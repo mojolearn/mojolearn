@@ -1760,12 +1760,32 @@ def _mismatch_bytes(name_a, a, name_b, b):
     return f"{name_a} and {name_b} differ: {n} bytes of {max(len(ba), len(bb))}"
 
 
+def _oracle_mismatch(*pairs):
+    """`_mismatch_bytes` over SEVERAL (name_a, a, name_b, b) tuples at once:
+    every disagreeing pair's message joined with '; ', or None when all agree.
+
+    A lane whose in-cell oracle is more than one comparison (the multi-GPU
+    drivers, which hold a sharded call to the plain one on each of their
+    outputs) needs all of them evaluated before it can build its parts and
+    raise `NumericalMismatch` once. EVERY pair is compared, so the message
+    names every side that moved rather than only the first: a sabotage build
+    that separated the routes on the distances and left the ids alone reads
+    differently from one that moved both, and a reader of the refusal text
+    should not have to run it again to learn which."""
+    said = [m for m in (_mismatch_bytes(*p) for p in pairs) if m is not None]
+    return "; ".join(said) if said else None
+
+
 def _same_bytes(name_a, a, name_b, b):
     """The forecasters' infer probe: two public entries the estimator
     documents as the same answer. Returns both for hashing when their bytes
     agree; raises, naming the pair and the byte count, when they do not, so
     the infer column reads REFUSED with the message instead of a hash that
-    hides which of the two moved."""
+    hides which of the two moved.
+
+    A lane that ALREADY HAS PARTS to hand when the oracle fires should use
+    `_oracle_mismatch` and `NumericalMismatch` instead; see
+    `_mismatch_bytes`."""
     message = _mismatch_bytes(name_a, a, name_b, b)
     if message is not None:
         raise ValueError(message)
@@ -6130,13 +6150,22 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("par-arima")
 def _(ml, X, yc, yr, Xh=None):
-    """fit_arima with two series per shard over the arima lane's four series."""
+    """fit_arima with two series per shard over the arima lane's four series.
+
+    THE ORACLE RAISES `NumericalMismatch` CARRYING THE PARTS, for
+    `par-scaler`'s reason (lane/broken-par-sabotage-arms, 2026-09-20).
+    MEASURED on the M4, one core, --repeats 2, base fixture, under the CORE
+    family's -D MOJOLEARN_HOST_SABOTAGE=1 binding alone: `fit_arima ar and
+    plain ar differ: 15 bytes of 16` and the cell read REFUSED."""
     from mojolearn.parallel_classical import fit_arima
     series = np.ascontiguousarray(X[:512, :4].T)
     par = fit_arima(ml.ARIMA(order=(1, 0, 0)), series, devices=_par_devices(), series_per_shard=2)
     plain = ml.ARIMA(order=(1, 0, 0)).fit(series)
-    _same_bytes("fit_arima ar", par.ar_, "plain ar", plain.ar_)
-    return _fit(dict(ar=_h(par.ar_), mu=_h(par.mu_), sigma2=_h(par.sigma2_), forecast=_h(par.forecast(24))),
+    mismatch = _mismatch_bytes("fit_arima ar", par.ar_, "plain ar", plain.ar_)
+    parts = dict(ar=_h(par.ar_), mu=_h(par.mu_), sigma2=_h(par.sigma2_), forecast=_h(par.forecast(24)))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts,
                 par, lambda e: _same_bytes("forecast(h)", e.forecast(FORECAST_HORIZON),
                                            "predict(n_obs, n_obs + h)", e.predict(e.n_obs_, e.n_obs_ + FORECAST_HORIZON)))
 
@@ -6161,16 +6190,33 @@ def _(ml, X, yc, yr, Xh=None):
 
     Reachable on a CPU column since `forecast_predict` joined
     `_parallel_pool.CPU_OPERATIONS`; before that all four
-    `parallel_forecasting` entries refused by name on every CPU install."""
+    `parallel_forecasting` entries refused by name on every CPU install.
+
+    THE ORACLE RAISES `NumericalMismatch` CARRYING THE PARTS, for
+    `par-scaler`'s reason (lane/broken-par-sabotage-arms, 2026-09-20).
+    MEASURED on the M4, one core, --repeats 2, base fixture, under the arima
+    family's -D MOJOLEARN_HOST_SABOTAGE=1 binding: the lane raised
+    `predict_arima(0, n_obs) and plain ARIMA.predict(0, n_obs) differ: 7246
+    bytes of 8192` and the cell read REFUSED, so the arm was DOING ITS JOB
+    and the column recorded no catch. The two sides separate under the arm
+    because the driver slices the fitted `__dict__` per shard and the host
+    `arima_predict` is entered once per shard rather than once, so a
+    per-call value perturbation lands a different number of times on the two
+    routes. The clean cell is unchanged: the same parts in the same order
+    whenever the two agree."""
     from mojolearn.parallel_forecasting import predict_arima, forecast_arima
     series = np.ascontiguousarray(X[:512, :4].T)
     d = _par_devices()
     m = ml.ARIMA(order=(1, 0, 0)).fit(series)
     sharded = predict_arima(m, 0, m.n_obs_, devices=d, series_per_shard=3)
-    _same_bytes("predict_arima(0, n_obs)", sharded, "plain ARIMA.predict(0, n_obs)", m.predict(0, m.n_obs_))
     ahead = forecast_arima(m, 24, devices=d, series_per_shard=3)
-    _same_bytes("forecast_arima(24)", ahead, "plain ARIMA.forecast(24)", m.forecast(24))
-    return _fit(dict(predict=_h(sharded), forecast=_h(ahead)), m,
+    mismatch = _oracle_mismatch(
+        ("predict_arima(0, n_obs)", sharded, "plain ARIMA.predict(0, n_obs)", m.predict(0, m.n_obs_)),
+        ("forecast_arima(24)", ahead, "plain ARIMA.forecast(24)", m.forecast(24)))
+    parts = dict(predict=_h(sharded), forecast=_h(ahead))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, m,
                 lambda e: _same_bytes(
                     f"forecast_arima({FORECAST_HORIZON})",
                     forecast_arima(e, FORECAST_HORIZON, devices=d, series_per_shard=3),
@@ -6382,7 +6428,14 @@ def _pq(e, R, method, **kw):
 def _(ml, X, yc, yr, Xh=None):
     """ParallelQueries over the knn-clf lane's KNeighborsClassifier, 64 query
     rows in shards of 16: kneighbors, predict and predict_proba, each held to
-    the plain call."""
+    the plain call.
+
+    THE ORACLE RAISES `NumericalMismatch` CARRYING THE PARTS, for
+    `par-scaler`'s reason (lane/broken-par-sabotage-arms, 2026-09-20).
+    MEASURED on the M4, one core, --repeats 2, base fixture, under the core
+    family's -D MOJOLEARN_HOST_SABOTAGE=1 binding: `ParallelQueries
+    kneighbors distances and plain distances differ: 1523 bytes of 2048` and
+    the cell read REFUSED, the same bytes `par-queries-nn` reported."""
     from mojolearn.parallel_neighbors import ParallelQueries
     m = ml.KNeighborsClassifier(n_neighbors=8).fit(X[:4096], yc[:4096])
     q = np.ascontiguousarray(X[4096:4160])
@@ -6391,27 +6444,44 @@ def _(ml, X, yc, yr, Xh=None):
         pr = pq.query(q, method="predict")
         pp = pq.query(q, method="predict_proba")
     d0, i0 = m.kneighbors(q)
-    _same_bytes("ParallelQueries kneighbors distances", d, "plain distances", d0)
-    _same_bytes("ParallelQueries kneighbors indices", i, "plain indices", i0)
-    _same_bytes("ParallelQueries predict", pr, "plain predict", m.predict(q))
-    _same_bytes("ParallelQueries predict_proba", pp, "plain predict_proba", m.predict_proba(q))
-    return _fit(dict(dist=_h(d), idx=_h(i), predict=_h(pr), proba=_h(pp)),
+    mismatch = _oracle_mismatch(
+        ("ParallelQueries kneighbors distances", d, "plain distances", d0),
+        ("ParallelQueries kneighbors indices", i, "plain indices", i0),
+        ("ParallelQueries predict", pr, "plain predict", m.predict(q)),
+        ("ParallelQueries predict_proba", pp, "plain predict_proba", m.predict_proba(q)))
+    parts = dict(dist=_h(d), idx=_h(i), predict=_h(pr), proba=_h(pp))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts,
                 m, lambda e: (_pq(e, Xh[:64], "predict"), _pq(e, Xh[:64], "predict_proba")))
 
 
 @lane("par-queries-radius")
 def _(ml, X, yc, yr, Xh=None):
     """ParallelQueries over the radius lane's RadiusNeighbors, ragged rows
-    joined in input order, held to the plain call."""
+    joined in input order, held to the plain call.
+
+    THE ORACLE RAISES `NumericalMismatch` CARRYING THE PARTS, for
+    `par-scaler`'s reason (lane/broken-par-sabotage-arms, 2026-09-20).
+    MEASURED on the M4, one core, --repeats 2, base fixture, under the core
+    family's -D MOJOLEARN_HOST_SABOTAGE=1 binding: `ParallelQueries
+    radius_neighbors counts and plain counts differ: 50 bytes of 512` and
+    the cell read REFUSED. The COUNTS moving is why this lane must keep its
+    parts: a radius query whose per-row count changed under the arm is the
+    ragged join being exercised, which no other part here reports."""
     index, q = X[:4096], np.ascontiguousarray(X[4096:4160])
     r = _radius_for(index, q)
     m = ml.RadiusNeighbors(radius=r).fit(index)
     par = _ragged(_pq(m, q, "radius_neighbors", sort_results=True))
     plain = _ragged(m.radius_neighbors(q, sort_results=True))
-    for k, name in enumerate(("counts", "distances", "indices")):
-        _same_bytes(f"ParallelQueries radius_neighbors {name}", par[k], f"plain {name}", plain[k])
+    mismatch = _oracle_mismatch(*[
+        (f"ParallelQueries radius_neighbors {name}", par[k], f"plain {name}", plain[k])
+        for k, name in enumerate(("counts", "distances", "indices"))])
     lens, dd, ii = par
-    return _fit(dict(radius=_h(np.float32(r)), counts=_h(lens), dist=_h(dd), idx=_h(ii)),
+    parts = dict(radius=_h(np.float32(r)), counts=_h(lens), dist=_h(dd), idx=_h(ii))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts,
                 m, lambda e: _ragged(_pq(e, Xh[:64], "radius_neighbors", sort_results=True)))
 
 
@@ -6615,18 +6685,31 @@ def _hw_series(X):
 @lane("par-holtwinters")
 def _(ml, X, yc, yr, Xh=None):
     """fit_exponential_smoothing, four series in shards of two, held to the
-    plain four-series fit on every fitted array and the forecast."""
+    plain four-series fit on every fitted array and the forecast.
+
+    THE ORACLE RAISES `NumericalMismatch` CARRYING THE PARTS, for
+    `par-scaler`'s reason (lane/broken-par-sabotage-arms, 2026-09-20).
+    MEASURED on the M4, one core, --repeats 2, base fixture, under the CORE
+    family's -D MOJOLEARN_HOST_SABOTAGE=1 binding alone: `fit_exponential_
+    smoothing level_ and plain level_ differ: 6054 bytes of 8000` and the
+    cell read REFUSED. Ten comparisons are folded into ONE message here, so
+    the refusal text names every fitted array that moved rather than only
+    `level_`, the first."""
     from mojolearn.parallel_classical import fit_exponential_smoothing
     S = _hw_series(X)
     kw = dict(seasonal="additive", seasonal_periods=12, ts_num=4)
     par = fit_exponential_smoothing(ml.ExponentialSmoothing(S, **kw), devices=_par_devices(), series_per_shard=2)
     plain = ml.ExponentialSmoothing(S, **kw).fit()
     names = ("level_", "trend_", "season_", "sse_", "alpha_", "beta_", "gamma_", "n_iter_", "criterion_")
-    for name in names:
-        _same_bytes(f"fit_exponential_smoothing {name}", getattr(par, name), f"plain {name}", getattr(plain, name))
     f = par.forecast(24)
-    _same_bytes("fit_exponential_smoothing forecast(24)", f, "plain forecast(24)", plain.forecast(24))
-    return _fit(dict(**{n.strip("_"): _h(getattr(par, n)) for n in names}, forecast=_h(f)),
+    mismatch = _oracle_mismatch(
+        *[(f"fit_exponential_smoothing {n}", getattr(par, n), f"plain {n}", getattr(plain, n))
+          for n in names],
+        ("fit_exponential_smoothing forecast(24)", f, "plain forecast(24)", plain.forecast(24)))
+    parts = dict(**{n.strip("_"): _h(getattr(par, n)) for n in names}, forecast=_h(f))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts,
                 par, lambda e: (e.forecast(FORECAST_HORIZON),))
 
 
@@ -7003,12 +7086,27 @@ def _(ml, X, yc, yr, Xh=None):
 def _(ml, X, yc, yr, Xh=None):
     """transform_rbf_sampler with 1024 random Fourier features over 1000
     rows in shards of 300 rows (each shard's output 1.17 MiB) on
-    _par_devices(), held to the one-call transform."""
+    _par_devices(), held to the one-call transform.
+
+    THE ORACLE RAISES `NumericalMismatch` CARRYING THE PARTS, for
+    `par-scaler`'s reason (lane/broken-par-sabotage-arms, 2026-09-20).
+    MEASURED on the M4, one core, --repeats 2, base fixture, under the
+    kernel_methods family's -D MOJOLEARN_HOST_SABOTAGE=1 binding: the lane
+    raised `transform_rbf_sampler and plain transform differ: 3869141 bytes
+    of 4096000` and the cell read REFUSED, so a working negative control was
+    recorded as a refusal and a refusal is not a catch. The two sides
+    separate under the arm because the row shards enter the host
+    `rbf_sampler_transform` four times (300, 300, 300, 100) against the plain
+    call's once, and the arm's perturbation is per call. The clean cell is
+    unchanged: the same parts in the same order whenever the two agree."""
     from mojolearn.parallel_classical import transform_rbf_sampler
     m = ml.RBFSampler(gamma=0.5, n_components=1024, random_state=1).fit(X)
     out = transform_rbf_sampler(m, X[:1000], devices=_par_devices(), rows_per_shard=300)
-    _same_bytes("transform_rbf_sampler", out, "plain transform", m.transform(X[:1000]))
-    return _fit(dict(weights=_h(m.random_weights_), offset=_h(m.random_offset_), transform=_h(out)),
+    mismatch = _mismatch_bytes("transform_rbf_sampler", out, "plain transform", m.transform(X[:1000]))
+    parts = dict(weights=_h(m.random_weights_), offset=_h(m.random_offset_), transform=_h(out))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts,
                 m, lambda e: (transform_rbf_sampler(e, Xh[:256], devices=_par_devices(), rows_per_shard=100),))
 
 
@@ -7184,16 +7282,39 @@ def _(ml, X, yc, yr, Xh=None):
 def _(ml, X, yc, yr, Xh=None):
     """ParallelQueries over the knn lane's NearestNeighbors, 64 query rows in
     shards of 16, held to the plain kneighbors. par-queries-knn carries the
-    classifier; this is the bare index the driver also admits."""
+    classifier; this is the bare index the driver also admits.
+
+    THE ORACLE RAISES `NumericalMismatch` CARRYING THE PARTS, for
+    `par-scaler`'s reason (lane/broken-par-sabotage-arms, 2026-09-20).
+    MEASURED on the M4, one core, --repeats 2, base fixture, under the core
+    family's -D MOJOLEARN_HOST_SABOTAGE=1 binding: the lane raised
+    `ParallelQueries kneighbors distances and plain distances differ: 1523
+    bytes of 2048` and the cell read REFUSED, so the arm fired and the column
+    recorded no catch. The two sides separate under the arm because the query
+    rows enter `core/knn_host_predict.mojo` four times, 16 rows each, against
+    the plain call's one entry over 64, and that arm perturbs a distance at
+    query time. The clean cell is unchanged: the same parts in the same
+    order whenever the two agree.
+
+    THIS IS NOT THE LANE'S OTHER DEFECT. Its `batch` part fails on TWO
+    devices and only on two (18 of 18 attempts on AMD), which is a live
+    investigation into a cross-device copy that does no `transfer_bytes`
+    host staging. Nothing here touches the batch part or the device axis:
+    the change is how a disagreement this cell ALREADY detected is
+    reported."""
     from mojolearn.parallel_neighbors import ParallelQueries
     m = ml.NearestNeighbors(n_neighbors=8).fit(X[:4096])
     q = np.ascontiguousarray(X[4096:4160])
     with ParallelQueries(m, devices=_par_devices(), rows_per_shard=PAR_QUERY_ROWS) as pq:
         d, i = pq.query(q, method="kneighbors")
     d0, i0 = m.kneighbors(q)
-    _same_bytes("ParallelQueries kneighbors distances", d, "plain distances", d0)
-    _same_bytes("ParallelQueries kneighbors indices", i, "plain indices", i0)
-    return _fit(dict(dist=_h(d), idx=_h(i)), m, lambda e: _pq(e, Xh[:64], "kneighbors"))
+    mismatch = _oracle_mismatch(
+        ("ParallelQueries kneighbors distances", d, "plain distances", d0),
+        ("ParallelQueries kneighbors indices", i, "plain indices", i0))
+    parts = dict(dist=_h(d), idx=_h(i))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts, m, lambda e: _pq(e, Xh[:64], "kneighbors"))
 
 
 # ---------------------------------------------------------------- lanes (2026-09-19, lane/laneless-public-classes)
@@ -7252,12 +7373,28 @@ def _(ml, X, yc, yr, Xh=None):
 
     WHAT THE CELL SAYS. The driver's whole contract is equality to the plain
     search, so the squared-metric arm is held to `IVFIndex.search` BYTE FOR
-    BYTE and the train cell reads REFUSED naming the pair if it is not: the
-    local-id maps, the per-shard candidate counts and the global merge by
-    `(distance, original id)` either reproduce the one-index answer or they
-    do not. `cand` is the merged candidate total per query, which is what
-    says the shards were probed at all rather than a k-sized answer arriving
-    from one of them.
+    BYTE and the train cell reads DIVERGENT naming the pair if it is not:
+    the local-id maps, the per-shard candidate counts and the global merge
+    by `(distance, original id)` either reproduce the one-index answer or
+    they do not. `cand` is the merged candidate total per query, which is
+    what says the shards were probed at all rather than a k-sized answer
+    arriving from one of them.
+
+    IT READS DIVERGENT AND NOT REFUSED since lane/broken-par-sabotage-arms
+    (2026-09-20), which is `par-scaler`'s correction applied here. The
+    oracle raises `NumericalMismatch` CARRYING the nine parts, so a cell
+    whose oracle fires still hashes what it computed. Until then the four
+    equality checks were bare `_same_bytes` raises, and MEASURED on the M4,
+    one core, --repeats 2, base fixture, under the ivf family's
+    -D MOJOLEARN_HOST_SABOTAGE=1 binding the lane raised `DistributedIVFIndex
+    distances and plain IVFIndex distances differ: 1658 bytes of 2048` and
+    the whole cell read REFUSED -- the arm working perfectly and the column
+    recording nothing. The two routes separate under the arm because each
+    shard enters `host_ivf_search` once, so a per-call value perturbation
+    lands once per shard on this route and once in total on the plain one:
+    the same seam the euclidean arm's flag is about, one level up. The
+    clean cell is unchanged: the same parts in the same order whenever the
+    four pairs agree.
 
     THE EUCLIDEAN ARM IS A FLAG, NOT A RAISE, and the reason is measured.
     Under `metric='euclidean'` the shards return SQUARED distances and the
@@ -7268,7 +7405,13 @@ def _(ml, X, yc, yr, Xh=None):
     root on this route and AFTER it on the plain one, so a raise would make
     the sabotaged cell read REFUSED, which the owed check
     (tools/cpu_identity_gate_check.py owed) does not count as a catch -- the
-    `tokenizer` lane's `roundtrip` part carries the same reasoning. MEASURED
+    `tokenizer` lane's `roundtrip` part carries the same reasoning. THAT
+    REASONING IS NO LONGER WHAT KEEPS IT A FLAG: since the four squared-arm
+    checks raise `NumericalMismatch` (above), a raise here would read
+    DIVERGENT and would be counted. It stays a flag because the seam it
+    watches is a CONTRACT the driver does not promise byte for byte on a
+    sabotaged build, and because the two hashes below are the recorded
+    evidence that this arm moves twice over. MEASURED
     on the M4, one core, --repeats 2, base fixture, 2026-09-19: clean
     `root_dist` cdbf46f042cf7c81 and `flags` b1e0e3b7b8fee07b against
     6381524ce593f295 and 9ce81bd2eece53a4 under the
@@ -7316,8 +7459,6 @@ def _(ml, X, yc, yr, Xh=None):
         d, i = shards.search(q)
         cand = np.asarray(shards.n_candidates_).copy()
         closed = shards
-    _same_bytes("DistributedIVFIndex distances", d, "plain IVFIndex distances", d0)
-    _same_bytes("DistributedIVFIndex ids", i, "plain IVFIndex ids", i0)
     e = ml.IVFIndex(metric="euclidean", **kw).fit(X[:4096])
     ed0, ei0 = e.search(q)
     with DistributedIVFIndex.from_index(e, devices=dev) as rooted:
@@ -7331,8 +7472,11 @@ def _(ml, X, yc, yr, Xh=None):
     tq = np.ascontiguousarray(X[4096:4104])
     td0, ti0 = thin.search(tq)
     td, ti, tcand = _dist_search(DistributedIVFIndex, thin, tq, dev)
-    _same_bytes("DistributedIVFIndex short-fill distances", td, "plain IVFIndex distances", td0)
-    _same_bytes("DistributedIVFIndex short-fill ids", ti, "plain IVFIndex ids", ti0)
+    mismatch = _oracle_mismatch(
+        ("DistributedIVFIndex distances", d, "plain IVFIndex distances", d0),
+        ("DistributedIVFIndex ids", i, "plain IVFIndex ids", i0),
+        ("DistributedIVFIndex short-fill distances", td, "plain IVFIndex distances", td0),
+        ("DistributedIVFIndex short-fill ids", ti, "plain IVFIndex ids", ti0))
     flags = np.asarray([
         np.asarray(ed).tobytes() == np.asarray(ed0).tobytes(),
         np.asarray(ei).tobytes() == np.asarray(ei0).tobytes(),
@@ -7342,8 +7486,11 @@ def _(ml, X, yc, yr, Xh=None):
         _refused(lambda: closed.search(q), "is closed"),
         _refused(lambda: _dist_search(DistributedIVFIndex, m, np.ascontiguousarray(q[:, :2]), dev), "query features"),
     ], dtype=np.int64)
-    return _fit(dict(dist=_h(d), idx=_h(i), cand=_h(cand), root_dist=_h(ed), root_idx=_h(ei),
-                     thin_dist=_h(td), thin_idx=_h(ti), thin_cand=_h(tcand), flags=_h(flags)),
+    parts = dict(dist=_h(d), idx=_h(i), cand=_h(cand), root_dist=_h(ed), root_idx=_h(ei),
+                 thin_dist=_h(td), thin_idx=_h(ti), thin_cand=_h(tcand), flags=_h(flags))
+    if mismatch:
+        raise NumericalMismatch(mismatch, parts)
+    return _fit(parts,
                 m, lambda est: _dist_search(DistributedIVFIndex, est, np.ascontiguousarray(Xh[:64]), _par_devices()))
 
 

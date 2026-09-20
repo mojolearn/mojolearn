@@ -254,6 +254,48 @@ same reason the input-copy cells do.
 - Each remaining family is one build pair away from being closed the way these
   four were, at about 15 to 90 seconds a build on one core.
 
+## SETTLED 2026-09-20 (lane/broken-par-sabotage-arms): the CPU route DOES run 23 par-* lanes
+
+The question the Owed item above left open -- whether a `par-*` lane can take
+a CPU column at all -- has been answered by running all 59 of them on this
+Mac's CPU host route, one core, base fixture, `--repeats 2`, with the full
+32-family host set built from this tree. Evidence
+`bench/results/identity_break/2026-09-20_broken-par-sabotage-arms/`.
+
+| result on the CPU column | lanes |
+|---|---|
+| ran, STABLE, full parts | 23 |
+| refused: no host binding restates the cooperative driver | 36 |
+
+The 36 refuse with a message that names the reason in the driver's own words
+("its shards are device row tiles"), or, for three byte-LM lanes, a missing
+GPU binding, or, for `par-causal-lm` and `par-cross-val`, a CUDA/HIP-only
+guard. Those 36 are structural and a CPU box cannot supply a control for
+them; the statement that this is true of EVERY par-* lane was too wide, and
+it is the 23 above that the earlier text was wrong about.
+
+A CPU-side negative control for the 23 exists and works. Building ONLY the
+`core` family with `-D MOJOLEARN_HOST_SABOTAGE=1` and leaving the other 31
+families production:
+
+| under the core arm alone | before | after |
+|---|---|---|
+| CAUGHT (a part moved and `negative_control_moves` credits it) | 13 | 17 |
+| INERT (ran, every part at its clean hash) | 6 | 6 |
+| BROKEN (ran clean, REFUSED sabotaged) | 4 | 0 |
+
+The BROKEN four were `par-arima`, `par-holtwinters`, `par-queries-knn` and
+`par-queries-radius`, fixed on that branch; so are the four the lane was
+opened for (`par-ivf`, `par-queries-nn`, `par-rbf-sampler`,
+`par-forecast-arima`). The reach is wider than any family table predicts,
+because `-D MOJOLEARN_HOST_SABOTAGE=1` on `core` also arms
+`bindings/hotpath_helpers.mojo::HOTPATH_SABOTAGE`, which perturbs the generic
+array helpers (`cast_elements`, `gather_*`, `reduce_stat`, `equal_elements`)
+that EVERY driver's shard staging runs through. A lane whose host family is
+`arima` is therefore reachable by the `core` define, which is why
+`par-holtwinters` and `par-arima` move under a build that touches neither
+family's own arm.
+
 ## The per-lane table
 
 Category (a) means at least one cell part has been seen to move. Where an arm
