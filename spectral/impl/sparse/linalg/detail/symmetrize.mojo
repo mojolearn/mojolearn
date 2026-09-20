@@ -115,7 +115,6 @@ def coo_symmetrize(
     ctx.enqueue_memset(d_orows, Int32(0))
     ctx.enqueue_memset(d_ocols, Int32(0))
     ctx.enqueue_memset(d_ovals, Float32(0.0))
-    ctx.synchronize()
     ctx.enqueue_function[coo_symmetrize_kernel](
         d_row_ind.unsafe_ptr(),
         d_rows.unsafe_ptr(),
@@ -128,7 +127,6 @@ def coo_symmetrize(
         grid_dim=((n + tpb - 1) // tpb, 1, 1),
         block_dim=(tpb, 1, 1),
     )
-    ctx.synchronize()
     var orows = download_i32(ctx, d_orows, 2 * nnz)
     var ocols = download_i32(ctx, d_ocols, 2 * nnz)
     var ovals = download_f32(ctx, d_ovals, 2 * nnz)
