@@ -3,7 +3,7 @@
  "repeats": 2,
  "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
  "vendor": "cpu-apple-m4",
- "commit": "f86b9955cc0c0623fe412781849e04203c49e3bb",
+ "commit": "8a0fa70ec39179194df3fa1fd3bdc5980531221a",
  "commit_source": "git rev-parse HEAD",
  "heldout_seed": 1,
  "fixtures": {
@@ -21,49 +21,49 @@
  "cells": {
   "mamba1-decode-session/base": {
    "verdict": "REFUSED",
-   "error": "NotImplementedError: mojolearn Mamba1DecodeSession: the loaded Mamba1Block binding exports no resident decode session (the CPU host route and older GPU builds); the per-call step() is the path here\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/tools/identity_break.py\", line 10832, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/tools/identity_break.py\", line 7420, in _\n    steps, resident = _decode_session_probe(blk, lambda: blk.allocate_state(2), 2, 16, dm, X)\n                      ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/tools/identity_break.py\", line 7351, in _decode_session_probe\n    with blk.decode_session(st) as sess:\n         ~~~~~~~~~~~~~~~~~~^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/python/mojolearn/_mamba_impl.py\", line 651, in decode_session\n    return Mamba1DecodeSession(self, state)\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/python/mojolearn/_mamba_impl.py\", line 692, in __init__\n    raise NotImplementedError(\n    ...<3 lines>...\n    )\nNotImplementedError: mojolearn Mamba1DecodeSession: the loaded Mamba1Block binding exports no resident decode session (the CPU host route and older GPU builds); the per-call step() is the path here",
+   "error": "NotImplementedError: mojolearn Mamba1DecodeSession: the loaded Mamba1Block binding exports no resident decode session (the CPU host route and older GPU builds); the per-call step() is the path here\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/tools/identity_break.py\", line 7421, in _\n    steps, resident = _decode_session_probe(blk, lambda: blk.allocate_state(2), 2, 16, dm, X)\n                      ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/tools/identity_break.py\", line 7351, in _decode_session_probe\n    with blk.decode_session(st) as sess:\n         ~~~~~~~~~~~~~~~~~~^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/python/mojolearn/_mamba_impl.py\", line 651, in decode_session\n    return Mamba1DecodeSession(self, state)\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/python/mojolearn/_mamba_impl.py\", line 692, in __init__\n    raise NotImplementedError(\n    ...<3 lines>...\n    )\nNotImplementedError: mojolearn Mamba1DecodeSession: the loaded Mamba1Block binding exports no resident decode session (the CPU host route and older GPU builds); the per-call step() is the path here",
    "hashes": [],
    "parts": [],
    "timing": {
-    "total_seconds": 0.00326625001616776,
+    "total_seconds": 0.009972249972634017,
     "stages": {
-     "repeat=1/train": 0.0013584579864982516
+     "repeat=1/train": 0.005045083002187312
     }
    }
   },
   "transformer-decode-session/base": {
    "verdict": "REFUSED",
-   "error": "NotImplementedError: mojolearn TransformerDecodeSession: the loaded TransformerBlock binding exports no resident decode session (the CPU host route and older GPU builds); the per-call step() is the path here\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/tools/identity_break.py\", line 10832, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/tools/identity_break.py\", line 7473, in _\n    steps, resident = _decode_session_probe(blk, fresh, 2, 16, dm, X)\n                      ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/tools/identity_break.py\", line 7351, in _decode_session_probe\n    with blk.decode_session(st) as sess:\n         ~~~~~~~~~~~~~~~~~~^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/python/mojolearn/_transformer_impl.py\", line 1207, in decode_session\n    return TransformerDecodeSession(self, state)\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/python/mojolearn/_transformer_impl.py\", line 1265, in __init__\n    raise NotImplementedError(\n    ...<3 lines>...\n    )\nNotImplementedError: mojolearn TransformerDecodeSession: the loaded TransformerBlock binding exports no resident decode session (the CPU host route and older GPU builds); the per-call step() is the path here",
+   "error": "NotImplementedError: mojolearn TransformerDecodeSession: the loaded TransformerBlock binding exports no resident decode session (the CPU host route and older GPU builds); the per-call step() is the path here\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/tools/identity_break.py\", line 7483, in _\n    steps, resident = _decode_session_probe(blk, fresh, 2, 16, dm, X)\n                      ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/tools/identity_break.py\", line 7351, in _decode_session_probe\n    with blk.decode_session(st) as sess:\n         ~~~~~~~~~~~~~~~~~~^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/python/mojolearn/_transformer_impl.py\", line 1207, in decode_session\n    return TransformerDecodeSession(self, state)\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/python/mojolearn/_transformer_impl.py\", line 1265, in __init__\n    raise NotImplementedError(\n    ...<3 lines>...\n    )\nNotImplementedError: mojolearn TransformerDecodeSession: the loaded TransformerBlock binding exports no resident decode session (the CPU host route and older GPU builds); the per-call step() is the path here",
    "hashes": [],
    "parts": [],
    "timing": {
-    "total_seconds": 0.0015677080082241446,
+    "total_seconds": 0.0035248330095782876,
     "stages": {
-     "repeat=1/train": 0.0009664589888416231
+     "repeat=1/train": 0.0022592500026803464
     }
    }
   },
   "par-causal-lm/base": {
    "verdict": "REFUSED",
-   "error": "NotImplementedError: ParallelCausalLM requires CUDA or HIP device isolation\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/tools/identity_break.py\", line 10832, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/tools/identity_break.py\", line 7725, in _\n    with ParallelCausalLM.load(root, layer_devices=owners) as par:\n         ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/python/mojolearn/models/parallel_causal_lm.py\", line 118, in load\n    raise NotImplementedError('ParallelCausalLM requires CUDA or HIP device isolation')\nNotImplementedError: ParallelCausalLM requires CUDA or HIP device isolation",
+   "error": "NotImplementedError: ParallelCausalLM requires CUDA or HIP device isolation\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/tools/identity_break.py\", line 7738, in _\n    with ParallelCausalLM.load(root, layer_devices=owners) as par:\n         ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/python/mojolearn/models/parallel_causal_lm.py\", line 118, in load\n    raise NotImplementedError('ParallelCausalLM requires CUDA or HIP device isolation')\nNotImplementedError: ParallelCausalLM requires CUDA or HIP device isolation",
    "hashes": [],
    "parts": [],
    "timing": {
-    "total_seconds": 0.057972915994469076,
+    "total_seconds": 0.038948250003159046,
     "stages": {
-     "repeat=1/train": 0.0573789170011878
+     "repeat=1/train": 0.03772824999759905
     }
    }
   },
   "par-cross-val/base": {
    "verdict": "REFUSED",
-   "error": "NotImplementedError: parallel cross-validation requires CUDA or HIP GPU workers\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/tools/identity_break.py\", line 10832, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/tools/identity_break.py\", line 7777, in _\n    scores = cross_val_score(est, X, yr, devices=dev, cv=3)\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/python/mojolearn/parallel_model_selection.py\", line 41, in cross_val_score\n    raise NotImplementedError('parallel cross-validation requires CUDA or HIP GPU workers')\nNotImplementedError: parallel cross-validation requires CUDA or HIP GPU workers",
+   "error": "NotImplementedError: parallel cross-validation requires CUDA or HIP GPU workers\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/tools/identity_break.py\", line 10845, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/tools/identity_break.py\", line 7790, in _\n    scores = cross_val_score(est, X, yr, devices=dev, cv=3)\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/python/mojolearn/parallel_model_selection.py\", line 41, in cross_val_score\n    raise NotImplementedError('parallel cross-validation requires CUDA or HIP GPU workers')\nNotImplementedError: parallel cross-validation requires CUDA or HIP GPU workers",
    "hashes": [],
    "parts": [],
    "timing": {
-    "total_seconds": 0.000997249997453764,
+    "total_seconds": 0.0012273330066818744,
     "stages": {
-     "repeat=1/train": 0.0002595839905552566
+     "repeat=1/train": 0.00041799998143687844
     }
    }
   }
@@ -623,7 +623,7 @@
  },
  "resume_signature": {
   "schema": 1,
-  "source_sha256": "ea4869955b031645235212fc2775a94fac9e8fd0f6e71f05fd45951c7b7a9ca5",
+  "source_sha256": "00caea39abb98498c0f4aab56e6e0b037ac92d3ecc8c1b2bd11e59bab5e2c824",
   "options": {
    "require_backend": null,
    "require_cpu": false,
@@ -650,7 +650,7 @@
   },
   "environment_sha256": "39929885ce782ca29aab17a11b333c5f0465ee893362f9a39409d93e9dd3c564",
   "provenance": {
-   "commit": "f86b9955cc0c0623fe412781849e04203c49e3bb",
+   "commit": "8a0fa70ec39179194df3fa1fd3bdc5980531221a",
    "mode": "identical",
    "vendor": "cpu-apple-m4",
    "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",

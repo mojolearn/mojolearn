@@ -1,9 +1,9 @@
 ===== mamba1-decode-session/base train =====
 NotImplementedError: mojolearn Mamba1DecodeSession: the loaded Mamba1Block binding exports no resident decode session (the CPU host route and older GPU builds); the per-call step() is the path here
 Traceback (most recent call last):
-  File "/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/tools/identity_break.py", line 10832, in _run_reference
+  File "/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/tools/identity_break.py", line 10845, in _run_reference
     p = LANES[name](ml, X, yc, yr, held[f].copy())
-  File "/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/tools/identity_break.py", line 7420, in _
+  File "/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/tools/identity_break.py", line 7421, in _
     steps, resident = _decode_session_probe(blk, lambda: blk.allocate_state(2), 2, 16, dm, X)
                       ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   File "/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/tools/identity_break.py", line 7351, in _decode_session_probe
@@ -20,9 +20,9 @@ NotImplementedError: mojolearn Mamba1DecodeSession: the loaded Mamba1Block bindi
 ===== par-causal-lm/base train =====
 NotImplementedError: ParallelCausalLM requires CUDA or HIP device isolation
 Traceback (most recent call last):
-  File "/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/tools/identity_break.py", line 10832, in _run_reference
+  File "/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/tools/identity_break.py", line 10845, in _run_reference
     p = LANES[name](ml, X, yc, yr, held[f].copy())
-  File "/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/tools/identity_break.py", line 7725, in _
+  File "/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/tools/identity_break.py", line 7738, in _
     with ParallelCausalLM.load(root, layer_devices=owners) as par:
          ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   File "/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/python/mojolearn/models/parallel_causal_lm.py", line 118, in load
@@ -32,9 +32,9 @@ NotImplementedError: ParallelCausalLM requires CUDA or HIP device isolation
 ===== par-cross-val/base train =====
 NotImplementedError: parallel cross-validation requires CUDA or HIP GPU workers
 Traceback (most recent call last):
-  File "/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/tools/identity_break.py", line 10832, in _run_reference
+  File "/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/tools/identity_break.py", line 10845, in _run_reference
     p = LANES[name](ml, X, yc, yr, held[f].copy())
-  File "/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/tools/identity_break.py", line 7777, in _
+  File "/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/tools/identity_break.py", line 7790, in _
     scores = cross_val_score(est, X, yr, devices=dev, cv=3)
   File "/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/python/mojolearn/parallel_model_selection.py", line 41, in cross_val_score
     raise NotImplementedError('parallel cross-validation requires CUDA or HIP GPU workers')
@@ -43,9 +43,9 @@ NotImplementedError: parallel cross-validation requires CUDA or HIP GPU workers
 ===== transformer-decode-session/base train =====
 NotImplementedError: mojolearn TransformerDecodeSession: the loaded TransformerBlock binding exports no resident decode session (the CPU host route and older GPU builds); the per-call step() is the path here
 Traceback (most recent call last):
-  File "/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/tools/identity_break.py", line 10832, in _run_reference
+  File "/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/tools/identity_break.py", line 10845, in _run_reference
     p = LANES[name](ml, X, yc, yr, held[f].copy())
-  File "/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/tools/identity_break.py", line 7473, in _
+  File "/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/tools/identity_break.py", line 7483, in _
     steps, resident = _decode_session_probe(blk, fresh, 2, 16, dm, X)
                       ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
   File "/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a9a08856693073478/tools/identity_break.py", line 7351, in _decode_session_probe
