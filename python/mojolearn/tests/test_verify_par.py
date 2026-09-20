@@ -301,5 +301,139 @@ def test_the_cli_routes_par_to_the_suite_and_not_to_the_kmeans_card():
     assert plain.par is None and not plain.par_self_test
 
 
+# ------------------------------------------------- a run that ran nothing
+# CLOSED 2026-09-20. `par_check` ended in
+# `passed = None if not cells else (gated == 0)`, and `cells` is appended once
+# per PART whatever the part read, so `None` could only mean the LANE LIST was
+# empty. A run where every part REFUSED on both columns counted zero gating
+# verdicts and printed `RESULT: THE TWO COLUMNS AGREE` at exit 0. The module's
+# own docstring at `par_check` records that state as measured.
+
+
+class _StubWitness:
+    """Two pools, four workers, nothing to refuse: the witness is not what
+    these tests are about and must not be what decides them."""
+
+    def __init__(self, vendor, devices):
+        self.vendor, self.devices = vendor, tuple(devices)
+
+    def watching(self):
+        import contextlib
+        return contextlib.nullcontext()
+
+    def summary(self):
+        return dict(pools=2, workers=4, devices=list(self.devices), placement="physical", detail=[])
+
+    def refusal(self):
+        return None
+
+
+class _StubHarness:
+    FIXTURES = ("base",)
+
+    def fixture(self, name):
+        import numpy as np
+        return np.zeros((4, 2)), np.zeros(4), np.zeros(4)
+
+    def heldout(self, name):
+        import numpy as np
+        return np.zeros((2, 2))
+
+
+def _par_check(monkeypatch, one, two, lanes=("par-gram",)):
+    """`par_check` with the two columns handed to it, so the verdict ladder is
+    exercised against the real function and not against a rebuilt dict."""
+    import contextlib
+    from mojolearn import _backend, _cpu_reference
+    _need_numpy()
+    monkeypatch.setattr(_backend, "vendor", lambda: "hip")
+    monkeypatch.setattr(_cpu_reference, "reference_training",
+                        lambda *a, **k: contextlib.nullcontext())
+    monkeypatch.setattr(vpar, "PoolWitness", _StubWitness)
+    monkeypatch.setattr(vpar, "par_devices", lambda devices: contextlib.nullcontext())
+    columns = iter([one, two] * len(lanes))
+    monkeypatch.setattr(vpar, "run_cell", lambda *a, **k: next(columns))
+    return vpar.par_check(_StubHarness(), None, list(lanes), ["base"], devices=(0, 1))
+
+
+_REFUSED = _cell(train=(None, "RuntimeError: GPU worker failed"),
+                 infer=(None, "RuntimeError: GPU worker failed"),
+                 model=(None, "RuntimeError: GPU worker failed"),
+                 batch=(None, "RuntimeError: GPU worker failed"),
+                 stepfull=(None, "RuntimeError: GPU worker failed"))
+
+
+def test_every_part_refused_on_both_columns_is_not_verified(monkeypatch):
+    """THE INPUT THAT USED TO PASS. Both columns refuse every part, the same
+    way. `compare_parts` reads REFUSED, which is correctly not a DIVERGENT --
+    and the run used to end VERIFIED at exit 0 on the strength of it."""
+    r = _par_check(monkeypatch, _REFUSED, _REFUSED)
+    assert r["counts"].get("REFUSED"), r["counts"]
+    assert not r["counts"].get("IDENTICAL")
+    assert r["state"] == "INCOMPLETE"
+    assert r["passed"] is not True
+    assert "INCOMPLETE" in vpar.format_par_check(r)
+    assert "AGREE" not in vpar.format_par_check(r)
+
+
+def test_one_refused_part_beside_real_agreement_is_still_incomplete(monkeypatch):
+    """A part that did not run is not made up for by the parts that did.
+    `_verify_all.verdict` has refused that trade since 2026-09-16."""
+    one = _cell(train="aaaa000011112222", infer=(None, "RuntimeError: refused"))
+    two = _cell(train="aaaa000011112222", infer=(None, "RuntimeError: refused"))
+    r = _par_check(monkeypatch, one, two)
+    assert r["counts"].get("IDENTICAL") and r["counts"].get("REFUSED")
+    assert r["state"] == "INCOMPLETE" and r["passed"] is not True
+
+
+def test_a_column_of_nothing_but_declared_limits_compares_nothing(monkeypatch):
+    """CPU-ROUTE-LIMIT is named rather than hidden and does not gate, but it
+    is not evidence either: a run with no IDENTICAL part compared nothing."""
+    refusal = "no CPU implementation of the cooperative multi-GPU driver mlp_update across 2 devices yet"
+    one = _cell(train="6e5cde4953362927")
+    two = _cell(train=(None, refusal))
+    import contextlib
+    from mojolearn import _backend, _cpu_reference
+    _need_numpy()
+    monkeypatch.setattr(_backend, "vendor", lambda: "cpu")
+    monkeypatch.setattr(_cpu_reference, "reference_training",
+                        lambda *a, **k: contextlib.nullcontext())
+    monkeypatch.setattr(vpar, "PoolWitness", _StubWitness)
+    monkeypatch.setattr(vpar, "par_devices", lambda devices: contextlib.nullcontext())
+    columns = iter([one, two])
+    monkeypatch.setattr(vpar, "run_cell", lambda *a, **k: next(columns))
+    r = vpar.par_check(_StubHarness(), None, ["par-mlp"], ["base"], devices=(0, 1))
+    assert r["counts"].get("CPU-ROUTE-LIMIT") and not r["counts"].get("IDENTICAL")
+    assert r["state"] == "NOTHING COMPARED" and r["passed"] is None
+
+
+def test_a_real_agreement_still_verifies(monkeypatch):
+    """The control. Without it the three tests above prove only that the
+    command now refuses everything."""
+    same = _cell(train="aaaa000011112222", infer="bbbb000011112222")
+    r = _par_check(monkeypatch, same, same)
+    assert r["counts"].get("IDENTICAL") == 2
+    assert r["state"] == "VERIFIED" and r["passed"] is True
+    assert "AGREE" in vpar.format_par_check(r)
+
+
+def test_a_divergence_still_outranks_a_refusal(monkeypatch):
+    """A wrong answer outranks an absent one, so MISMATCH is read first."""
+    one = _cell(train="aaaa000011112222", infer=(None, "RuntimeError: refused"))
+    two = _cell(train="ffff999988887777", infer=(None, "RuntimeError: refused"))
+    r = _par_check(monkeypatch, one, two)
+    assert r["state"] == "MISMATCH" and r["passed"] is False
+
+
+def test_the_state_ladder_reads_worst_first():
+    """`par_state` on its own, so the order is stated and not inferred."""
+    assert vpar.par_state({}, []) == ("NOTHING COMPARED", None)
+    assert vpar.par_state({"DIVERGENT": 1, "REFUSED": 9, "IDENTICAL": 9}, [1])[0] == "MISMATCH"
+    assert vpar.par_state({"REFUSED": 1, "IDENTICAL": 9}, [1])[0] == "INCOMPLETE"
+    assert vpar.par_state({"N/A": 9}, [1])[0] == "NOTHING COMPARED"
+    assert vpar.par_state({"IDENTICAL": 1}, [1]) == ("VERIFIED", True)
+    assert [s for s in vpar.PAR_STATES] == ["MISMATCH", "INCOMPLETE", "NOTHING COMPARED", "VERIFIED"]
+
+
 if __name__ == "__main__":  # pragma: no cover
     raise SystemExit(pytest.main([__file__, "-q"]))

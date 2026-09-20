@@ -318,6 +318,57 @@ def compare_parts(one, two, cpu_route=False):
 #: two AMD devices since 2026-09-19 while every release record read clean.
 GATING = ("DIVERGENT", "MOVED", "ONE-COLUMN")
 
+#: the states this command can end in, worst first. It is `_verify_all.verdict`'s
+#: ladder, applied to the two columns instead of to the reference table.
+PAR_STATES = ("MISMATCH", "INCOMPLETE", "NOTHING COMPARED", "VERIFIED")
+
+
+def par_state(counts, compared):
+    """`(state, passed)` from the per-verdict counts of every compared part.
+
+    A REFUSED PART DID NOT RUN, AND A RUN THAT RAN NOTHING IS NOT A PASS.
+    Until 2026-09-20 this was `passed = None if not cells else (gated == 0)`,
+    and `cells` is appended once per PART whatever the part read, so `None`
+    could only mean that the LANE LIST was empty. Every other way of running
+    nothing -- every part REFUSED on both columns, every part CPU-ROUTE-LIMIT,
+    every part N/A -- counted zero gating verdicts and printed
+    `RESULT: THE TWO COLUMNS AGREE` at exit 0. MEASURED the same day: a
+    CPU-only install outside `reference_training()` produced 65 REFUSED parts
+    and exited 0 as VERIFIED, and the docstring of `par_check` records that
+    exact state as a thing that happens.
+
+    The ladder, which is `_verify_all.verdict`'s and not a new invention:
+
+      MISMATCH          a GATING verdict. A wrong answer outranks an absent
+                        one, so this is read first.
+      INCOMPLETE        nothing gated, but a part REFUSED on both columns.
+                        Absence is not agreement. It is EXIT_CANNOT_RUN, not
+                        EXIT_MISMATCH: the part did not disagree, it did not
+                        run, and `compare_parts` still says REFUSED is not a
+                        difference.
+      NOTHING COMPARED  no part produced two hashes to compare. A column of
+                        N/A and CPU-ROUTE-LIMIT establishes nothing, and
+                        `_verify_all.verdict` already refuses to call that a
+                        pass.
+      VERIFIED          at least one part was compared and every compared
+                        part agreed.
+
+    CPU-ROUTE-LIMIT is deliberately NOT in the INCOMPLETE arm: it is a limit
+    the CPU route declares by name in its own docstring, it is reported rather
+    than hidden, and reading it as a refusal would bury `par-queries-nn` under
+    three declared limits. It cannot make a run VERIFIED either, because only
+    an IDENTICAL part can.
+    """
+    if not compared:
+        return "NOTHING COMPARED", None
+    if sum(counts.get(v, 0) for v in GATING):
+        return "MISMATCH", False
+    if counts.get("REFUSED", 0):
+        return "INCOMPLETE", None
+    if not counts.get("IDENTICAL", 0):
+        return "NOTHING COMPARED", None
+    return "VERIFIED", True
+
 
 def par_check(harness, ml, lanes, fixtures, devices=DEFAULT_PAR_DEVICES,
               repeats=1, log=None, perturb=False):
@@ -343,7 +394,10 @@ def par_check(harness, ml, lanes, fixtures, devices=DEFAULT_PAR_DEVICES,
             # The same scope `self_test` opens. On a GPU install it changes
             # nothing; on a CPU-only install it is what lets the verifier fit
             # at all, and without it every cell reads REFUSED on BOTH columns
-            # and the run says nothing (measured, 2026-09-20).
+            # (measured, 2026-09-20: 65 refused parts). That run now ends
+            # INCOMPLETE at a non-zero exit; until the same day `par_state`
+            # closed it, it printed `THE TWO COLUMNS AGREE on 0 compared cell
+            # parts` and exited 0.
             with reference_training():
                 with par_devices((devices[0],)):
                     one = run_cell(harness, ml, lane, fx, (X, yc, yr), held, repeats)
@@ -365,13 +419,13 @@ def par_check(harness, ml, lanes, fixtures, devices=DEFAULT_PAR_DEVICES,
             shown = " ".join(f"{r['part']}={r['verdict']}" for r in rows
                              if r["verdict"] != "N/A")
             log(f"  {lane:<26} {fx:<8} {shown:<58} {secs:6.2f}s")
-    gated = sum(counts.get(v, 0) for v in GATING)
+    state, passed = par_state(counts, cells)
     return dict(ran=True, vendor=vendor, devices=list(devices), repeats=repeats,
                 lanes=sorted({c["lane"] for c in cells}), fixtures=list(fixtures),
                 compared=len(cells), counts=counts, cells=cells,
                 perturbed=bool(perturb), witness=witness.summary(),
                 witness_refusal=witness.refusal(),
-                passed=None if not cells else (gated == 0))
+                state=state, passed=passed)
 
 
 # --------------------------------------------------------------------------
@@ -454,7 +508,15 @@ def format_par_check(r):
         lines.append("sharded is the exact failure this command exists to prevent.")
         return "\n".join(lines)
     lines.append("")
-    if r["passed"] is None:
+    state = r.get("state") or ("NOTHING COMPARED" if r["passed"] is None
+                               else "VERIFIED" if r["passed"] else "MISMATCH")
+    if state == "INCOMPLETE":
+        lines.append(f"RESULT: INCOMPLETE. {r['counts'].get('REFUSED', 0)} part(s) REFUSED on BOTH")
+        lines.append("columns, so they were never compared. Absence is not agreement: the parts that")
+        lines.append("did run do not make up for the ones that did not, and there is no threshold")
+        lines.append("below which a part that never ran counts as checked. The refusals are above,")
+        lines.append("with their errors.")
+    elif state == "NOTHING COMPARED":
         lines.append("RESULT: NOTHING COMPARED. No lane produced both columns, so there is nothing")
         lines.append("to agree or disagree about. This is not a pass and not a failure.")
     elif r["passed"]:
@@ -557,9 +619,14 @@ def cmd_par_check(args, ml):
         _emit(json.dumps(dict(format="mojolearn.verify-par.v1", **result), indent=1, sort_keys=True))
     else:
         _emit(format_par_check(result))
-    if result["witness_refusal"] or result["passed"] is None:
+    if result["witness_refusal"] or not result["cells"]:
         return EXIT_CANNOT_RUN
     if perturb:
+        # THE SELF-TEST ARM IS JUDGED BY ITS OWN POSITIVE REQUIREMENT and is
+        # read before the state ladder, because every part of a perturbed run
+        # is SUPPOSED to read DIVERGENT: the ladder would call that a MISMATCH,
+        # which it is, and say nothing about whether the comparison can fail.
+        # `self_test_passed` is already false when nothing was compared.
         if result["self_test_passed"]:
             _emit("SELF-TEST PASSED: the perturbed two-device column read DIVERGENT on "
                   f"{result['self_test_compared']} compared part(s). This comparison can fail.")
@@ -567,4 +634,11 @@ def cmd_par_check(args, ml):
         _emit("SELF-TEST FAILED: a perturbed two-device column did not read DIVERGENT, so this "
               "comparison cannot catch a wrong answer.")
         return EXIT_MISMATCH
-    return EXIT_VERIFIED if result["passed"] else EXIT_MISMATCH
+    # THE LADDER, not `passed` alone. `passed` is None for both INCOMPLETE and
+    # NOTHING COMPARED and neither is a pass; True only when a part was
+    # actually compared and every compared part agreed.
+    if result["state"] == "MISMATCH":
+        return EXIT_MISMATCH
+    if result["state"] != "VERIFIED":
+        return EXIT_CANNOT_RUN
+    return EXIT_VERIFIED
