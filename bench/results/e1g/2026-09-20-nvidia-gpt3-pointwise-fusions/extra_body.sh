@@ -54,7 +54,7 @@ for shape in ("2048x768", "8192x768", "32768x768"):
     row = {}
     for arm in ("split", "fused"):
         process_medians = []
-        for log in sorted(p.glob(f"norm-{arm}-[0-9].log")):
+        for log in sorted(p.glob(f"norm-{arm}-*.log")):
             vals = []
             for line in log.read_text().splitlines():
                 a = line.split()

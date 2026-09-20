@@ -1,0 +1,4 @@
+arming a 60-minute self-kill on pod tk6yb46r76epyt ...
+ARMED. Pod tk6yb46r76epyt is TERMINATED through the API in 60 minutes.
+  lease: /private/tmp/mojolearn-gpt3-fusions-cloud-6gbmiA/tools/../bench/results/runpod_leases/tk6yb46r76epyt.lease
+  extend with: tools/runpod_guard.sh extend tk6yb46r76epyt '-p 18416 root@103.207.149.173' <minutes>

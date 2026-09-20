@@ -48,7 +48,12 @@ from checks.numerics import (
     identical_rsqrt,
     identical_sigmoid,
 )
-from checks.kernel_matrix import COLUMN_APPLE, COLUMN_NVIDIA, TARGET_COLUMN
+from checks.kernel_matrix import (
+    COLUMN_AMD,
+    COLUMN_APPLE,
+    COLUMN_NVIDIA,
+    TARGET_COLUMN,
+)
 from transformer.impl.llama.fused_attention import (
     ATTN_ARM_TRIAL,
     ATTN_STICKY,
@@ -3114,6 +3119,8 @@ def llama_decoder_layer_backward_device(
         GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
         and (
             TARGET_COLUMN == COLUMN_APPLE
+            or TARGET_COLUMN == COLUMN_NVIDIA
+            or TARGET_COLUMN == COLUMN_AMD
             or BWD_GATED_SILU_FUSED_TRIAL
         )
         and not BWD_ANY_SABOTAGE
@@ -3219,6 +3226,8 @@ def llama_decoder_layer_backward_device(
         GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
         and (
             TARGET_COLUMN == COLUMN_APPLE
+            or TARGET_COLUMN == COLUMN_NVIDIA
+            or TARGET_COLUMN == COLUMN_AMD
             or BWD_NORM2_RESIDUAL_FUSED_TRIAL
         )
         and not BWD_NORM2_RESIDUAL_SPLIT_TRIAL

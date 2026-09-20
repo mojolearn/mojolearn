@@ -1,0 +1,6 @@
+pod=tk6yb46r76epyt
+armed=1
+terminated=1
+deadman_pid=12588
+exit=0
+at=2026-09-20T21:51:16Z
