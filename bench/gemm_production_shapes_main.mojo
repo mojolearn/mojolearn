@@ -68,15 +68,24 @@ def run(ctx: DeviceContext, name: String, m: Int, n: Int, k: Int) raises:
     else:
         identical_gemm_into(ctx, c, a, b, ws, m, n, k, OP_NT)
     ctx.synchronize()
+    var baseline_samples = List[Int]()
     var samples = List[Int]()
     for rep in range(5):
-        var t0 = perf_counter_ns()
-        if forced >= 0:
-            identical_gemm_with_plan(ctx, c, a, b, ws, m, n, k, OP_NT, forced)
-        else:
-            identical_gemm_into(ctx, c, a, b, ws, m, n, k, OP_NT)
-        ctx.synchronize()
-        samples.append(perf_counter_ns() - t0)
+        for arm in range(2):
+            var candidate = (arm == 0) == (rep % 2 == 1)
+            var t0 = perf_counter_ns()
+            if candidate:
+                if forced >= 0:
+                    identical_gemm_with_plan(ctx, c, a, b, ws, m, n, k, OP_NT, forced)
+                else:
+                    identical_gemm_into(ctx, c, a, b, ws, m, n, k, OP_NT)
+            else:
+                identical_gemm_with_plan(ctx, c, a, b, ws, m, n, k, OP_NT, 10)
+            ctx.synchronize()
+            if candidate:
+                samples.append(perf_counter_ns() - t0)
+            else:
+                baseline_samples.append(perf_counter_ns() - t0)
     var dh = ctx.enqueue_create_buffer[DType.uint32](1)
     var dm = ctx.enqueue_create_buffer[DType.int32](1)
     ctx.enqueue_copy(dst_buf=dm, src_ptr=hm.unsafe_ptr())
@@ -90,7 +99,8 @@ def run(ctx: DeviceContext, name: String, m: Int, n: Int, k: Int) raises:
     print("PROD_GEMM", name, "m", m, "n", n, "k", k,
           "plan", gemm_plan_name(forced if forced >= 0 else choose_gemm_plan(m, n, k)),
           "workspace_floats", ws_n, "output_mib", Float64(m*n*4)/1048576.0,
-          "samples_ns", samples, "hash", hd.unsafe_ptr().unsafe_load(0),
+          "baseline_plan10_ns", baseline_samples, "samples_ns", samples,
+          "hash", hd.unsafe_ptr().unsafe_load(0),
           "mismatches_vs_plan10", hm.unsafe_ptr().unsafe_load(0))
     _ = a^; _ = b^; _ = c^; _ = cref^; _ = ws^; _ = dh^; _ = dm^; _ = hd^; _ = hm^
 
@@ -98,6 +108,15 @@ def run(ctx: DeviceContext, name: String, m: Int, n: Int, k: Int) raises:
 def main() raises:
     var ctx = DeviceContext()
     print("PROD_GEMM_DEVICE", ctx.name())
+    run(ctx, "qkv_b1_l1024", 1024, 768, 768)
+    run(ctx, "qkv_b1_l2048", 2048, 768, 768)
+    run(ctx, "qkv_b2_l2048", 4096, 768, 768)
+    run(ctx, "qkv_b4_l2048", 8192, 768, 768)
+    run(ctx, "qkv_b8_l2048", 16384, 768, 768)
+    run(ctx, "mlp_up_b1_l2048", 2048, 2048, 768)
+    run(ctx, "mlp_down_b1_l2048", 2048, 768, 2048)
+    run(ctx, "gpt3_mlp_up_b1_l2048", 2048, 3072, 768)
+    run(ctx, "gpt3_mlp_down_b1_l2048", 2048, 768, 3072)
     run(ctx, "qkv_32768x2304x768", 32768, 2304, 768)
     run(ctx, "mlp_32768x3072x768", 32768, 3072, 768)
     run(ctx, "head_chunk_32768x1024x768", 32768, 1024, 768)
