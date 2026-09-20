@@ -324,3 +324,85 @@ def test_no_lane_reports_an_admission_the_table_cannot_support():
     for name, lane in report['lanes'].items():
         policy = lane['reference_admission']['policy']
         assert policy == strict, (name, policy)
+
+
+def _absence_harness():
+    import hashlib
+    return types.SimpleNamespace(
+        LANES={'x': None}, FIXTURES=['base'], LANE_REVISIONS={}, __file__=__file__,
+        BATCH_ALONE=16, BATCH_SPLIT=(1, 7),
+        _part_protocol=lambda part, alone: dict(part=part, alone=alone),
+        _rlpair_protocol=lambda: dict(enabled=True),
+        fixture=lambda f: (np.zeros(1),) * 3, heldout=lambda f: np.zeros(1),
+        _h=lambda a: hashlib.sha256(a.tobytes()).hexdigest()[:16])
+
+
+def test_an_absent_part_is_named_where_build_table_skips_it(tmp_path, monkeypatch):
+    """AN ABSENT PART USED TO BE A BARE `continue` (2026-09-20).
+
+    `build_table` skipped every unusable or uncollected part with no log line
+    and no flag, and the only signal was a smaller N in `use <path>: ... N
+    cell parts` -- a number with nothing to compare it against. A column
+    missing four of its nine parts and a whole one printed the same shape of
+    line. This holds the denominator, the per-part counts, and the two
+    reasons apart: NOT RUN (a hole in the column) and RAN BUT UNUSABLE (a
+    moved, refused, skipped or single-repeat cell the column did collect).
+    """
+    import json
+    h = _absence_harness()
+    fingerprint = h._h(np.zeros(1))
+    # train is usable; infer RAN and MOVED; every other part was never run.
+    cell = dict(verdict='STABLE', hashes=['a' * 16] * 2,
+                infer=['a' * 16, 'c' * 16], infer_verdict='MOVED')
+    record = dict(mode='identical', commit='a' * 40, vendor='cpu-test',
+                  fixtures={'base': dict(X=fingerprint, y_clf=fingerprint, y_reg=fingerprint)},
+                  heldout={'base': dict(X=fingerprint)}, cells={'x/base': cell})
+    path = tmp_path / 'cpu.json'
+    path.write_text(json.dumps(record))
+    monkeypatch.setattr(vr, '_commit_time', lambda *args: 1)
+    logs = []
+    parts = vr.PARTS + vr.OPTIONAL_PARTS
+    table = vr.build_table([str(path)], h, str(tmp_path), parts=parts, log=logs.append)
+    use = [l for l in logs if l.startswith('use ')]
+    assert len(use) == 1, logs
+    # the denominator, which the old line did not carry at all
+    assert f'1 of {len(parts)} cell parts' in use[0], use[0]
+    # and the two reasons, held apart
+    assert 'infer x1 (not usable' in use[0], use[0]
+    assert 'stepfull x1 (not run)' in use[0], use[0]
+    assert table['absent_parts']['infer'] == {
+        'not usable (moved, refused, skipped or one repeat)': 1}
+    assert table['absent_parts']['stepfull'] == {'not run': 1}
+    assert 'train' not in table['absent_parts']
+    assert any(l.startswith('absent stepfull: 1 cell parts over 1 admitted columns')
+               for l in logs), logs
+
+
+def test_a_whole_column_reports_no_absence_at_all(tmp_path, monkeypatch):
+    """The control for the test above. A line that always says `absent` says
+    nothing, so a column carrying every part must print none of it."""
+    import json
+    h = _absence_harness()
+    fingerprint = h._h(np.zeros(1))
+    cell = dict(verdict='STABLE', hashes=['a' * 16] * 2)
+    for part in ('infer', 'model', 'batch', 'stepfull') + vr.OPTIONAL_PARTS:
+        cell[part] = ['b' * 16] * 2
+        cell[part + '_verdict'] = 'STABLE'
+    record = dict(mode='identical', commit='a' * 40, vendor='cpu-test',
+                  fixtures={'base': dict(X=fingerprint, y_clf=fingerprint, y_reg=fingerprint)},
+                  heldout={'base': dict(X=fingerprint)}, cells={'x/base': cell})
+    for part in vr.OPTIONAL_PARTS:
+        record[part + '_protocol'] = (h._rlpair_protocol() if part == 'rlpair'
+                                      else h._part_protocol(part, h.BATCH_ALONE))
+    record['stepfull_protocol'] = h._part_protocol('stepfull', h.BATCH_ALONE)
+    record['batch_protocol'] = dict(alone=16, split=[1, 7, 'n'], prefix='1,7,full-1', enabled=True)
+    path = tmp_path / 'cpu.json'
+    path.write_text(json.dumps(record))
+    monkeypatch.setattr(vr, '_commit_time', lambda *args: 1)
+    logs = []
+    parts = vr.PARTS + vr.OPTIONAL_PARTS
+    table = vr.build_table([str(path)], h, str(tmp_path), parts=parts, log=logs.append)
+    use = [l for l in logs if l.startswith('use ')][0]
+    assert f'{len(parts)} of {len(parts)} cell parts' in use, use
+    assert 'absent' not in use, use
+    assert table['absent_parts'] == {}
