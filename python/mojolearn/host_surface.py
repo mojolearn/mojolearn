@@ -3314,8 +3314,8 @@ PUBLIC_PENDING_LANES = {
     # `verify --all` would read OWED for every part. `PUBLIC_INAPPLICABLE_PREFIXES`
     # already keeps every `par-` lane out of the public set; this says why the
     # table is empty as well.
-    "par-gpc-fit": "no reference",
-    "par-gpc-predict": "no reference",
+    # ADMITTED 2026-09-20: par-gpc-fit, CPU and a two-device RTX 4090 column agree on all nine fixtures.
+    # ADMITTED 2026-09-20: par-gpc-predict, CPU and a two-device RTX 4090 column agree on all nine fixtures.
     # THE OTHER FOUR, AND THE REASON THAT WAS WRONG
     # (lane/cpu-routes-gpu-only-four, 2026-09-20). The four lines above used
     # to read `no cpu route`, the reason that says "this box is the wrong box,
@@ -3351,8 +3351,8 @@ PUBLIC_PENDING_LANES = {
     # and nothing here claims otherwise.
     # ADMITTED 2026-09-20: mamba1-decode-session carries cells in the shipped table now.
     # ADMITTED 2026-09-20: transformer-decode-session carries cells in the shipped table now.
-    "par-causal-lm": "no reference",
-    "par-cross-val": "no reference",
+    # ADMITTED 2026-09-20: par-causal-lm, CPU and a two-device RTX 4090 column agree on all nine fixtures.
+    # ADMITTED 2026-09-20: par-cross-val, CPU and a two-device RTX 4090 column agree on all nine fixtures.
 }
 
 
