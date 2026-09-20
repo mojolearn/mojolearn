@@ -1721,7 +1721,28 @@ def commitment_state(doc, published, label):
         return out
     out["recomputed"] = recomputed
     stored = reveal.get("commitment")
-    if isinstance(stored, str) and stored != recomputed:
+    if not isinstance(stored, str):
+        # MALFORMED OUTRANKS EVERYTHING, and it is read before the published
+        # comparison (2026-09-20). Until this date the catch below was guarded
+        # by `isinstance(stored, str)` ALONE, so a document whose carried
+        # commitment was the right value in the wrong type -- a one-element
+        # list, a dict, an int, or the field stripped to null -- skipped the
+        # comparison entirely and read `self-declared`, which is in
+        # `_COMMITMENT_OK`. That is `broken=False`, AGREE, exit 0 on a
+        # document edited after it was sealed; the same edit with the
+        # commitment left as a string reads SELF-INCONSISTENT and exits 1.
+        # A reveal block this far down HAS a string nonce, so it claims to be
+        # sealed, and `seal_document` has never written anything but a string
+        # here. `cmd_challenge` and `_own_commitment` already refuse a
+        # non-string commitment by name; this states the same rule where the
+        # comparison is decided.
+        out.update(state="MALFORMED", problem=(
+            f"{label}: its `{REVEAL_KEY}.commitment` is {type(stored).__name__}, not a string "
+            f"({stored!r}). A sealed document commits to one hex line; a commitment in another "
+            f"type cannot be compared with the {recomputed} this document recomputes to, and a "
+            f"comparison that cannot be made is not a comparison that passed"))
+        return out
+    if stored != recomputed:
         # The document was edited after it was sealed. A forger who reseals
         # defeats this, which is exactly why the PUBLISHED commitment is the
         # mechanism and this is only a free extra catch -- but a document that
@@ -2186,7 +2207,18 @@ def challenge_state(doc, published, label):
         return out
     out["recomputed"] = recomputed
     stored = reveal.get(CHALLENGE_COMMITMENT_FIELD)
-    if isinstance(stored, str) and stored != recomputed:
+    if not isinstance(stored, str):
+        # THE IDENTICAL GUARD, AND THE IDENTICAL HOLE. See `commitment_state`.
+        # `seal_challenge` writes the nonce and the commitment together, so a
+        # block with a string nonce and a commitment in any other type was
+        # edited after it was sealed.
+        out.update(state="MALFORMED", problem=(
+            f"{label}: its `{REVEAL_KEY}.{CHALLENGE_COMMITMENT_FIELD}` is "
+            f"{type(stored).__name__}, not a string ({stored!r}), while it carries a "
+            f"`{CHALLENGE_NONCE_FIELD}` and so claims to be sealed. It cannot be compared with "
+            f"the {recomputed} this response recomputes to"))
+        return out
+    if stored != recomputed:
         out.update(state="SELF-INCONSISTENT", problem=(
             f"{label}: the challenge response does not match the challenge commitment the document "
             f"carries itself (carries {stored}, recomputes to {recomputed}); it was edited after "

@@ -339,6 +339,35 @@ def test_a_copied_challenge_response_is_caught_by_the_second_commitment():
     assert r2["verdict"] == "MISMATCH", r2["verdict"]
 
 
+@pytest.mark.parametrize("wrap", [lambda s: [s], lambda s: {"v": s},
+                                  lambda s: 7, lambda s: None])
+def test_a_challenge_commitment_in_the_wrong_type_is_malformed(wrap):
+    """THE SAME HOLE `commitment_state` CARRIED, closed the same day.
+    `challenge_state` guarded its self-consistency catch with
+    `isinstance(stored, str) and stored != recomputed`, so a response edited
+    after its challenge was sealed read `self-declared` -- which is in
+    `_CHALLENGE_OK` -- as soon as the carried line was not a string."""
+    a, b, la, lb, ca, cb, challenge = _challenged_pair()
+    a[va.CHALLENGE_KEY]["cells"][0]["value"] = "ffff0000ffff0000"   # edited after sealing
+    a[va.REVEAL_KEY][va.CHALLENGE_COMMITMENT_FIELD] = wrap(
+        a[va.REVEAL_KEY][va.CHALLENGE_COMMITMENT_FIELD])
+    st = va.challenge_state(a, None, "a.json")
+    assert st["state"] == "MALFORMED", st
+    assert "MALFORMED" not in va._CHALLENGE_OK
+    r = va.compare_documents(a, b, "a.json", "b.json", commitment_a=la, commitment_b=lb)
+    assert r["challenge"]["broken"] is True
+    assert r["verdict"] == "CHALLENGE BROKEN" and r["exit"] == va.EXIT_MISMATCH
+
+
+def test_a_document_with_no_challenge_nonce_is_still_absent():
+    """The narrowing: only a block that CLAIMS to be sealed is malformed."""
+    a, b, la, lb, _ca, _cb, _challenge = _challenged_pair(seal_challenges=False)
+    assert va.challenge_state(a, None, "a.json")["state"] == "absent"
+    r = va.compare_documents(a, b, "a.json", "b.json", commitment_a=la, commitment_b=lb)
+    assert r["challenge"]["broken"] is False
+    assert r["verdict"] == "AGREE", r["verdict"]
+
+
 def test_without_the_second_round_a_copied_response_passes_and_says_so():
     """AND WATCH THAT GAP, rather than claiming the second round is optional.
     With no challenge commitments exchanged, a copied response is
