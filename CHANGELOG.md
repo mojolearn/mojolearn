@@ -3,6 +3,17 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
+## Unreleased
+
+- Parallel workers now set native device counts to their own visible device
+  group, preventing inherited multi-GPU settings from reaching a single-GPU worker.
+- Parallel ARIMA preserves the caller's trend configuration and saved-model metadata.
+- Cross-validation supports explicit Metal `devices=(0,)`, with a checked child
+  process. Multiple Metal devices remain unsupported.
+- `verify --par all` runs all fixtures by default. Every lane/fixture must carry
+  its own placement witness; another cell's successful placement cannot certify it.
+  Explicit `--fixtures` selections still override the default.
+
 ## 0.8.9 (published 2026-09-20)
 
 - CPU-only installs now train through the packaged host bindings. Gradient
