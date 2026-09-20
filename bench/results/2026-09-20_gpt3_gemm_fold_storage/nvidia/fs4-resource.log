@@ -1,0 +1,51 @@
+1116 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x593100000000, nodemask=2)
+GEMM_CENSUS_BEGIN label=shipped
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function 'gemm_checks_gemm_identical_id6A6A6A6A6A6A_f9dade9e4111c0be' for 'sm_89'
+ptxas info    : Function properties for gemm_checks_gemm_identical_id6A6A6A6A6A6A_f9dade9e4111c0be
+    4144 bytes stack frame, 44 bytes spill stores, 44 bytes spill loads
+ptxas info    : Used 255 registers, 4144 bytes cumulative stack size, 40960 bytes smem, 416 bytes cmem[0]
+
+GEMM_CENSUS label=shipped regs=255 local=4144 shared=40960 max_threads=256 blocks_per_sm_256=1
+GEMM_CENSUS_BEGIN label=ksplit
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function 'gemm_checks_gemm_identical_id6A6A6A6A6A6A_4e3063e3566ca973' for 'sm_89'
+ptxas info    : Function properties for gemm_checks_gemm_identical_id6A6A6A6A6A6A_4e3063e3566ca973
+    4096 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads
+ptxas info    : Used 254 registers, 4096 bytes cumulative stack size, 40960 bytes smem, 420 bytes cmem[0]
+
+GEMM_CENSUS label=ksplit regs=254 local=4096 shared=40960 max_threads=256 blocks_per_sm_256=1
+GEMM_CENSUS_BEGIN label=fs4_all
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function 'gemm_checks_gemm_identical_id6A6A6A6A6A6A_1851de2330bbcdf0' for 'sm_89'
+ptxas info    : Function properties for gemm_checks_gemm_identical_id6A6A6A6A6A6A_1851de2330bbcdf0
+    1128 bytes stack frame, 104 bytes spill stores, 104 bytes spill loads
+ptxas info    : Used 255 registers, 1128 bytes cumulative stack size, 32768 bytes smem, 420 bytes cmem[0]
+
+1116 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x706e80000000, nodemask=1)
+GEMM_CENSUS label=fs4_all regs=255 local=1128 shared=32768 max_threads=256 blocks_per_sm_256=1
+GEMM_CENSUS_BEGIN label=fs4_group
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function 'gemm_checks_gemm_identical_id6A6A6A6A6A6A_42eef09db21e875e' for 'sm_89'
+ptxas info    : Function properties for gemm_checks_gemm_identical_id6A6A6A6A6A6A_42eef09db21e875e
+    1160 bytes stack frame, 132 bytes spill stores, 132 bytes spill loads
+ptxas info    : Used 255 registers, 1160 bytes cumulative stack size, 32768 bytes smem, 420 bytes cmem[0]
+
+GEMM_CENSUS label=fs4_group regs=255 local=1160 shared=32768 max_threads=256 blocks_per_sm_256=1
+GEMM_CENSUS_BEGIN label=fs4_pad_all
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function 'gemm_checks_gemm_identical_id6A6A6A6A6A6A_e15db9f2f9779df2' for 'sm_89'
+ptxas info    : Function properties for gemm_checks_gemm_identical_id6A6A6A6A6A6A_e15db9f2f9779df2
+    1128 bytes stack frame, 104 bytes spill stores, 104 bytes spill loads
+ptxas info    : Used 255 registers, 1128 bytes cumulative stack size, 33792 bytes smem, 420 bytes cmem[0]
+
+GEMM_CENSUS label=fs4_pad_all regs=255 local=1128 shared=33792 max_threads=256 blocks_per_sm_256=1
+GEMM_CENSUS_BEGIN label=fs4_pad_group
+ptxas info    : 0 bytes gmem
+ptxas info    : Compiling entry function 'gemm_checks_gemm_identical_id6A6A6A6A6A6A_b21d3872110f94f9' for 'sm_89'
+ptxas info    : Function properties for gemm_checks_gemm_identical_id6A6A6A6A6A6A_b21d3872110f94f9
+    1168 bytes stack frame, 144 bytes spill stores, 144 bytes spill loads
+ptxas info    : Used 255 registers, 1168 bytes cumulative stack size, 33792 bytes smem, 420 bytes cmem[0]
+
+GEMM_CENSUS label=fs4_pad_group regs=255 local=1168 shared=33792 max_threads=256 blocks_per_sm_256=1
+GEMM_CENSUS_DONE
