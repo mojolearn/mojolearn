@@ -229,3 +229,61 @@ def test_classifier_combined_prediction_is_exact_and_traverses_once(cls, monkeyp
     actual_np, expected_np = np.asarray(proba), np.asarray(expected)
     view = np.uint32 if actual_np.dtype == np.float32 else np.uint64
     np.testing.assert_array_equal(actual_np.view(view), expected_np.view(view))
+
+
+@pytest.mark.parametrize('cls', [RandomForestClassifier, ExtraTreesClassifier])
+def test_fast_classifier_predict_uses_resident_device_argmax(cls, monkeypatch):
+    """FAST labels cross as int32 codes; probability APIs keep their vote path."""
+    import ctypes
+    calls = []
+
+    def labels(handle, source, destination, dims):
+        calls.append(('labels', handle, tuple(dims)))
+        out = (ctypes.c_int32 * dims[0]).from_address(destination)
+        for row, code in enumerate((1, 0, 1)):
+            out[row] = code
+        return dims[0]
+
+    def votes(handle, source, destination, dims):
+        calls.append(('votes', handle, tuple(dims)))
+        out = (ctypes.c_float * (dims[0] * dims[2])).from_address(destination)
+        for row in range(dims[0]):
+            out[row * 2] = 0.25
+            out[row * 2 + 1] = 0.75
+        return dims[0]
+
+    native = SimpleNamespace(
+        forest_prepare_gpu=lambda *args: 7,
+        forest_predict_resident_gpu=votes,
+        forest_predict_resident_into_gpu=votes,
+        forest_predict_resident_reuse_gpu=votes,
+        forest_predict_resident_labels_gpu=labels,
+        forest_release_gpu=lambda handle: None,
+    )
+    monkeypatch.setattr(_backend, 'binding', lambda *args: native)
+    model = fitted(cls, 'parallel_groves')
+    model.numeric_mode = model._fit_numeric_mode = 'fast'
+    model.classes_ = [10, 20]
+    X = np.ones((3, 1), dtype=np.float32)
+    np.testing.assert_array_equal(model.predict(X), np.array([20, 10, 20]))
+    assert [call[0] for call in calls] == ['labels']
+    model.predict_proba(X)
+    assert [call[0] for call in calls] == ['labels', 'votes']
+
+
+@pytest.mark.parametrize('cls', [RandomForestClassifier, ExtraTreesClassifier])
+def test_classifier_device_argmax_is_fast_only_and_optional(cls, monkeypatch):
+    model = fitted(cls, 'parallel_groves')
+    X = np.ones((2, 1), dtype=np.float32)
+    def forbidden(*args):
+        pytest.fail('non-FAST or sequential dispatch reached device argmax')
+    native = SimpleNamespace(forest_predict_resident_labels_gpu=forbidden)
+    monkeypatch.setattr(_backend, 'binding', lambda *args: native)
+    # Explicit parallel_groves does not weaken the reproducibility tier.
+    assert model._predict_forest_labels(X) is None
+    model.numeric_mode = model._fit_numeric_mode = 'fast'
+    model.inference_engine = 'sequential'
+    assert model._predict_forest_labels(X) is None
+    model.inference_engine = 'parallel_groves'
+    del native.forest_predict_resident_labels_gpu
+    assert model._predict_forest_labels(X) is None

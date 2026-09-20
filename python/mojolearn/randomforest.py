@@ -698,7 +698,11 @@ class RandomForestClassifier(_RandomForestBase):
         `randomforest.cuh:417-427`) mapped through `classes_`: an int64 or
         float64 `Array` for numeric labels, a Python list for str labels
         (DEVIATION 2340)."""
-        return decode_labels(self.classes_, argmax_rows(self.predict_proba(X)))
+        Xa, _, _ = self._check_predict_input(X)
+        codes = self._predict_forest_labels(Xa)
+        if codes is not None:
+            return decode_labels(self.classes_, codes)
+        return decode_labels(self.classes_, argmax_rows(self.predict_proba(Xa)))
 
 
 @forest_estimator("regressor")
