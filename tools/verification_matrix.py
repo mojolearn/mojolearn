@@ -206,12 +206,14 @@ def part_value(cell, part):
 
 
 def stable_digest(cell, part):
-    """A repeated, stable digest; refusal/N/A/one repeat is not evidence."""
+    """A stable digest; refusal and N/A are not evidence. EVERY CELL IS FITTED
+    ONCE (2026-09-19): one fit is a value here, and the second witness is the
+    other columns this matrix sets beside it."""
     if not isinstance(cell, dict):
         return None
     verdict = cell.get("verdict" if part == "train" else part + "_verdict")
     values = part_value(cell, part)
-    if (verdict != "STABLE" or not values or len(values) < 2
+    if (verdict != "STABLE" or not values
             or not all(isinstance(v, str) and re.fullmatch(r"[0-9a-f]{16}", v) for v in values)
             or len(set(values)) != 1):
         return None
@@ -231,7 +233,7 @@ def negative_control_moves(cell, clean, part):
     if verdict not in ("MOVED", "DIVERGENT", "RELOAD-MOVED", "BATCH_MOVED", "RLPAIR_MOVED"):
         return False
     # An explicit assertion failure is evidence, an exception or N/A is not.
-    return bool(values and len(values) >= 2 and all(isinstance(v, str) and
+    return bool(values and all(isinstance(v, str) and
         (re.fullmatch(r"[0-9a-f]{16}", v) or v.startswith(("BATCH_MOVED:", "RLPAIR_MOVED:", "RELOAD-MOVED:")))
         for v in values) and any(v != baseline for v in values))
 

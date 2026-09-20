@@ -169,7 +169,7 @@ def test_builder_requires_witnesses_repeats_and_standard_property_protocols(tmp_
         'missing_heldout':{'train'},'batch_protocol':{'train','infer','stepfull'},
         'decode_protocol':{'train','infer','batch'}}
     assert parts==expected[broken]
-    assert table['admission_policy']['min_repeats']==2
+    assert table['admission_policy']==vref.ADMISSION_POLICY
 
 
 def scoped_tables():
@@ -270,3 +270,36 @@ def test_the_key_being_absent_reads_as_not_narrowed():
     column = clean_column()
     assert 'partial_column' not in column
     assert vref.admit(column, RECORDS + '/new/cpu-clean.json') is None
+
+
+@pytest.mark.parametrize('second,admitted', [('agrees', True), ('differs', False), ('absent', False)])
+def test_one_fit_on_two_device_classes_is_a_reference(tmp_path, monkeypatch, second, admitted):
+    """EVERY CELL IS FITTED ONCE. One fit is a value; the same hash from a
+    second device class is what makes it a reference. One class alone, or two
+    classes that disagree, give no reference."""
+    import json, types
+    h=types.SimpleNamespace(LANES={'x':None}, FIXTURES=['base'], LANE_REVISIONS={}, __file__=__file__,
+        _h=lambda x:'f'*16, fixture=lambda f:(0,0,0), heldout=lambda f:0,
+        BATCH_ALONE=16,BATCH_SPLIT=(3,7),_part_protocol=lambda part,alone:dict(length=32))
+    def column(vendor, value):
+        return dict(mode='identical',commit='a'*40,vendor=vendor,
+            cells={'x/base':dict(verdict='STABLE',hashes=[value])},
+            fixtures={'base':dict(X='f'*16,y_clf='f'*16,y_reg='f'*16)},heldout={'base':dict(X='f'*16)})
+    paths=[tmp_path/'cpu.json']
+    paths[0].write_text(json.dumps(column('cpu-test','a'*16)))
+    if second!='absent':
+        paths.append(tmp_path/'nvidia.json')
+        paths[1].write_text(json.dumps(column('nvidia-test','a'*16 if second=='agrees' else 'b'*16)))
+    monkeypatch.setattr(vref,'_commit_time',lambda *a:1)
+    table=vref.build_table([str(p) for p in paths],h,str(tmp_path),parts=('train',))
+    ref=table['cells'].get('x/base',{}).get('train',{}).get('ref')
+    assert (ref=='a'*16) is admitted
+    if admitted:
+        assert set(table['cells']['x/base']['train']['cols'])=={'cpu','nvidia'}
+
+
+def test_scoped_admission_accepts_the_two_witness_policy():
+    base, candidate = scoped_tables()
+    candidate['admission_policy'] = dict(vref.ADMISSION_POLICY)
+    merged = vref.merge_reference_lanes(base, candidate, ['new'])
+    assert merged['lane_admission']['new']['policy'] == vref.ADMISSION_POLICY

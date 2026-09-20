@@ -13,7 +13,6 @@ def cell(value='a' * 16, part='train'):
 
 @pytest.mark.parametrize('bad', [None, {}, {'verdict': 'REFUSED', 'hashes': ['error'] * 2},
     {'verdict': 'N/A', 'hashes': ['n/a:no-check'] * 2},
-    {'verdict': 'STABLE', 'hashes': ['a' * 16]},
     {'verdict': 'STABLE', 'hashes': ['a' * 16, 'b' * 16]}])
 def test_invalid_clean_or_changed_arm_is_not_a_negative_control(bad):
     assert not matrix.negative_control_moves(cell('b' * 16), bad, 'train')
@@ -23,6 +22,10 @@ def test_invalid_clean_or_changed_arm_is_not_a_negative_control(bad):
 def test_changed_bytes_and_explicit_failed_batch_assertion_are_controls():
     assert matrix.negative_control_moves(cell('b' * 16), cell(), 'train')
     assert not matrix.negative_control_moves(cell(), cell(), 'train')
+    # every cell is fitted once: one fit per arm is a control when the bytes differ
+    once = {'verdict': 'STABLE', 'hashes': ['a' * 16]}
+    assert matrix.negative_control_moves(cell('b' * 16), once, 'train')
+    assert not matrix.negative_control_moves(once, cell(), 'train')
     bad = {'batch_verdict': 'BATCH_MOVED', 'batch': ['BATCH_MOVED: changed row'] * 2}
     assert matrix.negative_control_moves(bad, cell(part='batch'), 'batch')
     bad['batch'] = ['RuntimeError: missing binding'] * 2

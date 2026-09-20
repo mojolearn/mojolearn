@@ -371,7 +371,7 @@ def test_an_absent_part_is_named_where_build_table_skips_it(tmp_path, monkeypatc
     assert 'infer x1 (not usable' in use[0], use[0]
     assert 'stepfull x1 (not run)' in use[0], use[0]
     assert table['absent_parts']['infer'] == {
-        'not usable (moved, refused, skipped or one repeat)': 1}
+        'not usable (moved, refused or skipped)': 1}
     assert table['absent_parts']['stepfull'] == {'not run': 1}
     assert 'train' not in table['absent_parts']
     assert any(l.startswith('absent stepfull: 1 cell parts over 1 admitted columns')

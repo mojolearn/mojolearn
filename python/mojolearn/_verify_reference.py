@@ -397,8 +397,9 @@ def _part_value(cell, part, min_repeats=1):
     """The one value a column carries for a part, or None when it carries no
     usable one (moved, refused, reload-moved, batch-moved, skipped).
 
-    Historical provenance readers may accept one sample. New table admission
-    explicitly requires two; reading an old table does not silently rewrite it.
+    ONE FIT IS A VALUE (2026-09-20). Every cell is fitted once; what makes a
+    value a REFERENCE is a second witness, and `build_table` asks for that
+    across columns (`_corroborated`), not for a second fit on the same box.
     """
     if not isinstance(cell, dict):
         return None
@@ -417,6 +418,28 @@ def _part_value(cell, part, min_repeats=1):
     return None
 
 
+#: EVERY CELL IS FITTED ONCE (Andrew, 2026-09-19). A reference needs two
+#: witnesses of the same hash, and a second device class is a better witness
+#: than a second fit on the same box: it separates "this box moves run to run"
+#: from "this box differs from the others" in one comparison. Two fits on one
+#: box still count, so the records taken before this rule stay admissible.
+ADMISSION_POLICY = dict(min_repeats=1, min_witnesses=2, input_witness_required=True,
+                        property_protocol_required=True)
+
+
+def _fits(cell, part):
+    values = cell.get("hashes" if part == "train" else part)
+    return len(values) if isinstance(values, list) else 0
+
+
+def _corroborated(by_cls, ref):
+    """Two witnesses of `ref`: two device classes, or one class fitted twice."""
+    if ref.startswith("n/a:"):
+        return True          # a declaration the harness makes, not a measurement
+    agree = [won for won in by_cls.values() if won[2] == ref]
+    return len(agree) >= 2 or any(won[3] >= 2 for won in agree)
+
+
 def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=None):
     """The table dict from the column JSONs at `record_paths`. `harness` is
     the imported identity_break module: its fixtures decide which columns
@@ -432,7 +455,8 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=No
                 for f, (X, yc, yr) in ((f, harness.fixture(f)) for f in harness.FIXTURES)}
     want_held = {f: dict(X=harness._h(harness.heldout(f))) for f in harness.FIXTURES}
     records, cache = [], {}
-    best = {}                      # (cell, part, class) -> (key, record idx, value)
+    best = {}                      # (cell, part, class) -> (key, record idx, value, fits)
+    uncorroborated = {}            # part -> count of single-witness cell parts left out
     absent_total = {}              # part -> {reason: count}, over every admitted column
     for path in sorted(record_paths):
         try:
@@ -503,15 +527,14 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=No
                         _absent(part, "not run" if j.get(f"{part}_protocol") is None
                                 else "protocol differs")
                         continue
-                value = _part_value(cell, part, min_repeats=2)
+                value = _part_value(cell, part)
                 if value is None:
                     # NOT RUN and RAN BUT UNUSABLE are different facts. The
                     # first is a hole in the column; the second is a moved,
-                    # refused, skipped or single-repeat cell that the column
-                    # did collect. Reading both as "absent" is how a
+                    # refused or skipped cell that the column did collect. Reading both as "absent" is how a
                     # four-part column passed for a nine-part one.
                     ran = ("verdict" if part == "train" else f"{part}_verdict") in cell
-                    _absent(part, "not usable (moved, refused, skipped or one repeat)"
+                    _absent(part, "not usable (moved, refused or skipped)"
                             if ran else "not run")
                     continue
                 if not value.startswith("n/a:") and part in ("batch", "stepfull"):
@@ -524,7 +547,7 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=No
                         continue
                 slot = (cell_key, part, cls)
                 if slot not in best or key > best[slot][0]:
-                    best[slot] = (key, idx, value)
+                    best[slot] = (key, idx, value, _fits(cell, part))
                 kept += 1
         line = f"use  {path}: class {cls}, commit {commit[:9]}, {kept} of {asked} cell parts"
         if absent:
@@ -547,14 +570,18 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=No
     grouped = {}
     for (cell_key, part, cls), won in best.items():
         grouped.setdefault((cell_key, part), {})[cls] = won
-    used = sorted({won[1] for g in grouped.values() for won in g.values()})
+    used = sorted({won[1] for g in grouped.values() for won in g.values()
+                   if _corroborated(g, g[max(g, key=lambda c: g[c][0])][2])})
     renum = {old: new for new, old in enumerate(used)}
     for (cell_key, part), by_cls in sorted(grouped.items()):
         newest_cls = max(by_cls, key=lambda c: by_cls[c][0])
-        n_key, _, ref = by_cls[newest_cls]
+        n_key, _, ref, _ = by_cls[newest_cls]
+        if not _corroborated(by_cls, ref):
+            uncorroborated[part] = uncorroborated.get(part, 0) + 1
+            continue
         ent = dict(ref=ref, cols={})
         for cls in sorted(by_cls):
-            k, idx, value = by_cls[cls]
+            k, idx, value, _ = by_cls[cls]
             if value == ref:
                 ent["cols"][cls] = renum[idx]
             elif k[0] == n_key[0] and records[idx]["commit"] == records[by_cls[newest_cls][1]]["commit"]:
@@ -566,6 +593,9 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=No
             ent["ref"] = None
             ent["cols"][newest_cls] = [renum[by_cls[newest_cls][1]], ref]
         cells.setdefault(cell_key, {})[part] = ent
+    for part in sorted(uncorroborated):
+        log(f"uncorroborated {part}: {uncorroborated[part]} cell parts rest on one fit of one "
+            "device class and were left out; a second class fitting the cell once admits them")
     return dict(
         format=FORMAT,
         generated_by="python -m mojolearn verify --all --emit-reference",
@@ -577,7 +607,7 @@ def build_table(record_paths, harness, repo_root, lanes=None, log=None, parts=No
         #: reference predates the input it is supposed to describe. A table
         #: generated before this key existed carries none, which reads as
         #: "unknown" and therefore stale for any lane that has a revision.
-        admission_policy=dict(min_repeats=2, input_witness_required=True, property_protocol_required=True),
+        admission_policy=dict(ADMISSION_POLICY),
         #: WHAT THE ADMITTED COLUMNS DID NOT CARRY (2026-09-20). The per-part
         #: counts `build_table` logged, kept in the table so a reader of the
         #: FILE, not only of the build log, can see that (say) every stepfull
@@ -629,7 +659,8 @@ def merge_reference_lanes(base, candidate, lanes):
     if not lanes:
         raise TableError("scoped admission requires at least one lane")
     policy = candidate.get("admission_policy", {})
-    if (policy.get("min_repeats", 0) < 2 or not policy.get("input_witness_required")
+    if ((policy.get("min_witnesses", 0) < 2 and policy.get("min_repeats", 0) < 2)
+            or not policy.get("input_witness_required")
             or not policy.get("property_protocol_required")):
         raise TableError("scoped admission requires a strict generated candidate")
     for field in ("format", "fixtures", "heldout"):
