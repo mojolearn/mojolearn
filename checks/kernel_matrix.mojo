@@ -1917,9 +1917,14 @@ def forest_row_threads_for[column: Int]() -> Bool:
     # LOSES and stays off: Covtype 54 columns 27.0 to 32.0 (0.84x), Year 90
     # columns 56.5 to 63.8 (0.89x), Istella-S 220 columns 275.2 to 619.4
     # (0.44x) and its regressor 257.5 to 545.0 (0.47x): adjacent threads read
-    # 32 different wide rows and the feature reads stop coalescing. Apple
-    # (identity only, checks/forest_inference_gpu.mojo) and AMD are untimed.
-    return column == COLUMN_NVIDIA
+    # 32 different wide rows and the feature reads stop coalescing.
+    # FLIPPED ON APPLE 2026-09-19 for the same <=32-feature bound (M4 Metal,
+    # direct resident-kernel ABBA, all output bits equal): at 28 features the
+    # row schedule improved scalar leaves by 1.28x (32 trees, depth8), 1.98x
+    # (100 trees, depth10), and 2.10x (300 trees, depth10); vector leaves by
+    # 1.53x at 2 outputs and 1.49x at 8 outputs (100 trees, depth10). The
+    # IDENTICAL scalar check improved 1.72x. AMD remains untimed.
+    return column == COLUMN_NVIDIA or column == COLUMN_APPLE
 
 
 def knn_smem_distance_tile_for[column: Int, identical: Bool]() -> Bool:
