@@ -1,0 +1,3470 @@
+{
+ "mode": "identical",
+ "repeats": 2,
+ "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+ "vendor": "cpu-apple-m4",
+ "commit": "2a2d3491d472bb76a8a0c53e209b8ebc9cdbfa91",
+ "commit_source": "git rev-parse HEAD",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "hashed": {
+   "X": "c93497b26fe65cda",
+   "y_clf": "d104ead2f62bdd03",
+   "y_reg": "ce4959d8070bb069"
+  },
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "denormal_ftz": {
+   "X": "34c156b0d0e8a891",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  },
+  "negative": {
+   "X": "08106ffff3256313",
+   "y_clf": "294ce4d7dadaf0bb",
+   "y_reg": "ce1914d5f78f5707"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "hashed": {
+   "X": "9dc786ade4574aff"
+  },
+  "wide": {
+   "X": "d52a1af18a3c2f1c"
+  },
+  "denormal": {
+   "X": "5061056b118d07d0"
+  },
+  "denormal_ftz": {
+   "X": "a8c3d1a560b5cabb"
+  },
+  "dupes": {
+   "X": "e4b16c115962dfcd"
+  },
+  "odd": {
+   "X": "32ea0bbed60b8e6c"
+  },
+  "negative": {
+   "X": "45b539a3f66ce25d"
+  }
+ },
+ "cells": {
+  "mamba1-decode-session/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "036f89b10477d901",
+    "036f89b10477d901"
+   ],
+   "parts": [
+    {
+     "step": "bfe92dd1b46862d2",
+     "state": "0800dac84123170c",
+     "flags": "cd5e26e9d1168a65"
+    },
+    {
+     "step": "bfe92dd1b46862d2",
+     "state": "0800dac84123170c",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "97e86b9db80719a7",
+    "97e86b9db80719a7"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any other row count by name, so a row alone is a different session and not a smaller batch of this call; the per-call step the session is held to carries the batch part on the mamba1 and transformer lanes)",
+    "n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any other row count by name, so a row alone is a different session and not a smaller batch of this call; the per-call step the session is held to carries the batch part on the mamba1 and transformer lanes)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "7d79ddc6d8ec34e4",
+    "7d79ddc6d8ec34e4"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.037618375004967675,
+    "stages": {
+     "repeat=1/train": 0.01017558400053531,
+     "repeat=1/infer-save-reload": 0.0024686669930815697,
+     "repeat=1/batch": 0.0001087500131689012,
+     "repeat=1/batchgrad": 2.7834001230075955e-05,
+     "repeat=1/batchscale": 2.1790998289361596e-05,
+     "repeat=1/ragged": 2.045798464678228e-05,
+     "repeat=1/stepfull": 0.006428416993003339,
+     "repeat=2/train": 0.0091467080055736,
+     "repeat=2/infer-save-reload": 0.0024206660164054483,
+     "repeat=2/batch": 0.00013025000225752592,
+     "repeat=2/batchgrad": 2.0291015971451998e-05,
+     "repeat=2/batchscale": 1.9625003915280104e-05,
+     "repeat=2/ragged": 1.912500010803342e-05,
+     "repeat=2/stepfull": 0.00643229199340567
+    }
+   }
+  },
+  "mamba1-decode-session/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3cc74db02ec1b22d",
+    "3cc74db02ec1b22d"
+   ],
+   "parts": [
+    {
+     "step": "531f16d389c37b89",
+     "state": "328777d66b5e2cfa",
+     "flags": "cd5e26e9d1168a65"
+    },
+    {
+     "step": "531f16d389c37b89",
+     "state": "328777d66b5e2cfa",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "13aed38cf2e3c341",
+    "13aed38cf2e3c341"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any other row count by name, so a row alone is a different session and not a smaller batch of this call; the per-call step the session is held to carries the batch part on the mamba1 and transformer lanes)",
+    "n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any other row count by name, so a row alone is a different session and not a smaller batch of this call; the per-call step the session is held to carries the batch part on the mamba1 and transformer lanes)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "bd3ea42885c1f0f5",
+    "bd3ea42885c1f0f5"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.05512233398621902,
+    "stages": {
+     "repeat=1/train": 0.01439708299585618,
+     "repeat=1/infer-save-reload": 0.003756541002076119,
+     "repeat=1/batch": 0.00010408301022835076,
+     "repeat=1/batchgrad": 3.0458002584055066e-05,
+     "repeat=1/batchscale": 2.891701296903193e-05,
+     "repeat=1/ragged": 2.8583017410710454e-05,
+     "repeat=1/stepfull": 0.009524125023745,
+     "repeat=2/train": 0.013815707992762327,
+     "repeat=2/infer-save-reload": 0.003577124996809289,
+     "repeat=2/batch": 0.00010525001562200487,
+     "repeat=2/batchgrad": 3.079199814237654e-05,
+     "repeat=2/batchscale": 2.8582988306879997e-05,
+     "repeat=2/ragged": 2.8416019631549716e-05,
+     "repeat=2/stepfull": 0.009436332999030128
+    }
+   }
+  },
+  "mamba1-decode-session/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a9bb1090e91b7582",
+    "a9bb1090e91b7582"
+   ],
+   "parts": [
+    {
+     "step": "af51e777f74767e3",
+     "state": "8d732563c8963010",
+     "flags": "cd5e26e9d1168a65"
+    },
+    {
+     "step": "af51e777f74767e3",
+     "state": "8d732563c8963010",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "b2e6c1006bf3a5ce",
+    "b2e6c1006bf3a5ce"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any other row count by name, so a row alone is a different session and not a smaller batch of this call; the per-call step the session is held to carries the batch part on the mamba1 and transformer lanes)",
+    "n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any other row count by name, so a row alone is a different session and not a smaller batch of this call; the per-call step the session is held to carries the batch part on the mamba1 and transformer lanes)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "12348ab88f4b097f",
+    "12348ab88f4b097f"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.05694533299538307,
+    "stages": {
+     "repeat=1/train": 0.014797250012634322,
+     "repeat=1/infer-save-reload": 0.004027583985589445,
+     "repeat=1/batch": 4.166699363850057e-05,
+     "repeat=1/batchgrad": 3.687501884996891e-05,
+     "repeat=1/batchscale": 3.3249991247430444e-05,
+     "repeat=1/ragged": 3.295901115052402e-05,
+     "repeat=1/stepfull": 0.010322291986085474,
+     "repeat=2/train": 0.014162292005494237,
+     "repeat=2/infer-save-reload": 0.0037629579892382026,
+     "repeat=2/batch": 0.00010987499263137579,
+     "repeat=2/batchgrad": 3.1167000997811556e-05,
+     "repeat=2/batchscale": 2.9082992114126682e-05,
+     "repeat=2/ragged": 2.9250018997117877e-05,
+     "repeat=2/stepfull": 0.009331082983408123
+    }
+   }
+  },
+  "mamba1-decode-session/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f765fff13969ae65",
+    "f765fff13969ae65"
+   ],
+   "parts": [
+    {
+     "step": "8da81e4e3c9aa155",
+     "state": "d7263806a5402f63",
+     "flags": "cd5e26e9d1168a65"
+    },
+    {
+     "step": "8da81e4e3c9aa155",
+     "state": "d7263806a5402f63",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "905c98cf2a276d1d",
+    "905c98cf2a276d1d"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any other row count by name, so a row alone is a different session and not a smaller batch of this call; the per-call step the session is held to carries the batch part on the mamba1 and transformer lanes)",
+    "n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any other row count by name, so a row alone is a different session and not a smaller batch of this call; the per-call step the session is held to carries the batch part on the mamba1 and transformer lanes)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "07799d0f4bc09ccf",
+    "07799d0f4bc09ccf"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.05351191700901836,
+    "stages": {
+     "repeat=1/train": 0.013317499979166314,
+     "repeat=1/infer-save-reload": 0.0035725419875234365,
+     "repeat=1/batch": 3.670802107080817e-05,
+     "repeat=1/batchgrad": 4.0875020204111934e-05,
+     "repeat=1/batchscale": 3.174997982569039e-05,
+     "repeat=1/ragged": 2.8874987037852407e-05,
+     "repeat=1/stepfull": 0.009237457998096943,
+     "repeat=2/train": 0.01362137499381788,
+     "repeat=2/infer-save-reload": 0.0035865840036422014,
+     "repeat=2/batch": 0.00010712500079534948,
+     "repeat=2/batchgrad": 3.1333998776972294e-05,
+     "repeat=2/batchscale": 2.9082992114126682e-05,
+     "repeat=2/ragged": 2.8749986086040735e-05,
+     "repeat=2/stepfull": 0.009656874986831099
+    }
+   }
+  },
+  "mamba1-decode-session/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3f050da17bbc4341",
+    "3f050da17bbc4341"
+   ],
+   "parts": [
+    {
+     "step": "9a06b54a24ee91bc",
+     "state": "5ae04fbabe492480",
+     "flags": "cd5e26e9d1168a65"
+    },
+    {
+     "step": "9a06b54a24ee91bc",
+     "state": "5ae04fbabe492480",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "79e0f910c5525ef7",
+    "79e0f910c5525ef7"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any other row count by name, so a row alone is a different session and not a smaller batch of this call; the per-call step the session is held to carries the batch part on the mamba1 and transformer lanes)",
+    "n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any other row count by name, so a row alone is a different session and not a smaller batch of this call; the per-call step the session is held to carries the batch part on the mamba1 and transformer lanes)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "d33e740c49673bfc",
+    "d33e740c49673bfc"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.05494870801339857,
+    "stages": {
+     "repeat=1/train": 0.013821041997289285,
+     "repeat=1/infer-save-reload": 0.0035812499991152436,
+     "repeat=1/batch": 3.695799387060106e-05,
+     "repeat=1/batchgrad": 3.041699528694153e-05,
+     "repeat=1/batchscale": 2.8584006940945983e-05,
+     "repeat=1/ragged": 2.8750015189871192e-05,
+     "repeat=1/stepfull": 0.009398083988344297,
+     "repeat=2/train": 0.014652041980298236,
+     "repeat=2/infer-save-reload": 0.00365708299796097,
+     "repeat=2/batch": 3.65830201189965e-05,
+     "repeat=2/batchgrad": 2.9416987672448158e-05,
+     "repeat=2/batchscale": 2.883397974073887e-05,
+     "repeat=2/ragged": 2.8583017410710454e-05,
+     "repeat=2/stepfull": 0.009398499998496845
+    }
+   }
+  },
+  "mamba1-decode-session/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3f050da17bbc4341",
+    "3f050da17bbc4341"
+   ],
+   "parts": [
+    {
+     "step": "9a06b54a24ee91bc",
+     "state": "5ae04fbabe492480",
+     "flags": "cd5e26e9d1168a65"
+    },
+    {
+     "step": "9a06b54a24ee91bc",
+     "state": "5ae04fbabe492480",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "79e0f910c5525ef7",
+    "79e0f910c5525ef7"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any other row count by name, so a row alone is a different session and not a smaller batch of this call; the per-call step the session is held to carries the batch part on the mamba1 and transformer lanes)",
+    "n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any other row count by name, so a row alone is a different session and not a smaller batch of this call; the per-call step the session is held to carries the batch part on the mamba1 and transformer lanes)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "d33e740c49673bfc",
+    "d33e740c49673bfc"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.053338666999479756,
+    "stages": {
+     "repeat=1/train": 0.013656583003466949,
+     "repeat=1/infer-save-reload": 0.003576374991098419,
+     "repeat=1/batch": 9.608300752006471e-05,
+     "repeat=1/batchgrad": 3.024999750778079e-05,
+     "repeat=1/batchscale": 2.8584006940945983e-05,
+     "repeat=1/ragged": 2.841599052771926e-05,
+     "repeat=1/stepfull": 0.009473374986555427,
+     "repeat=2/train": 0.013291250012116507,
+     "repeat=2/infer-save-reload": 0.0035985420108772814,
+     "repeat=2/batch": 3.229099093005061e-05,
+     "repeat=2/batchgrad": 2.9791990527883172e-05,
+     "repeat=2/batchscale": 2.8582988306879997e-05,
+     "repeat=2/ragged": 2.837498323060572e-05,
+     "repeat=2/stepfull": 0.009281208011088893
+    }
+   }
+  },
+  "mamba1-decode-session/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ac67de529f894730",
+    "ac67de529f894730"
+   ],
+   "parts": [
+    {
+     "step": "4148ca7358fe705e",
+     "state": "383652c8e9582b41",
+     "flags": "cd5e26e9d1168a65"
+    },
+    {
+     "step": "4148ca7358fe705e",
+     "state": "383652c8e9582b41",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "4f1ca2b3595ec583",
+    "4f1ca2b3595ec583"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any other row count by name, so a row alone is a different session and not a smaller batch of this call; the per-call step the session is held to carries the batch part on the mamba1 and transformer lanes)",
+    "n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any other row count by name, so a row alone is a different session and not a smaller batch of this call; the per-call step the session is held to carries the batch part on the mamba1 and transformer lanes)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "7f1ea504721cb325",
+    "7f1ea504721cb325"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.05397062501288019,
+    "stages": {
+     "repeat=1/train": 0.01375637500314042,
+     "repeat=1/infer-save-reload": 0.003806833003181964,
+     "repeat=1/batch": 4.4957996578887105e-05,
+     "repeat=1/batchgrad": 3.0208990210667253e-05,
+     "repeat=1/batchscale": 2.8499984182417393e-05,
+     "repeat=1/ragged": 2.8499984182417393e-05,
+     "repeat=1/stepfull": 0.009435958985704929,
+     "repeat=2/train": 0.01344779200735502,
+     "repeat=2/infer-save-reload": 0.0035677499836310744,
+     "repeat=2/batch": 3.4958007745444775e-05,
+     "repeat=2/batchgrad": 2.950002090074122e-05,
+     "repeat=2/batchscale": 2.8458016458898783e-05,
+     "repeat=2/ragged": 2.841599052771926e-05,
+     "repeat=2/stepfull": 0.009507625014521182
+    }
+   }
+  },
+  "mamba1-decode-session/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "036f89b10477d901",
+    "036f89b10477d901"
+   ],
+   "parts": [
+    {
+     "step": "bfe92dd1b46862d2",
+     "state": "0800dac84123170c",
+     "flags": "cd5e26e9d1168a65"
+    },
+    {
+     "step": "bfe92dd1b46862d2",
+     "state": "0800dac84123170c",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "97e86b9db80719a7",
+    "97e86b9db80719a7"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any other row count by name, so a row alone is a different session and not a smaller batch of this call; the per-call step the session is held to carries the batch part on the mamba1 and transformer lanes)",
+    "n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any other row count by name, so a row alone is a different session and not a smaller batch of this call; the per-call step the session is held to carries the batch part on the mamba1 and transformer lanes)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "7d79ddc6d8ec34e4",
+    "7d79ddc6d8ec34e4"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.06209704198408872,
+    "stages": {
+     "repeat=1/train": 0.013863916014088318,
+     "repeat=1/infer-save-reload": 0.0036197080044075847,
+     "repeat=1/batch": 2.608299837447703e-05,
+     "repeat=1/batchgrad": 2.145799226127565e-05,
+     "repeat=1/batchscale": 2.0499981474131346e-05,
+     "repeat=1/ragged": 1.995800994336605e-05,
+     "repeat=1/stepfull": 0.00938358300481923,
+     "repeat=2/train": 0.014075457991566509,
+     "repeat=2/infer-save-reload": 0.003700666013173759,
+     "repeat=2/batch": 6.816702079959214e-05,
+     "repeat=2/batchgrad": 2.2540974896401167e-05,
+     "repeat=2/batchscale": 2.029197639785707e-05,
+     "repeat=2/ragged": 2.066700835712254e-05,
+     "repeat=2/stepfull": 0.01697495800908655
+    }
+   }
+  },
+  "mamba1-decode-session/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "8f326fa28bc9d748",
+    "8f326fa28bc9d748"
+   ],
+   "parts": [
+    {
+     "step": "98b51b5202dada07",
+     "state": "8b77577957c5a550",
+     "flags": "cd5e26e9d1168a65"
+    },
+    {
+     "step": "98b51b5202dada07",
+     "state": "8b77577957c5a550",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "c0e8d2045bc0faf6",
+    "c0e8d2045bc0faf6"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any other row count by name, so a row alone is a different session and not a smaller batch of this call; the per-call step the session is held to carries the batch part on the mamba1 and transformer lanes)",
+    "n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any other row count by name, so a row alone is a different session and not a smaller batch of this call; the per-call step the session is held to carries the batch part on the mamba1 and transformer lanes)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "950eb9d64a333b48",
+    "950eb9d64a333b48"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.17894675000570714,
+    "stages": {
+     "repeat=1/train": 0.03002900001592934,
+     "repeat=1/infer-save-reload": 0.006221957999514416,
+     "repeat=1/batch": 0.00018616701709106565,
+     "repeat=1/batchgrad": 6.179098272696137e-05,
+     "repeat=1/batchscale": 5.620799493044615e-05,
+     "repeat=1/ragged": 6.229200516827404e-05,
+     "repeat=1/stepfull": 0.020398583001224324,
+     "repeat=2/train": 0.08473570900969207,
+     "repeat=2/infer-save-reload": 0.016676875005941838,
+     "repeat=2/batch": 0.0005444170092232525,
+     "repeat=2/batchgrad": 0.0002115420065820217,
+     "repeat=2/batchscale": 0.00011395799810998142,
+     "repeat=2/ragged": 7.241699495352805e-05,
+     "repeat=2/stepfull": 0.019112292007775977
+    }
+   }
+  },
+  "transformer-decode-session/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "44ed8cdc5dc0e0b9",
+    "44ed8cdc5dc0e0b9"
+   ],
+   "parts": [
+    {
+     "step": "168d9413b27ce4c8",
+     "prefill": "3c87773c8b7148a3",
+     "state": "272bab078083396a",
+     "flags": "cd5e26e9d1168a65"
+    },
+    {
+     "step": "168d9413b27ce4c8",
+     "prefill": "3c87773c8b7148a3",
+     "state": "272bab078083396a",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "80ab5cc2b56af36f",
+    "80ab5cc2b56af36f"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any other row count by name, so a row alone is a different session and not a smaller batch of this call; the per-call step the session is held to carries the batch part on the mamba1 and transformer lanes)",
+    "n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any other row count by name, so a row alone is a different session and not a smaller batch of this call; the per-call step the session is held to carries the batch part on the mamba1 and transformer lanes)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "2bd2002e82de9749",
+    "2bd2002e82de9749"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.2041799160069786,
+    "stages": {
+     "repeat=1/train": 0.11752475000685081,
+     "repeat=1/infer-save-reload": 0.006342209002468735,
+     "repeat=1/batch": 4.754198016598821e-05,
+     "repeat=1/batchgrad": 3.9916980313137174e-05,
+     "repeat=1/batchscale": 3.374999505467713e-05,
+     "repeat=1/ragged": 3.458399442024529e-05,
+     "repeat=1/stepfull": 0.013796959014143795,
+     "repeat=2/train": 0.04152512500877492,
+     "repeat=2/infer-save-reload": 0.006819000001996756,
+     "repeat=2/batch": 0.00011070800246670842,
+     "repeat=2/batchgrad": 8.087500464171171e-05,
+     "repeat=2/batchscale": 7.675000233575702e-05,
+     "repeat=2/ragged": 7.475001621060073e-05,
+     "repeat=2/stepfull": 0.017256249993806705
+    }
+   }
+  },
+  "transformer-decode-session/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3d31a6c8c65563d7",
+    "3d31a6c8c65563d7"
+   ],
+   "parts": [
+    {
+     "step": "1644ae9664e76e8e",
+     "prefill": "d1def26aea0ef2f7",
+     "state": "ac4fa750abdeb5fd",
+     "flags": "cd5e26e9d1168a65"
+    },
+    {
+     "step": "1644ae9664e76e8e",
+     "prefill": "d1def26aea0ef2f7",
+     "state": "ac4fa750abdeb5fd",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "2912a1df502a940f",
+    "2912a1df502a940f"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any other row count by name, so a row alone is a different session and not a smaller batch of this call; the per-call step the session is held to carries the batch part on the mamba1 and transformer lanes)",
+    "n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any other row count by name, so a row alone is a different session and not a smaller batch of this call; the per-call step the session is held to carries the batch part on the mamba1 and transformer lanes)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "1a3f572311d82358",
+    "1a3f572311d82358"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.09806570899672806,
+    "stages": {
+     "repeat=1/train": 0.03228774998569861,
+     "repeat=1/infer-save-reload": 0.004481124982703477,
+     "repeat=1/batch": 0.00020320899784564972,
+     "repeat=1/batchgrad": 9.104100172407925e-05,
+     "repeat=1/batchscale": 0.0001794580020941794,
+     "repeat=1/ragged": 3.925000783056021e-05,
+     "repeat=1/stepfull": 0.010609875025693327,
+     "repeat=2/train": 0.03265933401416987,
+     "repeat=2/infer-save-reload": 0.0046323330025188625,
+     "repeat=2/batch": 4.641601117327809e-05,
+     "repeat=2/batchgrad": 6.587500683963299e-05,
+     "repeat=2/batchscale": 4.095802432857454e-05,
+     "repeat=2/ragged": 3.3791002351790667e-05,
+     "repeat=2/stepfull": 0.012282250012503937
+    }
+   }
+  },
+  "transformer-decode-session/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3ffde21001d551a1",
+    "3ffde21001d551a1"
+   ],
+   "parts": [
+    {
+     "step": "aad12e85b69fe6eb",
+     "prefill": "51e98bc66c06e285",
+     "state": "7fdb9df334be2a69",
+     "flags": "cd5e26e9d1168a65"
+    },
+    {
+     "step": "aad12e85b69fe6eb",
+     "prefill": "51e98bc66c06e285",
+     "state": "7fdb9df334be2a69",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "0e628f9d48f2496e",
+    "0e628f9d48f2496e"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any other row count by name, so a row alone is a different session and not a smaller batch of this call; the per-call step the session is held to carries the batch part on the mamba1 and transformer lanes)",
+    "n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any other row count by name, so a row alone is a different session and not a smaller batch of this call; the per-call step the session is held to carries the batch part on the mamba1 and transformer lanes)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "8129833714f163b2",
+    "8129833714f163b2"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.11033066600793973,
+    "stages": {
+     "repeat=1/train": 0.03359079101937823,
+     "repeat=1/infer-save-reload": 0.0067265830002725124,
+     "repeat=1/batch": 0.00011999998241662979,
+     "repeat=1/batchgrad": 7.808301597833633e-05,
+     "repeat=1/batchscale": 7.450001430697739e-05,
+     "repeat=1/ragged": 7.72500061430037e-05,
+     "repeat=1/stepfull": 0.015480458998354152,
+     "repeat=2/train": 0.03534483301336877,
+     "repeat=2/infer-save-reload": 0.005999207991408184,
+     "repeat=2/batch": 5.583302117884159e-05,
+     "repeat=2/batchgrad": 4.9833994125947356e-05,
+     "repeat=2/batchscale": 5.1000009989365935e-05,
+     "repeat=2/ragged": 5.2499992307275534e-05,
+     "repeat=2/stepfull": 0.012253250024514273
+    }
+   }
+  },
+  "transformer-decode-session/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a52a0d87addfd3a4",
+    "a52a0d87addfd3a4"
+   ],
+   "parts": [
+    {
+     "step": "2068c28786c88b24",
+     "prefill": "9ee52efb54714083",
+     "state": "46a7f63520cce1a4",
+     "flags": "cd5e26e9d1168a65"
+    },
+    {
+     "step": "2068c28786c88b24",
+     "prefill": "9ee52efb54714083",
+     "state": "46a7f63520cce1a4",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "472ac906ecc50310",
+    "472ac906ecc50310"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any other row count by name, so a row alone is a different session and not a smaller batch of this call; the per-call step the session is held to carries the batch part on the mamba1 and transformer lanes)",
+    "n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any other row count by name, so a row alone is a different session and not a smaller batch of this call; the per-call step the session is held to carries the batch part on the mamba1 and transformer lanes)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "4d8b013d3ce03bec",
+    "4d8b013d3ce03bec"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.09681824999279343,
+    "stages": {
+     "repeat=1/train": 0.032700167008442804,
+     "repeat=1/infer-save-reload": 0.005936750007094815,
+     "repeat=1/batch": 7.675000233575702e-05,
+     "repeat=1/batchgrad": 4.300000728107989e-05,
+     "repeat=1/batchscale": 3.899997682310641e-05,
+     "repeat=1/ragged": 3.816699609160423e-05,
+     "repeat=1/stepfull": 0.012784166989149526,
+     "repeat=2/train": 0.027189957996597514,
+     "repeat=2/infer-save-reload": 0.0042760000214912,
+     "repeat=2/batch": 6.724998820573092e-05,
+     "repeat=2/batchgrad": 6.462499732151628e-05,
+     "repeat=2/batchscale": 5.91249845456332e-05,
+     "repeat=2/ragged": 7.120799273252487e-05,
+     "repeat=2/stepfull": 0.013161292008589953
+    }
+   }
+  },
+  "transformer-decode-session/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "4fcb8d8fda14d09b",
+    "4fcb8d8fda14d09b"
+   ],
+   "parts": [
+    {
+     "step": "188886a49e62151d",
+     "prefill": "082366d0beb8375d",
+     "state": "f9e4fd76e199753f",
+     "flags": "cd5e26e9d1168a65"
+    },
+    {
+     "step": "188886a49e62151d",
+     "prefill": "082366d0beb8375d",
+     "state": "f9e4fd76e199753f",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "409686c83a812662",
+    "409686c83a812662"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any other row count by name, so a row alone is a different session and not a smaller batch of this call; the per-call step the session is held to carries the batch part on the mamba1 and transformer lanes)",
+    "n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any other row count by name, so a row alone is a different session and not a smaller batch of this call; the per-call step the session is held to carries the batch part on the mamba1 and transformer lanes)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "40b8565d8f05e934",
+    "40b8565d8f05e934"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.11059479200048372,
+    "stages": {
+     "repeat=1/train": 0.031901749985991046,
+     "repeat=1/infer-save-reload": 0.005368791986256838,
+     "repeat=1/batch": 5.041601252742112e-05,
+     "repeat=1/batchgrad": 4.008301766589284e-05,
+     "repeat=1/batchscale": 3.879200085066259e-05,
+     "repeat=1/ragged": 4.05839818995446e-05,
+     "repeat=1/stepfull": 0.017927582986885682,
+     "repeat=2/train": 0.035654582985443994,
+     "repeat=2/infer-save-reload": 0.005388999998103827,
+     "repeat=2/batch": 6.787499296478927e-05,
+     "repeat=2/batchgrad": 5.9457990573719144e-05,
+     "repeat=2/batchscale": 7.124998955987394e-05,
+     "repeat=2/ragged": 5.791700095869601e-05,
+     "repeat=2/stepfull": 0.01355949998833239
+    }
+   }
+  },
+  "transformer-decode-session/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "4fcb8d8fda14d09b",
+    "4fcb8d8fda14d09b"
+   ],
+   "parts": [
+    {
+     "step": "188886a49e62151d",
+     "prefill": "082366d0beb8375d",
+     "state": "f9e4fd76e199753f",
+     "flags": "cd5e26e9d1168a65"
+    },
+    {
+     "step": "188886a49e62151d",
+     "prefill": "082366d0beb8375d",
+     "state": "f9e4fd76e199753f",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "409686c83a812662",
+    "409686c83a812662"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any other row count by name, so a row alone is a different session and not a smaller batch of this call; the per-call step the session is held to carries the batch part on the mamba1 and transformer lanes)",
+    "n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any other row count by name, so a row alone is a different session and not a smaller batch of this call; the per-call step the session is held to carries the batch part on the mamba1 and transformer lanes)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "40b8565d8f05e934",
+    "40b8565d8f05e934"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.09687349997693673,
+    "stages": {
+     "repeat=1/train": 0.028359999996609986,
+     "repeat=1/infer-save-reload": 0.005504000000655651,
+     "repeat=1/batch": 4.545800038613379e-05,
+     "repeat=1/batchgrad": 7.158401422202587e-05,
+     "repeat=1/batchscale": 4.283300950191915e-05,
+     "repeat=1/ragged": 3.80830024369061e-05,
+     "repeat=1/stepfull": 0.013020125014008954,
+     "repeat=2/train": 0.029820083000231534,
+     "repeat=2/infer-save-reload": 0.005510999995749444,
+     "repeat=2/batch": 4.370798706077039e-05,
+     "repeat=2/batchgrad": 3.5457982448861e-05,
+     "repeat=2/batchscale": 3.2917014323174953e-05,
+     "repeat=2/ragged": 3.2584008295089006e-05,
+     "repeat=2/stepfull": 0.013947125000413507
+    }
+   }
+  },
+  "transformer-decode-session/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "72aca467846eaed3",
+    "72aca467846eaed3"
+   ],
+   "parts": [
+    {
+     "step": "6f79a7c94a674df8",
+     "prefill": "c140ab65c57149d3",
+     "state": "94843353100a727b",
+     "flags": "cd5e26e9d1168a65"
+    },
+    {
+     "step": "6f79a7c94a674df8",
+     "prefill": "c140ab65c57149d3",
+     "state": "94843353100a727b",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "b148c12305954963",
+    "b148c12305954963"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any other row count by name, so a row alone is a different session and not a smaller batch of this call; the per-call step the session is held to carries the batch part on the mamba1 and transformer lanes)",
+    "n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any other row count by name, so a row alone is a different session and not a smaller batch of this call; the per-call step the session is held to carries the batch part on the mamba1 and transformer lanes)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "336f7d17c2760221",
+    "336f7d17c2760221"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.09215008301544003,
+    "stages": {
+     "repeat=1/train": 0.029283540992764756,
+     "repeat=1/infer-save-reload": 0.004530749982222915,
+     "repeat=1/batch": 4.554097540676594e-05,
+     "repeat=1/batchgrad": 3.5250006476417184e-05,
+     "repeat=1/batchscale": 3.266701241955161e-05,
+     "repeat=1/ragged": 3.3666001399978995e-05,
+     "repeat=1/stepfull": 0.012891458987724036,
+     "repeat=2/train": 0.026034667011117563,
+     "repeat=2/infer-save-reload": 0.0051448750018607825,
+     "repeat=2/batch": 6.183399818837643e-05,
+     "repeat=2/batchgrad": 4.054201417602599e-05,
+     "repeat=2/batchscale": 3.6874989746138453e-05,
+     "repeat=2/ragged": 3.47500026691705e-05,
+     "repeat=2/stepfull": 0.013657625007908791
+    }
+   }
+  },
+  "transformer-decode-session/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "44ed8cdc5dc0e0b9",
+    "44ed8cdc5dc0e0b9"
+   ],
+   "parts": [
+    {
+     "step": "168d9413b27ce4c8",
+     "prefill": "3c87773c8b7148a3",
+     "state": "272bab078083396a",
+     "flags": "cd5e26e9d1168a65"
+    },
+    {
+     "step": "168d9413b27ce4c8",
+     "prefill": "3c87773c8b7148a3",
+     "state": "272bab078083396a",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "80ab5cc2b56af36f",
+    "80ab5cc2b56af36f"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any other row count by name, so a row alone is a different session and not a smaller batch of this call; the per-call step the session is held to carries the batch part on the mamba1 and transformer lanes)",
+    "n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any other row count by name, so a row alone is a different session and not a smaller batch of this call; the per-call step the session is held to carries the batch part on the mamba1 and transformer lanes)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "2bd2002e82de9749",
+    "2bd2002e82de9749"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.10923833301058039,
+    "stages": {
+     "repeat=1/train": 0.030826082977000624,
+     "repeat=1/infer-save-reload": 0.005435333994682878,
+     "repeat=1/batch": 7.541599916294217e-05,
+     "repeat=1/batchgrad": 5.358300404623151e-05,
+     "repeat=1/batchscale": 4.891600110568106e-05,
+     "repeat=1/ragged": 4.733397508971393e-05,
+     "repeat=1/stepfull": 0.014723458007210866,
+     "repeat=2/train": 0.037036667024949566,
+     "repeat=2/infer-save-reload": 0.005445374990813434,
+     "repeat=2/batch": 3.7250021705403924e-05,
+     "repeat=2/batchgrad": 5.679097375832498e-05,
+     "repeat=2/batchscale": 0.00018274999456480145,
+     "repeat=2/ragged": 4.5541994040831923e-05,
+     "repeat=2/stepfull": 0.014791291992878541
+    }
+   }
+  },
+  "transformer-decode-session/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b668b4163397c0c9",
+    "b668b4163397c0c9"
+   ],
+   "parts": [
+    {
+     "step": "3071f783c96b5748",
+     "prefill": "edfca6f992240b79",
+     "state": "4010fb4e7b5b798a",
+     "flags": "cd5e26e9d1168a65"
+    },
+    {
+     "step": "3071f783c96b5748",
+     "prefill": "edfca6f992240b79",
+     "state": "4010fb4e7b5b798a",
+     "flags": "cd5e26e9d1168a65"
+    }
+   ],
+   "infer": [
+    "5dac481538b009f5",
+    "5dac481538b009f5"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any other row count by name, so a row alone is a different session and not a smaller batch of this call; the per-call step the session is held to carries the batch part on the mamba1 and transformer lanes)",
+    "n/a:fixed-session-batch (a decode session is opened for state.batch_size and its step refuses any other row count by name, so a row alone is a different session and not a smaller batch of this call; the per-call step the session is held to carries the batch part on the mamba1 and transformer lanes)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "8578fb673b364852",
+    "8578fb673b364852"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 0.08794887500698678,
+    "stages": {
+     "repeat=1/train": 0.03277945800800808,
+     "repeat=1/infer-save-reload": 0.00481020801817067,
+     "repeat=1/batch": 0.00012362501001916826,
+     "repeat=1/batchgrad": 3.7291989428922534e-05,
+     "repeat=1/batchscale": 3.2458017813041806e-05,
+     "repeat=1/ragged": 3.2249983632937074e-05,
+     "repeat=1/stepfull": 0.010668874980183318,
+     "repeat=2/train": 0.024427083000773564,
+     "repeat=2/infer-save-reload": 0.0043026250205002725,
+     "repeat=2/batch": 3.9040984120219946e-05,
+     "repeat=2/batchgrad": 3.579098847694695e-05,
+     "repeat=2/batchscale": 3.233298775739968e-05,
+     "repeat=2/ragged": 3.29999893438071e-05,
+     "repeat=2/stepfull": 0.010215167014393955
+    }
+   }
+  },
+  "par-causal-lm/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5171c3ffeb9dd8f8",
+    "5171c3ffeb9dd8f8"
+   ],
+   "parts": [
+    {
+     "logits": "71b13186e4fa95f3",
+     "params": "bb88c3e24c41da72",
+     "flags": "1b93738cd9ef30df"
+    },
+    {
+     "logits": "71b13186e4fa95f3",
+     "params": "bb88c3e24c41da72",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "2d58207bcc498e7c",
+    "2d58207bcc498e7c"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)",
+    "n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.1485304170055315,
+    "stages": {
+     "repeat=1/train": 0.25591262499801815,
+     "repeat=1/infer-save-reload": 1.3832992408424616e-05,
+     "repeat=1/batch": 0.27278558400576003,
+     "repeat=1/batchgrad": 0.000127417006297037,
+     "repeat=1/batchscale": 3.5500008380040526e-05,
+     "repeat=1/ragged": 3.308401210233569e-05,
+     "repeat=1/stepfull": 3.404199378564954e-05,
+     "repeat=2/train": 0.2632243749976624,
+     "repeat=2/infer-save-reload": 1.5708006685599685e-05,
+     "repeat=2/batch": 0.3550307500117924,
+     "repeat=2/batchgrad": 0.0003099170280620456,
+     "repeat=2/batchscale": 0.0003955830179620534,
+     "repeat=2/ragged": 3.8541998947039247e-05,
+     "repeat=2/stepfull": 3.366597229614854e-05
+    }
+   }
+  },
+  "par-causal-lm/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "e6caf9f0f7ae562d",
+    "e6caf9f0f7ae562d"
+   ],
+   "parts": [
+    {
+     "logits": "31c30f8c0ea0ad9c",
+     "params": "bb88c3e24c41da72",
+     "flags": "1b93738cd9ef30df"
+    },
+    {
+     "logits": "31c30f8c0ea0ad9c",
+     "params": "bb88c3e24c41da72",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "73aef1570825d468",
+    "73aef1570825d468"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)",
+    "n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.445799708017148,
+    "stages": {
+     "repeat=1/train": 0.31238137499894947,
+     "repeat=1/infer-save-reload": 1.4334014849737287e-05,
+     "repeat=1/batch": 0.34872833400731906,
+     "repeat=1/batchgrad": 0.00027591700199991465,
+     "repeat=1/batchscale": 6.779099931009114e-05,
+     "repeat=1/ragged": 6.437499541789293e-05,
+     "repeat=1/stepfull": 6.241697701625526e-05,
+     "repeat=2/train": 0.3103579169837758,
+     "repeat=2/infer-save-reload": 1.4583987649530172e-05,
+     "repeat=2/batch": 0.4719245830201544,
+     "repeat=2/batchgrad": 0.0006937499856576324,
+     "repeat=2/batchscale": 0.00018929201178252697,
+     "repeat=2/ragged": 0.0001471659925300628,
+     "repeat=2/stepfull": 0.00014108300092630088
+    }
+   }
+  },
+  "par-causal-lm/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "37c495fc132ea9db",
+    "37c495fc132ea9db"
+   ],
+   "parts": [
+    {
+     "logits": "a0641131ca09b686",
+     "params": "bb88c3e24c41da72",
+     "flags": "1b93738cd9ef30df"
+    },
+    {
+     "logits": "a0641131ca09b686",
+     "params": "bb88c3e24c41da72",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "b2dfd7cd9cf444df",
+    "b2dfd7cd9cf444df"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)",
+    "n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.675539874995593,
+    "stages": {
+     "repeat=1/train": 0.5800647499854676,
+     "repeat=1/infer-save-reload": 1.8874998204410076e-05,
+     "repeat=1/batch": 0.45199866601615213,
+     "repeat=1/batchgrad": 0.0002549590135458857,
+     "repeat=1/batchscale": 7.208299939520657e-05,
+     "repeat=1/ragged": 0.0003406250034458935,
+     "repeat=1/stepfull": 0.00017204199684783816,
+     "repeat=2/train": 0.30907808398478664,
+     "repeat=2/infer-save-reload": 1.595797948539257e-05,
+     "repeat=2/batch": 0.3326367499830667,
+     "repeat=2/batchgrad": 0.00015120799071155488,
+     "repeat=2/batchscale": 4.199999966658652e-05,
+     "repeat=2/ragged": 3.98330157622695e-05,
+     "repeat=2/stepfull": 3.825000021606684e-05
+    }
+   }
+  },
+  "par-causal-lm/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f711a5aa202b3e41",
+    "f711a5aa202b3e41"
+   ],
+   "parts": [
+    {
+     "logits": "5deeb2b77b89c972",
+     "params": "bb88c3e24c41da72",
+     "flags": "1b93738cd9ef30df"
+    },
+    {
+     "logits": "5deeb2b77b89c972",
+     "params": "bb88c3e24c41da72",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "97051f4a7819532e",
+    "97051f4a7819532e"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)",
+    "n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.5219830000132788,
+    "stages": {
+     "repeat=1/train": 0.27151074999710545,
+     "repeat=1/infer-save-reload": 1.491600414738059e-05,
+     "repeat=1/batch": 0.32157650002045557,
+     "repeat=1/batchgrad": 0.00014762498904019594,
+     "repeat=1/batchscale": 4.25000034738332e-05,
+     "repeat=1/ragged": 3.84590239264071e-05,
+     "repeat=1/stepfull": 3.7959020119160414e-05,
+     "repeat=2/train": 0.4053430829953868,
+     "repeat=2/infer-save-reload": 6.833299994468689e-05,
+     "repeat=2/batch": 0.5223287499975413,
+     "repeat=2/batchgrad": 0.00018795800860971212,
+     "repeat=2/batchscale": 6.266598938964307e-05,
+     "repeat=2/ragged": 5.7792000006884336e-05,
+     "repeat=2/stepfull": 5.658299778588116e-05
+    }
+   }
+  },
+  "par-causal-lm/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f1c5288260c678cd",
+    "f1c5288260c678cd"
+   ],
+   "parts": [
+    {
+     "logits": "3333a75866b17725",
+     "params": "bb88c3e24c41da72",
+     "flags": "1b93738cd9ef30df"
+    },
+    {
+     "logits": "3333a75866b17725",
+     "params": "bb88c3e24c41da72",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "0c52595dfa1179f9",
+    "0c52595dfa1179f9"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)",
+    "n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.28146074997494,
+    "stages": {
+     "repeat=1/train": 0.26900979201309383,
+     "repeat=1/infer-save-reload": 1.2208009138703346e-05,
+     "repeat=1/batch": 0.32255295797949657,
+     "repeat=1/batchgrad": 0.00019708400941453874,
+     "repeat=1/batchscale": 3.649998689070344e-05,
+     "repeat=1/ragged": 3.341698902659118e-05,
+     "repeat=1/stepfull": 3.229102003388107e-05,
+     "repeat=2/train": 0.2765764170035254,
+     "repeat=2/infer-save-reload": 1.462499494664371e-05,
+     "repeat=2/batch": 0.4122599170077592,
+     "repeat=2/batchgrad": 0.0001854579895734787,
+     "repeat=2/batchscale": 3.520798054523766e-05,
+     "repeat=2/ragged": 3.258298966102302e-05,
+     "repeat=2/stepfull": 3.2042007660493255e-05
+    }
+   }
+  },
+  "par-causal-lm/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "dba9613ece4fdadb",
+    "dba9613ece4fdadb"
+   ],
+   "parts": [
+    {
+     "logits": "8a41f078bdfa8cd9",
+     "params": "bb88c3e24c41da72",
+     "flags": "1b93738cd9ef30df"
+    },
+    {
+     "logits": "8a41f078bdfa8cd9",
+     "params": "bb88c3e24c41da72",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "ecda286f05a73eaa",
+    "ecda286f05a73eaa"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)",
+    "n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.0089849999931175,
+    "stages": {
+     "repeat=1/train": 0.23842858299030922,
+     "repeat=1/infer-save-reload": 1.2333010090515018e-05,
+     "repeat=1/batch": 0.25862341598258354,
+     "repeat=1/batchgrad": 0.00011937500676140189,
+     "repeat=1/batchscale": 3.1584000680595636e-05,
+     "repeat=1/ragged": 2.9542017728090286e-05,
+     "repeat=1/stepfull": 2.8457987355068326e-05,
+     "repeat=2/train": 0.25344033300643787,
+     "repeat=2/infer-save-reload": 1.1041993275284767e-05,
+     "repeat=2/batch": 0.2574893750133924,
+     "repeat=2/batchgrad": 0.00018291600281372666,
+     "repeat=2/batchscale": 0.00013199998647905886,
+     "repeat=2/ragged": 3.258301876485348e-05,
+     "repeat=2/stepfull": 3.058300353586674e-05
+    }
+   }
+  },
+  "par-causal-lm/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5171c3ffeb9dd8f8",
+    "5171c3ffeb9dd8f8"
+   ],
+   "parts": [
+    {
+     "logits": "71b13186e4fa95f3",
+     "params": "bb88c3e24c41da72",
+     "flags": "1b93738cd9ef30df"
+    },
+    {
+     "logits": "71b13186e4fa95f3",
+     "params": "bb88c3e24c41da72",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "2d58207bcc498e7c",
+    "2d58207bcc498e7c"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)",
+    "n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.388421459007077,
+    "stages": {
+     "repeat=1/train": 0.2235250840021763,
+     "repeat=1/infer-save-reload": 1.2750009773299098e-05,
+     "repeat=1/batch": 0.386498332984047,
+     "repeat=1/batchgrad": 0.00038666598265990615,
+     "repeat=1/batchscale": 0.00016391597455367446,
+     "repeat=1/ragged": 0.00015279199578799307,
+     "repeat=1/stepfull": 0.00014066699077375233,
+     "repeat=2/train": 0.37759054100024514,
+     "repeat=2/infer-save-reload": 1.783299376256764e-05,
+     "repeat=2/batch": 0.3988287500105798,
+     "repeat=2/batchgrad": 0.0002679169992916286,
+     "repeat=2/batchscale": 7.279100827872753e-05,
+     "repeat=2/ragged": 6.545797805301845e-05,
+     "repeat=2/stepfull": 6.437499541789293e-05
+    }
+   }
+  },
+  "par-causal-lm/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5171c3ffeb9dd8f8",
+    "5171c3ffeb9dd8f8"
+   ],
+   "parts": [
+    {
+     "logits": "71b13186e4fa95f3",
+     "params": "bb88c3e24c41da72",
+     "flags": "1b93738cd9ef30df"
+    },
+    {
+     "logits": "71b13186e4fa95f3",
+     "params": "bb88c3e24c41da72",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "2d58207bcc498e7c",
+    "2d58207bcc498e7c"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)",
+    "n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.532616375014186,
+    "stages": {
+     "repeat=1/train": 0.4098666250065435,
+     "repeat=1/infer-save-reload": 1.4999997802078724e-05,
+     "repeat=1/batch": 0.4070739170128945,
+     "repeat=1/batchgrad": 0.00013283401494845748,
+     "repeat=1/batchscale": 4.474999150261283e-05,
+     "repeat=1/ragged": 4.0333979995921254e-05,
+     "repeat=1/stepfull": 4.112499300390482e-05,
+     "repeat=2/train": 0.3260402910236735,
+     "repeat=2/infer-save-reload": 1.129199517890811e-05,
+     "repeat=2/batch": 0.3885589579876978,
+     "repeat=2/batchgrad": 0.00018904099124483764,
+     "repeat=2/batchscale": 3.0166993383318186e-05,
+     "repeat=2/ragged": 2.662499900907278e-05,
+     "repeat=2/stepfull": 2.5707995519042015e-05
+    }
+   }
+  },
+  "par-causal-lm/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "86e92270cebe985b",
+    "86e92270cebe985b"
+   ],
+   "parts": [
+    {
+     "logits": "3a2a57ac304f0b7b",
+     "params": "bb88c3e24c41da72",
+     "flags": "1b93738cd9ef30df"
+    },
+    {
+     "logits": "3a2a57ac304f0b7b",
+     "params": "bb88c3e24c41da72",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "921a3eb50c0e6439",
+    "921a3eb50c0e6439"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)",
+    "n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.3302812080073636,
+    "stages": {
+     "repeat=1/train": 0.3493538750044536,
+     "repeat=1/infer-save-reload": 1.2749980669468641e-05,
+     "repeat=1/batch": 0.32754012499935925,
+     "repeat=1/batchgrad": 0.00027562500326894224,
+     "repeat=1/batchscale": 6.366701563820243e-05,
+     "repeat=1/ragged": 5.9666024753823876e-05,
+     "repeat=1/stepfull": 5.512498319149017e-05,
+     "repeat=2/train": 0.27523966701119207,
+     "repeat=2/infer-save-reload": 1.2415985111147165e-05,
+     "repeat=2/batch": 0.3770099579996895,
+     "repeat=2/batchgrad": 0.00013237498933449388,
+     "repeat=2/batchscale": 3.566598752513528e-05,
+     "repeat=2/ragged": 3.300001844763756e-05,
+     "repeat=2/stepfull": 3.241698141209781e-05
+    }
+   }
+  },
+  "par-cross-val/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b42f6f50bae5b03c",
+    "b42f6f50bae5b03c"
+   ],
+   "parts": [
+    {
+     "scores": "9336dc0965e2ba0f",
+     "flags": "4a69320a0d048338"
+    },
+    {
+     "scores": "9336dc0965e2ba0f",
+     "flags": "4a69320a0d048338"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fold-reduction (one score per fold over that fold's whole test block; a call with fewer rows is a different cross-validation, not the same one in a smaller batch)",
+    "n/a:fold-reduction (one score per fold over that fold's whole test block; a call with fewer rows is a different cross-validation, not the same one in a smaller batch)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)",
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.9021669159992598,
+    "stages": {
+     "repeat=1/train": 0.9888815419981256,
+     "repeat=1/infer-save-reload": 1.0666000889614224e-05,
+     "repeat=1/batch": 0.00014183297753334045,
+     "repeat=1/batchgrad": 4.187499871477485e-05,
+     "repeat=1/batchscale": 3.287501749582589e-05,
+     "repeat=1/ragged": 3.283401019871235e-05,
+     "repeat=1/stepfull": 3.412499791011214e-05,
+     "repeat=2/train": 0.9124601249932311,
+     "repeat=2/infer-save-reload": 1.258301199413836e-05,
+     "repeat=2/batch": 7.083298987708986e-05,
+     "repeat=2/batchgrad": 4.600000102072954e-05,
+     "repeat=2/batchscale": 4.570800228975713e-05,
+     "repeat=2/ragged": 3.620801726356149e-05,
+     "repeat=2/stepfull": 3.579101758077741e-05
+    }
+   }
+  },
+  "par-cross-val/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "7ebc6632cd2f78db",
+    "7ebc6632cd2f78db"
+   ],
+   "parts": [
+    {
+     "scores": "99255240bc21a1d8",
+     "flags": "4a69320a0d048338"
+    },
+    {
+     "scores": "99255240bc21a1d8",
+     "flags": "4a69320a0d048338"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fold-reduction (one score per fold over that fold's whole test block; a call with fewer rows is a different cross-validation, not the same one in a smaller batch)",
+    "n/a:fold-reduction (one score per fold over that fold's whole test block; a call with fewer rows is a different cross-validation, not the same one in a smaller batch)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)",
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.847884917020565,
+    "stages": {
+     "repeat=1/train": 0.9669740840035956,
+     "repeat=1/infer-save-reload": 8.625007467344403e-06,
+     "repeat=1/batch": 6.637501064687967e-05,
+     "repeat=1/batchgrad": 4.033400909975171e-05,
+     "repeat=1/batchscale": 3.274998744018376e-05,
+     "repeat=1/ragged": 3.220798680558801e-05,
+     "repeat=1/stepfull": 3.2249983632937074e-05,
+     "repeat=2/train": 0.8801802910165861,
+     "repeat=2/infer-save-reload": 9.374984074383974e-06,
+     "repeat=2/batch": 0.00013545897672884166,
+     "repeat=2/batchgrad": 3.804199513979256e-05,
+     "repeat=2/batchscale": 3.0625000363215804e-05,
+     "repeat=2/ragged": 2.995799877680838e-05,
+     "repeat=2/stepfull": 2.9999995604157448e-05
+    }
+   }
+  },
+  "par-cross-val/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a2287c443cf24aa0",
+    "a2287c443cf24aa0"
+   ],
+   "parts": [
+    {
+     "scores": "9b24e65a694d9b86",
+     "flags": "4a69320a0d048338"
+    },
+    {
+     "scores": "9b24e65a694d9b86",
+     "flags": "4a69320a0d048338"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fold-reduction (one score per fold over that fold's whole test block; a call with fewer rows is a different cross-validation, not the same one in a smaller batch)",
+    "n/a:fold-reduction (one score per fold over that fold's whole test block; a call with fewer rows is a different cross-validation, not the same one in a smaller batch)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)",
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 2.2572236669948325,
+    "stages": {
+     "repeat=1/train": 1.1031664590118453,
+     "repeat=1/infer-save-reload": 1.4084012946113944e-05,
+     "repeat=1/batch": 0.00017174999811686575,
+     "repeat=1/batchgrad": 7.308300700969994e-05,
+     "repeat=1/batchscale": 5.9792015235871077e-05,
+     "repeat=1/ragged": 5.804098327644169e-05,
+     "repeat=1/stepfull": 6.0166988987475634e-05,
+     "repeat=2/train": 1.152977000019746,
+     "repeat=2/infer-save-reload": 1.500002690590918e-05,
+     "repeat=2/batch": 0.00010799997835420072,
+     "repeat=2/batchgrad": 4.345798515714705e-05,
+     "repeat=2/batchscale": 3.3167016226798296e-05,
+     "repeat=2/ragged": 3.2957992516458035e-05,
+     "repeat=2/stepfull": 3.1750008929520845e-05
+    }
+   }
+  },
+  "par-cross-val/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "40c2b054e9a24cdc",
+    "40c2b054e9a24cdc"
+   ],
+   "parts": [
+    {
+     "scores": "8641f26de10ebdb7",
+     "flags": "4a69320a0d048338"
+    },
+    {
+     "scores": "8641f26de10ebdb7",
+     "flags": "4a69320a0d048338"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fold-reduction (one score per fold over that fold's whole test block; a call with fewer rows is a different cross-validation, not the same one in a smaller batch)",
+    "n/a:fold-reduction (one score per fold over that fold's whole test block; a call with fewer rows is a different cross-validation, not the same one in a smaller batch)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)",
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 4.576712707988918,
+    "stages": {
+     "repeat=1/train": 2.4989492500026245,
+     "repeat=1/infer-save-reload": 1.2375006917864084e-05,
+     "repeat=1/batch": 0.00024091600789688528,
+     "repeat=1/batchgrad": 8.116700337268412e-05,
+     "repeat=1/batchscale": 0.00012904198956675828,
+     "repeat=1/ragged": 0.00037779202102683485,
+     "repeat=1/stepfull": 0.00032104100682772696,
+     "repeat=2/train": 2.074999791017035,
+     "repeat=2/infer-save-reload": 1.1124997399747372e-05,
+     "repeat=2/batch": 0.00017916702199727297,
+     "repeat=2/batchgrad": 0.00021104200277477503,
+     "repeat=2/batchscale": 0.00048041698755696416,
+     "repeat=2/ragged": 0.00010195799404755235,
+     "repeat=2/stepfull": 4.170800093561411e-05
+    }
+   }
+  },
+  "par-cross-val/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "0a3d0c41cf6d6da5",
+    "0a3d0c41cf6d6da5"
+   ],
+   "parts": [
+    {
+     "scores": "be44ff308679ca5f",
+     "flags": "4a69320a0d048338"
+    },
+    {
+     "scores": "be44ff308679ca5f",
+     "flags": "4a69320a0d048338"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fold-reduction (one score per fold over that fold's whole test block; a call with fewer rows is a different cross-validation, not the same one in a smaller batch)",
+    "n/a:fold-reduction (one score per fold over that fold's whole test block; a call with fewer rows is a different cross-validation, not the same one in a smaller batch)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)",
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 3.399615875008749,
+    "stages": {
+     "repeat=1/train": 2.1602426249883138,
+     "repeat=1/infer-save-reload": 1.3124983524903655e-05,
+     "repeat=1/batch": 0.00044249999336898327,
+     "repeat=1/batchgrad": 0.000190042017493397,
+     "repeat=1/batchscale": 7.058298797346652e-05,
+     "repeat=1/ragged": 6.899997242726386e-05,
+     "repeat=1/stepfull": 6.241697701625526e-05,
+     "repeat=2/train": 1.2378300419950392,
+     "repeat=2/infer-save-reload": 1.1041993275284767e-05,
+     "repeat=2/batch": 0.0001568750012665987,
+     "repeat=2/batchgrad": 4.3790991185233e-05,
+     "repeat=2/batchscale": 3.445800393819809e-05,
+     "repeat=2/ragged": 3.354198997840285e-05,
+     "repeat=2/stepfull": 3.312499029561877e-05
+    }
+   }
+  },
+  "par-cross-val/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "0a3d0c41cf6d6da5",
+    "0a3d0c41cf6d6da5"
+   ],
+   "parts": [
+    {
+     "scores": "be44ff308679ca5f",
+     "flags": "4a69320a0d048338"
+    },
+    {
+     "scores": "be44ff308679ca5f",
+     "flags": "4a69320a0d048338"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fold-reduction (one score per fold over that fold's whole test block; a call with fewer rows is a different cross-validation, not the same one in a smaller batch)",
+    "n/a:fold-reduction (one score per fold over that fold's whole test block; a call with fewer rows is a different cross-validation, not the same one in a smaller batch)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)",
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.8381098749814555,
+    "stages": {
+     "repeat=1/train": 0.9726198329881299,
+     "repeat=1/infer-save-reload": 9.58298915065825e-06,
+     "repeat=1/batch": 7.708300836384296e-05,
+     "repeat=1/batchgrad": 4.312500823289156e-05,
+     "repeat=1/batchscale": 3.4500000765547156e-05,
+     "repeat=1/ragged": 3.3666990930214524e-05,
+     "repeat=1/stepfull": 3.420800203457475e-05,
+     "repeat=2/train": 0.8647749579977244,
+     "repeat=2/infer-save-reload": 1.53339933604002e-05,
+     "repeat=2/batch": 5.6958000641316175e-05,
+     "repeat=2/batchgrad": 4.137499490752816e-05,
+     "repeat=2/batchscale": 3.095800639130175e-05,
+     "repeat=2/ragged": 3.0084018362686038e-05,
+     "repeat=2/stepfull": 3.333299537189305e-05
+    }
+   }
+  },
+  "par-cross-val/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "0965a2f7dd472e8d",
+    "0965a2f7dd472e8d"
+   ],
+   "parts": [
+    {
+     "scores": "fbd8c68dc08f37be",
+     "flags": "4a69320a0d048338"
+    },
+    {
+     "scores": "fbd8c68dc08f37be",
+     "flags": "4a69320a0d048338"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fold-reduction (one score per fold over that fold's whole test block; a call with fewer rows is a different cross-validation, not the same one in a smaller batch)",
+    "n/a:fold-reduction (one score per fold over that fold's whole test block; a call with fewer rows is a different cross-validation, not the same one in a smaller batch)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)",
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.7044050830008928,
+    "stages": {
+     "repeat=1/train": 0.8665021249908023,
+     "repeat=1/infer-save-reload": 1.0332994861528277e-05,
+     "repeat=1/batch": 4.9583002692088485e-05,
+     "repeat=1/batchgrad": 4.187499871477485e-05,
+     "repeat=1/batchscale": 3.362499410286546e-05,
+     "repeat=1/ragged": 3.374999505467713e-05,
+     "repeat=1/stepfull": 3.245798870921135e-05,
+     "repeat=2/train": 0.836787500011269,
+     "repeat=2/infer-save-reload": 1.233298098668456e-05,
+     "repeat=2/batch": 0.00024020799901336432,
+     "repeat=2/batchgrad": 9.899999713525176e-05,
+     "repeat=2/batchscale": 8.200001320801675e-05,
+     "repeat=2/ragged": 7.354200351983309e-05,
+     "repeat=2/stepfull": 7.191702025011182e-05
+    }
+   }
+  },
+  "par-cross-val/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "d2f37d8250f8b3ef",
+    "d2f37d8250f8b3ef"
+   ],
+   "parts": [
+    {
+     "scores": "ff12ee6c504afb26",
+     "flags": "4a69320a0d048338"
+    },
+    {
+     "scores": "ff12ee6c504afb26",
+     "flags": "4a69320a0d048338"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fold-reduction (one score per fold over that fold's whole test block; a call with fewer rows is a different cross-validation, not the same one in a smaller batch)",
+    "n/a:fold-reduction (one score per fold over that fold's whole test block; a call with fewer rows is a different cross-validation, not the same one in a smaller batch)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)",
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.6360434170055669,
+    "stages": {
+     "repeat=1/train": 0.8310122079856228,
+     "repeat=1/infer-save-reload": 1.1625001206994057e-05,
+     "repeat=1/batch": 9.533300180919468e-05,
+     "repeat=1/batchgrad": 3.312501939944923e-05,
+     "repeat=1/batchscale": 2.5042012566700578e-05,
+     "repeat=1/ragged": 2.3625005269423127e-05,
+     "repeat=1/stepfull": 2.4124979972839355e-05,
+     "repeat=2/train": 0.8043935839959886,
+     "repeat=2/infer-save-reload": 9.707990102469921e-06,
+     "repeat=2/batch": 5.6541000958532095e-05,
+     "repeat=2/batchgrad": 2.9084010748192668e-05,
+     "repeat=2/batchscale": 2.1249987185001373e-05,
+     "repeat=2/ragged": 2.0708015654236078e-05,
+     "repeat=2/stepfull": 2.1082989405840635e-05
+    }
+   }
+  },
+  "par-cross-val/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2df39c65766aac8e",
+    "2df39c65766aac8e"
+   ],
+   "parts": [
+    {
+     "scores": "0d02fcad7b9ed850",
+     "flags": "4a69320a0d048338"
+    },
+    {
+     "scores": "0d02fcad7b9ed850",
+     "flags": "4a69320a0d048338"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fold-reduction (one score per fold over that fold's whole test block; a call with fewer rows is a different cross-validation, not the same one in a smaller batch)",
+    "n/a:fold-reduction (one score per fold over that fold's whole test block; a call with fewer rows is a different cross-validation, not the same one in a smaller batch)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)",
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.8913870000105817,
+    "stages": {
+     "repeat=1/train": 0.8442015830078162,
+     "repeat=1/infer-save-reload": 9.457988198846579e-06,
+     "repeat=1/batch": 5.075000808574259e-05,
+     "repeat=1/batchgrad": 3.80830024369061e-05,
+     "repeat=1/batchscale": 2.9457994969561696e-05,
+     "repeat=1/ragged": 2.9457994969561696e-05,
+     "repeat=1/stepfull": 2.895799116231501e-05,
+     "repeat=2/train": 1.0464329170063138,
+     "repeat=2/infer-save-reload": 1.0624993592500687e-05,
+     "repeat=2/batch": 0.00013291698996908963,
+     "repeat=2/batchgrad": 4.5374996261671185e-05,
+     "repeat=2/batchscale": 3.700001980178058e-05,
+     "repeat=2/ragged": 3.4958997275680304e-05,
+     "repeat=2/stepfull": 3.4999975468963385e-05
+    }
+   }
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "lane_revisions": {
+  "tokenizer": "synthetic-vocab-1",
+  "gbdt-parametric-losses": "rows-1500-1",
+  "gbdt-nan-modes": "rows-1500-nan-in-split-columns-2",
+  "gbdt-lossguide-newtoncosine": "rows-1500-1",
+  "gbdt-pair-logit": "rows-1500-1",
+  "hdbscan": "rows-4000-1",
+  "hdbscan-leaf": "rows-2000-1",
+  "spectral": "rows-512-1",
+  "holtwinters": "obs-128-1",
+  "byte-lm": "steps-2-1",
+  "byte-lm-resident": "shape-l1-d16-ff32-1",
+  "samba": "steps-1-1",
+  "samba-untied-dropout-accum": "steps-3-1",
+  "mamba2-dtlimit": "seqlen-8-dtlimit-straddle-2",
+  "mamba3": "norms-near-one-1",
+  "transformer": "norms-near-one-1",
+  "transformer-window": "norms-near-one-1",
+  "umap": "transform-row-separable-1",
+  "par-graph-umap": "transform-row-separable-1"
+ },
+ "degenerate_lanes": [
+  "par-causal-lm",
+  "par-cross-val"
+ ],
+ "degenerate_column": "cpu-host",
+ "batchgrad_protocol": {
+  "rows": {
+   "alone": 16,
+   "split": [
+    1,
+    8,
+    "n"
+   ]
+  },
+  "accum_splits": [
+   2,
+   4,
+   8
+  ],
+  "uneven_split": "n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+  "carry_splits": [
+   [
+    1,
+    8,
+    "n"
+   ],
+   "every 16"
+  ],
+  "seq": [
+   8,
+   64
+  ]
+ },
+ "batchgrad_sabotage": false,
+ "batchscale_protocol": {
+  "batches": [
+   1,
+   17,
+   64,
+   256
+  ],
+  "whole": 1024,
+  "long_l": 1024,
+  "prefixes": [
+   1,
+   7,
+   63,
+   64,
+   65,
+   127,
+   128,
+   129,
+   255,
+   256,
+   257,
+   511,
+   512,
+   513,
+   1023
+  ]
+ },
+ "batchscale_sabotage": false,
+ "ragged_protocol": {
+  "lengths": [
+   16,
+   1,
+   7,
+   9,
+   16,
+   3,
+   12,
+   15
+  ],
+  "long_lengths": [
+   300,
+   1,
+   65,
+   129,
+   257,
+   128
+  ],
+  "padding": "nan/vocab+7"
+ },
+ "ragged_sabotage": false,
+ "stepfull_protocol": {
+  "rows": 2,
+  "length": 16,
+  "full": "forward(x) from a zero state, one pass",
+  "stepped": "allocate_state then step(x_t, state) at every position",
+  "compared": "bitwise, position by position"
+ },
+ "stepfull_sabotage": false,
+ "host": {
+  "cpu_model": "Apple M4",
+  "arch": "arm64",
+  "target_cpu": "unrecorded",
+  "mojo_version": "unrecorded",
+  "python": "3.14.7",
+  "column": "cpu",
+  "routed": {
+   "_mojolearn": "_mojolearn_core_host",
+   "_mojolearn_linalg": "_mojolearn_linalg_host",
+   "_mojolearn_estimators": "_mojolearn_estimators_host",
+   "_mojolearn_metrics": "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing": "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa": "_mojolearn_tsa_host",
+   "_mojolearn_solver": "_mojolearn_solver_host",
+   "_mojolearn_svm": "_mojolearn_svm_host",
+   "_mojolearn_trees": "_mojolearn_trees_host",
+   "_mojolearn_rf": "_mojolearn_rf_host",
+   "_mojolearn_gp": "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods": "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture": "_mojolearn_mixture_host",
+   "_mojolearn_hdbscan": "_mojolearn_hdbscan_host",
+   "_mojolearn_gbdt": "_mojolearn_gbdt_host",
+   "_mojolearn_training": "_mojolearn_training_host",
+   "_mojolearn_resample": "_mojolearn_resample_host",
+   "_mojolearn_mamba": "_mojolearn_mamba_host",
+   "_mojolearn_arima": "_mojolearn_arima_host",
+   "_mojolearn_embedding": "_mojolearn_embedding_host",
+   "_mojolearn_ivf": "_mojolearn_ivf_host",
+   "_mojolearn_transformer": "_mojolearn_transformer_host"
+  },
+  "surface": "python/mojolearn/host_surface.py",
+  "declared": [
+   "_mojolearn_byte_lm_host",
+   "_mojolearn_forest_host",
+   "_mojolearn_tokenizer_host",
+   "_mojolearn_neural_host",
+   "_mojolearn_core_host",
+   "_mojolearn_linalg_host",
+   "_mojolearn_estimators_host",
+   "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa_host",
+   "_mojolearn_solver_host",
+   "_mojolearn_svm_host",
+   "_mojolearn_trees_host",
+   "_mojolearn_rf_host",
+   "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture_host",
+   "_mojolearn_mixture_infer_host",
+   "_mojolearn_hdbscan_host",
+   "_mojolearn_gp_infer_host",
+   "_mojolearn_hdbscan_infer_host",
+   "_mojolearn_gbdt_host",
+   "_mojolearn_training_host",
+   "_mojolearn_resample_host",
+   "_mojolearn_mamba_host",
+   "_mojolearn_arima_host",
+   "_mojolearn_embedding_host",
+   "_mojolearn_embedding_infer_host",
+   "_mojolearn_ivf_host",
+   "_mojolearn_ivf_search_host",
+   "_mojolearn_forecast_host",
+   "_mojolearn_transformer_host"
+  ],
+  "covered_lanes": [
+   "kernel-ridge-poly",
+   "kernel-ridge-sigmoid",
+   "kernel-ridge-laplacian",
+   "nystroem-poly",
+   "nystroem-sigmoid",
+   "nystroem-laplacian",
+   "par-rbf-sampler",
+   "select-d",
+   "gemm-pinned",
+   "kde",
+   "holtwinters",
+   "lasso",
+   "elasticnet",
+   "svc",
+   "agglomerative",
+   "et-clf",
+   "et-reg",
+   "iforest",
+   "knn",
+   "knn-clf",
+   "knn-reg",
+   "pca",
+   "pca-whiten",
+   "tsvd",
+   "ols",
+   "ridge",
+   "dbscan",
+   "kmeans",
+   "metrics",
+   "spectral",
+   "standard-scaler",
+   "minmax-scaler",
+   "logistic",
+   "rf-clf",
+   "rf-reg",
+   "kmeans-random",
+   "kmeans-array",
+   "kmeans-weighted",
+   "standard-scaler-no-mean",
+   "standard-scaler-no-std",
+   "minmax-scaler-clip",
+   "spectral-precomputed",
+   "gp",
+   "gp-matern12",
+   "gp-matern32",
+   "gp-matern52-ard",
+   "gp-normalize-y",
+   "gp-optimize",
+   "gp-optimize-restarts",
+   "gpc",
+   "gpc-multiclass",
+   "par-gpc-fit",
+   "par-gpc-predict",
+   "mamba1-decode-session",
+   "transformer-decode-session",
+   "par-causal-lm",
+   "par-cross-val",
+   "knn-sqeuclidean",
+   "knn-clf-distance",
+   "knn-reg-distance",
+   "gemm-transposed",
+   "linalg-qr",
+   "linalg-eigh",
+   "linalg-svdvals",
+   "dbscan-brute-l1",
+   "kde-tophat-sqeuclidean",
+   "kde-epanechnikov-l1",
+   "kde-exponential-chebyshev",
+   "kde-linear-cosine",
+   "kde-cosine-minkowski",
+   "kde-weighted",
+   "ols-no-intercept",
+   "ols-weighted",
+   "ridge-no-intercept",
+   "logistic-unpenalized-no-intercept",
+   "elasticnet-l2end-no-intercept",
+   "holtwinters-multiplicative",
+   "svc-linear",
+   "svc-poly",
+   "iforest-tuned",
+   "knn-manhattan",
+   "knn-chebyshev",
+   "knn-cosine",
+   "knn-minkowski-p3",
+   "knn-rbc",
+   "radius",
+   "radius-manhattan",
+   "radius-chebyshev",
+   "radius-minkowski-p3",
+   "dbscan-weighted",
+   "logistic-l1",
+   "logistic-elasticnet",
+   "logistic-multiclass",
+   "kpss",
+   "svr",
+   "svr-linear",
+   "pca-full-whiten",
+   "metrics-classification",
+   "metrics-fowlkes-mallows",
+   "metrics-homogeneity-completeness",
+   "gbdt-adapter-score-weighted",
+   "rf-score-weighted",
+   "mlp",
+   "gbdt-symmetric",
+   "gbdt-rmse",
+   "gbdt-depthwise",
+   "gbdt-lossguide",
+   "gbdt-nan-modes",
+   "gbdt-adapter-clf",
+   "gbdt-adapter-reg",
+   "gbdt-parametric-losses",
+   "gbdt-exact-mae",
+   "gbdt-lossguide-newtoncosine",
+   "gbdt-multiclass",
+   "gbdt-onevsall",
+   "gbdt-ordered-rmse",
+   "gbdt-border-types",
+   "gbdt-ordered",
+   "gbdt-ordered-bayesian-noise",
+   "gbdt-bfa-quantile",
+   "gbdt-catboost-defaults",
+   "gbdt-feature-freq",
+   "gbdt-pointwise-l2-bayesian-eval",
+   "gbdt-categorical-ctr",
+   "gbdt-query-rmse",
+   "gbdt-pair-logit",
+   "gbdt-yeti-rank",
+   "arima",
+   "arima-011",
+   "arima-seasonal-c",
+   "arima-exog",
+   "arima-exog-seasonal",
+   "umap",
+   "kmeans-sqrt",
+   "kmeans-classic-pp",
+   "cross-val",
+   "bootstrap",
+   "permutation-test",
+   "monte-carlo",
+   "optim-sgd",
+   "optim-adam-clip",
+   "cross-entropy-arms",
+   "training-primitives",
+   "ordered-gradient-sum",
+   "cholesky",
+   "rbf-sampler",
+   "kernel-ridge",
+   "nystroem",
+   "gmm",
+   "gmm-random-init",
+   "hdbscan",
+   "hdbscan-leaf",
+   "rf-clf-entropy-log2-noboot",
+   "rf-clf-balanced-parallel",
+   "rf-reg-poisson",
+   "rf-reg-gamma-ig",
+   "et-clf-entropy-bestfirst",
+   "et-reg-bootstrap-parallel",
+   "mamba2",
+   "mamba2-dtlimit",
+   "mamba1",
+   "mamba3",
+   "transformer",
+   "transformer-window",
+   "samba",
+   "samba-untied-dropout-accum",
+   "byte-lm-host-infer",
+   "byte-lm-host-infer-threaded",
+   "byte-lm-host-train",
+   "language-model-config",
+   "par-scaler",
+   "par-scaler-minmax",
+   "par-arima",
+   "par-holtwinters",
+   "par-forecast-arima",
+   "par-forecast-holtwinters",
+   "par-queries-knn",
+   "par-queries-nn",
+   "par-queries-radius",
+   "par-queries-kde",
+   "par-reference-knn",
+   "par-reference-knn-reg",
+   "par-forest",
+   "par-forest-et",
+   "par-forest-et-clf",
+   "par-forest-reg",
+   "par-mlp",
+   "par-samba",
+   "par-samba-clip",
+   "embedding",
+   "embedding-sort",
+   "ivf",
+   "ivf-euclidean",
+   "par-ivf",
+   "ivf-extend",
+   "byte-lm",
+   "byte-lm-resident",
+   "gmm-sample",
+   "gmm-random-init-sample",
+   "gp-sample-y",
+   "gp-sample-y-normalize",
+   "tokenizer",
+   "bpe-trainer",
+   "bpe-vocabulary",
+   "tokenized-corpus",
+   "hf-checkpoint",
+   "hf-tokenizer",
+   "hf-causal-lm",
+   "gbdt-categorical-ctr-tables",
+   "gbdt-tensor-ctr-tables",
+   "gemm-bf16",
+   "gemm-int8",
+   "transformer-bf16w",
+   "transformer-int8w",
+   "mamba1-bf16w",
+   "mamba1-int8w",
+   "mamba2-bf16w",
+   "mamba2-int8w",
+   "mamba3-bf16w",
+   "mamba3-int8w",
+   "mlp-bf16w",
+   "mlp-int8w",
+   "samba-bf16w",
+   "samba-int8w",
+   "saved-model-host-infer",
+   "lowbit-conversions",
+   "grad-accumulation"
+  ],
+  "families": {
+   "_mojolearn_arima_host": {
+    "column": "cpu",
+    "sha256": "9e01846a01b2350c755490e76b5a13157912e566298cb6361aa9851a31280d8a",
+    "size": 380760,
+    "sabotage": false
+   },
+   "_mojolearn_byte_lm_host": {
+    "column": "cpu",
+    "sha256": "57893aae0cf668f7a33238d2dd9caaa868d6aeee6c0e319f286c4560766979ec",
+    "size": 534488,
+    "sabotage": false
+   },
+   "_mojolearn_core_host": {
+    "column": "cpu",
+    "sha256": "4c11728fa084de9a05acb7e3161e933f913c75990f0815580c9e817e4661431e",
+    "size": 899000,
+    "sabotage": false
+   },
+   "_mojolearn_embedding_host": {
+    "column": "cpu",
+    "sha256": "96a9c02f866241cb2268889f2899d371e4220df87756e5ea2a813f5c39122254",
+    "size": 229344,
+    "sabotage": false
+   },
+   "_mojolearn_embedding_infer_host": {
+    "column": "cpu",
+    "sha256": "e7e2dd7e8d6620f8f37d3b2adabd35b89b4708dc35b33d6ec628e949587f758c",
+    "size": 209184,
+    "sabotage": false
+   },
+   "_mojolearn_estimators_host": {
+    "column": "cpu",
+    "sha256": "c3a13f77a95b03a1b47ca70a97c4388e1f8d7ecf5a564f108f6596f8dcf42eb5",
+    "size": 665104,
+    "sabotage": false
+   },
+   "_mojolearn_forecast_host": {
+    "column": "cpu",
+    "sha256": "a1bc4d8fc3ae5a26f9e84434cf1978160d467c2e1eca534a34271c6b265e8741",
+    "size": 353304,
+    "sabotage": false
+   },
+   "_mojolearn_forest_host": {
+    "column": "cpu",
+    "sha256": "2578035d32d2228ed749b1fb6c0714f565d4d82cad33c3004eb5752ca0785288",
+    "size": 500600,
+    "sabotage": false
+   },
+   "_mojolearn_gbdt_host": {
+    "column": "cpu",
+    "sha256": "d4f721aab4a42a0f752e81ef5873ab89fbfdf33420738131bd157dc960b1c2a3",
+    "size": 1312312,
+    "sabotage": false
+   },
+   "_mojolearn_gp_host": {
+    "column": "cpu",
+    "sha256": "224efc08b645fc5ea3f78fb7ace7e65163e88122982e549dd3ed03e07322daf5",
+    "size": 451240,
+    "sabotage": false
+   },
+   "_mojolearn_gp_infer_host": {
+    "column": "cpu",
+    "sha256": "b7c1322c865fac620ba31b5bcd2adfd81013052bb3a76719f1e16f15b392cb1d",
+    "size": 288184,
+    "sabotage": false
+   },
+   "_mojolearn_hdbscan_host": {
+    "column": "cpu",
+    "sha256": "4426bc574006ed1c125301dba0aa6752d62fdbcc399600f4bb6961b3e346b2cb",
+    "size": 444584,
+    "sabotage": false
+   },
+   "_mojolearn_hdbscan_infer_host": {
+    "column": "cpu",
+    "sha256": "6f51af4297cb3cf2bd9a2a9824c366edd7f65648cc397da0ab711403692d9874",
+    "size": 312880,
+    "sabotage": false
+   },
+   "_mojolearn_ivf_host": {
+    "column": "cpu",
+    "sha256": "c2aad18ac69defc74ef3abec888625a53ff6ab4e653ce3687464399504eb95b0",
+    "size": 450280,
+    "sabotage": false
+   },
+   "_mojolearn_ivf_search_host": {
+    "column": "cpu",
+    "sha256": "ff73a5ff36897aee2ce0732409fb35fe47c664229478fc1e28c5598f028a088e",
+    "size": 286160,
+    "sabotage": false
+   },
+   "_mojolearn_kernel_methods_host": {
+    "column": "cpu",
+    "sha256": "cd66682c316ec27d8632e0f5e8c0f217fb952fe4c00596c43fcfc6f5fc651878",
+    "size": 352560,
+    "sabotage": false
+   },
+   "_mojolearn_linalg_host": {
+    "column": "cpu",
+    "sha256": "8ccf5c1cf74dacbe6f4c9fe3b76b5c35f2f607db083d2c3b1f366c22da3606f5",
+    "size": 349528,
+    "sabotage": false
+   },
+   "_mojolearn_mamba_host": {
+    "column": "cpu",
+    "sha256": "8319d12fed9cce63b5d6e458965fb8ada50cfc15f102758d38f68c95bc25acda",
+    "size": 1057416,
+    "sabotage": false
+   },
+   "_mojolearn_metrics_host": {
+    "column": "cpu",
+    "sha256": "99d42e5eacff3ef6f4d2426e4cd7091f7676b037a582e909bc3204c85c75db19",
+    "size": 780904,
+    "sabotage": false
+   },
+   "_mojolearn_mixture_host": {
+    "column": "cpu",
+    "sha256": "6da42b15a7de34e6540d5bbb6be1cc757f679efe1da2f5ba6278ccd6d84c62fc",
+    "size": 433560,
+    "sabotage": false
+   },
+   "_mojolearn_mixture_infer_host": {
+    "column": "cpu",
+    "sha256": "910ddd35b31333950e3f6b8b848fb48acc2a2db1409fcc7edfb8162cf0f22060",
+    "size": 251872,
+    "sabotage": false
+   },
+   "_mojolearn_neural_host": {
+    "column": "cpu",
+    "sha256": "389b1767c065fd5975202deb5a2dc7bc74f14416a84fac3ef3089d76a2f28057",
+    "size": 615816,
+    "sabotage": false
+   },
+   "_mojolearn_preprocessing_host": {
+    "column": "cpu",
+    "sha256": "74e6e2d7f54e3937d8267afa9954d59861ca84d86bc5f9182c2b02d8bdae302c",
+    "size": 235536,
+    "sabotage": false
+   },
+   "_mojolearn_resample_host": {
+    "column": "cpu",
+    "sha256": "1d823e5fbdbe422ae628359eb256ee2e606e64124dc2cb10e1d0a6451e348dbb",
+    "size": 325880,
+    "sabotage": false
+   },
+   "_mojolearn_rf_host": {
+    "column": "cpu",
+    "sha256": "ed5fcdb9e0d865ae5a7c4f788cd02884c1092aafa725b3e6577d445175603677",
+    "size": 528968,
+    "sabotage": false
+   },
+   "_mojolearn_solver_host": {
+    "column": "cpu",
+    "sha256": "f3005712048835077c4b3ebcd3a62530dd9bfcd12d3f0cfc8ef6cfdec97521f2",
+    "size": 291448,
+    "sabotage": false
+   },
+   "_mojolearn_svm_host": {
+    "column": "cpu",
+    "sha256": "f1e4acdc7733a6f31e02ada2bfded15c77aab680dab2c0a6744b1f2a14bc684f",
+    "size": 397496,
+    "sabotage": false
+   },
+   "_mojolearn_tokenizer_host": {
+    "column": "cpu",
+    "sha256": "27185fabca2bb6b912e148815a63327794476c2cfe72630f49a64360264e4642",
+    "size": 438048,
+    "sabotage": false
+   },
+   "_mojolearn_training_host": {
+    "column": "cpu",
+    "sha256": "999c8861a678b8bb1b5a20d7eb325729031a9c756c209f3f4f40bd7b853957c4",
+    "size": 413688,
+    "sabotage": false
+   },
+   "_mojolearn_transformer_host": {
+    "column": "cpu",
+    "sha256": "7a0b12024b6f323ae7fb8fce13bcb2c24f22c2bbd9ffe3cf18bd513a97dd4317",
+    "size": 424320,
+    "sabotage": false
+   },
+   "_mojolearn_trees_host": {
+    "column": "cpu",
+    "sha256": "9123eca97c52d8e0e9afc6e60f4ccc206278552687b5951570e73946b0d75b77",
+    "size": 540840,
+    "sabotage": false
+   },
+   "_mojolearn_tsa_host": {
+    "column": "cpu",
+    "sha256": "c8937ac180331d85f6f854b7ecfad7cdc2d15b874da10374056da98938324682",
+    "size": 312904,
+    "sabotage": false
+   }
+  }
+ },
+ "package": {
+  "version": "0.8.8",
+  "package_dir": "/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a30f341e25b2042bd/python/mojolearn",
+  "numpy": "2.5.3",
+  "python": "3.14.7",
+  "par_devices": "0",
+  "bindings": []
+ },
+ "resume_signature": {
+  "schema": 1,
+  "source_sha256": "2f95b4d2eeb3a5c31e10bb8322a97ee68b272a202f61c817ad5e10c0bf9db34f",
+  "options": {
+   "require_backend": null,
+   "require_cpu": false,
+   "fail_on_refused": false,
+   "jobs": 1,
+   "lanes": "mamba1-decode-session,transformer-decode-session,par-causal-lm,par-cross-val",
+   "skip": "",
+   "fixtures": "",
+   "repeats": 2,
+   "vendor": null,
+   "allow_fast": false,
+   "batch_alone": 16,
+   "no_batch": false,
+   "batch_grad": true,
+   "batch_scale": true,
+   "ragged": true,
+   "step_full": true,
+   "no_rlpair": false,
+   "diff": null,
+   "require_columns": 0,
+   "owed_json": "",
+   "merge": null,
+   "allow_separate_builds": false
+  },
+  "environment_sha256": "7f516c76932d47fe7e1400fcca466fc3ee1ee05766babf23e8daa3b7286848ff",
+  "provenance": {
+   "commit": "2a2d3491d472bb76a8a0c53e209b8ebc9cdbfa91",
+   "mode": "identical",
+   "vendor": "cpu-apple-m4",
+   "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+   "python": "3.14.7",
+   "numpy": "2.5.3",
+   "fixtures": {
+    "base": {
+     "X": "b5b0a0005efa3788",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "308c22120b664e5b"
+    },
+    "ties": {
+     "X": "186fe2109fc34ad5",
+     "y_clf": "f33cf521f758ae3c",
+     "y_reg": "047d4652a4d56bc3"
+    },
+    "hashed": {
+     "X": "c93497b26fe65cda",
+     "y_clf": "d104ead2f62bdd03",
+     "y_reg": "ce4959d8070bb069"
+    },
+    "wide": {
+     "X": "35f6a8481e649eb8",
+     "y_clf": "276ebacc29267948",
+     "y_reg": "611fc5dd6367bef5"
+    },
+    "denormal": {
+     "X": "752323c375a1cbf5",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "denormal_ftz": {
+     "X": "34c156b0d0e8a891",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "dupes": {
+     "X": "9d9d9db7c7785a14",
+     "y_clf": "d390ee2944b13e1d",
+     "y_reg": "135ce10f2a0817fe"
+    },
+    "odd": {
+     "X": "93d9611a09107bb9",
+     "y_clf": "273a388a705a4f40",
+     "y_reg": "25f3d126c81ca0ec"
+    },
+    "negative": {
+     "X": "08106ffff3256313",
+     "y_clf": "294ce4d7dadaf0bb",
+     "y_reg": "ce1914d5f78f5707"
+    }
+   },
+   "heldout": {
+    "base": {
+     "X": "d4de6b4eb682c465"
+    },
+    "ties": {
+     "X": "d1ba686494256660"
+    },
+    "hashed": {
+     "X": "9dc786ade4574aff"
+    },
+    "wide": {
+     "X": "d52a1af18a3c2f1c"
+    },
+    "denormal": {
+     "X": "5061056b118d07d0"
+    },
+    "denormal_ftz": {
+     "X": "a8c3d1a560b5cabb"
+    },
+    "dupes": {
+     "X": "e4b16c115962dfcd"
+    },
+    "odd": {
+     "X": "32ea0bbed60b8e6c"
+    },
+    "negative": {
+     "X": "45b539a3f66ce25d"
+    }
+   }
+  }
+ }
+}

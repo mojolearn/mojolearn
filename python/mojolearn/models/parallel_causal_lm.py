@@ -11,12 +11,44 @@ API does not promise resident KV or support a layer larger than one device.
 Checkpoint loading currently materializes all weights in parent RAM before
 sending each layer to its owner; that transient host-memory requirement remains.
 Physical two-GPU qualification is outstanding. Explicit experimental API.
+
+THE CPU HOST ROUTE (lane/cpu-routes-gpu-only-four, 2026-09-20). On a CPU-only
+install there are no devices to isolate, and the class says so rather than
+pretending otherwise: a "device index" is then one WORKER PROCESS, each layer
+is built there from `CausalLM`'s own CPU route (`_block_classes("cpu")`, the
+`neural_inference` block classes and `_CpuPrimitives`), and the hidden
+activations cross process boundaries exactly as they cross device boundaries
+on a GPU column. WHAT THAT COLUMN CHECKS is the layer PARTITION and the
+ordered hand-off -- one `_RemoteBlock` per layer, `_RemotePrimitives` for the
+embedding on the first owner and the norm and head on the last -- held byte
+for byte to a plain in-process `CausalLM` on the same weights. WHAT IT DOES
+NOT CHECK is device isolation, memory residency or anything physical: one
+process per index is the degenerate case of the device axis and two GPUs
+remain owed. It is AGREEMENT with the plain path, not a claim that either is
+right. METAL IS STILL REFUSED, deliberately: `DevicePool` gives an Apple
+group no visibility mask at all, so "one device per owner" would be a
+sentence with nothing behind it there, which is worse than a refusal.
 """
 from .. import _backend
-from .._parallel_pool import DevicePool
+from .._parallel_pool import DevicePool, _cpu_refusal
 from .causal_lm import CausalLM
 
 __all__ = ['ParallelCausalLM']
+
+
+def _admit_route():
+    """`gpu` on CUDA or HIP, `cpu` on a CPU-only install, a refusal otherwise.
+
+    Called in the same two places the vendor check used to sit, and before a
+    layer is built or a checkpoint is read."""
+    vendor = _backend.vendor()
+    if vendor in ('cuda', 'hip'):
+        return 'gpu'
+    if _backend._CPU_ONLY is not None:
+        return 'cpu'
+    raise NotImplementedError(
+        'ParallelCausalLM requires CUDA or HIP device isolation, or a CPU-only '
+        'install where one owner is one worker process')
 
 
 class _RemoteState:
@@ -90,8 +122,7 @@ class ParallelCausalLM(CausalLM):
         if (len(self.layer_devices) != plan.n_layers or
                 any(type(d) is not int or d < 0 for d in self.layer_devices)):
             raise ValueError('layer_devices requires one nonnegative device index per layer')
-        if _backend.vendor() not in ('cuda', 'hip'):
-            raise NotImplementedError('ParallelCausalLM requires CUDA or HIP device isolation')
+        self.route = _admit_route()
         self._closed = False
         self._pools = {}
         try:
@@ -100,7 +131,11 @@ class ParallelCausalLM(CausalLM):
             self._pools = dict.fromkeys(devices, pool)
             self._worker_index = {device: i for i, device in enumerate(devices)}
             pool._start()
-            super().__init__(plan, weights, device='gpu', **kwargs)
+            # EVERY WORKER LEARNS THE ROUTE BEFORE IT BUILDS ANYTHING, so no
+            # worker can silently take the GPU block classes on a host box.
+            for device in devices:
+                self._rpc(device, 'route', self.route)
+            super().__init__(plan, weights, device=self.route, **kwargs)
             self._rpc(self.layer_devices[0], 'tensors', {'embed': self._embed})
             self._rpc(self.layer_devices[-1], 'tensors', {'norm': self._norm, 'head': self._head})
             self._prims = _RemotePrimitives(self)
@@ -114,8 +149,7 @@ class ParallelCausalLM(CausalLM):
         from .safetensors import Checkpoint
         if weight_format not in ('float32', 'bfloat16', 'int8'):
             raise ValueError('unsupported weight_format')
-        if _backend.vendor() not in ('cuda', 'hip'):
-            raise NotImplementedError('ParallelCausalLM requires CUDA or HIP device isolation')
+        _admit_route()
         plan = plan_for(HFConfig.from_json(path))
         ckpt = Checkpoint.open(path)
         try:
@@ -132,7 +166,18 @@ class ParallelCausalLM(CausalLM):
         if self._closed:
             raise RuntimeError('ParallelCausalLM is closed')
         pool = self._pools[device]
-        return pool._call(pool._workers[self._worker_index[device]], ('causal_lm_layer', operation, args))
+        request = ('causal_lm_layer', operation, args)
+        # `_rpc` addresses ONE worker and so cannot go through `pool.map`,
+        # which is where the CPU admission normally sits. State it here rather
+        # than let the operation past that gate by the back door.
+        # The pool is never cooperative here and the device count is not part
+        # of the question, which is only whether `causal_lm_layer` is in
+        # `CPU_OPERATIONS`.
+        if _backend._CPU_ONLY is not None:
+            refusal = _cpu_refusal([request], False)
+            if refusal is not None:
+                raise refusal
+        return pool._call(pool._workers[self._worker_index[device]], request)
 
     def parameters(self):
         out = {self.plan.embed_name: self._embed, self.plan.norm_name: self._norm}

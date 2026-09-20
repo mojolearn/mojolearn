@@ -9,7 +9,7 @@ import pickle
 from . import _backend
 from ._array import Array
 from ._parallel_pool import DevicePool
-from ._gpu_witness import require_distinct_workers
+from ._gpu_witness import require_distinct_processes, require_distinct_workers
 from .model_selection import _clone, _prepare_folds, _take_rows
 
 __all__ = ['cross_val_score']
@@ -33,12 +33,29 @@ def cross_val_score(estimator, X, y, *, devices, cv=None, scoring=None,
 
     As with serial cross_val_score, only dense data and error_score='raise'
     are supported; fit metadata/weights and automatic refitting are absent.
-    Fold indices are host metadata. There is no distributed CPU fit route.
+    Fold indices are host metadata.
+
+    THE CPU HOST ROUTE (lane/cpu-routes-gpu-only-four, 2026-09-20). On a
+    CPU-only install a "device index" is one WORKER PROCESS: the fold
+    partition, the cloning, the wave dispatch, the fold order and the merge
+    are the driver's own Python, unchanged, and each fold runs the
+    estimator's public `fit` and `score` on that process's host bindings.
+    That column checks the DISPATCH against the serial API byte for byte and
+    nothing else; it is not device isolation, not placement and not a
+    throughput claim, and the two-device CUDA/HIP column remains owed. The
+    fold fits are reserved for the internal bitwise verifier there exactly as
+    every other CPU fit is (`_cpu_reference.require_training`, stated on the
+    worker's `cross_val_fold`), so this is not a public CPU training route.
+    METAL IS STILL REFUSED: `DevicePool` gives an Apple group no visibility
+    mask, so one-fold-per-device would be a sentence with nothing behind it.
     """
     pool = DevicePool(devices)
     vendor = _backend.vendor()
-    if vendor not in ('cuda', 'hip'):
-        raise NotImplementedError('parallel cross-validation requires CUDA or HIP GPU workers')
+    host = vendor not in ('cuda', 'hip') and _backend._CPU_ONLY is not None
+    if vendor not in ('cuda', 'hip') and not host:
+        raise NotImplementedError(
+            'parallel cross-validation requires CUDA or HIP GPU workers, or a '
+            'CPU-only install where one worker is one process')
     X, y, folds = _prepare_folds(estimator, X, y, cv, scoring, groups, error_score)
     prototype = _clone(estimator)
     params = prototype.get_params(deep=True)
@@ -52,8 +69,18 @@ def cross_val_score(estimator, X, y, *, devices, cv=None, scoring=None,
     scores = []
     try:
         width = len(pool.devices)
-        inventory = pool.map([('device_inventory', None, ()) for _ in pool.devices])
-        require_distinct_workers(inventory, vendor, width)
+        # ONE WITNESS PER ROUTE, EACH SAYING ONLY WHAT IT CAN. On CUDA/HIP
+        # that is one visible physical GPU per worker at local ordinal zero,
+        # with no repeated UUID or PCI id. On the host route there is no
+        # device to ask about, so it is one distinct worker PROCESS per index,
+        # under its own record kind and its own checker; the GPU check is
+        # untouched, deliberately.
+        if host:
+            require_distinct_processes(
+                pool.map([('worker_identity', None, ()) for _ in pool.devices]), width)
+        else:
+            inventory = pool.map([('device_inventory', None, ()) for _ in pool.devices])
+            require_distinct_workers(inventory, vendor, width)
         for start in range(0, len(folds), width):
             requests = []
             for train, test in folds[start:start + width]:

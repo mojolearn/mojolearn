@@ -700,20 +700,29 @@ def cpu_vacuous_lanes():
     The second kind is UNREACHABLE on the CPU axis, in both directions at
     once: no CPU run can ever declare a verifier for a class whose native
     entry exists only in a GPU binding, and no CPU run can ever move a
-    sabotage build through a door that is not there. The two resident decode
-    sessions are the case (lane/unlaned-public-algorithms, 2026-09-20):
+    sabotage build through a door that is not there.
+
+    THIS SET IS EMPTY AS OF 2026-09-20 (lane/cpu-routes-gpu-only-four), and
+    the two lanes it was written for are the reason to keep the derivation
+    rather than the list. They were the two resident decode sessions:
     `mamba1_session_create` and `transformer_decode_session_create` are in
     `bindings/_mojolearn_mamba.mojo` and
     `bindings/_mojolearn_transformer.mojo` and in no host binding, and each
-    constructor refuses BY NAME on the host route. Listing them under "No CPU
-    verifier declared" and "Sabotage not seen to move a build" advertises two
-    gaps that no run on any hardware can close, which is the same defect
-    already fixed for `par-*` on the CPU axis and then on the GPU axis.
+    constructor refused BY NAME on the host route. All of that is still true.
+    What was wrong was the inference from it: a session's ARITHMETIC is not
+    its residency, both host bindings already export the decode entry the
+    session runs, and each class now carries a host arm over it. The lanes
+    joined their families' `training_lanes` and stopped being vacuous here BY
+    THEMSELVES, without a name being removed from anywhere -- which is what
+    this function's last paragraph promises and is the whole reason it asks
+    `lane_applicability` instead of holding a list.
 
-    THEY ARE STILL REAL GAPS ON THE GPU AXIS, and they stay in those counts:
-    a GPU column is exactly where their proposition is stateable, no column
-    carries them yet, and no sabotage has moved them. Held out of the CPU
-    counts only, and reported by name under their own heading.
+    A LANE THAT DOES BELONG HERE still belongs here: listing it under "No CPU
+    verifier declared" and "Sabotage not seen to move a build" would
+    advertise gaps that no run on any hardware can close, the same defect
+    already fixed for `par-*` on the CPU axis and then on the GPU axis. The
+    bar, learned from those two, is to ask whether the thing that refuses is
+    the thing the lane hashes.
 
     Derived by asking `lane_applicability` and reading the reason it gives,
     never a list of names: a lane whose family gains a host route stops being
@@ -1161,9 +1170,15 @@ def render(data):
         w("")
         w("`identity_break.GPU_ONLY_LANES` drops them from a full-column run on a")
         w("CPU-only install and prints the reason per lane, so a CPU record never")
-        w("counts a refusal as a cell. `--lanes` is never filtered, and")
-        w("`bench/results/identity_break/2026-09-20_unlaned-public-algorithms/`")
-        w("carries the refusals recorded that way, verbatim.")
+        w("counts a refusal as a cell. `--lanes` is never filtered, so a record")
+        w("that wants the refusal text can still take it and commit it verbatim.")
+        w("")
+        w("BEFORE TRUSTING THIS SECTION, ASK THE QUESTION THE FIRST TWO ENTRIES")
+        w("DID NOT GET (lane/cpu-routes-gpu-only-four, 2026-09-20): is the entry")
+        w("that is missing the entry the lane HASHES? The two resident decode")
+        w("sessions were here on a true reading of a real refusal, and the")
+        w("refusal was about residency rather than arithmetic; both now take a")
+        w("CPU column and this section is empty.")
         w("")
         w("| lane | the entry that is missing | what it refuses with |")
         w("|---|---|---|")
