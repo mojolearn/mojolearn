@@ -2472,6 +2472,25 @@ class GradientBoosting(NumericModeMixin):
                 f"mojolearn: predict_classes needs a classification loss; "
                 f"this model was fitted with {self.loss!r}."
             )
+        if (self.loss in ("Logloss", "CrossEntropy")
+                and self.numeric_mode_used() == "fast"):
+            binding = self._bind("_mojolearn_gbdt")
+            direct = getattr(binding, "gbdt_resident_binary_classes", None)
+            if callable(direct):
+                handle = self._resident_handle(binding)
+                if handle is not None:
+                    Xa, n_rows, row_major = self._check_fitted_layout(X)
+                    out = empty((n_rows,), "<i8")
+                    wrote = direct(
+                        handle, addr_ro(Xa, name="X"),
+                        addr(out, name="class codes"),
+                        [n_rows, 1 if row_major else 0],
+                    )
+                    if wrote != n_rows:
+                        raise RuntimeError(
+                            f"mojolearn: predict_classes wrote {wrote} of {n_rows} rows"
+                        )
+                    return out
         return argmax_rows(self.predict_proba(X))
 
     def _tree_metadata(self):
