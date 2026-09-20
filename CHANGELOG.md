@@ -3,154 +3,30 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
-## Unreleased (public CPU training)
+## 0.8.9 (published 2026-09-20)
 
-- `fit` on a CPU-only install now trains. Until this change it raised
-  `NotImplementedError` and only the verifier could train on a CPU. Every
-  estimator with a CPU host binding is covered; the CPU result is bit-identical
-  to the GPU result. A configuration with no CPU implementation still refuses
-  by name (for example gradient boosting with `bootstrap_type='Bayesian'`).
-
-## Unreleased (FAST forest inference default)
-
-- Random Forest and Extra Trees now default `inference_engine` to `"auto"`.
-  It selects the resident parallel-groves predictor in FAST mode, while
-  DETERMINISTIC and IDENTICAL retain the historical sequential traversal.
-  Passing either engine explicitly remains authoritative.
-## Unreleased (lane/close-no-cpu-path-gbdt)
-
-**An eval set, the overfitting detector and `use_best_model` now have a CPU
-verification route** on the Plain SymmetricTree Logloss fit, through the new
-host oracle `gbdt/host/gbdt_oracle_eval.mojo`. Until this lane, `gbdt_fit`
-refused `eval_set` BY NAME on every Plain arm, so no early-stopping fit could
-be checked against a GPU column without owning a GPU.
-
-- The oracle restates four pieces of `fit_with_test`: `CreateCursors`' test
-  seed, `_apply_last_tree_to_test`, `_test_loss` through the same Logloss
-  kernel the learn curve uses, and `ShrinkToBestIteration`'s second
-  best-iteration tracker, which is not the detector's.
-- It does NOT narrow the fit. An eval set does not reach the learn cursor,
-  the borders, the splits or the leaves on the Plain doc-parallel path, and
-  with `use_best_model` off a fit WITH an eval set has the same model bytes,
-  learn curve and predictions as the same fit without one.
-- New identity_break lane **`gbdt-symmetric-eval`**, and a negative control of
-  its own, `-D MOJOLEARN_GBDT_EVAL_SABOTAGE=1`, which moves the held-out
-  cells and nothing else. The family's own arm moves the leaves and so cannot
-  tell a broken test cursor from a broken fit. The control earned its keep on
-  the first run: it read DIVERGENT on all nine fixtures for the two held-out
-  CURVES and did not move the detector or shrink parts at all, because at the
-  lane's first shape the held-out curve never turned and those two fits were
-  byte for byte the fit without an eval set. The stopping fits now overfit on
-  purpose, and the lane raises if the detector stops firing.
-- **GPU COLUMNS OWED.** The lane has a CPU column only; its cells read OWED
-  against the three committed GPU records until the next coordinated record.
-
-**`NO_CPU_PATH` no longer ends "among them".** Its single entry hid an unknown
-count behind that phrase, and one of the things it named (eval sets) had
-already been closed for Ordered boosting. It is now six entries, each naming
-what refuses and the structural reason. The guard-by-guard enumeration behind
-them, 50 by-name training refusal sites in 16 configuration families, is
-`docs/lanes/BRIEF_gbdt_no_cpu_path_2026-09-20.md`, and
-`tools/gbdt_cpu_refusal_probe.py` reproduces the table by fitting each
-configuration rather than reading the source.
-
-## Unreleased (lane/compare-challenge-nonce)
-
-**`verify --compare` can now tell a run from a transcription.** A commitment
-settled the ORDER of two evidence documents and nothing else: the reference
-table ships in the wheel with the expected hash of every cell in it, so a
-party could write a whole document out of that table, seal it, publish the
-commitment first and hand over a file that never executed a line.
-
-- **New `verify --challenge DOC --challenge-from C_A C_B`.** The challenge is
-  `sha256(domain || min(c_a, c_b) || max(c_a, c_b))` over the two commitments
-  published before the exchange, so neither party can compute it in advance
-  and neither controls it alone. It reseeds `identity_break.fixture('hashed')`
-  from that value, reruns the document's own lane set on it (about a ninth of
-  what `--all` cost on the same box), appends a `challenge` block and prints a
-  SECOND line to publish before the documents are exchanged. Two honest
-  responses are identical, so an uncommitted response can simply be copied.
-- **New `--challenge-commitment-a` / `--challenge-commitment-b`** on
-  `--compare`, and a new verdict rung **`CHALLENGE BROKEN` (exit 1)**,
-  directly under `COMMITMENT BROKEN` and above every cell outcome. A
-  comparison with NO challenge is unchanged: still `AGREE`, still exit 0,
-  labelled a weaker result on the RESULT line, exactly as a comparison
-  without commitments already is. Documents from earlier releases compare as
-  before, and answering a challenge does not move a document's round-one
-  commitment.
-- What it does NOT prove is in `docs/VERIFY_EXTERNALLY.md` beside what it
-  does: it does not prove two PEOPLE; whoever publishes their commitment last
-  can grind nonces to steer the challenge, so the fixture is not an unbiased
-  draw; and it proves execution of what it covers, on one fixture of one
-  kind. `bench/results/verify_reports/` predates the feature and sits at the
-  weaker rung.
-
-## Unreleased (lane/catboost-parity)
-
-**BEHAVIOR CHANGE: `GradientBoosting`'s SymmetricTree defaults are now CatBoost's
-GPU learner's** (catboost 1.2.10, pinned source 54a8143a). A default-constructed
-model fits a different, larger model than before; pass the old values
-explicitly to keep an old result. Old -> new, SymmetricTree only:
-
-- `n_estimators` 100 -> 1000 (`boosting_options.cpp:13`).
-- `learning_rate` 0.03 -> CatBoost's auto-selection from the pool when
-  `learning_rate`, `l2_leaf_reg`, `leaf_estimation_method` and
-  `leaf_estimation_iterations` are unset and the loss is RMSE, Logloss or
-  MultiClass (GPU coefficient rows, `options_helper.cpp:221-288`); 0.03
-  otherwise. The value used is `learning_rate_`.
-- `random_strength` 0.0 -> 1.0 (`oblivious_tree_options.cpp:17`); unset under
-  the L2/NewtonL2 scores, which carry no noise term, it resolves to 0.0.
-- `bootstrap_type` no sampling -> Bayesian with `bagging_temperature` 1.0
-  (`bootstrap_options.h:16-18`). For QueryRMSE, PairLogit and YetiRank that
-  default samples whole queries, which is not implemented, so an unset
-  bootstrap is refused by name for those losses (pass `bootstrap_type='No'`).
-- `leaf_estimation_iterations` unset -> 1 when there are fewer than 200
-  iterations and fewer than 20 features (`options_helper.cpp:290-307`).
-- `boost_from_average` unset on MAE, Quantile and MAPE: False -> True
-  (`options_helper.cpp:353-374`; all policies, as theirs). Their starting
-  constant (`CalcSampleQuantile` with the 1e-6 delta adjust, and the MAPE
-  weighted median) is now implemented and reproduces CatBoost 1.2.10 CPU's
-  bias bit for bit on 40 cases. A model whose bias is -0.0 now writes it.
-
-Depthwise and Lossguide keep 100 iterations, 0.03, no noise and no
-bootstrap. `GradientBoostingClassifier` and `GradientBoostingRegressor` now
-defer every default to `GradientBoosting` (their `l2_leaf_reg` default is
-None rather than 3.0, because an explicit l2 turns the learning-rate
-auto-selection off). Every GBDT lane of `tools/identity_break.py` and
-`tools/repeat_run_stability.py` passes its earlier configuration explicitly,
-and the covered lanes reproduce their shipped reference hashes on the CPU
-route under those pins. A CPU-only install still refuses the new defaults'
-Bayesian bootstrap and noise by name on most losses (`NO_CPU_PATH`).
-
-- `boosting_type` ('Plain' or 'Ordered'): CatBoost's GPU Ordered boosting
-  (`TDynamicBoosting`), with `fold_len_multiplier`, `fold_permutation_block`
-  and `permutation_count` as its knobs. **Unset, it is CatBoost's GPU default:
-  Ordered under SymmetricTree below 50,000 rows at 500 iterations or more**
-  (`catboost_options.cpp:802-807`, `defaults_helper.h:33-42`), Plain otherwise,
-  for the multiclass losses and for the L2 scores. Refused by name where
-  CatBoost refuses (non-symmetric trees, multiclass, L2 scores, Exact leaves)
-  and where it is not implemented (CTR categoricals, the ranking losses). An
-  eval set, the overfitting detector and use_best_model work as on a Plain fit.
-- `feature_border_type`: all seven of CatBoost's border selections
-  (GreedyLogSum stays the default), matching CatBoost 1.2.10's own borders bit
-  for bit on 294 oracle cases.
-- The score-noise add in both pointwise scorers is now a pinned fma under
-  IDENTICAL (IDENTITY_PATHS row 96); no recorded lane reached it.
-- CPU host path: the symmetric Logloss fit now restates the Bayesian,
-  Bernoulli and Poisson bootstraps and the score noise, so a CPU-only
-  verifier can check a default-constructed Logloss fit (the
-  gbdt-catboost-defaults lane). Ordered boosting and every border type have
-  CPU host paths too; weighted and one-hot Ordered fits
-  are GPU only and refused by name on the CPU.
-- Multi-GPU: `fit_boosting` accepts Ordered fits and every border type
-  (feature histograms partitioned by whole packed groups; the permutations,
-  folds, cursors, leaves and border selection stay on the root device). New
-  identity lanes par-ordered and par-border-types. The two-GPU columns are
-  owed; see docs/lanes/LANE_STATUS_catboost-parity.md for a logical-shard
-  finding on the Plain partition.
-- New identity lanes: gbdt-catboost-defaults, gbdt-ordered,
-  gbdt-ordered-bayesian-noise, gbdt-border-types, gbdt-bfa-quantile,
-  par-ordered, par-border-types.
+- CPU-only installs now train through the packaged host bindings. Gradient
+  boosting supports default regression, classification, multiclass and ranking
+  fits, including bootstrap sampling and score noise. RMSE honors Depthwise
+  and Lossguide on CPU. Unsupported configurations still report their limits.
+- Fix uninitialized GPU held-out cursors when average boosting is disabled.
+  CPU and GPU held-out loss curves, early stopping and model shrinking now
+  agree across all nine verifier fixtures; restore `gbdt-symmetric-eval`.
+- Add `LinearSVC`, `LinearSVR`, `QNRegressor`, and the `mojolearn.svm` namespace.
+  Six objective lanes have matching CPU and NVIDIA references. Add
+  `SpectralEmbedding` and `manifold.spectral_embedding` with verifier coverage.
+- Package stochastic, multiclass-default and ranking-default GBDT verifier
+  lanes alongside CPU and GPU implementations. Keep Poisson backtracking
+  enabled for the verifier's wide-count stress fixture.
+- Add CatBoost-style boosting defaults, ordered boosting, seven border
+  selection methods and quantile starting constants, plus expanded language
+  model, decode-session and linear algebra coverage.
+- Random Forest and Extra Trees select resident parallel-groves inference
+  automatically in FAST mode. DETERMINISTIC and IDENTICAL retain their
+  existing traversal; explicit engine selection remains supported.
+- Strengthen verifier comparison challenges and completeness checks. Fix
+  release inventory inspection before native builds and support publication
+  of Linux and macOS wheels with exact installed-wheel smoke receipts.
 
 ## 0.8.8 (published 2026-09-19)
 
