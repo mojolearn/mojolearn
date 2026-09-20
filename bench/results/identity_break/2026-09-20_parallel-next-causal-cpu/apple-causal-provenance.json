@@ -1,0 +1,13 @@
+{
+  "python_source_commit": "bcdfc9ab77eff46f937f656f936c53f96369bad0",
+  "native_source_commit": "819a47ae48166e91951f54f54e64ee173658e32a",
+  "selection": "par-causal-lm",
+  "fixtures": "all9",
+  "repeats": 1,
+  "parts": "full",
+  "device_owners": [
+    0,
+    0
+  ],
+  "CPU_threads": 2
+}
