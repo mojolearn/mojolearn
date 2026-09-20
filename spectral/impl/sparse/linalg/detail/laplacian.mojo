@@ -198,7 +198,6 @@ def compute_graph_laplacian(
     var indptr = upload_i32(ctx, indptr_h)
     var degrees = ctx.enqueue_create_buffer[DType.float32](g.n)
     ctx.enqueue_memset(degrees, Float32(0.0))
-    ctx.synchronize()
     ctx.enqueue_function[degree_kernel](
         indptr.unsafe_ptr(),
         vals.unsafe_ptr(),
@@ -235,7 +234,6 @@ def laplacian_normalized(
     var n = lap.n
     var nnz = lap.nnz
     ctx.enqueue_memset(diagonal_out, Float32(0.0))
-    ctx.synchronize()
     ctx.enqueue_function[coo_diagonal_kernel](
         lap.rows.unsafe_ptr(),
         lap.cols.unsafe_ptr(),
