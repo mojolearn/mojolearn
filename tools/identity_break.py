@@ -7417,6 +7417,7 @@ def _(ml, X, yc, yr, Xh=None):
         "dt_proj.bias": (di,), "A_log": (di, 16), "D": (di,), "out_proj.weight": (dm, di)},
         ones=("norm.weight",))
     blk = ml.Mamba1Block(w)
+    from mojolearn.mamba import Mamba1DecodeSession
     steps, resident = _decode_session_probe(blk, lambda: blk.allocate_state(2), 2, 16, dm, X)
     held = blk.allocate_state(2)
     sess = blk.decode_session(held)
@@ -7424,6 +7425,13 @@ def _(ml, X, yc, yr, Xh=None):
     busy = blk.allocate_state(2)
     open_session = blk.decode_session(busy)
     flags = np.asarray([
+        # THE DOOR RETURNS THE DOCUMENTED CLASS. `decode_session` is the only
+        # public door onto it, so the name is checked here rather than assumed;
+        # it is also what attributes this lane to `mamba.Mamba1DecodeSession`
+        # in tools/verification_matrix.py, which reads the lane body's
+        # references and not a hand-kept map.
+        type(open_session) is Mamba1DecodeSession,
+        int(open_session.is_open) and not sess.is_open,
         _refused(lambda: sess.step(np.zeros((2, 1, dm), dtype=np.float32)), "session is closed"),
         _refused(lambda: blk.decode_session(busy), "resident"),
         _refused(lambda: open_session.step(np.zeros((3, 1, dm), dtype=np.float32)), "rows"),
@@ -7467,6 +7475,8 @@ def _(ml, X, yc, yr, Xh=None):
         near_one=("input_layernorm.weight", "post_attention_layernorm.weight"))
     blk = ml.TransformerBlock(w, n_heads=nh, n_kv_heads=nkv)
 
+    from mojolearn.transformer import TransformerDecodeSession
+
     def fresh():
         return blk.allocate_state(2, max_tokens=32)
 
@@ -7487,6 +7497,9 @@ def _(ml, X, yc, yr, Xh=None):
     busy = fresh()
     open_session = blk.decode_session(busy)
     flags = np.asarray([
+        # the door returns the documented class; see the mamba1 lane
+        type(open_session) is TransformerDecodeSession,
+        int(open_session.is_open) and not sess.is_open,
         _refused(lambda: sess.step(np.zeros((2, 1, dm), dtype=np.float32)), "session is closed"),
         _refused(lambda: blk.decode_session(busy), "resident"),
         _refused(lambda: blk.decode_session(None), "state is required"),
