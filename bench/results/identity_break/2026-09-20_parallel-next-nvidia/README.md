@@ -1,3 +1,9 @@
-NVIDIA RTX4090 (sm_89), seven parallel-driver lanes × nine fixtures, full parts, repeats=1. All63 completed cells are STABLE; all234 numeric reference comparisons agree exactly, closing the126 planned NVIDIA values. Python/harness source14944378ff9d7a733cd39779c6bdb24b7d041e76; native binaries are the published0.8.9 wheel built at819a47ae48166e91951f54f54e64ee173658e32a, with wheelSHA256 in provenance.json. One physical GPU; this is not physical multi-GPU qualification.
+# NVIDIA parallel reference completion
 
-The initial900-second process guard stopped at49 complete cells. The same protocol resumed, then paused at50 complete cells to qualify the exact0.8.10 release wheel, and resumed again to completion under an1800-second guard. Partial interrupted cells were rerun; completed checkpoints were retained. CPU2/RSS12GiB limits and all fixture/part/protocol settings were unchanged. The lease watchdog was explicitly renewed and the pod was terminated after evidence fetch. Raw logs and lease receipts reside in mojolearn-evidence/parallel-next/nvidia149.
+NVIDIA RTX 4090 (sm_89), seven parallel-driver lanes × nine fixtures, full parts, one repeat. All 63 cells completed; all 234 numeric reference comparisons agree exactly, supplying the 126 planned NVIDIA values. One repeat does not establish repeated-run stability. One physical GPU was used; this is not physical multi-GPU qualification.
+
+Python/harness source: `14944378ff9d7a733cd39779c6bdb24b7d041e76`. Native binaries come from the published 0.8.9 wheel built at `819a47ae48166e91951f54f54e64ee173658e32a`; its SHA256 is in `provenance.json`.
+
+The initial 900-second process guard stopped at 49 completed cells. The identical protocol resumed, paused at 50 completed cells to qualify the exact 0.8.10 release wheel, then resumed to completion under an 1,800-second guard. Interrupted cells were rerun; completed checkpoints were retained. The two-CPU and 12 GiB RSS limits, fixtures and part settings remained unchanged.
+
+The lease watchdog was renewed explicitly. After evidence was fetched, the rental was deleted and verified absent (HTTP 404); `teardown.log` retains that receipt. Full runtime logs are retained locally in `mojolearn-evidence/parallel-next/nvidia149`.
