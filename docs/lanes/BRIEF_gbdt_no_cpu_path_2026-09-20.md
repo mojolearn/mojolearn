@@ -19,6 +19,18 @@ of its control block OK. The control block matters: if any of those refuses,
 the probe measured a stale or broken binding and every REFUSED line under it
 means nothing.
 
+**A PREBUILT `.so` IS A CLAIM ABOUT A COMMIT, AND THE CLAIM EXPIRES.** The
+first run of this probe used the `.so` already built in the main checkout
+(`python/mojolearn/host/_mojolearn_gbdt_host.so`, 2026-09-19 09:43) and
+produced a WRONG enumeration: it read REFUSED on the default Logloss fit
+(`bootstrap_type='Bayesian' under loss='Logloss'`), which is the first row of
+the control block and trains fine. The binary predated 94542a156, which landed
+at 13:31 the same day and added the symmetric stochastic arm. Nothing warned;
+the refusal was a real refusal, of a build four commits behind the source the
+sentence was being written about. Every number in this file comes from a
+binding built from this branch's own source, and the probe prints the host
+set it loaded so that a reader can tell.
+
 **A stale claim found on the way.** The old sentence said eval sets refuse
 "outside the gbdt-pointwise-l2-bayesian-eval configuration". That was already
 wrong before this lane: 000dbd2cf (2026-09-19) gave Ordered boosting an eval
