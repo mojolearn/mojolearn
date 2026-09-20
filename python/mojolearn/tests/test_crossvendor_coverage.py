@@ -155,3 +155,40 @@ def test_only_the_gpu_differing_from_cpu_is_planned():
     result = audit(t, CONTRACT, ['base'])
     assert result['gaps'][0]['reasons'] == {'amd': 'cpu_value_mismatch'}
     assert result['collection_plan']['apple'] == result['collection_plan']['nvidia'] == {}
+
+
+def test_old_lane_revision_cannot_qualify_current_contract():
+    t = table()
+    t['lane_revisions'] = {'par-demo': 'old'}
+    t['cells']['par-demo/base']['train']['cols']['cpu'] = 3
+    result = audit(t, CONTRACT, ['base'], lane_revisions={'par-demo': 'new'})
+    assert not result['complete']
+    gap = result['gaps'][0]
+    assert set(gap['reasons'].values()) == {'stale_revision'}
+    assert gap['expected_revision'] == 'new' and gap['recorded_revision'] == 'old'
+    assert gap['cpu_role'] == 'stale' and gap['target'] is None
+    t['lane_revisions']['par-demo'] = 'new'
+    assert audit(t, CONTRACT, ['base'], lane_revisions={'par-demo': 'new'})['complete']
+
+
+def test_cli_runs_in_checkout_with_no_native_package_initialization(tmp_path):
+    import shutil
+    import subprocess
+    import sys
+    root = Path(__file__).resolve().parents[3]
+    for relative in ('tools/audit_parallel_coverage.py', 'tools/identity_break.py',
+                     'python/mojolearn/_crossvendor_coverage.py',
+                     'python/mojolearn/_verify_reference.py'):
+        target = tmp_path / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(root / relative, target)
+    # A package initializer that must never run is stronger than absence of
+    # native files: it catches accidentally importing an installed fallback too.
+    (tmp_path / 'python/mojolearn/__init__.py').write_text('raise RuntimeError("native package initialized")\n')
+    reference = tmp_path / 'table.json'
+    reference.write_text(json.dumps(dict(format=vref.FORMAT, records=[], fixtures={}, heldout={}, cells={})))
+    result = subprocess.run([sys.executable, str(tmp_path / 'tools/audit_parallel_coverage.py'),
+        '--reference-table', str(reference), '--output', str(tmp_path / 'out.json'),
+        '--fail-on-incomplete'], cwd=tmp_path, capture_output=True, text=True)
+    assert result.returncode == 5, result.stderr
+    assert not json.loads((tmp_path / 'out.json').read_text())['complete']
