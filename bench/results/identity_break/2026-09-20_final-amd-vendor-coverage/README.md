@@ -1,0 +1,3 @@
+AMD MI325X (gfx942), native source `819a47ae48166e91951f54f54e64ee173658e32a`, full verifier parts and all nine fixtures, one fit per cell. 67 lanes, 603 completed cells; 2,187 numeric CPU-reference comparisons agree exactly.
+
+The initial process reached the unchanged 12 GiB RSS guard after 308 completed cells. The harness resumed the same protocol and JSON in a fresh process; the remaining cells completed with guard exit 0 (peak RSS 5,078,065,152 bytes). No selection, numerical criteria, memory limit, or lease deadline changed. Raw logs are retained in `mojolearn-evidence/final819-amd-vendor-columns`.
