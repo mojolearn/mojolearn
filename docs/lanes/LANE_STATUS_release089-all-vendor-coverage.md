@@ -15,3 +15,7 @@ The existing `verify --all --emit-reference --reference-table --batch-checks` pa
 ## Limits and audit
 
 `release089-all-vendor-fixture-audit.json` decodes actual values for each device column and includes all recorded numeric protocol parts, not only training and inference. It explicitly reports parallel APIs separately: 432 CPU numeric parts match all three GPUs; 279 CPU numeric parts still lack an equal value on at least one GPU. Another 684 parallel parts agree across all three GPUs without a numeric CPU role, while 531 lack at least one GPU value. These counts are not included in the nonparallel completeness claim. The artifact retains every parallel gap for inspection instead of excluding or rewriting it.
+
+## Archive completeness
+
+The corrected evidence archive includes all 548 raw JSON records referenced by the canonical table, alongside the audit, report and exact-wheel publication receipts. `release089-raw-record-manifest.json` lists each raw record path and SHA256; every listed file was checked byte-for-byte in a Git source archive. Export rules retain the verifier records and release receipts while omitting unrelated benchmark outputs. The initial evidence DOI `10.5281/zenodo.22864132` contains the report and audit only; use the corrected evidence archive for the underlying records. Existing DOIs remain unchanged.
