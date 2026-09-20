@@ -68,6 +68,8 @@ trailing update and the posterior mean move as well through
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
+from max.algorithm import sync_parallelize
+
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
@@ -77,6 +79,11 @@ from checks.numerics import (
     identical_mul,
     identical_mul_add,
     identical_sqrt,
+)
+from core.host_predict_threads import (
+    host_list_ptr,
+    host_predict_chunk,
+    host_predict_task_count,
 )
 from cholesky.host.chol_oracle import (
     chol_host_hex32_bits,
@@ -517,58 +524,77 @@ def gpr_host_kernel_matrix(
             stack.append(lhs^)
             _ = rhs^
             continue
-        var slot = List[Float32](capacity=cells)
+        # Allocate the complete slot before exposing its storage to worker
+        # tasks.  Each task owns whole, contiguous output rows; the feature
+        # fold and every transcendental within a cell remain in precisely
+        # the serial order above.
+        var slot = List[Float32](length=cells, fill=Float32(0.0))
+        var slotp = host_list_ptr(slot)
         if kind == GPR_K_CONST:
             # gp_const_kernel
             var v = ftz(spec.params[t])
-            for _c in range(cells):
-                slot.append(v)
+            for c in range(cells):
+                slotp.unsafe_store(c, v)
         elif kind == GPR_K_WHITE:
             # gp_white_kernel: the STRUCTURAL test (DEVIATION 1762), global
             # row start 0.
             for i in range(m):
                 for j in range(n):
                     if is_self and i == j:
-                        slot.append(ftz(spec.params[t]))
+                        slotp.unsafe_store(i * n + j, ftz(spec.params[t]))
                     else:
-                        slot.append(Float32(0.0))
+                        slotp.unsafe_store(i * n + j, Float32(0.0))
         else:
             var off = Int(spec.ls_off[t])
             var ln = Int(spec.ls_len[t])
+            var tasks = host_predict_task_count(m)
+            var chunk = host_predict_chunk(m, tasks)
             if kind == GPR_K_RBF:
                 # gp_rbf_kernel
-                for i in range(m):
-                    for j in range(n):
-                        var d2 = _scaled_sqdist(
-                            x, y, spec.length_scales, off, ln, i, j, d
-                        )
-                        var e = ftz(identical_mul(Float32(-0.5), d2))
-                        slot.append(ftz(identical_exp(e)))
+                def _rbf_rows(c: Int) {imm x, imm y, imm spec, imm slotp, imm off, imm ln, imm chunk, imm m, imm n, imm d}:
+                    var lo = c * chunk
+                    var hi = min(lo + chunk, m)
+                    for i in range(lo, hi):
+                        for j in range(n):
+                            var d2 = _scaled_sqdist(
+                                x, y, spec.length_scales, off, ln, i, j, d
+                            )
+                            var e = ftz(identical_mul(Float32(-0.5), d2))
+                            slotp.unsafe_store(i * n + j, ftz(identical_exp(e)))
+                if tasks == 1:
+                    _rbf_rows(0)
+                else:
+                    sync_parallelize(_rbf_rows, tasks)
             else:
                 # gp_matern_kernel, the three closed forms in sklearn's order
                 var nu_sel = _matern_selector(spec.params[t])
-                for i in range(m):
-                    for j in range(n):
-                        var d2 = _scaled_sqdist(
-                            x, y, spec.length_scales, off, ln, i, j, d
-                        )
-                        var dist = ftz(identical_sqrt(d2))
-                        if nu_sel == 0:
-                            slot.append(ftz(identical_exp(-dist)))
-                        elif nu_sel == 1:
-                            var s = ftz(identical_mul(dist, sqrt3))
-                            var pre = ftz(Float32(1.0) + s)
-                            slot.append(
-                                ftz(identical_mul(pre, ftz(identical_exp(-s))))
+                def _matern_rows(c: Int) {imm x, imm y, imm spec, imm slotp, imm off, imm ln, imm chunk, imm m, imm n, imm d, imm nu_sel, imm sqrt3, imm sqrt5}:
+                    var lo = c * chunk
+                    var hi = min(lo + chunk, m)
+                    for i in range(lo, hi):
+                        for j in range(n):
+                            var d2 = _scaled_sqdist(
+                                x, y, spec.length_scales, off, ln, i, j, d
                             )
-                        else:
-                            var s5 = ftz(identical_mul(dist, sqrt5))
-                            var ss = ftz(identical_mul(s5, s5))
-                            var third = ftz(identical_div(ss, Float32(3.0)))
-                            var pre5 = ftz(ftz(Float32(1.0) + s5) + third)
-                            slot.append(
-                                ftz(identical_mul(pre5, ftz(identical_exp(-s5))))
-                            )
+                            var dist = ftz(identical_sqrt(d2))
+                            if nu_sel == 0:
+                                slotp.unsafe_store(i * n + j, ftz(identical_exp(-dist)))
+                            elif nu_sel == 1:
+                                var s = ftz(identical_mul(dist, sqrt3))
+                                var pre = ftz(Float32(1.0) + s)
+                                slotp.unsafe_store(i * n + j,
+                                    ftz(identical_mul(pre, ftz(identical_exp(-s)))))
+                            else:
+                                var s5 = ftz(identical_mul(dist, sqrt5))
+                                var ss = ftz(identical_mul(s5, s5))
+                                var third = ftz(identical_div(ss, Float32(3.0)))
+                                var pre5 = ftz(ftz(Float32(1.0) + s5) + third)
+                                slotp.unsafe_store(i * n + j,
+                                    ftz(identical_mul(pre5, ftz(identical_exp(-s5)))))
+                if tasks == 1:
+                    _matern_rows(0)
+                else:
+                    sync_parallelize(_matern_rows, tasks)
         stack.append(slot^)
     # gp_copy_kernel: bit for bit, no ftz.
     return stack.pop()
