@@ -3,6 +3,7 @@
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext
 from transformer.impl.llama.attention_v2 import enqueue_attention_v2_forward
+from transformer.impl.llama.fused_attention import ATTN_ARM_DEFAULT, FUSED_RAN, fused_forward_launch_estash_ran
 
 def main() raises:
     comptime H = 12
@@ -35,4 +36,11 @@ def main() raises:
         enqueue_attention_v2_forward(ctx, q, k, v, lo, hi, out, m, z, R, L, HD, HD, L, Float32(0.125))
         ctx.synchronize()
         print("attention_v2 B1 H12 L1024 HD64 rep", rep, "ms", Float64(perf_counter_ns()-t0)/1e6, "resident_bytes", allocated, "quadratic_score_bytes", R*L*4)
-    _ = q^; _ = k^; _ = v^; _ = lo^; _ = hi^; _ = out^; _ = m^; _ = z^; _ = hlo^; _ = hhi^
+    var kept=ctx.enqueue_create_buffer[DType.float32](1);var kept_cells=0;var ran=-1
+    for rep in range(4):
+        var t0=perf_counter_ns()
+        var status=fused_forward_launch_estash_ran(ctx,out,m,z,q,k,v,kept,1,L,H,H,HD,L,0,0,0,Float32(.125),ATTN_ARM_DEFAULT,ran,kept_cells)
+        ctx.synchronize()
+        if status!=FUSED_RAN: raise Error("production v1 fused forward refused")
+        print("attention_v1 B1 H12 L1024 HD64 rep",rep,"ms",Float64(perf_counter_ns()-t0)/1e6,"base_resident_bytes",allocated,"kept_cells",kept_cells,"extra_kept_bytes",kept_cells*4,"ran_arm",ran)
+    _ = q^; _ = k^; _ = v^; _ = lo^; _ = hi^; _ = out^; _ = m^; _ = z^; _=kept^; _ = hlo^; _ = hhi^

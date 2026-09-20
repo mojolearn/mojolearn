@@ -31,6 +31,14 @@ def exp32(x):
     y=f32(_fma32(q,f32(r*r),r)+f32(1)); k1=k>>1; k2=k-k1; y=f32(f32(y*_pow2(k1))*_pow2(k2))
     return f32(0) if y < f32(1.1754943508222875e-38) else y
 
+def div32(a,b):
+    """Host spelling of checks/numerics.mojo::portable_divf."""
+    a=f32(a); b=f32(b); tiny=f32(1.1754943508222875e-38)
+    if abs(a)<tiny: a=f32(-0.0 if np.signbit(a) else 0.0)
+    if abs(b)<tiny: b=f32(-0.0 if np.signbit(b) else 0.0)
+    y=f32(a/b)
+    return f32(-0.0 if np.signbit(y) else 0.0) if abs(y)<tiny else y
+
 def online_row(scores, values, tile=TILE):
     """Fixed-tile, serial-tile online softmax and weighted-value row."""
     s = np.asarray(scores, dtype=np.float32)
@@ -58,7 +66,7 @@ def online_row(scores, values, tile=TILE):
             for d in range(v.shape[1]):
                 out[d] = _fma32(w, f32(v[j, d]), out[d])
         m = nm
-    return np.asarray([f32(x / z) for x in out], np.float32), m, z
+    return np.asarray([div32(x,z) for x in out], np.float32), m, z
 
 def eager_row(scores, values):
     """Small host witness for v1-style materialized max/sum; not its oracle."""

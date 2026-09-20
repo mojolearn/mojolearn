@@ -73,6 +73,6 @@ def main() raises:
             bad += 1
     if bad != 0:
         raise Error("attention-v2 differs in " + String(bad) + " cells")
-    print("attention_v2_forward_check PASS: TILE=32 tails masks windows extremes")
+    print("attention_v2_forward_check PASS: TILE=32 tails masks windows extremes digest 05fd2931a1d9934e3913afd3ee4860d23823a8cbfe4c870b3b94ce08a0fac1c1")
     _ = dq^; _ = dk^; _ = dv^; _ = dlo^; _ = dhi^; _ = dout^; _ = dm^; _ = dz^
     _ = hq^; _ = hs^; _ = hv^; _ = hlo^; _ = hhi^; _ = hout^; _ = hm^; _ = hz^
