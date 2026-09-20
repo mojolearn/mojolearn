@@ -36,6 +36,7 @@ min-norm card, which a bypass to `lstsq_eig` cannot do.
 
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceContext
+from max.algorithm import sync_parallelize
 
 from core.gemm import gemv_n
 from core.identity_trace import IdentityTrace
@@ -48,6 +49,7 @@ from glm.impl.qn.qn import qn_decision_function, qn_fit_x
 from glm.impl.ridge import RIDGE_ALGO_EIG, ridge_fit_traced
 from glm.impl.linear_model.qn import QN_LOSS_LOGISTIC, QN_LOSS_SOFTMAX, QNParams
 from checks.numerics import ftz, identical_exp64
+from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 
 
 def _add_scalar_kernel(
@@ -445,18 +447,30 @@ def qn_softmax_host(
     correctly rounded division per cell. No `log`, no fused multiply-add
     site. `core/classical_host_predict.mojo::host_qn_softmax` spells the
     same statements for the CPU binding and the gate holds the two to a
-    bit."""
-    for i in range(n_rows):
-        var base = i * n_classes
-        var m = Float64(scores_ptr.unsafe_load(base))
-        for c in range(1, n_classes):
-            var v = Float64(scores_ptr.unsafe_load(base + c))
-            if v > m:
-                m = v
-        var s = 0.0
-        for c in range(n_classes):
-            var z = Float64(scores_ptr.unsafe_load(base + c))
-            s = s + identical_exp64(z - m)
-        for c in range(n_classes):
-            var z = Float64(scores_ptr.unsafe_load(base + c))
-            out_ptr.unsafe_store(base + c, identical_exp64(z - m) / s)
+    bit. Rows are split into the shared host-prediction task count; no fold
+    crosses a row, and one task executes all three loops of its row."""
+    var tasks = host_predict_task_count(n_rows)
+    var chunk = host_predict_chunk(n_rows, tasks)
+
+    def _rows(c: Int) {imm scores_ptr, imm out_ptr, imm chunk, imm n_rows, imm n_classes}:
+        var lo = c * chunk
+        var hi = min(lo + chunk, n_rows)
+        for i in range(lo, hi):
+            var base = i * n_classes
+            var m = Float64(scores_ptr.unsafe_load(base))
+            for k in range(1, n_classes):
+                var v = Float64(scores_ptr.unsafe_load(base + k))
+                if v > m:
+                    m = v
+            var s = 0.0
+            for k in range(n_classes):
+                var z = Float64(scores_ptr.unsafe_load(base + k))
+                s = s + identical_exp64(z - m)
+            for k in range(n_classes):
+                var z = Float64(scores_ptr.unsafe_load(base + k))
+                out_ptr.unsafe_store(base + k, identical_exp64(z - m) / s)
+
+    if tasks == 1:
+        _rows(0)
+    else:
+        sync_parallelize(_rows, tasks)
