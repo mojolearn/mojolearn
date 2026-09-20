@@ -1,0 +1,30 @@
+  File "/root/mojolearn/python/mojolearn/parallel_ensemble.py", line 23, in fit_boosting
+    result = pool.map([('gbdt_fit', estimator,
+             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^
+        (X, y, dict(sample_weight=sample_weight, eval_set=eval_set)))])[0]
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_parallel_pool.py", line 250, in map
+    raise refusal
+NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates
+REFUSED par-cross-val/base: NotImplementedError: parallel cross-validation requires CUDA or HIP GPU workers
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 7790, in _
+    scores = cross_val_score(est, X, yr, devices=dev, cv=3)
+  File "/root/mojolearn/python/mojolearn/parallel_model_selection.py", line 41, in cross_val_score
+    raise NotImplementedError('parallel cross-validation requires CUDA or HIP GPU workers')
+NotImplementedError: parallel cross-validation requires CUDA or HIP GPU workers
+REFUSED par-cross-val/ties: NotImplementedError: parallel cross-validation requires CUDA or HIP GPU workers
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 7790, in _
+    scores = cross_val_score(est, X, yr, devices=dev, cv=3)
+  File "/root/mojolearn/python/mojolearn/parallel_model_selection.py", line 41, in cross_val_score
+    raise NotImplementedError('parallel cross-validation requires CUDA or HIP GPU workers')
+NotImplementedError: parallel cross-validation requires CUDA or HIP GPU workers
+BATCH_MOVED par-forest-et-clf/base: BATCH_MOVED:predict_proba:row 0 of 20000 alone:output 0 element 0: whole 0x3fdfc9cb40000000 vs alone 0x3fdffc6160000000
+BATCH_MOVED par-forest-et-clf/ties: BATCH_MOVED:predict_proba:row 0 of 20000 alone:output 0 element 0: whole 0x3fe362fe20000000 vs alone 0x3fd9206ba0000000
+wrote /root/leg_out/cpu-x86.sabotage.json
+wrote /root/leg_out/cpu-x86.sabotage.json.errors.txt (22 refusal(s), untruncated)

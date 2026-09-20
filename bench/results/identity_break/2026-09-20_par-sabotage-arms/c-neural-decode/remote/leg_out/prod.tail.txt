@@ -1,0 +1,30 @@
+         ~~~~~~~~~~~~~~~~~~^^^^
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 1207, in decode_session
+    return TransformerDecodeSession(self, state)
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 1265, in __init__
+    raise NotImplementedError(
+    ...<3 lines>...
+    )
+NotImplementedError: mojolearn TransformerDecodeSession: the loaded TransformerBlock binding exports no resident decode session (the CPU host route and older GPU builds); the per-call step() is the path here
+REFUSED par-causal-lm/base: NotImplementedError: ParallelCausalLM requires CUDA or HIP device isolation
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 7738, in _
+    with ParallelCausalLM.load(root, layer_devices=owners) as par:
+         ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/models/parallel_causal_lm.py", line 118, in load
+    raise NotImplementedError('ParallelCausalLM requires CUDA or HIP device isolation')
+NotImplementedError: ParallelCausalLM requires CUDA or HIP device isolation
+REFUSED par-causal-lm/ties: NotImplementedError: ParallelCausalLM requires CUDA or HIP device isolation
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 7738, in _
+    with ParallelCausalLM.load(root, layer_devices=owners) as par:
+         ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/models/parallel_causal_lm.py", line 118, in load
+    raise NotImplementedError('ParallelCausalLM requires CUDA or HIP device isolation')
+NotImplementedError: ParallelCausalLM requires CUDA or HIP device isolation
+wrote /root/leg_out/cpu-x86.json
+wrote /root/leg_out/cpu-x86.json.errors.txt (12 refusal(s), untruncated)

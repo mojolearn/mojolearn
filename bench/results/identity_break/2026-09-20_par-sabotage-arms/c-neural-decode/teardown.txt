@@ -1,0 +1,5 @@
+pod=blowoy6h6mmhgj
+name=mojolearn-cpu-parsab-c-20260920-154200
+terminated_verified=1
+exit=0
+at=2026-09-20T15:44:33Z

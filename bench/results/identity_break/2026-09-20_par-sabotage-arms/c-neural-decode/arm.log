@@ -1,0 +1,4 @@
+arming a 150-minute self-kill on pod blowoy6h6mmhgj ...
+ARMED. Pod blowoy6h6mmhgj is TERMINATED through the API in 150 minutes.
+  lease: bench/results/identity_break/2026-09-20_par-sabotage-arms/c-neural-decode/lease/blowoy6h6mmhgj.lease
+  extend with: tools/runpod_guard.sh extend blowoy6h6mmhgj '-p 38960 root@213.173.105.69' <minutes>

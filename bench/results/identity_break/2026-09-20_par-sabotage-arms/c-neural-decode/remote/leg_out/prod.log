@@ -1,0 +1,324 @@
+# vendor=cpu-amd-epyc-9655p-96-core-processor commit=2766cdb438acb1b2af9bc734106d26808c099b8e (MOJOLEARN_COMMIT) host.cpu_model='AMD EPYC 9655P 96-Core Processor' host.column=cpu host.families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host']
+# identity_break  mode=identical  2026-09-20 15:44:04  Linux-6.8.0-71-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             |
+|------------------------|------------------|------------------|
+# START par-forecast-arima/base repeat=1/train
+# DONE par-forecast-arima/base repeat=1/train 0.205s
+# START par-forecast-arima/base repeat=1/infer-save-reload
+# DONE par-forecast-arima/base repeat=1/infer-save-reload 0.202s
+# START par-forecast-arima/base repeat=1/batch
+# DONE par-forecast-arima/base repeat=1/batch 0.398s
+# START par-forecast-arima/base repeat=2/train
+# DONE par-forecast-arima/base repeat=2/train 0.207s
+# START par-forecast-arima/base repeat=2/infer-save-reload
+# DONE par-forecast-arima/base repeat=2/infer-save-reload 0.196s
+# START par-forecast-arima/base repeat=2/batch
+# DONE par-forecast-arima/base repeat=2/batch 0.388s
+# CELL par-forecast-arima/base STABLE 1.596s
+# START par-forecast-arima/ties repeat=1/train
+# DONE par-forecast-arima/ties repeat=1/train 0.196s
+# START par-forecast-arima/ties repeat=1/infer-save-reload
+# DONE par-forecast-arima/ties repeat=1/infer-save-reload 0.200s
+# START par-forecast-arima/ties repeat=1/batch
+# DONE par-forecast-arima/ties repeat=1/batch 0.378s
+# START par-forecast-arima/ties repeat=2/train
+# DONE par-forecast-arima/ties repeat=2/train 0.205s
+# START par-forecast-arima/ties repeat=2/infer-save-reload
+# DONE par-forecast-arima/ties repeat=2/infer-save-reload 0.196s
+# START par-forecast-arima/ties repeat=2/batch
+# DONE par-forecast-arima/ties repeat=2/batch 0.401s
+# CELL par-forecast-arima/ties STABLE 1.577s
+| par-forecast-arima     | a44b54d65768bf5e | 8d68e00817197a31 |
+| par-forecast-arima infer | 9f76be0396a666ca | e699bca0934688f0 |
+| par-forecast-arima model | 6ae822845884aedf | a70bbb860b0f3fcf |
+| par-forecast-arima batch | ec97b45a1c88081b | f339cdfecd860934 |
+# START par-byte-lm/base repeat=1/train
+# DONE par-byte-lm/base repeat=1/train 0.012s
+# CELL par-byte-lm/base REFUSED 0.014s
+# START par-byte-lm/ties repeat=1/train
+# DONE par-byte-lm/ties repeat=1/train 0.006s
+# CELL par-byte-lm/ties REFUSED 0.007s
+| par-byte-lm            | REFUSED          | REFUSED          |
+| par-byte-lm infer      | REFUSED          | REFUSED          |
+| par-byte-lm model      | REFUSED          | REFUSED          |
+| par-byte-lm batch      | REFUSED          | REFUSED          |
+# START par-forecast-holtwinters/base repeat=1/train
+# DONE par-forecast-holtwinters/base repeat=1/train 0.303s
+# START par-forecast-holtwinters/base repeat=1/infer-save-reload
+# DONE par-forecast-holtwinters/base repeat=1/infer-save-reload 0.200s
+# START par-forecast-holtwinters/base repeat=1/batch
+# DONE par-forecast-holtwinters/base repeat=1/batch 0.400s
+# START par-forecast-holtwinters/base repeat=2/train
+# DONE par-forecast-holtwinters/base repeat=2/train 0.310s
+# START par-forecast-holtwinters/base repeat=2/infer-save-reload
+# DONE par-forecast-holtwinters/base repeat=2/infer-save-reload 0.204s
+# START par-forecast-holtwinters/base repeat=2/batch
+# DONE par-forecast-holtwinters/base repeat=2/batch 0.386s
+# CELL par-forecast-holtwinters/base STABLE 1.804s
+# START par-forecast-holtwinters/ties repeat=1/train
+# DONE par-forecast-holtwinters/ties repeat=1/train 0.312s
+# START par-forecast-holtwinters/ties repeat=1/infer-save-reload
+# DONE par-forecast-holtwinters/ties repeat=1/infer-save-reload 0.205s
+# START par-forecast-holtwinters/ties repeat=1/batch
+# DONE par-forecast-holtwinters/ties repeat=1/batch 0.404s
+# START par-forecast-holtwinters/ties repeat=2/train
+# DONE par-forecast-holtwinters/ties repeat=2/train 0.305s
+# START par-forecast-holtwinters/ties repeat=2/infer-save-reload
+# DONE par-forecast-holtwinters/ties repeat=2/infer-save-reload 0.209s
+# START par-forecast-holtwinters/ties repeat=2/batch
+# DONE par-forecast-holtwinters/ties repeat=2/batch 0.402s
+# CELL par-forecast-holtwinters/ties STABLE 1.837s
+| par-forecast-holtwinters | 5e8ffa04d8c2fb3d | e3926af4c3fcb55a |
+| par-forecast-holtwinters infer | 2ba6e3fe81256474 | 9894a75e19343d02 |
+| par-forecast-holtwinters model | 2b788f20f8d8c145 | dc2d6a661f911c91 |
+| par-forecast-holtwinters batch | 77ca9a518446c250 | 60326d25dd4491b2 |
+# START par-byte-lm-model-pool/base repeat=1/train
+# DONE par-byte-lm-model-pool/base repeat=1/train 0.007s
+# CELL par-byte-lm-model-pool/base REFUSED 0.008s
+# START par-byte-lm-model-pool/ties repeat=1/train
+# DONE par-byte-lm-model-pool/ties repeat=1/train 0.006s
+# CELL par-byte-lm-model-pool/ties REFUSED 0.007s
+| par-byte-lm-model-pool | REFUSED          | REFUSED          |
+| par-byte-lm-model-pool infer | REFUSED          | REFUSED          |
+| par-byte-lm-model-pool model | REFUSED          | REFUSED          |
+| par-byte-lm-model-pool batch | REFUSED          | REFUSED          |
+# START par-byte-lm-offload/base repeat=1/train
+# DONE par-byte-lm-offload/base repeat=1/train 0.005s
+# CELL par-byte-lm-offload/base REFUSED 0.006s
+# START par-byte-lm-offload/ties repeat=1/train
+# DONE par-byte-lm-offload/ties repeat=1/train 0.005s
+# CELL par-byte-lm-offload/ties REFUSED 0.006s
+| par-byte-lm-offload    | REFUSED          | REFUSED          |
+| par-byte-lm-offload infer | REFUSED          | REFUSED          |
+| par-byte-lm-offload model | REFUSED          | REFUSED          |
+| par-byte-lm-offload batch | REFUSED          | REFUSED          |
+# START mamba1-decode-session/base repeat=1/train
+# DONE mamba1-decode-session/base repeat=1/train 0.001s
+# CELL mamba1-decode-session/base REFUSED 0.002s
+# START mamba1-decode-session/ties repeat=1/train
+# DONE mamba1-decode-session/ties repeat=1/train 0.001s
+# CELL mamba1-decode-session/ties REFUSED 0.002s
+| mamba1-decode-session  | REFUSED          | REFUSED          |
+| mamba1-decode-session infer | REFUSED          | REFUSED          |
+| mamba1-decode-session model | REFUSED          | REFUSED          |
+| mamba1-decode-session batch | REFUSED          | REFUSED          |
+# START transformer-decode-session/base repeat=1/train
+# DONE transformer-decode-session/base repeat=1/train 0.001s
+# CELL transformer-decode-session/base REFUSED 0.002s
+# START transformer-decode-session/ties repeat=1/train
+# DONE transformer-decode-session/ties repeat=1/train 0.001s
+# CELL transformer-decode-session/ties REFUSED 0.002s
+| transformer-decode-session | REFUSED          | REFUSED          |
+| transformer-decode-session infer | REFUSED          | REFUSED          |
+| transformer-decode-session model | REFUSED          | REFUSED          |
+| transformer-decode-session batch | REFUSED          | REFUSED          |
+# START par-causal-lm/base repeat=1/train
+# DONE par-causal-lm/base repeat=1/train 0.014s
+# CELL par-causal-lm/base REFUSED 0.015s
+# START par-causal-lm/ties repeat=1/train
+# DONE par-causal-lm/ties repeat=1/train 0.011s
+# CELL par-causal-lm/ties REFUSED 0.012s
+| par-causal-lm          | REFUSED          | REFUSED          |
+| par-causal-lm infer    | REFUSED          | REFUSED          |
+| par-causal-lm model    | REFUSED          | REFUSED          |
+| par-causal-lm batch    | REFUSED          | REFUSED          |
+
+cells=16 stable=4 moved=0 refused=12
+infer: stable=4
+model: stable=4
+batch: stable=4
+REFUSED par-byte-lm/base: ImportError: rebuild bindings/build_byte_lm.sh for parallel training
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6255, in _
+    losses, state, _ = _byte_lm_replay(tr, ref, ids)
+                       ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/identity_break.py", line 6595, in _byte_lm_replay
+    a, b = trainer.train_step(shards), reference.train_step(shards)
+           ~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/parallel_training.py", line 101, in train_step
+    self._open()
+    ~~~~~~~~~~^^
+  File "/root/mojolearn/python/mojolearn/parallel_training.py", line 63, in _open
+    raise ImportError('rebuild bindings/build_byte_lm.sh for parallel training')
+ImportError: rebuild bindings/build_byte_lm.sh for parallel training
+REFUSED par-byte-lm/ties: ImportError: rebuild bindings/build_byte_lm.sh for parallel training
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6255, in _
+    losses, state, _ = _byte_lm_replay(tr, ref, ids)
+                       ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/identity_break.py", line 6595, in _byte_lm_replay
+    a, b = trainer.train_step(shards), reference.train_step(shards)
+           ~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/parallel_training.py", line 101, in train_step
+    self._open()
+    ~~~~~~~~~~^^
+  File "/root/mojolearn/python/mojolearn/parallel_training.py", line 63, in _open
+    raise ImportError('rebuild bindings/build_byte_lm.sh for parallel training')
+ImportError: rebuild bindings/build_byte_lm.sh for parallel training
+REFUSED par-byte-lm-model-pool/base: ImportError: rebuild bindings/build_byte_lm.sh for model pooling
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6621, in _
+    losses, state, grads = _byte_lm_replay(tr, ref, ids)
+                           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/identity_break.py", line 6595, in _byte_lm_replay
+    a, b = trainer.train_step(shards), reference.train_step(shards)
+           ~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/parallel_training.py", line 101, in train_step
+    self._open()
+    ~~~~~~~~~~^^
+  File "/root/mojolearn/python/mojolearn/model_pool_training.py", line 58, in _open
+    binding = _ModelPoolBinding(helper._binding())
+  File "/root/mojolearn/python/mojolearn/model_pool_training.py", line 18, in __init__
+    raise ImportError('rebuild bindings/build_byte_lm.sh for model pooling')
+ImportError: rebuild bindings/build_byte_lm.sh for model pooling
+REFUSED par-byte-lm-model-pool/ties: ImportError: rebuild bindings/build_byte_lm.sh for model pooling
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6621, in _
+    losses, state, grads = _byte_lm_replay(tr, ref, ids)
+                           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/identity_break.py", line 6595, in _byte_lm_replay
+    a, b = trainer.train_step(shards), reference.train_step(shards)
+           ~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/parallel_training.py", line 101, in train_step
+    self._open()
+    ~~~~~~~~~~^^
+  File "/root/mojolearn/python/mojolearn/model_pool_training.py", line 58, in _open
+    binding = _ModelPoolBinding(helper._binding())
+  File "/root/mojolearn/python/mojolearn/model_pool_training.py", line 18, in __init__
+    raise ImportError('rebuild bindings/build_byte_lm.sh for model pooling')
+ImportError: rebuild bindings/build_byte_lm.sh for model pooling
+REFUSED par-byte-lm-offload/base: ImportError: rebuild bindings/build_byte_lm.sh for offloaded replay
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6639, in _
+    losses, state, grads = _byte_lm_replay(tr, ref, ids)
+                           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/identity_break.py", line 6595, in _byte_lm_replay
+    a, b = trainer.train_step(shards), reference.train_step(shards)
+           ~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/parallel_training.py", line 101, in train_step
+    self._open()
+    ~~~~~~~~~~^^
+  File "/root/mojolearn/python/mojolearn/offload_training.py", line 56, in _open
+    binding = _OffloadBinding(_load(self._shape))
+  File "/root/mojolearn/python/mojolearn/offload_training.py", line 18, in __init__
+    raise ImportError('rebuild bindings/build_byte_lm.sh for offloaded replay')
+ImportError: rebuild bindings/build_byte_lm.sh for offloaded replay
+REFUSED par-byte-lm-offload/ties: ImportError: rebuild bindings/build_byte_lm.sh for offloaded replay
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 6639, in _
+    losses, state, grads = _byte_lm_replay(tr, ref, ids)
+                           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/identity_break.py", line 6595, in _byte_lm_replay
+    a, b = trainer.train_step(shards), reference.train_step(shards)
+           ~~~~~~~~~~~~~~~~~~^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/parallel_training.py", line 101, in train_step
+    self._open()
+    ~~~~~~~~~~^^
+  File "/root/mojolearn/python/mojolearn/offload_training.py", line 56, in _open
+    binding = _OffloadBinding(_load(self._shape))
+  File "/root/mojolearn/python/mojolearn/offload_training.py", line 18, in __init__
+    raise ImportError('rebuild bindings/build_byte_lm.sh for offloaded replay')
+ImportError: rebuild bindings/build_byte_lm.sh for offloaded replay
+REFUSED mamba1-decode-session/base: NotImplementedError: mojolearn Mamba1DecodeSession: the loaded Mamba1Block binding exports no resident decode session (the CPU host route and older GPU builds); the per-call step() is the path here
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 7421, in _
+    steps, resident = _decode_session_probe(blk, lambda: blk.allocate_state(2), 2, 16, dm, X)
+                      ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/identity_break.py", line 7351, in _decode_session_probe
+    with blk.decode_session(st) as sess:
+         ~~~~~~~~~~~~~~~~~~^^^^
+  File "/root/mojolearn/python/mojolearn/_mamba_impl.py", line 651, in decode_session
+    return Mamba1DecodeSession(self, state)
+  File "/root/mojolearn/python/mojolearn/_mamba_impl.py", line 692, in __init__
+    raise NotImplementedError(
+    ...<3 lines>...
+    )
+NotImplementedError: mojolearn Mamba1DecodeSession: the loaded Mamba1Block binding exports no resident decode session (the CPU host route and older GPU builds); the per-call step() is the path here
+REFUSED mamba1-decode-session/ties: NotImplementedError: mojolearn Mamba1DecodeSession: the loaded Mamba1Block binding exports no resident decode session (the CPU host route and older GPU builds); the per-call step() is the path here
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 7421, in _
+    steps, resident = _decode_session_probe(blk, lambda: blk.allocate_state(2), 2, 16, dm, X)
+                      ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/identity_break.py", line 7351, in _decode_session_probe
+    with blk.decode_session(st) as sess:
+         ~~~~~~~~~~~~~~~~~~^^^^
+  File "/root/mojolearn/python/mojolearn/_mamba_impl.py", line 651, in decode_session
+    return Mamba1DecodeSession(self, state)
+  File "/root/mojolearn/python/mojolearn/_mamba_impl.py", line 692, in __init__
+    raise NotImplementedError(
+    ...<3 lines>...
+    )
+NotImplementedError: mojolearn Mamba1DecodeSession: the loaded Mamba1Block binding exports no resident decode session (the CPU host route and older GPU builds); the per-call step() is the path here
+REFUSED transformer-decode-session/base: NotImplementedError: mojolearn TransformerDecodeSession: the loaded TransformerBlock binding exports no resident decode session (the CPU host route and older GPU builds); the per-call step() is the path here
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 7483, in _
+    steps, resident = _decode_session_probe(blk, fresh, 2, 16, dm, X)
+                      ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/identity_break.py", line 7351, in _decode_session_probe
+    with blk.decode_session(st) as sess:
+         ~~~~~~~~~~~~~~~~~~^^^^
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 1207, in decode_session
+    return TransformerDecodeSession(self, state)
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 1265, in __init__
+    raise NotImplementedError(
+    ...<3 lines>...
+    )
+NotImplementedError: mojolearn TransformerDecodeSession: the loaded TransformerBlock binding exports no resident decode session (the CPU host route and older GPU builds); the per-call step() is the path here
+REFUSED transformer-decode-session/ties: NotImplementedError: mojolearn TransformerDecodeSession: the loaded TransformerBlock binding exports no resident decode session (the CPU host route and older GPU builds); the per-call step() is the path here
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 7483, in _
+    steps, resident = _decode_session_probe(blk, fresh, 2, 16, dm, X)
+                      ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/identity_break.py", line 7351, in _decode_session_probe
+    with blk.decode_session(st) as sess:
+         ~~~~~~~~~~~~~~~~~~^^^^
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 1207, in decode_session
+    return TransformerDecodeSession(self, state)
+  File "/root/mojolearn/python/mojolearn/_transformer_impl.py", line 1265, in __init__
+    raise NotImplementedError(
+    ...<3 lines>...
+    )
+NotImplementedError: mojolearn TransformerDecodeSession: the loaded TransformerBlock binding exports no resident decode session (the CPU host route and older GPU builds); the per-call step() is the path here
+REFUSED par-causal-lm/base: NotImplementedError: ParallelCausalLM requires CUDA or HIP device isolation
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 7738, in _
+    with ParallelCausalLM.load(root, layer_devices=owners) as par:
+         ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/models/parallel_causal_lm.py", line 118, in load
+    raise NotImplementedError('ParallelCausalLM requires CUDA or HIP device isolation')
+NotImplementedError: ParallelCausalLM requires CUDA or HIP device isolation
+REFUSED par-causal-lm/ties: NotImplementedError: ParallelCausalLM requires CUDA or HIP device isolation
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/identity_break.py", line 10845, in _run_reference
+    p = LANES[name](ml, X, yc, yr, held[f].copy())
+  File "/root/mojolearn/tools/identity_break.py", line 7738, in _
+    with ParallelCausalLM.load(root, layer_devices=owners) as par:
+         ~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/models/parallel_causal_lm.py", line 118, in load
+    raise NotImplementedError('ParallelCausalLM requires CUDA or HIP device isolation')
+NotImplementedError: ParallelCausalLM requires CUDA or HIP device isolation
+wrote /root/leg_out/cpu-x86.json
+wrote /root/leg_out/cpu-x86.json.errors.txt (12 refusal(s), untruncated)

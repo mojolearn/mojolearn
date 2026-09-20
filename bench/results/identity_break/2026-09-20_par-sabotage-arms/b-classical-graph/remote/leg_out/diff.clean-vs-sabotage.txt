@@ -1,0 +1,81 @@
+NOTE: column cpu-amd-epyc-9655p-96-core-processor is a CPU column: cpu_model='AMD EPYC 9655P 96-Core Processor' column=cpu families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host'] commit=2766cdb438acb1b2af9bc734106d26808c099b8e
+NOTE: column cpu-amd-epyc-9655p-96-core-processor is a CPU column: cpu_model='AMD EPYC 9655P 96-Core Processor' column=cpu families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host'] commit=2766cdb438acb1b2af9bc734106d26808c099b8e
+| lane/fixture                 | verdict    | cpu-amd-epyc-9655p-96-core-processor | cpu-amd-epyc-9655p-96-core-processor |
+|------------------------------|------------|------------------|------------------|
+| par-cd-elasticnet/base       | REFUSED    | REFUSED          | REFUSED          |
+| par-cd-elasticnet/ties       | REFUSED    | REFUSED          | REFUSED          |
+| par-cd/base                  | REFUSED    | REFUSED          | REFUSED          |
+| par-cd/ties                  | REFUSED    | REFUSED          | REFUSED          |
+| par-cholesky/base            | REFUSED    | REFUSED          | REFUSED          |
+| par-cholesky/ties            | REFUSED    | REFUSED          | REFUSED          |
+| par-dbscan/base              | REFUSED    | REFUSED          | REFUSED          |
+| par-dbscan/ties              | REFUSED    | REFUSED          | REFUSED          |
+| par-gmm/base                 | REFUSED    | REFUSED          | REFUSED          |
+| par-gmm/ties                 | REFUSED    | REFUSED          | REFUSED          |
+| par-gp/base                  | REFUSED    | REFUSED          | REFUSED          |
+| par-gp/ties                  | REFUSED    | REFUSED          | REFUSED          |
+| par-gram-ols/base            | REFUSED    | REFUSED          | REFUSED          |
+| par-gram-ols/ties            | REFUSED    | REFUSED          | REFUSED          |
+| par-gram-pca/base            | REFUSED    | REFUSED          | REFUSED          |
+| par-gram-pca/ties            | REFUSED    | REFUSED          | REFUSED          |
+| par-gram-tsvd/base           | REFUSED    | REFUSED          | REFUSED          |
+| par-gram-tsvd/ties           | REFUSED    | REFUSED          | REFUSED          |
+| par-gram/base                | REFUSED    | REFUSED          | REFUSED          |
+| par-gram/ties                | REFUSED    | REFUSED          | REFUSED          |
+| par-graph-agglomerative/base | REFUSED    | REFUSED          | REFUSED          |
+| par-graph-agglomerative/ties | REFUSED    | REFUSED          | REFUSED          |
+| par-graph-spectral/base      | REFUSED    | REFUSED          | REFUSED          |
+| par-graph-spectral/ties      | REFUSED    | REFUSED          | REFUSED          |
+| par-graph-umap/base          | REFUSED    | REFUSED          | REFUSED          |
+| par-graph-umap/ties          | REFUSED    | REFUSED          | REFUSED          |
+| par-hdbscan/base             | REFUSED    | REFUSED          | REFUSED          |
+| par-hdbscan/ties             | REFUSED    | REFUSED          | REFUSED          |
+| par-ivf/base                 | ONE-COLUMN | 82ac27da71d34ea9 | REFUSED          |
+| par-ivf/ties                 | ONE-COLUMN | 1f1a8383ed41ed53 | REFUSED          |
+| par-kernel-ridge/base        | REFUSED    | REFUSED          | REFUSED          |
+| par-kernel-ridge/ties        | REFUSED    | REFUSED          | REFUSED          |
+| par-kmeans/base              | REFUSED    | REFUSED          | REFUSED          |
+| par-kmeans/ties              | REFUSED    | REFUSED          | REFUSED          |
+| par-logistic/base            | REFUSED    | REFUSED          | REFUSED          |
+| par-logistic/ties            | REFUSED    | REFUSED          | REFUSED          |
+| par-nystroem/base            | REFUSED    | REFUSED          | REFUSED          |
+| par-nystroem/ties            | REFUSED    | REFUSED          | REFUSED          |
+| par-queries-nn/base          | ONE-COLUMN | 6869ae45e01fcb7a | REFUSED          |
+| par-queries-nn/ties          | ONE-COLUMN | 23daf3a923d4c74f | REFUSED          |
+| par-rbf-sampler/base         | ONE-COLUMN | 7ddfa0d92256da95 | REFUSED          |
+| par-rbf-sampler/ties         | ONE-COLUMN | 99aa0dcad513b6a1 | REFUSED          |
+| par-resample/base            | REFUSED    | REFUSED          | REFUSED          |
+| par-resample/ties            | REFUSED    | REFUSED          | REFUSED          |
+| par-svm-svr/base             | REFUSED    | REFUSED          | REFUSED          |
+| par-svm-svr/ties             | REFUSED    | REFUSED          | REFUSED          |
+| par-svm/base                 | REFUSED    | REFUSED          | REFUSED          |
+| par-svm/ties                 | REFUSED    | REFUSED          | REFUSED          |
+
+summary: ONE-COLUMN=6, REFUSED=42
+
+| lane/fixture                 | column | verdict      | cpu-amd-epyc-9655p-96-core-processor | cpu-amd-epyc-9655p-96-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|
+| par-ivf/base                 | infer  | ONE-COLUMN   | fd6eed35b1338d17 | REFUSED          |
+| par-ivf/base                 | model  | ONE-COLUMN   | dcfefe31adc21c6c | REFUSED          |
+| par-ivf/base                 | batch  | ONE-COLUMN   | 6baf3cfbde509312 | REFUSED          |
+| par-ivf/ties                 | infer  | ONE-COLUMN   | c62b1be91d40fc43 | REFUSED          |
+| par-ivf/ties                 | model  | ONE-COLUMN   | 2254dcdb3f209c1d | REFUSED          |
+| par-ivf/ties                 | batch  | ONE-COLUMN   | 166f61a6e1f346b8 | REFUSED          |
+| par-queries-nn/base          | infer  | ONE-COLUMN   | da53642fe53493ad | REFUSED          |
+| par-queries-nn/base          | model  | ONE-COLUMN   | 2262556d652b5187 | REFUSED          |
+| par-queries-nn/base          | batch  | ONE-COLUMN   | da944e45126bd8e0 | REFUSED          |
+| par-queries-nn/ties          | infer  | ONE-COLUMN   | 234e9e649f45c983 | REFUSED          |
+| par-queries-nn/ties          | model  | ONE-COLUMN   | 4049122e7b37a94e | REFUSED          |
+| par-queries-nn/ties          | batch  | ONE-COLUMN   | f6f06727f6f8caec | REFUSED          |
+| par-rbf-sampler/base         | infer  | ONE-COLUMN   | ded23e4c277b5697 | REFUSED          |
+| par-rbf-sampler/base         | model  | ONE-COLUMN   | d4b54301bf9a47f0 | REFUSED          |
+| par-rbf-sampler/base         | batch  | ONE-COLUMN   | 309d57b4d32c040a | REFUSED          |
+| par-rbf-sampler/ties         | infer  | ONE-COLUMN   | 83ab2945ae2792a3 | REFUSED          |
+| par-rbf-sampler/ties         | model  | ONE-COLUMN   | d4b54301bf9a47f0 | REFUSED          |
+| par-rbf-sampler/ties         | batch  | ONE-COLUMN   | 073106cb01a99748 | REFUSED          |
+
+infer/model: 84 column cells not compared (no JSON here carries them; they predate the columns)
+summary (infer/model): NOT-COMPARED=84, ONE-COLUMN=12
+batch: 42 column cells not compared (no JSON here carries them; they predate the batch part)
+summary (batch): NOT-COMPARED=42, ONE-COLUMN=6
+summary (rlpair): 

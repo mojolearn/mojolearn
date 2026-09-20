@@ -1,0 +1,153 @@
+started=2026-09-20T15:29:57Z
+budget_seconds=2500
+slug=neural-nine-parts-2026-09-20
+lanes=mamba3,transformer,transformer-window,samba,samba-untied-dropout-accum,mamba1-decode-session,transformer-decode-session
+degenerate_lanes=none
+commit=a959b73e559e99da15a22c92d2db2a1520bd8941
+device=NVIDIA GeForce RTX 4090, 580.126.20, 8.9, 24564 MiB 
+visible_gpus=1
+vendor_probe=nvidia
+gpu_archs=sm_89
+vendor_label=nvidia-nvidia-geforce-rtx-4090-sm_89
+bincache=python3 tools/bincache.py build map=staged entries=149
+portable_math_exit=0
+total 20
+-rwxr-xr-x 1 root root 18560 Sep 20 15:29 libMojolearnMath.so
+declared_host_families=build_mamba_host build_training_host build_transformer_host
+declared_gpu_families=build_mamba build_training build_transformer
+declared_families_built=7 failed=none
+import_check=IMPORT_OK cuda 0.8.8
+extra_part_flags=--step-full --batch-grad --batch-scale --ragged
+column_exit=0
+cells=63 stable=63 moved=0 refused=0
+elapsed_after_column=419
+all_families_failed=none
+f52190982b1b2e1ec2b60b23b47786486586543ec7b11389d92486c5f3bb0e44  python/mojolearn/identical/_mojolearn.so
+dba80e4e834a89848045e1c45488747cc0f2839f4fea59a931bdf6fb71a2bdf7  python/mojolearn/identical/_mojolearn_arima.so
+a9bb983c61070fe26ab1853ed7f3c380f8c89c5e8c435c7279ec8b433e6473da  python/mojolearn/identical/_mojolearn_byte_lm.so
+e79fd53a669fc2c5265d7a00dd58bcfe4475119773e28bb4e0543c263395b8a1  python/mojolearn/identical/_mojolearn_embedding.so
+486a5ad6a8ec3a69c706dc7dc5730df8f545c576b710c5a802b4e8f8820aa813  python/mojolearn/identical/_mojolearn_estimators.so
+38677486bbca6de42c9333cb659d879a4f96d1ce080fbd9cd1d9fce4869aac92  python/mojolearn/identical/_mojolearn_gbdt.so
+99710e8d77a2f9453ff1e736ed6878af8d4bc0be3370ea638ac72c926d3d62e3  python/mojolearn/identical/_mojolearn_gp.so
+ee9739f65724544188e72922229f9f73232cf0f0d513bbcec3e2dd4bef729a48  python/mojolearn/identical/_mojolearn_hdbscan.so
+7f00e6e018660a770e2969803581b046f6a7c2d34080124a16c2734412910b7b  python/mojolearn/identical/_mojolearn_ivf.so
+18b0e898c200758608bc8b5a9a5b3004e5799f5fd9f17cadcbbeb5b564389d17  python/mojolearn/identical/_mojolearn_kernel_methods.so
+3dd331a948d0d430e1da1713e2bd187819134a9a6b055f8b516d9b5a88761061  python/mojolearn/identical/_mojolearn_linalg.so
+f4ed5662db5dcdeeb0746a928d1a5e2baf4aa6d3fd1bbcd06bdf2f4c401d3704  python/mojolearn/identical/_mojolearn_mamba.so
+5abd4cd9115f87219eee6f7f4ffd0bee9b1d296401cf51624d3c5ede7abc36ea  python/mojolearn/identical/_mojolearn_metrics.so
+dcdc3d31976bb1b7799c02c5c7d554a894cd171848fec8327c178971bb36c4a9  python/mojolearn/identical/_mojolearn_mixture.so
+3ae36ba879ddabbd67e0c1634ec326a6079134ce0927156e23b6b497eab7be52  python/mojolearn/identical/_mojolearn_preprocessing.so
+22630ae4bd781fbfd78e3323d0b0f29d1aae96da50b9401e79325afae76fc0c9  python/mojolearn/identical/_mojolearn_resample.so
+d8a854828e11ae8d0cdeedcee9cec814341541bfe2d99d23503895f5798043ca  python/mojolearn/identical/_mojolearn_rf.so
+fd21deda33e6d7c397876f3a4fc1b8e7e0e91e691cfde39109f998636eed7d20  python/mojolearn/identical/_mojolearn_solver.so
+ce7a84af13a2b816c392828791b7a7192e1e47edf7dcc34d158645f22a5f428e  python/mojolearn/identical/_mojolearn_svm.so
+da374e6a75892db25692f585b2ea00e8aaa7849192dc8638b199300722a614d2  python/mojolearn/identical/_mojolearn_training.so
+d4e3d8ffd49164e115914ded22494fa0cf6fb9e742b85feb04ef51f74d32a04d  python/mojolearn/identical/_mojolearn_transformer.so
+dc1cf94791edfc57fb774c69535735de3387a6acb6f19b8bd29caabec0af0a0f  python/mojolearn/identical/_mojolearn_trees.so
+2b37dfda0e3ff5b8a4c8ffb0f37986e595bf67c2d6d83b593c99587274b6a99e  python/mojolearn/identical/_mojolearn_tsa.so
+fcf6e4719c3bfb07499d027a840b61b3d36af35bc99d5f3b36b8263f80a764b4  python/mojolearn/host/_mojolearn_arima_host.so
+6819d5457aebdbf5306bb94a4d5a1d6e449a6cd05e931e8f997d88c182f0c873  python/mojolearn/host/_mojolearn_byte_lm_host.so
+aa65c3fce280c8ecfd2fa68e4d66a4e28ecc81b97ec394380ff46097abea5ce3  python/mojolearn/host/_mojolearn_core_host.so
+f625d8e7659832675ec3f075b565cbcc6e4be895ec8f9caec5b6955ba8713fdc  python/mojolearn/host/_mojolearn_embedding_host.so
+31abe504e422bd9d51dafea98009872c6868b909548053e667ccc45b51c37033  python/mojolearn/host/_mojolearn_embedding_infer_host.so
+0e77015ecac4ceb66f5563598b1c15493e03555e3c0b06e1c67d4c2d078e1060  python/mojolearn/host/_mojolearn_estimators_host.so
+df2411d5122ada7320f8081073bc5122ea807953b3f1b1c2be9a7a4d3b832607  python/mojolearn/host/_mojolearn_forecast_host.so
+bdaf57c028ff26378dbb4b2975599cab807bc54be86d30430bac7935292dcb83  python/mojolearn/host/_mojolearn_forest_host.so
+421302a576597337b789291a8551cc6bf43ecd24634d635594467a5c8f4e05ce  python/mojolearn/host/_mojolearn_gbdt_host.so
+fd25ec45219e495f22c0638686a4c9929f731be07a03f4b2693ac5eef801d05c  python/mojolearn/host/_mojolearn_gp_host.so
+e3023b64c3bd60206ef214be9384d8b47977ef186b2106c7f4b843ea1c5d2e9e  python/mojolearn/host/_mojolearn_gp_infer_host.so
+76ac380c2245a8a186f90727be5a55a8a22a7ba50879baf86965fef8ec4326e4  python/mojolearn/host/_mojolearn_hdbscan_host.so
+0c68090360d760870589d7c533c528460eb970e4db6fdea32a6fce86ae4b0a33  python/mojolearn/host/_mojolearn_hdbscan_infer_host.so
+725cd81b234ff8a4e1482f978a8474b5e31819189439386304280cce128a84bd  python/mojolearn/host/_mojolearn_ivf_host.so
+a0ec8c806b364d2a85b4ab5854824a3ac1043962272b1bcfc458eb294a1f15e6  python/mojolearn/host/_mojolearn_ivf_search_host.so
+b878033535ba12da99667861889d82c33a2ca78e5c478dab22662d3e98d0f060  python/mojolearn/host/_mojolearn_kernel_methods_host.so
+40932a33015847222a1876b3793f7379c622b0852ecaa13d72dca15633ce60db  python/mojolearn/host/_mojolearn_linalg_host.so
+04d2848d31323cddc55081ff554d36141398eaf911eeef94ef04fb283fd2b712  python/mojolearn/host/_mojolearn_mamba_host.so
+9fd4a82ad81a6bf1250a032355405c0dea65794dc4ea1d74eb7022e0604bdf6c  python/mojolearn/host/_mojolearn_metrics_host.so
+838508c3c899bf82f97e4975f6c0be5eb89254bc11ce177cb06ca3ef76cf20c6  python/mojolearn/host/_mojolearn_mixture_host.so
+31b67bdd364baf994e4c6f7e5983c87840722b7b9bb1f4f7ff3c723980c1a08c  python/mojolearn/host/_mojolearn_mixture_infer_host.so
+2395c34a1fc02a3d88f3f81fc6a5e310118157e8888d5a78b980f085b99f07c8  python/mojolearn/host/_mojolearn_neural_host.so
+2247eb391ce5e43bf100ff4041223d07e19b9b9e0072fa174695c28e7cc4b453  python/mojolearn/host/_mojolearn_preprocessing_host.so
+9a001a65f74e11dafa5a75cc4ecc278766cede8b7a0e5d053839131ca7ebc11a  python/mojolearn/host/_mojolearn_resample_host.so
+235e1ddf70567b1bb8b2d6993c16d2231725c6ea2069e82235988c80df89b676  python/mojolearn/host/_mojolearn_rf_host.so
+a6722c66ac55346eb8f3b1445ced30e7d6c942d063235cffa7e5db9b30df16d4  python/mojolearn/host/_mojolearn_solver_host.so
+220d361f45855a0dd990149b2bc7dd365204c78792f6cdb6d7fb8e488598c0c5  python/mojolearn/host/_mojolearn_svm_host.so
+d8420b9cee648f0d21d55dc7813f273d206b821fd37a103eb5da1691d45417d7  python/mojolearn/host/_mojolearn_tokenizer_host.so
+979bd3b6124af51dfaff45314dae3b06f7cb1f41f747b739d00a10d9356f0c4b  python/mojolearn/host/_mojolearn_training_host.so
+263ba6acb837256001aeec8694b27849a2c243d4fdc731ded544f2a9e7ffa254  python/mojolearn/host/_mojolearn_transformer_host.so
+e84105dd04eaf69597b7bb32b7b6ef04f05919dcf09704cbae4ca741b6bf71c9  python/mojolearn/host/_mojolearn_trees_host.so
+880894412dd283bebe9dfedc582470af035e0042e9c6d3920e49ec1af9012ae4  python/mojolearn/host/_mojolearn_tsa_host.so
+elapsed_after_all_families=1810
+backstop_missing_families=none
+admit_commit_dir=bench/results/identity_break/2026-09-20_gpu-confirm-never-launched/
+--- admit, at the committed path ---
+nvidia-nvidia-geforce-rtx-4090-sm_89.neural-nine-parts-2026-09-20.json par_devices=0 cells=63 admit=ADMISSIBLE admit_par_axis=ADMISSIBLE at=bench/results/identity_break/2026-09-20_gpu-confirm-never-launched/nvidia-nvidia-geforce-rtx-4090-sm_89.neural-nine-parts-2026-09-20.json
+portable_math	0	0
+build	0	67
+build_mamba	0	69
+build_training	0	42
+build_transformer	0	63
+build_mamba_host	0	42
+build_training_host	0	15
+build_transformer_host	0	15
+import_check	0	1
+column	0	104
+build_arima	0	20
+build_arima_host	0	14
+build_byte_lm	0	174
+build_byte_lm_host	0	18
+build_core_host	0	24
+build_embedding	0	23
+build_embedding_host	0	10
+build_embedding_infer_host	0	9
+build_estimators	0	62
+build_estimators_host	0	20
+build_forecast_host	0	13
+build_forest_host	0	16
+build_gbdt	0	118
+build_gbdt_host	0	54
+build_gp	0	44
+build_gp_host	0	17
+build_gp_infer_host	0	12
+build_hdbscan	0	55
+build_hdbscan_host	0	17
+build_hdbscan_infer_host	0	13
+build_ivf	0	36
+build_ivf_host	0	16
+build_ivf_search_host	0	12
+build_kernel_methods	0	40
+build_kernel_methods_host	0	15
+build_linalg	0	35
+build_linalg_host	0	13
+build_metrics	0	78
+build_metrics_host	0	25
+build_mixture	0	49
+build_mixture_host	0	15
+build_mixture_infer_host	0	12
+build_neural_host	0	21
+build_preprocessing	0	1
+build_preprocessing_host	0	10
+build_resample	0	0
+build_resample_host	0	13
+build_rf	0	36
+build_rf_host	0	17
+build_solver	0	39
+build_solver_host	0	11
+build_svm	0	45
+build_svm_host	0	15
+build_tokenizer_host	0	18
+build_trees	0	35
+build_trees_host	0	18
+build_tsa	0	18
+build_tsa_host	0	12
+admit_check	0	0
+total 312
+-rw-r--r-- 1 root root    278 Sep 20 16:00 admit_check.log
+-rw-r--r-- 1 root root 122539 Sep 20 15:36 column.log
+-rw-r--r-- 1 root root   9032 Sep 20 16:00 gate.txt
+drwxr-xr-x 2 root root   4096 Sep 20 16:00 logs
+-rw------- 1 root root 171144 Sep 20 15:36 nvidia-nvidia-geforce-rtx-4090-sm_89.neural-nine-parts-2026-09-20.json
+-rw-r--r-- 1 root root   1264 Sep 20 16:00 status.tsv
+bincache_outcomes=      2 hit      53 miss+built-uploaded 
+bincache_build_seconds=1697
+finished=2026-09-20T16:00:07Z
