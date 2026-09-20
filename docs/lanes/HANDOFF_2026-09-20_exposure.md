@@ -31,20 +31,39 @@ fixtures), and the six QN objectives.
 
 ## Open, in priority order
 
-1. **`gbdt-symmetric-eval`: CPU and GPU DISAGREE.** First GPU run of the lane.
-   The held-out loss curve differs on all nine fixtures; the model differs on
-   `dupes` and `negative`; `wide` refuses on the GPU because the shrink never
-   cuts. Evidence: the `gbdt-symmetric-eval` JSON in the directory above versus
-   the CPU column from lane/close-no-cpu-path-gbdt. Suspect
-   `gbdt/host/gbdt_oracle_eval.mojo`. The device is the reference. The lane is
-   back in `PUBLIC_PENDING_LANES`.
-2. **Gradient boosting barely trains on a CPU.** The host side is
-   per-configuration oracles (`gbdt/host/`). Measured against a Sep 19 binding:
-   3 of 19 plain configurations trained; the DEFAULT regressor and classifier
-   refused (Bayesian and Bernoulli bootstrap, `random_strength`, RMSE under
-   Depthwise and Lossguide). Branch `origin/lane/gbdt-cpu-default-parity`
-   (4 commits, in progress, NOT merged): a matrix script, the before matrix,
-   and the default regressor training on a CPU. Not yet shown equal to a GPU.
+1. **Merge `origin/lane/gbdt-cpu-default-parity` (tip 8a9f08dd4, finished, NOT
+   merged).** The default `GradientBoostingRegressor()` and
+   `GradientBoostingClassifier()` train on a CPU and match an RTX 4090 bit for
+   bit: new lane `gbdt-stochastic-arms`, 36 of 36 cells, each fitted once,
+   admitted into that branch's table. Public matrix on a CPU pod went from 10
+   of 41 fits to 36 of 41 (`bench/results/gbdt_cpu_parity/2026-09-20/`). A
+   merge into main conflicts in EIGHT files because the QN and
+   SpectralEmbedding merges landed first: `README.md`, `SUPPORT_MATRIX.md`,
+   `docs/BYTE_LM_CPU_TRAINING.md`, `docs/VERIFICATION_MATRIX.md`,
+   `python/mojolearn/verify_reference/table.json` (generated: take main's and
+   regenerate with the commands below), `python/mojolearn/host_surface.py`,
+   `tools/identity_break.py` and `bindings/_mojolearn_gbdt_host.mojo` (both
+   sides add entries; keep both). The merged binding and harness have not been
+   compiled together, so build the gbdt host family and rerun
+   `gbdt-stochastic-arms` on a CPU pod after resolving. I aborted the merge
+   rather than push a hand-merged binding nobody had compiled.
+   Still refused on a CPU after that branch: MultiClass and OneVsAll with any
+   bootstrap or noise (so their default fit), the Poisson bootstrap on the
+   non-symmetric policies, and the pointwise losses under Depthwise and
+   Lossguide.
+2. **`gbdt-symmetric-eval`: CPU and GPU DISAGREE, and the evidence points at
+   the DEVICE.** On an RTX 4090 the held-out curve changes between identical
+   fits in one process while the learn curve does not, differs from the learn
+   curve when the eval set IS the learn set (equal on a CPU), and starts above
+   ln 2. `fit_with_test` in `gbdt/methods/doc_parallel_boosting.mojo` fills
+   the test cursor only under `boost_from_average`; the Ordered fit fills it
+   unconditionally. Looks like a one-line device fix; not made (that file is
+   under the performance lanes). Values and the diagnostic script:
+   `bench/results/identity_break/2026-09-20_gbdt-cpu-default-parity/` on the
+   branch in item 1. The lane stays in `PUBLIC_PENDING_LANES`. Separately, the
+   device's default RMSE fit takes its leaves from the bootstrapped stats
+   planes, which DEVIATION 64's argument does not cover; the CPU matches the
+   device there.
 3. **Six QN objectives: MERGED.** `mojolearn.svm.LinearSVC`, `LinearSVR` and
    `mojolearn.QNRegressor`, six lanes, CPU == RTX 4090 on all 54 cells. Left
    over: the classes have no save/load, no lane fits the l1 penalty on the
