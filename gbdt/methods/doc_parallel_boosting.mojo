@@ -1529,12 +1529,17 @@ def fit_with_test(
     # MINIMIZED, so `maxIsOptimal` is False; a detector built without a
     # test set is inert whatever was asked (`:122-124`).
     var has_test = test.__bool__() and test.value().n_rows > 0
-    if boost_from_average and has_test:
+    if has_test:
         # their `CreateCursors` seeds the TEST cursor with the same
         # `StartingPoint` (the CB_ENSURE at `:174-182` names
         # TestDataProvider precisely because the seed reaches it)
         ref t_arm = test.value()
-        enqueue_fill(ctx, t_arm.cursor, start_value)
+        # Device allocations are uninitialized. Without average boosting the
+        # starting point is zero, not the previous occupant of this buffer.
+        enqueue_fill(
+            ctx, t_arm.cursor,
+            start_value if boost_from_average else Float32(0.0),
+        )
     var detector = make_overfitting_detector(
         od_type, False, od_pvalue, od_wait, has_test
     )

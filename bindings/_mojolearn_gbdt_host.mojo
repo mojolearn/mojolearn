@@ -1528,7 +1528,7 @@ def gbdt_fit_binding(
             best_iteration = pw_model.best_iteration
             stopped_early = pw_model.stopped_early
             text = gbdt_rmse_host_model_text(GbdtRmseHostFit(pw_model^, pw_start))
-        elif is_rmse:
+        elif is_rmse and grow_code == 0:
             # `AdjustBoostFromAverageDefaultValue` (`gbdt/train.mojo:
             # 1597-1600`): unset is True for RMSE
             var fit = gbdt_rmse_host_fit(
