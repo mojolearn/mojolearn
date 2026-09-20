@@ -72,6 +72,14 @@ def test_accuracy_host_uses_pointer_parallel_count():
     assert "sync_parallelize(_rows, tasks)" in oracle
 
 
+def test_confusion_host_uses_pointer_parallel_counts():
+    binding = _read("bindings/_mojolearn_metrics_host.mojo")
+    oracle = _read("metrics/host/classification_oracle.mojo")
+    assert "host_confusion_matrix_ptr(y, p, n, k, normalization)" in binding
+    assert "def host_confusion_counts_ptr(" in oracle
+    assert "sync_parallelize(_rows, tasks)" in oracle
+
+
 def test_binding_registers_kmeans_fit():
     src = _read(host_surface.binding_source("core"))
     assert '("kmeans_fit")' in src, "the core host binding does not register kmeans_fit"
@@ -324,6 +332,22 @@ def test_metrics_run_on_the_host_when_built():
         else:
             os.environ["MOJOLEARN_CPU_THREADS"] = previous_threads
     assert serial == parallel
+    serial_cm = np.empty(9, dtype=np.int64)
+    parallel_cm = np.empty(9, dtype=np.int64)
+    previous_threads = os.environ.get("MOJOLEARN_CPU_THREADS")
+    try:
+        os.environ["MOJOLEARN_CPU_THREADS"] = "1"
+        module.confusion_matrix(yt.ctypes.data, yp.ctypes.data,
+                                serial_cm.ctypes.data, [len(yt), 3, 0])
+        os.environ["MOJOLEARN_CPU_THREADS"] = "7"
+        module.confusion_matrix(yt.ctypes.data, yp.ctypes.data,
+                                parallel_cm.ctypes.data, [len(yt), 3, 0])
+    finally:
+        if previous_threads is None:
+            os.environ.pop("MOJOLEARN_CPU_THREADS", None)
+        else:
+            os.environ["MOJOLEARN_CPU_THREADS"] = previous_threads
+    assert serial_cm.tobytes() == parallel_cm.tobytes()
     got = [(mt.accuracy_score(yt, yp), mt.adjusted_rand_score(yt, yp), mt.v_measure_score(yt, yp),
             mt.r2_score(x[:, 0], x[:, 0] * np.float32(0.9)), mt.silhouette_score(x, yp))
            for _ in range(2)]
