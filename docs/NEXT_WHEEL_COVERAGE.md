@@ -56,13 +56,17 @@ Reproduce the comparison without importing either wheel:
 python3 tools/wheel_api_audit.py published.whl candidate.whl --output wheel-api.json
 ```
 
-Native-only code is a separate issue: six QN one-target objectives are still
-recorded in `glm/NOT_IMPLEMENTED.tsv` as lacking a Python surface. These are
-implementation/API/measurement tasks, not names that should be exported before
-their contracts and gates exist. `SpectralEmbedding` was the other entry here
+Native-only code was a separate issue, and both of its entries are closed. The
+six QN one-target objectives were recorded in `glm/NOT_IMPLEMENTED.tsv` as
+lacking a Python surface; since lane/expose-qn-objectives (2026-09-20) they are
+`mojolearn.svm.LinearSVC`, `mojolearn.svm.LinearSVR` and `mojolearn.QNRegressor`,
+with a CPU arm in the estimators host family and six identity lanes
+(`linear-svc`, `linear-svc-squared-hinge`, `linear-svr`, `linear-svr-squared`,
+`qn-squared`, `qn-absolute`). `SpectralEmbedding` was the other entry here
 until 2026-09-20 (lane/expose-spectral-embedding): `mojolearn.SpectralEmbedding`
 and `mojolearn.manifold.spectral_embedding` now reach both metrics bindings, and
-the `spectral-embedding` identity lane covers them.
+the `spectral-embedding` identity lane covers them. All of these are new names
+for the following wheel.
 The model loader is packaged, but the matrix now exposes its missing whole-model
 identity lane instead of hiding it behind the single name `models`.
 
