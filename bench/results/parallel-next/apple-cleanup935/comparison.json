@@ -1,0 +1,187 @@
+{
+  "complete": true,
+  "numeric_cpu_matches": 18,
+  "differences": [],
+  "comparisons": [
+    {
+      "cell": "par-causal-lm/base",
+      "part": "train",
+      "value": "5171c3ffeb9dd8f8",
+      "reference_classes": [
+        "apple",
+        "cpu",
+        "nvidia"
+      ]
+    },
+    {
+      "cell": "par-causal-lm/base",
+      "part": "batch",
+      "value": "2d58207bcc498e7c",
+      "reference_classes": [
+        "apple",
+        "cpu",
+        "nvidia"
+      ]
+    },
+    {
+      "cell": "par-causal-lm/ties",
+      "part": "train",
+      "value": "e6caf9f0f7ae562d",
+      "reference_classes": [
+        "apple",
+        "cpu",
+        "nvidia"
+      ]
+    },
+    {
+      "cell": "par-causal-lm/ties",
+      "part": "batch",
+      "value": "73aef1570825d468",
+      "reference_classes": [
+        "apple",
+        "cpu",
+        "nvidia"
+      ]
+    },
+    {
+      "cell": "par-causal-lm/hashed",
+      "part": "train",
+      "value": "37c495fc132ea9db",
+      "reference_classes": [
+        "apple",
+        "cpu",
+        "nvidia"
+      ]
+    },
+    {
+      "cell": "par-causal-lm/hashed",
+      "part": "batch",
+      "value": "b2dfd7cd9cf444df",
+      "reference_classes": [
+        "apple",
+        "cpu",
+        "nvidia"
+      ]
+    },
+    {
+      "cell": "par-causal-lm/wide",
+      "part": "train",
+      "value": "f711a5aa202b3e41",
+      "reference_classes": [
+        "apple",
+        "cpu",
+        "nvidia"
+      ]
+    },
+    {
+      "cell": "par-causal-lm/wide",
+      "part": "batch",
+      "value": "97051f4a7819532e",
+      "reference_classes": [
+        "apple",
+        "cpu",
+        "nvidia"
+      ]
+    },
+    {
+      "cell": "par-causal-lm/denormal",
+      "part": "train",
+      "value": "f1c5288260c678cd",
+      "reference_classes": [
+        "apple",
+        "cpu",
+        "nvidia"
+      ]
+    },
+    {
+      "cell": "par-causal-lm/denormal",
+      "part": "batch",
+      "value": "0c52595dfa1179f9",
+      "reference_classes": [
+        "apple",
+        "cpu",
+        "nvidia"
+      ]
+    },
+    {
+      "cell": "par-causal-lm/denormal_ftz",
+      "part": "train",
+      "value": "dba9613ece4fdadb",
+      "reference_classes": [
+        "apple",
+        "cpu",
+        "nvidia"
+      ]
+    },
+    {
+      "cell": "par-causal-lm/denormal_ftz",
+      "part": "batch",
+      "value": "ecda286f05a73eaa",
+      "reference_classes": [
+        "apple",
+        "cpu",
+        "nvidia"
+      ]
+    },
+    {
+      "cell": "par-causal-lm/dupes",
+      "part": "train",
+      "value": "5171c3ffeb9dd8f8",
+      "reference_classes": [
+        "apple",
+        "cpu",
+        "nvidia"
+      ]
+    },
+    {
+      "cell": "par-causal-lm/dupes",
+      "part": "batch",
+      "value": "2d58207bcc498e7c",
+      "reference_classes": [
+        "apple",
+        "cpu",
+        "nvidia"
+      ]
+    },
+    {
+      "cell": "par-causal-lm/odd",
+      "part": "train",
+      "value": "5171c3ffeb9dd8f8",
+      "reference_classes": [
+        "apple",
+        "cpu",
+        "nvidia"
+      ]
+    },
+    {
+      "cell": "par-causal-lm/odd",
+      "part": "batch",
+      "value": "2d58207bcc498e7c",
+      "reference_classes": [
+        "apple",
+        "cpu",
+        "nvidia"
+      ]
+    },
+    {
+      "cell": "par-causal-lm/negative",
+      "part": "train",
+      "value": "86e92270cebe985b",
+      "reference_classes": [
+        "apple",
+        "cpu",
+        "nvidia"
+      ]
+    },
+    {
+      "cell": "par-causal-lm/negative",
+      "part": "batch",
+      "value": "921a3eb50c0e6439",
+      "reference_classes": [
+        "apple",
+        "cpu",
+        "nvidia"
+      ]
+    }
+  ]
+}
