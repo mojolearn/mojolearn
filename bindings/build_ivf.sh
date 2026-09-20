@@ -225,7 +225,12 @@ if [ "$(uname)" = "Darwin" ]; then
     done
 
     _failed=0
-    for _pair in ivf:1; do
+    # IDENTICAL uses the shared cluster and neighbors kernels, not an ivf
+    # prefix. Measured 2026-09-20: 16 cluster and two neighbors blobs; a
+    # fresh build/search with all lists probed returns the exact self rows.
+    # Keep both contributing families covered instead of requiring a
+    # nonexistent ivf-prefixed kernel.
+    for _pair in cluster:10 neighbors:2; do
         _s=${_pair%%:*}
         _min=${_pair#*:}
         _n=$(printf '%s\n' "$_air" | grep -c "^${_s}" || true)
