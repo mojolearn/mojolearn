@@ -373,15 +373,24 @@ def _chunk_dweight_kernel(d_weight: MutPointer[Float32, MutAnyOrigin], logits: M
     var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if j >= Int(n): return
     var token = Int(chunk0) + j
+    # Every feature consumes the same dlogit for this (row, token). Compute
+    # it once, while retaining each cell's exact row-ascending FMA chain.
     for f in range(Int(width)):
-        var acc = Float32(0.0)
-        for row in range(Int(rows)):
-            var shifted = ftz(ftz(logits.unsafe_load(row * Int(n) + j)) - ftz(maxima.unsafe_load(row)))
-            var p = ftz(identical_div(ftz(identical_exp(shifted)), ftz(denom.unsafe_load(row))))
-            var target = Float32(1.0) if token == Int(targets.unsafe_load(row)) else Float32(0.0)
-            var dl = ftz(identical_div(ftz(p - target), Float32(rows)))
-            acc = identical_mul_add(dl, hidden.unsafe_load(row * Int(width) + f), acc)
-        d_weight.unsafe_store(token * Int(width) + f, ftz(acc))
+        d_weight.unsafe_store(token * Int(width) + f, Float32(0.0))
+    for row in range(Int(rows)):
+        var shifted = ftz(ftz(logits.unsafe_load(row * Int(n) + j)) - ftz(maxima.unsafe_load(row)))
+        var p = ftz(identical_div(ftz(identical_exp(shifted)), ftz(denom.unsafe_load(row))))
+        var target = Float32(1.0) if token == Int(targets.unsafe_load(row)) else Float32(0.0)
+        var dl = ftz(identical_div(ftz(p - target), Float32(rows)))
+        for f in range(Int(width)):
+            var cell = token * Int(width) + f
+            d_weight.unsafe_store(cell, identical_mul_add(
+                dl, hidden.unsafe_load(row * Int(width) + f),
+                d_weight.unsafe_load(cell),
+            ))
+    for f in range(Int(width)):
+        var cell = token * Int(width) + f
+        d_weight.unsafe_store(cell, ftz(d_weight.unsafe_load(cell)))
 
 
 def chunked_lm_head_v2_gemm_forward_into(ctx: DeviceContext, mut loss: DeviceBuffer[DType.float32], mut maxima: DeviceBuffer[DType.float32], mut denom: DeviceBuffer[DType.float32], mut row_loss: DeviceBuffer[DType.float32], mut chunk: DeviceBuffer[DType.float32], mut ws: DeviceBuffer[DType.float32], mut hidden: DeviceBuffer[DType.float32], mut weight: DeviceBuffer[DType.float32], mut targets: DeviceBuffer[DType.int32], rows: Int, vocab: Int, width: Int) raises:
