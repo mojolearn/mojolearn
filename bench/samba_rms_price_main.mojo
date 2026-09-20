@@ -268,3 +268,7 @@ def main() raises:
     _shape(ctx, arm, rows, 512, 64)
     _shape(ctx, arm, rows, 2048, 512)
     _shape(ctx, arm, rows, 8192, 768)
+    # GPT-3-small training target: batch 16 x sequence 2048, width 768.
+    # Keep this resident-buffer-only: the samba host wrapper's full CPU scan
+    # is not part of a device-resident transformer training step.
+    _kernel_stage(ctx, arm, rows, 32768, 768)

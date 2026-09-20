@@ -1,0 +1,124 @@
+{
+  "wheel": "/Users/andrewhendel/mojolearn-evidence/releases/819a47ae48166e91951f54f54e64ee173658e32a/macos/alpha/mojolearn-0.8.9-py3-none-macosx_11_0_arm64.whl",
+  "wheel_sha256": "6703bd788ee926df92d9f43bebbde3703c2ffbc4eb6277c841acb6bc30ef45e4",
+  "status": "PASSED",
+  "jobs": [
+    {
+      "name": "create-venv",
+      "exit_code": 0,
+      "output": "/Users/andrewhendel/mojolearn-evidence/releases/819a47ae48166e91951f54f54e64ee173658e32a/macos/expanded-alpha/create-venv.log"
+    },
+    {
+      "name": "install",
+      "exit_code": 0,
+      "output": "/Users/andrewhendel/mojolearn-evidence/releases/819a47ae48166e91951f54f54e64ee173658e32a/macos/expanded-alpha/install.log"
+    },
+    {
+      "name": "dependencies",
+      "exit_code": 0,
+      "output": "/Users/andrewhendel/mojolearn-evidence/releases/819a47ae48166e91951f54f54e64ee173658e32a/macos/expanded-alpha/dependencies.log"
+    },
+    {
+      "name": "installed",
+      "exit_code": 0,
+      "output": "/Users/andrewhendel/mojolearn-evidence/releases/819a47ae48166e91951f54f54e64ee173658e32a/macos/expanded-alpha/installed.json"
+    },
+    {
+      "name": "expanded-api",
+      "exit_code": 0,
+      "output": "/Users/andrewhendel/mojolearn-evidence/releases/819a47ae48166e91951f54f54e64ee173658e32a/macos/expanded-alpha/expanded-api.json"
+    },
+    {
+      "name": "loaded-lm-cpu",
+      "exit_code": 0,
+      "output": "/Users/andrewhendel/mojolearn-evidence/releases/819a47ae48166e91951f54f54e64ee173658e32a/macos/expanded-alpha/loaded-lm-cpu.log"
+    },
+    {
+      "name": "loaded-lm-gpu",
+      "exit_code": 0,
+      "output": "/Users/andrewhendel/mojolearn-evidence/releases/819a47ae48166e91951f54f54e64ee173658e32a/macos/expanded-alpha/loaded-lm-gpu.log"
+    },
+    {
+      "name": "loaded-lm-cpu-gpu-compare",
+      "exit_code": 0,
+      "output": "/Users/andrewhendel/mojolearn-evidence/releases/819a47ae48166e91951f54f54e64ee173658e32a/macos/expanded-alpha/loaded-lm-cpu-gpu-compare.log"
+    },
+    {
+      "name": "coverage",
+      "exit_code": 0,
+      "output": "/Users/andrewhendel/mojolearn-evidence/releases/819a47ae48166e91951f54f54e64ee173658e32a/macos/expanded-alpha/coverage.json"
+    },
+    {
+      "name": "models",
+      "exit_code": 0,
+      "output": "/Users/andrewhendel/mojolearn-evidence/releases/819a47ae48166e91951f54f54e64ee173658e32a/macos/expanded-alpha/models.json"
+    },
+    {
+      "name": "batch",
+      "exit_code": 0,
+      "output": "/Users/andrewhendel/mojolearn-evidence/releases/819a47ae48166e91951f54f54e64ee173658e32a/macos/expanded-alpha/batch.json"
+    },
+    {
+      "name": "extended",
+      "exit_code": 0,
+      "output": "/Users/andrewhendel/mojolearn-evidence/releases/819a47ae48166e91951f54f54e64ee173658e32a/macos/expanded-alpha/extended.json"
+    },
+    {
+      "name": "self-test",
+      "exit_code": 0,
+      "output": "/Users/andrewhendel/mojolearn-evidence/releases/819a47ae48166e91951f54f54e64ee173658e32a/macos/expanded-alpha/self-test.json"
+    }
+  ],
+  "scope": "expanded",
+  "source_commit": "819a47ae48166e91951f54f54e64ee173658e32a",
+  "release_qualified": false,
+  "expanded": {
+    "scope": "expanded",
+    "release_qualified": false,
+    "physical_execution_trace": "OWED",
+    "native_fault_controls": "SEPARATE_GATE",
+    "cross_validation": "OWED",
+    "multi_gpu": "NOT_APPLICABLE",
+    "apis": {
+      "apis": {
+        "mojolearn.models": [
+          "CausalLM",
+          "ParallelCausalLM"
+        ],
+        "mojolearn.parallel_ivf": [
+          "DistributedIVFIndex"
+        ],
+        "mojolearn.parallel_model_selection": [
+          "cross_val_score"
+        ],
+        "mojolearn.parallel_gaussian_process": [
+          "fit_gaussian_process_classifier",
+          "predict_gaussian_process_classifier"
+        ],
+        "mojolearn.parallel_forecasting": [
+          "predict_arima",
+          "forecast_arima",
+          "predict_exponential_smoothing",
+          "forecast_exponential_smoothing"
+        ]
+      },
+      "ivf_symbols": [
+        "ivf_flat_partial_search",
+        "ivf_finalize_distances"
+      ],
+      "gbdt_symbols": [
+        "gbdt_fit"
+      ],
+      "gbdt_binding": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-verifier-wheel-4yralc_f/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_gbdt.so",
+      "gbdt_sha256": "a6c18a94764b6551716fb395a3641d740a49a71f618de13f492cb0424c7f033e",
+      "binding": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-verifier-wheel-4yralc_f/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_ivf.so",
+      "binding_sha256": "b3b38f39a5ca0b539cb58219e29d57888259d194ac6122207782698a10d3070a"
+    }
+  },
+  "installed": {
+    "package": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-verifier-wheel-4yralc_f/venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+    "version": "0.8.9",
+    "vendor": "metal"
+  },
+  "unqualified_properties": []
+}

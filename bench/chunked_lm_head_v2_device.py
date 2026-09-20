@@ -21,8 +21,9 @@ def main():
     parser.add_argument("--vocab", type=int, default=4096)
     parser.add_argument("--width", type=int, default=128)
     parser.add_argument("--reps", type=int, default=5)
+    parser.add_argument("--so", type=Path, default=SO)
     cli = parser.parse_args()
-    spec = importlib.util.spec_from_file_location("_mojolearn_training", SO)
+    spec = importlib.util.spec_from_file_location("_mojolearn_training", cli.so)
     binding = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(binding)
     rows, vocab, width = cli.rows, cli.vocab, cli.width
