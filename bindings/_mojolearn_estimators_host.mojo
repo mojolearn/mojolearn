@@ -74,8 +74,8 @@ from core.classical_host_predict import (
     host_pca_whiten_transform,
     host_qn_decision_into,
     host_qn_decision_multi_into,
-    host_qn_sigmoid,
-    host_qn_softmax,
+    host_qn_sigmoid_into,
+    host_qn_softmax_into,
     host_tsvd_transform_into,
 )
 from core.labeled_reference_host_predict import (
@@ -920,10 +920,9 @@ def qn_softmax_binding(
         raise Error("qn_softmax: n_classes must be at least 3; the binary link is qn_sigmoid")
     with GILReleased(Python()):
         _positive(nr, "n_rows")
-        var scores = read_f32(s_address, nr * nc)
-        var out = host_qn_softmax(scores, nr, nc)
-        for i in range(nr * nc):
-            op[i] = out[i]
+        host_qn_softmax_into(
+            f32_ptr(s_address), op, nr, nc, host_predict_task_count(nr)
+        )
     return PythonObject(0)
 
 
@@ -941,10 +940,9 @@ def qn_sigmoid_binding(
     var nr = _index(params[0])
     with GILReleased(Python()):
         _positive(nr, "n_rows")
-        var scores = read_f32(s_address, nr)
-        var out = host_qn_sigmoid(scores, nr)
-        for i in range(2 * nr):
-            op[i] = out[i]
+        host_qn_sigmoid_into(
+            f32_ptr(s_address), op, nr, host_predict_task_count(nr)
+        )
     return PythonObject(0)
 
 
