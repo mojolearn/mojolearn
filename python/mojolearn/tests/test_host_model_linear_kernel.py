@@ -28,34 +28,6 @@ def _rows(n=300, d=6, seed=3):
     return X, y
 
 
-@pytest.mark.parametrize("make", [
-    lambda: mojolearn.StandardScaler(),
-    lambda: mojolearn.MinMaxScaler(),
-    lambda: mojolearn.Lasso(alpha=0.01),
-    lambda: mojolearn.ElasticNet(alpha=0.01),
-])
-def test_cpu_only_fit_refuses_by_name(monkeypatch, make):
-    """StandardScaler, MinMaxScaler, Lasso and ElasticNet do not inherit
-    NumericModeMixin; on a CPU-only install their fit and fit_transform
-    refuse before any binding is called."""
-    monkeypatch.setattr(_backend, "_CPU_ONLY", "test CPU")
-    X, y = _rows()
-    est = make()
-    with pytest.raises(NotImplementedError, match="inference from saved models"):
-        est.fit(X, y)
-    if hasattr(est, "fit_transform"):
-        with pytest.raises(NotImplementedError, match="inference from saved models"):
-            make().fit_transform(X)
-
-
-def test_host_classes_refuse_fit_outside_reference():
-    X, y = _rows()
-    for cls in (_classical_host.HostStandardScaler, _classical_host.HostLasso,
-                _classical_host.HostKernelRidge, _classical_host.HostRBFSampler):
-        with pytest.raises(NotImplementedError):
-            cls().fit(X, y)
-
-
 def test_formats_are_host_model_formats():
     for fmt in ("mojolearn-scaler-1", "mojolearn-cd-1", "mojolearn-kernel-ridge-1",
                 "mojolearn-nystroem-1", "mojolearn-rbf-sampler-1"):

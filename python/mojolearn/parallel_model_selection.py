@@ -42,10 +42,8 @@ def cross_val_score(estimator, X, y, *, devices, cv=None, scoring=None,
     estimator's public `fit` and `score` on that process's host bindings.
     That column checks the DISPATCH against the serial API byte for byte and
     nothing else; it is not device isolation, not placement and not a
-    throughput claim, and the two-device CUDA/HIP column remains owed. The
-    fold fits are reserved for the internal bitwise verifier there exactly as
-    every other CPU fit is (`_cpu_reference.require_training`, stated on the
-    worker's `cross_val_fold`), so this is not a public CPU training route.
+    throughput claim, and the two-device CUDA/HIP column remains owed. CPU
+    training is public, so the fold fits run on a CPU-only install.
     METAL IS STILL REFUSED: `DevicePool` gives an Apple group no visibility
     mask, so one-fold-per-device would be a sentence with nothing behind it.
     """

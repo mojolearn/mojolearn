@@ -268,9 +268,10 @@ Mamba and Transformer APIs, including UMAP transform and CSR support. Newer
 Python API exposure does not inherit every numerical certificate. See
 [CHANGELOG.md](CHANGELOG.md) and the
 [support matrix](SUPPORT_MATRIX.md) for exact artifacts and limits.
-There is no silent CPU fallback. Every estimator trains on a GPU by default,
-and the library refuses rather than running a fit elsewhere. Beside that, a
-CPU-only binding exists for some lanes, and each is held to the same
+There is no silent CPU fallback: a box with a supported GPU trains on it.
+On a CPU-only install, `fit` trains on the CPU for every estimator that has
+a CPU binding, in the same arithmetic as the GPU builds, so the model is
+bit-identical to the one a GPU would have produced. Each CPU binding is held to the same
 bit-identity gate against the Apple, NVIDIA and AMD columns as the GPU builds,
 with a sabotage build required to fail it. Inference on a CPU from a saved
 model: <!--fact:host_inference_surfaces-->random forests, Extra Trees and eight gradient boosting variants; nearest neighbors on every metric and the ball cover, k-NN classification and k-NN regression with either weighting, radius neighbors and k-means assignment and distances; linear regression, ridge, truncated SVD, logistic regression, PCA with and without whitening (either solver), kernel density on every kernel, metric and weighting, the standard and min-max scalers, lasso, elasticnet, kernel ridge, the Nystroem approximation and random Fourier features; UMAP transform of a saved embedding (the GPU's bytes for a row, whatever else is asked in the same batch); SVC and the isolation forest; the Gaussian mixture's scores, probabilities, labels and samples; the Gaussian process regressor's predictive mean and std, normalized targets included, and the Gaussian process classifier's labels and probabilities; HDBSCAN's approximate_predict, membership_vector and all_points_membership_vectors; Embedding lookup in a saved table; IVF-Flat search over a saved index and extending it; batched ARIMA prediction, in sample and out of sample, and forecasts, with or without exogenous regressors, and Holt-Winters forecasts and in-sample one-step predictions, additive and multiplicative<!--/fact-->

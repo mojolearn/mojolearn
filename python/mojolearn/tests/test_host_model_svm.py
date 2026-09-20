@@ -34,12 +34,6 @@ def test_svr_format_is_a_host_model_format():
     assert _classical_host._FORMATS["mojolearn-svr-1"] == {"SVR": _classical_host.HostSVR}
 
 
-def test_host_svr_refuses_fit_outside_reference():
-    X, _, yr = _rows()
-    with pytest.raises(NotImplementedError):
-        _classical_host.HostSVR().fit(X, yr)
-
-
 def test_unfitted_svr_refuses_save():
     with tempfile.TemporaryDirectory() as tmp:
         with pytest.raises(RuntimeError, match="not fitted"):

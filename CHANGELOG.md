@@ -3,6 +3,14 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
+## Unreleased (public CPU training)
+
+- `fit` on a CPU-only install now trains. Until this change it raised
+  `NotImplementedError` and only the verifier could train on a CPU. Every
+  estimator with a CPU host binding is covered; the CPU result is bit-identical
+  to the GPU result. A configuration with no CPU implementation still refuses
+  by name (for example gradient boosting with `bootstrap_type='Bayesian'`).
+
 ## Unreleased (FAST forest inference default)
 
 - Random Forest and Extra Trees now default `inference_engine` to `"auto"`.

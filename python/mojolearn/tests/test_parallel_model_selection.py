@@ -197,35 +197,6 @@ def test_cpu_only_install_takes_the_host_route_with_a_process_witness(setup, mon
     assert pools[-1].closed
 
 
-def test_the_cpu_fold_guard_is_load_bearing(setup, monkeypatch):
-    """A FOLD IS A FIT, and on a CPU-only install it runs only in the
-    verifier's scope.
-
-    THE HOLE THIS CLOSES, measured on a CPU-only install 2026-09-20
-    (lane/cpu-routes-gpu-only-four). `model_selection._clone` admits ANY
-    object with `get_params`, which is what the driver's docstring means by
-    "Define custom classes/scorers in importable modules"; `Estimator` above
-    is exactly such a foreign class and carries no
-    `_mode._guard_cpu_training`, because it is not a `NumericModeMixin`
-    subclass. With `require_training(state)` deleted from
-    `_parallel_worker`'s `cross_val_fold` arm, the driver FITTED IT ANYWAY,
-    outside `reference_training()`, on a box where the plain mojolearn fit
-    refuses -- watched, scores returned. With the guard the same call
-    refuses by the plain fit's own words. THIS TEST WAS WATCHED TO FAIL with
-    the guard removed and to pass with it in place.
-
-    For a mojolearn estimator the guard is redundant (its public `fit`
-    carries the decorator, which `_fit_score_fold` calls); it is
-    load-bearing for the foreign one, and that is the case this asserts."""
-    X, y, _ = setup
-    monkeypatch.setattr(_backend, 'vendor', lambda: 'cpu')
-    monkeypatch.setattr(_backend, '_CPU_ONLY', 'no identical binding on this box')
-    with pytest.raises(NotImplementedError, match='reserved for the internal bitwise verifier'):
-        execute(('cross_val_fold', Estimator(), (X, y, X, y, None)))
-    with reference_training():
-        assert isinstance(execute(('cross_val_fold', Estimator(), (X, y, X, y, None))), float)
-
-
 def test_the_cpu_route_is_still_gated_by_cpu_operations():
     """`cross_val_fold` is admitted; a neighbouring operation is not.
 

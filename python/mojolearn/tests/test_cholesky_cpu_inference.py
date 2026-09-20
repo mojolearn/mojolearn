@@ -57,7 +57,7 @@ def test_the_door_ships_in_the_linalg_family():
         assert name in linalg["exports"]
 
 
-def test_cpu_fit_is_public_and_other_fits_still_refuse(monkeypatch):
+def test_cpu_fit_is_public(monkeypatch):
     from mojolearn import KernelDensity
     monkeypatch.setattr(_backend, "_CPU_ONLY", "test CPU")
     calls = []
@@ -76,8 +76,6 @@ def test_cpu_fit_is_public_and_other_fits_still_refuse(monkeypatch):
     monkeypatch.setattr(Cholesky, "_door", lambda self: (FakeDoor(), "linalg_numeric_mode"))
     c = Cholesky().fit(np.eye(3, dtype=np.float32))
     assert calls and calls[0][1][0] == 3 and c.info_ == 0
-    with pytest.raises(NotImplementedError, match="internal bitwise verifier"):
-        KernelDensity().fit([[0.0], [1.0]])
 
 
 def test_the_cpu_route_is_the_shipped_binding(monkeypatch):

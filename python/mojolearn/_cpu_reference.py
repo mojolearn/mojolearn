@@ -1,19 +1,21 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Private, scoped access to CPU training for the numerical verifier.
+"""CPU training is public (2026-09-20).
 
-This is not a public CPU training API. Source reference builds may contain
-more native bindings than an inference wheel. No environment variable turns
-ordinary estimator fitting into CPU training.
+Every estimator that has a CPU host binding fits on a CPU-only install, in
+the same arithmetic the GPU columns are checked against. Until this date an
+ordinary `fit` refused on CPU and only the verifier could train there, from
+inside `reference_training()`. The context manager and `require_training`
+stay so their callers keep working; neither one refuses anything.
 """
 from contextlib import contextmanager
 from contextvars import ContextVar
 
-_active = ContextVar("mojolearn_cpu_reference", default=False)
+_active = ContextVar("mojolearn_cpu_reference", default=True)
 
 
 @contextmanager
 def reference_training():
-    """Allow reference fits for this verification call, restoring on failure."""
+    """Kept for callers; CPU fits no longer need it."""
     token = _active.set(True)
     try:
         yield
@@ -22,18 +24,5 @@ def reference_training():
 
 
 def require_training(estimator):
-    from . import _backend
-    # A class whose `fit` computes an inference answer rather than training
-    # a model says so by name. `Cholesky` is the one: its fit factors a
-    # given matrix, the public CPU inference surface of
-    # lane/inference-embedding-ivf-cholesky (2026-09-15).
-    if getattr(type(estimator), "_CPU_FIT_IS_INFERENCE", False) is True:
-        return
-    is_cpu = _backend._CPU_ONLY is not None or getattr(estimator, "_HOST_INFERENCE_ONLY", False)
-    if is_cpu and not _active.get():
-        raise NotImplementedError(
-            "mojolearn: public CPU estimators support inference from saved models; "
-            "fit/training is reserved for the internal bitwise verifier. "
-            "Train on a supported GPU and load the saved model for CPU inference. "
-            "The published LanguageModelHostTrainer remains supported."
-        )
+    """Kept for callers; CPU training is public and nothing is refused."""
+    return None

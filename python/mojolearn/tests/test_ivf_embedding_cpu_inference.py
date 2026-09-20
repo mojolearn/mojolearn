@@ -86,13 +86,6 @@ def test_one_call_host_entry_is_build_then_search():
     assert "host_ivf_build(" in body and "host_ivf_search(" in body
 
 
-def test_embedding_backward_is_training_on_a_cpu(monkeypatch):
-    monkeypatch.setattr(_backend, "_CPU_ONLY", "test CPU")
-    e = Embedding(4, 2, weight=np.zeros((4, 2), np.float32))
-    with pytest.raises(NotImplementedError, match="internal bitwise verifier"):
-        e.backward(np.array([0, 1], np.int32), np.zeros((2, 2), np.float32))
-
-
 def _fake_index(n=12, dim=3, n_lists=3):
     from mojolearn._buffer import as_f32_c, as_i32_c
     rng = np.random.default_rng(0)

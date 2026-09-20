@@ -211,7 +211,6 @@ def test_repeat_batch_save_load_and_host_model():
                 continue
             assert isinstance(host, HostGaussianProcessClassifier)
             assert _bytes(host.predict_proba(q)) == _bytes(pa)
-            _raises(NotImplementedError, "fit/training is reserved", host.fit, X, y)
 
 
 def main():

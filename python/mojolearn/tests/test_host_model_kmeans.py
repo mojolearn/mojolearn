@@ -57,11 +57,6 @@ def test_kmeans_format_is_a_host_model_format():
     assert _classical_host._FORMATS[_KMEANS_FORMAT] == {"KMeans": _classical_host.HostKMeans}
 
 
-def test_host_kmeans_refuses_fit_outside_reference():
-    with pytest.raises(NotImplementedError):
-        _classical_host.HostKMeans(n_clusters=2).fit(_rows(8, 2))
-
-
 def test_unfitted_kmeans_refuses_save():
     with tempfile.TemporaryDirectory() as tmp:
         with pytest.raises(RuntimeError, match="not fitted"):

@@ -278,11 +278,6 @@ def _load(shape=None):
     if _backend._CPU_ONLY is not None:
         from ._byte_lm_trainer_host import is_cpu_trainer_binding
         if is_cpu_trainer_binding(binding):
-            # Public CPU training is reserved for the internal bitwise
-            # verifier (ee13e0d4b); tools/identity_break.py runs inside
-            # _cpu_reference.reference_training().
-            from ._cpu_reference import require_training
-            require_training(None)
             vendors = ('cpu',)
     if (int(binding.byte_lm_numeric_mode()) != 1
             or str(binding.byte_lm_profile()) != PROFILE
