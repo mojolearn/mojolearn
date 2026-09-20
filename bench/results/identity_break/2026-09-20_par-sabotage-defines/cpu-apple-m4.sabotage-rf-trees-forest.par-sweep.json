@@ -1,0 +1,3135 @@
+{
+ "mode": "identical",
+ "repeats": 2,
+ "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+ "vendor": "cpu-apple-m4",
+ "commit": "b3e4c91d18a379cf24626a5c9bc5932c14458196",
+ "commit_source": "git rev-parse HEAD",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  }
+ },
+ "cells": {
+  "par-forest/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ed0bcfcef5b35833",
+    "ed0bcfcef5b35833"
+   ],
+   "parts": [
+    {
+     "predict": "19145fdc622abdf2",
+     "proba": "8c502b939085ab92"
+    },
+    {
+     "predict": "19145fdc622abdf2",
+     "proba": "8c502b939085ab92"
+    }
+   ],
+   "infer": [
+    "c60b3005a0f09b7f",
+    "c60b3005a0f09b7f"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "fd74a88c8e3d55bd",
+    "fd74a88c8e3d55bd"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "c60b3005a0f09b7f",
+    "c60b3005a0f09b7f"
+   ],
+   "batch": [
+    "265f9178a02d08ed",
+    "265f9178a02d08ed"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 2.0930260840104893,
+    "stages": {
+     "repeat=1/train": 0.7562031660054345,
+     "repeat=1/infer-save-reload": 0.04374216700671241,
+     "repeat=1/batch": 0.16711895799380727,
+     "repeat=1/batchgrad": 0.00013366699567995965,
+     "repeat=1/batchscale": 5.870801396667957e-05,
+     "repeat=1/ragged": 5.454101483337581e-05,
+     "repeat=1/stepfull": 4.8582995077595115e-05,
+     "repeat=2/train": 0.8952215829922352,
+     "repeat=2/infer-save-reload": 0.04900020800414495,
+     "repeat=2/batch": 0.1800236249982845,
+     "repeat=2/batchgrad": 0.0001351670071016997,
+     "repeat=2/batchscale": 0.00011312501737847924,
+     "repeat=2/ragged": 0.00010645898873917758,
+     "repeat=2/stepfull": 9.295801282860339e-05
+    }
+   }
+  },
+  "par-forest-et/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ea112e2954936a35",
+    "ea112e2954936a35"
+   ],
+   "parts": [
+    {
+     "predict": "b1a67fff7a0c7276"
+    },
+    {
+     "predict": "b1a67fff7a0c7276"
+    }
+   ],
+   "infer": [
+    "9ffccb36ba58de65",
+    "9ffccb36ba58de65"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "70dbb8d0960a79f5",
+    "70dbb8d0960a79f5"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "9ffccb36ba58de65",
+    "9ffccb36ba58de65"
+   ],
+   "batch": [
+    "607c7f08285ac1b3",
+    "607c7f08285ac1b3"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 2.746120790980058,
+    "stages": {
+     "repeat=1/train": 1.1369367500010412,
+     "repeat=1/infer-save-reload": 0.013052166992565617,
+     "repeat=1/batch": 0.07279291699524038,
+     "repeat=1/batchgrad": 6.620798376388848e-05,
+     "repeat=1/batchscale": 3.558400203473866e-05,
+     "repeat=1/ragged": 3.724999260157347e-05,
+     "repeat=1/stepfull": 3.516700235195458e-05,
+     "repeat=2/train": 1.1899068749917205,
+     "repeat=2/infer-save-reload": 0.014466542023001239,
+     "repeat=2/batch": 0.31713329200283624,
+     "repeat=2/batchgrad": 0.00024250001297332346,
+     "repeat=2/batchscale": 0.00011799999629147351,
+     "repeat=2/ragged": 0.0003548339882399887,
+     "repeat=2/stepfull": 8.191700908355415e-05
+    }
+   }
+  },
+  "par-boosting/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 11462, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 6055, in _\n    par = fit_boosting(_gbdt(ml.GradientBoosting, **kw), X, yc, devices=_par_devices())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/parallel_ensemble.py\", line 23, in fit_boosting\n    result = pool.map([('gbdt_fit', estimator,\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^\n        (X, y, dict(sample_weight=sample_weight, eval_set=eval_set)))])[0]\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/_parallel_pool.py\", line 358, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0022222910192795098,
+    "stages": {
+     "repeat=1/train": 0.0002667499938979745
+    }
+   }
+  },
+  "par-kmeans/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver kmeans_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 11462, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 6068, in _\n    par = fit_kmeans(ml.KMeans(n_clusters=8, random_state=3), X, devices=_par_devices())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/parallel_classical.py\", line 185, in fit_kmeans\n    result = pool.map([('kmeans_fit', params, (X, sample_weight))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/_parallel_pool.py\", line 358, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver kmeans_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0029684580222237855,
+    "stages": {
+     "repeat=1/train": 0.0011328750115353614
+    }
+   }
+  },
+  "par-gram/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gram_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 11462, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 6082, in _\n    par = fit_gram_estimator(ml.Ridge(alpha=1.0), X, yr, devices=_par_devices())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/parallel_classical.py\", line 108, in fit_gram_estimator\n    result = pool.map([('gram_fit', estimator, (data, y, kwargs))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/_parallel_pool.py\", line 358, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver gram_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0019366669876035303,
+    "stages": {
+     "repeat=1/train": 0.0003684579860419035
+    }
+   }
+  },
+  "par-logistic/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver glm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 11462, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 6094, in _\n    par = fit_logistic(ml.LogisticRegression(max_iter=50), X, yc, devices=_par_devices())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/parallel_classical.py\", line 20, in fit_logistic\n    result = pool.map([('glm_fit', estimator, (X, y))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/_parallel_pool.py\", line 358, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver glm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0015019169950392097,
+    "stages": {
+     "repeat=1/train": 0.0003047079953830689
+    }
+   }
+  },
+  "par-cd/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver solver_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 11462, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 6106, in _\n    par = fit_coordinate_descent(ml.Lasso(alpha=0.01, max_iter=200), X, yr, devices=_par_devices())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/parallel_classical.py\", line 206, in fit_coordinate_descent\n    result = pool.map([('solver_fit', estimator, (X, y))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/_parallel_pool.py\", line 358, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver solver_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.04450812499271706,
+    "stages": {
+     "repeat=1/train": 0.00037616599001921713
+    }
+   }
+  },
+  "par-svm/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver svm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 11462, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 6119, in _\n    par = fit_svm(ml.SVC(**kw), X[:2000], yc[:2000], devices=_par_devices())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/parallel_classical.py\", line 228, in fit_svm\n    result = pool.map([('svm_fit', estimator, (X, y))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/_parallel_pool.py\", line 358, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver svm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0014686249778605998,
+    "stages": {
+     "repeat=1/train": 0.00023987499298527837
+    }
+   }
+  },
+  "par-gp/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gp_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 11462, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 6135, in _\n    par = fit_gaussian_process(ml.GaussianProcessRegressor(kernel=k), X[:256, :4], yr[:256], devices=_par_devices())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/parallel_classical.py\", line 260, in fit_gaussian_process\n    result = pool.map([('gp_fit', estimator, (X, y))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/_parallel_pool.py\", line 358, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver gp_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0017511670012027025,
+    "stages": {
+     "repeat=1/train": 0.0005092079809401184
+    }
+   }
+  },
+  "par-dbscan/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver dbscan_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 11462, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 6149, in _\n    par = fit_dbscan(ml.DBSCAN(eps=0.9, min_samples=5, prediction_data=True), X[:6000, :4], devices=_par_devices())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/parallel_classical.py\", line 300, in fit_dbscan\n    result = pool.map([('dbscan_fit', estimator, (X, sample_weight))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/_parallel_pool.py\", line 358, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver dbscan_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0015472079976461828,
+    "stages": {
+     "repeat=1/train": 0.00026637502014636993
+    }
+   }
+  },
+  "par-scaler/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c4cc661617a4b9a7",
+    "c4cc661617a4b9a7"
+   ],
+   "parts": [
+    {
+     "mean": "76e9820929e60694",
+     "var": "a20fb423ecf03128",
+     "transform": "5352a1483442eb63",
+     "inverse": "023c52f22335ccc5"
+    },
+    {
+     "mean": "76e9820929e60694",
+     "var": "a20fb423ecf03128",
+     "transform": "5352a1483442eb63",
+     "inverse": "023c52f22335ccc5"
+    }
+   ],
+   "infer": [
+    "fa0fbdef7ccae250",
+    "fa0fbdef7ccae250"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "3adc4c98c02a61b6",
+    "3adc4c98c02a61b6"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "fa0fbdef7ccae250",
+    "fa0fbdef7ccae250"
+   ],
+   "batch": [
+    "917ae37b02618ab5",
+    "917ae37b02618ab5"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.5097484579891898,
+    "stages": {
+     "repeat=1/train": 0.7653601250203792,
+     "repeat=1/infer-save-reload": 0.0034822089946828783,
+     "repeat=1/batch": 0.00404495801194571,
+     "repeat=1/batchgrad": 8.683398482389748e-05,
+     "repeat=1/batchscale": 4.787501529790461e-05,
+     "repeat=1/ragged": 4.837499000132084e-05,
+     "repeat=1/stepfull": 4.674997762776911e-05,
+     "repeat=2/train": 0.727481583977351,
+     "repeat=2/infer-save-reload": 0.004223791998811066,
+     "repeat=2/batch": 0.0037998330080881715,
+     "repeat=2/batchgrad": 0.00010500001371838152,
+     "repeat=2/batchscale": 8.933301432989538e-05,
+     "repeat=2/ragged": 9.5209019491449e-05,
+     "repeat=2/stepfull": 9.004201274365187e-05
+    }
+   }
+  },
+  "par-arima/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "377790cb117abb61",
+    "377790cb117abb61"
+   ],
+   "parts": [
+    {
+     "ar": "a87285b0f16f0bba",
+     "mu": "d984462e9dc49666",
+     "sigma2": "f624833d99097c71",
+     "forecast": "e33b73fe4f43dde5"
+    },
+    {
+     "ar": "a87285b0f16f0bba",
+     "mu": "d984462e9dc49666",
+     "sigma2": "f624833d99097c71",
+     "forecast": "e33b73fe4f43dde5"
+    }
+   ],
+   "infer": [
+    "9f76be0396a666ca",
+    "9f76be0396a666ca"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "30ba4efd0914b6c6",
+    "30ba4efd0914b6c6"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "9f76be0396a666ca",
+    "9f76be0396a666ca"
+   ],
+   "batch": [
+    "cef3c859431cbbaf",
+    "cef3c859431cbbaf"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.4424981669872068,
+    "stages": {
+     "repeat=1/train": 0.2155028750130441,
+     "repeat=1/infer-save-reload": 0.0038308750081341714,
+     "repeat=1/batch": 0.001432249991921708,
+     "repeat=1/batchgrad": 7.645800360478461e-05,
+     "repeat=1/batchscale": 4.9875001423060894e-05,
+     "repeat=1/ragged": 5.01670001540333e-05,
+     "repeat=1/stepfull": 4.7582987463101745e-05,
+     "repeat=2/train": 0.2160634169995319,
+     "repeat=2/infer-save-reload": 0.003690415993332863,
+     "repeat=2/batch": 0.0010674999793991446,
+     "repeat=2/batchgrad": 5.76250022277236e-05,
+     "repeat=2/batchscale": 4.15419926866889e-05,
+     "repeat=2/ragged": 4.0749990148469806e-05,
+     "repeat=2/stepfull": 3.9207981899380684e-05
+    }
+   }
+  },
+  "par-forecast-arima/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a44b54d65768bf5e",
+    "a44b54d65768bf5e"
+   ],
+   "parts": [
+    {
+     "predict": "fc394a633b4b3334",
+     "forecast": "e33b73fe4f43dde5"
+    },
+    {
+     "predict": "fc394a633b4b3334",
+     "forecast": "e33b73fe4f43dde5"
+    }
+   ],
+   "infer": [
+    "9f76be0396a666ca",
+    "9f76be0396a666ca"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "6ae822845884aedf",
+    "6ae822845884aedf"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "9f76be0396a666ca",
+    "9f76be0396a666ca"
+   ],
+   "batch": [
+    "ec97b45a1c88081b",
+    "ec97b45a1c88081b"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 3.0538833750179037,
+    "stages": {
+     "repeat=1/train": 0.6842498340120073,
+     "repeat=1/infer-save-reload": 0.5039497499819845,
+     "repeat=1/batch": 0.6891111659933813,
+     "repeat=1/batchgrad": 0.00014766599633730948,
+     "repeat=1/batchscale": 3.774999640882015e-05,
+     "repeat=1/ragged": 3.47500026691705e-05,
+     "repeat=1/stepfull": 3.229099093005061e-05,
+     "repeat=2/train": 0.31741049999254756,
+     "repeat=2/infer-save-reload": 0.29948937500012107,
+     "repeat=2/batch": 0.558488499984378,
+     "repeat=2/batchgrad": 0.00016729100025258958,
+     "repeat=2/batchscale": 3.4334021620452404e-05,
+     "repeat=2/ragged": 3.274998744018376e-05,
+     "repeat=2/stepfull": 2.8916983865201473e-05
+    }
+   }
+  },
+  "par-mlp/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "6e5cde4953362927",
+    "6e5cde4953362927"
+   ],
+   "parts": [
+    {
+     "weights": "c48127d483240383",
+     "logits": "c1e89a153be00030",
+     "shards": "d09817789bd0a06b"
+    },
+    {
+     "weights": "c48127d483240383",
+     "logits": "c1e89a153be00030",
+     "shards": "d09817789bd0a06b"
+    }
+   ],
+   "infer": [
+    "b7659ff90ae1ea39",
+    "b7659ff90ae1ea39"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "fb3977c1ab222cea",
+    "fb3977c1ab222cea"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "b7659ff90ae1ea39",
+    "b7659ff90ae1ea39"
+   ],
+   "batch": [
+    "16eaba30f0eb372d",
+    "16eaba30f0eb372d"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:mean-reduction (SmallMLPTrainer.loss_and_grads is mean cross-entropy over the call's own rows, _mlp_impl.py::_gradient; a row alone or a piece carries a different divisor by definition)",
+    "n/a:mean-reduction (SmallMLPTrainer.loss_and_grads is mean cross-entropy over the call's own rows, _mlp_impl.py::_gradient; a row alone or a piece carries a different divisor by definition)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.8273667090106755,
+    "stages": {
+     "repeat=1/train": 0.3603741249826271,
+     "repeat=1/infer-save-reload": 0.0031636669882573187,
+     "repeat=1/batch": 0.0060613329987972975,
+     "repeat=1/batchgrad": 6.6250009695068e-05,
+     "repeat=1/batchscale": 3.504200140014291e-05,
+     "repeat=1/ragged": 3.4083990612998605e-05,
+     "repeat=1/stepfull": 3.320799442008138e-05,
+     "repeat=2/train": 0.4481168749916833,
+     "repeat=2/infer-save-reload": 0.0028786250040866435,
+     "repeat=2/batch": 0.006001708010444418,
+     "repeat=2/batchgrad": 5.883298581466079e-05,
+     "repeat=2/batchscale": 3.5667006159201264e-05,
+     "repeat=2/ragged": 3.6416982766240835e-05,
+     "repeat=2/stepfull": 3.329201717860997e-05
+    }
+   }
+  },
+  "par-samba/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "359834bee4b2789a",
+    "359834bee4b2789a"
+   ],
+   "parts": [
+    {
+     "logits": "c4edb4f61dd9eb23",
+     "params": "98a1e9aaeaa6d3a4"
+    },
+    {
+     "logits": "c4edb4f61dd9eb23",
+     "params": "98a1e9aaeaa6d3a4"
+    }
+   ],
+   "infer": [
+    "c663dd4766895890",
+    "c663dd4766895890"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "40a81f8c42e2256b",
+    "40a81f8c42e2256b"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "c663dd4766895890",
+    "c663dd4766895890"
+   ],
+   "batch": [
+    "09eefddb12772255",
+    "09eefddb12772255"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 3.9340670840174425,
+    "stages": {
+     "repeat=1/train": 1.7457957500009798,
+     "repeat=1/infer-save-reload": 0.043654166016494855,
+     "repeat=1/batch": 0.42729345901170745,
+     "repeat=1/batchgrad": 8.49170028232038e-05,
+     "repeat=1/batchscale": 4.929202259518206e-05,
+     "repeat=1/ragged": 4.895799793303013e-05,
+     "repeat=1/stepfull": 4.2041996493935585e-05,
+     "repeat=2/train": 1.2896266659954563,
+     "repeat=2/infer-save-reload": 0.08726291698985733,
+     "repeat=2/batch": 0.3359631249913946,
+     "repeat=2/batchgrad": 6.166700040921569e-05,
+     "repeat=2/batchscale": 3.5500008380040526e-05,
+     "repeat=2/ragged": 3.541700425557792e-05,
+     "repeat=2/stepfull": 3.187500988133252e-05
+    }
+   }
+  },
+  "par-byte-lm/base": {
+   "verdict": "REFUSED",
+   "error": "ImportError: rebuild bindings/build_byte_lm.sh for parallel training\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 11462, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 6433, in _\n    losses, state, _ = _byte_lm_replay(tr, ref, ids)\n                       ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 6843, in _byte_lm_replay\n    a, b = trainer.train_step(shards), reference.train_step(shards)\n           ~~~~~~~~~~~~~~~~~~^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/parallel_training.py\", line 101, in train_step\n    self._open()\n    ~~~~~~~~~~^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/parallel_training.py\", line 63, in _open\n    raise ImportError('rebuild bindings/build_byte_lm.sh for parallel training')\nImportError: rebuild bindings/build_byte_lm.sh for parallel training",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.01276304098428227,
+    "stages": {
+     "repeat=1/train": 0.01165520798531361
+    }
+   }
+  },
+  "par-queries-knn/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "4b0dd36744b84c37",
+    "4b0dd36744b84c37"
+   ],
+   "parts": [
+    {
+     "dist": "3b60c40b1c624bbc",
+     "idx": "573b36fe45382a50",
+     "predict": "8977a96d816eac66",
+     "proba": "aee3a3584a2d98ad"
+    },
+    {
+     "dist": "3b60c40b1c624bbc",
+     "idx": "573b36fe45382a50",
+     "predict": "8977a96d816eac66",
+     "proba": "aee3a3584a2d98ad"
+    }
+   ],
+   "infer": [
+    "8381d6badb2ee31b",
+    "8381d6badb2ee31b"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "f0b9be0fd408466b",
+    "f0b9be0fd408466b"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "8381d6badb2ee31b",
+    "8381d6badb2ee31b"
+   ],
+   "batch": [
+    "b0ee1057fca8171a",
+    "b0ee1057fca8171a"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 3.0987804580072407,
+    "stages": {
+     "repeat=1/train": 0.2526456670020707,
+     "repeat=1/infer-save-reload": 0.7033202089951374,
+     "repeat=1/batch": 0.4227839160012081,
+     "repeat=1/batchgrad": 0.00015241699293255806,
+     "repeat=1/batchscale": 3.575001028366387e-05,
+     "repeat=1/ragged": 3.3666990930214524e-05,
+     "repeat=1/stepfull": 3.066699719056487e-05,
+     "repeat=2/train": 0.22829479101346806,
+     "repeat=2/infer-save-reload": 0.9513224170077592,
+     "repeat=2/batch": 0.5390301669831388,
+     "repeat=2/batchgrad": 0.00017449998995289207,
+     "repeat=2/batchscale": 4.237500252202153e-05,
+     "repeat=2/ragged": 3.9916980313137174e-05,
+     "repeat=2/stepfull": 3.600001218728721e-05
+    }
+   }
+  },
+  "par-queries-radius/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b4fa4ebf9623f5d0",
+    "b4fa4ebf9623f5d0"
+   ],
+   "parts": [
+    {
+     "radius": "f4673749037f472a",
+     "counts": "5dcbe6139c3d2fde",
+     "dist": "8acc5d8cd5a72219",
+     "idx": "640380f9baa521f9"
+    },
+    {
+     "radius": "f4673749037f472a",
+     "counts": "5dcbe6139c3d2fde",
+     "dist": "8acc5d8cd5a72219",
+     "idx": "640380f9baa521f9"
+    }
+   ],
+   "infer": [
+    "3eb3a2ab621fbb97",
+    "3eb3a2ab621fbb97"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "2ee81955e923d21f",
+    "2ee81955e923d21f"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "3eb3a2ab621fbb97",
+    "3eb3a2ab621fbb97"
+   ],
+   "batch": [
+    "cf44ff75b01d7995",
+    "cf44ff75b01d7995"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.92975529099931,
+    "stages": {
+     "repeat=1/train": 0.24730175000149757,
+     "repeat=1/infer-save-reload": 0.35772470899973996,
+     "repeat=1/batch": 0.21820750000188127,
+     "repeat=1/batchgrad": 0.000152749998960644,
+     "repeat=1/batchscale": 3.804199513979256e-05,
+     "repeat=1/ragged": 3.5500008380040526e-05,
+     "repeat=1/stepfull": 3.29999893438071e-05,
+     "repeat=2/train": 0.19573375000618398,
+     "repeat=2/infer-save-reload": 0.6482798749930225,
+     "repeat=2/batch": 0.26130445799208246,
+     "repeat=2/batchgrad": 0.0001637499954085797,
+     "repeat=2/batchscale": 4.3750012991949916e-05,
+     "repeat=2/ragged": 4.037498729303479e-05,
+     "repeat=2/stepfull": 3.937500878237188e-05
+    }
+   }
+  },
+  "par-queries-kde/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "e0d6e3d0623d6112",
+    "e0d6e3d0623d6112"
+   ],
+   "parts": [
+    {
+     "scores": "9a2d41d8dd246e5d"
+    },
+    {
+     "scores": "9a2d41d8dd246e5d"
+    }
+   ],
+   "infer": [
+    "1a2c3054b661b72a",
+    "1a2c3054b661b72a"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "cd5469f3b8854867",
+    "cd5469f3b8854867"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "1a2c3054b661b72a",
+    "1a2c3054b661b72a"
+   ],
+   "batch": [
+    "c0c645e32da9e31c",
+    "c0c645e32da9e31c"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.6789846250030678,
+    "stages": {
+     "repeat=1/train": 0.27853420900646597,
+     "repeat=1/infer-save-reload": 0.4329657090129331,
+     "repeat=1/batch": 0.24995858300826512,
+     "repeat=1/batchgrad": 0.0001595419889781624,
+     "repeat=1/batchscale": 4.237500252202153e-05,
+     "repeat=1/ragged": 3.758302773348987e-05,
+     "repeat=1/stepfull": 3.329102764837444e-05,
+     "repeat=2/train": 0.19535866598016582,
+     "repeat=2/infer-save-reload": 0.3239097089972347,
+     "repeat=2/batch": 0.19684029201744124,
+     "repeat=2/batchgrad": 0.0002015409991145134,
+     "repeat=2/batchscale": 4.4625019654631615e-05,
+     "repeat=2/ragged": 3.637498593889177e-05,
+     "repeat=2/stepfull": 3.3249991247430444e-05
+    }
+   }
+  },
+  "par-reference-knn/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "4b0dd36744b84c37",
+    "4b0dd36744b84c37"
+   ],
+   "parts": [
+    {
+     "dist": "3b60c40b1c624bbc",
+     "idx": "573b36fe45382a50",
+     "predict": "8977a96d816eac66",
+     "proba": "aee3a3584a2d98ad"
+    },
+    {
+     "dist": "3b60c40b1c624bbc",
+     "idx": "573b36fe45382a50",
+     "predict": "8977a96d816eac66",
+     "proba": "aee3a3584a2d98ad"
+    }
+   ],
+   "infer": [
+    "8381d6badb2ee31b",
+    "8381d6badb2ee31b"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "f0b9be0fd408466b",
+    "f0b9be0fd408466b"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "8381d6badb2ee31b",
+    "8381d6badb2ee31b"
+   ],
+   "batch": [
+    "73020445ac91c2f7",
+    "73020445ac91c2f7"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 2.776292583992472,
+    "stages": {
+     "repeat=1/train": 0.2443487919808831,
+     "repeat=1/infer-save-reload": 0.39148308397852816,
+     "repeat=1/batch": 0.6183252090122551,
+     "repeat=1/batchgrad": 0.0001550419838167727,
+     "repeat=1/batchscale": 3.950000973418355e-05,
+     "repeat=1/ragged": 3.63329891115427e-05,
+     "repeat=1/stepfull": 3.399999695830047e-05,
+     "repeat=2/train": 0.32270704198163,
+     "repeat=2/infer-save-reload": 0.5445048749970738,
+     "repeat=2/batch": 0.6537517089745961,
+     "repeat=2/batchgrad": 0.00013295799726620317,
+     "repeat=2/batchscale": 3.6375015042722225e-05,
+     "repeat=2/ragged": 3.404199378564954e-05,
+     "repeat=2/stepfull": 3.1333009246736765e-05
+    }
+   }
+  },
+  "par-reference-knn-reg/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "33e7da5c3fdd343c",
+    "33e7da5c3fdd343c"
+   ],
+   "parts": [
+    {
+     "predict": "9df86f515f2b5e69"
+    },
+    {
+     "predict": "9df86f515f2b5e69"
+    }
+   ],
+   "infer": [
+    "12b3c8b2763ae645",
+    "12b3c8b2763ae645"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "7404b5d0a3a97d83",
+    "7404b5d0a3a97d83"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "12b3c8b2763ae645",
+    "12b3c8b2763ae645"
+   ],
+   "batch": [
+    "74278bda8031c8f1",
+    "74278bda8031c8f1"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 2.158245334023377,
+    "stages": {
+     "repeat=1/train": 0.20234737498685718,
+     "repeat=1/infer-save-reload": 0.3782336249714717,
+     "repeat=1/batch": 0.30965629100683145,
+     "repeat=1/batchgrad": 0.0001568750012665987,
+     "repeat=1/batchscale": 4.029099363833666e-05,
+     "repeat=1/ragged": 3.679099609144032e-05,
+     "repeat=1/stepfull": 3.229099093005061e-05,
+     "repeat=2/train": 0.468794375017751,
+     "repeat=2/infer-save-reload": 0.4576073340140283,
+     "repeat=2/batch": 0.3402708329958841,
+     "repeat=2/batchgrad": 0.000174832995980978,
+     "repeat=2/batchscale": 3.875000402331352e-05,
+     "repeat=2/ragged": 3.454199759289622e-05,
+     "repeat=2/stepfull": 3.2625015592202544e-05
+    }
+   }
+  },
+  "par-graph-agglomerative/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver graph_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 11462, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 6605, in _\n    par = fit_graph(ml.AgglomerativeClustering(n_clusters=4, prediction_data=True), A, devices=_par_devices())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/parallel_graph.py\", line 42, in fit_graph\n    result = pool.map([('graph_fit', estimator, (X,))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/_parallel_pool.py\", line 358, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver graph_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.003144082991639152,
+    "stages": {
+     "repeat=1/train": 0.001982124987989664
+    }
+   }
+  },
+  "par-graph-spectral/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver graph_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 11462, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 6623, in _\n    par = fit_graph(ml.SpectralClustering(n_clusters=4, random_state=3), A, devices=_par_devices())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/parallel_graph.py\", line 42, in fit_graph\n    result = pool.map([('graph_fit', estimator, (X,))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/_parallel_pool.py\", line 358, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver graph_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0011194160033483058,
+    "stages": {
+     "repeat=1/train": 0.00038587499875575304
+    }
+   }
+  },
+  "par-graph-umap/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver graph_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 11462, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 6641, in _\n    par = fit_graph(ml.UMAP(**kw), A, devices=_par_devices())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/parallel_graph.py\", line 42, in fit_graph\n    result = pool.map([('graph_fit', estimator, (X,))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/_parallel_pool.py\", line 358, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver graph_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0009425000171177089,
+    "stages": {
+     "repeat=1/train": 0.00028391601517796516
+    }
+   }
+  },
+  "par-ordered-rmse/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver ordered_rmse_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 11462, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 6661, in _\n    par = fit_ordered_rmse(ml.OrderedRMSE(n_estimators=20, max_depth=6), X, yr, permutation=perm,\n                           devices=_par_devices())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/parallel_ensemble.py\", line 153, in fit_ordered_rmse\n    result = pool.map([('ordered_rmse_fit', estimator,\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        (X, y, dict(permutation=permutation, sample_weight=sample_weight)))])[0]\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/_parallel_pool.py\", line 358, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver ordered_rmse_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.004554915998596698,
+    "stages": {
+     "repeat=1/train": 0.0038166659942362458
+    }
+   }
+  },
+  "par-ordered/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 11462, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 6679, in _\n    par = fit_boosting(_gbdt(ml.GradientBoosting, **kw), X, yc, devices=_par_devices())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/parallel_ensemble.py\", line 23, in fit_boosting\n    result = pool.map([('gbdt_fit', estimator,\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^\n        (X, y, dict(sample_weight=sample_weight, eval_set=eval_set)))])[0]\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/_parallel_pool.py\", line 358, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0008709999965503812,
+    "stages": {
+     "repeat=1/train": 0.00020370801212266088
+    }
+   }
+  },
+  "par-border-types/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 11462, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 6699, in _\n    par = fit_boosting(_gbdt(ml.GradientBoosting, **kw), X, yc, devices=_par_devices())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/parallel_ensemble.py\", line 23, in fit_boosting\n    result = pool.map([('gbdt_fit', estimator,\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^\n        (X, y, dict(sample_weight=sample_weight, eval_set=eval_set)))])[0]\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/_parallel_pool.py\", line 358, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0008817079942673445,
+    "stages": {
+     "repeat=1/train": 0.00018920798902399838
+    }
+   }
+  },
+  "par-feature-freq/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 11462, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 6716, in _\n    par = fit_feature_freq(ml.ExperimentalTwoLevelFeatureFreq(sources=[0, 1], random_state=7), Xc, yr,\n                           devices=_par_devices())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/parallel_ensemble.py\", line 174, in fit_feature_freq\n    result = pool.map([('gbdt_fit', estimator,\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^\n        (X, y, dict(sample_weight=sample_weight)))])[0]\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/_parallel_pool.py\", line 358, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.002302459004567936,
+    "stages": {
+     "repeat=1/train": 0.0016176250064745545
+    }
+   }
+  },
+  "par-boosting-pointwise/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 11462, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 6734, in _\n    par = fit_boosting(_gbdt(ml.GradientBoosting, **kw), X, yc, devices=_par_devices())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/parallel_ensemble.py\", line 23, in fit_boosting\n    result = pool.map([('gbdt_fit', estimator,\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^\n        (X, y, dict(sample_weight=sample_weight, eval_set=eval_set)))])[0]\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/_parallel_pool.py\", line 358, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.001044958014972508,
+    "stages": {
+     "repeat=1/train": 0.00025983399245887995
+    }
+   }
+  },
+  "par-holtwinters/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "aa71e2e60daefca2",
+    "aa71e2e60daefca2"
+   ],
+   "parts": [
+    {
+     "level": "b6f28f0284e6dd89",
+     "trend": "d2b87ee9f9e8ab09",
+     "season": "e39f46ccf769912d",
+     "sse": "6bc4e1ecddaf69c9",
+     "alpha": "c27647af7e87ca40",
+     "beta": "4a6c9b4d23d9e675",
+     "gamma": "a787f0dcca9da9d4",
+     "n_iter": "6474f0001e31f108",
+     "criterion": "ecd7a5d78314d6e1",
+     "forecast": "741b9c1f80a30db8"
+    },
+    {
+     "level": "b6f28f0284e6dd89",
+     "trend": "d2b87ee9f9e8ab09",
+     "season": "e39f46ccf769912d",
+     "sse": "6bc4e1ecddaf69c9",
+     "alpha": "c27647af7e87ca40",
+     "beta": "4a6c9b4d23d9e675",
+     "gamma": "a787f0dcca9da9d4",
+     "n_iter": "6474f0001e31f108",
+     "criterion": "ecd7a5d78314d6e1",
+     "forecast": "741b9c1f80a30db8"
+    }
+   ],
+   "infer": [
+    "649ba9e2deb0116b",
+    "649ba9e2deb0116b"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "2b788f20f8d8c145",
+    "2b788f20f8d8c145"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "649ba9e2deb0116b",
+    "649ba9e2deb0116b"
+   ],
+   "batch": [
+    "232d55481f01f239",
+    "232d55481f01f239"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.3747838749841321,
+    "stages": {
+     "repeat=1/train": 0.18730658400454558,
+     "repeat=1/infer-save-reload": 0.0023552920029032975,
+     "repeat=1/batch": 0.0003573749854695052,
+     "repeat=1/batchgrad": 4.170800093561411e-05,
+     "repeat=1/batchscale": 2.99170205835253e-05,
+     "repeat=1/ragged": 3.254198236390948e-05,
+     "repeat=1/stepfull": 2.89160234387964e-05,
+     "repeat=2/train": 0.18178145799902268,
+     "repeat=2/infer-save-reload": 0.0020373750012367964,
+     "repeat=2/batch": 0.00035008302074857056,
+     "repeat=2/batchgrad": 3.862500307150185e-05,
+     "repeat=2/batchscale": 2.8583977837115526e-05,
+     "repeat=2/ragged": 2.9999995604157448e-05,
+     "repeat=2/stepfull": 2.7583999326452613e-05
+    }
+   }
+  },
+  "par-forecast-holtwinters/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5e8ffa04d8c2fb3d",
+    "5e8ffa04d8c2fb3d"
+   ],
+   "parts": [
+    {
+     "predict": "741b9c1f80a30db8",
+     "forecast": "741b9c1f80a30db8",
+     "indexed": "a66cc3d72dca5690"
+    },
+    {
+     "predict": "741b9c1f80a30db8",
+     "forecast": "741b9c1f80a30db8",
+     "indexed": "a66cc3d72dca5690"
+    }
+   ],
+   "infer": [
+    "2ba6e3fe81256474",
+    "2ba6e3fe81256474"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "2b788f20f8d8c145",
+    "2b788f20f8d8c145"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "2ba6e3fe81256474",
+    "2ba6e3fe81256474"
+   ],
+   "batch": [
+    "77ca9a518446c250",
+    "77ca9a518446c250"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 3.6954577500000596,
+    "stages": {
+     "repeat=1/train": 0.4995886250108015,
+     "repeat=1/infer-save-reload": 0.4977483749971725,
+     "repeat=1/batch": 1.0739555839973036,
+     "repeat=1/batchgrad": 0.00018008399638347328,
+     "repeat=1/batchscale": 4.1332998080179095e-05,
+     "repeat=1/ragged": 3.8708996726199985e-05,
+     "repeat=1/stepfull": 3.516601282171905e-05,
+     "repeat=2/train": 0.6324387079803273,
+     "repeat=2/infer-save-reload": 0.34733749998849817,
+     "repeat=2/batch": 0.6431901670002844,
+     "repeat=2/batchgrad": 0.00017158300033770502,
+     "repeat=2/batchscale": 3.5500008380040526e-05,
+     "repeat=2/ragged": 3.38749960064888e-05,
+     "repeat=2/stepfull": 3.15000070258975e-05
+    }
+   }
+  },
+  "par-byte-lm-model-pool/base": {
+   "verdict": "REFUSED",
+   "error": "ImportError: rebuild bindings/build_byte_lm.sh for model pooling\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 11462, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 6869, in _\n    losses, state, grads = _byte_lm_replay(tr, ref, ids)\n                           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 6843, in _byte_lm_replay\n    a, b = trainer.train_step(shards), reference.train_step(shards)\n           ~~~~~~~~~~~~~~~~~~^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/parallel_training.py\", line 101, in train_step\n    self._open()\n    ~~~~~~~~~~^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/model_pool_training.py\", line 58, in _open\n    binding = _ModelPoolBinding(helper._binding())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/model_pool_training.py\", line 18, in __init__\n    raise ImportError('rebuild bindings/build_byte_lm.sh for model pooling')\nImportError: rebuild bindings/build_byte_lm.sh for model pooling",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.011740749992895871,
+    "stages": {
+     "repeat=1/train": 0.010643791989423335
+    }
+   }
+  },
+  "par-byte-lm-offload/base": {
+   "verdict": "REFUSED",
+   "error": "ImportError: rebuild bindings/build_byte_lm.sh for offloaded replay\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 11462, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 6887, in _\n    losses, state, grads = _byte_lm_replay(tr, ref, ids)\n                           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 6843, in _byte_lm_replay\n    a, b = trainer.train_step(shards), reference.train_step(shards)\n           ~~~~~~~~~~~~~~~~~~^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/parallel_training.py\", line 101, in train_step\n    self._open()\n    ~~~~~~~~~~^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/offload_training.py\", line 56, in _open\n    binding = _OffloadBinding(_load(self._shape))\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/offload_training.py\", line 18, in __init__\n    raise ImportError('rebuild bindings/build_byte_lm.sh for offloaded replay')\nImportError: rebuild bindings/build_byte_lm.sh for offloaded replay",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.008188250008970499,
+    "stages": {
+     "repeat=1/train": 0.007194500009063631
+    }
+   }
+  },
+  "par-samba-clip/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "387a63aafbcce06d",
+    "387a63aafbcce06d"
+   ],
+   "parts": [
+    {
+     "loss": "9c7d808a1f27a257",
+     "logits": "8f133a06c340115e",
+     "grads": "579c739eff0f3b16",
+     "params": "c3dc4e7e223db28e"
+    },
+    {
+     "loss": "9c7d808a1f27a257",
+     "logits": "8f133a06c340115e",
+     "grads": "579c739eff0f3b16",
+     "params": "c3dc4e7e223db28e"
+    }
+   ],
+   "infer": [
+    "3c42e52ff16765ef",
+    "3c42e52ff16765ef"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "2807164675116cdb",
+    "2807164675116cdb"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "3c42e52ff16765ef",
+    "3c42e52ff16765ef"
+   ],
+   "batch": [
+    "b76cef8b3c5cab10",
+    "b76cef8b3c5cab10"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 2.24431070801802,
+    "stages": {
+     "repeat=1/train": 0.9481870839954354,
+     "repeat=1/infer-save-reload": 0.022823500010417774,
+     "repeat=1/batch": 0.2102402079908643,
+     "repeat=1/batchgrad": 4.5666005462408066e-05,
+     "repeat=1/batchscale": 2.2541004000231624e-05,
+     "repeat=1/ragged": 2.5165994884446263e-05,
+     "repeat=1/stepfull": 2.1624990040436387e-05,
+     "repeat=2/train": 0.7676614170195535,
+     "repeat=2/infer-save-reload": 0.02120512502733618,
+     "repeat=2/batch": 0.273565209005028,
+     "repeat=2/batchgrad": 5.5957993026822805e-05,
+     "repeat=2/batchscale": 2.5415996788069606e-05,
+     "repeat=2/ragged": 2.4999986635521054e-05,
+     "repeat=2/stepfull": 2.3125001462176442e-05
+    }
+   }
+  },
+  "par-iforest/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver iforest_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 11462, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 6977, in _\n    par = fit_isolation_forest(ml.IsolationForest(n_estimators=16, random_state=5), X, devices=_par_devices())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/parallel_ensemble.py\", line 117, in fit_isolation_forest\n    result = pool.map([('iforest_fit', estimator, (X,))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/_parallel_pool.py\", line 358, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver iforest_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0006885000038892031,
+    "stages": {
+     "repeat=1/train": 9.89580003079027e-05
+    }
+   }
+  },
+  "par-forest-pool/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver forest_prepare yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 11462, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 7010, in _\n    pred, proba = pooled(m, X)\n                  ~~~~~~^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 7007, in pooled\n    with ParallelForestPredictor(e, devices=_par_devices()) as pool:\n         ~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/parallel_ensemble.py\", line 218, in __init__\n    metadata = self._pool.map([('forest_prepare', estimator, None)])[0]\n               ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/_parallel_pool.py\", line 358, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver forest_prepare yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.41513112498796545,
+    "stages": {
+     "repeat=1/train": 0.41444033398875035
+    }
+   }
+  },
+  "par-gmm/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gmm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 11462, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 7025, in _\n    par = fit_gaussian_mixture(ml.GaussianMixture(**kw), X[:6000, :4], devices=_par_devices())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/parallel_classical.py\", line 329, in fit_gaussian_mixture\n    result = pool.map([('gmm_fit', estimator, (X,))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/_parallel_pool.py\", line 358, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver gmm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0009030000073835254,
+    "stages": {
+     "repeat=1/train": 0.00031262499396689236
+    }
+   }
+  },
+  "par-resample/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver resample yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 11462, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 7055, in _\n    b = pc.bootstrap(x, devices=dev, random_state=3, **kw)\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/parallel_classical.py\", line 374, in bootstrap\n    return _resample_parallel('bootstrap', devices, dict(kwargs, data=data))\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/parallel_classical.py\", line 361, in _resample_parallel\n    return pool.map([('resample', None, (name, kwargs))])[0]\n           ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/_parallel_pool.py\", line 358, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver resample yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0007472090073861182,
+    "stages": {
+     "repeat=1/train": 0.000186416000360623
+    }
+   }
+  },
+  "par-hdbscan/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver hdbscan_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 11462, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 7097, in _\n    par = fit_hdbscan(ml.HDBSCAN(min_cluster_size=5, prediction_data=True), X[:6000, :4], devices=_par_devices())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/parallel_classical.py\", line 409, in fit_hdbscan\n    result = pool.map([('hdbscan_fit', estimator, (X,))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/_parallel_pool.py\", line 358, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver hdbscan_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0007841250044293702,
+    "stages": {
+     "repeat=1/train": 0.0002713330031838268
+    }
+   }
+  },
+  "par-cholesky/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver cholesky_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 11462, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 7128, in _\n    par = fit_cholesky(ml.Cholesky(), A, devices=dev)\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/parallel_classical.py\", line 435, in fit_cholesky\n    result = pool.map([('cholesky_fit', estimator, (A,))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/_parallel_pool.py\", line 358, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver cholesky_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0035770410031545907,
+    "stages": {
+     "repeat=1/train": 0.00295762499445118
+    }
+   }
+  },
+  "par-kernel-ridge/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 11462, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 7154, in _\n    par = fit_kernel_method(ml.KernelRidge(**kw), X[:600, :4], Y, devices=dev)\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/parallel_classical.py\", line 488, in fit_kernel_method\n    result = pool.map([('km_fit', estimator, args)])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/_parallel_pool.py\", line 358, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.000992832996416837,
+    "stages": {
+     "repeat=1/train": 0.00038670800859108567
+    }
+   }
+  },
+  "par-nystroem/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 11462, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 7175, in _\n    par = fit_kernel_method(ml.Nystroem(**kw), X[:600, :4], devices=dev)\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/parallel_classical.py\", line 488, in fit_kernel_method\n    result = pool.map([('km_fit', estimator, args)])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/_parallel_pool.py\", line 358, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver km_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0008824999968055636,
+    "stages": {
+     "repeat=1/train": 0.00032654200913384557
+    }
+   }
+  },
+  "par-rbf-sampler/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "7ddfa0d92256da95",
+    "7ddfa0d92256da95"
+   ],
+   "parts": [
+    {
+     "weights": "25f5f36da6995eef",
+     "offset": "6f91043e1645bb3a",
+     "transform": "760e6bcbd85b4abb"
+    },
+    {
+     "weights": "25f5f36da6995eef",
+     "offset": "6f91043e1645bb3a",
+     "transform": "760e6bcbd85b4abb"
+    }
+   ],
+   "infer": [
+    "ded23e4c277b5697",
+    "ded23e4c277b5697"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "d4b54301bf9a47f0",
+    "d4b54301bf9a47f0"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "ded23e4c277b5697",
+    "ded23e4c277b5697"
+   ],
+   "batch": [
+    "309d57b4d32c040a",
+    "309d57b4d32c040a"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.3544122500170488,
+    "stages": {
+     "repeat=1/train": 0.2891531669883989,
+     "repeat=1/infer-save-reload": 0.3453716669755522,
+     "repeat=1/batch": 0.05393916598404758,
+     "repeat=1/batchgrad": 5.266699008643627e-05,
+     "repeat=1/batchscale": 3.112500417046249e-05,
+     "repeat=1/ragged": 2.8542010113596916e-05,
+     "repeat=1/stepfull": 2.6666995836421847e-05,
+     "repeat=2/train": 0.31308791699120775,
+     "repeat=2/infer-save-reload": 0.30591762499534525,
+     "repeat=2/batch": 0.04618087501148693,
+     "repeat=2/batchgrad": 4.558300133794546e-05,
+     "repeat=2/batchscale": 2.720800694078207e-05,
+     "repeat=2/ragged": 2.5209010345861316e-05,
+     "repeat=2/stepfull": 2.3250002413988113e-05
+    }
+   }
+  },
+  "par-forest-reg/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "51c47ab53a694b17",
+    "51c47ab53a694b17"
+   ],
+   "parts": [
+    {
+     "predict": "2ead920470e1e684"
+    },
+    {
+     "predict": "2ead920470e1e684"
+    }
+   ],
+   "infer": [
+    "8b43c2c7049ce3fa",
+    "8b43c2c7049ce3fa"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "f34a7fea573ff8cb",
+    "f34a7fea573ff8cb"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "8b43c2c7049ce3fa",
+    "8b43c2c7049ce3fa"
+   ],
+   "batch": [
+    "61b884c17056b9b1",
+    "61b884c17056b9b1"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 4.56557566599804,
+    "stages": {
+     "repeat=1/train": 1.8229416669928469,
+     "repeat=1/infer-save-reload": 0.016339125024387613,
+     "repeat=1/batch": 0.06301233402336948,
+     "repeat=1/batchgrad": 0.00015820801490917802,
+     "repeat=1/batchscale": 3.3958989661186934e-05,
+     "repeat=1/ragged": 3.316599759273231e-05,
+     "repeat=1/stepfull": 2.9166025342419744e-05,
+     "repeat=2/train": 2.4764214169990737,
+     "repeat=2/infer-save-reload": 0.018246999999973923,
+     "repeat=2/batch": 0.06759662498370744,
+     "repeat=2/batchgrad": 0.000110041000880301,
+     "repeat=2/batchscale": 4.5958004193380475e-05,
+     "repeat=2/ragged": 3.904200275428593e-05,
+     "repeat=2/stepfull": 3.733299672603607e-05
+    }
+   }
+  },
+  "par-forest-et-clf/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "d630c867d817d8fd",
+    "d630c867d817d8fd"
+   ],
+   "parts": [
+    {
+     "predict": "f6477574dcedb3fe",
+     "proba": "63b52435a6e61009"
+    },
+    {
+     "predict": "f6477574dcedb3fe",
+     "proba": "63b52435a6e61009"
+    }
+   ],
+   "infer": [
+    "810c0c355d640cbb",
+    "810c0c355d640cbb"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "1b68b7ced5ff0092",
+    "1b68b7ced5ff0092"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "810c0c355d640cbb",
+    "810c0c355d640cbb"
+   ],
+   "batch": [
+    "0c1a3f537ebfa2d6",
+    "0c1a3f537ebfa2d6"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.520951625017915,
+    "stages": {
+     "repeat=1/train": 0.5426460840099026,
+     "repeat=1/infer-save-reload": 0.02549554200959392,
+     "repeat=1/batch": 0.16761254100129008,
+     "repeat=1/batchgrad": 5.9958023484796286e-05,
+     "repeat=1/batchscale": 3.516601282171905e-05,
+     "repeat=1/ragged": 0.00012120799510739744,
+     "repeat=1/stepfull": 9.712498285807669e-05,
+     "repeat=2/train": 0.5729327919834759,
+     "repeat=2/infer-save-reload": 0.029559042013715953,
+     "repeat=2/batch": 0.1813883330032695,
+     "repeat=2/batchgrad": 8.674999116919935e-05,
+     "repeat=2/batchscale": 0.00010062500950880349,
+     "repeat=2/ragged": 7.029200787656009e-05,
+     "repeat=2/stepfull": 3.7874997360631824e-05
+    }
+   }
+  },
+  "par-boosting-clf/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 11462, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 7287, in _\n    par = fit_boosting(_gbdt(ml.GradientBoostingClassifier, **kw), X, yc, devices=_par_devices())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/parallel_ensemble.py\", line 23, in fit_boosting\n    result = pool.map([('gbdt_fit', estimator,\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^\n        (X, y, dict(sample_weight=sample_weight, eval_set=eval_set)))])[0]\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/_parallel_pool.py\", line 358, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0013918750046286732,
+    "stages": {
+     "repeat=1/train": 0.0002562500012572855
+    }
+   }
+  },
+  "par-boosting-reg/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 11462, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 7304, in _\n    par = fit_boosting(_gbdt(ml.GradientBoostingRegressor, **kw), X, yr, devices=_par_devices())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/parallel_ensemble.py\", line 23, in fit_boosting\n    result = pool.map([('gbdt_fit', estimator,\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^\n        (X, y, dict(sample_weight=sample_weight, eval_set=eval_set)))])[0]\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/_parallel_pool.py\", line 358, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver gbdt_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.001050332997692749,
+    "stages": {
+     "repeat=1/train": 0.00027275001048110425
+    }
+   }
+  },
+  "par-gram-ols/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gram_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 11462, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 7319, in _\n    par = fit_gram_estimator(ml.LinearRegression(), X, yr, devices=_par_devices())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/parallel_classical.py\", line 108, in fit_gram_estimator\n    result = pool.map([('gram_fit', estimator, (data, y, kwargs))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/_parallel_pool.py\", line 358, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver gram_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.001156417012680322,
+    "stages": {
+     "repeat=1/train": 0.00025366697809658945
+    }
+   }
+  },
+  "par-gram-pca/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gram_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 11462, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 7333, in _\n    par = fit_gram_estimator(ml.PCA(n_components=4), X, devices=_par_devices())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/parallel_classical.py\", line 108, in fit_gram_estimator\n    result = pool.map([('gram_fit', estimator, (data, y, kwargs))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/_parallel_pool.py\", line 358, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver gram_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.001041792012983933,
+    "stages": {
+     "repeat=1/train": 0.0002782499941531569
+    }
+   }
+  },
+  "par-gram-tsvd/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver gram_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 11462, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 7349, in _\n    par = fit_gram_estimator(ml.TruncatedSVD(n_components=4), X, devices=_par_devices())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/parallel_classical.py\", line 108, in fit_gram_estimator\n    result = pool.map([('gram_fit', estimator, (data, y, kwargs))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/_parallel_pool.py\", line 358, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver gram_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0013642919948324561,
+    "stages": {
+     "repeat=1/train": 0.0003105000068899244
+    }
+   }
+  },
+  "par-cd-elasticnet/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver solver_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 11462, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 7365, in _\n    par = fit_coordinate_descent(ml.ElasticNet(**kw), X, yr, devices=_par_devices())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/parallel_classical.py\", line 206, in fit_coordinate_descent\n    result = pool.map([('solver_fit', estimator, (X, y))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/_parallel_pool.py\", line 358, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver solver_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0009885420149657875,
+    "stages": {
+     "repeat=1/train": 0.0001822920166887343
+    }
+   }
+  },
+  "par-svm-svr/base": {
+   "verdict": "REFUSED",
+   "error": "NotImplementedError: no CPU implementation of the cooperative multi-GPU driver svm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates\nTraceback (most recent call last):\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 11462, in _run_reference\n    p = LANES[name](ml, X, yc, yr, held[f].copy())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/tools/identity_break.py\", line 7381, in _\n    par = fit_svm(ml.SVR(**kw), X[:2000], yr[:2000], devices=_par_devices())\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/parallel_classical.py\", line 228, in fit_svm\n    result = pool.map([('svm_fit', estimator, (X, y))])[0]\n             ~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn/_parallel_pool.py\", line 358, in map\n    raise refusal\nNotImplementedError: no CPU implementation of the cooperative multi-GPU driver svm_fit yet: its shards are device row tiles, chunks or ranges inside the GPU binding, which no host binding restates",
+   "hashes": [],
+   "parts": [],
+   "timing": {
+    "total_seconds": 0.0008599589928053319,
+    "stages": {
+     "repeat=1/train": 0.00018524998449720442
+    }
+   }
+  },
+  "par-scaler-minmax/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "646b46cf73ead58e",
+    "646b46cf73ead58e"
+   ],
+   "parts": [
+    {
+     "data_min": "49da8fb3988a0d0b",
+     "data_max": "6eeef3b1b2c3c6a4",
+     "scale": "dd1b7a78f53f5fd9",
+     "min": "258a1c3e711f2ebe",
+     "transform": "938b0f32edff7e2f",
+     "inverse": "ad483f03ce295eb4"
+    },
+    {
+     "data_min": "49da8fb3988a0d0b",
+     "data_max": "6eeef3b1b2c3c6a4",
+     "scale": "dd1b7a78f53f5fd9",
+     "min": "258a1c3e711f2ebe",
+     "transform": "938b0f32edff7e2f",
+     "inverse": "ad483f03ce295eb4"
+    }
+   ],
+   "infer": [
+    "5b934842e164f80f",
+    "5b934842e164f80f"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "24956a7dff42ccef",
+    "24956a7dff42ccef"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "5b934842e164f80f",
+    "5b934842e164f80f"
+   ],
+   "batch": [
+    "bdcf978b59eaee06",
+    "bdcf978b59eaee06"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.1907885409891605,
+    "stages": {
+     "repeat=1/train": 0.6276583749859128,
+     "repeat=1/infer-save-reload": 0.00354850001167506,
+     "repeat=1/batch": 0.003971500002080575,
+     "repeat=1/batchgrad": 0.00033370801247656345,
+     "repeat=1/batchscale": 5.570799112319946e-05,
+     "repeat=1/ragged": 4.045901005156338e-05,
+     "repeat=1/stepfull": 4.266700125299394e-05,
+     "repeat=2/train": 0.5461639579734765,
+     "repeat=2/infer-save-reload": 0.0037874170229770243,
+     "repeat=2/batch": 0.004100499994819984,
+     "repeat=2/batchgrad": 0.0002661250182427466,
+     "repeat=2/batchscale": 5.258398596197367e-05,
+     "repeat=2/ragged": 6.258301436901093e-05,
+     "repeat=2/stepfull": 3.63329891115427e-05
+    }
+   }
+  },
+  "par-queries-nn/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "6869ae45e01fcb7a",
+    "6869ae45e01fcb7a"
+   ],
+   "parts": [
+    {
+     "dist": "3b60c40b1c624bbc",
+     "idx": "573b36fe45382a50"
+    },
+    {
+     "dist": "3b60c40b1c624bbc",
+     "idx": "573b36fe45382a50"
+    }
+   ],
+   "infer": [
+    "da53642fe53493ad",
+    "da53642fe53493ad"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "2262556d652b5187",
+    "2262556d652b5187"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "da53642fe53493ad",
+    "da53642fe53493ad"
+   ],
+   "batch": [
+    "da944e45126bd8e0",
+    "da944e45126bd8e0"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 2.0423854590044357,
+    "stages": {
+     "repeat=1/train": 0.20571695899707265,
+     "repeat=1/infer-save-reload": 0.40679491599439643,
+     "repeat=1/batch": 0.28780412502237596,
+     "repeat=1/batchgrad": 0.000152749998960644,
+     "repeat=1/batchscale": 4.1207997128367424e-05,
+     "repeat=1/ragged": 3.604099038057029e-05,
+     "repeat=1/stepfull": 3.341599949635565e-05,
+     "repeat=2/train": 0.1868892080092337,
+     "repeat=2/infer-save-reload": 0.6021213330095634,
+     "repeat=2/batch": 0.32735612502438016,
+     "repeat=2/batchgrad": 0.00022325001191347837,
+     "repeat=2/batchscale": 5.07919758092612e-05,
+     "repeat=2/ragged": 4.054198507219553e-05,
+     "repeat=2/stepfull": 5.574998795054853e-05
+    }
+   }
+  },
+  "par-ivf/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "82ac27da71d34ea9",
+    "82ac27da71d34ea9"
+   ],
+   "parts": [
+    {
+     "dist": "e48ee8a4655b5b3b",
+     "idx": "c60826edcafa9479",
+     "cand": "0230224a7da25e41",
+     "root_dist": "cdbf46f042cf7c81",
+     "root_idx": "3af05056f9ee6648",
+     "thin_dist": "dd9ce41f8d009de7",
+     "thin_idx": "ebaf7339ccbf2f80",
+     "thin_cand": "f27d25891589d047",
+     "flags": "b1e0e3b7b8fee07b"
+    },
+    {
+     "dist": "e48ee8a4655b5b3b",
+     "idx": "c60826edcafa9479",
+     "cand": "0230224a7da25e41",
+     "root_dist": "cdbf46f042cf7c81",
+     "root_idx": "3af05056f9ee6648",
+     "thin_dist": "dd9ce41f8d009de7",
+     "thin_idx": "ebaf7339ccbf2f80",
+     "thin_cand": "f27d25891589d047",
+     "flags": "b1e0e3b7b8fee07b"
+    }
+   ],
+   "infer": [
+    "fd6eed35b1338d17",
+    "fd6eed35b1338d17"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "dcfefe31adc21c6c",
+    "dcfefe31adc21c6c"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "fd6eed35b1338d17",
+    "fd6eed35b1338d17"
+   ],
+   "batch": [
+    "6baf3cfbde509312",
+    "6baf3cfbde509312"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state",
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 4.5459097499842755,
+    "stages": {
+     "repeat=1/train": 1.9292852919897996,
+     "repeat=1/infer-save-reload": 0.43063416599761695,
+     "repeat=1/batch": 0.0835070830071345,
+     "repeat=1/batchgrad": 6.445799954235554e-05,
+     "repeat=1/batchscale": 3.862500307150185e-05,
+     "repeat=1/ragged": 4.0583021473139524e-05,
+     "repeat=1/stepfull": 3.766699228435755e-05,
+     "repeat=2/train": 1.6379454169946257,
+     "repeat=2/infer-save-reload": 0.37947379099205136,
+     "repeat=2/batch": 0.08408512501046062,
+     "repeat=2/batchgrad": 5.324999801814556e-05,
+     "repeat=2/batchscale": 3.683401155285537e-05,
+     "repeat=2/ragged": 3.591598942875862e-05,
+     "repeat=2/stepfull": 3.199998172931373e-05
+    }
+   }
+  },
+  "par-gpc-fit/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "53f3a09fc600d61d",
+    "53f3a09fc600d61d"
+   ],
+   "parts": [
+    {
+     "L": "cf8752e79a59c592",
+     "pi": "3e4e62ab648dd40a",
+     "lml": "98bb97bbe4c450b5",
+     "three_L": "7d9c2e518ae98c75",
+     "three_lml": "f79f5b3ad939076f",
+     "flags": "d529dd94544bb118"
+    },
+    {
+     "L": "cf8752e79a59c592",
+     "pi": "3e4e62ab648dd40a",
+     "lml": "98bb97bbe4c450b5",
+     "three_L": "7d9c2e518ae98c75",
+     "three_lml": "f79f5b3ad939076f",
+     "flags": "d529dd94544bb118"
+    }
+   ],
+   "infer": [
+    "fc0b4c2f28c2e079",
+    "fc0b4c2f28c2e079"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "81b8bb9e635d8e83",
+    "81b8bb9e635d8e83"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "fc0b4c2f28c2e079",
+    "fc0b4c2f28c2e079"
+   ],
+   "batch": [
+    "b46f1f9043e091a8",
+    "b46f1f9043e091a8"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)",
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 3.122122417000355,
+    "stages": {
+     "repeat=1/train": 1.4636759999848437,
+     "repeat=1/infer-save-reload": 0.04020541699719615,
+     "repeat=1/batch": 0.0411432090040762,
+     "repeat=1/batchgrad": 5.9291982324793935e-05,
+     "repeat=1/batchscale": 3.225001273676753e-05,
+     "repeat=1/ragged": 3.341701813042164e-05,
+     "repeat=1/stepfull": 3.170897252857685e-05,
+     "repeat=2/train": 1.4916705409996212,
+     "repeat=2/infer-save-reload": 0.040563125017797574,
+     "repeat=2/batch": 0.04141775000607595,
+     "repeat=2/batchgrad": 6.279200897552073e-05,
+     "repeat=2/batchscale": 3.383299917913973e-05,
+     "repeat=2/ragged": 3.470800584182143e-05,
+     "repeat=2/stepfull": 3.341599949635565e-05
+    }
+   }
+  },
+  "par-gpc-predict/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2f1217bcae26e6a9",
+    "2f1217bcae26e6a9"
+   ],
+   "parts": [
+    {
+     "proba": "7fe0c77419444f56",
+     "labels": "f9e4bc6d4cc2b195",
+     "three_proba": "7e0d3baa2c0e0f2a",
+     "three_labels": "c587c32a823e3991",
+     "flags": "4a69320a0d048338"
+    },
+    {
+     "proba": "7fe0c77419444f56",
+     "labels": "f9e4bc6d4cc2b195",
+     "three_proba": "7e0d3baa2c0e0f2a",
+     "three_labels": "c587c32a823e3991",
+     "flags": "4a69320a0d048338"
+    }
+   ],
+   "infer": [
+    "fb0a0cfb1fee8dab",
+    "fb0a0cfb1fee8dab"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "81b8bb9e635d8e83",
+    "81b8bb9e635d8e83"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "fb0a0cfb1fee8dab",
+    "fb0a0cfb1fee8dab"
+   ],
+   "batch": [
+    "b46f1f9043e091a8",
+    "b46f1f9043e091a8"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)",
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 2.9842770830146037,
+    "stages": {
+     "repeat=1/train": 1.4205627500195988,
+     "repeat=1/infer-save-reload": 0.033917499997187406,
+     "repeat=1/batch": 0.0374077910091728,
+     "repeat=1/batchgrad": 5.970901111140847e-05,
+     "repeat=1/batchscale": 3.1790987122803926e-05,
+     "repeat=1/ragged": 3.458300489000976e-05,
+     "repeat=1/stepfull": 3.2334006391465664e-05,
+     "repeat=2/train": 1.4134464579983614,
+     "repeat=2/infer-save-reload": 0.03813133298535831,
+     "repeat=2/batch": 0.03784237499348819,
+     "repeat=2/batchgrad": 5.1125010941177607e-05,
+     "repeat=2/batchscale": 3.05419962387532e-05,
+     "repeat=2/ragged": 3.120797919109464e-05,
+     "repeat=2/stepfull": 2.9624992748722434e-05
+    }
+   }
+  },
+  "par-causal-lm/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5171c3ffeb9dd8f8",
+    "5171c3ffeb9dd8f8"
+   ],
+   "parts": [
+    {
+     "logits": "71b13186e4fa95f3",
+     "params": "bb88c3e24c41da72",
+     "flags": "1b93738cd9ef30df"
+    },
+    {
+     "logits": "71b13186e4fa95f3",
+     "params": "bb88c3e24c41da72",
+     "flags": "1b93738cd9ef30df"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "2d58207bcc498e7c",
+    "2d58207bcc498e7c"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)",
+    "n/a:driver-lane (the layer owners hold the state in their own worker processes; the single-device CausalLM twin, hf-causal-lm, carries the prefill-against-decode flag)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.045938416995341,
+    "stages": {
+     "repeat=1/train": 0.3667980419995729,
+     "repeat=1/infer-save-reload": 1.3583980035036802e-05,
+     "repeat=1/batch": 0.21587474999250844,
+     "repeat=1/batchgrad": 9.962500189431012e-05,
+     "repeat=1/batchscale": 2.9041984817013144e-05,
+     "repeat=1/ragged": 2.8125010430812836e-05,
+     "repeat=1/stepfull": 2.850001328624785e-05,
+     "repeat=2/train": 0.23695366698666476,
+     "repeat=2/infer-save-reload": 1.5375000657513738e-05,
+     "repeat=2/batch": 0.22526341598131694,
+     "repeat=2/batchgrad": 0.00011991700739599764,
+     "repeat=2/batchscale": 3.295901115052402e-05,
+     "repeat=2/ragged": 3.0750001315027475e-05,
+     "repeat=2/stepfull": 2.970799687318504e-05
+    }
+   }
+  },
+  "par-cross-val/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b42f6f50bae5b03c",
+    "b42f6f50bae5b03c"
+   ],
+   "parts": [
+    {
+     "scores": "9336dc0965e2ba0f",
+     "flags": "4a69320a0d048338"
+    },
+    {
+     "scores": "9336dc0965e2ba0f",
+     "flags": "4a69320a0d048338"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:fold-reduction (one score per fold over that fold's whole test block; a call with fewer rows is a different cross-validation, not the same one in a smaller batch)",
+    "n/a:fold-reduction (one score per fold over that fold's whole test block; a call with fewer rows is a different cross-validation, not the same one in a smaller batch)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward",
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis",
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)",
+    "n/a:no-decode-state (a cross-validation score and a Gaussian process classifier posterior have no sequence axis and no carried state)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.1510478339914698,
+    "stages": {
+     "repeat=1/train": 0.5604489170073066,
+     "repeat=1/infer-save-reload": 1.841600169427693e-05,
+     "repeat=1/batch": 0.0001176249934360385,
+     "repeat=1/batchgrad": 3.762499545700848e-05,
+     "repeat=1/batchscale": 2.8999987989664078e-05,
+     "repeat=1/ragged": 2.8291979106143117e-05,
+     "repeat=1/stepfull": 2.8375012334436178e-05,
+     "repeat=2/train": 0.5880550000001676,
+     "repeat=2/infer-save-reload": 1.4082994312047958e-05,
+     "repeat=2/batch": 0.0001374170242343098,
+     "repeat=2/batchgrad": 3.9417005609720945e-05,
+     "repeat=2/batchscale": 2.983398735523224e-05,
+     "repeat=2/ragged": 2.7709000278264284e-05,
+     "repeat=2/stepfull": 2.633300027810037e-05
+    }
+   }
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "par_driver_sabotage": false,
+ "lane_revisions": {
+  "tokenizer": "synthetic-vocab-1",
+  "gbdt-parametric-losses": "rows-1500-1",
+  "gbdt-nan-modes": "rows-1500-nan-in-split-columns-2",
+  "gbdt-lossguide-newtoncosine": "rows-1500-1",
+  "gbdt-pair-logit": "rows-1500-1",
+  "hdbscan": "rows-4000-1",
+  "hdbscan-leaf": "rows-2000-1",
+  "spectral": "rows-512-1",
+  "holtwinters": "obs-128-1",
+  "byte-lm": "steps-2-1",
+  "byte-lm-resident": "shape-l1-d16-ff32-1",
+  "samba": "steps-1-1",
+  "samba-untied-dropout-accum": "steps-3-1",
+  "mamba2-dtlimit": "seqlen-8-dtlimit-straddle-2",
+  "mamba3": "norms-near-one-1",
+  "transformer": "norms-near-one-1",
+  "transformer-window": "norms-near-one-1",
+  "umap": "transform-row-separable-1",
+  "par-graph-umap": "transform-row-separable-1"
+ },
+ "parts_collected": [
+  "batch",
+  "batchgrad",
+  "batchscale",
+  "ragged",
+  "rlpair",
+  "stepfull"
+ ],
+ "parts_omitted": [],
+ "partial_column": false,
+ "degenerate_lanes": [
+  "par-arima",
+  "par-boosting",
+  "par-boosting-clf",
+  "par-boosting-pointwise",
+  "par-boosting-reg",
+  "par-border-types",
+  "par-byte-lm",
+  "par-byte-lm-model-pool",
+  "par-byte-lm-offload",
+  "par-causal-lm",
+  "par-cd",
+  "par-cd-elasticnet",
+  "par-cholesky",
+  "par-cross-val",
+  "par-dbscan",
+  "par-feature-freq",
+  "par-forecast-arima",
+  "par-forecast-holtwinters",
+  "par-forest",
+  "par-forest-et",
+  "par-forest-et-clf",
+  "par-forest-pool",
+  "par-forest-reg",
+  "par-gmm",
+  "par-gp",
+  "par-gpc-fit",
+  "par-gpc-predict",
+  "par-gram",
+  "par-gram-ols",
+  "par-gram-pca",
+  "par-gram-tsvd",
+  "par-graph-agglomerative",
+  "par-graph-spectral",
+  "par-graph-umap",
+  "par-hdbscan",
+  "par-holtwinters",
+  "par-iforest",
+  "par-ivf",
+  "par-kernel-ridge",
+  "par-kmeans",
+  "par-logistic",
+  "par-mlp",
+  "par-nystroem",
+  "par-ordered",
+  "par-ordered-rmse",
+  "par-queries-kde",
+  "par-queries-knn",
+  "par-queries-nn",
+  "par-queries-radius",
+  "par-rbf-sampler",
+  "par-reference-knn",
+  "par-reference-knn-reg",
+  "par-resample",
+  "par-samba",
+  "par-samba-clip",
+  "par-scaler",
+  "par-scaler-minmax",
+  "par-svm",
+  "par-svm-svr"
+ ],
+ "degenerate_column": "cpu-host",
+ "batchgrad_protocol": {
+  "rows": {
+   "alone": 16,
+   "split": [
+    1,
+    8,
+    "n"
+   ]
+  },
+  "accum_splits": [
+   2,
+   4,
+   8
+  ],
+  "uneven_split": "n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+  "carry_splits": [
+   [
+    1,
+    8,
+    "n"
+   ],
+   "every 16"
+  ],
+  "seq": [
+   8,
+   64
+  ]
+ },
+ "batchgrad_sabotage": false,
+ "batchscale_protocol": {
+  "batches": [
+   1,
+   17,
+   64,
+   256
+  ],
+  "whole": 1024,
+  "long_l": 1024,
+  "prefixes": [
+   1,
+   7,
+   63,
+   64,
+   65,
+   127,
+   128,
+   129,
+   255,
+   256,
+   257,
+   511,
+   512,
+   513,
+   1023
+  ]
+ },
+ "batchscale_sabotage": false,
+ "ragged_protocol": {
+  "lengths": [
+   16,
+   1,
+   7,
+   9,
+   16,
+   3,
+   12,
+   15
+  ],
+  "long_lengths": [
+   300,
+   1,
+   65,
+   129,
+   257,
+   128
+  ],
+  "padding": "nan/vocab+7"
+ },
+ "ragged_sabotage": false,
+ "stepfull_protocol": {
+  "rows": 2,
+  "length": 16,
+  "full": "forward(x) from a zero state, one pass",
+  "stepped": "allocate_state then step(x_t, state) at every position",
+  "compared": "bitwise, position by position"
+ },
+ "stepfull_sabotage": false,
+ "host": {
+  "cpu_model": "Apple M4",
+  "arch": "arm64",
+  "target_cpu": "unrecorded",
+  "mojo_version": "unrecorded",
+  "python": "3.14.6",
+  "column": "cpu",
+  "routed": {
+   "_mojolearn": "_mojolearn_core_host",
+   "_mojolearn_linalg": "_mojolearn_linalg_host",
+   "_mojolearn_estimators": "_mojolearn_estimators_host",
+   "_mojolearn_metrics": "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing": "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa": "_mojolearn_tsa_host",
+   "_mojolearn_solver": "_mojolearn_solver_host",
+   "_mojolearn_svm": "_mojolearn_svm_host",
+   "_mojolearn_trees": "_mojolearn_trees_host",
+   "_mojolearn_rf": "_mojolearn_rf_host",
+   "_mojolearn_gp": "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods": "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture": "_mojolearn_mixture_host",
+   "_mojolearn_hdbscan": "_mojolearn_hdbscan_host",
+   "_mojolearn_gbdt": "_mojolearn_gbdt_host",
+   "_mojolearn_training": "_mojolearn_training_host",
+   "_mojolearn_resample": "_mojolearn_resample_host",
+   "_mojolearn_mamba": "_mojolearn_mamba_host",
+   "_mojolearn_arima": "_mojolearn_arima_host",
+   "_mojolearn_embedding": "_mojolearn_embedding_host",
+   "_mojolearn_ivf": "_mojolearn_ivf_host",
+   "_mojolearn_transformer": "_mojolearn_transformer_host"
+  },
+  "surface": "python/mojolearn/host_surface.py",
+  "declared": [
+   "_mojolearn_byte_lm_host",
+   "_mojolearn_forest_host",
+   "_mojolearn_tokenizer_host",
+   "_mojolearn_neural_host",
+   "_mojolearn_core_host",
+   "_mojolearn_linalg_host",
+   "_mojolearn_estimators_host",
+   "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa_host",
+   "_mojolearn_solver_host",
+   "_mojolearn_svm_host",
+   "_mojolearn_trees_host",
+   "_mojolearn_rf_host",
+   "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture_host",
+   "_mojolearn_mixture_infer_host",
+   "_mojolearn_hdbscan_host",
+   "_mojolearn_gp_infer_host",
+   "_mojolearn_hdbscan_infer_host",
+   "_mojolearn_gbdt_host",
+   "_mojolearn_training_host",
+   "_mojolearn_resample_host",
+   "_mojolearn_mamba_host",
+   "_mojolearn_arima_host",
+   "_mojolearn_embedding_host",
+   "_mojolearn_embedding_infer_host",
+   "_mojolearn_ivf_host",
+   "_mojolearn_ivf_search_host",
+   "_mojolearn_forecast_host",
+   "_mojolearn_transformer_host"
+  ],
+  "covered_lanes": [
+   "kernel-ridge-poly",
+   "kernel-ridge-sigmoid",
+   "kernel-ridge-laplacian",
+   "nystroem-poly",
+   "nystroem-sigmoid",
+   "nystroem-laplacian",
+   "par-rbf-sampler",
+   "select-d",
+   "gemm-pinned",
+   "kde",
+   "holtwinters",
+   "lasso",
+   "elasticnet",
+   "svc",
+   "agglomerative",
+   "et-clf",
+   "et-reg",
+   "iforest",
+   "knn",
+   "knn-clf",
+   "knn-reg",
+   "pca",
+   "pca-whiten",
+   "tsvd",
+   "ols",
+   "ridge",
+   "dbscan",
+   "kmeans",
+   "metrics",
+   "spectral",
+   "standard-scaler",
+   "minmax-scaler",
+   "logistic",
+   "rf-clf",
+   "rf-reg",
+   "kmeans-random",
+   "kmeans-array",
+   "kmeans-weighted",
+   "standard-scaler-no-mean",
+   "standard-scaler-no-std",
+   "minmax-scaler-clip",
+   "spectral-precomputed",
+   "gp",
+   "gp-matern12",
+   "gp-matern32",
+   "gp-matern52-ard",
+   "gp-normalize-y",
+   "gp-optimize",
+   "gp-optimize-restarts",
+   "gpc",
+   "gpc-multiclass",
+   "par-gpc-fit",
+   "par-gpc-predict",
+   "mamba1-decode-session",
+   "transformer-decode-session",
+   "par-causal-lm",
+   "par-cross-val",
+   "knn-sqeuclidean",
+   "knn-clf-distance",
+   "knn-reg-distance",
+   "gemm-transposed",
+   "linalg-qr",
+   "linalg-eigh",
+   "linalg-svdvals",
+   "dbscan-brute-l1",
+   "kde-tophat-sqeuclidean",
+   "kde-epanechnikov-l1",
+   "kde-exponential-chebyshev",
+   "kde-linear-cosine",
+   "kde-cosine-minkowski",
+   "kde-weighted",
+   "ols-no-intercept",
+   "ols-weighted",
+   "ridge-no-intercept",
+   "logistic-unpenalized-no-intercept",
+   "elasticnet-l2end-no-intercept",
+   "holtwinters-multiplicative",
+   "svc-linear",
+   "svc-poly",
+   "iforest-tuned",
+   "knn-manhattan",
+   "knn-chebyshev",
+   "knn-cosine",
+   "knn-minkowski-p3",
+   "knn-rbc",
+   "radius",
+   "radius-manhattan",
+   "radius-chebyshev",
+   "radius-minkowski-p3",
+   "dbscan-weighted",
+   "logistic-l1",
+   "logistic-elasticnet",
+   "logistic-multiclass",
+   "kpss",
+   "svr",
+   "svr-linear",
+   "pca-full-whiten",
+   "metrics-classification",
+   "metrics-fowlkes-mallows",
+   "metrics-homogeneity-completeness",
+   "gbdt-adapter-score-weighted",
+   "rf-score-weighted",
+   "mlp",
+   "gbdt-symmetric",
+   "gbdt-rmse",
+   "gbdt-depthwise",
+   "gbdt-lossguide",
+   "gbdt-nan-modes",
+   "gbdt-adapter-clf",
+   "gbdt-adapter-reg",
+   "gbdt-parametric-losses",
+   "gbdt-exact-mae",
+   "gbdt-lossguide-newtoncosine",
+   "gbdt-multiclass",
+   "gbdt-onevsall",
+   "gbdt-ordered-rmse",
+   "gbdt-border-types",
+   "gbdt-ordered",
+   "gbdt-ordered-bayesian-noise",
+   "gbdt-bfa-quantile",
+   "gbdt-catboost-defaults",
+   "gbdt-symmetric-eval",
+   "gbdt-feature-freq",
+   "gbdt-pointwise-l2-bayesian-eval",
+   "gbdt-categorical-ctr",
+   "gbdt-query-rmse",
+   "gbdt-pair-logit",
+   "gbdt-yeti-rank",
+   "arima",
+   "arima-011",
+   "arima-seasonal-c",
+   "arima-exog",
+   "arima-exog-seasonal",
+   "umap",
+   "kmeans-sqrt",
+   "kmeans-classic-pp",
+   "cross-val",
+   "bootstrap",
+   "permutation-test",
+   "monte-carlo",
+   "optim-sgd",
+   "optim-adam-clip",
+   "cross-entropy-arms",
+   "training-primitives",
+   "ordered-gradient-sum",
+   "cholesky",
+   "rbf-sampler",
+   "kernel-ridge",
+   "nystroem",
+   "gmm",
+   "gmm-random-init",
+   "hdbscan",
+   "hdbscan-leaf",
+   "rf-clf-entropy-log2-noboot",
+   "rf-clf-balanced-parallel",
+   "rf-reg-poisson",
+   "rf-reg-gamma-ig",
+   "et-clf-entropy-bestfirst",
+   "et-reg-bootstrap-parallel",
+   "mamba2",
+   "mamba2-dtlimit",
+   "mamba1",
+   "mamba3",
+   "transformer",
+   "transformer-window",
+   "samba",
+   "samba-untied-dropout-accum",
+   "byte-lm-host-infer",
+   "byte-lm-host-infer-threaded",
+   "byte-lm-host-train",
+   "language-model-config",
+   "par-scaler",
+   "par-scaler-minmax",
+   "par-arima",
+   "par-holtwinters",
+   "par-forecast-arima",
+   "par-forecast-holtwinters",
+   "par-queries-knn",
+   "par-queries-nn",
+   "par-queries-radius",
+   "par-queries-kde",
+   "par-reference-knn",
+   "par-reference-knn-reg",
+   "par-forest",
+   "par-forest-et",
+   "par-forest-et-clf",
+   "par-forest-reg",
+   "par-mlp",
+   "par-samba",
+   "par-samba-clip",
+   "embedding",
+   "embedding-sort",
+   "ivf",
+   "ivf-euclidean",
+   "par-ivf",
+   "ivf-extend",
+   "byte-lm",
+   "byte-lm-resident",
+   "gmm-sample",
+   "gmm-random-init-sample",
+   "gp-sample-y",
+   "gp-sample-y-normalize",
+   "tokenizer",
+   "bpe-trainer",
+   "bpe-vocabulary",
+   "tokenized-corpus",
+   "hf-checkpoint",
+   "hf-tokenizer",
+   "hf-causal-lm",
+   "gbdt-categorical-ctr-tables",
+   "gbdt-tensor-ctr-tables",
+   "gemm-bf16",
+   "gemm-int8",
+   "transformer-bf16w",
+   "transformer-int8w",
+   "mamba1-bf16w",
+   "mamba1-int8w",
+   "mamba2-bf16w",
+   "mamba2-int8w",
+   "mamba3-bf16w",
+   "mamba3-int8w",
+   "mlp-bf16w",
+   "mlp-int8w",
+   "samba-bf16w",
+   "samba-int8w",
+   "saved-model-host-infer",
+   "lowbit-conversions",
+   "grad-accumulation"
+  ],
+  "families": {
+   "_mojolearn_arima_host": {
+    "column": "cpu",
+    "sha256": "753e7c0dd23bc05879b21d39d89de143b45141b6352de03c5b519954c7793ab2",
+    "size": 380760,
+    "sabotage": false
+   },
+   "_mojolearn_byte_lm_host": {
+    "column": "cpu",
+    "sha256": "3ef0672c802a23dd7e20cdb354c406a68593f10d16fdb817eb4a6ee284f2f3dc",
+    "size": 543992,
+    "sabotage": false
+   },
+   "_mojolearn_core_host": {
+    "column": "cpu",
+    "sha256": "5aeaf1da1fd71c5f6a50fa3702f0983ca85921098a8637452b74265a186feb29",
+    "size": 935496,
+    "sabotage": false
+   },
+   "_mojolearn_embedding_host": {
+    "column": "cpu",
+    "sha256": "b9ce6903394d6a0105c9266c29cb192cdc6f88aa8edc0f471047a83f61478fc0",
+    "size": 229344,
+    "sabotage": false
+   },
+   "_mojolearn_embedding_infer_host": {
+    "column": "cpu",
+    "sha256": "7ab64772ea2bafb41eb1803ba5b07eacb556792245046ec9b79fb22e9aba0f6e",
+    "size": 209184,
+    "sabotage": false
+   },
+   "_mojolearn_estimators_host": {
+    "column": "cpu",
+    "sha256": "75fb3744a0fd168cc297a3018bed750aa9f3bc39a11827b9b3899c602cc051aa",
+    "size": 687536,
+    "sabotage": false
+   },
+   "_mojolearn_forecast_host": {
+    "column": "cpu",
+    "sha256": "ac2b92529e5bd01203ff5ec5bc82d0f4bb55d0d3e88fe113f25854627f74a709",
+    "size": 364760,
+    "sabotage": false
+   },
+   "_mojolearn_forest_host": {
+    "column": "cpu",
+    "sha256": "e8ec0f30ce19241d08705b61cdd5b0bad9f9ce8a872a27039011659b550b6367",
+    "size": 500696,
+    "sabotage": true
+   },
+   "_mojolearn_gbdt_host": {
+    "column": "cpu",
+    "sha256": "f1480740b04ade8f8345b6c0053223cc9527788d8d780d751d860cff9dabbf3e",
+    "size": 1474536,
+    "sabotage": false
+   },
+   "_mojolearn_gp_host": {
+    "column": "cpu",
+    "sha256": "23b3099a37b5851f08b107b1d407c5def78740b612c14b49e639f24fdcb2fd49",
+    "size": 486600,
+    "sabotage": false
+   },
+   "_mojolearn_gp_infer_host": {
+    "column": "cpu",
+    "sha256": "f3927fb7120fd885baa725f8e8a9a5c401dd3b9c80a0980b5676e65ddf9e1231",
+    "size": 323544,
+    "sabotage": false
+   },
+   "_mojolearn_hdbscan_host": {
+    "column": "cpu",
+    "sha256": "a89ee6b96c83a410bdbb977b1647dc4f3be03c0b59eb4a625a0a6e567e9f1635",
+    "size": 450824,
+    "sabotage": false
+   },
+   "_mojolearn_hdbscan_infer_host": {
+    "column": "cpu",
+    "sha256": "d16c3eb43912f160aab8db165fddf2d445e8139832d4ccc01a2373960cea96d6",
+    "size": 312880,
+    "sabotage": false
+   },
+   "_mojolearn_ivf_host": {
+    "column": "cpu",
+    "sha256": "d90dae2d18cb1e6584be7966cf89dab00a40efd6b821f1fd3c09b89af6e53486",
+    "size": 455080,
+    "sabotage": false
+   },
+   "_mojolearn_ivf_search_host": {
+    "column": "cpu",
+    "sha256": "1fdd492c56d5d80848ef729ff279271b3de4a995043564e4006bb212e0d82378",
+    "size": 290960,
+    "sabotage": false
+   },
+   "_mojolearn_kernel_methods_host": {
+    "column": "cpu",
+    "sha256": "14a28be962ef4a13f68c262ce9927f2c54ead531656a50d248ee8457479ca062",
+    "size": 377520,
+    "sabotage": false
+   },
+   "_mojolearn_linalg_host": {
+    "column": "cpu",
+    "sha256": "cc5cfd01ddb497d16afb3723392f1e56aa69a0cfa18dced572e9aaec69d10436",
+    "size": 349992,
+    "sabotage": false
+   },
+   "_mojolearn_mamba_host": {
+    "column": "cpu",
+    "sha256": "f36418ca1a8c44407b77fddcc255f5c4985e50f3d0ca5ab1b4f02522893d76b3",
+    "size": 1075032,
+    "sabotage": false
+   },
+   "_mojolearn_metrics_host": {
+    "column": "cpu",
+    "sha256": "f76cb6b0e321f7c2f02dc37f7c2d15bd4fdf0030677bb1eb923350f4f9b924f4",
+    "size": 817944,
+    "sabotage": false
+   },
+   "_mojolearn_mixture_host": {
+    "column": "cpu",
+    "sha256": "0ae29310d0d935586581d2633fcbf9baa65dc1d1f7d7cb70a82ba22a00e553b6",
+    "size": 439672,
+    "sabotage": false
+   },
+   "_mojolearn_mixture_infer_host": {
+    "column": "cpu",
+    "sha256": "1b0ccf8abd8b2d903abaa96dd70e30b66baebc31d1aa1dbe4bb4c3d4cc44b50a",
+    "size": 277312,
+    "sabotage": false
+   },
+   "_mojolearn_neural_host": {
+    "column": "cpu",
+    "sha256": "ebe21bb81ea07b3b05b8d203ba04d4bb0c3e9fc92ee93985e0153b7bcbcab319",
+    "size": 642168,
+    "sabotage": false
+   },
+   "_mojolearn_preprocessing_host": {
+    "column": "cpu",
+    "sha256": "3a9cf319bb6fc6466d29c4e2e171c1578243f3f1db5ef7b552d9238232fdec81",
+    "size": 264800,
+    "sabotage": false
+   },
+   "_mojolearn_resample_host": {
+    "column": "cpu",
+    "sha256": "367e663d3911208254e86ae46ed746349bed0bc8af813613a61136e190fc09c8",
+    "size": 338424,
+    "sabotage": false
+   },
+   "_mojolearn_rf_host": {
+    "column": "cpu",
+    "sha256": "269d5c6cde7088bdb51c5bfcdd720b69a5bb64996f19b91809328a5ebdaa9bd2",
+    "size": 554744,
+    "sabotage": true
+   },
+   "_mojolearn_solver_host": {
+    "column": "cpu",
+    "sha256": "56106666a3bb64e2031a0487b5c59dca40caca5925d37a1073928fd3d2016376",
+    "size": 291448,
+    "sabotage": false
+   },
+   "_mojolearn_svm_host": {
+    "column": "cpu",
+    "sha256": "70b11f3704442aed55f0dec0058606d75937fc16ca3f074ee138aa394718daab",
+    "size": 413528,
+    "sabotage": false
+   },
+   "_mojolearn_tokenizer_host": {
+    "column": "cpu",
+    "sha256": "deb02e799e18724d32118e5fc54ea81e6139f26cf20f10d1a16e0a388262edd1",
+    "size": 461520,
+    "sabotage": false
+   },
+   "_mojolearn_training_host": {
+    "column": "cpu",
+    "sha256": "ca2a1995bc0aca2b5fda244bbf12f77ddd2085ed93c37b59e8f7f192cf538c4c",
+    "size": 443144,
+    "sabotage": false
+   },
+   "_mojolearn_transformer_host": {
+    "column": "cpu",
+    "sha256": "d014beaa49740e9e115a79d050830f46771b44e67233bb4dd2b3bda56f333a9f",
+    "size": 424784,
+    "sabotage": false
+   },
+   "_mojolearn_trees_host": {
+    "column": "cpu",
+    "sha256": "098ef71c4d7a704ff159114c216c42525d10854e346ba994e31a4c67d5008c33",
+    "size": 540840,
+    "sabotage": true
+   },
+   "_mojolearn_tsa_host": {
+    "column": "cpu",
+    "sha256": "45cd1322413f67dbe102640cc07744372bb9b58ce3830da442565cb518ecb6e3",
+    "size": 340888,
+    "sabotage": false
+   }
+  }
+ },
+ "package": {
+  "version": "0.8.8",
+  "package_dir": "/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a6b77ff10eaeabf1e/python/mojolearn",
+  "numpy": "2.4.4",
+  "python": "3.14.6",
+  "par_devices": "0",
+  "bindings": []
+ },
+ "resume_signature": {
+  "schema": 1,
+  "source_sha256": "bdd240a55906b7666002655867db3c6296f346c27e2a4ab75d797a24b7657de7",
+  "options": {
+   "require_backend": null,
+   "require_cpu": false,
+   "fail_on_refused": false,
+   "jobs": 1,
+   "lanes": "par-arima,par-boosting,par-boosting-clf,par-boosting-pointwise,par-boosting-reg,par-border-types,par-byte-lm,par-byte-lm-model-pool,par-byte-lm-offload,par-causal-lm,par-cd,par-cd-elasticnet,par-cholesky,par-cross-val,par-dbscan,par-feature-freq,par-forecast-arima,par-forecast-holtwinters,par-forest,par-forest-et,par-forest-et-clf,par-forest-pool,par-forest-reg,par-gmm,par-gp,par-gpc-fit,par-gpc-predict,par-gram,par-gram-ols,par-gram-pca,par-gram-tsvd,par-graph-agglomerative,par-graph-spectral,par-graph-umap,par-hdbscan,par-holtwinters,par-iforest,par-ivf,par-kernel-ridge,par-kmeans,par-logistic,par-mlp,par-nystroem,par-ordered,par-ordered-rmse,par-queries-kde,par-queries-knn,par-queries-nn,par-queries-radius,par-rbf-sampler,par-reference-knn,par-reference-knn-reg,par-resample,par-samba,par-samba-clip,par-scaler,par-scaler-minmax,par-svm,par-svm-svr",
+   "skip": "",
+   "fixtures": "base",
+   "repeats": 2,
+   "vendor": null,
+   "allow_fast": false,
+   "batch_alone": 16,
+   "partial_column": "",
+   "no_batch": false,
+   "no_rlpair": false,
+   "batch_grad": false,
+   "batch_scale": false,
+   "ragged": false,
+   "step_full": false,
+   "diff": null,
+   "require_columns": 0,
+   "owed_json": "",
+   "merge": null,
+   "allow_separate_builds": false
+  },
+  "environment_sha256": "ce5920e89dcfa648dc1fea83f8dc802df6f9e6b8e2586dc7eb700bae7595fcda",
+  "provenance": {
+   "commit": "b3e4c91d18a379cf24626a5c9bc5932c14458196",
+   "mode": "identical",
+   "vendor": "cpu-apple-m4",
+   "platform": "macOS-26.5.2-arm64-arm-64bit-Mach-O",
+   "python": "3.14.6",
+   "numpy": "2.4.4",
+   "fixtures": {
+    "base": {
+     "X": "b5b0a0005efa3788",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "308c22120b664e5b"
+    }
+   },
+   "heldout": {
+    "base": {
+     "X": "d4de6b4eb682c465"
+    }
+   }
+  }
+ }
+}
