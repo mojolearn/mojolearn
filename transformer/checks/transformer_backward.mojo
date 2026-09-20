@@ -534,6 +534,34 @@ def bwd_mul_kernel(
     )
 
 
+def bwd_mul2_kernel(
+    dst0: MutPointer[Float32, MutAnyOrigin],
+    dst1: MutPointer[Float32, MutAnyOrigin],
+    a: MutPointer[Float32, MutAnyOrigin],
+    b0: MutPointer[Float32, MutAnyOrigin],
+    b1: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """S21's two independent products in one traversal and one launch.
+
+    Each destination keeps `bwd_mul_kernel`'s exact one-cell spelling.  The
+    shared input load is a bit copy and neither product feeds the other, so
+    this changes only scheduling and memory traffic, not either arithmetic
+    DAG or its order.
+    """
+    var n = Int(n_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= n:
+        return
+    var av = ftz(a.unsafe_load(i))
+    dst0.unsafe_store(
+        i, ftz(pinned_mul(av, ftz(b0.unsafe_load(i))))
+    )
+    dst1.unsafe_store(
+        i, ftz(pinned_mul(av, ftz(b1.unsafe_load(i))))
+    )
+
+
 def bwd_scale_kernel(
     dst: MutPointer[Float32, MutAnyOrigin],
     src: MutPointer[Float32, MutAnyOrigin],
@@ -2897,18 +2925,11 @@ def llama_decoder_layer_backward_device(
     # STAGE 4-5. S21's backward, two `pinned_mul`s. ROUTING.
     # =====================================================================
     step_count_launch()
-    ctx.enqueue_function[bwd_mul_kernel](
+    ctx.enqueue_function[bwd_mul2_kernel](
         bst.d_silu_out.unsafe_ptr(),
-        bst.d_mlp_gated.unsafe_ptr(),
-        fwd.up_proj.unsafe_ptr(),
-        Int32(m * it),
-        grid_dim=(_grid(m * it), 1, 1),
-        block_dim=(BWD_TPB, 1, 1),
-    )
-    step_count_launch()
-    ctx.enqueue_function[bwd_mul_kernel](
         bst.d_up_proj_out.unsafe_ptr(),
         bst.d_mlp_gated.unsafe_ptr(),
+        fwd.up_proj.unsafe_ptr(),
         fwd.silu_out.unsafe_ptr(),
         Int32(m * it),
         grid_dim=(_grid(m * it), 1, 1),
