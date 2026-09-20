@@ -49,6 +49,7 @@ def run(ctx: DeviceContext, name: String, m: Int, n: Int, k: Int) raises:
     var forced_text = String(getenv("MOJOLEARN_PROD_GEMM_PLAN"))
     if forced_text.byte_length() > 0:
         forced = Int(forced_text)
+    var baseline_shipped = String(getenv("MOJOLEARN_PROD_GEMM_BASELINE_SHIPPED")) == "1"
     var a = ctx.enqueue_create_buffer[DType.float32](m * k)
     var b = ctx.enqueue_create_buffer[DType.float32](n * k)
     var c = ctx.enqueue_create_buffer[DType.float32](m * n)
@@ -62,7 +63,10 @@ def run(ctx: DeviceContext, name: String, m: Int, n: Int, k: Int) raises:
         grid_dim=((m * k + 255) // 256, 1, 1), block_dim=(256, 1, 1))
     ctx.enqueue_function[fill_kernel](b.unsafe_ptr(), Int32(n * k), UInt32(31),
         grid_dim=((n * k + 255) // 256, 1, 1), block_dim=(256, 1, 1))
-    identical_gemm_with_plan(ctx, cref, a, b, ws, m, n, k, OP_NT, 10)
+    if baseline_shipped:
+        identical_gemm_into(ctx, cref, a, b, ws, m, n, k, OP_NT)
+    else:
+        identical_gemm_with_plan(ctx, cref, a, b, ws, m, n, k, OP_NT, 10)
     if forced >= 0:
         identical_gemm_with_plan(ctx, c, a, b, ws, m, n, k, OP_NT, forced)
     else:
@@ -80,7 +84,10 @@ def run(ctx: DeviceContext, name: String, m: Int, n: Int, k: Int) raises:
                 else:
                     identical_gemm_into(ctx, c, a, b, ws, m, n, k, OP_NT)
             else:
-                identical_gemm_with_plan(ctx, c, a, b, ws, m, n, k, OP_NT, 10)
+                if baseline_shipped:
+                    identical_gemm_into(ctx, c, a, b, ws, m, n, k, OP_NT)
+                else:
+                    identical_gemm_with_plan(ctx, c, a, b, ws, m, n, k, OP_NT, 10)
             ctx.synchronize()
             if candidate:
                 samples.append(perf_counter_ns() - t0)
@@ -99,7 +106,8 @@ def run(ctx: DeviceContext, name: String, m: Int, n: Int, k: Int) raises:
     print("PROD_GEMM", name, "m", m, "n", n, "k", k,
           "plan", gemm_plan_name(forced if forced >= 0 else choose_gemm_plan(m, n, k)),
           "workspace_floats", ws_n, "output_mib", Float64(m*n*4)/1048576.0,
-          "baseline_plan10_ns", baseline_samples, "samples_ns", samples,
+          "baseline", "shipped" if baseline_shipped else "plan10",
+          "baseline_ns", baseline_samples, "samples_ns", samples,
           "hash", hd.unsafe_ptr().unsafe_load(0),
           "mismatches_vs_plan10", hm.unsafe_ptr().unsafe_load(0))
     _ = a^; _ = b^; _ = c^; _ = cref^; _ = ws^; _ = dh^; _ = dm^; _ = hd^; _ = hm^

@@ -1,0 +1,15 @@
+1277 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x701940000000, nodemask=1)
+1277 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x701980000000, nodemask=1)
+1277 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7019c0000000, nodemask=1)
+1277 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x701a00000000, nodemask=1)
+1277 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x701a40000000, nodemask=1)
+1408 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x190b40000000, nodemask=2)
+{"shards": 2, "step": 1, "seconds": 13.133323515765369, "tokens_per_second": 311.8784057274704}
+{"shards": 2, "step": 2, "seconds": 0.33641890808939934, "tokens_per_second": 12175.296636155588}
+{"shards": 2, "step": 3, "seconds": 0.34117912594228983, "tokens_per_second": 12005.423803954627}
+1277 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x701a80000000, nodemask=1)
+1277 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x701ac0000000, nodemask=1)
+1277 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x701b00000000, nodemask=1)
+{
+ "2": 12005.423803954627
+}

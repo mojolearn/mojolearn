@@ -844,7 +844,13 @@ _QN_OPT_RETCODE = {0: "OPT_SUCCESS", 1: "OPT_NUMERIC_ERROR",
 
 #: `glm/impl/linear_model/qn.mojo`'s ids, the 14th `qn_fit` field.
 _QN_LOSS_LOGISTIC = 0
+_QN_LOSS_SQUARED = 1
 _QN_LOSS_SOFTMAX = 2
+_QN_LOSS_SVC_L1 = 3
+_QN_LOSS_SVC_L2 = 4
+_QN_LOSS_SVR_L1 = 5
+_QN_LOSS_SVR_L2 = 6
+_QN_LOSS_ABS = 7
 
 
 def _coef_from_w(w, cols, n_targets, fit_intercept):
@@ -1241,3 +1247,142 @@ class LogisticRegression(NumericModeMixin):
         obj.coef_, obj.intercept_ = _coef_from_w(w, cols, n_targets, obj.fit_intercept)
         obj.n_features_in_ = cols
         return obj
+
+
+def _qn_fit_one_target(est, x, y_enc, n_classes, loss, l1, l2, grad_tol,
+                       change_tol, svr_eps=0.0):
+    """One `qn_fit` call on a one-target loss (the 15-field form): the
+    fitted `(n_features + fit_intercept,)` float32 block, `num_iters`, the
+    objective and the OPT_RETCODE. `est` supplies the solver fields."""
+    rows, cols = x.shape
+    w = zeros((cols + (1 if est.fit_intercept else 0),), "<f4")
+    info = zeros((2,), "<f4")
+    n_iter = est._bind("_mojolearn_estimators").qn_fit(
+        addr_ro(x, name="X"), addr_ro(y_enc, name="y"),
+        addr(w, name="coef_"), addr(info, name="info"),
+        [rows, cols, n_classes,
+         float(l1), float(l2), float(grad_tol), float(change_tol),
+         int(est.max_iter), int(est.linesearch_max_iter),
+         int(est.lbfgs_memory), 1 if est.fit_intercept else 0,
+         1 if est.penalty_normalized else 0, 0, int(loss), float(svr_eps)],
+    )
+    return w, int(n_iter), float(info[0]), int(info[1])
+
+
+def _qn_scores(est, X, w, n_targets=1):
+    """`qn_decision_function` on a fitted block: `(n,)` float32 for one
+    target, `(n, n_targets)` for the column-major one-vs-rest block."""
+    x, _ = as_f32_c(X, ndim=2, name="X")
+    if x.shape[1] != est.n_features_in_:
+        raise ValueError(f"mojolearn {type(est).__name__} feature count differs from fit")
+    params = [x.shape[0], x.shape[1], 1 if est.fit_intercept else 0]
+    shape = (x.shape[0],)
+    if n_targets > 1:
+        params.append(n_targets)
+        shape = (x.shape[0], n_targets)
+    out = empty(shape, "<f4")
+    est._bind("_mojolearn_estimators").qn_decision_function(
+        addr_ro(x, name="X"), addr_ro(w, name="coef_"),
+        addr(out, name="scores"), params,
+    )
+    return out
+
+
+def _check_qn_solver_fields(name, tol, max_iter, linesearch_max_iter, lbfgs_memory):
+    if not tol > 0:
+        raise ValueError(f"mojolearn {name}: tol must be positive, got {tol}")
+    for field, value in (("max_iter", max_iter),
+                         ("linesearch_max_iter", linesearch_max_iter),
+                         ("lbfgs_memory", lbfgs_memory)):
+        if int(value) != value or value < 1:
+            raise ValueError(f"mojolearn {name}: {field} must be a positive integer, got {value}")
+
+
+class QNRegressor(NumericModeMixin):
+    """Linear regression on the squared or the absolute loss, solved by the
+    quasi-Newton solver `LogisticRegression` uses.
+
+    Reference: `cuml.solvers.QN` with `loss='l2'` (squared) and `loss='l1'`
+    (absolute), `cuml/cpp/src/glm/qn/glm_linear.cuh`; the Mojo
+    implementation is `glm/impl/qn/glm_linear.mojo` (DEVIATION 707). The
+    objective is `mean_i lz(y_i, x_i w + b) + l1 ||w||_1 + (l2 / 2) ||w||^2`
+    with `lz = (z - y)^2 / 2` or `|z - y|`, both strengths divided by `n`
+    when `penalty_normalized`. `l1_strength != 0` selects OWL-QN, as it
+    does for `LogisticRegression`. The intercept is a solver parameter and
+    is not penalized.
+
+        loss            'squared_error' or 'absolute_error'
+        l1_strength, l2_strength   honored, non-negative
+        fit_intercept, max_iter, tol, delta, linesearch_max_iter,
+        lbfgs_memory, penalty_normalized   honored; grad_tol = tol,
+                        change_tol = delta if given else tol * 0.01
+                        (qn.pyx:504-506)
+        warm_start      refused   w0 = 0 always
+        sample_weight   refused   not implemented (glm/NOT_IMPLEMENTED.tsv)
+
+    OUTPUTS: `coef_` (n_features,) float32, `intercept_` a float,
+    `n_iter_`, `objective_`, `retcode_` as on `LogisticRegression`.
+    """
+
+    _BINDING = "_mojolearn_estimators"
+    _LOSSES = {"squared_error": _QN_LOSS_SQUARED, "absolute_error": _QN_LOSS_ABS}
+
+    def __init__(self, *, loss="squared_error", fit_intercept=True,
+                 l1_strength=0.0, l2_strength=0.0, max_iter=1000, tol=1e-4,
+                 delta=None, linesearch_max_iter=50, lbfgs_memory=5,
+                 warm_start=False, penalty_normalized=True):
+        if loss not in self._LOSSES:
+            raise ValueError(
+                f"Expected loss to be one of {list(self._LOSSES)}, got {loss!r}")
+        if warm_start:
+            raise NotImplementedError(
+                "mojolearn QNRegressor: warm_start is not implemented (the "
+                "solver starts from w0 = 0)")
+        if l1_strength < 0 or l2_strength < 0:
+            raise ValueError(
+                "mojolearn QNRegressor: l1_strength and l2_strength must be "
+                f"non-negative, got {l1_strength} and {l2_strength}")
+        if delta is not None and delta < 0:
+            raise ValueError(f"mojolearn QNRegressor: delta must be non-negative, got {delta}")
+        _check_qn_solver_fields("QNRegressor", tol, max_iter, linesearch_max_iter, lbfgs_memory)
+        self.loss = loss
+        self.fit_intercept = fit_intercept
+        self.l1_strength = l1_strength
+        self.l2_strength = l2_strength
+        self.max_iter = max_iter
+        self.tol = tol
+        self.delta = delta
+        self.linesearch_max_iter = linesearch_max_iter
+        self.lbfgs_memory = lbfgs_memory
+        self.warm_start = False
+        self.penalty_normalized = penalty_normalized
+
+    def fit(self, X, y, sample_weight=None):
+        if sample_weight is not None:
+            raise NotImplementedError(
+                "mojolearn QNRegressor: sample_weight is not implemented "
+                "(GLMBase::add_sample_weights, glm_base.cuh:115; "
+                "glm/NOT_IMPLEMENTED.tsv)")
+        x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
+        rows, cols = x.shape
+        t = _target_1d(y, rows, "mojolearn QNRegressor requires a 1-D y",
+                       "mojolearn QNRegressor X and y lengths differ")
+        change_tol = self.delta if self.delta is not None else self.tol * 0.01
+        w, n_iter, self.objective_, self.retcode_ = _qn_fit_one_target(
+            self, x, t, 1, self._LOSSES[self.loss], self.l1_strength,
+            self.l2_strength, self.tol, change_tol)
+        self._w = w
+        self.coef_ = w[:cols]
+        self.intercept_ = float(w[cols]) if self.fit_intercept else 0.0
+        self.n_iter_ = Array.from_list([n_iter], "<i8")
+        self.n_features_in_ = cols
+        return self
+
+    def predict(self, X):
+        if not hasattr(self, "_w"):
+            raise ValueError("mojolearn QNRegressor: call fit before predict")
+        return _qn_scores(self, X, self._w)
+
+    def score(self, X, y):
+        """R^2 on the host, as `LinearRegression.score`."""
+        return _r2_host(self.predict(X), y)
