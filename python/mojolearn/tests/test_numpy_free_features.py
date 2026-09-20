@@ -58,6 +58,35 @@ def test_token_payload_and_mapped_batches_match_independent_oracle(tmp_path):
     assert actual[0].tobytes() == np.stack([oracle[s:s + 4] for s in (0, 3, 6)]).tobytes()
 
 
+def test_token_batch_prefetch_is_ordered_bounded_and_propagates(monkeypatch, tmp_path):
+    data = b'abcdefghijklmnopqrstuvwxyz\n'
+    ranges = {'train_range': [0, len(data)]}
+    identity = {'schema': 'test-vocabulary', 'sha256': 'b' * 64, 'n_vocab': 1024}
+
+    class Tokenizer:
+        def encode_batch(self, documents):
+            return [[value + 256 for value in doc] for doc in documents]
+
+    lm_corpus._tokenize(data, {'sha256': hashlib.sha256(data).hexdigest()},
+                       ranges, Tokenizer(), identity, tmp_path, 8, 2)
+    batches = lm_corpus.TokenBatches(tmp_path, batch=2, length=4)
+    expected = [(step, batches.ids(step).tobytes()) for step in range(3, 10)]
+    actual = [(step, ids.tobytes()) for step, ids in batches.prefetch(3, 7, depth=2)]
+    assert actual == expected
+    for args in ((-1, 1, 2), (0, -1, 2), (0, 1, 0), (0, 1, True)):
+        with pytest.raises(ValueError):
+            list(batches.prefetch(args[0], args[1], depth=args[2]))
+
+    original = batches.ids
+    def fail_at_five(step):
+        if step == 5:
+            raise RuntimeError('prefetch-step-five')
+        return original(step)
+    monkeypatch.setattr(batches, 'ids', fail_at_five)
+    with pytest.raises(RuntimeError, match='prefetch-step-five'):
+        list(batches.prefetch(3, 7, depth=2))
+
+
 @pytest.mark.parametrize('shard_rows', [1, 3, 20])
 @pytest.mark.parametrize('fault', [None, 'width', 'missing', 'worker'])
 def test_parallel_rbf_copy_order_and_cleanup(monkeypatch, shard_rows, fault):
