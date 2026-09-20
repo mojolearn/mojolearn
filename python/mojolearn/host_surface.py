@@ -3204,14 +3204,9 @@ PUBLIC_PENDING_LANES = {
     # of all nine fixtures, from 2026-09-19_vendor-class-gaps (@0845c6de7)
     # and 2026-09-19_apple-column-gaps (@ef8c2b311) -- so nothing static holds
     # them and their reason is the watched CPU-only run.
-    # `saved-model-host-infer` gained NOTHING but the CPU column it already
-    # had: intersected over every part it rests on `cpu` ALONE, one witness,
-    # a number nothing has ever reproduced. That is `one column`, not
-    # `unwatched`, and test_host_surface checks the difference both ways --
-    # it fails if a lane held here gains a second class and if one held as
-    # `unwatched` has only one. What it owes is a GPU column, which is the
-    # one thing on this list that needs hardware.
-    "saved-model-host-infer": "one column",
+    # Fresh source-built CPU and Metal columns now agree on all nine
+    # saved-model-host-infer fixtures (2026-09-20_saved-host-refresh).
+    # They supersede the old single CPU column's stale GBDT binding values.
 
     # lane/models-namespace-lanes (2026-09-19). The three `mojolearn.models`
     # lanes joined the linalg, tokenizer and neural families' `training_lanes`
