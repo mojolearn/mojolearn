@@ -67,6 +67,31 @@ So: **four arms watched firing; zero of them creditable as `seen(build)`.**
 Anyone reconciling this record against the census should expect that and not
 go looking for the missing credit.
 
+## The old solo-re-run selector would have dropped every one of them
+
+`sab_diff_two.log` in this directory is the measurement. Run both selectors
+over it:
+
+    shipped  grep -E 'DIVERGENT|MOVED'   ->  (nothing)
+    positive awk selector                ->  par-cholesky par-gmm par-hdbscan
+                                             par-kernel-ridge par-resample
+
+**Zero against five.** The four arms that fired, plus the one lane with a
+build problem worth knowing about, were all invisible to the pattern the
+script shipped with this morning, because every one of them reads `REFUSED`
+or `ONE-COLUMN` and neither word is in `DIVERGENT|MOVED`. A leg that relied on
+its own `DISAGREEING LANES` line would have reported this run as finding
+nothing at all.
+
+The same comparison on `leg3b-par-two-device-INCONCLUSIVE/par_diff.log` is
+zero against three.
+
+`tools/gap_column_leg.sh` and `tools/two_device_par_class_amd_leg.sh` now
+carry the same positive selector: select a lane UNLESS its verdict is
+`IDENTICAL xN`, `N/A` or `NOT-COMPARED`. A denylist of failure verdicts — which
+is what the first fix here was — has the same defect one size larger, since a
+verdict added later is dropped again exactly as `ONE-COLUMN` was.
+
 ## What is still not known
 
 * Whether `MOJOLEARN_HIERARCHY_PARALLEL_SABOTAGE` reaches
