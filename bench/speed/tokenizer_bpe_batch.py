@@ -63,7 +63,8 @@ def main():
     elapsed.sort()
     digest = hashlib.sha256(ids[:total].tobytes() + counts.tobytes()).hexdigest()
     print(f"bytes={len(text)} documents={len(documents)} ids={total} "
-          f"median_s={elapsed[len(elapsed) // 2]:.6f} sha256={digest}")
+          f"median_s={elapsed[len(elapsed) // 2]:.6f} samples_s="
+          f"{','.join(f'{sample:.6f}' for sample in elapsed)} sha256={digest}")
 
 
 if __name__ == "__main__":

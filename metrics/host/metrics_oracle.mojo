@@ -530,6 +530,50 @@ def host_weighted_accuracy(
     return ftz(identical_div(sn, sd))
 
 
+def host_weighted_accuracy_ptr(
+    y_true: MutPointer[Int32, MutUntrackedOrigin],
+    y_pred: MutPointer[Int32, MutUntrackedOrigin],
+    w: MutPointer[Float32, MutUntrackedOrigin],
+    n: Int,
+) raises -> Float32:
+    """Pointer/slab spelling with the pinned tree unchanged."""
+    if n <= 0:
+        raise Error("weighted accuracy_score: n must be positive, got " + String(n))
+    var chunks = host_chunk_count(n)
+    var num_partials = List[Float32](length=chunks, fill=Float32(0.0))
+    var den_partials = List[Float32](length=chunks, fill=Float32(0.0))
+    var num_slab = List[Float32](length=PINNED_SUM_W, fill=Float32(0.0))
+    var den_slab = List[Float32](length=PINNED_SUM_W, fill=Float32(0.0))
+    for c in range(chunks):
+        for t in range(PINNED_SUM_W):
+            var i = c * PINNED_SUM_W + t
+            if i < n:
+                comptime if METRICS_ORACLE_HOST_SABOTAGE:
+                    i = (i + 1) % n
+                var wi = ftz(w.unsafe_load(i))
+                comptime if METRICS_ORACLE_HOST_SABOTAGE:
+                    if i == 0 and n > 1:
+                        wi = Float32(0.0)
+                den_slab[t] = wi
+                num_slab[t] = wi if y_true.unsafe_load(i) == y_pred.unsafe_load(i) else Float32(0.0)
+            else:
+                num_slab[t] = Float32(0.0)
+                den_slab[t] = Float32(0.0)
+        var step = PINNED_SUM_W // 2
+        while step > 0:
+            for t in range(step):
+                num_slab[t] = ftz(num_slab[t] + num_slab[t + step])
+                den_slab[t] = ftz(den_slab[t] + den_slab[t + step])
+            step //= 2
+        num_partials[c] = num_slab[0]
+        den_partials[c] = den_slab[0]
+    var sn = host_fold_partials(num_partials, chunks)
+    var sd = host_fold_partials(den_partials, chunks)
+    if sd <= Float32(0.0):
+        raise Error("weighted accuracy_score: the weights must have positive total")
+    return ftz(identical_div(sn, sd))
+
+
 def host_weighted_r2(
     y: List[Float32], y_hat: List[Float32], w: List[Float32], n: Int
 ) raises -> Float32:
@@ -645,6 +689,34 @@ def _host_entropy(
     return Float64(acc)
 
 
+def host_entropy_ptr(
+    labels: MutPointer[Int32, MutUntrackedOrigin],
+    size: Int,
+    lower: Int32,
+    upper: Int32,
+) -> Float64:
+    """Pointer-input entropy with the original histogram and class fold."""
+    if size == 0:
+        return 1.0
+    var n_unique = Int(upper - lower + 1)
+    var counts = List[Int32](length=n_unique, fill=Int32(0))
+    for row in range(size):
+        var value = labels.unsafe_load(row)
+        comptime if METRICS_ORACLE_HOST_SABOTAGE:
+            if row == 0 and value == Int32(0):
+                value = Int32(1)
+        var bin = Int(value - lower)
+        counts[bin] = counts[bin] + Int32(1)
+    var acc = Float32(0.0)
+    var fsize = Float32(size)
+    for i in range(n_unique):
+        var p = ftz(Float32(counts[i]) / fsize)
+        if p != Float32(0.0):
+            var lp = ftz(identical_log(p))
+            acc = ftz(identical_mul_add(-p, lp, acc))
+    return Float64(acc)
+
+
 def host_mutual_info(
     first: List[Int32], second: List[Int32], size: Int, lower: Int32, upper: Int32
 ) raises -> Float64:
@@ -668,6 +740,60 @@ def _host_mutual_info(
         )
     var k = Int(upper - lower + 1)
     var c = host_contingency(first, second, size, lower, upper)
+    var a = host_row_sums(c, k)
+    var b = host_col_sums(c, k)
+    var acc = Float32(0.0)
+    var fsize = Float32(size)
+    for i in range(k):
+        for j in range(k):
+            var cij = c[i * k + j]
+            var ab = a[i] * b[j]
+            if ab != Int64(0) and cij != Int32(0):
+                var fc = Float32(cij)
+                var l1 = ftz(identical_log(ftz(fsize * fc)))
+                var l2 = ftz(identical_log(ftz(Float32(ab))))
+                var diff = ftz(l1 - l2)
+                acc = ftz(identical_mul_add(fc, diff, acc))
+    return Float64(ftz(acc / fsize))
+
+
+def host_mutual_info_ptr(
+    first: MutPointer[Int32, MutUntrackedOrigin],
+    second: MutPointer[Int32, MutUntrackedOrigin],
+    size: Int,
+    lower: Int32,
+    upper: Int32,
+) raises -> Float64:
+    """Pointer-input spelling of ``host_mutual_info``.
+
+    The contingency counts and float epilogue retain exactly the original
+    iteration order; this only avoids copying both million-row label arrays
+    at the Python binding boundary.
+    """
+    if size <= 0:
+        raise Error(
+            "mutual_info_score: size must be positive, got "
+            + String(size)
+            + " (0 / 0 is refused by name)"
+        )
+    var k = Int(upper - lower + 1)
+    if k <= 0:
+        raise Error(
+            "contingency_matrix: maxLabel < minLabel ("
+            + String(upper)
+            + " < "
+            + String(lower)
+            + ")"
+        )
+    var c = List[Int32](length=k * k, fill=Int32(0))
+    for row in range(size):
+        var gt = first.unsafe_load(row)
+        comptime if METRICS_ORACLE_HOST_SABOTAGE:
+            if row == 0 and gt == Int32(0):
+                gt = Int32(1)
+        var pd = second.unsafe_load(row)
+        var idx = Int((gt - lower) * Int32(k) + pd - lower)
+        c[idx] = c[idx] + Int32(1)
     var a = host_row_sums(c, k)
     var b = host_col_sums(c, k)
     var acc = Float32(0.0)

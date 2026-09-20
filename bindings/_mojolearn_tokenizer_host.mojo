@@ -79,8 +79,10 @@ from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 from std.sys.compile import is_defined
+from max.algorithm import sync_parallelize
 
 from bindings.hostptr import i32_ptr
+from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from checks.kernel_matrix import (
     COLUMN_CPU,
     TARGET_COLUMN,
@@ -350,23 +352,48 @@ def bpe_encode_batch_binding(
                     + String(k)
                 )
         var all_ids = List[Int](capacity=n)
-        var counts = List[Int](capacity=n_docs)
+        var counts = List[Int](length=n_docs, fill=0)
+        # A document produces at most one id per input byte.  Give each one
+        # its byte-offset-sized temporary range, so independent encodes can
+        # run concurrently without a shared append or a prefix scan first.
+        var staged = List[Int32](length=n, fill=Int32(0))
+        var failed = List[Int](length=n_docs, fill=0)
+        var countp = counts.unsafe_ptr()
+        var stagep = staged.unsafe_ptr()
+        var failp = failed.unsafe_ptr()
+        var tasks = host_predict_task_count(n_docs) if n >= 16384 else 1
+        var chunk = host_predict_chunk(n_docs, tasks)
+        def _documents(task: Int) {imm owner, imm offs, imm text_address, imm allow, imm countp, imm stagep, imm failp, imm chunk, imm n_docs}:
+            var lo = task * chunk
+            var hi = min(lo + chunk, n_docs)
+            for k in range(lo, hi):
+                var a = Int(offs[k])
+                var m = Int(offs[k + 1]) - a
+                var doc = List[UInt8](length=m, fill=UInt8(0))
+                try:
+                    if m > 0:
+                        var src = _u8_ptr(text_address + a)
+                        memcpy(dest=doc.unsafe_ptr(), src=src, count=m)
+                    var ids = owner[].tok.value().encode_bytes(doc, allow)
+                    var c = len(ids)
+                    countp.unsafe_store(k, c)
+                    for j in range(c):
+                        comptime if TOKENIZER_HOST_SABOTAGE:
+                            stagep.unsafe_store(a + j, Int32(ids[c - 1 - j]))
+                        else:
+                            stagep.unsafe_store(a + j, Int32(ids[j]))
+                except:
+                    failp.unsafe_store(k, 1)
+        if tasks == 1:
+            _documents(0)
+        else:
+            sync_parallelize(_documents, tasks)
         for k in range(n_docs):
+            if failed[k] != 0:
+                raise Error("bpe_encode_batch: internal document encode failed")
             var a = Int(offs[k])
-            var m = Int(offs[k + 1]) - a
-            var doc = List[UInt8](length=m, fill=UInt8(0))
-            if m > 0:
-                var src = _u8_ptr(text_address + a)
-                memcpy(dest=doc.unsafe_ptr(), src=src, count=m)
-            # THE SAME CALL bpe_encode MAKES, on this document alone.
-            var ids = owner[].tok.value().encode_bytes(doc, allow)
-            var c = len(ids)
-            for j in range(c):
-                comptime if TOKENIZER_HOST_SABOTAGE:
-                    all_ids.append(ids[c - 1 - j])
-                else:
-                    all_ids.append(ids[j])
-            counts.append(c)
+            for j in range(counts[k]):
+                all_ids.append(Int(staged[a + j]))
         comptime if TOKENIZER_BATCH_SABOTAGE:
             # The batch part's negative control: swap the last id of each
             # document with the first id of the next non-empty one, which

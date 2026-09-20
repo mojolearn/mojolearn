@@ -94,11 +94,14 @@ from metrics.host.metrics_oracle import (
     host_accuracy_score_ptr,
     host_adjusted_rand_score,
     host_entropy,
+    host_entropy_ptr,
     host_fowlkes_mallows,
     host_weighted_accuracy,
+    host_weighted_accuracy_ptr,
     host_weighted_r2,
     host_homogeneity_score,
     host_mutual_info,
+    host_mutual_info_ptr,
     host_r2_score,
     host_silhouette,
     host_v_measure,
@@ -275,18 +278,13 @@ def entropy_binding(
     var n = _index(params[0])
     var lower = Int32(_index(params[1]))
     var upper = Int32(_index(params[2]))
-    var lab = read_i32(_index(labels_addr), n)
+    var lab = i32_ptr(_index(labels_addr))
     var out = Float64(0.0)
     with GILReleased(Python()):
         if n <= 0:
             raise Error("entropy: n must be positive, got " + String(n))
-        if len(lab) < n:
-            raise Error(
-                "entropy: labels holds " + String(len(lab))
-                + " entries, needs at least n = " + String(n)
-            )
         _check_range(lower, upper)
-        out = host_entropy(lab, n, lower, upper)
+        out = host_entropy_ptr(lab, n, lower, upper)
     return PythonObject(out)
 
 
@@ -301,13 +299,14 @@ def mutual_info_score_binding(
     var n = _index(params[0])
     var lower = Int32(_index(params[1]))
     var upper = Int32(_index(params[2]))
-    var yt = read_i32(_index(y_true_addr), n)
-    var yp = read_i32(_index(y_pred_addr), n)
+    var yt = i32_ptr(_index(y_true_addr))
+    var yp = i32_ptr(_index(y_pred_addr))
     var out = Float64(0.0)
     with GILReleased(Python()):
-        _check_pair(yt, yp, n)
+        if n <= 0:
+            raise Error("metrics: n must be positive, got " + String(n))
         _check_range(lower, upper)
-        out = host_mutual_info(yt, yp, n, lower, upper)
+        out = host_mutual_info_ptr(yt, yp, n, lower, upper)
     return PythonObject(out)
 
 
@@ -320,13 +319,14 @@ def accuracy_score_weighted_binding(
     """Weighted accuracy on the host. `params`: `0 n`."""
     _want(String("accuracy_score_weighted"), params, 1)
     var n = _index(params[0])
-    var yt = read_i32(_index(y_true_addr), n)
-    var yp = read_i32(_index(y_pred_addr), n)
-    var w = read_f32(_index(w_addr), n)
+    var yt = i32_ptr(_index(y_true_addr))
+    var yp = i32_ptr(_index(y_pred_addr))
+    var w = f32_ptr(_index(w_addr))
     var out = Float32(0.0)
     with GILReleased(Python()):
-        _check_pair(yt, yp, n)
-        out = host_weighted_accuracy(yt, yp, w, n)
+        if n <= 0:
+            raise Error("metrics: n must be positive, got " + String(n))
+        out = host_weighted_accuracy_ptr(yt, yp, w, n)
     return PythonObject(Float64(out))
 
 
