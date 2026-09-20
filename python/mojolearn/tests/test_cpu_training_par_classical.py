@@ -47,7 +47,11 @@ LANES = {"par-scaler": "preprocessing", "par-arima": "arima", "par-holtwinters":
          # wave 3 (lane/cpu-verifier-par-samba, 2026-09-16): the Samba stack's
          # gradient shards, the same driver as par-mlp on the same family
          "par-samba": "training", "par-samba-clip": "training",
-         "par-rbf-sampler": "kernel_methods"}
+         "par-rbf-sampler": "kernel_methods",
+         # lane/unlaned-public-algorithms (2026-09-20): the GaussianProcess
+         # CLASSIFIER's class-level shards, the two public entries
+         # tools/verification_matrix.py reported with no identity lane at all
+         "par-gpc-fit": "gp", "par-gpc-predict": "gp"}
 DRIVERS = {
     "python/mojolearn/parallel_preprocessing.py": ("scaler_fit", "scaler_transform"),
     "python/mojolearn/parallel_classical.py": ("arima_fit", "holtwinters_fit", "rbf_sampler_rows"),
@@ -129,6 +133,29 @@ def test_cpu_operations_are_the_python_sharded_drivers():
     assert "    if operation == 'forecast_predict':\n        method, positional = args\n" in worker
     assert "        return state.predict(*positional)\n" in worker
     wanted.add("forecast_predict")
+    # parallel_gaussian_process's two class-level drivers
+    # (lane/unlaned-public-algorithms, 2026-09-20). `_run` builds the ONE
+    # non-cooperative pool for every request the fit and predict drivers
+    # build, so the send sits in a different function from the pool and is
+    # checked by name here, as par-mlp's, DistributedIVFIndex's and the
+    # forecasting drivers' are. The split is one-vs-rest CLASSES, built by a
+    # Python comprehension over `columns`, and the merge is the driver's own
+    # Python in class order; no device-count environment variable appears, so
+    # no binding restates the partition at any device count. The worker's own
+    # work is the plain `_fit_binary` / `_latent`, the gp family's single
+    # `gpc_fit` and `gpc_predict` host entries.
+    gpc = _read("python/mojolearn/parallel_gaussian_process.py")
+    assert "pool = DevicePool(devices)" in gpc and "cooperative=True" not in gpc
+    assert "columns = [1] if len(classes) == 2 else range(len(classes))" in gpc
+    assert "requests = [('gpc_class_fit', _fresh(estimator)," in gpc
+    assert "requests.append(('gpc_class_predict', part, (fit, q, want_proba)))" in gpc
+    assert "columns = [value.tolist() for value in _run(requests, devices)]" in gpc
+    assert "MOJOLEARN_" not in gpc
+    assert "    if operation == 'gpc_class_fit':\n" in worker
+    assert "        return state._fit_binary(state._extension(), x, y01, *_kernel_arrays(state.kernel))\n" in worker
+    assert "    if operation == 'gpc_class_predict':\n" in worker
+    assert "        mean, _, probability = state._latent(state._extension(), fit, q, want_proba)\n" in worker
+    wanted.update(("gpc_class_fit", "gpc_class_predict"))
     assert set(_parallel_pool.CPU_OPERATIONS) == wanted, sorted(_parallel_pool.CPU_OPERATIONS)
     assert set(_parallel_pool.CPU_SINGLE_DEVICE_COOPERATIVE) == {"mlp_update", "samba_update"}
     cooperative = set()
@@ -167,6 +194,90 @@ def test_refusals_come_before_any_worker():
         else:
             raise AssertionError(f"{op} was admitted on a CPU-only install")
         assert pool._workers == [], "a worker started before the refusal"
+
+
+def test_the_gpc_class_fit_worker_refuses_outside_the_verifier():
+    """THE HOLE ADMITTING `gpc_class_fit` OPENED, AND THE GUARD THAT CLOSES IT
+    (lane/unlaned-public-algorithms, 2026-09-20).
+
+    Every other admitted fit operation runs its estimator's PUBLIC `fit`, so
+    it inherits `_mode._guard_cpu_training` and refuses on a CPU-only install
+    outside `reference_training()` -- which is what
+    `_parallel_pool.CPU_OPERATIONS`'s docstring promises of the whole set.
+    The GPC shard calls `_fit_binary`, which sits BELOW that decorator.
+    MEASURED before the guard was added: the plain
+    `GaussianProcessClassifier(...).fit(X, y)` raised "fit/training is
+    reserved for the internal bitwise verifier" and
+    `fit_gaussian_process_classifier` on the same data, in the same process,
+    trained and returned a fitted model. The two must refuse with the SAME
+    words, which is what this asserts."""
+    if not _cpu_only_with("_mojolearn_gp_host"):
+        return
+    import numpy as np
+    from mojolearn.parallel_gaussian_process import fit_gaussian_process_classifier
+    X = np.ascontiguousarray(np.random.default_rng(11).standard_normal((48, 3)).astype(np.float32))
+    y = (X[:, 0] > 0).astype(np.int64)
+    kernel = mojolearn.ConstantKernel(1.0) * mojolearn.RBF(1.0)
+    words = "fit/training is reserved for the internal bitwise verifier"
+    try:
+        mojolearn.GaussianProcessClassifier(kernel=kernel).fit(X, y)
+    except NotImplementedError as exc:
+        assert words in str(exc), str(exc)
+    else:
+        raise AssertionError("the plain CPU fit did not refuse; this box is not the CPU-only route")
+    try:
+        fit_gaussian_process_classifier(mojolearn.GaussianProcessClassifier(kernel=kernel), X, y,
+                                        devices=(0,))
+    except Exception as exc:
+        assert words in str(exc), str(exc)
+    else:
+        raise AssertionError(
+            "fit_gaussian_process_classifier TRAINED on a CPU-only install outside "
+            "reference_training(); the _fit_binary shard bypassed the public fit's guard")
+
+
+@reference_training()
+def test_sharded_gpc_equals_the_plain_fit_when_built():
+    """The class shards are real and the merge is byte exact: one
+    `gpc_class_fit` per one-vs-rest column (ONE for two classes, THREE for
+    three), one `gpc_class_predict` per fitted class, and the published state
+    and the merged posterior equal the plain estimator's bytes. This is the
+    in-cell oracle the `par-gpc-fit` and `par-gpc-predict` lanes carry, held
+    here as well so a CPU box with no record can still see it fail."""
+    if not _cpu_only_with("_mojolearn_gp_host"):
+        return
+    import numpy as np
+    from mojolearn.parallel_gaussian_process import (fit_gaussian_process_classifier,
+                                                     predict_gaussian_process_classifier)
+    rng = np.random.default_rng(7)
+    X = np.ascontiguousarray(rng.standard_normal((64, 3)).astype(np.float32))
+    q = np.ascontiguousarray(rng.standard_normal((16, 3)).astype(np.float32))
+    kernel = mojolearn.ConstantKernel(1.0) * mojolearn.RBF(1.0)
+    sent = []
+    call = _parallel_pool.DevicePool._call
+
+    def spy(worker, request):
+        sent.append(request[2][0] if request[0] == "cpu_reference" else request[0])
+        return call(worker, request)
+
+    for labels, n_fits in (((X[:, 0] > 0).astype(np.int64), 1),
+                           ((X[:, 0] > 0).astype(np.int64) + (X[:, 1] > 0).astype(np.int64), 3)):
+        sent.clear()
+        _parallel_pool.DevicePool._call = staticmethod(spy)
+        try:
+            par = fit_gaussian_process_classifier(
+                mojolearn.GaussianProcessClassifier(kernel=kernel), X, labels, devices=(0,))
+            proba = predict_gaussian_process_classifier(par, q, devices=(0,), method="predict_proba")
+        finally:
+            _parallel_pool.DevicePool._call = staticmethod(call)
+        assert sent == ["gpc_class_fit"] * n_fits + ["gpc_class_predict"] * n_fits, sent
+        plain = mojolearn.GaussianProcessClassifier(kernel=kernel).fit(X, labels)
+        assert len(par.estimators_) == n_fits, len(par.estimators_)
+        for i in range(n_fits):
+            for name in ("L_", "pi_", "W_sr_"):
+                assert (np.asarray(getattr(par.estimators_[i], name)).tobytes()
+                        == np.asarray(getattr(plain.estimators_[i], name)).tobytes()), (i, name)
+        assert np.asarray(proba).tobytes() == np.asarray(plain.predict_proba(q)).tobytes()
 
 
 @reference_training()

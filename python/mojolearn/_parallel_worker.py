@@ -181,7 +181,19 @@ def execute(request):
         native.ivf_finalize_distances(addr(state, name='distances'), state.size, args[0])
         return state
     if operation == 'gpc_class_fit':
+        # THE SAME GUARD THE PUBLIC `fit` CARRIES. `_fit_binary` is the class
+        # shard's work, and it sits BELOW `GaussianProcessClassifier.fit`'s
+        # `_mode._guard_cpu_training` decorator, so calling it here would have
+        # been a public CPU TRAINING path on an install where the plain
+        # `fit` refuses -- measured on a CPU-only install, 2026-09-20,
+        # lane/unlaned-public-algorithms: the plain fit raised
+        # "fit/training is reserved for the internal bitwise verifier" and the
+        # driver trained anyway. The other admitted fits (`arima_fit`,
+        # `holtwinters_fit`, ...) go through their estimator's public `fit`
+        # and inherit the guard; this one has to state it.
+        from ._cpu_reference import require_training
         from ._gpc_impl import _kernel_arrays
+        require_training(state)
         x, y01 = args
         return state._fit_binary(state._extension(), x, y01, *_kernel_arrays(state.kernel))
     if operation == 'gpc_class_predict':

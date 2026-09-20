@@ -420,6 +420,17 @@ TRAINING_LANE_NAMES = {
     # file). No GPU record carries these lanes yet, so their cells are OWED.
     "gpc": "the binary Gaussian process classifier",
     "gpc-multiclass": "the one-vs-rest Gaussian process classifier",
+    # lane/unlaned-public-algorithms (2026-09-20): the two
+    # `parallel_gaussian_process` entries `tools/verification_matrix.py`
+    # reported with NO identity lane at all. Their shards are CLASSES, cut in
+    # the driver's own Python and merged there in class order, and each shard
+    # is this family's host `gpc_fit`/`gpc_predict` -- the same arithmetic the
+    # two lanes above hash -- so `gpc_class_fit` and `gpc_class_predict`
+    # joined `_parallel_pool.CPU_OPERATIONS` and these two take a CPU column.
+    # `PUBLIC_EXCLUDED_PREFIXES` keeps every `par-*` lane out of the public
+    # reference set, so being covered here does not make them public.
+    "par-gpc-fit": "the class-sharded Gaussian process classifier fit",
+    "par-gpc-predict": "the class-sharded Gaussian process classifier prediction",
     # CPU training batch 3 (lane/cpu-training-batch3, 2026-09-14): option
     # variants of families that already had a host path, every one in the
     # 136-lane record and IDENTICAL x4 against its three GPU columns on the
@@ -1885,7 +1896,10 @@ FAMILIES = (
         # gpc_predict under the GPU binding's contract.
         training_lanes=("gp", "gp-matern12", "gp-matern32", "gp-matern52-ard", "gp-normalize-y",
                         "gpc", "gpc-multiclass", "gp-sample-y", "gp-sample-y-normalize",
-                        "gp-optimize", "gp-optimize-restarts"),
+                        "gp-optimize", "gp-optimize-restarts",
+                        # lane/unlaned-public-algorithms (2026-09-20): the class-sharded
+                        # GPC drivers, whose shard IS this family's gpc_fit/gpc_predict
+                        "par-gpc-fit", "par-gpc-predict"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("GaussianProcessRegressor", "GaussianProcessClassifier"),
