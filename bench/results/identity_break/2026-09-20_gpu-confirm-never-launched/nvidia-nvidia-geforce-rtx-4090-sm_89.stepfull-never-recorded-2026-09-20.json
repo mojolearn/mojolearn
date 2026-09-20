@@ -1,0 +1,5539 @@
+{
+ "mode": "identical",
+ "repeats": 2,
+ "platform": "Linux-6.8.0-124-generic-x86_64-with-glibc2.35",
+ "vendor": "nvidia-nvidia-geforce-rtx-4090-sm_89",
+ "commit": "2766cdb438acb1b2af9bc734106d26808c099b8e",
+ "commit_source": "commit.txt",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "hashed": {
+   "X": "c93497b26fe65cda",
+   "y_clf": "d104ead2f62bdd03",
+   "y_reg": "ce4959d8070bb069"
+  },
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "denormal_ftz": {
+   "X": "34c156b0d0e8a891",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  },
+  "negative": {
+   "X": "08106ffff3256313",
+   "y_clf": "294ce4d7dadaf0bb",
+   "y_reg": "ce1914d5f78f5707"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "hashed": {
+   "X": "9dc786ade4574aff"
+  },
+  "wide": {
+   "X": "d52a1af18a3c2f1c"
+  },
+  "denormal": {
+   "X": "5061056b118d07d0"
+  },
+  "denormal_ftz": {
+   "X": "a8c3d1a560b5cabb"
+  },
+  "dupes": {
+   "X": "e4b16c115962dfcd"
+  },
+  "odd": {
+   "X": "32ea0bbed60b8e6c"
+  },
+  "negative": {
+   "X": "45b539a3f66ce25d"
+  }
+ },
+ "cells": {
+  "mamba1/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "1609902abaf80a04",
+    "1609902abaf80a04"
+   ],
+   "parts": [
+    {
+     "forward": "a1b9bd38c3d8533d",
+     "prefill": "a1b9bd38c3d8533d",
+     "step": "50c8fffaf8c010a2",
+     "backward": "f1511e64f8fa8249"
+    },
+    {
+     "forward": "a1b9bd38c3d8533d",
+     "prefill": "a1b9bd38c3d8533d",
+     "step": "50c8fffaf8c010a2",
+     "backward": "f1511e64f8fa8249"
+    }
+   ],
+   "infer": [
+    "97e86b9db80719a7",
+    "97e86b9db80719a7"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "fbb1f3233000006e",
+    "fbb1f3233000006e"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "3fd0b9d19f53c9c1",
+    "3fd0b9d19f53c9c1"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "6dc76b046d9dfd07",
+    "6dc76b046d9dfd07"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A4:A_log']"
+   ],
+   "batchscale": [
+    "5481e0dff3303591",
+    "5481e0dff3303591"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "e560b542fc558190",
+    "e560b542fc558190"
+   ],
+   "ragged_verdict": "STABLE",
+   "stepfull": [
+    "f582474b00117f8e",
+    "f582474b00117f8e"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 2.532437144778669,
+    "stages": {
+     "repeat=1/train": 0.25583460833877325,
+     "repeat=1/infer-save-reload": 0.0013908306136727333,
+     "repeat=1/batch": 0.02110936027020216,
+     "repeat=1/batchgrad": 0.06309098470956087,
+     "repeat=1/batchscale": 0.09870701935142279,
+     "repeat=1/ragged": 0.024390646256506443,
+     "repeat=1/stepfull": 0.021104780957102776,
+     "repeat=1/rlpair": 1.4883297253400087,
+     "repeat=2/train": 0.008372477255761623,
+     "repeat=2/infer-save-reload": 0.0013648290187120438,
+     "repeat=2/batch": 0.019861766137182713,
+     "repeat=2/batchgrad": 0.0599756920710206,
+     "repeat=2/batchscale": 0.08962397743016481,
+     "repeat=2/ragged": 0.024756970815360546,
+     "repeat=2/stepfull": 0.020999186672270298,
+     "repeat=2/rlpair": 0.3328415649011731
+    }
+   }
+  },
+  "mamba1/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c821893bfb5ba46c",
+    "c821893bfb5ba46c"
+   ],
+   "parts": [
+    {
+     "forward": "58aeaa31110af3da",
+     "prefill": "58aeaa31110af3da",
+     "step": "a8d3b4e4b4cf9fd9",
+     "backward": "6e0163d714f415a4"
+    },
+    {
+     "forward": "58aeaa31110af3da",
+     "prefill": "58aeaa31110af3da",
+     "step": "a8d3b4e4b4cf9fd9",
+     "backward": "6e0163d714f415a4"
+    }
+   ],
+   "infer": [
+    "13aed38cf2e3c341",
+    "13aed38cf2e3c341"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "23b7f12c8a228592",
+    "23b7f12c8a228592"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "29e18589720b7474",
+    "29e18589720b7474"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "606a5724ab5c0f41",
+    "606a5724ab5c0f41"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A4:A_log']"
+   ],
+   "batchscale": [
+    "dcb2a540e0d72eac",
+    "dcb2a540e0d72eac"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "5abcb0b09ea615e3",
+    "5abcb0b09ea615e3"
+   ],
+   "ragged_verdict": "STABLE",
+   "stepfull": [
+    "783f30507f6d74b5",
+    "783f30507f6d74b5"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 1.1173923145979643,
+    "stages": {
+     "repeat=1/train": 0.009017960168421268,
+     "repeat=1/infer-save-reload": 0.0013755783438682556,
+     "repeat=1/batch": 0.02005103323608637,
+     "repeat=1/batchgrad": 0.060359726659953594,
+     "repeat=1/batchscale": 0.08917766064405441,
+     "repeat=1/ragged": 0.023565317504107952,
+     "repeat=1/stepfull": 0.020501568913459778,
+     "repeat=1/rlpair": 0.33624197728931904,
+     "repeat=2/train": 0.00833071768283844,
+     "repeat=2/infer-save-reload": 0.0013640988618135452,
+     "repeat=2/batch": 0.01992005854845047,
+     "repeat=2/batchgrad": 0.0598853500559926,
+     "repeat=2/batchscale": 0.08717420976608992,
+     "repeat=2/ragged": 0.02444871887564659,
+     "repeat=2/stepfull": 0.02109755016863346,
+     "repeat=2/rlpair": 0.3342088842764497
+    }
+   }
+  },
+  "mamba1/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "062931419c55ee5a",
+    "062931419c55ee5a"
+   ],
+   "parts": [
+    {
+     "forward": "c726ba8c688851b3",
+     "prefill": "c726ba8c688851b3",
+     "step": "b0304f6d0a3d4432",
+     "backward": "c42af8940038b2c5"
+    },
+    {
+     "forward": "c726ba8c688851b3",
+     "prefill": "c726ba8c688851b3",
+     "step": "b0304f6d0a3d4432",
+     "backward": "c42af8940038b2c5"
+    }
+   ],
+   "infer": [
+    "b2e6c1006bf3a5ce",
+    "b2e6c1006bf3a5ce"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "29fc3810bca1e78a",
+    "29fc3810bca1e78a"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "08398a6bfcc8570a",
+    "08398a6bfcc8570a"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "02307cd514fceb2d",
+    "02307cd514fceb2d"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A4:A_log']"
+   ],
+   "batchscale": [
+    "d44c4d814a35d216",
+    "d44c4d814a35d216"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "8fbfb081c0991539",
+    "8fbfb081c0991539"
+   ],
+   "ragged_verdict": "STABLE",
+   "stepfull": [
+    "f7a84796f87ea6e0",
+    "f7a84796f87ea6e0"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 1.1164714824408293,
+    "stages": {
+     "repeat=1/train": 0.008545474149286747,
+     "repeat=1/infer-save-reload": 0.001389799639582634,
+     "repeat=1/batch": 0.0198596753180027,
+     "repeat=1/batchgrad": 0.059855218045413494,
+     "repeat=1/batchscale": 0.08688775077462196,
+     "repeat=1/ragged": 0.024462569504976273,
+     "repeat=1/stepfull": 0.021406520158052444,
+     "repeat=1/rlpair": 0.334924609400332,
+     "repeat=2/train": 0.008021906018257141,
+     "repeat=2/infer-save-reload": 0.0013132775202393532,
+     "repeat=2/batch": 0.019455001689493656,
+     "repeat=2/batchgrad": 0.0593671603128314,
+     "repeat=2/batchscale": 0.08689779974520206,
+     "repeat=2/ragged": 0.025021850131452084,
+     "repeat=2/stepfull": 0.021395450457930565,
+     "repeat=2/rlpair": 0.33704430516809225
+    }
+   }
+  },
+  "mamba1/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "0e7b2cee60a53003",
+    "0e7b2cee60a53003"
+   ],
+   "parts": [
+    {
+     "forward": "15dc7e7be085b651",
+     "prefill": "15dc7e7be085b651",
+     "step": "74bef90fb99757ba",
+     "backward": "38fcd807df86a237"
+    },
+    {
+     "forward": "15dc7e7be085b651",
+     "prefill": "15dc7e7be085b651",
+     "step": "74bef90fb99757ba",
+     "backward": "38fcd807df86a237"
+    }
+   ],
+   "infer": [
+    "905c98cf2a276d1d",
+    "905c98cf2a276d1d"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "e83173af858d8291",
+    "e83173af858d8291"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "8a4cd7a1b49c65a8",
+    "8a4cd7a1b49c65a8"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "44ae6f0520c58bb3",
+    "44ae6f0520c58bb3"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A4:A_log']"
+   ],
+   "batchscale": [
+    "54da89a0749a8c64",
+    "54da89a0749a8c64"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "93bf5f8aa3430649",
+    "93bf5f8aa3430649"
+   ],
+   "ragged_verdict": "STABLE",
+   "stepfull": [
+    "a663c1d24961f690",
+    "a663c1d24961f690"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 1.1121664186939597,
+    "stages": {
+     "repeat=1/train": 0.00852873269468546,
+     "repeat=1/infer-save-reload": 0.0013536782935261726,
+     "repeat=1/batch": 0.019791994243860245,
+     "repeat=1/batchgrad": 0.05938479211181402,
+     "repeat=1/batchscale": 0.08720452059060335,
+     "repeat=1/ragged": 0.02448608074337244,
+     "repeat=1/stepfull": 0.02149325516074896,
+     "repeat=1/rlpair": 0.33185971062630415,
+     "repeat=2/train": 0.008314205333590508,
+     "repeat=2/infer-save-reload": 0.0013589691370725632,
+     "repeat=2/batch": 0.01962568797171116,
+     "repeat=2/batchgrad": 0.0598794799298048,
+     "repeat=2/batchscale": 0.08674553502351046,
+     "repeat=2/ragged": 0.024519781582057476,
+     "repeat=2/stepfull": 0.02099741715937853,
+     "repeat=2/rlpair": 0.33599100820720196
+    }
+   }
+  },
+  "mamba1/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b7b8e653d7d0f153",
+    "b7b8e653d7d0f153"
+   ],
+   "parts": [
+    {
+     "forward": "75c78448833068e6",
+     "prefill": "75c78448833068e6",
+     "step": "8f20ff5b161cb63e",
+     "backward": "1368d04e99287c9b"
+    },
+    {
+     "forward": "75c78448833068e6",
+     "prefill": "75c78448833068e6",
+     "step": "8f20ff5b161cb63e",
+     "backward": "1368d04e99287c9b"
+    }
+   ],
+   "infer": [
+    "79e0f910c5525ef7",
+    "79e0f910c5525ef7"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "a17b09e0f608dab7",
+    "a17b09e0f608dab7"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "7b0bbb310451668a",
+    "7b0bbb310451668a"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "6a7023d45d75092c",
+    "6a7023d45d75092c"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A4:A_log']"
+   ],
+   "batchscale": [
+    "6cefa2fe4b8e937a",
+    "6cefa2fe4b8e937a"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "820e4e6bfba11c24",
+    "820e4e6bfba11c24"
+   ],
+   "ragged_verdict": "STABLE",
+   "stepfull": [
+    "77aea1d61808fd10",
+    "77aea1d61808fd10"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 1.1103995759040117,
+    "stages": {
+     "repeat=1/train": 0.008893916383385658,
+     "repeat=1/infer-save-reload": 0.0013805683702230453,
+     "repeat=1/batch": 0.020685764960944653,
+     "repeat=1/batchgrad": 0.05943147372454405,
+     "repeat=1/batchscale": 0.08754609245806932,
+     "repeat=1/ragged": 0.024462359957396984,
+     "repeat=1/stepfull": 0.021422292105853558,
+     "repeat=1/rlpair": 0.3312491802498698,
+     "repeat=2/train": 0.00823507271707058,
+     "repeat=2/infer-save-reload": 0.0013408679515123367,
+     "repeat=2/batch": 0.019778222776949406,
+     "repeat=2/batchgrad": 0.059706772677600384,
+     "repeat=2/batchscale": 0.08640694338828325,
+     "repeat=2/ragged": 0.024527041241526604,
+     "repeat=2/stepfull": 0.021256915293633938,
+     "repeat=2/rlpair": 0.33347018901258707
+    }
+   }
+  },
+  "mamba1/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b7b8e653d7d0f153",
+    "b7b8e653d7d0f153"
+   ],
+   "parts": [
+    {
+     "forward": "75c78448833068e6",
+     "prefill": "75c78448833068e6",
+     "step": "8f20ff5b161cb63e",
+     "backward": "1368d04e99287c9b"
+    },
+    {
+     "forward": "75c78448833068e6",
+     "prefill": "75c78448833068e6",
+     "step": "8f20ff5b161cb63e",
+     "backward": "1368d04e99287c9b"
+    }
+   ],
+   "infer": [
+    "79e0f910c5525ef7",
+    "79e0f910c5525ef7"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "a17b09e0f608dab7",
+    "a17b09e0f608dab7"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "deb7fd8a06a24ed9",
+    "deb7fd8a06a24ed9"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "6a7023d45d75092c",
+    "6a7023d45d75092c"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A4:A_log']"
+   ],
+   "batchscale": [
+    "6cefa2fe4b8e937a",
+    "6cefa2fe4b8e937a"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "820e4e6bfba11c24",
+    "820e4e6bfba11c24"
+   ],
+   "ragged_verdict": "STABLE",
+   "stepfull": [
+    "77aea1d61808fd10",
+    "77aea1d61808fd10"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 1.1100718546658754,
+    "stages": {
+     "repeat=1/train": 0.008534952998161316,
+     "repeat=1/infer-save-reload": 0.0014773523434996605,
+     "repeat=1/batch": 0.02008182369172573,
+     "repeat=1/batchgrad": 0.059623369947075844,
+     "repeat=1/batchscale": 0.08679005689918995,
+     "repeat=1/ragged": 0.025337250903248787,
+     "repeat=1/stepfull": 0.021138431504368782,
+     "repeat=1/rlpair": 0.3326039668172598,
+     "repeat=2/train": 0.008241422474384308,
+     "repeat=2/infer-save-reload": 0.0013741888105869293,
+     "repeat=2/batch": 0.01966565940529108,
+     "repeat=2/batchgrad": 0.0595486368983984,
+     "repeat=2/batchscale": 0.08659480977803469,
+     "repeat=2/ragged": 0.02571936510503292,
+     "repeat=2/stepfull": 0.02150721475481987,
+     "repeat=2/rlpair": 0.331213247962296
+    }
+   }
+  },
+  "mamba1/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2ac98fad7386a721",
+    "2ac98fad7386a721"
+   ],
+   "parts": [
+    {
+     "forward": "82425d3aec16b35f",
+     "prefill": "82425d3aec16b35f",
+     "step": "76b43ac3a902e78d",
+     "backward": "9890749b6530ba2c"
+    },
+    {
+     "forward": "82425d3aec16b35f",
+     "prefill": "82425d3aec16b35f",
+     "step": "76b43ac3a902e78d",
+     "backward": "9890749b6530ba2c"
+    }
+   ],
+   "infer": [
+    "4f1ca2b3595ec583",
+    "4f1ca2b3595ec583"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "7eb2c68796e0f91a",
+    "7eb2c68796e0f91a"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "3fd0b9d19f53c9c1",
+    "3fd0b9d19f53c9c1"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "d3d5d8870262f8b6",
+    "d3d5d8870262f8b6"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A4:A_log']"
+   ],
+   "batchscale": [
+    "b8fa64bb560de88e",
+    "b8fa64bb560de88e"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "5a07ad1dafb81fb1",
+    "5a07ad1dafb81fb1"
+   ],
+   "ragged_verdict": "STABLE",
+   "stepfull": [
+    "df2cc85b6e3f787c",
+    "df2cc85b6e3f787c"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 1.1104410085827112,
+    "stages": {
+     "repeat=1/train": 0.009799988009035587,
+     "repeat=1/infer-save-reload": 0.0013543181121349335,
+     "repeat=1/batch": 0.019913998432457447,
+     "repeat=1/batchgrad": 0.06040025781840086,
+     "repeat=1/batchscale": 0.08704275544732809,
+     "repeat=1/ragged": 0.024344914592802525,
+     "repeat=1/stepfull": 0.021287057548761368,
+     "repeat=1/rlpair": 0.3335499120876193,
+     "repeat=2/train": 0.008263474330306053,
+     "repeat=2/infer-save-reload": 0.0013584783300757408,
+     "repeat=2/batch": 0.019718321971595287,
+     "repeat=2/batchgrad": 0.059689383022487164,
+     "repeat=2/batchscale": 0.08665823098272085,
+     "repeat=2/ragged": 0.023443134501576424,
+     "repeat=2/stepfull": 0.02070449758321047,
+     "repeat=2/rlpair": 0.3322875564917922
+    }
+   }
+  },
+  "mamba1/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "1609902abaf80a04",
+    "1609902abaf80a04"
+   ],
+   "parts": [
+    {
+     "forward": "a1b9bd38c3d8533d",
+     "prefill": "a1b9bd38c3d8533d",
+     "step": "50c8fffaf8c010a2",
+     "backward": "f1511e64f8fa8249"
+    },
+    {
+     "forward": "a1b9bd38c3d8533d",
+     "prefill": "a1b9bd38c3d8533d",
+     "step": "50c8fffaf8c010a2",
+     "backward": "f1511e64f8fa8249"
+    }
+   ],
+   "infer": [
+    "97e86b9db80719a7",
+    "97e86b9db80719a7"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "fbb1f3233000006e",
+    "fbb1f3233000006e"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "3fd0b9d19f53c9c1",
+    "3fd0b9d19f53c9c1"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "6dc76b046d9dfd07",
+    "6dc76b046d9dfd07"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A4:A_log']"
+   ],
+   "batchscale": [
+    "8f97528deb8aa655",
+    "8f97528deb8aa655"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "e560b542fc558190",
+    "e560b542fc558190"
+   ],
+   "ragged_verdict": "STABLE",
+   "stepfull": [
+    "f582474b00117f8e",
+    "f582474b00117f8e"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 1.1071007084101439,
+    "stages": {
+     "repeat=1/train": 0.008403399027884007,
+     "repeat=1/infer-save-reload": 0.0013772184029221535,
+     "repeat=1/batch": 0.019879876635968685,
+     "repeat=1/batchgrad": 0.05924531724303961,
+     "repeat=1/batchscale": 0.08594676572829485,
+     "repeat=1/ragged": 0.024185610003769398,
+     "repeat=1/stepfull": 0.021302158012986183,
+     "repeat=1/rlpair": 0.33209790848195553,
+     "repeat=2/train": 0.008088897913694382,
+     "repeat=2/infer-save-reload": 0.001340777613222599,
+     "repeat=2/batch": 0.0199204683303833,
+     "repeat=2/batchgrad": 0.05977741628885269,
+     "repeat=2/batchscale": 0.08587979432195425,
+     "repeat=2/ragged": 0.023619379848241806,
+     "repeat=2/stepfull": 0.021416601724922657,
+     "repeat=2/rlpair": 0.3340328885242343
+    }
+   }
+  },
+  "mamba1/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "0a83c66670f92b55",
+    "0a83c66670f92b55"
+   ],
+   "parts": [
+    {
+     "forward": "9e753e72f34e4e39",
+     "prefill": "9e753e72f34e4e39",
+     "step": "5d643aa92db8f0e1",
+     "backward": "3251da66cd144cbe"
+    },
+    {
+     "forward": "9e753e72f34e4e39",
+     "prefill": "9e753e72f34e4e39",
+     "step": "5d643aa92db8f0e1",
+     "backward": "3251da66cd144cbe"
+    }
+   ],
+   "infer": [
+    "c0e8d2045bc0faf6",
+    "c0e8d2045bc0faf6"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "a48d8850d38c0e4c",
+    "a48d8850d38c0e4c"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "0f0f848b5a1a12e3",
+    "0f0f848b5a1a12e3"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "d337c6414d0c6b88",
+    "d337c6414d0c6b88"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 9 of 9 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A4:A_log']"
+   ],
+   "batchscale": [
+    "f1f293536dd10853",
+    "f1f293536dd10853"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "71baa8846a0294d9",
+    "71baa8846a0294d9"
+   ],
+   "ragged_verdict": "STABLE",
+   "stepfull": [
+    "f9e149ea5f00a434",
+    "f9e149ea5f00a434"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 1.1068098191171885,
+    "stages": {
+     "repeat=1/train": 0.00863034650683403,
+     "repeat=1/infer-save-reload": 0.001362108625471592,
+     "repeat=1/batch": 0.019967740401625633,
+     "repeat=1/batchgrad": 0.059869508258998394,
+     "repeat=1/batchscale": 0.0866306209936738,
+     "repeat=1/ragged": 0.02598937414586544,
+     "repeat=1/stepfull": 0.021244745701551437,
+     "repeat=1/rlpair": 0.3315121391788125,
+     "repeat=2/train": 0.008149029687047005,
+     "repeat=2/infer-save-reload": 0.0012918561697006226,
+     "repeat=2/batch": 0.018899443559348583,
+     "repeat=2/batchgrad": 0.05962851084768772,
+     "repeat=2/batchscale": 0.08666437212377787,
+     "repeat=2/ragged": 0.024204120971262455,
+     "repeat=2/stepfull": 0.021539156325161457,
+     "repeat=2/rlpair": 0.3306069364771247
+    }
+   }
+  },
+  "mamba2/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5b05a3ecbd70248e",
+    "5b05a3ecbd70248e"
+   ],
+   "parts": [
+    {
+     "forward": "22f79ee009fd9884",
+     "prefill": "22f79ee009fd9884",
+     "step": "3fa40f29231409be",
+     "backward": "f252b3fc19f5f9f5"
+    },
+    {
+     "forward": "22f79ee009fd9884",
+     "prefill": "22f79ee009fd9884",
+     "step": "3fa40f29231409be",
+     "backward": "f252b3fc19f5f9f5"
+    }
+   ],
+   "infer": [
+    "b0084ee171c0720f",
+    "b0084ee171c0720f"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "d21a83ab6b3ce297",
+    "d21a83ab6b3ce297"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "f4abbd5451ff5172",
+    "f4abbd5451ff5172"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "99cad63be0fb7239",
+    "99cad63be0fb7239"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 5 of 5 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A2:conv1d.bias', 'A2:conv1d.weight', 'A2:dt_bias', 'A4:A_log', 'A4:conv1d.bias', 'A4:conv1d.weight', 'A4:dt_bias']"
+   ],
+   "batchscale": [
+    "f5c6c5c02917a956",
+    "f5c6c5c02917a956"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "f1f44805dc9171e8",
+    "f1f44805dc9171e8"
+   ],
+   "ragged_verdict": "STABLE",
+   "stepfull": [
+    "bfd516aa93fe1b12",
+    "bfd516aa93fe1b12"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 4.9750393955037,
+    "stages": {
+     "repeat=1/train": 0.022471348755061626,
+     "repeat=1/infer-save-reload": 0.0028564808890223503,
+     "repeat=1/batch": 0.05479202885180712,
+     "repeat=1/batchgrad": 0.11300784908235073,
+     "repeat=1/batchscale": 1.93176166433841,
+     "repeat=1/ragged": 0.045808879658579826,
+     "repeat=1/stepfull": 0.04508539382368326,
+     "repeat=1/rlpair": 0.47150554694235325,
+     "repeat=2/train": 0.01610055286437273,
+     "repeat=2/infer-save-reload": 0.002872942015528679,
+     "repeat=2/batch": 0.05493395309895277,
+     "repeat=2/batchgrad": 0.11190397012978792,
+     "repeat=2/batchscale": 1.547167737968266,
+     "repeat=2/ragged": 0.04590501356869936,
+     "repeat=2/stepfull": 0.04481509421020746,
+     "repeat=2/rlpair": 0.4631063574925065
+    }
+   }
+  },
+  "mamba2/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "48a4bec7b6f6e4f6",
+    "48a4bec7b6f6e4f6"
+   ],
+   "parts": [
+    {
+     "forward": "b1b37a3a50613035",
+     "prefill": "b1b37a3a50613035",
+     "step": "2ac937f80e406013",
+     "backward": "259bb8b9c52831ff"
+    },
+    {
+     "forward": "b1b37a3a50613035",
+     "prefill": "b1b37a3a50613035",
+     "step": "2ac937f80e406013",
+     "backward": "259bb8b9c52831ff"
+    }
+   ],
+   "infer": [
+    "bbd1634ec2e78ddf",
+    "bbd1634ec2e78ddf"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "4b2801f8f573c8c8",
+    "4b2801f8f573c8c8"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "f899efc2a35ec48a",
+    "f899efc2a35ec48a"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "d662c396d92de418",
+    "d662c396d92de418"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 5 of 5 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A2:conv1d.bias', 'A2:conv1d.weight', 'A2:dt_bias', 'A4:conv1d.bias', 'A4:conv1d.weight', 'A4:dt_bias']"
+   ],
+   "batchscale": [
+    "9febb4c33c9d4b48",
+    "9febb4c33c9d4b48"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "8f0119a70131adcb",
+    "8f0119a70131adcb"
+   ],
+   "ragged_verdict": "STABLE",
+   "stepfull": [
+    "e80d5052a77533a5",
+    "e80d5052a77533a5"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 4.566574179567397,
+    "stages": {
+     "repeat=1/train": 0.016194705851376057,
+     "repeat=1/infer-save-reload": 0.0028520114719867706,
+     "repeat=1/batch": 0.05603589303791523,
+     "repeat=1/batchgrad": 0.11221949104219675,
+     "repeat=1/batchscale": 1.5386311644688249,
+     "repeat=1/ragged": 0.04543754458427429,
+     "repeat=1/stepfull": 0.04525345005095005,
+     "repeat=1/rlpair": 0.4655085941776633,
+     "repeat=2/train": 0.01584941241890192,
+     "repeat=2/infer-save-reload": 0.0028341198340058327,
+     "repeat=2/batch": 0.0545157790184021,
+     "repeat=2/batchgrad": 0.11260297428816557,
+     "repeat=2/batchscale": 1.5414545750245452,
+     "repeat=2/ragged": 0.04521834850311279,
+     "repeat=2/stepfull": 0.04568633530288935,
+     "repeat=2/rlpair": 0.46539832931011915
+    }
+   }
+  },
+  "mamba2/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2689cc3187df61fd",
+    "2689cc3187df61fd"
+   ],
+   "parts": [
+    {
+     "forward": "89bd6f051ff55c9d",
+     "prefill": "89bd6f051ff55c9d",
+     "step": "795c0526eb99905f",
+     "backward": "7aae23b1c93fc40c"
+    },
+    {
+     "forward": "89bd6f051ff55c9d",
+     "prefill": "89bd6f051ff55c9d",
+     "step": "795c0526eb99905f",
+     "backward": "7aae23b1c93fc40c"
+    }
+   ],
+   "infer": [
+    "fa5cdfa7a8028ea4",
+    "fa5cdfa7a8028ea4"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "a824974d95e976a1",
+    "a824974d95e976a1"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "ebd9a6af0f062bee",
+    "ebd9a6af0f062bee"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "cc350cb47739345e",
+    "cc350cb47739345e"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 5 of 5 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A2:conv1d.bias', 'A2:conv1d.weight', 'A2:dt_bias', 'A4:A_log', 'A4:conv1d.bias', 'A4:conv1d.weight', 'A4:dt_bias']"
+   ],
+   "batchscale": [
+    "492b5c7545648f34",
+    "492b5c7545648f34"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "758a09358b4de751",
+    "758a09358b4de751"
+   ],
+   "ragged_verdict": "STABLE",
+   "stepfull": [
+    "22964e382156e886",
+    "22964e382156e886"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 4.554892374202609,
+    "stages": {
+     "repeat=1/train": 0.01610648352652788,
+     "repeat=1/infer-save-reload": 0.0028680814430117607,
+     "repeat=1/batch": 0.054684544913470745,
+     "repeat=1/batchgrad": 0.11241637635976076,
+     "repeat=1/batchscale": 1.5225032614544034,
+     "repeat=1/ragged": 0.046017966233193874,
+     "repeat=1/stepfull": 0.04508097283542156,
+     "repeat=1/rlpair": 0.4697059728205204,
+     "repeat=2/train": 0.01605143118649721,
+     "repeat=2/infer-save-reload": 0.0028732623904943466,
+     "repeat=2/batch": 0.0558135649189353,
+     "repeat=2/batchgrad": 0.11342904344201088,
+     "repeat=2/batchscale": 1.5404959013685584,
+     "repeat=2/ragged": 0.04550204798579216,
+     "repeat=2/stepfull": 0.045125183649361134,
+     "repeat=2/rlpair": 0.4653286077082157
+    }
+   }
+  },
+  "mamba2/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "0d1022f692c144dd",
+    "0d1022f692c144dd"
+   ],
+   "parts": [
+    {
+     "forward": "b0de377444fd2763",
+     "prefill": "b0de377444fd2763",
+     "step": "d6eae4bf431bd487",
+     "backward": "106aa7db8af5171c"
+    },
+    {
+     "forward": "b0de377444fd2763",
+     "prefill": "b0de377444fd2763",
+     "step": "d6eae4bf431bd487",
+     "backward": "106aa7db8af5171c"
+    }
+   ],
+   "infer": [
+    "b67647742c88aaf1",
+    "b67647742c88aaf1"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "0a20d6f3d8237f24",
+    "0a20d6f3d8237f24"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "47957b59ac09a5d8",
+    "47957b59ac09a5d8"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "3151cfcc25d5c776",
+    "3151cfcc25d5c776"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 5 of 5 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A2:conv1d.bias', 'A2:conv1d.weight', 'A2:dt_bias', 'A4:A_log', 'A4:conv1d.bias', 'A4:conv1d.weight', 'A4:dt_bias']"
+   ],
+   "batchscale": [
+    "ff5f412bb3fd5328",
+    "ff5f412bb3fd5328"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "9c1bcc53c4f2905a",
+    "9c1bcc53c4f2905a"
+   ],
+   "ragged_verdict": "STABLE",
+   "stepfull": [
+    "e56447ee7a8fe932",
+    "e56447ee7a8fe932"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 4.5523618357256055,
+    "stages": {
+     "repeat=1/train": 0.016136384569108486,
+     "repeat=1/infer-save-reload": 0.002849200740456581,
+     "repeat=1/batch": 0.05445730593055487,
+     "repeat=1/batchgrad": 0.11414356902241707,
+     "repeat=1/batchscale": 1.5344717167317867,
+     "repeat=1/ragged": 0.04692934826016426,
+     "repeat=1/stepfull": 0.04526931047439575,
+     "repeat=1/rlpair": 0.46765630040317774,
+     "repeat=2/train": 0.015723018907010555,
+     "repeat=2/infer-save-reload": 0.0027457382529973984,
+     "repeat=2/batch": 0.053701819851994514,
+     "repeat=2/batchgrad": 0.11315918434411287,
+     "repeat=2/batchscale": 1.5260600773617625,
+     "repeat=2/ragged": 0.045558770187199116,
+     "repeat=2/stepfull": 0.045175657607614994,
+     "repeat=2/rlpair": 0.46740499045699835
+    }
+   }
+  },
+  "mamba2/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a143926e29ac0813",
+    "a143926e29ac0813"
+   ],
+   "parts": [
+    {
+     "forward": "59dd134e992e3a6e",
+     "prefill": "59dd134e992e3a6e",
+     "step": "572468002b3b7a14",
+     "backward": "302657acf2f7450f"
+    },
+    {
+     "forward": "59dd134e992e3a6e",
+     "prefill": "59dd134e992e3a6e",
+     "step": "572468002b3b7a14",
+     "backward": "302657acf2f7450f"
+    }
+   ],
+   "infer": [
+    "715e3b3d9ee219ba",
+    "715e3b3d9ee219ba"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "ce1a26dfa4587c15",
+    "ce1a26dfa4587c15"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "c43d27b4d3607e26",
+    "c43d27b4d3607e26"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "ce0a5a78bcd04f68",
+    "ce0a5a78bcd04f68"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 5 of 5 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A2:conv1d.bias', 'A2:conv1d.weight', 'A2:dt_bias', 'A4:A_log', 'A4:conv1d.bias', 'A4:conv1d.weight', 'A4:dt_bias']"
+   ],
+   "batchscale": [
+    "a8a0984b5804dde6",
+    "a8a0984b5804dde6"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "c6cfc709454fd6a4",
+    "c6cfc709454fd6a4"
+   ],
+   "ragged_verdict": "STABLE",
+   "stepfull": [
+    "556d823e1cd70e16",
+    "556d823e1cd70e16"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 4.98258395306766,
+    "stages": {
+     "repeat=1/train": 0.016198906116187572,
+     "repeat=1/infer-save-reload": 0.002818000502884388,
+     "repeat=1/batch": 0.05423698853701353,
+     "repeat=1/batchgrad": 0.11454756278544664,
+     "repeat=1/batchscale": 1.9278291948139668,
+     "repeat=1/ragged": 0.04610915016382933,
+     "repeat=1/stepfull": 0.04534955136477947,
+     "repeat=1/rlpair": 0.46976061444729567,
+     "repeat=2/train": 0.015741050243377686,
+     "repeat=2/infer-save-reload": 0.00281429011374712,
+     "repeat=2/batch": 0.054163035936653614,
+     "repeat=2/batchgrad": 0.11268537677824497,
+     "repeat=2/batchscale": 1.5571200316771865,
+     "repeat=2/ragged": 0.045864020474255085,
+     "repeat=2/stepfull": 0.04540756531059742,
+     "repeat=2/rlpair": 0.47106149047613144
+    }
+   }
+  },
+  "mamba2/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a143926e29ac0813",
+    "a143926e29ac0813"
+   ],
+   "parts": [
+    {
+     "forward": "59dd134e992e3a6e",
+     "prefill": "59dd134e992e3a6e",
+     "step": "572468002b3b7a14",
+     "backward": "302657acf2f7450f"
+    },
+    {
+     "forward": "59dd134e992e3a6e",
+     "prefill": "59dd134e992e3a6e",
+     "step": "572468002b3b7a14",
+     "backward": "302657acf2f7450f"
+    }
+   ],
+   "infer": [
+    "715e3b3d9ee219ba",
+    "715e3b3d9ee219ba"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "ce1a26dfa4587c15",
+    "ce1a26dfa4587c15"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "85aeeec8c5a056a1",
+    "85aeeec8c5a056a1"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "ce0a5a78bcd04f68",
+    "ce0a5a78bcd04f68"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 5 of 5 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A2:conv1d.bias', 'A2:conv1d.weight', 'A2:dt_bias', 'A4:A_log', 'A4:conv1d.bias', 'A4:conv1d.weight', 'A4:dt_bias']"
+   ],
+   "batchscale": [
+    "a8a0984b5804dde6",
+    "a8a0984b5804dde6"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "c6cfc709454fd6a4",
+    "c6cfc709454fd6a4"
+   ],
+   "ragged_verdict": "STABLE",
+   "stepfull": [
+    "556d823e1cd70e16",
+    "556d823e1cd70e16"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 4.570303933694959,
+    "stages": {
+     "repeat=1/train": 0.017406838946044445,
+     "repeat=1/infer-save-reload": 0.002816750667989254,
+     "repeat=1/batch": 0.05534649733453989,
+     "repeat=1/batchgrad": 0.11154151614755392,
+     "repeat=1/batchscale": 1.5507275750860572,
+     "repeat=1/ragged": 0.045437405817210674,
+     "repeat=1/stepfull": 0.04536372236907482,
+     "repeat=1/rlpair": 0.46904341969639063,
+     "repeat=2/train": 0.016127532348036766,
+     "repeat=2/infer-save-reload": 0.0028525320813059807,
+     "repeat=2/batch": 0.05404143128544092,
+     "repeat=2/batchgrad": 0.11106595862656832,
+     "repeat=2/batchscale": 1.5304684834554791,
+     "repeat=2/ragged": 0.04784571100026369,
+     "repeat=2/stepfull": 0.04588834196329117,
+     "repeat=2/rlpair": 0.46340957935899496
+    }
+   }
+  },
+  "mamba2/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c565acd587b39ab2",
+    "c565acd587b39ab2"
+   ],
+   "parts": [
+    {
+     "forward": "3547ea68fdd14546",
+     "prefill": "3547ea68fdd14546",
+     "step": "c97c231502cc561d",
+     "backward": "9f21e95760900853"
+    },
+    {
+     "forward": "3547ea68fdd14546",
+     "prefill": "3547ea68fdd14546",
+     "step": "c97c231502cc561d",
+     "backward": "9f21e95760900853"
+    }
+   ],
+   "infer": [
+    "bc19a007224d9860",
+    "bc19a007224d9860"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "82b6615b36847109",
+    "82b6615b36847109"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "f4abbd5451ff5172",
+    "f4abbd5451ff5172"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "30287f3369d63e43",
+    "30287f3369d63e43"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 5 of 5 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A2:conv1d.bias', 'A2:conv1d.weight', 'A4:A_log', 'A4:conv1d.bias', 'A4:conv1d.weight', 'A4:dt_bias']"
+   ],
+   "batchscale": [
+    "8b9801efe8170524",
+    "8b9801efe8170524"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "c6240fc848bde00d",
+    "c6240fc848bde00d"
+   ],
+   "ragged_verdict": "STABLE",
+   "stepfull": [
+    "7e667d50fcbc11f4",
+    "7e667d50fcbc11f4"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 4.578303227201104,
+    "stages": {
+     "repeat=1/train": 0.01637810282409191,
+     "repeat=1/infer-save-reload": 0.002845190465450287,
+     "repeat=1/batch": 0.05410015303641558,
+     "repeat=1/batchgrad": 0.11264798603951931,
+     "repeat=1/batchscale": 1.530113721266389,
+     "repeat=1/ragged": 0.046301767230033875,
+     "repeat=1/stepfull": 0.04502190090715885,
+     "repeat=1/rlpair": 0.4730604523792863,
+     "repeat=2/train": 0.016150095500051975,
+     "repeat=2/infer-save-reload": 0.002852930687367916,
+     "repeat=2/batch": 0.05499520618468523,
+     "repeat=2/batchgrad": 0.11365164164453745,
+     "repeat=2/batchscale": 1.547477388754487,
+     "repeat=2/ragged": 0.04575515631586313,
+     "repeat=2/stepfull": 0.04524550773203373,
+     "repeat=2/rlpair": 0.4708227217197418
+    }
+   }
+  },
+  "mamba2/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "5b05a3ecbd70248e",
+    "5b05a3ecbd70248e"
+   ],
+   "parts": [
+    {
+     "forward": "22f79ee009fd9884",
+     "prefill": "22f79ee009fd9884",
+     "step": "3fa40f29231409be",
+     "backward": "f252b3fc19f5f9f5"
+    },
+    {
+     "forward": "22f79ee009fd9884",
+     "prefill": "22f79ee009fd9884",
+     "step": "3fa40f29231409be",
+     "backward": "f252b3fc19f5f9f5"
+    }
+   ],
+   "infer": [
+    "b0084ee171c0720f",
+    "b0084ee171c0720f"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "d21a83ab6b3ce297",
+    "d21a83ab6b3ce297"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "f4abbd5451ff5172",
+    "f4abbd5451ff5172"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "99cad63be0fb7239",
+    "99cad63be0fb7239"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 5 of 5 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A2:conv1d.bias', 'A2:conv1d.weight', 'A2:dt_bias', 'A4:A_log', 'A4:conv1d.bias', 'A4:conv1d.weight', 'A4:dt_bias']"
+   ],
+   "batchscale": [
+    "71e5ec10135b32fb",
+    "71e5ec10135b32fb"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "f1f44805dc9171e8",
+    "f1f44805dc9171e8"
+   ],
+   "ragged_verdict": "STABLE",
+   "stepfull": [
+    "bfd516aa93fe1b12",
+    "bfd516aa93fe1b12"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 4.975919825956225,
+    "stages": {
+     "repeat=1/train": 0.016338050365447998,
+     "repeat=1/infer-save-reload": 0.0028789229691028595,
+     "repeat=1/batch": 0.0537519920617342,
+     "repeat=1/batchgrad": 0.1123506547883153,
+     "repeat=1/batchscale": 1.5340315215289593,
+     "repeat=1/ragged": 0.045362573117017746,
+     "repeat=1/stepfull": 0.04899061191827059,
+     "repeat=1/rlpair": 0.4667107854038477,
+     "repeat=2/train": 0.016046530567109585,
+     "repeat=2/infer-save-reload": 0.0028792237862944603,
+     "repeat=2/batch": 0.058291513472795486,
+     "repeat=2/batchgrad": 0.11296450719237328,
+     "repeat=2/batchscale": 1.9451194806024432,
+     "repeat=2/ragged": 0.04584372974932194,
+     "repeat=2/stepfull": 0.04602959658950567,
+     "repeat=2/rlpair": 0.46744394302368164
+    }
+   }
+  },
+  "mamba2/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3506202ab66d8a1f",
+    "3506202ab66d8a1f"
+   ],
+   "parts": [
+    {
+     "forward": "17ba93b4ffb5ae32",
+     "prefill": "17ba93b4ffb5ae32",
+     "step": "2754d4affce78416",
+     "backward": "d027a7c5a9895e6d"
+    },
+    {
+     "forward": "17ba93b4ffb5ae32",
+     "prefill": "17ba93b4ffb5ae32",
+     "step": "2754d4affce78416",
+     "backward": "d027a7c5a9895e6d"
+    }
+   ],
+   "infer": [
+    "e47047c1022164fb",
+    "e47047c1022164fb"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "5e4dc2619d55149f",
+    "5e4dc2619d55149f"
+   ],
+   "batch_verdict": "STABLE",
+   "rlpair": [
+    "08cdec93b208dfcc",
+    "08cdec93b208dfcc"
+   ],
+   "rlpair_verdict": "STABLE",
+   "rlpair_sides": [
+    "sampler:allocate_state + forward(x, state) + step",
+    "trainer:forward(x) stateless"
+   ],
+   "batchgrad": [
+    "2992677ebe413db5",
+    "2992677ebe413db5"
+   ],
+   "batchgrad_verdict": "STABLE",
+   "batchgrad_notes": [
+    "backward weights: n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+    "backward weights: A=8 n/a:clause 9.2 refuses T=512 at A=8; negative control (tokens=None): 4 of 5 claimed tensors moved",
+    "backward weights: REPORTED (not claimed; a serial fold over tokens, not the v1 GEMM at k' = T; see GRAD_CLAIMED) moved at aligned splits: ['A2:A_log', 'A2:conv1d.bias', 'A2:conv1d.weight', 'A2:dt_bias', 'A4:A_log', 'A4:conv1d.bias', 'A4:conv1d.weight']"
+   ],
+   "batchscale": [
+    "9c78b8aeea6269b2",
+    "9c78b8aeea6269b2"
+   ],
+   "batchscale_verdict": "STABLE",
+   "ragged": [
+    "2586664048028a83",
+    "2586664048028a83"
+   ],
+   "ragged_verdict": "STABLE",
+   "stepfull": [
+    "9836f8424c64896c",
+    "9836f8424c64896c"
+   ],
+   "stepfull_verdict": "STABLE",
+   "timing": {
+    "total_seconds": 4.590220210142434,
+    "stages": {
+     "repeat=1/train": 0.016323561780154705,
+     "repeat=1/infer-save-reload": 0.0028970930725336075,
+     "repeat=1/batch": 0.054838080890476704,
+     "repeat=1/batchgrad": 0.11423596180975437,
+     "repeat=1/batchscale": 1.5486570009961724,
+     "repeat=1/ragged": 0.04699845053255558,
+     "repeat=1/stepfull": 0.0455470597371459,
+     "repeat=1/rlpair": 0.46899058762937784,
+     "repeat=2/train": 0.016222206875681877,
+     "repeat=2/infer-save-reload": 0.0028682714328169823,
+     "repeat=2/batch": 0.054574391804635525,
+     "repeat=2/batchgrad": 0.11326858773827553,
+     "repeat=2/batchscale": 1.542545543052256,
+     "repeat=2/ragged": 0.045962175354361534,
+     "repeat=2/stepfull": 0.04520914796739817,
+     "repeat=2/rlpair": 0.470206281170249
+    }
+   }
+  },
+  "par-samba/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "359834bee4b2789a",
+    "359834bee4b2789a"
+   ],
+   "parts": [
+    {
+     "logits": "c4edb4f61dd9eb23",
+     "params": "98a1e9aaeaa6d3a4"
+    },
+    {
+     "logits": "c4edb4f61dd9eb23",
+     "params": "98a1e9aaeaa6d3a4"
+    }
+   ],
+   "infer": [
+    "c663dd4766895890",
+    "c663dd4766895890"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "40a81f8c42e2256b",
+    "40a81f8c42e2256b"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "c663dd4766895890",
+    "c663dd4766895890"
+   ],
+   "batch": [
+    "09eefddb12772255",
+    "09eefddb12772255"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 10.414601447992027,
+    "stages": {
+     "repeat=1/train": 5.786051775328815,
+     "repeat=1/infer-save-reload": 0.017222351394593716,
+     "repeat=1/batch": 0.07190358638763428,
+     "repeat=1/batchgrad": 8.208304643630981e-05,
+     "repeat=1/batchscale": 5.1721930503845215e-05,
+     "repeat=1/ragged": 5.035102367401123e-05,
+     "repeat=1/stepfull": 4.9561262130737305e-05,
+     "repeat=2/train": 4.452228573150933,
+     "repeat=2/infer-save-reload": 0.01462073065340519,
+     "repeat=2/batch": 0.07164191827178001,
+     "repeat=2/batchgrad": 0.000120493583381176,
+     "repeat=2/batchscale": 5.467236042022705e-05,
+     "repeat=2/ragged": 5.2152201533317566e-05,
+     "repeat=2/stepfull": 5.162134766578674e-05
+    }
+   }
+  },
+  "par-samba/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "f3eb2f9e54c68bf7",
+    "f3eb2f9e54c68bf7"
+   ],
+   "parts": [
+    {
+     "logits": "d10e507dc16a5055",
+     "params": "b1b6b2e7146e55a9"
+    },
+    {
+     "logits": "d10e507dc16a5055",
+     "params": "b1b6b2e7146e55a9"
+    }
+   ],
+   "infer": [
+    "a8df84421515d634",
+    "a8df84421515d634"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "dc26f60c944cedf6",
+    "dc26f60c944cedf6"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "a8df84421515d634",
+    "a8df84421515d634"
+   ],
+   "batch": [
+    "71be58f89201f389",
+    "71be58f89201f389"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 9.05799034703523,
+    "stages": {
+     "repeat=1/train": 4.430997787974775,
+     "repeat=1/infer-save-reload": 0.014316178858280182,
+     "repeat=1/batch": 0.0716894194483757,
+     "repeat=1/batchgrad": 9.390339255332947e-05,
+     "repeat=1/batchscale": 5.618203431367874e-05,
+     "repeat=1/ragged": 5.381181836128235e-05,
+     "repeat=1/stepfull": 5.29726967215538e-05,
+     "repeat=2/train": 4.454379070550203,
+     "repeat=2/infer-save-reload": 0.014637420885264874,
+     "repeat=2/batch": 0.07105811685323715,
+     "repeat=2/batchgrad": 9.182281792163849e-05,
+     "repeat=2/batchscale": 5.304068326950073e-05,
+     "repeat=2/ragged": 5.088187754154205e-05,
+     "repeat=2/stepfull": 4.973169416189194e-05
+    }
+   }
+  },
+  "par-samba/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "78027e9d4a9ee36a",
+    "78027e9d4a9ee36a"
+   ],
+   "parts": [
+    {
+     "logits": "969b511689427836",
+     "params": "058840c92b486ef8"
+    },
+    {
+     "logits": "969b511689427836",
+     "params": "058840c92b486ef8"
+    }
+   ],
+   "infer": [
+    "cd09020cd23ba0bb",
+    "cd09020cd23ba0bb"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "a7965a8a91b70d4e",
+    "a7965a8a91b70d4e"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "cd09020cd23ba0bb",
+    "cd09020cd23ba0bb"
+   ],
+   "batch": [
+    "514770006708e9a0",
+    "514770006708e9a0"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 9.066583742387593,
+    "stages": {
+     "repeat=1/train": 4.438240417279303,
+     "repeat=1/infer-save-reload": 0.014713793061673641,
+     "repeat=1/batch": 0.07192995771765709,
+     "repeat=1/batchgrad": 8.175335824489594e-05,
+     "repeat=1/batchscale": 5.3091906011104584e-05,
+     "repeat=1/ragged": 5.1081180572509766e-05,
+     "repeat=1/stepfull": 5.077105015516281e-05,
+     "repeat=2/train": 4.453952363692224,
+     "repeat=2/infer-save-reload": 0.014424122869968414,
+     "repeat=2/batch": 0.07240340393036604,
+     "repeat=2/batchgrad": 8.865445852279663e-05,
+     "repeat=2/batchscale": 5.4601579904556274e-05,
+     "repeat=2/ragged": 5.265232175588608e-05,
+     "repeat=2/stepfull": 5.187094211578369e-05
+    }
+   }
+  },
+  "par-samba/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b9a6f11655fecdf2",
+    "b9a6f11655fecdf2"
+   ],
+   "parts": [
+    {
+     "logits": "90491564c1690ec8",
+     "params": "b1be24a271757d4a"
+    },
+    {
+     "logits": "90491564c1690ec8",
+     "params": "b1be24a271757d4a"
+    }
+   ],
+   "infer": [
+    "561cbc9176182841",
+    "561cbc9176182841"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "c68ee79e31dc0e49",
+    "c68ee79e31dc0e49"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "561cbc9176182841",
+    "561cbc9176182841"
+   ],
+   "batch": [
+    "a45b112b42f1ed51",
+    "a45b112b42f1ed51"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 9.099563254974782,
+    "stages": {
+     "repeat=1/train": 4.468956688418984,
+     "repeat=1/infer-save-reload": 0.014840777032077312,
+     "repeat=1/batch": 0.07081279810518026,
+     "repeat=1/batchgrad": 8.667353540658951e-05,
+     "repeat=1/batchscale": 6.017182022333145e-05,
+     "repeat=1/ragged": 5.0761736929416656e-05,
+     "repeat=1/stepfull": 5.0361268222332e-05,
+     "repeat=2/train": 4.4571464685723186,
+     "repeat=2/infer-save-reload": 0.014375461265444756,
+     "repeat=2/batch": 0.07251243852078915,
+     "repeat=2/batchgrad": 8.083321154117584e-05,
+     "repeat=2/batchscale": 5.451217293739319e-05,
+     "repeat=2/ragged": 5.264207720756531e-05,
+     "repeat=2/stepfull": 5.2111223340034485e-05
+    }
+   }
+  },
+  "par-samba/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c04ab1019588d438",
+    "c04ab1019588d438"
+   ],
+   "parts": [
+    {
+     "logits": "c3dfe1c9a11962c2",
+     "params": "66794f15eb179fd8"
+    },
+    {
+     "logits": "c3dfe1c9a11962c2",
+     "params": "66794f15eb179fd8"
+    }
+   ],
+   "infer": [
+    "fb72fcf2fb2ad224",
+    "fb72fcf2fb2ad224"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "9fc72e4c424419cc",
+    "9fc72e4c424419cc"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "fb72fcf2fb2ad224",
+    "fb72fcf2fb2ad224"
+   ],
+   "batch": [
+    "39efa7f425575919",
+    "39efa7f425575919"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 9.055887871421874,
+    "stages": {
+     "repeat=1/train": 4.451510327868164,
+     "repeat=1/infer-save-reload": 0.014303279109299183,
+     "repeat=1/batch": 0.07148321252316236,
+     "repeat=1/batchgrad": 9.998399764299393e-05,
+     "repeat=1/batchscale": 5.6362710893154144e-05,
+     "repeat=1/ragged": 5.367211997509003e-05,
+     "repeat=1/stepfull": 5.302205681800842e-05,
+     "repeat=2/train": 4.431399173103273,
+     "repeat=2/infer-save-reload": 0.014230946078896523,
+     "repeat=2/batch": 0.07204531133174896,
+     "repeat=2/batchgrad": 8.431263267993927e-05,
+     "repeat=2/batchscale": 5.310121923685074e-05,
+     "repeat=2/ragged": 5.068257451057434e-05,
+     "repeat=2/stepfull": 5.022156983613968e-05
+    }
+   }
+  },
+  "par-samba/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "afc67288c7c3a521",
+    "afc67288c7c3a521"
+   ],
+   "parts": [
+    {
+     "logits": "eda158e20e4a53a5",
+     "params": "e2c204eef13bcfc0"
+    },
+    {
+     "logits": "eda158e20e4a53a5",
+     "params": "e2c204eef13bcfc0"
+    }
+   ],
+   "infer": [
+    "f3e42b50f51378ce",
+    "f3e42b50f51378ce"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "aa31d80002abbd6c",
+    "aa31d80002abbd6c"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "f3e42b50f51378ce",
+    "f3e42b50f51378ce"
+   ],
+   "batch": [
+    "3c10388ca139a76c",
+    "3c10388ca139a76c"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 9.082898052409291,
+    "stages": {
+     "repeat=1/train": 4.4492941200733185,
+     "repeat=1/infer-save-reload": 0.01475791446864605,
+     "repeat=1/batch": 0.0711851716041565,
+     "repeat=1/batchgrad": 9.87425446510315e-05,
+     "repeat=1/batchscale": 5.477201193571091e-05,
+     "repeat=1/ragged": 4.98015433549881e-05,
+     "repeat=1/stepfull": 4.9591995775699615e-05,
+     "repeat=2/train": 4.460935682989657,
+     "repeat=2/infer-save-reload": 0.014180994592607021,
+     "repeat=2/batch": 0.07158375531435013,
+     "repeat=2/batchgrad": 0.0001165047287940979,
+     "repeat=2/batchscale": 5.5791810154914856e-05,
+     "repeat=2/ragged": 5.265232175588608e-05,
+     "repeat=2/stepfull": 5.2391551434993744e-05
+    }
+   }
+  },
+  "par-samba/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "bbe199c298e7016f",
+    "bbe199c298e7016f"
+   ],
+   "parts": [
+    {
+     "logits": "e10586c98910c5c3",
+     "params": "010a72fe7f06b888"
+    },
+    {
+     "logits": "e10586c98910c5c3",
+     "params": "010a72fe7f06b888"
+    }
+   ],
+   "infer": [
+    "2853920460831149",
+    "2853920460831149"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "2316354c8dc29b3d",
+    "2316354c8dc29b3d"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "2853920460831149",
+    "2853920460831149"
+   ],
+   "batch": [
+    "9c69d39f197def58",
+    "9c69d39f197def58"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 9.075049413368106,
+    "stages": {
+     "repeat=1/train": 4.447351771406829,
+     "repeat=1/infer-save-reload": 0.014720704406499863,
+     "repeat=1/batch": 0.0725506404414773,
+     "repeat=1/batchgrad": 8.424278348684311e-05,
+     "repeat=1/batchscale": 5.694199353456497e-05,
+     "repeat=1/ragged": 5.4751522839069366e-05,
+     "repeat=1/stepfull": 5.430169403553009e-05,
+     "repeat=2/train": 4.455595384351909,
+     "repeat=2/infer-save-reload": 0.013907914981245995,
+     "repeat=2/batch": 0.07001673988997936,
+     "repeat=2/batchgrad": 9.357277303934097e-05,
+     "repeat=2/batchscale": 5.1822513341903687e-05,
+     "repeat=2/ragged": 4.990212619304657e-05,
+     "repeat=2/stepfull": 4.936195909976959e-05
+    }
+   }
+  },
+  "par-samba/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "359834bee4b2789a",
+    "359834bee4b2789a"
+   ],
+   "parts": [
+    {
+     "logits": "c4edb4f61dd9eb23",
+     "params": "98a1e9aaeaa6d3a4"
+    },
+    {
+     "logits": "c4edb4f61dd9eb23",
+     "params": "98a1e9aaeaa6d3a4"
+    }
+   ],
+   "infer": [
+    "c663dd4766895890",
+    "c663dd4766895890"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "40a81f8c42e2256b",
+    "40a81f8c42e2256b"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "c663dd4766895890",
+    "c663dd4766895890"
+   ],
+   "batch": [
+    "09eefddb12772255",
+    "09eefddb12772255"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 9.037735786288977,
+    "stages": {
+     "repeat=1/train": 4.408399324864149,
+     "repeat=1/infer-save-reload": 0.013904604129493237,
+     "repeat=1/batch": 0.07179318275302649,
+     "repeat=1/batchgrad": 6.849225610494614e-05,
+     "repeat=1/batchscale": 3.957189619541168e-05,
+     "repeat=1/ragged": 3.8071535527706146e-05,
+     "repeat=1/stepfull": 3.7260353565216064e-05,
+     "repeat=2/train": 4.45698263309896,
+     "repeat=2/infer-save-reload": 0.014346410520374775,
+     "repeat=2/batch": 0.07156740501523018,
+     "repeat=2/batchgrad": 6.269197911024094e-05,
+     "repeat=2/batchscale": 3.717094659805298e-05,
+     "repeat=2/ragged": 3.6422163248062134e-05,
+     "repeat=2/stepfull": 3.587082028388977e-05
+    }
+   }
+  },
+  "par-samba/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3cacebe716d76ff0",
+    "3cacebe716d76ff0"
+   ],
+   "parts": [
+    {
+     "logits": "cb0ec74f3b79d599",
+     "params": "0bfbc66f5162f5e4"
+    },
+    {
+     "logits": "cb0ec74f3b79d599",
+     "params": "0bfbc66f5162f5e4"
+    }
+   ],
+   "infer": [
+    "13993c81dbf7c04f",
+    "13993c81dbf7c04f"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "a54857b10778d87a",
+    "a54857b10778d87a"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "13993c81dbf7c04f",
+    "13993c81dbf7c04f"
+   ],
+   "batch": [
+    "7da5afd7a9e3d5e7",
+    "7da5afd7a9e3d5e7"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 9.097317665815353,
+    "stages": {
+     "repeat=1/train": 4.453266229480505,
+     "repeat=1/infer-save-reload": 0.014412563294172287,
+     "repeat=1/batch": 0.0721234641969204,
+     "repeat=1/batchgrad": 8.212309330701828e-05,
+     "repeat=1/batchscale": 5.175173282623291e-05,
+     "repeat=1/ragged": 4.9491412937641144e-05,
+     "repeat=1/stepfull": 4.902202636003494e-05,
+     "repeat=2/train": 4.470403409563005,
+     "repeat=2/infer-save-reload": 0.014487124979496002,
+     "repeat=2/batch": 0.07174189202487469,
+     "repeat=2/batchgrad": 8.761323988437653e-05,
+     "repeat=2/batchscale": 5.486141890287399e-05,
+     "repeat=2/ragged": 5.0030648708343506e-05,
+     "repeat=2/stepfull": 4.985090345144272e-05
+    }
+   }
+  },
+  "par-byte-lm/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "eb83c1c233f68756",
+    "eb83c1c233f68756"
+   ],
+   "parts": [
+    {
+     "loss": "9d59941dd46420a5",
+     "params": "22e1d925f435512c",
+     "m": "15549f3796ef87b1"
+    },
+    {
+     "loss": "9d59941dd46420a5",
+     "params": "22e1d925f435512c",
+     "m": "15549f3796ef87b1"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)",
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.5005372893065214,
+    "stages": {
+     "repeat=1/train": 0.4321303255856037,
+     "repeat=1/infer-save-reload": 8.709728717803955e-06,
+     "repeat=1/batch": 0.00014611613005399704,
+     "repeat=1/batchgrad": 5.534198135137558e-05,
+     "repeat=1/batchscale": 5.27920201420784e-05,
+     "repeat=1/ragged": 5.2092596888542175e-05,
+     "repeat=1/stepfull": 5.17209991812706e-05,
+     "repeat=2/train": 0.06741603650152683,
+     "repeat=2/infer-save-reload": 7.850117981433868e-06,
+     "repeat=2/batch": 0.00011627376079559326,
+     "repeat=2/batchgrad": 5.757249891757965e-05,
+     "repeat=2/batchscale": 5.299132317304611e-05,
+     "repeat=2/ragged": 5.1992014050483704e-05,
+     "repeat=2/stepfull": 5.114171653985977e-05
+    }
+   }
+  },
+  "par-byte-lm/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3b5c2f34bf09e8c9",
+    "3b5c2f34bf09e8c9"
+   ],
+   "parts": [
+    {
+     "loss": "72bd44c455dad7b6",
+     "params": "e172de28e97c58c9",
+     "m": "f105ee2011e3849c"
+    },
+    {
+     "loss": "72bd44c455dad7b6",
+     "params": "e172de28e97c58c9",
+     "m": "f105ee2011e3849c"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)",
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.13525052927434444,
+    "stages": {
+     "repeat=1/train": 0.06742226704955101,
+     "repeat=1/infer-save-reload": 7.89109617471695e-06,
+     "repeat=1/batch": 0.00012612342834472656,
+     "repeat=1/batchgrad": 5.4541975259780884e-05,
+     "repeat=1/batchscale": 5.0552189350128174e-05,
+     "repeat=1/ragged": 5.0341710448265076e-05,
+     "repeat=1/stepfull": 4.9171969294548035e-05,
+     "repeat=2/train": 0.06687701866030693,
+     "repeat=2/infer-save-reload": 7.379800081253052e-06,
+     "repeat=2/batch": 0.00010798312723636627,
+     "repeat=2/batchgrad": 5.757249891757965e-05,
+     "repeat=2/batchscale": 5.082134157419205e-05,
+     "repeat=2/ragged": 4.941225051879883e-05,
+     "repeat=2/stepfull": 4.9931928515434265e-05
+    }
+   }
+  },
+  "par-byte-lm/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ddb13a422e4d2858",
+    "ddb13a422e4d2858"
+   ],
+   "parts": [
+    {
+     "loss": "8b60d773bb0d0d19",
+     "params": "03bb0834c49cbbf7",
+     "m": "afd153fba11adbf8"
+    },
+    {
+     "loss": "8b60d773bb0d0d19",
+     "params": "03bb0834c49cbbf7",
+     "m": "afd153fba11adbf8"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)",
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.13489610701799393,
+    "stages": {
+     "repeat=1/train": 0.06709146592766047,
+     "repeat=1/infer-save-reload": 7.569789886474609e-06,
+     "repeat=1/batch": 0.0001264140009880066,
+     "repeat=1/batchgrad": 5.8521516621112823e-05,
+     "repeat=1/batchscale": 5.264207720756531e-05,
+     "repeat=1/ragged": 5.188118666410446e-05,
+     "repeat=1/stepfull": 5.1381997764110565e-05,
+     "repeat=2/train": 0.06682294700294733,
+     "repeat=2/infer-save-reload": 7.309950888156891e-06,
+     "repeat=2/batch": 0.00011346396058797836,
+     "repeat=2/batchgrad": 7.0132315158844e-05,
+     "repeat=2/batchscale": 5.27920201420784e-05,
+     "repeat=2/ragged": 5.2082352340221405e-05,
+     "repeat=2/stepfull": 5.141180008649826e-05
+    }
+   }
+  },
+  "par-byte-lm/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "7ab80fd955e23d77",
+    "7ab80fd955e23d77"
+   ],
+   "parts": [
+    {
+     "loss": "65f8c3a9637000be",
+     "params": "5fd740b8dbb18f7a",
+     "m": "d09a4ce32b1c0b42"
+    },
+    {
+     "loss": "65f8c3a9637000be",
+     "params": "5fd740b8dbb18f7a",
+     "m": "d09a4ce32b1c0b42"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)",
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.13481787405908108,
+    "stages": {
+     "repeat=1/train": 0.06707946490496397,
+     "repeat=1/infer-save-reload": 7.899478077888489e-06,
+     "repeat=1/batch": 0.00012193527072668076,
+     "repeat=1/batchgrad": 5.885213613510132e-05,
+     "repeat=1/batchscale": 5.465187132358551e-05,
+     "repeat=1/ragged": 6.002187728881836e-05,
+     "repeat=1/stepfull": 5.1441602408885956e-05,
+     "repeat=2/train": 0.06676850467920303,
+     "repeat=2/infer-save-reload": 7.779337465763092e-06,
+     "repeat=2/batch": 0.00011582393199205399,
+     "repeat=2/batchgrad": 5.7211145758628845e-05,
+     "repeat=2/batchscale": 5.187094211578369e-05,
+     "repeat=2/ragged": 5.163252353668213e-05,
+     "repeat=2/stepfull": 5.1802024245262146e-05
+    }
+   }
+  },
+  "par-byte-lm/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c958c8af2e505ca0",
+    "c958c8af2e505ca0"
+   ],
+   "parts": [
+    {
+     "loss": "390dac10b46e66fe",
+     "params": "b199e56e8af0c510",
+     "m": "ed2f832f2cf00d07"
+    },
+    {
+     "loss": "390dac10b46e66fe",
+     "params": "b199e56e8af0c510",
+     "m": "ed2f832f2cf00d07"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)",
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.13455530535429716,
+    "stages": {
+     "repeat=1/train": 0.06657148711383343,
+     "repeat=1/infer-save-reload": 1.0219402611255646e-05,
+     "repeat=1/batch": 0.00011700578033924103,
+     "repeat=1/batchgrad": 5.7091936469078064e-05,
+     "repeat=1/batchscale": 5.049258470535278e-05,
+     "repeat=1/ragged": 4.982203245162964e-05,
+     "repeat=1/stepfull": 4.965253174304962e-05,
+     "repeat=2/train": 0.06702127307653427,
+     "repeat=2/infer-save-reload": 7.481314241886139e-06,
+     "repeat=2/batch": 0.00011100433766841888,
+     "repeat=2/batchgrad": 5.6692399084568024e-05,
+     "repeat=2/batchscale": 4.9631111323833466e-05,
+     "repeat=2/ragged": 4.9911439418792725e-05,
+     "repeat=2/stepfull": 6.275251507759094e-05
+    }
+   }
+  },
+  "par-byte-lm/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "aedc78ea66ef018c",
+    "aedc78ea66ef018c"
+   ],
+   "parts": [
+    {
+     "loss": "004e02221cd2cae9",
+     "params": "a39b1388d68225a7",
+     "m": "57838c235cce8d5b"
+    },
+    {
+     "loss": "004e02221cd2cae9",
+     "params": "a39b1388d68225a7",
+     "m": "57838c235cce8d5b"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)",
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.13458367437124252,
+    "stages": {
+     "repeat=1/train": 0.06716146785765886,
+     "repeat=1/infer-save-reload": 7.580965757369995e-06,
+     "repeat=1/batch": 0.00012858491390943527,
+     "repeat=1/batchgrad": 6.0811638832092285e-05,
+     "repeat=1/batchscale": 5.3202733397483826e-05,
+     "repeat=1/ragged": 5.25815412402153e-05,
+     "repeat=1/stepfull": 5.1721930503845215e-05,
+     "repeat=2/train": 0.06642370205372572,
+     "repeat=2/infer-save-reload": 7.599592208862305e-06,
+     "repeat=2/batch": 0.00011842325329780579,
+     "repeat=2/batchgrad": 7.158145308494568e-05,
+     "repeat=2/batchscale": 5.300156772136688e-05,
+     "repeat=2/ragged": 5.3161755204200745e-05,
+     "repeat=2/stepfull": 5.1901675760746e-05
+    }
+   }
+  },
+  "par-byte-lm/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "dc65953fd8966eb3",
+    "dc65953fd8966eb3"
+   ],
+   "parts": [
+    {
+     "loss": "d430bd113488c444",
+     "params": "44eec0e29d4e27e9",
+     "m": "7d960d9fc550cd4c"
+    },
+    {
+     "loss": "d430bd113488c444",
+     "params": "44eec0e29d4e27e9",
+     "m": "7d960d9fc550cd4c"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)",
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.13439549040049314,
+    "stages": {
+     "repeat=1/train": 0.06679382547736168,
+     "repeat=1/infer-save-reload": 7.491558790206909e-06,
+     "repeat=1/batch": 0.0001186644658446312,
+     "repeat=1/batchgrad": 5.6891702115535736e-05,
+     "repeat=1/batchscale": 5.0212256610393524e-05,
+     "repeat=1/ragged": 4.991237074136734e-05,
+     "repeat=1/stepfull": 4.9252063035964966e-05,
+     "repeat=2/train": 0.06665764097124338,
+     "repeat=2/infer-save-reload": 7.799826562404633e-06,
+     "repeat=2/batch": 0.00011179409921169281,
+     "repeat=2/batchgrad": 5.715247243642807e-05,
+     "repeat=2/batchscale": 5.078129470348358e-05,
+     "repeat=2/ragged": 4.971213638782501e-05,
+     "repeat=2/stepfull": 4.9350783228874207e-05
+    }
+   }
+  },
+  "par-byte-lm/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "eb83c1c233f68756",
+    "eb83c1c233f68756"
+   ],
+   "parts": [
+    {
+     "loss": "9d59941dd46420a5",
+     "params": "22e1d925f435512c",
+     "m": "15549f3796ef87b1"
+    },
+    {
+     "loss": "9d59941dd46420a5",
+     "params": "22e1d925f435512c",
+     "m": "15549f3796ef87b1"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)",
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.13389365188777447,
+    "stages": {
+     "repeat=1/train": 0.06676654424518347,
+     "repeat=1/infer-save-reload": 7.230788469314575e-06,
+     "repeat=1/batch": 7.820315659046173e-05,
+     "repeat=1/batchgrad": 4.1141174733638763e-05,
+     "repeat=1/batchscale": 3.8341619074344635e-05,
+     "repeat=1/ragged": 3.850273787975311e-05,
+     "repeat=1/stepfull": 3.7942081689834595e-05,
+     "repeat=2/train": 0.06634870823472738,
+     "repeat=2/infer-save-reload": 1.0370276868343353e-05,
+     "repeat=2/batch": 7.500220090150833e-05,
+     "repeat=2/batchgrad": 4.1221268475055695e-05,
+     "repeat=2/batchscale": 3.855209797620773e-05,
+     "repeat=2/ragged": 3.843102604150772e-05,
+     "repeat=2/stepfull": 3.765244036912918e-05
+    }
+   }
+  },
+  "par-byte-lm/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "63db87a288142b29",
+    "63db87a288142b29"
+   ],
+   "parts": [
+    {
+     "loss": "55c5d6768a6bc19e",
+     "params": "b99b399749a63909",
+     "m": "23187f2ed1bc3a9f"
+    },
+    {
+     "loss": "55c5d6768a6bc19e",
+     "params": "b99b399749a63909",
+     "m": "23187f2ed1bc3a9f"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)",
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.13545260671526194,
+    "stages": {
+     "repeat=1/train": 0.0672629214823246,
+     "repeat=1/infer-save-reload": 1.0419636964797974e-05,
+     "repeat=1/batch": 0.00012099370360374451,
+     "repeat=1/batchgrad": 5.6811608374118805e-05,
+     "repeat=1/batchscale": 4.967208951711655e-05,
+     "repeat=1/ragged": 4.938244819641113e-05,
+     "repeat=1/stepfull": 4.972144961357117e-05,
+     "repeat=2/train": 0.06720243953168392,
+     "repeat=2/infer-save-reload": 7.290393114089966e-06,
+     "repeat=2/batch": 0.00011217407882213593,
+     "repeat=2/batchgrad": 5.5701471865177155e-05,
+     "repeat=2/batchscale": 4.97717410326004e-05,
+     "repeat=2/ragged": 4.9911439418792725e-05,
+     "repeat=2/stepfull": 5.417130887508392e-05
+    }
+   }
+  },
+  "par-byte-lm-model-pool/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3d26daba7af771cc",
+    "3d26daba7af771cc"
+   ],
+   "parts": [
+    {
+     "loss": "9d59941dd46420a5",
+     "params": "22e1d925f435512c",
+     "m": "15549f3796ef87b1",
+     "v": "9a94ae7c0500b273",
+     "grads": "346f8f9249d19043"
+    },
+    {
+     "loss": "9d59941dd46420a5",
+     "params": "22e1d925f435512c",
+     "m": "15549f3796ef87b1",
+     "v": "9a94ae7c0500b273",
+     "grads": "346f8f9249d19043"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)",
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.13751883059740067,
+    "stages": {
+     "repeat=1/train": 0.06884349789470434,
+     "repeat=1/infer-save-reload": 7.720664143562317e-06,
+     "repeat=1/batch": 0.0001201452687382698,
+     "repeat=1/batchgrad": 5.7102181017398834e-05,
+     "repeat=1/batchscale": 5.153194069862366e-05,
+     "repeat=1/ragged": 5.1901675760746e-05,
+     "repeat=1/stepfull": 5.163252353668213e-05,
+     "repeat=2/train": 0.06771492771804333,
+     "repeat=2/infer-save-reload": 7.809139788150787e-06,
+     "repeat=2/batch": 0.00011443439871072769,
+     "repeat=2/batchgrad": 5.812197923660278e-05,
+     "repeat=2/batchscale": 5.137082189321518e-05,
+     "repeat=2/ragged": 5.3151510655879974e-05,
+     "repeat=2/stepfull": 5.258247256278992e-05
+    }
+   }
+  },
+  "par-byte-lm-model-pool/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c5fd6583ac8ddf9a",
+    "c5fd6583ac8ddf9a"
+   ],
+   "parts": [
+    {
+     "loss": "72bd44c455dad7b6",
+     "params": "e172de28e97c58c9",
+     "m": "f105ee2011e3849c",
+     "v": "c5f4fee499d289ee",
+     "grads": "ba5732d86a95bf1e"
+    },
+    {
+     "loss": "72bd44c455dad7b6",
+     "params": "e172de28e97c58c9",
+     "m": "f105ee2011e3849c",
+     "v": "c5f4fee499d289ee",
+     "grads": "ba5732d86a95bf1e"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)",
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.1375973829999566,
+    "stages": {
+     "repeat=1/train": 0.06878888607025146,
+     "repeat=1/infer-save-reload": 7.661059498786926e-06,
+     "repeat=1/batch": 0.00011652335524559021,
+     "repeat=1/batchgrad": 5.7102181017398834e-05,
+     "repeat=1/batchscale": 7.465202361345291e-05,
+     "repeat=1/ragged": 5.087163299322128e-05,
+     "repeat=1/stepfull": 4.9282796680927277e-05,
+     "repeat=2/train": 0.06785072293132544,
+     "repeat=2/infer-save-reload": 7.431022822856903e-06,
+     "repeat=2/batch": 0.00011091399937868118,
+     "repeat=2/batchgrad": 5.678180605173111e-05,
+     "repeat=2/batchscale": 4.972144961357117e-05,
+     "repeat=2/ragged": 5.033053457736969e-05,
+     "repeat=2/stepfull": 4.9690715968608856e-05
+    }
+   }
+  },
+  "par-byte-lm-model-pool/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "407da1849795daa4",
+    "407da1849795daa4"
+   ],
+   "parts": [
+    {
+     "loss": "8b60d773bb0d0d19",
+     "params": "03bb0834c49cbbf7",
+     "m": "afd153fba11adbf8",
+     "v": "5576128caea418b1",
+     "grads": "c2a59e1666fbed59"
+    },
+    {
+     "loss": "8b60d773bb0d0d19",
+     "params": "03bb0834c49cbbf7",
+     "m": "afd153fba11adbf8",
+     "v": "5576128caea418b1",
+     "grads": "c2a59e1666fbed59"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)",
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.13676621299237013,
+    "stages": {
+     "repeat=1/train": 0.06767238676548004,
+     "repeat=1/infer-save-reload": 7.559545338153839e-06,
+     "repeat=1/batch": 0.0001226840540766716,
+     "repeat=1/batchgrad": 5.805119872093201e-05,
+     "repeat=1/batchscale": 5.1901675760746e-05,
+     "repeat=1/ragged": 5.1791779696941376e-05,
+     "repeat=1/stepfull": 5.168188363313675e-05,
+     "repeat=2/train": 0.0681331129744649,
+     "repeat=2/infer-save-reload": 7.400289177894592e-06,
+     "repeat=2/batch": 0.00011101458221673965,
+     "repeat=2/batchgrad": 5.877204239368439e-05,
+     "repeat=2/batchscale": 5.212239921092987e-05,
+     "repeat=2/ragged": 5.170237272977829e-05,
+     "repeat=2/stepfull": 5.155149847269058e-05
+    }
+   }
+  },
+  "par-byte-lm-model-pool/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ed030c5713cf36a8",
+    "ed030c5713cf36a8"
+   ],
+   "parts": [
+    {
+     "loss": "65f8c3a9637000be",
+     "params": "5fd740b8dbb18f7a",
+     "m": "d09a4ce32b1c0b42",
+     "v": "a2bdc4f9ba6c750c",
+     "grads": "6ceeaa2451e66696"
+    },
+    {
+     "loss": "65f8c3a9637000be",
+     "params": "5fd740b8dbb18f7a",
+     "m": "d09a4ce32b1c0b42",
+     "v": "a2bdc4f9ba6c750c",
+     "grads": "6ceeaa2451e66696"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)",
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.13670488074421883,
+    "stages": {
+     "repeat=1/train": 0.06801813933998346,
+     "repeat=1/infer-save-reload": 7.591210305690765e-06,
+     "repeat=1/batch": 0.00012826453894376755,
+     "repeat=1/batchgrad": 6.516184657812119e-05,
+     "repeat=1/batchscale": 5.186069756746292e-05,
+     "repeat=1/ragged": 5.149189382791519e-05,
+     "repeat=1/stepfull": 5.121249705553055e-05,
+     "repeat=2/train": 0.06769462674856186,
+     "repeat=2/infer-save-reload": 7.390044629573822e-06,
+     "repeat=2/batch": 0.00011779461055994034,
+     "repeat=2/batchgrad": 5.7612545788288116e-05,
+     "repeat=2/batchscale": 5.227234214544296e-05,
+     "repeat=2/ragged": 5.1381997764110565e-05,
+     "repeat=2/stepfull": 5.121249705553055e-05
+    }
+   }
+  },
+  "par-byte-lm-model-pool/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "36c57f619628a629",
+    "36c57f619628a629"
+   ],
+   "parts": [
+    {
+     "loss": "390dac10b46e66fe",
+     "params": "b199e56e8af0c510",
+     "m": "ed2f832f2cf00d07",
+     "v": "43b5e78ec3b6d39b",
+     "grads": "ef9adbf8bb6f2640"
+    },
+    {
+     "loss": "390dac10b46e66fe",
+     "params": "b199e56e8af0c510",
+     "m": "ed2f832f2cf00d07",
+     "v": "43b5e78ec3b6d39b",
+     "grads": "ef9adbf8bb6f2640"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)",
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.13788953237235546,
+    "stages": {
+     "repeat=1/train": 0.06864467076957226,
+     "repeat=1/infer-save-reload": 7.669441401958466e-06,
+     "repeat=1/batch": 0.00013488531112670898,
+     "repeat=1/batchgrad": 5.407258868217468e-05,
+     "repeat=1/batchscale": 5.008187144994736e-05,
+     "repeat=1/ragged": 4.9522146582603455e-05,
+     "repeat=1/stepfull": 5.528237670660019e-05,
+     "repeat=2/train": 0.06827248819172382,
+     "repeat=2/infer-save-reload": 7.749535143375397e-06,
+     "repeat=2/batch": 0.00010980479419231415,
+     "repeat=2/batchgrad": 5.772244185209274e-05,
+     "repeat=2/batchscale": 4.970189183950424e-05,
+     "repeat=2/ragged": 4.987139254808426e-05,
+     "repeat=2/stepfull": 4.888232797384262e-05
+    }
+   }
+  },
+  "par-byte-lm-model-pool/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "33a04d5fd2d480a4",
+    "33a04d5fd2d480a4"
+   ],
+   "parts": [
+    {
+     "loss": "004e02221cd2cae9",
+     "params": "a39b1388d68225a7",
+     "m": "57838c235cce8d5b",
+     "v": "6fe710a01ebf9cd3",
+     "grads": "9b073fd2f346ff8e"
+    },
+    {
+     "loss": "004e02221cd2cae9",
+     "params": "a39b1388d68225a7",
+     "m": "57838c235cce8d5b",
+     "v": "6fe710a01ebf9cd3",
+     "grads": "9b073fd2f346ff8e"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)",
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.13844873290508986,
+    "stages": {
+     "repeat=1/train": 0.06878812611103058,
+     "repeat=1/infer-save-reload": 7.859431207180023e-06,
+     "repeat=1/batch": 0.0001215049996972084,
+     "repeat=1/batchgrad": 5.9711746871471405e-05,
+     "repeat=1/batchscale": 5.341041833162308e-05,
+     "repeat=1/ragged": 5.4001808166503906e-05,
+     "repeat=1/stepfull": 5.212239921092987e-05,
+     "repeat=2/train": 0.0686936229467392,
+     "repeat=2/infer-save-reload": 7.570721209049225e-06,
+     "repeat=2/batch": 0.00011581368744373322,
+     "repeat=2/batchgrad": 5.886144936084747e-05,
+     "repeat=2/batchscale": 5.2502378821372986e-05,
+     "repeat=2/ragged": 5.228165537118912e-05,
+     "repeat=2/stepfull": 5.238223820924759e-05
+    }
+   }
+  },
+  "par-byte-lm-model-pool/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "1ad7a65f9aa45cf8",
+    "1ad7a65f9aa45cf8"
+   ],
+   "parts": [
+    {
+     "loss": "d430bd113488c444",
+     "params": "44eec0e29d4e27e9",
+     "m": "7d960d9fc550cd4c",
+     "v": "f877cae56f118897",
+     "grads": "75b6c5086e147c06"
+    },
+    {
+     "loss": "d430bd113488c444",
+     "params": "44eec0e29d4e27e9",
+     "m": "7d960d9fc550cd4c",
+     "v": "f877cae56f118897",
+     "grads": "75b6c5086e147c06"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)",
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.1384603027254343,
+    "stages": {
+     "repeat=1/train": 0.06889738980680704,
+     "repeat=1/infer-save-reload": 7.4105337262153625e-06,
+     "repeat=1/batch": 0.00011971406638622284,
+     "repeat=1/batchgrad": 5.559064447879791e-05,
+     "repeat=1/batchscale": 5.024205893278122e-05,
+     "repeat=1/ragged": 4.975218325853348e-05,
+     "repeat=1/stepfull": 4.911143332719803e-05,
+     "repeat=2/train": 0.06862250994890928,
+     "repeat=2/infer-save-reload": 7.700175046920776e-06,
+     "repeat=2/batch": 0.0001178644597530365,
+     "repeat=2/batchgrad": 5.7522207498550415e-05,
+     "repeat=2/batchscale": 4.964228719472885e-05,
+     "repeat=2/ragged": 4.995148628950119e-05,
+     "repeat=2/stepfull": 4.915241152048111e-05
+    }
+   }
+  },
+  "par-byte-lm-model-pool/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3d26daba7af771cc",
+    "3d26daba7af771cc"
+   ],
+   "parts": [
+    {
+     "loss": "9d59941dd46420a5",
+     "params": "22e1d925f435512c",
+     "m": "15549f3796ef87b1",
+     "v": "9a94ae7c0500b273",
+     "grads": "346f8f9249d19043"
+    },
+    {
+     "loss": "9d59941dd46420a5",
+     "params": "22e1d925f435512c",
+     "m": "15549f3796ef87b1",
+     "v": "9a94ae7c0500b273",
+     "grads": "346f8f9249d19043"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)",
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.13870996329933405,
+    "stages": {
+     "repeat=1/train": 0.06870018318295479,
+     "repeat=1/infer-save-reload": 7.890164852142334e-06,
+     "repeat=1/batch": 8.192285895347595e-05,
+     "repeat=1/batchgrad": 4.158075898885727e-05,
+     "repeat=1/batchscale": 3.84720042347908e-05,
+     "repeat=1/ragged": 3.824103623628616e-05,
+     "repeat=1/stepfull": 3.786105662584305e-05,
+     "repeat=2/train": 0.0692570935934782,
+     "repeat=2/infer-save-reload": 7.511116564273834e-06,
+     "repeat=2/batch": 7.317308336496353e-05,
+     "repeat=2/batchgrad": 4.132091999053955e-05,
+     "repeat=2/batchscale": 3.7981197237968445e-05,
+     "repeat=2/ragged": 3.763195127248764e-05,
+     "repeat=2/stepfull": 3.777071833610535e-05
+    }
+   }
+  },
+  "par-byte-lm-model-pool/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "6610a15cea01cbd1",
+    "6610a15cea01cbd1"
+   ],
+   "parts": [
+    {
+     "loss": "55c5d6768a6bc19e",
+     "params": "b99b399749a63909",
+     "m": "23187f2ed1bc3a9f",
+     "v": "64105ce59c5358bc",
+     "grads": "f88bb5cebdc50809"
+    },
+    {
+     "loss": "55c5d6768a6bc19e",
+     "params": "b99b399749a63909",
+     "m": "23187f2ed1bc3a9f",
+     "v": "64105ce59c5358bc",
+     "grads": "f88bb5cebdc50809"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)",
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.13804869912564754,
+    "stages": {
+     "repeat=1/train": 0.068723414093256,
+     "repeat=1/infer-save-reload": 7.620081305503845e-06,
+     "repeat=1/batch": 0.00012323446571826935,
+     "repeat=1/batchgrad": 5.6041404604911804e-05,
+     "repeat=1/batchscale": 4.973262548446655e-05,
+     "repeat=1/ragged": 4.95128333568573e-05,
+     "repeat=1/stepfull": 5.8712437748908997e-05,
+     "repeat=2/train": 0.06837133225053549,
+     "repeat=2/infer-save-reload": 7.59027898311615e-06,
+     "repeat=2/batch": 0.00011713430285453796,
+     "repeat=2/batchgrad": 5.62816858291626e-05,
+     "repeat=2/batchscale": 4.9491412937641144e-05,
+     "repeat=2/ragged": 4.9631111323833466e-05,
+     "repeat=2/stepfull": 4.8881396651268005e-05
+    }
+   }
+  },
+  "par-byte-lm-offload/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3d26daba7af771cc",
+    "3d26daba7af771cc"
+   ],
+   "parts": [
+    {
+     "loss": "9d59941dd46420a5",
+     "params": "22e1d925f435512c",
+     "m": "15549f3796ef87b1",
+     "v": "9a94ae7c0500b273",
+     "grads": "346f8f9249d19043"
+    },
+    {
+     "loss": "9d59941dd46420a5",
+     "params": "22e1d925f435512c",
+     "m": "15549f3796ef87b1",
+     "v": "9a94ae7c0500b273",
+     "grads": "346f8f9249d19043"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)",
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.21412282343953848,
+    "stages": {
+     "repeat=1/train": 0.10686703026294708,
+     "repeat=1/infer-save-reload": 7.609836757183075e-06,
+     "repeat=1/batch": 0.00012743566185235977,
+     "repeat=1/batchgrad": 5.7872384786605835e-05,
+     "repeat=1/batchscale": 5.205068737268448e-05,
+     "repeat=1/ragged": 5.174148827791214e-05,
+     "repeat=1/stepfull": 5.153194069862366e-05,
+     "repeat=2/train": 0.10627772938460112,
+     "repeat=2/infer-save-reload": 7.569789886474609e-06,
+     "repeat=2/batch": 0.00012435391545295715,
+     "repeat=2/batchgrad": 5.775224417448044e-05,
+     "repeat=2/batchscale": 5.228258669376373e-05,
+     "repeat=2/ragged": 5.184207111597061e-05,
+     "repeat=2/stepfull": 5.13419508934021e-05
+    }
+   }
+  },
+  "par-byte-lm-offload/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c5fd6583ac8ddf9a",
+    "c5fd6583ac8ddf9a"
+   ],
+   "parts": [
+    {
+     "loss": "72bd44c455dad7b6",
+     "params": "e172de28e97c58c9",
+     "m": "f105ee2011e3849c",
+     "v": "c5f4fee499d289ee",
+     "grads": "ba5732d86a95bf1e"
+    },
+    {
+     "loss": "72bd44c455dad7b6",
+     "params": "e172de28e97c58c9",
+     "m": "f105ee2011e3849c",
+     "v": "c5f4fee499d289ee",
+     "grads": "ba5732d86a95bf1e"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)",
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.21140925772488117,
+    "stages": {
+     "repeat=1/train": 0.10480244550853968,
+     "repeat=1/infer-save-reload": 7.4803829193115234e-06,
+     "repeat=1/batch": 0.00012630503624677658,
+     "repeat=1/batchgrad": 5.6331977248191833e-05,
+     "repeat=1/batchscale": 4.96814027428627e-05,
+     "repeat=1/ragged": 4.9540773034095764e-05,
+     "repeat=1/stepfull": 4.9280934035778046e-05,
+     "repeat=2/train": 0.10562629625201225,
+     "repeat=2/infer-save-reload": 7.770955562591553e-06,
+     "repeat=2/batch": 0.0001225639134645462,
+     "repeat=2/batchgrad": 5.575176328420639e-05,
+     "repeat=2/batchscale": 4.972144961357117e-05,
+     "repeat=2/ragged": 6.145145744085312e-05,
+     "repeat=2/stepfull": 6.055273115634918e-05
+    }
+   }
+  },
+  "par-byte-lm-offload/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "407da1849795daa4",
+    "407da1849795daa4"
+   ],
+   "parts": [
+    {
+     "loss": "8b60d773bb0d0d19",
+     "params": "03bb0834c49cbbf7",
+     "m": "afd153fba11adbf8",
+     "v": "5576128caea418b1",
+     "grads": "c2a59e1666fbed59"
+    },
+    {
+     "loss": "8b60d773bb0d0d19",
+     "params": "03bb0834c49cbbf7",
+     "m": "afd153fba11adbf8",
+     "v": "5576128caea418b1",
+     "grads": "c2a59e1666fbed59"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)",
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.21393094677478075,
+    "stages": {
+     "repeat=1/train": 0.10691913217306137,
+     "repeat=1/infer-save-reload": 7.64988362789154e-06,
+     "repeat=1/batch": 0.00012575462460517883,
+     "repeat=1/batchgrad": 5.914177745580673e-05,
+     "repeat=1/batchscale": 5.158130079507828e-05,
+     "repeat=1/ragged": 5.1701441407203674e-05,
+     "repeat=1/stepfull": 5.163252353668213e-05,
+     "repeat=2/train": 0.10603653080761433,
+     "repeat=2/infer-save-reload": 7.661059498786926e-06,
+     "repeat=2/batch": 0.00012025423347949982,
+     "repeat=2/batchgrad": 5.805213004350662e-05,
+     "repeat=2/batchscale": 5.2082352340221405e-05,
+     "repeat=2/ragged": 5.21121546626091e-05,
+     "repeat=2/stepfull": 5.152169615030289e-05
+    }
+   }
+  },
+  "par-byte-lm-offload/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ed030c5713cf36a8",
+    "ed030c5713cf36a8"
+   ],
+   "parts": [
+    {
+     "loss": "65f8c3a9637000be",
+     "params": "5fd740b8dbb18f7a",
+     "m": "d09a4ce32b1c0b42",
+     "v": "a2bdc4f9ba6c750c",
+     "grads": "6ceeaa2451e66696"
+    },
+    {
+     "loss": "65f8c3a9637000be",
+     "params": "5fd740b8dbb18f7a",
+     "m": "d09a4ce32b1c0b42",
+     "v": "a2bdc4f9ba6c750c",
+     "grads": "6ceeaa2451e66696"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)",
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.2145601799711585,
+    "stages": {
+     "repeat=1/train": 0.10698815435171127,
+     "repeat=1/infer-save-reload": 7.761642336845398e-06,
+     "repeat=1/batch": 0.00012782495468854904,
+     "repeat=1/batchgrad": 5.772244185209274e-05,
+     "repeat=1/batchscale": 5.195196717977524e-05,
+     "repeat=1/ragged": 5.187187343835831e-05,
+     "repeat=1/stepfull": 6.22924417257309e-05,
+     "repeat=2/train": 0.10657413955777884,
+     "repeat=2/infer-save-reload": 7.819384336471558e-06,
+     "repeat=2/batch": 0.00011872407048940659,
+     "repeat=2/batchgrad": 5.6412070989608765e-05,
+     "repeat=2/batchscale": 5.167163908481598e-05,
+     "repeat=2/ragged": 5.149189382791519e-05,
+     "repeat=2/stepfull": 5.635153502225876e-05
+    }
+   }
+  },
+  "par-byte-lm-offload/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "36c57f619628a629",
+    "36c57f619628a629"
+   ],
+   "parts": [
+    {
+     "loss": "390dac10b46e66fe",
+     "params": "b199e56e8af0c510",
+     "m": "ed2f832f2cf00d07",
+     "v": "43b5e78ec3b6d39b",
+     "grads": "ef9adbf8bb6f2640"
+    },
+    {
+     "loss": "390dac10b46e66fe",
+     "params": "b199e56e8af0c510",
+     "m": "ed2f832f2cf00d07",
+     "v": "43b5e78ec3b6d39b",
+     "grads": "ef9adbf8bb6f2640"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)",
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.21402686089277267,
+    "stages": {
+     "repeat=1/train": 0.10677087679505348,
+     "repeat=1/infer-save-reload": 7.599592208862305e-06,
+     "repeat=1/batch": 0.00012167450040578842,
+     "repeat=1/batchgrad": 5.6811608374118805e-05,
+     "repeat=1/batchscale": 4.954170435667038e-05,
+     "repeat=1/ragged": 5.990173667669296e-05,
+     "repeat=1/stepfull": 4.950258880853653e-05,
+     "repeat=2/train": 0.10629245080053806,
+     "repeat=2/infer-save-reload": 7.789582014083862e-06,
+     "repeat=2/batch": 0.00011277478188276291,
+     "repeat=2/batchgrad": 6.211176514625549e-05,
+     "repeat=2/batchscale": 4.946067929267883e-05,
+     "repeat=2/ragged": 4.943087697029114e-05,
+     "repeat=2/stepfull": 4.8930756747722626e-05
+    }
+   }
+  },
+  "par-byte-lm-offload/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "33a04d5fd2d480a4",
+    "33a04d5fd2d480a4"
+   ],
+   "parts": [
+    {
+     "loss": "004e02221cd2cae9",
+     "params": "a39b1388d68225a7",
+     "m": "57838c235cce8d5b",
+     "v": "6fe710a01ebf9cd3",
+     "grads": "9b073fd2f346ff8e"
+    },
+    {
+     "loss": "004e02221cd2cae9",
+     "params": "a39b1388d68225a7",
+     "m": "57838c235cce8d5b",
+     "v": "6fe710a01ebf9cd3",
+     "grads": "9b073fd2f346ff8e"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)",
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.21370621863752604,
+    "stages": {
+     "repeat=1/train": 0.10668494366109371,
+     "repeat=1/infer-save-reload": 7.58003443479538e-06,
+     "repeat=1/batch": 0.00012651365250349045,
+     "repeat=1/batchgrad": 5.955155938863754e-05,
+     "repeat=1/batchscale": 5.2082352340221405e-05,
+     "repeat=1/ragged": 5.2492134273052216e-05,
+     "repeat=1/stepfull": 5.192216485738754e-05,
+     "repeat=2/train": 0.10604001954197884,
+     "repeat=2/infer-save-reload": 7.550232112407684e-06,
+     "repeat=2/batch": 0.00011863373219966888,
+     "repeat=2/batchgrad": 6.506219506263733e-05,
+     "repeat=2/batchscale": 5.2471645176410675e-05,
+     "repeat=2/ragged": 5.2401795983314514e-05,
+     "repeat=2/stepfull": 5.194265395402908e-05
+    }
+   }
+  },
+  "par-byte-lm-offload/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "1ad7a65f9aa45cf8",
+    "1ad7a65f9aa45cf8"
+   ],
+   "parts": [
+    {
+     "loss": "d430bd113488c444",
+     "params": "44eec0e29d4e27e9",
+     "m": "7d960d9fc550cd4c",
+     "v": "f877cae56f118897",
+     "grads": "75b6c5086e147c06"
+    },
+    {
+     "loss": "d430bd113488c444",
+     "params": "44eec0e29d4e27e9",
+     "m": "7d960d9fc550cd4c",
+     "v": "f877cae56f118897",
+     "grads": "75b6c5086e147c06"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)",
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.2128713196143508,
+    "stages": {
+     "repeat=1/train": 0.10668403469026089,
+     "repeat=1/infer-save-reload": 7.790513336658478e-06,
+     "repeat=1/batch": 0.00013232417404651642,
+     "repeat=1/batchgrad": 5.613267421722412e-05,
+     "repeat=1/batchscale": 4.982203245162964e-05,
+     "repeat=1/ragged": 4.972238093614578e-05,
+     "repeat=1/stepfull": 4.9522146582603455e-05,
+     "repeat=2/train": 0.10521736182272434,
+     "repeat=2/infer-save-reload": 1.052115112543106e-05,
+     "repeat=2/batch": 0.00011415313929319382,
+     "repeat=2/batchgrad": 5.63720241189003e-05,
+     "repeat=2/batchscale": 6.164237856864929e-05,
+     "repeat=2/ragged": 4.932191222906113e-05,
+     "repeat=2/stepfull": 4.967208951711655e-05
+    }
+   }
+  },
+  "par-byte-lm-offload/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3d26daba7af771cc",
+    "3d26daba7af771cc"
+   ],
+   "parts": [
+    {
+     "loss": "9d59941dd46420a5",
+     "params": "22e1d925f435512c",
+     "m": "15549f3796ef87b1",
+     "v": "9a94ae7c0500b273",
+     "grads": "346f8f9249d19043"
+    },
+    {
+     "loss": "9d59941dd46420a5",
+     "params": "22e1d925f435512c",
+     "m": "15549f3796ef87b1",
+     "v": "9a94ae7c0500b273",
+     "grads": "346f8f9249d19043"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)",
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.2130118552595377,
+    "stages": {
+     "repeat=1/train": 0.10630693007260561,
+     "repeat=1/infer-save-reload": 7.680617272853851e-06,
+     "repeat=1/batch": 8.612312376499176e-05,
+     "repeat=1/batchgrad": 4.202127456665039e-05,
+     "repeat=1/batchscale": 3.818143159151077e-05,
+     "repeat=1/ragged": 3.831181675195694e-05,
+     "repeat=1/stepfull": 3.774184733629227e-05,
+     "repeat=2/train": 0.10592544544488192,
+     "repeat=2/infer-save-reload": 7.419846951961517e-06,
+     "repeat=2/batch": 8.810311555862427e-05,
+     "repeat=2/batchgrad": 4.131067544221878e-05,
+     "repeat=2/batchscale": 3.837142139673233e-05,
+     "repeat=2/ragged": 3.785174340009689e-05,
+     "repeat=2/stepfull": 3.787130117416382e-05
+    }
+   }
+  },
+  "par-byte-lm-offload/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "6610a15cea01cbd1",
+    "6610a15cea01cbd1"
+   ],
+   "parts": [
+    {
+     "loss": "55c5d6768a6bc19e",
+     "params": "b99b399749a63909",
+     "m": "23187f2ed1bc3a9f",
+     "v": "64105ce59c5358bc",
+     "grads": "f88bb5cebdc50809"
+    },
+    {
+     "loss": "55c5d6768a6bc19e",
+     "params": "b99b399749a63909",
+     "m": "23187f2ed1bc3a9f",
+     "v": "64105ce59c5358bc",
+     "grads": "f88bb5cebdc50809"
+    }
+   ],
+   "infer": [
+    "n/a:function",
+    "n/a:function"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save",
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)",
+    "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.2141142040491104,
+    "stages": {
+     "repeat=1/train": 0.1066758343949914,
+     "repeat=1/infer-save-reload": 7.740221917629242e-06,
+     "repeat=1/batch": 0.00012950412929058075,
+     "repeat=1/batchgrad": 5.839206278324127e-05,
+     "repeat=1/batchscale": 5.1791779696941376e-05,
+     "repeat=1/ragged": 5.2121467888355255e-05,
+     "repeat=1/stepfull": 5.271192640066147e-05,
+     "repeat=2/train": 0.10647429618984461,
+     "repeat=2/infer-save-reload": 7.22985714673996e-06,
+     "repeat=2/batch": 0.00012099463492631912,
+     "repeat=2/batchgrad": 5.422160029411316e-05,
+     "repeat=2/batchscale": 4.939176142215729e-05,
+     "repeat=2/ragged": 4.940200597047806e-05,
+     "repeat=2/stepfull": 4.9291178584098816e-05
+    }
+   }
+  },
+  "par-samba-clip/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "387a63aafbcce06d",
+    "387a63aafbcce06d"
+   ],
+   "parts": [
+    {
+     "loss": "9c7d808a1f27a257",
+     "logits": "8f133a06c340115e",
+     "grads": "579c739eff0f3b16",
+     "params": "c3dc4e7e223db28e"
+    },
+    {
+     "loss": "9c7d808a1f27a257",
+     "logits": "8f133a06c340115e",
+     "grads": "579c739eff0f3b16",
+     "params": "c3dc4e7e223db28e"
+    }
+   ],
+   "infer": [
+    "3c42e52ff16765ef",
+    "3c42e52ff16765ef"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "2807164675116cdb",
+    "2807164675116cdb"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "3c42e52ff16765ef",
+    "3c42e52ff16765ef"
+   ],
+   "batch": [
+    "b76cef8b3c5cab10",
+    "b76cef8b3c5cab10"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 9.116560879163444,
+    "stages": {
+     "repeat=1/train": 4.500589223578572,
+     "repeat=1/infer-save-reload": 0.01447555422782898,
+     "repeat=1/batch": 0.07226189877837896,
+     "repeat=1/batchgrad": 8.557271212339401e-05,
+     "repeat=1/batchscale": 6.157159805297852e-05,
+     "repeat=1/ragged": 5.3462572395801544e-05,
+     "repeat=1/stepfull": 5.303230136632919e-05,
+     "repeat=2/train": 4.441658768802881,
+     "repeat=2/infer-save-reload": 0.01441839337348938,
+     "repeat=2/batch": 0.07227156031876802,
+     "repeat=2/batchgrad": 8.210353553295135e-05,
+     "repeat=2/batchscale": 5.3231604397296906e-05,
+     "repeat=2/ragged": 5.203206092119217e-05,
+     "repeat=2/stepfull": 5.152169615030289e-05
+    }
+   }
+  },
+  "par-samba-clip/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9ccee51aa073aff8",
+    "9ccee51aa073aff8"
+   ],
+   "parts": [
+    {
+     "loss": "7922335702bc398a",
+     "logits": "910fa563d4c1b82b",
+     "grads": "f7c4ee136fd8b8c4",
+     "params": "0d741974877552f7"
+    },
+    {
+     "loss": "7922335702bc398a",
+     "logits": "910fa563d4c1b82b",
+     "grads": "f7c4ee136fd8b8c4",
+     "params": "0d741974877552f7"
+    }
+   ],
+   "infer": [
+    "71932c1b2cb73896",
+    "71932c1b2cb73896"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "bc2ee9ab693e2300",
+    "bc2ee9ab693e2300"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "71932c1b2cb73896",
+    "71932c1b2cb73896"
+   ],
+   "batch": [
+    "b34db70fee130cf0",
+    "b34db70fee130cf0"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 9.087575349025428,
+    "stages": {
+     "repeat=1/train": 4.45656880736351,
+     "repeat=1/infer-save-reload": 0.01456517819315195,
+     "repeat=1/batch": 0.07196413911879063,
+     "repeat=1/batchgrad": 8.67629423737526e-05,
+     "repeat=1/batchscale": 5.3522177040576935e-05,
+     "repeat=1/ragged": 5.073193460702896e-05,
+     "repeat=1/stepfull": 4.9851834774017334e-05,
+     "repeat=2/train": 4.456398191861808,
+     "repeat=2/infer-save-reload": 0.014363370835781097,
+     "repeat=2/batch": 0.07283699046820402,
+     "repeat=2/batchgrad": 8.462276309728622e-05,
+     "repeat=2/batchscale": 5.301181226968765e-05,
+     "repeat=2/ragged": 5.003251135349274e-05,
+     "repeat=2/stepfull": 4.932191222906113e-05
+    }
+   }
+  },
+  "par-samba-clip/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "e963a3a21f0c5297",
+    "e963a3a21f0c5297"
+   ],
+   "parts": [
+    {
+     "loss": "33d610d07c283749",
+     "logits": "1c5fa2d878405f70",
+     "grads": "7eae58be9fa71cfe",
+     "params": "e75422126a48bab6"
+    },
+    {
+     "loss": "33d610d07c283749",
+     "logits": "1c5fa2d878405f70",
+     "grads": "7eae58be9fa71cfe",
+     "params": "e75422126a48bab6"
+    }
+   ],
+   "infer": [
+    "36caeedd4f67d5b5",
+    "36caeedd4f67d5b5"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "fafb34a8007e8a0c",
+    "fafb34a8007e8a0c"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "36caeedd4f67d5b5",
+    "36caeedd4f67d5b5"
+   ],
+   "batch": [
+    "cbe62bff3728b910",
+    "cbe62bff3728b910"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 9.059068134985864,
+    "stages": {
+     "repeat=1/train": 4.465075209736824,
+     "repeat=1/infer-save-reload": 0.014344070106744766,
+     "repeat=1/batch": 0.07216202560812235,
+     "repeat=1/batchgrad": 8.974317461252213e-05,
+     "repeat=1/batchscale": 5.6061893701553345e-05,
+     "repeat=1/ragged": 5.333218723535538e-05,
+     "repeat=1/stepfull": 5.2852556109428406e-05,
+     "repeat=2/train": 4.422172663733363,
+     "repeat=2/infer-save-reload": 0.014038769528269768,
+     "repeat=2/batch": 0.07037298288196325,
+     "repeat=2/batchgrad": 8.545350283384323e-05,
+     "repeat=2/batchscale": 5.383044481277466e-05,
+     "repeat=2/ragged": 5.2051618695259094e-05,
+     "repeat=2/stepfull": 5.118176341056824e-05
+    }
+   }
+  },
+  "par-samba-clip/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "53b13d6e08035dd3",
+    "53b13d6e08035dd3"
+   ],
+   "parts": [
+    {
+     "loss": "361bc534bc126f5d",
+     "logits": "af5049b28d1f05db",
+     "grads": "6b7bf19264267921",
+     "params": "138c91c5112fc671"
+    },
+    {
+     "loss": "361bc534bc126f5d",
+     "logits": "af5049b28d1f05db",
+     "grads": "6b7bf19264267921",
+     "params": "138c91c5112fc671"
+    }
+   ],
+   "infer": [
+    "f234aa064f3bd4f1",
+    "f234aa064f3bd4f1"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "de15105c83cd98c8",
+    "de15105c83cd98c8"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "f234aa064f3bd4f1",
+    "f234aa064f3bd4f1"
+   ],
+   "batch": [
+    "a9b01c132c43de42",
+    "a9b01c132c43de42"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 9.047049717977643,
+    "stages": {
+     "repeat=1/train": 4.440369941294193,
+     "repeat=1/infer-save-reload": 0.014324480667710304,
+     "repeat=1/batch": 0.07152452319860458,
+     "repeat=1/batchgrad": 8.921325206756592e-05,
+     "repeat=1/batchscale": 5.5252574384212494e-05,
+     "repeat=1/ragged": 5.372148007154465e-05,
+     "repeat=1/stepfull": 5.3262338042259216e-05,
+     "repeat=2/train": 4.4331223936751485,
+     "repeat=2/infer-save-reload": 0.014556718058884144,
+     "repeat=2/batch": 0.07224037870764732,
+     "repeat=2/batchgrad": 8.756294846534729e-05,
+     "repeat=2/batchscale": 5.6162476539611816e-05,
+     "repeat=2/ragged": 5.2842311561107635e-05,
+     "repeat=2/stepfull": 5.609169602394104e-05
+    }
+   }
+  },
+  "par-samba-clip/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "8c2ae3ff8e254f9b",
+    "8c2ae3ff8e254f9b"
+   ],
+   "parts": [
+    {
+     "loss": "31754110ff98d8a7",
+     "logits": "3c7f58d46b14a534",
+     "grads": "911ed77dba97f4c5",
+     "params": "b54a8ec24d3daba3"
+    },
+    {
+     "loss": "31754110ff98d8a7",
+     "logits": "3c7f58d46b14a534",
+     "grads": "911ed77dba97f4c5",
+     "params": "b54a8ec24d3daba3"
+    }
+   ],
+   "infer": [
+    "cf7f2ccb7812ed87",
+    "cf7f2ccb7812ed87"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "4f2fc43b147d1be1",
+    "4f2fc43b147d1be1"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "cf7f2ccb7812ed87",
+    "cf7f2ccb7812ed87"
+   ],
+   "batch": [
+    "5396feefc8346a0a",
+    "5396feefc8346a0a"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 9.084416917525232,
+    "stages": {
+     "repeat=1/train": 4.45758206397295,
+     "repeat=1/infer-save-reload": 0.014737694524228573,
+     "repeat=1/batch": 0.07178403157740831,
+     "repeat=1/batchgrad": 8.355360478162766e-05,
+     "repeat=1/batchscale": 5.262158811092377e-05,
+     "repeat=1/ragged": 4.963204264640808e-05,
+     "repeat=1/stepfull": 4.914216697216034e-05,
+     "repeat=2/train": 4.450396959669888,
+     "repeat=2/infer-save-reload": 0.015298593789339066,
+     "repeat=2/batch": 0.07362874876707792,
+     "repeat=2/batchgrad": 0.00013847555965185165,
+     "repeat=2/batchscale": 5.300156772136688e-05,
+     "repeat=2/ragged": 4.974100738763809e-05,
+     "repeat=2/stepfull": 4.8941001296043396e-05
+    }
+   }
+  },
+  "par-samba-clip/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "374ecd21fbc5cb69",
+    "374ecd21fbc5cb69"
+   ],
+   "parts": [
+    {
+     "loss": "ae1a21274988fdbd",
+     "logits": "e37021ac6e2e2dcc",
+     "grads": "6dca617d85eee0f9",
+     "params": "8ddde0366beac345"
+    },
+    {
+     "loss": "ae1a21274988fdbd",
+     "logits": "e37021ac6e2e2dcc",
+     "grads": "6dca617d85eee0f9",
+     "params": "8ddde0366beac345"
+    }
+   ],
+   "infer": [
+    "5b9e3d287c536c7d",
+    "5b9e3d287c536c7d"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "d55f9ae234ccc49c",
+    "d55f9ae234ccc49c"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "5b9e3d287c536c7d",
+    "5b9e3d287c536c7d"
+   ],
+   "batch": [
+    "a11c050920337e57",
+    "a11c050920337e57"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 9.11344054248184,
+    "stages": {
+     "repeat=1/train": 4.489712466485798,
+     "repeat=1/infer-save-reload": 0.014717533253133297,
+     "repeat=1/batch": 0.0714655527845025,
+     "repeat=1/batchgrad": 8.482299745082855e-05,
+     "repeat=1/batchscale": 5.4611824452877045e-05,
+     "repeat=1/ragged": 5.188118666410446e-05,
+     "repeat=1/stepfull": 5.1341019570827484e-05,
+     "repeat=2/train": 4.449757351540029,
+     "repeat=2/infer-save-reload": 0.014515685848891735,
+     "repeat=2/batch": 0.07236023619771004,
+     "repeat=2/batchgrad": 9.894464164972305e-05,
+     "repeat=2/batchscale": 5.573127418756485e-05,
+     "repeat=2/ragged": 5.2762217819690704e-05,
+     "repeat=2/stepfull": 5.2821822464466095e-05
+    }
+   }
+  },
+  "par-samba-clip/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b8ced390472a553d",
+    "b8ced390472a553d"
+   ],
+   "parts": [
+    {
+     "loss": "1394c15160819160",
+     "logits": "aa818a35a7b27207",
+     "grads": "888edaa60e0743f9",
+     "params": "c5eeeaad3f09d440"
+    },
+    {
+     "loss": "1394c15160819160",
+     "logits": "aa818a35a7b27207",
+     "grads": "888edaa60e0743f9",
+     "params": "c5eeeaad3f09d440"
+    }
+   ],
+   "infer": [
+    "e698edca59d268ae",
+    "e698edca59d268ae"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "b008c852a628854e",
+    "b008c852a628854e"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "e698edca59d268ae",
+    "e698edca59d268ae"
+   ],
+   "batch": [
+    "fb2af36d443533b1",
+    "fb2af36d443533b1"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 9.080775304697454,
+    "stages": {
+     "repeat=1/train": 4.444140201434493,
+     "repeat=1/infer-save-reload": 0.014379692263901234,
+     "repeat=1/batch": 0.0716713210567832,
+     "repeat=1/batchgrad": 8.507352322340012e-05,
+     "repeat=1/batchscale": 5.2731484174728394e-05,
+     "repeat=1/ragged": 5.115196108818054e-05,
+     "repeat=1/stepfull": 5.04516065120697e-05,
+     "repeat=2/train": 4.463473900221288,
+     "repeat=2/infer-save-reload": 0.01429210789501667,
+     "repeat=2/batch": 0.07192214019596577,
+     "repeat=2/batchgrad": 9.584333747625351e-05,
+     "repeat=2/batchscale": 5.304254591464996e-05,
+     "repeat=2/ragged": 5.1441602408885956e-05,
+     "repeat=2/stepfull": 5.0401315093040466e-05
+    }
+   }
+  },
+  "par-samba-clip/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "387a63aafbcce06d",
+    "387a63aafbcce06d"
+   ],
+   "parts": [
+    {
+     "loss": "9c7d808a1f27a257",
+     "logits": "8f133a06c340115e",
+     "grads": "579c739eff0f3b16",
+     "params": "c3dc4e7e223db28e"
+    },
+    {
+     "loss": "9c7d808a1f27a257",
+     "logits": "8f133a06c340115e",
+     "grads": "579c739eff0f3b16",
+     "params": "c3dc4e7e223db28e"
+    }
+   ],
+   "infer": [
+    "3c42e52ff16765ef",
+    "3c42e52ff16765ef"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "2807164675116cdb",
+    "2807164675116cdb"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "3c42e52ff16765ef",
+    "3c42e52ff16765ef"
+   ],
+   "batch": [
+    "b76cef8b3c5cab10",
+    "b76cef8b3c5cab10"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 9.071593819186091,
+    "stages": {
+     "repeat=1/train": 4.46450986713171,
+     "repeat=1/infer-save-reload": 0.014294658787548542,
+     "repeat=1/batch": 0.0721330875530839,
+     "repeat=1/batchgrad": 7.178355008363724e-05,
+     "repeat=1/batchscale": 3.7291087210178375e-05,
+     "repeat=1/ragged": 3.6630779504776e-05,
+     "repeat=1/stepfull": 3.5752542316913605e-05,
+     "repeat=2/train": 4.432412254624069,
+     "repeat=2/infer-save-reload": 0.014585289172828197,
+     "repeat=2/batch": 0.07281006034463644,
+     "repeat=2/batchgrad": 8.449330925941467e-05,
+     "repeat=2/batchscale": 4.3812207877635956e-05,
+     "repeat=2/ragged": 3.8782134652137756e-05,
+     "repeat=2/stepfull": 3.862101584672928e-05
+    }
+   }
+  },
+  "par-samba-clip/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "e2b57bbef5c259df",
+    "e2b57bbef5c259df"
+   ],
+   "parts": [
+    {
+     "loss": "65cc4b6824afe84e",
+     "logits": "6da7719a6f32e131",
+     "grads": "cf53c0fd8d043061",
+     "params": "9100c422f4cb2a04"
+    },
+    {
+     "loss": "65cc4b6824afe84e",
+     "logits": "6da7719a6f32e131",
+     "grads": "cf53c0fd8d043061",
+     "params": "9100c422f4cb2a04"
+    }
+   ],
+   "infer": [
+    "0c2d9b48bf8a7933",
+    "0c2d9b48bf8a7933"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "d4321cd95f3136a3",
+    "d4321cd95f3136a3"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "0c2d9b48bf8a7933",
+    "0c2d9b48bf8a7933"
+   ],
+   "batch": [
+    "bf7953af6b60040b",
+    "bf7953af6b60040b"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)",
+    "n/a:driver-lane (a multi-GPU driver held to its single-device twin by its train column; the twin lane carries the batchgrad part)"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set",
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers take no lengths; the single-device twin lane is asked)"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+    "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 9.103288686834276,
+    "stages": {
+     "repeat=1/train": 4.471026559360325,
+     "repeat=1/infer-save-reload": 0.014289428479969501,
+     "repeat=1/batch": 0.07106629014015198,
+     "repeat=1/batchgrad": 9.299349039793015e-05,
+     "repeat=1/batchscale": 5.2891671657562256e-05,
+     "repeat=1/ragged": 5.0341710448265076e-05,
+     "repeat=1/stepfull": 5.01023605465889e-05,
+     "repeat=2/train": 4.459191388450563,
+     "repeat=2/infer-save-reload": 0.014300349168479443,
+     "repeat=2/batch": 0.07248898968100548,
+     "repeat=2/batchgrad": 9.377393871545792e-05,
+     "repeat=2/batchscale": 5.3581781685352325e-05,
+     "repeat=2/ragged": 5.232170224189758e-05,
+     "repeat=2/stepfull": 5.0780363380908966e-05
+    }
+   }
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "lane_revisions": {
+  "tokenizer": "synthetic-vocab-1",
+  "gbdt-parametric-losses": "rows-1500-1",
+  "gbdt-nan-modes": "rows-1500-nan-in-split-columns-2",
+  "gbdt-lossguide-newtoncosine": "rows-1500-1",
+  "gbdt-pair-logit": "rows-1500-1",
+  "hdbscan": "rows-4000-1",
+  "hdbscan-leaf": "rows-2000-1",
+  "spectral": "rows-512-1",
+  "holtwinters": "obs-128-1",
+  "byte-lm": "steps-2-1",
+  "byte-lm-resident": "shape-l1-d16-ff32-1",
+  "samba": "steps-1-1",
+  "samba-untied-dropout-accum": "steps-3-1",
+  "mamba2-dtlimit": "seqlen-8-dtlimit-straddle-2",
+  "mamba3": "norms-near-one-1",
+  "transformer": "norms-near-one-1",
+  "transformer-window": "norms-near-one-1",
+  "umap": "transform-row-separable-1",
+  "par-graph-umap": "transform-row-separable-1"
+ },
+ "degenerate_lanes": [
+  "par-byte-lm",
+  "par-byte-lm-model-pool",
+  "par-byte-lm-offload",
+  "par-samba",
+  "par-samba-clip"
+ ],
+ "degenerate_column": "nvidia-1gpu",
+ "gpu_slot": "FREE (run not serialised)",
+ "batchgrad_protocol": {
+  "rows": {
+   "alone": 16,
+   "split": [
+    1,
+    8,
+    "n"
+   ]
+  },
+  "accum_splits": [
+   2,
+   4,
+   8
+  ],
+  "uneven_split": "n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+  "carry_splits": [
+   [
+    1,
+    8,
+    "n"
+   ],
+   "every 16"
+  ],
+  "seq": [
+   8,
+   64
+  ]
+ },
+ "batchgrad_sabotage": false,
+ "batchscale_protocol": {
+  "batches": [
+   1,
+   17,
+   64,
+   256
+  ],
+  "whole": 1024,
+  "long_l": 1024,
+  "prefixes": [
+   1,
+   7,
+   63,
+   64,
+   65,
+   127,
+   128,
+   129,
+   255,
+   256,
+   257,
+   511,
+   512,
+   513,
+   1023
+  ]
+ },
+ "batchscale_sabotage": false,
+ "ragged_protocol": {
+  "lengths": [
+   16,
+   1,
+   7,
+   9,
+   16,
+   3,
+   12,
+   15
+  ],
+  "long_lengths": [
+   300,
+   1,
+   65,
+   129,
+   257,
+   128
+  ],
+  "padding": "nan/vocab+7"
+ },
+ "ragged_sabotage": false,
+ "stepfull_protocol": {
+  "rows": 2,
+  "length": 16,
+  "full": "forward(x) from a zero state, one pass",
+  "stepped": "allocate_state then step(x_t, state) at every position",
+  "compared": "bitwise, position by position"
+ },
+ "stepfull_sabotage": false,
+ "package": {
+  "version": "0.8.8",
+  "package_dir": "/root/mojolearn/python/mojolearn",
+  "numpy": "2.5.2",
+  "python": "3.14.7",
+  "par_devices": "0",
+  "bindings": [
+   {
+    "module": "_mojolearn",
+    "sha256": "f52190982b1b2e1ec2b60b23b47786486586543ec7b11389d92486c5f3bb0e44",
+    "size": 8032872
+   },
+   {
+    "module": "_mojolearn_arima",
+    "sha256": "dba80e4e834a89848045e1c45488747cc0f2839f4fea59a931bdf6fb71a2bdf7",
+    "size": 846440
+   },
+   {
+    "module": "_mojolearn_byte_lm",
+    "sha256": "73b46df0c5ecd2c4306cfa7694b3b83b41a92f8260ba82d4714eda5e9d17bc10",
+    "size": 9137576
+   },
+   {
+    "module": "_mojolearn_embedding",
+    "sha256": "e79fd53a669fc2c5265d7a00dd58bcfe4475119773e28bb4e0543c263395b8a1",
+    "size": 300640
+   },
+   {
+    "module": "_mojolearn_estimators",
+    "sha256": "486a5ad6a8ec3a69c706dc7dc5730df8f545c576b710c5a802b4e8f8820aa813",
+    "size": 6447784
+   },
+   {
+    "module": "_mojolearn_gbdt",
+    "sha256": "38677486bbca6de42c9333cb659d879a4f96d1ce080fbd9cd1d9fce4869aac92",
+    "size": 8679744
+   },
+   {
+    "module": "_mojolearn_gp",
+    "sha256": "99710e8d77a2f9453ff1e736ed6878af8d4bc0be3370ea638ac72c926d3d62e3",
+    "size": 3384392
+   },
+   {
+    "module": "_mojolearn_hdbscan",
+    "sha256": "ee9739f65724544188e72922229f9f73232cf0f0d513bbcec3e2dd4bef729a48",
+    "size": 6043640
+   },
+   {
+    "module": "_mojolearn_ivf",
+    "sha256": "7f00e6e018660a770e2969803581b046f6a7c2d34080124a16c2734412910b7b",
+    "size": 2066168
+   },
+   {
+    "module": "_mojolearn_kernel_methods",
+    "sha256": "18b0e898c200758608bc8b5a9a5b3004e5799f5fd9f17cadcbbeb5b564389d17",
+    "size": 3225920
+   },
+   {
+    "module": "_mojolearn_linalg",
+    "sha256": "3dd331a948d0d430e1da1713e2bd187819134a9a6b055f8b516d9b5a88761061",
+    "size": 2935680
+   },
+   {
+    "module": "_mojolearn_mamba",
+    "sha256": "f4ed5662db5dcdeeb0746a928d1a5e2baf4aa6d3fd1bbcd06bdf2f4c401d3704",
+    "size": 4952824
+   },
+   {
+    "module": "_mojolearn_metrics",
+    "sha256": "5abd4cd9115f87219eee6f7f4ffd0bee9b1d296401cf51624d3c5ede7abc36ea",
+    "size": 10423528
+   },
+   {
+    "module": "_mojolearn_mixture",
+    "sha256": "dcdc3d31976bb1b7799c02c5c7d554a894cd171848fec8327c178971bb36c4a9",
+    "size": 4746008
+   },
+   {
+    "module": "_mojolearn_preprocessing",
+    "sha256": "3ae36ba879ddabbd67e0c1634ec326a6079134ce0927156e23b6b497eab7be52",
+    "size": 318824
+   },
+   {
+    "module": "_mojolearn_resample",
+    "sha256": "22630ae4bd781fbfd78e3323d0b0f29d1aae96da50b9401e79325afae76fc0c9",
+    "size": 1460712
+   },
+   {
+    "module": "_mojolearn_rf",
+    "sha256": "d8a854828e11ae8d0cdeedcee9cec814341541bfe2d99d23503895f5798043ca",
+    "size": 2186776
+   },
+   {
+    "module": "_mojolearn_solver",
+    "sha256": "fd21deda33e6d7c397876f3a4fc1b8e7e0e91e691cfde39109f998636eed7d20",
+    "size": 3036448
+   },
+   {
+    "module": "_mojolearn_svm",
+    "sha256": "ce7a84af13a2b816c392828791b7a7192e1e47edf7dcc34d158645f22a5f428e",
+    "size": 3495072
+   },
+   {
+    "module": "_mojolearn_training",
+    "sha256": "da374e6a75892db25692f585b2ea00e8aaa7849192dc8638b199300722a614d2",
+    "size": 3242608
+   },
+   {
+    "module": "_mojolearn_transformer",
+    "sha256": "4f31ecf83f76f63dce06c90f2e57476c41c6613c3e6441d27071c34767fbeeb2",
+    "size": 8095232
+   },
+   {
+    "module": "_mojolearn_trees",
+    "sha256": "dc1cf94791edfc57fb774c69535735de3387a6acb6f19b8bd29caabec0af0a0f",
+    "size": 1869808
+   },
+   {
+    "module": "_mojolearn_tsa",
+    "sha256": "2b37dfda0e3ff5b8a4c8ffb0f37986e595bf67c2d6d83b593c99587274b6a99e",
+    "size": 751376
+   }
+  ]
+ },
+ "resume_signature": {
+  "schema": 1,
+  "source_sha256": "4b787c7f19b15c85222379f95153e63702067a22d406b3675c6e166d7548a75a",
+  "options": {
+   "require_backend": null,
+   "require_cpu": false,
+   "fail_on_refused": false,
+   "jobs": 1,
+   "lanes": "mamba1,mamba2,par-samba,par-samba-clip,par-byte-lm,par-byte-lm-model-pool,par-byte-lm-offload",
+   "skip": "",
+   "fixtures": "",
+   "repeats": 2,
+   "vendor": "nvidia-nvidia-geforce-rtx-4090-sm_89",
+   "allow_fast": false,
+   "batch_alone": 16,
+   "no_batch": false,
+   "batch_grad": true,
+   "batch_scale": true,
+   "ragged": true,
+   "step_full": true,
+   "no_rlpair": false,
+   "diff": null,
+   "require_columns": 0,
+   "owed_json": "",
+   "merge": null,
+   "allow_separate_builds": false
+  },
+  "environment_sha256": "5d58bd41992e683347acc7269d398bc52ce685eda47aace91389b2806de15c87",
+  "provenance": {
+   "commit": "2766cdb438acb1b2af9bc734106d26808c099b8e",
+   "mode": "identical",
+   "vendor": "nvidia-nvidia-geforce-rtx-4090-sm_89",
+   "platform": "Linux-6.8.0-124-generic-x86_64-with-glibc2.35",
+   "python": "3.14.7",
+   "numpy": "2.5.2",
+   "fixtures": {
+    "base": {
+     "X": "b5b0a0005efa3788",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "308c22120b664e5b"
+    },
+    "ties": {
+     "X": "186fe2109fc34ad5",
+     "y_clf": "f33cf521f758ae3c",
+     "y_reg": "047d4652a4d56bc3"
+    },
+    "hashed": {
+     "X": "c93497b26fe65cda",
+     "y_clf": "d104ead2f62bdd03",
+     "y_reg": "ce4959d8070bb069"
+    },
+    "wide": {
+     "X": "35f6a8481e649eb8",
+     "y_clf": "276ebacc29267948",
+     "y_reg": "611fc5dd6367bef5"
+    },
+    "denormal": {
+     "X": "752323c375a1cbf5",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "denormal_ftz": {
+     "X": "34c156b0d0e8a891",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "dupes": {
+     "X": "9d9d9db7c7785a14",
+     "y_clf": "d390ee2944b13e1d",
+     "y_reg": "135ce10f2a0817fe"
+    },
+    "odd": {
+     "X": "93d9611a09107bb9",
+     "y_clf": "273a388a705a4f40",
+     "y_reg": "25f3d126c81ca0ec"
+    },
+    "negative": {
+     "X": "08106ffff3256313",
+     "y_clf": "294ce4d7dadaf0bb",
+     "y_reg": "ce1914d5f78f5707"
+    }
+   },
+   "heldout": {
+    "base": {
+     "X": "d4de6b4eb682c465"
+    },
+    "ties": {
+     "X": "d1ba686494256660"
+    },
+    "hashed": {
+     "X": "9dc786ade4574aff"
+    },
+    "wide": {
+     "X": "d52a1af18a3c2f1c"
+    },
+    "denormal": {
+     "X": "5061056b118d07d0"
+    },
+    "denormal_ftz": {
+     "X": "a8c3d1a560b5cabb"
+    },
+    "dupes": {
+     "X": "e4b16c115962dfcd"
+    },
+    "odd": {
+     "X": "32ea0bbed60b8e6c"
+    },
+    "negative": {
+     "X": "45b539a3f66ce25d"
+    }
+   }
+  }
+ }
+}
