@@ -28,7 +28,7 @@ The four kinds, for one lane:
 
 - Lanes: **273** (214 single-device, 59 `par-*` multi-GPU drivers).
 - Source public API entries enumerated from the public API: **255**.
-- Source public API entries with ALL FOUR kinds on at least one lane: **212** of 255.
+- Source public API entries with ALL FOUR kinds on at least one lane: **216** of 255.
 - Source public API entries with NO IDENTITY LANE AT ALL: **0**.
 - Source public API entries with no lane of their own, but reached by the harness's
   CPU inference routing: **0**.
@@ -37,7 +37,7 @@ Per kind, over the public API entries:
 
 | kind | API entries that have it | missing |
 |---|---|---|
-| gpu column | 250 | 5 |
+| gpu column | 254 | 1 |
 | cpu verifier | 222 | 33 |
 | sabotage seen to move a build | 217 | 38 |
 | batch part or named n/a | 255 | 0 |
@@ -46,12 +46,12 @@ Per kind, over the lanes:
 
 | kind | lanes that have it | missing |
 |---|---|---|
-| gpu column (any class) | 270 | 3 |
+| gpu column (any class) | 271 | 2 |
 | gpu column on all three classes | 235 | 38 |
 | cpu verifier declared | 239 | 34 |
 | sabotage seen to move a build | 230 | 43 |
 | batch part or named n/a | 273 | 0 |
-| ALL FOUR | 227 | 46 |
+| ALL FOUR | 228 | 45 |
 
 Sabotage, split by what was actually watched:
 
@@ -108,8 +108,8 @@ A blank cell means no lane of this algorithm has that kind.
 | `GradientBoostingClassifier` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `GradientBoostingRegressor` | 6 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `HDBSCAN` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `HostForest` | 1 |  | training | seen(build) | part | NO |
-| `HostGBDT` | 1 |  | training | seen(build) | part | NO |
+| `HostForest` | 1 | apple | training | seen(build) | part | yes |
+| `HostGBDT` | 1 | apple | training | seen(build) | part | yes |
 | `IVFIndex` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `IsolationForest` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `KMeans` | 9 | amd,apple,nvidia | training | seen(build) | part | yes |
@@ -175,8 +175,8 @@ A blank cell means no lane of this algorithm has that kind.
 | `hdbscan.approximate_predict` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `hdbscan.membership_vector` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `host_model` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
-| `host_predict` | 1 |  | training | seen(build) | part | NO |
-| `host_predict_proba` | 1 |  | training | seen(build) | part | NO |
+| `host_predict` | 1 | apple | training | seen(build) | part | yes |
+| `host_predict_proba` | 1 | apple | training | seen(build) | part | yes |
 | `kernel_methods.KernelRidge` | 8 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `kernel_methods.Nystroem` | 8 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `kernel_methods.RBFSampler` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
@@ -594,7 +594,7 @@ A blank cell means no lane of this algorithm has that kind.
 | samba-bf16w | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-complete-dependencies/records/samba-bf16w/cpu-sabotage.json` | n/a n/a:weight-format lane; the batch part is measured on its base lane | yes |
 | samba-int8w | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_cpu-complete-dependencies/records/samba-int8w/cpu-sabotage.json` | n/a n/a:weight-format lane; the batch part is measured on its base lane | yes |
 | samba-untied-dropout-accum | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_cpu-samba/cpu-apple-m4.sabotage.json` | part | yes |
-| saved-model-host-infer | - | training | seen(build) | `bench/results/identity_break/2026-09-19_laneless-public-classes/sabotage-forest-own-define.json` | part | NO |
+| saved-model-host-infer | apple | training | seen(build) | `bench/results/identity_break/2026-09-19_laneless-public-classes/sabotage-forest-own-define.json` | part | yes |
 | select-d | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-17_tsa-negative-controls/cpu-sabotage.json` | part | yes |
 | spectral | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_spectral-predict/cpu-x86.host-sabotage.json (clean partner at another commit)` | part | yes |
 | spectral-embedding | nvidia | training | seen(build) | `bench/results/identity_break/2026-09-20_spectral-embedding/cpu-x86-sabotage.json` | n/a n/a:transductive (SpectralEmbedding embeds the fitted rows only; it has no transform, in the reference and in scikit-learn alike) | yes |
@@ -722,7 +722,7 @@ its host restatement changing makes that lane's columns disagree.
 
 Renting a GPU for a lane in this table buys a CPU run at GPU prices.
 
-**RECORDED IS NOT THE SAME AS MEANINGFUL.** 3 of these
+**RECORDED IS NOT THE SAME AS MEANINGFUL.** 4 of these
 carry GPU columns anyway, recorded before this classification existed.
 They are not extra assurance: each is a GPU box that ran its own CPU.
 They are marked below so a reader does not count them as vendor
@@ -735,7 +735,7 @@ coverage, and they are not evidence for any vendor claim.
 | byte-lm-host-train | training | seen(build) | amd,apple,nvidia (assert nothing) |
 | cross-val-folds | host-only | seen(build) | none, correctly |
 | language-model-config | training | seen(build) | none, correctly |
-| saved-model-host-infer | training | seen(build) | none, correctly |
+| saved-model-host-infer | training | seen(build) | apple (assert nothing) |
 
 ## The multi-GPU driver lanes, which a CPU column cannot judge
 
