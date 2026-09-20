@@ -340,9 +340,12 @@ you can CHECK and changed nothing about what the library will train for you.
 | `--reference-table PATH` | compare against another table |
 | `--self-test` | show that this verifier can fail (below) |
 | `--cross-check [quick\|default\|all]` | compare your GPU against your CPU (below) |
+| `--par [quick\|default\|all]` | compare your two-device column against your one-device column (below) |
+| `--par-devices 0,1` | with `--par`: which devices the second column runs on |
+| `--par-self-test` | show that `--par` can fail |
 | `--json-out PATH` | with `--all`: also write the evidence document to PATH |
 
-The three checks answer different questions, and are worth more together than
+The four checks answer different questions, and are worth more together than
 separately:
 
 1. **`--cross-check`**, your GPU against your CPU. Trusts nobody: you generated
@@ -351,8 +354,58 @@ separately:
    which is auditable because the raw columns are committed under
    `bench/results/identity_break/` and the document names the exact file and
    commit each reference came from.
-3. **`--self-test`**, which shows the comparison can fail at all. Without it the
-   first two are checks nobody has watched fail.
+3. **`--par`**, your two-device column against your one-device column, for the
+   59 `par-*` multi-device driver lanes. Trusts nobody for the same reason
+   `--cross-check` does not, and it is the only command that states the
+   drivers' claim at all: every `par-*` cell in the recorded table is a
+   ONE-device run, so `--all` cannot ask this question.
+4. **`--self-test`** and **`--par-self-test`**, which show the comparisons can
+   fail at all. Without them the first three are checks nobody has watched
+   fail.
+
+## Your two devices against your one device
+
+A `par-*` lane is a multi-device DRIVER: it cuts one fit or one query into
+shards, sends each shard to its own device, and merges the results. Its whole
+claim, in `identity_break._par_devices`, is that the two-device column hashes
+equal to the one-device column cell for cell. Sharding must not move a bit.
+
+That claim is not in any release record. `identity_break.RECORD_EXCLUDED_PREFIXES`
+keeps `par-*` out of a full column, and every `par-*` reference in the shipped
+table is a one-device run, so `verify --all` compares one device against one
+device and passes whatever the sharding does.
+
+```sh
+python -m mojolearn verify --par                  # all 59 par-* lanes, base fixture
+python -m mojolearn verify --par quick            # one lane per family
+python -m mojolearn verify --par --lanes par-queries-nn --fixtures base,ties
+python -m mojolearn verify --par-devices 2,3      # another pair
+```
+
+It runs each lane twice in one process, once with `MOJOLEARN_PAR_DEVICES=0` and
+once with `0,1`, and compares. There is no reference table: the one-device
+column, produced on your box minutes earlier off the same build, IS the
+reference.
+
+**A column that never sharded is refused, not passed.** If a driver silently
+falls back to one device, both columns agree instantly and a naive command
+would print a confident pass over nothing. So every device pool the two-device
+column starts is inventoried through the driver, each worker is required to
+resolve to its own process and its own physical GPU by UUID and PCI id, and a
+run in which no pool started at all is reported as CANNOT RUN with that
+sentence.
+
+`DIVERGENT` means sharding changed the bits. `ONE-COLUMN` means the work
+refused on exactly one of the two columns, which is a defect only a two-device
+run can see. Both exit non-zero.
+
+**Apple is excluded structurally, not by policy.** `DevicePool._start` admits
+the metal vendor only at a single device and raises for any other group, so no
+Mac can produce a two-device `par-*` column with this code. The command says so
+by name rather than leaving you to look for hardware that would never have
+worked. On a CPU-only install it runs the drivers' own partition and merge
+across two worker processes and states, in the report, that this is not a
+device claim.
 
 ## Can you watch it fail?
 
