@@ -37,7 +37,6 @@ struct ByteParallelTrainer(Movable, Writable):
     var contexts: List[DeviceContext]
     var trainers: List[ByteTrainer]
     var total: Optional[DeviceBuffer[DType.float32]]
-    var incoming: Optional[DeviceBuffer[DType.float32]]
     var pool_totals: List[DeviceBuffer[DType.float32]]
     var pool_incoming: List[DeviceBuffer[DType.float32]]
     var pool_optimizer: Bool
@@ -49,7 +48,6 @@ struct ByteParallelTrainer(Movable, Writable):
         self.contexts = List[DeviceContext]()
         self.trainers = List[ByteTrainer]()
         self.total = Optional[DeviceBuffer[DType.float32]]()
-        self.incoming = Optional[DeviceBuffer[DType.float32]]()
         self.pool_totals = List[DeviceBuffer[DType.float32]]()
         self.pool_incoming = List[DeviceBuffer[DType.float32]]()
         self.pool_optimizer = False
@@ -67,7 +65,6 @@ struct ByteParallelTrainer(Movable, Writable):
         # Drain buffer destruction before destroying any device context.
         _ = self.trainers^
         _ = self.total^
-        _ = self.incoming^
         _ = self.pool_totals^
         _ = self.pool_incoming^
         for i in range(len(self.contexts)):
@@ -83,7 +80,6 @@ struct ByteParallelTrainer(Movable, Writable):
         self.usable = False
         self.trainers = List[ByteTrainer]()
         self.total = None
-        self.incoming = None
         self.pool_totals = List[DeviceBuffer[DType.float32]]()
         self.pool_incoming = List[DeviceBuffer[DType.float32]]()
         for i in range(len(self.contexts)):
@@ -130,7 +126,6 @@ struct ByteParallelTrainer(Movable, Writable):
                     self.contexts[i].synchronize()
             else:
                 self.total = self.contexts[0].enqueue_create_buffer[DType.float32](shape.n_total())
-                self.incoming = self.contexts[0].enqueue_create_buffer[DType.float32](shape.n_total())
                 self.contexts[0].synchronize()
         except error:
             self.close()
@@ -251,13 +246,24 @@ struct ByteParallelTrainer(Movable, Writable):
                                     grid_dim=((owned+127)//128,1,1),block_dim=(128,1,1))
                             self.contexts[owner].synchronize()
                     else:
-                        transfer_bytes(self.contexts[rank], self.contexts[0], self.trainers[rank].buffers.grad,
-                            self.incoming.value(), n, rank != 0)
+                        # Rank zero's gradient has entered the fold before a
+                        # later rank may overwrite it.  Reuse that now-dead
+                        # full gradient as the transfer staging buffer rather
+                        # than retaining a second full-model allocation on
+                        # device zero.  `total` remains a distinct accumulator,
+                        # so the logical left fold and every FP operation are
+                        # unchanged.  On later waves rank zero first computes
+                        # its new shard into the same buffer, consumes it, and
+                        # only then can a remote transfer overwrite it again.
+                        ref incoming = self.trainers[0].buffers.grad
+                        if rank != 0:
+                            var source = self.trainers[rank].buffers.grad.create_sub_buffer[DType.float32](0, n)
+                            transfer_bytes(self.contexts[rank], self.contexts[0], source, incoming, n, True)
                         if start + rank == 0:
-                            _copy_into(self.contexts[0], self.total.value(), self.incoming.value(), 0, 0, n)
+                            _copy_into(self.contexts[0], self.total.value(), incoming, 0, 0, n)
                         else:
                             self.contexts[0].enqueue_function[_ordered_add_kernel](
-                                self.total.value().unsafe_ptr(), self.incoming.value().unsafe_ptr(), Int32(n),
+                                self.total.value().unsafe_ptr(), incoming.unsafe_ptr(), Int32(n),
                                 grid_dim=((n + 127) // 128, 1, 1), block_dim=(128, 1, 1))
                         self.contexts[0].synchronize()
                 start += active

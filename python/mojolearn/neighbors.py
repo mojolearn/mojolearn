@@ -1021,8 +1021,16 @@ class KNeighborsClassifier(NearestNeighbors):
         nq = q.shape[0]
         n_out = self._y_cols.shape[0]
         n_classes = [len(c) for c in self._classes_list]
-        labels = empty((nq, n_out), "<i4")
-        proba = empty((nq * sum(n_classes),), "<f4")
+        # The native contract writes exactly one of these two outputs.  Keep
+        # the unselected address valid without materializing its full public
+        # shape: at million-row scale the unused probability matrix can be
+        # tens or hundreds of MiB, and predict_proba likewise has no use for
+        # a labels matrix.  Both GPU and host bindings promise not to read or
+        # write the unselected pointer (their one-element sentinel contract).
+        labels = (empty((1,), "<i4") if want_proba else
+                  empty((nq, n_out), "<i4"))
+        proba = (empty((nq * sum(n_classes),), "<f4") if want_proba else
+                 empty((1,), "<f4"))
         uniq = empty((sum(n_classes),), "<i4")
         idx = self._index
         y_cols = self._y_cols
@@ -1095,7 +1103,10 @@ class KNeighborsClassifier(NearestNeighbors):
         """Vote fractions per class, columns in `classes_` order; a list of
         arrays for a 2-D `y`."""
         labels, proba, n_classes = self._predict(X, want_proba=True)
-        nq = labels.shape[0]
+        # `labels` is the one-element sentinel in this arm.  The selected
+        # flat probability buffer records the query count without retaining
+        # an otherwise-unused labels matrix.
+        nq = proba.shape[0] // sum(n_classes)
         out = []
         off = 0
         for n in n_classes:

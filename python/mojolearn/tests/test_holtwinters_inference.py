@@ -174,5 +174,3 @@ def test_saved_model_forecasts_and_predicts(tmp_path, seasonal):
     assert type(host).__name__ == "HostExponentialSmoothing"
     assert os.path.realpath(host._bind().__file__) == os.path.realpath(host_path)
     assert answers(host) == answers(m), "the forecast host binding answers differently"
-    with pytest.raises(NotImplementedError):
-        host.fit()

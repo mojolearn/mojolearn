@@ -1145,10 +1145,22 @@ class LogisticRegression(NumericModeMixin):
         lowest class index, `_labels.argmax_rows`; the same rule the
         device's `softmax_row_max` applies to a tie and to `+0.0` against
         `-0.0`, and cuML's `qn_predict` argmax over `C` scores)."""
-        scores = self.decision_function(X)
         if self._n_targets() == 1:
+            x, _ = as_f32_c(X, ndim=2, name="X")
+            codes = empty((x.shape[0],), "<i8")
+            binding = self._bind("_mojolearn_estimators")
+            native = getattr(binding, "qn_predict_binary", None)
+            if native is not None:
+                native(
+                    addr_ro(x, name="X"), addr_ro(self._w, name="coef_"),
+                    addr(codes, name="codes"),
+                    [x.shape[0], x.shape[1], 1 if self.fit_intercept else 0],
+                )
+                return decode_labels(self.classes_, codes)
+            scores = self.decision_function(x)
             return decode_labels(self.classes_,
                                  [1 if s > 0.0 else 0 for s in scores.tolist()])
+        scores = self.decision_function(X)
         return decode_labels(self.classes_, argmax_rows(scores))
 
     def predict_proba(self, X):

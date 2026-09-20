@@ -649,9 +649,10 @@ def gbdt_resident_predict_binding(
     SIGMOID as `gbdt_predict_multi` takes them, plus 3 SIGMOID_PAIR: the
     Logloss and CrossEntropy `predict_proba` columns `[1 - p, p]` written
     as FLOAT64 to `out_addr` (`gbdt_sigmoid_pair`'s two statements over
-    the exact widening of the raw float32 value). Every other mode writes
-    float32 to `out_addr`, `n_rows * width` values row-major, exactly as
-    `gbdt_predict` and `gbdt_predict_multi` write them. `row_major` (an
+    the exact widening of the raw float32 value). Modes 4..6 write int64
+    class codes; every other mode writes float32 to `out_addr`, `n_rows *
+    width` values row-major, exactly as `gbdt_predict` and
+    `gbdt_predict_multi` write them. `row_major` (an
     optional third entry, 0 when absent) says `x` is the C-order
     `[row * n_features + f]` block rather than the column-major one; the
     staging pass transposes it. The feature count comes from the prepared

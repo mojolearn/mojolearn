@@ -466,6 +466,39 @@ def qn_decision_function_host(
     _ = hs^
 
 
+def qn_predict_binary_host(
+    ctx: DeviceContext,
+    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    coef_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    out_ptr: MutPointer[Int64, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    fit_intercept: Bool,
+) raises:
+    """Binary `qn_predict`, retaining the score and threshold boundary in
+    native code so Python never materializes scalar score/code objects."""
+    var n_param = n_features + (1 if fit_intercept else 0)
+    var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+    var w = ctx.enqueue_create_buffer[DType.float32](n_param)
+    var scores = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    ctx.enqueue_copy(dst_buf=w, src_ptr=coef_ptr)
+    ctx.synchronize()
+    var pams = QNParams.default()
+    pams.loss = QN_LOSS_LOGISTIC
+    pams.fit_intercept = fit_intercept
+    qn_decision_function(ctx, pams, x, n_rows, n_features, w, scores)
+    var hs = ctx.enqueue_create_host_buffer[DType.float32](n_rows)
+    ctx.enqueue_copy(dst_ptr=hs.unsafe_ptr(), src_buf=scores)
+    ctx.synchronize()
+    for i in range(n_rows):
+        out_ptr.unsafe_store(
+            i, Int64(1) if hs.unsafe_ptr().unsafe_load(i) > Float32(0.0)
+            else Int64(0),
+        )
+    _ = hs^
+
+
 def qn_sigmoid_host(
     scores_ptr: MutPointer[Float32, MutUntrackedOrigin],
     out_ptr: MutPointer[Float64, MutUntrackedOrigin],

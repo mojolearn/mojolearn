@@ -100,6 +100,7 @@ def host_predict_chunk(rows: Int, tasks: Int) -> Int:
 comptime HostF32Ptr = MutPointer[Float32, MutUntrackedOrigin]
 comptime HostF64Ptr = MutPointer[Float64, MutUntrackedOrigin]
 comptime HostU32Ptr = MutPointer[UInt32, MutUntrackedOrigin]
+comptime HostI64Ptr = MutPointer[Int64, MutUntrackedOrigin]
 
 
 @always_inline

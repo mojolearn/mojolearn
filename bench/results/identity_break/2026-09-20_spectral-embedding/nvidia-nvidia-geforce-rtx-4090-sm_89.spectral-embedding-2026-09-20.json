@@ -1,0 +1,856 @@
+{
+ "mode": "identical",
+ "repeats": 1,
+ "platform": "Linux-6.8.0-134-generic-x86_64-with-glibc2.35",
+ "vendor": "nvidia-nvidia-geforce-rtx-4090-sm_89",
+ "commit": "849d8e2b82945d3aca94600e7865eb7595a7f90e",
+ "commit_source": "commit.txt",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "hashed": {
+   "X": "c93497b26fe65cda",
+   "y_clf": "d104ead2f62bdd03",
+   "y_reg": "ce4959d8070bb069"
+  },
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "denormal_ftz": {
+   "X": "34c156b0d0e8a891",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  },
+  "negative": {
+   "X": "08106ffff3256313",
+   "y_clf": "294ce4d7dadaf0bb",
+   "y_reg": "ce1914d5f78f5707"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "hashed": {
+   "X": "9dc786ade4574aff"
+  },
+  "wide": {
+   "X": "d52a1af18a3c2f1c"
+  },
+  "denormal": {
+   "X": "5061056b118d07d0"
+  },
+  "denormal_ftz": {
+   "X": "a8c3d1a560b5cabb"
+  },
+  "dupes": {
+   "X": "e4b16c115962dfcd"
+  },
+  "odd": {
+   "X": "32ea0bbed60b8e6c"
+  },
+  "negative": {
+   "X": "45b539a3f66ce25d"
+  }
+ },
+ "cells": {
+  "spectral-embedding/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "8ba3b234b11555d3"
+   ],
+   "parts": [
+    {
+     "embedding": "bb676e2ac1a9512d",
+     "affinity": "2af13e58feeebe1b",
+     "precomputed": "84a760bebf720e5a",
+     "unnormalized": "a130c26b9edeb26b"
+    }
+   ],
+   "infer": [
+    "n/a:transductive"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:transductive (SpectralEmbedding embeds the fitted rows only; it has no transform, in the reference and in scikit-learn alike)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 1.7683582855388522,
+    "stages": {
+     "repeat=1/train": 1.766862434335053,
+     "repeat=1/infer-save-reload": 2.028048038482666e-05,
+     "repeat=1/batch": 0.0007681269198656082,
+     "repeat=1/batchgrad": 9.864103049039841e-05,
+     "repeat=1/batchscale": 8.70702788233757e-05,
+     "repeat=1/ragged": 7.779989391565323e-05,
+     "repeat=1/stepfull": 6.600096821784973e-05
+    }
+   }
+  },
+  "spectral-embedding/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "aa7d8da9aab7e642"
+   ],
+   "parts": [
+    {
+     "embedding": "8c3d245c13c5c13d",
+     "affinity": "cc43a67c7ffdc20d",
+     "precomputed": "053d8d7846cb0b8d",
+     "unnormalized": "11d4b89f7eb4a8f9"
+    }
+   ],
+   "infer": [
+    "n/a:transductive"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:transductive (SpectralEmbedding embeds the fitted rows only; it has no transform, in the reference and in scikit-learn alike)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.14585160836577415,
+    "stages": {
+     "repeat=1/train": 0.14517852291464806,
+     "repeat=1/infer-save-reload": 1.1350028216838837e-05,
+     "repeat=1/batch": 0.00013622082769870758,
+     "repeat=1/batchgrad": 8.615106344223022e-05,
+     "repeat=1/batchscale": 7.532071322202682e-05,
+     "repeat=1/ragged": 7.792003452777863e-05,
+     "repeat=1/stepfull": 5.880091339349747e-05
+    }
+   }
+  },
+  "spectral-embedding/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "d3d61c2839b8d641"
+   ],
+   "parts": [
+    {
+     "embedding": "b94c8a2916be892c",
+     "affinity": "36e6e7817c063fb3",
+     "precomputed": "1935b43a135e434c",
+     "unnormalized": "db9a23c55fdcb598"
+    }
+   ],
+   "infer": [
+    "n/a:transductive"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:transductive (SpectralEmbedding embeds the fitted rows only; it has no transform, in the reference and in scikit-learn alike)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.12664694618433714,
+    "stages": {
+     "repeat=1/train": 0.12601213064044714,
+     "repeat=1/infer-save-reload": 9.349547326564789e-06,
+     "repeat=1/batch": 0.00012188032269477844,
+     "repeat=1/batchgrad": 9.066984057426453e-05,
+     "repeat=1/batchscale": 7.727090269327164e-05,
+     "repeat=1/ragged": 6.89411535859108e-05,
+     "repeat=1/stepfull": 6.461981683969498e-05
+    }
+   }
+  },
+  "spectral-embedding/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2a30361d02fdf598"
+   ],
+   "parts": [
+    {
+     "embedding": "57f0a899a92d94e5",
+     "affinity": "1526b6819d970842",
+     "precomputed": "870e3bce3ec88b6c",
+     "unnormalized": "c0264f64cff91699"
+    }
+   ],
+   "infer": [
+    "n/a:transductive"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:transductive (SpectralEmbedding embeds the fitted rows only; it has no transform, in the reference and in scikit-learn alike)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.12409149575978518,
+    "stages": {
+     "repeat=1/train": 0.1234424002468586,
+     "repeat=1/infer-save-reload": 8.650124073028564e-06,
+     "repeat=1/batch": 0.0001244107261300087,
+     "repeat=1/batchgrad": 8.205138146877289e-05,
+     "repeat=1/batchscale": 7.335096597671509e-05,
+     "repeat=1/ragged": 7.618125528097153e-05,
+     "repeat=1/stepfull": 6.643030792474747e-05
+    }
+   }
+  },
+  "spectral-embedding/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "4fed620e51580dbb"
+   ],
+   "parts": [
+    {
+     "embedding": "e4decddb168e1798",
+     "affinity": "2f86ec13c9aeefd0",
+     "precomputed": "c6b1bba8f837c839",
+     "unnormalized": "e01c2eaed9dcfe79"
+    }
+   ],
+   "infer": [
+    "n/a:transductive"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:transductive (SpectralEmbedding embeds the fitted rows only; it has no transform, in the reference and in scikit-learn alike)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.27539945766329765,
+    "stages": {
+     "repeat=1/train": 0.27473644353449345,
+     "repeat=1/infer-save-reload": 1.0670162737369537e-05,
+     "repeat=1/batch": 0.00014174077659845352,
+     "repeat=1/batchgrad": 9.097158908843994e-05,
+     "repeat=1/batchscale": 7.947161793708801e-05,
+     "repeat=1/ragged": 6.80210068821907e-05,
+     "repeat=1/stepfull": 4.8459507524967194e-05
+    }
+   }
+  },
+  "spectral-embedding/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "4fed620e51580dbb"
+   ],
+   "parts": [
+    {
+     "embedding": "e4decddb168e1798",
+     "affinity": "2f86ec13c9aeefd0",
+     "precomputed": "c6b1bba8f837c839",
+     "unnormalized": "e01c2eaed9dcfe79"
+    }
+   ],
+   "infer": [
+    "n/a:transductive"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:transductive (SpectralEmbedding embeds the fitted rows only; it has no transform, in the reference and in scikit-learn alike)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.2760901730507612,
+    "stages": {
+     "repeat=1/train": 0.27541278675198555,
+     "repeat=1/infer-save-reload": 1.086946576833725e-05,
+     "repeat=1/batch": 0.0001298012211918831,
+     "repeat=1/batchgrad": 8.451007306575775e-05,
+     "repeat=1/batchscale": 7.45309516787529e-05,
+     "repeat=1/ragged": 6.841029971837997e-05,
+     "repeat=1/stepfull": 6.395019590854645e-05
+    }
+   }
+  },
+  "spectral-embedding/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "8ba3b234b11555d3"
+   ],
+   "parts": [
+    {
+     "embedding": "bb676e2ac1a9512d",
+     "affinity": "2af13e58feeebe1b",
+     "precomputed": "84a760bebf720e5a",
+     "unnormalized": "a130c26b9edeb26b"
+    }
+   ],
+   "infer": [
+    "n/a:transductive"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:transductive (SpectralEmbedding embeds the fitted rows only; it has no transform, in the reference and in scikit-learn alike)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.11776892468333244,
+    "stages": {
+     "repeat=1/train": 0.11713437922298908,
+     "repeat=1/infer-save-reload": 1.3299286365509033e-05,
+     "repeat=1/batch": 0.0001357411965727806,
+     "repeat=1/batchgrad": 8.613057434558868e-05,
+     "repeat=1/batchscale": 7.813982665538788e-05,
+     "repeat=1/ragged": 6.449036300182343e-05,
+     "repeat=1/stepfull": 4.581082612276077e-05
+    }
+   }
+  },
+  "spectral-embedding/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "97fb425ccea5f8f3"
+   ],
+   "parts": [
+    {
+     "embedding": "1e6182a9e5aa29a5",
+     "affinity": "3cceb1c395a16a3d",
+     "precomputed": "bca1fda9e953cc9b",
+     "unnormalized": "86c9b25c62787984"
+    }
+   ],
+   "infer": [
+    "n/a:transductive"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:transductive (SpectralEmbedding embeds the fitted rows only; it has no transform, in the reference and in scikit-learn alike)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.11890862416476011,
+    "stages": {
+     "repeat=1/train": 0.11842736974358559,
+     "repeat=1/infer-save-reload": 8.979812264442444e-06,
+     "repeat=1/batch": 8.825119584798813e-05,
+     "repeat=1/batchgrad": 5.8321282267570496e-05,
+     "repeat=1/batchscale": 4.515983164310455e-05,
+     "repeat=1/ragged": 4.335027188062668e-05,
+     "repeat=1/stepfull": 3.9800070226192474e-05
+    }
+   }
+  },
+  "spectral-embedding/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "e5efa1522a422de1"
+   ],
+   "parts": [
+    {
+     "embedding": "85f3e15ff09adfd7",
+     "affinity": "6c4ad9e29c97c10f",
+     "precomputed": "46ec7e80737e4ac7",
+     "unnormalized": "aaf7cf27711b23bb"
+    }
+   ],
+   "infer": [
+    "n/a:transductive"
+   ],
+   "infer_verdict": "N/A",
+   "model": [
+    "n/a:no-save"
+   ],
+   "model_verdict": "N/A",
+   "batch": [
+    "n/a:transductive (SpectralEmbedding embeds the fitted rows only; it has no transform, in the reference and in scikit-learn alike)"
+   ],
+   "batch_verdict": "N/A",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.11458121053874493,
+    "stages": {
+     "repeat=1/train": 0.11392505560070276,
+     "repeat=1/infer-save-reload": 9.279698133468628e-06,
+     "repeat=1/batch": 0.00013585109263658524,
+     "repeat=1/batchgrad": 8.552055805921555e-05,
+     "repeat=1/batchscale": 7.539056241512299e-05,
+     "repeat=1/ragged": 7.330998778343201e-05,
+     "repeat=1/stepfull": 5.633104592561722e-05
+    }
+   }
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "lane_revisions": {
+  "tokenizer": "synthetic-vocab-1",
+  "gbdt-parametric-losses": "rows-1500-1",
+  "gbdt-nan-modes": "rows-1500-nan-in-split-columns-2",
+  "gbdt-lossguide-newtoncosine": "rows-1500-1",
+  "gbdt-pair-logit": "rows-1500-1",
+  "hdbscan": "rows-4000-1",
+  "hdbscan-leaf": "rows-2000-1",
+  "spectral": "rows-512-1",
+  "holtwinters": "obs-128-1",
+  "byte-lm": "steps-2-1",
+  "byte-lm-resident": "shape-l1-d16-ff32-1",
+  "samba": "steps-1-1",
+  "samba-untied-dropout-accum": "steps-3-1",
+  "mamba2-dtlimit": "seqlen-8-dtlimit-straddle-2",
+  "mamba3": "norms-near-one-1",
+  "transformer": "norms-near-one-1",
+  "transformer-window": "norms-near-one-1",
+  "umap": "transform-row-separable-1",
+  "par-graph-umap": "transform-row-separable-1"
+ },
+ "parts_collected": [
+  "batch",
+  "batchgrad",
+  "batchscale",
+  "ragged",
+  "rlpair",
+  "stepfull"
+ ],
+ "parts_omitted": [],
+ "partial_column": false,
+ "gpu_slot": "FREE (run not serialised)",
+ "batchgrad_protocol": {
+  "rows": {
+   "alone": 16,
+   "split": [
+    1,
+    8,
+    "n"
+   ]
+  },
+  "accum_splits": [
+   2,
+   4,
+   8
+  ],
+  "uneven_split": "n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+  "carry_splits": [
+   [
+    1,
+    8,
+    "n"
+   ],
+   "every 16"
+  ],
+  "seq": [
+   8,
+   64
+  ]
+ },
+ "batchgrad_sabotage": false,
+ "batchscale_protocol": {
+  "batches": [
+   1,
+   17,
+   64,
+   256
+  ],
+  "whole": 1024,
+  "long_l": 1024,
+  "prefixes": [
+   1,
+   7,
+   63,
+   64,
+   65,
+   127,
+   128,
+   129,
+   255,
+   256,
+   257,
+   511,
+   512,
+   513,
+   1023
+  ]
+ },
+ "batchscale_sabotage": false,
+ "ragged_protocol": {
+  "lengths": [
+   16,
+   1,
+   7,
+   9,
+   16,
+   3,
+   12,
+   15
+  ],
+  "long_lengths": [
+   300,
+   1,
+   65,
+   129,
+   257,
+   128
+  ],
+  "padding": "nan/vocab+7"
+ },
+ "ragged_sabotage": false,
+ "stepfull_protocol": {
+  "rows": 2,
+  "length": 16,
+  "full": "forward(x) from a zero state, one pass",
+  "stepped": "allocate_state then step(x_t, state) at every position",
+  "compared": "bitwise, position by position"
+ },
+ "stepfull_sabotage": false,
+ "package": {
+  "version": "0.8.8",
+  "package_dir": "/root/mojolearn/python/mojolearn",
+  "numpy": "2.5.2",
+  "python": "3.14.7",
+  "par_devices": "0",
+  "bindings": [
+   {
+    "module": "_mojolearn",
+    "sha256": "f52190982b1b2e1ec2b60b23b47786486586543ec7b11389d92486c5f3bb0e44",
+    "size": 8032872
+   },
+   {
+    "module": "_mojolearn_metrics",
+    "sha256": "f23a3c5dc6a2872ab5582ffd1b0a2c762669e335048023f076f961c02ab8cd48",
+    "size": 10455920
+   }
+  ]
+ },
+ "resume_signature": {
+  "schema": 1,
+  "source_sha256": "13fdff66f877b9893cc016926a072f7a8836ff2880a2e0facbc87236238bae5a",
+  "options": {
+   "require_backend": null,
+   "require_cpu": false,
+   "fail_on_refused": false,
+   "jobs": 1,
+   "lanes": "spectral-embedding",
+   "skip": "",
+   "fixtures": "",
+   "repeats": 1,
+   "vendor": "nvidia-nvidia-geforce-rtx-4090-sm_89",
+   "allow_fast": false,
+   "batch_alone": 16,
+   "partial_column": "",
+   "no_batch": false,
+   "no_rlpair": false,
+   "batch_grad": false,
+   "batch_scale": false,
+   "ragged": false,
+   "step_full": false,
+   "diff": null,
+   "require_columns": null,
+   "owed_json": "",
+   "merge": null,
+   "allow_separate_builds": false
+  },
+  "environment_sha256": "79654b0b504c6e314a5bd1006188400596f26ab1b25f95cc78575a666ec3c38d",
+  "provenance": {
+   "commit": "849d8e2b82945d3aca94600e7865eb7595a7f90e",
+   "mode": "identical",
+   "vendor": "nvidia-nvidia-geforce-rtx-4090-sm_89",
+   "platform": "Linux-6.8.0-134-generic-x86_64-with-glibc2.35",
+   "python": "3.14.7",
+   "numpy": "2.5.2",
+   "fixtures": {
+    "base": {
+     "X": "b5b0a0005efa3788",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "308c22120b664e5b"
+    },
+    "ties": {
+     "X": "186fe2109fc34ad5",
+     "y_clf": "f33cf521f758ae3c",
+     "y_reg": "047d4652a4d56bc3"
+    },
+    "hashed": {
+     "X": "c93497b26fe65cda",
+     "y_clf": "d104ead2f62bdd03",
+     "y_reg": "ce4959d8070bb069"
+    },
+    "wide": {
+     "X": "35f6a8481e649eb8",
+     "y_clf": "276ebacc29267948",
+     "y_reg": "611fc5dd6367bef5"
+    },
+    "denormal": {
+     "X": "752323c375a1cbf5",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "denormal_ftz": {
+     "X": "34c156b0d0e8a891",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "dupes": {
+     "X": "9d9d9db7c7785a14",
+     "y_clf": "d390ee2944b13e1d",
+     "y_reg": "135ce10f2a0817fe"
+    },
+    "odd": {
+     "X": "93d9611a09107bb9",
+     "y_clf": "273a388a705a4f40",
+     "y_reg": "25f3d126c81ca0ec"
+    },
+    "negative": {
+     "X": "08106ffff3256313",
+     "y_clf": "294ce4d7dadaf0bb",
+     "y_reg": "ce1914d5f78f5707"
+    }
+   },
+   "heldout": {
+    "base": {
+     "X": "d4de6b4eb682c465"
+    },
+    "ties": {
+     "X": "d1ba686494256660"
+    },
+    "hashed": {
+     "X": "9dc786ade4574aff"
+    },
+    "wide": {
+     "X": "d52a1af18a3c2f1c"
+    },
+    "denormal": {
+     "X": "5061056b118d07d0"
+    },
+    "denormal_ftz": {
+     "X": "a8c3d1a560b5cabb"
+    },
+    "dupes": {
+     "X": "e4b16c115962dfcd"
+    },
+    "odd": {
+     "X": "32ea0bbed60b8e6c"
+    },
+    "negative": {
+     "X": "45b539a3f66ce25d"
+    }
+   }
+  }
+ }
+}
