@@ -7,6 +7,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from core.device_zero import enqueue_fill
 from max.gpu.host.device_attribute import DeviceAttribute
 from std.math import isfinite
+from std.sys.compile import is_defined
 from gbdt.methods.kernel_add_model_value import add_model_value_kernel
 from gbdt.metrics.optimal_const_for_loss import (
     calc_one_dimensional_optimum_const_approx,
@@ -108,7 +109,7 @@ from checks.kernel_matrix import (
 )
 from gbdt.options.catboost_options import SCORE_FUNCTION_COSINE
 from checks.numerics import PIN_DETERMINISM
-from checks.numerics import NUMERIC_IDENTICAL
+from checks.numerics import NUMERIC_FAST, NUMERIC_IDENTICAL
 from gbdt.gpu_util.kernel.fill import launch_make_sequence
 from gbdt.gpu_util.kernel.bootstrap import (
     bootstrap_grid_blocks,
@@ -143,6 +144,7 @@ from gbdt.options.overfitting_detector_options import (
     OD_DEFAULT_STOP_PVALUE,
     OD_DEFAULT_WAIT_ITERATIONS,
 )
+
 from gbdt.options.catboost_options import (
     LEAF_ESTIMATION_EXACT,
     LEAF_ESTIMATION_GRADIENT,
@@ -184,6 +186,16 @@ from gbdt.targets.kernel.query_rmse import (
     make_querywise_target_buffers,
 )
 from gbdt.gpu_data.kernel.query_helper import launch_inverse_permutation
+
+
+comptime FAST_DEPTHWISE_DEVICE_PARTITION = not is_defined[
+    "MOJOLEARN_GBDT_FAST_DEPTHWISE_HOST_PARTITION"
+]()
+"""Use the existing stable device leaf partition for FAST Depthwise fits.
+
+The define restores the former host materialization for performance A/Bs;
+it is not a second production policy.
+"""
 
 
 @fieldwise_init
@@ -2037,6 +2049,15 @@ def fit_with_test(
     # DEVIATION 2551: the non-symmetric estimator's device partition, the
     # FIT's pool of one (empty and never touched on the default side)
     var leaf_parts = List[DeviceLeafPartitioner]()
+    # FAST depthwise fits otherwise download and counting-sort every row,
+    # then upload the same stable row order once per tree/permutation. The
+    # existing device partitioner produces identical integer partitions and
+    # is already the IDENTICAL default. Keep Lossguide and symmetric routing
+    # unchanged while eliminating that 1M-row host materialization here.
+    var device_leaf_partition = DEVICE_LEAF_PARTITION or (
+        HIST_BUILD_MODE == NUMERIC_FAST and grow_policy == GROW_DEPTHWISE
+        and FAST_DEPTHWISE_DEVICE_PARTITION
+    )
 
     # `secondDerAsWeights = IsSecondOrderScoreFunction(scoreFunction)`.
     # BOTH their searchers key the stat planes' content on it -- the greedy
@@ -2504,7 +2525,7 @@ def fit_with_test(
             )
             loop_times.stop_host("iter_tree_search", t_search)
             var n_bins = tree.bin_count()
-            comptime if DEVICE_LEAF_PARTITION:
+            if device_leaf_partition:
                 # DEVIATION 2551: the pool of one, keyed on the row count,
                 # with a leaf capacity of the policy's own bound
                 if (
@@ -2524,7 +2545,7 @@ def fit_with_test(
                 var pv = List[Float32]()
                 var t_bins = loop_times.start()
                 var part: LeafPartition
-                comptime if DEVICE_LEAF_PARTITION:
+                if device_leaf_partition:
                     ref lp = leaf_parts[0]
                     if p == learn_p:
                         compute_non_symmetric_bins_for_model(
