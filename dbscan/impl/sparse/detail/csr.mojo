@@ -194,8 +194,6 @@ def weak_cc_batched(
         grid_dim=((n_rows + WEAK_CC_TPB - 1) // WEAK_CC_TPB, 1, 1),
         block_dim=(WEAK_CC_TPB, 1, 1),
     )
-    ctx.synchronize()
-
     var passes = 0
     var converged = False
     for _it in range(max_iterations):
@@ -213,7 +211,6 @@ def weak_cc_batched(
             grid_dim=((batch_size + WEAK_CC_TPB - 1) // WEAK_CC_TPB, 1, 1),
             block_dim=(WEAK_CC_TPB, 1, 1),
         )
-        ctx.synchronize()
         ctx.enqueue_copy(dst_ptr=h_changed.unsafe_ptr(), src_buf=d_changed)
         ctx.synchronize()
         passes += 1
