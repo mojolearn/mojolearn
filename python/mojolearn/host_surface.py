@@ -2820,48 +2820,81 @@ PUBLIC_PENDING_LANES = {
     # public lane with no reference makes an installed `verify --all` read
     # OWED for something it could have been told not to ask. It joins
     # `public_reference_lanes()` the day a record carries it.
+    #
+    # THE ONLY ONE OF THE TEN STILL HERE FOR THIS REASON
+    # (lane/new-lane-reference-promotion, 2026-09-20). The other nine had
+    # admissible committed columns by then and were promoted into the shipped
+    # table; this one could not be, and the merge guard is what said so
+    # rather than a reading of the record:
+    #
+    #     merge_reference_lanes -> language-model-config/base: missing parts ['batch']
+    #
+    # bench/results/identity_break/2026-09-19_language-model-config/ carries
+    # ONE fixture (base) and three parts (train, infer, model) for it, and a
+    # scoped admission requires all nine fixtures with train, infer, model
+    # and batch. So its debt is unchanged and is a RECORD: one CPU column
+    # over all nine fixtures at `--repeats 2` with the batch part run. It is
+    # not a GPU debt and not a rental.
     "language-model-config": "no reference",
 
-    # lane/linalg-public (2026-09-19), THE SAME DEBT, paid the same day it was
-    # incurred. Adding these three to the linalg family's `training_lanes`
-    # this morning made them public reference lanes, and no GPU column has
-    # ever run them, so the shipped table carries no cell for any of them --
+    # lane/linalg-public (2026-09-19). Adding these three to the linalg
+    # family's `training_lanes` made them public reference lanes with no
+    # column of any kind behind them --
     # `test_public_reference_lanes_are_derived_and_every_pending_reason_is_true`
     # named `linalg-eigh` and `linalg-qr` and failed from that commit onward.
-    # MEASURED, not assumed: `python -m mojolearn verify --all` on this host
-    # reads 27 OWED and 0 DIVERGENT for the linalg section, against 108
-    # VERIFIED / 0 DIVERGENT for the estimators beside them. They are
-    # bit-reproducible on CPU and sabotage-proven; the CROSS-VENDOR claim
-    # this tree exists to make is NOT yet established for them, and the
-    # honest way to say that is here rather than in a lane's docstring.
-    # They leave this table the day one GPU column carries them.
-    "linalg-qr": "no reference",
-    "linalg-eigh": "no reference",
-    "linalg-svdvals": "no reference",
+    #
+    # THE REASON MOVED ON 2026-09-20 (lane/new-lane-reference-promotion), and
+    # it moved because the columns the comment above was waiting for had
+    # landed in the tree and nothing had admitted them into the artifact the
+    # wheel ships. A scoped, additive admission from the committed records --
+    # no binding, no GPU, no rental -- gave all three cells on all nine
+    # fixtures from 2026-09-19_vendor-class-gaps (amd + nvidia, @0845c6de7)
+    # and 2026-09-19_apple-column-gaps (@ef8c2b311), 36 parts per class per
+    # lane, with 0 conflicts. Intersected over every part of every fixture
+    # they carry amd + apple + nvidia, which is all three vendor classes.
+    #
+    # So `no reference` is no longer true and `one column` never was: what is
+    # left is the ONE thing the promotion rule will not do without, a CPU-only
+    # `verify --all` WATCHED to read IDENTICAL for them. This box cannot run
+    # it -- it has no binding built -- so the reason says exactly that.
+    # Note the CPU class is deliberately absent from the intersection: the
+    # 2026-09-19_linalg-public CPU column covers the base fixture only (3 of
+    # 36 parts), which is why the watched run is still the open item.
+    "linalg-qr": "unwatched",
+    "linalg-eigh": "unwatched",
+    "linalg-svdvals": "unwatched",
 
-    # lane/laneless-public-classes (2026-09-19), the same debt again and
-    # declared the same hour. Three lanes joined their families'
-    # `training_lanes` today, which makes them public reference lanes, and no
-    # committed column of any kind carries them. What they DO have is on this
-    # box and is in `bench/results/identity_break/
+    # lane/laneless-public-classes (2026-09-19). Three lanes joined their
+    # families' `training_lanes` with no committed column of any kind. Their
+    # CPU evidence is in `bench/results/identity_break/
     # 2026-09-19_laneless-public-classes/`: 27 of 27 cells STABLE over all
     # nine fixtures at `--repeats 2`, both declared batch parts STABLE and
     # seen BATCH_MOVED under the harness switch, and each one watched failing
     # under a build define (`saved-model-host-infer` and `lowbit-conversions`
     # 9/9 under their families' OWN defines and 0/9 under the generic one,
-    # `grad-accumulation` 9/9 under the training family's). That is CPU
-    # bit-reproducibility and a live negative control; it is NOT the
-    # cross-vendor claim, and the honest place to say so is here. They leave
-    # this table the day a GPU column carries them.
-    "saved-model-host-infer": "no reference",
-    "lowbit-conversions": "no reference",
-    "grad-accumulation": "no reference",
+    # `grad-accumulation` 9/9 under the training family's).
+    #
+    # TWO OF THE THREE SPLIT ON 2026-09-20 (lane/new-lane-reference-promotion)
+    # and the split is the one the vocabulary predicts.
+    # `lowbit-conversions` and `grad-accumulation` gained amd + apple +
+    # nvidia GPU columns on top of that CPU one -- four classes on every part
+    # of all nine fixtures, from 2026-09-19_vendor-class-gaps (@0845c6de7)
+    # and 2026-09-19_apple-column-gaps (@ef8c2b311) -- so nothing static holds
+    # them and their reason is the watched CPU-only run.
+    # `saved-model-host-infer` gained NOTHING but the CPU column it already
+    # had: intersected over every part it rests on `cpu` ALONE, one witness,
+    # a number nothing has ever reproduced. That is `one column`, not
+    # `unwatched`, and test_host_surface checks the difference both ways --
+    # it fails if a lane held here gains a second class and if one held as
+    # `unwatched` has only one. What it owes is a GPU column, which is the
+    # one thing on this list that needs hardware.
+    "saved-model-host-infer": "one column",
+    "lowbit-conversions": "unwatched",
+    "grad-accumulation": "unwatched",
 
-    # lane/models-namespace-lanes (2026-09-19), THE SAME DEBT, declared in
-    # the same commit that incurs it. The three `mojolearn.models` lanes
-    # joined the linalg, tokenizer and neural families' `training_lanes`,
-    # which makes them public reference lanes, and no committed column of
-    # any kind carries them. What they DO have is on this box, in
+    # lane/models-namespace-lanes (2026-09-19). The three `mojolearn.models`
+    # lanes joined the linalg, tokenizer and neural families' `training_lanes`
+    # with no committed column. Their CPU evidence is in
     # `bench/results/identity_break/2026-09-19_models-namespace/`: 27 of 27
     # cells STABLE over all nine fixtures at `--repeats 2`, a clean replay
     # IDENTICAL on all 27, `hf-causal-lm`'s batch part STABLE, and each lane
@@ -2869,13 +2902,20 @@ PUBLIC_PENDING_LANES = {
     # MOJOLEARN_LOWBIT_CONVERT_SABOTAGE (and 0/9 under the generic one,
     # which is recorded there and is why linalg needs its own arm),
     # `hf-tokenizer` under both of the tokenizer family's own arms, and
-    # `hf-causal-lm` under the generic define on the neural family. That is
-    # CPU bit-reproducibility and a live negative control; it is NOT the
-    # cross-vendor claim, which for these three has never been taken on any
-    # column. They leave this table the day a GPU column carries them.
-    "hf-checkpoint": "no reference",
-    "hf-tokenizer": "no reference",
-    "hf-causal-lm": "no reference",
+    # `hf-causal-lm` under the generic define on the neural family.
+    #
+    # ALL THREE MOVED TO `unwatched` ON 2026-09-20
+    # (lane/new-lane-reference-promotion). The cross-vendor claim the comment
+    # above said "has never been taken on any column" HAD been taken, in
+    # 2026-09-19_vendor-class-gaps (amd + nvidia, @0845c6de7) and
+    # 2026-09-19_apple-column-gaps (@ef8c2b311); the columns were committed
+    # and admissible and simply had not been admitted into the shipped table.
+    # They now carry amd + apple + cpu + nvidia on every part of all nine
+    # fixtures, 0 conflicts. What is left for each is the watched CPU-only
+    # `verify --all`, which this box has no binding to run.
+    "hf-checkpoint": "unwatched",
+    "hf-tokenizer": "unwatched",
+    "hf-causal-lm": "unwatched",
 
     # 2026-09-18: current all-nine, full-property AMD captures now agree
     # with the CPU references for these five neural routes. The independent

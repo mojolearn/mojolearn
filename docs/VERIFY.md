@@ -408,6 +408,7 @@ watched before the code that catches it existed:
 | `SAME DOCUMENT` | 4 | the two files are byte-identical. That is one document handed over twice, and it can only agree with itself |
 | `MALFORMED` | 2 | a file is not an evidence document, or names one cell part twice. A duplicated row would otherwise let a party paste the other's answer over their own and hide the loss |
 | `COMMITMENT BROKEN` | 1 | a document is not the one its party committed to before the exchange. Only `MALFORMED` outranks it: until you know a document is the one that was committed to, no headline about its cells is honest |
+| `CHALLENGE BROKEN` | 1 | a challenge is answered and the answer does not hold up: only one document carries one, the two answer different challenges, the challenge is not what its own pair of commitments hashes to, that pair is not the one in hand or the one published, a response does not match the challenge commitment published for it, the two carry the same challenge nonce, or the two answered over different input. It sits directly under `COMMITMENT BROKEN`, and above every cell outcome, because until it is settled the reader does not know these cells were computed rather than written out of the shipped table. Absence of a challenge never lands here |
 | `SAME FILE` / `CANNOT READ` | 2 | both arguments are one path, or a file is missing or not JSON |
 
 A cell recorded with the **same** `n/a` reason by both sides is an absence they
@@ -490,13 +491,50 @@ self-declared and never as a check that passed: the nonce ships with it, so
 anyone holding the document can recompute it. One commitment presented for
 both documents, and two documents carrying the same nonce, are refused.
 
-**What it still does not close.** Commit-reveal stops a party copying after
-seeing. It does not stop a party synthesizing a document from the reference
-table shipped in this wheel, which pins the expected hash of every cell on
-every pinned fixture, and committing to that without running anything. Only a
-challenge that neither party controls -- fixtures derived from a nonce agreed
-after both parties are committed -- would close that, and such cells have no
-reference by construction, so it could only ever produce a pairwise verdict.
+### The challenge: commit, exchange the lines, then run
+
+**What commit-reveal does not close.** It stops a party copying after seeing.
+It does not stop a party synthesizing a document from the reference table
+shipped in this wheel, which pins the expected hash of every cell on every
+pinned fixture, and committing to that without running anything. A commitment
+is evidence about ORDER, never about execution.
+
+The challenge closes that, and the protocol grows one round for it:
+
+    challenge = sha256("mojolearn.verify-challenge.v1\n" || min(c_a, c_b) || max(c_a, c_b))
+
+Both parties publish their commitments, exchange those two lines, and only
+then run
+
+    python -m mojolearn verify --challenge mine.json \
+        --challenge-from <your line> <their line>
+
+which reseeds `identity_break.fixture('hashed', seed=...)` from the challenge,
+reruns the document's own lane set on it, appends a `challenge` block and
+prints a SECOND line to publish before the documents are exchanged. Those
+hashes are in no table we ship, so they cannot be written in advance; and
+because `--compare` reads no table -- it compares two documents to each other
+-- unreferenced cells are exactly what it can check. The block is kept out of
+`cells` so `verify --all`'s own verdict, which does judge against the table,
+never sees a cell it has no reference for.
+
+The second line is not ceremony: two honest responses are IDENTICAL, so a
+response nobody was bound to can be copied out of the other party's file after
+it arrives. Its digest has its own domain separator and covers the document's
+round-one commitment, so it cannot be presented for a different document. The
+challenge block is deliberately EXCLUDED from the round-one commitment: it is
+derived from that commitment and so arrives after it, and a check that fired
+on the protocol working would be worse than no check.
+
+**What it does not prove**, in the same breath as what it does: it does not
+prove two PEOPLE (one party with one machine can answer once and write both
+documents around it, and the device blocks are self-reported); whoever
+publishes their commitment LAST can grind nonces to steer the challenge, so
+the fixture is not an unbiased draw, though every candidate still has to be
+run to be answered; and it proves execution of what it covers, on one fixture
+of one kind, so a party who answers honestly and writes the rest of the
+document out of the table still passes.
+`docs/VERIFY_EXTERNALLY.md` carries the adversary model as a table.
 
 The comparer takes its lanes from the two documents and never enumerates,
 greps or imports a lane list of its own, so it cannot grow a second idea of
