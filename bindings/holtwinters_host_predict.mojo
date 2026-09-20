@@ -30,11 +30,18 @@ from std.python._cpython import GILReleased
 from std.sys.compile import is_defined
 
 from bindings.hostptr import f32_ptr
-from holtwinters.host.hw_predict import hw_forecast_from_state, hw_predict_in_sample
-from holtwinters.impl.tsa.holtwinters_params import SEASONAL_ADDITIVE, seasonal_from_name
+from holtwinters.host.hw_predict import (
+    hw_forecast_from_state_ptr,
+    hw_predict_in_sample_ptr,
+)
+from holtwinters.impl.tsa.holtwinters_params import (
+    SEASONAL_ADDITIVE,
+    seasonal_from_name,
+)
 
 comptime HW_PREDICT_SABOTAGE = (
-    is_defined["MOJOLEARN_HOST_SABOTAGE"]() or is_defined["MOJOLEARN_HW_PREDICT_SABOTAGE"]()
+    is_defined["MOJOLEARN_HOST_SABOTAGE"]()
+    or is_defined["MOJOLEARN_HW_PREDICT_SABOTAGE"]()
 )
 
 
@@ -50,7 +57,9 @@ def _hw_index(value: PythonObject) raises -> Int:
 def _store(op: MutPointer[Float32, MutUntrackedOrigin], i: Int, v: Float32):
     comptime if HW_PREDICT_SABOTAGE:
         if isfinite(v):
-            op.unsafe_store(i, bitcast[DType.float32](bitcast[DType.uint32](v) ^ UInt32(1)))
+            op.unsafe_store(
+                i, bitcast[DType.float32](bitcast[DType.uint32](v) ^ UInt32(1))
+            )
             return
     op.unsafe_store(i, v)
 
@@ -60,30 +69,22 @@ def _refuse_state(n: Int, batch_size: Int, frequency: Int, who: String) raises:
     in its words and order, after `seasonal_from_name`."""
     if n <= frequency:
         raise Error(
-            "holtwinters " + who + ": n (" + String(n) + ") must exceed frequency ("
-            + String(frequency) + "); there would be no fitted components"
+            "holtwinters "
+            + who
+            + ": n ("
+            + String(n)
+            + ") must exceed frequency ("
+            + String(frequency)
+            + "); there would be no fitted components"
         )
     if batch_size < 1:
         raise Error(
-            "holtwinters " + who + ": batch_size must be >= 1 (batch_size="
-            + String(batch_size) + ")"
+            "holtwinters "
+            + who
+            + ": batch_size must be >= 1 (batch_size="
+            + String(batch_size)
+            + ")"
         )
-
-
-def _read_components(
-    cp: MutPointer[Float32, MutUntrackedOrigin],
-    components_len: Int,
-    mut level: List[Float32],
-    mut trend: List[Float32],
-    mut season: List[Float32],
-):
-    level.reserve(components_len)
-    trend.reserve(components_len)
-    season.reserve(components_len)
-    for i in range(components_len):
-        level.append(cp.unsafe_load(i))
-        trend.append(cp.unsafe_load(components_len + i))
-        season.append(cp.unsafe_load(2 * components_len + i))
 
 
 def holtwinters_forecast_binding(
@@ -110,7 +111,8 @@ def holtwinters_forecast_binding(
     if len(params) != 4:
         raise Error(
             "holtwinters_forecast: params must contain 4 values (n,"
-            " batch_size, frequency, h), got " + String(len(params))
+            " batch_size, frequency, h), got "
+            + String(len(params))
         )
     var cp = f32_ptr(_hw_index(comps_addr))
     var op = f32_ptr(_hw_index(out_addr))
@@ -126,12 +128,14 @@ def holtwinters_forecast_binding(
         if h <= 0:
             raise Error("h must be > 0. Currently: " + String(h))
         var components_len = (n - frequency) * batch_size
-        var level = List[Float32]()
-        var trend = List[Float32]()
-        var season = List[Float32]()
-        _read_components(cp, components_len, level, trend, season)
-        var fc = hw_forecast_from_state[DType.float32](
-            level, trend, season, n, batch_size, frequency, st == SEASONAL_ADDITIVE, h
+        var fc = hw_forecast_from_state_ptr(
+            cp,
+            components_len,
+            n,
+            batch_size,
+            frequency,
+            st == SEASONAL_ADDITIVE,
+            h,
         )
         for i in range(h * batch_size):
             _store(op, i, fc[i])
@@ -165,7 +169,8 @@ def holtwinters_predict_binding(
     if len(params) != 5:
         raise Error(
             "holtwinters_predict: params must contain 5 values (n,"
-            " batch_size, frequency, start, end), got " + String(len(params))
+            " batch_size, frequency, start, end), got "
+            + String(len(params))
         )
     var cp = f32_ptr(_hw_index(comps_addr))
     var op = f32_ptr(_hw_index(out_addr))
@@ -181,21 +186,30 @@ def holtwinters_predict_binding(
         _refuse_state(n, batch_size, frequency, "predict")
         if start < 0 or end <= start:
             raise Error(
-                "holtwinters predict: need 0 <= start < end (start=" + String(start)
-                + ", end=" + String(end) + ")"
+                "holtwinters predict: need 0 <= start < end (start="
+                + String(start)
+                + ", end="
+                + String(end)
+                + ")"
             )
         if end > n:
             raise Error(
                 "holtwinters predict: the in-sample prediction ends at n (end="
-                + String(end) + ", n=" + String(n) + "); later times are the forecast's"
+                + String(end)
+                + ", n="
+                + String(n)
+                + "); later times are the forecast's"
             )
         var components_len = (n - frequency) * batch_size
-        var level = List[Float32]()
-        var trend = List[Float32]()
-        var season = List[Float32]()
-        _read_components(cp, components_len, level, trend, season)
-        var out = hw_predict_in_sample(
-            level, trend, season, n, batch_size, frequency, st == SEASONAL_ADDITIVE, start, end
+        var out = hw_predict_in_sample_ptr(
+            cp,
+            components_len,
+            n,
+            batch_size,
+            frequency,
+            st == SEASONAL_ADDITIVE,
+            start,
+            end,
         )
         written = (end - start) * batch_size
         for i in range(written):
