@@ -751,6 +751,18 @@ def main() raises:
     mbu.mlp_kind = MLP_GELU
     mbu.mlp_bias = True
     run_case(ctx, String("mlp_bias_gelu"), sh, mbu, gelu, 25, False)
+    var mbu_t = BlockOptions()
+    mbu_t.mlp_kind = MLP_GELU_TANH
+    mbu_t.mlp_bias = True
+    run_case(ctx, String("mlp_bias_gelu_tanh"), sh, mbu_t, gelu_t, 25, False)
+    var mbg = BlockOptions()
+    mbg.mlp_kind = MLP_GEGLU
+    mbg.mlp_bias = True
+    run_case(ctx, String("mlp_bias_geglu"), sh, mbg, geglu, 24, False)
+    var mbg_t = BlockOptions()
+    mbg_t.mlp_kind = MLP_GEGLU_TANH
+    mbg_t.mlp_bias = True
+    run_case(ctx, String("mlp_bias_geglu_tanh"), sh, mbg_t, geglu_t, 24, False)
 
     # ---- axis 5: the q/k norm -------------------------------------------
     var qkn = BlockOptions()
