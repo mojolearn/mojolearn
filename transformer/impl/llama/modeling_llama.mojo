@@ -298,6 +298,7 @@ from core.step_glue import (
 )
 
 from core.identity_trace import IdentityTrace
+from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN
 from gemm.checks.gemm_identical import GemmWorkspace
 
 # ORIENTATION NUMBERING: these are `gemm_oracle`'s, where
@@ -1844,6 +1845,45 @@ def llama_rms_norm_kernel(
         var inner = ftz(pinned_mul(ftz(x.unsafe_load(t * dm + j)), rstd))
         out_buf.unsafe_store(
             t * dm + j, ftz(pinned_mul(ftz(weight.unsafe_load(j)), inner))
+        )
+
+
+def residual_rms_norm_kernel(
+    residual: MutPointer[Float32, MutAnyOrigin],
+    sumsq: MutPointer[Float32, MutAnyOrigin],
+    out_buf: MutPointer[Float32, MutAnyOrigin],
+    a: MutPointer[Float32, MutAnyOrigin],
+    b: MutPointer[Float32, MutAnyOrigin],
+    weight: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32,
+    dm_in: Int32,
+    eps_in: Float32,
+):
+    """Exact S22 residual add followed by S1--S4 RMSNorm.
+
+    One row owner preserves S1's serial ascending fold. The residual is still
+    materialized for tracing/backward, but its value feeds S1 directly rather
+    than being written by one launch and reread by the next.
+    """
+    var m = Int(m_in)
+    var dm = Int(dm_in)
+    var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if t >= m:
+        return
+    var acc = Float32(0.0)
+    for j in range(dm):
+        var i = t * dm + j
+        var r = ftz(ftz(a.unsafe_load(i)) + ftz(b.unsafe_load(i)))
+        residual.unsafe_store(i, r)
+        acc = ftz(identical_mul_add(r, r, acc))
+    sumsq.unsafe_store(t, acc)
+    var mean = ftz(identical_div(acc, Float32(dm)))
+    var rstd = ftz(identical_rsqrt(ftz(mean + eps_in)))
+    for j in range(dm):
+        var i = t * dm + j
+        var inner = ftz(pinned_mul(ftz(residual.unsafe_load(i)), rstd))
+        out_buf.unsafe_store(
+            i, ftz(pinned_mul(ftz(weight.unsafe_load(j)), inner))
         )
 
 
@@ -4936,15 +4976,34 @@ def llama_decoder_layer_forward_planted(
 
     # ---- residual + hidden_states (:317). S22. The mamba lane's S16
     #      kernel, IMPORTED (contract section 0).
-    step_count_launch()
-    ctx.enqueue_function[residual_add_kernel](
-        stages.residual1.unsafe_ptr(),
-        x.unsafe_ptr(),
-        stages.o_proj.unsafe_ptr(),
-        Int32(m * dm),
-        grid_dim=(_grid(m * dm), 1, 1),
-        block_dim=(LLAMA_TPB, 1, 1),
+    comptime fuse_residual_norm = (
+        is_defined["MOJOLEARN_FUSE_RESIDUAL1_NORM2"]()
+        or TARGET_COLUMN == COLUMN_APPLE
     )
+    var fused_residual_norm = (
+        fuse_residual_norm and w.opts.norm_kind == NORM_RMSNORM
+        and not w.opts.norm_bias and (
+            is_defined["MOJOLEARN_FUSE_RESIDUAL1_NORM2"]() or m <= 2048
+        )
+    )
+    step_count_launch()
+    if fused_residual_norm:
+        ctx.enqueue_function[residual_rms_norm_kernel](
+            stages.residual1.unsafe_ptr(), stages.norm2_sumsq.unsafe_ptr(),
+            stages.norm2_out.unsafe_ptr(), x.unsafe_ptr(),
+            stages.o_proj.unsafe_ptr(), w.norm2_w.unsafe_ptr(), Int32(m),
+            Int32(dm), w.eps, grid_dim=(_grid(m), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[residual_add_kernel](
+            stages.residual1.unsafe_ptr(),
+            x.unsafe_ptr(),
+            stages.o_proj.unsafe_ptr(),
+            Int32(m * dm),
+            grid_dim=(_grid(m * dm), 1, 1),
+            block_dim=(LLAMA_TPB, 1, 1),
+        )
     # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
     # statement is a trace record. `IdentityTrace.record_device` returns
     # at once when tracing is off; when it is on it enqueues its OWN copy
@@ -4958,19 +5017,20 @@ def llama_decoder_layer_forward_planted(
     # ---- residual = hidden_states (:320), then
     #      self.post_attention_layernorm(...) (:321). S1-S4 again, the SAME
     #      kernel with the SAME eps and a different weight.
-    llama_norm(
-        ctx,
-        stages.norm2_sumsq,
-        stages.norm2_out,
-        stages.residual1,
-        w.norm2_w,
-        w.norm2_b,
-        m,
-        dm,
-        w.eps,
-        w.opts.norm_kind,
-        w.opts.norm_bias,
-    )
+    if not fused_residual_norm:
+        llama_norm(
+            ctx,
+            stages.norm2_sumsq,
+            stages.norm2_out,
+            stages.residual1,
+            w.norm2_w,
+            w.norm2_b,
+            m,
+            dm,
+            w.eps,
+            w.opts.norm_kind,
+            w.opts.norm_bias,
+        )
     # DEVIATION 2721 (lane/wait-removal): WAIT REMOVED here. The next
     # statement is a trace record. `IdentityTrace.record_device` returns
     # at once when tracing is off; when it is on it enqueues its OWN copy
