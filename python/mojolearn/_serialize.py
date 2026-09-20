@@ -138,7 +138,8 @@ def _describe(value, *, c_order):
         a = value._as_c() if c_order else value
         shape = a.shape if (a.ndim or not c_order) else (1,)
         descr = _DESCR_OF.get(a.dtype, a.dtype)
-        return descr, a.order == "F" and a.ndim > 1, shape, a.tobytes()
+        raw = a._mv.cast("B") if a.nbytes else b""
+        return descr, a.order == "F" and a.ndim > 1, shape, raw
     if isinstance(value, bool):
         return "|b1", False, (1,) if c_order else (), bytes([1 if value else 0])
     if isinstance(value, int):
@@ -159,13 +160,17 @@ def _describe(value, *, c_order):
         shape = b.shape if b.ndim else ()
         if c_order:
             fortran = False
-            raw = memoryview(value).tobytes()  # C order for any strides
+            view = memoryview(value)
+            # A byte view borrows an already C-contiguous payload. Strided or
+            # Fortran inputs still need the established C-order linearization.
+            raw = (view.cast("B") if b.nbytes else b"") if view.c_contiguous \
+                else view.tobytes()
             if not shape:
                 shape = (1,)
         else:
             if b.c_contiguous:
                 fortran = False
-                raw = memoryview(value).tobytes()
+                raw = memoryview(value).cast("B") if b.nbytes else b""
             elif b.f_contiguous:
                 fortran = True
                 raw = memoryview(value).tobytes(order="F")
@@ -200,7 +205,7 @@ def encode_npy(value, *, c_order=False):
     would write, including `fortran_order: True` for an F-order block
     unless `c_order` asks for the 0.6.x `write_npz` linearization."""
     descr, fortran, shape, raw = _describe(value, c_order=c_order)
-    return _header(descr, fortran, shape) + raw
+    return _header(descr, fortran, shape) + bytes(raw)
 
 
 def write_npy(fp, value, *, c_order=False):
