@@ -201,8 +201,22 @@ def _default_folds(y, n_splits, classifier):
                 all((isinstance(v, numbers.Integral) or
                      (isinstance(v, numbers.Real) and math.isfinite(v) and float(v).is_integer()))
                     for v in labels))
+    stratified = classifier and discrete
+    if not stratified and not _sabotage_requested():
+        # A plain KFold test set is one contiguous interval.  Construct its
+        # complement from the two surrounding ranges in C instead of doing
+        # ``n`` Python set lookups for every fold.  Keep the general path when
+        # the dormant order control is armed because its rotated tests are no
+        # longer necessarily contiguous.
+        offset = 0
+        for fold in range(n_splits):
+            size = n // n_splits + (fold < n % n_splits)
+            stop = offset + size
+            yield list(range(offset)) + list(range(stop, n)), list(range(offset, stop))
+            offset = stop
+        return
     tests = [[] for _ in range(n_splits)]
-    if classifier and discrete:
+    if stratified:
         classes = {}
         for index, label in enumerate(labels):
             classes.setdefault(label, []).append(index)
@@ -429,8 +443,12 @@ def split_descriptor(X, y, *, estimator=None, cv=None, groups=None):
         raise ValueError('y must be a 1-D buffer array matching X rows')
     folds = []
     for train, test in _folds(cv, estimator, X, y, groups):
-        folds.append(([int(i) for i in _indices(train, len(X), 'train').tolist()],
-                      [int(i) for i in _indices(test, len(X), 'test').tolist()]))
+        # ``_indices`` has already normalized both sides to signed Int64, and
+        # Array.tolist() returns ordinary Python ints.  Re-wrapping every row
+        # with ``int`` duplicated millions of Python calls when recording a
+        # large cross-validation split without changing the canonical JSON.
+        folds.append((_indices(train, len(X), 'train').tolist(),
+                      _indices(test, len(X), 'test').tolist()))
     if not folds:
         raise ValueError('cv must produce at least one fold')
     descriptor = {
