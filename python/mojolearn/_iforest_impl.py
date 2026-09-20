@@ -370,14 +370,16 @@ class IsolationForest(NumericModeMixin):
         train = self._x  # kept in a local: the Mojo side borrows the address
         # DEVIATION 2344: `_buffer.empty` output `Array`s; nothing here
         # reads them on the host except the three-slot `info`.
-        values = empty((n_query,), "<f4")
-        labels = empty((n_query,), "<i4")
+        # The native contract touches exactly one result address according
+        # to `want`; do not allocate the other million-row boundary buffer.
+        values = None if want == _WANT_PREDICT else empty((n_query,), "<f4")
+        labels = empty((n_query,), "<i4") if want == _WANT_PREDICT else None
         info = empty((3,), "<f8")
         self._bind("_mojolearn_svm").iforest_run(
             addr_ro(train, name="X (training)"),
             addr_ro(q, name="X"),
-            addr(values, name="scores"),
-            addr(labels, name="labels"),
+            0 if values is None else addr(values, name="scores"),
+            0 if labels is None else addr(labels, name="labels"),
             addr(info, name="info"),
             self._params(train.shape[0], train.shape[1], n_query, want),
         )
