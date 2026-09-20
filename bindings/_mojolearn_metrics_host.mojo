@@ -109,6 +109,7 @@ from metrics.host.classification_oracle import (
     host_binary_ranking,
     host_confusion_matrix_f32,
     host_confusion_matrix_i64,
+    host_confusion_matrix_ptr,
     host_kl_divergence,
     host_log_loss,
     host_precision_recall_fscore,
@@ -940,6 +941,22 @@ def _check_classification(y: List[Int32], p: List[Int32], n: Int, k: Int, matrix
             raise Error("classification metrics: encoded label out of range")
 
 
+def _check_classification_ptr(
+    y: MutPointer[Int32, MutUntrackedOrigin],
+    p: MutPointer[Int32, MutUntrackedOrigin],
+    n: Int, k: Int, matrix: Bool,
+) raises:
+    if n <= 0:
+        raise Error("metrics: n must be positive, got " + String(n))
+    var cap = MAX_CONFUSION_CLASSES if matrix else MAX_PRF_CLASSES
+    if n > 2147483647 or k <= 0 or k > cap:
+        raise Error("classification metrics: count or class allocation bound exceeded")
+    var minimum = -1 if matrix else 0
+    for i in range(n):
+        if Int(y.unsafe_load(i)) < minimum or Int(y.unsafe_load(i)) >= k or Int(p.unsafe_load(i)) < minimum or Int(p.unsafe_load(i)) >= k:
+            raise Error("classification metrics: encoded label out of range")
+
+
 def confusion_matrix_binding(
     true_addr: PythonObject, pred_addr: PythonObject, out_addr: PythonObject, params: PythonObject,
 ) raises -> PythonObject:
@@ -953,22 +970,22 @@ def confusion_matrix_binding(
     var address = _index(out_addr)
     if address == 0:
         raise Error("confusion_matrix: null output")
-    var y = read_i32(_index(true_addr), max(0, n))
-    var p = read_i32(_index(pred_addr), max(0, n))
+    var y = i32_ptr(_index(true_addr))
+    var p = i32_ptr(_index(pred_addr))
     if normalization == 0:
         var output = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=address)
         with GILReleased(Python()):
-            _check_classification(y, p, n, k, True)
-            var values = host_confusion_matrix_i64(y, p, n, k, normalization)
-            for i in range(len(values)):
-                output[i] = values[i]
+            _check_classification_ptr(y, p, n, k, True)
+            var values = host_confusion_matrix_ptr(y, p, n, k, normalization)
+            for i in range(len(values[0])):
+                output[i] = values[0][i]
     else:
         var output = f32_ptr(address)
         with GILReleased(Python()):
-            _check_classification(y, p, n, k, True)
-            var values = host_confusion_matrix_f32(y, p, n, k, normalization)
-            for i in range(len(values)):
-                output[i] = values[i]
+            _check_classification_ptr(y, p, n, k, True)
+            var values = host_confusion_matrix_ptr(y, p, n, k, normalization)
+            for i in range(len(values[1])):
+                output[i] = values[1][i]
     return PythonObject(k * k)
 
 

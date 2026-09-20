@@ -84,9 +84,11 @@ tools/identity_break.py on the metrics-classification lane is the
 measurement.
 """
 from std.memory import bitcast
+from max.algorithm import sync_parallelize
 
 from checks.numerics import ftz, identical_div, identical_log, portable_sqrtf
 from core.knn_host_predict import host_knn_search
+from core.host_predict_threads import host_predict_chunk, host_predict_task_count
 from metrics.host.metrics_oracle import (
     METRICS_ORACLE_HOST_SABOTAGE,
     PINNED_SUM_W,
@@ -271,6 +273,74 @@ def host_confusion_counts(
             if count_total:
                 counts[k * k] = counts[k * k] + Int32(1)
     return counts^
+
+
+def host_confusion_counts_ptr(
+    y: MutPointer[Int32, MutUntrackedOrigin],
+    p: MutPointer[Int32, MutUntrackedOrigin],
+    n: Int, k: Int, count_total: Bool,
+) -> List[Int32]:
+    """Pointer/parallel count table; task-local integer tables merge exactly."""
+    var tasks = host_predict_task_count(n)
+    if n < 32768 or k > 1024:
+        tasks = 1
+    var width = k * k + 1
+    var local = List[Int32](length=tasks * width, fill=Int32(0))
+    var lp = rebind[MutPointer[Int32, MutUntrackedOrigin]](local.unsafe_ptr())
+    var chunk = host_predict_chunk(n, tasks)
+
+    def _rows(task: Int) {imm y, imm p, imm n, imm k, imm count_total, imm width, imm chunk, imm lp}:
+        var lo = task * chunk
+        var hi = min(lo + chunk, n)
+        var base = task * width
+        for i in range(lo, hi):
+            var yi = Int(y.unsafe_load(i))
+            var pi = Int(p.unsafe_load(i))
+            if yi >= 0 and pi >= 0:
+                var at = base + yi * k + pi
+                lp.unsafe_store(at, lp.unsafe_load(at) + Int32(1))
+                if count_total:
+                    lp.unsafe_store(base + k * k, lp.unsafe_load(base + k * k) + Int32(1))
+
+    if tasks == 1:
+        _rows(0)
+    else:
+        sync_parallelize(_rows, tasks)
+    var counts = List[Int32](length=width, fill=Int32(0))
+    for task in range(tasks):
+        for i in range(width):
+            counts[i] += local[task * width + i]
+    return counts^
+
+
+def host_confusion_matrix_ptr(
+    y: MutPointer[Int32, MutUntrackedOrigin],
+    p: MutPointer[Int32, MutUntrackedOrigin],
+    n: Int, k: Int, normalization: Int,
+) raises -> Tuple[List[Int64], List[Float32]]:
+    """Pointer/parallel form returning exactly one populated output list."""
+    if normalization < 0 or normalization > 3:
+        raise Error("confusion_matrix: invalid normalization")
+    var counts = host_confusion_counts_ptr(y, p, n, k, normalization == 3)
+    if normalization == 0:
+        var raw = List[Int64](length=k * k, fill=Int64(0))
+        for i in range(k * k):
+            raw[i] = Int64(counts[i])
+        return (raw^, List[Float32]())
+    var out = List[Float32](length=k * k, fill=Float32(0.0))
+    if normalization == 3:
+        for i in range(k * k):
+            out[i] = host_count_ratio(Int64(counts[i]), Int64(counts[k * k]), 0)
+        return (List[Int64](), out^)
+    for i in range(k):
+        var denominator = Int64(0)
+        for j in range(k):
+            var index = i * k + j if normalization == 1 else j * k + i
+            denominator += Int64(counts[index])
+        for j in range(k):
+            var index = i * k + j if normalization == 1 else j * k + i
+            out[index] = host_count_ratio(Int64(counts[index]), denominator, 0)
+    return (List[Int64](), out^)
 
 
 def host_confusion_matrix_i64(
