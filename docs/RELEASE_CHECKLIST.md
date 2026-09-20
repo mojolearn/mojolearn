@@ -218,7 +218,7 @@ the rerun completed all 45.
 ```sh
 git tag -a v<version> -m "mojolearn <version>" <commit> && git push origin refs/tags/v<version>
 nohup sh tools/release_runner.sh > runner.log 2>&1 &          # one ephemeral runner, one job
-gh workflow run release-provenance.yml --ref v<version> -f publish=pypi
+gh workflow run release-provenance.yml --ref v<version> -f validation_profile=full -f publish=pypi
 gh run watch <run id> --exit-status
 ```
 

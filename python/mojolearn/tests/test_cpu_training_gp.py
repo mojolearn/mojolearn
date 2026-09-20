@@ -58,7 +58,8 @@ def test_manifest_declares_the_gp_family():
     # classifier's lanes on lane/gaussian-process-classifier
     # (tests/test_gpc_surface.py).
     assert fam["training_lanes"] == LANES + ("gp-normalize-y", "gpc", "gpc-multiclass",
-        "gp-sample-y", "gp-sample-y-normalize", "gp-optimize", "gp-optimize-restarts")
+        "gp-sample-y", "gp-sample-y-normalize", "gp-optimize", "gp-optimize-restarts",
+        "par-gpc-fit", "par-gpc-predict")
     for module in (GP_ORACLE, CHOL_ORACLE):
         assert module in fam["host_modules"] and (ROOT / module).is_file()
     assert (ROOT / host_surface.build_shim("gp")).is_file()
