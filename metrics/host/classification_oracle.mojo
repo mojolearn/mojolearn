@@ -115,21 +115,38 @@ def host_rand_score(first: List[Int32], second: List[Int32], size: Int) -> Float
     """`compute_rand_index`: the integer pair counts, one Float64 division."""
     if size < 2:
         return 1.0
-    var a = Int64(0)
-    var b = Int64(0)
+    # A pair agrees when it is in the same joint-label bucket, or when it
+    # differs in both partitions.  Counting those buckets gives exactly the
+    # same integer numerator as the quadratic pair walk:
+    #
+    #   same_both + different_both
+    # = total_pairs - same_first - same_second + 2 * same_both.
+    #
+    # The packed key is injective over the two Int32 bit patterns, including
+    # negative raw labels accepted by the binding.
+    var first_counts = Dict[Int32, Int64]()
+    var second_counts = Dict[Int32, Int64]()
+    var joint_counts = Dict[UInt64, Int64]()
     for i in range(size):
         var fi = first[i]
         var si = second[i]
-        for j in range(i):
-            var fj = first[j]
-            var sj = second[j]
-            if fi == fj and si == sj:
-                a += 1
-            elif fi != fj and si != sj:
-                b += 1
+        first_counts[fi] = first_counts.get(fi, Int64(0)) + 1
+        second_counts[si] = second_counts.get(si, Int64(0)) + 1
+        var key = (UInt64(bitcast[DType.uint32](fi)) << 32) | UInt64(bitcast[DType.uint32](si))
+        joint_counts[key] = joint_counts.get(key, Int64(0)) + 1
+    var same_first = Int64(0)
+    var same_second = Int64(0)
+    var same_both = Int64(0)
+    for count in first_counts.values():
+        same_first += count * (count - 1) // 2
+    for count in second_counts.values():
+        same_second += count * (count - 1) // 2
+    for count in joint_counts.values():
+        same_both += count * (count - 1) // 2
     var n = Int64(size)
     var n_choose_two = n * (n - 1) // 2
-    return Float64(a + b) / Float64(n_choose_two)
+    var agreeing = n_choose_two - same_first - same_second + 2 * same_both
+    return Float64(agreeing) / Float64(n_choose_two)
 
 
 # ===========================================================================
@@ -400,9 +417,11 @@ def host_binary_ranking(
             tk[dst] = keys[i]
             tl[dst] = labels[i]
             bucket[bkt] = dst + 1
-        for i in range(n):
-            keys[i] = tk[i]
-            labels[i] = tl[i]
+        # The next byte pass can consume the destination buffers directly.
+        # Four passes is even, so the final sorted data still ends in `keys`
+        # and `labels`; swapping avoids a fifth full-array walk per pass.
+        swap(keys, tk)
+        swap(labels, tl)
     # The exclusive prefix of positives (bit 0 of the label).
     var prefix = List[Int64](length=n, fill=Int64(0))
     var run = Int64(0)
