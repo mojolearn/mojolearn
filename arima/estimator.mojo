@@ -476,10 +476,42 @@ def _predict_into(
     )
 
     var ctx = DeviceContext()
-    var y = _upload_f32(ctx, y_ptr, batch_size * n_obs)
-    var exog = _upload_list(ctx, exog_host)
-    var exog_fut = _upload_list(ctx, fut_host)
-    var xin = _upload_f32(ctx, params_ptr, N * batch_size)
+
+    # Stage the four immutable inputs as one upload batch.  The generic
+    # helpers synchronize before returning because their host allocations
+    # cannot outlive the helper.  Keeping all four staging allocations here
+    # makes their lifetime explicit and removes three host/device round trips
+    # from every predict/forecast call (including the common no-exog case,
+    # where the old empty uploads still synchronized).
+    var y_count = batch_size * n_obs
+    var params_count = N * batch_size
+    var exog_count = len(exog_host)
+    var fut_count = len(fut_host)
+    var y = ctx.enqueue_create_buffer[DType.float32](y_count)
+    var exog = ctx.enqueue_create_buffer[DType.float32](max(1, exog_count))
+    var exog_fut = ctx.enqueue_create_buffer[DType.float32](max(1, fut_count))
+    var xin = ctx.enqueue_create_buffer[DType.float32](params_count)
+    var y_host = ctx.enqueue_create_host_buffer[DType.float32](y_count)
+    var exog_stage = ctx.enqueue_create_host_buffer[DType.float32](max(1, exog_count))
+    var fut_stage = ctx.enqueue_create_host_buffer[DType.float32](max(1, fut_count))
+    var params_host = ctx.enqueue_create_host_buffer[DType.float32](params_count)
+    copy_f32(y_ptr, y_host.unsafe_ptr(), y_count)
+    copy_f32(params_ptr, params_host.unsafe_ptr(), params_count)
+    for i in range(exog_count):
+        exog_stage.unsafe_ptr().unsafe_store(i, exog_host[i])
+    for i in range(fut_count):
+        fut_stage.unsafe_ptr().unsafe_store(i, fut_host[i])
+    ctx.enqueue_copy(dst_buf=y, src_ptr=y_host.unsafe_ptr())
+    if exog_count > 0:
+        ctx.enqueue_copy(dst_buf=exog, src_ptr=exog_stage.unsafe_ptr())
+    if fut_count > 0:
+        ctx.enqueue_copy(dst_buf=exog_fut, src_ptr=fut_stage.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=xin, src_ptr=params_host.unsafe_ptr())
+    ctx.synchronize()
+    _ = params_host^
+    _ = fut_stage^
+    _ = exog_stage^
+    _ = y_host^
     var params = ARIMAParams(ctx, order, batch_size)
     unpack(ctx, params, order, batch_size, xin)
     ctx.synchronize()
