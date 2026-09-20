@@ -68,6 +68,9 @@ from training.checks.loss import (
     identical_ce_ones_floats, identical_ce_workspace_max_floats,
 )
 from training.checks.loss_oracle import REDUCTION_MEAN, CeConfig
+from training.chunked_lm_head_v2 import (
+    chunked_lm_head_v2_forward_into, chunked_lm_head_v2_backward_into,
+)
 from training.checks.optimizer import (
     ANY_SABOTAGE as OPT_SABOTAGE, OPT_RECORD_INTERMEDIATES, SAB_CHUNKS, identical_optimizer_step,
     identical_optimizer_workspace_floats,
@@ -392,15 +395,18 @@ def _byte_validate_allocations(config: ByteConfig) raises:
     config.validate()
     var m = config.batch * config.length
     var widths: List[Int] = [config.d_model, config.n_kv * config.head_dim,
-                            config.intermediate, config.vocab_size]
+                            config.intermediate]
+    if not config.chunked_lm_head_v2:
+        widths.append(config.vocab_size)
     for width in widths:
         _byte_check_gemm(m, width, config.d_model)
     _byte_check_gemm(m, config.d_model, config.intermediate)
     _byte_check_gemm(config.length, config.length, config.head_dim)
     _byte_check_gemm(config.length, config.head_dim, config.length)
     _byte_check_gemm(1, config.d_model, m)
-    _byte_check_workspace(identical_ce_workspace_max_floats(m, config.vocab_size, REDUCTION_MEAN))
-    _byte_check_workspace(identical_ce_ones_floats(m, config.vocab_size))
+    if not config.chunked_lm_head_v2:
+        _byte_check_workspace(identical_ce_workspace_max_floats(m, config.vocab_size, REDUCTION_MEAN))
+        _byte_check_workspace(identical_ce_ones_floats(m, config.vocab_size))
     _byte_check_workspace(identical_optimizer_workspace_floats(config.offsets()))
 
 
@@ -532,7 +538,7 @@ struct ByteBuffers(Movable):
         self.targets = _zeros_i32(ctx, M)
 
         self.x = _zeros(ctx, M * DM)
-        self.logits = _zeros(ctx, M * V)
+        self.logits = _zeros(ctx, 1 if config.chunked_lm_head_v2 else M * V)
         self.d_h = _zeros(ctx, M * DM)
 
         self.ce_max = _zeros(ctx, M)
@@ -569,11 +575,14 @@ struct ByteBuffers(Movable):
         # name, so the brief's flagged level-2 risk is closed by a check
         # and not by a promise. The loss lane's own gate fixtures pass
         # five distinct buffers and are untouched by this.
-        comptime if BYTE_LM_CE_UNALIASED:
-            self.ce_shift = _zeros(ctx, M * V)
+        if config.chunked_lm_head_v2:
+            self.ce_shift = _zeros(ctx, 1)
         else:
-            self.ce_shift = self.logits.create_sub_buffer[DType.float32](0, M * V)
-        self.ce_expo = _zeros(ctx, M * V)
+            comptime if BYTE_LM_CE_UNALIASED:
+                self.ce_shift = _zeros(ctx, M * V)
+            else:
+                self.ce_shift = self.logits.create_sub_buffer[DType.float32](0, M * V)
+        self.ce_expo = _zeros(ctx, 1 if config.chunked_lm_head_v2 else M * V)
         self.ce_denom = _zeros(ctx, M)
         self.ce_logdenom = _zeros(ctx, M)
         self.ce_logp_target = _zeros(ctx, M)
@@ -585,26 +594,21 @@ struct ByteBuffers(Movable):
         self.ce_total = _zeros(ctx, 1)
         self.ce_loss = _zeros(ctx, 1)
         # DEVIATION 3011: both are `ce_expo` (see `ce_shift` above).
-        comptime if BYTE_LM_CE_UNALIASED:
-            self.ce_weights = _zeros(ctx, M * V)
-            self.ce_dlogits = _zeros(ctx, M * V)
+        if config.chunked_lm_head_v2:
+            self.ce_weights = _zeros(ctx, 1)
+            self.ce_dlogits = _zeros(ctx, 1)
         else:
-            self.ce_weights = self.ce_expo.create_sub_buffer[DType.float32](0, M * V)
-            self.ce_dlogits = self.ce_expo.create_sub_buffer[DType.float32](0, M * V)
-        self.ce_ones = _ones(ctx, identical_ce_ones_floats(M, V))
-        self.ce_ws = _zeros(
-            ctx, identical_ce_workspace_max_floats(M, V, REDUCTION_MEAN)
-        )
+            comptime if BYTE_LM_CE_UNALIASED:
+                self.ce_weights = _zeros(ctx, M * V)
+                self.ce_dlogits = _zeros(ctx, M * V)
+            else:
+                self.ce_weights = self.ce_expo.create_sub_buffer[DType.float32](0, M * V)
+                self.ce_dlogits = self.ce_expo.create_sub_buffer[DType.float32](0, M * V)
+        self.ce_ones = _ones(ctx, 1 if config.chunked_lm_head_v2 else identical_ce_ones_floats(M, V))
+        self.ce_ws = _zeros(ctx, 1 if config.chunked_lm_head_v2 else identical_ce_workspace_max_floats(M, V, REDUCTION_MEAN))
 
-        self.head_ws = _zeros(
-            ctx, identical_gemm_workspace_max_floats(M, V, DM)
-        )
-        self.head_bwd_ws = _zeros(
-            ctx,
-            identical_gemm_backward_workspace_max_floats(
-                OP_NT, M, V, DM, False
-            ),
-        )
+        self.head_ws = _zeros(ctx, 1 if config.chunked_lm_head_v2 else identical_gemm_workspace_max_floats(M, V, DM))
+        self.head_bwd_ws = _zeros(ctx, 1 if config.chunked_lm_head_v2 else identical_gemm_backward_workspace_max_floats(OP_NT, M, V, DM, False))
 
         var scratch = emb_run_scratch_ints(V, M)
         if scratch != V + (V + 1) + M:
@@ -1155,8 +1159,16 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
     # DEVIATION 2630: the head GEMM's call-kind line (core/step_phase.mojo),
     # compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1.
     var pg = StepPhaseClock(ctx)
-    identical_gemm_into(ctx, tr.buffers.logits, tr.forward[config.n_layers - 1].residual2,
-        tr.buffers.lm_w, tr.buffers.head_ws, M, config.vocab_size, config.d_model, OP_NT)
+    if config.chunked_lm_head_v2:
+        chunked_lm_head_v2_forward_into(
+            ctx, tr.buffers.ce_loss, tr.buffers.ce_max, tr.buffers.ce_denom,
+            tr.buffers.ce_row, tr.forward[config.n_layers - 1].residual2,
+            tr.buffers.lm_w, tr.buffers.targets, M, config.vocab_size,
+            config.d_model,
+        )
+    else:
+        identical_gemm_into(ctx, tr.buffers.logits, tr.forward[config.n_layers - 1].residual2,
+            tr.buffers.lm_w, tr.buffers.head_ws, M, config.vocab_size, config.d_model, OP_NT)
     # No wait: the cross entropy forward below queues onto this same in-order context.
     # A host round trip costs about a dozen kernel launches on Metal.
     pg.tick(ctx, "gemm.head_fwd")
@@ -1165,12 +1177,13 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
     # first statement: the full logits download and host scan) and then
     # `step.ce_forward` (L1-L13, waited on under the switch only), both from
     # its own clock; this clock is re-read after the call's wait.
-    identical_ce_forward_into(ctx, tr.buffers.ce_max, tr.buffers.ce_shift,
-        tr.buffers.ce_expo, tr.buffers.ce_denom, tr.buffers.ce_logdenom,
-        tr.buffers.ce_logp_target, tr.buffers.ce_nll, tr.buffers.ce_logp,
-        tr.buffers.ce_logp_sum, tr.buffers.ce_smooth, tr.buffers.ce_row,
-        tr.buffers.ce_total, tr.buffers.ce_loss, tr.buffers.logits,
-        tr.buffers.targets, tr.buffers.ce_ones, tr.buffers.ce_ws, M, M, ce)
+    if not config.chunked_lm_head_v2:
+        identical_ce_forward_into(ctx, tr.buffers.ce_max, tr.buffers.ce_shift,
+            tr.buffers.ce_expo, tr.buffers.ce_denom, tr.buffers.ce_logdenom,
+            tr.buffers.ce_logp_target, tr.buffers.ce_nll, tr.buffers.ce_logp,
+            tr.buffers.ce_logp_sum, tr.buffers.ce_smooth, tr.buffers.ce_row,
+            tr.buffers.ce_total, tr.buffers.ce_loss, tr.buffers.logits,
+            tr.buffers.targets, tr.buffers.ce_ones, tr.buffers.ce_ws, M, M, ce)
     # No wait: `download_f32` below waits for the loss itself.
     # A host round trip costs about a dozen kernel launches on Metal.
     if ton:
@@ -1276,9 +1289,17 @@ def byte_gradient_device(ctx: DeviceContext, mut tr: ByteTrainer,
     # own clock ended at `step.loss_download`; this one starts here.
     var ton = timing_on()
     var tk = Int(perf_counter_ns())
-    identical_ce_backward_into(ctx, tr.buffers.ce_weights, tr.buffers.ce_dlogits,
-        tr.buffers.ce_expo, tr.buffers.ce_denom, tr.buffers.ce_logp,
-        tr.buffers.targets, M, M, ce)
+    if config.chunked_lm_head_v2:
+        chunked_lm_head_v2_backward_into(
+            ctx, tr.buffers.d_h, tr.buffers.dw_lm,
+            tr.forward[config.n_layers - 1].residual2, tr.buffers.lm_w,
+            tr.buffers.targets, tr.buffers.ce_max, tr.buffers.ce_denom,
+            M, config.vocab_size, config.d_model,
+        )
+    else:
+        identical_ce_backward_into(ctx, tr.buffers.ce_weights, tr.buffers.ce_dlogits,
+            tr.buffers.ce_expo, tr.buffers.ce_denom, tr.buffers.ce_logp,
+            tr.buffers.targets, M, M, ce)
     # No wait: the two head backward GEMMs below queue onto this same in-order context.
     # A host round trip costs about a dozen kernel launches on Metal.
     timing_tick(ctx, ton, tk, "step.ce_backward")
@@ -1286,15 +1307,17 @@ def byte_gradient_device(ctx: DeviceContext, mut tr: ByteTrainer,
     # compiled only under -D MOJOLEARN_STEP_PHASE_TIMERS=1. Its dA tick
     # waits only there, like the `step.head_backward_da` tick below.
     var pg = StepPhaseClock(ctx)
-    identical_gemm_backward_a_into(ctx, tr.buffers.d_h, tr.buffers.ce_dlogits,
-        tr.buffers.lm_w, tr.buffers.head_bwd_ws, M, config.vocab_size, config.d_model, OP_NT)
+    if not config.chunked_lm_head_v2:
+        identical_gemm_backward_a_into(ctx, tr.buffers.d_h, tr.buffers.ce_dlogits,
+            tr.buffers.lm_w, tr.buffers.head_bwd_ws, M, config.vocab_size, config.d_model, OP_NT)
     pg.tick(ctx, "gemm.head_dA")
     # dA and dB share one wait below; the tick between them waits ONLY
     # under the switch (a timed step is not a sample, and the two GEMMs are
     # queued on one in-order context either way).
     timing_tick(ctx, ton, tk, "step.head_backward_da")
-    identical_gemm_backward_b_into(ctx, tr.buffers.dw_lm, tr.buffers.ce_dlogits,
-        tr.forward[config.n_layers - 1].residual2, tr.buffers.head_bwd_ws, M, config.vocab_size, config.d_model, OP_NT)
+    if not config.chunked_lm_head_v2:
+        identical_gemm_backward_b_into(ctx, tr.buffers.dw_lm, tr.buffers.ce_dlogits,
+            tr.forward[config.n_layers - 1].residual2, tr.buffers.head_bwd_ws, M, config.vocab_size, config.d_model, OP_NT)
     # No wait: the block backward loop below queues onto this same in-order context.
     # A host round trip costs about a dozen kernel launches on Metal.
     pg.tick(ctx, "gemm.head_dB")
