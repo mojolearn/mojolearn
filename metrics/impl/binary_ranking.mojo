@@ -106,13 +106,29 @@ def ranking_groups_kernel[curve: Bool](
             contributions.unsafe_store(group,group_positive*(2*(Int64(i)-before)+group_negative))
 
 
-# Only the final contribution fold is serial; all per-group work is parallel.
-# With n<=Int32.max, 2*P*N < 2^61, so every partial and sum fit Int64.
-def ranking_auc_fold_kernel(
-    labels: MutPointer[UInt32, MutAnyOrigin],
-    prefix: MutPointer[Int32, MutAnyOrigin],
+# AUC contributions are integers, so their grouping does not affect the exact
+# result.  Collapse bounded contiguous runs in parallel before the final fold;
+# this avoids making one GPU lane walk every distinct score for large inputs.
+def ranking_auc_partial_kernel(
     size: MutPointer[Int32, MutAnyOrigin],
     contributions: MutPointer[Int64, MutAnyOrigin],
+    partials: MutPointer[Int64, MutAnyOrigin],
+):
+    comptime RUN = 256
+    var chunk = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    var begin = chunk*RUN
+    var end = min(begin+RUN,Int(size.unsafe_load(0)))
+    var total = Int64(0)
+    for group in range(begin,end):
+        total += contributions.unsafe_load(group)
+    partials.unsafe_store(chunk,total)
+
+
+def ranking_auc_partial_fold_kernel(
+    labels: MutPointer[UInt32, MutAnyOrigin],
+    prefix: MutPointer[Int32, MutAnyOrigin],
+    partials: MutPointer[Int64, MutAnyOrigin],
+    chunks: Int32,
     n_in: Int32,
     output: MutPointer[Float32, MutAnyOrigin],
 ):
@@ -121,8 +137,8 @@ def ranking_auc_fold_kernel(
         var positives = Int64(prefix.unsafe_load(n-1))+Int64(labels.unsafe_load(n-1))
         var negatives = Int64(n)-positives
         var total = Int64(0)
-        for group in range(Int(size.unsafe_load(0))):
-            total += contributions.unsafe_load(group)
+        for chunk in range(Int(chunks)):
+            total += partials.unsafe_load(chunk)
         output.unsafe_store(0,ftz(identical_div(Float32(total),Float32(2*positives*negatives))))
 
 
@@ -147,6 +163,8 @@ def binary_ranking[curve: Bool](
     var size = ctx.enqueue_create_buffer[DType.int32](1)
     var starts = ctx.enqueue_create_buffer[DType.int32](n)
     var contributions = ctx.enqueue_create_buffer[DType.int64](1 if curve else n)
+    var auc_chunks = (n+255)//256
+    var auc_partials = ctx.enqueue_create_buffer[DType.int64](1 if curve else auc_chunks)
     ctx.enqueue_function[ranking_keys_kernel](
         y.unsafe_ptr(),
         scores.unsafe_ptr(),
@@ -221,11 +239,18 @@ def binary_ranking[curve: Bool](
         block_dim=REORDER_BLOCK,
     )
     comptime if not curve:
-        ctx.enqueue_function[ranking_auc_fold_kernel](
-            labels.unsafe_ptr(),
-            prefix.unsafe_ptr(),
+        ctx.enqueue_function[ranking_auc_partial_kernel](
             size.unsafe_ptr(),
             contributions.unsafe_ptr(),
+            auc_partials.unsafe_ptr(),
+            grid_dim=(auc_chunks+255)//256,
+            block_dim=256,
+        )
+        ctx.enqueue_function[ranking_auc_partial_fold_kernel](
+            labels.unsafe_ptr(),
+            prefix.unsafe_ptr(),
+            auc_partials.unsafe_ptr(),
+            Int32(auc_chunks),
             Int32(n),
             output.unsafe_ptr(),
             grid_dim=1,
@@ -236,6 +261,7 @@ def binary_ranking[curve: Bool](
     with size.map_to_host() as h:
         m = Int(h[0])
     _ = contributions^
+    _ = auc_partials^
     _ = starts^
     _ = size^
     _ = output^
