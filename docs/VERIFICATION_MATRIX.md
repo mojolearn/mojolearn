@@ -26,9 +26,9 @@ The four kinds, for one lane:
 
 ## The numbers
 
-- Lanes: **264** (205 single-device, 59 `par-*` multi-GPU drivers).
-- Source public API entries enumerated from the public API: **248**.
-- Source public API entries with ALL FOUR kinds on at least one lane: **210** of 248.
+- Lanes: **270** (211 single-device, 59 `par-*` multi-GPU drivers).
+- Source public API entries enumerated from the public API: **255**.
+- Source public API entries with ALL FOUR kinds on at least one lane: **212** of 255.
 - Source public API entries with NO IDENTITY LANE AT ALL: **0**.
 - Source public API entries with no lane of their own, but reached by the harness's
   CPU inference routing: **0**.
@@ -37,21 +37,21 @@ Per kind, over the public API entries:
 
 | kind | API entries that have it | missing |
 |---|---|---|
-| gpu column | 243 | 5 |
-| cpu verifier | 215 | 33 |
-| sabotage seen to move a build | 215 | 33 |
-| batch part or named n/a | 248 | 0 |
+| gpu column | 250 | 5 |
+| cpu verifier | 222 | 33 |
+| sabotage seen to move a build | 217 | 38 |
+| batch part or named n/a | 255 | 0 |
 
 Per kind, over the lanes:
 
 | kind | lanes that have it | missing |
 |---|---|---|
-| gpu column (any class) | 261 | 3 |
-| gpu column on all three classes | 235 | 29 |
-| cpu verifier declared | 230 | 34 |
-| sabotage seen to move a build | 230 | 34 |
-| batch part or named n/a | 264 | 0 |
-| ALL FOUR | 227 | 37 |
+| gpu column (any class) | 267 | 3 |
+| gpu column on all three classes | 235 | 35 |
+| cpu verifier declared | 236 | 34 |
+| sabotage seen to move a build | 230 | 40 |
+| batch part or named n/a | 270 | 0 |
+| ALL FOUR | 227 | 43 |
 
 Sabotage, split by what was actually watched:
 
@@ -59,7 +59,7 @@ Sabotage, split by what was actually watched:
 |---|---|---|
 | seen(build) | 230 | a sabotage BUILD moved the bytes; a real negative control |
 | seen(harness) | 3 | only the harness batch switch moved; the probe can fail, the build is unproven |
-| declared | 0 | the family declares a define; no committed pair moves this lane |
+| declared | 6 | the family declares a define; no committed pair moves this lane |
 | none | 31 | no define reaches the lane and nothing has moved it |
 
 ## Source public API entries with no identity lane at all
@@ -123,6 +123,8 @@ A blank cell means no lane of this algorithm has that kind.
 | `LanguageModelTrainer` (alias of `SmallByteLanguageModelTrainer`) | 5 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `Lasso` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `LinearRegression` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `LinearSVC` | 2 | nvidia | training | declared | part | NO |
+| `LinearSVR` | 2 | nvidia | training | declared | part | NO |
 | `LogisticRegression` | 6 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `MLPInference` | 16 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `Mamba1Block` | 10 | amd,apple,nvidia | training | seen(build) | part | yes |
@@ -141,6 +143,7 @@ A blank cell means no lane of this algorithm has that kind.
 | `ParallelByteLanguageModelTrainer` | 3 | amd,apple,nvidia |  | none | n/a | NO |
 | `ParallelNeuralTrainer` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `PooledByteLanguageModelTrainer` | 1 | amd,apple,nvidia |  | none | n/a | NO |
+| `QNRegressor` | 2 | nvidia | training | declared | part | NO |
 | `RBF` | 6 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `RBFSampler` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `RadiusNeighbors` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
@@ -306,6 +309,10 @@ A blank cell means no lane of this algorithm has that kind.
 | `resample.monte_carlo_integrate` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `resample.permutation_test` | 2 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `select_d` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `svm.LinearSVC` | 2 | nvidia | training | declared | part | NO |
+| `svm.LinearSVR` | 2 | nvidia | training | declared | part | NO |
+| `svm.SVC` | 4 | amd,apple,nvidia | training | seen(build) | part | yes |
+| `svm.SVR` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `tokenizer.BpeTokenizer` | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `tokenizer.BpeVocabularyTrainer` | 3 | amd,apple,nvidia | training | seen(build) | n/a | yes |
 | `tokenizer.GPT2Tokenizer` (alias of `BpeTokenizer`) | 3 | amd,apple,nvidia | training | seen(build) | part | yes |
@@ -460,6 +467,10 @@ A blank cell means no lane of this algorithm has that kind.
 | linalg-eigh | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-19_linalg-public/cpu-sabotage.json` | n/a n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output) | yes |
 | linalg-qr | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-19_linalg-public/cpu-sabotage.json` | n/a n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output) | yes |
 | linalg-svdvals | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-19_linalg-public/cpu-sabotage.json` | n/a n/a:whole-matrix-decomposition (a factorization reduces over every row; splitting the rows gives a different matrix, not a batch of the same call, and there is no per-row output) | yes |
+| linear-svc | nvidia | training | declared | - | part | NO |
+| linear-svc-squared-hinge | nvidia | training | declared | - | part | NO |
+| linear-svr | nvidia | training | declared | - | part | NO |
+| linear-svr-squared | nvidia | training | declared | - | part | NO |
 | logistic | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-16_sabotage-audit/cpu-sab.json` | part | yes |
 | logistic-elasticnet | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-linear-kernel/cpu-apple-m4-sabotage.json` | part | yes |
 | logistic-l1 | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-linear-kernel/cpu-apple-m4-sabotage.json` | part | yes |
@@ -560,6 +571,8 @@ A blank cell means no lane of this algorithm has that kind.
 | pca-full-whiten | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-forecast-umap-pca/cpu-apple-m4.sabotage.json` | part | yes |
 | pca-whiten | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-16_sabotage-audit/cpu-sab.json` | part | yes |
 | permutation-test | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-16_sabotage-audit/r2-sab.json` | part | yes |
+| qn-absolute | nvidia | training | declared | - | part | NO |
+| qn-squared | nvidia | training | declared | - | part | NO |
 | radius | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-neighbors-density/cpu-apple-m4.sabotage.json` | part | yes |
 | radius-chebyshev | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-neighbors-density/cpu-apple-m4.sabotage.json` | part | yes |
 | radius-manhattan | amd,apple,nvidia | training | seen(build) | `bench/results/identity_break/2026-09-15_inference-neighbors-density/cpu-apple-m4.sabotage.json` | part | yes |
@@ -639,9 +652,9 @@ proved is real and is reported under the driver heading below, not here.
 
 > (plus 0 `par-*` multi-GPU driver lanes, held out of this count: this count is unreachable for them in both directions. They are listed once below.)
 
-**GPU column on fewer than three classes: 4**
+**GPU column on fewer than three classes: 10**
 
-> gbdt-symmetric-eval, mamba1-decode-session, spectral-embedding, transformer-decode-session
+> gbdt-symmetric-eval, linear-svc, linear-svc-squared-hinge, linear-svr, linear-svr-squared, mamba1-decode-session, qn-absolute, qn-squared, spectral-embedding, transformer-decode-session
 
 > (plus 22 `par-*` multi-GPU driver lanes, held out of this count: this count is unreachable for them in both directions. They are listed once below.)
 
@@ -651,9 +664,9 @@ proved is real and is reported under the driver heading below, not here.
 
 > (plus 34 `par-*` multi-GPU driver lanes, held out of this count: a CPU column cannot state their claim. They are listed once below.)
 
-**Sabotage not seen to move a build: 0**
+**Sabotage not seen to move a build: 6**
 
-> none
+> linear-svc, linear-svc-squared-hinge, linear-svr, linear-svr-squared, qn-absolute, qn-squared
 
 > (plus 34 `par-*` multi-GPU driver lanes, held out of this count: a CPU column cannot state their claim. They are listed once below.)
 
