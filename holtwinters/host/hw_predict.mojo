@@ -28,7 +28,14 @@ prediction is NaN before `d + s*D`.
 
 from std.memory import bitcast
 
+from max.algorithm import sync_parallelize
+
 from checks.numerics import ftz, identical_mul_add
+from core.host_predict_threads import (
+    host_list_ptr,
+    host_predict_chunk,
+    host_predict_task_count,
+)
 
 
 @always_inline
@@ -109,18 +116,34 @@ def hw_forecast_from_state_ptr(
     var lt_shift = (n_minus - 1) * bs
     var s_shift = (n_minus - f) * bs
     var out = List[Float32](length=h * bs, fill=Float32(0.0))
-    for s in range(bs):
-        var lv = components.unsafe_load(lt_shift + s)
-        var tr = components.unsafe_load(components_len + lt_shift + s)
-        for i in range(h):
+    var op = host_list_ptr(out)
+    var cells = h * bs
+    var tasks = host_predict_task_count(cells)
+    if h * bs < 32768:
+        tasks = 1
+    var chunk = host_predict_chunk(cells, tasks)
+
+    def _cells(task: Int) {imm components, imm components_len, imm bs, imm f, imm lt_shift, imm s_shift, imm cells, imm additive, imm chunk, imm op}:
+        var lo = task * chunk
+        var hi = min(lo + chunk, cells)
+        for cell in range(lo, hi):
+            var i = cell // bs
+            var s = cell - i * bs
+            var lv = components.unsafe_load(lt_shift + s)
+            var tr = components.unsafe_load(components_len + lt_shift + s)
             var sn = components.unsafe_load(
                 2 * components_len + s_shift + s + (i % f) * bs
             )
             var lt = ftz(identical_mul_add(tr, Float32(i + 1), lv))
             if additive:
-                out[s + i * bs] = ftz(lt + sn)
+                op.unsafe_store(cell, ftz(lt + sn))
             else:
-                out[s + i * bs] = ftz(lt * sn)
+                op.unsafe_store(cell, ftz(lt * sn))
+
+    if tasks == 1:
+        _cells(0)
+    else:
+        sync_parallelize(_cells, tasks)
     return out^
 
 
@@ -179,21 +202,35 @@ def hw_predict_in_sample_ptr(
     var ld = end - start
     var qnan = bitcast[DType.float32](UInt32(0x7FC00000))
     var out = List[Float32](length=ld * bs, fill=qnan)
-    for k in range(ld):
-        var t = start + k
-        if t < 2 * f:
-            continue
-        var i = t - f
-        for s in range(bs):
-            var leveltrend = ftz(
-                components.unsafe_load(s + (i - 1) * bs)
-                + components.unsafe_load(components_len + s + (i - 1) * bs)
-            )
-            var stmp = components.unsafe_load(
-                2 * components_len + s + (i - f) * bs
-            )
-            if additive:
-                out[s + k * bs] = ftz(leveltrend + stmp)
-            else:
-                out[s + k * bs] = ftz(leveltrend * stmp)
+    var op = host_list_ptr(out)
+    var tasks = host_predict_task_count(ld)
+    if ld * bs < 32768:
+        tasks = 1
+    var chunk = host_predict_chunk(ld, tasks)
+
+    def _steps(task: Int) {imm components, imm components_len, imm bs, imm f, imm start, imm ld, imm additive, imm chunk, imm op}:
+        var lo = task * chunk
+        var hi = min(lo + chunk, ld)
+        for k in range(lo, hi):
+            var t = start + k
+            if t < 2 * f:
+                continue
+            var i = t - f
+            for s in range(bs):
+                var leveltrend = ftz(
+                    components.unsafe_load(s + (i - 1) * bs)
+                    + components.unsafe_load(components_len + s + (i - 1) * bs)
+                )
+                var stmp = components.unsafe_load(
+                    2 * components_len + s + (i - f) * bs
+                )
+                if additive:
+                    op.unsafe_store(s + k * bs, ftz(leveltrend + stmp))
+                else:
+                    op.unsafe_store(s + k * bs, ftz(leveltrend * stmp))
+
+    if tasks == 1:
+        _steps(0)
+    else:
+        sync_parallelize(_steps, tasks)
     return out^
