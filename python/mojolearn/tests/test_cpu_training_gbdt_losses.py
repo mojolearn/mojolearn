@@ -147,7 +147,7 @@ def test_binding_dispatches_and_refuses_by_name():
     assert "gbdt_losses_host_fit(\n                x, y, n_rows, n_features, p, pw_loss, host_group_sizes," in src
     assert "gbdt_multi_host_fit(" in src and "gbdt_multi_host_model_text(multi_model)" in src
     assert '("gbdt_predict_multi")' in src
-    assert "var lg_boot = lossguide_knobs and bootstrap_type == String(\"Bernoulli\")" in src
+    assert "var lg_boot = ns_stochastic and (" in src
     assert "_refuse(\"bootstrap_type='\" + bootstrap_type + \"' under loss='\" + loss + \"'\")" in src
     assert "if is_rmse or grow_code != 0 or is_pointwise or is_multi or len(flags) != 0:" in src
 

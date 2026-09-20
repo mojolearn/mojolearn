@@ -397,6 +397,9 @@ sampler, a solver, a metric, a reduction).
                gbdt-border-types gbdt-bfa-quantile par-ordered par-border-types
     2026-09-20 (lane/expose-spectral-embedding, SpectralEmbedding's Python door)
       spectral-embedding
+    2026-09-20 (lane/gbdt-cpu-default-parity: the bootstraps and the score
+               noise on RMSE and on Depthwise and Lossguide)
+      gbdt-stochastic-arms
 
 The 18 lanes added on 2026-09-13 (svr through samba above) are fed the SAME
 fixture bytes in the shape their estimator wants; the derivation rules are
@@ -1542,6 +1545,55 @@ def _(ml, X, yc, yr, Xh=None):
                      classifier_proba=_h(c.predict_proba(X)),
                      auto_rate_fit=_h(a.predict(X[:2000]))),
                 m, lambda e: (e.predict(Xh),))
+
+
+@lane("gbdt-stochastic-arms")
+def _(ml, X, yc, yr, Xh=None):
+    """The bootstrap and the score noise on every arm a default fit or a
+    `bootstrap_type` reaches, Logloss and RMSE (lane/gbdt-cpu-default-parity,
+    2026-09-20). 20 trees each, everything else unset. SymmetricTree: the
+    default RMSE fit (Bayesian bootstrap, random_strength 1, its leaves read
+    off the bootstrapped planes), the same through GradientBoostingRegressor,
+    and Bernoulli and No for both losses (No keeps the noise). Depthwise and
+    Lossguide: RMSE at the policy defaults, the Bayesian and Bernoulli
+    bootstraps for both losses, and Depthwise with random_strength 1 under
+    the Bayesian bootstrap. Then the ten pointwise losses at their defaults
+    (Bayesian bootstrap, random_strength 1), eight trees each. The first 4000
+    rows of the fixture."""
+    rows = 4000
+    X, yc, yr = X[:rows], yc[:rows], yr[:rows]
+    m = ml.GradientBoosting(n_estimators=20, loss="RMSE").fit(X, yr)
+    reg = ml.GradientBoostingRegressor(n_estimators=20).fit(X, yr)
+    parts = dict(predict=_h(m.predict(X)), regressor=_h(reg.predict(X)))
+    curves = [np.asarray(m.loss_curve_, dtype=np.float64)]
+
+    def add(name, y, **kw):
+        g = ml.GradientBoosting(n_estimators=20, **kw).fit(X, y)
+        parts[name] = _h(g.predict(X))
+        curves.append(np.asarray(g.loss_curve_, dtype=np.float64))
+
+    for loss, y in (("RMSE", yr), ("Logloss", yc)):
+        for boot in ("Bernoulli", "No"):
+            add("sym-%s-%s" % (loss, boot), y, loss=loss, bootstrap_type=boot)
+    for policy in ("Depthwise", "Lossguide"):
+        add("%s-RMSE" % policy, yr, loss="RMSE", grow_policy=policy)
+        for loss, y in (("RMSE", yr), ("Logloss", yc)):
+            for boot in ("Bayesian", "Bernoulli"):
+                add("%s-%s-%s" % (policy, loss, boot), y, loss=loss,
+                    grow_policy=policy, bootstrap_type=boot)
+    for loss, y in (("RMSE", yr), ("Logloss", yc)):
+        add("Depthwise-%s-noise" % loss, y, loss=loss, grow_policy="Depthwise",
+            bootstrap_type="Bayesian", random_strength=1.0)
+    ypos = _pos(yr)
+    for loss, kw in (("Quantile", {}), ("MAE", {}), ("LogLinQuantile", {}), ("MAPE", {}),
+                     ("Poisson", {}), ("Lq", dict(loss_q=3.0)), ("Expectile", dict(loss_alpha=0.3)),
+                     ("Tweedie", dict(loss_variance_power=1.5)), ("Huber", dict(loss_delta=1.0))):
+        g = ml.GradientBoosting(n_estimators=8, loss=loss, **kw).fit(X, ypos)
+        parts["sym-%s" % loss] = _h(g.predict(X))
+    ce = ml.GradientBoosting(n_estimators=8, loss="CrossEntropy").fit(X, yc.astype(np.float32))
+    parts["sym-CrossEntropy"] = _h(ce.predict(X))
+    parts["loss_curves"] = _h(np.concatenate(curves))
+    return _fit(parts, m, lambda e: (e.predict(Xh),))
 
 
 @lane("gbdt-bfa-quantile")
@@ -8582,7 +8634,7 @@ _batch_decl(_rows_calls("predict"),
             "gbdt-query-rmse", "gbdt-pair-logit", "gbdt-yeti-rank",
             "par-forest-reg", "par-boosting-reg", "gbdt-border-types",
             "gbdt-ordered-bayesian-noise", "par-ordered", "gbdt-bfa-quantile",
-            "gbdt-catboost-defaults", "par-border-types")
+            "gbdt-catboost-defaults", "par-border-types", "gbdt-stochastic-arms")
 _batch_decl(_rows_calls("predict", prep=_coded), "gbdt-feature-freq", "gbdt-categorical-ctr")
 _batch_decl(_rows_calls("predict", prep=_with_nan), "gbdt-nan-modes")
 _batch_decl(_rows_calls("predict", "predict_proba", prep=_ctr_tables_xh), "gbdt-categorical-ctr-tables")

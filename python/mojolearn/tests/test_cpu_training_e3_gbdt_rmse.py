@@ -77,9 +77,10 @@ def test_oracle_imports_no_gpu_module():
     assert not GPU_IMPORTS.search(text), f"{ORACLE} imports a GPU module"
     imports = sorted(set(re.findall(r"^from\s+([\w.]+)\s+import", text, re.M)))
     assert imports == [
-        "checks.numerics", "gbdt.gpu_data.compressed_index_builder",
+        "checks.numerics", "gbdt.data.permutation",
+        "gbdt.gpu_data.compressed_index_builder",
         "gbdt.gpu_data.feature_blocks", "gbdt.gpu_data.grid_policy",
-        "gbdt.host.gbdt_oracle", "std.memory",
+        "gbdt.host.gbdt_oracle", "std.math", "std.memory",
     ], imports
     assert "optimal_const_for_loss" not in "".join(re.findall(r"^from .*$", text, re.M)), (
         "the optimum constant module imports a kernel module; restate it"
@@ -100,10 +101,10 @@ def test_oracle_spells_the_bit_carrying_constructs():
     assert "comptime GBDT_RMSE_MIN_LEAF_WEIGHT = Float32(1e-20)" in text
     assert "identical_mul_add(leaf_values[leaf], lr, cursor[row])" in text
     assert "model_leaves.append(leaf_values[i] * lr)" in text, "the host rescale"
-    assert 'String("bias ") + gbdt_f64_token(fit.bias)' in text
+    assert 'String("bias ") + gbdt_f64_token(bias)' in text
     # a zero bias writes no record; zero BY BITS since lane/catboost-parity
     # (a -0.0 bias is theirs to report and is written)
-    assert "if bitcast[DType.uint64](fit.bias) == UInt64(0):" in text, "a zero bias writes no record"
+    assert "if bitcast[DType.uint64](bias) == UInt64(0):" in text, "a zero bias writes no record"
     assert "var cursor = List[Float32](length=n_rows, fill=start_value)" in text
 
 

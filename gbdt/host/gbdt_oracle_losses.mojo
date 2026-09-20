@@ -71,7 +71,7 @@ leaves move.
 The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the two lanes is the measurement.
 """
-from std.math import isfinite
+from std.math import exp, isfinite, log
 from std.memory import bitcast
 
 from checks.numerics import (
@@ -112,6 +112,7 @@ from gbdt.host.gbdt_oracle import (
     GBDT_BOOT_POISSON,
     GBDT_BOOT_SEEDS,
     _bootstrap_pass,
+    _target_std_dev,
     gbdt_bootstrap_seeds,
     GBDT_FLOAT32_MAX,
     GBDT_MSE_BLOCK,
@@ -780,6 +781,7 @@ def gbdt_losses_host_fit(
     pair_losers: List[UInt32] = List[UInt32](),
     pair_weights: List[Float32] = List[Float32](),
     start: Float64 = 0.0,
+    random_strength: Float32 = Float32(0.0),
 ) raises -> GbdtHostModel:
     """`train` then `fit_with_test` on the covered configurations (see the
     module docstring). `group_sizes` is read by QueryRMSE alone, already
@@ -877,6 +879,9 @@ def gbdt_losses_host_fit(
     var seeds = List[UInt64]()
     if bootstrap_on:
         seeds = gbdt_bootstrap_seeds(params.random_seed)
+    # the score noise, the stochastic arm of `gbdt_oracle.mojo::
+    # gbdt_host_fit_eval`: the same draws in the same order
+    var noise_rand = TRandom(params.random_seed)
 
     var losses = List[Float64]()
     var tree_split_offsets = List[Int]()
@@ -907,6 +912,14 @@ def gbdt_losses_host_fit(
         else:
             _loss_search_pass(loss, y, cursor, n_rows, stats, fv_part, mag_part)
         var fv = _deterministic_sum_lanes(fv_part, 1, fv_blocks)[0]
+        var noise_mult = Float64(0.0)
+        if random_strength != Float32(0.0):
+            var model_left = exp(
+                log(Float64(n_rows))
+                - Float64(iteration) * Float64(params.learning_rate)
+            )
+            noise_mult = model_left / (1.0 + model_left)
+        var tree_seed = noise_rand.next_uniform_l()
         var fixed_scale: Float32
         if bootstrap_on:
             var bm = _bootstrap_pass(
@@ -916,6 +929,13 @@ def gbdt_losses_host_fit(
         else:
             var mags = _deterministic_sum_lanes(mag_part, 2, mse_blocks)
             fixed_scale = _choose_scale_from_magnitudes(mags[0], mags[1], n_rows)
+        var score_std_dev = Float32(0.0)
+        if random_strength != Float32(0.0):
+            score_std_dev = Float32(
+                Float64(Float32(noise_mult * Float64(random_strength)))
+                * _target_std_dev(stats, n_rows)
+            )
+        var level_rand = TRandom(tree_seed)
 
         # ---- `run_tree_layout_traced`, every level (TWIN: the loop in
         # `gbdt_oracle.mojo::gbdt_host_fit`; edit both) ----
@@ -935,6 +955,7 @@ def gbdt_losses_host_fit(
         var winners_bf = List[UInt32]()
         var n_live = 1
         for depth in range(max_depth):
+            var level_seed = level_rand.next_uniform_l()
             var half = n_live // 2
             var planned = depth > 0
             var compute = List[Int]()
@@ -1004,7 +1025,8 @@ def gbdt_losses_host_fit(
             var best_bin = GBDT_SENTINEL
             for bf in range(hist_cells):
                 var gain = _cosine_gain(
-                    hist, hist_cells, part_stats, n_live, bf, params.l2_leaf_reg
+                    hist, hist_cells, part_stats, n_live, bf, params.l2_leaf_reg,
+                    score_std_dev, level_seed, bf_feature[bf],
                 )
                 if gain > best_gain:
                     best_gain = gain

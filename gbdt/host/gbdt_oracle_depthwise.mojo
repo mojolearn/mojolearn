@@ -155,8 +155,12 @@ from gbdt.host.gbdt_oracle import (
 from gbdt.gpu_util.kernel.random_gen import advance_seed_k, next_normal_f
 from gbdt.host.gbdt_oracle_losses import (
     GBDT_LEAF_NEWTON,
+    GBDT_OBJ_LOGLOSS,
+    GBDT_OBJ_RMSE,
     GbdtHostLoss,
     _estimate_leaves_for_loss,
+    _loss_search_pass,
+    _loss_value,
 )
 from gbdt.host.gbdt_oracle_lossguide import (
     add_leaf_l2,
@@ -978,9 +982,18 @@ def gbdt_host_fit_non_symmetric(
     n_rows: Int,
     n_features: Int,
     params: GbdtHostTreeParams,
+    start: Float64 = 0.0,
 ) raises -> GbdtHostNsModel:
     """`train` then `fit_with_test`'s non-symmetric arm on the covered
-    configuration (see the module docstring)."""
+    configuration (see the module docstring).
+
+    `params.loss.objective` is Logloss or RMSE. RMSE's search planes are the
+    unit weight and `t - p` under every score function (its Der2 is 1.0, so
+    the Newton planes are the same numbers), its leaves come from the
+    estimator as every non-symmetric fit's do
+    (`doc_parallel_boosting.mojo:1507-1511`), and `start` is the resolved
+    `boost_from_average` constant the cursor is filled with; the caller
+    writes it as the model's bias."""
     if n_rows < 1 or n_features < 1:
         raise Error("train requires at least one row and one feature")
     if len(x_colmajor) != n_rows * n_features:
@@ -999,6 +1012,9 @@ def gbdt_host_fit_non_symmetric(
     )
     if not newton and params.score_function != GBDT_HOST_SCORE_COSINE_NS:
         raise Error("the non-symmetric host fit restates Cosine, NewtonL2 and NewtonCosine only")
+    var is_logloss = params.loss.objective == GBDT_OBJ_LOGLOSS
+    if not is_logloss and params.loss.objective != GBDT_OBJ_RMSE:
+        raise Error("the non-symmetric host fit restates Logloss and RMSE only")
     var base = params.base
 
     var grid = gbdt_host_grid(
@@ -1031,7 +1047,7 @@ def gbdt_host_fit_non_symmetric(
 
     var lr = base.learning_rate
     var border = base.logloss_border
-    var cursor = List[Float32](length=n_rows, fill=Float32(0.0))
+    var cursor = List[Float32](length=n_rows, fill=Float32(start))
     var stats = List[Float32](length=2 * n_rows, fill=Float32(0.0))
     var mse_blocks = (n_rows + GBDT_MSE_BLOCK - 1) // GBDT_MSE_BLOCK
     var fv_part = List[Float32](length=mse_blocks, fill=Float32(0.0))
@@ -1047,7 +1063,8 @@ def gbdt_host_fit_non_symmetric(
     var feature_random = TRandom(base.random_seed ^ UInt64(0x4645415455524553))
     # the Newton walker the four covered Logloss lanes were measured on
     var plain_newton = (
-        params.loss.method == GBDT_LEAF_NEWTON and not bootstrap_on
+        is_logloss and params.loss.method == GBDT_LEAF_NEWTON
+        and not bootstrap_on
     )
 
     var losses = List[Float64]()
@@ -1103,7 +1120,9 @@ def gbdt_host_fit_non_symmetric(
                     t_bf_bin[Int(lf.first_fold_index) + b] = b
 
         # ---- the gradients, the learn loss and the magnitudes ----
-        if newton:
+        if not is_logloss:
+            _loss_search_pass(params.loss, y, cursor, n_rows, stats, fv_part, mag_part)
+        elif newton:
             logloss_search_pass_newton(y, cursor, n_rows, border, stats, fv_part, mag_part)
         else:
             _logloss_search_pass(y, cursor, n_rows, border, stats, fv_part, mag_part)
@@ -1202,7 +1221,10 @@ def gbdt_host_fit_non_symmetric(
             if iteration + 1 > 1:
                 losses.append(-Float64(fv) / Float64(n_rows))
 
-    losses.append(-Float64(_logloss_value(y, cursor, n_rows, border)) / Float64(n_rows))
+    if is_logloss:
+        losses.append(-Float64(_logloss_value(y, cursor, n_rows, border)) / Float64(n_rows))
+    else:
+        losses.append(-Float64(_loss_value(params.loss, y, cursor, n_rows)) / Float64(n_rows))
     return GbdtHostNsModel(
         grid.fold_counts.copy(), grid.borders.copy(), grid.nan_treatment.copy(),
         tree_node_offsets^, node_feature^, node_bin^, node_left^, node_right^,
