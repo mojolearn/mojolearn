@@ -890,6 +890,87 @@ def host_rbc_radius_row(
     return out^
 
 
+def host_rbc_radius_counts(
+    index: List[Float32], n_index: Int, queries: List[Float32], n_queries: Int,
+    d: Int, eps: Float32, metric: Int, metric_arg: Float32,
+    mut counts: List[Int32], requested_tasks: Int = 0,
+):
+    """Count independent radius-query rows in parallel.
+
+    Each task owns disjoint ``counts`` cells.  The feature fold and ascending
+    index walk inside a row are unchanged, so one and many tasks produce the
+    same bytes.
+    """
+    var tasks = requested_tasks
+    if tasks <= 0:
+        tasks = host_predict_task_count(n_queries)
+    tasks = max(1, min(tasks, n_queries))
+    var chunk = host_predict_chunk(n_queries, tasks)
+    var eps_cmp = rbc_cmp_bound(metric, eps)
+    def _rows(c: Int) {imm index, imm queries, mut counts, imm chunk, imm n_queries, imm n_index, imm d, imm eps_cmp, imm metric, imm metric_arg}:
+        var lo = c * chunk
+        var hi = min(lo + chunk, n_queries)
+        for q in range(lo, hi):
+            var count = Int32(0)
+            for col in range(n_index):
+                var dist = host_rbc_cmp_dist(
+                    queries, q * d, index, col * d, d, metric, metric_arg
+                )
+                if dist <= eps_cmp:
+                    count += Int32(1)
+            counts[q] = count
+    if tasks == 1:
+        _rows(0)
+    else:
+        sync_parallelize(_rows, tasks)
+
+
+def host_rbc_radius_fill_rows(
+    index: List[Float32], n_index: Int, queries: List[Float32], n_queries: Int,
+    d: Int, eps: Float32, return_sqrt: Bool, metric: Int, metric_arg: Float32,
+    indptr: List[Int32], mut actual_counts: List[Int32],
+    mut cols: List[Int32], mut dists: List[Float32],
+    requested_tasks: Int = 0,
+):
+    """Fill independent CSR rows in parallel at their counted offsets."""
+    var tasks = requested_tasks
+    if tasks <= 0:
+        tasks = host_predict_task_count(n_queries)
+    tasks = max(1, min(tasks, n_queries))
+    var chunk = host_predict_chunk(n_queries, tasks)
+    var eps_cmp = rbc_cmp_bound(metric, eps)
+    def _rows(c: Int) {imm index, imm queries, imm indptr, mut actual_counts, mut cols, mut dists, imm chunk, imm n_queries, imm n_index, imm d, imm eps_cmp, imm return_sqrt, imm metric, imm metric_arg}:
+        var lo = c * chunk
+        var hi = min(lo + chunk, n_queries)
+        for q in range(lo, hi):
+            var out = Int(indptr[q])
+            var out_end = Int(indptr[q + 1])
+            var actual = Int32(0)
+            for col in range(n_index):
+                var cmp_dist = host_rbc_cmp_dist(
+                    queries, q * d, index, col * d, d, metric, metric_arg
+                )
+                if cmp_dist <= eps_cmp:
+                    # The count call supplied this row's exact slice.  Clamp
+                    # writes if the caller mutated an input between calls;
+                    # the binding rejects the changed count after the join.
+                    if out < out_end:
+                        cols[out] = Int32(col)
+                        var reported = cmp_dist
+                        if return_sqrt:
+                            reported = rbc_true_dist(metric, cmp_dist)
+                        comptime if KNN_HOST_SABOTAGE:
+                            reported = host_sabotage_value_flip(reported)
+                        dists[out] = reported
+                        out += 1
+                    actual += Int32(1)
+            actual_counts[q] = actual
+    if tasks == 1:
+        _rows(0)
+    else:
+        sync_parallelize(_rows, tasks)
+
+
 def host_rbc_edge_distance(
     index: List[Float32], queries: List[Float32], q: Int, c: Int, d: Int,
     return_sqrt: Bool, metric: Int, metric_arg: Float32,

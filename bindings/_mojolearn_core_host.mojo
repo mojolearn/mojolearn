@@ -138,9 +138,9 @@ from cluster.host.kmeans_oracle import (
 )
 from core.knn_host_predict import (
     KNN_HOST_SABOTAGE,
-    host_rbc_edge_distance,
+    host_rbc_radius_counts,
+    host_rbc_radius_fill_rows,
     host_rbc_knn_search,
-    host_rbc_radius_row,
     KNN_HOST_WEIGHTS_DISTANCE,
     KNN_HOST_WEIGHTS_UNIFORM,
     host_class_probs,
@@ -928,10 +928,13 @@ def radius_neighbors_count_binding(
         rbc_validate_metric(mtr, marg)
         var index = read_f32(index_address, ni * nf)
         var queries = read_f32(queries_address, nq * nf)
+        var counts = List[Int32](length=nq, fill=Int32(0))
+        host_rbc_radius_counts(
+            index, ni, queries, nq, nf, rad, mtr, marg, counts
+        )
         ap[0] = Int32(0)
         for q in range(nq):
-            var row = host_rbc_radius_row(index, ni, queries, q, nf, rad, mtr, marg)
-            nnz += len(row)
+            nnz += Int(counts[q])
             ap[q + 1] = Int32(nnz)
     return PythonObject(nnz)
 
@@ -982,28 +985,35 @@ def radius_neighbors_fill_binding(
         var index = read_f32(index_address, ni * nf)
         var queries = read_f32(queries_address, nq * nf)
         var indptr = List[Int32](length=nq + 1, fill=Int32(0))
-        var cols = List[Int32]()
-        var dists = List[Float32]()
-        for q in range(nq):
-            var row = host_rbc_radius_row(index, ni, queries, q, nf, rad, mtr, marg)
-            for p in range(len(row)):
-                cols.append(row[p])
-                dists.append(
-                    host_rbc_edge_distance(index, queries, q, Int(row[p]), nf, sq, mtr, marg)
-                )
-            indptr[q + 1] = Int32(len(cols))
-        nnz = len(cols)
-        if nnz > cap:
+        if ap[0] != Int32(0) or Int(ap[nq]) != cap:
             raise Error(
-                "radius_neighbors_fill: the search found "
-                + String(nnz)
-                + " edges and the caller allocated for "
-                + String(cap)
-                + ". The two calls saw different data. Re-run"
-                " radius_neighbors_count against the arrays this call was given"
-                " rather than truncating, which would return a subset that looks"
-                " like a complete answer."
+                "radius_neighbors_fill: indptr must start at zero and end at"
+                " nnz_capacity; call radius_neighbors_count first"
             )
+        for q in range(nq):
+            if ap[q + 1] < ap[q]:
+                raise Error("radius_neighbors_fill: indptr must be nondecreasing")
+            indptr[q] = ap[q]
+        indptr[nq] = ap[nq]
+        var cols = List[Int32](length=cap, fill=Int32(0))
+        var dists = List[Float32](length=cap, fill=Float32(0.0))
+        var actual_counts = List[Int32](length=nq, fill=Int32(0))
+        host_rbc_radius_fill_rows(
+            index, ni, queries, nq, nf, rad, sq, mtr, marg,
+            indptr, actual_counts, cols, dists,
+        )
+        for q in range(nq):
+            var expected = Int(indptr[q + 1] - indptr[q])
+            var actual = Int(actual_counts[q])
+            nnz += actual
+            if actual != expected:
+                raise Error(
+                    "radius_neighbors_fill: query row " + String(q)
+                    + " changed from " + String(expected) + " to "
+                    + String(actual) + " edges between the count and fill calls."
+                    " Re-run radius_neighbors_count against the arrays this call"
+                    " was given rather than returning a stale CSR layout."
+                )
         if nnz > 0:
             var xp = i32_ptr(idx_address)
             var dp = f32_ptr(dist_address)
