@@ -1,0 +1,42 @@
+# Optimization-attempt ledger — 2026-09-20
+
+This is a negative-result and handoff index, not promotion evidence. A row
+without a linked raw receipt must be rerun before it can vote. Times are
+wall-clock medians unless stated otherwise. “Exact” means the named gate's
+bitwise outputs, not merely a tolerance check.
+
+## Rejected or not promoted
+
+| Component / idea | Mode, shape, hardware | Exactness / quality | Before → after | Disposition |
+|---|---|---|---|---|
+| Chunked LM-head v2: retain one `rows × 256` dlogit chunk and feed separate dHidden/dWeight kernels | IDENTICAL; ByteLM B1/L64/d_model64/V8192; Apple M4 | Device loss/max/denominator/dHidden/dWeight matched the CPU oracle; repeated ByteTrainer update passed | 141.581 ms → 147.366 ms median (+4.1%); retained head cells 16,389 → 32,772 (~+65.5 KiB) | Rejected: extra launch per chunk, more storage, no repeatable speed win. Fully reverted; no commit. Related shipped-path receipts: [device stage](2026-09-20_chunked_lm_head_v2_device.md), [dWeight reuse](2026-09-20_chunked_lm_head_v2_dweight_reuse.md), [NVIDIA profile](2026-09-20_chunked_lm_head_v2_nvidia.md). |
+| Chunked LM-head fusion/pass reuse beyond the retained-dlogit arm | IDENTICAL; static/local Apple analysis, realistic LM-head shapes | No operation-order-safe implementation qualified beyond the already-landed GEMM and dWeight-reuse stages | No independent qualified A/B | Not promoted: reducing four recomputation passes without changing the serial max/sum/dHidden/dWeight folds remained unresolved. Use the three linked LM-head receipts above before reopening. |
+| Transformer gated-MLP dual multiply/fusion | IDENTICAL; local Apple design/gate lane `perf/neural-training-sep20` | No durable session receipt establishes all gradient/update hashes for the fused candidate | Before/after numbers were not retained in a durable artifact | Rejected as evidence: do not infer a win from the abandoned worktree. Reprofile after checking the landed fused GELU/SiLU work; avoid duplicating it. |
+| Third backward alias: reuse `norm2_dx` storage for `d_residual1` | IDENTICAL; full transformer backward gate, Apple M4 | **Failed exactness:** first difference was stage `bwd.norm2.dx`, case `base_b1_l4_nrep1` | Theoretical saving 4·B·L·d_model bytes/layer (128 MiB/layer at B4/L2048/d_model4096); timing not run after failure | Rejected immediately because the recorded/device lifetime overlaps the in-place residual write. Fully reverted; branch `lane/backward-normdx-alias`, base `9b3b0e7ce`, no commit. Do not retry without changing ownership/recording semantics. |
+| FAST Depthwise GBDT: replace host leaf partition with existing device partitioner | FAST only; 100k matrix and 1M matrix on Apple M4; seeds 7/41/99; classification/regression; uniform/skewed/imbalanced/tie-heavy; features 8/32/100; depths 3/6/10 | 23/24 100k cases matched. Tie-heavy classification, seed 99, f32/d10 diverged: host `9eb10e9a611862f6`, device `a83dd55d4df6ae35`; candidate also lost within-process hash stability. A guarded 1M d3/d6 matrix was exact in 24/24 cases. | Initial 1M f100/d6/t5 cell: 0.772009 s → 0.545375 s (-29.36%). Generalized 1M t2 cells were mixed/near-neutral (examples: 0.086647→0.100593 s f8/d3 classifier; 0.252219→0.253692 s f100/d6 classifier; 0.283160→0.261524 s f100/d6 regressor). | Rejected: unguarded correctness failure; guarded speed did not generalize robustly. **Do not merge `cc652d70b`** (`lane/gbdt-depthwise-fast`). |
+| Symmetric GBDT partition/partition-stat reuse experiments | FAST symmetric; local lanes `agent/fast-symmetric-hist-sep20` and `agent/fast-symmetric-million-sep20`; intended ≥1M rows | No new durable model/prediction/loss receipt was committed by either lane | No durable before/after table; older mechanism work is `049f486fc` / `d4d395f8a` | Not promoted. Treat the missing numeric receipt as a failed qualification, not as “approximately neutral.” Reuse the existing split-record mechanism only after a fresh public-fit A/B. |
+| RF training histogram-copy removal/reuse | FAST RF training; lane `agent/fast-nvidia-rf-et-train-sep20`; NVIDIA qualification was intended | No durable full-model/prediction fingerprint receipt for this hypothesis | No durable before/after measurement | Not promoted. The branch contains no candidate commit. Do not confuse this with the separately qualified forest inference/device-argmax evidence: [FAST forest auto](fast_forest_auto_2026-09-20/README.md), [device argmax](fast_forest_device_argmax_2026-09-20/README.md). |
+| Lossguide histogram scheduling | FAST Lossguide; lane `agent/fast-lossguide-gbdt-sep20`; ≥1M-row target | No durable exact model/prediction/loss receipt | No durable before/after measurement | Not promoted: lane ended without a candidate commit or timing artifact. Reprofile independently; do not borrow Depthwise conclusions because leaf scheduling differs. |
+| CPU regression metric block-size changes | CPU; 1M and 10M rows; Apple M4 | MSE/MAE/RMSE outputs preserved the required ascending final fold in the qualified work; alternative block-size hypotheses did not clear the robust threshold | See the raw and summarized numbers in [CPU regression metrics, 10M](2026-09-20_cpu_regression_metrics_10m.md) | Rejected alternatives; only the change documented in the linked receipt may be treated as qualified. |
+
+## Promising, but pending vendor qualification
+
+These are deliberately separate from the rejected table. None is a default
+flip until its missing vendor leg and exact end-to-end gate are recorded.
+
+| Candidate | What is already known | Missing evidence |
+|---|---|---|
+| Wider fixed LM-head v2 chunks / launch amortization | Apple IDENTICAL qualification for the landed fixed-width tuning showed an exact local improvement; the bounded-memory contract remains intact. The NVIDIA bottleneck and current shipped path are described in [the NVIDIA receipt](2026-09-20_chunked_lm_head_v2_nvidia.md). | Same-commit NVIDIA and AMD v1/current/new timing, peak VRAM, loss/dHidden/dWeight/update hashes. Do not extrapolate Apple launch behavior. |
+| Packed-attention exponent stash and y/dy scheduling | Existing receipt: [packed-estash README](attention_packed_estash_2026-09-20/README.md). It records the implemented schedules and vendor-specific status. | Any new y/dy packing or recompute arm needs same-pod current/new measurements and exact all-stage hashes; two `[B,n_heads,L,S]` buffers make memory and speed a joint decision. |
+| Gated-MLP dual multiply | Arithmetic sharing is plausible because both outputs consume the same incoming gradient, but this session produced no durable qualified artifact. | Apple current/new raw timing plus NVIDIA/AMD, exact stage hashes, repeated optimizer update, and peak memory. Until then it belongs here, not in a promotion list. |
+
+## Reading rules
+
+- A branch or commit named in the rejected section is provenance, not an
+  instruction to merge it.
+- Missing raw timing is recorded explicitly rather than reconstructed from
+  chat or terminal scrollback.
+- FAST results do not vote for IDENTICAL or deterministic routing, and an
+  Apple result does not vote for NVIDIA or AMD.
+- Reopening an item should append a new evidence file and link it here; do
+  not silently rewrite a rejected result into a success.
