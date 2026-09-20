@@ -33,11 +33,11 @@ import pytest
 from mojolearn.models import parallel_causal_lm as mod
 
 
-@pytest.mark.parametrize('vendor', ['cpu', 'metal'])
+@pytest.mark.parametrize('vendor', ['cpu'])
 def test_gpu_install_of_the_wrong_vendor_rejected_before_checkpoint_read(monkeypatch, vendor):
     """A GPU INSTALL whose vendor is not CUDA or HIP still refuses, before a
-    file is opened. `_CPU_ONLY is None` here, so this is Metal and the case
-    of a GPU install reporting `cpu` -- NOT the CPU-only host route, which
+    file is opened. `_CPU_ONLY is None` here: a GPU install reporting
+    `cpu` is NOT the CPU-only host route, which
     `test_cpu_only_install_takes_the_host_route` covers. The two are
     different facts and the vocabulary keeps them apart."""
     monkeypatch.setattr(mod._backend, 'vendor', lambda: vendor)
@@ -97,7 +97,8 @@ def test_remote_state_refuses_wrong_layer_and_release_is_idempotent():
     with pytest.raises(ValueError,match='released'): a._run('step',None,state)
 
 
-def test_layer_transport_matches_cpu_with_isolated_mock_workers(monkeypatch, tmp_path):
+@pytest.mark.parametrize('vendor,owners', [('cuda', (2, 0)), ('metal', (0, 0))])
+def test_layer_transport_matches_cpu_with_isolated_mock_workers(monkeypatch, tmp_path, vendor, owners):
     """Real CPU numerics through emulated RPC; not physical GPU evidence."""
     import pickle
     from mojolearn import Array
@@ -115,7 +116,7 @@ def test_layer_transport_matches_cpu_with_isolated_mock_workers(monkeypatch, tmp
     cpu_classes=base._block_classes('cpu')
     monkeypatch.setattr(base,'_block_classes', lambda route: cpu_classes)
     monkeypatch.setattr(base,'_GpuPrimitives',base._CpuPrimitives)
-    monkeypatch.setattr(mod._backend,'vendor',lambda:'cuda')
+    monkeypatch.setattr(mod._backend,'vendor',lambda:vendor)
     worlds={}
     calls=[]
     class Pool:
@@ -131,7 +132,7 @@ def test_layer_transport_matches_cpu_with_isolated_mock_workers(monkeypatch, tmp
             return pickle.loads(pickle.dumps(worker.execute(operation,args)))
     monkeypatch.setattr(mod,'DevicePool',Pool)
     ids=Array.from_list([[1,3,7],[2,4,8]],'<i4')
-    with mod.ParallelCausalLM.load(tmp_path, layer_devices=(2,0)) as split:
+    with mod.ParallelCausalLM.load(tmp_path, layer_devices=iter(owners)) as split:
         assert digest(plain.forward(ids))==digest(split.forward(ids))
         a=plain.allocate_state(2,8); b=split.allocate_state(2,8)
         assert digest(plain.forward(ids,a))==digest(split.forward(ids,b))
@@ -142,5 +143,33 @@ def test_layer_transport_matches_cpu_with_isolated_mock_workers(monkeypatch, tmp
         assert digest(split.forward(ids,b))==digest(plain.forward(ids))
         assert digest(split.generate(ids,2))==digest(plain.generate(ids,2))
         assert set(split.parameters())==set(plain.parameters())
-    assert set(worlds[2][0])=={0} and set(worlds[0][0])=={1}
-    assert (2,'embedding') in calls and (0,'head') in calls
+    if vendor == 'metal':
+        assert set(worlds) == {0}
+        assert set(worlds[0][0]) == {0, 1}
+    else:
+        assert set(worlds[2][0])=={0} and set(worlds[0][0])=={1}
+    assert (owners[0],'embedding') in calls and (owners[-1],'head') in calls
+
+
+@pytest.mark.parametrize('devices', [(0, 1), (1, 1), (True, 0), ()])
+def test_metal_owner_validation_precedes_checkpoint_read(monkeypatch, devices):
+    monkeypatch.setattr(mod._backend, 'vendor', lambda: 'metal')
+    monkeypatch.setattr(mod._backend, '_CPU_ONLY', None)
+    with pytest.raises(ValueError):
+        mod.ParallelCausalLM.load('/does/not/exist', layer_devices=devices)
+
+
+def test_metal_zero_owners_use_gpu_route_and_reach_checkpoint(monkeypatch):
+    monkeypatch.setattr(mod._backend, 'vendor', lambda: 'metal')
+    monkeypatch.setattr(mod._backend, '_CPU_ONLY', None)
+    assert mod._admit_route((0, 0)) == 'gpu'
+    with pytest.raises(FileNotFoundError):
+        mod.ParallelCausalLM.load('/does/not/exist', layer_devices=iter((0, 0)))
+
+
+def test_metal_nonzero_owner_refuses_before_pool(monkeypatch):
+    monkeypatch.setattr(mod._backend, 'vendor', lambda: 'metal')
+    monkeypatch.setattr(mod._backend, '_CPU_ONLY', None)
+    monkeypatch.setattr(mod, 'DevicePool', lambda *a, **k: pytest.fail('pool must not start'))
+    with pytest.raises(ValueError, match='device 0'):
+        mod.ParallelCausalLM(SimpleNamespace(n_layers=2), {}, layer_devices=(0, 1))
