@@ -3252,6 +3252,29 @@ def gelu_kernel(
         act_out.unsafe_store(i, ftz(identical_gelu_erf(z)))
 
 
+def bias_gelu_kernel(
+    act_out: MutPointer[Float32, MutAnyOrigin],
+    src: MutPointer[Float32, MutAnyOrigin],
+    bias: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    width_in: Int32,
+    tanh_form_in: Int32,
+):
+    """Bias epilogue followed by GELU, preserving the materialized source."""
+    var n = Int(n_in)
+    var width = Int(width_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= n:
+        return
+    var col = i - (i // width) * width
+    var z = ftz(ftz(src.unsafe_load(i)) + ftz(bias.unsafe_load(col)))
+    src.unsafe_store(i, z)
+    if Int(tanh_form_in) != 0:
+        act_out.unsafe_store(i, ftz(identical_gelu_tanh(z)))
+    else:
+        act_out.unsafe_store(i, ftz(identical_gelu_erf(z)))
+
+
 # ===========================================================================
 # THE REFUSAL, contract section 8. Before ANY recorded stage.
 # ===========================================================================
@@ -4433,6 +4456,7 @@ def llama_mlp_forward(
     # here before, launch for launch.
     var opts = w.opts.copy()
     var gated = opts.gated()
+    var bias_gelu_fused = opts.mlp_bias and not opts.act_is_silu()
 
     # ---- gate_proj and up_proj. C[M, it] = norm2_out[M, dm] . W[it, dm]^T.
     if gated:
@@ -4446,7 +4470,15 @@ def llama_mlp_forward(
             dm,
             _gemm_op_nt(),
         )
-        if opts.mlp_bias:
+        if bias_gelu_fused:
+            step_count_launch()
+            ctx.enqueue_function[bias_gelu_kernel](
+                stages.silu_out.unsafe_ptr(), stages.gate_proj.unsafe_ptr(),
+                w.b_gate.unsafe_ptr(), Int32(m * it), Int32(it),
+                Int32(1 if opts.act_is_gelu_tanh() else 0),
+                grid_dim=(_grid(m * it), 1, 1), block_dim=(LLAMA_TPB, 1, 1),
+            )
+        elif opts.mlp_bias:
             step_count_launch()
             ctx.enqueue_function[add_bias_kernel](
                 stages.gate_proj.unsafe_ptr(),
@@ -4476,7 +4508,15 @@ def llama_mlp_forward(
         dm,
         _gemm_op_nt(),
     )
-    if opts.mlp_bias:
+    if bias_gelu_fused and not gated:
+        step_count_launch()
+        ctx.enqueue_function[bias_gelu_kernel](
+            stages.silu_out.unsafe_ptr(), stages.up_proj.unsafe_ptr(),
+            w.b_up.unsafe_ptr(), Int32(m * it), Int32(it),
+            Int32(1 if opts.act_is_gelu_tanh() else 0),
+            grid_dim=(_grid(m * it), 1, 1), block_dim=(LLAMA_TPB, 1, 1),
+        )
+    elif opts.mlp_bias:
         step_count_launch()
         ctx.enqueue_function[add_bias_kernel](
             stages.up_proj.unsafe_ptr(),
@@ -4494,7 +4534,9 @@ def llama_mlp_forward(
     # ---- act_fn (:175). S20: SiLU at the default record, a GELU form
     #      otherwise, over the gate projection (gated) or the up
     #      projection (ungated).
-    if opts.act_is_silu():
+    if bias_gelu_fused:
+        pass
+    elif opts.act_is_silu():
         step_count_launch()
         ctx.enqueue_function[silu_kernel](
             stages.silu_out.unsafe_ptr(),
