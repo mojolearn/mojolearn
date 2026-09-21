@@ -177,6 +177,16 @@ from linalg.matmul import matmul
 from linalg.gemv import gemv_gpu
 
 
+# Default-off production-step trial. The shipped kpack body normally reserves
+# its profile-wide 16-level thread-local fold stack. This switch selects the
+# already-gated 4/8/16 class from the call's contract leaf count and unchanged
+# group rule. It changes only unreachable local storage above the highest fold
+# level; every product, leaf, merge, output address, and workspace stays fixed.
+comptime GEMM_FOLD_SPECIALIZE_TRIAL = is_defined[
+    "MOJOLEARN_GEMM_FOLD_SPECIALIZE_TRIAL"
+]()
+
+
 # ===========================================================================
 # THE SABOTAGE SWITCHES
 # ===========================================================================
@@ -4454,6 +4464,27 @@ def _shipped_body_kpack_hg[
             )
             return
     if choose_gemm_plan(m, n, k) == PLAN_TUNED_128_8X8:
+        comptime if not SAB and GEMM_FOLD_SPECIALIZE_TRIAL:
+            comptime assert GEMM_ARM_TRIAL, (
+                "MOJOLEARN_GEMM_FOLD_SPECIALIZE_TRIAL requires "
+                "MOJOLEARN_GEMM_ARM_TRIAL"
+            )
+            var p_count = contract_partition(k)[1]
+            var gl = gemm_default_ksplit_leaves(m, n, k)
+            var fs = gemm_kpack_fold_slots_for(p_count, gl)
+            if fs == 4:
+                _kpack_hg_run_with_ws[4, False](
+                    ctx, c, a, b, ws, m, n, k, op
+                )
+            elif fs == 8:
+                _kpack_hg_run_with_ws[8, False](
+                    ctx, c, a, b, ws, m, n, k, op
+                )
+            else:
+                _kpack_hg_run_with_ws[GEMM_KPACK_FS, False](
+                    ctx, c, a, b, ws, m, n, k, op
+                )
+            return
         # L40S, 2026-09-20: GPT-3-small Q/K/V/O dWeight has six contract
         # leaves, so FS4 covers its unchanged fold tree while avoiding 3 KiB
         # of unreachable per-thread local stack. Keep the measured choice
@@ -5436,7 +5467,7 @@ def identical_gemm_kpack_kernel[
     )
     comptime assert (
         FS >= GEMM_FOLD_LEVELS
-        or is_defined["MOJOLEARN_GEMM_FOLD_SPECIALIZE_TRIAL"]()
+        or GEMM_FOLD_SPECIALIZE_TRIAL
         or (TARGET_COLUMN == COLUMN_NVIDIA and (FS == 4 or FS == 8))
     ), (
         "identical_gemm_kpack_kernel: the local fold stack must cover the"

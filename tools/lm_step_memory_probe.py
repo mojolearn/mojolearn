@@ -378,6 +378,7 @@ def worker(args):
                 # (the ksplit default where the row is above 0) is never
                 # confused with the old plan (`tuned128`). None when unset.
                 gemm_plan=os.environ.get('MOJOLEARN_GEMM_PLAN_LABEL'),
+                gemm_fold_specialized=runtime.get('native_gemm_fold_specialized'),
                 # DEVIATION 2648: the step glue arm the binding runs (its
                 # read-back; `shipped` on any non-trial binding), the raw
                 # request and whether the binding is a glue trial build.
@@ -600,6 +601,7 @@ def _write_result(args, shape, steps, limited, timing_step_seconds=None, mode=No
         attention_arm_resolved_hd64=mode.get('attention_arm_resolved_hd64'),
         attention_arm_trial_build=mode.get('attention_arm_trial_build'),
         gemm_arm=mode.get('gemm_arm'), gemm_plan=mode.get('gemm_plan'),
+        gemm_fold_specialized=mode.get('gemm_fold_specialized'),
         # DEVIATION 2648: the step glue arm the binding ran, the raw request
         # and whether the binding was a glue trial build (see `mode`).
         step_glue_arm=mode.get('step_glue_arm'),
@@ -610,6 +612,10 @@ def _write_result(args, shape, steps, limited, timing_step_seconds=None, mode=No
         # run from result.json alone; the same records are in events.jsonl.
         step_witnesses=[dict(step=s['step'], completed_steps=s['completed_steps'], sha256=s['sha256'])
                         for s in steps],
+        # Numeric losses are a quality witness as well as the bit hashes
+        # above.  Keeping every step makes an A/B training gate able to
+        # reject a trajectory change without scraping events.jsonl.
+        step_losses=[s['loss'] for s in steps],
         # The lean run's one export after the last untimed step (None when
         # every step was witnessed or the run was limited before it).
         final_witness=final_witness,

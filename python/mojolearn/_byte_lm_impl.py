@@ -362,7 +362,8 @@ def _binding_metadata(binding, shape):
     root = Path(__file__).resolve().parents[2]
     names = ('python/mojolearn/_byte_lm_impl.py', 'python/mojolearn/language_model.py',
              'bindings/_mojolearn_byte_lm.mojo', 'training/byte_lm.mojo',
-             'training/byte_lm_config.mojo', 'python/mojolearn/_byte_lm_config.py')
+             'training/byte_lm_config.mojo', 'python/mojolearn/_byte_lm_config.py',
+             'gemm/checks/gemm_identical.mojo')
     inventory = {name: _sha(root / name) for name in names if (root / name).is_file()}
     # Installed wheels may lack native sources; the Python source and exact
     # loaded binding are still identified. Do not claim a full source audit.
@@ -386,12 +387,16 @@ def _binding_metadata(binding, shape):
     if hasattr(binding, 'byte_lm_step_glue_arm'):
         glue_arm, glue_trial = binding.byte_lm_step_glue_arm()
         step_glue = dict(arm=str(glue_arm), trial_build=bool(int(glue_trial)))
+    fold_specialized = None
+    if hasattr(binding, 'byte_lm_gemm_fold_specialized'):
+        fold_specialized = bool(int(binding.byte_lm_gemm_fold_specialized()))
     return dict(binding_file=binding.__file__, binding_sha256=_sha(binding.__file__),
                 native_profile=str(binding.byte_lm_profile()),
                 native_vendor=str(binding.byte_lm_vendor()),
                 native_numeric_mode=int(binding.byte_lm_numeric_mode()),
                 native_attention_arm=attention,
                 native_step_glue_arm=step_glue,
+                native_gemm_fold_specialized=fold_specialized,
                 source_sha256=inventory,
                 source_scope='available direct source files; binding SHA identifies the compiled artifact')
 

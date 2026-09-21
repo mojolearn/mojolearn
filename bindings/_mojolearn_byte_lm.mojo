@@ -41,7 +41,12 @@ from core.step_phase import (
 )
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.vendor import COMPILED_VENDOR
-from gemm.checks.gemm_identical import TUNED_STAGE_FTZ, GEMM_REUSE_GROUP_WS
+from gemm.checks.gemm_identical import (
+    GEMM_BODY_KPACK_HG,
+    GEMM_FOLD_SPECIALIZE_TRIAL,
+    GEMM_REUSE_GROUP_WS,
+    TUNED_STAGE_FTZ,
+)
 from training.checks.optimizer_oracle import OptimizerConfig
 from training.checks.train_loop import download_f32
 from training.byte_lm_config import ByteConfig
@@ -743,6 +748,11 @@ def byte_lm_fault_inject_available_binding() raises -> PythonObject:
 def byte_lm_gemm_reuse_group_ws_binding() raises -> PythonObject:
     """Read grouped-scratch reuse from the loaded training binary."""
     return PythonObject(GEMM_REUSE_GROUP_WS)
+
+
+def byte_lm_gemm_fold_specialized_binding() raises -> PythonObject:
+    """Whether eligible production GEMMs select bounded local fold stacks."""
+    return PythonObject(GEMM_FOLD_SPECIALIZE_TRIAL and GEMM_BODY_KPACK_HG)
 
 
 def byte_lm_gemm_stage_ftz_binding() raises -> PythonObject:
@@ -1689,6 +1699,7 @@ def PyInit__mojolearn_byte_lm() abi("C") -> PythonObject:
         module.def_function[byte_lm_session_info_binding]("byte_lm_session_info")
         module.def_function[byte_lm_fault_inject_available_binding]("byte_lm_fault_inject_available")
         module.def_function[byte_lm_gemm_reuse_group_ws_binding]("byte_lm_gemm_reuse_group_ws")
+        module.def_function[byte_lm_gemm_fold_specialized_binding]("byte_lm_gemm_fold_specialized")
         module.def_function[byte_lm_gemm_stage_ftz_binding]("byte_lm_gemm_stage_ftz")
         module.def_function[byte_lm_ce_aliased_binding]("byte_lm_ce_aliased")
         module.def_function[byte_lm_attn_sticky_fallback_binding]("byte_lm_attn_sticky_fallback")
