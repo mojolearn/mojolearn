@@ -1,0 +1,362 @@
+{
+  "all_four_cell_geomean": 0.996285693030408,
+  "candidate_define": "MOJOLEARN_2661_NONSYM_GROUP_WIDTH=1",
+  "cells": {
+    "gbdt-depthwise/istella": {
+      "baseline": {
+        "max_ms_25": 1907.322,
+        "median_ms_25": 1742.229,
+        "min_ms_25": 1564.675,
+        "outer_medians_iqr_ms": 57.66000000000008,
+        "outer_medians_ms": [
+          1739.666,
+          1785.248,
+          1670.398,
+          1812.1,
+          1727.588
+        ],
+        "outer_medians_q1_ms": 1727.588,
+        "outer_medians_q3_ms": 1785.248,
+        "quality": {
+          "auc": [
+            0.971896,
+            0.971896,
+            0.971896,
+            0.971896,
+            0.971896
+          ],
+          "logloss": [
+            0.126517,
+            0.126517,
+            0.126517,
+            0.126517,
+            0.126517
+          ]
+        }
+      },
+      "candidate": {
+        "max_ms_25": 1915.047,
+        "median_ms_25": 1750.957,
+        "min_ms_25": 1669.545,
+        "outer_medians_iqr_ms": 21.03099999999995,
+        "outer_medians_ms": [
+          1768.378,
+          1814.067,
+          1766.122,
+          1693.807,
+          1747.347
+        ],
+        "outer_medians_q1_ms": 1747.347,
+        "outer_medians_q3_ms": 1768.378,
+        "quality": {
+          "auc": [
+            0.971896,
+            0.971896,
+            0.971896,
+            0.971896,
+            0.971896
+          ],
+          "logloss": [
+            0.126517,
+            0.126517,
+            0.126517,
+            0.126517,
+            0.126517
+          ]
+        }
+      },
+      "candidate_over_baseline_median25": 1.005009674388384,
+      "output_hashes": [
+        "5d053cd086658072"
+      ],
+      "paired_outer_ratio_max": 1.057306103096388,
+      "paired_outer_ratio_median": 1.0161428552223557,
+      "paired_outer_ratio_min": 0.9347204900391811,
+      "paired_outer_ratios": [
+        1.0165043174954274,
+        1.0161428552223557,
+        1.057306103096388,
+        0.9347204900391811,
+        1.0114373334382967
+      ]
+    },
+    "gbdt-depthwise/taxi": {
+      "baseline": {
+        "max_ms_25": 479.92,
+        "median_ms_25": 453.047,
+        "min_ms_25": 439.942,
+        "outer_medians_iqr_ms": 12.562999999999988,
+        "outer_medians_ms": [
+          453.392,
+          459.26,
+          446.697,
+          440.868,
+          461.682
+        ],
+        "outer_medians_q1_ms": 446.697,
+        "outer_medians_q3_ms": 459.26,
+        "quality": {
+          "auc": [
+            0.621421,
+            0.621421,
+            0.621421,
+            0.621421,
+            0.621421
+          ],
+          "logloss": [
+            0.525086,
+            0.525086,
+            0.525086,
+            0.525086,
+            0.525086
+          ]
+        }
+      },
+      "candidate": {
+        "max_ms_25": 489.018,
+        "median_ms_25": 452.606,
+        "min_ms_25": 439.143,
+        "outer_medians_iqr_ms": 8.476999999999975,
+        "outer_medians_ms": [
+          453.926,
+          451.146,
+          445.449,
+          444.827,
+          467.398
+        ],
+        "outer_medians_q1_ms": 445.449,
+        "outer_medians_q3_ms": 453.926,
+        "quality": {
+          "auc": [
+            0.621421,
+            0.621421,
+            0.621421,
+            0.621421,
+            0.621421
+          ],
+          "logloss": [
+            0.525086,
+            0.525086,
+            0.525086,
+            0.525086,
+            0.525086
+          ]
+        }
+      },
+      "candidate_over_baseline_median25": 0.9990265910600886,
+      "output_hashes": [
+        "40c1683b9e0eb151"
+      ],
+      "paired_outer_ratio_max": 1.0123808162328183,
+      "paired_outer_ratio_median": 1.001177788756749,
+      "paired_outer_ratio_min": 0.9823324478508906,
+      "paired_outer_ratios": [
+        1.001177788756749,
+        0.9823324478508906,
+        0.9972061598801872,
+        1.008980012157834,
+        1.0123808162328183
+      ]
+    },
+    "gbdt-lossguide/istella": {
+      "baseline": {
+        "max_ms_25": 2629.316,
+        "median_ms_25": 2449.034,
+        "min_ms_25": 2292.997,
+        "outer_medians_iqr_ms": 22.56800000000021,
+        "outer_medians_ms": [
+          2472.999,
+          2426.466,
+          2442.351,
+          2449.034,
+          2384.887
+        ],
+        "outer_medians_q1_ms": 2426.466,
+        "outer_medians_q3_ms": 2449.034,
+        "quality": {
+          "auc": [
+            0.975037,
+            0.975037,
+            0.975037,
+            0.975037,
+            0.975037
+          ],
+          "logloss": [
+            0.122045,
+            0.122045,
+            0.122045,
+            0.122045,
+            0.122045
+          ]
+        }
+      },
+      "candidate": {
+        "max_ms_25": 2635.35,
+        "median_ms_25": 2427.004,
+        "min_ms_25": 2336.271,
+        "outer_medians_iqr_ms": 49.715000000000146,
+        "outer_medians_ms": [
+          2465.455,
+          2426.389,
+          2564.546,
+          2414.431,
+          2415.74
+        ],
+        "outer_medians_q1_ms": 2415.74,
+        "outer_medians_q3_ms": 2465.455,
+        "quality": {
+          "auc": [
+            0.975037,
+            0.975037,
+            0.975037,
+            0.975037,
+            0.975037
+          ],
+          "logloss": [
+            0.122045,
+            0.122045,
+            0.122045,
+            0.122045,
+            0.122045
+          ]
+        }
+      },
+      "candidate_over_baseline_median25": 0.991004616514103,
+      "output_hashes": [
+        "6182fd2bee4fb941"
+      ],
+      "paired_outer_ratio_max": 1.0500317112487108,
+      "paired_outer_ratio_median": 0.9999682666066618,
+      "paired_outer_ratio_min": 0.9858707555713804,
+      "paired_outer_ratios": [
+        0.9969494528707857,
+        0.9999682666066618,
+        1.0500317112487108,
+        0.9858707555713804,
+        1.0129368812861992
+      ]
+    },
+    "gbdt-lossguide/taxi": {
+      "baseline": {
+        "max_ms_25": 1060.157,
+        "median_ms_25": 1025.6,
+        "min_ms_25": 996.256,
+        "outer_medians_iqr_ms": 8.06899999999996,
+        "outer_medians_ms": [
+          1032.049,
+          1025.6,
+          1010.444,
+          1017.531,
+          1020.136
+        ],
+        "outer_medians_q1_ms": 1017.531,
+        "outer_medians_q3_ms": 1025.6,
+        "quality": {
+          "auc": [
+            0.619386,
+            0.619386,
+            0.619386,
+            0.619386,
+            0.619386
+          ],
+          "logloss": [
+            0.525504,
+            0.525504,
+            0.525504,
+            0.525504,
+            0.525504
+          ]
+        }
+      },
+      "candidate": {
+        "max_ms_25": 1054.409,
+        "median_ms_25": 1015.525,
+        "min_ms_25": 1002.661,
+        "outer_medians_iqr_ms": 35.17899999999986,
+        "outer_medians_ms": [
+          1042.244,
+          1012.152,
+          1006.483,
+          1007.065,
+          1042.72
+        ],
+        "outer_medians_q1_ms": 1007.065,
+        "outer_medians_q3_ms": 1042.244,
+        "quality": {
+          "auc": [
+            0.619386,
+            0.619386,
+            0.619386,
+            0.619386,
+            0.619386
+          ],
+          "logloss": [
+            0.525504,
+            0.525504,
+            0.525504,
+            0.525504,
+            0.525504
+          ]
+        }
+      },
+      "candidate_over_baseline_median25": 0.9901764820592824,
+      "output_hashes": [
+        "0dd8bcfc3c3a4a1d"
+      ],
+      "paired_outer_ratio_max": 1.022138224707294,
+      "paired_outer_ratio_median": 0.9960799410952017,
+      "paired_outer_ratio_min": 0.9868876755070204,
+      "paired_outer_ratios": [
+        1.0098784069361046,
+        0.9868876755070204,
+        0.9960799410952017,
+        0.989714318286126,
+        1.022138224707294
+      ]
+    }
+  },
+  "datasets": {
+    "istella": {
+      "r2_bytes": 2248281826,
+      "r2_key": "gbm-bench/istella/istella_speed.npz",
+      "r2_sha256": "31f042376c0b819fe169cbbd998e840567c23dae25c14cb9054b460292f6ffef",
+      "source_shape": [
+        2043304,
+        220
+      ],
+      "timed_shape": [
+        1000000,
+        220
+      ]
+    },
+    "taxi": {
+      "r2_bytes": 419757252,
+      "r2_key": "gbm-bench/taxi/taxi_speed.npz",
+      "r2_sha256": "10d5d35f376a5b2ad5c66fabe624ee2caafb58bc5e7516824f801de9aab6cc15",
+      "source_shape": [
+        4000000,
+        11
+      ],
+      "timed_shape": [
+        1000000,
+        16
+      ]
+    }
+  },
+  "device": "NVIDIA H100 80GB HBM3",
+  "driver": "580.126.09",
+  "lane_geomeans": {
+    "gbdt-depthwise": 1.0020136670657926,
+    "gbdt-lossguide": 0.9905904627465595
+  },
+  "mode": "IDENTICAL",
+  "protocol": {
+    "measurements_per_arm_cell": 25,
+    "order": "baseline-first on odd outer passes; candidate-first on even outer passes",
+    "outer_passes": 5,
+    "timed_fits_per_process": 5,
+    "warmup": "forest harness warm-up excluded"
+  },
+  "schema": "mojolearn.gbdt_2661.compact.v1",
+  "source_commit": "2e6c8bbf949ff1add71e235225f69505e96f6bec"
+}

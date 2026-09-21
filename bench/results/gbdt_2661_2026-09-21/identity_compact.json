@@ -1,0 +1,446 @@
+{
+  "columns": {
+    "batch": {
+      "gbdt-depthwise/base": {
+        "hash": "25bf2754b853a026",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-depthwise/denormal": {
+        "hash": "c75b24565da79e80",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-depthwise/denormal_ftz": {
+        "hash": "c75b24565da79e80",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-depthwise/dupes": {
+        "hash": "72dbff12dd6a21a5",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-depthwise/hashed": {
+        "hash": "5f52a35c82337b02",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-depthwise/negative": {
+        "hash": "fcc3087fb2cb9d5c",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-depthwise/odd": {
+        "hash": "992386f8f1c7c126",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-depthwise/ties": {
+        "hash": "071de76e68c2fc1d",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-depthwise/wide": {
+        "hash": "e3852cc5e1042eb0",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-lossguide/base": {
+        "hash": "e645c5854d89c482",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-lossguide/denormal": {
+        "hash": "d168f7185b64c38d",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-lossguide/denormal_ftz": {
+        "hash": "d168f7185b64c38d",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-lossguide/dupes": {
+        "hash": "6222402bea446ddc",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-lossguide/hashed": {
+        "hash": "eb8a95903164a0b0",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-lossguide/negative": {
+        "hash": "c9a5612ba8242a3f",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-lossguide/odd": {
+        "hash": "5232e0e0101a443e",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-lossguide/ties": {
+        "hash": "e0ab456d446fcfe2",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-lossguide/wide": {
+        "hash": "00753b402e022f5c",
+        "verdict": "IDENTICAL x2"
+      }
+    },
+    "infer": {
+      "gbdt-depthwise/base": {
+        "hash": "688bf9a8e927232e",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-depthwise/denormal": {
+        "hash": "7b73dadeb43db4cf",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-depthwise/denormal_ftz": {
+        "hash": "7b73dadeb43db4cf",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-depthwise/dupes": {
+        "hash": "fc255cbff38ea320",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-depthwise/hashed": {
+        "hash": "d11cf64a629bd4fb",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-depthwise/negative": {
+        "hash": "ddaa5cebdc9c1484",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-depthwise/odd": {
+        "hash": "4ee637393df9aff7",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-depthwise/ties": {
+        "hash": "e299a1457dfaedc7",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-depthwise/wide": {
+        "hash": "65e906e50a54735e",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-lossguide/base": {
+        "hash": "38894a4992494eec",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-lossguide/denormal": {
+        "hash": "11691f0c929f3421",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-lossguide/denormal_ftz": {
+        "hash": "11691f0c929f3421",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-lossguide/dupes": {
+        "hash": "48a2422d07d569e8",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-lossguide/hashed": {
+        "hash": "6ad2edafdef76901",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-lossguide/negative": {
+        "hash": "d3535f6580f644c7",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-lossguide/odd": {
+        "hash": "c61553f78e6fb798",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-lossguide/ties": {
+        "hash": "37cf90363e2078cf",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-lossguide/wide": {
+        "hash": "95431b9721836309",
+        "verdict": "IDENTICAL x2"
+      }
+    },
+    "model": {
+      "gbdt-depthwise/base": {
+        "hash": "448c1bcf37ffdc97",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-depthwise/denormal": {
+        "hash": "a5f5c6eac0c3732c",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-depthwise/denormal_ftz": {
+        "hash": "a5f5c6eac0c3732c",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-depthwise/dupes": {
+        "hash": "ca399349c402761a",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-depthwise/hashed": {
+        "hash": "80b172e1332f9dd9",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-depthwise/negative": {
+        "hash": "9c2f348d3bf8e73c",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-depthwise/odd": {
+        "hash": "e4f63fb009a0a7b5",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-depthwise/ties": {
+        "hash": "ef4323cc40bbfd0a",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-depthwise/wide": {
+        "hash": "38d9c484d12b1f01",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-lossguide/base": {
+        "hash": "9e01e18241859f87",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-lossguide/denormal": {
+        "hash": "cb45b0cc2830737b",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-lossguide/denormal_ftz": {
+        "hash": "cb45b0cc2830737b",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-lossguide/dupes": {
+        "hash": "8c51a41b08c13e13",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-lossguide/hashed": {
+        "hash": "efe7e6ef1fe94f1e",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-lossguide/negative": {
+        "hash": "f2f295f6c2c1929d",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-lossguide/odd": {
+        "hash": "7393593a5fb3ed79",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-lossguide/ties": {
+        "hash": "3653934f21f61d9d",
+        "verdict": "IDENTICAL x2"
+      },
+      "gbdt-lossguide/wide": {
+        "hash": "0b24cabbdbb1f867",
+        "verdict": "IDENTICAL x2"
+      }
+    }
+  },
+  "repeats": 2,
+  "schema": "mojolearn.gbdt_2661.identity.v1",
+  "subbyte": {
+    "base2661": {
+      "gbdt-depthwise/bin2": {
+        "hashes": [
+          "70c30f14ccb609d5",
+          "70c30f14ccb609d5"
+        ],
+        "reference": "70c30f14ccb609d5",
+        "verdict": "PASS"
+      },
+      "gbdt-depthwise/bits5": {
+        "hashes": [
+          "c8b57b95de2052f7",
+          "c8b57b95de2052f7"
+        ],
+        "reference": "c8b57b95de2052f7",
+        "verdict": "PASS"
+      },
+      "gbdt-depthwise/bits6": {
+        "hashes": [
+          "caf1feee1cff20be",
+          "caf1feee1cff20be"
+        ],
+        "reference": "caf1feee1cff20be",
+        "verdict": "PASS"
+      },
+      "gbdt-depthwise/ties": {
+        "hashes": [
+          "465cb10f303e005a",
+          "465cb10f303e005a"
+        ],
+        "reference": "465cb10f303e005a",
+        "verdict": "PASS"
+      },
+      "gbdt-lossguide/bin2": {
+        "hashes": [
+          "b502d21f4bb0a0c9",
+          "b502d21f4bb0a0c9"
+        ],
+        "reference": "b502d21f4bb0a0c9",
+        "verdict": "PASS"
+      },
+      "gbdt-lossguide/bits5": {
+        "hashes": [
+          "e69d957f80a7a128",
+          "e69d957f80a7a128"
+        ],
+        "reference": "e69d957f80a7a128",
+        "verdict": "PASS"
+      },
+      "gbdt-lossguide/bits6": {
+        "hashes": [
+          "654bcd575d6b3c2e",
+          "654bcd575d6b3c2e"
+        ],
+        "reference": "654bcd575d6b3c2e",
+        "verdict": "PASS"
+      },
+      "gbdt-lossguide/ties": {
+        "hashes": [
+          "19d199f7bfa16c25",
+          "19d199f7bfa16c25"
+        ],
+        "reference": "19d199f7bfa16c25",
+        "verdict": "PASS"
+      }
+    },
+    "g2661": {
+      "gbdt-depthwise/bin2": {
+        "hashes": [
+          "70c30f14ccb609d5",
+          "70c30f14ccb609d5"
+        ],
+        "reference": "70c30f14ccb609d5",
+        "verdict": "PASS"
+      },
+      "gbdt-depthwise/bits5": {
+        "hashes": [
+          "c8b57b95de2052f7",
+          "c8b57b95de2052f7"
+        ],
+        "reference": "c8b57b95de2052f7",
+        "verdict": "PASS"
+      },
+      "gbdt-depthwise/bits6": {
+        "hashes": [
+          "caf1feee1cff20be",
+          "caf1feee1cff20be"
+        ],
+        "reference": "caf1feee1cff20be",
+        "verdict": "PASS"
+      },
+      "gbdt-depthwise/ties": {
+        "hashes": [
+          "465cb10f303e005a",
+          "465cb10f303e005a"
+        ],
+        "reference": "465cb10f303e005a",
+        "verdict": "PASS"
+      },
+      "gbdt-lossguide/bin2": {
+        "hashes": [
+          "b502d21f4bb0a0c9",
+          "b502d21f4bb0a0c9"
+        ],
+        "reference": "b502d21f4bb0a0c9",
+        "verdict": "PASS"
+      },
+      "gbdt-lossguide/bits5": {
+        "hashes": [
+          "e69d957f80a7a128",
+          "e69d957f80a7a128"
+        ],
+        "reference": "e69d957f80a7a128",
+        "verdict": "PASS"
+      },
+      "gbdt-lossguide/bits6": {
+        "hashes": [
+          "654bcd575d6b3c2e",
+          "654bcd575d6b3c2e"
+        ],
+        "reference": "654bcd575d6b3c2e",
+        "verdict": "PASS"
+      },
+      "gbdt-lossguide/ties": {
+        "hashes": [
+          "19d199f7bfa16c25",
+          "19d199f7bfa16c25"
+        ],
+        "reference": "19d199f7bfa16c25",
+        "verdict": "PASS"
+      }
+    }
+  },
+  "subbyte_summary": {
+    "base2661_pass": 8,
+    "g2661_pass": 8
+  },
+  "summary": {
+    "batch_identical": 18,
+    "infer_identical": 18,
+    "model_identical": 18,
+    "training_cells_identical": 18
+  },
+  "training": {
+    "gbdt-depthwise/base": {
+      "hash": "38726fc0c93c0bff",
+      "verdict": "IDENTICAL x2"
+    },
+    "gbdt-depthwise/denormal": {
+      "hash": "64ba350c759ff2e9",
+      "verdict": "IDENTICAL x2"
+    },
+    "gbdt-depthwise/denormal_ftz": {
+      "hash": "64ba350c759ff2e9",
+      "verdict": "IDENTICAL x2"
+    },
+    "gbdt-depthwise/dupes": {
+      "hash": "e521424a96e216cb",
+      "verdict": "IDENTICAL x2"
+    },
+    "gbdt-depthwise/hashed": {
+      "hash": "9455870882645f48",
+      "verdict": "IDENTICAL x2"
+    },
+    "gbdt-depthwise/negative": {
+      "hash": "d77fc9f6a3eee0a2",
+      "verdict": "IDENTICAL x2"
+    },
+    "gbdt-depthwise/odd": {
+      "hash": "fb9e5c03088814f6",
+      "verdict": "IDENTICAL x2"
+    },
+    "gbdt-depthwise/ties": {
+      "hash": "465cb10f303e005a",
+      "verdict": "IDENTICAL x2"
+    },
+    "gbdt-depthwise/wide": {
+      "hash": "2a77ec865e62539a",
+      "verdict": "IDENTICAL x2"
+    },
+    "gbdt-lossguide/base": {
+      "hash": "bc3017cb29615105",
+      "verdict": "IDENTICAL x2"
+    },
+    "gbdt-lossguide/denormal": {
+      "hash": "b0a6d4a26ed4d77c",
+      "verdict": "IDENTICAL x2"
+    },
+    "gbdt-lossguide/denormal_ftz": {
+      "hash": "b0a6d4a26ed4d77c",
+      "verdict": "IDENTICAL x2"
+    },
+    "gbdt-lossguide/dupes": {
+      "hash": "b1546f9b3c4293a5",
+      "verdict": "IDENTICAL x2"
+    },
+    "gbdt-lossguide/hashed": {
+      "hash": "3841103ecb3ac05d",
+      "verdict": "IDENTICAL x2"
+    },
+    "gbdt-lossguide/negative": {
+      "hash": "67b332fcf8b5d0dd",
+      "verdict": "IDENTICAL x2"
+    },
+    "gbdt-lossguide/odd": {
+      "hash": "9fd309c55a93e6c3",
+      "verdict": "IDENTICAL x2"
+    },
+    "gbdt-lossguide/ties": {
+      "hash": "19d199f7bfa16c25",
+      "verdict": "IDENTICAL x2"
+    },
+    "gbdt-lossguide/wide": {
+      "hash": "b9cc1b2b55425cdc",
+      "verdict": "IDENTICAL x2"
+    }
+  }
+}
