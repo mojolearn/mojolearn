@@ -37,8 +37,15 @@ def worker(args):
     os.environ["MOJOLEARN_NUMERIC_MODE"] = "identical"
     import mojolearn as ml
 
-    with np.load(args.block) as loaded:
-        X = np.ascontiguousarray(loaded["X"], dtype=np.float32)
+    if args.block.endswith(".npy"):
+        # A read-only mmap lets two alternating Apple workers share the same
+        # 1.8 GiB Istella pages on a 16 GiB unified-memory machine. The native
+        # boundary is read-only and receives the same contiguous Float32 bytes.
+        X = np.ascontiguousarray(np.load(args.block, mmap_mode="r"),
+                                 dtype=np.float32)
+    else:
+        with np.load(args.block) as loaded:
+            X = np.ascontiguousarray(loaded["X"], dtype=np.float32)
     probe = ml.StandardScaler()
     binding = probe._binding("identical")
     fused = hasattr(binding, "standard_fit_transform")
@@ -144,6 +151,8 @@ def main():
     r.add_argument("--spread-gate", type=float, default=1.10)
     r.add_argument("--min-speedup", type=float, default=1.02)
     r.add_argument("--first-arm", choices=("off", "fused"), default="off")
+    r.add_argument("--sequential-arms", action="store_true",
+                   help="run one arm process at a time for constrained unified memory")
     r.add_argument("--output", required=True)
     args = parser.parse_args()
     if args.command == "worker":
@@ -152,31 +161,51 @@ def main():
     if set(arms) != {"off", "fused"} or len(args.arm) != 2 or args.rounds < 5:
         parser.error("race requires exactly off and fused arms and at least five rounds")
     os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
-    children = {}
     records = {name: [] for name in arms}
     ready = {}
-    try:
-        for name, (python, tree) in arms.items():
-            children[name] = Child(name, python, tree, args.block,
-                                   args.output + "." + name + ".log")
-            ready[name] = children[name].read(args.timeout)
-        # Warm each independently. Alternate first arm every measured round.
-        for name in ("off", "fused"):
-            children[name].send("run -1")
-            children[name].read(args.timeout)
-        for seq in range(args.rounds):
-            first = args.first_arm if seq % 2 == 0 else (
-                "fused" if args.first_arm == "off" else "off")
-            order = (first, "fused" if first == "off" else "off")
-            for name in order:
-                children[name].send("run %d" % seq)
-                record = children[name].read(args.timeout)
-                if record.get("event") != "run" or record.get("seq") != seq:
-                    raise RuntimeError("unexpected record %r" % record)
-                records[name].append(record)
-    finally:
-        for child in children.values():
-            child.close()
+    if args.sequential_arms:
+        order = (args.first_arm,
+                 "fused" if args.first_arm == "off" else "off")
+        for name in order:
+            python, tree = arms[name]
+            child = Child(name, python, tree, args.block,
+                          args.output + "." + name + ".log")
+            try:
+                ready[name] = child.read(args.timeout)
+                child.send("run -1")
+                child.read(args.timeout)
+                for seq in range(args.rounds):
+                    child.send("run %d" % seq)
+                    record = child.read(args.timeout)
+                    if record.get("event") != "run" or record.get("seq") != seq:
+                        raise RuntimeError("unexpected record %r" % record)
+                    records[name].append(record)
+            finally:
+                child.close()
+    else:
+        children = {}
+        try:
+            for name, (python, tree) in arms.items():
+                children[name] = Child(name, python, tree, args.block,
+                                       args.output + "." + name + ".log")
+                ready[name] = children[name].read(args.timeout)
+            # Warm each independently. Alternate first arm every measured round.
+            for name in ("off", "fused"):
+                children[name].send("run -1")
+                children[name].read(args.timeout)
+            for seq in range(args.rounds):
+                first = args.first_arm if seq % 2 == 0 else (
+                    "fused" if args.first_arm == "off" else "off")
+                order = (first, "fused" if first == "off" else "off")
+                for name in order:
+                    children[name].send("run %d" % seq)
+                    record = children[name].read(args.timeout)
+                    if record.get("event") != "run" or record.get("seq") != seq:
+                        raise RuntimeError("unexpected record %r" % record)
+                    records[name].append(record)
+        finally:
+            for child in children.values():
+                child.close()
 
     all_records = records["off"] + records["fused"]
     for field in ("stats_sha256", "output_sha256", "quality"):
