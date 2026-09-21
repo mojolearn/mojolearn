@@ -3,6 +3,21 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
+## 0.8.12 (published 2026-09-21)
+
+- Experimental live cross-vendor training (`mojolearn.cross_vendor`): GPUs from
+  different vendors, in different machines, train one language model together,
+  and every replica holds the same bits after every step. Workers own logical
+  microbatches, a coordinator sums their gradients in a fixed order, and every
+  step is checked by a hash of each worker's full training state.
+  `ParallelByteLanguageModelTrainer` gains `shard_gradient` and `apply_gradient`.
+- Fix an abort in Apple language-model training with two or more blocks at
+  batch times length up to 2048 (an out-of-range read in the fused
+  residual and RMSNorm step).
+- Native libraries rebuilt from source, including the exact GPT backward
+  fusions on NVIDIA and AMD and grouped symmetric-tree inference launches.
+- Updated research preprint.
+
 ## 0.8.11 (published 2026-09-21)
 
 - Include the research preprint in both platform wheels and link it from the README.
