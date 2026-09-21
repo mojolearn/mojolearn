@@ -72,6 +72,11 @@ check-docs = "python3 tools/check_docs_reference_reality.py"
 check-docs-facts = "python3 tools/docs_facts.py --check"
 check-source-hygiene = "python3 tools/source_hygiene_check.py"
 write-docs-facts = "python3 tools/docs_facts.py --write"
+# THE RELEASE REHEARSAL (docs/RELEASE_CHECKLIST.md step 0). Run BY HAND before
+# a release, never per merge and never in CI: local, CPU only except the
+# Python tests (which wait for the Mac's Metal slot), rents nothing. One line
+# per step and a non-zero exit when any step failed. tools/release_rehearsal.py.
+release-rehearsal = "python3 tools/release_rehearsal.py"
 
 # ---------------------------------------------------------------------------
 # THE FAST SPEED LANE (bench/speed/README.md). Ours against the vendor's own
@@ -1681,8 +1686,9 @@ test-algo = "python3 tools/identity_iterate.py"
 # changed since the last v* tag; records as it goes and resumes when rerun.
 apple-pass = "python3 tools/verify_lanes.py --apple-pass"
 cpu-pass = "python3 tools/verify_lanes.py --cpu-pass"
-# The whole release verification, local, nothing rented: CPU then the Apple GPU.
-release-check = { depends-on = ["cpu-pass", "apple-pass"] }
+# The whole release verification, local, nothing rented: the CPU pass and the
+# Apple GPU pass AT ONCE, within the Mac's five slots (tools/release_check.py).
+release-check = "python3 tools/release_check.py"
 # `pixi run -e test test-python`.
 # NOTE the two shapes of test in that directory. The pytest files are
 # collected here. The GATE-STYLE files (test_linalg_identity,
