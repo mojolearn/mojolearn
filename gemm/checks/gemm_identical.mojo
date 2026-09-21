@@ -185,9 +185,18 @@ from linalg.gemv import gemv_gpu
 comptime GEMM_FOLD_SPECIALIZE_TRIAL = is_defined[
     "MOJOLEARN_GEMM_FOLD_SPECIALIZE_TRIAL"
 ]()
-comptime GEMM_FOLD_SPECIALIZE_SABOTAGE = is_defined[
-    "MOJOLEARN_GEMM_FOLD_SPECIALIZE_SABOTAGE"
+comptime GEMM_FOLD_SPECIALIZE_SABOTAGE_FS4 = is_defined[
+    "MOJOLEARN_GEMM_FOLD_SPECIALIZE_SABOTAGE_FS4"
 ]()
+comptime GEMM_FOLD_SPECIALIZE_SABOTAGE_FS8 = is_defined[
+    "MOJOLEARN_GEMM_FOLD_SPECIALIZE_SABOTAGE_FS8"
+]()
+comptime GEMM_FOLD_SPECIALIZE_SABOTAGE = (
+    GEMM_FOLD_SPECIALIZE_SABOTAGE_FS4 or GEMM_FOLD_SPECIALIZE_SABOTAGE_FS8
+)
+comptime assert not (
+    GEMM_FOLD_SPECIALIZE_SABOTAGE_FS4 and GEMM_FOLD_SPECIALIZE_SABOTAGE_FS8
+), "select only one fold-specialization sabotage class"
 comptime assert not GEMM_FOLD_SPECIALIZE_SABOTAGE or GEMM_FOLD_SPECIALIZE_TRIAL, (
     "fold-specialization sabotage requires its trial"
 )
@@ -4502,7 +4511,10 @@ def _shipped_body_kpack_hg[
                 # Reach requires an actually smaller class; an FS16-only
                 # workload cannot qualify this optimization by executing the
                 # surrounding dispatch branch.
-                if fs == 4 or fs == 8:
+                if (
+                    (GEMM_FOLD_SPECIALIZE_SABOTAGE_FS4 and fs == 4)
+                    or (GEMM_FOLD_SPECIALIZE_SABOTAGE_FS8 and fs == 8)
+                ):
                     ctx.enqueue_function[_gemm_fold_specialize_sabotage_kernel](
                         c.unsafe_ptr(), grid_dim=(1, 1, 1), block_dim=(1, 1, 1)
                     )

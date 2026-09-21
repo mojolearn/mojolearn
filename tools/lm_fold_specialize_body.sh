@@ -11,7 +11,8 @@ set -euo pipefail
 R=${MOJOLEARN_TRIAL_ROOT:-/root/mojolearn}
 B=${MOJOLEARN_LM_FOLD_BASELINE_ROOT:-/root/mojolearn-lmfs-baseline}
 C=${MOJOLEARN_LM_FOLD_CANDIDATE_ROOT:-/root/mojolearn-lmfs-candidate}
-S=${MOJOLEARN_LM_FOLD_SABOTAGE_ROOT:-/root/mojolearn-lmfs-sabotage}
+S4=${MOJOLEARN_LM_FOLD_SABOTAGE_FS4_ROOT:-/root/mojolearn-lmfs-sabotage-fs4}
+S8=${MOJOLEARN_LM_FOLD_SABOTAGE_FS8_ROOT:-/root/mojolearn-lmfs-sabotage-fs8}
 OUT=${MOJOLEARN_LM_FOLD_OUT:-/root/lm_fold_specialize_out}
 DATA=${GBM_BENCH_DATA:-/root/datasets/gbm-bench}
 STEPS=${MOJOLEARN_LM_FOLD_STEPS:-6}
@@ -52,7 +53,8 @@ prepare_corpora() {
         got=$(sha256sum "$src" | awk '{print $1}')
         [ "$got" = "$want" ] || { echo "$ds sha256 $got, expected $want" >&2; return 1; }
         mkdir -p "$OUT/corpora/$ds"
-        cp "$src" "$OUT/corpora/$ds/input.bin"
+        rm -f "$OUT/corpora/$ds/input.bin"
+        ln -s "$src" "$OUT/corpora/$ds/input.bin"
         bytes=$(stat -c %s "$src")
         "$PY" - "$OUT/corpora/$ds/manifest.json" "$want" "$bytes" "$ds" <<'PY'
 import json,sys
@@ -85,15 +87,24 @@ phase_build() {
         echo "refusing: MOJOLEARN_TARGET_COLUMN must be nvidia or amd" >&2; return 2 ;; esac
     cd "$R"
     [ -x .pixi/envs/default/bin/python ] || pixi install
+    manifest=${MOJOLEARN_SOURCE_MANIFEST:-$R/SHIPPED_SOURCE_MANIFEST.json}
+    [ -s "$manifest" ] || { echo "missing clean detached source manifest $manifest" >&2; return 2; }
+    "$PY" tools/trial_source_manifest.py verify --root "$R" \
+        --manifest "$manifest" --commit "$(commit_of "$R")"
+    cp "$manifest" "$OUT/source_manifest.json"
+    sha256sum "$manifest" > "$OUT/source_manifest.sha256"
     [ -f python/mojolearn/identical/_mojolearn.so ] || bash bindings/build.sh
     clone_tree "$R" "$B"
     clone_tree "$R" "$C"
-    clone_tree "$R" "$S"
+    clone_tree "$R" "$S4"
+    clone_tree "$R" "$S8"
     build_one "$B" baseline ""
     build_one "$C" candidate \
         "-D MOJOLEARN_GEMM_ARM_TRIAL=1 -D MOJOLEARN_GEMM_FOLD_SPECIALIZE_TRIAL=1"
-    build_one "$S" sabotage \
-        "-D MOJOLEARN_GEMM_ARM_TRIAL=1 -D MOJOLEARN_GEMM_FOLD_SPECIALIZE_TRIAL=1 -D MOJOLEARN_GEMM_FOLD_SPECIALIZE_SABOTAGE=1"
+    build_one "$S4" sabotage_fs4 \
+        "-D MOJOLEARN_GEMM_ARM_TRIAL=1 -D MOJOLEARN_GEMM_FOLD_SPECIALIZE_TRIAL=1 -D MOJOLEARN_GEMM_FOLD_SPECIALIZE_SABOTAGE_FS4=1"
+    build_one "$S8" sabotage_fs8 \
+        "-D MOJOLEARN_GEMM_ARM_TRIAL=1 -D MOJOLEARN_GEMM_FOLD_SPECIALIZE_TRIAL=1 -D MOJOLEARN_GEMM_FOLD_SPECIALIZE_SABOTAGE_FS8=1"
     {
         echo "source_commit=$(commit_of "$R")"
         echo "gpu_archs=${MOJOLEARN_GPU_ARCHS:-}"
@@ -140,7 +151,8 @@ phase_run() {
                 run_one "$B" baseline "$ds" "$outer" 1 "$STEPS"
             fi
         done
-        run_one "$S" sabotage "$ds" 1 0 1
+        run_one "$S4" sabotage_fs4 "$ds" 1 0 1
+        run_one "$S8" sabotage_fs8 "$ds" 1 0 1
     done
     (cd "$R" && PYTHONPATH=python "$PY" tools/lm_fold_specialize_probe.py summarize \
         "$OUT/json/*.json" --json "$OUT/summary.json") | tee "$OUT/summary.txt"

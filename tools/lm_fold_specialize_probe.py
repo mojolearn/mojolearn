@@ -109,7 +109,9 @@ def cmd_summarize(args):
     for rec in records:
         dataset = rec.get("dataset")
         arm = rec.get("arm")
-        if dataset not in DATASETS or arm not in ("baseline", "candidate", "sabotage"):
+        if dataset not in DATASETS or arm not in (
+            "baseline", "candidate", "sabotage_fs4", "sabotage_fs8"
+        ):
             failures.append("unexpected record cell %r/%r" % (dataset, arm))
             continue
         cells.setdefault(dataset, {}).setdefault(arm, []).append(rec)
@@ -186,32 +188,46 @@ def cmd_summarize(args):
         row.update(provenance_ok=provenance_ok, ab_exact=ab_exact,
                    median_of_process_medians_ratio=ratio,
                    conservative_ratio_diagnostic=conservative)
-        sabotage = arms.get("sabotage", [])
         base0 = arms.get("baseline", [None])[0]
-        sab0 = sabotage[0] if len(sabotage) == 1 else None
-        sabotage_reached = bool(sab0 and base0) and (
-            sab0.get("outer") == 1 and sab0.get("launch_position") == 0
-            and sab0["result"].get("steps_completed") == 1
-            and sab0["result"].get("steady_step_seconds") == []
-            and _complete_witnesses_one(sab0["result"])
-            and sab0["result"].get("gemm_fold_specialized") is True
-            and sab0.get("commit") == base0.get("commit")
-            and sab0.get("numeric_mode_env") == "identical"
-            and sab0["result"].get("corpus") == base0["result"].get("corpus")
-            and sab0.get("input", {}).get("initial_parameters_sha256") ==
-                base0.get("input", {}).get("initial_parameters_sha256")
-            and sab0.get("input", {}).get("ids_sha256") ==
-                base0.get("input", {}).get("ids_sha256", [])[:1]
-            and sab0.get("hardware", {}).get("sha256") ==
-                base0.get("hardware", {}).get("sha256")
-            and sab0["binding"]["sha256"] not in
-                (base0["binding"]["sha256"], arms["candidate"][0]["binding"]["sha256"])
-            and all(sab0["result"]["step_witnesses"][0]["sha256"][name] !=
-                    base0["result"]["step_witnesses"][0]["sha256"][name]
-                    for name in ("loss", "gradients", "parameters", "m", "v"))
-            and sab0["result"]["step_losses"][0] != base0["result"]["step_losses"][0]
-        )
-        row["specialization_sabotage_reached"] = sabotage_reached
+        reaches = {}
+        timed_binding_shas = {base0["binding"]["sha256"],
+                              arms["candidate"][0]["binding"]["sha256"]} if base0 else set()
+        sabotage_binding_shas = set()
+        for sabotage_arm in ("sabotage_fs4", "sabotage_fs8"):
+            sabotage = arms.get(sabotage_arm, [])
+            sab0 = sabotage[0] if len(sabotage) == 1 else None
+            reached = bool(sab0 and base0) and (
+                sab0.get("outer") == 1 and sab0.get("launch_position") == 0
+                and sab0["result"].get("steps_completed") == 1
+                and sab0["result"].get("steady_step_seconds") == []
+                and _complete_witnesses_one(sab0["result"])
+                and sab0["result"].get("gemm_fold_specialized") is True
+                and sab0.get("commit") == base0.get("commit")
+                and sab0.get("numeric_mode_env") == "identical"
+                and sab0["result"].get("corpus") == base0["result"].get("corpus")
+                and sab0.get("input", {}).get("initial_parameters_sha256") ==
+                    base0.get("input", {}).get("initial_parameters_sha256")
+                and sab0.get("input", {}).get("ids_sha256") ==
+                    base0.get("input", {}).get("ids_sha256", [])[:1]
+                and sab0.get("hardware", {}).get("sha256") ==
+                    base0.get("hardware", {}).get("sha256")
+                and (sab0.get("runtime") or {}).get("native_vendor") ==
+                    (base0.get("runtime") or {}).get("native_vendor")
+                and (sab0.get("runtime") or {}).get("native_numeric_mode") == 1
+                and (sab0.get("runtime") or {}).get("source_sha256") ==
+                    (base0.get("runtime") or {}).get("source_sha256")
+                and sab0["binding"]["sha256"] not in timed_binding_shas
+                and sab0["binding"]["sha256"] not in sabotage_binding_shas
+                and all(sab0["result"]["step_witnesses"][0]["sha256"][name] !=
+                        base0["result"]["step_witnesses"][0]["sha256"][name]
+                        for name in ("loss", "gradients", "parameters", "m", "v"))
+                and sab0["result"]["step_losses"][0] != base0["result"]["step_losses"][0]
+            )
+            reaches[sabotage_arm] = reached
+            if sab0:
+                sabotage_binding_shas.add(sab0["binding"]["sha256"])
+        row["specialization_class_reach"] = reaches
+        sabotage_reached = all(reaches.values())
         row["pass"] = (row["arms"]["baseline"]["valid"] and
                        row["arms"]["candidate"]["valid"] and
                        provenance_ok and ab_exact and sabotage_reached and ratio < 1.0)
@@ -220,7 +236,7 @@ def cmd_summarize(args):
         if not ab_exact:
             failures.append("%s loss/state trajectory differs" % dataset)
         if not sabotage_reached:
-            failures.append("%s specialization-only sabotage did not reach target step" % dataset)
+            failures.append("%s FS4/FS8 class-selective sabotage did not both reach target step" % dataset)
         if ratio >= 1.0:
             failures.append("%s median-of-process-medians ratio %.6f is not faster" % (dataset, ratio))
         rows.append(row)
@@ -251,7 +267,9 @@ def main():
     sub = parser.add_subparsers(dest="cmd", required=True)
     rec = sub.add_parser("record")
     rec.add_argument("--dataset", choices=DATASETS, required=True)
-    rec.add_argument("--arm", choices=("baseline", "candidate", "sabotage"), required=True)
+    rec.add_argument("--arm", choices=(
+        "baseline", "candidate", "sabotage_fs4", "sabotage_fs8"
+    ), required=True)
     rec.add_argument("--outer", type=int, required=True)
     rec.add_argument("--launch-position", type=int, choices=(0, 1), required=True)
     rec.add_argument("--commit", required=True)
