@@ -81,11 +81,113 @@ def last_release_tag():
     return got.stdout.strip() if got.returncode == 0 else ""
 
 
+def pass_base_dir():
+    return os.environ.get("MOJOLEARN_RELEASE_CHECK_DIR") or os.path.expanduser("~/mojolearn-evidence/release-check")
+
+
 def pass_out_dir(backend):
     """Where a release pass keeps its records: outside the checkout, keyed by
     commit, so rerunning the same command at the same commit resumes."""
-    base = os.environ.get("MOJOLEARN_RELEASE_CHECK_DIR") or os.path.expanduser("~/mojolearn-evidence/release-check")
-    return os.path.join(base, (_commit() or "unknown")[:12], backend)
+    return os.path.join(pass_base_dir(), (_commit() or "unknown")[:12], backend)
+
+
+def _git_ok(*args):
+    return subprocess.run(["git", "-C", ROOT, *args], capture_output=True, text=True).returncode == 0
+
+
+def _record(record_dir):
+    """(manifest, summary) of a finished pass directory, or None."""
+    try:
+        manifest = json.loads((Path(record_dir) / "manifest.json").read_text())
+        summary = json.loads((Path(record_dir) / "run-summary.json").read_text())
+    except (OSError, ValueError):
+        return None
+    if not isinstance(manifest, dict) or not isinstance(summary, dict):
+        return None
+    return manifest, summary
+
+
+def verified_anchor(backend, fixtures, base=None, depth=0, _commit_filter=None):
+    """THE LAST COMMIT THIS BACKEND WAS VERIFIED AT, from the pass records on
+    this machine, or None (2026-09-21).
+
+    A release pass checks the lanes changed since an anchor. The anchor was
+    the newest `v*` tag, and that tag was v0.8.8 for four releases because
+    0.8.9 through 0.8.11 were cut under `alpha-api-*` tags: the 0.8.12 Apple
+    pass diffed 2,328 paths and ran every lane. The anchor is now the last
+    pass that actually FINISHED on this backend, which is the thing the tag
+    stood in for.
+
+    A record counts only when ALL of these hold, and anything unreadable
+    means it does not:
+      * `column.json` exists and `run-summary.json` says complete with no
+        validation failures;
+      * it checked the same fixtures, one fit, core probes, on this backend;
+      * its tree was clean where it mattered: `dirty_lanes` (the lanes its
+        own uncommitted and untracked paths selected) is empty, so the bits it
+        verified are the bits of its commit;
+      * its own coverage is either every lane (`covers.mode == "all"`) or the
+        lanes changed since a release tag, or since ANOTHER record that
+        passes this same test. The chain is followed to its base, so one
+        narrow pass cannot vouch for another without a full or tag-anchored
+        pass underneath;
+      * its commit still exists in this repository.
+    Records written before these fields existed carry no `covers` and are
+    never used. The first pass after this change therefore anchors on the
+    tag, as before, and every pass after it on the pass before."""
+    base = base or pass_base_dir()
+    if depth > 64 or not os.path.isdir(base):
+        return None
+    best = None
+    for name in os.listdir(base):
+        rec_dir = os.path.join(base, name, backend)
+        got = _record(rec_dir)
+        if got is None:
+            continue
+        manifest, summary = got
+        commit = manifest.get("commit") or ""
+        if _commit_filter is not None and commit != _commit_filter:
+            continue
+        if not (os.path.isfile(os.path.join(rec_dir, "column.json")) and summary.get("complete") is True
+                and not summary.get("validation_failures")):
+            continue
+        if (manifest.get("backend") != backend or manifest.get("fixtures") != fixtures
+                or manifest.get("repeats") != 1 or manifest.get("probe_group") != "core"):
+            continue
+        if manifest.get("metal_shards", 1) != 1:
+            # Sharded Metal is unproven (tools/metal_fanout.py); such a record
+            # is evidence for its own run, never an anchor for the next.
+            continue
+        covers = manifest.get("covers")
+        if not isinstance(covers, dict) or manifest.get("dirty_lanes") != []:
+            continue
+        if not (len(commit) == 40 and _git_ok("cat-file", "-e", commit + "^{commit}")):
+            continue
+        if covers.get("mode") == "all":
+            pass
+        elif covers.get("mode") == "since-tag" and isinstance(covers.get("since"), str) and \
+                _git_ok("cat-file", "-e", covers["since"] + "^{commit}"):
+            pass
+        elif covers.get("mode") == "since-record" and isinstance(covers.get("since"), str):
+            if verified_anchor(backend, fixtures, base, depth + 1, _commit_filter=covers["since"]) is None:
+                continue
+        else:
+            continue
+        when = os.path.getmtime(os.path.join(rec_dir, "run-summary.json"))
+        if best is None or when > best[0]:
+            best = (when, commit)
+    return best[1] if best else None
+
+
+def dirty_paths():
+    """Uncommitted and untracked paths in the checkout right now."""
+    out = set()
+    for args in (["diff", "--name-only", "HEAD"], ["ls-files", "--others", "--exclude-standard"]):
+        got = subprocess.run(["git", "-C", ROOT, *args], capture_output=True, text=True)
+        if got.returncode != 0:
+            return None
+        out |= {line.strip() for line in got.stdout.splitlines() if line.strip()}
+    return sorted(out)
 #: RunPod CPU, 16 vCPU, 2026-09-16. The 8 vCPU figure in docs/RUNPOD_CPU_LEG.md
 #: is $0.24/h; a 16 vCPU pod is about twice that. Printed with a plan so the
 #: cost of a full sweep is a number before anyone rents anything.
@@ -205,6 +307,29 @@ def _run_local(groups, load, args, out_dir):
         while pending or running:
             if time.monotonic() >= args.deadline:
                 break
+            if pending and getattr(args, "metal_shards", 1) > 1:
+                # ONE Metal slot for the whole group: mac_slot holds the GPU
+                # lock once and tools/metal_fanout.py starts every shard under
+                # it. Per-shard exit codes come back through `codes`; a shard
+                # the fan-out cannot account for is recorded as failed.
+                spec_path = os.path.join(out_dir, "fanout.json")
+                codes_path = os.path.join(out_dir, "fanout.codes.json")
+                Path(codes_path).unlink(missing_ok=True)
+                spec = dict(codes=codes_path, children=[
+                    dict(cmd=_identity_break_cmd(groups[k], parts[k], args),
+                         log=os.path.join(out_dir, f"part{k}.log")) for k in pending])
+                Path(spec_path).write_text(json.dumps(spec, indent=1) + "\n")
+                cmd = [sys.executable, os.path.join(ROOT, "tools/mac_slot.py"),
+                       "--timeout", str(args.timeout), "--wait-timeout", str(args.wait_timeout),
+                       "--deadline", str(args.deadline), "metal",
+                       sys.executable, os.path.join(ROOT, "tools/metal_fanout.py"), spec_path]
+                fh = open(os.path.join(out_dir, "fanout.log"), "w")
+                group = list(pending)
+                pending.clear()
+                proc = subprocess.Popen(cmd, stdout=fh, stderr=subprocess.STDOUT, cwd=ROOT, env=env)
+                running["fanout"] = (proc, fh)
+                print(f"# {len(group)} Metal shards started under one slot: "
+                      f"{', '.join(str(len(groups[k])) for k in group)} lanes", flush=True)
             while pending and len(running) < args.jobs and time.monotonic() < args.deadline:
                 k = pending.pop(0)
                 fh = open(os.path.join(out_dir, f"part{k}.log"), "w")
@@ -224,7 +349,10 @@ def _run_local(groups, load, args, out_dir):
                 rc = proc.poll()
                 if rc is not None:
                     fh.close()
-                    codes[k] = rc
+                    if k == "fanout":
+                        codes.update(_fanout_codes(out_dir, len(groups), rc))
+                    else:
+                        codes[k] = rc
                     del running[k]
             report()
             if any(c != 0 for c in codes.values()):
@@ -242,13 +370,31 @@ def _run_local(groups, load, args, out_dir):
             if proc.poll() is None:
                 proc.terminate()
         for k, (proc, fh) in list(running.items()):
-            codes[k] = proc.wait()
+            rc = proc.wait()
             fh.close()
+            if k == "fanout":
+                codes.update(_fanout_codes(out_dir, len(groups), rc))
+            else:
+                codes[k] = rc
             del running[k]
         report()
         for signum, handler in old.items():
             signal.signal(signum, handler)
     return parts, codes, time.monotonic() - args.started
+
+
+def _fanout_codes(out_dir, count, rc):
+    """Per-shard exit codes from tools/metal_fanout.py. Missing, unreadable or
+    malformed codes are failures, and a non-zero fan-out with every shard at 0
+    (the slot timed out or was interrupted) fails every shard."""
+    try:
+        got = json.loads(Path(out_dir, "fanout.codes.json").read_text())
+        codes = {k: int(got[str(k)]) for k in range(count)}
+    except (OSError, ValueError, KeyError, TypeError):
+        return {k: rc or 1 for k in range(count)}
+    if rc != 0 and all(c == 0 for c in codes.values()):
+        return {k: rc for k in range(count)}
+    return codes
 
 
 def _verdict(lanes, parts, codes, out_dir, elapsed, deadline=None, fixtures=None):
@@ -390,6 +536,11 @@ def main(argv=None):
                     help="the whole Apple check: Metal, one fit per cell, the end model only "
                          f"(train, infer, save/reload), fixtures {APPLE_PASS_FIXTURES}, "
                          f"a {APPLE_PASS_BUDGET}-second total budget")
+    ap.add_argument("--metal-shards", type=int, default=1, metavar="N",
+                    help="Metal only, OPT-IN and unproven: split the lanes into N processes that share "
+                         "the one GPU under a single Metal slot (1 to 3; default 1). Concurrent Metal "
+                         "has produced bad outputs before; see docs/RELEASE_CHECKLIST.md for the "
+                         "comparison that must read zero differences before this becomes a default")
     ap.add_argument("--runner", choices=("local", "pods"), default="local",
                     help="local processes, or print one runpod_cpu_leg.sh command per shard")
     ap.add_argument("--plan", action="store_true", help="print what would run and stop")
@@ -411,7 +562,10 @@ def main(argv=None):
         args.fixtures = args.fixtures if args.fixtures is not None else APPLE_PASS_FIXTURES
         args.budget = args.budget if args.budget is not None else APPLE_PASS_BUDGET
         args.timeout = args.wait_timeout = args.budget
-        args.shards = args.jobs = int(os.environ.get("MAC_SLOTS", "5"))
+        # MOJOLEARN_CPU_PASS_SLOTS leaves room for a concurrent Apple pass
+        # (tools/release_check.py): the Metal job holds one of the MAC_SLOTS.
+        args.shards = args.jobs = int(os.environ.get("MOJOLEARN_CPU_PASS_SLOTS")
+                                      or os.environ.get("MAC_SLOTS", "5"))
     if args.apple_pass:
         # The batch and decode probes check batching logic, which the CPU and
         # NVIDIA columns carry; here Metal answers one question, whether its
@@ -422,6 +576,14 @@ def main(argv=None):
         args.fixtures = args.fixtures if args.fixtures is not None else APPLE_PASS_FIXTURES
         args.budget = args.budget if args.budget is not None else APPLE_PASS_BUDGET
         args.timeout = args.wait_timeout = args.budget
+    if not 1 <= args.metal_shards <= 3:
+        ap.error("--metal-shards must be 1, 2 or 3")
+    if args.metal_shards > 1:
+        if args.backend != "metal" or args.runner != "local":
+            ap.error("--metal-shards splits a LOCAL Metal run; it needs --backend metal or --apple-pass")
+        if args.shards not in (1, args.metal_shards):
+            ap.error("--metal-shards sets the shard count; do not also pass a different --shards")
+        args.shards = args.metal_shards
     args.budget = args.budget if args.budget is not None else (60 if args.backend == "metal" else 300)
     args.started, args.deadline = started, started + args.budget
     if any(not math.isfinite(v) or v <= 0 for v in (args.budget, args.timeout, args.wait_timeout)):
@@ -451,21 +613,53 @@ def main(argv=None):
         ap.error("--repeats must be positive")
     selection_modes = sum(bool(x) for x in (args.all, args.lanes or args.lane, args.changed_since, args.lanes_for_paths))
     is_pass = args.apple_pass or args.cpu_pass
+    covers = dict(mode="all") if args.all else None
     if is_pass and selection_modes == 0:
-        # Only what the release touched. The selector widens to every lane by
-        # itself when a changed path cannot be attributed, so this can only
-        # ever run too much, never too little.
-        args.changed_since = last_release_tag()
-        args.all = not args.changed_since
+        # Only what changed since this backend was last verified. The selector
+        # widens to every lane by itself when a changed path cannot be
+        # attributed, so this can only ever run too much, never too little.
+        # The anchor is the last FINISHED pass on this backend when one
+        # qualifies (`verified_anchor`), else the newest v* tag as before.
+        anchor = verified_anchor(args.backend, args.fixtures)
+        if anchor:
+            args.changed_since = anchor
+            covers = dict(mode="since-record", since=anchor)
+            print(f"# release pass: lanes changed since {anchor[:12]}, the last completed "
+                  f"{args.backend} pass on this machine")
+        else:
+            args.changed_since = last_release_tag()
+            args.all = not args.changed_since
+            if args.changed_since:
+                tag_commit = subprocess.run(["git", "-C", ROOT, "rev-parse", args.changed_since + "^{commit}"],
+                                            capture_output=True, text=True).stdout.strip()
+                covers = dict(mode="since-tag", since=tag_commit, tag=args.changed_since) if tag_commit else None
+            else:
+                covers = dict(mode="all")
+            print(f"# release pass: lanes changed since {args.changed_since} (no completed {args.backend} "
+                  f"pass on this machine qualifies as an anchor)" if args.changed_since
+                  else "# release pass: no v* tag found, so every lane")
         selection_modes = 1
-        print(f"# release pass: lanes changed since {args.changed_since}" if args.changed_since
-              else "# release pass: no v* tag found, so every lane")
     if is_pass:
         args.full_selection = True
     if selection_modes != 1:
         ap.error("choose one of --all, named lanes, --changed-since, or --lanes-for-paths")
 
-    lanes, sel, _ = _selection(args)
+    lanes, sel, sources = _selection(args)
+    if sel.get("fallback"):
+        covers = dict(mode="all")
+    # CAN THIS RECORD ANCHOR THE NEXT PASS? Only if the bits it checks are its
+    # commit's bits: the uncommitted and untracked paths must select no lane.
+    dirty_lanes = None
+    if is_pass and covers is not None:
+        dirty = dirty_paths()
+        if dirty is not None:
+            dsel = lane_select.select(dirty, ref="HEAD", sources=sources) if dirty else dict(lanes=[], fallback=False)
+            dirty_lanes = ["*"] if dsel["fallback"] else list(dsel["lanes"])
+        if dirty_lanes == []:
+            print("# this pass, once complete, anchors the next one on this backend")
+        else:
+            print(f"# this pass cannot anchor the next one: uncommitted or untracked paths select "
+                  f"{'every lane' if dirty_lanes == ['*'] else dirty_lanes if dirty_lanes else 'an unknown set'}")
     if (args.apple_pass or args.cpu_pass) and not (args.lanes or args.lane):
         # A lane whose arithmetic never reaches this backend says nothing
         # here. Named lanes still refuse below; a derived selection drops
@@ -513,7 +707,8 @@ def main(argv=None):
                     fixtures=args.fixtures, repeats=args.repeats, runner=args.runner, backend=args.backend,
                     probe_group=args.probe_group, budget=args.budget, timeout=args.timeout, jobs=args.jobs,
                     registry_total=len(lane_select.all_lanes()), selection=sel.get("mode", "derived"),
-                    fallback=bool(sel.get("fallback")))
+                    fallback=bool(sel.get("fallback")), covers=covers, dirty_lanes=dirty_lanes,
+                    metal_shards=args.metal_shards)
     if args.plan or args.runner == "pods":
         _plan(groups, load, args, out_dir)
         return 0

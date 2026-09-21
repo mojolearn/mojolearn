@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class PublishCommandTests(unittest.TestCase):
-    def invoke(self, platform, receipt=True, failed=False, artifact_source=None):
+    def invoke(self, platform, receipt=True, failed=False, artifact_source=None, full=False):
         with tempfile.TemporaryDirectory(prefix='release publish ') as directory:
             root = Path(directory)
             for name in ('bin', 'python/mojolearn', 'tools', 'packaging'):
@@ -57,6 +57,8 @@ class PublishCommandTests(unittest.TestCase):
                        'alpha-api-0.8.9-test', 'none', str(root / 'work')]
             if receipt:
                 command.extend(['--light-smoke', str(report)])
+            if full:
+                command.append('--full')
             result = subprocess.run(command, env=env, capture_output=True, text=True, timeout=15)
             record = root / 'commands'
             calls = record.read_text() if record.exists() else ''
@@ -94,12 +96,19 @@ class PublishCommandTests(unittest.TestCase):
         self.assertEqual(calls, '')
         self.assertEqual(manifest, {})
 
-    def test_existing_linux_call_keeps_full_profile(self):
+    def test_no_route_flag_refuses_before_external_calls(self):
+        # Until 0.8.12 an omitted flag silently chose the full route.
         result, calls, manifest = self.invoke('linux', receipt=False)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('the light route is the default', result.stderr)
+        self.assertEqual(calls, '')
+        self.assertEqual(manifest, {})
+
+    def test_full_route_is_opt_in(self):
+        result, calls, manifest = self.invoke('linux', receipt=False, full=True)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn('validation_profile=full', calls)
         self.assertNotIn('light_smoke', manifest)
-
 
 if __name__ == '__main__':
     unittest.main()

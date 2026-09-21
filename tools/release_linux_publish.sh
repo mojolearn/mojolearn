@@ -2,12 +2,15 @@
 # Publish a packed, audited Linux wheel through the Trusted Publisher route:
 # manifest, GitHub release, workflow dispatch, watch. One command.
 #
-#   bash tools/release_linux_publish.sh <final .whl> <tag> <none|testpypi|pypi> <workdir> [--light-smoke <results.json>]
+#   bash tools/release_linux_publish.sh <final .whl> <tag> <none|testpypi|pypi> <workdir> --light-smoke <results.json>
+#   bash tools/release_linux_publish.sh <final .whl> <tag> <none|testpypi|pypi> <workdir> --full
 #
-# --light-smoke accepts the existing qualify_verifier_wheel.py expanded receipt
-# for the exact Linux or macOS wheel. It stages and checks that receipt before
-# publication and selects the bounded light workflow for that one platform.
-# Without it, retain the full native Linux release/certification route.
+# THE LIGHT ROUTE IS THE DEFAULT. --light-smoke takes the
+# tools/qualify_verifier_wheel.py --scope expanded receipt for the exact Linux
+# or macOS wheel, stages and checks it, and selects the bounded light workflow
+# for that one platform. The full native Linux certification route is opt-in
+# with --full. With neither, the script refuses: until 0.8.12 an omitted flag
+# silently chose the full route.
 # MOJOLEARN_ARTIFACT_SOURCE_COMMIT optionally pins an older frozen artifact
 # source when only pack/publish tools changed; defaults to HEAD. The release
 # tag still names the current tools, while the wheel and receipt keep their
@@ -41,13 +44,20 @@ PUBLISH="${3:?none|testpypi|pypi}"
 WORK="${4:?workdir}"
 case "$PUBLISH" in none|testpypi|pypi) ;; *) echo "publish must be none, testpypi or pypi" >&2; exit 2 ;; esac
 case "$TAG" in alpha-api-*) ;; *) echo "the workflow's alpha route requires an alpha-api-* tag" >&2; exit 2 ;; esac
-LIGHT_SMOKE=""; VALIDATION_PROFILE=full; LIGHT_PLATFORM=linux
-if [ "$#" -gt 4 ]; then
-  [ "$#" -eq 6 ] && [ "$5" = --light-smoke ] || { echo "expected --light-smoke <results.json>" >&2; exit 2; }
-  LIGHT_SMOKE=$(cd "$(dirname "$6")" && pwd)/$(basename "$6")
-  [ -f "$LIGHT_SMOKE" ] || { echo "missing smoke receipt: $LIGHT_SMOKE" >&2; exit 2; }
-  VALIDATION_PROFILE=light
-fi
+LIGHT_SMOKE=""; VALIDATION_PROFILE=light; LIGHT_PLATFORM=linux
+case "${5:-}" in
+  --light-smoke)
+    [ "$#" -eq 6 ] || { echo "expected --light-smoke <results.json>" >&2; exit 2; }
+    LIGHT_SMOKE=$(cd "$(dirname "$6")" && pwd)/$(basename "$6")
+    [ -f "$LIGHT_SMOKE" ] || { echo "missing smoke receipt: $LIGHT_SMOKE" >&2; exit 2; } ;;
+  --full)
+    [ "$#" -eq 5 ] || { echo "--full takes no argument" >&2; exit 2; }
+    VALIDATION_PROFILE=full ;;
+  "")
+    echo "REFUSING: the light route is the default and needs --light-smoke <results.json> (tools/qualify_verifier_wheel.py --scope expanded on this exact wheel); pass --full to choose the full certification route" >&2
+    exit 2 ;;
+  *) echo "expected --light-smoke <results.json> or --full" >&2; exit 2 ;;
+esac
 case "$WHL" in
   *manylinux*) ;;
   *macosx*)

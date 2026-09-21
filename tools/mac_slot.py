@@ -256,7 +256,17 @@ def main(argv=None):
             return code
         limit = min(args.timeout, remaining) if args.timeout and remaining is not None else (remaining or args.timeout or None)
         scheduler.mark_env(env)   # the child can now tell it holds the slot
-        child = subprocess.Popen(["nice", "-n", "19", *args.command], env=env, start_new_session=True)
+        # THE GPU JOB IS NOT BACKGROUND WORK (2026-09-21). A Metal pass is
+        # bound by host to device synchronisation, so its one host thread
+        # waiting behind other CPU work idles the only GPU. The 0.8.12 Apple
+        # pass ran the same 232 cells, same order, same commit, in 360 s and
+        # then 232 s thirteen minutes later, the ordered GBDT lanes up to 2.4x
+        # slower in the first run, which is what host contention on a nice-19
+        # process looks like. CPU slots stay at
+        # nice 19; the holder of the GPU lock runs at normal priority. The
+        # thread and job pins above are unchanged, so it still uses one core.
+        niceness = "0" if args.mode in ("metal", "cuda", "hip") else "19"
+        child = subprocess.Popen(["nice", "-n", niceness, *args.command], env=env, start_new_session=True)
         scheduler.child_started(child.pid)
         try:
             code = child.wait(timeout=limit)
