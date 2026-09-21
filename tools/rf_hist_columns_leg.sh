@@ -58,24 +58,36 @@ export MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_SKIP_BUILD_GATE=1
 export MOJOLEARN_COMPILE_JOBS=${MOJOLEARN_COMPILE_JOBS:-4}
 export PYTHONPATH="$ROOT/python"
 
-MOJOLEARN_EXTRA_DEFINES='' step build_baseline 1500 sh bindings/build_rf.sh
+MOJOLEARN_EXTRA_DEFINES='-D MOJOLEARN_RF_HIST_COLUMNS4_OFF=1' \
+    step build_baseline 1500 sh bindings/build_rf.sh
 cp "$MODULE" "$OUT/bin/baseline.so"
-printf '%s\n' '(none)' > "$OUT/bin/baseline.defines"
-MOJOLEARN_EXTRA_DEFINES='-D MOJOLEARN_RF_HIST_COLUMNS4_WIDE=1' \
+printf '%s\n' 'MOJOLEARN_RF_HIST_COLUMNS4_OFF=1' > "$OUT/bin/baseline.defines"
+candidate_defines=''
+if command -v rocm-smi >/dev/null 2>&1; then
+    candidate_defines='-D MOJOLEARN_RF_HIST_COLUMNS4=1'
+fi
+MOJOLEARN_EXTRA_DEFINES="$candidate_defines" \
     step build_columns4 1500 sh bindings/build_rf.sh
 cp "$MODULE" "$OUT/bin/columns4.so"
-printf '%s\n' 'MOJOLEARN_RF_HIST_COLUMNS4_WIDE=1' > "$OUT/bin/columns4.defines"
+if [ -n "$candidate_defines" ]; then
+    printf '%s\n' 'MOJOLEARN_RF_HIST_COLUMNS4=1 (AMD trial opt-in)' > "$OUT/bin/columns4.defines"
+else
+    printf '%s\n' '(none; shipped NVIDIA/Apple default)' > "$OUT/bin/columns4.defines"
+fi
 restore
 sha256sum "$OUT/bin/baseline.so" "$OUT/bin/columns4.so" > "$OUT/binaries.sha256"
 
 for arm in baseline columns4; do
-    : > "$OUT/$arm.launches"
-    expected=''
-    [ "$arm" = columns4 ] && expected=--expect-tile4
-    # shellcheck disable=SC2086 -- expected is one optional flag.
-    RF_LAUNCH_LOG="$OUT/$arm.launches" step "probe_$arm" 900 env \
-        RF_LAUNCH_LOG="$OUT/$arm.launches" "$PY" bench/speed/rf_hist_columns_ab.py probe \
-        --dataset istella --arm "$arm" --binding "$OUT/bin/$arm.so" $expected
+    for dataset in taxi istella; do
+        launches="$OUT/$arm.$dataset.launches"
+        : > "$launches"
+        expected=''
+        [ "$arm" = columns4 ] && expected=--expect-tile4
+        # shellcheck disable=SC2086 -- expected is one optional flag.
+        RF_LAUNCH_LOG="$launches" step "probe_${arm}_${dataset}" 900 env \
+            RF_LAUNCH_LOG="$launches" "$PY" bench/speed/rf_hist_columns_ab.py probe \
+            --dataset "$dataset" --arm "$arm" --binding "$OUT/bin/$arm.so" $expected
+    done
 done
 
 : > "$OUT/columns4.taxi-fallback.launches"
@@ -111,5 +123,5 @@ while [ "$outer" -lt 3 ]; do
     outer=$((outer + 1))
 done
 step summarize 300 "$PY" bench/speed/rf_hist_columns_ab.py summarize \
-    "$OUT"/'*.o*.json' --wide-only --out "$OUT/verdict.json"
+    "$OUT"/'*.o*.json' --out "$OUT/verdict.json"
 cat "$OUT/verdict.json"
