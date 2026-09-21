@@ -74,6 +74,9 @@ phase_setup() {
         curl -fsSL https://pixi.sh/install.sh | sh >"$OUT/pixi_install.log" 2>&1 || return 1
     fi
     run pixi_install pixi install || return 1
+    run portable_math env PYTHONPATH="$R/packaging/portable_math" pixi run python3 -c \
+        "import pathlib, stage; stage.build(pathlib.Path('$R/python/mojolearn/.libs/libMojolearnMath.so'))" \
+        || return 1
     pixi run mojo --version >"$OUT/mojo_version.txt" 2>&1
     nvidia-smi --query-gpu=name,driver_version --format=csv,noheader >"$OUT/gpu.txt" 2>&1
     build_arm base "" || return 1
