@@ -1,12 +1,13 @@
 # IDENTICAL ordered resident RF/ExtraTrees inference
 
-**Verdict: promoted on NVIDIA IDENTICAL.** The route retains the resident GPU
+**Verdict: promoted on NVIDIA IDENTICAL and Apple FAST/IDENTICAL.** The route retains the resident GPU
 model and I/O workspaces while using the existing strict increasing-tree
 aggregation kernel. NVIDIA IDENTICAL `inference_engine="auto"` selects it by
-default. `-D MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF=1` restores the former
-sequential AUTO path and resident 32-grove graph. Other vendors and numeric
-modes retain their previous defaults; the positive define remains available
-for explicit IDENTICAL experiments on them.
+default. Apple FAST and IDENTICAL select the same strict ordered resident
+route. `-D MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF=1` restores the former
+sequential IDENTICAL AUTO path and resident FAST 32-grove graph. AMD and
+other vendors retain their previous defaults; the positive define remains
+available for explicit IDENTICAL experiments on them.
 
 The run reused the warm RunPod H100 and the two Cloudflare R2 objects already
 staged by `tools/stage_from_r2.sh`: Taxi and Istella-S. Models were fitted once

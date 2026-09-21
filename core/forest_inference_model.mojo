@@ -14,7 +14,7 @@ from std.memory import bitcast
 from std.time import perf_counter_ns
 from max.algorithm import sync_parallelize
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA
+from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE, COLUMN_NVIDIA
 from max.gpu.host import DeviceContext, DeviceBuffer, HostBuffer
 from core.forest_inference import validate_flat_forest, require_finite, launch_forest_inference, launch_forest_argmax, FOREST_PACKED_NODES
 from core.forest_inference_pool import PooledForest, forest_device_count
@@ -39,15 +39,18 @@ comptime FOREST_PROFILE = is_defined["MOJOLEARN_FOREST_PROFILE"]()
 def forest_ordered_resident_policy[
     column: Int, identical: Bool, forced: Bool, disabled: Bool
 ]() -> Bool:
-    """NVIDIA IDENTICAL default; explicit force is experimental elsewhere."""
-    return identical and not disabled and (forced or column == COLUMN_NVIDIA)
+    """Apple FAST/IDENTICAL and NVIDIA IDENTICAL defaults."""
+    return not disabled and (
+        column == COLUMN_APPLE
+        or (identical and (forced or column == COLUMN_NVIDIA))
+    )
 
 
 #: Retain the resident model/workspaces while launching the strict
 #: increasing-tree kernel. H100 full-buffer qualification promotes this for
-#: NVIDIA IDENTICAL. `_OFF` restores the former sequential AUTO policy and
-#: resident 32-grove graph; the positive define remains an experiment switch
-#: for other IDENTICAL columns.
+#: NVIDIA IDENTICAL and Apple FAST/IDENTICAL. `_OFF` restores the former
+#: sequential IDENTICAL AUTO policy and resident FAST 32-grove graph; the
+#: positive define remains an experiment switch for other IDENTICAL columns.
 comptime FOREST_ORDERED_RESIDENT = forest_ordered_resident_policy[
     TARGET_COLUMN,
     GLOBAL_NUMERIC_MODE == 1,

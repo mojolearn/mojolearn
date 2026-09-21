@@ -9,12 +9,16 @@ def main() raises:
         raise Error("NVIDIA IDENTICAL must select ordered resident")
     if forest_ordered_resident_policy[COLUMN_NVIDIA, False, False, False]():
         raise Error("NVIDIA non-IDENTICAL must retain its existing policy")
-    if forest_ordered_resident_policy[COLUMN_APPLE, True, False, False]():
-        raise Error("Apple must not select NVIDIA's default")
+    if not forest_ordered_resident_policy[COLUMN_APPLE, True, False, False]():
+        raise Error("Apple IDENTICAL must select ordered resident")
+    if not forest_ordered_resident_policy[COLUMN_APPLE, False, False, False]():
+        raise Error("Apple FAST must select ordered resident")
     if forest_ordered_resident_policy[COLUMN_AMD, True, False, False]():
         raise Error("AMD must not select NVIDIA's default")
     if not forest_ordered_resident_policy[COLUMN_APPLE, True, True, False]():
         raise Error("explicit experimental force did not select the route")
     if forest_ordered_resident_policy[COLUMN_NVIDIA, True, True, True]():
         raise Error("restore switch must win over default and force")
+    if forest_ordered_resident_policy[COLUMN_APPLE, False, False, True]():
+        raise Error("restore switch must disable Apple FAST default")
     print("PASS forest ordered resident policy")
