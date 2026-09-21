@@ -98,8 +98,14 @@ def dependency_errors(path, relative):
 LIBM = re.compile(r"^lib(?:m|mvec)(?:[.-]|$)", re.I)
 
 
-def audit_tree(root):
-    import lief
+def audit_tree(root, python_only=False):
+    """Audit an unpacked wheel. `python_only` is the release rehearsal's
+    dry run over a STAGED SOURCE TREE (tools/release_rehearsal.py): the same
+    NumPy, dependency and Python-math rules over every shipped .py, with the
+    native checks off, because a source tree's binaries have not been through
+    stage() yet and would fail for that reason alone."""
+    if not python_only:
+        import lief
     errors, binaries = [], []
     for path in sorted(root.rglob("*")):
         if not path.is_file():
@@ -116,6 +122,8 @@ def audit_tree(root):
                            else [node.module or ""] if isinstance(node, ast.ImportFrom) and not node.level else [])
                 if any(name.split(".")[0] in ("math", "cmath") for name in imports):
                     errors.append(relative + ": platform Python math import")
+        if python_only:
+            continue
         with path.open("rb") as stream:
             magic = stream.read(4)
         if magic == b"\x7fELF":
@@ -145,6 +153,11 @@ def audit_tree(root):
             errors.append(f"{relative}: math imports={bad_symbols}, dependencies={bad_deps}")
         binaries.append({"file": relative, "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
                          "math_imports": bad_symbols, "math_dependencies": bad_deps})
+    if python_only:
+        if errors:
+            raise ValueError("platform math audit failed:\n" + "\n".join(errors))
+        return {"numpy_runtime_free": True, "platform_math_free_python": True, "binaries": [],
+                "scope": "staged source tree, Python files only (release rehearsal)"}
     if (root / "mojolearn/_portable_math.py").exists() and not any(
             (root / "mojolearn" / path).is_file() for path in
             (".libs/libMojolearnMath.so", ".dylibs/libMojolearnMath.dylib")):
@@ -221,10 +234,19 @@ def finalize(wheel, helper=None, audit_only=False):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("wheels", nargs="+", type=Path)
+    parser.add_argument("wheels", nargs="*", type=Path)
     parser.add_argument("--helper", type=Path)
     parser.add_argument("--audit-only", action="store_true")
+    parser.add_argument("--python-tree", type=Path, metavar="DIR",
+                        help="audit the .py files of a staged package tree (the wheel's root layout) and exit")
     args = parser.parse_args()
+    if args.python_tree:
+        report = audit_tree(args.python_tree, python_only=True)
+        print(json.dumps({"tree": str(args.python_tree), "numpy_runtime_free": report["numpy_runtime_free"],
+                          "platform_math_free_python": True}))
+        return
+    if not args.wheels:
+        parser.error("name at least one wheel, or --python-tree DIR")
     for wheel in args.wheels:
         report = finalize(wheel, args.helper, args.audit_only)
         print(json.dumps({"wheel": str(wheel), "platform_math_free": True, "numpy_runtime_free": report["numpy_runtime_free"],

@@ -564,35 +564,46 @@ def test_a_path_nothing_reaches_selects_nothing():
         lane_select.reset_caches()
 
 
-def test_a_test_module_is_inert_unless_something_outside_the_tests_imports_it():
+def test_a_test_module_is_inert_unless_something_a_lane_reaches_names_it():
     """A test cannot change what a lane computes, which is why
     `_python_files()` leaves `python/mojolearn/tests/` out of the map. The
     selector never acted on that, so every test file read NOT ATTRIBUTABLE and
     sent its lane to the full sweep.
 
-    THE ARM THAT MUST DECLINE IS IN THE TREE, not synthesised.
-    `tools/transformer_fresh_prefill_check.py` and
-    `tools/transformer_transfer_check.py` both do
-    `from mojolearn.tests.test_transformer_surface import _weights`, so that
-    one test module is NOT inert while its neighbours are. If that import ever
-    goes away this test says so rather than quietly losing its control."""
+    ONLY FILES A LANE REACHES VOTE (2026-09-21). A pixi task or a tool under
+    tools/ that imports a test module does not put it into any lane's process,
+    so `tools/transformer_transfer_check.py` importing
+    `test_transformer_surface._weights` no longer keeps that module out. THE
+    ARM THAT MUST DECLINE is synthesised in a file every lane reaches (the
+    manifest), both as a plain name and as a dynamic import string, and in the
+    tree `test_tokenizer_surface` is named by the manifest's own gate text."""
     tests = os.path.join(lane_select.ROOT, "python", "mojolearn", "tests")
     names = sorted(n for n in os.listdir(tests) if n.endswith(".py"))
     assert len(names) > 50, "the tests directory is not where this test thinks it is"
 
-    imported = "python/mojolearn/tests/test_transformer_surface.py"
-    assert lane_select.test_module_inert(imported) is None, (
-        "test_transformer_surface is imported by tools/transformer_fresh_prefill_check.py and "
-        "tools/transformer_transfer_check.py and must not be called inert. If that import is "
-        "gone, this control is gone with it and needs replacing, not deleting.")
+    assert lane_select.test_module_inert("python/mojolearn/tests/test_tokenizer_surface.py") is None, \
+        "host_surface.py names test_tokenizer_surface in code and it must not be called inert"
+    probe = "python/mojolearn/tests/test_host_model_kmeans.py"
+    assert lane_select.test_module_inert(probe), f"{probe} should be inert to begin with"
+    _refuse_if_manifest_dirty()
+    manifest = os.path.join(lane_select.ROOT, lane_select.MANIFEST)
+    before = open(manifest, encoding="utf-8").read()
+    try:
+        # Strings only: the manifest is imported by the selector, and a real
+        # import_module call here would run the test module.
+        for line in ("_ARM = ('import_module', 'mojolearn.tests.test_host_model_kmeans')",
+                     "_ARM = 'test_host_model_kmeans'"):
+            with open(manifest, "w") as fh:
+                fh.write(before + "\n" + line + "\n")
+            lane_select.reset_caches()
+            assert lane_select.test_module_inert(probe) is None, \
+                f"a file every lane reaches names {probe} ({line}) and it was still called inert"
+    finally:
+        with open(manifest, "w") as fh:
+            fh.write(before)
+        lane_select.reset_caches()
 
     inert = [n for n in names if lane_select.test_module_inert("python/mojolearn/tests/" + n)]
-    # The floor is HALF, not "nearly all". It was 124 of 125 while the check
-    # looked for import STATEMENTS; closing the dynamic-import hole by
-    # searching for the module NAME anywhere outside the tests directory took
-    # it to 91 of 125, because 33 modules are mentioned by a workflow, a script
-    # or a requirements file. That is the trade this rule is supposed to make.
-    # The floor exists to catch the rule dying, not to pin a number.
     assert len(inert) > len(names) // 2, \
         f"only {len(inert)} of {len(names)} test modules read inert; the rule stopped firing"
 
@@ -1084,6 +1095,188 @@ def test_no_docstring_is_read_back_at_run_time():
                 bad.append(f"{os.path.relpath(path, lane_select.ROOT)}:{node.lineno}")
     assert not bad, ("a docstring is READ as a value, so a docstring-only change can reach it: "
                      f"{bad[:5]}")
+
+
+# ---------------------------------------------------------------- 2026-09-21
+# The rules that took the 0.8.12 Apple pass's 148 NOT ATTRIBUTABLE paths down
+# to a handful. Each is tested twice: once where it narrows, and once where a
+# path that CAN reach lane arithmetic must still widen.
+
+def _with_fake(path, new_text, old_text=None, ref="<fake ref>"):
+    lane_select._read.cache[path] = new_text
+    if old_text is not None:
+        lane_select._GIT_SHOW[f"{ref}:{path}"] = old_text
+    return ref
+
+
+def _drop_fake(path, ref="<fake ref>"):
+    lane_select._read.cache.pop(path, None)
+    lane_select._GIT_SHOW.pop(f"{ref}:{path}", None)
+
+
+def test_a_build_script_selects_the_lanes_of_the_binding_it_compiles():
+    """bindings/build_svm.sh compiles bindings/_mojolearn_svm.mojo, so it
+    selects exactly the lanes that reach that source, not every lane."""
+    sources, _ = lane_select.lane_sources()
+    rev = lane_select.reverse_map(sources)
+    sel = lane_select.select(["bindings/build_svm.sh"], ref="HEAD")
+    assert not sel["fallback"], sel["reasons"]
+    want = rev["bindings/_mojolearn_svm.mojo"]
+    assert want and set(sel["lanes"]) == want, "the build script did not select its binding's lanes"
+    assert len(want) < len(sources), "the svm binding is reached by every lane; the case proves nothing"
+
+
+def test_a_build_script_whose_source_is_not_literal_still_widens():
+    """THE ARM THAT MUST WIDEN. A `mojo build` line whose source is a variable
+    cannot be attributed, and a build script is lane arithmetic."""
+    path = "bindings/build_armprobe.sh"
+    _with_fake(path, 'src=bindings/_mojolearn_svm.mojo\npixi run mojo build "$src" -o x.so\n')
+    try:
+        assert lane_select.build_script_roots(path) is None
+        sel = lane_select.select([path], ref="HEAD")
+        assert sel["fallback"] and path in sel["unattributed"], sel["reasons"]
+    finally:
+        _drop_fake(path)
+
+
+def test_pixi_tasks_are_inert_and_a_dependency_is_every_lane():
+    base = '[workspace]\nname = "x"\n\n[tasks]\na = "echo a"\n\n[dependencies]\nmax = "==26.5.0"\n'
+    tasks = base.replace('a = "echo a"', 'a = "echo a"\nb = "echo b"  # a new task')
+    dep = base.replace("26.5.0", "26.6.0")
+    try:
+        ref = _with_fake("pixi.toml", tasks, base)
+        sel = lane_select.select(["pixi.toml"], ref=ref)
+        assert not sel["fallback"] and not sel["lanes"], sel["reasons"]
+        assert "task tables" in sel["reasons"]["pixi.toml"]
+        ref = _with_fake("pixi.toml", dep, base)
+        sel = lane_select.select(["pixi.toml"], ref=ref)
+        assert sel["fallback"], "a dependency change in pixi.toml must select every lane"
+    finally:
+        _drop_fake("pixi.toml")
+
+
+def test_native_code_the_package_loads_selects_the_loaders_lanes():
+    """stage.py is a Python file outside the package that no lane imports, and
+    it still compiles the library `_portable_math.py` loads. It must never be
+    called unreachable."""
+    sources, _ = lane_select.lane_sources()
+    rev = lane_select.reverse_map(sources)
+    for path in ("packaging/portable_math/stage.py", "packaging/portable_math/portable_math.c"):
+        # No ref: against HEAD an unchanged file is "docstrings only" first.
+        sel = lane_select.select([path])
+        assert not sel["fallback"] and set(sel["lanes"]) == rev["python/mojolearn/_portable_math.py"], \
+            f"{path}: {sel['reasons']}"
+        assert "native code" in sel["reasons"][path]
+
+
+def test_a_tool_named_only_by_a_literal_join_is_unreachable():
+    """`join(base, "tools", "identity_break.py")` names one file; it does not
+    walk tools/. A leg script nothing names is unreachable, a helper a build
+    script runs is not, and a tool a lane's file imports is not."""
+    assert lane_select.unreachable("tools/gemm_remote_leg.sh"), "a rental leg script should be unreachable"
+    assert lane_select.unreachable("tools/with_build_lock.sh") is None, \
+        "bindings/build_preprocessing.sh execs tools/with_build_lock.sh; it is a build input"
+    assert lane_select.unreachable("tools/identity_trace_diff.py") is None, \
+        "the package names identity_trace_diff.py and it must stay reachable"
+
+
+def test_a_directory_walk_under_tools_still_widens():
+    """THE ARM THAT MUST WIDEN: a join whose tail is a variable walks the
+    directory, so everything in it stays reachable."""
+    _refuse_if_manifest_dirty()
+    manifest = os.path.join(lane_select.ROOT, lane_select.MANIFEST)
+    before = open(manifest, encoding="utf-8").read()
+    try:
+        with open(manifest, "w") as fh:
+            fh.write(before + "\nimport os as _o\n_ARM = lambda n: _o.path.join('tools', n)\n")
+        lane_select.reset_caches()
+        assert lane_select.unreachable("tools/gemm_remote_leg.sh") is None, \
+            "a variable join under tools/ did not count as walking it"
+    finally:
+        with open(manifest, "w") as fh:
+            fh.write(before)
+        lane_select.reset_caches()
+
+
+def test_a_mojo_program_nothing_imports_is_unreachable_and_an_imported_one_is_not():
+    assert lane_select.unreachable("transformer/checks/attention_v2_forward_bench.mojo"), \
+        "a benchmark program no Mojo file imports should be unreachable"
+    assert lane_select.unreachable("mamba/checks/mamba_fixture.mojo") is None, \
+        "mamba_fixture.mojo is in lanes' closures and must never be unreachable"
+    assert lane_select.unreachable("glm/host/qn_oracle.mojo") is None
+
+
+def test_package_modules_the_verifier_alone_uses_are_unreachable():
+    """`_verify_par.py` runs from `python -m mojolearn verify`, never in a lane.
+    The controls: `_mode.py`, which every lane imports, and a package module
+    that only `__init__.py` imports, whose top level runs in every lane."""
+    assert lane_select.unreachable("python/mojolearn/_verify_par.py")
+    assert lane_select.unreachable("python/mojolearn/verify_reference/table.json")
+    assert lane_select.unreachable("python/mojolearn/_mode.py") is None
+    closure = lane_select._package_import_closure()
+    only_init = sorted(f for f in lane_select._python_imports(os.path.join(lane_select.PKG, "__init__.py"))
+                       if f in closure)
+    assert only_init, "__init__.py imports nothing the closure holds; the control is gone"
+    for rel in only_init:
+        assert lane_select.unreachable(rel) is None, f"{rel} runs at `import mojolearn` and was called unreachable"
+
+
+def test_a_package_module_named_by_a_lane_file_stays_reachable():
+    """THE ARM THAT MUST WIDEN for the package rule: a dynamic import string in
+    a file every lane reaches."""
+    probe = "python/mojolearn/_verify_par.py"
+    assert lane_select.unreachable(probe), "the probe must start unreachable"
+    _refuse_if_manifest_dirty()
+    manifest = os.path.join(lane_select.ROOT, lane_select.MANIFEST)
+    before = open(manifest, encoding="utf-8").read()
+    try:
+        with open(manifest, "w") as fh:
+            fh.write(before + "\n_ARM = 'mojolearn._verify_par'\n")
+        lane_select.reset_caches()
+        assert lane_select.unreachable(probe) is None
+    finally:
+        with open(manifest, "w") as fh:
+            fh.write(before)
+        lane_select.reset_caches()
+
+
+LANE_PROSE_BASE = HARNESS_BASE.replace(
+    "TOL = 1", 'TOL = 1\nNOTES = {\n    "alpha": "why alpha changed",\n    "beta": "why beta changed",\n}')
+
+
+def test_a_lane_keyed_prose_table_selects_the_lanes_it_names():
+    reworded = LANE_PROSE_BASE.replace("why alpha changed", "why alpha changed, said better")
+    assert _harness_answer(reworded, LANE_PROSE_BASE) == ["alpha"]
+    only_beta = LANE_PROSE_BASE.replace('    "alpha": "why alpha changed",\n', "")
+    assert _harness_answer(LANE_PROSE_BASE, only_beta) == ["alpha"], "an added entry names its lane"
+    # A lane registered by a loop (gamma-1) is not a lane body the harness
+    # reader can see, so a key naming it widens rather than guessing.
+    looped = LANE_PROSE_BASE.replace('    "beta": "why beta changed",\n',
+                                     '    "beta": "why beta changed",\n    "gamma-1": "new",\n')
+    assert _harness_answer(looped, LANE_PROSE_BASE) is None
+
+
+def test_a_lane_keyed_table_that_is_not_prose_still_widens():
+    """THE ARMS THAT MUST WIDEN: a value that computes, a key that is not a
+    lane, and a removed entry."""
+    computed = LANE_PROSE_BASE.replace('"why alpha changed"', "helper(1)")
+    assert _harness_answer(computed, LANE_PROSE_BASE) is None
+    stray = LANE_PROSE_BASE.replace('    "beta": "why beta changed",\n',
+                                    '    "beta": "why beta changed",\n    "not-a-lane": "x",\n')
+    assert _harness_answer(stray, LANE_PROSE_BASE) is None
+    removed = LANE_PROSE_BASE.replace('    "beta": "why beta changed",\n', "")
+    assert _harness_answer(removed, LANE_PROSE_BASE) is None
+    both = LANE_PROSE_BASE.replace("why alpha changed", "x").replace("return x + TOL", "return x - TOL")
+    assert _harness_answer(both, LANE_PROSE_BASE) is None
+
+
+def test_a_failed_diff_refuses_instead_of_selecting_nothing():
+    try:
+        lane_select.changed_paths("no-such-ref-armprobe")
+    except SystemExit as exc:
+        assert "REFUSING" in str(exc)
+    else:
+        raise AssertionError("a diff against a missing ref returned a path list")
 
 
 def _main():

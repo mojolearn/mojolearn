@@ -2,6 +2,24 @@
 
 **Alpha Python/reference patch:** use the [bounded patch path](lanes/RELEASE_PROCESS_ALPHA.md#pythonreference-patches-with-unchanged-native-inputs). Reuse unchanged native binaries, check only affected numerical references, and smoke each exact final wheel. The broader native-build and certification steps below do not apply to every such patch.
 
+## 0. Rehearse (by hand, before anything is rented)
+
+```sh
+pixi run release-rehearsal
+```
+
+A pre-release rehearsal the releaser runs by hand. It is not a per-merge check
+and not a CI job. It runs locally in minutes, rents nothing and compiles
+nothing, and prints one PASS or FAIL line per step with a non-zero exit when
+any step failed: the wheel audit's tests, the Python suite in IDENTICAL mode
+(the one step that may touch Metal, so it waits for the Mac's Metal slot),
+the docs facts, both extension-list checks, the wheel's NumPy and platform-math
+audit over the package staged as the wheel ships it (with the
+`_identity_break.py` and `_identity_trace_diff.py` copies), and the dry runs of
+the NVIDIA and AMD release legs. Each of these failed 0.8.12 after boxes were
+rented or after a 16-minute macOS compile. `--list` prints the steps; `--only`
+reruns some of them.
+
 Five steps, one finish line: the file is on PyPI and installs. The longer
 runbooks (`docs/PYPI_RELEASE.md`, `docs/RELEASE_0_6_1_EXECUTION_PLAN.md`,
 `packaging/ALPHA_LINUX_061_PUBLICATION.md`, `docs/RELEASE_0_6_1_RUNPOD_PROFILE7.md`)
@@ -20,9 +38,13 @@ of rental spin-up, and the three run in parallel; pack, audit and upload are
 about 15 minutes; one install-and-test column is about four minutes. The
 macOS run on the release Mac was 20 minutes, 8 of them compiling.
 
-Since then the extension builds run four at a time on every builder
-(MOJOLEARN_BUILD_JOBS, default 4, each build still capped at two compiler
-workers and one BLAS thread, the box affinity at 2 x jobs cores). Set
+Since then the Linux extension builds run four at a time (MOJOLEARN_BUILD_JOBS,
+default 4, each build capped at two compiler workers and one BLAS thread, the
+box affinity at 2 x jobs cores). On the Mac the default is TWO builds of two
+compiler workers (2026-09-21): the Apple release budget is five cores and about
+8 GB. The release workflow ran the Mac builds one at a time from 2026-09-17,
+which made step 6 take 30 to 60 minutes; it now runs 2 x 2 and reuses every
+unchanged binding from a local compile cache (step 6). Set
 MOJOLEARN_BUILD_JOBS=1 to reproduce a serial build. Times for the parallel
 path are OWED from the next release; record them here when it ships.
 
@@ -223,10 +245,10 @@ without uploading.
 A release is verified by two things (2026-09-19):
 
 ```sh
-pixi run -e test release-check            # both, on this Mac, nothing rented
-# which is:
-pixi run -e test cpu-pass                 # the CPU route, 5 local slots, same cells as the Apple pass
-pixi run -e test apple-pass               # the Apple GPU: every Metal lane, fitted once, end model, 600 s
+pixi run -e test release-check            # both AT ONCE, on this Mac, nothing rented
+# which is, concurrently (tools/release_check.py):
+pixi run -e test apple-pass               # the Apple GPU: Metal lock + one of the 5 Mac slots
+MOJOLEARN_CPU_PASS_SLOTS=4 pixi run -e test cpu-pass   # the CPU route on the other 4 slots
 ```
 
 Both run LOCALLY. No pod, no NVIDIA or AMD box and no R2 staging is part of a
@@ -234,9 +256,43 @@ release. Each pass is `base,denormal,odd`, fitted once, end model only.
 
 **Only the lanes the release touched are required, and that is automatic.**
 With no selection given, a pass checks the lanes whose sources changed since
-the newest `v*` tag (`git describe`). When a changed path cannot be attributed
-to lanes (a build script, a shared kernel) the selector widens to every lane by
-itself, so it can run too much and never too little. `--all` forces everything.
+the last pass on the same backend that FINISHED on this Mac (complete, same
+fixtures, one fit, a clean tree, and itself anchored on a full pass, a tag or
+another such pass). With no such record it falls back to the newest `v*` tag,
+as before; 0.8.9 to 0.8.11 were cut under `alpha-api-*` tags, which is why the
+0.8.12 pass diffed 2,328 paths against v0.8.8. When a changed path cannot be
+attributed to lanes the selector widens to every lane by itself, so it can run
+too much and never too little. `--all` forces everything. Build scripts, tools
+nothing runs, check programs nothing imports, the verifier's own modules and
+pixi task edits are attributed now (tools/lane_select.py, 2026-09-21); what
+still widens to every lane is a change to `tools/identity_break.py` outside a
+lane body, a whole-surface registry, `pixi.lock`, `__main__.py` and anything
+the map genuinely cannot place.
+
+**Sharded Metal is opt-in and unproven.** `pixi run -e test apple-pass
+--metal-shards N` (N = 2 or 3) splits the lanes over N processes that share the
+one GPU under a single Metal slot, to overlap their host-to-device waits.
+Concurrent Metal jobs returned NaN and zero outputs on 2026-09-15, so N stays 1
+until this has been run once, after a release, on a quiet Mac:
+
+```sh
+C=$(git rev-parse --short=12 HEAD); E=~/mojolearn-evidence/metal-shards; mkdir -p $E
+for n in 1 2 3; do
+  MOJOLEARN_RELEASE_CHECK_DIR=$E/n$n /usr/bin/time -p pixi run -e test \
+    python3 tools/verify_lanes.py --apple-pass --all --metal-shards $n 2>&1 | tee $E/n$n.log
+done
+# every part of every cell, sharded against unsharded, then against the CPU
+# column of the same commit (the reference the Apple column must equal; make
+# it full first with `pixi run -e test cpu-pass --all` at this commit):
+pixi run -e test python3 tools/identity_break.py --diff $E/n1/$C/metal/column.json $E/n2/$C/metal/column.json
+pixi run -e test python3 tools/identity_break.py --diff $E/n1/$C/metal/column.json $E/n3/$C/metal/column.json
+pixi run -e test python3 tools/identity_break.py --diff \
+  ~/mojolearn-evidence/release-check/$C/cpu/column.json $E/n3/$C/metal/column.json
+```
+
+Only if all three diffs read zero differences over the full sweep may the
+default change, and a sharded record never anchors the next pass (the
+`metal_shards` field in its manifest). Record the three wall times here.
 
 **It records as it goes and resumes.** Records live in
 `~/mojolearn-evidence/release-check/<commit>/<backend>/`, one checkpoint per
@@ -246,7 +302,14 @@ hang guard, run the same command again at the same commit: it prints
 route: 15 lanes x 3 fixtures in 14 s; killed at 6 s with 13 cells on disk,
 the rerun completed all 45.
 
-## 6. Publish macOS (on the release Mac, 30 to 60 minutes)
+## 6. Publish macOS (on the release Mac)
+
+The build job compiles two extensions at a time with two compiler workers
+each, and reuses from `~/.mojolearn-bincache/macos-release` every binding whose
+inputs are unchanged since the last workflow run (tools/bincache.py, "a LOCAL
+directory cache"; the log ends with how many were reused). A rerun of a failed
+dispatch therefore compiles nothing it compiled before. It was 30 to 60 minutes
+serial and uncached.
 
 ```sh
 git tag -a v<version> -m "mojolearn <version>" <commit> && git push origin refs/tags/v<version>

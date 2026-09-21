@@ -119,6 +119,13 @@ if [ "$PACKAGE_BYTE_LM" = 1 ]; then
     # overwriting it, so a host .so left by an earlier local build fails the
     # build instead of being reused; remove them first, as build_sets.sh does.
     for n in $HOST_NAMES; do rm -f "$PKG/host/$n.so"; done
+    # bindings/build_byte_lm.sh refuses the same way ("byte LM: output already
+    # exists"), and on 2026-09-21 a byte LM left by an earlier local build
+    # failed the 0.8.12 wheel build 13 minutes in. It is rebuilt below like
+    # every other extension, so the stale copy goes first; the refusal inside
+    # build_byte_lm.sh stays, for anyone running it by hand. A CI checkout
+    # never has the file.
+    rm -f "$PKG/identical/_mojolearn_byte_lm.so"
 fi
 
 # THE PER-SCRIPT GATES ARE OFF HERE, AND THE REASON IS A CLEAN CHECKOUT.
@@ -191,13 +198,30 @@ if [ "$PACKAGE_BYTE_LM" = 0 ]; then
     }
 fi
 
-# DEVIATION 2501: the builds run MOJOLEARN_BUILD_JOBS at a time (default 4)
-# through xargs -P; each (mode, script) pair writes its own log, printed in
-# full when it finishes so the transcript reads as before. Every pair has its
-# own output directory and mktemp scratch, so the pairs are independent. The
-# identical tier is queued first because it holds the most scripts. Any
-# failure fails the build after the running pairs finish (xargs exits 123).
-BUILD_JOBS="${MOJOLEARN_BUILD_JOBS:-4}"
+# DEVIATION 2501: the builds run MOJOLEARN_BUILD_JOBS at a time through
+# xargs -P; each (mode, script) pair writes its own log, printed in full when
+# it finishes so the transcript reads as before. Every pair has its own output
+# directory and mktemp scratch, so the pairs are independent. The identical
+# tier is queued first because it holds the most scripts. Any failure fails
+# the build after the running pairs finish (xargs exits 123).
+#
+# THE DEFAULT IS TWO, 2026-09-21: the Apple release budget is five CPU cores
+# and about 8 GB (Andrew, 2026-09-21; the M4 has 10 cores and 16 GB). Two
+# builds of two compiler workers each (MOJOLEARN_COMPILE_JOBS, default 2 in
+# every bindings/build_*.sh) is four compiler threads, and one compile peaks
+# at about 1.2 GB, so the pair stays well inside the memory half. It was 4
+# (eight threads) until the release workflow pinned it to 1 on 2026-09-17,
+# which made the macOS build 30 to 60 minutes; the workflow now uses 2 x 2.
+#
+# THE LOCAL COMPILE CACHE. With MOJOLEARN_BINCACHE_DIR set every pair runs
+# through `tools/bincache.py build`, keyed on the binding's import closure,
+# every build script, pixi.lock, the Mojo and Xcode toolchains, the mode, the
+# environment and the checkout path, with the one .so it writes DECLARED
+# (the pairs share a tree, so outputs are never inferred). An unchanged
+# binding is placed from the cache, verified byte for byte against the
+# archive's manifest, and every gate below runs on it exactly as on a fresh
+# build. Unset, nothing changes. The header of tools/bincache.py has the key.
+BUILD_JOBS="${MOJOLEARN_BUILD_JOBS:-2}"
 case "$BUILD_JOBS" in ''|*[!0-9]*|0) echo 'MOJOLEARN_BUILD_JOBS must be 1..16' >&2; exit 2;; esac
 [ "$BUILD_JOBS" -le 16 ] || { echo 'MOJOLEARN_BUILD_JOBS must be 1..16' >&2; exit 2; }
 BUILD_LOGS=$(mktemp -d "${TMPDIR:-/tmp}/mojolearn-release-builds.XXXXXX")
@@ -224,6 +248,29 @@ build_pairs | xargs -P "$BUILD_JOBS" -n 2 sh -c '
     logs=$1; mode=$2; script=$3; log="$logs/${mode}_${script%.sh}.log"
     # The byte LM build keeps its own gate on, as it always did here.
     skip=1; [ "$script" = build_byte_lm.sh ] && skip=
+    # THE ONE FILE THIS PAIR WRITES, declared for the compile cache. Named
+    # the way the gates below name it: build.sh is _mojolearn, build_X.sh is
+    # _mojolearn_X, a host shim is host/_mojolearn_X_host, the byte LM lives
+    # in identical/, and the fast tier is the package directory itself.
+    case "$script" in
+        build_*_host.sh) f="${script#build_}"; output="python/mojolearn/host/_mojolearn_${f%_host.sh}_host.so" ;;
+        build_byte_lm.sh) output="python/mojolearn/identical/_mojolearn_byte_lm.so" ;;
+        build.sh) ext=_mojolearn ;;
+        *) e="${script#build_}"; ext="_mojolearn_${e%.sh}" ;;
+    esac
+    case "$script" in build_*_host.sh|build_byte_lm.sh) ;; *)
+        if [ "$mode" = fast ]; then output="python/mojolearn/$ext.so"; else output="python/mojolearn/$mode/$ext.so"; fi ;;
+    esac
+    runner=bash
+    if [ -n "${MOJOLEARN_BINCACHE_DIR:-}" ]; then
+        runner="python3 tools/bincache.py build"
+        export MOJOLEARN_BINCACHE_OUTPUTS="$output" MOJOLEARN_BINCACHE_SHELL=bash
+        # The cache never replaces an existing file, so a .so left by an
+        # earlier local build would force a compile. Every build script
+        # replaces its output anyway, and the staleness gate below requires a
+        # file newer than this run, so removing it first loses nothing.
+        rm -f "$output"
+    fi
     # A host build must never see an accelerator target: it has no device
     # code, and MOJOLEARN_GPU_ARCHS reaching it is the one way it can be
     # silently wrong. Both output directory variables (the per-family one and
@@ -238,7 +285,7 @@ build_pairs | xargs -P "$BUILD_JOBS" -n 2 sh -c '
         FAM=$(printf "%s" "$fam" | tr "a-z" "A-Z")
         if MOJOLEARN_NUMERIC_MODE=$mode MOJOLEARN_SKIP_BUILD_GATE=$skip MOJOLEARN_TARGET_COLUMN=cpu \
              env -u MOJOLEARN_GPU_ARCHS -u MOJOLEARN_HOST_OUTDIR -u "MOJOLEARN_${FAM}_HOST_OUTDIR" \
-             bash "./bindings/$script" > "$log" 2>&1; then
+             $runner "./bindings/$script" > "$log" 2>&1; then
             { echo "== $script ($mode) OK"; cat "$log"; }
         else
             { echo "== $script ($mode) FAILED"; cat "$log"; }
@@ -246,7 +293,7 @@ build_pairs | xargs -P "$BUILD_JOBS" -n 2 sh -c '
         fi
         exit 0 ;;
     esac
-    if MOJOLEARN_NUMERIC_MODE=$mode MOJOLEARN_SKIP_BUILD_GATE=$skip bash "./bindings/$script" > "$log" 2>&1; then
+    if MOJOLEARN_NUMERIC_MODE=$mode MOJOLEARN_SKIP_BUILD_GATE=$skip $runner "./bindings/$script" > "$log" 2>&1; then
         { echo "== $script ($mode) OK"; cat "$log"; }
     else
         { echo "== $script ($mode) FAILED"; cat "$log"; }

@@ -490,6 +490,134 @@ class BuildFlowTests(unittest.TestCase):
             bc.check_upload_row(row.replace(dest, "bincache/v1/../x/%s.tar.gz" % key), out_a / "keys")
 
 
+class LocalCacheTests(unittest.TestCase):
+    """The macOS release build's local directory cache: declared outputs, a
+    verified archive, never a replaced destination, fail closed."""
+
+    OUT = "python/mojolearn/identical/_mojolearn_fake.so"
+
+    def setUp(self):
+        self.td = tempfile.TemporaryDirectory()
+        self.addCleanup(self.td.cleanup)
+        self.base = Path(self.td.name).resolve()
+        self.cache = self.base / "cache"
+        self.n = 0
+
+    def tree(self, script=SCRIPT):
+        repo = self.base / "mojolearn"
+        if repo.exists():
+            self.n += 1
+            repo.rename(self.base / ("gone-%d" % self.n))
+        make_repo(repo)
+        (repo / "bindings" / "build_fake.sh").write_text(script)
+        return repo
+
+    def build(self, repo, outputs=OUT, extra=None):
+        env = {k: v for k, v in os.environ.items() if not k.startswith("MOJOLEARN_")}
+        env.update(MOJOLEARN_BINCACHE_DIR=str(self.cache), MOJOLEARN_BINCACHE_OUTPUTS=outputs,
+                   BINCACHE_TEST_MARKER=str(repo / "ran.txt"))
+        env.update(extra or {})
+        orig = (bc.device_arch, bc.os_fields, bc.darwin_toolchain)
+        bc.device_arch, bc.os_fields = (lambda: "none"), (lambda: dict(OS))
+        bc.darwin_toolchain = lambda: dict(xcode="Xcode 26.0", metal="metal 32023")
+        try:
+            return _run_with_buffer(bc.cmd_build)([str(repo / "bindings/build_fake.sh")], environ=env)
+        finally:
+            bc.device_arch, bc.os_fields, bc.darwin_toolchain = orig
+
+    def rows(self):
+        return [l.split("\t") for l in (self.cache / "provenance" / "provenance.tsv").read_text().splitlines()]
+
+    def test_fresh_then_hit_then_corrupt(self):
+        a = self.tree()
+        self.assertEqual(self.build(a), 0)
+        self.assertEqual(self.rows()[-1][2], "miss+built-cached")
+        key = self.rows()[-1][3]
+        built = (a / self.OUT).read_bytes()
+        b = self.tree()
+        self.assertEqual(self.build(b), 0)
+        self.assertEqual(self.rows()[-1][2], "hit")
+        self.assertFalse((b / "ran.txt").exists(), "a hit must not run the build script")
+        self.assertEqual((b / self.OUT).read_bytes(), built)
+        arc = self.cache / (key + ".tar.gz")
+        with tarfile.open(arc, "r:gz") as tf:
+            members = {m.name: tf.extractfile(m).read() for m in tf.getmembers()}
+        members["files/" + self.OUT] = b"X" + members["files/" + self.OUT][1:]
+        with tarfile.open(arc, "w:gz") as tf:
+            for n, data in members.items():
+                ti = tarfile.TarInfo(n)
+                ti.size = len(data)
+                tf.addfile(ti, io.BytesIO(data))
+        c = self.tree()
+        self.assertEqual(self.build(c), 0)
+        self.assertTrue(self.rows()[-1][2].startswith("rejected:sha256 mismatch"), self.rows()[-1][2])
+        self.assertTrue((c / "ran.txt").exists(), "a corrupt archive must fall back to a real build")
+        self.assertEqual((c / self.OUT).read_bytes(), built)
+
+    def test_only_the_declared_output_is_archived(self):
+        # The release script runs builds side by side in ONE tree, so a .so
+        # another build writes at the same time must never enter this archive.
+        script = SCRIPT.replace("echo built", "printf other > python/mojolearn/identical/_mojolearn_other.so\necho built")
+        a = self.tree(script)
+        self.assertEqual(self.build(a), 0)
+        key = self.rows()[-1][3]
+        with tarfile.open(self.cache / (key + ".tar.gz"), "r:gz") as tf:
+            names = sorted(m.name for m in tf.getmembers())
+        self.assertEqual(names, ["files/" + self.OUT, "manifest.json"])
+
+    def test_no_declared_output_means_no_cache(self):
+        a = self.tree()
+        self.assertEqual(self.build(a, outputs=""), 0)
+        self.assertEqual(self.rows()[-1][2], "refused:no-declared-outputs")
+        self.assertFalse(list(self.cache.glob("*.tar.gz")))
+        self.assertEqual(self.build(self.tree(), outputs="../escape.so"), 0)
+        self.assertEqual(self.rows()[-1][2], "refused:no-declared-outputs")
+
+    def test_a_declared_output_the_build_did_not_write_is_not_cached(self):
+        a = self.tree()
+        self.assertEqual(self.build(a, outputs="python/mojolearn/identical/_mojolearn_nothing.so"), 0)
+        self.assertIn("declared-output-not-written", self.rows()[-1][2])
+        self.assertFalse(list(self.cache.glob("*.tar.gz")))
+
+    def test_a_helper_the_script_runs_moves_the_key_and_a_comment_does_not(self):
+        helper = SCRIPT.replace("mkdir -p python", "sh tools/helper.sh\nmkdir -p python")
+        a = self.tree(helper)
+        (a / "tools").mkdir()
+        (a / "tools" / "helper.sh").write_text("true\n")
+        self.build(a)
+        first = self.rows()[-1][3]
+        b = self.tree(helper)
+        (b / "tools").mkdir()
+        (b / "tools" / "helper.sh").write_text("true # changed\n")
+        self.build(b)
+        self.assertEqual(self.rows()[-1][2], "miss+built-cached")
+        self.assertNotEqual(self.rows()[-1][3], first)
+        # a path named only in a comment is not an input
+        commented = SCRIPT.replace("set -eu", "set -eu\n# see tools/unrelated.sh")
+        c = self.tree(commented)
+        self.assertEqual(bc.local_inputs(c, c / "bindings/build_fake.sh")["files"], ["bindings/build_fake.sh"])
+
+    def test_sabotage_and_an_existing_destination_never_use_the_cache(self):
+        a = self.tree()
+        self.build(a)
+        b = self.tree()
+        self.assertEqual(self.build(b, extra={"MOJOLEARN_BUILD_EXTRA_DEFINES": "-D X_SABOTAGE=1"}), 0)
+        self.assertTrue(self.rows()[-1][2].startswith("refused:sabotage:"))
+        self.assertTrue((b / "ran.txt").exists())
+        c = self.tree()
+        (c / self.OUT).parent.mkdir(parents=True, exist_ok=True)
+        (c / self.OUT).write_bytes(b"old")
+        self.assertEqual(self.build(c), 0)
+        self.assertTrue(self.rows()[-1][2].startswith("bypass-destination-exists"), self.rows()[-1][2])
+        self.assertTrue((c / "ran.txt").exists())
+
+    def test_a_failed_build_keeps_its_exit_code_and_caches_nothing(self):
+        a = self.tree(SCRIPT.replace("mkdir -p python", "exit 7\nmkdir -p python"))
+        self.assertEqual(self.build(a), 7)
+        self.assertTrue(self.rows()[-1][2].endswith("+build-failed"))
+        self.assertFalse(list(self.cache.glob("*.tar.gz")))
+
+
 def _run_with_buffer(fn):
     """run_tee writes to sys.stdout.buffer, which unittest's capture may lack."""
     def wrapper(*a, **k):
