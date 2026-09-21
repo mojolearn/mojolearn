@@ -94,7 +94,7 @@ done
 RF_LAUNCH_LOG="$OUT/columns4.taxi-fallback.launches" step probe_columns4_taxi_fallback 900 env \
     RF_LAUNCH_LOG="$OUT/columns4.taxi-fallback.launches" "$PY" \
     bench/speed/rf_hist_columns_ab.py probe --dataset taxi --arm columns4 \
-    --binding "$OUT/bin/columns4.so"
+    --binding "$OUT/bin/columns4.so" --expect-tile4
 
 # Effective negative control: a baseline binary falsely labelled tile4 must be
 # rejected by the same compile/route witness used above.
