@@ -4,5 +4,6 @@
 /bench/results/release_verification -export-ignore
 /bench/results/release089 -export-ignore
 /bench/results/parallel-next -export-ignore
+/bench/results/par_lm_xvendor -export-ignore
 /mamba/corpus/** export-ignore
 /mamba/corpus/gen_corpus.py -export-ignore

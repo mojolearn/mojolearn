@@ -37,11 +37,41 @@ shard gradient (caught in exactly the 7 of 8 assignments that use that shard).
 
 ## Columns
 
-| column | commit | result |
-|---|---|---|
-| Apple M4, 1 GPU (`apple-m4-1gpu.json`) | 42bea8726 | PASS, 6 steps; step-3 handoff committed beside it |
+Every run once. State hash after each step (parameters, m, v, flags):
 
-(NVIDIA and AMD two-GPU legs: see below once they land.)
+| step | Apple M4, 1 GPU | H100, 1 GPU | 2x H100 | 2x H100 resumed from the 1-GPU step 3 | M4 resumed from the 2x H100 step 3 |
+|---|---|---|---|---|---|
+| 1 | 9932e700be7baf9c | 9932e700be7baf9c | 9932e700be7baf9c | - | - |
+| 2 | ddb92404d62a16e1 | ddb92404d62a16e1 | ddb92404d62a16e1 | - | - |
+| 3 | c4e8c600747c8d47 | c4e8c600747c8d47 | c4e8c600747c8d47 | - | - |
+| 4 | 52c78ce6847ae49c | 52c78ce6847ae49c | 52c78ce6847ae49c | 52c78ce6847ae49c | 52c78ce6847ae49c |
+| 5 | c3546a777d6e628f | c3546a777d6e628f | c3546a777d6e628f | c3546a777d6e628f | c3546a777d6e628f |
+| 6 | 0abc34974e913d92 | 0abc34974e913d92 | 0abc34974e913d92 | 0abc34974e913d92 | 0abc34974e913d92 |
+
+`compare` over all five, with the shard gradients of the Apple, H100 1-GPU and
+2x H100 runs: **492 comparisons, 0 disagreements**, including **468 mixed
+assignments** of shards to Apple and NVIDIA runs, each folded on the host and
+equal to every device sum. Every on-box check passed on every run.
+
+Where each came from:
+
+- Apple M4: `apple-m4-1gpu.json`, commit 42bea8726, this Mac, Metal.
+- 2x H100 80GB HBM3: RunPod pod mobzs40xr7gejg, commit fab190e5a, sm_90a,
+  `nvidia-sm_90a-*.json`, `nvidia-h100x2-gate.txt`. Pod verified gone (404).
+- M4 resumed from `nvidia-sm_90a-two.handoff.npz`: `apple-m4-from-nvidia-2gpu.json`,
+  run on this Mac after the leg came home. The vendor and the device count
+  change at the same handoff.
+
+The H100 leg did not resume from the Apple handoff because `.gitattributes`
+left `bench/results/*` out of `git archive`; `bench/results/par_lm_xvendor` is
+now exported. The handoff was run in the other direction instead.
+
+Shard gradient files (about 4 MB each) are kept outside the repository.
+
+What this does NOT show: a single live step whose shards ran on different
+vendors at the same moment. The mixed assignments establish the arithmetic of
+such a step; running one needs an entry point that applies an externally
+summed gradient, which the binding does not have.
 
 ## Found on the way
 

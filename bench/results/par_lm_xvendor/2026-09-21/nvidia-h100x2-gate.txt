@@ -1,0 +1,21 @@
+started=2026-09-21T13:44:17Z
+commit=fab190e5a812a8effe68ab11505b567fcc8c7245
+vendor=nvidia gpus=2 arch=sm_90a
+portable_math exit=0 secs=0
+build exit=0 secs=49
+build_byte_lm exit=0 secs=126
+59bb5c34c867a0d30ca3cb2127cabb14d7d9352bc5b1a377a88cbdb89895b00b  python/mojolearn/identical/_mojolearn_byte_lm.so
+one exit=0 secs=5
+two exit=0 secs=3
+two-from-one exit=0 secs=3
+compare exit=0 secs=1
+step   nvidia-sm_90a-1gpu[0]  nvidia-sm_90a-2gpu[0,1]  nvidia-sm_90a-2gpu-resumed-from-1gpu[0,1]
+   1        9932e700be7baf9c        9932e700be7baf9c                       -
+   2        ddb92404d62a16e1        ddb92404d62a16e1                       -
+   3        c4e8c600747c8d47        c4e8c600747c8d47                       -
+   4        52c78ce6847ae49c        52c78ce6847ae49c        52c78ce6847ae49c
+   5        c3546a777d6e628f        c3546a777d6e628f        c3546a777d6e628f
+   6        0abc34974e913d92        0abc34974e913d92        0abc34974e913d92
+mixed-vendor folds: 84 assignments over 6 steps
+compared=108 disagreements=0
+finished=2026-09-21T13:47:24Z
