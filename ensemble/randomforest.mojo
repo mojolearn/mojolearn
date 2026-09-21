@@ -4,6 +4,7 @@
 
 from std.gpu import block_dim, block_idx, global_idx, thread_idx
 from std.sys.compile import is_defined
+from std.sys.info import has_nvidia_gpu_accelerator
 from std.math import ceildiv as _ceildiv
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from checks.numerics import (
@@ -101,14 +102,23 @@ comptime LABELS_SAMPLED_ORDER = True
 # `-D MOJOLEARN_2010_ROWS_SORTED=1` turns it on; off is the shipped default.
 comptime ROWS_SORTED_SAMPLE = is_defined["MOJOLEARN_2010_ROWS_SORTED"]()
 
-# Default-off repeated-fit candidate: the default bootstrap sampler already
+# The default bootstrap sampler already
 # computes each sampled row in a GPU thread, then the sampled-label staging
 # kernel rereads that row id to gather its label. Fuse those address-only
 # writes while the Philox row value is live. The RNG mapping and sampled row
 # bytes are unchanged; weighted and non-bootstrap arms keep their old route.
-comptime FUSED_BOOTSTRAP_GATHER = is_defined[
-    "MOJOLEARN_RF_FUSED_BOOTSTRAP_GATHER"
-]()
+# H100 Taxi and Istella repeated-fit trials were bitwise/quality identical and
+# improved the median of process medians. NVIDIA therefore ships the fused
+# route. HIP remains unchanged after a small Taxi regression on MI325X. The
+# explicit candidate define still permits experiments on other vendors, and
+# OFF restores the old two-launch route everywhere.
+comptime FUSED_BOOTSTRAP_GATHER = (
+    not is_defined["MOJOLEARN_RF_FUSED_BOOTSTRAP_GATHER_OFF"]()
+    and (
+        has_nvidia_gpu_accelerator()
+        or is_defined["MOJOLEARN_RF_FUSED_BOOTSTRAP_GATHER"]()
+    )
+)
 comptime FUSED_BOOTSTRAP_GATHER_SABOTAGE = is_defined[
     "MOJOLEARN_RF_FUSED_BOOTSTRAP_GATHER_SABOTAGE"
 ]()

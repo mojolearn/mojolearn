@@ -921,7 +921,7 @@ def rf_numeric_mode_binding() raises -> PythonObject:
 
 
 def rf_fused_bootstrap_gather_binding() raises -> PythonObject:
-    """Whether this binary uses the default-off fused bootstrap/gather arm."""
+    """Whether this binary uses the fused bootstrap/gather arm."""
     return PythonObject(Int(FUSED_BOOTSTRAP_GATHER))
 
 
