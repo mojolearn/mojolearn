@@ -1,9 +1,9 @@
 # AMD full-estash `y` alias: exact, memory-positive, speed-neutral rejection
 
-Date: 2026-09-20  
-Base: `f8b3a1967`  
+Date: 2026-09-20
+Base: `f8b3a1967`
 Device: Hot Aisle AMD Instinct MI300X VF (`gfx942`), Mojo 1.0.0
-(`ed45d567`)  
+(`ed45d567`)
 Mode: IDENTICAL, `B=1 L=2048 nh=12 nkv=12 hd=64`, causal
 
 ## Candidate
