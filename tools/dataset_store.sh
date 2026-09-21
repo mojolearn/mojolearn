@@ -57,6 +57,15 @@
 #   corpus/enwik8/tokens/mojolearn-bpe-50257-v1/manifest.json               26,834,102 int32 ids, schema
 #                                                               mojolearn.byte-lm.tokens.v1, mojolearn.lm_corpus)
 #
+#   vocab/mojolearn-bpe-fineweb-edu-50257-v1/ranks.tsv       (THE GPT-3 SMALL RUN'S VOCABULARY, 2026-09-21: 50,256
+#   vocab/mojolearn-bpe-fineweb-edu-50257-v1/tokenizer.json   ranks, min_frequency 2, trained by train_main.mojo on
+#                                                               ALL of FineWeb-Edu 10BT shard 000, each of its 726
+#                                                               row groups one document, every text followed by one
+#                                                               0x0A: 3,470,451,588 bytes, sha256 2fdce568...; R2 only)
+#   corpus/fineweb-edu-10BT/vocab-sample/000-rg0-19.txt         95,788,129   (row groups 0 to 19 of that shard as one
+#                                                               document: the sample the builder was held to across
+#                                                               the M4 and two rented x86 hosts, ranks 06a8b273...)
+#
 # And one MULTI-SHARD group, whose members are keys in their own right:
 #   corpus/fineweb-edu-10BT/NNN_00000.parquet  28,518,193,415 total, 14 shards
 #                                                 (FineWeb-Edu sample-10BT, the
@@ -95,6 +104,9 @@ vocab/mojolearn-bpe-50257-v1/ranks.tsv	HOME/mojolearn-evidence/tokenized-corpus-
 vocab/mojolearn-bpe-50257-v1/tokenizer.json	HOME/mojolearn-evidence/tokenized-corpus-sep18/vocab/mojolearn-bpe-50257-v1.tokenizer.json
 corpus/enwik8/tokens/mojolearn-bpe-50257-v1/tokens.i32	HOME/mojolearn-evidence/tokenized-corpus-sep18/lmcache/tokens/2b49720ec4d78c3c-3d547b17821cf465-d1048576/tokens.i32
 corpus/enwik8/tokens/mojolearn-bpe-50257-v1/manifest.json	HOME/mojolearn-evidence/tokenized-corpus-sep18/lmcache/tokens/2b49720ec4d78c3c-3d547b17821cf465-d1048576/manifest.json
+corpus/fineweb-edu-10BT/vocab-sample/000-rg0-19.txt	HOME/mojolearn-evidence/gpt3-small-vocab-sep21/fineweb-edu-10BT-000-rg0-19.txt
+vocab/mojolearn-bpe-fineweb-edu-50257-v1/ranks.tsv	HOME/mojolearn-evidence/gpt3-small-vocab-sep21/m4-shard000/vocab.ranks.tsv
+vocab/mojolearn-bpe-fineweb-edu-50257-v1/tokenizer.json	HOME/mojolearn-evidence/gpt3-small-vocab-sep21/m4-shard000/vocab.tokenizer.json
 EOF
 }
 

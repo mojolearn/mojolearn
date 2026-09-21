@@ -1,0 +1,2 @@
+mojolearn==0.8.11
+numpy==2.2.6
