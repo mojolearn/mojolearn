@@ -86,8 +86,7 @@ def make(family, source):
                    'D': source.f32((heads,)), 'out_proj.weight': source.f32((dm,di))}
         from mojolearn import Mamba3Block
         block = Mamba3Block(weights); block.numeric_mode = 'identical'
-    x = source.f32((b,l,dm)); dy = source.f32((b,l,dm))
-    return block, weights, x, dy
+    return block, weights
 
 
 def main():
@@ -101,7 +100,10 @@ def main():
     args = ap.parse_args()
     import numpy as np
     source = Bytes(args.dataset, {'transformer':0,'mamba1':104729,'mamba2':209759,'mamba3':314573}[args.family])
-    block, weights, x, dy = make(args.family, source)
+    block, weights = make(args.family, source)
+    common = Bytes(args.dataset, 4000000)
+    x = common.f32((SHAPE['batch'],SHAPE['length'],SHAPE['d_model']))
+    dy = common.f32((SHAPE['batch'],SHAPE['length'],SHAPE['d_model']))
     initial = digest(weights); rows=[]; last_y=None; last_g=None
     for step in range(args.warmup + args.samples):
         total0=time.perf_counter_ns(); t=time.perf_counter_ns(); last_y=block.forward(x)
@@ -111,19 +113,39 @@ def main():
         for name, value in weights.items():
             value -= np.float32(1e-5) * np.asarray(last_g[name])
         optimizer=(time.perf_counter_ns()-t)/1e9; total=(time.perf_counter_ns()-total0)/1e9
-        if step >= args.warmup: rows.append(dict(forward=forward,backward=backward,optimizer=optimizer,total=total))
+        arrays = {k:np.asarray(v) for k,v in last_g.items()}
+        if (not np.isfinite(np.asarray(last_y)).all() or
+                not all(np.isfinite(v).all() for v in arrays.values()) or
+                not all(np.isfinite(v).all() for v in weights.values())):
+            raise RuntimeError('nonfinite family screen result')
+        rows.append(dict(step=step+1,retained=step>=args.warmup,
+                         forward=forward,backward=backward,optimizer=optimizer,total=total,
+                         hashes=dict(output=hashlib.sha256(np.asarray(last_y).tobytes()).hexdigest(),
+                                     gradients=digest(arrays),weights=digest(weights))))
     from mojolearn import _backend
     binding_name = '_mojolearn_transformer' if args.family == 'transformer' else '_mojolearn_mamba'
     binding = _backend.binding(binding_name, 'identical'); binding_path = Path(binding.__file__)
+    root = Path(__file__).resolve().parents[1]
+    source_names = ['tools/neural_family_screen.py','python/mojolearn/_transformer_impl.py',
+                    'bindings/_mojolearn_transformer.mojo'] if args.family == 'transformer' else [
+                    'tools/neural_family_screen.py','python/mojolearn/_mamba_impl.py','bindings/_mojolearn_mamba.mojo']
+    source_sha256 = {name:hashlib.sha256((root/name).read_bytes()).hexdigest() for name in source_names}
+    retained = [r for r in rows if r['retained']]
+    native_vendor = str(binding.transformer_vendor() if args.family == 'transformer' else binding.mamba_vendor())
+    native_numeric_mode = int(binding.transformer_numeric_mode() if args.family == 'transformer' else binding.mamba_numeric_mode())
     result=dict(schema='mojolearn.neural-family-screen.v1',family=args.family,shape=SHAPE,
                 commit=args.commit,process=args.process,target_column=args.target_column,
                 binding=dict(path=str(binding_path),bytes=binding_path.stat().st_size,
                              sha256=hashlib.sha256(binding_path.read_bytes()).hexdigest()),
+                native_vendor=native_vendor,native_numeric_mode=native_numeric_mode,
+                source_sha256=source_sha256,
                 dataset=dict(key=args.dataset_key,sha256=args.dataset_sha256,bytes=args.dataset.stat().st_size),
                 schedule='raw R2 bytes deterministically mapped to finite fp32 inputs, cotangents, and weights',
                 warmup=args.warmup,samples=args.samples,rows=rows,
-                medians={k:statistics.median(r[k] for r in rows) for k in rows[0]},
+                medians={k:statistics.median(r[k] for r in retained) for k in ('forward','backward','optimizer','total')},
                 hashes=dict(initial_weights=initial,final_weights=digest(weights),
+                            input=hashlib.sha256(x.tobytes()).hexdigest(),
+                            cotangent=hashlib.sha256(dy.tobytes()).hexdigest(),
                             output=hashlib.sha256(np.asarray(last_y).tobytes()).hexdigest(),
                             gradients=digest({k:np.asarray(v) for k,v in last_g.items()})),
                 component_scope=dict(
@@ -133,7 +155,7 @@ def main():
                     attention_or_scan_core=None,pack_unpack_or_state_copies=None,
                     unavailable_reason='public block ABI does not expose isolated core/copy timers; use family-specific native timer follow-up after this total-step screen'))
     args.out.parent.mkdir(parents=True,exist_ok=True); args.out.write_text(json.dumps(result,indent=1,allow_nan=False)+'\n')
-    source.close(); print(json.dumps(dict(family=args.family,medians=result['medians'],status='PASS')))
+    common.close(); source.close(); print(json.dumps(dict(family=args.family,medians=result['medians'],status='PASS')))
 
 
 if __name__ == '__main__': main()
