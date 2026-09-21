@@ -1,13 +1,13 @@
 # Ordered resident RF/ExtraTrees inference
 
-**Verdict: promoted on NVIDIA IDENTICAL and Apple FAST/IDENTICAL.** The route retains the resident GPU
+**Verdict: promoted on Apple, NVIDIA, and AMD in FAST and IDENTICAL.** The route retains the resident GPU
 model and I/O workspaces while using the existing strict increasing-tree
-aggregation kernel. NVIDIA IDENTICAL `inference_engine="auto"` selects it by
-default. Apple FAST and IDENTICAL select the same strict ordered resident
-route. `-D MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF=1` restores the former
-sequential IDENTICAL AUTO path and resident FAST 32-grove graph. AMD and
-other vendors retain their previous defaults; the positive define remains
-available for explicit IDENTICAL experiments on them.
+aggregation kernel. `inference_engine="auto"` selects the same strict ordered
+resident route in both modes on all three GPU vendors.
+`-D MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF=1` restores the former sequential
+IDENTICAL AUTO path and resident FAST 32-grove graph. Unsupported columns
+retain their previous defaults; the positive define remains available for
+explicit IDENTICAL experiments on them.
 
 The run reused the warm RunPod H100 and the two Cloudflare R2 objects already
 staged by `tools/stage_from_r2.sh`: Taxi and Istella-S. Models were fitted once
@@ -56,6 +56,41 @@ a public `inference_engine="auto"` smoke compared it with explicit sequential
 inference on 100,000 rows from both datasets. All eight RF/ET predict/proba
 cells matched full-buffer SHA-256 for three AUTO repeats. This verifies the
 promoted default rather than only the experimental define.
+
+NVIDIA FAST uses the same already-qualified ordered kernel and policy arm.
+A forced NVIDIA-column FAST build of the analytic lifecycle and
+candidate-selection check compiled locally after the policy change. No new
+NVIDIA rental was opened for this policy extension.
+
+## AMD MI325X qualification
+
+The identical matrix was repeated on a DigitalOcean AMD Instinct MI325X VF
+(`gfx942`, ROCm driver 6.12.12). Both R2 objects were staged before the run.
+Models were fitted once on 1,000,000 rows and inference used 1,000,000 rows.
+Each cell retained five calls after one warmup in three alternating processes.
+
+| dataset | model | operation | sequential ms | ordered resident ms | speedup | conservative candidate/baseline | quality |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Taxi | RF | predict | 4212.658 | 9.340 | 451.04x | 0.0022 | accuracy 0.784290 |
+| Taxi | RF | proba | 4207.314 | 7.937 | 530.07x | 0.0019 | logloss 0.4899468627365843 |
+| Taxi | ET | predict | 4139.323 | 7.850 | 527.28x | 0.0019 | accuracy 0.779572 |
+| Taxi | ET | proba | 4138.255 | 7.057 | 586.41x | 0.0019 | logloss 0.5114427944488870 |
+| Istella-S | RF | predict | 4224.668 | 61.555 | 68.63x | 0.0164 | accuracy 0.965139 |
+| Istella-S | RF | proba | 4311.683 | 59.804 | 72.10x | 0.0160 | logloss 0.1061623170680610 |
+| Istella-S | ET | predict | 4211.484 | 58.842 | 71.57x | 0.0144 | accuracy 0.938552 |
+| Istella-S | ET | proba | 4199.769 | 58.030 | 72.37x | 0.0141 | logloss 0.1700072624003231 |
+
+All eight AMD cells passed the full gate: every output buffer and quality
+value matched, candidate process-median spreads were 1.006--1.030, and the
+conservative ratios were 0.0019--0.0164. Fresh no-define AMD FAST and
+IDENTICAL RF/ExtraTrees bindings then passed analytic route selection and
+public AUTO versus explicit sequential full-buffer equality on both datasets,
+all four operations, and three repeats at 100,000 rows. Compact receipts are
+in `bench/results/forest_ordered_amd_2026-09-21/`.
+
+DigitalOcean droplet `602447298` was deleted after evidence fetch. DELETE
+returned HTTP 204, the ID lookup reached HTTP 404, and the final listing was
+HTTP 200 with no matching droplet.
 
 ## Apple Metal support
 

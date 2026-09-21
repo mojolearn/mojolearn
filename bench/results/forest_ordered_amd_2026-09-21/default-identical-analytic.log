@@ -1,0 +1,8 @@
+RESIDENT_LAYOUT_PACKED True
+RESIDENT_ORDERED True
+ORDERED_ROUTE_PASS RF_INPUT True selected True
+ORDERED_ROUTE_PASS RF_INPUT False selected True
+WORKSPACE_PASS RF_INPUT True cached/uncached resize/reuse/empty/changed-input/close
+WORKSPACE_PASS RF_INPUT False cached/uncached resize/reuse/empty/changed-input/close
+RESIDENT_MODE 1 VENDOR hip
+RESIDENT_FOREST_PASS repeated borrowed/List/transient/stump, release/stale/newID, dimensions/finite input+output/graph, destruction

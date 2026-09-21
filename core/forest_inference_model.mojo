@@ -13,8 +13,8 @@ from std.sys.compile import is_defined
 from std.memory import bitcast
 from std.time import perf_counter_ns
 from max.algorithm import sync_parallelize
-from checks.numerics import GLOBAL_NUMERIC_MODE
-from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE, COLUMN_NVIDIA
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
+from checks.kernel_matrix import TARGET_COLUMN, COLUMN_APPLE, COLUMN_NVIDIA, COLUMN_AMD
 from max.gpu.host import DeviceContext, DeviceBuffer, HostBuffer
 from core.forest_inference import validate_flat_forest, require_finite, launch_forest_inference, launch_forest_argmax, FOREST_PACKED_NODES
 from core.forest_inference_pool import PooledForest, forest_device_count
@@ -37,23 +37,27 @@ from core.forest_inference_pool import PooledForest, forest_device_count
 comptime FOREST_PINNED_STAGE = is_defined["MOJOLEARN_FOREST_PINNED_STAGE"]()
 comptime FOREST_PROFILE = is_defined["MOJOLEARN_FOREST_PROFILE"]()
 def forest_ordered_resident_policy[
-    column: Int, identical: Bool, forced: Bool, disabled: Bool
+    column: Int, mode: Int, forced: Bool, disabled: Bool
 ]() -> Bool:
-    """Apple FAST/IDENTICAL and NVIDIA IDENTICAL defaults."""
+    """Strict ordered resident defaults on every supported GPU vendor."""
     return not disabled and (
-        column == COLUMN_APPLE
-        or (identical and (forced or column == COLUMN_NVIDIA))
+        ((mode == NUMERIC_FAST or mode == NUMERIC_IDENTICAL) and (
+            column == COLUMN_APPLE
+            or column == COLUMN_NVIDIA
+            or column == COLUMN_AMD
+        ))
+        or (mode == NUMERIC_IDENTICAL and forced)
     )
 
 
 #: Retain the resident model/workspaces while launching the strict
 #: increasing-tree kernel. H100 full-buffer qualification promotes this for
-#: NVIDIA IDENTICAL and Apple FAST/IDENTICAL. `_OFF` restores the former
+#: Apple, NVIDIA and AMD in FAST/IDENTICAL. `_OFF` restores the former
 #: sequential IDENTICAL AUTO policy and resident FAST 32-grove graph; the
 #: positive define remains an experiment switch for other IDENTICAL columns.
 comptime FOREST_ORDERED_RESIDENT = forest_ordered_resident_policy[
     TARGET_COLUMN,
-    GLOBAL_NUMERIC_MODE == 1,
+    GLOBAL_NUMERIC_MODE,
     is_defined["MOJOLEARN_FOREST_ORDERED_RESIDENT"](),
     is_defined["MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF"](),
 ]()
