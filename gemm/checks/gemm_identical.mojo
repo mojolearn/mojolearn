@@ -194,12 +194,6 @@ comptime GEMM_FOLD_SPECIALIZE_SABOTAGE_FS8 = is_defined[
 comptime GEMM_FOLD_SPECIALIZE_SABOTAGE = (
     GEMM_FOLD_SPECIALIZE_SABOTAGE_FS4 or GEMM_FOLD_SPECIALIZE_SABOTAGE_FS8
 )
-comptime assert not (
-    GEMM_FOLD_SPECIALIZE_SABOTAGE_FS4 and GEMM_FOLD_SPECIALIZE_SABOTAGE_FS8
-), "select only one fold-specialization sabotage class"
-comptime assert not GEMM_FOLD_SPECIALIZE_SABOTAGE or GEMM_FOLD_SPECIALIZE_TRIAL, (
-    "fold-specialization sabotage requires its trial"
-)
 
 
 # ===========================================================================
@@ -4471,6 +4465,13 @@ def _shipped_body_kpack_hg[
     in one asynchronous launch otherwise. Every other
     call keeps `choose_gemm_plan`'s plan. `SAB = True` is the trial hook's
     sabotage of this body: exactly `gemm_step_kpack_reach` cells move."""
+    comptime assert not (
+        GEMM_FOLD_SPECIALIZE_SABOTAGE_FS4
+        and GEMM_FOLD_SPECIALIZE_SABOTAGE_FS8
+    ), "select only one fold-specialization sabotage class"
+    comptime assert (
+        not GEMM_FOLD_SPECIALIZE_SABOTAGE or GEMM_FOLD_SPECIALIZE_TRIAL
+    ), "fold-specialization sabotage requires its trial"
     if m <= 0 or n <= 0:
         return
     # MI325X, 2026-09-20: the packed body wins strongly for the narrow
