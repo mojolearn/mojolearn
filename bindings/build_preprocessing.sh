@@ -52,7 +52,7 @@ trap 'rm -rf "$tmpdir"' EXIT INT TERM
 out=$tmpdir/_mojolearn_preprocessing.so
 # Intentionally split compiler option lists, consistent with existing builders.
 pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib \
-    $target_flags $link_flags $mode_flags $column_flags ${MOJOLEARN_BUILD_EXTRA_DEFINES:-} -I . -I bindings \
+    $target_flags $link_flags $mode_flags $column_flags -I . -I bindings \
     bindings/_mojolearn_preprocessing.mojo -o "$out"
 # The gate below needs NumPy in the gating interpreter, which a fresh Linux
 # build box does not have; the caller that sets MOJOLEARN_SKIP_BUILD_GATE
