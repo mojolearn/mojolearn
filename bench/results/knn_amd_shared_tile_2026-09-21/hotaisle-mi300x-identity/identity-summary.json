@@ -1,0 +1,42 @@
+{
+ "comparisons": {
+  "default_cpu_diff_exit": 0,
+  "narrow_default_sabotage_diff_exit": 0
+ },
+ "cpu": {
+  "cell_count": 198,
+  "commit": "38cd6ce6cc84546a27b54e4aea3f80f74590a407",
+  "complete": true,
+  "fixture_count": 9,
+  "mode": "identical",
+  "partial_column": false,
+  "repeats": 2,
+  "sha256": "cdbd8c202c545c830b40cc69f046ba942885b02beb5bd10793ec82a6cbf85e6e",
+  "skipped_count": 0,
+  "vendor": "amd-gfx942-cpu"
+ },
+ "default": {
+  "cell_count": 198,
+  "commit": "38cd6ce6cc84546a27b54e4aea3f80f74590a407",
+  "complete": true,
+  "fixture_count": 9,
+  "mode": "identical",
+  "partial_column": false,
+  "repeats": 2,
+  "sha256": "6120f6ee73503bc2506b6d7b81bcc4b6b89bc68ec3a6f7e82837bd568149a2e0",
+  "skipped_count": 0,
+  "vendor": "amd-gfx942-default"
+ },
+ "sabotage": {
+  "cell_count": 198,
+  "commit": "38cd6ce6cc84546a27b54e4aea3f80f74590a407",
+  "complete": true,
+  "fixture_count": 9,
+  "mode": "identical",
+  "partial_column": false,
+  "repeats": 2,
+  "sha256": "39b75bc67b37baeb226f96c0c3a158dd0cdaa0f269e602cf2db874f361e03e0d",
+  "skipped_count": 0,
+  "vendor": "amd-gfx942-sabotage"
+ }
+}

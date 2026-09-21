@@ -1,0 +1,6 @@
+306ee7378ab54597a8cf409775ee738a9d88f9ddfca1eea9386fb134c01e4cc5  /root/knn-amd-bins/default/_mojolearn.so
+a54e2055d751df4eca4ec83e2c08d06b3475d6a079af2ec50984a637cde11a4b  /root/knn-amd-bins/default/_mojolearn_estimators.so
+611d37c75a29aad21c138cf5587e792fe67e5c1cf735d5835fed0291dd47aa88  /root/knn-amd-bins/sabotage/_mojolearn.so
+a54e2055d751df4eca4ec83e2c08d06b3475d6a079af2ec50984a637cde11a4b  /root/knn-amd-bins/sabotage/_mojolearn_estimators.so
+aa65c3fce280c8ecfd2fa68e4d66a4e28ecc81b97ec394380ff46097abea5ce3  /root/knn-amd-host/_mojolearn_core_host.so
+af54658f1e11d56b89d04259d7b1336a43c3f6ca64bfd1cd0d6885a460b574cb  /root/knn-amd-host/_mojolearn_estimators_host.so

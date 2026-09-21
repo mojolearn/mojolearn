@@ -26,7 +26,7 @@ That repeatable single-dataset regression rejects unconditional AMD routing.
 | DigitalOcean MI325X VF (`gfx942`) | 24.6410 -> 34.2718 | 1.3914 | 104.1189 -> 55.7047 | 0.5351 | 0.8629 |
 | Hot Aisle MI300X VF (`gfx942`) | 26.1097 -> 34.7844 | 1.3302 | 115.5578 -> 57.7079 | 0.4992 | 0.8149 |
 
-## Route only at 32 or more features: promising, with an admission gap
+## Route only at 32 or more features: accepted
 
 The follow-up candidate set `KNN_SMEM_MIN_FEATURES=32`. This disabled the
 shared tile and block top-k for Taxi, while 220-feature Istella-S used both.
@@ -35,7 +35,9 @@ Taxi because that admission had not yet been given the same runtime width
 guard. Taxi therefore did not measure the final intended narrow request path,
 and its result cannot by itself admit the promoted routing. The working
 candidate now applies `n_features >= KNN_SMEM_MIN_FEATURES` to exact-chain
-admission as well; that correction still needs its narrow confirmation.
+admission as well. A later broad identity run confirmed that the corrected
+narrow default is unchanged from both the CPU oracle and a shared-tile
+sabotage build; the promoted tile cannot affect requests below 32 features.
 
 | provider / GPU | Taxi ms (base -> candidate) | Taxi paired ratio | Istella-S ms (base -> candidate) | Istella-S ratio | geomean |
 |---|---:|---:|---:|---:|---:|
@@ -45,9 +47,8 @@ admission as well; that correction still needs its narrow confirmation.
 `*` The Hot Aisle Taxi baseline had one outlier and a 1.452 max/min spread,
 so the harness marked that arm `flagged`; its Taxi ratio and derived geomean
 are diagnostic, not promotion evidence. The stable DigitalOcean run and both
-providers' roughly halved wide-input time support the width-gated candidate,
-but the corrected narrow admission and broad identity/sabotage checks remain
-promotion gates.
+providers' roughly halved wide-input time support the width-gated candidate.
+The broad identity and reach results below close the remaining promotion gate.
 
 IQR below means Q3-Q1 over the six outer-pass medians, using inclusive
 quartiles. The paired range is the minimum and maximum of the same six
@@ -73,9 +74,36 @@ stable within each arm and bitwise equal across the baseline and candidate:
 Because every returned neighbor index and distance bit is unchanged, kNN
 recall and all downstream quality computed from these outputs are unchanged.
 The fixed two-dataset digest gate passed on MI325X and MI300X for both the
-unconditional and 32-feature candidates. This is not the broad kNN identity
-gate: cross-column reference coverage and the shared-tile sabotage witness
-are still required before promotion.
+unconditional and 32-feature candidates. The separate broad kNN identity gate
+below supplies cross-column reference coverage and a shared-tile sabotage
+witness before promotion.
+
+## Broad identity and shared-tile reach: passed
+
+The final `gfx942` candidate was built three ways from source `38cd6ce6c`:
+the promoted HIP default, the same HIP build with
+`MOJOLEARN_KNN_SMEM_TILE_SABOTAGE=1`, and the CPU host oracle. The broad
+matrix covered 22 neighbor and density lanes, nine fixtures, two repeats, and
+198 cells per arm. Every arm was complete with no skipped cells. The default
+HIP and CPU outputs were bitwise equal. The narrow default and sabotage
+outputs were also equal, proving that the shared tile remains isolated below
+the 32-feature threshold.
+
+A separate width probe hashed complete caller-visible output buffers for 36
+cases at 32 and 220 features. All default HIP hashes equaled CPU. Sabotage
+moved all 14 cases that traverse the promoted brute-force tile: Euclidean and
+squared-Euclidean nearest-neighbor queries at `k=1,8,16`, plus uniform and
+distance-weighted classifier and regressor calls. Non-L2 metrics, KDE, and
+`RadiusNeighbors` remained equal as expected.
+
+The on-box judge initially listed `radius-d32` as a required sabotage target
+and therefore exited 1 after every substantive check had passed.
+`RadiusNeighbors` uses the separate ball-cover count/fill implementation, so
+it cannot reach the brute-force shared tile. The harness now keeps radius as
+an identity check without requiring it to react to the shared-tile sabotage.
+The corrected judge passes against the original three width-probe outputs;
+no GPU rerun was needed and the uncorrected verdict is retained in the compact
+receipts.
 
 ## Receipts and teardown
 
@@ -89,7 +117,7 @@ identity, source hashes, and provider lifecycle logs:
 - `digitalocean-mi325x-wide`: 32-feature candidate, source `1afe6d028`.
 - `hotaisle-mi300x-wide`: 32-feature candidate, source `1afe6d028`.
 
-Compact tracked receipts for both conditional runs are under
+Compact tracked receipts for both conditional runs and the final broad gate are under
 `bench/results/knn_amd_shared_tile_2026-09-21/`. They contain the original
 summaries and verdicts, a deterministic projection retaining all round
 medians, paired ratios, and timed-call digests, source and teardown receipts,
@@ -99,7 +127,9 @@ driver 6.12.12 and ROCm 6.4.0-47. Hot Aisle used an MI300X VF in
 Both used `gfx942`, Mojo 1.0.0 (`ed45d567`), NumPy 2.5.3, and PyTorch
 2.6.0+rocm6.4.1.
 
-Both DigitalOcean droplets were deleted and verified with HTTP 404. Both Hot
-Aisle VMs were deleted, returned HTTP 404, were absent from the provider list,
-and released their local lease slots. No paid resource from these trials was
-left running.
+Both DigitalOcean droplets were deleted and verified with HTTP 404. All three
+Hot Aisle VMs, including the final broad-gate MI300X, were deleted, returned
+HTTP 404, were absent from the provider list, and released their local lease
+slots. The broad gate's Cloudflare R2 staging also verified the pinned Taxi
+and Istella-S object hashes, although its fixed identity inputs did not need
+to read those datasets. No paid resource from these trials was left running.

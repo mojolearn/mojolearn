@@ -1,0 +1,25 @@
+{
+ "default_cpu_bitwise_equal": true,
+ "default_cpu_mismatches": [],
+ "required_reach_count": 15,
+ "sabotage_moved": [
+  "clf-d32-distance",
+  "clf-d32-uniform",
+  "nn-d220-euclidean-k1",
+  "nn-d220-euclidean-k16",
+  "nn-d220-sqeuclidean-k1",
+  "nn-d220-sqeuclidean-k16",
+  "nn-d32-euclidean-k1",
+  "nn-d32-euclidean-k16",
+  "nn-d32-euclidean-k8",
+  "nn-d32-sqeuclidean-k1",
+  "nn-d32-sqeuclidean-k16",
+  "nn-d32-sqeuclidean-k8",
+  "reg-d32-distance",
+  "reg-d32-uniform"
+ ],
+ "sabotage_moved_count": 14,
+ "unreached": [
+  "radius-d32"
+ ]
+}

@@ -152,9 +152,11 @@ diff_equal narrow_default_sabotage "$OUT/default.json" "$OUT/sabotage.json"
 
 # A separate width probe reaches the promoted d>=32 route.  It covers the
 # shipped block-top-k range at k=1,8,16, both L2 spellings, classifier and
-# regressor (uniform and distance weights), radius output, KDE, and the other
-# public metrics as collateral identity checks.  Every arm runs in a fresh
-# process; the JSON stores complete caller-visible array hashes.
+# regressor (uniform and distance weights), plus radius, KDE, and the other
+# public metrics as collateral identity checks.  Radius uses the separate
+# ball-cover implementation, so it must remain bitwise equal but is not a
+# shared-tile sabotage target.  Every arm runs in a fresh process; the JSON
+# stores complete caller-visible array hashes.
 cat > "$OUT/width_probe.py" <<'PY'
 import hashlib, json, os, sys
 import numpy as np
@@ -237,7 +239,7 @@ moved = sorted(k for k in d if d[k] != s[k])
 # These cases all traverse the Euclidean/squared-Euclidean tile at d>=32.
 required = [k for k in d if (k.startswith("nn-") and ("-euclidean-" in k or "-sqeuclidean-" in k))]
 required += ["clf-d32-uniform", "clf-d32-distance", "reg-d32-uniform",
-             "reg-d32-distance", "radius-d32"]
+             "reg-d32-distance"]
 unreached = sorted(k for k in required if k not in moved)
 record = {"default_cpu_bitwise_equal": not mismatch, "default_cpu_mismatches": mismatch,
           "sabotage_moved_count": len(moved), "sabotage_moved": moved,

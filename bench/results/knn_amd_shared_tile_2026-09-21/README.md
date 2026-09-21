@@ -20,7 +20,14 @@ provider lifecycle. `gpu.txt`, `box.txt`, `rocm_provenance.txt`, `uname.txt`,
 hardware, driver/runtime, compiler, environment, and dependency provenance.
 The manifest hashes every receipt except itself.
 
-This directory supports the fixed-workload performance and digest result. It
-does not replace the broad kNN identity and sabotage gates required before
-promotion. The trial source also left the experimental exact-chain admission
-active below 32 features; the evidence note records that admission gap.
+This directory supports the fixed-workload performance and digest result plus
+the final broad identity and sabotage gate. The two timing-trial sources left
+the experimental exact-chain admission active below 32 features; the evidence
+note records that historical gap and how the final gate closed it.
+
+`hotaisle-mi300x-identity/` contains compact receipts for the corrected final
+candidate. Its 22-lane broad matrix was bitwise equal to the CPU oracle, its
+narrow outputs were unaffected by the shared-tile sabotage, and all 14 wide
+brute-force cases required to traverse the promoted tile moved under sabotage.
+The original judge incorrectly required the separate ball-cover radius path
+to move; both its failed output and the corrected verdict are retained.
