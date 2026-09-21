@@ -23,6 +23,7 @@ TRAIN_ROWS=${GROUP8_TRAIN_ROWS:-1000000}
 TREES=${GROUP8_TREES:-256}
 ROUNDS=${GROUP8_ROUNDS:-5}
 PASSES=${GROUP8_PASSES:-3}
+BATCH_CALLS=${GROUP8_BATCH_CALLS:-5}
 DATA=${GBM_BENCH_DATA:-/root/datasets/gbm-bench}
 export GBM_BENCH_DATA="$DATA"
 export MOJOLEARN_NUMERIC_MODE=identical
@@ -108,7 +109,8 @@ time_one() {
     env PYTHONPATH="$ARMS/$_arm" pixi run python3 bench/speed/infer_speed_trees_ab.py time \
         --model "$_model" --x "$AB/x_${_dataset}.npy" --y "$AB/y_${_dataset}.npy" \
         --dataset "$_dataset" --task binary --kind gbdt --path "gpu-$_path" \
-        --rounds "$ROUNDS" --label "$_arm" --json "$_json"
+        --rounds "$ROUNDS" --batch-calls "$BATCH_CALLS" \
+        --label "$_arm" --json "$_json"
 }
 
 phase_run() {

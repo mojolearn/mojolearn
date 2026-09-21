@@ -169,6 +169,8 @@ def _load_gpu_model(kind, path):
 
 def time_path(args):
     import mojolearn as ml
+    if args.batch_calls < 1:
+        raise SystemExit("--batch-calls must be at least 1")
     x = np.load(args.x)
     x = np.ascontiguousarray(x, dtype=np.float32)
     if args.path.startswith("host"):
@@ -219,9 +221,10 @@ def time_path(args):
     rounds = []
     for _ in range(args.rounds):
         t0 = time.perf_counter()
-        r = call()
-        rounds.append((time.perf_counter() - t0) * 1000.0)
-        hashes.append(digest(r))
+        for _inner in range(args.batch_calls):
+            r = call()
+            hashes.append(digest(r))
+        rounds.append((time.perf_counter() - t0) * 1000.0 / args.batch_calls)
     ordered = sorted(rounds)
     median = ordered[len(ordered) // 2] if len(ordered) % 2 else 0.5 * (ordered[len(ordered) // 2 - 1] + ordered[len(ordered) // 2])
     spread = ordered[-1] / ordered[0] if ordered[0] > 0 else float("inf")
@@ -236,7 +239,7 @@ def time_path(args):
         vendor=ml.vendor(), numeric_mode=ml.numeric_mode(),
         package_dir=os.path.dirname(ml.__file__), bindings=_loaded_bindings(),
         threads_env=os.environ.get("MOJOLEARN_CPU_THREADS", ""), label=args.label,
-        cpu_count=os.cpu_count(),
+        cpu_count=os.cpu_count(), batch_calls=args.batch_calls,
     )
     with open(args.json, "w") as fh:
         json.dump(record, fh, indent=1)
@@ -310,6 +313,8 @@ def main():
     t.add_argument("--path", required=True,
                    choices=("gpu-predict", "gpu-proba", "host-predict", "host-proba", "gbdt-parse"))
     t.add_argument("--rounds", type=int, default=5)
+    t.add_argument("--batch-calls", type=int, default=1,
+                   help="calls per timed sample; report per-call milliseconds")
     t.add_argument("--json", required=True)
     t.add_argument("--label", default="")
     t.add_argument("--dataset", choices=("taxi", "istella"), default=None)
