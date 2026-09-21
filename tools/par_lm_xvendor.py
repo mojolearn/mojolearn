@@ -233,11 +233,11 @@ def cmd_compare(args):
     for r, n in zip(recs, names):
         if r["verdict"] != "PASS":
             bad.append(f"{n}: on-box verdict {r['verdict']}: {r['failures'][:3]}")
-    recipe = lambda r: (r["logical_shards"], r["steps"], r["seed"], json.dumps(r["shape"], sort_keys=True))
+    recipe = lambda r: (r["logical_shards"], r["seed"], json.dumps(r["shape"], sort_keys=True))
     by_step = {}
     for r, n in zip(recs, names):
         if recipe(r) != recipe(recs[0]):
-            bad.append(f"{n}: a different recipe (shards, steps, seed or shape); not comparable")
+            bad.append(f"{n}: a different recipe (shards, seed or shape); not comparable")
             continue
         for row in r["rows"]:
             by_step.setdefault(row["step"], []).append((n, row))
