@@ -59,31 +59,55 @@ done
 
 build_arm off ''
 build_arm fused "$D_FUSED"
-for _ds in taxi istella; do
-    require_step "race_$_ds" 5400 "$P" "$R/bench/speed/standard_fit_transform_ab.py" race \
-      --block "$DATA/big-$_ds.npz" --rounds 5 --timeout 1800 \
-      --spread-gate 1.10 --min-speedup 1.02 --output "$O/$_ds.json" \
+for _outer in 0 1 2; do
+  _first=off; [ $(( _outer % 2 )) -eq 0 ] || _first=fused
+  for _ds in taxi istella; do
+    require_step "race_${_ds}_${_outer}" 5400 "$P" "$R/bench/speed/standard_fit_transform_ab.py" race \
+      --block "$DATA/big-$_ds.npz" --rounds 5 --timeout 1800 --first-arm "$_first" \
+      --spread-gate 1.10 --min-speedup 0.0 --output "$O/${_ds}.${_outer}.json" \
       --arm off "$P" /root/standard-fit-transform-off \
       --arm fused "$P" /root/standard-fit-transform-fused
+  done
 done
 
 "$P" - "$O" <<'PY'
 import json, pathlib, sys
 root = pathlib.Path(sys.argv[1])
-cells = [json.loads((root / (name + ".json")).read_text())
-         for name in ("taxi", "istella")]
-ok = all(cell.get("promotion_eligible") is True for cell in cells)
-summary = {"pass": ok, "cells": [
-    {"dataset": pathlib.Path(cell["block"]).stem,
-     "speedup": cell["speedup"],
-     "spread": {arm: cell["arms"][arm]["spread"] for arm in ("off", "fused")},
-     "stats_sha256": cell["stats_sha256"],
-     "output_sha256": cell["output_sha256"],
-     "quality": cell["quality"], "verdict": cell["verdict"]}
-    for cell in cells]}
+datasets = ("taxi", "istella")
+cells = {name: [json.loads((root / f"{name}.{outer}.json").read_text())
+                for outer in range(3)] for name in datasets}
+summaries = []
+ok = True
+for name in datasets:
+    rows = cells[name]
+    ready = [row["ready"] for row in rows]
+    inputs = {(tuple(r[arm]["shape"]), r[arm]["dtype"], r[arm]["input_sha256"])
+              for r in ready for arm in ("off", "fused")}
+    stats_hashes = {row["stats_sha256"] for row in rows}
+    output_hashes = {row["output_sha256"] for row in rows}
+    qualities = {json.dumps(row["quality"], sort_keys=True) for row in rows}
+    conservative = (min(row["arms"]["off"]["median_ms"] for row in rows) /
+                    max(row["arms"]["fused"]["median_ms"] for row in rows))
+    stable = all(row["arms"][arm]["spread"] <= 1.10
+                 for row in rows for arm in ("off", "fused"))
+    exact = len(inputs) == len(stats_hashes) == len(output_hashes) == len(qualities) == 1
+    passed = exact and stable and conservative >= 1.02
+    ok = ok and passed
+    shape, dtype, input_sha = next(iter(inputs))
+    summaries.append({"dataset": name, "shape": list(shape), "dtype": dtype,
+                      "input_sha256": input_sha,
+                      "stats_sha256": next(iter(stats_hashes)),
+                      "output_sha256": next(iter(output_hashes)),
+                      "quality": rows[0]["quality"],
+                      "outer_speedups": [row["speedup"] for row in rows],
+                      "conservative_speedup": conservative,
+                      "stable": stable, "pass": passed})
+summary = {"datasets": list(datasets), "exact_dataset_set": list(cells) == list(datasets),
+           "fresh_process_outers": 3, "retained_rounds_per_arm_per_outer": 5,
+           "pass": ok and list(cells) == list(datasets), "cells": summaries}
 (root / "verdict.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
 print(json.dumps(summary, sort_keys=True))
-raise SystemExit(0 if ok else 1)
+raise SystemExit(0 if summary["pass"] else 1)
 PY
 test $? -eq 0 || exit 35
 git rev-parse HEAD > "$O/commit.txt"

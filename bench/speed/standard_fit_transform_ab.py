@@ -49,7 +49,8 @@ def worker(args):
         protocol.write(json.dumps(record, sort_keys=True, allow_nan=False) + "\n")
 
     emit({"event": "ready", "arm": args.arm, "fused_native": fused,
-          "shape": list(X.shape), "dtype": X.dtype.str})
+          "shape": list(X.shape), "dtype": X.dtype.str,
+          "input_sha256": digest(X)})
     for line in sys.stdin:
         command, _, number = line.strip().partition(" ")
         if command == "quit":
@@ -71,6 +72,8 @@ def worker(args):
             "scale_positive": bool(np.all(stats[2] > 0)),
             "samples": int(model.n_samples_seen_),
             "features": int(model.n_features_in_),
+            "transformed_mean": output.mean(axis=0, dtype=np.float64).tolist(),
+            "transformed_variance": output.var(axis=0, dtype=np.float64).tolist(),
         }
         emit({"event": "run", "seq": seq, "ms": elapsed,
               "stats_sha256": digest(stats), "output_sha256": digest(output),
@@ -140,13 +143,14 @@ def main():
     r.add_argument("--timeout", type=float, default=1800)
     r.add_argument("--spread-gate", type=float, default=1.10)
     r.add_argument("--min-speedup", type=float, default=1.02)
+    r.add_argument("--first-arm", choices=("off", "fused"), default="off")
     r.add_argument("--output", required=True)
     args = parser.parse_args()
     if args.command == "worker":
         return worker(args)
     arms = {name: (python, tree) for name, python, tree in args.arm}
-    if set(arms) != {"off", "fused"} or len(args.arm) != 2 or args.rounds < 1:
-        parser.error("race requires exactly off and fused arms and positive rounds")
+    if set(arms) != {"off", "fused"} or len(args.arm) != 2 or args.rounds < 5:
+        parser.error("race requires exactly off and fused arms and at least five rounds")
     os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
     children = {}
     records = {name: [] for name in arms}
@@ -161,7 +165,9 @@ def main():
             children[name].send("run -1")
             children[name].read(args.timeout)
         for seq in range(args.rounds):
-            order = ("off", "fused") if seq % 2 == 0 else ("fused", "off")
+            first = args.first_arm if seq % 2 == 0 else (
+                "fused" if args.first_arm == "off" else "off")
+            order = (first, "fused" if first == "off" else "off")
             for name in order:
                 children[name].send("run %d" % seq)
                 record = children[name].read(args.timeout)
