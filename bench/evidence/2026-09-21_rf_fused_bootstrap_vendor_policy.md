@@ -37,3 +37,11 @@ The H100 receipt is external at
 `verdict.json` SHA-256 is `be9b4ea1...d13065316`. The MI325X receipt is at
 `mojolearn-evidence/training-amd-2026-09-21_114800-mi325x-retry/remote/rf-fused-bootstrap/`.
 Both provider leases were destroyed and verified absent after collection.
+
+After promotion, a fresh H100 default-versus-OFF smoke compiled both policies
+from `1a131612b`. The default binding reported CUDA and fusion enabled; the OFF
+binding reported CUDA and fusion disabled. Across Taxi and Istella, all ten
+retained records per dataset matched complete model arrays, fitted metadata and
+classes, predictions, probabilities, accuracy, and log loss. Launch logs found
+120 fused bootstrap launches per dataset only in the default binding. The
+receipt is `mojolearn-evidence/2026-09-21_rf_gdw_h100/pulled/rf-default-smoke/`.

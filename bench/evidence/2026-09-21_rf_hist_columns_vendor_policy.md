@@ -30,3 +30,12 @@ NVIDIA and Apple therefore select tile4 by default.
 `MOJOLEARN_RF_HIST_COLUMNS4_OFF=1` restores the original one-column route.
 HIP remains default-off pending its MI300X trial, while
 `MOJOLEARN_RF_HIST_COLUMNS4=1` remains the explicit AMD experiment switch.
+
+A post-promotion H100 smoke compiled the shipped default and `_OFF` bindings
+from `1a131612b`. The default selected 1,836 Taxi and 2,940 Istella tile4
+launches with zero original-route launches; OFF selected the same counts on the
+original route with zero tile4 launches. The same run matched complete model,
+metadata/classes, prediction, probability, and quality outputs across all ten
+retained records per dataset. Evidence is at
+`mojolearn-evidence/2026-09-21_rf_gdw_h100/pulled/rf-default-smoke/`.
+RunPod `9c8xn6uorujf8k` was then destroyed (DELETE 204, verification GET 404).
