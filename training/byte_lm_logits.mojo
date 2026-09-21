@@ -177,6 +177,7 @@ def _logits_forward(
     var trace = IdentityTrace.disabled()
     for layer in range(config.n_layers):
         var st = sc.stages.pop(layer)
+        # After the pop, the NEXT block's stages are at index `layer`, not `layer + 1`.
         sc.cache.s = 0
         var prefix = String("byte.logits.block") + String(layer) + ".forward"
         var norm1_ready = layer > 0 and residual_next_norm_fusion_enabled(
@@ -190,8 +191,8 @@ def _logits_forward(
             if fuse_next:
                 llama_decoder_layer_forward(ctx, st, sc.cache, rope, weights[layer], sc.x,
                     batch, length, 0, trace, prefix, norm1_ready=norm1_ready,
-                    next_norm_sumsq=Optional(sc.stages[layer + 1].norm1_sumsq.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
-                    next_norm_out=Optional(sc.stages[layer + 1].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
+                    next_norm_sumsq=Optional(sc.stages[layer].norm1_sumsq.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
+                    next_norm_out=Optional(sc.stages[layer].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_weight=Optional(weights[layer + 1].norm1_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_eps=Optional(weights[layer + 1].eps))
             else:
@@ -201,8 +202,8 @@ def _logits_forward(
             if fuse_next:
                 llama_decoder_layer_forward(ctx, st, sc.cache, rope, weights[layer], sc.stages[layer - 1].residual2,
                     batch, length, 0, trace, prefix, norm1_ready=norm1_ready,
-                    next_norm_sumsq=Optional(sc.stages[layer + 1].norm1_sumsq.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
-                    next_norm_out=Optional(sc.stages[layer + 1].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
+                    next_norm_sumsq=Optional(sc.stages[layer].norm1_sumsq.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
+                    next_norm_out=Optional(sc.stages[layer].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_weight=Optional(weights[layer + 1].norm1_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_eps=Optional(weights[layer + 1].eps))
             else:

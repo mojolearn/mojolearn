@@ -1140,6 +1140,7 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
         # Move the current stages out while borrowing the preceding residual.
         # No extra activation copy; restore canonical layer order after the call.
         var stages = tr.forward.pop(layer)
+        # After the pop, the NEXT block's stages are at index `layer`, not `layer + 1`.
         # The reference modeling_llama.py:402-412 visits independent decoder layers.
         # Training always starts a full prefill: s=0 makes kv_append_kernel
         # read only fresh K/V. Reuse storage, never another layer's history.
@@ -1158,8 +1159,8 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
                 llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
                     tr.buffers.x, config.batch, config.length, 0, trace, prefix,
                     norm1_ready=norm1_ready,
-                    next_norm_sumsq=Optional(tr.forward[layer + 1].norm1_sumsq.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
-                    next_norm_out=Optional(tr.forward[layer + 1].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
+                    next_norm_sumsq=Optional(tr.forward[layer].norm1_sumsq.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
+                    next_norm_out=Optional(tr.forward[layer].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_weight=Optional(tr.weights[layer + 1].norm1_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_eps=Optional(tr.weights[layer + 1].eps))
             else:
@@ -1171,8 +1172,8 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
                 llama_decoder_layer_forward(ctx, stages, tr.prefill_cache, tr.rope, tr.weights[layer],
                     tr.forward[layer - 1].residual2, config.batch, config.length, 0, trace, prefix,
                     norm1_ready=norm1_ready,
-                    next_norm_sumsq=Optional(tr.forward[layer + 1].norm1_sumsq.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
-                    next_norm_out=Optional(tr.forward[layer + 1].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
+                    next_norm_sumsq=Optional(tr.forward[layer].norm1_sumsq.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
+                    next_norm_out=Optional(tr.forward[layer].norm1_out.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_weight=Optional(tr.weights[layer + 1].norm1_w.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()),
                     next_norm_eps=Optional(tr.weights[layer + 1].eps))
             else:
