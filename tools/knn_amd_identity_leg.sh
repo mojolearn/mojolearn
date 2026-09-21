@@ -92,8 +92,13 @@ step build_default_estimators 1800 sh "$R/bindings/build_estimators.sh"
 cp "$R/python/mojolearn/identical/_mojolearn_estimators.so" /root/knn-amd-bins/default/
 build_core sabotage "$SABOTAGE"
 cp /root/knn-amd-bins/default/_mojolearn_estimators.so /root/knn-amd-bins/sabotage/
-step build_host_core 1500 env MOJOLEARN_HOST_OUTDIR=/root/knn-amd-host sh "$R/bindings/build_core_host.sh"
-step build_host_estimators 1500 env MOJOLEARN_HOST_OUTDIR=/root/knn-amd-host sh "$R/bindings/build_estimators_host.sh"
+# The provider runner correctly exports the AMD device column for GPU builds.
+# Host recipes intentionally compile COLUMN_CPU and refuse that inherited
+# target, so remove both device selectors only for these two subprocesses.
+step build_host_core 1500 env -u MOJOLEARN_TARGET_COLUMN -u MOJOLEARN_GPU_ARCHS \
+    MOJOLEARN_HOST_OUTDIR=/root/knn-amd-host sh "$R/bindings/build_core_host.sh"
+step build_host_estimators 1500 env -u MOJOLEARN_TARGET_COLUMN -u MOJOLEARN_GPU_ARCHS \
+    MOJOLEARN_HOST_OUTDIR=/root/knn-amd-host sh "$R/bindings/build_estimators_host.sh"
 sha256sum /root/knn-amd-bins/*/*.so /root/knn-amd-host/*.so > "$OUT/bindings.sha256"
 
 make_tree() {
