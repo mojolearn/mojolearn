@@ -85,6 +85,7 @@ def worker(args):
     emit({"event": "ready", "vendor": vendor, "numeric_mode": mode,
           "fit_shape": list(X.shape), "transform_shape": [len(Xq), 64]})
     for line in sys.stdin:
+        line = line.strip()
         command, _, number = line.partition(" ")
         seq = int(number or 0)
         if command == "fit":
@@ -177,43 +178,47 @@ def run_reach(args):
     """Require both planted defects to move a full-size dataset fit."""
     if len(args.arm) != 3:
         raise RuntimeError("reach requires candidate, sabotage_block, sabotage_scale arms")
-    children = {}
+    required = ("both", "sabotage_block", "sabotage_scale")
+    arms = {name: (python, tree) for name, python, tree in args.arm}
+    if len(arms) != len(args.arm):
+        raise RuntimeError("duplicate reach arm")
+    if set(arms) != set(required):
+        raise RuntimeError("reach arms must be %s, got %s" % (required, tuple(arms)))
     result = {"block": os.path.abspath(args.block), "arms": {}}
-    try:
-        for name, python, tree in args.arm:
-            if name in children:
-                raise RuntimeError("duplicate arm %s" % name)
+    # One process at a time. Each full Istella fit keeps a large device-memory
+    # cache alive with its process; three concurrent workers can exhaust a
+    # partition before the third planted defect runs even though each fit
+    # succeeds alone.
+    for name in required:
+        python, tree = arms[name]
+        child = None
+        try:
             child = Child(name, python, tree, args, args.output + "." + name + ".log")
-            children[name] = child
             result["arms"][name] = {"ready": child.read(args.timeout)}
-        required = ("both", "sabotage_block", "sabotage_scale")
-        if set(children) != set(required):
-            raise RuntimeError("reach arms must be %s, got %s" % (required, tuple(children)))
-        for name, child in children.items():
             child.send("fit 0")
             record = child.read(args.timeout)
             if record.get("event") != "fit":
                 raise RuntimeError("unexpected worker record %r" % record)
             result["arms"][name]["fit"] = record
-        candidate, block, scale = [result["arms"][name]["fit"] for name in required]
-        block_changed = any(block["parts"].get(key) != candidate["parts"].get(key)
-                            for key in ("centers", "labels", "n_iter", "inertia"))
-        scale_changed = scale["parts"].get("sum_scale") != candidate["parts"].get("sum_scale")
-        result.update(block_accumulator_reached=block_changed,
-                      device_scale_reached=scale_changed,
-                      verdict="BOTH_FULL_DATA_STAGES_REACHED" if block_changed and scale_changed
-                              else "REACH_FAILED")
-        with open(args.output, "x") as stream:
-            json.dump(result, stream, indent=2, sort_keys=True, allow_nan=False)
-            stream.write("\n")
-        print("KMEANS-AMD", result["verdict"],
-              "block=%s" % block_changed, "scale=%s" % scale_changed)
-        # A recorded reach failure is an experimental rejection, not a harness
-        # crash. Let the outer body collect both datasets before its final gate.
-        return 0
-    finally:
-        for child in children.values():
-            child.close()
+        finally:
+            if child is not None:
+                child.close()
+    candidate, block, scale = [result["arms"][name]["fit"] for name in required]
+    block_changed = any(block["parts"].get(key) != candidate["parts"].get(key)
+                        for key in ("centers", "labels", "n_iter", "inertia"))
+    scale_changed = scale["parts"].get("sum_scale") != candidate["parts"].get("sum_scale")
+    result.update(block_accumulator_reached=block_changed,
+                  device_scale_reached=scale_changed,
+                  verdict="BOTH_FULL_DATA_STAGES_REACHED" if block_changed and scale_changed
+                          else "REACH_FAILED")
+    with open(args.output, "x") as stream:
+        json.dump(result, stream, indent=2, sort_keys=True, allow_nan=False)
+        stream.write("\n")
+    print("KMEANS-AMD", result["verdict"],
+          "block=%s" % block_changed, "scale=%s" % scale_changed)
+    # A recorded reach failure is an experimental rejection, not a harness
+    # crash. Let the outer body collect both datasets before its final gate.
+    return 0
 
 
 def main():
