@@ -1,0 +1,16 @@
+# python -m mojolearn verify --par
+
+Ran each `par-*` lane TWICE in this process on this box (cuda): once with
+MOJOLEARN_PAR_DEVICES=0 and once with MOJOLEARN_PAR_DEVICES=0,1, and compared the
+two columns cell for cell. No reference table is involved: the one-device column
+produced here, minutes ago, off this build, IS the reference. That equality is
+the drivers' whole claim and no release record states it.
+
+  par-byte-lm                base     train     IDENTICAL   one=eb83c1c233f68756  two=eb83c1c233f68756
+  par-byte-lm-model-pool     base     train     IDENTICAL   one=3d26daba7af771cc  two=3d26daba7af771cc
+Device witness: 0 pool(s), 0 worker(s), 2 native in-process session(s), placement=physical.
+ONE DEVICE BY DESIGN, reported N/A and not as a match: par-byte-lm-offload: n/a:one-device-by-design (OffloadedByteLanguageModelTrainer admits exactly one device, so this lane runs on the first device in both columns and its agreement says nothing about sharding)
+
+RESULT: THE TWO COLUMNS AGREE on 2 compared cell parts across 3 lane(s)
+and 1 fixture(s), IDENTICAL=2, N/A=13.
+Sharding this work across the devices did not move a bit.

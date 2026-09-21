@@ -1,0 +1,34 @@
+slug=nvidia-lease7-byte-lm
+started=2026-09-21T02:37:03Z
+budget_seconds=1200
+lanesets=byte_lm=par-byte-lm,par-byte-lm-model-pool,par-byte-lm-offload
+overlay=1 source_commit=10dd372a74ba3f466ae83ab86fe2f7163dde812c
+vendor=nvidia
+visible_gpus=2
+GPU 0: NVIDIA GeForce RTX 4090 (UUID: GPU-9e2cff5f-3fc0-a820-884d-495cb605b5a9)
+GPU 1: NVIDIA GeForce RTX 4090 (UUID: GPU-6c39fe9b-5877-2f4e-e654-15b0c13ac6da)
+index, name, uuid, pci.bus_id, driver_version, compute_cap, memory.total [MiB]
+0, NVIDIA GeForce RTX 4090, GPU-9e2cff5f-3fc0-a820-884d-495cb605b5a9, 00000000:01:00.0, 580.159.04, 8.9, 24564 MiB
+1, NVIDIA GeForce RTX 4090, GPU-6c39fe9b-5877-2f4e-e654-15b0c13ac6da, 00000000:C2:00.0, 580.159.04, 8.9, 24564 MiB
+system_python=/usr/bin/python3.11 (Python 3.11.10)
+pip_download_exit=0
+c8a09722c3a3fcbe91905d2d15b8489d960b008bb9776afa15b2400e115e778c  ./mojolearn-0.8.10-py3-none-manylinux_2_35_x86_64.whl
+total 77116
+-rw-r--r-- 1 root root 78966755 Sep 21 02:37 mojolearn-0.8.10-py3-none-manylinux_2_35_x86_64.whl
+pip_install_exit=0
+import_where=0.8.10 /root/parwheel-venv/lib/python3.11/site-packages/mojolearn/__init__.py
+activated: VIRTUAL_ENV=/root/parwheel-venv python=/root/parwheel-venv/bin/python
+import_where_activated=0.8.10 /root/parwheel-venv/lib/python3.11/site-packages/mojolearn/__init__.py
+install_mode=venv-activated
+overlay_diff_lines=283
+e1a913e148f851e65ff48ce23f335d37b4ec5fe1df6ecf9cc124ae2adf46c201  /root/gemm_leg_out/nvidia-lease7-byte-lm/_verify_par.wheel.py
+9e00047ae5f813fd4a5830c706d4a6f56c66598e15c280008ee59cd9bfb7fa32  /root/mojolearn/python/mojolearn/_verify_par.py
+9e00047ae5f813fd4a5830c706d4a6f56c66598e15c280008ee59cd9bfb7fa32  /root/parwheel-venv/lib/python3.11/site-packages/mojolearn/_verify_par.py
+overlay_import_exit=0 /root/parwheel-venv/lib/python3.11/site-packages/mojolearn/_verify_par.py ['par-byte-lm-offload']
+pytest_verify_par_exit=0
+par_self_test_exit=0  (MUST BE 0)
+par_self_test_json_exit=0  (MUST BE 0)
+par_lanes_byte_lm_exit=0 seconds=6
+elapsed_total=43
+finished=2026-09-21T02:37:46Z
+pull_hold_seconds=65 pull_ok=yes

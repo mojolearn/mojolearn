@@ -1,0 +1,5 @@
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+# par (default): 3 of 59 par-* lanes x 1 fixture(s), devices 0 then 0,1
+  par-byte-lm                base     train=IDENTICAL                                              4.02s
+  par-byte-lm-model-pool     base     train=IDENTICAL                                              0.31s
+  par-byte-lm-offload        base                                                                  0.22s

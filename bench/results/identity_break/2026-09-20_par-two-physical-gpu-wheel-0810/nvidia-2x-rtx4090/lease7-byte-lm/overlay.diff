@@ -1,0 +1,283 @@
+--- /root/parwheel-venv/lib/python3.11/site-packages/mojolearn/_verify_par.py	2026-09-21 02:37:14.244116252 +0000
++++ /root/mojolearn/python/mojolearn/_verify_par.py	2026-09-21 02:33:47.000000000 +0000
+@@ -33,6 +33,22 @@
+ process and (on CUDA and HIP) its own physical GPU by UUID and PCI id. A
+ column that reports AGREE without a witness is not reported at all.
+ 
++THE BYTE-LM DRIVERS START NO POOL, BY CONSTRUCTION (2026-09-20). The three
++trainers in `parallel_training`, `model_pool_training` and `offload_training`
++hand their device list to the native binding, which opens one
++`DeviceContext(device_id=...)` per device INSIDE THIS PROCESS
++(training/byte_lm_parallel.mojo, training/byte_lm_layer_pool.mojo). No
++`DevicePool` exists on that path, so a witness that watches only pools read
++`par-byte-lm` and `par-byte-lm-model-pool` as "started NO device pool" on two
++RTX 4090s while both were sharding. Those sessions are now inventoried as
++what they are, `NATIVE_SESSION`: the group the trainer opened, the native
++binding's own per-device ownership rows (every requested device must own
++resident bytes), and this process's driver inventory showing those ordinals
++are distinct physical GPUs. `par-byte-lm-offload` is the other case: its
++driver admits exactly one device, so its "two-device" column is a one-device
++run by design and is reported N/A by name (`ONE_DEVICE_BY_DESIGN`), never as
++a match.
++
+ APPLE IS EXCLUDED STRUCTURALLY, NOT BY POLICY. `DevicePool._start` admits the
+ metal vendor only at `group == (0,)` and raises "device selection is
+ unavailable for this vendor/device group" for anything else. There is no Mac,
+@@ -71,8 +87,41 @@
+ 
+ #: a `--par quick` column, one lane per driver family, is seconds per lane;
+ #: the default is every `par-*` lane on the base fixture.
++#:
++#: WHICH SCOPE TO RUN. `--par quick` IS the two-physical-GPU check: it runs
++#: one lane per family on one device and on two, with the placement witness,
++#: in under a minute of lane time. Use it, with `--par-self-test`, for every
++#: routine run and every rented box.
++#: NEVER RUN `--par all` WITHOUT ANDREW'S EXPRESS PERMISSION (2026-09-20). It
++#: is every lane on all nine fixtures, twice: about 16 minutes per fixture and
++#: 2.4 hours in all on two RTX 4090s, six one-hour leases, and `par-resample`
++#: alone is about 300 s of each fixture. The default scope (every lane, base
++#: fixture, about 16 minutes) also needs a reason. A run that only has to
++#: show that sharding does not move a bit is `--par quick`.
+ QUICK_FIXTURE = "base"
+ 
++#: LANES WHOSE DRIVER ADMITS EXACTLY ONE DEVICE, so their "two-device" column
++#: is a one-device run BY DESIGN and can state nothing about sharding.
++#: {lane: (driver class name, reason)}. `OffloadedByteLanguageModelTrainer`
++#: raises "offloaded replay requires exactly one device" for any other group
++#: (offload_training.py) and its lane hands it `_par_devices()[:1]`. Such a
++#: lane still runs on both columns, a part that would have read IDENTICAL
++#: reads N/A with this reason, and a part that DIFFERS still gates. THE
++#: DECLARATION IS CHECKED, NOT TRUSTED: `PoolWitness.refusal` refuses unless
++#: the column opened that driver, on the first device only, and nothing on the
++#: full group; a lane that starts sharding tomorrow makes this entry a refusal.
++ONE_DEVICE_BY_DESIGN = {
++    "par-byte-lm-offload": (
++        "OffloadedByteLanguageModelTrainer",
++        "n/a:one-device-by-design (OffloadedByteLanguageModelTrainer admits exactly one "
++        "device, so this lane runs on the first device in both columns and its agreement "
++        "says nothing about sharding)"),
++}
++
++#: the `kind` of a witness record for a driver that shards inside the native
++#: binding in this process instead of through a `DevicePool`
++NATIVE_SESSION = "native-session"
++
+ 
+ # --------------------------------------------------------------------------
+ # which lanes
+@@ -119,11 +168,14 @@
+     the failure this class exists to name, so `refusal()` reports it first.
+     """
+ 
+-    def __init__(self, vendor, devices):
++    def __init__(self, vendor, devices, one_device_driver=None):
+         self.vendor = vendor
+         self.devices = tuple(devices)
+         self.pools = []
++        self.sessions = []
+         self.errors = []
++        #: the driver class name from `ONE_DEVICE_BY_DESIGN`, or None
++        self.one_device_driver = one_device_driver
+ 
+     # -- the placement rule -------------------------------------------------
+ 
+@@ -157,12 +209,105 @@
+             return
+         require_distinct_workers(inventory, self.vendor, len(asked))
+ 
++    # -- drivers that shard inside the native binding ----------------------
++
++    def _physical_inventory(self):
++        """This process's unmasked driver inventory, asked in a CHILD for the
++        reason `_gpu_witness.unmasked_device_count` gives: the parent is in
++        the middle of a fit and owes the driver no extra state. The child
++        inherits this environment, so it sees the ordinals this process sees.
++        """
++        import subprocess
++        child = subprocess.run([sys.executable, "-m", "mojolearn._gpu_witness", self.vendor],
++                               capture_output=True, text=True, timeout=120)
++        if child.returncode != 0:
++            detail = (child.stderr or child.stdout or "").strip().splitlines()
++            raise RuntimeError("the GPU driver inventory child failed: "
++                               + (detail[-1] if detail else f"exit {child.returncode}"))
++        return json.loads(child.stdout)["inventory"]["devices"]
++
++    def _admit_session(self, trainer):
++        """The record for one native multi-device session, or a by-name
++        refusal. A session on fewer devices than the column asked for (the
++        in-cell replica reference every byte-LM lane opens on the first
++        device) is recorded and admits nothing.
++
++        WHAT THIS ADMITS, and it is the cooperative-pool rule restated for a
++        driver with no worker process: the trainer opened the requested group
++        natively, the binding's OWN ownership rows put resident bytes on every
++        requested device, and those ordinals are distinct physical GPUs by
++        UUID and PCI id. Like every record in `_gpu_witness` it is placement,
++        not proof that a kernel ran.
++        """
++        asked = tuple(trainer.devices)
++        record = dict(kind=NATIVE_SESSION, driver=type(trainer).__name__,
++                      devices=list(asked), cooperative=False, placed=False, workers=[])
++        if asked != self.devices or self.vendor not in ("cuda", "hip"):
++            # The CPU route has no device identity to give an in-process
++            # session, and there are no separate processes either, so a native
++            # session there is recorded and never counted.
++            return record
++        rows = trainer.optimizer_ownership()
++        resident = {}
++        for row in rows:
++            held = sum(int(v) for k, v in row.items() if k.endswith("_bytes"))
++            resident[row["device"]] = resident.get(row["device"], 0) + held
++        empty = [d for d in asked if resident.get(d, 0) <= 0]
++        if empty or set(resident) - set(asked):
++            raise RuntimeError(f"the native session names devices {list(asked)} but its own "
++                               f"ownership rows put resident bytes on {sorted(resident.items())}; "
++                               f"device(s) {empty} own nothing, so this column did not shard")
++        seen = {d["ordinal"]: d for d in self._physical_inventory()}
++        missing = [d for d in asked if d not in seen]
++        if missing:
++            raise RuntimeError(f"this process's driver shows no device at ordinal(s) {missing}")
++        placed = [seen[d] for d in asked]
++        if (len({d["uuid"] for d in placed}) != len(placed)
++                or len({d["pci_bus_id"] for d in placed}) != len(placed)):
++            raise RuntimeError("the native session's devices resolve to one physical GPU twice")
++        record.update(placed=True, resident_bytes=[resident[d] for d in asked],
++                      workers=[dict(pid=os.getpid(), devices=[d["uuid"] for d in placed],
++                                    visibility={})])
++        return record
++
++    def _watch_sessions(self):
++        """Wrap `_open` on each byte-LM trainer class; returns the undo list.
++        Each class defines its own `_open`, so each is wrapped where it is
++        defined. An install that cannot import them has no such lane to run.
++        """
++        try:
++            from .parallel_training import ParallelByteLanguageModelTrainer
++            from .model_pool_training import PooledByteLanguageModelTrainer
++            from .offload_training import OffloadedByteLanguageModelTrainer
++        except ImportError:
++            return []
++        undo = []
++        for cls in (ParallelByteLanguageModelTrainer, PooledByteLanguageModelTrainer,
++                    OffloadedByteLanguageModelTrainer):
++            original = cls.__dict__["_open"]
++
++            def opened(trainer, _original=original):
++                fresh = trainer._session is None
++                _original(trainer)
++                if not fresh or trainer._session is None:
++                    return
++                try:
++                    self.sessions.append(self._admit_session(trainer))
++                except Exception as exc:  # noqa: BLE001 - recorded, not swallowed
++                    self.errors.append(f"{type(exc).__name__}: {exc}")
++                    raise
++
++            cls._open = opened
++            undo.append((cls, original))
++        return undo
++
+     # -- the wrapper --------------------------------------------------------
+ 
+     @contextlib.contextmanager
+     def watching(self):
+         from ._parallel_pool import DevicePool
+         original_start, original_call = DevicePool._start, DevicePool._call
++        undo = self._watch_sessions()
+ 
+         def start(pool):
+             started = bool(pool._workers)
+@@ -203,6 +348,8 @@
+             yield self
+         finally:
+             DevicePool._start = original_start
++            for cls, original in undo:
++                cls._open = original
+ 
+     # -- the verdict --------------------------------------------------------
+ 
+@@ -211,7 +358,19 @@
+         devices it names, else the sentence that says it was not."""
+         if self.errors:
+             return "a worker was not where the column said it was: " + self.errors[0]
+-        if not self.pools:
++        if self.one_device_driver:
++            # THE DECLARATION IS CHECKED. It holds only while the column opens
++            # that driver, on the first device alone, and shards nothing.
++            first = [self.devices[0]]
++            if self.pools or any(s["devices"] != first for s in self.sessions):
++                return ("this lane is declared ONE_DEVICE_BY_DESIGN and its column opened more "
++                        "than the first device; the declaration is stale, remove it")
++            if not any(s["driver"] == self.one_device_driver for s in self.sessions):
++                return (f"this lane is declared ONE_DEVICE_BY_DESIGN for {self.one_device_driver} "
++                        "and the column never opened that driver, so nothing is known about "
++                        "where it ran")
++            return None
++        if not self.pools and not any(s["placed"] for s in self.sessions):
+             return ("the two-device column started NO device pool at all, so it ran on one "
+                     "device and agreeing with the one-device column proves nothing. Either "
+                     "the lane does not shard on this install or the driver fell back "
+@@ -222,11 +381,15 @@
+         return None
+ 
+     def summary(self):
++        # `pools` and `workers` keep their meaning for existing readers: a
++        # native session is not a pool and is counted under its own name.
+         return dict(pools=len(self.pools),
+                     workers=sum(len(p["workers"]) for p in self.pools),
++                    native_sessions=sum(1 for s in self.sessions if s["placed"]),
++                    one_device_by_design=bool(self.one_device_driver),
+                     devices=list(self.devices),
+                     placement=("physical" if self.vendor in ("cuda", "hip") else "process-only"),
+-                    detail=self.pools)
++                    detail=self.pools + self.sessions)
+ 
+ 
+ # --------------------------------------------------------------------------
+@@ -390,7 +553,9 @@
+         for fx in fixtures:
+             t0 = time.time()
+             # Placement from another lane or fixture cannot certify this cell.
+-            witness = PoolWitness(vendor, devices)
++            declared = ONE_DEVICE_BY_DESIGN.get(lane)
++            witness = (PoolWitness(vendor, devices, one_device_driver=declared[0])
++                       if declared else PoolWitness(vendor, devices))
+             X, yc, yr = harness.fixture(fx)
+             held = harness.heldout(fx)
+             # The same scope `self_test` opens. On a GPU install it changes
+@@ -418,6 +583,13 @@
+                                        witness_refusal=witness.refusal()))
+             secs = round(time.time() - t0, 3)
+             rows = compare_parts(one, two, cpu_route=(vendor == "cpu"))
++            if declared:
++                # Both columns ran on one device, so an agreement is not a
++                # two-device comparison and is not counted as one. A part
++                # that DIFFERS is still a finding and still gates.
++                for row in rows:
++                    if row["verdict"] == "IDENTICAL":
++                        row.update(verdict="N/A", note=declared[1])
+             for row in rows:
+                 counts[row["verdict"]] = counts.get(row["verdict"], 0) + 1
+                 cells.append(dict(lane=lane, fixture=fx, seconds=secs, **row))
+@@ -435,6 +607,9 @@
+     summaries = [c["witness"] for c in cell_witnesses]
+     aggregate = dict(pools=sum(s["pools"] for s in summaries),
+                      workers=sum(s["workers"] for s in summaries),
++                     native_sessions=sum(s.get("native_sessions", 0) for s in summaries),
++                     one_device_by_design=sorted({c["lane"] for c in cell_witnesses
++                                                  if c["witness"].get("one_device_by_design")}),
+                      devices=list(devices),
+                      placement="physical" if vendor in ("cuda", "hip") else "process-only",
+                      detail=[p for s in summaries for p in s["detail"]])
+@@ -516,7 +691,11 @@
+         lines.append("")
+     w = r["witness"]
+     lines.append(f"Device witness: {w['pools']} pool(s), {w['workers']} worker(s), "
++                 f"{w.get('native_sessions', 0)} native in-process session(s), "
+                  f"placement={w['placement']}.")
++    for lane in w.get("one_device_by_design") or []:
++        lines.append(f"ONE DEVICE BY DESIGN, reported N/A and not as a match: {lane}: "
++                     + ONE_DEVICE_BY_DESIGN[lane][1])
+     if r["witness_refusal"]:
+         lines.append("WITNESS REFUSED: " + r["witness_refusal"])
+         lines.append("")
