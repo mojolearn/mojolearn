@@ -3,6 +3,11 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
+## 0.8.11 (published 2026-09-21)
+
+- Include the research preprint in both platform wheels and link it from the README.
+- Documentation-only patch of 0.8.10: numerical code, reference data and native libraries are unchanged.
+
 ## 0.8.10 (published 2026-09-20)
 
 - Parallel workers now set native device counts to their own visible device

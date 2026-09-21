@@ -14,7 +14,7 @@ build-backend = "setuptools.build_meta"
 name = "mojolearn"
 # Must agree with python/mojolearn/_version.py. Not made dynamic, so that a
 # version bump is a visible edit in both places rather than one.
-version = "0.8.10"
+version = "0.8.11"
 description = "GPU machine learning in Mojo for Apple silicon Metal, NVIDIA CUDA, and AMD HIP, with fast, deterministic, and cross-vendor identical modes for certified configurations"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -130,6 +130,7 @@ classifiers = [
 dependencies = []
 
 [project.urls]
+Paper = "https://github.com/mojolearn/mojolearn/blob/main/python/mojolearn/Hendel_2026_bitwise_identical_gpu_ml_preprint.pdf"
 Homepage = "https://github.com/mojolearn/mojolearn"
 Repository = "https://github.com/mojolearn/mojolearn"
 Issues = "https://github.com/mojolearn/mojolearn/issues"
@@ -221,6 +222,7 @@ mojolearn = [
     # machine-readable citation, not just the license. Attribution that only
     # exists in the git repository does not travel with the artifact.
     "CITATION.cff",
+    "Hendel_2026_bitwise_identical_gpu_ml_preprint.pdf",
     "ALPHA_API.md",
     "*.so", "identical/*.so", "deterministic/*.so", ".dylibs/*.dylib",
     # DEVIATION 2610: the host (CPU) bindings, loaded by path or through
