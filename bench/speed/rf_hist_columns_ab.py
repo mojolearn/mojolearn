@@ -111,7 +111,8 @@ def run(args):
         raise RuntimeError("retained fits are not byte/quality identical")
     output = {
         "dataset": args.dataset, "arm": args.arm, "outer": args.outer,
-        "launch_position": args.launch_position, "binary_sha256": digest(open(args.binding, "rb").read()),
+        "launch_position": args.launch_position,
+        "binary_sha256": hashlib.sha256(open(args.binding, "rb").read()).hexdigest(),
         "input": {"sha256": digest(x, y), "x_shape": list(x.shape),
                   "y_shape": list(y.shape), "x_dtype": x.dtype.str, "y_dtype": y.dtype.str},
         "trees": args.trees, "depth": args.depth, "predict_rows": predict_rows,
@@ -137,6 +138,8 @@ def probe(args):
         raise RuntimeError("tile4 compile/selection witness missing")
     if not args.expect_tile4 and tiled:
         raise RuntimeError("baseline unexpectedly selected tile4")
+    if not args.expect_tile4 and not normal:
+        raise RuntimeError("baseline did not reach the comparable binned histogram route")
     print(json.dumps({"arm": args.arm, "expect_tile4": args.expect_tile4,
                       "tile4_launches": tiled, "normal_launches": normal}, sort_keys=True))
 
