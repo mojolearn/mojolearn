@@ -185,6 +185,12 @@ from linalg.gemv import gemv_gpu
 comptime GEMM_FOLD_SPECIALIZE_TRIAL = is_defined[
     "MOJOLEARN_GEMM_FOLD_SPECIALIZE_TRIAL"
 ]()
+comptime GEMM_FOLD_SPECIALIZE_SABOTAGE = is_defined[
+    "MOJOLEARN_GEMM_FOLD_SPECIALIZE_SABOTAGE"
+]()
+comptime assert not GEMM_FOLD_SPECIALIZE_SABOTAGE or GEMM_FOLD_SPECIALIZE_TRIAL, (
+    "fold-specialization sabotage requires its trial"
+)
 
 
 # ===========================================================================
@@ -3452,6 +3458,14 @@ def _gemm_step_arm_sabotage(v: Float32) -> Float32:
     return bitcast[DType.float32](bits + UInt32(1))
 
 
+def _gemm_fold_specialize_sabotage_kernel(
+    c: MutPointer[Float32, MutAnyOrigin]
+):
+    """Trial reach only: move one output after a specialized launch."""
+    if Int(block_idx.x) == 0 and Int(thread_idx.x) == 0:
+        c[0] = c[0] + Float32(1.0)
+
+
 def identical_gemm_step_arm_kernel[
     RPT: Int, CPT: Int, TC: Int, KS: Int, PAGES: Int, LFOLD: Bool, SAB: Bool
 ](
@@ -4484,6 +4498,14 @@ def _shipped_body_kpack_hg[
                 _kpack_hg_run_with_ws[GEMM_KPACK_FS, False](
                     ctx, c, a, b, ws, m, n, k, op
                 )
+            comptime if GEMM_FOLD_SPECIALIZE_SABOTAGE:
+                # Reach requires an actually smaller class; an FS16-only
+                # workload cannot qualify this optimization by executing the
+                # surrounding dispatch branch.
+                if fs == 4 or fs == 8:
+                    ctx.enqueue_function[_gemm_fold_specialize_sabotage_kernel](
+                        c.unsafe_ptr(), grid_dim=(1, 1, 1), block_dim=(1, 1, 1)
+                    )
             return
         # L40S, 2026-09-20: GPT-3-small Q/K/V/O dWeight has six contract
         # leaves, so FS4 covers its unchanged fold tree while avoiding 3 KiB

@@ -53,6 +53,7 @@ def cmd_record(args):
     if setup is None:
         raise SystemExit("missing setup event")
     binding = os.path.abspath(args.binding)
+    hardware = os.path.abspath(args.hardware)
     record = {
         "dataset": args.dataset,
         "arm": args.arm,
@@ -61,6 +62,8 @@ def cmd_record(args):
         "commit": args.commit,
         "binding": {"path": binding, "bytes": os.path.getsize(binding),
                     "sha256": _sha_file(binding)},
+        "hardware": {"path": hardware, "bytes": os.path.getsize(hardware),
+                     "sha256": _sha_file(hardware)},
         "runtime": setup.get("runtime"),
         "numeric_mode_env": setup.get("numeric_mode_env"),
         "input": {"seed": setup.get("seed"),
@@ -89,6 +92,15 @@ def _complete_witnesses(result):
             and all(set(w.get("sha256", {})) == required for w in witnesses))
 
 
+def _complete_witnesses_one(result):
+    witnesses = result.get("step_witnesses", [])
+    required = {"loss", "gradients", "parameters", "m", "v", "flags"}
+    return (len(witnesses) == 1 and len(result.get("step_losses", [])) == 1
+            and witnesses[0].get("step") == 1
+            and witnesses[0].get("completed_steps") == 1
+            and set(witnesses[0].get("sha256", {})) == required)
+
+
 def cmd_summarize(args):
     records = [json.load(open(path)) for pattern in args.files
                for path in sorted(glob.glob(pattern))]
@@ -97,7 +109,7 @@ def cmd_summarize(args):
     for rec in records:
         dataset = rec.get("dataset")
         arm = rec.get("arm")
-        if dataset not in DATASETS or arm not in ("baseline", "candidate"):
+        if dataset not in DATASETS or arm not in ("baseline", "candidate", "sabotage"):
             failures.append("unexpected record cell %r/%r" % (dataset, arm))
             continue
         cells.setdefault(dataset, {}).setdefault(arm, []).append(rec)
@@ -162,6 +174,8 @@ def cmd_summarize(args):
                     for r in both)
             and all((r.get("runtime") or {}).get("native_numeric_mode") == 1 for r in both)
             and _same([(r.get("runtime") or {}).get("source_sha256") for r in both])
+            and _same([r.get("hardware", {}).get("sha256") for r in both])
+            and all(r.get("hardware", {}).get("bytes", 0) > 0 for r in both)
         )
         ab_exact = bool(both) and _same([_trajectory(r) for r in both])
         bm = row["arms"]["baseline"]["outer_medians_seconds"]
@@ -172,13 +186,41 @@ def cmd_summarize(args):
         row.update(provenance_ok=provenance_ok, ab_exact=ab_exact,
                    median_of_process_medians_ratio=ratio,
                    conservative_ratio_diagnostic=conservative)
+        sabotage = arms.get("sabotage", [])
+        base0 = arms.get("baseline", [None])[0]
+        sab0 = sabotage[0] if len(sabotage) == 1 else None
+        sabotage_reached = bool(sab0 and base0) and (
+            sab0.get("outer") == 1 and sab0.get("launch_position") == 0
+            and sab0["result"].get("steps_completed") == 1
+            and sab0["result"].get("steady_step_seconds") == []
+            and _complete_witnesses_one(sab0["result"])
+            and sab0["result"].get("gemm_fold_specialized") is True
+            and sab0.get("commit") == base0.get("commit")
+            and sab0.get("numeric_mode_env") == "identical"
+            and sab0["result"].get("corpus") == base0["result"].get("corpus")
+            and sab0.get("input", {}).get("initial_parameters_sha256") ==
+                base0.get("input", {}).get("initial_parameters_sha256")
+            and sab0.get("input", {}).get("ids_sha256") ==
+                base0.get("input", {}).get("ids_sha256", [])[:1]
+            and sab0.get("hardware", {}).get("sha256") ==
+                base0.get("hardware", {}).get("sha256")
+            and sab0["binding"]["sha256"] not in
+                (base0["binding"]["sha256"], arms["candidate"][0]["binding"]["sha256"])
+            and all(sab0["result"]["step_witnesses"][0]["sha256"][name] !=
+                    base0["result"]["step_witnesses"][0]["sha256"][name]
+                    for name in ("loss", "gradients", "parameters", "m", "v"))
+            and sab0["result"]["step_losses"][0] != base0["result"]["step_losses"][0]
+        )
+        row["specialization_sabotage_reached"] = sabotage_reached
         row["pass"] = (row["arms"]["baseline"]["valid"] and
                        row["arms"]["candidate"]["valid"] and
-                       provenance_ok and ab_exact and ratio < 1.0)
+                       provenance_ok and ab_exact and sabotage_reached and ratio < 1.0)
         if not provenance_ok:
             failures.append("%s provenance invalid" % dataset)
         if not ab_exact:
             failures.append("%s loss/state trajectory differs" % dataset)
+        if not sabotage_reached:
+            failures.append("%s specialization-only sabotage did not reach target step" % dataset)
         if ratio >= 1.0:
             failures.append("%s median-of-process-medians ratio %.6f is not faster" % (dataset, ratio))
         rows.append(row)
@@ -209,11 +251,12 @@ def main():
     sub = parser.add_subparsers(dest="cmd", required=True)
     rec = sub.add_parser("record")
     rec.add_argument("--dataset", choices=DATASETS, required=True)
-    rec.add_argument("--arm", choices=("baseline", "candidate"), required=True)
+    rec.add_argument("--arm", choices=("baseline", "candidate", "sabotage"), required=True)
     rec.add_argument("--outer", type=int, required=True)
     rec.add_argument("--launch-position", type=int, choices=(0, 1), required=True)
     rec.add_argument("--commit", required=True)
     rec.add_argument("--binding", required=True)
+    rec.add_argument("--hardware", required=True)
     rec.add_argument("--result", required=True)
     rec.add_argument("--events", required=True)
     rec.add_argument("--json", required=True)

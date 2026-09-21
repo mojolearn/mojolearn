@@ -11,6 +11,7 @@ set -euo pipefail
 R=${MOJOLEARN_TRIAL_ROOT:-/root/mojolearn}
 B=${MOJOLEARN_LM_FOLD_BASELINE_ROOT:-/root/mojolearn-lmfs-baseline}
 C=${MOJOLEARN_LM_FOLD_CANDIDATE_ROOT:-/root/mojolearn-lmfs-candidate}
+S=${MOJOLEARN_LM_FOLD_SABOTAGE_ROOT:-/root/mojolearn-lmfs-sabotage}
 OUT=${MOJOLEARN_LM_FOLD_OUT:-/root/lm_fold_specialize_out}
 DATA=${GBM_BENCH_DATA:-/root/datasets/gbm-bench}
 STEPS=${MOJOLEARN_LM_FOLD_STEPS:-6}
@@ -87,9 +88,12 @@ phase_build() {
     [ -f python/mojolearn/identical/_mojolearn.so ] || bash bindings/build.sh
     clone_tree "$R" "$B"
     clone_tree "$R" "$C"
+    clone_tree "$R" "$S"
     build_one "$B" baseline ""
     build_one "$C" candidate \
         "-D MOJOLEARN_GEMM_ARM_TRIAL=1 -D MOJOLEARN_GEMM_FOLD_SPECIALIZE_TRIAL=1"
+    build_one "$S" sabotage \
+        "-D MOJOLEARN_GEMM_ARM_TRIAL=1 -D MOJOLEARN_GEMM_FOLD_SPECIALIZE_TRIAL=1 -D MOJOLEARN_GEMM_FOLD_SPECIALIZE_SABOTAGE=1"
     {
         echo "source_commit=$(commit_of "$R")"
         echo "gpu_archs=${MOJOLEARN_GPU_ARCHS:-}"
@@ -97,22 +101,23 @@ phase_build() {
         "$R/.pixi/envs/default/bin/mojo" --version
         uname -a
         command -v nvidia-smi >/dev/null && nvidia-smi --query-gpu=name,driver_version --format=csv,noheader
-        command -v rocm-smi >/dev/null && rocm-smi --showproductname --showdriverversion
+        command -v rocm-smi >/dev/null && rocm-smi --showproductname --showuniqueid --showdriverversion
     } > "$OUT/build_provenance.txt" 2>&1
 }
 run_one() {
-    tree=$1; arm=$2; ds=$3; outer=$4; position=$5
+    tree=$1; arm=$2; ds=$3; outer=$4; position=$5; steps=$6
     tag="${ds}_${arm}_${outer}"
     run="$OUT/runs/$tag"
     rm -rf "$run"; mkdir -p "$run"
     (cd "$tree" && PYTHONPATH=python "$PY" tools/lm_step_memory_probe.py \
         --out "$run" --target --resident-lean --witness-every-step \
-        --steps "$STEPS" --budget-seconds 900 \
+        --steps "$steps" --budget-seconds 900 \
         --corpus "$OUT/corpora/$ds/input.bin") > "$OUT/logs/$tag.log" 2>&1
     (cd "$tree" && PYTHONPATH=python "$PY" tools/lm_fold_specialize_probe.py record \
         --dataset "$ds" --arm "$arm" --outer "$outer" --launch-position "$position" \
         --commit "$(commit_of "$R")" \
         --binding "$tree/python/mojolearn/identical/_mojolearn_byte_lm.so" \
+        --hardware "$OUT/build_provenance.txt" \
         --result "$run/result.json" --events "$run/events.jsonl" \
         --json "$OUT/json/$tag.json")
     say "$tag complete"
@@ -120,20 +125,22 @@ run_one() {
 phase_run() {
     [ "$OUTERS" -eq 3 ] || { echo "gate requires exactly 3 fresh-process outers" >&2; return 2; }
     [ "$STEPS" -eq 6 ] || { echo "gate requires one warmup plus exactly 5 retained steps" >&2; return 2; }
+    [ -s "$OUT/build_provenance.txt" ] || { echo "missing build/hardware provenance" >&2; return 2; }
     prepare_corpora
     : > "$OUT/run_order.tsv"
     for ds in taxi istella; do
         for outer in 1 2 3; do
             if [ $((outer % 2)) -eq 1 ]; then
                 printf '%s\t%d\tbaseline,candidate\n' "$ds" "$outer" >> "$OUT/run_order.tsv"
-                run_one "$B" baseline "$ds" "$outer" 0
-                run_one "$C" candidate "$ds" "$outer" 1
+                run_one "$B" baseline "$ds" "$outer" 0 "$STEPS"
+                run_one "$C" candidate "$ds" "$outer" 1 "$STEPS"
             else
                 printf '%s\t%d\tcandidate,baseline\n' "$ds" "$outer" >> "$OUT/run_order.tsv"
-                run_one "$C" candidate "$ds" "$outer" 0
-                run_one "$B" baseline "$ds" "$outer" 1
+                run_one "$C" candidate "$ds" "$outer" 0 "$STEPS"
+                run_one "$B" baseline "$ds" "$outer" 1 "$STEPS"
             fi
         done
+        run_one "$S" sabotage "$ds" 1 0 1
     done
     (cd "$R" && PYTHONPATH=python "$PY" tools/lm_fold_specialize_probe.py summarize \
         "$OUT/json/*.json" --json "$OUT/summary.json") | tee "$OUT/summary.txt"
