@@ -16,13 +16,17 @@ cases = {"c2_boot", "c5_no_boot", "c5_weighted", "c2_weighted_boot", "c17_capaci
 summary = []
 for mode in ("fast", "deterministic", "identical"):
     expected = None
-    for arm in ("reference", "columns2", "columns4"):
+    for arm in ("reference", "shipped_default", "columns2", "columns4"):
         name = f"{mode}-{arm}"
         binary = out / name
         command = ["pixi", "run", "mojo", "build", "-I", "."]
         if mode != "fast":
             command += ["-D", f"MOJOLEARN_NUMERIC_{mode.upper()}=1"]
-        if arm != "reference":
+        # Apple now ships tile4.  OFF reconstructs the untiled reference and
+        # keeps each explicit tile fingerprint independent of that default.
+        if arm != "shipped_default":
+            command += ["-D", "MOJOLEARN_RF_HIST_COLUMNS4_OFF=1"]
+        if arm in ("columns2", "columns4"):
             command += ["-D", f"MOJOLEARN_RF_HIST_{arm.upper()}=1"]
         command += [source, "-o", str(binary)]
         print("BUILD", name, flush=True)
@@ -53,11 +57,17 @@ for mode in ("fast", "deterministic", "identical"):
                 case_launches[current].append(line)
         assert set(case_launches) == cases
         reach = {case: sum(line.startswith("histogram_binned_columns") for line in logs) for case, logs in case_launches.items()}
+        reach2 = {case: sum(line.startswith("histogram_binned_columns2_") for line in logs) for case, logs in case_launches.items()}
+        reach4 = {case: sum(line.startswith("histogram_binned_columns4_") for line in logs) for case, logs in case_launches.items()}
         if arm == "reference":
             assert not any(reach.values()), (name, "reference unexpectedly tiled")
         else:
             for case in cases - {"c17_capacity", "c5_search"}:
                 assert reach[case] > 0, (name, case, "candidate did not run")
+                if arm == "columns2":
+                    assert reach2[case] == reach[case] and reach4[case] == 0, (name, case, "explicit tile2 route mismatch")
+                else:
+                    assert reach4[case] == reach[case] and reach2[case] == 0, (name, case, "tile4 route mismatch")
             for case in ("c17_capacity", "c5_search"):
                 assert reach[case] == 0, (name, case, "fallback unexpectedly tiled")
         message = f"PASS {name}: {len(hashes)} full-model/prediction fingerprints; tile launches {reach}"
