@@ -1,0 +1,17 @@
+{
+ "cells": [
+  {
+   "bitwise_equal": true,
+   "complete": true,
+   "dataset": "taxi",
+   "paired_ratio": 0.9892834989463828
+  },
+  {
+   "bitwise_equal": true,
+   "complete": true,
+   "dataset": "istella",
+   "paired_ratio": 0.5339559962787637
+  }
+ ],
+ "identity_and_completeness_pass": true
+}

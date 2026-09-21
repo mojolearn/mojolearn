@@ -1,0 +1,8 @@
+Mon Sep 21 13:03:27 UTC 2026
+Linux enc1-gpuvm002 6.8.0-124-generic #124-Ubuntu SMP PREEMPT_DYNAMIC Tue May 26 13:00:45 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+13
+  Marketing Name:          Intel(R) Xeon(R) Platinum 8470     
+  Compute Unit:            13                                 
+  Name:                    gfx942                             
+  Marketing Name:          AMD Instinct MI300X VF             
+  Compute Unit:            304                                

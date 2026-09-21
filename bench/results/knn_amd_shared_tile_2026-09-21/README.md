@@ -1,0 +1,24 @@
+# AMD kNN shared-tile conditional trial receipts
+
+These are compact, tracked copies of the two conditional (`n_features >= 32`)
+provider receipts described in
+`bench/evidence/2026-09-21_knn_amd_shared_tile.md`. The source artifacts remain
+under `/Users/andrewhendel/mojolearn-evidence/2026-09-21_knn_amd_smem/`.
+
+For each provider, `summary.tsv` and `verdict.json` are byte-for-byte copies.
+`cells_compact.json` is a deterministic projection of the two aggregate cell
+JSON files. It retains every outer-pass median, every timed-call digest, all
+six paired ratios, aggregate timing/spread/status fields, and the two-dataset
+geomean. Its IQR is Q3-Q1 over the six outer-pass medians using Python
+`statistics.quantiles(..., method="inclusive")`.
+
+`leg.txt`, `source_sha256.txt`, and `teardown.txt` attribute the source and
+provider lifecycle. `gpu.txt`, `box.txt`, `rocm_provenance.txt`, `uname.txt`,
+`mojo_version.txt`, `pixi_env.log`, and `versions.txt` record the available
+hardware, driver/runtime, compiler, environment, and dependency provenance.
+The manifest hashes every receipt except itself.
+
+This directory supports the fixed-workload performance and digest result. It
+does not replace the broad kNN identity and sabotage gates required before
+promotion. The trial source also left the experimental exact-chain admission
+active below 32 features; the evidence note records that admission gap.

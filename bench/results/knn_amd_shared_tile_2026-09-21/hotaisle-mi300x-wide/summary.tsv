@@ -1,0 +1,5 @@
+lane	dataset	arm	rows	ok_rounds	median_ms	min_ms	max_ms	spread	digest_stable	status	paired_ratio_over_first
+knn	taxi	base	4000	6	26.1292	26.0421	37.8152	1.4521	True	flagged	
+knn	taxi	topk	4000	6	25.1392	25.0242	25.6371	1.0245	True	ok	0.9627
+knn	istella	base	4000	6	115.6362	114.3387	116.1253	1.0156	True	ok	
+knn	istella	topk	4000	6	57.6100	57.4821	59.1894	1.0297	True	ok	0.4984

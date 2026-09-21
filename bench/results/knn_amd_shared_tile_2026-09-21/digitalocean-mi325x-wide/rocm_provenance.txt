@@ -1,0 +1,46 @@
+== rocm-smi --showproductname --showdriverversion
+
+
+============================ ROCm System Management Interface ============================
+============================== Version of System Component ===============================
+Driver version: 6.12.12
+==========================================================================================
+====================================== Product Info ======================================
+GPU[0]		: Card Series: 		AMD Instinct Mi325X VF
+GPU[0]		: Card Model: 		0x74b9
+GPU[0]		: Card Vendor: 		Advanced Micro Devices, Inc. [AMD/ATI]
+GPU[0]		: Card SKU: 		M3250101
+GPU[0]		: Subsystem ID: 	0x74a5
+GPU[0]		: Device Rev: 		0x00
+GPU[0]		: Node ID: 		1
+GPU[0]		: GUID: 		43855
+GPU[0]		: GFX Version: 		gfx942
+==========================================================================================
+================================== End of ROCm SMI Log ===================================
+== amd-smi version
+AMDSMI Tool: 25.3.0+ede62f2 | AMDSMI Library version: 25.3.0 | ROCm version: 6.4.0 | amdgpu version: 6.12.12 | amd_hsmp version: N/A
+== amd-smi static --asic
+GPU: 0
+    ASIC:
+        MARKET_NAME: AMD Instinct Mi325X VF
+        VENDOR_ID: 0x1002
+        VENDOR_NAME: Advanced Micro Devices Inc. [AMD/ATI]
+        SUBVENDOR_ID: 0x1002
+        DEVICE_ID: 0x74b9
+        SUBSYSTEM_ID: 0x74a5
+        REV_ID: 0x00
+        ASIC_SERIAL: 0xAC2F06FB705109F2
+        OAM_ID: 4
+        NUM_COMPUTE_UNITS: 304
+        TARGET_GRAPHICS_VERSION: gfx942
+
+== rocminfo (names)
+  Marketing Name:          AMD EPYC 9575F 64-Core Processor   
+  Compute Unit:            20                                 
+  Name:                    gfx942                             
+  Marketing Name:          AMD Instinct Mi325X VF             
+  Compute Unit:            304                                
+== /opt/rocm/.info/version
+6.4.0-47
+== /sys/module/amdgpu/version
+6.12.12
