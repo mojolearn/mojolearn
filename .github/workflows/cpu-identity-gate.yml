@@ -305,6 +305,11 @@ jobs:
           for d in $(python3 $manifest --classical-recorded) $(python3 $manifest --saved-model-recorded) $(python3 $manifest --classical-gpu-columns) $(python3 $manifest --training-gpu-columns) $(python3 $manifest --training-fix-columns) $(python3 $manifest --gbdt-ctr-models); do
             [ -e "$d" ] || { echo "manifest names $d, which is not in this checkout: the record lags the surface" >&2; exit 1; }
           done
+          # The `if: always()` steps below run after an earlier failure too,
+          # and then read every list above as EMPTY: an empty COVERED_LANES
+          # reads as "nothing to certify" and an empty fixture list reaches
+          # the tools as a usage error. They refuse unless this marker is set.
+          echo "CPU_SURFACE_MANIFEST=read" >> "$GITHUB_ENV"
 
       - uses: prefix-dev/setup-pixi@v0.10.1
         with:
@@ -407,6 +412,7 @@ jobs:
           MOJOLEARN_BUILD_EXTRA_DEFINES: "-D MOJOLEARN_FOREST_HOST_SABOTAGE=1"
         run: |
           set -o pipefail
+          command -v pixi >/dev/null || { echo "::error::pixi is not on PATH: the setup-pixi step did not run (an earlier step failed); fix the first failed step" >&2; exit 1; }
           MOJOLEARN_BUILD_JOBS=2 sh bindings/build_forest_host.sh 2>&1 | tee "$GATE_OUT/build_forest_sab.log"
 
       # A gate that cannot fail proves nothing. The sabotage build divides the
@@ -419,6 +425,7 @@ jobs:
           MOJOLEARN_FOREST_HOST_BINARY: ${{ runner.temp }}/forest-host-sab/_mojolearn_forest_host.so
         run: |
           set -o pipefail
+          [ -n "${RECORDED:-}" ] || { echo "::error::RECORDED is empty: the forest fixture sorting step did not run (an earlier step failed); fix the first failed step" >&2; exit 1; }
           python3 tools/forest_host_gate.py check $RECORDED --expect-mismatch \
             --report "$GATE_OUT/forest_gate_sab.json" 2>&1 | tee "$GATE_OUT/forest_gate_sab.log"
 
@@ -431,6 +438,7 @@ jobs:
         if: always()
         run: |
           set -o pipefail
+          [ "${CPU_SURFACE_MANIFEST:-}" = read ] || { echo "::error::the CPU surface manifest step did not complete (an earlier step failed), so this step has no lists to run on; fix the first failed step" >&2; exit 1; }
           columns=""
           for c in $CLASSICAL_GPU_COLUMNS; do columns="$columns --gpu-column $c"; done
           python3 tools/classical_host_gate.py check $CLASSICAL_RECORDED $columns \
@@ -451,6 +459,7 @@ jobs:
         if: always()
         run: |
           set -o pipefail
+          [ "${CPU_SURFACE_MANIFEST:-}" = read ] || { echo "::error::the CPU surface manifest step did not complete (an earlier step failed), so this step has no lists to run on; fix the first failed step" >&2; exit 1; }
           columns=""
           for c in $CLASSICAL_GPU_COLUMNS; do columns="$columns --gpu-column $c"; done
           python3 tools/classical_host_gate.py check $SAVED_MODEL_RECORDED $columns \
@@ -458,8 +467,8 @@ jobs:
 
       # The tool loads on this CPU and the three committed GPU columns diff
       # exactly as recorded (the 2026-09-14 166-lane record at 1eea14f80, the
-      # batch part and 31 par-* lanes, AMD column MI325X): 1331 comparable train cells
-      # IDENTICAL x3 and ONE DIVERGENT, kmeans-sqrt/wide, where the H100
+      # batch part and 31 par-* lanes, AMD column MI325X): 1322 comparable train cells
+      # (the revised lanes' cells excluded, see the step) IDENTICAL x3 and ONE DIVERGENT, kmeans-sqrt/wide, where the H100
       # inertia stands alone (docs/lanes/BRIEF_kmeans_sqrt_wide_h100_inertia_2026-09-14.md).
       # --diff exits 1 on that cell, so the step requires exit 1 AND the exact
       # summary tokens AND that row: a second divergence, a diff that printed
@@ -480,17 +489,22 @@ jobs:
       - name: identity_break --diff over the three committed GPU columns (require 3)
         if: always() && env.FULL_CPU_VERIFY == 'true'
         run: |
+          [ "${CPU_SURFACE_MANIFEST:-}" = read ] || { echo "::error::the CPU surface manifest step did not complete (an earlier step failed), so this step has no lists to run on; fix the first failed step" >&2; exit 1; }
           st=0
           python3 tools/identity_break.py --diff $GPU_COLUMNS --require-columns 3 \
             > "$GATE_OUT/diff_gpu3.txt" 2>&1 || st=$?
           cat "$GATE_OUT/diff_gpu3.txt"
-          # Current lane revisions invalidate 18 x 9 historical cells per
+          # Current lane revisions invalidate 19 x 9 historical cells per
           # vendor. Assert those exclusions as well as every remaining total;
           # this record cannot certify the revised lanes by its old hashes.
-          [ "$(grep -c '^NOTE: column .*its 162 cell(s) there are not compared and read as absent$' "$GATE_OUT/diff_gpu3.txt")" = 3 ]
-          grep -F 'summary: DIVERGENT=1, IDENTICAL=1331' "$GATE_OUT/diff_gpu3.txt"
-          grep -F 'summary (infer/model): IDENTICAL=1701, N/A=963' "$GATE_OUT/diff_gpu3.txt"
-          grep -F 'summary (batch): IDENTICAL=1080, N/A=252' "$GATE_OUT/diff_gpu3.txt"
+          # par-arima joined LANE_REVISIONS at 4459379a4 (trend-metadata-1):
+          # its 9 train, 9 infer, 9 model (N/A) and 9 batch cells left the
+          # comparison, 162 -> 171 excluded, 1331 -> 1322, 1701 -> 1692,
+          # 963 -> 954 and 1080 -> 1071.
+          [ "$(grep -c '^NOTE: column .*its 171 cell(s) there are not compared and read as absent$' "$GATE_OUT/diff_gpu3.txt")" = 3 ]
+          grep -F 'summary: DIVERGENT=1, IDENTICAL=1322' "$GATE_OUT/diff_gpu3.txt"
+          grep -F 'summary (infer/model): IDENTICAL=1692, N/A=954' "$GATE_OUT/diff_gpu3.txt"
+          grep -F 'summary (batch): IDENTICAL=1071, N/A=252' "$GATE_OUT/diff_gpu3.txt"
           grep -E '^\| kmeans-sqrt/wide +\| DIVERGENT +\| parts differ: inertia;' "$GATE_OUT/diff_gpu3.txt"
           grep -F 'require-columns 3 over' "$GATE_OUT/diff_gpu3.txt" | grep -F ': OK'
           [ "$st" = 1 ] || { echo "expected --diff to exit 1 on the one recorded DIVERGENT cell, got $st" >&2; exit 1; }
@@ -502,6 +516,7 @@ jobs:
         if: always() && env.FULL_CPU_VERIFY == 'true'
         run: |
           set -o pipefail
+          [ "${CPU_SURFACE_MANIFEST:-}" = read ] || { echo "::error::the CPU surface manifest step did not complete (an earlier step failed), so this step has no lists to run on; fix the first failed step" >&2; exit 1; }
           if python3 tools/identity_break.py --diff $GPU_COLUMNS --require-columns 4 --lanes gemm-pinned \
                > "$GATE_OUT/diff_gpu4_control.txt" 2>&1; then
             echo "control FAIL: --require-columns 4 over three columns exited 0" >&2
@@ -547,6 +562,7 @@ jobs:
         timeout-minutes: 20
         run: |
           set -o pipefail
+          [ "${CPU_SURFACE_MANIFEST:-}" = read ] || { echo "::error::the CPU surface manifest step did not complete (an earlier step failed), so this step has no lists to run on; fix the first failed step" >&2; exit 1; }
           # The smoke runs two lanes, so it judges only those two as covered:
           # the checker fails any --covered lane with no cell, and the full
           # COVERED_LANES list is the next step's. Both must be covered lanes.
@@ -581,6 +597,7 @@ jobs:
         timeout-minutes: 50
         run: |
           set -o pipefail
+          [ "${CPU_SURFACE_MANIFEST:-}" = read ] || { echo "::error::the CPU surface manifest step did not complete (an earlier step failed), so this step has no lists to run on; fix the first failed step" >&2; exit 1; }
           if [ -z "$COVERED_LANES" ]; then
             echo "no identity_break lane has a CPU implementation yet (COVERED_LANES is empty); phase 1 of docs/lanes/BRIEF_cpu_training_2026-09-13.md adds the first (gemm-pinned). Nothing run, nothing certified." | tee "$GATE_OUT/cpu_column.log"
             exit 0
@@ -679,10 +696,12 @@ jobs:
           MOJOLEARN_HOST_OUTDIR: ${{ runner.temp }}/host-sab
         run: |
           set -o pipefail
+          [ "${CPU_SURFACE_MANIFEST:-}" = read ] || { echo "::error::the CPU surface manifest step did not complete (an earlier step failed), so this step has no lists to run on; fix the first failed step" >&2; exit 1; }
           if [ -z "$COVERED_LANES" ]; then
             echo "no covered lane, no sabotage host set to build (COVERED_LANES is empty)"
             exit 0
           fi
+          command -v pixi >/dev/null || { echo "::error::pixi is not on PATH: the setup-pixi step did not run (an earlier step failed); fix the first failed step" >&2; exit 1; }
           rm -rf "${{ runner.temp }}/host-sab"
           # SABOTAGE_FAMILIES is BUILD_FAMILIES (the manifest step checked
           # both). MOJOLEARN_HOST_DIR has no fallback, and a binding absent
@@ -703,6 +722,7 @@ jobs:
         timeout-minutes: 50
         run: |
           set -o pipefail
+          [ "${CPU_SURFACE_MANIFEST:-}" = read ] || { echo "::error::the CPU surface manifest step did not complete (an earlier step failed), so this step has no lists to run on; fix the first failed step" >&2; exit 1; }
           if [ -z "$COVERED_LANES" ]; then
             echo "no covered lane, no sabotage arm to run (COVERED_LANES is empty)" | tee "$GATE_OUT/cpu_sabotage.log"
             exit 0
@@ -766,6 +786,7 @@ jobs:
           MOJOLEARN_HOST_ALLOW_SABOTAGE: "1"
         run: |
           set -o pipefail
+          [ "${CPU_SURFACE_MANIFEST:-}" = read ] || { echo "::error::the CPU surface manifest step did not complete (an earlier step failed), so this step has no lists to run on; fix the first failed step" >&2; exit 1; }
           [ -f "$MOJOLEARN_HOST_DIR/_mojolearn_estimators_host.so" ] || { echo "no sabotage estimators host binding under $MOJOLEARN_HOST_DIR" >&2; exit 1; }
           python3 tools/classical_host_gate.py check $CLASSICAL_RECORDED --expect-mismatch \
             --report "$GATE_OUT/classical_gate_sab.json" 2>&1 | tee "$GATE_OUT/classical_gate_sab.log"
@@ -782,6 +803,7 @@ jobs:
           MOJOLEARN_HOST_ALLOW_SABOTAGE: "1"
         run: |
           set -o pipefail
+          [ "${CPU_SURFACE_MANIFEST:-}" = read ] || { echo "::error::the CPU surface manifest step did not complete (an earlier step failed), so this step has no lists to run on; fix the first failed step" >&2; exit 1; }
           for b in _mojolearn_forecast_host _mojolearn_mixture_infer_host _mojolearn_gp_infer_host \
                    _mojolearn_hdbscan_infer_host _mojolearn_ivf_search_host _mojolearn_embedding_infer_host; do
             [ -f "$MOJOLEARN_HOST_DIR/$b.so" ] || { echo "no sabotage $b under $MOJOLEARN_HOST_DIR" >&2; exit 1; }

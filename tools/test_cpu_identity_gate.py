@@ -488,11 +488,16 @@ class SabotageDefinesTests(unittest.TestCase):
         # gbdt carries three since lane/catboost-parity (2026-09-19): the
         # border types' own arm (select_borders' middle border, which no
         # GreedyLogSum lane reaches), Ordered boosting's and the quantile
-        # constant's.
+        # constant's. A fourth since lane/close-no-cpu-path-gbdt (2026-09-20,
+        # ee06063c6): the held-out cursor's own arm, which moves the eval
+        # lane's held-out cells and nothing else (the family arm moves the
+        # leaves, so it reads DIVERGENT there whether or not the held-out
+        # restatement is right).
         self.assertEqual(own, {'forest': ['-D', 'MOJOLEARN_GBDT_CTR_HOST_SABOTAGE=1'],
                                'gbdt': ['-D', 'MOJOLEARN_BORDER_TYPES_SABOTAGE=1',
                                         '-D', 'MOJOLEARN_ORDERED_SABOTAGE=1',
-                                        '-D', 'MOJOLEARN_SAMPLE_QUANTILE_SABOTAGE=1'],
+                                        '-D', 'MOJOLEARN_SAMPLE_QUANTILE_SABOTAGE=1',
+                                        '-D', 'MOJOLEARN_GBDT_EVAL_SABOTAGE=1'],
                                'linalg': ['-D', 'MOJOLEARN_LOWBIT_CONVERT_SABOTAGE=1'],
                                'tokenizer': ['-D', 'MOJOLEARN_TOKENIZER_HOST_SABOTAGE=1',
                                              '-D', 'MOJOLEARN_BPE_TRAINER_SABOTAGE=1']})

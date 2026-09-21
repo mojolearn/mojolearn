@@ -832,7 +832,9 @@ def main():
     rec.add_argument('--fixtures', default='', help='comma separated identity_break fixtures (default all nine)')
     rec.add_argument('--overwrite', action='store_true')
     chk = sub.add_parser('check', help='on the CPU box, compare the host predictions with every expected.json')
-    chk.add_argument('fixture_dir', type=Path, nargs='+',
+    # nargs='*' so an empty list reaches the refusal in main(), which says
+    # what is missing, instead of argparse's usage line.
+    chk.add_argument('fixture_dir', type=Path, nargs='*',
                      help='a <lane>/<fixture> directory, or a root holding <lane>/<fixture>/ directories')
     chk.add_argument('--gpu-column', action='append', default=[],
                      help='an identity_break JSON whose infer cells are compared too (repeatable)')
@@ -855,6 +857,12 @@ def main():
     # (lane/saved-model-reference-gaps).
     if getattr(args, 'lane_rule_only', None) and not args.every_fixture:
         parser.error('--lane-rule-only needs --every-fixture')
+    if args.command == 'check' and not args.fixture_dir:
+        print('classical_host_gate.py check: no fixture directory given, so there is nothing to check; '
+              'in the CPU identity gate this is CLASSICAL_RECORDED or SAVED_MODEL_RECORDED, which the '
+              'CPU surface manifest step writes and which is empty when that step did not run',
+              file=sys.stderr)
+        return 2
     if args.command == 'record':
         return do_record(args)
     return do_check(args)
