@@ -38,7 +38,7 @@ code; the rented GPU boxes contribute their CPUs.
 |---|---:|---|---|
 | Apple M4 (repo checkout, 0.8.11 binding) | 730.7 s | 06a8b2733537f408531b8b4deb959c5d84e78b85ef6004548af558e27137d812 | c89330d6c3ed18212c3aece3c7550f16624a8e3cb39f5a014838833a7e09b21b |
 | RunPod MI300X pod, AMD EPYC 9474F | 1,554.6 s | 06a8b273...d812 | c89330d6...b21b |
-| RunPod RTX 4090 pod | see `nvidia/` when it lands | | |
+| RunPod RTX 4090 pod, AMD EPYC 7642 | NO RESULT: stopped by the body's 2,400 s cap (exit 124), unfinished | | |
 
 The faster builder (d2b1f49f7, `../2026-09-21_incremental-counts/`) reproduces 06a8b273... in 2.4 s.
 
