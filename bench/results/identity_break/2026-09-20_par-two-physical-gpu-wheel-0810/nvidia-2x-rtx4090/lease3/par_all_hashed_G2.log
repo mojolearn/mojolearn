@@ -1,0 +1,20 @@
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+# par (all): 18 of 59 par-* lanes x 1 fixture(s), devices 0 then 0,1
+  par-arima                  hashed   train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   5.32s
+  par-boosting-clf           hashed   train=IDENTICAL infer=IDENTICAL batch=IDENTICAL              5.99s
+  par-byte-lm-offload        hashed   train=IDENTICAL                                              0.25s
+  par-cd-elasticnet          hashed   train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.64s
+  par-feature-freq           hashed   train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   5.17s
+  par-gram                   hashed   train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.61s
+  par-gram-pca               hashed   train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.59s
+  par-graph-umap             hashed   train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  81.03s
+  par-holtwinters            hashed   train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.30s
+  par-kmeans                 hashed   train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.12s
+  par-mlp                    hashed   train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   8.12s
+  par-nystroem               hashed   train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  14.09s
+  par-ordered-rmse           hashed   train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   7.11s
+  par-queries-kde            hashed   train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  15.72s
+  par-queries-radius         hashed   train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  15.78s
+  par-reference-knn          hashed   train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  16.19s
+  par-samba-clip             hashed   train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   9.16s
+  par-svm                    hashed   train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  10.98s

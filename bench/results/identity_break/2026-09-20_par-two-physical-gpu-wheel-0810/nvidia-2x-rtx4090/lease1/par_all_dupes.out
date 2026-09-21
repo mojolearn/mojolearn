@@ -1,0 +1,10 @@
+{
+ "devices": [
+  0,
+  1
+ ],
+ "format": "mojolearn.verify-par.v1",
+ "ran": false,
+ "reason": "the GPU driver could not be asked how many devices this box has: /usr/bin/python3: Error while finding module specification for 'mojolearn._gpu_witness' (ModuleNotFoundError: No module named 'mojolearn')",
+ "vendor": "cuda"
+}

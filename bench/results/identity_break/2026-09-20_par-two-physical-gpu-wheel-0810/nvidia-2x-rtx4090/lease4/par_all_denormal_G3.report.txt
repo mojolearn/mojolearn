@@ -1,0 +1,84 @@
+# python -m mojolearn verify --par
+
+Ran each `par-*` lane TWICE in this process on this box (cuda): once with
+MOJOLEARN_PAR_DEVICES=0 and once with MOJOLEARN_PAR_DEVICES=0,1, and compared the
+two columns cell for cell. No reference table is involved: the one-device column
+produced here, minutes ago, off this build, IS the reference. That equality is
+the drivers' whole claim and no release record states it.
+
+  par-boosting               denormal train     IDENTICAL   one=56560dec5bdb6cb9  two=56560dec5bdb6cb9
+  par-boosting               denormal infer     IDENTICAL   one=e1db044dc82354ac  two=e1db044dc82354ac
+  par-boosting               denormal model     IDENTICAL   one=4f2c8b24bbe2eb42  two=4f2c8b24bbe2eb42
+  par-boosting               denormal batch     IDENTICAL   one=9d36287df25eff95  two=9d36287df25eff95
+  par-byte-lm                denormal train     IDENTICAL   one=c958c8af2e505ca0  two=c958c8af2e505ca0
+  par-causal-lm              denormal train     IDENTICAL   one=f1c5288260c678cd  two=f1c5288260c678cd
+  par-causal-lm              denormal batch     IDENTICAL   one=0c52595dfa1179f9  two=0c52595dfa1179f9
+  par-cholesky               denormal train     IDENTICAL   one=f47598a208186afb  two=f47598a208186afb
+  par-cholesky               denormal infer     IDENTICAL   one=cd57ea2608ceca3f  two=cd57ea2608ceca3f
+  par-cholesky               denormal model     IDENTICAL   one=33aa19eace5dbd51  two=33aa19eace5dbd51
+  par-cholesky               denormal batch     IDENTICAL   one=ab9f9fccfa789ad1  two=ab9f9fccfa789ad1
+  par-cross-val              denormal train     IDENTICAL   one=0a3d0c41cf6d6da5  two=0a3d0c41cf6d6da5
+  par-dbscan                 denormal train     IDENTICAL   one=9c0b3563fc16b652  two=9c0b3563fc16b652
+  par-dbscan                 denormal infer     IDENTICAL   one=3a6472714f51d8ab  two=3a6472714f51d8ab
+  par-dbscan                 denormal model     IDENTICAL   one=af8f5b102930fc66  two=af8f5b102930fc66
+  par-dbscan                 denormal batch     IDENTICAL   one=a8e67882b424a053  two=a8e67882b424a053
+  par-forecast-holtwinters   denormal train     IDENTICAL   one=61084170fa566d6f  two=61084170fa566d6f
+  par-forecast-holtwinters   denormal infer     IDENTICAL   one=3baf29a408512838  two=3baf29a408512838
+  par-forecast-holtwinters   denormal model     IDENTICAL   one=999974b61bbe0004  two=999974b61bbe0004
+  par-forecast-holtwinters   denormal batch     IDENTICAL   one=e14ccee0b3733785  two=e14ccee0b3733785
+  par-forest-et              denormal train     IDENTICAL   one=19a23f6fea44befd  two=19a23f6fea44befd
+  par-forest-et              denormal infer     IDENTICAL   one=406ff2c63a669110  two=406ff2c63a669110
+  par-forest-et              denormal model     IDENTICAL   one=8704471f45cc32d6  two=8704471f45cc32d6
+  par-forest-et              denormal batch     IDENTICAL   one=342ed44aaf4bda3b  two=342ed44aaf4bda3b
+  par-forest-et-clf          denormal train     IDENTICAL   one=b40377fb35e52909  two=b40377fb35e52909
+  par-forest-et-clf          denormal infer     IDENTICAL   one=df1046f889386ad8  two=df1046f889386ad8
+  par-forest-et-clf          denormal model     IDENTICAL   one=5d348c7133844b3e  two=5d348c7133844b3e
+  par-forest-et-clf          denormal batch     IDENTICAL   one=9e6b4329ac925a6a  two=9e6b4329ac925a6a
+  par-forest-pool            denormal train     IDENTICAL   one=3ed53f693f8b6640  two=3ed53f693f8b6640
+  par-forest-pool            denormal infer     IDENTICAL   one=dbec1223a5e9f1b8  two=dbec1223a5e9f1b8
+  par-forest-pool            denormal model     IDENTICAL   one=ce858a257a715073  two=ce858a257a715073
+  par-forest-pool            denormal batch     IDENTICAL   one=856eb88a9f6333a6  two=856eb88a9f6333a6
+  par-gmm                    denormal train     IDENTICAL   one=30e206252716e42a  two=30e206252716e42a
+  par-gmm                    denormal infer     IDENTICAL   one=74e7a4b0f419ec90  two=74e7a4b0f419ec90
+  par-gmm                    denormal model     IDENTICAL   one=8b5297c12a121af0  two=8b5297c12a121af0
+  par-gmm                    denormal batch     IDENTICAL   one=d1f4d2bbc5ce06b0  two=d1f4d2bbc5ce06b0
+  par-gram-tsvd              denormal train     IDENTICAL   one=36d9e3d5aaadcd92  two=36d9e3d5aaadcd92
+  par-gram-tsvd              denormal infer     IDENTICAL   one=fc4af18e4659ab46  two=fc4af18e4659ab46
+  par-gram-tsvd              denormal model     IDENTICAL   one=3ddbcba0a9ba339d  two=3ddbcba0a9ba339d
+  par-gram-tsvd              denormal batch     IDENTICAL   one=fe195d8a3551d078  two=fe195d8a3551d078
+  par-graph-agglomerative    denormal train     IDENTICAL   one=32a85ba63aeea62c  two=32a85ba63aeea62c
+  par-graph-agglomerative    denormal infer     IDENTICAL   one=2b2d3f329eec69f7  two=2b2d3f329eec69f7
+  par-graph-agglomerative    denormal model     IDENTICAL   one=0749a7721feb2709  two=0749a7721feb2709
+  par-graph-agglomerative    denormal batch     IDENTICAL   one=a2740d2ed4d74812  two=a2740d2ed4d74812
+  par-graph-spectral         denormal train     IDENTICAL   one=f39c1218d8a74f8b  two=f39c1218d8a74f8b
+  par-kernel-ridge           denormal train     IDENTICAL   one=021f596e13389e34  two=021f596e13389e34
+  par-kernel-ridge           denormal infer     IDENTICAL   one=c6b85f3201238961  two=c6b85f3201238961
+  par-kernel-ridge           denormal model     IDENTICAL   one=6c8e7be0f6ef2188  two=6c8e7be0f6ef2188
+  par-kernel-ridge           denormal batch     IDENTICAL   one=61a579018c7f9c91  two=61a579018c7f9c91
+  par-ordered                denormal train     IDENTICAL   one=0e73adb47576ba74  two=0e73adb47576ba74
+  par-ordered                denormal infer     IDENTICAL   one=d7a4f4eeda536f16  two=d7a4f4eeda536f16
+  par-ordered                denormal model     IDENTICAL   one=337411e478a47dd5  two=337411e478a47dd5
+  par-ordered                denormal batch     IDENTICAL   one=1b7f902bed2f8264  two=1b7f902bed2f8264
+  par-queries-knn            denormal train     IDENTICAL   one=4313fe10444c709c  two=4313fe10444c709c
+  par-queries-knn            denormal infer     IDENTICAL   one=3b26081dcfb54057  two=3b26081dcfb54057
+  par-queries-knn            denormal model     IDENTICAL   one=3ae6ad51532e6887  two=3ae6ad51532e6887
+  par-queries-knn            denormal batch     IDENTICAL   one=2c069b279f4d3406  two=2c069b279f4d3406
+  par-queries-nn             denormal train     IDENTICAL   one=c5404ea40ba502da  two=c5404ea40ba502da
+  par-queries-nn             denormal infer     IDENTICAL   one=32426a86a46b417f  two=32426a86a46b417f
+  par-queries-nn             denormal model     IDENTICAL   one=d2ef07879ac4916e  two=d2ef07879ac4916e
+  par-queries-nn             denormal batch     IDENTICAL   one=9af443b575315e61  two=9af443b575315e61
+  par-scaler-minmax          denormal train     IDENTICAL   one=760381e656d7edc6  two=760381e656d7edc6
+  par-scaler-minmax          denormal infer     IDENTICAL   one=17c9e6cc1a1bfd82  two=17c9e6cc1a1bfd82
+  par-scaler-minmax          denormal model     IDENTICAL   one=1f70dcfa4e160e3e  two=1f70dcfa4e160e3e
+  par-scaler-minmax          denormal batch     IDENTICAL   one=e470cfca3c51904a  two=e470cfca3c51904a
+  par-svm-svr                denormal train     IDENTICAL   one=e916e4426dcd5a14  two=e916e4426dcd5a14
+  par-svm-svr                denormal infer     IDENTICAL   one=13643cd05c4a641d  two=13643cd05c4a641d
+  par-svm-svr                denormal model     IDENTICAL   one=08b0cf218897d8e3  two=08b0cf218897d8e3
+  par-svm-svr                denormal batch     IDENTICAL   one=e4e4083511a0e155  two=e4e4083511a0e155
+Device witness: 52 pool(s), 79 worker(s), placement=physical.
+WITNESS REFUSED: par-byte-lm/denormal: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+
+RESULT: CANNOT RUN. The two-device column was not shown to have run on two
+devices, so its agreement with the one-device column is not evidence. This is
+reported rather than counted, because a clean AGREE from a column that never
+sharded is the exact failure this command exists to prevent.

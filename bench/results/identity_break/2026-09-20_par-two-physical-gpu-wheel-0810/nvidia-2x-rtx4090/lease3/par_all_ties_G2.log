@@ -1,0 +1,20 @@
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+# par (all): 18 of 59 par-* lanes x 1 fixture(s), devices 0 then 0,1
+  par-arima                  ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   5.26s
+  par-boosting-clf           ties     train=IDENTICAL infer=IDENTICAL batch=IDENTICAL              6.06s
+  par-byte-lm-offload        ties     train=IDENTICAL                                              1.04s
+  par-cd-elasticnet          ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.73s
+  par-feature-freq           ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   5.01s
+  par-gram                   ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.79s
+  par-gram-pca               ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.55s
+  par-graph-umap             ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  80.40s
+  par-holtwinters            ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.76s
+  par-kmeans                 ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.32s
+  par-mlp                    ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  39.72s
+  par-nystroem               ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  13.94s
+  par-ordered-rmse           ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   7.04s
+  par-queries-kde            ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  15.73s
+  par-queries-radius         ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  15.67s
+  par-reference-knn          ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  16.30s
+  par-samba-clip             ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  11.07s
+  par-svm                    ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  11.34s

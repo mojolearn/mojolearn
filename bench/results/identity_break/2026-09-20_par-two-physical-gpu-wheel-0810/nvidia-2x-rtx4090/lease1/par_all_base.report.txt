@@ -1,0 +1,3 @@
+# python -m mojolearn verify --par
+
+NOT RUN: the GPU driver could not be asked how many devices this box has: /usr/bin/python3: Error while finding module specification for 'mojolearn._gpu_witness' (ModuleNotFoundError: No module named 'mojolearn')

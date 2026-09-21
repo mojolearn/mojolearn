@@ -1,0 +1,91 @@
+# python -m mojolearn verify --par
+
+Ran each `par-*` lane TWICE in this process on this box (cuda): once with
+MOJOLEARN_PAR_DEVICES=0 and once with MOJOLEARN_PAR_DEVICES=0,1, and compared the
+two columns cell for cell. No reference table is involved: the one-device column
+produced here, minutes ago, off this build, IS the reference. That equality is
+the drivers' whole claim and no release record states it.
+
+  par-boosting-pointwise     hashed   train     IDENTICAL   one=cf3de2636433b65a  two=cf3de2636433b65a
+  par-boosting-pointwise     hashed   infer     IDENTICAL   one=548cebaf2b1310eb  two=548cebaf2b1310eb
+  par-boosting-pointwise     hashed   model     IDENTICAL   one=24d9422c46dcfff9  two=24d9422c46dcfff9
+  par-boosting-pointwise     hashed   batch     IDENTICAL   one=8cb251b8df89f2dd  two=8cb251b8df89f2dd
+  par-boosting-reg           hashed   train     IDENTICAL   one=a89dba586c0f1ab4  two=a89dba586c0f1ab4
+  par-boosting-reg           hashed   infer     IDENTICAL   one=b79afaae27b8bdb6  two=b79afaae27b8bdb6
+  par-boosting-reg           hashed   batch     IDENTICAL   one=15a568bd232c8fbd  two=15a568bd232c8fbd
+  par-border-types           hashed   train     IDENTICAL   one=7f756ddfe38a2ebe  two=7f756ddfe38a2ebe
+  par-border-types           hashed   infer     IDENTICAL   one=74e7fcf52b8b2c4a  two=74e7fcf52b8b2c4a
+  par-border-types           hashed   model     IDENTICAL   one=6d959300597b3068  two=6d959300597b3068
+  par-border-types           hashed   batch     IDENTICAL   one=34cb9dc84217d641  two=34cb9dc84217d641
+  par-byte-lm-model-pool     hashed   train     IDENTICAL   one=407da1849795daa4  two=407da1849795daa4
+  par-cd                     hashed   train     IDENTICAL   one=0446105edc307f9c  two=0446105edc307f9c
+  par-cd                     hashed   infer     IDENTICAL   one=482da47ba9b49877  two=482da47ba9b49877
+  par-cd                     hashed   model     IDENTICAL   one=e04dc1c060b2abb3  two=e04dc1c060b2abb3
+  par-cd                     hashed   batch     IDENTICAL   one=47e2908275e5aadb  two=47e2908275e5aadb
+  par-forecast-arima         hashed   train     IDENTICAL   one=9e1a5684478a1da9  two=9e1a5684478a1da9
+  par-forecast-arima         hashed   infer     IDENTICAL   one=06461dad67cfb784  two=06461dad67cfb784
+  par-forecast-arima         hashed   model     IDENTICAL   one=913af384ea04d543  two=913af384ea04d543
+  par-forecast-arima         hashed   batch     IDENTICAL   one=331526a2ec20a264  two=331526a2ec20a264
+  par-forest                 hashed   train     IDENTICAL   one=30000a54b1ebf87f  two=30000a54b1ebf87f
+  par-forest                 hashed   infer     IDENTICAL   one=95452dea53316b5c  two=95452dea53316b5c
+  par-forest                 hashed   model     IDENTICAL   one=4acba627d01b9da9  two=4acba627d01b9da9
+  par-forest                 hashed   batch     IDENTICAL   one=3ccd0f87fbbd7234  two=3ccd0f87fbbd7234
+  par-forest-reg             hashed   train     IDENTICAL   one=c755113ac878c8b9  two=c755113ac878c8b9
+  par-forest-reg             hashed   infer     IDENTICAL   one=c451d1194f8c47f5  two=c451d1194f8c47f5
+  par-forest-reg             hashed   model     IDENTICAL   one=3ce6c16334ce58a2  two=3ce6c16334ce58a2
+  par-forest-reg             hashed   batch     IDENTICAL   one=2beefbce28d7b6fd  two=2beefbce28d7b6fd
+  par-gp                     hashed   train     IDENTICAL   one=8ab241df41f2f643  two=8ab241df41f2f643
+  par-gp                     hashed   infer     IDENTICAL   one=6eec04108625b28e  two=6eec04108625b28e
+  par-gp                     hashed   model     IDENTICAL   one=e313387e268603e1  two=e313387e268603e1
+  par-gp                     hashed   batch     IDENTICAL   one=f18ced6112fb55e8  two=f18ced6112fb55e8
+  par-gpc-fit                hashed   train     IDENTICAL   one=04ea8fda33a7b3dc  two=04ea8fda33a7b3dc
+  par-gpc-fit                hashed   infer     IDENTICAL   one=9da411da0b1e3037  two=9da411da0b1e3037
+  par-gpc-fit                hashed   model     IDENTICAL   one=f4c2aca55d9362f2  two=f4c2aca55d9362f2
+  par-gpc-fit                hashed   batch     IDENTICAL   one=0419fbbe5d340ea4  two=0419fbbe5d340ea4
+  par-gpc-predict            hashed   train     IDENTICAL   one=a84c7a9a2f90ff21  two=a84c7a9a2f90ff21
+  par-gpc-predict            hashed   infer     IDENTICAL   one=4b0cface672a3d34  two=4b0cface672a3d34
+  par-gpc-predict            hashed   model     IDENTICAL   one=f4c2aca55d9362f2  two=f4c2aca55d9362f2
+  par-gpc-predict            hashed   batch     IDENTICAL   one=0419fbbe5d340ea4  two=0419fbbe5d340ea4
+  par-gram-ols               hashed   train     IDENTICAL   one=7a4cc4b643207e04  two=7a4cc4b643207e04
+  par-gram-ols               hashed   infer     IDENTICAL   one=73b6c23acb537f4f  two=73b6c23acb537f4f
+  par-gram-ols               hashed   model     IDENTICAL   one=5de64f00889bfe52  two=5de64f00889bfe52
+  par-gram-ols               hashed   batch     IDENTICAL   one=a4956d9ac7b79682  two=a4956d9ac7b79682
+  par-hdbscan                hashed   train     IDENTICAL   one=d7d82149c701e81d  two=d7d82149c701e81d
+  par-hdbscan                hashed   infer     IDENTICAL   one=273d36cdf15d7782  two=273d36cdf15d7782
+  par-hdbscan                hashed   model     IDENTICAL   one=cb996f3d4bbe32fa  two=cb996f3d4bbe32fa
+  par-hdbscan                hashed   batch     IDENTICAL   one=cf8b28373c03028e  two=cf8b28373c03028e
+  par-iforest                hashed   train     IDENTICAL   one=72260557474879ae  two=72260557474879ae
+  par-iforest                hashed   infer     IDENTICAL   one=e4d04598e6d55395  two=e4d04598e6d55395
+  par-iforest                hashed   model     IDENTICAL   one=37e9f5de0dd4f62f  two=37e9f5de0dd4f62f
+  par-iforest                hashed   batch     IDENTICAL   one=bbe1f1b12f09585b  two=bbe1f1b12f09585b
+  par-ivf                    hashed   train     IDENTICAL   one=10ba4e138bc9450c  two=10ba4e138bc9450c
+  par-ivf                    hashed   infer     IDENTICAL   one=49c22df302ee0334  two=49c22df302ee0334
+  par-ivf                    hashed   model     IDENTICAL   one=9d809fde4ffc96cc  two=9d809fde4ffc96cc
+  par-ivf                    hashed   batch     IDENTICAL   one=648bf9fc3764372d  two=648bf9fc3764372d
+  par-logistic               hashed   train     IDENTICAL   one=ec4fd3f1b3f90393  two=ec4fd3f1b3f90393
+  par-logistic               hashed   infer     IDENTICAL   one=dfe219d0b67a77ca  two=dfe219d0b67a77ca
+  par-logistic               hashed   model     IDENTICAL   one=ee3cb3e174ae7c73  two=ee3cb3e174ae7c73
+  par-logistic               hashed   batch     IDENTICAL   one=d97f6965451c3618  two=d97f6965451c3618
+  par-rbf-sampler            hashed   train     IDENTICAL   one=ee83de7466c54d8c  two=ee83de7466c54d8c
+  par-rbf-sampler            hashed   infer     IDENTICAL   one=46f930e278cb1bc3  two=46f930e278cb1bc3
+  par-rbf-sampler            hashed   model     IDENTICAL   one=d4b54301bf9a47f0  two=d4b54301bf9a47f0
+  par-rbf-sampler            hashed   batch     IDENTICAL   one=9a58a9e55969d818  two=9a58a9e55969d818
+  par-reference-knn-reg      hashed   train     IDENTICAL   one=81f9b8890b3f8185  two=81f9b8890b3f8185
+  par-reference-knn-reg      hashed   infer     IDENTICAL   one=4223804b361954e6  two=4223804b361954e6
+  par-reference-knn-reg      hashed   model     IDENTICAL   one=0ed94f6eaca5e6f1  two=0ed94f6eaca5e6f1
+  par-reference-knn-reg      hashed   batch     IDENTICAL   one=0e524fc522d94027  two=0e524fc522d94027
+  par-samba                  hashed   train     IDENTICAL   one=78027e9d4a9ee36a  two=78027e9d4a9ee36a
+  par-samba                  hashed   infer     IDENTICAL   one=cd09020cd23ba0bb  two=cd09020cd23ba0bb
+  par-samba                  hashed   model     IDENTICAL   one=a7965a8a91b70d4e  two=a7965a8a91b70d4e
+  par-samba                  hashed   batch     IDENTICAL   one=514770006708e9a0  two=514770006708e9a0
+  par-scaler                 hashed   train     IDENTICAL   one=212f9506f7d20854  two=212f9506f7d20854
+  par-scaler                 hashed   infer     IDENTICAL   one=fc7e9239e772ec64  two=fc7e9239e772ec64
+  par-scaler                 hashed   model     IDENTICAL   one=56f8f885e1f14002  two=56f8f885e1f14002
+  par-scaler                 hashed   batch     IDENTICAL   one=f929bcdbb2293a30  two=f929bcdbb2293a30
+Device witness: 50 pool(s), 83 worker(s), placement=physical.
+WITNESS REFUSED: par-byte-lm-model-pool/hashed: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+
+RESULT: CANNOT RUN. The two-device column was not shown to have run on two
+devices, so its agreement with the one-device column is not evidence. This is
+reported rather than counted, because a clean AGREE from a column that never
+sharded is the exact failure this command exists to prevent.

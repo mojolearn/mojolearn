@@ -1,0 +1,22 @@
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+# par (all): 20 of 59 par-* lanes x 1 fixture(s), devices 0 then 0,1
+  par-boosting               wide     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   6.62s
+  par-byte-lm                wide     train=IDENTICAL                                              1.19s
+  par-causal-lm              wide     train=IDENTICAL batch=IDENTICAL                              9.41s
+  par-cholesky               wide     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  17.67s
+  par-cross-val              wide     train=IDENTICAL                                              4.12s
+  par-dbscan                 wide     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   5.22s
+  par-forecast-holtwinters   wide     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  34.85s
+  par-forest-et              wide     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.30s
+  par-forest-et-clf          wide     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.53s
+  par-forest-pool            wide     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  10.73s
+  par-gmm                    wide     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  20.54s
+  par-gram-tsvd              wide     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.51s
+  par-graph-agglomerative    wide     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.48s
+  par-graph-spectral         wide     train=IDENTICAL                                              3.67s
+  par-kernel-ridge           wide     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  15.32s
+  par-ordered                wide     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   8.18s
+  par-queries-knn            wide     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  23.34s
+  par-queries-nn             wide     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  15.29s
+  par-scaler-minmax          wide     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  11.69s
+  par-svm-svr                wide     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   7.03s

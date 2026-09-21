@@ -1,0 +1,6 @@
+pod=juzgii19nciezf
+armed=1
+terminated=1
+deadman_pid=65544
+exit=0
+at=2026-09-21T00:01:36Z

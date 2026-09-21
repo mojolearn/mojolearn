@@ -1,0 +1,297 @@
+## commands (status.tsv: name, exit, seconds)
+lease1/status.tsv
+    pip_download  0  2
+    pip_install  0  5
+    env_report  0  1
+    par_self_test  4  0
+    par_self_test_json  4  1
+    par_quick  4  0
+    par_all_base  4  0
+    par_all_ties  4  1
+    par_all_hashed  4  1
+    par_all_wide  4  1
+    par_all_denormal  4  0
+    par_all_denormal_ftz  4  0
+    par_all_dupes  4  0
+    par_all_odd  4  1
+    par_all_negative  4  1
+lease2/status.tsv
+    pip_download  0  47
+    pip_install  0  28
+    env_report  0  1
+    python_where_unactivated  0  0
+    python_where_activated  0  1
+    par_self_test  0  9
+    par_self_test_json  0  8
+    par_quick  0  225
+    par_all_base  4  1210
+    par_all_ties  NOT-STARTED  0
+    par_all_hashed  NOT-STARTED  0
+    par_all_wide  NOT-STARTED  0
+    par_all_denormal  NOT-STARTED  0
+    par_all_denormal_ftz  NOT-STARTED  0
+    par_all_dupes  NOT-STARTED  0
+    par_all_odd  NOT-STARTED  0
+    par_all_negative  NOT-STARTED  0
+lease3/status.tsv
+    pip_download  0  2
+    pip_install  0  4
+    env_report  0  1
+    python_where_unactivated  0  0
+    python_where_activated  0  0
+    par_self_test  0  7
+    par_self_test_json  0  6
+    par_all_ties_G1  0  295
+    par_all_ties_G2  4  250
+    par_all_ties_G3  4  217
+    par_all_ties_G4  4  219
+    par_all_hashed_G1  0  304
+    par_all_hashed_G2  4  216
+    par_all_hashed_G3  4  216
+    par_all_hashed_G4  4  220
+    par_all_wide_G2  4  219
+    par_all_wide_G3  4  212
+    par_all_wide_G4  NOT-STARTED  0
+    par_all_wide_G1  NOT-STARTED  0
+lease4/status.tsv
+    pip_download  0  6
+    pip_install  0  4
+    env_report  0  0
+    python_where_unactivated  0  1
+    python_where_activated  0  0
+    par_self_test  0  7
+    par_self_test_json  0  7
+    par_all_wide_G4  4  216
+    par_all_wide_G1  0  291
+    par_all_denormal_G1  0  294
+    par_all_denormal_G2  4  214
+    par_all_denormal_G3  4  215
+    par_all_denormal_G4  4  211
+    par_all_denormal_ftz_G1  0  297
+    par_all_denormal_ftz_G2  4  216
+    par_all_denormal_ftz_G3  4  213
+    par_all_denormal_ftz_G4  4  209
+    par_all_dupes_G2  NOT-STARTED  0
+    par_all_dupes_G3  NOT-STARTED  0
+    par_all_dupes_G4  NOT-STARTED  0
+    par_all_dupes_G1  NOT-STARTED  0
+lease5/status.tsv
+    pip_download  0  2
+    pip_install  0  5
+    env_report  0  1
+    python_where_unactivated  0  0
+    python_where_activated  0  1
+    par_self_test  0  7
+    par_self_test_json  0  6
+    par_all_dupes_G1  0  294
+    par_all_dupes_G2  4  221
+    par_all_dupes_G3  4  212
+    par_all_dupes_G4  4  211
+    par_all_odd_G1  0  293
+    par_all_odd_G2  4  215
+    par_all_odd_G3  4  216
+    par_all_odd_G4  4  220
+    par_all_negative_G2  4  227
+    par_all_negative_G3  4  216
+    par_all_negative_G4  NOT-STARTED  0
+    par_all_negative_G1  NOT-STARTED  0
+lease6/status.tsv
+    pip_download  0  2
+    pip_install  0  5
+    env_report  0  0
+    python_where_unactivated  0  0
+    python_where_activated  0  1
+    par_self_test  0  7
+    par_self_test_json  0  7
+    par_all_negative_G4  4  224
+    par_all_negative_G1  0  302
+
+## verify --par quick
+lease1/par_quick.out: NOT RUN: the GPU driver could not be asked how many devices this box has: /usr/bin/python3: Error while finding module specification for 'mojolearn._gpu_witness' (ModuleNotFoundError: No module named 'mojolearn')
+lease2/par_quick.out: state=VERIFIED passed=True vendor=cuda devices=[0, 1] repeats=1 lanes=14 fixtures=['base'] parts=70 counts={'IDENTICAL': 51, 'N/A': 19} elapsed_s=223.75 witness_refusal=None
+
+lane/fixture cells run: 14 (59 lanes x 9 fixtures = 531 is the whole of `--par all`)
+lanes run: 14   fixtures run: 1 ['base']
+parts reported: 70   parts with two hashes compared: 51
+  IDENTICAL        51
+  DIVERGENT        0
+  MOVED            0
+  ONE-COLUMN       0
+  REFUSED          0
+  CPU-ROUTE-LIMIT  0
+  N/A              19
+placement witness: 14 of 14 lane/fixture cells showed >= 2 distinct physical GPU UUIDs; witness refusals: 0
+  lease2: GPU UUIDs named by the workers themselves: ['be0ed8d96131996f04ef131b0e69c47e', 'd961b89f849374b73d6089baa7c94717']
+
+| lane | fixtures run | IDENTICAL | DIVERGENT | MOVED | ONE-COLUMN | REFUSED | N/A | WITNESS REFUSED (fixtures) |
+|---|---|---|---|---|---|---|---|---|
+| par-arima | 1 | 4 | 0 | 0 | 0 | 0 | 1 | 0 |
+| par-boosting | 1 | 4 | 0 | 0 | 0 | 0 | 1 | 0 |
+| par-causal-lm | 1 | 2 | 0 | 0 | 0 | 0 | 3 | 0 |
+| par-cross-val | 1 | 1 | 0 | 0 | 0 | 0 | 4 | 0 |
+| par-forecast-holtwinters | 1 | 4 | 0 | 0 | 0 | 0 | 1 | 0 |
+| par-forest | 1 | 4 | 0 | 0 | 0 | 0 | 1 | 0 |
+| par-forest-et | 1 | 4 | 0 | 0 | 0 | 0 | 1 | 0 |
+| par-gpc-fit | 1 | 4 | 0 | 0 | 0 | 0 | 1 | 0 |
+| par-ivf | 1 | 4 | 0 | 0 | 0 | 0 | 1 | 0 |
+| par-mlp | 1 | 4 | 0 | 0 | 0 | 0 | 1 | 0 |
+| par-queries-kde | 1 | 4 | 0 | 0 | 0 | 0 | 1 | 0 |
+| par-queries-knn | 1 | 4 | 0 | 0 | 0 | 0 | 1 | 0 |
+| par-rbf-sampler | 1 | 4 | 0 | 0 | 0 | 0 | 1 | 0 |
+| par-scaler | 1 | 4 | 0 | 0 | 0 | 0 | 1 | 0 |
+
+every part that is not IDENTICAL and not N/A, in the verifier's own words:
+  (none)
+
+## verify --par all (one fixture per command)
+lease1/par_all_base.out: NOT RUN: the GPU driver could not be asked how many devices this box has: /usr/bin/python3: Error while finding module specification for 'mojolearn._gpu_witness' (ModuleNotFoundError: No module named 'mojolearn')
+lease1/par_all_denormal.out: NOT RUN: the GPU driver could not be asked how many devices this box has: /usr/bin/python3: Error while finding module specification for 'mojolearn._gpu_witness' (ModuleNotFoundError: No module named 'mojolearn')
+lease1/par_all_denormal_ftz.out: NOT RUN: the GPU driver could not be asked how many devices this box has: /usr/bin/python3: Error while finding module specification for 'mojolearn._gpu_witness' (ModuleNotFoundError: No module named 'mojolearn')
+lease1/par_all_dupes.out: NOT RUN: the GPU driver could not be asked how many devices this box has: /usr/bin/python3: Error while finding module specification for 'mojolearn._gpu_witness' (ModuleNotFoundError: No module named 'mojolearn')
+lease1/par_all_hashed.out: NOT RUN: the GPU driver could not be asked how many devices this box has: /usr/bin/python3: Error while finding module specification for 'mojolearn._gpu_witness' (ModuleNotFoundError: No module named 'mojolearn')
+lease1/par_all_negative.out: NOT RUN: the GPU driver could not be asked how many devices this box has: /usr/bin/python3: Error while finding module specification for 'mojolearn._gpu_witness' (ModuleNotFoundError: No module named 'mojolearn')
+lease1/par_all_odd.out: NOT RUN: the GPU driver could not be asked how many devices this box has: /usr/bin/python3: Error while finding module specification for 'mojolearn._gpu_witness' (ModuleNotFoundError: No module named 'mojolearn')
+lease1/par_all_ties.out: NOT RUN: the GPU driver could not be asked how many devices this box has: /usr/bin/python3: Error while finding module specification for 'mojolearn._gpu_witness' (ModuleNotFoundError: No module named 'mojolearn')
+lease1/par_all_wide.out: NOT RUN: the GPU driver could not be asked how many devices this box has: /usr/bin/python3: Error while finding module specification for 'mojolearn._gpu_witness' (ModuleNotFoundError: No module named 'mojolearn')
+lease2/par_all_base.out: state=INCOMPLETE passed=None vendor=cuda devices=[0, 1] repeats=1 lanes=59 fixtures=['base'] parts=295 counts={'IDENTICAL': 215, 'N/A': 80} elapsed_s=1208.36 witness_refusal=par-byte-lm/base: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+lease3/par_all_hashed_G1.out: state=VERIFIED passed=True vendor=cuda devices=[0, 1] repeats=1 lanes=1 fixtures=['hashed'] parts=5 counts={'IDENTICAL': 2, 'N/A': 3} elapsed_s=302.53 witness_refusal=None
+lease3/par_all_hashed_G2.out: state=INCOMPLETE passed=None vendor=cuda devices=[0, 1] repeats=1 lanes=18 fixtures=['hashed'] parts=90 counts={'IDENTICAL': 68, 'N/A': 22} elapsed_s=214.34 witness_refusal=par-byte-lm-offload/hashed: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+lease3/par_all_hashed_G3.out: state=INCOMPLETE passed=None vendor=cuda devices=[0, 1] repeats=1 lanes=20 fixtures=['hashed'] parts=100 counts={'IDENTICAL': 69, 'N/A': 31} elapsed_s=215.01 witness_refusal=par-byte-lm/hashed: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+lease3/par_all_hashed_G4.out: state=INCOMPLETE passed=None vendor=cuda devices=[0, 1] repeats=1 lanes=20 fixtures=['hashed'] parts=100 counts={'IDENTICAL': 76, 'N/A': 24} elapsed_s=218.71 witness_refusal=par-byte-lm-model-pool/hashed: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+lease3/par_all_ties_G1.out: state=VERIFIED passed=True vendor=cuda devices=[0, 1] repeats=1 lanes=1 fixtures=['ties'] parts=5 counts={'IDENTICAL': 2, 'N/A': 3} elapsed_s=294.29 witness_refusal=None
+lease3/par_all_ties_G2.out: state=INCOMPLETE passed=None vendor=cuda devices=[0, 1] repeats=1 lanes=18 fixtures=['ties'] parts=90 counts={'IDENTICAL': 68, 'N/A': 22} elapsed_s=248.92 witness_refusal=par-byte-lm-offload/ties: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+lease3/par_all_ties_G3.out: state=INCOMPLETE passed=None vendor=cuda devices=[0, 1] repeats=1 lanes=20 fixtures=['ties'] parts=100 counts={'IDENTICAL': 69, 'N/A': 31} elapsed_s=214.7 witness_refusal=par-byte-lm/ties: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+lease3/par_all_ties_G4.out: state=INCOMPLETE passed=None vendor=cuda devices=[0, 1] repeats=1 lanes=20 fixtures=['ties'] parts=100 counts={'IDENTICAL': 76, 'N/A': 24} elapsed_s=217.81 witness_refusal=par-byte-lm-model-pool/ties: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+lease3/par_all_wide_G2.out: state=INCOMPLETE passed=None vendor=cuda devices=[0, 1] repeats=1 lanes=18 fixtures=['wide'] parts=90 counts={'IDENTICAL': 68, 'N/A': 22} elapsed_s=218.15 witness_refusal=par-byte-lm-offload/wide: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+lease3/par_all_wide_G3.out: state=INCOMPLETE passed=None vendor=cuda devices=[0, 1] repeats=1 lanes=20 fixtures=['wide'] parts=100 counts={'IDENTICAL': 69, 'N/A': 31} elapsed_s=210.84 witness_refusal=par-byte-lm/wide: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+lease4/par_all_denormal_G1.out: state=VERIFIED passed=True vendor=cuda devices=[0, 1] repeats=1 lanes=1 fixtures=['denormal'] parts=5 counts={'IDENTICAL': 2, 'N/A': 3} elapsed_s=292.96 witness_refusal=None
+lease4/par_all_denormal_G2.out: state=INCOMPLETE passed=None vendor=cuda devices=[0, 1] repeats=1 lanes=18 fixtures=['denormal'] parts=90 counts={'IDENTICAL': 68, 'N/A': 22} elapsed_s=213.27 witness_refusal=par-byte-lm-offload/denormal: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+lease4/par_all_denormal_G3.out: state=INCOMPLETE passed=None vendor=cuda devices=[0, 1] repeats=1 lanes=20 fixtures=['denormal'] parts=100 counts={'IDENTICAL': 69, 'N/A': 31} elapsed_s=213.87 witness_refusal=par-byte-lm/denormal: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+lease4/par_all_denormal_G4.out: state=INCOMPLETE passed=None vendor=cuda devices=[0, 1] repeats=1 lanes=20 fixtures=['denormal'] parts=100 counts={'IDENTICAL': 76, 'N/A': 24} elapsed_s=209.0 witness_refusal=par-byte-lm-model-pool/denormal: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+lease4/par_all_denormal_ftz_G1.out: state=VERIFIED passed=True vendor=cuda devices=[0, 1] repeats=1 lanes=1 fixtures=['denormal_ftz'] parts=5 counts={'IDENTICAL': 2, 'N/A': 3} elapsed_s=295.73 witness_refusal=None
+lease4/par_all_denormal_ftz_G2.out: state=INCOMPLETE passed=None vendor=cuda devices=[0, 1] repeats=1 lanes=18 fixtures=['denormal_ftz'] parts=90 counts={'IDENTICAL': 68, 'N/A': 22} elapsed_s=215.58 witness_refusal=par-byte-lm-offload/denormal_ftz: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+lease4/par_all_denormal_ftz_G3.out: state=INCOMPLETE passed=None vendor=cuda devices=[0, 1] repeats=1 lanes=20 fixtures=['denormal_ftz'] parts=100 counts={'IDENTICAL': 69, 'N/A': 31} elapsed_s=211.53 witness_refusal=par-byte-lm/denormal_ftz: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+lease4/par_all_denormal_ftz_G4.out: state=INCOMPLETE passed=None vendor=cuda devices=[0, 1] repeats=1 lanes=20 fixtures=['denormal_ftz'] parts=100 counts={'IDENTICAL': 76, 'N/A': 24} elapsed_s=207.28 witness_refusal=par-byte-lm-model-pool/denormal_ftz: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+lease4/par_all_wide_G1.out: state=VERIFIED passed=True vendor=cuda devices=[0, 1] repeats=1 lanes=1 fixtures=['wide'] parts=5 counts={'IDENTICAL': 2, 'N/A': 3} elapsed_s=289.79 witness_refusal=None
+lease4/par_all_wide_G4.out: state=INCOMPLETE passed=None vendor=cuda devices=[0, 1] repeats=1 lanes=20 fixtures=['wide'] parts=100 counts={'IDENTICAL': 76, 'N/A': 24} elapsed_s=214.5 witness_refusal=par-byte-lm-model-pool/wide: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+lease5/par_all_dupes_G1.out: state=VERIFIED passed=True vendor=cuda devices=[0, 1] repeats=1 lanes=1 fixtures=['dupes'] parts=5 counts={'IDENTICAL': 2, 'N/A': 3} elapsed_s=293.01 witness_refusal=None
+lease5/par_all_dupes_G2.out: state=INCOMPLETE passed=None vendor=cuda devices=[0, 1] repeats=1 lanes=18 fixtures=['dupes'] parts=90 counts={'IDENTICAL': 68, 'N/A': 22} elapsed_s=219.32 witness_refusal=par-byte-lm-offload/dupes: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+lease5/par_all_dupes_G3.out: state=INCOMPLETE passed=None vendor=cuda devices=[0, 1] repeats=1 lanes=20 fixtures=['dupes'] parts=100 counts={'IDENTICAL': 69, 'N/A': 31} elapsed_s=210.97 witness_refusal=par-byte-lm/dupes: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+lease5/par_all_dupes_G4.out: state=INCOMPLETE passed=None vendor=cuda devices=[0, 1] repeats=1 lanes=20 fixtures=['dupes'] parts=100 counts={'IDENTICAL': 76, 'N/A': 24} elapsed_s=209.81 witness_refusal=par-byte-lm-model-pool/dupes: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+lease5/par_all_negative_G2.out: state=INCOMPLETE passed=None vendor=cuda devices=[0, 1] repeats=1 lanes=18 fixtures=['negative'] parts=90 counts={'IDENTICAL': 68, 'N/A': 22} elapsed_s=225.62 witness_refusal=par-byte-lm-offload/negative: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+lease5/par_all_negative_G3.out: state=INCOMPLETE passed=None vendor=cuda devices=[0, 1] repeats=1 lanes=20 fixtures=['negative'] parts=100 counts={'IDENTICAL': 69, 'N/A': 31} elapsed_s=214.23 witness_refusal=par-byte-lm/negative: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+lease5/par_all_odd_G1.out: state=VERIFIED passed=True vendor=cuda devices=[0, 1] repeats=1 lanes=1 fixtures=['odd'] parts=5 counts={'IDENTICAL': 2, 'N/A': 3} elapsed_s=292.04 witness_refusal=None
+lease5/par_all_odd_G2.out: state=INCOMPLETE passed=None vendor=cuda devices=[0, 1] repeats=1 lanes=18 fixtures=['odd'] parts=90 counts={'IDENTICAL': 68, 'N/A': 22} elapsed_s=214.58 witness_refusal=par-byte-lm-offload/odd: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+lease5/par_all_odd_G3.out: state=INCOMPLETE passed=None vendor=cuda devices=[0, 1] repeats=1 lanes=20 fixtures=['odd'] parts=100 counts={'IDENTICAL': 69, 'N/A': 31} elapsed_s=213.59 witness_refusal=par-byte-lm/odd: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+lease5/par_all_odd_G4.out: state=INCOMPLETE passed=None vendor=cuda devices=[0, 1] repeats=1 lanes=20 fixtures=['odd'] parts=100 counts={'IDENTICAL': 76, 'N/A': 24} elapsed_s=218.83 witness_refusal=par-byte-lm-model-pool/odd: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+lease6/par_all_negative_G1.out: state=VERIFIED passed=True vendor=cuda devices=[0, 1] repeats=1 lanes=1 fixtures=['negative'] parts=5 counts={'IDENTICAL': 2, 'N/A': 3} elapsed_s=301.2 witness_refusal=None
+lease6/par_all_negative_G4.out: state=INCOMPLETE passed=None vendor=cuda devices=[0, 1] repeats=1 lanes=20 fixtures=['negative'] parts=100 counts={'IDENTICAL': 76, 'N/A': 24} elapsed_s=222.35 witness_refusal=par-byte-lm-model-pool/negative: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+
+lane/fixture cells run: 531 (59 lanes x 9 fixtures = 531 is the whole of `--par all`)
+lanes run: 59   fixtures run: 9 ['base', 'hashed', 'ties', 'wide', 'denormal', 'denormal_ftz', 'dupes', 'negative', 'odd']
+parts reported: 2655   parts with two hashes compared: 1935
+  IDENTICAL        1935
+  DIVERGENT        0
+  MOVED            0
+  ONE-COLUMN       0
+  REFUSED          0
+  CPU-ROUTE-LIMIT  0
+  N/A              720
+placement witness: 504 of 531 lane/fixture cells showed >= 2 distinct physical GPU UUIDs; witness refusals: 27
+  lease2: GPU UUIDs named by the workers themselves: ['be0ed8d96131996f04ef131b0e69c47e', 'd961b89f849374b73d6089baa7c94717']
+  lease3: GPU UUIDs named by the workers themselves: ['09bd08531c338345e1be46323ea19f5b', '5c4c7be6cdfa9c7ed40b74d56b47de4f']
+  lease4: GPU UUIDs named by the workers themselves: ['09bd08531c338345e1be46323ea19f5b', '5c4c7be6cdfa9c7ed40b74d56b47de4f']
+  lease5: GPU UUIDs named by the workers themselves: ['5c4c7be6cdfa9c7ed40b74d56b47de4f', 'd9c3091bb8ce1d3a5afe0ce6876ad537']
+  lease6: GPU UUIDs named by the workers themselves: ['5c4c7be6cdfa9c7ed40b74d56b47de4f', 'd9c3091bb8ce1d3a5afe0ce6876ad537']
+  WITNESS REFUSED par-byte-lm/base: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+  WITNESS REFUSED par-byte-lm-model-pool/base: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+  WITNESS REFUSED par-byte-lm-offload/base: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+  WITNESS REFUSED par-byte-lm-offload/hashed: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+  WITNESS REFUSED par-byte-lm/hashed: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+  WITNESS REFUSED par-byte-lm-model-pool/hashed: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+  WITNESS REFUSED par-byte-lm-offload/ties: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+  WITNESS REFUSED par-byte-lm/ties: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+  WITNESS REFUSED par-byte-lm-model-pool/ties: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+  WITNESS REFUSED par-byte-lm-offload/wide: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+  WITNESS REFUSED par-byte-lm/wide: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+  WITNESS REFUSED par-byte-lm-offload/denormal: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+  WITNESS REFUSED par-byte-lm/denormal: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+  WITNESS REFUSED par-byte-lm-model-pool/denormal: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+  WITNESS REFUSED par-byte-lm-offload/denormal_ftz: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+  WITNESS REFUSED par-byte-lm/denormal_ftz: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+  WITNESS REFUSED par-byte-lm-model-pool/denormal_ftz: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+  WITNESS REFUSED par-byte-lm-model-pool/wide: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+  WITNESS REFUSED par-byte-lm-offload/dupes: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+  WITNESS REFUSED par-byte-lm/dupes: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+  WITNESS REFUSED par-byte-lm-model-pool/dupes: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+  WITNESS REFUSED par-byte-lm-offload/negative: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+  WITNESS REFUSED par-byte-lm/negative: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+  WITNESS REFUSED par-byte-lm-offload/odd: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+  WITNESS REFUSED par-byte-lm/odd: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+  WITNESS REFUSED par-byte-lm-model-pool/odd: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+  WITNESS REFUSED par-byte-lm-model-pool/negative: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+
+| lane | fixtures run | IDENTICAL | DIVERGENT | MOVED | ONE-COLUMN | REFUSED | N/A | WITNESS REFUSED (fixtures) |
+|---|---|---|---|---|---|---|---|---|
+| par-arima | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-boosting | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-boosting-clf | 9 | 27 | 0 | 0 | 0 | 0 | 18 | 0 |
+| par-boosting-pointwise | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-boosting-reg | 9 | 27 | 0 | 0 | 0 | 0 | 18 | 0 |
+| par-border-types | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-byte-lm | 9 | 9 | 0 | 0 | 0 | 0 | 36 | 9 |
+| par-byte-lm-model-pool | 9 | 9 | 0 | 0 | 0 | 0 | 36 | 9 |
+| par-byte-lm-offload | 9 | 9 | 0 | 0 | 0 | 0 | 36 | 9 |
+| par-causal-lm | 9 | 18 | 0 | 0 | 0 | 0 | 27 | 0 |
+| par-cd | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-cd-elasticnet | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-cholesky | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-cross-val | 9 | 9 | 0 | 0 | 0 | 0 | 36 | 0 |
+| par-dbscan | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-feature-freq | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-forecast-arima | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-forecast-holtwinters | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-forest | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-forest-et | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-forest-et-clf | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-forest-pool | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-forest-reg | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-gmm | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-gp | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-gpc-fit | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-gpc-predict | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-gram | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-gram-ols | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-gram-pca | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-gram-tsvd | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-graph-agglomerative | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-graph-spectral | 9 | 9 | 0 | 0 | 0 | 0 | 36 | 0 |
+| par-graph-umap | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-hdbscan | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-holtwinters | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-iforest | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-ivf | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-kernel-ridge | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-kmeans | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-logistic | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-mlp | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-nystroem | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-ordered | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-ordered-rmse | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-queries-kde | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-queries-knn | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-queries-nn | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-queries-radius | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-rbf-sampler | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-reference-knn | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-reference-knn-reg | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-resample | 9 | 18 | 0 | 0 | 0 | 0 | 27 | 0 |
+| par-samba | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-samba-clip | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-scaler | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-scaler-minmax | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-svm | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+| par-svm-svr | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+
+every part that is not IDENTICAL and not N/A, in the verifier's own words:
+  (none)

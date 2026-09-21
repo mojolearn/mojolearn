@@ -1,0 +1,124 @@
+{
+  "wheel": "/private/tmp/mojolearn-0811/macos/mojolearn-0.8.11-py3-none-macosx_11_0_arm64.whl",
+  "wheel_sha256": "70420f8131424e34de7fa6168b40828213bd16a36c85307a8e0dacea5dd1f412",
+  "status": "PASSED",
+  "jobs": [
+    {
+      "name": "create-venv",
+      "exit_code": 0,
+      "output": "/private/tmp/mojolearn-0811/smoke-macos/create-venv.log"
+    },
+    {
+      "name": "install",
+      "exit_code": 0,
+      "output": "/private/tmp/mojolearn-0811/smoke-macos/install.log"
+    },
+    {
+      "name": "dependencies",
+      "exit_code": 0,
+      "output": "/private/tmp/mojolearn-0811/smoke-macos/dependencies.log"
+    },
+    {
+      "name": "installed",
+      "exit_code": 0,
+      "output": "/private/tmp/mojolearn-0811/smoke-macos/installed.json"
+    },
+    {
+      "name": "expanded-api",
+      "exit_code": 0,
+      "output": "/private/tmp/mojolearn-0811/smoke-macos/expanded-api.json"
+    },
+    {
+      "name": "loaded-lm-cpu",
+      "exit_code": 0,
+      "output": "/private/tmp/mojolearn-0811/smoke-macos/loaded-lm-cpu.log"
+    },
+    {
+      "name": "loaded-lm-gpu",
+      "exit_code": 0,
+      "output": "/private/tmp/mojolearn-0811/smoke-macos/loaded-lm-gpu.log"
+    },
+    {
+      "name": "loaded-lm-cpu-gpu-compare",
+      "exit_code": 0,
+      "output": "/private/tmp/mojolearn-0811/smoke-macos/loaded-lm-cpu-gpu-compare.log"
+    },
+    {
+      "name": "coverage",
+      "exit_code": 0,
+      "output": "/private/tmp/mojolearn-0811/smoke-macos/coverage.json"
+    },
+    {
+      "name": "models",
+      "exit_code": 0,
+      "output": "/private/tmp/mojolearn-0811/smoke-macos/models.json"
+    },
+    {
+      "name": "batch",
+      "exit_code": 0,
+      "output": "/private/tmp/mojolearn-0811/smoke-macos/batch.json"
+    },
+    {
+      "name": "extended",
+      "exit_code": 0,
+      "output": "/private/tmp/mojolearn-0811/smoke-macos/extended.json"
+    },
+    {
+      "name": "self-test",
+      "exit_code": 0,
+      "output": "/private/tmp/mojolearn-0811/smoke-macos/self-test.json"
+    }
+  ],
+  "scope": "expanded",
+  "source_commit": "7a8d1bd8f29c3a3d11e202123e6c46a0c2469540",
+  "release_qualified": false,
+  "expanded": {
+    "scope": "expanded",
+    "release_qualified": false,
+    "physical_execution_trace": "OWED",
+    "native_fault_controls": "SEPARATE_GATE",
+    "cross_validation": "OWED",
+    "multi_gpu": "NOT_APPLICABLE",
+    "apis": {
+      "apis": {
+        "mojolearn.models": [
+          "CausalLM",
+          "ParallelCausalLM"
+        ],
+        "mojolearn.parallel_ivf": [
+          "DistributedIVFIndex"
+        ],
+        "mojolearn.parallel_model_selection": [
+          "cross_val_score"
+        ],
+        "mojolearn.parallel_gaussian_process": [
+          "fit_gaussian_process_classifier",
+          "predict_gaussian_process_classifier"
+        ],
+        "mojolearn.parallel_forecasting": [
+          "predict_arima",
+          "forecast_arima",
+          "predict_exponential_smoothing",
+          "forecast_exponential_smoothing"
+        ]
+      },
+      "ivf_symbols": [
+        "ivf_flat_partial_search",
+        "ivf_finalize_distances"
+      ],
+      "gbdt_symbols": [
+        "gbdt_fit"
+      ],
+      "gbdt_binding": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-verifier-wheel-9mmeg3lx/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_gbdt.so",
+      "gbdt_sha256": "a6c18a94764b6551716fb395a3641d740a49a71f618de13f492cb0424c7f033e",
+      "binding": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-verifier-wheel-9mmeg3lx/venv/lib/python3.12/site-packages/mojolearn/identical/_mojolearn_ivf.so",
+      "binding_sha256": "b3b38f39a5ca0b539cb58219e29d57888259d194ac6122207782698a10d3070a"
+    }
+  },
+  "installed": {
+    "package": "/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-verifier-wheel-9mmeg3lx/venv/lib/python3.12/site-packages/mojolearn/__init__.py",
+    "version": "0.8.11",
+    "vendor": "metal"
+  },
+  "unqualified_properties": []
+}

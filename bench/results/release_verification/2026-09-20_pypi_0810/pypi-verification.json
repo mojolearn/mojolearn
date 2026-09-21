@@ -1,0 +1,19 @@
+{
+  "version": "0.8.10",
+  "status": "PUBLISHED_AND_DOWNLOAD_VERIFIED",
+  "files": {
+    "mojolearn-0.8.10-py3-none-macosx_11_0_arm64.whl": {
+      "sha256": "1f0a5d318236e943b4192721e917907df31ffec364762c973c9688254e8b1b03",
+      "url": "https://files.pythonhosted.org/packages/84/60/9dac5cd3f083a2ccc10073b310fd5d85c948f203b37d396cf549251a4ba7/mojolearn-0.8.10-py3-none-macosx_11_0_arm64.whl",
+      "bytes": 36534838,
+      "download_verified": true
+    },
+    "mojolearn-0.8.10-py3-none-manylinux_2_35_x86_64.whl": {
+      "sha256": "c8a09722c3a3fcbe91905d2d15b8489d960b008bb9776afa15b2400e115e778c",
+      "url": "https://files.pythonhosted.org/packages/43/e4/270637acf763eaff0f24b3c4f13ccd10ffc63aabb17152a029aa1f4b35dd/mojolearn-0.8.10-py3-none-manylinux_2_35_x86_64.whl",
+      "bytes": 78966755,
+      "download_verified": true
+    }
+  },
+  "workflow": "https://github.com/mojolearn/mojolearn/actions/runs/35540139858"
+}

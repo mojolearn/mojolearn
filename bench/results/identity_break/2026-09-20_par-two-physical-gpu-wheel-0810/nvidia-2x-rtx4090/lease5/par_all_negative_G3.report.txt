@@ -1,0 +1,84 @@
+# python -m mojolearn verify --par
+
+Ran each `par-*` lane TWICE in this process on this box (cuda): once with
+MOJOLEARN_PAR_DEVICES=0 and once with MOJOLEARN_PAR_DEVICES=0,1, and compared the
+two columns cell for cell. No reference table is involved: the one-device column
+produced here, minutes ago, off this build, IS the reference. That equality is
+the drivers' whole claim and no release record states it.
+
+  par-boosting               negative train     IDENTICAL   one=fb9966f26639c286  two=fb9966f26639c286
+  par-boosting               negative infer     IDENTICAL   one=3d7847393c2eeeed  two=3d7847393c2eeeed
+  par-boosting               negative model     IDENTICAL   one=145ac848bbea01ba  two=145ac848bbea01ba
+  par-boosting               negative batch     IDENTICAL   one=557ef75b0ae06946  two=557ef75b0ae06946
+  par-byte-lm                negative train     IDENTICAL   one=63db87a288142b29  two=63db87a288142b29
+  par-causal-lm              negative train     IDENTICAL   one=86e92270cebe985b  two=86e92270cebe985b
+  par-causal-lm              negative batch     IDENTICAL   one=921a3eb50c0e6439  two=921a3eb50c0e6439
+  par-cholesky               negative train     IDENTICAL   one=69d3f44d193304d1  two=69d3f44d193304d1
+  par-cholesky               negative infer     IDENTICAL   one=ad82b19c511ca43f  two=ad82b19c511ca43f
+  par-cholesky               negative model     IDENTICAL   one=53df472b5d57fad8  two=53df472b5d57fad8
+  par-cholesky               negative batch     IDENTICAL   one=e5e1cdf405695875  two=e5e1cdf405695875
+  par-cross-val              negative train     IDENTICAL   one=2df39c65766aac8e  two=2df39c65766aac8e
+  par-dbscan                 negative train     IDENTICAL   one=bb6bd31e075693e9  two=bb6bd31e075693e9
+  par-dbscan                 negative infer     IDENTICAL   one=3a6472714f51d8ab  two=3a6472714f51d8ab
+  par-dbscan                 negative model     IDENTICAL   one=6211d942d0c33fa2  two=6211d942d0c33fa2
+  par-dbscan                 negative batch     IDENTICAL   one=a8e67882b424a053  two=a8e67882b424a053
+  par-forecast-holtwinters   negative train     IDENTICAL   one=ecbbbcfd88aa3baa  two=ecbbbcfd88aa3baa
+  par-forecast-holtwinters   negative infer     IDENTICAL   one=badfe6614be23470  two=badfe6614be23470
+  par-forecast-holtwinters   negative model     IDENTICAL   one=e97d48fa0ba847d0  two=e97d48fa0ba847d0
+  par-forecast-holtwinters   negative batch     IDENTICAL   one=309b6269cad54229  two=309b6269cad54229
+  par-forest-et              negative train     IDENTICAL   one=3fd3dff94cc79fc2  two=3fd3dff94cc79fc2
+  par-forest-et              negative infer     IDENTICAL   one=9579a3dac3b9af8b  two=9579a3dac3b9af8b
+  par-forest-et              negative model     IDENTICAL   one=34d9143f7fc1fec7  two=34d9143f7fc1fec7
+  par-forest-et              negative batch     IDENTICAL   one=b66d6fad4eb27ee4  two=b66d6fad4eb27ee4
+  par-forest-et-clf          negative train     IDENTICAL   one=e1409786c462d97b  two=e1409786c462d97b
+  par-forest-et-clf          negative infer     IDENTICAL   one=2b7903f4728bb9c0  two=2b7903f4728bb9c0
+  par-forest-et-clf          negative model     IDENTICAL   one=974e58a34d03e07b  two=974e58a34d03e07b
+  par-forest-et-clf          negative batch     IDENTICAL   one=b852e5cd9819f18a  two=b852e5cd9819f18a
+  par-forest-pool            negative train     IDENTICAL   one=27c176318b7e2d83  two=27c176318b7e2d83
+  par-forest-pool            negative infer     IDENTICAL   one=e08335ce6d02f919  two=e08335ce6d02f919
+  par-forest-pool            negative model     IDENTICAL   one=2d6aced317e7053d  two=2d6aced317e7053d
+  par-forest-pool            negative batch     IDENTICAL   one=9fc61a2ec91dce68  two=9fc61a2ec91dce68
+  par-gmm                    negative train     IDENTICAL   one=853a3a4a5c826928  two=853a3a4a5c826928
+  par-gmm                    negative infer     IDENTICAL   one=da90b4d88a8ccc64  two=da90b4d88a8ccc64
+  par-gmm                    negative model     IDENTICAL   one=089dc6043d91ad45  two=089dc6043d91ad45
+  par-gmm                    negative batch     IDENTICAL   one=9edc52af7c6e8f16  two=9edc52af7c6e8f16
+  par-gram-tsvd              negative train     IDENTICAL   one=22e0958cc1ded92d  two=22e0958cc1ded92d
+  par-gram-tsvd              negative infer     IDENTICAL   one=47e1b7225f50fa55  two=47e1b7225f50fa55
+  par-gram-tsvd              negative model     IDENTICAL   one=27c536a4f0a5c619  two=27c536a4f0a5c619
+  par-gram-tsvd              negative batch     IDENTICAL   one=103aac49d3277730  two=103aac49d3277730
+  par-graph-agglomerative    negative train     IDENTICAL   one=66ecfd892fa3e932  two=66ecfd892fa3e932
+  par-graph-agglomerative    negative infer     IDENTICAL   one=3a6472714f51d8ab  two=3a6472714f51d8ab
+  par-graph-agglomerative    negative model     IDENTICAL   one=573732d2cc0397a8  two=573732d2cc0397a8
+  par-graph-agglomerative    negative batch     IDENTICAL   one=a8e67882b424a053  two=a8e67882b424a053
+  par-graph-spectral         negative train     IDENTICAL   one=1dd3478716bce917  two=1dd3478716bce917
+  par-kernel-ridge           negative train     IDENTICAL   one=615029952e8564af  two=615029952e8564af
+  par-kernel-ridge           negative infer     IDENTICAL   one=11e7372259fb0002  two=11e7372259fb0002
+  par-kernel-ridge           negative model     IDENTICAL   one=cb2d09094c04cbb1  two=cb2d09094c04cbb1
+  par-kernel-ridge           negative batch     IDENTICAL   one=a10cc498407c239a  two=a10cc498407c239a
+  par-ordered                negative train     IDENTICAL   one=ba631525958c6163  two=ba631525958c6163
+  par-ordered                negative infer     IDENTICAL   one=09e6dfe70a9e8341  two=09e6dfe70a9e8341
+  par-ordered                negative model     IDENTICAL   one=a003b5a16d9f7e2f  two=a003b5a16d9f7e2f
+  par-ordered                negative batch     IDENTICAL   one=6f79c5a5836408fb  two=6f79c5a5836408fb
+  par-queries-knn            negative train     IDENTICAL   one=228cbed4badc1c43  two=228cbed4badc1c43
+  par-queries-knn            negative infer     IDENTICAL   one=4a407720c8a6509a  two=4a407720c8a6509a
+  par-queries-knn            negative model     IDENTICAL   one=1043a59bb6257373  two=1043a59bb6257373
+  par-queries-knn            negative batch     IDENTICAL   one=a43781fdbaf48d6c  two=a43781fdbaf48d6c
+  par-queries-nn             negative train     IDENTICAL   one=b73513bc451075d0  two=b73513bc451075d0
+  par-queries-nn             negative infer     IDENTICAL   one=aa5dd33322e1cb78  two=aa5dd33322e1cb78
+  par-queries-nn             negative model     IDENTICAL   one=5f934babcd0bc097  two=5f934babcd0bc097
+  par-queries-nn             negative batch     IDENTICAL   one=9f59fac4020afea4  two=9f59fac4020afea4
+  par-scaler-minmax          negative train     IDENTICAL   one=b1d799cf9b13f224  two=b1d799cf9b13f224
+  par-scaler-minmax          negative infer     IDENTICAL   one=b386904f1b2473e2  two=b386904f1b2473e2
+  par-scaler-minmax          negative model     IDENTICAL   one=4e293888067f4c42  two=4e293888067f4c42
+  par-scaler-minmax          negative batch     IDENTICAL   one=b11bf2396e39a72a  two=b11bf2396e39a72a
+  par-svm-svr                negative train     IDENTICAL   one=157297e596168454  two=157297e596168454
+  par-svm-svr                negative infer     IDENTICAL   one=9815b80b4546e3a3  two=9815b80b4546e3a3
+  par-svm-svr                negative model     IDENTICAL   one=06c9310b80362f99  two=06c9310b80362f99
+  par-svm-svr                negative batch     IDENTICAL   one=903978a7a15fdc7a  two=903978a7a15fdc7a
+Device witness: 52 pool(s), 79 worker(s), placement=physical.
+WITNESS REFUSED: par-byte-lm/negative: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+
+RESULT: CANNOT RUN. The two-device column was not shown to have run on two
+devices, so its agreement with the one-device column is not evidence. This is
+reported rather than counted, because a clean AGREE from a column that never
+sharded is the exact failure this command exists to prevent.

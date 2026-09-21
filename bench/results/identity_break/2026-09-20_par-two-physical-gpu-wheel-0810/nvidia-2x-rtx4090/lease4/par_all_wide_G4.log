@@ -1,0 +1,22 @@
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+# par (all): 20 of 59 par-* lanes x 1 fixture(s), devices 0 then 0,1
+  par-boosting-pointwise     wide     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   5.92s
+  par-boosting-reg           wide     train=IDENTICAL infer=IDENTICAL batch=IDENTICAL              5.89s
+  par-border-types           wide     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  30.60s
+  par-byte-lm-model-pool     wide     train=IDENTICAL                                              2.02s
+  par-cd                     wide     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.69s
+  par-forecast-arima         wide     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  30.78s
+  par-forest                 wide     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   5.03s
+  par-forest-reg             wide     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.56s
+  par-gp                     wide     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   7.28s
+  par-gpc-fit                wide     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   7.70s
+  par-gpc-predict            wide     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  14.66s
+  par-gram-ols               wide     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.79s
+  par-hdbscan                wide     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.53s
+  par-iforest                wide     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  15.49s
+  par-ivf                    wide     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  19.93s
+  par-logistic               wide     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.66s
+  par-rbf-sampler            wide     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  12.01s
+  par-reference-knn-reg      wide     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  15.57s
+  par-samba                  wide     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   9.55s
+  par-scaler                 wide     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  11.68s

@@ -1,0 +1,22 @@
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+# par (all): 20 of 59 par-* lanes x 1 fixture(s), devices 0 then 0,1
+  par-boosting-pointwise     denormal train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   5.49s
+  par-boosting-reg           denormal train=IDENTICAL infer=IDENTICAL batch=IDENTICAL              5.30s
+  par-border-types           denormal train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  30.62s
+  par-byte-lm-model-pool     denormal train=IDENTICAL                                              1.20s
+  par-cd                     denormal train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.52s
+  par-forecast-arima         denormal train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  30.55s
+  par-forest                 denormal train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.68s
+  par-forest-reg             denormal train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.39s
+  par-gp                     denormal train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   7.03s
+  par-gpc-fit                denormal train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   7.71s
+  par-gpc-predict            denormal train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  14.63s
+  par-gram-ols               denormal train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.52s
+  par-hdbscan                denormal train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.71s
+  par-iforest                denormal train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  15.55s
+  par-ivf                    denormal train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  19.74s
+  par-logistic               denormal train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.59s
+  par-rbf-sampler            denormal train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  11.54s
+  par-reference-knn-reg      denormal train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  15.43s
+  par-samba                  denormal train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   9.05s
+  par-scaler                 denormal train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  11.57s

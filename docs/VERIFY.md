@@ -382,6 +382,15 @@ python -m mojolearn verify --par --lanes par-queries-nn --fixtures base,ties
 python -m mojolearn verify --par-devices 2,3      # another pair
 ```
 
+**Which scope to run.** `--par quick` is the two-physical-GPU check: one lane
+per family on one device and on two, with the placement witness, in under a
+minute of lane time. Run it, with `--par-self-test`, on every routine run and
+every rented box. **Never run `--par all` without the maintainer's express
+permission.** It is every lane on all nine fixtures, twice: measured on two
+RTX 4090s on 2026-09-20 at about 16 minutes per fixture and 2.4 hours in all,
+with `par-resample` alone taking about 300 s of each fixture. The default
+scope (every lane, base fixture) is about 16 minutes and also needs a reason.
+
 It runs each lane twice in one process, once with `MOJOLEARN_PAR_DEVICES=0` and
 once with `0,1`, and compares. There is no reference table: the one-device
 column, produced on your box minutes earlier off the same build, IS the

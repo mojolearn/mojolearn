@@ -1,0 +1,10 @@
+Name: mojolearn
+Version: 0.8.10
+Summary: GPU machine learning in Mojo for Apple silicon Metal, NVIDIA CUDA, and AMD HIP, with fast, deterministic, and cross-vendor identical modes for certified configurations
+Home-page: 
+Author: Andrew Hendel
+Author-email: 
+License: 
+Location: /root/parwheel-venv/lib/python3.10/site-packages
+Requires: 
+Required-by: 

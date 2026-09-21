@@ -1,0 +1,3797 @@
+{
+ "cell_witnesses": [
+  {
+   "fixture": "odd",
+   "lane": "par-arima",
+   "witness": {
+    "detail": [
+     {
+      "cooperative": false,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537"
+        ],
+        "pid": 51612,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0"
+        }
+       },
+       {
+        "devices": [
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 51613,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "1"
+        }
+       }
+      ]
+     }
+    ],
+    "devices": [
+     0,
+     1
+    ],
+    "placement": "physical",
+    "pools": 1,
+    "workers": 2
+   },
+   "witness_refusal": null
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-boosting-clf",
+   "witness": {
+    "detail": [
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 51825,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     }
+    ],
+    "devices": [
+     0,
+     1
+    ],
+    "placement": "physical",
+    "pools": 1,
+    "workers": 1
+   },
+   "witness_refusal": null
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-byte-lm-offload",
+   "witness": {
+    "detail": [],
+    "devices": [
+     0,
+     1
+    ],
+    "placement": "physical",
+    "pools": 0,
+    "workers": 0
+   },
+   "witness_refusal": "the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-cd-elasticnet",
+   "witness": {
+    "detail": [
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 51981,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     }
+    ],
+    "devices": [
+     0,
+     1
+    ],
+    "placement": "physical",
+    "pools": 1,
+    "workers": 1
+   },
+   "witness_refusal": null
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-feature-freq",
+   "witness": {
+    "detail": [
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 52125,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     }
+    ],
+    "devices": [
+     0,
+     1
+    ],
+    "placement": "physical",
+    "pools": 1,
+    "workers": 1
+   },
+   "witness_refusal": null
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-gram",
+   "witness": {
+    "detail": [
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 52269,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     }
+    ],
+    "devices": [
+     0,
+     1
+    ],
+    "placement": "physical",
+    "pools": 1,
+    "workers": 1
+   },
+   "witness_refusal": null
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-gram-pca",
+   "witness": {
+    "detail": [
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 52413,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     }
+    ],
+    "devices": [
+     0,
+     1
+    ],
+    "placement": "physical",
+    "pools": 1,
+    "workers": 1
+   },
+   "witness_refusal": null
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-graph-umap",
+   "witness": {
+    "detail": [
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 54216,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 54289,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 54362,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 54435,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 54520,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 54593,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 54664,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 54735,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 54806,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 54877,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 54948,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 55019,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 55090,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 55161,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 55232,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 55303,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 55374,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 55445,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 55518,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 55601,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 55672,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 55743,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 55816,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 55899,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     }
+    ],
+    "devices": [
+     0,
+     1
+    ],
+    "placement": "physical",
+    "pools": 24,
+    "workers": 24
+   },
+   "witness_refusal": null
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-holtwinters",
+   "witness": {
+    "detail": [
+     {
+      "cooperative": false,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537"
+        ],
+        "pid": 56043,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0"
+        }
+       },
+       {
+        "devices": [
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 56044,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "1"
+        }
+       }
+      ]
+     }
+    ],
+    "devices": [
+     0,
+     1
+    ],
+    "placement": "physical",
+    "pools": 1,
+    "workers": 2
+   },
+   "witness_refusal": null
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-kmeans",
+   "witness": {
+    "detail": [
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 56256,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     }
+    ],
+    "devices": [
+     0,
+     1
+    ],
+    "placement": "physical",
+    "pools": 1,
+    "workers": 1
+   },
+   "witness_refusal": null
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-mlp",
+   "witness": {
+    "detail": [
+     {
+      "cooperative": false,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537"
+        ],
+        "pid": 56471,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0"
+        }
+       },
+       {
+        "devices": [
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 56472,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 56613,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     }
+    ],
+    "devices": [
+     0,
+     1
+    ],
+    "placement": "physical",
+    "pools": 2,
+    "workers": 3
+   },
+   "witness_refusal": null
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-nystroem",
+   "witness": {
+    "detail": [
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 56970,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 57043,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 57118,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 57201,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     }
+    ],
+    "devices": [
+     0,
+     1
+    ],
+    "placement": "physical",
+    "pools": 4,
+    "workers": 4
+   },
+   "witness_refusal": null
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-ordered-rmse",
+   "witness": {
+    "detail": [
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 57345,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     }
+    ],
+    "devices": [
+     0,
+     1
+    ],
+    "placement": "physical",
+    "pools": 1,
+    "workers": 1
+   },
+   "witness_refusal": null
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-queries-kde",
+   "witness": {
+    "detail": [
+     {
+      "cooperative": false,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537"
+        ],
+        "pid": 57702,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0"
+        }
+       },
+       {
+        "devices": [
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 57703,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": false,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537"
+        ],
+        "pid": 57844,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0"
+        }
+       },
+       {
+        "devices": [
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 57845,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": false,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537"
+        ],
+        "pid": 57986,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0"
+        }
+       },
+       {
+        "devices": [
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 57987,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": false,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537"
+        ],
+        "pid": 58130,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0"
+        }
+       },
+       {
+        "devices": [
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 58131,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "1"
+        }
+       }
+      ]
+     }
+    ],
+    "devices": [
+     0,
+     1
+    ],
+    "placement": "physical",
+    "pools": 4,
+    "workers": 8
+   },
+   "witness_refusal": null
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-queries-radius",
+   "witness": {
+    "detail": [
+     {
+      "cooperative": false,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537"
+        ],
+        "pid": 58579,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0"
+        }
+       },
+       {
+        "devices": [
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 58580,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": false,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537"
+        ],
+        "pid": 58722,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0"
+        }
+       },
+       {
+        "devices": [
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 58723,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": false,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537"
+        ],
+        "pid": 58864,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0"
+        }
+       },
+       {
+        "devices": [
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 58865,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": false,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537"
+        ],
+        "pid": 59006,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0"
+        }
+       },
+       {
+        "devices": [
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 59007,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "1"
+        }
+       }
+      ]
+     }
+    ],
+    "devices": [
+     0,
+     1
+    ],
+    "placement": "physical",
+    "pools": 4,
+    "workers": 8
+   },
+   "witness_refusal": null
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-reference-knn",
+   "witness": {
+    "detail": [
+     {
+      "cooperative": false,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537"
+        ],
+        "pid": 59432,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0"
+        }
+       },
+       {
+        "devices": [
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 59433,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": false,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537"
+        ],
+        "pid": 59574,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0"
+        }
+       },
+       {
+        "devices": [
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 59575,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": false,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537"
+        ],
+        "pid": 59716,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0"
+        }
+       },
+       {
+        "devices": [
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 59717,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": false,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537"
+        ],
+        "pid": 59858,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0"
+        }
+       },
+       {
+        "devices": [
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 59859,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "1"
+        }
+       }
+      ]
+     }
+    ],
+    "devices": [
+     0,
+     1
+    ],
+    "placement": "physical",
+    "pools": 4,
+    "workers": 8
+   },
+   "witness_refusal": null
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-samba-clip",
+   "witness": {
+    "detail": [
+     {
+      "cooperative": false,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537"
+        ],
+        "pid": 60142,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0"
+        }
+       },
+       {
+        "devices": [
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 60143,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 60284,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     }
+    ],
+    "devices": [
+     0,
+     1
+    ],
+    "placement": "physical",
+    "pools": 2,
+    "workers": 3
+   },
+   "witness_refusal": null
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-svm",
+   "witness": {
+    "detail": [
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 60582,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 60655,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     },
+     {
+      "cooperative": true,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "d9c3091bb8ce1d3a5afe0ce6876ad537",
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 60728,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0,1"
+        }
+       }
+      ]
+     }
+    ],
+    "devices": [
+     0,
+     1
+    ],
+    "placement": "physical",
+    "pools": 3,
+    "workers": 3
+   },
+   "witness_refusal": null
+  }
+ ],
+ "cells": [
+  {
+   "fixture": "odd",
+   "lane": "par-arima",
+   "one": "20bf64323fc5fa12",
+   "one_error": null,
+   "part": "train",
+   "seconds": 5.282,
+   "two": "20bf64323fc5fa12",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-arima",
+   "one": "4aa662dbcc728e65",
+   "one_error": null,
+   "part": "infer",
+   "seconds": 5.282,
+   "two": "4aa662dbcc728e65",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-arima",
+   "one": "859442a49f63a8d0",
+   "one_error": null,
+   "part": "model",
+   "seconds": 5.282,
+   "two": "859442a49f63a8d0",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-arima",
+   "one": "8e0a0c4068873ad7",
+   "one_error": null,
+   "part": "batch",
+   "seconds": 5.282,
+   "two": "8e0a0c4068873ad7",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-arima",
+   "one": "n/a:no-decode-state",
+   "one_error": null,
+   "part": "stepfull",
+   "seconds": 5.282,
+   "two": "n/a:no-decode-state",
+   "two_error": null,
+   "verdict": "N/A"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-boosting-clf",
+   "one": "f8f56dac8e714ab8",
+   "one_error": null,
+   "part": "train",
+   "seconds": 5.385,
+   "two": "f8f56dac8e714ab8",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-boosting-clf",
+   "one": "94e4c2a70fc9bfd8",
+   "one_error": null,
+   "part": "infer",
+   "seconds": 5.385,
+   "two": "94e4c2a70fc9bfd8",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-boosting-clf",
+   "one": "n/a:save-not-implemented",
+   "one_error": null,
+   "part": "model",
+   "seconds": 5.385,
+   "two": "n/a:save-not-implemented",
+   "two_error": null,
+   "verdict": "N/A"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-boosting-clf",
+   "one": "38ba96eea94d8ea9",
+   "one_error": null,
+   "part": "batch",
+   "seconds": 5.385,
+   "two": "38ba96eea94d8ea9",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-boosting-clf",
+   "one": "n/a:no-decode-state",
+   "one_error": null,
+   "part": "stepfull",
+   "seconds": 5.385,
+   "two": "n/a:no-decode-state",
+   "two_error": null,
+   "verdict": "N/A"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-byte-lm-offload",
+   "one": "3d26daba7af771cc",
+   "one_error": null,
+   "part": "train",
+   "seconds": 0.18,
+   "two": "3d26daba7af771cc",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-byte-lm-offload",
+   "one": "n/a:function",
+   "one_error": null,
+   "part": "infer",
+   "seconds": 0.18,
+   "two": "n/a:function",
+   "two_error": null,
+   "verdict": "N/A"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-byte-lm-offload",
+   "one": "n/a:no-save",
+   "one_error": null,
+   "part": "model",
+   "seconds": 0.18,
+   "two": "n/a:no-save",
+   "two_error": null,
+   "verdict": "N/A"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-byte-lm-offload",
+   "one": "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)",
+   "one_error": null,
+   "part": "batch",
+   "seconds": 0.18,
+   "two": "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)",
+   "two_error": null,
+   "verdict": "N/A"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-byte-lm-offload",
+   "one": "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+   "one_error": null,
+   "part": "stepfull",
+   "seconds": 0.18,
+   "two": "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+   "two_error": null,
+   "verdict": "N/A"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-cd-elasticnet",
+   "one": "1a518e703b7dd1d9",
+   "one_error": null,
+   "part": "train",
+   "seconds": 3.61,
+   "two": "1a518e703b7dd1d9",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-cd-elasticnet",
+   "one": "75a88217f1114867",
+   "one_error": null,
+   "part": "infer",
+   "seconds": 3.61,
+   "two": "75a88217f1114867",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-cd-elasticnet",
+   "one": "14095ddb22139e58",
+   "one_error": null,
+   "part": "model",
+   "seconds": 3.61,
+   "two": "14095ddb22139e58",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-cd-elasticnet",
+   "one": "f140130bad4b7f18",
+   "one_error": null,
+   "part": "batch",
+   "seconds": 3.61,
+   "two": "f140130bad4b7f18",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-cd-elasticnet",
+   "one": "n/a:no-decode-state",
+   "one_error": null,
+   "part": "stepfull",
+   "seconds": 3.61,
+   "two": "n/a:no-decode-state",
+   "two_error": null,
+   "verdict": "N/A"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-feature-freq",
+   "one": "c481331145bfb998",
+   "one_error": null,
+   "part": "train",
+   "seconds": 4.992,
+   "two": "c481331145bfb998",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-feature-freq",
+   "one": "711887d930537c47",
+   "one_error": null,
+   "part": "infer",
+   "seconds": 4.992,
+   "two": "711887d930537c47",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-feature-freq",
+   "one": "53a4160101e38573",
+   "one_error": null,
+   "part": "model",
+   "seconds": 4.992,
+   "two": "53a4160101e38573",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-feature-freq",
+   "one": "bfe39e4c9f5bacc7",
+   "one_error": null,
+   "part": "batch",
+   "seconds": 4.992,
+   "two": "bfe39e4c9f5bacc7",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-feature-freq",
+   "one": "n/a:no-decode-state",
+   "one_error": null,
+   "part": "stepfull",
+   "seconds": 4.992,
+   "two": "n/a:no-decode-state",
+   "two_error": null,
+   "verdict": "N/A"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-gram",
+   "one": "bdaf14e02a8f07ec",
+   "one_error": null,
+   "part": "train",
+   "seconds": 3.515,
+   "two": "bdaf14e02a8f07ec",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-gram",
+   "one": "83420de0d62b5c95",
+   "one_error": null,
+   "part": "infer",
+   "seconds": 3.515,
+   "two": "83420de0d62b5c95",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-gram",
+   "one": "3f77c9c16c29bd84",
+   "one_error": null,
+   "part": "model",
+   "seconds": 3.515,
+   "two": "3f77c9c16c29bd84",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-gram",
+   "one": "34d5126ca77a014e",
+   "one_error": null,
+   "part": "batch",
+   "seconds": 3.515,
+   "two": "34d5126ca77a014e",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-gram",
+   "one": "n/a:no-decode-state",
+   "one_error": null,
+   "part": "stepfull",
+   "seconds": 3.515,
+   "two": "n/a:no-decode-state",
+   "two_error": null,
+   "verdict": "N/A"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-gram-pca",
+   "one": "2bde4e929e103470",
+   "one_error": null,
+   "part": "train",
+   "seconds": 3.458,
+   "two": "2bde4e929e103470",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-gram-pca",
+   "one": "9f765336b6cbcc11",
+   "one_error": null,
+   "part": "infer",
+   "seconds": 3.458,
+   "two": "9f765336b6cbcc11",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-gram-pca",
+   "one": "87d34e709375c9b5",
+   "one_error": null,
+   "part": "model",
+   "seconds": 3.458,
+   "two": "87d34e709375c9b5",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-gram-pca",
+   "one": "7546b18e9c36ebe5",
+   "one_error": null,
+   "part": "batch",
+   "seconds": 3.458,
+   "two": "7546b18e9c36ebe5",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-gram-pca",
+   "one": "n/a:no-decode-state",
+   "one_error": null,
+   "part": "stepfull",
+   "seconds": 3.458,
+   "two": "n/a:no-decode-state",
+   "two_error": null,
+   "verdict": "N/A"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-graph-umap",
+   "one": "9b9d0fa9ad02e0e4",
+   "one_error": null,
+   "part": "train",
+   "seconds": 82.551,
+   "two": "9b9d0fa9ad02e0e4",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-graph-umap",
+   "one": "3da4ff5741c4cbff",
+   "one_error": null,
+   "part": "infer",
+   "seconds": 82.551,
+   "two": "3da4ff5741c4cbff",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-graph-umap",
+   "one": "338703ec3d735a5d",
+   "one_error": null,
+   "part": "model",
+   "seconds": 82.551,
+   "two": "338703ec3d735a5d",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-graph-umap",
+   "one": "ee25637280e38b12",
+   "one_error": null,
+   "part": "batch",
+   "seconds": 82.551,
+   "two": "ee25637280e38b12",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-graph-umap",
+   "one": "n/a:no-decode-state",
+   "one_error": null,
+   "part": "stepfull",
+   "seconds": 82.551,
+   "two": "n/a:no-decode-state",
+   "two_error": null,
+   "verdict": "N/A"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-holtwinters",
+   "one": "02b67bfea83a5c15",
+   "one_error": null,
+   "part": "train",
+   "seconds": 4.445,
+   "two": "02b67bfea83a5c15",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-holtwinters",
+   "one": "a3554de5fcae28c3",
+   "one_error": null,
+   "part": "infer",
+   "seconds": 4.445,
+   "two": "a3554de5fcae28c3",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-holtwinters",
+   "one": "3c4ad8350c73bac5",
+   "one_error": null,
+   "part": "model",
+   "seconds": 4.445,
+   "two": "3c4ad8350c73bac5",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-holtwinters",
+   "one": "65da76de08e2f1f4",
+   "one_error": null,
+   "part": "batch",
+   "seconds": 4.445,
+   "two": "65da76de08e2f1f4",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-holtwinters",
+   "one": "n/a:no-decode-state",
+   "one_error": null,
+   "part": "stepfull",
+   "seconds": 4.445,
+   "two": "n/a:no-decode-state",
+   "two_error": null,
+   "verdict": "N/A"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-kmeans",
+   "one": "43d8a3d3859f4143",
+   "one_error": null,
+   "part": "train",
+   "seconds": 4.114,
+   "two": "43d8a3d3859f4143",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-kmeans",
+   "one": "191287260610940c",
+   "one_error": null,
+   "part": "infer",
+   "seconds": 4.114,
+   "two": "191287260610940c",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-kmeans",
+   "one": "5fdc9f5ac45877c9",
+   "one_error": null,
+   "part": "model",
+   "seconds": 4.114,
+   "two": "5fdc9f5ac45877c9",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-kmeans",
+   "one": "06c7a23bc000d13d",
+   "one_error": null,
+   "part": "batch",
+   "seconds": 4.114,
+   "two": "06c7a23bc000d13d",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-kmeans",
+   "one": "n/a:no-decode-state",
+   "one_error": null,
+   "part": "stepfull",
+   "seconds": 4.114,
+   "two": "n/a:no-decode-state",
+   "two_error": null,
+   "verdict": "N/A"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-mlp",
+   "one": "939248cda720463f",
+   "one_error": null,
+   "part": "train",
+   "seconds": 8.863,
+   "two": "939248cda720463f",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-mlp",
+   "one": "ed981f80c3527a61",
+   "one_error": null,
+   "part": "infer",
+   "seconds": 8.863,
+   "two": "ed981f80c3527a61",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-mlp",
+   "one": "0d99a719dc720e03",
+   "one_error": null,
+   "part": "model",
+   "seconds": 8.863,
+   "two": "0d99a719dc720e03",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-mlp",
+   "one": "ae46b224d90cff20",
+   "one_error": null,
+   "part": "batch",
+   "seconds": 8.863,
+   "two": "ae46b224d90cff20",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-mlp",
+   "one": "n/a:no-decode-state",
+   "one_error": null,
+   "part": "stepfull",
+   "seconds": 8.863,
+   "two": "n/a:no-decode-state",
+   "two_error": null,
+   "verdict": "N/A"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-nystroem",
+   "one": "b00ab3f7ed67c9bf",
+   "one_error": null,
+   "part": "train",
+   "seconds": 14.037,
+   "two": "b00ab3f7ed67c9bf",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-nystroem",
+   "one": "e98e2c933562f4d1",
+   "one_error": null,
+   "part": "infer",
+   "seconds": 14.037,
+   "two": "e98e2c933562f4d1",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-nystroem",
+   "one": "1ea3d7c5c0589289",
+   "one_error": null,
+   "part": "model",
+   "seconds": 14.037,
+   "two": "1ea3d7c5c0589289",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-nystroem",
+   "one": "016621899148ff93",
+   "one_error": null,
+   "part": "batch",
+   "seconds": 14.037,
+   "two": "016621899148ff93",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-nystroem",
+   "one": "n/a:no-decode-state",
+   "one_error": null,
+   "part": "stepfull",
+   "seconds": 14.037,
+   "two": "n/a:no-decode-state",
+   "two_error": null,
+   "verdict": "N/A"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-ordered-rmse",
+   "one": "d83c83930af5d802",
+   "one_error": null,
+   "part": "train",
+   "seconds": 6.556,
+   "two": "d83c83930af5d802",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-ordered-rmse",
+   "one": "c7f0cb99b920a716",
+   "one_error": null,
+   "part": "infer",
+   "seconds": 6.556,
+   "two": "c7f0cb99b920a716",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-ordered-rmse",
+   "one": "4d02412a6fa569f9",
+   "one_error": null,
+   "part": "model",
+   "seconds": 6.556,
+   "two": "4d02412a6fa569f9",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-ordered-rmse",
+   "one": "c05993b79c89e09a",
+   "one_error": null,
+   "part": "batch",
+   "seconds": 6.556,
+   "two": "c05993b79c89e09a",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-ordered-rmse",
+   "one": "n/a:no-decode-state",
+   "one_error": null,
+   "part": "stepfull",
+   "seconds": 6.556,
+   "two": "n/a:no-decode-state",
+   "two_error": null,
+   "verdict": "N/A"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-queries-kde",
+   "one": "8a2b6beee09a98f3",
+   "one_error": null,
+   "part": "train",
+   "seconds": 15.477,
+   "two": "8a2b6beee09a98f3",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-queries-kde",
+   "one": "e49f797e443af916",
+   "one_error": null,
+   "part": "infer",
+   "seconds": 15.477,
+   "two": "e49f797e443af916",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-queries-kde",
+   "one": "eaf7436bbd4ff68f",
+   "one_error": null,
+   "part": "model",
+   "seconds": 15.477,
+   "two": "eaf7436bbd4ff68f",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-queries-kde",
+   "one": "5dc9b6eb77f6bca0",
+   "one_error": null,
+   "part": "batch",
+   "seconds": 15.477,
+   "two": "5dc9b6eb77f6bca0",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-queries-kde",
+   "one": "n/a:no-decode-state",
+   "one_error": null,
+   "part": "stepfull",
+   "seconds": 15.477,
+   "two": "n/a:no-decode-state",
+   "two_error": null,
+   "verdict": "N/A"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-queries-radius",
+   "one": "99a3e94304f0d55a",
+   "one_error": null,
+   "part": "train",
+   "seconds": 15.59,
+   "two": "99a3e94304f0d55a",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-queries-radius",
+   "one": "ef0450b6bc48f488",
+   "one_error": null,
+   "part": "infer",
+   "seconds": 15.59,
+   "two": "ef0450b6bc48f488",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-queries-radius",
+   "one": "5f50d73e7a4f1146",
+   "one_error": null,
+   "part": "model",
+   "seconds": 15.59,
+   "two": "5f50d73e7a4f1146",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-queries-radius",
+   "one": "aa014d1a0ed67389",
+   "one_error": null,
+   "part": "batch",
+   "seconds": 15.59,
+   "two": "aa014d1a0ed67389",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-queries-radius",
+   "one": "n/a:no-decode-state",
+   "one_error": null,
+   "part": "stepfull",
+   "seconds": 15.59,
+   "two": "n/a:no-decode-state",
+   "two_error": null,
+   "verdict": "N/A"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-reference-knn",
+   "one": "17269e539cfec71f",
+   "one_error": null,
+   "part": "train",
+   "seconds": 16.242,
+   "two": "17269e539cfec71f",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-reference-knn",
+   "one": "a593e7cc3b0f8144",
+   "one_error": null,
+   "part": "infer",
+   "seconds": 16.242,
+   "two": "a593e7cc3b0f8144",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-reference-knn",
+   "one": "d52a45a13c74a487",
+   "one_error": null,
+   "part": "model",
+   "seconds": 16.242,
+   "two": "d52a45a13c74a487",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-reference-knn",
+   "one": "71c0d6aee494e8ee",
+   "one_error": null,
+   "part": "batch",
+   "seconds": 16.242,
+   "two": "71c0d6aee494e8ee",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-reference-knn",
+   "one": "n/a:no-decode-state",
+   "one_error": null,
+   "part": "stepfull",
+   "seconds": 16.242,
+   "two": "n/a:no-decode-state",
+   "two_error": null,
+   "verdict": "N/A"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-samba-clip",
+   "one": "387a63aafbcce06d",
+   "one_error": null,
+   "part": "train",
+   "seconds": 9.117,
+   "two": "387a63aafbcce06d",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-samba-clip",
+   "one": "3c42e52ff16765ef",
+   "one_error": null,
+   "part": "infer",
+   "seconds": 9.117,
+   "two": "3c42e52ff16765ef",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-samba-clip",
+   "one": "2807164675116cdb",
+   "one_error": null,
+   "part": "model",
+   "seconds": 9.117,
+   "two": "2807164675116cdb",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-samba-clip",
+   "one": "b76cef8b3c5cab10",
+   "one_error": null,
+   "part": "batch",
+   "seconds": 9.117,
+   "two": "b76cef8b3c5cab10",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-samba-clip",
+   "one": "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+   "one_error": null,
+   "part": "stepfull",
+   "seconds": 9.117,
+   "two": "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+   "two_error": null,
+   "verdict": "N/A"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-svm",
+   "one": "61b1676a7e40c914",
+   "one_error": null,
+   "part": "train",
+   "seconds": 11.002,
+   "two": "61b1676a7e40c914",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-svm",
+   "one": "acd970db5a3ae605",
+   "one_error": null,
+   "part": "infer",
+   "seconds": 11.002,
+   "two": "acd970db5a3ae605",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-svm",
+   "one": "1cf6ac54635490ef",
+   "one_error": null,
+   "part": "model",
+   "seconds": 11.002,
+   "two": "1cf6ac54635490ef",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-svm",
+   "one": "03e6a6673542064b",
+   "one_error": null,
+   "part": "batch",
+   "seconds": 11.002,
+   "two": "03e6a6673542064b",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "odd",
+   "lane": "par-svm",
+   "one": "n/a:no-decode-state",
+   "one_error": null,
+   "part": "stepfull",
+   "seconds": 11.002,
+   "two": "n/a:no-decode-state",
+   "two_error": null,
+   "verdict": "N/A"
+  }
+ ],
+ "compared": 90,
+ "counts": {
+  "IDENTICAL": 68,
+  "N/A": 22
+ },
+ "devices": [
+  0,
+  1
+ ],
+ "elapsed_s": 214.58,
+ "fixtures": [
+  "odd"
+ ],
+ "format": "mojolearn.verify-par.v1",
+ "lanes": [
+  "par-arima",
+  "par-boosting-clf",
+  "par-byte-lm-offload",
+  "par-cd-elasticnet",
+  "par-feature-freq",
+  "par-gram",
+  "par-gram-pca",
+  "par-graph-umap",
+  "par-holtwinters",
+  "par-kmeans",
+  "par-mlp",
+  "par-nystroem",
+  "par-ordered-rmse",
+  "par-queries-kde",
+  "par-queries-radius",
+  "par-reference-knn",
+  "par-samba-clip",
+  "par-svm"
+ ],
+ "par_lanes": [
+  "par-arima",
+  "par-boosting",
+  "par-boosting-clf",
+  "par-boosting-pointwise",
+  "par-boosting-reg",
+  "par-border-types",
+  "par-byte-lm",
+  "par-byte-lm-model-pool",
+  "par-byte-lm-offload",
+  "par-causal-lm",
+  "par-cd",
+  "par-cd-elasticnet",
+  "par-cholesky",
+  "par-cross-val",
+  "par-dbscan",
+  "par-feature-freq",
+  "par-forecast-arima",
+  "par-forecast-holtwinters",
+  "par-forest",
+  "par-forest-et",
+  "par-forest-et-clf",
+  "par-forest-pool",
+  "par-forest-reg",
+  "par-gmm",
+  "par-gp",
+  "par-gpc-fit",
+  "par-gpc-predict",
+  "par-gram",
+  "par-gram-ols",
+  "par-gram-pca",
+  "par-gram-tsvd",
+  "par-graph-agglomerative",
+  "par-graph-spectral",
+  "par-graph-umap",
+  "par-hdbscan",
+  "par-holtwinters",
+  "par-iforest",
+  "par-ivf",
+  "par-kernel-ridge",
+  "par-kmeans",
+  "par-logistic",
+  "par-mlp",
+  "par-nystroem",
+  "par-ordered",
+  "par-ordered-rmse",
+  "par-queries-kde",
+  "par-queries-knn",
+  "par-queries-nn",
+  "par-queries-radius",
+  "par-rbf-sampler",
+  "par-reference-knn",
+  "par-reference-knn-reg",
+  "par-resample",
+  "par-samba",
+  "par-samba-clip",
+  "par-scaler",
+  "par-scaler-minmax",
+  "par-svm",
+  "par-svm-svr"
+ ],
+ "passed": null,
+ "perturbed": false,
+ "ran": true,
+ "repeats": 1,
+ "representative_of": {
+  "arima": "par-arima",
+  "core": "par-queries-knn",
+  "estimators": "par-queries-kde",
+  "gbdt": "par-cross-val",
+  "gp": "par-gpc-fit",
+  "ivf": "par-ivf",
+  "kernel_methods": "par-rbf-sampler",
+  "neural": "par-causal-lm",
+  "parallel drivers": "par-boosting",
+  "preprocessing": "par-scaler",
+  "rf": "par-forest",
+  "training": "par-mlp",
+  "trees": "par-forest-et",
+  "tsa": "par-forecast-holtwinters"
+ },
+ "scope": "all",
+ "state": "INCOMPLETE",
+ "vendor": "cuda",
+ "witness": {
+  "detail": [
+   {
+    "cooperative": false,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537"
+      ],
+      "pid": 51612,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0"
+      }
+     },
+     {
+      "devices": [
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 51613,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 51825,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 51981,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 52125,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 52269,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 52413,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 54216,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 54289,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 54362,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 54435,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 54520,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 54593,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 54664,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 54735,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 54806,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 54877,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 54948,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 55019,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 55090,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 55161,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 55232,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 55303,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 55374,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 55445,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 55518,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 55601,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 55672,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 55743,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 55816,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 55899,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": false,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537"
+      ],
+      "pid": 56043,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0"
+      }
+     },
+     {
+      "devices": [
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 56044,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 56256,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": false,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537"
+      ],
+      "pid": 56471,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0"
+      }
+     },
+     {
+      "devices": [
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 56472,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 56613,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 56970,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 57043,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 57118,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 57201,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 57345,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": false,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537"
+      ],
+      "pid": 57702,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0"
+      }
+     },
+     {
+      "devices": [
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 57703,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": false,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537"
+      ],
+      "pid": 57844,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0"
+      }
+     },
+     {
+      "devices": [
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 57845,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": false,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537"
+      ],
+      "pid": 57986,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0"
+      }
+     },
+     {
+      "devices": [
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 57987,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": false,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537"
+      ],
+      "pid": 58130,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0"
+      }
+     },
+     {
+      "devices": [
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 58131,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": false,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537"
+      ],
+      "pid": 58579,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0"
+      }
+     },
+     {
+      "devices": [
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 58580,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": false,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537"
+      ],
+      "pid": 58722,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0"
+      }
+     },
+     {
+      "devices": [
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 58723,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": false,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537"
+      ],
+      "pid": 58864,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0"
+      }
+     },
+     {
+      "devices": [
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 58865,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": false,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537"
+      ],
+      "pid": 59006,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0"
+      }
+     },
+     {
+      "devices": [
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 59007,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": false,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537"
+      ],
+      "pid": 59432,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0"
+      }
+     },
+     {
+      "devices": [
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 59433,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": false,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537"
+      ],
+      "pid": 59574,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0"
+      }
+     },
+     {
+      "devices": [
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 59575,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": false,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537"
+      ],
+      "pid": 59716,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0"
+      }
+     },
+     {
+      "devices": [
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 59717,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": false,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537"
+      ],
+      "pid": 59858,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0"
+      }
+     },
+     {
+      "devices": [
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 59859,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": false,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537"
+      ],
+      "pid": 60142,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0"
+      }
+     },
+     {
+      "devices": [
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 60143,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 60284,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 60582,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 60655,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   },
+   {
+    "cooperative": true,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "d9c3091bb8ce1d3a5afe0ce6876ad537",
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 60728,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0,1"
+      }
+     }
+    ]
+   }
+  ],
+  "devices": [
+   0,
+   1
+  ],
+  "placement": "physical",
+  "pools": 56,
+  "workers": 72
+ },
+ "witness_refusal": "par-byte-lm-offload/odd: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes"
+}

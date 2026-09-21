@@ -1,0 +1,15 @@
+# python -m mojolearn verify --par
+
+Ran each `par-*` lane TWICE in this process on this box (cuda): once with
+MOJOLEARN_PAR_DEVICES=0 and once with MOJOLEARN_PAR_DEVICES=0,1, and compared the
+two columns cell for cell. No reference table is involved: the one-device column
+produced here, minutes ago, off this build, IS the reference. That equality is
+the drivers' whole claim and no release record states it.
+
+  par-resample               denormal_ftz train     IDENTICAL   one=afe735a9eaf62c84  two=afe735a9eaf62c84
+  par-resample               denormal_ftz batch     IDENTICAL   one=2cc6cdaaad3d21eb  two=2cc6cdaaad3d21eb
+Device witness: 66 pool(s), 66 worker(s), placement=physical.
+
+RESULT: THE TWO COLUMNS AGREE on 2 compared cell parts across 1 lane(s)
+and 1 fixture(s), IDENTICAL=2, N/A=3.
+Sharding this work across the devices did not move a bit.

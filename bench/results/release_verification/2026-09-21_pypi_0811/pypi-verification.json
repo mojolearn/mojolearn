@@ -1,0 +1,9 @@
+{
+  "version": "0.8.11",
+  "files": {
+    "mojolearn-0.8.11-py3-none-macosx_11_0_arm64.whl": "70420f8131424e34de7fa6168b40828213bd16a36c85307a8e0dacea5dd1f412",
+    "mojolearn-0.8.11-py3-none-manylinux_2_35_x86_64.whl": "8784e89af05fbaa057ff42bef362076abcd3808b88917bfe6898a3164d52d777"
+  },
+  "status": "MATCH",
+  "workflow": "https://github.com/mojolearn/mojolearn/actions/runs/35556348968"
+}

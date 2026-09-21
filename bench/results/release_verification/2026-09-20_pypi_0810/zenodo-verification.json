@@ -1,0 +1,20 @@
+{
+  "schema": "mojolearn.zenodo-archive-verification.v1",
+  "checked_at": "2026-09-20T21:57:51.998727+00:00",
+  "record_id": 22864816,
+  "doi": "10.5281/zenodo.22864816",
+  "url": "https://zenodo.org/records/22864816",
+  "version": "alpha-api-0.8.10-20260920",
+  "archive_tag_source": "fc0bf2a04e003f341e3a8127a841d2692520cdcc",
+  "artifact_source": "fe27b1d053e2c44818dd08736721087880f03f2a",
+  "archive_url": "https://zenodo.org/api/records/22864816/files/mojolearn/mojolearn-alpha-api-0.8.10-20260920.zip/content",
+  "archive_size": 48686637,
+  "archive_md5": "10ff0474951680baee978a4c6247195a",
+  "archive_sha256": "f655637f2a7d9959cd29aba5d44a1edfec809e1bd7a6cdc961feb1d9a8659b69",
+  "description_matches_source": true,
+  "has_isDerivedFrom": false,
+  "reference_table_sha256": "c8bd574dcecc6bded270659bcaeeabd0bdff28bfd56b5425beaae2cf574480c5",
+  "verified_records": 331,
+  "all_reference_record_hashes_match": true,
+  "status": "PASSED"
+}

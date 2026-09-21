@@ -1,0 +1,1333 @@
+{
+  "schema": "mojolearn.reference-archive-manifest.v1",
+  "reference_table_sha256": "c8bd574dcecc6bded270659bcaeeabd0bdff28bfd56b5425beaae2cf574480c5",
+  "reference_records": 331,
+  "all_reference_records_archived": true,
+  "archive_checked_source": "fc0bf2a04e003f341e3a8127a841d2692520cdcc",
+  "records": [
+    {
+      "path": "bench/results/identity_break/2026-09-14_166-lanes/amd-mi325x-gfx942.json",
+      "sha256": "65d9b82ca062baf3edb26880d3810d35214d3e0a73288dcd73767708121e1c7b"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-14_166-lanes/apple-m4.json",
+      "sha256": "13965d0eac96a31a8b24e4c66e0fd757d2728bb0787553acef52339d2e9e8cbb"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-14_166-lanes/nvidia-h100-sm_90a.json",
+      "sha256": "11896c55ec4fca53e4971fa7bd08574b7e9e6c56cab40c3d918c4bf408e02179"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-15_batch2/amd-mi325x-gfx942.json",
+      "sha256": "23decbff5d58f44bdedf5e17c543c78c24181c346185a4eb92d22ef288b395ba"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-15_batch2/apple-m4.json",
+      "sha256": "0af3f574076ea3ffaba03e4a93d84c91d8d4e43eb3393b93c2e6f193953b58b9"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-15_batch2/nvidia-h100-sm_90a.json",
+      "sha256": "14b640284f964741363dd9d87ef6e11aac951b8a5dca070725ccabc09cbeb93a"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-15_inference-linear-kernel/apple-m4-metal.json",
+      "sha256": "f7ad5aff15a8122c22e69e353bfc5dac51779e5ea62341da7985a3368d211986"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-15_inference-svm/apple-m4-metal.json",
+      "sha256": "d59a08d5a1d16eb9ea19e5ff10e23d4d9877ea4a03946eaec3557093dcef8616"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-15_ivf-embedding-cpu-inference/apple-m4.json",
+      "sha256": "189eb75731f0218f78be684ac864f70c030baf02dc2f57a578eac69ff3ab6d98"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-15_par-lanes-new/amd-2xmi300x-old4/one.json",
+      "sha256": "35bf0e06e72ab8a95162b875c8a59368e2e698be25cd2daa82bd528a9923fcde"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/byte-lm-host-train/byte-lm-host-train/cpu-clean.json",
+      "sha256": "6dc817de4d885621e06826d4c5d25b53b9569fa2ad0a909c02b307d18791ef5f"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/cross-entropy-arms/cross-entropy-arms/cpu-clean.json",
+      "sha256": "54c2a685bb872ef5698de9e5a32873b1e0d66a27feb6deb25f5d70e49db0a5c6"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/et-clf-entropy-bestfirst/et-clf-entropy-bestfirst/cpu-clean.json",
+      "sha256": "3cae14ae395ddd552880b0fed9511f6c82c70bba6d7c66cdf609510da1d4eac1"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/et-reg-bootstrap-parallel/et-reg-bootstrap-parallel/cpu-clean.json",
+      "sha256": "1c2326e542a3524f80ee7b276adb7cd1c5232578b26024c0b61839106e3af1fb"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-adapter-clf/gbdt-adapter-clf/cpu-clean.json",
+      "sha256": "297af35bc42a1f0d843a2286e7a33b1fb1f40e9efd4e09c2da10b5a74256ca48"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-adapter-reg/gbdt-adapter-reg/cpu-clean.json",
+      "sha256": "a7cf20ae923968ba3159d302ec5bf65cb36d0ee9eeafb80f534b6e4a507e1d1d"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-categorical-ctr/gbdt-categorical-ctr/cpu-clean.json",
+      "sha256": "33fca195aac00d79d4629afd97dae91485b06a0a7f7a63c4816ae1176c19650f"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-depthwise/gbdt-depthwise/cpu-clean.json",
+      "sha256": "088399dc3d40c447892cd5d4b353bc9b7c326ec65261d85bf2b98c5d7d685a71"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-exact-mae/gbdt-exact-mae/cpu-clean.json",
+      "sha256": "8cf0a692fac48b0bd8c6c09548f08b61419e67716c29136a1b1b59534933a01a"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-feature-freq/gbdt-feature-freq/cpu-clean.json",
+      "sha256": "388beb6898a378923ac59d0ad4aefe3ae433873ff915a3408a3a4cb11ded8fbe"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-lossguide/gbdt-lossguide/cpu-clean.json",
+      "sha256": "debf51e619c1a168297f9e384f8cff70474a2d1beca4a1bb9cc27b443430fb16"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-multiclass/gbdt-multiclass/cpu-clean.json",
+      "sha256": "d345b5b00ab4f3a2edbae12ed2f836113ac0f1b133cc471448cf0bbe3bfeabf4"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-onevsall/gbdt-onevsall/cpu-clean.json",
+      "sha256": "cdb233dc675c7a2c06bcfaa8d6fd4cd0e853efce956e6aafc18a6b531b8a41ce"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-ordered-rmse/gbdt-ordered-rmse/cpu-clean.json",
+      "sha256": "dbeda6e5130db0c646a42b7e792f5a888650c6674c6e214d42e3b957016b6dd6"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-pointwise-l2-bayesian-eval/gbdt-pointwise-l2-bayesian-eval/cpu-clean.json",
+      "sha256": "c97bd2461a5592159ab5fec2560bd227838b1b452a4976b1c4d9ad68e0e65c80"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-rmse/gbdt-rmse/cpu-clean.json",
+      "sha256": "7fd33854b17e5ca29f27edb73cfc81a56923a72141b1178875b776657733d4b8"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-symmetric/gbdt-symmetric/cpu-clean.json",
+      "sha256": "e2a0800b18adfbb2fe0f8a36c064b7c6d0a5c226a2d287329717b4143ad5bfa2"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/gemm-pinned/gemm-pinned/cpu-clean.json",
+      "sha256": "e683448628d7d3b9fbb12d86fcd8efc1dd67cb977c5bcc4d82f23458037d7a2c"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/gemm-transposed/gemm-transposed/cpu-clean.json",
+      "sha256": "f2093179c3bfedb25eec09ed1e711ba79875e7d5702b0ecadcab833fc7617e58"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/kde-cosine-minkowski/kde-cosine-minkowski/cpu-clean.json",
+      "sha256": "f0b4701b5b28f4fe62cb32b5b570e6906fd2a3a37f43e58840015e3e7e42b884"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/kde-epanechnikov-l1/kde-epanechnikov-l1/cpu-clean.json",
+      "sha256": "49744b26776a135ff4c41e140771bc9d98894e33976863ec1b0df157d3b46f6a"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/kde-exponential-chebyshev/kde-exponential-chebyshev/cpu-clean.json",
+      "sha256": "a87d627ec7dba1735be1fa818e4048731a4ac2d2304e96cd557b46d022a9e671"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/kde-linear-cosine/kde-linear-cosine/cpu-clean.json",
+      "sha256": "9834742157d8538765656bd89ccfb40babcfc5066f7381e997d3a6164bb326e3"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/kde-tophat-sqeuclidean/kde-tophat-sqeuclidean/cpu-clean.json",
+      "sha256": "c7e989c2dd87adab751352cfd6a253d148f232dacd14b4960d2c37fe97ad8774"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/kde-weighted/kde-weighted/cpu-clean.json",
+      "sha256": "28d520935e6a6c396feb31e0dd92c5024923035655a997c12a6646a3f68ad59a"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/kde/kde/cpu-clean.json",
+      "sha256": "f8d0083afa22525488eaca37dde4520b68a80805b4a2f0b3151d47db4f31453a"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/knn-chebyshev/knn-chebyshev/cpu-clean.json",
+      "sha256": "3cf7bacdd6e172c5e2a85009b87519717b607164028f537cd9398c9387abf40a"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/knn-clf-distance/knn-clf-distance/cpu-clean.json",
+      "sha256": "90ab6849292a4ab1e47256299d01d7f99afa509f2e9a277cbcd4064721ad9b74"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/knn-clf/knn-clf/cpu-clean.json",
+      "sha256": "bc5b987600c335c91168682086d1cb692555430fa7c95bf4eadc304b896861f0"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/knn-cosine/knn-cosine/cpu-clean.json",
+      "sha256": "6d767cc2ec3f94da7ba45e2da4bd37ba66ac3254acdee9409cba96822c8da658"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/knn-manhattan/knn-manhattan/cpu-clean.json",
+      "sha256": "8664e88cf48514e829bb576c3b7b6815e498d0fe87499e37832e2cfb8e5a3ad4"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/knn-minkowski-p3/knn-minkowski-p3/cpu-clean.json",
+      "sha256": "cd307d7cd20712cdbda6b4142a6c600fe8a3aafd3ed5ebd517006f25b0e9f119"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/knn-rbc/knn-rbc/cpu-clean.json",
+      "sha256": "b8e66eaa0202d37735a683b70aeaab10ef0186bb7610b15efdb361615a8604c3"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/knn-reg-distance/knn-reg-distance/cpu-clean.json",
+      "sha256": "0c95972006a58a9ff12cc4bdef19ea2726c77ce9081a849babbc587777b525ff"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/knn-reg/knn-reg/cpu-clean.json",
+      "sha256": "94b6d2c2444f945fa956186e177610957edbd3a1762081653c4d635353db4f05"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/knn-sqeuclidean/knn-sqeuclidean/cpu-clean.json",
+      "sha256": "7ae5347990993cda846659239dc6a7b2397617d3680d97fd8c3309b1cd251441"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/knn/knn/cpu-clean.json",
+      "sha256": "4ef422bce6550ea840ecceb96cb70a10d7bd840a178be9ecceb501728599cff4"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/logistic-elasticnet/logistic-elasticnet/cpu-clean.json",
+      "sha256": "20247d7665edf8056e065eddb24a516b234893731cb7b369d934059abf3b5ba1"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/logistic-l1/logistic-l1/cpu-clean.json",
+      "sha256": "f50968b80f9241cacbe1a5d15bc7fff8d85eebcd166dc7242166220ced02d067"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/logistic-multiclass/logistic-multiclass/cpu-clean.json",
+      "sha256": "845fbdcaa33ec8472beb1224f46bfd4bb1ba6728d9df19600f8b1ecdc6019884"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/logistic-unpenalized-no-intercept/logistic-unpenalized-no-intercept/cpu-clean.json",
+      "sha256": "b98e15c39b14c4ba81be0c1a5ec47f73c5f1bcf66d7a75f993260d83a9afe7c0"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/logistic/logistic/cpu-clean.json",
+      "sha256": "fe69fe5551ff107035238bc6064ba7b8be5093e0904621facb914568402510e5"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/metrics/metrics/cpu-clean.json",
+      "sha256": "ca57ae1153cbb008356c7ce70f10d9169a1ba56e72136d959a72e4f0c62eca7f"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/mlp/mlp/cpu-clean.json",
+      "sha256": "7b64306791561ecf5667107a9683bcaa8f475adf581e781c5a6e163dbc8a5cfc"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/monte-carlo/monte-carlo/cpu-clean.json",
+      "sha256": "32a1d5e66acf8ddfc527335e3ff73823e270b59535f5a1dfb2d4b510b9062732"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/ols-no-intercept/ols-no-intercept/cpu-clean.json",
+      "sha256": "8660c53d7fe916438697f9076db48df5d640eab997c062fc7608a7d75d732fa6"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/ols-weighted/ols-weighted/cpu-clean.json",
+      "sha256": "a9011658e9a1085dc674a9fd579680c9c5c391c9d07bd8ec8b86f35d5671a04f"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/ols/ols/cpu-clean.json",
+      "sha256": "113541be4ec026d89f2490a3a8c8b3ce140018185795a77d56700a05bded85ed"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/pca-full-whiten/pca-full-whiten/cpu-clean.json",
+      "sha256": "27309d08cb647be4f1bd4dcd5c405c01bbc041b806d9229c58a98bb81be84e8a"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/pca-whiten/pca-whiten/cpu-clean.json",
+      "sha256": "692e989a7e8f056e6b356e12ce1fe8df2dfc8e866f610edcf67e42db8ba00bcf"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/pca/pca/cpu-clean.json",
+      "sha256": "d8424277ee8f35dcceb1493bd2bc8ae15bb47d545043e95a168817ce0e3efed8"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/rf-clf-balanced-parallel/rf-clf-balanced-parallel/cpu-clean.json",
+      "sha256": "c80f652ef9e4a5c449eb9c5d0d37d76490534678e1ec3dd66fc2c4106f139788"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/rf-clf-entropy-log2-noboot/rf-clf-entropy-log2-noboot/cpu-clean.json",
+      "sha256": "16f9458d28a3c68625128811e07b61918df1db76f5a6825cbd7208ba1dfdb8d4"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/rf-clf/rf-clf/cpu-clean.json",
+      "sha256": "8bcf14cdb973be0c3aa3b5d8d83acf0a59be44d37f801a0fecb60de79f781c55"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/rf-reg-gamma-ig/rf-reg-gamma-ig/cpu-clean.json",
+      "sha256": "0951bc36e79b90160f8a7b8c8f9f1330671101e7582cf9ab932b4665341f6f16"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/rf-reg-poisson/rf-reg-poisson/cpu-clean.json",
+      "sha256": "38722ffba2be8ea9cc3a5e758d6fe57e21690c0d0d57951e42cf5bb75a9b94f8"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/rf-reg/rf-reg/cpu-clean.json",
+      "sha256": "93b1ac2a8cd90a464ed7eb15f5a6c82e22d2fd52a0a0b193137676ba1a004fc3"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/ridge-no-intercept/ridge-no-intercept/cpu-clean.json",
+      "sha256": "fb494511098d8b03b33f5cb4df9e39ddd08defec4f4c6a37a3d8c0f84d3b2a96"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/ridge/ridge/cpu-clean.json",
+      "sha256": "bb920b4527f948071439bb6065c08664f6d7a1fcbb26640b795e9ce37310e684"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/training-primitives/training-primitives/cpu-clean.json",
+      "sha256": "ac3ef89e6df77264064cc6b34025738c13a3366f5a4fa56f053795617b3deb81"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/tsvd/tsvd/cpu-clean.json",
+      "sha256": "17dadbc28ff53e91eed12aa9a9a289ba0084900d76f61eb00291ca377f68eb15"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-light1.json",
+      "sha256": "5f12749d149c17477d5ed97c42e2560ea3909acebae67b1d6a114c147d295233"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-light2.json",
+      "sha256": "bc4c97d6ef89719d7d3731ea0c63801aba125393024de2308f8e858aed423942"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-shard1.json",
+      "sha256": "12e2d51651509022e06b2012ee6ed2a9c5fb14a4e379154334ac3c4c3a7ac348"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-shard2.json",
+      "sha256": "2297a4dbdd5a71d3908ff79b0ba20b21d80b6483b685d2b0665807568ac1522d"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-shard3.json",
+      "sha256": "2a4cf525443e132076b7cc1292cbc57659bc02dd099e067fe3ca83b12d072de2"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-shard4.json",
+      "sha256": "d9d5ec984e18d43369a2b9e1929cc7a6ff394aa72d2f5d9419ecd77c94f4cae5"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_parallel-reference-gaps/amd/par-cd.json",
+      "sha256": "e53f5ea15c5a91d1d4e15983e4bcd650a0a2a48268968d06b3997b793e078501"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_parallel-reference-gaps/apple/par-cd.json",
+      "sha256": "2239495b125e95668173a78c0a943b39efadb670b59e1a4f3b30ff1a5fc3d87b"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_parallel-reference-gaps/nvidia/par-cd.json",
+      "sha256": "4a3e7ca0bf38f48546a7b399e6d773734f7509206ace659cc591b347bc79b629"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_parallel-reference-gaps/amd/par-cholesky.json",
+      "sha256": "e954654ec14f2cd2c744733467c9d3bb833a438b0485e1496a6cca407a358681"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_parallel-reference-gaps/apple/par-cholesky.json",
+      "sha256": "86f4aa920564b79b6f63fcc8217825f4812d3aa0dade0a2e77c71961f6b05ec8"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_parallel-reference-gaps/nvidia/par-cholesky.json",
+      "sha256": "adba2cbdce95e496f74f3945ee32e0e2b8b3b337ef85a9f0d5dcb2fd5b41f7e9"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_parallel-reference-gaps/amd/par-dbscan.json",
+      "sha256": "d826a6d8d7699744ce6cfdc15053268b22210c3324ccde75e235394d7657da40"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_parallel-reference-gaps/apple/par-dbscan.json",
+      "sha256": "e7fc913f85100b72f4977c64c44611999e6ab8ae70c51bcc5bc020d564763b1d"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_parallel-reference-gaps/nvidia/par-dbscan.json",
+      "sha256": "a36b71ddd711970e2a3b9a26cbd58e647a0d44886d3b8b6ea9fac67a9c70be1e"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_parallel-reference-gaps/amd/par-gmm.json",
+      "sha256": "05a4ba9f26eb2262c21760020dbd78c59ff6fa942c1129ec50a9dc600f8878fd"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_parallel-reference-gaps/apple/par-gmm.json",
+      "sha256": "0371890844c94381996228fdeaa763423959b202ec417231bde9012010ae604a"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_parallel-reference-gaps/nvidia/par-gmm.json",
+      "sha256": "33d982177cd9acd4f550307c8fe394e9cfb86d073e2a30c325a96363db4bb26f"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_parallel-reference-gaps/amd/par-gp.json",
+      "sha256": "ecbd189b46cd005c837ad26df9687a1cbd5e581a89b6767b76f3b0f06e48589c"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_parallel-reference-gaps/apple/par-gp.json",
+      "sha256": "e82b0aa219703e4969d0123edc61c7e7dab1bd8da7eb0c23759054921a9c3e9c"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_parallel-reference-gaps/nvidia/par-gp.json",
+      "sha256": "4d88f2e6c34638f726ff736242f21103abd07bbae62eec903c9f1affe3f55586"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_parallel-reference-gaps/amd/par-graph-agglomerative.json",
+      "sha256": "45b686ad9045d1ef3ee94a59c81a55d5c6c8a9a3c6b5d494e6c410fb492df6cd"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_parallel-reference-gaps/apple/par-graph-agglomerative.json",
+      "sha256": "083668e6c4b60550272f51c68a6b045db740b37f50f60f62758bd816b601e48c"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_parallel-reference-gaps/nvidia/par-graph-agglomerative.json",
+      "sha256": "bf61628c8597afcd00a83115948bb40a81bf98c2476bd3788e828ea116986aff"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_parallel-reference-gaps/amd/par-hdbscan.json",
+      "sha256": "a1fd5ca9eeb37721839207d31fc18066b5b6d2ef87c53ddfc0d8690d0be8c1d0"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_parallel-reference-gaps/apple/par-hdbscan.json",
+      "sha256": "87684fa905a04625cd46eb3b1cf8770f77f55a698fbda672e672fd2aa706e271"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_parallel-reference-gaps/nvidia/par-hdbscan.json",
+      "sha256": "9dd7b9a4feee3ee3667cd39cedcf22e1481e2d54d8a73f88b422fd0ebc916fa6"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_parallel-reference-gaps/amd/par-iforest.json",
+      "sha256": "a738aae4e578b7a39aeb3e6e3a313b41d5bde61b12651e21368d914cf898ce31"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_parallel-reference-gaps/apple/par-iforest.json",
+      "sha256": "9cbf93533795e55452c3fe1dd0e546631eb4d82a62b3224ebfe1ac03693f1ea4"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_parallel-reference-gaps/nvidia/par-iforest.json",
+      "sha256": "1b0b355f53c6a4a8d725a0cd3ec1f09e2356bb6704906559195f857c9261be03"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_parallel-reference-gaps/amd/par-kernel-ridge.json",
+      "sha256": "1d9d946f7561e28f715c9416c3a1caf8a99c3166eb057eace27640c5b5cc05e8"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_parallel-reference-gaps/apple/par-kernel-ridge.json",
+      "sha256": "9245e9bebd6e157393b90d451282058b48a3514c4c657b43cd4a9a2147398421"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_parallel-reference-gaps/nvidia/par-kernel-ridge.json",
+      "sha256": "97be2b9b491cea7432a222a910168d7eca042aa199e12f08a5870cd4bc4d3a77"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_parallel-reference-gaps/amd/par-kmeans.json",
+      "sha256": "a9cb5e6acdb1c6929097f59828177eabb1ef2d570c1b3e79f7d91a4d744369e9"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_parallel-reference-gaps/apple/par-kmeans.json",
+      "sha256": "425e6caa2a372c7d5e08f806d47aa338b25c13024a422136051323c75ea252bf"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_parallel-reference-gaps/nvidia/par-kmeans.json",
+      "sha256": "196116af2b500815a157dab3a91eb4fe1f96cbcbe0a6e53903ecad4fd03961a2"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_parallel-reference-gaps/amd/par-nystroem.json",
+      "sha256": "5711484b7ec5e32ead4ea6aaf4bbc1177bf5f100dafcc2389a7ad95dcb90a7b8"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_parallel-reference-gaps/apple/par-nystroem.json",
+      "sha256": "616f713d9c3831b1d65342fb1e6652d02bd62551a96868fb8c99d588ed4bb584"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_parallel-reference-gaps/nvidia/par-nystroem.json",
+      "sha256": "7d3c312aa86615d24c2ade14e8d5bc76220be826417461382e88388cde630fd9"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_parallel-reference-gaps/amd/par-resample.json",
+      "sha256": "86a353b8253869f5ac148903689304c811df3d3f7baabfb034aa68fec9e6eb64"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_parallel-reference-gaps/apple/par-resample.json",
+      "sha256": "b5ac616d0d33fd825562b714b6cfeb806ac1ef09ac1f45b1bf9778ed1cd12fe4"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/captures-gbdt/gbdt-query-rmse.json",
+      "sha256": "4dd355650f5f056ec1f70e587ef4051287664734352e19030ccaa8c5d8171523"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_installed-apple-properties/gbdt-query-rmse.json",
+      "sha256": "6d656924557ae257f92d4c421a384898fd95a52488c71704f30eab3eb606f94a"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-light1.json",
+      "sha256": "5f12749d149c17477d5ed97c42e2560ea3909acebae67b1d6a114c147d295233"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_gpu-class-gaps/nvidia-nvidia-geforce-rtx-4090-sm_89.classical.json",
+      "sha256": "1c47ddf452291f952f2bbf8b9df5308cc6b59da76867e48a764b4f82419a62ad"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-shard3.json",
+      "sha256": "2a4cf525443e132076b7cc1292cbc57659bc02dd099e067fe3ca83b12d072de2"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/captures-mixture/gmm-random-init-sample.json",
+      "sha256": "f767f696c7622b047b7f1ad8544cebc21c32a07bc696d92630cfc8094ccac88d"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_installed-apple-properties/gmm-random-init-sample.json",
+      "sha256": "3d6f21962666a2b66eef93d55154c7a690263f690486d7b5808f6146248b88a7"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-light2.json",
+      "sha256": "bc4c97d6ef89719d7d3731ea0c63801aba125393024de2308f8e858aed423942"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-shard4.json",
+      "sha256": "d9d5ec984e18d43369a2b9e1929cc7a6ff394aa72d2f5d9419ecd77c94f4cae5"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/captures-mixture/gmm-sample.json",
+      "sha256": "716ba991742cde3dcc5582b62adfbfb6db74d5763dc7e91e3ffa184f6cb0703a"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_installed-apple-properties/gmm-sample.json",
+      "sha256": "cd274efc428ce336d8e5f8a3649339bcd69a22f720c4fa83895465e895d3be44"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/recovery-gp/capture/gp-normalize-y.json",
+      "sha256": "86740ee1fde3c3b318bedeaad2428e1b34418805862e669919615f08e629427d"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_installed-apple-properties/gp-normalize-y.json",
+      "sha256": "cbcf4f5df2487838cea0c0b55a64d85e6dde2edd61f2d331dfef9644adc7e60f"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/gp-normalize-y/gp-normalize-y/cpu-clean.json",
+      "sha256": "e3ae7683546200e2c523cc85b33b84a16b527ca4db50ad8f8214f2b340b897d2"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_single-device-gaps/nvidia-nvidia-geforce-rtx-4090-sm_89.single-device-gaps.json",
+      "sha256": "76da20f69d80e4d62ecaec4855c7ef672c39c4c267ff7412399a62cdb4475422"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-shard2.json",
+      "sha256": "2297a4dbdd5a71d3908ff79b0ba20b21d80b6483b685d2b0665807568ac1522d"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/captures-gp/gp-optimize.json",
+      "sha256": "698a8db6618b074b23f89fa35c723db2cdb868967db95b0868db9c2797f5700d"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_installed-apple-properties/gp-optimize.json",
+      "sha256": "75a2ba636e82b9ebd43bb315b6f658328672d45cd7e0e2056f63cabb3f11fd5f"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-shard1.json",
+      "sha256": "12e2d51651509022e06b2012ee6ed2a9c5fb14a4e379154334ac3c4c3a7ac348"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/captures-gp/gp-optimize-restarts.json",
+      "sha256": "bdd97333a53d9eb7a9b4a7b62b3801334309fd834ac888b606f8642664a0442f"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_installed-apple-properties/gp-optimize-restarts.json",
+      "sha256": "e2f8a1efe867fad6458d69eeae1fccbb11a38655b40b7ee812d552c4ea2e1a93"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/captures-gp/gp-sample-y.json",
+      "sha256": "de69804d57c704fb97d0de57554ea81e14fb4634542600dfaf02e81628eb63fa"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_installed-apple-properties/gp-sample-y.json",
+      "sha256": "0b87f6d59b31030fd155c200f3c07ec76383e1dab87a1f990b43415e54fd8058"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/recovery-gp/capture/gp-sample-y-normalize.json",
+      "sha256": "c07310c109d5af0ef8ee692acd91ef8feb4fb7d036c38973a4f9df368b955e75"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_installed-apple-properties/gp-sample-y-normalize.json",
+      "sha256": "d8b491c1decf5906a35548156a342e4a41b7607836e285107010d697f34ef945"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/gp-sample-y-normalize/gp-sample-y-normalize/cpu-clean.json",
+      "sha256": "c55a15c4b355f71a00941004757c852ed176406e3cce332b10e8dc9d2915dd47"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/captures-gp/gpc.json",
+      "sha256": "1718facaa091bc65f71fa1bdfb41e2e1f7cfd42f26a0d51457827bcc88668655"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_installed-apple-properties/gpc.json",
+      "sha256": "3ca1075ffed652d309a2799e8156a449f13938d5a31afceff75549a53d8700fa"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/captures-gp/gpc-multiclass.json",
+      "sha256": "c210826539f563cc9cb0099d0515ffee31754595b98b7512a8acea12e400da7a"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_installed-apple-properties/gpc-multiclass.json",
+      "sha256": "6a37dc4b7d1434a23bad225136f3a6a8f596b6fcfda996c6f33bec3e39b10898"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/captures-ivf/ivf-extend.json",
+      "sha256": "4f566060d7b4da399498cad5145888224ab5cc22b3c8810e39a9e25866887e30"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_installed-apple-properties/ivf-extend.json",
+      "sha256": "0dd6eb19556370ab410a0b078bbd0674823c05046d1460faa7afebc5f0b1cb59"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/captures-kernels/kernel-ridge-laplacian.json",
+      "sha256": "66e5e128a6a2cef19658af2f34a1c96c09387beb3a4291e52e36864da602cba0"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18-cpu-kernel-variants/apple-kernel-ridge-laplacian.json",
+      "sha256": "0ee3628c99455a951f50f32f33fe88deb58de081ac79f347616deac5f7a005a9"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18-cpu-kernel-variants/cpu-kernel-ridge-laplacian.json",
+      "sha256": "796b8a2e59efaee399265e9c1826461164dbbc5a37f4542aadbb7d11ec1d3039"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/captures-kernels/kernel-ridge-poly.json",
+      "sha256": "e5597fa951098e1c523b69b91d55d8f2d09e42c94cf6e725fcfd74cc8a606573"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18-cpu-kernel-variants/apple-kernel-ridge-poly.json",
+      "sha256": "facfa585933fc1eb2c8bebaab529eb30c2eeaf6959da93dbf638509d15eecc89"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18-cpu-kernel-variants/cpu-kernel-ridge-poly.json",
+      "sha256": "5d7b6c2e5ca164b5587d212b652cc9880f8d00255540794e91df290539aa91dd"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/captures-kernels/kernel-ridge-sigmoid.json",
+      "sha256": "f5d1776c611ce46996fcf106a1d261e3453dbe5b753a0f2510b92f7d225940b2"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18-cpu-kernel-variants/apple-kernel-ridge-sigmoid.json",
+      "sha256": "a97205ee65198a36a9fc1f2dc70a0ceb51a0a6f005ce92af7028ae17cc0875ea"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18-cpu-kernel-variants/cpu-kernel-ridge-sigmoid.json",
+      "sha256": "62612c1516efa86d371af3511c8bbe13173a637322e3b47de29a61b639387cdd"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/captures-kernels/nystroem-laplacian.json",
+      "sha256": "235496c245425b514a37b3d7cfe713237baed7070077f169f34bdcc8549d47d2"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18-cpu-kernel-variants/apple-nystroem-laplacian.json",
+      "sha256": "a2fe173dcd2ccee9392572834ce77f0194af9bdd9c3254f056fab24e56846982"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18-cpu-kernel-variants/cpu-nystroem-laplacian.json",
+      "sha256": "f51ed9e5f23ed15f80794191965bc618b63df1fc48dc34af11fbb3b7b3ad9016"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/captures-kernels/nystroem-poly.json",
+      "sha256": "b5392954b03e0406151bbc84ab586169292a0d67fb8ad282d8824616f84b9144"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18-cpu-kernel-variants/apple-nystroem-poly.json",
+      "sha256": "e46a58a2fe6625f023f94d81b2be0849c9bf9d3b00a110e747961c961f46b2f3"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18-cpu-kernel-variants/cpu-nystroem-poly.json",
+      "sha256": "0f84f0ee922c1bd6a7adf68d6ccede29e8eb02d0bbae0b120b216b3cc0aac1b2"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/captures-kernels/nystroem-sigmoid.json",
+      "sha256": "ebfc19f393d2e01f17eca5df55e7446318dbd20ff9b672f3eb7fbd08d1b203cd"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18-cpu-kernel-variants/apple-nystroem-sigmoid.json",
+      "sha256": "a5de2412260149f48fba49b6075f637f9bb6aa27bce049e3be20b1fa65cab764"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18-cpu-kernel-variants/cpu-nystroem-sigmoid.json",
+      "sha256": "9b361d3ac0152a81e07ce6921350fa9224cddc3fdffa99b896a5659ff73ddbe5"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/captures-svm/svc-poly.json",
+      "sha256": "903ed7998f0b10f52839a43b43d48ad9ffa21565d041b136db90f6a3863e199e"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_installed-apple-properties/svc-poly.json",
+      "sha256": "bbaa526b0c5d4c9d8c281abd993b2a325b204ba8c8b3ea00f5ff98f05472ad93"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_gbdt-class-gaps/amd-amd-instinct-mi300x-gfx942.gbdt-class-gaps.json",
+      "sha256": "0e464a93e1dbd45631099df30f774966f183796ec7385461a344e9d8f8aa778c"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_catboost-parity/apple-m4.json",
+      "sha256": "50169d4e08bd0cc8c656c6f8eebe75761619af903abad70044ab92206a764e68"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_gbdt-sabotage-pair/cpu-apple-m4.clean.json",
+      "sha256": "fc4039f8945f65bea7e933916fbbb63ae5e2485db9e9ea34cca4f04233bf50b8"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_gbdt-class-gaps/nvidia-nvidia-geforce-rtx-4090-sm_89.gbdt-class-gaps.json",
+      "sha256": "b48ced4b00d1492239fe2b404ce61e127783b49d0c5da1fd110424f99cfe6dbf"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_catboost-parity/cpu-apple-m4.json",
+      "sha256": "dbd3d86582a2886510fedaf85adf70b40eb2ba3ce4597fc641bb01f87b7973ce"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_vendor-class-gaps/amd-amd-instinct-mi300x-gfx942.vendor-class-gaps.json",
+      "sha256": "076d3b9e7139cf863f310d5a93557e96f4fd00cc9de1b2e018dbdc86b27ba929"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_apple-column-gaps/grad-accumulation.apple-m4.json",
+      "sha256": "2700a91744f2965237931c78af1facc4b1365780715605258c0ecaea7daab72d"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_laneless-public-classes/clean.json",
+      "sha256": "fdf1efefbd3e59593dc38dc7106b93e2ecdd62b896dd1211654ad4dfc4bdf4a4"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_vendor-class-gaps/nvidia-nvidia-geforce-rtx-4090-sm_89.vendor-class-gaps.json",
+      "sha256": "2934d7a1f19fc25f333d6b93dfebb6d68f3dbd2cbeab0b3f255e9614f671e1c3"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_apple-column-gaps/hf-causal-lm.apple-m4.json",
+      "sha256": "59348fc1befe4a9512ae8ff94e5c0f2d12210a107e0b6e7fcffc8b67d974853c"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_models-namespace/m4.replay.json",
+      "sha256": "2bf9bd368cc41efc6a164f55c5c31b27ef1e49f4a9b296cc6aaf73177748442a"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_apple-column-gaps/hf-checkpoint.apple-m4.json",
+      "sha256": "10f1e7f91b824424b6fc703f6b8ac30de9bdf719bec192db1469a3a71342925d"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_apple-column-gaps/hf-tokenizer.apple-m4.json",
+      "sha256": "611ec0340cde754b3afe91daf8f723234ed1deb0355f623a9729d601fe02a5e2"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_apple-column-gaps/lowbit-conversions.apple-m4.json",
+      "sha256": "5448ce24a61357a9569de2af08db94dbdb12bde7809161a596ec1dac769cdd84"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_laneless-public-classes/clean-linalg-rebuilt.json",
+      "sha256": "e5bb04d2f531dcb08169fecfef9824b4ea7ef2a91b0abc44e902e113e7b23559"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_par-two-device-gaps/ordered-and-border-types/nvidia-nvidia-geforce-rtx-4090-sm_89.par-two-device-gaps.json",
+      "sha256": "6165005c1e5f0f4eea99e93c2f7b350aad919837ac83708b214cce2fbaf9dca0"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_vendor-class-gaps/amd-amd-instinct-mi300x-gfx942.vendor-class-gaps.json",
+      "sha256": "076d3b9e7139cf863f310d5a93557e96f4fd00cc9de1b2e018dbdc86b27ba929"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_apple-column-gaps/linalg-eigh.apple-m4.json",
+      "sha256": "b4d6620b90d35ad82d4c502cdec6e19ec39c7bfa4b5489a1bbda7dab827ae48c"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-20_linalg-cpu-completion/cpu-apple-m4.json",
+      "sha256": "2a78f48b050eb2e3b207376a98a13d2c2cbec1243be61f26ecbaf737cb193c3e"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-20_gpu-confirm-never-launched/nvidia-nvidia-geforce-rtx-4090-sm_89.new-since-088-nine-parts-2026-09-20.json",
+      "sha256": "6aad6e73ca73f3ee49986dd4dc841bd8f021598503462c858943e31a5d1737bb"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_apple-column-gaps/linalg-qr.apple-m4.json",
+      "sha256": "570206455bb8186509100c31a3cd6c309c78e5331b9ae46f590c097326e9973c"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_apple-column-gaps/linalg-svdvals.apple-m4.json",
+      "sha256": "c685ac7bc9aa447196c8ae84f0cd0108f6064fb11a450356c657562ead6c4eeb"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-20_apple-gap-full-parts/apple-m4.json",
+      "sha256": "4f2a947644337a1863b789ee2c1f54fca9e4247a4035ea8d18c5ec14989f6b36"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-shard3.json",
+      "sha256": "2a4cf525443e132076b7cc1292cbc57659bc02dd099e067fe3ca83b12d072de2"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-shard2.json",
+      "sha256": "2297a4dbdd5a71d3908ff79b0ba20b21d80b6483b685d2b0665807568ac1522d"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_vendor-class-gaps/amd-amd-instinct-mi300x-gfx942.vendor-class-gaps.json",
+      "sha256": "076d3b9e7139cf863f310d5a93557e96f4fd00cc9de1b2e018dbdc86b27ba929"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-light1.json",
+      "sha256": "5f12749d149c17477d5ed97c42e2560ea3909acebae67b1d6a114c147d295233"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_single-device-gaps/nvidia-nvidia-geforce-rtx-4090-sm_89.single-device-gaps.json",
+      "sha256": "76da20f69d80e4d62ecaec4855c7ef672c39c4c267ff7412399a62cdb4475422"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-shard4.json",
+      "sha256": "d9d5ec984e18d43369a2b9e1929cc7a6ff394aa72d2f5d9419ecd77c94f4cae5"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-light2.json",
+      "sha256": "bc4c97d6ef89719d7d3731ea0c63801aba125393024de2308f8e858aed423942"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-shard1.json",
+      "sha256": "12e2d51651509022e06b2012ee6ed2a9c5fb14a4e379154334ac3c4c3a7ac348"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_bpe-builder-native/m4.after.json",
+      "sha256": "04c16fa03e9b0f31483063f9bcdf0573c144873cebe0f9fbbe10f07182f6dbe4"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_vendor-class-gaps/nvidia-nvidia-geforce-rtx-4090-sm_89.vendor-class-gaps.json",
+      "sha256": "2934d7a1f19fc25f333d6b93dfebb6d68f3dbd2cbeab0b3f255e9614f671e1c3"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_laneless-public-classes/clean-linalg-rebuilt.json",
+      "sha256": "e5bb04d2f531dcb08169fecfef9824b4ea7ef2a91b0abc44e902e113e7b23559"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_amd-gpu-class-gaps/pod-wou5qm58lecba7/amd-amd-instinct-mi300x-gfx942.gbdt.json",
+      "sha256": "56b251d8556d8361575f77be032cc648ac138c10c90154a52aec3649f629a059"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-categorical-ctr-tables/gbdt-categorical-ctr-tables/cpu-clean.json",
+      "sha256": "55bbe373418d56ffa2577aeb9e90727a9792d00451b9a0ea38c81954326559be"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_gpu-class-gaps/nvidia-nvidia-geforce-rtx-4090-sm_89.classical.json",
+      "sha256": "1c47ddf452291f952f2bbf8b9df5308cc6b59da76867e48a764b4f82419a62ad"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_amd-gpu-class-gaps/pod-wou5qm58lecba7/amd-amd-instinct-mi300x-gfx942.lowbit.json",
+      "sha256": "efb262cdbcb4b98a723a15a175e48d992600c95f0f1f0a94ff0d6799cf1904ca"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_gpu-class-gaps/nvidia-nvidia-geforce-rtx-4090-sm_89.lowbit.json",
+      "sha256": "f2a257b11d9164ced13308df30a082069603927ffbc924614cc6c8176d6a3964"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_sabotage-sweep/g-accumulate-arm-family-define/cpu-x86.json",
+      "sha256": "e94d63bd1236cbf9ccc6bb209c39fd375511d5284e0659d53c17121e67c07e6a"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-16_amd-mi300x/amd-mi300x-gfx942.predict.json",
+      "sha256": "de81cce5c839ebe272e49a7fd672dce8a867da7b86cef37aa2568828e02d5166"
+    },
+    {
+      "path": "bench/results/release089/apple-vendor-completion/apple.json",
+      "sha256": "af3e0662a66ffe8a5fb8fc87f0bb7a55a359e5af567c71aed222513274a1da03"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-light2.json",
+      "sha256": "bc4c97d6ef89719d7d3731ea0c63801aba125393024de2308f8e858aed423942"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-16_predict-nvidia/nvidia-a100-sm_80.json",
+      "sha256": "11cd6c17ed0857d38c2b8ea2df1c55209ca517dfac1fe8eb4e9000252a301b66"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-shard3.json",
+      "sha256": "2a4cf525443e132076b7cc1292cbc57659bc02dd099e067fe3ca83b12d072de2"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-20_final-amd-vendor-coverage/amd-mi325x-gfx942.json",
+      "sha256": "8aff71c75164526b0058ae5173f0eef3f3d366573fc54aa5a717115ec9eba6d0"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-20_apple-gap-full-parts/apple-m4.json",
+      "sha256": "4f2a947644337a1863b789ee2c1f54fca9e4247a4035ea8d18c5ec14989f6b36"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/arima/arima/cpu-clean.json",
+      "sha256": "ce4f942dbfe5ce15b17d3044a010e069b5e4ab1f7108f381341d8805c934a216"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-20_final-nvidia-vendor-coverage/nvidia-h100.json",
+      "sha256": "e4bb7b8861849cc390d22175ef0cec4862f9e748d1053dbf9b241f5b8fc1dbe9"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/arima-011/arima-011/cpu-clean.json",
+      "sha256": "b856ad5490c7d9aa9d7e03c790d69ab7a87a0daba90b4395090b24b269b166df"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-shard2.json",
+      "sha256": "2297a4dbdd5a71d3908ff79b0ba20b21d80b6483b685d2b0665807568ac1522d"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/arima-seasonal-c/arima-seasonal-c/cpu-clean.json",
+      "sha256": "80f4093ef3da2bab0583bfebb74f769f3801cf49ea7867bf0ba2b2f4dccb7f6d"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/bootstrap/bootstrap/cpu-clean.json",
+      "sha256": "26d000d3cc622de28369b235e819beb1feab869b8679f6a6731acc78a09ff4bc"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-shard1.json",
+      "sha256": "12e2d51651509022e06b2012ee6ed2a9c5fb14a4e379154334ac3c4c3a7ac348"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-20_amd-neural-full-parts/amd-mi325x-gfx942.json",
+      "sha256": "178f96e9fe39ee9f2e862806113d249c1014d0d320b35f8f75ec8136bf7ee96e"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-light1.json",
+      "sha256": "5f12749d149c17477d5ed97c42e2560ea3909acebae67b1d6a114c147d295233"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_sabotage-sweep/d-neural/cpu-x86.json",
+      "sha256": "3bb76498a8edd269195112449acf1848a121cae877ffcf6b17952c46d271f798"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-15_batch2/apple-m4.json",
+      "sha256": "0af3f574076ea3ffaba03e4a93d84c91d8d4e43eb3393b93c2e6f193953b58b9"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/byte-lm-host-infer/byte-lm-host-infer/cpu-clean.json",
+      "sha256": "f817aeb2c6d07582866a0ee98db6696a219ba79aa04bad8108960125b3da9dbe"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-15_batch2/nvidia-h100-sm_90a.json",
+      "sha256": "14b640284f964741363dd9d87ef6e11aac951b8a5dca070725ccabc09cbeb93a"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-15_rlpair/apple-m4.json",
+      "sha256": "e94e9824921f5971c83ee9735e5b4794971ccafacaff450e67a2136cd2f4976a"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-15_rlpair/nvidia-h100-sm_90a.json",
+      "sha256": "42692be2ed1038a9d5898f63cb07591248bbe1881fe6226c77f0fdb67bf5bf20"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18-cpu-proof-followup/clean.json",
+      "sha256": "703cc40cd263dd48bb557271093c5b995f7b74dd5cd20011314aae860417f499"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/byte-lm-host-infer-threaded/byte-lm-host-infer-threaded/cpu-clean.json",
+      "sha256": "20deb5ce8e24bdf2a17324618cfde6a7585b2c6669fdf60eed7f28f4acc3386e"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_laneless-public-classes/clean-linalg-rebuilt.json",
+      "sha256": "e5bb04d2f531dcb08169fecfef9824b4ea7ef2a91b0abc44e902e113e7b23559"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/cross-val/cross-val/cpu-clean.json",
+      "sha256": "9f2514a16462511e099ee6e895821f4d60aea7007cb4cef9e1e7f44ac7b78f1c"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-shard4.json",
+      "sha256": "d9d5ec984e18d43369a2b9e1929cc7a6ff394aa72d2f5d9419ecd77c94f4cae5"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-control-repairs/cpu-clean.json",
+      "sha256": "7d89266148ddae8b02c82f89e38861de72f1ee45085d839c6dc989a5d0942c7b"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/elasticnet/elasticnet/cpu-clean.json",
+      "sha256": "73208e37110417d087453c34d09faf1948016e2ca9a9d04f8b055ddc98d9d193"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/elasticnet-l2end-no-intercept/elasticnet-l2end-no-intercept/cpu-clean.json",
+      "sha256": "7f5c9579e1840bb1b69b79526df7711d3273b2d4d7bfa00c51077bff02a3c0ee"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-20_gbdt-multiclass-defaults/apple.json",
+      "sha256": "8dcefd9671a5a16f791cac8b6e78673a00b546b4765aa8993e544499138a91da"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-20_gbdt-multiclass-defaults/cpu.json",
+      "sha256": "158fa4a02f32cfb5a969a73de235f1770edb84394d394b4aa618a0ea9eb119e4"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_catboost-parity/apple-m4.json",
+      "sha256": "50169d4e08bd0cc8c656c6f8eebe75761619af903abad70044ab92206a764e68"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_gbdt-sabotage-pair/cpu-apple-m4.clean.json",
+      "sha256": "fc4039f8945f65bea7e933916fbbb63ae5e2485db9e9ea34cca4f04233bf50b8"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-20_gpu-confirm-never-launched/nvidia-nvidia-geforce-rtx-4090-sm_89.new-since-088-nine-parts-2026-09-20.json",
+      "sha256": "6aad6e73ca73f3ee49986dd4dc841bd8f021598503462c858943e31a5d1737bb"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_catboost-parity/cpu-apple-m4.json",
+      "sha256": "dbd3d86582a2886510fedaf85adf70b40eb2ba3ce4597fc641bb01f87b7973ce"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-20_ranking-defaults/apple-m4.json",
+      "sha256": "ac133f9f79987dd776550195fca8d24fcc2771f5eae6aa4a202bbe370a906ff3"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-20_ranking-defaults/cpu-apple-m4.json",
+      "sha256": "def2a83bf4db6ea17d6c523465823977b6268ca72fa86598427946a921fea992"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-20_gbdt-stochastic-defaults/apple-m4.json",
+      "sha256": "812f77fb6d6e208f280c44fb16dccade6770a3f561841a5e8b6254869ad6ae7a"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-20_gbdt-stochastic-defaults/cpu-apple-m4.json",
+      "sha256": "ba74d80fae1d3a9def9d7793363894a26a43de747efdd882c9b13516e2eee005"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-20_gbdt-eval-cursor-fix/apple-m4.json",
+      "sha256": "2095cdf936b8e718c9c769a3719aa824ce003dd38c7cb3553e035b7116f53624"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-20_gbdt-eval-cursor-fix/cpu-apple-m4.json",
+      "sha256": "dbc8e777291721bce487c712613fa17f4b83bb3359aa3eb6904a5ef163236290"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-15_cpu-verifier-gaps-7/metal-ctr/validate-tensor.json",
+      "sha256": "9285e36e2e4c644c8ddd81f6e1f621f311607f963ec2477b8c121ccdd0950652"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/gbdt-tensor-ctr-tables/gbdt-tensor-ctr-tables/cpu-clean.json",
+      "sha256": "efd0adb1120ffb9bb1d4c7d0b92fc476ab753080363d205e02da8e7ea24b0c8a"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-15_cpu-verifier-gaps-7/metal-ctr/tensor-6fx.json",
+      "sha256": "187e906b75e66a50d6f601e48bad0a60a9d5d0ec600f0321d598b39c787b3660"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-15_gbdt-ctr-tables/apple-m4.json",
+      "sha256": "668ab7293b40349087e2ad9ae87ce80162342b5a3a492c77b1db70873340d99a"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-15_gp-optimize/apple-m4.json",
+      "sha256": "b971be828c85c1c0d29f017fb1dbf15a2ce9006732ba20cdbc25bbea4a0012c9"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-20_final-linux-hdbscan/cpu-amd-epyc.json",
+      "sha256": "2e92c3e0ce9c3dbfb600ca16193ab4faf1407720b9339a8bd541ece643ab2c4d"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/iforest-tuned/iforest-tuned/cpu-clean.json",
+      "sha256": "8d851b22a39dc913d4287698753ed4cb8df93e8f371c6b6cf3525a28735fb64c"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-15_ivf-extend/apple-m4.json",
+      "sha256": "495bb1876b2dcb84c674c652a8fd5a4ce88eb4d132282be963af0a99334c3799"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-16_amd-mi300x/amd-mi300x-gfx942.kmeans.json",
+      "sha256": "0855fa42060976f859069ef7e5b9bf65f320a8055fdc2231e9f567b7c3191e49"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/kmeans/kmeans/cpu-clean.json",
+      "sha256": "ae4f57e929bba5a81522ff3093a00f0310ae403fd00f40bb8f70da4089c1527c"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-16_kmeans-and-spectral-cpu/nvidia-a100-sm_80.json",
+      "sha256": "1fe1675acf89387006bf0fb62639038e5ada8220d6fcef91ec789c7422ee57bf"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/kmeans-array/kmeans-array/cpu-clean.json",
+      "sha256": "79f0146d69c2db4a5fd244e484e5bf91e9e05e70bb22b1f4a04f79c4fbe65c09"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/kmeans-classic-pp/kmeans-classic-pp/cpu-clean.json",
+      "sha256": "a643e12a04e6d2bd16fcc32426b50df37f58b5af0af5bfec9d757406f85eccaf"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/kmeans-random/kmeans-random/cpu-clean.json",
+      "sha256": "d225d08e2363e3de10d9866ba0d978be9c9d054fb191d1b4f404c969e16b40e9"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/kmeans-weighted/kmeans-weighted/cpu-clean.json",
+      "sha256": "79c66486b0552ae7115b5f18f61f80f5c84988707152eb59e086c911adb33d15"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-20_fresh-cpu-language-model-config/cpu-x86.json",
+      "sha256": "a728b58ea4d4499077b4360f9ad02a3a4e19e5ca5e340770b76d167676487bda"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/lasso/lasso/cpu-clean.json",
+      "sha256": "5df11e27ee1555dc52ffaca88c827420b66f472a1185c2452d15785b31a4b8fa"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-20_qn-objectives/cpu-x86-epyc.json",
+      "sha256": "1c99b38042bdaa2f742846963eb9af6f4ed8166ecc98eb0d5cd1ccbc21647d34"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-20_qn-objectives/nvidia-nvidia-geforce-rtx-4090-sm_89.qn-objectives-2026-09-20.json",
+      "sha256": "680752cf305609ab685aae12c13b303eb9977b88ca9abc3f266b7cf078f27f7e"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-reference-repair/cpu-clean.json",
+      "sha256": "c23411f18bade45139604cba2a389b1de366fbefa1e8fb6f16ce68923d59bcfe"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-20_gpu-confirm-never-launched/nvidia-nvidia-geforce-rtx-4090-sm_89.stepfull-never-recorded-2026-09-20.json",
+      "sha256": "4d36a27b237484b57015ca37421114f5ac05780896ca8cc43077bcf8cc6e170d"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-neural.json",
+      "sha256": "24ec3680878e949b40d11e597a35203257692e2b0087132d49c970880b0a7e67"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_laneless-public-classes/regression-rebuilt-linalg.json",
+      "sha256": "650ff6d9efdfaca959ac1475d7c7af438c48bed592be438ff047557bb59400c2"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-complete-dependencies/records/mamba1-bf16w/cpu-clean.json",
+      "sha256": "79935fd2e78d340ecb329784cf98f509e3390aee1cbce26d700cc4777b7299d6"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-20_cpu-routes-gpu-only-four/clean.json",
+      "sha256": "9244e3c3b76b6055ff37e009d484d2c554b9b5fa45139034a4d4c90853b71b51"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-complete-dependencies/records/mamba2-bf16w/cpu-clean.json",
+      "sha256": "140235e9ee25130a713b12c26a6924520aea299cfef2f096dfbbbb2f20ea94eb"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-mamba2-completion/cpu-mac-clean.json",
+      "sha256": "5edbd4693c6eb1a8c9cdfc53cc9cc29557f4a9195ff0462e691ac22f7f83da74"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-complete-dependencies/records/mamba2-int8w/cpu-clean.json",
+      "sha256": "25257c8d36f6ed92797c8f12a36944c2142935c012c59b54ba2968e179838fb8"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/captures-neural/mamba3.json",
+      "sha256": "b62470e5e0d363ebea8c586850bdf21d08cde08b3a7579be1d8ababd96e65af3"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_installed-apple-properties/mamba3.json",
+      "sha256": "3fdeb7225fd091928ee46ca94341dff1faa2173f3d4918ed23a3cc95f5ccf77a"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-complete-dependencies/records/mamba3-bf16w/cpu-clean.json",
+      "sha256": "6532b0514c384fb7ded2804cb5f0b3d0d6a7fb4d37dd519ca129a5b3a4722ec1"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-complete-dependencies/records/mamba3-int8w/cpu-clean.json",
+      "sha256": "e1398b1c303adf61240cd3d57f03b75d2f9be70805178fdf3816cca532ceefec"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/metrics-classification/metrics-classification/cpu-clean.json",
+      "sha256": "2952205e3bfb83f85b57d31211e191bef81aace43e8866013a350e234ced923b"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_gpu-class-gaps/nvidia-nvidia-geforce-rtx-4090-sm_89.lowbit.json",
+      "sha256": "f2a257b11d9164ced13308df30a082069603927ffbc924614cc6c8176d6a3964"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/optim-sgd/optim-sgd/cpu-clean.json",
+      "sha256": "a4dd18ff4c3f3e735caa960be4633a0cdf560298cb9e8fadd12d85dcbfc8367d"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/permutation-test/permutation-test/cpu-clean.json",
+      "sha256": "fe38e7590432188bf65713acd6f8e946129d5fbca21047d9e98670980b48edf0"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/radius/radius/cpu-clean.json",
+      "sha256": "11481bb0e5c7574146770c46f85df3f2cc9e4d08ba6052ebe26347034dcf2400"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/radius-chebyshev/radius-chebyshev/cpu-clean.json",
+      "sha256": "901d6aefe7ca767f847115be1a04d2d0abfb06820424af4c7c2a8431326c7b70"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/radius-manhattan/radius-manhattan/cpu-clean.json",
+      "sha256": "97cb449cb28a0c80c8bed64782e7f09edaa8ece1257b812616919fc44b0ad914"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/radius-minkowski-p3/radius-minkowski-p3/cpu-clean.json",
+      "sha256": "c6483a7274867def33a54a9aeaaec9e3bf0a99828a179696923cb069b751ce57"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/captures-neural/samba.json",
+      "sha256": "1ff8fc77459648c6a908b32a5c89ab3b626604b9104257e66e68bf5ed94aa999"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_installed-apple-properties/samba.json",
+      "sha256": "cd72d8cd913d05ecfb96a62648d928adcbf8fb0d050ef3111af489c1b8573121"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/captures-neural/samba-untied-dropout-accum.json",
+      "sha256": "4ed4d1fc5eeecab819e0ab8717813b4aca8ffd9b32b37d1c06906e4a98003078"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_installed-apple-properties/samba-untied-dropout-accum.json",
+      "sha256": "7f5c0d95492175a21172d36b341c26b0fd51e3893ed2a4b93f14593731ab01b8"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-20_saved-host-refresh/apple-m4.json",
+      "sha256": "38dc3a84f113dfe14c209f8669f9be376a8fafeb58fb77ab153f1420a5681982"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-20_saved-host-refresh/cpu-apple-m4.json",
+      "sha256": "ba8c0e5bef1a58fe9152949a5055dabb985840669bce48f59e7dc605769b176f"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-20_spectral-embedding/cpu-x86.json",
+      "sha256": "7d353ccae14ae37216a6939f06c800cf27562f3114bd58b86127c70969885700"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-20_spectral-embedding/nvidia-nvidia-geforce-rtx-4090-sm_89.spectral-embedding-2026-09-20.json",
+      "sha256": "a12e878e39c35d884684de98875e9bc8747b7dab887e0bc02978e0c3bb641e4e"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/spectral-precomputed/spectral-precomputed/cpu-clean.json",
+      "sha256": "c9b9a8d3ae0bdfc758a10b64445f3036ae3425b5ab7be9e9acf743371264494b"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-native-nine/records/standard-scaler-no-std/standard-scaler-no-std/cpu-clean.json",
+      "sha256": "734f6e0f90cf64c7a8bafefb9318a9b194a69793438593c0de4596a989145f0d"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-15_inference-svm/apple-m4-metal.json",
+      "sha256": "d59a08d5a1d16eb9ea19e5ff10e23d4d9877ea4a03946eaec3557093dcef8616"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_bpe-builder-native/m4.after.json",
+      "sha256": "04c16fa03e9b0f31483063f9bcdf0573c144873cebe0f9fbbe10f07182f6dbe4"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/captures-neural/transformer.json",
+      "sha256": "2a6d972541b6929dab96094c4b7d7cd32345187da541d970135a5fccaf94cce1"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_installed-apple-properties/transformer.json",
+      "sha256": "da076242cfca995c9bccdfe6d3cd7c83d9441b4d35af879e4da04d9d17cb9dcc"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_cpu-complete-dependencies/records/transformer-int8w/cpu-clean.json",
+      "sha256": "4488ee796baeacb5efee1f0bbf41a6a4ade625ccc47ce3cd8333b06af3c3f4ec"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18-ordinary-holds-amd/ordinary-holds/captures-neural/transformer-window.json",
+      "sha256": "241bc41304f52bd8d6020bce7e7e22d817b77a11cd913653e7a8d24a410b4412"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-18_installed-apple-properties/transformer-window.json",
+      "sha256": "d6c9bdfe4e17312ce1da2837009f7ada4d6f9ed82ee25cae1a1a6e15834f508c"
+    },
+    {
+      "path": "bench/results/parallel-next/apple-4459379a4/all-nine.json",
+      "sha256": "0e214709c49288baf51932f4de4c317a7865950911bb97044fc0d80dfa1562cc"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-20_parallel-next-causal-cpu/cpu-arima.json",
+      "sha256": "c91fe41947de63d6fd7dbe4b4d96b7cc919a7c1a4241e56ca161f97280801aa9"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_par-lane-amd-class/amd-amd-instinct-mi300x-gfx942.par-one.json",
+      "sha256": "5d19222705d052cb07f4825a679687160d1545e290db50de96cd016aee2209d3"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_reference-regen/nvidia-rtx4090-sm_89-par-lanes.json",
+      "sha256": "8816a1a27a429ea87efc57b7eaef63e21b09bbf40277a9b977c4ef053336b5f5"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-20_parallel-next-causal-cpu/apple-m4-causal.json",
+      "sha256": "4edad60982d3af3a945fc5cc87da64a3959c9021aa1a88023743baca9823b0e1"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-20_cpu-routes-gpu-only-four/clean.json",
+      "sha256": "9244e3c3b76b6055ff37e009d484d2c554b9b5fa45139034a4d4c90853b71b51"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-20_takeover-last-gpu-columns/nvidia-nvidia-geforce-rtx-4090-sm_89.par-two-device-last-four-2026-09-20.json",
+      "sha256": "a6f13a8ae7d39482fb12d62c2dc4ae0254b9c673bda5f9e9f85764f2b18a45ab"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-20_broken-par-sabotage-arms/cpu-apple-m4.par-sweep.clean.json",
+      "sha256": "7b4377becc75c261ee870ed30ffc6f21fa9bee244a67c8b26cafdd7344d656c6"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_par-two-device-final3b/nvidia-nvidia-geforce-rtx-4090-sm_89.par-two-device-final3b.json",
+      "sha256": "edbdd1a1bd269e9b024407bfe8675b888791b80aca52ecd04f7d01620fe6a795"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-20_par-sabotage-arms/c-neural-decode/remote/leg_out/cpu-x86.json",
+      "sha256": "4841bf65a5e9acdc4c6e6cfa7fea6b75890a18caf9a9a9e8d3b2685165ac71ec"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-shard3.json",
+      "sha256": "2a4cf525443e132076b7cc1292cbc57659bc02dd099e067fe3ca83b12d072de2"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-light2.json",
+      "sha256": "bc4c97d6ef89719d7d3731ea0c63801aba125393024de2308f8e858aed423942"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-20_par-sabotage-arms/a-trees-gbdt/remote/leg_out/cpu-x86.json",
+      "sha256": "00cab797714ef0d1f749e741d0b1af4e58fd6ecf3314fcab1a8e4a80ff7589b8"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-shard2.json",
+      "sha256": "2297a4dbdd5a71d3908ff79b0ba20b21d80b6483b685d2b0665807568ac1522d"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-light1.json",
+      "sha256": "5f12749d149c17477d5ed97c42e2560ea3909acebae67b1d6a114c147d295233"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-20_unlaned-public-algorithms/clean.json",
+      "sha256": "f7dca844eb737855d8b471c61fb896da3077c6e745fd0b6c0c89d6ff62d53b5d"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-15_holtwinters-linesearch-fix/amd-mi325x-gfx942.json",
+      "sha256": "4d70dbe4a136e9b7c6bebd9480a8b7334a3d810f07b9d5449957a1b243123130"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-15_holtwinters-linesearch-fix/nvidia-rtx-4090-sm_89.json",
+      "sha256": "567f0cc4d7b88157d51a4cc3357a00f4e7ead5b1607be45dc203e742ce819ecb"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-20_par-sabotage-arms/b-classical-graph/remote/leg_out/cpu-x86.json",
+      "sha256": "e9b3bc93e70b07d1bf67865285a6fcf6e6c6c6045d42fb95fd26cc8c936fdc92"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-20_gpu-confirm-never-launched/leg6-verify-par/nn.one-device.json",
+      "sha256": "265fec47d2d57ea07333dddc527eb8759bd9f7991a0514152c9b996cc476830a"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-shard4.json",
+      "sha256": "d9d5ec984e18d43369a2b9e1929cc7a6ff394aa72d2f5d9419ecd77c94f4cae5"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-14_166-lanes/amd-mi325x-gfx942.json",
+      "sha256": "65d9b82ca062baf3edb26880d3810d35214d3e0a73288dcd73767708121e1c7b"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-14_166-lanes/nvidia-h100-sm_90a.json",
+      "sha256": "11896c55ec4fca53e4971fa7bd08574b7e9e6c56cab40c3d918c4bf408e02179"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-20_parallel-next-causal-cpu/cpu-rbf-sampler.json",
+      "sha256": "2c6670488c5f566a324f41000c71f31c528d064fa81ac0fa1ff77da7534dc071"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-15_par-lanes-new/nvidia-2xh100-new8/one.json",
+      "sha256": "3bd2ecb4c13d59c82b93ceba2da42b5e545ec49733d528dc9497dbb1f4a2c072"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_reference-regen/cpu-x86-shard1.json",
+      "sha256": "12e2d51651509022e06b2012ee6ed2a9c5fb14a4e379154334ac3c4c3a7ac348"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-19_par-lane-oracles/after-seven-lanes.cpu-apple-m4.json",
+      "sha256": "aee4344e96d9b95808d01f50e4733d6058f50c581a2ee74a2ebc551bb1e72a59"
+    },
+    {
+      "path": "bench/results/identity_break/2026-09-17_sabotage-sweep/i-par-scaler-mismatch/cpu-x86.json",
+      "sha256": "dded7a9dd942e4c729c0dc2f6836b8355fb52990224c01591914c0ae2f13881e"
+    }
+  ]
+}

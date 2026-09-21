@@ -1,0 +1,22 @@
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+# par (all): 20 of 59 par-* lanes x 1 fixture(s), devices 0 then 0,1
+  par-boosting               denormal_ftz train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   6.67s
+  par-byte-lm                denormal_ftz train=IDENTICAL                                              1.19s
+  par-causal-lm              denormal_ftz train=IDENTICAL batch=IDENTICAL                              9.39s
+  par-cholesky               denormal_ftz train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  17.55s
+  par-cross-val              denormal_ftz train=IDENTICAL                                              4.08s
+  par-dbscan                 denormal_ftz train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.95s
+  par-forecast-holtwinters   denormal_ftz train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  34.24s
+  par-forest-et              denormal_ftz train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.25s
+  par-forest-et-clf          denormal_ftz train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.47s
+  par-forest-pool            denormal_ftz train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  10.76s
+  par-gmm                    denormal_ftz train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  20.34s
+  par-gram-tsvd              denormal_ftz train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.44s
+  par-graph-agglomerative    denormal_ftz train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.47s
+  par-graph-spectral         denormal_ftz train=IDENTICAL                                              6.90s
+  par-kernel-ridge           denormal_ftz train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  15.05s
+  par-ordered                denormal_ftz train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   7.97s
+  par-queries-knn            denormal_ftz train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  23.00s
+  par-queries-nn             denormal_ftz train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  15.24s
+  par-scaler-minmax          denormal_ftz train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  11.49s
+  par-svm-svr                denormal_ftz train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   6.94s

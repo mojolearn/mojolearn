@@ -1,0 +1,22 @@
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+# par (all): 20 of 59 par-* lanes x 1 fixture(s), devices 0 then 0,1
+  par-boosting-pointwise     odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   5.53s
+  par-boosting-reg           odd      train=IDENTICAL infer=IDENTICAL batch=IDENTICAL              5.58s
+  par-border-types           odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  31.69s
+  par-byte-lm-model-pool     odd      train=IDENTICAL                                              1.26s
+  par-cd                     odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.62s
+  par-forecast-arima         odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  31.67s
+  par-forest                 odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.68s
+  par-forest-reg             odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.43s
+  par-gp                     odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   7.56s
+  par-gpc-fit                odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   7.97s
+  par-gpc-predict            odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  15.52s
+  par-gram-ols               odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.78s
+  par-hdbscan                odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.89s
+  par-iforest                odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  16.13s
+  par-ivf                    odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  20.98s
+  par-logistic               odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.81s
+  par-rbf-sampler            odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  12.30s
+  par-reference-knn-reg      odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  16.45s
+  par-samba                  odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   9.40s
+  par-scaler                 odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  12.42s

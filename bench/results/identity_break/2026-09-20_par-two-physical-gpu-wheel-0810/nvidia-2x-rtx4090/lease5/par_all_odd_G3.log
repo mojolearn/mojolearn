@@ -1,0 +1,22 @@
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+# par (all): 20 of 59 par-* lanes x 1 fixture(s), devices 0 then 0,1
+  par-boosting               odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   6.57s
+  par-byte-lm                odd      train=IDENTICAL                                              1.23s
+  par-causal-lm              odd      train=IDENTICAL batch=IDENTICAL                              9.44s
+  par-cholesky               odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  17.48s
+  par-cross-val              odd      train=IDENTICAL                                              4.07s
+  par-dbscan                 odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.84s
+  par-forecast-holtwinters   odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  34.45s
+  par-forest-et              odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.09s
+  par-forest-et-clf          odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.27s
+  par-forest-pool            odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  10.47s
+  par-gmm                    odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  20.20s
+  par-gram-tsvd              odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.41s
+  par-graph-agglomerative    odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.44s
+  par-graph-spectral         odd      train=IDENTICAL                                              3.63s
+  par-kernel-ridge           odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  14.79s
+  par-ordered                odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   7.37s
+  par-queries-knn            odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  22.99s
+  par-queries-nn             odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  21.71s
+  par-scaler-minmax          odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  11.76s
+  par-svm-svr                odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   7.23s

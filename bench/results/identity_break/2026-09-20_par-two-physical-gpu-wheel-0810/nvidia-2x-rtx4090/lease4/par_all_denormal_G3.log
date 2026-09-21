@@ -1,0 +1,22 @@
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+# par (all): 20 of 59 par-* lanes x 1 fixture(s), devices 0 then 0,1
+  par-boosting               denormal train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   6.51s
+  par-byte-lm                denormal train=IDENTICAL                                              1.17s
+  par-causal-lm              denormal train=IDENTICAL batch=IDENTICAL                              9.40s
+  par-cholesky               denormal train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  17.67s
+  par-cross-val              denormal train=IDENTICAL                                              4.13s
+  par-dbscan                 denormal train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   5.08s
+  par-forecast-holtwinters   denormal train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  34.44s
+  par-forest-et              denormal train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.60s
+  par-forest-et-clf          denormal train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.63s
+  par-forest-pool            denormal train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  10.85s
+  par-gmm                    denormal train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  20.63s
+  par-gram-tsvd              denormal train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.44s
+  par-graph-agglomerative    denormal train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.53s
+  par-graph-spectral         denormal train=IDENTICAL                                              7.02s
+  par-kernel-ridge           denormal train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  15.21s
+  par-ordered                denormal train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   8.02s
+  par-queries-knn            denormal train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  23.16s
+  par-queries-nn             denormal train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  15.33s
+  par-scaler-minmax          denormal train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  11.65s
+  par-svm-svr                denormal train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   7.25s

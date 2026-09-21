@@ -1,0 +1,17 @@
+pip_download	0	47
+pip_install	0	28
+env_report	0	1
+python_where_unactivated	0	0
+python_where_activated	0	1
+par_self_test	0	9
+par_self_test_json	0	8
+par_quick	0	225
+par_all_base	4	1210
+par_all_ties	NOT-STARTED	0
+par_all_hashed	NOT-STARTED	0
+par_all_wide	NOT-STARTED	0
+par_all_denormal	NOT-STARTED	0
+par_all_denormal_ftz	NOT-STARTED	0
+par_all_dupes	NOT-STARTED	0
+par_all_odd	NOT-STARTED	0
+par_all_negative	NOT-STARTED	0

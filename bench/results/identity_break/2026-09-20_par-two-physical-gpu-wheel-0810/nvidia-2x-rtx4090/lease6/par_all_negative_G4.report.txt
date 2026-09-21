@@ -1,0 +1,91 @@
+# python -m mojolearn verify --par
+
+Ran each `par-*` lane TWICE in this process on this box (cuda): once with
+MOJOLEARN_PAR_DEVICES=0 and once with MOJOLEARN_PAR_DEVICES=0,1, and compared the
+two columns cell for cell. No reference table is involved: the one-device column
+produced here, minutes ago, off this build, IS the reference. That equality is
+the drivers' whole claim and no release record states it.
+
+  par-boosting-pointwise     negative train     IDENTICAL   one=fb9966f26639c286  two=fb9966f26639c286
+  par-boosting-pointwise     negative infer     IDENTICAL   one=3d7847393c2eeeed  two=3d7847393c2eeeed
+  par-boosting-pointwise     negative model     IDENTICAL   one=145ac848bbea01ba  two=145ac848bbea01ba
+  par-boosting-pointwise     negative batch     IDENTICAL   one=557ef75b0ae06946  two=557ef75b0ae06946
+  par-boosting-reg           negative train     IDENTICAL   one=e54f74cdab3f29f0  two=e54f74cdab3f29f0
+  par-boosting-reg           negative infer     IDENTICAL   one=2f7db100a96ca46b  two=2f7db100a96ca46b
+  par-boosting-reg           negative batch     IDENTICAL   one=36bc296fc8f0a3cf  two=36bc296fc8f0a3cf
+  par-border-types           negative train     IDENTICAL   one=d638f3adaf1d0bb8  two=d638f3adaf1d0bb8
+  par-border-types           negative infer     IDENTICAL   one=922b88f982e8dfe9  two=922b88f982e8dfe9
+  par-border-types           negative model     IDENTICAL   one=846dc3e9b49543c0  two=846dc3e9b49543c0
+  par-border-types           negative batch     IDENTICAL   one=58c475080fa02b79  two=58c475080fa02b79
+  par-byte-lm-model-pool     negative train     IDENTICAL   one=6610a15cea01cbd1  two=6610a15cea01cbd1
+  par-cd                     negative train     IDENTICAL   one=c332c713694ff28d  two=c332c713694ff28d
+  par-cd                     negative infer     IDENTICAL   one=0167126d36a4243d  two=0167126d36a4243d
+  par-cd                     negative model     IDENTICAL   one=5a616b0f5f81a9c7  two=5a616b0f5f81a9c7
+  par-cd                     negative batch     IDENTICAL   one=2cafc45caf97e130  two=2cafc45caf97e130
+  par-forecast-arima         negative train     IDENTICAL   one=0682211121cf732a  two=0682211121cf732a
+  par-forecast-arima         negative infer     IDENTICAL   one=4e0defb4e0feb99f  two=4e0defb4e0feb99f
+  par-forecast-arima         negative model     IDENTICAL   one=d3fa0fbbec979263  two=d3fa0fbbec979263
+  par-forecast-arima         negative batch     IDENTICAL   one=ce5a5438ad2aff04  two=ce5a5438ad2aff04
+  par-forest                 negative train     IDENTICAL   one=5c321c2a1e99f705  two=5c321c2a1e99f705
+  par-forest                 negative infer     IDENTICAL   one=a8494465884e646a  two=a8494465884e646a
+  par-forest                 negative model     IDENTICAL   one=58fcd13c13e9de79  two=58fcd13c13e9de79
+  par-forest                 negative batch     IDENTICAL   one=9913471eb5cc333d  two=9913471eb5cc333d
+  par-forest-reg             negative train     IDENTICAL   one=cd81c456c75aaaf0  two=cd81c456c75aaaf0
+  par-forest-reg             negative infer     IDENTICAL   one=b8e07686422213e6  two=b8e07686422213e6
+  par-forest-reg             negative model     IDENTICAL   one=9deda76973ef536f  two=9deda76973ef536f
+  par-forest-reg             negative batch     IDENTICAL   one=a1dedfde3094b24b  two=a1dedfde3094b24b
+  par-gp                     negative train     IDENTICAL   one=dba43c8c1d922070  two=dba43c8c1d922070
+  par-gp                     negative infer     IDENTICAL   one=b2713d53a58fa4c9  two=b2713d53a58fa4c9
+  par-gp                     negative model     IDENTICAL   one=adc071acad296182  two=adc071acad296182
+  par-gp                     negative batch     IDENTICAL   one=0284440d2cd65731  two=0284440d2cd65731
+  par-gpc-fit                negative train     IDENTICAL   one=6c906f7311c4464c  two=6c906f7311c4464c
+  par-gpc-fit                negative infer     IDENTICAL   one=b7e320a5c79c2f12  two=b7e320a5c79c2f12
+  par-gpc-fit                negative model     IDENTICAL   one=42456472e82844f7  two=42456472e82844f7
+  par-gpc-fit                negative batch     IDENTICAL   one=c2f1bdf1ba2a74f9  two=c2f1bdf1ba2a74f9
+  par-gpc-predict            negative train     IDENTICAL   one=fb79c0d34c7353ab  two=fb79c0d34c7353ab
+  par-gpc-predict            negative infer     IDENTICAL   one=29771f8e07c66d7e  two=29771f8e07c66d7e
+  par-gpc-predict            negative model     IDENTICAL   one=42456472e82844f7  two=42456472e82844f7
+  par-gpc-predict            negative batch     IDENTICAL   one=c2f1bdf1ba2a74f9  two=c2f1bdf1ba2a74f9
+  par-gram-ols               negative train     IDENTICAL   one=737566e6c5e95e7d  two=737566e6c5e95e7d
+  par-gram-ols               negative infer     IDENTICAL   one=ddf1f9ebb606db70  two=ddf1f9ebb606db70
+  par-gram-ols               negative model     IDENTICAL   one=f534c0184e2b735f  two=f534c0184e2b735f
+  par-gram-ols               negative batch     IDENTICAL   one=134a538ba901d0d4  two=134a538ba901d0d4
+  par-hdbscan                negative train     IDENTICAL   one=0043e92ac7d32026  two=0043e92ac7d32026
+  par-hdbscan                negative infer     IDENTICAL   one=3b4ec17bebdce664  two=3b4ec17bebdce664
+  par-hdbscan                negative model     IDENTICAL   one=988d95feb321cfc1  two=988d95feb321cfc1
+  par-hdbscan                negative batch     IDENTICAL   one=256671df590a8958  two=256671df590a8958
+  par-iforest                negative train     IDENTICAL   one=a5b7676e39778af5  two=a5b7676e39778af5
+  par-iforest                negative infer     IDENTICAL   one=99572e40ada83cdf  two=99572e40ada83cdf
+  par-iforest                negative model     IDENTICAL   one=67a2841351048d55  two=67a2841351048d55
+  par-iforest                negative batch     IDENTICAL   one=413ee44500f1aadd  two=413ee44500f1aadd
+  par-ivf                    negative train     IDENTICAL   one=bfb587574d151b90  two=bfb587574d151b90
+  par-ivf                    negative infer     IDENTICAL   one=71333eccc89915b1  two=71333eccc89915b1
+  par-ivf                    negative model     IDENTICAL   one=ec79d31b3169a984  two=ec79d31b3169a984
+  par-ivf                    negative batch     IDENTICAL   one=9786387eb7123b42  two=9786387eb7123b42
+  par-logistic               negative train     IDENTICAL   one=b50b9cbe101d71d8  two=b50b9cbe101d71d8
+  par-logistic               negative infer     IDENTICAL   one=00fff477b42c65a0  two=00fff477b42c65a0
+  par-logistic               negative model     IDENTICAL   one=61cb0a45d1792d44  two=61cb0a45d1792d44
+  par-logistic               negative batch     IDENTICAL   one=f447ab7a48eabfde  two=f447ab7a48eabfde
+  par-rbf-sampler            negative train     IDENTICAL   one=f1e32c4175e06449  two=f1e32c4175e06449
+  par-rbf-sampler            negative infer     IDENTICAL   one=bd1dc4d78fca62fa  two=bd1dc4d78fca62fa
+  par-rbf-sampler            negative model     IDENTICAL   one=d4b54301bf9a47f0  two=d4b54301bf9a47f0
+  par-rbf-sampler            negative batch     IDENTICAL   one=3822b312a38c28e8  two=3822b312a38c28e8
+  par-reference-knn-reg      negative train     IDENTICAL   one=b34860cd7e03c8fe  two=b34860cd7e03c8fe
+  par-reference-knn-reg      negative infer     IDENTICAL   one=ca725c74b7aec59b  two=ca725c74b7aec59b
+  par-reference-knn-reg      negative model     IDENTICAL   one=66c3df348fcdf3b4  two=66c3df348fcdf3b4
+  par-reference-knn-reg      negative batch     IDENTICAL   one=cd68a51eeed36ee2  two=cd68a51eeed36ee2
+  par-samba                  negative train     IDENTICAL   one=3cacebe716d76ff0  two=3cacebe716d76ff0
+  par-samba                  negative infer     IDENTICAL   one=13993c81dbf7c04f  two=13993c81dbf7c04f
+  par-samba                  negative model     IDENTICAL   one=a54857b10778d87a  two=a54857b10778d87a
+  par-samba                  negative batch     IDENTICAL   one=7da5afd7a9e3d5e7  two=7da5afd7a9e3d5e7
+  par-scaler                 negative train     IDENTICAL   one=8f955b500b7eea17  two=8f955b500b7eea17
+  par-scaler                 negative infer     IDENTICAL   one=bd2b7e506db725c8  two=bd2b7e506db725c8
+  par-scaler                 negative model     IDENTICAL   one=d35ffb14a4d2873d  two=d35ffb14a4d2873d
+  par-scaler                 negative batch     IDENTICAL   one=28349e692d1c6f69  two=28349e692d1c6f69
+Device witness: 50 pool(s), 83 worker(s), placement=physical.
+WITNESS REFUSED: par-byte-lm-model-pool/negative: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+
+RESULT: CANNOT RUN. The two-device column was not shown to have run on two
+devices, so its agreement with the one-device column is not evidence. This is
+reported rather than counted, because a clean AGREE from a column that never
+sharded is the exact failure this command exists to prevent.

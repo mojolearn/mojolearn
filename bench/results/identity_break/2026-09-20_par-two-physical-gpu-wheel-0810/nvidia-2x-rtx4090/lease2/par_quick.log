@@ -1,0 +1,16 @@
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+# par (quick): 14 of 59 par-* lanes x 1 fixture(s), devices 0 then 0,1
+  par-arima                  base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   6.29s
+  par-boosting               base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   8.07s
+  par-causal-lm              base     train=IDENTICAL batch=IDENTICAL                             12.85s
+  par-cross-val              base     train=IDENTICAL                                              5.35s
+  par-forecast-holtwinters   base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  47.27s
+  par-forest                 base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   6.95s
+  par-forest-et              base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   6.37s
+  par-gpc-fit                base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  10.83s
+  par-ivf                    base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  26.78s
+  par-mlp                    base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  10.65s
+  par-queries-kde            base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  20.23s
+  par-queries-knn            base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  30.98s
+  par-rbf-sampler            base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  15.70s
+  par-scaler                 base     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  15.22s

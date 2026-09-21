@@ -1,0 +1,84 @@
+# python -m mojolearn verify --par
+
+Ran each `par-*` lane TWICE in this process on this box (cuda): once with
+MOJOLEARN_PAR_DEVICES=0 and once with MOJOLEARN_PAR_DEVICES=0,1, and compared the
+two columns cell for cell. No reference table is involved: the one-device column
+produced here, minutes ago, off this build, IS the reference. That equality is
+the drivers' whole claim and no release record states it.
+
+  par-boosting               odd      train     IDENTICAL   one=0836bd47530040d0  two=0836bd47530040d0
+  par-boosting               odd      infer     IDENTICAL   one=24dbd6988a519e0c  two=24dbd6988a519e0c
+  par-boosting               odd      model     IDENTICAL   one=3dfdadfd1961d2b5  two=3dfdadfd1961d2b5
+  par-boosting               odd      batch     IDENTICAL   one=a60497d0f9d20e28  two=a60497d0f9d20e28
+  par-byte-lm                odd      train     IDENTICAL   one=eb83c1c233f68756  two=eb83c1c233f68756
+  par-causal-lm              odd      train     IDENTICAL   one=5171c3ffeb9dd8f8  two=5171c3ffeb9dd8f8
+  par-causal-lm              odd      batch     IDENTICAL   one=2d58207bcc498e7c  two=2d58207bcc498e7c
+  par-cholesky               odd      train     IDENTICAL   one=5f48a5f1c2b0a10f  two=5f48a5f1c2b0a10f
+  par-cholesky               odd      infer     IDENTICAL   one=500b8db2bc2b0327  two=500b8db2bc2b0327
+  par-cholesky               odd      model     IDENTICAL   one=fea14f7028251736  two=fea14f7028251736
+  par-cholesky               odd      batch     IDENTICAL   one=e2b8a7df547e6a83  two=e2b8a7df547e6a83
+  par-cross-val              odd      train     IDENTICAL   one=d2f37d8250f8b3ef  two=d2f37d8250f8b3ef
+  par-dbscan                 odd      train     IDENTICAL   one=54d129f45630ea84  two=54d129f45630ea84
+  par-dbscan                 odd      infer     IDENTICAL   one=22e3872de99d04f6  two=22e3872de99d04f6
+  par-dbscan                 odd      model     IDENTICAL   one=8f762291a36100db  two=8f762291a36100db
+  par-dbscan                 odd      batch     IDENTICAL   one=ca397a1032011cd9  two=ca397a1032011cd9
+  par-forecast-holtwinters   odd      train     IDENTICAL   one=9109112cb670e19d  two=9109112cb670e19d
+  par-forecast-holtwinters   odd      infer     IDENTICAL   one=ce81b5ac876ab24b  two=ce81b5ac876ab24b
+  par-forecast-holtwinters   odd      model     IDENTICAL   one=3c4ad8350c73bac5  two=3c4ad8350c73bac5
+  par-forecast-holtwinters   odd      batch     IDENTICAL   one=4fc21213f0a13c49  two=4fc21213f0a13c49
+  par-forest-et              odd      train     IDENTICAL   one=c9fe7c90673c2661  two=c9fe7c90673c2661
+  par-forest-et              odd      infer     IDENTICAL   one=27c45b87272bc27f  two=27c45b87272bc27f
+  par-forest-et              odd      model     IDENTICAL   one=d631aaa061d3f2e4  two=d631aaa061d3f2e4
+  par-forest-et              odd      batch     IDENTICAL   one=8716211bd7b6727f  two=8716211bd7b6727f
+  par-forest-et-clf          odd      train     IDENTICAL   one=1da918353bb9f10e  two=1da918353bb9f10e
+  par-forest-et-clf          odd      infer     IDENTICAL   one=518eb1a0b0211a91  two=518eb1a0b0211a91
+  par-forest-et-clf          odd      model     IDENTICAL   one=ed0c7e9a34735dbd  two=ed0c7e9a34735dbd
+  par-forest-et-clf          odd      batch     IDENTICAL   one=c070f3c53e86d833  two=c070f3c53e86d833
+  par-forest-pool            odd      train     IDENTICAL   one=ae3200f0920488f0  two=ae3200f0920488f0
+  par-forest-pool            odd      infer     IDENTICAL   one=4ed57e5084725d65  two=4ed57e5084725d65
+  par-forest-pool            odd      model     IDENTICAL   one=b23cd1b8caf1a1ba  two=b23cd1b8caf1a1ba
+  par-forest-pool            odd      batch     IDENTICAL   one=6fd25d7af83689ac  two=6fd25d7af83689ac
+  par-gmm                    odd      train     IDENTICAL   one=9c5f0095535f9172  two=9c5f0095535f9172
+  par-gmm                    odd      infer     IDENTICAL   one=b10e2c74401a1d7e  two=b10e2c74401a1d7e
+  par-gmm                    odd      model     IDENTICAL   one=3789c99cf21ba8fd  two=3789c99cf21ba8fd
+  par-gmm                    odd      batch     IDENTICAL   one=ed695b9148dacaba  two=ed695b9148dacaba
+  par-gram-tsvd              odd      train     IDENTICAL   one=452fd865062565da  two=452fd865062565da
+  par-gram-tsvd              odd      infer     IDENTICAL   one=4ca5ee061209a589  two=4ca5ee061209a589
+  par-gram-tsvd              odd      model     IDENTICAL   one=efe0b4a3e0f314b8  two=efe0b4a3e0f314b8
+  par-gram-tsvd              odd      batch     IDENTICAL   one=6f1af89fe056c083  two=6f1af89fe056c083
+  par-graph-agglomerative    odd      train     IDENTICAL   one=7ef92e7a27f33416  two=7ef92e7a27f33416
+  par-graph-agglomerative    odd      infer     IDENTICAL   one=3a6472714f51d8ab  two=3a6472714f51d8ab
+  par-graph-agglomerative    odd      model     IDENTICAL   one=dc518a35765a3b5c  two=dc518a35765a3b5c
+  par-graph-agglomerative    odd      batch     IDENTICAL   one=a8e67882b424a053  two=a8e67882b424a053
+  par-graph-spectral         odd      train     IDENTICAL   one=d12243334f847bd4  two=d12243334f847bd4
+  par-kernel-ridge           odd      train     IDENTICAL   one=ed8548d95da45760  two=ed8548d95da45760
+  par-kernel-ridge           odd      infer     IDENTICAL   one=0f217cc91b475113  two=0f217cc91b475113
+  par-kernel-ridge           odd      model     IDENTICAL   one=b74150c13b8412d7  two=b74150c13b8412d7
+  par-kernel-ridge           odd      batch     IDENTICAL   one=a5852d6fb4d951f2  two=a5852d6fb4d951f2
+  par-ordered                odd      train     IDENTICAL   one=ff7a264740642731  two=ff7a264740642731
+  par-ordered                odd      infer     IDENTICAL   one=96ab641b67fe93b4  two=96ab641b67fe93b4
+  par-ordered                odd      model     IDENTICAL   one=2762eab7c9aadc51  two=2762eab7c9aadc51
+  par-ordered                odd      batch     IDENTICAL   one=7b18f6ba4d9bf426  two=7b18f6ba4d9bf426
+  par-queries-knn            odd      train     IDENTICAL   one=17269e539cfec71f  two=17269e539cfec71f
+  par-queries-knn            odd      infer     IDENTICAL   one=a593e7cc3b0f8144  two=a593e7cc3b0f8144
+  par-queries-knn            odd      model     IDENTICAL   one=d52a45a13c74a487  two=d52a45a13c74a487
+  par-queries-knn            odd      batch     IDENTICAL   one=6c898f4c2607b51c  two=6c898f4c2607b51c
+  par-queries-nn             odd      train     IDENTICAL   one=f4ddd08c4744ae8d  two=f4ddd08c4744ae8d
+  par-queries-nn             odd      infer     IDENTICAL   one=ef7c64cd35cc99ad  two=ef7c64cd35cc99ad
+  par-queries-nn             odd      model     IDENTICAL   one=8e7ac0d7c257cac6  two=8e7ac0d7c257cac6
+  par-queries-nn             odd      batch     IDENTICAL   one=7ebe1444150c0ee5  two=7ebe1444150c0ee5
+  par-scaler-minmax          odd      train     IDENTICAL   one=803149932ba8b2da  two=803149932ba8b2da
+  par-scaler-minmax          odd      infer     IDENTICAL   one=c170795fb6119629  two=c170795fb6119629
+  par-scaler-minmax          odd      model     IDENTICAL   one=be72f1cc9a133351  two=be72f1cc9a133351
+  par-scaler-minmax          odd      batch     IDENTICAL   one=380e2675e1096b8e  two=380e2675e1096b8e
+  par-svm-svr                odd      train     IDENTICAL   one=07d6f7035db0e04b  two=07d6f7035db0e04b
+  par-svm-svr                odd      infer     IDENTICAL   one=7a2173bef2f1dcbe  two=7a2173bef2f1dcbe
+  par-svm-svr                odd      model     IDENTICAL   one=23cbc4642d1cc522  two=23cbc4642d1cc522
+  par-svm-svr                odd      batch     IDENTICAL   one=ad054e11a184f1bf  two=ad054e11a184f1bf
+Device witness: 52 pool(s), 79 worker(s), placement=physical.
+WITNESS REFUSED: par-byte-lm/odd: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+
+RESULT: CANNOT RUN. The two-device column was not shown to have run on two
+devices, so its agreement with the one-device column is not evidence. This is
+reported rather than counted, because a clean AGREE from a column that never
+sharded is the exact failure this command exists to prevent.

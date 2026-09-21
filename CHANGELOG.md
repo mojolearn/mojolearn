@@ -3,7 +3,12 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
-## 0.8.10 (unreleased)
+## 0.8.11 (published 2026-09-21)
+
+- Include the research preprint in both platform wheels and link it from the README.
+- Documentation-only patch of 0.8.10: numerical code, reference data and native libraries are unchanged.
+
+## 0.8.10 (published 2026-09-20)
 
 - Parallel workers now set native device counts to their own visible device
   group, preventing inherited multi-GPU settings from reaching a single-GPU worker.
@@ -11,6 +16,11 @@ contain the detailed investigation record.
 - Cross-validation supports explicit Metal `devices=(0,)`, with a checked child
   process. Multiple Metal devices remain unsupported.
 - Parallel causal language models support assigning every layer to Metal device 0.
+- The causal-language-model batch verifier closes workers explicitly on success
+  and failure, preventing reference cycles from retaining worker processes.
+- Reuse the unchanged native libraries from 0.8.9 with new Python and verifier
+  code. Additional one-device reference collection continues: 378 AMD and
+  126 NVIDIA part-cells remain outstanding at this release freeze.
 - `verify --par all` runs all fixtures by default. Every lane/fixture must carry
   its own placement witness; another cell's successful placement cannot certify it.
   Explicit `--fixtures` selections still override the default.

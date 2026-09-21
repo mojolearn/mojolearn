@@ -1,0 +1,22 @@
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+# par (all): 20 of 59 par-* lanes x 1 fixture(s), devices 0 then 0,1
+  par-boosting               negative train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   6.92s
+  par-byte-lm                negative train=IDENTICAL                                              1.29s
+  par-causal-lm              negative train=IDENTICAL batch=IDENTICAL                              9.61s
+  par-cholesky               negative train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  18.12s
+  par-cross-val              negative train=IDENTICAL                                              4.11s
+  par-dbscan                 negative train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.95s
+  par-forecast-holtwinters   negative train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  35.10s
+  par-forest-et              negative train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.33s
+  par-forest-et-clf          negative train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.72s
+  par-forest-pool            negative train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  11.34s
+  par-gmm                    negative train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  20.99s
+  par-gram-tsvd              negative train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.50s
+  par-graph-agglomerative    negative train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.54s
+  par-graph-spectral         negative train=IDENTICAL                                              3.86s
+  par-kernel-ridge           negative train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  15.38s
+  par-ordered                negative train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   8.24s
+  par-queries-knn            negative train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  23.52s
+  par-queries-nn             negative train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  15.60s
+  par-scaler-minmax          negative train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  11.79s
+  par-svm-svr                negative train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   7.18s

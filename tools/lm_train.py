@@ -27,6 +27,27 @@ the vocabulary's sha256 and n_vocab, the shape, the per-step losses), and
 per row and the rows at or above 256 are counted: under a vocabulary of more
 than 256 ids the embedding rows of ids that occurred get nonzero gradient,
 and under `--bytes` every embedding row at or above 256 must be EXACTLY zero.
+
+LONG RUNS AND CROSS-DEVICE REPLAY. A run that is to be compared with another
+device does not need every array of every step. `--hash-every N` records the
+sha256 of the complete training state (parameters, m, v, flags) after every
+N completed steps and after the last one, in `run.json` and, line by line as
+they are taken, in `state_hashes.jsonl`. `--checkpoint-every N` writes the
+state as raw arrays plus `state.json` under `checkpoints/step_XXXXXXXX/` (the
+`tools/lm_shakedown_resume.py` format, each array carrying its sha256).
+`--resume DIR` restores such a checkpoint in a fresh process through
+`load_state_dict` and continues at its completed step; it refuses a
+checkpoint whose data schedule is not the one this corpus and seed produce,
+because a resumed run that read different tokens would compare nothing.
+`--record-window A:B` (repeatable, absolute step indices, B exclusive) takes
+the full witness inside the window: sha256 of the loss, the gradient,
+parameters, m, v and flags after each step. `--lean` (with `--resident`)
+keeps the state on the device and returns only the loss outside the windows,
+so a long run pays for the witness only where it is asked for. Batches are a
+pure function of the absolute step index, so a resumed or replayed window
+reads the same tokens as the original run. Two runs agree when their
+`state_hashes` agree at every common step; a disagreement is localized by
+re-running the stretch before it with a `--record-window` over it.
 """
 import argparse
 import hashlib
@@ -71,6 +92,21 @@ def _row_report(grad, vocab, name, ids):
     )
 
 
+def _window(text):
+    a, sep, b = text.partition(":")
+    if not sep:
+        raise argparse.ArgumentTypeError("a window is A:B, absolute step indices, B exclusive")
+    a, b = int(a), int(b)
+    if a < 0 or b <= a:
+        raise argparse.ArgumentTypeError("a window needs 0 <= A < B")
+    return a, b
+
+
+def _state_hashes(state):
+    import numpy as np
+    return {k: _sha(np.ascontiguousarray(np.asarray(state[k])).tobytes()) for k in ("parameters", "m", "v", "flags")}
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--corpus", type=Path, required=True)
@@ -93,7 +129,21 @@ def main(argv=None):
     ap.add_argument("--witness-rows", action="store_true")
     ap.add_argument("--no-state", action="store_true")
     ap.add_argument("--prepare-only", action="store_true", help="prepare the tokenized corpus and stop")
+    ap.add_argument("--hash-every", type=int, default=0, metavar="N",
+                    help="sha256 the complete state after every N completed steps and after the last")
+    ap.add_argument("--checkpoint-every", type=int, default=0, metavar="N",
+                    help="write checkpoints/step_XXXXXXXX/ after every N completed steps and after the last")
+    ap.add_argument("--resume", type=Path, default=None, metavar="DIR",
+                    help="restore a checkpoint directory and continue at its completed step")
+    ap.add_argument("--record-window", type=_window, action="append", default=[], metavar="A:B",
+                    help="full per-step witness for absolute steps A <= k < B (repeatable)")
+    ap.add_argument("--lean", action="store_true",
+                    help="with --resident: return only the loss outside the record windows")
     args = ap.parse_args(argv)
+    if args.lean and not args.resident:
+        ap.error("--lean requires --resident")
+    if args.hash_every < 0 or args.checkpoint_every < 0:
+        ap.error("--hash-every and --checkpoint-every take a positive step count")
 
     args.out.mkdir(parents=True, exist_ok=False)
     log = (args.out / "log.txt").open("a")
@@ -155,23 +205,77 @@ def main(argv=None):
     record["shape"] = shape.to_dict()
     record["data_schedule"] = schedule
 
-    rng = np.random.default_rng(args.seed)
-    weights = rng.normal(0, .02, shape.n_total).astype(np.float32)
-    for entry in Trainer.parameter_registry(shape):
-        if "norm" in entry["name"]:
-            weights[entry["offset"]:entry["offset"] + entry["size"]] += np.float32(1)
-    record["init_sha256"] = _sha(weights.tobytes())
-    trainer = Trainer(weights, shape=shape, data_schedule=schedule, lr=args.lr, resident=args.resident,
-                      step_result="full")
+    step_result = "lean" if args.lean else "full"
+    if args.resume is not None:
+        from lm_shakedown_resume import _load_state
+        state = _load_state(args.resume, zero_moments=False)
+        if json.dumps(state["data_schedule"], sort_keys=True, default=str) != json.dumps(schedule, sort_keys=True, default=str):
+            raise SystemExit("--resume: the checkpoint's data schedule is not the one this corpus, shape and seed "
+                             "produce; a resumed run must read the same tokens")
+        cfg = state["config"]
+        trainer = Trainer(state["parameters"], shape=shape, data_schedule=state["data_schedule"], lr=cfg["lr"],
+                          betas=(cfg["beta1"], cfg["beta2"]), eps=cfg["eps"], weight_decay=cfg["weight_decay"],
+                          resident=args.resident, step_result=step_result)
+        trainer.load_state_dict(state)
+        first = int(state["completed_steps"])
+        record["resumed_from"] = dict(directory=str(args.resume), completed_steps=first,
+                                      state_sha256=_state_hashes(state))
+        say(f"resumed {args.resume} at step {first}")
+    else:
+        rng = np.random.default_rng(args.seed)
+        weights = rng.normal(0, .02, shape.n_total).astype(np.float32)
+        for entry in Trainer.parameter_registry(shape):
+            if "norm" in entry["name"]:
+                weights[entry["offset"]:entry["offset"] + entry["size"]] += np.float32(1)
+        record["init_sha256"] = _sha(weights.tobytes())
+        trainer = Trainer(weights, shape=shape, data_schedule=schedule, lr=args.lr, resident=args.resident,
+                          step_result=step_result)
+        first = 0
+    record["first_step"] = first
+
+    def in_window(k):
+        return any(a <= k < b for a, b in args.record_window)
+
+    def save_checkpoint(completed):
+        from lm_shakedown_resume import _save_state
+        directory = args.out / "checkpoints" / f"step_{completed:08d}"
+        digests, at = _save_state(trainer, directory)
+        if at != completed:
+            raise SystemExit(f"checkpoint reports step {at}, the loop completed {completed}")
+        record.setdefault("checkpoints", []).append(dict(completed_steps=completed, directory=str(directory),
+                                                         state_sha256=digests))
+        say(f"checkpoint at step {completed}: {directory}")
+
+    hash_log = (args.out / "state_hashes.jsonl").open("a") if args.hash_every else None
     steps = []
-    for k in range(args.steps):
+    last = first + args.steps - 1
+    for k in range(first, first + args.steps):
         ids = batches.ids(k)
         t0 = time.perf_counter()
         result = trainer.train_step(ids)
         seconds = time.perf_counter() - t0
         loss = float(np.asarray(result["loss"]).reshape(-1)[0]) if "loss" in result else None
         entry = dict(step=k, loss=loss, seconds=seconds, ids_sha256=_sha(np.ascontiguousarray(ids).tobytes()),
-                     max_id=int(ids.max()), gradients_sha256=_sha(np.asarray(result["flat_gradients"]).tobytes()))
+                     max_id=int(ids.max()))
+        if not args.lean:
+            entry["gradients_sha256"] = _sha(np.asarray(result["flat_gradients"]).tobytes())
+        if in_window(k):
+            if args.lean:
+                gradients = trainer.export_gradients(named=False)["flat_gradients"]
+            else:
+                gradients = result["flat_gradients"]
+            witness = _state_hashes(trainer.export_state())
+            witness["gradients"] = _sha(np.ascontiguousarray(np.asarray(gradients)).tobytes())
+            witness["loss"] = _sha(np.array([loss], np.float32).tobytes())
+            entry["witness_sha256"] = witness
+        completed = k + 1
+        if args.hash_every and (completed % args.hash_every == 0 or k == last):
+            line = dict(completed_steps=completed, state_sha256=_state_hashes(trainer.export_state()))
+            record.setdefault("state_hashes", []).append(line)
+            hash_log.write(json.dumps(line, sort_keys=True) + "\n")
+            hash_log.flush()
+        if args.checkpoint_every and (completed % args.checkpoint_every == 0 or k == last):
+            save_checkpoint(completed)
         if args.witness_rows:
             g = result["gradients"]
             entry["embed"] = _row_report(g["embed"], shape.vocab_size, "embed", ids[:, :-1])

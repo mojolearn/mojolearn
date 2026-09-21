@@ -1,0 +1,22 @@
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+# par (all): 20 of 59 par-* lanes x 1 fixture(s), devices 0 then 0,1
+  par-boosting-pointwise     ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   5.46s
+  par-boosting-reg           ties     train=IDENTICAL infer=IDENTICAL batch=IDENTICAL              5.22s
+  par-border-types           ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  30.39s
+  par-byte-lm-model-pool     ties     train=IDENTICAL                                              1.20s
+  par-cd                     ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.56s
+  par-forecast-arima         ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  31.76s
+  par-forest                 ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.98s
+  par-forest-reg             ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.87s
+  par-gp                     ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   7.50s
+  par-gpc-fit                ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   8.09s
+  par-gpc-predict            ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  15.41s
+  par-gram-ols               ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.81s
+  par-hdbscan                ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.29s
+  par-iforest                ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  16.34s
+  par-ivf                    ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  20.74s
+  par-logistic               ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.97s
+  par-rbf-sampler            ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  12.05s
+  par-reference-knn-reg      ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  16.61s
+  par-samba                  ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   8.70s
+  par-scaler                 ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  12.70s

@@ -1,0 +1,15 @@
+pip_download	0	2
+pip_install	0	5
+env_report	0	1
+par_self_test	4	0
+par_self_test_json	4	1
+par_quick	4	0
+par_all_base	4	0
+par_all_ties	4	1
+par_all_hashed	4	1
+par_all_wide	4	1
+par_all_denormal	4	0
+par_all_denormal_ftz	4	0
+par_all_dupes	4	0
+par_all_odd	4	1
+par_all_negative	4	1

@@ -1,0 +1,84 @@
+# python -m mojolearn verify --par
+
+Ran each `par-*` lane TWICE in this process on this box (cuda): once with
+MOJOLEARN_PAR_DEVICES=0 and once with MOJOLEARN_PAR_DEVICES=0,1, and compared the
+two columns cell for cell. No reference table is involved: the one-device column
+produced here, minutes ago, off this build, IS the reference. That equality is
+the drivers' whole claim and no release record states it.
+
+  par-boosting               dupes    train     IDENTICAL   one=9d55545ce5f2ac2b  two=9d55545ce5f2ac2b
+  par-boosting               dupes    infer     IDENTICAL   one=04bc7278a6524318  two=04bc7278a6524318
+  par-boosting               dupes    model     IDENTICAL   one=534330823f304849  two=534330823f304849
+  par-boosting               dupes    batch     IDENTICAL   one=6ea60cd70531740c  two=6ea60cd70531740c
+  par-byte-lm                dupes    train     IDENTICAL   one=dc65953fd8966eb3  two=dc65953fd8966eb3
+  par-causal-lm              dupes    train     IDENTICAL   one=5171c3ffeb9dd8f8  two=5171c3ffeb9dd8f8
+  par-causal-lm              dupes    batch     IDENTICAL   one=2d58207bcc498e7c  two=2d58207bcc498e7c
+  par-cholesky               dupes    train     IDENTICAL   one=bcd1f0ae70f82778  two=bcd1f0ae70f82778
+  par-cholesky               dupes    infer     IDENTICAL   one=22b011b6280f9d1e  two=22b011b6280f9d1e
+  par-cholesky               dupes    model     IDENTICAL   one=2de240cf59714da6  two=2de240cf59714da6
+  par-cholesky               dupes    batch     IDENTICAL   one=06390499b4ebedaa  two=06390499b4ebedaa
+  par-cross-val              dupes    train     IDENTICAL   one=0965a2f7dd472e8d  two=0965a2f7dd472e8d
+  par-dbscan                 dupes    train     IDENTICAL   one=64df251bd00de81b  two=64df251bd00de81b
+  par-dbscan                 dupes    infer     IDENTICAL   one=e6e720fcb54b180e  two=e6e720fcb54b180e
+  par-dbscan                 dupes    model     IDENTICAL   one=c36812c6260e7ee6  two=c36812c6260e7ee6
+  par-dbscan                 dupes    batch     IDENTICAL   one=f7e7d24690d3107e  two=f7e7d24690d3107e
+  par-forecast-holtwinters   dupes    train     IDENTICAL   one=5e8ffa04d8c2fb3d  two=5e8ffa04d8c2fb3d
+  par-forecast-holtwinters   dupes    infer     IDENTICAL   one=2ba6e3fe81256474  two=2ba6e3fe81256474
+  par-forecast-holtwinters   dupes    model     IDENTICAL   one=2b788f20f8d8c145  two=2b788f20f8d8c145
+  par-forecast-holtwinters   dupes    batch     IDENTICAL   one=77ca9a518446c250  two=77ca9a518446c250
+  par-forest-et              dupes    train     IDENTICAL   one=9a63fea590f79a67  two=9a63fea590f79a67
+  par-forest-et              dupes    infer     IDENTICAL   one=a531191ff80bfa39  two=a531191ff80bfa39
+  par-forest-et              dupes    model     IDENTICAL   one=d99a54bf0717266d  two=d99a54bf0717266d
+  par-forest-et              dupes    batch     IDENTICAL   one=07a82dcea7f93e8d  two=07a82dcea7f93e8d
+  par-forest-et-clf          dupes    train     IDENTICAL   one=a24dcc8a93f699ff  two=a24dcc8a93f699ff
+  par-forest-et-clf          dupes    infer     IDENTICAL   one=55bed611333bec41  two=55bed611333bec41
+  par-forest-et-clf          dupes    model     IDENTICAL   one=ff82d3ce7bd5651f  two=ff82d3ce7bd5651f
+  par-forest-et-clf          dupes    batch     IDENTICAL   one=1b6985d9b8825e11  two=1b6985d9b8825e11
+  par-forest-pool            dupes    train     IDENTICAL   one=4e67e3e91efb7c00  two=4e67e3e91efb7c00
+  par-forest-pool            dupes    infer     IDENTICAL   one=2d2a22015635749f  two=2d2a22015635749f
+  par-forest-pool            dupes    model     IDENTICAL   one=24c2f39aceedf815  two=24c2f39aceedf815
+  par-forest-pool            dupes    batch     IDENTICAL   one=0073a86db7911807  two=0073a86db7911807
+  par-gmm                    dupes    train     IDENTICAL   one=2e2f431921382642  two=2e2f431921382642
+  par-gmm                    dupes    infer     IDENTICAL   one=85fe32a2a96f9f7b  two=85fe32a2a96f9f7b
+  par-gmm                    dupes    model     IDENTICAL   one=c4a997dc3ae320a2  two=c4a997dc3ae320a2
+  par-gmm                    dupes    batch     IDENTICAL   one=7ba1e60c59f6aad6  two=7ba1e60c59f6aad6
+  par-gram-tsvd              dupes    train     IDENTICAL   one=9a24cf55eff6013c  two=9a24cf55eff6013c
+  par-gram-tsvd              dupes    infer     IDENTICAL   one=b20d1e18ded5c227  two=b20d1e18ded5c227
+  par-gram-tsvd              dupes    model     IDENTICAL   one=0ccf336c88307c6c  two=0ccf336c88307c6c
+  par-gram-tsvd              dupes    batch     IDENTICAL   one=0c723290ada8b005  two=0c723290ada8b005
+  par-graph-agglomerative    dupes    train     IDENTICAL   one=6c9e7daffb48878f  two=6c9e7daffb48878f
+  par-graph-agglomerative    dupes    infer     IDENTICAL   one=3a6472714f51d8ab  two=3a6472714f51d8ab
+  par-graph-agglomerative    dupes    model     IDENTICAL   one=9bb9f86300c44f5f  two=9bb9f86300c44f5f
+  par-graph-agglomerative    dupes    batch     IDENTICAL   one=a8e67882b424a053  two=a8e67882b424a053
+  par-graph-spectral         dupes    train     IDENTICAL   one=818df233c7e16c40  two=818df233c7e16c40
+  par-kernel-ridge           dupes    train     IDENTICAL   one=74f913d1e444dd2c  two=74f913d1e444dd2c
+  par-kernel-ridge           dupes    infer     IDENTICAL   one=6a917442c8867fc0  two=6a917442c8867fc0
+  par-kernel-ridge           dupes    model     IDENTICAL   one=47bfec674163e0c7  two=47bfec674163e0c7
+  par-kernel-ridge           dupes    batch     IDENTICAL   one=1674f75d1b15edc2  two=1674f75d1b15edc2
+  par-ordered                dupes    train     IDENTICAL   one=d6c73836e3381dd4  two=d6c73836e3381dd4
+  par-ordered                dupes    infer     IDENTICAL   one=d2d7de40eeb0e888  two=d2d7de40eeb0e888
+  par-ordered                dupes    model     IDENTICAL   one=c110a1e501e287f1  two=c110a1e501e287f1
+  par-ordered                dupes    batch     IDENTICAL   one=ae28684d368e2b6f  two=ae28684d368e2b6f
+  par-queries-knn            dupes    train     IDENTICAL   one=6858f0a3a5c594bc  two=6858f0a3a5c594bc
+  par-queries-knn            dupes    infer     IDENTICAL   one=20ea108e0746b7e5  two=20ea108e0746b7e5
+  par-queries-knn            dupes    model     IDENTICAL   one=937c7d9ac1a87689  two=937c7d9ac1a87689
+  par-queries-knn            dupes    batch     IDENTICAL   one=71a7e5d1960bc25f  two=71a7e5d1960bc25f
+  par-queries-nn             dupes    train     IDENTICAL   one=55dffcfe5d6aa112  two=55dffcfe5d6aa112
+  par-queries-nn             dupes    infer     IDENTICAL   one=6776f2a2ef1528ee  two=6776f2a2ef1528ee
+  par-queries-nn             dupes    model     IDENTICAL   one=0f847e465f0fce2d  two=0f847e465f0fce2d
+  par-queries-nn             dupes    batch     IDENTICAL   one=4c05d8d24e5cfa27  two=4c05d8d24e5cfa27
+  par-scaler-minmax          dupes    train     IDENTICAL   one=768f7054da806434  two=768f7054da806434
+  par-scaler-minmax          dupes    infer     IDENTICAL   one=cb07d5eb86d27807  two=cb07d5eb86d27807
+  par-scaler-minmax          dupes    model     IDENTICAL   one=a12a63eb85664923  two=a12a63eb85664923
+  par-scaler-minmax          dupes    batch     IDENTICAL   one=92acfd69d9b04106  two=92acfd69d9b04106
+  par-svm-svr                dupes    train     IDENTICAL   one=6e2a4421f6b02f85  two=6e2a4421f6b02f85
+  par-svm-svr                dupes    infer     IDENTICAL   one=2d84831c33ef58e0  two=2d84831c33ef58e0
+  par-svm-svr                dupes    model     IDENTICAL   one=73d9170287e81a7d  two=73d9170287e81a7d
+  par-svm-svr                dupes    batch     IDENTICAL   one=172b3f38f86ea64a  two=172b3f38f86ea64a
+Device witness: 52 pool(s), 79 worker(s), placement=physical.
+WITNESS REFUSED: par-byte-lm/dupes: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+
+RESULT: CANNOT RUN. The two-device column was not shown to have run on two
+devices, so its agreement with the one-device column is not evidence. This is
+reported rather than counted, because a clean AGREE from a column that never
+sharded is the exact failure this command exists to prevent.

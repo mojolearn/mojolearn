@@ -3,6 +3,10 @@
 [![PyPI](https://img.shields.io/pypi/v/mojolearn.svg)](https://pypi.org/project/mojolearn/)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22068632.svg)](https://doi.org/10.5281/zenodo.22068632)
 
+**[Read the research paper (PDF)](python/mojolearn/Hendel_2026_bitwise_identical_gpu_ml_preprint.pdf)** —
+*Bitwise-Identical Machine Learning Across Metal, CUDA, and HIP*, Andrew Hendel.
+Current preprint; a copy is included in the library package.
+
 **Machine learning that trains and predicts bitwise identically across Apple,
 NVIDIA and AMD GPUs, for certified configurations.**
 
@@ -187,7 +191,7 @@ optimization gaps in the current kernels. A paper collecting the numbers is
 in preparation outside this repository; the raw records behind them live
 under `bench/results/`.
 
-**`identical` is the default**, in the published <!--fact:published_version-->0.8.9<!--/fact--> wheels and in this
+**`identical` is the default**, in the published <!--fact:published_version-->0.8.11<!--/fact--> wheels and in this
 source. For the tree estimators you opt out of it, not into it, by
 setting `MOJOLEARN_NUMERIC_MODE=fast` or `deterministic` in the environment
 before import, or by calling `mojolearn.set_numeric_mode(...)` in code.
@@ -257,7 +261,7 @@ source .venv/bin/activate
 pip install mojolearn
 ```
 
-Version **<!--fact:published_version-->0.8.9<!--/fact--> is published on PyPI** as a macOS arm64
+Version **<!--fact:published_version-->0.8.11<!--/fact--> is published on PyPI** as a macOS arm64
 wheel and one Linux x86-64 wheel carrying CUDA and HIP together. The Linux
 wheel targets **CUDA sm_89, CUDA sm_90a and HIP gfx942**, with the tree bindings
 in all three numeric modes, every other GPU binding in identical mode, and
@@ -322,8 +326,8 @@ as released-wheel support.
 
 ### Stability and release cadence
 
-The current published release is <!--fact:published_version-->0.8.9<!--/fact-->, dated
-<!--fact:published_date-->2026-09-20<!--/fact-->. [CHANGELOG.md](CHANGELOG.md)
+The current published release is <!--fact:published_version-->0.8.11<!--/fact-->, dated
+<!--fact:published_date-->2026-09-21<!--/fact-->. [CHANGELOG.md](CHANGELOG.md)
 records published releases and versions that were prepared but never published.
 
 Version 0.3.0, published

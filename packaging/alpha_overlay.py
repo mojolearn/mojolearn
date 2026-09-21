@@ -111,7 +111,8 @@ def assemble(base, python_root, version, out, allow_alpha_final_version=False, s
                 'Python source overlay exceeds bounds')
         replacements[name] = source.read_bytes()
     for source, name in ((package / 'ALPHA_API.md', 'mojolearn/ALPHA_API.md'),
-                         (python_root / 'mojolearn_diagnostics.py', 'mojolearn_diagnostics.py')):
+                         (python_root / 'mojolearn_diagnostics.py', 'mojolearn_diagnostics.py'),
+                         (package / 'Hendel_2026_bitwise_identical_gpu_ml_preprint.pdf', 'mojolearn/Hendel_2026_bitwise_identical_gpu_ml_preprint.pdf')):
         if source.exists() or source.is_symlink():
             require(source.is_file() and not source.is_symlink()
                     and source.stat().st_size <= 1024**2, 'invalid/oversize alpha documentation or diagnostics')
@@ -124,7 +125,7 @@ def assemble(base, python_root, version, out, allow_alpha_final_version=False, s
         for name, source in generated.items():
             replacements[name] = (python_root.parent / source).read_bytes()
     source_hashes = {name: hashlib.sha256(raw).hexdigest() for name, raw in replacements.items() if name.endswith('.py')}
-    doc_hashes = {name: hashlib.sha256(raw).hexdigest() for name, raw in replacements.items() if name.endswith('.md')}
+    doc_hashes = {name: hashlib.sha256(raw).hexdigest() for name, raw in replacements.items() if name.endswith(('.md', '.pdf'))}
     require(sum(map(len, replacements.values())) <= 64 * 1024**2 and len(replacements) <= MAX_FILES,
             'Python source overlay exceeds bounds')
     replacements['mojolearn/_version.py'] = ('__version__ = ' + repr(version) + '\n').encode()

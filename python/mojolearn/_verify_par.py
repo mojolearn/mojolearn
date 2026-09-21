@@ -71,6 +71,17 @@ DEFAULT_PAR_DEVICES = (0, 1)
 
 #: a `--par quick` column, one lane per driver family, is seconds per lane;
 #: the default is every `par-*` lane on the base fixture.
+#:
+#: WHICH SCOPE TO RUN. `--par quick` IS the two-physical-GPU check: it runs
+#: one lane per family on one device and on two, with the placement witness,
+#: in under a minute of lane time. Use it, with `--par-self-test`, for every
+#: routine run and every rented box.
+#: NEVER RUN `--par all` WITHOUT ANDREW'S EXPRESS PERMISSION (2026-09-20). It
+#: is every lane on all nine fixtures, twice: about 16 minutes per fixture and
+#: 2.4 hours in all on two RTX 4090s, six one-hour leases, and `par-resample`
+#: alone is about 300 s of each fixture. The default scope (every lane, base
+#: fixture, about 16 minutes) also needs a reason. A run that only has to
+#: show that sharding does not move a bit is `--par quick`.
 QUICK_FIXTURE = "base"
 
 

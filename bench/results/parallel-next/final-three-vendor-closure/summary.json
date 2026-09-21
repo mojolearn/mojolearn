@@ -1,0 +1,19 @@
+{
+  "cpu_plus_three_gpu_exact": 771,
+  "new_numeric_vendor_values": 126,
+  "numeric_parts": 1935,
+  "published_release_modified": false,
+  "reference_table_sha256": "e95fbbb863933bbd611fcb8a2e4722efdd3bf33f7d7cc78f179882c3abd0b7c9",
+  "regression_tests_passed": 80,
+  "selected_lanes": [
+    "par-arima",
+    "par-forest-pool",
+    "par-holtwinters",
+    "par-queries-radius",
+    "par-rbf-sampler",
+    "par-resample",
+    "par-scaler"
+  ],
+  "three_gpu_exact_without_numeric_cpu_reference": 1164,
+  "unchanged_nonselected_cells": 2394
+}
