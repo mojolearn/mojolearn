@@ -49,7 +49,6 @@ the split kernels expect), and the bin within the feature.
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast
-from std.sys.compile import is_defined
 
 from gbdt.gpu_data.gpu_structures import CFeature
 from gbdt.methods.greedy_subsets_searcher.kernel.compute_scores import (
@@ -307,10 +306,10 @@ def leaf_winner_fold_kernel(
     `wait_complete`; (d) the unpack raises on BIN_OUT_OF_RANGE with the
     host fold's message and feeds `update_best_split` / `best_cells`
     (DEVIATION 1901's cell rides out in record word [4]). ALL OF IT UNDER
-    THE FAST COMPTIME BRANCH by default. The separate default-off IDENTICAL
-    timing candidate can select this fold without enabling the partition-
-    stats propagation or histogram scheduling changes grouped under
-    `SPLIT_COST_IDENTICAL`.
+    THE FAST COMPTIME BRANCH (`SPLIT_COST_IDENTICAL`, the DEVIATION-1876
+    pattern): IDENTICAL keeps the host fold byte-for-byte even though the
+    winner is provably the same, because IDENTICAL's contract is the code
+    path, not just the bits.
     ==================================================
     """
     if Int(thread_idx.x) != 0:
@@ -377,24 +376,6 @@ def leaf_winner_fold_kernel(
             best_gain = cand_gain
             best_cell = bf
             status = WINNER_STATUS_DEFINED
-
-    # Reachability control for the default-off IDENTICAL candidate. A
-    # defined winner is rewritten to another valid threshold. The normal
-    # candidate never enters this branch; a changed model proves that its
-    # result came through this device fold rather than the standing host
-    # fold.
-    comptime if (
-        is_defined["MOJOLEARN_EXPERIMENTAL_IDENTICAL_DEVICE_WINNER_FOLD"]()
-        and is_defined["MOJOLEARN_SABOTAGE_IDENTICAL_DEVICE_WINNER_FOLD"]()
-    ):
-        if status == WINNER_STATUS_DEFINED:
-            var max_bin = bf_folds.unsafe_load(Int(best_cell)) - Int32(1)
-            if bf_one_hot.unsafe_load(Int(best_cell)) != UInt8(0):
-                max_bin = bf_folds.unsafe_load(Int(best_cell))
-            if best_bin == Int32(0) and max_bin > Int32(0):
-                best_bin = Int32(1)
-            else:
-                best_bin = Int32(0)
 
     var base = row * WINNER_RECORD_WORDS
     winner_records.unsafe_store(base + 0, best_feature.cast[DType.uint32]())

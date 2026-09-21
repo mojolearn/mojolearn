@@ -20,16 +20,25 @@ labelled baseline negative control was rejected.
 | NVIDIA H100 | Istella-S | 1290.605 | 1138.535 | 0.88217 | default on |
 | Apple Metal | Taxi | 8134.5 | 7356.0 | 0.90429 | default on |
 | Apple Metal | Istella-S | 21217.3 | 17685.9 | 0.83356 | default on |
+| AMD MI300X | Taxi | 1286.613 | 1307.959 | 1.01659 | default off |
+| AMD MI300X | Istella-S | 2009.904 | 2097.264 | 1.04346 | default off |
 
 The Apple runs used 1,000,000 rows and matched complete model, prediction,
 probability, and quality outputs. Their observed spreads were 1.063/1.052 on
 Taxi and 1.162/1.092 on Istella for baseline/candidate; stability is recorded
 but is not a promotion gate under the current median policy.
 
-NVIDIA and Apple therefore select tile4 by default.
+The MI300X run used the same two R2 inputs, 1,000,000 rows, five retained fits,
+and three alternating fresh processes. Complete model, metadata, prediction,
+probability, accuracy, and log-loss records matched in both cells. Maximum
+within-process spread was 1.011, but tile4 was 1.7% slower on Taxi and 4.3%
+slower on Istella-S. Full records are outside the repository at
+`mojolearn-evidence/rf-gbdt-mi300x-2026-09-21/run2/remote/rf_tile4/`.
+
+NVIDIA and Apple therefore select tile4 by default; AMD selects the baseline.
 `MOJOLEARN_RF_HIST_COLUMNS4_OFF=1` restores the original one-column route.
-HIP remains default-off pending its MI300X trial, while
-`MOJOLEARN_RF_HIST_COLUMNS4=1` remains the explicit AMD experiment switch.
+HIP remains default-off, while `MOJOLEARN_RF_HIST_COLUMNS4=1` remains the
+explicit AMD experiment switch.
 
 A post-promotion H100 smoke compiled the shipped default and `_OFF` bindings
 from `1a131612b`. The default selected 1,836 Taxi and 2,940 Istella tile4
