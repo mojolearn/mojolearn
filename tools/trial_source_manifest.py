@@ -6,6 +6,8 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import tarfile
+import tempfile
 
 
 SCHEMA = "mojolearn.clean-detached-source.v1"
@@ -85,6 +87,64 @@ def cmd_verify(args):
           (record["commit"], record.get("git_tree"), len(files)))
 
 
+def cmd_bundle(args):
+    """Put the generated manifest inside the exact git-archive shipment."""
+    root = args.root.resolve()
+    out = args.out.resolve()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="mojolearn-source-bundle-") as td:
+        temp = Path(td)
+        manifest = temp / "SHIPPED_SOURCE_MANIFEST.json"
+        cmd_create(argparse.Namespace(root=root, commit=args.commit, out=manifest))
+        commit = json.loads(manifest.read_text())["commit"]
+        archive = temp / "source.tar"
+        subprocess.run(["git", "-C", str(root), "archive", "--format=tar",
+                        "--output", str(archive), commit], check=True)
+        manifest_bytes = manifest.read_bytes()
+        commit_bytes = (commit + "\n").encode()
+        with tarfile.open(archive, "a") as tf:
+            for name, data in (("SHIPPED_SOURCE_MANIFEST.json", manifest_bytes),
+                               ("SHIPPED_COMMIT.txt", commit_bytes)):
+                info = tarfile.TarInfo(name)
+                info.size = len(data)
+                info.mode = 0o644
+                info.mtime = 0
+                import io
+                tf.addfile(info, io.BytesIO(data))
+        # Verify the payload itself, not only the source worktree from which
+        # it was made. Every manifested byte must be present in the tar.
+        record = json.loads(manifest_bytes)
+        with tarfile.open(archive, "r") as tf:
+            if tf.extractfile("SHIPPED_COMMIT.txt").read() != commit_bytes:
+                raise SystemExit("bundled commit witness differs")
+            bundled_manifest = tf.extractfile("SHIPPED_SOURCE_MANIFEST.json").read()
+            if bundled_manifest != manifest_bytes:
+                raise SystemExit("bundled source manifest differs")
+            for name, expected in record["files"].items():
+                member = tf.getmember(name)
+                if expected["kind"] == "symlink":
+                    data = member.linkname.encode()
+                else:
+                    data = tf.extractfile(member).read()
+                if (hashlib.sha256(data).hexdigest() != expected["sha256"]
+                        or len(data) != expected["bytes"]):
+                    raise SystemExit("bundled source differs: " + name)
+        os.replace(archive, out)
+    archive_sha = _sha_path(out)
+    sidecar = Path(str(out) + ".sha256")
+    sidecar.write_text("%s  %s\n" % (archive_sha, out.name))
+    print("SOURCE BUNDLE commit=%s files=%d bytes=%d sha256=%s" %
+          (commit, len(record["files"]), out.stat().st_size, archive_sha))
+
+
+def _sha_path(path):
+    h = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            h.update(block)
+    return h.hexdigest()
+
+
 def main():
     parser = argparse.ArgumentParser()
     sub = parser.add_subparsers(dest="cmd", required=True)
@@ -98,6 +158,11 @@ def main():
     verify.add_argument("--manifest", type=Path, required=True)
     verify.add_argument("--commit", required=True)
     verify.set_defaults(func=cmd_verify)
+    bundle = sub.add_parser("bundle")
+    bundle.add_argument("--root", type=Path, required=True)
+    bundle.add_argument("--commit", required=True)
+    bundle.add_argument("--out", type=Path, required=True)
+    bundle.set_defaults(func=cmd_bundle)
     args = parser.parse_args()
     return args.func(args) or 0
 
