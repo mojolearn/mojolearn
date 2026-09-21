@@ -27,9 +27,29 @@ step() {
     [ "$rc" -eq 0 ] || die "$name rc=$rc"
 }
 
+[ "${MOJOLEARN_RF_COLUMNS_RUN_GUARD:-}" = R2_TAXI_ISTELLA ] || \
+    die "set MOJOLEARN_RF_COLUMNS_RUN_GUARD=R2_TAXI_ISTELLA"
+[ -n "${GBM_BENCH_DATA:-}" ] || die "GBM_BENCH_DATA must name the R2 staging root"
+for file in "$GBM_BENCH_DATA/taxi/taxi_speed.npz" \
+            "$GBM_BENCH_DATA/istella/istella_speed.npz"; do
+    [ -s "$file" ] || die "missing R2-staged $file"
+done
 [ -x "$PY" ] || die "missing Python $PY"
 [ -s "$MODULE" ] || die "missing installed RF binding"
 : > "$OUT/status.tsv"
+sha256sum "$GBM_BENCH_DATA/taxi/taxi_speed.npz" \
+          "$GBM_BENCH_DATA/istella/istella_speed.npz" > "$OUT/r2-inputs.sha256"
+commit=${MOJOLEARN_COMMIT:-$(git rev-parse HEAD 2>/dev/null)}
+[ -n "$commit" ] || commit=$(cat "$ROOT/SHIPPED_COMMIT.txt" 2>/dev/null)
+[ -n "$commit" ] || die "missing source commit witness"
+printf '%s\n' "$commit" > "$OUT/commit.txt"
+if command -v nvidia-smi >/dev/null 2>&1; then
+    nvidia-smi -L > "$OUT/gpu.txt"
+elif command -v rocm-smi >/dev/null 2>&1; then
+    rocm-smi --showproductname --showdriverversion > "$OUT/gpu.txt"
+else
+    system_profiler SPDisplaysDataType > "$OUT/gpu.txt" 2>&1 || die "missing GPU inventory"
+fi
 cp "$MODULE" "$OUT/bin/original.so"
 restore() { cp "$OUT/bin/original.so" "$MODULE"; }
 trap restore EXIT INT TERM
