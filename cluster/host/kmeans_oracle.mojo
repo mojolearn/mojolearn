@@ -490,6 +490,32 @@ def host_assign(
         labels[row] = key
 
 
+def host_checked_label(labels: List[UInt32], row: Int, k: Int) raises -> Int:
+    """`labels[row]` as an index into `k` clusters, or a raised error.
+
+    `host_assign` leaves its sentinel 0xFFFFFFFF when no distance of the
+    row compares below FUSED_MAX: a NaN or an infinity from an input, a
+    centroid or an overflowing square. Used as an index that label read
+    past the end of a `k` or `k x d` list, and the bounds assert ABORTED
+    the whole process (gate run 35636551982, spectral-precomputed under
+    the sabotage host set: index 17179869180 = 4 x 0xFFFFFFFF). Valid
+    inputs always produce a label below `k`, so this moves no answer; it
+    turns the abort into an error the Python caller sees and records."""
+    var label = Int(labels[row])
+    if label < 0 or label >= k:
+        raise Error(
+            "kmeans host: row "
+            + String(row)
+            + " has no nearest centroid (label "
+            + String(label)
+            + " of "
+            + String(k)
+            + "); a distance was not finite, so the input or the centroids"
+            " carry a NaN, an infinity or an overflowing value"
+        )
+    return label
+
+
 def host_sum_device(
     a: List[Float32], b: List[Float32], n: Int, mode: Int
 ) -> Float32:
@@ -918,7 +944,7 @@ def host_init_scalable(
         cand_norm = host_row_norms(cand, cand_count, d, False)
         host_assign(x, n, x_norm, cand, cand_count, cand_norm, d, is_sqrt, labels, min_dist)
         for i in range(n):
-            var lab = Int(labels[i])
+            var lab = host_checked_label(labels, i, cand_count)
             weight[lab] = weight[lab] + Float32(1.0)
         # Step 8: UNWEIGHTED classic k-means++ over the candidates under the
         # outer params, then Lloyd over the weighted candidates under fresh
@@ -1002,10 +1028,16 @@ def host_accumulate(
     weight_scale: Float32,
     mut sums_i32: List[Int32],
     mut weight_i32: List[Int32],
-):
+) raises:
     """`launch_accumulate_centroid_sums` and `launch_accumulate_weight_per_
     cluster` (`cluster/checks/reduce_by_key.mojo`): the quantized Int32
-    scatter-add, whose sum is order independent, walked in row order."""
+    scatter-add, whose sum is order independent, walked in row order.
+
+    Every label is checked against `k` before it addresses a cell
+    (`host_checked_label`), so a row with no nearest centroid raises a
+    Python-visible error instead of aborting the process."""
+    for row in range(n):
+        _ = host_checked_label(labels, row, k)
     for c in range(k * d):
         sums_i32[c] = Int32(0)
     for c in range(k):

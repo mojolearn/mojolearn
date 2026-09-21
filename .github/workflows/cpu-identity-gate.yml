@@ -765,10 +765,16 @@ jobs:
           # same module name, so both must name that file, or the lanes'
           # binary guard refuses them.
           export MOJOLEARN_FOREST_HOST_BINARY="${{ runner.temp }}/host-sab/_mojolearn_forest_host.so" MOJOLEARN_FOREST_HOST_ALLOW_SABOTAGE=1
+          # --production: a covered cell the sabotage build makes the lane
+          # itself refuse (run 35636551982: rf-score-weighted's weights,
+          # spectral-precomputed's k-means) counts as caught only when the
+          # production column hashes that cell STABLE (caught_refusals).
           python3 tools/cpu_identity_gate_check.py run-column --sabotage --lanes "$COVERED_LANES" --shards "$GATE_SHARDS" \
+            --production "$GATE_OUT/cpu-${{ matrix.slot }}.json" \
             --json "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" -- --repeats 2 2>&1 | tee "$GATE_OUT/cpu_sabotage.log"
           python3 tools/cpu_identity_gate_check.py column "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" \
-            --sabotage --covered "$COVERED_LANES" --commit "$MOJOLEARN_COMMIT" 2>&1 | tee "$GATE_OUT/cpu_sabotage_check.log"
+            --sabotage --production "$GATE_OUT/cpu-${{ matrix.slot }}.json" \
+            --covered "$COVERED_LANES" --commit "$MOJOLEARN_COMMIT" 2>&1 | tee "$GATE_OUT/cpu_sabotage_check.log"
           if python3 tools/identity_break.py --diff $GPU_COLUMNS "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" \
                --require-columns 4 --lanes "$RECORD_COVERED_LANES" > "$GATE_OUT/diff_four_columns_sab.txt" 2>&1; then
             echo "SABOTAGE NOT CAUGHT: the sabotage host set diffed IDENTICAL against the GPU columns" >&2
