@@ -24,7 +24,11 @@ Local Apple Metal gates:
   on Istella. These short local timings are direction only and are not a
   promotion result.
 
-`bench/speed/rf_fused_bootstrap_ab.py` is the ready experiment body. A promotion
-decision still needs the intended 1M-row, 100-tree, depth-16 Taxi and Istella
-matrix on each target GPU, with three alternating fresh processes per arm and
-the default 0.98 conservative ratio gate.
+`tools/rf_fused_bootstrap_leg.sh` is the guarded R2 experiment body. It requires
+the explicit `R2_TAXI_ISTELLA` run guard and staged Taxi/Istella files, records
+their source hashes, builds both arms, and alternates them over outer IDs 0, 1,
+and 2. Each process excludes a complete warmup and retains five complete fits.
+The summary requires the exact 12-cell matrix, <=1.10 within-process timing
+spread, equality of every repeat's five model arrays, fitted metadata/classes,
+predictions, probabilities and quality, and a slowest-candidate / fastest-
+baseline ratio <=0.98 on both datasets.
