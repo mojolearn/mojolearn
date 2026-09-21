@@ -40,7 +40,6 @@ import argparse
 import array
 import hashlib
 import json
-import math
 import socket
 import struct
 import sys
@@ -58,8 +57,19 @@ class CrossVendorMismatch(RuntimeError):
 
 
 # ------------------------------------------------------------ the fold
+_EXP, _MAN, _SIGN = 0x7F800000, 0x007FFFFF, 0x80000000
+
+
 def _f32(payload):
     return memoryview(payload).cast("B").cast("f")
+
+
+def _flush(bits, i):
+    """checks/numerics.mojo `ftz` on element i of a uint32 view: a subnormal
+    becomes a zero of the same sign."""
+    b = bits[i]
+    if not b & _EXP and b & _MAN:
+        bits[i] = b & _SIGN
 
 
 def ordered_fold(gradients):
@@ -67,43 +77,25 @@ def ordered_fold(gradients):
     total = ftz(ftz(total) + ftz(g[k])) with one float32 rounding per add
     (training/byte_lm_parallel.mojo `_ordered_add_kernel`, fma(1, a, b)).
     `gradients` is a sequence of float32 buffers in shard order; returns
-    bytes. Uses numpy when installed; the pure-Python path is exact too,
-    because a float64 sum rounded once to float32 is the float32 sum
-    (53 >= 2*24 + 2)."""
+    bytes. Exact in pure Python: a float64 sum of two float32 values,
+    rounded once to float32 on the store, is the float32 sum
+    (53 >= 2*24 + 2). No NumPy and no platform math library."""
     gradients = list(gradients)
     if not gradients:
         raise ValueError("ordered_fold needs at least one gradient")
     n = len(_f32(gradients[0]))
     if any(len(_f32(g)) != n for g in gradients):
         raise ValueError("ordered_fold: gradients differ in length")
-    try:
-        import numpy as np
-    except ImportError:
-        return _fold_python(gradients, n)
-    exp, man, sign = np.uint32(0x7F800000), np.uint32(0x007FFFFF), np.uint32(0x80000000)
-
-    def ftz(x):
-        b = x.view(np.uint32)
-        return np.where(((b & exp) == 0) & ((b & man) != 0), b & sign, b).view(np.float32)
-
-    total = np.frombuffer(bytes(_f32(gradients[0])), dtype=np.float32).copy()
-    with np.errstate(over="ignore", invalid="ignore"):
-        for g in gradients[1:]:
-            total = ftz(ftz(total) + ftz(np.frombuffer(_f32(g), dtype=np.float32)))
-    return total.tobytes()
-
-
-def _ftz(x):
-    return math.copysign(0.0, x) if x != 0.0 and abs(x) < _TINY else x
-
-
-def _fold_python(gradients, n):
     total = array.array("f", _f32(gradients[0]))
+    tbits = memoryview(total).cast("B").cast("I")
     for g in gradients[1:]:
-        gv = _f32(g)
+        shard = array.array("f", _f32(g))
+        sbits = memoryview(shard).cast("B").cast("I")
         for i in range(n):
-            total[i] = _ftz(total[i]) + _ftz(gv[i])
-            total[i] = _ftz(total[i])
+            _flush(tbits, i)
+            _flush(sbits, i)
+            total[i] = total[i] + shard[i]
+            _flush(tbits, i)
     return total.tobytes()
 
 

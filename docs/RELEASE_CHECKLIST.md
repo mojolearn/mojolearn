@@ -84,9 +84,14 @@ push. Every build below runs from that commit.
 
 ```sh
 REF=<40-hex commit>
-# AMD gfx942 on a DigitalOcean MI325X. The output directory
-# ~/mojolearn-evidence/releases/$REF/hip-gfx942/release-build must not pre-exist.
-bash tools/do_release061_leg.sh $REF ~/.mojolearn_do_token --rent
+# AMD gfx942 on a DigitalOcean MI325X, built in the pinned Ubuntu 22.04 container.
+# The droplet image is Ubuntu 24.04 (GCC 13); built on the host, every host binding
+# differs from the NVIDIA legs' (Ubuntu 22.04, GCC 11) and step 3 refuses the wheel.
+# The container checks its core host binding against the NVIDIA one before compiling.
+# The output directory ~/mojolearn-evidence/releases/$REF/hip-gfx942/release-build
+# must not pre-exist.
+MOJOLEARN_RELEASE_UBUNTU22=1 MOJOLEARN_EXPECT_CORE_HOST_SHA256=<sha256 of an NVIDIA leg's host/_mojolearn_core_host.so> \
+  bash tools/do_release061_leg.sh $REF ~/.mojolearn_do_token --rent
 # NVIDIA sm_90a (RunPod H100) and sm_89 (RunPod L40S), started 90 s apart
 MOJOLEARN_RUNPOD_KEY_FILE=~/.mojolearn_runpod_key MOJOLEARN_NVIDIA_CAMPAIGN=7 MOJOLEARN_GPU_ARCHS=sm_90a \
   sh tools/gemm_remote_leg.sh nvidia --payload mamba --source-ref $REF --gpu "NVIDIA H100 80GB HBM3" --allow-concurrent --rent --minutes 60
