@@ -1,0 +1,59 @@
+[
+  {
+    "logical_shards": 2,
+    "exact": true,
+    "hashes": {
+      "parameters": "0021fa02891392202bd2ff2d750b7bf124193c85af0b00a699147fa79981300d",
+      "m": "0c684f9385bac0c4f51611daca250f8ab6e954f122465196a549af2ac2e437ce",
+      "v": "728aedcd521b34d23547f79fd5d71d94b3d17dfa5eb23ca8746ce4d94e29cb36",
+      "flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb",
+      "gradients": "c53f1bdba7ec23fbd3ed9d22f1ed393b163c4baf2b9cb20f6288046aeb3593bb"
+    },
+    "baseline_one_seconds": 0.3759824850130826,
+    "baseline_two_seconds": 0.29696296801557764,
+    "candidate_one_seconds": 0.3772303439909592,
+    "candidate_two_seconds": 0.29493604198796675,
+    "baseline_two_device_speedup": 1.2660921579735824,
+    "candidate_two_device_speedup": 1.279024229959491,
+    "candidate_vs_baseline_one": 0.9966920503672246,
+    "candidate_vs_baseline_two": 1.006872425675576
+  },
+  {
+    "logical_shards": 3,
+    "exact": true,
+    "hashes": {
+      "parameters": "00b3bc2f5d540e14fb61a620a764684dfb2c91eaa6bf018645a9974a5d9830c3",
+      "m": "edcc8072d35bcdac068ecb61903bf0c487d2547b741a225e426da0487e4cd3f2",
+      "v": "c7def86d9e84a8b858ffdca62558cd9d671646868a17a5c8c732a1b1b5c4adbb",
+      "flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb",
+      "gradients": "0fa267d56022ca066fd75a64ed0984701f73aa878a1a1b50d8e432ecf2e86e3f"
+    },
+    "baseline_one_seconds": 0.5522824020008557,
+    "baseline_two_seconds": 0.48734073201194406,
+    "candidate_one_seconds": 0.5568207750329748,
+    "candidate_two_seconds": 0.48572186497040093,
+    "baseline_two_device_speedup": 1.133257217636633,
+    "candidate_two_device_speedup": 1.1463778248214263,
+    "candidate_vs_baseline_one": 0.9918494904723152,
+    "candidate_vs_baseline_two": 1.0033329095482284
+  },
+  {
+    "logical_shards": 5,
+    "exact": true,
+    "hashes": {
+      "parameters": "60279ff64e772253c12ced6bb3018350a28fb24f51847720321426c6f77cd090",
+      "m": "fa2dc331182f33e6d13b85d21717c13e4ed947f0c0dbc8954e9e6c6b9f10734a",
+      "v": "79d75c8b3e5ad43b40d19d97423c14754fb031d73e65029ce073470dd933b343",
+      "flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb",
+      "gradients": "c027f7764e6af49c6cd74c955801ecb45ca1f6fe7a37f68eca0f5151609a9b74"
+    },
+    "baseline_one_seconds": 0.9054249720065854,
+    "baseline_two_seconds": 0.6979875050019473,
+    "candidate_one_seconds": 0.9058005309780128,
+    "candidate_two_seconds": 0.6988469429779798,
+    "baseline_two_device_speedup": 1.2971936682506364,
+    "candidate_two_device_speedup": 1.2961357849233004,
+    "candidate_vs_baseline_one": 0.9995853844653614,
+    "candidate_vs_baseline_two": 0.9987702057157606
+  }
+]
