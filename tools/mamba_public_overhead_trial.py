@@ -84,6 +84,52 @@ def reports(family, block):
     return [getattr(block,n) for n in names]
 
 
+def witness(family, block, state, output):
+    return dict(output=sha(output), reports=sha(*reports(family, block)),
+                state=sha(*state_arrays(family, state)))
+
+
+def load_state_gate(family, block, token):
+    """Mutate stale host state, explicitly refresh it, and compare one step."""
+    import numpy as np
+    plain=block.allocate_state(1); owned=block.allocate_state(1)
+    session=block.decode_session(owned)
+    try:
+        for i,(a,b) in enumerate(zip(state_arrays(family,plain),state_arrays(family,owned))):
+            value=np.float32((i+1)/4096.0); np.asarray(a)[...]=value; np.asarray(b)[...]=value
+        plain.buffered_tokens=owned.buffered_tokens=3
+        if family=="mamba3": plain.pending=owned.pending=False
+        session.load_state()
+        yp=np.asarray(block.step(token,plain)).copy(); pw=witness(family,block,plain,yp)
+        yr=np.asarray(session.step(token)).copy(); session.sync_state(); rw=witness(family,block,owned,yr)
+    finally: session.close()
+    try:
+        session.step(token); closed=False
+    except ValueError as exc: closed="closed" in str(exc)
+    return dict(percall=pw,resident=rw,exact=pw==rw,closed_refused=closed,
+                native_session=session._native is not None)
+
+
+def pending_gate(block, token):
+    """Mamba-3 fresh pending Input_States consumption and report/state split."""
+    import numpy as np
+    plain=block.allocate_state(1); owned=block.allocate_state(1); nh=block.nheads
+    vals=(np.full((1,nh,32),np.float32(.001),dtype=np.float32),
+          np.full((1,nh,64,128),np.float32(.002),dtype=np.float32),
+          np.full((1,nh,128),np.float32(.003),dtype=np.float32),
+          np.full((1,nh,64),np.float32(.004),dtype=np.float32))
+    plain.set_input_states(*vals); owned.set_input_states(*vals)
+    yp=np.asarray(block.step(token,plain)).copy(); pw=witness("mamba3",block,plain,yp)
+    session=block.decode_session(owned)
+    try:
+        yr=np.asarray(session.step(token)).copy(); session.sync_state(); rw=witness("mamba3",block,owned,yr)
+        consumed=owned.pending is False
+        native=session._native is not None
+    finally: session.close()
+    return dict(percall=pw,resident=rw,exact=pw==rw,pending_consumed=consumed,
+                native_session=native)
+
+
 def arm(family, block, x, cfg, resident, sabotage=False):
     import numpy as np
     state=block.allocate_state(1)
@@ -178,7 +224,9 @@ def main():
         speedup=med["percall"]/med["resident"],gradient_hash=grad_before,
         gradient_after_hash=grad_after,input_hash=sha(x),gradient_input_hash=sha(gx,gdy),
         weights_hash=weights_initial,weights_after_hash=sha(*[w[k] for k in sorted(w)]),
-        exact=(a.sabotage=="none"),quality="bitwise output identity; quality_bits hashes identical")
+        exact=(a.sabotage=="none"),quality="bitwise output identity; quality_bits hashes identical",
+        load_state_gate=load_state_gate(a.family,block,np.ascontiguousarray(x[:,:1])),
+        pending_gate=(pending_gate(block,np.ascontiguousarray(x[:,1:2])) if a.family=="mamba3" else None))
     if not all(math.isfinite(v) and v>0 for v in med.values()): raise RuntimeError("invalid timing")
     a.out.parent.mkdir(parents=True,exist_ok=True)
     a.out.write_text(json.dumps(result,indent=1,allow_nan=False)+"\n")

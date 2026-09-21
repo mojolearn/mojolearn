@@ -39,6 +39,19 @@ def validate_arm(arm,tokens,resident):
  if not resident and (arm.get("native_session") is not None or arm.get("ownership_refused") is not None): e.append("percall route witness")
  return e
 
+def validate_route_gates(r,family):
+ e=[]; load=r.get("load_state_gate",{})
+ for label,g in (("load",load),("pending",r.get("pending_gate",{}))):
+  if label=="pending" and family!="mamba3":
+   if r.get("pending_gate") is not None: e.append("unexpected pending gate")
+   continue
+  if g.get("exact") is not True or g.get("native_session") is not True: e.append(label+" exact/native")
+  if label=="load" and g.get("closed_refused") is not True: e.append("load closed refusal")
+  if label=="pending" and g.get("pending_consumed") is not True: e.append("pending not consumed")
+  p,q=g.get("percall",{}),g.get("resident",{})
+  if p!=q or set(p)!={"output","reports","state"} or not all(h64(p.get(k)) for k in p): e.append(label+" witnesses")
+ return e
+
 def validate_clean(r):
  e=[]; rows=r.get("rows",[]); tokens=r.get("shape",{}).get("tokens",-1)
  if r.get("rounds")!=3 or len(rows)!=4: return ["row count"]
@@ -82,7 +95,7 @@ def main():
     if len(paths)!=count: errors.append(f"{rung}/{ds}/{family}: expected {count} processes"); continue
     recs=[json.loads(p.read_text()) for p in paths]; allrec+=recs
     for i,r in enumerate(recs):
-     for x in common_errors(r,rung,ds,family,i,"none")+validate_clean(r): errors.append(f"{rung}/{ds}/{family}/process{i}: {x}")
+     for x in common_errors(r,rung,ds,family,i,"none")+validate_clean(r)+validate_route_gates(r,family): errors.append(f"{rung}/{ds}/{family}/process{i}: {x}")
     witnesses={(r.get("input_hash"),r.get("gradient_input_hash"),r.get("weights_hash"),r.get("gradient_hash")) for r in recs}
     if len(witnesses)!=1: errors.append(f"{rung}/{ds}/{family}: process witnesses differ")
     p=statistics.median(r["medians"]["percall"] for r in recs); q=statistics.median(r["medians"]["resident"] for r in recs)
@@ -93,12 +106,13 @@ def main():
     if rung=="screen" and not sp.exists(): errors.append(f"{ds}/{family}: missing sabotage")
     elif rung=="screen":
      s=json.loads(sp.read_text())
-     for x in common_errors(s,"screen",ds,family,0,"wrong-token")+validate_sabotage(s): errors.append(f"{ds}/{family}/sabotage: {x}")
+     for x in common_errors(s,"screen",ds,family,0,"wrong-token")+validate_sabotage(s)+validate_route_gates(s,family): errors.append(f"{ds}/{family}/sabotage: {x}")
      # Sabotage must be built/run from the same source, binding and inputs.
      clean=recs[0] if rung=="screen" else None
      if clean and any(s.get(k)!=clean.get(k) for k in ("commit","input_hash","gradient_input_hash","weights_hash","weights_after_hash","gradient_hash","gradient_after_hash","source_sha256","binding","target_column","native_vendor","native_numeric_mode")): errors.append(f"{ds}/{family}/sabotage: provenance differs")
  for field in ("commit","target_column"):
   if len({r.get(field) for r in allrec})!=1: errors.append("records disagree on "+field)
+ if len({json.dumps(r.get("source_sha256"),sort_keys=True) for r in allrec})!=1: errors.append("clean source inventories differ")
  for family in FAMILIES:
   if len({r.get("binding",{}).get("sha256") for r in allrec if r.get("family")==family})!=1: errors.append(family+" binding hashes differ")
  qualified=[r for r in rows if r["rung"]=="qualification"]
