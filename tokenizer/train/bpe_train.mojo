@@ -29,11 +29,12 @@ and it rests on four things, every one of which is visible in this file:
 2.  NO REDUCTION ORDER TO GET WRONG. Counting is single-threaded. A parallel
     count would have to merge per-shard counts in shard index order; this
     trainer does not take that risk.
-3.  NO ITERATION ORDER REACHES THE RESULT. `touched` is walked in whatever
-    order pairs were first seen, and that is SAFE HERE precisely because the
-    selection is a total order over `(count, key)`: the same set of pairs
-    yields the same winner however it is walked. The Python reference walks
-    its pairs in sorted order instead, and the gate proves the two agree.
+3.  NO ITERATION ORDER REACHES THE RESULT. The winner comes off a heap
+    ordered by the same total order over `(count, key)`, so which pair wins
+    does not depend on the order pairs were first seen, the order groups are
+    held in, or where a count sits in the table. The Python reference
+    recounts every pair each merge and walks them in sorted order instead,
+    and the gate proves the two agree.
 4.  NO FLOATS ANYWHERE. Counts, ids and the comparison are all integers.
     There is no score and no probability -- which is exactly where a unigram
     trainer's reproducibility goes.
@@ -51,10 +52,13 @@ that never produces a tie it would be INERT and the gate would pass,
 which is why `n_ties_broken` is carried out of the trainer and the fixture
 carries a corpus engineered to tie.
 
-COST. Each merge rescans every sequence, so training is O(merges x corpus
-pre-tokens). A pre-token is a word, the fixtures are small, and this module
-makes no speed claim; the incremental-bookkeeping form is the same output by
-construction.
+COST. The pair counts are kept ACROSS merges and only the groups that hold
+the merged pair are touched (2026-09-21). Before that every merge recounted
+every group, O(merges x corpus pre-tokens): 731 s on an M4 for a 96 MB
+sample. A count is a sum of integers over groups, so subtracting a touched
+group's pairs and adding them back after the rewrite leaves exactly the
+table a full recount would build; the vocabulary files are the same bytes
+and `tools/bpe_trainer_determinism.py` and the gate hold that.
 """
 
 from std.sys.compile import is_defined
@@ -154,96 +158,177 @@ struct PieceGroups(Copyable, Movable):
             self._grow(len(self.buckets) * 2)
 
 
-struct PairCounts(Movable):
-    """Adjacent-pair counts for ONE pass of the merge loop, keyed by
-    `left * V + right`, in an open-addressing table with linear probing.
+struct PairTable(Movable):
+    """Adjacent-pair counts kept ACROSS the merge loop, keyed by
+    `left * V + right`. A pair gets a dense entry id the first time it is
+    seen and keeps it; an open-addressing table with linear probing maps the
+    key to the id.
 
-    THE MEMORY BOUND. Let N0 be the number of adjacent positions in the
-    initial pre-token groups (the sum over DISTINCT groups of `len - 1`,
-    at most the unique pre-token bytes). A pass sees P distinct pairs with
-    P <= the adjacent positions of that pass <= N0 (merges only shorten a
-    group), and P <= V * V. The table holds a power of two of slots, at most
-    4 * max(P, 256) because it doubles only when more than half full, each
-    slot two Ints, plus one Int per occupied slot in `touched`. Peak:
-    8 * (2 * 4P + P) = 72 * P bytes <= 72 * N0 bytes, and it never shrinks.
-    The dense table it replaced was 8 * V * V bytes whatever the corpus
-    (20.2 GB at V = 50,256).
+    `where[id]` lists the groups that have held the pair. It is only ever
+    appended to, so it may name a group that no longer holds the pair, or
+    name one twice: the merge loop scans the group and skips it when the
+    pair is not there. It never MISSES a holder, and the loop checks that by
+    requiring the merged pair's count to reach exactly zero.
 
-    ORDER. `touched` lists occupied slots in first-seen order. Nothing reads
-    that order into the result: the selection is a total order over
-    `(count, key)`, so any walk of the same set finds the same winner.
+    `pushed[id]` is the count last put on the heap for the pair and
+    `stamp[id]` the last merge that changed it, so a merge pushes each
+    changed pair once, with its final count.
+
+    ORDER. Nothing here reaches the result: the heap orders `(count, key)`
+    totally, and the counts are integer sums that do not depend on the order
+    they were added in.
     """
 
     var keys: List[Int]
     var vals: List[Int]
-    var touched: List[Int]
+    var pushed: List[Int]
+    var stamp: List[Int]
+    var where: List[List[Int]]
+    var buckets: List[Int]
     var mask: Int
 
     def __init__(out self):
         self.keys = List[Int]()
         self.vals = List[Int]()
-        self.touched = List[Int]()
-        self.mask = 0
-        self._alloc(1024)
-
-    def _alloc(mut self, size: Int):
-        self.keys = List[Int](length=size, fill=-1)
-        self.vals = List[Int](length=size, fill=0)
-        self.mask = size - 1
+        self.pushed = List[Int]()
+        self.stamp = List[Int]()
+        self.where = List[List[Int]]()
+        self.buckets = List[Int](length=1024, fill=0)
+        self.mask = 1023
 
     @always_inline
     def _slot(self, key: Int) -> Int:
         # Fibonacci hashing: spreads the dense low keys (pairs of small ids)
-        # across the table. The hash reaches only WHERE a count sits.
+        # across the table. The hash reaches only WHERE an id sits.
         var h = UInt64(key) * 11400714819323198485
         return Int((h >> 32) ^ h) & self.mask
 
     def n(self) -> Int:
-        return len(self.touched)
-
-    def clear(mut self):
-        """Empty the table, touching only the occupied slots."""
-        for t in range(len(self.touched)):
-            var s = self.touched[t]
-            self.keys[s] = -1
-            self.vals[s] = 0
-        self.touched.clear()
+        return len(self.keys)
 
     def _grow(mut self):
         var size = (self.mask + 1) * 2
-        var old_keys = self.keys^
-        var old_vals = self.vals^
-        var old_touched = self.touched^
-        self.keys = List[Int](length=size, fill=-1)
-        self.vals = List[Int](length=size, fill=0)
+        self.buckets = List[Int](length=size, fill=0)
         self.mask = size - 1
-        self.touched = List[Int](capacity=len(old_touched))
-        for t in range(len(old_touched)):
-            var s = old_touched[t]
-            var key = old_keys[s]
-            var slot = self._slot(key)
-            while self.keys[slot] != -1:
+        for id in range(len(self.keys)):
+            var slot = self._slot(self.keys[id])
+            while self.buckets[slot] != 0:
                 slot = (slot + 1) & self.mask
-            self.keys[slot] = key
-            self.vals[slot] = old_vals[s]
-            self.touched.append(slot)
+            self.buckets[slot] = id + 1
 
     @always_inline
-    def add(mut self, key: Int, c: Int):
+    def find(self, key: Int) -> Int:
+        """The pair's entry id, or -1."""
         var slot = self._slot(key)
-        while True:
-            var k = self.keys[slot]
-            if k == key:
-                self.vals[slot] += c
-                return
-            if k == -1:
-                break
+        while self.buckets[slot] != 0:
+            var id = self.buckets[slot] - 1
+            if self.keys[id] == key:
+                return id
             slot = (slot + 1) & self.mask
-        self.keys[slot] = key
-        self.vals[slot] = c
-        self.touched.append(slot)
-        if 2 * len(self.touched) > self.mask + 1:
+        return -1
+
+    @always_inline
+    def find_or_add(mut self, key: Int) -> Int:
+        var slot = self._slot(key)
+        while self.buckets[slot] != 0:
+            var id = self.buckets[slot] - 1
+            if self.keys[id] == key:
+                return id
+            slot = (slot + 1) & self.mask
+        var id = len(self.keys)
+        self.keys.append(key)
+        self.vals.append(0)
+        self.pushed.append(0)
+        self.stamp.append(-1)
+        self.where.append(List[Int]())
+        self.buckets[slot] = id + 1
+        if 2 * len(self.keys) > self.mask + 1:
             self._grow()
+        return id
+
+    @always_inline
+    def note(mut self, id: Int, g: Int):
+        """Record that group `g` holds the pair. Groups arrive in runs, so
+        comparing with the last entry drops most repeats; the rest are
+        harmless."""
+        var n = len(self.where[id])
+        if n == 0 or self.where[id][n - 1] != g:
+            self.where[id].append(g)
+
+
+struct PairHeap(Movable):
+    """A binary heap of `(count, key, entry id)` whose top is the pair the
+    selection rule picks: the highest count, then the smallest key (the
+    LARGEST key under the sabotage). Entries are never updated in place. A
+    pair whose count moved gets a new entry, and an entry whose count is no
+    longer the pair's count is dropped when it reaches the top."""
+
+    var count: List[Int]
+    var key: List[Int]
+    var id: List[Int]
+    var reverse: Bool
+
+    def __init__(out self, reverse: Bool):
+        self.count = List[Int]()
+        self.key = List[Int]()
+        self.id = List[Int]()
+        self.reverse = reverse
+
+    def n(self) -> Int:
+        return len(self.count)
+
+    @always_inline
+    def _before(self, i: Int, j: Int) -> Bool:
+        if self.count[i] != self.count[j]:
+            return self.count[i] > self.count[j]
+        if self.reverse:
+            # THE SABOTAGE: the opposite end of the same total order.
+            return self.key[i] > self.key[j]
+        return self.key[i] < self.key[j]
+
+    @always_inline
+    def _swap(mut self, i: Int, j: Int):
+        var c = self.count[i]
+        var k = self.key[i]
+        var d = self.id[i]
+        self.count[i] = self.count[j]
+        self.key[i] = self.key[j]
+        self.id[i] = self.id[j]
+        self.count[j] = c
+        self.key[j] = k
+        self.id[j] = d
+
+    def push(mut self, count: Int, key: Int, id: Int):
+        self.count.append(count)
+        self.key.append(key)
+        self.id.append(id)
+        var i = len(self.count) - 1
+        while i > 0:
+            var parent = (i - 1) // 2
+            if not self._before(i, parent):
+                break
+            self._swap(i, parent)
+            i = parent
+
+    def pop(mut self):
+        var last = len(self.count) - 1
+        self._swap(0, last)
+        _ = self.count.pop()
+        _ = self.key.pop()
+        _ = self.id.pop()
+        var i = 0
+        while True:
+            var l = 2 * i + 1
+            var r = l + 1
+            var top = i
+            if l < last and self._before(l, top):
+                top = l
+            if r < last and self._before(r, top):
+                top = r
+            if top == i:
+                break
+            self._swap(i, top)
+            i = top
 
 
 struct TrainedVocabulary(Copyable, Movable):
@@ -343,56 +428,49 @@ def train_bpe(
 
     # 4.  The merge loop. A pair is the single integer key
     #     `left * V + right`, so a key's ORDER is the pair's order and the
-    #     tie-break needs no separate comparison. The counts live in
-    #     `PairCounts`, an open-addressing table sized by the DISTINCT PAIRS
-    #     THAT OCCUR in one pass (lane/bpe-builder-native, 2026-09-18); it
-    #     replaced a dense `V * V` table that was 20.2 GB at V = 50,256.
-    #     Where a count is stored cannot reach the result: the selection
-    #     below reads only `(count, key)` over the set of keys seen.
+    #     tie-break needs no separate comparison. The counts are built ONCE
+    #     and then maintained: a merge touches only the groups that hold the
+    #     merged pair (see `PairTable`, and COST in the module docstring).
     var V = vocab_size
-    var counts = PairCounts()
     var reverse = break_ties_high
     comptime if BPE_TRAINER_SABOTAGE:
         reverse = True
+    var table = PairTable()
+    var heap = PairHeap(reverse)
 
+    for g in range(len(seqs)):
+        var c = groups.count[g]
+        for k in range(len(seqs[g]) - 1):
+            var id = table.find_or_add(seqs[g][k] * V + seqs[g][k + 1])
+            table.vals[id] += c
+            table.note(id, g)
+    for id in range(table.n()):
+        table.pushed[id] = table.vals[id]
+        heap.push(table.vals[id], table.keys[id], id)
+
+    var changed = List[Int]()
+    var merge_no = 0
     while vocab.n_tokens() < vocab_size:
-        counts.clear()
-
-        for g in range(len(seqs)):
-            var c = groups.count[g]
-            var n = len(seqs[g])
-            for k in range(n - 1):
-                counts.add(seqs[g][k] * V + seqs[g][k + 1], c)
-
         # THE SELECTION. Highest count, then the smallest key -- which is the
-        # smallest `(left_id, right_id)`. Every comparison here is between
-        # integers.
-        var best_key = -1
-        var best_count = 0
-        for t in range(counts.n()):
-            var key = counts.keys[counts.touched[t]]
-            var c = counts.vals[counts.touched[t]]
-            if c < min_frequency:
-                continue
-            if best_key < 0 or c > best_count:
-                best_key = key
-                best_count = c
-            elif c == best_count:
-                if reverse:
-                    # THE SABOTAGE: the opposite end of the same total order.
-                    if key > best_key:
-                        best_key = key
-                else:
-                    if key < best_key:
-                        best_key = key
-        if best_key < 0:
+        # smallest `(left_id, right_id)`. Every comparison is between
+        # integers. An entry whose count is no longer its pair's is stale.
+        while heap.n() > 0 and heap.count[0] != table.vals[heap.id[0]]:
+            heap.pop()
+        if heap.n() == 0:
             break
+        var best_id = heap.id[0]
+        var best_key = heap.key[0]
+        var best_count = heap.count[0]
+        if best_count < min_frequency:
+            break
+        heap.pop()
 
-        var n_at_top = 0
-        for t in range(counts.n()):
-            if counts.vals[counts.touched[t]] == best_count:
-                n_at_top += 1
-        if n_at_top > 1:
+        # A tie is another pair holding the same count.
+        while heap.n() > 0 and (
+            heap.count[0] != table.vals[heap.id[0]] or heap.id[0] == best_id
+        ):
+            heap.pop()
+        if heap.n() > 0 and heap.count[0] == best_count:
             vocab.n_ties_broken += 1
 
         var a = best_key // V
@@ -414,12 +492,36 @@ def train_bpe(
         vocab.merge_left.append(a)
         vocab.merge_right.append(b)
 
-        # Rewrite every sequence LEFT TO RIGHT, NON-OVERLAPPING, in place:
-        # the write index never passes the read index, so reading `k` and
-        # writing `w <= k` in one buffer is the same rewrite as building a
-        # fresh list, without an allocation per group per merge.
-        for g in range(len(seqs)):
+        # Only the groups that hold the pair. `holders` is a copy because
+        # the loop below appends to `table.where`.
+        var holders = table.where[best_id].copy()
+        table.where[best_id].clear()
+        for h in range(len(holders)):
+            var g = holders[h]
             var n = len(seqs[g])
+            var found = False
+            for k in range(n - 1):
+                if seqs[g][k] == a and seqs[g][k + 1] == b:
+                    found = True
+                    break
+            if not found:
+                continue
+            var c = groups.count[g]
+
+            # Take this group's pairs out of the counts ...
+            for k in range(n - 1):
+                var id = table.find(seqs[g][k] * V + seqs[g][k + 1])
+                if id < 0:
+                    raise Error("train_bpe: a counted pair has no entry")
+                table.vals[id] -= c
+                if table.stamp[id] != merge_no:
+                    table.stamp[id] = merge_no
+                    changed.append(id)
+
+            # ... rewrite it LEFT TO RIGHT, NON-OVERLAPPING, in place: the
+            # write index never passes the read index, so reading `k` and
+            # writing `w <= k` in one buffer is the same rewrite as building
+            # a fresh list ...
             var w = 0
             var k = 0
             while k < n:
@@ -430,7 +532,36 @@ def train_bpe(
                     seqs[g][w] = seqs[g][k]
                     k += 1
                 w += 1
-            if w < n:
-                seqs[g].shrink(w)
+            seqs[g].shrink(w)
+
+            # ... and put its pairs back. A pair the group did not hold
+            # before has the new token on one side.
+            for k in range(w - 1):
+                var left = seqs[g][k]
+                var right = seqs[g][k + 1]
+                var id = table.find_or_add(left * V + right)
+                table.vals[id] += c
+                if table.stamp[id] != merge_no:
+                    table.stamp[id] = merge_no
+                    changed.append(id)
+                if left == new or right == new:
+                    table.note(id, g)
+
+        # `where` must have named EVERY holder: the pair is gone.
+        if table.vals[best_id] != 0:
+            raise Error(
+                "train_bpe: the merged pair is still counted "
+                + String(table.vals[best_id])
+                + " times after its merge"
+            )
+
+        for t in range(len(changed)):
+            var id = changed[t]
+            if table.vals[id] != table.pushed[id]:
+                table.pushed[id] = table.vals[id]
+                if table.vals[id] > 0:
+                    heap.push(table.vals[id], table.keys[id], id)
+        changed.clear()
+        merge_no += 1
 
     return vocab^
