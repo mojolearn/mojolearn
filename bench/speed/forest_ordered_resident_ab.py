@@ -138,22 +138,34 @@ def summarize(args):
                 hashes = {r["hash"] for r in cell}
                 qualities = {json.dumps(r["quality"], sort_keys=True) for r in cell}
                 exact = len(hashes) == 1 and len(qualities) == 1 and all(r["hashes_equal"] for r in cell)
-                stable = all(r["spread"] <= args.spread for r in cell)
+                process_medians = {a: [r["median_ms"] for r in rs]
+                                   for a, rs in arms.items()}
+                process_spread = {a: max(xs) / min(xs)
+                                  for a, xs in process_medians.items()}
+                # The unit of replication is the alternating process median.
+                # Retain every within-process max/min above, but do not let a
+                # one-millisecond scheduling excursion veto a 5-call median.
+                stable = process_spread["ordered"] <= args.spread
                 base = statistics.median(r["median_ms"] for r in arms["sequential"])
                 cand = statistics.median(r["median_ms"] for r in arms["ordered"])
                 ratio = cand / base
+                conservative_ratio = (max(process_medians["ordered"]) /
+                                      min(process_medians["sequential"]))
                 qualified = exact and stable
-                if not qualified or ratio > args.promote_ratio:
+                if not qualified or conservative_ratio > args.promote_ratio:
                     verdict = "reject"
                 table.append({"dataset": dataset, "kind": kind, "operation": op,
                               "sequential_ms": base, "ordered_ms": cand,
                               "ordered_over_sequential": ratio, "exact": exact,
+                              "conservative_ordered_over_sequential": conservative_ratio,
                               "stable": stable, "qualified": qualified,
+                              "process_median_spread": process_spread,
                               "quality": arms["sequential"][0]["quality"],
                               "process_spreads": {a: [r["spread"] for r in rs]
                                                   for a, rs in arms.items()}})
     result = {"verdict": verdict, "promotion_rule":
-              "all 8 cells exact, stable, and ordered/sequential <= %.3f" % args.promote_ratio,
+              "all 8 cells exact, ordered process-median spread <= %.3f, and slowest ordered / fastest sequential <= %.3f" %
+              (args.spread, args.promote_ratio),
               "cells": table}
     with open(args.out, "w") as fh:
         json.dump(result, fh, indent=2, sort_keys=True)
@@ -179,7 +191,7 @@ def main():
     s = sub.add_parser("summarize")
     s.add_argument("inputs", nargs="+")
     s.add_argument("--outers", type=int, default=3)
-    s.add_argument("--spread", type=float, default=1.15)
+    s.add_argument("--spread", type=float, default=1.10)
     s.add_argument("--promote-ratio", type=float, default=0.98)
     s.add_argument("--out", required=True)
     args = ap.parse_args()
