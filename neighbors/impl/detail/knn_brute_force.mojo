@@ -107,7 +107,7 @@ from neighbors.checks.pinned_distance_tile import (
     pinned_distance_tile_kernel,
 )
 from checks.kernel_matrix import knn_distance_exact_chain_for, knn_fused_distance_select_for, knn_radix_scratch_shrink_for
-from checks.kernel_matrix import knn_smem_distance_tile_for, knn_block_topk_select_for, KNN_BLOCK_TOPK_MAX_K
+from checks.kernel_matrix import knn_smem_distance_tile_for, knn_smem_min_features_for, knn_block_topk_select_for, KNN_BLOCK_TOPK_MAX_K
 from checks.kernel_matrix import knn_selector_bound_compact_for, KNN_SELECTOR_BOUND_MIN_K
 from checks.kernel_matrix import knn_resident_derived_cache_for
 from checks.kernel_matrix import knn_block_topk_bounded_for, KNN_BOUNDED_FIRST_TILE
@@ -270,14 +270,11 @@ comptime KNN_BLOCK_TOPK = (
     and not is_defined["MOJOLEARN_KNN_SELECT_TRIAL"]()
 )
 
-# AMD gfx942 pays more launch and synchronization overhead than NVIDIA for
-# the shared tile on narrow rows.  The two-dataset trial can compile this
-# guard without changing either kernel: requests below one two-slice tile
-# keep the existing register path, while wide requests use the exact shared
-# tile and block top-k.
-comptime KNN_SMEM_MIN_FEATURES = (
-    32 if is_defined["MOJOLEARN_EXPERIMENTAL_KNN_SMEM_WIDE_ONLY"]() else 1
-)
+# DEVIATION 3000's measured runtime width gate. On AMD, rows narrower than
+# two 16-feature slices keep the register path; NVIDIA's route is unchanged.
+comptime KNN_SMEM_MIN_FEATURES = knn_smem_min_features_for[
+    TARGET_COLUMN, IDENTICAL_BUILD
+]()
 
 
 # DEVIATION 3061 (kernel-matrix row `knn_resident_derived_cache_for`).
@@ -855,7 +852,12 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
     # Apple minima use; the two never run in one request.
     var use_exact = False
     comptime if KNN_EXACT_CHAIN:
-        use_exact = use_transposed_index and KNN_REGISTER_TILE_IDENTICAL and not use_vendor_topk and not use_metadata and (mtr == DIST_L2_SQRT_EXPANDED or mtr == DIST_L2_EXPANDED)
+        use_exact = (
+            use_transposed_index and KNN_REGISTER_TILE_IDENTICAL
+            and not use_vendor_topk and not use_metadata
+            and n_features >= KNN_SMEM_MIN_FEATURES
+            and (mtr == DIST_L2_SQRT_EXPANDED or mtr == DIST_L2_EXPANDED)
+        )
     var meta_on = use_metadata or use_exact
     var metadata_cells = n_queries + n_index if meta_on else 0
     var part_dist = ctx.enqueue_create_buffer[DType.float32](part_cells + metadata_cells)
