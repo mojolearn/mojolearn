@@ -700,7 +700,7 @@ def _refuse_resident(state, what):
     if owner is not None:
         raise ValueError(
             f"mojolearn {what}: the state is owned by an open resident "
-            "Mamba1DecodeSession (its pieces live in the session, on the "
+            "decode session (its pieces live in the session, on the "
             "device or on the host, and the caller's buffers are stale); "
             "call sync_state() or close() on the session first"
         )
@@ -1044,6 +1044,7 @@ class Mamba2Block(_MambaBase):
         b, l = int(x.shape[0]), int(x.shape[1])
         if state is None:
             state = self.allocate_state(b)
+        _refuse_resident(state, what)
         win = _state_buf(state.conv_window, what, "conv_window",
                          (b, self.conv_dim, _M2_D_CONV))
         h = _state_buf(state.h, what, "h",
@@ -1141,7 +1142,155 @@ class Mamba2Block(_MambaBase):
             )
         return self._call(x, state, step=True)
 
+    def decode_session(self, state):
+        """Keep Mamba-2 weights and recurrent state resident for repeated
+        single-token decode.  The session runs the same L=1 block entry as
+        :meth:`step`; close or sync it before using ``state`` elsewhere."""
+        return Mamba2DecodeSession(self, state)
+
     __call__ = forward
+
+
+class Mamba2DecodeSession:
+    """Resident repeated decode for one ``Mamba2Block`` and state."""
+
+    def __init__(self, block, state):
+        what = "Mamba2DecodeSession"
+        ext = block._extension()
+        try:
+            create = getattr(ext, "mamba2_session_create", None)
+        except ImportError:
+            create = None
+        host = create is None and _exports(ext, "mamba2_decode_step")
+        if create is None and not host:
+            raise NotImplementedError(f"mojolearn {what}: binding lacks decode entries")
+        if state is None:
+            raise ValueError(f"mojolearn {what}: state is required")
+        _refuse_resident(state, what)
+        pb = probe(state.h)
+        if len(pb.shape) != 4 or pb.shape[0] < 1:
+            raise ValueError(f"mojolearn {what}: state.h has invalid shape")
+        b = int(pb.shape[0])
+        win = _state_buf(state.conv_window, what, "conv_window", (b, block.conv_dim, _M2_D_CONV))
+        h = _state_buf(state.h, what, "h", (b, block.nheads, _M2_HEADDIM, _M2_D_STATE))
+        bx = _state_buf(state.buffer_xbc, what, "buffer_xbc", (b, _M2_CHUNK_SIZE, block.conv_dim))
+        bd = _state_buf(state.buffer_dtraw, what, "buffer_dtraw", (b, _M2_CHUNK_SIZE, block.nheads))
+        self._block, self._state, self._ext = block, state, ext
+        self._b, self._open = b, False
+        if host:
+            self._native = None
+            self._hw = [_private_copy(a) for a in block._w]
+            self._parts = [_private_copy(a) for a in (win, h, bx, bd)]
+            self._q = int(state.buffered_tokens)
+        else:
+            self._native = create()
+            lo, hi = block.dt_limit
+            ext.mamba2_session_open(
+                self._native,
+                [addr_ro(a, name="weight") for a in block._w]
+                + [addr(win, name="conv_window"), addr(h, name="h"),
+                   addr(bx, name="buffer_xbc"), addr(bd, name="buffer_dtraw")],
+                [b, block.d_model, int(state.buffered_tokens), lo, hi])
+        self._open = True
+        state._resident_session = self
+
+    @property
+    def state(self): return self._state
+
+    @property
+    def is_open(self): return self._open
+
+    def _require_open(self, what):
+        if not self._open:
+            raise ValueError(f"mojolearn {what}: the session is closed")
+
+    def _state_parts(self, what):
+        st, b, blk = self._state, self._b, self._block
+        return (
+            _state_buf(st.conv_window, what, "conv_window", (b, blk.conv_dim, _M2_D_CONV)),
+            _state_buf(st.h, what, "h", (b, blk.nheads, _M2_HEADDIM, _M2_D_STATE)),
+            _state_buf(st.buffer_xbc, what, "buffer_xbc", (b, _M2_CHUNK_SIZE, blk.conv_dim)),
+            _state_buf(st.buffer_dtraw, what, "buffer_dtraw", (b, _M2_CHUNK_SIZE, blk.nheads)),
+        )
+
+    def step(self, x):
+        what = "Mamba2DecodeSession.step"
+        self._require_open(what)
+        blk = self._block
+        x = _batch_tokens(x, what, blk.d_model, True)
+        if int(x.shape[0]) != self._b:
+            raise ValueError(f"mojolearn {what}: batch size changed")
+        y = empty((self._b, 1, blk.d_model), "<f4")
+        report = empty((self._b, blk.nheads, _M2_HEADDIM, _M2_D_STATE), "<f4")
+        if self._native is None:
+            addrs = ([addr_ro(x, name="x")]
+                     + [addr_ro(a, name="weight") for a in self._hw]
+                     + [addr(a, name="state") for a in self._parts]
+                     + [addr(y, name="y"), addr(report, name="h_last")])
+            lo, hi = blk.dt_limit
+            self._q = int(self._ext.mamba2_decode_step(
+                addrs, [self._b, blk.d_model, self._q, lo, hi]))
+        else:
+            self._q = int(self._ext.mamba2_session_step(
+                self._native, [addr_ro(x, name="x"), addr(y, name="y"),
+                               addr(report, name="h_last")]))
+        blk.h_last_ = report
+        return y
+
+    def sync_state(self):
+        what = "Mamba2DecodeSession.sync_state"
+        self._require_open(what)
+        parts = self._state_parts(what)
+        if self._native is None:
+            for dst, src in zip(parts, self._parts):
+                memcopy(addr(dst, name="state"), addr_ro(src, name="resident"), 4 * int(src.size))
+            q = self._q
+        else:
+            q = int(self._ext.mamba2_session_export_state(
+                self._native, [addr(a, name="state") for a in parts]))
+        self._state.buffered_tokens = q
+        return self._state
+
+    def load_state(self):
+        what = "Mamba2DecodeSession.load_state"
+        self._require_open(what)
+        parts = self._state_parts(what)
+        q = int(self._state.buffered_tokens)
+        if self._native is None:
+            for dst, src in zip(self._parts, parts):
+                memcopy(addr(dst, name="resident"), addr_ro(src, name="state"), 4 * int(dst.size))
+            self._q = q
+        else:
+            self._ext.mamba2_session_load_state(
+                self._native, [addr(a, name="state") for a in parts], [q])
+        return self._state
+
+    def _release(self):
+        if self._native is None:
+            self._hw = self._parts = None
+        else:
+            self._ext.mamba2_session_close(self._native)
+
+    def close(self):
+        if not self._open: return
+        try: self.sync_state()
+        finally:
+            self._open = False
+            self._state._resident_session = None
+            self._release()
+
+    def __enter__(self): return self
+    def __exit__(self, *exc): self.close(); return False
+    def __del__(self):
+        try:
+            if getattr(self, "_open", False):
+                self._open = False
+                self._state._resident_session = None
+                self._release()
+        except Exception: pass
+
+    def __repr__(self):
+        return "Mamba2DecodeSession(open=%r, rows=%d)" % (self._open, self._b)
 
 
 class Mamba3State:
@@ -1413,6 +1562,7 @@ class Mamba3Block(_MambaBase):
                 return self._call_fresh(x, fresh_ext)
         if state is None:
             state = self.allocate_state(b)
+        _refuse_resident(state, what)
         nh, q = self.nheads, _M3_CHUNK_SIZE
         theta = _state_buf(state.theta, what, "theta",
                            (b, nh, _M3_NUM_ROPE_ANGLES))
@@ -1540,4 +1690,166 @@ class Mamba3Block(_MambaBase):
             )
         return self._call(x, state, step=True)
 
+    def decode_session(self, state):
+        """Keep Mamba-3 weights and recurrent state resident for repeated
+        single-token decode while executing the existing L=1 block entry."""
+        return Mamba3DecodeSession(self, state)
+
     __call__ = forward
+
+
+class Mamba3DecodeSession:
+    """Resident repeated decode for one ``Mamba3Block`` and state."""
+
+    _STATE_NAMES = (
+        "theta", "h", "buffer_qrot", "buffer_krot", "buffer_v",
+        "buffer_dt", "buffer_sig", "buffer_adt", "pending_k", "pending_v",
+    )
+
+    def __init__(self, block, state):
+        what = "Mamba3DecodeSession"
+        ext = block._extension()
+        try:
+            create = getattr(ext, "mamba3_session_create", None)
+        except ImportError:
+            create = None
+        host = create is None and _exports(ext, "mamba3_decode_step")
+        if create is None and not host:
+            raise NotImplementedError(f"mojolearn {what}: binding lacks decode entries")
+        if state is None:
+            raise ValueError(f"mojolearn {what}: state is required")
+        _refuse_resident(state, what)
+        pb = probe(state.h)
+        if len(pb.shape) != 4 or pb.shape[0] < 1:
+            raise ValueError(f"mojolearn {what}: state.h has invalid shape")
+        self._block, self._state, self._ext = block, state, ext
+        self._b, self._open = int(pb.shape[0]), False
+        parts = self._state_parts(what)
+        if host:
+            self._native = None
+            self._hw = [_private_copy(a) for a in block._w]
+            self._parts = [_private_copy(a) for a in parts]
+            self._q = int(state.buffered_tokens)
+            self._pending = bool(state.pending)
+        else:
+            self._native = create()
+            ext.mamba3_session_open(
+                self._native,
+                [addr_ro(a, name="weight") for a in block._w]
+                + [addr(a, name=name) for a, name in zip(parts, self._STATE_NAMES)],
+                [self._b, block.d_model, int(state.buffered_tokens),
+                 1 if state.pending else 0])
+        self._open = True
+        state._resident_session = self
+
+    @property
+    def state(self): return self._state
+
+    @property
+    def is_open(self): return self._open
+
+    def _require_open(self, what):
+        if not self._open:
+            raise ValueError(f"mojolearn {what}: the session is closed")
+
+    def _state_parts(self, what):
+        st, b, blk = self._state, self._b, self._block
+        nh, q = blk.nheads, _M3_CHUNK_SIZE
+        shapes = (
+            (b, nh, _M3_NUM_ROPE_ANGLES),
+            (b, nh, _M3_HEADDIM, _M3_D_STATE),
+            (b, q, nh, _M3_D_STATE), (b, q, nh, _M3_D_STATE),
+            (b, q, nh, _M3_HEADDIM), (b, q, nh), (b, q, nh), (b, q, nh),
+            (b, nh, _M3_D_STATE), (b, nh, _M3_HEADDIM),
+        )
+        return tuple(_state_buf(getattr(st, name), what, name, shape)
+                     for name, shape in zip(self._STATE_NAMES, shapes))
+
+    def step(self, x):
+        what = "Mamba3DecodeSession.step"
+        self._require_open(what)
+        blk = self._block
+        x = _batch_tokens(x, what, blk.d_model, True)
+        if int(x.shape[0]) != self._b:
+            raise ValueError(f"mojolearn {what}: batch size changed")
+        b, nh = self._b, blk.nheads
+        y = empty((b, 1, blk.d_model), "<f4")
+        reports = (
+            empty((b, nh, _M3_HEADDIM, _M3_D_STATE), "<f4"),
+            empty((b, nh, _M3_D_STATE), "<f4"),
+            empty((b, nh, _M3_HEADDIM), "<f4"),
+            empty((b, nh, _M3_NUM_ROPE_ANGLES), "<f4"),
+        )
+        if self._native is None:
+            addrs = ([addr_ro(x, name="x")]
+                     + [addr_ro(a, name="weight") for a in self._hw]
+                     + [addr(a, name="state") for a in self._parts]
+                     + [addr(y, name="y")]
+                     + [addr(a, name="report") for a in reports])
+            self._q = int(self._ext.mamba3_decode_step(
+                addrs, [b, blk.d_model, self._q, 1 if self._pending else 0]))
+            self._pending = False
+        else:
+            self._q = int(self._ext.mamba3_session_step(
+                self._native, [addr_ro(x, name="x"), addr(y, name="y")]
+                + [addr(a, name="report") for a in reports]))
+        blk.h_last_, blk.k_last_, blk.v_last_, blk.theta_last_ = reports
+        return y
+
+    def sync_state(self):
+        what = "Mamba3DecodeSession.sync_state"
+        self._require_open(what)
+        parts = self._state_parts(what)
+        if self._native is None:
+            for dst, src in zip(parts, self._parts):
+                memcopy(addr(dst, name="state"), addr_ro(src, name="resident"), 4 * int(src.size))
+            q, pending = self._q, self._pending
+        else:
+            q, pending = self._ext.mamba3_session_export_state(
+                self._native, [addr(a, name="state") for a in parts])
+            q, pending = int(q), bool(pending)
+        self._state.buffered_tokens = q
+        self._state.pending = pending
+        return self._state
+
+    def load_state(self):
+        what = "Mamba3DecodeSession.load_state"
+        self._require_open(what)
+        parts = self._state_parts(what)
+        q, pending = int(self._state.buffered_tokens), bool(self._state.pending)
+        if self._native is None:
+            for dst, src in zip(self._parts, parts):
+                memcopy(addr(dst, name="resident"), addr_ro(src, name="state"), 4 * int(dst.size))
+            self._q, self._pending = q, pending
+        else:
+            self._ext.mamba3_session_load_state(
+                self._native, [addr(a, name="state") for a in parts],
+                [q, 1 if pending else 0])
+        return self._state
+
+    def _release(self):
+        if self._native is None:
+            self._hw = self._parts = None
+        else:
+            self._ext.mamba3_session_close(self._native)
+
+    def close(self):
+        if not self._open: return
+        try: self.sync_state()
+        finally:
+            self._open = False
+            self._state._resident_session = None
+            self._release()
+
+    def __enter__(self): return self
+    def __exit__(self, *exc): self.close(); return False
+    def __del__(self):
+        try:
+            if getattr(self, "_open", False):
+                self._open = False
+                self._state._resident_session = None
+                self._release()
+        except Exception: pass
+
+    def __repr__(self):
+        return "Mamba3DecodeSession(open=%r, rows=%d)" % (self._open, self._b)
