@@ -1,9 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Exact analytic gate for four-tree resident oblivious apply grouping."""
+"""Exact analytic gate for four- and eight-tree resident apply grouping."""
 
 from max.gpu.host import DeviceContext
 from std.time import perf_counter_ns
 from gbdt.models.kernel.add_bin_values import (
+    compute_bins_and_add_eight_kernel,
     compute_bins_and_add_four_kernel,
     compute_bins_and_add_kernel,
 )
@@ -13,9 +14,11 @@ def main() raises:
     var ctx = DeviceContext()
     comptime N = 1_000_003
     comptime DIM = 2
-    var depths: List[Int] = [1, 2, 3, 1]
-    var total_levels = 7
-    var total_leaves = 16
+    var depths: List[Int] = [1, 2, 3, 1, 4, 2, 1, 3]
+    # Allocate the full symmetric descriptor cap so the last gate can exercise
+    # a depth-32 tree without allocating its unreachable 2**32 leaf slab.
+    var total_levels = 32
+    var total_leaves = 46
     var h_ci = ctx.enqueue_create_host_buffer[DType.uint32](N)
     for r in range(N):
         h_ci[r] = UInt32((r * 37 + r // 11) & 255)
@@ -77,6 +80,42 @@ def main() raises:
             if ah[i].to_bits() != bh[i].to_bits():
                 raise Error("grouped oblivious apply changed cell " + String(i))
     print("grouped oblivious apply: exact", N * DIM, "cells")
+    # Every legal tail width takes the same tree prefix and performs the same
+    # Float32 additions in the same order as one launch per tree.
+    for count in range(1, 9):
+        ctx.enqueue_memset(a, 0)
+        ctx.enqueue_memset(b, 0)
+        level = 0
+        leaf = 0
+        for t in range(count):
+            var depth = depths[t]
+            ctx.enqueue_function[compute_bins_and_add_kernel](
+                d_ci.unsafe_ptr(), d_off.unsafe_ptr() + level,
+                d_shift.unsafe_ptr() + level, d_mask.unsafe_ptr() + level,
+                d_bin.unsafe_ptr() + level, d_eq.unsafe_ptr() + level,
+                Int32(depth), d_leaf.unsafe_ptr() + leaf * DIM, Int32(N),
+                a.unsafe_ptr(), Int32(DIM), Int32(N),
+                grid_dim=((N + 255) // 256, DIM, 1), block_dim=(256, 1, 1),
+            )
+            level += depth
+            leaf += 1 << depth
+        ctx.enqueue_function[compute_bins_and_add_eight_kernel](
+            d_ci.unsafe_ptr(), d_off.unsafe_ptr(), d_shift.unsafe_ptr(),
+            d_mask.unsafe_ptr(), d_bin.unsafe_ptr(), d_eq.unsafe_ptr(),
+            Int32(depths[0]), Int32(depths[1]), Int32(depths[2]),
+            Int32(depths[3]), Int32(depths[4]), Int32(depths[5]),
+            Int32(depths[6]), Int32(depths[7]), Int32(count),
+            d_leaf.unsafe_ptr(), Int32(N), b.unsafe_ptr(), Int32(DIM), Int32(N),
+            grid_dim=((N + 255) // 256, DIM, 1), block_dim=(256, 1, 1),
+        )
+        with a.map_to_host() as ah, b.map_to_host() as bh:
+            for i in range(N * DIM):
+                if ah[i].to_bits() != bh[i].to_bits():
+                    raise Error(
+                        "eight-tree tail " + String(count)
+                        + " changed cell " + String(i)
+                    )
+    print("eight-tree grouped apply: exact tails 1..8")
     # One hundred identical ordered trees model a realistic boosted ensemble.
     # Reusing the four-tree descriptor is intentional: this measures launch
     # and cursor traffic rather than model preparation.
@@ -121,3 +160,40 @@ def main() raises:
         for i in range(N * DIM):
             if ah[i].to_bits() != bh[i].to_bits():
                 raise Error("100-tree grouped apply changed cell " + String(i))
+
+    # The descriptor's resident symmetric-tree limit is 32 levels. Force all
+    # predicates false so only leaf zero is reachable; this checks all 32
+    # descriptor slots without constructing an impossible 2**32-leaf fixture.
+    for j in range(total_levels):
+        h_off[j] = UInt32(0)
+        h_shift[j] = UInt32(0)
+        h_mask[j] = UInt32(0)
+        h_bin[j] = UInt32(0)
+        h_eq[j] = UInt8(0)
+    ctx.enqueue_copy(dst_buf=d_off, src_buf=h_off)
+    ctx.enqueue_copy(dst_buf=d_shift, src_buf=h_shift)
+    ctx.enqueue_copy(dst_buf=d_mask, src_buf=h_mask)
+    ctx.enqueue_copy(dst_buf=d_bin, src_buf=h_bin)
+    ctx.enqueue_copy(dst_buf=d_eq, src_buf=h_eq)
+    ctx.enqueue_memset(a, 0)
+    ctx.enqueue_memset(b, 0)
+    ctx.enqueue_function[compute_bins_and_add_kernel](
+        d_ci.unsafe_ptr(), d_off.unsafe_ptr(), d_shift.unsafe_ptr(),
+        d_mask.unsafe_ptr(), d_bin.unsafe_ptr(), d_eq.unsafe_ptr(),
+        Int32(32), d_leaf.unsafe_ptr(), Int32(N), a.unsafe_ptr(),
+        Int32(DIM), Int32(N), grid_dim=((N + 255) // 256, DIM, 1),
+        block_dim=(256, 1, 1),
+    )
+    ctx.enqueue_function[compute_bins_and_add_eight_kernel](
+        d_ci.unsafe_ptr(), d_off.unsafe_ptr(), d_shift.unsafe_ptr(),
+        d_mask.unsafe_ptr(), d_bin.unsafe_ptr(), d_eq.unsafe_ptr(),
+        Int32(32), Int32(0), Int32(0), Int32(0), Int32(0), Int32(0),
+        Int32(0), Int32(0), Int32(1), d_leaf.unsafe_ptr(), Int32(N),
+        b.unsafe_ptr(), Int32(DIM), Int32(N),
+        grid_dim=((N + 255) // 256, DIM, 1), block_dim=(256, 1, 1),
+    )
+    with a.map_to_host() as ah, b.map_to_host() as bh:
+        for i in range(N * DIM):
+            if ah[i].to_bits() != bh[i].to_bits():
+                raise Error("depth-32 grouped apply changed cell " + String(i))
+    print("eight-tree grouped apply: exact depth 32")
