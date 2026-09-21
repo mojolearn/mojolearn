@@ -14,6 +14,7 @@ from std.memory import bitcast
 from std.time import perf_counter_ns
 from max.algorithm import sync_parallelize
 from checks.numerics import GLOBAL_NUMERIC_MODE
+from checks.kernel_matrix import TARGET_COLUMN, COLUMN_NVIDIA
 from max.gpu.host import DeviceContext, DeviceBuffer, HostBuffer
 from core.forest_inference import validate_flat_forest, require_finite, launch_forest_inference, launch_forest_argmax, FOREST_PACKED_NODES
 from core.forest_inference_pool import PooledForest, forest_device_count
@@ -35,14 +36,24 @@ from core.forest_inference_pool import PooledForest, forest_device_count
 #: diagnostic build, never a timed arm.
 comptime FOREST_PINNED_STAGE = is_defined["MOJOLEARN_FOREST_PINNED_STAGE"]()
 comptime FOREST_PROFILE = is_defined["MOJOLEARN_FOREST_PROFILE"]()
-#: Experimental repeated-inference arm: retain the resident model/workspaces,
-#: but launch the strict increasing-tree kernel used by the sequential GPU
-#: path.  Restrict activation to IDENTICAL builds; passing the define to a
-#: FAST or DETERMINISTIC build is deliberately a no-op.  Default builds keep
-#: the qualified 32-grove resident graph.
-comptime FOREST_ORDERED_RESIDENT = (
-    is_defined["MOJOLEARN_FOREST_ORDERED_RESIDENT"]() and GLOBAL_NUMERIC_MODE == 1
-)
+def forest_ordered_resident_policy[
+    column: Int, identical: Bool, forced: Bool, disabled: Bool
+]() -> Bool:
+    """NVIDIA IDENTICAL default; explicit force is experimental elsewhere."""
+    return identical and not disabled and (forced or column == COLUMN_NVIDIA)
+
+
+#: Retain the resident model/workspaces while launching the strict
+#: increasing-tree kernel. H100 full-buffer qualification promotes this for
+#: NVIDIA IDENTICAL. `_OFF` restores the former sequential AUTO policy and
+#: resident 32-grove graph; the positive define remains an experiment switch
+#: for other IDENTICAL columns.
+comptime FOREST_ORDERED_RESIDENT = forest_ordered_resident_policy[
+    TARGET_COLUMN,
+    GLOBAL_NUMERIC_MODE == 1,
+    is_defined["MOJOLEARN_FOREST_ORDERED_RESIDENT"](),
+    is_defined["MOJOLEARN_FOREST_ORDERED_RESIDENT_OFF"](),
+]()
 comptime FOREST_CHECK_W = 16
 comptime FOREST_CHECK_CHUNK = 1 << 20
 comptime FOREST_CHECK_SERIAL = 1 << 16
