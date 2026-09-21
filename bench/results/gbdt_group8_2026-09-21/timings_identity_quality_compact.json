@@ -1,0 +1,459 @@
+{
+  "bindings": {
+    "base_sha256": "9fe002284c14a6c520c1ca8cee1a6701178a7711113ea0a2f35e07827ee033c8",
+    "group8_sha256": "e8f7aff05fbbb73bbb3d4c519f3cc2c171c6928a298a15d9277191901a3e9ed4"
+  },
+  "candidate_define": "-D MOJOLEARN_GBDT_GROUP8=1",
+  "cells": {
+    "istella.predict": {
+      "arms": {
+        "base": {
+          "all_processes_stable": false,
+          "binding_sha256_prefix": "9fe002284c14a6c5",
+          "median_of_process_medians_ms": 73.3666144311428,
+          "output_hash": "b3930e8f00eab54cb972180f2ef8f93f1b73cab8ee0bd6a5e6585cf2830648b2:<f4:(1000000,)",
+          "process_medians_ms": [
+            73.3666144311428,
+            73.37646335363388,
+            70.60153558850288
+          ],
+          "process_spreads_max_over_min": [
+            1.0349817915703063,
+            1.038374389857455,
+            1.3598608607671583
+          ],
+          "quality": {
+            "accuracy": 0.948101,
+            "logloss": 0.130511686040713
+          },
+          "timed_sample_per_call_ms": [
+            [
+              75.39707571268082,
+              72.84869775176048,
+              73.3666144311428,
+              73.22285324335098,
+              73.4889306128025
+            ],
+            [
+              75.68594962358475,
+              72.88888320326805,
+              73.37646335363388,
+              73.26672077178955,
+              73.70124533772469
+            ],
+            [
+              69.49025616049767,
+              66.5633849799633,
+              70.60153558850288,
+              73.89483824372292,
+              90.51694199442863
+            ]
+          ]
+        },
+        "group8": {
+          "all_processes_stable": false,
+          "binding_sha256_prefix": "e8f7aff05fbbb73b",
+          "median_of_process_medians_ms": 70.09001448750496,
+          "output_hash": "b3930e8f00eab54cb972180f2ef8f93f1b73cab8ee0bd6a5e6585cf2830648b2:<f4:(1000000,)",
+          "process_medians_ms": [
+            66.17021337151527,
+            77.24326103925705,
+            70.09001448750496
+          ],
+          "process_spreads_max_over_min": [
+            1.082999240783972,
+            1.2372674126883756,
+            1.037776964375044
+          ],
+          "quality": {
+            "accuracy": 0.948101,
+            "logloss": 0.130511686040713
+          },
+          "timed_sample_per_call_ms": [
+            [
+              70.08018791675568,
+              64.70936015248299,
+              65.48153311014175,
+              67.59734898805618,
+              66.17021337151527
+            ],
+            [
+              76.56365260481834,
+              77.24326103925705,
+              92.69619733095169,
+              88.16964700818062,
+              74.92009922862053
+            ],
+            [
+              70.7010991871357,
+              70.09001448750496,
+              69.70789507031441,
+              69.24581304192543,
+              71.86170965433121
+            ]
+          ]
+        }
+      },
+      "base_over_group8_ratio": 1.0467484557906885,
+      "hashes_equal_across_arms": true,
+      "paired_process_base_over_group8_ratios": [
+        1.1087558992627553,
+        0.9499399995080741,
+        1.007298059570085
+      ],
+      "qualified": false,
+      "quality_equal_across_arms": true
+    },
+    "istella.proba": {
+      "arms": {
+        "base": {
+          "all_processes_stable": false,
+          "binding_sha256_prefix": "9fe002284c14a6c5",
+          "median_of_process_medians_ms": 87.19230517745018,
+          "output_hash": "8051f1322bdffa4e3171b89a9ef0887a353236f43e990cacf77243edcd715795:<f8:(1000000, 2)",
+          "process_medians_ms": [
+            94.02272552251816,
+            87.19230517745018,
+            85.64556241035461
+          ],
+          "process_spreads_max_over_min": [
+            1.120214035309467,
+            1.1221977237976843,
+            1.188187591159427
+          ],
+          "quality": {
+            "accuracy": 0.948101,
+            "logloss": 0.130511686040713
+          },
+          "timed_sample_per_call_ms": [
+            [
+              91.45461618900299,
+              94.02272552251816,
+              97.03276678919792,
+              99.85422343015671,
+              89.13852199912071
+            ],
+            [
+              87.19230517745018,
+              82.54692852497101,
+              92.6339752972126,
+              85.07233560085297,
+              90.15041515231133
+            ],
+            [
+              90.78289344906807,
+              82.25313276052475,
+              81.74715861678123,
+              97.1309594810009,
+              85.64556241035461
+            ]
+          ]
+        },
+        "group8": {
+          "all_processes_stable": false,
+          "binding_sha256_prefix": "e8f7aff05fbbb73b",
+          "median_of_process_medians_ms": 81.09612241387367,
+          "output_hash": "8051f1322bdffa4e3171b89a9ef0887a353236f43e990cacf77243edcd715795:<f8:(1000000, 2)",
+          "process_medians_ms": [
+            80.561263859272,
+            88.6759802699089,
+            81.09612241387367
+          ],
+          "process_spreads_max_over_min": [
+            1.097920177903826,
+            1.2648323970423898,
+            1.0716754804786417
+          ],
+          "quality": {
+            "accuracy": 0.948101,
+            "logloss": 0.130511686040713
+          },
+          "timed_sample_per_call_ms": [
+            [
+              88.2564626634121,
+              80.99713400006294,
+              80.38513585925102,
+              80.5281326174736,
+              80.561263859272
+            ],
+            [
+              105.37431389093399,
+              84.75818410515785,
+              83.31089094281197,
+              88.6759802699089,
+              95.46744003891945
+            ],
+            [
+              86.24308779835701,
+              81.09612241387367,
+              80.5681511759758,
+              80.475003272295,
+              82.52350613474846
+            ]
+          ]
+        }
+      },
+      "base_over_group8_ratio": 1.075172308886295,
+      "hashes_equal_across_arms": true,
+      "paired_process_base_over_group8_ratios": [
+        1.1670959592535841,
+        0.9832685797445626,
+        1.056099352978468
+      ],
+      "qualified": false,
+      "quality_equal_across_arms": true
+    },
+    "taxi.predict": {
+      "arms": {
+        "base": {
+          "all_processes_stable": false,
+          "binding_sha256_prefix": "9fe002284c14a6c5",
+          "median_of_process_medians_ms": 13.146806508302689,
+          "output_hash": "05b20a940b8ede7da988c95500f48cab6ef98af116af84837889a469f9c938fb:<f4:(1000000,)",
+          "process_medians_ms": [
+            13.146806508302689,
+            16.466569900512695,
+            12.50607967376709
+          ],
+          "process_spreads_max_over_min": [
+            1.1632833424889069,
+            1.2718080327486423,
+            1.2217232509453841
+          ],
+          "quality": {
+            "accuracy": 0.775567,
+            "logloss": 0.5180164941558509
+          },
+          "timed_sample_per_call_ms": [
+            [
+              13.146806508302689,
+              12.481958419084549,
+              12.855830043554306,
+              14.520054310560226,
+              13.91070932149887
+            ],
+            [
+              16.293513774871826,
+              16.718317568302155,
+              16.795991361141205,
+              16.466569900512695,
+              13.206388801336288
+            ],
+            [
+              12.870538234710693,
+              12.312498688697815,
+              12.377053499221802,
+              12.50607967376709,
+              15.042465925216675
+            ]
+          ]
+        },
+        "group8": {
+          "all_processes_stable": true,
+          "binding_sha256_prefix": "e8f7aff05fbbb73b",
+          "median_of_process_medians_ms": 12.475642561912537,
+          "output_hash": "05b20a940b8ede7da988c95500f48cab6ef98af116af84837889a469f9c938fb:<f4:(1000000,)",
+          "process_medians_ms": [
+            12.374945729970932,
+            12.524031102657318,
+            12.475642561912537
+          ],
+          "process_spreads_max_over_min": [
+            1.076466235355695,
+            1.0212623496340616,
+            1.014716168089755
+          ],
+          "quality": {
+            "accuracy": 0.775567,
+            "logloss": 0.5180164941558509
+          },
+          "timed_sample_per_call_ms": [
+            [
+              13.153475522994995,
+              12.219125032424927,
+              12.242719531059265,
+              12.374945729970932,
+              12.791590392589569
+            ],
+            [
+              12.607280910015106,
+              12.344801425933838,
+              12.413153797388077,
+              12.524031102657318,
+              12.601950764656067
+            ],
+            [
+              12.575331330299377,
+              12.392954528331757,
+              12.519768625497818,
+              12.450691312551498,
+              12.475642561912537
+            ]
+          ]
+        }
+      },
+      "base_over_group8_ratio": 1.0537979461225653,
+      "hashes_equal_across_arms": true,
+      "paired_process_base_over_group8_ratios": [
+        1.0623728616815171,
+        1.3147979085598773,
+        1.00243972298048
+      ],
+      "qualified": false,
+      "quality_equal_across_arms": true
+    },
+    "taxi.proba": {
+      "arms": {
+        "base": {
+          "all_processes_stable": false,
+          "binding_sha256_prefix": "9fe002284c14a6c5",
+          "median_of_process_medians_ms": 22.92102575302124,
+          "output_hash": "1c57074e7e015185a849be62769bb4e95ac3cd9ef493bad997191f3e25af57a8:<f8:(1000000, 2)",
+          "process_medians_ms": [
+            23.352428525686264,
+            22.92102575302124,
+            22.571956366300583
+          ],
+          "process_spreads_max_over_min": [
+            1.264018177447744,
+            1.197309396295488,
+            1.2846080996615263
+          ],
+          "quality": {
+            "accuracy": 0.775567,
+            "logloss": 0.5180164941558509
+          },
+          "timed_sample_per_call_ms": [
+            [
+              28.361837565898895,
+              24.883519858121872,
+              23.352428525686264,
+              22.442052513360977,
+              22.437839955091476
+            ],
+            [
+              26.610926538705826,
+              22.225605696439743,
+              22.279147058725357,
+              24.07541424036026,
+              22.92102575302124
+            ],
+            [
+              28.945349156856537,
+              22.571956366300583,
+              22.53243550658226,
+              22.56324291229248,
+              24.489744752645493
+            ]
+          ]
+        },
+        "group8": {
+          "all_processes_stable": false,
+          "binding_sha256_prefix": "e8f7aff05fbbb73b",
+          "median_of_process_medians_ms": 24.66663494706154,
+          "output_hash": "1c57074e7e015185a849be62769bb4e95ac3cd9ef493bad997191f3e25af57a8:<f8:(1000000, 2)",
+          "process_medians_ms": [
+            25.222115963697433,
+            24.53726753592491,
+            24.66663494706154
+          ],
+          "process_spreads_max_over_min": [
+            1.3010502995299913,
+            1.3207094034529185,
+            1.1984526082212472
+          ],
+          "quality": {
+            "accuracy": 0.775567,
+            "logloss": 0.5180164941558509
+          },
+          "timed_sample_per_call_ms": [
+            [
+              28.66358682513237,
+              25.911089032888412,
+              25.222115963697433,
+              22.39907532930374,
+              22.031113505363464
+            ],
+            [
+              29.83010932803154,
+              23.35379049181938,
+              22.586429119110107,
+              24.53726753592491,
+              27.078374475240707
+            ],
+            [
+              26.506046950817108,
+              22.11689203977585,
+              22.32760414481163,
+              24.66663494706154,
+              24.88226816058159
+            ]
+          ]
+        }
+      },
+      "base_over_group8_ratio": 0.9292319686983389,
+      "hashes_equal_across_arms": true,
+      "paired_process_base_over_group8_ratios": [
+        0.9258711108654707,
+        0.9341311423312584,
+        0.9150804888767169
+      ],
+      "qualified": false,
+      "quality_equal_across_arms": true
+    }
+  },
+  "datasets": {
+    "istella": {
+      "r2_bytes": 2248281826,
+      "r2_key": "gbm-bench/istella/istella_speed.npz",
+      "r2_sha256": "31f042376c0b819fe169cbbd998e840567c23dae25c14cb9054b460292f6ffef",
+      "source_shape": [
+        2043304,
+        220
+      ],
+      "timed_shape": [
+        1000000,
+        220
+      ]
+    },
+    "taxi": {
+      "r2_bytes": 419757252,
+      "r2_key": "gbm-bench/taxi/taxi_speed.npz",
+      "r2_sha256": "10d5d35f376a5b2ad5c66fabe624ee2caafb58bc5e7516824f801de9aab6cc15",
+      "source_shape": [
+        4000000,
+        11
+      ],
+      "timed_shape": [
+        1000000,
+        16
+      ]
+    }
+  },
+  "decision": "reject_default_promotion",
+  "device": "NVIDIA H100 80GB HBM3",
+  "diagnostic_geomean_base_over_group8": 1.0245908483870647,
+  "driver": "580.126.09",
+  "mode": "identical",
+  "protocol": {
+    "alternating_process_order": true,
+    "calls_per_timed_sample": 5,
+    "excluded_warmups_per_process": 1,
+    "inference_rows": 1000000,
+    "process_pairs": 3,
+    "reported_unit": "per-call milliseconds",
+    "spread_gate_max_over_min": 1.1,
+    "timed_calls_per_process": 25,
+    "timed_samples_per_process": 5,
+    "train_rows": 1000000,
+    "trees": 256
+  },
+  "reason": "all cells failed the 1.10 within-process spread gate and Taxi predict_proba regressed",
+  "schema": "mojolearn.gbdt-group8-h100.v1",
+  "source_commits": {
+    "candidate": "d774a17418086048e178a24aa2919740699112c2",
+    "leg": "38cd6ce6c",
+    "portable_math_fix": "426b4e453",
+    "repeated_call_timing": "13c046d50"
+  }
+}
