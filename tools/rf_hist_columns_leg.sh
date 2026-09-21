@@ -7,6 +7,10 @@ PY=${MOJOLEARN_RF_COLUMNS_PY:-$ROOT/.pixi/envs/default/bin/python}
 ROWS=${MOJOLEARN_RF_COLUMNS_ROWS:-1000000}
 REPEATS=${MOJOLEARN_RF_COLUMNS_REPEATS:-5}
 MODULE=$ROOT/python/mojolearn/identical/_mojolearn_rf.so
+if [ "$(uname -s)" = Darwin ] && [ -z "${MOJOLEARN_SLOT_TOKEN:-}" ]; then
+    exec python3 "$ROOT/tools/mac_slot.py" --timeout 7200 --wait-timeout 3600 \
+        metal sh "$ROOT/tools/rf_hist_columns_leg.sh"
+fi
 mkdir -p "$OUT/bin" "$OUT/logs"
 cd "$ROOT" || exit 9
 
