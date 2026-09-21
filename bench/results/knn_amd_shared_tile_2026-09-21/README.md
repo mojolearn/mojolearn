@@ -5,7 +5,9 @@ provider receipts described in
 `bench/evidence/2026-09-21_knn_amd_shared_tile.md`. The source artifacts remain
 under `/Users/andrewhendel/mojolearn-evidence/2026-09-21_knn_amd_smem/`.
 
-For each provider, `summary.tsv` and `verdict.json` are byte-for-byte copies.
+For each provider, `verdict.json` is a byte-for-byte copy. `summary.tsv` is
+a whitespace-normalized compact copy: trailing padding is removed and an
+empty baseline `paired_ratio_over_first` field is written as `NA`.
 `cells_compact.json` is a deterministic projection of the two aggregate cell
 JSON files. It retains every outer-pass median, every timed-call digest, all
 six paired ratios, aggregate timing/spread/status fields, and the two-dataset

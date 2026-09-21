@@ -35,11 +35,11 @@ GPU: 0
         TARGET_GRAPHICS_VERSION: gfx942
 
 == rocminfo (names)
-  Marketing Name:          Intel(R) Xeon(R) Platinum 8470     
-  Compute Unit:            13                                 
-  Name:                    gfx942                             
-  Marketing Name:          AMD Instinct MI300X VF             
-  Compute Unit:            304                                
+  Marketing Name:          Intel(R) Xeon(R) Platinum 8470
+  Compute Unit:            13
+  Name:                    gfx942
+  Marketing Name:          AMD Instinct MI300X VF
+  Compute Unit:            304
 == /opt/rocm/.info/version
 6.4.1-83
 == /sys/module/amdgpu/version

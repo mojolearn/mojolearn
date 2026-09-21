@@ -35,11 +35,11 @@ GPU: 0
         TARGET_GRAPHICS_VERSION: gfx942
 
 == rocminfo (names)
-  Marketing Name:          AMD EPYC 9575F 64-Core Processor   
-  Compute Unit:            20                                 
-  Name:                    gfx942                             
-  Marketing Name:          AMD Instinct Mi325X VF             
-  Compute Unit:            304                                
+  Marketing Name:          AMD EPYC 9575F 64-Core Processor
+  Compute Unit:            20
+  Name:                    gfx942
+  Marketing Name:          AMD Instinct Mi325X VF
+  Compute Unit:            304
 == /opt/rocm/.info/version
 6.4.0-47
 == /sys/module/amdgpu/version

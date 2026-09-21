@@ -1,8 +1,8 @@
 Mon Sep 21 13:02:30 UTC 2026
 Linux mojolearn-extra-amd 6.8.0-59-generic #61-Ubuntu SMP PREEMPT_DYNAMIC Fri Apr 11 23:16:11 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux
 20
-  Marketing Name:          AMD EPYC 9575F 64-Core Processor   
-  Compute Unit:            20                                 
-  Name:                    gfx942                             
-  Marketing Name:          AMD Instinct Mi325X VF             
-  Compute Unit:            304                                
+  Marketing Name:          AMD EPYC 9575F 64-Core Processor
+  Compute Unit:            20
+  Name:                    gfx942
+  Marketing Name:          AMD Instinct Mi325X VF
+  Compute Unit:            304
