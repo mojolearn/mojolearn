@@ -58,6 +58,9 @@ def numpy_errors(path, relative):
 # Module level: the standard library and mojolearn only. Inside a function: also
 # an optional interop package, which the caller must tolerate being absent.
 OPTIONAL_LAZY_IMPORTS = {"sklearn"}  # scikit-learn protocol hooks; each falls back when it is missing
+# A source-tree-only check the shipped copy of tools/identity_break.py skips
+# by name when tools/ is absent (it reads bindings/*.mojo, which never ship).
+SOURCE_TREE_LAZY_IMPORTS = {"mojolearn/_identity_break.py": {"lane_applicability"}}
 
 
 def dependency_errors(path, relative):
@@ -85,6 +88,8 @@ def dependency_errors(path, relative):
             if top in allowed or top.startswith("_mojolearn"):
                 continue
             if top in OPTIONAL_LAZY_IMPORTS and id(node) in lazy:
+                continue
+            if top in SOURCE_TREE_LAZY_IMPORTS.get(relative, ()) and id(node) in lazy:
                 continue
             errors.append(f"{relative}: imports {top!r}, which the wheel does not provide")
     return errors

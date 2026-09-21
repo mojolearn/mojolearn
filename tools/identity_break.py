@@ -11359,8 +11359,17 @@ def _run_reference(args):
         # `_verify_reference.admit` can both see it without re-deriving the
         # rule. Recorded, not refused: a record that names its own weakness is
         # worth more than one that was never written.
+        # The check reads the source tree (tools/, bindings/*.mojo), so it runs
+        # only from a checkout; the installed package's copy of this file says
+        # so plainly instead of recording an import error.
+        _here = os.path.dirname(os.path.abspath(__file__))
+
+        class _SourceTreeOnly(Exception):
+            pass
         try:
-            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            if not os.path.isfile(os.path.join(_here, "lane_applicability.py")):
+                raise _SourceTreeOnly()
+            sys.path.insert(0, _here)
             import lane_applicability as _la
             _la.use_harness(sys.modules[__name__])   # never exec this file twice
             # FROM THE LOADED BACKEND, NOT A FLAG. `identity_break.py` has no
@@ -11375,6 +11384,9 @@ def _run_reference(args):
                 if _hit:
                     record["degenerate_lanes"] = _hit
                     record["degenerate_column"] = _col
+        except _SourceTreeOnly:
+            record["degenerate_check"] = ("not run: it needs the source tree "
+                                          "(tools/lane_applicability.py); run from a checkout")
         except Exception as exc:        # never lose a column over this check
             record["degenerate_check_error"] = f"{type(exc).__name__}: {exc}"[:200]
         # WAS THIS GPU RUN SERIALISED? (2026-09-19) Concurrent Metal jobs on one
