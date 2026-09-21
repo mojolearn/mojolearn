@@ -40,6 +40,7 @@ def prepare(args):
     import mojolearn as ml
     os.makedirs(args.out, exist_ok=True)
     manifest = {"trees": args.trees, "depth": args.depth, "train_rows": args.train_rows,
+                "numeric_mode": args.numeric_mode,
                 "datasets": {}}
     for dataset in ("taxi", "istella"):
         x, y = load_data(dataset)
@@ -52,7 +53,7 @@ def prepare(args):
                           ("et", ml.ExtraTreesClassifier)):
             model = cls(n_estimators=args.trees, max_depth=args.depth,
                         max_features=max_features, random_state=7, device="gpu",
-                        numeric_mode="identical", inference_engine="sequential")
+                        numeric_mode=args.numeric_mode, inference_engine="sequential")
             t0 = time.perf_counter()
             model.fit(x[:n], y[:n])
             path = os.path.join(args.out, "%s-%s.npz" % (dataset, kind))
@@ -183,6 +184,7 @@ def main():
     p.add_argument("--train-rows", type=int, default=1_000_000)
     p.add_argument("--trees", type=int, default=100)
     p.add_argument("--depth", type=int, default=16)
+    p.add_argument("--numeric-mode", choices=("fast", "identical"), default="identical")
     r = sub.add_parser("run")
     r.add_argument("--dataset", choices=("taxi", "istella"), required=True)
     r.add_argument("--arm", choices=("sequential", "ordered"), required=True)

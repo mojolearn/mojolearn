@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""H100 smoke: NVIDIA IDENTICAL AUTO selects ordered resident, exactly."""
+"""Smoke: default AUTO selects ordered resident and matches sequential exactly."""
 import argparse
 import hashlib
 import json
@@ -32,8 +32,16 @@ def main():
     ap.add_argument("--models", required=True)
     ap.add_argument("--rows", type=int, default=100_000)
     ap.add_argument("--json", required=True)
+    ap.add_argument("--expected-mode", choices=("fast", "identical"), default="identical")
+    ap.add_argument("--expected-vendor")
     args = ap.parse_args()
     import mojolearn as ml
+    if ml.numeric_mode() != args.expected_mode:
+        raise RuntimeError("numeric mode %r, expected %r" %
+                           (ml.numeric_mode(), args.expected_mode))
+    if args.expected_vendor is not None and ml.vendor() != args.expected_vendor:
+        raise RuntimeError("vendor %r, expected %r" %
+                           (ml.vendor(), args.expected_vendor))
     records = []
     for dataset in ("taxi", "istella"):
         x = load_data(dataset, args.rows)
@@ -46,7 +54,7 @@ def main():
             references = {"predict": model.predict(x), "proba": model.predict_proba(x)}
             model.inference_engine = "auto"
             if model._prediction_engine() != "parallel_groves":
-                raise RuntimeError("NVIDIA IDENTICAL AUTO did not select resident inference")
+                raise RuntimeError("AUTO did not select resident inference")
             for op, reference in references.items():
                 call = model.predict if op == "predict" else model.predict_proba
                 expected = sha(reference)
@@ -60,7 +68,8 @@ def main():
                 print("DEFAULT_EXACT", dataset, kind, op, expected[:16])
     with open(args.json, "w") as fh:
         json.dump(records, fh, indent=2, sort_keys=True)
-    print("PASS NVIDIA IDENTICAL ordered resident AUTO", len(records), "cells")
+    print("PASS", ml.vendor(), ml.numeric_mode(), "ordered resident AUTO",
+          len(records), "cells")
 
 
 if __name__ == "__main__":

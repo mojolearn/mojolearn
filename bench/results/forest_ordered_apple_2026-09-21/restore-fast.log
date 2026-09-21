@@ -1,0 +1,8 @@
+RESIDENT_LAYOUT_PACKED True
+RESIDENT_ORDERED False
+ORDERED_ROUTE_PASS RF_INPUT True selected False
+ORDERED_ROUTE_PASS RF_INPUT False selected False
+WORKSPACE_PASS RF_INPUT True cached/uncached resize/reuse/empty/changed-input/close
+WORKSPACE_PASS RF_INPUT False cached/uncached resize/reuse/empty/changed-input/close
+RESIDENT_MODE 0 VENDOR metal
+RESIDENT_FOREST_PASS repeated borrowed/List/transient/stump, release/stale/newID, dimensions/finite input+output/graph, destruction

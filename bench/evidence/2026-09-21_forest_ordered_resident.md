@@ -1,4 +1,4 @@
-# IDENTICAL ordered resident RF/ExtraTrees inference
+# Ordered resident RF/ExtraTrees inference
 
 **Verdict: promoted on NVIDIA IDENTICAL and Apple FAST/IDENTICAL.** The route retains the resident GPU
 model and I/O workspaces while using the existing strict increasing-tree
@@ -56,3 +56,44 @@ a public `inference_engine="auto"` smoke compared it with explicit sequential
 inference on 100,000 rows from both datasets. All eight RF/ET predict/proba
 cells matched full-buffer SHA-256 for three AUTO repeats. This verifies the
 promoted default rather than only the experimental define.
+
+## Apple Metal support
+
+The no-define Apple IDENTICAL route was also compared with the former
+sequential route on the same two datasets. Models were fitted once on 250,000
+rows and each process predicted 1,000,000 rows. The process pattern remained
+three alternating arms, one excluded warmup, and five retained calls.
+
+| dataset | model | operation | sequential ms | ordered resident ms | speedup | conservative candidate/baseline | quality |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Taxi | RF | predict | 5524.572 | 173.112 | 31.91x | 0.0427 | accuracy 0.779465 |
+| Taxi | RF | proba | 5824.373 | 202.813 | 28.72x | 0.0389 | logloss 0.5126321444971583 |
+| Taxi | ET | predict | 3915.889 | 215.645 | 18.16x | 0.0600 | accuracy 0.777343 |
+| Taxi | ET | proba | 3827.299 | 196.738 | 19.45x | 0.0591 | logloss 0.5195547196918995 |
+| Istella-S | RF | predict | 6188.296 | 641.641 | 9.65x | 0.1238 | accuracy 0.945320 |
+| Istella-S | RF | proba | 6214.627 | 607.458 | 10.23x | 0.1225 | logloss 0.1429750222767868 |
+| Istella-S | ET | predict | 4105.800 | 568.655 | 7.22x | 0.1570 | accuracy 0.926648 |
+| Istella-S | ET | proba | 4301.406 | 562.888 | 7.64x | 0.1581 | logloss 0.1837667854902221 |
+
+All warmup and retained full-buffer hashes match across the two Apple arms,
+so accuracy and logloss are bitwise-derived from the same predictions. The
+mechanical verdict is `reject` because local contention put the cross-process
+candidate median spread above 1.10 in five cells. The sequential arm was also
+above 1.10 in seven cells. This run is therefore supporting performance
+evidence rather than the promotion gate. Even its conservative slowest
+candidate / fastest baseline ratios are 0.0389--0.1581.
+
+Fresh no-define Apple FAST bindings then fitted separate FAST models and
+compared public AUTO with explicit sequential inference on 100,000 rows.
+All eight Taxi/Istella-S RF/ET predict/proba cells matched full-buffer SHA-256
+for three AUTO repeats. This proves that the FAST default keeps strict tree
+order and exact output bytes. The pure policy gate passed, and explicit `_OFF`
+FAST and IDENTICAL builds reported `RESIDENT_ORDERED False` while passing the
+resident lifecycle and routing checks, proving the restore path remains live.
+Compact Apple receipts are in
+`bench/results/forest_ordered_apple_2026-09-21/`; raw logs remain in
+`~/mojolearn-evidence/2026-09-21_forest_ordered_apple{,_fast}/`.
+
+The reused H100 was terminated after the NVIDIA work. RunPod returned HTTP
+204 for deletion and HTTP 404 on the verification lookup; the teardown receipt
+is tracked beside the NVIDIA results.

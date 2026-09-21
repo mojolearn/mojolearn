@@ -1,0 +1,254 @@
+{
+  "cells": [
+    {
+      "conservative_ordered_over_sequential": 0.04272575165636741,
+      "dataset": "taxi",
+      "exact": true,
+      "kind": "rf",
+      "operation": "predict",
+      "ordered_ms": 173.111959,
+      "ordered_over_sequential": 0.03133490700278812,
+      "process_median_spread": {
+        "ordered": 1.4326607103026099,
+        "sequential": 1.080135923318283
+      },
+      "process_spreads": {
+        "ordered": [
+          1.0895932611256487,
+          1.0312994442125265,
+          1.1603440277930797
+        ],
+        "sequential": [
+          1.0929109455920991,
+          1.2744057494090077,
+          1.068420642349743
+        ]
+      },
+      "qualified": false,
+      "quality": {
+        "accuracy": 0.779465
+      },
+      "sequential_ms": 5524.572292,
+      "stable": false
+    },
+    {
+      "conservative_ordered_over_sequential": 0.03889731765142947,
+      "dataset": "taxi",
+      "exact": true,
+      "kind": "rf",
+      "operation": "proba",
+      "ordered_ms": 202.813334,
+      "ordered_over_sequential": 0.03482148517132398,
+      "process_median_spread": {
+        "ordered": 1.3272541248333112,
+        "sequential": 1.1137674735567324
+      },
+      "process_spreads": {
+        "ordered": [
+          1.0602749653373582,
+          1.0673974413469032,
+          1.142408946678188
+        ],
+        "sequential": [
+          1.542090154443538,
+          1.2312129073348632,
+          1.1894917597828236
+        ]
+      },
+      "qualified": false,
+      "quality": {
+        "logloss": 0.5126321444971583
+      },
+      "sequential_ms": 5824.373458,
+      "stable": false
+    },
+    {
+      "conservative_ordered_over_sequential": 0.06003489586540836,
+      "dataset": "taxi",
+      "exact": true,
+      "kind": "et",
+      "operation": "predict",
+      "ordered_ms": 215.645333,
+      "ordered_over_sequential": 0.05506931649162903,
+      "process_median_spread": {
+        "ordered": 1.2392048877685202,
+        "sequential": 1.4971973229751583
+      },
+      "process_spreads": {
+        "ordered": [
+          1.042092470174868,
+          1.1243438783484438,
+          1.051667914328849
+        ],
+        "sequential": [
+          1.0260117690607808,
+          1.0329178312841492,
+          1.4321613045252906
+        ]
+      },
+      "qualified": false,
+      "quality": {
+        "accuracy": 0.777343
+      },
+      "sequential_ms": 3915.889042,
+      "stable": false
+    },
+    {
+      "conservative_ordered_over_sequential": 0.059109096277950426,
+      "dataset": "taxi",
+      "exact": true,
+      "kind": "et",
+      "operation": "proba",
+      "ordered_ms": 196.737541,
+      "ordered_over_sequential": 0.051403756361317866,
+      "process_median_spread": {
+        "ordered": 1.078081813015888,
+        "sequential": 1.578954018755746
+      },
+      "process_spreads": {
+        "ordered": [
+          1.0591928058886855,
+          1.0466923918019384,
+          1.0935757182547319
+        ],
+        "sequential": [
+          1.022818857032287,
+          1.0474126145169242,
+          1.7536651918486503
+        ]
+      },
+      "qualified": true,
+      "quality": {
+        "logloss": 0.5195547196918995
+      },
+      "sequential_ms": 3827.298916,
+      "stable": true
+    },
+    {
+      "conservative_ordered_over_sequential": 0.12380001218929208,
+      "dataset": "istella",
+      "exact": true,
+      "kind": "rf",
+      "operation": "predict",
+      "ordered_ms": 641.640708,
+      "ordered_over_sequential": 0.10368616880077826,
+      "process_median_spread": {
+        "ordered": 1.1085103770060614,
+        "sequential": 1.407638829551739
+      },
+      "process_spreads": {
+        "ordered": [
+          1.1659220928155285,
+          1.6337455551595685,
+          1.6518958273051634
+        ],
+        "sequential": [
+          1.3494625861024128,
+          1.0551283560980727,
+          1.3699893279025046
+        ]
+      },
+      "qualified": false,
+      "quality": {
+        "accuracy": 0.94532
+      },
+      "sequential_ms": 6188.296042,
+      "stable": false
+    },
+    {
+      "conservative_ordered_over_sequential": 0.1224718044089866,
+      "dataset": "istella",
+      "exact": true,
+      "kind": "rf",
+      "operation": "proba",
+      "ordered_ms": 607.458,
+      "ordered_over_sequential": 0.09774649058921532,
+      "process_median_spread": {
+        "ordered": 1.100988587942435,
+        "sequential": 1.519036234144188
+      },
+      "process_spreads": {
+        "ordered": [
+          1.0563228854461804,
+          1.0421157709660753,
+          1.0509389718003261
+        ],
+        "sequential": [
+          1.1529705780993451,
+          1.0624998033781572,
+          1.5426514449179707
+        ]
+      },
+      "qualified": false,
+      "quality": {
+        "logloss": 0.1429750222767868
+      },
+      "sequential_ms": 6214.627209,
+      "stable": false
+    },
+    {
+      "conservative_ordered_over_sequential": 0.1570398373009735,
+      "dataset": "istella",
+      "exact": true,
+      "kind": "et",
+      "operation": "predict",
+      "ordered_ms": 568.655084,
+      "ordered_over_sequential": 0.13850042887389263,
+      "process_median_spread": {
+        "ordered": 1.0159483886005631,
+        "sequential": 1.1410040017446224
+      },
+      "process_spreads": {
+        "ordered": [
+          1.0865385005991677,
+          1.1293852276425682,
+          1.1070270749559505
+        ],
+        "sequential": [
+          1.0832385025321196,
+          1.2086875236617114,
+          1.0246520824551466
+        ]
+      },
+      "qualified": true,
+      "quality": {
+        "accuracy": 0.926648
+      },
+      "sequential_ms": 4105.800167,
+      "stable": true
+    },
+    {
+      "conservative_ordered_over_sequential": 0.15806888156900775,
+      "dataset": "istella",
+      "exact": true,
+      "kind": "et",
+      "operation": "proba",
+      "ordered_ms": 562.887916,
+      "ordered_over_sequential": 0.13086136522840952,
+      "process_median_spread": {
+        "ordered": 1.036879874065079,
+        "sequential": 1.2525014138204331
+      },
+      "process_spreads": {
+        "ordered": [
+          1.0387774075932679,
+          1.0208910429026714,
+          1.0663906367474403
+        ],
+        "sequential": [
+          1.1077297699690982,
+          1.0432997266803319,
+          1.178605683567093
+        ]
+      },
+      "qualified": true,
+      "quality": {
+        "logloss": 0.1837667854902221
+      },
+      "sequential_ms": 4301.406416,
+      "stable": true
+    }
+  ],
+  "promotion_rule": "all 8 cells exact, ordered process-median spread <= 1.100, and slowest ordered / fastest sequential <= 0.980",
+  "verdict": "reject"
+}
