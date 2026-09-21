@@ -116,3 +116,6 @@ def table(selected, title):
 
 table([d for d in docs if d[1] == "par_quick"], "verify --par quick")
 table([d for d in docs if d[1].startswith("par_all_")], "verify --par all (one fixture per command)")
+if any(d[1].startswith("par_lanes_") for d in docs):
+    table([d for d in docs if d[1].startswith("par_lanes_")],
+          "verify --par --lanes <explicit list> --fixtures base")
