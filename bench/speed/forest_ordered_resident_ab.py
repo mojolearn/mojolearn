@@ -75,6 +75,8 @@ def run(args):
     import mojolearn as ml
     os.makedirs(os.path.dirname(args.json), exist_ok=True)
     x, y = load_data(args.dataset)
+    x = np.ascontiguousarray(x[:args.rows])
+    y = np.ascontiguousarray(y[:args.rows])
     rows = []
     for kind, cls in (("rf", ml.RandomForestClassifier),
                       ("et", ml.ExtraTreesClassifier)):
@@ -172,6 +174,7 @@ def main():
     r.add_argument("--models", required=True)
     r.add_argument("--outer", type=int, required=True)
     r.add_argument("--rounds", type=int, default=5)
+    r.add_argument("--rows", type=int, default=1_000_000)
     r.add_argument("--json", required=True)
     s = sub.add_parser("summarize")
     s.add_argument("inputs", nargs="+")

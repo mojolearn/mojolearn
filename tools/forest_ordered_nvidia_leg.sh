@@ -7,6 +7,7 @@ MODELS=/root/forest-ordered-models
 PY="$ROOT/.pixi/envs/default/bin/python3"
 OUTERS=${MOJOLEARN_FOREST_ORDERED_OUTERS:-3}
 ROUNDS=${MOJOLEARN_FOREST_ORDERED_ROUNDS:-5}
+ROWS=${MOJOLEARN_FOREST_ORDERED_ROWS:-1000000}
 mkdir -p "$OUT" "$MODELS" /root/bins/baseline
 cd "$ROOT" || exit 9
 export PATH="$HOME/.pixi/bin:$PATH" GBM_BENCH_DATA=/root/datasets/gbm-bench
@@ -56,7 +57,7 @@ while [ "$outer" -le "$OUTERS" ]; do
         for dataset in taxi istella; do
             step "run.$outer.$arm.$dataset" 3600 env PYTHONPATH="$ROOT/python" "$PY" -u \
                 bench/speed/forest_ordered_resident_ab.py run --dataset "$dataset" \
-                --arm "$arm" --models "$MODELS" --outer "$outer" --rounds "$ROUNDS" \
+                --arm "$arm" --models "$MODELS" --outer "$outer" --rounds "$ROUNDS" --rows "$ROWS" \
                 --json "$OUT/$dataset.$arm.o$outer.json"
         done
     done
