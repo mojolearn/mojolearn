@@ -207,6 +207,39 @@ def byte_lm_ce_aliased() -> Bool:
     return True
 
 
+comptime BYTE_LM_PARAM_VIEWS = is_defined["MOJOLEARN_BYTE_LM_PARAM_VIEWS"]()
+comptime BYTE_LM_GRAD_VIEWS = is_defined["MOJOLEARN_BYTE_LM_GRAD_VIEWS"]()
+comptime BYTE_LM_FLAT_VIEW_SABOTAGE = is_defined[
+    "MOJOLEARN_BYTE_LM_FLAT_VIEW_SABOTAGE"
+]()
+"""Default-off repeated-step storage trial.
+
+`PARAM_VIEWS` makes the embedding, decoder-block and LM-head weights exact
+sub-buffers of the authoritative flat parameter buffer. `GRAD_VIEWS` makes
+their gradients exact sub-buffers of the authoritative flat gradient buffer.
+The arithmetic launchers and their operands are unchanged; only the storage
+handles differ. The two switches are independent so the trial can price all
+four arms.
+
+`FLAT_VIEW_SABOTAGE` shifts block 0's first parameter view by one float. It is
+deliberately a valid, equal-length view and therefore proves that a full-step
+identity comparison reaches and distinguishes the view route rather than
+merely comparing two builds of the shipped copy route.
+"""
+
+
+def byte_lm_flat_view_arm() -> Int:
+    """Bit 0 parameter views, bit 1 gradient views, bit 2 reach sabotage."""
+    var arm = 0
+    comptime if BYTE_LM_PARAM_VIEWS:
+        arm |= 1
+    comptime if BYTE_LM_GRAD_VIEWS:
+        arm |= 2
+    comptime if BYTE_LM_FLAT_VIEW_SABOTAGE:
+        arm |= 4
+    return arm
+
+
 def byte_lm_attn_sticky_fallback() -> Bool:
     """DEVIATION 3110: TRUE only in a build carrying
     `-D MOJOLEARN_ATTN_STICKY=1`, which stops relaunching the fused attention
@@ -379,6 +412,10 @@ def _require_profile() raises:
                  or ANY_LOSS_SABOTAGE or OPT_SABOTAGE or BWD_ANY_SABOTAGE
                  or BLOCK_ANY_SABOTAGE or ATTN_TAIL_GUARD_SABOTAGE or ATTN_REPAIR_SAB_Z or ATTN_REPAIR_SAB_DQ):
         raise Error("byte LM: numerical sabotage build refused")
+    comptime if BYTE_LM_FLAT_VIEW_SABOTAGE and not BYTE_LM_PARAM_VIEWS:
+        raise Error(
+            "byte LM: flat-view sabotage requires parameter views"
+        )
 
 
 def _byte_check_workspace(n: Int) raises:
@@ -439,6 +476,8 @@ struct ByteBuffers(Movable):
 
     var emb_w: DeviceBuffer[DType.float32]  # [V, d_model]
     var lm_w: DeviceBuffer[DType.float32]  # [V, d_model]
+    var shadow_emb_w: DeviceBuffer[DType.float32]
+    var shadow_lm_w: DeviceBuffer[DType.float32]
     var dw_emb: DeviceBuffer[DType.float32]  # [V, d_model]
     var dw_lm: DeviceBuffer[DType.float32]  # [V, d_model]
 
@@ -534,10 +573,22 @@ struct ByteBuffers(Movable):
         )
         self.sab_partials = _zeros(ctx, SAB_CHUNKS)
 
-        self.emb_w = _zeros(ctx, V * DM)
-        self.lm_w = _zeros(ctx, V * DM)
-        self.dw_emb = _zeros(ctx, V * DM)
-        self.dw_lm = _zeros(ctx, V * DM)
+        comptime if BYTE_LM_PARAM_VIEWS:
+            self.emb_w = self.param.create_sub_buffer[DType.float32](0, V * DM)
+            self.lm_w = self.param.create_sub_buffer[DType.float32](
+                self.offsets[config.n_tensors() - 1], V * DM
+            )
+        else:
+            self.emb_w = _zeros(ctx, V * DM)
+            self.lm_w = _zeros(ctx, V * DM)
+        comptime if BYTE_LM_GRAD_VIEWS:
+            self.dw_emb = self.grad.create_sub_buffer[DType.float32](0, V * DM)
+            self.dw_lm = self.grad.create_sub_buffer[DType.float32](
+                self.offsets[config.n_tensors() - 1], V * DM
+            )
+        else:
+            self.dw_emb = _zeros(ctx, V * DM)
+            self.dw_lm = _zeros(ctx, V * DM)
 
         self.ids = _zeros_i32(ctx, M)
         self.targets = _zeros_i32(ctx, M)
@@ -633,6 +684,20 @@ struct ByteBuffers(Movable):
         self.shadow_p = _zeros(ctx, owned)
         self.shadow_m = _zeros(ctx, owned)
         self.shadow_v = _zeros(ctx, owned)
+        comptime if BYTE_LM_PARAM_VIEWS:
+            if not self.optimizer_pooled:
+                self.shadow_emb_w = self.shadow_p.create_sub_buffer[DType.float32](
+                    0, V * DM
+                )
+                self.shadow_lm_w = self.shadow_p.create_sub_buffer[DType.float32](
+                    self.offsets[config.n_tensors() - 1], V * DM
+                )
+            else:
+                self.shadow_emb_w = _zeros(ctx, 1)
+                self.shadow_lm_w = _zeros(ctx, 1)
+        else:
+            self.shadow_emb_w = _zeros(ctx, 1)
+            self.shadow_lm_w = _zeros(ctx, 1)
         self.flags_before = flags.copy()
 
 
@@ -653,6 +718,55 @@ def _block_weights(ctx: DeviceContext, params: List[Float32], block: Int, config
         _param_slice(params, base + 3, config), _param_slice(params, base + 4, config),
         _param_slice(params, base + 6, config), _param_slice(params, base + 7, config),
         _param_slice(params, base + 8, config))
+
+
+def _flat_view(mut buf: DeviceBuffer[DType.float32], offsets: List[Int],
+               j: Int, shift: Int = 0) raises -> DeviceBuffer[DType.float32]:
+    """An exact registry tensor view; `shift` exists only for the reach arm."""
+    return buf.create_sub_buffer[DType.float32](
+        offsets[j] + shift, offsets[j + 1] - offsets[j]
+    )
+
+
+def _block_weight_views(ctx: DeviceContext,
+                        mut param: DeviceBuffer[DType.float32], block: Int,
+                        config: ByteConfig) raises -> LlamaDeviceWeights:
+    """One block's nine weights as views of an authoritative flat buffer."""
+    var base = 1 + 9 * block
+    var o = byte_offsets(config)
+    var first_shift = 0
+    comptime if BYTE_LM_FLAT_VIEW_SABOTAGE:
+        if block == 0:
+            first_shift = 1
+    var norm1 = _flat_view(param, o, base, first_shift)
+    var norm2 = _flat_view(param, o, base + 5)
+    var wq = _flat_view(param, o, base + 1)
+    var wk = _flat_view(param, o, base + 2)
+    var wv = _flat_view(param, o, base + 3)
+    var wo = _flat_view(param, o, base + 4)
+    var wg = _flat_view(param, o, base + 6)
+    var wu = _flat_view(param, o, base + 7)
+    var wd = _flat_view(param, o, base + 8)
+    return LlamaDeviceWeights(
+        ctx, byte_dims(config), Float32(1e-6), norm1^, norm2^, wq^, wk^,
+        wv^, wo^, wg^, wu^, wd^
+    )
+
+
+def _bind_block_grad_views(mut tb: ByteBuffers,
+                           mut bst: LlamaBackwardStages, block: Int) raises:
+    """Write one block's nine gradients directly into canonical flat grad."""
+    var base = 1 + 9 * block
+    var o = tb.offsets.copy()
+    bst.dw_norm1 = _flat_view(tb.grad, o, base)
+    bst.dw_q = _flat_view(tb.grad, o, base + 1)
+    bst.dw_k = _flat_view(tb.grad, o, base + 2)
+    bst.dw_v = _flat_view(tb.grad, o, base + 3)
+    bst.dw_o = _flat_view(tb.grad, o, base + 4)
+    bst.dw_norm2 = _flat_view(tb.grad, o, base + 5)
+    bst.dw_gate = _flat_view(tb.grad, o, base + 6)
+    bst.dw_up = _flat_view(tb.grad, o, base + 7)
+    bst.dw_down = _flat_view(tb.grad, o, base + 8)
 
 
 def _block_offsets(o: List[Int], base: Int) raises -> List[Int]:
@@ -720,6 +834,7 @@ struct ByteTrainer(Movable):
     var config: ByteConfig
     var buffers: ByteBuffers
     var weights: List[LlamaDeviceWeights]
+    var shadow_weights: List[LlamaDeviceWeights]
     var rope: LlamaRopeTable
     var prefill_cache: LlamaKVCache
     var forward: List[LlamaDeviceStages]
@@ -754,17 +869,35 @@ struct ByteTrainer(Movable):
         self.scan = DeviceScanScratch(ctx)
         self.buffers = ByteBuffers(ctx, initial_params, initial_m, initial_v, flags, config, optimizer_first, optimizer_count)
         self.weights = List[LlamaDeviceWeights]()
+        self.shadow_weights = List[LlamaDeviceWeights]()
         self.forward = List[LlamaDeviceStages]()
         self.backward = List[LlamaBackwardStages]()
         self.rope = LlamaRopeTable(ctx, byte_dims(config), Float32(10000), config.length)
         self.prefill_cache = LlamaKVCache(ctx, config.batch, byte_dims(config), config.length)
         for layer in range(config.n_layers):
-            self.weights.append(_block_weights(ctx, initial_params, layer, config))
+            comptime if BYTE_LM_PARAM_VIEWS:
+                self.weights.append(
+                    _block_weight_views(ctx, self.buffers.param, layer, config)
+                )
+                if not self.buffers.optimizer_pooled:
+                    self.shadow_weights.append(
+                        _block_weight_views(
+                            ctx, self.buffers.shadow_p, layer, config
+                        )
+                    )
+            else:
+                self.weights.append(_block_weights(ctx, initial_params, layer, config))
             # The trace-disabled trainer uses the existing fused attention path.
             # Allocate its quadratic stages lazily; eager/diagnostic fallback
             # still grows them through ensure_*_attention_capacity.
             self.forward.append(LlamaDeviceStages(ctx, config.batch, config.length, config.length, byte_dims(config), lean=True))
-            self.backward.append(LlamaBackwardStages(ctx, config.batch, config.length, config.length, byte_dims(config), lean=True))
+            var backward = LlamaBackwardStages(
+                ctx, config.batch, config.length, config.length,
+                byte_dims(config), lean=True
+            )
+            comptime if BYTE_LM_GRAD_VIEWS:
+                _bind_block_grad_views(self.buffers, backward, layer)
+            self.backward.append(backward^)
         step_count_sync()
         ctx.synchronize()
 
@@ -1120,16 +1253,20 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
     # The wait above completes both uploads: host split, staging, H2D.
     timing_tick(ctx, ton, tk, "step.upload_inputs")
     timing_bytes(ton, "step.upload_inputs_bytes", 2 * M * 4)
-    for layer in range(config.n_layers):
-        _unpack_block(ctx, tr.buffers, tr.weights[layer], layer)
-    _copy_into(ctx, tr.buffers.emb_w, tr.buffers.param, 0, 0, config.vocab_size * config.d_model)
-    _copy_into(ctx, tr.buffers.lm_w, tr.buffers.param, 0, tr.buffers.offsets[config.n_tensors() - 1], config.vocab_size * config.d_model)
+    comptime if not BYTE_LM_PARAM_VIEWS:
+        for layer in range(config.n_layers):
+            _unpack_block(ctx, tr.buffers, tr.weights[layer], layer)
+        _copy_into(ctx, tr.buffers.emb_w, tr.buffers.param, 0, 0, config.vocab_size * config.d_model)
+        _copy_into(ctx, tr.buffers.lm_w, tr.buffers.param, 0, tr.buffers.offsets[config.n_tensors() - 1], config.vocab_size * config.d_model)
     # No wait: the embedding forward below is the next thing queued on this
     # same in-order context and reads no host memory.
     # A host round trip costs about a dozen kernel launches on Metal.
     # Device-to-device: every parameter byte copied once (blocks, emb, head).
     timing_tick(ctx, ton, tk, "step.unpack_weights")
-    timing_bytes(ton, "step.unpack_weights_bytes", config.n_total() * 4)
+    comptime if BYTE_LM_PARAM_VIEWS:
+        timing_bytes(ton, "step.unpack_weights_bytes", 0)
+    else:
+        timing_bytes(ton, "step.unpack_weights_bytes", config.n_total() * 4)
     var emb = EmbConfig.llama(config.vocab_size, config.d_model)
     var ce = CeConfig.causal_lm(config.vocab_size)
     identical_embedding_forward_into(ctx, tr.buffers.x, tr.buffers.emb_w, tr.buffers.ids, M, emb)
@@ -1406,15 +1543,19 @@ def byte_gradient_device(ctx: DeviceContext, mut tr: ByteTrainer,
     # No wait: the pack loop below queues onto this same in-order context.
     # A host round trip costs about a dozen kernel launches on Metal.
     timing_tick(ctx, ton, tk, "step.embedding_backward")
-    for layer in range(config.n_layers):
-        _pack_block(ctx, tr.buffers, tr.backward[layer], layer)
-    _copy_into(ctx, tr.buffers.grad, tr.buffers.dw_emb, 0, 0, config.vocab_size * config.d_model)
-    _copy_into(ctx, tr.buffers.grad, tr.buffers.dw_lm, tr.buffers.offsets[config.n_tensors() - 1], 0, config.vocab_size * config.d_model)
+    comptime if not BYTE_LM_GRAD_VIEWS:
+        for layer in range(config.n_layers):
+            _pack_block(ctx, tr.buffers, tr.backward[layer], layer)
+        _copy_into(ctx, tr.buffers.grad, tr.buffers.dw_emb, 0, 0, config.vocab_size * config.d_model)
+        _copy_into(ctx, tr.buffers.grad, tr.buffers.dw_lm, tr.buffers.offsets[config.n_tensors() - 1], 0, config.vocab_size * config.d_model)
     # No wait: the gradient scan in `byte_update_device` waits for its own answer.
     # A host round trip costs about a dozen kernel launches on Metal.
     # Device-to-device: every gradient byte copied once into `grad`.
     timing_tick(ctx, ton, tk, "step.pack_grads")
-    timing_bytes(ton, "step.pack_grads_bytes", config.n_total() * 4)
+    comptime if BYTE_LM_GRAD_VIEWS:
+        timing_bytes(ton, "step.pack_grads_bytes", 0)
+    else:
+        timing_bytes(ton, "step.pack_grads_bytes", config.n_total() * 4)
     _ = trace
     return loss
 
@@ -1670,6 +1811,13 @@ def _byte_glue_update(ctx: DeviceContext, mut tr: ByteTrainer, next_step: Int, a
         swap(tr.buffers.param, tr.buffers.shadow_p)
         swap(tr.buffers.m_state, tr.buffers.shadow_m)
         swap(tr.buffers.v_state, tr.buffers.shadow_v)
+        comptime if BYTE_LM_PARAM_VIEWS:
+            # The two collections were made once from the two alternating
+            # allocations. Keep every named view paired with the handle whose
+            # storage it references; no per-step sub-buffer construction.
+            swap(tr.buffers.emb_w, tr.buffers.shadow_emb_w)
+            swap(tr.buffers.lm_w, tr.buffers.shadow_lm_w)
+            swap(tr.weights, tr.shadow_weights)
         tr.shadow_valid = True
     timing_tick(ctx, ton, tk, "step.optimizer")
 

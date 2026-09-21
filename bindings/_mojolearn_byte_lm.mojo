@@ -52,7 +52,7 @@ from training.byte_lm import (
     byte_validate_tokens, byte_lm_fault_inject_available,
     byte_attention_eager_cells, byte_lm_attn_bwd_corner_refuses,
     byte_lm_attn_kv_corner_guard,
-    byte_lm_attn_sticky_fallback, byte_lm_ce_aliased,
+    byte_lm_attn_sticky_fallback, byte_lm_ce_aliased, byte_lm_flat_view_arm,
 )
 from training.byte_lm_optimizer_pool import pool_fault_available
 from training.byte_lm_model_pool import ByteModelPool
@@ -757,6 +757,11 @@ def byte_lm_ce_aliased_binding() raises -> PythonObject:
     The A/B that claims aliasing moves no bit reads this to prove its two
     arms are two arms."""
     return PythonObject(byte_lm_ce_aliased())
+
+
+def byte_lm_flat_view_arm_binding() raises -> PythonObject:
+    """Inside-the-loaded-binding witness for the four-arm storage trial."""
+    return PythonObject(byte_lm_flat_view_arm())
 
 
 def byte_lm_attn_sticky_fallback_binding() raises -> PythonObject:
@@ -1727,6 +1732,7 @@ def PyInit__mojolearn_byte_lm() abi("C") -> PythonObject:
         module.def_function[byte_lm_gemm_reuse_group_ws_binding]("byte_lm_gemm_reuse_group_ws")
         module.def_function[byte_lm_gemm_stage_ftz_binding]("byte_lm_gemm_stage_ftz")
         module.def_function[byte_lm_ce_aliased_binding]("byte_lm_ce_aliased")
+        module.def_function[byte_lm_flat_view_arm_binding]("byte_lm_flat_view_arm")
         module.def_function[byte_lm_attn_sticky_fallback_binding]("byte_lm_attn_sticky_fallback")
         module.def_function[byte_lm_attn_kv_corner_guard_binding]("byte_lm_attn_kv_corner_guard")
         module.def_function[byte_lm_attn_bwd_corner_refuses_binding]("byte_lm_attn_bwd_corner_refuses")
