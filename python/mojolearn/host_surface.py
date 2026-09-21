@@ -195,7 +195,12 @@ CLASSICAL_RECORDED = (
     "bench/results/classical_host/2026-09-15-apple-m4-linear-kernel",
     # lane/inference-forecast-umap-pca (2026-09-15): pca-full-whiten and umap,
     # recorded on the M4's Metal set; both bind families the gate builds.
-    "bench/results/classical_host/2026-09-15-apple-m4-umap-pca",
+    # The 2026-09-15 recording predates UMAP.transform becoming row separable
+    # (2026-09-16, LANE_REVISIONS "umap"), so its umap expectations are stale
+    # and the CPU build rightly differs from them on every fixture. The
+    # 2026-09-18 recording is the same nine fixtures of both lanes, recorded on
+    # Metal after that fix (aff968968; its README and host-check.json).
+    "bench/results/classical_host/2026-09-18-apple-m4-umap-pca",
     # lane/inference-svm (2026-09-15): svc-linear, svc-poly, svr and
     # svr-linear, recorded on the M4's Metal set on all nine fixtures. The
     # NVIDIA and AMD recordings are owed to the next release record.

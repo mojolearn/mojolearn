@@ -706,6 +706,13 @@ def do_check(args):
         print(f'gate: import failed: {type(exc).__name__}: {exc}', file=sys.stderr)
         return 2
     columns = gpu_columns(args.gpu_column)
+    # The lanes each column hashed at an older LANE_REVISIONS revision. Its
+    # infer cell there describes arithmetic the lane no longer has (umap
+    # became row separable on 2026-09-16 after the 46-lane record), so it is
+    # reported STALE and not compared, the rule `identity_break --diff`
+    # applies to the same columns. The recording's own expected.json, made
+    # at the current revision, still binds every prediction.
+    stale = [set(ib.stale_revision_lanes(j)) for _, j in columns]
     dirs = []
     for root in args.fixture_dir:
         if (root / 'expected.json').exists():
@@ -774,13 +781,16 @@ def do_check(args):
         else:
             unmoved.append(f'{lane}/{kind}')
         vendors = []
-        for label, j in columns:
+        for (label, j), stale_lanes in zip(columns, stale):
             cell = j.get('cells', {}).get(f'{lane}/{kind}')
             infer = (cell or {}).get('infer') or []
             theirs = infer[0] if infer else None
             equal = theirs == got['identity_hash']
             if theirs is None:
                 status = 'ABSENT'
+            elif lane in stale_lanes:
+                status = 'STALE'
+                equal = None
             elif isinstance(theirs, str) and theirs.startswith('n/a:'):
                 # A record older than the lane's infer probe carries its
                 # reason (`n/a:transductive` on hdbscan before 2026-09-15),

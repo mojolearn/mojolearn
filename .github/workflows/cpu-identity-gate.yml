@@ -347,6 +347,24 @@ jobs:
             MOJOLEARN_BUILD_JOBS=2 sh "bindings/build_${family}_host.sh" 2>&1 | tee "$GATE_OUT/build_${family}_host.log"
           done
 
+      # `python/mojolearn/_portable_math.py` dlopens the owned host math
+      # library (.dylibs/libMojolearnMath.dylib on macOS, .libs/libMojolearnMath.so
+      # on Linux) for sqrt, log and exp. Nothing under bindings/ builds it and
+      # both directories are gitignored, so on a fresh checkout every saved
+      # model whose Python side calls sqrt (the GP family first) failed with
+      # OSError (run 35628874036). It is built by the tree's own recipe,
+      # packaging/portable_math/stage.py build(), whose compiler flags are the
+      # arithmetic contract, and it is small enough to build every run.
+      - name: Build the owned host math library (libMojolearnMath)
+        run: |
+          set -o pipefail
+          if [ "$(uname -s)" = Darwin ]; then out=python/mojolearn/.dylibs/libMojolearnMath.dylib
+          else out=python/mojolearn/.libs/libMojolearnMath.so; fi
+          PYTHONPATH=packaging/portable_math python3 -c \
+            "import json, pathlib, sys, stage; print(json.dumps(stage.build(pathlib.Path(sys.argv[1])), indent=2))" \
+            "$out" 2>&1 | tee "$GATE_OUT/portable_math.log"
+          python3 -c "import ctypes, sys; lib = ctypes.CDLL(sys.argv[1]); f = lib.mojolearn_sqrt; f.argtypes = [ctypes.c_double]; f.restype = ctypes.c_double; assert f(4.0) == 2.0" "$out"
+
       # The package must take the CPU-only path on this runner, and each host
       # binding must read back as the CPU column. A binding that compiled as
       # another column does not exist (its comptime assert refuses), so this
