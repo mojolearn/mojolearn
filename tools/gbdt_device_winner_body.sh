@@ -1,7 +1,7 @@
 #!/bin/bash
 # Guarded on-box body for the default-off exact GBDT device winner fold.
 # It runs exactly Taxi and Istella-S, each with Depthwise and Lossguide.
-set -uo pipefail
+set -euo pipefail
 
 [ "${MOJOLEARN_GBDT_DEVICE_WINNER_RUN_GUARD:-}" = "R2_TAXI_ISTELLA" ] || {
     echo "refusing: set MOJOLEARN_GBDT_DEVICE_WINNER_RUN_GUARD=R2_TAXI_ISTELLA" >&2
@@ -61,6 +61,12 @@ build_one() {
     sha256sum "$tree/python/mojolearn/identical/_mojolearn_gbdt.so" \
         > "$OUT/${label}_binding.sha256"
 }
+clone_tree() {
+    src=$1; dst=$2
+    mkdir -p "$dst"
+    (cd "$src" && tar --exclude=.git --exclude=.pixi -cf - .) | (cd "$dst" && tar -xf -)
+    ln -s "$R/.pixi" "$dst/.pixi"
+}
 
 phase_build() {
     rm -rf "$B" "$S"
@@ -68,11 +74,9 @@ phase_build() {
     [ -x .pixi/envs/default/bin/python ] || pixi install
     [ -f python/mojolearn/identical/_mojolearn.so ] || bash bindings/build.sh
     build_one "$R" baseline ""
-    rsync -a --exclude .git --exclude .pixi "$R/" "$B/"
-    ln -s "$R/.pixi" "$B/.pixi"
+    clone_tree "$R" "$B"
     build_one "$R" candidate "-D MOJOLEARN_EXPERIMENTAL_IDENTICAL_DEVICE_WINNER_FOLD=1"
-    rsync -a --exclude .git --exclude .pixi "$R/" "$S/"
-    ln -s "$R/.pixi" "$S/.pixi"
+    clone_tree "$R" "$S"
     build_one "$S" sabotage "-D MOJOLEARN_EXPERIMENTAL_IDENTICAL_DEVICE_WINNER_FOLD=1 -D MOJOLEARN_SABOTAGE_IDENTICAL_DEVICE_WINNER_FOLD=1"
     {
         echo "source_commit=$(commit_of "$R")"

@@ -39,7 +39,8 @@ done
 : > "$OUT/status.tsv"
 sha256sum "$GBM_BENCH_DATA/taxi/taxi_speed.npz" \
           "$GBM_BENCH_DATA/istella/istella_speed.npz" > "$OUT/r2-inputs.sha256"
-commit=${MOJOLEARN_COMMIT:-$(git rev-parse HEAD 2>/dev/null)}
+commit=${MOJOLEARN_COMMIT:-}
+[ -n "$commit" ] || commit=$(git rev-parse HEAD 2>/dev/null || true)
 [ -n "$commit" ] || commit=$(cat "$ROOT/SHIPPED_COMMIT.txt" 2>/dev/null)
 [ -n "$commit" ] || die "missing source commit witness"
 printf '%s\n' "$commit" > "$OUT/commit.txt"

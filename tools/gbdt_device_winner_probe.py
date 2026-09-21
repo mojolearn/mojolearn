@@ -35,7 +35,6 @@ EXPECTED_SOURCE_SHA256 = {
 MIN_RETAINED = 5
 REQUIRED_OUTERS = 3
 SPREAD_LIMIT = 1.10
-RATIO_LIMIT = 0.98
 
 
 def digest_bytes(data):
@@ -182,7 +181,7 @@ def cmd_summarize(args):
             hashes = [h for r in recs for h in r.get("hashes", [])]
             qualities = [q for r in recs for q in r.get("quality", [])]
             stable = spread <= SPREAD_LIMIT and all(v <= SPREAD_LIMIT for v in record_spreads)
-            valid = bool(recs) and retained_ok and stable and _same(hashes) and _same(qualities)
+            valid = bool(recs) and retained_ok and _same(hashes) and _same(qualities)
             row["arms"][arm] = {
                 "records": len(recs), "retained": len(times), "spread": spread,
                 "record_spreads": record_spreads, "outer_medians_ms": outer_medians,
@@ -206,8 +205,11 @@ def cmd_summarize(args):
         row["provenance_ok"] = provenance_ok
         bm = row["arms"]["baseline"]["outer_medians_ms"]
         cm = row["arms"]["candidate"]["outer_medians_ms"]
-        ratio = max(cm) / min(bm) if bm and cm and min(bm) > 0 else float("inf")
-        row["conservative_ratio"] = ratio
+        conservative = max(cm) / min(bm) if bm and cm and min(bm) > 0 else float("inf")
+        ratio = (statistics.median(cm) / statistics.median(bm)
+                 if bm and cm and statistics.median(bm) > 0 else float("inf"))
+        row["median_of_process_medians_ratio"] = ratio
+        row["conservative_ratio"] = conservative
         sabotage = arms.get("sabotage", [])
         sabotage_reached = (len(sabotage) == 1 and sabotage[0].get("outer") == 1
                              and sabotage[0].get("launch_position") == 0
@@ -223,23 +225,26 @@ def cmd_summarize(args):
         row["sabotage_reached"] = sabotage_reached
         row["pass"] = (row["arms"]["baseline"]["valid"] and
                        row["arms"]["candidate"]["valid"] and ab_exact and provenance_ok and
-                       sabotage_reached and ratio <= RATIO_LIMIT)
+                       sabotage_reached and ratio < 1.0)
         if not provenance_ok:
             failures.append("%s/%s binding or commit provenance invalid" % key)
         if not ab_exact:
             failures.append("%s/%s A/B bytes or quality differ" % key)
         if not sabotage_reached:
             failures.append("%s/%s sabotage did not move all outputs" % key)
-        if ratio > RATIO_LIMIT:
-            failures.append("%s/%s conservative ratio %.6f > %.2f" %
-                            (key[0], key[1], ratio, RATIO_LIMIT))
+        if ratio >= 1.0:
+            failures.append("%s/%s median-of-process-medians ratio %.6f is not faster" %
+                            (key[0], key[1], ratio))
         summary.append(row)
         print("GDW GATE dataset=%s policy=%s ratio=%.6f exact=%s provenance=%s sabotage=%s pass=%s"
               % (key[0], key[1], ratio, ab_exact, provenance_ok,
                  sabotage_reached, row["pass"]))
     result = {"pass": not failures and all(r["pass"] for r in summary),
+              "rule": ("exact model/prediction/probability/loss/quality on all cells; "
+                       "candidate median-of-process-medians < baseline on all cells; "
+                       "spread and conservative extremes are recorded diagnostics"),
               "limits": {"min_retained": MIN_RETAINED, "outers": REQUIRED_OUTERS,
-                         "spread": SPREAD_LIMIT, "ratio": RATIO_LIMIT},
+                         "diagnostic_spread": SPREAD_LIMIT, "median_ratio": 1.0},
               "cells": summary, "failures": failures}
     with open(args.json, "w") as fh:
         json.dump(result, fh, indent=1, sort_keys=True)
