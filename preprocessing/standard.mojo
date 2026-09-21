@@ -115,6 +115,24 @@ def standard_transform_kernel(
         output.unsafe_store(i,value)
 
 
+def standard_transform_from_stats_kernel(
+    x: MutPointer[Float32, MutAnyOrigin], stats: MutPointer[Float32, MutAnyOrigin],
+    output: MutPointer[Float32, MutAnyOrigin], count: Int32, d_in: Int32,
+    with_mean: Int32, with_std: Int32,
+):
+    """Forward transform reading mean and scale from the fitted 3xd table."""
+    var i = Int(block_idx.x)*Int(block_dim.x)+Int(thread_idx.x)
+    if i < Int(count):
+        var d = Int(d_in)
+        var c = i % d
+        var value = x.unsafe_load(i)
+        if with_mean != 0:
+            value = ftz(ftz(value)-ftz(stats.unsafe_load(c)))
+        if with_std != 0:
+            value = ftz(identical_div(ftz(value),ftz(stats.unsafe_load(2*d+c))))
+        output.unsafe_store(i,value)
+
+
 def standard_fit(
     ctx: DeviceContext, mut x: DeviceBuffer[DType.float32], n: Int, d: Int,
     with_mean: Int, with_std: Int,
@@ -148,6 +166,43 @@ def standard_fit(
     var result = download_f32(ctx,output,3*d)
     _ = output^
     return result^
+
+
+def standard_fit_transform_into(
+    ctx: DeviceContext, mut x: DeviceBuffer[DType.float32],
+    mut stats: DeviceBuffer[DType.float32], mut output: DeviceBuffer[DType.float32],
+    n: Int, d: Int, with_mean: Int, with_std: Int,
+) raises:
+    """Fit and transform with one resident input and the ordinary kernels."""
+    ctx.enqueue_function[standard_initialize_kernel](stats.unsafe_ptr(),Int32(d),grid_dim=(d+255)//256,block_dim=256)
+    if with_mean != 0 or with_std != 0:
+        var chunks = (n+255)//256
+        var partials = ctx.enqueue_create_buffer[DType.float32](chunks*d)
+        var differences = ctx.enqueue_create_buffer[DType.float32](chunks*d)
+        ctx.enqueue_function[standard_chunks_kernel[False]](
+            x.unsafe_ptr(),stats.unsafe_ptr(),Int32(n),Int32(d),partials.unsafe_ptr(),differences.unsafe_ptr(),
+            grid_dim=chunks*d,block_dim=256,
+        )
+        ctx.enqueue_function[standard_finalize_kernel[False]](
+            x.unsafe_ptr(),partials.unsafe_ptr(),differences.unsafe_ptr(),Int32(n),Int32(d),Int32(chunks),Int32(with_std),stats.unsafe_ptr(),
+            grid_dim=(d+255)//256,block_dim=256,
+        )
+        if with_std != 0:
+            ctx.enqueue_function[standard_chunks_kernel[True]](
+                x.unsafe_ptr(),stats.unsafe_ptr(),Int32(n),Int32(d),partials.unsafe_ptr(),differences.unsafe_ptr(),
+                grid_dim=chunks*d,block_dim=256,
+            )
+            ctx.enqueue_function[standard_finalize_kernel[True]](
+                x.unsafe_ptr(),partials.unsafe_ptr(),differences.unsafe_ptr(),Int32(n),Int32(d),Int32(chunks),Int32(with_std),stats.unsafe_ptr(),
+                grid_dim=(d+255)//256,block_dim=256,
+            )
+        ctx.synchronize()
+        _ = differences^
+        _ = partials^
+    ctx.enqueue_function[standard_transform_from_stats_kernel](
+        x.unsafe_ptr(),stats.unsafe_ptr(),output.unsafe_ptr(),Int32(n*d),Int32(d),Int32(with_mean),Int32(with_std),
+        grid_dim=(n*d+255)//256,block_dim=256,
+    )
 
 
 def standard_transform(

@@ -2,10 +2,10 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn.
 from std.math import isfinite
 from max.gpu.host import DeviceContext
-from metrics.checks.device_io import upload_f32
+from metrics.checks.device_io import download_f32, upload_f32
 from core.device_scan import device_first_nonfinite
 from preprocessing.minmax import minmax_fit, minmax_transform, minmax_transform_into
-from preprocessing.standard import standard_fit, standard_transform, standard_transform_into
+from preprocessing.standard import standard_fit, standard_fit_transform_into, standard_transform, standard_transform_into
 
 
 def validate_dimensions(n: Int, d: Int, lower: Float32, upper: Float32) raises:
@@ -92,6 +92,35 @@ def standard_fit_host(x: List[Float32], n: Int, d: Int, with_mean: Int, with_std
         if result[d+c] < 0 or result[2*d+c] <= 0:
             raise Error("StandardScaler: invalid variance or scale")
     return result^
+
+
+def standard_fit_transform_host_into[stats_origin: MutOrigin, out_origin: MutOrigin](
+    mut x: List[Float32], stats_output: MutPointer[Float32, stats_origin],
+    output: MutPointer[Float32, out_origin], n: Int, d: Int,
+    with_mean: Int, with_std: Int,
+) raises:
+    """One-copy/one-upload StandardScaler fit followed by transform."""
+    validate_standard(n,d,with_mean,with_std)
+    if len(x) < n*d:
+        raise Error("StandardScaler: short input")
+    standard_finite(x)
+    var ctx = DeviceContext()
+    var dx = upload_f32(ctx,x)
+    var dstats = ctx.enqueue_create_buffer[DType.float32](3*d)
+    var dout = ctx.enqueue_create_buffer[DType.float32](n*d)
+    standard_fit_transform_into(ctx,dx,dstats,dout,n,d,with_mean,with_std)
+    if device_first_nonfinite(ctx,dout,n*d) >= 0:
+        raise Error("StandardScaler: nonfinite input or Float32 arithmetic overflow")
+    var result = download_f32(ctx,dstats,3*d)
+    standard_finite(result)
+    for c in range(d):
+        if result[d+c] < 0 or result[2*d+c] <= 0:
+            raise Error("StandardScaler: invalid variance or scale")
+    for i in range(3*d):
+        stats_output.unsafe_store(i,result[i])
+    ctx.enqueue_copy(dst_ptr=output,src_buf=dout)
+    ctx.synchronize()
+    _ = dout^; _ = dstats^; _ = dx^; _ = ctx^
 
 
 def standard_transform_host(

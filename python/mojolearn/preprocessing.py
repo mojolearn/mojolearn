@@ -315,6 +315,51 @@ class StandardScaler(_ScalerProtocol):
         self.with_std_ = bool(self.with_std)
         return self
 
+    def fit_transform(self, X, y=None, **fit_params):
+        """Fit and transform, reusing one native copy/upload when compiled.
+
+        Release builds without the experimental native entry retain the
+        protocol's ordinary ``fit(X).transform(X)`` behavior.
+        """
+        binding = self._binding(
+            (self.numeric_mode if self.numeric_mode is not None
+             else _backend.default_mode()).strip().lower()
+        )
+        if not hasattr(binding, 'standard_fit_transform'):
+            return super().fit_transform(X, y, **fit_params)
+        _require_training(self)
+        self._configuration()
+        for name in list(self.__dict__):
+            if name.endswith('_'):
+                del self.__dict__[name]
+        sample_weight = fit_params.pop('sample_weight', None)
+        if fit_params:
+            raise TypeError(f"unexpected fit parameters: {sorted(fit_params)}")
+        if sample_weight is not None:
+            raise NotImplementedError('StandardScaler does not support sample_weight')
+        values = self._input(X)
+        n, d = values.shape
+        mode = (self.numeric_mode if self.numeric_mode is not None else
+                _backend.default_mode()).strip().lower()
+        binding = self._binding(mode)
+        stats = empty((3, d), '<f4')
+        output = empty(values.shape, '<f4')
+        binding.standard_fit_transform(
+            _addr_ro(values), _addr(stats), _addr(output),
+            [n, d, int(self.with_mean), int(self.with_std)])
+        if (not all_finite(stats) or not all_finite(output) or
+                stats[1].min() < 0 or stats[2].min() <= 0):
+            raise ValueError('StandardScaler statistics or transformed values are invalid in Float32')
+        self.mean_ = stats[0].copy() if self.with_mean or self.with_std else None
+        self.var_ = stats[1].copy() if self.with_std else None
+        self.scale_ = stats[2].copy() if self.with_std else None
+        self.n_features_in_ = d
+        self.n_samples_seen_ = n
+        self.numeric_mode_ = mode
+        self.with_mean_ = bool(self.with_mean)
+        self.with_std_ = bool(self.with_std)
+        return output
+
     def _transform(self, X, inverse, copy):
         if copy is not None and (not is_bool(copy) or not copy):
             raise NotImplementedError('StandardScaler transform currently requires copy=True or None')

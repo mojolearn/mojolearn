@@ -7,9 +7,10 @@ from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
+from std.sys.compile import is_defined
 from checks.vendor import COMPILED_VENDOR
 from checks.numerics import GLOBAL_NUMERIC_MODE
-from preprocessing.estimator import validate_dimensions, minmax_fit_host, minmax_transform_host_into, validate_standard, standard_fit_host, standard_transform_host_into
+from preprocessing.estimator import validate_dimensions, minmax_fit_host, minmax_transform_host_into, validate_standard, standard_fit_host, standard_fit_transform_host_into, standard_transform_host_into
 
 
 def ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -80,6 +81,22 @@ def standard_fit_binding(x_addr: PythonObject, out_addr: PythonObject, params: P
     return PythonObject(3*d)
 
 
+def standard_fit_transform_binding(
+    x_addr: PythonObject, stats_addr: PythonObject, out_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    if len(params) != 4:
+        raise Error("standard_fit_transform: requires 4 parameters")
+    var n = Int(py=params[0]); var d = Int(py=params[1])
+    var with_mean = Int(py=params[2]); var with_std = Int(py=params[3])
+    validate_standard(n,d,with_mean,with_std)
+    var x = load(Int(py=x_addr),n*d)
+    var stats = ptr(Int(py=stats_addr)); var output = ptr(Int(py=out_addr))
+    with GILReleased(Python()):
+        standard_fit_transform_host_into(x,stats,output,n,d,with_mean,with_std)
+    return PythonObject(n*d)
+
+
 def standard_transform_binding(
     x_addr: PythonObject, mean_addr: PythonObject, scale_addr: PythonObject,
     out_addr: PythonObject, params: PythonObject,
@@ -115,6 +132,8 @@ def PyInit__mojolearn_preprocessing() abi("C") -> PythonObject:
     try:
         var m = PythonModuleBuilder("_mojolearn_preprocessing")
         m.def_function[standard_fit_binding]("standard_fit")
+        comptime if is_defined["MOJOLEARN_EXPERIMENTAL_STANDARD_FIT_TRANSFORM"]():
+            m.def_function[standard_fit_transform_binding]("standard_fit_transform")
         m.def_function[standard_transform_binding]("standard_transform")
         m.def_function[fit_binding]("minmax_fit")
         m.def_function[transform_binding]("minmax_transform")
