@@ -141,6 +141,88 @@ def compute_bins_and_add_kernel(
         i += stride
 
 
+def compute_bins_and_add_four_kernel(
+    compressed_index: MutPointer[UInt32, MutAnyOrigin],
+    feature_offset: MutPointer[UInt32, MutAnyOrigin],
+    feature_shift: MutPointer[UInt32, MutAnyOrigin],
+    feature_mask: MutPointer[UInt32, MutAnyOrigin],
+    split_bin: MutPointer[UInt32, MutAnyOrigin],
+    take_equal: MutPointer[UInt8, MutAnyOrigin],
+    depth0_in: Int32,
+    depth1_in: Int32,
+    depth2_in: Int32,
+    depth3_in: Int32,
+    tree_count_in: Int32,
+    leaf_values: MutPointer[Float32, MutAnyOrigin],
+    n_rows_in: Int32,
+    cursor: MutPointer[Float32, MutAnyOrigin],
+    dim_count_in: Int32,
+    cursor_stride_in: Int32,
+):
+    """Apply up to four consecutive oblivious trees in their original order.
+
+    This is the resident-inference launch grouping of
+    `compute_bins_and_add_kernel`: the same five descriptor planes are staged
+    once per block, and each row performs the same ordered float32 additions.
+    No tree or level is reordered and no reduction is introduced.
+    """
+    var depths = InlineArray[Int, 4](fill=0)
+    depths[0] = Int(depth0_in)
+    depths[1] = Int(depth1_in)
+    depths[2] = Int(depth2_in)
+    depths[3] = Int(depth3_in)
+    var tree_count = Int(tree_count_in)
+    var total_levels = 0
+    for t in range(tree_count):
+        total_levels += depths[t]
+    var meta = stack_allocation[
+        5 * 128, Scalar[DType.uint32], address_space = AddressSpace.SHARED
+    ]()
+    var tid = Int(thread_idx.x)
+    if tid < total_levels:
+        meta.unsafe_store(tid, feature_offset.unsafe_load(tid))
+        meta.unsafe_store(128 + tid, feature_shift.unsafe_load(tid))
+        meta.unsafe_store(256 + tid, feature_mask.unsafe_load(tid))
+        meta.unsafe_store(384 + tid, split_bin.unsafe_load(tid))
+        meta.unsafe_store(512 + tid, UInt32(take_equal.unsafe_load(tid)))
+    barrier()
+
+    var n_rows = Int(n_rows_in)
+    var dim = Int(block_idx.y)
+    var dim_count = Int(dim_count_in)
+    var plane = dim * Int(cursor_stride_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + tid
+    var stride = Int(grid_dim.x) * Int(block_dim.x)
+    while i < n_rows:
+        var acc = cursor.unsafe_load(plane + i)
+        var level_base = 0
+        var leaf_base = 0
+        for t in range(tree_count):
+            var depth = depths[t]
+            var leaf = 0
+            for level in range(depth):
+                var j = level_base + level
+                var off = Int(meta.unsafe_load(j))
+                var shift = meta.unsafe_load(128 + j)
+                var mask = meta.unsafe_load(256 + j) << shift
+                var value = meta.unsafe_load(384 + j) << shift
+                var feature_val = compressed_index.unsafe_load(off + i) & mask
+                var split: Bool
+                if meta.unsafe_load(512 + j) != UInt32(0):
+                    split = feature_val == value
+                else:
+                    split = feature_val > value
+                if split:
+                    leaf += 1 << level
+            acc = acc + leaf_values.unsafe_load(
+                leaf_base + leaf * dim_count + dim
+            )
+            level_base += depth
+            leaf_base += (1 << depth) * dim_count
+        cursor.unsafe_store(plane + i, acc)
+        i += stride
+
+
 def compute_bins_kernel(
     compressed_index: MutPointer[UInt32, MutAnyOrigin],
     feature_offset: MutPointer[UInt32, MutAnyOrigin],
