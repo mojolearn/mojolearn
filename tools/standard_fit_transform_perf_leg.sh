@@ -30,6 +30,31 @@ step() {
 }
 require_step() { step "$@" || exit 30; }
 
+# A completed race returns 1 when its timing gate rejects the candidate.  Keep
+# collecting the remaining cells in that case; only the final two-dataset
+# summary decides promotion.  Crashes and identity/quality failures do not
+# produce this explicit, complete rejection record and remain fatal.
+record_race() {
+    _name=$1; _json=$2; _cap=$3; shift 3
+    step "$_name" "$_cap" "$@"
+    _rc=$?
+    [ "$_rc" -eq 0 ] && return 0
+    [ "$_rc" -eq 1 ] || return "$_rc"
+    "$P" - "$_json" <<'PY'
+import json, pathlib, sys
+
+path = pathlib.Path(sys.argv[1])
+row = json.loads(path.read_text())
+if row.get("promotion_eligible") is not False:
+    raise SystemExit("race exit 1 lacks an explicit promotion rejection")
+if row.get("verdict") != "REJECT_TIMING_GATE":
+    raise SystemExit("race exit 1 is not a timing-gate rejection")
+for key in ("ready", "arms", "quality", "stats_sha256", "output_sha256"):
+    if key not in row:
+        raise SystemExit("incomplete rejected race: missing " + key)
+PY
+}
+
 build_arm() {
     _arm=$1; _defs=$2
     require_step "build_$_arm" 1800 env MOJOLEARN_BUILD_EXTRA_DEFINES="$_defs" \
@@ -66,11 +91,13 @@ build_arm fused "$D_FUSED"
 for _outer in 0 1 2; do
   _first=off; [ $(( _outer % 2 )) -eq 0 ] || _first=fused
   for _ds in taxi istella; do
-    require_step "race_${_ds}_${_outer}" 5400 "$P" "$R/bench/speed/standard_fit_transform_ab.py" race \
+    _json="$O/${_ds}.${_outer}.json"
+    record_race "race_${_ds}_${_outer}" "$_json" 5400 \
+      "$P" "$R/bench/speed/standard_fit_transform_ab.py" race \
       --block "$DATA/big-$_ds.npz" --rounds 5 --timeout 1800 --first-arm "$_first" \
-      --spread-gate 1.10 --min-speedup 0.0 --output "$O/${_ds}.${_outer}.json" \
+      --spread-gate 1.10 --min-speedup 0.0 --output "$_json" \
       --arm off "$P" /root/standard-fit-transform-off \
-      --arm fused "$P" /root/standard-fit-transform-fused
+      --arm fused "$P" /root/standard-fit-transform-fused || exit 30
   done
 done
 

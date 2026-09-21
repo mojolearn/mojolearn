@@ -32,3 +32,13 @@ The summary requires the exact 12-cell matrix, <=1.10 within-process timing
 spread, equality of every repeat's five model arrays, fitted metadata/classes,
 predictions, probabilities and quality, and a slowest-candidate / fastest-
 baseline ratio <=0.98 on both datasets.
+
+The guarded DigitalOcean MI325X run at commit `58f788564` completed all 12
+cells and rejected the candidate. Every complete model, prediction,
+probability, and quality hash matched. Taxi's fused/baseline median ratio was
+1.0013 and its conservative ratio was 1.0020. Istella's ratios were 0.9994 and
+1.0023. Both miss the required conservative ratio of at most 0.98. All
+within-process spreads were at most 1.023. No shipping default changed. The
+evidence is preserved externally at
+`mojolearn-evidence/training-amd-2026-09-21_114800-mi325x-retry`; its droplet
+`602462012` was destroyed (DELETE 204, then GET 404).
