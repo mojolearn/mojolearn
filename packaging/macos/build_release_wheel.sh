@@ -202,16 +202,39 @@ fi
 # xargs -P; each (mode, script) pair writes its own log, printed in full when
 # it finishes so the transcript reads as before. Every pair has its own output
 # directory and mktemp scratch, so the pairs are independent. The identical
-# tier is queued first because it holds the most scripts. Any failure fails
-# the build after the running pairs finish (xargs exits 123).
+# tier is listed first because it holds the most scripts, and the pairs are
+# then queued heaviest first (ordered_pairs below). Any failure fails the
+# build after the running pairs finish (xargs exits 123).
 #
-# THE DEFAULT IS TWO, 2026-09-21: the Apple release budget is five CPU cores
-# and about 8 GB (Andrew, 2026-09-21; the M4 has 10 cores and 16 GB). Two
-# builds of two compiler workers each (MOJOLEARN_COMPILE_JOBS, default 2 in
-# every bindings/build_*.sh) is four compiler threads, and one compile peaks
-# at about 1.2 GB, so the pair stays well inside the memory half. It was 4
-# (eight threads) until the release workflow pinned it to 1 on 2026-09-17,
-# which made the macOS build 30 to 60 minutes; the workflow now uses 2 x 2.
+# THE DEFAULT IS FOUR BUILDS OF ONE COMPILER WORKER (2026-09-21, measured).
+# The 0.8.13 macOS build with an empty compile cache ran 2666 s. It compiled
+# one extension at a time with one worker: it ran under `tools/mac_slot.py
+# run`, which pins MOJOLEARN_BUILD_JOBS=1 and MOJOLEARN_COMPILE_JOBS=1 and
+# overrides whatever this script defaults to (the log's third line says
+# "1 at a time"). The 61 per-extension compile times (build_seconds in the
+# local cache's manifests) sum to 2371 s, the longest is the identical mamba
+# binding at 322.5 s, and the remaining 295 s are staging, packing, the audit
+# and the five interpreter runs. The 0.8.12 build (908 s,
+# ~/mojolearn-evidence/releases/0.8.12/mac-build-r5.log) was ALSO one at a
+# time with one worker, so its 16 minutes were not a parallel default: its
+# compiles were faster on that run, not more of them at once.
+#
+# Scheduling those 61 measured times on P single-worker builds, heaviest
+# first (the order below), gives a compile wall of 1186 s at P=2, 792 s at
+# 3, 595 s at 4 and 476 s at 5; with the 295 s around it, P=4 is about 890 s
+# (15 minutes) cold, where the 2 x 2 default of 63089d263 would have been
+# about 25 minutes even at full speed. Four workers stay inside the Apple
+# release budget of five cores (Andrew, 2026-09-21; the M4 has 4P + 6E cores
+# and 16 GB), and at about 1.2 GB peak per mojo compile they need about
+# 5 GB. One worker each, not two: the measurements are all at one worker, and
+# 4 x 2 would be eight compiler threads on a five core budget.
+#
+# UNDER mac_slot, pass --slots 4: it then holds four of the five Mac slots
+# and hands the build MOJOLEARN_BUILD_JOBS=4 (compiler workers stay 1):
+#
+#     python3 tools/mac_slot.py --slots 4 run -- ./packaging/macos/build_release_wheel.sh
+#
+# Without --slots, mac_slot still pins one build at a time.
 #
 # THE LOCAL COMPILE CACHE. With MOJOLEARN_BINCACHE_DIR set every pair runs
 # through `tools/bincache.py build`, keyed on the binding's import closure,
@@ -221,7 +244,10 @@ fi
 # binding is placed from the cache, verified byte for byte against the
 # archive's manifest, and every gate below runs on it exactly as on a fresh
 # build. Unset, nothing changes. The header of tools/bincache.py has the key.
-BUILD_JOBS="${MOJOLEARN_BUILD_JOBS:-2}"
+BUILD_JOBS="${MOJOLEARN_BUILD_JOBS:-4}"
+# One compiler worker per build unless the caller says otherwise (the
+# bindings/build_*.sh default is 2); see the measurement above.
+export MOJOLEARN_COMPILE_JOBS="${MOJOLEARN_COMPILE_JOBS:-1}"
 case "$BUILD_JOBS" in ''|*[!0-9]*|0) echo 'MOJOLEARN_BUILD_JOBS must be 1..16' >&2; exit 2;; esac
 [ "$BUILD_JOBS" -le 16 ] || { echo 'MOJOLEARN_BUILD_JOBS must be 1..16' >&2; exit 2; }
 BUILD_LOGS=$(mktemp -d "${TMPDIR:-/tmp}/mojolearn-release-builds.XXXXXX")
@@ -243,8 +269,36 @@ build_pairs() {
         for script in $BUILD_SCRIPTS; do printf '%s %s\n' "$mode" "$script"; done
     done
 }
-echo "== building $(build_pairs | wc -l | tr -d ' ') extensions, $BUILD_JOBS at a time (logs in $BUILD_LOGS)"
-build_pairs | xargs -P "$BUILD_JOBS" -n 2 sh -c '
+# HEAVIEST FIRST. The seconds are the 0.8.13 cold compile times (one worker,
+# build_seconds in the cache manifests); every pair not named weighs 0 and
+# keeps its place (a stable sort). A stale entry only moves wall time: the
+# pairs are independent. Measured order-versus-heaviest-first at four builds:
+# 664 s against 595 s of compile.
+pair_weight() {
+    case "$1 $2" in
+        "identical build_mamba.sh") echo 323 ;;
+        "identical build_byte_lm.sh") echo 182 ;;
+        "identical build_hdbscan.sh") echo 182 ;;
+        "fast build_gbdt.sh") echo 157 ;;
+        "identical build_transformer.sh") echo 136 ;;
+        "identical build_kernel_methods.sh") echo 111 ;;
+        "identical build_ivf.sh") echo 110 ;;
+        "identical build_gbdt.sh") echo 87 ;;
+        "deterministic build_gbdt.sh") echo 81 ;;
+        "identical build_mixture.sh") echo 71 ;;
+        "identical build_resample.sh") echo 58 ;;
+        "identical build_gbdt_host.sh") echo 52 ;;
+        *) echo 0 ;;
+    esac
+}
+ordered_pairs() {
+    build_pairs | while read -r mode script; do
+        printf '%s %s %s\n' "$(pair_weight "$mode" "$script")" "$mode" "$script"
+    done | sort -s -k1,1nr | cut -d' ' -f2-
+}
+[ "$(ordered_pairs | sort)" = "$(build_pairs | sort)" ] || { echo 'build order lost or added a pair' >&2; exit 2; }
+echo "== building $(build_pairs | wc -l | tr -d ' ') extensions, $BUILD_JOBS at a time, $MOJOLEARN_COMPILE_JOBS compiler worker(s) each (logs in $BUILD_LOGS)"
+ordered_pairs | xargs -P "$BUILD_JOBS" -n 2 sh -c '
     logs=$1; mode=$2; script=$3; log="$logs/${mode}_${script%.sh}.log"
     # The byte LM build keeps its own gate on, as it always did here.
     skip=1; [ "$script" = build_byte_lm.sh ] && skip=

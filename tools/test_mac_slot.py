@@ -45,6 +45,35 @@ def test_waiting_for_cpu_does_not_hold_metal(env):
     gpu.release()
 
 
+def test_multi_slot_job_takes_all_or_nothing(env):
+    env = dict(env, MAC_SLOTS="3")
+    one, many = Scheduler(env), Scheduler(env)
+    assert one.attempt(False, ["one"])
+    assert not many.attempt(False, ["many"], slots=3)
+    assert not many.held and sum(p.exists() for p in many.slots) == 1
+    assert many.attempt(False, ["many"], slots=2)
+    assert len(many.held) == 2 and all(p.exists() for p in many.slots)
+    many.release()
+    one.release()
+    assert not any(p.exists() for p in one.slots)
+    with pytest.raises(ValueError):
+        many.attempt(True, ["gpu"], slots=2)
+
+
+def test_slots_sets_the_build_jobs_and_nothing_else(env, tmp_path):
+    env = dict(env, MAC_SLOTS="4")
+    out = tmp_path / "env.txt"
+    body = ("import os,sys;open(sys.argv[1],'w').write(os.environ['MOJOLEARN_BUILD_JOBS']+' '"
+            "+os.environ['MOJOLEARN_COMPILE_JOBS']+' '+os.environ['OMP_NUM_THREADS'])")
+    p = launch(env, "--slots", "4", "run", sys.executable, "-c", body, str(out))
+    p.communicate(timeout=10)
+    assert p.returncode == 0 and out.read_text() == "4 1 1"
+    for bad in (("--slots", "5", "run"), ("--slots", "2", "metal"), ("--slots", "0", "run")):
+        p = launch(env, *bad, sys.executable, "-c", "pass")
+        p.communicate(timeout=10)
+        assert p.returncode == 2, bad
+
+
 def test_live_legacy_and_unpublished_locks_not_stolen(env):
     s = Scheduler(env)
     s.metal.mkdir()

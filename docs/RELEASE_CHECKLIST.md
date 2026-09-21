@@ -40,13 +40,15 @@ macOS run on the release Mac was 20 minutes, 8 of them compiling.
 
 Since then the Linux extension builds run four at a time (MOJOLEARN_BUILD_JOBS,
 default 4, each build capped at two compiler workers and one BLAS thread, the
-box affinity at 2 x jobs cores). On the Mac the default is TWO builds of two
-compiler workers (2026-09-21): the Apple release budget is five cores and about
-8 GB. The release workflow ran the Mac builds one at a time from 2026-09-17,
-which made step 6 take 30 to 60 minutes; it now runs 2 x 2 and reuses every
-unchanged binding from a local compile cache (step 6). Set
-MOJOLEARN_BUILD_JOBS=1 to reproduce a serial build. Times for the parallel
-path are OWED from the next release; record them here when it ships.
+box affinity at 2 x jobs cores). On the Mac the default is FOUR builds of one
+compiler worker, heaviest first (2026-09-21), inside the Apple release budget
+of five cores and about 5 GB. The 0.8.13 cold build ran one at a time (2666 s,
+2371 s of it compiling); its measured per-extension times put four single
+worker builds at about 15 minutes cold. Under `tools/mac_slot.py` pass
+`--slots 4`, or mac_slot pins one build at a time:
+`python3 tools/mac_slot.py --slots 4 run -- ./packaging/macos/build_release_wheel.sh`.
+Unchanged bindings come from a local compile cache (step 6). Set
+MOJOLEARN_BUILD_JOBS=1 to reproduce a serial build.
 
 ## 1. Freeze
 
@@ -305,7 +307,7 @@ the rerun completed all 45.
 
 ## 6. Publish macOS (on the release Mac)
 
-The build job compiles two extensions at a time with two compiler workers
+The build job compiles four extensions at a time with one compiler worker
 each, and reuses from `~/.mojolearn-bincache/macos-release` every binding whose
 inputs are unchanged since the last workflow run (tools/bincache.py, "a LOCAL
 directory cache"; the log ends with how many were reused). A rerun of a failed
