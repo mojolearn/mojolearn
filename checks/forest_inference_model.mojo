@@ -6,7 +6,36 @@ from checks.vendor import COMPILED_VENDOR
 from std.memory import bitcast
 from std.sys.compile import is_defined
 from core.forest_inference import forest_predict_gpu, FOREST_PACKED_NODES
-from core.forest_inference_model import resident_prepare, resident_predict, resident_release, ResidentForest, resident_predict_into
+from core.forest_inference_model import resident_prepare, resident_predict, resident_release, ResidentForest, resident_predict_into, FOREST_ORDERED_RESIDENT
+
+
+def check_ordered_resident[RF_INPUT: Bool]() raises:
+    """Cancellation witness separating increasing-tree and grove folds."""
+    var offsets = List[Int32](capacity=34)
+    var columns = List[Int32](length=33, fill=Int32(-1))
+    var thresholds = List[Float32](length=33, fill=Float32(0))
+    var left = List[Int32](length=33, fill=Int32(-1))
+    var leaves = List[Float32](length=33, fill=Float32(0))
+    for tree in range(34):
+        offsets.append(Int32(tree))
+    leaves[0] = Float32(1e20)
+    leaves[1] = Float32(-1e20)
+    leaves[2] = Float32(1)
+    var x: List[Float32] = [0]
+    var ctx = DeviceContext()
+    var ordered = forest_predict_gpu[RF_INPUT, False](
+        ctx, offsets, columns, thresholds, left, leaves, x, 1, 1, 1)
+    var grove = forest_predict_gpu[RF_INPUT, True](
+        ctx, offsets, columns, thresholds, left, leaves, x, 1, 1, 1)
+    if bitcast[DType.uint32](ordered[0]) == bitcast[DType.uint32](grove[0]):
+        raise Error("ordered-resident cancellation witness did not separate folds")
+    var model = ResidentForest(offsets, columns, thresholds, left, leaves, 1, 1)
+    var actual = model.predict[RF_INPUT](x, 1, 1, 1)
+    var expected = ordered[0] if FOREST_ORDERED_RESIDENT else grove[0]
+    if bitcast[DType.uint32](actual[0]) != bitcast[DType.uint32](expected):
+        raise Error("resident forest selected the wrong aggregation graph")
+    model.close()
+    print("ORDERED_ROUTE_PASS RF_INPUT", RF_INPUT, "selected", FOREST_ORDERED_RESIDENT)
 
 
 def check_workspace[RF_INPUT: Bool]() raises:
@@ -78,8 +107,8 @@ def check_layout[RF_INPUT: Bool](outputs: Int) raises:
     var x: List[Float32] = [0, 1, bitcast[DType.float32](UInt32(1)), 2,
         bitcast[DType.float32](UInt32(2)), 3, -1, 4, 1, 2]
     var ctx = DeviceContext()
-    var expected = forest_predict_gpu[RF_INPUT, True](ctx, offsets, columns,
-        thresholds, left, leaves, x, 5, 2, outputs)
+    var expected = forest_predict_gpu[RF_INPUT, not FOREST_ORDERED_RESIDENT](
+        ctx, offsets, columns, thresholds, left, leaves, x, 5, 2, outputs)
     var model = ResidentForest(offsets, columns, thresholds, left, leaves, 2, outputs)
     # WP3/2483: compare the retained List boundary to BOTH pointer entries on
     # the same ragged model/input. RF and ET threshold semantics, class-vector
@@ -115,10 +144,13 @@ def check_layout[RF_INPUT: Bool](outputs: Int) raises:
 
 def main() raises:
     print("RESIDENT_LAYOUT_PACKED", FOREST_PACKED_NODES)
+    print("RESIDENT_ORDERED", FOREST_ORDERED_RESIDENT)
     var output_counts: List[Int] = [1, 2, 3, 5, 8, 9]
     for outputs in output_counts:
         check_layout[True](outputs)
         check_layout[False](outputs)
+    check_ordered_resident[True]()
+    check_ordered_resident[False]()
     check_workspace[True]()
     check_workspace[False]()
     print("RESIDENT_MODE", Int(GLOBAL_NUMERIC_MODE), "VENDOR", String(COMPILED_VENDOR))
@@ -130,7 +162,8 @@ def main() raises:
     var x: List[Float32] = [1, 2, 3, 4, 5, 6]
     var h = resident_prepare[True](off, col, thr, left, leaf, 2, 2)
     var ctx = DeviceContext()
-    var reference = forest_predict_gpu[True, True](ctx, off, col, thr, left, leaf, x, 3, 2, 2)
+    var reference = forest_predict_gpu[True, not FOREST_ORDERED_RESIDENT](
+        ctx, off, col, thr, left, leaf, x, 3, 2, 2)
     for repeat in range(4):
         var direct = List[Float32](length=6, fill=Float32(-9))
         resident_predict_into[True](h,

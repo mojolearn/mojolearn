@@ -107,7 +107,7 @@ from neighbors.checks.pinned_distance_tile import (
     pinned_distance_tile_kernel,
 )
 from checks.kernel_matrix import knn_distance_exact_chain_for, knn_fused_distance_select_for, knn_radix_scratch_shrink_for
-from checks.kernel_matrix import knn_smem_distance_tile_for, knn_block_topk_select_for, KNN_BLOCK_TOPK_MAX_K
+from checks.kernel_matrix import knn_smem_distance_tile_for, knn_smem_min_features_for, knn_block_topk_select_for, KNN_BLOCK_TOPK_MAX_K
 from checks.kernel_matrix import knn_selector_bound_compact_for, KNN_SELECTOR_BOUND_MIN_K
 from checks.kernel_matrix import knn_resident_derived_cache_for
 from checks.kernel_matrix import knn_block_topk_bounded_for, KNN_BOUNDED_FIRST_TILE
@@ -270,6 +270,12 @@ comptime KNN_BLOCK_TOPK = (
     and not is_defined["MOJOLEARN_KNN_SELECT_TRIAL"]()
 )
 
+# DEVIATION 3000's measured runtime width gate. On AMD, rows narrower than
+# two 16-feature slices keep the register path; NVIDIA's route is unchanged.
+comptime KNN_SMEM_MIN_FEATURES = knn_smem_min_features_for[
+    TARGET_COLUMN, IDENTICAL_BUILD
+]()
+
 
 # DEVIATION 3061 (kernel-matrix row `knn_resident_derived_cache_for`).
 comptime KNN_RESIDENT_CACHE = knn_resident_derived_cache_for[TARGET_COLUMN, IDENTICAL_BUILD]()
@@ -373,7 +379,7 @@ def block_topk_applies(
             not use_vendor_topk
             and (metric == DIST_L2_EXPANDED or metric == DIST_L2_SQRT_EXPANDED)
             and k >= 1 and k <= SMT_MAX_K and k <= KNN_BLOCK_TOPK_LIMIT and k <= n_index
-            and n_features > 0 and n_features <= 2147483647
+            and n_features >= KNN_SMEM_MIN_FEATURES and n_features <= 2147483647
             and n_index <= 2147483647
         )
     return False
@@ -846,7 +852,12 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
     # Apple minima use; the two never run in one request.
     var use_exact = False
     comptime if KNN_EXACT_CHAIN:
-        use_exact = use_transposed_index and KNN_REGISTER_TILE_IDENTICAL and not use_vendor_topk and not use_metadata and (mtr == DIST_L2_SQRT_EXPANDED or mtr == DIST_L2_EXPANDED)
+        use_exact = (
+            use_transposed_index and KNN_REGISTER_TILE_IDENTICAL
+            and not use_vendor_topk and not use_metadata
+            and n_features >= KNN_SMEM_MIN_FEATURES
+            and (mtr == DIST_L2_SQRT_EXPANDED or mtr == DIST_L2_EXPANDED)
+        )
     var meta_on = use_metadata or use_exact
     var metadata_cells = n_queries + n_index if meta_on else 0
     var part_dist = ctx.enqueue_create_buffer[DType.float32](part_cells + metadata_cells)
@@ -875,6 +886,7 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
         use_smem = (
             use_transposed_index and not use_vendor_topk and not use_metadata
             and (mtr == DIST_L2_SQRT_EXPANDED or mtr == DIST_L2_EXPANDED)
+            and n_features >= KNN_SMEM_MIN_FEATURES
         )
 
     # Metadata is rebuilt for every request, including in-place input mutations.

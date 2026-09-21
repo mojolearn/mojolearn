@@ -1,0 +1,3 @@
+created 602447298 2026-09-21T14:52:06Z label=ordered-rf-et commit=fbd973ae66141b5c2538c69d3651f47d115407de
+watchdog 602447298 verified 2026-09-21T14:53:16Z: ALIVE=2324 ID_BAKED=1 GET=200 
+destroyed 602447298 verified 2026-09-21T15:14:48Z (GET id 404, listing HTTP 200 without mojolearn-trees-amd)

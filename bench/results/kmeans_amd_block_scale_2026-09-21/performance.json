@@ -1,0 +1,494 @@
+{
+  "istella": {
+    "arms": {
+      "both": {
+        "fit_median_ms": 429.133841999942,
+        "fit_parts": {
+          "centers": "86dc6e8fd355b928cef13d06fefa7dd3910367830ab59aa46b9397c59ec78d05",
+          "inertia": "459c5fa1cce3854a699cd38c023fe24318751e3bfc05fb61f2cbd25b4c9cedc9",
+          "labels": "8ebda9058620549cf29d7cb5c883b7a3857bdb1ed2e43e0ddaa44118b7a89619",
+          "n_iter": "3b89a440447b7acfcf6e6a8abefd0e7423f2bac6d42fe428a27bc24996362453",
+          "sum_scale": "98b08cd538376e8a6512a0b01af81eb570ea6f13053e4f2ba67dd48d43d104fb",
+          "weight_scale": "9b76827dc3f9af4f53bdce4f4497cb339420904e9704678af4ca01f2c504f998"
+        },
+        "fit_quality": {
+          "clusters": 64,
+          "finite_centers": true,
+          "inertia": 1.3128675641786368e+17,
+          "labels_in_range": true,
+          "n_iter": 21,
+          "rows": 2043304
+        },
+        "fit_samples_ms": [
+          432.5057360000528,
+          437.8787690000081,
+          429.05553499997495,
+          429.133841999942,
+          426.29026300005535
+        ],
+        "fit_spread": 1.0271845430350617,
+        "ready": {
+          "event": "ready",
+          "fit_shape": [
+            2043304,
+            220
+          ],
+          "numeric_mode": "identical",
+          "transform_shape": [
+            100000,
+            64
+          ],
+          "vendor": "hip"
+        },
+        "transform_digest": "ba3eaf6148cdb8909d2aceb92b88109e49d3ffd38aa1690fee9c2207dc839f61",
+        "transform_median_ms": 8.107344999984889,
+        "transform_predict_digest": "e4a941ad8f9cfead4239ab7a3a35cfe27da87167aa7c33db879a156812f8bae2",
+        "transform_quality": {
+          "argmin_agreement_fraction": 1.0,
+          "finite": true,
+          "selected_equals_min": true
+        },
+        "transform_samples_ms": [
+          50.81889799998862,
+          23.14925200005291,
+          20.217806999994536,
+          8.043770000085715,
+          8.055651999939073,
+          8.107344999984889,
+          8.064031000003524
+        ],
+        "transform_spread": 6.3177960085192755
+      },
+      "off": {
+        "fit_median_ms": 3154.510328000015,
+        "fit_parts": {
+          "centers": "86dc6e8fd355b928cef13d06fefa7dd3910367830ab59aa46b9397c59ec78d05",
+          "inertia": "459c5fa1cce3854a699cd38c023fe24318751e3bfc05fb61f2cbd25b4c9cedc9",
+          "labels": "8ebda9058620549cf29d7cb5c883b7a3857bdb1ed2e43e0ddaa44118b7a89619",
+          "n_iter": "3b89a440447b7acfcf6e6a8abefd0e7423f2bac6d42fe428a27bc24996362453",
+          "sum_scale": "98b08cd538376e8a6512a0b01af81eb570ea6f13053e4f2ba67dd48d43d104fb",
+          "weight_scale": "9b76827dc3f9af4f53bdce4f4497cb339420904e9704678af4ca01f2c504f998"
+        },
+        "fit_quality": {
+          "clusters": 64,
+          "finite_centers": true,
+          "inertia": 1.3128675641786368e+17,
+          "labels_in_range": true,
+          "n_iter": 21,
+          "rows": 2043304
+        },
+        "fit_samples_ms": [
+          3161.762692000025,
+          3154.510328000015,
+          3142.4829699999464,
+          3155.1352819999465,
+          3152.884168000014
+        ],
+        "fit_spread": 1.006135187424764,
+        "ready": {
+          "event": "ready",
+          "fit_shape": [
+            2043304,
+            220
+          ],
+          "numeric_mode": "identical",
+          "transform_shape": [
+            100000,
+            64
+          ],
+          "vendor": "hip"
+        },
+        "transform_digest": "ba3eaf6148cdb8909d2aceb92b88109e49d3ffd38aa1690fee9c2207dc839f61",
+        "transform_median_ms": 8.099663000052715,
+        "transform_predict_digest": "e4a941ad8f9cfead4239ab7a3a35cfe27da87167aa7c33db879a156812f8bae2",
+        "transform_quality": {
+          "argmin_agreement_fraction": 1.0,
+          "finite": true,
+          "selected_equals_min": true
+        },
+        "transform_samples_ms": [
+          49.42785899993396,
+          21.361306000017066,
+          20.220475999963128,
+          7.969389999971099,
+          8.06623000005402,
+          8.099663000052715,
+          8.053700000004937
+        ],
+        "transform_spread": 6.202213594781183
+      }
+    },
+    "block": "/root/ctd-data/big-istella.npz",
+    "fit_speedup": 7.350877556751726,
+    "promotion_eligible": false,
+    "reach": {
+      "arms": {
+        "both": {
+          "fit": {
+            "event": "fit",
+            "ms": 3899.936761000049,
+            "parts": {
+              "centers": "86dc6e8fd355b928cef13d06fefa7dd3910367830ab59aa46b9397c59ec78d05",
+              "inertia": "459c5fa1cce3854a699cd38c023fe24318751e3bfc05fb61f2cbd25b4c9cedc9",
+              "labels": "8ebda9058620549cf29d7cb5c883b7a3857bdb1ed2e43e0ddaa44118b7a89619",
+              "n_iter": "3b89a440447b7acfcf6e6a8abefd0e7423f2bac6d42fe428a27bc24996362453",
+              "sum_scale": "98b08cd538376e8a6512a0b01af81eb570ea6f13053e4f2ba67dd48d43d104fb",
+              "weight_scale": "9b76827dc3f9af4f53bdce4f4497cb339420904e9704678af4ca01f2c504f998"
+            },
+            "quality": {
+              "clusters": 64,
+              "finite_centers": true,
+              "inertia": 1.3128675641786368e+17,
+              "labels_in_range": true,
+              "n_iter": 21,
+              "rows": 2043304
+            },
+            "seq": 0
+          },
+          "ready": {
+            "event": "ready",
+            "fit_shape": [
+              2043304,
+              220
+            ],
+            "numeric_mode": "identical",
+            "transform_shape": [
+              1,
+              64
+            ],
+            "vendor": "hip"
+          }
+        },
+        "sabotage_block": {
+          "fit": {
+            "event": "fit",
+            "ms": 4118.0856140000515,
+            "parts": {
+              "centers": "1c09b1e3f25433018592edd6d4c187006fdcd1836b3778b03ac652e127c240bd",
+              "inertia": "99d121af5e3832744844de800497fea9b306f15478dbdbba13494f11acc35b6b",
+              "labels": "6210ff2e975364fbb2f72e25a7bb59c99ac2d6bc99f0624738c39697af099f3c",
+              "n_iter": "3b89a440447b7acfcf6e6a8abefd0e7423f2bac6d42fe428a27bc24996362453",
+              "sum_scale": "98b08cd538376e8a6512a0b01af81eb570ea6f13053e4f2ba67dd48d43d104fb",
+              "weight_scale": "9b76827dc3f9af4f53bdce4f4497cb339420904e9704678af4ca01f2c504f998"
+            },
+            "quality": {
+              "clusters": 64,
+              "finite_centers": true,
+              "inertia": 1.2110256432532685e+17,
+              "labels_in_range": true,
+              "n_iter": 21,
+              "rows": 2043304
+            },
+            "seq": 0
+          },
+          "ready": {
+            "event": "ready",
+            "fit_shape": [
+              2043304,
+              220
+            ],
+            "numeric_mode": "identical",
+            "transform_shape": [
+              1,
+              64
+            ],
+            "vendor": "hip"
+          }
+        },
+        "sabotage_scale": {
+          "fit": {
+            "event": "fit",
+            "ms": 4122.569438000028,
+            "parts": {
+              "centers": "10549eadb0278ac9fa8a808b4a0f8386cad5b5b4037b5a0edb2200dfa8617dc0",
+              "inertia": "a1de4922279dd407078b073abf7b2ca1a261e4145188fc73e0119c2f7808650c",
+              "labels": "19e6f3e46d431216753a0951b110746fe688e8562869240c8ca44ce09b719bd9",
+              "n_iter": "3b89a440447b7acfcf6e6a8abefd0e7423f2bac6d42fe428a27bc24996362453",
+              "sum_scale": "0c2486404d7caed2bd0c5c64b9550fdcefd7c83474aab0ddf6aa7fc7278428b3",
+              "weight_scale": "9b76827dc3f9af4f53bdce4f4497cb339420904e9704678af4ca01f2c504f998"
+            },
+            "quality": {
+              "clusters": 64,
+              "finite_centers": true,
+              "inertia": 1.3931053701083955e+17,
+              "labels_in_range": true,
+              "n_iter": 21,
+              "rows": 2043304
+            },
+            "seq": 0
+          },
+          "ready": {
+            "event": "ready",
+            "fit_shape": [
+              2043304,
+              220
+            ],
+            "numeric_mode": "identical",
+            "transform_shape": [
+              1,
+              64
+            ],
+            "vendor": "hip"
+          }
+        }
+      },
+      "block": "/root/ctd-data/big-istella.npz",
+      "block_accumulator_reached": true,
+      "device_scale_reached": true,
+      "verdict": "BOTH_FULL_DATA_STAGES_REACHED"
+    },
+    "thresholds": {
+      "min_fit_speedup": 1.02,
+      "min_transform_speedup": 0.95,
+      "spread_gate": 1.1
+    },
+    "transform_speedup": 0.9990524641627822,
+    "verdict": "REJECT_UNSTABLE_OR_INSUFFICIENT_SPEED"
+  },
+  "taxi": {
+    "arms": {
+      "both": {
+        "fit_median_ms": 122.31371600000784,
+        "fit_parts": {
+          "centers": "8743497cb99e18874f82458f61bfe287b0ce4efb8eaf26e81585d555f6f3d8d1",
+          "inertia": "8a73002d017264969f072264373be5a7ae1481c1391dc1e7f02b9e8351420fa8",
+          "labels": "376b37268ba926332b345318c240ebe4b9ccfd5f1f4142e295a37ea271bff9d6",
+          "n_iter": "3b89a440447b7acfcf6e6a8abefd0e7423f2bac6d42fe428a27bc24996362453",
+          "sum_scale": "430fed339fe50a81bcabd004ec9c2f3176390cff1f93ae0434d3f589cbe6e0a1",
+          "weight_scale": "ff493e64894b039e43482f1bd3f50273b5e8ff959cd994af7516f09b2de3dd17"
+        },
+        "fit_quality": {
+          "clusters": 64,
+          "finite_centers": true,
+          "inertia": 120627664.0,
+          "labels_in_range": true,
+          "n_iter": 21,
+          "rows": 4000000
+        },
+        "fit_samples_ms": [
+          127.71678400008568,
+          133.48545199994533,
+          122.31371600000784,
+          121.44571999999698,
+          118.09259399990424
+        ],
+        "fit_spread": 1.1303456675704284,
+        "ready": {
+          "event": "ready",
+          "fit_shape": [
+            4000000,
+            11
+          ],
+          "numeric_mode": "identical",
+          "transform_shape": [
+            100000,
+            64
+          ],
+          "vendor": "hip"
+        },
+        "transform_digest": "865d06095697f0c138b36aea3f071e626e43fbcb94929e0fc42656302b5ac9a7",
+        "transform_median_ms": 4.365149000022939,
+        "transform_predict_digest": "98d8555ab92107166f94db4d10b14f68adb5a8abe062087aae331e4af44c749d",
+        "transform_quality": {
+          "argmin_agreement_fraction": 1.0,
+          "finite": true,
+          "selected_equals_min": true
+        },
+        "transform_samples_ms": [
+          41.78273899992746,
+          17.35113500001262,
+          16.412503000083234,
+          4.365149000022939,
+          4.286659000058535,
+          4.336172999956034,
+          4.283433999944464
+        ],
+        "transform_spread": 9.75449580884617
+      },
+      "off": {
+        "fit_median_ms": 116.52402500010339,
+        "fit_parts": {
+          "centers": "8743497cb99e18874f82458f61bfe287b0ce4efb8eaf26e81585d555f6f3d8d1",
+          "inertia": "8a73002d017264969f072264373be5a7ae1481c1391dc1e7f02b9e8351420fa8",
+          "labels": "376b37268ba926332b345318c240ebe4b9ccfd5f1f4142e295a37ea271bff9d6",
+          "n_iter": "3b89a440447b7acfcf6e6a8abefd0e7423f2bac6d42fe428a27bc24996362453",
+          "sum_scale": "430fed339fe50a81bcabd004ec9c2f3176390cff1f93ae0434d3f589cbe6e0a1",
+          "weight_scale": "ff493e64894b039e43482f1bd3f50273b5e8ff959cd994af7516f09b2de3dd17"
+        },
+        "fit_quality": {
+          "clusters": 64,
+          "finite_centers": true,
+          "inertia": 120627664.0,
+          "labels_in_range": true,
+          "n_iter": 21,
+          "rows": 4000000
+        },
+        "fit_samples_ms": [
+          129.45678099993074,
+          118.54124699993918,
+          116.52402500010339,
+          110.48651499993412,
+          111.5866879999885
+        ],
+        "fit_spread": 1.1716975687033657,
+        "ready": {
+          "event": "ready",
+          "fit_shape": [
+            4000000,
+            11
+          ],
+          "numeric_mode": "identical",
+          "transform_shape": [
+            100000,
+            64
+          ],
+          "vendor": "hip"
+        },
+        "transform_digest": "865d06095697f0c138b36aea3f071e626e43fbcb94929e0fc42656302b5ac9a7",
+        "transform_median_ms": 4.896176999977797,
+        "transform_predict_digest": "98d8555ab92107166f94db4d10b14f68adb5a8abe062087aae331e4af44c749d",
+        "transform_quality": {
+          "argmin_agreement_fraction": 1.0,
+          "finite": true,
+          "selected_equals_min": true
+        },
+        "transform_samples_ms": [
+          44.73671699997794,
+          17.225155000005543,
+          21.408005000012054,
+          4.251224999961778,
+          4.896176999977797,
+          4.288683000027049,
+          4.301740999949288
+        ],
+        "transform_spread": 10.5232531800552
+      }
+    },
+    "block": "/root/ctd-data/big-taxi.npz",
+    "fit_speedup": 0.9526652350264293,
+    "promotion_eligible": false,
+    "reach": {
+      "arms": {
+        "both": {
+          "fit": {
+            "event": "fit",
+            "ms": 4647.601943000041,
+            "parts": {
+              "centers": "8743497cb99e18874f82458f61bfe287b0ce4efb8eaf26e81585d555f6f3d8d1",
+              "inertia": "8a73002d017264969f072264373be5a7ae1481c1391dc1e7f02b9e8351420fa8",
+              "labels": "376b37268ba926332b345318c240ebe4b9ccfd5f1f4142e295a37ea271bff9d6",
+              "n_iter": "3b89a440447b7acfcf6e6a8abefd0e7423f2bac6d42fe428a27bc24996362453",
+              "sum_scale": "430fed339fe50a81bcabd004ec9c2f3176390cff1f93ae0434d3f589cbe6e0a1",
+              "weight_scale": "ff493e64894b039e43482f1bd3f50273b5e8ff959cd994af7516f09b2de3dd17"
+            },
+            "quality": {
+              "clusters": 64,
+              "finite_centers": true,
+              "inertia": 120627664.0,
+              "labels_in_range": true,
+              "n_iter": 21,
+              "rows": 4000000
+            },
+            "seq": 0
+          },
+          "ready": {
+            "event": "ready",
+            "fit_shape": [
+              4000000,
+              11
+            ],
+            "numeric_mode": "identical",
+            "transform_shape": [
+              1,
+              64
+            ],
+            "vendor": "hip"
+          }
+        },
+        "sabotage_block": {
+          "fit": {
+            "event": "fit",
+            "ms": 5478.208720999987,
+            "parts": {
+              "centers": "78c39449daadf4edacf7336a4c2856ed2a19bba0dd7849883bdfdfa462100b45",
+              "inertia": "8c558115d9ea9aef33bb238af0d438829b401ceece78fc44dfc61287fee96a73",
+              "labels": "958e01385416e0be94be940a3c64c94c5129af13c7308ea751971642f12069c1",
+              "n_iter": "3b89a440447b7acfcf6e6a8abefd0e7423f2bac6d42fe428a27bc24996362453",
+              "sum_scale": "430fed339fe50a81bcabd004ec9c2f3176390cff1f93ae0434d3f589cbe6e0a1",
+              "weight_scale": "ff493e64894b039e43482f1bd3f50273b5e8ff959cd994af7516f09b2de3dd17"
+            },
+            "quality": {
+              "clusters": 64,
+              "finite_centers": true,
+              "inertia": 120915464.0,
+              "labels_in_range": true,
+              "n_iter": 21,
+              "rows": 4000000
+            },
+            "seq": 0
+          },
+          "ready": {
+            "event": "ready",
+            "fit_shape": [
+              4000000,
+              11
+            ],
+            "numeric_mode": "identical",
+            "transform_shape": [
+              1,
+              64
+            ],
+            "vendor": "hip"
+          }
+        },
+        "sabotage_scale": {
+          "fit": {
+            "event": "fit",
+            "ms": 5473.64840900002,
+            "parts": {
+              "centers": "7624cddbbb28bd886d01140ed69d8a23ca0295f67a35901fdb74b87db993acb6",
+              "inertia": "b3c849603b1cd949c079ea534ec440a0631468cf8d9c64e21b798c154a85edc3",
+              "labels": "94ed638e51dc0050ccd58274c7341f56ef91457fdc3bf51f0811c333a639eb3e",
+              "n_iter": "3b89a440447b7acfcf6e6a8abefd0e7423f2bac6d42fe428a27bc24996362453",
+              "sum_scale": "4fe96f8aee7618d261c650ce231fd4c31b3a7016a5e4e135325d3c23f582bfd3",
+              "weight_scale": "ff493e64894b039e43482f1bd3f50273b5e8ff959cd994af7516f09b2de3dd17"
+            },
+            "quality": {
+              "clusters": 64,
+              "finite_centers": true,
+              "inertia": 122574448.0,
+              "labels_in_range": true,
+              "n_iter": 21,
+              "rows": 4000000
+            },
+            "seq": 0
+          },
+          "ready": {
+            "event": "ready",
+            "fit_shape": [
+              4000000,
+              11
+            ],
+            "numeric_mode": "identical",
+            "transform_shape": [
+              1,
+              64
+            ],
+            "vendor": "hip"
+          }
+        }
+      },
+      "block": "/root/ctd-data/big-taxi.npz",
+      "block_accumulator_reached": true,
+      "device_scale_reached": true,
+      "verdict": "BOTH_FULL_DATA_STAGES_REACHED"
+    },
+    "thresholds": {
+      "min_fit_speedup": 1.02,
+      "min_transform_speedup": 0.95,
+      "spread_gate": 1.1
+    },
+    "transform_speedup": 1.121651746584611,
+    "verdict": "REJECT_UNSTABLE_OR_INSUFFICIENT_SPEED"
+  }
+}

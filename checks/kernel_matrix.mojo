@@ -1836,9 +1836,10 @@ def knn_distance_exact_chain_for[column: Int, identical: Bool]() -> Bool:
     comptime if is_defined["MOJOLEARN_EXPERIMENTAL_KNN_EXACT_CHAIN"]():
         return identical
     # 2026-09-17 (lane/knn-tiled-distance, DEVIATION 3000): ON where the
-    # shared-memory tile runs, which admits per BLOCK from the same
-    # request-local metadata. There the flush IS what the distance class
-    # pays for: on the RTX 4090 at 400k x 4k x d220 the smem tile's distance
+    # shared-memory tile runs, subject to that tile's runtime minimum feature
+    # width, which admits per BLOCK from the same request-local metadata.
+    # There the flush IS what the distance class pays for: on the RTX 4090
+    # at 400k x 4k x d220 the smem tile's distance
     # class went 37.9 to 31.4 ms (k10) and the request 60.9 to 56.5 ms
     # (paired medians 0.754 to 0.695 of base), every bit equal on the cuda
     # column against the cpu host route and the sabotage arm DIVERGENT
@@ -1928,7 +1929,7 @@ def forest_row_threads_for[column: Int]() -> Bool:
 
 
 def knn_smem_distance_tile_for[column: Int, identical: Bool]() -> Bool:
-    """SCHEDULING row (DEVIATION 3000, 2026-09-17, lane/knn-tiled-distance): whether the transposed IDENTICAL tiled k-NN arm computes each column tile's distances through the SHARED-MEMORY tile (`neighbors/checks/smem_distance_tile.mojo::smem_distance_tile_kernel`): a block of 256 threads owns 64 query rows x 128 index columns, stages each 16-feature slice of the query rows and of the transposed index columns into shared memory once (flushed at the store), and every thread advances its 8 x 4 accumulators from three 16-byte shared loads per feature step, instead of the register tile's twelve global loads and twelve flushes per step. Every cell is still one ascending `_rt_step` chain over the feature axis from +0.0 with the register tile's epilogue, clamp and root, and `ftz` is idempotent, so the bits are the register tile's; the gate is `tools/identity_break.py` on the knn lanes, cuda against the cpu host route, plus `-D MOJOLEARN_KNN_SMEM_TILE_SABOTAGE=1`. Needs the transposed layout and the register-tile row, and does not carry the Apple metadata or DEVIATION 2629 chains (a request on those keeps the register tile). ON on NVIDIA (measured, the comment in the body), OFF elsewhere; `-D MOJOLEARN_EXPERIMENTAL_KNN_SMEM_TILE=1` forces it on any column, `-D MOJOLEARN_KNN_IDENTICAL_REGISTER_TILE_ONLY=1` forces the register tile."""
+    """SCHEDULING row (DEVIATION 3000, 2026-09-17, lane/knn-tiled-distance): whether the transposed IDENTICAL tiled k-NN arm computes each column tile's distances through the SHARED-MEMORY tile (`neighbors/checks/smem_distance_tile.mojo::smem_distance_tile_kernel`): a block of 256 threads owns 64 query rows x 128 index columns, stages each 16-feature slice of the query rows and of the transposed index columns into shared memory once (flushed at the store), and every thread advances its 8 x 4 accumulators from three 16-byte shared loads per feature step, instead of the register tile's twelve global loads and twelve flushes per step. Every cell is still one ascending `_rt_step` chain over the feature axis from +0.0 with the register tile's epilogue, clamp and root, and `ftz` is idempotent, so the bits are the register tile's; the gate is `tools/identity_break.py` on the knn lanes, cuda against the cpu host route, plus `-D MOJOLEARN_KNN_SMEM_TILE_SABOTAGE=1`. Needs the transposed layout and the register-tile row, and does not carry the Apple metadata or DEVIATION 2629 chains (a request on those keeps the register tile). ON on NVIDIA and AMD (measured below); AMD's runtime width gate is `knn_smem_min_features_for`. `-D MOJOLEARN_EXPERIMENTAL_KNN_SMEM_TILE=1` forces it on any column and at every positive width, while `-D MOJOLEARN_KNN_IDENTICAL_REGISTER_TILE_ONLY=1` forces the register tile."""
     comptime if not identical:
         return False
     comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_REGISTER_TILE_ONLY"]():
@@ -1943,13 +1944,41 @@ def knn_smem_distance_tile_for[column: Int, identical: Bool]() -> Bool:
     # (d 11); kneighbors paired medians 0.754 (Istella-S) and 0.938 (taxi)
     # of base. Every knn, radius and kde lane IDENTICAL on the cuda column
     # against the cpu host route (five fixtures, two repeats), the sabotage
-    # arm DIVERGENT on every knn infer and batch cell. Apple and AMD are
-    # untimed and keep the register tile.
-    return column == COLUMN_NVIDIA
+    # arm DIVERGENT on every knn infer and batch cell.
+    # FLIPPED ON AMD 2026-09-21 for d >= 32 (gfx942, exact repeated-inference
+    # races over the two large R2 datasets, six alternating outer visits x
+    # three samples): MI325X taxi 0.9892834989 and Istella-S 0.5339559963,
+    # MI300X taxi 0.9626919989 and Istella-S 0.4984478690, all relative to
+    # the register path and with complete distance/index digests equal. The
+    # MI300X taxi baseline had one flagged timing outlier (spread 1.4521;
+    # candidate 1.0245), but the conclusion agrees with MI325X. The
+    # unconditional arm lost on taxi (MI325X 1.3914128902; MI300X
+    # 1.3302377089) while winning on Istella-S (0.5351173817 and
+    # 0.4991675935), which is why the width gate is part of the promotion.
+    # Apple remains untimed and keeps the register tile.
+    return column == COLUMN_NVIDIA or column == COLUMN_AMD
+
+
+@always_inline
+def knn_smem_min_features_for[column: Int, identical: Bool]() -> Int:
+    """Smallest feature width served by DEVIATION 3000's shared tile.
+
+    AMD defaults to 32 from the paired measurements in
+    `knn_smem_distance_tile_for`; narrower rows keep the register tile.
+    NVIDIA's measured default remains every positive width. The explicit
+    experimental tile define preserves its original all-width meaning;
+    `MOJOLEARN_EXPERIMENTAL_KNN_SMEM_WIDE_ONLY` requests the AMD threshold
+    on any column for reproducing the promotion trial.
+    """
+    comptime if is_defined["MOJOLEARN_EXPERIMENTAL_KNN_SMEM_WIDE_ONLY"]():
+        return 32
+    comptime if is_defined["MOJOLEARN_EXPERIMENTAL_KNN_SMEM_TILE"]():
+        return 1
+    return 32 if identical and column == COLUMN_AMD else 1
 
 
 def knn_block_topk_select_for[column: Int, identical: Bool]() -> Bool:
-    """SCHEDULING row (DEVIATION 3001, 2026-09-17, lane/knn-tiled-distance): whether the shared-memory tile (DEVIATION 3000, required) writes NO distance matrix and instead pops each of its rows' k smallest composite keys inside the block (`smem_distance_tile_kernel[TOPK=True]`, warp minima over the block's 128 columns), with `partial_keys_select_kernel` selecting the row's k smallest from the union of the per-block lists. The key is the small-k selector's `composite_key(distance, tile-local column)`, keys are unique, the row's k smallest keys are a subset of the union whatever the partition, and the rank phase pops the same UInt64 minima ascending, so neighbors and distances are the same bits (the distance is `twiddle_out` of the key's high half, the exact inverse of the key's `twiddle_in`); the gate is the same identity run as DEVIATION 3000. Replaces the `query_tile x index_tile` matrix write and the selector's read of it by a `query_tile x (index_tile / 128) x k` key buffer. Needs the small-k selector row and 1 <= k <= 64; the fused select (DEVIATION 2667) and selector trial builds keep the two-launch form. ON on NVIDIA for k <= KNN_BLOCK_TOPK_MAX_K (measured, the comment in the body), OFF elsewhere; `-D MOJOLEARN_EXPERIMENTAL_KNN_BLOCK_TOPK=1` forces it on any column, `-D MOJOLEARN_KNN_IDENTICAL_MATRIX_SELECT=1` keeps the matrix and the selector."""
+    """SCHEDULING row (DEVIATION 3001, 2026-09-17, lane/knn-tiled-distance): whether the shared-memory tile (DEVIATION 3000, required) writes NO distance matrix and instead pops each of its rows' k smallest composite keys inside the block (`smem_distance_tile_kernel[TOPK=True]`, warp minima over the block's 128 columns), with `partial_keys_select_kernel` selecting the row's k smallest from the union of the per-block lists. The key is the small-k selector's `composite_key(distance, tile-local column)`, keys are unique, the row's k smallest keys are a subset of the union whatever the partition, and the rank phase pops the same UInt64 minima ascending, so neighbors and distances are the same bits (the distance is `twiddle_out` of the key's high half, the exact inverse of the key's `twiddle_in`); the gate is the same identity run as DEVIATION 3000. Replaces the `query_tile x index_tile` matrix write and the selector's read of it by a `query_tile x (index_tile / 128) x k` key buffer. Needs the small-k selector row and 1 <= k <= 64; the fused select (DEVIATION 2667) and selector trial builds keep the two-launch form. ON on NVIDIA and AMD for k <= KNN_BLOCK_TOPK_MAX_K (measured in this row and DEVIATION 3000's row); AMD also uses DEVIATION 3000's runtime width gate. `-D MOJOLEARN_EXPERIMENTAL_KNN_BLOCK_TOPK=1` forces it on any column, while `-D MOJOLEARN_KNN_IDENTICAL_MATRIX_SELECT=1` keeps the matrix and the selector."""
     comptime if not identical:
         return False
     comptime if is_defined["MOJOLEARN_KNN_IDENTICAL_MATRIX_SELECT"]():
@@ -1967,7 +1996,10 @@ def knn_block_topk_select_for[column: Int, identical: Bool]() -> Bool:
     # ms (taxi) at k 1. At k 64 the in-block rank loop costs more than the
     # selector it replaces (147 against 127 ms Istella-S, 116 against 97 ms
     # taxi), so above the bound the matrix and the small-k selector stay.
-    return column == COLUMN_NVIDIA and knn_smem_distance_tile_for[column, identical]()
+    return (
+        (column == COLUMN_NVIDIA or column == COLUMN_AMD)
+        and knn_smem_distance_tile_for[column, identical]()
+    )
 
 
 #: The widest k the block top-k (DEVIATION 3001) serves by default; larger

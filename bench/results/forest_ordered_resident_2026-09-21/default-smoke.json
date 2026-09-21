@@ -1,0 +1,66 @@
+[
+  {
+    "dataset": "taxi",
+    "hash": "e3bfa5d9f4db287d1c647cb5c4adf75c42c064598211cf91758a984a0c30d33c",
+    "kind": "rf",
+    "operation": "predict",
+    "repeats": 3,
+    "rows": 100000
+  },
+  {
+    "dataset": "taxi",
+    "hash": "0bc58783463d050f117577404ac5add59fafce525eb48b11a07223206a4f7854",
+    "kind": "rf",
+    "operation": "proba",
+    "repeats": 3,
+    "rows": 100000
+  },
+  {
+    "dataset": "taxi",
+    "hash": "981b77dc430660766e3b89268e020e24ab73574e54f9afbef120987ec11ec41c",
+    "kind": "et",
+    "operation": "predict",
+    "repeats": 3,
+    "rows": 100000
+  },
+  {
+    "dataset": "taxi",
+    "hash": "b7c530c4631fd3eb160adcbf42a827bb84f68fa9c3d1262a5a26150abca69c50",
+    "kind": "et",
+    "operation": "proba",
+    "repeats": 3,
+    "rows": 100000
+  },
+  {
+    "dataset": "istella",
+    "hash": "f56812cd691840016dacdcf11fb04f42a73e25a9c1ddaca7f024a85e6c44a041",
+    "kind": "rf",
+    "operation": "predict",
+    "repeats": 3,
+    "rows": 100000
+  },
+  {
+    "dataset": "istella",
+    "hash": "de683c49967fa4d4f6be45fe8ea70c86e4da294249e239ffda6bcf749d4806af",
+    "kind": "rf",
+    "operation": "proba",
+    "repeats": 3,
+    "rows": 100000
+  },
+  {
+    "dataset": "istella",
+    "hash": "e32317c8b39ea89172ae85ea7232193defc35ee47ef8e937bcdd8b0c19c5a6f7",
+    "kind": "et",
+    "operation": "predict",
+    "repeats": 3,
+    "rows": 100000
+  },
+  {
+    "dataset": "istella",
+    "hash": "d875325bcf26bbdf26505abe85307f271aa838dbd0f8b777000ee43dcdd710d8",
+    "kind": "et",
+    "operation": "proba",
+    "repeats": 3,
+    "rows": 100000
+  }
+]

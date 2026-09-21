@@ -7,7 +7,7 @@ native handle can be released while another call is using it.
 from std.python import PythonObject
 from std.sys.compile import is_defined
 from core.forest_inference import vector_groves_for, FOREST_PACKED_NODES
-from core.forest_inference_model import resident_prepare, resident_predict, resident_release, resident_predict_into, resident_predict_labels
+from core.forest_inference_model import resident_prepare, resident_predict, resident_release, resident_predict_into, resident_predict_labels, FOREST_ORDERED_RESIDENT
 
 
 def forest_pool_available() raises -> PythonObject:
@@ -99,6 +99,11 @@ def forest_release_gpu_binding[RF_INPUT: Bool](handle: PythonObject) raises -> P
 def forest_vector_groves_binding(outputs: PythonObject) raises -> PythonObject:
     """Read actual compiled vector dispatch, not environment or filenames."""
     return PythonObject(vector_groves_for(Int(py=outputs)))
+
+
+def forest_ordered_resident_binding() raises -> PythonObject:
+    """Read the compiled experimental resident aggregation route."""
+    return PythonObject(1 if FOREST_ORDERED_RESIDENT else 0)
 
 
 def forest_predict_resident_into_gpu_binding[RF_INPUT: Bool, REUSE_IO: Bool = False](

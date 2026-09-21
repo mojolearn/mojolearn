@@ -1,0 +1,19 @@
+Mon Sep 21 13:43:16 UTC 2026
+Linux enc1-gpuvm002 6.8.0-124-generic #124-Ubuntu SMP PREEMPT_DYNAMIC Tue May 26 13:00:45 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+13
+model name	: Intel(R) Xeon(R) Platinum 8470
+
+
+============================ ROCm System Management Interface ============================
+====================================== Product Info ======================================
+GPU[0]		: Card Series: 		AMD Instinct MI300X VF
+GPU[0]		: Card Model: 		0x74b5
+GPU[0]		: Card Vendor: 		Advanced Micro Devices, Inc. [AMD/ATI]
+GPU[0]		: Card SKU: 		M3000108
+GPU[0]		: Subsystem ID: 	0x74a1
+GPU[0]		: Device Rev: 		0x00
+GPU[0]		: Node ID: 		1
+GPU[0]		: GUID: 		46235
+GPU[0]		: GFX Version: 		gfx942
+==========================================================================================
+================================== End of ROCm SMI Log ===================================

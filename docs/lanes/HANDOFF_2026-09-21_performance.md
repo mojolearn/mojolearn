@@ -6,6 +6,55 @@ integration worktree is `/Users/andrewhendel/mojolearn-wt/handoff-sep18`; use
 worktrees and normal merges, not cherry-picks. A clean worktree is removable
 only after `tools/worktree_prune_check.sh` and a live-owner/evidence check.
 
+## Classical repeated-step continuation
+
+Keep this lane narrow: optimize repeated public fit, predict, transform, and
+neighbor calls on exactly the R2-staged Taxi (4,000,000 x 11) and Istella-S
+(2,043,304 x 220) datasets. Promotion requires bitwise-identical complete
+outputs and unchanged quality on both datasets. Subagents prepare isolated
+candidates and timing bodies; one orchestrator owns rentals, warm-box lifetime,
+evidence, and integration so agents do not compete for provider resources.
+
+- **AMD kNN shared tile: promoted.** `gfx942` now uses the shared distance tile
+  and block top-k at 32 or more features. Istella-S repeated `kneighbors` fell
+  from 103.8297 to 55.4420 ms on DigitalOcean MI325X and from 115.6362 to
+  57.6100 ms on Hot Aisle MI300X. The narrow Taxi route remains unchanged.
+  The broad gate covered 22 lanes, nine fixtures and two repeats; all 198
+  default HIP cells equaled the CPU oracle, and width-probe sabotage proved
+  that the promoted route was reached without changing caller-visible bits or
+  quality. See `bench/evidence/2026-09-21_knn_amd_shared_tile.md` and
+  `bench/results/knn_amd_shared_tile_2026-09-21/`.
+- **H100 GBDT DEVIATION 2661: rejected.** Lossguide improved about 0.94% across
+  the two datasets, while depthwise's geomean regressed about 0.20% and its
+  Istella-S cell regressed 0.50%. Identity, prediction hashes, AUC, and logloss
+  all matched, but a common default switch was not justified. See
+  `bench/evidence/2026-09-21_gbdt_2661_h100_rejected.md` and
+  `bench/results/gbdt_2661_2026-09-21/`.
+- **H100 eight-tree grouped inference: rejected and removed.** Group8 retained
+  exact outputs and quality, but every timing cell failed the 1.10 spread gate
+  and Taxi `predict_proba` regressed about 7.1%. The diagnostic four-cell
+  geomean was only 1.0246x. See
+  `bench/evidence/2026-09-21_gbdt_group8_h100_rejected.md` and
+  `bench/results/gbdt_group8_2026-09-21/`.
+
+Cloudflare R2 is the canonical staging path for both datasets. Reuse one warm
+box for compile/push/rerun cycles, refresh its 30–60 minute deletion watchdog
+while useful work continues, and delete it immediately after the last trial.
+DigitalOcean and all completed Hot Aisle AMD resources from the kNN work were
+deleted and verified absent (HTTP 404). RunPod H100 `7crz0erxxhpbcy` is an
+owned, intentionally warm resource under
+`/Users/andrewhendel/mojolearn-evidence/2026-09-21_gbdt_2661/runpod-state`;
+the ordered forest follow-up is using it and its watchdog must remain armed.
+
+Two default-off follow-ups are active in this worktree. The AMD K-means trial
+combines the existing block-accumulation and device-scale candidates, checks
+identity plus sabotage reachability, and races repeated fit and transform on
+Taxi and Istella-S (`tools/kmeans_amd_perf_leg.sh`,
+`bench/speed/kmeans_amd_ab.py`). The ordered RF/Extra Trees trial compares the
+resident grove reduction with strict increasing-tree aggregation while keeping
+the model and workspaces resident. Neither candidate is promoted until both
+datasets pass timing stability, complete-output identity, and quality gates.
+
 ## Shipped and qualified
 
 - GPT-3-small repeated training: large embedding backward selects stable sort

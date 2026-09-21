@@ -147,9 +147,16 @@ class ForestProtocol:
         engine = self._validate_inference_engine(getattr(self, "inference_engine", "sequential"))
         if engine == "auto":
             # FAST permits the grove-parallel reduction and benefits from a
-            # persistent device snapshot.  The reproducibility tiers retain
-            # the historical sequential traversal and arithmetic.
-            return "parallel_groves" if self._effective_mode() == "fast" else "sequential"
+            # persistent device snapshot. NVIDIA IDENTICAL uses that snapshot
+            # with the compiled strict increasing-tree aggregation route.
+            mode = self._effective_mode()
+            if mode == "fast":
+                return "parallel_groves"
+            if mode == "identical":
+                selected = getattr(self._bind(), "forest_ordered_resident", None)
+                if callable(selected) and int(selected()) == 1:
+                    return "parallel_groves"
+            return "sequential"
         return engine
 
     def _prediction_function(self, sequential_name):

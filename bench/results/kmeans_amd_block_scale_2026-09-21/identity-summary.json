@@ -1,0 +1,44 @@
+{
+  "block_sabotage": {
+    "batch": "DIVERGENT=54",
+    "infer_model": "DIVERGENT=108",
+    "refused": 0
+  },
+  "cells_per_arm": 54,
+  "fixtures": [
+    "base",
+    "ties",
+    "hashed",
+    "wide",
+    "denormal",
+    "denormal_ftz",
+    "dupes",
+    "odd",
+    "negative"
+  ],
+  "lanes": [
+    "kmeans",
+    "kmeans-random",
+    "kmeans-array",
+    "kmeans-weighted",
+    "kmeans-sqrt",
+    "kmeans-classic-pp"
+  ],
+  "off_vs_both": {
+    "batch": "IDENTICAL=54",
+    "infer_model": "IDENTICAL=108",
+    "refused": 0
+  },
+  "repeats": 2,
+  "scale_sabotage": {
+    "batch": "DIVERGENT=49, IDENTICAL=5",
+    "infer_model": "DIVERGENT=103, IDENTICAL=5",
+    "refused": 0
+  },
+  "source_json_sha256": {
+    "identity.both.json": "1a4a5d1c7aeef73b24f17a783dbf08010c3ab5caa1a129264fc62d0d4fbf6f85",
+    "identity.off.json": "c581ca401630a49511bd3bc3531e2c60a141ba149d3204a563bc12cd1aa6ae6a",
+    "identity.sabotage_block.json": "76a10cf199b13a071e1b25e3319521b3893ffc678dcf39b304b14152b781dc25",
+    "identity.sabotage_scale.json": "98dc453924352205cdcc38603f2b4549d83220668c83d11776fa7e613be37820"
+  }
+}
