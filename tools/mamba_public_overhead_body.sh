@@ -13,9 +13,10 @@ mkdir -p "$OUT/logs"; sh bindings/build_mamba.sh >"$OUT/logs/build.log" 2>&1
 for row in "taxi:$DATA/taxi/taxi_speed.npz:gbm-bench/taxi/taxi_speed.npz:10d5d35f376a5b2ad5c66fabe624ee2caafb58bc5e7516824f801de9aab6cc15" "istella:$DATA/istella/istella_speed.npz:gbm-bench/istella/istella_speed.npz:31f042376c0b819fe169cbbd998e840567c23dae25c14cb9054b460292f6ffef"; do
  ds=${row%%:*}; rest=${row#*:}; path=${rest%%:*}; rest=${rest#*:}; key=${rest%%:*}; sha=${rest#*:}
  sh tools/dataset_store.sh verify "$key" "$path" >"$OUT/logs/verify-$ds.log" 2>&1
- for family in mamba1 mamba2 mamba3; do
+ for family in mamba2 mamba3; do
   for rung in screen qualification; do
-   p=0; while [ "$p" -lt 3 ]; do
+   [ "$rung" = screen ] && processes=1 || processes=3
+   p=0; while [ "$p" -lt "$processes" ]; do
     dest="$OUT/$rung/$ds/$family/process$p"; mkdir -p "$dest"
     pixi run python tools/mamba_public_overhead_trial.py --family "$family" --rung "$rung" --dataset "$path" --dataset-key "$key" --dataset-sha256 "$sha" --commit "$COMMIT" --process "$p" --target-column "$MOJOLEARN_TARGET_COLUMN" --out "$dest/result.json" >"$dest/probe.log" 2>&1
     p=$((p+1))

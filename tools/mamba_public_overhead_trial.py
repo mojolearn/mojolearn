@@ -90,6 +90,15 @@ def arm(family, block, x, cfg, resident, sabotage=False):
     block.forward(np.ascontiguousarray(x[:,:cfg["prefill"]]),state)
     out=[]; trajectory=[]; samples=[]
     session=block.decode_session(state) if resident else None
+    native_route = bool(session is not None and session._native is not None)
+    ownership_refused = None
+    if session is not None:
+        try:
+            block.step(np.ascontiguousarray(x[:, cfg["prefill"]:cfg["prefill"]+1]), state)
+        except ValueError as exc:
+            ownership_refused = "resident" in str(exc)
+        else:
+            ownership_refused = False
     try:
         for pos in range(cfg["tokens"]):
             ix=cfg["prefill"]+pos
@@ -110,7 +119,9 @@ def arm(family, block, x, cfg, resident, sabotage=False):
     arrays=state_arrays(family,state)
     return dict(samples=samples,median=statistics.median(samples),
                 output=sha(*out),state=sha(*arrays),trajectory=trajectory,
-                quality_bits=sha(np.asarray([sum(float((z*z).sum()) for z in out)],dtype=np.float64)))
+                quality_bits=sha(np.asarray([sum(float((z*z).sum()) for z in out)],dtype=np.float64)),
+                native_session=native_route if resident else None,
+                ownership_refused=ownership_refused if resident else None)
 
 
 def main():
@@ -125,6 +136,7 @@ def main():
     a=ap.parse_args(); import numpy as np; import mojolearn as ml
     cfg=RUNG[a.rung]; source=Bytes(a.dataset,104729)
     w=weights(a.family,cfg["dm"],source); block=make_block(a.family,w)
+    weights_initial=sha(*[w[k] for k in sorted(w)])
     common=Bytes(a.dataset,4000000)
     # One extra token exists solely for the wrong-token sabotage.
     x=common.array((1,cfg["prefill"]+cfg["tokens"]+1,cfg["dm"]))
@@ -162,8 +174,10 @@ def main():
         source_sha256={p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in
           ("tools/mamba_public_overhead_trial.py","python/mojolearn/_mamba_impl.py","bindings/_mojolearn_mamba.mojo")},
         rounds=a.rounds,warmup=1,sabotage=a.sabotage,rows=rows,medians=med,
+        sabotage_step=(cfg["tokens"]//2 if a.sabotage=="wrong-token" else None),
         speedup=med["percall"]/med["resident"],gradient_hash=grad_before,
-        input_hash=sha(x),gradient_input_hash=sha(gx,gdy),weights_hash=sha(*[w[k] for k in sorted(w)]),
+        gradient_after_hash=grad_after,input_hash=sha(x),gradient_input_hash=sha(gx,gdy),
+        weights_hash=weights_initial,weights_after_hash=sha(*[w[k] for k in sorted(w)]),
         exact=(a.sabotage=="none"),quality="bitwise output identity; quality_bits hashes identical")
     if not all(math.isfinite(v) and v>0 for v in med.values()): raise RuntimeError("invalid timing")
     a.out.parent.mkdir(parents=True,exist_ok=True)
