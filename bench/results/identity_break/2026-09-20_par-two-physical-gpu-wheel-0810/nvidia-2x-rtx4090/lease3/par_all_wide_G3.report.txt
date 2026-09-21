@@ -1,0 +1,84 @@
+# python -m mojolearn verify --par
+
+Ran each `par-*` lane TWICE in this process on this box (cuda): once with
+MOJOLEARN_PAR_DEVICES=0 and once with MOJOLEARN_PAR_DEVICES=0,1, and compared the
+two columns cell for cell. No reference table is involved: the one-device column
+produced here, minutes ago, off this build, IS the reference. That equality is
+the drivers' whole claim and no release record states it.
+
+  par-boosting               wide     train     IDENTICAL   one=bc0084b9b1e30f87  two=bc0084b9b1e30f87
+  par-boosting               wide     infer     IDENTICAL   one=9f7630d079f43f07  two=9f7630d079f43f07
+  par-boosting               wide     model     IDENTICAL   one=1cdaebf93c86aa45  two=1cdaebf93c86aa45
+  par-boosting               wide     batch     IDENTICAL   one=09f8dd630ebbce0f  two=09f8dd630ebbce0f
+  par-byte-lm                wide     train     IDENTICAL   one=7ab80fd955e23d77  two=7ab80fd955e23d77
+  par-causal-lm              wide     train     IDENTICAL   one=f711a5aa202b3e41  two=f711a5aa202b3e41
+  par-causal-lm              wide     batch     IDENTICAL   one=97051f4a7819532e  two=97051f4a7819532e
+  par-cholesky               wide     train     IDENTICAL   one=dc6da74a7e70e734  two=dc6da74a7e70e734
+  par-cholesky               wide     infer     IDENTICAL   one=bee2cfdb23b027f9  two=bee2cfdb23b027f9
+  par-cholesky               wide     model     IDENTICAL   one=48d3fe8181b432a4  two=48d3fe8181b432a4
+  par-cholesky               wide     batch     IDENTICAL   one=f1afad8987fc9240  two=f1afad8987fc9240
+  par-cross-val              wide     train     IDENTICAL   one=40c2b054e9a24cdc  two=40c2b054e9a24cdc
+  par-dbscan                 wide     train     IDENTICAL   one=d17808b4b9261d5d  two=d17808b4b9261d5d
+  par-dbscan                 wide     infer     IDENTICAL   one=3a6472714f51d8ab  two=3a6472714f51d8ab
+  par-dbscan                 wide     model     IDENTICAL   one=12450128a5b4be8b  two=12450128a5b4be8b
+  par-dbscan                 wide     batch     IDENTICAL   one=a8e67882b424a053  two=a8e67882b424a053
+  par-forecast-holtwinters   wide     train     IDENTICAL   one=84779b08ee76181f  two=84779b08ee76181f
+  par-forecast-holtwinters   wide     infer     IDENTICAL   one=1ed7d450da2f1e7e  two=1ed7d450da2f1e7e
+  par-forecast-holtwinters   wide     model     IDENTICAL   one=3280cb2f403e61bb  two=3280cb2f403e61bb
+  par-forecast-holtwinters   wide     batch     IDENTICAL   one=4371fe4d83f38591  two=4371fe4d83f38591
+  par-forest-et              wide     train     IDENTICAL   one=b745e53515f59cac  two=b745e53515f59cac
+  par-forest-et              wide     infer     IDENTICAL   one=62bb5a2df07afdb7  two=62bb5a2df07afdb7
+  par-forest-et              wide     model     IDENTICAL   one=6da81ae280958f67  two=6da81ae280958f67
+  par-forest-et              wide     batch     IDENTICAL   one=3faffd9a3037b28e  two=3faffd9a3037b28e
+  par-forest-et-clf          wide     train     IDENTICAL   one=ee8b318d6bf698b2  two=ee8b318d6bf698b2
+  par-forest-et-clf          wide     infer     IDENTICAL   one=a5387ead8aca6bb0  two=a5387ead8aca6bb0
+  par-forest-et-clf          wide     model     IDENTICAL   one=f792edfcd53b6aff  two=f792edfcd53b6aff
+  par-forest-et-clf          wide     batch     IDENTICAL   one=f7c2f10cfe901b45  two=f7c2f10cfe901b45
+  par-forest-pool            wide     train     IDENTICAL   one=0fa817cfbbc3f208  two=0fa817cfbbc3f208
+  par-forest-pool            wide     infer     IDENTICAL   one=85658ce0e0f66091  two=85658ce0e0f66091
+  par-forest-pool            wide     model     IDENTICAL   one=5989a0ecc598afb4  two=5989a0ecc598afb4
+  par-forest-pool            wide     batch     IDENTICAL   one=327eb3522003b1d1  two=327eb3522003b1d1
+  par-gmm                    wide     train     IDENTICAL   one=dfc81b75cafb2da2  two=dfc81b75cafb2da2
+  par-gmm                    wide     infer     IDENTICAL   one=ab4baa2fd071bf8e  two=ab4baa2fd071bf8e
+  par-gmm                    wide     model     IDENTICAL   one=e388ab98305cfc62  two=e388ab98305cfc62
+  par-gmm                    wide     batch     IDENTICAL   one=5f345692d68666aa  two=5f345692d68666aa
+  par-gram-tsvd              wide     train     IDENTICAL   one=975f2a167b1ac6d5  two=975f2a167b1ac6d5
+  par-gram-tsvd              wide     infer     IDENTICAL   one=cef9d6af2957dea2  two=cef9d6af2957dea2
+  par-gram-tsvd              wide     model     IDENTICAL   one=d1350f18d6205fbb  two=d1350f18d6205fbb
+  par-gram-tsvd              wide     batch     IDENTICAL   one=01c3cbd301ab9c8e  two=01c3cbd301ab9c8e
+  par-graph-agglomerative    wide     train     IDENTICAL   one=b3ac8c835fd42259  two=b3ac8c835fd42259
+  par-graph-agglomerative    wide     infer     IDENTICAL   one=3a6472714f51d8ab  two=3a6472714f51d8ab
+  par-graph-agglomerative    wide     model     IDENTICAL   one=921238d7a4940b9c  two=921238d7a4940b9c
+  par-graph-agglomerative    wide     batch     IDENTICAL   one=a8e67882b424a053  two=a8e67882b424a053
+  par-graph-spectral         wide     train     IDENTICAL   one=01f7dd9ac7c3fe00  two=01f7dd9ac7c3fe00
+  par-kernel-ridge           wide     train     IDENTICAL   one=778d274001c930f3  two=778d274001c930f3
+  par-kernel-ridge           wide     infer     IDENTICAL   one=933d43107f4dd76d  two=933d43107f4dd76d
+  par-kernel-ridge           wide     model     IDENTICAL   one=233aabd6c5216872  two=233aabd6c5216872
+  par-kernel-ridge           wide     batch     IDENTICAL   one=c76cee1eb7ceeda5  two=c76cee1eb7ceeda5
+  par-ordered                wide     train     IDENTICAL   one=c143f163f1e23772  two=c143f163f1e23772
+  par-ordered                wide     infer     IDENTICAL   one=e8fde999f64eec22  two=e8fde999f64eec22
+  par-ordered                wide     model     IDENTICAL   one=c24f27aa4e7d989f  two=c24f27aa4e7d989f
+  par-ordered                wide     batch     IDENTICAL   one=0cc769bdafb5820b  two=0cc769bdafb5820b
+  par-queries-knn            wide     train     IDENTICAL   one=dd6787fbab085855  two=dd6787fbab085855
+  par-queries-knn            wide     infer     IDENTICAL   one=b128c6dd4d428648  two=b128c6dd4d428648
+  par-queries-knn            wide     model     IDENTICAL   one=1823e75c34d7670f  two=1823e75c34d7670f
+  par-queries-knn            wide     batch     IDENTICAL   one=e2c971b19ea19d50  two=e2c971b19ea19d50
+  par-queries-nn             wide     train     IDENTICAL   one=3956d623d56e1786  two=3956d623d56e1786
+  par-queries-nn             wide     infer     IDENTICAL   one=3173e563e425be1c  two=3173e563e425be1c
+  par-queries-nn             wide     model     IDENTICAL   one=244f616088763b08  two=244f616088763b08
+  par-queries-nn             wide     batch     IDENTICAL   one=62dabd8ae8cf5b4f  two=62dabd8ae8cf5b4f
+  par-scaler-minmax          wide     train     IDENTICAL   one=77b3a6c235e5a346  two=77b3a6c235e5a346
+  par-scaler-minmax          wide     infer     IDENTICAL   one=6577f1b08a4a0b8d  two=6577f1b08a4a0b8d
+  par-scaler-minmax          wide     model     IDENTICAL   one=d32f2d26c235a8ff  two=d32f2d26c235a8ff
+  par-scaler-minmax          wide     batch     IDENTICAL   one=c85af33e17ebc9f1  two=c85af33e17ebc9f1
+  par-svm-svr                wide     train     IDENTICAL   one=089b83a32233143b  two=089b83a32233143b
+  par-svm-svr                wide     infer     IDENTICAL   one=62661f1f0efa01f4  two=62661f1f0efa01f4
+  par-svm-svr                wide     model     IDENTICAL   one=ed154067c6066391  two=ed154067c6066391
+  par-svm-svr                wide     batch     IDENTICAL   one=7589ad96ecc05db1  two=7589ad96ecc05db1
+Device witness: 52 pool(s), 79 worker(s), placement=physical.
+WITNESS REFUSED: par-byte-lm/wide: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+
+RESULT: CANNOT RUN. The two-device column was not shown to have run on two
+devices, so its agreement with the one-device column is not evidence. This is
+reported rather than counted, because a clean AGREE from a column that never
+sharded is the exact failure this command exists to prevent.

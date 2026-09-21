@@ -1,0 +1,84 @@
+# python -m mojolearn verify --par
+
+Ran each `par-*` lane TWICE in this process on this box (cuda): once with
+MOJOLEARN_PAR_DEVICES=0 and once with MOJOLEARN_PAR_DEVICES=0,1, and compared the
+two columns cell for cell. No reference table is involved: the one-device column
+produced here, minutes ago, off this build, IS the reference. That equality is
+the drivers' whole claim and no release record states it.
+
+  par-boosting               ties     train     IDENTICAL   one=b32c469f812adf25  two=b32c469f812adf25
+  par-boosting               ties     infer     IDENTICAL   one=e71542e71394acc3  two=e71542e71394acc3
+  par-boosting               ties     model     IDENTICAL   one=d01adab1226baf49  two=d01adab1226baf49
+  par-boosting               ties     batch     IDENTICAL   one=8146b2372b89188b  two=8146b2372b89188b
+  par-byte-lm                ties     train     IDENTICAL   one=3b5c2f34bf09e8c9  two=3b5c2f34bf09e8c9
+  par-causal-lm              ties     train     IDENTICAL   one=e6caf9f0f7ae562d  two=e6caf9f0f7ae562d
+  par-causal-lm              ties     batch     IDENTICAL   one=73aef1570825d468  two=73aef1570825d468
+  par-cholesky               ties     train     IDENTICAL   one=bbaf20dd79236882  two=bbaf20dd79236882
+  par-cholesky               ties     infer     IDENTICAL   one=86516bef368a3bea  two=86516bef368a3bea
+  par-cholesky               ties     model     IDENTICAL   one=79a69f3e6e1ad124  two=79a69f3e6e1ad124
+  par-cholesky               ties     batch     IDENTICAL   one=48ebef5641890020  two=48ebef5641890020
+  par-cross-val              ties     train     IDENTICAL   one=7ebc6632cd2f78db  two=7ebc6632cd2f78db
+  par-dbscan                 ties     train     IDENTICAL   one=b7535355c1581603  two=b7535355c1581603
+  par-dbscan                 ties     infer     IDENTICAL   one=63990f64c63d296b  two=63990f64c63d296b
+  par-dbscan                 ties     model     IDENTICAL   one=7c766eb707695149  two=7c766eb707695149
+  par-dbscan                 ties     batch     IDENTICAL   one=be9e40c554329827  two=be9e40c554329827
+  par-forecast-holtwinters   ties     train     IDENTICAL   one=e3926af4c3fcb55a  two=e3926af4c3fcb55a
+  par-forecast-holtwinters   ties     infer     IDENTICAL   one=9894a75e19343d02  two=9894a75e19343d02
+  par-forecast-holtwinters   ties     model     IDENTICAL   one=dc2d6a661f911c91  two=dc2d6a661f911c91
+  par-forecast-holtwinters   ties     batch     IDENTICAL   one=60326d25dd4491b2  two=60326d25dd4491b2
+  par-forest-et              ties     train     IDENTICAL   one=e7072e1c8fe0083c  two=e7072e1c8fe0083c
+  par-forest-et              ties     infer     IDENTICAL   one=25c3d08ea7aaac22  two=25c3d08ea7aaac22
+  par-forest-et              ties     model     IDENTICAL   one=0ae34e3bcc2b7391  two=0ae34e3bcc2b7391
+  par-forest-et              ties     batch     IDENTICAL   one=c46241fb51ef3d87  two=c46241fb51ef3d87
+  par-forest-et-clf          ties     train     IDENTICAL   one=604f59c7a4203eeb  two=604f59c7a4203eeb
+  par-forest-et-clf          ties     infer     IDENTICAL   one=7aa541bcca22b6fd  two=7aa541bcca22b6fd
+  par-forest-et-clf          ties     model     IDENTICAL   one=e63de8292d8384e4  two=e63de8292d8384e4
+  par-forest-et-clf          ties     batch     IDENTICAL   one=2296c44521d45082  two=2296c44521d45082
+  par-forest-pool            ties     train     IDENTICAL   one=ed6ebb8d17c0d8be  two=ed6ebb8d17c0d8be
+  par-forest-pool            ties     infer     IDENTICAL   one=b762e42bf992386c  two=b762e42bf992386c
+  par-forest-pool            ties     model     IDENTICAL   one=2c532280c917b0f9  two=2c532280c917b0f9
+  par-forest-pool            ties     batch     IDENTICAL   one=14c4888984f52442  two=14c4888984f52442
+  par-gmm                    ties     train     IDENTICAL   one=391ad032f87985dd  two=391ad032f87985dd
+  par-gmm                    ties     infer     IDENTICAL   one=b826318a10f37b16  two=b826318a10f37b16
+  par-gmm                    ties     model     IDENTICAL   one=fa63a34d1b2e5088  two=fa63a34d1b2e5088
+  par-gmm                    ties     batch     IDENTICAL   one=fe518740b7ec427e  two=fe518740b7ec427e
+  par-gram-tsvd              ties     train     IDENTICAL   one=86d6e87cfc1f48c0  two=86d6e87cfc1f48c0
+  par-gram-tsvd              ties     infer     IDENTICAL   one=441e224141ca3ef4  two=441e224141ca3ef4
+  par-gram-tsvd              ties     model     IDENTICAL   one=5aa8d4139303b4c2  two=5aa8d4139303b4c2
+  par-gram-tsvd              ties     batch     IDENTICAL   one=6f772af007dbdeaf  two=6f772af007dbdeaf
+  par-graph-agglomerative    ties     train     IDENTICAL   one=e0ddbabe3fa9e85c  two=e0ddbabe3fa9e85c
+  par-graph-agglomerative    ties     infer     IDENTICAL   one=d161892b4ef55128  two=d161892b4ef55128
+  par-graph-agglomerative    ties     model     IDENTICAL   one=64a8cd1101ec17ba  two=64a8cd1101ec17ba
+  par-graph-agglomerative    ties     batch     IDENTICAL   one=a8e67882b424a053  two=a8e67882b424a053
+  par-graph-spectral         ties     train     IDENTICAL   one=e8aa4ab1fc17b228  two=e8aa4ab1fc17b228
+  par-kernel-ridge           ties     train     IDENTICAL   one=cb949195fbe57da4  two=cb949195fbe57da4
+  par-kernel-ridge           ties     infer     IDENTICAL   one=df5816c733355692  two=df5816c733355692
+  par-kernel-ridge           ties     model     IDENTICAL   one=56eb82130d1dfdc6  two=56eb82130d1dfdc6
+  par-kernel-ridge           ties     batch     IDENTICAL   one=841571214fc43760  two=841571214fc43760
+  par-ordered                ties     train     IDENTICAL   one=b08dd75a1fd4de8a  two=b08dd75a1fd4de8a
+  par-ordered                ties     infer     IDENTICAL   one=529e6b54d8cfe020  two=529e6b54d8cfe020
+  par-ordered                ties     model     IDENTICAL   one=e1ea00b03e0a3d16  two=e1ea00b03e0a3d16
+  par-ordered                ties     batch     IDENTICAL   one=e60f8dc009c82663  two=e60f8dc009c82663
+  par-queries-knn            ties     train     IDENTICAL   one=853a07551e849373  two=853a07551e849373
+  par-queries-knn            ties     infer     IDENTICAL   one=d7292e53ec625170  two=d7292e53ec625170
+  par-queries-knn            ties     model     IDENTICAL   one=02aa0eb5e36cffee  two=02aa0eb5e36cffee
+  par-queries-knn            ties     batch     IDENTICAL   one=c153be1da0434ba5  two=c153be1da0434ba5
+  par-queries-nn             ties     train     IDENTICAL   one=23daf3a923d4c74f  two=23daf3a923d4c74f
+  par-queries-nn             ties     infer     IDENTICAL   one=234e9e649f45c983  two=234e9e649f45c983
+  par-queries-nn             ties     model     IDENTICAL   one=4049122e7b37a94e  two=4049122e7b37a94e
+  par-queries-nn             ties     batch     IDENTICAL   one=f6f06727f6f8caec  two=f6f06727f6f8caec
+  par-scaler-minmax          ties     train     IDENTICAL   one=fcaf2c976dae67d9  two=fcaf2c976dae67d9
+  par-scaler-minmax          ties     infer     IDENTICAL   one=6717b6636f5595fc  two=6717b6636f5595fc
+  par-scaler-minmax          ties     model     IDENTICAL   one=6c83436d35af2540  two=6c83436d35af2540
+  par-scaler-minmax          ties     batch     IDENTICAL   one=af35d3cfeccf029b  two=af35d3cfeccf029b
+  par-svm-svr                ties     train     IDENTICAL   one=d69c878738f75a68  two=d69c878738f75a68
+  par-svm-svr                ties     infer     IDENTICAL   one=0a371cbfd4cbe5c1  two=0a371cbfd4cbe5c1
+  par-svm-svr                ties     model     IDENTICAL   one=490b7d9dbdf08c50  two=490b7d9dbdf08c50
+  par-svm-svr                ties     batch     IDENTICAL   one=c5728a83acf5f4c2  two=c5728a83acf5f4c2
+Device witness: 52 pool(s), 79 worker(s), placement=physical.
+WITNESS REFUSED: par-byte-lm/ties: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+
+RESULT: CANNOT RUN. The two-device column was not shown to have run on two
+devices, so its agreement with the one-device column is not evidence. This is
+reported rather than counted, because a clean AGREE from a column that never
+sharded is the exact failure this command exists to prevent.

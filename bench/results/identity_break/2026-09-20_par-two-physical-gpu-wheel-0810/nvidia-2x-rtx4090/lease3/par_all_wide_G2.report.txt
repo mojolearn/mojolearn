@@ -1,0 +1,83 @@
+# python -m mojolearn verify --par
+
+Ran each `par-*` lane TWICE in this process on this box (cuda): once with
+MOJOLEARN_PAR_DEVICES=0 and once with MOJOLEARN_PAR_DEVICES=0,1, and compared the
+two columns cell for cell. No reference table is involved: the one-device column
+produced here, minutes ago, off this build, IS the reference. That equality is
+the drivers' whole claim and no release record states it.
+
+  par-arima                  wide     train     IDENTICAL   one=440f5eba6a3ddede  two=440f5eba6a3ddede
+  par-arima                  wide     infer     IDENTICAL   one=956bebc3f45a1c69  two=956bebc3f45a1c69
+  par-arima                  wide     model     IDENTICAL   one=1f7be9c37fb3f5d6  two=1f7be9c37fb3f5d6
+  par-arima                  wide     batch     IDENTICAL   one=9103785606065f64  two=9103785606065f64
+  par-boosting-clf           wide     train     IDENTICAL   one=2c52f777f933c7cc  two=2c52f777f933c7cc
+  par-boosting-clf           wide     infer     IDENTICAL   one=2dd0483189f81a32  two=2dd0483189f81a32
+  par-boosting-clf           wide     batch     IDENTICAL   one=24653b9a06a6071a  two=24653b9a06a6071a
+  par-byte-lm-offload        wide     train     IDENTICAL   one=ed030c5713cf36a8  two=ed030c5713cf36a8
+  par-cd-elasticnet          wide     train     IDENTICAL   one=ef8800eaf0ca4f87  two=ef8800eaf0ca4f87
+  par-cd-elasticnet          wide     infer     IDENTICAL   one=e37614bc5b2ef0af  two=e37614bc5b2ef0af
+  par-cd-elasticnet          wide     model     IDENTICAL   one=834bad42787a264a  two=834bad42787a264a
+  par-cd-elasticnet          wide     batch     IDENTICAL   one=cff22b28b0b5e227  two=cff22b28b0b5e227
+  par-feature-freq           wide     train     IDENTICAL   one=c6d7fccba2483372  two=c6d7fccba2483372
+  par-feature-freq           wide     infer     IDENTICAL   one=2a4274996f907f13  two=2a4274996f907f13
+  par-feature-freq           wide     model     IDENTICAL   one=6b7d9eddfa4b79b6  two=6b7d9eddfa4b79b6
+  par-feature-freq           wide     batch     IDENTICAL   one=367ed0852797c66b  two=367ed0852797c66b
+  par-gram                   wide     train     IDENTICAL   one=7215c2605901cdc6  two=7215c2605901cdc6
+  par-gram                   wide     infer     IDENTICAL   one=cc8d5d1192f32b52  two=cc8d5d1192f32b52
+  par-gram                   wide     model     IDENTICAL   one=2869ff3b7b3a7558  two=2869ff3b7b3a7558
+  par-gram                   wide     batch     IDENTICAL   one=5f47b5b61a45d567  two=5f47b5b61a45d567
+  par-gram-pca               wide     train     IDENTICAL   one=ee30334357c2fe6e  two=ee30334357c2fe6e
+  par-gram-pca               wide     infer     IDENTICAL   one=abbcfa36cfc4cc81  two=abbcfa36cfc4cc81
+  par-gram-pca               wide     model     IDENTICAL   one=dec2221e136875c8  two=dec2221e136875c8
+  par-gram-pca               wide     batch     IDENTICAL   one=7392d0d03806937b  two=7392d0d03806937b
+  par-graph-umap             wide     train     IDENTICAL   one=383854621bb512d9  two=383854621bb512d9
+  par-graph-umap             wide     infer     IDENTICAL   one=434ad4834cf6ac99  two=434ad4834cf6ac99
+  par-graph-umap             wide     model     IDENTICAL   one=373b2b40f0a4f4b0  two=373b2b40f0a4f4b0
+  par-graph-umap             wide     batch     IDENTICAL   one=3730ec2999871cce  two=3730ec2999871cce
+  par-holtwinters            wide     train     IDENTICAL   one=e8ca2175544f1a73  two=e8ca2175544f1a73
+  par-holtwinters            wide     infer     IDENTICAL   one=600b74954f7ec426  two=600b74954f7ec426
+  par-holtwinters            wide     model     IDENTICAL   one=3280cb2f403e61bb  two=3280cb2f403e61bb
+  par-holtwinters            wide     batch     IDENTICAL   one=f035af87f7c31bfd  two=f035af87f7c31bfd
+  par-kmeans                 wide     train     IDENTICAL   one=6f0529fcb3d60536  two=6f0529fcb3d60536
+  par-kmeans                 wide     infer     IDENTICAL   one=576a17d0775573bc  two=576a17d0775573bc
+  par-kmeans                 wide     model     IDENTICAL   one=1c5abd185e53aaf6  two=1c5abd185e53aaf6
+  par-kmeans                 wide     batch     IDENTICAL   one=1893d1e955539a1c  two=1893d1e955539a1c
+  par-mlp                    wide     train     IDENTICAL   one=aee8950c7eb25df8  two=aee8950c7eb25df8
+  par-mlp                    wide     infer     IDENTICAL   one=657d8e4662358a6a  two=657d8e4662358a6a
+  par-mlp                    wide     model     IDENTICAL   one=058b5a50342ac66a  two=058b5a50342ac66a
+  par-mlp                    wide     batch     IDENTICAL   one=b57f9c98bedb5f13  two=b57f9c98bedb5f13
+  par-nystroem               wide     train     IDENTICAL   one=e1e61f3ff6e03ef8  two=e1e61f3ff6e03ef8
+  par-nystroem               wide     infer     IDENTICAL   one=92d3ae4a690748e3  two=92d3ae4a690748e3
+  par-nystroem               wide     model     IDENTICAL   one=83ea4650e2b1e3c0  two=83ea4650e2b1e3c0
+  par-nystroem               wide     batch     IDENTICAL   one=fa20d57225f7cfcf  two=fa20d57225f7cfcf
+  par-ordered-rmse           wide     train     IDENTICAL   one=356a38c2904749c0  two=356a38c2904749c0
+  par-ordered-rmse           wide     infer     IDENTICAL   one=7172e83c3f745933  two=7172e83c3f745933
+  par-ordered-rmse           wide     model     IDENTICAL   one=a9b709a9373fae6f  two=a9b709a9373fae6f
+  par-ordered-rmse           wide     batch     IDENTICAL   one=6b8ccb2798f6e41f  two=6b8ccb2798f6e41f
+  par-queries-kde            wide     train     IDENTICAL   one=36c3cbb2ef71f768  two=36c3cbb2ef71f768
+  par-queries-kde            wide     infer     IDENTICAL   one=39622885a3c508a9  two=39622885a3c508a9
+  par-queries-kde            wide     model     IDENTICAL   one=4d511b1377a350b9  two=4d511b1377a350b9
+  par-queries-kde            wide     batch     IDENTICAL   one=bec66eb4376017f7  two=bec66eb4376017f7
+  par-queries-radius         wide     train     IDENTICAL   one=4ea06c29cad72c3a  two=4ea06c29cad72c3a
+  par-queries-radius         wide     infer     IDENTICAL   one=2561486a5ba9ea00  two=2561486a5ba9ea00
+  par-queries-radius         wide     model     IDENTICAL   one=76078d052fa5fc25  two=76078d052fa5fc25
+  par-queries-radius         wide     batch     IDENTICAL   one=af3f119fb1c99a87  two=af3f119fb1c99a87
+  par-reference-knn          wide     train     IDENTICAL   one=dd6787fbab085855  two=dd6787fbab085855
+  par-reference-knn          wide     infer     IDENTICAL   one=b128c6dd4d428648  two=b128c6dd4d428648
+  par-reference-knn          wide     model     IDENTICAL   one=1823e75c34d7670f  two=1823e75c34d7670f
+  par-reference-knn          wide     batch     IDENTICAL   one=65813a17ec281f48  two=65813a17ec281f48
+  par-samba-clip             wide     train     IDENTICAL   one=53b13d6e08035dd3  two=53b13d6e08035dd3
+  par-samba-clip             wide     infer     IDENTICAL   one=f234aa064f3bd4f1  two=f234aa064f3bd4f1
+  par-samba-clip             wide     model     IDENTICAL   one=de15105c83cd98c8  two=de15105c83cd98c8
+  par-samba-clip             wide     batch     IDENTICAL   one=a9b01c132c43de42  two=a9b01c132c43de42
+  par-svm                    wide     train     IDENTICAL   one=550d1845e417ca18  two=550d1845e417ca18
+  par-svm                    wide     infer     IDENTICAL   one=ee2e31ef0e3bbfcb  two=ee2e31ef0e3bbfcb
+  par-svm                    wide     model     IDENTICAL   one=19e15b0ab3ceac90  two=19e15b0ab3ceac90
+  par-svm                    wide     batch     IDENTICAL   one=fa143cf297359f9e  two=fa143cf297359f9e
+Device witness: 56 pool(s), 72 worker(s), placement=physical.
+WITNESS REFUSED: par-byte-lm-offload/wide: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+
+RESULT: CANNOT RUN. The two-device column was not shown to have run on two
+devices, so its agreement with the one-device column is not evidence. This is
+reported rather than counted, because a clean AGREE from a column that never
+sharded is the exact failure this command exists to prevent.

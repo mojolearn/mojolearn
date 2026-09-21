@@ -1,0 +1,39 @@
+slug=nvidia-lease3
+started=2026-09-20T23:20:26Z
+budget_seconds=2750
+fixtures=ties:G1 ties:G2 ties:G3 ties:G4 hashed:G1 hashed:G2 hashed:G3 hashed:G4 wide:G2 wide:G3 wide:G4 wide:G1
+lanes=<all par-* lanes>
+vendor=nvidia
+visible_gpus=2
+GPU 0: NVIDIA GeForce RTX 4090 (UUID: GPU-09bd0853-1c33-8345-e1be-46323ea19f5b)
+GPU 1: NVIDIA GeForce RTX 4090 (UUID: GPU-5c4c7be6-cdfa-9c7e-d40b-74d56b47de4f)
+index, name, uuid, pci.bus_id, driver_version, compute_cap, memory.total [MiB]
+0, NVIDIA GeForce RTX 4090, GPU-09bd0853-1c33-8345-e1be-46323ea19f5b, 00000000:2D:00.0, 580.159.04, 8.9, 24564 MiB
+1, NVIDIA GeForce RTX 4090, GPU-5c4c7be6-cdfa-9c7e-d40b-74d56b47de4f, 00000000:62:00.0, 580.159.04, 8.9, 24564 MiB
+system_python=/usr/bin/python3.11 (Python 3.11.10)
+pip_download_exit=0
+c8a09722c3a3fcbe91905d2d15b8489d960b008bb9776afa15b2400e115e778c  ./mojolearn-0.8.10-py3-none-manylinux_2_35_x86_64.whl
+total 77116
+-rw-r--r-- 1 root root 78966755 Sep 20 23:20 mojolearn-0.8.10-py3-none-manylinux_2_35_x86_64.whl
+pip_install_exit=0
+import_where=0.8.10 /root/parwheel-venv/lib/python3.11/site-packages/mojolearn/__init__.py
+activated: VIRTUAL_ENV=/root/parwheel-venv python=/root/parwheel-venv/bin/python
+import_where_activated=0.8.10 /root/parwheel-venv/lib/python3.11/site-packages/mojolearn/__init__.py
+install_mode=venv-activated
+par_self_test_exit=0  (MUST BE 0)
+par_self_test_json_exit=0  (MUST BE 0)
+par_all_ties_G1_exit=0 seconds=295
+par_all_ties_G2_exit=4 seconds=250
+par_all_ties_G3_exit=4 seconds=217
+par_all_ties_G4_exit=4 seconds=219
+par_all_hashed_G1_exit=0 seconds=304
+par_all_hashed_G2_exit=4 seconds=216
+par_all_hashed_G3_exit=4 seconds=216
+par_all_hashed_G4_exit=4 seconds=220
+par_all_wide_G2_exit=4 seconds=219
+par_all_wide_G3_exit=4 seconds=212
+NOT STARTED: chunk wide:G4 (budget left 355s, longest chunk so far 304s)
+NOT STARTED: chunk wide:G1 (budget left 355s, longest chunk so far 304s)
+elapsed_total=2395
+finished=2026-09-21T00:00:21Z
+pull_hold_seconds=65 pull_ok=yes

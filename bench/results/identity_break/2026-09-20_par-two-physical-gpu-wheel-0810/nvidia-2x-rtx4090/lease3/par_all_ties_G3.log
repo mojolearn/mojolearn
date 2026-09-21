@@ -1,0 +1,22 @@
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+# par (all): 20 of 59 par-* lanes x 1 fixture(s), devices 0 then 0,1
+  par-boosting               ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   6.86s
+  par-byte-lm                ties     train=IDENTICAL                                              1.20s
+  par-causal-lm              ties     train=IDENTICAL batch=IDENTICAL                              9.45s
+  par-cholesky               ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  17.72s
+  par-cross-val              ties     train=IDENTICAL                                              4.10s
+  par-dbscan                 ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   5.14s
+  par-forecast-holtwinters   ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  35.56s
+  par-forest-et              ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.63s
+  par-forest-et-clf          ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.72s
+  par-forest-pool            ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  11.46s
+  par-gmm                    ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  21.12s
+  par-gram-tsvd              ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.46s
+  par-graph-agglomerative    ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.69s
+  par-graph-spectral         ties     train=IDENTICAL                                              3.84s
+  par-kernel-ridge           ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  15.55s
+  par-ordered                ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   8.16s
+  par-queries-knn            ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  23.42s
+  par-queries-nn             ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  15.60s
+  par-scaler-minmax          ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  11.79s
+  par-svm-svr                ties     train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   7.05s

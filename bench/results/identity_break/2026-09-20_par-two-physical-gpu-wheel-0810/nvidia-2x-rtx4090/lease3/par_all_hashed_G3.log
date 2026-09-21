@@ -1,0 +1,22 @@
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+# par (all): 20 of 59 par-* lanes x 1 fixture(s), devices 0 then 0,1
+  par-boosting               hashed   train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   6.64s
+  par-byte-lm                hashed   train=IDENTICAL                                              1.26s
+  par-causal-lm              hashed   train=IDENTICAL batch=IDENTICAL                              9.55s
+  par-cholesky               hashed   train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  17.82s
+  par-cross-val              hashed   train=IDENTICAL                                              4.19s
+  par-dbscan                 hashed   train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.92s
+  par-forecast-holtwinters   hashed   train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  35.15s
+  par-forest-et              hashed   train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.36s
+  par-forest-et-clf          hashed   train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.63s
+  par-forest-pool            hashed   train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  11.18s
+  par-gmm                    hashed   train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  21.32s
+  par-gram-tsvd              hashed   train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.71s
+  par-graph-agglomerative    hashed   train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.67s
+  par-graph-spectral         hashed   train=IDENTICAL                                              3.82s
+  par-kernel-ridge           hashed   train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  15.53s
+  par-ordered                hashed   train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   8.17s
+  par-queries-knn            hashed   train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  23.78s
+  par-queries-nn             hashed   train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  15.66s
+  par-scaler-minmax          hashed   train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  11.84s
+  par-svm-svr                hashed   train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   7.63s

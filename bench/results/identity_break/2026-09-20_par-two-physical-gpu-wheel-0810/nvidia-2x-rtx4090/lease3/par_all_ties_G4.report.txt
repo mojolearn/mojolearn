@@ -1,0 +1,91 @@
+# python -m mojolearn verify --par
+
+Ran each `par-*` lane TWICE in this process on this box (cuda): once with
+MOJOLEARN_PAR_DEVICES=0 and once with MOJOLEARN_PAR_DEVICES=0,1, and compared the
+two columns cell for cell. No reference table is involved: the one-device column
+produced here, minutes ago, off this build, IS the reference. That equality is
+the drivers' whole claim and no release record states it.
+
+  par-boosting-pointwise     ties     train     IDENTICAL   one=b32c469f812adf25  two=b32c469f812adf25
+  par-boosting-pointwise     ties     infer     IDENTICAL   one=e71542e71394acc3  two=e71542e71394acc3
+  par-boosting-pointwise     ties     model     IDENTICAL   one=d01adab1226baf49  two=d01adab1226baf49
+  par-boosting-pointwise     ties     batch     IDENTICAL   one=8146b2372b89188b  two=8146b2372b89188b
+  par-boosting-reg           ties     train     IDENTICAL   one=88cba1574daa922e  two=88cba1574daa922e
+  par-boosting-reg           ties     infer     IDENTICAL   one=4044415de3b73aee  two=4044415de3b73aee
+  par-boosting-reg           ties     batch     IDENTICAL   one=1681c6f968f338d2  two=1681c6f968f338d2
+  par-border-types           ties     train     IDENTICAL   one=a7eca40195af6ded  two=a7eca40195af6ded
+  par-border-types           ties     infer     IDENTICAL   one=8ee7f9352fb63cc0  two=8ee7f9352fb63cc0
+  par-border-types           ties     model     IDENTICAL   one=7e32a31d0097a69c  two=7e32a31d0097a69c
+  par-border-types           ties     batch     IDENTICAL   one=355457a0a246a2a1  two=355457a0a246a2a1
+  par-byte-lm-model-pool     ties     train     IDENTICAL   one=c5fd6583ac8ddf9a  two=c5fd6583ac8ddf9a
+  par-cd                     ties     train     IDENTICAL   one=1e207f82f555270b  two=1e207f82f555270b
+  par-cd                     ties     infer     IDENTICAL   one=ff61f45db38db46d  two=ff61f45db38db46d
+  par-cd                     ties     model     IDENTICAL   one=5c8ede12d215a691  two=5c8ede12d215a691
+  par-cd                     ties     batch     IDENTICAL   one=a286c692435fdad1  two=a286c692435fdad1
+  par-forecast-arima         ties     train     IDENTICAL   one=8d68e00817197a31  two=8d68e00817197a31
+  par-forecast-arima         ties     infer     IDENTICAL   one=e699bca0934688f0  two=e699bca0934688f0
+  par-forecast-arima         ties     model     IDENTICAL   one=a70bbb860b0f3fcf  two=a70bbb860b0f3fcf
+  par-forecast-arima         ties     batch     IDENTICAL   one=f339cdfecd860934  two=f339cdfecd860934
+  par-forest                 ties     train     IDENTICAL   one=578c313bdad14449  two=578c313bdad14449
+  par-forest                 ties     infer     IDENTICAL   one=122d0397afe9bc84  two=122d0397afe9bc84
+  par-forest                 ties     model     IDENTICAL   one=2d8da1cf56084257  two=2d8da1cf56084257
+  par-forest                 ties     batch     IDENTICAL   one=7c24de838b13708e  two=7c24de838b13708e
+  par-forest-reg             ties     train     IDENTICAL   one=ec6e7b28cd0d16a9  two=ec6e7b28cd0d16a9
+  par-forest-reg             ties     infer     IDENTICAL   one=9e088d6c6c1bf54b  two=9e088d6c6c1bf54b
+  par-forest-reg             ties     model     IDENTICAL   one=a35ee93f7a000cbd  two=a35ee93f7a000cbd
+  par-forest-reg             ties     batch     IDENTICAL   one=cdda8ca2f47be0d0  two=cdda8ca2f47be0d0
+  par-gp                     ties     train     IDENTICAL   one=9231702dbdd1b410  two=9231702dbdd1b410
+  par-gp                     ties     infer     IDENTICAL   one=22b0b528124de8d0  two=22b0b528124de8d0
+  par-gp                     ties     model     IDENTICAL   one=5a2f8a826a1aab15  two=5a2f8a826a1aab15
+  par-gp                     ties     batch     IDENTICAL   one=42c01186900b0c68  two=42c01186900b0c68
+  par-gpc-fit                ties     train     IDENTICAL   one=f7640639a72e6940  two=f7640639a72e6940
+  par-gpc-fit                ties     infer     IDENTICAL   one=ede5baa0c8969b06  two=ede5baa0c8969b06
+  par-gpc-fit                ties     model     IDENTICAL   one=7b9bf869ad365c26  two=7b9bf869ad365c26
+  par-gpc-fit                ties     batch     IDENTICAL   one=c5069c7b59de4ee1  two=c5069c7b59de4ee1
+  par-gpc-predict            ties     train     IDENTICAL   one=b7725384674bcb9b  two=b7725384674bcb9b
+  par-gpc-predict            ties     infer     IDENTICAL   one=36faf8506fbac21b  two=36faf8506fbac21b
+  par-gpc-predict            ties     model     IDENTICAL   one=7b9bf869ad365c26  two=7b9bf869ad365c26
+  par-gpc-predict            ties     batch     IDENTICAL   one=c5069c7b59de4ee1  two=c5069c7b59de4ee1
+  par-gram-ols               ties     train     IDENTICAL   one=c73c0c1158ebcb9e  two=c73c0c1158ebcb9e
+  par-gram-ols               ties     infer     IDENTICAL   one=55f61f34cae7e5ff  two=55f61f34cae7e5ff
+  par-gram-ols               ties     model     IDENTICAL   one=b25d3a2214bc6196  two=b25d3a2214bc6196
+  par-gram-ols               ties     batch     IDENTICAL   one=9dbfb3084184e215  two=9dbfb3084184e215
+  par-hdbscan                ties     train     IDENTICAL   one=444bc82f0a607cfb  two=444bc82f0a607cfb
+  par-hdbscan                ties     infer     IDENTICAL   one=324146f46faedded  two=324146f46faedded
+  par-hdbscan                ties     model     IDENTICAL   one=a282d01525378b33  two=a282d01525378b33
+  par-hdbscan                ties     batch     IDENTICAL   one=a5c1950592d1d992  two=a5c1950592d1d992
+  par-iforest                ties     train     IDENTICAL   one=5043855ee14799da  two=5043855ee14799da
+  par-iforest                ties     infer     IDENTICAL   one=288c5e41c62cddea  two=288c5e41c62cddea
+  par-iforest                ties     model     IDENTICAL   one=052acc3268f89dc5  two=052acc3268f89dc5
+  par-iforest                ties     batch     IDENTICAL   one=d441bc2c72edfeab  two=d441bc2c72edfeab
+  par-ivf                    ties     train     IDENTICAL   one=1f1a8383ed41ed53  two=1f1a8383ed41ed53
+  par-ivf                    ties     infer     IDENTICAL   one=c62b1be91d40fc43  two=c62b1be91d40fc43
+  par-ivf                    ties     model     IDENTICAL   one=2254dcdb3f209c1d  two=2254dcdb3f209c1d
+  par-ivf                    ties     batch     IDENTICAL   one=166f61a6e1f346b8  two=166f61a6e1f346b8
+  par-logistic               ties     train     IDENTICAL   one=aa9b1fa93dc2ad08  two=aa9b1fa93dc2ad08
+  par-logistic               ties     infer     IDENTICAL   one=31ae5dc087daddea  two=31ae5dc087daddea
+  par-logistic               ties     model     IDENTICAL   one=eff4803be10700c8  two=eff4803be10700c8
+  par-logistic               ties     batch     IDENTICAL   one=2eb32fc5060dcf00  two=2eb32fc5060dcf00
+  par-rbf-sampler            ties     train     IDENTICAL   one=99aa0dcad513b6a1  two=99aa0dcad513b6a1
+  par-rbf-sampler            ties     infer     IDENTICAL   one=83ab2945ae2792a3  two=83ab2945ae2792a3
+  par-rbf-sampler            ties     model     IDENTICAL   one=d4b54301bf9a47f0  two=d4b54301bf9a47f0
+  par-rbf-sampler            ties     batch     IDENTICAL   one=073106cb01a99748  two=073106cb01a99748
+  par-reference-knn-reg      ties     train     IDENTICAL   one=556283a80ad1e387  two=556283a80ad1e387
+  par-reference-knn-reg      ties     infer     IDENTICAL   one=fcbc1a112c60d1d0  two=fcbc1a112c60d1d0
+  par-reference-knn-reg      ties     model     IDENTICAL   one=059724706575c43d  two=059724706575c43d
+  par-reference-knn-reg      ties     batch     IDENTICAL   one=82302d325c95041c  two=82302d325c95041c
+  par-samba                  ties     train     IDENTICAL   one=f3eb2f9e54c68bf7  two=f3eb2f9e54c68bf7
+  par-samba                  ties     infer     IDENTICAL   one=a8df84421515d634  two=a8df84421515d634
+  par-samba                  ties     model     IDENTICAL   one=dc26f60c944cedf6  two=dc26f60c944cedf6
+  par-samba                  ties     batch     IDENTICAL   one=71be58f89201f389  two=71be58f89201f389
+  par-scaler                 ties     train     IDENTICAL   one=1ecadb87b13bb827  two=1ecadb87b13bb827
+  par-scaler                 ties     infer     IDENTICAL   one=4c66195589867f60  two=4c66195589867f60
+  par-scaler                 ties     model     IDENTICAL   one=b10d8fc2c81e61e7  two=b10d8fc2c81e61e7
+  par-scaler                 ties     batch     IDENTICAL   one=789ad47ddd5c18b0  two=789ad47ddd5c18b0
+Device witness: 50 pool(s), 83 worker(s), placement=physical.
+WITNESS REFUSED: par-byte-lm-model-pool/ties: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+
+RESULT: CANNOT RUN. The two-device column was not shown to have run on two
+devices, so its agreement with the one-device column is not evidence. This is
+reported rather than counted, because a clean AGREE from a column that never
+sharded is the exact failure this command exists to prevent.
