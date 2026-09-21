@@ -111,15 +111,21 @@ phase_build() {
         echo "target_column=${MOJOLEARN_TARGET_COLUMN:-}"
         "$R/.pixi/envs/default/bin/mojo" --version
         uname -a
-        command -v nvidia-smi >/dev/null && nvidia-smi --query-gpu=name,driver_version --format=csv,noheader
-        command -v rocm-smi >/dev/null && rocm-smi --showproductname --showuniqueid --showdriverversion
+        if command -v nvidia-smi >/dev/null; then
+            nvidia-smi --query-gpu=name,driver_version --format=csv,noheader
+        fi
+        if command -v rocm-smi >/dev/null; then
+            rocm-smi --showproductname --showuniqueid --showdriverversion
+        fi
     } > "$OUT/build_provenance.txt" 2>&1
 }
 run_one() {
     tree=$1; arm=$2; ds=$3; outer=$4; position=$5; steps=$6
     tag="${ds}_${arm}_${outer}"
     run="$OUT/runs/$tag"
-    rm -rf "$run"; mkdir -p "$run"
+    # The public probe creates --out with exist_ok=False so stale or mixed
+    # process evidence cannot be silently reused.
+    rm -rf "$run"
     (cd "$tree" && PYTHONPATH=python "$PY" tools/lm_step_memory_probe.py \
         --out "$run" --target --resident-lean --witness-every-step \
         --steps "$steps" --budget-seconds 900 \
