@@ -184,6 +184,100 @@ def test_a_cooperative_pool_seeing_one_device_is_refused():
         w._admit(_FakePool((0, 1), cooperative=True), [one])
 
 
+# ------------------------------- drivers that shard inside the native binding
+
+class _FakeTrainer:
+    """The three attributes `_admit_session` reads from a byte-LM trainer."""
+
+    def __init__(self, devices, rows):
+        self.devices, self._rows = tuple(devices), rows
+
+    def optimizer_ownership(self):
+        return tuple(self._rows)
+
+
+_TWO_GPUS = [dict(ordinal=0, uuid="a" * 32, pci_bus_id="0000:01:00.0", name="f"),
+             dict(ordinal=1, uuid="b" * 32, pci_bus_id="0000:02:00.0", name="f")]
+
+
+def _session_witness(monkeypatch, inventory=None, **kw):
+    w = vpar.PoolWitness("hip", (0, 1), **kw)
+    monkeypatch.setattr(w, "_physical_inventory", lambda: list(inventory or _TWO_GPUS))
+    return w
+
+
+def test_a_native_session_on_both_devices_is_a_witness(monkeypatch):
+    """MEASURED 2026-09-20 on 2x RTX 4090: `par-byte-lm` shards through the
+    native binding in this process and starts no `DevicePool`, so a witness
+    that counts only pools refused a column that WAS sharding."""
+    w = _session_witness(monkeypatch)
+    rows = [dict(device=0, first=0, count=10, moment_bytes=80, rollback_bytes=0, reduction_bytes=8),
+            dict(device=1, first=10, count=10, moment_bytes=80, rollback_bytes=0, reduction_bytes=8)]
+    w.sessions.append(w._admit_session(_FakeTrainer((0, 1), rows)))
+    assert w.refusal() is None
+    s = w.summary()
+    assert (s["pools"], s["native_sessions"]) == (0, 1)
+    assert s["detail"][0]["workers"][0]["devices"] == ["a" * 32, "b" * 32]
+
+
+def test_a_native_session_whose_second_device_owns_nothing_is_refused(monkeypatch):
+    w = _session_witness(monkeypatch)
+    rows = [dict(device=0, first=0, count=20, moment_bytes=160),
+            dict(device=1, first=20, count=0, moment_bytes=0)]
+    with pytest.raises(RuntimeError, match="own nothing, so this column did not shard"):
+        w._admit_session(_FakeTrainer((0, 1), rows))
+
+
+def test_a_native_session_on_one_physical_gpu_twice_is_refused(monkeypatch):
+    same = [_TWO_GPUS[0], dict(_TWO_GPUS[1], uuid="a" * 32)]
+    w = _session_witness(monkeypatch, inventory=same)
+    rows = [dict(device=0, moment_bytes=8), dict(device=1, moment_bytes=8)]
+    with pytest.raises(RuntimeError, match="one physical GPU twice"):
+        w._admit_session(_FakeTrainer((0, 1), rows))
+
+
+def test_the_one_device_reference_session_admits_nothing(monkeypatch):
+    """Every byte-LM lane opens its in-cell replica reference on the first
+    device. That session is recorded and must never stand in for the driver
+    under test."""
+    w = _session_witness(monkeypatch)
+    w.sessions.append(w._admit_session(_FakeTrainer((0,), [dict(device=0, moment_bytes=8)])))
+    assert w.sessions[0]["placed"] is False
+    assert "NO device pool" in w.refusal()
+
+
+def test_a_native_session_is_never_a_witness_on_the_cpu_route(monkeypatch):
+    w = vpar.PoolWitness("cpu", (0, 1))
+    w.sessions.append(w._admit_session(_FakeTrainer((0, 1), [])))
+    assert "NO device pool" in w.refusal()
+
+
+def test_one_device_by_design_is_checked_not_trusted(monkeypatch):
+    driver = vpar.ONE_DEVICE_BY_DESIGN["par-byte-lm-offload"][0]
+    w = _session_witness(monkeypatch, one_device_driver=driver)
+    assert "never opened that driver" in w.refusal()
+    w.sessions.append(dict(kind=vpar.NATIVE_SESSION, driver=driver, devices=[0],
+                           placed=False, workers=[]))
+    assert w.refusal() is None
+    w.sessions.append(dict(kind=vpar.NATIVE_SESSION, driver=driver, devices=[0, 1],
+                           placed=True, workers=[]))
+    assert "declaration is stale" in w.refusal()
+
+
+def test_a_one_device_lane_reads_na_and_never_identical(monkeypatch):
+    """Both columns of `par-byte-lm-offload` run on the first device, so an
+    agreement is not a two-device comparison. It must not be counted as one,
+    and a part that DIFFERS must still gate."""
+    same = _cell(train="aaaa000011112222")
+    r = _par_check(monkeypatch, same, same, lanes=("par-byte-lm-offload",))
+    assert r["counts"].get("IDENTICAL", 0) == 0
+    assert (r["state"], r["passed"]) == ("NOTHING COMPARED", None)
+    assert [c for c in r["cells"] if c["part"] == "train"][0]["note"].startswith("n/a:one-device")
+    r = _par_check(monkeypatch, same, _cell(train="bbbb000011112222"),
+                   lanes=("par-byte-lm-offload",))
+    assert (r["state"], r["passed"]) == ("MISMATCH", False)
+
+
 def test_the_witness_refusal_beats_a_clean_agreement_in_the_report():
     """Even when every part agrees, a column that was not shown to have
     sharded must not read as a pass."""
@@ -314,7 +408,7 @@ class _StubWitness:
     """Two pools, four workers, nothing to refuse: the witness is not what
     these tests are about and must not be what decides them."""
 
-    def __init__(self, vendor, devices):
+    def __init__(self, vendor, devices, **kw):
         self.vendor, self.devices = vendor, tuple(devices)
 
     def watching(self):
