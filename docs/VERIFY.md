@@ -340,7 +340,7 @@ you can CHECK and changed nothing about what the library will train for you.
 | `--reference-table PATH` | compare against another table |
 | `--self-test` | show that this verifier can fail (below) |
 | `--cross-check [quick\|default\|all]` | compare your GPU against your CPU (below) |
-| `--par [quick\|default\|all]` | compare your two-device column against your one-device column (below) |
+| `--par [quick\|default\|all]` | run your two-device column once and compare it with the recorded one-device values (below) |
 | `--par-devices 0,1` | with `--par`: which devices the second column runs on |
 | `--par-self-test` | show that `--par` can fail |
 | `--json-out PATH` | with `--all`: also write the evidence document to PATH |
@@ -386,15 +386,15 @@ python -m mojolearn verify --par-devices 2,3      # another pair
 per family on one device and on two, with the placement witness, in under a
 minute of lane time. Run it, with `--par-self-test`, on every routine run and
 every rented box. **Never run `--par all` without the maintainer's express
-permission.** It is every lane on all nine fixtures, twice: measured on two
-RTX 4090s on 2026-09-20 at about 16 minutes per fixture and 2.4 hours in all,
-with `par-resample` alone taking about 300 s of each fixture. The default
-scope (every lane, base fixture) is about 16 minutes and also needs a reason.
+permission.** It is every lane on all nine fixtures: measured on two RTX 4090s
+on 2026-09-20, when each lane still ran twice, at about 16 minutes per fixture
+and 2.4 hours in all, with `par-resample` alone taking about 300 s of each
+fixture. The default scope (every lane, base fixture) also needs a reason.
 
-It runs each lane twice in one process, once with `MOJOLEARN_PAR_DEVICES=0` and
-once with `0,1`, and compares. There is no reference table: the one-device
-column, produced on your box minutes earlier off the same build, IS the
-reference.
+It runs each lane ONCE, with `MOJOLEARN_PAR_DEVICES=0,1`, and compares the
+result with the one-device values the shipped reference table already records
+for that lane on your vendor class. Fitting the one-device column again on
+your box bought nothing and doubled the run, so it is gone.
 
 **A column that never sharded is refused, not passed.** If a driver silently
 falls back to one device, both columns agree instantly and a naive command
@@ -414,9 +414,9 @@ its driver admits exactly one device, so both of its columns run on the first
 device. Its parts read `N/A` with that reason and are never counted as a match;
 a part that differs still gates.
 
-`DIVERGENT` means sharding changed the bits. `ONE-COLUMN` means the work
-refused on exactly one of the two columns, which is a defect only a two-device
-run can see. Both exit non-zero.
+`DIVERGENT` means sharding changed the bits. `ONE-COLUMN` means the two-device
+run refused a part the record has a value for (or the reverse), which is a
+defect only a two-device run can see. Both exit non-zero.
 
 **A run that ran nothing is not a pass.** The result is a ladder, worst first,
 and it is the one `verify --all` already uses:

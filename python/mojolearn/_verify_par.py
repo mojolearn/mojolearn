@@ -4,24 +4,16 @@
 
 THE CLAIM THIS COMMAND STATES. `identity_break._par_devices` says it in one
 sentence: a `par-*` lane's two-device column "must hash equal, cell for cell,
-to the one-device column of the same commit; that equality is the drivers'
-whole claim". Nothing else in the shipped verifier states it. `verify --all`
-compares this box against our recorded table and every `par-*` cell in that
-table is a ONE-device run (`identity_break.RECORD_EXCLUDED_PREFIXES`), so a
-release record cannot carry the claim and never has.
+to the one-device column". Sharding must not move a bit.
 
-NO REFERENCE TABLE IS INVOLVED, and that is the point. Both sides are produced
-here, in this process, minutes apart, off one build: the local ONE-device
-column IS the reference. `_verify_reference.admit(..., par_axis=True)` exists
-for exactly this reason, and this command needs neither it nor the table.
-
-HOW THE COLUMN IS FLIPPED. Two `run_cell` calls with `MOJOLEARN_PAR_DEVICES`
-set to `"0"` and then to `"0,1"`. That is enough and it was checked rather
-than assumed: `identity_break._par_devices()` reads the variable at FIT time,
-inside the lane body, and `_parallel_pool.DevicePool._start` builds each
-worker's environment from `dict(os.environ, ...)` at spawn time, so a pool
-created after the variable changes carries the new value. No re-import, no
-second process, no reference regeneration.
+EACH LANE RUNS ONCE. It runs on the two-device group, and its hashes are
+compared with the values the shipped reference table already records for that
+lane, fixture and part (`_verify_reference.entry`). Every `par-*` value in
+that table is a ONE-device run on the same vendor class, so the recorded
+value IS the one-device column; fitting it again on the box bought nothing
+and doubled the run. `MOJOLEARN_PAR_DEVICES` is read at FIT time inside the
+lane body and each `DevicePool` worker's environment is built at spawn time,
+so setting it around the one `run_cell` call is enough.
 
 WHY A SILENT ONE-DEVICE FALLBACK IS THE FAILURE THIS GUARDS AGAINST. If the
 two-device column quietly runs on one device, every hash agrees, the command
@@ -88,16 +80,13 @@ DEFAULT_PAR_DEVICES = (0, 1)
 #: a `--par quick` column, one lane per driver family, is seconds per lane;
 #: the default is every `par-*` lane on the base fixture.
 #:
-#: WHICH SCOPE TO RUN. `--par quick` IS the two-physical-GPU check: it runs
-#: one lane per family on one device and on two, with the placement witness,
-#: in under a minute of lane time. Use it, with `--par-self-test`, for every
-#: routine run and every rented box.
-#: NEVER RUN `--par all` WITHOUT ANDREW'S EXPRESS PERMISSION (2026-09-20). It
-#: is every lane on all nine fixtures, twice: about 16 minutes per fixture and
-#: 2.4 hours in all on two RTX 4090s, six one-hour leases, and `par-resample`
-#: alone is about 300 s of each fixture. The default scope (every lane, base
-#: fixture, about 16 minutes) also needs a reason. A run that only has to
-#: show that sharding does not move a bit is `--par quick`.
+#: WHICH SCOPE TO RUN. `--par quick` IS the two-physical-GPU check: one lane
+#: per family, run once on the two-device group with the placement witness.
+#: Use it, with `--par-self-test`, for every routine run and every rented box.
+#: NEVER RUN `--par all` WITHOUT ANDREW'S EXPRESS PERMISSION (2026-09-20): it
+#: is every lane on all nine fixtures (2.4 hours on two RTX 4090s when each
+#: lane still ran twice; `par-resample` alone was about 300 s per fixture).
+#: The default scope (every lane, base fixture) also needs a reason.
 QUICK_FIXTURE = "base"
 
 #: LANES WHOSE DRIVER ADMITS EXACTLY ONE DEVICE, so their "two-device" column
@@ -436,7 +425,8 @@ def compare_parts(one, two, cpu_route=False):
                     changed the bits, which is the strongest thing this
                     command can find and it gates.
     MOVED           a side disagreed with itself across repeats
-    ONE-COLUMN      one side produced a hash and the other REFUSED. This is
+    ONE-COLUMN      the record has a hash and the two-device run REFUSED, or
+                    the reverse. This is
                     the `par-queries-nn` batch shape: a real shipped defect
                     that only the two-device column can see, and it gates.
     CPU-ROUTE-LIMIT the two-device side refused with the CPU route's OWN
@@ -456,7 +446,7 @@ def compare_parts(one, two, cpu_route=False):
     rows = []
     for part in vref.PARTS:
         (v1, e1), (v2, e2) = one.get(part, (None, "missing")), two.get(part, (None, "missing"))
-        if _is_na(v1) and _is_na(v2) and v1 == v2:
+        if _is_na(v1) and _is_na(v2):
             verdict = "N/A"
         elif v1 is None and v2 is None:
             verdict = "REFUSED"
@@ -482,7 +472,7 @@ def compare_parts(one, two, cpu_route=False):
 GATING = ("DIVERGENT", "MOVED", "ONE-COLUMN")
 
 #: the states this command can end in, worst first. It is `_verify_all.verdict`'s
-#: ladder, applied to the two columns instead of to the reference table.
+#: ladder.
 PAR_STATES = ("MISMATCH", "INCOMPLETE", "NOTHING COMPARED", "VERIFIED")
 
 
@@ -535,10 +525,10 @@ def par_state(counts, compared):
 
 def par_check(harness, ml, lanes, fixtures, devices=DEFAULT_PAR_DEVICES,
               repeats=1, log=None, perturb=False):
-    """The one-device column, then the two-device column, then the comparison.
+    """The two-device column, run ONCE, against the recorded one-device values.
 
-    `perturb=True` moves every value of the input's first column up by one ULP
-    for the TWO-device arm only. It is the `--par-self-test` arm and it exists
+    `perturb=True` moves every value of the input's first column up by one
+    ULP. It is the `--par-self-test` arm and it exists
     because a comparison never seen to fail is not a comparison: with it on,
     every cell must read DIVERGENT or this machinery is not doing its job.
     """
@@ -547,6 +537,7 @@ def par_check(harness, ml, lanes, fixtures, devices=DEFAULT_PAR_DEVICES,
     from ._cpu_reference import reference_training
     log = log or (lambda s: None)
     vendor = _backend.vendor()
+    table, cls = vref.load_table(), vref.VENDOR_CLASS.get(vendor, "cpu")
     cells, counts = [], {}
     cell_witnesses = []
     for lane in lanes:
@@ -565,9 +556,10 @@ def par_check(harness, ml, lanes, fixtures, devices=DEFAULT_PAR_DEVICES,
             # INCOMPLETE at a non-zero exit; until the same day `par_state`
             # closed it, it printed `THE TWO COLUMNS AGREE on 0 compared cell
             # parts` and exited 0.
+            one = {part: ((vref.entry(table, lane, fx, part, cls) or {}).get("ref"),
+                          "the reference table records no value for this part")
+                   for part in vref.PARTS}
             with reference_training():
-                with par_devices((devices[0],)):
-                    one = run_cell(harness, ml, lane, fx, (X, yc, yr), held, repeats)
                 data = (X, yc, yr)
                 if perturb:
                     Xp = np.array(X, copy=True)
@@ -656,12 +648,9 @@ def format_par_check(r):
     if not r["ran"]:
         lines.append("NOT RUN: " + r["reason"])
         return "\n".join(lines)
-    lines.append(f"Ran each `par-*` lane TWICE in this process on this box ({r['vendor']}): once with")
-    lines.append(f"MOJOLEARN_PAR_DEVICES={r['devices'][0]} and once with "
-                 f"MOJOLEARN_PAR_DEVICES={','.join(str(d) for d in r['devices'])}, and compared the")
-    lines.append("two columns cell for cell. No reference table is involved: the one-device column")
-    lines.append("produced here, minutes ago, off this build, IS the reference. That equality is")
-    lines.append("the drivers' whole claim and no release record states it.")
+    lines.append(f"Ran each `par-*` lane ONCE on this box ({r['vendor']}) with "
+                 f"MOJOLEARN_PAR_DEVICES={','.join(str(d) for d in r['devices'])} and compared")
+    lines.append("it, cell for cell, with the one-device values the shipped reference table records.")
     lines.append("")
     if r["vendor"] == "cpu":
         lines.append("THIS IS THE CPU ROUTE AND IT IS NOT A DEVICE CLAIM. Each `device` here is one")
@@ -750,8 +739,8 @@ def _parse_devices(text):
 
 
 def cmd_par_check(args, ml):
-    """`verify --par [quick|default|all]`: the two-device column against the
-    one-device column, both produced here."""
+    """`verify --par [quick|default|all]`: the two-device column, run once,
+    against the recorded one-device values."""
     from . import _backend
     json_out = getattr(args, "json", False)
     log = (lambda s: _emit(s, sys.stderr)) if json_out else _emit

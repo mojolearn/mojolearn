@@ -47,6 +47,14 @@ def _cell(**parts):
     return out
 
 
+def _recorded(monkeypatch, one):
+    """The reference table's one-device values, taken from a `_cell`: the
+    two-device column is the only thing that runs."""
+    monkeypatch.setattr(vpar.vref, "load_table", lambda *a, **k: {})
+    monkeypatch.setattr(vpar.vref, "entry", lambda table, lane, fx, part, cls=None:
+                        dict(ref=one.get(part, (None, "missing"))[0]))
+
+
 # ------------------------------------------------------- the comparison
 
 def test_the_comparison_reports_divergent_and_names_both_hashes():
@@ -445,8 +453,8 @@ def _par_check(monkeypatch, one, two, lanes=("par-gram",)):
                         lambda *a, **k: contextlib.nullcontext())
     monkeypatch.setattr(vpar, "PoolWitness", _StubWitness)
     monkeypatch.setattr(vpar, "par_devices", lambda devices: contextlib.nullcontext())
-    columns = iter([one, two] * len(lanes))
-    monkeypatch.setattr(vpar, "run_cell", lambda *a, **k: next(columns))
+    _recorded(monkeypatch, one)
+    monkeypatch.setattr(vpar, "run_cell", lambda *a, **k: two)
     return vpar.par_check(_StubHarness(), None, list(lanes), ["base"], devices=(0, 1))
 
 
@@ -494,8 +502,8 @@ def test_a_column_of_nothing_but_declared_limits_compares_nothing(monkeypatch):
                         lambda *a, **k: contextlib.nullcontext())
     monkeypatch.setattr(vpar, "PoolWitness", _StubWitness)
     monkeypatch.setattr(vpar, "par_devices", lambda devices: contextlib.nullcontext())
-    columns = iter([one, two])
-    monkeypatch.setattr(vpar, "run_cell", lambda *a, **k: next(columns))
+    _recorded(monkeypatch, one)
+    monkeypatch.setattr(vpar, "run_cell", lambda *a, **k: two)
     r = vpar.par_check(_StubHarness(), None, ["par-mlp"], ["base"], devices=(0, 1))
     assert r["counts"].get("CPU-ROUTE-LIMIT") and not r["counts"].get("IDENTICAL")
     assert r["state"] == "NOTHING COMPARED" and r["passed"] is None
@@ -568,6 +576,7 @@ def test_each_parallel_cell_needs_its_own_device_witness(monkeypatch, axis, miss
         return _cell(train='aaaa000011112222')
 
     monkeypatch.setattr(vpar, 'run_cell', run_cell)
+    _recorded(monkeypatch, _cell(train='aaaa000011112222'))
     lanes = ['par-gram', 'par-covariance'] if axis == 'lane' else ['par-gram']
     fixtures = ['base'] if axis == 'lane' else ['base', 'wide']
     result = vpar.par_check(_StubHarness(), None, lanes, fixtures)
