@@ -118,7 +118,6 @@ SELECTION_MACHINERY = (
     os.path.join("tools", "test_lane_select.py"),
     os.path.join("tools", "identity_iterate.py"),
     os.path.join("tools", "mac_slot.py"),
-    os.path.join("tools", "lane_applicability.py"),
     os.path.join("tools", "test_algorithm_scope.py"),
     os.path.join("tools", "test_mac_slot.py"),
     os.path.join("tools", "test_identity_runtime.py"),
@@ -127,6 +126,21 @@ SELECTION_MACHINERY = (
     os.path.join("tools", "test_backend_control.py"),
     os.path.join("tools", "test_gate_scope.py"),
 )
+
+#: FILES THE HARNESS IMPORTS WHILE IT RECORDS A COLUMN. `lane_applicability.py`
+#: was selection machinery until 2026-09-19, when `identity_break.py` began
+#: importing it at run time to write `degenerate_lanes` into every column it
+#: records. From then on a change to it changes what EVERY column says about
+#: itself, and which lanes it names is decided by `degenerate()` over the
+#: whole registry, so no one lane owns the effect: a change to one of these
+#: selects every lane. They stay out of the reaching corpus like the machinery,
+#: because their text names paths to READ them, not to run them in a lane.
+HARNESS_RUNTIME_IMPORTS = (
+    os.path.join("tools", "lane_applicability.py"),
+)
+
+#: Tools whose text is not evidence that a lane reaches a path.
+_NOT_CORPUS = SELECTION_MACHINERY + HARNESS_RUNTIME_IMPORTS
 
 _BINDING_RE = re.compile(r"_mojolearn[a-z0-9_]*")
 _MOJO_IMPORT_RE = re.compile(r"^\s*(?:from\s+([a-zA-Z0-9_.]+)\s+import|import\s+([a-zA-Z0-9_.]+))")
@@ -1227,7 +1241,7 @@ def test_module_inert(path):
     # import from a file a lane does reach still counts.
     importers = []
     for rel in _reaching_corpus():
-        if rel.startswith(TESTS) or _is_inert(rel) or rel in SELECTION_MACHINERY:
+        if rel.startswith(TESTS) or _is_inert(rel) or rel in _NOT_CORPUS:
             continue
         if module in _searchable(rel):
             importers.append(rel)
@@ -1304,7 +1318,7 @@ def _corpus_text():
     global _CORPUS_TEXT
     if _CORPUS_TEXT is None:
         _CORPUS_TEXT = "\n\0\n".join(_searchable(rel) for rel in _reaching_corpus()
-                                     if not _is_inert(rel) and rel not in SELECTION_MACHINERY)
+                                     if not _is_inert(rel) and rel not in _NOT_CORPUS)
     return _CORPUS_TEXT
 
 
@@ -1375,7 +1389,7 @@ def _named_by_the_corpus(token, skip=(), whole=False):
                          + (r"(?![A-Za-z0-9_.])" if whole else ""))
     out = []
     for rel in _reaching_corpus():
-        if rel in skip or _is_inert(rel) or rel in SELECTION_MACHINERY:
+        if rel in skip or _is_inert(rel) or rel in _NOT_CORPUS:
             continue
         if pattern.search(_searchable(rel)):
             out.append(rel)
@@ -1430,7 +1444,7 @@ def _joined_with(directory, skip=()):
     """The corpus files that hand `directory` to a path-building call."""
     return [rel for rel in _reaching_corpus()
             if rel.endswith(".py") and rel not in skip and not _is_inert(rel)
-            and rel not in SELECTION_MACHINERY and directory in _path_join_roots(rel)]
+            and rel not in _NOT_CORPUS and directory in _path_join_roots(rel)]
 
 
 def unreachable(path):
@@ -1454,7 +1468,7 @@ def unreachable(path):
     An earlier spelling passed the whole changed list as a skip set, which
     would have hidden exactly the case that matters: a new source added
     together with the import that pulls it in."""
-    if path in (HARNESS, MANIFEST) or path in SELECTION_MACHINERY or path in enumerator_files():
+    if path in (HARNESS, MANIFEST) or path in _NOT_CORPUS or path in enumerator_files():
         return None
     if path in reverse_map():
         return None
@@ -1522,7 +1536,7 @@ def _named_in_code(patterns, skip=(), literals=()):
         return []
     out = []
     for rel in _reaching_corpus():
-        if rel in skip or _is_inert(rel) or rel in SELECTION_MACHINERY:
+        if rel in skip or _is_inert(rel) or rel in _NOT_CORPUS:
             continue
         kind = os.path.splitext(rel)[1]
         text = _searchable(rel)
@@ -2312,6 +2326,14 @@ def select(paths, ref=None, sources=None):
             inert.append(path)
             reasons[path] = ("pixi.toml task tables and comments only: the environment, "
                              "dependencies and channels are identical to " + ref)
+            continue
+        if path in HARNESS_RUNTIME_IMPORTS:
+            # BEFORE the test-module and unreachable rules: nothing a lane
+            # reaches names it, and the harness still runs it on every column.
+            fallback = True
+            unattributed.append(path)
+            reasons[path] = ("imported by the harness while it records a column, and what it "
+                             "writes there (degenerate_lanes) is derived over every lane: every lane")
             continue
         why_test = test_module_inert(path)
         if why_test:

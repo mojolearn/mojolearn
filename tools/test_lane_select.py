@@ -1435,19 +1435,42 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
     how a map goes back to answering every lane, so the files whose narrow
     answers were measured when the per-export rule landed are pinned here.
     `core/forest_host_predict.mojo` is 15 rather than its old 7 on purpose:
-    `rf_predict_proba` routes to it and the rf lanes were missing."""
+    `rf_predict_proba` routes to it and the rf lanes were missing.
+
+    REMEASURED 2026-09-21 (212 lanes then, 273 now), and every move was
+    attributed before a number changed; none is the walk widening. The first
+    pin failing (kmeans_oracle) had hidden the other four since 2026-09-17.
+      kmeans_oracle        20 -> 21  `kmeans-cosine` removed; `par-ivf` and
+                                     `spectral-embedding` added through doors
+                                     their siblings already walked
+      gbdt_host_predict    23 -> 34  eleven NEW lanes, no old lane moved
+      forest_host_predict  15 -> 59  thirteen new lanes, and 31 old gbdt lanes
+                                     through REAL imports added 2026-09-17:
+                                     `core/gbdt_host_predict.mojo` and
+                                     `gbdt/resident_model.mojo` now import
+                                     `core.forest_host_predict`
+      forest_inference     23 -> 26  three NEW lanes
+      neural_inference.py  21 -> 40  nineteen NEW lanes (low-bit, decode
+                                     session, causal LM), no old lane moved"""
     rev = lane_select.reverse_map()
-    for rel, want in (("cluster/host/kmeans_oracle.mojo", 20),
-                      ("core/gbdt_host_predict.mojo", 23),
-                      ("core/forest_host_predict.mojo", 15),
-                      ("core/forest_inference.mojo", 23),
-                      ("python/mojolearn/neural_inference.py", 21)):
+    for rel, want in (("cluster/host/kmeans_oracle.mojo", 21),
+                      ("core/gbdt_host_predict.mojo", 34),
+                      ("core/forest_host_predict.mojo", 59),
+                      ("core/forest_inference.mojo", 26),
+                      ("python/mojolearn/neural_inference.py", 40)):
         got = len(rev.get(rel, set()))
         assert got == want, f"{rel} answers {got} lanes, not {want}"
     lanes = len(lane_select.all_lanes())
     every = [rel for rel, seen in rev.items() if len(seen) == lanes]
-    assert len(every) <= 41, \
-        f"{len(every)} files now select every lane, against 41 when the per-export rule landed"
+    # 41 when the per-export rule landed, 55 on 2026-09-21. The fourteen were
+    # traced commit by commit and each is a REAL import into a closure every
+    # lane already had, never a wider walk: `_byte_lm_host.py` importing
+    # `lowbit.py` (2026-09-17) brought lowbit, linalg, _linalg_impl,
+    # _cholesky_impl, _mode and the linalg and gp bindings; `_byte_lm_impl.py`
+    # brought _byte_lm_checkpoint and _portable_math; the byte LM host build
+    # brought block_options, rtf_seam and identical_gemm.
+    assert len(every) <= 55, \
+        f"{len(every)} files now select every lane, against 55 measured on 2026-09-21"
 
 
 # --------------------------------------------------------------------------
@@ -1489,27 +1512,56 @@ def test_the_public_door_a_name_is_bound_from_is_in_the_map():
     THE CASE THAT MUST STAY NARROW is in the same assert. Treating every
     `from .X import N` inside the package as a binding of N was measured and
     is far too wide: the median file went from 29 lanes to 60 and
-    neural_inference.py from 21 to all 212."""
+    neural_inference.py from 21 to all 212.
+
+    NARROW MEANS EVERY LANE AT THE DOOR NAMES WHAT THE DOOR BINDS. The first
+    spelling was a count (`<= 12`), and a count measures the registry as much
+    as the rule: the fourteen low-bit lanes (2026-09-17), `language-model-config`
+    and `transformer-decode-session` all name `LanguageModelInference` through
+    `_neural_inference`, so language_model.py went from 11 lanes to 25 with the
+    door rule unchanged. The rule itself is what is held now: a lane reaches a
+    door only when its own code closure names a name `__init__.py` binds from
+    that module, which the wide rule above breaks at once."""
     rev = lane_select.reverse_map()
+    ib = lane_select.identity_break()
+    init = ast.parse(open(os.path.join(lane_select.ROOT, lane_select.PKG, "__init__.py"),
+                          encoding="utf-8").read())
     for rel, want in (("python/mojolearn/umap.py", "umap"),
                       ("python/mojolearn/neural_network.py", "mlp"),
                       ("python/mojolearn/language_model.py", "byte-lm")):
         lanes = rev.get(rel, set())
         assert want in lanes, f"{rel} is the public door for {want} and the lane does not reach it"
-        assert len(lanes) <= 12, f"{rel} answers {len(lanes)} lanes; the door rule has gone wide"
-    assert len(rev.get("python/mojolearn/neural_inference.py", ())) == 21, \
-        "the re-export rule moved neural_inference.py off its measured 21 lanes"
+        stem = os.path.basename(rel)[:-3]
+        bound = {a.asname or a.name for n in ast.walk(init)
+                 if isinstance(n, ast.ImportFrom) and n.level == 1 and n.module == stem
+                 for a in n.names}
+        assert bound, f"__init__.py binds nothing from {stem}; pick a new case"
+        naming = {n for n, fn in ib.LANES.items()
+                  if lane_select._code_names(fn, vars(ib)) & bound}
+        assert len(naming) < len(ib.LANES) // 4, \
+            f"{len(naming)} lanes name {sorted(bound)}, so the subset check below cannot fail"
+        wide = sorted(lanes - naming)
+        assert not wide, (f"{rel} answers {len(lanes)} lanes and {wide[:5]} name nothing it "
+                          f"binds ({sorted(bound)}); the door rule has gone wide")
+    assert len(rev.get("python/mojolearn/neural_inference.py", ())) == 40, \
+        "the re-export rule moved neural_inference.py off its measured 40 lanes"
 
-    # THE FAILING SIDE: with no public rebindings the three doors vanish.
+    # THE FAILING SIDE: with no public rebindings the lane each door is
+    # checked for loses it. Held per LANE and not per file since 2026-09-21:
+    # `language-model-config` (2026-09-19) names `LanguageModelConfig`, which
+    # language_model.py DEFINES (`LanguageModelConfig = ByteLanguageModelConfig`),
+    # so that file stays in the map by the definition rule alone. What this
+    # side must show is that `want in lanes` above is carried by the door.
     keep = lane_select._public_rebindings
     lane_select._public_rebindings = lambda files: {}
     try:
         lane_select.reset_caches()
         blind = lane_select.reverse_map()
-        for rel in ("python/mojolearn/umap.py", "python/mojolearn/neural_network.py",
-                    "python/mojolearn/language_model.py"):
-            assert rel not in blind, \
-                f"{rel} is in the map without the public door rule, so this test cannot fail"
+        for rel, want in (("python/mojolearn/umap.py", "umap"),
+                          ("python/mojolearn/neural_network.py", "mlp"),
+                          ("python/mojolearn/language_model.py", "byte-lm")):
+            assert want not in blind.get(rel, set()), \
+                f"{want} reaches {rel} without the public door rule, so this test cannot fail"
     finally:
         lane_select._public_rebindings = keep
         lane_select.reset_caches()
@@ -1542,8 +1594,20 @@ def test_an_aliased_mojo_import_is_recorded_under_the_name_the_body_uses():
 
 
 def test_runtime_controls_do_not_trigger_numerical_sweep():
-    paths = ["tools/identity_iterate.py", "tools/mac_slot.py", "tools/lane_applicability.py"]
+    paths = ["tools/identity_iterate.py", "tools/mac_slot.py"]
     selected = lane_select.select(paths)
     assert selected["lanes"] == []
     assert not selected["fallback"]
     assert not selected["unattributed"]
+
+
+def test_a_file_the_harness_imports_at_run_time_selects_every_lane():
+    """`tools/lane_applicability.py` was a runtime control until 2026-09-19,
+    when `identity_break.py` began importing it to write `degenerate_lanes`
+    into every column it records. A change to it now changes what every
+    column says, over the whole registry, so it must select every lane and
+    never read as inert."""
+    selected = lane_select.select(["tools/lane_applicability.py"])
+    assert selected["fallback"], selected["reasons"]
+    assert selected["unattributed"] == ["tools/lane_applicability.py"]
+    assert len(selected["lanes"]) == selected["total"] > 0
