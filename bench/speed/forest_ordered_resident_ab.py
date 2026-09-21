@@ -45,10 +45,13 @@ def prepare(args):
         x, y = load_data(dataset)
         n = min(args.train_rows, len(x))
         entry = {"shape": list(x.shape), "positive_fraction": float(y.mean()), "models": {}}
+        # Integer spelling is the public "sqrt" policy (floor(sqrt(d))) and
+        # does not require the optional portable-math dylib on a source tree.
+        max_features = max(1, int(np.sqrt(x.shape[1])))
         for kind, cls in (("rf", ml.RandomForestClassifier),
                           ("et", ml.ExtraTreesClassifier)):
             model = cls(n_estimators=args.trees, max_depth=args.depth,
-                        max_features="sqrt", random_state=7, device="gpu",
+                        max_features=max_features, random_state=7, device="gpu",
                         numeric_mode="identical", inference_engine="sequential")
             t0 = time.perf_counter()
             model.fit(x[:n], y[:n])

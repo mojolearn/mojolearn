@@ -31,9 +31,11 @@ use() {
     cp "$BINS/$1/_mojolearn_trees.so" "$TIER/"
 }
 
-tools/with_build_lock.sh sh bindings/build.sh > "$OUT/build.base.log" 2>&1
-build sequential ""
-build ordered "-D MOJOLEARN_FOREST_ORDERED_RESIDENT=1"
+if [ "${MOJOLEARN_FOREST_SKIP_BUILDS:-0}" != 1 ]; then
+    tools/with_build_lock.sh sh bindings/build.sh > "$OUT/build.base.log" 2>&1
+    build sequential ""
+    build ordered "-D MOJOLEARN_FOREST_ORDERED_RESIDENT=1"
+fi
 use sequential
 PYTHONPATH=python "$PY" -u bench/speed/forest_ordered_resident_ab.py prepare \
     --out "$MODELS" --train-rows "$TRAIN_ROWS" > "$OUT/prepare.log" 2>&1
