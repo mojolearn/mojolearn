@@ -97,7 +97,9 @@ run_one() {
     arm=$1; ds=$2; outer=$3; position=$4; requested=$5; steps=$6
     tag="${ds}_${arm}_${outer}"
     run="$OUT/runs/$tag"
-    rm -rf "$run"; mkdir -p "$run"
+    # The public probe creates --out with exist_ok=False so stale or mixed
+    # process evidence cannot be silently reused.
+    rm -rf "$run"
     (cd "$T" && MOJOLEARN_ATTN_ARM="$requested" PYTHONPATH=python "$PY" \
         tools/lm_step_memory_probe.py --out "$run" --target --resident-lean \
         --witness-every-step --steps "$steps" --budget-seconds 900 \
