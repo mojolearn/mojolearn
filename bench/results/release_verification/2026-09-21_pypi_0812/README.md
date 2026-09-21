@@ -26,3 +26,21 @@ are byte-identical across the three builds. auditwheel repair passed. The exact
 wheel passed tools/qualify_verifier_wheel.py --scope expanded on an NVIDIA H100
 (light-smoke-linux.json) and was published on the light route with tag
 alpha-api-0.8.12-linux-light-20260921.
+
+## macOS wheel
+
+mojolearn-0.8.12-py3-none-macosx_11_0_arm64.whl, sha256
+bd23113c55bc81254a301afb2503b697de799caca2d611e86995243227d98200, built on the release
+Mac from the source commit (packaging/macos/build_release_wheel.sh with
+MOJOLEARN_PACKAGE_BYTE_LM=1; its installed-wheel verification passed on 5
+interpreters). The exact wheel passed tools/qualify_verifier_wheel.py --scope expanded
+on the M4 GPU (light-smoke-macos.json) and was published on the light route with tag
+alpha-api-0.8.12-macos-light-20260921, the first fresh native macOS build admitted on
+that route (packaging/verify_alpha_artifacts.py, 93fd389a7; the tag's commit is the
+source commit plus that admission change, branch release/0.8.12).
+
+## Installed from PyPI
+
+`pip install mojolearn==0.8.12` on the M4 (Python 3.12): version 0.8.12, vendor metal,
+mojolearn.cross_vendor present, ParallelByteLanguageModelTrainer.shard_gradient and
+apply_gradient present, the preprint ships, and the wheel requires no other package.
