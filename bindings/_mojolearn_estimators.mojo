@@ -605,12 +605,14 @@ def qn_predict_binary_binding(
     var nf = Int(py=params[1])
     var fi = Int(py=params[2]) != 0
     var op = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=Int(py=out_addr))
+    # Every PythonObject is read BEFORE the GIL is released: `Int(py=...)`
+    # calls into the interpreter (the host binding's copy of this entry
+    # crashed with SIGSEGV doing it inside GILReleased).
+    var xp = _f32_ptr(Int(py=x_addr))
+    var cp = _f32_ptr(Int(py=coef_addr))
     with GILReleased(Python()):
         var ctx = DeviceContext()
-        qn_predict_binary_host(
-            ctx, _f32_ptr(Int(py=x_addr)), _f32_ptr(Int(py=coef_addr)),
-            op, nr, nf, fi,
-        )
+        qn_predict_binary_host(ctx, xp, cp, op, nr, nf, fi)
     return PythonObject(0)
 
 

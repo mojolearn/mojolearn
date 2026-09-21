@@ -746,9 +746,12 @@ def rf_predict_proba_binding(
     var n_nodes = Int(offsets_p[n_trees])
     if Int(offsets_p[0]) != 0 or n_nodes < n_trees:
         raise Error("rf_predict_proba: tree_offsets must start at 0 and hold at least one node per tree")
+    # X's address is read while the GIL is held: `Int(py=...)` calls
+    # into the interpreter, which is not safe inside GILReleased.
+    var x_address = Int(py=x_addr)
     var wrote = 0
     with GILReleased(Python()):
-        var rows = read_f32(Int(py=x_addr), n_rows * n_cols)
+        var rows = read_f32(x_address, n_rows * n_cols)
         var probs = List[Float32](length=n_rows * num_outputs, fill=Float32(0.0))
         var trees = rf_host_trees(
             offsets_p, colid_p, quesval_p, left_p, leaves_p,
@@ -805,9 +808,12 @@ def rf_predict_reg_binding(
     var n_nodes = Int(offsets_p[n_trees])
     if Int(offsets_p[0]) != 0 or n_nodes < n_trees:
         raise Error("rf_predict_reg: tree_offsets must start at 0 and hold at least one node per tree")
+    # X's address is read while the GIL is held: `Int(py=...)` calls
+    # into the interpreter, which is not safe inside GILReleased.
+    var x_address = Int(py=x_addr)
     var wrote = 0
     with GILReleased(Python()):
-        var rows = read_f32(Int(py=x_addr), n_rows * n_cols)
+        var rows = read_f32(x_address, n_rows * n_cols)
         var preds = List[Float32](length=n_rows, fill=Float32(0.0))
         var trees = rf_host_trees(
             offsets_p, colid_p, quesval_p, left_p, leaves_p, n_trees, n_nodes, n_cols, 1
