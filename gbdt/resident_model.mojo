@@ -37,8 +37,10 @@ resident call is the device work of `gbdt/train.mojo::predict_floats` and
     text for a NaN on an `AsIs` column); features without borders are
     skipped exactly as `_build_cindex_from_floats` skips them;
   * the cursor is filled with `Float32(model.bias)` and every oblivious
-    tree is applied by the same `compute_bins_and_add_kernel` launch, in
-    tree order, back to back on one stream, with the same grid
+    tree is applied in tree order with the same grid. FAST and DETERMINISTIC
+    use the same `compute_bins_and_add_kernel` launch per tree; IDENTICAL
+    groups at most four consecutive trees while retaining the same ordered
+    float32 additions and split walk
     (`gbdt/methods/doc_parallel_boosting.mojo::predict`); the split records
     and leaf values it reads are the bytes that function packs, packed once
     here instead of once per call. The one per-call word is
@@ -90,7 +92,11 @@ from std.sys.compile import is_defined
 from max.algorithm import sync_parallelize
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, identical_exp64
+from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
+    identical_exp64,
+)
 from core.device_zero import enqueue_fill
 from core.forest_host_predict import host_worker_count
 from gbdt.data.quantization import NAN_TREATMENT_AS_IS, nan_substitution
@@ -105,7 +111,10 @@ from gbdt.gpu_data.kernel.binarize import (
 )
 from gbdt.methods.doc_parallel_boosting import model_approx_dim, predict
 from gbdt.models.ctr_value_table import expand_raw_columns
-from gbdt.models.kernel.add_bin_values import compute_bins_and_add_kernel
+from gbdt.models.kernel.add_bin_values import (
+    compute_bins_and_add_four_kernel,
+    compute_bins_and_add_kernel,
+)
 from gbdt.models.model_text import load_model_text
 from gbdt.models.oblivious_model import BIN_SPLIT_TAKE_BIN
 from gbdt.train import TrainedModel, model_input_features
@@ -582,18 +591,43 @@ struct ResidentGbdtModel(Movable):
             wide = 1024
         var lvl = 0
         var leaf = 0
-        for t in range(self.tm.model.size()):
-            ref weak = self.tm.model.weak_models[t]
-            var depth = weak.structure.get_depth()
-            var split_offset = lvl if depth > 0 else 0
-            ctx.enqueue_function[compute_bins_and_add_kernel](
+        comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+            for t0 in range(self.tm.model.size()):
+                ref weak = self.tm.model.weak_models[t0]
+                var depth = weak.structure.get_depth()
+                var split_offset = lvl if depth > 0 else 0
+                ctx.enqueue_function[compute_bins_and_add_kernel](
+                    self.d_cindex.value().unsafe_ptr(),
+                    self.d_off.unsafe_ptr() + split_offset,
+                    self.d_shift.unsafe_ptr() + split_offset,
+                    self.d_mask.unsafe_ptr() + split_offset,
+                    self.d_bin.unsafe_ptr() + split_offset,
+                    self.d_eq.unsafe_ptr() + split_offset,
+                    Int32(depth), self.d_vals.unsafe_ptr() + leaf,
+                    Int32(n_rows), self.d_cursor.value().unsafe_ptr(),
+                    Int32(self.approx_dim), Int32(n_rows),
+                    grid_dim=(wide, self.approx_dim, 1),
+                    block_dim=(256, 1, 1),
+                )
+                lvl += depth
+                leaf += (1 << depth) * self.approx_dim
+            return
+        var t = 0
+        while t < self.tm.model.size():
+            var count = min(4, self.tm.model.size() - t)
+            var d0 = self.tm.model.weak_models[t].structure.get_depth()
+            var d1 = self.tm.model.weak_models[t + 1].structure.get_depth() if count > 1 else 0
+            var d2 = self.tm.model.weak_models[t + 2].structure.get_depth() if count > 2 else 0
+            var d3 = self.tm.model.weak_models[t + 3].structure.get_depth() if count > 3 else 0
+            var split_offset = lvl if d0 > 0 else 0
+            ctx.enqueue_function[compute_bins_and_add_four_kernel](
                 self.d_cindex.value().unsafe_ptr(),
                 self.d_off.unsafe_ptr() + split_offset,
                 self.d_shift.unsafe_ptr() + split_offset,
                 self.d_mask.unsafe_ptr() + split_offset,
                 self.d_bin.unsafe_ptr() + split_offset,
                 self.d_eq.unsafe_ptr() + split_offset,
-                Int32(depth),
+                Int32(d0), Int32(d1), Int32(d2), Int32(d3), Int32(count),
                 self.d_vals.unsafe_ptr() + leaf,
                 Int32(n_rows),
                 self.d_cursor.value().unsafe_ptr(),
@@ -602,8 +636,13 @@ struct ResidentGbdtModel(Movable):
                 grid_dim=(wide, self.approx_dim, 1),
                 block_dim=(256, 1, 1),
             )
-            lvl += depth
-            leaf += (1 << depth) * self.approx_dim
+            lvl += d0 + d1 + d2 + d3
+            leaf += (
+                (1 << d0) + (1 << d1 if count > 1 else 0)
+                + (1 << d2 if count > 2 else 0)
+                + (1 << d3 if count > 3 else 0)
+            ) * self.approx_dim
+            t += count
 
     def predict_into(
         mut self,
