@@ -27,7 +27,7 @@ restore() { cp "$OUT/bin/original.so" "$MODULE"; }
 trap restore EXIT INT TERM
 export MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_SKIP_BUILD_GATE=1
 export MOJOLEARN_COMPILE_JOBS=${MOJOLEARN_COMPILE_JOBS:-4}
-export PYTHONPATH="$ROOT/python" GBM_BENCH_DATA=${GBM_BENCH_DATA:-$ROOT/bench/data}
+export PYTHONPATH="$ROOT/python"
 
 MOJOLEARN_EXTRA_DEFINES='' step build_baseline 1500 sh bindings/build_rf.sh
 cp "$MODULE" "$OUT/bin/baseline.so"
