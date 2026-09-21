@@ -385,6 +385,10 @@ from std.gpu import (
     grid_dim,
     thread_idx,
 )
+from std.sys.info import (
+    has_apple_gpu_accelerator,
+    has_nvidia_gpu_accelerator,
+)
 from std.math import ceildiv
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
@@ -2553,10 +2557,24 @@ def launch_build_histograms_kernel[
         )
     else:
         if dataset.has_bins:
-            # Opt-in only. The fallback also covers callers without host
-            # dimensions and experimental replicated-histogram combinations.
-            comptime TILE = 4 if is_defined["MOJOLEARN_RF_HIST_COLUMNS4"]() else 2
-            comptime ENABLED = is_defined["MOJOLEARN_RF_HIST_COLUMNS4"]() or is_defined["MOJOLEARN_RF_HIST_COLUMNS2"]()
+            # NVIDIA and Apple use four-column tiles after exact Taxi/Istella
+            # repeated-fit trials improved both datasets. HIP stays on the
+            # original route pending its own trial. OFF restores that route;
+            # the explicit defines remain available for other-vendor trials.
+            comptime DEFAULT4 = (
+                not is_defined["MOJOLEARN_RF_HIST_COLUMNS4_OFF"]()
+                and (
+                    has_nvidia_gpu_accelerator()
+                    or has_apple_gpu_accelerator()
+                )
+            )
+            comptime USE4 = (
+                DEFAULT4 or is_defined["MOJOLEARN_RF_HIST_COLUMNS4"]()
+            )
+            comptime TILE = 4 if USE4 else 2
+            comptime ENABLED = (
+                USE4 or is_defined["MOJOLEARN_RF_HIST_COLUMNS2"]()
+            )
             comptime if ENABLED and SMEM_COPIES == 1 and sabotage == 0:
                 var need = TILE * max_n_bins * num_outputs * size_of[O.BinT]()
                 comptime for BYTES in [2048, 4096, 8192, 16384]:

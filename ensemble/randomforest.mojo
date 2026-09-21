@@ -2,8 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Random Forest estimator surface, parameters, metrics, training dispatch, and host inference, aligned with pinned cuML behavior."""
 
-from std.gpu import global_idx
+from std.gpu import block_dim, block_idx, global_idx, thread_idx
 from std.sys.compile import is_defined
+from std.sys.info import has_nvidia_gpu_accelerator
 from std.math import ceildiv as _ceildiv
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from checks.numerics import (
@@ -41,7 +42,10 @@ from core.device_liveness import assert_device_alive
 from core.launch_log import log_launch
 from ensemble.instruments import FitInstruments
 from core.philox import (
+    RNG_BLOCK_THREADS,
     RNG_STRIDE,
+    PhiloxState,
+    custom_next_uniform_int_u32,
     launch_uniform_int,
     uniform_double_host,
 )
@@ -97,6 +101,27 @@ comptime LABELS_SAMPLED_ORDER = True
 # `row_ids` order and its diagnostic trace intentionally differ from the reference.
 # `-D MOJOLEARN_2010_ROWS_SORTED=1` turns it on; off is the shipped default.
 comptime ROWS_SORTED_SAMPLE = is_defined["MOJOLEARN_2010_ROWS_SORTED"]()
+
+# The default bootstrap sampler already
+# computes each sampled row in a GPU thread, then the sampled-label staging
+# kernel rereads that row id to gather its label. Fuse those address-only
+# writes while the Philox row value is live. The RNG mapping and sampled row
+# bytes are unchanged; weighted and non-bootstrap arms keep their old route.
+# H100 Taxi and Istella repeated-fit trials were bitwise/quality identical and
+# improved the median of process medians. NVIDIA therefore ships the fused
+# route. HIP remains unchanged after a small Taxi regression on MI325X. The
+# explicit candidate define still permits experiments on other vendors, and
+# OFF restores the old two-launch route everywhere.
+comptime FUSED_BOOTSTRAP_GATHER = (
+    not is_defined["MOJOLEARN_RF_FUSED_BOOTSTRAP_GATHER_OFF"]()
+    and (
+        has_nvidia_gpu_accelerator()
+        or is_defined["MOJOLEARN_RF_FUSED_BOOTSTRAP_GATHER"]()
+    )
+)
+comptime FUSED_BOOTSTRAP_GATHER_SABOTAGE = is_defined[
+    "MOJOLEARN_RF_FUSED_BOOTSTRAP_GATHER_SABOTAGE"
+]()
 
 
 # ---------------------------------------------------------------------------
@@ -1778,6 +1803,76 @@ def sort_selected_rows[
     # (RowSampler), alive past every launch by construction.
 
 
+def bootstrap_rows_labels_kernel[
+    label_dtype: DType, sabotage: Int = 0
+](
+    rows: MutPointer[Int32, MutAnyOrigin],
+    labels: MutPointer[Scalar[label_dtype], MutAnyOrigin],
+    labels_s: MutPointer[Scalar[label_dtype], MutAnyOrigin],
+    n: Int32,
+    n_rows: Int32,
+    seed_lo: Int32,
+    seed_hi: Int32,
+):
+    """Default bootstrap Philox draw plus sampled-label gather in one pass.
+
+    This is `core.philox.uniform_int_kernel` with `start=0`, `diff=n_rows`
+    and the one address-only store from `gather_sampled_order_kernel`. The
+    thread/subsequence mapping and rejection loop are therefore unchanged.
+    """
+    var tid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var length = Int(n)
+    if tid >= length:
+        return
+    var seed = (
+        (seed_hi.cast[DType.uint64]() & 0xFFFFFFFF) << 32
+    ) | (seed_lo.cast[DType.uint64]() & 0xFFFFFFFF)
+    var gen = PhiloxState.init(seed, UInt64(tid), UInt64(0))
+    var idx = tid
+    while idx < length:
+        var row = custom_next_uniform_int_u32(
+            gen, Int32(0), n_rows.cast[DType.uint32]()
+        )
+        rows[unsafe_offset=idx] = row
+        var label_row = Int(row)
+        comptime if sabotage == 1:
+            label_row = 0
+        labels_s[unsafe_offset=idx] = labels[unsafe_offset=label_row]
+        idx += RNG_STRIDE
+
+
+def launch_bootstrap_rows_labels[
+    label_dtype: DType, //, sabotage: Int = 0
+](
+    ctx: DeviceContext,
+    mut rows: DeviceBuffer[DType.int32],
+    labels: MutPointer[Scalar[label_dtype], MutUntrackedOrigin],
+    labels_s: MutPointer[Scalar[label_dtype], MutUntrackedOrigin],
+    n: Int,
+    n_rows: Int,
+    seed: UInt64,
+) raises:
+    """Launch the fused default-bootstrap candidate with RAFT geometry."""
+    if n <= 0:
+        return
+    var full_blocks = RNG_STRIDE // RNG_BLOCK_THREADS
+    var need_blocks = _ceildiv(n, RNG_BLOCK_THREADS)
+    var n_blocks = min(full_blocks, need_blocks)
+    comptime k = bootstrap_rows_labels_kernel[label_dtype, sabotage]
+    log_launch("philox_uniform_int_gather")
+    ctx.enqueue_function[k](
+        rows.unsafe_ptr(),
+        labels.unsafe_origin_cast[MutAnyOrigin](),
+        labels_s.unsafe_origin_cast[MutAnyOrigin](),
+        Int32(n),
+        Int32(n_rows),
+        (seed & 0xFFFFFFFF).cast[DType.uint32]().cast[DType.int32](),
+        (seed >> 32).cast[DType.uint32]().cast[DType.int32](),
+        grid_dim=n_blocks,
+        block_dim=RNG_BLOCK_THREADS,
+    )
+
+
 struct RowSampler(Movable):
     """`ML::DT::detail::RowSampler`, `randomforest.cuh:62-226`.
 
@@ -2360,6 +2455,12 @@ def fit_forest[
     already-hashed seed down would double-hash and produce a different
     forest.
     """
+    comptime assert not (FUSED_BOOTSTRAP_GATHER and ROWS_SORTED_SAMPLE), (
+        "fused bootstrap gather and sorted bootstrap rows are separate candidates"
+    )
+    comptime assert (
+        FUSED_BOOTSTRAP_GATHER or not FUSED_BOOTSTRAP_GATHER_SABOTAGE
+    ), "fused bootstrap gather sabotage requires its candidate"
     # A shard retains GLOBAL tree IDs for row and feature RNG. Quantiles
     # still use the complete data and original forest seed on each device.
     if tree_start < 0 or tree_start + Int(rf_params.n_trees) > 2147483647:
@@ -2660,7 +2761,41 @@ def fit_forest[
             break
         while next_tree < n_trees:
             t_stage = instr.times.start()
-            sampler.sample(ctx, Int32(tree_start + next_tree), k)
+            comptime if FUSED_BOOTSTRAP_GATHER:
+                if rf_params.bootstrap and not has_sw:
+                    comptime if FUSED_BOOTSTRAP_GATHER_SABOTAGE:
+                        launch_bootstrap_rows_labels[sabotage=1](
+                            ctx,
+                            sampler.selected_rows_[k],
+                            y.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+                            builders[k].labels_s.value().unsafe_ptr()
+                            .unsafe_origin_cast[MutUntrackedOrigin](),
+                            sampler.n_selected,
+                            n_rows,
+                            UInt64(Int(sampler.rng_seed_for(
+                                Int32(tree_start + next_tree)
+                            ))),
+                        )
+                    else:
+                        launch_bootstrap_rows_labels(
+                            ctx,
+                            sampler.selected_rows_[k],
+                            y.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+                            builders[k].labels_s.value().unsafe_ptr()
+                            .unsafe_origin_cast[MutUntrackedOrigin](),
+                            sampler.n_selected,
+                            n_rows,
+                            UInt64(Int(sampler.rng_seed_for(
+                                Int32(tree_start + next_tree)
+                            ))),
+                        )
+                    sampler.store_bootstrap_mask(
+                        ctx, Int32(tree_start + next_tree), k
+                    )
+                else:
+                    sampler.sample(ctx, Int32(tree_start + next_tree), k)
+            else:
+                sampler.sample(ctx, Int32(tree_start + next_tree), k)
             instr.times.stop(ctx, "row_sampling", t_stage)
             # DEVIATION 401 -- the tree's sampled rows, the first per-tree
             # divergence point (a pure hash of (seed, tree_id), so K-free).
@@ -2703,7 +2838,16 @@ def fit_forest[
             # builder stages from this view then carries them. Compiled
             # out under the default.
             comptime if LABELS_SAMPLED_ORDER:
-                builders[k].stage_sampled_order(ctx, dataset)
+                comptime if FUSED_BOOTSTRAP_GATHER:
+                    if not (rf_params.bootstrap and not has_sw):
+                        builders[k].stage_sampled_order(ctx, dataset)
+                    else:
+                        dataset.labels = (
+                            builders[k].labels_s.value().unsafe_ptr()
+                            .unsafe_origin_cast[MutUntrackedOrigin]()
+                        )
+                else:
+                    builders[k].stage_sampled_order(ctx, dataset)
             var ts = builders[k].begin_tree(ctx, dataset, quantiles, instr)
             instr.times.stop_host("host_begin_tree", t_host)
             if ts.done:
@@ -2760,7 +2904,41 @@ def fit_forest[
                     active -= 1
                     break
                 t_stage = instr.times.start()
-                sampler.sample(ctx, Int32(tree_start + next_tree), k)
+                comptime if FUSED_BOOTSTRAP_GATHER:
+                    if rf_params.bootstrap and not has_sw:
+                        comptime if FUSED_BOOTSTRAP_GATHER_SABOTAGE:
+                            launch_bootstrap_rows_labels[sabotage=1](
+                                ctx,
+                                sampler.selected_rows_[k],
+                                y.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+                                builders[k].labels_s.value().unsafe_ptr()
+                                .unsafe_origin_cast[MutUntrackedOrigin](),
+                                sampler.n_selected,
+                                n_rows,
+                                UInt64(Int(sampler.rng_seed_for(
+                                    Int32(tree_start + next_tree)
+                                ))),
+                            )
+                        else:
+                            launch_bootstrap_rows_labels(
+                                ctx,
+                                sampler.selected_rows_[k],
+                                y.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
+                                builders[k].labels_s.value().unsafe_ptr()
+                                .unsafe_origin_cast[MutUntrackedOrigin](),
+                                sampler.n_selected,
+                                n_rows,
+                                UInt64(Int(sampler.rng_seed_for(
+                                    Int32(tree_start + next_tree)
+                                ))),
+                            )
+                        sampler.store_bootstrap_mask(
+                            ctx, Int32(tree_start + next_tree), k
+                        )
+                    else:
+                        sampler.sample(ctx, Int32(tree_start + next_tree), k)
+                else:
+                    sampler.sample(ctx, Int32(tree_start + next_tree), k)
                 instr.times.stop(ctx, "row_sampling", t_stage)
                 # DEVIATION 401 -- same checkpoint as the prime loop's.
                 if instr.trace.enabled:
@@ -2799,7 +2977,16 @@ def fit_forest[
                 )
                 # DEVIATION 2001 -- as in the prime loop above.
                 comptime if LABELS_SAMPLED_ORDER:
-                    builders[k].stage_sampled_order(ctx, dataset)
+                    comptime if FUSED_BOOTSTRAP_GATHER:
+                        if not (rf_params.bootstrap and not has_sw):
+                            builders[k].stage_sampled_order(ctx, dataset)
+                        else:
+                            dataset.labels = (
+                                builders[k].labels_s.value().unsafe_ptr()
+                                .unsafe_origin_cast[MutUntrackedOrigin]()
+                            )
+                    else:
+                        builders[k].stage_sampled_order(ctx, dataset)
                 states[k] = builders[k].begin_tree(
                     ctx, dataset, quantiles, instr
                 )

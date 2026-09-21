@@ -76,6 +76,7 @@ from ensemble.decisiontree.decisiontree import (
 from ensemble.flatnode import SparseTreeNode
 from ensemble.randomforest import (
     CLASSIFICATION,
+    FUSED_BOOTSTRAP_GATHER,
     REGRESSION,
     RF_params,
     RandomForest,
@@ -919,6 +920,11 @@ def rf_numeric_mode_binding() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 
 
+def rf_fused_bootstrap_gather_binding() raises -> PythonObject:
+    """Whether this binary uses the fused bootstrap/gather arm."""
+    return PythonObject(Int(FUSED_BOOTSTRAP_GATHER))
+
+
 def rf_vendor_binding() raises -> PythonObject:
     """THE ACCELERATOR API THIS BINARY WAS COMPILED FOR: 'metal', 'cuda',
     'hip' or 'none'. A compile-time constant folded in from
@@ -948,6 +954,9 @@ def PyInit__mojolearn_rf() abi("C") -> PythonObject:
         var m = PythonModuleBuilder("_mojolearn_rf")
         m.def_function[rf_vendor_binding]("rf_vendor")
         m.def_function[rf_numeric_mode_binding]("rf_numeric_mode")
+        m.def_function[rf_fused_bootstrap_gather_binding](
+            "rf_fused_bootstrap_gather"
+        )
         m.def_function[rf_classifier_fit_binding[False]]("rf_classifier_fit")
         m.def_function[rf_classifier_fit_binding[True]]("rf_classifier_fit_export")
         m.def_function[rf_classifier_fit_rowmajor_binding[False]]("rf_classifier_fit_rowmajor")

@@ -100,6 +100,15 @@ datasets pass timing stability, complete-output identity, and quality gates.
   `bench/evidence/2026-09-20_optimization_attempt_ledger.md`.
 - Exact RF sequential accumulator reuse and Extra Trees RPT64/publication
   trials preserved hashes but did not improve elapsed time; source reverted.
+- LogisticRegression QN fused-save was rejected and reverted. The reached
+  default LBFGS/OWL-QN loop copied its saved point and gradient in one launch;
+  all six alternating Taxi/Istella-S processes matched complete model and
+  probability hashes plus quality. Taxi baseline medians were
+  119.33/122.11/121.69 ms versus 120.43/121.40/118.06 ms fused, and Istella-S
+  was 20.63/21.49/19.04 ms versus 23.16/22.88/19.46 ms. The copied vectors
+  contain only features plus intercept (12 or 221 floats), while each
+  objective/gradient evaluates all rows, so the removed launch was noise and
+  the candidate also failed the stability gate.
 
 ## Cloud and worktree safety
 
