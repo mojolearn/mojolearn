@@ -69,13 +69,35 @@ def _kernel_variant_probe(model, X, method):
     return (getattr(model, method)(held),)
 
 
+#: Set by `do_check` for the --expect-mismatch (sabotage) arm.
+_SABOTAGE_ARM = False
+
+
+def _same_pair(name_a, a, name_b, b):
+    """identity_break's `_same_bytes`: the pair for hashing when its two
+    public entries agree byte for byte, a ValueError naming both when they do
+    not. In the sabotage arm a disagreeing pair is hashed as it is instead:
+    the recording hashed an AGREEING pair, so a disagreement always differs
+    from it and the fixture reads moved, which is what the sabotage set must
+    show. Raising there made the gate exit 2 on a sabotage that worked: the
+    core host set's copy helper (bindings/hotpath_helpers.mojo, reversed
+    runs of eight) moves `forecast(h, index=0)`'s row copy and not the flat
+    buffer. The production arm still refuses any disagreement by name."""
+    message = identity_tool()._mismatch_bytes(name_a, a, name_b, b)
+    if message is not None:
+        if not _SABOTAGE_ARM:
+            raise ValueError(message)
+        print(f'note: sabotage arm, {message}; hashed as measured')
+    return a, b
+
+
 def _forecast_pair(e):
     """identity_break's forecaster infer probe, the same call and the same
     byte check (`_same_bytes`), so its hash is that column's cell."""
     ib = identity_tool()
     h = ib.FORECAST_HORIZON
-    return ib._same_bytes("forecast(h)", e.forecast(h),
-                          "predict(n_obs, n_obs + h)", e.predict(e.n_obs_, e.n_obs_ + h))
+    return _same_pair("forecast(h)", e.forecast(h),
+                      "predict(n_obs, n_obs + h)", e.predict(e.n_obs_, e.n_obs_ + h))
 
 
 def _radius_probe(e, X):
@@ -185,7 +207,7 @@ def _hw_forecast_pair(e):
     same bytes (`_same_bytes`), so its hash is that column's cell."""
     ib = identity_tool()
     h = ib.FORECAST_HORIZON
-    return ib._same_bytes("forecast(h)", e.forecast(h), "forecast(h, index=0)", e.forecast(h, index=0))
+    return _same_pair("forecast(h)", e.forecast(h), "forecast(h, index=0)", e.forecast(h, index=0))
 
 
 #: The surfaces every Holt-Winters lane adds beside its identity probe
@@ -697,6 +719,8 @@ def sabotage_verdict(verdict_ok, moved, unmoved, every_lane=False, every_fixture
 
 
 def do_check(args):
+    global _SABOTAGE_ARM
+    _SABOTAGE_ARM = bool(args.expect_mismatch)
     package_root(args)
     try:
         ib = identity_tool()

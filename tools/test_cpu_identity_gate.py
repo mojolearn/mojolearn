@@ -532,6 +532,33 @@ def load_classical_gate():
     return module
 
 
+class ProbePairTests(unittest.TestCase):
+    """The forecasters' two-entry probe: refused by name in production,
+    hashed as measured in the sabotage arm."""
+
+    def setUp(self):
+        self.gate = load_classical_gate()
+        tool = SimpleNamespace(_mismatch_bytes=lambda na, a, nb, b: None if a == b else f'{na} and {nb} differ')
+        patcher = patch.object(self.gate, 'identity_tool', return_value=tool)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_agreeing_pair_is_returned_in_both_arms(self):
+        for arm in (False, True):
+            self.gate._SABOTAGE_ARM = arm
+            self.assertEqual(self.gate._same_pair('a', b'x', 'b', b'x'), (b'x', b'x'))
+
+    def test_disagreeing_pair_is_refused_in_production(self):
+        self.gate._SABOTAGE_ARM = False
+        with self.assertRaisesRegex(ValueError, 'a and b differ'):
+            self.gate._same_pair('a', b'x', 'b', b'y')
+
+    def test_disagreeing_pair_is_hashed_in_the_sabotage_arm(self):
+        self.gate._SABOTAGE_ARM = True
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(self.gate._same_pair('a', b'x', 'b', b'y'), (b'x', b'y'))
+
+
 class SabotageVerdictTests(unittest.TestCase):
     """classical_host_gate's --expect-mismatch rules (lane/ties-sabotage,
     2026-09-15). The fixture shape is the one the old IVF arms left: the
