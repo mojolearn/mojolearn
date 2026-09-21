@@ -20,7 +20,7 @@ from training.byte_lm_optimizer_pool import pool_snapshot, pool_update, pool_res
 from training.checks.optimizer import OPT_RECORD_INTERMEDIATES
 from training.byte_lm_config import ByteConfig
 from training.checks.optimizer_oracle import OptimizerConfig
-from training.checks.train_loop import _copy_into
+from training.checks.train_loop import _copy_into, _upload
 from core.multi_gpu import transfer_bytes
 
 
@@ -177,6 +177,66 @@ struct ByteParallelTrainer(Movable, Writable):
         if lost:
             self.usable = False
             raise Error("byte LM parallel: replica recovery failed; restore an export")
+
+    def _require_single_replicated(self) raises:
+        self.require_open()
+        if len(self.trainers) != 1 or self.pool_optimizer:
+            raise Error("byte LM parallel: shard_gradient/apply_gradient require one device and a replicated optimizer")
+        if not self.trainers[0].healthy or self.busy:
+            raise Error("byte LM parallel: replica is not ready")
+
+    def shard_gradient(mut self, ids: List[Int32]) raises -> Float32:
+        """One shard's gradient from the CURRENT state, into `buffers.grad`,
+        with NO update: the worker half of a step whose shards run in other
+        processes (mojolearn.cross_vendor). The same `byte_gradient_device`
+        and finiteness scan `step` runs per shard; parameters, moments and
+        flags are untouched, so the committed-gradient export is voided."""
+        self._require_single_replicated()
+        byte_validate_tokens(ids, self.trainers[0].config)
+        var n = self.trainers[0].config.n_total()
+        self.busy = True
+        self.trainers[0].grad_step = -1
+        var loss: Float32
+        try:
+            loss = byte_gradient_device(self.contexts[0], self.trainers[0], ids)
+            _require_device_finite(self.contexts[0], self.trainers[0].scan,
+                self.trainers[0].buffers.grad, n, "shard gradients")
+        except error:
+            self.busy = False
+            raise error
+        self.busy = False
+        return loss
+
+    def apply_gradient(mut self, total: List[Float32]) raises:
+        """Commit one step with a summed gradient folded elsewhere (the same
+        ordered left fold `step` runs, done by the caller). From here on this
+        is `step`'s replicated tail verbatim: the total lands in
+        `buffers.grad`, is scanned, and `byte_update_device` updates."""
+        self._require_single_replicated()
+        var n = self.trainers[0].config.n_total()
+        if len(total) != n:
+            raise Error("byte LM parallel: summed gradient has the wrong length")
+        if self.trainers[0].completed_steps >= 999999:
+            raise Error("byte LM parallel: step bound reached")
+        self.busy = True
+        self.trainers[0].shadow_valid = False
+        self.trainers[0].grad_step = -1
+        self.trainers[0].healthy = False
+        try:
+            var staged = _upload(self.contexts[0], total)
+            _copy_into(self.contexts[0], self.trainers[0].buffers.grad, staged, 0, 0, n)
+            self.contexts[0].synchronize()
+            _ = staged^
+            _require_device_finite(self.contexts[0], self.trainers[0].scan,
+                self.trainers[0].buffers.grad, n, "summed gradients")
+            byte_update_device(self.contexts[0], self.trainers[0])
+            self.contexts[0].synchronize()
+            self.trainers[0].healthy = True
+        except error:
+            self.busy = False
+            self.rollback()
+            raise error
+        self.busy = False
 
     def step(mut self, shards: List[List[Int32]]) raises -> List[Float32]:
         self.require_open()

@@ -1,0 +1,21 @@
+started=2026-09-21T13:53:28Z
+commit=c2367f3e74ab3afd603c98e899a346edea888030
+vendor=amd gpus=1 arch=gfx942
+portable_math exit=0 secs=1
+build exit=0 secs=55
+build_byte_lm exit=0 secs=153
+2d0e24a0786ae407a9b394e1f8b0df75ede300c958057e7ec4d4ef0af2e71cb6  python/mojolearn/identical/_mojolearn_byte_lm.so
+one exit=0 secs=3
+ONE GPU VISIBLE: no two-device run; this leg then states nothing about multi-GPU
+compare exit=1 secs=0
+step      amd-gfx942-1gpu[0]
+   1        9932e700be7baf9c
+   2        ddb92404d62a16e1
+   3        c4e8c600747c8d47
+   4        52c78ce6847ae49c
+   5        c3546a777d6e628f
+   6        0abc34974e913d92
+compared=0 disagreements=1
+DISAGREE --grads needs two or more .npz files for a mixed fold
+NOTHING WAS COMPARED: give two or more records of the same recipe
+finished=2026-09-21T13:57:00Z

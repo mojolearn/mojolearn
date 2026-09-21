@@ -1357,6 +1357,42 @@ def byte_lm_parallel_step_binding(session: PythonObject, addresses: PythonObject
     return out
 
 
+def byte_lm_parallel_shard_gradient_binding(session: PythonObject, addresses: PythonObject,
+    completed_arg: PythonObject) raises -> PythonObject:
+    """addresses = [ids int32[B*(L+1)], out float32[n]]; returns the loss. No update."""
+    _require_binding_profile()
+    var owner = session.downcast_value_ptr[ByteParallelTrainer]()
+    owner[].require_open()
+    if Int(py=completed_arg) != owner[].trainers[0].completed_steps:
+        raise Error("byte LM parallel: completed-step mismatch")
+    var shape = owner[].trainers[0].config.copy()
+    var n = shape.n_total()
+    var n_ids = shape.batch * (shape.length + 1)
+    var addr = _read_addresses(addresses, 2)
+    var cells: List[Int] = [n_ids, n]
+    _validate_slot_table(addr, cells, 1)
+    var loss = owner[].shard_gradient(_read_ids(addr[0], n_ids))
+    var g = download_f32(owner[].contexts[0], owner[].trainers[0].buffers.grad, n)
+    copy_f32(g.unsafe_ptr(), f32_ptr(addr[1]), n)
+    return PythonObject(loss)
+
+
+def byte_lm_parallel_apply_gradient_binding(session: PythonObject, addresses: PythonObject,
+    completed_arg: PythonObject) raises -> PythonObject:
+    """addresses = [summed float32[n]]; commits one step; returns completed steps."""
+    _require_binding_profile()
+    var owner = session.downcast_value_ptr[ByteParallelTrainer]()
+    owner[].require_open()
+    if Int(py=completed_arg) != owner[].trainers[0].completed_steps:
+        raise Error("byte LM parallel: completed-step mismatch")
+    var n = owner[].trainers[0].config.n_total()
+    var addr = _read_addresses(addresses, 1)
+    var cells: List[Int] = [n]
+    _validate_slot_table(addr, cells, 1)
+    owner[].apply_gradient(_read_f32(addr[0], n))
+    return PythonObject(owner[].trainers[0].completed_steps)
+
+
 def byte_lm_parallel_export_binding(session: PythonObject, addresses: PythonObject,
     rank_arg: PythonObject, gradients_arg: PythonObject) raises -> PythonObject:
     var rank = Int(py=rank_arg)
@@ -1709,6 +1745,8 @@ def PyInit__mojolearn_byte_lm() abi("C") -> PythonObject:
         module.def_function[byte_lm_parallel_ownership_binding]("byte_lm_parallel_ownership")
         module.def_function[byte_lm_parallel_step_binding]("byte_lm_parallel_step")
         module.def_function[byte_lm_parallel_export_binding]("byte_lm_parallel_export")
+        module.def_function[byte_lm_parallel_shard_gradient_binding]("byte_lm_parallel_shard_gradient")
+        module.def_function[byte_lm_parallel_apply_gradient_binding]("byte_lm_parallel_apply_gradient")
         module.def_function[byte_lm_parallel_rollback_binding]("byte_lm_parallel_rollback")
         _ = module.add_type[ByteOffloadedReplay]("_ByteOffloadedReplay")
         module.def_function[byte_lm_offload_create_binding]("byte_lm_offload_create")

@@ -145,6 +145,46 @@ class ParallelByteLanguageModelTrainer:
                 raise RuntimeError('parallel gradient export returned wrong step')
             return out
 
+    def _require_split_step(self, name):
+        if self.pool_optimizer or len(self.devices) != 1:
+            raise ValueError(name + ' requires devices=(d,) and pool_optimizer=False')
+        if not callable(getattr(self._binding, 'byte_lm_parallel_' + name, None)):
+            raise RuntimeError('this byte-LM binary predates ' + name + '; rebuild bindings/build_byte_lm.sh')
+
+    def shard_gradient(self, ids):
+        """One logical shard's gradient from the CURRENT state, with no
+        update: `(loss, float32[n_total] Array)`. The worker half of a step
+        whose shards run in other processes, on any vendor
+        (`mojolearn.cross_vendor`). Same kernels as one shard of
+        `train_step`."""
+        with self._lock:
+            tokens = _array(ids, (self._shape.batch, self._shape.length + 1), 'shard', '<i4')
+            self._open()
+            self._require_split_step('shard_gradient')
+            out = empty((self._shape.n_total,), '<f4')
+            loss = self._binding.byte_lm_parallel_shard_gradient(self._session,
+                [addr_ro(tokens, name='shard'), addr(out, name='gradient')], self.step_)
+            return float(loss), out
+
+    def apply_gradient(self, total):
+        """Commit one step with `total`, the ordered left fold of every
+        shard's gradient (`mojolearn.cross_vendor.ordered_fold`). The update
+        is the one `train_step` runs after its own fold."""
+        with self._lock:
+            total = _array(total, (self._shape.n_total,), 'summed gradient')
+            self._open()
+            self._require_split_step('apply_gradient')
+            before = self.step_
+            # A native failure has already rolled the replica back to `before`.
+            done = self._binding.byte_lm_parallel_apply_gradient(self._session,
+                [addr_ro(total, name='summed gradient')], before)
+            if done != before + 1:
+                self._lost = True
+                raise RuntimeError('apply_gradient returned the wrong step')
+            self._state['completed_steps'] = before + 1
+            self._state['next_batch_index'] = before + 1
+            return done
+
     def optimizer_ownership(self):
         """Actual native ownership and moment/rollback/reduction bytes per device."""
         with self._lock:

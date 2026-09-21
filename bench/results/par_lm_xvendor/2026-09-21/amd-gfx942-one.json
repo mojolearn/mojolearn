@@ -1,0 +1,181 @@
+{
+ "schema": "mojolearn.par-lm-xvendor.v1",
+ "label": "amd-gfx942-1gpu",
+ "vendor": "hip",
+ "devices": [
+  0
+ ],
+ "logical_shards": 4,
+ "steps": 6,
+ "seed": 20260921,
+ "box": {
+  "host": "enc1-gpuvm002",
+  "machine": "x86_64",
+  "python": "3.14.7",
+  "rocm-smi": "============================ ROCm System Management Interface ============================\n======================================= Unique ID ========================================\nGPU[0]\t\t: Unique ID: 0x6104e2a75685060a\n==========================================================================================\n====================================== Product Info ======================================\nGPU[0]\t\t: Card Series: \t\tAMD Instinct MI300X VF\nGPU[0]\t\t: Card Model: \t\t0x74b5\nGPU[0]\t\t: Card Vendor: \t\tAdvanced Micro Devices, Inc. [AMD/ATI]\nGPU[0]\t\t: Card SKU: \t\tM3000108\nGPU[0]\t\t: Subsystem ID: \t0x74a1\nGPU[0]\t\t: Device Rev: \t\t0x00\nGPU[0]\t\t: Node ID: \t\t1\nGPU[0]\t\t: GUID: \t\t46235\nGPU[0]\t\t: GFX Version: \t\tgfx942\n==========================================================================================\n================================== End of ROCm SMI Log ==================================="
+ },
+ "commit": "c2367f3e74ab3afd603c98e899a346edea888030",
+ "shape": {
+  "batch": 2,
+  "length": 32,
+  "d_model": 32,
+  "n_heads": 4,
+  "n_kv": 2,
+  "head_dim": 8,
+  "intermediate": 64,
+  "n_layers": 2,
+  "vocab_size": 512
+ },
+ "start_state": "77d9452786497487",
+ "resumed_from": null,
+ "rows": [
+  {
+   "step": 1,
+   "losses": [
+    1086798883,
+    1086819047,
+    1086827138,
+    1086834607
+   ],
+   "state": "9932e700be7baf9c",
+   "grad": "6c519fe1a6c47244",
+   "shard_losses": [
+    1086798883,
+    1086819047,
+    1086827138,
+    1086834607
+   ],
+   "shard_grads": [
+    "ea5509af6b3d1bd9",
+    "19cc6f44d97e8e4a",
+    "4a96832cbc099269",
+    "16b17ac07eaae28c"
+   ],
+   "host_fold": "6c519fe1a6c47244"
+  },
+  {
+   "step": 2,
+   "losses": [
+    1086830954,
+    1086825242,
+    1086852280,
+    1086838350
+   ],
+   "state": "ddb92404d62a16e1",
+   "grad": "871b5de0c3563762",
+   "shard_losses": [
+    1086830954,
+    1086825242,
+    1086852280,
+    1086838350
+   ],
+   "shard_grads": [
+    "c79ae3edb47acb4f",
+    "7664828ed647cbc2",
+    "312bb6a1a379099f",
+    "97ab6a6db5e774ef"
+   ],
+   "host_fold": "871b5de0c3563762"
+  },
+  {
+   "step": 3,
+   "losses": [
+    1086834025,
+    1086835661,
+    1086851180,
+    1086848548
+   ],
+   "state": "c4e8c600747c8d47",
+   "grad": "39ea9d1c33b5a7e0",
+   "shard_losses": [
+    1086834025,
+    1086835661,
+    1086851180,
+    1086848548
+   ],
+   "shard_grads": [
+    "7111961a67bc0476",
+    "0b83d270997d3392",
+    "b13cb288a242f754",
+    "5ad2ad54ad216eb2"
+   ],
+   "host_fold": "39ea9d1c33b5a7e0",
+   "handoff_written": true
+  },
+  {
+   "step": 4,
+   "losses": [
+    1086834884,
+    1086850978,
+    1086814757,
+    1086813792
+   ],
+   "state": "52c78ce6847ae49c",
+   "grad": "d6e2923614979062",
+   "shard_losses": [
+    1086834884,
+    1086850978,
+    1086814757,
+    1086813792
+   ],
+   "shard_grads": [
+    "4732bbcaecf4051c",
+    "321248f099df2819",
+    "12190519678f7b02",
+    "c9f7c3cedf4ebfba"
+   ],
+   "host_fold": "d6e2923614979062"
+  },
+  {
+   "step": 5,
+   "losses": [
+    1086822206,
+    1086813752,
+    1086840896,
+    1086803675
+   ],
+   "state": "c3546a777d6e628f",
+   "grad": "1a0a297b3804243e",
+   "shard_losses": [
+    1086822206,
+    1086813752,
+    1086840896,
+    1086803675
+   ],
+   "shard_grads": [
+    "3921303c9b17cc96",
+    "79e0b02369e6f35e",
+    "3c9f701d30ccbef2",
+    "705226759b380bec"
+   ],
+   "host_fold": "1a0a297b3804243e"
+  },
+  {
+   "step": 6,
+   "losses": [
+    1086824769,
+    1086798225,
+    1086842978,
+    1086825912
+   ],
+   "state": "0abc34974e913d92",
+   "grad": "18e434ba2c8f8117",
+   "shard_losses": [
+    1086824769,
+    1086798225,
+    1086842978,
+    1086825912
+   ],
+   "shard_grads": [
+    "0f52c4755e97a1c3",
+    "7fdf606fc75a202d",
+    "3c4462d6c507d976",
+    "960567a74302b2ef"
+   ],
+   "host_fold": "18e434ba2c8f8117"
+  }
+ ],
+ "failures": [],
+ "seconds": 1.62,
+ "verdict": "PASS"
+}
