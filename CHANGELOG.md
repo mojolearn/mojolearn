@@ -3,6 +3,14 @@
 This file records release-level changes, not the development diary. Git history and archived evidence
 contain the detailed investigation record.
 
+## 0.8.13 (published 2026-09-21)
+
+- Fix a race in several prediction bindings: quantile regression (GPU and CPU
+  host), extra trees and random forest `predict`/`predict_proba` read Python
+  objects after releasing the interpreter lock, which could crash the
+  process (seen as a segfault in the CPU certification). Each address is now
+  read before the lock is released.
+
 ## 0.8.12 (published 2026-09-21)
 
 - Experimental live cross-vendor training (`mojolearn.cross_vendor`): GPUs from
