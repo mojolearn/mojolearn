@@ -1,0 +1,9 @@
+pip_download	0	2
+pip_install	0	5
+env_report	0	0
+python_where_unactivated	0	0
+python_where_activated	0	1
+par_self_test	0	7
+par_self_test_json	0	7
+par_all_negative_G4	4	224
+par_all_negative_G1	0	302

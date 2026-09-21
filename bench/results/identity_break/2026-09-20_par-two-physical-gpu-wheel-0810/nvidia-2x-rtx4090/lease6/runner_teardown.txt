@@ -1,0 +1,6 @@
+pod=ok6dr70tmui4rw
+armed=1
+terminated=1
+deadman_pid=19040
+exit=0
+at=2026-09-21T01:41:59Z

@@ -1,0 +1,22 @@
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+# par (all): 20 of 59 par-* lanes x 1 fixture(s), devices 0 then 0,1
+  par-boosting-pointwise     negative train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   6.07s
+  par-boosting-reg           negative train=IDENTICAL infer=IDENTICAL batch=IDENTICAL              6.08s
+  par-border-types           negative train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  32.12s
+  par-byte-lm-model-pool     negative train=IDENTICAL                                              2.10s
+  par-cd                     negative train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.91s
+  par-forecast-arima         negative train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  32.65s
+  par-forest                 negative train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   5.17s
+  par-forest-reg             negative train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.66s
+  par-gp                     negative train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   7.51s
+  par-gpc-fit                negative train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   7.92s
+  par-gpc-predict            negative train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  14.91s
+  par-gram-ols               negative train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.83s
+  par-hdbscan                negative train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.50s
+  par-iforest                negative train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  15.90s
+  par-ivf                    negative train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  20.41s
+  par-logistic               negative train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.82s
+  par-rbf-sampler            negative train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  12.36s
+  par-reference-knn-reg      negative train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  15.98s
+  par-samba                  negative train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  10.47s
+  par-scaler                 negative train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  11.85s

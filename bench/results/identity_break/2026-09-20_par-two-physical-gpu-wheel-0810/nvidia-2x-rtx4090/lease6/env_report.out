@@ -1,0 +1,19 @@
+{
+  "commit": "unknown (no checkout beside this package)",
+  "device": "NVIDIA NVIDIA GeForce RTX 4090, 580.159.04",
+  "mode": {
+    "binary": "/root/parwheel-venv/lib/python3.11/site-packages/mojolearn/cuda/sm_89/identical/_mojolearn.so",
+    "compiled": "identical",
+    "ident_dir": "/root/parwheel-venv/lib/python3.11/site-packages/mojolearn/identical",
+    "loaded": "identical",
+    "problem": "the selector reports identical but the extension running this fixture is /root/parwheel-venv/lib/python3.11/site-packages/mojolearn/cuda/sm_89/identical/_mojolearn.so, which is NOT under /root/parwheel-venv/lib/python3.11/site-packages/mojolearn/identical. A binary is in the wrong directory; nothing here can be labelled.",
+    "requested": "identical",
+    "under_identical": false
+  },
+  "mojolearn_version": "0.8.10",
+  "numpy_version": "2.4.6",
+  "platform": "Linux 6.8.0-134-generic x86_64",
+  "profile": "mojolearn.identical.verify.kmeans.fp32.v1",
+  "python": "3.11.10 CPython",
+  "vendor": "cuda (the box probe (device nodes and driver libraries))"
+}
