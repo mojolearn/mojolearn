@@ -3,6 +3,10 @@
 [![PyPI](https://img.shields.io/pypi/v/mojolearn.svg)](https://pypi.org/project/mojolearn/)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.22068632.svg)](https://doi.org/10.5281/zenodo.22068632)
 
+**[Read the research paper (PDF)](python/mojolearn/Hendel_2026_bitwise_identical_gpu_ml_preprint.pdf)** —
+*Bitwise-Identical Machine Learning Across Metal, CUDA, and HIP*, Andrew Hendel.
+Current preprint; a copy is included in the library package.
+
 **Machine learning that trains and predicts bitwise identically across Apple,
 NVIDIA and AMD GPUs, for certified configurations.**
 
