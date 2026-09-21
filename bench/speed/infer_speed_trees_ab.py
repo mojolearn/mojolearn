@@ -14,14 +14,8 @@ binary and an AFTER binary are therefore timed in ALTERNATING PROCESSES
 over the same inputs, never in one process, because they are two builds
 of the same module name.
 
-The symmetric GBDT preparation lane accepts exactly the project's two
-pinned medium/large datasets, taxi and Istella-S. It saves target arrays so
-timed predict and predict_proba records carry quality as well as full output
-hashes. The default remains taxi, preserving historical invocations.
-
     PYTHONPATH=python python3 bench/speed/infer_speed_trees_ab.py prepare \\
-        --out /root/ab --rows 1000000 --gbdt-iterations 100,1000 \\
-        --gbdt-datasets taxi,istella
+        --out /root/ab --rows 1000000 --gbdt-iterations 100,1000
     PYTHONPATH=python python3 bench/speed/infer_speed_trees_ab.py time \\
         --model /root/ab/rf-reg-100x16.npz --x /root/ab/x_taxireg.npy \\
         --path host-predict --rounds 5 --json /root/ab/after/rf-reg.host.json
@@ -81,77 +75,45 @@ def _loaded_bindings():
 
 def prepare(args):
     import mojolearn as ml
-    from speed_gbdt_arm import load_istella, load_taxi
+    from speed_gbdt_arm import load_taxi
     os.makedirs(args.out, exist_ok=True)
     rows = args.rows
-    datasets = [v.strip() for v in args.gbdt_datasets.split(",") if v.strip()]
-    if any(v not in ("taxi", "istella") for v in datasets):
-        raise SystemExit("--gbdt-datasets accepts only taxi,istella")
-    cls = (load_taxi("shipped", rows_cap=args.train_rows, regression=False)
-           if "taxi" in datasets or not args.gbdt_only else None)
-    reg = None
-    if not args.gbdt_only:
-        reg = load_taxi("shipped", rows_cap=args.train_rows, regression=True)
+    cls = load_taxi("shipped", rows_cap=args.train_rows, regression=False)
+    reg = load_taxi("shipped", rows_cap=args.train_rows, regression=True)
     # The fixed prediction rows: the LAST `rows` rows of each table in
     # temporal order (the shipped held-out block is 500k; a larger floor
     # takes the rows just before it). Timing does not need held-out rows.
-    if not args.gbdt_only:
-        for name, data in (("taxi", cls), ("taxireg", reg)):
-            full = np.concatenate([data.X_train, data.X_test]) if rows > data.X_test.shape[0] else data.X_test
-            x = np.ascontiguousarray(full[-rows:], dtype=np.float32)
-            path = os.path.join(args.out, f"x_{name}.npy")
-            np.save(path, x)
-            print(f"prepare rows {name} {x.shape} sha256 {_sha(x.tobytes())[:16]} -> {path}")
-    manifest = dict(rows=rows, train_rows=args.train_rows, models={})
-    if not args.gbdt_only:
-        t0 = time.perf_counter()
-        m = ml.RandomForestRegressor(n_estimators=args.trees, max_depth=args.depth,
-                                     numeric_mode="identical", random_state=7)
-        m.fit(reg.X_train, reg.y_train)
-        p = os.path.join(args.out, f"rf-reg-{args.trees}x{args.depth}.npz")
-        m.save(p)
-        manifest["models"]["rf-reg"] = dict(path=p, kind="rf-reg", fit_s=time.perf_counter() - t0, x="x_taxireg.npy")
-        print(f"prepare rf-reg fit {time.perf_counter() - t0:.1f}s -> {p}")
-        t0 = time.perf_counter()
-        m = ml.ExtraTreesRegressor(n_estimators=args.trees, max_depth=args.depth,
-                                   numeric_mode="identical", random_state=7)
-        m.fit(reg.X_train, reg.y_train)
-        p = os.path.join(args.out, f"et-reg-{args.trees}x{args.depth}.npz")
-        m.save(p)
-        manifest["models"]["et-reg"] = dict(path=p, kind="et-reg", fit_s=time.perf_counter() - t0, x="x_taxireg.npy")
-        print(f"prepare et-reg fit {time.perf_counter() - t0:.1f}s -> {p}")
-    gbdt_data = {}
-    for dataset in datasets:
-        if dataset == "taxi":
-            data = cls
-        elif dataset == "istella":
-            data = load_istella("shipped", rows_cap=args.train_rows, regression=False)
-        full = (np.concatenate([data.X_train, data.X_test])
-                if rows > data.X_test.shape[0] else data.X_test)
-        full_y = (np.concatenate([data.y_train, data.y_test])
-                  if rows > data.y_test.shape[0] else data.y_test)
+    for name, data in (("taxi", cls), ("taxireg", reg)):
+        full = np.concatenate([data.X_train, data.X_test]) if rows > data.X_test.shape[0] else data.X_test
         x = np.ascontiguousarray(full[-rows:], dtype=np.float32)
-        y = np.ascontiguousarray(full_y[-rows:], dtype=np.float32)
-        np.save(os.path.join(args.out, f"x_{dataset}.npy"), x)
-        np.save(os.path.join(args.out, f"y_{dataset}.npy"), y)
-        gbdt_data[dataset] = data
-        print(f"prepare rows {dataset} {x.shape} sha256 {_sha(x.tobytes())[:16]}")
-    for dataset, data in gbdt_data.items():
-        for iters in [int(v) for v in args.gbdt_iterations.split(",") if v]:
-            t0 = time.perf_counter()
-            m = ml.GradientBoosting(loss="Logloss", n_estimators=iters, max_depth=6,
-                                    numeric_mode="identical")
-            m.fit(data.X_train, data.y_train)
-            # Keep the historical taxi name byte-for-byte.  Dataset-qualified
-            # names are used only for the newly added Istella-S arm.
-            stem = f"gbdt-logloss-{iters}" if dataset == "taxi" else f"gbdt-{dataset}-logloss-{iters}"
-            p = os.path.join(args.out, stem + ".npz")
-            m.save(p)
-            manifest["models"][stem] = dict(
-                path=p, kind="gbdt", dataset=dataset,
-                fit_s=time.perf_counter() - t0, x=f"x_{dataset}.npy",
-                y=f"y_{dataset}.npy", task="binary")
-            print(f"prepare {stem} fit {time.perf_counter() - t0:.1f}s -> {p}")
+        path = os.path.join(args.out, f"x_{name}.npy")
+        np.save(path, x)
+        print(f"prepare rows {name} {x.shape} sha256 {_sha(x.tobytes())[:16]} -> {path}")
+    manifest = dict(rows=rows, train_rows=args.train_rows, models={})
+    t0 = time.perf_counter()
+    m = ml.RandomForestRegressor(n_estimators=args.trees, max_depth=args.depth,
+                                 numeric_mode="identical", random_state=7)
+    m.fit(reg.X_train, reg.y_train)
+    p = os.path.join(args.out, f"rf-reg-{args.trees}x{args.depth}.npz")
+    m.save(p)
+    manifest["models"]["rf-reg"] = dict(path=p, kind="rf-reg", fit_s=time.perf_counter() - t0, x="x_taxireg.npy")
+    print(f"prepare rf-reg fit {time.perf_counter() - t0:.1f}s -> {p}")
+    t0 = time.perf_counter()
+    m = ml.ExtraTreesRegressor(n_estimators=args.trees, max_depth=args.depth,
+                               numeric_mode="identical", random_state=7)
+    m.fit(reg.X_train, reg.y_train)
+    p = os.path.join(args.out, f"et-reg-{args.trees}x{args.depth}.npz")
+    m.save(p)
+    manifest["models"]["et-reg"] = dict(path=p, kind="et-reg", fit_s=time.perf_counter() - t0, x="x_taxireg.npy")
+    print(f"prepare et-reg fit {time.perf_counter() - t0:.1f}s -> {p}")
+    for iters in [int(v) for v in args.gbdt_iterations.split(",") if v]:
+        t0 = time.perf_counter()
+        m = ml.GradientBoosting(loss="Logloss", n_estimators=iters, max_depth=6, numeric_mode="identical")
+        m.fit(cls.X_train, cls.y_train)
+        p = os.path.join(args.out, f"gbdt-logloss-{iters}.npz")
+        m.save(p)
+        manifest["models"][f"gbdt-logloss-{iters}"] = dict(path=p, kind="gbdt", fit_s=time.perf_counter() - t0, x="x_taxi.npy")
+        print(f"prepare gbdt-logloss-{iters} fit {time.perf_counter() - t0:.1f}s -> {p}")
     with open(os.path.join(args.out, "manifest.json"), "w") as fh:
         json.dump(manifest, fh, indent=1)
 
@@ -169,8 +131,6 @@ def _load_gpu_model(kind, path):
 
 def time_path(args):
     import mojolearn as ml
-    if args.batch_calls < 1:
-        raise SystemExit("--batch-calls must be at least 1")
     x = np.load(args.x)
     x = np.ascontiguousarray(x, dtype=np.float32)
     if args.path.startswith("host"):
@@ -194,26 +154,6 @@ def time_path(args):
             return f"dim:{result}"
         return _sha(result.tobytes()) + f":{result.dtype}:{tuple(result.shape)}"
 
-    def quality(result):
-        if not args.y:
-            return None
-        y = np.load(args.y).astype(np.float64, copy=False)
-        out = np.asarray(result)
-        if args.task != "binary":
-            raise SystemExit("the two-dataset GBDT timing currently supports binary quality only")
-        if args.path.endswith("proba"):
-            p = out[:, 1].astype(np.float64, copy=False)
-        else:
-            # GradientBoosting.predict returns raw Logloss scores; use the
-            # public contract's sigmoid when scoring that path.
-            raw = out.reshape(-1).astype(np.float64, copy=False)
-            p = 1.0 / (1.0 + np.exp(-raw))
-        p = np.clip(p, 1e-15, 1.0 - 1e-15)
-        return {
-            "logloss": -float(np.mean(y * np.log(p) + (1.0 - y) * np.log(1.0 - p))),
-            "accuracy": float(np.mean((p >= 0.5) == (y >= 0.5))),
-        }
-
     t0 = time.perf_counter()
     warm = call()
     warm_ms = (time.perf_counter() - t0) * 1000.0
@@ -221,10 +161,9 @@ def time_path(args):
     rounds = []
     for _ in range(args.rounds):
         t0 = time.perf_counter()
-        for _inner in range(args.batch_calls):
-            r = call()
-            hashes.append(digest(r))
-        rounds.append((time.perf_counter() - t0) * 1000.0 / args.batch_calls)
+        r = call()
+        rounds.append((time.perf_counter() - t0) * 1000.0)
+        hashes.append(digest(r))
     ordered = sorted(rounds)
     median = ordered[len(ordered) // 2] if len(ordered) % 2 else 0.5 * (ordered[len(ordered) // 2 - 1] + ordered[len(ordered) // 2])
     spread = ordered[-1] / ordered[0] if ordered[0] > 0 else float("inf")
@@ -233,13 +172,10 @@ def time_path(args):
         rows=int(x.shape[0]), features=int(x.shape[1]), rounds=rounds, warmup_ms=warm_ms,
         median_ms=median, spread=spread, stable=(spread <= SPREAD_GATE and len(rounds) >= 5),
         hash=hashes[0], hashes_equal=(len(set(hashes)) == 1),
-        quality=quality(warm), dataset=args.dataset,
-        model_sha256=_file_sha(args.model), x_sha256=_file_sha(args.x),
-        y_sha256=_file_sha(args.y) if args.y else None,
         vendor=ml.vendor(), numeric_mode=ml.numeric_mode(),
         package_dir=os.path.dirname(ml.__file__), bindings=_loaded_bindings(),
         threads_env=os.environ.get("MOJOLEARN_CPU_THREADS", ""), label=args.label,
-        cpu_count=os.cpu_count(), batch_calls=args.batch_calls,
+        cpu_count=os.cpu_count(),
     )
     with open(args.json, "w") as fh:
         json.dump(record, fh, indent=1)
@@ -269,9 +205,6 @@ def summarize(args):
                 by_label.setdefault(r["label"], []).append(r)
         hashes = set(r["hash"] for rs in by_label.values() for r in rs)
         row["hashes_equal_across_arms"] = len(hashes) == 1
-        qualities = {json.dumps(r.get("quality"), sort_keys=True)
-                     for rs in by_label.values() for r in rs}
-        row["quality_equal_across_arms"] = len(qualities) == 1
         for label, rs in by_label.items():
             meds = sorted(r["median_ms"] for r in rs)
             row[label] = dict(processes=len(rs), median_ms=meds[len(meds) // 2],
@@ -280,9 +213,7 @@ def summarize(args):
                               rows=rs[0]["rows"], threads=rs[0].get("threads_env", ""))
         if args.before in row and args.after in row:
             b, a = row[args.before], row[args.after]
-            qualified = (b["stable"] and a["stable"]
-                         and row["hashes_equal_across_arms"]
-                         and row["quality_equal_across_arms"])
+            qualified = b["stable"] and a["stable"] and row["hashes_equal_across_arms"]
             row["ratio_before_over_after"] = (b["median_ms"] / a["median_ms"]) if qualified else None
             row["qualified"] = qualified
         table.append(row)
@@ -302,10 +233,6 @@ def main():
     p.add_argument("--trees", type=int, default=100)
     p.add_argument("--depth", type=int, default=16)
     p.add_argument("--gbdt-iterations", default="100,1000")
-    p.add_argument("--gbdt-datasets", default="taxi",
-                   help="comma-separated symmetric GBDT datasets: taxi,istella")
-    p.add_argument("--gbdt-only", action="store_true",
-                   help="skip the historical RF/ET preparation")
     t = sub.add_parser("time")
     t.add_argument("--model", required=True)
     t.add_argument("--x", required=True)
@@ -313,13 +240,8 @@ def main():
     t.add_argument("--path", required=True,
                    choices=("gpu-predict", "gpu-proba", "host-predict", "host-proba", "gbdt-parse"))
     t.add_argument("--rounds", type=int, default=5)
-    t.add_argument("--batch-calls", type=int, default=1,
-                   help="calls per timed sample; report per-call milliseconds")
     t.add_argument("--json", required=True)
     t.add_argument("--label", default="")
-    t.add_argument("--dataset", choices=("taxi", "istella"), default=None)
-    t.add_argument("--y", default="", help="optional target .npy for quality")
-    t.add_argument("--task", choices=("binary",), default="binary")
     s = sub.add_parser("summarize")
     s.add_argument("json", nargs="+")
     s.add_argument("--before", default="before")

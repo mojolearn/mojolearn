@@ -39,8 +39,7 @@ resident call is the device work of `gbdt/train.mojo::predict_floats` and
   * the cursor is filled with `Float32(model.bias)` and every oblivious
     tree is applied in tree order with the same grid. FAST and DETERMINISTIC
     use the same `compute_bins_and_add_kernel` launch per tree; IDENTICAL
-    groups at most four consecutive trees, or eight behind the default-off
-    `MOJOLEARN_GBDT_GROUP8` experiment, while retaining the same ordered
+    groups at most four consecutive trees while retaining the same ordered
     float32 additions and split walk
     (`gbdt/methods/doc_parallel_boosting.mojo::predict`); the split records
     and leaf values it reads are the bytes that function packs, packed once
@@ -113,7 +112,6 @@ from gbdt.gpu_data.kernel.binarize import (
 from gbdt.methods.doc_parallel_boosting import model_approx_dim, predict
 from gbdt.models.ctr_value_table import expand_raw_columns
 from gbdt.models.kernel.add_bin_values import (
-    compute_bins_and_add_eight_kernel,
     compute_bins_and_add_four_kernel,
     compute_bins_and_add_kernel,
 )
@@ -144,10 +142,6 @@ comptime RESIDENT_CLASSES_OVA = 6
 comptime BORDER_SLAB = 256
 
 comptime RESIDENT_SABOTAGE = is_defined["MOJOLEARN_GBDT_RESIDENT_SABOTAGE"]()
-
-#: Experimental wider launch grouping for IDENTICAL symmetric resident apply.
-#: The shipped/default path remains the measured four-tree group.
-comptime RESIDENT_GROUP8 = is_defined["MOJOLEARN_GBDT_GROUP8"]()
 
 #: a staging or pair task takes at least this many rows, so a small
 #: fixture does not fan out
@@ -617,66 +611,6 @@ struct ResidentGbdtModel(Movable):
                 )
                 lvl += depth
                 leaf += (1 << depth) * self.approx_dim
-            return
-        comptime if RESIDENT_GROUP8:
-            var t8 = 0
-            while t8 < self.tm.model.size():
-                var count8 = min(8, self.tm.model.size() - t8)
-                var d80 = self.tm.model.weak_models[t8].structure.get_depth()
-                var d81 = (
-                    self.tm.model.weak_models[t8 + 1].structure.get_depth()
-                    if count8 > 1 else 0
-                )
-                var d82 = (
-                    self.tm.model.weak_models[t8 + 2].structure.get_depth()
-                    if count8 > 2 else 0
-                )
-                var d83 = (
-                    self.tm.model.weak_models[t8 + 3].structure.get_depth()
-                    if count8 > 3 else 0
-                )
-                var d84 = (
-                    self.tm.model.weak_models[t8 + 4].structure.get_depth()
-                    if count8 > 4 else 0
-                )
-                var d85 = (
-                    self.tm.model.weak_models[t8 + 5].structure.get_depth()
-                    if count8 > 5 else 0
-                )
-                var d86 = (
-                    self.tm.model.weak_models[t8 + 6].structure.get_depth()
-                    if count8 > 6 else 0
-                )
-                var d87 = (
-                    self.tm.model.weak_models[t8 + 7].structure.get_depth()
-                    if count8 > 7 else 0
-                )
-                ctx.enqueue_function[compute_bins_and_add_eight_kernel](
-                    self.d_cindex.value().unsafe_ptr(),
-                    self.d_off.unsafe_ptr() + lvl,
-                    self.d_shift.unsafe_ptr() + lvl,
-                    self.d_mask.unsafe_ptr() + lvl,
-                    self.d_bin.unsafe_ptr() + lvl,
-                    self.d_eq.unsafe_ptr() + lvl,
-                    Int32(d80), Int32(d81), Int32(d82), Int32(d83),
-                    Int32(d84), Int32(d85), Int32(d86), Int32(d87),
-                    Int32(count8), self.d_vals.unsafe_ptr() + leaf,
-                    Int32(n_rows), self.d_cursor.value().unsafe_ptr(),
-                    Int32(self.approx_dim), Int32(n_rows),
-                    grid_dim=(wide, self.approx_dim, 1),
-                    block_dim=(256, 1, 1),
-                )
-                lvl += d80 + d81 + d82 + d83 + d84 + d85 + d86 + d87
-                leaf += (
-                    (1 << d80) + (1 << d81 if count8 > 1 else 0)
-                    + (1 << d82 if count8 > 2 else 0)
-                    + (1 << d83 if count8 > 3 else 0)
-                    + (1 << d84 if count8 > 4 else 0)
-                    + (1 << d85 if count8 > 5 else 0)
-                    + (1 << d86 if count8 > 6 else 0)
-                    + (1 << d87 if count8 > 7 else 0)
-                ) * self.approx_dim
-                t8 += count8
             return
         var t = 0
         while t < self.tm.model.size():
