@@ -13,7 +13,11 @@ cd "$ROOT" || exit 9
 die() { echo "RF_HIST_COLUMNS FAIL: $*" >&2; exit 1; }
 step() {
     name=$1 cap=$2; shift 2
-    timeout -k 30 "$cap" "$@" > "$OUT/logs/$name.log" 2>&1
+    if command -v timeout >/dev/null 2>&1; then
+        timeout -k 30 "$cap" "$@" > "$OUT/logs/$name.log" 2>&1
+    else
+        "$@" > "$OUT/logs/$name.log" 2>&1
+    fi
     rc=$?
     printf '%s\t%s\n' "$name" "$rc" >> "$OUT/status.tsv"
     [ "$rc" -eq 0 ] || die "$name rc=$rc"
