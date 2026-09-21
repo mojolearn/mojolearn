@@ -1,0 +1,60 @@
+slug=amd-lease1
+started=2026-09-21T01:47:48Z
+budget_seconds=2600
+fixtures=base:G1 base:G2 base:G3 base:G4 ties:G1 ties:G2 ties:G3 ties:G4 hashed:G2 hashed:G3 hashed:G4 hashed:G1
+lanes=<all par-* lanes>
+vendor=amd
+visible_gpus=2
+
+
+============================ ROCm System Management Interface ============================
+=========================================== ID ===========================================
+GPU[0]		: Device Name: 		AMD Instinct MI300X
+GPU[0]		: Device ID: 		0x74a1
+GPU[0]		: Device Rev: 		0x00
+GPU[0]		: Subsystem ID: 	0x74a1
+GPU[0]		: GUID: 		53458
+GPU[1]		: Device Name: 		AMD Instinct MI300X
+GPU[1]		: Device ID: 		0x74a1
+GPU[1]		: Device Rev: 		0x00
+GPU[1]		: Subsystem ID: 	0x74a1
+GPU[1]		: GUID: 		63883
+==========================================================================================
+======================================= Unique ID ========================================
+GPU[0]		: Unique ID: 0x83cd823ce61dd094
+GPU[1]		: Unique ID: 0x484960c35d6be285
+==========================================================================================
+======================================= PCI Bus ID =======================================
+GPU[0]		: PCI Bus: 0000:85:00.0
+GPU[1]		: PCI Bus: 0000:A6:00.0
+==========================================================================================
+====================================== Product Info ======================================
+GPU[0]		: Card Series: 		AMD Instinct MI300X
+GPU[0]		: Card Model: 		0x74a1
+GPU[0]		: Card Vendor: 		Advanced Micro Devices, Inc. [AMD/ATI]
+GPU[0]		: Card SKU: 		MI3SRIOV
+GPU[0]		: Subsystem ID: 	0x74a1
+GPU[0]		: Device Rev: 		0x00
+GPU[0]		: Node ID: 		6
+GPU[0]		: GUID: 		53458
+GPU[0]		: GFX Version: 		gfx942
+GPU[1]		: Card Series: 		AMD Instinct MI300X
+GPU[1]		: Card Model: 		0x74a1
+GPU[1]		: Card Vendor: 		Advanced Micro Devices, Inc. [AMD/ATI]
+GPU[1]		: Card SKU: 		MI3SRIOV
+GPU[1]		: Subsystem ID: 	0x74a1
+GPU[1]		: Device Rev: 		0x00
+GPU[1]		: Node ID: 		7
+GPU[1]		: GUID: 		63883
+GPU[1]		: GFX Version: 		gfx942
+==========================================================================================
+================================== End of ROCm SMI Log ===================================
+system_python=/usr/bin/python3.10 (Python 3.10.12)
+pip_download_exit=0
+c8a09722c3a3fcbe91905d2d15b8489d960b008bb9776afa15b2400e115e778c  ./mojolearn-0.8.10-py3-none-manylinux_2_35_x86_64.whl
+total 77116
+-rw-r--r-- 1 root root 78966755 Sep 21 01:47 mojolearn-0.8.10-py3-none-manylinux_2_35_x86_64.whl
+pip_install_exit=0
+import_where=3318 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x38c480000000, nodemask=2)
+0.8.10 /root/parwheel-venv/lib/python3.10/site-packages/mojolearn/__init__.py
+REFUSED: import mojolearn did not resolve to 0.8.10 inside /root/parwheel-venv. Nothing was measured.

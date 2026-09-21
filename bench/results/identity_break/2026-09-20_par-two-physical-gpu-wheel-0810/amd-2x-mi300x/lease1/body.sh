@@ -1,6 +1,6 @@
 #!/bin/sh
 # MOJOLEARN_GEMM_LEG_EXTRA body: `python -m mojolearn verify --par` on TWO
-# PHYSICAL GPUs in one pod, against the PUBLISHED pip wheel mojolearn==@VERSION@.
+# PHYSICAL GPUs in one pod, against the PUBLISHED pip wheel mojolearn==0.8.10.
 #
 # The runner (tools/gemm_remote_leg.sh, gemm payload) ships a source archive
 # and runs its own gates first. NOTHING BELOW USES THAT SOURCE TREE. The
@@ -9,23 +9,23 @@
 # body refuses to measure unless `mojolearn.__file__` resolves inside the venv.
 #
 # Placeholders substituted per lease by make_body.sh (RunPod passes no env):
-#   @VERSION@   the wheel version
-#   @SLUG@      this lease's distinct output slug
-#   @FIXTURES@  space separated chunks this lease runs, in order: `fixture` or `fixture:G<n>`
-#   @LANES@     empty for every par-* lane, or a comma separated --lanes value
-#   @QUICK@     1 to run `verify --par quick` before the fixtures, else 0
-#   @BUDGET@    seconds this body may spend, from its own start
+#   0.8.10   the wheel version
+#   amd-lease1      this lease's distinct output slug
+#   base:G1 base:G2 base:G3 base:G4 ties:G1 ties:G2 ties:G3 ties:G4 hashed:G2 hashed:G3 hashed:G4 hashed:G1  space separated chunks this lease runs, in order: `fixture` or `fixture:G<n>`
+#        empty for every par-* lane, or a comma separated --lanes value
+#   1     1 to run `verify --par quick` before the fixtures, else 0
+#   2600    seconds this body may spend, from its own start
 #
 # Every cell is fitted ONCE per column: no --repeats anywhere. Every command
 # is bounded with timeout(1). set -u and NOT set -e: a red verdict is a
 # result and its log has to come home.
 set -u
-VERSION="@VERSION@"
-SLUG="@SLUG@"
-FIXTURES="@FIXTURES@"
-LANES="@LANES@"
-QUICK="@QUICK@"
-BUDGET="@BUDGET@"
+VERSION="0.8.10"
+SLUG="amd-lease1"
+FIXTURES="base:G1 base:G2 base:G3 base:G4 ties:G1 ties:G2 ties:G3 ties:G4 hashed:G2 hashed:G3 hashed:G4 hashed:G1"
+LANES=""
+QUICK="1"
+BUDGET="2600"
 
 OUT="/root/gemm_leg_out/$SLUG"
 mkdir -p "$OUT"
@@ -119,19 +119,15 @@ say "pip_install_exit=$?"
 "$VENV/bin/pip" show mojolearn > "$OUT/pip_show.txt" 2>&1
 "$VENV/bin/pip" freeze > "$OUT/pip_freeze.txt" 2>&1
 
-# AMD lease 1 (pod 267njpbyrbua3b) FINDING ABOUT THIS BODY, not the wheel: a
-# tcmalloc "Unable to mbind memory" warning on stderr was captured into
-# import_where.txt with 2>&1 and the exact-prefix match below refused a correct
-# install (exit 13, nothing measured). stderr now goes to its own file.
 # ---- run from OUTSIDE the checkout, with nothing of the checkout in the environment
 RUN=/root/parrun
 rm -rf "$RUN"; mkdir -p "$RUN"; cd "$RUN" || exit 9
 unset PYTHONPATH MOJOLEARN_PAR_DEVICES MOJOLEARN_NUMERIC_MODE MOJOLEARN_GPU_ARCHS
 env | grep -E '^(MOJOLEARN|PYTHON|CUDA_VISIBLE|HIP_VISIBLE|ROCR_VISIBLE)' > "$OUT/env_relevant.txt" 2>&1
 P="$VENV/bin/python"
-"$P" -c "import mojolearn,sys; print(mojolearn.__version__, mojolearn.__file__)" > "$OUT/import_where.txt" 2> "$OUT/import_where.stderr.txt"
+"$P" -c "import mojolearn,sys; print(mojolearn.__version__, mojolearn.__file__)" > "$OUT/import_where.txt" 2>&1
 say "import_where=$(cat "$OUT/import_where.txt")"
-case "$(tail -1 "$OUT/import_where.txt")" in
+case "$(cat "$OUT/import_where.txt")" in
     "$VERSION $VENV/"*) : ;;
     *) say "REFUSED: import mojolearn did not resolve to $VERSION inside $VENV. Nothing was measured."; exit 13 ;;
 esac
@@ -172,9 +168,9 @@ run python_where_unactivated 300 "$P" "$RUN/where_is_python.py"
 P=python
 say "activated: VIRTUAL_ENV=$VIRTUAL_ENV python=$(command -v python)"
 run python_where_activated 300 "$P" "$RUN/where_is_python.py"
-"$P" -c "import mojolearn,sys; print(mojolearn.__version__, mojolearn.__file__)" > "$OUT/import_where_activated.txt" 2> "$OUT/import_where_activated.stderr.txt"
+"$P" -c "import mojolearn,sys; print(mojolearn.__version__, mojolearn.__file__)" > "$OUT/import_where_activated.txt" 2>&1
 say "import_where_activated=$(cat "$OUT/import_where_activated.txt")"
-case "$(tail -1 "$OUT/import_where_activated.txt")" in
+case "$(cat "$OUT/import_where_activated.txt")" in
     "$VERSION $VENV/"*) : ;;
     *) say "REFUSED: activated import did not resolve to $VERSION inside $VENV. Nothing was measured."; exit 13 ;;
 esac
@@ -192,9 +188,9 @@ if ! grep -q 'require_device_count(2): ok' "$OUT/python_where_activated.out"; th
     INSTALL_MODE=system-interpreter
     "$P" -m pip show mojolearn > "$OUT/pip_show_system.txt" 2>&1
     run python_where_system 300 "$P" "$RUN/where_is_python.py"
-    "$P" -c "import mojolearn,sys; print(mojolearn.__version__, mojolearn.__file__)" > "$OUT/import_where_system.txt" 2> "$OUT/import_where_system.stderr.txt"
+    "$P" -c "import mojolearn,sys; print(mojolearn.__version__, mojolearn.__file__)" > "$OUT/import_where_system.txt" 2>&1
     say "import_where_system=$(cat "$OUT/import_where_system.txt")"
-    case "$(tail -1 "$OUT/import_where_system.txt")" in
+    case "$(cat "$OUT/import_where_system.txt")" in
         "$VERSION /root/mojolearn"*|"$VERSION $RUN"*) say "REFUSED: system import resolved into the checkout."; exit 13 ;;
         "$VERSION "*) : ;;
         *) say "REFUSED: system import is not $VERSION."; exit 13 ;;
@@ -237,7 +233,7 @@ fi
 # narrows the lane list. A chunk is started only if the budget left exceeds
 # the longest chunk measured so far by a margin; otherwise it is recorded as
 # NOT-STARTED and a later lease runs it. FIXTURES entries are `fixture` (all
-# lanes, or @LANES@) or `fixture:G<n>`.
+# lanes, or ) or `fixture:G<n>`.
 G1="par-resample"
 G2="par-arima,par-boosting-clf,par-byte-lm-offload,par-cd-elasticnet,par-feature-freq,par-gram,par-gram-pca,par-graph-umap,par-holtwinters,par-kmeans,par-mlp,par-nystroem,par-ordered-rmse,par-queries-kde,par-queries-radius,par-reference-knn,par-samba-clip,par-svm"
 G3="par-boosting,par-byte-lm,par-causal-lm,par-cholesky,par-cross-val,par-dbscan,par-forecast-holtwinters,par-forest-et,par-forest-et-clf,par-forest-pool,par-gmm,par-gram-tsvd,par-graph-agglomerative,par-graph-spectral,par-kernel-ridge,par-ordered,par-queries-knn,par-queries-nn,par-scaler-minmax,par-svm-svr"
