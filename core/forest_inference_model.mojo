@@ -35,6 +35,14 @@ from core.forest_inference_pool import PooledForest, forest_device_count
 #: diagnostic build, never a timed arm.
 comptime FOREST_PINNED_STAGE = is_defined["MOJOLEARN_FOREST_PINNED_STAGE"]()
 comptime FOREST_PROFILE = is_defined["MOJOLEARN_FOREST_PROFILE"]()
+#: Experimental repeated-inference arm: retain the resident model/workspaces,
+#: but launch the strict increasing-tree kernel used by the sequential GPU
+#: path.  Restrict activation to IDENTICAL builds; passing the define to a
+#: FAST or DETERMINISTIC build is deliberately a no-op.  Default builds keep
+#: the qualified 32-grove resident graph.
+comptime FOREST_ORDERED_RESIDENT = (
+    is_defined["MOJOLEARN_FOREST_ORDERED_RESIDENT"]() and GLOBAL_NUMERIC_MODE == 1
+)
 comptime FOREST_CHECK_W = 16
 comptime FOREST_CHECK_CHUNK = 1 << 20
 comptime FOREST_CHECK_SERIAL = 1 << 16
@@ -138,7 +146,10 @@ struct ResidentForest(Movable):
         comptime if FOREST_PACKED_NODES:
             if len(columns) > 2147483647 // 4:
                 raise Error("packed forest node word count exceeds Int32")
-        if device_count > 1:
+        # A sharded pool combines per-device tree partitions and therefore
+        # cannot express one global increasing-tree fold.  The experimental
+        # ordered arm stays on one device so its arithmetic graph is exact.
+        if device_count > 1 and not FOREST_ORDERED_RESIDENT:
             self.pool = PooledForest(offsets, columns, thresholds, left, leaves,
                 features, outputs, device_count)
             return
@@ -271,7 +282,7 @@ struct ResidentForest(Movable):
         var hout = self.ctx.value().enqueue_create_host_buffer[DType.float32](rows * outputs)
         try:
             self.ctx.value().enqueue_copy(dst_buf=dx, src_ptr=x.unsafe_ptr())
-            launch_forest_inference[RF_INPUT, True, FOREST_PACKED_NODES](
+            launch_forest_inference[RF_INPUT, not FOREST_ORDERED_RESIDENT, FOREST_PACKED_NODES](
                 self.ctx.value(), self.offsets.value(), self.columns.value(),
                 self.thresholds.value(), self.left.value(), self.leaves.value(),
                 dx, dout, rows, features, outputs, self.trees,
@@ -399,7 +410,7 @@ struct ResidentForest(Movable):
             if not self.label_workspace:
                 self.label_workspace = self.ctx.value().enqueue_create_buffer[DType.int32](rows)
             self.ctx.value().enqueue_copy(dst_buf=self.input_workspace.value(), src_ptr=x)
-            launch_forest_inference[RF_INPUT, True, FOREST_PACKED_NODES](
+            launch_forest_inference[RF_INPUT, not FOREST_ORDERED_RESIDENT, FOREST_PACKED_NODES](
                 self.ctx.value(), self.offsets.value(), self.columns.value(),
                 self.thresholds.value(), self.left.value(), self.leaves.value(),
                 self.input_workspace.value(), self.output_workspace.value(), rows,
@@ -444,7 +455,7 @@ def _predict_into_buffers[RF_INPUT: Bool](ctx: DeviceContext,
         comptime if FOREST_PROFILE:
             ctx.synchronize()
             t2 = Int(perf_counter_ns())
-        launch_forest_inference[RF_INPUT, True, FOREST_PACKED_NODES](ctx, offsets, columns,
+        launch_forest_inference[RF_INPUT, not FOREST_ORDERED_RESIDENT, FOREST_PACKED_NODES](ctx, offsets, columns,
             thresholds, left, leaves, dx, dout, rows, features, outputs, trees)
         comptime if FOREST_PROFILE:
             ctx.synchronize()

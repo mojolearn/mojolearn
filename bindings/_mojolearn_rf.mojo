@@ -41,7 +41,8 @@ from forest_inference_binding import (
     forest_prepare_gpu_binding, forest_predict_resident_gpu_binding, forest_release_gpu_binding,
     forest_vector_groves_binding, forest_predict_resident_into_gpu_binding,
     forest_predict_resident_labels_gpu_binding,
-    forest_resident_layout_binding, forest_pool_available, forest_pool_fault_available,
+    forest_resident_layout_binding, forest_ordered_resident_binding,
+    forest_pool_available, forest_pool_fault_available,
 )
 from core.forest_inference import forest_predict_gpu
 from checks.vendor import COMPILED_VENDOR
@@ -962,6 +963,7 @@ def PyInit__mojolearn_rf() abi("C") -> PythonObject:
         m.def_function[rf_predict_proba_gpu_parallel_binding]("rf_predict_proba_gpu_parallel")
         m.def_function[rf_predict_reg_gpu_parallel_binding]("rf_predict_reg_gpu_parallel")
         m.def_function[forest_resident_layout_binding]("forest_resident_layout")
+        m.def_function[forest_ordered_resident_binding]("forest_ordered_resident")
         m.def_function[forest_pool_available]("forest_pool_available")
         m.def_function[forest_pool_fault_available]("forest_pool_fault_available")
         m.def_function[rf_forest_export_binding]("forest_export")
