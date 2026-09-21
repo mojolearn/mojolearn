@@ -1235,6 +1235,7 @@ check-mamba1-backward-oracle-host = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -
 # DEVIATION 2712: the four Mamba lanes cold on a binding whose scratch buffers
 # hold NaN; every cell must equal the committed record (tools/mamba_poison_gate.sh)
 check-mamba-poison = "sh tools/mamba_poison_gate.sh"
+test-wheel-audit = "sh tools/test_wheel_audit.sh"
 # Narrow GPU runtime checks; take the shared Metal lease on macOS.
 check-neural-stage-init = "mojo run -j 1 -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_STEP_PHASE_TIMERS=1 training/checks/neural_stage_init.mojo"
 check-neural-stage-init-poison = "mojo run -j 1 -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_STEP_PHASE_TIMERS=1 -D MOJOLEARN_MAMBA_POISON=1 training/checks/neural_stage_init.mojo"

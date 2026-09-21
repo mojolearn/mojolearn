@@ -52,6 +52,44 @@ def numpy_errors(path, relative):
     return errors
 
 
+# THE WHEEL DEPENDS ON NOTHING BUT PYTHON AND THE MOJO/MAX RUNTIME IT BUNDLES.
+# `dependencies = []` in pyproject.toml says so; this makes a shipped module that
+# imports a third-party package fail the build instead of failing on a user's box.
+# Module level: the standard library and mojolearn only. Inside a function: also
+# an optional interop package, which the caller must tolerate being absent.
+OPTIONAL_LAZY_IMPORTS = {"sklearn"}  # scikit-learn protocol hooks; each falls back when it is missing
+
+
+def dependency_errors(path, relative):
+    """A shipped .py importing anything but the standard library and mojolearn
+    (NumPy is judged by numpy_errors; an optional interop package only lazily)."""
+    if path.suffix != ".py":
+        return []
+    import sys
+    allowed = set(sys.stdlib_module_names) | {"mojolearn", "numpy", "__future__"}
+    errors = []
+    tree = ast.parse(path.read_bytes(), filename=relative)
+    lazy = set()
+    for fn in ast.walk(tree):
+        if isinstance(fn, (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)):
+            lazy.update(id(n) for n in ast.walk(fn))
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            names = [a.name for a in node.names]
+        elif isinstance(node, ast.ImportFrom) and not node.level:
+            names = [node.module or ""]
+        else:
+            continue
+        for name in names:
+            top = name.split(".")[0]
+            if top in allowed or top.startswith("_mojolearn"):
+                continue
+            if top in OPTIONAL_LAZY_IMPORTS and id(node) in lazy:
+                continue
+            errors.append(f"{relative}: imports {top!r}, which the wheel does not provide")
+    return errors
+
+
 LIBM = re.compile(r"^lib(?:m|mvec)(?:[.-]|$)", re.I)
 
 
@@ -63,6 +101,7 @@ def audit_tree(root):
             continue
         relative = path.relative_to(root).as_posix()
         errors.extend(numpy_errors(path, relative))
+        errors.extend(dependency_errors(path, relative))
         if LIBM.match(path.name):
             errors.append(relative + ": bundled platform math library")
         if path.suffix == ".py":

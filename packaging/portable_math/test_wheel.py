@@ -65,3 +65,28 @@ def test_numpy_remains_available_to_independent_verification(tmp_path, relative)
     path = tmp_path / '_identity_break.py'
     path.write_text('import numpy as np\n')
     assert not audit.numpy_errors(path, relative)
+
+
+@pytest.mark.parametrize('content', ['import scipy\n', 'import sklearn\n', 'from requests import get\n',
+                                     'def f():\n    import requests\n'])
+def test_dependency_policy_rejects_a_package_the_wheel_does_not_provide(tmp_path, content):
+    module = tmp_path / 'mojolearn' / 'module.py'
+    module.parent.mkdir()
+    module.write_text(content)
+    assert audit.dependency_errors(module, 'mojolearn/module.py')
+
+
+@pytest.mark.parametrize('content', ['import json\nfrom . import _backend\nimport mojolearn\n',
+                                     'def tags(self):\n    from sklearn.utils import Tags\n'])
+def test_dependency_policy_allows_the_standard_library_and_lazy_interop(tmp_path, content):
+    module = tmp_path / 'mojolearn' / 'module.py'
+    module.parent.mkdir()
+    module.write_text(content)
+    assert audit.dependency_errors(module, 'mojolearn/module.py') == []
+
+
+def test_the_shipped_package_imports_nothing_the_wheel_does_not_provide():
+    root = HERE.parents[1] / 'python'
+    paths = [root / 'mojolearn_diagnostics.py'] + [
+        p for p in (root / 'mojolearn').rglob('*.py') if 'tests' not in p.relative_to(root).parts]
+    assert paths and not [e for p in paths for e in audit.dependency_errors(p, p.relative_to(root).as_posix())]

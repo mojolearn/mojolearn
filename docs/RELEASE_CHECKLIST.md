@@ -51,6 +51,7 @@ python3 packaging/check_ext_lists.py --host   # the host list is read from the m
 MOJOLEARN_NUMERIC_MODE=identical pixi run -e test test-python   # 978 pytest tests, about 7 s
 pixi run check-python-gates-release                              # explicit bounded release gates
 pixi run check-mamba-poison                                      # DEVIATIONS 2712/2713: the four Mamba lanes cold on a NaN-poisoned, guard-banded binding, about 3 min
+pixi run test-wheel-audit                                        # the wheel ships nothing but Python and the Mojo/MAX runtime: no third-party imports, no NumPy, no platform math
 ```
 
 Both need the 17 IDENTICAL bindings built on this Mac (`bindings/build*.sh`).
