@@ -16,7 +16,11 @@ EXPECTED_SOURCE_SHA256 = {
     "taxi": "10d5d35f376a5b2ad5c66fabe624ee2caafb58bc5e7516824f801de9aab6cc15",
     "istella": "31f042376c0b819fe169cbbd998e840567c23dae25c14cb9054b460292f6ffef",
 }
-TARGET_SHAPE = [1, 2048, 768, 12, 12, 64, 2048, 12, 50257]
+TARGET_SHAPE = {
+    "batch": 1, "length": 2048, "d_model": 768, "n_heads": 12,
+    "n_kv": 12, "head_dim": 64, "intermediate": 2048,
+    "n_layers": 12, "vocab_size": 50257,
+}
 TARGET_PARAMETERS = 162147840
 REQUIRED_OUTERS = 3
 RETAINED = 5
@@ -221,10 +225,15 @@ def cmd_summarize(args):
               and (sab.get("runtime") or {}).get("native_numeric_mode") == 1
               and (sab.get("runtime") or {}).get("source_sha256") ==
                   (base.get("runtime") or {}).get("source_sha256")
+              # +sabotage_new is intentionally in the backward kernel: the
+              # already-computed forward loss must stay fixed while every
+              # downstream gradient/optimizer state proves branch reach.
+              and sab["result"]["step_witnesses"][0]["sha256"]["loss"] ==
+                  base["result"]["step_witnesses"][0]["sha256"]["loss"]
               and all(sab["result"]["step_witnesses"][0]["sha256"][name] !=
                       base["result"]["step_witnesses"][0]["sha256"][name]
-                      for name in ("loss", "gradients", "parameters", "m", "v"))
-              and sab["result"]["step_losses"][0] != base["result"]["step_losses"][0])
+                      for name in ("gradients", "parameters", "m", "v"))
+              and sab["result"]["step_losses"][0] == base["result"]["step_losses"][0])
         sabotage_ok = sabotage_ok and ok
         if not ok:
             failures.append("%s candidate sabotage did not prove execution" % dataset)
