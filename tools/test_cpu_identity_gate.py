@@ -488,11 +488,16 @@ class SabotageDefinesTests(unittest.TestCase):
         # gbdt carries three since lane/catboost-parity (2026-09-19): the
         # border types' own arm (select_borders' middle border, which no
         # GreedyLogSum lane reaches), Ordered boosting's and the quantile
-        # constant's.
+        # constant's. A fourth since lane/close-no-cpu-path-gbdt (2026-09-20,
+        # ee06063c6): the held-out cursor's own arm, which moves the eval
+        # lane's held-out cells and nothing else (the family arm moves the
+        # leaves, so it reads DIVERGENT there whether or not the held-out
+        # restatement is right).
         self.assertEqual(own, {'forest': ['-D', 'MOJOLEARN_GBDT_CTR_HOST_SABOTAGE=1'],
                                'gbdt': ['-D', 'MOJOLEARN_BORDER_TYPES_SABOTAGE=1',
                                         '-D', 'MOJOLEARN_ORDERED_SABOTAGE=1',
-                                        '-D', 'MOJOLEARN_SAMPLE_QUANTILE_SABOTAGE=1'],
+                                        '-D', 'MOJOLEARN_SAMPLE_QUANTILE_SABOTAGE=1',
+                                        '-D', 'MOJOLEARN_GBDT_EVAL_SABOTAGE=1'],
                                'linalg': ['-D', 'MOJOLEARN_LOWBIT_CONVERT_SABOTAGE=1'],
                                'tokenizer': ['-D', 'MOJOLEARN_TOKENIZER_HOST_SABOTAGE=1',
                                              '-D', 'MOJOLEARN_BPE_TRAINER_SABOTAGE=1']})
@@ -525,6 +530,33 @@ def load_classical_gate():
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
+
+
+class ProbePairTests(unittest.TestCase):
+    """The forecasters' two-entry probe: refused by name in production,
+    hashed as measured in the sabotage arm."""
+
+    def setUp(self):
+        self.gate = load_classical_gate()
+        tool = SimpleNamespace(_mismatch_bytes=lambda na, a, nb, b: None if a == b else f'{na} and {nb} differ')
+        patcher = patch.object(self.gate, 'identity_tool', return_value=tool)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+    def test_agreeing_pair_is_returned_in_both_arms(self):
+        for arm in (False, True):
+            self.gate._SABOTAGE_ARM = arm
+            self.assertEqual(self.gate._same_pair('a', b'x', 'b', b'x'), (b'x', b'x'))
+
+    def test_disagreeing_pair_is_refused_in_production(self):
+        self.gate._SABOTAGE_ARM = False
+        with self.assertRaisesRegex(ValueError, 'a and b differ'):
+            self.gate._same_pair('a', b'x', 'b', b'y')
+
+    def test_disagreeing_pair_is_hashed_in_the_sabotage_arm(self):
+        self.gate._SABOTAGE_ARM = True
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(self.gate._same_pair('a', b'x', 'b', b'y'), (b'x', b'y'))
 
 
 class SabotageVerdictTests(unittest.TestCase):
@@ -584,7 +616,7 @@ class SabotageVerdictTests(unittest.TestCase):
 class ClassicalColumnFaultTests(unittest.TestCase):
     """Exercise the gate with real fixture/reference files and mocked inference."""
 
-    def check(self, *, expect_mismatch, cpu_hash):
+    def check(self, *, expect_mismatch, cpu_hash, stale_lanes=()):
         # This suite also runs before any package/native binding is built.
         mojolearn = SimpleNamespace(vendor=lambda: 'cpu')
         host = SimpleNamespace(
@@ -614,7 +646,8 @@ class ClassicalColumnFaultTests(unittest.TestCase):
                     'mojolearn': mojolearn, 'mojolearn._classical_host': host}))
                 stack.enter_context(patch.object(gate, 'package_root'))
                 stack.enter_context(patch.object(gate, 'identity_tool',
-                    return_value=SimpleNamespace(FIXTURES=['base'])))
+                    return_value=SimpleNamespace(FIXTURES=['base'],
+                        stale_revision_lanes=lambda record: sorted(stale_lanes))))
                 stack.enter_context(patch.object(gate, 'held_out', return_value=(None, 'input')))
                 stack.enter_context(patch.object(gate, 'digests_for', return_value=dict(
                     identity_hash=cpu_hash, predict=prediction, seconds=0)))
@@ -630,6 +663,21 @@ class ClassicalColumnFaultTests(unittest.TestCase):
 
     def test_changed_cpu_output_still_passes_fault_check(self):
         self.assertEqual(self.check(expect_mismatch=True, cpu_hash='c' * 16), 0)
+
+    def test_column_at_an_older_lane_revision_is_not_compared(self):
+        # The column hashed ols at an older LANE_REVISIONS revision: its cell
+        # is STALE, as `identity_break --diff` drops it, and the recording
+        # still decides.
+        self.assertEqual(self.check(expect_mismatch=False, cpu_hash='a' * 16, stale_lanes=('ols',)), 0)
+
+    def test_stale_other_lane_does_not_excuse_this_one(self):
+        self.assertEqual(self.check(expect_mismatch=False, cpu_hash='a' * 16, stale_lanes=('umap',)), 1)
+
+    def test_stale_column_does_not_hide_a_moved_recording(self):
+        # A STALE column is never a catch on its own and never hides a
+        # prediction that differs from the recording.
+        self.assertEqual(self.check(expect_mismatch=False, cpu_hash='c' * 16, stale_lanes=('ols',)), 1)
+        self.assertEqual(self.check(expect_mismatch=True, cpu_hash='a' * 16, stale_lanes=('ols',)), 1)
 
 
 if __name__ == '__main__':

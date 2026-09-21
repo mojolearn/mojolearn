@@ -16,18 +16,29 @@ case ${1:-} in
     *) echo 'Expected prepare or run hip gfx942 NEW_OUT' >&2; exit 2 ;;
 esac
 [[ $# = 3 && $1 = hip && $2 = gfx942 && $3 = /root/* ]] || exit 2
-[[ ${MOJOLEARN_BUILD_JOBS:-1} = 1 ]] || { echo 'Container release build requires one compiler' >&2; exit 2; }
+# The same parallel build as the NVIDIA legs (packaging/linux/build_sets.sh):
+# MOJOLEARN_BUILD_JOBS extensions at a time, default 4, each capped at two
+# compiler workers, so the container gets 2 x jobs cores and 16 GiB per job
+# (at most three quarters of the droplet's memory). The byte compare in
+# pack_wheel.py refuses the wheel if any host binding differs across legs.
+JOBS=${MOJOLEARN_BUILD_JOBS:-4}
+[[ "$JOBS" =~ ^[1-9][0-9]?$ && "$JOBS" -le 16 ]] || { echo 'MOJOLEARN_BUILD_JOBS must be 1..16' >&2; exit 2; }
 [[ ${MOJOLEARN_EXPECT_CORE_HOST_SHA256:-} =~ ^[0-9a-f]{64}$ ]] || { echo 'Expected NVIDIA core-host SHA256 required' >&2; exit 2; }
-cores=$(python3 -c 'import os; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:2])))')
+cores=$(python3 -c 'import os, sys; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:2 * int(sys.argv[1])])))' "$JOBS")
+[[ -n "$cores" ]] || { echo 'Empty CPU affinity' >&2; exit 2; }
+ncpus=$(awk -F, '{print NF}' <<< "$cores")
+mem_gib=$(awk -v jobs="$JOBS" '/^MemTotal:/ {cap = int($2 / 1048576 * 3 / 4); want = 16 * jobs; print (want < cap ? want : cap)}' /proc/meminfo)
+[[ "$mem_gib" =~ ^[0-9]+$ && "$mem_gib" -ge 16 ]] || { echo 'Container build needs at least 16 GiB' >&2; exit 2; }
+echo "container_build_jobs=$JOBS cpuset=$cores cpus=$ncpus memory=${mem_gib}g"
 # /root is the disposable rental's source, locked Pixi environment, tools and
 # output tree. Keeping those paths identical preserves the compiler witnesses.
-exec docker run --rm --pull=never --cpuset-cpus "$cores" --cpus 2 --memory 16g \
+exec docker run --rm --pull=never --cpuset-cpus "$cores" --cpus "$ncpus" --memory "${mem_gib}g" \
     --device /dev/kfd --device /dev/dri --security-opt seccomp=unconfined \
     --network host --mount type=bind,src=/root,dst=/root \
     --workdir /root/mojolearn \
     --env MOJOLEARN_COMMIT --env MOJOLEARN_RELEASE_BUILD_SECONDS \
     --env MOJOLEARN_EXPECT_CORE_HOST_SHA256 \
-    --env MOJOLEARN_BUILD_JOBS=1 \
+    --env MOJOLEARN_BUILD_JOBS="$JOBS" \
     --env MOJOLEARN_PYTHON=/root/mojolearn/.pixi/envs/default/bin/python \
     --env PATH=/root/mojolearn/.pixi/envs/default/bin:/root/release-tools/bin:/root/.pixi/bin:/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
     --entrypoint bash "$IMAGE" -c '

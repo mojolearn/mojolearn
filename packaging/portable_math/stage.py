@@ -32,7 +32,14 @@ def build(output, cc=None):
         args += ["-dynamiclib", "-arch", "arm64", "-mmacosx-version-min=11.0",
                  "-Wl,-install_name,@rpath/libMojolearnMath.dylib"]
     else:
-        args += ["-shared", "-fPIC", "-march=x86-64-v3", "-nostdlib",
+        # x86-64-v3 is the Linux wheel's baseline. The CPU identity gate also
+        # builds this helper on ARM64 Linux, where that flag is an error; the
+        # source's aarch64 branch uses only base AArch64 instructions (fmadd,
+        # fsqrt), so armv8-a is its baseline there.
+        import platform
+        machine = platform.machine().lower()
+        march = "-march=armv8-a" if machine in ("aarch64", "arm64") else "-march=x86-64-v3"
+        args += ["-shared", "-fPIC", march, "-nostdlib",
                  "-Wl,-soname,libMojolearnMath.so"]
     subprocess.run(args + [str(source), "-o", str(output)], check=True)
     if sys.platform == "darwin":

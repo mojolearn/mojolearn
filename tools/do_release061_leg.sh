@@ -54,6 +54,10 @@ if [ "$UBUNTU22" = 1 ] && { [ "$LEG_MODE" != build ] || [ "${MOJOLEARN_LEG_GPU:-
   echo 'Ubuntu 22.04 container mode applies only to the AMD build' >&2; exit 2
 fi
 CORE_HOST_SHA=${MOJOLEARN_EXPECT_CORE_HOST_SHA256:-}
+# Extension builds at a time, on the host and in the Ubuntu 22.04 container
+# alike (tools/release_ubuntu22_build.sh sizes the container to 2 x jobs cores).
+BUILD_JOBS=${MOJOLEARN_BUILD_JOBS:-4}
+[[ "$BUILD_JOBS" =~ ^[1-9][0-9]?$ && "$BUILD_JOBS" -le 16 ]] || { echo 'MOJOLEARN_BUILD_JOBS must be 1..16' >&2; exit 2; }
 if [ "$UBUNTU22" = 1 ] && [[ ! "$CORE_HOST_SHA" =~ ^[0-9a-f]{64}$ ]]; then
   echo 'Ubuntu 22.04 rebuild requires the NVIDIA core-host SHA256' >&2; exit 2
 fi
@@ -147,13 +151,18 @@ ARCHIVE_BYTES=$(wc -c < "$TMPD/src.tgz" | tr -d ' ')
 ARCHIVE_SHA=$(sha256_of "$TMPD/src.tgz")
 mkdir "$TMPD/archive" && tar -xzf "$TMPD/src.tgz" -C "$TMPD/archive" || die "archive does not unpack"
 # The packer compares every proof's inventory against THIS checkout, so the
-# commit and the working tree must agree on every native-inventory file now.
-python3 - "$TMPD/archive" "$REPO" > "$TMPD/source_inventory_local.json" <<'PY' || die "native inventory differs between $COMMIT and the working tree; freeze first"
-import json, pathlib, sys
+# commit and the working tree must agree on every TRACKED native-inventory file
+# now. Ignored and untracked files (generated tables, local test output) never
+# ship in the archive, so they are not compared; an uncommitted edit still is.
+python3 -B - "$TMPD/archive" "$REPO" > "$TMPD/source_inventory_local.json" <<'PY' || die "native inventory differs between $COMMIT and the working tree; freeze first"
+import json, pathlib, subprocess, sys
 archive, local = map(pathlib.Path, sys.argv[1:])
 sys.path.insert(0, str(archive / 'tools'))
 from check_linux_release_qualification import native_inventory
-a, l = native_inventory(archive), native_inventory(local)
+tracked = set(subprocess.run(['git', '-C', str(local), 'ls-files', '-z'], check=True,
+                             capture_output=True, timeout=60).stdout.decode().split('\0'))
+a = native_inventory(archive)
+l = [entry for entry in native_inventory(local) if entry[0] in tracked]
 if a != l:
     names = sorted({p for p, _ in set(map(tuple, a)) ^ set(map(tuple, l))})
     raise SystemExit('differs: ' + ' '.join(names[:8]))
@@ -183,8 +192,11 @@ if [ "$LEG_MODE" = qualify ]; then
   qualify  bash tools/release_installed_checks.sh qualify-release-linux3 \\
              /root/$(basename "$QUAL_WHEEL") <sha256> $LEG_VENDOR \$REMOTE_OUT /root/proofs $LEG_ARCH"
 else
+  DRY_ENTRY=tools/release061_remote_build.sh
+  [ "$UBUNTU22" = 1 ] && DRY_ENTRY='/root/release_ubuntu22_build.sh run (pinned Ubuntu 22.04 container)'
   WOULD_RUN="  build    MOJOLEARN_COMMIT=$COMMIT MOJOLEARN_PYTHON=$REMOTE_PY MOJOLEARN_RELEASE_BUILD_SECONDS=<=2400
-           bash tools/release061_remote_build.sh $LEG_VENDOR $LEG_ARCH \$REMOTE_OUT > \$REMOTE_LOG"
+           MOJOLEARN_BUILD_JOBS=$BUILD_JOBS (affinity $((2 * BUILD_JOBS)) cores)
+           bash $DRY_ENTRY $LEG_VENDOR $LEG_ARCH \$REMOTE_OUT > \$REMOTE_LOG"
 fi
   cat <<EOF
 DRY RUN -- nothing rented. With --rent this leg would:
@@ -447,7 +459,7 @@ else
 $SSH "cd /root/mojolearn && nohup bash -c 'export PATH=/root/release-tools/bin:/root/.pixi/bin:\$PATH; \
   MOJOLEARN_COMMIT=$COMMIT MOJOLEARN_PYTHON=$REMOTE_PY MOJOLEARN_RELEASE_BUILD_SECONDS=$WORK_SECONDS \
   MOJOLEARN_EXPECT_CORE_HOST_SHA256=$CORE_HOST_SHA \
-  MOJOLEARN_BUILD_JOBS=${MOJOLEARN_BUILD_JOBS:-4} \
+  MOJOLEARN_BUILD_JOBS=$BUILD_JOBS \
   timeout -k 20 $((WORK_SECONDS + 40)) bash $BUILD_ENTRY $LEG_VENDOR $LEG_ARCH $REMOTE_OUT > $REMOTE_LOG 2>&1; \
   echo \$? > /root/rel061.exit' > /dev/null 2>&1 < /dev/null &" || { log "could not start the build"; exit 9; }
 fi

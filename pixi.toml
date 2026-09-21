@@ -72,6 +72,11 @@ check-docs = "python3 tools/check_docs_reference_reality.py"
 check-docs-facts = "python3 tools/docs_facts.py --check"
 check-source-hygiene = "python3 tools/source_hygiene_check.py"
 write-docs-facts = "python3 tools/docs_facts.py --write"
+# THE RELEASE REHEARSAL (docs/RELEASE_CHECKLIST.md step 0). Run BY HAND before
+# a release, never per merge and never in CI: local, CPU only except the
+# Python tests (which wait for the Mac's Metal slot), rents nothing. One line
+# per step and a non-zero exit when any step failed. tools/release_rehearsal.py.
+release-rehearsal = "python3 tools/release_rehearsal.py"
 
 # ---------------------------------------------------------------------------
 # THE FAST SPEED LANE (bench/speed/README.md). Ours against the vendor's own
@@ -1235,6 +1240,7 @@ check-mamba1-backward-oracle-host = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -
 # DEVIATION 2712: the four Mamba lanes cold on a binding whose scratch buffers
 # hold NaN; every cell must equal the committed record (tools/mamba_poison_gate.sh)
 check-mamba-poison = "sh tools/mamba_poison_gate.sh"
+test-wheel-audit = "sh tools/test_wheel_audit.sh"
 # Narrow GPU runtime checks; take the shared Metal lease on macOS.
 check-neural-stage-init = "mojo run -j 1 -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_STEP_PHASE_TIMERS=1 training/checks/neural_stage_init.mojo"
 check-neural-stage-init-poison = "mojo run -j 1 -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_STEP_PHASE_TIMERS=1 -D MOJOLEARN_MAMBA_POISON=1 training/checks/neural_stage_init.mojo"
@@ -1680,8 +1686,9 @@ test-algo = "python3 tools/identity_iterate.py"
 # changed since the last v* tag; records as it goes and resumes when rerun.
 apple-pass = "python3 tools/verify_lanes.py --apple-pass"
 cpu-pass = "python3 tools/verify_lanes.py --cpu-pass"
-# The whole release verification, local, nothing rented: CPU then the Apple GPU.
-release-check = { depends-on = ["cpu-pass", "apple-pass"] }
+# The whole release verification, local, nothing rented: the CPU pass and the
+# Apple GPU pass AT ONCE, within the Mac's five slots (tools/release_check.py).
+release-check = "python3 tools/release_check.py"
 # `pixi run -e test test-python`.
 # NOTE the two shapes of test in that directory. The pytest files are
 # collected here. The GATE-STYLE files (test_linalg_identity,

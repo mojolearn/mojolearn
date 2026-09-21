@@ -1553,10 +1553,16 @@ leg_check_tree_clean() {
     # cannot reach a float and which THIS LEG creates before the gate runs
     # (its own bench/results/e1g/<stamp>-nvidia-mamba/ refused two release
     # builds on 2026-09-08).
-    if [ "$NVIDIA_CAMPAIGN" = 7 ]; then _paths=". :!bench/results"; fi
+    # The release build (campaign 7) ships the pinned commit and makes no
+    # local card, so only TRACKED files can reach its bits: an ignored or
+    # untracked file (portable-math-build.json, a local test run's output)
+    # never enters its archive. An uncommitted edit to a tracked file still
+    # refuses.
+    _untracked=normal
+    if [ "$NVIDIA_CAMPAIGN" = 7 ]; then _paths=". :!bench/results"; _untracked=no; fi
     # The list is a deliberate word list, so it is unquoted.
     # shellcheck disable=SC2086
-    _dirty=$(git status --porcelain -- $_paths 2>/dev/null || true)
+    _dirty=$(git status --porcelain --untracked-files=$_untracked -- $_paths 2>/dev/null || true)
     if [ -n "$_dirty" ]; then
         if [ -n "$SOURCE_REF" ]; then
             echo "  conservative clean-tree gate: modified $PAYLOAD source paths."
@@ -4627,12 +4633,15 @@ leg_ship_and_run() {
     if [ "$NVIDIA_CAMPAIGN" = 7 ]; then
         # Keep imports from adding untracked bytecode to the source transport manifest.
         python3 -B - "$TMPD/archive" "$REPO" > "$OUT/source_inventory_local.json" <<'RELEASE_SOURCE'
-import json, pathlib, sys
+import json, pathlib, subprocess, sys
 archive, local=map(pathlib.Path, sys.argv[1:])
 sys.path.insert(0,str(archive/'tools'))
 from check_linux_release_qualification import native_inventory
 received=native_inventory(archive)
-if received!=native_inventory(local): raise SystemExit('Release archive lacks or changes canonical current native source')
+# Judge TRACKED sources only: an ignored or untracked file (a generated table,
+# local test output) is never in the archive and never ships.
+tracked=set(subprocess.run(['git','-C',str(local),'ls-files','-z'],check=True,capture_output=True,timeout=60).stdout.decode().split('\0'))
+if received!=[e for e in native_inventory(local) if e[0] in tracked]: raise SystemExit('Release archive lacks or changes canonical current native source')
 print(json.dumps(received, separators=(',', ':')))
 RELEASE_SOURCE
         [ "$?" = 0 ] || leg_die 'Could not bind full release source inventory'
@@ -5799,11 +5808,14 @@ leg_rehearse() {
         if [ "$PAYLOAD" = "mamba" ]; then
             if [ "$NVIDIA_CAMPAIGN" = 7 ]; then
                 if python3 - "$TMPD/dryarch" "$REPO" > "$TMPD/g2a.out" 2>&1 <<'RELEASE_DRY_INVENTORY'
-import pathlib, sys
+import pathlib, subprocess, sys
 archive, local = map(pathlib.Path, sys.argv[1:])
 sys.path.insert(0, str(archive / 'tools'))
 from check_linux_release_qualification import native_inventory
-assert native_inventory(archive) == native_inventory(local), 'Canonical release source inventory differs'
+tracked = set(subprocess.run(['git', '-C', str(local), 'ls-files', '-z'], check=True,
+                             capture_output=True, timeout=60).stdout.decode().split('\0'))
+local_tracked = [e for e in native_inventory(local) if e[0] in tracked]
+assert native_inventory(archive) == local_tracked, 'Canonical release source inventory differs'
 RELEASE_DRY_INVENTORY
                 then
                     rok "G2a the release archive matches the complete canonical native inventory"

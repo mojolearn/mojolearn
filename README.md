@@ -191,7 +191,7 @@ optimization gaps in the current kernels. A paper collecting the numbers is
 in preparation outside this repository; the raw records behind them live
 under `bench/results/`.
 
-**`identical` is the default**, in the published <!--fact:published_version-->0.8.12<!--/fact--> wheels and in this
+**`identical` is the default**, in the published <!--fact:published_version-->0.8.13<!--/fact--> wheels and in this
 source. For the tree estimators you opt out of it, not into it, by
 setting `MOJOLEARN_NUMERIC_MODE=fast` or `deterministic` in the environment
 before import, or by calling `mojolearn.set_numeric_mode(...)` in code.
@@ -261,7 +261,7 @@ source .venv/bin/activate
 pip install mojolearn
 ```
 
-Version **<!--fact:published_version-->0.8.12<!--/fact--> is published on PyPI** as a macOS arm64
+Version **<!--fact:published_version-->0.8.13<!--/fact--> is published on PyPI** as a macOS arm64
 wheel and one Linux x86-64 wheel carrying CUDA and HIP together. The Linux
 wheel targets **CUDA sm_89, CUDA sm_90a and HIP gfx942**, with the tree bindings
 in all three numeric modes, every other GPU binding in identical mode, and
@@ -326,7 +326,7 @@ as released-wheel support.
 
 ### Stability and release cadence
 
-The current published release is <!--fact:published_version-->0.8.12<!--/fact-->, dated
+The current published release is <!--fact:published_version-->0.8.13<!--/fact-->, dated
 <!--fact:published_date-->2026-09-21<!--/fact-->. [CHANGELOG.md](CHANGELOG.md)
 records published releases and versions that were prepared but never published.
 

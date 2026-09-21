@@ -55,10 +55,14 @@ def test_reproducibility_tiers_and_multiclass_keep_probability_path(monkeypatch)
     )
     np.testing.assert_array_equal(model.predict_classes([[0.0], [1.0]]), [0, 1])
 
+    # FAST fuses narrow (at most three classes) symmetric multiclass output
+    # on the resident model; wider multiclass keeps the probability path.
     model.loss = "MultiClass"
+    model.n_classes_ = 4
     monkeypatch.setattr(model, "numeric_mode_used", lambda: "fast")
     monkeypatch.setattr(
         model, "predict_proba",
-        lambda X: Array.from_list([[0.4, 0.4, 0.2], [0.1, 0.2, 0.7]], "<f4"),
+        lambda X: Array.from_list(
+            [[0.4, 0.4, 0.1, 0.1], [0.1, 0.2, 0.6, 0.1]], "<f4"),
     )
     np.testing.assert_array_equal(model.predict_classes([[0.0], [1.0]]), [0, 2])

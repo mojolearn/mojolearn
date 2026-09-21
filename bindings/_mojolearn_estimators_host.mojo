@@ -914,12 +914,17 @@ def qn_predict_binary_binding(
     var nf = _index(params[1])
     var fi = _index(params[2]) != 0
     var op = MutPointer[Int64, MutUntrackedOrigin](unsafe_from_address=_index(out_addr))
+    # Every PythonObject is read BEFORE the GIL is released. `_index` calls
+    # into the interpreter, and calling it inside GILReleased (as this entry
+    # did for X and coef_) crashed the classical host gate with SIGSEGV in
+    # PyObject_GetAttrString on the first binary logistic fixture.
+    var xp = f32_ptr(_index(x_addr))
+    var wp = f32_ptr(_index(coef_addr))
     with GILReleased(Python()):
         _positive(nr, "n_rows")
         _positive(nf, "n_features")
         host_qn_predict_binary_into(
-            f32_ptr(_index(x_addr)), f32_ptr(_index(coef_addr)), op,
-            nr, nf, fi, host_predict_task_count(nr),
+            xp, wp, op, nr, nf, fi, host_predict_task_count(nr),
         )
     return PythonObject(0)
 

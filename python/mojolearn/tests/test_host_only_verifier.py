@@ -38,9 +38,13 @@ def test_host_only_replay_matches_and_both_fault_controls_diverge(lane):
     for fixture in va.load_harness().FIXTURES:
         key = f"{lane}/{fixture}"
         entry = ref.entry(table, lane, fixture, "train")
-        # These operations have only a host implementation. A CPU reference
-        # must never be presented as an Apple/NVIDIA/AMD GPU witness.
-        assert set(entry["cols"]) == {"cpu"}
+        # These operations run on the host through the tokenizer binding. The
+        # CPU column is the replay recorded here; the Apple, NVIDIA and AMD
+        # columns were recorded by GPU-backend runs (2026-09-19_vendor-class-gaps,
+        # 2026-09-20_apple-gap-full-parts). A CPU record must never be
+        # presented as an Apple/NVIDIA/AMD GPU witness.
+        _assert_columns_match_record_class(table, entry)
+        assert "cpu" in entry["cols"]
         for name, record in records.items():
             cell = record["cells"][key]
             assert len(cell["hashes"]) >= 2
@@ -50,8 +54,15 @@ def test_host_only_replay_matches_and_both_fault_controls_diverge(lane):
             if "sabotage" in name:
                 assert ref.admit(record, str(RECORDS / name)) is not None
         for part, part_entry in table["cells"][key].items():
-            assert set(part_entry["cols"]) == {"cpu"}
+            _assert_columns_match_record_class(table, part_entry)
             if part != "train":
                 assert part_entry["ref"].startswith("n/a:")
     assert table["lane_admission"][lane]["policy"] == dict(
-        min_repeats=2, input_witness_required=True, property_protocol_required=True)
+        min_repeats=1, min_witnesses=2, input_witness_required=True,
+        property_protocol_required=True)
+
+
+def _assert_columns_match_record_class(table, entry):
+    for cls, column in entry["cols"].items():
+        index = column if isinstance(column, int) else column[0]
+        assert table["records"][index]["class"] == cls, (cls, table["records"][index])

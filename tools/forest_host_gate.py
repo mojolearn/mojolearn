@@ -479,10 +479,18 @@ def main():
     rec.add_argument('--allow-cpu-recording', action='store_true',
                      help='record on a CPU-only install anyway (a self-comparison; never for a certificate)')
     chk = sub.add_parser('check', help='on the CPU box, compare the host predictions with expected.json')
-    chk.add_argument('fixture_dir', type=Path, nargs='+')
+    # nargs='*' so an empty list reaches the refusal below, which says what
+    # is missing, instead of argparse's usage line: in the CPU identity gate
+    # the list is the workflow's $RECORDED, empty when an earlier step failed.
+    chk.add_argument('fixture_dir', type=Path, nargs='*')
     chk.add_argument('--report', type=Path, help='new exclusive JSON report')
     chk.add_argument('--expect-mismatch', action='store_true')
     args = parser.parse_args()
+    if args.command == 'check' and not args.fixture_dir:
+        print('forest_host_gate.py check: no fixture directory given, so there is nothing to check; '
+              'in the CPU identity gate this is the RECORDED list, which the fixture sorting step '
+              'writes and which is empty when that step or an earlier one did not run', file=sys.stderr)
+        return 2
     if args.command == 'make':
         return do_make(args)
     if args.command == 'record':

@@ -66,7 +66,8 @@ def wheel_digest(path):
     return digest.hexdigest()
 
 
-def verify_wheel(path, version, release_profile=None, qualification_root=None, source_root=None):
+def verify_wheel(path, version, release_profile=None, qualification_root=None, source_root=None,
+                 macos_smoke_source=None):
     parts = path.name[:-4].split('-')
     require(path.name.endswith('.whl') and len(parts) in (5, 6)
             and parts[0] == 'mojolearn' and parts[1] == version
@@ -150,6 +151,31 @@ def verify_wheel(path, version, release_profile=None, qualification_root=None, s
                     # DEVIATION 2293: Hopper spelled sm_90 or sm_90a, never both.
                     and surface.arch_set_ok(set(result.get('runtime_coverage', {}))),
                     'exact final combined wheel runtime qualification missing')
+            return sorted(tags)
+        if (parts[-1].startswith('macosx_') and parts[-1].endswith('_arm64') and not overlay_present
+                and dist + 'LINUX_PAYLOAD.json' not in files):
+            # A FRESH NATIVE macOS BUILD (0.8.12). Until then a macOS wheel could
+            # reach the light route only as an overlay inheriting native bytes,
+            # so a release with native changes had no light path on macOS. It is
+            # admitted only as the released version, only with a macOS smoke
+            # receipt in the manifest, and only when its source witness names the
+            # commit that receipt was taken from (tools/check_light_release.py
+            # then ties the receipt to this exact wheel's SHA256).
+            require(version == released and release_profile == 'alpha-api',
+                    'a fresh macOS build is admitted only as the released alpha-api version')
+            require(macos_smoke_source is not None,
+                    'a fresh macOS build needs its light-smoke-macos.json receipt in the manifest')
+            require(small('mojolearn/identity_columns/COMMIT').decode().strip() == macos_smoke_source,
+                    'fresh macOS build source witness differs from its smoke receipt source')
+            require(dist + 'portable-math.json' in files, 'fresh macOS build lacks its platform-math audit record')
+            require(any(n.endswith(('.so', '.dylib')) and n.startswith('mojolearn/identical/') for n in files),
+                    'fresh macOS build carries no identical-mode native binaries')
+            declared = [ast.literal_eval(node.value) for node in ast.parse(small('mojolearn/_version.py')).body
+                        if isinstance(node, ast.Assign)
+                        and any(isinstance(t, ast.Name) and t.id == '__version__' for t in node.targets)]
+            require(declared == [version], 'runtime Python version differs from wheel metadata')
+            require(not any(n.startswith('mojolearn/') and any(p in ('tests', '__pycache__') for p in Path(n).parts)
+                            for n in files), 'test/cache artifacts must not ship')
             return sorted(tags)
         provenance = decode(small(dist + 'ALPHA_PROVENANCE.json'))
         require(provenance.get('schema') == 'mojolearn.alpha-overlay.v1'
@@ -319,7 +345,9 @@ def verify(directory, manifest_sha256, qualification_archive=None, source_root=N
                 tags[name] = verify_wheel(path, version, release_profile, extracted, source_root)
         else:
             # DEVIATION 2290: the source root only decides which _version.py is read.
-            tags[name] = verify_wheel(path, version, release_profile, None, source_root)
+            macos_source = (smoke['source_commit'] if smoke is not None
+                            and 'light-smoke-macos.json' in smoke_files else None)
+            tags[name] = verify_wheel(path, version, release_profile, None, source_root, macos_source)
     return dict(schema='mojolearn.alpha-artifact-verification.v1', passed=True, version=version,
                 manifest_sha256=manifest_sha256, files=files, tags=tags, release_profile=release_profile,
                 linux_qualification=qualification,

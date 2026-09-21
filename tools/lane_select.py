@@ -48,6 +48,14 @@ worse than one that runs a few extra, so:
     (`harness_lanes` below, which refuses to narrow when a shared helper,
     a fixture, a constant or a registration loop moved);
   * only doc and evidence paths are treated as inert, by an explicit list.
+    Everything else that selects fewer than every lane rests on a DERIVED
+    rule with its own docstring and its own test that the rule still widens
+    where it must (2026-09-21, after the 0.8.12 Apple pass fell back on 148
+    paths): `build_script_roots` (a build script selects the lanes of the
+    binding it compiles), `pixi_tasks_only`, `NATIVE_INPUTS`,
+    `_outside_python_unreachable`, `_unimported_mojo_unreachable`,
+    `_package_file_unreachable`, `_lane_keyed_prose` and the corpus-only
+    reading of `test_module_inert`.
 
 WHAT IT REFUSES TO DO. It never returns an empty selection quietly. An empty
 answer for a non-empty diff is reported as UNATTRIBUTED and reads as "run
@@ -110,7 +118,6 @@ SELECTION_MACHINERY = (
     os.path.join("tools", "test_lane_select.py"),
     os.path.join("tools", "identity_iterate.py"),
     os.path.join("tools", "mac_slot.py"),
-    os.path.join("tools", "lane_applicability.py"),
     os.path.join("tools", "test_algorithm_scope.py"),
     os.path.join("tools", "test_mac_slot.py"),
     os.path.join("tools", "test_identity_runtime.py"),
@@ -119,6 +126,21 @@ SELECTION_MACHINERY = (
     os.path.join("tools", "test_backend_control.py"),
     os.path.join("tools", "test_gate_scope.py"),
 )
+
+#: FILES THE HARNESS IMPORTS WHILE IT RECORDS A COLUMN. `lane_applicability.py`
+#: was selection machinery until 2026-09-19, when `identity_break.py` began
+#: importing it at run time to write `degenerate_lanes` into every column it
+#: records. From then on a change to it changes what EVERY column says about
+#: itself, and which lanes it names is decided by `degenerate()` over the
+#: whole registry, so no one lane owns the effect: a change to one of these
+#: selects every lane. They stay out of the reaching corpus like the machinery,
+#: because their text names paths to READ them, not to run them in a lane.
+HARNESS_RUNTIME_IMPORTS = (
+    os.path.join("tools", "lane_applicability.py"),
+)
+
+#: Tools whose text is not evidence that a lane reaches a path.
+_NOT_CORPUS = SELECTION_MACHINERY + HARNESS_RUNTIME_IMPORTS
 
 _BINDING_RE = re.compile(r"_mojolearn[a-z0-9_]*")
 _MOJO_IMPORT_RE = re.compile(r"^\s*(?:from\s+([a-zA-Z0-9_.]+)\s+import|import\s+([a-zA-Z0-9_.]+))")
@@ -175,7 +197,8 @@ def reset_caches():
     """Drop every memo. Only a caller that edits the tree mid-process needs
     this; no code path in this repository does."""
     global _ENUMERATORS, _LANE_SOURCES, _SOURCE_HASHED, _TRACKED, _CONSTANTS, _EXTENDERS
-    global _MOJO_CONFORMANCE, _MOJO_IMPORTERS, _PYTHON_FILES
+    global _MOJO_CONFORMANCE, _MOJO_IMPORTERS, _PYTHON_FILES, _PKG_IMPORT_CLOSURE
+    global _CORPUS, _CORPUS_TEXT, _REVERSE
     for cache in _CACHES:
         cache.clear()
     _GIT_SHOW.clear()
@@ -188,6 +211,10 @@ def reset_caches():
     _EXTENDERS = None
     _MOJO_CONFORMANCE = None
     _MOJO_IMPORTERS = None
+    _PKG_IMPORT_CLOSURE = None
+    _CORPUS = None
+    _CORPUS_TEXT = None
+    _REVERSE = None
 
 
 @_by_path
@@ -1003,10 +1030,19 @@ def lane_sources():
     return _LANE_SOURCES
 
 
+_REVERSE = None
+
+
 def reverse_map(sources=None):
-    """file -> the lanes that exercise it."""
+    """file -> the lanes that exercise it. The default map's inversion is
+    memoized like the map itself (it was rebuilt on every corpus lookup, 30 s
+    of the v0.8.8 selection); a caller handing in its own `sources` gets a
+    fresh one."""
+    global _REVERSE
     if sources is None:
-        sources, _ = lane_sources()
+        if _REVERSE is None:
+            _REVERSE = reverse_map(lane_sources()[0])
+        return _REVERSE
     out = {}
     for lane, files in sources.items():
         for rel in files:
@@ -1192,21 +1228,27 @@ def test_module_inert(path):
     # The module NAME is searched instead, anywhere outside the tests
     # directory, so a dynamic import, a `python -m` line in a script and a
     # bare mention all count. Over-firing here only costs a sweep.
+    #
+    # ONLY FILES A LANE REACHES CAN VOTE (2026-09-21), the argument
+    # `_reaching_corpus` makes for every other path. A pixi task that runs
+    # `python -m mojolearn.tests.test_byte_lm_surface`, a workflow that lists
+    # it, or `tools/transformer_transfer_check.py` importing a helper from a
+    # test module does not put that module into any lane's process: none of
+    # those files is in any lane's closure. Counting them sent 34 of 125 test
+    # modules, and with them every release that touched a test, to the full
+    # sweep. The search is still by NAME over the code (`_searchable`: every
+    # string literal survives, docstrings and comments do not), so a dynamic
+    # import from a file a lane does reach still counts.
     importers = []
-    for rel in sorted(tracked_files()):
-        if rel.startswith(TESTS) or _is_inert(rel) or rel in SELECTION_MACHINERY:
+    for rel in _reaching_corpus():
+        if rel.startswith(TESTS) or _is_inert(rel) or rel in _NOT_CORPUS:
             continue
-        if not rel.endswith((".py", ".sh", ".toml", ".yml", ".yaml", ".cfg", ".txt", ".in")):
-            continue
-        try:
-            if module in _read(rel):
-                importers.append(rel)
-        except OSError:
-            continue
+        if module in _searchable(rel):
+            importers.append(rel)
     if importers:
         return None
     return ("a test module: it is outside the map by construction, because a test cannot change "
-            "what a lane computes, and its name appears nowhere outside python/mojolearn/tests/")
+            "what a lane computes, and no file any lane reaches names it in code")
 
 
 _MOJO_IMPORTERS = None
@@ -1243,8 +1285,41 @@ def _reaching_corpus():
     chain. So the only files whose text can extend a lane's reach are the ones
     the map already contains. `pixi.toml` naming `umap/checks` does not put a
     check into any lane, and neither does a build task, a CI workflow or a
-    contribution gate: none of them is in any lane's closure."""
-    return sorted(set(reverse_map()) | {HARNESS, MANIFEST})
+    contribution gate: none of them is in any lane's closure.
+
+    PLUS EVERY BUILD SCRIPT UNDER bindings/ (2026-09-21). A lane runs the
+    binary those scripts compile, so what a build script names (a helper it
+    execs, a generator it runs, a define file it reads) reaches the lane at
+    build time even though no lane's Python or Mojo closure contains the
+    script. The host shims were already in the map; the GPU build scripts and
+    `build_host_family.sh` were not, which was harmless only while every file
+    under tools/ read as reachable through a directory join. Adding them here
+    keeps `tools/with_build_lock.sh` and `tokenizer/tools/gen_unicode_table.sh`
+    reachable now that a literal `join(base, "tools", "x.py")` no longer
+    counts as walking tools/."""
+    global _CORPUS
+    if _CORPUS is None:
+        builds = {rel for rel in tracked_files()
+                  if rel.startswith("bindings" + os.sep) and rel.endswith(".sh")}
+        _CORPUS = sorted(set(reverse_map()) | {HARNESS, MANIFEST} | builds)
+    return _CORPUS
+
+
+_CORPUS = None
+_CORPUS_TEXT = None
+
+
+def _corpus_text():
+    """Every searchable corpus file's code, joined, so a token that occurs
+    NOWHERE is dismissed with one substring test instead of one regex per
+    file. Measured 2026-09-21 on the 2,329-path v0.8.8 diff: the per-file
+    search was 74 s of a 139 s selection. A token that does occur is still
+    searched file by file with its exact pattern, so the answer is unchanged."""
+    global _CORPUS_TEXT
+    if _CORPUS_TEXT is None:
+        _CORPUS_TEXT = "\n\0\n".join(_searchable(rel) for rel in _reaching_corpus()
+                                     if not _is_inert(rel) and rel not in _NOT_CORPUS)
+    return _CORPUS_TEXT
 
 
 @_by_path
@@ -1286,6 +1361,10 @@ def _searchable(rel):
                 continue
             out.append(line.split("#", 1)[0])
         return "\n".join(out)
+    if rel.endswith(".sh"):
+        # A FULL-LINE SHELL COMMENT is prose. Only whole lines are dropped:
+        # `#` inside a line is also `${x#y}` and `"#"`, which are code.
+        return "\n".join(line for line in text.splitlines() if not line.lstrip().startswith("#"))
     return text
 
 
@@ -1299,10 +1378,18 @@ def _named_by_the_corpus(token, skip=(), whole=False):
     always yes. What matters is whether anything names the DIRECTORY ITSELF,
     which is the shape a glob or a directory walk takes: `umap/` followed by a
     quote, a star or a bracket rather than by another path component."""
-    pattern = re.compile(re.escape(token) + (r"(?![A-Za-z0-9_.])" if whole else ""))
+    # A DIRECTORY TOKEN IS ANCHORED ON THE LEFT TOO (2026-09-21): `checks/`
+    # inside "(mamba/checks/)" names mamba/checks/, a different directory, and
+    # was what kept every new file under the top-level checks/ reachable. A
+    # token preceded by `<word>/` is a subdirectory of something else and does
+    # not count; one preceded by `/` alone (ROOT + "/checks/") or `../` does.
+    if token not in _corpus_text():
+        return []
+    pattern = re.compile((r"(?<![A-Za-z0-9_-]/)" if whole else "") + re.escape(token)
+                         + (r"(?![A-Za-z0-9_.])" if whole else ""))
     out = []
     for rel in _reaching_corpus():
-        if rel in skip or _is_inert(rel) or rel in SELECTION_MACHINERY:
+        if rel in skip or _is_inert(rel) or rel in _NOT_CORPUS:
             continue
         if pattern.search(_searchable(rel)):
             out.append(rel)
@@ -1317,7 +1404,18 @@ def _path_join_roots(rel):
     """String constants this Python file hands to a path-building call as its
     FIRST argument: `os.path.join('bench', name)` yields 'bench'. A directory
     named this way is being walked or built on, even though its name never
-    appears with a slash."""
+    appears with a slash.
+
+    A CALL THAT SPELLS ONE FILE WALKS NOTHING (2026-09-21). In
+    `os.path.join(base, "tools", "identity_break.py")` every argument from the
+    first constant on is a constant and the last one is a file name, so the
+    call names exactly `tools/identity_break.py`. That file is still found by
+    its basename, which the token search reads; what is dropped is the claim
+    that the call walks `tools/`. Counting it as a walk made every one of the
+    ~250 files under tools/ reachable from `_identity.py` and `_verify.py`,
+    and every leg script, benchmark and test there sent a release to all
+    lanes. A join whose tail is a variable (`join('armprobedir', name)`) still
+    counts: that one really does build paths under the directory."""
     tree = _parse(rel)
     out = set()
     for node in ast.walk(tree or ast.Module(body=[], type_ignores=[])):
@@ -1325,6 +1423,13 @@ def _path_join_roots(rel):
             continue
         name = getattr(node.func, "attr", None) or getattr(node.func, "id", None)
         if name not in _JOINERS:
+            continue
+        consts = [k for k, a in enumerate(node.args)
+                  if isinstance(a, ast.Constant) and isinstance(a.value, str)]
+        if consts and len(node.args) > 1 and all(
+                isinstance(a, ast.Constant) and isinstance(a.value, str)
+                for a in node.args[consts[0]:]) \
+                and re.search(r"[A-Za-z0-9_]\.[A-Za-z0-9]{1,5}$", node.args[-1].value):
             continue
         for arg in node.args:
             if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
@@ -1339,7 +1444,7 @@ def _joined_with(directory, skip=()):
     """The corpus files that hand `directory` to a path-building call."""
     return [rel for rel in _reaching_corpus()
             if rel.endswith(".py") and rel not in skip and not _is_inert(rel)
-            and rel not in SELECTION_MACHINERY and directory in _path_join_roots(rel)]
+            and rel not in _NOT_CORPUS and directory in _path_join_roots(rel)]
 
 
 def unreachable(path):
@@ -1363,12 +1468,20 @@ def unreachable(path):
     An earlier spelling passed the whole changed list as a skip set, which
     would have hidden exactly the case that matters: a new source added
     together with the import that pulls it in."""
-    if path in (HARNESS, MANIFEST) or path in SELECTION_MACHINERY or path in enumerator_files():
-        return None
-    if path.startswith(PKG + os.sep) or path.startswith("bindings" + os.sep):
+    if path in (HARNESS, MANIFEST) or path in _NOT_CORPUS or path in enumerator_files():
         return None
     if path in reverse_map():
         return None
+    if path.startswith(PKG + os.sep):
+        return _package_file_unreachable(path)
+    if path.startswith("bindings" + os.sep):
+        return None
+    if path.endswith(".mojo") and not _mojo_importers(path):
+        why = _unimported_mojo_unreachable(path)
+        if why:
+            return why
+    if path.endswith(".py"):
+        return _outside_python_unreachable(path)
     if path.endswith(".mojo") and _mojo_importers(path):
         # IMPORTED BY SOMETHING, EVEN SOMETHING THE MAP DOES NOT HAVE. The
         # corpus is what a lane reaches, and a chain of files the map is
@@ -1412,6 +1525,224 @@ def unreachable(path):
             return None
     return ("nothing reaches it: no lane's derived source set contains this path, and no file "
             "that any lane DOES reach names it, its stem or any directory above it")
+
+
+def _named_in_code(patterns, skip=(), literals=()):
+    """Corpus files whose searchable text matches any of `patterns`, a dict
+    of corpus-file suffix -> compiled regex list ("" is the default). When
+    every pattern can only match text containing one of `literals`, a
+    literal absent from the whole corpus answers at once."""
+    if literals and not any(lit in _corpus_text() for lit in literals):
+        return []
+    out = []
+    for rel in _reaching_corpus():
+        if rel in skip or _is_inert(rel) or rel in _NOT_CORPUS:
+            continue
+        kind = os.path.splitext(rel)[1]
+        text = _searchable(rel)
+        if any(p.search(text) for p in patterns.get(kind, patterns[""])):
+            out.append(rel)
+    return out
+
+
+def _module_patterns(stem, dotted=()):
+    """How a Python module is named when something LOADS it, per corpus kind.
+
+    In a Python corpus file (read as its code dump, docstrings gone) an import
+    of `stem` is `alias(name='stem')` or `ImportFrom(module='x.stem')` and a
+    dynamic import is `Constant(value='stem')`: a quoted string that IS the
+    name or ends in `.stem`. A Mojo file can only reach a Python module through
+    `Python.import_module("stem")`, a quoted name again. A shell script runs it
+    as `-m x.stem`, by path, or imports it in a heredoc, so there `-m`,
+    `import` and `from` followed by the dotted name count. What does NOT
+    count is the stem inside a longer word or a sentence: `stage` in "no stage
+    the card records", `setup` in "trainer_setup", `wheel` in an error message.
+    Those were the hits that kept packaging/portable_math/stage.py and
+    python/setup.py in every release's full sweep."""
+    word = re.escape(stem)
+    quoted = re.compile(r"""['"](?:[\w.]*\.)?%s['"]""" % word)
+    run = re.compile(r"(?:-m|import|from)\s+(?:\w+\.)*%s(?![\w])" % word)
+    out = {"": [run], ".py": [quoted], ".mojo": [quoted]}
+    for d in dotted:
+        out[""].append(re.compile(re.escape(d)))
+        out[".py"].append(re.compile(re.escape(d)))
+    return out
+
+
+def _outside_python_unreachable(path):
+    """A Python file outside the package (a tool, a check, a packaging script)
+    that no lane reaches.
+
+    The same corpus search as `unreachable`, with ONE difference: the bare
+    module stem counts only where something could LOAD the module
+    (`_module_patterns`), not wherever the word occurs. The path, the basename
+    `stem.py`, every ancestor directory and every structural directory join
+    are searched exactly as before."""
+    stem = os.path.basename(path)[:-3]
+    dotted = path[:-3].replace(os.sep, ".")
+    tokens = [(path, False), (os.path.basename(path), False)]
+    parts = path.split(os.sep)[:-1]
+    for k in range(len(parts)):
+        d = os.sep.join(parts[:k + 1])
+        tokens.append((d + os.sep, True))
+        if k:
+            tokens.append((d.replace(os.sep, "."), True))
+    for token, whole in dict.fromkeys(tokens):
+        if len(token) >= 4 and _named_by_the_corpus(token, skip={path}, whole=whole):
+            return None
+    if len(stem) < 3 or _named_in_code(_module_patterns(stem, (dotted,)), skip={path}, literals=(stem,)):
+        return None
+    for part in dict.fromkeys(parts):
+        if _joined_with(part, skip={path}):
+            return None
+    return ("nothing reaches it: a Python file outside the package that no lane's source set "
+            "contains, that nothing a lane reaches imports or names by path, and whose "
+            "directory nothing a lane reaches walks")
+
+
+def _mojo_packages_built():
+    """Do any build scripts compile a whole DIRECTORY (`mojo package`)? Then a
+    Mojo file nobody imports can still be in a binary, and the rule below must
+    not fire."""
+    return any("mojo package" in _read(rel) for rel in _reaching_corpus()
+               if rel.startswith("bindings" + os.sep) and rel.endswith(".sh"))
+
+
+def _unimported_mojo_unreachable(path):
+    """A Mojo source that no other tracked Mojo source imports.
+
+    A Mojo file reaches a lane only by being compiled into a binding: named on
+    a `mojo build` line (every such line is in a bindings/ build script, which
+    is in the corpus) or imported by something that is. Nothing imports this
+    one (`_mojo_importers` is a compile-time fact over the whole tree, the same
+    resolution the forward walk uses), so the only way in is by NAME: its path,
+    its basename, its stem or its dotted module path, in a file a lane reaches.
+
+    The DIRECTORY tokens `unreachable` also tries are not used here. They find
+    sentences in string literals ("defines are for the lane gates
+    (transformer/checks/)") and an unrelated `join(tmp, "llama")`, and a
+    directory cannot pull an unimported Mojo file into a binary unless a build
+    compiles the whole directory, which `_mojo_packages_built` rules out.
+    This is what keeps a new benchmark or check program under */checks/ or
+    tools/ from sending a release to every lane."""
+    if _mojo_packages_built():
+        return None
+    stem = os.path.basename(path)[:-5]
+    dotted = path[:-5].replace(os.sep, ".")
+    for token in dict.fromkeys((path, os.path.basename(path), dotted)):
+        if _named_by_the_corpus(token, skip={path}):
+            return None
+    if len(stem) < 4 or _named_in_code({"": [re.compile(r"(?<![\w])%s(?![\w])" % re.escape(stem))]},
+                                       skip={path}, literals=(stem,)):
+        return None
+    return ("nothing reaches it: a Mojo source that no tracked Mojo source imports, so it is in no "
+            "binding, and that nothing a lane reaches names by path, basename, stem or module path")
+
+
+_SHELL_CALLS = frozenset({"system", "popen", "getoutput", "getstatusoutput"})
+
+
+@_by_path
+def _runs_shell_strings(rel):
+    tree = _parse(rel)
+    for node in ast.walk(tree or ast.Module(body=[], type_ignores=[])):
+        if isinstance(node, ast.Call):
+            name = getattr(node.func, "attr", None) or getattr(node.func, "id", None)
+            if name in _SHELL_CALLS:
+                return True
+            for kw in node.keywords:
+                if kw.arg == "shell" and not (isinstance(kw.value, ast.Constant) and kw.value.value is False):
+                    return True
+    return False
+
+
+def _corpus_runs_shell_strings():
+    """Does any Python file a lane reaches hand a command STRING to a shell
+    (`shell=True`, `os.system`, `os.popen`, `subprocess.getoutput`)? If none
+    does, a command written inside a Python string cannot be executed, and
+    the string is a message."""
+    return any(_runs_shell_strings(rel) for rel in _reaching_corpus() if rel.endswith(".py"))
+
+
+_PKG_IMPORT_CLOSURE = None
+
+
+def _package_import_closure():
+    """Every package module the reaching corpus can IMPORT, walking straight
+    through the registries (`__init__.py` included) that the lane map stops
+    at. A module `import mojolearn` executes is in here even when no lane's
+    door calls into it, because its top-level code runs in every lane's
+    process."""
+    global _PKG_IMPORT_CLOSURE
+    if _PKG_IMPORT_CLOSURE is None:
+        seeds = [rel for rel in _reaching_corpus() if rel.startswith(PKG + os.sep) and rel.endswith(".py")]
+        seeds.append(os.path.join(PKG, "__init__.py"))
+        _PKG_IMPORT_CLOSURE = _python_closure(seeds, sinks=())
+    return _PKG_IMPORT_CLOSURE
+
+
+def _package_file_unreachable(path):
+    """A file inside python/mojolearn/ that no lane can load.
+
+    The package used to be refused outright because its modules are resolved
+    by name at load time. That stays true for everything the rule below does
+    not prove, and it proves little:
+
+      * a TOP-LEVEL MODULE (python/mojolearn/X.py) is unreachable when no
+        lane's closure has it, the corpus cannot import it even through the
+        registries (`_package_import_closure`), and no corpus file names it
+        where a loader would (`_module_patterns`). `__main__.py` is searched
+        as `mojolearn.__main__`, `-m mojolearn` and `run_module`, because the bare
+        `__main__` is in every script guard. These are the verifier's own
+        modules (`_verify_par.py`, `_verify_reference.py`, `cross_vendor.py`):
+        they run from `python -m mojolearn verify`, never inside a lane.
+      * a PACKAGE DATA FILE that is not code (.json, .pdf, .csv) is
+        unreachable when no corpus file names its basename or its path under
+        the package and no corpus file walks its own directory. The package
+        root itself (`python`, `mojolearn`) is joined by every file that puts
+        the package on sys.path, so those two parts are not read as walks.
+        `verify_reference/table.json` is the case: the reference table the
+        verifier compares a finished column with, which no lane reads.
+
+    Subpackages (`models/`, `tests/`) are left to the rules that already
+    handle them, because `_python_imports` does not resolve a dotted relative
+    import into a subpackage and this rule would then be guessing."""
+    rel = path[len(PKG) + 1:]
+    if os.sep in rel:
+        if rel.startswith("tests" + os.sep) or not path.endswith((".json", ".pdf", ".csv")):
+            return None
+    if path.endswith(".py"):
+        if path in _package_import_closure() or path == os.path.join(PKG, "__init__.py"):
+            return None
+        stem = os.path.basename(path)[:-3]
+        if stem == "__main__":
+            # `python -m mojolearn` in a Python file is a usage string in a
+            # message unless something runs command STRINGS. So in Python the
+            # list form (`[sys.executable, "-m", "mojolearn", ...]`) counts,
+            # and the string form counts only if some corpus file runs shell
+            # strings at all (`_corpus_runs_shell_strings`).
+            pats = [re.compile(re.escape(t)) for t in ("mojolearn.__main__", "run_module", "__main__.py")]
+            listed = re.compile(r"Constant\(value='-m'\), Constant\(value='mojolearn'\)")
+            string = re.compile(r"-m\s+mojolearn(?![\w.])")
+            py = pats + [listed] + ([string] if _corpus_runs_shell_strings() else [])
+            patterns = {"": pats + [string], ".py": py, ".mojo": pats + [string]}
+        else:
+            patterns = _module_patterns(stem, ("mojolearn." + stem,))
+        if _named_in_code(patterns, skip={path}, literals=(stem,) if stem != "__main__" else ()):
+            return None
+        return ("nothing reaches it: a package module that no lane's closure contains, that "
+                "nothing a lane reaches can import (even through __init__ and the registries), "
+                "and that nothing a lane reaches names where a loader would")
+    if not path.endswith((".json", ".pdf", ".csv")):
+        return None
+    for token in dict.fromkeys((path, rel, os.path.basename(path))):
+        if len(token) >= 5 and _named_by_the_corpus(token, skip={path}):
+            return None
+    for part in rel.split(os.sep)[:-1]:
+        if _named_by_the_corpus(part + os.sep, skip={path}, whole=True) or _joined_with(part, skip={path}):
+            return None
+    return ("nothing reaches it: package data that no file a lane reaches names by basename or "
+            "path, in a directory no file a lane reaches walks")
 
 
 _CONSTANTS = None
@@ -1738,23 +2069,195 @@ def harness_lanes(ref, path=HARNESS):
         new_lanes, new_others = _harness_segments(new)
     except (OSError, SyntaxError):
         return None
+    prose = set()
     if [d for _, _, d in old_others] != [d for _, _, d in new_others] \
             and not _only_new_functions(old_others, new_others, old_lanes):
-        return None                         # a shared statement moved: every lane
-    return sorted(n for n in set(old_lanes) | set(new_lanes)
-                  if old_lanes.get(n) != new_lanes.get(n))
+        prose = _lane_keyed_prose(old_others, new_others, set(old_lanes) | set(new_lanes))
+        if prose is None:
+            return None                     # a shared statement moved: every lane
+    return sorted(prose | {n for n in set(old_lanes) | set(new_lanes)
+                           if old_lanes.get(n) != new_lanes.get(n)})
+
+
+def _lane_keyed_prose(old_others, new_others, lane_names):
+    """The lanes named by the keys of a LANE-KEYED TABLE OF PROSE whose
+    entries were added or reworded, or None when any other shared statement
+    moved.
+
+    `NON_SIZE_REVISIONS = {"par-arima": "why ...", ...}` records, per lane,
+    why a lane's revision changed. Rewording the "par-arima" sentence is a
+    change to a module-level statement, which `harness_lanes` must read as
+    every lane; on 2026-09-21 it was one of the two edits that sent the 0.8.12
+    release to all 273. The narrowing is allowed only when ALL of these hold:
+    the statements line up one to one by name and order; every one that
+    differs is a plain `NAME = {...}` dict literal; the change is additions or
+    changed values under unchanged keys (`_container_delta`); every added or
+    changed key is a string constant naming a lane; and every added or changed
+    VALUE is a string constant. A string cannot compute anything, so the most
+    it can move is that lane's own record; the lanes its keys name are
+    selected."""
+    if [n for n, _, _ in old_others] != [n for n, _, _ in new_others] or len(old_others) != len(new_others):
+        return None
+    out = set()
+    for (name, old, od), (_, new, nd) in zip(old_others, new_others):
+        if od == nd:
+            continue
+        if not (isinstance(old, ast.Assign) and isinstance(new, ast.Assign) and len(new.targets) == 1
+                and isinstance(new.targets[0], ast.Name) and ast.dump(old.targets[0]) == ast.dump(new.targets[0])
+                and isinstance(old.value, ast.Dict) and isinstance(new.value, ast.Dict)):
+            return None
+        delta = _container_delta(old.value, new.value)
+        if delta is None:
+            return None
+        added, changed = delta
+        for dumped_key, value in added + changed:
+            key = _key_node(old, new, dumped_key)
+            if not (isinstance(key, ast.Constant) and key.value in lane_names):
+                return None
+            if not (isinstance(value, ast.Constant) and isinstance(value.value, str)):
+                return None
+            out.add(key.value)
+    return out
+
+
+def pixi_toml_build_part(text):
+    """pixi.toml without its task tables and comment lines: the same reading
+    tools/bincache.py keys a binary on (it is copied here rather than
+    imported so the selector does not depend on the cache). A task is a
+    command line; dependencies, channels, environments and the workspace stay
+    in."""
+    out, in_tasks, in_string = [], False, False
+    for line in text.splitlines():
+        s = line.strip()
+        if in_tasks and (s.count('"""') + s.count("'''")) % 2 == 1:
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if s.startswith("[") and not s.startswith("[["):
+            in_tasks = s.rstrip().endswith("tasks]")
+            if in_tasks:
+                continue
+        if in_tasks or not s or s.startswith("#"):
+            continue
+        out.append(line.rstrip())
+    return "\n".join(out) + "\n"
+
+
+def pixi_tasks_only(ref, path="pixi.toml"):
+    """True when pixi.toml differs from `ref` in task tables and comments
+    alone. A task names a command to run later; it does not change the
+    environment a binding is compiled or a lane is run in. Everything else in
+    the file (a dependency, a channel, an environment, a platform) still
+    selects every lane, and so does pixi.lock, which is the solved toolchain."""
+    old = _git_show(ref, path)
+    if old is None:
+        return False
+    try:
+        new = _read(path)
+    except OSError:
+        return False
+    return pixi_toml_build_part(old) == pixi_toml_build_part(new)
+
+
+_MOJO_BUILD_SRC = re.compile(r"(\S+\.mojo)\b")
+
+
+def build_script_roots(path, seen=None):
+    """The binding sources a bindings/ build script compiles, or None when
+    they cannot be read literally.
+
+    Read from the script's own `mojo build` lines (continuations joined), the
+    same reading tools/bincache.py uses to key a binary. A script that execs
+    or runs ANOTHER build script by name inherits that script's roots.
+    `build_host_family.sh` builds the host binding of whichever family it is
+    handed, so its roots are every family's host binding. A `mojo build` line
+    whose source is not a literal path returns None: every lane."""
+    seen = set() if seen is None else seen
+    if path in seen:
+        return set()
+    seen.add(path)
+    try:
+        text = _read(path)
+    except OSError:
+        return None
+    if os.path.basename(path) == "build_host_family.sh":
+        hs = host_surface()
+        return {hs.binding_source(f["family"]) for f in hs.FAMILIES}
+    roots = set()
+    joined = text.replace("\\\n", " ")
+    for line in joined.splitlines():
+        s = line.strip()
+        if s.startswith("#"):
+            continue
+        for other in re.findall(r"(?:bindings/|/)(build[\w]*\.sh)\b", s):
+            rel = os.path.join("bindings", other)
+            if rel != path and os.path.isfile(os.path.join(ROOT, rel)) and \
+                    re.search(r"(?:^|[\s;&|(])(?:exec|sh|bash|\.)\s", s):
+                more = build_script_roots(rel, seen)
+                if more is None:
+                    return None
+                roots |= more
+        if "mojo build" not in s:
+            continue
+        srcs = _MOJO_BUILD_SRC.findall(s)
+        if len(srcs) != 1 or "$" in srcs[0]:
+            return None
+        src = srcs[0].strip("\"'")
+        if not os.path.isfile(os.path.join(ROOT, src)):
+            return None
+        roots.add(src)
+    return roots or None
+
+
+#: NATIVE CODE THE PACKAGE LOADS BY PATH. packaging/portable_math/ builds
+#: libMojolearnMath (stage.py compiles portable_math.c with its own flags) and
+#: python/mojolearn/_portable_math.py loads it with ctypes. A change to any of
+#: the three reaches exactly the lanes that reach the loader. The pairing is
+#: CHECKED, not trusted: the loader and the builder must both still name the
+#: library, or the rule is off and the path selects every lane.
+NATIVE_INPUTS = {
+    "packaging/portable_math/portable_math.c": "python/mojolearn/_portable_math.py",
+    "packaging/portable_math/powers_of_ten.h": "python/mojolearn/_portable_math.py",
+    "packaging/portable_math/stage.py": "python/mojolearn/_portable_math.py",
+}
+NATIVE_LIBRARY = "libMojolearnMath"
+
+
+def native_input_lanes(path, rev):
+    loader = NATIVE_INPUTS.get(path)
+    if loader is None:
+        return None
+    try:
+        if NATIVE_LIBRARY not in _read(loader) or \
+                NATIVE_LIBRARY not in _read("packaging/portable_math/stage.py"):
+            return None
+    except OSError:
+        return None
+    return rev.get(loader, set())
 
 
 def changed_paths(ref):
     """Paths that differ from `ref`, including uncommitted work: a change you
-    have not committed is still a change this run has to cover."""
+    have not committed is still a change this run has to cover.
+
+    BOTH DIFFS, two-dot and three-dot (2026-09-21). `ref...HEAD` is what HEAD
+    changed since the merge base, which misses a file the REF side changed
+    when ref is not an ancestor (a release cut on its own branch, as 0.8.10 and
+    0.8.11 were). `ref HEAD` is every file whose bytes differ between the two
+    trees, which is the question when ref is the last verified state. For an
+    ancestor the two agree; otherwise their union is the safe answer."""
     out = set()
-    for args in (["diff", "--name-only", f"{ref}...HEAD"], ["diff", "--name-only", "HEAD"],
+    for args in (["diff", "--name-only", f"{ref}...HEAD"], ["diff", "--name-only", ref, "HEAD"],
+                 ["diff", "--name-only", "HEAD"],
                  ["ls-files", "--others", "--exclude-standard"]):
         try:
             res = subprocess.run(["git", "-C", ROOT] + args, capture_output=True, text=True, check=True)
-        except subprocess.CalledProcessError:
-            continue
+        except subprocess.CalledProcessError as exc:
+            # A diff that could not be taken is not an empty diff. Skipping it
+            # quietly could hand the selector nothing and a pass nothing to run.
+            raise SystemExit(f"REFUSING: git {' '.join(args)} failed ({exc.returncode}): "
+                             f"{(exc.stderr or '').strip()[:200]}")
         out |= {line.strip() for line in res.stdout.splitlines() if line.strip()}
     return sorted(out)
 
@@ -1809,6 +2312,29 @@ def select(paths, ref=None, sources=None):
                 lanes |= set(touched)
                 reasons[path] = f"harness diff touches only these lane bodies: {','.join(touched) or 'none'}"
             continue
+        if path in NATIVE_INPUTS:
+            # BEFORE `unreachable`: stage.py is a Python file outside the
+            # package that no lane imports, and it still decides the bits of a
+            # library the package loads.
+            native = native_input_lanes(path, rev)
+            if native is not None:
+                lanes |= native
+                reasons[path] = (f"native code the package loads by path ({NATIVE_LIBRARY}, "
+                                 f"through {NATIVE_INPUTS[path]}): {len(native)} lane(s)")
+                continue
+        if path == "pixi.toml" and ref and pixi_tasks_only(ref, path):
+            inert.append(path)
+            reasons[path] = ("pixi.toml task tables and comments only: the environment, "
+                             "dependencies and channels are identical to " + ref)
+            continue
+        if path in HARNESS_RUNTIME_IMPORTS:
+            # BEFORE the test-module and unreachable rules: nothing a lane
+            # reaches names it, and the harness still runs it on every column.
+            fallback = True
+            unattributed.append(path)
+            reasons[path] = ("imported by the harness while it records a column, and what it "
+                             "writes there (degenerate_lanes) is derived over every lane: every lane")
+            continue
         why_test = test_module_inert(path)
         if why_test:
             inert.append(path)
@@ -1849,6 +2375,15 @@ def select(paths, ref=None, sources=None):
             lanes |= hit
             reasons[path] = f"{len(hit)} lane(s)"
             continue
+        if path.startswith("bindings" + os.sep) and path.endswith(".sh"):
+            roots = build_script_roots(path)
+            if roots is not None:
+                built = set().union(*[rev.get(r, set()) for r in roots])
+                lanes |= built
+                reasons[path] = (f"a build script: it compiles {len(roots)} binding source(s) "
+                                 f"({','.join(sorted(roots)[:3])}{'...' if len(roots) > 3 else ''}), "
+                                 f"which {len(built)} lane(s) reach")
+                continue
         fallback = True
         unattributed.append(path)
         reasons[path] = "NOT ATTRIBUTABLE: no lane's derived source set names it, so every lane"

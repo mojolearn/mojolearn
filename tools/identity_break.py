@@ -1149,8 +1149,9 @@ def lane_floors():
 #: name a size is refused by name, so this cannot become a way of opting out.
 NON_SIZE_REVISIONS = {
     "par-arima": (
-        "parallel fit now preserves the caller's trend=None instead of rewriting it to c/n; "
-        "the saved-model metadata changes while the fitted arithmetic is unchanged"),
+        "parallel fit now preserves the caller's trend=None instead of rewriting it to c/n "
+        "(2026-09-20, a140bfee5 in python/mojolearn/parallel_classical.py); the saved-model "
+        "metadata changes while the fitted arithmetic is unchanged"),
     "tokenizer": (
         "what changed is the VOCABULARY, not a size: the lane swapped the GPT-2 table for a 512-rank "
         "synthetic one (2026-09-16, lane/identity-fixtures-light), and a vocabulary is a constructor "
@@ -11358,8 +11359,17 @@ def _run_reference(args):
         # `_verify_reference.admit` can both see it without re-deriving the
         # rule. Recorded, not refused: a record that names its own weakness is
         # worth more than one that was never written.
+        # The check reads the source tree (tools/, bindings/*.mojo), so it runs
+        # only from a checkout; the installed package's copy of this file says
+        # so plainly instead of recording an import error.
+        _here = os.path.dirname(os.path.abspath(__file__))
+
+        class _SourceTreeOnly(Exception):
+            pass
         try:
-            sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+            if not os.path.isfile(os.path.join(_here, "lane_applicability.py")):
+                raise _SourceTreeOnly()
+            sys.path.insert(0, _here)
             import lane_applicability as _la
             _la.use_harness(sys.modules[__name__])   # never exec this file twice
             # FROM THE LOADED BACKEND, NOT A FLAG. `identity_break.py` has no
@@ -11374,6 +11384,9 @@ def _run_reference(args):
                 if _hit:
                     record["degenerate_lanes"] = _hit
                     record["degenerate_column"] = _col
+        except _SourceTreeOnly:
+            record["degenerate_check"] = ("not run: it needs the source tree "
+                                          "(tools/lane_applicability.py); run from a checkout")
         except Exception as exc:        # never lose a column over this check
             record["degenerate_check_error"] = f"{type(exc).__name__}: {exc}"[:200]
         # WAS THIS GPU RUN SERIALISED? (2026-09-19) Concurrent Metal jobs on one

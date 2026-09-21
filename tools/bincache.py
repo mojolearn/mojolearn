@@ -56,6 +56,13 @@ after the leg (`promote`), server side. No URL is ever printed or logged.
     python3 tools/bincache.py plan --partition P --image I --leg-id L
     python3 tools/bincache.py promote <leg out>/remote/bincache
     python3 tools/bincache.py selftest-r2
+  ON THE MAC, LOCALLY (the macOS release build; no R2, no credentials):
+    MOJOLEARN_BINCACHE_DIR=~/.mojolearn-bincache/macos-release \
+    MOJOLEARN_BINCACHE_OUTPUTS=python/mojolearn/identical/_mojolearn_svm.so \
+      python3 tools/bincache.py build bindings/build_svm.sh
+    (packaging/macos/build_release_wheel.sh does this for every pair when
+    MOJOLEARN_BINCACHE_DIR is set; the section "a LOCAL directory cache"
+    below has the extra key fields and the rules.)
 
 Provenance lands in $MOJOLEARN_BINCACHE_OUT (default
 /root/gemm_leg_out/bincache): provenance.tsv names every build, whether it
@@ -773,12 +780,250 @@ def claim_slot(map_path, puts):
     return None, None
 
 
+# ---------------------------------------------------------------------------
+# the Mac: a LOCAL directory cache for the macOS release build (2026-09-21)
+# ---------------------------------------------------------------------------
+#
+# WHY. packaging/macos/build_release_wheel.sh compiles every extension from
+# source on every run: about 45 builds (22 identical GPU bindings, the tree
+# bindings in two more tiers, the byte LM and 32 host families), and the
+# release workflow ran them one at a time, 30 to 60 minutes. Between two
+# releases most bindings have the same import closure, and a rerun of a
+# failed workflow has all of them. A binding is a pure function of the key
+# below, so an unchanged one is taken from a directory on this Mac instead.
+#
+# WHAT IS DIFFERENT FROM THE R2 PATH, and why each difference is stricter:
+#   * the build DECLARES its outputs (MOJOLEARN_BINCACHE_OUTPUTS, paths under
+#     the repository). The R2 path diffs a snapshot of python/, which is
+#     right for one build at a time and wrong for the release script, which
+#     runs several builds at once in the same tree: build A would archive
+#     build B's .so. A declared output that the build did not rewrite is not
+#     archived, and the build still counts.
+#   * the key carries `local`: every shell or Python file the build script
+#     names, followed through the scripts it runs, and every generator under
+#     tokenizer/tools/ it reaches (so a script that execs another, or a
+#     generated source, cannot reuse a stale binary), the shell, the declared
+#     outputs, and the Mac's own toolchain (macOS build, Xcode, the Metal
+#     compiler, the active developer directory), because Metal AIR is
+#     produced with the system's tools and the R2 key never needed them.
+#   * no negative control and no upload slots: a sabotage build is refused
+#     outright, as it is on the R2 path.
+# Everything else is shared: the source closure, pixi.lock's toolchain,
+# every MOJOLEARN_*/MOJO_*/MODULAR_* variable, the numeric mode, the OS and
+# the repository path; the archive is the same format and is verified the
+# same way (manifest key and fields, every file's sha256 and size) before a
+# byte is placed, and a destination that already exists is never replaced.
+#
+# FAIL CLOSED. Any error reading, verifying or placing an archive means the
+# build runs from source; an error writing one means the built binary is used
+# and nothing is cached. The release script's own gates (staleness, GPU code
+# present, ISA baseline, macOS floor, then verify_wheel.sh fitting every
+# family on every interpreter) run on the placed bytes exactly as on built
+# ones, and the build log names every hit with its key and sha256.
+#
+#   MOJOLEARN_BINCACHE_DIR=<dir>        turn it on (off when unset)
+#   MOJOLEARN_BINCACHE_OUTPUTS="a b"    what the build writes, repo-relative
+#   MOJOLEARN_BINCACHE_SHELL=bash       how to run the script (default sh)
+#   MOJOLEARN_BINCACHE_KEEP=<n>         archives kept, newest first (default 400)
+LOCAL_KEEP = 400
+
+
+def darwin_toolchain():
+    """The Mac's own compilers, which the Metal half of a binding is built
+    with. Empty off macOS."""
+    if sys.platform != "darwin":
+        return {}
+    return dict(
+        product=first_line(["sw_vers", "-productVersion"]),
+        build=first_line(["sw_vers", "-buildVersion"]),
+        xcode=" ".join(first_line(["xcodebuild", "-version"]).split()),
+        developer_dir=first_line(["xcode-select", "-p"]),
+        metal=first_line(["xcrun", "metal", "--version"]),
+        sdk=first_line(["xcrun", "--show-sdk-version"]),
+    )
+
+
+_REF_RE = re.compile(r"(?<![\w./-])((?:[\w.-]+/)*[\w.-]+\.(?:sh|py))\b")
+
+
+def local_inputs(repo, script):
+    """sha256 over every shell or Python file the build script names on a
+    line that is not a comment, followed through the shell files it names
+    (so `exec build_host_family.sh` pulls in the builder and the generator
+    the builder runs), plus the whole directory of any generator under
+    tokenizer/tools/, whose output is compiled in. Wider than the R2 key's
+    `tools/*.sh` references on purpose: a script, helper or generator named
+    by ANY path is keyed, whatever the spelling of the call. Every build
+    script under bindings/ is NOT keyed wholesale: they change several times
+    a day, and an edit to one says nothing about another's binary."""
+    repo = Path(repo).resolve()
+    seen, todo, files = set(), [Path(script).resolve()], set()
+    shims = repo / "bindings" / "build_host_family.sh"
+    while todo:
+        f = todo.pop()
+        if f in seen or not f.is_file():
+            continue
+        seen.add(f)
+        files.add(f)
+        text = f.read_text(errors="replace")
+        if f.suffix == ".sh" and "build_host_family.sh" in text:
+            todo.append(shims)
+        if f.suffix != ".sh":
+            continue
+        for line in text.replace("\\\n", " ").splitlines():
+            if line.lstrip().startswith("#"):
+                continue
+            for ref in _REF_RE.findall(line):
+                for cand in (repo / ref, f.parent / ref):
+                    if cand.is_file():
+                        cand = cand.resolve()
+                        if cand.is_relative_to(repo):
+                            todo.append(cand)
+                            if (repo / "tokenizer" / "tools") in cand.parents:
+                                files.update(p.resolve() for p in (repo / "tokenizer" / "tools").rglob("*")
+                                             if p.is_file())
+    h = hashlib.sha256()
+    rels = sorted(os.path.relpath(p, repo) for p in files)
+    for rel in rels:
+        h.update(rel.encode() + b"\0" + sha256_file(repo / rel).encode() + b"\n")
+    return dict(digest=h.hexdigest(), files=rels)
+
+
+def local_fields(repo, script, args, environ, outputs, shell):
+    fields = key_fields(repo, script, args, environ, "local",
+                        force_tree=environ.get("MOJOLEARN_BINCACHE_SOURCE") == "tree")
+    fields["local"] = dict(inputs=local_inputs(repo, script), outputs=sorted(outputs), shell=shell,
+                           host_toolchain=darwin_toolchain())
+    return fields
+
+
+def _prune(cache_dir, keep):
+    arcs = sorted(Path(cache_dir).glob("*.tar.gz"), key=lambda p: p.stat().st_mtime, reverse=True)
+    for p in arcs[keep:]:
+        try:
+            p.unlink()
+        except OSError:
+            pass
+
+
+def cmd_build_local(script, args, environ, cache_dir):
+    shell = environ.get("MOJOLEARN_BINCACHE_SHELL", "sh")
+    if shell not in ("sh", "bash"):
+        print("MOJOLEARN_BINCACHE_SHELL must be sh or bash", file=sys.stderr)
+        return 2
+    plain = [shell, script] + args
+    t0 = time.time()
+    repo = Path(script).resolve().parent.parent
+    rel_script = os.path.relpath(Path(script).resolve(), repo)
+    cache_dir = Path(cache_dir)
+    rec = Record(environ.get("MOJOLEARN_BINCACHE_OUT") or str(cache_dir / "provenance"))
+    outputs = [o for o in environ.get("MOJOLEARN_BINCACHE_OUTPUTS", "").split() if o]
+    if not outputs or not all(safe_rel(o) for o in outputs):
+        rc = subprocess.call(plain, env=environ)
+        rec.row(rel_script, "refused:no-declared-outputs", "", time.time() - t0, [])
+        return rc
+    try:
+        cache_dir.mkdir(parents=True, exist_ok=True)
+        fields = local_fields(repo, script, args, environ, outputs, shell)
+    except Exception as exc:                                   # never lose a build over the cache
+        rc = subprocess.call(plain, env=environ)
+        rec.row(rel_script, "error-key:%s" % type(exc).__name__, "", time.time() - t0, [])
+        return rc
+    why = refusal(fields, environ)
+    if why:
+        rc = subprocess.call(plain, env=environ)
+        rec.row(rel_script, "refused:" + why, "", time.time() - t0, [])
+        return rc
+    key = key_of(fields)
+    rec.key(key, fields)
+    arc = cache_dir / (key + ".tar.gz")
+    miss = "miss"
+    if arc.is_file():
+        try:
+            manifest, blobs = verify_archive(str(arc), key, fields)
+            if sorted(blobs) != sorted(outputs):
+                raise Reject("archive files differ from the declared outputs")
+            have = installed_toolchain(repo)
+            if have is not None and manifest.get("installed_toolchain") not in (None, have):
+                raise Reject("installed toolchain differs")
+            if any((repo / rel).exists() for rel in blobs):
+                miss = "bypass-destination-exists"
+            else:
+                placed = []
+                modes = {f["path"]: f.get("mode", 0o755) for f in manifest["files"]}
+                for rel, data in sorted(blobs.items()):
+                    dst = repo / rel
+                    dst.parent.mkdir(parents=True, exist_ok=True)
+                    tmp = dst.parent / (".bincache-%s-%s" % (os.getpid(), dst.name))
+                    tmp.write_bytes(data)
+                    os.chmod(tmp, modes[rel])
+                    os.replace(tmp, dst)
+                    if sha256_file(dst) != sha256_bytes(data):
+                        dst.unlink()
+                        raise Reject("placed file differs " + rel)
+                    placed.append(dict(path=rel, sha256=sha256_bytes(data)))
+                    print("built %s (from the local bincache, key %s, sha256 %s)"
+                          % (rel, key[:16], placed[-1]["sha256"]))
+                os.utime(arc)
+                rec.row(rel_script, "hit", key, time.time() - t0, placed)
+                return 0
+        except Reject as exc:
+            miss = "rejected:" + str(exc).replace("\t", " ")
+        except OSError as exc:
+            miss = "rejected:io-%s" % type(exc).__name__
+    before = {o: _stat(repo / o) for o in outputs}
+    tb = time.time()
+    rc, log_sha = run_tee(plain, environ)
+    build_seconds = time.time() - tb
+    if rc != 0:
+        rec.row(rel_script, miss + "+build-failed", key, time.time() - t0, [])
+        return rc
+    after = {o: _stat(repo / o) for o in outputs}
+    stale = [o for o in outputs if after[o] is None or after[o] == before[o]]
+    files_meta = [dict(path=o, sha256=sha256_file(repo / o)) for o in outputs if after[o] is not None]
+    if stale:
+        rec.row(rel_script, miss + "+built-not-cached:declared-output-not-written:" + ",".join(stale),
+                key, time.time() - t0, files_meta)
+        return 0
+    try:
+        with tempfile.NamedTemporaryFile(dir=cache_dir, prefix=".tmp-", suffix=".tar.gz", delete=False) as tf:
+            tmp = tf.name
+        pack(tmp, key, fields, repo, outputs, dict(
+            builder=dict(host=platform.node(), leg="local"),
+            build_seconds=round(build_seconds, 1), build_log_sha256=log_sha,
+            installed_toolchain=installed_toolchain(repo),
+            built=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())))
+        # The archive must read back as a hit would read it, or it is not kept.
+        verify_archive(tmp, key, fields)
+        os.replace(tmp, arc)
+        _prune(cache_dir, int(environ.get("MOJOLEARN_BINCACHE_KEEP", LOCAL_KEEP)))
+    except (Reject, OSError, ValueError) as exc:
+        try:
+            os.unlink(tmp)
+        except (OSError, UnboundLocalError):
+            pass
+        rec.row(rel_script, miss + "+built-not-cached:%s" % type(exc).__name__, key, time.time() - t0, files_meta)
+        return 0
+    rec.row(rel_script, miss + "+built-cached", key, time.time() - t0, files_meta)
+    return 0
+
+
+def _stat(p):
+    try:
+        st = p.stat()
+    except OSError:
+        return None
+    return (st.st_ino, st.st_mtime_ns, st.st_size)
+
+
 def cmd_build(argv, environ=None):
     environ = dict(os.environ if environ is None else environ)
     if not argv:
         print("usage: bincache.py build <bindings/build_X.sh> [args...]", file=sys.stderr)
         return 2
     script, args = argv[0], argv[1:]
+    if environ.get("MOJOLEARN_BINCACHE", "") != "0" and environ.get("MOJOLEARN_BINCACHE_DIR"):
+        return cmd_build_local(script, args, environ, environ["MOJOLEARN_BINCACHE_DIR"])
     map_path = environ.get("MOJOLEARN_BINCACHE_MAP", DEFAULT_MAP)
     plain = ["sh", script] + args
     if environ.get("MOJOLEARN_BINCACHE", "") == "0" or not os.path.isfile(map_path):

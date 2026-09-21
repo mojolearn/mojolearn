@@ -152,8 +152,11 @@ jobs:
     timeout-minutes: 90
     env:
       MOJOLEARN_PACKAGE_BYTE_LM: '1'
-      MOJOLEARN_BUILD_JOBS: '1'
-      MOJOLEARN_COMPILE_JOBS: '1'
+      # Two builds of two compiler workers: four compiler threads, inside the
+      # Apple release budget of five cores and about 8 GB (2026-09-21). One at
+      # a time (the 2026-09-17 setting) made this job 30 to 60 minutes.
+      MOJOLEARN_BUILD_JOBS: '2'
+      MOJOLEARN_COMPILE_JOBS: '2'
       MOJOLEARN_CPU_THREADS: '1'
       OMP_NUM_THREADS: '1'
       OPENBLAS_NUM_THREADS: '1'
@@ -278,10 +281,25 @@ jobs:
       # kept so the next step can refuse a SKIP, which is what a missing
       # interpreter looks like and what "No interpreter may be skipped"
       # exists to catch.
+      # THE LOCAL COMPILE CACHE (tools/bincache.py, "a LOCAL directory
+      # cache"). It lives in the runner user's home, outside the ephemeral
+      # checkout, so a rerun of a failed release and the next release reuse
+      # every binding whose inputs did not change. The key includes this
+      # checkout's path, the import closure, every script the build runs,
+      # pixi.lock, the Mojo and Xcode toolchains, the mode and the build
+      # environment. A cached binding is verified byte for byte against its
+      # archive before it is placed, then goes through every gate below
+      # exactly like a fresh one; any cache fault builds from source. The
+      # provenance lines are printed after the build so the log says which
+      # bindings were compiled and which were reused, with their sha256.
       - name: Build the wheel, then install and RUN it on every claimed interpreter
         run: |
           set -o pipefail
+          export MOJOLEARN_BINCACHE_DIR="$HOME/.mojolearn-bincache/macos-release"
+          export MOJOLEARN_BINCACHE_OUT="${RUNNER_TEMP:-/tmp}/bincache"
           ./packaging/macos/build_release_wheel.sh 2>&1 | tee build.log
+          echo "== compile cache: $(grep -c $'\thit\t' "$MOJOLEARN_BINCACHE_OUT/provenance.tsv" || true) reused, $(grep -vc $'\thit\t' "$MOJOLEARN_BINCACHE_OUT/provenance.tsv" || true) compiled"
+          cat "$MOJOLEARN_BINCACHE_OUT/provenance.tsv" || true
 
       - name: No interpreter may be skipped, in either numeric mode
         run: |

@@ -69,13 +69,35 @@ def _kernel_variant_probe(model, X, method):
     return (getattr(model, method)(held),)
 
 
+#: Set by `do_check` for the --expect-mismatch (sabotage) arm.
+_SABOTAGE_ARM = False
+
+
+def _same_pair(name_a, a, name_b, b):
+    """identity_break's `_same_bytes`: the pair for hashing when its two
+    public entries agree byte for byte, a ValueError naming both when they do
+    not. In the sabotage arm a disagreeing pair is hashed as it is instead:
+    the recording hashed an AGREEING pair, so a disagreement always differs
+    from it and the fixture reads moved, which is what the sabotage set must
+    show. Raising there made the gate exit 2 on a sabotage that worked: the
+    core host set's copy helper (bindings/hotpath_helpers.mojo, reversed
+    runs of eight) moves `forecast(h, index=0)`'s row copy and not the flat
+    buffer. The production arm still refuses any disagreement by name."""
+    message = identity_tool()._mismatch_bytes(name_a, a, name_b, b)
+    if message is not None:
+        if not _SABOTAGE_ARM:
+            raise ValueError(message)
+        print(f'note: sabotage arm, {message}; hashed as measured')
+    return a, b
+
+
 def _forecast_pair(e):
     """identity_break's forecaster infer probe, the same call and the same
     byte check (`_same_bytes`), so its hash is that column's cell."""
     ib = identity_tool()
     h = ib.FORECAST_HORIZON
-    return ib._same_bytes("forecast(h)", e.forecast(h),
-                          "predict(n_obs, n_obs + h)", e.predict(e.n_obs_, e.n_obs_ + h))
+    return _same_pair("forecast(h)", e.forecast(h),
+                      "predict(n_obs, n_obs + h)", e.predict(e.n_obs_, e.n_obs_ + h))
 
 
 def _radius_probe(e, X):
@@ -185,7 +207,7 @@ def _hw_forecast_pair(e):
     same bytes (`_same_bytes`), so its hash is that column's cell."""
     ib = identity_tool()
     h = ib.FORECAST_HORIZON
-    return ib._same_bytes("forecast(h)", e.forecast(h), "forecast(h, index=0)", e.forecast(h, index=0))
+    return _same_pair("forecast(h)", e.forecast(h), "forecast(h, index=0)", e.forecast(h, index=0))
 
 
 #: The surfaces every Holt-Winters lane adds beside its identity probe
@@ -697,6 +719,8 @@ def sabotage_verdict(verdict_ok, moved, unmoved, every_lane=False, every_fixture
 
 
 def do_check(args):
+    global _SABOTAGE_ARM
+    _SABOTAGE_ARM = bool(args.expect_mismatch)
     package_root(args)
     try:
         ib = identity_tool()
@@ -706,6 +730,13 @@ def do_check(args):
         print(f'gate: import failed: {type(exc).__name__}: {exc}', file=sys.stderr)
         return 2
     columns = gpu_columns(args.gpu_column)
+    # The lanes each column hashed at an older LANE_REVISIONS revision. Its
+    # infer cell there describes arithmetic the lane no longer has (umap
+    # became row separable on 2026-09-16 after the 46-lane record), so it is
+    # reported STALE and not compared, the rule `identity_break --diff`
+    # applies to the same columns. The recording's own expected.json, made
+    # at the current revision, still binds every prediction.
+    stale = [set(ib.stale_revision_lanes(j)) for _, j in columns]
     dirs = []
     for root in args.fixture_dir:
         if (root / 'expected.json').exists():
@@ -774,13 +805,16 @@ def do_check(args):
         else:
             unmoved.append(f'{lane}/{kind}')
         vendors = []
-        for label, j in columns:
+        for (label, j), stale_lanes in zip(columns, stale):
             cell = j.get('cells', {}).get(f'{lane}/{kind}')
             infer = (cell or {}).get('infer') or []
             theirs = infer[0] if infer else None
             equal = theirs == got['identity_hash']
             if theirs is None:
                 status = 'ABSENT'
+            elif lane in stale_lanes:
+                status = 'STALE'
+                equal = None
             elif isinstance(theirs, str) and theirs.startswith('n/a:'):
                 # A record older than the lane's infer probe carries its
                 # reason (`n/a:transductive` on hdbscan before 2026-09-15),
@@ -832,7 +866,9 @@ def main():
     rec.add_argument('--fixtures', default='', help='comma separated identity_break fixtures (default all nine)')
     rec.add_argument('--overwrite', action='store_true')
     chk = sub.add_parser('check', help='on the CPU box, compare the host predictions with every expected.json')
-    chk.add_argument('fixture_dir', type=Path, nargs='+',
+    # nargs='*' so an empty list reaches the refusal in main(), which says
+    # what is missing, instead of argparse's usage line.
+    chk.add_argument('fixture_dir', type=Path, nargs='*',
                      help='a <lane>/<fixture> directory, or a root holding <lane>/<fixture>/ directories')
     chk.add_argument('--gpu-column', action='append', default=[],
                      help='an identity_break JSON whose infer cells are compared too (repeatable)')
@@ -855,6 +891,12 @@ def main():
     # (lane/saved-model-reference-gaps).
     if getattr(args, 'lane_rule_only', None) and not args.every_fixture:
         parser.error('--lane-rule-only needs --every-fixture')
+    if args.command == 'check' and not args.fixture_dir:
+        print('classical_host_gate.py check: no fixture directory given, so there is nothing to check; '
+              'in the CPU identity gate this is CLASSICAL_RECORDED or SAVED_MODEL_RECORDED, which the '
+              'CPU surface manifest step writes and which is empty when that step did not run',
+              file=sys.stderr)
+        return 2
     if args.command == 'record':
         return do_record(args)
     return do_check(args)

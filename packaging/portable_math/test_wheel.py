@@ -65,3 +65,46 @@ def test_numpy_remains_available_to_independent_verification(tmp_path, relative)
     path = tmp_path / '_identity_break.py'
     path.write_text('import numpy as np\n')
     assert not audit.numpy_errors(path, relative)
+
+
+@pytest.mark.parametrize('content', ['import scipy\n', 'import sklearn\n', 'from requests import get\n',
+                                     'def f():\n    import requests\n'])
+def test_dependency_policy_rejects_a_package_the_wheel_does_not_provide(tmp_path, content):
+    module = tmp_path / 'mojolearn' / 'module.py'
+    module.parent.mkdir()
+    module.write_text(content)
+    assert audit.dependency_errors(module, 'mojolearn/module.py')
+
+
+@pytest.mark.parametrize('content', ['import json\nfrom . import _backend\nimport mojolearn\n',
+                                     'def tags(self):\n    from sklearn.utils import Tags\n'])
+def test_dependency_policy_allows_the_standard_library_and_lazy_interop(tmp_path, content):
+    module = tmp_path / 'mojolearn' / 'module.py'
+    module.parent.mkdir()
+    module.write_text(content)
+    assert audit.dependency_errors(module, 'mojolearn/module.py') == []
+
+
+def test_the_shipped_package_imports_nothing_the_wheel_does_not_provide():
+    root = HERE.parents[1] / 'python'
+    paths = [root / 'mojolearn_diagnostics.py'] + [
+        p for p in (root / 'mojolearn').rglob('*.py') if 'tests' not in p.relative_to(root).parts]
+    shipped = [(p, p.relative_to(root).as_posix()) for p in paths]
+    # packaging/linux/pack_wheel.py and the macOS build ship these tools under these names
+    tools = HERE.parents[1] / 'tools'
+    shipped += [(tools / 'identity_break.py', 'mojolearn/_identity_break.py'),
+                (tools / 'identity_trace_diff.py', 'mojolearn/_identity_trace_diff.py')]
+    assert paths and not [e for p, rel in shipped for e in audit.dependency_errors(p, rel)]
+
+
+def test_dependency_policy_allows_the_source_tree_check_only_where_it_is_skipped(tmp_path):
+    body = 'def run():\n    import lane_applicability\n'
+    module = tmp_path / 'mojolearn' / '_identity_break.py'
+    module.parent.mkdir()
+    module.write_text(body)
+    assert audit.dependency_errors(module, 'mojolearn/_identity_break.py') == []
+    other = tmp_path / 'mojolearn' / 'other.py'
+    other.write_text(body)
+    assert audit.dependency_errors(other, 'mojolearn/other.py')
+    module.write_text('import lane_applicability\n')
+    assert audit.dependency_errors(module, 'mojolearn/_identity_break.py')
