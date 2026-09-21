@@ -1,0 +1,12 @@
+started=2026-09-21T14:04:51Z
+commit=82d9ff0f4a0974ca624857140292a62c349b19e8
+vendor=amd arch=gfx942 tag=amd-gfx942
+portable_math exit=0 secs=0
+build exit=0 secs=56
+build_byte_lm exit=0 secs=152
+f13104bda89925a9d8c852bdfb0c73cc8d0bcabebfae4209007289566be89bb8  python/mojolearn/identical/_mojolearn_byte_lm.so
+ready=2026-09-21T14:08:20Z
+shards=3
+worker exit=0 secs=5
+amd-gfx942: committed 6 steps
+finished=2026-09-21T14:32:50Z

@@ -16,6 +16,8 @@
 # is left out, by name, and the run goes on with the others. Every step is
 # held to the recorded one-process column (--expect). The runners keep their
 # own dead-men, fetch and verified delete; nothing here rents or reaps.
+# Host keys go to OUTDIR/known_hosts: cloud IPs are reused, and a stale key
+# in ~/.ssh/known_hosts once kept a ready box from being seen at all.
 set -u
 OUT=${1:?usage: live_xvendor_leg.sh OUTDIR nvidia [amd]}; shift
 [ $# -ge 1 ] || { echo "name at least one remote vendor: nvidia, amd" >&2; exit 2; }
@@ -49,7 +51,7 @@ for v in "$@"; do
     esac
 done
 
-SSH_BASE=(-o StrictHostKeyChecking=accept-new -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=30)
+SSH_BASE=(-o StrictHostKeyChecking=accept-new -o "UserKnownHostsFile=$OUT/known_hosts" -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=30)
 nv_target() { grep -m1 'ssh target:' "$OUT/nvidia-leg.log" 2>/dev/null | sed 's/.*ssh target: //'; }
 amd_target() {
     _l=$(grep -m1 'running after .*; ssh hotaisle@' "$OUT/amd-leg.log" 2>/dev/null) || return 0

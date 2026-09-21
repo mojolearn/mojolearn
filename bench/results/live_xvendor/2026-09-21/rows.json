@@ -1,0 +1,126 @@
+{
+ "schema": "mojolearn.live-xvendor.v1",
+ "rows": [
+  {
+   "step": 1,
+   "losses": [
+    6.226090908050537,
+    6.235705852508545,
+    6.239563941955566,
+    6.2431254386901855
+   ],
+   "state": "9932e700be7baf9c060c68e45baa2c1c376cadef7dde6f12172ba30678236d9f",
+   "workers": {
+    "nvidia-sm_90a": "9932e700be7baf9c060c68e45baa2c1c376cadef7dde6f12172ba30678236d9f",
+    "apple-m4": "9932e700be7baf9c060c68e45baa2c1c376cadef7dde6f12172ba30678236d9f",
+    "amd-gfx942": "9932e700be7baf9c060c68e45baa2c1c376cadef7dde6f12172ba30678236d9f"
+   },
+   "vendors": {
+    "nvidia-sm_90a": "cuda",
+    "apple-m4": "metal",
+    "amd-gfx942": "hip"
+   }
+  },
+  {
+   "step": 2,
+   "losses": [
+    6.2413835525512695,
+    6.238659858703613,
+    6.251552581787109,
+    6.24491024017334
+   ],
+   "state": "ddb92404d62a16e1cc360695058e531b24a8c6c1fa42a3ad3c7c891ca2a97ad8",
+   "workers": {
+    "nvidia-sm_90a": "ddb92404d62a16e1cc360695058e531b24a8c6c1fa42a3ad3c7c891ca2a97ad8",
+    "apple-m4": "ddb92404d62a16e1cc360695058e531b24a8c6c1fa42a3ad3c7c891ca2a97ad8",
+    "amd-gfx942": "ddb92404d62a16e1cc360695058e531b24a8c6c1fa42a3ad3c7c891ca2a97ad8"
+   },
+   "vendors": {
+    "nvidia-sm_90a": "cuda",
+    "apple-m4": "metal",
+    "amd-gfx942": "hip"
+   }
+  },
+  {
+   "step": 3,
+   "losses": [
+    6.242847919464111,
+    6.243628025054932,
+    6.251028060913086,
+    6.249773025512695
+   ],
+   "state": "c4e8c600747c8d4734121e71f84f7e64fd485ca42f6a456ebaec05af239de766",
+   "workers": {
+    "nvidia-sm_90a": "c4e8c600747c8d4734121e71f84f7e64fd485ca42f6a456ebaec05af239de766",
+    "apple-m4": "c4e8c600747c8d4734121e71f84f7e64fd485ca42f6a456ebaec05af239de766",
+    "amd-gfx942": "c4e8c600747c8d4734121e71f84f7e64fd485ca42f6a456ebaec05af239de766"
+   },
+   "vendors": {
+    "nvidia-sm_90a": "cuda",
+    "apple-m4": "metal",
+    "amd-gfx942": "hip"
+   }
+  },
+  {
+   "step": 4,
+   "losses": [
+    6.243257522583008,
+    6.250931739807129,
+    6.2336602210998535,
+    6.2332000732421875
+   ],
+   "state": "52c78ce6847ae49cbd32f86333a02c627b7231dedfe157cd67392dcae74397a8",
+   "workers": {
+    "nvidia-sm_90a": "52c78ce6847ae49cbd32f86333a02c627b7231dedfe157cd67392dcae74397a8",
+    "apple-m4": "52c78ce6847ae49cbd32f86333a02c627b7231dedfe157cd67392dcae74397a8",
+    "amd-gfx942": "52c78ce6847ae49cbd32f86333a02c627b7231dedfe157cd67392dcae74397a8"
+   },
+   "vendors": {
+    "nvidia-sm_90a": "cuda",
+    "apple-m4": "metal",
+    "amd-gfx942": "hip"
+   }
+  },
+  {
+   "step": 5,
+   "losses": [
+    6.237212181091309,
+    6.233180999755859,
+    6.246124267578125,
+    6.2283759117126465
+   ],
+   "state": "c3546a777d6e628f88486c696aa41be9b959d99a9d1ee20f91fe86bb083b6d12",
+   "workers": {
+    "nvidia-sm_90a": "c3546a777d6e628f88486c696aa41be9b959d99a9d1ee20f91fe86bb083b6d12",
+    "apple-m4": "c3546a777d6e628f88486c696aa41be9b959d99a9d1ee20f91fe86bb083b6d12",
+    "amd-gfx942": "c3546a777d6e628f88486c696aa41be9b959d99a9d1ee20f91fe86bb083b6d12"
+   },
+   "vendors": {
+    "nvidia-sm_90a": "cuda",
+    "apple-m4": "metal",
+    "amd-gfx942": "hip"
+   }
+  },
+  {
+   "step": 6,
+   "losses": [
+    6.238434314727783,
+    6.2257771492004395,
+    6.247117042541504,
+    6.238979339599609
+   ],
+   "state": "0abc34974e913d929d64dc78c87b442b30b88c8ef1567474a312e05641fb18bb",
+   "workers": {
+    "nvidia-sm_90a": "0abc34974e913d929d64dc78c87b442b30b88c8ef1567474a312e05641fb18bb",
+    "apple-m4": "0abc34974e913d929d64dc78c87b442b30b88c8ef1567474a312e05641fb18bb",
+    "amd-gfx942": "0abc34974e913d929d64dc78c87b442b30b88c8ef1567474a312e05641fb18bb"
+   },
+   "vendors": {
+    "nvidia-sm_90a": "cuda",
+    "apple-m4": "metal",
+    "amd-gfx942": "hip"
+   }
+  }
+ ],
+ "workers": 3
+}

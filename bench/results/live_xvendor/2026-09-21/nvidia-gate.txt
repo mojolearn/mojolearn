@@ -1,0 +1,14 @@
+started=2026-09-21T14:04:22Z
+commit=82d9ff0f4a0974ca624857140292a62c349b19e8
+vendor=nvidia arch=sm_90a tag=nvidia-sm_90a
+portable_math exit=0 secs=0
+build exit=0 secs=1
+build_byte_lm exit=0 secs=122
+b1788e925cb62beb9b8f5e3fa2088eabff5a37238a49bc0df5b7168dd30aff80  python/mojolearn/identical/_mojolearn_byte_lm.so
+ready=2026-09-21T14:06:26Z
+shards=2
+worker exit=0 secs=15
+2333 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x11c480000000, nodemask=1)
+2333 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1a1580000000, nodemask=2)
+nvidia-sm_90a: committed 6 steps
+finished=2026-09-21T14:32:51Z

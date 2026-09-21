@@ -44,6 +44,7 @@ import math
 import socket
 import struct
 import sys
+import threading
 import time
 
 PROTOCOL = "mojolearn.cross-vendor.v1"
@@ -162,6 +163,8 @@ class Coordinator:
         self.K, self.steps, self.on_step = logical_shards, steps, on_step
         self.timeout, self.accept_timeout, self.max_bytes = timeout, accept_timeout, max_gradient_bytes
         self.peers = []
+        self.bound_port = None
+        self.ready = threading.Event()  # set once listening; `bound_port` is then the real port
 
     def _refuse(self, reason):
         for p in self.peers:
@@ -174,6 +177,8 @@ class Coordinator:
     def run(self):
         srv = socket.create_server((self.host, self.port), reuse_port=False)
         srv.settimeout(self.accept_timeout)
+        self.bound_port = srv.getsockname()[1]
+        self.ready.set()
         try:
             while len(self.peers) < self.n_workers:
                 sock, where = srv.accept()
