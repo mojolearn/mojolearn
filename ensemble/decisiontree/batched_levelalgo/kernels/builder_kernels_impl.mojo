@@ -2555,13 +2555,14 @@ def launch_build_histograms_kernel[
         if dataset.has_bins:
             # Opt-in only. The fallback also covers callers without host
             # dimensions and experimental replicated-histogram combinations.
-            comptime TILE = 4 if is_defined["MOJOLEARN_RF_HIST_COLUMNS4"]() else 2
-            comptime ENABLED = is_defined["MOJOLEARN_RF_HIST_COLUMNS4"]() or is_defined["MOJOLEARN_RF_HIST_COLUMNS2"]()
+            comptime WIDE4 = is_defined["MOJOLEARN_RF_HIST_COLUMNS4_WIDE"]()
+            comptime TILE = 4 if (is_defined["MOJOLEARN_RF_HIST_COLUMNS4"]() or WIDE4) else 2
+            comptime ENABLED = is_defined["MOJOLEARN_RF_HIST_COLUMNS4"]() or is_defined["MOJOLEARN_RF_HIST_COLUMNS2"]() or WIDE4
             comptime if ENABLED and SMEM_COPIES == 1 and sabotage == 0:
                 var need = TILE * max_n_bins * num_outputs * size_of[O.BinT]()
                 comptime for BYTES in [2048, 4096, 8192, 16384]:
                     comptime SLOTS = BYTES // size_of[O.BinT]()
-                    if num_outputs > 0 and need > 0 and need <= SLOTS * size_of[O.BinT]():
+                    if (not WIDE4 or dataset.n_cols >= 32) and num_outputs > 0 and need > 0 and need <= SLOTS * size_of[O.BinT]():
                         comptime tiled = build_histograms_binned_columns_kernel[O, TPB, TILE, SLOTS, sampled_labels]
                         log_launch("histogram_binned_columns" + String(TILE) + "_" + String(BYTES))
                         ctx.enqueue_function[tiled](

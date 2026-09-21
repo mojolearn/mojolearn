@@ -176,18 +176,21 @@ def summarize(args):
         baseline = [r["median_fit_ms"] for r in arms["baseline"]]
         candidate = [r["median_fit_ms"] for r in arms["columns4"]]
         conservative = max(candidate) / min(baseline)
-        if not exact or conservative > args.promote_ratio:
+        speed_gated = not args.wide_only or dataset == "istella"
+        if not exact or (speed_gated and conservative > args.promote_ratio):
             verdict = "reject"
         cells.append({"dataset": dataset, "exact_model_prediction_quality": exact,
                       "baseline_ms": statistics.median(baseline),
                       "columns4_ms": statistics.median(candidate),
                       "columns4_over_baseline": statistics.median(candidate) / statistics.median(baseline),
                       "conservative_columns4_over_baseline": conservative,
+                      "speed_gated": speed_gated,
                       "process_fit_spreads": {arm: [r["fit_spread"] for r in rs]
                                               for arm, rs in arms.items()},
                       "input": arms["baseline"][0]["input"]})
     result = {"verdict": verdict, "cells": cells,
-              "rule": "exact bytes/quality and slowest columns4 / fastest baseline <= %.3f" % args.promote_ratio}
+              "rule": (("exact bytes/quality on both; wide Istella slowest columns4 / fastest baseline <= %.3f; narrow Taxi route unchanged" if args.wide_only else
+                        "exact bytes/quality and slowest columns4 / fastest baseline <= %.3f") % args.promote_ratio)}
     with open(args.out, "w") as stream:
         json.dump(result, stream, indent=2, sort_keys=True)
     print(json.dumps(result, indent=2, sort_keys=True))
@@ -215,6 +218,7 @@ def main():
     summary.add_argument("inputs", nargs="+")
     summary.add_argument("--spread", type=float, default=1.10)
     summary.add_argument("--promote-ratio", type=float, default=0.98)
+    summary.add_argument("--wide-only", action="store_true")
     summary.add_argument("--out", required=True)
     args = parser.parse_args()
     {"run": run, "probe": probe, "summarize": summarize}[args.command](args)

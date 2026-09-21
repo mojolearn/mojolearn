@@ -60,10 +60,10 @@ export PYTHONPATH="$ROOT/python"
 MOJOLEARN_EXTRA_DEFINES='' step build_baseline 1500 sh bindings/build_rf.sh
 cp "$MODULE" "$OUT/bin/baseline.so"
 printf '%s\n' '(none)' > "$OUT/bin/baseline.defines"
-MOJOLEARN_EXTRA_DEFINES='-D MOJOLEARN_RF_HIST_COLUMNS4=1' \
+MOJOLEARN_EXTRA_DEFINES='-D MOJOLEARN_RF_HIST_COLUMNS4_WIDE=1' \
     step build_columns4 1500 sh bindings/build_rf.sh
 cp "$MODULE" "$OUT/bin/columns4.so"
-printf '%s\n' 'MOJOLEARN_RF_HIST_COLUMNS4=1' > "$OUT/bin/columns4.defines"
+printf '%s\n' 'MOJOLEARN_RF_HIST_COLUMNS4_WIDE=1' > "$OUT/bin/columns4.defines"
 restore
 sha256sum "$OUT/bin/baseline.so" "$OUT/bin/columns4.so" > "$OUT/binaries.sha256"
 
@@ -76,6 +76,12 @@ for arm in baseline columns4; do
         RF_LAUNCH_LOG="$OUT/$arm.launches" "$PY" bench/speed/rf_hist_columns_ab.py probe \
         --dataset istella --arm "$arm" --binding "$OUT/bin/$arm.so" $expected
 done
+
+: > "$OUT/columns4.taxi-fallback.launches"
+RF_LAUNCH_LOG="$OUT/columns4.taxi-fallback.launches" step probe_columns4_taxi_fallback 900 env \
+    RF_LAUNCH_LOG="$OUT/columns4.taxi-fallback.launches" "$PY" \
+    bench/speed/rf_hist_columns_ab.py probe --dataset taxi --arm columns4 \
+    --binding "$OUT/bin/columns4.so"
 
 # Effective negative control: a baseline binary falsely labelled tile4 must be
 # rejected by the same compile/route witness used above.
@@ -104,5 +110,5 @@ while [ "$outer" -lt 3 ]; do
     outer=$((outer + 1))
 done
 step summarize 300 "$PY" bench/speed/rf_hist_columns_ab.py summarize \
-    "$OUT"/'*.o*.json' --out "$OUT/verdict.json"
+    "$OUT"/'*.o*.json' --wide-only --out "$OUT/verdict.json"
 cat "$OUT/verdict.json"
