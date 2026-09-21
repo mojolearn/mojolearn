@@ -1,0 +1,19 @@
+{
+  "commit": "unknown (no checkout beside this package)",
+  "device": "AMD card1,AMD Instinct MI300X,0x74a1,Advanced Micro Devices Inc. [AMD/ATI],MI3SRIOV,0x74a1,0x00,7,63883,gfx942",
+  "mode": {
+    "binary": "/root/parwheel-venv/lib/python3.10/site-packages/mojolearn/hip/gfx942/identical/_mojolearn.so",
+    "compiled": "identical",
+    "ident_dir": "/root/parwheel-venv/lib/python3.10/site-packages/mojolearn/identical",
+    "loaded": "identical",
+    "problem": "the selector reports identical but the extension running this fixture is /root/parwheel-venv/lib/python3.10/site-packages/mojolearn/hip/gfx942/identical/_mojolearn.so, which is NOT under /root/parwheel-venv/lib/python3.10/site-packages/mojolearn/identical. A binary is in the wrong directory; nothing here can be labelled.",
+    "requested": "identical",
+    "under_identical": false
+  },
+  "mojolearn_version": "0.8.10",
+  "numpy_version": "2.2.6",
+  "platform": "Linux 6.8.0-138-generic x86_64",
+  "profile": "mojolearn.identical.verify.kmeans.fp32.v1",
+  "python": "3.10.12 CPython",
+  "vendor": "hip (the box probe (device nodes and driver libraries))"
+}

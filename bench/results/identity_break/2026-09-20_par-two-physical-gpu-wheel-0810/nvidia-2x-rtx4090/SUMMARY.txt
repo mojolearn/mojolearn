@@ -105,6 +105,17 @@ lease6/status.tsv
     par_self_test_json  0  7
     par_all_negative_G4  4  224
     par_all_negative_G1  0  302
+lease7-byte-lm/status.tsv
+    pip_download  0  2
+    pip_install  0  6
+    env_report  0  0
+    python_where_unactivated  0  0
+    python_where_activated  0  1
+    pip_install_pytest  0  4
+    pytest_verify_par  0  0
+    par_self_test  0  9
+    par_self_test_json  0  8
+    par_lanes_byte_lm  0  6
 
 ## verify --par quick
 lease1/par_quick.out: NOT RUN: the GPU driver could not be asked how many devices this box has: /usr/bin/python3: Error while finding module specification for 'mojolearn._gpu_witness' (ModuleNotFoundError: No module named 'mojolearn')
@@ -292,6 +303,31 @@ placement witness: 504 of 531 lane/fixture cells showed >= 2 distinct physical G
 | par-scaler-minmax | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
 | par-svm | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
 | par-svm-svr | 9 | 36 | 0 | 0 | 0 | 0 | 9 | 0 |
+
+every part that is not IDENTICAL and not N/A, in the verifier's own words:
+  (none)
+
+## verify --par --lanes <explicit list> --fixtures base
+lease7-byte-lm/par_lanes_byte_lm.out: state=VERIFIED passed=True vendor=cuda devices=[0, 1] repeats=1 lanes=3 fixtures=['base'] parts=15 counts={'IDENTICAL': 2, 'N/A': 13} elapsed_s=4.76 witness_refusal=None
+
+lane/fixture cells run: 3 (59 lanes x 9 fixtures = 531 is the whole of `--par all`)
+lanes run: 3   fixtures run: 1 ['base']
+parts reported: 15   parts with two hashes compared: 2
+  IDENTICAL        2
+  DIVERGENT        0
+  MOVED            0
+  ONE-COLUMN       0
+  REFUSED          0
+  CPU-ROUTE-LIMIT  0
+  N/A              13
+placement witness: 2 of 3 lane/fixture cells showed >= 2 distinct physical GPU UUIDs; witness refusals: 0
+  lease7-byte-lm: GPU UUIDs named by the workers themselves: ['6c39fe9b58772f4ee65415b0c13ac6da', '9e2cff5f3fc0a820884d495cb605b5a9']
+
+| lane | fixtures run | IDENTICAL | DIVERGENT | MOVED | ONE-COLUMN | REFUSED | N/A | WITNESS REFUSED (fixtures) |
+|---|---|---|---|---|---|---|---|---|
+| par-byte-lm | 1 | 1 | 0 | 0 | 0 | 0 | 4 | 0 |
+| par-byte-lm-model-pool | 1 | 1 | 0 | 0 | 0 | 0 | 4 | 0 |
+| par-byte-lm-offload | 1 | 0 | 0 | 0 | 0 | 0 | 5 | 0 |
 
 every part that is not IDENTICAL and not N/A, in the verifier's own words:
   (none)

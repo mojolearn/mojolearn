@@ -1,0 +1,1 @@
+0.8.10 /root/parwheel-venv/lib/python3.10/site-packages/mojolearn/__init__.py
