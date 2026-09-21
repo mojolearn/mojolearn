@@ -98,14 +98,15 @@ build_arm sabotage_scale "$D_BLOCK $D_SCALE $S_SCALE"
 # data races. Candidate and off must compare cleanly.
 for _arm in off both sabotage_block sabotage_scale; do identity_arm "$_arm"; done
 require_step diff_off_both 300 "$P" "$R/tools/identity_break.py" --diff \
-  --require-columns 2 --lanes "$LANES" \
-  "$O/identity.off.json" "$O/identity.both.json"
+  "$O/identity.off.json" "$O/identity.both.json" \
+  --require-columns 2 --lanes "$LANES"
 
 # A sabotage comparison is expected to return nonzero. Require an actual
 # DIVERGENT cell and reject a refusal, so a dead experimental arm cannot pass.
 for _sab in sabotage_block sabotage_scale; do
-    "$P" "$R/tools/identity_break.py" --diff --require-columns 2 --lanes "$LANES" \
+    "$P" "$R/tools/identity_break.py" --diff \
       "$O/identity.both.json" "$O/identity.$_sab.json" \
+      --require-columns 2 --lanes "$LANES" \
       > "$O/logs/diff_$_sab.log" 2>&1
     _diff_rc=$?
     printf 'diff_%s\t%s\t0\n' "$_sab" "$_diff_rc" >> "$O/status.tsv"
