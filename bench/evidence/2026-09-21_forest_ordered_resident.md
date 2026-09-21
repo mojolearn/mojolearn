@@ -49,3 +49,10 @@ Compact receipts are in
 `bench/results/forest_ordered_resident_2026-09-21/`; raw logs and per-call
 JSON remain outside git under
 `~/mojolearn-evidence/2026-09-21_forest_ordered/`.
+
+After promotion, fresh no-define NVIDIA RF and ExtraTrees bindings were built
+on the same H100. The analytic gate reported the ordered route selected, and
+a public `inference_engine="auto"` smoke compared it with explicit sequential
+inference on 100,000 rows from both datasets. All eight RF/ET predict/proba
+cells matched full-buffer SHA-256 for three AUTO repeats. This verifies the
+promoted default rather than only the experimental define.
