@@ -24,7 +24,8 @@ export PYTHONUNBUFFERED=1
 
 say() { printf '[%s gdw] %s\n' "$(date +%T)" "$*"; }
 commit_of() {
-    if [ -f "$1/SHIPPED_COMMIT.txt" ]; then cat "$1/SHIPPED_COMMIT.txt"
+    if [ -n "${MOJOLEARN_COMMIT:-}" ]; then printf '%s\n' "$MOJOLEARN_COMMIT"
+    elif [ -f "$1/SHIPPED_COMMIT.txt" ]; then cat "$1/SHIPPED_COMMIT.txt"
     elif [ -f "$1/MOJOLEARN_COMMIT" ]; then cat "$1/MOJOLEARN_COMMIT"
     else git -C "$1" rev-parse HEAD
     fi
