@@ -1,0 +1,83 @@
+# python -m mojolearn verify --par
+
+Ran each `par-*` lane TWICE in this process on this box (cuda): once with
+MOJOLEARN_PAR_DEVICES=0 and once with MOJOLEARN_PAR_DEVICES=0,1, and compared the
+two columns cell for cell. No reference table is involved: the one-device column
+produced here, minutes ago, off this build, IS the reference. That equality is
+the drivers' whole claim and no release record states it.
+
+  par-arima                  odd      train     IDENTICAL   one=20bf64323fc5fa12  two=20bf64323fc5fa12
+  par-arima                  odd      infer     IDENTICAL   one=4aa662dbcc728e65  two=4aa662dbcc728e65
+  par-arima                  odd      model     IDENTICAL   one=859442a49f63a8d0  two=859442a49f63a8d0
+  par-arima                  odd      batch     IDENTICAL   one=8e0a0c4068873ad7  two=8e0a0c4068873ad7
+  par-boosting-clf           odd      train     IDENTICAL   one=f8f56dac8e714ab8  two=f8f56dac8e714ab8
+  par-boosting-clf           odd      infer     IDENTICAL   one=94e4c2a70fc9bfd8  two=94e4c2a70fc9bfd8
+  par-boosting-clf           odd      batch     IDENTICAL   one=38ba96eea94d8ea9  two=38ba96eea94d8ea9
+  par-byte-lm-offload        odd      train     IDENTICAL   one=3d26daba7af771cc  two=3d26daba7af771cc
+  par-cd-elasticnet          odd      train     IDENTICAL   one=1a518e703b7dd1d9  two=1a518e703b7dd1d9
+  par-cd-elasticnet          odd      infer     IDENTICAL   one=75a88217f1114867  two=75a88217f1114867
+  par-cd-elasticnet          odd      model     IDENTICAL   one=14095ddb22139e58  two=14095ddb22139e58
+  par-cd-elasticnet          odd      batch     IDENTICAL   one=f140130bad4b7f18  two=f140130bad4b7f18
+  par-feature-freq           odd      train     IDENTICAL   one=c481331145bfb998  two=c481331145bfb998
+  par-feature-freq           odd      infer     IDENTICAL   one=711887d930537c47  two=711887d930537c47
+  par-feature-freq           odd      model     IDENTICAL   one=53a4160101e38573  two=53a4160101e38573
+  par-feature-freq           odd      batch     IDENTICAL   one=bfe39e4c9f5bacc7  two=bfe39e4c9f5bacc7
+  par-gram                   odd      train     IDENTICAL   one=bdaf14e02a8f07ec  two=bdaf14e02a8f07ec
+  par-gram                   odd      infer     IDENTICAL   one=83420de0d62b5c95  two=83420de0d62b5c95
+  par-gram                   odd      model     IDENTICAL   one=3f77c9c16c29bd84  two=3f77c9c16c29bd84
+  par-gram                   odd      batch     IDENTICAL   one=34d5126ca77a014e  two=34d5126ca77a014e
+  par-gram-pca               odd      train     IDENTICAL   one=2bde4e929e103470  two=2bde4e929e103470
+  par-gram-pca               odd      infer     IDENTICAL   one=9f765336b6cbcc11  two=9f765336b6cbcc11
+  par-gram-pca               odd      model     IDENTICAL   one=87d34e709375c9b5  two=87d34e709375c9b5
+  par-gram-pca               odd      batch     IDENTICAL   one=7546b18e9c36ebe5  two=7546b18e9c36ebe5
+  par-graph-umap             odd      train     IDENTICAL   one=9b9d0fa9ad02e0e4  two=9b9d0fa9ad02e0e4
+  par-graph-umap             odd      infer     IDENTICAL   one=3da4ff5741c4cbff  two=3da4ff5741c4cbff
+  par-graph-umap             odd      model     IDENTICAL   one=338703ec3d735a5d  two=338703ec3d735a5d
+  par-graph-umap             odd      batch     IDENTICAL   one=ee25637280e38b12  two=ee25637280e38b12
+  par-holtwinters            odd      train     IDENTICAL   one=02b67bfea83a5c15  two=02b67bfea83a5c15
+  par-holtwinters            odd      infer     IDENTICAL   one=a3554de5fcae28c3  two=a3554de5fcae28c3
+  par-holtwinters            odd      model     IDENTICAL   one=3c4ad8350c73bac5  two=3c4ad8350c73bac5
+  par-holtwinters            odd      batch     IDENTICAL   one=65da76de08e2f1f4  two=65da76de08e2f1f4
+  par-kmeans                 odd      train     IDENTICAL   one=43d8a3d3859f4143  two=43d8a3d3859f4143
+  par-kmeans                 odd      infer     IDENTICAL   one=191287260610940c  two=191287260610940c
+  par-kmeans                 odd      model     IDENTICAL   one=5fdc9f5ac45877c9  two=5fdc9f5ac45877c9
+  par-kmeans                 odd      batch     IDENTICAL   one=06c7a23bc000d13d  two=06c7a23bc000d13d
+  par-mlp                    odd      train     IDENTICAL   one=939248cda720463f  two=939248cda720463f
+  par-mlp                    odd      infer     IDENTICAL   one=ed981f80c3527a61  two=ed981f80c3527a61
+  par-mlp                    odd      model     IDENTICAL   one=0d99a719dc720e03  two=0d99a719dc720e03
+  par-mlp                    odd      batch     IDENTICAL   one=ae46b224d90cff20  two=ae46b224d90cff20
+  par-nystroem               odd      train     IDENTICAL   one=b00ab3f7ed67c9bf  two=b00ab3f7ed67c9bf
+  par-nystroem               odd      infer     IDENTICAL   one=e98e2c933562f4d1  two=e98e2c933562f4d1
+  par-nystroem               odd      model     IDENTICAL   one=1ea3d7c5c0589289  two=1ea3d7c5c0589289
+  par-nystroem               odd      batch     IDENTICAL   one=016621899148ff93  two=016621899148ff93
+  par-ordered-rmse           odd      train     IDENTICAL   one=d83c83930af5d802  two=d83c83930af5d802
+  par-ordered-rmse           odd      infer     IDENTICAL   one=c7f0cb99b920a716  two=c7f0cb99b920a716
+  par-ordered-rmse           odd      model     IDENTICAL   one=4d02412a6fa569f9  two=4d02412a6fa569f9
+  par-ordered-rmse           odd      batch     IDENTICAL   one=c05993b79c89e09a  two=c05993b79c89e09a
+  par-queries-kde            odd      train     IDENTICAL   one=8a2b6beee09a98f3  two=8a2b6beee09a98f3
+  par-queries-kde            odd      infer     IDENTICAL   one=e49f797e443af916  two=e49f797e443af916
+  par-queries-kde            odd      model     IDENTICAL   one=eaf7436bbd4ff68f  two=eaf7436bbd4ff68f
+  par-queries-kde            odd      batch     IDENTICAL   one=5dc9b6eb77f6bca0  two=5dc9b6eb77f6bca0
+  par-queries-radius         odd      train     IDENTICAL   one=99a3e94304f0d55a  two=99a3e94304f0d55a
+  par-queries-radius         odd      infer     IDENTICAL   one=ef0450b6bc48f488  two=ef0450b6bc48f488
+  par-queries-radius         odd      model     IDENTICAL   one=5f50d73e7a4f1146  two=5f50d73e7a4f1146
+  par-queries-radius         odd      batch     IDENTICAL   one=aa014d1a0ed67389  two=aa014d1a0ed67389
+  par-reference-knn          odd      train     IDENTICAL   one=17269e539cfec71f  two=17269e539cfec71f
+  par-reference-knn          odd      infer     IDENTICAL   one=a593e7cc3b0f8144  two=a593e7cc3b0f8144
+  par-reference-knn          odd      model     IDENTICAL   one=d52a45a13c74a487  two=d52a45a13c74a487
+  par-reference-knn          odd      batch     IDENTICAL   one=71c0d6aee494e8ee  two=71c0d6aee494e8ee
+  par-samba-clip             odd      train     IDENTICAL   one=387a63aafbcce06d  two=387a63aafbcce06d
+  par-samba-clip             odd      infer     IDENTICAL   one=3c42e52ff16765ef  two=3c42e52ff16765ef
+  par-samba-clip             odd      model     IDENTICAL   one=2807164675116cdb  two=2807164675116cdb
+  par-samba-clip             odd      batch     IDENTICAL   one=b76cef8b3c5cab10  two=b76cef8b3c5cab10
+  par-svm                    odd      train     IDENTICAL   one=61b1676a7e40c914  two=61b1676a7e40c914
+  par-svm                    odd      infer     IDENTICAL   one=acd970db5a3ae605  two=acd970db5a3ae605
+  par-svm                    odd      model     IDENTICAL   one=1cf6ac54635490ef  two=1cf6ac54635490ef
+  par-svm                    odd      batch     IDENTICAL   one=03e6a6673542064b  two=03e6a6673542064b
+Device witness: 56 pool(s), 72 worker(s), placement=physical.
+WITNESS REFUSED: par-byte-lm-offload/odd: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+
+RESULT: CANNOT RUN. The two-device column was not shown to have run on two
+devices, so its agreement with the one-device column is not evidence. This is
+reported rather than counted, because a clean AGREE from a column that never
+sharded is the exact failure this command exists to prevent.

@@ -1,0 +1,20 @@
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+# par (all): 18 of 59 par-* lanes x 1 fixture(s), devices 0 then 0,1
+  par-arima                  odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   5.28s
+  par-boosting-clf           odd      train=IDENTICAL infer=IDENTICAL batch=IDENTICAL              5.38s
+  par-byte-lm-offload        odd      train=IDENTICAL                                              0.18s
+  par-cd-elasticnet          odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.61s
+  par-feature-freq           odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.99s
+  par-gram                   odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.52s
+  par-gram-pca               odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.46s
+  par-graph-umap             odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  82.55s
+  par-holtwinters            odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.45s
+  par-kmeans                 odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.11s
+  par-mlp                    odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   8.86s
+  par-nystroem               odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  14.04s
+  par-ordered-rmse           odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   6.56s
+  par-queries-kde            odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  15.48s
+  par-queries-radius         odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  15.59s
+  par-reference-knn          odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  16.24s
+  par-samba-clip             odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   9.12s
+  par-svm                    odd      train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  11.00s

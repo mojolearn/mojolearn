@@ -1,0 +1,91 @@
+# python -m mojolearn verify --par
+
+Ran each `par-*` lane TWICE in this process on this box (cuda): once with
+MOJOLEARN_PAR_DEVICES=0 and once with MOJOLEARN_PAR_DEVICES=0,1, and compared the
+two columns cell for cell. No reference table is involved: the one-device column
+produced here, minutes ago, off this build, IS the reference. That equality is
+the drivers' whole claim and no release record states it.
+
+  par-boosting-pointwise     dupes    train     IDENTICAL   one=9d55545ce5f2ac2b  two=9d55545ce5f2ac2b
+  par-boosting-pointwise     dupes    infer     IDENTICAL   one=04bc7278a6524318  two=04bc7278a6524318
+  par-boosting-pointwise     dupes    model     IDENTICAL   one=534330823f304849  two=534330823f304849
+  par-boosting-pointwise     dupes    batch     IDENTICAL   one=6ea60cd70531740c  two=6ea60cd70531740c
+  par-boosting-reg           dupes    train     IDENTICAL   one=49848bfd3c26b52e  two=49848bfd3c26b52e
+  par-boosting-reg           dupes    infer     IDENTICAL   one=da755bd965b6c511  two=da755bd965b6c511
+  par-boosting-reg           dupes    batch     IDENTICAL   one=17cffc317f1b3c99  two=17cffc317f1b3c99
+  par-border-types           dupes    train     IDENTICAL   one=cbcef08fd74fc613  two=cbcef08fd74fc613
+  par-border-types           dupes    infer     IDENTICAL   one=fd23741816d7611d  two=fd23741816d7611d
+  par-border-types           dupes    model     IDENTICAL   one=e4178a57a728a449  two=e4178a57a728a449
+  par-border-types           dupes    batch     IDENTICAL   one=eaf5c67e384055c5  two=eaf5c67e384055c5
+  par-byte-lm-model-pool     dupes    train     IDENTICAL   one=1ad7a65f9aa45cf8  two=1ad7a65f9aa45cf8
+  par-cd                     dupes    train     IDENTICAL   one=beafb1d480c34cf4  two=beafb1d480c34cf4
+  par-cd                     dupes    infer     IDENTICAL   one=727d68f61ef51bfb  two=727d68f61ef51bfb
+  par-cd                     dupes    model     IDENTICAL   one=84c62fe78df70d08  two=84c62fe78df70d08
+  par-cd                     dupes    batch     IDENTICAL   one=2986d3275cbac770  two=2986d3275cbac770
+  par-forecast-arima         dupes    train     IDENTICAL   one=a44b54d65768bf5e  two=a44b54d65768bf5e
+  par-forecast-arima         dupes    infer     IDENTICAL   one=9f76be0396a666ca  two=9f76be0396a666ca
+  par-forecast-arima         dupes    model     IDENTICAL   one=6ae822845884aedf  two=6ae822845884aedf
+  par-forecast-arima         dupes    batch     IDENTICAL   one=ec97b45a1c88081b  two=ec97b45a1c88081b
+  par-forest                 dupes    train     IDENTICAL   one=941ea7485b906b92  two=941ea7485b906b92
+  par-forest                 dupes    infer     IDENTICAL   one=f7836c254af7cb78  two=f7836c254af7cb78
+  par-forest                 dupes    model     IDENTICAL   one=a481d93b96bec8af  two=a481d93b96bec8af
+  par-forest                 dupes    batch     IDENTICAL   one=d1b8ea15b798b331  two=d1b8ea15b798b331
+  par-forest-reg             dupes    train     IDENTICAL   one=55f5becd2a3a172c  two=55f5becd2a3a172c
+  par-forest-reg             dupes    infer     IDENTICAL   one=76d74b876471a685  two=76d74b876471a685
+  par-forest-reg             dupes    model     IDENTICAL   one=1836f0b40183be27  two=1836f0b40183be27
+  par-forest-reg             dupes    batch     IDENTICAL   one=437234d1b789556e  two=437234d1b789556e
+  par-gp                     dupes    train     IDENTICAL   one=aa19bc38e1743968  two=aa19bc38e1743968
+  par-gp                     dupes    infer     IDENTICAL   one=52e6b306c452f16c  two=52e6b306c452f16c
+  par-gp                     dupes    model     IDENTICAL   one=0eca938df7a74371  two=0eca938df7a74371
+  par-gp                     dupes    batch     IDENTICAL   one=3caf5f428c1e5112  two=3caf5f428c1e5112
+  par-gpc-fit                dupes    train     IDENTICAL   one=53f3a09fc600d61d  two=53f3a09fc600d61d
+  par-gpc-fit                dupes    infer     IDENTICAL   one=fc0b4c2f28c2e079  two=fc0b4c2f28c2e079
+  par-gpc-fit                dupes    model     IDENTICAL   one=81b8bb9e635d8e83  two=81b8bb9e635d8e83
+  par-gpc-fit                dupes    batch     IDENTICAL   one=b46f1f9043e091a8  two=b46f1f9043e091a8
+  par-gpc-predict            dupes    train     IDENTICAL   one=2f1217bcae26e6a9  two=2f1217bcae26e6a9
+  par-gpc-predict            dupes    infer     IDENTICAL   one=fb0a0cfb1fee8dab  two=fb0a0cfb1fee8dab
+  par-gpc-predict            dupes    model     IDENTICAL   one=81b8bb9e635d8e83  two=81b8bb9e635d8e83
+  par-gpc-predict            dupes    batch     IDENTICAL   one=b46f1f9043e091a8  two=b46f1f9043e091a8
+  par-gram-ols               dupes    train     IDENTICAL   one=5d93af9edf61d3e7  two=5d93af9edf61d3e7
+  par-gram-ols               dupes    infer     IDENTICAL   one=09ac924358918527  two=09ac924358918527
+  par-gram-ols               dupes    model     IDENTICAL   one=ef68b4364cd0fa2d  two=ef68b4364cd0fa2d
+  par-gram-ols               dupes    batch     IDENTICAL   one=a38ddf4744dc462e  two=a38ddf4744dc462e
+  par-hdbscan                dupes    train     IDENTICAL   one=1032d54b827b0e0c  two=1032d54b827b0e0c
+  par-hdbscan                dupes    infer     IDENTICAL   one=a104cfe065750353  two=a104cfe065750353
+  par-hdbscan                dupes    model     IDENTICAL   one=886b0c2a69e8f5b9  two=886b0c2a69e8f5b9
+  par-hdbscan                dupes    batch     IDENTICAL   one=43c868ddda4bae13  two=43c868ddda4bae13
+  par-iforest                dupes    train     IDENTICAL   one=b879bcf3dcf99f38  two=b879bcf3dcf99f38
+  par-iforest                dupes    infer     IDENTICAL   one=db8a00a8aa424f7c  two=db8a00a8aa424f7c
+  par-iforest                dupes    model     IDENTICAL   one=fb2362d583209a88  two=fb2362d583209a88
+  par-iforest                dupes    batch     IDENTICAL   one=bfeab82f12199afa  two=bfeab82f12199afa
+  par-ivf                    dupes    train     IDENTICAL   one=5f192f5e269eccfd  two=5f192f5e269eccfd
+  par-ivf                    dupes    infer     IDENTICAL   one=4ae50eab359ba1e9  two=4ae50eab359ba1e9
+  par-ivf                    dupes    model     IDENTICAL   one=3163ed44a2b28c07  two=3163ed44a2b28c07
+  par-ivf                    dupes    batch     IDENTICAL   one=99ec531fb8ae409f  two=99ec531fb8ae409f
+  par-logistic               dupes    train     IDENTICAL   one=8b3071b0cd8446b2  two=8b3071b0cd8446b2
+  par-logistic               dupes    infer     IDENTICAL   one=df012d0cb1286818  two=df012d0cb1286818
+  par-logistic               dupes    model     IDENTICAL   one=4b387ce327c969d6  two=4b387ce327c969d6
+  par-logistic               dupes    batch     IDENTICAL   one=f04513e96fac907b  two=f04513e96fac907b
+  par-rbf-sampler            dupes    train     IDENTICAL   one=73b67d021532219c  two=73b67d021532219c
+  par-rbf-sampler            dupes    infer     IDENTICAL   one=d4ca40aeb33ffe80  two=d4ca40aeb33ffe80
+  par-rbf-sampler            dupes    model     IDENTICAL   one=d4b54301bf9a47f0  two=d4b54301bf9a47f0
+  par-rbf-sampler            dupes    batch     IDENTICAL   one=f815694b150a5d9a  two=f815694b150a5d9a
+  par-reference-knn-reg      dupes    train     IDENTICAL   one=3bb71dcd3b676bd6  two=3bb71dcd3b676bd6
+  par-reference-knn-reg      dupes    infer     IDENTICAL   one=0e04bd5ca4150340  two=0e04bd5ca4150340
+  par-reference-knn-reg      dupes    model     IDENTICAL   one=dd4b16d90ea35aff  two=dd4b16d90ea35aff
+  par-reference-knn-reg      dupes    batch     IDENTICAL   one=b76e583646b1d507  two=b76e583646b1d507
+  par-samba                  dupes    train     IDENTICAL   one=bbe199c298e7016f  two=bbe199c298e7016f
+  par-samba                  dupes    infer     IDENTICAL   one=2853920460831149  two=2853920460831149
+  par-samba                  dupes    model     IDENTICAL   one=2316354c8dc29b3d  two=2316354c8dc29b3d
+  par-samba                  dupes    batch     IDENTICAL   one=9c69d39f197def58  two=9c69d39f197def58
+  par-scaler                 dupes    train     IDENTICAL   one=871f6df54f615520  two=871f6df54f615520
+  par-scaler                 dupes    infer     IDENTICAL   one=89d88a83a11d2485  two=89d88a83a11d2485
+  par-scaler                 dupes    model     IDENTICAL   one=05c29b3ea7e5d0fd  two=05c29b3ea7e5d0fd
+  par-scaler                 dupes    batch     IDENTICAL   one=303de898d7f06932  two=303de898d7f06932
+Device witness: 50 pool(s), 83 worker(s), placement=physical.
+WITNESS REFUSED: par-byte-lm-model-pool/dupes: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+
+RESULT: CANNOT RUN. The two-device column was not shown to have run on two
+devices, so its agreement with the one-device column is not evidence. This is
+reported rather than counted, because a clean AGREE from a column that never
+sharded is the exact failure this command exists to prevent.

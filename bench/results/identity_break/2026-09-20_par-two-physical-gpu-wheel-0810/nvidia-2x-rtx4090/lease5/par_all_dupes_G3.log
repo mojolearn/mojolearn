@@ -1,0 +1,22 @@
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+# par (all): 20 of 59 par-* lanes x 1 fixture(s), devices 0 then 0,1
+  par-boosting               dupes    train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   6.71s
+  par-byte-lm                dupes    train=IDENTICAL                                              1.20s
+  par-causal-lm              dupes    train=IDENTICAL batch=IDENTICAL                              9.50s
+  par-cholesky               dupes    train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  17.83s
+  par-cross-val              dupes    train=IDENTICAL                                              4.11s
+  par-dbscan                 dupes    train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.94s
+  par-forecast-holtwinters   dupes    train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  34.46s
+  par-forest-et              dupes    train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.56s
+  par-forest-et-clf          dupes    train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.64s
+  par-forest-pool            dupes    train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  11.03s
+  par-gmm                    dupes    train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  20.58s
+  par-gram-tsvd              dupes    train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.42s
+  par-graph-agglomerative    dupes    train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.60s
+  par-graph-spectral         dupes    train=IDENTICAL                                              3.69s
+  par-kernel-ridge           dupes    train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  15.04s
+  par-ordered                dupes    train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   8.03s
+  par-queries-knn            dupes    train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  23.00s
+  par-queries-nn             dupes    train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  15.29s
+  par-scaler-minmax          dupes    train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  11.94s
+  par-svm-svr                dupes    train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   7.25s
