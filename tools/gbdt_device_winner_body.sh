@@ -1,7 +1,7 @@
 #!/bin/bash
 # Guarded on-box body for the default-off exact GBDT device winner fold.
 # It runs exactly Taxi and Istella-S, each with Depthwise and Lossguide.
-set -u
+set -uo pipefail
 
 [ "${MOJOLEARN_GBDT_DEVICE_WINNER_RUN_GUARD:-}" = "R2_TAXI_ISTELLA" ] || {
     echo "refusing: set MOJOLEARN_GBDT_DEVICE_WINNER_RUN_GUARD=R2_TAXI_ISTELLA" >&2
