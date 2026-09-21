@@ -227,12 +227,13 @@ bash tools/release_linux_publish.sh <final-wheel> \
   --light-smoke <fresh-smoke-dir>/results.json
 ```
 
-Run the publisher from the frozen source checkout. Despite its historical name,
-the helper accepts either platform with `--light-smoke`; it hashes and stages the
-receipt, checks the existing light admission rules, and dispatches the matching
-platform batch. Publish the two wheels independently with separate tags and work
-directories. Without the option, it explicitly selects the full native Linux
-certification route. No smoke receipt from an older wheel can be reused.
+Run the publisher from the frozen source checkout. The light route is the
+default: despite its historical name, the helper takes either platform with
+`--light-smoke`, hashes and stages the receipt, checks the light admission
+rules, and dispatches the matching platform batch. Publish the two wheels
+independently with separate tags and work directories. The full native Linux
+certification route is opt-in with `--full`; with neither flag the helper
+refuses. No smoke receipt from an older wheel can be reused.
 
 Manifest, GitHub release, Trusted Publisher dispatch, watch. If step 4 ran,
 pass its three output directories and the proofs directory through the
