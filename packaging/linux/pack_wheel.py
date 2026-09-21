@@ -527,6 +527,7 @@ def main():
     entries["mojolearn_diagnostics.py"] = PY_DIR / "mojolearn_diagnostics.py"
     entries.update(python_package_entries())
     entries["mojolearn/ALPHA_API.md"] = PKG / "ALPHA_API.md"
+    entries["mojolearn/Hendel_2026_bitwise_identical_gpu_ml_preprint.pdf"] = PKG / "Hendel_2026_bitwise_identical_gpu_ml_preprint.pdf"
     seen_vendor_libs = set()
     for vendor, arch, files, libs, _, _ in sets:
         for rel, p in files.items():
