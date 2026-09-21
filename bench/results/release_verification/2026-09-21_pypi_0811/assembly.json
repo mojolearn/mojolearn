@@ -1,0 +1,16 @@
+[
+  {
+    "platform": "macos",
+    "wheel": "mojolearn-0.8.11-py3-none-macosx_11_0_arm64.whl",
+    "sha256": "70420f8131424e34de7fa6168b40828213bd16a36c85307a8e0dacea5dd1f412",
+    "unchanged_python_files": 119,
+    "paper_sha256": "c7de0ba6e3395d63d9f66b757d19035d77435e6e774c1f9361a290724eba2f71"
+  },
+  {
+    "platform": "linux",
+    "wheel": "mojolearn-0.8.11-py3-none-manylinux_2_35_x86_64.whl",
+    "sha256": "8784e89af05fbaa057ff42bef362076abcd3808b88917bfe6898a3164d52d777",
+    "unchanged_python_files": 119,
+    "paper_sha256": "c7de0ba6e3395d63d9f66b757d19035d77435e6e774c1f9361a290724eba2f71"
+  }
+]

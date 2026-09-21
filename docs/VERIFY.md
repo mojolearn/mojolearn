@@ -404,6 +404,16 @@ resolve to its own process and its own physical GPU by UUID and PCI id, and a
 run in which no pool started at all is reported as CANNOT RUN with that
 sentence.
 
+The byte-level language-model drivers start no pool: they hand their device
+list to the native binding, which opens one device context per device inside
+the calling process. Those sessions are inventoried as native sessions. One
+counts as a witness only when the binding's own ownership rows put resident
+bytes on every requested device and the process's driver inventory shows those
+ordinals as distinct physical GPUs. `par-byte-lm-offload` is different again:
+its driver admits exactly one device, so both of its columns run on the first
+device. Its parts read `N/A` with that reason and are never counted as a match;
+a part that differs still gates.
+
 `DIVERGENT` means sharding changed the bits. `ONE-COLUMN` means the work
 refused on exactly one of the two columns, which is a defect only a two-device
 run can see. Both exit non-zero.

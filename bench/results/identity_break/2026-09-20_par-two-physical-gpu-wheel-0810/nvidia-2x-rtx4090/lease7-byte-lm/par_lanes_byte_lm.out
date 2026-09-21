@@ -1,0 +1,521 @@
+{
+ "cell_witnesses": [
+  {
+   "fixture": "base",
+   "lane": "par-byte-lm",
+   "witness": {
+    "detail": [
+     {
+      "cooperative": false,
+      "devices": [
+       0,
+       1
+      ],
+      "driver": "ParallelByteLanguageModelTrainer",
+      "kind": "native-session",
+      "placed": true,
+      "resident_bytes": [
+       489216,
+       489216
+      ],
+      "workers": [
+       {
+        "devices": [
+         "9e2cff5f3fc0a820884d495cb605b5a9",
+         "6c39fe9b58772f4ee65415b0c13ac6da"
+        ],
+        "pid": 2242,
+        "visibility": {}
+       }
+      ]
+     },
+     {
+      "cooperative": false,
+      "devices": [
+       0
+      ],
+      "driver": "ParallelByteLanguageModelTrainer",
+      "kind": "native-session",
+      "placed": false,
+      "workers": []
+     }
+    ],
+    "devices": [
+     0,
+     1
+    ],
+    "native_sessions": 1,
+    "one_device_by_design": false,
+    "placement": "physical",
+    "pools": 0,
+    "workers": 0
+   },
+   "witness_refusal": null
+  },
+  {
+   "fixture": "base",
+   "lane": "par-byte-lm-model-pool",
+   "witness": {
+    "detail": [
+     {
+      "cooperative": false,
+      "devices": [
+       0,
+       1
+      ],
+      "driver": "PooledByteLanguageModelTrainer",
+      "kind": "native-session",
+      "placed": true,
+      "resident_bytes": [
+       718592,
+       259840
+      ],
+      "workers": [
+       {
+        "devices": [
+         "9e2cff5f3fc0a820884d495cb605b5a9",
+         "6c39fe9b58772f4ee65415b0c13ac6da"
+        ],
+        "pid": 2242,
+        "visibility": {}
+       }
+      ]
+     },
+     {
+      "cooperative": false,
+      "devices": [
+       0
+      ],
+      "driver": "ParallelByteLanguageModelTrainer",
+      "kind": "native-session",
+      "placed": false,
+      "workers": []
+     }
+    ],
+    "devices": [
+     0,
+     1
+    ],
+    "native_sessions": 1,
+    "one_device_by_design": false,
+    "placement": "physical",
+    "pools": 0,
+    "workers": 0
+   },
+   "witness_refusal": null
+  },
+  {
+   "fixture": "base",
+   "lane": "par-byte-lm-offload",
+   "witness": {
+    "detail": [
+     {
+      "cooperative": false,
+      "devices": [
+       0
+      ],
+      "driver": "OffloadedByteLanguageModelTrainer",
+      "kind": "native-session",
+      "placed": false,
+      "workers": []
+     },
+     {
+      "cooperative": false,
+      "devices": [
+       0
+      ],
+      "driver": "ParallelByteLanguageModelTrainer",
+      "kind": "native-session",
+      "placed": false,
+      "workers": []
+     }
+    ],
+    "devices": [
+     0,
+     1
+    ],
+    "native_sessions": 0,
+    "one_device_by_design": true,
+    "placement": "physical",
+    "pools": 0,
+    "workers": 0
+   },
+   "witness_refusal": null
+  }
+ ],
+ "cells": [
+  {
+   "fixture": "base",
+   "lane": "par-byte-lm",
+   "one": "eb83c1c233f68756",
+   "one_error": null,
+   "part": "train",
+   "seconds": 4.022,
+   "two": "eb83c1c233f68756",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "base",
+   "lane": "par-byte-lm",
+   "one": "n/a:function",
+   "one_error": null,
+   "part": "infer",
+   "seconds": 4.022,
+   "two": "n/a:function",
+   "two_error": null,
+   "verdict": "N/A"
+  },
+  {
+   "fixture": "base",
+   "lane": "par-byte-lm",
+   "one": "n/a:no-save",
+   "one_error": null,
+   "part": "model",
+   "seconds": 4.022,
+   "two": "n/a:no-save",
+   "two_error": null,
+   "verdict": "N/A"
+  },
+  {
+   "fixture": "base",
+   "lane": "par-byte-lm",
+   "one": "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)",
+   "one_error": null,
+   "part": "batch",
+   "seconds": 4.022,
+   "two": "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)",
+   "two_error": null,
+   "verdict": "N/A"
+  },
+  {
+   "fixture": "base",
+   "lane": "par-byte-lm",
+   "one": "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+   "one_error": null,
+   "part": "stepfull",
+   "seconds": 4.022,
+   "two": "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+   "two_error": null,
+   "verdict": "N/A"
+  },
+  {
+   "fixture": "base",
+   "lane": "par-byte-lm-model-pool",
+   "one": "3d26daba7af771cc",
+   "one_error": null,
+   "part": "train",
+   "seconds": 0.31,
+   "two": "3d26daba7af771cc",
+   "two_error": null,
+   "verdict": "IDENTICAL"
+  },
+  {
+   "fixture": "base",
+   "lane": "par-byte-lm-model-pool",
+   "one": "n/a:function",
+   "one_error": null,
+   "part": "infer",
+   "seconds": 0.31,
+   "two": "n/a:function",
+   "two_error": null,
+   "verdict": "N/A"
+  },
+  {
+   "fixture": "base",
+   "lane": "par-byte-lm-model-pool",
+   "one": "n/a:no-save",
+   "one_error": null,
+   "part": "model",
+   "seconds": 0.31,
+   "two": "n/a:no-save",
+   "two_error": null,
+   "verdict": "N/A"
+  },
+  {
+   "fixture": "base",
+   "lane": "par-byte-lm-model-pool",
+   "one": "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)",
+   "one_error": null,
+   "part": "batch",
+   "seconds": 0.31,
+   "two": "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)",
+   "two_error": null,
+   "verdict": "N/A"
+  },
+  {
+   "fixture": "base",
+   "lane": "par-byte-lm-model-pool",
+   "one": "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+   "one_error": null,
+   "part": "stepfull",
+   "seconds": 0.31,
+   "two": "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+   "two_error": null,
+   "verdict": "N/A"
+  },
+  {
+   "fixture": "base",
+   "lane": "par-byte-lm-offload",
+   "note": "n/a:one-device-by-design (OffloadedByteLanguageModelTrainer admits exactly one device, so this lane runs on the first device in both columns and its agreement says nothing about sharding)",
+   "one": "3d26daba7af771cc",
+   "one_error": null,
+   "part": "train",
+   "seconds": 0.221,
+   "two": "3d26daba7af771cc",
+   "two_error": null,
+   "verdict": "N/A"
+  },
+  {
+   "fixture": "base",
+   "lane": "par-byte-lm-offload",
+   "one": "n/a:function",
+   "one_error": null,
+   "part": "infer",
+   "seconds": 0.221,
+   "two": "n/a:function",
+   "two_error": null,
+   "verdict": "N/A"
+  },
+  {
+   "fixture": "base",
+   "lane": "par-byte-lm-offload",
+   "one": "n/a:no-save",
+   "one_error": null,
+   "part": "model",
+   "seconds": 0.221,
+   "two": "n/a:no-save",
+   "two_error": null,
+   "verdict": "N/A"
+  },
+  {
+   "fixture": "base",
+   "lane": "par-byte-lm-offload",
+   "one": "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)",
+   "one_error": null,
+   "part": "batch",
+   "seconds": 0.221,
+   "two": "n/a:driver-step (ParallelByteLanguageModelTrainer and its Pooled and Offloaded subclasses have train_step, state_dict, export_gradients and checkpoint only, python/mojolearn/parallel_training.py:89-172; train_step returns per-shard mean losses and one update from the shard-mean gradient, so no output belongs to one sequence, and the shard split is held to the replica trainer by the train column)",
+   "two_error": null,
+   "verdict": "N/A"
+  },
+  {
+   "fixture": "base",
+   "lane": "par-byte-lm-offload",
+   "one": "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+   "one_error": null,
+   "part": "stepfull",
+   "seconds": 0.221,
+   "two": "n/a:driver-lane (the multi-GPU drivers carry no decode state; the single-device twin lane is asked)",
+   "two_error": null,
+   "verdict": "N/A"
+  }
+ ],
+ "compared": 15,
+ "counts": {
+  "IDENTICAL": 2,
+  "N/A": 13
+ },
+ "devices": [
+  0,
+  1
+ ],
+ "elapsed_s": 4.76,
+ "fixtures": [
+  "base"
+ ],
+ "format": "mojolearn.verify-par.v1",
+ "lanes": [
+  "par-byte-lm",
+  "par-byte-lm-model-pool",
+  "par-byte-lm-offload"
+ ],
+ "par_lanes": [
+  "par-arima",
+  "par-boosting",
+  "par-boosting-clf",
+  "par-boosting-pointwise",
+  "par-boosting-reg",
+  "par-border-types",
+  "par-byte-lm",
+  "par-byte-lm-model-pool",
+  "par-byte-lm-offload",
+  "par-causal-lm",
+  "par-cd",
+  "par-cd-elasticnet",
+  "par-cholesky",
+  "par-cross-val",
+  "par-dbscan",
+  "par-feature-freq",
+  "par-forecast-arima",
+  "par-forecast-holtwinters",
+  "par-forest",
+  "par-forest-et",
+  "par-forest-et-clf",
+  "par-forest-pool",
+  "par-forest-reg",
+  "par-gmm",
+  "par-gp",
+  "par-gpc-fit",
+  "par-gpc-predict",
+  "par-gram",
+  "par-gram-ols",
+  "par-gram-pca",
+  "par-gram-tsvd",
+  "par-graph-agglomerative",
+  "par-graph-spectral",
+  "par-graph-umap",
+  "par-hdbscan",
+  "par-holtwinters",
+  "par-iforest",
+  "par-ivf",
+  "par-kernel-ridge",
+  "par-kmeans",
+  "par-logistic",
+  "par-mlp",
+  "par-nystroem",
+  "par-ordered",
+  "par-ordered-rmse",
+  "par-queries-kde",
+  "par-queries-knn",
+  "par-queries-nn",
+  "par-queries-radius",
+  "par-rbf-sampler",
+  "par-reference-knn",
+  "par-reference-knn-reg",
+  "par-resample",
+  "par-samba",
+  "par-samba-clip",
+  "par-scaler",
+  "par-scaler-minmax",
+  "par-svm",
+  "par-svm-svr"
+ ],
+ "passed": true,
+ "perturbed": false,
+ "ran": true,
+ "repeats": 1,
+ "representative_of": {
+  "arima": "par-arima",
+  "core": "par-queries-knn",
+  "estimators": "par-queries-kde",
+  "gbdt": "par-cross-val",
+  "gp": "par-gpc-fit",
+  "ivf": "par-ivf",
+  "kernel_methods": "par-rbf-sampler",
+  "neural": "par-causal-lm",
+  "parallel drivers": "par-boosting",
+  "preprocessing": "par-scaler",
+  "rf": "par-forest",
+  "training": "par-mlp",
+  "trees": "par-forest-et",
+  "tsa": "par-forecast-holtwinters"
+ },
+ "scope": "default",
+ "state": "VERIFIED",
+ "vendor": "cuda",
+ "witness": {
+  "detail": [
+   {
+    "cooperative": false,
+    "devices": [
+     0,
+     1
+    ],
+    "driver": "ParallelByteLanguageModelTrainer",
+    "kind": "native-session",
+    "placed": true,
+    "resident_bytes": [
+     489216,
+     489216
+    ],
+    "workers": [
+     {
+      "devices": [
+       "9e2cff5f3fc0a820884d495cb605b5a9",
+       "6c39fe9b58772f4ee65415b0c13ac6da"
+      ],
+      "pid": 2242,
+      "visibility": {}
+     }
+    ]
+   },
+   {
+    "cooperative": false,
+    "devices": [
+     0
+    ],
+    "driver": "ParallelByteLanguageModelTrainer",
+    "kind": "native-session",
+    "placed": false,
+    "workers": []
+   },
+   {
+    "cooperative": false,
+    "devices": [
+     0,
+     1
+    ],
+    "driver": "PooledByteLanguageModelTrainer",
+    "kind": "native-session",
+    "placed": true,
+    "resident_bytes": [
+     718592,
+     259840
+    ],
+    "workers": [
+     {
+      "devices": [
+       "9e2cff5f3fc0a820884d495cb605b5a9",
+       "6c39fe9b58772f4ee65415b0c13ac6da"
+      ],
+      "pid": 2242,
+      "visibility": {}
+     }
+    ]
+   },
+   {
+    "cooperative": false,
+    "devices": [
+     0
+    ],
+    "driver": "ParallelByteLanguageModelTrainer",
+    "kind": "native-session",
+    "placed": false,
+    "workers": []
+   },
+   {
+    "cooperative": false,
+    "devices": [
+     0
+    ],
+    "driver": "OffloadedByteLanguageModelTrainer",
+    "kind": "native-session",
+    "placed": false,
+    "workers": []
+   },
+   {
+    "cooperative": false,
+    "devices": [
+     0
+    ],
+    "driver": "ParallelByteLanguageModelTrainer",
+    "kind": "native-session",
+    "placed": false,
+    "workers": []
+   }
+  ],
+  "devices": [
+   0,
+   1
+  ],
+  "native_sessions": 2,
+  "one_device_by_design": [
+   "par-byte-lm-offload"
+  ],
+  "placement": "physical",
+  "pools": 0,
+  "workers": 0
+ },
+ "witness_refusal": null
+}

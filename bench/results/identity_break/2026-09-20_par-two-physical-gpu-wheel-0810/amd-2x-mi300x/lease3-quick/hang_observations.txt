@@ -1,0 +1,37 @@
+Read-only samples taken over ssh while lease 3 (pod 7g6tbuqw8853tb) ran. Nothing on the
+box was signalled, stopped or changed; every command was bounded by the body's own timeout.
+
+What the body recorded (status.tsv): par_self_test exit 124 after 900 s, par_self_test_json
+exit 124 after 900 s, par_quick exit 124 after 583 s (the budget), par_lanes_nine NOT-STARTED.
+The last line each verifier command printed was its header, for example
+"# par (quick): 14 of 59 par-* lanes x 1 fixture(s), devices 0 then 0,1". No lane line was
+ever printed, so the first lane (par-arima in all three commands) never finished.
+
+Sample 1, during par_self_test_json, command age 75 s, two pool workers aged 27 s:
+  6812  python -m mojolearn verify --par --par-self-test --json   wchan futex_wait_queue
+  7435  python -m mojolearn._parallel_worker  HIP_VISIBLE_DEVICES=0  wchan dma_fence_default_wait
+  7436  python -m mojolearn._parallel_worker  HIP_VISIBLE_DEVICES=1  wchan pipe_read
+  rocm-smi: GPU use 0 % on both; VRAM allocated 99 % (GPU 0) and 97 % (GPU 1)
+
+Sample 2, 03:02:14Z, command age 93 s, workers aged 45 s: same three states.
+  rocm-smi --showmeminfo vram: GPU[0] 205452832768 of 206141652992 bytes used,
+                               GPU[1] 201063055360 of 206141652992 bytes used
+  rocm-smi --showpids (host pids): one process on 2 GPUs holding 392113016832 bytes,
+  one on 1 GPU holding 12652367872, one on 1 GPU holding 374173696, one on 1 GPU holding 54632448
+
+Sample 3, 03:13:15Z, command age 753 s, workers aged 705 s: worker 7435 still in
+dma_fence_default_wait at 0.0 % CPU, every thread of both workers at zero accumulated ticks
+since the previous sample, worker 7436 still in pipe_read.
+
+What this establishes: two workers existed, so the one-device column had finished and the
+two-device pool had started; the worker masked to device 0 then sat in a kernel GPU fence
+wait for at least eleven minutes with the GPU idle, while device 0's VRAM was 99.7 % used
+and one process held 392 GB across both devices. It happened the same way in all three
+commands.
+
+What it does not establish: the cause. `verify --par` runs both columns in ONE process; the
+AMD two-device records on main came from tools/two_device_par_class_amd_leg.sh, which runs
+each column in its OWN process. A parent that still holds nearly all of device 0 while a
+masked worker starts on device 0 fits the samples, and is untested. The known MI300X SR-IOV
+stale read (wrong values after a cross-device copy above 1 MiB) is a different symptom and
+nothing here points at it. The same wheel and the same commands pass on 2x RTX 4090.

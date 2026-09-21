@@ -52,7 +52,7 @@ for line in open(st):
     name, code, secs = line.rstrip("\n").split("\t")
     # par_self_test_json is a JSON document FOLLOWED by the SELF-TEST line, so it is
     # not parsed here (lease 2: parsing it failed this check on a complete pull)
-    if not name.startswith(("par_quick", "par_all_")) or code == "NOT-STARTED":
+    if not name.startswith(("par_quick", "par_all_", "par_lanes_")) or code == "NOT-STARTED":
         continue
     out = os.path.join(d, name + ".out")
     log = os.path.join(d, name + ".log")

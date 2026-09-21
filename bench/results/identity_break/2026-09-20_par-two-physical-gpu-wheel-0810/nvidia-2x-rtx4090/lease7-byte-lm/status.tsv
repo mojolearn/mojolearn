@@ -1,0 +1,10 @@
+pip_download	0	2
+pip_install	0	6
+env_report	0	0
+python_where_unactivated	0	0
+python_where_activated	0	1
+pip_install_pytest	0	4
+pytest_verify_par	0	0
+par_self_test	0	9
+par_self_test_json	0	8
+par_lanes_byte_lm	0	6

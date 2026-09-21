@@ -1,0 +1,7 @@
+Collecting mojolearn==0.8.10
+  Downloading mojolearn-0.8.10-py3-none-manylinux_2_35_x86_64.whl.metadata (50 kB)
+     ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 50.2/50.2 kB 559.5 kB/s eta 0:00:00
+Downloading mojolearn-0.8.10-py3-none-manylinux_2_35_x86_64.whl (79.0 MB)
+   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 79.0/79.0 MB 82.7 MB/s eta 0:00:00
+Saved /root/parwheel-download/mojolearn-0.8.10-py3-none-manylinux_2_35_x86_64.whl
+Successfully downloaded mojolearn

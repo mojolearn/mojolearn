@@ -1,0 +1,11 @@
+argv0_executable       /root/parwheel-venv/bin/python
+base_executable        /root/parwheel-venv/bin/python
+prefix / base_prefix   /root/parwheel-venv / /usr
+which python3 on PATH  /usr/bin/python3
+VIRTUAL_ENV            None
+after import mojolearn /root/parwheel-venv/bin/python
+vendor                 hip
+after vendor()         /root/parwheel-venv/bin/python
+after load_harness     /root/parwheel-venv/bin/python
+require_device_count(2): ok
+at exit                /root/parwheel-venv/bin/python

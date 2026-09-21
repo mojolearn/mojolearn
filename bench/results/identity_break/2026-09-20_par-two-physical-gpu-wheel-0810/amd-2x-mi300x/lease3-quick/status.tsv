@@ -1,0 +1,9 @@
+pip_download	0	1
+pip_install	0	4
+env_report	0	0
+python_where_unactivated	0	1
+python_where_activated	0	0
+par_self_test	124	900
+par_self_test_json	124	900
+par_quick	124	583
+par_lanes_nine	NOT-STARTED	0

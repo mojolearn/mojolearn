@@ -1,0 +1,69 @@
+slug=amd-lease3-quick
+started=2026-09-21T02:45:24Z
+budget_seconds=2400
+lanesets=nine=par-border-types,par-causal-lm,par-cross-val,par-forecast-arima,par-forecast-holtwinters,par-gpc-fit,par-gpc-predict,par-ivf,par-ordered
+overlay=0 source_commit=8394bf7fc69bc00920d11dccee40bea4949c070f
+vendor=amd
+visible_gpus=2
+
+
+============================ ROCm System Management Interface ============================
+=========================================== ID ===========================================
+GPU[0]		: Device Name: 		AMD Instinct MI300X
+GPU[0]		: Device ID: 		0x74a1
+GPU[0]		: Device Rev: 		0x00
+GPU[0]		: Subsystem ID: 	0x74a1
+GPU[0]		: GUID: 		53458
+GPU[1]		: Device Name: 		AMD Instinct MI300X
+GPU[1]		: Device ID: 		0x74a1
+GPU[1]		: Device Rev: 		0x00
+GPU[1]		: Subsystem ID: 	0x74a1
+GPU[1]		: GUID: 		63883
+==========================================================================================
+======================================= Unique ID ========================================
+GPU[0]		: Unique ID: 0x83cd823ce61dd094
+GPU[1]		: Unique ID: 0x484960c35d6be285
+==========================================================================================
+======================================= PCI Bus ID =======================================
+GPU[0]		: PCI Bus: 0000:85:00.0
+GPU[1]		: PCI Bus: 0000:A6:00.0
+==========================================================================================
+====================================== Product Info ======================================
+GPU[0]		: Card Series: 		AMD Instinct MI300X
+GPU[0]		: Card Model: 		0x74a1
+GPU[0]		: Card Vendor: 		Advanced Micro Devices, Inc. [AMD/ATI]
+GPU[0]		: Card SKU: 		MI3SRIOV
+GPU[0]		: Subsystem ID: 	0x74a1
+GPU[0]		: Device Rev: 		0x00
+GPU[0]		: Node ID: 		6
+GPU[0]		: GUID: 		53458
+GPU[0]		: GFX Version: 		gfx942
+GPU[1]		: Card Series: 		AMD Instinct MI300X
+GPU[1]		: Card Model: 		0x74a1
+GPU[1]		: Card Vendor: 		Advanced Micro Devices, Inc. [AMD/ATI]
+GPU[1]		: Card SKU: 		MI3SRIOV
+GPU[1]		: Subsystem ID: 	0x74a1
+GPU[1]		: Device Rev: 		0x00
+GPU[1]		: Node ID: 		7
+GPU[1]		: GUID: 		63883
+GPU[1]		: GFX Version: 		gfx942
+==========================================================================================
+================================== End of ROCm SMI Log ===================================
+system_python=/usr/bin/python3.10 (Python 3.10.12)
+pip_download_exit=0
+c8a09722c3a3fcbe91905d2d15b8489d960b008bb9776afa15b2400e115e778c  ./mojolearn-0.8.10-py3-none-manylinux_2_35_x86_64.whl
+total 77116
+-rw-r--r-- 1 root root 78966755 Sep 21 02:45 mojolearn-0.8.10-py3-none-manylinux_2_35_x86_64.whl
+pip_install_exit=0
+import_where=0.8.10 /root/parwheel-venv/lib/python3.10/site-packages/mojolearn/__init__.py
+activated: VIRTUAL_ENV=/root/parwheel-venv python=/root/parwheel-venv/bin/python
+import_where_activated=0.8.10 /root/parwheel-venv/lib/python3.10/site-packages/mojolearn/__init__.py
+install_mode=venv-activated
+par_self_test_exit=124  (MUST BE 0)
+par_self_test_json_exit=124  (MUST BE 0)
+par_quick_exit=124 seconds=583
+render failed for par_quick (no JSON document; see par_quick.log)
+NOT STARTED: par_lanes_nine (budget left -1s)
+elapsed_total=2401
+finished=2026-09-21T03:25:25Z
+pull_hold_seconds=60 pull_ok=yes
