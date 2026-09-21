@@ -156,12 +156,18 @@ jobs:
             slot: x86-a
             label: x86-64 Linux (24.04)
     runs-on: ${{ matrix.runner }}
-    # Both full-column sweeps have 50-minute step budgets, in addition to
+    # Both full-column sweeps have their own step budgets, in addition to
     # binding builds and saved-model/property gates. The previous 90-minute
     # job cap cancelled hosted Apple run 35350125464 during its sabotage
     # sweep. Preserve the per-job two-worker shard cap;
     # allow bounded time for both arms and artifact upload instead.
-    timeout-minutes: 180
+    # Run 35628874036 (a503d5d6d): the covered lanes step hit its 50-minute
+    # budget on all three runners with both shards still running, about
+    # 6000 s of lane time measured per runner and the column unfinished (the
+    # Ordered GBDT lanes alone are about 3000 s). Each full-column step now
+    # has 120 minutes and the job 330, under the hosted runners' 360; the
+    # two-shard cap is unchanged. A timeout is still a failure.
+    timeout-minutes: 330
     permissions:
       contents: read
     env:
@@ -612,7 +618,7 @@ jobs:
       # phase 1, not a pass.
       - name: The CPU column, covered lanes (every fixture)
         if: always() && env.FULL_CPU_VERIFY == 'true'
-        timeout-minutes: 50
+        timeout-minutes: 120
         run: |
           set -o pipefail
           [ "${CPU_SURFACE_MANIFEST:-}" = read ] || { echo "::error::the CPU surface manifest step did not complete (an earlier step failed), so this step has no lists to run on; fix the first failed step" >&2; exit 1; }
@@ -737,7 +743,7 @@ jobs:
 
       - name: The CPU column, covered lanes must diverge under MOJOLEARN_HOST_SABOTAGE
         if: always() && env.FULL_CPU_VERIFY == 'true'
-        timeout-minutes: 50
+        timeout-minutes: 120
         run: |
           set -o pipefail
           [ "${CPU_SURFACE_MANIFEST:-}" = read ] || { echo "::error::the CPU surface manifest step did not complete (an earlier step failed), so this step has no lists to run on; fix the first failed step" >&2; exit 1; }

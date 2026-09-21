@@ -264,20 +264,29 @@ def do_owed(args):
 
 #: Seconds per covered lane on a hosted runner, the mean over the seven
 #: runners of CPU identity gate run 34955435564 (b7e5a4287), read from the
-#: log timestamps of the lane rows. A BALANCE HINT ONLY: a stale or missing
-#: entry moves wall time between shards and never changes a cell. A lane not
+#: log timestamps of the lane rows; the 31 lanes measured again are the mean
+#: over the three runners of run 35628874036 (a503d5d6d, sum of each lane's
+#: DONE rows, lanes that finished all nine fixtures twice without an error).
+#: The Ordered GBDT lanes alone (1809 s and 1173 s) outweighed the whole
+#: old table, which had them at the 4 s default. A BALANCE HINT ONLY: a
+#: stale or missing entry moves wall time between shards and never changes
+#: a cell. A lane not
 #: listed weighs DEFAULT_LANE_SECONDS (the 60 lanes under 5 s averaged 1.5).
 LANE_SECONDS = {
-    "iforest-tuned": 99, "dbscan-weighted": 89, "iforest": 86, "hdbscan-leaf": 69, "hdbscan": 69,
-    "kmeans-random": 67, "gbdt-symmetric": 57, "gbdt-depthwise": 53, "bootstrap": 46, "gbdt-lossguide": 43,
-    "kmeans-sqrt": 41, "rf-reg-gamma-ig": 41, "kmeans": 37, "kmeans-weighted": 32, "spectral": 31,
-    "kmeans-array": 25, "radius-minkowski-p3": 23, "rf-reg": 21, "agglomerative": 20, "kmeans-classic-pp": 19,
-    "gbdt-rmse": 16, "metrics-classification": 16, "permutation-test": 16, "kde-cosine-minkowski": 15,
-    "dbscan-brute-l1": 15, "metrics": 13, "rf-clf-balanced-parallel": 12, "knn-minkowski-p3": 12, "svr": 12,
-    "rf-clf-entropy-log2-noboot": 10, "svr-linear": 10, "svc": 9, "et-reg": 9, "et-clf": 8, "rf-reg-poisson": 8,
-    "cross-val": 8, "et-clf-entropy-bestfirst": 7, "arima-seasonal-c": 7, "dbscan": 7, "knn-clf": 7,
-    "knn-clf-distance": 7, "kde-linear-cosine": 6, "logistic-elasticnet": 6, "logistic-l1": 6, "kde-weighted": 6,
-    "logistic-multiclass": 5, "kde": 5, "et-reg-bootstrap-parallel": 5,
+    "gbdt-ordered-bayesian-noise": 1809, "gbdt-ordered": 1173, "mamba2": 539, "byte-lm-host-infer": 314,
+    "gbdt-symmetric-eval": 275, "transformer": 124, "transformer-bf16w": 101, "iforest-tuned": 99,
+    "dbscan-weighted": 89, "iforest": 86, "mamba1-bf16w": 81, "gbdt-ordered-rmse": 78, "mamba1": 77,
+    "hdbscan": 69, "hdbscan-leaf": 69, "kmeans-random": 67, "byte-lm": 55, "gbdt-depthwise": 52,
+    "gbdt-symmetric": 51, "kmeans": 50, "gbdt-border-types": 47, "bootstrap": 46, "gbdt-lossguide": 42,
+    "kmeans-sqrt": 41, "rf-reg-gamma-ig": 41, "kmeans-weighted": 32, "spectral": 31, "kmeans-array": 25,
+    "gbdt-bfa-quantile": 23, "radius-minkowski-p3": 23, "rf-reg": 21, "agglomerative": 19,
+    "kmeans-classic-pp": 19, "knn": 17, "metrics-classification": 16, "permutation-test": 16,
+    "dbscan-brute-l1": 15, "kde-cosine-minkowski": 15, "gbdt-rmse": 14, "gpc-multiclass": 13, "svr": 13,
+    "knn-minkowski-p3": 12, "rf-clf-balanced-parallel": 12, "metrics": 10, "rf-clf-entropy-log2-noboot": 10,
+    "svr-linear": 10, "dbscan": 9, "et-reg": 9, "svc": 9, "cross-val": 8, "et-clf": 8, "rf-reg-poisson": 8,
+    "arima-seasonal-c": 7, "et-clf-entropy-bestfirst": 7, "knn-clf": 7, "knn-clf-distance": 7, "kde": 6,
+    "kde-linear-cosine": 6, "kde-weighted": 6, "logistic-elasticnet": 6, "logistic-l1": 6,
+    "et-reg-bootstrap-parallel": 5, "logistic-multiclass": 5, "umap": 5,
 }
 DEFAULT_LANE_SECONDS = 4
 
