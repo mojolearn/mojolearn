@@ -1,0 +1,47 @@
+{
+  "cells": [
+    {
+      "dataset": "big-taxi",
+      "fit_speedup": 0.9526652350264293,
+      "fit_spread": {
+        "both": 1.1303456675704284,
+        "off": 1.1716975687033657
+      },
+      "transform_speedup": 1.121651746584611,
+      "transform_spread": {
+        "both": 9.75449580884617,
+        "off": 10.5232531800552
+      },
+      "verdict": "REJECT_UNSTABLE_OR_INSUFFICIENT_SPEED"
+    },
+    {
+      "dataset": "big-istella",
+      "fit_speedup": 7.350877556751726,
+      "fit_spread": {
+        "both": 1.0271845430350617,
+        "off": 1.006135187424764
+      },
+      "transform_speedup": 0.9990524641627822,
+      "transform_spread": {
+        "both": 6.3177960085192755,
+        "off": 6.202213594781183
+      },
+      "verdict": "REJECT_UNSTABLE_OR_INSUFFICIENT_SPEED"
+    }
+  ],
+  "pass": false,
+  "reach": [
+    {
+      "block_accumulator_reached": true,
+      "dataset": "big-taxi",
+      "device_scale_reached": true,
+      "verdict": "BOTH_FULL_DATA_STAGES_REACHED"
+    },
+    {
+      "block_accumulator_reached": true,
+      "dataset": "big-istella",
+      "device_scale_reached": true,
+      "verdict": "BOTH_FULL_DATA_STAGES_REACHED"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+prep_r2_blocks	0	9
+build_off	0	56
+build_both	0	51
+build_sabotage_block	0	50
+build_sabotage_scale	0	49
+identity_off	0	27
+identity_both	0	40
+identity_sabotage_block	0	41
+identity_sabotage_scale	0	41
+diff_off_both	0	0
+diff_sabotage_block	1	0
+diff_sabotage_scale	1	0
+reach_taxi	0	18
+reach_istella	0	19
+race_taxi	0	9
+race_istella	0	30
