@@ -70,7 +70,10 @@ valuable than the neutral timing.
 ## Reproduction and teardown
 
 `tools/attention_alias_y_amd_body.sh` builds the phase profile and both A/B
-binaries.  Raw logs were captured under
-`bench/results/e1g/2026-09-20_amd-mi300x-attention-alias-y-route-run3/`.
-The guarded rental finished with `extra_exit=0`; DELETE returned HTTP 204 and
-the follow-up GET returned 404 (`destroy_confirmed=1`).
+binaries.  The compact hashes, per-process medians, phase ranges, environment,
+and teardown verdict needed to audit the decision are preserved above.  The
+19 MB raw rental directory was intentionally not committed: almost all of it
+was three reproducible build products, while its six repetitive logs expand
+the same hashes and medians recorded here.  The guarded rental finished with
+`extra_exit=0`; DELETE returned HTTP 204 and the follow-up GET returned 404
+(`destroy_confirmed=1`).
