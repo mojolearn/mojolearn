@@ -83,6 +83,10 @@ def main():
     p.add_argument('--manifest', type=Path,
                    default=Path('bench/results/dataset_store/manifest.tsv'))
     p.add_argument('--out', type=Path, required=True)
+    p.add_argument('--commit', required=True)
+    p.add_argument('--process', type=int, required=True)
+    p.add_argument('--position', type=int, required=True)
+    p.add_argument('--target-column', choices=('nvidia', 'amd'), required=True)
     p.add_argument('--shape', type=int, nargs=9,
                    default=[1, 2048, 768, 12, 12, 64, 2048, 12, 50257])
     p.add_argument('--seed', type=int, default=20260921)
@@ -103,33 +107,46 @@ def main():
     for row in Trainer.parameter_registry(shape):
         if 'norm' in row['name']:
             parameters[row['offset']:row['offset'] + row['size']] += np.float32(1)
+    initial_parameters_sha256 = sha(parameters.tobytes())
     trainer = Trainer(parameters, shape=shape, resident=True, step_result='lean',
                       data_schedule=dict(dataset_key=args.dataset_key,
                                          dataset_sha256=data.digest,
                                          schedule='raw bytes, full-object strided next-byte windows'))
     binding = _backend.binding('_mojolearn_byte_lm', 'identical')
+    binding_path = Path(binding.__file__)
     arm = int(binding.byte_lm_flat_view_arm())
     witnesses, times = [], []
     total = args.witness_steps + args.warmup + args.samples
+    result = None
     for step in range(total):
+        ids = data.ids(step)
         t0 = time.perf_counter_ns()
-        result = trainer.train_step(data.ids(step))
+        result = trainer.train_step(ids)
         elapsed = (time.perf_counter_ns() - t0) / 1e9
-        if step < args.witness_steps:
-            witnesses.append(digest_step(trainer, float(result['loss'])))
-        elif step >= args.witness_steps + args.warmup:
+        witnesses.append(digest_step(trainer, float(result['loss'])))
+        if step >= args.witness_steps + args.warmup:
             times.append(elapsed)
+    final_witness = witnesses[-1] if witnesses else None
     state = trainer.export_state()
+    metadata = trainer.run_metadata()
     result = dict(
         schema='mojolearn.lm-flat-views.v1', arm=arm,
         dataset=dict(key=args.dataset_key, path=str(args.dataset), bytes=data.size,
                      sha256=data.digest), shape=list(args.shape), seed=args.seed,
+        commit=args.commit, process=args.process, position=args.position,
+        target_column=args.target_column,
+        initial_parameters_sha256=initial_parameters_sha256,
+        binding=dict(path=str(binding_path), bytes=binding_path.stat().st_size,
+                     sha256=sha(binding_path.read_bytes())),
         schedule='step k row b: dataset bytes at (k*2654435761+b*2246822519) modulo (size-length-1); uint8 to int32; target shifted one byte',
-        witnesses=witnesses, post_swap_witness=(witnesses[1] if len(witnesses) > 1 else None),
+        witnesses=witnesses, final_witness=final_witness,
+        post_swap_witness=(witnesses[1] if len(witnesses) > 1 else None),
         seconds=times, median_seconds=(statistics.median(times) if times else None),
         min_seconds=(min(times) if times else None),
         max_seconds=(max(times) if times else None),
-        completed_steps=int(state['completed_steps']), run_metadata=trainer.run_metadata(),
+        counts=dict(witness_steps=args.witness_steps, warmup=args.warmup,
+                    samples=args.samples, total=total),
+        completed_steps=int(state['completed_steps']), run_metadata=metadata,
     )
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(json.dumps(result, indent=1, allow_nan=False) + '\n')

@@ -760,7 +760,7 @@ def byte_lm_ce_aliased_binding() raises -> PythonObject:
 
 
 def byte_lm_flat_view_arm_binding() raises -> PythonObject:
-    """Inside-the-loaded-binding witness for the four-arm storage trial."""
+    """View bits 0/1 plus independent parameter/gradient sabotage bits 2/3."""
     return PythonObject(byte_lm_flat_view_arm())
 
 
