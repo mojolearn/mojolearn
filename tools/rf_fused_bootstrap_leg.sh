@@ -24,8 +24,11 @@ step() {
 
 [ "${MOJOLEARN_RF_FUSED_RUN_GUARD:-}" = "R2_TAXI_ISTELLA" ] || \
     die "set MOJOLEARN_RF_FUSED_RUN_GUARD=R2_TAXI_ISTELLA"
-[ -d "$ROOT/.git" ] || [ -f "$ROOT/.git" ] || die "missing checkout $ROOT"
+[ -d "$ROOT" ] || die "missing source tree $ROOT"
 [ -x "$PY" ] || die "missing pinned Python $PY"
+COMMIT=${MOJOLEARN_COMMIT:-$(sed -n 's/^commit=//p' /root/gemm_leg_out/leg.txt 2>/dev/null | head -1)}
+[ -n "$COMMIT" ] || COMMIT=$(cat "$ROOT/SHIPPED_COMMIT.txt" 2>/dev/null)
+[ -n "$COMMIT" ] || die "missing commit witness"
 for f in "$DATA/taxi/taxi_speed.npz" "$DATA/istella/istella_speed.npz"; do
     [ -s "$f" ] || die "missing R2-staged $f"
 done
@@ -43,7 +46,7 @@ export PATH="$HOME/.pixi/bin:$PATH"
 export GBM_BENCH_DATA="$DATA" MOJOLEARN_NUMERIC_MODE=identical
 export MOJOLEARN_SKIP_BUILD_GATE=1 MOJOLEARN_COMPILE_JOBS="${MOJOLEARN_COMPILE_JOBS:-4}"
 : > "$OUT/status.tsv"
-git rev-parse HEAD > "$OUT/commit.txt"
+printf '%s\n' "$COMMIT" > "$OUT/commit.txt"
 if [ "$GPU" = nvidia ]; then
     nvidia-smi -L > "$OUT/gpu.txt" 2>&1 || die nvidia-smi
 else

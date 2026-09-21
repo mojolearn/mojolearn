@@ -14,7 +14,10 @@ mkdir -p "$O/logs" "$BINS"
 export PATH="$HOME/.pixi/bin:$PATH"
 export MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_SKIP_BUILD_GATE=1
 export MOJOLEARN_COMPILE_JOBS="${MOJOLEARN_COMPILE_JOBS:-13}"
-export MOJOLEARN_COMMIT="${MOJOLEARN_COMMIT:-$(git rev-parse HEAD)}"
+MOJOLEARN_COMMIT=${MOJOLEARN_COMMIT:-$(sed -n 's/^commit=//p' /root/gemm_leg_out/leg.txt 2>/dev/null | head -1)}
+[ -n "$MOJOLEARN_COMMIT" ] || MOJOLEARN_COMMIT=$(git rev-parse HEAD 2>/dev/null)
+[ -n "$MOJOLEARN_COMMIT" ] || { echo "missing commit witness" >&2; exit 10; }
+export MOJOLEARN_COMMIT
 
 note() { printf '%s %s\n' "$*" "$(date -u +%H:%M:%S)" | tee -a "$O/progress.txt"; }
 step() {
@@ -57,6 +60,7 @@ for _ds in taxi istella; do
     sha256sum "$DATA/big-$_ds.npz" >> "$O/data.sha256"
 done
 
+require_step build_base 2400 sh bindings/build.sh
 build_arm off ''
 build_arm fused "$D_FUSED"
 for _outer in 0 1 2; do

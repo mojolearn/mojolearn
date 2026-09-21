@@ -6,6 +6,8 @@ ROOT=/root/mojolearn
 OUT=/root/gemm_leg_out
 mkdir -p "$OUT"
 cd "$ROOT" || exit 9
+MOJOLEARN_COMMIT=${MOJOLEARN_COMMIT:-$(sed -n 's/^commit=//p' "$OUT/leg.txt" 2>/dev/null | head -1)}
+export MOJOLEARN_COMMIT
 
 echo "combined_training_start=$(date -u +%Y-%m-%dT%H:%M:%SZ)" > "$OUT/combined-training.txt"
 sh tools/standard_fit_transform_perf_leg.sh
