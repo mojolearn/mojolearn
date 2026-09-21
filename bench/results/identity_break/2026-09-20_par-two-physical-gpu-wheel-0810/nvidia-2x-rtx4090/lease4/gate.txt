@@ -1,0 +1,41 @@
+slug=nvidia-lease4
+started=2026-09-21T00:04:15Z
+budget_seconds=2750
+fixtures=wide:G4 wide:G1 denormal:G1 denormal:G2 denormal:G3 denormal:G4 denormal_ftz:G1 denormal_ftz:G2 denormal_ftz:G3 denormal_ftz:G4 dupes:G2 dupes:G3 dupes:G4 dupes:G1
+lanes=<all par-* lanes>
+vendor=nvidia
+visible_gpus=2
+GPU 0: NVIDIA GeForce RTX 4090 (UUID: GPU-09bd0853-1c33-8345-e1be-46323ea19f5b)
+GPU 1: NVIDIA GeForce RTX 4090 (UUID: GPU-5c4c7be6-cdfa-9c7e-d40b-74d56b47de4f)
+index, name, uuid, pci.bus_id, driver_version, compute_cap, memory.total [MiB]
+0, NVIDIA GeForce RTX 4090, GPU-09bd0853-1c33-8345-e1be-46323ea19f5b, 00000000:2D:00.0, 580.159.04, 8.9, 24564 MiB
+1, NVIDIA GeForce RTX 4090, GPU-5c4c7be6-cdfa-9c7e-d40b-74d56b47de4f, 00000000:62:00.0, 580.159.04, 8.9, 24564 MiB
+system_python=/usr/bin/python3.11 (Python 3.11.10)
+pip_download_exit=0
+c8a09722c3a3fcbe91905d2d15b8489d960b008bb9776afa15b2400e115e778c  ./mojolearn-0.8.10-py3-none-manylinux_2_35_x86_64.whl
+total 77116
+-rw-r--r-- 1 root root 78966755 Sep 21 00:04 mojolearn-0.8.10-py3-none-manylinux_2_35_x86_64.whl
+pip_install_exit=0
+import_where=0.8.10 /root/parwheel-venv/lib/python3.11/site-packages/mojolearn/__init__.py
+activated: VIRTUAL_ENV=/root/parwheel-venv python=/root/parwheel-venv/bin/python
+import_where_activated=0.8.10 /root/parwheel-venv/lib/python3.11/site-packages/mojolearn/__init__.py
+install_mode=venv-activated
+par_self_test_exit=0  (MUST BE 0)
+par_self_test_json_exit=0  (MUST BE 0)
+par_all_wide_G4_exit=4 seconds=216
+par_all_wide_G1_exit=0 seconds=291
+par_all_denormal_G1_exit=0 seconds=294
+par_all_denormal_G2_exit=4 seconds=214
+par_all_denormal_G3_exit=4 seconds=215
+par_all_denormal_G4_exit=4 seconds=211
+par_all_denormal_ftz_G1_exit=0 seconds=297
+par_all_denormal_ftz_G2_exit=4 seconds=216
+par_all_denormal_ftz_G3_exit=4 seconds=213
+par_all_denormal_ftz_G4_exit=4 seconds=209
+NOT STARTED: chunk dupes:G2 (budget left 343s, longest chunk so far 297s)
+NOT STARTED: chunk dupes:G3 (budget left 343s, longest chunk so far 297s)
+NOT STARTED: chunk dupes:G4 (budget left 343s, longest chunk so far 297s)
+NOT STARTED: chunk dupes:G1 (budget left 343s, longest chunk so far 297s)
+elapsed_total=2407
+finished=2026-09-21T00:44:22Z
+pull_hold_seconds=20 pull_ok=yes

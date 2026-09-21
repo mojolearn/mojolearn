@@ -1,0 +1,20 @@
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+# par (all): 18 of 59 par-* lanes x 1 fixture(s), devices 0 then 0,1
+  par-arima                  denormal_ftz train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   5.57s
+  par-boosting-clf           denormal_ftz train=IDENTICAL infer=IDENTICAL batch=IDENTICAL              5.63s
+  par-byte-lm-offload        denormal_ftz train=IDENTICAL                                              0.18s
+  par-cd-elasticnet          denormal_ftz train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.67s
+  par-feature-freq           denormal_ftz train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   5.12s
+  par-gram                   denormal_ftz train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.66s
+  par-gram-pca               denormal_ftz train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.51s
+  par-graph-umap             denormal_ftz train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  83.04s
+  par-holtwinters            denormal_ftz train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   3.98s
+  par-kmeans                 denormal_ftz train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   4.07s
+  par-mlp                    denormal_ftz train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   8.76s
+  par-nystroem               denormal_ftz train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  14.01s
+  par-ordered-rmse           denormal_ftz train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   6.88s
+  par-queries-kde            denormal_ftz train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  15.46s
+  par-queries-radius         denormal_ftz train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  15.53s
+  par-reference-knn          denormal_ftz train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  16.21s
+  par-samba-clip             denormal_ftz train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL   9.11s
+  par-svm                    denormal_ftz train=IDENTICAL infer=IDENTICAL model=IDENTICAL batch=IDENTICAL  11.02s

@@ -1,0 +1,247 @@
+{
+ "cell_witnesses": [
+  {
+   "fixture": "base",
+   "lane": "par-arima",
+   "witness": {
+    "detail": [
+     {
+      "cooperative": false,
+      "devices": [
+       0,
+       1
+      ],
+      "workers": [
+       {
+        "devices": [
+         "09bd08531c338345e1be46323ea19f5b"
+        ],
+        "pid": 2158,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "0"
+        }
+       },
+       {
+        "devices": [
+         "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+        ],
+        "pid": 2159,
+        "visibility": {
+         "CUDA_VISIBLE_DEVICES": "1"
+        }
+       }
+      ]
+     }
+    ],
+    "devices": [
+     0,
+     1
+    ],
+    "placement": "physical",
+    "pools": 1,
+    "workers": 2
+   },
+   "witness_refusal": null
+  }
+ ],
+ "cells": [
+  {
+   "fixture": "base",
+   "lane": "par-arima",
+   "one": "377790cb117abb61",
+   "one_error": null,
+   "part": "train",
+   "seconds": 5.063,
+   "two": "28a25430973fa636",
+   "two_error": null,
+   "verdict": "DIVERGENT"
+  },
+  {
+   "fixture": "base",
+   "lane": "par-arima",
+   "one": "9f76be0396a666ca",
+   "one_error": null,
+   "part": "infer",
+   "seconds": 5.063,
+   "two": "0957a2b49d4ce602",
+   "two_error": null,
+   "verdict": "DIVERGENT"
+  },
+  {
+   "fixture": "base",
+   "lane": "par-arima",
+   "one": "6ae822845884aedf",
+   "one_error": null,
+   "part": "model",
+   "seconds": 5.063,
+   "two": "eb5eb17be349eac8",
+   "two_error": null,
+   "verdict": "DIVERGENT"
+  },
+  {
+   "fixture": "base",
+   "lane": "par-arima",
+   "one": "cef3c859431cbbaf",
+   "one_error": null,
+   "part": "batch",
+   "seconds": 5.063,
+   "two": "110cee7462be27eb",
+   "two_error": null,
+   "verdict": "DIVERGENT"
+  },
+  {
+   "fixture": "base",
+   "lane": "par-arima",
+   "one": "n/a:no-decode-state",
+   "one_error": null,
+   "part": "stepfull",
+   "seconds": 5.063,
+   "two": "n/a:no-decode-state",
+   "two_error": null,
+   "verdict": "N/A"
+  }
+ ],
+ "compared": 5,
+ "counts": {
+  "DIVERGENT": 4,
+  "N/A": 1
+ },
+ "devices": [
+  0,
+  1
+ ],
+ "elapsed_s": 5.22,
+ "fixtures": [
+  "base"
+ ],
+ "format": "mojolearn.verify-par.v1",
+ "lanes": [
+  "par-arima"
+ ],
+ "par_lanes": [
+  "par-arima",
+  "par-boosting",
+  "par-boosting-clf",
+  "par-boosting-pointwise",
+  "par-boosting-reg",
+  "par-border-types",
+  "par-byte-lm",
+  "par-byte-lm-model-pool",
+  "par-byte-lm-offload",
+  "par-causal-lm",
+  "par-cd",
+  "par-cd-elasticnet",
+  "par-cholesky",
+  "par-cross-val",
+  "par-dbscan",
+  "par-feature-freq",
+  "par-forecast-arima",
+  "par-forecast-holtwinters",
+  "par-forest",
+  "par-forest-et",
+  "par-forest-et-clf",
+  "par-forest-pool",
+  "par-forest-reg",
+  "par-gmm",
+  "par-gp",
+  "par-gpc-fit",
+  "par-gpc-predict",
+  "par-gram",
+  "par-gram-ols",
+  "par-gram-pca",
+  "par-gram-tsvd",
+  "par-graph-agglomerative",
+  "par-graph-spectral",
+  "par-graph-umap",
+  "par-hdbscan",
+  "par-holtwinters",
+  "par-iforest",
+  "par-ivf",
+  "par-kernel-ridge",
+  "par-kmeans",
+  "par-logistic",
+  "par-mlp",
+  "par-nystroem",
+  "par-ordered",
+  "par-ordered-rmse",
+  "par-queries-kde",
+  "par-queries-knn",
+  "par-queries-nn",
+  "par-queries-radius",
+  "par-rbf-sampler",
+  "par-reference-knn",
+  "par-reference-knn-reg",
+  "par-resample",
+  "par-samba",
+  "par-samba-clip",
+  "par-scaler",
+  "par-scaler-minmax",
+  "par-svm",
+  "par-svm-svr"
+ ],
+ "passed": false,
+ "perturbed": true,
+ "ran": true,
+ "repeats": 1,
+ "representative_of": {
+  "arima": "par-arima",
+  "core": "par-queries-knn",
+  "estimators": "par-queries-kde",
+  "gbdt": "par-cross-val",
+  "gp": "par-gpc-fit",
+  "ivf": "par-ivf",
+  "kernel_methods": "par-rbf-sampler",
+  "neural": "par-causal-lm",
+  "parallel drivers": "par-boosting",
+  "preprocessing": "par-scaler",
+  "rf": "par-forest",
+  "training": "par-mlp",
+  "trees": "par-forest-et",
+  "tsa": "par-forecast-holtwinters"
+ },
+ "scope": "default",
+ "self_test_compared": 4,
+ "self_test_passed": true,
+ "state": "MISMATCH",
+ "vendor": "cuda",
+ "witness": {
+  "detail": [
+   {
+    "cooperative": false,
+    "devices": [
+     0,
+     1
+    ],
+    "workers": [
+     {
+      "devices": [
+       "09bd08531c338345e1be46323ea19f5b"
+      ],
+      "pid": 2158,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "0"
+      }
+     },
+     {
+      "devices": [
+       "5c4c7be6cdfa9c7ed40b74d56b47de4f"
+      ],
+      "pid": 2159,
+      "visibility": {
+       "CUDA_VISIBLE_DEVICES": "1"
+      }
+     }
+    ]
+   }
+  ],
+  "devices": [
+   0,
+   1
+  ],
+  "placement": "physical",
+  "pools": 1,
+  "workers": 2
+ },
+ "witness_refusal": null
+}
+SELF-TEST PASSED: the perturbed two-device column read DIVERGENT on 4 compared part(s). This comparison can fail.

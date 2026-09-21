@@ -1,0 +1,83 @@
+# python -m mojolearn verify --par
+
+Ran each `par-*` lane TWICE in this process on this box (cuda): once with
+MOJOLEARN_PAR_DEVICES=0 and once with MOJOLEARN_PAR_DEVICES=0,1, and compared the
+two columns cell for cell. No reference table is involved: the one-device column
+produced here, minutes ago, off this build, IS the reference. That equality is
+the drivers' whole claim and no release record states it.
+
+  par-arima                  denormal_ftz train     IDENTICAL   one=7dbefd70378dfac6  two=7dbefd70378dfac6
+  par-arima                  denormal_ftz infer     IDENTICAL   one=aab930a9e876ec1e  two=aab930a9e876ec1e
+  par-arima                  denormal_ftz model     IDENTICAL   one=87b2ac97204e1a6e  two=87b2ac97204e1a6e
+  par-arima                  denormal_ftz batch     IDENTICAL   one=a5e918e8c07deeeb  two=a5e918e8c07deeeb
+  par-boosting-clf           denormal_ftz train     IDENTICAL   one=933184700a044eb2  two=933184700a044eb2
+  par-boosting-clf           denormal_ftz infer     IDENTICAL   one=33875685be67febb  two=33875685be67febb
+  par-boosting-clf           denormal_ftz batch     IDENTICAL   one=984baeb0cccbd21e  two=984baeb0cccbd21e
+  par-byte-lm-offload        denormal_ftz train     IDENTICAL   one=33a04d5fd2d480a4  two=33a04d5fd2d480a4
+  par-cd-elasticnet          denormal_ftz train     IDENTICAL   one=3add60ff69fd788c  two=3add60ff69fd788c
+  par-cd-elasticnet          denormal_ftz infer     IDENTICAL   one=0047832ca8c561a3  two=0047832ca8c561a3
+  par-cd-elasticnet          denormal_ftz model     IDENTICAL   one=7f16adbc1a1fea7e  two=7f16adbc1a1fea7e
+  par-cd-elasticnet          denormal_ftz batch     IDENTICAL   one=19772c145c4b0d34  two=19772c145c4b0d34
+  par-feature-freq           denormal_ftz train     IDENTICAL   one=e7f1da14d1a9794b  two=e7f1da14d1a9794b
+  par-feature-freq           denormal_ftz infer     IDENTICAL   one=973775798c10da25  two=973775798c10da25
+  par-feature-freq           denormal_ftz model     IDENTICAL   one=d6c30648533bdf45  two=d6c30648533bdf45
+  par-feature-freq           denormal_ftz batch     IDENTICAL   one=ba9644901c99745d  two=ba9644901c99745d
+  par-gram                   denormal_ftz train     IDENTICAL   one=2eed6e454ed965da  two=2eed6e454ed965da
+  par-gram                   denormal_ftz infer     IDENTICAL   one=4233d399ae41d2e6  two=4233d399ae41d2e6
+  par-gram                   denormal_ftz model     IDENTICAL   one=80113efe9b48cc79  two=80113efe9b48cc79
+  par-gram                   denormal_ftz batch     IDENTICAL   one=3d155f9f8c15eb89  two=3d155f9f8c15eb89
+  par-gram-pca               denormal_ftz train     IDENTICAL   one=632dd2d41a856846  two=632dd2d41a856846
+  par-gram-pca               denormal_ftz infer     IDENTICAL   one=d28a4176d38a79ad  two=d28a4176d38a79ad
+  par-gram-pca               denormal_ftz model     IDENTICAL   one=85752b8d4fc03a22  two=85752b8d4fc03a22
+  par-gram-pca               denormal_ftz batch     IDENTICAL   one=c4efab49f835d5ac  two=c4efab49f835d5ac
+  par-graph-umap             denormal_ftz train     IDENTICAL   one=ccfec6d66ea17fb3  two=ccfec6d66ea17fb3
+  par-graph-umap             denormal_ftz infer     IDENTICAL   one=d3b17552fe76de7e  two=d3b17552fe76de7e
+  par-graph-umap             denormal_ftz model     IDENTICAL   one=5889a802cc5cd9cc  two=5889a802cc5cd9cc
+  par-graph-umap             denormal_ftz batch     IDENTICAL   one=6afb90d3cdd5b32f  two=6afb90d3cdd5b32f
+  par-holtwinters            denormal_ftz train     IDENTICAL   one=e33dcd8e2af3c5ed  two=e33dcd8e2af3c5ed
+  par-holtwinters            denormal_ftz infer     IDENTICAL   one=ae5d01a90ca7a3a0  two=ae5d01a90ca7a3a0
+  par-holtwinters            denormal_ftz model     IDENTICAL   one=999974b61bbe0004  two=999974b61bbe0004
+  par-holtwinters            denormal_ftz batch     IDENTICAL   one=61ee91ed7913e382  two=61ee91ed7913e382
+  par-kmeans                 denormal_ftz train     IDENTICAL   one=993fe5caff144b0c  two=993fe5caff144b0c
+  par-kmeans                 denormal_ftz infer     IDENTICAL   one=9b15ee1cac8ce636  two=9b15ee1cac8ce636
+  par-kmeans                 denormal_ftz model     IDENTICAL   one=8646c7d4fc16c75e  two=8646c7d4fc16c75e
+  par-kmeans                 denormal_ftz batch     IDENTICAL   one=cd11da38d7d996eb  two=cd11da38d7d996eb
+  par-mlp                    denormal_ftz train     IDENTICAL   one=64ac01c75bdea784  two=64ac01c75bdea784
+  par-mlp                    denormal_ftz infer     IDENTICAL   one=0659617762bde850  two=0659617762bde850
+  par-mlp                    denormal_ftz model     IDENTICAL   one=c2e7a5157a96fb28  two=c2e7a5157a96fb28
+  par-mlp                    denormal_ftz batch     IDENTICAL   one=2592a63cb1321f67  two=2592a63cb1321f67
+  par-nystroem               denormal_ftz train     IDENTICAL   one=7a6ea946ad1a60a8  two=7a6ea946ad1a60a8
+  par-nystroem               denormal_ftz infer     IDENTICAL   one=0990abeba452b473  two=0990abeba452b473
+  par-nystroem               denormal_ftz model     IDENTICAL   one=b58cccd4538cf27f  two=b58cccd4538cf27f
+  par-nystroem               denormal_ftz batch     IDENTICAL   one=4d1d99cd53b5e54a  two=4d1d99cd53b5e54a
+  par-ordered-rmse           denormal_ftz train     IDENTICAL   one=2a44bb38f86cd4ec  two=2a44bb38f86cd4ec
+  par-ordered-rmse           denormal_ftz infer     IDENTICAL   one=9f09dbf44c4ea866  two=9f09dbf44c4ea866
+  par-ordered-rmse           denormal_ftz model     IDENTICAL   one=7997d9773285efc3  two=7997d9773285efc3
+  par-ordered-rmse           denormal_ftz batch     IDENTICAL   one=ccafd9d9faa33059  two=ccafd9d9faa33059
+  par-queries-kde            denormal_ftz train     IDENTICAL   one=2128392fe1eb228a  two=2128392fe1eb228a
+  par-queries-kde            denormal_ftz infer     IDENTICAL   one=21caf753bc5b6352  two=21caf753bc5b6352
+  par-queries-kde            denormal_ftz model     IDENTICAL   one=6e413286a1f8aebb  two=6e413286a1f8aebb
+  par-queries-kde            denormal_ftz batch     IDENTICAL   one=f6d4a25e759c171f  two=f6d4a25e759c171f
+  par-queries-radius         denormal_ftz train     IDENTICAL   one=b31c83097872381e  two=b31c83097872381e
+  par-queries-radius         denormal_ftz infer     IDENTICAL   one=0d8e5847c0de67f1  two=0d8e5847c0de67f1
+  par-queries-radius         denormal_ftz model     IDENTICAL   one=83650c2063c0b192  two=83650c2063c0b192
+  par-queries-radius         denormal_ftz batch     IDENTICAL   one=0032b46732b142a5  two=0032b46732b142a5
+  par-reference-knn          denormal_ftz train     IDENTICAL   one=4313fe10444c709c  two=4313fe10444c709c
+  par-reference-knn          denormal_ftz infer     IDENTICAL   one=3b26081dcfb54057  two=3b26081dcfb54057
+  par-reference-knn          denormal_ftz model     IDENTICAL   one=02916106bd5f4a5c  two=02916106bd5f4a5c
+  par-reference-knn          denormal_ftz batch     IDENTICAL   one=eba1aa6ad4a6ef82  two=eba1aa6ad4a6ef82
+  par-samba-clip             denormal_ftz train     IDENTICAL   one=374ecd21fbc5cb69  two=374ecd21fbc5cb69
+  par-samba-clip             denormal_ftz infer     IDENTICAL   one=5b9e3d287c536c7d  two=5b9e3d287c536c7d
+  par-samba-clip             denormal_ftz model     IDENTICAL   one=d55f9ae234ccc49c  two=d55f9ae234ccc49c
+  par-samba-clip             denormal_ftz batch     IDENTICAL   one=a11c050920337e57  two=a11c050920337e57
+  par-svm                    denormal_ftz train     IDENTICAL   one=549c0b5c319d84cf  two=549c0b5c319d84cf
+  par-svm                    denormal_ftz infer     IDENTICAL   one=ebc593040592ca1e  two=ebc593040592ca1e
+  par-svm                    denormal_ftz model     IDENTICAL   one=55604dc15ce7c411  two=55604dc15ce7c411
+  par-svm                    denormal_ftz batch     IDENTICAL   one=52692289bfb89f21  two=52692289bfb89f21
+Device witness: 56 pool(s), 72 worker(s), placement=physical.
+WITNESS REFUSED: par-byte-lm-offload/denormal_ftz: the two-device column started NO device pool at all, so it ran on one device and agreeing with the one-device column proves nothing. Either the lane does not shard on this install or the driver fell back silently; both are failures of this check, not passes
+
+RESULT: CANNOT RUN. The two-device column was not shown to have run on two
+devices, so its agreement with the one-device column is not evidence. This is
+reported rather than counted, because a clean AGREE from a column that never
+sharded is the exact failure this command exists to prevent.

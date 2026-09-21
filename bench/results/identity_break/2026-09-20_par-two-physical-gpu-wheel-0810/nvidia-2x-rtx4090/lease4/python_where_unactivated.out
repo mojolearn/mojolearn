@@ -1,0 +1,11 @@
+argv0_executable       /root/parwheel-venv/bin/python
+base_executable        /usr/bin/python3.11
+prefix / base_prefix   /root/parwheel-venv / /usr
+which python3 on PATH  /usr/bin/python3
+VIRTUAL_ENV            None
+after import mojolearn /root/parwheel-venv/bin/python
+vendor                 cuda
+after vendor()         /root/parwheel-venv/bin/python
+after load_harness     /root/parwheel-venv/bin/python
+require_device_count(2): REFUSED: the GPU driver could not be asked how many devices this box has: /usr/bin/python3: Error while finding module specification for 'mojolearn._gpu_witness' (ModuleNotFoundError: No module named 'mojolearn')
+at exit                /root/parwheel-venv/bin/python

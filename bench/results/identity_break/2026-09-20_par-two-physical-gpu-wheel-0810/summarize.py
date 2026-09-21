@@ -38,14 +38,16 @@ for st in sorted(glob.glob(os.path.join(root, "lease*", "status.tsv"))):
 def table(selected, title):
     print(f"\n## {title}")
     lanes, fixtures, counts, per_lane, seen = set(), [], {}, {}, {}
-    uuids, cells_witnessed, cells_total, refusals = set(), 0, 0, []
+    uuids, cells_witnessed, cells_total, refusals = {}, 0, 0, []
     for rel, name, doc in selected:
+        if doc.get("ran") is False:
+            print(f"{rel}: NOT RUN: {doc.get('reason')}")
+            continue
         print(f"{rel}: state={doc.get('state')} passed={doc.get('passed')} vendor={doc.get('vendor')} "
               f"devices={doc.get('devices')} repeats={doc.get('repeats')} lanes={len(doc.get('lanes', []))} "
               f"fixtures={doc.get('fixtures')} parts={doc.get('compared')} counts={doc.get('counts')} "
               f"elapsed_s={doc.get('elapsed_s')} witness_refusal={doc.get('witness_refusal')}")
         for fx in doc.get("fixtures", []):
-            seen[fx] = seen.get(fx, 0) + 1
             if fx not in fixtures:
                 fixtures.append(fx)
         for c in doc.get("cells", []):
@@ -57,19 +59,21 @@ def table(selected, title):
             cells_total += 1
             if w.get("witness_refusal"):
                 refusals.append((w["lane"], w["fixture"], w["witness_refusal"]))
+            seen[(w["lane"], w["fixture"])] = seen.get((w["lane"], w["fixture"]), 0) + 1
             cell_uuids = set()
             for pool in w["witness"].get("detail", []):
                 for worker in pool.get("workers", []):
                     cell_uuids.update(u for u in worker.get("devices", []) if u)
             if len(cell_uuids) >= 2:
                 cells_witnessed += 1
-            uuids |= cell_uuids
-    dup = {f: n for f, n in seen.items() if n > 1}
+            uuids.setdefault(rel.split(os.sep)[0], set()).update(cell_uuids)
+    dup = {f"{l}/{f}": n for (l, f), n in seen.items() if n > 1}
+    print(f"\nlane/fixture cells run: {len(seen)} (59 lanes x 9 fixtures = 531 is the whole of `--par all`)")
     total = sum(counts.values())
     compared = sum(v for k, v in counts.items() if k in ("IDENTICAL", "DIVERGENT", "MOVED"))
-    print(f"\nlanes run: {len(lanes)}   fixtures run: {len(fixtures)} {fixtures}")
+    print(f"lanes run: {len(lanes)}   fixtures run: {len(fixtures)} {fixtures}")
     if dup:
-        print(f"FIXTURES RUN MORE THAN ONCE (every run is counted): {dup}")
+        print(f"CELLS RUN MORE THAN ONCE (every run is counted): {dup}")
     print(f"parts reported: {total}   parts with two hashes compared: {compared}")
     for k in ("IDENTICAL", "DIVERGENT", "MOVED", "ONE-COLUMN", "REFUSED", "CPU-ROUTE-LIMIT", "N/A"):
         print(f"  {k:<16} {counts.get(k, 0)}")
@@ -79,14 +83,23 @@ def table(selected, title):
         print(f"  OTHER VERDICTS: {other}")
     print(f"placement witness: {cells_witnessed} of {cells_total} lane/fixture cells showed >= 2 distinct "
           f"physical GPU UUIDs; witness refusals: {len(refusals)}")
-    print(f"distinct GPU UUIDs named by workers: {sorted(uuids)}")
+    for lease in sorted(uuids):
+        print(f"  {lease}: GPU UUIDs named by the workers themselves: {sorted(uuids[lease])}")
     for lane, fx, why in refusals:
         print(f"  WITNESS REFUSED {lane}/{fx}: {why}")
     cols = ("IDENTICAL", "DIVERGENT", "MOVED", "ONE-COLUMN", "REFUSED", "N/A")
-    print("\n| lane | " + " | ".join(cols) + " |")
-    print("|---|" + "---|" * len(cols))
+    refused_by_lane = {}
+    for lane, fx, why in refusals:
+        refused_by_lane[lane] = refused_by_lane.get(lane, 0) + 1
+    cells_by_lane = {}
+    for (lane, fx), n in seen.items():
+        cells_by_lane[lane] = cells_by_lane.get(lane, 0) + n
+    print("\n| lane | fixtures run | " + " | ".join(cols) + " | WITNESS REFUSED (fixtures) |")
+    print("|---|---|" + "---|" * len(cols) + "---|")
     for lane in sorted(per_lane):
-        print(f"| {lane} | " + " | ".join(str(per_lane[lane].get(k, 0)) for k in cols) + " |")
+        print(f"| {lane} | {cells_by_lane.get(lane, 0)} | "
+              + " | ".join(str(per_lane[lane].get(k, 0)) for k in cols)
+              + f" | {refused_by_lane.get(lane, 0)} |")
     print("\nevery part that is not IDENTICAL and not N/A, in the verifier's own words:")
     n = 0
     for rel, name, doc in selected:
