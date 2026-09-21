@@ -45,7 +45,7 @@ cp "$R/python/mojolearn/identical/_mojolearn.so" /root/knn-amd-bins/base/
 sha256sum /root/knn-amd-bins/base/_mojolearn.so > "$O/base.sha256"
 rm -f "$R/python/mojolearn/identical/_mojolearn.so"
 step build_topk 1800 env \
-  MOJOLEARN_BUILD_EXTRA_DEFINES='-D MOJOLEARN_EXPERIMENTAL_KNN_SMEM_TILE=1 -D MOJOLEARN_EXPERIMENTAL_KNN_BLOCK_TOPK=1' \
+  MOJOLEARN_BUILD_EXTRA_DEFINES='-D MOJOLEARN_EXPERIMENTAL_KNN_SMEM_TILE=1 -D MOJOLEARN_EXPERIMENTAL_KNN_BLOCK_TOPK=1 -D MOJOLEARN_EXPERIMENTAL_KNN_SMEM_WIDE_ONLY=1' \
   sh "$R/bindings/build.sh"
 test $? -eq 0 || exit 31
 cp "$R/python/mojolearn/identical/_mojolearn.so" /root/knn-amd-bins/topk/

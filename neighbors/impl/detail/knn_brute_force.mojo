@@ -270,6 +270,15 @@ comptime KNN_BLOCK_TOPK = (
     and not is_defined["MOJOLEARN_KNN_SELECT_TRIAL"]()
 )
 
+# AMD gfx942 pays more launch and synchronization overhead than NVIDIA for
+# the shared tile on narrow rows.  The two-dataset trial can compile this
+# guard without changing either kernel: requests below one two-slice tile
+# keep the existing register path, while wide requests use the exact shared
+# tile and block top-k.
+comptime KNN_SMEM_MIN_FEATURES = (
+    32 if is_defined["MOJOLEARN_EXPERIMENTAL_KNN_SMEM_WIDE_ONLY"]() else 1
+)
+
 
 # DEVIATION 3061 (kernel-matrix row `knn_resident_derived_cache_for`).
 comptime KNN_RESIDENT_CACHE = knn_resident_derived_cache_for[TARGET_COLUMN, IDENTICAL_BUILD]()
@@ -373,7 +382,7 @@ def block_topk_applies(
             not use_vendor_topk
             and (metric == DIST_L2_EXPANDED or metric == DIST_L2_SQRT_EXPANDED)
             and k >= 1 and k <= SMT_MAX_K and k <= KNN_BLOCK_TOPK_LIMIT and k <= n_index
-            and n_features > 0 and n_features <= 2147483647
+            and n_features >= KNN_SMEM_MIN_FEATURES and n_features <= 2147483647
             and n_index <= 2147483647
         )
     return False
@@ -875,6 +884,7 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
         use_smem = (
             use_transposed_index and not use_vendor_topk and not use_metadata
             and (mtr == DIST_L2_SQRT_EXPANDED or mtr == DIST_L2_EXPANDED)
+            and n_features >= KNN_SMEM_MIN_FEATURES
         )
 
     # Metadata is rebuilt for every request, including in-place input mutations.
