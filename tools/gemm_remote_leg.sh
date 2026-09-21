@@ -3303,6 +3303,12 @@ uname -a > "$OUT/uname.txt" 2>&1
   | { shasum -a 256 2>/dev/null || sha256sum ; } \
   | awk '{print $1}' > "$OUT/source_sha256.txt"
 
+# A WHEEL LEG BUILDS NOTHING. MOJOLEARN_WHEEL_VERSION says the leg tests the
+# published wheel, which the extra body pip-installs; the Mojo toolchain and
+# the three source gates below cost about 12 minutes of a 60-minute lease and
+# say nothing about a wheel. Measured 2026-09-20: a 7-minute `verify --par`
+# body took a half-hour lease.
+if [ -z "@WHEELVERSION@" ]; then
 if [ ! -x "$HOME/.pixi/bin/pixi" ] && ! command -v pixi > /dev/null 2>&1; then
     curl -fsSL https://pixi.sh/install.sh | sh > "$OUT/pixi_install.log" 2>&1
 fi
@@ -3335,6 +3341,7 @@ if [ "@SWEEP@" = "1" ]; then
     MOJOLEARN_GEMM_CARD_ARM=device MOJOLEARN_COLUMN_OUT="$OUT/colinv" \
         sh tools/gemm_column_invariance.sh > "$OUT/column_invariance.log" 2>&1
     echo "column_invariance_exit=$?" >> "$OUT/leg.txt"
+fi
 fi
 
 # MOJOLEARN_GEMM_LEG_EXTRA: the lane's own work, after the gates, same box,
@@ -6227,7 +6234,7 @@ elif [ "$PAYLOAD" = "phase8" ]; then
     # for not producing what it was told not to produce. Step 1 above already
     # skipped the Apple-column guard on the same test.
     leg_phase9_artifacts || RED=1
-else
+elif [ -z "$WHEEL_VERSION" ]; then
     REMOTE_CARD="$OUT/remote/$VENDOR.card"
     leg_require_file "$REMOTE_CARD" "the remote never produced a card; read $OUT/remote/card_driver.log" || RED=1
     leg_require_identical "$OUT/remote/$VENDOR.card.log" "remote card" || RED=1
