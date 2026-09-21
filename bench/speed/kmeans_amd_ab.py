@@ -173,12 +173,62 @@ def same(records, field, label):
         raise RuntimeError("%s differs: %s" % (label, values))
 
 
+def run_reach(args):
+    """Require both planted defects to move a full-size dataset fit."""
+    if len(args.arm) != 3:
+        raise RuntimeError("reach requires candidate, sabotage_block, sabotage_scale arms")
+    children = {}
+    result = {"block": os.path.abspath(args.block), "arms": {}}
+    try:
+        for name, python, tree in args.arm:
+            if name in children:
+                raise RuntimeError("duplicate arm %s" % name)
+            child = Child(name, python, tree, args, args.output + "." + name + ".log")
+            children[name] = child
+            result["arms"][name] = {"ready": child.read(args.timeout)}
+        required = ("both", "sabotage_block", "sabotage_scale")
+        if set(children) != set(required):
+            raise RuntimeError("reach arms must be %s, got %s" % (required, tuple(children)))
+        for name, child in children.items():
+            child.send("fit 0")
+            record = child.read(args.timeout)
+            if record.get("event") != "fit":
+                raise RuntimeError("unexpected worker record %r" % record)
+            result["arms"][name]["fit"] = record
+        candidate, block, scale = [result["arms"][name]["fit"] for name in required]
+        block_changed = any(block["parts"].get(key) != candidate["parts"].get(key)
+                            for key in ("centers", "labels", "n_iter", "inertia"))
+        scale_changed = scale["parts"].get("sum_scale") != candidate["parts"].get("sum_scale")
+        result.update(block_accumulator_reached=block_changed,
+                      device_scale_reached=scale_changed,
+                      verdict="BOTH_FULL_DATA_STAGES_REACHED" if block_changed and scale_changed
+                              else "REACH_FAILED")
+        with open(args.output, "x") as stream:
+            json.dump(result, stream, indent=2, sort_keys=True, allow_nan=False)
+            stream.write("\n")
+        print("KMEANS-AMD", result["verdict"],
+              "block=%s" % block_changed, "scale=%s" % scale_changed)
+        # A recorded reach failure is an experimental rejection, not a harness
+        # crash. Let the outer body collect both datasets before its final gate.
+        return 0
+    finally:
+        for child in children.values():
+            child.close()
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
     w = sub.add_parser("worker")
     w.add_argument("--block", required=True)
     w.add_argument("--transform-rows", type=int, required=True)
+    q = sub.add_parser("reach")
+    q.add_argument("--block", required=True)
+    q.add_argument("--arm", action="append", nargs=3, metavar=("NAME", "PYTHON", "TREE"),
+                   required=True)
+    q.add_argument("--transform-rows", type=int, default=1)
+    q.add_argument("--timeout", type=float, default=1200)
+    q.add_argument("--output", required=True)
     r = sub.add_parser("race")
     r.add_argument("--block", required=True)
     r.add_argument("--arm", action="append", nargs=3, metavar=("NAME", "PYTHON", "TREE"),
@@ -187,10 +237,16 @@ def main():
     r.add_argument("--transform-rounds", type=int, default=7)
     r.add_argument("--transform-rows", type=int, default=100000)
     r.add_argument("--timeout", type=float, default=900)
+    r.add_argument("--spread-gate", type=float, default=1.10)
+    r.add_argument("--min-fit-speedup", type=float, default=1.02)
+    r.add_argument("--min-transform-speedup", type=float, default=0.95)
     r.add_argument("--output", required=True)
     args = parser.parse_args()
     if args.command == "worker":
         return worker(args)
+    if args.command == "reach":
+        os.makedirs(os.path.dirname(os.path.abspath(args.output)), exist_ok=True)
+        return run_reach(args)
     if len(args.arm) < 2 or args.rounds < 1 or args.transform_rounds < 1:
         parser.error("race requires at least two arms and positive round counts")
     if args.transform_rows < 1:
@@ -241,18 +297,34 @@ def main():
             for phase in ("fit", "transform"):
                 samples = [row["ms"] for row in arm[phase]]
                 arm[phase + "_median_ms"] = statistics.median(samples)
+                spread = max(samples) / min(samples) if min(samples) > 0 else float("inf")
+                arm[phase + "_spread"] = spread
+                arm[phase + "_stable"] = len(samples) >= 5 and spread <= args.spread_gate
         baseline, candidate = names[:2]
         for phase in ("fit", "transform"):
             b = result["arms"][baseline][phase + "_median_ms"]
             c = result["arms"][candidate][phase + "_median_ms"]
             result[phase + "_speedup"] = b / c
-        result["verdict"] = "BITWISE_IDENTICAL_AND_QUALITY_EQUAL"
+        result["thresholds"] = {"spread_gate": args.spread_gate,
+                                "min_fit_speedup": args.min_fit_speedup,
+                                "min_transform_speedup": args.min_transform_speedup}
+        stable = all(result["arms"][name][phase + "_stable"]
+                     for name in names[:2] for phase in ("fit", "transform"))
+        speed = (result["fit_speedup"] >= args.min_fit_speedup and
+                 result["transform_speedup"] >= args.min_transform_speedup)
+        result["promotion_eligible"] = stable and speed
+        result["verdict"] = ("PROMOTION_ELIGIBLE_BITWISE_AND_QUALITY_EQUAL"
+                             if result["promotion_eligible"] else
+                             "REJECT_UNSTABLE_OR_INSUFFICIENT_SPEED")
         with open(args.output, "x") as stream:
             json.dump(result, stream, indent=2, sort_keys=True, allow_nan=False)
             stream.write("\n")
         print("KMEANS-AMD", result["verdict"],
               "fit_speedup=%.3f" % result["fit_speedup"],
-              "transform_speedup=%.3f" % result["transform_speedup"])
+              "transform_speedup=%.3f" % result["transform_speedup"],
+              "stable=%s" % stable)
+        # A recorded timing rejection is an experiment result. The outer body
+        # collects both datasets and exits nonzero from its final joint gate.
         return 0
     finally:
         for child in children.values():

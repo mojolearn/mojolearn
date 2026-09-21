@@ -11,7 +11,7 @@ DATA=/root/ctd-data
 BINS=/root/kmeans-amd-bins
 P=$R/.pixi/envs/default/bin/python3
 LANES=kmeans,kmeans-random,kmeans-array,kmeans-weighted,kmeans-sqrt,kmeans-classic-pp
-FIXTURES=base,ties,odd,dupes,wide
+FIXTURES=base,ties,hashed,wide,denormal,denormal_ftz,dupes,odd,negative
 D_BLOCK='-D MOJOLEARN_EXPERIMENTAL_KMEANS_BLOCK_ACC=1'
 D_SCALE='-D MOJOLEARN_EXPERIMENTAL_KMEANS_DEVICE_SCALE=1'
 S_BLOCK='-D MOJOLEARN_KMEANS_BLOCK_ACC_SABOTAGE=1'
@@ -94,8 +94,8 @@ build_arm both "$D_BLOCK $D_SCALE"
 build_arm sabotage_block "$D_BLOCK $D_SCALE $S_BLOCK"
 build_arm sabotage_scale "$D_BLOCK $D_SCALE $S_SCALE"
 
-# Small, varied fixtures catch reachability and repeated-run instability before
-# the expensive data races. Candidate and off must compare cleanly.
+# All nine standard fixtures gate repeated-run identity before the expensive
+# data races. Candidate and off must compare cleanly.
 for _arm in off both sabotage_block sabotage_scale; do identity_arm "$_arm"; done
 require_step diff_off_both 300 "$P" "$R/tools/identity_break.py" --diff \
   --require-columns 2 --lanes "$LANES" \
@@ -113,9 +113,22 @@ for _sab in sabotage_block sabotage_scale; do
     ! grep -q 'REFUSED' "$O/logs/diff_$_sab.log" || exit 34
 done
 
+# Prove both experimental stages execute on each full timed workload. A
+# small-fixture divergence cannot establish that the certified scale did not
+# refuse and fall back for Taxi or Istella-S.
+for _ds in taxi istella; do
+    require_step "reach_$_ds" 3600 "$P" "$R/bench/speed/kmeans_amd_ab.py" reach \
+      --block "$DATA/big-$_ds.npz" --timeout 1200 --output "$O/reach-$_ds.json" \
+      --arm both "$P" /root/kmeans-amd-both \
+      --arm sabotage_block "$P" /root/kmeans-amd-sabotage_block \
+      --arm sabotage_scale "$P" /root/kmeans-amd-sabotage_scale
+done
+
 # Five alternating fit samples after one warmup; seven alternating transform
 # samples on 100k held-out rows. The Python harness hashes every output byte,
-# records fit quality, and checks transform minima against public predict.
+# records fit quality, checks transform minima against public predict, and
+# rejects max/min spread above 1.10, fit speedup below 1.02, or a material
+# transform regression (speedup below 0.95).
 for _ds in taxi istella; do
     require_step "race_$_ds" 5400 "$P" "$R/bench/speed/kmeans_amd_ab.py" race \
       --block "$DATA/big-$_ds.npz" --rounds 5 --transform-rounds 7 \
@@ -128,11 +141,21 @@ done
 import json, pathlib, sys
 root = pathlib.Path(sys.argv[1])
 cells = [json.loads((root / (name + ".json")).read_text()) for name in ("taxi", "istella")]
-ok = all(c.get("verdict") == "BITWISE_IDENTICAL_AND_QUALITY_EQUAL" for c in cells)
+reach = [json.loads((root / ("reach-" + name + ".json")).read_text())
+         for name in ("taxi", "istella")]
+ok = (all(c.get("promotion_eligible") is True for c in cells) and
+      all(c.get("verdict") == "PROMOTION_ELIGIBLE_BITWISE_AND_QUALITY_EQUAL" for c in cells) and
+      all(c.get("verdict") == "BOTH_FULL_DATA_STAGES_REACHED" for c in reach))
 summary = {"pass": ok, "cells": [{"dataset": pathlib.Path(c["block"]).stem,
             "fit_speedup": c["fit_speedup"],
             "transform_speedup": c["transform_speedup"],
-            "verdict": c["verdict"]} for c in cells]}
+            "fit_spread": {a: c["arms"][a]["fit_spread"] for a in ("off", "both")},
+            "transform_spread": {a: c["arms"][a]["transform_spread"] for a in ("off", "both")},
+            "verdict": c["verdict"]} for c in cells],
+           "reach": [{"dataset": pathlib.Path(c["block"]).stem,
+                       "block_accumulator_reached": c["block_accumulator_reached"],
+                       "device_scale_reached": c["device_scale_reached"],
+                       "verdict": c["verdict"]} for c in reach]}
 (root / "verdict.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
 print(json.dumps(summary, sort_keys=True))
 raise SystemExit(0 if ok else 1)
