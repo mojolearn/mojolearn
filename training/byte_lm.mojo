@@ -209,8 +209,11 @@ def byte_lm_ce_aliased() -> Bool:
 
 comptime BYTE_LM_PARAM_VIEWS = is_defined["MOJOLEARN_BYTE_LM_PARAM_VIEWS"]()
 comptime BYTE_LM_GRAD_VIEWS = is_defined["MOJOLEARN_BYTE_LM_GRAD_VIEWS"]()
-comptime BYTE_LM_FLAT_VIEW_SABOTAGE = is_defined[
+comptime BYTE_LM_PARAM_VIEW_SABOTAGE = is_defined[
     "MOJOLEARN_BYTE_LM_FLAT_VIEW_SABOTAGE"
+]()
+comptime BYTE_LM_GRAD_VIEW_SABOTAGE = is_defined[
+    "MOJOLEARN_BYTE_LM_GRAD_VIEW_SABOTAGE"
 ]()
 """Default-off repeated-step storage trial.
 
@@ -221,7 +224,8 @@ The arithmetic launchers and their operands are unchanged; only the storage
 handles differ. The two switches are independent so the trial can price all
 four arms.
 
-`FLAT_VIEW_SABOTAGE` shifts block 0's first parameter view by one float. It is
+`FLAT_VIEW_SABOTAGE` shifts block 0's first parameter view by one float and
+`GRAD_VIEW_SABOTAGE` independently shifts its first gradient view. Each is
 deliberately a valid, equal-length view and therefore proves that a full-step
 identity comparison reaches and distinguishes the view route rather than
 merely comparing two builds of the shipped copy route.
@@ -235,8 +239,10 @@ def byte_lm_flat_view_arm() -> Int:
         arm |= 1
     comptime if BYTE_LM_GRAD_VIEWS:
         arm |= 2
-    comptime if BYTE_LM_FLAT_VIEW_SABOTAGE:
+    comptime if BYTE_LM_PARAM_VIEW_SABOTAGE:
         arm |= 4
+    comptime if BYTE_LM_GRAD_VIEW_SABOTAGE:
+        arm |= 8
     return arm
 
 
@@ -412,9 +418,13 @@ def _require_profile() raises:
                  or ANY_LOSS_SABOTAGE or OPT_SABOTAGE or BWD_ANY_SABOTAGE
                  or BLOCK_ANY_SABOTAGE or ATTN_TAIL_GUARD_SABOTAGE or ATTN_REPAIR_SAB_Z or ATTN_REPAIR_SAB_DQ):
         raise Error("byte LM: numerical sabotage build refused")
-    comptime if BYTE_LM_FLAT_VIEW_SABOTAGE and not BYTE_LM_PARAM_VIEWS:
+    comptime if BYTE_LM_PARAM_VIEW_SABOTAGE and not BYTE_LM_PARAM_VIEWS:
         raise Error(
             "byte LM: flat-view sabotage requires parameter views"
+        )
+    comptime if BYTE_LM_GRAD_VIEW_SABOTAGE and not BYTE_LM_GRAD_VIEWS:
+        raise Error(
+            "byte LM: gradient-view sabotage requires gradient views"
         )
 
 
@@ -735,7 +745,7 @@ def _block_weight_views(ctx: DeviceContext,
     var base = 1 + 9 * block
     var o = byte_offsets(config)
     var first_shift = 0
-    comptime if BYTE_LM_FLAT_VIEW_SABOTAGE:
+    comptime if BYTE_LM_PARAM_VIEW_SABOTAGE:
         if block == 0:
             first_shift = 1
     var norm1 = _flat_view(param, o, base, first_shift)
@@ -758,7 +768,11 @@ def _bind_block_grad_views(mut tb: ByteBuffers,
     """Write one block's nine gradients directly into canonical flat grad."""
     var base = 1 + 9 * block
     var o = tb.offsets.copy()
-    bst.dw_norm1 = _flat_view(tb.grad, o, base)
+    var first_shift = 0
+    comptime if BYTE_LM_GRAD_VIEW_SABOTAGE:
+        if block == 0:
+            first_shift = 1
+    bst.dw_norm1 = _flat_view(tb.grad, o, base, first_shift)
     bst.dw_q = _flat_view(tb.grad, o, base + 1)
     bst.dw_k = _flat_view(tb.grad, o, base + 2)
     bst.dw_v = _flat_view(tb.grad, o, base + 3)
