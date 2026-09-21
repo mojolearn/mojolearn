@@ -88,7 +88,9 @@ REF=<40-hex commit>
 # AMD gfx942 on a DigitalOcean MI325X, built in the pinned Ubuntu 22.04 container.
 # The droplet image is Ubuntu 24.04 (GCC 13); built on the host, every host binding
 # differs from the NVIDIA legs' (Ubuntu 22.04, GCC 11) and step 3 refuses the wheel.
-# The container checks its core host binding against the NVIDIA one before compiling.
+# The container checks its core host binding against the NVIDIA one before compiling
+# (that probe stays one compiler), then builds MOJOLEARN_BUILD_JOBS extensions at a
+# time like the NVIDIA legs (default 4, 2 x jobs cores, 16 GiB per job).
 # The output directory ~/mojolearn-evidence/releases/$REF/hip-gfx942/release-build
 # must not pre-exist.
 MOJOLEARN_RELEASE_UBUNTU22=1 MOJOLEARN_EXPECT_CORE_HOST_SHA256=<sha256 of an NVIDIA leg's host/_mojolearn_core_host.so> \
@@ -99,6 +101,13 @@ MOJOLEARN_RUNPOD_KEY_FILE=~/.mojolearn_runpod_key MOJOLEARN_NVIDIA_CAMPAIGN=7 MO
 MOJOLEARN_RUNPOD_KEY_FILE=~/.mojolearn_runpod_key MOJOLEARN_NVIDIA_CAMPAIGN=7 MOJOLEARN_GPU_ARCHS=sm_89 \
   sh tools/gemm_remote_leg.sh nvidia --payload mamba --source-ref $REF --gpu "NVIDIA L40S" --allow-concurrent --rent --minutes 60
 ```
+
+The legs' pre-flights and the packer judge TRACKED source only: an ignored or
+untracked file (a generated table, local test output) cannot refuse a launch
+or a pack, while an uncommitted edit to a tracked file still does. The build
+inventory leaves out `python/mojolearn/tests/`, which never ships, so a
+test-only commit after the Linux builds does not force a rebuild; the packer
+still refuses any shipped `.py` that differs from the build commit.
 
 Launch each with `nohup ... &` from a shell that outlives it. Proofs land at
 `~/mojolearn-evidence/releases/<source-commit>/hip-gfx942/release-build/` and

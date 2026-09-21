@@ -64,6 +64,27 @@ def digest_stream(stream):
     return digest.hexdigest(), size
 
 
+INVENTORY_EXCLUDED_DIRS = ('.git', '.pixi', '.venv', '__pycache__', 'results', 'dist',
+                           'archive', 'upstream')
+
+
+def is_native_source(rel):
+    """True when REL (a POSIX path relative to the source root) is native-build input.
+
+    python/mojolearn/tests/ is neither shipped (python/pyproject.toml packages)
+    nor read by any build, so a test-only change does not invalidate a build.
+    """
+    name = rel.rsplit('/', 1)[-1]
+    if rel.startswith('python/mojolearn/tests/'):
+        return False
+    # tokenizer/tools/ writes tokenizer/impl/unicode_table_generated.mojo
+    # before the tokenizer host compile, so it is native source too.
+    return bool(name.endswith('.mojo') or rel.startswith((
+        'bindings/', 'packaging/linux/', 'python/mojolearn/', 'tokenizer/tools/'))
+        and name.endswith(('.py', '.sh')) or rel in (
+        'pixi.toml', 'pixi.lock', 'tools/linux_surface_qualification.sh'))
+
+
 def native_inventory(root):
     """Exactly the build snapshot policy in linux_surface_qualification.sh.
 
@@ -74,19 +95,40 @@ def native_inventory(root):
     root = Path(root)
     files = []
     for directory, dirs, names in os.walk(root):
-        dirs[:] = sorted(d for d in dirs if d not in (
-            '.git', '.pixi', '.venv', '__pycache__', 'results', 'dist',
-            'archive', 'upstream') and not d.startswith('.'))
+        dirs[:] = sorted(d for d in dirs if d not in INVENTORY_EXCLUDED_DIRS
+                         and not d.startswith('.'))
         for name in sorted(names):
             path = Path(directory) / name
             rel = path.relative_to(root).as_posix()
-            # tokenizer/tools/ writes tokenizer/impl/unicode_table_generated.mojo
-            # before the tokenizer host compile, so it is native source too.
-            if (name.endswith('.mojo') or rel.startswith((
-                    'bindings/', 'packaging/linux/', 'python/mojolearn/', 'tokenizer/tools/'))
-                    and name.endswith(('.py', '.sh')) or rel in (
-                    'pixi.toml', 'pixi.lock', 'tools/linux_surface_qualification.sh')):
+            if is_native_source(rel):
                 files.append([rel, digest_file(path)])
+    return sorted(files)
+
+
+def tracked_native_inventory(root):
+    """native_inventory restricted to the files git TRACKS in ROOT.
+
+    For a checkout (ROOT/.git exists) this is what `git archive` of the commit
+    would carry, hashed from the working tree: an uncommitted edit to a tracked
+    file, a staged new file or a deleted tracked file still changes it, while an
+    ignored or untracked file (a generated table, a local test run's JSON, the
+    ignored identity copies under python/mojolearn/) cannot. A directory without
+    .git (an extracted archive on a build box) is walked as before.
+    """
+    import subprocess
+    root = Path(root)
+    if not (root / '.git').exists():
+        return native_inventory(root)
+    listed = subprocess.run(['git', '-C', str(root), 'ls-files', '-z', '--cached', '--full-name'],
+                            check=True, capture_output=True, timeout=60).stdout
+    files = []
+    for rel in sorted(set(listed.decode().split('\0')) - {''}):
+        parts = rel.split('/')
+        if any(d in INVENTORY_EXCLUDED_DIRS or d.startswith('.') for d in parts[:-1]):
+            continue
+        path = root / rel
+        if is_native_source(rel) and path.is_file():
+            files.append([rel, digest_file(path)])
     return sorted(files)
 
 
@@ -256,7 +298,7 @@ def release_audit(wheel, source_root, proof_root, runtime_key):
     require(surface.arch_set_ok(carried),
             version + ' requires exactly sm_89, sm_90 (or sm_90a) and gfx942')
     require(runtime_key in carried, 'Qualified architecture is not one this wheel carries')
-    inventory = native_inventory(source_root)
+    inventory = tracked_native_inventory(source_root)
     source_sha = inventory_digest(inventory)
     with zipfile.ZipFile(wheel) as archive:
         member = 'mojolearn-' + version + '.dist-info/LINUX_PAYLOAD.json'
@@ -325,7 +367,7 @@ def release_audit(wheel, source_root, proof_root, runtime_key):
 def check_release061(wheel, qualification_root, source_root):
     wheel, qualification_root, source_root = map(Path, (wheel, qualification_root, source_root))
     proof_root = qualification_root / 'build-proofs'
-    inventory = native_inventory(source_root)
+    inventory = tracked_native_inventory(source_root)
     # DEVIATION 2293: the architectures are the ones the WHEEL carries, with
     # the Hopper slot spelled however it was built. arch_set_ok still requires
     # exactly the three slots, filled once each.
@@ -436,7 +478,7 @@ def check_corpora(directory, source_root):
 def check(wheel, qualification_root, source_root):
     wheel, qualification_root, source_root = map(Path, (wheel, qualification_root, source_root))
     wheel_sha = digest_file(wheel)
-    inventory = native_inventory(source_root)
+    inventory = tracked_native_inventory(source_root)
     extensions, sets = inspect_wheel(wheel, source_root)
     directories = {v: qualification_root / v for v in ('hip', 'cuda')}
     for vendor, directory in directories.items():

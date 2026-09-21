@@ -459,6 +459,40 @@ def sha(path):
     return h.digest()
 
 
+def require_shipped_python_at_commit(entries, commit, repo=REPO):
+    """Every shipped .py read from REPO must be byte-identical to COMMIT's copy.
+
+    The build proofs bind native source only, and their inventory leaves out
+    python/mojolearn/tests/, which never ships. This is the check that the
+    wheel's Python equals the built commit: an uncommitted edit, or an ignored
+    or untracked module sitting in a packaged directory, is refused here.
+    Git blob ids are computed locally, so no file is read through git.
+    """
+    import subprocess
+    repo = pathlib.Path(repo).resolve()
+    try:
+        listing = subprocess.run(["git", "-C", str(repo), "ls-tree", "-r", "-z", "--full-tree", commit],
+                                 check=True, capture_output=True, timeout=60).stdout.decode()
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise SystemExit(f"pack_wheel: cannot list build commit {commit} in {repo}: {exc}")
+    blobs = {}
+    for row in filter(None, listing.split("\0")):
+        meta, path = row.split("\t", 1)
+        blobs[path] = meta.split()[2]
+    for arcname, source in sorted(entries.items()):
+        if not arcname.endswith(".py"):
+            continue
+        source = pathlib.Path(source).resolve()
+        if not source.is_relative_to(repo):
+            raise SystemExit(f"pack_wheel: {arcname} is read from outside the checkout: {source}")
+        rel = source.relative_to(repo).as_posix()
+        data = source.read_bytes()
+        blob = hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
+        if blobs.get(rel) != blob:
+            state = "is not in" if rel not in blobs else "differs from"
+            raise SystemExit(f"pack_wheel: shipped {arcname} ({rel}) {state} build commit {commit}")
+
+
 def python_package_entries():
     """Use the same explicit Python package inventory as the macOS wheel."""
     config = tomllib.loads((PY_DIR / "pyproject.toml").read_text())
@@ -608,6 +642,7 @@ def main():
         entries[f"mojolearn/identity_columns/{record_dir}/{src.name}"] = src
     if inventory is not None:
         witness = inventory["source_commit"]
+        require_shipped_python_at_commit(entries, witness)
     else:
         import subprocess
         witness = subprocess.run(["git", "-C", str(REPO), "rev-parse", "HEAD"],
