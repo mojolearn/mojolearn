@@ -257,7 +257,7 @@ def host(monkeypatch):
         assert name == '_mojolearn_byte_lm' and mode == 'identical'
         return fake
     monkeypatch.setattr(impl._backend, 'binding', binding)
-    monkeypatch.setattr(impl, '_binding_metadata', lambda value: {
+    monkeypatch.setattr(impl, '_binding_metadata', lambda value, shape=None: {
         'binding_file': 'fake-byte-lm.so', 'binding_sha256': '0' * 64,
         'native_profile': value.profile, 'native_vendor': value.vendor,
         'native_numeric_mode': value.mode, 'source_sha256': {'fake': '3' * 64}})

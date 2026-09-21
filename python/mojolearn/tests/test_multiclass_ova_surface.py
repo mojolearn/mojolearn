@@ -15,8 +15,15 @@ from mojolearn.ensemble import GradientBoosting
 
 class _Binding:
     def __init__(self, classes):
+        # `numeric_mode_used()` reads the tier back from the binding it holds
+        # (`<suffix>_numeric_mode` on the module named here), as a real
+        # identical-tier `_mojolearn_gbdt` does.
+        self.__name__ = "mojolearn.identical._mojolearn_gbdt"
         self.classes = classes
         self.transforms = []
+
+    def gbdt_numeric_mode(self):
+        return _backend._MODE_CODE["identical"]
 
     def gbdt_fit(self, x, y, weights, flags, ex, ey, params, strings):
         self.params = list(params)
@@ -50,7 +57,7 @@ def test_ova_dimensions_link_weights_and_saved_mode(classes, monkeypatch, tmp_pa
     binding = _Binding(classes)
     selected_modes = []
 
-    def bind(model, name):
+    def bind(model, name=None):
         selected_modes.append(model.numeric_mode)
         return binding
 

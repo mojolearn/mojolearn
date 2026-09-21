@@ -315,10 +315,13 @@ def test_no_lane_reports_an_admission_the_table_cannot_support():
     strict = dict(min_repeats=2, input_witness_required=True, property_protocol_required=True)
     assert report['reference_admission_policy'] == strict
     # the lanes the scoped path admitted onto the old legacy base, and one
-    # (`ols`) that was legacy at the time: all of them read the same policy
-    # now, because all of them came out of the same strict global build
+    # (`ols`) that was legacy at the time: each reads exactly the policy the
+    # table carries for it. Those without a lane entry came out of the strict
+    # global build; ivf-euclidean was re-admitted on 2026-09-20 (292143f3a,
+    # three-vendor agreement) under the two-witness policy.
     for lane in ('embedding', 'embedding-sort', 'ivf-euclidean', 'ols'):
-        assert report['lanes'][lane]['reference_admission']['policy'] == strict, lane
+        carried = table.get('lane_admission', {}).get(lane, {}).get('policy', strict)
+        assert report['lanes'][lane]['reference_admission']['policy'] == carried, lane
         assert report['lanes'][lane]['status'] == 'available', lane
     # and nothing anywhere claims a policy the table does not carry
     # a lane admitted since 2026-09-20 carries the two-witness policy instead:

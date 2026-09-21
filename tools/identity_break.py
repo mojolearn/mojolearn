@@ -1149,8 +1149,9 @@ def lane_floors():
 #: name a size is refused by name, so this cannot become a way of opting out.
 NON_SIZE_REVISIONS = {
     "par-arima": (
-        "parallel fit now preserves the caller's trend=None instead of rewriting it to c/n; "
-        "the saved-model metadata changes while the fitted arithmetic is unchanged"),
+        "parallel fit now preserves the caller's trend=None instead of rewriting it to c/n "
+        "(2026-09-20, a140bfee5 in python/mojolearn/parallel_classical.py); the saved-model "
+        "metadata changes while the fitted arithmetic is unchanged"),
     "tokenizer": (
         "what changed is the VOCABULARY, not a size: the lane swapped the GPT-2 table for a 512-rank "
         "synthetic one (2026-09-16, lane/identity-fixtures-light), and a vocabulary is a constructor "
