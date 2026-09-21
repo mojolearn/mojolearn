@@ -54,6 +54,10 @@ if [ "$UBUNTU22" = 1 ] && { [ "$LEG_MODE" != build ] || [ "${MOJOLEARN_LEG_GPU:-
   echo 'Ubuntu 22.04 container mode applies only to the AMD build' >&2; exit 2
 fi
 CORE_HOST_SHA=${MOJOLEARN_EXPECT_CORE_HOST_SHA256:-}
+# tools/release_ubuntu22_build.sh builds with one compiler and refuses any other
+# job count, so the container mode defaults to 1 instead of the host default of 4.
+DEFAULT_BUILD_JOBS=4
+[ "$UBUNTU22" = 1 ] && DEFAULT_BUILD_JOBS=1
 if [ "$UBUNTU22" = 1 ] && [[ ! "$CORE_HOST_SHA" =~ ^[0-9a-f]{64}$ ]]; then
   echo 'Ubuntu 22.04 rebuild requires the NVIDIA core-host SHA256' >&2; exit 2
 fi
@@ -447,7 +451,7 @@ else
 $SSH "cd /root/mojolearn && nohup bash -c 'export PATH=/root/release-tools/bin:/root/.pixi/bin:\$PATH; \
   MOJOLEARN_COMMIT=$COMMIT MOJOLEARN_PYTHON=$REMOTE_PY MOJOLEARN_RELEASE_BUILD_SECONDS=$WORK_SECONDS \
   MOJOLEARN_EXPECT_CORE_HOST_SHA256=$CORE_HOST_SHA \
-  MOJOLEARN_BUILD_JOBS=${MOJOLEARN_BUILD_JOBS:-4} \
+  MOJOLEARN_BUILD_JOBS=${MOJOLEARN_BUILD_JOBS:-$DEFAULT_BUILD_JOBS} \
   timeout -k 20 $((WORK_SECONDS + 40)) bash $BUILD_ENTRY $LEG_VENDOR $LEG_ARCH $REMOTE_OUT > $REMOTE_LOG 2>&1; \
   echo \$? > /root/rel061.exit' > /dev/null 2>&1 < /dev/null &" || { log "could not start the build"; exit 9; }
 fi
