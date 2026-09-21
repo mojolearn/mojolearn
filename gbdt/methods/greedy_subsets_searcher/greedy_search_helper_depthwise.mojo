@@ -126,6 +126,16 @@ from gbdt.options.catboost_options import (
 # cache reduces repeated work without changing any leaf's arithmetic.
 comptime SPLIT_COST_IDENTICAL = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 
+# Default-off IDENTICAL timing candidate: DEVIATION 1904's device fold is a
+# sequential transcription of the host loop, including poison handling,
+# bounds checks, ToSplit clamping, and strict tie order.  Isolate it from the
+# other FAST split-cost changes because partition-stat propagation can change
+# float rounding while this fold cannot change the selected record.
+comptime DEVICE_WINNER_FOLD = (
+    not SPLIT_COST_IDENTICAL
+    or is_defined["MOJOLEARN_EXPERIMENTAL_IDENTICAL_DEVICE_WINNER_FOLD"]()
+)
+
 # Cache unchanged partitions under IDENTICAL without propagating histogram
 # sums (which would change rounding). CatBoost updates only split children
 # in TSplitPointsKernel (split_properties_helper.cpp:918-936); this implementation keeps
@@ -996,12 +1006,12 @@ def fit_non_symmetric_tree[
     # The four columns the device-side winner fold resolves through --
     # the SAME `TBinFeatureTable` the host fold resolved through, uploaded
     # once per tree so record and cell cannot disagree with `to_split`.
-    # FAST only: IDENTICAL never launches the fold and keeps its schedule
-    # byte-for-byte. No drain: the staging pairs are pool-owned
+    # FAST plus the default-off IDENTICAL timing candidate. No drain: the
+    # staging pairs are pool-owned
     # (DEVIATION 261's rule -- one pair per list, written once per tree),
     # the first `score.read` wait settles the copies, and the next tree's
     # rewrite sits behind this tree's own waits.
-    comptime if not SPLIT_COST_IDENTICAL:
+    comptime if DEVICE_WINNER_FOLD:
         for bf0 in range(hist_cells_per_leaf):
             h_bf_feature.unsafe_ptr().unsafe_store(bf0, table.feature[bf0])
             h_bf_bin.unsafe_ptr().unsafe_store(bf0, table.bin[bf0])
@@ -1806,7 +1816,7 @@ def fit_non_symmetric_tree[
 
             # ===== HOST WAIT ONE OF TWO: their `bestProps.Read(propsCpu)`
             # (`greedy_search_helper.cpp:517`). =====
-            comptime if SPLIT_COST_IDENTICAL:
+            comptime if not DEVICE_WINNER_FOLD:
                 stage_times.begin(ctx)
                 ctx.enqueue_copy(
                     dst_ptr=h_region_score.unsafe_ptr(), src_buf=region_score
@@ -1913,8 +1923,9 @@ def fit_non_symmetric_tree[
             # `WINNER_RECORD_WORDS` words per leaf instead of
             # `2 * argmax_blocks` values per leaf, and the host loop
             # that follows only UNPACKS -- it resolves and compares
-            # nothing. IDENTICAL keeps the host fold byte-for-byte.
-            comptime if not SPLIT_COST_IDENTICAL:
+            # nothing. IDENTICAL keeps the host fold unless the default-off
+            # timing candidate explicitly selects this exact device twin.
+            comptime if DEVICE_WINNER_FOLD:
                 stage_times.begin(ctx)
                 ctx.enqueue_function[leaf_winner_fold_kernel](
                     region_score.unsafe_ptr(),
