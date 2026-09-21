@@ -204,7 +204,8 @@ def verify_wheel(path, version, release_profile=None, qualification_root=None, s
         require(python and provenance.get('overlay_python_sha256') == python,
                 'overlaid Python provenance mismatch')
         docs = provenance.get('documentation_source_sha256')
-        require(isinstance(docs, dict) and set(docs) <= {'mojolearn/ALPHA_API.md', 'mojolearn/CITATION.cff'}
+        require(isinstance(docs, dict) and set(docs) <= {'mojolearn/ALPHA_API.md', 'mojolearn/CITATION.cff',
+                    'mojolearn/Hendel_2026_bitwise_identical_gpu_ml_preprint.pdf'}
                 and all(hashes.get(n) == h and hex_digest(h) for n, h in docs.items()),
                 'overlaid documentation provenance mismatch')
         require(('mojolearn/ALPHA_API.md' not in hashes) or 'mojolearn/ALPHA_API.md' in docs,
