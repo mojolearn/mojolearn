@@ -403,6 +403,126 @@ def _pw_half_byte_group(
     return cells^
 
 
+def _pw_live_runs(off: Int, sz: Int, full_pass: Bool) -> List[Int]:
+    """`_pw_thread_points` by RUNS: for every point index `k`, the triple
+    (first position, position step per thread, live thread count). Every
+    thread's `k`-th point is `first + step * t` for `t` below the count and
+    a zero point past it, because each arm's live threads are a PREFIX of
+    the block: the head `t < min(128, last_id)` (32 on a partial pass), the
+    tail `t < tail`, and a striped trip `j` owns a point exactly when
+    `ds - i > j * stripe` with `i` rising in `t`."""
+    var runs = List[Int]()
+    if full_pass:
+        var last_id = min(128 - (off & 127), sz)
+        runs.append(off)
+        runs.append(1)
+        runs.append(max(0, min(128, last_id)))
+        var ds = sz - last_id if sz > last_id else 0
+        var base = off + last_id
+        var tail = ds & 63
+        if tail != 0:
+            runs.append(base + ds - tail)
+            runs.append(1)
+            runs.append(min(64, tail))
+        ds -= tail
+        if ds > 0:
+            comptime stripe = GBDT_ORD_HB_BLOCK * 2
+            var max_iters = (ds + stripe - 1) // stripe
+            for j in range(max_iters):
+                # thread t is live iff 2t < ds - j * stripe
+                var live = (ds - j * stripe + 1) // 2
+                if live > GBDT_ORD_HB_BLOCK:
+                    live = GBDT_ORD_HB_BLOCK
+                for d in range(2):
+                    runs.append(base + j * stripe + d)
+                    runs.append(2)
+                    runs.append(live)
+    else:
+        var last_id = min(32 - (off & 31), sz)
+        runs.append(off)
+        runs.append(1)
+        runs.append(max(0, last_id))
+        var ds = sz - last_id if sz > last_id else 0
+        var base = off + last_id
+        var tail = ds & 31
+        if tail != 0:
+            runs.append(base + ds - tail)
+            runs.append(1)
+            runs.append(tail)
+        ds -= tail
+        if ds > 0:
+            comptime stripe = GBDT_ORD_HB_BLOCK
+            var max_iters = (ds + stripe - 1) // stripe
+            for j in range(max_iters):
+                var live = ds - j * stripe
+                if live > GBDT_ORD_HB_BLOCK:
+                    live = GBDT_ORD_HB_BLOCK
+                runs.append(base + j * stripe)
+                runs.append(1)
+                runs.append(live)
+    return runs^
+
+
+def _pw_binary_cells(
+    runs: List[Int],
+    docs: List[Int],
+    g_weight: List[Float32],
+    g_target: List[Float32],
+    cindex: List[UInt32],
+    word_offset: Int,
+    nibbles: Int,
+) -> List[Float32]:
+    """`_pw_half_byte_group` over the live points only: the same 256
+    reduced cells `[value * 16 + 2 * nibble + stat]`, the same window order
+    (point `k`, turn `sub`, thread `t`). A zero point is skipped there
+    already; here the loop does not visit it. The fold of the warp slices
+    visits only the slices a live thread wrote: a slice no thread reaches
+    is all +0.0, a cell never holds -0.0 (it starts at +0.0 and a float sum
+    reaches -0.0 only from -0.0 + -0.0), so adding it moves no bit."""
+    comptime SLICE = 512
+    var max_live = 0
+    for r in range(len(runs) // 3):
+        if runs[3 * r + 2] > max_live:
+            max_live = runs[3 * r + 2]
+    var warps = (max_live + 31) // 32
+    var slices = List[Float32](length=warps * SLICE, fill=Float32(0.0))
+    for r in range(len(runs) // 3):
+        var first = runs[3 * r]
+        var step = runs[3 * r + 1]
+        var live = runs[3 * r + 2]
+        for sub in range(16):
+            var i = sub // 2
+            var d = sub % 2
+            for t in range(live):
+                var shift = t & 14
+                var j = ((shift // 2) + i) % 8
+                if j >= nibbles:
+                    continue
+                var p = first + step * t
+                var flag = t & 1
+                var stat = flag if d == 0 else 1 - flag
+                var row = docs[p]
+                var ci = cindex[word_offset + row]
+                var bin = Int((ci >> UInt32(28 - 4 * j)) & UInt32(15))
+                var at = (t // 32) * SLICE + (t & 16) + (bin << 5) + 2 * j + stat
+                var val = g_target[p] if stat == 1 else g_weight[p]
+                slices[at] = slices[at] + val
+    var cells = List[Float32](length=256, fill=Float32(0.0))
+    if warps == 0:
+        return cells^
+    for tid in range(256):
+        var fold2 = tid >> 4
+        var e = tid & 15
+        var s0 = 32 * fold2 + e
+        var a0 = Float32(0.0)
+        var a1 = Float32(0.0)
+        for w in range(warps):
+            a0 += slices[w * SLICE + s0]
+            a1 += slices[w * SLICE + s0 + 16]
+        cells[tid] = a0 + a1
+    return cells^
+
+
 def _ordered_tree_structure(
     cindex: List[UInt32],
     mut helpers: List[_PwHelper],
@@ -562,12 +682,12 @@ def _ordered_tree_structure(
                         # value, of the reduced cells whose value has that
                         # bit clear, stored when its magnitude exceeds
                         # `PW_WRITE_EPS`. No scan: one fold.
-                        var points = _pw_thread_points(off, sz, full_pass)
+                        var runs = _pw_live_runs(off, sz, full_pass)
                         var f_base = 0
                         while f_base < n_feat:
                             var f_count = min(group, n_feat - f_base)
-                            var cells = _pw_half_byte_group(
-                                points, docs, s.g_weight, s.g_target, cindex,
+                            var cells = _pw_binary_cells(
+                                runs, docs, s.g_weight, s.g_target, cindex,
                                 hp.offsets[f_base], (f_count + 3) // 4,
                             )
                             for j in range(f_count):
