@@ -42,6 +42,10 @@ section 3.4), as a tool that runs on a laptop too.
              column and the MOJOLEARN_HOST_SABOTAGE column. Exit 1 on a part
              that did not move or is absent under sabotage, or is refused by
              anything but the lane's own computation (caught_refusals).
+             The parts in SABOTAGE_EXEMPT_ENTRIES (2026-09-22) are the
+             exception: the host sabotage does not reach them, so they are
+             counted as exempt when unmoved and FAIL when they move (the
+             entry is stale). docs/VERIFY.md lists them and why.
   build-list the host binding lists the gate builds, read back and builds
              again for the sabotage set, against the manifest
              (python/mojolearn/host_surface.py, 2026-09-15). Every family the
@@ -398,6 +402,72 @@ def _part_values(cell, part):
     return list(values) if values else None
 
 
+#: Every fixture identity_break runs (tools/identity_break.py FIXTURES).
+_ALL_FIXTURES = ("base", "ties", "hashed", "wide", "denormal", "denormal_ftz", "dupes", "odd", "negative")
+
+#: OWED cell parts the MOJOLEARN_HOST_SABOTAGE build does not move, EXEMPT
+#: from the owed check's "must move" rule (Andrew, 2026-09-22). Each entry is
+#: (lane, part, fixtures, reason) and stands for one (lane, fixture, part)
+#: per fixture. Measured on CPU identity gate run 35728134044 (99f10a932):
+#: the same 92 parts, and only those, did not move on x86-a, arm64 and
+#: macos15. THESE PARTS HAVE NO NEGATIVE CONTROL: the owed check admits them
+#: on the production CPU hash and cross-column agreement alone. An exempted
+#: part that DOES move fails the check (`do_owed`), so the list can only
+#: shrink: remove the entry, which puts the part back under the sabotage
+#: control. To take a part off this list for good, add a fault the sabotage
+#: build reaches it with (docs/VERIFY.md, "Owed parts the host sabotage
+#: cannot move").
+SABOTAGE_EXEMPT_ENTRIES = (
+    ("radius", "model", _ALL_FIXTURES,
+     "RadiusNeighbors.save writes the fitted index (the training rows as given), radius, metric, p and "
+     "algorithm; fit computes nothing, the ball cover is built per query, so no host kernel produces "
+     "a saved byte (train, infer and batch move)"),
+    ("radius-manhattan", "model", _ALL_FIXTURES, "as radius: the saved file is the training rows and the knobs"),
+    ("radius-chebyshev", "model", _ALL_FIXTURES, "as radius: the saved file is the training rows and the knobs"),
+    ("radius-minkowski-p3", "model", _ALL_FIXTURES, "as radius: the saved file is the training rows and the knobs"),
+    ("iforest", "model", _ALL_FIXTURES,
+     "IsolationForest.save writes the training matrix, the resolved knobs and offset_ (the constant "
+     "-0.5 at contamination='auto'); the forest is rebuilt on every scoring call and never saved "
+     "(DEVIATION 874), so the sabotaged scoring path writes no saved byte (train, infer and batch move)"),
+    ("rbf-sampler", "model", _ALL_FIXTURES,
+     "RBFSampler.save writes the Philox weights and offsets, sigma and scale; the fit reads only "
+     "n_features (the model hash is the same on all nine fixtures) and the sabotaged GEMM is in "
+     "transform, which is not saved (train, infer and batch move)"),
+    ("kernel-ridge-poly", "model", tuple(f for f in _ALL_FIXTURES if f != "negative"),
+     "reached but inert: KernelRidge.save writes X_fit_ and dual_coef_; the GEMM value flip moves the "
+     "48x48 poly kernel by one ulp, but at alpha=64 on inputs scaled by 1/8 the solved dual rounds to "
+     "the same float32 on these eight fixtures (it moves on negative, whose larger kernel carries the "
+     "ulp through); train, infer and batch move on all nine"),
+    ("standard-scaler-no-std", "model", ("ties",),
+     "reached but inert: with_std=False saves mean_ only, and ties is integer valued (0 to 5 over "
+     "20000 rows), so every partial sum is exact in float32 and the reordered fold returns the same "
+     "mean (it moves on the other eight fixtures; train, infer and batch move on ties)"),
+    ("optim-sgd", "batch", _ALL_FIXTURES,
+     "the batch arms run SGD step without max_norm: momentum, Nesterov, dampening and weight decay are "
+     "elementwise per parameter and no host kernel the sabotage flips runs; the train part, whose "
+     "clip norm is a reduction the training host sabotage moves, moves"),
+    ("select-d", "train", _ALL_FIXTURES,
+     "select_d returns an integer differencing order chosen by the KPSS p-value against 0.05; the host "
+     "sabotage reorders the KPSS statistic's fold (kpss_oracle KPSS_ORACLE_HOST_SABOTAGE) by an ulp, "
+     "which crosses no threshold on these series, and the decision arm MOJOLEARN_KPSS_DECISION_SABOTAGE "
+     "is not in the gate's tsa sabotage build; NO part of this lane moves"),
+    ("select-d", "batch", _ALL_FIXTURES, "as select-d train: the batch part is the same integer order per series"),
+    ("agglomerative", "batch", ("denormal", "denormal_ftz"),
+     "reached but inert: the 64 held-out rows the batch part asks predict for get the same labels with "
+     "and without the fault on these two fixtures (the hash the sabotage build gives on every "
+     "fixture); the 256-row infer part and the model part move on both"),
+)
+
+
+def exempt_set(entries=None):
+    """{(lane, fixture, part): reason} expanded from SABOTAGE_EXEMPT_ENTRIES."""
+    out = {}
+    for lane, part, fixtures, reason in (SABOTAGE_EXEMPT_ENTRIES if entries is None else entries):
+        for f in fixtures:
+            out[(lane, f, part)] = reason
+    return out
+
+
 def do_owed(args):
     """The OWED cell parts' sabotage arm (lane/cpu-gate-owed-cells,
     2026-09-15). identity_break --diff --owed-json admits a cell part no GPU
@@ -410,7 +480,8 @@ def do_owed(args):
     `caught_refusals` admits it (the lane's own computation refused under
     the sabotage build on a cell production hashes STABLE), and a cell whose
     training failed its own oracle on every repeat is (`_oracle_diverged`),
-    as the column verdict admits it."""
+    as the column verdict admits it. The parts in SABOTAGE_EXEMPT_ENTRIES
+    are the exception (see there)."""
     try:
         with open(args.owed_json) as fh:
             owed = json.load(fh)
@@ -437,47 +508,71 @@ def do_owed(args):
     # part of it moved too.
     oracle_caught = {k for k, c in (sab.get("cells") or {}).items()
                      if _host_sabotaged(sab) and _oracle_diverged(c)}
-    for o in entries:
-        key, part = f"{o['lane']}/{o['fixture']}", o["part"]
+
+    def judge(key, part):
+        """("moved", line), ("unmoved", text) or ("fail", text) for one part."""
         p = _part_values(prod["cells"].get(key), part)
         s = _part_values(sab["cells"].get(key), part)
         if not p or len(set(p)) != 1 or str(p[0]).startswith("n/a"):
-            failures.append(f"{key} {part}: the production CPU column does not hash it STABLE ({p})")
-            continue
+            return "fail", f"{key} {part}: the production CPU column does not hash it STABLE ({p})"
         if not s and key in oracle_caught:
-            moved += 1
-            print(f"owed {key} {part}: production {p[0]} sabotage DIVERGENT from its own oracle "
-                  f"({str((sab['cells'][key].get('oracle_errors') or [''])[0])[:120]}) MOVED")
-            continue
+            return "moved", (f"owed {key} {part}: production {p[0]} sabotage DIVERGENT from its own oracle "
+                             f"({str((sab['cells'][key].get('oracle_errors') or [''])[0])[:120]}) MOVED")
         if not s and key in caught:
-            moved += 1
-            print(f"owed {key} {part}: production {p[0]} sabotage REFUSED by the lane's own computation "
-                  f"({str(sab['cells'][key].get('error', ''))[:120]}) MOVED")
-            continue
+            return "moved", (f"owed {key} {part}: production {p[0]} sabotage REFUSED by the lane's own computation "
+                             f"({str(sab['cells'][key].get('error', ''))[:120]}) MOVED")
         if s and all(v is None for v in s) and f"{part}_verdict" in caught_parts.get(key, ()):
-            moved += 1
-            print(f"owed {key} {part}: production {p[0]} sabotage REFUSED by the lane's own check "
-                  f"({str(sab['cells'][key].get('probe_error', ''))[:120]}) MOVED")
-            continue
+            return "moved", (f"owed {key} {part}: production {p[0]} sabotage REFUSED by the lane's own check "
+                             f"({str(sab['cells'][key].get('probe_error', ''))[:120]}) MOVED")
         if not s or any(v is None for v in s):
-            failures.append(f"{key} {part}: the sabotage column has no value (absent, or REFUSED by routing, "
+            return "fail", (f"{key} {part}: the sabotage column has no value (absent, or REFUSED by routing, "
                             "loading or the environment); such a refusal is not a catch")
-            continue
         if str(s[0]).startswith("n/a"):
-            failures.append(f"{key} {part}: the sabotage column reads {s[0]}")
-            continue
+            return "fail", f"{key} {part}: the sabotage column reads {s[0]}"
         if s[0] == p[0]:
-            failures.append(f"{key} {part}: DID NOT MOVE under the sabotage host set ({p[0]}); an owed cell "
-                            "that sabotage cannot move rests on nothing")
+            return "unmoved", f"{key} {part}: DID NOT MOVE under the sabotage host set ({p[0]})"
+        return "moved", f"owed {key} {part}: production {p[0]} sabotage {str(s[0])[:60]} MOVED"
+
+    # The parts the host sabotage cannot move (SABOTAGE_EXEMPT_ENTRIES). An
+    # exempted part that stays put is counted, never silently passed; one
+    # that MOVES fails, because the exemption is then stale and the part can
+    # be covered again by removing it.
+    exempt = exempt_set(getattr(args, "exempt_entries", None))
+    exempted = 0
+    seen_exempt = set()
+    for o in entries:
+        key, part = f"{o['lane']}/{o['fixture']}", o["part"]
+        ekey = (o["lane"], o["fixture"], part)
+        kind, text = judge(key, part)
+        if ekey in exempt:
+            seen_exempt.add(ekey)
+            if kind == "unmoved":
+                exempted += 1
+                print(f"owed {text} EXEMPT ({exempt[ekey][:100]})")
+            elif kind == "moved":
+                failures.append(f"{key} {part}: EXEMPT but MOVED under the sabotage host set; the exemption is "
+                                "stale, remove its entry from SABOTAGE_EXEMPT_ENTRIES "
+                                "(tools/cpu_identity_gate_check.py) so the sabotage control covers it again")
+                print(text)
+            else:
+                failures.append(text)
             continue
-        moved += 1
-        print(f"owed {key} {part}: production {p[0]} sabotage {str(s[0])[:60]} MOVED")
+        if kind == "moved":
+            moved += 1
+            print(text)
+        elif kind == "unmoved":
+            failures.append(f"{text}; an owed cell that sabotage cannot move rests on nothing")
+        else:
+            failures.append(text)
     if not entries:
         print("owed: no OWED cell part in the list; nothing to move")
+    absent = len(exempt) - len(seen_exempt)
+    if absent:
+        print(f"owed: {absent} exempt part(s) are not in this owed list (recorded by a GPU column, or another list)")
     for f in failures:
         print(f"owed FAIL: {f}")
     print(f"owed verdict {'OK' if not failures else 'FAIL'} ({moved} of {len(entries)} owed cell part(s) moved, "
-          f"{len(failures)} failure(s))")
+          f"{exempted} exempt part(s) did not move as listed, {len(failures)} failure(s))")
     return 1 if failures else 0
 
 

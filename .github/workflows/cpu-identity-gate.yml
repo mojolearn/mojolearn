@@ -780,14 +780,14 @@ jobs:
             echo "SABOTAGE NOT CAUGHT: the sabotage host set diffed IDENTICAL against the GPU columns" >&2
             exit 1
           fi
-          grep -E '^summary: .*DIVERGENT=[1-9][0-9]*([[:space:]]|$)' "$GATE_OUT/diff_four_columns_sab.txt"
+          grep -E '^summary: .*DIVERGENT=[1-9][0-9]*([[:space:],]|$)' "$GATE_OUT/diff_four_columns_sab.txt"
           if [ -n "$FIX_COVERED_LANES" ]; then
             if python3 tools/identity_break.py --diff $FIX_COLUMNS "$GATE_OUT/cpu-sab-${{ matrix.slot }}.json" \
                  --require-columns 4 --lanes "$FIX_COVERED_LANES" > "$GATE_OUT/diff_four_columns_fix_sab.txt" 2>&1; then
               echo "SABOTAGE NOT CAUGHT: the sabotage host set diffed IDENTICAL against the fix columns on $FIX_COVERED_LANES" >&2
               exit 1
             fi
-            grep -E '^summary: .*DIVERGENT=[1-9][0-9]*([[:space:]]|$)' "$GATE_OUT/diff_four_columns_fix_sab.txt"
+            grep -E '^summary: .*DIVERGENT=[1-9][0-9]*([[:space:],]|$)' "$GATE_OUT/diff_four_columns_fix_sab.txt"
           fi
           # Every OWED cell part the production diffs listed must MOVE between
           # the production and sabotage CPU columns: no GPU hash stands behind
