@@ -1,0 +1,41 @@
+{
+  "title": "mojolearn: bitwise-identical GPU machine learning in Mojo on Apple Metal, NVIDIA CUDA and AMD HIP",
+  "upload_type": "software",
+  "license": "Apache-2.0",
+  "access_right": "open",
+  "creators": [
+    {
+      "name": "Hendel, Andrew",
+      "orcid": "0009-0000-9877-3623",
+      "affiliation": "Latent Archon"
+    }
+  ],
+  "description": "<p>mojolearn supports bitwise-identical training and inference across more than 50 machine-learning algorithms.</p>",
+  "keywords": [
+    "machine learning",
+    "gpu",
+    "mojo",
+    "apple silicon",
+    "metal",
+    "cuda",
+    "rocm",
+    "gradient boosting",
+    "random forest",
+    "k-means",
+    "bitwise reproducibility",
+    "nvidia",
+    "amd",
+    "hip",
+    "bitwise identical",
+    "reproducibility",
+    "cross-vendor"
+  ],
+  "related_identifiers": [
+    {
+      "identifier": "https://github.com/mojolearn/mojolearn",
+      "relation": "isSupplementTo",
+      "resource_type": "software",
+      "scheme": "url"
+    }
+  ]
+}

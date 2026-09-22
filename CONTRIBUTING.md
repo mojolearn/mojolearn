@@ -111,7 +111,8 @@ GitHub component of the Pile. Name the opponent's threading and BLAS before
 quoting a ratio, never mix GPU models in one ratio, and report measured
 ratios rather than general speed claims. There is no fixed percentage
 threshold for performance work. Review weighs measured benefit, generality
-and regressions against complexity.
+and regressions against complexity. The full policy is the
+[performance acceptance policy](docs/PERFORMANCE_ACCEPTANCE.md).
 
 ### Comparing against libraries without a GPU path
 

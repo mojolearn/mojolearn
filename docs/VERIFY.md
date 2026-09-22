@@ -32,6 +32,8 @@ they do not certify the installed wheel or promote a pending lane.
 
 The appendix is a historical list, not the total number of today's public
 algorithms. `additional_lanes` names registered checks outside that list.
+For the source/API/wheel comparison and the remaining qualification work, see
+[the next-wheel coverage audit](NEXT_WHEEL_COVERAGE.md).
 
 The candidate's default CPU selection now includes spectral clustering,
 Fowlkes–Mallows, and both ARIMA-with-regressors variants. To replay just those
