@@ -1,6 +1,6 @@
 import unittest
 import numpy as np
-from tools.attention_v2_oracle import online_row, eager_row, workspace_bytes, materialized_bytes
+from tools.attention_v2_oracle import exp32, online_row, eager_row, workspace_bytes, materialized_bytes
 
 class AttentionV2OracleTest(unittest.TestCase):
     def fixture(self):
@@ -10,6 +10,10 @@ class AttentionV2OracleTest(unittest.TestCase):
         s,v=self.fixture(); a=online_row(s,v); b=online_row(s,v)
         self.assertEqual(a[0].tobytes(),b[0].tobytes()); self.assertEqual(a[1:],b[1:])
         with self.assertRaisesRegex(ValueError,"fixed"): online_row(s,v,16)
+    def test_portable_exp_leaf_bits(self):
+        got=np.asarray([exp32(x) for x in (-10.,-1.,-0.,1.,10.)],np.float32)
+        # Authoritative checks/numerics.mojo::portable_expf bits, verified on Apple.
+        self.assertEqual(got.view(np.uint32).tolist(),[943614926,1052531378,1065353216,1076754516,1185682670])
     def test_intentional_v1_separation(self):
         s,v=self.fixture()
         self.assertNotEqual(online_row(s,v)[0].tobytes(), eager_row(s,v).tobytes())

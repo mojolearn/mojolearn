@@ -4,7 +4,7 @@
 This is deliberately a different floating-point function from transformer v1.
 Tiles and folds are logical contract quantities, never device tuning knobs.
 """
-import math
+import math, struct
 import numpy as np
 
 TILE = 32
@@ -12,10 +12,24 @@ TILE = 32
 def f32(x):
     return np.float32(x)
 
+def _fma32(a,b,c):
+    return f32(math.fma(float(f32(a)),float(f32(b)),float(f32(c))))
+
+def _pow2(k):
+    return np.frombuffer(struct.pack('<I',(k+127)<<23),dtype='<f4')[0]
+
 def exp32(x):
-    # GPU work must replace this leaf with the repository's portable exp32
-    # and prove its bits against the device columns.
-    return f32(math.exp(float(f32(x))))
+    """Bit transcription of checks/numerics.mojo::portable_expf."""
+    x=f32(x)
+    if np.isnan(x): return x
+    if x > f32(88.722835): return f32(np.inf)
+    if x < f32(-87.33655): return f32(0)
+    t=f32(f32(x*f32(1.4426950408889634))+f32(.5)); zf=math.floor(float(t)); k=int(zf)
+    r=_fma32(f32(zf),f32(-.693359375),x); r=_fma32(f32(zf),f32(2.12194440e-4),r)
+    q=f32(1.9875691500e-4)
+    for c in (1.3981999507e-3,8.3334519073e-3,4.1665795894e-2,1.6666665459e-1,5.0000001201e-1): q=_fma32(q,r,f32(c))
+    y=f32(_fma32(q,f32(r*r),r)+f32(1)); k1=k>>1; k2=k-k1; y=f32(f32(y*_pow2(k1))*_pow2(k2))
+    return f32(0) if y < f32(1.1754943508222875e-38) else y
 
 def online_row(scores, values, tile=TILE):
     """Fixed-tile, serial-tile online softmax and weighted-value row."""
