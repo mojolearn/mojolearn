@@ -8,6 +8,7 @@
 #   MOJOLEARN_GEMM_LEG_EXTRA=tools/attention_step_leg.sh \
 #   MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date -u +%Y-%m-%d_%H%M%S)-amd-mi325x-attention-step \
 #   bash tools/do_extra_leg.sh amd [--minutes N] [--dry-run] [--skip-gates]
+#   bash tools/do_extra_leg.sh amd --segment-lease N --dollar-cap USD   # a lease above one hour, priced first
 #
 #   amd   gpu-mi325x1-256gb, tor1, image 188571990
 #   nv    gpu-h100x1-80gb,   nyc2, image 236925144
@@ -138,6 +139,10 @@ usage() {
 }
 
 VENDOR=""; MINUTES=60; DRY=0; GATES=1
+# THE SEGMENT LEASE (docs/GPT3_SMALL_SIX_SEGMENT_PLAN.md, E4): a lease above
+# one hour, named, and bound to a dollar figure at the size's own hourly
+# price read from the sizes API BEFORE the create. Both flags or neither.
+SEGMENT_LEASE=""; DOLLAR_CAP=""; SEGMENT_CAP_MINUTES=2880
 while [ $# -gt 0 ]; do
   case "$1" in
     amd|nv|cpu-intel|cpu-amd)
@@ -145,6 +150,10 @@ while [ $# -gt 0 ]; do
       VENDOR=$1 ;;
     --minutes) shift; MINUTES="${1:-}" ;;
     --minutes=*) MINUTES="${1#--minutes=}" ;;
+    --segment-lease) shift; SEGMENT_LEASE="${1:-}" ;;
+    --segment-lease=*) SEGMENT_LEASE="${1#--segment-lease=}" ;;
+    --dollar-cap) shift; DOLLAR_CAP="${1:-}" ;;
+    --dollar-cap=*) DOLLAR_CAP="${1#--dollar-cap=}" ;;
     --dry-run) DRY=1 ;;
     --skip-gates) GATES=0 ;;
     -h|--help) usage; exit 0 ;;
@@ -154,8 +163,17 @@ while [ $# -gt 0 ]; do
 done
 [ -n "$VENDOR" ] || { usage >&2; exit 2; }
 case "$MINUTES" in ''|*[!0-9]*) echo "--minutes must be a whole number" >&2; exit 2 ;; esac
-if [ "$MINUTES" -gt 60 ]; then
-  echo "--minutes $MINUTES REFUSED: one hour is the hard cap for a rented GPU (a second leg, never an extension)" >&2
+if [ -n "$SEGMENT_LEASE" ] || [ -n "$DOLLAR_CAP" ]; then
+  { [ -n "$SEGMENT_LEASE" ] && [ -n "$DOLLAR_CAP" ]; } || { echo "--segment-lease and --dollar-cap go together" >&2; exit 2; }
+  [ "$MINUTES" = 60 ] || { echo "--minutes and --segment-lease are two ways to say one thing; give one" >&2; exit 2; }
+  case "$SEGMENT_LEASE" in ''|*[!0-9]*) echo "--segment-lease must be whole minutes" >&2; exit 2 ;; esac
+  case "$DOLLAR_CAP" in ''|*[!0-9.]*|.|*.*.*) echo "--dollar-cap must be a dollar figure like 120 or 47.50" >&2; exit 2 ;; esac
+  if [ "$SEGMENT_LEASE" -le 60 ] || [ "$SEGMENT_LEASE" -gt "$SEGMENT_CAP_MINUTES" ]; then
+    echo "--segment-lease is for leases ABOVE one hour and at most $SEGMENT_CAP_MINUTES minutes (48 h); got $SEGMENT_LEASE" >&2; exit 2
+  fi
+  MINUTES=$SEGMENT_LEASE
+elif [ "$MINUTES" -gt 60 ]; then
+  echo "--minutes $MINUTES REFUSED: one hour is the hard cap for a rented GPU (a second leg, never an extension); a training segment names its lease with --segment-lease N --dollar-cap USD" >&2
   exit 2
 fi
 [ "$MINUTES" -ge 10 ] || { echo "--minutes must be at least 10" >&2; exit 2; }
@@ -1010,6 +1028,29 @@ if ps -axo command= 2>/dev/null | grep -q -F -f "$TOKPAT"; then
   echo "local_key_in_ps=VISIBLE" >> "$OUT/leg.txt"
 else
   echo "local_key_in_ps=not_visible" >> "$OUT/leg.txt"
+fi
+
+# ---- the segment lease is priced BEFORE the create ----
+if [ -n "$SEGMENT_LEASE" ]; then
+  c=$(http_code GET "$API/sizes?per_page=200" "$TMPD/sizes.json")
+  [ "$c" = 200 ] || die "segment lease: the sizes API answered HTTP $c; a $MINUTES-minute lease cannot be priced, so it is refused" 2
+  PRICE_HOURLY=$(python3 - "$TMPD/sizes.json" "$SIZE" <<'PY'
+import json, sys
+try:
+    for s in json.load(open(sys.argv[1])).get("sizes", []):
+        if s.get("slug") == sys.argv[2]:
+            print(s.get("price_hourly", "")); break
+except Exception:
+    pass
+PY
+)
+  [ -n "$PRICE_HOURLY" ] || die "segment lease: size $SIZE has no price_hourly in the sizes listing; refused" 2
+  MAX_COST=$(python3 -c "import sys; print('%.2f' % (float(sys.argv[1]) * int(sys.argv[2]) / 60.0))" "$PRICE_HOURLY" "$MINUTES")
+  if [ "$(python3 -c "import sys; print(1 if float(sys.argv[1]) > float(sys.argv[2]) else 0)" "$MAX_COST" "$DOLLAR_CAP")" = 1 ]; then
+    die "segment lease REFUSED: $MINUTES minutes of $SIZE at \$$PRICE_HOURLY/h is up to \$$MAX_COST, above the --dollar-cap of \$$DOLLAR_CAP; nothing was created" 2
+  fi
+  log "segment lease: $MINUTES minutes of $SIZE at \$$PRICE_HOURLY/h is at most \$$MAX_COST, under the cap of \$$DOLLAR_CAP"
+  { echo "segment_lease=$MINUTES"; echo "dollar_cap=$DOLLAR_CAP"; echo "price_hourly=$PRICE_HOURLY"; echo "max_cost=$MAX_COST"; } >> "$OUT/leg.txt"
 fi
 
 # ---- the create ----

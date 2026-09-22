@@ -1,0 +1,4 @@
+binding has byte_lm_parallel_set_lr: True
+step1 equal: True | set_lr == reopen: True | lr change moves bits: True | raw hash == state_dict hash: True | config lr follows: True
+lr 0 refused: Byte-LM requires lr > 0
+PASS

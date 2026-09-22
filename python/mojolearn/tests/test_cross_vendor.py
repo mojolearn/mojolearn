@@ -148,3 +148,86 @@ def test_refuses_a_replica_that_drifts():
 def test_refuses_shards_not_owned_exactly_once(splits):
     rows, errors = _group(splits)
     assert rows is None and any("exactly once" in str(e) for e in errors)
+
+
+# ------------------------------------------------------------ the chained fold
+
+def test_fold_pair_numpy_and_pure_python_agree_bit_for_bit():
+    np = pytest.importorskip("numpy")
+    rng = np.random.default_rng(11)
+    a = (rng.standard_normal(2048) * 10.0 ** rng.integers(-40, 3, 2048)).astype(np.float32).tobytes()
+    b = (rng.standard_normal(2048) * 10.0 ** rng.integers(-40, 3, 2048)).astype(np.float32).tobytes()
+    assert cv.fold_pair(a, b, numpy=True) == cv.fold_pair(a, b, numpy=False)
+
+
+def test_ordered_fold_with_a_prefix_equals_the_flat_fold():
+    np = pytest.importorskip("numpy")
+    rng = np.random.default_rng(5)
+    grads = [(rng.standard_normal(512) * 10.0 ** rng.integers(-40, 3, 512)).astype(np.float32).tobytes()
+             for _ in range(6)]
+    flat = cv.ordered_fold(grads)
+    prefix = cv.ordered_fold(grads[:2])
+    assert cv.ordered_fold(grads[2:], prefix=prefix) == flat
+    # and a prefix of one shard is that shard
+    assert cv.ordered_fold(grads[1:], prefix=grads[0]) == flat
+    # the reverse order is a different fold (the check can fail)
+    assert cv.ordered_fold(list(reversed(grads))) != flat
+
+
+def _chained_group(splits, steps=3, drift=None):
+    coord = cv.Coordinator(host="127.0.0.1", port=0, workers=len(splits), logical_shards=4, steps=steps,
+                           accept_timeout=30, timeout=30, chained=True)
+    out, errors = {}, []
+
+    def run_coord():
+        try:
+            out["rows"] = coord.run()
+        except BaseException as e:  # noqa: BLE001
+            errors.append(e)
+
+    t = threading.Thread(target=run_coord)
+    t.start()
+    assert coord.ready.wait(10)
+    workers = []
+    for i, shards in enumerate(splits):
+        w = cv.Worker(trainer=_Fake(drift_at=drift if i == 1 else None), shards=shards,
+                      batches=lambda step, k: k, address=("127.0.0.1", coord.bound_port), name=f"w{i}",
+                      connect_timeout=10, timeout=30, chained=True)
+        workers.append(threading.Thread(target=lambda w=w: _safe(w, errors)))
+    for w in workers:
+        w.start()
+    for w in workers + [t]:
+        w.join()
+    return out.get("rows"), errors
+
+
+def test_chained_group_equals_the_gathered_group_and_one_process():
+    chained, errors = _chained_group([[0, 1], [2, 3]])
+    assert not errors and [r["step"] for r in chained] == [1, 2, 3]
+    gathered, errors = _group([[0, 1], [2, 3]])
+    assert not errors
+    assert [r["state"] for r in chained] == [r["state"] for r in gathered]
+    assert [r["total_sha256"] for r in chained] == [r["total_sha256"] for r in gathered]
+    assert chained[0]["protocol"] == "chained" and gathered[0]["protocol"] == "gathered"
+    one = _Fake()
+    for _ in range(3):
+        grads = [one.shard_gradient(k)[1].tobytes() for k in range(4)]
+        one.apply_gradient(array.array("f", cv.ordered_fold(grads)))
+    assert chained[-1]["state"] == hashlib.sha256(memoryview(one.param).cast("B")).hexdigest()
+
+
+def test_chained_refuses_a_non_contiguous_block():
+    rows, errors = _chained_group([[0, 2], [1, 3]])
+    assert rows is None and any("contiguous" in str(e) for e in errors)
+
+
+def test_chained_refuses_a_replica_that_drifts():
+    rows, errors = _chained_group([[0, 1], [2, 3]], drift=2)
+    assert rows is None and any("disagree after step 2" in str(e) for e in errors)
+
+
+def test_chained_three_workers_unequal_blocks():
+    rows, errors = _chained_group([[0], [1, 2], [3]])
+    assert not errors and len(rows) == 3
+    gathered, _ = _group([[0, 1], [2, 3]])
+    assert [r["state"] for r in rows] == [r["state"] for r in gathered]
