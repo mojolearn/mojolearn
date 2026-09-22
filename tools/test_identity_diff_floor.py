@@ -146,7 +146,7 @@ def test_owed_json_still_demands_an_explicit_count(tmp_path):
 @pytest.mark.parametrize("record,columns,require,want_rc,token", [
     ("2026-09-14_166-lanes",
      ("apple-m4.json", "nvidia-h100-sm_90a.json", "amd-mi325x-gfx942.json"),
-     "3", 1, "summary: DIVERGENT=1, IDENTICAL=1322"),
+     "3", 1, "summary: DIVERGENT=1, IDENTICAL=1304"),
     ("2026-09-14_kmeans-sqrt-fix",
      ("apple-m4.json", "nvidia-h100-sm_90a.json", "amd-mi325x-gfx942.json"),
      "3", 0, "summary: IDENTICAL=72"),

@@ -491,7 +491,7 @@ jobs:
 
       # The tool loads on this CPU and the three committed GPU columns diff
       # exactly as recorded (the 2026-09-14 166-lane record at 1eea14f80, the
-      # batch part and 31 par-* lanes, AMD column MI325X): 1322 comparable train cells
+      # batch part and 31 par-* lanes, AMD column MI325X): 1304 comparable train cells
       # (the revised lanes' cells excluded, see the step) IDENTICAL x3 and ONE DIVERGENT, kmeans-sqrt/wide, where the H100
       # inertia stands alone (docs/lanes/BRIEF_kmeans_sqrt_wide_h100_inertia_2026-09-14.md).
       # --diff exits 1 on that cell, so the step requires exit 1 AND the exact
@@ -524,11 +524,14 @@ jobs:
           # par-arima joined LANE_REVISIONS at 4459379a4 (trend-metadata-1):
           # its 9 train, 9 infer, 9 model (N/A) and 9 batch cells left the
           # comparison, 162 -> 171 excluded, 1331 -> 1322, 1701 -> 1692,
-          # 963 -> 954 and 1080 -> 1071.
-          [ "$(grep -c '^NOTE: column .*its 171 cell(s) there are not compared and read as absent$' "$GATE_OUT/diff_gpu3.txt")" = 3 ]
-          grep -F 'summary: DIVERGENT=1, IDENTICAL=1322' "$GATE_OUT/diff_gpu3.txt"
-          grep -F 'summary (infer/model): IDENTICAL=1692, N/A=954' "$GATE_OUT/diff_gpu3.txt"
-          grep -F 'summary (batch): IDENTICAL=1071, N/A=252' "$GATE_OUT/diff_gpu3.txt"
+          # 963 -> 954 and 1080 -> 1071. holtwinters and
+          # holtwinters-multiplicative joined at a5e6da96a (the estimated
+          # default): 171 -> 189 excluded, 1322 -> 1304, 1692 -> 1674,
+          # 954 -> 936 and 1071 -> 1053.
+          [ "$(grep -c '^NOTE: column .*its 189 cell(s) there are not compared and read as absent$' "$GATE_OUT/diff_gpu3.txt")" = 3 ]
+          grep -F 'summary: DIVERGENT=1, IDENTICAL=1304' "$GATE_OUT/diff_gpu3.txt"
+          grep -F 'summary (infer/model): IDENTICAL=1674, N/A=936' "$GATE_OUT/diff_gpu3.txt"
+          grep -F 'summary (batch): IDENTICAL=1053, N/A=252' "$GATE_OUT/diff_gpu3.txt"
           grep -E '^\| kmeans-sqrt/wide +\| DIVERGENT +\| parts differ: inertia;' "$GATE_OUT/diff_gpu3.txt"
           grep -F 'require-columns 3 over' "$GATE_OUT/diff_gpu3.txt" | grep -F ': OK'
           [ "$st" = 1 ] || { echo "expected --diff to exit 1 on the one recorded DIVERGENT cell, got $st" >&2; exit 1; }
