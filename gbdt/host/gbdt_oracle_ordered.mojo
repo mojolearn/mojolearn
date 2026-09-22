@@ -100,8 +100,9 @@ from gbdt.host.gbdt_oracle import (
     GbdtHostGrid,
     GbdtHostModel,
     _binarize_columns,
-    _halving_fold,
+    _halving_fold_live,
     _hist2_dither,
+    _pinned_partition_stat,
     _hist2_quantize,
     gbdt_host_model_text,
 )
@@ -190,15 +191,22 @@ def _ordered_folds(n: Int, growth_rate: Float64, min_fold_size: Int) raises -> L
 def _partition_update_sum(values: List[Float32], offset: Int, size: Int) -> Float32:
     """`_compute_sum[1024]` per thread then `_block_reduce_sum[1024]`
     (`pointwise_scores.mojo:578-628`, `:1408-1443`)."""
-    var slab = List[Float32](length=GBDT_ORD_WIDE_BLOCK, fill=Float32(0.0))
-    for tid in range(GBDT_ORD_WIDE_BLOCK):
+    if size <= 0:
+        return Float32(0.0)
+    var live = min(size, GBDT_ORD_WIDE_BLOCK)
+    var p = 1
+    while p < live:
+        p <<= 1
+    var slab = List[Float32](length=p, fill=Float32(0.0))
+    for tid in range(p):
         var s = Float32(0.0)
         var i = tid
         while i < size:
             s += values[offset + i]
             i += GBDT_ORD_WIDE_BLOCK
         slab[tid] = s
-    return _halving_fold(slab)
+    # lanes past `size` hold +0.0 (`_halving_fold_live`)
+    return _halving_fold_live(slab, live, GBDT_ORD_WIDE_BLOCK)
 
 
 @fieldwise_init
@@ -756,27 +764,9 @@ def _partition_stat_n(
     """`compute_partition_stats` for one (leaf, stat) at
     `partition_stats_chunks(32, n_stats)` chunks (`partitions_reduce.mojo`)."""
     var max_chunks = (2 * GBDT_ORD_PINNED_SM + n_stats - 1) // n_stats
-    var partials = List[Float32](length=max_chunks, fill=Float32(0.0))
-    var stride = max_chunks * GBDT_ORD_STATS_BLOCK
-    for chunk in range(max_chunks):
-        var slab = List[Float32](length=GBDT_ORD_STATS_BLOCK, fill=Float32(0.0))
-        for tid in range(GBDT_ORD_STATS_BLOCK):
-            var v = Float32(0.0)
-            var i = chunk * GBDT_ORD_STATS_BLOCK + tid
-            while i < size:
-                v += stats[stat_id * line_size + offset + i]
-                i += stride
-            slab[tid] = v
-        partials[chunk] = _halving_fold(slab)
-    var slab2 = List[Float32](length=GBDT_ORD_STATS_BLOCK, fill=Float32(0.0))
-    for tid in range(GBDT_ORD_STATS_BLOCK):
-        var acc = Float32(0.0)
-        var c = tid
-        while c < max_chunks:
-            acc += partials[c]
-            c += GBDT_ORD_STATS_BLOCK
-        slab2[tid] = acc
-    return _halving_fold(slab2)
+    return _pinned_partition_stat(
+        stats, stat_id * line_size + offset, size, max_chunks
+    )
 
 
 def _ordered_estimate_and_apply(

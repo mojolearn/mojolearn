@@ -308,6 +308,38 @@ def _halving_fold(mut slab: List[Float32]) -> Float32:
     return slab[0]
 
 
+def _halving_fold_live(mut slab: List[Float32], live: Int, width: Int) -> Float32:
+    """`_halving_fold` over `width` lanes (a power of two) of which only the
+    first `live` can hold anything but +0.0, the same result with work
+    proportional to `live`. The caller fills `slab[0:p]`, `p` the least power
+    of two at or above `live` (lanes `live..p` at +0.0); lanes at `p` and above
+    are never read.
+
+    WHY IT IS THE SAME SUM. Every outer step with `step >= p` adds a lane at
+    or above `p` (+0.0: such lanes only ever receive +0.0 + +0.0) onto each
+    lane below `p`; after the first of them each lane below `p` is
+    `x + 0.0`, and further `+ 0.0` adds change nothing (`x + 0.0` is its own
+    fixed point in every rounding and flush mode, -0.0 included). So those
+    steps are ONE `+ 0.0` pass over the prefix, kept here, then the steps
+    below `p` read only lanes below `p`, exactly the full tree's adds. A
+    partition-stats launch at 320 rows spent 90% of a host Ordered tree
+    folding lanes that held +0.0 (lane/perf gbdt-small-round2, 2026-09-22)."""
+    var p = 1
+    while p < live:
+        p <<= 1
+    if p > width:
+        p = width
+    if p < width:
+        for t in range(p):
+            slab[t] = slab[t] + Float32(0.0)
+    var step = p // 2
+    while step > 0:
+        for t in range(step):
+            slab[t] = slab[t] + slab[t + step]
+        step //= 2
+    return slab[0]
+
+
 def _deterministic_sum_lanes(
     partials: List[Float32], lanes: Int, count: Int
 ) -> List[Float32]:
@@ -1150,27 +1182,56 @@ def _partition_stat(
     each 512-thread block over the leaf, phase 2 folds one partial per chunk,
     each through the 512-lane halving tree."""
     comptime MAX_CHUNKS = (2 * GBDT_PINNED_SM + 2 - 1) // 2
-    var partials = List[Float32](length=MAX_CHUNKS, fill=Float32(0.0))
-    var stride = MAX_CHUNKS * GBDT_STATS_BLOCK
-    for chunk in range(MAX_CHUNKS):
-        var slab = List[Float32](length=GBDT_STATS_BLOCK, fill=Float32(0.0))
-        for tid in range(GBDT_STATS_BLOCK):
+    return _pinned_partition_stat(
+        stats, stat_id * line_size + offset, size, MAX_CHUNKS
+    )
+
+
+def _pinned_partition_stat(
+    stats: List[Float32], base: Int, size: Int, max_chunks: Int
+) -> Float32:
+    """The pinned `compute_partition_stats` launch over `stats[base:base +
+    size]` at `max_chunks` chunks of `GBDT_STATS_BLOCK` threads: phase 1
+    strides each block over the leaf (thread `g` folds `g, g + stride, ...`
+    from 0.0), phase 2 folds one partial per chunk from 0.0, each through the
+    512-lane halving tree. Chunk `c` has `size - 512 c` live threads (none
+    past the leaf; a chunk with none holds +0.0 and its tree folds +0.0), so
+    each tree runs through `_halving_fold_live` over its live lanes: the same
+    adds on every lane that can hold a value."""
+    if size <= 0:
+        return Float32(0.0)
+    var stride = max_chunks * GBDT_STATS_BLOCK
+    var live_chunks = (size + GBDT_STATS_BLOCK - 1) // GBDT_STATS_BLOCK
+    if live_chunks > max_chunks:
+        live_chunks = max_chunks
+    var slab = List[Float32](length=GBDT_STATS_BLOCK, fill=Float32(0.0))
+    var partials = List[Float32](length=GBDT_STATS_BLOCK, fill=Float32(0.0))
+    for chunk in range(live_chunks):
+        var live = min(size - chunk * GBDT_STATS_BLOCK, GBDT_STATS_BLOCK)
+        var p = 1
+        while p < live:
+            p <<= 1
+        for tid in range(p):
             var v = Float32(0.0)
             var i = chunk * GBDT_STATS_BLOCK + tid
             while i < size:
-                v += stats[stat_id * line_size + offset + i]
+                v += stats[base + i]
                 i += stride
             slab[tid] = v
-        partials[chunk] = _halving_fold(slab)
-    var slab2 = List[Float32](length=GBDT_STATS_BLOCK, fill=Float32(0.0))
-    for tid in range(GBDT_STATS_BLOCK):
+        partials[chunk] = _halving_fold_live(slab, live, GBDT_STATS_BLOCK)
+    # phase 2: lane `t < max_chunks` holds `0.0 + partials[t] (+ ...)`, the
+    # dead chunks' +0.0 included; lanes past the live chunks hold +0.0
+    var p2 = 1
+    while p2 < live_chunks:
+        p2 <<= 1
+    for tid in range(p2):
         var acc = Float32(0.0)
         var c = tid
-        while c < MAX_CHUNKS:
-            acc += partials[c]
+        while c < max_chunks:
+            acc += partials[c] if c < live_chunks else Float32(0.0)
             c += GBDT_STATS_BLOCK
-        slab2[tid] = acc
-    return _halving_fold(slab2)
+        slab[tid] = acc
+    return _halving_fold_live(slab, live_chunks, GBDT_STATS_BLOCK)
 
 
 def _add_leaf_cosine(
