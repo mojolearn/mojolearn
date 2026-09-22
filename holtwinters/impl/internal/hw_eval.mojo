@@ -162,8 +162,13 @@ def holtwinters_eval_device(
     var ctrend = Float32(0.0)
     var cseason = Float32(0.0)
     var stmp_default: Float32 = Float32(0.0) if additive_seasonal else Float32(1.0)
+    # `s` is `i % frequency`, carried as a phase counter (i >= 0, and a
+    # frequency <= 0 keeps s = 0, which is Int's `i % 0`). The signed 64-bit
+    # floor modulus it replaces made the gfx942 code object differ from one
+    # cold compile to the next (the sign fix-up's adds came out in either
+    # association); the counter has no division to lower.
+    var s = 0
     for i in range(n - shift):
-        var s = i % frequency
         # IDX(tid, i + shift, batch_size) = tid + (i + shift) * batch_size
         var pts = ts.unsafe_load(tid + (i + shift) * batch_size)
         var leveltrend = _f(plevel + ptrend)
@@ -217,6 +222,9 @@ def holtwinters_eval_device(
             season.unsafe_store(tid + i * batch_size, cseason)
         if (write_mask & HW_WRITE_XHAT) != 0:
             xhat.unsafe_store(tid + i * batch_size, xhat_)
+        s += 1
+        if s >= frequency:
+            s = 0
     return error_
 
 
