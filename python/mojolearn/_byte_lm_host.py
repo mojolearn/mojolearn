@@ -349,7 +349,7 @@ class LanguageModelHostTrainer:
 
     def __init__(self, parameters, *, m=None, v=None, shape=None,
                  completed_steps=0, lr=1e-3, betas=(.9, .999), eps=1e-8,
-                 weight_decay=0.0):
+                 weight_decay=.01):
         shape = ByteLanguageModelConfig() if shape is None else shape
         self._shape = shape
         self._native = _native_shape(shape)

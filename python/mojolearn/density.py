@@ -282,6 +282,14 @@ class DBSCAN(NumericModeMixin):
                 "point) or a positive cap"
             )
         x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
+        if not all_finite(x):
+            # Before this check a NaN row reached the kernel and came back
+            # labelled noise (-1), silently; scikit-learn refuses it.
+            raise ValueError(
+                "mojolearn DBSCAN: X contains a NaN or an infinity; a "
+                "non-finite row has no distance to any other, so it is "
+                "refused by name"
+            )
         labels = empty((x.shape[0],), "<i4")
         budget = 0 if self.max_mbytes_per_batch is None else int(self.max_mbytes_per_batch)
         if budget < 0:
@@ -721,6 +729,14 @@ class KernelDensity(NumericModeMixin):
         # NearestNeighbors.fit does (DEVIATION 2921's key rule).
         self._release_resident_fit()
         x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
+        if not all_finite(x):
+            # DEVIATION 604 refuses a non-finite fit set at the first
+            # score_samples; refusing it here as well names the input at the
+            # call that supplied it, as scikit-learn's fit does.
+            raise ValueError(
+                "mojolearn KernelDensity: X contains a NaN or an infinity; "
+                "refused by name at fit (DEVIATION 604)"
+            )
         self._x = x  # kept alive; score_samples reads it
         self.n_features_in_ = x.shape[1]
         self.n_samples_fit_ = x.shape[0]

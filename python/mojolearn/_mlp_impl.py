@@ -158,7 +158,12 @@ def _batch(value):
     try:
         pb = probe(value)
     except TypeError:
-        raise ValueError('SmallMLPTrainer X must have shape (batch, 8)') from None
+        # A nested list of the right shape used to be told its SHAPE was
+        # wrong. The fault is the type: this surface reads float32 buffers
+        # only (the same refusal a float64 array gets from `_array`).
+        raise TypeError('SmallMLPTrainer X must be a float32 array of shape (batch, 8) '
+                        '(a NumPy array, an array.array or a mojolearn Array), got '
+                        + type(value).__name__) from None
     if pb.ndim != 2 or pb.shape[1] != 8:
         raise ValueError('SmallMLPTrainer X must have shape (batch, 8)')
     if not 1 <= pb.shape[0] <= 256:

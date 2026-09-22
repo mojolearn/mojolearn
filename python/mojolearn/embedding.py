@@ -45,7 +45,7 @@ NO SPEED CLAIM.
 """
 from . import _backend, _serialize
 from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty, frombytes
+from ._buffer import _materialize, addr, addr_ro, as_f32_c, as_i32_c, empty, frombytes
 from ._mode import NumericModeMixin
 
 _MODE_CODE = {"fast": 0, "identical": 1, "deterministic": 2}
@@ -165,7 +165,16 @@ class Embedding(NumericModeMixin):
         return mod
 
     def _ids(self, ids):
-        a, _ = as_i32_c(ids, ndim=None, name="ids")
+        raw, _ = _materialize(ids, "ids")
+        if raw.dtype[1] not in "iu":
+            # Before this check a float id was cast to int32 and 1.5 read
+            # row 1, silently. torch refuses a float index tensor; an id is
+            # a row number, so a non-integer one is refused by name.
+            raise TypeError(
+                f"mojolearn Embedding: ids must be integers, got dtype "
+                f"{raw.dtype!r}; a float id is refused rather than truncated"
+            )
+        a, _ = as_i32_c(raw, ndim=None, name="ids")
         return a.reshape((int(a.size),)), tuple(a.shape)
 
     def forward(self, ids):

@@ -131,7 +131,7 @@ class GradientBoostingClassifier(_GBDTAdapter):
     predict returns labels, decision_function returns raw Float32 margins,
     predict_proba returns GPU Float32 [negative, positive] probabilities.
     Positive means the larger sorted class; a zero margin predicts class zero.
-    Training weights are supported; weighted scoring is not. eval_set labels
+    Training weights and weighted scoring are supported. eval_set labels
     must belong to the training vocabulary, and its X must already be transformed.
     """
     _loss = 'Logloss'

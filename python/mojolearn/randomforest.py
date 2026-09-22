@@ -476,6 +476,11 @@ class _RandomForestBase(ForestProtocol, NumericModeMixin):
         n_rows, n_features = Xf.shape
         if len(y_arr) != n_rows:
             raise ValueError(f"y has {len(y_arr)} rows, X has {n_rows}")
+        # The builder has no missing-value arm: a NaN or inf in X was
+        # quantized and split on silently (pip smoke 2026-09-22). Refused
+        # here, as cuML documents and scikit-learn's pre-1.4 forests did.
+        if not all_finite(Xf):
+            raise ValueError("X contains NaN or infinity; the forest has no missing-value arm")
         params = self._fit_params(n_rows, n_features, n_classes)
         out = fit_fn(
             addr_ro(Xf, name="X"), addr_ro(y_arr, name="y"), params,

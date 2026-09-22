@@ -1503,3 +1503,16 @@ def test_shipped_verifier_hashes_like_the_harness():
 
 if __name__ == "__main__":
     sys.exit(pytest.main([__file__, "-q"]))
+
+
+def test_harness_note_only_when_something_failed():
+    from mojolearn import _verify_all as va
+    def rep(match, div=0, owed=0):
+        fam = {"IDENTICAL": 5, "DIVERGENT": div, "OWED": owed}
+        return {"harness": {"matches_table": match},
+                "families": [("gbdt", fam), ("all", dict(fam))]}
+    assert va.harness_note(rep(True)) is None
+    assert va.harness_note(rep(True, div=1)) is None
+    assert va.harness_note(rep(False)) is None  # every part matched: the sha256 alone says nothing
+    assert "OWED or DIVERGENT" in va.harness_note(rep(False, div=1))
+    assert "OWED or DIVERGENT" in va.harness_note(rep(False, owed=2))

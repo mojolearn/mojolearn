@@ -3307,6 +3307,18 @@ def format_lane_accounting(accounting, examples=6):
     return lines
 
 
+def harness_note(report):
+    """The harness file changes between releases while the cells it computes do not, so a
+    differing sha256 alone says nothing. It is worth a line only as a possible cause of a
+    failure: a lane added or changed after the table was recorded reads OWED or DIVERGENT.
+    The JSON always carries harness.matches_table."""
+    unresolved = sum(c["DIVERGENT"] + c["OWED"] for fam, c in report["families"] if fam != "all")
+    if report["harness"]["matches_table"] or not unresolved:
+        return None
+    return ("# note: this harness is not the one the table was generated with; a lane added or "
+            "changed since then reads OWED or DIVERGENT until the table is regenerated")
+
+
 def format_human(report):
     lines = []
     d = report["device"]
@@ -3318,9 +3330,9 @@ def format_human(report):
     lines.append(f"# reference table {t['path']} (sha256 {t['sha256'][:16]}, {t['records']} records)")
     lines.append(f"# depth {report['depth']}: {len(report['lanes'])} lanes x {len(report['fixtures'])} fixtures, "
                  f"{report['repeats']} repeat(s), {report['models_checked']} portable model(s)")
-    if not report["harness"]["matches_table"]:
-        lines.append("# note: this harness is not the one the table was generated with; lanes added or "
-                     "changed since then read OWED or DIVERGENT until the table is regenerated")
+    note = harness_note(report)
+    if note:
+        lines.append(note)
     lines.append("")
     w = max([len("family")] + [len(f) for f, _ in report["families"]])
     head = f"| {'family':<{w}} | lanes | IDENTICAL | DIVERGENT | OWED | REFUSED | N/A |"

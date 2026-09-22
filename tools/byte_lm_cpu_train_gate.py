@@ -437,8 +437,8 @@ def mode_cpu(args):
         # surface accepts as parameters and moments, and the ids are int32.
         # THE OPTIMIZER COMES FROM THE CAPTURE, NOT FROM DEFAULTS. Each step's
         # capture.json records the configuration that produced it (lr 0.003 and
-        # weight_decay 0.01 here, not the surface's 0.001 and 0.0), and post_p
-        # is the only array that reads either. Assuming defaults made this gate
+        # weight_decay 0.01 here, not the surface's default lr 0.001), and
+        # post_p is the only array that reads either. Assuming defaults made this gate
         # fail on hyperparameters while the backward pass was in fact agreeing,
         # which is a gate testing the wrong thing.
         opt = optimizer_config(tree, number)
