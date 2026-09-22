@@ -40,6 +40,28 @@ def refused_under_sabotage_record(lanes=('gemm-pinned', 'kde'),
     return value
 
 
+def with_probe_parts(value):
+    """Every cell carries STABLE infer and model columns, as a production
+    column of a lane with a probe does."""
+    for c in value['cells'].values():
+        c.update(infer=['i', 'i'], infer_verdict='STABLE', model=['m', 'm'], model_verdict='STABLE')
+    return value
+
+
+def probe_refused_under_sabotage_record(lanes=('gemm-pinned', 'kde'),
+                                        error='infer: ValueError: forecast_exponential_smoothing(512) and plain '
+                                              'ExponentialSmoothing.forecast(512) differ: 5972 bytes of 8192'):
+    """Gate run 35662090487 shard 1: the holtwinters cells trained to stable
+    (moved) bytes, then their infer self-check refused under sabotage; the
+    cell reads STABLE with infer/model REFUSED and a probe_error."""
+    value = with_probe_parts(record(lanes))
+    value['host']['families']['binding']['sabotage'] = True
+    next(iter(value['cells'].values())).update(
+        hashes=['def', 'def'], infer=[None, None], infer_verdict='REFUSED',
+        model=[None, None], model_verdict='REFUSED', probe_error=error)
+    return value
+
+
 class GateTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -148,6 +170,76 @@ class GateTests(unittest.TestCase):
                  patch.object(gate.subprocess, 'run', return_value=SimpleNamespace(returncode=0)), \
                  patch.object(gate.time, 'sleep'):
                 self.assertEqual(gate.do_run_column(args), expected, (sabotage, production))
+
+    def test_sabotage_probe_refusal_is_caught_only_against_a_stable_production_column(self):
+        value = probe_refused_under_sabotage_record()
+        self.assertEqual(self.column_against(value, with_probe_parts(record())), 0)
+        self.assertIn("REFUSED under sabotage by the lane's own check", self.output.getvalue())
+        self.assertEqual(self.column_against(value, with_probe_parts(record()), sabotage=False), 1)
+        self.assertEqual(self.column(value, sabotage=True), 1)
+        for error in (f'infer: RuntimeError: {gate.REFUSAL} kde', 'infer: ImportError: cannot load the binding',
+                      'model: OSError: disk full', 'infer: MemoryError: ', 'batch: ValueError: x',
+                      'ValueError: no stage', ''):
+            bad = probe_refused_under_sabotage_record(error=error)
+            self.assertEqual(self.column_against(bad, with_probe_parts(record())), 1, error)
+        for mutation in ('prod-infer-refused', 'prod-no-infer', 'prod-probe-error', 'batch-refused',
+                         'batch-error', 'half-refused', 'unstable-train', 'no-readback'):
+            bad, prod = copy.deepcopy(value), with_probe_parts(record())
+            first = next(iter(bad['cells']))
+            if mutation == 'prod-infer-refused':
+                prod['cells'][first].update(infer=[None, None], infer_verdict='REFUSED')
+            elif mutation == 'prod-no-infer':
+                for f in ('infer', 'infer_verdict', 'model', 'model_verdict'):
+                    prod['cells'][first].pop(f)
+            elif mutation == 'prod-probe-error':
+                prod['cells'][first]['probe_error'] = 'infer: ValueError: x'
+            elif mutation == 'batch-refused':
+                bad['cells'][first].update(batch=[None, None], batch_verdict='REFUSED')
+            elif mutation == 'batch-error':
+                bad['cells'][first]['batch_error'] = 'batch: ValueError: x'
+            elif mutation == 'half-refused':
+                bad['cells'][first]['infer'] = ['i', None]
+            elif mutation == 'unstable-train':
+                bad['cells'][first]['hashes'] = ['def', 'deg']
+            else:
+                bad['host']['families']['binding']['sabotage'] = False
+            self.assertEqual(self.column_against(bad, prod), 1, mutation)
+
+    def test_run_column_accepts_a_shard_whose_only_failures_are_caught_refusals(self):
+        """Gate run 35662090487: shard 0 carried caught cell refusals and was
+        excused; shard 1 carried caught cell refusals AND cells whose infer
+        self-check refused under sabotage, and failed the step."""
+        prod = self.root / 'production.json'
+        prod.write_text(json.dumps(with_probe_parts(record(('gemm-pinned', 'kde', 'holtwinters')))))
+
+        def shard_record(lanes, kind):
+            value = with_probe_parts(record(lanes))
+            value['host']['families']['binding']['sabotage'] = True
+            cells = list(value['cells'].values())
+            cells[0].update(verdict='REFUSED', hashes=[], error='ValueError: sample_weight must have positive total weight')
+            cells[-1].update(hashes=['def', 'def'], infer=[None, None], infer_verdict='REFUSED',
+                             model=[None, None], model_verdict='REFUSED',
+                             probe_error='infer: ValueError: forecast(h) and forecast(h, index=0) differ')
+            if kind == 'environment':
+                cells[-1]['probe_error'] = 'infer: ImportError: cannot load the binding'
+            elif kind == 'crash':
+                cells[1].update(verdict='REFUSED', hashes=[], error=f'RuntimeError: {gate.REFUSAL} kde')
+            return value
+
+        for kind, sabotage, expected in (('caught', True, 0), ('caught', False, 1),
+                                         ('environment', True, 1), ('crash', True, 1)):
+            def worker(cmd, stdout, stderr):
+                lanes = cmd[cmd.index('--lanes') + 1].split(',')
+                Path(cmd[cmd.index('--json') + 1]).write_text(json.dumps(shard_record(lanes, kind)))
+                return SimpleNamespace(poll=lambda: 1)
+
+            args = SimpleNamespace(lanes='gemm-pinned,kde,holtwinters', shards=2, jobs=2,
+                                   json=str(self.root / 'merged.json'), extra=['--repeats', '2'],
+                                   heartbeat=120, sabotage=sabotage, production=str(prod))
+            with patch.object(gate.subprocess, 'Popen', side_effect=worker), \
+                 patch.object(gate.subprocess, 'run', return_value=SimpleNamespace(returncode=0)), \
+                 patch.object(gate.time, 'sleep'):
+                self.assertEqual(gate.do_run_column(args), expected, (kind, sabotage))
 
     def test_native_property_violation_is_not_a_production_pass(self):
         value = record()
