@@ -1,0 +1,21 @@
+1968 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x786b40000000, nodemask=2)
+[19:59:12] segment: route A segment t1 label nvidia-one, global steps 0..3, K=64, devices (0,), from ckpt_00000000.blm (sha256 5871ef0f4cea5499)
+1968 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x786b80000000, nodemask=2)
+1968 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x786bc0000000, nodemask=2)
+1968 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x786c00000000, nodemask=2)
+1968 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x786c40000000, nodemask=2)
+1968 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x786c80000000, nodemask=2)
+1968 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x786cc0000000, nodemask=2)
+1968 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x786d00000000, nodemask=2)
+1968 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x786d40000000, nodemask=2)
+[20:00:19] step 1 lr 399d4952 loss 10.9871 state d333b045e1141e0d grad 36aea7967b8b4d03 50.86 s (+7.96 s hashing)
+[20:01:23] uploaded ckpt_00000001.blm in 54.3 s
+[20:01:24] checkpoint ckpt_00000001.blm (1945780159 bytes, sha256 21c46ad0c59cd4e1, 4.9 s)
+[20:02:11] step 2 lr 3a1d4952 loss 10.3414 state 094b4e5a70d9609e grad 298642639276b309 39.91 s (+7.97 s hashing)
+[20:03:00] step 3 lr 3a17e610 loss 25.7737 state 6a408d480a1775c9 grad 086dc5eff1309b3c 39.88 s (+9.08 s hashing)
+[20:04:09] uploaded ckpt_00000003.blm in 55.6 s
+[20:04:09] checkpoint ckpt_00000003.blm (1945780159 bytes, sha256 5dcbb3c47c27351f, 4.4 s)
+[20:04:09] uploaded chain.jsonl in 0.5 s
+[20:04:10] uploaded segment.json in 0.4 s
+[20:04:10] uploaded manifest.tsv in 0.4 s
+[20:04:10] PASS: /root/gemm_leg_out/lm-t1-nvidia/one

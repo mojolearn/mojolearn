@@ -1,0 +1,16 @@
+2363 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x7bfa00000000, nodemask=2)
+2363 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x535f00000000, nodemask=1)
+[20:06:01] segment: route A segment t1-replay label nvidia-replay, global steps 1..3, K=64, devices (0,), from ckpt_00000001.blm (sha256 21c46ad0c59cd4e1)
+2363 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x535f40000000, nodemask=1)
+2363 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x535f80000000, nodemask=1)
+2363 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x535fc0000000, nodemask=1)
+2363 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x536000000000, nodemask=1)
+2363 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x536040000000, nodemask=1)
+2363 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x536080000000, nodemask=1)
+2363 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5360c0000000, nodemask=1)
+2363 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x536100000000, nodemask=1)
+[20:07:04] step 2 lr 3a1d4952 loss 10.3414 state 094b4e5a70d9609e grad 298642639276b309 48.36 s (+7.91 s hashing)
+[20:07:04] step 2 agrees with the expected chain
+[20:07:52] step 3 lr 3a17e610 loss 25.7737 state 6a408d480a1775c9 grad 086dc5eff1309b3c 39.88 s (+8.03 s hashing)
+[20:07:52] step 3 agrees with the expected chain
+[20:07:52] PASS: /root/gemm_leg_out/lm-t1-nvidia/replay

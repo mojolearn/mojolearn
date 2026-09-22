@@ -1,0 +1,2 @@
+1720 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x713340000000, nodemask=1)
+wrote /root/gemm_leg_out/lm-t1-nvidia/ckpt_00000000.blm: step 0, 162147840 parameters, init sha256 0e36d8d036d8c4cf, file sha256 5871ef0f4cea5499, numpy 2.5.2
