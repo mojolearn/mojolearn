@@ -115,7 +115,7 @@ on the host for the CPU column.
     multi-GPU fit here must equal the one-GPU fit bit for bit.
 """
 
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.gpu import block_idx, block_dim, thread_idx
 from std.math import isfinite, sqrt
 from std.sys.compile import is_defined
@@ -133,6 +133,7 @@ from gbdt.data.ordered_plan import (
     ordered_permutations,
 )
 from gbdt.data.permutation import TRandom
+from gbdt.gpu_util.arena import BufferArena
 from gbdt.gpu_data.compressed_index_builder import CompressedIndexLayout
 from gbdt.gpu_util.kernel.bootstrap import (
     bootstrap_grid_blocks,
@@ -140,7 +141,13 @@ from gbdt.gpu_util.kernel.bootstrap import (
     launch_bootstrap,
 )
 from gbdt.methods.doc_parallel_boosting import (
+    PendingEstimation,
     TEstimationWorkspace,
+    _estimate_complete,
+    _estimate_prepare,
+    estimate_advance,
+    estimate_can_batch,
+    estimate_workspace,
     TestArm,
     _apply_last_tree_to_test,
     _estimate_and_apply,
@@ -162,11 +169,11 @@ from gbdt.methods.dynamic_boosting_folds import (
 from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import StageTimes
 from gbdt.methods.leaves_estimation.doc_parallel_leaves_estimator import (
     compute_bins_for_model,
-    partition_from_bins,
+    LeafPartition,
 )
 from gbdt.methods.oblivious_tree_doc_parallel_structure_searcher import (
     PointwiseTreeWorkspace,
-    fit_oblivious_tree_structure,
+    fit_oblivious_tree_structure_traced,
 )
 from gbdt.models.oblivious_model import (
     TAdditiveModel,
@@ -334,6 +341,33 @@ def _ord_abs_planes_kernel(
         dst.unsafe_store(2 * i + 1, abs(sg.unsafe_load(i)))
 
 
+def _ord_stage_in_kernel(
+    y: MutPointer[Float32, MutAnyOrigin],
+    weights: MutPointer[Float32, MutAnyOrigin],
+    permutation: MutPointer[UInt32, MutAnyOrigin],
+    cursor: MutPointer[Float32, MutAnyOrigin],
+    row_index: MutPointer[UInt32, MutAnyOrigin],
+    out_y: MutPointer[Float32, MutAnyOrigin],
+    out_w: MutPointer[Float32, MutAnyOrigin],
+    out_c: MutPointer[Float32, MutAnyOrigin],
+    size_in: Int32,
+):
+    """`_ordered_gather_kernel` into permutation order, then the
+    estimator's three bin-order gathers through `row_index`
+    (`_estimate_and_apply`'s stage-in), in one pass: position `i` of the
+    estimator's arrays is permutation position `j = row_index[i]`, so
+    `out_y[i] = y[perm[j]]`, `out_w[i] = weights[perm[j]]`,
+    `out_c[i] = cursor[j]` -- the same loads and stores of the same values,
+    without the intermediate arrays."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(size_in):
+        var j = Int(row_index.unsafe_load(i))
+        var row = Int(permutation.unsafe_load(j))
+        out_y.unsafe_store(i, y.unsafe_load(row))
+        out_w.unsafe_store(i, weights.unsafe_load(row))
+        out_c.unsafe_store(i, cursor.unsafe_load(j))
+
+
 def _grid(n: Int) -> Int:
     return (n + ORDERED_BLOCK - 1) // ORDERED_BLOCK
 
@@ -341,6 +375,106 @@ def _grid(n: Int) -> Int:
 # ===========================================================================
 # ONE ESTIMATION TASK
 # ===========================================================================
+
+
+def _partition_into(
+    ctx: DeviceContext,
+    tree_bins: HostBuffer[DType.uint32],
+    permutation: List[UInt32],
+    n_rows: Int,
+    n_leaves: Int,
+    h_rows: HostBuffer[DType.uint32],
+    mut row_index: DeviceBuffer[DType.uint32],
+    mut sizes: List[Int],
+    mut offsets: List[Int],
+) raises:
+    """`_partition_from_host_bins` into the caller's `row_index` (at least
+    `n_rows` long; the upload copies the whole staging buffer, whose first
+    `n_rows` cells are this partition), nothing drained."""
+    if n_leaves <= 0:
+        raise Error("partition_from_bins: n_leaves must be positive")
+    sizes.clear()
+    for _ in range(n_leaves):
+        sizes.append(0)
+    var bins_p = tree_bins.unsafe_ptr()
+    for r in range(n_rows):
+        var b = Int(bins_p.unsafe_load(Int(permutation[r])))
+        if b < 0 or b >= n_leaves:
+            raise Error(
+                "partition_from_bins: row " + String(r) + " fell in leaf "
+                + String(b) + " of " + String(n_leaves)
+            )
+        sizes[b] += 1
+    offsets.clear()
+    var running = 0
+    for i in range(n_leaves):
+        offsets.append(running)
+        running += sizes[i]
+    var fill = offsets.copy()
+    var rows_p = h_rows.unsafe_ptr()
+    for r in range(n_rows):
+        var b = Int(bins_p.unsafe_load(Int(permutation[r])))
+        rows_p.unsafe_store(fill[b], UInt32(r))
+        fill[b] += 1
+    ctx.enqueue_copy(dst_buf=row_index, src_ptr=h_rows.unsafe_ptr())
+
+
+def _partition_from_host_bins(
+    ctx: DeviceContext,
+    tree_bins: HostBuffer[DType.uint32],
+    permutation: List[UInt32],
+    n_rows: Int,
+    n_leaves: Int,
+    h_rows: HostBuffer[DType.uint32],
+) raises -> LeafPartition:
+    """`partition_from_bins` (`doc_parallel_leaves_estimator.mojo`,
+    DEVIATION 90) over the permutation's prefix `[0, n_rows)` of a tree's
+    bins that are ALREADY ON THE HOST: row `i`'s leaf is
+    `tree_bins[permutation[i]]`, exactly the value `_ordered_gather_kernel`
+    writes to the gathered bins buffer that function would download, and
+    the same STABLE counting sort over it, so the partition is the same
+    list of integers.
+
+    Why: that function downloads the gathered bins and drains twice per
+    call, and an Ordered tree calls it once per (learn permutation, fold)
+    plus once for the estimation permutation -- 28 calls on a default fit
+    of fewer than 500 rows, all reading ONE tree's bins. The fit now
+    downloads those bins once per tree and partitions every task here.
+
+    `h_rows` is the caller's staging (at least `n_rows` long); its upload
+    is enqueued and NOT drained here, so the caller keeps it alive until
+    its task's tail drain."""
+    if n_leaves <= 0:
+        raise Error("partition_from_bins: n_leaves must be positive")
+    var sizes = List[Int]()
+    for _ in range(n_leaves):
+        sizes.append(0)
+    var bins_p = tree_bins.unsafe_ptr()
+    for r in range(n_rows):
+        var b = Int(bins_p.unsafe_load(Int(permutation[r])))
+        if b < 0 or b >= n_leaves:
+            raise Error(
+                "partition_from_bins: row " + String(r) + " fell in leaf "
+                + String(b) + " of " + String(n_leaves)
+            )
+        sizes[b] += 1
+
+    var offsets = List[Int]()
+    var running = 0
+    for i in range(n_leaves):
+        offsets.append(running)
+        running += sizes[i]
+
+    var fill = offsets.copy()
+    var rows_p = h_rows.unsafe_ptr()
+    for r in range(n_rows):
+        var b = Int(bins_p.unsafe_load(Int(permutation[r])))
+        rows_p.unsafe_store(fill[b], UInt32(r))
+        fill[b] += 1
+
+    var row_index = ctx.enqueue_create_buffer[DType.uint32](n_rows)
+    ctx.enqueue_copy(dst_buf=row_index, src_ptr=h_rows.unsafe_ptr())
+    return LeafPartition(row_index^, offsets^, sizes^)
 
 
 def _ordered_estimate_task(
@@ -351,13 +485,18 @@ def _ordered_estimate_task(
     mut y: DeviceBuffer[DType.float32],
     mut weights: DeviceBuffer[DType.float32],
     mut permutation: DeviceBuffer[DType.uint32],
+    host_permutation: List[UInt32],
     mut bins: DeviceBuffer[DType.uint32],
+    tree_bins: HostBuffer[DType.uint32],
+    h_rows: HostBuffer[DType.uint32],
     mut cursor: DeviceBuffer[DType.float32],
     opts: OrderedBoostingOptions,
     sm_count: Int,
     mut est_ws: List[TEstimationWorkspace],
     mut trace: IdentityTrace,
     tag: String,
+    mut est_times: StageTimes,
+    mut walker_times: StageTimes,
 ) raises -> List[Float32]:
     """Their `AddEstimationTask(targetSlice(estimate), cursorSlice)` then
     `AddTask(model, [0, apply))` (`dynamic_boosting.h:377-385`,
@@ -367,6 +506,7 @@ def _ordered_estimate_task(
     cursor (its walker's `MoveTo`), never the real one."""
     if estimate_size < 1 or estimate_size > apply_size:
         raise Error("ordered estimation requires 0 < prefix <= cursor size")
+    est_times.begin(ctx)
     var gy = ctx.enqueue_create_buffer[DType.float32](estimate_size)
     var gw = ctx.enqueue_create_buffer[DType.float32](estimate_size)
     var gc = ctx.enqueue_create_buffer[DType.float32](estimate_size)
@@ -377,19 +517,25 @@ def _ordered_estimate_task(
         gw.unsafe_ptr(), gc.unsafe_ptr(), gb.unsafe_ptr(), Int32(estimate_size),
         grid_dim=(_grid(estimate_size), 1, 1), block_dim=(ORDERED_BLOCK, 1, 1),
     )
-    var part = partition_from_bins(ctx, gb, estimate_size, n_leaves)
+    est_times.end(ctx, "est.gather")
+    est_times.begin(ctx)
+    var part = _partition_from_host_bins(
+        ctx, tree_bins, host_permutation, estimate_size, n_leaves, h_rows
+    )
+    est_times.end(ctx, "est.partition")
     var leaves = List[Float32]()
     var not_pd = 0
-    var times = StageTimes()
-    times.enabled = False
+    est_times.begin(ctx)
     _estimate_and_apply(
         ctx, estimate_size, 1, n_leaves, part.sizes, part.offsets,
         part.row_index, gy, gw, True, gc, opts.objective,
         opts.kernel_alpha, opts.estimator_alpha, opts.logloss_border,
         opts.l2_leaf_reg, sm_count, opts.leaf_method, 0,
         opts.leaf_iterations, opts.learning_rate, leaves, not_pd,
-        trace, times, tag, est_ws,
+        trace, walker_times, tag, est_ws,
     )
+    est_times.end(ctx, "est.estimate_and_apply")
+    est_times.begin(ctx)
     var hl = ctx.enqueue_create_host_buffer[DType.float32](n_leaves)
     var dl = ctx.enqueue_create_buffer[DType.float32](n_leaves)
     for leaf in range(n_leaves):
@@ -401,12 +547,154 @@ def _ordered_estimate_task(
         grid_dim=(_grid(apply_size), 1, 1), block_dim=(ORDERED_BLOCK, 1, 1),
     )
     ctx.synchronize()
+    est_times.end(ctx, "est.apply")
     _ = hl^
     _ = dl^
     _ = gb^
     _ = gy^
     _ = gw^
     _ = gc^
+    return leaves^
+
+
+struct _OrderedSlot(Movable):
+    """One batched estimation task's own buffers, for the whole fit: the
+    partition's row order and its upload staging, and the leaf
+    upload pair (at `1 << max_depth`, of which a tree reads its
+    `n_leaves`). Every cell a task reads it writes first; the batch's
+    closing drain orders one tree's reads before the next tree's writes."""
+
+    var row_index: DeviceBuffer[DType.uint32]
+    var h_rows: HostBuffer[DType.uint32]
+    var dl: DeviceBuffer[DType.float32]
+    var hl: HostBuffer[DType.float32]
+
+    def __init__(
+        out self,
+        ctx: DeviceContext,
+        mut arena: BufferArena,
+        estimate_size: Int,
+        leaf_capacity: Int,
+    ) raises:
+        self.row_index = arena.device[DType.uint32](ctx, estimate_size)
+        self.h_rows = arena.host_buffer[DType.uint32](ctx, estimate_size)
+        self.dl = arena.device[DType.float32](ctx, leaf_capacity)
+        self.hl = arena.host_buffer[DType.float32](ctx, leaf_capacity)
+
+
+struct _OrderedPending(Movable):
+    """One `_ordered_estimate_task` stopped at its estimator's drain
+    (`_ordered_estimate_prepare`); the estimator's state lives here until
+    the batch's closing drain."""
+
+    var est: PendingEstimation
+    var apply_size: Int
+
+    def __init__(out self, var est: PendingEstimation, apply_size: Int):
+        self.est = est^
+        self.apply_size = apply_size
+
+
+def _ordered_estimate_prepare(
+    ctx: DeviceContext,
+    estimate_size: Int,
+    apply_size: Int,
+    n_leaves: Int,
+    mut y: DeviceBuffer[DType.float32],
+    mut weights: DeviceBuffer[DType.float32],
+    mut permutation: DeviceBuffer[DType.uint32],
+    host_permutation: List[UInt32],
+    mut bins: DeviceBuffer[DType.uint32],
+    tree_bins: HostBuffer[DType.uint32],
+    mut slot: _OrderedSlot,
+    mut cursor: DeviceBuffer[DType.float32],
+    opts: OrderedBoostingOptions,
+    sm_count: Int,
+    mut est_ws: List[TEstimationWorkspace],
+    mut arena: BufferArena,
+    mut est_times: StageTimes,
+    mut walker_times: StageTimes,
+) raises -> _OrderedPending:
+    """`_ordered_estimate_task` up to its estimator's evaluation readback,
+    nothing drained (`_estimate_prepare`): the same gather, the same
+    partition, the same estimator launches in the same order, into the
+    task's own `slot` and `est_ws` -- the batch keeps every task's buffers
+    in flight at once."""
+    if estimate_size < 1 or estimate_size > apply_size:
+        raise Error("ordered estimation requires 0 < prefix <= cursor size")
+    est_times.begin(ctx)
+    var sizes = List[Int]()
+    var offsets = List[Int]()
+    _partition_into(
+        ctx, tree_bins, host_permutation, estimate_size, n_leaves,
+        slot.h_rows, slot.row_index, sizes, offsets,
+    )
+    est_times.end(ctx, "est.partition")
+    est_times.begin(ctx)
+    # the gather into permutation order and the estimator's stage-in, as
+    # one pass straight into this task's estimation workspace
+    estimate_workspace(ctx, est_ws, arena, estimate_size, n_leaves)
+    ctx.enqueue_function[_ord_stage_in_kernel](
+        y.unsafe_ptr(), weights.unsafe_ptr(), permutation.unsafe_ptr(),
+        cursor.unsafe_ptr(), slot.row_index.unsafe_ptr(),
+        est_ws[0].g_target.unsafe_ptr(), est_ws[0].g_weights.unsafe_ptr(),
+        est_ws[0].g_cursor.unsafe_ptr(), Int32(estimate_size),
+        grid_dim=(_grid(estimate_size), 1, 1), block_dim=(ORDERED_BLOCK, 1, 1),
+    )
+    est_times.end(ctx, "est.gather")
+    est_times.begin(ctx)
+    var est = _estimate_prepare(
+        ctx, estimate_size, n_leaves, sizes, offsets,
+        slot.row_index, y, weights, True, cursor, opts.objective,
+        opts.kernel_alpha, opts.estimator_alpha, opts.logloss_border,
+        opts.l2_leaf_reg, sm_count, opts.leaf_method, est_ws, arena,
+        walker_times, staged=True, iterations=opts.leaf_iterations,
+    )
+    est_times.end(ctx, "est.estimate_and_apply")
+    return _OrderedPending(est^, apply_size)
+
+
+def _ordered_estimate_complete(
+    ctx: DeviceContext,
+    mut pending: _OrderedPending,
+    mut slot: _OrderedSlot,
+    n_leaves: Int,
+    mut permutation: DeviceBuffer[DType.uint32],
+    mut bins: DeviceBuffer[DType.uint32],
+    mut cursor: DeviceBuffer[DType.float32],
+    opts: OrderedBoostingOptions,
+    mut est_ws: List[TEstimationWorkspace],
+    mut trace: IdentityTrace,
+    tag: String,
+    mut est_times: StageTimes,
+    mut walker_times: StageTimes,
+) raises -> List[Float32]:
+    """The rest of `_ordered_estimate_task` after the batch's drain: the
+    estimator's host half and its `AppendModels` (`_estimate_complete`),
+    then `leaf * rate` onto the real cursor, ENQUEUED; the buffers stay in
+    `pending` for the batch's closing drain."""
+    var leaves = List[Float32]()
+    var not_pd = 0
+    est_times.begin(ctx)
+    _estimate_complete(
+        ctx, pending.est, slot.row_index, cursor, opts.learning_rate,
+        leaves, not_pd, trace, walker_times, tag, est_ws,
+        append_to_cursor=False,
+    )
+    est_times.end(ctx, "est.estimate_and_apply")
+    est_times.begin(ctx)
+    ref hl = slot.hl
+    ref dl = slot.dl
+    for leaf in range(n_leaves):
+        hl.unsafe_ptr().unsafe_store(leaf, leaves[leaf])
+    ctx.enqueue_copy(dst_buf=dl, src_ptr=hl.unsafe_ptr())
+    ctx.enqueue_function[_ordered_apply_kernel](
+        permutation.unsafe_ptr(), bins.unsafe_ptr(), dl.unsafe_ptr(),
+        cursor.unsafe_ptr(), Int32(pending.apply_size), opts.learning_rate,
+        grid_dim=(_grid(pending.apply_size), 1, 1),
+        block_dim=(ORDERED_BLOCK, 1, 1),
+    )
+    est_times.end(ctx, "est.apply")
     return leaves^
 
 
@@ -480,6 +768,10 @@ def fit_ordered(
     var learn_count = est_p if est_p > 0 else 1
     var folds = ordered_folds(n_rows, opts.fold_len_multiplier, opts.min_fold_size)
     var n_folds = len(folds)
+    # THE FIT'S ARENA (`gbdt/gpu_util/arena.mojo`): the long-lived per-fold
+    # and per-task buffers below are carved from a few parents, because on
+    # Metal every live allocation is bound to every launch
+    var arena = BufferArena()
     var dperms = List[DeviceBuffer[DType.uint32]]()
     for p in range(perm_count):
         var h = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
@@ -515,8 +807,8 @@ def fit_ordered(
     for _ in range(learn_count):
         var per = List[DeviceBuffer[DType.float32]]()
         for f in range(n_folds):
-            var c = ctx.enqueue_create_buffer[DType.float32](
-                folds[f].quality_evaluate_samples.right
+            var c = arena.device[DType.float32](
+                ctx, folds[f].quality_evaluate_samples.right
             )
             enqueue_fill(ctx, c, opts.start_value)
             per.append(c^)
@@ -550,8 +842,75 @@ def fit_ordered(
         2 * bootstrap_grid_blocks(total)
     )
     var rng = TRandom(opts.random_seed ^ ORDERED_STREAM_SALT)
+    # the fold derivatives' gathers and planes, one set per fold for the
+    # whole fit: every cell is rewritten each tree before it is read, and
+    # the fit's queue orders a tree's rewrite after the last tree's reads,
+    # so the per-fold drain that used to free them is gone (it was a drain
+    # per fold per tree, nine a tree below 500 rows)
+    var der_gy = List[DeviceBuffer[DType.float32]]()
+    var der_gw = List[DeviceBuffer[DType.float32]]()
+    var der_stats = List[DeviceBuffer[DType.float32]]()
+    var der_part = List[DeviceBuffer[DType.float32]]()
+    for f in range(n_folds):
+        var r = folds[f].quality_evaluate_samples.right
+        der_gy.append(arena.device[DType.float32](ctx, r))
+        der_gw.append(arena.device[DType.float32](ctx, r))
+        der_stats.append(arena.device[DType.float32](ctx, 2 * r))
+        der_part.append(
+            arena.device[DType.float32](
+                ctx, (r + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
+            )
+        )
     var pool = List[PointwiseTreeWorkspace]()
-    var est_ws = List[TEstimationWorkspace]()
+    # ONE ESTIMATION WORKSPACE PER ESTIMATE SIZE, not one for the fit.
+    # `_estimate_and_apply`'s pool of one (DEVIATION 1890) is keyed on
+    # the task's row count, and an Ordered tree runs tasks at every fold's
+    # prefix length and then at `n_rows`, so a single pool rebuilt its
+    # buffers (and dropped its oracle scratch) on EVERY task -- measured
+    # as most of an Ordered tree's wall at 320 rows. Slot `f` serves fold
+    # `f`'s tasks (the same size for every learn permutation, and under
+    # the sabotage arm too) and slot `n_folds` the estimation task, so
+    # each slot sees one key for the whole fit: exactly the reuse the
+    # Plain fit already makes of its one slot, under the same contract
+    # (every cell a task reads is written by that task's gathers; the
+    # previous task's consumers drained at its tail).
+    # the per-tree host copy of the bins and the partition's upload staging
+    # (every task drains at its tail, so one staging buffer serves them all)
+    var h_tree_bins = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
+    var h_part_rows = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
+    var est_pools = List[List[TEstimationWorkspace]]()
+    #
+    # THE BATCHED ESTIMATION (`estimate_can_batch`: a single-dimensional
+    # pointwise loss under the Newton or Gradient walker, which every
+    # default Ordered fit is). Each task's only drains were its estimator's
+    # (the oracle's weight fold, one readback per walker evaluation, the
+    # estimator's tail) and its own tail; the tasks of a tree are
+    # independent -- each reads the tree's bins and its OWN cursor and
+    # writes only that cursor -- so the tree now enqueues every task up to
+    # its first readback, then walks every task in LOCK STEP (one drain per
+    # round, `estimate_advance`), finishes them in task order (the same
+    # trace records in the same order), and drains once more: at the
+    # default four permutations, (walker rounds + 1) drains for the tree's
+    # 28 tasks instead of several per task. Each task's oracle calls run in
+    # the order its own walk makes them, on its own buffers. It needs one
+    # workspace and one partition staging per TASK (slot `lp * n_folds +
+    # f`, the estimation task last), since all of them are in flight
+    # together.
+    var batch = estimate_can_batch(
+        opts.objective, opts.leaf_method, opts.leaf_iterations
+    )
+    var n_slots = learn_count * n_folds + 1 if batch else n_folds + 1
+    for _ in range(n_slots):
+        est_pools.append(List[TEstimationWorkspace]())
+    var slots = List[_OrderedSlot]()
+    if batch:
+        for _ in range(learn_count):
+            for f in range(n_folds):
+                var est = folds[f].estimate_samples.right
+                comptime if ORDERED_SABOTAGE:
+                    est = folds[f].quality_evaluate_samples.right
+                slots.append(_OrderedSlot(ctx, arena, est, 1 << max_depth))
+        slots.append(_OrderedSlot(ctx, arena, n_rows, 1 << max_depth))
     var losses = List[Float64]()
     var fv_blocks = (n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
     var fv_part = ctx.enqueue_create_buffer[DType.float32](fv_blocks)
@@ -569,6 +928,14 @@ def fit_ordered(
     var stopped_early = False
     ctx.synchronize()
     _ = hq^
+    # `MOJOLEARN_STAGE_TIMES=1`: the per-stage triage table (drains per
+    # stage, NOT a benchmark); one Bool test per stage when unset
+    var times = StageTimes()
+    # the structure search's own per-level table rides the same clock only
+    # when it is on; otherwise the searcher gets a disabled one
+    var no_trace = IdentityTrace.disabled()
+    var est_times = StageTimes()
+    var walker_times = StageTimes()
 
     for iteration in range(n_estimators):
         var tag = String("ordered.") + String(iteration)
@@ -579,12 +946,13 @@ def fit_ordered(
         var tree_seed = rng.next_uniform_l()
 
         # 2. the fold derivatives, concatenated
+        times.begin(ctx)
         var sw = ctx.enqueue_create_buffer[DType.float32](total)
         var sg = ctx.enqueue_create_buffer[DType.float32](total)
         for f in range(n_folds):
             var r = folds[f].quality_evaluate_samples.right
-            var gy = ctx.enqueue_create_buffer[DType.float32](r)
-            var gw = ctx.enqueue_create_buffer[DType.float32](r)
+            ref gy = der_gy[f]
+            ref gw = der_gw[f]
             ctx.enqueue_function[_ord_gather_kernel](
                 targets.unsafe_ptr(), dperms[learn_p].unsafe_ptr(),
                 gy.unsafe_ptr(), Int32(r), grid_dim=(_grid(r), 1, 1),
@@ -595,9 +963,9 @@ def fit_ordered(
                 gw.unsafe_ptr(), Int32(r), grid_dim=(_grid(r), 1, 1),
                 block_dim=(ORDERED_BLOCK, 1, 1),
             )
-            var stats = ctx.enqueue_create_buffer[DType.float32](2 * r)
+            ref stats = der_stats[f]
+            ref part = der_part[f]
             var blocks = (r + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
-            var part = ctx.enqueue_create_buffer[DType.float32](blocks)
             if second_order:
                 launch_approximate[False, True](
                     ctx, opts.objective, gy, gw, Int32(r),
@@ -617,13 +985,10 @@ def fit_ordered(
                 Int32(r), Int32(offsets[f]), grid_dim=(_grid(r), 1, 1),
                 block_dim=(ORDERED_BLOCK, 1, 1),
             )
-            ctx.synchronize()
-            _ = gy^
-            _ = gw^
-            _ = stats^
-            _ = part^
 
+        times.end(ctx, "ord.derivatives")
         # 3. the score noise, from the UNBOOTSTRAPPED quality slices
+        times.begin(ctx)
         var score_std = Float32(0.0)
         if opts.random_strength != Float32(0.0):
             var terms = ctx.enqueue_create_buffer[DType.float32](total)
@@ -658,7 +1023,9 @@ def fit_ordered(
             _ = s2^
             _ = hs^
 
+        times.end(ctx, "ord.score_std")
         # 4. the bootstrap, quality slices only
+        times.begin(ctx)
         if bootstrap_on:
             var draws = ctx.enqueue_create_buffer[DType.float32](total)
             enqueue_fill(ctx, draws, Float32(1.0))
@@ -674,7 +1041,9 @@ def fit_ordered(
             ctx.synchronize()
             _ = draws^
 
+        times.end(ctx, "ord.bootstrap")
         # the fixed-point scale from the planes as the searcher reads them
+        times.begin(ctx)
         var absv = ctx.enqueue_create_buffer[DType.float32](2 * total)
         ctx.enqueue_function[_ord_abs_planes_kernel](
             sw.unsafe_ptr(), sg.unsafe_ptr(), absv.unsafe_ptr(), Int32(total),
@@ -697,13 +1066,18 @@ def fit_ordered(
         _ = mags^
         _ = hm^
 
+        times.end(ctx, "ord.scale")
         # 5. the structure, on the learn permutation's folds
-        var splits = fit_oblivious_tree_structure(
+        times.begin(ctx)
+        var splits = fit_oblivious_tree_structure_traced(
             ctx, layout, n_rows, max_depth, cindex, sw^, sg^, sm_count,
-            scale, opts.score_function, pool, opts.l2_leaf_reg,
+            scale, opts.score_function, pool, no_trace, times,
+            String("tree"), opts.l2_leaf_reg,
             score_std_dev=score_std, seed=tree_seed, one_hot=one_hot,
             folds=folds, permutation=perms[learn_p],
         )
+        times.end(ctx, "ord.structure")
+        times.begin(ctx)
         var bins = ctx.enqueue_create_buffer[DType.uint32](n_rows)
         if len(splits) == 0:
             enqueue_fill(ctx, bins, UInt32(0))
@@ -712,24 +1086,91 @@ def fit_ordered(
                 ctx, layout, splits, len(splits), cindex, n_rows, bins
             )
         var n_leaves = 1 << len(splits)
+        # the tree's bins on the host ONCE, for every task's partition
+        # (`_partition_from_host_bins`)
+        ctx.enqueue_copy(dst_buf=h_tree_bins, src_buf=bins)
+        ctx.synchronize()
 
+        times.end(ctx, "ord.bins")
         # 6. the fold models, then the estimation model
-        for lp in range(learn_count):
+        times.begin(ctx)
+        var leaves = List[Float32]()
+        if batch:
+            var pend = List[_OrderedPending]()
+            for lp in range(learn_count):
+                for f in range(n_folds):
+                    var est = folds[f].estimate_samples.right
+                    comptime if ORDERED_SABOTAGE:
+                        est = folds[f].quality_evaluate_samples.right
+                    var slot = lp * n_folds + f
+                    pend.append(
+                        _ordered_estimate_prepare(
+                            ctx, est, folds[f].quality_evaluate_samples.right,
+                            n_leaves, targets, weights, dperms[lp], perms[lp],
+                            bins, h_tree_bins, slots[slot],
+                            cursors[lp][f], opts, sm_count, est_pools[slot],
+                            arena, est_times, walker_times,
+                        )
+                    )
+            var est_slot = learn_count * n_folds
+            pend.append(
+                _ordered_estimate_prepare(
+                    ctx, n_rows, n_rows, n_leaves, targets, weights,
+                    dperms[est_p], perms[est_p], bins, h_tree_bins,
+                    slots[est_slot], est_cursor, opts, sm_count,
+                    est_pools[est_slot], arena, est_times, walker_times,
+                )
+            )
+            # the walks in lock step: one drain per round for every task
+            # still walking (a one-iteration walk is one round)
+            var walking = True
+            while walking:
+                ctx.synchronize()
+                walking = False
+                for t in range(len(pend)):
+                    if pend[t].est.phase != 2:
+                        if estimate_advance(pend[t].est):
+                            walking = True
+            for lp in range(learn_count):
+                for f in range(n_folds):
+                    var slot = lp * n_folds + f
+                    _ = _ordered_estimate_complete(
+                        ctx, pend[slot], slots[slot], n_leaves, dperms[lp],
+                        bins,
+                        cursors[lp][f], opts, est_pools[slot], trace,
+                        tag + ".perm." + String(lp) + ".fold." + String(f),
+                        est_times, walker_times,
+                    )
+            leaves = _ordered_estimate_complete(
+                ctx, pend[est_slot], slots[est_slot], n_leaves,
+                dperms[est_p], bins,
+                est_cursor, opts, est_pools[est_slot], trace,
+                tag + ".estimation", est_times, walker_times,
+            )
+            ctx.synchronize()
+            _ = pend^
+        for lp in range(0 if batch else learn_count):
             for f in range(n_folds):
                 var est = folds[f].estimate_samples.right
                 comptime if ORDERED_SABOTAGE:
                     est = folds[f].quality_evaluate_samples.right
                 _ = _ordered_estimate_task(
                     ctx, est, folds[f].quality_evaluate_samples.right,
-                    n_leaves, targets, weights, dperms[lp], bins,
-                    cursors[lp][f], opts, sm_count, est_ws, trace,
+                    n_leaves, targets, weights, dperms[lp], perms[lp], bins,
+                    h_tree_bins, h_part_rows, cursors[lp][f], opts, sm_count,
+                    est_pools[f], trace,
                     tag + ".perm." + String(lp) + ".fold." + String(f),
+                    est_times, walker_times,
                 )
-        var leaves = _ordered_estimate_task(
-            ctx, n_rows, n_rows, n_leaves, targets, weights, dperms[est_p],
-            bins, est_cursor, opts, sm_count, est_ws, trace,
-            tag + ".estimation",
-        )
+        times.end(ctx, "ord.fold_estimates")
+        times.begin(ctx)
+        if not batch:
+            leaves = _ordered_estimate_task(
+                ctx, n_rows, n_rows, n_leaves, targets, weights,
+                dperms[est_p], perms[est_p], bins, h_tree_bins, h_part_rows,
+                est_cursor, opts, sm_count, est_pools[n_folds], trace,
+                tag + ".estimation", est_times, walker_times,
+            )
         var structure = TObliviousTreeStructure()
         structure.splits = splits^
         var weak = TObliviousTreeModel(structure^)
@@ -738,7 +1179,9 @@ def fit_ordered(
         model.add_weak_model(weak^)
         trace.record_device(ctx, tag + ".estimation_cursor", est_cursor)
 
+        times.end(ctx, "ord.estimation_estimate")
         # 7. the learn loss at the estimation cursor
+        times.begin(ctx)
         launch_approximate[False](
             ctx, opts.objective, est_y, est_w, Int32(n_rows), est_cursor,
             Int32(1), opts.kernel_alpha, opts.logloss_border, loss_stats,
@@ -751,6 +1194,7 @@ def fit_ordered(
         ctx.enqueue_copy(dst_buf=h_fv, src_buf=fv)
         ctx.synchronize()
         losses.append(-Float64(h_fv[0]) / Float64(n_rows))
+        times.end(ctx, "ord.learn_loss")
         _ = bins^
         # 8. the held-out cursor, its loss, the detector
         if has_test:
@@ -767,7 +1211,19 @@ def fit_ordered(
                 stopped_early = True
                 break
     ctx.synchronize()
+    times.report("ordered boosting")
+    est_times.report("ordered estimation tasks")
+    walker_times.report("ordered estimate_and_apply internals")
     _ = quality^
+    _ = h_tree_bins^
+    _ = h_part_rows^
+    _ = slots^
+    _ = der_gy^
+    _ = der_gw^
+    _ = der_stats^
+    _ = der_part^
+    _ = cursors^
+    _ = arena^
     _ = boot_seeds^
     _ = boot_mags^
     _ = est_y^

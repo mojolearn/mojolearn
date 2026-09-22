@@ -44,8 +44,6 @@ from ._mamba_impl import (
     Mamba3Block,
     Mamba3State,
     Mamba1DecodeSession,
-    Mamba2DecodeSession,
-    Mamba3DecodeSession,
 )
 
 __all__ = [
@@ -53,9 +51,7 @@ __all__ = [
     "Mamba1DecodeSession",
     "Mamba1State",
     "Mamba2Block",
-    "Mamba2DecodeSession",
     "Mamba2State",
     "Mamba3Block",
-    "Mamba3DecodeSession",
     "Mamba3State",
 ]

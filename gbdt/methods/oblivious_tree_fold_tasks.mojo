@@ -301,6 +301,7 @@ def create_fold_based_subsets(
     max_depth: Int,
     mut source: TL2Target,
     layout: FoldLayout,
+    sm_count: Int = -1,
 ) raises -> TOptimizationSubsets:
     """`TFeatureParallelObliviousTreeSearcher::CreateSubsets`
     (`oblivious_tree_structure_searcher.cpp:29-43`), the FOLD arm.
@@ -398,8 +399,12 @@ def create_fold_based_subsets(
             " ReorderBins asserts (offset + bits) <= 32"
         )
 
+    # `sm_count` threaded through (the caller's cached device count): the
+    # query it replaces is a 1.26 ms IORegistry read on Metal, once per
+    # Ordered tree
     var subsets = create_subsets(
-        ctx, max_depth, source, layout.fold_count, layout.fold_bits
+        ctx, max_depth, source, layout.fold_count, layout.fold_bits,
+        sm_count=sm_count,
     )
     # the ternary's fold arm (`:30-31`)
     write_fold_based_initial_bins(ctx, layout, subsets.bins)

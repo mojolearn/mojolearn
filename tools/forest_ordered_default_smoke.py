@@ -53,7 +53,12 @@ def main():
             model.inference_engine = "sequential"
             references = {"predict": model.predict(x), "proba": model.predict_proba(x)}
             model.inference_engine = "auto"
-            if model._prediction_engine() != "parallel_groves":
+            # IDENTICAL auto predicts AS sequential through an ordered
+            # resident snapshot (2026-09-22); FAST auto is parallel_groves.
+            resident = (model._ordered_resident_auto()
+                        if args.expected_mode == "identical"
+                        else model._prediction_engine() == "parallel_groves")
+            if not resident:
                 raise RuntimeError("AUTO did not select resident inference")
             for op, reference in references.items():
                 call = model.predict if op == "predict" else model.predict_proba

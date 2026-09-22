@@ -16,9 +16,10 @@ their modules import kernel modules.
 THE CONFIGURATION THIS COVERS, by name (tools/identity_break.py
 `gbdt-ordered-rmse`: 20 trees, depth 6, the default border_count 128,
 learning_rate 0.03 and l2 3.0, one explicit permutation, unit weights). The
-binding refuses by name `sample_weight` and any layout whose histogram policy
-is not OneByteFeatures (a feature with 15 or fewer borders), the only policy
-the covered data reaches.
+binding refuses `sample_weight` by name. All three histogram policies are
+carried: OneByteFeatures, HalfByteFeatures and, since 2026-09-22,
+BinaryFeatures (a feature with exactly one border; `_pw_binary_cells` and
+the `pw_hb_binary_sum` writeback, the gbdt-binary-columns lane).
 
 WHAT IS MIRRORED, IN THE ORDER THE FIT REACHES IT (IDENTICAL build)
 
@@ -86,7 +87,11 @@ from checks.numerics import ftz, identical_mul, identical_mul_add, identical_sqr
 from gbdt.data.quantization import NAN_TREATMENT_AS_IS
 from gbdt.gpu_data.compressed_index_builder import build_layout
 from gbdt.gpu_data.feature_blocks import blocks_for
-from gbdt.gpu_data.grid_policy import POLICY_HALF_BYTE, POLICY_ONE_BYTE
+from gbdt.gpu_data.grid_policy import (
+    POLICY_BINARY,
+    POLICY_HALF_BYTE,
+    POLICY_ONE_BYTE,
+)
 from gbdt.grid_creator.binarization import best_split
 from gbdt.data.permutation import TRandom
 from gbdt.gpu_util.kernel.random_gen import (
@@ -96,12 +101,14 @@ from gbdt.gpu_util.kernel.random_gen import (
     next_uniform_f,
 )
 from gbdt.host.gbdt_oracle import (
+    GBDT_HOST_BINARY_SABOTAGE,
     GBDT_ORACLE_HOST_SABOTAGE,
     GbdtHostGrid,
     GbdtHostModel,
     _binarize_columns,
-    _halving_fold,
+    _halving_fold_live,
     _hist2_dither,
+    _pinned_partition_stat,
     _hist2_quantize,
     gbdt_host_model_text,
 )
@@ -190,15 +197,22 @@ def _ordered_folds(n: Int, growth_rate: Float64, min_fold_size: Int) raises -> L
 def _partition_update_sum(values: List[Float32], offset: Int, size: Int) -> Float32:
     """`_compute_sum[1024]` per thread then `_block_reduce_sum[1024]`
     (`pointwise_scores.mojo:578-628`, `:1408-1443`)."""
-    var slab = List[Float32](length=GBDT_ORD_WIDE_BLOCK, fill=Float32(0.0))
-    for tid in range(GBDT_ORD_WIDE_BLOCK):
+    if size <= 0:
+        return Float32(0.0)
+    var live = min(size, GBDT_ORD_WIDE_BLOCK)
+    var p = 1
+    while p < live:
+        p <<= 1
+    var slab = List[Float32](length=p, fill=Float32(0.0))
+    for tid in range(p):
         var s = Float32(0.0)
         var i = tid
         while i < size:
             s += values[offset + i]
             i += GBDT_ORD_WIDE_BLOCK
         slab[tid] = s
-    return _halving_fold(slab)
+    # lanes past `size` hold +0.0 (`_halving_fold_live`)
+    return _halving_fold_live(slab, live, GBDT_ORD_WIDE_BLOCK)
 
 
 @fieldwise_init
@@ -212,6 +226,7 @@ struct _OrdSubsets(Movable):
     var g_target: List[Float32]
 
 
+@no_inline
 def _update_subsets_stats(
     mut s: _OrdSubsets, part_count: Int, sw: List[Float32], sg: List[Float32]
 ):
@@ -262,6 +277,15 @@ struct _PwHelper(Movable):
     var folds: List[Int]
     var hist_line: Int
     var hist: List[Float32]
+    # the slots written since the histogram was last all +0.0: the next
+    # tree zeroes these instead of allocating and filling a fresh plane
+    var dirty: List[Int]
+    var dirty_flag: List[Bool]
+
+    def mark(mut self, slot: Int):
+        if not self.dirty_flag[slot]:
+            self.dirty_flag[slot] = True
+            self.dirty.append(slot)
 
 
 def _pw_thread_points(
@@ -381,6 +405,126 @@ def _pw_half_byte_group(
     return cells^
 
 
+def _pw_live_runs(off: Int, sz: Int, full_pass: Bool) -> List[Int]:
+    """`_pw_thread_points` by RUNS: for every point index `k`, the triple
+    (first position, position step per thread, live thread count). Every
+    thread's `k`-th point is `first + step * t` for `t` below the count and
+    a zero point past it, because each arm's live threads are a PREFIX of
+    the block: the head `t < min(128, last_id)` (32 on a partial pass), the
+    tail `t < tail`, and a striped trip `j` owns a point exactly when
+    `ds - i > j * stripe` with `i` rising in `t`."""
+    var runs = List[Int]()
+    if full_pass:
+        var last_id = min(128 - (off & 127), sz)
+        runs.append(off)
+        runs.append(1)
+        runs.append(max(0, min(128, last_id)))
+        var ds = sz - last_id if sz > last_id else 0
+        var base = off + last_id
+        var tail = ds & 63
+        if tail != 0:
+            runs.append(base + ds - tail)
+            runs.append(1)
+            runs.append(min(64, tail))
+        ds -= tail
+        if ds > 0:
+            comptime stripe = GBDT_ORD_HB_BLOCK * 2
+            var max_iters = (ds + stripe - 1) // stripe
+            for j in range(max_iters):
+                # thread t is live iff 2t < ds - j * stripe
+                var live = (ds - j * stripe + 1) // 2
+                if live > GBDT_ORD_HB_BLOCK:
+                    live = GBDT_ORD_HB_BLOCK
+                for d in range(2):
+                    runs.append(base + j * stripe + d)
+                    runs.append(2)
+                    runs.append(live)
+    else:
+        var last_id = min(32 - (off & 31), sz)
+        runs.append(off)
+        runs.append(1)
+        runs.append(max(0, last_id))
+        var ds = sz - last_id if sz > last_id else 0
+        var base = off + last_id
+        var tail = ds & 31
+        if tail != 0:
+            runs.append(base + ds - tail)
+            runs.append(1)
+            runs.append(tail)
+        ds -= tail
+        if ds > 0:
+            comptime stripe = GBDT_ORD_HB_BLOCK
+            var max_iters = (ds + stripe - 1) // stripe
+            for j in range(max_iters):
+                var live = ds - j * stripe
+                if live > GBDT_ORD_HB_BLOCK:
+                    live = GBDT_ORD_HB_BLOCK
+                runs.append(base + j * stripe)
+                runs.append(1)
+                runs.append(live)
+    return runs^
+
+
+def _pw_binary_cells(
+    runs: List[Int],
+    docs: List[Int],
+    g_weight: List[Float32],
+    g_target: List[Float32],
+    cindex: List[UInt32],
+    word_offset: Int,
+    nibbles: Int,
+) -> List[Float32]:
+    """`_pw_half_byte_group` over the live points only: the same 256
+    reduced cells `[value * 16 + 2 * nibble + stat]`, the same window order
+    (point `k`, turn `sub`, thread `t`). A zero point is skipped there
+    already; here the loop does not visit it. The fold of the warp slices
+    visits only the slices a live thread wrote: a slice no thread reaches
+    is all +0.0, a cell never holds -0.0 (it starts at +0.0 and a float sum
+    reaches -0.0 only from -0.0 + -0.0), so adding it moves no bit."""
+    comptime SLICE = 512
+    var max_live = 0
+    for r in range(len(runs) // 3):
+        if runs[3 * r + 2] > max_live:
+            max_live = runs[3 * r + 2]
+    var warps = (max_live + 31) // 32
+    var slices = List[Float32](length=warps * SLICE, fill=Float32(0.0))
+    for r in range(len(runs) // 3):
+        var first = runs[3 * r]
+        var step = runs[3 * r + 1]
+        var live = runs[3 * r + 2]
+        for sub in range(16):
+            var i = sub // 2
+            var d = sub % 2
+            for t in range(live):
+                var shift = t & 14
+                var j = ((shift // 2) + i) % 8
+                if j >= nibbles:
+                    continue
+                var p = first + step * t
+                var flag = t & 1
+                var stat = flag if d == 0 else 1 - flag
+                var row = docs[p]
+                var ci = cindex[word_offset + row]
+                var bin = Int((ci >> UInt32(28 - 4 * j)) & UInt32(15))
+                var at = (t // 32) * SLICE + (t & 16) + (bin << 5) + 2 * j + stat
+                var val = g_target[p] if stat == 1 else g_weight[p]
+                slices[at] = slices[at] + val
+    var cells = List[Float32](length=256, fill=Float32(0.0))
+    if warps == 0:
+        return cells^
+    for tid in range(256):
+        var fold2 = tid >> 4
+        var e = tid & 15
+        var s0 = 32 * fold2 + e
+        var a0 = Float32(0.0)
+        var a1 = Float32(0.0)
+        for w in range(warps):
+            a0 += slices[w * SLICE + s0]
+            a1 += slices[w * SLICE + s0 + 16]
+        cells[tid] = a0 + a1
+    return cells^
+
+
 def _ordered_tree_structure(
     cindex: List[UInt32],
     mut helpers: List[_PwHelper],
@@ -431,10 +575,22 @@ def _ordered_tree_structure(
     _update_subsets_stats(s, 1 << fold_bits, sw, sg)
 
     for h in range(len(helpers)):
-        helpers[h].hist = List[Float32](
-            length=(1 << max_depth) * fold_count * helpers[h].hist_line * 2,
-            fill=Float32(0.0),
-        )
+        # every slot starts the tree at +0.0: a fresh plane the first time,
+        # then only the slots the previous tree wrote are zeroed again
+        ref hz = helpers[h]
+        var slots = (1 << max_depth) * fold_count
+        var line2 = hz.hist_line * 2
+        if len(hz.hist) != slots * line2 or len(hz.dirty_flag) != slots:
+            hz.hist = List[Float32](length=slots * line2, fill=Float32(0.0))
+            hz.dirty = List[Int]()
+            hz.dirty_flag = List[Bool](length=slots, fill=False)
+        else:
+            for k in range(len(hz.dirty)):
+                var slot = hz.dirty[k]
+                for c in range(slot * line2, (slot + 1) * line2):
+                    hz.hist[c] = Float32(0.0)
+                hz.dirty_flag[slot] = False
+            hz.dirty.clear()
     var structure = List[_OrdSplit]()
     var score_before = Float32(0.0)
     var docs = List[Int](length=doc_count, fill=0)
@@ -459,8 +615,12 @@ def _ordered_tree_structure(
             var helper_seed = helper_rand.next_uniform_l()
             var hist_line = hp.hist_line
             var n_feat = len(hp.gids)
-            var group = 8 if hp.policy == POLICY_HALF_BYTE else 4
+            var group = 8 if hp.policy == POLICY_HALF_BYTE else (
+                32 if hp.policy == POLICY_BINARY else 4
+            )
             var acc = List[Int32](length=hist_line * 2, fill=Int32(0))
+            var reached = List[Bool](length=hist_line, fill=False)
+            var reached_list = List[Int](capacity=hist_line)
             # ---- the histograms (`compute_hist2`) ----
             for y in range(ny):
                 for z in range(fold_count):
@@ -478,12 +638,14 @@ def _ordered_tree_structure(
                     var sz = s.p_sz[data_part]
                     if sz == 0:
                         continue
+                    hp.mark(hist_slot)
                     var base = hist_slot * hist_line * 2
                     if hp.policy == POLICY_ONE_BYTE:
                         # the 8-bit fixed-point kernel: Int32 sums, the
-                        # dither keyed on the document id
-                        for c in range(hist_line * 2):
-                            acc[c] = Int32(0)
+                        # dither keyed on the document id. A cell no row
+                        # reaches sums to 0 and is not written (`|0| >
+                        # 1e-20` is false), so only the reached cells are
+                        # converted, then cleared for the next slot.
                         for pos in range(off, off + sz):
                             var row = docs[pos]
                             var u = _hist2_dither(row)
@@ -497,13 +659,50 @@ def _ordered_tree_structure(
                                     var bin = Int((ci >> UInt32(24 - 8 * j)) & UInt32(255))
                                     if bin < hp.folds[f_base + j]:
                                         var at = (hp.first[f_base + j] + bin) * 2
+                                        if not reached[at // 2]:
+                                            reached[at // 2] = True
+                                            reached_list.append(at)
                                         acc[at] = acc[at] + qw
                                         acc[at + 1] = acc[at + 1] + qt
                                 f_base += group
-                        for c in range(hist_line * 2):
-                            var val = Float32(Int(acc[c])) / fixed_scale
-                            if abs(val) > Float32(1e-20):
-                                hp.hist[base + c] = val
+                        for k in range(len(reached_list)):
+                            var at = reached_list[k]
+                            for c in range(at, at + 2):
+                                var val = Float32(Int(acc[c])) / fixed_scale
+                                if abs(val) > Float32(1e-20):
+                                    hp.hist[base + c] = val
+                                acc[c] = Int32(0)
+                            reached[at // 2] = False
+                        reached_list.clear()
+                    elif hp.policy == POLICY_BINARY:
+                        # `compute_split_properties_b_kernel`
+                        # (`pointwise_hist2_binary.mojo`): the half-byte
+                        # accumulator over the word's eight nibbles, then
+                        # `pw_hb_binary_sum`: feature `fid` is bit
+                        # `3 - (fid & 3)` of nibble `fid / 4`, its one cell
+                        # per stat the sum from 0.0, ascending in the nibble
+                        # value, of the reduced cells whose value has that
+                        # bit clear, stored when its magnitude exceeds
+                        # `PW_WRITE_EPS`. No scan: one fold.
+                        var runs = _pw_live_runs(off, sz, full_pass)
+                        var f_base = 0
+                        while f_base < n_feat:
+                            var f_count = min(group, n_feat - f_base)
+                            var cells = _pw_binary_cells(
+                                runs, docs, s.g_weight, s.g_target, cindex,
+                                hp.offsets[f_base], (f_count + 3) // 4,
+                            )
+                            for j in range(f_count):
+                                var group_id = j // 4
+                                var f_mask = 1 << (3 - (j & 3))
+                                for w in range(2):
+                                    var acc_b = Float32(0.0)
+                                    for i in range(16):
+                                        if (i & f_mask) == 0 and not (GBDT_HOST_BINARY_SABOTAGE and i == 0):
+                                            acc_b += cells[i * 16 + 2 * group_id + w]
+                                    if abs(acc_b) > Float32(1e-20):
+                                        hp.hist[base + hp.first[f_base + j] * 2 + w] = acc_b
+                            f_base += group
                     else:
                         var points = _pw_thread_points(off, sz, full_pass)
                         var f_base = 0
@@ -524,6 +723,19 @@ def _ordered_tree_structure(
             for y in range(ny):
                 for z in range(fold_count):
                     var slot = (y * fold_count + z) if full_pass else ((y | ny) * fold_count + z)
+                    # a slot is first written at the level that computes
+                    # it (leaves [ny, 2ny) here, leaf 0 at depth 0), so one
+                    # whose partition is empty is still all +0.0 and its
+                    # scan writes +0.0 over +0.0
+                    var data_part: Int
+                    if full_pass:
+                        data_part = y * stripe + z
+                    else:
+                        var left = y * stripe + z
+                        var right = (y | ny) * stripe + z
+                        data_part = left if s.p_sz[left] < s.p_sz[right] else right
+                    if s.p_sz[data_part] == 0:
+                        continue
                     for f in range(n_feat):
                         if hp.folds[f] <= 1:
                             continue
@@ -540,10 +752,26 @@ def _ordered_tree_structure(
                     for z in range(fold_count):
                         var left_part = y * stripe + z
                         var right_part = (y | ny) * stripe + z
+                        # an empty parent's slot and its computed child are
+                        # all +0.0 (by induction from the fresh slots), and
+                        # +0.0 - +0.0 is +0.0: nothing to write
+                        if s.p_sz[left_part] == 0 and s.p_sz[right_part] == 0:
+                            continue
                         var is_left = s.p_sz[left_part] < s.p_sz[right_part]
+                        hp.mark(y * fold_count + z)
+                        hp.mark((y | ny) * fold_count + z)
                         var lslot = (y * fold_count + z) * hist_line * 2
                         var rslot = ((y | ny) * fold_count + z) * hist_line * 2
-                        for c in range(hist_line * 2):
+                        var hq = hp.hist.unsafe_ptr()
+                        comptime SW = 8
+                        var c0 = 0
+                        while c0 + SW <= hist_line * 2:
+                            var calc = hq.unsafe_load[width=SW](rslot + c0)
+                            var comp = hq.unsafe_load[width=SW](lslot + c0) - calc
+                            hq.unsafe_store(lslot + c0, calc if is_left else comp)
+                            hq.unsafe_store(rslot + c0, comp if is_left else calc)
+                            c0 += SW
+                        for c in range(c0, hist_line * 2):
                             var calc = hp.hist[rslot + c]
                             var comp = hp.hist[lslot + c] - calc
                             hp.hist[lslot + c] = calc if is_left else comp
@@ -568,6 +796,17 @@ def _ordered_tree_structure(
             var t_score = List[Float32](length=GBDT_ORD_SCORE_BLOCK, fill=Float32(0.0))
             var t_gain = List[Float32](length=GBDT_ORD_SCORE_BLOCK, fill=Float32(0.0))
             var t_index = List[Int](length=GBDT_ORD_SCORE_BLOCK, fill=0)
+            # the dynamic cosine score of every candidate, (leaf, fold pair)
+            # outer and the candidate inner: each candidate's own adds run
+            # in the kernel's (leaf, fold) order, the same expressions
+            var c_noisy = List[Float32]()
+            var c_gain = List[Float32]()
+            if not plain_l2:
+                c_noisy = _dynamic_cosine_candidates(
+                    hp, s.part_stats, part_count, fold_count, stripe, l2,
+                    score_std_dev, helper_seed, bf_feature, score_before,
+                    c_gain,
+                )
             for blk in range(blocks):
                 for tid in range(GBDT_ORD_SCORE_BLOCK):
                     var th_score = GBDT_ORD_FLOAT32_MAX
@@ -604,52 +843,8 @@ def _ordered_tree_structure(
                                 th_index = b
                             i += GBDT_ORD_SCORE_BLOCK * blocks
                             continue
-                        var score = Float32(0.0)
-                        var denum_sqr = Float32(1e-20)
-                        var current = 2 * b
-                        for leaf in range(part_count):
-                            var fold = 0
-                            while fold < fold_count:
-                                var learn_off = leaf * stripe + fold
-                                var test_off = leaf * stripe + fold + 1
-                                var plw = s.part_stats[3 * learn_off]
-                                var pls = s.part_stats[3 * learn_off + 1]
-                                var ptw = s.part_stats[3 * test_off]
-                                var pts = s.part_stats[3 * test_off + 1]
-                                var h_learn = hist_line * (leaf * fold_count + fold) * 2
-                                var h_test = hist_line * (leaf * fold_count + fold + 1) * 2
-                                var wel = hp.hist[current + h_learn]
-                                var wer = max(plw - wel, Float32(0.0))
-                                var sel = hp.hist[current + h_learn + 1]
-                                var ser = pls - sel
-                                var wtl = hp.hist[current + h_test]
-                                var wtr = max(ptw - wtl, Float32(0.0))
-                                var stl = hp.hist[current + h_test + 1]
-                                var sum_tr = pts - stl
-                                var mu_l = Float32(0.0)
-                                if wel > Float32(0.0):
-                                    mu_l = sel / (wel + l2)
-                                score += stl * mu_l
-                                denum_sqr += wtl * mu_l * mu_l
-                                var mu_r = Float32(0.0)
-                                if wer > Float32(0.0):
-                                    mu_r = ser / (wer + l2)
-                                score += sum_tr * mu_r
-                                denum_sqr += wtr * mu_r * mu_r
-                                fold += 2
-                        if denum_sqr > Float32(1e-15):
-                            score = -score / identical_sqrt(denum_sqr)
-                        else:
-                            score = GBDT_ORD_FLOAT32_MAX
-                        score *= Float32(1.0)
-                        var noisy = score
-                        if score_std_dev != Float32(0.0):
-                            var nseed = advance_seed_k(
-                                helper_seed + UInt64(UInt32(bf_feature[b])), 4
-                            )
-                            var draw = next_normal_f(nseed)
-                            noisy = identical_mul_add(draw[0], score_std_dev, noisy)
-                        var gain = (noisy - score_before) * Float32(1.0)
+                        var noisy = c_noisy[b]
+                        var gain = c_gain[b]
                         if gain < th_gain:
                             th_score = noisy
                             th_gain = gain
@@ -727,6 +922,124 @@ def _ordered_tree_structure(
     return structure^
 
 
+@no_inline
+def _dynamic_cosine_candidates(
+    hp: _PwHelper,
+    part_stats: List[Float32],
+    part_count: Int,
+    fold_count: Int,
+    stripe: Int,
+    l2: Float32,
+    score_std_dev: Float32,
+    helper_seed: UInt64,
+    bf_feature: List[Int],
+    score_before: Float32,
+    mut gain_out: List[Float32],
+) -> List[Float32]:
+    """`find_optimal_split_cosine_kernel`'s per-candidate score (the
+    (estimate, test) fold pairs, `denum_sqr` from 1e-20), its noise and its
+    gain, for every candidate of the helper at once: returns the noisy
+    scores and fills `gain_out`. Each candidate accumulates over (leaf,
+    fold pair) in the kernel's order with the kernel's expressions; only
+    the loop nest is turned so a (leaf, fold pair)'s two histogram lines are
+    read once, front to back. The noise draw depends on the candidate's
+    feature only, so it is drawn once per feature."""
+    var hist_line = hp.hist_line
+    var score = List[Float32](length=hist_line, fill=Float32(0.0))
+    var denum = List[Float32](length=hist_line, fill=Float32(1e-20))
+    for leaf in range(part_count):
+        var fold = 0
+        while fold < fold_count:
+            var learn_off = leaf * stripe + fold
+            var test_off = leaf * stripe + fold + 1
+            var plw = part_stats[3 * learn_off]
+            var pls = part_stats[3 * learn_off + 1]
+            var ptw = part_stats[3 * test_off]
+            var pts = part_stats[3 * test_off + 1]
+            var h_learn = hist_line * (leaf * fold_count + fold) * 2
+            var h_test = hist_line * (leaf * fold_count + fold + 1) * 2
+            var hptr = hp.hist.unsafe_ptr()
+            var sptr = score.unsafe_ptr()
+            var dptr = denum.unsafe_ptr()
+            comptime W = 8
+            var vb = 0
+            while vb + W <= hist_line:
+                # W candidates per step, lane k is candidate vb + k: the
+                # scalar loop below, lane by lane (the same contraction of
+                # `x += a * b` into one fma, measured on the host compiler)
+                var lpair = hptr.unsafe_load[width = 2 * W](h_learn + 2 * vb).deinterleave()
+                var tpair = hptr.unsafe_load[width = 2 * W](h_test + 2 * vb).deinterleave()
+                var sc = sptr.unsafe_load[width=W](vb)
+                var dn = dptr.unsafe_load[width=W](vb)
+                var wel = lpair[0]
+                var sel = lpair[1]
+                var wtl = tpair[0]
+                var stl = tpair[1]
+                var zero = SIMD[DType.float32, W](0.0)
+                var wer = max(SIMD[DType.float32, W](plw) - wel, zero)
+                var ser = SIMD[DType.float32, W](pls) - sel
+                var wtr = max(SIMD[DType.float32, W](ptw) - wtl, zero)
+                var sum_tr = SIMD[DType.float32, W](pts) - stl
+                var mu_l = wel.gt(zero).select(sel / (wel + l2), zero)
+                sc += stl * mu_l
+                dn += wtl * mu_l * mu_l
+                var mu_r = wer.gt(zero).select(ser / (wer + l2), zero)
+                sc += sum_tr * mu_r
+                dn += wtr * mu_r * mu_r
+                sptr.unsafe_store(vb, sc)
+                dptr.unsafe_store(vb, dn)
+                vb += W
+            for b in range(vb, hist_line):
+                var current = 2 * b
+                var sc = score[b]
+                var dn = denum[b]
+                var wel = hp.hist[current + h_learn]
+                var wer = max(plw - wel, Float32(0.0))
+                var sel = hp.hist[current + h_learn + 1]
+                var ser = pls - sel
+                var wtl = hp.hist[current + h_test]
+                var wtr = max(ptw - wtl, Float32(0.0))
+                var stl = hp.hist[current + h_test + 1]
+                var sum_tr = pts - stl
+                var mu_l = Float32(0.0)
+                if wel > Float32(0.0):
+                    mu_l = sel / (wel + l2)
+                sc += stl * mu_l
+                dn += wtl * mu_l * mu_l
+                var mu_r = Float32(0.0)
+                if wer > Float32(0.0):
+                    mu_r = ser / (wer + l2)
+                sc += sum_tr * mu_r
+                dn += wtr * mu_r * mu_r
+                score[b] = sc
+                denum[b] = dn
+            fold += 2
+    var noisy_out = List[Float32](length=hist_line, fill=Float32(0.0))
+    gain_out = List[Float32](length=hist_line, fill=Float32(0.0))
+    var last_feature = -1
+    var last_draw = Float32(0.0)
+    for b in range(hist_line):
+        var sc = score[b]
+        var denum_sqr = denum[b]
+        if denum_sqr > Float32(1e-15):
+            sc = -sc / identical_sqrt(denum_sqr)
+        else:
+            sc = GBDT_ORD_FLOAT32_MAX
+        sc *= Float32(1.0)
+        var noisy = sc
+        if score_std_dev != Float32(0.0):
+            if bf_feature[b] != last_feature:
+                var nseed = advance_seed_k(
+                    helper_seed + UInt64(UInt32(bf_feature[b])), 4
+                )
+                last_draw = next_normal_f(nseed)[0]
+                last_feature = bf_feature[b]
+            noisy = identical_mul_add(last_draw, score_std_dev, noisy)
+        noisy_out[b] = noisy
+        gain_out[b] = (noisy - score_before) * Float32(1.0)
+    return noisy_out^
+
+
 def _record_less(
     gain_a: Float32, fid_a: UInt32, bin_a: UInt32,
     gain_b: Float32, fid_b: UInt32, bin_b: UInt32,
@@ -756,27 +1069,9 @@ def _partition_stat_n(
     """`compute_partition_stats` for one (leaf, stat) at
     `partition_stats_chunks(32, n_stats)` chunks (`partitions_reduce.mojo`)."""
     var max_chunks = (2 * GBDT_ORD_PINNED_SM + n_stats - 1) // n_stats
-    var partials = List[Float32](length=max_chunks, fill=Float32(0.0))
-    var stride = max_chunks * GBDT_ORD_STATS_BLOCK
-    for chunk in range(max_chunks):
-        var slab = List[Float32](length=GBDT_ORD_STATS_BLOCK, fill=Float32(0.0))
-        for tid in range(GBDT_ORD_STATS_BLOCK):
-            var v = Float32(0.0)
-            var i = chunk * GBDT_ORD_STATS_BLOCK + tid
-            while i < size:
-                v += stats[stat_id * line_size + offset + i]
-                i += stride
-            slab[tid] = v
-        partials[chunk] = _halving_fold(slab)
-    var slab2 = List[Float32](length=GBDT_ORD_STATS_BLOCK, fill=Float32(0.0))
-    for tid in range(GBDT_ORD_STATS_BLOCK):
-        var acc = Float32(0.0)
-        var c = tid
-        while c < max_chunks:
-            acc += partials[c]
-            c += GBDT_ORD_STATS_BLOCK
-        slab2[tid] = acc
-    return _halving_fold(slab2)
+    return _pinned_partition_stat(
+        stats, stat_id * line_size + offset, size, max_chunks
+    )
 
 
 def _ordered_estimate_and_apply(
@@ -908,12 +1203,6 @@ def gbdt_ordered_rmse_host_fit(
     var helpers = List[_PwHelper]()
     for b in range(len(blocks)):
         ref blk = blocks[b]
-        if blk.policy != POLICY_ONE_BYTE and blk.policy != POLICY_HALF_BYTE:
-            _refuse_ordered(
-                "a feature with exactly one border (the BinaryFeatures"
-                " histogram policy, feature "
-                + String(blk.feature_ids[0]) + ")"
-            )
         var gids = List[Int]()
         var offs = List[Int]()
         var firsts = List[Int]()
@@ -928,6 +1217,7 @@ def gbdt_ordered_rmse_host_fit(
             hist_line += Int(blk.folds[k])
         helpers.append(_PwHelper(
             blk.policy, gids^, offs^, firsts^, folds^, hist_line, List[Float32](),
+            List[Int](), List[Bool](),
         ))
     var feat_offset = List[Int](length=n_features, fill=0)
     var feat_shift = List[UInt32](length=n_features, fill=UInt32(0))
@@ -1225,6 +1515,7 @@ def _ordered_bootstrap_draws(
     return draws^
 
 
+@no_inline
 def _ordered_task_host(
     loss: GbdtHostLoss,
     estimate_size: Int,
@@ -1322,13 +1613,6 @@ def gbdt_ordered_host_fit(
     var helpers = List[_PwHelper]()
     for b in range(len(blocks)):
         ref blk = blocks[b]
-        if blk.policy != POLICY_ONE_BYTE and blk.policy != POLICY_HALF_BYTE:
-            raise Error(
-                "no CPU implementation of _mojolearn_gbdt.gbdt_fit for Ordered"
-                " boosting on a feature with exactly one border (the"
-                " BinaryFeatures histogram policy, feature "
-                + String(blk.feature_ids[0]) + ")"
-            )
         var gids = List[Int]()
         var offs = List[Int]()
         var firsts = List[Int]()
@@ -1343,6 +1627,7 @@ def gbdt_ordered_host_fit(
             hist_line += Int(blk.folds[k])
         helpers.append(_PwHelper(
             blk.policy, gids^, offs^, firsts^, folds^, hist_line, List[Float32](),
+            List[Int](), List[Bool](),
         ))
     var feat_offset = List[Int](length=n_features, fill=0)
     var feat_shift = List[UInt32](length=n_features, fill=UInt32(0))

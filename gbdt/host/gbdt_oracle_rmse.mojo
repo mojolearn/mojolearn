@@ -37,7 +37,8 @@ default flags the symmetric oracle names)
 
   1. `AdjustBoostFromAverageDefaultValue` (`gbdt/train.mojo:1580-1605`):
      unset resolves TRUE for RMSE. `_rmse_starting_approx` below.
-  2. The grid, the layout, the binary policy refusal and the binarize: the
+  2. The grid, the layout and the binarize (one-border columns through the
+     symmetric oracle's `_binary_block` since 2026-09-22): the
      symmetric oracle's `gbdt_host_grid` and `_binarize_columns`, called.
   3. `calc_one_dimensional_optimum_const_approx`'s RMSE arm
      (`gbdt/metrics/optimal_const_for_loss.mojo:52-111`, unweighted branch:
@@ -100,9 +101,11 @@ from gbdt.host.gbdt_oracle import (
     GbdtHostModel,
     GbdtHostParams,
     _binarize_columns,
+    _binary_block,
     _bootstrap_pass,
     _choose_scale_from_magnitudes,
     _cosine_gain,
+    _cosine_gains,
     _deterministic_sum_lanes,
     _half_byte_block,
     _halving_fold,
@@ -285,16 +288,6 @@ def gbdt_rmse_host_fit(
     var one_hot = List[Bool](length=n_features, fill=False)
     var layout = build_layout(grid.fold_counts, one_hot)
     var blocks = blocks_for(layout, n_rows)
-    for b in range(len(blocks)):
-        if blocks[b].policy == POLICY_BINARY:
-            raise Error(
-                "no CPU implementation of _mojolearn_gbdt.gbdt_fit for a"
-                " feature with exactly one border (the BinaryFeatures"
-                " histogram policy, feature "
-                + String(blocks[b].feature_ids[0])
-                + "); the gbdt host binding restates the half-byte and"
-                " one-byte policies only (gbdt/host/gbdt_oracle.mojo)"
-            )
     var cindex = _binarize_columns(x_colmajor, n_rows, n_features, grid, layout)
     var hist_cells = layout.hist_cells
 
@@ -407,7 +400,13 @@ def gbdt_rmse_host_fit(
                 var total = 0
                 for k in range(blk.count()):
                     total += Int(blk.folds[k])
-                if blk.policy == POLICY_HALF_BYTE:
+                if blk.policy == POLICY_BINARY:
+                    _binary_block(
+                        blk, block_first_bin, hist_cells, compute, depth,
+                        p_off, p_sz, row_index, stats, cindex, n_rows,
+                        fixed_scale, hist,
+                    )
+                elif blk.policy == POLICY_HALF_BYTE:
                     _half_byte_block(
                         blk, block_first_bin, hist_cells, compute, depth,
                         p_off, p_sz, row_index, stats, cindex, n_rows,
@@ -462,11 +461,12 @@ def gbdt_rmse_host_fit(
             # the score and the device winner
             var best_gain = -GBDT_FLOAT32_MAX
             var best_bin = GBDT_SENTINEL
+            var gains = _cosine_gains(
+                hist, hist_cells, part_stats, n_live, params.l2_leaf_reg,
+                score_std_dev, level_seed, bf_feature,
+            )
             for bf in range(hist_cells):
-                var gain = _cosine_gain(
-                    hist, hist_cells, part_stats, n_live, bf, params.l2_leaf_reg,
-                    score_std_dev, level_seed, bf_feature[bf],
-                )
+                var gain = gains[bf]
                 if gain > best_gain:
                     best_gain = gain
                     best_bin = UInt32(bf)

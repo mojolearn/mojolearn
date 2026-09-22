@@ -20,17 +20,24 @@ _FOREST_ARRAYS = ("_offsets", "_colid", "_quesval", "_left_child", "_leaves")
 
 class _ResidentForest:
     """Own a device snapshot independently of estimator lifetime or pickling."""
-    def __init__(self, native, arrays, dimensions, mode):
+    def __init__(self, native, arrays, dimensions, mode, ordered=None):
         self.native = native
         self.arrays = arrays
         self.dimensions = dimensions
         self.mode = mode
+        self.ordered = ordered
+        params = list(dimensions)
+        if ordered is not None:
+            # 1 strict increasing-tree kernel, 0 the 32-grove graph; None
+            # leaves the binary's compiled default.
+            params.append(1 if ordered else 0)
         self.handle = native.forest_prepare_gpu(
-            *(_addr_ro(a) for a in arrays), list(dimensions))
+            *(_addr_ro(a) for a in arrays), params)
         self._finalizer = weakref.finalize(self, native.forest_release_gpu, self.handle)
 
-    def matches(self, native, arrays, dimensions, mode):
+    def matches(self, native, arrays, dimensions, mode, ordered=None):
         return (native is self.native and dimensions == self.dimensions and mode == self.mode
+                and ordered == self.ordered
                 and all(a is b for a, b in zip(arrays, self.arrays)))
 
 
@@ -144,20 +151,66 @@ class ForestProtocol:
         return engine
 
     def _prediction_engine(self):
+        """The engine this model PREDICTS AS, which is also what its archive
+        records: 'sequential' or 'parallel_groves'.
+
+        IDENTICAL `auto` is 'sequential' even where a resident snapshot
+        serves it (`_ordered_resident_auto`): that snapshot runs the strict
+        increasing-tree kernel, the sequential route's arithmetic, so the
+        model's bits and its archive are the sequential ones on every
+        vendor and on the CPU. Until 2026-09-22 it answered
+        'parallel_groves', which wrote a groves archive (every RF lane's
+        saved-model hash moved) and, through the compiled default, moved an
+        explicit IDENTICAL `parallel_groves` model off the 32-grove fold it
+        was recorded with."""
         engine = self._validate_inference_engine(getattr(self, "inference_engine", "sequential"))
         if engine == "auto":
             # FAST permits the grove-parallel reduction and benefits from a
-            # persistent device snapshot. NVIDIA IDENTICAL uses that snapshot
-            # with the compiled strict increasing-tree aggregation route.
-            mode = self._effective_mode()
-            if mode == "fast":
+            # persistent device snapshot.
+            if self._effective_mode() == "fast":
                 return "parallel_groves"
-            if mode == "identical":
-                selected = getattr(self._bind(), "forest_ordered_resident", None)
-                if callable(selected) and int(selected()) == 1:
-                    return "parallel_groves"
             return "sequential"
         return engine
+
+    def _ordered_resident_auto(self):
+        """IDENTICAL `auto` on a binary whose strict increasing-tree resident
+        route is compiled (`forest_ordered_resident`): predict through a
+        device-resident snapshot with the sequential route's bits. A host
+        binding (CPU-only install) has no such route; its proxy raises
+        ImportError by name for any function it lacks, so a missing export
+        is an absence here, never a refusal of the whole prediction."""
+        if getattr(self, "inference_engine", "sequential") != "auto":
+            return False
+        if self._effective_mode() != "identical":
+            return False
+        selected = self._ordered_resident_export()
+        return selected is not None and int(selected()) == 1
+
+    def _ordered_resident_export(self):
+        """The binding's `forest_ordered_resident`, or None where it has none:
+        an older binary, or a host binding, whose proxy raises ImportError
+        by name (not AttributeError) for an export it lacks."""
+        try:
+            selected = getattr(self._bind(), "forest_ordered_resident", None)
+        except (AttributeError, ImportError):
+            return None
+        return selected if callable(selected) else None
+
+    def _resident_ordered_flag(self):
+        """The aggregation a resident snapshot is prepared with: True strict
+        increasing-tree, False the 32-grove graph, None the compiled
+        default. IDENTICAL names it explicitly so the recorded bits do not
+        depend on a vendor build default: `auto` (served resident only by
+        `_ordered_resident_auto`) is strict, `parallel_groves` is the grove
+        fold that the CPU host groves engine and the recorded GPU columns
+        compute. FAST and DETERMINISTIC keep the binary's default, and so
+        does a binary older than the per-snapshot choice (no
+        `forest_ordered_resident` export), whose resident route is groves."""
+        if self._effective_mode() != "identical":
+            return None
+        if self._ordered_resident_export() is None:
+            return None
+        return self._prediction_engine() == "sequential"
 
     def _prediction_function(self, sequential_name):
         engine = self._prediction_engine()
@@ -186,7 +239,7 @@ class ForestProtocol:
         rows, features = X.shape
         dimensions = (int(features), int(self._n_trees), int(self._num_outputs))
         arrays = tuple(getattr(self, name) for name in _FOREST_ARRAYS)
-        if engine == "sequential":
+        if engine == "sequential" and not self._ordered_resident_auto():
             return self._prediction_function(sequential_name)(
                 *(_addr_ro(a) for a in arrays), _addr_ro(X),
                 _addr(out), [int(rows), *dimensions])
@@ -214,7 +267,7 @@ class ForestProtocol:
 
     def _prepare_resident_forest(self, native=None):
         """Prepare the existing immutable parallel-groves snapshot without a query."""
-        if self._prediction_engine() != "parallel_groves":
+        if self._prediction_engine() != "parallel_groves" and not self._ordered_resident_auto():
             raise ValueError("resident forest preparation requires parallel_groves")
         if not hasattr(self, "_offsets"):
             raise RuntimeError("this estimator is not fitted yet")
@@ -226,8 +279,9 @@ class ForestProtocol:
         if any(not callable(getattr(native, name, None)) for name in required):
             raise RuntimeError("rebuild the forest binding for resident parallel_groves inference")
         mode = self._effective_mode()
+        ordered = self._resident_ordered_flag()
         resident = getattr(self, "_resident_forest", None)
-        if resident is None or not resident.matches(native, arrays, dimensions, mode):
+        if resident is None or not resident.matches(native, arrays, dimensions, mode, ordered):
             # A bytes owner cannot be made writable again via setflags(). A
             # caller retaining an old mutable private-array alias cannot alter
             # the device snapshot or the host model used by save/sequential.
@@ -243,7 +297,7 @@ class ForestProtocol:
                     or int(arrays[0][-1]) != nodes):
                 raise ValueError("forest model array shapes do not match metadata")
             frozen = tuple(Array.from_buffer(memoryview(a.tobytes()).cast("i" if a.dtype == "<i4" else "f")) for a in arrays)
-            resident = _ResidentForest(native, frozen, dimensions, mode)
+            resident = _ResidentForest(native, frozen, dimensions, mode, ordered)
             for name, a in zip(_FOREST_ARRAYS, frozen):
                 setattr(self, name, a)
             self._resident_forest = resident

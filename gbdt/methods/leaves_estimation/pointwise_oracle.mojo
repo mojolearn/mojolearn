@@ -67,6 +67,7 @@ THE CALL CYCLE, theirs (`pointwise_oracle.cpp`):
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.host.device_attribute import DeviceAttribute
+from gbdt.gpu_util.arena import BufferArena
 
 from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import (
     StageTimes,
@@ -334,6 +335,26 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
     #: the seed of that call's task streams (`querywise_targets_impl.h:214`;
     #: the stream is the fit's per-tree draw, see `doc_parallel_boosting.mojo`)
     var yeti_rng: TRandom
+    #: the DEFERRED weight sums (`make_bin_optimized_oracle(...,
+    #: defer_weights=True)`): the per-leaf weight fold's host copy, read into
+    #: `weights_cpu` by `settle_weights` after the caller's next drain. None
+    #: on every oracle built the ordinary way, whose constructor drains and
+    #: fills `weights_cpu` itself.
+    var h_weight_stats: Optional[HostBuffer[DType.float32]]
+
+    def settle_weights(mut self) raises:
+        """`WeightsCpu` from the deferred weight fold (see
+        `h_weight_stats`): the SAME per-leaf float32 sums the constructor's
+        drained readback reads, widened the same way. The caller must have
+        drained the queue since construction. A no-op on an ordinary
+        oracle."""
+        if not self.h_weight_stats.__bool__():
+            return
+        var h = self.h_weight_stats.take()
+        self.weights_cpu.clear()
+        for leaf in range(self.bin_count):
+            self.weights_cpu.append(Float64(h.unsafe_ptr().unsafe_load(leaf)))
+        _ = h^
 
     def point_dim(self) -> Int:
         return self.bin_count * self.single_bin_dim
@@ -497,11 +518,35 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         identity on the kernel directly, which is what makes this line
         safe to write rather than merely plausible.
         """
+        if self.single_bin_dim == 1:
+            self.enqueue_single_dim_evaluation()
+            self.times.begin(self.ctx)
+            # KEPT (DEVIATION 1891 audit): the ONE drain per walker
+            # evaluation, and it is required -- the host reads
+            # `h_part_stats` and `h_fv` immediately below to decide the
+            # line search. Both readbacks are already batched ahead of
+            # this single drain, and no per-evaluation allocation exists
+            # on this path, so this is the floor CatBoost's pinned-memory
+            # `ReadReduce` also pays (theirs is cheaper per drain, not
+            # fewer drains).
+            self.ctx.synchronize()
+            self.times.end(self.ctx, "est.readback")
+            self.finish_single_dim_evaluation(value, gradient)
+            return
+        self._write_multi_dim_value_and_first_derivatives(value, gradient)
+
+    def enqueue_single_dim_evaluation(mut self) raises:
+        """The single-dim arm of `write_value_and_first_derivatives` up to
+        its drain: the evaluation launch, the per-leaf fold, and the two
+        readback copies, ENQUEUED. `finish_single_dim_evaluation` reads them
+        after the caller's drain. The ordinary method is exactly
+        enqueue -> drain -> finish; the Ordered fit's batched estimation
+        (`ordered_boosting.mojo`) enqueues every task's evaluation behind
+        ONE drain instead of one each."""
         var blocks = (
             self.n_rows + MSE_BLOCK_SIZE - 1
         ) // MSE_BLOCK_SIZE
-
-        if self.single_bin_dim == 1:
+        if True:
             self.times.begin(self.ctx)
             # the QUERYWISE target (QueryRMSE): `ApproximateAt` through the
             # querywise der calcer (`permutation_der_calcer.h:192-205`),
@@ -576,11 +621,14 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                     )
             self.times.end(self.ctx, "est.approx")
             self.times.begin(self.ctx)
+            # the widest leaf bounds every partition exactly
+            # (`compute_partition_stats`' `row_bound`)
             compute_partition_stats(
                 self.ctx, self.bin_count, 0, 2, self.n_rows,
                 self.d_leaves, self.d_p_off, self.d_p_sz,
                 self.d_eval_stats, self.d_partials, self.d_part_stats,
                 sm_count=self.sm_count,
+                row_bound=self.max_leaf_size,
             )
             self.times.end(self.ctx, "est.pstats")
             self.times.begin(self.ctx)
@@ -591,17 +639,13 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             self.ctx.enqueue_copy(
                 dst_ptr=self.h_fv.unsafe_ptr(), src_buf=self.d_fv
             )
-            # KEPT (DEVIATION 1891 audit): the ONE drain per walker
-            # evaluation, and it is required -- the host reads
-            # `h_part_stats` and `h_fv` immediately below to decide the
-            # line search. Both readbacks are already batched ahead of
-            # this single drain, and no per-evaluation allocation exists
-            # on this path, so this is the floor CatBoost's pinned-memory
-            # `ReadReduce` also pays (theirs is cheaper per drain, not
-            # fewer drains).
-            self.ctx.synchronize()
-            self.times.end(self.ctx, "est.readback")
 
+    def finish_single_dim_evaluation(
+        mut self, mut value: Float64, mut gradient: List[Float64]
+    ) raises:
+        """The host half of the single-dim arm, after the drain that made
+        `enqueue_single_dim_evaluation`'s copies runs."""
+        if True:
             gradient.clear()
             self.cached_der2.clear()
             for leaf in range(self.bin_count):
@@ -638,8 +682,11 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             for b in range(self.fv_blocks):
                 fv32 += self.h_fv.unsafe_ptr().unsafe_load(b)
             value = Float64(fv32)
-            return
 
+    def _write_multi_dim_value_and_first_derivatives(
+        mut self, mut value: Float64, mut gradient: List[Float64]
+    ) raises:
+        """The rowSize > 1 arm of `write_value_and_first_derivatives`."""
         # ---- the rowSize > 1 arm: the multiclass family --------------
         var is_ova = self.objective == OBJECTIVE_MULTICLASS_OVA
         if self.objective != OBJECTIVE_MULTICLASS and not is_ova:
@@ -1270,6 +1317,141 @@ def make_oracle_device_scratch(
     )
 
 
+def make_oracle_device_scratch_in(
+    ctx: DeviceContext,
+    mut arena: BufferArena,
+    n_rows: Int,
+    bin_count: Int,
+    cursor_dim: Int,
+    multi_planes: Int,
+    fv_blocks: Int,
+    sm: Int,
+) raises -> OracleDeviceScratch:
+    """`make_oracle_device_scratch` at the same sizes, carved from `arena`
+    (`gbdt/gpu_util/arena.mojo`) instead of allocated one by one."""
+    var d_identity = arena.device[DType.uint32](ctx, n_rows)
+    var d_bins = arena.device[DType.uint32](ctx, n_rows)
+    var d_leaves = arena.device[DType.uint32](ctx, bin_count)
+    var d_shift = arena.device[DType.float32](ctx, bin_count * cursor_dim)
+    var d_eval_stats = arena.device[DType.float32](ctx, 2 * n_rows)
+    var d_fv = arena.device[DType.float32](ctx, fv_blocks)
+    var d_mag_dummy = arena.device[DType.float32](ctx, 2)
+    var d_partials = arena.device[DType.float32](
+        ctx, _oracle_partials_len(bin_count, sm)
+    )
+    var d_multi_partials = arena.device[DType.float32](
+        ctx, _oracle_multi_partials_len(bin_count, sm, multi_planes)
+    )
+    var d_part_stats = arena.device[DType.float32](ctx, 2 * bin_count)
+    var d_multi_der = arena.device[DType.float32](ctx, multi_planes * n_rows)
+    var d_multi_stats = arena.device[DType.float32](
+        ctx, multi_planes * bin_count
+    )
+    return OracleDeviceScratch(
+        n_rows, bin_count, cursor_dim, multi_planes, fv_blocks, sm,
+        d_identity^, d_bins^, d_leaves^, d_shift^, d_eval_stats^, d_fv^,
+        d_mag_dummy^, d_partials^, d_multi_partials^, d_part_stats^,
+        d_multi_der^, d_multi_stats^,
+    )
+
+
+struct OracleHostScratch(Movable):
+    """The host staging `make_bin_optimized_oracle` allocates per oracle
+    (`h_leaves`, `h_shift`, `h_fv`, `h_part_stats`, `h_multi_stats`, and
+    the deferred weight fold's `h_weight_stats`), supplied by a caller that
+    keeps them for the fit. Every cell is written (by the host, or by a
+    copy) before it is read, in each oracle's life."""
+
+    var bin_count: Int
+    var cursor_dim: Int
+    var multi_planes: Int
+    var fv_blocks: Int
+    var h_leaves: HostBuffer[DType.uint32]
+    var h_shift: HostBuffer[DType.float32]
+    var h_fv: HostBuffer[DType.float32]
+    var h_part_stats: HostBuffer[DType.float32]
+    var h_multi_stats: HostBuffer[DType.float32]
+    var h_weight_stats: HostBuffer[DType.float32]
+
+    def __init__(
+        out self,
+        ctx: DeviceContext,
+        mut arena: BufferArena,
+        bin_count: Int,
+        cursor_dim: Int,
+        multi_planes: Int,
+        fv_blocks: Int,
+    ) raises:
+        self.bin_count = bin_count
+        self.cursor_dim = cursor_dim
+        self.multi_planes = multi_planes
+        self.fv_blocks = fv_blocks
+        self.h_leaves = arena.host_buffer[DType.uint32](ctx, bin_count)
+        self.h_shift = arena.host_buffer[DType.float32](
+            ctx, bin_count * cursor_dim
+        )
+        self.h_fv = arena.host_buffer[DType.float32](ctx, fv_blocks)
+        self.h_part_stats = arena.host_buffer[DType.float32](
+            ctx, 2 * bin_count
+        )
+        self.h_multi_stats = arena.host_buffer[DType.float32](
+            ctx, multi_planes * bin_count
+        )
+        # the size of `d_part_stats`, the WHOLE-BUFFER copy's source (the
+        # weight fold fills its first `bin_count` cells): a staging buffer
+        # of `bin_count` took a copy of twice its length, and the overrun
+        # landed in whatever host memory came next -- a neighbour's
+        # `h_leaves` whose upload had not run yet, which is how it was
+        # found (a batched fit whose partitions all read leaf 0)
+        self.h_weight_stats = arena.host_buffer[DType.float32](
+            ctx, 2 * bin_count
+        )
+
+    def matches(
+        self, bin_count: Int, cursor_dim: Int, multi_planes: Int,
+        fv_blocks: Int,
+    ) -> Bool:
+        return (
+            self.bin_count == bin_count
+            and self.cursor_dim == cursor_dim
+            and self.multi_planes == multi_planes
+            and self.fv_blocks == fv_blocks
+        )
+
+    def handles(self) -> OracleHostScratch:
+        """Handle copies onto the same host memory."""
+        return OracleHostScratch(
+            self.bin_count, self.cursor_dim, self.multi_planes,
+            self.fv_blocks, self.h_leaves.copy(), self.h_shift.copy(),
+            self.h_fv.copy(), self.h_part_stats.copy(),
+            self.h_multi_stats.copy(), self.h_weight_stats.copy(),
+        )
+
+    def __init__(
+        out self,
+        bin_count: Int,
+        cursor_dim: Int,
+        multi_planes: Int,
+        fv_blocks: Int,
+        var h_leaves: HostBuffer[DType.uint32],
+        var h_shift: HostBuffer[DType.float32],
+        var h_fv: HostBuffer[DType.float32],
+        var h_part_stats: HostBuffer[DType.float32],
+        var h_multi_stats: HostBuffer[DType.float32],
+        var h_weight_stats: HostBuffer[DType.float32],
+    ):
+        self.bin_count = bin_count
+        self.cursor_dim = cursor_dim
+        self.multi_planes = multi_planes
+        self.fv_blocks = fv_blocks
+        self.h_leaves = h_leaves^
+        self.h_shift = h_shift^
+        self.h_fv = h_fv^
+        self.h_part_stats = h_part_stats^
+        self.h_multi_stats = h_multi_stats^
+        self.h_weight_stats = h_weight_stats^
+
+
 def make_oracle_device_scratch_sharing_rows(
     ctx: DeviceContext,
     rows: OracleDeviceScratch,
@@ -1401,6 +1583,9 @@ def make_bin_optimized_oracle(
     # DEVIATION 3041: handle views onto the fit's pool of one; None (every
     # check, and every column the row is off on) allocates as before
     var scratch: Optional[OracleDeviceScratch] = None,
+    defer_weights: Bool = False,
+    var host_scratch: Optional[OracleHostScratch] = None,
+    leaves_ready: Bool = False,
 ) raises -> BinOptimizedOracle:
     """Their ctor (`pointwise_oracle.cpp:218-246`): allocate the eval
     buffers, seed `CurrentPoint` at zero, and settle `WeightsCpu` once --
@@ -1475,17 +1660,46 @@ def make_bin_optimized_oracle(
     var d_multi_der = ws.d_multi_der.copy()
     var d_multi_stats = ws.d_multi_stats.copy()
 
-    launch_make_sequence(ctx, UInt32(0), d_identity, n_rows)
+    # `leaves_ready`: the caller's persistent scratch (`have_scratch`) whose
+    # `d_leaves` already holds `[0, bin_count)` from its first use, on a
+    # single-dimensional non-Exact walk, which never reads `d_identity`
+    # (only the multiclass arms and the Exact scratch do). Neither buffer
+    # is written by anything else, so both refills are skipped.
+    var skip_static = leaves_ready and have_scratch
+    if skip_static and (
+        single_bin_dim != 1 or estimation_method == LEAF_ESTIMATION_EXACT
+    ):
+        raise Error("leaves_ready is for single-dim, non-Exact oracles only")
+    if not skip_static:
+        launch_make_sequence(ctx, UInt32(0), d_identity, n_rows)
 
-    var h_leaves = ctx.enqueue_create_host_buffer[DType.uint32](bin_count)
-    for i in range(bin_count):
-        h_leaves.unsafe_ptr().unsafe_store(i, UInt32(i))
-    ctx.enqueue_copy(dst_buf=d_leaves, src_ptr=h_leaves.unsafe_ptr())
+    # the host staging: the caller's (`host_scratch`, kept for the fit) when
+    # it matches this oracle's shape, else allocated here as always
+    var have_host = False
+    if host_scratch.__bool__():
+        have_host = host_scratch.value().matches(
+            bin_count, cursor_dim, multi_planes, fv_blocks
+        )
+    var h_leaves: HostBuffer[DType.uint32]
+    if have_host:
+        h_leaves = host_scratch.value().h_leaves.copy()
+    else:
+        h_leaves = ctx.enqueue_create_host_buffer[DType.uint32](bin_count)
+    if not skip_static:
+        for i in range(bin_count):
+            h_leaves.unsafe_ptr().unsafe_store(i, UInt32(i))
+        ctx.enqueue_copy(dst_buf=d_leaves, src_ptr=h_leaves.unsafe_ptr())
 
-    var h_shift = ctx.enqueue_create_host_buffer[DType.float32](
-        bin_count * cursor_dim
-    )
-    var h_fv = ctx.enqueue_create_host_buffer[DType.float32](fv_blocks)
+    var h_shift: HostBuffer[DType.float32]
+    var h_fv: HostBuffer[DType.float32]
+    if have_host:
+        h_shift = host_scratch.value().h_shift.copy()
+        h_fv = host_scratch.value().h_fv.copy()
+    else:
+        h_shift = ctx.enqueue_create_host_buffer[DType.float32](
+            bin_count * cursor_dim
+        )
+        h_fv = ctx.enqueue_create_host_buffer[DType.float32](fv_blocks)
 
     # their oracle's per-row `Bins`, read off the partition ONCE per tree
     # (their ctor receives it ready-made from the searcher). Machine-sized
@@ -1510,13 +1724,18 @@ def make_bin_optimized_oracle(
 
     # `d_partials`, `d_multi_partials`, `d_part_stats`, `d_multi_der` and
     # `d_multi_stats` are sized by `make_oracle_device_scratch` (DEVIATION 3041)
-    var h_part_stats = ctx.enqueue_create_host_buffer[DType.float32](
-        2 * bin_count
-    )
-
-    var h_multi_stats = ctx.enqueue_create_host_buffer[DType.float32](
-        multi_planes * bin_count
-    )
+    var h_part_stats: HostBuffer[DType.float32]
+    var h_multi_stats: HostBuffer[DType.float32]
+    if have_host:
+        h_part_stats = host_scratch.value().h_part_stats.copy()
+        h_multi_stats = host_scratch.value().h_multi_stats.copy()
+    else:
+        h_part_stats = ctx.enqueue_create_host_buffer[DType.float32](
+            2 * bin_count
+        )
+        h_multi_stats = ctx.enqueue_create_host_buffer[DType.float32](
+            multi_planes * bin_count
+        )
 
     # `CurrentPoint` lives in the CURSOR's gauge -- `cursorDim` per bin,
     # not `SingleBinDim()` -- because `MoveTo` projects before it
@@ -1528,12 +1747,40 @@ def make_bin_optimized_oracle(
     # WeightsCpu (`:236-243`): the weighted arm reduces the real weights;
     # the unweighted arm takes the exact integer counts (deviation block).
     var weights_cpu = List[Float64]()
-    if has_weights:
+    # the widest leaf, an exact bound on every partition the weight fold
+    # reads (`compute_partition_stats`' `row_bound`)
+    var widest_leaf = 0
+    for i in range(bin_count):
+        if leaf_sizes[i] > widest_leaf:
+            widest_leaf = leaf_sizes[i]
+    # `defer_weights`: the same fold, copied to its OWN host buffer and read
+    # by `settle_weights` after the caller's next drain instead of draining
+    # here (the evaluation's readback reuses `h_part_stats`, so the two
+    # copies may not share it while both are in flight)
+    var h_weight_stats = Optional[HostBuffer[DType.float32]]()
+    if has_weights and defer_weights:
         compute_partition_stats(
             ctx, bin_count, 0, 1, n_rows,
             d_leaves, d_p_off, d_p_sz,
             d_weights, d_partials, d_part_stats,
             sm_count=sm,
+            row_bound=widest_leaf,
+        )
+        var h_w: HostBuffer[DType.float32]
+        if have_host:
+            h_w = host_scratch.value().h_weight_stats.copy()
+        else:
+            # `d_part_stats`' length: the copy below is whole-buffer
+            h_w = ctx.enqueue_create_host_buffer[DType.float32](2 * bin_count)
+        ctx.enqueue_copy(dst_ptr=h_w.unsafe_ptr(), src_buf=d_part_stats)
+        h_weight_stats = Optional(h_w^)
+    elif has_weights:
+        compute_partition_stats(
+            ctx, bin_count, 0, 1, n_rows,
+            d_leaves, d_p_off, d_p_sz,
+            d_weights, d_partials, d_part_stats,
+            sm_count=sm,
+            row_bound=widest_leaf,
         )
         ctx.enqueue_copy(
             dst_ptr=h_part_stats.unsafe_ptr(), src_buf=d_part_stats
@@ -1643,4 +1890,5 @@ def make_bin_optimized_oracle(
         fv_blocks,
         yeti^,
         TRandom(yeti_seed),
+        h_weight_stats^,
     )

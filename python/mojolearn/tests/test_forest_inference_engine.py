@@ -287,3 +287,71 @@ def test_classifier_device_argmax_is_fast_only_and_optional(cls, monkeypatch):
     model.inference_engine = 'parallel_groves'
     del native.forest_predict_resident_labels_gpu
     assert model._predict_forest_labels(X) is None
+
+
+@pytest.mark.parametrize('cls', CLASSES)
+def test_identical_auto_ordered_resident_keeps_sequential_bits_and_archive(cls, tmp_path, monkeypatch):
+    """2026-09-22: a binary compiled with the strict increasing-tree resident
+    route (`forest_ordered_resident() == 1`) serves IDENTICAL `auto` from a
+    resident snapshot prepared ORDERED, while the model still predicts and
+    saves AS 'sequential'. An explicit IDENTICAL `parallel_groves` prepares
+    the 32-grove graph (ordered flag 0), the fold its recorded columns and
+    the CPU host groves engine compute. Before the fix `auto` answered
+    'parallel_groves', wrote a groves archive and, through the compiled
+    default, moved explicit parallel_groves off the grove fold."""
+    import ctypes
+    prepared = []
+
+    def prepare(*args):
+        prepared.append(list(args[-1]))
+        return len(prepared)
+
+    def predict(handle, x, out, dims):
+        values = np.ctypeslib.as_array((ctypes.c_float * (dims[0]*dims[2])).from_address(out))
+        values[:] = 1 / dims[2]
+        return dims[0]
+
+    def sequential(*args):
+        pytest.fail('IDENTICAL auto on an ordered-resident binary took the List route')
+
+    native = SimpleNamespace(forest_ordered_resident=lambda: 1,
+                             forest_prepare_gpu=prepare,
+                             forest_predict_resident_reuse_gpu=predict,
+                             forest_release_gpu=lambda handle: None,
+                             rf_predict_proba=sequential, rf_predict_reg=sequential,
+                             et_predict=sequential, et_predict_proba=sequential)
+    monkeypatch.setattr(_backend, 'binding', lambda *args: native)
+    X = np.ones((3, 1), dtype=np.float32)
+
+    auto = fitted(cls, 'auto')
+    assert auto._prediction_engine() == 'sequential'
+    assert auto._ordered_resident_auto()
+    (auto.predict_proba if auto._num_outputs > 1 else auto.predict)(X)
+    assert prepared[-1][-1] == 1
+    path = tmp_path/'auto.npz'
+    auto.save(path)
+    assert cls.load(path).inference_engine == 'sequential'
+    with np.load(path, allow_pickle=False) as z:
+        assert 'parallel-groves' not in _serialize.scalar_str(z, 'format')
+
+    groves = fitted(cls, 'parallel_groves')
+    (groves.predict_proba if groves._num_outputs > 1 else groves.predict)(X)
+    assert prepared[-1][-1] == 0
+
+    explicit = fitted(cls, 'sequential')
+    assert not explicit._ordered_resident_auto()
+
+
+def test_identical_auto_on_a_host_binding_is_sequential(monkeypatch):
+    """A CPU-only install serves the host binding through a proxy that
+    raises ImportError by name for a function it lacks; the ordered-resident
+    probe must read that as absent, not refuse every RF prediction."""
+    class Host:
+        def __getattr__(self, item):
+            raise ImportError(f'no CPU implementation of {item}')
+    monkeypatch.setattr(_backend, 'binding', lambda *args: Host())
+    model = fitted(RandomForestRegressor, 'auto')
+    assert model._prediction_engine() == 'sequential'
+    assert not model._ordered_resident_auto()
+    groves = fitted(RandomForestRegressor, 'parallel_groves')
+    assert groves._resident_ordered_flag() is None

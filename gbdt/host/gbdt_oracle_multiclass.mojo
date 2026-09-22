@@ -100,6 +100,7 @@ from gbdt.host.gbdt_oracle import (
     _deterministic_sum_lanes,
     _half_byte_one_block,
     _halving_fold,
+    _pinned_partition_stat,
     _hist2_dither,
     _hist2_quantize,
     gbdt_f32_token,
@@ -146,27 +147,9 @@ def _partition_stat_n(
     var max_chunks = (2 * GBDT_PINNED_SM + n_stats - 1) // n_stats
     if max_chunks < 1:
         max_chunks = 1
-    var partials = List[Float32](length=max_chunks, fill=Float32(0.0))
-    var stride = max_chunks * GBDT_STATS_BLOCK
-    for chunk in range(max_chunks):
-        var slab = List[Float32](length=GBDT_STATS_BLOCK, fill=Float32(0.0))
-        for tid in range(GBDT_STATS_BLOCK):
-            var v = Float32(0.0)
-            var i = chunk * GBDT_STATS_BLOCK + tid
-            while i < size:
-                v += stats[stat_id * line_size + offset + i]
-                i += stride
-            slab[tid] = v
-        partials[chunk] = _halving_fold(slab)
-    var slab2 = List[Float32](length=GBDT_STATS_BLOCK, fill=Float32(0.0))
-    for tid in range(GBDT_STATS_BLOCK):
-        var acc = Float32(0.0)
-        var c = tid
-        while c < max_chunks:
-            acc += partials[c]
-            c += GBDT_STATS_BLOCK
-        slab2[tid] = acc
-    return _halving_fold(slab2)
+    return _pinned_partition_stat(
+        stats, stat_id * line_size + offset, size, max_chunks
+    )
 
 
 # ===========================================================================

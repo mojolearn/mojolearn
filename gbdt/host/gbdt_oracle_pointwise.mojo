@@ -352,7 +352,7 @@ def gbdt_pointwise_host_fit(
             firsts.append(Int(blk.fold_offset[k]))
             folds.append(Int(blk.folds[k]))
             hist_line += Int(blk.folds[k])
-        helpers.append(_PwHelper(blk.policy, gids^, offs^, firsts^, folds^, hist_line, List[Float32]()))
+        helpers.append(_PwHelper(blk.policy, gids^, offs^, firsts^, folds^, hist_line, List[Float32](), List[Int](), List[Bool]()))
     var feat_offset = List[Int](length=n_features, fill=0)
     var feat_shift = List[UInt32](length=n_features, fill=UInt32(0))
     var feat_mask = List[UInt32](length=n_features, fill=UInt32(0))

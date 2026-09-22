@@ -108,8 +108,8 @@ def test_ordered_oracle_spells_the_bit_carrying_constructs():
     assert "if abs(val) > Float32(1e-20):" in text, "the write guard"
     assert "var at = (t // 32) * SLICE + (t & 16) + (bin << 5) + 2 * j + stat" in text, "the half-byte slot"
     assert "cells[tid] = stage1[32 * fold2 + e] + stage1[32 * fold2 + e + 16]" in text, "the inner copies"
-    assert "var denum_sqr = Float32(1e-20)" in text, "the dynamic scorer's seed"
-    assert "var gain = (noisy - score_before) * Float32(1.0)" in text
+    assert "var denum = List[Float32](length=hist_line, fill=Float32(1e-20))" in text, "the dynamic scorer's seed"
+    assert "gain_out[b] = (noisy - score_before) * Float32(1.0)" in text
     assert "if _record_less(loc_gain, loc_fid, loc_bin, best_gain, best_fid, best_bin):" in text
     assert "data_part = left if s.p_sz[left] < s.p_sz[right] else right" in text, "the smaller child"
     assert "var is_left = s.p_sz[left_part] < s.p_sz[right_part]" in text

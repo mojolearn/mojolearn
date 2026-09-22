@@ -62,6 +62,14 @@ def weights(family, dm, source):
     return {n: source.array(s, add=1 if n in ones else 0) for n,s in shapes.items()}
 
 
+def open_session(block, state):
+    """The resident session door: public `decode_session` on Mamba-1, the
+    private `_decode_session` on Mamba-2/3 until their lanes are recorded
+    (see `_RESIDENT_SESSION_NOTE` in python/mojolearn/_mamba_impl.py)."""
+    door = getattr(block, "decode_session", None) or block._decode_session
+    return door(state)
+
+
 def make_block(family, w):
     import mojolearn as ml
     cls={"mamba1":ml.Mamba1Block,"mamba2":ml.Mamba2Block,"mamba3":ml.Mamba3Block}[family]
@@ -93,7 +101,7 @@ def load_state_gate(family, block, token):
     """Mutate stale host state, explicitly refresh it, and compare one step."""
     import numpy as np
     plain=block.allocate_state(1); owned=block.allocate_state(1)
-    session=block.decode_session(owned)
+    session=open_session(block, owned)
     try:
         for i,(a,b) in enumerate(zip(state_arrays(family,plain),state_arrays(family,owned))):
             value=np.float32((i+1)/4096.0); np.asarray(a)[...]=value; np.asarray(b)[...]=value
@@ -120,7 +128,7 @@ def pending_gate(block, token):
           np.full((1,nh,64),np.float32(.004),dtype=np.float32))
     plain.set_input_states(*vals); owned.set_input_states(*vals)
     yp=np.asarray(block.step(token,plain)).copy(); pw=witness("mamba3",block,plain,yp)
-    session=block.decode_session(owned)
+    session=open_session(block, owned)
     try:
         yr=np.asarray(session.step(token)).copy(); session.sync_state(); rw=witness("mamba3",block,owned,yr)
         consumed=owned.pending is False
@@ -135,7 +143,7 @@ def arm(family, block, x, cfg, resident, sabotage=False):
     state=block.allocate_state(1)
     block.forward(np.ascontiguousarray(x[:,:cfg["prefill"]]),state)
     out=[]; trajectory=[]; samples=[]
-    session=block.decode_session(state) if resident else None
+    session=open_session(block, state) if resident else None
     native_route = bool(session is not None and session._native is not None)
     ownership_refused = None
     if session is not None:

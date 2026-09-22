@@ -35,9 +35,10 @@ outside it (bindings/_mojolearn_gbdt_host.mojo, `_refuse`):
   column (one-hot columns are carried, `one_hot_in` below and
   gbdt/host/gbdt_oracle_onehot.mojo), no eval_set and no overfitting detector,
   random_strength 0, the greedy searcher (use_pointwise_searcher False),
-  boost_from_average unset or False, feature_fraction 1, and no
-  feature with exactly one border (the BINARY histogram policy, whose
-  nibble-combination decode is not restated). border_count, n_estimators,
+  boost_from_average unset or False and feature_fraction 1. A feature with
+  exactly one border (the BINARY histogram policy) is carried since
+  2026-09-22 (`_binary_block`, the nibble-combination decode of
+  `hist_binary.mojo`; the gbdt-binary-columns lane). border_count, n_estimators,
   max_depth, learning_rate, l2_leaf_reg, random_state, nan_mode (Min and
   Max on an X carrying NaN since 2026-09-15, the gbdt-nan-modes lane) and
   border_build_max_samples (both border paths) are carried.
@@ -130,7 +131,10 @@ from std.sys.compile import is_defined
 from max.algorithm import sync_parallelize
 
 from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
     ftz,
+    identical_mul_add_simd,
     identical_exp,
     identical_log,
     identical_mul_add,
@@ -199,6 +203,17 @@ comptime GBDT_BOOT_SEEDS = 65536
 
 #: The gate's negative control (see THE NEGATIVE CONTROL above).
 comptime GBDT_ORACLE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
+#: `ftz` flushes only under IDENTICAL (`checks/numerics.mojo`); `_ftz_lanes` follows it.
+#: THE BINARY NEGATIVE CONTROL. `-D MOJOLEARN_GBDT_BINARY_SABOTAGE=1` leaves
+#: nibble value 0 (all four flags of the nibble clear) out of a binary
+#: feature's sum, in `_binary_block` and in the Ordered fold arm's binary
+#: writeback (gbdt_oracle_ordered.mojo), so the `gbdt-binary-columns` lane's
+#: CPU column must move under it. Summing the SET side instead does NOT move
+#: it and is no control: a one-fold feature's cosine score is symmetric in
+#: its two sides, and the rows are split by the bit in the compressed index,
+#: not by the histogram.
+comptime GBDT_HOST_BINARY_SABOTAGE = is_defined["MOJOLEARN_GBDT_BINARY_SABOTAGE"]()
+comptime GBDT_HOST_FTZ_ON = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime GBDT_HOST_BINARIZE_LINEAR = is_defined[
     "MOJOLEARN_GBDT_HOST_BINARIZE_LINEAR"
 ]()
@@ -301,6 +316,38 @@ def _halving_fold(mut slab: List[Float32]) -> Float32:
     `pointwise_targets.mojo:847-858` is the same tree). `len(slab)` is a
     power of two; threads with no data hold 0.0."""
     var step = len(slab) // 2
+    while step > 0:
+        for t in range(step):
+            slab[t] = slab[t] + slab[t + step]
+        step //= 2
+    return slab[0]
+
+
+def _halving_fold_live(mut slab: List[Float32], live: Int, width: Int) -> Float32:
+    """`_halving_fold` over `width` lanes (a power of two) of which only the
+    first `live` can hold anything but +0.0, the same result with work
+    proportional to `live`. The caller fills `slab[0:p]`, `p` the least power
+    of two at or above `live` (lanes `live..p` at +0.0); lanes at `p` and above
+    are never read.
+
+    WHY IT IS THE SAME SUM. Every outer step with `step >= p` adds a lane at
+    or above `p` (+0.0: such lanes only ever receive +0.0 + +0.0) onto each
+    lane below `p`; after the first of them each lane below `p` is
+    `x + 0.0`, and further `+ 0.0` adds change nothing (`x + 0.0` is its own
+    fixed point in every rounding and flush mode, -0.0 included). So those
+    steps are ONE `+ 0.0` pass over the prefix, kept here, then the steps
+    below `p` read only lanes below `p`, exactly the full tree's adds. A
+    partition-stats launch at 320 rows spent 90% of a host Ordered tree
+    folding lanes that held +0.0 (lane/perf gbdt-small-round2, 2026-09-22)."""
+    var p = 1
+    while p < live:
+        p <<= 1
+    if p > width:
+        p = width
+    if p < width:
+        for t in range(p):
+            slab[t] = slab[t] + Float32(0.0)
+    var step = p // 2
     while step > 0:
         for t in range(step):
             slab[t] = slab[t] + slab[t + step]
@@ -1141,6 +1188,237 @@ def _half_byte_block(
                         ] = cell
 
 
+#: the binary family under IDENTICAL: the half-byte accumulator
+#: (`point_hist_half_byte_template.mojo`, the same block, lanes, load and
+#: floats) at `UNROLL` 2 (`hist_binary.mojo:67`), 32 features to a word.
+comptime GBDT_BIN_UNROLL = 2
+
+
+def _binary_one_block(
+    local_block_idx: Int,
+    active_block_count: Int,
+    p_offset: Int,
+    p_size: Int,
+    stat_id: Int,
+    column: Int,
+    row_index: List[Int],
+    stats: List[Float32],
+    cindex: List[UInt32],
+    n_rows: Int,
+) -> List[Float32]:
+    """ONE grid block of `binary_hist_gather_kernel` (`hist_binary.mojo:
+    551-948`; the direct `binary_hist_kernel` at depth 0 is the same
+    arithmetic over the identity index), up to its `Reduce()`: returns the
+    128 stage-2 cells `[nibble + 8 * nibble value]`.
+
+    The accumulator is the half-byte one (`add_half_byte_point`,
+    `add_point_slot`), so the argument of `_half_byte_one_block` holds
+    unchanged: the barriers fix every cell's add order to window order, a
+    cell is written by at most one thread per window, in that thread's
+    point order. What differs is the loop: `UNROLL` 2, so `ALIGN_SIZE` and
+    a warp's entries are 256 points, and a striped iteration is two batches
+    of `LOAD_SIZE` points, each batch its own eight turns (`:377-399`), so
+    the windows run (iteration, batch, turn).
+
+    ZERO POINTS ARE SKIPPED. A thread with no row adds +0.0 to bin 0 of its
+    turn's nibble. Every cell starts at +0.0 and x + (+0.0) is x for every x
+    but -0.0; a cell reaches -0.0 only through `ftz` of a negative
+    subnormal sum, and a signed zero, however it is spelled, is a zero to
+    every later nonzero add, to the stage sums and to the writeback, whose
+    `|val| > 1e-20` guard discards it. So the live points alone, in window
+    order, give every bit the full block gives."""
+    var smem = List[Float32](
+        length=GBDT_HB_BLOCK * GBDT_HB_FLOATS, fill=Float32(0.0)
+    )
+    comptime ALIGN_SIZE = GBDT_HB_LOAD * GBDT_HB_LANES * GBDT_BIN_UNROLL
+    var head_len = p_size
+    var to_align = ALIGN_SIZE - (p_offset % ALIGN_SIZE)
+    if to_align < head_len:
+        head_len = to_align
+    if head_len < 0:
+        head_len = 0
+    var body_size = p_size - head_len
+    if body_size < 0:
+        body_size = 0
+    var tail_len = body_size % ALIGN_SIZE
+    var tail_start = p_offset + head_len + (body_size - tail_len)
+
+    # the peel (`hist_binary.mojo:718-756`): PEEL_END is 512, one trip per
+    # thread, head point turns 0..7 then tail point turns 8..15; only block
+    # 0 loads
+    if local_block_idx == 0:
+        for phase in range(2):
+            var plen = head_len if phase == 0 else tail_len
+            var pstart = p_offset if phase == 0 else tail_start
+            if plen > GBDT_HB_BLOCK:
+                plen = GBDT_HB_BLOCK
+            for i in range(8):
+                for t in range(plen):
+                    var pos = pstart + t
+                    var ci = cindex[column * n_rows + row_index[pos]]
+                    var st = stats[stat_id * n_rows + pos]
+                    var s = _half_byte_slot(ci, t, i)
+                    smem[s] = ftz(smem[s] + st)
+
+    # the striped loop (`:758-918`)
+    var aligned_offset = p_offset + head_len
+    var aligned_size = body_size - tail_len
+    var warps_per_block = GBDT_HB_BLOCK // GBDT_HB_LANES
+    var entries_per_warp = GBDT_HB_LANES * GBDT_BIN_UNROLL * GBDT_HB_LOAD
+    var stripe_size = entries_per_warp * warps_per_block * active_block_count
+    var max_iters = (aligned_size + stripe_size - 1) // stripe_size
+    var bases = List[Int](length=GBDT_HB_BLOCK, fill=0)
+    var iter_counts = List[Int](length=GBDT_HB_BLOCK, fill=0)
+    var live_threads = 0
+    for t in range(GBDT_HB_BLOCK):
+        var global_warp_id = local_block_idx * warps_per_block + (
+            t // GBDT_HB_LANES
+        )
+        var remaining = aligned_size - global_warp_id * entries_per_warp
+        if remaining < 0:
+            remaining = 0
+        var local_idx = (t & (GBDT_HB_LANES - 1)) * GBDT_HB_LOAD
+        bases[t] = aligned_offset + global_warp_id * entries_per_warp + local_idx
+        var ic = (remaining - local_idx + stripe_size - 1) // stripe_size
+        if ic < 0:
+            ic = 0
+        iter_counts[t] = ic
+        if ic > 0:
+            live_threads = t + 1
+    for it in range(max_iters):
+        for batch in range(GBDT_BIN_UNROLL):
+            for i in range(8):
+                for t in range(live_threads):
+                    if it >= iter_counts[t]:
+                        continue
+                    var p0 = (
+                        bases[t] + it * stripe_size
+                        + GBDT_HB_LANES * GBDT_HB_LOAD * batch
+                    )
+                    for e in range(GBDT_HB_LOAD):
+                        var pos = p0 + e
+                        var ci = cindex[column * n_rows + row_index[pos]]
+                        var st = stats[stat_id * n_rows + pos]
+                        var s = _half_byte_slot(ci, t, i)
+                        smem[s] = ftz(smem[s] + st)
+
+    # `Reduce()`, the same two stages as `_half_byte_one_block`
+    for s in range(GBDT_HB_REDUCE_WIDTH):
+        var acc = Float32(0.0)
+        var i2 = s
+        while i2 < GBDT_HB_BLOCK * GBDT_HB_FLOATS:
+            acc = ftz(acc + smem[i2])
+            i2 += GBDT_HB_REDUCE_WIDTH
+        smem[s] = acc
+    var stage2 = List[Float32](length=128, fill=Float32(0.0))
+    for t in range(128):
+        var acc2 = Float32(0.0)
+        for group in range(4):
+            acc2 = ftz(acc2 + smem[32 * ((t >> 3) & 15) + (t & 7) + 8 * group])
+        stage2[t] = acc2
+    return stage2^
+
+
+def _binary_block(
+    blk: PolicyBlock,
+    block_first_bin: Int,
+    hist_cells: Int,
+    compute_ids: List[Int],
+    depth: Int,
+    p_off: List[Int],
+    p_sz: List[Int],
+    row_index: List[Int],
+    stats: List[Float32],
+    cindex: List[UInt32],
+    n_rows: Int,
+    fixed_scale: Float32,
+    mut hist: List[Float32],
+):
+    """A BINARY block (the BinaryFeatures policy, one border): the binary arm
+    of `launch_histograms_for_blocks` (`greedy_search_helper.mojo:2853-
+    2905`) over `replication_for`'s pinned grid with 32 features to a group
+    (`feature_groups_for`, `:2539`), then `TPointHistBinary::
+    AddToGlobalMemory` (`hist_binary.mojo:950-1064`) and the bridge
+    `write_reduces_from_fixed_kernel[True]`, as `_half_byte_block`.
+
+    THE WRITEBACK IS THE NIBBLE SUM. Feature `fid` of a group is bit
+    `3 - (fid & 3)` of nibble `fid / 4`, and its one cell is the sum, from
+    0.0 and ascending in the nibble value, of the eight stage-2 cells whose
+    value has that bit clear. That sum carries no `ftz` (`:973-978`). The
+    flush is the half-byte one at `fold` 0:
+
+      active blocks > 1   q = sum over blocks with |val| > 1e-20 of
+                          Int32(val * scale); the cell is
+                          ftz(Float32(Int(q)) / scale) when q != 0, else 0.0
+      one active block    val when |val| > 1e-20, else 0.0
+      none (empty leaf)   0.0
+    """
+    var n_f = blk.count()
+    var n_compute = len(compute_ids)
+    var groups = (n_f + 31) // 32
+    var max_active_blocks = 2 * GBDT_PINNED_SM
+    if depth > 0:
+        max_active_blocks = 2 * max_active_blocks
+    var base_count = groups * n_compute * 2
+    if base_count < 1:
+        base_count = 1
+    var replicas = (max_active_blocks + base_count - 1) // base_count
+    if replicas < 1:
+        replicas = 1
+    var min_docs_per_block = GBDT_HB_LANES * GBDT_BIN_UNROLL * GBDT_HB_LOAD * (
+        GBDT_HB_BLOCK // GBDT_HB_LANES
+    )
+    for j in range(n_compute):
+        var slot = compute_ids[j]
+        var p_offset = p_off[slot]
+        var p_size = p_sz[slot]
+        var active_block_count = (p_size + min_docs_per_block - 1) // min_docs_per_block
+        if active_block_count > replicas:
+            active_block_count = replicas
+        for z in range(2):
+            for g in range(groups):
+                var feature_offset = g * 32
+                var f_count = n_f - feature_offset
+                if f_count > 32:
+                    f_count = 32
+                var column = blk.first_column + g
+                var vals = List[Float32](
+                    length=128 * active_block_count, fill=Float32(0.0)
+                )
+                for lb in range(active_block_count):
+                    var stage2 = _binary_one_block(
+                        lb, active_block_count, p_offset, p_size, z, column,
+                        row_index, stats, cindex, n_rows,
+                    )
+                    for t in range(128):
+                        vals[lb * 128 + t] = stage2[t]
+                for fid in range(f_count):
+                    if Int(blk.folds[feature_offset + fid]) == 0:
+                        continue
+                    var fold_off = Int(blk.fold_offset[feature_offset + fid])
+                    var group_id = fid // 4
+                    var f_mask = 1 << (3 - (fid & 3))
+                    var cell = Float32(0.0)
+                    if active_block_count >= 1:
+                        var q = Int32(0)
+                        for lb in range(active_block_count):
+                            var v = Float32(0.0)
+                            for i in range(16):
+                                if (i & f_mask) == 0 and not (GBDT_HOST_BINARY_SABOTAGE and i == 0):
+                                    v += vals[lb * 128 + 8 * i + group_id]
+                            if abs(v) > Float32(1e-20):
+                                if active_block_count == 1:
+                                    cell = v
+                                else:
+                                    q = q + Int32(v * fixed_scale)
+                        if active_block_count > 1 and q != Int32(0):
+                            cell = ftz(Float32(Int(q)) / fixed_scale)
+                    hist[
+                        slot * 2 * hist_cells + z * hist_cells
+                        + block_first_bin + fold_off
+                    ] = cell
+
+
 def _partition_stat(
     stats: List[Float32], line_size: Int, stat_id: Int, offset: Int, size: Int
 ) -> Float32:
@@ -1150,27 +1428,56 @@ def _partition_stat(
     each 512-thread block over the leaf, phase 2 folds one partial per chunk,
     each through the 512-lane halving tree."""
     comptime MAX_CHUNKS = (2 * GBDT_PINNED_SM + 2 - 1) // 2
-    var partials = List[Float32](length=MAX_CHUNKS, fill=Float32(0.0))
-    var stride = MAX_CHUNKS * GBDT_STATS_BLOCK
-    for chunk in range(MAX_CHUNKS):
-        var slab = List[Float32](length=GBDT_STATS_BLOCK, fill=Float32(0.0))
-        for tid in range(GBDT_STATS_BLOCK):
+    return _pinned_partition_stat(
+        stats, stat_id * line_size + offset, size, MAX_CHUNKS
+    )
+
+
+def _pinned_partition_stat(
+    stats: List[Float32], base: Int, size: Int, max_chunks: Int
+) -> Float32:
+    """The pinned `compute_partition_stats` launch over `stats[base:base +
+    size]` at `max_chunks` chunks of `GBDT_STATS_BLOCK` threads: phase 1
+    strides each block over the leaf (thread `g` folds `g, g + stride, ...`
+    from 0.0), phase 2 folds one partial per chunk from 0.0, each through the
+    512-lane halving tree. Chunk `c` has `size - 512 c` live threads (none
+    past the leaf; a chunk with none holds +0.0 and its tree folds +0.0), so
+    each tree runs through `_halving_fold_live` over its live lanes: the same
+    adds on every lane that can hold a value."""
+    if size <= 0:
+        return Float32(0.0)
+    var stride = max_chunks * GBDT_STATS_BLOCK
+    var live_chunks = (size + GBDT_STATS_BLOCK - 1) // GBDT_STATS_BLOCK
+    if live_chunks > max_chunks:
+        live_chunks = max_chunks
+    var slab = List[Float32](length=GBDT_STATS_BLOCK, fill=Float32(0.0))
+    var partials = List[Float32](length=GBDT_STATS_BLOCK, fill=Float32(0.0))
+    for chunk in range(live_chunks):
+        var live = min(size - chunk * GBDT_STATS_BLOCK, GBDT_STATS_BLOCK)
+        var p = 1
+        while p < live:
+            p <<= 1
+        for tid in range(p):
             var v = Float32(0.0)
             var i = chunk * GBDT_STATS_BLOCK + tid
             while i < size:
-                v += stats[stat_id * line_size + offset + i]
+                v += stats[base + i]
                 i += stride
             slab[tid] = v
-        partials[chunk] = _halving_fold(slab)
-    var slab2 = List[Float32](length=GBDT_STATS_BLOCK, fill=Float32(0.0))
-    for tid in range(GBDT_STATS_BLOCK):
+        partials[chunk] = _halving_fold_live(slab, live, GBDT_STATS_BLOCK)
+    # phase 2: lane `t < max_chunks` holds `0.0 + partials[t] (+ ...)`, the
+    # dead chunks' +0.0 included; lanes past the live chunks hold +0.0
+    var p2 = 1
+    while p2 < live_chunks:
+        p2 <<= 1
+    for tid in range(p2):
         var acc = Float32(0.0)
         var c = tid
-        while c < MAX_CHUNKS:
-            acc += partials[c]
+        while c < max_chunks:
+            acc += partials[c] if c < live_chunks else Float32(0.0)
             c += GBDT_STATS_BLOCK
-        slab2[tid] = acc
-    return _halving_fold(slab2)
+        slab[tid] = acc
+    return _halving_fold_live(slab, live_chunks, GBDT_STATS_BLOCK)
 
 
 def _add_leaf_cosine(
@@ -1233,6 +1540,97 @@ def _cosine_gain(
         final_score = ftz(identical_mul_add(neg_draw, score_std_dev, final_score))
         score_before = ftz(identical_mul_add(neg_draw, score_std_dev, score_before))
     return ftz(ftz(final_score - score_before) * Float32(1.0))
+
+
+def _ftz_lanes[w: Int](x: SIMD[DType.float32, w]) -> SIMD[DType.float32, w]:
+    """`ftz` lane by lane as bit operations: a subnormal becomes the zero of
+    its sign, everything else passes (IDENTICAL builds only, as `ftz`)."""
+    comptime if GBDT_HOST_FTZ_ON:
+        var b = bitcast[DType.uint32, w](x)
+        var sub = (b & UInt32(0x7F800000)).eq(UInt32(0)) & (
+            b & UInt32(0x007FFFFF)
+        ).ne(UInt32(0))
+        return sub.select(bitcast[DType.float32, w](b & UInt32(0x80000000)), x)
+    return x
+
+
+def _cosine_gains(
+    hist: List[Float32],
+    hist_cells: Int,
+    part_stats: List[Float32],
+    n_live: Int,
+    lambda_l2: Float32,
+    score_std_dev: Float32,
+    level_seed: UInt64,
+    bf_feature: List[Int],
+) -> List[Float32]:
+    """`_cosine_gain` for every bin-feature at once: the same two
+    `AddLeaf`s per leaf in dense leaf order for each candidate, turned so
+    the leaf is the outer loop and 8 candidates run a step, lane by lane
+    the scalar expressions (`_add_leaf_cosine`'s pinned fmas, `ftz` as bit
+    operations); then the normalization and the noise per candidate, the
+    noise drawn once per feature (it depends on the feature only)."""
+    comptime W = 8
+    var score = List[Float32](length=hist_cells, fill=Float32(0.0))
+    var denum = List[Float32](length=hist_cells, fill=Float32(1e-10))
+    var hp = hist.unsafe_ptr()
+    var sp = score.unsafe_ptr()
+    var dp = denum.unsafe_ptr()
+    var zero = SIMD[DType.float32, W](0.0)
+    var lam_v = SIMD[DType.float32, W](lambda_l2)
+    for i in range(n_live):
+        var leaf_base = i * 2 * hist_cells
+        var ps0 = part_stats[i * 2]
+        var ps1 = part_stats[i * 2 + 1]
+        var bf = 0
+        while bf + W <= hist_cells:
+            var wl = max(hp.unsafe_load[width=W](leaf_base + bf), zero)
+            var wr = _ftz_lanes[W](max(SIMD[DType.float32, W](ps0) - wl, zero))
+            var sl = hp.unsafe_load[width=W](leaf_base + hist_cells + bf)
+            var sr = _ftz_lanes[W](SIMD[DType.float32, W](ps1) - sl)
+            var sc = sp.unsafe_load[width=W](bf)
+            var dn = dp.unsafe_load[width=W](bf)
+            var mu_l = _ftz_lanes[W](wl.gt(zero).select(sl / (wl + lam_v), zero))
+            sc = _ftz_lanes[W](identical_mul_add_simd[W](sl, mu_l, sc))
+            dn = _ftz_lanes[W](identical_mul_add_simd[W](_ftz_lanes[W](wl * mu_l), mu_l, dn))
+            var mu_r = _ftz_lanes[W](wr.gt(zero).select(sr / (wr + lam_v), zero))
+            sc = _ftz_lanes[W](identical_mul_add_simd[W](sr, mu_r, sc))
+            dn = _ftz_lanes[W](identical_mul_add_simd[W](_ftz_lanes[W](wr * mu_r), mu_r, dn))
+            sp.unsafe_store(bf, sc)
+            dp.unsafe_store(bf, dn)
+            bf += W
+        while bf < hist_cells:
+            var weight_left = max(hist[leaf_base + bf], Float32(0.0))
+            var weight_right = ftz(max(ps0 - weight_left, Float32(0.0)))
+            var sum_left = hist[leaf_base + hist_cells + bf]
+            var sum_right = ftz(ps1 - sum_left)
+            var sc = score[bf]
+            var dn = denum[bf]
+            _add_leaf_cosine(sum_left, weight_left, lambda_l2, sc, dn)
+            _add_leaf_cosine(sum_right, weight_right, lambda_l2, sc, dn)
+            score[bf] = sc
+            denum[bf] = dn
+            bf += 1
+    var gains = List[Float32](length=hist_cells, fill=Float32(0.0))
+    var last_feature = -1
+    var neg_draw = Float32(0.0)
+    for bf in range(hist_cells):
+        var final_score = score[bf]
+        var denum_sqr = denum[bf]
+        var score_before = Float32(0.0)
+        if denum_sqr > Float32(1e-15):
+            final_score = ftz(final_score / identical_sqrt(denum_sqr))
+        else:
+            final_score = -GBDT_FLOAT32_MAX
+        if score_std_dev != Float32(0.0):
+            if bf_feature[bf] != last_feature:
+                var seed = advance_seed_k(level_seed + UInt64(bf_feature[bf]), 4)
+                neg_draw = -next_normal_f(seed)[0]
+                last_feature = bf_feature[bf]
+            final_score = ftz(identical_mul_add(neg_draw, score_std_dev, final_score))
+            score_before = ftz(identical_mul_add(neg_draw, score_std_dev, score_before))
+        gains[bf] = ftz(ftz(final_score - score_before) * Float32(1.0))
+    return gains^
 
 
 # ===========================================================================
@@ -1684,16 +2082,6 @@ def gbdt_host_fit_eval(
         raise Error("one_hot flags must be empty or one per feature")
     var layout = build_layout(grid.fold_counts, one_hot)
     var blocks = blocks_for(layout, n_rows)
-    for b in range(len(blocks)):
-        if blocks[b].policy == POLICY_BINARY:
-            raise Error(
-                "no CPU implementation of _mojolearn_gbdt.gbdt_fit for a"
-                " feature with exactly one border (the BinaryFeatures"
-                " histogram policy, feature "
-                + String(blocks[b].feature_ids[0])
-                + "); the gbdt host binding restates the half-byte and"
-                " one-byte policies only (gbdt/host/gbdt_oracle.mojo)"
-            )
     var cindex = _binarize_columns(x_colmajor, n_rows, n_features, grid, layout)
     var hist_cells = layout.hist_cells
 
@@ -1840,7 +2228,13 @@ def gbdt_host_fit_eval(
                 var total = 0
                 for k in range(blk.count()):
                     total += Int(blk.folds[k])
-                if blk.policy == POLICY_HALF_BYTE:
+                if blk.policy == POLICY_BINARY:
+                    _binary_block(
+                        blk, block_first_bin, hist_cells, compute, depth,
+                        p_off, p_sz, row_index, stats, cindex, n_rows,
+                        fixed_scale, hist,
+                    )
+                elif blk.policy == POLICY_HALF_BYTE:
                     _half_byte_block(
                         blk, block_first_bin, hist_cells, compute, depth,
                         p_off, p_sz, row_index, stats, cindex, n_rows,
@@ -1895,11 +2289,12 @@ def gbdt_host_fit_eval(
             # the score and the device winner
             var best_gain = -GBDT_FLOAT32_MAX
             var best_bin = GBDT_SENTINEL
+            var gains = _cosine_gains(
+                hist, hist_cells, part_stats, n_live, params.l2_leaf_reg,
+                score_std_dev, level_seed, bf_feature,
+            )
             for bf in range(hist_cells):
-                var gain = _cosine_gain(
-                    hist, hist_cells, part_stats, n_live, bf, params.l2_leaf_reg,
-                    score_std_dev, level_seed, bf_feature[bf],
-                )
+                var gain = gains[bf]
                 if gain > best_gain:
                     best_gain = gain
                     best_bin = UInt32(bf)

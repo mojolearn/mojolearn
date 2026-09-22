@@ -26,17 +26,26 @@ from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import (
     StageTimes,
 )
 from gbdt.methods.leaves_estimation.descent_helpers import (
+    _move,
+    _update_move_direction,
     newton_like_walker_estimate,
 )
+from gbdt.gpu_util.arena import BufferArena
 from gbdt.methods.leaves_estimation.pointwise_oracle import (
+    BinOptimizedOracle,
     ORACLE_SCRATCH_POOLED,
     OracleDeviceScratch,
+    OracleHostScratch,
+    _oracle_dims,
+    make_oracle_device_scratch_in,
     OracleScratchPool,
     make_bin_optimized_oracle,
     merge_stage_times,
 )
 from gbdt.methods.leaves_estimation.step_estimator import (
     BACKTRACKING_ANY_IMPROVEMENT,
+    StepEstimator,
+    create_step_estimator,
 )
 from checks.fixed_point import choose_scale
 from gbdt.methods.random_score_helper import (
@@ -618,6 +627,37 @@ struct TEstimationWorkspace(Movable):
     #: DEVIATION 3041: the oracle's own device buffers, under their own
     #: exact keys (`pointwise_oracle.OracleScratchPool`)
     var oracle_scratch: OracleScratchPool
+    #: the batched path's (`_estimate_prepare`) oracle buffers, carved from
+    #: the fit's arena and kept for the fit, one entry per exact key (a tree
+    #: that stops early has fewer leaves); empty on every workspace the
+    #: one-call path builds
+    var arena_scratch: List[OracleDeviceScratch]
+    var arena_host: List[OracleHostScratch]
+
+    def __init__(
+        out self,
+        ctx: DeviceContext,
+        mut arena: BufferArena,
+        n_rows: Int,
+        n_leaves: Int,
+    ) raises:
+        """The same buffers at `approx_dim` 1, carved from `arena`
+        (`gbdt/gpu_util/arena.mojo`) for the batched path."""
+        self.n_rows_key = n_rows
+        self.approx_dim_key = 1
+        self.n_leaves_cap = n_leaves
+        self.g_target = arena.device[DType.float32](ctx, n_rows)
+        self.g_weights = arena.device[DType.float32](ctx, n_rows)
+        self.g_cursor = arena.device[DType.float32](ctx, n_rows)
+        self.d_p_off = arena.device[DType.uint32](ctx, n_leaves)
+        self.d_p_sz = arena.device[DType.uint32](ctx, n_leaves)
+        self.h_po = arena.host_buffer[DType.uint32](ctx, n_leaves)
+        self.h_ps = arena.host_buffer[DType.uint32](ctx, n_leaves)
+        self.d_est = arena.device[DType.float32](ctx, n_leaves)
+        self.h_est = arena.host_buffer[DType.float32](ctx, n_leaves)
+        self.oracle_scratch = OracleScratchPool()
+        self.arena_scratch = List[OracleDeviceScratch]()
+        self.arena_host = List[OracleHostScratch]()
 
     def __init__(
         out self,
@@ -645,6 +685,8 @@ struct TEstimationWorkspace(Movable):
             n_leaves * approx_dim
         )
         self.oracle_scratch = OracleScratchPool()
+        self.arena_scratch = List[OracleDeviceScratch]()
+        self.arena_host = List[OracleHostScratch]()
 
 
 def _estimate_and_apply(
@@ -714,6 +756,7 @@ def _estimate_and_apply(
     # block). Reuse is safe because every consumer of the previous task's
     # contents drained at that task's tail (DEVIATION 1891), and the
     # gathers below overwrite every cell this task reads.
+    stage_times.begin(ctx)
     if (
         len(est_ws) == 0
         or est_ws[0].n_rows_key != n_rows
@@ -815,6 +858,8 @@ def _estimate_and_apply(
     if yeti.__bool__():
         # the same inverse bin order, for the YetiRank der calcer
         launch_inverse_permutation(ctx, row_index, yeti.value().query.inverse, n_rows)
+    stage_times.end(ctx, "est.stage_in")
+    stage_times.begin(ctx)
     var oracle = make_bin_optimized_oracle(
         ctx, n_rows, n_leaves, sizes,
         g_target.copy(), g_weights.copy(), g_cursor.copy(),
@@ -834,6 +879,7 @@ def _estimate_and_apply(
         yeti_seed,
         oracle_ws^,
     )
+    stage_times.end(ctx, "est.make_oracle")
     # `TDocParallelLeavesEstimator::Estimate`
     # (`doc_parallel_leaves_estimator.cpp:9-16`): Exact REPLACES
     # the walker, it does not configure it.
@@ -901,6 +947,7 @@ def _estimate_and_apply(
             + " leaf values for " + String(n_leaves) + " leaves x "
             + String(approx_dim) + " dims"
         )
+    stage_times.begin(ctx)
     for i in range(est_len):
         h_est.unsafe_ptr().unsafe_store(i, estimated[i])
     ctx.enqueue_copy(dst_buf=d_est, src_ptr=h_est.unsafe_ptr())
@@ -934,7 +981,422 @@ def _estimate_and_apply(
     #     Exact path's trailing `move_to` operands) under queued work --
     #     the step-33 race class, device side.
     ctx.synchronize()
+    stage_times.end(ctx, "est.tail_apply")
     _ = oracle^  # past the drain (step-33 race class, device side)
+
+
+struct PendingEstimation(Movable):
+    """One estimation task of `_estimate_and_apply` as a RESUMABLE WALK:
+    the oracle, and `TNewtonLikeWalker::Estimate`'s locals
+    (`descent_helpers.newton_like_walker_estimate`) between two of its
+    evaluations. Every evaluation is enqueued by `_estimate_prepare` or
+    `estimate_advance` and read back by the next `estimate_advance`, after
+    the caller's drain; so several tasks walk in lock step, one drain per
+    round for all of them, each task's oracle calls in exactly the order
+    its own walk makes them. `_estimate_complete` is the rest of the task.
+    """
+
+    var oracle: BinOptimizedOracle
+    var n_rows: Int
+    var n_leaves: Int
+    var iterations: Int
+    #: 0: the start point's evaluation is in flight; 1: a line-search
+    #: evaluation (`next_point`) is in flight; 2: the walk is finished
+    var phase: Int
+    var iteration: Int
+    var updated: Bool
+    var step: Float64
+    var cur_point: List[Float32]
+    var next_point: List[Float32]
+    var cur_value: Float64
+    var cur_grad: List[Float64]
+    var cur_hess: List[Float64]
+    var direction: List[Float32]
+    var estimator: StepEstimator
+    var not_pd: Int
+    #: the walk's return, `MakeEstimationResult(point)`, once `phase == 2`
+    var final_point: List[Float32]
+
+    def __init__(
+        out self,
+        var oracle: BinOptimizedOracle,
+        n_rows: Int,
+        n_leaves: Int,
+        iterations: Int,
+        var start_point: List[Float32],
+    ):
+        self.oracle = oracle^
+        self.n_rows = n_rows
+        self.n_leaves = n_leaves
+        self.iterations = iterations
+        self.phase = 0
+        self.iteration = 0
+        self.updated = False
+        self.step = 1.0
+        self.cur_point = start_point^
+        self.next_point = List[Float32]()
+        self.cur_value = 0.0
+        self.cur_grad = List[Float64]()
+        self.cur_hess = List[Float64]()
+        self.direction = List[Float32]()
+        self.estimator = StepEstimator(BACKTRACKING_ANY_IMPROVEMENT, 0.0, 0.0)
+        self.not_pd = 0
+        self.final_point = List[Float32]()
+
+
+def _walk_line_search_or_finish(mut p: PendingEstimation) raises -> Bool:
+    """The walker's inner `while` test and its body up to the evaluation
+    (`descent_helpers.newton_like_walker_estimate`): either enqueue the
+    next line-search evaluation (True), or -- the inner loop ending with no
+    accepted step, which breaks the outer loop -- finish the walk (False).
+    """
+    if p.iteration < p.iterations or (
+        (not p.updated) and p.iteration < 100
+    ):
+        var next_point = _move(p.cur_point, p.direction, p.step)
+        p.oracle.regularize(next_point)
+        p.oracle.move_to(next_point)
+        p.oracle.enqueue_single_dim_evaluation()
+        p.next_point = next_point^
+        p.phase = 1
+        return True
+    p.final_point = p.oracle.make_estimation_result(p.cur_point)
+    p.phase = 2
+    return False
+
+
+def _walk_outer_or_finish(mut p: PendingEstimation) raises -> Bool:
+    """The walker's outer `while iteration < iterations` test and a round's
+    start: freeze the step rule and begin its line search (True when an
+    evaluation was enqueued), or finish the walk at the current point."""
+    if p.iteration < p.iterations:
+        p.estimator = create_step_estimator(
+            BACKTRACKING_ANY_IMPROVEMENT, p.cur_value, p.cur_grad, p.direction
+        )
+        p.step = 1.0
+        return _walk_line_search_or_finish(p)
+    p.final_point = p.oracle.make_estimation_result(p.cur_point)
+    p.phase = 2
+    return False
+
+
+def estimate_advance(mut p: PendingEstimation) raises -> Bool:
+    """Read back the evaluation in flight (the caller has drained since it
+    was enqueued) and run the walk to its next evaluation: True when one is
+    enqueued, False when the walk has finished (`final_point`). The
+    statements, and their order, are
+    `descent_helpers.newton_like_walker_estimate`'s with
+    `BACKTRACKING_ANY_IMPROVEMENT`, `_estimate_and_apply`'s choice."""
+    if p.phase == 0:
+        p.oracle.settle_weights()
+        p.oracle.finish_single_dim_evaluation(p.cur_value, p.cur_grad)
+        p.oracle.write_second_derivatives(p.cur_hess)
+        var not_pd_here = 0
+        p.direction = _update_move_direction(
+            p.cur_grad, p.cur_hess, p.oracle.hessian_block_size(),
+            not_pd_here,
+        )
+        p.not_pd += not_pd_here
+        if p.iterations == 1:
+            var result = _move(p.cur_point, p.direction, 1.0)
+            p.oracle.regularize(result)
+            p.final_point = p.oracle.make_estimation_result(result)
+            p.phase = 2
+            return False
+        p.iteration = 0
+        p.updated = False
+        return _walk_outer_or_finish(p)
+    if p.phase == 1:
+        var next_value = Float64(0.0)
+        var next_grad = List[Float64]()
+        p.oracle.finish_single_dim_evaluation(next_value, next_grad)
+        if p.estimator.is_satisfied(p.step, next_value):
+            p.oracle.write_second_derivatives(p.cur_hess)
+            p.cur_point = p.next_point.copy()
+            p.cur_value = next_value
+            p.cur_grad = next_grad^
+            var not_pd_here = 0
+            p.direction = _update_move_direction(
+                p.cur_grad, p.cur_hess, p.oracle.hessian_block_size(),
+                not_pd_here,
+            )
+            p.not_pd += not_pd_here
+            p.iteration += 1
+            p.updated = True
+            return _walk_outer_or_finish(p)
+        p.iteration += 1
+        p.step /= 2
+        return _walk_line_search_or_finish(p)
+    return False
+
+
+def estimate_can_batch(
+    objective: Int, leaf_estimation_method: Int, iters: Int
+) -> Bool:
+    """Whether `_estimate_prepare`/`_estimate_complete` restate
+    `_estimate_and_apply` for this task: a single-dimensional pointwise loss
+    (no MultiClass family, no ranking target), the Newton or Gradient walker
+    at any iteration count -- a walk whose only drains are its evaluations'
+    readbacks (`estimate_advance`). Everything else keeps the one-call
+    path."""
+    if iters < 1:
+        return False
+    if not (
+        leaf_estimation_method == LEAF_ESTIMATION_NEWTON
+        or leaf_estimation_method == LEAF_ESTIMATION_GRADIENT
+    ):
+        return False
+    if (
+        objective == OBJECTIVE_MULTICLASS
+        or objective == OBJECTIVE_MULTICLASS_OVA
+        or objective == OBJECTIVE_PAIR_LOGIT
+        or objective == OBJECTIVE_YETI_RANK
+        or objective == OBJECTIVE_QUERY_RMSE
+    ):
+        return False
+    return True
+
+
+def estimate_workspace(
+    ctx: DeviceContext,
+    mut est_ws: List[TEstimationWorkspace],
+    mut arena: BufferArena,
+    n_rows: Int,
+    n_leaves: Int,
+) raises:
+    """The batched path's workspace for a task of `n_rows` and `n_leaves`
+    (`_estimate_prepare`'s key check), built from `arena` on a miss, so a
+    caller can stage the gathered target, weights and cursor into it
+    before `_estimate_prepare(staged=True)`."""
+    if (
+        len(est_ws) == 0
+        or est_ws[0].n_rows_key != n_rows
+        or est_ws[0].approx_dim_key != 1
+        or est_ws[0].n_leaves_cap < n_leaves
+    ):
+        est_ws.clear()
+        est_ws.append(TEstimationWorkspace(ctx, arena, n_rows, n_leaves))
+
+
+def _estimate_prepare(
+    ctx: DeviceContext,
+    n_rows: Int,
+    n_leaves: Int,
+    sizes: List[Int],
+    leaf_offsets: List[Int],
+    mut row_index: DeviceBuffer[DType.uint32],
+    mut targets: DeviceBuffer[DType.float32],
+    mut weights: DeviceBuffer[DType.float32],
+    has_weights: Bool,
+    mut cursor: DeviceBuffer[DType.float32],
+    objective: Int,
+    alpha: Float32,
+    estimator_alpha: Float32,
+    logloss_border: Float32,
+    l2_leaf_reg: Float32,
+    est_sm: Int,
+    leaf_estimation_method: Int,
+    mut est_ws: List[TEstimationWorkspace],
+    mut arena: BufferArena,
+    mut stage_times: StageTimes,
+    staged: Bool = False,
+    iterations: Int = 1,
+) raises -> PendingEstimation:
+    """`_estimate_and_apply` for an `estimate_can_batch` task (approx_dim 1,
+    no grouping), up to its walker's evaluation readback, WITHOUT the drain
+    that settles it: the same workspace and oracle-scratch pools, the same
+    gathers and partition uploads, the same oracle (its weight fold
+    deferred, `make_bin_optimized_oracle(defer_weights=True)`), the walker's
+    first `MoveTo` and its evaluation, enqueued in the same order. Several
+    tasks prepared back to back therefore run the same kernels on the same
+    inputs as the same tasks run one at a time, behind one drain instead of
+    three each.
+
+    `est_ws` must be THIS task's workspace list and no other in-flight
+    task's: the staging (`h_po`/`h_ps`/`h_est`) and the oracle scratch are
+    rewritten by a task that reuses it, and nothing here drains.
+
+    THE BUFFERS COME FROM `arena` (`gbdt/gpu_util/arena.mojo`): the
+    workspace, and the oracle's device and host scratch (DEVIATION 3041's
+    `OracleDeviceScratch` and its host twin), each kept in the task's
+    workspace for the fit under its exact key. A batch holds every task's
+    buffers at once, and on Metal every live allocation is bound to every
+    launch; carved from a few parents they cost what one buffer does. The
+    oracle reads the same cells either way: every cell it reads it writes
+    first (DEVIATION 3041's contract, which the identity lanes hold)."""
+    if not estimate_can_batch(objective, leaf_estimation_method, iterations):
+        raise Error("_estimate_prepare: this task needs _estimate_and_apply")
+    stage_times.begin(ctx)
+    if staged:
+        # the caller gathered straight into THIS workspace
+        # (`estimate_workspace`); a rebuild here would drop it
+        if len(est_ws) == 0 or est_ws[0].n_rows_key != n_rows:
+            raise Error("_estimate_prepare(staged=True) needs the staged workspace")
+    estimate_workspace(ctx, est_ws, arena, n_rows, n_leaves)
+    var dims = _oracle_dims(objective, 0)
+    var fv_blocks = (n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
+    var sm = est_sm
+    if sm < 0:
+        sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+    var ds = -1
+    for i in range(len(est_ws[0].arena_scratch)):
+        if est_ws[0].arena_scratch[i].matches(
+            n_rows, n_leaves, dims[0], dims[1], fv_blocks, sm
+        ):
+            ds = i
+    var fresh_scratch = ds < 0
+    if ds < 0:
+        est_ws[0].arena_scratch.append(
+            make_oracle_device_scratch_in(
+                ctx, arena, n_rows, n_leaves, dims[0], dims[1], fv_blocks, sm
+            )
+        )
+        ds = len(est_ws[0].arena_scratch) - 1
+    var hsi = -1
+    for i in range(len(est_ws[0].arena_host)):
+        if est_ws[0].arena_host[i].matches(
+            n_leaves, dims[0], dims[1], fv_blocks
+        ):
+            hsi = i
+    if hsi < 0:
+        est_ws[0].arena_host.append(
+            OracleHostScratch(
+                ctx, arena, n_leaves, dims[0], dims[1], fv_blocks
+            )
+        )
+        hsi = len(est_ws[0].arena_host) - 1
+    if fresh_scratch:
+        # the scratch's `d_leaves` is `[0, n_leaves)` for the fit, written
+        # ONCE here (the factory's own refill is skipped, `leaves_ready`);
+        # the staging is the scratch's own, never rewritten, so the upload
+        # reads the same values whenever it runs
+        ref h_leaves = est_ws[0].arena_host[hsi].h_leaves
+        for i in range(n_leaves):
+            h_leaves.unsafe_ptr().unsafe_store(i, UInt32(i))
+        ctx.enqueue_copy(
+            dst_buf=est_ws[0].arena_scratch[ds].d_leaves,
+            src_ptr=h_leaves.unsafe_ptr(),
+        )
+    var oracle_ws = Optional(est_ws[0].arena_scratch[ds].handles())
+    var oracle_hs = Optional(est_ws[0].arena_host[hsi].handles())
+    ref g_target = est_ws[0].g_target
+    ref g_weights = est_ws[0].g_weights
+    ref g_cursor = est_ws[0].g_cursor
+    ref d_p_off = est_ws[0].d_p_off
+    ref d_p_sz = est_ws[0].d_p_sz
+    ref h_po = est_ws[0].h_po
+    ref h_ps = est_ws[0].h_ps
+    if not staged:
+        launch_gather_with_mask_f32(
+            ctx, g_target, targets, row_index, n_rows,
+            UInt32(0xFFFFFFFF),
+        )
+        if has_weights:
+            launch_gather_with_mask_f32(
+                ctx, g_weights, weights, row_index, n_rows,
+                UInt32(0xFFFFFFFF),
+            )
+        launch_gather_planes_with_mask_f32(
+            ctx, g_cursor, cursor, row_index, n_rows,
+            UInt32(0xFFFFFFFF), 1, n_rows,
+        )
+    for i in range(n_leaves):
+        h_po.unsafe_ptr().unsafe_store(i, UInt32(leaf_offsets[i]))
+        h_ps.unsafe_ptr().unsafe_store(i, UInt32(sizes[i]))
+    ctx.enqueue_copy(dst_buf=d_p_off, src_ptr=h_po.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=d_p_sz, src_ptr=h_ps.unsafe_ptr())
+    stage_times.end(ctx, "est.stage_in")
+    stage_times.begin(ctx)
+    var oracle = make_bin_optimized_oracle(
+        ctx, n_rows, n_leaves, sizes,
+        g_target.copy(), g_weights.copy(), g_cursor.copy(),
+        d_p_off.copy(), d_p_sz.copy(),
+        has_weights,
+        objective,
+        alpha,
+        estimator_alpha,
+        logloss_border,
+        Float64(l2_leaf_reg),
+        est_sm,
+        leaf_estimation_method,
+        0,
+        scratch=oracle_ws^,
+        defer_weights=True,
+        host_scratch=oracle_hs^,
+        leaves_ready=True,
+    )
+    stage_times.end(ctx, "est.make_oracle")
+    # `TNewtonLikeWalker::Estimate` at one iteration
+    # (`descent_helpers.newton_like_walker_estimate`), its first half:
+    # `MoveTo(startPoint)`, then the evaluation up to its readback
+    oracle.times.enabled = stage_times.enabled
+    var start = List[Float32]()
+    for _ in range(oracle.point_dim()):
+        start.append(Float32(0.0))
+    oracle.move_to(start)
+    oracle.enqueue_single_dim_evaluation()
+    return PendingEstimation(oracle^, n_rows, n_leaves, iterations, start^)
+
+
+def _estimate_complete(
+    ctx: DeviceContext,
+    mut pending: PendingEstimation,
+    mut row_index: DeviceBuffer[DType.uint32],
+    mut cursor: DeviceBuffer[DType.float32],
+    learning_rate: Float32,
+    mut leaf_values: List[Float32],
+    mut not_pd_total: Int,
+    mut trace: IdentityTrace,
+    mut stage_times: StageTimes,
+    leaf_tag: String,
+    mut est_ws: List[TEstimationWorkspace],
+    append_to_cursor: Bool = True,
+) raises:
+    """The rest of a `_estimate_prepare` task once its walk has finished
+    (`estimate_advance` returned False): the walker's trace record and
+    `DEVIATION 74` count, then `_estimate_and_apply`'s
+    `AppendModels` onto `cursor`, ENQUEUED: the caller drains before it
+    reuses `est_ws` or lets `pending` die (the oracle's buffers are read by
+    the launch below)."""
+    ref oracle = pending.oracle
+    if pending.phase != 2:
+        raise Error("_estimate_complete before the walk finished")
+    var estimated = pending.final_point.copy()
+    merge_stage_times(stage_times, oracle.times)
+    trace.record_list_f32(leaf_tag, estimated)
+    not_pd_total += pending.not_pd
+    leaf_values.clear()
+    for i in range(len(estimated)):
+        leaf_values.append(estimated[i])
+    var n_leaves = pending.n_leaves
+    if len(estimated) != n_leaves:
+        raise Error(
+            "the estimator returned " + String(len(estimated))
+            + " leaf values for " + String(n_leaves) + " leaves x 1 dims"
+        )
+    if not append_to_cursor:
+        # a caller whose `cursor` is a private copy it discards (the Ordered
+        # fit's gathered cursor): nothing reads the move, so it is not made
+        return
+    ref d_est = est_ws[0].d_est
+    ref h_est = est_ws[0].h_est
+    for i in range(n_leaves):
+        h_est.unsafe_ptr().unsafe_store(i, estimated[i])
+    ctx.enqueue_copy(dst_buf=d_est, src_ptr=h_est.unsafe_ptr())
+    var amv_gx = 2 * oracle.sm_count
+    if amv_gx < 1:
+        amv_gx = 1
+    ctx.enqueue_function[add_model_value_kernel](
+        oracle.d_p_off.unsafe_ptr(),
+        oracle.d_p_sz.unsafe_ptr(),
+        row_index.unsafe_ptr(),
+        d_est.unsafe_ptr(),
+        learning_rate,
+        cursor.unsafe_ptr(),
+        Int32(1), Int32(pending.n_rows),
+        grid_dim=(amv_gx, n_leaves, 1),
+        block_dim=(256, 1, 1),
+    )
 
 
 def fit_with_test(

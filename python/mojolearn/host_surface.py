@@ -638,6 +638,11 @@ TRAINING_LANE_NAMES = {
     "gbdt-border-types": "gradient boosting with the six non-default feature border types",
     "gbdt-ordered": "ordered boosting (boosting_type='Ordered') with the Logloss and RMSE losses",
     "gbdt-ordered-bayesian-noise": "ordered boosting with the Bayesian bootstrap and score noise",
+    # perf/gbdt-host-one-border (2026-09-22): a column with exactly one
+    # border (the BinaryFeatures histogram policy) through the Plain and
+    # Ordered host restatements in gbdt/host/gbdt_oracle.mojo and
+    # gbdt/host/gbdt_oracle_ordered.mojo
+    "gbdt-binary-columns": "gradient boosting on columns with exactly one border (binary flags), Plain and Ordered",
     "gbdt-bfa-quantile": "boost from average on the MAE, Quantile and MAPE losses",
     "gbdt-catboost-defaults": "gradient boosting at CatBoost's GPU defaults (auto learning rate, Bayesian bootstrap, score noise)",
     # lane/gbdt-cpu-default-parity (2026-09-20)
@@ -2328,6 +2333,9 @@ FAMILIES = (
             # lane/catboost-parity: Ordered boosting through
             # gbdt/host/gbdt_oracle_ordered.mojo::gbdt_ordered_host_fit
             "gbdt-ordered", "gbdt-ordered-bayesian-noise",
+            # perf/gbdt-host-one-border (2026-09-22): one-border columns,
+            # the binary histograms of both searchers
+            "gbdt-binary-columns",
             # lane/catboost-parity: the MAE / Quantile / MAPE starting point
             # (`gbdt/metrics/sample_quantile.mojo`, shared host code)
             "gbdt-bfa-quantile",

@@ -156,9 +156,29 @@ def partition_stats_partial_kernel(
     var chunk = Int(block_idx.x)
     var tid = Int(thread_idx.x)
 
-    # `blockCount` is `gridDim.x`, exactly as theirs is: the stride has to be
-    # the grid that is actually running, not the buffer's row width.
-    var stride = Int(grid_dim.x) * STATS_BLOCK
+    # A BLOCK WHOSE FIRST ROW IS PAST THE PARTITION holds no row at all
+    # (its stripe only moves further), so every thread's `v` stays +0.0 and
+    # the fold returns +0.0: its partial is written as that constant
+    # without running the fold. Bit-identical (a sum of +0.0 is +0.0 in
+    # every fold shape), and the condition is uniform across the block, so
+    # no thread skips a barrier its block runs. Under IDENTICAL the grid is
+    # pinned (`partition_stats_chunks`), so a leaf of a few rows paid dozens
+    # of empty 512-thread folds: most of an Ordered tree's estimation time
+    # on a small pool (2026-09-22). The twin, `partition_stats_partial_gather_kernel` (`gpu_util/kernel/partition_stats_gather.mojo`),
+    # carries the same exit.
+    if chunk * STATS_BLOCK >= size:
+        if tid == 0:
+            partials.unsafe_store(
+                (leaf_slot * n_stats + stat) * max_chunks + chunk, Float32(0.0)
+            )
+        return
+
+    # `blockCount` is the PINNED chunk count, `gridDim.x` when the whole grid
+    # runs, exactly as theirs is. A launch bounded by `row_bound`
+    # (`compute_partition_stats`) runs fewer blocks, and the stripe must
+    # still be the full grid's so every row lands in the chunk it always
+    # did: `max_chunks` is that count whatever ran.
+    var stride = max_chunks * STATS_BLOCK
     var v = Float32(0.0)
     var i = chunk * STATS_BLOCK + tid
     while i < size:
@@ -180,6 +200,7 @@ def partition_stats_finish_kernel(
     partials: MutPointer[Float32, MutAnyOrigin],
     out_stats: MutPointer[Float32, MutAnyOrigin],
     max_chunks_in: Int32,
+    launched_in: Int32,
 ):
     """PHASE 2: sum a leaf's per-block partials into `partStats`.
 
@@ -214,12 +235,19 @@ def partition_stats_finish_kernel(
     var n_stats = Int(grid_dim.z)
     var tid = Int(thread_idx.x)
 
+    # `launched_in` phase-1 blocks ran (all `max_chunks` unless the launch
+    # was row-bounded); a chunk that did not run held no row, and its
+    # partial would have been +0.0, which `0.0 + 0.0` leaves where a thread
+    # that skips it stands: at +0.0. `max_chunks <= STATS_BLOCK`, so each
+    # thread folds at most one partial and the skip changes no bit.
+    var launched = Int(launched_in)
     var acc = Float32(0.0)
     var c = tid
     while c < max_chunks:
-        acc += partials.unsafe_load(
-            (leaf_slot * n_stats + stat) * max_chunks + c
-        )
+        if c < launched:
+            acc += partials.unsafe_load(
+                (leaf_slot * n_stats + stat) * max_chunks + c
+            )
         c += STATS_BLOCK
     # IDENTITY_PATHS row 8 (see the sibling fold above).
     var total = pinned_block_sum[STATS_BLOCK](acc)
@@ -289,8 +317,17 @@ def compute_partition_stats(
     mut partials: DeviceBuffer[DType.float32],
     mut out_stats: DeviceBuffer[DType.float32],
     sm_count: Int = -1,
+    row_bound: Int = -1,
 ) raises:
     """`ComputePartitionStats`, both phases.
+
+    `row_bound`, when not negative, is an UPPER BOUND ON EVERY PARTITION'S
+    SIZE that the caller knows exactly (the oracle's widest leaf): phase 1
+    then launches only the chunks a partition that size can reach, every
+    other chunk being an empty one whose partial is +0.0, and phase 2 folds
+    the partials that ran (see both kernels). The same bits as the full
+    grid; an under-reported bound would DROP rows, so only a caller that
+    holds the exact partition sizes passes one.
 
     `max_leaf_rows` sizes the grid and NOTHING ELSE. Both kernels are correct
     at any width, because phase 1 stripes the way `ComputeSum` does and phase
@@ -327,6 +364,13 @@ def compute_partition_stats(
     if sm < 0:
         sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
     var max_chunks = partition_stats_chunks(sm, n_stats)
+    var launched = max_chunks
+    if row_bound >= 0:
+        var reach = (row_bound + STATS_BLOCK - 1) // STATS_BLOCK
+        if reach < 1:
+            reach = 1
+        if reach < launched:
+            launched = reach
 
     ctx.enqueue_function[partition_stats_partial_kernel](
         leaves.unsafe_ptr(),
@@ -336,7 +380,7 @@ def compute_partition_stats(
         Int32(line_size),
         partials.unsafe_ptr(),
         Int32(max_chunks),
-        grid_dim=(max_chunks, n_leaf_slots, n_stats),
+        grid_dim=(launched, n_leaf_slots, n_stats),
         block_dim=(STATS_BLOCK, 1, 1),
     )
     ctx.enqueue_function[partition_stats_finish_kernel](
@@ -344,6 +388,7 @@ def compute_partition_stats(
         partials.unsafe_ptr(),
         out_stats.unsafe_ptr(),
         Int32(max_chunks),
+        Int32(launched),
         grid_dim=(1, n_leaf_slots, n_stats),
         block_dim=(STATS_BLOCK, 1, 1),
     )
