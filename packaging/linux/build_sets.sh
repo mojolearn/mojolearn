@@ -46,19 +46,26 @@ JOBS="${MOJOLEARN_BUILD_JOBS:-4}"
 [[ "$JOBS" =~ ^[1-9][0-9]?$ && "$JOBS" -le 16 ]] || { echo 'MOJOLEARN_BUILD_JOBS must be 1..16' >&2; exit 2; }
 BUILD_CORES=$((2 * JOBS))
 export MOJOLEARN_COMPILE_JOBS=2 MAX_JOBS=2 CMAKE_BUILD_PARALLEL_LEVEL=2
-# AN AMD GPU BINDING COMPILES WITH ONE WORKER (2026-09-22). `mojo build -j 2`
-# for gfx942 is NOT deterministic: five cold-cache builds of
-# bindings/build_mixture.sh at d181d9792 on one box gave three different
-# binaries (embedded gemm_identical code objects differing in a few register
-# numbers), while five builds with -j 1 gave one, and three -j 1 builds each
-# of tsa and linalg agreed too. A warm Mojo cache hides it (every later build
-# on a box reuses the first compile), which is why every single box looked
-# reproducible; the CPU build box's first gfx942 set differed from the
-# MI325X leg's in 4 of 66 binaries for exactly this reason. The NVIDIA sets
-# and the host bindings (CPU codegen) keep two workers: they came out
-# byte-identical across three boxes. GPU_COMPILE_JOBS applies to the GPU
-# bindings only; the host bindings in an AMD set still build with two, so
-# they stay byte-identical to the NVIDIA sets' copies (pack_wheel.py).
+# AN AMD GPU BINDING COMPILES WITH ONE WORKER, AND IS STILL NOT REPRODUCIBLE
+# (2026-09-22, lane/release-cpu-build-box). The Mojo compiler's gfx942 output
+# varies from run to run with a cold cache: a few register numbers or two
+# swapped instructions inside some embedded AMDGPU code objects
+# (gemm_identical, holtwinters). Measured at d181d9792 on RunPod CPU pods,
+# the Mojo cache wiped before every build:
+#   build_mixture.sh -j 2: 3 distinct binaries in 5 builds; -j 1: 1 in 5
+#   build_tsa.sh     -j 2: 2 in 4;  -j 1: 2 in 12 (8 of one, 4 of the other)
+# The variance is inside one compiler process (idle or loaded box alike), so
+# -j 1 narrows it and does not remove it; disabling ASLR to test the usual
+# cause (pointer-ordered containers) is refused inside a RunPod container.
+# A warm Mojo cache replays the first compile, which is why every single box
+# always looked reproducible. What makes a released AMD binary reproducible is
+# the binding cache: once built, the same key serves the same bytes to every
+# later build (tools/bincache.py). NVIDIA sets and the host bindings (CPU
+# codegen) keep two workers: every pair of cold builds compared matched (the
+# H100 and L40S legs against the CPU box at d181d9792, two cold CPU boxes at
+# 4756f57a9: 264 of 264 NVIDIA binaries, the host bindings on every box). The
+# host bindings in an AMD set also keep two, so they stay byte-identical to
+# the NVIDIA sets' copies (pack_wheel.py compares them).
 GPU_COMPILE_JOBS=2
 case "${MOJOLEARN_GPU_ARCHS:-}" in gfx*) GPU_COMPILE_JOBS=1 ;; esac
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1

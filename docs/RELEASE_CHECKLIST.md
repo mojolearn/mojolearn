@@ -186,11 +186,15 @@ Proof at d181d9792 (0.8.14) against that release's three GPU-box builds,
 sha256 of every `.so` in each set (tiers, `host/`, `.libs/`):
 cuda/sm_90a 66 of 66 and cuda/sm_89 66 of 66 byte-identical, with
 `readback.txt`, `arch_readback.txt` and the provenance extension and
-host-binding digests identical. hip/gfx942 matched 62 of 66: `mojo build -j 2`
-for gfx942 is not deterministic (five cold builds of one binding gave three
-binaries, five with `-j 1` gave one), so the MI325X leg's own bytes were one
-draw. `packaging/linux/build_sets.sh` now compiles AMD GPU bindings with one
-worker on every route. `manifest.json` differs only in its `set` field, the
+host-binding digests identical. hip/gfx942 matched 62 of 66: the Mojo
+compiler's gfx942 output is not reproducible run to run on any box (with a
+cold Mojo cache, `build_tsa.sh` gave 2 binaries in 12 builds with `-j 1`,
+`build_mixture.sh` 3 in 5 with `-j 2`; a warm cache hides it), so the MI325X
+leg's own bytes were one draw. `packaging/linux/build_sets.sh` compiles AMD
+GPU bindings with one worker, which narrows it, and the binding cache below is
+what makes a released AMD binary reproducible. Two cold CPU-box builds of
+4756f57a9 agreed on 197 of 198 binaries (the one: `identical/_mojolearn_tsa.so`
+on gfx942). `manifest.json` differs only in its `set` field, the
 staging path, which nothing reads.
 
 The binding cache (`tools/bincache.py`, R2 `bincache/v1/none/<image>/`) is on

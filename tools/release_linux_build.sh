@@ -15,9 +15,9 @@
 #
 # PROVEN at d181d9792 (0.8.14), 2026-09-22: cuda/sm_90a and cuda/sm_89
 # byte-identical (sha256, 132 of 132 binaries) to the GPU-box builds of the
-# same commit; hip/gfx942 62 of 66, because `mojo build -j 2` for gfx942 is
-# nondeterministic (AMD GPU bindings now build with one worker on every
-# route). docs/RELEASE_CHECKLIST.md section 2c has the numbers.
+# same commit; hip/gfx942 62 of 66, because the Mojo compiler's gfx942 output
+# is not reproducible run to run on ANY box (the binding cache is what freezes
+# a released AMD binary). docs/RELEASE_CHECKLIST.md section 2c has the numbers.
 #
 # Output (default ~/mojolearn-evidence/releases/<commit>/linux-cpu-box/<stamp>):
 #   cuda-sm_90a/release-build  cuda-sm_89/release-build  hip-gfx942/release-build
