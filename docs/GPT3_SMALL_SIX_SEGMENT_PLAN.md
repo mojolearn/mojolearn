@@ -409,38 +409,43 @@ started.
 
 ## 9. Cost and wall clock, from measured cells
 
-Measured. H100 batch 4 step 0.66 s, 12,390 tokens/s, flat over 2,000 steps
-after the repair. MI325X batch 1 repaired step 0.550 s against the H100's
-0.197 s, 2.8x, taken 2026-09-18 BEFORE the 2026-09-20 AMD projection GEMM
-tuning that cut those GEMMs 33 to 45 percent
-(`bench/evidence/2026-09-20_gpt3_small_amd_gemm_dispatch.md`); GEMM was 81
-percent of the AMD step, so the AMD full step is now somewhere between 2.0x
-and 2.8x the H100's and is unmeasured at batch 4. Apple is unmeasured at this
-shape. Prices on record: RunPod H100 SXM $2.69 to $3.49 an hour, DigitalOcean
-MI325X $3.80, RunPod MI300X about $2.50 when available, RunPod CPU $0.24.
+**Measured in T1, 2026-09-22, at the target shape and K = 64
+(`bench/results/lm_t1_2026-09-22/`).** One optimizer step of 64 shards of
+batch 4 is 39.9 s on one H100 and 20.2 s on two H100s with the same bits;
+138.6 s on one MI325X, 3.47 times the H100. Hashing the state and the summed
+gradient costs 8 s a step on the H100 host and 3.5 s on the MI325X host. A
+1.95 GB checkpoint saves in 5 s and uploads to R2 in 55 s. The repaired
+attention path held for 1,916 batch-4 steps on the MI325X at a flat 2.176 s.
+Three optimizer steps of this shape are the same bits on the H100 and the
+MI325X, and the arrival replay across vendors lands on the boundary hash.
+Prices on record: RunPod H100 SXM $2.69 to $3.49 an hour, DigitalOcean
+MI325X $3.80 (the box that ran), RunPod MI300X about $2.50 when it has
+capacity (none on 2026-09-20 or 2026-09-22), RunPod CPU $0.24.
 
-Derived from those. One optimizer step of 64 shards is 42 s on one H100 and 84
-to 118 s on one MI300X or MI325X. The per-segment constraint fixes each vendor's
-share whatever the arrangement; the revision moved 100 steps from NVIDIA to
-AMD.
+Derived from those. The per-segment constraint fixes each vendor's share
+whatever the arrangement.
 
 | | optimizer steps | GPU hours | cost |
 |---|---:|---:|---:|
-| NVIDIA, both routes, less its share of segment 3 | 4,100 | 48 | $130 to $170 |
-| AMD, both routes, less its share of segment 3 | 4,200 | 98 to 138 | $250 to $520 |
-| segment 3, both routes, both boxes | 800 | about 24 box hours | $60 to $80 |
+| NVIDIA, both routes, less its share of segment 3 | 4,100 | 45 (plus 9 percent hashing) | $135 to $175 |
+| AMD, both routes, less its share of segment 3 | 4,200 | 162 (plus 3 percent hashing) | $615 on the MI325X; about $405 on an MI300X if RunPod has one |
+| segment 3, both routes, both boxes | 800 | measured in T1c | about $60 to $100 |
 | Apple, route A segment 6, 52M tokens | 100 | unmeasured, hours on an M1 Ultra | one day, about $60 |
 | CPU witnesses, arrival replays, negative controls | | | about $50 |
-| test runs T1 and T2 (section 10) | | | about $120 to $180 |
-| **total** | **10,000** | **about 200** | **about $650 to $1,050** |
+| T1 and T2 | | | about $40 spent in T1; T2 about $80 |
+| **total** | **10,000** | **about 210** | **about $950 to $1,150 on the MI325X, about $750 to $950 with MI300X capacity** |
 
-Wall clock is route A's critical path. At one GPU per segment about 90 to 110
-hours, four to five days. NVIDIA and AMD segments on 4-GPU boxes bring that to
-about two days, because device count divides wall clock and never changes bits.
-Ordering the AMD segments onto 8x MI300X boxes when RunPod has them is the
-cheapest lever on wall clock. Two GPU-hours for every one in the table is the
-price of the second route, and it is what turns a sampled claim into a
-per-step one.
+The AMD step is the whole difference from the first estimate: 3.47x the
+H100 at $3.80 an hour instead of 2.0x to 2.8x at $2.50. Two levers, neither
+changing a bit: RunPod MI300X capacity when it exists (a third off the AMD
+line), and 4-GPU AMD boxes for wall clock (device count divides the step;
+two H100s divided it by 1.98).
+
+Wall clock is route A's critical path. At one GPU per segment about 200
+hours, dominated by the two AMD segments (2,000 steps at 139 s is 77 hours
+each). On 4-GPU boxes for the AMD segments and 2-GPU for NVIDIA, about three
+days. Two GPU-hours for every one in the table is the price of the second
+route, and it is what turns a sampled claim into a per-step one.
 
 ## 10. Test runs, cheapest first, each one gating the next
 

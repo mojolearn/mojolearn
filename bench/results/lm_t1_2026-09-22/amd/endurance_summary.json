@@ -1,0 +1,29 @@
+{
+ "steps_logged": 1916,
+ "budget_seconds": 4200,
+ "timeout_exit": 124,
+ "median_seconds_head": 2.1757610350000505,
+ "median_seconds_tail": 2.1756456174998675,
+ "max_seconds": 2.234882937000293,
+ "loss_first": 10.977826118469238,
+ "loss_last": 1.6557759046554565,
+ "nonfinite_losses": 0,
+ "distinct_eager_bytes": [
+  432
+ ],
+ "status_counts": {
+  "forward_status_counts:NOT_ATTEMPTED": 0,
+  "forward_status_counts:FUSED_RAN": 22992,
+  "forward_status_counts:FUSED_REFUSED_REGIME": 0,
+  "forward_status_counts:FUSED_CORNER": 0,
+  "forward_status_counts:FUSED_SKIPPED_STICKY": 0,
+  "backward_status_counts:NOT_ATTEMPTED": 0,
+  "backward_status_counts:FUSED_RAN": 22992,
+  "backward_status_counts:FUSED_REFUSED_REGIME": 0,
+  "backward_status_counts:FUSED_CORNER": 0,
+  "backward_status_counts:FUSED_SKIPPED_STICKY": 0
+ },
+ "device_used_mb": [
+  38661
+ ]
+}

@@ -1,0 +1,73 @@
+{
+ "schema": "mojolearn.lm-segment.recipe.v1",
+ "shape": [
+  4,
+  2048,
+  768,
+  12,
+  12,
+  64,
+  2048,
+  12,
+  50257
+ ],
+ "logical_shards": 64,
+ "steps": 10,
+ "seed": 93261,
+ "optimizer": {
+  "betas": [
+   0.9,
+   0.95
+  ],
+  "eps": 1e-08,
+  "weight_decay": 0.1
+ },
+ "schedule": {
+  "kind": "warmup-linear-cosine",
+  "peak_lr": 0.0006,
+  "warmup_steps": 2,
+  "final_ratio": 0.1,
+  "table_f32_hex": [
+   "399d4952",
+   "3a1d4952",
+   "3a17e610",
+   "3a088e45",
+   "39e32fd5",
+   "39ad03da",
+   "396dafbc",
+   "3911d651",
+   "38a8ee4f",
+   "387ba882"
+  ]
+ },
+ "data": {
+  "schedule": "lm-segment.shards.v1",
+  "tokens_sha256": "2ad0c690bc4438d5ddab5cb481c4b247ba61b7dd3d841a3d7c0a7d0f94b2c253",
+  "tokens_manifest_sha256": "51898a61dc62f23fa33edcfaa00b4d526899cc55b262c75d84c0b3767b474d9a",
+  "train_range": [
+   0,
+   24141115
+  ],
+  "vocabulary": {
+   "schema": "mojolearn.bpe-vocabulary.v1",
+   "sha256": "3d547b17821cf46502f275a441dd6ded9682a4ddcacde993a1ff836f39c4122d",
+   "n_ranks": 50256,
+   "n_vocab": 50257,
+   "endoftext_id": 50256
+  }
+ },
+ "checkpoint_every": 100,
+ "boundaries": [],
+ "reduction": "ordered_sum",
+ "written_by": {
+  "box": {
+   "host": "mojolearn-extra-amd",
+   "machine": "x86_64",
+   "system": "Linux",
+   "python": "3.14.7",
+   "rocm-smi": "device,Unique ID,Card Series,Card Model,Card Vendor,Card SKU,Subsystem ID,Device Rev,Node ID,GUID,GFX Version\ncard0,0x292458c0919d7722,AMD Instinct Mi325X VF,0x74b9,Advanced Micro Devices Inc. [AMD/ATI],M3250101,0x74a5,0x00,1,43855,gfx942"
+  },
+  "commit": null,
+  "utc": "2026-09-22T20:16:38Z"
+ }
+}

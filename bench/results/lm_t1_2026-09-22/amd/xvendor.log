@@ -1,0 +1,8 @@
+[20:18:08] segment: route B segment t1 label amd-xvendor, global steps 0..3, K=64, devices (0,), from ckpt_00000000.blm (sha256 5871ef0f4cea5499)
+[20:20:37] step 1 lr 399d4952 loss 10.9871 state d333b045e1141e0d grad 36aea7967b8b4d03 141.90 s (+3.53 s hashing)
+[20:20:37] step 1 agrees with the expected chain
+[20:22:59] step 2 lr 3a1d4952 loss 10.3414 state 094b4e5a70d9609e grad 298642639276b309 138.63 s (+3.54 s hashing)
+[20:22:59] step 2 agrees with the expected chain
+[20:25:21] step 3 lr 3a17e610 loss 25.7737 state 6a408d480a1775c9 grad 086dc5eff1309b3c 138.54 s (+3.53 s hashing)
+[20:25:21] step 3 agrees with the expected chain
+[20:25:22] PASS: /root/gemm_leg_out/lm-t1-amd/xvendor

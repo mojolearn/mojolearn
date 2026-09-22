@@ -1,0 +1,18 @@
+20:14:15 arm=amd devices=0 started=2026-09-22T20:14:15Z
+20:14:15 gpu_archs=gfx942
+20:14:58 build base exit=0 secs=43
+20:16:37 build byte_lm exit=0 secs=99
+20:16:38 binding: vendor hip set_lr True
+20:16:38 tokens=/root/mojolearn-evidence/tokenized-corpus-sep18/lmcache/tokens/2b49720ec4d78c3c-3d547b17821cf465-d1048576
+20:16:38 recipe exit=0
+20:17:24 fetch ckpt0 exit=0
+20:18:03 fetch ckpt1 exit=0
+20:18:03 fetch chain exit=0 secs=85
+20:18:05 nvidia checkpoints verified exit=0
+20:25:22 xvendor exit=0 secs=437
+[20:25:22] PASS: /root/gemm_leg_out/lm-t1-amd/xvendor
+20:30:16 arrival exit=0 secs=294
+[20:30:16] PASS: /root/gemm_leg_out/lm-t1-amd/arrival
+21:40:16 endurance exit=124 secs=4200
+21:40:16 endurance verdict exit=1:     r = json.load(open(sys.argv[1]))                   ~~~~^^^^^^^^^^^^^ FileNotFoundError: [Errno 2] No such file or directory: '/root/gemm_leg_out/lm-t1-amd/endurance/result.json' 
+21:40:16 finished=2026-09-22T21:40:16Z

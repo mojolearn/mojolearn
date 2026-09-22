@@ -1,0 +1,37 @@
+{
+ "schema": "mojolearn.lm-segment.run.v1",
+ "route": "B",
+ "segment": "t1",
+ "label": "amd-xvendor",
+ "from_checkpoint": {
+  "file": "ckpt_00000000.blm",
+  "sha256": "5871ef0f4cea549947d9d5c11b589a433057ddad8dd3145df4719f1a4a6927a2",
+  "step": 0
+ },
+ "first_step": 0,
+ "last_step": 3,
+ "devices": [
+  0
+ ],
+ "logical_shards": 64,
+ "recipe_sha256": "a630a409e949f3e641ac43692ac705789a3926ea4757cce69922c4915591cacd",
+ "tokens_sha256": "2ad0c690bc4438d5ddab5cb481c4b247ba61b7dd3d841a3d7c0a7d0f94b2c253",
+ "box": {
+  "host": "mojolearn-extra-amd",
+  "machine": "x86_64",
+  "system": "Linux",
+  "python": "3.14.7",
+  "rocm-smi": "device,Unique ID,Card Series,Card Model,Card Vendor,Card SKU,Subsystem ID,Device Rev,Node ID,GUID,GFX Version\ncard0,0x292458c0919d7722,AMD Instinct Mi325X VF,0x74b9,Advanced Micro Devices Inc. [AMD/ATI],M3250101,0x74a5,0x00,1,43855,gfx942"
+ },
+ "commit": null,
+ "zero_moments": false,
+ "expect_chain": "/root/gemm_leg_out/lm-t1-amd/from-nvidia/chain.jsonl",
+ "checkpoints": [],
+ "utc_start": "2026-09-22T20:18:08Z",
+ "verdict": "PASS",
+ "disagreements": [],
+ "steps_completed": 3,
+ "last_completed": 3,
+ "utc_end": "2026-09-22T20:25:22Z",
+ "uploads": []
+}

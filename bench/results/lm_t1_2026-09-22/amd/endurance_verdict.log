@@ -1,0 +1,8 @@
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/lm_attention_endurance_check.py", line 67, in <module>
+    main()
+    ~~~~^^
+  File "/root/mojolearn/tools/lm_attention_endurance_check.py", line 28, in main
+    r = json.load(open(sys.argv[1]))
+                  ~~~~^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/root/gemm_leg_out/lm-t1-amd/endurance/result.json'
