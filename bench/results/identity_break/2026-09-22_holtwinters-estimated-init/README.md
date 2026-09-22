@@ -21,7 +21,13 @@ and AMD columns below are recorded and the table is regenerated.
 | cpu, Apple M4 arm64 | `cpu-apple-m4-arm64.json` | `tools/cpu_identity_gate_check.py run-column --shards 1 -- --repeats 1 --vendor cpu-apple-m4` on a copy of the package with no GPU binding, the tsa host binding built from this branch; `column` verdict OK (`legs/cpu-apple-m4-arm64.column-check.txt`) |
 | cpu sabotage, Apple M4 arm64 | `cpu-apple-m4-arm64.sabotage.json` | the same, with the tsa host binding built with `-D MOJOLEARN_HOST_SABOTAGE=1` (the estimated path's SSE step split into two roundings, plus the fitted-state bit flip) |
 
-Every lane read STABLE (36 of 36 cells) in each column.
+Every lane read STABLE (36 of 36 cells) in each column. All three were
+recorded at 6eacfab28, which carries the parallel device kernel (one block
+per series and start, one thread per theta column). Its cells equal those of
+the one-thread-per-series build that came before it, bit for bit, on all
+four lanes, and its fits are faster on the M4 (100 series, n=240, f=12:
+763 ms before, 99 ms after, heuristic 122 ms; one series, n=520, f=52:
+2.7 s before, 58 ms after, heuristic 41 ms).
 
 ## What agrees
 
@@ -37,8 +43,9 @@ cells of all four lanes are held at an older lane revision and are not
 compared; the two new columns agree (IDENTICAL=36).
 
 Mojo gates on the M4 under IDENTICAL: `legs/apple-m4.hw_estimate_check.txt`
-(device == host oracle, bit for bit, on seven fixtures at two block widths,
-and the heuristic default unchanged) and `legs/apple-m4.hw_check.txt` (the
+(device == host oracle, bit for bit, on 17 fits: seven fixtures at two
+block widths through the parallel arm, its f = 59 edge, the serial arm at
+f = 60, and the heuristic default unchanged) and `legs/apple-m4.hw_check.txt` (the
 existing heuristic gate, ALL OK).
 
 ## What is owed before admission

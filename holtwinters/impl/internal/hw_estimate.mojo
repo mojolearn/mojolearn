@@ -61,15 +61,28 @@ THE SPELLING (DEVIATION 698's rule, applied to every new seam): every
 stored intermediate through `ftz`; at every `a * x + b * y` the FIRST
 product fused (`identical_mul_add`) and the second stored; divisions are
 IEEE `/` (correctly rounded on every column measured, IDENTITY_PATHS row
-10). ONE FUNCTION, `hw_estimate_series`, is the arithmetic: the GPU kernel
-calls it once per thread and the host oracle (`holtwinters/host/
-hw_oracle.mojo`, the CPU column) calls it once per series, so the device
-and the CPU run the same spelling by construction and the gate compares
-their bits.
+10). The per-element arithmetic lives in ONE set of helpers (`_est_step`,
+`_sse_add`, `_est_dx`, `_est_dln`, `_est_dbn`, `_est_dsn`, `_est_row_acc`,
+`hw_est_finish`) that every arm calls:
+
+  * the host oracle (`holtwinters/host/hw_oracle.mojo`, the CPU column) and
+    the serial device kernel run `hw_estimate_series`, one series at a time;
+  * THE PARALLEL DEVICE KERNEL (`holtwinters_estimate_block_kernel`, taken
+    when `f + 5 <= HW_EST_BLOCK`) runs one thread block per (series, start)
+    and one thread per theta column. Every derivative update is per column,
+    so thread `j` owns column `j`; row `i` of `J^T J` is accumulated by
+    thread `i` in the same `t` order; the elimination updates row `i` in
+    thread `i`; the scalar recurrence, the back substitution and every
+    control decision are one thread's or computed redundantly from the same
+    shared values. No value is ever summed across threads, so the parallel
+    kernel performs exactly the host's operations on every element and
+    `hw_estimate_check.mojo` compares their bits.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
-from std.memory import bitcast
+from std.memory import bitcast, stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -118,14 +131,6 @@ def hw_est_dim(frequency: Int) -> Int:
     return frequency + 5
 
 
-def hw_est_scratch_len(frequency: Int) -> Int:
-    """Float32 scratch per series: th, trial, best, grad, step, dl, db, dn
-    (`8 d`), the season derivatives (`f d`), the working season (`f`), and
-    `J^T J` and the system matrix (`2 d^2`)."""
-    var d = hw_est_dim(frequency)
-    return 8 * d + frequency * d + frequency + 2 * d * d
-
-
 @always_inline
 def _f(x: Float32) -> Float32:
     return ftz(x)
@@ -159,7 +164,144 @@ def _inv_pow2(sc: Float32) -> Float32:
     return bitcast[DType.float32](UInt32(254 - se) << UInt32(23))
 
 
-def _est_eval(
+def _series_scale(
+    tid: Int, ts: MutPointer[Float32, MutAnyOrigin], n: Int, batch_size: Int
+) -> Float32:
+    var m = Float32(0.0)
+    for t in range(n):
+        var v = abs(ts.unsafe_load(tid + t * batch_size))
+        if v > m:
+            m = v
+    return _pow2_scale(m)
+
+
+# ---------------------------------------------------------------------------
+# The per-element arithmetic every arm shares
+# ---------------------------------------------------------------------------
+
+
+@fieldwise_init
+struct _Step(Copyable, Movable, ImplicitlyCopyable):
+    var e: Float32
+    var sp: Float32
+    var lt: Float32
+    var ysp: Float32
+    var ln: Float32
+    var bn: Float32
+    var ylv: Float32
+    var sn: Float32
+    var sp_eps: Float32
+    var guarded: Bool
+
+
+@always_inline
+def _est_step(
+    y: Float32, sp: Float32, l: Float32, tr: Float32,
+    a: Float32, b: Float32, g: Float32,
+    oma: Float32, omb: Float32, omg: Float32, additive: Bool,
+) -> _Step:
+    """One step of the recurrence (the header's equations)."""
+    var lt = _f(l + tr)
+    var xh: Float32
+    if additive:
+        xh = _f(lt + sp)
+    else:
+        xh = _f(lt * sp)
+    var e = _f(y - xh)
+    var sp_eps: Float32 = sp
+    var guarded = False
+    if not additive:
+        if not (abs(sp) > STMP_EPS):
+            sp_eps = STMP_EPS
+            guarded = True
+    var ysp: Float32
+    if additive:
+        ysp = _f(y - sp)
+    else:
+        ysp = _f(y / sp_eps)
+    var ln = _mix(a, ysp, oma, lt)
+    var bn = _mix(b, _f(ln - l), omb, tr)
+    var ylv: Float32
+    if additive:
+        ylv = _f(y - ln)
+    else:
+        ylv = _f(y / ln)
+    var sn = _mix(g, ylv, omg, sp)
+    return _Step(e, sp, lt, ysp, ln, bn, ylv, sn, sp_eps, guarded)
+
+
+@always_inline
+def _sse_add(sse: Float32, e: Float32) -> Float32:
+    comptime if HW_EST_HOST_SABOTAGE:
+        # the CPU gate's negative control (hw_oracle.mojo's): the fused
+        # SSE step split into two roundings. Host sabotage builds only.
+        return _f(sse + _f(e * e))
+    else:
+        return _mad(e, e, sse)
+
+
+@always_inline
+def _est_ca(st: _Step, a: Float32, additive: Bool) -> Float32:
+    """d level' / d s_p's coefficient."""
+    if additive:
+        return -a
+    if st.guarded:
+        return Float32(0.0)
+    return -_f(a * _f(st.ysp / st.sp_eps))
+
+
+@always_inline
+def _est_cg(st: _Step, g: Float32, additive: Bool) -> Float32:
+    """d season' / d level''s coefficient."""
+    if additive:
+        return -g
+    return -_f(g * _f(st.ylv / st.ln))
+
+
+@always_inline
+def _est_dx(additive: Bool, st: _Step, dlj: Float32, dbj: Float32, dspj: Float32) -> Float32:
+    var dlt = _f(dlj + dbj)
+    if additive:
+        return _f(dlt + dspj)
+    return _mad(st.sp, dlt, _f(st.lt * dspj))
+
+
+@always_inline
+def _est_dln(
+    j: Int, st: _Step, ca: Float32, oma: Float32, dlj: Float32, dbj: Float32, dspj: Float32
+) -> Float32:
+    var dlt = _f(dlj + dbj)
+    var v = _mad(ca, dspj, _f(oma * dlt))
+    if j == 0:
+        v = _f(v + _f(st.ysp - st.lt))
+    return v
+
+
+@always_inline
+def _est_dbn(
+    j: Int, st: _Step, b: Float32, omb: Float32, dnj: Float32, dlj: Float32, dbj: Float32,
+    l: Float32, tr: Float32,
+) -> Float32:
+    var v = _mad(b, _f(dnj - dlj), _f(omb * dbj))
+    if j == 1:
+        v = _f(v + _f(_f(st.ln - l) - tr))
+    return v
+
+
+@always_inline
+def _est_dsn(j: Int, st: _Step, cg: Float32, omg: Float32, dlnew: Float32, dspj: Float32) -> Float32:
+    var v = _mad(cg, dlnew, _f(omg * dspj))
+    if j == 2:
+        v = _f(v + _f(st.ylv - st.sp))
+    return v
+
+
+# ---------------------------------------------------------------------------
+# The serial arm: the host oracle and the device fallback for f + 5 > 64
+# ---------------------------------------------------------------------------
+
+
+def _est_eval_plain(
     tid: Int,
     ts: MutPointer[Float32, MutAnyOrigin],
     n: Int,
@@ -169,13 +311,6 @@ def _est_eval(
     additive: Bool,
     th: MutPointer[Float32, MutAnyOrigin],
     sw: MutPointer[Float32, MutAnyOrigin],
-    jac: Bool,
-    A: MutPointer[Float32, MutAnyOrigin],
-    grad: MutPointer[Float32, MutAnyOrigin],
-    dl: MutPointer[Float32, MutAnyOrigin],
-    db: MutPointer[Float32, MutAnyOrigin],
-    dn: MutPointer[Float32, MutAnyOrigin],
-    ds: MutPointer[Float32, MutAnyOrigin],
     write: Bool,
     inv_sc: Float32,
     level: MutPointer[Float32, MutAnyOrigin],
@@ -183,9 +318,57 @@ def _est_eval(
     season: MutPointer[Float32, MutAnyOrigin],
 ) -> Float32:
     """The recurrence from t = 0 at `th` (scaled units); returns the SSE.
-    `jac`: also `A = J^T J` (upper triangle, row-major `d x d`) and `grad =
-    J^T e`. `write`: the states at `t >= f`, scaled back, time-major at
-    `tid + (t - f) * batch_size`. The SSE bits do not depend on either flag."""
+    `write`: the states at `t >= f`, scaled back, time-major at `tid + (t -
+    f) * batch_size`."""
+    var a = th.unsafe_load(0)
+    var b = th.unsafe_load(1)
+    var g = th.unsafe_load(2)
+    var oma = _f(Float32(1.0) - a)
+    var omb = _f(Float32(1.0) - b)
+    var omg = _f(Float32(1.0) - g)
+    var l = th.unsafe_load(3)
+    var tr = th.unsafe_load(4)
+    for p in range(f):
+        sw.unsafe_store(p, th.unsafe_load(5 + p))
+    var sse = Float32(0.0)
+    for t in range(n):
+        var p = t % f
+        var y = _f(ts.unsafe_load(tid + t * batch_size) * sc)
+        var st = _est_step(y, sw.unsafe_load(p), l, tr, a, b, g, oma, omb, omg, additive)
+        sse = _sse_add(sse, st.e)
+        l = st.ln
+        tr = st.bn
+        sw.unsafe_store(p, st.sn)
+        if write and t >= f:
+            var k = tid + (t - f) * batch_size
+            level.unsafe_store(k, _f(st.ln * inv_sc))
+            trend.unsafe_store(k, _f(st.bn * inv_sc))
+            if additive:
+                season.unsafe_store(k, _f(st.sn * inv_sc))
+            else:
+                season.unsafe_store(k, st.sn)
+    return sse
+
+
+def _est_eval_jac(
+    tid: Int,
+    ts: MutPointer[Float32, MutAnyOrigin],
+    n: Int,
+    batch_size: Int,
+    f: Int,
+    sc: Float32,
+    additive: Bool,
+    th: MutPointer[Float32, MutAnyOrigin],
+    sw: MutPointer[Float32, MutAnyOrigin],
+    A: MutPointer[Float32, MutAnyOrigin],
+    grad: MutPointer[Float32, MutAnyOrigin],
+    dl: MutPointer[Float32, MutAnyOrigin],
+    db: MutPointer[Float32, MutAnyOrigin],
+    dn: MutPointer[Float32, MutAnyOrigin],
+    ds: MutPointer[Float32, MutAnyOrigin],
+) -> Float32:
+    """`_est_eval_plain` plus `A = J^T J` (upper triangle, row-major `d x
+    d`) and `grad = J^T e`. The SSE bits are `_est_eval_plain`'s."""
     var d = f + 5
     var a = th.unsafe_load(0)
     var b = th.unsafe_load(1)
@@ -197,113 +380,43 @@ def _est_eval(
     var tr = th.unsafe_load(4)
     for p in range(f):
         sw.unsafe_store(p, th.unsafe_load(5 + p))
-    if jac:
-        for i in range(d * d):
-            A.unsafe_store(i, Float32(0.0))
+    for i in range(d * d):
+        A.unsafe_store(i, Float32(0.0))
+    for j in range(d):
+        grad.unsafe_store(j, Float32(0.0))
+        dl.unsafe_store(j, Float32(1.0) if j == 3 else Float32(0.0))
+        db.unsafe_store(j, Float32(1.0) if j == 4 else Float32(0.0))
+    for p in range(f):
         for j in range(d):
-            grad.unsafe_store(j, Float32(0.0))
-            dl.unsafe_store(j, Float32(0.0))
-            db.unsafe_store(j, Float32(0.0))
-        for p in range(f):
-            for j in range(d):
-                ds.unsafe_store(p * d + j, Float32(0.0))
-            ds.unsafe_store(p * d + 5 + p, Float32(1.0))
-        dl.unsafe_store(3, Float32(1.0))
-        db.unsafe_store(4, Float32(1.0))
+            ds.unsafe_store(p * d + j, Float32(1.0) if j == 5 + p else Float32(0.0))
     var sse = Float32(0.0)
     for t in range(n):
         var p = t % f
+        var pd = p * d
         var y = _f(ts.unsafe_load(tid + t * batch_size) * sc)
-        var sp = sw.unsafe_load(p)
-        var lt = _f(l + tr)
-        var xh: Float32
-        if additive:
-            xh = _f(lt + sp)
-        else:
-            xh = _f(lt * sp)
-        var e = _f(y - xh)
-        comptime if HW_EST_HOST_SABOTAGE:
-            # the CPU gate's negative control (hw_oracle.mojo's): the fused
-            # SSE step split into two roundings. Host sabotage builds only.
-            sse = _f(sse + _f(e * e))
-        else:
-            sse = _mad(e, e, sse)
-        var sp_eps: Float32 = sp
-        var guarded = False
-        if not additive:
-            if not (abs(sp) > STMP_EPS):
-                sp_eps = STMP_EPS
-                guarded = True
-        var ysp: Float32
-        var ln: Float32
-        if additive:
-            ysp = _f(y - sp)
-        else:
-            ysp = _f(y / sp_eps)
-        ln = _mix(a, ysp, oma, lt)
-        var bn = _mix(b, _f(ln - l), omb, tr)
-        var ylv: Float32
-        if additive:
-            ylv = _f(y - ln)
-        else:
-            ylv = _f(y / ln)
-        var sn = _mix(g, ylv, omg, sp)
-        if jac:
-            var pd = p * d
-            # dx = d xhat / d theta, into dn; then A += dx dx^T, grad += e dx
-            for j in range(d):
-                var dlt = _f(dl.unsafe_load(j) + db.unsafe_load(j))
-                var dx: Float32
-                if additive:
-                    dx = _f(dlt + ds.unsafe_load(pd + j))
-                else:
-                    dx = _mad(sp, dlt, _f(lt * ds.unsafe_load(pd + j)))
-                dn.unsafe_store(j, dx)
-            for i in range(d):
-                var xi = dn.unsafe_load(i)
-                if xi != Float32(0.0):
-                    grad.unsafe_store(i, _mad(e, xi, grad.unsafe_load(i)))
-                    for j in range(i, d):
-                        A.unsafe_store(i * d + j, _mad(xi, dn.unsafe_load(j), A.unsafe_load(i * d + j)))
-            # the level's derivative, into dn (dx is no longer needed)
-            var ca: Float32
-            if additive:
-                ca = -a
-            elif guarded:
-                ca = Float32(0.0)
-            else:
-                ca = -_f(a * _f(ysp / sp_eps))
-            for j in range(d):
-                var dlt = _f(dl.unsafe_load(j) + db.unsafe_load(j))
-                dn.unsafe_store(j, _mad(ca, ds.unsafe_load(pd + j), _f(oma * dlt)))
-            dn.unsafe_store(0, _f(dn.unsafe_load(0) + _f(ysp - lt)))
-            # the trend's (reads the OLD dl), then dl <- dn
-            for j in range(d):
-                var dlj = dl.unsafe_load(j)
-                var dnj = dn.unsafe_load(j)
-                db.unsafe_store(j, _mad(b, _f(dnj - dlj), _f(omb * db.unsafe_load(j))))
-                dl.unsafe_store(j, dnj)
-            db.unsafe_store(1, _f(db.unsafe_load(1) + _f(_f(ln - l) - tr)))
-            # the season slot's
-            var cg: Float32
-            if additive:
-                cg = -g
-            else:
-                cg = -_f(g * _f(ylv / ln))
-            for j in range(d):
-                ds.unsafe_store(pd + j, _mad(cg, dl.unsafe_load(j), _f(omg * ds.unsafe_load(pd + j))))
-            ds.unsafe_store(pd + 2, _f(ds.unsafe_load(pd + 2) + _f(ylv - sp)))
-        l = ln
-        tr = bn
-        sw.unsafe_store(p, sn)
-        if write and t >= f:
-            var k = tid + (t - f) * batch_size
-            level.unsafe_store(k, _f(ln * inv_sc))
-            trend.unsafe_store(k, _f(bn * inv_sc))
-            if additive:
-                season.unsafe_store(k, _f(sn * inv_sc))
-            else:
-                season.unsafe_store(k, sn)
+        var st = _est_step(y, sw.unsafe_load(p), l, tr, a, b, g, oma, omb, omg, additive)
+        sse = _sse_add(sse, st.e)
+        for j in range(d):
+            dn.unsafe_store(j, _est_dx(additive, st, dl.unsafe_load(j), db.unsafe_load(j), ds.unsafe_load(pd + j)))
+        for i in range(d):
+            var xi = dn.unsafe_load(i)
+            if xi != Float32(0.0):
+                grad.unsafe_store(i, _mad(st.e, xi, grad.unsafe_load(i)))
+                for jj in range(i, d):
+                    A.unsafe_store(i * d + jj, _mad(xi, dn.unsafe_load(jj), A.unsafe_load(i * d + jj)))
+        var ca = _est_ca(st, a, additive)
+        var cg = _est_cg(st, g, additive)
+        for j in range(d):
+            var dlj = dl.unsafe_load(j)
+            var dbj = db.unsafe_load(j)
+            var dspj = ds.unsafe_load(pd + j)
+            var dnj = _est_dln(j, st, ca, oma, dlj, dbj, dspj)
+            db.unsafe_store(j, _est_dbn(j, st, b, omb, dnj, dlj, dbj, l, tr))
+            dl.unsafe_store(j, dnj)
+            ds.unsafe_store(pd + j, _est_dsn(j, st, cg, omg, dnj, dspj))
+        l = st.ln
+        tr = st.bn
+        sw.unsafe_store(p, st.sn)
     return sse
 
 
@@ -335,6 +448,90 @@ def _est_solve(
     return True
 
 
+@always_inline
+def _hold(v: Float32, gi: Float32) -> Bool:
+    """A bounded parameter on its bound whose gradient points out."""
+    return (not (v > Float32(0.0)) and gi < Float32(0.0)) or (not (v < Float32(1.0)) and gi > Float32(0.0))
+
+
+@always_inline
+def _seed(k: Int, j: Int, l0: Float32, b0: Float32, s0: Float32, sc: Float32, additive: Bool) -> Float32:
+    """Start `k`'s theta_j; `s0` is the heuristic season of column `j >= 5`."""
+    if j < 3:
+        return hw_est_start(k, j)
+    if j == 3:
+        return l0
+    if j == 4:
+        return b0
+    if additive:
+        return _f(s0 * sc)
+    return s0
+
+
+def hw_est_finish(
+    tid: Int,
+    ts: MutPointer[Float32, MutAnyOrigin],
+    n: Int,
+    batch_size: Int,
+    frequency: Int,
+    additive: Bool,
+    sc: Float32,
+    inv_sc: Float32,
+    cand: MutPointer[Float32, MutAnyOrigin],
+    sse0: Float32, sse1: Float32, sse2: Float32,
+    it0: Int, it1: Int, it2: Int,
+    cr0: Int, cr1: Int, cr2: Int,
+    sw: MutPointer[Float32, MutAnyOrigin],
+    level: MutPointer[Float32, MutAnyOrigin],
+    trend: MutPointer[Float32, MutAnyOrigin],
+    season: MutPointer[Float32, MutAnyOrigin],
+    alpha: MutPointer[Float32, MutAnyOrigin],
+    beta: MutPointer[Float32, MutAnyOrigin],
+    gamma: MutPointer[Float32, MutAnyOrigin],
+    error: MutPointer[Float32, MutAnyOrigin],
+    criterion: MutPointer[Int32, MutAnyOrigin],
+    niter: MutPointer[Int32, MutAnyOrigin],
+    theta_out: MutPointer[Float32, MutAnyOrigin],
+):
+    """The lowest final SSE of the three starts (`cand` holds their thetas,
+    `d` apart), the earlier start on a tie and a finite SSE over a NaN; then
+    the final pass writes the components and every per-series output."""
+    var d = frequency + 5
+    var bk = 0
+    var best_sse = sse0
+    var best_it = it0
+    var best_cr = cr0
+    for k in range(1, HW_EST_STARTS):
+        var sk = sse1 if k == 1 else sse2
+        if sk < best_sse or (not (best_sse == best_sse) and sk == sk):
+            bk = k
+            best_sse = sk
+            best_it = it1 if k == 1 else it2
+            best_cr = cr1 if k == 1 else cr2
+    var best = cand.unsafe_offset(bk * d)
+    var sse = _est_eval_plain(tid, ts, n, batch_size, frequency, sc, additive, best, sw,
+                              True, inv_sc, level, trend, season)
+    alpha.unsafe_store(tid, best.unsafe_load(0))
+    beta.unsafe_store(tid, best.unsafe_load(1))
+    gamma.unsafe_store(tid, best.unsafe_load(2))
+    error.unsafe_store(tid, _f(_f(sse * inv_sc) * inv_sc))
+    criterion.unsafe_store(tid, Int32(best_cr))
+    niter.unsafe_store(tid, Int32(best_it))
+    for j in range(d):
+        var v = best.unsafe_load(j)
+        if j == 3 or j == 4 or (j >= 5 and additive):
+            v = _f(v * inv_sc)
+        theta_out.unsafe_store(j * batch_size + tid, v)
+
+
+def hw_est_scratch_len(frequency: Int) -> Int:
+    """Float32 scratch per series for the serial arm: three candidate
+    thetas, trial, grad, step, dl, db, dn (`9 d`), the season derivatives
+    (`f d`), the working season (`f`), and `J^T J` and the system (`2 d^2`)."""
+    var d = hw_est_dim(frequency)
+    return 9 * d + frequency * d + frequency + 2 * d * d
+
+
 def hw_estimate_series(
     tid: Int,
     ts: MutPointer[Float32, MutAnyOrigin],
@@ -357,64 +554,43 @@ def hw_estimate_series(
     niter: MutPointer[Int32, MutAnyOrigin],
     theta_out: MutPointer[Float32, MutAnyOrigin],
 ):
-    """The estimated fit of series `tid` (see the header). `ts` is
+    """The estimated fit of series `tid`, serially (see the header). `ts` is
     time-major (`[tid + t * batch_size]`), `start_season` this series'
     heuristic seasons at stride `batch_size`, `scratch` this series'
-    `hw_est_scratch_len(frequency)` floats. Writes the components at `t >=
-    frequency`, `alpha/beta/gamma/error/criterion/niter[tid]`, and the
-    chosen theta with its states in the series' units at `theta_out[j *
-    batch_size + tid]`."""
+    `hw_est_scratch_len(frequency)` floats."""
     var f = frequency
     var d = f + 5
-    var th = scratch
-    var tt = scratch.unsafe_offset(d)
-    var best = scratch.unsafe_offset(2 * d)
-    var grad = scratch.unsafe_offset(3 * d)
-    var step = scratch.unsafe_offset(4 * d)
-    var dl = scratch.unsafe_offset(5 * d)
-    var db = scratch.unsafe_offset(6 * d)
-    var dn = scratch.unsafe_offset(7 * d)
-    var ds = scratch.unsafe_offset(8 * d)
+    var cand = scratch
+    var tt = scratch.unsafe_offset(3 * d)
+    var grad = scratch.unsafe_offset(4 * d)
+    var step = scratch.unsafe_offset(5 * d)
+    var dl = scratch.unsafe_offset(6 * d)
+    var db = scratch.unsafe_offset(7 * d)
+    var dn = scratch.unsafe_offset(8 * d)
+    var ds = scratch.unsafe_offset(9 * d)
     var sw = ds.unsafe_offset(f * d)
     var A = sw.unsafe_offset(f)
     var M = A.unsafe_offset(d * d)
 
-    # the power-of-two scale
-    var m = Float32(0.0)
-    for t in range(n):
-        var v = abs(ts.unsafe_load(tid + t * batch_size))
-        if v > m:
-            m = v
-    var sc = _pow2_scale(m)
+    var sc = _series_scale(tid, ts, n, batch_size)
     var inv_sc = _inv_pow2(sc)
-
-    # the heuristic seed, in scaled units
     var l0 = _f(_mad(Float32(-f), start_trend, start_level) * sc)
     var b0 = _f(start_trend * sc)
 
-    var best_sse = Float32(0.0)
-    var best_niter = 0
-    var best_crit = OPTIM_BFGS_ITER_LIMIT
+    var sses = InlineArray[Float32, HW_EST_STARTS](fill=Float32(0.0))
+    var its = InlineArray[Int, HW_EST_STARTS](fill=0)
+    var crs = InlineArray[Int, HW_EST_STARTS](fill=0)
     for k in range(HW_EST_STARTS):
-        th.unsafe_store(0, hw_est_start(k, 0))
-        th.unsafe_store(1, hw_est_start(k, 1))
-        th.unsafe_store(2, hw_est_start(k, 2))
-        th.unsafe_store(3, l0)
-        th.unsafe_store(4, b0)
-        for p in range(f):
-            var s0 = start_season.unsafe_load(p * batch_size)
-            if additive:
-                th.unsafe_store(5 + p, _f(s0 * sc))
-            else:
-                th.unsafe_store(5 + p, s0)
-        var sse = _est_eval(tid, ts, n, batch_size, f, sc, additive, th, sw, True,
-                            A, grad, dl, db, dn, ds, False, inv_sc, level, trend, season)
+        var th = cand.unsafe_offset(k * d)
+        for j in range(d):
+            var s0 = start_season.unsafe_load((j - 5) * batch_size) if j >= 5 else Float32(0.0)
+            th.unsafe_store(j, _seed(k, j, l0, b0, s0, sc, additive))
+        var sse = _est_eval_jac(tid, ts, n, batch_size, f, sc, additive, th, sw, A, grad, dl, db, dn, ds)
         var lam = HW_EST_LAMBDA0
         var crit = OPTIM_BFGS_ITER_LIMIT
         var it = 0
         while it < HW_EST_MAX_ITER:
             it += 1
-            # Marquardt's diagonal, floored relative to the largest
             var maxdiag = Float32(0.0)
             for i in range(d):
                 var v = A.unsafe_load(i * d + i)
@@ -430,13 +606,8 @@ def hw_estimate_series(
                 var dg: Float32 = aii if aii > floor_ else floor_
                 M.unsafe_store(i * d + i, _mad(lam, dg, aii))
                 step.unsafe_store(i, grad.unsafe_load(i))
-            # the active bounds: held fixed this step
             for i in range(3):
-                var v = th.unsafe_load(i)
-                var gi = grad.unsafe_load(i)
-                var hold = (not (v > Float32(0.0)) and gi < Float32(0.0)) or (
-                    not (v < Float32(1.0)) and gi > Float32(0.0))
-                if hold:
+                if _hold(th.unsafe_load(i), grad.unsafe_load(i)):
                     for j in range(d):
                         M.unsafe_store(i * d + j, Float32(0.0))
                         M.unsafe_store(j * d + i, Float32(0.0))
@@ -452,14 +623,13 @@ def hw_estimate_series(
                 tt.unsafe_store(j, _f(th.unsafe_load(j) + step.unsafe_load(j)))
             for j in range(3):
                 tt.unsafe_store(j, bound_device(tt.unsafe_load(j)))
-            var ns = _est_eval(tid, ts, n, batch_size, f, sc, additive, tt, sw, False,
-                               A, grad, dl, db, dn, ds, False, inv_sc, level, trend, season)
+            var ns = _est_eval_plain(tid, ts, n, batch_size, f, sc, additive, tt, sw,
+                                     False, inv_sc, level, trend, season)
             if ns < sse:
                 var rel = _f(_f(sse - ns) / sse)
                 for j in range(d):
                     th.unsafe_store(j, tt.unsafe_load(j))
-                sse = _est_eval(tid, ts, n, batch_size, f, sc, additive, th, sw, True,
-                                A, grad, dl, db, dn, ds, False, inv_sc, level, trend, season)
+                sse = _est_eval_jac(tid, ts, n, batch_size, f, sc, additive, th, sw, A, grad, dl, db, dn, ds)
                 lam = _f(lam / Float32(3.0))
                 if lam < HW_EST_LAMBDA_MIN:
                     lam = HW_EST_LAMBDA_MIN
@@ -471,28 +641,12 @@ def hw_estimate_series(
                 if lam > HW_EST_LAMBDA_MAX:
                     crit = OPTIM_MIN_PARAM_DIFF
                     break
-        var take = k == 0 or sse < best_sse or (not (best_sse == best_sse) and sse == sse)
-        if take:
-            best_sse = sse
-            best_niter = it
-            best_crit = crit
-            for j in range(d):
-                best.unsafe_store(j, th.unsafe_load(j))
-
-    # the final pass at the chosen theta writes the components
-    var sse = _est_eval(tid, ts, n, batch_size, f, sc, additive, best, sw, False,
-                        A, grad, dl, db, dn, ds, True, inv_sc, level, trend, season)
-    alpha.unsafe_store(tid, best.unsafe_load(0))
-    beta.unsafe_store(tid, best.unsafe_load(1))
-    gamma.unsafe_store(tid, best.unsafe_load(2))
-    error.unsafe_store(tid, _f(_f(sse * inv_sc) * inv_sc))
-    criterion.unsafe_store(tid, Int32(best_crit))
-    niter.unsafe_store(tid, Int32(best_niter))
-    for j in range(d):
-        var v = best.unsafe_load(j)
-        if j == 3 or j == 4 or (j >= 5 and additive):
-            v = _f(v * inv_sc)
-        theta_out.unsafe_store(j * batch_size + tid, v)
+        sses[k] = sse
+        its[k] = it
+        crs[k] = crit
+    hw_est_finish(tid, ts, n, batch_size, f, additive, sc, inv_sc, cand,
+                  sses[0], sses[1], sses[2], its[0], its[1], its[2], crs[0], crs[1], crs[2],
+                  sw, level, trend, season, alpha, beta, gamma, error, criterion, niter, theta_out)
 
 
 def holtwinters_estimate_gpu_kernel(
@@ -516,7 +670,8 @@ def holtwinters_estimate_gpu_kernel(
     niter: MutPointer[Int32, MutAnyOrigin],
     theta_out: MutPointer[Float32, MutAnyOrigin],
 ):
-    """One thread per series; each thread owns its slice of `scratch`."""
+    """The serial arm on the device (f + 5 > HW_EST_BLOCK): one thread per
+    series, `hw_estimate_series`."""
     var tid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var batch_size = Int(batch_size_in)
     var frequency = Int(frequency_in)
@@ -526,6 +681,353 @@ def holtwinters_estimate_gpu_kernel(
             start_level.unsafe_load(tid), start_trend.unsafe_load(tid),
             start_season.unsafe_offset(tid),
             scratch.unsafe_offset(tid * hw_est_scratch_len(frequency)),
+            level, trend, season, alpha, beta, gamma, error, criterion, niter, theta_out,
+        )
+
+
+# ---------------------------------------------------------------------------
+# The parallel arm: one block per (series, start), one thread per column
+# ---------------------------------------------------------------------------
+
+#: threads per block, and the largest `d = f + 5` the parallel arm takes
+#: (the system matrix lives in threadgroup memory: 64 x 64 floats, 16 KiB)
+comptime HW_EST_BLOCK = 64
+#: threadgroup layout (floats)
+comptime _SH_M = 0
+comptime _SH_TH = HW_EST_BLOCK * HW_EST_BLOCK
+comptime _SH_TT = _SH_TH + HW_EST_BLOCK
+comptime _SH_RHS = _SH_TT + HW_EST_BLOCK
+comptime _SH_G = _SH_RHS + HW_EST_BLOCK
+comptime _SH_DX = _SH_G + HW_EST_BLOCK
+comptime _SH_DIAG = _SH_DX + HW_EST_BLOCK
+comptime _SH_S = _SH_DIAG + HW_EST_BLOCK      # 2 x 16 step scalars
+comptime _SH_CTL = _SH_S + 32                  # broadcast SSE
+comptime _SH_LEN = _SH_CTL + 4
+
+
+def hw_est_parallel(frequency: Int) -> Bool:
+    return frequency + 5 <= HW_EST_BLOCK
+
+
+def hw_est_block_scratch_len(frequency: Int) -> Int:
+    """Per (series, start) block: `J^T J` rows (`d^2`, row `i` thread `i`'s
+    own), the season derivatives (`f d`, column `j` thread `j`'s own), the
+    working season and a theta copy (thread 0's own)."""
+    var d = hw_est_dim(frequency)
+    return d * d + frequency * d + frequency + d
+
+
+@always_inline
+def _blk_eval_jac[
+    origin: MutOrigin, //
+](
+    sh: MutPointer[Float32, origin, address_space = AddressSpace.SHARED],
+    j: Int, s: Int,
+    ts: MutPointer[Float32, MutAnyOrigin],
+    n: Int, batch_size: Int, f: Int, sc: Float32, additive: Bool,
+    Arow: MutPointer[Float32, MutAnyOrigin],
+    dsj: MutPointer[Float32, MutAnyOrigin],
+    sw: MutPointer[Float32, MutAnyOrigin],
+) -> Float32:
+    """`_est_eval_jac` at the shared theta, in parallel. Thread 0 runs the
+    scalar recurrence and publishes each step's scalars (double-buffered by
+    `t` parity); thread `j < d` carries column `j` of the derivatives and
+    row `j` of `J^T J` and entry `j` of `J^T e` (into shared `_SH_G`).
+    Returns the SSE on every thread."""
+    var d = f + 5
+    var a = sh.unsafe_load(_SH_TH + 0)
+    var b = sh.unsafe_load(_SH_TH + 1)
+    var g = sh.unsafe_load(_SH_TH + 2)
+    var oma = _f(Float32(1.0) - a)
+    var omb = _f(Float32(1.0) - b)
+    var omg = _f(Float32(1.0) - g)
+    var l = sh.unsafe_load(_SH_TH + 3)
+    var tr = sh.unsafe_load(_SH_TH + 4)
+    var dl = Float32(0.0)
+    var db = Float32(0.0)
+    if j < d:
+        for jj in range(j, d):
+            Arow.unsafe_store(jj, Float32(0.0))
+        sh.unsafe_store(_SH_G + j, Float32(0.0))
+        dl = Float32(1.0) if j == 3 else Float32(0.0)
+        db = Float32(1.0) if j == 4 else Float32(0.0)
+        for p in range(f):
+            dsj.unsafe_store(p, Float32(1.0) if j == 5 + p else Float32(0.0))
+    if j == 0:
+        for p in range(f):
+            sw.unsafe_store(p, sh.unsafe_load(_SH_TH + 5 + p))
+    var sse = Float32(0.0)
+    for t in range(n):
+        var p = t % f
+        var S = _SH_S + (t % 2) * 16
+        if j == 0:
+            var y = _f(ts.unsafe_load(s + t * batch_size) * sc)
+            var st = _est_step(y, sw.unsafe_load(p), l, tr, a, b, g, oma, omb, omg, additive)
+            sse = _sse_add(sse, st.e)
+            sh.unsafe_store(S + 0, st.e)
+            sh.unsafe_store(S + 1, st.sp)
+            sh.unsafe_store(S + 2, st.lt)
+            sh.unsafe_store(S + 3, st.ysp)
+            sh.unsafe_store(S + 4, st.ln)
+            sh.unsafe_store(S + 5, st.bn)
+            sh.unsafe_store(S + 6, st.ylv)
+            sh.unsafe_store(S + 7, st.sn)
+            sh.unsafe_store(S + 8, st.sp_eps)
+            sh.unsafe_store(S + 9, Float32(1.0) if st.guarded else Float32(0.0))
+            sh.unsafe_store(S + 10, l)
+            sh.unsafe_store(S + 11, tr)
+            l = st.ln
+            tr = st.bn
+            sw.unsafe_store(p, st.sn)
+        barrier()
+        var st = _Step(
+            sh.unsafe_load(S + 0), sh.unsafe_load(S + 1), sh.unsafe_load(S + 2), sh.unsafe_load(S + 3),
+            sh.unsafe_load(S + 4), sh.unsafe_load(S + 5), sh.unsafe_load(S + 6), sh.unsafe_load(S + 7),
+            sh.unsafe_load(S + 8), sh.unsafe_load(S + 9) != Float32(0.0),
+        )
+        var dspj = Float32(0.0)
+        if j < d:
+            dspj = dsj.unsafe_load(p)
+            sh.unsafe_store(_SH_DX + j, _est_dx(additive, st, dl, db, dspj))
+        barrier()
+        if j < d:
+            var xi = sh.unsafe_load(_SH_DX + j)
+            if xi != Float32(0.0):
+                sh.unsafe_store(_SH_G + j, _mad(st.e, xi, sh.unsafe_load(_SH_G + j)))
+                for jj in range(j, d):
+                    Arow.unsafe_store(jj, _mad(xi, sh.unsafe_load(_SH_DX + jj), Arow.unsafe_load(jj)))
+            var lold = sh.unsafe_load(S + 10)
+            var trold = sh.unsafe_load(S + 11)
+            var ca = _est_ca(st, a, additive)
+            var cg = _est_cg(st, g, additive)
+            var dnj = _est_dln(j, st, ca, oma, dl, db, dspj)
+            db = _est_dbn(j, st, b, omb, dnj, dl, db, lold, trold)
+            dl = dnj
+            dsj.unsafe_store(p, _est_dsn(j, st, cg, omg, dnj, dspj))
+    if j == 0:
+        sh.unsafe_store(_SH_CTL, sse)
+    barrier()
+    var out = sh.unsafe_load(_SH_CTL)
+    barrier()
+    return out
+
+
+@always_inline
+def _blk_eval_plain[
+    origin: MutOrigin, //
+](
+    sh: MutPointer[Float32, origin, address_space = AddressSpace.SHARED],
+    at: Int, j: Int, s: Int,
+    ts: MutPointer[Float32, MutAnyOrigin],
+    n: Int, batch_size: Int, f: Int, sc: Float32, additive: Bool,
+    sw: MutPointer[Float32, MutAnyOrigin],
+    thp: MutPointer[Float32, MutAnyOrigin],
+    inv_sc: Float32,
+    level: MutPointer[Float32, MutAnyOrigin],
+) -> Float32:
+    """`_est_eval_plain` of the shared theta at offset `at`, by thread 0
+    alone (the scalar recurrence has no column to split); every thread
+    returns its SSE."""
+    var d = f + 5
+    if j == 0:
+        for jj in range(d):
+            thp.unsafe_store(jj, sh.unsafe_load(at + jj))
+        var v = _est_eval_plain(s, ts, n, batch_size, f, sc, additive, thp, sw,
+                                False, inv_sc, level, level, level)
+        sh.unsafe_store(_SH_CTL, v)
+    barrier()
+    var out = sh.unsafe_load(_SH_CTL)
+    barrier()
+    return out
+
+
+def holtwinters_estimate_block_kernel(
+    ts: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    batch_size_in: Int32,
+    frequency_in: Int32,
+    additive_in: Int32,
+    start_level: MutPointer[Float32, MutAnyOrigin],
+    start_trend: MutPointer[Float32, MutAnyOrigin],
+    start_season: MutPointer[Float32, MutAnyOrigin],
+    scratch: MutPointer[Float32, MutAnyOrigin],
+    cand_theta: MutPointer[Float32, MutAnyOrigin],
+    cand_sse: MutPointer[Float32, MutAnyOrigin],
+    cand_ints: MutPointer[Int32, MutAnyOrigin],
+    level: MutPointer[Float32, MutAnyOrigin],
+):
+    """Block `s * 3 + k` runs start `k` of series `s`: `hw_estimate_series`'s
+    start loop body with every per-element operation in the thread that owns
+    that element. Writes the start's final theta (`cand_theta[(s*3+k)*d +
+    j]`), SSE and (niter, criterion) (`cand_ints[2*(s*3+k)..]`)."""
+    var blk = Int(block_idx.x)
+    var j = Int(thread_idx.x)
+    var n = Int(n_in)
+    var batch_size = Int(batch_size_in)
+    var f = Int(frequency_in)
+    var additive = additive_in != 0
+    var s = blk // HW_EST_STARTS
+    var k = blk - s * HW_EST_STARTS
+    var d = f + 5
+    var sh = stack_allocation[_SH_LEN, Float32, address_space = AddressSpace.SHARED]()
+    var base = scratch.unsafe_offset(blk * hw_est_block_scratch_len(f))
+    var jr = j if j < d else 0
+    var Arow = base.unsafe_offset(jr * d)
+    var dsj = base.unsafe_offset(d * d + jr * f)
+    var sw = base.unsafe_offset(d * d + f * d)
+    var thp = sw.unsafe_offset(f)
+
+    var sc = _series_scale(s, ts, n, batch_size)
+    var inv_sc = _inv_pow2(sc)
+    var l0 = _f(_mad(Float32(-f), start_trend.unsafe_load(s), start_level.unsafe_load(s)) * sc)
+    var b0 = _f(start_trend.unsafe_load(s) * sc)
+    if j < d:
+        var s0 = start_season.unsafe_load((j - 5) * batch_size + s) if j >= 5 else Float32(0.0)
+        sh.unsafe_store(_SH_TH + j, _seed(k, j, l0, b0, s0, sc, additive))
+    barrier()
+    var sse = _blk_eval_jac(sh, j, s, ts, n, batch_size, f, sc, additive, Arow, dsj, sw)
+    var lam = HW_EST_LAMBDA0
+    var crit = OPTIM_BFGS_ITER_LIMIT
+    var it = 0
+    while it < HW_EST_MAX_ITER:
+        it += 1
+        if j < d:
+            sh.unsafe_store(_SH_DIAG + j, Arow.unsafe_load(j))
+        barrier()
+        var maxdiag = Float32(0.0)
+        for i in range(d):
+            var v = sh.unsafe_load(_SH_DIAG + i)
+            if v > maxdiag:
+                maxdiag = v
+        var floor_ = _f(HW_EST_DIAG_FLOOR * maxdiag)
+        if j < d:
+            for jj in range(j, d):
+                var v = Arow.unsafe_load(jj)
+                sh.unsafe_store(_SH_M + j * d + jj, v)
+                sh.unsafe_store(_SH_M + jj * d + j, v)
+            var ajj = Arow.unsafe_load(j)
+            var dg: Float32 = ajj if ajj > floor_ else floor_
+            sh.unsafe_store(_SH_M + j * d + j, _mad(lam, dg, ajj))
+            sh.unsafe_store(_SH_RHS + j, sh.unsafe_load(_SH_G + j))
+        barrier()
+        var h0 = _hold(sh.unsafe_load(_SH_TH + 0), sh.unsafe_load(_SH_G + 0))
+        var h1 = _hold(sh.unsafe_load(_SH_TH + 1), sh.unsafe_load(_SH_G + 1))
+        var h2 = _hold(sh.unsafe_load(_SH_TH + 2), sh.unsafe_load(_SH_G + 2))
+        if j < d:
+            for i in range(3):
+                var hi = h0 if i == 0 else (h1 if i == 1 else h2)
+                if hi:
+                    sh.unsafe_store(_SH_M + i * d + j, Float32(0.0))
+                    sh.unsafe_store(_SH_M + j * d + i, Float32(0.0))
+        barrier()
+        if j < 3:
+            var hj = h0 if j == 0 else (h1 if j == 1 else h2)
+            if hj:
+                sh.unsafe_store(_SH_M + j * d + j, Float32(1.0))
+                sh.unsafe_store(_SH_RHS + j, Float32(0.0))
+        # the elimination: row i in thread i, pivot row k untouched at step k
+        var ok = True
+        for kk in range(d):
+            barrier()
+            var piv = sh.unsafe_load(_SH_M + kk * d + kk)
+            if not (piv > Float32(0.0)):
+                ok = False
+                break
+            if j > kk and j < d:
+                var m = _f(sh.unsafe_load(_SH_M + j * d + kk) / piv)
+                if m != Float32(0.0):
+                    var nm = -m
+                    for jj in range(kk + 1, d):
+                        sh.unsafe_store(_SH_M + j * d + jj,
+                                        _mad(nm, sh.unsafe_load(_SH_M + kk * d + jj), sh.unsafe_load(_SH_M + j * d + jj)))
+                    sh.unsafe_store(_SH_RHS + j, _mad(nm, sh.unsafe_load(_SH_RHS + kk), sh.unsafe_load(_SH_RHS + j)))
+        barrier()
+        if not ok:
+            lam = _f(lam * Float32(4.0))
+            if lam > HW_EST_LAMBDA_MAX:
+                crit = OPTIM_MIN_PARAM_DIFF
+                break
+            continue
+        if j == 0:
+            var r = d - 1
+            while r >= 0:
+                var acc = sh.unsafe_load(_SH_RHS + r)
+                for jj in range(r + 1, d):
+                    acc = _mad(-sh.unsafe_load(_SH_M + r * d + jj), sh.unsafe_load(_SH_RHS + jj), acc)
+                sh.unsafe_store(_SH_RHS + r, _f(acc / sh.unsafe_load(_SH_M + r * d + r)))
+                r -= 1
+        barrier()
+        if j < d:
+            var v = _f(sh.unsafe_load(_SH_TH + j) + sh.unsafe_load(_SH_RHS + j))
+            if j < 3:
+                v = bound_device(v)
+            sh.unsafe_store(_SH_TT + j, v)
+        barrier()
+        var ns = _blk_eval_plain(sh, _SH_TT, j, s, ts, n, batch_size, f, sc, additive, sw, thp, inv_sc, level)
+        if ns < sse:
+            var rel = _f(_f(sse - ns) / sse)
+            if j < d:
+                sh.unsafe_store(_SH_TH + j, sh.unsafe_load(_SH_TT + j))
+            barrier()
+            sse = _blk_eval_jac(sh, j, s, ts, n, batch_size, f, sc, additive, Arow, dsj, sw)
+            lam = _f(lam / Float32(3.0))
+            if lam < HW_EST_LAMBDA_MIN:
+                lam = HW_EST_LAMBDA_MIN
+            if rel < HW_EST_REL_TOL:
+                crit = OPTIM_MIN_ERROR_DIFF
+                break
+        else:
+            lam = _f(lam * Float32(4.0))
+            if lam > HW_EST_LAMBDA_MAX:
+                crit = OPTIM_MIN_PARAM_DIFF
+                break
+    if j < d:
+        cand_theta.unsafe_store(blk * d + j, sh.unsafe_load(_SH_TH + j))
+    if j == 0:
+        cand_sse.unsafe_store(blk, sse)
+        cand_ints.unsafe_store(2 * blk, Int32(it))
+        cand_ints.unsafe_store(2 * blk + 1, Int32(crit))
+
+
+def holtwinters_estimate_finish_kernel(
+    ts: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    batch_size_in: Int32,
+    frequency_in: Int32,
+    additive_in: Int32,
+    cand_theta: MutPointer[Float32, MutAnyOrigin],
+    cand_sse: MutPointer[Float32, MutAnyOrigin],
+    cand_ints: MutPointer[Int32, MutAnyOrigin],
+    sw_all: MutPointer[Float32, MutAnyOrigin],
+    level: MutPointer[Float32, MutAnyOrigin],
+    trend: MutPointer[Float32, MutAnyOrigin],
+    season: MutPointer[Float32, MutAnyOrigin],
+    alpha: MutPointer[Float32, MutAnyOrigin],
+    beta: MutPointer[Float32, MutAnyOrigin],
+    gamma: MutPointer[Float32, MutAnyOrigin],
+    error: MutPointer[Float32, MutAnyOrigin],
+    criterion: MutPointer[Int32, MutAnyOrigin],
+    niter: MutPointer[Int32, MutAnyOrigin],
+    theta_out: MutPointer[Float32, MutAnyOrigin],
+):
+    """One thread per series: `hw_est_finish` over the three blocks' starts."""
+    var s = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var batch_size = Int(batch_size_in)
+    var f = Int(frequency_in)
+    var n = Int(n_in)
+    if s < batch_size:
+        var d = f + 5
+        var sc = _series_scale(s, ts, n, batch_size)
+        var b3 = s * HW_EST_STARTS
+        hw_est_finish(
+            s, ts, n, batch_size, f, additive_in != 0, sc, _inv_pow2(sc),
+            cand_theta.unsafe_offset(b3 * d),
+            cand_sse.unsafe_load(b3), cand_sse.unsafe_load(b3 + 1), cand_sse.unsafe_load(b3 + 2),
+            Int(cand_ints.unsafe_load(2 * b3)), Int(cand_ints.unsafe_load(2 * b3 + 2)),
+            Int(cand_ints.unsafe_load(2 * b3 + 4)),
+            Int(cand_ints.unsafe_load(2 * b3 + 1)), Int(cand_ints.unsafe_load(2 * b3 + 3)),
+            Int(cand_ints.unsafe_load(2 * b3 + 5)),
+            sw_all.unsafe_offset(s * f),
             level, trend, season, alpha, beta, gamma, error, criterion, niter, theta_out,
         )
 
@@ -553,17 +1055,60 @@ def holtwinters_estimate_gpu(
     tpb: Int,
     scratch_pad: Int = 0,
     scratch_poison: Float32 = Float32(0.0),
+    force_serial: Bool = False,
 ) raises:
     """Launch the estimated fit. `ts` is time-major; `theta_out` holds
-    `(frequency + 5) * batch_size`. `tpb` is scheduling only."""
+    `(frequency + 5) * batch_size`. `tpb` is the finish/serial kernels'
+    block width (scheduling only). `force_serial` takes the serial arm at
+    any `frequency` (the gate uses it to hold the two arms to each other)."""
     if tpb <= 0:
         raise Error("holtwinters_estimate_gpu: tpb must be positive")
+    var total_blocks = (batch_size + tpb - 1) // tpb
+    if hw_est_parallel(frequency) and not force_serial:
+        var d = frequency + 5
+        var blocks = batch_size * HW_EST_STARTS
+        var scratch = ctx.enqueue_create_buffer[DType.float32](blocks * hw_est_block_scratch_len(frequency) + scratch_pad)
+        var cand_theta = ctx.enqueue_create_buffer[DType.float32](blocks * d + scratch_pad)
+        var cand_sse = ctx.enqueue_create_buffer[DType.float32](blocks + scratch_pad)
+        var cand_ints = ctx.enqueue_create_buffer[DType.int32](2 * blocks)
+        var sw_all = ctx.enqueue_create_buffer[DType.float32](batch_size * frequency + scratch_pad)
+        scratch.enqueue_fill(scratch_poison)
+        cand_theta.enqueue_fill(scratch_poison)
+        cand_sse.enqueue_fill(scratch_poison)
+        sw_all.enqueue_fill(scratch_poison)
+        ctx.synchronize()
+        ctx.enqueue_function[holtwinters_estimate_block_kernel](
+            ts.unsafe_ptr(), Int32(n), Int32(batch_size), Int32(frequency),
+            Int32(1 if additive else 0),
+            start_level.unsafe_ptr(), start_trend.unsafe_ptr(), start_season.unsafe_ptr(),
+            scratch.unsafe_ptr(), cand_theta.unsafe_ptr(), cand_sse.unsafe_ptr(), cand_ints.unsafe_ptr(),
+            level.unsafe_ptr(),
+            grid_dim=(blocks, 1, 1),
+            block_dim=(HW_EST_BLOCK, 1, 1),
+        )
+        ctx.synchronize()
+        ctx.enqueue_function[holtwinters_estimate_finish_kernel](
+            ts.unsafe_ptr(), Int32(n), Int32(batch_size), Int32(frequency),
+            Int32(1 if additive else 0),
+            cand_theta.unsafe_ptr(), cand_sse.unsafe_ptr(), cand_ints.unsafe_ptr(), sw_all.unsafe_ptr(),
+            level.unsafe_ptr(), trend.unsafe_ptr(), season.unsafe_ptr(),
+            alpha.unsafe_ptr(), beta.unsafe_ptr(), gamma.unsafe_ptr(), error.unsafe_ptr(),
+            criterion.unsafe_ptr(), niter.unsafe_ptr(), theta_out.unsafe_ptr(),
+            grid_dim=(total_blocks, 1, 1),
+            block_dim=(tpb, 1, 1),
+        )
+        ctx.synchronize()
+        _ = scratch^
+        _ = cand_theta^
+        _ = cand_sse^
+        _ = cand_ints^
+        _ = sw_all^
+        return
     var scratch = ctx.enqueue_create_buffer[DType.float32](
         batch_size * hw_est_scratch_len(frequency) + scratch_pad
     )
     scratch.enqueue_fill(scratch_poison)
     ctx.synchronize()
-    var total_blocks = (batch_size + tpb - 1) // tpb
     ctx.enqueue_function[holtwinters_estimate_gpu_kernel](
         ts.unsafe_ptr(), Int32(n), Int32(batch_size), Int32(frequency),
         Int32(1 if additive else 0),

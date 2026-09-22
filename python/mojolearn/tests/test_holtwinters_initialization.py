@@ -91,16 +91,23 @@ def test_parallel_driver_forwards_the_method():
 
 
 def test_device_and_host_share_one_estimate_function():
-    """The CPU column and the device kernel call the same arithmetic."""
+    """The CPU column and both device arms call the same per-element
+    helpers, and nothing sums across threads."""
     oracle = (ROOT / "holtwinters/host/hw_oracle.mojo").read_text(encoding="utf-8")
     kernel = (ROOT / "holtwinters/impl/internal/hw_estimate.mojo").read_text(encoding="utf-8")
     assert "hw_estimate_series(" in oracle
     assert re.search(r"def holtwinters_estimate_gpu_kernel\([\s\S]*?hw_estimate_series\(", kernel)
-    # no libm, no atomics, no platform intrinsics in the estimated path
+    blk = kernel[kernel.index("def _blk_eval_jac["):kernel.index("def holtwinters_estimate_finish_kernel(")]
+    for helper in ("_est_step(", "_sse_add(", "_est_dx(", "_est_dln(", "_est_dbn(", "_est_dsn(",
+                   "_est_eval_plain(", "_seed(", "_hold("):
+        assert helper in blk, f"the parallel arm does not call {helper}"
+    assert "hw_est_finish(" in kernel[kernel.index("def holtwinters_estimate_finish_kernel("):]
+    # no libm, no atomics, no warp or block reductions in the estimated path
     imports = set(re.findall(r"^from ([\w.]+) import", kernel, re.M))
-    assert imports <= {"std.gpu", "std.memory", "std.sys.compile", "max.gpu.host",
-                       "holtwinters.impl.internal.hw_utils", "holtwinters.impl.tsa.holtwinters_params",
-                       "checks.numerics"}, sorted(imports)
+    assert imports <= {"std.gpu", "std.memory", "std.sys.compile", "max.gpu.host", "max.gpu.memory",
+                       "max.gpu.sync", "holtwinters.impl.internal.hw_utils",
+                       "holtwinters.impl.tsa.holtwinters_params", "checks.numerics"}, sorted(imports)
+    assert not re.search(r"\bwarp\.|block_reduce|Atomic", kernel)
 
 
 # -- runtime ------------------------------------------------------------------

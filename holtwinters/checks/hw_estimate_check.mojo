@@ -9,7 +9,9 @@ The path is `holtwinters/impl/internal/hw_estimate.mojo`. Run as
 1. DEVICE == HOST ORACLE, BIT FOR BIT, under IDENTICAL: every fitted output
    (level, trend, season, sse, alpha, beta, gamma, niter, criterion) of the
    estimated fit on additive, multiplicative, noiseless, no-season, constant
-   and mixed batches, at two thread-block widths. The host arm is the CPU
+   and mixed batches, at two thread-block widths, through the parallel
+   device arm (f + 5 <= 64), at its edge (f = 59), and through the serial
+   device arm (f = 60). The host arm is the CPU
    column's code (`hw_oracle.mojo::oracle_fit(init_method=ESTIMATED)`).
 2. THE ESTIMATED FIT'S OWN OBJECTIVE IS NO WORSE than its heuristic seed's:
    the full-n SSE at the chosen theta is <= the full-n SSE at the first
@@ -107,6 +109,12 @@ def check_device_equals_oracle(ctx: DeviceContext) raises -> Int:
         bad += _one(ctx, "constant", hw_fixture(spec_constant(), 24, 2, 4, 6), 24, 2, 4, SEASONAL_ADDITIVE, tpb)
         var specs: List[HWFixtureSpec] = [spec_additive(), spec_additive_noiseless(), spec_constant()]
         bad += _one(ctx, "mixed", hw_fixture_mixed(specs, 48, 7, 6, 7), 48, 7, 6, SEASONAL_ADDITIVE, tpb)
+    # f + 5 > HW_EST_BLOCK: the SERIAL device arm (every fixture above takes
+    # the parallel one)
+    bad += _one(ctx, "additive-f60-serial-arm", hw_fixture(spec_additive(), 130, 2, 60, 8), 130, 2, 60, SEASONAL_ADDITIVE, 32)
+    bad += _one(ctx, "multiplicative-f60-serial-arm", hw_fixture(spec_multiplicative(), 130, 2, 60, 9), 130, 2, 60, SEASONAL_MULTIPLICATIVE, 32)
+    # d = 64 exactly: the largest the parallel arm takes
+    bad += _one(ctx, "additive-f59-parallel-edge", hw_fixture(spec_additive(), 120, 2, 59, 10), 120, 2, 59, SEASONAL_ADDITIVE, 32)
     return bad
 
 
