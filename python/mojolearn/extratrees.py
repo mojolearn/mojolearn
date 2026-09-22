@@ -193,9 +193,7 @@ def _n_samples_bootstrap(n_rows, max_samples):
 def _validate_device(device):
     if not isinstance(device, str) or device != "gpu":
         raise ValueError(
-            f"device must be 'gpu', got {device!r}: the fit runs on the GPU"
-            " binding, or, on a CPU-only install with the trees host binding"
-            " built, on its host restatement under the same device='gpu'"
+            f"Extra Trees training is GPU-only; device must be 'gpu', got {device!r}"
         )
 
 
