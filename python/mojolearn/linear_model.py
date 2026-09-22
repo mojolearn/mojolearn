@@ -580,6 +580,10 @@ class LinearRegression(NumericModeMixin):
     exists to not have.
     """
 
+    #: scikit-learn's estimator kind: `cross_val_score` stratifies a
+    #: classifier's default folds, as scikit-learn's does.
+    _estimator_type = "regressor"
+
     #: This family's binding, for `NumericModeMixin._bind`.
     _BINDING = "_mojolearn_estimators"
 
@@ -723,6 +727,10 @@ class Ridge(NumericModeMixin):
                                   by the Mojo layer
         y 2-D           refused   one target only, at this boundary
     """
+
+    #: scikit-learn's estimator kind: `cross_val_score` stratifies a
+    #: classifier's default folds, as scikit-learn's does.
+    _estimator_type = "regressor"
 
     #: This family's binding, for `NumericModeMixin._bind`.
     _BINDING = "_mojolearn_estimators"
@@ -988,6 +996,10 @@ class LogisticRegression(NumericModeMixin):
     records all of them. Under the default FAST mode the reductions are
     the vendor's and the count may differ across GPUs.
     """
+
+    #: scikit-learn's estimator kind: `cross_val_score` stratifies a
+    #: classifier's default folds, as scikit-learn's does.
+    _estimator_type = "classifier"
 
     #: This family's binding, for `NumericModeMixin._bind`.
     _BINDING = "_mojolearn_estimators"
@@ -1323,6 +1335,10 @@ class QNRegressor(NumericModeMixin):
     OUTPUTS: `coef_` (n_features,) float32, `intercept_` a float,
     `n_iter_`, `objective_`, `retcode_` as on `LogisticRegression`.
     """
+
+    #: scikit-learn's estimator kind: `cross_val_score` stratifies a
+    #: classifier's default folds, as scikit-learn's does.
+    _estimator_type = "regressor"
 
     _BINDING = "_mojolearn_estimators"
     _LOSSES = {"squared_error": _QN_LOSS_SQUARED, "absolute_error": _QN_LOSS_ABS}

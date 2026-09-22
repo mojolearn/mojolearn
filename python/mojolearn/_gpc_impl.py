@@ -161,6 +161,10 @@ class GaussianProcessClassifier(NumericModeMixin):
     n_features_in_ : int
     """
 
+    #: scikit-learn's estimator kind: `cross_val_score` stratifies a
+    #: classifier's default folds, as scikit-learn's does.
+    _estimator_type = "classifier"
+
     _BINDING = "_mojolearn_gp"
 
     def __init__(

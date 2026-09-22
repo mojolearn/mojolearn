@@ -26,6 +26,8 @@ bit-identical to the corresponding slice of a whole run.
 
 NO SPEED CLAIM. The lane has no published number and this door adds none.
 """
+from collections import namedtuple
+
 from . import _backend
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, empty
@@ -42,6 +44,12 @@ ALTERNATIVES = {"two-sided": 0, "less": 1, "greater": 2}
 INTEGRANDS = {"const": 0, "sum": 1, "product": 2}
 
 
+#: SciPy's `ConfidenceInterval`: a 2-tuple that also answers `.low` and
+#: `.high` (Sep 22 pip smoke: `res.confidence_interval.low`, SciPy's
+#: spelling, raised AttributeError on the plain tuple).
+ConfidenceInterval = namedtuple("ConfidenceInterval", ["low", "high"])
+
+
 class BootstrapResult:
     """SciPy's `BootstrapResult` plus the sorted distribution and the two
     order-statistic positions the interval used."""
@@ -52,7 +60,7 @@ class BootstrapResult:
         self.distribution = distribution
         self.sorted_distribution = sorted_distribution
         self.standard_error = standard_error
-        self.confidence_interval = (low, high)
+        self.confidence_interval = ConfidenceInterval(low, high)
         self.order_low = order_low
         self.order_high = order_high
 

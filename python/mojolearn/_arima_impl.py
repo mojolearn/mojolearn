@@ -488,8 +488,11 @@ class ARIMA(NumericModeMixin):
         # `arima/impl/tsa/arima_common.mojo::validate_order`, with the reference's
         # messages, before any device context exists. A copy of those
         # bounds here would be a second place for them to be wrong.
-        self.order = (p, d, q)
-        self.seasonal_order = (P, D, Q, s)
+        # The caller's own tuple when it already is the normalized one, so
+        # `get_params` hands `clone` back the object it was given.
+        self.order = order if _plain_order(order, (p, d, q)) else (p, d, q)
+        self.seasonal_order = (seasonal_order if _plain_order(seasonal_order, (P, D, Q, s))
+                               else (P, D, Q, s))
 
         if trend is None:
             k = 0 if (d + D) else 1
@@ -521,7 +524,7 @@ class ARIMA(NumericModeMixin):
         # that decision stays reachable (DEVIATION 992).
         if not isinstance(method, str):
             raise ValueError("mojolearn ARIMA: method is a name")
-        m = method.lower()
+        m = method if method == method.lower() else method.lower()
         if m not in _METHODS:
             raise ValueError(
                 f"mojolearn ARIMA: unknown method {method!r}; cuML's three "
@@ -970,6 +973,12 @@ class ARIMA(NumericModeMixin):
             "ARIMA(order={}, seasonal_order={}, trend={!r}, method={!r})"
             .format(self.order, self.seasonal_order, self.trend, self.method)
         )
+
+
+def _plain_order(value, normalized):
+    """True when `value` already IS `normalized`: a tuple of Python ints."""
+    return (type(value) is tuple and all(type(v) is int for v in value)
+            and value == normalized)
 
 
 def _as_order(value, width, name):

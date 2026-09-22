@@ -175,6 +175,15 @@ def _as_labels(y):
             "is a Python-layer one-vs-one/one-vs-rest wrapper and is not "
             "implemented (svm/NOT_IMPLEMENTED.tsv)"
         )
+    if not all(isinstance(c, numbers.Real) for c in classes):
+        # String (or other non-numeric) labels: the solver sees each row's
+        # dense code, 0.0 or 1.0, so `classes_[1]` still maps to +1 and the
+        # label pair it reports back is (0.0, 1.0). Numeric labels keep the
+        # float32 path below, bit for bit. Found by the Sep 22 pip smoke:
+        # `SVC().fit(X, ["a", "b", ...])` raised "buffer format '<U1'"
+        # while LogisticRegression and LinearSVC took the same labels.
+        f = Array.from_list([float(c) for c in _codes], "<f4")
+        return f, classes, (0.0, 1.0)
     f, _ = as_f32_c(y, ndim=1, name="y")
     if not all_finite(f):
         raise ValueError(
@@ -182,7 +191,7 @@ def _as_labels(y):
             "NaN or inf cannot be fitted; a computed NaN carries a "
             "vendor-specific payload and cannot sit in a hashed stage)"
         )
-    return f, classes
+    return f, classes, (classes[0], classes[1])
 
 
 def _dual_times_sv(dual_coef, support_vectors):
@@ -340,6 +349,10 @@ class SVC(NumericModeMixin):
     n_features_in_ : int
     """
 
+    #: scikit-learn's estimator kind: `cross_val_score` stratifies a
+    #: classifier's default folds, as scikit-learn's does.
+    _estimator_type = "classifier"
+
     #: This family's binding, for `NumericModeMixin._bind` (the kde svc host
     #: lane, 2026-09-14: `fit` and `_run` bind through `self._bind`, the same
     #: `_backend.binding(_EXT_NAME, numeric_mode)` that `_extension` resolves,
@@ -368,7 +381,9 @@ class SVC(NumericModeMixin):
     ):
         if not isinstance(kernel, str):
             raise ValueError("mojolearn SVC: kernel is a name")
-        k = kernel.lower()
+        # The caller's own string object when it is already lower case, so
+        # `get_params` hands `clone` back the object it was given.
+        k = kernel if kernel == kernel.lower() else kernel.lower()
         if k in _SVC_REFUSED_KERNELS:
             raise NotImplementedError(
                 f"mojolearn SVC: kernel={kernel!r} is refused; "
@@ -540,7 +555,7 @@ class SVC(NumericModeMixin):
                 "(svm/NOT_IMPLEMENTED.tsv). class_weight is the same refusal"
             )
         x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
-        labels, classes = _as_labels(y)
+        labels, classes, pair = _as_labels(y)
         n_rows, n_cols = x.shape
         if labels.shape[0] != n_rows:
             raise ValueError(
@@ -576,12 +591,12 @@ class SVC(NumericModeMixin):
         # if that disagreed with this side's sorted unique, `predict` would
         # map the device's answer onto the wrong class and the error would
         # look like a bad model rather than a bad boundary.
-        if label0 != _round_f32(classes[0]) or label1 != _round_f32(classes[1]):
+        if label0 != _round_f32(pair[0]) or label1 != _round_f32(pair[1]):
             raise RuntimeError(
                 "mojolearn SVC: the solver's label pair "
                 f"({float(label0)}, {float(label1)}) does not match the "
-                f"host's sorted unique ({float(classes[0])}, "
-                f"{float(classes[1])}); the class mapping cannot be trusted"
+                f"host's sorted unique ({float(pair[0])}, "
+                f"{float(pair[1])}); the class mapping cannot be trusted"
             )
         self.classes_ = classes
         self.n_features_in_ = n_cols
@@ -964,6 +979,10 @@ class SVR(NumericModeMixin):
     n_features_in_ : int
     """
 
+    #: scikit-learn's estimator kind: `cross_val_score` stratifies a
+    #: classifier's default folds, as scikit-learn's does.
+    _estimator_type = "regressor"
+
     #: This family's binding, for `NumericModeMixin._bind`
     #: (lane/inference-svm, 2026-09-15): `predict` binds through
     #: `self._bind`, which resolves what `_extension` resolves, so
@@ -988,7 +1007,9 @@ class SVR(NumericModeMixin):
     ):
         if not isinstance(kernel, str):
             raise ValueError("mojolearn SVR: kernel is a name")
-        k = kernel.lower()
+        # The caller's own string object when it is already lower case, so
+        # `get_params` hands `clone` back the object it was given.
+        k = kernel if kernel == kernel.lower() else kernel.lower()
         if k in _REFUSED_KERNELS:
             raise NotImplementedError(
                 f"mojolearn SVR: kernel={kernel!r} is refused; "

@@ -608,7 +608,9 @@ class KernelDensity(NumericModeMixin):
                 "n ** (-1/(d+4)), silverman is (n (d+2) / 4) ** (-1/(d+4)))"
                 % bandwidth
             )
-        bandwidth = float(bandwidth)
+        # The caller's own object when it already is a float, so
+        # `get_params` hands `clone` back the object it was given.
+        bandwidth = bandwidth if type(bandwidth) is float else float(bandwidth)
         if not (bandwidth > 0.0) or bandwidth != bandwidth:
             raise ValueError(
                 "mojolearn KernelDensity: bandwidth must be positive, got "
@@ -655,6 +657,13 @@ class KernelDensity(NumericModeMixin):
         self.kernel = kernel
         self.metric = metric
         self.algorithm = "auto"
+        # Stored under their own names so `get_params` / `clone` see every
+        # constructor parameter (they only ever hold the accepted values).
+        self.atol = atol
+        self.rtol = rtol
+        self.breadth_first = breadth_first
+        self.leaf_size = leaf_size
+        self.metric_params = metric_params
 
     def _resident_fit_handle(self, binding):
         """The handle of the device-resident copy of the fit set (DEVIATION
