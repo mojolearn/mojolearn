@@ -102,3 +102,53 @@ def test_host_route_returns_the_device_bits(route, bt, loss):
     ran_device, device = _fit(bt, loss, 320)
     assert (ran_auto, ran_device) == ("host", "device")
     assert auto == device
+
+
+# ---- one-border columns (perf/gbdt-host-one-border, 2026-09-22) ----
+
+_ONE_BORDER_TEXT = "format mojolearn-model 2\nfeature 0 folds 7 one_hot 0\nfeature 1 folds 1 one_hot 0\n"
+_NO_ONE_BORDER_TEXT = "format mojolearn-model 2\nfeature 0 folds 7 one_hot 0\nfeature 1 folds 12 one_hot 0\n"
+
+
+@pytest.mark.parametrize("vendor, route_value, text, admitted", [
+    ("metal", "auto", _ONE_BORDER_TEXT, True),     # witnessed: Apple == CPU
+    ("cuda", "auto", _ONE_BORDER_TEXT, False),     # NVIDIA column owed
+    ("hip", "auto", _ONE_BORDER_TEXT, False),      # AMD column owed
+    ("cuda", "host", _ONE_BORDER_TEXT, True),      # forced host keeps it
+    ("cuda", "auto", _NO_ONE_BORDER_TEXT, True),   # no binary column
+])
+def test_one_border_pools_route_only_where_witnessed(monkeypatch, route, vendor,
+                                                     route_value, text, admitted):
+    route(route_value)
+    monkeypatch.setattr(_backend, "vendor", lambda: vendor)
+    assert GradientBoosting()._host_one_border_admitted(text) is admitted
+
+
+def test_one_border_host_route_returns_the_device_bits(route):
+    """Where it routes (Metal), a pool with binary columns trains on the host
+    and returns the device fit's bits."""
+    if _backend._CPU_ONLY is not None:
+        pytest.skip("CPU-only install: every fit is the host fit")
+    if not os.path.exists(_backend.host_module_path("_mojolearn_gbdt_host")):
+        pytest.skip("the gbdt host binding is not built")
+    if _backend.vendor() not in ensemble._HOST_ONE_BORDER_VENDORS:
+        pytest.skip("one-border pools do not auto-route on this vendor")
+    np = pytest.importorskip("numpy")
+    rng = np.random.RandomState(0)
+    X = rng.randn(320, 10).astype(np.float32)
+    X[:, 2] = (rng.rand(320) < 0.3).astype(np.float32)
+    X[:, 7] = (rng.rand(320) < 0.6).astype(np.float32)
+    y = (X[:, 0] + 1.5 * X[:, 2] - X[:, 7]).astype(np.float32)
+    out = {}
+    for value in ("auto", "device"):
+        route(value)
+        for bt in ("Ordered", "Plain"):
+            m = GradientBoosting(max_depth=6, n_estimators=20, boosting_type=bt,
+                                 numeric_mode="identical").fit(X, y)
+            out[value, bt] = (m.fit_route_, str(m.model_),
+                              np.asarray(m.loss_curve_).tobytes(),
+                              np.asarray(m.predict(X)).tobytes())
+    for bt in ("Ordered", "Plain"):
+        assert out["auto", bt][0] == "host" and out["device", bt][0] == "device"
+        assert " folds 1 " in out["auto", bt][1]
+        assert out["auto", bt][1:] == out["device", bt][1:]

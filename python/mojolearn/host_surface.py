@@ -3116,7 +3116,6 @@ PUBLIC_PENDING_STALE_REASONS = ("stale reference",)
 #: were PUBLIC that morning. A fixture change recreates this reason on the
 #: same day it is declared resolved.
 PUBLIC_PENDING_LANES = {
-    "gbdt-binary-columns": "no reference",
     # THIRTEEN LANES LEFT THIS TABLE ON 2026-09-20, on a watched run and not
     # on an argument (lane/verifier-full-exposure). The promotion rule in
     # `public_reference_lanes()` is "a covered lane, in a release record's

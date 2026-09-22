@@ -394,6 +394,13 @@ _ORDERED_MIN_ITERATIONS = 500
 _HOST_ROUTE_MAX_CELLS = 200_000
 #: auto (default), device or host (`_small_pool_host`).
 _HOST_ROUTE_ENV = "MOJOLEARN_GBDT_ROUTE"
+#: The device vendors whose BinaryFeatures histograms (a column with exactly
+#: one border) a recorded column has witnessed equal to the host binding's:
+#: the `gbdt-binary-columns` lane, Apple M4 Metal == the CPU host column on
+#: all nine fixtures (bench/results/identity_break/2026-09-22_gbdt-binary-
+#: columns). The NVIDIA and AMD columns of that lane are OWED, so on those
+#: devices an auto-routed fit with such a column trains on the device.
+_HOST_ONE_BORDER_VENDORS = ("metal",)
 
 #: The greedy searcher's ranking targets form grouped gradients first, then
 #: multiply both statistic planes by row bootstrap weights, as CatBoost's
@@ -1681,6 +1688,30 @@ class GradientBoosting(NumericModeMixin):
         except ImportError:
             return None
 
+    def _host_one_border_admitted(self, model_text):
+        """False when an AUTO-routed host fit must be discarded for the
+        device: the pool has a column with exactly one border (the
+        BinaryFeatures histogram policy, a model record `feature <f> folds 1`)
+        and this device's binary histograms have no recorded column to
+        witness them against the host's (`_HOST_ONE_BORDER_VENDORS`).
+
+        The host binding restates the binary policy since 2026-09-22
+        (perf/gbdt-host-one-border), and the `gbdt-binary-columns` lane holds
+        it to the Apple M4 Metal fit bit for bit on all nine fixtures, so on
+        Metal the host result IS the device result. `MOJOLEARN_GBDT_ROUTE=
+        host` keeps whatever the host trained."""
+        route = os.environ.get(_HOST_ROUTE_ENV, "auto").strip().lower()
+        if route == "host":
+            return True
+        if _backend.vendor() in _HOST_ONE_BORDER_VENDORS:
+            return True
+        for line in str(model_text).split("\n"):
+            fields = line.split()
+            if (len(fields) >= 4 and fields[0] == "feature"
+                    and fields[2] == "folds" and fields[3] == "1"):
+                return False
+        return True
+
     def _resolved_boosting_type(self, n_rows):
         """The boosting type a fit on `n_rows` rows uses (`boosting_type_`).
 
@@ -2200,6 +2231,9 @@ class GradientBoosting(NumericModeMixin):
                 # a configuration the host binding refuses by name trains
                 # on the device, which also raises any genuine error
                 out = None
+            if out is not None and not self._host_one_border_admitted(out[0]):
+                out = None
+                self.fit_route_ = "device"
         if out is None:
             out = self._bind("_mojolearn_gbdt").gbdt_fit(*fit_args)
         self.model_ = out[0]
