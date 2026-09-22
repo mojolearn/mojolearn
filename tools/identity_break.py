@@ -1038,8 +1038,16 @@ LANE_REVISIONS = {
     "hdbscan": "rows-4000-1",
     "hdbscan-leaf": "rows-2000-1",
     "spectral": "rows-512-1",
-    # observations: 128 still carries many periods of the seasonal 12
-    "holtwinters": "obs-128-1",
+    # observations: 128 still carries many periods of the seasonal 12.
+    # -2 (2026-09-22, feat/holtwinters-estimated-init-sep22): ARITHMETIC, not
+    # input. ExponentialSmoothing's default became initialization_method=
+    # "estimated" (holtwinters/impl/internal/hw_estimate.mojo), so every
+    # committed cell of the four Holt-Winters lanes hashes the heuristic fit
+    # this harness no longer runs by default; they read OWED to the next record.
+    "holtwinters": "obs-128-estimated-init-2",
+    "holtwinters-multiplicative": "estimated-init-1",
+    "par-holtwinters": "estimated-init-1",
+    "par-forecast-holtwinters": "estimated-init-1",
     # training steps: 3 AdamW steps -> 1, and two of those cuts REVERSED
     # 2026-09-16 (lane/shrink-floors) because the one-step cell could no longer
     # FAIL: byte-lm back to 2 steps, samba-untied-dropout-accum back to 3. Each
@@ -1148,6 +1156,20 @@ def lane_floors():
 #: key lands here with a sentence saying what moved. An entry whose key does
 #: name a size is refused by name, so this cannot become a way of opting out.
 NON_SIZE_REVISIONS = {
+    "holtwinters-multiplicative": (
+        "arithmetic, not input: ExponentialSmoothing's default became initialization_method="
+        "'estimated' (2026-09-22, feat/holtwinters-estimated-init-sep22), which estimates the initial "
+        "level, trend and seasons jointly with alpha/beta/gamma over all n points "
+        "(holtwinters/impl/internal/hw_estimate.mojo). The lane still fits the same 512 observations; "
+        "'heuristic' reproduces the old cells bit for bit"),
+    "par-holtwinters": (
+        "the same default change as `holtwinters-multiplicative` (2026-09-22, "
+        "feat/holtwinters-estimated-init-sep22): fit_exponential_smoothing forwards "
+        "initialization_method to every shard, and the four series and shard size did not move"),
+    "par-forecast-holtwinters": (
+        "the same default change as `holtwinters-multiplicative` (2026-09-22, "
+        "feat/holtwinters-estimated-init-sep22): the fitted state the prediction drivers read comes "
+        "from the estimated fit now; the drivers, series and horizon did not move"),
     "par-arima": (
         "parallel fit now preserves the caller's trend=None instead of rewriting it to c/n "
         "(2026-09-20, a140bfee5 in python/mojolearn/parallel_classical.py); the saved-model "
