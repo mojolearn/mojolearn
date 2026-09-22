@@ -50,3 +50,102 @@ with Ordered forced 1.8 s and 2.5 s. LightGBM 1000 trees 1.35 s. XGBoost 1000
 trees depth 6 0.34 s. The GPU Ordered fit is still sync and launch bound at
 this size: what remains is about 15 launches per task and the structure
 search's per tree rebuild of its fold state.
+
+## Round 2: the CPU host route (2026-09-22, perf/gbdt-small-round2-sep22)
+
+### Why a 320 row host tree took 133 ms
+
+`sample(1)` on a host Ordered fit put 90% of the time in
+`_partition_stat` and `_halving_fold`. The host restatement of the pinned
+`compute_partition_stats` launch ran all 32 (or 64) chunks of 512 threads and
+every 512 lane halving tree for each (leaf, stat), about 5,000 calls and
+170 million adds a tree at 320 rows, almost all of them folding +0.0.
+
+| cause | fix | host Ordered RMSE ms/tree, 320 rows |
+|---|---|---|
+| before | | 133.6 |
+| partition stats fold every chunk and lane | only the live chunks and lanes (`_pinned_partition_stat`, `_halving_fold_live`) | 8.4 |
+| histogram cells converted and cleared whether reached or not; empty slots scanned; empty parents subtracted; candidate loop in kernel order | reached cells only; empty slots and parents skipped; (leaf, fold) outer, candidate inner; noise drawn once per feature | 3.7 |
+| scalar dynamic cosine score | 8 candidates a step, same expressions lane by lane | 2.96 |
+| an 11.8 MB histogram plane allocated and filled every tree | one plane per fit, the slots the last tree wrote zeroed | 1.22 |
+
+`_halving_fold_live` is the same sum. Every outer step at or above the least
+power of two covering the live lanes adds a lane that only ever holds +0.0,
+and `x + 0.0` is its own fixed point, so those steps are one `+ 0.0` pass
+over the prefix and the rest of the tree reads only prefix lanes. The host
+compiler contracts `x += a * b` into one fma for scalars and vectors alike
+(checked in its assembly), and a temporary build that recomputed every
+vector lane with the scalar loop and compared bits reported no mismatch.
+
+### Host against device, same bits (M4, depth 6, 10 features, ms/tree)
+
+| rows | Ordered RMSE host / device | Ordered Logloss host / device | Plain RMSE host / device | Plain Logloss host / device |
+|---|---|---|---|---|
+| 320 | 1.22 / 18.7 | 1.28 / 16.1 | 1.56 / 3.9 | 1.56 / 4.3 |
+| 1,000 | 1.62 / 17.2 | 2.02 / 14.5 | 1.66 / 4.4 | 1.71 / 4.8 |
+| 3,200 | 2.66 / 14.1 | 3.51 / 14.4 | 2.03 / 4.4 | 2.08 / 4.7 |
+| 10,000 | 5.6 / 16.0 | 7.7 / 16.3 | 3.0 / 4.7 | 3.3 / 5.3 |
+| 20,000 | 11.0 / 18.0 | 13.5 / 17.8 | 4.5 / 4.8 | 5.1 / 5.5 |
+| 32,000 | 17.8 / 20.5 | 22.6 / 20.0 | 5.8 / 4.8 | 6.7 / 5.5 |
+| 50,000 | 20.6 / 20.9 | 27.1 / 21.7 | 7.8 / 5.4 | 9.5 / 5.7 |
+
+Explicit fits of 50 trees (30 at 10,000 rows and above), one fit per cell.
+The model text is the same on both routes in every cell. Crossover on this
+machine at 10 features is 20,000 to 32,000 rows for Plain and 25,000
+(Logloss) to 50,000 (RMSE) rows for Ordered.
+
+### The small pool route
+
+`GradientBoosting.fit` now trains an IDENTICAL fit of at most 200,000 cells
+(rows x features) on the host binding when the configuration is one the
+verifier's CPU column covers: SymmetricTree, RMSE or Logloss, unit weights,
+numeric columns, no groups, no eval set. The host fit is the CPU column of
+every gbdt training lane. A configuration the host binding refuses by name
+trains on the device. `MOJOLEARN_GBDT_ROUTE=device` pins the device,
+`host` forces the host, `auto` is the default, and `fit_route_` says which
+ran. `tools/identity_break.py` pins `device`, so the Metal, NVIDIA and AMD
+columns keep hashing the GPU fit.
+
+A column with exactly one border (the BinaryFeatures histogram policy, for
+example the sex column of the smoke test's diabetes split) is refused by
+the host binding for Ordered and Plain alike, and no gbdt lane fixture has
+one, so that fit stays on the device: the smoke defaults still take 15.1 s.
+
+| fit, 1000 trees unless stated | round 1 | round 2 | route |
+|---|---|---|---|
+| defaults RMSE, 320 x 10 synthetic (Ordered) | 14.4 s | 1.06 s | host |
+| defaults Logloss, 320 x 10 synthetic (Ordered, 10 Newton steps) | 44.5 s | 2.62 s | host |
+| defaults RMSE, 3,200 x 10 (Ordered) | 13.2 s | 2.17 s | host |
+| defaults Logloss, 3,200 x 10 (Ordered) | 39.9 s | 7.74 s | host |
+| Plain RMSE, 320 x 10 | 3.9 s | 1.58 s | host |
+| Plain Logloss, 320 x 10 | 4.3 s | 1.72 s | host |
+| smoke defaults, diabetes 320 x 10 (binary column) | 15.2 s | 15.1 s | device |
+
+References on the same 320 x 10 pool (round 1, CPU): CatBoost defaults 0.44 s
+(regression and classification), CatBoost with Ordered forced 1.8 s
+(regression) and 2.5 s (Logloss), LightGBM 1000 trees 1.35 s, XGBoost 1000
+trees depth 6 0.34 s.
+
+### CatBoost's default boosting type here
+
+CatBoost 1.2.10 on the CPU resolves an unset `boosting_type` to Plain at
+320, 3,200, 32,000 and 60,000 rows, at 100 and at 1000 iterations
+(`get_all_params()`). Our unset default is Ordered below 50,000 rows at 500
+or more iterations, which is CatBoost's GPU chain
+(`catboost_options.cpp:802-807`, `defaults_helper.h:33-42`), not its CPU
+default. So our defaults match CatBoost GPU, and against CatBoost CPU's
+defaults they train the more expensive boosting type. The semantics are
+unchanged here.
+
+### Identity
+
+Model text and prediction hashes are unchanged against main at 320, 3,200
+and 32,000 rows for RMSE and Logloss, explicit Ordered, explicit Plain and
+the defaults; the host route's model text, loss curve and predictions equal
+the device fit's at every size above. `python -m mojolearn verify --all`
+over the 31 gbdt lanes, fixtures base, reads VERIFIED with 0 divergent on
+Metal and on the CPU column (all fixtures on the CPU column too, 1,053
+parts). A host build with a deliberately wrong `_halving_fold_live` reads
+DIVERGENT on 29 of the 31 lanes of the CPU column and VERIFIED on Metal
+(the device pin holds), and the auto routed public fit then differs from
+the device fit.
