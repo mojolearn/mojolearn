@@ -3,7 +3,8 @@
 """`python -m mojolearn <subcommand>`.
 
     python -m mojolearn verify           check this build against the
-                                         reference card shipped in the wheel
+                                         reference card shipped in the wheel;
+                                         with no card shipped, `verify --quick`
     python -m mojolearn verify --json    the same, machine readable
     python -m mojolearn env              what this process loaded, no GPU
     python -m mojolearn check-fixture    rebuild and hash the pinned fixture,
@@ -94,9 +95,44 @@ def _wants_suite(args):
                 or getattr(args, "batch_checks", False))
 
 
+def _asks_for_card(args):
+    """True when a flag names the pinned k-means card path itself, so a
+    missing card must stay exit 5 rather than fall back to the table."""
+    return bool(getattr(args, "all_stages", False)
+                or getattr(args, "keep", False)
+                or getattr(args, "emit_reference", None)
+                or getattr(args, "confirm_reference", None)
+                or getattr(args, "reference_name", _verify.REFERENCE_NAME)
+                != _verify.REFERENCE_NAME)
+
+
+def _ships_card():
+    try:
+        _verify.read_reference()
+    except _verify._NoReference:
+        return False
+    return True
+
+
+QUICK_FALLBACK_NOTE = ("# no reference card ships with this install; running "
+                       "`verify --quick` against the reference table instead "
+                       "(`verify --all` is the full check)")
+
+
 def _verify_dispatch(args):
     if getattr(args, "training_only", False):
         args.no_models = True
+    if not _wants_suite(args) and not _asks_for_card(args) and not _ships_card():
+        # Bare `verify` is the first command anyone types. With no real card
+        # in the wheel it would always end NO REFERENCE, so it runs the
+        # table's quick sample instead, and says so in one line. A request
+        # that names the card path (the flags above) still gets exit 5.
+        args.quick = True
+        if getattr(args, "argv", None) is not None and "--quick" not in args.argv:
+            args.argv = list(args.argv) + ["--quick"]
+        print(QUICK_FALLBACK_NOTE,
+              file=sys.stderr if getattr(args, "json", False) else sys.stdout,
+              flush=True)
     if _wants_suite(args):
         return _verify_all.cmd_verify_all(args)
     return _verify.cmd_verify(args)

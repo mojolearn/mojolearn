@@ -12,6 +12,7 @@ every input, parameter combination or GPU generation.
 Inspect the installed package's scope before running the checks:
 
 ```sh
+python -m mojolearn verify          # the quick sample (--quick) when no card ships
 python -m mojolearn verify --coverage
 python -m mojolearn verify --coverage --json-out coverage.json
 python -m mojolearn verify --all --json-out verification.json
@@ -831,6 +832,12 @@ in the installation.
 ```sh
 MOJOLEARN_NUMERIC_MODE=identical python -m mojolearn verify
 ```
+
+When the installation ships only the card placeholder, bare `verify` runs
+`verify --quick` against the reference table instead, says so in one line,
+and points to `verify --all` for the full check. A request that names the
+card path (`--all-stages`, `--keep`, `--reference-name`, `--emit-reference`,
+`--confirm-reference`) still exits 5 when no card is installed.
 
 Use `--json` for automation, `--all-stages` to list every divergent stage,
 and `--keep` to retain a matching generated card. `python -m mojolearn env`

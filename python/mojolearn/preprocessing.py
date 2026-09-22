@@ -4,7 +4,7 @@ import struct
 from . import _portable_math as math
 import numbers
 from ._array import Array
-from ._buffer import _materialize, all_finite, empty, zeros, full, as_f32_c
+from ._buffer import materialize_f32_lists, all_finite, empty, zeros, full, as_f32_c
 from ._labels import is_bool
 
 from . import _backend, _serialize
@@ -50,7 +50,7 @@ def _scaler_header(arrays, path, cls, fields):
 class _ScalerProtocol:
     @staticmethod
     def _input(X):
-        values = _materialize(X, "input")[0]
+        values = materialize_f32_lists(X, "input")[0]
         if values.dtype != "<f4":
             raise TypeError('Scaler input must have dtype float32')
         if values.ndim != 2 or min(values.shape) == 0:

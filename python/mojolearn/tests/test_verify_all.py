@@ -1229,6 +1229,40 @@ def test_flags_route_to_the_suite_or_the_card():
     assert va.cmd_verify_all(args) == va.EXIT_USAGE
 
 
+def test_bare_verify_without_a_card_runs_quick(monkeypatch, capsys):
+    """Bare `verify` must not dead-end at NO REFERENCE when the wheel ships
+    only the card placeholder: it runs `--quick` against the table and says
+    so. A flag that names the card path still reaches the card check."""
+    from mojolearn import _verify
+    parser = cli.build_parser()
+    suite, card = [], []
+    monkeypatch.setattr(va, "cmd_verify_all", lambda args: suite.append(args) or 0)
+    monkeypatch.setattr(_verify, "cmd_verify", lambda args: card.append(args) or 5)
+
+    def no_card(name=_verify.REFERENCE_NAME):
+        raise _verify._NoReference("placeholder only")
+
+    monkeypatch.setattr(_verify, "read_reference", no_card)
+    for argv in (["verify"], ["verify", "--json"]):
+        args = parser.parse_args(argv)
+        args.argv = argv
+        assert cli._verify_dispatch(args) == 0
+        assert suite[-1].quick and "--quick" in suite[-1].argv
+        out = capsys.readouterr()
+        shown = out.err if "--json" in argv else out.out
+        assert cli.QUICK_FALLBACK_NOTE in shown and "--all" in shown
+        if "--json" in argv:
+            assert cli.QUICK_FALLBACK_NOTE not in out.out
+    for argv in (["verify", "--all-stages"], ["verify", "--keep"],
+                 ["verify", "--reference-name", "other.card"]):
+        assert cli._verify_dispatch(parser.parse_args(argv)) == 5, argv
+    assert len(suite) == 2 and len(card) == 3
+    # With a real card shipped, bare `verify` is the card check as before.
+    monkeypatch.setattr(_verify, "read_reference", lambda name=None: ("card", [], 1))
+    assert cli._verify_dispatch(parser.parse_args(["verify"])) == 5
+    assert len(suite) == 2 and len(card) == 4
+
+
 def test_explicit_training_and_inference_scopes(monkeypatch):
     parser = cli.build_parser()
     observed = []

@@ -9,7 +9,7 @@ sklearn Pipeline does not automatically transform a supplied eval_set.
 import inspect
 
 from ._array import Array
-from ._buffer import _materialize, all_finite, empty, as_f32_c
+from ._buffer import materialize_f32_lists, all_finite, empty, as_f32_c
 from ._labels import decode_labels
 
 from . import _backend, _metrics_impl as metrics
@@ -214,7 +214,7 @@ class GradientBoostingRegressor(_GBDTAdapter):
 
     def fit(self, X, y, sample_weight=None, eval_set=None):
         self._clear_fit()
-        target = _materialize(y, "input")[0]
+        target = materialize_f32_lists(y, "y")[0]
         self._regression_target(target, 'y')
         if eval_set is not None:
             if isinstance(eval_set, list):
@@ -224,7 +224,7 @@ class GradientBoostingRegressor(_GBDTAdapter):
             if not isinstance(eval_set, tuple) or len(eval_set) != 2:
                 raise ValueError('eval_set must be (X_eval, y_eval) or a one-pair list')
             eval_X, eval_y = eval_set
-            eval_target = _materialize(eval_y, "input")[0]
+            eval_target = materialize_f32_lists(eval_y, "eval_set y")[0]
             self._regression_target(eval_target, 'eval_set y')
             eval_set = (eval_X, eval_target)
         return self._fit_native(X, target, sample_weight, eval_set)
@@ -246,7 +246,7 @@ class GradientBoostingRegressor(_GBDTAdapter):
         """R2, weighted by `sample_weight` when given (scikit-learn's weighted
         `r2_score` on the pinned-sum path, `metrics.r2_score`)."""
         self._check_fitted()
-        target = _materialize(y, "input")[0]
+        target = materialize_f32_lists(y, "y")[0]
         self._regression_target(target, 'y')
         return metrics.r2_score(target, self.predict(X),
                                 sample_weight=sample_weight,

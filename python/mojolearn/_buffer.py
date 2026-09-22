@@ -485,6 +485,25 @@ def _materialize(obj, name):
     return Array.from_buffer(obj), False
 
 
+def materialize_f32_lists(obj, name):
+    """`_materialize(obj, name)`, except that nested Python lists or tuples
+    of numbers come back as float32.
+
+    For the estimators whose contract is float32 ONLY (the scalers and the
+    boosted regressor's targets): a buffer input keeps its own dtype, so a
+    float64 NumPy array is still refused by the caller's dtype check, but
+    plain Python numbers have no float32 spelling and are cast here. The
+    cast is `_convert`, the same one round-to-nearest-even per element
+    every other estimator applies to the same list through `as_f32_c`, so
+    the bytes are identical. A float32 input is untouched."""
+    a, copied = _materialize(obj, name)
+    if (a.dtype in ("<f8", "<i8") and not isinstance(obj, Array)
+            and (isinstance(obj, (list, tuple)) or not _has_buffer(obj))):
+        a = _convert(a, "<f4", "C")[0]
+        copied = True
+    return a, copied
+
+
 def _same_dtype_store(raw, dtype):
     """An `array.array` holding the elements `raw` (bytes of `dtype`) holds,
     equal byte for byte to `array.array(code, memoryview(raw).cast(code))`,
