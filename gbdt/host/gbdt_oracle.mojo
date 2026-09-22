@@ -1178,6 +1178,237 @@ def _half_byte_block(
                         ] = cell
 
 
+#: the binary family under IDENTICAL: the half-byte accumulator
+#: (`point_hist_half_byte_template.mojo`, the same block, lanes, load and
+#: floats) at `UNROLL` 2 (`hist_binary.mojo:67`), 32 features to a word.
+comptime GBDT_BIN_UNROLL = 2
+
+
+def _binary_one_block(
+    local_block_idx: Int,
+    active_block_count: Int,
+    p_offset: Int,
+    p_size: Int,
+    stat_id: Int,
+    column: Int,
+    row_index: List[Int],
+    stats: List[Float32],
+    cindex: List[UInt32],
+    n_rows: Int,
+) -> List[Float32]:
+    """ONE grid block of `binary_hist_gather_kernel` (`hist_binary.mojo:
+    551-948`; the direct `binary_hist_kernel` at depth 0 is the same
+    arithmetic over the identity index), up to its `Reduce()`: returns the
+    128 stage-2 cells `[nibble + 8 * nibble value]`.
+
+    The accumulator is the half-byte one (`add_half_byte_point`,
+    `add_point_slot`), so the argument of `_half_byte_one_block` holds
+    unchanged: the barriers fix every cell's add order to window order, a
+    cell is written by at most one thread per window, in that thread's
+    point order. What differs is the loop: `UNROLL` 2, so `ALIGN_SIZE` and
+    a warp's entries are 256 points, and a striped iteration is two batches
+    of `LOAD_SIZE` points, each batch its own eight turns (`:377-399`), so
+    the windows run (iteration, batch, turn).
+
+    ZERO POINTS ARE SKIPPED. A thread with no row adds +0.0 to bin 0 of its
+    turn's nibble. Every cell starts at +0.0 and x + (+0.0) is x for every x
+    but -0.0; a cell reaches -0.0 only through `ftz` of a negative
+    subnormal sum, and a signed zero, however it is spelled, is a zero to
+    every later nonzero add, to the stage sums and to the writeback, whose
+    `|val| > 1e-20` guard discards it. So the live points alone, in window
+    order, give every bit the full block gives."""
+    var smem = List[Float32](
+        length=GBDT_HB_BLOCK * GBDT_HB_FLOATS, fill=Float32(0.0)
+    )
+    comptime ALIGN_SIZE = GBDT_HB_LOAD * GBDT_HB_LANES * GBDT_BIN_UNROLL
+    var head_len = p_size
+    var to_align = ALIGN_SIZE - (p_offset % ALIGN_SIZE)
+    if to_align < head_len:
+        head_len = to_align
+    if head_len < 0:
+        head_len = 0
+    var body_size = p_size - head_len
+    if body_size < 0:
+        body_size = 0
+    var tail_len = body_size % ALIGN_SIZE
+    var tail_start = p_offset + head_len + (body_size - tail_len)
+
+    # the peel (`hist_binary.mojo:718-756`): PEEL_END is 512, one trip per
+    # thread, head point turns 0..7 then tail point turns 8..15; only block
+    # 0 loads
+    if local_block_idx == 0:
+        for phase in range(2):
+            var plen = head_len if phase == 0 else tail_len
+            var pstart = p_offset if phase == 0 else tail_start
+            if plen > GBDT_HB_BLOCK:
+                plen = GBDT_HB_BLOCK
+            for i in range(8):
+                for t in range(plen):
+                    var pos = pstart + t
+                    var ci = cindex[column * n_rows + row_index[pos]]
+                    var st = stats[stat_id * n_rows + pos]
+                    var s = _half_byte_slot(ci, t, i)
+                    smem[s] = ftz(smem[s] + st)
+
+    # the striped loop (`:758-918`)
+    var aligned_offset = p_offset + head_len
+    var aligned_size = body_size - tail_len
+    var warps_per_block = GBDT_HB_BLOCK // GBDT_HB_LANES
+    var entries_per_warp = GBDT_HB_LANES * GBDT_BIN_UNROLL * GBDT_HB_LOAD
+    var stripe_size = entries_per_warp * warps_per_block * active_block_count
+    var max_iters = (aligned_size + stripe_size - 1) // stripe_size
+    var bases = List[Int](length=GBDT_HB_BLOCK, fill=0)
+    var iter_counts = List[Int](length=GBDT_HB_BLOCK, fill=0)
+    var live_threads = 0
+    for t in range(GBDT_HB_BLOCK):
+        var global_warp_id = local_block_idx * warps_per_block + (
+            t // GBDT_HB_LANES
+        )
+        var remaining = aligned_size - global_warp_id * entries_per_warp
+        if remaining < 0:
+            remaining = 0
+        var local_idx = (t & (GBDT_HB_LANES - 1)) * GBDT_HB_LOAD
+        bases[t] = aligned_offset + global_warp_id * entries_per_warp + local_idx
+        var ic = (remaining - local_idx + stripe_size - 1) // stripe_size
+        if ic < 0:
+            ic = 0
+        iter_counts[t] = ic
+        if ic > 0:
+            live_threads = t + 1
+    for it in range(max_iters):
+        for batch in range(GBDT_BIN_UNROLL):
+            for i in range(8):
+                for t in range(live_threads):
+                    if it >= iter_counts[t]:
+                        continue
+                    var p0 = (
+                        bases[t] + it * stripe_size
+                        + GBDT_HB_LANES * GBDT_HB_LOAD * batch
+                    )
+                    for e in range(GBDT_HB_LOAD):
+                        var pos = p0 + e
+                        var ci = cindex[column * n_rows + row_index[pos]]
+                        var st = stats[stat_id * n_rows + pos]
+                        var s = _half_byte_slot(ci, t, i)
+                        smem[s] = ftz(smem[s] + st)
+
+    # `Reduce()`, the same two stages as `_half_byte_one_block`
+    for s in range(GBDT_HB_REDUCE_WIDTH):
+        var acc = Float32(0.0)
+        var i2 = s
+        while i2 < GBDT_HB_BLOCK * GBDT_HB_FLOATS:
+            acc = ftz(acc + smem[i2])
+            i2 += GBDT_HB_REDUCE_WIDTH
+        smem[s] = acc
+    var stage2 = List[Float32](length=128, fill=Float32(0.0))
+    for t in range(128):
+        var acc2 = Float32(0.0)
+        for group in range(4):
+            acc2 = ftz(acc2 + smem[32 * ((t >> 3) & 15) + (t & 7) + 8 * group])
+        stage2[t] = acc2
+    return stage2^
+
+
+def _binary_block(
+    blk: PolicyBlock,
+    block_first_bin: Int,
+    hist_cells: Int,
+    compute_ids: List[Int],
+    depth: Int,
+    p_off: List[Int],
+    p_sz: List[Int],
+    row_index: List[Int],
+    stats: List[Float32],
+    cindex: List[UInt32],
+    n_rows: Int,
+    fixed_scale: Float32,
+    mut hist: List[Float32],
+):
+    """A BINARY block (the BinaryFeatures policy, one border): the binary arm
+    of `launch_histograms_for_blocks` (`greedy_search_helper.mojo:2853-
+    2905`) over `replication_for`'s pinned grid with 32 features to a group
+    (`feature_groups_for`, `:2539`), then `TPointHistBinary::
+    AddToGlobalMemory` (`hist_binary.mojo:950-1064`) and the bridge
+    `write_reduces_from_fixed_kernel[True]`, as `_half_byte_block`.
+
+    THE WRITEBACK IS THE NIBBLE SUM. Feature `fid` of a group is bit
+    `3 - (fid & 3)` of nibble `fid / 4`, and its one cell is the sum, from
+    0.0 and ascending in the nibble value, of the eight stage-2 cells whose
+    value has that bit clear. That sum carries no `ftz` (`:973-978`). The
+    flush is the half-byte one at `fold` 0:
+
+      active blocks > 1   q = sum over blocks with |val| > 1e-20 of
+                          Int32(val * scale); the cell is
+                          ftz(Float32(Int(q)) / scale) when q != 0, else 0.0
+      one active block    val when |val| > 1e-20, else 0.0
+      none (empty leaf)   0.0
+    """
+    var n_f = blk.count()
+    var n_compute = len(compute_ids)
+    var groups = (n_f + 31) // 32
+    var max_active_blocks = 2 * GBDT_PINNED_SM
+    if depth > 0:
+        max_active_blocks = 2 * max_active_blocks
+    var base_count = groups * n_compute * 2
+    if base_count < 1:
+        base_count = 1
+    var replicas = (max_active_blocks + base_count - 1) // base_count
+    if replicas < 1:
+        replicas = 1
+    var min_docs_per_block = GBDT_HB_LANES * GBDT_BIN_UNROLL * GBDT_HB_LOAD * (
+        GBDT_HB_BLOCK // GBDT_HB_LANES
+    )
+    for j in range(n_compute):
+        var slot = compute_ids[j]
+        var p_offset = p_off[slot]
+        var p_size = p_sz[slot]
+        var active_block_count = (p_size + min_docs_per_block - 1) // min_docs_per_block
+        if active_block_count > replicas:
+            active_block_count = replicas
+        for z in range(2):
+            for g in range(groups):
+                var feature_offset = g * 32
+                var f_count = n_f - feature_offset
+                if f_count > 32:
+                    f_count = 32
+                var column = blk.first_column + g
+                var vals = List[Float32](
+                    length=128 * active_block_count, fill=Float32(0.0)
+                )
+                for lb in range(active_block_count):
+                    var stage2 = _binary_one_block(
+                        lb, active_block_count, p_offset, p_size, z, column,
+                        row_index, stats, cindex, n_rows,
+                    )
+                    for t in range(128):
+                        vals[lb * 128 + t] = stage2[t]
+                for fid in range(f_count):
+                    if Int(blk.folds[feature_offset + fid]) == 0:
+                        continue
+                    var fold_off = Int(blk.fold_offset[feature_offset + fid])
+                    var group_id = fid // 4
+                    var f_mask = 1 << (3 - (fid & 3))
+                    var cell = Float32(0.0)
+                    if active_block_count >= 1:
+                        var q = Int32(0)
+                        for lb in range(active_block_count):
+                            var v = Float32(0.0)
+                            for i in range(16):
+                                if (i & f_mask) == 0:
+                                    v += vals[lb * 128 + 8 * i + group_id]
+                            if abs(v) > Float32(1e-20):
+                                if active_block_count == 1:
+                                    cell = v
+                                else:
+                                    q = q + Int32(v * fixed_scale)
+                        if active_block_count > 1 and q != Int32(0):
+                            cell = ftz(Float32(Int(q)) / fixed_scale)
+                    hist[
+                        slot * 2 * hist_cells + z * hist_cells
+                        + block_first_bin + fold_off
+                    ] = cell
+
+
 def _partition_stat(
     stats: List[Float32], line_size: Int, stat_id: Int, offset: Int, size: Int
 ) -> Float32:
@@ -1841,16 +2072,6 @@ def gbdt_host_fit_eval(
         raise Error("one_hot flags must be empty or one per feature")
     var layout = build_layout(grid.fold_counts, one_hot)
     var blocks = blocks_for(layout, n_rows)
-    for b in range(len(blocks)):
-        if blocks[b].policy == POLICY_BINARY:
-            raise Error(
-                "no CPU implementation of _mojolearn_gbdt.gbdt_fit for a"
-                " feature with exactly one border (the BinaryFeatures"
-                " histogram policy, feature "
-                + String(blocks[b].feature_ids[0])
-                + "); the gbdt host binding restates the half-byte and"
-                " one-byte policies only (gbdt/host/gbdt_oracle.mojo)"
-            )
     var cindex = _binarize_columns(x_colmajor, n_rows, n_features, grid, layout)
     var hist_cells = layout.hist_cells
 
@@ -1997,7 +2218,13 @@ def gbdt_host_fit_eval(
                 var total = 0
                 for k in range(blk.count()):
                     total += Int(blk.folds[k])
-                if blk.policy == POLICY_HALF_BYTE:
+                if blk.policy == POLICY_BINARY:
+                    _binary_block(
+                        blk, block_first_bin, hist_cells, compute, depth,
+                        p_off, p_sz, row_index, stats, cindex, n_rows,
+                        fixed_scale, hist,
+                    )
+                elif blk.policy == POLICY_HALF_BYTE:
                     _half_byte_block(
                         blk, block_first_bin, hist_cells, compute, depth,
                         p_off, p_sz, row_index, stats, cindex, n_rows,

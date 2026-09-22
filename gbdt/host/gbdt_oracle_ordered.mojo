@@ -86,7 +86,11 @@ from checks.numerics import ftz, identical_mul, identical_mul_add, identical_sqr
 from gbdt.data.quantization import NAN_TREATMENT_AS_IS
 from gbdt.gpu_data.compressed_index_builder import build_layout
 from gbdt.gpu_data.feature_blocks import blocks_for
-from gbdt.gpu_data.grid_policy import POLICY_HALF_BYTE, POLICY_ONE_BYTE
+from gbdt.gpu_data.grid_policy import (
+    POLICY_BINARY,
+    POLICY_HALF_BYTE,
+    POLICY_ONE_BYTE,
+)
 from gbdt.grid_creator.binarization import best_split
 from gbdt.data.permutation import TRandom
 from gbdt.gpu_util.kernel.random_gen import (
@@ -489,7 +493,9 @@ def _ordered_tree_structure(
             var helper_seed = helper_rand.next_uniform_l()
             var hist_line = hp.hist_line
             var n_feat = len(hp.gids)
-            var group = 8 if hp.policy == POLICY_HALF_BYTE else 4
+            var group = 8 if hp.policy == POLICY_HALF_BYTE else (
+                32 if hp.policy == POLICY_BINARY else 4
+            )
             var acc = List[Int32](length=hist_line * 2, fill=Int32(0))
             var reached = List[Bool](length=hist_line, fill=False)
             var reached_list = List[Int](capacity=hist_line)
@@ -546,6 +552,35 @@ def _ordered_tree_structure(
                                 acc[c] = Int32(0)
                             reached[at // 2] = False
                         reached_list.clear()
+                    elif hp.policy == POLICY_BINARY:
+                        # `compute_split_properties_b_kernel`
+                        # (`pointwise_hist2_binary.mojo`): the half-byte
+                        # accumulator over the word's eight nibbles, then
+                        # `pw_hb_binary_sum`: feature `fid` is bit
+                        # `3 - (fid & 3)` of nibble `fid / 4`, its one cell
+                        # per stat the sum from 0.0, ascending in the nibble
+                        # value, of the reduced cells whose value has that
+                        # bit clear, stored when its magnitude exceeds
+                        # `PW_WRITE_EPS`. No scan: one fold.
+                        var points = _pw_thread_points(off, sz, full_pass)
+                        var f_base = 0
+                        while f_base < n_feat:
+                            var f_count = min(group, n_feat - f_base)
+                            var cells = _pw_half_byte_group(
+                                points, docs, s.g_weight, s.g_target, cindex,
+                                hp.offsets[f_base], (f_count + 3) // 4,
+                            )
+                            for j in range(f_count):
+                                var group_id = j // 4
+                                var f_mask = 1 << (3 - (j & 3))
+                                for w in range(2):
+                                    var acc_b = Float32(0.0)
+                                    for i in range(16):
+                                        if (i & f_mask) == 0:
+                                            acc_b += cells[i * 16 + 2 * group_id + w]
+                                    if abs(acc_b) > Float32(1e-20):
+                                        hp.hist[base + hp.first[f_base + j] * 2 + w] = acc_b
+                            f_base += group
                     else:
                         var points = _pw_thread_points(off, sz, full_pass)
                         var f_base = 0
@@ -1046,12 +1081,6 @@ def gbdt_ordered_rmse_host_fit(
     var helpers = List[_PwHelper]()
     for b in range(len(blocks)):
         ref blk = blocks[b]
-        if blk.policy != POLICY_ONE_BYTE and blk.policy != POLICY_HALF_BYTE:
-            _refuse_ordered(
-                "a feature with exactly one border (the BinaryFeatures"
-                " histogram policy, feature "
-                + String(blk.feature_ids[0]) + ")"
-            )
         var gids = List[Int]()
         var offs = List[Int]()
         var firsts = List[Int]()
@@ -1462,13 +1491,6 @@ def gbdt_ordered_host_fit(
     var helpers = List[_PwHelper]()
     for b in range(len(blocks)):
         ref blk = blocks[b]
-        if blk.policy != POLICY_ONE_BYTE and blk.policy != POLICY_HALF_BYTE:
-            raise Error(
-                "no CPU implementation of _mojolearn_gbdt.gbdt_fit for Ordered"
-                " boosting on a feature with exactly one border (the"
-                " BinaryFeatures histogram policy, feature "
-                + String(blk.feature_ids[0]) + ")"
-            )
         var gids = List[Int]()
         var offs = List[Int]()
         var firsts = List[Int]()
