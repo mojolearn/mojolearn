@@ -51,7 +51,7 @@ trees depth 6 0.34 s. The GPU Ordered fit is still sync and launch bound at
 this size: what remains is about 15 launches per task and the structure
 search's per tree rebuild of its fold state.
 
-## Round 2: the CPU host route (2026-09-22, perf/gbdt-small-round2-sep22)
+## Round 2, the CPU host route (2026-09-22, perf/gbdt-small-round2-sep22)
 
 ### Why a 320 row host tree took 133 ms
 
@@ -69,6 +69,11 @@ every 512 lane halving tree for each (leaf, stat), about 5,000 calls and
 | scalar dynamic cosine score | 8 candidates a step, same expressions lane by lane | 2.96 |
 | an 11.8 MB histogram plane allocated and filled every tree | one plane per fit, the slots the last tree wrote zeroed | 1.22 |
 
+The Plain host fit had the same partition stats cost and a scalar cosine
+score with a noise draw per candidate; with the live lane fold and
+`_cosine_gains` (8 candidates a step, the noise drawn once per feature) a
+Plain tree at 320 rows went from 12.6 to 1.1 ms.
+
 `_halving_fold_live` is the same sum. Every outer step at or above the least
 power of two covering the live lanes adds a lane that only ever holds +0.0,
 and `x + 0.0` is its own fixed point, so those steps are one `+ 0.0` pass
@@ -81,15 +86,17 @@ vector lane with the scalar loop and compared bits reported no mismatch.
 
 | rows | Ordered RMSE host / device | Ordered Logloss host / device | Plain RMSE host / device | Plain Logloss host / device |
 |---|---|---|---|---|
-| 320 | 1.22 / 18.7 | 1.28 / 16.1 | 1.56 / 3.9 | 1.56 / 4.3 |
+| 320 | 1.22 / 18.7 | 1.28 / 16.1 | 1.08 / 3.9 | 1.05 / 4.3 |
 | 1,000 | 1.62 / 17.2 | 2.02 / 14.5 | 1.66 / 4.4 | 1.71 / 4.8 |
-| 3,200 | 2.66 / 14.1 | 3.51 / 14.4 | 2.03 / 4.4 | 2.08 / 4.7 |
+| 3,200 | 2.66 / 14.1 | 3.51 / 14.4 | 1.51 / 4.4 | 1.57 / 4.7 |
 | 10,000 | 5.6 / 16.0 | 7.7 / 16.3 | 3.0 / 4.7 | 3.3 / 5.3 |
 | 20,000 | 11.0 / 18.0 | 13.5 / 17.8 | 4.5 / 4.8 | 5.1 / 5.5 |
-| 32,000 | 17.8 / 20.5 | 22.6 / 20.0 | 5.8 / 4.8 | 6.7 / 5.5 |
+| 32,000 | 17.8 / 20.5 | 22.6 / 20.0 | 5.5 / 4.8 | 6.3 / 5.5 |
 | 50,000 | 20.6 / 20.9 | 27.1 / 21.7 | 7.8 / 5.4 | 9.5 / 5.7 |
 
 Explicit fits of 50 trees (30 at 10,000 rows and above), one fit per cell.
+Plain at 1,000, 10,000, 20,000 and 50,000 rows was measured before
+`_cosine_gains` and is about 0.4 ms a tree slower than the host is now.
 The model text is the same on both routes in every cell. Crossover on this
 machine at 10 features is 20,000 to 32,000 rows for Plain and 25,000
 (Logloss) to 50,000 (RMSE) rows for Ordered.
@@ -98,8 +105,8 @@ machine at 10 features is 20,000 to 32,000 rows for Plain and 25,000
 
 `GradientBoosting.fit` now trains an IDENTICAL fit of at most 200,000 cells
 (rows x features) on the host binding when the configuration is one the
-verifier's CPU column covers: SymmetricTree, RMSE or Logloss, unit weights,
-numeric columns, no groups, no eval set. The host fit is the CPU column of
+verifier's CPU column covers (SymmetricTree, RMSE or Logloss, unit weights,
+numeric columns, no groups, no eval set). The host fit is the CPU column of
 every gbdt training lane. A configuration the host binding refuses by name
 trains on the device. `MOJOLEARN_GBDT_ROUTE=device` pins the device,
 `host` forces the host, `auto` is the default, and `fit_route_` says which
@@ -109,7 +116,9 @@ columns keep hashing the GPU fit.
 A column with exactly one border (the BinaryFeatures histogram policy, for
 example the sex column of the smoke test's diabetes split) is refused by
 the host binding for Ordered and Plain alike, and no gbdt lane fixture has
-one, so that fit stays on the device: the smoke defaults still take 15.1 s.
+one, so that fit stays on the device, and the smoke defaults still take
+15.1 s. Restating BinaryFeatures on the host is the next step for that fit,
+and it needs a lane fixture with a one border column before it can route.
 
 | fit, 1000 trees unless stated | round 1 | round 2 | route |
 |---|---|---|---|
@@ -117,11 +126,11 @@ one, so that fit stays on the device: the smoke defaults still take 15.1 s.
 | defaults Logloss, 320 x 10 synthetic (Ordered, 10 Newton steps) | 44.5 s | 2.62 s | host |
 | defaults RMSE, 3,200 x 10 (Ordered) | 13.2 s | 2.17 s | host |
 | defaults Logloss, 3,200 x 10 (Ordered) | 39.9 s | 7.74 s | host |
-| Plain RMSE, 320 x 10 | 3.9 s | 1.58 s | host |
-| Plain Logloss, 320 x 10 | 4.3 s | 1.72 s | host |
+| Plain RMSE, 320 x 10 | 3.9 s | 1.1 s | host |
+| Plain Logloss, 320 x 10 | 4.3 s | 1.1 s | host |
 | smoke defaults, diabetes 320 x 10 (binary column) | 15.2 s | 15.1 s | device |
 
-References on the same 320 x 10 pool (round 1, CPU): CatBoost defaults 0.44 s
+References on the same 320 x 10 pool (round 1, CPU) were CatBoost defaults 0.44 s
 (regression and classification), CatBoost with Ordered forced 1.8 s
 (regression) and 2.5 s (Logloss), LightGBM 1000 trees 1.35 s, XGBoost 1000
 trees depth 6 0.34 s.
@@ -149,3 +158,17 @@ parts). A host build with a deliberately wrong `_halving_fold_live` reads
 DIVERGENT on 29 of the 31 lanes of the CPU column and VERIFIED on Metal
 (the device pin holds), and the auto routed public fit then differs from
 the device fit.
+
+### The device Ordered path (goal 2, not done in this round)
+
+The device fit is unchanged in this round. What it costs at 320 rows, 50
+trees, is 16 to 19 ms a tree, of which the 28 leaf estimation tasks are
+most (about 10 launches and copies each, one drain per walker round for
+all tasks since round 1). A device Plain tree at this size is 3.9 ms, and an
+Ordered tree runs at least the same structure search over 18 fold
+partitions, so fusing the tasks' kernels into one launch per stage and
+keeping the fold state resident would bring the device Ordered tree toward
+that floor, not below 2 ms. Below 200,000 cells the host route now takes
+these fits at 1.1 to 1.3 ms a tree with the same bits. The fused device
+path matters for Ordered pools of 20,000 to 50,000 rows, where the device
+is still at 18 to 22 ms a tree and the host at 11 to 27 ms.
