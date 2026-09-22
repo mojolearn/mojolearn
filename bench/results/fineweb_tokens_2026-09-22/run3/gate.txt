@@ -1,0 +1,41 @@
+run=run3
+started=2026-09-22T20:08:53Z
+commit=424b8fab4294d0ca2ff8ed3adc7c961205f6a094
+cpu=AMD EPYC 7713 64-Core Processor
+vocab=/root/mojolearn-evidence/gpt3-small-vocab-sep21/m4-shard000/vocab.ranks.tsv
+shards_dir=/root/mojolearn-wt/gpt3-tooling/training/corpus/fineweb-edu-10BT
+pip_install_exit=0
+tokens_exit=0 seconds=742
+wrote /root/tokens/tokens.i32: 3098101 documents, 3110556447 tokens (4.75 bytes/token), train [0, 2926502182), sha256 4cf7181ba71058e7, 742.4 s (33.867 MB/s encode)
+4cf7181ba71058e70d7329dbae32de53c5750b49ae95331cebde4676f922209d  /root/tokens/tokens.i32
+1db7fadd6dec742d5dbf6c8ec3d8d95cb3aaf809fb4a8080038598240ff81b71  /root/tokens/manifest.json
+total 12150616
+-rw-r--r-- 1 root root        3938 Sep 22 20:22 manifest.json
+-rw-r--r-- 1 root root 12442225788 Sep 22 20:21 tokens.i32
+total 24301248
+-rw-r--r-- 1 root root        3938 Sep 22 20:22 manifest.json
+-rw-r--r-- 1 root root 12442225788 Sep 22 20:21 tokens.i32
+-rw-r--r-- 1 root root  2000000000 Sep 22 20:23 tokens.i32.part00
+-rw-r--r-- 1 root root  2000000000 Sep 22 20:23 tokens.i32.part01
+-rw-r--r-- 1 root root  2000000000 Sep 22 20:23 tokens.i32.part02
+-rw-r--r-- 1 root root  2000000000 Sep 22 20:23 tokens.i32.part03
+-rw-r--r-- 1 root root  2000000000 Sep 22 20:23 tokens.i32.part04
+-rw-r--r-- 1 root root  2000000000 Sep 22 20:23 tokens.i32.part05
+-rw-r--r-- 1 root root   442225788 Sep 22 20:23 tokens.i32.part06
+dd753a77514bfb999d1b45d1c10ecd6b0e05a4d912844f7638a0754e9df4011b  tokens.i32.part00
+f0cc0594700ea6dbfb148398f0f7b500368a4cb084f1466453a2125df3a2d008  tokens.i32.part01
+0e5588c2e668fbc7a92a6781f28c5347f9b96bb42a1f8d1a18992a49aa24a84d  tokens.i32.part02
+15a7b31aa642e698eb72dba074d57fce8a2d0fa2629e87e5ad2387bf97799cfe  tokens.i32.part03
+1c6a2b2b6190ea65ddb2976dc3647050fc8a5c51f19b0c91b812352ddb9e7f54  tokens.i32.part04
+bdf73212ad4c9b8b3099ca8f2cd8bae9eda7fc7b3e67b702f6239f00e5b790cf  tokens.i32.part05
+bc97eee6432b3a21cab79527ff7edd894167d1cca1b9b4de2569c75fc04f459f  tokens.i32.part06
+parts_joined_sha256=4cf7181ba71058e70d7329dbae32de53c5750b49ae95331cebde4676f922209d
+upload tokens.i32.part00 exit=0 secs=193
+upload tokens.i32.part01 exit=0 secs=264
+upload tokens.i32.part02 exit=0 secs=319
+upload tokens.i32.part03 exit=0 secs=382
+upload tokens.i32.part04 exit=0 secs=438
+upload tokens.i32.part05 exit=0 secs=512
+upload tokens.i32.part06 exit=0 secs=528
+upload manifest.json exit=0 secs=528
+finished=2026-09-22T20:31:56Z

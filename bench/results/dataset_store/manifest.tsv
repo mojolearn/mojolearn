@@ -15,6 +15,14 @@ corpus/fineweb-edu-10BT/010_00000.parquet	2152798864	e5a2eae25f057f0856a10bfae31
 corpus/fineweb-edu-10BT/011_00000.parquet	2152323681	db71cf0425bb3d1813a09f12ff1acd6dabdfb91a2e4f141960254ee5a7f036e7
 corpus/fineweb-edu-10BT/012_00000.parquet	2152069689	08b47a3e1c25161f796d2f8dbf99ccf60affdebdcea4910833d0d5783315551f
 corpus/fineweb-edu-10BT/013_00000.parquet	540632672	b393f51fefab26cd6f4c8f65707c1924f6666c4961a0ebebe04bb57f7ec832de
+corpus/fineweb-edu-10BT/tokens/mojolearn-bpe-fineweb-edu-50257-v1/manifest.json	3938	1db7fadd6dec742d5dbf6c8ec3d8d95cb3aaf809fb4a8080038598240ff81b71
+corpus/fineweb-edu-10BT/tokens/mojolearn-bpe-fineweb-edu-50257-v1/tokens.i32.part00	2000000000	dd753a77514bfb999d1b45d1c10ecd6b0e05a4d912844f7638a0754e9df4011b
+corpus/fineweb-edu-10BT/tokens/mojolearn-bpe-fineweb-edu-50257-v1/tokens.i32.part01	2000000000	f0cc0594700ea6dbfb148398f0f7b500368a4cb084f1466453a2125df3a2d008
+corpus/fineweb-edu-10BT/tokens/mojolearn-bpe-fineweb-edu-50257-v1/tokens.i32.part02	2000000000	0e5588c2e668fbc7a92a6781f28c5347f9b96bb42a1f8d1a18992a49aa24a84d
+corpus/fineweb-edu-10BT/tokens/mojolearn-bpe-fineweb-edu-50257-v1/tokens.i32.part03	2000000000	15a7b31aa642e698eb72dba074d57fce8a2d0fa2629e87e5ad2387bf97799cfe
+corpus/fineweb-edu-10BT/tokens/mojolearn-bpe-fineweb-edu-50257-v1/tokens.i32.part04	2000000000	1c6a2b2b6190ea65ddb2976dc3647050fc8a5c51f19b0c91b812352ddb9e7f54
+corpus/fineweb-edu-10BT/tokens/mojolearn-bpe-fineweb-edu-50257-v1/tokens.i32.part05	2000000000	bdf73212ad4c9b8b3099ca8f2cd8bae9eda7fc7b3e67b702f6239f00e5b790cf
+corpus/fineweb-edu-10BT/tokens/mojolearn-bpe-fineweb-edu-50257-v1/tokens.i32.part06	442225788	bc97eee6432b3a21cab79527ff7edd894167d1cca1b9b4de2569c75fc04f459f
 corpus/fineweb-edu-10BT/vocab-sample/000-rg0-19.txt	95788129	30f5541394c22c18374a76148a0eb388e6d6ca447e75d20ed2c02c8499e31b8e
 corpus/pile_github/input.txt	97124565	52a5b4c36ab9119c15505331c10e3b23690377d40fbac3e598c7fafe13a324df
 gbm-bench/covtype/covtype_speed.npz	127823140	d0a9b7b4076fbd4bd45a20acf8632e35b8e2d577ce3609b4122601313674db04

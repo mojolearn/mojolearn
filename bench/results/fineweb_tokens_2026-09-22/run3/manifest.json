@@ -1,0 +1,88 @@
+{
+  "schema": "mojolearn.byte-lm.tokens.v1",
+  "tool": {
+    "name": "tools/fineweb_tokens.py",
+    "sha256": "7cd4eb7bbe4a4cbb739cc324795a245c140dd5acb9b460a35497b89f6aed87d5",
+    "argv": [
+      "--vocab",
+      "/root/mojolearn-evidence/gpt3-small-vocab-sep21/m4-shard000/vocab.ranks.tsv",
+      "--out",
+      "/root/tokens",
+      "--held-out-shard",
+      "/root/mojolearn-wt/gpt3-tooling/training/corpus/fineweb-edu-10BT/000_00000.parquet",
+      "/root/mojolearn-wt/gpt3-tooling/training/corpus/fineweb-edu-10BT/001_00000.parquet",
+      "/root/mojolearn-wt/gpt3-tooling/training/corpus/fineweb-edu-10BT/002_00000.parquet",
+      "/root/mojolearn-wt/gpt3-tooling/training/corpus/fineweb-edu-10BT/003_00000.parquet",
+      "/root/mojolearn-wt/gpt3-tooling/training/corpus/fineweb-edu-10BT/013_00000.parquet"
+    ],
+    "package": {
+      "version": "0.8.14",
+      "file": "/root/tokvenv/lib/python3.14/site-packages/mojolearn/__init__.py"
+    },
+    "held_out": "last shard"
+  },
+  "source": {
+    "path": "/root/mojolearn-wt/gpt3-tooling/training/corpus/fineweb-edu-10BT/000_00000.parquet;/root/mojolearn-wt/gpt3-tooling/training/corpus/fineweb-edu-10BT/001_00000.parquet;/root/mojolearn-wt/gpt3-tooling/training/corpus/fineweb-edu-10BT/002_00000.parquet;/root/mojolearn-wt/gpt3-tooling/training/corpus/fineweb-edu-10BT/003_00000.parquet;/root/mojolearn-wt/gpt3-tooling/training/corpus/fineweb-edu-10BT/013_00000.parquet",
+    "sha256": "2fab7c805ad903af5d5350609b1d59ebe17dda4cd3340e3fbf957bffe6dcdbd4",
+    "bytes": 14775613020,
+    "schema": "fineweb-edu.parquet-rows.v1",
+    "inputs": [
+      {
+        "path": "/root/mojolearn-wt/gpt3-tooling/training/corpus/fineweb-edu-10BT/000_00000.parquet",
+        "sha256": "b1ba7b2ce4cb5ea6ef42dca40263eabb85f37700d01693a68e9b30a31d78e871",
+        "bytes": 2152819114
+      },
+      {
+        "path": "/root/mojolearn-wt/gpt3-tooling/training/corpus/fineweb-edu-10BT/001_00000.parquet",
+        "sha256": "3fcf2dc69cd52503986276d3d2d26a8c356d0f2ea28a0de4fdbda8cf87755693",
+        "bytes": 2152222432
+      },
+      {
+        "path": "/root/mojolearn-wt/gpt3-tooling/training/corpus/fineweb-edu-10BT/002_00000.parquet",
+        "sha256": "547ae182d132c9f06b6ce63149567208ea9f57630bfd9b1a2938e504f0c9ebd7",
+        "bytes": 2151796315
+      },
+      {
+        "path": "/root/mojolearn-wt/gpt3-tooling/training/corpus/fineweb-edu-10BT/003_00000.parquet",
+        "sha256": "22184e6eb25759ddd97783751ffc73e1705dfa2542e630dae1f2a8bac8ee6ddb",
+        "bytes": 2152437524
+      },
+      {
+        "path": "/root/mojolearn-wt/gpt3-tooling/training/corpus/fineweb-edu-10BT/013_00000.parquet",
+        "sha256": "b393f51fefab26cd6f4c8f65707c1924f6666c4961a0ebebe04bb57f7ec832de",
+        "bytes": 540632672
+      }
+    ],
+    "row_groups_per_shard": null
+  },
+  "vocabulary": {
+    "schema": "mojolearn.bpe-vocabulary.v1",
+    "sha256": "bfe4a401789e734c139ee6d872848833d0058b1b274757334c955236a57d9b24",
+    "n_ranks": 50256,
+    "n_vocab": 50257,
+    "endoftext_id": 50256
+  },
+  "encoder": "mojolearn.tokenizer.BpeTokenizer.encode_batch (host binding _mojolearn_tokenizer_host, tokenizer/encoding.mojo); integers and tables only",
+  "endoftext": "not inserted and not recognized (allow_endoftext=False)",
+  "document_rule": "one document per FineWeb-Edu row (or per line of a fineweb_text.py file), each encoded alone, ids concatenated in row order",
+  "n_documents": 3098101,
+  "dtype": "int32",
+  "byte_order": "little",
+  "sha256": "4cf7181ba71058e70d7329dbae32de53c5750b49ae95331cebde4676f922209d",
+  "bytes": 12442225788,
+  "tokens": 3110556447,
+  "bytes_per_token": 4.75015106517371,
+  "max_id": 50255,
+  "train_range": [
+    0,
+    2926502182
+  ],
+  "validation_range": [
+    2926502182,
+    3110556447
+  ],
+  "schedule": "train-range-modulo.v1",
+  "tokenize_seconds": 742.3810774479061,
+  "encode_seconds": 436.27772442251444,
+  "encode_bytes_per_second": 33867447.712481685
+}
