@@ -30,10 +30,14 @@ from gbdt.methods.leaves_estimation.descent_helpers import (
     _update_move_direction,
     newton_like_walker_estimate,
 )
+from gbdt.gpu_util.arena import BufferArena
 from gbdt.methods.leaves_estimation.pointwise_oracle import (
     BinOptimizedOracle,
     ORACLE_SCRATCH_POOLED,
     OracleDeviceScratch,
+    OracleHostScratch,
+    _oracle_dims,
+    make_oracle_device_scratch_in,
     OracleScratchPool,
     make_bin_optimized_oracle,
     merge_stage_times,
@@ -621,6 +625,37 @@ struct TEstimationWorkspace(Movable):
     #: DEVIATION 3041: the oracle's own device buffers, under their own
     #: exact keys (`pointwise_oracle.OracleScratchPool`)
     var oracle_scratch: OracleScratchPool
+    #: the batched path's (`_estimate_prepare`) oracle buffers, carved from
+    #: the fit's arena and kept for the fit, one entry per exact key (a tree
+    #: that stops early has fewer leaves); empty on every workspace the
+    #: one-call path builds
+    var arena_scratch: List[OracleDeviceScratch]
+    var arena_host: List[OracleHostScratch]
+
+    def __init__(
+        out self,
+        ctx: DeviceContext,
+        mut arena: BufferArena,
+        n_rows: Int,
+        n_leaves: Int,
+    ) raises:
+        """The same buffers at `approx_dim` 1, carved from `arena`
+        (`gbdt/gpu_util/arena.mojo`) for the batched path."""
+        self.n_rows_key = n_rows
+        self.approx_dim_key = 1
+        self.n_leaves_cap = n_leaves
+        self.g_target = arena.device[DType.float32](ctx, n_rows)
+        self.g_weights = arena.device[DType.float32](ctx, n_rows)
+        self.g_cursor = arena.device[DType.float32](ctx, n_rows)
+        self.d_p_off = arena.device[DType.uint32](ctx, n_leaves)
+        self.d_p_sz = arena.device[DType.uint32](ctx, n_leaves)
+        self.h_po = arena.host_buffer[DType.uint32](ctx, n_leaves)
+        self.h_ps = arena.host_buffer[DType.uint32](ctx, n_leaves)
+        self.d_est = arena.device[DType.float32](ctx, n_leaves)
+        self.h_est = arena.host_buffer[DType.float32](ctx, n_leaves)
+        self.oracle_scratch = OracleScratchPool()
+        self.arena_scratch = List[OracleDeviceScratch]()
+        self.arena_host = List[OracleHostScratch]()
 
     def __init__(
         out self,
@@ -648,6 +683,8 @@ struct TEstimationWorkspace(Movable):
             n_leaves * approx_dim
         )
         self.oracle_scratch = OracleScratchPool()
+        self.arena_scratch = List[OracleDeviceScratch]()
+        self.arena_host = List[OracleHostScratch]()
 
 
 def _estimate_and_apply(
@@ -1015,6 +1052,7 @@ def _estimate_prepare(
     est_sm: Int,
     leaf_estimation_method: Int,
     mut est_ws: List[TEstimationWorkspace],
+    mut arena: BufferArena,
     mut stage_times: StageTimes,
 ) raises -> PendingEstimation:
     """`_estimate_and_apply` for an `estimate_can_batch` task (approx_dim 1,
@@ -1029,7 +1067,16 @@ def _estimate_prepare(
 
     `est_ws` must be THIS task's workspace list and no other in-flight
     task's: the staging (`h_po`/`h_ps`/`h_est`) and the oracle scratch are
-    rewritten by a task that reuses it, and nothing here drains."""
+    rewritten by a task that reuses it, and nothing here drains.
+
+    THE BUFFERS COME FROM `arena` (`gbdt/gpu_util/arena.mojo`): the
+    workspace, and the oracle's device and host scratch (DEVIATION 3041's
+    `OracleDeviceScratch` and its host twin), each kept in the task's
+    workspace for the fit under its exact key. A batch holds every task's
+    buffers at once, and on Metal every live allocation is bound to every
+    launch; carved from a few parents they cost what one buffer does. The
+    oracle reads the same cells either way: every cell it reads it writes
+    first (DEVIATION 3041's contract, which the identity lanes hold)."""
     if not estimate_can_batch(objective, leaf_estimation_method, 1):
         raise Error("_estimate_prepare: this task needs _estimate_and_apply")
     stage_times.begin(ctx)
@@ -1040,12 +1087,40 @@ def _estimate_prepare(
         or est_ws[0].n_leaves_cap < n_leaves
     ):
         est_ws.clear()
-        est_ws.append(TEstimationWorkspace(ctx, n_rows, 1, n_leaves))
-    var oracle_ws = Optional[OracleDeviceScratch]()
-    comptime if ORACLE_SCRATCH_POOLED:
-        oracle_ws = est_ws[0].oracle_scratch.take(
-            ctx, n_rows, n_leaves, objective, 0, est_sm, 0,
+        est_ws.append(TEstimationWorkspace(ctx, arena, n_rows, n_leaves))
+    var dims = _oracle_dims(objective, 0)
+    var fv_blocks = (n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
+    var sm = est_sm
+    if sm < 0:
+        sm = ctx.get_attribute(DeviceAttribute.MULTIPROCESSOR_COUNT)
+    var ds = -1
+    for i in range(len(est_ws[0].arena_scratch)):
+        if est_ws[0].arena_scratch[i].matches(
+            n_rows, n_leaves, dims[0], dims[1], fv_blocks, sm
+        ):
+            ds = i
+    if ds < 0:
+        est_ws[0].arena_scratch.append(
+            make_oracle_device_scratch_in(
+                ctx, arena, n_rows, n_leaves, dims[0], dims[1], fv_blocks, sm
+            )
         )
+        ds = len(est_ws[0].arena_scratch) - 1
+    var hsi = -1
+    for i in range(len(est_ws[0].arena_host)):
+        if est_ws[0].arena_host[i].matches(
+            n_leaves, dims[0], dims[1], fv_blocks
+        ):
+            hsi = i
+    if hsi < 0:
+        est_ws[0].arena_host.append(
+            OracleHostScratch(
+                ctx, arena, n_leaves, dims[0], dims[1], fv_blocks
+            )
+        )
+        hsi = len(est_ws[0].arena_host) - 1
+    var oracle_ws = Optional(est_ws[0].arena_scratch[ds].handles())
+    var oracle_hs = Optional(est_ws[0].arena_host[hsi].handles())
     ref g_target = est_ws[0].g_target
     ref g_weights = est_ws[0].g_weights
     ref g_cursor = est_ws[0].g_cursor
@@ -1088,6 +1163,7 @@ def _estimate_prepare(
         0,
         scratch=oracle_ws^,
         defer_weights=True,
+        host_scratch=oracle_hs^,
     )
     stage_times.end(ctx, "est.make_oracle")
     # `TNewtonLikeWalker::Estimate` at one iteration

@@ -67,6 +67,7 @@ THE CALL CYCLE, theirs (`pointwise_oracle.cpp`):
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.host.device_attribute import DeviceAttribute
+from gbdt.gpu_util.arena import BufferArena
 
 from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import (
     StageTimes,
@@ -1313,6 +1314,141 @@ def make_oracle_device_scratch(
     )
 
 
+def make_oracle_device_scratch_in(
+    ctx: DeviceContext,
+    mut arena: BufferArena,
+    n_rows: Int,
+    bin_count: Int,
+    cursor_dim: Int,
+    multi_planes: Int,
+    fv_blocks: Int,
+    sm: Int,
+) raises -> OracleDeviceScratch:
+    """`make_oracle_device_scratch` at the same sizes, carved from `arena`
+    (`gbdt/gpu_util/arena.mojo`) instead of allocated one by one."""
+    var d_identity = arena.device[DType.uint32](ctx, n_rows)
+    var d_bins = arena.device[DType.uint32](ctx, n_rows)
+    var d_leaves = arena.device[DType.uint32](ctx, bin_count)
+    var d_shift = arena.device[DType.float32](ctx, bin_count * cursor_dim)
+    var d_eval_stats = arena.device[DType.float32](ctx, 2 * n_rows)
+    var d_fv = arena.device[DType.float32](ctx, fv_blocks)
+    var d_mag_dummy = arena.device[DType.float32](ctx, 2)
+    var d_partials = arena.device[DType.float32](
+        ctx, _oracle_partials_len(bin_count, sm)
+    )
+    var d_multi_partials = arena.device[DType.float32](
+        ctx, _oracle_multi_partials_len(bin_count, sm, multi_planes)
+    )
+    var d_part_stats = arena.device[DType.float32](ctx, 2 * bin_count)
+    var d_multi_der = arena.device[DType.float32](ctx, multi_planes * n_rows)
+    var d_multi_stats = arena.device[DType.float32](
+        ctx, multi_planes * bin_count
+    )
+    return OracleDeviceScratch(
+        n_rows, bin_count, cursor_dim, multi_planes, fv_blocks, sm,
+        d_identity^, d_bins^, d_leaves^, d_shift^, d_eval_stats^, d_fv^,
+        d_mag_dummy^, d_partials^, d_multi_partials^, d_part_stats^,
+        d_multi_der^, d_multi_stats^,
+    )
+
+
+struct OracleHostScratch(Movable):
+    """The host staging `make_bin_optimized_oracle` allocates per oracle
+    (`h_leaves`, `h_shift`, `h_fv`, `h_part_stats`, `h_multi_stats`, and
+    the deferred weight fold's `h_weight_stats`), supplied by a caller that
+    keeps them for the fit. Every cell is written (by the host, or by a
+    copy) before it is read, in each oracle's life."""
+
+    var bin_count: Int
+    var cursor_dim: Int
+    var multi_planes: Int
+    var fv_blocks: Int
+    var h_leaves: HostBuffer[DType.uint32]
+    var h_shift: HostBuffer[DType.float32]
+    var h_fv: HostBuffer[DType.float32]
+    var h_part_stats: HostBuffer[DType.float32]
+    var h_multi_stats: HostBuffer[DType.float32]
+    var h_weight_stats: HostBuffer[DType.float32]
+
+    def __init__(
+        out self,
+        ctx: DeviceContext,
+        mut arena: BufferArena,
+        bin_count: Int,
+        cursor_dim: Int,
+        multi_planes: Int,
+        fv_blocks: Int,
+    ) raises:
+        self.bin_count = bin_count
+        self.cursor_dim = cursor_dim
+        self.multi_planes = multi_planes
+        self.fv_blocks = fv_blocks
+        self.h_leaves = arena.host_buffer[DType.uint32](ctx, bin_count)
+        self.h_shift = arena.host_buffer[DType.float32](
+            ctx, bin_count * cursor_dim
+        )
+        self.h_fv = arena.host_buffer[DType.float32](ctx, fv_blocks)
+        self.h_part_stats = arena.host_buffer[DType.float32](
+            ctx, 2 * bin_count
+        )
+        self.h_multi_stats = arena.host_buffer[DType.float32](
+            ctx, multi_planes * bin_count
+        )
+        # the size of `d_part_stats`, the WHOLE-BUFFER copy's source (the
+        # weight fold fills its first `bin_count` cells): a staging buffer
+        # of `bin_count` took a copy of twice its length, and the overrun
+        # landed in whatever host memory came next -- a neighbour's
+        # `h_leaves` whose upload had not run yet, which is how it was
+        # found (a batched fit whose partitions all read leaf 0)
+        self.h_weight_stats = arena.host_buffer[DType.float32](
+            ctx, 2 * bin_count
+        )
+
+    def matches(
+        self, bin_count: Int, cursor_dim: Int, multi_planes: Int,
+        fv_blocks: Int,
+    ) -> Bool:
+        return (
+            self.bin_count == bin_count
+            and self.cursor_dim == cursor_dim
+            and self.multi_planes == multi_planes
+            and self.fv_blocks == fv_blocks
+        )
+
+    def handles(self) -> OracleHostScratch:
+        """Handle copies onto the same host memory."""
+        return OracleHostScratch(
+            self.bin_count, self.cursor_dim, self.multi_planes,
+            self.fv_blocks, self.h_leaves.copy(), self.h_shift.copy(),
+            self.h_fv.copy(), self.h_part_stats.copy(),
+            self.h_multi_stats.copy(), self.h_weight_stats.copy(),
+        )
+
+    def __init__(
+        out self,
+        bin_count: Int,
+        cursor_dim: Int,
+        multi_planes: Int,
+        fv_blocks: Int,
+        var h_leaves: HostBuffer[DType.uint32],
+        var h_shift: HostBuffer[DType.float32],
+        var h_fv: HostBuffer[DType.float32],
+        var h_part_stats: HostBuffer[DType.float32],
+        var h_multi_stats: HostBuffer[DType.float32],
+        var h_weight_stats: HostBuffer[DType.float32],
+    ):
+        self.bin_count = bin_count
+        self.cursor_dim = cursor_dim
+        self.multi_planes = multi_planes
+        self.fv_blocks = fv_blocks
+        self.h_leaves = h_leaves^
+        self.h_shift = h_shift^
+        self.h_fv = h_fv^
+        self.h_part_stats = h_part_stats^
+        self.h_multi_stats = h_multi_stats^
+        self.h_weight_stats = h_weight_stats^
+
+
 def make_oracle_device_scratch_sharing_rows(
     ctx: DeviceContext,
     rows: OracleDeviceScratch,
@@ -1445,6 +1581,7 @@ def make_bin_optimized_oracle(
     # check, and every column the row is off on) allocates as before
     var scratch: Optional[OracleDeviceScratch] = None,
     defer_weights: Bool = False,
+    var host_scratch: Optional[OracleHostScratch] = None,
 ) raises -> BinOptimizedOracle:
     """Their ctor (`pointwise_oracle.cpp:218-246`): allocate the eval
     buffers, seed `CurrentPoint` at zero, and settle `WeightsCpu` once --
@@ -1521,15 +1658,32 @@ def make_bin_optimized_oracle(
 
     launch_make_sequence(ctx, UInt32(0), d_identity, n_rows)
 
-    var h_leaves = ctx.enqueue_create_host_buffer[DType.uint32](bin_count)
+    # the host staging: the caller's (`host_scratch`, kept for the fit) when
+    # it matches this oracle's shape, else allocated here as always
+    var have_host = False
+    if host_scratch.__bool__():
+        have_host = host_scratch.value().matches(
+            bin_count, cursor_dim, multi_planes, fv_blocks
+        )
+    var h_leaves: HostBuffer[DType.uint32]
+    if have_host:
+        h_leaves = host_scratch.value().h_leaves.copy()
+    else:
+        h_leaves = ctx.enqueue_create_host_buffer[DType.uint32](bin_count)
     for i in range(bin_count):
         h_leaves.unsafe_ptr().unsafe_store(i, UInt32(i))
     ctx.enqueue_copy(dst_buf=d_leaves, src_ptr=h_leaves.unsafe_ptr())
 
-    var h_shift = ctx.enqueue_create_host_buffer[DType.float32](
-        bin_count * cursor_dim
-    )
-    var h_fv = ctx.enqueue_create_host_buffer[DType.float32](fv_blocks)
+    var h_shift: HostBuffer[DType.float32]
+    var h_fv: HostBuffer[DType.float32]
+    if have_host:
+        h_shift = host_scratch.value().h_shift.copy()
+        h_fv = host_scratch.value().h_fv.copy()
+    else:
+        h_shift = ctx.enqueue_create_host_buffer[DType.float32](
+            bin_count * cursor_dim
+        )
+        h_fv = ctx.enqueue_create_host_buffer[DType.float32](fv_blocks)
 
     # their oracle's per-row `Bins`, read off the partition ONCE per tree
     # (their ctor receives it ready-made from the searcher). Machine-sized
@@ -1554,13 +1708,18 @@ def make_bin_optimized_oracle(
 
     # `d_partials`, `d_multi_partials`, `d_part_stats`, `d_multi_der` and
     # `d_multi_stats` are sized by `make_oracle_device_scratch` (DEVIATION 3041)
-    var h_part_stats = ctx.enqueue_create_host_buffer[DType.float32](
-        2 * bin_count
-    )
-
-    var h_multi_stats = ctx.enqueue_create_host_buffer[DType.float32](
-        multi_planes * bin_count
-    )
+    var h_part_stats: HostBuffer[DType.float32]
+    var h_multi_stats: HostBuffer[DType.float32]
+    if have_host:
+        h_part_stats = host_scratch.value().h_part_stats.copy()
+        h_multi_stats = host_scratch.value().h_multi_stats.copy()
+    else:
+        h_part_stats = ctx.enqueue_create_host_buffer[DType.float32](
+            2 * bin_count
+        )
+        h_multi_stats = ctx.enqueue_create_host_buffer[DType.float32](
+            multi_planes * bin_count
+        )
 
     # `CurrentPoint` lives in the CURSOR's gauge -- `cursorDim` per bin,
     # not `SingleBinDim()` -- because `MoveTo` projects before it
@@ -1584,7 +1743,12 @@ def make_bin_optimized_oracle(
             d_weights, d_partials, d_part_stats,
             sm_count=sm,
         )
-        var h_w = ctx.enqueue_create_host_buffer[DType.float32](bin_count)
+        var h_w: HostBuffer[DType.float32]
+        if have_host:
+            h_w = host_scratch.value().h_weight_stats.copy()
+        else:
+            # `d_part_stats`' length: the copy below is whole-buffer
+            h_w = ctx.enqueue_create_host_buffer[DType.float32](2 * bin_count)
         ctx.enqueue_copy(dst_ptr=h_w.unsafe_ptr(), src_buf=d_part_stats)
         h_weight_stats = Optional(h_w^)
     elif has_weights:

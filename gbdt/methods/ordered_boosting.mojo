@@ -133,6 +133,7 @@ from gbdt.data.ordered_plan import (
     ordered_permutations,
 )
 from gbdt.data.permutation import TRandom
+from gbdt.gpu_util.arena import BufferArena
 from gbdt.gpu_data.compressed_index_builder import CompressedIndexLayout
 from gbdt.gpu_util.kernel.bootstrap import (
     bootstrap_grid_blocks,
@@ -545,18 +546,20 @@ struct _OrderedSlot(Movable):
     var hl: HostBuffer[DType.float32]
 
     def __init__(
-        out self, ctx: DeviceContext, estimate_size: Int, leaf_capacity: Int
+        out self,
+        ctx: DeviceContext,
+        mut arena: BufferArena,
+        estimate_size: Int,
+        leaf_capacity: Int,
     ) raises:
-        self.gy = ctx.enqueue_create_buffer[DType.float32](estimate_size)
-        self.gw = ctx.enqueue_create_buffer[DType.float32](estimate_size)
-        self.gc = ctx.enqueue_create_buffer[DType.float32](estimate_size)
-        self.gb = ctx.enqueue_create_buffer[DType.uint32](estimate_size)
-        self.row_index = ctx.enqueue_create_buffer[DType.uint32](estimate_size)
-        self.h_rows = ctx.enqueue_create_host_buffer[DType.uint32](
-            estimate_size
-        )
-        self.dl = ctx.enqueue_create_buffer[DType.float32](leaf_capacity)
-        self.hl = ctx.enqueue_create_host_buffer[DType.float32](leaf_capacity)
+        self.gy = arena.device[DType.float32](ctx, estimate_size)
+        self.gw = arena.device[DType.float32](ctx, estimate_size)
+        self.gc = arena.device[DType.float32](ctx, estimate_size)
+        self.gb = arena.device[DType.uint32](ctx, estimate_size)
+        self.row_index = arena.device[DType.uint32](ctx, estimate_size)
+        self.h_rows = arena.host_buffer[DType.uint32](ctx, estimate_size)
+        self.dl = arena.device[DType.float32](ctx, leaf_capacity)
+        self.hl = arena.host_buffer[DType.float32](ctx, leaf_capacity)
 
 
 struct _OrderedPending(Movable):
@@ -588,6 +591,7 @@ def _ordered_estimate_prepare(
     opts: OrderedBoostingOptions,
     sm_count: Int,
     mut est_ws: List[TEstimationWorkspace],
+    mut arena: BufferArena,
     mut est_times: StageTimes,
     mut walker_times: StageTimes,
 ) raises -> _OrderedPending:
@@ -623,7 +627,8 @@ def _ordered_estimate_prepare(
         ctx, estimate_size, n_leaves, sizes, offsets,
         slot.row_index, gy, gw, True, gc, opts.objective,
         opts.kernel_alpha, opts.estimator_alpha, opts.logloss_border,
-        opts.l2_leaf_reg, sm_count, opts.leaf_method, est_ws, walker_times,
+        opts.l2_leaf_reg, sm_count, opts.leaf_method, est_ws, arena,
+        walker_times,
     )
     est_times.end(ctx, "est.estimate_and_apply")
     return _OrderedPending(est^, apply_size)
@@ -742,6 +747,10 @@ def fit_ordered(
     var learn_count = est_p if est_p > 0 else 1
     var folds = ordered_folds(n_rows, opts.fold_len_multiplier, opts.min_fold_size)
     var n_folds = len(folds)
+    # THE FIT'S ARENA (`gbdt/gpu_util/arena.mojo`): the long-lived per-fold
+    # and per-task buffers below are carved from a few parents, because on
+    # Metal every live allocation is bound to every launch
+    var arena = BufferArena()
     var dperms = List[DeviceBuffer[DType.uint32]]()
     for p in range(perm_count):
         var h = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
@@ -777,8 +786,8 @@ def fit_ordered(
     for _ in range(learn_count):
         var per = List[DeviceBuffer[DType.float32]]()
         for f in range(n_folds):
-            var c = ctx.enqueue_create_buffer[DType.float32](
-                folds[f].quality_evaluate_samples.right
+            var c = arena.device[DType.float32](
+                ctx, folds[f].quality_evaluate_samples.right
             )
             enqueue_fill(ctx, c, opts.start_value)
             per.append(c^)
@@ -823,12 +832,12 @@ def fit_ordered(
     var der_part = List[DeviceBuffer[DType.float32]]()
     for f in range(n_folds):
         var r = folds[f].quality_evaluate_samples.right
-        der_gy.append(ctx.enqueue_create_buffer[DType.float32](r))
-        der_gw.append(ctx.enqueue_create_buffer[DType.float32](r))
-        der_stats.append(ctx.enqueue_create_buffer[DType.float32](2 * r))
+        der_gy.append(arena.device[DType.float32](ctx, r))
+        der_gw.append(arena.device[DType.float32](ctx, r))
+        der_stats.append(arena.device[DType.float32](ctx, 2 * r))
         der_part.append(
-            ctx.enqueue_create_buffer[DType.float32](
-                (r + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
+            arena.device[DType.float32](
+                ctx, (r + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
             )
         )
     var pool = List[PointwiseTreeWorkspace]()
@@ -877,8 +886,8 @@ def fit_ordered(
                 var est = folds[f].estimate_samples.right
                 comptime if ORDERED_SABOTAGE:
                     est = folds[f].quality_evaluate_samples.right
-                slots.append(_OrderedSlot(ctx, est, 1 << max_depth))
-        slots.append(_OrderedSlot(ctx, n_rows, 1 << max_depth))
+                slots.append(_OrderedSlot(ctx, arena, est, 1 << max_depth))
+        slots.append(_OrderedSlot(ctx, arena, n_rows, 1 << max_depth))
     var losses = List[Float64]()
     var fv_blocks = (n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
     var fv_part = ctx.enqueue_create_buffer[DType.float32](fv_blocks)
@@ -1077,7 +1086,7 @@ def fit_ordered(
                             n_leaves, targets, weights, dperms[lp], perms[lp],
                             bins, h_tree_bins, slots[slot],
                             cursors[lp][f], opts, sm_count, est_pools[slot],
-                            est_times, walker_times,
+                            arena, est_times, walker_times,
                         )
                     )
             var est_slot = learn_count * n_folds
@@ -1086,7 +1095,7 @@ def fit_ordered(
                     ctx, n_rows, n_rows, n_leaves, targets, weights,
                     dperms[est_p], perms[est_p], bins, h_tree_bins,
                     slots[est_slot], est_cursor, opts, sm_count,
-                    est_pools[est_slot], est_times, walker_times,
+                    est_pools[est_slot], arena, est_times, walker_times,
                 )
             )
             ctx.synchronize()
@@ -1181,6 +1190,8 @@ def fit_ordered(
     _ = der_gw^
     _ = der_stats^
     _ = der_part^
+    _ = cursors^
+    _ = arena^
     _ = boot_seeds^
     _ = boot_mags^
     _ = est_y^
