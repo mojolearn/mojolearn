@@ -142,7 +142,14 @@ from . import linalg
 from . import lowbit
 from . import models
 from .linalg import matmul
+import sys as _sys
+
 from . import _metrics_impl as metrics
+# `metrics` is an alias of a private module, so `import mojolearn.metrics` and
+# `from mojolearn.metrics import accuracy_score` found no `mojolearn/metrics.py`
+# and raised ModuleNotFoundError while `mojolearn.metrics.accuracy_score`
+# worked (Sep 22 pip smoke). Registering the alias makes both spellings work.
+_sys.modules[__name__ + ".metrics"] = metrics
 from ._hierarchy_impl import AgglomerativeClustering
 from ._iforest_impl import IsolationForest
 from ._solver_impl import ElasticNet, Lasso
