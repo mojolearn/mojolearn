@@ -172,3 +172,45 @@ that floor, not below 2 ms. Below 200,000 cells the host route now takes
 these fits at 1.1 to 1.3 ms a tree with the same bits. The fused device
 path matters for Ordered pools of 20,000 to 50,000 rows, where the device
 is still at 18 to 22 ms a tree and the host at 11 to 27 ms.
+
+## Round 3, one-border columns on the host route (2026-09-22, perf/gbdt-host-one-border-sep22)
+
+The host binding refused a column with exactly one border because it did not
+restate the BinaryFeatures histograms. It does now, on both searchers:
+
+- Plain (`gbdt/host/gbdt_oracle.mojo::_binary_block`): `binary_hist_kernel`
+  and its gather twin are the half-byte accumulator at `UNROLL` 2 (a warp
+  takes 256 points, a striped iteration is two batches of eight turns),
+  32 flags to a word, and the writeback sums, per flag, the eight stage-2
+  cells of its nibble whose value has the flag's bit clear. The flush and
+  the fixed-point bridge are the half-byte ones.
+- Ordered (`gbdt/host/gbdt_oracle_ordered.mojo::_pw_binary_cells`):
+  `compute_split_properties_b_kernel` is the pointwise half-byte
+  accumulator with `pw_hb_binary_sum` as its writeback and no scan. The
+  host walks only the live threads of each point run, which is what keeps
+  the Ordered host tree near 1 ms.
+
+Identity (model text, loss curve, predictions, host against device): the
+smoke case below; synthetic pools with 1, 2 and 3 binary columns at 320 and
+3,200 rows, RMSE and Logloss, Plain and Ordered (24 cells, 40 trees);
+10,000 to 30,000 rows (multi-block flush); and the defaults at 1000 trees.
+All equal.
+
+| fit, defaults (1000 trees, Ordered) | before | after | route |
+|---|---|---|---|
+| smoke, diabetes 320 x 10 (one binary column), RMSE | 15.2 s | 0.93 s | host |
+| 320 x 10, 3 binary columns, RMSE | 15.0 s | 0.97 s | host |
+| 320 x 10, 3 binary columns, Logloss | 45.2 s | 2.7 s | host |
+| 3,200 x 10, 3 binary columns, RMSE | | 2.2 s | host |
+| 3,200 x 10, 3 binary columns, Logloss | | 8.3 s | host |
+
+Coverage: the new lane `gbdt-binary-columns` (five flag columns on every
+fixture, Plain and Ordered, Logloss and RMSE, the Ordered defaults' bootstrap
+and noise, OrderedRMSE) has Apple M4 and CPU columns, equal on all nine
+fixtures (`bench/results/identity_break/2026-09-22_gbdt-binary-columns/`),
+and the shipped reference table admits its cells from those two witnesses.
+Its NVIDIA and AMD columns are owed (the commands are in that README), so
+`GradientBoosting` auto-routes a one-border pool to the host on Metal only;
+on CUDA and HIP it trains on the device as before. `verify --all` over the
+32 gbdt lanes, fixtures base, reads VERIFIED with 0 divergent on Metal and on
+the CPU column.

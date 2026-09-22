@@ -35,9 +35,10 @@ outside it (bindings/_mojolearn_gbdt_host.mojo, `_refuse`):
   column (one-hot columns are carried, `one_hot_in` below and
   gbdt/host/gbdt_oracle_onehot.mojo), no eval_set and no overfitting detector,
   random_strength 0, the greedy searcher (use_pointwise_searcher False),
-  boost_from_average unset or False, feature_fraction 1, and no
-  feature with exactly one border (the BINARY histogram policy, whose
-  nibble-combination decode is not restated). border_count, n_estimators,
+  boost_from_average unset or False and feature_fraction 1. A feature with
+  exactly one border (the BINARY histogram policy) is carried since
+  2026-09-22 (`_binary_block`, the nibble-combination decode of
+  `hist_binary.mojo`; the gbdt-binary-columns lane). border_count, n_estimators,
   max_depth, learning_rate, l2_leaf_reg, random_state, nan_mode (Min and
   Max on an X carrying NaN since 2026-09-15, the gbdt-nan-modes lane) and
   border_build_max_samples (both border paths) are carried.

@@ -16,9 +16,10 @@ their modules import kernel modules.
 THE CONFIGURATION THIS COVERS, by name (tools/identity_break.py
 `gbdt-ordered-rmse`: 20 trees, depth 6, the default border_count 128,
 learning_rate 0.03 and l2 3.0, one explicit permutation, unit weights). The
-binding refuses by name `sample_weight` and any layout whose histogram policy
-is not OneByteFeatures (a feature with 15 or fewer borders), the only policy
-the covered data reaches.
+binding refuses `sample_weight` by name. All three histogram policies are
+carried: OneByteFeatures, HalfByteFeatures and, since 2026-09-22,
+BinaryFeatures (a feature with exactly one border; `_pw_binary_cells` and
+the `pw_hb_binary_sum` writeback, the gbdt-binary-columns lane).
 
 WHAT IS MIRRORED, IN THE ORDER THE FIT REACHES IT (IDENTICAL build)
 

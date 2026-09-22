@@ -1653,7 +1653,9 @@ class GradientBoosting(NumericModeMixin):
         RMSE and Logloss, Ordered and Plain). Only the configurations those
         lanes cover are routed: SymmetricTree, RMSE or Logloss, unit
         weights, numeric columns, no groups, no eval set; anything the host
-        binding refuses by name falls back to the device.
+        binding refuses by name falls back to the device. A column with
+        exactly one border (a 0/1 flag) routes on Metal only
+        (`_host_one_border_admitted`, perf/gbdt-host-one-border).
 
         `MOJOLEARN_GBDT_ROUTE=device` pins the device fit (the identity
         harness sets it, so the GPU columns keep measuring the GPU),

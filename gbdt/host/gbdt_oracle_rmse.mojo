@@ -37,7 +37,8 @@ default flags the symmetric oracle names)
 
   1. `AdjustBoostFromAverageDefaultValue` (`gbdt/train.mojo:1580-1605`):
      unset resolves TRUE for RMSE. `_rmse_starting_approx` below.
-  2. The grid, the layout, the binary policy refusal and the binarize: the
+  2. The grid, the layout and the binarize (one-border columns through the
+     symmetric oracle's `_binary_block` since 2026-09-22): the
      symmetric oracle's `gbdt_host_grid` and `_binarize_columns`, called.
   3. `calc_one_dimensional_optimum_const_approx`'s RMSE arm
      (`gbdt/metrics/optimal_const_for_loss.mojo:52-111`, unweighted branch:
