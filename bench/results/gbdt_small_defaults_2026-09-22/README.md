@@ -214,3 +214,53 @@ Its NVIDIA and AMD columns are owed (the commands are in that README), so
 on CUDA and HIP it trains on the device as before. `verify --all` over the
 32 gbdt lanes, fixtures base, reads VERIFIED with 0 divergent on Metal and on
 the CPU column.
+
+## Round 4, eval sets and multiclass on the host route (2026-09-22, perf/gbdt-route-eval-multiclass-sep22)
+
+Python only. The host binding already trained these configurations and the
+lanes covering them already had all four columns; only the gate in
+`GradientBoosting._small_pool_host` kept them on the device. The gate is now
+a table, `ensemble._HOST_ROUTE_LANES`, keyed (resolved boosting type, loss,
+eval set given), with the lanes that cover each key:
+
+| configuration | lanes (NVIDIA, AMD, Apple, CPU recorded) |
+|---|---|
+| Plain Logloss | gbdt-symmetric, gbdt-catboost-defaults |
+| Plain RMSE | gbdt-rmse, gbdt-stochastic-arms |
+| Ordered Logloss | gbdt-ordered-bayesian-noise |
+| Ordered RMSE | gbdt-ordered |
+| Plain Logloss with an eval set (new) | gbdt-symmetric-eval |
+| Ordered Logloss with an eval set (new) | gbdt-ordered |
+| Plain MultiClass (new) | gbdt-multiclass, gbdt-multiclass-defaults |
+| Plain MultiClassOneVsAll (new) | gbdt-onevsall, gbdt-multiclass-defaults |
+
+`test_gbdt_small_pool_route.py` checks that every lane named there has all
+four columns on the train part of every fixture of the shipped table. Still
+on the device: Plain RMSE with an eval set (the host refuses it by name),
+Ordered RMSE with an eval set (the host trains it, no lane records it),
+multiclass with an eval set (refused by name), multiclass with a one-border
+column (refused by name), and any one-border pool outside the four
+configurations `gbdt-binary-columns` fits (`_HOST_ONE_BORDER_CONFIGS`, so a
+one-border pool with an eval set trains on the device on Metal too).
+
+Identity, host route against the device-pinned fit, 320 and 3,200 rows, 20
+or 30 trees (model text, learn and held-out curves, best_iteration,
+stopped_early, predictions, probabilities): Plain Logloss with an eval set;
+Plain and Ordered Logloss with the Iter detector firing and use_best_model
+cutting; Ordered Logloss with an eval set at the Bayesian bootstrap and
+random_strength 1; MultiClass and MultiClassOneVsAll with class weights, with
+and without the public stochastic defaults. All equal. The five fallback
+cases train on the device under `auto` and equal the pinned fit.
+
+| fit (1000 trees, one fit per cell, M4) | before (device) | after | route |
+|---|---|---|---|
+| defaults Logloss + eval set, 320 x 10 (Ordered) | 45.3 s | 2.49 s | host |
+| Plain Logloss + eval set, 320 x 10 | 6.75 s | 1.20 s | host |
+| defaults Logloss + eval set, 3,200 x 10 (Ordered) | 40.7 s | 7.97 s | host |
+| Plain Logloss + eval set, 3,200 x 10 | 7.16 s | 2.32 s | host |
+| defaults MultiClass, iris 150 x 4 | 5.24 s | 0.54 s | host |
+| defaults MultiClassOneVsAll, iris 150 x 4 | 4.10 s | 0.62 s | host |
+| defaults RMSE + eval set, 320 x 10 (Ordered) | 15.0 s | 15.1 s | device |
+
+Model text, curves, best_iteration and predictions were equal between the
+two routes in every row.
