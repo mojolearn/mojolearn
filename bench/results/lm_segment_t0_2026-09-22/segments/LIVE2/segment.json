@@ -1,8 +1,8 @@
 {
  "schema": "mojolearn.lm-segment.run.v1",
- "route": "A",
- "segment": "2",
- "label": "m4-a",
+ "route": "L",
+ "segment": "live2",
+ "label": "m4-live",
  "from_checkpoint": {
   "file": "ckpt_00000004.blm",
   "sha256": "fdd04a26b581c29a2f21b59e342e21bd5749b2f428a3aea75cd63a374597e61a",
@@ -24,28 +24,39 @@
  },
  "commit": "6471822acbeebf6e3fa6e66025891eed4023e72e",
  "zero_moments": false,
- "expect_chain": null,
+ "expect_chain": "<scratchpad>/seg/A2/chain.jsonl",
  "checkpoints": [
   {
    "step": 6,
    "file": "ckpt_00000006.blm",
    "bytes": 38822695,
    "sha256": "d897af746606bb064a8dd488990faafff432a8b5e4397c0909d4c2a0dc5b6776",
-   "save_seconds": 0.048
+   "save_seconds": 0.058
   },
   {
    "step": 8,
    "file": "ckpt_00000008.blm",
    "bytes": 38822696,
    "sha256": "ce1cf689859e86072e4c7fd9f6a4c0d52146da1a76983b375b08cb6c83242668",
-   "save_seconds": 0.052
+   "save_seconds": 0.055
   }
  ],
- "utc_start": "2026-09-22T20:36:41Z",
+ "utc_start": "2026-09-22T20:36:55Z",
+ "live": {
+  "role": "coordinator",
+  "shards": [
+   0,
+   1
+  ],
+  "workers": 2,
+  "port": 7812,
+  "address": null,
+  "protocol": "chained"
+ },
  "verdict": "PASS",
  "disagreements": [],
  "steps_completed": 4,
  "last_completed": 8,
- "utc_end": "2026-09-22T20:36:43Z",
+ "utc_end": "2026-09-22T20:36:58Z",
  "uploads": []
 }

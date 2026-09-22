@@ -383,6 +383,185 @@ def _chain_index(path):
 COMPARED = ("state_sha256", "gradient_sha256", "losses_f32_hex", "lr_f32_hex")
 
 
+class ChainWriter:
+    """`chain.jsonl`: one canonical JSON line per completed step, each carrying
+    the sha256 of the previous line, held to an expected chain when given.
+    `write(row)` returns False when the segment must stop (a disagreement)."""
+
+    def __init__(self, path, first, expect, say):
+        self.path, self.expect, self.say = Path(path), expect, say
+        self.prev, self.done, self.verdict, self.disagreements = None, first, "PASS", []
+        self.first = first
+        if self.path.exists():
+            lines = [l for l in self.path.read_text().splitlines() if l.strip()]
+            if lines:
+                prev_row = json.loads(lines[-1])
+                if int(prev_row["step"]) != first:
+                    raise SystemExit("REFUSED: %s ends at step %s, the checkpoint is at %d; use a fresh --out or the matching checkpoint"
+                                     % (self.path, prev_row["step"], first))
+                self.prev = _sha(lines[-1].encode())
+        self.fh = self.path.open("a")
+
+    def write(self, row):
+        row = dict(row, prev=self.prev)
+        line = _canonical(row)
+        self.fh.write(line + "\n")
+        self.fh.flush()
+        self.prev = _sha(line.encode())
+        completed = int(row["step"])
+        self.done = completed
+        K = len(row["losses_f32_hex"])
+        mean_loss = sum(_bits_f32(int(h, 16)) for h in row["losses_f32_hex"]) / max(K, 1)
+        self.say("step %d lr %s loss %.4f state %s grad %s %.2f s (+%.2f s hashing)"
+                 % (completed, row["lr_f32_hex"], mean_loss, row["state_sha256"][:16], row["gradient_sha256"][:16],
+                    row.get("seconds", 0.0), row.get("hash_seconds", 0.0)))
+        if self.expect is None:
+            return True
+        want = self.expect.get(completed)
+        if want is None:
+            self.say("step %d: the expected chain has no line (not compared)" % completed)
+            return True
+        diff = [k for k in COMPARED if want.get(k) != row.get(k)]
+        if diff:
+            self.disagreements.append(dict(step=completed, fields=diff, expected={k: want.get(k) for k in diff},
+                                           got={k: row.get(k) for k in diff}))
+            self.verdict = "FAIL"
+            self.say("DISAGREE at step %d on %s; the segment stops here" % (completed, diff))
+            return False
+        self.say("step %d agrees with the expected chain" % completed)
+        return True
+
+    def close(self, last):
+        self.fh.close()
+        if self.expect is not None and self.verdict == "PASS":
+            compared = sum(1 for s in range(self.first + 1, last + 1) if s in self.expect)
+            if compared == 0:
+                self.verdict = "FAIL"
+                self.disagreements.append(dict(reason="NOTHING WAS COMPARED: the expected chain covers none of these steps"))
+        return self.verdict, self.disagreements, self.done
+
+
+def _block(text):
+    a, sep, b = text.partition(":")
+    if not sep:
+        raise SystemExit("--live-shards is A:B, this box's contiguous block of shards, B exclusive")
+    a, b = int(a), int(b)
+    if a < 0 or b <= a:
+        raise SystemExit("--live-shards needs 0 <= A < B")
+    return list(range(a, b))
+
+
+def _run_live(args, recipe, batches, state, devices, chain, table, out, manifest, upload, segment, say,
+              first, last, wants_checkpoint):
+    """The multi-vendor segment: this box is one worker of a chained
+    `mojolearn.cross_vendor` group, and, as the coordinator, also the fold's
+    host. Every agreed step becomes a chain line of the same shape a one-box
+    segment writes (the total's hash is the summed gradient's hash, since the
+    host fold and the device fold are the same bits), so route A's live
+    segment and route B's compare line for line, and checkpoints come from
+    this worker's replica."""
+    import threading
+    from mojolearn.cross_vendor import Coordinator, Worker
+    from mojolearn.parallel_training import ParallelByteLanguageModelTrainer as Par
+    K = int(recipe["logical_shards"])
+    block = _block(args.live_shards)
+    if any(k < 0 or k >= K for k in block):
+        raise SystemExit("--live-shards must lie inside 0..%d" % (K - 1))
+    segment["live"] = dict(role=args.live_role, shards=[block[0], block[-1] + 1], workers=args.live_workers,
+                           port=args.live_port, address=args.live_address, protocol="chained")
+    lr_for_step = lambda step: _bits_f32(int(table[step], 16))  # noqa: E731
+    batches_fn = lambda step, k: batches.ids(step * K + k)  # noqa: E731
+    last_commit = [time.perf_counter()]
+    stop = {"flag": False}
+
+    def make_commit(trainer):
+        def on_commit(completed, row):
+            now = time.perf_counter()
+            line = dict(schema=CHAIN_SCHEMA, step=completed, route=args.route, segment=args.segment, label=args.label,
+                        lr_f32_hex=table[completed - 1], losses_f32_hex=["%08x" % _f32_bits(x) for x in row["losses"]],
+                        state_sha256=row["state"], gradient_sha256=row["total_sha256"],
+                        batch_index=[(completed - 1) * K, completed * K], seconds=round(now - last_commit[0], 4),
+                        hash_seconds=0.0, live=segment["live"])
+            last_commit[0] = time.perf_counter()
+            if not chain.write(line):
+                stop["flag"] = True
+                raise SystemExit("the live segment stops at a disagreement")
+            if wants_checkpoint(completed) and args.live_role == "coordinator":
+                info = save_checkpoint(trainer, out, manifest=manifest, upload=upload)
+                segment["checkpoints"].append(info)
+                say("checkpoint %s (%d bytes, sha256 %s, %.1f s)" % (info["file"], info["bytes"], info["sha256"][:16], info["save_seconds"]))
+        return on_commit
+
+    errors = []
+    coord = None
+    if args.live_role == "coordinator":
+        coord = Coordinator(host="0.0.0.0", port=args.live_port, workers=args.live_workers, logical_shards=K,
+                            steps=last, chained=True, timeout=args.live_timeout, accept_timeout=args.live_timeout,
+                            on_step=lambda r: _append_json(out / "coordinator.jsonl", r))
+        t = threading.Thread(target=lambda: _safe(coord.run, errors), name="coordinator")
+        t.start()
+        coord.ready.wait(30)
+        address = ("127.0.0.1", coord.bound_port)
+        say("coordinator listening on port %d for %d workers, K=%d, until step %d" % (coord.bound_port, args.live_workers, K, last))
+    else:
+        host, port = args.live_address.rsplit(":", 1)
+        address = (host, int(port))
+    lock = threading.Lock()
+    workers = []
+    trainer = Par(state, devices=(devices[0],), logical_shards=1, pool_optimizer=False)
+    workers.append(Worker(trainer=_Locked(trainer, lock) if args.live_local_extra else trainer, shards=block,
+                          batches=batches_fn, address=address, name=args.label, chained=True,
+                          lr_for_step=lr_for_step, on_commit=make_commit(trainer),
+                          connect_timeout=args.live_timeout, timeout=args.live_timeout))
+    if args.live_local_extra:  # a test: a second worker in this process, same device under a lock
+        extra = Par(state, devices=(devices[0],), logical_shards=1, pool_optimizer=False)
+        workers.append(Worker(trainer=_Locked(extra, lock), shards=_block(args.live_local_extra), batches=batches_fn,
+                              address=address, name=args.label + "-extra", chained=True, lr_for_step=lr_for_step,
+                              connect_timeout=args.live_timeout, timeout=args.live_timeout))
+    threads = [threading.Thread(target=lambda w=w: _safe(w.run, errors), name=w.name) for w in workers]
+    for th in threads:
+        th.start()
+    for th in threads:
+        th.join()
+    if coord is not None:
+        t.join()
+    trainer.close()
+    if errors and not stop["flag"]:
+        segment["live_errors"] = [str(e) for e in errors]
+        say("LIVE ERROR: %s" % "; ".join(str(e)[:200] for e in errors))
+        chain.verdict = "FAIL"
+        chain.disagreements.append(dict(reason="live group error", errors=[str(e) for e in errors]))
+
+
+def _safe(fn, errors):
+    try:
+        fn()
+    except BaseException as e:  # noqa: BLE001
+        errors.append(e)
+
+
+def _append_json(path, row):
+    with open(path, "a") as fh:
+        fh.write(_canonical(row) + "\n")
+
+
+class _Locked:
+    """A trainer whose device calls take turns under one lock (one Metal job at a time)."""
+
+    def __init__(self, trainer, lock):
+        self._t, self._lock = trainer, lock
+
+    def __getattr__(self, name):
+        attr = getattr(self._t, name)
+        if not callable(attr):
+            return attr
+
+        def call(*a, **k):
+            with self._lock:
+                return attr(*a, **k)
+        return call
+
+
 def cmd_run(args):
     from mojolearn.parallel_training import ParallelByteLanguageModelTrainer as Par
     recipe = load_recipe(args.recipe)
@@ -411,6 +590,12 @@ def cmd_run(args):
     if args.boundary is not None and not (first < args.boundary <= last):
         raise SystemExit("--boundary must be a global step inside this segment")
     devices = tuple(int(x) for x in args.devices.split(","))
+    if args.live_role and not args.live_shards:
+        raise SystemExit("--live-role needs --live-shards A:B")
+    if args.live_role == "worker" and not args.live_address:
+        raise SystemExit("--live-role worker needs --live-address HOST:PORT")
+    if args.live_role == "worker":
+        args.no_checkpoints = True  # the coordinator's replica writes the checkpoints
     expect = _chain_index(args.expect_chain) if args.expect_chain else None
     manifest = Manifest(out)
     keys = expected_keys(recipe, first, args.steps, args.boundary) if not args.no_checkpoints else ["chain.jsonl", "manifest.tsv", "segment.json"]
@@ -424,87 +609,57 @@ def cmd_run(args):
                    recipe_sha256=_sha_file(args.recipe), tokens_sha256=batches.sha256, box=_box(),
                    commit=_commit(), zero_moments=bool(args.zero_moments), expect_chain=args.expect_chain,
                    checkpoints=[], utc_start=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
-    chain_path = out / "chain.jsonl"
-    prev = None
-    if chain_path.exists():
-        lines = [l for l in chain_path.read_text().splitlines() if l.strip()]
-        if lines:
-            prev_row = json.loads(lines[-1])
-            if int(prev_row["step"]) != first:
-                raise SystemExit("REFUSED: %s ends at step %s, the checkpoint is at %d; use a fresh --out or the matching checkpoint"
-                                 % (chain_path, prev_row["step"], first))
-            prev = _sha(lines[-1].encode())
-    chain_fh = chain_path.open("a")
+    chain = ChainWriter(out / "chain.jsonl", first, expect, say)
     table = recipe["schedule"]["table_f32_hex"]
-    verdict = "PASS"
-    disagreements = []
-    done = first
 
     def in_window(step):
         return any(a <= step < b for a, b in args.record_window)
 
-    with Par(state, devices=devices, logical_shards=K) as trainer:
-        del state
-        for s in range(first, last):
-            completed = s + 1
-            lr_hex = table[s]  # the rate used to reach step s+1
-            lr_used = trainer.set_lr(_bits_f32(int(lr_hex, 16)))
-            if "%08x" % _f32_bits(lr_used) != lr_hex:
-                raise SystemExit("learning rate bits drifted between the table and the device")
-            shards = [batches.ids(s * K + k) for k in range(K)]
-            t0 = time.perf_counter()
-            result = trainer.train_step(shards)
-            step_seconds = time.perf_counter() - t0
-            t1 = time.perf_counter()
-            raw = trainer.export_raw()
-            state_digest = _hash_arrays(raw)
-            grad_digest = _sha(memoryview(trainer.export_gradients()).cast("B"))
-            hash_seconds = time.perf_counter() - t1
-            row = dict(schema=CHAIN_SCHEMA, step=completed, route=args.route, segment=args.segment, label=args.label,
-                       lr_f32_hex=lr_hex, losses_f32_hex=["%08x" % _f32_bits(x) for x in result["losses"]],
-                       state_sha256=state_digest, gradient_sha256=grad_digest,
-                       batch_index=[s * K, s * K + K], seconds=round(step_seconds, 4),
-                       hash_seconds=round(hash_seconds, 3), prev=prev)
-            if in_window(s):
-                row["window"] = _window_witness(trainer, raw, shards, say)
-            line = _canonical(row)
-            chain_fh.write(line + "\n")
-            chain_fh.flush()
-            prev = _sha(line.encode())
-            done = completed
-            mean_loss = sum(_bits_f32(int(h, 16)) for h in row["losses_f32_hex"]) / K
-            say("step %d lr %s loss %.4f state %s grad %s %.2f s (+%.2f s hashing)"
-                % (completed, lr_hex, mean_loss, state_digest[:16], grad_digest[:16], step_seconds, hash_seconds))
-            if expect is not None:
-                want = expect.get(completed)
-                if want is None:
-                    say("step %d: the expected chain has no line (not compared)" % completed)
-                else:
-                    diff = [k for k in COMPARED if want.get(k) != row.get(k)]
-                    if diff:
-                        disagreements.append(dict(step=completed, fields=diff, expected={k: want.get(k) for k in diff},
-                                                  got={k: row.get(k) for k in diff}))
-                        verdict = "FAIL"
-                        say("DISAGREE at step %d on %s; the segment stops here" % (completed, diff))
-                        break
-                    say("step %d agrees with the expected chain" % completed)
-            wants_ckpt = (not args.no_checkpoints) and (
-                completed % every == 0 or completed == last or (args.boundary and completed == args.boundary - 2))
-            if wants_ckpt:
-                info = save_checkpoint(trainer, out, manifest=manifest, upload=upload)
-                segment["checkpoints"].append(info)
-                say("checkpoint %s (%d bytes, sha256 %s, %.1f s)" % (info["file"], info["bytes"], info["sha256"][:16], info["save_seconds"]))
-    chain_fh.close()
-    if expect is not None and verdict == "PASS":
-        compared = sum(1 for s in range(first + 1, last + 1) if s in expect)
-        if compared == 0:
-            verdict = "FAIL"
-            disagreements.append(dict(reason="NOTHING WAS COMPARED: the expected chain covers none of these steps"))
+    def wants_checkpoint(completed):
+        return (not args.no_checkpoints) and (
+            completed % every == 0 or completed == last or (args.boundary and completed == args.boundary - 2))
+
+    if args.live_role:
+        _run_live(args, recipe, batches, state, devices, chain, table, out, manifest, upload, segment, say,
+                  first, last, wants_checkpoint)
+        state = None
+    else:
+        with Par(state, devices=devices, logical_shards=K) as trainer:
+            del state
+            for s in range(first, last):
+                completed = s + 1
+                lr_hex = table[s]  # the rate used to reach step s+1
+                lr_used = trainer.set_lr(_bits_f32(int(lr_hex, 16)))
+                if "%08x" % _f32_bits(lr_used) != lr_hex:
+                    raise SystemExit("learning rate bits drifted between the table and the device")
+                shards = [batches.ids(s * K + k) for k in range(K)]
+                t0 = time.perf_counter()
+                result = trainer.train_step(shards)
+                step_seconds = time.perf_counter() - t0
+                t1 = time.perf_counter()
+                raw = trainer.export_raw()
+                state_digest = _hash_arrays(raw)
+                grad_digest = _sha(memoryview(trainer.export_gradients()).cast("B"))
+                hash_seconds = time.perf_counter() - t1
+                row = dict(schema=CHAIN_SCHEMA, step=completed, route=args.route, segment=args.segment, label=args.label,
+                           lr_f32_hex=lr_hex, losses_f32_hex=["%08x" % _f32_bits(x) for x in result["losses"]],
+                           state_sha256=state_digest, gradient_sha256=grad_digest,
+                           batch_index=[s * K, s * K + K], seconds=round(step_seconds, 4),
+                           hash_seconds=round(hash_seconds, 3))
+                if in_window(s):
+                    row["window"] = _window_witness(trainer, raw, shards, say)
+                if not chain.write(row):
+                    break
+                if wants_checkpoint(completed):
+                    info = save_checkpoint(trainer, out, manifest=manifest, upload=upload)
+                    segment["checkpoints"].append(info)
+                    say("checkpoint %s (%d bytes, sha256 %s, %.1f s)" % (info["file"], info["bytes"], info["sha256"][:16], info["save_seconds"]))
+    verdict, disagreements, done = chain.close(last)
     segment.update(verdict=verdict, disagreements=disagreements, steps_completed=done - first, last_completed=done,
                    utc_end=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), uploads=upload.uploaded)
-    manifest.pin("chain.jsonl", chain_path.stat().st_size, _sha_file(chain_path))
+    manifest.pin("chain.jsonl", chain.path.stat().st_size, _sha_file(chain.path))
     (out / "segment.json").write_text(json.dumps(segment, indent=1, default=str) + "\n")
-    upload("chain.jsonl", chain_path)
+    upload("chain.jsonl", chain.path)
     upload("segment.json", out / "segment.json")
     upload("manifest.tsv", manifest.path)
     say("%s: %s" % (verdict, out))
@@ -629,6 +784,15 @@ def main(argv=None):
     ru.add_argument("--record-window", type=_window, action="append", default=[], metavar="A:B")
     ru.add_argument("--zero-moments", action="store_true", help="NEGATIVE CONTROL: restore with zeroed AdamW moments")
     ru.add_argument("--no-checkpoints", action="store_true", help="a replay: write the chain only")
+    ru.add_argument("--live-role", choices=("coordinator", "worker"), default=None,
+                    help="the multi-vendor segment: this box is one worker of a chained cross_vendor group")
+    ru.add_argument("--live-shards", default=None, metavar="A:B", help="this box's contiguous block of shards")
+    ru.add_argument("--live-port", type=int, default=7777, help="coordinator: the port to listen on")
+    ru.add_argument("--live-workers", type=int, default=2, help="coordinator: workers in the group, this one included")
+    ru.add_argument("--live-address", default=None, metavar="HOST:PORT", help="worker: the coordinator")
+    ru.add_argument("--live-timeout", type=float, default=7200.0, help="seconds to wait for peers and for a step")
+    ru.add_argument("--live-local-extra", default=None, metavar="A:B",
+                    help="TEST ONLY: a second worker in this process, this block, sharing the device under a lock")
 
     c = sub.add_parser("compare")
     c.add_argument("chains", nargs="+")

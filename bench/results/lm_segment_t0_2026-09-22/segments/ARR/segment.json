@@ -14,7 +14,7 @@
   0
  ],
  "logical_shards": 4,
- "recipe_sha256": "f953e670ece2c38b2e487cefa01b6d36a434b9098aa1e4b270e705692f31435e",
+ "recipe_sha256": "8ffada5676d9a831c8a1ac7bd0bcf7c2bcb8d7ee5d03eef61ed753345b584e4d",
  "tokens_sha256": "2ad0c690bc4438d5ddab5cb481c4b247ba61b7dd3d841a3d7c0a7d0f94b2c253",
  "box": {
   "host": "Mac",
@@ -22,15 +22,15 @@
   "system": "Darwin",
   "python": "3.14.7"
  },
- "commit": "86033e1a32efc151d574ba7d4d609be30b753bd0",
+ "commit": "6471822acbeebf6e3fa6e66025891eed4023e72e",
  "zero_moments": false,
  "expect_chain": "<scratchpad>/seg/A1/chain.jsonl",
  "checkpoints": [],
- "utc_start": "2026-09-22T19:26:57Z",
+ "utc_start": "2026-09-22T20:36:49Z",
  "verdict": "PASS",
  "disagreements": [],
  "steps_completed": 2,
  "last_completed": 4,
- "utc_end": "2026-09-22T19:26:57Z",
+ "utc_end": "2026-09-22T20:36:50Z",
  "uploads": []
 }

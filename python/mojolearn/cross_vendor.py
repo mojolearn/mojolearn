@@ -288,10 +288,11 @@ class Coordinator:
                         self._refuse("%s returned a wrong fold" % p["name"])
                 total = prefix
                 last = self.peers[-1]["name"]
+                all_losses = [losses[k] for k in range(self.K)]
                 for p in self.peers:
                     # the last folder already holds the total; send it the hash only
-                    _send(p["sock"], {"cmd": "apply", "step": step, "total_sha256": hashlib.sha256(total).hexdigest()},
-                          b"" if p["name"] == last else total)
+                    _send(p["sock"], {"cmd": "apply", "step": step, "total_sha256": hashlib.sha256(total).hexdigest(),
+                                      "losses": all_losses}, b"" if p["name"] == last else total)
             else:
                 for p in self.peers:
                     head, payload = _recv(p["sock"], len(p["shards"]) * n_total * 4)
@@ -303,8 +304,10 @@ class Coordinator:
                         grads[k] = payload[i * n_total * 4:(i + 1) * n_total * 4]
                         losses[k] = head["losses"][i]
                 total = ordered_fold(grads[k] for k in range(self.K))
+                all_losses = [losses[k] for k in range(self.K)]
                 for p in self.peers:
-                    _send(p["sock"], {"cmd": "apply", "step": step}, total)
+                    _send(p["sock"], {"cmd": "apply", "step": step, "total_sha256": hashlib.sha256(total).hexdigest(),
+                                      "losses": all_losses}, total)
             hashes = {}
             for p in self.peers:
                 head, _ = _recv(p["sock"], 0)
@@ -335,7 +338,8 @@ class Worker:
     tokens; it must be the same function on every worker."""
 
     def __init__(self, state=None, *, shards, batches, address, name=None, device=0,
-                 trainer=None, connect_timeout=600.0, timeout=3600.0, chained=False, lr_for_step=None):
+                 trainer=None, connect_timeout=600.0, timeout=3600.0, chained=False, lr_for_step=None,
+                 on_commit=None):
         if trainer is None:
             from .parallel_training import ParallelByteLanguageModelTrainer
             trainer = ParallelByteLanguageModelTrainer(state, devices=(device,), logical_shards=1,
@@ -347,6 +351,10 @@ class Worker:
         #: optional `lr_for_step(step) -> float`: the per-step learning rate
         #: (a recipe's table), applied through `trainer.set_lr` before the update
         self.lr_for_step = lr_for_step
+        #: optional `on_commit(step_completed, row)` after each applied step, with
+        #: the state hash, every shard's loss and the total's hash; the worker is
+        #: idle inside the call, so its trainer may be exported or checkpointed
+        self.on_commit = on_commit
 
     def _connect(self):
         deadline = time.monotonic() + self.connect_timeout
@@ -410,7 +418,11 @@ class Worker:
                     tr.apply_gradient(array.array("f", total))
                     total = None
                     committed += 1
-                    _send(sock, {"completed": tr.step_, "state": trainer_state_hash(tr)})
+                    digest = trainer_state_hash(tr)
+                    if self.on_commit is not None:
+                        self.on_commit(tr.step_, dict(step=tr.step_, state=digest, total_sha256=want,
+                                                      losses=head.get("losses")))
+                    _send(sock, {"completed": tr.step_, "state": digest})
                 elif cmd == "done":
                     return committed
                 elif cmd == "refuse":

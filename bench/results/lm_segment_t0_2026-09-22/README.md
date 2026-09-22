@@ -76,3 +76,16 @@ check itself (RunPod `costPerHr` after the create, DigitalOcean
 Anything at the target shape: the per-step hash cost at 1.95 GB of state,
 checkpoint save and upload times, the chained fold's bytes on a wide-area
 link, and the multi-device step. T1 in the plan.
+
+## E1 plus E5: the live segment inside the runner (`logs/live_segment.log`, `segments/LIVE*`)
+
+`tools/lm_segment.py run --live-role coordinator --live-shards 0:2
+--live-workers 2 --live-local-extra 2:4` (a second worker in the same process,
+sharing the M4 under a lock) from the seed checkpoint, held to route A's
+one-box chain: every state hash, every summed-gradient hash (the host fold's
+total against the device fold's), every loss and both checkpoints equal
+(`compare` 16 fields, `manifests` 2 checkpoints, 0 disagreements); the same
+from checkpoint 4 into segment 2 with unequal blocks 0:1 and 1:4 against
+route A's segment 2. `coordinator.jsonl` is the group's own record. So a
+segment run by a live chained group of workers writes the same chain and
+the same checkpoints as the same segment on one box.

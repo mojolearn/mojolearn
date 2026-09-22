@@ -1,28 +1,28 @@
 === recipe
-wrote <scratchpad>/seg/recipe.json: shape [2, 32, 32, 4, 2, 8, 64, 2, 50257], K=4, 12 steps, 3072 tokens, lr table 12 entries, sha256 f953e670ece2c38b
+wrote <scratchpad>/seg/recipe.json: shape [2, 32, 32, 4, 2, 8, 64, 2, 50257], K=4, 12 steps, 3072 tokens, lr table 12 entries, sha256 8ffada5676d9a831
 === keys
 chain.jsonl manifest.tsv segment.json ckpt_00000006.blm ckpt_00000008.blm 
 === init
 wrote <scratchpad>/seg/ckpt_00000000.blm: step 0, 3235008 parameters, init sha256 a78b390a81c4a403, file sha256 eb50db22b1640a9b, numpy 2.5.3
 === A1
-[15:26:48] checkpoint ckpt_00000002.blm (38822695 bytes, sha256 266d1acf59d9e568, 0.0 s)
-[15:26:49] checkpoint ckpt_00000004.blm (38822695 bytes, sha256 fdd04a26b581c29a, 0.0 s)
-[15:26:49] PASS: <scratchpad>/seg/A1
+[16:36:40] checkpoint ckpt_00000002.blm (38822695 bytes, sha256 266d1acf59d9e568, 0.0 s)
+[16:36:41] checkpoint ckpt_00000004.blm (38822695 bytes, sha256 fdd04a26b581c29a, 0.0 s)
+[16:36:41] PASS: <scratchpad>/seg/A1
 === A2
-[15:26:51] PASS: <scratchpad>/seg/A2
+[16:36:43] PASS: <scratchpad>/seg/A2
 === A3
-[15:26:53] PASS: <scratchpad>/seg/A3
+[16:36:45] PASS: <scratchpad>/seg/A3
 === B1 (expect A1)
-[15:26:54] step 3 agrees with the expected chain
-[15:26:54] step 4 agrees with the expected chain
-[15:26:55] PASS: <scratchpad>/seg/B1
+[16:36:47] step 3 agrees with the expected chain
+[16:36:47] step 4 agrees with the expected chain
+[16:36:47] PASS: <scratchpad>/seg/B1
 === B2 from A1's checkpoint (expect A2)
-[15:26:56] PASS: <scratchpad>/seg/B2
+[16:36:49] PASS: <scratchpad>/seg/B2
 === arrival replay at boundary 4 (must PASS)
-[15:26:57] PASS: <scratchpad>/seg/ARR
+[16:36:50] PASS: <scratchpad>/seg/ARR
 === zero-moments control (must FAIL)
-[15:26:58] DISAGREE at step 3 on ['state_sha256']; the segment stops here
-[15:26:58] FAIL: <scratchpad>/seg/CTRL
+[16:36:51] DISAGREE at step 3 on ['state_sha256']; the segment stops here
+[16:36:51] FAIL: <scratchpad>/seg/CTRL
 control exit=1
 === compare chains
 steps=4 compared=16 disagreements=0
@@ -32,8 +32,8 @@ checkpoints compared=2 disagreements=0
 REFUSED: the checkpoint's data schedule is not this recipe's over these tokens (K, shape, seed, learning-rate table or token stream differ)
 refusal exit=1
 === chain line sample
-{"batch_index":[0,4],"gradient_sha256":"d557d3a8207b3c2c5e1085fe12b7ca1be17801d1c7c88a8586cd354d307919f4","hash_seconds":0.109,"label":"m4-a","losses_f32_hex":["412d3467","412d33ac","412d35f3","412d36b3"],"lr_f32_hex":"3a03126f","prev":null,"route":"A","schema":"mojolearn.lm-segment.chain.v1","seconds":0.3568,"segment":"1","state_sha256":"c18fc996c4c5c7802fd2280c38bed94e1b0d3952fc4b15d80b097b99bf0a8cbe","step":1,"window":{"flags":"5b6fb58e61fa475939767d68a446f97f1bff02c0e5935a3ea8bb51e6515783d8","m":"b952747c391d32ab56392532cd5fa0efc25b1f30359b5d4694f3280ba26a027c","parameters":"b6220489992e5cbd9600d869a942ea8e202a6927244493af27aba781d4718146","shards_sha256":["e55fce22599fe0ee0397cca4031401
-chain.jsonl	2451	835ecc3e304cbe9292ea81fc61bcc962dd75b005684d3df93efb0dbc16109a82
+{"batch_index":[0,4],"gradient_sha256":"d557d3a8207b3c2c5e1085fe12b7ca1be17801d1c7c88a8586cd354d307919f4","hash_seconds":0.11,"label":"m4-a","losses_f32_hex":["412d3467","412d33ac","412d35f3","412d36b3"],"lr_f32_hex":"3a03126f","prev":null,"route":"A","schema":"mojolearn.lm-segment.chain.v1","seconds":0.3385,"segment":"1","state_sha256":"c18fc996c4c5c7802fd2280c38bed94e1b0d3952fc4b15d80b097b99bf0a8cbe","step":1,"window":{"flags":"5b6fb58e61fa475939767d68a446f97f1bff02c0e5935a3ea8bb51e6515783d8","m":"b952747c391d32ab56392532cd5fa0efc25b1f30359b5d4694f3280ba26a027c","parameters":"b6220489992e5cbd9600d869a942ea8e202a6927244493af27aba781d4718146","shards_sha256":["e55fce22599fe0ee0397cca40314010
+chain.jsonl	2450	1b2490f97f541f266eddc1d7f11482de08d5cbf8ba3d40ea4063f4d61ff09f45
 ckpt_00000002.blm	38822695	266d1acf59d9e568fdd1624a0d2986191021cd4570ddf06e3ac54af43955a745
 ckpt_00000004.blm	38822695	fdd04a26b581c29a2f21b59e342e21bd5749b2f428a3aea75cd63a374597e61a
 OVERALL fail=0
