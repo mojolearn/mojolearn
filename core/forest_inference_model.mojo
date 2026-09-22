@@ -55,6 +55,12 @@ def forest_ordered_resident_policy[
 #: Apple, NVIDIA and AMD in FAST/IDENTICAL. `_OFF` restores the former
 #: sequential IDENTICAL AUTO policy and resident FAST 32-grove graph; the
 #: positive define remains an experiment switch for other IDENTICAL columns.
+#: Since 2026-09-22 this is the DEFAULT of a per-snapshot choice
+#: (`ResidentForest.ordered`, forest_prepare_gpu's optional 4th param): an
+#: IDENTICAL caller names it, strict for `auto` (the sequential bits) and
+#: the 32-grove graph for an explicit `parallel_groves` (the recorded fold,
+#: which the CPU host groves engine also computes). As a bare compiled
+#: default it moved recorded IDENTICAL parallel_groves cells on every GPU.
 comptime FOREST_ORDERED_RESIDENT = forest_ordered_resident_policy[
     TARGET_COLUMN,
     GLOBAL_NUMERIC_MODE,

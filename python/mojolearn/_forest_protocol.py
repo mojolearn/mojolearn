@@ -183,11 +183,18 @@ class ForestProtocol:
             return False
         if self._effective_mode() != "identical":
             return False
+        selected = self._ordered_resident_export()
+        return selected is not None and int(selected()) == 1
+
+    def _ordered_resident_export(self):
+        """The binding's `forest_ordered_resident`, or None where it has none:
+        an older binary, or a host binding, whose proxy raises ImportError
+        by name (not AttributeError) for an export it lacks."""
         try:
             selected = getattr(self._bind(), "forest_ordered_resident", None)
         except (AttributeError, ImportError):
-            return False
-        return callable(selected) and int(selected()) == 1
+            return None
+        return selected if callable(selected) else None
 
     def _resident_ordered_flag(self):
         """The aggregation a resident snapshot is prepared with: True strict
@@ -201,7 +208,7 @@ class ForestProtocol:
         `forest_ordered_resident` export), whose resident route is groves."""
         if self._effective_mode() != "identical":
             return None
-        if not callable(getattr(self._bind(), "forest_ordered_resident", None)):
+        if self._ordered_resident_export() is None:
             return None
         return self._prediction_engine() == "sequential"
 

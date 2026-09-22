@@ -353,3 +353,5 @@ def test_identical_auto_on_a_host_binding_is_sequential(monkeypatch):
     model = fitted(RandomForestRegressor, 'auto')
     assert model._prediction_engine() == 'sequential'
     assert not model._ordered_resident_auto()
+    groves = fitted(RandomForestRegressor, 'parallel_groves')
+    assert groves._resident_ordered_flag() is None
