@@ -2,6 +2,22 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
+## 0.8.14 (published 2026-09-22)
+
+### Changed
+- `ExponentialSmoothing` takes `initialization_method`, default `"estimated"`: the initial level, trend and seasonal states are fitted jointly with the smoothing parameters. `"heuristic"` (alias `"cuml"`) is the 0.8.13 fit, and saved models without the field load as `"heuristic"`.
+- `GradientBoosting` trains small IDENTICAL pools, and pools of one-border columns, on the CPU host route with the same bits.
+- Native libraries rebuilt from source, including ordered resident forest inference on every GPU vendor, per-vendor exact random forest training kernels and a parallel Holt-Winters fit kernel.
+
+### Fixed
+- Random forest `fit` no longer hangs on NaN in `X`; the tree family refuses NaN and infinite inputs with a `ValueError` naming them.
+- `KMeans`, `DBSCAN` and `KernelDensity` refuse NaN and infinite inputs at `fit`, and `Embedding` refuses non-integer ids.
+- Classical estimators have `get_params` and work with `clone` and `cross_val_score`; `mojolearn.Array` converts through `__array__`; `import mojolearn.metrics` works; `SVC` accepts string labels.
+- `GradientBoostingRegressor` targets and the scalers accept nested Python lists.
+- `LanguageModelHostTrainer` defaults `weight_decay` to 0.01, like the GPU trainer.
+- The GreedyLogSum border penalty uses the portable logarithm, so borders near a tie agree across platforms.
+- `python -m mojolearn verify` with no card runs the quick check instead of ending with no reference.
+
 ## 0.8.13 (published 2026-09-21)
 
 ### Fixed
