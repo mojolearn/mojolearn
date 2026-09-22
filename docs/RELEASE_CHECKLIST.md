@@ -163,6 +163,43 @@ sha256sum <sm89>/build/sets/cuda/sm_89/host/*.so <sm90a>/build/sets/cuda/sm_90a/
 differ across legs, and requires every manifest binding in every set; the
 lines above say WHICH leg is wrong before the packer says that one is.
 
+## 2c. The CPU build route: all three sets on one CPU box, no GPU
+
+```sh
+bash tools/release_linux_build.sh $REF          # dry run: nothing rented
+bash tools/release_linux_build.sh $REF --rent   # about 17 minutes, about $0.40
+```
+
+One RunPod CPU pod (32 vCPU, 128 GB) runs the AMD leg's pinned
+`rocm/dev-ubuntu-22.04` image (GCC 11.4, ld 2.38, patchelf 0.17.2) and builds
+cuda/sm_90a, cuda/sm_89 and hip/gfx942 one after another at `/root/mojolearn`
+through the same `tools/release061_remote_build.sh`, with
+`MOJOLEARN_RELEASE_NO_DEVICE=1`: Mojo compiles each set from
+`--target-accelerator` alone, the guard (`tools/cpu_build_guard.py`) refuses if
+any GPU device node is visible, and the postflight requires the read-back
+architecture to equal the requested one. The output is
+`~/mojolearn-evidence/releases/$REF/linux-cpu-box/<stamp>/{cuda-sm_90a,cuda-sm_89,hip-gfx942}/release-build`,
+the same trees the GPU legs write; the script prints the step 3 pack command.
+It replaces the three GPU rentals of section 2 (20 to 35 minutes each).
+
+Proof at d181d9792 (0.8.14) against that release's three GPU-box builds,
+sha256 of every `.so` in each set (tiers, `host/`, `.libs/`):
+cuda/sm_90a 66 of 66 and cuda/sm_89 66 of 66 byte-identical, with
+`readback.txt`, `arch_readback.txt` and the provenance extension and
+host-binding digests identical. hip/gfx942 matched 62 of 66: `mojo build -j 2`
+for gfx942 is not deterministic (five cold builds of one binding gave three
+binaries, five with `-j 1` gave one), so the MI325X leg's own bytes were one
+draw. `packaging/linux/build_sets.sh` now compiles AMD GPU bindings with one
+worker on every route. `manifest.json` differs only in its `set` field, the
+staging path, which nothing reads.
+
+The binding cache (`tools/bincache.py`, R2 `bincache/v1/none/<image>/`) is on
+by default: a build whose key (source closure, scripts, toolchain, build
+variables, OS, path) matches an archive takes its bytes after the archive's
+key, fields and every file's sha256 verify. `build-provenance.json` records per
+binary whether it was built or taken, its key, and the commit whose build
+compiled it. `--no-bincache` builds everything from source.
+
 ## 3. Pack, audit, strip (on the Mac, docker, about 10 minutes)
 
 ```sh

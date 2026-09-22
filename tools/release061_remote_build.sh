@@ -23,8 +23,10 @@ esac
 # that no device was read instead of reading one, and the postflight requires
 # the read-back architecture to equal the requested one. Everything else, the
 # build, the read-backs and the provenance, is the same code as the GPU legs.
-# Proven 2026-09-22 at d181d9792 (0.8.14): every shipped binary byte-identical
-# to the GPU-box builds of the same commit (docs/RELEASE_CHECKLIST.md 2c).
+# Proven 2026-09-22 at d181d9792 (0.8.14): both NVIDIA sets byte-identical to
+# the GPU-box builds of the same commit (132 of 132 binaries); the AMD set
+# matched 62 of 66 because `mojo build -j 2` for gfx942 is nondeterministic,
+# now built with one worker (docs/RELEASE_CHECKLIST.md 2c).
 NO_DEVICE=${MOJOLEARN_RELEASE_NO_DEVICE:-0}
 case "$NO_DEVICE" in 0) ;; 1) guard=tools/cpu_build_guard.py ;; *) echo 'MOJOLEARN_RELEASE_NO_DEVICE must be 0 or 1' >&2; exit 2 ;; esac
 PY=${MOJOLEARN_PYTHON:?existing absolute stdlib Python executable required}
