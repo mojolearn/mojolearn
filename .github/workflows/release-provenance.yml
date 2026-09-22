@@ -152,11 +152,13 @@ jobs:
     timeout-minutes: 90
     env:
       MOJOLEARN_PACKAGE_BYTE_LM: '1'
-      # Two builds of two compiler workers: four compiler threads, inside the
-      # Apple release budget of five cores and about 8 GB (2026-09-21). One at
-      # a time (the 2026-09-17 setting) made this job 30 to 60 minutes.
-      MOJOLEARN_BUILD_JOBS: '2'
-      MOJOLEARN_COMPILE_JOBS: '2'
+      # Four builds of one compiler worker: four compiler threads, inside the
+      # Apple release budget of five cores, about 5 GB (2026-09-21). From the
+      # 0.8.13 cold build's measured per-extension times this is about 15
+      # minutes; 2 x 2 would be about 25 and one at a time was 44
+      # (packaging/macos/build_release_wheel.sh has the measurement).
+      MOJOLEARN_BUILD_JOBS: '4'
+      MOJOLEARN_COMPILE_JOBS: '1'
       MOJOLEARN_CPU_THREADS: '1'
       OMP_NUM_THREADS: '1'
       OPENBLAS_NUM_THREADS: '1'

@@ -110,9 +110,28 @@ class Scheduler:
             if not self.publish(self.ticket, command):
                 raise RuntimeError("ticket publication raced a legacy scheduler; retry")
 
-    def attempt(self, metal, command):
+    def attempt(self, metal, command, slots=1):
+        """Take one slot (and the Metal lock when `metal`), or `slots` CPU
+        slots at once for a job that runs that many single-threaded workers
+        (the macOS release build, `--slots`). All or nothing: a partial take
+        is released before returning False."""
         with self.guard():
             self.reap()
+            if slots > 1:
+                if metal:
+                    raise ValueError("a Metal job takes one slot")
+                free = [p for p in self.slots if not p.exists()][:slots]
+                if len(free) < slots:
+                    return False
+                for path in free:
+                    if not self.publish(path, command):
+                        for taken in self.held:
+                            if read(taken / "token") == self.token:
+                                shutil.rmtree(taken)
+                        self.held = []
+                        return False
+                    self.held.append(path)
+                return True
             free = next((p for p in self.slots if not p.exists()), None)
             if free is None:
                 return False
@@ -202,6 +221,9 @@ def main(argv=None):
     ap.add_argument("--deadline", type=float, default=0, help="shared monotonic deadline; 0 disables it")
     ap.add_argument("--poll", type=float, default=0.25)
     ap.add_argument("--timing-json")
+    ap.add_argument("--slots", type=int, default=1,
+                    help="run mode only: hold this many CPU slots and let the child run that many "
+                         "single-threaded build jobs (MOJOLEARN_BUILD_JOBS); every other pin stays 1")
     ap.add_argument("mode", choices=("run", "metal", "cuda", "hip", "status"))
     ap.add_argument("command", nargs=argparse.REMAINDER)
     args = ap.parse_args(argv)
@@ -209,6 +231,10 @@ def main(argv=None):
             or args.timeout < 0 or args.wait_timeout < 0 or args.deadline < 0 or args.poll <= 0):
         ap.error("timeouts must be finite and nonnegative and poll must be finite and positive")
     scheduler = Scheduler()
+    if args.slots < 1 or (args.slots > 1 and args.mode != "run"):
+        ap.error("--slots must be positive, and above 1 only in run mode")
+    if args.slots > scheduler.count:
+        ap.error(f"--slots {args.slots} exceeds the {scheduler.count} Mac slots")
     if args.mode == "status":
         scheduler.status()
         return 0
@@ -233,7 +259,7 @@ def main(argv=None):
                 print("mac_slot: total run budget exhausted", file=sys.stderr, flush=True)
                 code = 124
                 return code
-            if scheduler.attempt(args.mode in ("metal", "cuda", "hip"), args.command):
+            if scheduler.attempt(args.mode in ("metal", "cuda", "hip"), args.command, args.slots):
                 break
             waited = now - started
             if args.wait_timeout and waited >= args.wait_timeout:
@@ -248,8 +274,12 @@ def main(argv=None):
         print(f"mac_slot: admitted after {admitted - started:.3f}s", file=sys.stderr, flush=True)
         env = dict(os.environ, OMP_NUM_THREADS="1", OPENBLAS_NUM_THREADS="1",
                    VECLIB_MAXIMUM_THREADS="1", MOJOLEARN_CPU_THREADS="1",
-                   MOJOLEARN_COMPILE_JOBS="1", MOJOLEARN_BUILD_JOBS="1",
+                   MOJOLEARN_COMPILE_JOBS="1", MOJOLEARN_BUILD_JOBS=str(args.slots),
                    MODULAR_THREAD_BUSY_WAIT_US="0")
+        # --slots N (2026-09-21): N slots held, N single-worker builds. The
+        # macOS release build under one slot compiled its 61 extensions one
+        # after another (0.8.13: 2370 s of compile in a 2666 s run); see
+        # packaging/macos/build_release_wheel.sh for the measurement.
         remaining = args.deadline - time.monotonic() if args.deadline else None
         if remaining is not None and remaining <= 0:
             code = 124

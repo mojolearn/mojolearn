@@ -18,6 +18,10 @@ section 3.4), as a tool that runs on a laptop too.
              sentence "no CPU implementation of". A JSON with no cell, or a
              cell of the wrong kind, fails: a step that was supposed to
              produce a cell and produced none is a failure, never a pass.
+             With --sabotage --production PROD, a covered cell the sabotage
+             build makes the lane itself refuse, on a cell PROD hashes
+             STABLE, counts as caught (caught_refusals); without --sabotage
+             every refusal of a covered cell stays a failure.
   run-column run tools/identity_break.py over --lanes as SHARDS in parallel
              processes and join the parts with identity_break --merge into
              --json (2026-09-15, lane/cpu-training-gate-budget). The gate's
@@ -36,7 +40,8 @@ section 3.4), as a tool that runs on a laptop too.
              STABLE and every column that has it agrees; this check then
              requires every listed part to MOVE between the production CPU
              column and the MOJOLEARN_HOST_SABOTAGE column. Exit 1 on a part
-             that did not move, is refused or absent under sabotage.
+             that did not move or is absent under sabotage, or is refused by
+             anything but the lane's own computation (caught_refusals).
   build-list the host binding lists the gate builds, read back and builds
              again for the sabotage set, against the manifest
              (python/mojolearn/host_surface.py, 2026-09-15). Every family the
@@ -64,11 +69,157 @@ import time
 REFUSAL = "no CPU implementation of"
 
 
-def recorded_native_oracle_failure(record):
+#: Exception names whose refusal says nothing about the lane's arithmetic:
+#: the package or a binding did not load, the box ran out of memory or time.
+#: A sabotage refusal of one of these kinds is never a catch.
+_ENVIRONMENT_ERRORS = ("ImportError", "ModuleNotFoundError", "OSError", "FileNotFoundError",
+                       "PermissionError", "MemoryError", "TimeoutError", "KeyboardInterrupt",
+                       "SystemExit", "RecursionError")
+#: The loader's sentence for a sabotage binary loaded without the gate's
+#: permission (python/mojolearn/_backend.py): the arm did not run at all.
+_SABOTAGE_LOAD_REFUSAL = "refused outside the gate"
+
+
+def _host_sabotaged(record):
+    return any(f.get("sabotage") is True for f in ((record.get("host") or {}).get("families") or {}).values())
+
+
+def caught_refusals(record, production):
+    """The sabotage column's cells REFUSED because the sabotage build broke
+    the lane's own computation, so the column MOVED there (2026-09-21).
+
+    Gate run 35636551982 (8fbcd2514): under the sabotage host set the
+    helpers' deliberate faults made rf-score-weighted's weighted score
+    refuse its own weights (the sabotaged max read the minimum, zero) and
+    spectral-precomputed's k-means reach a row with no nearest centroid.
+    Those are the sabotage caught, but the recorder writes them as REFUSED,
+    and a refusal was never evidence, so both shards failed the step.
+
+    A refused cell counts as caught ONLY when all of these hold:
+      - `record` is a CPU column whose host families read back sabotage and
+        `production` is a CPU column of the same commit, fixtures and CPU
+        whose families read back production (no sabotage);
+      - the production column hashes the same cell STABLE over at least two
+        repeats with no refusal of any part: the only difference between the
+        two runs is the sabotage build, so the refusal is the sabotage's;
+      - the refusal is not the routing refusal ("no CPU implementation of"),
+        not the loader's refusal of a sabotage binary, and not an
+        environment failure (_ENVIRONMENT_ERRORS).
+    Never used for a production column: a refusal there stays a failure."""
+    if not _comparable(record, production):
+        return set()
+    caught = set()
+    pcells = production.get("cells") or {}
+    for key, cell in (record.get("cells") or {}).items():
+        if cell.get("verdict") != "REFUSED":
+            continue
+        if not _own_computation_refusal(cell.get("error")):
+            continue
+        if not _production_stable(pcells.get(key)):
+            continue
+        caught.add(key)
+    return caught
+
+
+def _comparable(record, production):
+    """`record` is a sabotage CPU column and `production` a production CPU
+    column of the same commit, CPU, fixtures and mode."""
+    if not production or not _host_sabotaged(record) or _host_sabotaged(production):
+        return False
+    host, phost = record.get("host") or {}, production.get("host") or {}
+    return not (host.get("column") != "cpu" or phost.get("column") != "cpu"
+                or record.get("commit") != production.get("commit")
+                or host.get("cpu_model") != phost.get("cpu_model")
+                or set(record.get("fixtures") or {}) != set(production.get("fixtures") or {})
+                or record.get("mode") != production.get("mode"))
+
+
+def _own_computation_refusal(error):
+    """The refusal text names the lane's own computation: not empty, not the
+    routing refusal, not the loader's refusal of a sabotage binary, not an
+    environment failure. A probe refusal carries its stage first
+    ("infer: ValueError: ..."), which is dropped before the kind is read."""
+    error = str(error or "")
+    if not error or REFUSAL in error or _SABOTAGE_LOAD_REFUSAL in error:
+        return False
+    head, _, rest = error.partition(":")
+    if head.strip() in _PROBE_STAGES and rest.strip():
+        error = rest.strip()
+    kind = error.split(":", 1)[0].strip()
+    return not any(kind == e or kind.endswith("." + e) for e in _ENVIRONMENT_ERRORS)
+
+
+def _production_stable(p, parts=()):
+    """The production cell hashes STABLE over at least two repeats with no
+    error of any part, and each of `parts` (a `<part>_verdict` field) reads
+    STABLE."""
+    p = p or {}
+    hashes = p.get("hashes") or []
+    return not (p.get("verdict") != "STABLE" or not isinstance(hashes, list) or len(hashes) < 2
+                or not all(isinstance(h, str) and h for h in hashes) or len(set(hashes)) != 1
+                or any(v for f, v in p.items() if f == "error" or f.endswith("_error"))
+                or any(p.get(f) != "STABLE" for f in parts))
+
+
+#: The stages whose failure identity_break records as the cell's
+#: `probe_error` and whose column then reads REFUSED.
+_PROBE_STAGES = ("infer", "model")
+
+
+def caught_part_refusals(record, production):
+    """The sabotage column's cells whose TRAINING hashed STABLE but whose
+    infer or model part the lane's own self-check refused, on a cell the
+    production column hashes STABLE with those parts STABLE (2026-09-22).
+
+    Gate run 35662090487 (e28efd4a5): under the sabotage host set the
+    holtwinters lanes trained to stable bytes that differ from production,
+    then their infer probe compared forecast(h) with forecast(h, index=0)
+    (and forecast_exponential_smoothing with ExponentialSmoothing.forecast)
+    and refused because the sabotaged kernel made them differ. identity_break
+    records that as probe_error with infer_verdict and model_verdict REFUSED;
+    the cell's own verdict stays STABLE, so `caught_refusals` never saw it and
+    shard 1 failed the step on every runner.
+
+    Returns {cell key: frozenset of the REFUSED `<part>_verdict` fields}. A
+    cell is admitted only when `caught_refusals`' column conditions hold, the
+    cell reads STABLE, probe_error names the lane's own computation
+    (`_own_computation_refusal`), the REFUSED fields are only infer_verdict
+    and model_verdict and every repeat of each is None, and the production
+    cell reads those parts STABLE. Every other part and error of the cell is
+    still judged as before."""
+    if not _comparable(record, production):
+        return {}
+    pcells = production.get("cells") or {}
+    caught = {}
+    for key, cell in (record.get("cells") or {}).items():
+        if cell.get("verdict") != "STABLE" or not cell.get("probe_error"):
+            continue
+        error = str(cell.get("probe_error"))
+        if error.partition(":")[0].strip() not in _PROBE_STAGES or not _own_computation_refusal(error):
+            continue
+        refused = {f for f, v in cell.items() if f.endswith("_verdict") and v == "REFUSED"}
+        if not refused or not refused <= {f"{s}_verdict" for s in _PROBE_STAGES}:
+            continue
+        if any(not isinstance(cell.get(f[:-len("_verdict")]), list)
+               or any(v is not None for v in cell.get(f[:-len("_verdict")]))
+               for f in refused):
+            continue
+        if not _production_stable(pcells.get(key), sorted(refused)):
+            continue
+        caught[key] = frozenset(refused)
+    return caught
+
+
+def recorded_native_oracle_failure(record, caught=frozenset(), caught_parts=None):
     """A deliberate native fault returned repeated bytes and failed its oracle.
 
     This permits the recorder's exit one only in the explicit sabotage arm.
-    It never turns a refusal, unstable result or incomplete shard into evidence.
+    It never turns a refusal, unstable result or incomplete shard into
+    evidence, except the cells in `caught` (`caught_refusals`, a refusal the
+    production column shows the sabotage build caused), which are skipped
+    here and count as observed, and the part refusals in `caught_parts`
+    (`caught_part_refusals`), whose probe_error and REFUSED infer/model
+    columns count as observed while the rest of the cell is judged as usual.
     """
     from verify_cpu_batch import expected_oracle_failure
     host = record.get("host") or {}
@@ -79,12 +230,29 @@ def recorded_native_oracle_failure(record):
             or not any(f.get("sabotage") is True for f in (host.get("families") or {}).values())):
         return False
     cells = record.get("cells") or {}
-    for cell in cells.values():
+    for key, cell in cells.items():
+        if key in caught:
+            continue
         hashes = cell.get("hashes") or []
         if (not isinstance(hashes, list) or len(hashes) != repeats
                 or not all(isinstance(h, str) and h for h in hashes) or len(set(hashes)) != 1):
             return False
-    return expected_oracle_failure(record)
+    return expected_oracle_failure(record, caught=caught, caught_parts=caught_parts)
+
+
+def _load_production(path):
+    """The production CPU column a sabotage verdict is read against, or None.
+    An unreadable one admits no refusal as caught (the verdict is then the
+    strict one) and is said so; it is not itself a failure of this arm."""
+    if not path:
+        return None
+    try:
+        with open(path) as fh:
+            return json.load(fh)
+    except (OSError, ValueError) as exc:
+        print(f"note: cannot read the production column {path} ({exc}); no sabotage refusal counts as caught",
+              flush=True)
+        return None
 
 
 def do_readback(args):
@@ -158,7 +326,11 @@ def do_column(args):
         need(b in families, f"host.families lacks {b}")
         need(families.get(b, {}).get("column") == "cpu", f"host.families[{b}].column is not cpu")
     cells = j.get("cells") or {}
-    oracle_control = bool(getattr(args, "sabotage", False) and recorded_native_oracle_failure(j))
+    sabotage = bool(getattr(args, "sabotage", False))
+    production = _load_production(getattr(args, "production", None)) if sabotage else None
+    caught = caught_refusals(j, production) if sabotage else set()
+    caught_parts = caught_part_refusals(j, production) if sabotage else {}
+    oracle_control = bool(sabotage and recorded_native_oracle_failure(j, caught, caught_parts))
     need(len(cells) > 0, "the JSON carries NO cell; a run that was supposed to produce cells produced none")
     need(j.get("complete", False), "the JSON is INCOMPLETE (the run was killed)")
     fixtures = j.get("fixtures") or {}
@@ -171,13 +343,22 @@ def do_column(args):
         lane = key.split("/")[0]
         seen.add(lane)
         verdict = cell.get("verdict")
+        if lane in covered and key in caught and oracle_control:
+            print(f"column {key}: REFUSED under sabotage, STABLE in production: caught "
+                  f"({str(cell.get('error', ''))[:160]})")
+            continue
         if lane in covered:
             need(verdict == "STABLE" or (oracle_control and verdict == "DIVERGENT"),
                  f"{key}: covered lane reads {verdict}, not STABLE" + (f" ({cell.get('error', '')[:160]})" if verdict == "REFUSED" else ""))
             # A stable training hash cannot certify a failed inference or
             # metamorphic comparison. Only explicitly inapplicable/skipped
             # parts may be N/A; every reported failure stays a failure.
+            if oracle_control and key in caught_parts:
+                print(f"column {key}: {', '.join(sorted(caught_parts[key]))} REFUSED under sabotage by the "
+                      f"lane's own check, STABLE in production: caught ({str(cell.get('probe_error', ''))[:160]})")
             for field, part_verdict in cell.items():
+                if oracle_control and field in caught_parts.get(key, ()):
+                    continue
                 if field.endswith("_verdict"):
                     need(part_verdict in ("STABLE", "N/A") or
                          (oracle_control and part_verdict in ("BATCH_MOVED", "RLPAIR_MOVED")),
@@ -195,6 +376,16 @@ def do_column(args):
         print(f"column FAIL: {f}")
     print(f"column verdict {'OK' if not failures else 'FAIL'} ({len(failures)} failure(s))")
     return 1 if failures else 0
+
+
+def _oracle_diverged(cell):
+    """A cell whose training failed its oracle on every repeat with the same
+    bytes: DIVERGENT, one non-empty oracle error per repeated hash."""
+    hashes = cell.get("hashes") or []
+    errors = cell.get("oracle_errors") or []
+    return (cell.get("verdict") == "DIVERGENT" and isinstance(hashes, list) and len(hashes) >= 2
+            and all(isinstance(h, str) and h for h in hashes) and len(set(hashes)) == 1
+            and len(errors) == len(hashes) and all(errors))
 
 
 def _part_values(cell, part):
@@ -215,7 +406,11 @@ def do_owed(args):
     does nothing, so every owed part must also MOVE under the sabotage host
     set: its sabotage value must exist, must not be n/a, and must differ from
     the production CPU hash (a BATCH_MOVED string differs from every hash).
-    A refused or absent sabotage cell is not a catch."""
+    An absent sabotage cell is not a catch; a refused one is only when
+    `caught_refusals` admits it (the lane's own computation refused under
+    the sabotage build on a cell production hashes STABLE), and a cell whose
+    training failed its own oracle on every repeat is (`_oracle_diverged`),
+    as the column verdict admits it."""
     try:
         with open(args.owed_json) as fh:
             owed = json.load(fh)
@@ -234,6 +429,14 @@ def do_owed(args):
         print(f"owed: {args.owed_json} carries no owed list", file=sys.stderr)
         return 2
     moved = 0
+    caught = caught_refusals(sab, prod)
+    caught_parts = caught_part_refusals(sab, prod)
+    # A sabotage cell whose training failed its own oracle on every repeat
+    # records no further part (gate run 35636551982: the par-* lanes); the
+    # column verdict already admits it as the sabotage caught, so an owed
+    # part of it moved too.
+    oracle_caught = {k for k, c in (sab.get("cells") or {}).items()
+                     if _host_sabotaged(sab) and _oracle_diverged(c)}
     for o in entries:
         key, part = f"{o['lane']}/{o['fixture']}", o["part"]
         p = _part_values(prod["cells"].get(key), part)
@@ -241,8 +444,24 @@ def do_owed(args):
         if not p or len(set(p)) != 1 or str(p[0]).startswith("n/a"):
             failures.append(f"{key} {part}: the production CPU column does not hash it STABLE ({p})")
             continue
-        if not s:
-            failures.append(f"{key} {part}: the sabotage column has no value (absent or REFUSED); a refusal is not a catch")
+        if not s and key in oracle_caught:
+            moved += 1
+            print(f"owed {key} {part}: production {p[0]} sabotage DIVERGENT from its own oracle "
+                  f"({str((sab['cells'][key].get('oracle_errors') or [''])[0])[:120]}) MOVED")
+            continue
+        if not s and key in caught:
+            moved += 1
+            print(f"owed {key} {part}: production {p[0]} sabotage REFUSED by the lane's own computation "
+                  f"({str(sab['cells'][key].get('error', ''))[:120]}) MOVED")
+            continue
+        if s and all(v is None for v in s) and f"{part}_verdict" in caught_parts.get(key, ()):
+            moved += 1
+            print(f"owed {key} {part}: production {p[0]} sabotage REFUSED by the lane's own check "
+                  f"({str(sab['cells'][key].get('probe_error', ''))[:120]}) MOVED")
+            continue
+        if not s or any(v is None for v in s):
+            failures.append(f"{key} {part}: the sabotage column has no value (absent, or REFUSED by routing, "
+                            "loading or the environment); such a refusal is not a catch")
             continue
         if str(s[0]).startswith("n/a"):
             failures.append(f"{key} {part}: the sabotage column reads {s[0]}")
@@ -374,6 +593,7 @@ def do_run_column(args):
         with open(logs[k]) as lf:
             sys.stdout.write(lf.read())
         sys.stdout.flush()
+    production = _load_production(getattr(args, "production", None)) if getattr(args, "sabotage", False) else None
     bad = []
     for k in range(len(shards)):
         if codes[k] == 0:
@@ -387,7 +607,9 @@ def do_run_column(args):
                                   for fixture in record.get("fixtures", {})}
                 expected_failure = (bool(expected_cells)
                                     and set(record.get("cells", {})) == expected_cells
-                                    and recorded_native_oracle_failure(record))
+                                    and recorded_native_oracle_failure(
+                                        record, caught_refusals(record, production),
+                                        caught_part_refusals(record, production)))
             except (OSError, ValueError):
                 pass
         if expected_failure:
@@ -468,6 +690,8 @@ def main(argv=None):
     col.add_argument("--commit", default="", help="the commit the JSON must carry")
     col.add_argument("--binding", default="", help="host bindings that must appear in host.families with column cpu, comma separated")
     col.add_argument("--sabotage", action="store_true", help="accept repeated explicit oracle failures with native sabotage readback")
+    col.add_argument("--production", default="", help="with --sabotage: the production CPU column; a covered cell it hashes "
+                     "STABLE that the sabotage build makes the lane refuse counts as caught")
     ow = sub.add_parser("owed", help="every OWED cell part (identity_break --owed-json) must move under the sabotage host set")
     ow.add_argument("owed_json")
     ow.add_argument("--production", required=True, help="the production CPU column the owed list was diffed from")
@@ -479,6 +703,7 @@ def main(argv=None):
     rc.add_argument("--jobs", type=int, default=0, help="shards running at once (default: --shards)")
     rc.add_argument("--heartbeat", type=float, default=120.0, help="seconds between progress lines")
     rc.add_argument("--sabotage", action="store_true", help="accept exit one only for complete, repeated native oracle failures")
+    rc.add_argument("--production", default="", help="with --sabotage: the production CPU column; see column --production")
     rc.add_argument("--resume", action="store_true", help="preserve shard checkpoints; the harness refuses incompatible source, binaries, environment or protocol")
     rc.add_argument("extra", nargs="*", help="after --, arguments passed to every identity_break shard")
     bl = sub.add_parser("build-list", help="the gate's build lists must cover every host binding the manifest declares")

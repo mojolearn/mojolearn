@@ -30,6 +30,38 @@ def oracle_failure_record(lanes=('gemm-pinned', 'kde')):
     return value
 
 
+def refused_under_sabotage_record(lanes=('gemm-pinned', 'kde'),
+                                  error='ValueError: mojolearn accuracy_score: sample_weight must have positive total weight'):
+    """A sabotage column whose first cell the lane itself refused (gate run
+    35636551982: rf-score-weighted and spectral-precomputed)."""
+    value = record(lanes)
+    value['host']['families']['binding']['sabotage'] = True
+    next(iter(value['cells'].values())).update(verdict='REFUSED', error=error, hashes=[])
+    return value
+
+
+def with_probe_parts(value):
+    """Every cell carries STABLE infer and model columns, as a production
+    column of a lane with a probe does."""
+    for c in value['cells'].values():
+        c.update(infer=['i', 'i'], infer_verdict='STABLE', model=['m', 'm'], model_verdict='STABLE')
+    return value
+
+
+def probe_refused_under_sabotage_record(lanes=('gemm-pinned', 'kde'),
+                                        error='infer: ValueError: forecast_exponential_smoothing(512) and plain '
+                                              'ExponentialSmoothing.forecast(512) differ: 5972 bytes of 8192'):
+    """Gate run 35662090487 shard 1: the holtwinters cells trained to stable
+    (moved) bytes, then their infer self-check refused under sabotage; the
+    cell reads STABLE with infer/model REFUSED and a probe_error."""
+    value = with_probe_parts(record(lanes))
+    value['host']['families']['binding']['sabotage'] = True
+    next(iter(value['cells'].values())).update(
+        hashes=['def', 'def'], infer=[None, None], infer_verdict='REFUSED',
+        model=[None, None], model_verdict='REFUSED', probe_error=error)
+    return value
+
+
 class GateTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
@@ -69,6 +101,145 @@ class GateTests(unittest.TestCase):
             else:
                 cell['batch_verdict'] = 'REFUSED'
             self.assertEqual(self.column(bad, sabotage=True), 1, mutation)
+
+    def column_against(self, value, production, sabotage=True):
+        prod = self.root / 'production.json'
+        prod.write_text(json.dumps(production))
+        path = self.root / 'column.json'
+        path.write_text(json.dumps(value))
+        return gate.do_column(SimpleNamespace(json=str(path), covered='gemm-pinned,kde', binding='binding',
+                                             commit='test', sabotage=sabotage, production=str(prod)))
+
+    def test_sabotage_refusal_is_caught_only_against_a_stable_production_column(self):
+        value = refused_under_sabotage_record()
+        self.assertEqual(self.column_against(value, record()), 0)
+        self.assertIn('REFUSED under sabotage, STABLE in production: caught', self.output.getvalue())
+        # never outside the sabotage arm, and never without the production column
+        self.assertEqual(self.column_against(value, record(), sabotage=False), 1)
+        self.assertEqual(self.column(value, sabotage=True), 1)
+        for error in (f'RuntimeError: {gate.REFUSAL} kde', 'ImportError: cannot load the binding',
+                      'ModuleNotFoundError: mojolearn', 'MemoryError: ', 'OSError: dlopen failed',
+                      'RuntimeError: this binary was built with a sabotage define on purpose; '
+                      'it is refused outside the gate (MOJOLEARN_HOST_ALLOW_SABOTAGE=1)', ''):
+            self.assertEqual(self.column_against(refused_under_sabotage_record(error=error), record()), 1, error)
+        for mutation in ('prod-refused', 'prod-unstable', 'prod-one-repeat', 'prod-sabotaged',
+                         'prod-commit', 'prod-cpu', 'incomplete', 'no-readback'):
+            bad, prod = copy.deepcopy(value), record()
+            first = next(iter(prod['cells']))
+            if mutation == 'prod-refused':
+                prod['cells'][first] = dict(verdict='REFUSED', error='ValueError: x', hashes=[])
+            elif mutation == 'prod-unstable':
+                prod['cells'][first]['hashes'] = ['abc', 'abd']
+            elif mutation == 'prod-one-repeat':
+                prod['cells'][first]['hashes'] = ['abc']
+            elif mutation == 'prod-sabotaged':
+                prod['host']['families']['binding']['sabotage'] = True
+            elif mutation == 'prod-commit':
+                prod['commit'] = 'other'
+            elif mutation == 'prod-cpu':
+                prod['host']['cpu_model'] = 'other'
+            elif mutation == 'incomplete':
+                bad['complete'] = False
+            else:
+                bad['host']['families']['binding']['sabotage'] = False
+            self.assertEqual(self.column_against(bad, prod), 1, mutation)
+
+    def test_caught_refusal_never_excuses_another_failure(self):
+        value = refused_under_sabotage_record()
+        list(value['cells'].values())[1]['hashes'] = ['abc', 'abd']
+        self.assertEqual(self.column_against(value, record()), 1)
+        value = refused_under_sabotage_record()
+        list(value['cells'].values())[1]['verdict'] = 'REFUSED'
+        list(value['cells'].values())[1]['error'] = f'RuntimeError: {gate.REFUSAL} kde'
+        self.assertEqual(self.column_against(value, record()), 1)
+
+    def test_run_column_accepts_a_caught_refusal_only_with_the_production_column(self):
+        prod = self.root / 'production.json'
+        prod.write_text(json.dumps(record()))
+        for sabotage, production, expected in ((True, str(prod), 0), (True, '', 1), (False, str(prod), 1),
+                                               (True, str(self.root / 'absent.json'), 1)):
+            def worker(cmd, stdout, stderr):
+                lanes = cmd[cmd.index('--lanes') + 1].split(',')
+                Path(cmd[cmd.index('--json') + 1]).write_text(json.dumps(refused_under_sabotage_record(lanes)))
+                return SimpleNamespace(poll=lambda: 1)
+
+            args = SimpleNamespace(lanes='gemm-pinned,kde', shards=2, jobs=2,
+                                   json=str(self.root / 'merged.json'), extra=['--repeats', '2'],
+                                   heartbeat=120, sabotage=sabotage, production=production)
+            with patch.object(gate.subprocess, 'Popen', side_effect=worker), \
+                 patch.object(gate.subprocess, 'run', return_value=SimpleNamespace(returncode=0)), \
+                 patch.object(gate.time, 'sleep'):
+                self.assertEqual(gate.do_run_column(args), expected, (sabotage, production))
+
+    def test_sabotage_probe_refusal_is_caught_only_against_a_stable_production_column(self):
+        value = probe_refused_under_sabotage_record()
+        self.assertEqual(self.column_against(value, with_probe_parts(record())), 0)
+        self.assertIn("REFUSED under sabotage by the lane's own check", self.output.getvalue())
+        self.assertEqual(self.column_against(value, with_probe_parts(record()), sabotage=False), 1)
+        self.assertEqual(self.column(value, sabotage=True), 1)
+        for error in (f'infer: RuntimeError: {gate.REFUSAL} kde', 'infer: ImportError: cannot load the binding',
+                      'model: OSError: disk full', 'infer: MemoryError: ', 'batch: ValueError: x',
+                      'ValueError: no stage', ''):
+            bad = probe_refused_under_sabotage_record(error=error)
+            self.assertEqual(self.column_against(bad, with_probe_parts(record())), 1, error)
+        for mutation in ('prod-infer-refused', 'prod-no-infer', 'prod-probe-error', 'batch-refused',
+                         'batch-error', 'half-refused', 'unstable-train', 'no-readback'):
+            bad, prod = copy.deepcopy(value), with_probe_parts(record())
+            first = next(iter(bad['cells']))
+            if mutation == 'prod-infer-refused':
+                prod['cells'][first].update(infer=[None, None], infer_verdict='REFUSED')
+            elif mutation == 'prod-no-infer':
+                for f in ('infer', 'infer_verdict', 'model', 'model_verdict'):
+                    prod['cells'][first].pop(f)
+            elif mutation == 'prod-probe-error':
+                prod['cells'][first]['probe_error'] = 'infer: ValueError: x'
+            elif mutation == 'batch-refused':
+                bad['cells'][first].update(batch=[None, None], batch_verdict='REFUSED')
+            elif mutation == 'batch-error':
+                bad['cells'][first]['batch_error'] = 'batch: ValueError: x'
+            elif mutation == 'half-refused':
+                bad['cells'][first]['infer'] = ['i', None]
+            elif mutation == 'unstable-train':
+                bad['cells'][first]['hashes'] = ['def', 'deg']
+            else:
+                bad['host']['families']['binding']['sabotage'] = False
+            self.assertEqual(self.column_against(bad, prod), 1, mutation)
+
+    def test_run_column_accepts_a_shard_whose_only_failures_are_caught_refusals(self):
+        """Gate run 35662090487: shard 0 carried caught cell refusals and was
+        excused; shard 1 carried caught cell refusals AND cells whose infer
+        self-check refused under sabotage, and failed the step."""
+        prod = self.root / 'production.json'
+        prod.write_text(json.dumps(with_probe_parts(record(('gemm-pinned', 'kde', 'holtwinters')))))
+
+        def shard_record(lanes, kind):
+            value = with_probe_parts(record(lanes))
+            value['host']['families']['binding']['sabotage'] = True
+            cells = list(value['cells'].values())
+            cells[0].update(verdict='REFUSED', hashes=[], error='ValueError: sample_weight must have positive total weight')
+            cells[-1].update(hashes=['def', 'def'], infer=[None, None], infer_verdict='REFUSED',
+                             model=[None, None], model_verdict='REFUSED',
+                             probe_error='infer: ValueError: forecast(h) and forecast(h, index=0) differ')
+            if kind == 'environment':
+                cells[-1]['probe_error'] = 'infer: ImportError: cannot load the binding'
+            elif kind == 'crash':
+                cells[1].update(verdict='REFUSED', hashes=[], error=f'RuntimeError: {gate.REFUSAL} kde')
+            return value
+
+        for kind, sabotage, expected in (('caught', True, 0), ('caught', False, 1),
+                                         ('environment', True, 1), ('crash', True, 1)):
+            def worker(cmd, stdout, stderr):
+                lanes = cmd[cmd.index('--lanes') + 1].split(',')
+                Path(cmd[cmd.index('--json') + 1]).write_text(json.dumps(shard_record(lanes, kind)))
+                return SimpleNamespace(poll=lambda: 1)
+
+            args = SimpleNamespace(lanes='gemm-pinned,kde,holtwinters', shards=2, jobs=2,
+                                   json=str(self.root / 'merged.json'), extra=['--repeats', '2'],
+                                   heartbeat=120, sabotage=sabotage, production=str(prod))
+            with patch.object(gate.subprocess, 'Popen', side_effect=worker), \
+                 patch.object(gate.subprocess, 'run', return_value=SimpleNamespace(returncode=0)), \
+                 patch.object(gate.time, 'sleep'):
+                self.assertEqual(gate.do_run_column(args), expected, (kind, sabotage))
 
     def test_native_property_violation_is_not_a_production_pass(self):
         value = record()
@@ -369,16 +540,6 @@ class OwedTests(unittest.TestCase):
         with self.assertRaisesRegex(SystemExit, 'needs --require-columns'):
             self.identity.diff([], 0, None, str(self.root / 'x.json'))
 
-    def sabotage_check(self, mutate):
-        cols = self.columns()
-        self.assertEqual(self.diff(cols), 0)
-        prod = self.root / 'cpu.json'
-        sab_cells = {k: cell('s' + k, 's-infer' + k, 'BATCH_MOVED:x' + k, repeats=1) for k in cols['cpu']['cells']}
-        mutate(sab_cells)
-        sab = self.root / 'cpu-sab.json'
-        sab.write_text(json.dumps(column('cpu', sab_cells, cpu=True)))
-        return gate.do_owed(SimpleNamespace(owed_json=str(self.owed_path), production=str(prod), sabotage=str(sab)))
-
     def test_owed_cells_that_move_under_sabotage_pass(self):
         self.assertEqual(self.sabotage_check(lambda cells: None), 0)
         self.assertIn('owed verdict OK (4 of 4', self.output.getvalue())
@@ -388,6 +549,43 @@ class OwedTests(unittest.TestCase):
             cells['km/odd']['batch'] = ['bodd']
         self.assertEqual(self.sabotage_check(unmoved), 1)
         self.assertIn('km/odd batch: DID NOT MOVE', self.output.getvalue())
+
+    def sabotage_check(self, mutate, readback=False):
+        cols = self.columns()
+        self.assertEqual(self.diff(cols), 0)
+        prod = self.root / 'cpu.json'
+        sab_cells = {k: cell('s' + k, 's-infer' + k, 'BATCH_MOVED:x' + k, repeats=1) for k in cols['cpu']['cells']}
+        mutate(sab_cells)
+        sab = self.root / 'cpu-sab.json'
+        sab_column = column('cpu', sab_cells, cpu=True)
+        if readback:
+            sab_column['host']['families'] = {'binding': dict(column='cpu', sabotage=True)}
+        sab.write_text(json.dumps(sab_column))
+        return gate.do_owed(SimpleNamespace(owed_json=str(self.owed_path), production=str(prod), sabotage=str(sab)))
+
+    def test_owed_cell_refused_by_its_own_computation_under_sabotage_moves(self):
+        def refuse(error):
+            def mutate(cells):
+                cells['km/base'] = dict(verdict='REFUSED', error=error, hashes=[])
+            return mutate
+        own = refuse('RuntimeError: kmeans host: row 1 has no nearest centroid')
+        self.assertEqual(self.sabotage_check(own, readback=True), 0)
+        self.assertIn('REFUSED by the lane', self.output.getvalue())
+        # a sabotage column with no sabotage readback admits no refusal
+        self.assertEqual(self.sabotage_check(own), 1)
+        self.assertEqual(self.sabotage_check(refuse('ImportError: no binding'), readback=True), 1)
+        self.assertEqual(self.sabotage_check(refuse(f'RuntimeError: {gate.REFUSAL} km'), readback=True), 1)
+
+    def test_owed_cell_whose_training_failed_its_oracle_under_sabotage_moves(self):
+        def diverge(errors):
+            def mutate(cells):
+                cells['km/base'] = dict(verdict='DIVERGENT', hashes=['x', 'x'], oracle_errors=errors)
+            return mutate
+        self.assertEqual(self.sabotage_check(diverge(['oracle disagrees'] * 2), readback=True), 0)
+        self.assertIn('DIVERGENT from its own oracle', self.output.getvalue())
+        self.assertEqual(self.sabotage_check(diverge(['oracle disagrees'] * 2)), 1)
+        self.assertEqual(self.sabotage_check(diverge(['oracle disagrees', '']), readback=True), 1)
+        self.assertEqual(self.sabotage_check(diverge([]), readback=True), 1)
 
     def test_owed_cell_refused_or_absent_under_sabotage_fails(self):
         for mutation in ('refused', 'absent'):
