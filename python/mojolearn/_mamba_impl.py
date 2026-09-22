@@ -1142,16 +1142,51 @@ class Mamba2Block(_MambaBase):
             )
         return self._call(x, state, step=True)
 
-    def decode_session(self, state):
+    def _decode_session(self, state):
         """Keep Mamba-2 weights and recurrent state resident for repeated
         single-token decode.  The session runs the same L=1 block entry as
-        :meth:`step`; close or sync it before using ``state`` elsewhere."""
-        return Mamba2DecodeSession(self, state)
+        :meth:`step`; close or sync it before using ``state`` elsewhere.
+
+        PRIVATE UNTIL ITS LANE IS RECORDED; see `_RESIDENT_SESSION_NOTE`."""
+        return _Mamba2DecodeSession(self, state)
 
     __call__ = forward
 
 
-class Mamba2DecodeSession:
+#: WHY THE MAMBA-2 AND MAMBA-3 RESIDENT SESSIONS ARE PRIVATE (2026-09-22,
+#: fix/mamba-decode-surface-sep22). 769936f70 made `Mamba2DecodeSession` and
+#: `Mamba3DecodeSession` public with no identity lane, and
+#: tools/lane_accounting.py refused both by name: a public algorithm with no
+#: lane cannot be missing a cell, so no census sees it. They could not borrow
+#: the `mamba2`/`mamba3` lanes' coverage. Those lanes' recorded `stepfull`
+#: cells hash the per-call `step`, and no recorded column ever ran a session:
+#: the device arm is its own entry (`mamba2_session_step` /
+#: `mamba3_session_step` over resident device buffers) and the AMD and NVIDIA
+#: columns have never executed it. Code reading says it calls the same
+#: `mamba2_block_forward(..., L=1)`; a reading is not a witness. So they stay
+#: underscore-private, reached only through `Mamba2Block._decode_session` and
+#: `Mamba3Block._decode_session`, and are NOT exported from `mojolearn.mamba`.
+#: python/mojolearn/tests/test_mamba23_decode_sessions.py holds each to the
+#: per-call step byte for byte on whatever arm the box has.
+#:
+#: WHAT MAKES THEM PUBLIC. Two lanes in tools/identity_break.py,
+#: `mamba2-decode-session` and `mamba3-decode-session`, built exactly as
+#: `mamba1-decode-session` is: the `mamba2`/`mamba3` lanes' weights and slab,
+#: `_decode_session_probe` holding `step` and `sync_state` to the per-call
+#: `block.step` IN THE CELL (Mamba-2's state adds `buffer_xbc`,
+#: `buffer_dtraw` and `buffered_tokens`; Mamba-3's is the ten
+#: `_STATE_NAMES` pieces, so `_decode_state_arrays` needs those names),
+#: `flags` for the refusals, a `_stepfull_session_spec()` declaration, the
+#: batch/batchscale n/a with the Mamba-1 reason, and the mamba family's
+#: `-D MOJOLEARN_HOST_SABOTAGE=1` arm seen to move. Then cells for both lanes
+#: in the shipped verify reference table on CPU, Apple, NVIDIA and AMD. After
+#: that, rename the classes and the `_decode_session` doors back, re-export
+#: them from `mojolearn.mamba`, and add both lanes to host_surface's
+#: descriptions beside `mamba1-decode-session`.
+_RESIDENT_SESSION_NOTE = "see the comment above"
+
+
+class _Mamba2DecodeSession:
     """Resident repeated decode for one ``Mamba2Block`` and state."""
 
     def __init__(self, block, state):
@@ -1690,15 +1725,17 @@ class Mamba3Block(_MambaBase):
             )
         return self._call(x, state, step=True)
 
-    def decode_session(self, state):
+    def _decode_session(self, state):
         """Keep Mamba-3 weights and recurrent state resident for repeated
-        single-token decode while executing the existing L=1 block entry."""
-        return Mamba3DecodeSession(self, state)
+        single-token decode while executing the existing L=1 block entry.
+
+        PRIVATE UNTIL ITS LANE IS RECORDED; see `_RESIDENT_SESSION_NOTE`."""
+        return _Mamba3DecodeSession(self, state)
 
     __call__ = forward
 
 
-class Mamba3DecodeSession:
+class _Mamba3DecodeSession:
     """Resident repeated decode for one ``Mamba3Block`` and state."""
 
     _STATE_NAMES = (
