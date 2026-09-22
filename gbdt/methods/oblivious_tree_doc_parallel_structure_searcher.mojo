@@ -384,7 +384,7 @@ def fit_oblivious_tree_structure_traced(
         var subsets_new = create_subsets(ctx, max_depth, target) if (
             fold_count == 1
         ) else create_fold_based_subsets(
-            ctx, max_depth, target, fold_layout
+            ctx, max_depth, target, fold_layout, sm_count=sm_count
         )
         # DEVIATION 126, LIFTED 2026-09-03. This call omitted `fold_count`,
         # so the calcer's helpers were built at the default 1 while the

@@ -165,6 +165,7 @@ def compute_partition_stats_gather(
         partials.unsafe_ptr(),
         out_stats.unsafe_ptr(),
         Int32(max_chunks),
+        Int32(max_chunks),
         grid_dim=(1, n_leaf_slots, n_stats),
         block_dim=(STATS_BLOCK, 1, 1),
     )

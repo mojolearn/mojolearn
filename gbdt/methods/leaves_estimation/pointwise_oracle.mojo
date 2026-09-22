@@ -621,11 +621,14 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
                     )
             self.times.end(self.ctx, "est.approx")
             self.times.begin(self.ctx)
+            # the widest leaf bounds every partition exactly
+            # (`compute_partition_stats`' `row_bound`)
             compute_partition_stats(
                 self.ctx, self.bin_count, 0, 2, self.n_rows,
                 self.d_leaves, self.d_p_off, self.d_p_sz,
                 self.d_eval_stats, self.d_partials, self.d_part_stats,
                 sm_count=self.sm_count,
+                row_bound=self.max_leaf_size,
             )
             self.times.end(self.ctx, "est.pstats")
             self.times.begin(self.ctx)
@@ -1744,6 +1747,12 @@ def make_bin_optimized_oracle(
     # WeightsCpu (`:236-243`): the weighted arm reduces the real weights;
     # the unweighted arm takes the exact integer counts (deviation block).
     var weights_cpu = List[Float64]()
+    # the widest leaf, an exact bound on every partition the weight fold
+    # reads (`compute_partition_stats`' `row_bound`)
+    var widest_leaf = 0
+    for i in range(bin_count):
+        if leaf_sizes[i] > widest_leaf:
+            widest_leaf = leaf_sizes[i]
     # `defer_weights`: the same fold, copied to its OWN host buffer and read
     # by `settle_weights` after the caller's next drain instead of draining
     # here (the evaluation's readback reuses `h_part_stats`, so the two
@@ -1755,6 +1764,7 @@ def make_bin_optimized_oracle(
             d_leaves, d_p_off, d_p_sz,
             d_weights, d_partials, d_part_stats,
             sm_count=sm,
+            row_bound=widest_leaf,
         )
         var h_w: HostBuffer[DType.float32]
         if have_host:
@@ -1770,6 +1780,7 @@ def make_bin_optimized_oracle(
             d_leaves, d_p_off, d_p_sz,
             d_weights, d_partials, d_part_stats,
             sm_count=sm,
+            row_bound=widest_leaf,
         )
         ctx.enqueue_copy(
             dst_ptr=h_part_stats.unsafe_ptr(), src_buf=d_part_stats
