@@ -44,7 +44,7 @@ def evaluate_pair(clean, sabotage, lane, fixtures):
                             and all(r['detected'] for r in rows)))
 
 
-def expected_oracle_failure(record, caught=frozenset()):
+def expected_oracle_failure(record, caught=frozenset(), caught_parts=None):
     """Exit one is expected only for repeated training or property failures.
 
     Native faults can break an independent batch/RL-pair comparison while
@@ -53,8 +53,13 @@ def expected_oracle_failure(record, caught=frozenset()):
     except the cells in `caught`: refusals the caller has already shown the
     sabotage build caused against a production column
     (tools/cpu_identity_gate_check.py caught_refusals). They are skipped
-    and count as observed.
+    and count as observed. `caught_parts` maps a cell to the infer/model
+    `<part>_verdict` fields its lane's own check refused under sabotage
+    (cpu_identity_gate_check.caught_part_refusals): that cell's probe_error
+    and those REFUSED fields count as observed; everything else in the cell
+    is judged as usual.
     """
+    caught_parts = caught_parts or {}
     cells = record.get('cells', {})
     observed = False
     mismatch_kinds = {part: 'BATCH_MOVED' for part in ('batch', 'batchgrad', 'batchscale', 'ragged', 'stepfull')}
@@ -67,7 +72,9 @@ def expected_oracle_failure(record, caught=frozenset()):
         if (not isinstance(hashes, list) or len(hashes) < 2
                 or not all(isinstance(h, str) and h for h in hashes) or len(set(hashes)) != 1):
             return False
-        if any(value for field, value in cell.items() if field == 'error' or field.endswith('_error')):
+        excused = caught_parts.get(key, frozenset())
+        if any(value for field, value in cell.items() if (field == 'error' or field.endswith('_error'))
+               and not (excused and field == 'probe_error')):
             return False
         if cell.get('verdict') == 'DIVERGENT':
             errors = cell.get('oracle_errors', [])
@@ -78,6 +85,9 @@ def expected_oracle_failure(record, caught=frozenset()):
             return False
         for field, verdict in cell.items():
             if not field.endswith('_verdict') or verdict in ('STABLE', 'N/A'):
+                continue
+            if field in excused and verdict == 'REFUSED':
+                observed = True
                 continue
             part = field[:-len('_verdict')]
             values = cell.get(part, [])
