@@ -1,8 +1,24 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Whole packed feature groups; original pointwise document and sibling folds."""
+"""Whole packed feature groups; original pointwise document and sibling folds.
+
+THE NEGATIVE CONTROL. `-D MOJOLEARN_GBDT_PARALLEL_SABOTAGE=1` makes every owner
+above rank 0 read its feature descriptors one packed GROUP early. `width`,
+`bin_first`, `bin_count` and the bin-range copy-back are all still derived from
+the true `begin`, so every allocation and every packed-word lane position keeps
+its size and only the features a shard histograms change. `count` is
+`min(requested, groups)`, so `begin >= group` whenever `rank >= 1` and the
+shifted offset cannot go negative. It is a `comptime if`, so no production bit
+can move, and it is INERT AT ONE DEVICE, which is what makes a moved
+`par-boosting-pointwise` cell attributable to the define rather than to the
+second device. The same define arms the greedy searcher's feature-histogram
+shards (`gbdt/methods/greedy_subsets_searcher/greedy_search_helper.mojo`), which
+is the partition the other `gbdt_fit` lanes take. Owed a two-device column
+(`MOJOLEARN_PAR_DEVICES=0,1`); no host binding restates this driver.
+"""
 from max.gpu.host import DeviceContext, DeviceBuffer
 from max.algorithm import sync_parallelize
 from std.os import getenv
+from std.sys.compile import is_defined
 from core.multi_gpu import peer_clone, gbdt_shard_device_id
 from checks.numerics import NUMERIC_IDENTICAL
 from gbdt.methods.pointwise_kernels import compute_hist2, FoldsHistogram, HIST_BUILD_MODE, PW_PRIVATE_DOC_SLOTS
@@ -87,14 +103,20 @@ def pointwise_feature_shards(ctx: DeviceContext, policy: Int,
         var width = end-begin
         var bin_first = Int(hf.unsafe_ptr()[begin])
         var bin_end = Int(hf.unsafe_ptr()[end-1])+Int(hn.unsafe_ptr()[end-1])
+        var source = begin
+        comptime if is_defined["MOJOLEARN_GBDT_PARALLEL_SABOTAGE"]():
+            # Check-only arm: later owners read their feature descriptors one
+            # packed group early. Bin ranges and widths keep the true `begin`.
+            if rank > 0:
+                source = begin - group
         var device = DeviceContext(device_id=gbdt_shard_device_id(rank))
-        var v_offset = offset.create_sub_buffer[DType.uint32](begin,width)
+        var v_offset = offset.create_sub_buffer[DType.uint32](source,width)
         var d_offset = peer_clone(ctx,device,v_offset)
-        var v_first = first.create_sub_buffer[DType.uint32](begin,width)
+        var v_first = first.create_sub_buffer[DType.uint32](source,width)
         var d_first = peer_clone(ctx,device,v_first)
-        var v_folds = folds.create_sub_buffer[DType.uint32](begin,width)
+        var v_folds = folds.create_sub_buffer[DType.uint32](source,width)
         var d_folds = peer_clone(ctx,device,v_folds)
-        var v_one_hot = one_hot.create_sub_buffer[DType.uint8](begin,width)
+        var v_one_hot = one_hot.create_sub_buffer[DType.uint8](source,width)
         var d_one_hot = peer_clone(ctx,device,v_one_hot)
         var d_cindex = peer_clone(ctx,device,cindex)
         var d_target = peer_clone(ctx,device,target)

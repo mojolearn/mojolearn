@@ -5,7 +5,7 @@ import ctypes
 import heapq
 import struct
 
-from ._parallel_pool import DevicePool
+from ._parallel_pool import DevicePool, driver_read_shift
 from ._buffer import as_f32_c, empty, addr, addr_ro
 from ._bufcheck import memcopy
 from .parallel_neighbors import _join
@@ -184,9 +184,17 @@ class ReferenceShardedNeighbors:
             # Materialize only one device wave of reference slices on the host.
             # Retain just its small candidate output before staging the next.
             for wave in range(0, len(ranges), len(self._pool.devices)):
+                # The READ is shifted by `driver_read_shift` (0 unless the
+                # driver sabotage switch is on, and 0 for the first reference
+                # range either way); the merge below still folds by the true
+                # `ranges`, and `stop-start` keeps every shard's width.
                 parts.extend(self._pool.map([
-                    ('neighbor_reference', params, (model._index[start:stop], query, min(k, stop-start)))
-                    for start, stop in ranges[wave:wave+len(self._pool.devices)]]))
+                    ('neighbor_reference', params,
+                     (model._index[start - driver_read_shift(index, start, self._pool.devices):
+                                   stop - driver_read_shift(index, start, self._pool.devices)],
+                      query, min(k, stop-start)))
+                    for index, (start, stop) in enumerate(ranges[wave:wave+len(self._pool.devices)],
+                                                          start=wave)]))
             distances, indices = _merge(parts, ranges, end-first, k)
             if method == 'kneighbors':
                 indices = indices.astype('<i8')

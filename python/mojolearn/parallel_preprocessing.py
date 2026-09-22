@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Column partitions retaining each scaler's original row-reduction tree."""
-from ._parallel_pool import DevicePool
+from ._parallel_pool import DevicePool, driver_read_shift
 from ._buffer import empty, addr, addr_ro
 from ._bufcheck import memcopy
 
@@ -39,8 +39,14 @@ def fit_scaler(estimator, X, *, devices=(0,), columns_per_shard=16, sample_weigh
     params['numeric_mode'] = 'identical'
     pool = DevicePool(devices)
     try:
-        parts = pool.map([('scaler_fit', (type(estimator).__name__, params),
-                           (data[:, start:end],)) for start, end in ranges])
+        # The READ is shifted by `driver_read_shift` (0 unless the driver
+        # sabotage switch is on); the MERGE below still writes at `start`, so
+        # every width and every statistic keeps its position.
+        parts = pool.map([
+            ('scaler_fit', (type(estimator).__name__, params),
+             (data[:, start - driver_read_shift(index, start, devices):
+                     end - driver_read_shift(index, start, devices)],))
+            for index, (start, end) in enumerate(ranges)])
     finally:
         pool.close()
     result = type(estimator)(**params)
@@ -75,14 +81,19 @@ def transform_scaler(estimator, X, *, devices=(0,), columns_per_shard=16, invers
         raise ValueError('input feature count differs from fit')
     ranges = _ranges(d, columns_per_shard)
     requests = []
-    for start, end in ranges:
+    for index, (start, end) in enumerate(ranges):
         part = copy.copy(estimator)
         part.__dict__ = estimator.__dict__.copy()
         part.n_features_in_ = end - start
         for name in names:
             value = getattr(estimator, name)
             setattr(part, name, None if value is None else value[start:end])
-        requests.append(('scaler_transform', part, (data[:, start:end], inverse)))
+        # Only the DATA columns are shifted; the fitted statistics stay on the
+        # true columns, so the shard transforms the wrong rows of the right
+        # column block rather than changing any shape.
+        shift = driver_read_shift(index, start, devices)
+        requests.append(('scaler_transform', part,
+                         (data[:, start - shift:end - shift], inverse)))
     pool = DevicePool(devices)
     try:
         parts = pool.map(requests)

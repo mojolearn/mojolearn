@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Cooperative classical estimators with explicit per-algorithm partitions."""
-from ._parallel_pool import DevicePool
+from ._parallel_pool import DevicePool, driver_read_shift
 from ._buffer import as_f32_c
 
 
@@ -44,8 +44,11 @@ def fit_exponential_smoothing(estimator, *, devices=(0,), series_per_shard=1):
                   start_periods=estimator.start_periods, eps=estimator.eps)
     pool = DevicePool(devices)
     try:
-        parts = pool.map([('holtwinters_fit', params, (data[start:start + series_per_shard],))
-                          for start in range(0, batch, series_per_shard)])
+        parts = pool.map([
+            ('holtwinters_fit', params,
+             (data[start - driver_read_shift(index, start, devices):
+                   min(start + series_per_shard, batch) - driver_read_shift(index, start, devices)],))
+            for index, start in enumerate(range(0, batch, series_per_shard))])
     finally:
         pool.close()
     result = ExponentialSmoothing(estimator.endog, ts_num=batch, **params)
@@ -135,8 +138,10 @@ def fit_arima(estimator, y, *, devices=(0,), series_per_shard=1, exog=None):
     params = dict(order=estimator.order, seasonal_order=estimator.seasonal_order,
                   trend=estimator.trend, method=estimator.method,
                   maxiter=estimator.maxiter, numeric_mode='identical')
-    requests = [('arima_fit', params, (data[start:start + series_per_shard],))
-                for start in range(0, batch, series_per_shard)]
+    requests = [('arima_fit', params,
+                 (data[start - driver_read_shift(index, start, devices):
+                       min(start + series_per_shard, batch) - driver_read_shift(index, start, devices)],))
+                for index, start in enumerate(range(0, batch, series_per_shard))]
     pool = DevicePool(devices)
     try:
         parts = pool.map(requests)
@@ -527,8 +532,9 @@ def transform_rbf_sampler(estimator, X, *, devices=(0,), rows_per_shard=4096):
     rows = X.shape[0]
     if rows == 0:
         return estimator.transform(X)
-    shards = [X[start:start + rows_per_shard]
-              for start in range(0, rows, rows_per_shard)]
+    shards = [X[start - driver_read_shift(index, start, devices):
+                min(start + rows_per_shard, rows) - driver_read_shift(index, start, devices)]
+              for index, start in enumerate(range(0, rows, rows_per_shard))]
     pool = DevicePool(devices)
     try:
         parts = pool.map([('rbf_sampler_rows', estimator, (shard,)) for shard in shards])

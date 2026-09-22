@@ -267,11 +267,25 @@ struct PooledForest(Movable):
                 for tree in range(grove, self.trees, 32):
                     counts[grove] += 1
                     for node in range(Int(offsets[tree]), Int(offsets[tree+1])):
+                        var leaf_base = node * outputs
+                        comptime if is_defined["MOJOLEARN_FOREST_POOL_PARALLEL_SABOTAGE"]():
+                            # Check-only arm: later owners read their leaf
+                            # values one node early. The inner loop still runs
+                            # `outputs` times, so len(vals) and every buffer
+                            # sized from it are unchanged, and the node
+                            # topology (`left`) is untouched so the packed
+                            # leaf count cannot move either. INERT AT ONE
+                            # DEVICE: grove 0 always lands on owner 0, so a
+                            # rank above 0 owns only trees above 0 and
+                            # `node > 0` holds; the `node > 0` test states
+                            # that rather than assuming it.
+                            if rank > 0 and node > 0:
+                                leaf_base = (node - 1) * outputs
                         col.append(columns[node])
                         thr.append(thresholds[node])
                         child.append(left[node])
                         for c in range(outputs):
-                            vals.append(leaves[node * outputs + c])
+                            vals.append(leaves[leaf_base + c])
                     loff.append(Int32(len(col)))
             self.owners.append(ForestGroveOwner(rank, loff, col, thr, child,
                 vals, starts, counts, outputs, groves))

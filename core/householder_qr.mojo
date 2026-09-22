@@ -156,6 +156,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.gpu import block_idx, thread_idx
 from std.memory import stack_allocation
+from std.sys.compile import is_defined
 
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL,
@@ -528,7 +529,16 @@ def qr_parallel_panels(ctx: DeviceContext, mut a: DeviceBuffer[DType.float32],
         var rank = panel%count
         var first = panel*m//ns
         var rows = (panel+1)*m//ns-first
-        var view = a.create_sub_buffer[DType.float32](first*n,rows*n)
+        var source = first
+        comptime if is_defined["MOJOLEARN_QR_PARALLEL_SABOTAGE"]():
+            # Check-only arm: later owners read their panel one row early. The
+            # length `rows*n` is unchanged, the kernel scalars are re-derived in
+            # the launch loop from the true `first`, and both write-backs keep
+            # the true offsets. INERT AT ONE DEVICE: `count == 1` returns before
+            # this loop, and `panel % 1` is 0 for every panel.
+            if rank > 0:
+                source = first - 1
+        var view = a.create_sub_buffer[DType.float32](source*n,rows*n)
         panels.append(peer_clone(ctx,devices[rank],view))
         outputs.append(devices[rank].enqueue_create_buffer[DType.float32](n*n))
     for rank in range(count):

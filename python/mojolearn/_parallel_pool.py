@@ -184,6 +184,75 @@ DEVICE_COUNT_VARIABLES = tuple(
 )
 
 
+#: THE NON-COOPERATIVE DRIVERS' NEGATIVE CONTROL, AND WHY IT IS HERE AND NOT
+#: IN A BINDING (lane/par-sabotage-defines, 2026-09-20).
+#:
+#: A COOPERATIVE driver hands the whole fit to one worker and splits inside the
+#: GPU binding, so its arm is a `-D MOJOLEARN_<X>_PARALLEL_SABOTAGE=1` build
+#: (`cluster/multi_gpu.mojo`, `solver/multi_gpu.mojo`, and the eleven others).
+#: A NON-cooperative driver has no such binding to rebuild: its partition and
+#: its merge are the driver's OWN PYTHON -- the column ranges of
+#: `parallel_preprocessing`, the global tree-ID ranges of
+#: `parallel_ensemble.fit_forest`, the series ranges of `parallel_forecasting`,
+#: the query and reference rows of the neighbor drivers, the row ranges of
+#: `parallel_ivf`, the class columns of `parallel_gaussian_process`. No define
+#: reaches that code, so before this switch existed, the only negative control
+#: those lanes had was a HOST ARM, which perturbs the shard's arithmetic and
+#: the plain call's arithmetic EQUALLY and therefore says nothing about the
+#: partition. This switch perturbs the partition itself.
+#:
+#: WHAT IT DOES. Every shard after the first reads its slice ONE POSITION
+#: EARLY while the merge still writes at the true offset. Widths, shard counts,
+#: allocations and every validation are untouched, exactly as the Mojo arms
+#: leave them; the answer is simply assembled from the wrong rows. It is the
+#: `_sabotage_fold_order` shape of `model_selection.py`: an invariant a checker
+#: could test still holds, so the difference has to be caught by the HASH.
+#:
+#: INERT AT ONE DEVICE OR ONE SHARD, which is the whole point. `index > 0` is
+#: false for a single shard, so a `par-*` cell that moves under this switch
+#: moved because of the switch and not because of the second device.
+#:
+#: TWO VARIABLES, as `MOJOLEARN_FOLD_ORDER_SABOTAGE` has needed since
+#: 2026-09-17: a switch that quietly returns wrong answers on one env var is a
+#: footgun. No build script, no workflow and no gate sets either one.
+PAR_DRIVER_SABOTAGE = 'MOJOLEARN_PAR_DRIVER_SABOTAGE'
+
+
+def par_driver_sabotage():
+    """True when both switch variables are set. Read at call time, never
+    cached, so a test can turn it on and off inside one process."""
+    return (os.environ.get(PAR_DRIVER_SABOTAGE) == '1'
+            and os.environ.get('MOJOLEARN_HOST_ALLOW_SABOTAGE') == '1')
+
+
+def driver_read_shift(index, first, devices):
+    """How far back shard `index` should READ, in the driver's own units.
+
+    0 always, except under the switch above for a shard that runs on an owner
+    ABOVE RANK 0, where it is 1 and the caller must still MERGE at the
+    unshifted offset.
+
+    THE RANK, NOT THE SHARD INDEX, AND THAT DISTINCTION IS THE WHOLE CONTROL.
+    A Python-sharded driver cuts as many logical shards as its
+    `*_per_shard` argument asks for, whatever the device count: `fit_forest`
+    with `trees_per_shard=4` makes four shards on ONE device. An arm gated on
+    `index > 0` therefore fires at one device, and a cell that moves under it
+    is not attributable to the second device. MEASURED, 2026-09-20: the first
+    version of this function was gated on `index` and moved the SAME 15 cells
+    at one device as at two, which is exactly the control failing.
+    `DevicePool.map` dispatches in waves of `len(devices)` and hands wave
+    position `j` to worker `j`, so shard `index` runs on rank
+    `index % len(devices)`; that is what is tested here, and it is 0 for every
+    shard when there is one device.
+
+    `first` is the shard's true start: a shard starting at 0 is never shifted,
+    so the shift can never make an index negative.
+    """
+    if first < 1 or len(devices) < 2 or index % len(devices) == 0:
+        return 0
+    return 1 if par_driver_sabotage() else 0
+
+
 def _cpu_refusal(requests, cooperative, n_devices=1):
     names = sorted({request[0] for request in requests})
     if cooperative:

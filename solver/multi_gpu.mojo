@@ -3,8 +3,20 @@
 
 Only automatic plan selection is intercepted. Explicit plan probes continue
 through their requested implementation. Root solver state remains resident.
+
+THE NEGATIVE CONTROL. `-D MOJOLEARN_SOLVER_PARALLEL_SABOTAGE=1` makes every
+owner above rank 0 read its leaf range one VALUE early. `rows` is still
+computed from the true `start`, so the shard buffers keep their lengths and the
+fold still sees `leaves` partials at their true positions; only the values
+inside each leaf move. It is a `comptime if`, so no production bit can move,
+and it is INERT AT ONE DEVICE: the shift is guarded by `rank > 0` and a
+one-device column has only rank 0. That is what makes a moved `par-cd` or
+`par-cd-elasticnet` cell attributable to the define rather than to the second
+device. Owed a two-device column (`MOJOLEARN_PAR_DEVICES=0,1`); no host binding
+restates this driver, so no CPU column can watch it fire.
 """
 from std.os import getenv
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceContext, DeviceBuffer
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.multi_gpu import peer_clone
@@ -59,8 +71,14 @@ def profile_dot_parallel(
         var width = leaves * (rank + 1) // active - first
         var start = first * leaf
         var rows = min(k - start, width * leaf)
-        var source_a = a.create_sub_buffer[DType.float32](start, rows)
-        var source_b = b.create_sub_buffer[DType.float32](start, rows)
+        var source = start
+        comptime if is_defined["MOJOLEARN_SOLVER_PARALLEL_SABOTAGE"]():
+            # Check-only arm: later owners read their leaf range one value
+            # early. `rows` above is unchanged, so no length moves.
+            if rank > 0:
+                source = start - 1
+        var source_a = a.create_sub_buffer[DType.float32](source, rows)
+        var source_b = b.create_sub_buffer[DType.float32](source, rows)
         var device = DeviceContext(device_id=rank)
         var local_a = peer_clone(ctx, device, source_a)
         var local_b = peer_clone(ctx, device, source_b)

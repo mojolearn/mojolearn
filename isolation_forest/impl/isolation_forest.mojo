@@ -1055,6 +1055,14 @@ def _fit_tree_shards(ctx: DeviceContext, input_colmajor: List[Float32],
 
     Training data remains replicated. No complete forest is allocated on the
     root; only successful owners are published after every worker joins.
+
+    THE NEGATIVE CONTROL is `-D MOJOLEARN_ISOLATION_FOREST_PARALLEL_SABOTAGE=1`
+    below. Unlike the other `par-*` arms it perturbs an RNG STREAM rather than a
+    row offset, because `first` is a curand subsequence base and nothing else:
+    every buffer is indexed by the LOCAL tree id. The shard's trees are then
+    entirely different rather than slightly shifted, so expect a large delta.
+    Owed a two-device column (`MOJOLEARN_PAR_DEVICES=0,1`); no host binding
+    restates this driver, so no CPU column can watch it fire.
     """
     if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
         raise Error("parallel IsolationForest requires IDENTICAL")
@@ -1095,8 +1103,20 @@ def _fit_tree_shards(ctx: DeviceContext, input_colmajor: List[Float32],
             var forest = IsolationForest(local_config)
             var local = IsolationForestModel(shard.ctx)
             var trace = IdentityTrace.disabled()
+            var tree_base = shard.first
+            comptime if is_defined["MOJOLEARN_ISOLATION_FOREST_PARALLEL_SABOTAGE"]():
+                # Check-only arm: later owners seed their trees one RNG stream
+                # early. `shard.first` is the curand subsequence base and has
+                # exactly one consumer -- this call -- so no allocation, no
+                # length and no validation can see it; `shard.count` still
+                # sizes every buffer and every published tree. INERT AT ONE
+                # DEVICE (`active` is 1, only rank 0 runs), which is what makes
+                # a moved `par-iforest` cell attributable to the define rather
+                # than to the second device.
+                if rank > 0:
+                    tree_base = shard.first - 1
             forest.fit(shard.ctx, data, rows, columns, local, trace,
-                       knobs, src_addr, shard.first, False)
+                       knobs, src_addr, tree_base, False)
             swap(shard.global_feature_indices, local.global_feature_indices)
             swap(shard.node_feature, local.node_feature)
             swap(shard.node_threshold, local.node_threshold)

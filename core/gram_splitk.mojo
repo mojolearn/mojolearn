@@ -1185,7 +1185,15 @@ def _gram_parallel[centered: Bool](
         var begin_row = first * kc
         var rows = min(k, end * kc) - begin_row
         var device = DeviceContext(device_id=rank)
-        var view = x.create_sub_buffer[DType.float32](begin_row * m, rows * m)
+        var source_row = begin_row
+        comptime if is_defined["MOJOLEARN_GRAM_PARALLEL_SABOTAGE"]():
+            # Check-only arm: later owners read their rows one row early. The
+            # length `rows * m`, the partial-output size and the write-back
+            # offset `shard.first * m * m` all keep the true `begin_row`, so no
+            # allocation and no validation moves. INERT AT ONE DEVICE.
+            if rank > 0:
+                source_row = begin_row - 1
+        var view = x.create_sub_buffer[DType.float32](source_row * m, rows * m)
         var local_x = peer_clone(ctx, device, view)
         var local_mu: DeviceBuffer[DType.float32]
         comptime if centered:

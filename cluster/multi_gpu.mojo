@@ -4,9 +4,19 @@
 The original policy and centroid order run on every shard. Full-data centroid
 updates, inertia, initialization and convergence remain in the existing driver.
 This correctness path stages buffers per call; it makes no throughput claim.
+
+THE NEGATIVE CONTROL. `-D MOJOLEARN_KMEANS_PARALLEL_SABOTAGE=1` makes every
+owner above rank 0 read its row tile one row early. It is a `comptime if`, so
+no production bit can move, and it is INERT AT ONE DEVICE by construction: the
+shift is guarded by `rank > 0` and a one-device column has only rank 0. That
+guard is what makes a moved `par-kmeans` cell attributable to the define
+rather than to the second device. Owed a two-device column
+(`MOJOLEARN_PAR_DEVICES=0,1`); no CPU route restates this driver, so no Mac and
+no CPU-only box can watch it fire.
 """
 from max.gpu.host import DeviceContext, DeviceBuffer
 from std.os import getenv
+from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from cluster.impl.distance.fused_distance_nn.simt_kernel import fused_distance_nn_kernel
 from neighbors.impl.distance.detail.pairwise_distance_base import launch_config_generator
@@ -69,6 +79,17 @@ def assignment_parallel[veclen: Int, kblk: Int, tr: Int, tc: Int](
         var begin = (tiles * rank // active) * mblk
         var end = min(n_samples, (tiles * (rank + 1) // active) * mblk)
         var rows = end - begin
+        var source = begin
+        comptime if is_defined["MOJOLEARN_KMEANS_PARALLEL_SABOTAGE"]():
+            # Check-only arm: later owners read their row tile one row early.
+            # INERT AT ONE DEVICE. `active` is 1 there, the loop runs rank 0
+            # only and `source` stays `begin`, so a cell that moves under this
+            # build moved because of the define and not because of the second
+            # device. The write-back below still uses `shard.begin`, so no
+            # buffer length, allocation or validation changes; only the bytes
+            # the assignment kernel reads do.
+            if rank > 0:
+                source = begin - 1
         var device = DeviceContext(device_id=rank)
         var sx = device.enqueue_create_buffer[DType.float32](rows * n_features)
         var sxn = device.enqueue_create_buffer[DType.float32](rows)
@@ -77,8 +98,8 @@ def assignment_parallel[veclen: Int, kblk: Int, tr: Int, tc: Int](
         var key = device.enqueue_create_buffer[DType.uint32](rows)
         var value = device.enqueue_create_buffer[DType.float32](rows)
         device.synchronize()
-        var xv = x.create_sub_buffer[DType.float32](begin * n_features, rows * n_features)
-        var nv = x_norm.create_sub_buffer[DType.float32](begin, rows)
+        var xv = x.create_sub_buffer[DType.float32](source * n_features, rows * n_features)
+        var nv = x_norm.create_sub_buffer[DType.float32](source, rows)
         xv.enqueue_copy_to(sx)
         nv.enqueue_copy_to(sxn)
         centroids.enqueue_copy_to(sc)

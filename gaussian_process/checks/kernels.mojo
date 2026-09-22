@@ -100,6 +100,7 @@ from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.multi_gpu import peer_clone
 from std.os import getenv
+from std.sys.compile import is_defined
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 from core.identity_trace import IdentityTrace
@@ -1411,6 +1412,18 @@ def _gp_rows(ctx: DeviceContext, mut output: DeviceBuffer[DType.float32],
     WhiteKernel's structural diagonal uses the original global row index.
     The Cholesky/solve/likelihood and predictive variance remain on the root.
     Full covariance and root expression workspace still have to fit there.
+
+    THE NEGATIVE CONTROL. `-D MOJOLEARN_GP_PARALLEL_SABOTAGE=1` makes every
+    owner above rank 0 read its covariance rows one row early. `active` is
+    `min(count, m)`, so `first >= 1` whenever `rank >= 1`; `rows`, the shard
+    allocations, the global row index handed to `gp_kernel_matrix` and the
+    write-back offset are all unchanged, so nothing but the coordinates
+    measured moves. It is a `comptime if`, so no production bit can move, and
+    it is INERT AT ONE DEVICE, which is what makes a moved `par-gp` cell
+    attributable to the define rather than to the second device. Owed a
+    two-device column (`MOJOLEARN_PAR_DEVICES=0,1`); no host binding restates
+    this driver, and `parallel_gaussian_process`'s CPU route is the CLASS
+    shards of `par-gpc-fit`, not these row shards.
     """
     ctx.synchronize()
     var active = min(count, m)
@@ -1418,8 +1431,16 @@ def _gp_rows(ctx: DeviceContext, mut output: DeviceBuffer[DType.float32],
     for rank in range(active):
         var first = m * rank // active
         var rows = m * (rank + 1) // active - first
+        var source = first
+        comptime if is_defined["MOJOLEARN_GP_PARALLEL_SABOTAGE"]():
+            # Check-only arm: later owners read their covariance rows one row
+            # early. `rows` and `shard.first` (the global row index WhiteKernel's
+            # structural diagonal uses, and the write-back offset) are unchanged,
+            # so no length and no validation moves.
+            if rank > 0:
+                source = first - 1
         var device = DeviceContext(device_id=rank)
-        var xv = x.create_sub_buffer[DType.float32](first * d, rows * d)
+        var xv = x.create_sub_buffer[DType.float32](source * d, rows * d)
         var yv = y.create_sub_buffer[DType.float32](0, n * d)
         var local_x = peer_clone(ctx, device, xv)
         var local_y = peer_clone(ctx, device, yv)
