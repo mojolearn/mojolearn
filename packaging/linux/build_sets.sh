@@ -46,6 +46,21 @@ JOBS="${MOJOLEARN_BUILD_JOBS:-4}"
 [[ "$JOBS" =~ ^[1-9][0-9]?$ && "$JOBS" -le 16 ]] || { echo 'MOJOLEARN_BUILD_JOBS must be 1..16' >&2; exit 2; }
 BUILD_CORES=$((2 * JOBS))
 export MOJOLEARN_COMPILE_JOBS=2 MAX_JOBS=2 CMAKE_BUILD_PARALLEL_LEVEL=2
+# AN AMD GPU BINDING COMPILES WITH ONE WORKER (2026-09-22). `mojo build -j 2`
+# for gfx942 is NOT deterministic: five cold-cache builds of
+# bindings/build_mixture.sh at d181d9792 on one box gave three different
+# binaries (embedded gemm_identical code objects differing in a few register
+# numbers), while five builds with -j 1 gave one, and three -j 1 builds each
+# of tsa and linalg agreed too. A warm Mojo cache hides it (every later build
+# on a box reuses the first compile), which is why every single box looked
+# reproducible; the CPU build box's first gfx942 set differed from the
+# MI325X leg's in 4 of 66 binaries for exactly this reason. The NVIDIA sets
+# and the host bindings (CPU codegen) keep two workers: they came out
+# byte-identical across three boxes. GPU_COMPILE_JOBS applies to the GPU
+# bindings only; the host bindings in an AMD set still build with two, so
+# they stay byte-identical to the NVIDIA sets' copies (pack_wheel.py).
+GPU_COMPILE_JOBS=2
+case "${MOJOLEARN_GPU_ARCHS:-}" in gfx*) GPU_COMPILE_JOBS=1 ;; esac
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
 export NUMEXPR_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1
 if [[ "$(uname -s)" != Linux ]]; then
@@ -131,7 +146,7 @@ HOST_NAMES=$(python3 python/mojolearn/host_surface.py --wheel-bindings) || exit 
 host_so() { printf 'python/mojolearn/host/%s.so' "$1"; }
 say() { echo "[$(date +%T) build_sets] $*"; }
 
-say "repo $REPO, dest $DEST, tiers: $TIERS, jobs: $JOBS"
+say "repo $REPO, dest $DEST, tiers: $TIERS, jobs: $JOBS, gpu compile workers: $GPU_COMPILE_JOBS"
 say "pixi env: $PIXI_ENV"
 export PATH="$HOME/.pixi/bin:$PATH"
 command -v pixi >/dev/null || { say "no pixi on PATH"; exit 2; }
@@ -208,11 +223,11 @@ build_one() {
     # nvidia is refused", so the column is pinned to cpu for every host build.
     local fam="${s#build_}"; fam="${fam%_host.sh}"
     local FAM; FAM=$(printf '%s' "$fam" | tr 'a-z' 'A-Z')
-    MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_SKIP_BUILD_GATE=1 MOJOLEARN_TARGET_COLUMN=cpu \
+    MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_SKIP_BUILD_GATE=1 MOJOLEARN_TARGET_COLUMN=cpu MOJOLEARN_COMPILE_JOBS=2 \
       run_binding "$tier" "$s" env -u MOJOLEARN_GPU_ARCHS -u MOJOLEARN_HOST_OUTDIR -u "MOJOLEARN_${FAM}_HOST_OUTDIR" \
       >> "$log" 2>&1 || rc=$?
   else
-    MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_SKIP_BUILD_GATE=1 \
+    MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_SKIP_BUILD_GATE=1 MOJOLEARN_COMPILE_JOBS=$GPU_COMPILE_JOBS \
       run_binding "$tier" "$s" env >> "$log" 2>&1 || rc=$?
   fi
   if [[ "$rc" = 0 ]]; then
