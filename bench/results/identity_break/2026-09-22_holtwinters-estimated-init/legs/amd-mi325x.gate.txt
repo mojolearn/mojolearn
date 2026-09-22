@@ -1,35 +1,35 @@
-started=2026-09-22T16:32:09Z commit=91f713c06674e9aea5d98652a24e780c37f3595f
+started=2026-09-22T16:41:27Z commit=3e1b87ccf5c2288288f7c4c4002bf3593296318b
 device=  Marketing Name:          AMD EPYC 9575F 64-Core Processor      Name:                    gfx942                                Marketing Name:          AMD Instinct Mi325X VF              
 gpu_archs=gfx942 column=amd label=amd-gfx942 gbdt_label=amd-mi325x-binary-columns backend=hip
-bincache map staged entries=0
+bincache map staged entries=3
 portable_math exit=0 secs=1
-build exit=0 secs=32
+build exit=0 secs=1
 build_tsa exit=0 secs=8
-build_gbdt exit=0 secs=60
+build_gbdt exit=0 secs=1
 fe22984c41162956f93c8f8c4bb18c28bef585a25a9e32a0caf96b7126398e68  python/mojolearn/identical/_mojolearn.so
 bd4c2addd8f35327f2089aa1f252db655bf61fac54049ce9c4c2685641b225d7  python/mojolearn/identical/_mojolearn_gbdt.so
-a35fe86c45111997612d0ddc356a198d255812344f0a9f89afb34b1c1e3c1a6f  python/mojolearn/identical/_mojolearn_tsa.so
+00dcb888476258e214de4310064f61a3b064d7843dbbdbe75766e5f10ffeaf63  python/mojolearn/identical/_mojolearn_tsa.so
 import_probe exit=0 secs=0
 import_probe=IMPORT_OK hip 0.8.13
-identity-gbdt-binary-columns exit=0 secs=10
+identity-gbdt-binary-columns exit=0 secs=9
 cells=9 stable=9 moved=0 refused=0
 infer: stable=9
 model: stable=9
 batch: stable=9
 batchgrad: n/a=9
 batchscale: n/a=9
-elapsed_after_gbdt=111
+elapsed_after_gbdt=20
 identity-holtwinters exit=0 secs=3
 cells=9 stable=9 moved=0 refused=0
-identity-holtwinters-multiplicative exit=0 secs=10
+identity-holtwinters-multiplicative exit=0 secs=2
 cells=9 stable=9 moved=0 refused=0
-identity-par-holtwinters exit=0 secs=24
+identity-par-holtwinters exit=0 secs=7
 cells=9 stable=9 moved=0 refused=0
-identity-par-forecast-holtwinters exit=0 secs=41
+identity-par-forecast-holtwinters exit=0 secs=35
 cells=9 stable=9 moved=0 refused=0
-merge exit=0 secs=1
-elapsed_after_hw=190
-check-estimate exit=0 secs=6
+merge exit=0 secs=0
+elapsed_after_hw=67
+check-estimate exit=0 secs=18
   additive tpb=32 batch=5 n=60 f=12: device vs oracle differing=0 sse[0]=44.352245 abg[0]=0.0/0.05853799/0.0 niter[0]=24 crit[0]=2
   additive-noiseless tpb=32 batch=3 n=40 f=4: device vs oracle differing=0 sse[0]=0.0 abg[0]=0.40066713/0.2996949/0.29884657 niter[0]=27 crit[0]=1
   additive-no-season tpb=32 batch=2 n=32 f=4: device vs oracle differing=0 sse[0]=0.0 abg[0]=0.8036719/0.09945909/0.07759209 niter[0]=26 crit[0]=1
@@ -44,8 +44,11 @@ check-estimate exit=0 secs=6
   multiplicative-noiseless tpb=1 batch=3 n=40 f=4: device vs oracle differing=0 sse[0]=1.4305115e-06 abg[0]=0.40023342/0.29925796/0.29985487 niter[0]=31 crit[0]=1
   constant tpb=1 batch=2 n=24 f=4: device vs oracle differing=0 sse[0]=0.0 abg[0]=0.4/0.3/0.3 niter[0]=22 crit[0]=1
   mixed tpb=1 batch=7 n=48 f=6: device vs oracle differing=0 sse[0]=37.070187 abg[0]=0.0/0.81457293/0.0 niter[0]=59 crit[0]=1
+  additive-f60-serial-arm tpb=32 batch=2 n=130 f=60: device vs oracle differing=0 sse[0]=57.16786 abg[0]=0.019560603/0.35268232/0.0 niter[0]=70 crit[0]=1
+  multiplicative-f60-serial-arm tpb=32 batch=2 n=130 f=60: device vs oracle differing=0 sse[0]=0.104967535 abg[0]=0.0/1.5933484e-08/0.0 niter[0]=54 crit[0]=1
+  additive-f59-parallel-edge tpb=32 batch=2 n=120 f=59: device vs oracle differing=0 sse[0]=46.37302 abg[0]=0.0/0.007336321/0.0 niter[0]=27 crit[0]=2
   heuristic: default vs explicit differing=0
 == hw_estimate_check: ALL OK [IDENTICAL] ==
 check-identical exit=0 secs=15
 == hw_check: ALL OK [IDENTICAL] ==
-finished=2026-09-22T16:35:40Z elapsed=211
+finished=2026-09-22T16:43:07Z elapsed=100

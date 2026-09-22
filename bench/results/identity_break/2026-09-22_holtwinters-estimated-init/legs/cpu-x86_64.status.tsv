@@ -1,8 +1,8 @@
-build	core	0	24
-build	tsa	0	11
-build	gbdt	0	54
-sabotage-build	core	0	21
-sabotage-build	tsa	0	11
+build	core	0	1
+build	tsa	0	10
+build	gbdt	0	1
+sabotage-build	core	0	0
+sabotage-build	tsa	0	9
 portable-math	0	0
 readback	0
 run-column-hw	0

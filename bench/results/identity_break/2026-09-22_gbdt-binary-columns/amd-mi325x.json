@@ -3,7 +3,7 @@
  "repeats": 1,
  "platform": "Linux-6.8.0-59-generic-x86_64-with-glibc2.39",
  "vendor": "amd-mi325x-binary-columns",
- "commit": "91f713c06674e9aea5d98652a24e780c37f3595f",
+ "commit": "3e1b87ccf5c2288288f7c4c4002bf3593296318b",
  "commit_source": "commit.txt",
  "heldout_seed": 1,
  "fixtures": {
@@ -132,15 +132,15 @@
    ],
    "stepfull_verdict": "N/A",
    "timing": {
-    "total_seconds": 1.3319566649999786,
+    "total_seconds": 1.3052756069999987,
     "stages": {
-     "repeat=1/train": 1.240830772999999,
-     "repeat=1/infer-save-reload": 0.007172359999998434,
-     "repeat=1/batch": 0.08361945800001536,
-     "repeat=1/batchgrad": 6.9349999989754e-05,
-     "repeat=1/batchscale": 2.6948999988007927e-05,
-     "repeat=1/ragged": 2.170000001910921e-05,
-     "repeat=1/stepfull": 2.1288999988655632e-05
+     "repeat=1/train": 1.215328939999992,
+     "repeat=1/infer-save-reload": 0.007000731000005089,
+     "repeat=1/batch": 0.0825970060000003,
+     "repeat=1/batchgrad": 7.278000001065266e-05,
+     "repeat=1/batchscale": 2.551000000039494e-05,
+     "repeat=1/ragged": 2.1340000003533532e-05,
+     "repeat=1/stepfull": 2.0219999996129445e-05
     }
    }
   },
@@ -193,15 +193,15 @@
    ],
    "stepfull_verdict": "N/A",
    "timing": {
-    "total_seconds": 0.7574925210000174,
+    "total_seconds": 0.6859116259999922,
     "stages": {
-     "repeat=1/train": 0.6469012940000027,
-     "repeat=1/infer-save-reload": 0.004040724000020646,
-     "repeat=1/batch": 0.10622454800000014,
-     "repeat=1/batchgrad": 6.68889999815292e-05,
-     "repeat=1/batchscale": 2.4089000021376705e-05,
-     "repeat=1/ragged": 2.0590000019637955e-05,
-     "repeat=1/stepfull": 1.97299999911138e-05
+     "repeat=1/train": 0.5764767189999986,
+     "repeat=1/infer-save-reload": 0.0039315899999934345,
+     "repeat=1/batch": 0.10513128700000607,
+     "repeat=1/batchgrad": 7.07399999981817e-05,
+     "repeat=1/batchscale": 3.463000000181182e-05,
+     "repeat=1/ragged": 3.0379999998331186e-05,
+     "repeat=1/stepfull": 2.1580000009180367e-05
     }
    }
   },
@@ -254,15 +254,15 @@
    ],
    "stepfull_verdict": "N/A",
    "timing": {
-    "total_seconds": 0.8420800480000139,
+    "total_seconds": 0.8554951779999982,
     "stages": {
-     "repeat=1/train": 0.7176266350000162,
-     "repeat=1/infer-save-reload": 0.006189253000002282,
-     "repeat=1/batch": 0.1179329349999989,
-     "repeat=1/batchgrad": 7.021799999051836e-05,
-     "repeat=1/batchscale": 2.6210000015680635e-05,
-     "repeat=1/ragged": 2.3950000013428507e-05,
-     "repeat=1/stepfull": 2.135899998734203e-05
+     "repeat=1/train": 0.7343924549999912,
+     "repeat=1/infer-save-reload": 0.006159703999998101,
+     "repeat=1/batch": 0.11463698800000088,
+     "repeat=1/batchgrad": 7.042000000012649e-05,
+     "repeat=1/batchscale": 2.218000000198117e-05,
+     "repeat=1/ragged": 2.06600000041135e-05,
+     "repeat=1/stepfull": 1.9670000000360233e-05
     }
    }
   },
@@ -315,15 +315,15 @@
    ],
    "stepfull_verdict": "N/A",
    "timing": {
-    "total_seconds": 0.8070907209999802,
+    "total_seconds": 0.820367884999996,
     "stages": {
-     "repeat=1/train": 0.7264426920000062,
-     "repeat=1/infer-save-reload": 0.006173243000006323,
-     "repeat=1/batch": 0.07418551000000662,
-     "repeat=1/batchgrad": 5.31389999878229e-05,
-     "repeat=1/batchscale": 3.266899997811379e-05,
-     "repeat=1/ragged": 2.1339999989322678e-05,
-     "repeat=1/stepfull": 2.0280000001093867e-05
+     "repeat=1/train": 0.7406722710000082,
+     "repeat=1/infer-save-reload": 0.00598650199999895,
+     "repeat=1/batch": 0.07344390200000817,
+     "repeat=1/batchgrad": 5.400999999949363e-05,
+     "repeat=1/batchscale": 2.2029999996675542e-05,
+     "repeat=1/ragged": 1.9880000010630283e-05,
+     "repeat=1/stepfull": 1.9670000000360233e-05
     }
    }
   },
@@ -376,15 +376,15 @@
    ],
    "stepfull_verdict": "N/A",
    "timing": {
-    "total_seconds": 0.8374318059999837,
+    "total_seconds": 0.8477266080000021,
     "stages": {
-     "repeat=1/train": 0.7204213850000087,
-     "repeat=1/infer-save-reload": 0.0061659050000173465,
-     "repeat=1/batch": 0.11052973799999677,
-     "repeat=1/batchgrad": 6.829899999161171e-05,
-     "repeat=1/batchscale": 2.641899999389352e-05,
-     "repeat=1/ragged": 2.10299999992003e-05,
-     "repeat=1/stepfull": 1.9940000015594705e-05
+     "repeat=1/train": 0.7345960720000022,
+     "repeat=1/infer-save-reload": 0.0059131809999968254,
+     "repeat=1/batch": 0.10692005300001028,
+     "repeat=1/batchgrad": 6.710000000964556e-05,
+     "repeat=1/batchscale": 2.2399999991762343e-05,
+     "repeat=1/ragged": 2.0609999992871053e-05,
+     "repeat=1/stepfull": 2.4799999991387267e-05
     }
    }
   },
@@ -437,15 +437,15 @@
    ],
    "stepfull_verdict": "N/A",
    "timing": {
-    "total_seconds": 0.8498426590000179,
+    "total_seconds": 0.8570562489999958,
     "stages": {
-     "repeat=1/train": 0.7250360499999999,
-     "repeat=1/infer-save-reload": 0.0061946760000068934,
-     "repeat=1/batch": 0.11829580699998132,
-     "repeat=1/batchgrad": 6.669900000133566e-05,
-     "repeat=1/batchscale": 2.3349999992205994e-05,
-     "repeat=1/ragged": 2.0498999987239586e-05,
-     "repeat=1/stepfull": 2.0180000007030685e-05
+     "repeat=1/train": 0.7377726610000082,
+     "repeat=1/infer-save-reload": 0.0059606099999882645,
+     "repeat=1/batch": 0.11296626700000445,
+     "repeat=1/batchgrad": 0.00011483000000112042,
+     "repeat=1/batchscale": 3.2369999999559695e-05,
+     "repeat=1/ragged": 2.5480000005018155e-05,
+     "repeat=1/stepfull": 2.2650000005342008e-05
     }
    }
   },
@@ -498,15 +498,15 @@
    ],
    "stepfull_verdict": "N/A",
    "timing": {
-    "total_seconds": 0.8584977919999801,
+    "total_seconds": 0.8550532849999968,
     "stages": {
-     "repeat=1/train": 0.7333833819999995,
-     "repeat=1/infer-save-reload": 0.005841602999993256,
-     "repeat=1/batch": 0.11896700299999452,
-     "repeat=1/batchgrad": 6.838900000616377e-05,
-     "repeat=1/batchscale": 2.272899999411493e-05,
-     "repeat=1/ragged": 2.0159999991165023e-05,
-     "repeat=1/stepfull": 1.9678999990446755e-05
+     "repeat=1/train": 0.7376619080000069,
+     "repeat=1/infer-save-reload": 0.005679329000003008,
+     "repeat=1/batch": 0.11135660899999777,
+     "repeat=1/batchgrad": 0.00011546999999723084,
+     "repeat=1/batchscale": 3.286000000457534e-05,
+     "repeat=1/ragged": 2.2479999998381572e-05,
+     "repeat=1/stepfull": 2.056900000013684e-05
     }
    }
   },
@@ -559,15 +559,15 @@
    ],
    "stepfull_verdict": "N/A",
    "timing": {
-    "total_seconds": 0.7841703390000134,
+    "total_seconds": 0.7726972480000001,
     "stages": {
-     "repeat=1/train": 0.6782329119999986,
-     "repeat=1/infer-save-reload": 0.00602136099999484,
-     "repeat=1/batch": 0.0996258510000132,
-     "repeat=1/batchgrad": 5.235900002276139e-05,
-     "repeat=1/batchscale": 1.8289999985654504e-05,
-     "repeat=1/ragged": 1.5278999995871345e-05,
-     "repeat=1/stepfull": 1.4720000024226465e-05
+     "repeat=1/train": 0.6731570190000014,
+     "repeat=1/infer-save-reload": 0.0059150400000049785,
+     "repeat=1/batch": 0.09337101900000278,
+     "repeat=1/batchgrad": 5.120000000147229e-05,
+     "repeat=1/batchscale": 1.516000000378881e-05,
+     "repeat=1/ragged": 1.4329999999063148e-05,
+     "repeat=1/stepfull": 1.3719999998329513e-05
     }
    }
   },
@@ -620,15 +620,15 @@
    ],
    "stepfull_verdict": "N/A",
    "timing": {
-    "total_seconds": 0.8230911330000197,
+    "total_seconds": 0.8224104739999945,
     "stages": {
-     "repeat=1/train": 0.7413942989999782,
-     "repeat=1/infer-save-reload": 0.006067701999995734,
-     "repeat=1/batch": 0.07532493700000487,
-     "repeat=1/batchgrad": 5.729000000087581e-05,
-     "repeat=1/batchscale": 2.437900002405513e-05,
-     "repeat=1/ragged": 2.0660000018324354e-05,
-     "repeat=1/stepfull": 2.7398999975503102e-05
+     "repeat=1/train": 0.743178309000001,
+     "repeat=1/infer-save-reload": 0.006044969000001288,
+     "repeat=1/batch": 0.07284544700000595,
+     "repeat=1/batchgrad": 0.00011268999999458629,
+     "repeat=1/batchscale": 2.9359999999201136e-05,
+     "repeat=1/ragged": 2.2040000004608373e-05,
+     "repeat=1/stepfull": 2.877000000012231e-05
     }
    }
   }
@@ -807,14 +807,14 @@
    },
    {
     "module": "_mojolearn_tsa",
-    "sha256": "a35fe86c45111997612d0ddc356a198d255812344f0a9f89afb34b1c1e3c1a6f",
-    "size": 699648
+    "sha256": "00dcb888476258e214de4310064f61a3b064d7843dbbdbe75766e5f10ffeaf63",
+    "size": 745144
    }
   ]
  },
  "resume_signature": {
   "schema": 1,
-  "source_sha256": "a205221ea5412963b9439f249342bdae97d149c4d4ba635b399c2e604c850db6",
+  "source_sha256": "13eb8e4274aca7a15da80fd2761811e83f7b34e8516dfdff5b931631c2fb0446",
   "options": {
    "require_backend": "hip",
    "require_cpu": false,
@@ -842,7 +842,7 @@
   },
   "environment_sha256": "889c57882801390282a75eaf5561375b2ae6c2a3a3f30d216adfe5285441ee33",
   "provenance": {
-   "commit": "91f713c06674e9aea5d98652a24e780c37f3595f",
+   "commit": "3e1b87ccf5c2288288f7c4c4002bf3593296318b",
    "mode": "identical",
    "vendor": "amd-mi325x-binary-columns",
    "platform": "Linux-6.8.0-59-generic-x86_64-with-glibc2.39",

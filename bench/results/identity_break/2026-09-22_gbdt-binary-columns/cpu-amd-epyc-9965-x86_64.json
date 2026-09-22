@@ -1,9 +1,9 @@
 {
  "mode": "identical",
  "repeats": 1,
- "platform": "Linux-6.8.0-134-generic-x86_64-with-glibc2.35",
- "vendor": "cpu-amd-epyc-9965-192-core-processor",
- "commit": "07201a6149b5f86fad77335ba7219a2588f1e66b",
+ "platform": "Linux-6.8.0-79-generic-x86_64-with-glibc2.35",
+ "vendor": "cpu-amd-epyc-9575f-64-core-processor",
+ "commit": "3e1b87ccf5c2288288f7c4c4002bf3593296318b",
  "commit_source": "MOJOLEARN_COMMIT",
  "heldout_seed": 1,
  "fixtures": {
@@ -237,7 +237,7 @@
  },
  "stepfull_sabotage": false,
  "host": {
-  "cpu_model": "AMD EPYC 9965 192-Core Processor",
+  "cpu_model": "AMD EPYC 9575F 64-Core Processor",
   "arch": "x86_64",
   "target_cpu": "unrecorded",
   "mojo_version": "unrecorded",
@@ -558,8 +558,8 @@
    },
    "_mojolearn_tsa_host": {
     "column": "cpu",
-    "sha256": "af45f9d16abf0c75a420dcb0c5746976f3cc8afa30084dc4bc395eaa79c7f78f",
-    "size": 349392,
+    "sha256": "5f70d399b3534b96aaa24f41d6af5a61deb417046f63c8a626e78a9369a3637c",
+    "size": 350040,
     "sabotage": false
    }
   }
@@ -574,7 +574,7 @@
  },
  "resume_signature": {
   "schema": 1,
-  "source_sha256": "22b5f1e57fbd12e42a9f6c12ae47b979f6192310fd089eba55f384bb46c98b6b",
+  "source_sha256": "d0f97f5c030ffc0471e51a8a13a272feda9caae23165d347bd01f896874828eb",
   "options": {
    "require_backend": null,
    "require_cpu": false,
@@ -600,12 +600,12 @@
    "merge": null,
    "allow_separate_builds": false
   },
-  "environment_sha256": "88f8cfa1876254d0c27ee3e733cb64c3ea3ecc84d41540f3b3aff83e5f6d1513",
+  "environment_sha256": "7f25420c40e3893837f0db0e62cb2e3b6e7f3ddf7338c2c8fbcef311d80fb06f",
   "provenance": {
-   "commit": "07201a6149b5f86fad77335ba7219a2588f1e66b",
+   "commit": "3e1b87ccf5c2288288f7c4c4002bf3593296318b",
    "mode": "identical",
-   "vendor": "cpu-amd-epyc-9965-192-core-processor",
-   "platform": "Linux-6.8.0-134-generic-x86_64-with-glibc2.35",
+   "vendor": "cpu-amd-epyc-9575f-64-core-processor",
+   "platform": "Linux-6.8.0-79-generic-x86_64-with-glibc2.35",
    "python": "3.14.7",
    "numpy": "2.5.2",
    "fixtures": {
@@ -736,15 +736,15 @@
    ],
    "stepfull_verdict": "N/A",
    "timing": {
-    "total_seconds": 3.84050708450377,
+    "total_seconds": 2.6535011641681194,
     "stages": {
-     "repeat=1/train": 3.6058141933754086,
-     "repeat=1/infer-save-reload": 0.0435481583699584,
-     "repeat=1/batch": 0.19053762592375278,
-     "repeat=1/batchgrad": 0.00011133961379528046,
-     "repeat=1/batchscale": 6.730016320943832e-05,
-     "repeat=1/ragged": 5.744956433773041e-05,
-     "repeat=1/stepfull": 5.347002297639847e-05
+     "repeat=1/train": 2.510820634663105,
+     "repeat=1/infer-save-reload": 0.018332652747631073,
+     "repeat=1/batch": 0.12388082966208458,
+     "repeat=1/batchgrad": 8.402764797210693e-05,
+     "repeat=1/batchscale": 4.668906331062317e-05,
+     "repeat=1/ragged": 2.191215753555298e-05,
+     "repeat=1/stepfull": 1.917034387588501e-05
     }
    }
   },
@@ -797,15 +797,15 @@
    ],
    "stepfull_verdict": "N/A",
    "timing": {
-    "total_seconds": 6.10736621171236,
+    "total_seconds": 4.281583070755005,
     "stages": {
-     "repeat=1/train": 5.825513589195907,
-     "repeat=1/infer-save-reload": 0.027537107467651367,
-     "repeat=1/batch": 0.25365702994167805,
-     "repeat=1/batchgrad": 0.0001537604257464409,
-     "repeat=1/batchscale": 6.296858191490173e-05,
-     "repeat=1/ragged": 4.818011075258255e-05,
-     "repeat=1/stepfull": 4.4549815356731415e-05
+     "repeat=1/train": 4.091016765683889,
+     "repeat=1/infer-save-reload": 0.011355210095643997,
+     "repeat=1/batch": 0.17877063900232315,
+     "repeat=1/batchgrad": 8.366256952285767e-05,
+     "repeat=1/batchscale": 4.304572939872742e-05,
+     "repeat=1/ragged": 3.0018389225006104e-05,
+     "repeat=1/stepfull": 2.4273991584777832e-05
     }
    }
   },
@@ -858,15 +858,15 @@
    ],
    "stepfull_verdict": "N/A",
    "timing": {
-    "total_seconds": 3.9327964382246137,
+    "total_seconds": 2.804459374397993,
     "stages": {
-     "repeat=1/train": 3.6405863352119923,
-     "repeat=1/infer-save-reload": 0.04135798942297697,
-     "repeat=1/batch": 0.2502863258123398,
-     "repeat=1/batchgrad": 0.00012218020856380463,
-     "repeat=1/batchscale": 5.8020465075969696e-05,
-     "repeat=1/ragged": 4.6708621084690094e-05,
-     "repeat=1/stepfull": 4.911050200462341e-05
+     "repeat=1/train": 2.5895945616066456,
+     "repeat=1/infer-save-reload": 0.017727967351675034,
+     "repeat=1/batch": 0.1967102512717247,
+     "repeat=1/batchgrad": 8.178874850273132e-05,
+     "repeat=1/batchscale": 3.935769200325012e-05,
+     "repeat=1/ragged": 2.7447938919067383e-05,
+     "repeat=1/stepfull": 2.3301690816879272e-05
     }
    }
   },
@@ -919,15 +919,15 @@
    ],
    "stepfull_verdict": "N/A",
    "timing": {
-    "total_seconds": 3.344700559042394,
+    "total_seconds": 2.336830712854862,
     "stages": {
-     "repeat=1/train": 3.120367117226124,
-     "repeat=1/infer-save-reload": 0.0411515599116683,
-     "repeat=1/batch": 0.18259107507765293,
-     "repeat=1/batchgrad": 0.00013190042227506638,
-     "repeat=1/batchscale": 5.993898957967758e-05,
-     "repeat=1/ragged": 4.647020250558853e-05,
-     "repeat=1/stepfull": 5.991943180561066e-05
+     "repeat=1/train": 2.18903598934412,
+     "repeat=1/infer-save-reload": 0.01726435497403145,
+     "repeat=1/batch": 0.13008276745676994,
+     "repeat=1/batchgrad": 8.122995495796204e-05,
+     "repeat=1/batchscale": 4.824250936508179e-05,
+     "repeat=1/ragged": 2.257898449897766e-05,
+     "repeat=1/stepfull": 3.949180245399475e-05
     }
    }
   },
@@ -980,15 +980,15 @@
    ],
    "stepfull_verdict": "N/A",
    "timing": {
-    "total_seconds": 3.8196187475696206,
+    "total_seconds": 2.6879601068794727,
     "stages": {
-     "repeat=1/train": 3.536488799378276,
-     "repeat=1/infer-save-reload": 0.04183151666074991,
-     "repeat=1/batch": 0.24074333254247904,
-     "repeat=1/batchgrad": 0.00012433063238859177,
-     "repeat=1/batchscale": 5.477946251630783e-05,
-     "repeat=1/ragged": 4.326924681663513e-05,
-     "repeat=1/stepfull": 4.427041858434677e-05
+     "repeat=1/train": 2.4794268384575844,
+     "repeat=1/infer-save-reload": 0.017517603933811188,
+     "repeat=1/batch": 0.19058304652571678,
+     "repeat=1/batchgrad": 8.302181959152222e-05,
+     "repeat=1/batchscale": 4.7400593757629395e-05,
+     "repeat=1/ragged": 2.221018075942993e-05,
+     "repeat=1/stepfull": 2.0947307348251343e-05
     }
    }
   },
@@ -1041,15 +1041,15 @@
    ],
    "stepfull_verdict": "N/A",
    "timing": {
-    "total_seconds": 3.827711956575513,
+    "total_seconds": 2.7067619524896145,
     "stages": {
-     "repeat=1/train": 3.531660884618759,
-     "repeat=1/infer-save-reload": 0.042028176598250866,
-     "repeat=1/batch": 0.25342942029237747,
-     "repeat=1/batchgrad": 0.00012482888996601105,
-     "repeat=1/batchscale": 5.668029189109802e-05,
-     "repeat=1/ragged": 5.1740556955337524e-05,
-     "repeat=1/stepfull": 4.7499313950538635e-05
+     "repeat=1/train": 2.492178063839674,
+     "repeat=1/infer-save-reload": 0.01771818846464157,
+     "repeat=1/batch": 0.1964254453778267,
+     "repeat=1/batchgrad": 8.216127753257751e-05,
+     "repeat=1/batchscale": 4.5750290155410767e-05,
+     "repeat=1/ragged": 2.2549182176589966e-05,
+     "repeat=1/stepfull": 1.9818544387817383e-05
     }
    }
   },
@@ -1102,15 +1102,15 @@
    ],
    "stepfull_verdict": "N/A",
    "timing": {
-    "total_seconds": 3.6250123400241137,
+    "total_seconds": 2.5896538719534874,
     "stages": {
-     "repeat=1/train": 3.351856124587357,
-     "repeat=1/infer-save-reload": 0.03774506691843271,
-     "repeat=1/batch": 0.23482626117765903,
-     "repeat=1/batchgrad": 0.00013741850852966309,
-     "repeat=1/batchscale": 8.856039494276047e-05,
-     "repeat=1/ragged": 4.325900226831436e-05,
-     "repeat=1/stepfull": 4.1369348764419556e-05
+     "repeat=1/train": 2.3755546882748604,
+     "repeat=1/infer-save-reload": 0.016084976494312286,
+     "repeat=1/batch": 0.19757415726780891,
+     "repeat=1/batchgrad": 8.335709571838379e-05,
+     "repeat=1/batchscale": 4.814937710762024e-05,
+     "repeat=1/ragged": 2.7239322662353516e-05,
+     "repeat=1/stepfull": 2.314150333404541e-05
     }
    }
   },
@@ -1163,15 +1163,15 @@
    ],
    "stepfull_verdict": "N/A",
    "timing": {
-    "total_seconds": 2.485628386028111,
+    "total_seconds": 1.7756100557744503,
     "stages": {
-     "repeat=1/train": 2.261083384975791,
-     "repeat=1/infer-save-reload": 0.029466516338288784,
-     "repeat=1/batch": 0.19456946663558483,
-     "repeat=1/batchgrad": 0.0001063300296664238,
-     "repeat=1/batchscale": 3.757886588573456e-05,
-     "repeat=1/ragged": 2.420879900455475e-05,
-     "repeat=1/stepfull": 2.2079795598983765e-05
+     "repeat=1/train": 1.5979611463844776,
+     "repeat=1/infer-save-reload": 0.012962404638528824,
+     "repeat=1/batch": 0.1643247790634632,
+     "repeat=1/batchgrad": 5.436316132545471e-05,
+     "repeat=1/batchscale": 1.811981201171875e-05,
+     "repeat=1/ragged": 1.5467405319213867e-05,
+     "repeat=1/stepfull": 1.4159828424453735e-05
     }
    }
   },
@@ -1224,15 +1224,15 @@
    ],
    "stepfull_verdict": "N/A",
    "timing": {
-    "total_seconds": 3.715314502827823,
+    "total_seconds": 2.5742998495697975,
     "stages": {
-     "repeat=1/train": 3.482527091167867,
-     "repeat=1/infer-save-reload": 0.04147680941969156,
-     "repeat=1/batch": 0.19070348422974348,
-     "repeat=1/batchgrad": 0.00015890877693891525,
-     "repeat=1/batchscale": 5.544908344745636e-05,
-     "repeat=1/ragged": 4.784855991601944e-05,
-     "repeat=1/stepfull": 4.221964627504349e-05
+     "repeat=1/train": 2.427301064133644,
+     "repeat=1/infer-save-reload": 0.01744207739830017,
+     "repeat=1/batch": 0.12911230698227882,
+     "repeat=1/batchgrad": 8.038803935050964e-05,
+     "repeat=1/batchscale": 3.037974238395691e-05,
+     "repeat=1/ragged": 3.8079917430877686e-05,
+     "repeat=1/stepfull": 1.993030309677124e-05
     }
    }
   }
@@ -1243,7 +1243,7 @@
    "file": "cpu-binary-columns.part0.json",
    "cells": 9,
    "complete": true,
-   "platform": "Linux-6.8.0-134-generic-x86_64-with-glibc2.35",
+   "platform": "Linux-6.8.0-79-generic-x86_64-with-glibc2.35",
    "bindings": []
   }
  ],
