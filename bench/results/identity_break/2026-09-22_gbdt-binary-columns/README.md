@@ -21,21 +21,17 @@ are reached. Summing the set side instead is not a control: a one-fold
 feature's cosine score is symmetric in its two sides, and that build read
 IDENTICAL.
 
-The NVIDIA and AMD columns are owed. Record them on a rental with a built
-GPU set at this lane's commit (or later):
+## NVIDIA, AMD and x86-64 CPU columns (admitted 2026-09-22)
 
-```sh
-MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH=python python tools/identity_break.py \
-  --require-backend cuda --lanes gbdt-binary-columns --repeats 1 \
-  --batch-grad --batch-scale --ragged --step-full \
-  --vendor nvidia-<gpu>-binary-columns --json nvidia-<gpu>.json
-MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH=python python tools/identity_break.py \
-  --require-backend hip --lanes gbdt-binary-columns --repeats 1 \
-  --batch-grad --batch-scale --ragged --step-full \
-  --vendor amd-<gpu>-binary-columns --json amd-<gpu>.json
-```
+| file | column |
+|---|---|
+| `nvidia-h100.json` | NVIDIA H100, CUDA, commit 3e1b87ccf (RunPod) |
+| `nvidia-rtx4090.json` | NVIDIA RTX 4090, CUDA, commit 91f713c06 (RunPod) |
+| `amd-mi325x.json` | AMD MI325X, HIP, commit 3e1b87ccf (DigitalOcean) |
+| `cpu-amd-epyc-9965-x86_64.json` | x86-64 CPU host binding, commit 3e1b87ccf (RunPod CPU) |
 
-then commit the JSONs here and admit them with
-`python -m mojolearn verify --all --emit-reference python/mojolearn/verify_reference/table.json --reference-table python/mojolearn/verify_reference/table.json --lanes gbdt-binary-columns`.
-Until then `GradientBoosting` auto-routes a pool with a one-border column to
-the host binding on Metal only (`ensemble._HOST_ONE_BORDER_VENDORS`).
+Recorded with `--require-backend cuda|hip --repeats 1 --batch-grad
+--batch-scale --ragged --step-full`. `diff.five-columns.txt`, all six columns:
+train 9, infer and model 18, batch 9 IDENTICAL, exit 0. Admitted into
+`verify_reference/table.json`, and `ensemble._HOST_ONE_BORDER_VENDORS` is now
+metal, cuda and hip.

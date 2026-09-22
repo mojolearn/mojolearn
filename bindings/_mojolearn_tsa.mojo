@@ -82,6 +82,9 @@ def holtwinters_fit_binding(
         2  frequency      cuML's seasonal_periods
         3  start_periods
         4  eps            (float)
+        5  init_method    OPTIONAL: 0 heuristic (cuML's fit, the value when
+                          absent), 1 estimated (`holtwinters/impl/internal/
+                          hw_estimate.mojo`, the Python default)
 
     `seasonal` is cuML's name string; `seasonal_from_name` refuses
     anything but 'additive'/'add'/'multiplicative'/'mul' BY NAME, in their
@@ -116,10 +119,10 @@ def holtwinters_fit_binding(
         [0 * batch_size, 1 * batch_size)   niter
         [1 * batch_size, 2 * batch_size)   criterion
     """
-    if len(params) != 5:
+    if len(params) != 5 and len(params) != 6:
         raise Error(
-            "holtwinters_fit: params must contain 5 values (n, batch_size,"
-            " frequency, start_periods, eps), got " + String(len(params))
+            "holtwinters_fit: params must contain 5 or 6 values (n, batch_size,"
+            " frequency, start_periods, eps[, init_method]), got " + String(len(params))
         )
     var dp = _f32_ptr(Int(py=data_addr))
     var cp = _f32_ptr(Int(py=comps_addr))
@@ -130,11 +133,15 @@ def holtwinters_fit_binding(
     var frequency = Int(py=params[2])
     var start_periods = Int(py=params[3])
     var eps = Float32(Float64(py=params[4]))
+    var init_method = Int(py=params[5]) if len(params) == 6 else 0
+    if init_method != 0 and init_method != 1:
+        raise Error("holtwinters_fit: init_method must be 0 (heuristic) or 1 (estimated), got " + String(init_method))
     var sname = String(py=seasonal)
     var components_len = 0
     with GILReleased(Python()):
         components_len = holtwinters_fit_ptr(
             dp, cp, sp, fp, n, batch_size, frequency, start_periods, sname, eps,
+            init_method,
         )
     return PythonObject(components_len)
 

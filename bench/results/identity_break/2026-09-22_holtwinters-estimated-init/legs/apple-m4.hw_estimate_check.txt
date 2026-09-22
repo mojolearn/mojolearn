@@ -1,0 +1,20 @@
+== holtwinters/checks/hw_estimate_check.mojo [IDENTICAL] ==
+  additive tpb=32 batch=5 n=60 f=12: device vs oracle differing=0 sse[0]=44.352245 abg[0]=0.0/0.05853799/0.0 niter[0]=24 crit[0]=2
+  additive-noiseless tpb=32 batch=3 n=40 f=4: device vs oracle differing=0 sse[0]=0.0 abg[0]=0.40066713/0.2996949/0.29884657 niter[0]=27 crit[0]=1
+  additive-no-season tpb=32 batch=2 n=32 f=4: device vs oracle differing=0 sse[0]=0.0 abg[0]=0.8036719/0.09945909/0.07759209 niter[0]=26 crit[0]=1
+  multiplicative tpb=32 batch=5 n=60 f=12: device vs oracle differing=0 sse[0]=0.065600276 abg[0]=0.0/3.625503e-08/0.0 niter[0]=54 crit[0]=1
+  multiplicative-noiseless tpb=32 batch=3 n=40 f=4: device vs oracle differing=0 sse[0]=1.4305115e-06 abg[0]=0.40023342/0.29925796/0.29985487 niter[0]=31 crit[0]=1
+  constant tpb=32 batch=2 n=24 f=4: device vs oracle differing=0 sse[0]=0.0 abg[0]=0.4/0.3/0.3 niter[0]=22 crit[0]=1
+  mixed tpb=32 batch=7 n=48 f=6: device vs oracle differing=0 sse[0]=37.070187 abg[0]=0.0/0.81457293/0.0 niter[0]=59 crit[0]=1
+  additive tpb=1 batch=5 n=60 f=12: device vs oracle differing=0 sse[0]=44.352245 abg[0]=0.0/0.05853799/0.0 niter[0]=24 crit[0]=2
+  additive-noiseless tpb=1 batch=3 n=40 f=4: device vs oracle differing=0 sse[0]=0.0 abg[0]=0.40066713/0.2996949/0.29884657 niter[0]=27 crit[0]=1
+  additive-no-season tpb=1 batch=2 n=32 f=4: device vs oracle differing=0 sse[0]=0.0 abg[0]=0.8036719/0.09945909/0.07759209 niter[0]=26 crit[0]=1
+  multiplicative tpb=1 batch=5 n=60 f=12: device vs oracle differing=0 sse[0]=0.065600276 abg[0]=0.0/3.625503e-08/0.0 niter[0]=54 crit[0]=1
+  multiplicative-noiseless tpb=1 batch=3 n=40 f=4: device vs oracle differing=0 sse[0]=1.4305115e-06 abg[0]=0.40023342/0.29925796/0.29985487 niter[0]=31 crit[0]=1
+  constant tpb=1 batch=2 n=24 f=4: device vs oracle differing=0 sse[0]=0.0 abg[0]=0.4/0.3/0.3 niter[0]=22 crit[0]=1
+  mixed tpb=1 batch=7 n=48 f=6: device vs oracle differing=0 sse[0]=37.070187 abg[0]=0.0/0.81457293/0.0 niter[0]=59 crit[0]=1
+  additive-f60-serial-arm tpb=32 batch=2 n=130 f=60: device vs oracle differing=0 sse[0]=57.16786 abg[0]=0.019560603/0.35268232/0.0 niter[0]=70 crit[0]=1
+  multiplicative-f60-serial-arm tpb=32 batch=2 n=130 f=60: device vs oracle differing=0 sse[0]=0.104967535 abg[0]=0.0/1.5933484e-08/0.0 niter[0]=54 crit[0]=1
+  additive-f59-parallel-edge tpb=32 batch=2 n=120 f=59: device vs oracle differing=0 sse[0]=46.37302 abg[0]=0.0/0.007336321/0.0 niter[0]=27 crit[0]=2
+  heuristic: default vs explicit differing=0
+== hw_estimate_check: ALL OK [IDENTICAL] ==

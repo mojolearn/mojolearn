@@ -1,0 +1,12 @@
+build	core	0	1
+build	tsa	0	10
+build	gbdt	0	1
+sabotage-build	core	0	0
+sabotage-build	tsa	0	9
+portable-math	0	0
+readback	0
+run-column-hw	0
+column-check-hw	0
+run-column-binary	0
+column-check-binary	0
+run-column-hw-sab	1

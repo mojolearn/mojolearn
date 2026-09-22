@@ -51,6 +51,7 @@ def fit(
     tpb_optim: Int = HW_OPTIM_TPB,
     scratch_pad: Int = 0,
     scratch_poison: Float32 = Float32(0.0),
+    init_method: Int = 0,
 ) raises:
     """`ML::HoltWinters::fit` (`holtwinters.cu:37-62`, float). The extra
     outputs (`alpha/beta/gamma`, `criterion`, `niter`, `iter_trace`) are
@@ -60,7 +61,7 @@ def fit(
         ctx, data, n, batch_size, frequency, start_periods, seasonal, epsilon,
         level_d, trend_d, season_d, error_d, alpha_d, beta_d, gamma_d,
         criterion_d, niter_d, decisions_d, iter_trace_d, trace_iters, trace,
-        tpb_decomp, tpb_optim, scratch_pad, scratch_poison,
+        tpb_decomp, tpb_optim, scratch_pad, scratch_poison, init_method,
     )
 
 

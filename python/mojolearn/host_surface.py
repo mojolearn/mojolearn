@@ -3372,6 +3372,10 @@ PUBLIC_PENDING_LANES = {
     # ADMITTED 2026-09-20: transformer-decode-session carries cells in the shipped table now.
     # ADMITTED 2026-09-20: par-causal-lm, CPU and a two-device RTX 4090 column agree on all nine fixtures.
     # ADMITTED 2026-09-20: par-cross-val, CPU and a two-device RTX 4090 column agree on all nine fixtures.
+    # ADMITTED 2026-09-22: holtwinters, holtwinters-multiplicative, par-holtwinters and
+    # par-forecast-holtwinters at the estimated-initialization default. Apple M4, arm64 CPU,
+    # NVIDIA H100, AMD MI325X and x86-64 CPU agree on all nine fixtures
+    # (bench/results/identity_break/2026-09-22_holtwinters-estimated-init/).
 }
 
 

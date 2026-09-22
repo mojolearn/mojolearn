@@ -1,0 +1,30 @@
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+# verify --all: metal (apple), 4 lanes x 1 fixtures, harness checkout, table /Users/andrewhendel/CascadeProjects/mojolearn-wt-records/python/mojolearn/verify_reference/table.json
+  holtwinters                        tsa                 0.2s
+  holtwinters-multiplicative         tsa                 0.3s
+  par-holtwinters                    tsa                 1.1s
+  par-forecast-holtwinters           tsa                 1.6s
+# python -m mojolearn verify --all
+# mojolearn 0.8.13  commit e88bbe2c5249d8f6c36c3c5e5ac91966f0b67a94 (WORKING TREE DIRTY) (git checkout beside the package)
+# mode identical  vendor metal (class apple)  device Apple M4 / Mac16,12
+# cpu Apple M4  macOS-26.5.2-arm64-arm-64bit-Mach-O  python 3.13.15  numpy 2.5.2
+# reference table /Users/andrewhendel/CascadeProjects/mojolearn-wt-records/python/mojolearn/verify_reference/table.json (sha256 3bc1195294200650, 626 records)
+# depth full: 4 lanes x 1 fixtures, 1 repeat(s), 0 portable model(s)
+
+| family | lanes | IDENTICAL | DIVERGENT | OWED | REFUSED | N/A |
+|--------|-------|-----------|-----------|------|---------|-----|
+| tsa    |     4 |        16 |         0 |    0 |       0 |   4 |
+| all    |     4 |        16 |         0 |    0 |       0 |   4 |
+
+LANE ACCOUNTING: 274 of 274 harness lanes accounted for; 2 VERIFIED, 272 not.
+  a lane that is not VERIFIED is not checked, whatever its state says:
+  NOT RUN (213): agglomerative, arima, arima-011, arima-exog, arima-exog-seasonal, arima-seasonal-c, ... 207 more
+      exposed, but this run did not select it
+  NOT APPLICABLE (59): par-arima, par-boosting, par-boosting-clf, par-boosting-pointwise, par-boosting-reg, par-border-types, ... 53 more
+      claim requires two devices: a par-* driver claims that a TWO-DEVICE column hashes equal to the one-device column cell for cell. `verify` is always a one-device run (it refuses MOJOLEARN_PAR_DEVICES), and on one device the comparison is a run against itself, which passes whatever the code does. Owed: a two-GPU box running `MOJOLEARN_PAR_DEVICES=0,1 python3 tools/identity_break.py --repeats 2 --lanes <lane> --json par2.json` beside the same lanes at MOJOLEARN_PAR_DEVICES=0, admitted with _verify_reference.admit(par_axis=True)
+  NOT APPLICABLE leaves nothing unknown, so it does not cost the run its pass; it is reported because an absence a user cannot see is worse than a gap they can. Every other state above does cost it.
+  this run's scope is 4 lanes, 2 VERIFIED, 2 not applicable, 0 not checked
+
+Batch invariance: IDENTICAL=4, DIVERGENT=0, OWED=0, REFUSED=0, N/A=0
+Scope: selected fixtures and properties only; use verify --coverage for omissions.
+RESULT: VERIFIED (verified 16 of 20 cell parts (0 divergent, 0 owed, 0 refused, 4 n/a); 2 verified, 2 not applicable, 0 owed, 0 held, of 4 lanes). 4.0s. exit 0

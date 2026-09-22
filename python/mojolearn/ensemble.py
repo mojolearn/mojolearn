@@ -396,11 +396,11 @@ _HOST_ROUTE_MAX_CELLS = 200_000
 _HOST_ROUTE_ENV = "MOJOLEARN_GBDT_ROUTE"
 #: The device vendors whose BinaryFeatures histograms (a column with exactly
 #: one border) a recorded column has witnessed equal to the host binding's:
-#: the `gbdt-binary-columns` lane, Apple M4 Metal == the CPU host column on
-#: all nine fixtures (bench/results/identity_break/2026-09-22_gbdt-binary-
-#: columns). The NVIDIA and AMD columns of that lane are OWED, so on those
-#: devices an auto-routed fit with such a column trains on the device.
-_HOST_ONE_BORDER_VENDORS = ("metal",)
+#: the `gbdt-binary-columns` lane, Apple M4 Metal, NVIDIA RTX 4090 (CUDA),
+#: AMD MI325X (HIP) and the CPU host column (arm64 and x86-64) agree bit for
+#: bit on all nine fixtures (bench/results/identity_break/2026-09-22_gbdt-
+#: binary-columns). A vendor absent here trains such a pool on the device.
+_HOST_ONE_BORDER_VENDORS = ("metal", "cuda", "hip")
 #: THE CONFIGURATIONS THE SMALL-POOL ROUTE TAKES, keyed (resolved boosting
 #: type, loss, eval set given), each with the verifier lanes whose recorded
 #: columns (NVIDIA, AMD, Apple and CPU, all four, in
@@ -1746,8 +1746,8 @@ class GradientBoosting(NumericModeMixin):
 
         The host binding restates the binary policy since 2026-09-22
         (perf/gbdt-host-one-border), and the `gbdt-binary-columns` lane holds
-        it to the Apple M4 Metal fit bit for bit on all nine fixtures, so on
-        Metal the host result IS the device result. `MOJOLEARN_GBDT_ROUTE=
+        it to the Apple M4 Metal, NVIDIA and AMD fits bit for bit on all nine
+        fixtures, so on those devices the host result IS the device result. `MOJOLEARN_GBDT_ROUTE=
         host` keeps whatever the host trained."""
         route = os.environ.get(_HOST_ROUTE_ENV, "auto").strip().lower()
         if route == "host":

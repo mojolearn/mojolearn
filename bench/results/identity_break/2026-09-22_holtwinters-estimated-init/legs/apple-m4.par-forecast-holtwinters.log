@@ -1,0 +1,155 @@
+# vendor=apple-m4 commit=6eacfab2813c708f80d4d6de0c5830fd3d9d2b76 (git rev-parse HEAD)
+# identity_break  mode=identical  2026-09-22 12:36:26  macOS-26.5.2-arm64-arm-64bit-Mach-O
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START par-forecast-holtwinters/base repeat=1/train
+# DONE par-forecast-holtwinters/base repeat=1/train 0.561s
+# START par-forecast-holtwinters/base repeat=1/infer-save-reload
+# DONE par-forecast-holtwinters/base repeat=1/infer-save-reload 0.304s
+# START par-forecast-holtwinters/base repeat=1/batch
+# DONE par-forecast-holtwinters/base repeat=1/batch 0.543s
+# START par-forecast-holtwinters/base repeat=1/batchgrad
+# DONE par-forecast-holtwinters/base repeat=1/batchgrad 0.000s
+# START par-forecast-holtwinters/base repeat=1/batchscale
+# DONE par-forecast-holtwinters/base repeat=1/batchscale 0.000s
+# START par-forecast-holtwinters/base repeat=1/ragged
+# DONE par-forecast-holtwinters/base repeat=1/ragged 0.000s
+# START par-forecast-holtwinters/base repeat=1/stepfull
+# DONE par-forecast-holtwinters/base repeat=1/stepfull 0.000s
+# CELL par-forecast-holtwinters/base STABLE 1.408s
+# START par-forecast-holtwinters/ties repeat=1/train
+# DONE par-forecast-holtwinters/ties repeat=1/train 0.472s
+# START par-forecast-holtwinters/ties repeat=1/infer-save-reload
+# DONE par-forecast-holtwinters/ties repeat=1/infer-save-reload 0.298s
+# START par-forecast-holtwinters/ties repeat=1/batch
+# DONE par-forecast-holtwinters/ties repeat=1/batch 0.596s
+# START par-forecast-holtwinters/ties repeat=1/batchgrad
+# DONE par-forecast-holtwinters/ties repeat=1/batchgrad 0.000s
+# START par-forecast-holtwinters/ties repeat=1/batchscale
+# DONE par-forecast-holtwinters/ties repeat=1/batchscale 0.000s
+# START par-forecast-holtwinters/ties repeat=1/ragged
+# DONE par-forecast-holtwinters/ties repeat=1/ragged 0.000s
+# START par-forecast-holtwinters/ties repeat=1/stepfull
+# DONE par-forecast-holtwinters/ties repeat=1/stepfull 0.000s
+# CELL par-forecast-holtwinters/ties STABLE 1.366s
+# START par-forecast-holtwinters/hashed repeat=1/train
+# DONE par-forecast-holtwinters/hashed repeat=1/train 0.480s
+# START par-forecast-holtwinters/hashed repeat=1/infer-save-reload
+# DONE par-forecast-holtwinters/hashed repeat=1/infer-save-reload 0.310s
+# START par-forecast-holtwinters/hashed repeat=1/batch
+# DONE par-forecast-holtwinters/hashed repeat=1/batch 0.577s
+# START par-forecast-holtwinters/hashed repeat=1/batchgrad
+# DONE par-forecast-holtwinters/hashed repeat=1/batchgrad 0.000s
+# START par-forecast-holtwinters/hashed repeat=1/batchscale
+# DONE par-forecast-holtwinters/hashed repeat=1/batchscale 0.000s
+# START par-forecast-holtwinters/hashed repeat=1/ragged
+# DONE par-forecast-holtwinters/hashed repeat=1/ragged 0.000s
+# START par-forecast-holtwinters/hashed repeat=1/stepfull
+# DONE par-forecast-holtwinters/hashed repeat=1/stepfull 0.000s
+# CELL par-forecast-holtwinters/hashed STABLE 1.366s
+# START par-forecast-holtwinters/wide repeat=1/train
+# DONE par-forecast-holtwinters/wide repeat=1/train 0.470s
+# START par-forecast-holtwinters/wide repeat=1/infer-save-reload
+# DONE par-forecast-holtwinters/wide repeat=1/infer-save-reload 0.351s
+# START par-forecast-holtwinters/wide repeat=1/batch
+# DONE par-forecast-holtwinters/wide repeat=1/batch 0.567s
+# START par-forecast-holtwinters/wide repeat=1/batchgrad
+# DONE par-forecast-holtwinters/wide repeat=1/batchgrad 0.000s
+# START par-forecast-holtwinters/wide repeat=1/batchscale
+# DONE par-forecast-holtwinters/wide repeat=1/batchscale 0.000s
+# START par-forecast-holtwinters/wide repeat=1/ragged
+# DONE par-forecast-holtwinters/wide repeat=1/ragged 0.000s
+# START par-forecast-holtwinters/wide repeat=1/stepfull
+# DONE par-forecast-holtwinters/wide repeat=1/stepfull 0.000s
+# CELL par-forecast-holtwinters/wide STABLE 1.388s
+# START par-forecast-holtwinters/denormal repeat=1/train
+# DONE par-forecast-holtwinters/denormal repeat=1/train 0.469s
+# START par-forecast-holtwinters/denormal repeat=1/infer-save-reload
+# DONE par-forecast-holtwinters/denormal repeat=1/infer-save-reload 0.286s
+# START par-forecast-holtwinters/denormal repeat=1/batch
+# DONE par-forecast-holtwinters/denormal repeat=1/batch 0.582s
+# START par-forecast-holtwinters/denormal repeat=1/batchgrad
+# DONE par-forecast-holtwinters/denormal repeat=1/batchgrad 0.000s
+# START par-forecast-holtwinters/denormal repeat=1/batchscale
+# DONE par-forecast-holtwinters/denormal repeat=1/batchscale 0.000s
+# START par-forecast-holtwinters/denormal repeat=1/ragged
+# DONE par-forecast-holtwinters/denormal repeat=1/ragged 0.000s
+# START par-forecast-holtwinters/denormal repeat=1/stepfull
+# DONE par-forecast-holtwinters/denormal repeat=1/stepfull 0.000s
+# CELL par-forecast-holtwinters/denormal STABLE 1.338s
+# START par-forecast-holtwinters/denormal_ftz repeat=1/train
+# DONE par-forecast-holtwinters/denormal_ftz repeat=1/train 0.491s
+# START par-forecast-holtwinters/denormal_ftz repeat=1/infer-save-reload
+# DONE par-forecast-holtwinters/denormal_ftz repeat=1/infer-save-reload 0.291s
+# START par-forecast-holtwinters/denormal_ftz repeat=1/batch
+# DONE par-forecast-holtwinters/denormal_ftz repeat=1/batch 0.618s
+# START par-forecast-holtwinters/denormal_ftz repeat=1/batchgrad
+# DONE par-forecast-holtwinters/denormal_ftz repeat=1/batchgrad 0.000s
+# START par-forecast-holtwinters/denormal_ftz repeat=1/batchscale
+# DONE par-forecast-holtwinters/denormal_ftz repeat=1/batchscale 0.000s
+# START par-forecast-holtwinters/denormal_ftz repeat=1/ragged
+# DONE par-forecast-holtwinters/denormal_ftz repeat=1/ragged 0.000s
+# START par-forecast-holtwinters/denormal_ftz repeat=1/stepfull
+# DONE par-forecast-holtwinters/denormal_ftz repeat=1/stepfull 0.000s
+# CELL par-forecast-holtwinters/denormal_ftz STABLE 1.401s
+# START par-forecast-holtwinters/dupes repeat=1/train
+# DONE par-forecast-holtwinters/dupes repeat=1/train 0.481s
+# START par-forecast-holtwinters/dupes repeat=1/infer-save-reload
+# DONE par-forecast-holtwinters/dupes repeat=1/infer-save-reload 0.302s
+# START par-forecast-holtwinters/dupes repeat=1/batch
+# DONE par-forecast-holtwinters/dupes repeat=1/batch 0.560s
+# START par-forecast-holtwinters/dupes repeat=1/batchgrad
+# DONE par-forecast-holtwinters/dupes repeat=1/batchgrad 0.000s
+# START par-forecast-holtwinters/dupes repeat=1/batchscale
+# DONE par-forecast-holtwinters/dupes repeat=1/batchscale 0.000s
+# START par-forecast-holtwinters/dupes repeat=1/ragged
+# DONE par-forecast-holtwinters/dupes repeat=1/ragged 0.000s
+# START par-forecast-holtwinters/dupes repeat=1/stepfull
+# DONE par-forecast-holtwinters/dupes repeat=1/stepfull 0.000s
+# CELL par-forecast-holtwinters/dupes STABLE 1.344s
+# START par-forecast-holtwinters/odd repeat=1/train
+# DONE par-forecast-holtwinters/odd repeat=1/train 0.497s
+# START par-forecast-holtwinters/odd repeat=1/infer-save-reload
+# DONE par-forecast-holtwinters/odd repeat=1/infer-save-reload 0.290s
+# START par-forecast-holtwinters/odd repeat=1/batch
+# DONE par-forecast-holtwinters/odd repeat=1/batch 0.564s
+# START par-forecast-holtwinters/odd repeat=1/batchgrad
+# DONE par-forecast-holtwinters/odd repeat=1/batchgrad 0.000s
+# START par-forecast-holtwinters/odd repeat=1/batchscale
+# DONE par-forecast-holtwinters/odd repeat=1/batchscale 0.000s
+# START par-forecast-holtwinters/odd repeat=1/ragged
+# DONE par-forecast-holtwinters/odd repeat=1/ragged 0.000s
+# START par-forecast-holtwinters/odd repeat=1/stepfull
+# DONE par-forecast-holtwinters/odd repeat=1/stepfull 0.000s
+# CELL par-forecast-holtwinters/odd STABLE 1.352s
+# START par-forecast-holtwinters/negative repeat=1/train
+# DONE par-forecast-holtwinters/negative repeat=1/train 0.475s
+# START par-forecast-holtwinters/negative repeat=1/infer-save-reload
+# DONE par-forecast-holtwinters/negative repeat=1/infer-save-reload 0.293s
+# START par-forecast-holtwinters/negative repeat=1/batch
+# DONE par-forecast-holtwinters/negative repeat=1/batch 0.565s
+# START par-forecast-holtwinters/negative repeat=1/batchgrad
+# DONE par-forecast-holtwinters/negative repeat=1/batchgrad 0.000s
+# START par-forecast-holtwinters/negative repeat=1/batchscale
+# DONE par-forecast-holtwinters/negative repeat=1/batchscale 0.000s
+# START par-forecast-holtwinters/negative repeat=1/ragged
+# DONE par-forecast-holtwinters/negative repeat=1/ragged 0.000s
+# START par-forecast-holtwinters/negative repeat=1/stepfull
+# DONE par-forecast-holtwinters/negative repeat=1/stepfull 0.000s
+# CELL par-forecast-holtwinters/negative STABLE 1.333s
+| par-forecast-holtwinters | e129d91043f9ca1b | 532ff0cb9a7c742d | c6f5d8b3a7c6e2ef | c1700d46bb89f370 | 1a3f406a70294fb3 | 1a3f406a70294fb3 | e129d91043f9ca1b | ff71bc2acfcc04c0 | 16422c5a24ea4ff5 |
+| par-forecast-holtwinters infer | f64346115fd1e485 | e30245aa5f954cac | e889103b9e2156b0 | d50097a2978e191d | c510c55d7fe7634c | c510c55d7fe7634c | f64346115fd1e485 | d703e84ef2619c33 | 13a2f8d75bb87a49 |
+| par-forecast-holtwinters model | 574f8ee721ff8cb1 | c4bf3300c250e545 | b98682943d8f6ca8 | 3b98cc951a655fda | 4aa7580e6078aafc | 4aa7580e6078aafc | 574f8ee721ff8cb1 | faaf3751f5a7301c | 141468532f9d578b |
+| par-forecast-holtwinters batch | 5a24aebcd557a49d | e3896bd322189e93 | 560a4a23f15b7be0 | d5f4a7f92e1a7de5 | e9ecaede17a9e007 | e9ecaede17a9e007 | 5a24aebcd557a49d | a2d6bea9501142fa | a514a1878c162023 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+batchgrad: n/a=9
+batchscale: n/a=9
+ragged: n/a=9
+stepfull: n/a=9
+n/a: par-forecast-holtwinters batchgrad n/a:no-backward, par-forecast-holtwinters batchscale n/a:not-in-the-serving-set, par-forecast-holtwinters ragged n/a:no-sequence-axis, par-forecast-holtwinters stepfull n/a:no-decode-state
+wrote bench/results/identity_break/2026-09-22_holtwinters-estimated-init/legs/apple-m4.par-forecast-holtwinters.json

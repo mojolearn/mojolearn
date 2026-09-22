@@ -1,0 +1,2408 @@
+{
+ "mode": "identical",
+ "repeats": 1,
+ "platform": "Linux-6.8.0-79-generic-x86_64-with-glibc2.35",
+ "vendor": "cpu-amd-epyc-9575f-64-core-processor",
+ "commit": "3e1b87ccf5c2288288f7c4c4002bf3593296318b",
+ "commit_source": "MOJOLEARN_COMMIT",
+ "heldout_seed": 1,
+ "fixtures": {
+  "base": {
+   "X": "b5b0a0005efa3788",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "308c22120b664e5b"
+  },
+  "ties": {
+   "X": "186fe2109fc34ad5",
+   "y_clf": "f33cf521f758ae3c",
+   "y_reg": "047d4652a4d56bc3"
+  },
+  "hashed": {
+   "X": "c93497b26fe65cda",
+   "y_clf": "d104ead2f62bdd03",
+   "y_reg": "ce4959d8070bb069"
+  },
+  "wide": {
+   "X": "35f6a8481e649eb8",
+   "y_clf": "276ebacc29267948",
+   "y_reg": "611fc5dd6367bef5"
+  },
+  "denormal": {
+   "X": "752323c375a1cbf5",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "denormal_ftz": {
+   "X": "34c156b0d0e8a891",
+   "y_clf": "3a1bce5286de1274",
+   "y_reg": "6988f4eaf25e42f9"
+  },
+  "dupes": {
+   "X": "9d9d9db7c7785a14",
+   "y_clf": "d390ee2944b13e1d",
+   "y_reg": "135ce10f2a0817fe"
+  },
+  "odd": {
+   "X": "93d9611a09107bb9",
+   "y_clf": "273a388a705a4f40",
+   "y_reg": "25f3d126c81ca0ec"
+  },
+  "negative": {
+   "X": "08106ffff3256313",
+   "y_clf": "294ce4d7dadaf0bb",
+   "y_reg": "ce1914d5f78f5707"
+  }
+ },
+ "heldout": {
+  "base": {
+   "X": "d4de6b4eb682c465"
+  },
+  "ties": {
+   "X": "d1ba686494256660"
+  },
+  "hashed": {
+   "X": "9dc786ade4574aff"
+  },
+  "wide": {
+   "X": "d52a1af18a3c2f1c"
+  },
+  "denormal": {
+   "X": "5061056b118d07d0"
+  },
+  "denormal_ftz": {
+   "X": "a8c3d1a560b5cabb"
+  },
+  "dupes": {
+   "X": "e4b16c115962dfcd"
+  },
+  "odd": {
+   "X": "32ea0bbed60b8e6c"
+  },
+  "negative": {
+   "X": "45b539a3f66ce25d"
+  }
+ },
+ "complete": true,
+ "skipped": [],
+ "batch_protocol": {
+  "alone": 16,
+  "split": [
+   1,
+   8,
+   "n"
+  ],
+  "prefix": "1,7,full-1",
+  "enabled": true
+ },
+ "batch_sabotage": false,
+ "rlpair_protocol": {
+  "seqs": 5,
+  "prompt": 4,
+  "decode": 12,
+  "trainer_split": [
+   2,
+   "n"
+  ],
+  "joiner": 4,
+  "join_at": 3,
+  "join_row": 2,
+  "leaver": 1,
+  "leave_after": 8,
+  "block_vocab": 48,
+  "logprob": "training.cross_entropy(reduction='none')",
+  "enabled": true
+ },
+ "rlpair_sabotage": false,
+ "par_driver_sabotage": false,
+ "lane_revisions": {
+  "par-arima": "trend-metadata-1",
+  "tokenizer": "synthetic-vocab-1",
+  "gbdt-parametric-losses": "rows-1500-1",
+  "gbdt-nan-modes": "rows-1500-nan-in-split-columns-2",
+  "gbdt-lossguide-newtoncosine": "rows-1500-1",
+  "gbdt-pair-logit": "rows-1500-1",
+  "hdbscan": "rows-4000-1",
+  "hdbscan-leaf": "rows-2000-1",
+  "spectral": "rows-512-1",
+  "holtwinters": "obs-128-estimated-init-2",
+  "holtwinters-multiplicative": "estimated-init-1",
+  "par-holtwinters": "estimated-init-1",
+  "par-forecast-holtwinters": "estimated-init-1",
+  "byte-lm": "steps-2-1",
+  "byte-lm-resident": "shape-l1-d16-ff32-1",
+  "samba": "steps-1-1",
+  "samba-untied-dropout-accum": "steps-3-1",
+  "mamba2-dtlimit": "seqlen-8-dtlimit-straddle-2",
+  "mamba3": "norms-near-one-1",
+  "transformer": "norms-near-one-1",
+  "transformer-window": "norms-near-one-1",
+  "umap": "transform-row-separable-1",
+  "par-graph-umap": "transform-row-separable-1"
+ },
+ "parts_collected": [
+  "batch",
+  "batchgrad",
+  "batchscale",
+  "ragged",
+  "rlpair",
+  "stepfull"
+ ],
+ "parts_omitted": [],
+ "partial_column": false,
+ "batchgrad_protocol": {
+  "rows": {
+   "alone": 16,
+   "split": [
+    1,
+    8,
+    "n"
+   ]
+  },
+  "accum_splits": [
+   2,
+   4,
+   8
+  ],
+  "uneven_split": "n/a:split 1,7,rest (optimizer contract clause 9.2: three unequal pieces, A = 3 is not a power of two (condition 4) and the pieces are not complete subtrees (condition 3))",
+  "carry_splits": [
+   [
+    1,
+    8,
+    "n"
+   ],
+   "every 16"
+  ],
+  "seq": [
+   8,
+   64
+  ]
+ },
+ "batchgrad_sabotage": false,
+ "batchscale_protocol": {
+  "batches": [
+   1,
+   17,
+   64,
+   256
+  ],
+  "whole": 1024,
+  "long_l": 1024,
+  "prefixes": [
+   1,
+   7,
+   63,
+   64,
+   65,
+   127,
+   128,
+   129,
+   255,
+   256,
+   257,
+   511,
+   512,
+   513,
+   1023
+  ]
+ },
+ "batchscale_sabotage": false,
+ "ragged_protocol": {
+  "lengths": [
+   16,
+   1,
+   7,
+   9,
+   16,
+   3,
+   12,
+   15
+  ],
+  "long_lengths": [
+   300,
+   1,
+   65,
+   129,
+   257,
+   128
+  ],
+  "padding": "nan/vocab+7"
+ },
+ "ragged_sabotage": false,
+ "stepfull_protocol": {
+  "rows": 2,
+  "length": 16,
+  "full": "forward(x) from a zero state, one pass",
+  "stepped": "allocate_state then step(x_t, state) at every position",
+  "compared": "bitwise, position by position"
+ },
+ "stepfull_sabotage": false,
+ "host": {
+  "cpu_model": "AMD EPYC 9575F 64-Core Processor",
+  "arch": "x86_64",
+  "target_cpu": "unrecorded",
+  "mojo_version": "unrecorded",
+  "python": "3.14.7",
+  "column": "cpu",
+  "routed": {
+   "_mojolearn": "_mojolearn_core_host",
+   "_mojolearn_linalg": "_mojolearn_linalg_host",
+   "_mojolearn_estimators": "_mojolearn_estimators_host",
+   "_mojolearn_metrics": "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing": "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa": "_mojolearn_tsa_host",
+   "_mojolearn_solver": "_mojolearn_solver_host",
+   "_mojolearn_svm": "_mojolearn_svm_host",
+   "_mojolearn_trees": "_mojolearn_trees_host",
+   "_mojolearn_rf": "_mojolearn_rf_host",
+   "_mojolearn_gp": "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods": "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture": "_mojolearn_mixture_host",
+   "_mojolearn_hdbscan": "_mojolearn_hdbscan_host",
+   "_mojolearn_gbdt": "_mojolearn_gbdt_host",
+   "_mojolearn_training": "_mojolearn_training_host",
+   "_mojolearn_resample": "_mojolearn_resample_host",
+   "_mojolearn_mamba": "_mojolearn_mamba_host",
+   "_mojolearn_arima": "_mojolearn_arima_host",
+   "_mojolearn_embedding": "_mojolearn_embedding_host",
+   "_mojolearn_ivf": "_mojolearn_ivf_host",
+   "_mojolearn_transformer": "_mojolearn_transformer_host"
+  },
+  "surface": "python/mojolearn/host_surface.py",
+  "declared": [
+   "_mojolearn_byte_lm_host",
+   "_mojolearn_forest_host",
+   "_mojolearn_tokenizer_host",
+   "_mojolearn_neural_host",
+   "_mojolearn_core_host",
+   "_mojolearn_linalg_host",
+   "_mojolearn_estimators_host",
+   "_mojolearn_metrics_host",
+   "_mojolearn_preprocessing_host",
+   "_mojolearn_tsa_host",
+   "_mojolearn_solver_host",
+   "_mojolearn_svm_host",
+   "_mojolearn_trees_host",
+   "_mojolearn_rf_host",
+   "_mojolearn_gp_host",
+   "_mojolearn_kernel_methods_host",
+   "_mojolearn_mixture_host",
+   "_mojolearn_mixture_infer_host",
+   "_mojolearn_hdbscan_host",
+   "_mojolearn_gp_infer_host",
+   "_mojolearn_hdbscan_infer_host",
+   "_mojolearn_gbdt_host",
+   "_mojolearn_training_host",
+   "_mojolearn_resample_host",
+   "_mojolearn_mamba_host",
+   "_mojolearn_arima_host",
+   "_mojolearn_embedding_host",
+   "_mojolearn_embedding_infer_host",
+   "_mojolearn_ivf_host",
+   "_mojolearn_ivf_search_host",
+   "_mojolearn_forecast_host",
+   "_mojolearn_transformer_host"
+  ],
+  "covered_lanes": [
+   "kernel-ridge-poly",
+   "kernel-ridge-sigmoid",
+   "kernel-ridge-laplacian",
+   "nystroem-poly",
+   "nystroem-sigmoid",
+   "nystroem-laplacian",
+   "par-rbf-sampler",
+   "select-d",
+   "gemm-pinned",
+   "kde",
+   "holtwinters",
+   "lasso",
+   "elasticnet",
+   "svc",
+   "agglomerative",
+   "et-clf",
+   "et-reg",
+   "iforest",
+   "knn",
+   "knn-clf",
+   "knn-reg",
+   "pca",
+   "pca-whiten",
+   "tsvd",
+   "ols",
+   "ridge",
+   "dbscan",
+   "kmeans",
+   "metrics",
+   "spectral",
+   "standard-scaler",
+   "minmax-scaler",
+   "logistic",
+   "rf-clf",
+   "rf-reg",
+   "kmeans-random",
+   "kmeans-array",
+   "kmeans-weighted",
+   "standard-scaler-no-mean",
+   "standard-scaler-no-std",
+   "minmax-scaler-clip",
+   "spectral-precomputed",
+   "spectral-embedding",
+   "gp",
+   "gp-matern12",
+   "gp-matern32",
+   "gp-matern52-ard",
+   "gp-normalize-y",
+   "gp-optimize",
+   "gp-optimize-restarts",
+   "gpc",
+   "gpc-multiclass",
+   "par-gpc-fit",
+   "par-gpc-predict",
+   "mamba1-decode-session",
+   "transformer-decode-session",
+   "par-causal-lm",
+   "par-cross-val",
+   "knn-sqeuclidean",
+   "knn-clf-distance",
+   "knn-reg-distance",
+   "gemm-transposed",
+   "linalg-qr",
+   "linalg-eigh",
+   "linalg-svdvals",
+   "dbscan-brute-l1",
+   "kde-tophat-sqeuclidean",
+   "kde-epanechnikov-l1",
+   "kde-exponential-chebyshev",
+   "kde-linear-cosine",
+   "kde-cosine-minkowski",
+   "kde-weighted",
+   "ols-no-intercept",
+   "ols-weighted",
+   "ridge-no-intercept",
+   "logistic-unpenalized-no-intercept",
+   "elasticnet-l2end-no-intercept",
+   "holtwinters-multiplicative",
+   "svc-linear",
+   "svc-poly",
+   "iforest-tuned",
+   "knn-manhattan",
+   "knn-chebyshev",
+   "knn-cosine",
+   "knn-minkowski-p3",
+   "knn-rbc",
+   "radius",
+   "radius-manhattan",
+   "radius-chebyshev",
+   "radius-minkowski-p3",
+   "dbscan-weighted",
+   "logistic-l1",
+   "logistic-elasticnet",
+   "logistic-multiclass",
+   "linear-svc",
+   "linear-svc-squared-hinge",
+   "linear-svr",
+   "linear-svr-squared",
+   "qn-squared",
+   "qn-absolute",
+   "kpss",
+   "svr",
+   "svr-linear",
+   "pca-full-whiten",
+   "metrics-classification",
+   "metrics-fowlkes-mallows",
+   "metrics-homogeneity-completeness",
+   "gbdt-adapter-score-weighted",
+   "rf-score-weighted",
+   "mlp",
+   "gbdt-symmetric",
+   "gbdt-rmse",
+   "gbdt-depthwise",
+   "gbdt-lossguide",
+   "gbdt-nan-modes",
+   "gbdt-adapter-clf",
+   "gbdt-adapter-reg",
+   "gbdt-parametric-losses",
+   "gbdt-exact-mae",
+   "gbdt-lossguide-newtoncosine",
+   "gbdt-multiclass",
+   "gbdt-multiclass-defaults",
+   "gbdt-onevsall",
+   "gbdt-ordered-rmse",
+   "gbdt-border-types",
+   "gbdt-ordered",
+   "gbdt-ordered-bayesian-noise",
+   "gbdt-binary-columns",
+   "gbdt-bfa-quantile",
+   "gbdt-catboost-defaults",
+   "gbdt-stochastic-arms",
+   "gbdt-symmetric-eval",
+   "gbdt-feature-freq",
+   "gbdt-pointwise-l2-bayesian-eval",
+   "gbdt-categorical-ctr",
+   "gbdt-ranking-defaults",
+   "gbdt-query-rmse",
+   "gbdt-pair-logit",
+   "gbdt-yeti-rank",
+   "arima",
+   "arima-011",
+   "arima-seasonal-c",
+   "arima-exog",
+   "arima-exog-seasonal",
+   "umap",
+   "kmeans-sqrt",
+   "kmeans-classic-pp",
+   "cross-val",
+   "bootstrap",
+   "permutation-test",
+   "monte-carlo",
+   "optim-sgd",
+   "optim-adam-clip",
+   "cross-entropy-arms",
+   "training-primitives",
+   "ordered-gradient-sum",
+   "cholesky",
+   "rbf-sampler",
+   "kernel-ridge",
+   "nystroem",
+   "gmm",
+   "gmm-random-init",
+   "hdbscan",
+   "hdbscan-leaf",
+   "rf-clf-entropy-log2-noboot",
+   "rf-clf-balanced-parallel",
+   "rf-reg-poisson",
+   "rf-reg-gamma-ig",
+   "et-clf-entropy-bestfirst",
+   "et-reg-bootstrap-parallel",
+   "mamba2",
+   "mamba2-dtlimit",
+   "mamba1",
+   "mamba3",
+   "transformer",
+   "transformer-window",
+   "samba",
+   "samba-untied-dropout-accum",
+   "byte-lm-host-infer",
+   "byte-lm-host-infer-threaded",
+   "byte-lm-host-train",
+   "language-model-config",
+   "par-scaler",
+   "par-scaler-minmax",
+   "par-arima",
+   "par-holtwinters",
+   "par-forecast-arima",
+   "par-forecast-holtwinters",
+   "par-queries-knn",
+   "par-queries-nn",
+   "par-queries-radius",
+   "par-queries-kde",
+   "par-reference-knn",
+   "par-reference-knn-reg",
+   "par-forest",
+   "par-forest-et",
+   "par-forest-et-clf",
+   "par-forest-reg",
+   "par-mlp",
+   "par-samba",
+   "par-samba-clip",
+   "embedding",
+   "embedding-sort",
+   "ivf",
+   "ivf-euclidean",
+   "par-ivf",
+   "ivf-extend",
+   "byte-lm",
+   "byte-lm-resident",
+   "gmm-sample",
+   "gmm-random-init-sample",
+   "gp-sample-y",
+   "gp-sample-y-normalize",
+   "tokenizer",
+   "bpe-trainer",
+   "bpe-vocabulary",
+   "tokenized-corpus",
+   "hf-checkpoint",
+   "hf-tokenizer",
+   "hf-causal-lm",
+   "gbdt-categorical-ctr-tables",
+   "gbdt-tensor-ctr-tables",
+   "gemm-bf16",
+   "gemm-int8",
+   "transformer-bf16w",
+   "transformer-int8w",
+   "mamba1-bf16w",
+   "mamba1-int8w",
+   "mamba2-bf16w",
+   "mamba2-int8w",
+   "mamba3-bf16w",
+   "mamba3-int8w",
+   "mlp-bf16w",
+   "mlp-int8w",
+   "samba-bf16w",
+   "samba-int8w",
+   "saved-model-host-infer",
+   "lowbit-conversions",
+   "grad-accumulation"
+  ],
+  "families": {
+   "_mojolearn_core_host": {
+    "column": "cpu",
+    "sha256": "03c6c0fcfbde4ea68ffc12364ff9374a0654d437ebd3b25393bf8c04f596c8c7",
+    "size": 985656,
+    "sabotage": true
+   },
+   "_mojolearn_tsa_host": {
+    "column": "cpu",
+    "sha256": "79797569e0974e0f679f6aed99bf0fda123b401823566b1226ca0ce18906a964",
+    "size": 350040,
+    "sabotage": true
+   }
+  }
+ },
+ "package": {
+  "version": "0.8.13",
+  "package_dir": "/root/mojolearn/python/mojolearn",
+  "numpy": "2.5.2",
+  "python": "3.14.7",
+  "par_devices": "0",
+  "bindings": []
+ },
+ "resume_signature": {
+  "schema": 1,
+  "source_sha256": "4677ef682dd50d65a49a869327009df3b348e7c035ba0aa2911083a1192e243d",
+  "options": {
+   "require_backend": null,
+   "require_cpu": false,
+   "fail_on_refused": false,
+   "jobs": 1,
+   "lanes": "holtwinters",
+   "skip": "",
+   "fixtures": "",
+   "repeats": 1,
+   "vendor": null,
+   "allow_fast": false,
+   "batch_alone": 16,
+   "partial_column": "",
+   "no_batch": false,
+   "no_rlpair": false,
+   "batch_grad": false,
+   "batch_scale": false,
+   "ragged": false,
+   "step_full": false,
+   "diff": null,
+   "require_columns": null,
+   "owed_json": "",
+   "merge": null,
+   "allow_separate_builds": false
+  },
+  "environment_sha256": "1718b0f5f3b51d9c7f476baf6fdf274f778bf53ea70caf492ba14326e4c6e90f",
+  "provenance": {
+   "commit": "3e1b87ccf5c2288288f7c4c4002bf3593296318b",
+   "mode": "identical",
+   "vendor": "cpu-amd-epyc-9575f-64-core-processor",
+   "platform": "Linux-6.8.0-79-generic-x86_64-with-glibc2.35",
+   "python": "3.14.7",
+   "numpy": "2.5.2",
+   "fixtures": {
+    "base": {
+     "X": "b5b0a0005efa3788",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "308c22120b664e5b"
+    },
+    "ties": {
+     "X": "186fe2109fc34ad5",
+     "y_clf": "f33cf521f758ae3c",
+     "y_reg": "047d4652a4d56bc3"
+    },
+    "hashed": {
+     "X": "c93497b26fe65cda",
+     "y_clf": "d104ead2f62bdd03",
+     "y_reg": "ce4959d8070bb069"
+    },
+    "wide": {
+     "X": "35f6a8481e649eb8",
+     "y_clf": "276ebacc29267948",
+     "y_reg": "611fc5dd6367bef5"
+    },
+    "denormal": {
+     "X": "752323c375a1cbf5",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "denormal_ftz": {
+     "X": "34c156b0d0e8a891",
+     "y_clf": "3a1bce5286de1274",
+     "y_reg": "6988f4eaf25e42f9"
+    },
+    "dupes": {
+     "X": "9d9d9db7c7785a14",
+     "y_clf": "d390ee2944b13e1d",
+     "y_reg": "135ce10f2a0817fe"
+    },
+    "odd": {
+     "X": "93d9611a09107bb9",
+     "y_clf": "273a388a705a4f40",
+     "y_reg": "25f3d126c81ca0ec"
+    },
+    "negative": {
+     "X": "08106ffff3256313",
+     "y_clf": "294ce4d7dadaf0bb",
+     "y_reg": "ce1914d5f78f5707"
+    }
+   },
+   "heldout": {
+    "base": {
+     "X": "d4de6b4eb682c465"
+    },
+    "ties": {
+     "X": "d1ba686494256660"
+    },
+    "hashed": {
+     "X": "9dc786ade4574aff"
+    },
+    "wide": {
+     "X": "d52a1af18a3c2f1c"
+    },
+    "denormal": {
+     "X": "5061056b118d07d0"
+    },
+    "denormal_ftz": {
+     "X": "a8c3d1a560b5cabb"
+    },
+    "dupes": {
+     "X": "e4b16c115962dfcd"
+    },
+    "odd": {
+     "X": "32ea0bbed60b8e6c"
+    },
+    "negative": {
+     "X": "45b539a3f66ce25d"
+    }
+   }
+  }
+ },
+ "cells": {
+  "holtwinters/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "17636b95ed11c68b"
+   ],
+   "parts": [
+    {
+     "forecast": "b529d68b57b8bac2"
+    }
+   ],
+   "infer": [
+    null
+   ],
+   "infer_verdict": "REFUSED",
+   "model": [
+    null
+   ],
+   "model_verdict": "REFUSED",
+   "probe_error": "infer: ValueError: forecast(h) and forecast(h, index=0) differ: 1574 bytes of 2048\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 11419, in _probe_fit_impl\n    infer = _h(*fit.probe(_public_est(name, fit.est)))\n                ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 1937, in <lambda>\n    lambda e: _same_bytes(\"forecast(h)\", e.forecast(FORECAST_HORIZON),\n              ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                          \"forecast(h, index=0)\", e.forecast(FORECAST_HORIZON, index=0)))\n                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 1986, in _same_bytes\n    raise ValueError(message)\nValueError: forecast(h) and forecast(h, index=0) differ: 1574 bytes of 2048",
+   "batch": [
+    "cecd37f5351dbc02"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.0045158751308918,
+    "stages": {
+     "repeat=1/train": 0.0020353347063064575,
+     "repeat=1/infer-save-reload": 0.0018376223742961884,
+     "repeat=1/batch": 0.0003256388008594513,
+     "repeat=1/batchgrad": 4.9427151679992676e-05,
+     "repeat=1/batchscale": 2.7451664209365845e-05,
+     "repeat=1/ragged": 2.2463500499725342e-05,
+     "repeat=1/stepfull": 2.2359192371368408e-05
+    }
+   }
+  },
+  "holtwinters/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "2dfc08010f6223c9"
+   ],
+   "parts": [
+    {
+     "forecast": "ba03648ded3f21ee"
+    }
+   ],
+   "infer": [
+    null
+   ],
+   "infer_verdict": "REFUSED",
+   "model": [
+    null
+   ],
+   "model_verdict": "REFUSED",
+   "probe_error": "infer: ValueError: forecast(h) and forecast(h, index=0) differ: 1412 bytes of 2048\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 11419, in _probe_fit_impl\n    infer = _h(*fit.probe(_public_est(name, fit.est)))\n                ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 1937, in <lambda>\n    lambda e: _same_bytes(\"forecast(h)\", e.forecast(FORECAST_HORIZON),\n              ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                          \"forecast(h, index=0)\", e.forecast(FORECAST_HORIZON, index=0)))\n                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 1986, in _same_bytes\n    raise ValueError(message)\nValueError: forecast(h) and forecast(h, index=0) differ: 1412 bytes of 2048",
+   "batch": [
+    "66637f3e1b5e56c1"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.0021133162081241608,
+    "stages": {
+     "repeat=1/train": 0.0012390166521072388,
+     "repeat=1/infer-save-reload": 0.0004492327570915222,
+     "repeat=1/batch": 0.00021841377019882202,
+     "repeat=1/batchgrad": 3.505870699882507e-05,
+     "repeat=1/batchscale": 2.201274037361145e-05,
+     "repeat=1/ragged": 2.088025212287903e-05,
+     "repeat=1/stepfull": 2.039968967437744e-05
+    }
+   }
+  },
+  "holtwinters/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b85a2e26aeeabbaa"
+   ],
+   "parts": [
+    {
+     "forecast": "92af290182888ec7"
+    }
+   ],
+   "infer": [
+    null
+   ],
+   "infer_verdict": "REFUSED",
+   "model": [
+    null
+   ],
+   "model_verdict": "REFUSED",
+   "probe_error": "infer: ValueError: forecast(h) and forecast(h, index=0) differ: 1502 bytes of 2048\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 11419, in _probe_fit_impl\n    infer = _h(*fit.probe(_public_est(name, fit.est)))\n                ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 1937, in <lambda>\n    lambda e: _same_bytes(\"forecast(h)\", e.forecast(FORECAST_HORIZON),\n              ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                          \"forecast(h, index=0)\", e.forecast(FORECAST_HORIZON, index=0)))\n                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 1986, in _same_bytes\n    raise ValueError(message)\nValueError: forecast(h) and forecast(h, index=0) differ: 1502 bytes of 2048",
+   "batch": [
+    "ecfc2b70ca9c45b7"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.001603778451681137,
+    "stages": {
+     "repeat=1/train": 0.0009226538240909576,
+     "repeat=1/infer-save-reload": 0.00034030526876449585,
+     "repeat=1/batch": 0.00016984343528747559,
+     "repeat=1/batchgrad": 3.4030526876449585e-05,
+     "repeat=1/batchscale": 2.088025212287903e-05,
+     "repeat=1/ragged": 2.0030885934829712e-05,
+     "repeat=1/stepfull": 2.0332634449005127e-05
+    }
+   }
+  },
+  "holtwinters/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "9d14011296ee02c0"
+   ],
+   "parts": [
+    {
+     "forecast": "d81d33b22c5841a9"
+    }
+   ],
+   "infer": [
+    null
+   ],
+   "infer_verdict": "REFUSED",
+   "model": [
+    null
+   ],
+   "model_verdict": "REFUSED",
+   "probe_error": "infer: ValueError: forecast(h) and forecast(h, index=0) differ: 990 bytes of 2048\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 11419, in _probe_fit_impl\n    infer = _h(*fit.probe(_public_est(name, fit.est)))\n                ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 1937, in <lambda>\n    lambda e: _same_bytes(\"forecast(h)\", e.forecast(FORECAST_HORIZON),\n              ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                          \"forecast(h, index=0)\", e.forecast(FORECAST_HORIZON, index=0)))\n                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 1986, in _same_bytes\n    raise ValueError(message)\nValueError: forecast(h) and forecast(h, index=0) differ: 990 bytes of 2048",
+   "batch": [
+    "cba30972e9bbd237"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.0017002001404762268,
+    "stages": {
+     "repeat=1/train": 0.0009716562926769257,
+     "repeat=1/infer-save-reload": 0.0003808625042438507,
+     "repeat=1/batch": 0.00018049031496047974,
+     "repeat=1/batchgrad": 3.473460674285889e-05,
+     "repeat=1/batchscale": 2.004951238632202e-05,
+     "repeat=1/ragged": 1.9390136003494263e-05,
+     "repeat=1/stepfull": 1.8991529941558838e-05
+    }
+   }
+  },
+  "holtwinters/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "6735b93b8cf9ec19"
+   ],
+   "parts": [
+    {
+     "forecast": "8c968216fc6c0a8f"
+    }
+   ],
+   "infer": [
+    "e4d1fb4fb6483655"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "44ab468e95b0cdd4"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "e4d1fb4fb6483655"
+   ],
+   "batch": [
+    "875a061dd457af0a"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.0029333308339118958,
+    "stages": {
+     "repeat=1/train": 0.0006855465471744537,
+     "repeat=1/infer-save-reload": 0.0018737651407718658,
+     "repeat=1/batch": 0.00019031763076782227,
+     "repeat=1/batchgrad": 3.769993782043457e-05,
+     "repeat=1/batchscale": 2.107769250869751e-05,
+     "repeat=1/ragged": 1.870095729827881e-05,
+     "repeat=1/stepfull": 1.9419938325881958e-05
+    }
+   }
+  },
+  "holtwinters/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "6735b93b8cf9ec19"
+   ],
+   "parts": [
+    {
+     "forecast": "8c968216fc6c0a8f"
+    }
+   ],
+   "infer": [
+    "e4d1fb4fb6483655"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "44ab468e95b0cdd4"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "e4d1fb4fb6483655"
+   ],
+   "batch": [
+    "875a061dd457af0a"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.002310037612915039,
+    "stages": {
+     "repeat=1/train": 0.0007553137838840485,
+     "repeat=1/infer-save-reload": 0.0011912882328033447,
+     "repeat=1/batch": 0.00018544495105743408,
+     "repeat=1/batchgrad": 3.5371631383895874e-05,
+     "repeat=1/batchscale": 2.0720064640045166e-05,
+     "repeat=1/ragged": 1.9740313291549683e-05,
+     "repeat=1/stepfull": 1.9311904907226562e-05
+    }
+   }
+  },
+  "holtwinters/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "17636b95ed11c68b"
+   ],
+   "parts": [
+    {
+     "forecast": "b529d68b57b8bac2"
+    }
+   ],
+   "infer": [
+    null
+   ],
+   "infer_verdict": "REFUSED",
+   "model": [
+    null
+   ],
+   "model_verdict": "REFUSED",
+   "probe_error": "infer: ValueError: forecast(h) and forecast(h, index=0) differ: 1574 bytes of 2048\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 11419, in _probe_fit_impl\n    infer = _h(*fit.probe(_public_est(name, fit.est)))\n                ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 1937, in <lambda>\n    lambda e: _same_bytes(\"forecast(h)\", e.forecast(FORECAST_HORIZON),\n              ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                          \"forecast(h, index=0)\", e.forecast(FORECAST_HORIZON, index=0)))\n                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 1986, in _same_bytes\n    raise ValueError(message)\nValueError: forecast(h) and forecast(h, index=0) differ: 1574 bytes of 2048",
+   "batch": [
+    "cecd37f5351dbc02"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.001849845051765442,
+    "stages": {
+     "repeat=1/train": 0.0009677372872829437,
+     "repeat=1/infer-save-reload": 0.00042451173067092896,
+     "repeat=1/batch": 0.0001922324299812317,
+     "repeat=1/batchgrad": 3.436952829360962e-05,
+     "repeat=1/batchscale": 2.3931264877319336e-05,
+     "repeat=1/ragged": 1.9669532775878906e-05,
+     "repeat=1/stepfull": 1.9200146198272705e-05
+    }
+   }
+  },
+  "holtwinters/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "a3ebd19cfd2bca04"
+   ],
+   "parts": [
+    {
+     "forecast": "baca8ca338e7ed3b"
+    }
+   ],
+   "infer": [
+    null
+   ],
+   "infer_verdict": "REFUSED",
+   "model": [
+    null
+   ],
+   "model_verdict": "REFUSED",
+   "probe_error": "infer: ValueError: forecast(h) and forecast(h, index=0) differ: 1456 bytes of 2048\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 11419, in _probe_fit_impl\n    infer = _h(*fit.probe(_public_est(name, fit.est)))\n                ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 1937, in <lambda>\n    lambda e: _same_bytes(\"forecast(h)\", e.forecast(FORECAST_HORIZON),\n              ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                          \"forecast(h, index=0)\", e.forecast(FORECAST_HORIZON, index=0)))\n                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 1986, in _same_bytes\n    raise ValueError(message)\nValueError: forecast(h) and forecast(h, index=0) differ: 1456 bytes of 2048",
+   "batch": [
+    "5bcc8ca3372203fe"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.001368410885334015,
+    "stages": {
+     "repeat=1/train": 0.0007315650582313538,
+     "repeat=1/infer-save-reload": 0.00035333260893821716,
+     "repeat=1/batch": 0.000151902437210083,
+     "repeat=1/batchgrad": 1.7721205949783325e-05,
+     "repeat=1/batchscale": 1.4249235391616821e-05,
+     "repeat=1/ragged": 1.377984881401062e-05,
+     "repeat=1/stepfull": 1.265108585357666e-05
+    }
+   }
+  },
+  "holtwinters/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "085a56b03095173a"
+   ],
+   "parts": [
+    {
+     "forecast": "527a6036239e7299"
+    }
+   ],
+   "infer": [
+    null
+   ],
+   "infer_verdict": "REFUSED",
+   "model": [
+    null
+   ],
+   "model_verdict": "REFUSED",
+   "probe_error": "infer: ValueError: forecast(h) and forecast(h, index=0) differ: 1518 bytes of 2048\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 11419, in _probe_fit_impl\n    infer = _h(*fit.probe(_public_est(name, fit.est)))\n                ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 1937, in <lambda>\n    lambda e: _same_bytes(\"forecast(h)\", e.forecast(FORECAST_HORIZON),\n              ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                          \"forecast(h, index=0)\", e.forecast(FORECAST_HORIZON, index=0)))\n                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 1986, in _same_bytes\n    raise ValueError(message)\nValueError: forecast(h) and forecast(h, index=0) differ: 1518 bytes of 2048",
+   "batch": [
+    "053da5ec6fd427d4"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.0019019469618797302,
+    "stages": {
+     "repeat=1/train": 0.0011771656572818756,
+     "repeat=1/infer-save-reload": 0.00038253143429756165,
+     "repeat=1/batch": 0.0001743622124195099,
+     "repeat=1/batchgrad": 3.39411199092865e-05,
+     "repeat=1/batchscale": 2.0269304513931274e-05,
+     "repeat=1/ragged": 1.96211040019989e-05,
+     "repeat=1/stepfull": 1.9352883100509644e-05
+    }
+   }
+  },
+  "holtwinters-multiplicative/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "fdd5d8eba1cac612"
+   ],
+   "parts": [
+    {
+     "forecast": "846ab6fcf5427c27"
+    }
+   ],
+   "infer": [
+    null
+   ],
+   "infer_verdict": "REFUSED",
+   "model": [
+    null
+   ],
+   "model_verdict": "REFUSED",
+   "probe_error": "infer: ValueError: forecast(h) and forecast(h, index=0) differ: 1528 bytes of 2048\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 11419, in _probe_fit_impl\n    infer = _h(*fit.probe(_public_est(name, fit.est)))\n                ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 4311, in <lambda>\n    lambda e: _same_bytes(\"forecast(h)\", e.forecast(FORECAST_HORIZON),\n              ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                          \"forecast(h, index=0)\", e.forecast(FORECAST_HORIZON, index=0)))\n                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 1986, in _same_bytes\n    raise ValueError(message)\nValueError: forecast(h) and forecast(h, index=0) differ: 1528 bytes of 2048",
+   "batch": [
+    "18bc74ecdbb7a1b1"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.004836555570363998,
+    "stages": {
+     "repeat=1/train": 0.0031007006764411926,
+     "repeat=1/infer-save-reload": 0.0012805573642253876,
+     "repeat=1/batch": 0.00023194029927253723,
+     "repeat=1/batchgrad": 3.71299684047699e-05,
+     "repeat=1/batchscale": 2.2780150175094604e-05,
+     "repeat=1/ragged": 2.1267682313919067e-05,
+     "repeat=1/stepfull": 2.0910054445266724e-05
+    }
+   }
+  },
+  "holtwinters-multiplicative/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "fd57e9a2ac1b258f"
+   ],
+   "parts": [
+    {
+     "forecast": "cf2741a8fda12682"
+    }
+   ],
+   "infer": [
+    null
+   ],
+   "infer_verdict": "REFUSED",
+   "model": [
+    null
+   ],
+   "model_verdict": "REFUSED",
+   "probe_error": "infer: ValueError: forecast(h) and forecast(h, index=0) differ: 1392 bytes of 2048\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 11419, in _probe_fit_impl\n    infer = _h(*fit.probe(_public_est(name, fit.est)))\n                ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 4311, in <lambda>\n    lambda e: _same_bytes(\"forecast(h)\", e.forecast(FORECAST_HORIZON),\n              ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                          \"forecast(h, index=0)\", e.forecast(FORECAST_HORIZON, index=0)))\n                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 1986, in _same_bytes\n    raise ValueError(message)\nValueError: forecast(h) and forecast(h, index=0) differ: 1392 bytes of 2048",
+   "batch": [
+    "8143c83b84806027"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.021956637501716614,
+    "stages": {
+     "repeat=1/train": 0.020476017147302628,
+     "repeat=1/infer-save-reload": 0.0007446929812431335,
+     "repeat=1/batch": 0.0003232918679714203,
+     "repeat=1/batchgrad": 6.756186485290527e-05,
+     "repeat=1/batchscale": 4.513189196586609e-05,
+     "repeat=1/ragged": 2.85319983959198e-05,
+     "repeat=1/stepfull": 2.346932888031006e-05
+    }
+   }
+  },
+  "holtwinters-multiplicative/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "ef373873078321ed"
+   ],
+   "parts": [
+    {
+     "forecast": "216ec4fd2d6d370a"
+    }
+   ],
+   "infer": [
+    null
+   ],
+   "infer_verdict": "REFUSED",
+   "model": [
+    null
+   ],
+   "model_verdict": "REFUSED",
+   "probe_error": "infer: ValueError: forecast(h) and forecast(h, index=0) differ: 1516 bytes of 2048\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 11419, in _probe_fit_impl\n    infer = _h(*fit.probe(_public_est(name, fit.est)))\n                ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 4311, in <lambda>\n    lambda e: _same_bytes(\"forecast(h)\", e.forecast(FORECAST_HORIZON),\n              ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                          \"forecast(h, index=0)\", e.forecast(FORECAST_HORIZON, index=0)))\n                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 1986, in _same_bytes\n    raise ValueError(message)\nValueError: forecast(h) and forecast(h, index=0) differ: 1516 bytes of 2048",
+   "batch": [
+    "6e730026f6dbdd1f"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.006985202431678772,
+    "stages": {
+     "repeat=1/train": 0.005743138492107391,
+     "repeat=1/infer-save-reload": 0.0006209984421730042,
+     "repeat=1/batch": 0.00029880180954933167,
+     "repeat=1/batchgrad": 6.832927465438843e-05,
+     "repeat=1/batchscale": 4.603341221809387e-05,
+     "repeat=1/ragged": 3.5528093576431274e-05,
+     "repeat=1/stepfull": 2.5548040866851807e-05
+    }
+   }
+  },
+  "holtwinters-multiplicative/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "8941934588afb03c"
+   ],
+   "parts": [
+    {
+     "forecast": "3a878df92a3e329b"
+    }
+   ],
+   "infer": [
+    null
+   ],
+   "infer_verdict": "REFUSED",
+   "model": [
+    null
+   ],
+   "model_verdict": "REFUSED",
+   "probe_error": "infer: ValueError: forecast(h) and forecast(h, index=0) differ: 930 bytes of 2048\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 11419, in _probe_fit_impl\n    infer = _h(*fit.probe(_public_est(name, fit.est)))\n                ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 4311, in <lambda>\n    lambda e: _same_bytes(\"forecast(h)\", e.forecast(FORECAST_HORIZON),\n              ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                          \"forecast(h, index=0)\", e.forecast(FORECAST_HORIZON, index=0)))\n                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 1986, in _same_bytes\n    raise ValueError(message)\nValueError: forecast(h) and forecast(h, index=0) differ: 930 bytes of 2048",
+   "batch": [
+    "9d7820a2f925275a"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.007685128599405289,
+    "stages": {
+     "repeat=1/train": 0.0062852539122104645,
+     "repeat=1/infer-save-reload": 0.0006548464298248291,
+     "repeat=1/batch": 0.00030964240431785583,
+     "repeat=1/batchgrad": 9.115040302276611e-05,
+     "repeat=1/batchscale": 6.03310763835907e-05,
+     "repeat=1/ragged": 5.294010043144226e-05,
+     "repeat=1/stepfull": 4.222989082336426e-05
+    }
+   }
+  },
+  "holtwinters-multiplicative/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "6735b93b8cf9ec19"
+   ],
+   "parts": [
+    {
+     "forecast": "8c968216fc6c0a8f"
+    }
+   ],
+   "infer": [
+    "e4d1fb4fb6483655"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "43a630c78f1bc87c"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "e4d1fb4fb6483655"
+   ],
+   "batch": [
+    "875a061dd457af0a"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.0067611075937747955,
+    "stages": {
+     "repeat=1/train": 0.003333732485771179,
+     "repeat=1/infer-save-reload": 0.0027937889099121094,
+     "repeat=1/batch": 0.00028923898935317993,
+     "repeat=1/batchgrad": 6.809830665588379e-05,
+     "repeat=1/batchscale": 5.266070365905762e-05,
+     "repeat=1/ragged": 4.065409302711487e-05,
+     "repeat=1/stepfull": 3.411248326301575e-05
+    }
+   }
+  },
+  "holtwinters-multiplicative/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "6735b93b8cf9ec19"
+   ],
+   "parts": [
+    {
+     "forecast": "8c968216fc6c0a8f"
+    }
+   ],
+   "infer": [
+    "e4d1fb4fb6483655"
+   ],
+   "infer_verdict": "STABLE",
+   "model": [
+    "43a630c78f1bc87c"
+   ],
+   "model_verdict": "STABLE",
+   "reload": [
+    "e4d1fb4fb6483655"
+   ],
+   "batch": [
+    "875a061dd457af0a"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.005841013044118881,
+    "stages": {
+     "repeat=1/train": 0.00350310280919075,
+     "repeat=1/infer-save-reload": 0.0017281994223594666,
+     "repeat=1/batch": 0.0002871416509151459,
+     "repeat=1/batchgrad": 7.794052362442017e-05,
+     "repeat=1/batchscale": 4.620105028152466e-05,
+     "repeat=1/ragged": 3.116577863693237e-05,
+     "repeat=1/stepfull": 2.5659799575805664e-05
+    }
+   }
+  },
+  "holtwinters-multiplicative/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "fdd5d8eba1cac612"
+   ],
+   "parts": [
+    {
+     "forecast": "846ab6fcf5427c27"
+    }
+   ],
+   "infer": [
+    null
+   ],
+   "infer_verdict": "REFUSED",
+   "model": [
+    null
+   ],
+   "model_verdict": "REFUSED",
+   "probe_error": "infer: ValueError: forecast(h) and forecast(h, index=0) differ: 1528 bytes of 2048\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 11419, in _probe_fit_impl\n    infer = _h(*fit.probe(_public_est(name, fit.est)))\n                ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 4311, in <lambda>\n    lambda e: _same_bytes(\"forecast(h)\", e.forecast(FORECAST_HORIZON),\n              ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                          \"forecast(h, index=0)\", e.forecast(FORECAST_HORIZON, index=0)))\n                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 1986, in _same_bytes\n    raise ValueError(message)\nValueError: forecast(h) and forecast(h, index=0) differ: 1528 bytes of 2048",
+   "batch": [
+    "18bc74ecdbb7a1b1"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.00606377050280571,
+    "stages": {
+     "repeat=1/train": 0.004828374832868576,
+     "repeat=1/infer-save-reload": 0.0006413534283638,
+     "repeat=1/batch": 0.00028816238045692444,
+     "repeat=1/batchgrad": 7.313862442970276e-05,
+     "repeat=1/batchscale": 3.87728214263916e-05,
+     "repeat=1/ragged": 3.426894545555115e-05,
+     "repeat=1/stepfull": 2.574920654296875e-05
+    }
+   }
+  },
+  "holtwinters-multiplicative/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "defd7a6f581e9066"
+   ],
+   "parts": [
+    {
+     "forecast": "bb8cc4e6208586b5"
+    }
+   ],
+   "infer": [
+    null
+   ],
+   "infer_verdict": "REFUSED",
+   "model": [
+    null
+   ],
+   "model_verdict": "REFUSED",
+   "probe_error": "infer: ValueError: forecast(h) and forecast(h, index=0) differ: 1416 bytes of 2048\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 11419, in _probe_fit_impl\n    infer = _h(*fit.probe(_public_est(name, fit.est)))\n                ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 4311, in <lambda>\n    lambda e: _same_bytes(\"forecast(h)\", e.forecast(FORECAST_HORIZON),\n              ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                          \"forecast(h, index=0)\", e.forecast(FORECAST_HORIZON, index=0)))\n                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 1986, in _same_bytes\n    raise ValueError(message)\nValueError: forecast(h) and forecast(h, index=0) differ: 1416 bytes of 2048",
+   "batch": [
+    "1d7c74f95b48ecc4"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.006286442279815674,
+    "stages": {
+     "repeat=1/train": 0.005205806344747543,
+     "repeat=1/infer-save-reload": 0.0005878210067749023,
+     "repeat=1/batch": 0.0002400614321231842,
+     "repeat=1/batchgrad": 3.478303551673889e-05,
+     "repeat=1/batchscale": 2.3320317268371582e-05,
+     "repeat=1/ragged": 3.0409544706344604e-05,
+     "repeat=1/stepfull": 1.8458813428878784e-05
+    }
+   }
+  },
+  "holtwinters-multiplicative/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "d3f32961417fabd3"
+   ],
+   "parts": [
+    {
+     "forecast": "cb3bb4c600d56bd0"
+    }
+   ],
+   "infer": [
+    null
+   ],
+   "infer_verdict": "REFUSED",
+   "model": [
+    null
+   ],
+   "model_verdict": "REFUSED",
+   "probe_error": "infer: ValueError: forecast(h) and forecast(h, index=0) differ: 1510 bytes of 2048\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 11419, in _probe_fit_impl\n    infer = _h(*fit.probe(_public_est(name, fit.est)))\n                ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 4311, in <lambda>\n    lambda e: _same_bytes(\"forecast(h)\", e.forecast(FORECAST_HORIZON),\n              ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                          \"forecast(h, index=0)\", e.forecast(FORECAST_HORIZON, index=0)))\n                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 1986, in _same_bytes\n    raise ValueError(message)\nValueError: forecast(h) and forecast(h, index=0) differ: 1510 bytes of 2048",
+   "batch": [
+    "e95f5f7796811b91"
+   ],
+   "batch_verdict": "STABLE",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.007839325815439224,
+    "stages": {
+     "repeat=1/train": 0.006494797766208649,
+     "repeat=1/infer-save-reload": 0.0006323345005512238,
+     "repeat=1/batch": 0.00031489133834838867,
+     "repeat=1/batchgrad": 7.895752787590027e-05,
+     "repeat=1/batchscale": 5.710124969482422e-05,
+     "repeat=1/ragged": 4.2632222175598145e-05,
+     "repeat=1/stepfull": 3.466755151748657e-05
+    }
+   }
+  },
+  "par-holtwinters/base": {
+   "verdict": "DIVERGENT",
+   "hashes": [
+    "03ba5c3041e88a95"
+   ],
+   "parts": [
+    {
+     "level": "9c106230ead255ef",
+     "trend": "3ec49a987fadd7cb",
+     "season": "08de69baf02ed857",
+     "sse": "62ab3bff38683876",
+     "alpha": "e6ce7fe196327344",
+     "beta": "0888df8ad7fd05ab",
+     "gamma": "0888df8ad7fd05ab",
+     "n_iter": "5084938bc22412c9",
+     "criterion": "f1457d446e288bf7",
+     "forecast": "73767626ca30dc02"
+    }
+   ],
+   "oracle_errors": [
+    "fit_exponential_smoothing level_ and plain level_ differ: 6047 bytes of 8000; fit_exponential_smoothing trend_ and plain trend_ differ: 6000 bytes of 8000; fit_exponential_smoothing season_ and plain season_ differ: 7666 bytes of 8000; fit_exponential_smoothing sse_ and plain sse_ differ: 14 bytes of 16; fit_exponential_smoothing alpha_ and plain alpha_ differ: 12 bytes of 16; fit_exponential_smoothing gamma_ and plain gamma_ differ: 6 bytes of 16; fit_exponential_smoothing n_iter_ and plain n_iter_ differ: 4 bytes of 16; fit_exponential_smoothing criterion_ and plain criterion_ differ: 2 bytes of 16; fit_exponential_smoothing forecast(24) and plain forecast(24) differ: 335 bytes of 384"
+   ],
+   "timing": {
+    "total_seconds": 0.14378425851464272,
+    "stages": {
+     "repeat=1/train": 0.1436496451497078
+    }
+   }
+  },
+  "par-holtwinters/ties": {
+   "verdict": "DIVERGENT",
+   "hashes": [
+    "2873b889e3ac91d7"
+   ],
+   "parts": [
+    {
+     "level": "6066038f04c30299",
+     "trend": "7e2dfb41e2606e2d",
+     "season": "fa6b022cab27b708",
+     "sse": "531e05e7b645e894",
+     "alpha": "4d9d2c61d4b56993",
+     "beta": "0888df8ad7fd05ab",
+     "gamma": "0888df8ad7fd05ab",
+     "n_iter": "3ac45ffc8156b49b",
+     "criterion": "39c25c53a1212aa6",
+     "forecast": "943703a543323094"
+    }
+   ],
+   "oracle_errors": [
+    "fit_exponential_smoothing level_ and plain level_ differ: 5973 bytes of 8000; fit_exponential_smoothing trend_ and plain trend_ differ: 5992 bytes of 8000; fit_exponential_smoothing season_ and plain season_ differ: 7959 bytes of 8000; fit_exponential_smoothing sse_ and plain sse_ differ: 16 bytes of 16; fit_exponential_smoothing alpha_ and plain alpha_ differ: 11 bytes of 16; fit_exponential_smoothing beta_ and plain beta_ differ: 4 bytes of 16; fit_exponential_smoothing gamma_ and plain gamma_ differ: 6 bytes of 16; fit_exponential_smoothing n_iter_ and plain n_iter_ differ: 3 bytes of 16; fit_exponential_smoothing forecast(24) and plain forecast(24) differ: 259 bytes of 384"
+   ],
+   "timing": {
+    "total_seconds": 0.11734294146299362,
+    "stages": {
+     "repeat=1/train": 0.11723019182682037
+    }
+   }
+  },
+  "par-holtwinters/hashed": {
+   "verdict": "DIVERGENT",
+   "hashes": [
+    "576f060d1d9f5567"
+   ],
+   "parts": [
+    {
+     "level": "0201afc0ad3b93a5",
+     "trend": "52d0c93b9d76fc6e",
+     "season": "187dacd34cabef3b",
+     "sse": "35a0f118183c6deb",
+     "alpha": "cb322bebf769c5da",
+     "beta": "0888df8ad7fd05ab",
+     "gamma": "0888df8ad7fd05ab",
+     "n_iter": "bec0bbfe491e9119",
+     "criterion": "d9d1f6f929976544",
+     "forecast": "c55ad35563d27f13"
+    }
+   ],
+   "oracle_errors": [
+    "fit_exponential_smoothing level_ and plain level_ differ: 6109 bytes of 8000; fit_exponential_smoothing trend_ and plain trend_ differ: 6000 bytes of 8000; fit_exponential_smoothing season_ and plain season_ differ: 7456 bytes of 8000; fit_exponential_smoothing sse_ and plain sse_ differ: 13 bytes of 16; fit_exponential_smoothing alpha_ and plain alpha_ differ: 12 bytes of 16; fit_exponential_smoothing gamma_ and plain gamma_ differ: 6 bytes of 16; fit_exponential_smoothing n_iter_ and plain n_iter_ differ: 4 bytes of 16; fit_exponential_smoothing forecast(24) and plain forecast(24) differ: 354 bytes of 384"
+   ],
+   "timing": {
+    "total_seconds": 0.12328056246042252,
+    "stages": {
+     "repeat=1/train": 0.12316694483160973
+    }
+   }
+  },
+  "par-holtwinters/wide": {
+   "verdict": "DIVERGENT",
+   "hashes": [
+    "79d4432cc3a812c5"
+   ],
+   "parts": [
+    {
+     "level": "72daced3ebd1061b",
+     "trend": "0307e3326ecd7fce",
+     "season": "3705faabb18133de",
+     "sse": "ca1e8e5b7e1bd401",
+     "alpha": "91347fb7675c4c81",
+     "beta": "0888df8ad7fd05ab",
+     "gamma": "0888df8ad7fd05ab",
+     "n_iter": "9970d333bbbdd5b7",
+     "criterion": "5e1c22db5d13a14c",
+     "forecast": "362dbaefac89b496"
+    }
+   ],
+   "oracle_errors": [
+    "fit_exponential_smoothing level_ and plain level_ differ: 4375 bytes of 8000; fit_exponential_smoothing trend_ and plain trend_ differ: 6000 bytes of 8000; fit_exponential_smoothing season_ and plain season_ differ: 7248 bytes of 8000; fit_exponential_smoothing sse_ and plain sse_ differ: 15 bytes of 16; fit_exponential_smoothing alpha_ and plain alpha_ differ: 12 bytes of 16; fit_exponential_smoothing gamma_ and plain gamma_ differ: 4 bytes of 16; fit_exponential_smoothing n_iter_ and plain n_iter_ differ: 4 bytes of 16; fit_exponential_smoothing criterion_ and plain criterion_ differ: 2 bytes of 16; fit_exponential_smoothing forecast(24) and plain forecast(24) differ: 213 bytes of 384"
+   ],
+   "timing": {
+    "total_seconds": 0.13030742853879929,
+    "stages": {
+     "repeat=1/train": 0.13020719587802887
+    }
+   }
+  },
+  "par-holtwinters/denormal": {
+   "verdict": "DIVERGENT",
+   "hashes": [
+    "d8d9b304e1297b0d"
+   ],
+   "parts": [
+    {
+     "level": "70c3d16adb0face7",
+     "trend": "026fc82d446e5036",
+     "season": "9094ee6148d52a8a",
+     "sse": "cf35b3cd91bbe804",
+     "alpha": "d7c59d4297843b45",
+     "beta": "e5f4f729dc22d8c7",
+     "gamma": "78fbb55a44741e49",
+     "n_iter": "8cb945158a26c2e9",
+     "criterion": "5e1c22db5d13a14c",
+     "forecast": "9c4da708b9f795bb"
+    }
+   ],
+   "oracle_errors": [
+    "fit_exponential_smoothing level_ and plain level_ differ: 1499 bytes of 8000; fit_exponential_smoothing trend_ and plain trend_ differ: 1500 bytes of 8000; fit_exponential_smoothing season_ and plain season_ differ: 1874 bytes of 8000; fit_exponential_smoothing sse_ and plain sse_ differ: 3 bytes of 16; fit_exponential_smoothing alpha_ and plain alpha_ differ: 3 bytes of 16; fit_exponential_smoothing gamma_ and plain gamma_ differ: 4 bytes of 16; fit_exponential_smoothing n_iter_ and plain n_iter_ differ: 1 bytes of 16; fit_exponential_smoothing forecast(24) and plain forecast(24) differ: 95 bytes of 384"
+   ],
+   "timing": {
+    "total_seconds": 0.11503585427999496,
+    "stages": {
+     "repeat=1/train": 0.11492807418107986
+    }
+   }
+  },
+  "par-holtwinters/denormal_ftz": {
+   "verdict": "DIVERGENT",
+   "hashes": [
+    "d8d9b304e1297b0d"
+   ],
+   "parts": [
+    {
+     "level": "70c3d16adb0face7",
+     "trend": "026fc82d446e5036",
+     "season": "9094ee6148d52a8a",
+     "sse": "cf35b3cd91bbe804",
+     "alpha": "d7c59d4297843b45",
+     "beta": "e5f4f729dc22d8c7",
+     "gamma": "78fbb55a44741e49",
+     "n_iter": "8cb945158a26c2e9",
+     "criterion": "5e1c22db5d13a14c",
+     "forecast": "9c4da708b9f795bb"
+    }
+   ],
+   "oracle_errors": [
+    "fit_exponential_smoothing level_ and plain level_ differ: 1499 bytes of 8000; fit_exponential_smoothing trend_ and plain trend_ differ: 1500 bytes of 8000; fit_exponential_smoothing season_ and plain season_ differ: 1874 bytes of 8000; fit_exponential_smoothing sse_ and plain sse_ differ: 3 bytes of 16; fit_exponential_smoothing alpha_ and plain alpha_ differ: 3 bytes of 16; fit_exponential_smoothing gamma_ and plain gamma_ differ: 4 bytes of 16; fit_exponential_smoothing n_iter_ and plain n_iter_ differ: 1 bytes of 16; fit_exponential_smoothing forecast(24) and plain forecast(24) differ: 95 bytes of 384"
+   ],
+   "timing": {
+    "total_seconds": 0.11448752135038376,
+    "stages": {
+     "repeat=1/train": 0.11438832059502602
+    }
+   }
+  },
+  "par-holtwinters/dupes": {
+   "verdict": "DIVERGENT",
+   "hashes": [
+    "03ba5c3041e88a95"
+   ],
+   "parts": [
+    {
+     "level": "9c106230ead255ef",
+     "trend": "3ec49a987fadd7cb",
+     "season": "08de69baf02ed857",
+     "sse": "62ab3bff38683876",
+     "alpha": "e6ce7fe196327344",
+     "beta": "0888df8ad7fd05ab",
+     "gamma": "0888df8ad7fd05ab",
+     "n_iter": "5084938bc22412c9",
+     "criterion": "f1457d446e288bf7",
+     "forecast": "73767626ca30dc02"
+    }
+   ],
+   "oracle_errors": [
+    "fit_exponential_smoothing level_ and plain level_ differ: 6047 bytes of 8000; fit_exponential_smoothing trend_ and plain trend_ differ: 6000 bytes of 8000; fit_exponential_smoothing season_ and plain season_ differ: 7666 bytes of 8000; fit_exponential_smoothing sse_ and plain sse_ differ: 14 bytes of 16; fit_exponential_smoothing alpha_ and plain alpha_ differ: 12 bytes of 16; fit_exponential_smoothing gamma_ and plain gamma_ differ: 6 bytes of 16; fit_exponential_smoothing n_iter_ and plain n_iter_ differ: 4 bytes of 16; fit_exponential_smoothing criterion_ and plain criterion_ differ: 2 bytes of 16; fit_exponential_smoothing forecast(24) and plain forecast(24) differ: 335 bytes of 384"
+   ],
+   "timing": {
+    "total_seconds": 0.10829908773303032,
+    "stages": {
+     "repeat=1/train": 0.1082019992172718
+    }
+   }
+  },
+  "par-holtwinters/odd": {
+   "verdict": "DIVERGENT",
+   "hashes": [
+    "fe90deba9d575356"
+   ],
+   "parts": [
+    {
+     "level": "c0f3dfd1f6b89d30",
+     "trend": "b5519b397fda3e63",
+     "season": "b6a92970149d8dc5",
+     "sse": "61e83e2474d893c5",
+     "alpha": "b3c664e74cf63309",
+     "beta": "0888df8ad7fd05ab",
+     "gamma": "0888df8ad7fd05ab",
+     "n_iter": "63bb977a0787b15c",
+     "criterion": "3f44cdf6f790612b",
+     "forecast": "3ad1d4275fadf0a4"
+    }
+   ],
+   "oracle_errors": [
+    "fit_exponential_smoothing level_ and plain level_ differ: 6042 bytes of 8000; fit_exponential_smoothing trend_ and plain trend_ differ: 6486 bytes of 8000; fit_exponential_smoothing season_ and plain season_ differ: 7500 bytes of 8000; fit_exponential_smoothing sse_ and plain sse_ differ: 16 bytes of 16; fit_exponential_smoothing alpha_ and plain alpha_ differ: 12 bytes of 16; fit_exponential_smoothing beta_ and plain beta_ differ: 4 bytes of 16; fit_exponential_smoothing n_iter_ and plain n_iter_ differ: 4 bytes of 16; fit_exponential_smoothing criterion_ and plain criterion_ differ: 1 bytes of 16; fit_exponential_smoothing forecast(24) and plain forecast(24) differ: 297 bytes of 384"
+   ],
+   "timing": {
+    "total_seconds": 0.11184948682785034,
+    "stages": {
+     "repeat=1/train": 0.11174872145056725
+    }
+   }
+  },
+  "par-holtwinters/negative": {
+   "verdict": "DIVERGENT",
+   "hashes": [
+    "6b7f65af25d67b38"
+   ],
+   "parts": [
+    {
+     "level": "2a3c6f0352fbe16d",
+     "trend": "c59b1f5260ec03c7",
+     "season": "247dd1795bd92ac2",
+     "sse": "5b008492247a97bf",
+     "alpha": "1471de3d3b89ab64",
+     "beta": "0888df8ad7fd05ab",
+     "gamma": "73f302bca755bae6",
+     "n_iter": "46c788dd1a96d3df",
+     "criterion": "d9d1f6f929976544",
+     "forecast": "f77cfa173df6ef4d"
+    }
+   ],
+   "oracle_errors": [
+    "fit_exponential_smoothing level_ and plain level_ differ: 6078 bytes of 8000; fit_exponential_smoothing trend_ and plain trend_ differ: 6000 bytes of 8000; fit_exponential_smoothing season_ and plain season_ differ: 7999 bytes of 8000; fit_exponential_smoothing sse_ and plain sse_ differ: 16 bytes of 16; fit_exponential_smoothing alpha_ and plain alpha_ differ: 9 bytes of 16; fit_exponential_smoothing gamma_ and plain gamma_ differ: 12 bytes of 16; fit_exponential_smoothing n_iter_ and plain n_iter_ differ: 4 bytes of 16; fit_exponential_smoothing forecast(24) and plain forecast(24) differ: 333 bytes of 384"
+   ],
+   "timing": {
+    "total_seconds": 0.13004489615559578,
+    "stages": {
+     "repeat=1/train": 0.12994050607085228
+    }
+   }
+  },
+  "par-forecast-holtwinters/base": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3187d2a867b9c0c6"
+   ],
+   "parts": [
+    {
+     "predict": "1b1ccf72d148eaf2",
+     "forecast": "1b1ccf72d148eaf2",
+     "indexed": "69d4bbb4747587fe"
+    }
+   ],
+   "infer": [
+    null
+   ],
+   "infer_verdict": "REFUSED",
+   "model": [
+    null
+   ],
+   "model_verdict": "REFUSED",
+   "probe_error": "infer: ValueError: forecast_exponential_smoothing(512) and plain ExponentialSmoothing.forecast(512) differ: 6898 bytes of 8192\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 11419, in _probe_fit_impl\n    infer = _h(*fit.probe(_public_est(name, fit.est)))\n                ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 7104, in <lambda>\n    lambda e: _same_bytes(\n              ~~~~~~~~~~~^\n        f\"forecast_exponential_smoothing({FORECAST_HORIZON})\",\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        forecast_exponential_smoothing(e, FORECAST_HORIZON, devices=d, series_per_shard=3),\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        f\"plain ExponentialSmoothing.forecast({FORECAST_HORIZON})\", e.forecast(FORECAST_HORIZON)))\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 1986, in _same_bytes\n    raise ValueError(message)\nValueError: forecast_exponential_smoothing(512) and plain ExponentialSmoothing.forecast(512) differ: 6898 bytes of 8192",
+   "batch": [
+    "BATCH_MOVED:forecast_exponential_smoothing:length 1 of 512:position 0 output 0 element 0: whole 0x4077fa90 vs prefix 0x401c30ee"
+   ],
+   "batch_verdict": "BATCH_MOVED",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.49812067300081253,
+    "stages": {
+     "repeat=1/train": 0.25547725707292557,
+     "repeat=1/infer-save-reload": 0.08049265295267105,
+     "repeat=1/batch": 0.16174623370170593,
+     "repeat=1/batchgrad": 7.132068276405334e-05,
+     "repeat=1/batchscale": 3.7822872400283813e-05,
+     "repeat=1/ragged": 2.4762004613876343e-05,
+     "repeat=1/stepfull": 2.3271888494491577e-05
+    }
+   }
+  },
+  "par-forecast-holtwinters/ties": {
+   "verdict": "STABLE",
+   "hashes": [
+    "d6224f1132d5f265"
+   ],
+   "parts": [
+    {
+     "predict": "b4346b6cd869d510",
+     "forecast": "b4346b6cd869d510",
+     "indexed": "b93fe7483587a401"
+    }
+   ],
+   "infer": [
+    null
+   ],
+   "infer_verdict": "REFUSED",
+   "model": [
+    null
+   ],
+   "model_verdict": "REFUSED",
+   "probe_error": "infer: ValueError: forecast_exponential_smoothing(512) and plain ExponentialSmoothing.forecast(512) differ: 5550 bytes of 8192\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 11419, in _probe_fit_impl\n    infer = _h(*fit.probe(_public_est(name, fit.est)))\n                ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 7104, in <lambda>\n    lambda e: _same_bytes(\n              ~~~~~~~~~~~^\n        f\"forecast_exponential_smoothing({FORECAST_HORIZON})\",\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        forecast_exponential_smoothing(e, FORECAST_HORIZON, devices=d, series_per_shard=3),\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        f\"plain ExponentialSmoothing.forecast({FORECAST_HORIZON})\", e.forecast(FORECAST_HORIZON)))\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 1986, in _same_bytes\n    raise ValueError(message)\nValueError: forecast_exponential_smoothing(512) and plain ExponentialSmoothing.forecast(512) differ: 5550 bytes of 8192",
+   "batch": [
+    "BATCH_MOVED:forecast_exponential_smoothing:length 1 of 512:position 0 output 0 element 0: whole 0x44a426ae vs prefix 0x44a3d11e"
+   ],
+   "batch_verdict": "BATCH_MOVED",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.49707357957959175,
+    "stages": {
+     "repeat=1/train": 0.2546130083501339,
+     "repeat=1/infer-save-reload": 0.08311347663402557,
+     "repeat=1/batch": 0.15895060449838638,
+     "repeat=1/batchgrad": 7.583945989608765e-05,
+     "repeat=1/batchscale": 3.954768180847168e-05,
+     "repeat=1/ragged": 2.5928020477294922e-05,
+     "repeat=1/stepfull": 2.384185791015625e-05
+    }
+   }
+  },
+  "par-forecast-holtwinters/hashed": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3ae3539fc0683a8c"
+   ],
+   "parts": [
+    {
+     "predict": "bc1cb60512cd0d92",
+     "forecast": "bc1cb60512cd0d92",
+     "indexed": "0faa28efde8fbcf4"
+    }
+   ],
+   "infer": [
+    null
+   ],
+   "infer_verdict": "REFUSED",
+   "model": [
+    null
+   ],
+   "model_verdict": "REFUSED",
+   "probe_error": "infer: ValueError: forecast_exponential_smoothing(512) and plain ExponentialSmoothing.forecast(512) differ: 7196 bytes of 8192\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 11419, in _probe_fit_impl\n    infer = _h(*fit.probe(_public_est(name, fit.est)))\n                ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 7104, in <lambda>\n    lambda e: _same_bytes(\n              ~~~~~~~~~~~^\n        f\"forecast_exponential_smoothing({FORECAST_HORIZON})\",\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        forecast_exponential_smoothing(e, FORECAST_HORIZON, devices=d, series_per_shard=3),\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        f\"plain ExponentialSmoothing.forecast({FORECAST_HORIZON})\", e.forecast(FORECAST_HORIZON)))\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 1986, in _same_bytes\n    raise ValueError(message)\nValueError: forecast_exponential_smoothing(512) and plain ExponentialSmoothing.forecast(512) differ: 7196 bytes of 8192",
+   "batch": [
+    "BATCH_MOVED:forecast_exponential_smoothing:length 1 of 512:position 0 output 0 element 0: whole 0x3f8b7a23 vs prefix 0x41f81d33"
+   ],
+   "batch_verdict": "BATCH_MOVED",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.5724402070045471,
+    "stages": {
+     "repeat=1/train": 0.27921437099575996,
+     "repeat=1/infer-save-reload": 0.09229463338851929,
+     "repeat=1/batch": 0.20054132491350174,
+     "repeat=1/batchgrad": 7.965043187141418e-05,
+     "repeat=1/batchscale": 3.1810253858566284e-05,
+     "repeat=1/ragged": 2.4430453777313232e-05,
+     "repeat=1/stepfull": 2.2280961275100708e-05
+    }
+   }
+  },
+  "par-forecast-holtwinters/wide": {
+   "verdict": "STABLE",
+   "hashes": [
+    "40e6dcd7bbb38437"
+   ],
+   "parts": [
+    {
+     "predict": "1475d0c4a00ca2ce",
+     "forecast": "1475d0c4a00ca2ce",
+     "indexed": "33f42456cb54c075"
+    }
+   ],
+   "infer": [
+    null
+   ],
+   "infer_verdict": "REFUSED",
+   "model": [
+    null
+   ],
+   "model_verdict": "REFUSED",
+   "probe_error": "infer: ValueError: forecast_exponential_smoothing(512) and plain ExponentialSmoothing.forecast(512) differ: 4906 bytes of 8192\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 11419, in _probe_fit_impl\n    infer = _h(*fit.probe(_public_est(name, fit.est)))\n                ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 7104, in <lambda>\n    lambda e: _same_bytes(\n              ~~~~~~~~~~~^\n        f\"forecast_exponential_smoothing({FORECAST_HORIZON})\",\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        forecast_exponential_smoothing(e, FORECAST_HORIZON, devices=d, series_per_shard=3),\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        f\"plain ExponentialSmoothing.forecast({FORECAST_HORIZON})\", e.forecast(FORECAST_HORIZON)))\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 1986, in _same_bytes\n    raise ValueError(message)\nValueError: forecast_exponential_smoothing(512) and plain ExponentialSmoothing.forecast(512) differ: 4906 bytes of 8192",
+   "batch": [
+    "BATCH_MOVED:forecast_exponential_smoothing:length 1 of 512:position 0 output 0 element 0: whole 0x3f802020 vs prefix 0x3f8004bd"
+   ],
+   "batch_verdict": "BATCH_MOVED",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.5615225806832314,
+    "stages": {
+     "repeat=1/train": 0.294758353382349,
+     "repeat=1/infer-save-reload": 0.08541854098439217,
+     "repeat=1/batch": 0.18097753450274467,
+     "repeat=1/batchgrad": 7.835030555725098e-05,
+     "repeat=1/batchscale": 5.90495765209198e-05,
+     "repeat=1/ragged": 2.0250678062438965e-05,
+     "repeat=1/stepfull": 1.93864107131958e-05
+    }
+   }
+  },
+  "par-forecast-holtwinters/denormal": {
+   "verdict": "STABLE",
+   "hashes": [
+    "112b55d1f485aa90"
+   ],
+   "parts": [
+    {
+     "predict": "49eb739a1a6db1b6",
+     "forecast": "49eb739a1a6db1b6",
+     "indexed": "8c968216fc6c0a8f"
+    }
+   ],
+   "infer": [
+    null
+   ],
+   "infer_verdict": "REFUSED",
+   "model": [
+    null
+   ],
+   "model_verdict": "REFUSED",
+   "probe_error": "infer: ValueError: forecast_exponential_smoothing(512) and plain ExponentialSmoothing.forecast(512) differ: 1566 bytes of 8192\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 11419, in _probe_fit_impl\n    infer = _h(*fit.probe(_public_est(name, fit.est)))\n                ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 7104, in <lambda>\n    lambda e: _same_bytes(\n              ~~~~~~~~~~~^\n        f\"forecast_exponential_smoothing({FORECAST_HORIZON})\",\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        forecast_exponential_smoothing(e, FORECAST_HORIZON, devices=d, series_per_shard=3),\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        f\"plain ExponentialSmoothing.forecast({FORECAST_HORIZON})\", e.forecast(FORECAST_HORIZON)))\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 1986, in _same_bytes\n    raise ValueError(message)\nValueError: forecast_exponential_smoothing(512) and plain ExponentialSmoothing.forecast(512) differ: 1566 bytes of 8192",
+   "batch": [
+    "BATCH_MOVED:forecast_exponential_smoothing:length 1 of 512:position 0 output 0 element 3: whole 0x407a3536 vs prefix 0x405d76f4"
+   ],
+   "batch_verdict": "BATCH_MOVED",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.4757714346051216,
+    "stages": {
+     "repeat=1/train": 0.23903818055987358,
+     "repeat=1/infer-save-reload": 0.07927708700299263,
+     "repeat=1/batch": 0.1570662185549736,
+     "repeat=1/batchgrad": 7.231160998344421e-05,
+     "repeat=1/batchscale": 3.790855407714844e-05,
+     "repeat=1/ragged": 3.053992986679077e-05,
+     "repeat=1/stepfull": 2.209097146987915e-05
+    }
+   }
+  },
+  "par-forecast-holtwinters/denormal_ftz": {
+   "verdict": "STABLE",
+   "hashes": [
+    "112b55d1f485aa90"
+   ],
+   "parts": [
+    {
+     "predict": "49eb739a1a6db1b6",
+     "forecast": "49eb739a1a6db1b6",
+     "indexed": "8c968216fc6c0a8f"
+    }
+   ],
+   "infer": [
+    null
+   ],
+   "infer_verdict": "REFUSED",
+   "model": [
+    null
+   ],
+   "model_verdict": "REFUSED",
+   "probe_error": "infer: ValueError: forecast_exponential_smoothing(512) and plain ExponentialSmoothing.forecast(512) differ: 1566 bytes of 8192\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 11419, in _probe_fit_impl\n    infer = _h(*fit.probe(_public_est(name, fit.est)))\n                ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 7104, in <lambda>\n    lambda e: _same_bytes(\n              ~~~~~~~~~~~^\n        f\"forecast_exponential_smoothing({FORECAST_HORIZON})\",\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        forecast_exponential_smoothing(e, FORECAST_HORIZON, devices=d, series_per_shard=3),\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        f\"plain ExponentialSmoothing.forecast({FORECAST_HORIZON})\", e.forecast(FORECAST_HORIZON)))\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 1986, in _same_bytes\n    raise ValueError(message)\nValueError: forecast_exponential_smoothing(512) and plain ExponentialSmoothing.forecast(512) differ: 1566 bytes of 8192",
+   "batch": [
+    "BATCH_MOVED:forecast_exponential_smoothing:length 1 of 512:position 0 output 0 element 3: whole 0x407a3536 vs prefix 0x405d76f4"
+   ],
+   "batch_verdict": "BATCH_MOVED",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.4809335954487324,
+    "stages": {
+     "repeat=1/train": 0.243319820612669,
+     "repeat=1/infer-save-reload": 0.07873592898249626,
+     "repeat=1/batch": 0.1585162989795208,
+     "repeat=1/batchgrad": 7.714703679084778e-05,
+     "repeat=1/batchscale": 2.4400651454925537e-05,
+     "repeat=1/ragged": 2.1111220121383667e-05,
+     "repeat=1/stepfull": 2.0101666450500488e-05
+    }
+   }
+  },
+  "par-forecast-holtwinters/dupes": {
+   "verdict": "STABLE",
+   "hashes": [
+    "3187d2a867b9c0c6"
+   ],
+   "parts": [
+    {
+     "predict": "1b1ccf72d148eaf2",
+     "forecast": "1b1ccf72d148eaf2",
+     "indexed": "69d4bbb4747587fe"
+    }
+   ],
+   "infer": [
+    null
+   ],
+   "infer_verdict": "REFUSED",
+   "model": [
+    null
+   ],
+   "model_verdict": "REFUSED",
+   "probe_error": "infer: ValueError: forecast_exponential_smoothing(512) and plain ExponentialSmoothing.forecast(512) differ: 6898 bytes of 8192\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 11419, in _probe_fit_impl\n    infer = _h(*fit.probe(_public_est(name, fit.est)))\n                ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 7104, in <lambda>\n    lambda e: _same_bytes(\n              ~~~~~~~~~~~^\n        f\"forecast_exponential_smoothing({FORECAST_HORIZON})\",\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        forecast_exponential_smoothing(e, FORECAST_HORIZON, devices=d, series_per_shard=3),\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        f\"plain ExponentialSmoothing.forecast({FORECAST_HORIZON})\", e.forecast(FORECAST_HORIZON)))\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 1986, in _same_bytes\n    raise ValueError(message)\nValueError: forecast_exponential_smoothing(512) and plain ExponentialSmoothing.forecast(512) differ: 6898 bytes of 8192",
+   "batch": [
+    "BATCH_MOVED:forecast_exponential_smoothing:length 1 of 512:position 0 output 0 element 0: whole 0x4077fa90 vs prefix 0x401c30ee"
+   ],
+   "batch_verdict": "BATCH_MOVED",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.48533423990011215,
+    "stages": {
+     "repeat=1/train": 0.24865563586354256,
+     "repeat=1/infer-save-reload": 0.08007563278079033,
+     "repeat=1/batch": 0.15624194592237473,
+     "repeat=1/batchgrad": 7.65584409236908e-05,
+     "repeat=1/batchscale": 2.4139881134033203e-05,
+     "repeat=1/ragged": 2.117827534675598e-05,
+     "repeat=1/stepfull": 2.0042061805725098e-05
+    }
+   }
+  },
+  "par-forecast-holtwinters/odd": {
+   "verdict": "STABLE",
+   "hashes": [
+    "c18dd26f12097912"
+   ],
+   "parts": [
+    {
+     "predict": "833ea3b963cd3676",
+     "forecast": "833ea3b963cd3676",
+     "indexed": "8624de6753c9d9a3"
+    }
+   ],
+   "infer": [
+    null
+   ],
+   "infer_verdict": "REFUSED",
+   "model": [
+    null
+   ],
+   "model_verdict": "REFUSED",
+   "probe_error": "infer: ValueError: forecast_exponential_smoothing(512) and plain ExponentialSmoothing.forecast(512) differ: 6910 bytes of 8192\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 11419, in _probe_fit_impl\n    infer = _h(*fit.probe(_public_est(name, fit.est)))\n                ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 7104, in <lambda>\n    lambda e: _same_bytes(\n              ~~~~~~~~~~~^\n        f\"forecast_exponential_smoothing({FORECAST_HORIZON})\",\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        forecast_exponential_smoothing(e, FORECAST_HORIZON, devices=d, series_per_shard=3),\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        f\"plain ExponentialSmoothing.forecast({FORECAST_HORIZON})\", e.forecast(FORECAST_HORIZON)))\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 1986, in _same_bytes\n    raise ValueError(message)\nValueError: forecast_exponential_smoothing(512) and plain ExponentialSmoothing.forecast(512) differ: 6910 bytes of 8192",
+   "batch": [
+    "BATCH_MOVED:forecast_exponential_smoothing:length 1 of 512:position 0 output 0 element 0: whole 0x41d9b5e1 vs prefix 0x42259266"
+   ],
+   "batch_verdict": "BATCH_MOVED",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.4874271936714649,
+    "stages": {
+     "repeat=1/train": 0.24904435873031616,
+     "repeat=1/infer-save-reload": 0.08023576438426971,
+     "repeat=1/batch": 0.15780692920088768,
+     "repeat=1/batchgrad": 5.2988529205322266e-05,
+     "repeat=1/batchscale": 2.473965287208557e-05,
+     "repeat=1/ragged": 2.4262815713882446e-05,
+     "repeat=1/stepfull": 2.2668391466140747e-05
+    }
+   }
+  },
+  "par-forecast-holtwinters/negative": {
+   "verdict": "STABLE",
+   "hashes": [
+    "b3ca7852eaf04298"
+   ],
+   "parts": [
+    {
+     "predict": "f46f01a3a45596ee",
+     "forecast": "f46f01a3a45596ee",
+     "indexed": "3556018dcd5ee3e5"
+    }
+   ],
+   "infer": [
+    null
+   ],
+   "infer_verdict": "REFUSED",
+   "model": [
+    null
+   ],
+   "model_verdict": "REFUSED",
+   "probe_error": "infer: ValueError: forecast_exponential_smoothing(512) and plain ExponentialSmoothing.forecast(512) differ: 5860 bytes of 8192\nTraceback (most recent call last):\n  File \"/root/mojolearn/tools/identity_break.py\", line 11419, in _probe_fit_impl\n    infer = _h(*fit.probe(_public_est(name, fit.est)))\n                ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 7104, in <lambda>\n    lambda e: _same_bytes(\n              ~~~~~~~~~~~^\n        f\"forecast_exponential_smoothing({FORECAST_HORIZON})\",\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        forecast_exponential_smoothing(e, FORECAST_HORIZON, devices=d, series_per_shard=3),\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n        f\"plain ExponentialSmoothing.forecast({FORECAST_HORIZON})\", e.forecast(FORECAST_HORIZON)))\n        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/root/mojolearn/tools/identity_break.py\", line 1986, in _same_bytes\n    raise ValueError(message)\nValueError: forecast_exponential_smoothing(512) and plain ExponentialSmoothing.forecast(512) differ: 5860 bytes of 8192",
+   "batch": [
+    "BATCH_MOVED:forecast_exponential_smoothing:length 1 of 512:position 0 output 0 element 0: whole 0xc0e4346a vs prefix 0xbfd6d3a1"
+   ],
+   "batch_verdict": "BATCH_MOVED",
+   "batchgrad": [
+    "n/a:no-backward"
+   ],
+   "batchgrad_verdict": "N/A",
+   "batchscale": [
+    "n/a:not-in-the-serving-set"
+   ],
+   "batchscale_verdict": "N/A",
+   "ragged": [
+    "n/a:no-sequence-axis"
+   ],
+   "ragged_verdict": "N/A",
+   "stepfull": [
+    "n/a:no-decode-state"
+   ],
+   "stepfull_verdict": "N/A",
+   "timing": {
+    "total_seconds": 0.4806376323103905,
+    "stages": {
+     "repeat=1/train": 0.24694239348173141,
+     "repeat=1/infer-save-reload": 0.07982403039932251,
+     "repeat=1/batch": 0.15351806953549385,
+     "repeat=1/batchgrad": 7.564947009086609e-05,
+     "repeat=1/batchscale": 2.1748244762420654e-05,
+     "repeat=1/ragged": 1.993030309677124e-05,
+     "repeat=1/stepfull": 1.938268542289734e-05
+    }
+   }
+  }
+ },
+ "complete_by_coverage": false,
+ "merged_from": [
+  {
+   "file": "cpu-hw-sab.part0.json",
+   "cells": 9,
+   "complete": true,
+   "platform": "Linux-6.8.0-79-generic-x86_64-with-glibc2.35",
+   "bindings": []
+  },
+  {
+   "file": "cpu-hw-sab.part1.json",
+   "cells": 9,
+   "complete": true,
+   "platform": "Linux-6.8.0-79-generic-x86_64-with-glibc2.35",
+   "bindings": []
+  },
+  {
+   "file": "cpu-hw-sab.part2.json",
+   "cells": 9,
+   "complete": true,
+   "platform": "Linux-6.8.0-79-generic-x86_64-with-glibc2.35",
+   "bindings": []
+  },
+  {
+   "file": "cpu-hw-sab.part3.json",
+   "cells": 9,
+   "complete": true,
+   "platform": "Linux-6.8.0-79-generic-x86_64-with-glibc2.35",
+   "bindings": []
+  }
+ ],
+ "merged_separate_builds": false
+}

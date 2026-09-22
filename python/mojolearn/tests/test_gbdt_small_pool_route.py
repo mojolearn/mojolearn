@@ -120,10 +120,11 @@ _NO_ONE_BORDER_TEXT = "format mojolearn-model 2\nfeature 0 folds 7 one_hot 0\nfe
 
 @pytest.mark.parametrize("vendor, route_value, text, admitted", [
     ("metal", "auto", _ONE_BORDER_TEXT, True),     # witnessed: Apple == CPU
-    ("cuda", "auto", _ONE_BORDER_TEXT, False),     # NVIDIA column owed
-    ("hip", "auto", _ONE_BORDER_TEXT, False),      # AMD column owed
-    ("cuda", "host", _ONE_BORDER_TEXT, True),      # forced host keeps it
-    ("cuda", "auto", _NO_ONE_BORDER_TEXT, True),   # no binary column
+    ("cuda", "auto", _ONE_BORDER_TEXT, True),      # witnessed: NVIDIA == CPU
+    ("hip", "auto", _ONE_BORDER_TEXT, True),       # witnessed: AMD == CPU
+    ("other", "auto", _ONE_BORDER_TEXT, False),    # no recorded column
+    ("other", "host", _ONE_BORDER_TEXT, True),     # forced host keeps it
+    ("other", "auto", _NO_ONE_BORDER_TEXT, True),  # no binary column
 ])
 def test_one_border_pools_route_only_where_witnessed(monkeypatch, route, vendor,
                                                      route_value, text, admitted):
@@ -133,7 +134,7 @@ def test_one_border_pools_route_only_where_witnessed(monkeypatch, route, vendor,
 
 
 def test_one_border_host_route_returns_the_device_bits(route):
-    """Where it routes (Metal), a pool with binary columns trains on the host
+    """Where it routes (Metal, CUDA, HIP), a pool with binary columns trains on the host
     and returns the device fit's bits."""
     if _backend._CPU_ONLY is not None:
         pytest.skip("CPU-only install: every fit is the host fit")

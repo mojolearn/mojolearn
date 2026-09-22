@@ -1,0 +1,155 @@
+# vendor=apple-m4 commit=6eacfab2813c708f80d4d6de0c5830fd3d9d2b76 (git rev-parse HEAD)
+# identity_break  mode=identical  2026-09-22 12:36:22  macOS-26.5.2-arm64-arm-64bit-Mach-O
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START par-holtwinters/base repeat=1/train
+# DONE par-holtwinters/base repeat=1/train 0.251s
+# START par-holtwinters/base repeat=1/infer-save-reload
+# DONE par-holtwinters/base repeat=1/infer-save-reload 0.005s
+# START par-holtwinters/base repeat=1/batch
+# DONE par-holtwinters/base repeat=1/batch 0.005s
+# START par-holtwinters/base repeat=1/batchgrad
+# DONE par-holtwinters/base repeat=1/batchgrad 0.000s
+# START par-holtwinters/base repeat=1/batchscale
+# DONE par-holtwinters/base repeat=1/batchscale 0.000s
+# START par-holtwinters/base repeat=1/ragged
+# DONE par-holtwinters/base repeat=1/ragged 0.000s
+# START par-holtwinters/base repeat=1/stepfull
+# DONE par-holtwinters/base repeat=1/stepfull 0.000s
+# CELL par-holtwinters/base STABLE 0.260s
+# START par-holtwinters/ties repeat=1/train
+# DONE par-holtwinters/ties repeat=1/train 0.255s
+# START par-holtwinters/ties repeat=1/infer-save-reload
+# DONE par-holtwinters/ties repeat=1/infer-save-reload 0.005s
+# START par-holtwinters/ties repeat=1/batch
+# DONE par-holtwinters/ties repeat=1/batch 0.005s
+# START par-holtwinters/ties repeat=1/batchgrad
+# DONE par-holtwinters/ties repeat=1/batchgrad 0.000s
+# START par-holtwinters/ties repeat=1/batchscale
+# DONE par-holtwinters/ties repeat=1/batchscale 0.000s
+# START par-holtwinters/ties repeat=1/ragged
+# DONE par-holtwinters/ties repeat=1/ragged 0.000s
+# START par-holtwinters/ties repeat=1/stepfull
+# DONE par-holtwinters/ties repeat=1/stepfull 0.000s
+# CELL par-holtwinters/ties STABLE 0.266s
+# START par-holtwinters/hashed repeat=1/train
+# DONE par-holtwinters/hashed repeat=1/train 0.231s
+# START par-holtwinters/hashed repeat=1/infer-save-reload
+# DONE par-holtwinters/hashed repeat=1/infer-save-reload 0.004s
+# START par-holtwinters/hashed repeat=1/batch
+# DONE par-holtwinters/hashed repeat=1/batch 0.004s
+# START par-holtwinters/hashed repeat=1/batchgrad
+# DONE par-holtwinters/hashed repeat=1/batchgrad 0.000s
+# START par-holtwinters/hashed repeat=1/batchscale
+# DONE par-holtwinters/hashed repeat=1/batchscale 0.000s
+# START par-holtwinters/hashed repeat=1/ragged
+# DONE par-holtwinters/hashed repeat=1/ragged 0.000s
+# START par-holtwinters/hashed repeat=1/stepfull
+# DONE par-holtwinters/hashed repeat=1/stepfull 0.000s
+# CELL par-holtwinters/hashed STABLE 0.240s
+# START par-holtwinters/wide repeat=1/train
+# DONE par-holtwinters/wide repeat=1/train 0.231s
+# START par-holtwinters/wide repeat=1/infer-save-reload
+# DONE par-holtwinters/wide repeat=1/infer-save-reload 0.005s
+# START par-holtwinters/wide repeat=1/batch
+# DONE par-holtwinters/wide repeat=1/batch 0.006s
+# START par-holtwinters/wide repeat=1/batchgrad
+# DONE par-holtwinters/wide repeat=1/batchgrad 0.000s
+# START par-holtwinters/wide repeat=1/batchscale
+# DONE par-holtwinters/wide repeat=1/batchscale 0.000s
+# START par-holtwinters/wide repeat=1/ragged
+# DONE par-holtwinters/wide repeat=1/ragged 0.000s
+# START par-holtwinters/wide repeat=1/stepfull
+# DONE par-holtwinters/wide repeat=1/stepfull 0.000s
+# CELL par-holtwinters/wide STABLE 0.242s
+# START par-holtwinters/denormal repeat=1/train
+# DONE par-holtwinters/denormal repeat=1/train 0.249s
+# START par-holtwinters/denormal repeat=1/infer-save-reload
+# DONE par-holtwinters/denormal repeat=1/infer-save-reload 0.004s
+# START par-holtwinters/denormal repeat=1/batch
+# DONE par-holtwinters/denormal repeat=1/batch 0.005s
+# START par-holtwinters/denormal repeat=1/batchgrad
+# DONE par-holtwinters/denormal repeat=1/batchgrad 0.000s
+# START par-holtwinters/denormal repeat=1/batchscale
+# DONE par-holtwinters/denormal repeat=1/batchscale 0.000s
+# START par-holtwinters/denormal repeat=1/ragged
+# DONE par-holtwinters/denormal repeat=1/ragged 0.000s
+# START par-holtwinters/denormal repeat=1/stepfull
+# DONE par-holtwinters/denormal repeat=1/stepfull 0.000s
+# CELL par-holtwinters/denormal STABLE 0.259s
+# START par-holtwinters/denormal_ftz repeat=1/train
+# DONE par-holtwinters/denormal_ftz repeat=1/train 0.247s
+# START par-holtwinters/denormal_ftz repeat=1/infer-save-reload
+# DONE par-holtwinters/denormal_ftz repeat=1/infer-save-reload 0.004s
+# START par-holtwinters/denormal_ftz repeat=1/batch
+# DONE par-holtwinters/denormal_ftz repeat=1/batch 0.005s
+# START par-holtwinters/denormal_ftz repeat=1/batchgrad
+# DONE par-holtwinters/denormal_ftz repeat=1/batchgrad 0.000s
+# START par-holtwinters/denormal_ftz repeat=1/batchscale
+# DONE par-holtwinters/denormal_ftz repeat=1/batchscale 0.000s
+# START par-holtwinters/denormal_ftz repeat=1/ragged
+# DONE par-holtwinters/denormal_ftz repeat=1/ragged 0.000s
+# START par-holtwinters/denormal_ftz repeat=1/stepfull
+# DONE par-holtwinters/denormal_ftz repeat=1/stepfull 0.000s
+# CELL par-holtwinters/denormal_ftz STABLE 0.257s
+# START par-holtwinters/dupes repeat=1/train
+# DONE par-holtwinters/dupes repeat=1/train 0.239s
+# START par-holtwinters/dupes repeat=1/infer-save-reload
+# DONE par-holtwinters/dupes repeat=1/infer-save-reload 0.004s
+# START par-holtwinters/dupes repeat=1/batch
+# DONE par-holtwinters/dupes repeat=1/batch 0.004s
+# START par-holtwinters/dupes repeat=1/batchgrad
+# DONE par-holtwinters/dupes repeat=1/batchgrad 0.000s
+# START par-holtwinters/dupes repeat=1/batchscale
+# DONE par-holtwinters/dupes repeat=1/batchscale 0.000s
+# START par-holtwinters/dupes repeat=1/ragged
+# DONE par-holtwinters/dupes repeat=1/ragged 0.000s
+# START par-holtwinters/dupes repeat=1/stepfull
+# DONE par-holtwinters/dupes repeat=1/stepfull 0.000s
+# CELL par-holtwinters/dupes STABLE 0.248s
+# START par-holtwinters/odd repeat=1/train
+# DONE par-holtwinters/odd repeat=1/train 0.274s
+# START par-holtwinters/odd repeat=1/infer-save-reload
+# DONE par-holtwinters/odd repeat=1/infer-save-reload 0.005s
+# START par-holtwinters/odd repeat=1/batch
+# DONE par-holtwinters/odd repeat=1/batch 0.005s
+# START par-holtwinters/odd repeat=1/batchgrad
+# DONE par-holtwinters/odd repeat=1/batchgrad 0.000s
+# START par-holtwinters/odd repeat=1/batchscale
+# DONE par-holtwinters/odd repeat=1/batchscale 0.000s
+# START par-holtwinters/odd repeat=1/ragged
+# DONE par-holtwinters/odd repeat=1/ragged 0.000s
+# START par-holtwinters/odd repeat=1/stepfull
+# DONE par-holtwinters/odd repeat=1/stepfull 0.000s
+# CELL par-holtwinters/odd STABLE 0.284s
+# START par-holtwinters/negative repeat=1/train
+# DONE par-holtwinters/negative repeat=1/train 0.254s
+# START par-holtwinters/negative repeat=1/infer-save-reload
+# DONE par-holtwinters/negative repeat=1/infer-save-reload 0.005s
+# START par-holtwinters/negative repeat=1/batch
+# DONE par-holtwinters/negative repeat=1/batch 0.005s
+# START par-holtwinters/negative repeat=1/batchgrad
+# DONE par-holtwinters/negative repeat=1/batchgrad 0.000s
+# START par-holtwinters/negative repeat=1/batchscale
+# DONE par-holtwinters/negative repeat=1/batchscale 0.000s
+# START par-holtwinters/negative repeat=1/ragged
+# DONE par-holtwinters/negative repeat=1/ragged 0.000s
+# START par-holtwinters/negative repeat=1/stepfull
+# DONE par-holtwinters/negative repeat=1/stepfull 0.000s
+# CELL par-holtwinters/negative STABLE 0.264s
+| par-holtwinters        | d549f7f07351bd64 | 973db6ffecbe7092 | 4e6ea1e565d33bef | 890bf4dccda8d026 | bb5e381e2f50c40e | bb5e381e2f50c40e | d549f7f07351bd64 | 342d9fd7ae1103cf | af3a3d733e0bcdb3 |
+| par-holtwinters infer  | 1832b9c59bc8b03d | 7a915105e1ca5b11 | 90d70c35aadb11c9 | 2386650c48b3097e | f2b078793277ad49 | f2b078793277ad49 | 1832b9c59bc8b03d | 6f32a9c34e5ac7b8 | 2f54f0a7e7459c4e |
+| par-holtwinters model  | 574f8ee721ff8cb1 | c4bf3300c250e545 | b98682943d8f6ca8 | 3b98cc951a655fda | 4aa7580e6078aafc | 4aa7580e6078aafc | 574f8ee721ff8cb1 | faaf3751f5a7301c | 141468532f9d578b |
+| par-holtwinters batch  | be72b2532c5f96bc | 1e600e09d2510aa4 | 08ce1bd3003a71cd | 84b63fed1986c0e4 | 0276ee3ed5014cbe | 0276ee3ed5014cbe | be72b2532c5f96bc | 81786de0c60ca916 | 698bb594ff2171f1 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+batchgrad: n/a=9
+batchscale: n/a=9
+ragged: n/a=9
+stepfull: n/a=9
+n/a: par-holtwinters batchgrad n/a:no-backward, par-holtwinters batchscale n/a:not-in-the-serving-set, par-holtwinters ragged n/a:no-sequence-axis, par-holtwinters stepfull n/a:no-decode-state
+wrote bench/results/identity_break/2026-09-22_holtwinters-estimated-init/legs/apple-m4.par-holtwinters.json
