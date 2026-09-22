@@ -44,6 +44,8 @@ from gbdt.methods.leaves_estimation.pointwise_oracle import (
 )
 from gbdt.methods.leaves_estimation.step_estimator import (
     BACKTRACKING_ANY_IMPROVEMENT,
+    StepEstimator,
+    create_step_estimator,
 )
 from checks.fixed_point import choose_scale
 from gbdt.methods.random_score_helper import (
@@ -984,27 +986,148 @@ def _estimate_and_apply(
 
 
 struct PendingEstimation(Movable):
-    """One estimation task of `_estimate_and_apply` stopped at its walker's
-    ONE drain: everything up to that drain enqueued, the oracle holding the
-    enqueued readbacks. `_estimate_complete` is the rest of the task.
-    Built by `_estimate_prepare`."""
+    """One estimation task of `_estimate_and_apply` as a RESUMABLE WALK:
+    the oracle, and `TNewtonLikeWalker::Estimate`'s locals
+    (`descent_helpers.newton_like_walker_estimate`) between two of its
+    evaluations. Every evaluation is enqueued by `_estimate_prepare` or
+    `estimate_advance` and read back by the next `estimate_advance`, after
+    the caller's drain; so several tasks walk in lock step, one drain per
+    round for all of them, each task's oracle calls in exactly the order
+    its own walk makes them. `_estimate_complete` is the rest of the task.
+    """
 
     var oracle: BinOptimizedOracle
     var n_rows: Int
     var n_leaves: Int
-    var start_point: List[Float32]
+    var iterations: Int
+    #: 0: the start point's evaluation is in flight; 1: a line-search
+    #: evaluation (`next_point`) is in flight; 2: the walk is finished
+    var phase: Int
+    var iteration: Int
+    var updated: Bool
+    var step: Float64
+    var cur_point: List[Float32]
+    var next_point: List[Float32]
+    var cur_value: Float64
+    var cur_grad: List[Float64]
+    var cur_hess: List[Float64]
+    var direction: List[Float32]
+    var estimator: StepEstimator
+    var not_pd: Int
+    #: the walk's return, `MakeEstimationResult(point)`, once `phase == 2`
+    var final_point: List[Float32]
 
     def __init__(
         out self,
         var oracle: BinOptimizedOracle,
         n_rows: Int,
         n_leaves: Int,
+        iterations: Int,
         var start_point: List[Float32],
     ):
         self.oracle = oracle^
         self.n_rows = n_rows
         self.n_leaves = n_leaves
-        self.start_point = start_point^
+        self.iterations = iterations
+        self.phase = 0
+        self.iteration = 0
+        self.updated = False
+        self.step = 1.0
+        self.cur_point = start_point^
+        self.next_point = List[Float32]()
+        self.cur_value = 0.0
+        self.cur_grad = List[Float64]()
+        self.cur_hess = List[Float64]()
+        self.direction = List[Float32]()
+        self.estimator = StepEstimator(BACKTRACKING_ANY_IMPROVEMENT, 0.0, 0.0)
+        self.not_pd = 0
+        self.final_point = List[Float32]()
+
+
+def _walk_line_search_or_finish(mut p: PendingEstimation) raises -> Bool:
+    """The walker's inner `while` test and its body up to the evaluation
+    (`descent_helpers.newton_like_walker_estimate`): either enqueue the
+    next line-search evaluation (True), or -- the inner loop ending with no
+    accepted step, which breaks the outer loop -- finish the walk (False).
+    """
+    if p.iteration < p.iterations or (
+        (not p.updated) and p.iteration < 100
+    ):
+        var next_point = _move(p.cur_point, p.direction, p.step)
+        p.oracle.regularize(next_point)
+        p.oracle.move_to(next_point)
+        p.oracle.enqueue_single_dim_evaluation()
+        p.next_point = next_point^
+        p.phase = 1
+        return True
+    p.final_point = p.oracle.make_estimation_result(p.cur_point)
+    p.phase = 2
+    return False
+
+
+def _walk_outer_or_finish(mut p: PendingEstimation) raises -> Bool:
+    """The walker's outer `while iteration < iterations` test and a round's
+    start: freeze the step rule and begin its line search (True when an
+    evaluation was enqueued), or finish the walk at the current point."""
+    if p.iteration < p.iterations:
+        p.estimator = create_step_estimator(
+            BACKTRACKING_ANY_IMPROVEMENT, p.cur_value, p.cur_grad, p.direction
+        )
+        p.step = 1.0
+        return _walk_line_search_or_finish(p)
+    p.final_point = p.oracle.make_estimation_result(p.cur_point)
+    p.phase = 2
+    return False
+
+
+def estimate_advance(mut p: PendingEstimation) raises -> Bool:
+    """Read back the evaluation in flight (the caller has drained since it
+    was enqueued) and run the walk to its next evaluation: True when one is
+    enqueued, False when the walk has finished (`final_point`). The
+    statements, and their order, are
+    `descent_helpers.newton_like_walker_estimate`'s with
+    `BACKTRACKING_ANY_IMPROVEMENT`, `_estimate_and_apply`'s choice."""
+    if p.phase == 0:
+        p.oracle.settle_weights()
+        p.oracle.finish_single_dim_evaluation(p.cur_value, p.cur_grad)
+        p.oracle.write_second_derivatives(p.cur_hess)
+        var not_pd_here = 0
+        p.direction = _update_move_direction(
+            p.cur_grad, p.cur_hess, p.oracle.hessian_block_size(),
+            not_pd_here,
+        )
+        p.not_pd += not_pd_here
+        if p.iterations == 1:
+            var result = _move(p.cur_point, p.direction, 1.0)
+            p.oracle.regularize(result)
+            p.final_point = p.oracle.make_estimation_result(result)
+            p.phase = 2
+            return False
+        p.iteration = 0
+        p.updated = False
+        return _walk_outer_or_finish(p)
+    if p.phase == 1:
+        var next_value = Float64(0.0)
+        var next_grad = List[Float64]()
+        p.oracle.finish_single_dim_evaluation(next_value, next_grad)
+        if p.estimator.is_satisfied(p.step, next_value):
+            p.oracle.write_second_derivatives(p.cur_hess)
+            p.cur_point = p.next_point.copy()
+            p.cur_value = next_value
+            p.cur_grad = next_grad^
+            var not_pd_here = 0
+            p.direction = _update_move_direction(
+                p.cur_grad, p.cur_hess, p.oracle.hessian_block_size(),
+                not_pd_here,
+            )
+            p.not_pd += not_pd_here
+            p.iteration += 1
+            p.updated = True
+            return _walk_outer_or_finish(p)
+        p.iteration += 1
+        p.step /= 2
+        return _walk_line_search_or_finish(p)
+    return False
 
 
 def estimate_can_batch(
@@ -1013,9 +1136,10 @@ def estimate_can_batch(
     """Whether `_estimate_prepare`/`_estimate_complete` restate
     `_estimate_and_apply` for this task: a single-dimensional pointwise loss
     (no MultiClass family, no ranking target), the Newton or Gradient walker
-    at ONE iteration -- the walk whose only drain is its one evaluation's
-    readback. Everything else keeps the one-call path."""
-    if iters != 1:
+    at any iteration count -- a walk whose only drains are its evaluations'
+    readbacks (`estimate_advance`). Everything else keeps the one-call
+    path."""
+    if iters < 1:
         return False
     if not (
         leaf_estimation_method == LEAF_ESTIMATION_NEWTON
@@ -1076,6 +1200,7 @@ def _estimate_prepare(
     mut arena: BufferArena,
     mut stage_times: StageTimes,
     staged: Bool = False,
+    iterations: Int = 1,
 ) raises -> PendingEstimation:
     """`_estimate_and_apply` for an `estimate_can_batch` task (approx_dim 1,
     no grouping), up to its walker's evaluation readback, WITHOUT the drain
@@ -1099,7 +1224,7 @@ def _estimate_prepare(
     launch; carved from a few parents they cost what one buffer does. The
     oracle reads the same cells either way: every cell it reads it writes
     first (DEVIATION 3041's contract, which the identity lanes hold)."""
-    if not estimate_can_batch(objective, leaf_estimation_method, 1):
+    if not estimate_can_batch(objective, leaf_estimation_method, iterations):
         raise Error("_estimate_prepare: this task needs _estimate_and_apply")
     stage_times.begin(ctx)
     if staged:
@@ -1210,7 +1335,7 @@ def _estimate_prepare(
         start.append(Float32(0.0))
     oracle.move_to(start)
     oracle.enqueue_single_dim_evaluation()
-    return PendingEstimation(oracle^, n_rows, n_leaves, start^)
+    return PendingEstimation(oracle^, n_rows, n_leaves, iterations, start^)
 
 
 def _estimate_complete(
@@ -1227,30 +1352,19 @@ def _estimate_complete(
     mut est_ws: List[TEstimationWorkspace],
     append_to_cursor: Bool = True,
 ) raises:
-    """The rest of a `_estimate_prepare` task, AFTER the caller's drain:
-    the walker's host half (the evaluation's readback, the second
-    derivatives, `UpdateMoveDirection`, the one step, `Regularize`,
-    `MakeEstimationResult`, the trace record), then `_estimate_and_apply`'s
+    """The rest of a `_estimate_prepare` task once its walk has finished
+    (`estimate_advance` returned False): the walker's trace record and
+    `DEVIATION 74` count, then `_estimate_and_apply`'s
     `AppendModels` onto `cursor`, ENQUEUED: the caller drains before it
     reuses `est_ws` or lets `pending` die (the oracle's buffers are read by
     the launch below)."""
     ref oracle = pending.oracle
-    oracle.settle_weights()
-    var cur_value = Float64(0.0)
-    var cur_grad = List[Float64]()
-    var cur_hess = List[Float64]()
-    oracle.finish_single_dim_evaluation(cur_value, cur_grad)
-    oracle.write_second_derivatives(cur_hess)
-    var not_pd_here = 0
-    var direction = _update_move_direction(
-        cur_grad, cur_hess, oracle.hessian_block_size(), not_pd_here
-    )
-    var result = _move(pending.start_point, direction, 1.0)
-    oracle.regularize(result)
-    var estimated = oracle.make_estimation_result(result)
+    if pending.phase != 2:
+        raise Error("_estimate_complete before the walk finished")
+    var estimated = pending.final_point.copy()
     merge_stage_times(stage_times, oracle.times)
     trace.record_list_f32(leaf_tag, estimated)
-    not_pd_total += not_pd_here
+    not_pd_total += pending.not_pd
     leaf_values.clear()
     for i in range(len(estimated)):
         leaf_values.append(estimated[i])

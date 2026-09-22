@@ -145,6 +145,7 @@ from gbdt.methods.doc_parallel_boosting import (
     TEstimationWorkspace,
     _estimate_complete,
     _estimate_prepare,
+    estimate_advance,
     estimate_can_batch,
     estimate_workspace,
     TestArm,
@@ -647,7 +648,7 @@ def _ordered_estimate_prepare(
         slot.row_index, y, weights, True, cursor, opts.objective,
         opts.kernel_alpha, opts.estimator_alpha, opts.logloss_border,
         opts.l2_leaf_reg, sm_count, opts.leaf_method, est_ws, arena,
-        walker_times, staged=True,
+        walker_times, staged=True, iterations=opts.leaf_iterations,
     )
     est_times.end(ctx, "est.estimate_and_apply")
     return _OrderedPending(est^, apply_size)
@@ -879,17 +880,19 @@ def fit_ordered(
     var h_part_rows = ctx.enqueue_create_host_buffer[DType.uint32](n_rows)
     var est_pools = List[List[TEstimationWorkspace]]()
     #
-    # THE BATCHED ESTIMATION (`estimate_can_batch`: a one-iteration Newton
-    # or Gradient walk, which every default Ordered fit is). Each task's
-    # only drains were its estimator's (the oracle's weight fold, the one
-    # evaluation readback, the estimator's tail) and its own tail; the
-    # tasks of a tree are independent -- each reads the tree's bins and its
-    # OWN cursor and writes only that cursor -- so the tree now enqueues
-    # every task up to its readback, drains ONCE, finishes every task on
-    # the host in the same task order (the same trace records in the same
-    # order), and drains once more: two drains for the tree's 28 tasks at
-    # the default four permutations instead of about a hundred. Every
-    # kernel reads the same inputs it read one task at a time. It needs one
+    # THE BATCHED ESTIMATION (`estimate_can_batch`: a single-dimensional
+    # pointwise loss under the Newton or Gradient walker, which every
+    # default Ordered fit is). Each task's only drains were its estimator's
+    # (the oracle's weight fold, one readback per walker evaluation, the
+    # estimator's tail) and its own tail; the tasks of a tree are
+    # independent -- each reads the tree's bins and its OWN cursor and
+    # writes only that cursor -- so the tree now enqueues every task up to
+    # its first readback, then walks every task in LOCK STEP (one drain per
+    # round, `estimate_advance`), finishes them in task order (the same
+    # trace records in the same order), and drains once more: at the
+    # default four permutations, (walker rounds + 1) drains for the tree's
+    # 28 tasks instead of several per task. Each task's oracle calls run in
+    # the order its own walk makes them, on its own buffers. It needs one
     # workspace and one partition staging per TASK (slot `lp * n_folds +
     # f`, the estimation task last), since all of them are in flight
     # together.
@@ -1118,7 +1121,16 @@ def fit_ordered(
                     est_pools[est_slot], arena, est_times, walker_times,
                 )
             )
-            ctx.synchronize()
+            # the walks in lock step: one drain per round for every task
+            # still walking (a one-iteration walk is one round)
+            var walking = True
+            while walking:
+                ctx.synchronize()
+                walking = False
+                for t in range(len(pend)):
+                    if pend[t].est.phase != 2:
+                        if estimate_advance(pend[t].est):
+                            walking = True
             for lp in range(learn_count):
                 for f in range(n_folds):
                     var slot = lp * n_folds + f
