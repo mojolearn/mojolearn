@@ -203,6 +203,15 @@ comptime GBDT_BOOT_SEEDS = 65536
 #: The gate's negative control (see THE NEGATIVE CONTROL above).
 comptime GBDT_ORACLE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 #: `ftz` flushes only under IDENTICAL (`checks/numerics.mojo`); `_ftz_lanes` follows it.
+#: THE BINARY NEGATIVE CONTROL. `-D MOJOLEARN_GBDT_BINARY_SABOTAGE=1` leaves
+#: nibble value 0 (all four flags of the nibble clear) out of a binary
+#: feature's sum, in `_binary_block` and in the Ordered fold arm's binary
+#: writeback (gbdt_oracle_ordered.mojo), so the `gbdt-binary-columns` lane's
+#: CPU column must move under it. Summing the SET side instead does NOT move
+#: it and is no control: a one-fold feature's cosine score is symmetric in
+#: its two sides, and the rows are split by the bit in the compressed index,
+#: not by the histogram.
+comptime GBDT_HOST_BINARY_SABOTAGE = is_defined["MOJOLEARN_GBDT_BINARY_SABOTAGE"]()
 comptime GBDT_HOST_FTZ_ON = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime GBDT_HOST_BINARIZE_LINEAR = is_defined[
     "MOJOLEARN_GBDT_HOST_BINARIZE_LINEAR"
@@ -1394,7 +1403,7 @@ def _binary_block(
                         for lb in range(active_block_count):
                             var v = Float32(0.0)
                             for i in range(16):
-                                if (i & f_mask) == 0:
+                                if (i & f_mask) == 0 and not (GBDT_HOST_BINARY_SABOTAGE and i == 0):
                                     v += vals[lb * 128 + 8 * i + group_id]
                             if abs(v) > Float32(1e-20):
                                 if active_block_count == 1:

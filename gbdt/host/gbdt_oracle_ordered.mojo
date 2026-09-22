@@ -100,6 +100,7 @@ from gbdt.gpu_util.kernel.random_gen import (
     next_uniform_f,
 )
 from gbdt.host.gbdt_oracle import (
+    GBDT_HOST_BINARY_SABOTAGE,
     GBDT_ORACLE_HOST_SABOTAGE,
     GbdtHostGrid,
     GbdtHostModel,
@@ -696,7 +697,7 @@ def _ordered_tree_structure(
                                 for w in range(2):
                                     var acc_b = Float32(0.0)
                                     for i in range(16):
-                                        if (i & f_mask) == 0:
+                                        if (i & f_mask) == 0 and not (GBDT_HOST_BINARY_SABOTAGE and i == 0):
                                             acc_b += cells[i * 16 + 2 * group_id + w]
                                     if abs(acc_b) > Float32(1e-20):
                                         hp.hist[base + hp.first[f_base + j] * 2 + w] = acc_b

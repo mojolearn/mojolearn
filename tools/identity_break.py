@@ -1547,6 +1547,91 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: (e.predict(Xh),))
 
 
+#: The columns `gbdt-binary-columns` turns into 0/1 flags: five, so the
+#: BinaryFeatures block spans two nibbles of its word (feature 4 of the block
+#: is the first of the second nibble), none of them the three columns the
+#: `denormal` fixture perturbs.
+_GBDT_BINARY_COLUMNS = (3, 5, 6, 8, 9)
+
+
+def _gbdt_binary_columns(X):
+    """`X` with `_GBDT_BINARY_COLUMNS` replaced by the top mantissa bit of
+    each value (float32 0.0 / 1.0: 1.0 when |x| lies in [1.5, 2) times a
+    power of two). A function of the VALUE alone, so the held-out rows and
+    the batch slices are cut by the same rule with no training statistic to
+    carry, and it keeps both values on every fixture: a median or a sign
+    threshold would not (`negative` has no positive value, `wide` scales
+    column 3 below 1, `ties` holds the integers 0 to 5, of which 3 alone has
+    the bit). Each such column quantizes to exactly one border, the
+    BinaryFeatures histogram policy; the lane refuses a fixture on which one
+    does not."""
+    X = np.array(X, dtype=np.float32, copy=True)
+    for c in _GBDT_BINARY_COLUMNS:
+        bits = np.ascontiguousarray(X[:, c]).view(np.uint32)
+        X[:, c] = ((bits >> np.uint32(22)) & np.uint32(1)).astype(np.float32)
+    return X
+
+
+@lane("gbdt-binary-columns")
+def _(ml, X, yc, yr, Xh=None):
+    """Five columns with exactly ONE border each (0/1 flags,
+    `_gbdt_binary_columns`), the BinaryFeatures histogram policy
+    (perf/gbdt-host-one-border, 2026-09-22). No other lane's fixture
+    quantizes a column to one border, so until this lane the binary
+    histograms (`hist_binary.mojo` on the Plain searcher,
+    `pointwise_hist2_binary.mojo` on the Ordered fold arm) reached no cell
+    and the CPU host binding refused such a column by name. The labels are
+    the fixture's with the flags folded in (below), so the flags decide
+    splits.
+
+    The fits are the configurations the small-pool host route takes
+    (`GradientBoosting._small_pool_host`): Plain and Ordered, Logloss and
+    RMSE, at `_gbdt`'s recorded options, 20 depth-6 trees each; the Ordered
+    RMSE fit again at CatBoost's GPU defaults for the bootstrap and the
+    noise (Bayesian, random_strength 1), which is what an unset
+    `GradientBoosting()` of 500 trees or more trains below 50,000 rows; and
+    OrderedRMSE, whose host restatement shares the Ordered fold arm. The
+    model and held-out columns read the Ordered Logloss fit."""
+    X = _gbdt_binary_columns(X)
+    Xh = None if Xh is None else _gbdt_binary_columns(Xh)
+    for c in _GBDT_BINARY_COLUMNS:
+        if np.unique(X[:, c]).size != 2:
+            raise RuntimeError(
+                "gbdt-binary-columns: column " + str(c) + " is not two-valued"
+                " on this fixture, so it would not quantize to one border and"
+                " the lane would not reach the binary histograms")
+    # the flags DECIDE the fits, so a wrong binary histogram moves a split
+    # rather than a score nobody takes: the class label is flipped where
+    # flag 5 is set, and the regression target gains two flags' steps
+    # (elementwise float32, no BLAS, the same bytes on every box)
+    yc = (np.asarray(yc, dtype=np.int32) ^ X[:, 5].astype(np.int32)).astype(np.int32)
+    yr = (np.asarray(yr, dtype=np.float32) + np.float32(1.5) * X[:, 3]
+          - np.float32(1.0) * X[:, 8]).astype(np.float32)
+    pc = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss",
+               boosting_type="Plain").fit(X, yc)
+    pr = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="RMSE",
+               boosting_type="Plain").fit(X, yr)
+    oc = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="Logloss",
+               boosting_type="Ordered").fit(X, yc)
+    orr = _gbdt(ml.GradientBoosting, n_estimators=20, max_depth=6, loss="RMSE",
+                boosting_type="Ordered").fit(X, yr)
+    od = ml.GradientBoosting(n_estimators=20, max_depth=6, loss="RMSE",
+                             boosting_type="Ordered", learning_rate=0.03).fit(X, yr)
+    perm = np.argsort(_hashed_uniform(X.shape[0], 1, "ordered-permutation").reshape(-1), kind="stable")
+    ormse = ml.OrderedRMSE(n_estimators=20, max_depth=6).fit(X, yr, permutation=perm)
+    return _fit(dict(plain_logloss=_h(pc.predict(X), pc.predict_proba(X)),
+                     plain_rmse=_h(pr.predict(X)),
+                     plain_curves=_h(np.asarray(pc.loss_curve_, dtype=np.float64),
+                                     np.asarray(pr.loss_curve_, dtype=np.float64)),
+                     ordered_logloss=_h(oc.predict(X), oc.predict_proba(X)),
+                     ordered_rmse=_h(orr.predict(X)),
+                     ordered_curves=_h(np.asarray(oc.loss_curve_, dtype=np.float64),
+                                       np.asarray(orr.loss_curve_, dtype=np.float64)),
+                     ordered_defaults=_h(od.predict(X)),
+                     ordered_rmse_estimator=_h(ormse.predict(X))),
+                oc, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
 @lane("gbdt-catboost-defaults")
 def _(ml, X, yc, yr, Xh=None):
     """The SymmetricTree defaults this implementation takes from CatBoost's
@@ -8882,6 +8967,7 @@ _batch_decl(_rows_calls("predict"),
             "gbdt-catboost-defaults", "par-border-types", "gbdt-stochastic-arms")
 _batch_decl(_rows_calls("predict", prep=_coded), "gbdt-feature-freq", "gbdt-categorical-ctr")
 _batch_decl(_rows_calls("predict", prep=_with_nan), "gbdt-nan-modes")
+_batch_decl(_rows_calls("predict", "predict_proba", prep=_gbdt_binary_columns), "gbdt-binary-columns")
 _batch_decl(_rows_calls("predict", "predict_proba", prep=_ctr_tables_xh), "gbdt-categorical-ctr-tables")
 _batch_decl(_rows_calls("predict", prep=_tensor_ctr_xh), "gbdt-tensor-ctr-tables")
 
