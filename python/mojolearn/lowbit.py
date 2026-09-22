@@ -43,7 +43,7 @@ constructions, so this rewrite takes no DEVIATION number.
 
     packed = mojolearn.lowbit.pack(weights, "bfloat16")     # or "int8"
     blk = mojolearn.TransformerBlock(packed, n_heads=8)      # weight_format "bfloat16"
-    f32 = mojolearn.lowbit.unpack(packed)                    # the materialized dict
+    f32, fmt = mojolearn.lowbit.unpack(packed)               # (materialized dict, format)
 
 Only 2-D tensors are packed. `pack` selects BY RANK, not by name: every 2-D
 tensor of the dict is packed, which is the projection matrices and ALSO a
@@ -54,7 +54,8 @@ stay float32, because they never enter a GEMM and the profiles are about
 the GEMM's operands. A caller that wants `A_log` kept float32 packs by name
 with `pack_one` (the model loader does). `pack` and `unpack` are inverses on
 the packed tensors up to the rounding `pack` performs, and
-`unpack(pack(unpack(p)))` is `unpack(p)`.
+`unpack(pack(unpack(p)[0], fmt))` is `unpack(p)` (`unpack` returns the
+materialized dict and its format).
 """
 import array
 from . import _portable_math as math
