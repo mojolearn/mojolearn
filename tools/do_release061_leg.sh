@@ -5,6 +5,7 @@
 #
 #   bash tools/do_release061_leg.sh <frozen-40-hex-commit> <token_file>          DRY RUN, rents nothing
 #   bash tools/do_release061_leg.sh <frozen-40-hex-commit> <token_file> --rent   spends money
+#   ... [--rent] --expect-from <NVIDIA leg release-build dir>                   see CORE HOST below
 #
 # DEVIATION 2268. The 0.6.1 wheel needs three per-architecture build proofs.
 # The two CUDA proofs come from
@@ -32,7 +33,17 @@ set -uo pipefail
 COMMIT="${1:?frozen 40-hex commit}"
 TOKFILE="${2:?token file (~/.mojolearn_do_token)}"
 RENT=0
-case "$#:${3:-}" in 2:|3:--rent) [ "${3:-}" = "--rent" ] && RENT=1 ;; *) echo "usage: $0 <commit> <token_file> [--rent]"; exit 2 ;; esac
+EXPECT_FROM=${MOJOLEARN_EXPECT_CORE_HOST_FROM:-}
+USAGE="usage: $0 <commit> <token_file> [--rent] [--expect-from <nvidia release-build dir>]"
+shift 2
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --rent) RENT=1 ;;
+    --expect-from) [ $# -ge 2 ] || { echo "$USAGE" >&2; exit 2; }; EXPECT_FROM=$2; shift ;;
+    *) echo "$USAGE" >&2; exit 2 ;;
+  esac
+  shift
+done
 DEADMAN_SECONDS="${DEADMAN_SECONDS:-3600}"
 # DEVIATION 2294: the same guarded rental, doing the OTHER half of the release.
 # tools/linux_surface_qualification.sh runs ON the device, and until now nothing
@@ -53,13 +64,63 @@ case "$UBUNTU22" in 0|1) ;; *) echo 'MOJOLEARN_RELEASE_UBUNTU22 must be 0 or 1' 
 if [ "$UBUNTU22" = 1 ] && { [ "$LEG_MODE" != build ] || [ "${MOJOLEARN_LEG_GPU:-mi325x}" != mi325x ]; }; then
   echo 'Ubuntu 22.04 container mode applies only to the AMD build' >&2; exit 2
 fi
+# CORE HOST PROBE (2026-09-22). The Ubuntu 22.04 container builds one small
+# host binding first and compares it with the NVIDIA legs' copy, to fail in two
+# minutes instead of after the whole build. It is ADVISORY: pack_wheel.py
+# refuses any host binding whose bytes differ across the three legs, so a
+# mismatch can never ship without it. Three ways to set it:
+#   (nothing)                       the probe is skipped and the AMD leg can
+#                                   start in parallel with the NVIDIA legs;
+#                                   the staged digest is compared at pack time
+#   --expect-from <dir>             derived HERE from an NVIDIA leg of THIS
+#                                   commit: <dir>/build/sets/cuda/<arch>/host/
+#                                   _mojolearn_core_host.so, the STAGED set
+#                                   copy (after patchelf). <dir> is the leg's
+#                                   release-build directory or its OUT dir.
+#   MOJOLEARN_EXPECT_CORE_HOST_SHA256=<64 hex>
+#                                   by hand. It MUST be the staged set copy:
+#                                   on 0.8.14 the unstaged python/mojolearn/
+#                                   host/ copy on the pod (a different digest)
+#                                   was used and an MI325X rental was wasted.
 CORE_HOST_SHA=${MOJOLEARN_EXPECT_CORE_HOST_SHA256:-}
+CORE_HOST_SOURCE=${CORE_HOST_SHA:+by-hand}
+if [ -n "$EXPECT_FROM" ]; then
+  derived=$(python3 - "$EXPECT_FROM" "$COMMIT" <<'PYX'
+import hashlib, json, pathlib, sys
+root, commit = pathlib.Path(sys.argv[1]).expanduser(), sys.argv[2]
+cands = [root, root / 'release-build', root / 'remote' / 'release-build']
+base = next((c for c in cands if (c / 'build' / 'build-provenance.json').is_file()), None)
+if base is None:
+    sys.exit('no build/build-provenance.json under ' + str(root) + ' (give an NVIDIA leg release-build directory)')
+proof = json.loads((base / 'build' / 'build-provenance.json').read_text())
+if proof.get('source_commit') != commit:
+    sys.exit('the NVIDIA build is of %s, not %s' % (proof.get('source_commit'), commit))
+if proof.get('complete') is not True or proof.get('build_exit') != 0:
+    sys.exit('the NVIDIA build proof is not complete with build_exit 0')
+sos = sorted((base / 'build' / 'sets' / 'cuda').glob('*/host/_mojolearn_core_host.so'))
+if not sos:
+    sys.exit('no staged build/sets/cuda/<arch>/host/_mojolearn_core_host.so under ' + str(base))
+digests = {hashlib.sha256(p.read_bytes()).hexdigest() for p in sos}
+if len(digests) != 1:
+    sys.exit('the staged core host copies disagree: ' + ' '.join(sorted(digests)))
+print(digests.pop(), sos[0])
+PYX
+) || { echo "--expect-from $EXPECT_FROM: refused" >&2; exit 2; }
+  set -- $derived
+  if [ -n "$CORE_HOST_SHA" ] && [ "$CORE_HOST_SHA" != "$1" ]; then
+    echo "MOJOLEARN_EXPECT_CORE_HOST_SHA256=$CORE_HOST_SHA disagrees with the staged copy $2 ($1)" >&2; exit 2
+  fi
+  CORE_HOST_SHA=$1; CORE_HOST_SOURCE=$2
+fi
+if [ "${MOJOLEARN_RELEASE_UBUNTU22:-0}" = 1 ] && [ -z "$CORE_HOST_SHA" ]; then
+  CORE_HOST_SHA=skip; CORE_HOST_SOURCE=none
+fi
 # Extension builds at a time, on the host and in the Ubuntu 22.04 container
 # alike (tools/release_ubuntu22_build.sh sizes the container to 2 x jobs cores).
 BUILD_JOBS=${MOJOLEARN_BUILD_JOBS:-4}
 [[ "$BUILD_JOBS" =~ ^[1-9][0-9]?$ && "$BUILD_JOBS" -le 16 ]] || { echo 'MOJOLEARN_BUILD_JOBS must be 1..16' >&2; exit 2; }
-if [ "$UBUNTU22" = 1 ] && [[ ! "$CORE_HOST_SHA" =~ ^[0-9a-f]{64}$ ]]; then
-  echo 'Ubuntu 22.04 rebuild requires the NVIDIA core-host SHA256' >&2; exit 2
+if [ "$UBUNTU22" = 1 ] && [[ ! "$CORE_HOST_SHA" =~ ^([0-9a-f]{64}|skip)$ ]]; then
+  echo 'MOJOLEARN_EXPECT_CORE_HOST_SHA256 must be 64 lowercase hex (the STAGED NVIDIA set copy) or skip' >&2; exit 2
 fi
 if [ "$LEG_MODE" = qualify ]; then
   QUAL_WHEEL="${MOJOLEARN_QUALIFY_WHEEL:?qualify mode needs the repaired wheel}"
@@ -193,7 +254,7 @@ if [ "$LEG_MODE" = qualify ]; then
              /root/$(basename "$QUAL_WHEEL") <sha256> $LEG_VENDOR \$REMOTE_OUT /root/proofs $LEG_ARCH"
 else
   DRY_ENTRY=tools/release061_remote_build.sh
-  [ "$UBUNTU22" = 1 ] && DRY_ENTRY='/root/release_ubuntu22_build.sh run (pinned Ubuntu 22.04 container)'
+  [ "$UBUNTU22" = 1 ] && DRY_ENTRY="/root/release_ubuntu22_build.sh run (pinned Ubuntu 22.04 container, core host probe: $CORE_HOST_SHA from $CORE_HOST_SOURCE)"
   WOULD_RUN="  build    MOJOLEARN_COMMIT=$COMMIT MOJOLEARN_PYTHON=$REMOTE_PY MOJOLEARN_RELEASE_BUILD_SECONDS=<=2400
            MOJOLEARN_BUILD_JOBS=$BUILD_JOBS (affinity $((2 * BUILD_JOBS)) cores)
            bash $DRY_ENTRY $LEG_VENDOR $LEG_ARCH \$REMOTE_OUT > \$REMOTE_LOG"
@@ -274,6 +335,7 @@ cp "$TMPD/source_inventory_local.json" "$OUT/source_inventory_local.json"
   echo "vendor=amd"; echo "arch=hip/gfx942"; echo "image=$IMAGE"; echo "size=$SIZE"; echo "region=$REGION"
   echo "commit=$COMMIT"; echo "archive_sha256=$ARCHIVE_SHA"; echo "archive_bytes=$ARCHIVE_BYTES"
   echo "deadman_seconds=$DEADMAN_SECONDS"; echo "fetch_reserve=$FETCH_RESERVE"; echo "started=$(date -u +%FT%TZ)"
+  [ "$UBUNTU22" = 1 ] && echo "expect_core_host_sha256=$CORE_HOST_SHA source=$CORE_HOST_SOURCE"
 } > "$STATE"
 
 nohup bash -c "sleep $DEADMAN_SECONDS; for id in \$(curl -s -H 'Authorization: Bearer $TOK' '$API/droplets?tag_name=$TAG&per_page=50' | python3 -c \"import json,sys; d=json.load(sys.stdin); print(' '.join(str(x['id']) for x in d.get('droplets',[]) if x['name']=='$NAME'))\"); do curl -s -o /dev/null -w \"deadman DELETE \$id -> %{http_code}\\n\" -X DELETE -H 'Authorization: Bearer $TOK' \"$API/droplets/\$id\" >> '$STATE'; done" \
@@ -474,8 +536,18 @@ log "build exit ${BUILD_EXIT:-none}; $($SSH "tail -3 $REMOTE_LOG" 2>/dev/null | 
 
 log "fetch evidence"
 rsync -az -e "ssh $SSH_OPTS" "root@$IP:$REMOTE_OUT/" "$OUT/release-build/" && log "fetched release-build/" || log "FETCH FAILED (release-build/)"
-if [ "$UBUNTU22" = 1 ]; then
+if [ "$UBUNTU22" = 1 ] && [ "$CORE_HOST_SHA" != skip ]; then
   rsync -az -e "ssh $SSH_OPTS" "root@$IP:/root/release-toolchain-probe/" "$OUT/toolchain-probe/" || log 'FETCH FAILED (toolchain-probe/)'
+fi
+# The staged AMD copy, recorded for the pack-time compare (pack_wheel.py
+# refuses a host binding that differs across legs; this line says so early).
+AMD_CORE_HOST="$OUT/release-build/build/sets/$LEG_VENDOR/$LEG_ARCH/host/_mojolearn_core_host.so"
+if [ "$LEG_MODE" = build ] && [ -f "$AMD_CORE_HOST" ]; then
+  AMD_CORE_SHA=$(sha256_of "$AMD_CORE_HOST")
+  echo "staged_core_host_sha256=$AMD_CORE_SHA" >> "$STATE"
+  if [[ "$CORE_HOST_SHA" =~ ^[0-9a-f]{64}$ ]] && [ "$CORE_HOST_SHA" != "$AMD_CORE_SHA" ]; then
+    log "WARNING: staged AMD core host $AMD_CORE_SHA differs from the NVIDIA copy $CORE_HOST_SHA; pack_wheel.py will refuse"
+  fi
 fi
 for f in rel061-build.log pixi_install.log pixi_bootstrap.log apt.log rel061.exit; do
   rsync -az -e "ssh $SSH_OPTS" "root@$IP:/root/$f" "$OUT/$f" 2>/dev/null || true
