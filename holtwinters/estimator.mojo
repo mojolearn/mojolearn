@@ -28,6 +28,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
 from holtwinters.impl.holtwinters import buffer_size, fit, forecast
+from holtwinters.impl.internal.hw_estimate import HW_INIT_ESTIMATED, HW_INIT_HEURISTIC
 from holtwinters.impl.internal.hw_utils import HW_OPTIM_TPB
 from holtwinters.impl.runner import (
     HW_DEFAULT_EPS,
@@ -138,10 +139,12 @@ def holtwinters_fit_host_traced(
     tpb_optim: Int = HW_OPTIM_TPB,
     scratch_pad: Int = 0,
     scratch_poison: Float32 = Float32(0.0),
+    init_method: Int = HW_INIT_HEURISTIC,
 ) raises -> HWFit:
     """`ExponentialSmoothing(endog, seasonal, seasonal_periods=frequency,
     start_periods, ts_num=batch_size, eps).fit()` with an explicit trace
-    and the scheduling / padding knobs the gates vary."""
+    and the scheduling / padding knobs the gates vary. `init_method` is
+    `hw_estimate.mojo`'s code (HEURISTIC, cuML's fit, unless named)."""
     var st = seasonal_from_name(seasonal)
     holtwinters_validate_params(n, batch_size, frequency, start_periods, eps)
     holtwinters_validate_data(data, n, batch_size, st)
@@ -172,12 +175,13 @@ def holtwinters_fit_host_traced(
         "holtwinters: n=" + String(n) + " batch_size=" + String(batch_size) + " frequency="
         + String(frequency) + " start_periods=" + String(start_periods) + " seasonal=" + seasonal
         + " eps=" + String(eps) + " trace_iters=" + String(trace_iters)
+        + (" initialization=estimated" if init_method == HW_INIT_ESTIMATED else "")
     )
     fit(
         ctx, n, batch_size, frequency, start_periods, st, eps, ddata,
         level_d, trend_d, season_d, error_d, alpha_d, beta_d, gamma_d,
         criterion_d, niter_d, decisions_d, iter_trace_d, trace, trace_iters,
-        tpb_decomp, tpb_optim, scratch_pad, scratch_poison,
+        tpb_decomp, tpb_optim, scratch_pad, scratch_poison, init_method,
     )
     var out = HWFit(n, batch_size, frequency, st, trace_iters)
     out.level = download_f32(ctx, level_d, sizes.components_len)
@@ -214,13 +218,15 @@ def holtwinters_fit_host(
     start_periods: Int = 2,
     seasonal: String = "additive",
     eps: Float32 = HW_DEFAULT_EPS,
+    init_method: Int = HW_INIT_HEURISTIC,
 ) raises -> HWFit:
     """The bindings entry: the environment's trace (`MOJOLEARN_IDENTITY_TRACE`),
     their block widths, no padding."""
     var ctx = DeviceContext()
     var trace = IdentityTrace()
     return holtwinters_fit_host_traced(
-        ctx, data, n, batch_size, frequency, start_periods, seasonal, eps, trace
+        ctx, data, n, batch_size, frequency, start_periods, seasonal, eps, trace,
+        init_method=init_method,
     )
 
 
@@ -287,6 +293,7 @@ def holtwinters_fit_ptr(
     start_periods: Int,
     seasonal: String,
     eps: Float32,
+    init_method: Int = HW_INIT_HEURISTIC,
 ) raises -> Int:
     """`ExponentialSmoothing(endog, seasonal, seasonal_periods=frequency,
     start_periods, ts_num=batch_size, eps).fit()`. Returns `components_len
@@ -370,7 +377,7 @@ def holtwinters_fit_ptr(
     for i in range(_cells):
         data.append(data_ptr.unsafe_load(i))
     var fitted = holtwinters_fit_host(
-        data, n, batch_size, frequency, start_periods, seasonal, eps
+        data, n, batch_size, frequency, start_periods, seasonal, eps, init_method
     )
     var components_len = len(fitted.level)
     for i in range(components_len):

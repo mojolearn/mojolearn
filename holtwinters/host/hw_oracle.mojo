@@ -41,6 +41,12 @@ from holtwinters.impl.internal.hw_optim import (
     HW_DEC_RHO_ZERO,
     HW_DEC_ZERO_DIR,
 )
+from holtwinters.impl.internal.hw_estimate import (
+    HW_INIT_ESTIMATED,
+    HW_INIT_HEURISTIC,
+    hw_est_scratch_len,
+    hw_estimate_series,
+)
 from holtwinters.impl.internal.hw_utils import STMP_EPS
 from holtwinters.impl.runner import (
     HW_ALPHA0,
@@ -173,6 +179,9 @@ struct HWOracleFit[dt: DType](Movable):
     var level: List[Scalar[Self.dt]]         # (n - f) x batch
     var trend: List[Scalar[Self.dt]]
     var season: List[Scalar[Self.dt]]
+    #: the estimated path's chosen theta (`[j * batch + s]`, d = f + 5);
+    #: empty under the heuristic path.
+    var theta: List[Scalar[Self.dt]]
 
     def __init__(out self, n: Int, batch_size: Int, frequency: Int, additive: Bool, trace_iters: Int):
         self.n = n
@@ -198,6 +207,7 @@ struct HWOracleFit[dt: DType](Movable):
         self.level = List[Scalar[Self.dt]]()
         self.trend = List[Scalar[Self.dt]]()
         self.season = List[Scalar[Self.dt]]()
+        self.theta = List[Scalar[Self.dt]]()
 
 
 def _zeros[dt: DType](n: Int) -> List[Scalar[dt]]:
@@ -335,6 +345,7 @@ def oracle_fit[dt: DType](
     zero_dir_guard: Bool = True,
     bfgs_iter_limit: Int = -1,
     linesearch_iter_limit: Int = -1,
+    init_method: Int = HW_INIT_HEURISTIC,
 ) raises -> HWOracleFit[dt]:
     """`HoltWintersFitHelper` on the host: transpose, decompose, BFGS,
     final eval. `data` is series-major float32 (widened exactly for
@@ -411,6 +422,15 @@ def oracle_fit[dt: DType](
             tr = _f[dt](_mad[dt](rq[2 * i + 1], b, tr))
         fit.start_level[s] = lv
         fit.start_trend[s] = tr
+
+    if init_method == HW_INIT_ESTIMATED:
+        comptime if dt == DType.float32:
+            _oracle_estimate(fit, n, batch_size, frequency, additive)
+            return fit^
+        else:
+            raise Error("oracle_fit: initialization 'estimated' has a float32 arm only")
+    if init_method != HW_INIT_HEURISTIC:
+        raise Error("oracle_fit: initialization method code " + String(init_method) + " is not 0 or 1")
 
     # Step 3: BFGS per series
     var p = default_optim_params(eps_f32)
@@ -599,6 +619,50 @@ def oracle_fit[dt: DType](
             x1, x2, x3, additive, True, fit.level, fit.trend, fit.season,
         )
     return fit^
+
+
+def _p32[dt: DType](mut l: List[Scalar[dt]]) -> MutPointer[Float32, MutAnyOrigin]:
+    """A float32 view of a float32 list's storage (dt is float32 at every
+    call site; the estimated arm has no float64 instantiation)."""
+    return l.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]().bitcast[Float32]()
+
+
+def _oracle_estimate[dt: DType](
+    mut fit: HWOracleFit[dt], n: Int, batch_size: Int, frequency: Int, additive: Bool
+) raises:
+    """The estimated fit on the host: `hw_estimate.mojo::hw_estimate_series`,
+    the SAME function the device kernel runs, once per series in ascending
+    order, over the host's own decomposition seeds. float32 only."""
+    comptime assert dt == DType.float32
+    var comps = (n - frequency) * batch_size
+    var d = frequency + 5
+    fit.alpha = _zeros[dt](batch_size)
+    fit.beta = _zeros[dt](batch_size)
+    fit.gamma = _zeros[dt](batch_size)
+    fit.sse = _zeros[dt](batch_size)
+    fit.level = _zeros[dt](comps)
+    fit.trend = _zeros[dt](comps)
+    fit.season = _zeros[dt](comps)
+    fit.theta = _zeros[dt](d * batch_size)
+    var crit = List[Int32](length=batch_size, fill=Int32(0))
+    var nit = List[Int32](length=batch_size, fill=Int32(0))
+    var scratch = List[Float32](length=hw_est_scratch_len(frequency), fill=Float32(0.0))
+    for s in range(batch_size):
+        hw_estimate_series(
+            s, _p32[dt](fit.ts), n, batch_size, frequency, additive,
+            rebind[Float32](fit.start_level[s]), rebind[Float32](fit.start_trend[s]),
+            _p32[dt](fit.start_season).unsafe_offset(s),
+            scratch.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            _p32[dt](fit.level), _p32[dt](fit.trend), _p32[dt](fit.season),
+            _p32[dt](fit.alpha), _p32[dt](fit.beta), _p32[dt](fit.gamma), _p32[dt](fit.sse),
+            crit.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            nit.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            _p32[dt](fit.theta),
+        )
+    for s in range(batch_size):
+        fit.criterion.append(Int(crit[s]))
+        fit.niter.append(Int(nit[s]))
+        fit.decisions.append(0)
 
 
 def oracle_forecast[dt: DType](fit: HWOracleFit[dt], h: Int) -> List[Scalar[dt]]:

@@ -66,6 +66,11 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
 from holtwinters.impl.internal.hw_decompose import stl_decomposition_gpu
+from holtwinters.impl.internal.hw_estimate import (
+    HW_INIT_ESTIMATED,
+    HW_INIT_HEURISTIC,
+    holtwinters_estimate_gpu,
+)
 from holtwinters.impl.internal.hw_eval import HW_WRITE_ALL, holtwinters_eval_gpu
 from holtwinters.impl.internal.hw_forecast import holtwinters_forecast_gpu
 from holtwinters.impl.internal.hw_optim import holtwinters_optim_gpu
@@ -265,6 +270,7 @@ def holtwinters_fit_helper(
     tpb_optim: Int = HW_OPTIM_TPB,
     scratch_pad: Int = 0,
     scratch_poison: Float32 = Float32(0.0),
+    init_method: Int = HW_INIT_HEURISTIC,
 ) raises:
     """`HoltWintersFitHelper` (`runner.cuh:309-412`): transpose, decompose,
     optimize (BFGS, all three parameters), with the card. `data` is the
@@ -336,6 +342,67 @@ def holtwinters_fit_helper(
     record_device_canon(ctx, trace, "hw.start.level", level_seed_d, batch_size, canon_scratch)
     record_device_canon(ctx, trace, "hw.start.trend", trend_seed_d, batch_size, canon_scratch)
     record_device_canon(ctx, trace, "hw.start.season", start_season_d, frequency * batch_size, canon_scratch)
+
+    if init_method == HW_INIT_ESTIMATED:
+        # OURS (hw_estimate.mojo): initial states estimated jointly with
+        # alpha/beta/gamma over all n points. The heuristic seeds above are
+        # its starting point; cuML's BFGS below does not run. `decisions`
+        # and `iter_trace` stay at their fills (no BFGS branch record).
+        var d_est = frequency + 5
+        var theta_d = ctx.enqueue_create_buffer[DType.float32](d_est * batch_size)
+        ctx.synchronize()
+        holtwinters_estimate_gpu(
+            ctx, dataset_d, n, batch_size, frequency, additive,
+            level_seed_d, trend_seed_d, start_season_d,
+            level_d, trend_d, season_d, alpha_d, beta_d, gamma_d, error_d,
+            criterion_d, niter_d, theta_d, tpb_optim, scratch_pad, scratch_poison,
+        )
+        decisions_d.enqueue_fill(Int32(0))
+        ctx.synchronize()
+        if trace.enabled:
+            var est_scratch = ctx.enqueue_create_buffer[DType.float32](d_est * batch_size)
+            ctx.synchronize()
+            record_device_canon(ctx, trace, "hw.est.theta", theta_d, d_est * batch_size, est_scratch)
+            _ = est_scratch^
+            trace.record_device[DType.int32](ctx, "hw.opt.niter", niter_d, batch_size)
+            trace.record_device[DType.int32](ctx, "hw.opt.criterion", criterion_d, batch_size)
+            var params = ctx.enqueue_create_buffer[DType.float32](3 * batch_size)
+            var pa = params.create_sub_buffer[DType.float32](0, batch_size)
+            var pb = params.create_sub_buffer[DType.float32](batch_size, batch_size)
+            var pg = params.create_sub_buffer[DType.float32](2 * batch_size, batch_size)
+            var sa = alpha_d.create_sub_buffer[DType.float32](0, batch_size)
+            var sb = beta_d.create_sub_buffer[DType.float32](0, batch_size)
+            var sg = gamma_d.create_sub_buffer[DType.float32](0, batch_size)
+            ctx.enqueue_copy(dst_buf=pa, src_buf=sa)
+            ctx.enqueue_copy(dst_buf=pb, src_buf=sb)
+            ctx.enqueue_copy(dst_buf=pg, src_buf=sg)
+            ctx.synchronize()
+            record_device_canon(ctx, trace, "hw.params", params, 3 * batch_size, canon_scratch)
+            _ = pa^
+            _ = pb^
+            _ = pg^
+            _ = sa^
+            _ = sb^
+            _ = sg^
+            _ = params^
+            record_device_canon(ctx, trace, "hw.sse", error_d, batch_size, canon_scratch)
+            record_device_canon(ctx, trace, "hw.level", level_d, sizes.components_len, canon_scratch)
+            record_device_canon(ctx, trace, "hw.trend", trend_d, sizes.components_len, canon_scratch)
+            record_device_canon(ctx, trace, "hw.season", season_d, sizes.components_len, canon_scratch)
+        ctx.synchronize()
+        _ = theta_d^
+        _ = dataset_d^
+        _ = level_seed_d^
+        _ = trend_seed_d^
+        _ = start_season_d^
+        _ = pseason_d^
+        _ = xhat_dummy^
+        _ = canon_scratch^
+        _ = decomp_trend^
+        _ = decomp_season^
+        return
+    if init_method != HW_INIT_HEURISTIC:
+        raise Error("holtwinters: initialization method code " + String(init_method) + " is not 0 (heuristic) or 1 (estimated)")
 
     # Step 3: Find optimal alpha, beta and gamma values (seasonal HW)
     var p = default_optim_params(epsilon)

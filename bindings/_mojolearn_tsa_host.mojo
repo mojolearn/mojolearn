@@ -141,16 +141,17 @@ def holtwinters_fit_binding(
         2  frequency      cuML's seasonal_periods
         3  start_periods
         4  eps            (float)
+        5  init_method    OPTIONAL: 0 heuristic (absent), 1 estimated
 
     `data_addr` reads `batch_size * n` float32, SERIES-MAJOR. `comps_addr`
     is written with `3 * components_len` float32 (level, trend, season,
     each TIME-MAJOR: series `s` at step `i` is `[s + i * batch_size]`),
     `stats_addr` with `4 * batch_size` float32 (sse, alpha, beta, gamma),
     `flags_addr` with `2 * batch_size` int32 (niter, criterion)."""
-    if len(params) != 5:
+    if len(params) != 5 and len(params) != 6:
         raise Error(
-            "holtwinters_fit: params must contain 5 values (n, batch_size,"
-            " frequency, start_periods, eps), got " + String(len(params))
+            "holtwinters_fit: params must contain 5 or 6 values (n, batch_size,"
+            " frequency, start_periods, eps[, init_method]), got " + String(len(params))
         )
     var data_address = _index(data_addr)
     var cp = f32_ptr(_index(comps_addr))
@@ -161,6 +162,9 @@ def holtwinters_fit_binding(
     var frequency = _index(params[2])
     var start_periods = _index(params[3])
     var eps = Float32(Float64(py=params[4]))
+    var init_method = _index(params[5]) if len(params) == 6 else 0
+    if init_method != 0 and init_method != 1:
+        raise Error("holtwinters_fit: init_method must be 0 (heuristic) or 1 (estimated), got " + String(init_method))
     var sname = String(py=seasonal)
     var components_len = 0
     with GILReleased(Python()):
@@ -190,7 +194,8 @@ def holtwinters_fit_binding(
         # THE ONE CALL THAT COMPUTES ANYTHING. trace_iters is a record, not
         # an arithmetic input; 0 keeps no per-iteration trace.
         var fitted = oracle_fit[DType.float32](
-            data, n, batch_size, frequency, start_periods, st, eps, 0
+            data, n, batch_size, frequency, start_periods, st, eps, 0,
+            init_method=init_method,
         )
         components_len = len(fitted.level)
         if (
