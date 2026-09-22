@@ -229,7 +229,10 @@ def test_cpu_pass_is_local_cpu_with_the_apple_pass_cells(monkeypatch, capsys):
     assert "--repeats 1" in out and "--no-batch" in out and "--no-rlpair" in out
 
 
-def test_a_pass_selects_what_changed_since_the_last_release_tag(monkeypatch, capsys):
+def test_a_pass_selects_what_changed_since_the_last_release_tag(monkeypatch, capsys, tmp_path):
+    # No finished pass on record, so the tag is the anchor (a real pass
+    # record on this machine would otherwise anchor it: test_release_pass_anchor).
+    monkeypatch.setenv("MOJOLEARN_RELEASE_CHECK_DIR", str(tmp_path))
     monkeypatch.setattr(verify_lanes, "last_release_tag", lambda: "v9.9.9")
     seen = {}
     def selection(args):
@@ -241,7 +244,8 @@ def test_a_pass_selects_what_changed_since_the_last_release_tag(monkeypatch, cap
     assert "lanes changed since v9.9.9" in capsys.readouterr().out
 
 
-def test_a_pass_with_no_release_tag_runs_every_lane_and_an_untouched_release_passes(monkeypatch, capsys):
+def test_a_pass_with_no_release_tag_runs_every_lane_and_an_untouched_release_passes(monkeypatch, capsys, tmp_path):
+    monkeypatch.setenv("MOJOLEARN_RELEASE_CHECK_DIR", str(tmp_path))
     monkeypatch.setattr(verify_lanes, "last_release_tag", lambda: "")
     monkeypatch.setattr(verify_lanes, "_selection", lambda args: ([], dict(mode="all", fallback=False), None)
                         if args.all else pytest.fail("no tag must mean --all"))

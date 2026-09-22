@@ -106,8 +106,14 @@ def test_lanes_alone_can_report_a_lane_no_json_carries(tmp_path):
 def test_the_floor_can_be_turned_off_by_name(tmp_path):
     """A caller that means `no floor` says so, and gets exactly the old
     behaviour. This is what keeps the change from being a check that cannot
-    pass."""
+    pass.
+
+    The pair shares three of four cells: with no floor, a bare two-column
+    diff also refuses a pair whose overlap is under a quarter of the widest
+    column (at least 2), and that separate rule is not what this tests."""
     a, b = _two_agreeing()
+    for col in (a, b):
+        col["cells"].update({"pca/base": _cell(), "ridge/base": _cell()})
     del b["cells"]["kmeans/base"]
     rc, out = _diff(tmp_path, [a, b], "--require-columns", "0")
     assert rc == 0, out
@@ -140,7 +146,7 @@ def test_owed_json_still_demands_an_explicit_count(tmp_path):
 @pytest.mark.parametrize("record,columns,require,want_rc,token", [
     ("2026-09-14_166-lanes",
      ("apple-m4.json", "nvidia-h100-sm_90a.json", "amd-mi325x-gfx942.json"),
-     "3", 1, "summary: DIVERGENT=1, IDENTICAL=1331"),
+     "3", 1, "summary: DIVERGENT=1, IDENTICAL=1322"),
     ("2026-09-14_kmeans-sqrt-fix",
      ("apple-m4.json", "nvidia-h100-sm_90a.json", "amd-mi325x-gfx942.json"),
      "3", 0, "summary: IDENTICAL=72"),
