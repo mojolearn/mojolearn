@@ -1582,6 +1582,7 @@ def make_bin_optimized_oracle(
     var scratch: Optional[OracleDeviceScratch] = None,
     defer_weights: Bool = False,
     var host_scratch: Optional[OracleHostScratch] = None,
+    leaves_ready: Bool = False,
 ) raises -> BinOptimizedOracle:
     """Their ctor (`pointwise_oracle.cpp:218-246`): allocate the eval
     buffers, seed `CurrentPoint` at zero, and settle `WeightsCpu` once --
@@ -1656,7 +1657,18 @@ def make_bin_optimized_oracle(
     var d_multi_der = ws.d_multi_der.copy()
     var d_multi_stats = ws.d_multi_stats.copy()
 
-    launch_make_sequence(ctx, UInt32(0), d_identity, n_rows)
+    # `leaves_ready`: the caller's persistent scratch (`have_scratch`) whose
+    # `d_leaves` already holds `[0, bin_count)` from its first use, on a
+    # single-dimensional non-Exact walk, which never reads `d_identity`
+    # (only the multiclass arms and the Exact scratch do). Neither buffer
+    # is written by anything else, so both refills are skipped.
+    var skip_static = leaves_ready and have_scratch
+    if skip_static and (
+        single_bin_dim != 1 or estimation_method == LEAF_ESTIMATION_EXACT
+    ):
+        raise Error("leaves_ready is for single-dim, non-Exact oracles only")
+    if not skip_static:
+        launch_make_sequence(ctx, UInt32(0), d_identity, n_rows)
 
     # the host staging: the caller's (`host_scratch`, kept for the fit) when
     # it matches this oracle's shape, else allocated here as always
@@ -1670,9 +1682,10 @@ def make_bin_optimized_oracle(
         h_leaves = host_scratch.value().h_leaves.copy()
     else:
         h_leaves = ctx.enqueue_create_host_buffer[DType.uint32](bin_count)
-    for i in range(bin_count):
-        h_leaves.unsafe_ptr().unsafe_store(i, UInt32(i))
-    ctx.enqueue_copy(dst_buf=d_leaves, src_ptr=h_leaves.unsafe_ptr())
+    if not skip_static:
+        for i in range(bin_count):
+            h_leaves.unsafe_ptr().unsafe_store(i, UInt32(i))
+        ctx.enqueue_copy(dst_buf=d_leaves, src_ptr=h_leaves.unsafe_ptr())
 
     var h_shift: HostBuffer[DType.float32]
     var h_fv: HostBuffer[DType.float32]

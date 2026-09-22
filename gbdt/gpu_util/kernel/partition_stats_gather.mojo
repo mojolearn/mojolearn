@@ -83,6 +83,23 @@ def partition_stats_partial_gather_kernel(
     var chunk = Int(block_idx.x)
     var tid = Int(thread_idx.x)
 
+    # A BLOCK WHOSE FIRST ROW IS PAST THE PARTITION holds no row at all
+    # (its stripe only moves further), so every thread's `v` stays +0.0 and
+    # the fold returns +0.0: its partial is written as that constant
+    # without running the fold. Bit-identical (a sum of +0.0 is +0.0 in
+    # every fold shape), and the condition is uniform across the block, so
+    # no thread skips a barrier its block runs. Under IDENTICAL the grid is
+    # pinned (`partition_stats_chunks`), so a leaf of a few rows paid dozens
+    # of empty 512-thread folds: most of an Ordered tree's estimation time
+    # on a small pool (2026-09-22). The twin, `partition_stats_partial_kernel` (`gpu_util/partitions_reduce.mojo`),
+    # carries the same exit.
+    if chunk * STATS_BLOCK >= size:
+        if tid == 0:
+            partials.unsafe_store(
+                (leaf_slot * n_stats + stat) * max_chunks + chunk, Float32(0.0)
+            )
+        return
+
     var stride = Int(grid_dim.x) * STATS_BLOCK
     var v = Float32(0.0)
     var i = chunk * STATS_BLOCK + tid

@@ -1033,6 +1033,27 @@ def estimate_can_batch(
     return True
 
 
+def estimate_workspace(
+    ctx: DeviceContext,
+    mut est_ws: List[TEstimationWorkspace],
+    mut arena: BufferArena,
+    n_rows: Int,
+    n_leaves: Int,
+) raises:
+    """The batched path's workspace for a task of `n_rows` and `n_leaves`
+    (`_estimate_prepare`'s key check), built from `arena` on a miss, so a
+    caller can stage the gathered target, weights and cursor into it
+    before `_estimate_prepare(staged=True)`."""
+    if (
+        len(est_ws) == 0
+        or est_ws[0].n_rows_key != n_rows
+        or est_ws[0].approx_dim_key != 1
+        or est_ws[0].n_leaves_cap < n_leaves
+    ):
+        est_ws.clear()
+        est_ws.append(TEstimationWorkspace(ctx, arena, n_rows, n_leaves))
+
+
 def _estimate_prepare(
     ctx: DeviceContext,
     n_rows: Int,
@@ -1054,6 +1075,7 @@ def _estimate_prepare(
     mut est_ws: List[TEstimationWorkspace],
     mut arena: BufferArena,
     mut stage_times: StageTimes,
+    staged: Bool = False,
 ) raises -> PendingEstimation:
     """`_estimate_and_apply` for an `estimate_can_batch` task (approx_dim 1,
     no grouping), up to its walker's evaluation readback, WITHOUT the drain
@@ -1080,14 +1102,12 @@ def _estimate_prepare(
     if not estimate_can_batch(objective, leaf_estimation_method, 1):
         raise Error("_estimate_prepare: this task needs _estimate_and_apply")
     stage_times.begin(ctx)
-    if (
-        len(est_ws) == 0
-        or est_ws[0].n_rows_key != n_rows
-        or est_ws[0].approx_dim_key != 1
-        or est_ws[0].n_leaves_cap < n_leaves
-    ):
-        est_ws.clear()
-        est_ws.append(TEstimationWorkspace(ctx, arena, n_rows, n_leaves))
+    if staged:
+        # the caller gathered straight into THIS workspace
+        # (`estimate_workspace`); a rebuild here would drop it
+        if len(est_ws) == 0 or est_ws[0].n_rows_key != n_rows:
+            raise Error("_estimate_prepare(staged=True) needs the staged workspace")
+    estimate_workspace(ctx, est_ws, arena, n_rows, n_leaves)
     var dims = _oracle_dims(objective, 0)
     var fv_blocks = (n_rows + MSE_BLOCK_SIZE - 1) // MSE_BLOCK_SIZE
     var sm = est_sm
@@ -1099,6 +1119,7 @@ def _estimate_prepare(
             n_rows, n_leaves, dims[0], dims[1], fv_blocks, sm
         ):
             ds = i
+    var fresh_scratch = ds < 0
     if ds < 0:
         est_ws[0].arena_scratch.append(
             make_oracle_device_scratch_in(
@@ -1119,6 +1140,18 @@ def _estimate_prepare(
             )
         )
         hsi = len(est_ws[0].arena_host) - 1
+    if fresh_scratch:
+        # the scratch's `d_leaves` is `[0, n_leaves)` for the fit, written
+        # ONCE here (the factory's own refill is skipped, `leaves_ready`);
+        # the staging is the scratch's own, never rewritten, so the upload
+        # reads the same values whenever it runs
+        ref h_leaves = est_ws[0].arena_host[hsi].h_leaves
+        for i in range(n_leaves):
+            h_leaves.unsafe_ptr().unsafe_store(i, UInt32(i))
+        ctx.enqueue_copy(
+            dst_buf=est_ws[0].arena_scratch[ds].d_leaves,
+            src_ptr=h_leaves.unsafe_ptr(),
+        )
     var oracle_ws = Optional(est_ws[0].arena_scratch[ds].handles())
     var oracle_hs = Optional(est_ws[0].arena_host[hsi].handles())
     ref g_target = est_ws[0].g_target
@@ -1128,19 +1161,20 @@ def _estimate_prepare(
     ref d_p_sz = est_ws[0].d_p_sz
     ref h_po = est_ws[0].h_po
     ref h_ps = est_ws[0].h_ps
-    launch_gather_with_mask_f32(
-        ctx, g_target, targets, row_index, n_rows,
-        UInt32(0xFFFFFFFF),
-    )
-    if has_weights:
+    if not staged:
         launch_gather_with_mask_f32(
-            ctx, g_weights, weights, row_index, n_rows,
+            ctx, g_target, targets, row_index, n_rows,
             UInt32(0xFFFFFFFF),
         )
-    launch_gather_planes_with_mask_f32(
-        ctx, g_cursor, cursor, row_index, n_rows,
-        UInt32(0xFFFFFFFF), 1, n_rows,
-    )
+        if has_weights:
+            launch_gather_with_mask_f32(
+                ctx, g_weights, weights, row_index, n_rows,
+                UInt32(0xFFFFFFFF),
+            )
+        launch_gather_planes_with_mask_f32(
+            ctx, g_cursor, cursor, row_index, n_rows,
+            UInt32(0xFFFFFFFF), 1, n_rows,
+        )
     for i in range(n_leaves):
         h_po.unsafe_ptr().unsafe_store(i, UInt32(leaf_offsets[i]))
         h_ps.unsafe_ptr().unsafe_store(i, UInt32(sizes[i]))
@@ -1164,6 +1198,7 @@ def _estimate_prepare(
         scratch=oracle_ws^,
         defer_weights=True,
         host_scratch=oracle_hs^,
+        leaves_ready=True,
     )
     stage_times.end(ctx, "est.make_oracle")
     # `TNewtonLikeWalker::Estimate` at one iteration
@@ -1190,6 +1225,7 @@ def _estimate_complete(
     mut stage_times: StageTimes,
     leaf_tag: String,
     mut est_ws: List[TEstimationWorkspace],
+    append_to_cursor: Bool = True,
 ) raises:
     """The rest of a `_estimate_prepare` task, AFTER the caller's drain:
     the walker's host half (the evaluation's readback, the second
@@ -1224,6 +1260,10 @@ def _estimate_complete(
             "the estimator returned " + String(len(estimated))
             + " leaf values for " + String(n_leaves) + " leaves x 1 dims"
         )
+    if not append_to_cursor:
+        # a caller whose `cursor` is a private copy it discards (the Ordered
+        # fit's gathered cursor): nothing reads the move, so it is not made
+        return
     ref d_est = est_ws[0].d_est
     ref h_est = est_ws[0].h_est
     for i in range(n_leaves):

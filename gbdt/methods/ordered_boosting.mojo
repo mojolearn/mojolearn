@@ -146,6 +146,7 @@ from gbdt.methods.doc_parallel_boosting import (
     _estimate_complete,
     _estimate_prepare,
     estimate_can_batch,
+    estimate_workspace,
     TestArm,
     _apply_last_tree_to_test,
     _estimate_and_apply,
@@ -339,6 +340,33 @@ def _ord_abs_planes_kernel(
         dst.unsafe_store(2 * i + 1, abs(sg.unsafe_load(i)))
 
 
+def _ord_stage_in_kernel(
+    y: MutPointer[Float32, MutAnyOrigin],
+    weights: MutPointer[Float32, MutAnyOrigin],
+    permutation: MutPointer[UInt32, MutAnyOrigin],
+    cursor: MutPointer[Float32, MutAnyOrigin],
+    row_index: MutPointer[UInt32, MutAnyOrigin],
+    out_y: MutPointer[Float32, MutAnyOrigin],
+    out_w: MutPointer[Float32, MutAnyOrigin],
+    out_c: MutPointer[Float32, MutAnyOrigin],
+    size_in: Int32,
+):
+    """`_ordered_gather_kernel` into permutation order, then the
+    estimator's three bin-order gathers through `row_index`
+    (`_estimate_and_apply`'s stage-in), in one pass: position `i` of the
+    estimator's arrays is permutation position `j = row_index[i]`, so
+    `out_y[i] = y[perm[j]]`, `out_w[i] = weights[perm[j]]`,
+    `out_c[i] = cursor[j]` -- the same loads and stores of the same values,
+    without the intermediate arrays."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(size_in):
+        var j = Int(row_index.unsafe_load(i))
+        var row = Int(permutation.unsafe_load(j))
+        out_y.unsafe_store(i, y.unsafe_load(row))
+        out_w.unsafe_store(i, weights.unsafe_load(row))
+        out_c.unsafe_store(i, cursor.unsafe_load(j))
+
+
 def _grid(n: Int) -> Int:
     return (n + ORDERED_BLOCK - 1) // ORDERED_BLOCK
 
@@ -530,16 +558,11 @@ def _ordered_estimate_task(
 
 struct _OrderedSlot(Movable):
     """One batched estimation task's own buffers, for the whole fit: the
-    gathered targets, weights, cursor copy and bins at the task's estimate
-    size, the partition's row order and its upload staging, and the leaf
+    partition's row order and its upload staging, and the leaf
     upload pair (at `1 << max_depth`, of which a tree reads its
     `n_leaves`). Every cell a task reads it writes first; the batch's
     closing drain orders one tree's reads before the next tree's writes."""
 
-    var gy: DeviceBuffer[DType.float32]
-    var gw: DeviceBuffer[DType.float32]
-    var gc: DeviceBuffer[DType.float32]
-    var gb: DeviceBuffer[DType.uint32]
     var row_index: DeviceBuffer[DType.uint32]
     var h_rows: HostBuffer[DType.uint32]
     var dl: DeviceBuffer[DType.float32]
@@ -552,10 +575,6 @@ struct _OrderedSlot(Movable):
         estimate_size: Int,
         leaf_capacity: Int,
     ) raises:
-        self.gy = arena.device[DType.float32](ctx, estimate_size)
-        self.gw = arena.device[DType.float32](ctx, estimate_size)
-        self.gc = arena.device[DType.float32](ctx, estimate_size)
-        self.gb = arena.device[DType.uint32](ctx, estimate_size)
         self.row_index = arena.device[DType.uint32](ctx, estimate_size)
         self.h_rows = arena.host_buffer[DType.uint32](ctx, estimate_size)
         self.dl = arena.device[DType.float32](ctx, leaf_capacity)
@@ -603,18 +622,6 @@ def _ordered_estimate_prepare(
     if estimate_size < 1 or estimate_size > apply_size:
         raise Error("ordered estimation requires 0 < prefix <= cursor size")
     est_times.begin(ctx)
-    ref gy = slot.gy
-    ref gw = slot.gw
-    ref gc = slot.gc
-    ref gb = slot.gb
-    ctx.enqueue_function[_ordered_gather_kernel](
-        y.unsafe_ptr(), weights.unsafe_ptr(), permutation.unsafe_ptr(),
-        cursor.unsafe_ptr(), bins.unsafe_ptr(), gy.unsafe_ptr(),
-        gw.unsafe_ptr(), gc.unsafe_ptr(), gb.unsafe_ptr(), Int32(estimate_size),
-        grid_dim=(_grid(estimate_size), 1, 1), block_dim=(ORDERED_BLOCK, 1, 1),
-    )
-    est_times.end(ctx, "est.gather")
-    est_times.begin(ctx)
     var sizes = List[Int]()
     var offsets = List[Int]()
     _partition_into(
@@ -623,12 +630,24 @@ def _ordered_estimate_prepare(
     )
     est_times.end(ctx, "est.partition")
     est_times.begin(ctx)
+    # the gather into permutation order and the estimator's stage-in, as
+    # one pass straight into this task's estimation workspace
+    estimate_workspace(ctx, est_ws, arena, estimate_size, n_leaves)
+    ctx.enqueue_function[_ord_stage_in_kernel](
+        y.unsafe_ptr(), weights.unsafe_ptr(), permutation.unsafe_ptr(),
+        cursor.unsafe_ptr(), slot.row_index.unsafe_ptr(),
+        est_ws[0].g_target.unsafe_ptr(), est_ws[0].g_weights.unsafe_ptr(),
+        est_ws[0].g_cursor.unsafe_ptr(), Int32(estimate_size),
+        grid_dim=(_grid(estimate_size), 1, 1), block_dim=(ORDERED_BLOCK, 1, 1),
+    )
+    est_times.end(ctx, "est.gather")
+    est_times.begin(ctx)
     var est = _estimate_prepare(
         ctx, estimate_size, n_leaves, sizes, offsets,
-        slot.row_index, gy, gw, True, gc, opts.objective,
+        slot.row_index, y, weights, True, cursor, opts.objective,
         opts.kernel_alpha, opts.estimator_alpha, opts.logloss_border,
         opts.l2_leaf_reg, sm_count, opts.leaf_method, est_ws, arena,
-        walker_times,
+        walker_times, staged=True,
     )
     est_times.end(ctx, "est.estimate_and_apply")
     return _OrderedPending(est^, apply_size)
@@ -657,8 +676,9 @@ def _ordered_estimate_complete(
     var not_pd = 0
     est_times.begin(ctx)
     _estimate_complete(
-        ctx, pending.est, slot.row_index, slot.gc, opts.learning_rate,
+        ctx, pending.est, slot.row_index, cursor, opts.learning_rate,
         leaves, not_pd, trace, walker_times, tag, est_ws,
+        append_to_cursor=False,
     )
     est_times.end(ctx, "est.estimate_and_apply")
     est_times.begin(ctx)
