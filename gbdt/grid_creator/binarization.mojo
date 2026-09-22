@@ -42,7 +42,7 @@ The border between two bins is the MIDPOINT of the values either side
 (`:1367`), not one of the values.
 """
 
-from std.math import log
+
 from std.sys.compile import is_defined
 
 from checks.numerics import ftz, portable_log64
@@ -56,8 +56,20 @@ the binary searches, which return the same indices. RUN OWED; see
 
 def _penalty_max_sum_log(weight: Float64) -> Float64:
     """`Penalty<EPenaltyType::MaxSumLog>` (`:179`). The `1e-8` is theirs and
-    is what keeps a bin of size zero finite."""
-    return -log(weight + 1e-8)
+    is what keeps a bin of size zero finite.
+
+    DEVIATION 2263 applied here too (2026-09-22): `portable_log64`, not
+    `std.math.log`. The heap compares split scores of DIFFERENT bins, and
+    the `1e-8` makes mathematically equal scores differ by ~1e-10: bins
+    3+6 of 9 and 4+4 of 8 both score log 2, and the epsilon separates them
+    by 1.4e-10, while `std.math.log` errs by ~5e-11 per call (three calls
+    per score). That noise flipped the heap order on duplicate-heavy
+    columns: a pip-install smoke test found 4 of 120 random columns whose
+    borders differed from CatBoost's (70 rows, border_count 27: a border at
+    -0.515 where CatBoost has 0.860), and a correctly rounded log matched
+    CatBoost on 399 of 399. `portable_log64` is within 2 ulp and gives the
+    same bits on every host and device."""
+    return -portable_log64(weight + 1e-8)
 
 
 struct TFeatureBin(Copyable, ImplicitlyCopyable, Movable):
@@ -453,16 +465,10 @@ def _penalty_min_entropy(weight: Float64) -> Float64:
     1-ULP near-tie, or accept a documented tolerance ONLY where the input
     is such a near-tie. Do not reach for libm again to make it green.
 
-    MEASURED AND CLOSED: `_penalty_max_sum_log` above deliberately still
-    calls `std.math.log`, and that is now a result rather than an omission.
-    `GreedyLogSum` ties for a DIFFERENT structural reason and is not
-    exposed. Its tied scores come from IDENTICAL integer bin sizes, so both
-    sides are computed from the same inputs and any deterministic log
-    returns the same bits; MinEntropy's tied costs are reached by DIFFERENT
-    summation paths, which is what let 5e-8 of noise pull them apart.
-    `pixi run check-greedylogsum` swapped libm in on tie-heavy columns at
-    budgets 37, 63, 100 and 200 and nothing moved, while flipping one
-    comparison in the heap pop broke 4 of 6 cases. Do not "fix" it.
+    `_penalty_max_sum_log` (GreedyLogSum) calls `portable_log64` as well.
+    Its heap compares scores of bins with DIFFERENT integer sizes whose
+    exact values differ by ~1e-10 (the `1e-8` epsilon's doing), inside
+    `std.math.log`'s error; see its docstring for the measured divergence.
     """
     return weight * portable_log64(weight + 1e-8)  # DEVIATION 2263
 

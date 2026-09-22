@@ -19,6 +19,12 @@ control that must STAY green when the others go red.
 Proven to have teeth: flipping the pop's equal-pair comparison from LEFT to
 RIGHT child fails 4 of 6 cases, 93 of 100 borders on two of them, while
 budget 15 stays exact exactly as the tier argument predicts.
+
+Cases 6 onward are 120 seeded random duplicate-heavy columns (the near-tie
+shape: the penalty's `1e-8` separates equal-in-theory scores of DIFFERENT
+bin sizes by ~1e-10). They guard the penalty's log: with `std.math.log` in
+place of `portable_log64`, cases 26, 32, 94 and 121 fail (measured
+2026-09-22), and all 126 pass with `portable_log64`.
 """
 from gbdt.grid_creator.binarization import best_split
 
