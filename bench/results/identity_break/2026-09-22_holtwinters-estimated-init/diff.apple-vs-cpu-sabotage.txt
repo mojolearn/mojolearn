@@ -1,0 +1,306 @@
+NOTE: --lanes scopes this diff to 4 lane(s); 0 other lane(s) the JSONs carry are not compared
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host'] commit=3e7d0f47501c8e0f776dcdcfedeb45ffd6a28d28
+| lane/fixture                 | verdict    | apple-m4         | cpu-apple-m4     |
+|------------------------------|------------|------------------|------------------|
+| holtwinters-multiplicative/base | DIVERGENT  | parts differ: forecast; agree: - | fdd5d8eba1cac612 |
+| holtwinters-multiplicative/denormal | DIVERGENT  | parts differ: forecast; agree: - | 6735b93b8cf9ec19 |
+| holtwinters-multiplicative/denormal_ftz | DIVERGENT  | parts differ: forecast; agree: - | 6735b93b8cf9ec19 |
+| holtwinters-multiplicative/dupes | DIVERGENT  | parts differ: forecast; agree: - | fdd5d8eba1cac612 |
+| holtwinters-multiplicative/hashed | DIVERGENT  | parts differ: forecast; agree: - | ef373873078321ed |
+| holtwinters-multiplicative/negative | DIVERGENT  | parts differ: forecast; agree: - | d3f32961417fabd3 |
+| holtwinters-multiplicative/odd | DIVERGENT  | parts differ: forecast; agree: - | defd7a6f581e9066 |
+| holtwinters-multiplicative/ties | DIVERGENT  | parts differ: forecast; agree: - | fd57e9a2ac1b258f |
+| holtwinters-multiplicative/wide | DIVERGENT  | parts differ: forecast; agree: - | 8941934588afb03c |
+| holtwinters/base             | DIVERGENT  | parts differ: forecast; agree: - | 17636b95ed11c68b |
+| holtwinters/denormal         | DIVERGENT  | parts differ: forecast; agree: - | 6735b93b8cf9ec19 |
+| holtwinters/denormal_ftz     | DIVERGENT  | parts differ: forecast; agree: - | 6735b93b8cf9ec19 |
+| holtwinters/dupes            | DIVERGENT  | parts differ: forecast; agree: - | 17636b95ed11c68b |
+| holtwinters/hashed           | DIVERGENT  | parts differ: forecast; agree: - | b85a2e26aeeabbaa |
+| holtwinters/negative         | DIVERGENT  | parts differ: forecast; agree: - | 085a56b03095173a |
+| holtwinters/odd              | DIVERGENT  | parts differ: forecast; agree: - | a3ebd19cfd2bca04 |
+| holtwinters/ties             | DIVERGENT  | parts differ: forecast; agree: - | 2dfc08010f6223c9 |
+| holtwinters/wide             | DIVERGENT  | parts differ: forecast; agree: - | 9d14011296ee02c0 |
+| par-forecast-holtwinters/base | DIVERGENT  | parts differ: predict,forecast,indexed; agree: - | 3187d2a867b9c0c6 |
+| par-forecast-holtwinters/denormal | DIVERGENT  | parts differ: predict,forecast,indexed; agree: - | 112b55d1f485aa90 |
+| par-forecast-holtwinters/denormal_ftz | DIVERGENT  | parts differ: predict,forecast,indexed; agree: - | 112b55d1f485aa90 |
+| par-forecast-holtwinters/dupes | DIVERGENT  | parts differ: predict,forecast,indexed; agree: - | 3187d2a867b9c0c6 |
+| par-forecast-holtwinters/hashed | DIVERGENT  | parts differ: predict,forecast,indexed; agree: - | 3ae3539fc0683a8c |
+| par-forecast-holtwinters/negative | DIVERGENT  | parts differ: predict,forecast,indexed; agree: - | b3ca7852eaf04298 |
+| par-forecast-holtwinters/odd | DIVERGENT  | parts differ: predict,forecast,indexed; agree: - | c18dd26f12097912 |
+| par-forecast-holtwinters/ties | DIVERGENT  | parts differ: predict,forecast,indexed; agree: - | d6224f1132d5f265 |
+| par-forecast-holtwinters/wide | DIVERGENT  | parts differ: predict,forecast,indexed; agree: - | 40e6dcd7bbb38437 |
+| par-holtwinters/base         | DIVERGENT  | parts differ: level,trend,season,sse,alpha,beta,gamma,n_iter,forecast; agree: criterion | c46c5e601a82eff6 |
+| par-holtwinters/denormal     | DIVERGENT  | parts differ: sse,alpha,beta,gamma,forecast; agree: level,trend,season,n_iter,criterion | 1d1d2de2b718d124 |
+| par-holtwinters/denormal_ftz | DIVERGENT  | parts differ: sse,alpha,beta,gamma,forecast; agree: level,trend,season,n_iter,criterion | 1d1d2de2b718d124 |
+| par-holtwinters/dupes        | DIVERGENT  | parts differ: level,trend,season,sse,alpha,beta,gamma,n_iter,forecast; agree: criterion | c46c5e601a82eff6 |
+| par-holtwinters/hashed       | DIVERGENT  | parts differ: level,trend,season,sse,alpha,beta,gamma,n_iter,forecast; agree: criterion | afda704fe03c825b |
+| par-holtwinters/negative     | DIVERGENT  | parts differ: sse,alpha,beta,gamma,forecast; agree: level,trend,season,n_iter,criterion | c899517023f1ec83 |
+| par-holtwinters/odd          | DIVERGENT  | parts differ: level,trend,season,sse,alpha,beta,gamma,n_iter,criterion,forecast; agree: - | af4f95468b7662bb |
+| par-holtwinters/ties         | DIVERGENT  | parts differ: sse,alpha,beta,gamma,forecast; agree: level,trend,season,n_iter,criterion | e92002463fae95d4 |
+| par-holtwinters/wide         | DIVERGENT  | parts differ: sse,alpha,beta,gamma,forecast; agree: level,trend,season,n_iter,criterion | d0e787da334db180 |
+
+summary: DIVERGENT=36
+
+| lane/fixture                 | column | verdict      | apple-m4         | cpu-apple-m4     |
+|------------------------------|--------|--------------|------------------|------------------|
+| holtwinters-multiplicative/base | infer  | DIVERGENT    | 1923ecf4aa468950 | 7766dc22f1dab5e0 |
+| holtwinters-multiplicative/base | model  | DIVERGENT    | 316342a94d89d5c1 | e346f0a8f884dd7b |
+| holtwinters-multiplicative/base | batch  | DIVERGENT    | 6930ca7bf90707da | 18bc74ecdbb7a1b1 |
+| holtwinters-multiplicative/base | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| holtwinters-multiplicative/base | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| holtwinters-multiplicative/base | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| holtwinters-multiplicative/base | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| holtwinters-multiplicative/denormal | infer  | DIVERGENT    | 5e7dba822d698dd4 | e4d1fb4fb6483655 |
+| holtwinters-multiplicative/denormal | model  | DIVERGENT    | b1e5b27840f59ee3 | 43a630c78f1bc87c |
+| holtwinters-multiplicative/denormal | batch  | DIVERGENT    | 0b25b078a96b247e | 875a061dd457af0a |
+| holtwinters-multiplicative/denormal | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| holtwinters-multiplicative/denormal | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| holtwinters-multiplicative/denormal | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| holtwinters-multiplicative/denormal | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| holtwinters-multiplicative/denormal_ftz | infer  | DIVERGENT    | 5e7dba822d698dd4 | e4d1fb4fb6483655 |
+| holtwinters-multiplicative/denormal_ftz | model  | DIVERGENT    | b1e5b27840f59ee3 | 43a630c78f1bc87c |
+| holtwinters-multiplicative/denormal_ftz | batch  | DIVERGENT    | 0b25b078a96b247e | 875a061dd457af0a |
+| holtwinters-multiplicative/denormal_ftz | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| holtwinters-multiplicative/denormal_ftz | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| holtwinters-multiplicative/denormal_ftz | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| holtwinters-multiplicative/denormal_ftz | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| holtwinters-multiplicative/dupes | infer  | DIVERGENT    | 1923ecf4aa468950 | 7766dc22f1dab5e0 |
+| holtwinters-multiplicative/dupes | model  | DIVERGENT    | 316342a94d89d5c1 | e346f0a8f884dd7b |
+| holtwinters-multiplicative/dupes | batch  | DIVERGENT    | 6930ca7bf90707da | 18bc74ecdbb7a1b1 |
+| holtwinters-multiplicative/dupes | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| holtwinters-multiplicative/dupes | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| holtwinters-multiplicative/dupes | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| holtwinters-multiplicative/dupes | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| holtwinters-multiplicative/hashed | infer  | DIVERGENT    | cce5c144749e2d29 | a2d42a9eeb3bc24f |
+| holtwinters-multiplicative/hashed | model  | DIVERGENT    | 3fcbde97d3f830b0 | 63dd242457791c03 |
+| holtwinters-multiplicative/hashed | batch  | DIVERGENT    | 36d518fb04b2d7d9 | 6e730026f6dbdd1f |
+| holtwinters-multiplicative/hashed | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| holtwinters-multiplicative/hashed | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| holtwinters-multiplicative/hashed | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| holtwinters-multiplicative/hashed | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| holtwinters-multiplicative/negative | infer  | DIVERGENT    | 6f24666c34c57ce2 | 4ed75450de556310 |
+| holtwinters-multiplicative/negative | model  | DIVERGENT    | ec71aa6253751d3b | b99a95cbb2453916 |
+| holtwinters-multiplicative/negative | batch  | DIVERGENT    | 7d578ce6ff4dca72 | e95f5f7796811b91 |
+| holtwinters-multiplicative/negative | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| holtwinters-multiplicative/negative | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| holtwinters-multiplicative/negative | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| holtwinters-multiplicative/negative | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| holtwinters-multiplicative/odd | infer  | DIVERGENT    | f0e5d8a2b6c65fa1 | 8cd744141350406d |
+| holtwinters-multiplicative/odd | model  | DIVERGENT    | a8cc78e3c3ab4a98 | d42d7ea8b5dbaf80 |
+| holtwinters-multiplicative/odd | batch  | DIVERGENT    | 3b3df44b3e2988dd | 1d7c74f95b48ecc4 |
+| holtwinters-multiplicative/odd | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| holtwinters-multiplicative/odd | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| holtwinters-multiplicative/odd | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| holtwinters-multiplicative/odd | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| holtwinters-multiplicative/ties | infer  | DIVERGENT    | cabd879417793c5c | a770a9fad37f5585 |
+| holtwinters-multiplicative/ties | model  | DIVERGENT    | 4f2f71d0a5ec4125 | c2516747891899d5 |
+| holtwinters-multiplicative/ties | batch  | DIVERGENT    | d1ffb3e9542d465b | 8143c83b84806027 |
+| holtwinters-multiplicative/ties | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| holtwinters-multiplicative/ties | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| holtwinters-multiplicative/ties | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| holtwinters-multiplicative/ties | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| holtwinters-multiplicative/wide | infer  | DIVERGENT    | d01a31af70eb81fc | cd7e2522476e9247 |
+| holtwinters-multiplicative/wide | model  | DIVERGENT    | a1b52629bf46db7c | d2b67e4e41efd2ed |
+| holtwinters-multiplicative/wide | batch  | DIVERGENT    | 052d4b02ac13150f | 9d7820a2f925275a |
+| holtwinters-multiplicative/wide | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| holtwinters-multiplicative/wide | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| holtwinters-multiplicative/wide | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| holtwinters-multiplicative/wide | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| holtwinters/base             | infer  | DIVERGENT    | 44ccc710b68fadca | 481f126d98a72474 |
+| holtwinters/base             | model  | DIVERGENT    | 78ff983389a12959 | 6e7391233754b2d9 |
+| holtwinters/base             | batch  | DIVERGENT    | c1e9c2f1bda0935e | cecd37f5351dbc02 |
+| holtwinters/base             | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| holtwinters/base             | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| holtwinters/base             | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| holtwinters/base             | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| holtwinters/denormal         | infer  | DIVERGENT    | 5e7dba822d698dd4 | e4d1fb4fb6483655 |
+| holtwinters/denormal         | model  | DIVERGENT    | 0d96a83353519cac | 44ab468e95b0cdd4 |
+| holtwinters/denormal         | batch  | DIVERGENT    | 0b25b078a96b247e | 875a061dd457af0a |
+| holtwinters/denormal         | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| holtwinters/denormal         | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| holtwinters/denormal         | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| holtwinters/denormal         | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| holtwinters/denormal_ftz     | infer  | DIVERGENT    | 5e7dba822d698dd4 | e4d1fb4fb6483655 |
+| holtwinters/denormal_ftz     | model  | DIVERGENT    | 0d96a83353519cac | 44ab468e95b0cdd4 |
+| holtwinters/denormal_ftz     | batch  | DIVERGENT    | 0b25b078a96b247e | 875a061dd457af0a |
+| holtwinters/denormal_ftz     | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| holtwinters/denormal_ftz     | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| holtwinters/denormal_ftz     | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| holtwinters/denormal_ftz     | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| holtwinters/dupes            | infer  | DIVERGENT    | 44ccc710b68fadca | 481f126d98a72474 |
+| holtwinters/dupes            | model  | DIVERGENT    | 78ff983389a12959 | 6e7391233754b2d9 |
+| holtwinters/dupes            | batch  | DIVERGENT    | c1e9c2f1bda0935e | cecd37f5351dbc02 |
+| holtwinters/dupes            | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| holtwinters/dupes            | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| holtwinters/dupes            | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| holtwinters/dupes            | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| holtwinters/hashed           | infer  | DIVERGENT    | 704f730f62e457ef | 661762da76371d89 |
+| holtwinters/hashed           | model  | DIVERGENT    | 413bb5ade95df112 | d6e0e7b0fd9b4884 |
+| holtwinters/hashed           | batch  | DIVERGENT    | be7b6b82935f4b0a | ecfc2b70ca9c45b7 |
+| holtwinters/hashed           | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| holtwinters/hashed           | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| holtwinters/hashed           | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| holtwinters/hashed           | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| holtwinters/negative         | infer  | DIVERGENT    | 6749e91c85eac58b | 6e93a3df3f097c5e |
+| holtwinters/negative         | model  | DIVERGENT    | 2e6fc91cd5af500c | 6d2e4cb620d1abca |
+| holtwinters/negative         | batch  | DIVERGENT    | 9044038b2d830a74 | 053da5ec6fd427d4 |
+| holtwinters/negative         | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| holtwinters/negative         | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| holtwinters/negative         | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| holtwinters/negative         | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| holtwinters/odd              | infer  | DIVERGENT    | d2df69128cc73273 | ea61175483689195 |
+| holtwinters/odd              | model  | DIVERGENT    | a43c022c1756d711 | ffeae7346344da77 |
+| holtwinters/odd              | batch  | DIVERGENT    | fdeb8696a8b83894 | 5bcc8ca3372203fe |
+| holtwinters/odd              | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| holtwinters/odd              | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| holtwinters/odd              | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| holtwinters/odd              | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| holtwinters/ties             | infer  | DIVERGENT    | dfcedb0048e99751 | 17bbc379122785f2 |
+| holtwinters/ties             | model  | DIVERGENT    | c94a8a39b1858c3b | 04753c8408d46e16 |
+| holtwinters/ties             | batch  | DIVERGENT    | d98c7a31d057b190 | 66637f3e1b5e56c1 |
+| holtwinters/ties             | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| holtwinters/ties             | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| holtwinters/ties             | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| holtwinters/ties             | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| holtwinters/wide             | infer  | DIVERGENT    | a376271e249ed91c | ce479293b26544bf |
+| holtwinters/wide             | model  | DIVERGENT    | 2171881218e50720 | c230c24af4e7c68a |
+| holtwinters/wide             | batch  | DIVERGENT    | 782f89106b8b9c8f | cba30972e9bbd237 |
+| holtwinters/wide             | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| holtwinters/wide             | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| holtwinters/wide             | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| holtwinters/wide             | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| par-forecast-holtwinters/base | infer  | DIVERGENT    | f64346115fd1e485 | c194b5e58fbc1b23 |
+| par-forecast-holtwinters/base | model  | DIVERGENT    | 574f8ee721ff8cb1 | 34de6fc2904f70ad |
+| par-forecast-holtwinters/base | batch  | DIVERGENT    | 5a24aebcd557a49d | 9c2d7eed1bba3343 |
+| par-forecast-holtwinters/base | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| par-forecast-holtwinters/base | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| par-forecast-holtwinters/base | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| par-forecast-holtwinters/base | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| par-forecast-holtwinters/denormal | infer  | DIVERGENT    | c510c55d7fe7634c | cc93f4db4d554e1b |
+| par-forecast-holtwinters/denormal | model  | DIVERGENT    | 4aa7580e6078aafc | c90ee49846c6ff4d |
+| par-forecast-holtwinters/denormal | batch  | DIVERGENT    | e9ecaede17a9e007 | 2e07b728643d996b |
+| par-forecast-holtwinters/denormal | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| par-forecast-holtwinters/denormal | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| par-forecast-holtwinters/denormal | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| par-forecast-holtwinters/denormal | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| par-forecast-holtwinters/denormal_ftz | infer  | DIVERGENT    | c510c55d7fe7634c | cc93f4db4d554e1b |
+| par-forecast-holtwinters/denormal_ftz | model  | DIVERGENT    | 4aa7580e6078aafc | c90ee49846c6ff4d |
+| par-forecast-holtwinters/denormal_ftz | batch  | DIVERGENT    | e9ecaede17a9e007 | 2e07b728643d996b |
+| par-forecast-holtwinters/denormal_ftz | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| par-forecast-holtwinters/denormal_ftz | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| par-forecast-holtwinters/denormal_ftz | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| par-forecast-holtwinters/denormal_ftz | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| par-forecast-holtwinters/dupes | infer  | DIVERGENT    | f64346115fd1e485 | c194b5e58fbc1b23 |
+| par-forecast-holtwinters/dupes | model  | DIVERGENT    | 574f8ee721ff8cb1 | 34de6fc2904f70ad |
+| par-forecast-holtwinters/dupes | batch  | DIVERGENT    | 5a24aebcd557a49d | 9c2d7eed1bba3343 |
+| par-forecast-holtwinters/dupes | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| par-forecast-holtwinters/dupes | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| par-forecast-holtwinters/dupes | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| par-forecast-holtwinters/dupes | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| par-forecast-holtwinters/hashed | infer  | DIVERGENT    | e889103b9e2156b0 | 6f0ec3b50963f52c |
+| par-forecast-holtwinters/hashed | model  | DIVERGENT    | b98682943d8f6ca8 | e6a8719a545d036d |
+| par-forecast-holtwinters/hashed | batch  | DIVERGENT    | 560a4a23f15b7be0 | 44d3063d549d0846 |
+| par-forecast-holtwinters/hashed | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| par-forecast-holtwinters/hashed | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| par-forecast-holtwinters/hashed | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| par-forecast-holtwinters/hashed | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| par-forecast-holtwinters/negative | infer  | DIVERGENT    | 13a2f8d75bb87a49 | 6dd3825779ce64e0 |
+| par-forecast-holtwinters/negative | model  | DIVERGENT    | 141468532f9d578b | b68b05449a2dcbc5 |
+| par-forecast-holtwinters/negative | batch  | DIVERGENT    | a514a1878c162023 | 90a76823537d4a6b |
+| par-forecast-holtwinters/negative | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| par-forecast-holtwinters/negative | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| par-forecast-holtwinters/negative | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| par-forecast-holtwinters/negative | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| par-forecast-holtwinters/odd | infer  | DIVERGENT    | d703e84ef2619c33 | d8cc18bed57c0e5f |
+| par-forecast-holtwinters/odd | model  | DIVERGENT    | faaf3751f5a7301c | 586a434d94917fe6 |
+| par-forecast-holtwinters/odd | batch  | DIVERGENT    | a2d6bea9501142fa | 099a39e788ff0ceb |
+| par-forecast-holtwinters/odd | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| par-forecast-holtwinters/odd | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| par-forecast-holtwinters/odd | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| par-forecast-holtwinters/odd | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| par-forecast-holtwinters/ties | infer  | DIVERGENT    | e30245aa5f954cac | 718e449de947d655 |
+| par-forecast-holtwinters/ties | model  | DIVERGENT    | c4bf3300c250e545 | d337d165f3c58813 |
+| par-forecast-holtwinters/ties | batch  | DIVERGENT    | e3896bd322189e93 | fd665192c4849244 |
+| par-forecast-holtwinters/ties | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| par-forecast-holtwinters/ties | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| par-forecast-holtwinters/ties | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| par-forecast-holtwinters/ties | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| par-forecast-holtwinters/wide | infer  | DIVERGENT    | d50097a2978e191d | af6d24909f1875fc |
+| par-forecast-holtwinters/wide | model  | DIVERGENT    | 3b98cc951a655fda | 95640930cd0fe6f3 |
+| par-forecast-holtwinters/wide | batch  | DIVERGENT    | d5f4a7f92e1a7de5 | 0e6fba4c06e6f4da |
+| par-forecast-holtwinters/wide | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| par-forecast-holtwinters/wide | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| par-forecast-holtwinters/wide | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| par-forecast-holtwinters/wide | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| par-holtwinters/base         | infer  | DIVERGENT    | 1832b9c59bc8b03d | 3c5b1f5aca94de94 |
+| par-holtwinters/base         | model  | DIVERGENT    | 574f8ee721ff8cb1 | 34de6fc2904f70ad |
+| par-holtwinters/base         | batch  | DIVERGENT    | be72b2532c5f96bc | 02892936fa6d2046 |
+| par-holtwinters/base         | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| par-holtwinters/base         | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| par-holtwinters/base         | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| par-holtwinters/base         | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| par-holtwinters/denormal     | infer  | DIVERGENT    | f2b078793277ad49 | 071ab669cda442b6 |
+| par-holtwinters/denormal     | model  | DIVERGENT    | 4aa7580e6078aafc | c90ee49846c6ff4d |
+| par-holtwinters/denormal     | batch  | DIVERGENT    | 0276ee3ed5014cbe | 779886873a5f7520 |
+| par-holtwinters/denormal     | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| par-holtwinters/denormal     | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| par-holtwinters/denormal     | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| par-holtwinters/denormal     | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| par-holtwinters/denormal_ftz | infer  | DIVERGENT    | f2b078793277ad49 | 071ab669cda442b6 |
+| par-holtwinters/denormal_ftz | model  | DIVERGENT    | 4aa7580e6078aafc | c90ee49846c6ff4d |
+| par-holtwinters/denormal_ftz | batch  | DIVERGENT    | 0276ee3ed5014cbe | 779886873a5f7520 |
+| par-holtwinters/denormal_ftz | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| par-holtwinters/denormal_ftz | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| par-holtwinters/denormal_ftz | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| par-holtwinters/denormal_ftz | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| par-holtwinters/dupes        | infer  | DIVERGENT    | 1832b9c59bc8b03d | 3c5b1f5aca94de94 |
+| par-holtwinters/dupes        | model  | DIVERGENT    | 574f8ee721ff8cb1 | 34de6fc2904f70ad |
+| par-holtwinters/dupes        | batch  | DIVERGENT    | be72b2532c5f96bc | 02892936fa6d2046 |
+| par-holtwinters/dupes        | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| par-holtwinters/dupes        | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| par-holtwinters/dupes        | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| par-holtwinters/dupes        | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| par-holtwinters/hashed       | infer  | DIVERGENT    | 90d70c35aadb11c9 | aa7ad693aa625583 |
+| par-holtwinters/hashed       | model  | DIVERGENT    | b98682943d8f6ca8 | e6a8719a545d036d |
+| par-holtwinters/hashed       | batch  | DIVERGENT    | 08ce1bd3003a71cd | d3a7d419dde5857f |
+| par-holtwinters/hashed       | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| par-holtwinters/hashed       | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| par-holtwinters/hashed       | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| par-holtwinters/hashed       | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| par-holtwinters/negative     | infer  | DIVERGENT    | 2f54f0a7e7459c4e | 61d04a1e534fb219 |
+| par-holtwinters/negative     | model  | DIVERGENT    | 141468532f9d578b | b68b05449a2dcbc5 |
+| par-holtwinters/negative     | batch  | DIVERGENT    | 698bb594ff2171f1 | 8e88e264c0d57d32 |
+| par-holtwinters/negative     | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| par-holtwinters/negative     | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| par-holtwinters/negative     | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| par-holtwinters/negative     | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| par-holtwinters/odd          | infer  | DIVERGENT    | 6f32a9c34e5ac7b8 | 78fb7703ae8ce91d |
+| par-holtwinters/odd          | model  | DIVERGENT    | faaf3751f5a7301c | 586a434d94917fe6 |
+| par-holtwinters/odd          | batch  | DIVERGENT    | 81786de0c60ca916 | e99228c94adaa627 |
+| par-holtwinters/odd          | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| par-holtwinters/odd          | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| par-holtwinters/odd          | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| par-holtwinters/odd          | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| par-holtwinters/ties         | infer  | DIVERGENT    | 7a915105e1ca5b11 | c9f463d39664af8c |
+| par-holtwinters/ties         | model  | DIVERGENT    | c4bf3300c250e545 | d337d165f3c58813 |
+| par-holtwinters/ties         | batch  | DIVERGENT    | 1e600e09d2510aa4 | f5035c7638360af3 |
+| par-holtwinters/ties         | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| par-holtwinters/ties         | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| par-holtwinters/ties         | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| par-holtwinters/ties         | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+| par-holtwinters/wide         | infer  | DIVERGENT    | 2386650c48b3097e | d84f216c0edff447 |
+| par-holtwinters/wide         | model  | DIVERGENT    | 3b98cc951a655fda | 95640930cd0fe6f3 |
+| par-holtwinters/wide         | batch  | DIVERGENT    | 84b63fed1986c0e4 | 98d39d13323849a5 |
+| par-holtwinters/wide         | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  |
+| par-holtwinters/wide         | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| par-holtwinters/wide         | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| par-holtwinters/wide         | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state |
+
+summary (infer/model): DIVERGENT=72
+summary (batch): DIVERGENT=36
+summary (rlpair): 
+summary (batchgrad): N/A=36
+summary (batchscale): N/A=36
+summary (ragged): N/A=36
+summary (stepfull): N/A=36
+require-columns 2 over ['holtwinters', 'holtwinters-multiplicative', 'par-forecast-holtwinters', 'par-holtwinters']: OK

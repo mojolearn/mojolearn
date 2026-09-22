@@ -1,0 +1,155 @@
+# vendor=apple-m4 commit=3e7d0f47501c8e0f776dcdcfedeb45ffd6a28d28 (git rev-parse HEAD)
+# identity_break  mode=identical  2026-09-22 12:21:40  macOS-26.5.2-arm64-arm-64bit-Mach-O
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START holtwinters/base repeat=1/train
+# DONE holtwinters/base repeat=1/train 0.139s
+# START holtwinters/base repeat=1/infer-save-reload
+# DONE holtwinters/base repeat=1/infer-save-reload 0.012s
+# START holtwinters/base repeat=1/batch
+# DONE holtwinters/base repeat=1/batch 0.005s
+# START holtwinters/base repeat=1/batchgrad
+# DONE holtwinters/base repeat=1/batchgrad 0.000s
+# START holtwinters/base repeat=1/batchscale
+# DONE holtwinters/base repeat=1/batchscale 0.000s
+# START holtwinters/base repeat=1/ragged
+# DONE holtwinters/base repeat=1/ragged 0.000s
+# START holtwinters/base repeat=1/stepfull
+# DONE holtwinters/base repeat=1/stepfull 0.000s
+# CELL holtwinters/base STABLE 0.156s
+# START holtwinters/ties repeat=1/train
+# DONE holtwinters/ties repeat=1/train 0.100s
+# START holtwinters/ties repeat=1/infer-save-reload
+# DONE holtwinters/ties repeat=1/infer-save-reload 0.007s
+# START holtwinters/ties repeat=1/batch
+# DONE holtwinters/ties repeat=1/batch 0.004s
+# START holtwinters/ties repeat=1/batchgrad
+# DONE holtwinters/ties repeat=1/batchgrad 0.000s
+# START holtwinters/ties repeat=1/batchscale
+# DONE holtwinters/ties repeat=1/batchscale 0.000s
+# START holtwinters/ties repeat=1/ragged
+# DONE holtwinters/ties repeat=1/ragged 0.000s
+# START holtwinters/ties repeat=1/stepfull
+# DONE holtwinters/ties repeat=1/stepfull 0.000s
+# CELL holtwinters/ties STABLE 0.111s
+# START holtwinters/hashed repeat=1/train
+# DONE holtwinters/hashed repeat=1/train 0.076s
+# START holtwinters/hashed repeat=1/infer-save-reload
+# DONE holtwinters/hashed repeat=1/infer-save-reload 0.006s
+# START holtwinters/hashed repeat=1/batch
+# DONE holtwinters/hashed repeat=1/batch 0.004s
+# START holtwinters/hashed repeat=1/batchgrad
+# DONE holtwinters/hashed repeat=1/batchgrad 0.000s
+# START holtwinters/hashed repeat=1/batchscale
+# DONE holtwinters/hashed repeat=1/batchscale 0.000s
+# START holtwinters/hashed repeat=1/ragged
+# DONE holtwinters/hashed repeat=1/ragged 0.000s
+# START holtwinters/hashed repeat=1/stepfull
+# DONE holtwinters/hashed repeat=1/stepfull 0.000s
+# CELL holtwinters/hashed STABLE 0.087s
+# START holtwinters/wide repeat=1/train
+# DONE holtwinters/wide repeat=1/train 0.081s
+# START holtwinters/wide repeat=1/infer-save-reload
+# DONE holtwinters/wide repeat=1/infer-save-reload 0.007s
+# START holtwinters/wide repeat=1/batch
+# DONE holtwinters/wide repeat=1/batch 0.005s
+# START holtwinters/wide repeat=1/batchgrad
+# DONE holtwinters/wide repeat=1/batchgrad 0.000s
+# START holtwinters/wide repeat=1/batchscale
+# DONE holtwinters/wide repeat=1/batchscale 0.000s
+# START holtwinters/wide repeat=1/ragged
+# DONE holtwinters/wide repeat=1/ragged 0.000s
+# START holtwinters/wide repeat=1/stepfull
+# DONE holtwinters/wide repeat=1/stepfull 0.000s
+# CELL holtwinters/wide STABLE 0.093s
+# START holtwinters/denormal repeat=1/train
+# DONE holtwinters/denormal repeat=1/train 0.048s
+# START holtwinters/denormal repeat=1/infer-save-reload
+# DONE holtwinters/denormal repeat=1/infer-save-reload 0.007s
+# START holtwinters/denormal repeat=1/batch
+# DONE holtwinters/denormal repeat=1/batch 0.005s
+# START holtwinters/denormal repeat=1/batchgrad
+# DONE holtwinters/denormal repeat=1/batchgrad 0.000s
+# START holtwinters/denormal repeat=1/batchscale
+# DONE holtwinters/denormal repeat=1/batchscale 0.000s
+# START holtwinters/denormal repeat=1/ragged
+# DONE holtwinters/denormal repeat=1/ragged 0.000s
+# START holtwinters/denormal repeat=1/stepfull
+# DONE holtwinters/denormal repeat=1/stepfull 0.000s
+# CELL holtwinters/denormal STABLE 0.060s
+# START holtwinters/denormal_ftz repeat=1/train
+# DONE holtwinters/denormal_ftz repeat=1/train 0.047s
+# START holtwinters/denormal_ftz repeat=1/infer-save-reload
+# DONE holtwinters/denormal_ftz repeat=1/infer-save-reload 0.007s
+# START holtwinters/denormal_ftz repeat=1/batch
+# DONE holtwinters/denormal_ftz repeat=1/batch 0.005s
+# START holtwinters/denormal_ftz repeat=1/batchgrad
+# DONE holtwinters/denormal_ftz repeat=1/batchgrad 0.000s
+# START holtwinters/denormal_ftz repeat=1/batchscale
+# DONE holtwinters/denormal_ftz repeat=1/batchscale 0.000s
+# START holtwinters/denormal_ftz repeat=1/ragged
+# DONE holtwinters/denormal_ftz repeat=1/ragged 0.000s
+# START holtwinters/denormal_ftz repeat=1/stepfull
+# DONE holtwinters/denormal_ftz repeat=1/stepfull 0.000s
+# CELL holtwinters/denormal_ftz STABLE 0.060s
+# START holtwinters/dupes repeat=1/train
+# DONE holtwinters/dupes repeat=1/train 0.078s
+# START holtwinters/dupes repeat=1/infer-save-reload
+# DONE holtwinters/dupes repeat=1/infer-save-reload 0.007s
+# START holtwinters/dupes repeat=1/batch
+# DONE holtwinters/dupes repeat=1/batch 0.005s
+# START holtwinters/dupes repeat=1/batchgrad
+# DONE holtwinters/dupes repeat=1/batchgrad 0.000s
+# START holtwinters/dupes repeat=1/batchscale
+# DONE holtwinters/dupes repeat=1/batchscale 0.000s
+# START holtwinters/dupes repeat=1/ragged
+# DONE holtwinters/dupes repeat=1/ragged 0.000s
+# START holtwinters/dupes repeat=1/stepfull
+# DONE holtwinters/dupes repeat=1/stepfull 0.000s
+# CELL holtwinters/dupes STABLE 0.090s
+# START holtwinters/odd repeat=1/train
+# DONE holtwinters/odd repeat=1/train 0.049s
+# START holtwinters/odd repeat=1/infer-save-reload
+# DONE holtwinters/odd repeat=1/infer-save-reload 0.006s
+# START holtwinters/odd repeat=1/batch
+# DONE holtwinters/odd repeat=1/batch 0.004s
+# START holtwinters/odd repeat=1/batchgrad
+# DONE holtwinters/odd repeat=1/batchgrad 0.000s
+# START holtwinters/odd repeat=1/batchscale
+# DONE holtwinters/odd repeat=1/batchscale 0.000s
+# START holtwinters/odd repeat=1/ragged
+# DONE holtwinters/odd repeat=1/ragged 0.000s
+# START holtwinters/odd repeat=1/stepfull
+# DONE holtwinters/odd repeat=1/stepfull 0.000s
+# CELL holtwinters/odd STABLE 0.074s
+# START holtwinters/negative repeat=1/train
+# DONE holtwinters/negative repeat=1/train 0.100s
+# START holtwinters/negative repeat=1/infer-save-reload
+# DONE holtwinters/negative repeat=1/infer-save-reload 0.006s
+# START holtwinters/negative repeat=1/batch
+# DONE holtwinters/negative repeat=1/batch 0.004s
+# START holtwinters/negative repeat=1/batchgrad
+# DONE holtwinters/negative repeat=1/batchgrad 0.000s
+# START holtwinters/negative repeat=1/batchscale
+# DONE holtwinters/negative repeat=1/batchscale 0.000s
+# START holtwinters/negative repeat=1/ragged
+# DONE holtwinters/negative repeat=1/ragged 0.000s
+# START holtwinters/negative repeat=1/stepfull
+# DONE holtwinters/negative repeat=1/stepfull 0.000s
+# CELL holtwinters/negative STABLE 0.110s
+| holtwinters            | a6a3572430bf4caf | ffbe8f0403c7d726 | f982611b6394b32c | 236580f3b9cca265 | db35c88da059e9e1 | db35c88da059e9e1 | a6a3572430bf4caf | 059fe095ee61a506 | 4d85f2b280422343 |
+| holtwinters infer      | 44ccc710b68fadca | dfcedb0048e99751 | 704f730f62e457ef | a376271e249ed91c | 5e7dba822d698dd4 | 5e7dba822d698dd4 | 44ccc710b68fadca | d2df69128cc73273 | 6749e91c85eac58b |
+| holtwinters model      | 78ff983389a12959 | c94a8a39b1858c3b | 413bb5ade95df112 | 2171881218e50720 | 0d96a83353519cac | 0d96a83353519cac | 78ff983389a12959 | a43c022c1756d711 | 2e6fc91cd5af500c |
+| holtwinters batch      | c1e9c2f1bda0935e | d98c7a31d057b190 | be7b6b82935f4b0a | 782f89106b8b9c8f | 0b25b078a96b247e | 0b25b078a96b247e | c1e9c2f1bda0935e | fdeb8696a8b83894 | 9044038b2d830a74 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+batchgrad: n/a=9
+batchscale: n/a=9
+ragged: n/a=9
+stepfull: n/a=9
+n/a: holtwinters batchgrad n/a:no-backward, holtwinters batchscale n/a:not-in-the-serving-set, holtwinters ragged n/a:no-sequence-axis, holtwinters stepfull n/a:no-decode-state
+wrote bench/results/identity_break/2026-09-22_holtwinters-estimated-init/legs/apple-m4.holtwinters.json
