@@ -714,6 +714,7 @@ def _estimate_and_apply(
     # block). Reuse is safe because every consumer of the previous task's
     # contents drained at that task's tail (DEVIATION 1891), and the
     # gathers below overwrite every cell this task reads.
+    stage_times.begin(ctx)
     if (
         len(est_ws) == 0
         or est_ws[0].n_rows_key != n_rows
@@ -815,6 +816,8 @@ def _estimate_and_apply(
     if yeti.__bool__():
         # the same inverse bin order, for the YetiRank der calcer
         launch_inverse_permutation(ctx, row_index, yeti.value().query.inverse, n_rows)
+    stage_times.end(ctx, "est.stage_in")
+    stage_times.begin(ctx)
     var oracle = make_bin_optimized_oracle(
         ctx, n_rows, n_leaves, sizes,
         g_target.copy(), g_weights.copy(), g_cursor.copy(),
@@ -834,6 +837,7 @@ def _estimate_and_apply(
         yeti_seed,
         oracle_ws^,
     )
+    stage_times.end(ctx, "est.make_oracle")
     # `TDocParallelLeavesEstimator::Estimate`
     # (`doc_parallel_leaves_estimator.cpp:9-16`): Exact REPLACES
     # the walker, it does not configure it.
@@ -901,6 +905,7 @@ def _estimate_and_apply(
             + " leaf values for " + String(n_leaves) + " leaves x "
             + String(approx_dim) + " dims"
         )
+    stage_times.begin(ctx)
     for i in range(est_len):
         h_est.unsafe_ptr().unsafe_store(i, estimated[i])
     ctx.enqueue_copy(dst_buf=d_est, src_ptr=h_est.unsafe_ptr())
@@ -934,6 +939,7 @@ def _estimate_and_apply(
     #     Exact path's trailing `move_to` operands) under queued work --
     #     the step-33 race class, device side.
     ctx.synchronize()
+    stage_times.end(ctx, "est.tail_apply")
     _ = oracle^  # past the drain (step-33 race class, device side)
 
 
