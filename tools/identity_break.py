@@ -10021,21 +10021,33 @@ class _ScaleRows:
         self.label, self.R, self.fn = label, np.ascontiguousarray(R), fn
 
 
-def _eval_scale_rows(call, sabotage, digest):
+def _eval_scale_rows(call, sabotage, digest, notes):
     n = call.R.shape[0]
     whole = _as_rows(call.fn(call.R), n, f"{call.label} whole B={n}")
     if sabotage:
         _sabotage_rows(whole)
+    # THE BATCHES THIS CALL ACTUALLY ASKED, not SCALE_BATCHES (2026-09-20).
+    # A sub-batch wider than the whole call cannot be taken, and until this
+    # date the skip was silent: the digest was seeded with the whole tuple
+    # and the JSON recorded `batches=[1,17,64,256]`, so a cell asserted a
+    # size it never ran. `_eval_grad_accum` is the model: the digest carries
+    # what was asked and an `n/a:` note says what was not. Every _ScaleRows
+    # in the tree today holds SCALE_WHOLE=1024 rows, so `asked` is the whole
+    # tuple and no committed cell moves; the claim is now true by
+    # construction rather than by the value of a constant.
+    asked = []
     for b in SCALE_BATCHES:
         if b > n:
+            notes.append(f"{call.label}: B={b} n/a:the whole call is {n} rows, narrower than the sub-batch")
             continue
+        asked.append(b)
         for a in sorted({0, (n - b) // 2, n - b}):
             got = _as_rows(call.fn(np.ascontiguousarray(call.R[a:a + b])), b, f"{call.label} B={b} at {a}")
             for i in range(b):
                 m = _row_mismatch(whole[a + i], got[i], f"B={b} starting at row {a}")
                 if m:
                     return f"BATCH_MOVED:{call.label}:row {a + i} of {n} in B={b} starting at row {a}:{m}"
-    digest.update(f"scale:{call.label}:{n}:{','.join(map(str, SCALE_BATCHES))}".encode())
+    digest.update(f"scale:{call.label}:{n}:{','.join(map(str, asked))}".encode())
     for r in whole:
         for dt, shape, raw in r:
             digest.update(f"{dt}{shape}".encode())
@@ -10493,7 +10505,7 @@ def _probe_part(part, fit, name, ml, Xh, alone, sabotage):
             elif isinstance(call, _GradCarry):
                 moved = _eval_grad_carry(ml, call, sabotage, digest, notes)
             elif isinstance(call, _ScaleRows):
-                moved = _eval_scale_rows(call, flip, digest)
+                moved = _eval_scale_rows(call, flip, digest, notes)
             elif isinstance(call, _RaggedCall):
                 moved = _eval_ragged(call, flip, digest)
             elif isinstance(call, _StepFullCall):
