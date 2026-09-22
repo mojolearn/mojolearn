@@ -106,15 +106,26 @@ def fold_pair(total, shard, *, numpy=None):
         except ImportError:
             np = None
     if np is not None:
-        tb = np.frombuffer(bytes(t.cast("B")), dtype=np.uint32)
-        gb = np.frombuffer(bytes(g.cast("B")), dtype=np.uint32)
+        # In place, over views of the callers' buffers: one owned copy of
+        # each operand's bits, flushed where subnormal, one float32 add
+        # into the first, one flush of the sum. No bytes() round trips and
+        # no np.where temporaries: at 162M elements each of those was a
+        # 649 MB allocation, and a 44-shard fold took 184 s on an H100 pod's
+        # host (bench/results/lm_t1_2026-09-22/live).
+        tb = np.array(np.frombuffer(t.cast("B"), dtype=np.uint32), copy=True)
+        gb = np.array(np.frombuffer(g.cast("B"), dtype=np.uint32), copy=True)
 
-        def ftz(b):
-            sub = ((b & _EXP) == 0) & ((b & _MAN) != 0)
-            return np.where(sub, b & np.uint32(_SIGN), b)
+        def ftz_(b):
+            sub = (b & _EXP) == 0
+            sub &= (b & _MAN) != 0
+            b[sub] &= np.uint32(_SIGN)
+        ftz_(tb)
+        ftz_(gb)
+        tf = tb.view(np.float32)
         with np.errstate(over="ignore", invalid="ignore"):
-            out = ftz(tb).view(np.float32) + ftz(gb).view(np.float32)
-        return ftz(out.view(np.uint32)).tobytes()
+            np.add(tf, gb.view(np.float32), out=tf)
+        ftz_(tb)
+        return tb.tobytes()
     n = len(t)
     out = array.array("f", t)
     sh = array.array("f", g)
