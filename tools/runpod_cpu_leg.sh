@@ -33,6 +33,8 @@
 #   --disk GB            container disk (default 40)
 #   --out DIR            results (default <worktree>/bench/results/runpod_cpu/<stamp>-<lane>)
 #   --no-bincache        build from source
+#   --release-bincache   stage the binding cache map for a command that builds
+#                        through it itself (tools/release_linux_build.sh)
 #   --envcache           restore and upload .pixi/envs from R2 (default OFF: measured
 #                        slower than a locked install on RunPod, 37 s against 12 s)
 #   --max-pods N         refuse when N mojolearn-cpu pods are live (default 8, MOJOLEARN_RUNPOD_CPU_MAX_PODS)
@@ -79,7 +81,7 @@ SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLeve
 LANE=""; CMD=""; CMD_FILE=""; WORKTREE=""; INCLUDES=""; BUILD=""; SAB_BUILD=""
 SAB_DEFINES="-D MOJOLEARN_HOST_SABOTAGE=1"; ENVS="default"; VCPU=8; FLAVORS="cpu3c,cpu5c"
 LEASE=60; JOBS=8; IMAGE="runpod/base:1.3.1-ubuntu2204"; DISK=40; OUT=""; BINCACHE=1; ENVCACHE=0
-STAGE_KEYS=""
+STAGE_KEYS=""; RELEASE_BINCACHE=0
 MAX_PODS=${MOJOLEARN_RUNPOD_CPU_MAX_PODS:-8}; RENT=0
 
 say() { printf '[%s cpu-leg] %s\n' "$(date +%T)" "$*"; }
@@ -231,6 +233,7 @@ ${1:-}" ;;
         --disk) shift; DISK="${1:-}" ;;
         --out) shift; OUT="${1:-}" ;;
         --no-bincache) BINCACHE=0 ;;
+        --release-bincache) RELEASE_BINCACHE=1 ;;
         --envcache) ENVCACHE=1 ;;
         --no-envcache) ENVCACHE=0 ;;
         --max-pods) shift; MAX_PODS="${1:-}" ;;
@@ -301,13 +304,26 @@ PYEOF
 }
 
 write_create_request() {
-    python3 - "$1" "$POD_NAME" "$IMAGE" "$FLAVORS" "$VCPU" "$DISK" <<'PYEOF'
+    python3 - "$1" "$POD_NAME" "$IMAGE" "$FLAVORS" "$VCPU" "$DISK" "$ROOT/tools/runpod_ssh_bootstrap.sh" <<'PYEOF'
 import json, sys
-out, name, image, flavors, vcpu, disk = sys.argv[1:]
+out, name, image, flavors, vcpu, disk, bootstrap = sys.argv[1:]
 req = {"name": name, "imageName": image, "computeType": "CPU",
        "cpuFlavorIds": flavors.split(","), "vcpuCount": int(vcpu),
        "containerDiskInGb": int(disk), "volumeInGb": 0, "ports": ["22/tcp"],
        "supportPublicIp": True, "cloudType": "SECURE"}
+# A PLAIN IMAGE HAS NO RUNPOD START SCRIPT, so it gets the same ssh bootstrap
+# the AMD GPU legs use for rocm/dev images (tools/gemm_remote_leg.sh), after
+# curl, which the watchdog and the cache transfers need. The release CPU build
+# route (tools/release_linux_build.sh) runs on the pinned rocm/dev-ubuntu-22.04
+# image for its GCC 11.4 / ld 2.38 toolchain; nothing it installs is part of
+# that toolchain, and the route asserts the compiler and linker versions.
+if image.startswith(("rocm/dev-", "ubuntu:", "ubuntu@")):
+    pre = ("export DEBIAN_FRONTEND=noninteractive\n"
+           "if ! command -v curl >/dev/null || [ ! -x /usr/sbin/sshd ]; then\n"
+           "  apt-get -o Acquire::Retries=2 update && apt-get -o Acquire::Retries=2 install -y --no-install-recommends curl ca-certificates openssh-server\n"
+           "fi\n")
+    req["dockerEntrypoint"] = ["/bin/bash", "-lc"]
+    req["dockerStartCmd"] = [pre + open(bootstrap).read()]
 open(out, "w").write(json.dumps(req, indent=2) + "\n")
 PYEOF
 }
@@ -735,9 +751,13 @@ say "$(tail -1 "$OUT/cache_plan.log")"
   printf 'CACHE_MAP_EOF\necho CACHE_MAP_OK\n'
 } | bssh 'sh -s' | grep -q CACHE_MAP_OK || die "the cache URL map did not land"
 rm -f "$TMPD/cachemap"
-if [ "$BINCACHE" = 1 ] && [ -n "$BUILD$SAB_BUILD" ]; then
+# --release-bincache (tools/release_linux_build.sh): the command itself builds
+# through the cache (packaging/linux/build_sets.sh), so the map is staged with
+# no --build families, and with enough upload slots for three full sets.
+if [ "$BINCACHE" = 1 ] && { [ -n "$BUILD$SAB_BUILD" ] || [ "$RELEASE_BINCACHE" = 1 ]; }; then
     _neg=0; [ -n "$SAB_BUILD" ] && _neg=1
-    MOJOLEARN_BINCACHE_NEGATIVE=$_neg sh "$ROOT/tools/bincache_leg.sh" stage "$SSH_TARGET" "runpod-cpu:$IMAGE" > "$OUT/bincache_stage.log" 2>&1 || true
+    _slots=64; [ "$RELEASE_BINCACHE" = 1 ] && _slots=192
+    MOJOLEARN_BINCACHE_SLOTS=$_slots MOJOLEARN_BINCACHE_NEGATIVE=$_neg sh "$ROOT/tools/bincache_leg.sh" stage "$SSH_TARGET" "runpod-cpu:$IMAGE" > "$OUT/bincache_stage.log" 2>&1 || true
     say "$(tail -1 "$OUT/bincache_stage.log")"
 fi
 if [ -n "$STAGE_KEYS" ]; then

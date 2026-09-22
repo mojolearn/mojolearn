@@ -15,6 +15,18 @@ case "$vendor:$arch" in
     hip:gfx942) guard=tools/amd_serial_guard.py; column=amd ;;
     *) echo 'Only cuda:sm_89, cuda:sm_90, cuda:sm_90a or hip:gfx942' >&2; exit 2 ;;
 esac
+# THE CPU BUILD ROUTE (tools/release_linux_build.sh, 2026-09-22). Mojo compiles
+# a GPU set ahead of time from --target-accelerator alone (PTX for NVIDIA, a
+# code object for AMD), so a release set does not need its GPU to be BUILT.
+# MOJOLEARN_RELEASE_NO_DEVICE=1 builds on a CPU-only box: the guard is the CPU
+# one (which refuses if any GPU device node is visible), the preflight records
+# that no device was read instead of reading one, and the postflight requires
+# the read-back architecture to equal the requested one. Everything else, the
+# build, the read-backs and the provenance, is the same code as the GPU legs.
+# Proven 2026-09-22 at d181d9792 (0.8.14): every shipped binary byte-identical
+# to the GPU-box builds of the same commit (docs/RELEASE_CHECKLIST.md 2c).
+NO_DEVICE=${MOJOLEARN_RELEASE_NO_DEVICE:-0}
+case "$NO_DEVICE" in 0) ;; 1) guard=tools/cpu_build_guard.py ;; *) echo 'MOJOLEARN_RELEASE_NO_DEVICE must be 0 or 1' >&2; exit 2 ;; esac
 PY=${MOJOLEARN_PYTHON:?existing absolute stdlib Python executable required}
 commit=${MOJOLEARN_COMMIT:?full frozen source commit required}
 seconds=${MOJOLEARN_RELEASE_BUILD_SECONDS:?remaining work seconds, excluding fetch reserve}
@@ -41,6 +53,10 @@ export PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1
 BUILD_JOBS=${MOJOLEARN_BUILD_JOBS:-4}
 [[ "$BUILD_JOBS" =~ ^[1-9][0-9]?$ && "$BUILD_JOBS" -le 16 ]] || { echo 'MOJOLEARN_BUILD_JOBS must be 1..16' >&2; exit 2; }
 BUILD_CORES=$((2 * BUILD_JOBS))
+# The GPU guards cap the build's process group at 12 GiB (their maximum is
+# 16). The CPU box runs more builds at once and is sized at 16 GiB per job.
+BUILD_RSS_GIB=12
+[[ "$NO_DEVICE" = 1 ]] && BUILD_RSS_GIB=$((16 * BUILD_JOBS))
 export MOJOLEARN_BUILD_JOBS=$BUILD_JOBS MOJOLEARN_COMPILE_JOBS=2 MAX_JOBS=2 CMAKE_BUILD_PARALLEL_LEVEL=2
 export MOJOLEARN_CPU_THREADS=2 CARGO_BUILD_JOBS=2 RAYON_NUM_THREADS=2
 export OMP_NUM_THREADS=1 OMP_THREAD_LIMIT=1 OMP_MAX_ACTIVE_LEVELS=1
@@ -74,7 +90,7 @@ trap 'exit 130' INT
 cp "$ROOT/tools/release061_remote_build.sh" "$OUT/campaign-source.sh"
 printf '%s\n' "vendor=$vendor" "architecture=$arch" "source_commit=$commit" \
     "cpu_affinity=$cores" "build_jobs=$BUILD_JOBS" "build_cores=$BUILD_CORES" "work_seconds=$seconds" 'rss_gib=12' 'pixi_environment=default' \
-    "kernel_column=$column" 'linux_cpu=x86-64-v3' "patchelf=$(command -v patchelf)" \
+    "kernel_column=$column" 'linux_cpu=x86-64-v3' "patchelf=$(command -v patchelf)" "no_device=$NO_DEVICE" "build_rss_gib=$BUILD_RSS_GIB" \
     'scope=one architecture full46 build; byte LM IDENTICAL only; no installed wheel or numerical admission' > "$OUT/campaign.txt"
 run() {
     local name=$1 cap=$2 remaining status
@@ -86,11 +102,11 @@ run() {
     fi
     ((cap <= remaining)) || cap=$remaining
     # The build step alone runs on BUILD_CORES; every other job stays on two.
-    local guard_cores=2
-    [[ "$name" = full46-build ]] && guard_cores=$BUILD_CORES
-    printf '%q ' "$PY" "$guard" --seconds "$cap" --rss-gib 12 --cores "$guard_cores" -- "$@" > "$OUT/$name.command.txt"
+    local guard_cores=2 guard_rss=12
+    [[ "$name" = full46-build ]] && guard_cores=$BUILD_CORES && guard_rss=$BUILD_RSS_GIB
+    printf '%q ' "$PY" "$guard" --seconds "$cap" --rss-gib "$guard_rss" --cores "$guard_cores" -- "$@" > "$OUT/$name.command.txt"
     printf '\n' >> "$OUT/$name.command.txt"
-    "$PY" "$guard" --seconds "$cap" --rss-gib 12 --cores "$guard_cores" -- "$@" > "$OUT/$name.log" 2>&1 &
+    "$PY" "$guard" --seconds "$cap" --rss-gib "$guard_rss" --cores "$guard_cores" -- "$@" > "$OUT/$name.log" 2>&1 &
     active_guard=$!
     status=0
     wait "$active_guard" || status=$?
@@ -102,7 +118,7 @@ run() {
 cat > "$OUT/preflight.py" <<'PYPROBE'
 import importlib.util, json, os, pathlib, subprocess, sys
 root, out = map(pathlib.Path, sys.argv[1:3])
-vendor, arch, commit = sys.argv[3:]
+vendor, arch, commit, no_device = sys.argv[3:]
 sys.path.insert(0, str(root / 'tools'))
 from check_linux_release_qualification import native_inventory, inventory_digest
 if (root / '.git').exists():
@@ -125,7 +141,14 @@ spec = importlib.util.spec_from_file_location('release_backend_probe._backend', 
 backend = importlib.util.module_from_spec(spec)
 sys.modules[spec.name] = backend
 spec.loader.exec_module(backend)
-actual_arch, how = backend._device_arch(vendor)
+if no_device == '1':
+    # THE CPU BUILD ROUTE: nothing is read from a device, and that is recorded
+    # as such. The architecture is the requested one; the build's own
+    # arch_readback.txt (build_sets.sh) and the postflight below prove the
+    # binaries carry exactly it.
+    actual_arch, how = arch, 'no-device: CPU build box, target from MOJOLEARN_GPU_ARCHS=' + arch
+else:
+    actual_arch, how = backend._device_arch(vendor)
 # DEVIATION 2293: the device reports sm_90; an sm_90a build targets exactly
 # that chip. This is _backend.py's own selector rule (the `a` restricts WHICH
 # DEVICES, and this is one of them), applied to the build side so the box we
@@ -140,12 +163,13 @@ inventory = native_inventory(root)
 record = dict(schema='mojolearn.release061.build-preflight.v1', source_commit=commit,
               source_inventory=inventory, source_sha256=inventory_digest(inventory),
               vendor=vendor, device_architecture=actual_arch, architecture_probe=how,
+              device_read=(no_device != '1'),
               cpu_affinity=sorted(os.sched_getaffinity(0)), pixi_environment='default',
               scope='Physical device and source witness; no installed qualification')
 (out / 'preflight.json').write_text(json.dumps(record, indent=2) + '\n')
 PYPROBE
 run resource-prefix-tests 45 "$PY" "$ROOT/tools/test_linux_surface_resource_caps.py"
-run physical-source-preflight 60 "$PY" "$OUT/preflight.py" "$ROOT" "$OUT" "$vendor" "$arch" "$commit"
+run physical-source-preflight 60 "$PY" "$OUT/preflight.py" "$ROOT" "$OUT" "$vendor" "$arch" "$commit" "$NO_DEVICE"
 run full46-build 2400 bash "$ROOT/tools/linux_surface_qualification.sh" build "$OUT/build"
 cat > "$OUT/postflight.py" <<'PYPOST'
 import json, pathlib, sys
