@@ -86,6 +86,50 @@ def test_gradient_boosting_refuses_nonfinite_labels():
                 ValueError, "eval_set y must be finite")
 
 
+_NATIVE_NAN_CHILD = r"""
+import math, sys
+import mojolearn as ml
+import mojolearn.randomforest as rfm
+rfm.all_finite = lambda _x: True  # reach the native builder past the Python refusal
+X = [[float((i * 7 + j * 3) % 11) for j in range(4)] for i in range(200)]
+for i in range(200):
+    for j in range(4):
+        if X[i][j] > 6.0:
+            X[i][j] = math.nan
+y = [i % 2 for i in range(200)]
+for est, yy in ((ml.RandomForestClassifier, y), (ml.RandomForestRegressor, [float(v) for v in y])):
+    try:
+        est(n_estimators=2, random_state=0).fit(X, yy)
+    except Exception as e:
+        if "would not terminate" not in str(e):
+            sys.exit(f"{est.__name__}: wrong error {type(e).__name__}: {e}")
+    else:
+        sys.exit(f"{est.__name__}: the native builder accepted NaN")
+X = [[float((i * 7 + j * 3) % 11) for j in range(4)] for i in range(200)]
+for i in range(0, 200, 9):
+    X[i][1] = math.inf
+    X[i][3] = -math.inf
+ml.RandomForestClassifier(n_estimators=2, random_state=0).fit(X, y)
+print("ok")
+"""
+
+
+def test_forest_native_builder_refuses_nan():
+    """The native RF builder itself (pip smoke 2026-09-22): a NaN in X made
+    the fit loop forever at the default unlimited depth, a NaN binning left
+    in the histogram but partitioning right. The builder now refuses it by
+    name; +-inf still fits (it bins and partitions consistently). Run in a
+    child with a timeout, because the defect this guards is a hang."""
+    import subprocess
+    import sys
+    try:
+        r = subprocess.run([sys.executable, "-c", _NATIVE_NAN_CHILD],
+                           capture_output=True, text=True, timeout=300)
+    except subprocess.TimeoutExpired:
+        raise AssertionError("the native forest fit on NaN did not return in 300 s")
+    assert r.returncode == 0 and r.stdout.strip().endswith("ok"), r.stdout + r.stderr
+
+
 def main():
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     for t in tests:
