@@ -462,6 +462,50 @@ answer fails it.
 Two commands, then, and the passing one means something because the other one
 can fail.
 
+### Owed parts the host sabotage cannot move (maintainers)
+
+The CPU identity gate (`.github/workflows/cpu-identity-gate.yml`) has a
+negative control of its own. It builds every host binding again with
+`-D MOJOLEARN_HOST_SABOTAGE=1`, reruns the covered lanes on that set, and
+`tools/cpu_identity_gate_check.py owed` requires every OWED cell part (one no
+committed GPU record hashes yet) to move between the production and the
+sabotage CPU columns. A part that does not move rests on nothing.
+
+A few parts cannot move, because the sabotage faults never reach the bytes
+they hash. They are listed, one entry per lane and part with its fixtures and
+its reason, in `SABOTAGE_EXEMPT_ENTRIES` in `tools/cpu_identity_gate_check.py`.
+Measured on gate run 35728134044, the same 92 parts, and only those, stayed put
+on the x86, ARM64 and macOS runners.
+
+| Lane | Part | Fixtures | Why the sabotage does not reach it |
+|---|---|---|---|
+| `radius`, `radius-manhattan`, `radius-chebyshev`, `radius-minkowski-p3` | model | all 9 | the saved file is the training rows and the knobs; fit computes nothing and the ball cover is built per query |
+| `iforest` | model | all 9 | the saved file is the training matrix, the knobs and a constant `offset_`; the forest is rebuilt on every scoring call and never saved |
+| `rbf-sampler` | model | all 9 | the saved Philox weights and offsets depend only on `n_features` and the seed; the sabotaged GEMM is in `transform`, which is not saved |
+| `kernel-ridge-poly` | model | 8 (all but `negative`) | reached but inert, since the one ulp flip in the kernel matrix does not survive the `alpha=64` solve into the float32 dual |
+| `standard-scaler-no-std` | model | `ties` | reached but inert, since the saved mean is a sum of small integers, exact in float32 in any order |
+| `optim-sgd` | batch | all 9 | the batch arms step SGD without a clip, which is elementwise; only the clip norm is a reduction the sabotage moves |
+| `select-d` | train, batch | all 9 | the result is an integer differencing order, and a one ulp change in the KPSS statistic crosses no threshold |
+| `agglomerative` | batch | `denormal`, `denormal_ftz` | reached but inert, since the 64 held out rows get the same labels with and without the fault |
+
+**These parts are not covered by the sabotage control.** The owed check admits
+them on the production CPU hash and the agreement of the other columns alone.
+Every other part of these lanes still moves, with one exception. `select-d`
+moves in no part at all, so that lane has no negative control in the CPU gate.
+
+The check prints each exempted part as `EXEMPT` and counts them in its verdict
+line, for example `owed verdict OK (4111 of 4203 owed cell part(s) moved, 92
+exempt part(s) did not move as listed, 0 failure(s))`. An exempted part that
+does move fails the check. That is deliberate, not strict. The fixtures are
+seeded and the three runners agree, so a move means a code change now lets the
+fault reach the part, and the entry is stale.
+
+To remove an entry, add a fault the sabotage build reaches that part with (for
+example a value flip in the code that writes the saved file, or a
+`MOJOLEARN_HOST_SABOTAGE` arm on the KPSS decision), rerun the gate, and delete
+the entry once the part moves. A failing `EXEMPT but MOVED` line asks for the
+same deletion.
+
 ## Your GPU against your CPU
 
 The strongest of the three checks, because it requires trusting **nobody**:

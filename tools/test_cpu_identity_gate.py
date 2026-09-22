@@ -587,6 +587,53 @@ class OwedTests(unittest.TestCase):
         self.assertEqual(self.sabotage_check(diverge(['oracle disagrees', '']), readback=True), 1)
         self.assertEqual(self.sabotage_check(diverge([]), readback=True), 1)
 
+    def test_exempted_part_that_does_not_move_passes_and_is_counted(self):
+        def unmoved(cells):
+            cells['km/odd']['batch'] = ['bodd']
+        exempt = (('km', 'batch', ('odd',), 'no host kernel reaches it'),)
+        with patch.object(gate, 'SABOTAGE_EXEMPT_ENTRIES', exempt):
+            self.assertEqual(self.sabotage_check(unmoved), 0)
+        out = self.output.getvalue()
+        self.assertIn('km/odd batch: DID NOT MOVE', out)
+        self.assertIn('EXEMPT (no host kernel reaches it)', out)
+        self.assertIn('owed verdict OK (3 of 4 owed cell part(s) moved, 1 exempt part(s) did not move', out)
+
+    def test_non_exempted_part_that_does_not_move_still_fails(self):
+        def unmoved(cells):
+            cells['km/odd']['batch'] = ['bodd']
+        # an entry for another fixture and another part does not cover km/odd batch
+        exempt = (('km', 'batch', ('base',), 'x'), ('km', 'infer', ('odd',), 'x'))
+        with patch.object(gate, 'SABOTAGE_EXEMPT_ENTRIES', exempt):
+            self.assertEqual(self.sabotage_check(unmoved), 1)
+        out = self.output.getvalue()
+        self.assertIn('owed FAIL: km/odd batch: DID NOT MOVE', out)
+        self.assertIn('owed FAIL: km/base batch: EXEMPT but MOVED', out)
+
+    def test_exempted_part_that_moves_fails_as_stale(self):
+        exempt = (('km', 'batch', ('odd',), 'x'),)
+        with patch.object(gate, 'SABOTAGE_EXEMPT_ENTRIES', exempt):
+            self.assertEqual(self.sabotage_check(lambda cells: None), 1)
+        out = self.output.getvalue()
+        self.assertIn('owed FAIL: km/odd batch: EXEMPT but MOVED', out)
+        self.assertIn('remove its entry from SABOTAGE_EXEMPT_ENTRIES', out)
+        self.assertIn('0 exempt part(s) did not move as listed, 1 failure(s)', out)
+
+    def test_exempted_part_still_needs_a_stable_production_hash_and_a_sabotage_value(self):
+        exempt = (('km', 'infer', ('base',), 'x'),)
+        with patch.object(gate, 'SABOTAGE_EXEMPT_ENTRIES', exempt):
+            self.assertEqual(self.sabotage_check(lambda cells: cells.pop('km/base')), 1)
+        self.assertIn('km/base infer: the sabotage column has no value', self.output.getvalue())
+
+    def test_the_shipped_exempt_list_is_well_formed(self):
+        fixtures = set(load_identity().FIXTURES)
+        keys = gate.exempt_set()
+        self.assertEqual(len(keys), 92)
+        for lane, part, fx, reason in gate.SABOTAGE_EXEMPT_ENTRIES:
+            self.assertIn(part, ('train', 'infer', 'model', 'batch'))
+            self.assertTrue(fx and set(fx) <= fixtures, (lane, fx))
+            self.assertTrue(reason.strip(), lane)
+        self.assertEqual(len(keys), sum(len(e[2]) for e in gate.SABOTAGE_EXEMPT_ENTRIES), 'duplicate entry')
+
     def test_owed_cell_refused_or_absent_under_sabotage_fails(self):
         for mutation in ('refused', 'absent'):
             def mutate(cells):
