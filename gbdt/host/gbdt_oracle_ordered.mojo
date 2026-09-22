@@ -469,6 +469,8 @@ def _ordered_tree_structure(
             var n_feat = len(hp.gids)
             var group = 8 if hp.policy == POLICY_HALF_BYTE else 4
             var acc = List[Int32](length=hist_line * 2, fill=Int32(0))
+            var reached = List[Bool](length=hist_line, fill=False)
+            var reached_list = List[Int](capacity=hist_line)
             # ---- the histograms (`compute_hist2`) ----
             for y in range(ny):
                 for z in range(fold_count):
@@ -489,9 +491,10 @@ def _ordered_tree_structure(
                     var base = hist_slot * hist_line * 2
                     if hp.policy == POLICY_ONE_BYTE:
                         # the 8-bit fixed-point kernel: Int32 sums, the
-                        # dither keyed on the document id
-                        for c in range(hist_line * 2):
-                            acc[c] = Int32(0)
+                        # dither keyed on the document id. A cell no row
+                        # reaches sums to 0 and is not written (`|0| >
+                        # 1e-20` is false), so only the reached cells are
+                        # converted, then cleared for the next slot.
                         for pos in range(off, off + sz):
                             var row = docs[pos]
                             var u = _hist2_dither(row)
@@ -505,13 +508,21 @@ def _ordered_tree_structure(
                                     var bin = Int((ci >> UInt32(24 - 8 * j)) & UInt32(255))
                                     if bin < hp.folds[f_base + j]:
                                         var at = (hp.first[f_base + j] + bin) * 2
+                                        if not reached[at // 2]:
+                                            reached[at // 2] = True
+                                            reached_list.append(at)
                                         acc[at] = acc[at] + qw
                                         acc[at + 1] = acc[at + 1] + qt
                                 f_base += group
-                        for c in range(hist_line * 2):
-                            var val = Float32(Int(acc[c])) / fixed_scale
-                            if abs(val) > Float32(1e-20):
-                                hp.hist[base + c] = val
+                        for k in range(len(reached_list)):
+                            var at = reached_list[k]
+                            for c in range(at, at + 2):
+                                var val = Float32(Int(acc[c])) / fixed_scale
+                                if abs(val) > Float32(1e-20):
+                                    hp.hist[base + c] = val
+                                acc[c] = Int32(0)
+                            reached[at // 2] = False
+                        reached_list.clear()
                     else:
                         var points = _pw_thread_points(off, sz, full_pass)
                         var f_base = 0
@@ -532,6 +543,19 @@ def _ordered_tree_structure(
             for y in range(ny):
                 for z in range(fold_count):
                     var slot = (y * fold_count + z) if full_pass else ((y | ny) * fold_count + z)
+                    # a slot is first written at the level that computes
+                    # it (leaves [ny, 2ny) here, leaf 0 at depth 0), so one
+                    # whose partition is empty is still all +0.0 and its
+                    # scan writes +0.0 over +0.0
+                    var data_part: Int
+                    if full_pass:
+                        data_part = y * stripe + z
+                    else:
+                        var left = y * stripe + z
+                        var right = (y | ny) * stripe + z
+                        data_part = left if s.p_sz[left] < s.p_sz[right] else right
+                    if s.p_sz[data_part] == 0:
+                        continue
                     for f in range(n_feat):
                         if hp.folds[f] <= 1:
                             continue
@@ -548,6 +572,11 @@ def _ordered_tree_structure(
                     for z in range(fold_count):
                         var left_part = y * stripe + z
                         var right_part = (y | ny) * stripe + z
+                        # an empty parent's slot and its computed child are
+                        # all +0.0 (by induction from the fresh slots), and
+                        # +0.0 - +0.0 is +0.0: nothing to write
+                        if s.p_sz[left_part] == 0 and s.p_sz[right_part] == 0:
+                            continue
                         var is_left = s.p_sz[left_part] < s.p_sz[right_part]
                         var lslot = (y * fold_count + z) * hist_line * 2
                         var rslot = ((y | ny) * fold_count + z) * hist_line * 2
@@ -576,6 +605,17 @@ def _ordered_tree_structure(
             var t_score = List[Float32](length=GBDT_ORD_SCORE_BLOCK, fill=Float32(0.0))
             var t_gain = List[Float32](length=GBDT_ORD_SCORE_BLOCK, fill=Float32(0.0))
             var t_index = List[Int](length=GBDT_ORD_SCORE_BLOCK, fill=0)
+            # the dynamic cosine score of every candidate, (leaf, fold pair)
+            # outer and the candidate inner: each candidate's own adds run
+            # in the kernel's (leaf, fold) order, the same expressions
+            var c_noisy = List[Float32]()
+            var c_gain = List[Float32]()
+            if not plain_l2:
+                c_noisy = _dynamic_cosine_candidates(
+                    hp, s.part_stats, part_count, fold_count, stripe, l2,
+                    score_std_dev, helper_seed, bf_feature, score_before,
+                    c_gain,
+                )
             for blk in range(blocks):
                 for tid in range(GBDT_ORD_SCORE_BLOCK):
                     var th_score = GBDT_ORD_FLOAT32_MAX
@@ -612,52 +652,8 @@ def _ordered_tree_structure(
                                 th_index = b
                             i += GBDT_ORD_SCORE_BLOCK * blocks
                             continue
-                        var score = Float32(0.0)
-                        var denum_sqr = Float32(1e-20)
-                        var current = 2 * b
-                        for leaf in range(part_count):
-                            var fold = 0
-                            while fold < fold_count:
-                                var learn_off = leaf * stripe + fold
-                                var test_off = leaf * stripe + fold + 1
-                                var plw = s.part_stats[3 * learn_off]
-                                var pls = s.part_stats[3 * learn_off + 1]
-                                var ptw = s.part_stats[3 * test_off]
-                                var pts = s.part_stats[3 * test_off + 1]
-                                var h_learn = hist_line * (leaf * fold_count + fold) * 2
-                                var h_test = hist_line * (leaf * fold_count + fold + 1) * 2
-                                var wel = hp.hist[current + h_learn]
-                                var wer = max(plw - wel, Float32(0.0))
-                                var sel = hp.hist[current + h_learn + 1]
-                                var ser = pls - sel
-                                var wtl = hp.hist[current + h_test]
-                                var wtr = max(ptw - wtl, Float32(0.0))
-                                var stl = hp.hist[current + h_test + 1]
-                                var sum_tr = pts - stl
-                                var mu_l = Float32(0.0)
-                                if wel > Float32(0.0):
-                                    mu_l = sel / (wel + l2)
-                                score += stl * mu_l
-                                denum_sqr += wtl * mu_l * mu_l
-                                var mu_r = Float32(0.0)
-                                if wer > Float32(0.0):
-                                    mu_r = ser / (wer + l2)
-                                score += sum_tr * mu_r
-                                denum_sqr += wtr * mu_r * mu_r
-                                fold += 2
-                        if denum_sqr > Float32(1e-15):
-                            score = -score / identical_sqrt(denum_sqr)
-                        else:
-                            score = GBDT_ORD_FLOAT32_MAX
-                        score *= Float32(1.0)
-                        var noisy = score
-                        if score_std_dev != Float32(0.0):
-                            var nseed = advance_seed_k(
-                                helper_seed + UInt64(UInt32(bf_feature[b])), 4
-                            )
-                            var draw = next_normal_f(nseed)
-                            noisy = identical_mul_add(draw[0], score_std_dev, noisy)
-                        var gain = (noisy - score_before) * Float32(1.0)
+                        var noisy = c_noisy[b]
+                        var gain = c_gain[b]
                         if gain < th_gain:
                             th_score = noisy
                             th_gain = gain
@@ -733,6 +729,92 @@ def _ordered_tree_structure(
         s.indices = new_indices^
         _update_subsets_stats(s, 1 << (depth + 1 + fold_bits), sw, sg)
     return structure^
+
+
+def _dynamic_cosine_candidates(
+    hp: _PwHelper,
+    part_stats: List[Float32],
+    part_count: Int,
+    fold_count: Int,
+    stripe: Int,
+    l2: Float32,
+    score_std_dev: Float32,
+    helper_seed: UInt64,
+    bf_feature: List[Int],
+    score_before: Float32,
+    mut gain_out: List[Float32],
+) -> List[Float32]:
+    """`find_optimal_split_cosine_kernel`'s per-candidate score (the
+    (estimate, test) fold pairs, `denum_sqr` from 1e-20), its noise and its
+    gain, for every candidate of the helper at once: returns the noisy
+    scores and fills `gain_out`. Each candidate accumulates over (leaf,
+    fold pair) in the kernel's order with the kernel's expressions; only
+    the loop nest is turned so a (leaf, fold pair)'s two histogram lines are
+    read once, front to back. The noise draw depends on the candidate's
+    feature only, so it is drawn once per feature."""
+    var hist_line = hp.hist_line
+    var score = List[Float32](length=hist_line, fill=Float32(0.0))
+    var denum = List[Float32](length=hist_line, fill=Float32(1e-20))
+    for leaf in range(part_count):
+        var fold = 0
+        while fold < fold_count:
+            var learn_off = leaf * stripe + fold
+            var test_off = leaf * stripe + fold + 1
+            var plw = part_stats[3 * learn_off]
+            var pls = part_stats[3 * learn_off + 1]
+            var ptw = part_stats[3 * test_off]
+            var pts = part_stats[3 * test_off + 1]
+            var h_learn = hist_line * (leaf * fold_count + fold) * 2
+            var h_test = hist_line * (leaf * fold_count + fold + 1) * 2
+            for b in range(hist_line):
+                var current = 2 * b
+                var sc = score[b]
+                var dn = denum[b]
+                var wel = hp.hist[current + h_learn]
+                var wer = max(plw - wel, Float32(0.0))
+                var sel = hp.hist[current + h_learn + 1]
+                var ser = pls - sel
+                var wtl = hp.hist[current + h_test]
+                var wtr = max(ptw - wtl, Float32(0.0))
+                var stl = hp.hist[current + h_test + 1]
+                var sum_tr = pts - stl
+                var mu_l = Float32(0.0)
+                if wel > Float32(0.0):
+                    mu_l = sel / (wel + l2)
+                sc += stl * mu_l
+                dn += wtl * mu_l * mu_l
+                var mu_r = Float32(0.0)
+                if wer > Float32(0.0):
+                    mu_r = ser / (wer + l2)
+                sc += sum_tr * mu_r
+                dn += wtr * mu_r * mu_r
+                score[b] = sc
+                denum[b] = dn
+            fold += 2
+    var noisy_out = List[Float32](length=hist_line, fill=Float32(0.0))
+    gain_out = List[Float32](length=hist_line, fill=Float32(0.0))
+    var last_feature = -1
+    var last_draw = Float32(0.0)
+    for b in range(hist_line):
+        var sc = score[b]
+        var denum_sqr = denum[b]
+        if denum_sqr > Float32(1e-15):
+            sc = -sc / identical_sqrt(denum_sqr)
+        else:
+            sc = GBDT_ORD_FLOAT32_MAX
+        sc *= Float32(1.0)
+        var noisy = sc
+        if score_std_dev != Float32(0.0):
+            if bf_feature[b] != last_feature:
+                var nseed = advance_seed_k(
+                    helper_seed + UInt64(UInt32(bf_feature[b])), 4
+                )
+                last_draw = next_normal_f(nseed)[0]
+                last_feature = bf_feature[b]
+            noisy = identical_mul_add(last_draw, score_std_dev, noisy)
+        noisy_out[b] = noisy
+        gain_out[b] = (noisy - score_before) * Float32(1.0)
+    return noisy_out^
 
 
 def _record_less(
