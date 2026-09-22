@@ -1813,6 +1813,8 @@ class GradientBoosting(NumericModeMixin):
                 f"mojolearn: eval_set y has {yea.shape[0]} values for "
                 f"{n_eval_rows} rows"
             )
+        if not all_finite(yea):
+            raise ValueError("mojolearn: eval_set y must be finite (no NaN or infinity)")
         return Xea, yea, n_eval_rows
 
     def fit(self, X, y, sample_weight=None, eval_set=None, group_id=None,
@@ -1855,8 +1857,8 @@ class GradientBoosting(NumericModeMixin):
         their own combination at pool build
         (`target/data_providers.cpp:168`:
         `rawWeights[i] * rawGroupWeights[i] * classWeights[...]`). Their
-        group-weight factor is absent because this implementation carries no
-        `group_id`.
+        group-weight factor is absent: `group_id` carries no group weights
+        here.
 
         `eval_set` is `(X_eval, y_eval)`, or a one-element list holding
         that pair. **CatBoost takes a LIST of eval sets and this takes
@@ -1898,6 +1900,11 @@ class GradientBoosting(NumericModeMixin):
             raise ValueError(
                 f"mojolearn: y has {ya.shape[0]} values for {n_rows} rows"
             )
+        # A NaN label reached the searcher and surfaced as a bare Exception
+        # ("All splits have infinite score"); CatBoost refuses NaN targets
+        # at pool construction. Refused here, with inf, before the binding.
+        if not all_finite(ya):
+            raise ValueError("mojolearn: y must be finite (no NaN or infinity)")
 
         # `nan_mode='Forbidden'` MEANS "THERE ARE NO NaNs", AND IT HAS TO BE
         # CHECKED HERE OR IT MEANS NOTHING.

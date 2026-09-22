@@ -40,7 +40,7 @@ import numbers
 
 from . import _serialize
 from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, empty
+from ._buffer import addr, addr_ro, all_finite, as_f32_c, empty
 from ._labels import is_bool
 from ._mode import NumericModeMixin
 
@@ -399,6 +399,10 @@ class IsolationForest(NumericModeMixin):
                 "(cuML raises UnsupportedOnGPU for it too)"
             )
         x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
+        if not all_finite(x):
+            # was a bare Exception from the native fit; scikit-learn raises
+            # ValueError for the same input
+            raise ValueError("mojolearn IsolationForest: X contains NaN or infinity")
         self._x = x  # kept alive; every scoring call refits from it
         self.n_features_in_ = x.shape[1]
         self._run(x[:1], _WANT_SCORE_SAMPLES)  # one row, an `Array` copy

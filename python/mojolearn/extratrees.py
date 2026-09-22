@@ -92,7 +92,7 @@ import numbers
 
 from . import _mojolearn_trees, _serialize
 from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, as_f32_colmajor, as_f32_forest_layout, empty
+from ._buffer import addr, addr_ro, all_finite, as_f32_c, as_f32_colmajor, as_f32_forest_layout, empty
 from ._labels import (
     argmax_rows, classes_from_member, classes_member, decode_labels,
     encode_labels, flatten_labels, is_bool, sorted_classes,
@@ -260,6 +260,11 @@ class _ExtraTreesBase(ForestProtocol, NumericModeMixin):
             raise ValueError(
                 f"y has {len(ya)} rows, X has {n_rows}"
             )
+        # The builder has no missing-value arm: a NaN or inf in X was
+        # quantized and split on silently (pip smoke 2026-09-22). Refused
+        # here, as cuML documents and scikit-learn's pre-1.4 forests did.
+        if not all_finite(Xf):
+            raise ValueError("X contains NaN or infinity; the forest has no missing-value arm")
         params = _fit_params(
             n_rows, n_features, n_classes, self._cfg, self.device,
             self._criterion_code,
@@ -457,6 +462,14 @@ class ExtraTreesClassifier(_ExtraTreesBase):
         # label objects under `_labels.sorted_classes`'s order rule, and
         # the codes are one dict lookup per row (the permitted O(rows)
         # label-encoding loop). The codes cross as float32, as before.
+        if self._cfg["class_weight"] is not None:
+            # The native builder raised a bare Exception for this; refuse it
+            # by name with the type every other unimplemented knob uses.
+            raise NotImplementedError(
+                "class_weight is not implemented for ExtraTreesClassifier: it"
+                " becomes a per-sample weight, and sample_weight is"
+                " unimplemented. See NOT_IMPLEMENTED.tsv."
+            )
         self.classes_, codes = encode_labels(y)  # DEVIATION 2500, int32 codes
         self.n_classes_ = int(len(self.classes_))
         if tree_start is not None:
