@@ -42,9 +42,26 @@ say() { echo "[$(date +%H:%M:%S) live] $*" | tee -a "$OUT/live.log"; }
 say "commit $(git rev-parse HEAD); nvidia body $NV_BODY; amd body $AMD_BODY ($AMD_PROVIDER); lease $MINUTES min, cap \$$CAP"
 
 if [ "$MINUTES" -gt 60 ]; then LEASE_ARGS=(--segment-lease "$MINUTES" --dollar-cap "$CAP"); else LEASE_ARGS=(--minutes "$MINUTES"); fi
-MOJOLEARN_GEMM_LEG_EXTRA="$NV_BODY" MOJOLEARN_STAGE_KEYS="$TOKENS" MOJOLEARN_GEMM_LEG_OUT="$OUT/nvidia" \
-    sh tools/gemm_remote_leg.sh nvidia --rent --allow-concurrent "${LEASE_ARGS[@]}" \
-    --gpu "${MOJOLEARN_LIVE_NVIDIA_GPU:-NVIDIA H100 80GB HBM3}" > "$OUT/nvidia-leg.log" 2>&1 &
+# The NVIDIA box: walk the GPU types in MOJOLEARN_LIVE_NVIDIA_GPUS (a | list)
+# until one has capacity; a create refused for capacity fails in seconds and
+# the next type is tried. Do not pin one spec (a leg once starved 30 minutes).
+nvidia_walk() {
+    IFS='|' read -r -a _gpus <<< "${MOJOLEARN_LIVE_NVIDIA_GPUS:-NVIDIA H100 80GB HBM3|NVIDIA H200|NVIDIA H100 PCIe|NVIDIA H100 NVL|NVIDIA A100 80GB PCIe}"
+    for gpu in "${_gpus[@]}"; do
+        slug=$(printf '%s' "$gpu" | tr ' ' '_' | tr -cd 'A-Za-z0-9_')
+        say "nvidia: trying $gpu"
+        MOJOLEARN_GEMM_LEG_EXTRA="$NV_BODY" MOJOLEARN_STAGE_KEYS="$TOKENS" MOJOLEARN_GEMM_LEG_OUT="$OUT/nvidia-$slug" \
+            sh tools/gemm_remote_leg.sh nvidia --rent --allow-concurrent "${LEASE_ARGS[@]}" --gpu "$gpu" > "$OUT/nvidia-$slug.log" 2>&1
+        rc=$?
+        if grep -q "no instances currently available" "$OUT/nvidia-$slug/create_response.json" 2>/dev/null; then
+            say "nvidia: no capacity for $gpu"; continue
+        fi
+        ln -sf "nvidia-$slug.log" "$OUT/nvidia-leg.log"
+        return $rc
+    done
+    say "nvidia: NO CAPACITY on any type"; return 3
+}
+nvidia_walk &
 NV_PID=$!
 sleep 5
 case "$AMD_PROVIDER" in
@@ -60,7 +77,7 @@ case "$AMD_PROVIDER" in
 esac
 
 SSH_BASE=(-o StrictHostKeyChecking=accept-new -o "UserKnownHostsFile=$OUT/known_hosts" -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=30)
-nv_target() { grep -m1 'ssh target:' "$OUT/nvidia-leg.log" 2>/dev/null | sed 's/.*ssh target: //'; }
+nv_target() { cat "$OUT"/nvidia-*.log 2>/dev/null | grep -m1 'ssh target:' | sed 's/.*ssh target: //'; }
 amd_target() {
     case "$AMD_PROVIDER" in
         do) _ip=$(grep -m1 'active at ' "$OUT/amd-leg.log" 2>/dev/null | sed 's/.*active at //'); [ -n "$_ip" ] && echo "root@$_ip" ;;
@@ -85,8 +102,14 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
     sleep 15
 done
 if [ "$NV_READY" != 1 ] || [ "$AMD_READY" != 1 ]; then
-    say "NOT READY (nvidia $NV_READY, amd $AMD_READY) after the wait; telling the worker to stand down"
-    t=$(amd_target); [ -n "$t" ] && box "$t" 'echo "none 0" > /root/live_peer.txt' >/dev/null 2>&1
+    say "NOT READY (nvidia $NV_READY, amd $AMD_READY); telling the worker to stand down as soon as it can be reached"
+    # the worker's box may still be coming up; it waits an hour for the peer
+    # file, so keep trying to reach it rather than leave it waiting on the bill
+    for _i in $(seq 1 40); do
+        t=$(amd_target)
+        if [ -n "$t" ] && box "$t" 'echo "none 0" > /root/live_peer.txt' >/dev/null 2>&1; then say "worker told to stand down"; break; fi
+        sleep 15
+    done
     wait; exit 1
 fi
 
