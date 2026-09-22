@@ -135,6 +135,40 @@ record = dict(schema='mojolearn.linux.build-provenance.v1', source_commit=commit
               source_inventory=files, source_sha256=hashlib.sha256(json.dumps(files, separators=(',', ':')).encode()).hexdigest(),
               extensions=outputs, host_extension=host_outputs,
               complete=(status == 0 and action == 'build' and len(outputs) == full_count))
+# THE BINDING CACHE, PER BINARY (packaging/linux/build_sets.sh, 2026-09-22).
+# Present only when the build ran through tools/bincache.py. For every shipped
+# member: how it was obtained (a build, or a hit and from where), the cache
+# key (sha256 of every input that reaches the compiler: the source closure,
+# the scripts, the toolchain, the build variables, the OS and the path), the
+# unstaged digest, and the commit whose build compiled those bytes: this
+# build's commit for a miss, the archive's recorded commit for a hit. A hit
+# is the same bytes an identical-input build of that commit produced, and the
+# key equality is the proof that the inputs were identical.
+cache_rows = out / 'bincache' / 'provenance.tsv'
+if cache_rows.is_file():
+    placed = {}
+    placements = out / 'bincache' / 'placements.jsonl'
+    if placements.is_file():
+        for line in placements.read_text().splitlines():
+            row = json.loads(line)
+            for f in row['files']:
+                placed[(row['key'], f['path'])] = row.get('archive_source_commit', '')
+    by_path = {}
+    for line in cache_rows.read_text().splitlines():
+        cols = line.split('\t')
+        if len(cols) != 6 or cols[5] == '-':
+            continue
+        for item in cols[5].split(' '):
+            path, _, digest = item.partition('=')
+            hit = cols[2] in ('hit', 'hot-hit')
+            by_path[path] = dict(outcome=cols[2], key=cols[3], unstaged_sha256=digest,
+                                 compiled_from_commit=(placed.get((cols[3], path), '') if hit else commit))
+    cache = {}
+    for member in list(outputs) + list(host_outputs):
+        parts = member.split('/')          # mojolearn/<vendor>/<arch>/[tier/]name.so
+        rel = 'python/' + '/'.join([parts[0]] + parts[3:])
+        cache[member] = by_path.get(rel, dict(outcome='not-recorded'))
+    record['bincache'] = cache
 (out / 'build-provenance.json').write_text(json.dumps(record, indent=2) + '\n')
 assert status == 0, 'Build/staging failed; retained provenance is not admissible'
 assert len(outputs) == expected_count, 'Incomplete build outputs'

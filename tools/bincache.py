@@ -100,7 +100,17 @@ KEY_ENV_PREFIXES = ("MOJOLEARN_", "MOJO_", "MODULAR_")
 # above is keyed, including the compile job counts, because a parallel
 # codegen split has not been shown to be byte-neutral.
 NON_BUILD_ENV = ("MOJOLEARN_COMMIT", "MOJOLEARN_CPU_THREADS", "MOJOLEARN_SKIP_BUILD_GATE",
-                 "MOJOLEARN_BUILD_LOCK_HELD", "MOJOLEARN_PYTHON", "MOJOLEARN_SMOKE_SO")
+                 "MOJOLEARN_BUILD_LOCK_HELD", "MOJOLEARN_PYTHON", "MOJOLEARN_SMOKE_SO",
+                 # THE RELEASE BUILD'S SCHEDULING AND WITNESSES (2026-09-22,
+                 # lane/release-cpu-build-box). MOJOLEARN_BUILD_JOBS is how many
+                 # build SCRIPTS packaging/linux/build_sets.sh runs at once; no
+                 # script under bindings/ reads it (each compiler keeps
+                 # MOJOLEARN_COMPILE_JOBS=2, which stays keyed), and the proof
+                 # at d181d9792 measured it byte-neutral: 4 jobs on the GPU
+                 # boxes and 16 on the CPU box gave the same sha256 for every
+                 # shipped binary. The other two are the release runner's
+                 # interpreter path and the AMD leg's core-host witness.
+                 "MOJOLEARN_BUILD_JOBS", "MOJOLEARN_QUALIFY_PYTHON", "MOJOLEARN_EXPECT_CORE_HOST_SHA256")
 NON_BUILD_PREFIXES = ("MOJOLEARN_BINCACHE", "MOJOLEARN_IDENTITY_", "MOJOLEARN_STAGE_",
                       "MOJOLEARN_GEMM_LEG_", "MOJOLEARN_HOTAISLE_", "MOJOLEARN_DO_",
                       # MOJOLEARN_GAP_ IS WHICH LANES THE LEG WILL RUN AFTERWARDS
@@ -128,7 +138,13 @@ NON_BUILD_PREFIXES = ("MOJOLEARN_BINCACHE", "MOJOLEARN_IDENTITY_", "MOJOLEARN_ST
                       # only leg that could ever have hit those 110 objects is
                       # one running the SAME LANES into the SAME DIRECTORY --
                       # which is the one leg nobody ever needs to run twice.
-                      "MOJOLEARN_GAP_")
+                      "MOJOLEARN_GAP_",
+                      # tools/release061_remote_build.sh's budget and route
+                      # switches (MOJOLEARN_RELEASE_BUILD_SECONDS shrinks by the
+                      # elapsed time inside the AMD container, so keying it
+                      # would make every release a miss). Nothing under
+                      # bindings/ reads a MOJOLEARN_RELEASE_ variable.
+                      "MOJOLEARN_RELEASE_")
 SABOTAGE_RE = re.compile(r"SABOTAGE|FAULT_INJECT", re.I)
 # Import roots that are the toolchain's, not this tree's: the precompiled
 # packages in .pixi/envs/default/lib/mojo/*.mojoc for mojo 1.0.0 / max 26.5.0
@@ -762,6 +778,18 @@ class Record:
         if self.dir is not None:
             (self.dir / "keys" / (key + ".json")).write_text(json.dumps(fields, indent=1, sort_keys=True))
 
+    def placement(self, script, outcome, key, placed, manifest):
+        """One JSON line per cache HIT: the bytes placed and the archive's own
+        record of where they came from (its builder, its build time and the
+        commit it was compiled from), for the release provenance."""
+        if self.dir is None:
+            return
+        with open(self.dir / "placements.jsonl", "a") as fh:
+            fh.write(json.dumps(dict(script=script, outcome=outcome, key=key, files=placed,
+                                     archive_source_commit=manifest.get("source_commit", ""),
+                                     archive_built=manifest.get("built", ""),
+                                     archive_builder=manifest.get("builder", {})), sort_keys=True) + "\n")
+
     def upload_row(self, leg, slot, dest, key, sabotage=False):
         with open(self.dir / "uploads.tsv", "a") as fh:
             fh.write("%s\t%s\t%s\t%s\tsabotage=%d\n" % (leg, slot, dest, key, 1 if sabotage else 0))
@@ -1025,7 +1053,11 @@ def cmd_build(argv, environ=None):
     if environ.get("MOJOLEARN_BINCACHE", "") != "0" and environ.get("MOJOLEARN_BINCACHE_DIR"):
         return cmd_build_local(script, args, environ, environ["MOJOLEARN_BINCACHE_DIR"])
     map_path = environ.get("MOJOLEARN_BINCACHE_MAP", DEFAULT_MAP)
-    plain = ["sh", script] + args
+    shell = environ.get("MOJOLEARN_BINCACHE_SHELL", "sh")
+    if shell not in ("sh", "bash"):
+        print("MOJOLEARN_BINCACHE_SHELL must be sh or bash", file=sys.stderr)
+        return 2
+    plain = [shell, script] + args
     if environ.get("MOJOLEARN_BINCACHE", "") == "0" or not os.path.isfile(map_path):
         return subprocess.call(plain, env=environ)
     t0 = time.time()
@@ -1033,9 +1065,25 @@ def cmd_build(argv, environ=None):
     urls = read_map(map_path)
     rec = Record(environ.get("MOJOLEARN_BINCACHE_OUT", DEFAULT_OUT))
     rel_script = os.path.relpath(Path(script).resolve(), repo)
+    # DECLARED OUTPUTS (MOJOLEARN_BINCACHE_OUTPUTS; the release build,
+    # packaging/linux/build_sets.sh, 2026-09-22). That script runs several
+    # builds at once in one tree, where the snapshot diff below would archive
+    # a neighbour's .so under this key. A declared build is keyed WIDER, with
+    # the local cache's `inputs` (every shell or Python file the script names,
+    # followed through the scripts it runs, and the tokenizer generators) and
+    # the output list, so it never shares a key with an undeclared one.
+    declared = None
+    if environ.get("MOJOLEARN_BINCACHE_OUTPUTS", "").strip():
+        declared = sorted(o for o in environ["MOJOLEARN_BINCACHE_OUTPUTS"].split() if o)
+        if not all(safe_rel(o) for o in declared):
+            rc = subprocess.call(plain, env=environ)
+            rec.row(rel_script, "refused:unsafe-declared-output", "", time.time() - t0, [])
+            return rc
     try:
         fields = key_fields(repo, script, args, environ, urls["header"].get("image", ""),
                             force_tree=environ.get("MOJOLEARN_BINCACHE_SOURCE") == "tree")
+        if declared is not None:
+            fields["declared"] = dict(inputs=local_inputs(repo, script), outputs=declared, shell=shell)
     except Exception as exc:                                   # never lose a build over the cache
         rc = subprocess.call(plain, env=environ)
         rec.row(rel_script, "error-key:%s" % type(exc).__name__, "", time.time() - t0, [])
@@ -1054,6 +1102,18 @@ def cmd_build(argv, environ=None):
     key = key_of(fields)
     rec.key(key, fields)
     miss = tag + "miss"
+    # THE BOX-LOCAL HOT DIRECTORY (MOJOLEARN_BINCACHE_HOT_DIR, the release
+    # build, 2026-09-22): archives this box built earlier in the same run, so
+    # the three release sets built one after another share the 32 host
+    # bindings (vendor-neutral, keyed without any GPU variable) before the Mac
+    # has promoted anything. Read and verified exactly like an R2 object.
+    hot = Path(environ["MOJOLEARN_BINCACHE_HOT_DIR"]) if environ.get("MOJOLEARN_BINCACHE_HOT_DIR") and not negative else None
+    if hot is not None and (hot / (key + ".tar.gz")).is_file():
+        got = _try_place(str(hot / (key + ".tar.gz")), key, fields, repo, declared, rec, rel_script,
+                         "hot-hit", t0)
+        if got == 0:
+            return 0
+        miss = got
     if key in gets:
         with tempfile.TemporaryDirectory(prefix="bincache-") as td:
             arc = os.path.join(td, "a.tar.gz")
@@ -1061,48 +1121,39 @@ def cmd_build(argv, environ=None):
             if code != 200:
                 miss = "miss-get-%s" % code
             else:
-                try:
-                    manifest, blobs = verify_archive(arc, key, fields)
-                    have = installed_toolchain(repo)
-                    if have is not None and manifest.get("installed_toolchain") not in (None, have):
-                        raise Reject("installed toolchain differs")
-                    if any((repo / rel).exists() for rel in blobs):
-                        miss = "bypass-destination-exists"
-                    else:
-                        placed = []
-                        modes = {f["path"]: f.get("mode", 0o755) for f in manifest["files"]}
-                        for rel, data in sorted(blobs.items()):
-                            dst = repo / rel
-                            dst.parent.mkdir(parents=True, exist_ok=True)
-                            tmp = dst.parent / (".bincache-%s-%s" % (os.getpid(), dst.name))
-                            tmp.write_bytes(data)
-                            os.chmod(tmp, modes[rel])
-                            os.replace(tmp, dst)
-                            if sha256_file(dst) != sha256_bytes(data):
-                                raise Reject("placed file differs " + rel)
-                            placed.append(dict(path=rel, sha256=sha256_bytes(data)))
-                            print("built %s (from bincache key %s, sha256 %s)" % (rel, key[:16], placed[-1]["sha256"]))
-                        rec.row(rel_script, tag + "hit", key, time.time() - t0, placed)
-                        return 0
-                except Reject as exc:
-                    miss = tag + "rejected:" + str(exc).replace("\t", " ")
-    before = snapshot(repo, environ)
+                got = _try_place(arc, key, fields, repo, declared, rec, rel_script, tag + "hit", t0, tag=tag)
+                if got == 0:
+                    return 0
+                miss = got
+    before = snapshot(repo, environ) if declared is None else {o: _stat(repo / o) for o in declared}
     tb = time.time()
     rc, log_sha = run_tee(plain, environ)
     build_seconds = time.time() - tb
     if rc != 0:
         rec.row(rel_script, miss + "+build-failed", key, time.time() - t0, [])
         return rc
-    after = snapshot(repo, environ)
-    outputs = []
-    for p, st in after.items():
-        if before.get(p) != st:
-            rp = Path(p)
-            try:
-                outputs.append(str(rp.relative_to(repo.resolve())))
-            except ValueError:
-                outputs = None
-                break
+    if declared is None:
+        after = snapshot(repo, environ)
+        outputs = []
+        for p, st in after.items():
+            if before.get(p) != st:
+                rp = Path(p)
+                try:
+                    outputs.append(str(rp.relative_to(repo.resolve())))
+                except ValueError:
+                    outputs = None
+                    break
+    else:
+        # A declared output the build did not rewrite is never archived: the
+        # archive would carry some other build's bytes under this key.
+        after = {o: _stat(repo / o) for o in declared}
+        stale = [o for o in declared if after[o] is None or after[o] == before[o]]
+        if stale:
+            files_meta = [dict(path=o, sha256=sha256_file(repo / o)) for o in declared if after[o] is not None]
+            rec.row(rel_script, miss + "+built-not-cached:declared-output-not-written:" + ",".join(stale),
+                    key, time.time() - t0, files_meta)
+            return 0
+        outputs = list(declared)
     files_meta = [dict(path=o, sha256=sha256_file(repo / o)) for o in sorted(outputs or [])]
     if not outputs:
         rec.row(rel_script, miss + "+built-not-cached:%s" % ("outside-tree" if outputs is None else "no-outputs"),
@@ -1111,19 +1162,33 @@ def cmd_build(argv, environ=None):
     if rec.dir is None:
         rec.row(rel_script, miss + "+built-not-uploaded:no-out-dir", key, time.time() - t0, files_meta)
         return 0
-    slot, put_url = claim_slot(map_path, urls["put"])
-    if slot is None:
-        rec.row(rel_script, miss + "+built-not-uploaded:no-slot", key, time.time() - t0, files_meta)
-        return 0
-    partition = urls["header"].get("partition", "")
-    dest = "%s/%s/%s.tar.gz" % (SABOTAGE_PREFIX if negative else OBJECT_PREFIX, partition, key)
+    extra = dict(builder=dict(host=platform.node(), leg=urls["header"].get("leg", "")),
+                 build_seconds=round(build_seconds, 1), build_log_sha256=log_sha,
+                 installed_toolchain=installed_toolchain(repo),
+                 # WHICH COMMIT THESE BYTES WERE COMPILED FROM. Not a key field
+                 # (a commit that changes nothing the binding reads must hit),
+                 # but carried so a release's provenance can name, per binary,
+                 # the commit whose build produced the bytes it ships.
+                 source_commit=environ.get("MOJOLEARN_COMMIT", ""),
+                 built=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
     with tempfile.TemporaryDirectory(prefix="bincache-") as td:
         arc = os.path.join(td, "a.tar.gz")
-        pack(arc, key, fields, repo, outputs, dict(
-            builder=dict(host=platform.node(), leg=urls["header"].get("leg", "")),
-            build_seconds=round(build_seconds, 1), build_log_sha256=log_sha,
-            installed_toolchain=installed_toolchain(repo),
-            built=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())))
+        pack(arc, key, fields, repo, outputs, extra)
+        if hot is not None:
+            try:
+                verify_archive(arc, key, fields)
+                hot.mkdir(parents=True, exist_ok=True)
+                tmp_hot = hot / (".tmp-%d-%s.tar.gz" % (os.getpid(), key))
+                shutil.copyfile(arc, tmp_hot)
+                os.replace(tmp_hot, hot / (key + ".tar.gz"))
+            except (Reject, OSError):
+                pass
+        slot, put_url = claim_slot(map_path, urls["put"])
+        if slot is None:
+            rec.row(rel_script, miss + "+built-not-uploaded:no-slot", key, time.time() - t0, files_meta)
+            return 0
+        partition = urls["header"].get("partition", "")
+        dest = "%s/%s/%s.tar.gz" % (SABOTAGE_PREFIX if negative else OBJECT_PREFIX, partition, key)
         code = http_put(put_url, arc)
     if code != 200:
         rec.row(rel_script, miss + "+built-upload-failed-%s" % code, key, time.time() - t0, files_meta)
@@ -1131,6 +1196,37 @@ def cmd_build(argv, environ=None):
     rec.upload_row(urls["header"].get("leg", ""), slot, dest, key, sabotage=negative)
     rec.row(rel_script, miss + "+built-uploaded", key, time.time() - t0, files_meta)
     return 0
+
+
+def _try_place(arc, key, fields, repo, declared, rec, rel_script, outcome, t0, tag=""):
+    """Verify an archive and place its files; 0 on a hit, else the miss reason."""
+    try:
+        manifest, blobs = verify_archive(arc, key, fields)
+        if declared is not None and sorted(blobs) != sorted(declared):
+            raise Reject("archive files differ from the declared outputs")
+        have = installed_toolchain(repo)
+        if have is not None and manifest.get("installed_toolchain") not in (None, have):
+            raise Reject("installed toolchain differs")
+        if any((repo / rel).exists() for rel in blobs):
+            return "bypass-destination-exists"
+        placed = []
+        modes = {f["path"]: f.get("mode", 0o755) for f in manifest["files"]}
+        for rel, data in sorted(blobs.items()):
+            dst = repo / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            tmp = dst.parent / (".bincache-%s-%s" % (os.getpid(), dst.name))
+            tmp.write_bytes(data)
+            os.chmod(tmp, modes[rel])
+            os.replace(tmp, dst)
+            if sha256_file(dst) != sha256_bytes(data):
+                raise Reject("placed file differs " + rel)
+            placed.append(dict(path=rel, sha256=sha256_bytes(data)))
+            print("built %s (from bincache key %s, sha256 %s)" % (rel, key[:16], placed[-1]["sha256"]))
+        rec.row(rel_script, outcome, key, time.time() - t0, placed)
+        rec.placement(rel_script, outcome, key, placed, manifest)
+        return 0
+    except Reject as exc:
+        return tag + "rejected:" + str(exc).replace("\t", " ")
 
 
 # ---------------------------------------------------------------------------

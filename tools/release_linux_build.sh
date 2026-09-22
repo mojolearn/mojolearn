@@ -104,6 +104,15 @@ tar xzf /root/route-overlay.tgz -C /root/mojolearn
 for f in $OVERLAY; do printf 'after %s %s\n' "\$f" "\$(sha256sum "\$f" | cut -c1-64)"; done >> "\$LEG_OUT/release/overlay.txt"
 export MOJOLEARN_BINCACHE_OUT="\$LEG_OUT/bincache" MOJOLEARN_BINCACHE=$BINCACHE
 MOJOLEARN_BUILD_JOBS=$JOBS bash tools/release_linux_cpu_box.sh "\$LEG_OUT/release" $ARCHS
+rc=\$?
+# each set records its own cache rows; the runner promotes one uploads.tsv
+mkdir -p "\$LEG_OUT/bincache/keys"
+for d in "\$LEG_OUT"/release/*/release-build/build/bincache; do
+    [ -d "\$d" ] || continue
+    [ -f "\$d/uploads.tsv" ] && cat "\$d/uploads.tsv" >> "\$LEG_OUT/bincache/uploads.tsv"
+    cp "\$d"/keys/*.json "\$LEG_OUT/bincache/keys/" 2>/dev/null
+done
+exit \$rc
 EOF
 bash -n "$TMPF/cmd.sh" || die "command script"
 

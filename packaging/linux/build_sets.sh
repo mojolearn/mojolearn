@@ -149,6 +149,44 @@ done
 # would therefore fail this build instead of being reused.
 for n in $HOST_NAMES; do rm -f "$(host_so "$n")"; done
 
+# ---------------------------------------------------------------- the cache
+# THE BINDING CACHE (tools/bincache.py, 2026-09-22). ON only where a runner
+# staged a URL map on this box (tools/release_linux_build.sh through
+# tools/runpod_cpu_leg.sh --release-bincache) and MOJOLEARN_BINCACHE is not 0;
+# everywhere else, the GPU legs included, every build below is the plain
+# `pixi run bash bindings/<script>` it always was. Each build DECLARES its one
+# output (several builds share this tree at once), a hit is placed only after
+# the archive's key, fields and every file's sha256 verify, and the host
+# bindings built for one set are served to the next set from a box-local hot
+# directory. $DEST/bincache/ records every build's outcome and key, and every
+# hit's origin commit; build-provenance.json carries it per binary.
+BINCACHE_MAP=${MOJOLEARN_BINCACHE_MAP:-/root/.mojolearn_bincache/urls.tsv}
+USE_BINCACHE=0
+if [[ "${MOJOLEARN_BINCACHE:-}" != 0 && -f "$BINCACHE_MAP" ]]; then USE_BINCACHE=1; fi
+say "binding cache: $([[ $USE_BINCACHE = 1 ]] && echo "ON ($BINCACHE_MAP)" || echo off)"
+declared_output() {   # tier script -> the one .so it writes, repo-relative
+  local tier="$1" s="$2" name dir
+  if [[ "$s" = build_*_host.sh ]]; then
+    name="${s#build_}"; name="${name%.sh}"
+    printf 'python/mojolearn/host/_mojolearn_%s.so' "$name"; return
+  fi
+  if [[ "$s" = build.sh ]]; then name=_mojolearn; else name="${s#build_}"; name="_mojolearn_${name%.sh}"; fi
+  case "$tier" in fast) dir=python/mojolearn ;; *) dir=python/mojolearn/$tier ;; esac
+  printf '%s/%s.so' "$dir" "$name"
+}
+run_binding() {   # tier script env-prefix...: the build, through the cache when it is on
+  local tier="$1" s="$2"
+  shift 2
+  if [[ "$USE_BINCACHE" = 1 ]]; then
+    "$@" MOJOLEARN_BINCACHE_MAP="$BINCACHE_MAP" MOJOLEARN_BINCACHE_OUT="$DEST/bincache" \
+      MOJOLEARN_BINCACHE_HOT_DIR="${MOJOLEARN_BINCACHE_HOT_DIR:-/root/.mojolearn_bincache/hot}" \
+      MOJOLEARN_BINCACHE_SHELL=bash MOJOLEARN_BINCACHE_OUTPUTS="$(declared_output "$tier" "$s")" \
+      pixi run -e "$PIXI_ENV" python3 tools/bincache.py build "bindings/$s"
+  else
+    "$@" pixi run -e "$PIXI_ENV" bash "bindings/$s"
+  fi
+}
+
 # ---------------------------------------------------------------- builds
 build_one() {
   local tier="$1" s="$2"
@@ -171,11 +209,11 @@ build_one() {
     local fam="${s#build_}"; fam="${fam%_host.sh}"
     local FAM; FAM=$(printf '%s' "$fam" | tr 'a-z' 'A-Z')
     MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_SKIP_BUILD_GATE=1 MOJOLEARN_TARGET_COLUMN=cpu \
-      env -u MOJOLEARN_GPU_ARCHS -u MOJOLEARN_HOST_OUTDIR -u "MOJOLEARN_${FAM}_HOST_OUTDIR" \
-      pixi run -e "$PIXI_ENV" bash "bindings/$s" >> "$log" 2>&1 || rc=$?
+      run_binding "$tier" "$s" env -u MOJOLEARN_GPU_ARCHS -u MOJOLEARN_HOST_OUTDIR -u "MOJOLEARN_${FAM}_HOST_OUTDIR" \
+      >> "$log" 2>&1 || rc=$?
   else
     MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_SKIP_BUILD_GATE=1 \
-      pixi run -e "$PIXI_ENV" bash "bindings/$s" >> "$log" 2>&1 || rc=$?
+      run_binding "$tier" "$s" env >> "$log" 2>&1 || rc=$?
   fi
   if [[ "$rc" = 0 ]]; then
     echo "end $(date -u +%FT%TZ) OK" >> "$log"

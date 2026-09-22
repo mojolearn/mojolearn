@@ -490,6 +490,76 @@ class BuildFlowTests(unittest.TestCase):
             bc.check_upload_row(row.replace(dest, "bincache/v1/../x/%s.tar.gz" % key), out_a / "keys")
 
 
+class ReleaseDeclaredTests(BuildFlowTests):
+    """The Linux release build (packaging/linux/build_sets.sh through the CPU
+    build box, 2026-09-22): declared outputs on the R2 path, the box-local hot
+    directory shared by the three sets, and the per-hit placement record that
+    names the commit an archive was compiled from."""
+
+    OUT = "python/mojolearn/identical/_mojolearn_fake.so"
+
+    def rbuild(self, repo, map_path, out, hot=None, extra=None):
+        env = dict(MOJOLEARN_BINCACHE_OUTPUTS=self.OUT, MOJOLEARN_BINCACHE_SHELL="bash",
+                   MOJOLEARN_COMMIT="c" * 40)
+        if hot is not None:
+            env["MOJOLEARN_BINCACHE_HOT_DIR"] = str(hot)
+        env.update(extra or {})
+        return self.build(repo, map_path, out, env)
+
+    def test_declared_build_is_keyed_apart_and_archives_only_its_output(self):
+        a = self.tree("a")
+        # a neighbour's binary written during the build must not be archived
+        (a / "bindings/build_fake.sh").write_text(SCRIPT + "printf n > python/mojolearn/identical/_mojolearn_other.so\n")
+        out_a = self.base / "out-a"
+        self.assertEqual(self.rbuild(a, self.write_map("a"), out_a), 0)
+        row = self.provenance(out_a)[0]
+        self.assertEqual(row[2], "miss+built-uploaded")
+        self.assertNotIn("_mojolearn_other.so", row[5])
+        fields_a = json.loads((out_a / "keys" / (row[3] + ".json")).read_text())
+        self.assertEqual(fields_a["declared"]["outputs"], [self.OUT])
+        self.assertIn("bindings/build_fake.sh", fields_a["declared"]["inputs"]["files"])
+        b = self.tree("b")
+        out_b = self.base / "out-b"
+        self.build(b, self.write_map("b"), out_b)
+        self.assertNotEqual(self.provenance(out_b)[0][3], row[3], "declared and undeclared keys must differ")
+
+    def test_hot_directory_serves_the_next_set_and_records_the_commit(self):
+        hot = self.base / "hot"
+        a = self.tree("a")
+        out = self.base / "out"
+        self.assertEqual(self.rbuild(a, self.write_map("a"), out, hot=hot), 0)
+        key = self.provenance(out)[0][3]
+        self.assertTrue((hot / (key + ".tar.gz")).is_file())
+        so = (a / self.OUT).read_bytes()
+        (a / self.OUT).unlink()          # build_sets.sh moves each set out of the tree
+        (a / "ran.txt").unlink()
+        self.assertEqual(self.rbuild(a, self.write_map("a2", leg="leg2"), out, hot=hot), 0)
+        row = self.provenance(out)[1]
+        self.assertEqual(row[2], "hot-hit")
+        self.assertFalse((a / "ran.txt").exists(), "a hot hit must not run the build script")
+        self.assertEqual((a / self.OUT).read_bytes(), so)
+        rec = [json.loads(l) for l in (out / "placements.jsonl").read_text().splitlines()]
+        self.assertEqual(rec[0]["archive_source_commit"], "c" * 40)
+        self.assertEqual(rec[0]["files"][0]["sha256"], bc.sha256_bytes(so))
+
+    def test_a_declared_output_the_build_did_not_write_is_not_cached(self):
+        a = self.tree("a")
+        out = self.base / "out"
+        env = dict(MOJOLEARN_BINCACHE_OUTPUTS="python/mojolearn/identical/_mojolearn_nothing.so")
+        self.assertEqual(self.build(a, self.write_map("a"), out, env), 0)
+        self.assertIn("declared-output-not-written", self.provenance(out)[0][2])
+        self.assertFalse((out / "uploads.tsv").exists())
+
+    def test_release_scheduling_variables_do_not_move_the_key(self):
+        a = self.tree("a")
+        base = fields(a, {"MOJOLEARN_NUMERIC_MODE": "identical"})
+        moved = fields(a, {"MOJOLEARN_NUMERIC_MODE": "identical", "MOJOLEARN_BUILD_JOBS": "16",
+                           "MOJOLEARN_RELEASE_BUILD_SECONDS": "2371", "MOJOLEARN_RELEASE_NO_DEVICE": "1",
+                           "MOJOLEARN_QUALIFY_PYTHON": "/x/python", "MOJOLEARN_EXPECT_CORE_HOST_SHA256": "skip"})
+        self.assertEqual(bc.key_of(base), bc.key_of(moved))
+        self.assertNotEqual(bc.key_of(base), bc.key_of(fields(a, {"MOJOLEARN_COMPILE_JOBS": "4"})))
+
+
 class LocalCacheTests(unittest.TestCase):
     """The macOS release build's local directory cache: declared outputs, a
     verified archive, never a replaced destination, fail closed."""
