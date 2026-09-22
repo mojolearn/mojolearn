@@ -206,7 +206,14 @@ class SambaStack(object):
     optimizer is AdamW over the registry in order; `max_norm=None` turns
     the clip off. `accumulation_steps` splits the batch rows into that many
     microbatches and combines by the clause 9.2 tree; a split the clause
-    does not admit is refused BY NAME before any gradient is computed.
+    does not admit is refused BY NAME before any gradient is computed. An
+    admitted split reproduces the unsplit step's block, final-norm and
+    `lm_head` gradients bit for bit, but NOT `embed.weight`'s: the embedding
+    backward is a run-sorted fold over each row's occurrences, not a leaf
+    tree, so a row seen in two microbatches sums in a different order
+    (`tests/test_samba_surface.py` records it as "no claim"). The whole
+    parameter buffer after an A > 1 step can therefore differ from A = 1 in
+    the last bits of the embedding.
     """
 
     def __init__(self, config, weights=None, generator=None, lr=1e-3,
