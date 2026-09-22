@@ -270,6 +270,7 @@ class Coordinator:
                 self._refuse("chained fold: every worker must be started with chained=True")
         rows = []
         for step in range(int(self.peers[0]["completed"]), self.steps):
+            timing = {"step_sent": time.monotonic()}
             for p in self.peers:
                 _send(p["sock"], {"cmd": "step", "step": step, "chained": self.chained})
             grads, losses = {}, {}
@@ -280,12 +281,16 @@ class Coordinator:
                         self._refuse("%s answered the wrong step or shards" % p["name"])
                     for i, k in enumerate(p["shards"]):
                         losses[k] = head["losses"][i]
+                    timing["gradients_" + p["name"]] = round(time.monotonic() - timing["step_sent"], 3)
                 prefix = b""
                 for p in self.peers:
+                    t0 = time.monotonic()
                     _send(p["sock"], {"cmd": "fold", "step": step}, prefix)
                     head, prefix = _recv(p["sock"], n_total * 4)
                     if head.get("step") != step or len(prefix) != n_total * 4:
                         self._refuse("%s returned a wrong fold" % p["name"])
+                    # the prefix out, the worker's fold, the result back: one round trip per worker
+                    timing["fold_" + p["name"]] = round(time.monotonic() - t0, 3)
                 total = prefix
                 last = self.peers[-1]["name"]
                 all_losses = [losses[k] for k in range(self.K)]
@@ -308,18 +313,22 @@ class Coordinator:
                 for p in self.peers:
                     _send(p["sock"], {"cmd": "apply", "step": step, "total_sha256": hashlib.sha256(total).hexdigest(),
                                       "losses": all_losses}, total)
+            timing["apply_sent"] = round(time.monotonic() - timing["step_sent"], 3)
             hashes = {}
             for p in self.peers:
                 head, _ = _recv(p["sock"], 0)
                 if head.get("completed") != step + 1:
                     self._refuse("%s did not commit step %d" % (p["name"], step + 1))
                 hashes[p["name"]] = head["state"]
+                timing["applied_" + p["name"]] = round(time.monotonic() - timing["step_sent"], 3)
+            timing["step_seconds"] = round(time.monotonic() - timing.pop("step_sent"), 3)
             if len(set(hashes.values())) != 1:
                 self._refuse("replicas disagree after step %d: %s" % (step + 1, hashes))
             row = dict(step=step + 1, losses=[losses[k] for k in range(self.K)],
                        state=next(iter(hashes.values())), workers=hashes,
                        vendors={p["name"]: p.get("vendor") for p in self.peers},
-                       total_sha256=hashlib.sha256(total).hexdigest(), protocol="chained" if self.chained else "gathered")
+                       total_sha256=hashlib.sha256(total).hexdigest(), protocol="chained" if self.chained else "gathered",
+                       timing=timing)
             rows.append(row)
             if self.on_step:
                 self.on_step(row)
