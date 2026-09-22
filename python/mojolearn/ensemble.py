@@ -401,6 +401,45 @@ _HOST_ROUTE_ENV = "MOJOLEARN_GBDT_ROUTE"
 #: columns). The NVIDIA and AMD columns of that lane are OWED, so on those
 #: devices an auto-routed fit with such a column trains on the device.
 _HOST_ONE_BORDER_VENDORS = ("metal",)
+#: THE CONFIGURATIONS THE SMALL-POOL ROUTE TAKES, keyed (resolved boosting
+#: type, loss, eval set given), each with the verifier lanes whose recorded
+#: columns (NVIDIA, AMD, Apple and CPU, all four, in
+#: `verify_reference/table.json`) hold the host fit of that configuration to
+#: the device fits. A configuration absent here trains on the device; the
+#: rest of the gate (SymmetricTree, unit weights, numeric columns, no groups)
+#: is `_small_pool_host`'s. `test_gbdt_small_pool_route.py` checks every lane
+#: named here has all four columns on every fixture.
+#:
+#: Left out on purpose: Plain RMSE with an eval set (the host binding refuses
+#: it by name, its test cursor is not restated), Ordered RMSE with an eval
+#: set (the host trains it, but no lane records it), a multiclass fit with an
+#: eval set (refused by the host by name, no lane), and Ordered multiclass
+#: (their GPU trains multiclass Plain only).
+_HOST_ROUTE_LANES = {
+    ("Plain", "Logloss", False): ("gbdt-symmetric", "gbdt-catboost-defaults"),
+    ("Plain", "RMSE", False): ("gbdt-rmse", "gbdt-stochastic-arms"),
+    ("Ordered", "Logloss", False): ("gbdt-ordered-bayesian-noise",),
+    ("Ordered", "RMSE", False): ("gbdt-ordered",),
+    # perf/gbdt-route-eval-multiclass (2026-09-22): the held-out arm
+    # (`gbdt/host/gbdt_oracle_eval.mojo`), with the Iter detector and
+    # use_best_model's shrink
+    ("Plain", "Logloss", True): ("gbdt-symmetric-eval",),
+    # the Ordered Logloss fit of gbdt-ordered has an eval set, the Iter
+    # detector and use_best_model (`GbdtOrderedHostEval`)
+    ("Ordered", "Logloss", True): ("gbdt-ordered",),
+    # `gbdt/host/gbdt_oracle_multiclass.mojo`: class weights (gbdt-multiclass,
+    # gbdt-onevsall), the public stochastic defaults, Bayesian bootstrap and
+    # random_strength 1 (gbdt-multiclass-defaults)
+    ("Plain", "MultiClass", False): ("gbdt-multiclass", "gbdt-multiclass-defaults"),
+    ("Plain", "MultiClassOneVsAll", False): ("gbdt-onevsall", "gbdt-multiclass-defaults"),
+}
+#: The configurations of `_HOST_ROUTE_LANES` the `gbdt-binary-columns` lane
+#: fits with one-border columns (no eval set, no multiclass): a pool with
+#: such a column routes only for these, and only on `_HOST_ONE_BORDER_VENDORS`.
+_HOST_ONE_BORDER_CONFIGS = (
+    ("Plain", "Logloss", False), ("Plain", "RMSE", False),
+    ("Ordered", "Logloss", False), ("Ordered", "RMSE", False),
+)
 
 #: The greedy searcher's ranking targets form grouped gradients first, then
 #: multiply both statistic planes by row bootstrap weights, as CatBoost's
@@ -1632,7 +1671,7 @@ class GradientBoosting(NumericModeMixin):
         return _CATBOOST_LEARNING_RATE if rate is None else rate
 
     def _small_pool_host(self, n_rows, n_features, n_weights, n_flags,
-                         n_eval_rows, grouped):
+                         n_eval_rows, grouped, boosting=None):
         """The CPU host binding when this fit should train on it, else None.
 
         THE SMALL-POOL ROUTE (perf/gbdt-small-round2, 2026-09-22). On a
@@ -1651,11 +1690,15 @@ class GradientBoosting(NumericModeMixin):
         (`host_surface.py`), and the model text it returns is the device
         fit's byte for byte (measured on this route at 320 to 50,000 rows,
         RMSE and Logloss, Ordered and Plain). Only the configurations those
-        lanes cover are routed: SymmetricTree, RMSE or Logloss, unit
-        weights, numeric columns, no groups, no eval set; anything the host
-        binding refuses by name falls back to the device. A column with
-        exactly one border (a 0/1 flag) routes on Metal only
-        (`_host_one_border_admitted`, perf/gbdt-host-one-border).
+        lanes cover are routed: SymmetricTree, unit weights, numeric
+        columns, no groups, and a (boosting type, loss, eval set) key of
+        `_HOST_ROUTE_LANES`, which names the lanes covering each one (since
+        perf/gbdt-route-eval-multiclass: Logloss with an eval set, Plain and
+        Ordered, and Plain MultiClass and MultiClassOneVsAll); anything the
+        host binding refuses by name falls back to the device. A column with
+        exactly one border (a 0/1 flag) routes on Metal only and only for
+        `_HOST_ONE_BORDER_CONFIGS` (`_host_one_border_admitted`,
+        perf/gbdt-host-one-border).
 
         `MOJOLEARN_GBDT_ROUTE=device` pins the device fit (the identity
         harness sets it, so the GPU columns keep measuring the GPU),
@@ -1678,9 +1721,11 @@ class GradientBoosting(NumericModeMixin):
             return None
         if route == "auto" and n_rows * n_features > _HOST_ROUTE_MAX_CELLS:
             return None
+        if boosting is None:
+            boosting = self._resolved_boosting_type(n_rows)
         if (self.grow_policy != "SymmetricTree"
-                or self.loss not in ("RMSE", "Logloss")
-                or n_weights or n_flags or n_eval_rows or grouped):
+                or (boosting, self.loss, bool(n_eval_rows)) not in _HOST_ROUTE_LANES
+                or n_weights or n_flags or grouped):
             return None
         path = _backend.host_module_path("_mojolearn_gbdt_host")
         if not os.path.exists(path):
@@ -1690,12 +1735,14 @@ class GradientBoosting(NumericModeMixin):
         except ImportError:
             return None
 
-    def _host_one_border_admitted(self, model_text):
+    def _host_one_border_admitted(self, model_text, config=None):
         """False when an AUTO-routed host fit must be discarded for the
         device: the pool has a column with exactly one border (the
         BinaryFeatures histogram policy, a model record `feature <f> folds 1`)
         and this device's binary histograms have no recorded column to
-        witness them against the host's (`_HOST_ONE_BORDER_VENDORS`).
+        witness them against the host's (`_HOST_ONE_BORDER_VENDORS`), or
+        `config` (boosting type, loss, eval set given) is not one the
+        `gbdt-binary-columns` lane fits (`_HOST_ONE_BORDER_CONFIGS`).
 
         The host binding restates the binary policy since 2026-09-22
         (perf/gbdt-host-one-border), and the `gbdt-binary-columns` lane holds
@@ -1705,7 +1752,8 @@ class GradientBoosting(NumericModeMixin):
         route = os.environ.get(_HOST_ROUTE_ENV, "auto").strip().lower()
         if route == "host":
             return True
-        if _backend.vendor() in _HOST_ONE_BORDER_VENDORS:
+        if (_backend.vendor() in _HOST_ONE_BORDER_VENDORS
+                and (config is None or config in _HOST_ONE_BORDER_CONFIGS)):
             return True
         for line in str(model_text).split("\n"):
             fields = line.split()
@@ -2229,7 +2277,7 @@ class GradientBoosting(NumericModeMixin):
         self.fit_route_ = "device"
         host = self._small_pool_host(
             n_rows, n_features, n_weights, n_flags, n_eval_rows,
-            group_id is not None or pairs is not None,
+            group_id is not None or pairs is not None, boosting,
         )
         if host is not None:
             try:
@@ -2239,7 +2287,8 @@ class GradientBoosting(NumericModeMixin):
                 # a configuration the host binding refuses by name trains
                 # on the device, which also raises any genuine error
                 out = None
-            if out is not None and not self._host_one_border_admitted(out[0]):
+            if out is not None and not self._host_one_border_admitted(
+                    out[0], (boosting, self.loss, bool(n_eval_rows))):
                 out = None
                 self.fit_route_ = "device"
         if out is None:
