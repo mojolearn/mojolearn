@@ -1,5 +1,0 @@
-amd gemm_step_price_main: device modules main=45 branch=45 identical=True
-amd gemm_device_check: device modules main=68 branch=68 identical=True
-amd lanes_price_main: device modules main=522 branch=522 identical=True
-amd gemm_lowbit_check: device modules main=75 branch=75 identical=True
-amd gram_outputs_parallel_check: device modules main=70 branch=70 identical=True

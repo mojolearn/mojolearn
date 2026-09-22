@@ -22,7 +22,7 @@ calls `cuvs::cluster::kmeans::fit`, which dispatches to KMEANS-BALANCED --
 a hierarchical, balanced-cluster-size quantizer with its own mesocluster
 recursion. This tree has no implementation of it,
 so this build trains the implemented Lloyd k-means instead. That is a departure
-from `ENGINEERING_RULES.md` 0b-i -- the reference dispatch goes somewhere this tree does not
+from `CONTRIBUTING.md` (Algorithms and references) -- the reference dispatch goes somewhere this tree does not
 have -- and it is stated at the top of `ivf/README.md` and in
 `ivf/NOT_IMPLEMENTED.tsv` rather than buried. Two consequences a reader must
 carry:

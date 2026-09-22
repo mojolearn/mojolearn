@@ -1,3 +1,0 @@
-2491 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x708f40000000, nodemask=1)
-{"step": 0, "seconds": 2.7117215099860914, "loss": 9.022993087768555, "completed_steps": 1, "device_used_mb": 4655, "rss_bytes": 2303270912, "attention": {"forward_eager_cells": 32, "forward_aexp_cells": 201326592, "backward_eager_cells": 40, "forward_eager_bytes": 128, "forward_aexp_bytes": 805306368, "backward_eager_bytes": 160, "eager_bytes": 288, "total_bytes": 805306656, "layers_grown_forward": 0, "layers_grown_backward": 0, "layers_full_aexp": 8, "layers": 8}}
-{"event": "done", "out": "/root/gemm_leg_out/lm-ce-alias/eager-off", "ce_aliased": true, "steps": 1}

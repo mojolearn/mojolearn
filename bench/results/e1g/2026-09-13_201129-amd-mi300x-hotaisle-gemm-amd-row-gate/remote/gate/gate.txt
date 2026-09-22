@@ -1,2 +1,0 @@
-card_exit=0
-kernel_leg_exit=0

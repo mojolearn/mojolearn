@@ -2,8 +2,7 @@
 # tools/attention_round3_leg.sh -- the third attention round's on-box body:
 # DEVIATIONS 2533 (preflushed seams, `_pf`), 2531 (forward grid,
 # `_fgrid_r32` / `_fgrid_r64`) and 2530 (forward Q residency, `_qres`),
-# priced against the shipped default stash_tiled (brief
-# docs/lanes/BRIEF_attention_step_2026-09-11.md section 14).
+# priced against the shipped default stash_tiled.
 #
 # A MOJOLEARN_GEMM_LEG_EXTRA body. tools/gemm_remote_leg.sh has no extra-env
 # plumbing, so the settings live here (that leg copies this file into the
@@ -12,7 +11,7 @@
 # MOJOLEARN_HOTAISLE_EXTRA_ENV) every setting below can be overridden by
 # name; an unset one takes the default written here.
 #
-# NVIDIA (RunPod, the measurement column while ENGINEERING_RULES 10's NVIDIA
+# NVIDIA (RunPod, the measurement column while CONTRIBUTING.md (Comparing against libraries without a GPU path)'s NVIDIA
 # clause is in force):
 #
 #   MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key \
@@ -33,7 +32,7 @@
 # no-trial transformer_fused_check (DEVIATION 2534) when the lease allows.
 #
 # Gates: brief section 6 with stash_tiled in place of baseline. Flip:
-# ENGINEERING_RULES 9, the geometric mean of the enwik8 and pilegithub lean
+# CONTRIBUTING.md (Performance claims), the geometric mean of the enwik8 and pilegithub lean
 # step ratios (arm over stash_tiled, lm_summary.tsv steady medians) below 1,
 # and witnesses_equal_baseline=True for every arm and corpus.
 #

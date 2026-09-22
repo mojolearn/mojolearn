@@ -1,3 +1,0 @@
-v7 amd rc=0
-v7 nvidia rc=0
-v7 apple rc=0

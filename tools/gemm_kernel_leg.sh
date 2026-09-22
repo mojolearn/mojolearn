@@ -1,9 +1,8 @@
 #!/bin/sh
-# tools/gemm_kernel_leg.sh -- DEVIATION 2599, the GEMM kernel lane's on-box work
-# (docs/lanes/BRIEF_gemm_kernel_2026-09-11.md). A thin wrapper, the pattern of
-# tools/gemm_longk_leg.sh: it names the arms `kpack` and `kpack_wide`, turns on
-# the per-component LM timing, then runs tools/gemm_step_leg.sh (DEVIATION
-# 2544), which builds and runs the step arms check, the resources instrument,
+# tools/gemm_kernel_leg.sh -- DEVIATION 2599, the GEMM kernel lane's on-box work.
+# A thin wrapper, the pattern of tools/gemm_longk_leg.sh: it names the arms
+# `kpack` and `kpack_wide`, turns on the per-component LM timing, then runs
+# tools/gemm_step_leg.sh (DEVIATION 2544), which builds and runs the step arms check, the resources instrument,
 # the price runs, the trial bindings and the lean LM step on enwik8 and the
 # Pile GitHub component, bracketed by the shipped default.
 #
@@ -41,7 +40,7 @@
 # an LM arm list of `shipped` alone resolves to none and no LM probe runs. This
 # wrapper refuses that list before anything is built.
 #
-# The flip rule is the step leg's (ENGINEERING_RULES 9): the geometric mean of
+# The flip rule is the step leg's (CONTRIBUTING.md (Performance claims)): the geometric mean of
 # the enwik8 and pilegithub lean step ratios against the shipped default below
 # 1 on the same pod, with every step witness equal to shipped on both corpora
 # (lm_summary.tsv verdict lines). A flip changes only the NVIDIA row.
@@ -81,7 +80,6 @@ fi
 
 {
     echo "deviations=2599,2700,2703,2706,2707"
-    echo "brief=docs/lanes/BRIEF_gemm_kernel_2026-09-11.md"
     echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "root=$ROOT"
     echo "arms=$MOJOLEARN_GEMM_STEP_LEG_ARMS"

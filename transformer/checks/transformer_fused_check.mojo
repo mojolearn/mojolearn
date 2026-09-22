@@ -29,8 +29,7 @@ A fused path that silently skipped the corner would pass every ordinary
 case here and differ from eager on `underflow` -- which is the case that
 exists to say so ([[reached-but-inert]]).
 
-WHICH ARM RAN (DEVIATION 2534, brief
-docs/lanes/BRIEF_attention_step_2026-09-11.md section 15). The shipped
+WHICH ARM RAN (DEVIATION 2534). The shipped
 attention arm is a kernel-matrix row per column (`attn_default_arm_for`:
 NVIDIA `stash_tiled_fgrid_r32_qres_pf`, AMD
 `stash_tiled_fgrid_r32_qres_pf_kvgrid_r32` (brief section 18), Apple and the

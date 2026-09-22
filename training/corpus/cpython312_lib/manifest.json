@@ -20,5 +20,5 @@
   "planned_steps": 3,
   "train_batch_schedule": "step k zero-based, row b: bytes[(k*batch*2048 + b*2048) % (4522096 - 2049) : start+2049]; targets shifted one byte (tools/lm_step_memory_probe.py --corpus)",
   "validation_batch_starts": [],
-  "scope": "source-code kind for the two-corpus neural timing rule (ENGINEERING_RULES section 9); attention step lane DEVIATIONS 2525 to 2527; no learning claim; input.txt is fetched by tools/fetch_corpus_cpython312_lib.sh and is not committed"
+  "scope": "source-code kind for the two-corpus neural timing rule (CONTRIBUTING.md (Performance claims)); attention step lane DEVIATIONS 2525 to 2527; no learning claim; input.txt is fetched by tools/fetch_corpus_cpython312_lib.sh and is not committed"
 }

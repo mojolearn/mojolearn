@@ -1,8 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """CPU inference for saved LinearRegression, Ridge, TruncatedSVD,
 LogisticRegression and PCA models (the classical host inference lane,
-2026-09-13; brief docs/lanes/BRIEF_forest_host_inference_2026-09-13.md,
-"Classical lanes"), since the kde svc host lane (2026-09-14) saved
+2026-09-13), since the kde svc host lane (2026-09-14) saved
 KernelDensity and SVC models, since the knn host inference lane
 (2026-09-14) NearestNeighbors, KNeighborsClassifier and KNeighborsRegressor,
 and since lane/inference-linear-svm (2026-09-15) StandardScaler,

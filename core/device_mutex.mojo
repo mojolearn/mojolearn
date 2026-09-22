@@ -64,9 +64,7 @@ separately ensure that spinning blocks can make progress.
 
 WHAT THIS FILE DOES NOT CLAIM. This is the C++ and LLVM release-sequence argument plus a
 measurement that the fence reaches the ISA. It is not a claim that any backend's lowering
-has been proved correct, and it is not a substitute for the device checks. See
-`docs/lanes/RF_MUTEX_RECONCILIATION_2026-09-16.md` for the evidence ledger and for what
-is still owed.
+has been proved correct, and it is not a substitute for the device checks.
 """
 
 from std.atomic import Atomic, Ordering, fence

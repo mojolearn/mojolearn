@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """What DEVIATION 2649's row geometry costs the samba RMSNorm path.
 
-`docs/lanes/BRIEF_step_glue_2026-09-11.md` section 11, WHAT IS NOT CLAIMED:
+The step glue lane recorded what it did NOT claim, as follows.
 
     The rows arms move the launch geometry of `llama_rms_norm` and
     `bwd_rms_norm` for EVERY caller on an NVIDIA build, including

@@ -48,7 +48,7 @@ check-byte-lm-config = "mojo run -j 2 -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . trai
 # The whole correctness suite, end to end, on the GPU. This is the one command
 # that answers "does it still work". It builds and runs; there is no separate
 # build step to keep in sync.
-probe = "mojo run -I . probe_main.mojo"
+probe = "mojo run -I . checks/probe_main.mojo"
 
 # ---------------------------------------------------------------------------
 # DOC GATES. Neither needs a GPU, one takes a second and the other about six,
@@ -124,7 +124,7 @@ speed-classical = "mojo run -I . bench/speed/classical_speed_main.mojo"
 # written in this repository. Needs `bench/oracle.txt`, which is committed;
 # regenerate it with `oracle-gen` when a setting or the CatBoost version
 # moves, and read the diff, because that diff IS the behaviour change.
-oracle = "mojo run -I . oracle_main.mojo"
+oracle = "mojo run -I . checks/oracle_main.mojo"
 
 # The DEPTH and FEATURE-COUNT sweep of the same differential: five depths by
 # three feature counts, both searchers, plus the four one-byte accumulators at
@@ -161,12 +161,12 @@ soak-determinism = "mojo run -I . checks/determinism_soak.mojo"
 #
 # WHEN FIRST REGISTERED, 21 OF THE 22 FAILED INSTANTLY with "module does not
 # define a `main` function" -- they are libraries of check functions driven by
-# `probe_main.mojo`, not programs, and they were registered without one of
+# `checks/probe_main.mojo`, not programs, and they were registered without one of
 # them being run. Each now carries a `def main()` making exactly the calls
 # `probe_main` makes with the same arguments: a check run in a different
 # configuration than the one it was written for is not the same check.
 # `check-vendor-correctness` was the exception -- its driver already existed
-# as `vendor_main.mojo`, which also owns the `--transpose` arm and the exit-1
+# as `checks/vendor_main.mojo`, which also owns the `--transpose` arm and the exit-1
 # gate, and the task now points there instead of at the library.
 #
 # EVERY ONE HAS NOW BEEN RUN. 18 pass. THREE ARE RED AND STAY REGISTERED RED:
@@ -226,10 +226,10 @@ check-reorder = "mojo run -I . checks/reorder_check.mojo"
 check-replicated-half-byte = "mojo run -I . checks/replicated_half_byte_check.mojo"
 check-searcher-parity-covtype = "mojo run -I . checks/searcher_parity_covtype_check.mojo"
 check-train-api = "mojo run -I . checks/train_api_check.mojo"
-# CHANGED 2026-08-22: the check module is a library; `vendor_main.mojo` is its
+# CHANGED 2026-08-22: the check module is a library; `checks/vendor_main.mojo` is its
 # driver and always was. It also takes `--transpose` and exits 1 on a WRONG
 # verdict for a WIRED primitive, neither of which a bare `main()` would carry.
-check-vendor-correctness = "mojo run -I . vendor_main.mojo"
+check-vendor-correctness = "mojo run -I . checks/vendor_main.mojo"
 
 # The control plane, which is host-side and has its own `main()` rather than
 # a function `probe_main` could call, so it runs as its own task instead of
@@ -403,7 +403,7 @@ check-leaf-partition = "mojo run -I . checks/leaf_partition_check.mojo"
 # DEVIATIONS 2550 (X read in place) and 2551 (device leaf partition), one
 # named check per side, IDENTICAL tier. Both are the IDENTICAL default since
 # 2026-09-11, so check-gbdt-per-round runs both ON sides and the two tasks
-# below name the OPT-OUT sides (ENGINEERING_RULES 8). Claim 1 compares the
+# below name the OPT-OUT sides (CONTRIBUTING.md (Non-default paths)). Claim 1 compares the
 # device partition with the host one on every build; claim 2 prints one
 # MODEL_HASH per lane, which must be equal across the three builds.
 check-gbdt-per-round = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/gbdt_per_round_check.mojo"
@@ -1148,12 +1148,9 @@ check-bpe-trainer = "sh tokenizer/tools/gen_unicode_table.sh && python3 python/m
 # run reports that rather than passing quietly.
 check-bpe-trainer-sabotage = "sh tokenizer/tools/gen_unicode_table.sh && python3 python/mojolearn/_bpe_trainer.py build/bpe_trainer && mojo run -D MOJOLEARN_BPE_TRAINER_SABOTAGE=1 -I . tokenizer/checks/trainer_check.mojo"
 # THE FOUR-LANE ORACLES (lane/four-lane-oracles, 2026-09-16). The oracle and
-# applicability audit (docs/lanes/LANE_STATUS_oracle-and-applicability-audit.md)
-# found four lanes a release record runs whose passing cell is a hash compared
+# applicability audit found four lanes a release record runs whose passing cell is a hash compared
 # only against a previous hash of the SAME CODE. These four checks give each of
 # them something that computes the answer a second way and can disagree.
-# Per lane, what the oracle is, what it can and cannot catch, and the sabotage
-# it was SEEN TO FAIL on, are in docs/lanes/LANE_STATUS_four-lane-oracles.md.
 #
 # `check-bpe-trainer` above is NOT this. It holds the Mojo trainer to the
 # Python one, and the Mojo one was written against the Python one, so a wrong
@@ -1320,7 +1317,7 @@ build-mamba2-ssd-backward-probe = "mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -
 #
 #   tools/with_identical_mode.sh pixi run mojo run \
 #       -D MOJOLEARN_BATCHINV_SABOTAGE_NORM_CHUNK_FROM_M=1 \
-#       -I . batch_invariance_main.mojo
+#       -I . checks/batch_invariance_main.mojo
 #
 # splits RMSNorm's per-row sum of squares into chunks whose WIDTH IS DERIVED
 # FROM m = B*L -- contract 6.1's forbidden `L = f(k, m)`, one layer up. One
@@ -1336,7 +1333,7 @@ build-mamba2-ssd-backward-probe = "mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -
 # in this file) raises from `arm_expectation` because this arm is not one of
 # that contract's thirteen. A gate that does not own an arm should refuse to
 # score it.
-check-batch-invariance = "mojo run -I . batch_invariance_main.mojo"
+check-batch-invariance = "mojo run -I . checks/batch_invariance_main.mojo"
 
 # THE TRANSFORMER GATES, WHICH HAD NO TASK AT ALL UNTIL 2026-08-31.
 # Both files carry their own `def main`, so they were always runnable -- but

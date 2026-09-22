@@ -1,14 +1,13 @@
 #!/usr/bin/env sh
 # THE EXTRATREES AND FUSED-kNN ARMS OF THE CROSS-BLOCK MUTEX DEFECT, ON gfx942.
 #
-# docs/lanes/RF_MUTEX_RECONCILIATION_2026-09-16.md section 5 item 4: both subsystems
+# Both subsystems
 # carry the same claim_device_mutex protocol as the random forest and NEITHER HAS EVER
 # BEEN MEASURED. This body measures them. It does not touch the forest; a peer session
 # owns that.
 #
 # READ THIS BEFORE READING ANY NUMBER BELOW IT.
-# docs/lanes/LANE_STATUS_lane-mutex-extratrees-knn.md establishes, from the source and
-# with no box at all, that the two sites have REACHABILITY GATES the forest does not:
+# The source establishes, with no box at all, that the two sites have REACHABILITY GATES the forest does not:
 #
 #   * ExtraTrees claims from bpn = ceildiv(k, TPB) blocks per node, k the sampled column
 #     count and TPB 512 on a 64-lane wavefront. At k <= TPB there is ONE claimant per

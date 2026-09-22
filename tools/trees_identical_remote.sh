@@ -59,7 +59,7 @@ track_pip() {
     python3 -c "import cuml; print('cuml', cuml.__version__)" >> "$OUT/versions.txt" 2>&1
     python3 -c "import torch; print('torch', torch.__version__, 'cuda', torch.version.cuda)" >> "$OUT/versions.txt" 2>&1
     : > "$OUT/track_pip_base.done"
-    # The two datasets of ENGINEERING_RULES.md section 9 (2026-09-11):
+    # The two datasets of CONTRIBUTING.md (Performance claims) (2026-09-11):
     # NYC taxi (about 100 MB of parquet, needs pyarrow) and Istella-S LETOR
     # (472 MB tar). Direct downloads, no credentials; each decoded once to a
     # NumPy cache by the harness's own --download step. HIGGS is retired.

@@ -1,9 +1,0 @@
-smoke-ours-QueryRMSE-gpu=0 23:13:28
-smoke-ours-PairLogit-gpu=0 23:13:36
-smoke-ours-YetiRank-gpu=0 23:13:43
-smoke-catboost-QueryRMSE-gpu=0 23:13:50
-smoke-catboost-PairLogit-gpu=0 23:13:57
-smoke-catboost-YetiRank-gpu=0 23:14:03
-smoke-xgboost-rank_pairwise-gpu=1 23:14:07
-smoke-xgboost-rank_ndcg-gpu=1 23:14:11
-smoke-lightgbm-lambdarank-cpu=1 23:14:15

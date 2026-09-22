@@ -128,5 +128,5 @@ def check_train_api() raises:
 
 
 def main() raises:
-    # STANDALONE DRIVER, the last call `probe_main.mojo` makes.
+    # STANDALONE DRIVER, the last call `checks/probe_main.mojo` makes.
     check_train_api()

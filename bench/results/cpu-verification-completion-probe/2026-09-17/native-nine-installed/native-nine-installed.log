@@ -1,3 +1,0 @@
-mac_slot: admitted after 0.001s
-native-five {'DIVERGENT': 0, 'IDENTICAL': 180, 'N/A': 45, 'OWED': 0, 'REFUSED': 0} {'appendix_entries': 246, 'available': 162, 'excluded': 50, 'registered_lanes': 229, 'unavailable': 0, 'withheld': 17}
-mac_slot: {"wait_seconds": 0.0006290839992288966, "run_seconds": 56.41048333300023, "exit_code": 0}

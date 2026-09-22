@@ -1,3 +1,0 @@
-2694 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x523c80000000, nodemask=1)
-record GradientBoosting predict <f4 [200] sha256 98318916ca1e5eceb099c51e7be4b7efdd1eb350dbe1184dbad1b8d642c41fb5
-record wrote /root/gemm_leg_out/forest_host/2026-09-13-gpu-gbdt_rmse/expected.json (vendor cuda, mode identical)

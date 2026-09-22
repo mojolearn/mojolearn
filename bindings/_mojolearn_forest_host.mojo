@@ -178,8 +178,7 @@ def forest_host_sabotage_binding() raises -> PythonObject:
     committed column
     `bench/results/identity_break/2026-09-15_gbdt-ctr-tables/cpu-x86-ctr-sabotage.json`
     is classified as a PRODUCTION column by any reader that trusts this flag,
-    which is how the sabotage audit found it
-    (docs/lanes/SABOTAGE_AUDIT_2026-09-16.md, finding 3). The arm itself is
+    which is how the sabotage audit found it. The arm itself is
     real and was watched to fail; what was missing is the read-back, and a
     column that misreports which binary produced it undermines every verdict
     read from it. `python/mojolearn/_forest_host.py` already ORs the two when

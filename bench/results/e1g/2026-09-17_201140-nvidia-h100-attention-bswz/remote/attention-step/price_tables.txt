@@ -1,8 +1,0 @@
-TABLE kind=file:operands-enwik8 shape=B1_L2048_nh12_nkv12_hd64_win0 column=nvidia default_arm=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
-TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
-TABLE stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 | 1.856282 | 3.472315452070321 | 5.11434 | 3.258058 | 4.945888526232498 | 1.0 | 1.0
-TABLE stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz | 1.555187 | 4.14457982994971 | 4.408422 | 2.8532349999999997 | 5.64762162247414 | 1.1936069424448634 | 1.1601294068489814
-TABLE kind=file:operands-pilegithub shape=B1_L2048_nh12_nkv12_hd64_win0 column=nvidia default_arm=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 visible_cells=25178112 (useful flops: fwd 4*cells*hd, bwd 10*cells*hd; executed multiplier of the shipped kernels: fwd dots 3 of 2 contractions, bwd dots 6 of 5)
-TABLE arm | fwd median ms | fwd useful TFLOP/s | fwd+bwd median ms | bwd (derived) ms | bwd useful TFLOP/s | fwd ratio | fwd+bwd ratio
-TABLE stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 | 1.879461 | 3.429492110770056 | 5.170539 | 3.2910779999999997 | 4.896265503278865 | 1.0 | 1.0
-TABLE stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz | 1.557726 | 4.137824413279358 | 4.419992 | 2.862266 | 5.6298022895146715 | 1.2065414585106753 | 1.169807320918228

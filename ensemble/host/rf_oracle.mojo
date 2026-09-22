@@ -1,8 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The RandomForest fit on the host, a SECOND spelling of the device trainer
-(workstream E batch 3, 2026-09-14; brief
-docs/lanes/BRIEF_cpu_training_2026-09-13.md section 1.1 rf-clf, rf-reg).
+(workstream E batch 3, the rf-clf and rf-reg lanes, 2026-09-14).
 
 HOST ONLY. Nothing here imports `max.gpu`, `std.gpu`, a `DeviceContext` or
 any module under `ensemble/` that defines a kernel. The only library

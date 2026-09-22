@@ -1005,8 +1005,7 @@ def test_a_corrupted_reference_hash_reads_divergent_and_exit_1():
 # ---------------------------------------------------------------- the decode part
 
 #: the eight lanes tools/identity_break.py declares a real stepfull part for,
-#: and the hash all four recorded columns landed on
-#: (docs/lanes/LANE_STATUS_lane-decode-columns.md, 2026-09-16)
+#: and the hash all four recorded columns landed on (2026-09-16).
 #: mamba2-dtlimit was re-recorded at its corrected clamp on 2026-09-17;
 #: see identity_break/2026-09-17_cpu-mamba2-completion/cpu-mac-clean.json.
 #:

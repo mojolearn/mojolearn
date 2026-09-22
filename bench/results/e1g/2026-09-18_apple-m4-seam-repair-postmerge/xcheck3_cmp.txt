@@ -1,4 +1,0 @@
-post-merge nvidia gemm_device_check: device modules main=66 branch=66 identical=True
-post-merge nvidia gemm_step_price_main: device modules main=44 branch=44 identical=True
-post-merge amd gemm_device_check: device modules main=68 branch=68 identical=True
-post-merge amd gemm_step_price_main: device modules main=45 branch=45 identical=True

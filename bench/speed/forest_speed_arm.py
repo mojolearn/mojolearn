@@ -424,7 +424,7 @@ def verify_our_arm(arm, requested=None):
                            % (requested, expected_vendor, resolved, compiled, vendor))
     print("BENCH_BINDING arm=%s requested=%s resolved=%s compiled=%s vendor=%s path=%s"
           % (arm.name, requested, resolved, compiled, vendor, binding.__file__), flush=True)
-    # ENGINEERING_RULES.md section 8: the compiled side of every opt-in
+    # CONTRIBUTING.md (Non-default paths): the compiled side of every opt-in
     # switch this binding carries, beside the timing (DEVIATIONS 2550, 2551,
     # 2580, 2581).
     paths = getattr(binding, prefix + "_per_round_paths", None)
@@ -477,7 +477,7 @@ def build_parser():
                         "(the default) is GPU-ONLY wherever an accelerator "
                         "is visible and cpu on the MacBook. On NVIDIA we "
                         "compare against the vendor's GPU path only; on AMD "
-                        "(ENGINEERING_RULES.md section 10, 2026-09-11) a "
+                        "(CONTRIBUTING.md (Comparing against libraries without a GPU path), 2026-09-11) a "
                         "library with no AMD GPU path runs on the box's CPU "
                         "when `cpu` is listed, labeled in the arm name. "
                         "`opencl` selects LightGBM's USE_GPU learner. An "
@@ -566,7 +566,7 @@ def main(argv=None):
     if spec.accel_vendor() == "amd":
         policy = ("AMD box: an opponent with an AMD GPU path runs on the GPU, "
                   "one without runs on this box's CPU on all cores "
-                  "(ENGINEERING_RULES.md section 10); the arm name says which")
+                  "(CONTRIBUTING.md (Comparing against libraries without a GPU path)); the arm name says which")
     else:
         policy = ("on an NVIDIA box the vendors' CPU arms do not run, so a "
                   "lane whose only opponent is a CPU library has NO legal "

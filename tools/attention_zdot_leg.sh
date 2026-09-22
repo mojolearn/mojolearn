@@ -3,8 +3,7 @@
 # DEVIATION 2598 (`_zlag`: the preflushed zdot stash kernel with its stash
 # stores deferred into the next staging round trip and its z fold lagged into
 # that phase; `_zdefer`: the stores deferred only), on the shipped NVIDIA
-# default stash_tiled_fgrid_r32_qres_pf and priced against it (brief
-# docs/lanes/BRIEF_attention_step_2026-09-11.md section 17). The AMD dk/dv
+# default stash_tiled_fgrid_r32_qres_pf and priced against it. The AMD dk/dv
 # arms `_kvgrid_r32` and `_kvsplit` (DEVIATION 2597, kernels unchanged;
 # `stash_tiled_fgrid_r32_qres_pf_kvgrid_r32` is the shipped AMD default since
 # brief section 18, NVIDIA's default is unchanged) ride the same pod for
@@ -34,7 +33,7 @@
 # phase explanation (brief 17.2).
 #
 # Gates: brief section 6 with stash_tiled_fgrid_r32_qres_pf in place of
-# baseline. Flip (brief 17.7, ENGINEERING_RULES 9): the geometric mean of the
+# baseline. Flip (brief 17.7, CONTRIBUTING.md (Performance claims)): the geometric mean of the
 # enwik8 and pilegithub lean step ratios (arm over the default, lm_summary.tsv
 # steady medians, same pod) below 1, with witnesses_equal_baseline=True for
 # every step on both corpora. A flip changes only the NVIDIA row.

@@ -125,7 +125,7 @@ def check_copy_histograms() raises:
 
 
 def main() raises:
-    # STANDALONE DRIVER, the same call `probe_main.mojo` makes under
+    # STANDALONE DRIVER, the same call `checks/probe_main.mojo` makes under
     # "copy_histograms in isolation". The check builds its own
     # `DeviceContext` internally, so there is nothing to set up here.
     print("copy_histograms in isolation:")

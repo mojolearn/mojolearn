@@ -1,2 +1,0 @@
-DELETE almtzr6iqth0k9 -> HTTP 204
-GET after delete -> HTTP 404 (404 means gone)

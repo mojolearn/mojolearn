@@ -8,7 +8,7 @@ FACT ABOUT THE RUNNER rather than something to reason about from the chip. If
 this prints OK in CI, the release workflow can build and test a wheel on a
 hosted runner and no self-hosted machine is needed.
 
-Deliberately not part of probe_main.mojo: that file is large, is under active
+Deliberately not part of checks/probe_main.mojo: that file is large, is under active
 edit by another session, and a CI probe that fails for an unrelated reason
 answers the wrong question.
 """

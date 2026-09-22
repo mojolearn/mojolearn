@@ -1,6 +1,0 @@
-# verify --all: cpu (cpu), 5 lanes x 9 fixtures, harness wheel copy, table /Users/andrewhendel/mojolearn-evidence/cpu-verification-completion/installed-env/lib/python3.14/site-packages/mojolearn/verify_reference/table.json
-  byte-lm                            byte_lm             5.5s
-  gemm-bf16                          linalg              0.2s
-  gemm-int8                          linalg              0.0s
-  byte-lm-resident                   byte_lm             1.7s
-  ivf                                ivf                12.5s

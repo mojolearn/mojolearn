@@ -14,7 +14,7 @@
 #
 # THIS SCRIPT DECIDES NOTHING. It does not compute a flip verdict and it does
 # not touch a default. It reports times, quality and hashes. Verdicts stay with
-# tools/flip_verdict.py and the ENGINEERING_RULES.md section 9 rule, on purpose:
+# tools/flip_verdict.py and the CONTRIBUTING.md (Performance claims) rule, on purpose:
 # a sweep you run occasionally is the wrong place to move a default.
 #
 # PARALLELISM. Never within a pod: two timed runs sharing one GPU corrupt both
@@ -127,7 +127,7 @@ tree_arms_for() {
 
 # `et` is the ONE lane where an NVIDIA box admits a CPU arm by name: no GPU
 # ExtraTrees exists anywhere, so sklearn on all cores is its only legal
-# opponent (resolve_devices, ENGINEERING_RULES.md section 10). Every other lane
+# opponent (resolve_devices, CONTRIBUTING.md (Comparing against libraries without a GPU path)). Every other lane
 # stays GPU-only. The arm name carries -cpu so the table cannot hide it.
 tree_devices_for() {
     case "$1" in

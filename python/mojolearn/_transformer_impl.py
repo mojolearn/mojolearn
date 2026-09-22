@@ -1212,8 +1212,7 @@ class TransformerBlock(NumericModeMixin):
         every call re-reads the weights exactly as the per-call entry does.
 
         This is NOT the block's retained per-model context (`_native_session`,
-        the binding's `transformer_session_*` entry points, docs/
-        TRANSFORMER_SESSION_REUSE.md), which the per-call `forward`/`step`
+        the binding's `transformer_session_*` entry points), which the per-call `forward`/`step`
         use and which rereads the weights and the caller's cache on every
         call. The decode session owns its own context and its entry points
         are `transformer_decode_session_*`; the two coexist on one block."""

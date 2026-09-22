@@ -1,6 +1,6 @@
 #!/bin/sh
 # tools/classical_two_datasets_leg.sh -- DEVIATION 2570, the classical
-# opponent rows on the two benchmark datasets (ENGINEERING_RULES.md sections
+# opponent rows on the two benchmark datasets (CONTRIBUTING.md sections
 # 9 and 10). Runs ON THE BOX from /root/mojolearn.
 #
 # NVIDIA (RunPod, DEVIATION 2571): driven phase by phase over tools/trees_leg.sh

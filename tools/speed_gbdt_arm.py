@@ -750,7 +750,7 @@ def _decode_letor(path, n_features):
 
 def load_istella(size, rows_cap=None, regression=False):
     """Istella-S LETOR, 3,408,630 x 220, THE HIGH-FEATURE LARGE DATASET
-    (ENGINEERING_RULES.md section 9, the second kind beside NYC taxi; HIGGS is retired).
+    (CONTRIBUTING.md (Performance claims), the second kind beside NYC taxi; HIGGS is retired).
 
     Real web-search query/document feature vectors from the istella search
     engine (Dato et al., ACM TOIS 2016), dense, 220 numeric features,
@@ -927,7 +927,7 @@ def _decode_taxi_month(path):
 
 def load_taxi(size, rows_cap=None, regression=False):
     """NYC TLC yellow taxi trips, January and February 2024, THE MIXED-TYPE
-    LARGE DATASET (ENGINEERING_RULES.md section 9, the second kind beside
+    LARGE DATASET (CONTRIBUTING.md (Performance claims), the second kind beside
     Istella-S).
 
     About 5.8M plausible trips after the filter in `_decode_taxi_month`,
@@ -996,7 +996,7 @@ def load_taxi(size, rows_cap=None, regression=False):
 
 
 #: Which dataset each lane runs by default. Since 2026-09-11 every tree
-#: lane defaults to `taxi` (ENGINEERING_RULES.md section 9); a leg runs
+#: lane defaults to `taxi` (CONTRIBUTING.md (Performance claims)); a leg runs
 #: `taxi` and `istella` both, and HIGGS is retired (its loader stays so old
 #: evidence can be re-read). `year` and `covtype` remain as small fixtures.
 LANE_DEFAULT_DATASET = {
@@ -2838,7 +2838,7 @@ def accel_vendor():
 def resolve_devices(requested, lane=None):
     """Which device arms of each opponent may run here.
 
-    CORRECTED 2026-09-11 (ENGINEERING_RULES.md section 10): on AMD a library
+    CORRECTED 2026-09-11 (CONTRIBUTING.md (Comparing against libraries without a GPU path)): on AMD a library
     with no AMD GPU path runs on the box's CPU on all cores when `cpu` is
     requested by name, and every arm name says -cpu or -gpu; the GPU-only
     rule below now binds NVIDIA only.
@@ -2881,7 +2881,7 @@ def resolve_devices(requested, lane=None):
             emit_note(
                 lane, want, "devices", float(len(want)),
                 "AMD box: CPU arms run for libraries with no AMD GPU path, "
-                "on all cores (ENGINEERING_RULES.md section 10); every arm "
+                "on all cores (CONTRIBUTING.md (Comparing against libraries without a GPU path)); every arm "
                 "name carries its device")
     elif "cpu" in want and accel_visible() and lane == "et" and not auto:
         # CORRECTED 2026-09-11 (lane trees-taxi-h100): NVIDIA has no GPU
@@ -2927,7 +2927,7 @@ def build_opponents(lane, cfg, data, devices):
                          "GPU-PATH-ONLY: %s is a CPU arm and cpu was not "
                          "requested on this accelerator box. On NVIDIA we "
                          "compare against the vendor's GPU path only; on AMD "
-                         "request cpu by name (ENGINEERING_RULES.md section "
+                         "request cpu by name (CONTRIBUTING.md section "
                          "10)." % name)
         if blocked and len(blocked) == len(names):
             continue
@@ -2956,8 +2956,7 @@ def prepare_cuml_labels(data):
 # --------------------------------------------------------------------------
 
 def prepare_anomaly_labels(lane, data):
-    """The iforest lane on a labeled dataset (taxi, Istella-S; ENGINEERING_RULES.md
-    section 9, lane forest-speed 2026-09-11). Neither has planted anomalies, so
+    """The iforest lane on a labeled dataset (taxi, Istella-S; CONTRIBUTING.md (Performance claims), lane forest-speed 2026-09-11). Neither has planted anomalies, so
     the AUC column is a PROXY: the anomaly score against the training set's
     minority class on the test rows (taxi: no 20% tip, about 24%; Istella-S:
     relevance above 0, about 11%). It checks that two forests rank the same

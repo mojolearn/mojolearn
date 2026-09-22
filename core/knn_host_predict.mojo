@@ -1,9 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Brute-force k-NN inference on the host, for a box with no GPU (the knn
-host inference lane, 2026-09-14; brief
-docs/lanes/BRIEF_forest_host_inference_2026-09-13.md, "Classical lanes",
-rank 8).
+host inference lane, 2026-09-14).
 
 HOST ONLY. Nothing here imports `max.gpu`, `std.gpu` or a `DeviceContext`,
 and the GPU bindings do not import this file. It exists because the three

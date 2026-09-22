@@ -1,7 +1,7 @@
 #!/bin/sh
 # tools/two_device_par_class_amd_leg.sh: the on-box body (MOJOLEARN_GEMM_LEG_EXTRA
 # for tools/gemm_remote_leg.sh amd) of the ONE lease that can move the thirteen
-# `par-*` lanes docs/VERIFICATION_MATRIX.md lists under "GPU column on fewer
+# `par-*` lanes tools/verification_matrix.py lists under "GPU column on fewer
 # than three classes", 2026-09-19.
 #
 #   MOJOLEARN_GEMM_LEG_GPU_COUNT=2 \

@@ -13,7 +13,7 @@ cuML 26.08 still spell their accessors the way the readers here assume --
 only a box with those libraries can say that, and the readers report
 UNAVAILABLE BY NAME rather than crashing when they do not.
 
-BOTH SIDES OF EVERY SWITCH (ENGINEERING_RULES.md section 8). The refusal case
+BOTH SIDES OF EVERY SWITCH (CONTRIBUTING.md (Non-default paths)). The refusal case
 and the accept case are separate named checks: a dataset that is missing must
 REFUSE, and a generated fixture asked for BY NAME must still load. A check
 that only ever ran the refusing side would not notice the day the accepting

@@ -1,10 +1,9 @@
 #!/bin/sh
 # tools/attention_regs_leg.sh -- the attention REGISTER PRESSURE lane's
-# on-box body (DEVIATIONS 2653 and 2654; brief
-# docs/lanes/BRIEF_attention_regs_2026-09-11.md).
+# on-box body (DEVIATIONS 2653 and 2654).
 #
-# WHAT THIS LANE FOUND, so the body is read for what it is. Section 20.2 of
-# docs/lanes/BRIEF_attention_step_2026-09-11.md reads the H100 as
+# WHAT THIS LANE FOUND, so the body is read for what it is. The attention step
+# lane reads the H100 as
 # `floor(256 / pad8(regs))` 256-thread blocks per SM, and every attention
 # kernel of the step has a register readback EXCEPT the forward. The backward
 # dq kernel is already at two blocks per SM (118 registers) and brief section
@@ -65,7 +64,7 @@
 # brief with the NVIDIA default in place of `baseline`.
 #
 # THERE IS NO FLIP. This lane changes no kernel and no default, so
-# ENGINEERING_RULES 9 has nothing to decide here; the product is the six
+# CONTRIBUTING.md (Performance claims) has nothing to decide here; the product is the six
 # register rows and brief section 4's reading of them.
 #
 # POSIX sh only: RunPod's Ubuntu images link /bin/sh to dash.

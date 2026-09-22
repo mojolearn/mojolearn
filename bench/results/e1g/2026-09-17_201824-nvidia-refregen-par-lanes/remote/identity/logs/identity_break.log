@@ -1,1 +1,0 @@
-REFUSING: no commit witness. Set MOJOLEARN_COMMIT, run from a git checkout, or place a COMMIT or commit.txt file at the repository root. A JSON with an empty commit is not written.

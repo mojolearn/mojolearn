@@ -1,2 +1,0 @@
-	.amdgcn_target "amdgcn-amd-amdhsa-unknown-gfx942"
-	v_cmp_class_f32_e64 s[2:3], v1, v13

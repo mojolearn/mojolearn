@@ -1,4 +1,0 @@
-PINNED rtf_repair=False rounds=7
-PINNED gemm_nt_1024x1024x512 median_ms=12.6 out_fnv=0x2a47d1bb77b8b1a8
-PINNED gemv_n_1Mx64 median_ms=3.521 out_fnv=0x7e7178abe61f9eb
-PINNED gram_512x4096 median_ms=24.358 out_fnv=0xca4098ec7f8fcbef

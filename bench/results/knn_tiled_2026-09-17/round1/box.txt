@@ -1,6 +1,0 @@
-48
-model name	: AMD EPYC 7443 24-Core Processor
-Linux c81332a0058a 6.8.0-71-generic #71-Ubuntu SMP PREEMPT_DYNAMIC Tue Jul 22 16:52:38 UTC 2025 x86_64 x86_64 x86_64 GNU/Linux
-Python 3.11.10
-               total        used        free      shared  buff/cache   available
-Mem:             251          31          24           0         195         218

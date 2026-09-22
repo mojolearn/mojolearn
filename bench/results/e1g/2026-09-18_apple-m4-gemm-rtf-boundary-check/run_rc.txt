@@ -1,4 +1,0 @@
-norepair rc=1
-admit rc=0
-never rc=0
-inline rc=0

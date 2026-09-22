@@ -1,8 +1,0 @@
-mode IDENTICAL   sabotage: RANK_BY_ARRIVAL   EMB_TPB: 256
-ledger: the caller expected 'RANK_BY_ARRIVAL' and the binary agrees, so the -D was not silently dropped
-clause (a): 17 fixture cases, all 9 stages, device vs host oracle, BITWISE
-card: 9 records at /root/gemm_leg_out/embedding-sabotage/RANK_BY_ARRIVAL.card, contract section 10 wants 9
-card: 9/9 tags in contract section 10's order, all unique, three of them INTEGER (contract section 6: emb.perm is where a divergent sort becomes visible before it reaches a float)
-clause (g): arm RANK_BY_ARRIVAL -- contract 6.3 case 3, **the most dangerous spelling in this lane** -- an integer atomic's COUNT is order free and its SLOT is not. DEVIATION 1504: it needs T > 2 * EMB_TPB, not merely more than one block
-clause (g): RANK_BY_ARRIVAL BIT on f_multiblock: 2 of 9 stages moved, FIRST at emb.perm, which is the stage its own clause writes.
-clause (g): RANK_BY_ARRIVAL is INERT on f_nodup, 9/9 stages unmoved, which is the half that makes it a reach proof rather than a smoke test.

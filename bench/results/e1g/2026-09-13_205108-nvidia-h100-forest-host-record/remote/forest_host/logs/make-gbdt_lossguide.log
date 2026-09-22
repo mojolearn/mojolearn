@@ -1,2 +1,0 @@
-2497 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x79ed00000000, nodemask=2)
-make wrote /root/gemm_leg_out/forest_host/2026-09-13-gpu-gbdt_lossguide (gbdt_lossguide, GradientBoosting, vendor cuda, model sha256 ce045c6ad8de4e51f6210fbede267ad28dac797d931c98799a2e55cb1fa523bc)

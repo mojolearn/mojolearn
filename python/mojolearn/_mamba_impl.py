@@ -86,7 +86,7 @@ passing; see `bench/results/resume/2026-09-06-root-feature-nvidia/run3/remote/fe
 That source-run evidence does not certify an unbuilt alpha wheel or every
 vendor, shape and mode. All three classes expose zero-state IDENTICAL
 prefill backward. Current scope and packaging boundaries are documented in
-`mamba/PUBLIC_ALPHA_SURFACE.md`; older comments are not release certificates.
+SUPPORT_MATRIX.md; older comments are not release certificates.
 """
 
 from . import _buffer as _buffers, _bufcheck as _checks
@@ -1124,7 +1124,7 @@ class Mamba2Block(_MambaBase):
         independent arrays under the constructor's exact weight names plus
         ``x``. Incoming-cache and final-state cotangents are not supported.
         Retained NVIDIA fixture checks and outstanding wheel/vendor scopes are
-        listed in mamba/PUBLIC_ALPHA_SURFACE.md.
+        listed in SUPPORT_MATRIX.md.
         """
         return self._prefill_backward(x, grad_output, "mamba2_backward")
 
@@ -1706,7 +1706,7 @@ class Mamba3Block(_MambaBase):
         independent arrays under the constructor's exact weight names plus
         ``x``. Incoming-cache and final-state cotangents are not supported.
         Retained NVIDIA fixture checks and outstanding wheel/vendor scopes are
-        listed in mamba/PUBLIC_ALPHA_SURFACE.md.
+        listed in SUPPORT_MATRIX.md.
         """
         return self._prefill_backward(x, grad_output, "mamba3_backward")
 

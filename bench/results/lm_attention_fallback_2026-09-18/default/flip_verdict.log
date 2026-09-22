@@ -1,2 +1,0 @@
-EXPECTED NO FLIP deliberately doubled candidate times; geomean after/before=2
-FLIP NVIDIA: enwik8 after/before=0.4328934650117849; Pile GitHub after/before=0.5219120282475129; geomean=0.47532337028531896; every loss/state witness equal on both corpora

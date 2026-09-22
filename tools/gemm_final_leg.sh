@@ -1,6 +1,6 @@
 #!/bin/sh
 # tools/gemm_final_leg.sh -- DEVIATIONS 2640 to 2642, the GEMM final lane's
-# on-box work (docs/lanes/BRIEF_gemm_final_2026-09-11.md). A thin wrapper, the
+# on-box work. A thin wrapper, the
 # pattern of tools/gemm_kernel_leg.sh: it names the arms `kfoldv` and
 # `kfoldv_leaf` (with `ksplit_leaf` as a price-only control that separates the
 # rule from the fold), turns on the per-component LM timing, then runs
@@ -34,7 +34,7 @@
 #   MOJOLEARN_GEMM_STEP_LEG_OUT=/root/gemm_leg_out/gemm-final
 #
 # `shipped` is always the LM bracket and must not be the only LM arm.
-# The flip rule is the step leg's (ENGINEERING_RULES 9): the geometric mean of
+# The flip rule is the step leg's (CONTRIBUTING.md (Performance claims)): the geometric mean of
 # the enwik8 and pilegithub lean step ratios against the shipped default below
 # 1 on the same pod, with every step witness equal to shipped on both corpora.
 #
@@ -61,7 +61,6 @@ fi
 
 {
     echo "deviations=2640-2642"
-    echo "brief=docs/lanes/BRIEF_gemm_final_2026-09-11.md"
     echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "root=$ROOT"
     echo "arms=$MOJOLEARN_GEMM_STEP_LEG_ARMS"

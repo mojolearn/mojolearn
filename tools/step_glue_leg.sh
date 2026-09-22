@@ -2,11 +2,11 @@
 # tools/step_glue_leg.sh -- DEVIATIONS 2645 to 2648: the byte LM step glue
 # arms against the shipped step, lean step on both corpora in one pod, every
 # step witness compared, timers for attribution, a verdict per arm
-# (ENGINEERING_RULES section 9). VENDOR-AGNOSTIC body, written for the
+# (CONTRIBUTING.md (Performance claims)). VENDOR-AGNOSTIC body, written for the
 # NVIDIA H100 column: it runs ON THE BOX as the MOJOLEARN_GEMM_LEG_EXTRA body
 # of tools/gemm_remote_leg.sh (RunPod), from /root/mojolearn with pixi on
 # PATH; everything under /root/gemm_leg_out/step-glue/ comes home with the
-# leg's fetch. Brief: docs/lanes/BRIEF_step_glue_2026-09-11.md.
+# leg's fetch.
 #
 #   MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key \
 #   MOJOLEARN_GPU_ARCHS=sm_90a \
@@ -236,7 +236,7 @@ probe() {  # <run name> <glue arm, or - for none> <corpus path> <probe args...>
     fi
 }
 
-# ---- the two corpora (ENGINEERING_RULES section 9) --------------------------
+# ---- the two corpora (CONTRIBUTING.md (Performance claims)) --------------------------
 CORPORA=""
 run corpus-enwik8 sh tools/fetch_corpus_enwik8.sh \
     && CORPORA="$CORPORA enwik8=training/corpus/enwik8/input.txt"

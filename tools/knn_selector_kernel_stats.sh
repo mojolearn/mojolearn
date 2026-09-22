@@ -15,8 +15,7 @@
 #       --gpu "NVIDIA H100 80GB HBM3" \
 #       --local-card bench/results/e1/2026-08-28_131651-runpod-nvidia/lanes/gemm.identical.card
 #
-# WHY. The brief (docs/lanes/BRIEF_knn_selection_2026-09-10.md, "Step 5
-# result") closed the bound family and the deferred insertion: three
+# WHY. The kNN selection lane's step 5 closed the bound family and the deferred insertion: three
 # mechanisms that run the K-chain less often left the 0.80 ms per unit of k
 # untouched, so the cost is a property of the compiled kernel, not of how
 # often the chain executes. The three candidate properties are (a) the
@@ -56,9 +55,8 @@
 #             reports them), then `cuobjdump --dump-resource-usage` and
 #             `--dump-sass` on the cubin give REG / STACK / LOCAL / SHARED
 #             and the LDL / STL that execute. Same tools and flags as
-#             tools/gemm_cuda_resources.py (the GEMM lane's H100 pass,
-#             archive/docs/lanes/HANDOFF_speed_gemm_2026-09-10.md, "H100 resource
-#             inspection"); NVIDIA's binary-utilities documentation names
+#             tools/gemm_cuda_resources.py (the GEMM lane's H100 pass);
+#             NVIDIA's binary-utilities documentation names
 #             them. An offline ptxas is that toolkit's answer, not
 #             necessarily the runtime JIT's: where the two disagree the
 #             driver's runtime attributes win (stats.tsv carries both).

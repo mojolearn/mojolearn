@@ -1,8 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CPU binding for the `_mojolearn_svm` family, SVC today (the CPU training
-lane, phase 1, 2026-09-13; brief docs/lanes/BRIEF_cpu_training_2026-09-13.md
-sections 1.1 svc and 3.2).
+lane, phase 1, 2026-09-13).
 
 HOST ONLY. No DeviceContext, no kernel launch, no GPU. The fit is
 `svm/host/smo_oracle.mojo::smo_oracle_fit[DType.float32]`, "the SAME SMO,

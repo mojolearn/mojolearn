@@ -1,3 +1,0 @@
-Using CPython 3.12.3 interpreter at: /usr/bin/python3.12
-Creating virtual environment with seed packages at: /root/venv-gpu
- + pip==26.2.1

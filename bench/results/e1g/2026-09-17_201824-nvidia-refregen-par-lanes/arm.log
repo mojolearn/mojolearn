@@ -1,4 +1,0 @@
-arming a 60-minute self-kill on pod v69tyfbe8ww536 ...
-ARMED. Pod v69tyfbe8ww536 is TERMINATED through the API in 60 minutes.
-  lease: /Users/andrewhendel/mojolearn-wt/reference-regen/tools/../bench/results/runpod_leases/v69tyfbe8ww536.lease
-  extend with: tools/runpod_guard.sh extend v69tyfbe8ww536 '-p 13653 root@47.47.180.29' <minutes>

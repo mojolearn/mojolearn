@@ -1,7 +1,0 @@
-device probe: raw 0x80c00000 + 0x00800000 -> 0x80000000 on the DEVICE, a flushed add, so EMB_NO_FLUSH_ACC is INERT on this column (contract 9.3) and clause (g) asserts that instead
-device refusal: f_oor_high REFUSED by name on the device entry point, output buffer untouched (6 poisoned cells), so nothing was launched
-device refusal: f_oor_neg REFUSED by name on the device entry point, output buffer untouched (6 poisoned cells), so nothing was launched
-device refusal: PASS, both out-of-range cases refused by name before any launch
-clause (g): arm FOLD_READS_LAUNCH -- contract 5.1's last paragraph. **DEVIATION 1502: the device file's 'never inert on a run of length >= 2' is FALSE.** The arm rotates by `EMB_TPB % span` and EMB_TPB is a power of two on every column, so it is bitwise INERT at R = 2, 4, 8, ... -- which is why f_tree4 (R = 4) is the inert case and f_order3 (R = 3) is the only witness
-clause (g): FOLD_READS_LAUNCH BIT on f_order3: 1 of 9 stages moved, FIRST at emb.dw, which is the stage its own clause writes.
-clause (g): FOLD_READS_LAUNCH is INERT on f_tree4, 9/9 stages unmoved, which is the half that makes it a reach proof rather than a smoke test.

@@ -1,8 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Classical inference on the host, for a box with no GPU (the classical host
-inference lane, 2026-09-13; brief
-docs/lanes/BRIEF_forest_host_inference_2026-09-13.md, "Classical lanes").
+inference lane, 2026-09-13).
 
 HOST ONLY. Nothing here imports `max.gpu`, `std.gpu` or a `DeviceContext`,
 and the GPU bindings do not import this file. It exists because the five

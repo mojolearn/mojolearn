@@ -1,6 +1,0 @@
-...
-----------------------------------------------------------------------
-Ran 3 tests in 0.198s
-
-OK
-{"guard": "nvidia-root-serial-v1", "reason": null, "cpu_affinity": "0,1", "thread_limit": 2, "returncode": 0}

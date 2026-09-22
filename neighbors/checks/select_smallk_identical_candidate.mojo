@@ -273,8 +273,7 @@ comptime SMALLK_SCAN_SPAN = SMALLK_SCAN_UNROLL * SMALLK_BLOCK
 
 
 # ---------------------------------------------------------------------------
-# THE SELECTION TRIAL HOOK (DEVIATION 2497 and 2498, 2026-09-11; brief
-# `docs/lanes/BRIEF_knn_selection_2026-09-10.md` section 4).
+# THE SELECTION TRIAL HOOK (DEVIATION 2497 and 2498, 2026-09-11).
 #
 # `-D MOJOLEARN_KNN_SELECT_TRIAL=1` (never on a shipped build) compiles every
 # arm of `smallk_bucket_kernel` and lets the HOST pick one per request from

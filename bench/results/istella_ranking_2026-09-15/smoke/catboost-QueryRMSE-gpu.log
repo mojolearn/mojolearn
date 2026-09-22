@@ -1,6 +1,0 @@
-RANK start catboost QueryRMSE gpu rows=19995 queries=166 version=1.2.10 drain=libcudart.so
-RANK warmup 923.1 ms
-RANK fit rep=0 trees=1 ms=380.5
-RANK fit rep=0 trees=2 ms=385.7
-RANK quality rep=0 ndcg5=0.470439 ndcg10=0.529963 hash=65bac9ae9ccb808c
-RANK done catboost QueryRMSE median@2=385.7 fixed=375.2 per_tree=5.235 peak=77059 base=0

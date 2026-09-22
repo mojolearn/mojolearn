@@ -3,8 +3,7 @@
 # for DEVIATION 2534: `stash_tiled_fgrid_r32_qres_pf` is NVIDIA's shipped
 # attention default (kernel matrix `attn_default_arm_for`), priced against
 # `stash_tiled`, with the no-trial fused check proving the shipped path runs
-# the default and is bit-identical to eager (brief
-# docs/lanes/BRIEF_attention_step_2026-09-11.md section 15).
+# the default and is bit-identical to eager.
 #
 # A MOJOLEARN_GEMM_LEG_EXTRA body. tools/gemm_remote_leg.sh has no extra-env
 # plumbing, so the settings live here (that leg copies this file into the

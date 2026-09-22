@@ -1,220 +1,178 @@
-# Contributing to MojoLearn
+# Contributing to mojolearn
 
 Contributions are welcome. Bug reproductions, documentation, tests, hardware
-cards, estimator work, performance improvements and numerical audits all
+reports, estimator work, performance improvements and numerical audits all
 matter.
 
-New here? [docs/START_HERE.md](docs/START_HERE.md) is the whole path from a
-clone to a merged change, and it is short on purpose. You do not need to read
-the rest of this repository's documentation before your first contribution.
+New here? [docs/START_HERE.md](docs/START_HERE.md) covers the path from a
+clone to a merged change.
 
-## What you actually need
+## What you need
 
-**One GPU. Any vendor. That is the entire hardware requirement.** The vendor
-floors and the examples that qualify are the table in
-[docs/START_HERE.md](docs/START_HERE.md) section 1; they are not repeated here.
-There is no CPU path, so you do need a GPU. You do not need a good one, you do
-not need to rent one, and you do not need more than one.
+One machine with [pixi](https://pixi.sh). A GPU supported by the Mojo
+toolchain (Apple, NVIDIA or AMD) lets you build and check the GPU paths.
+Routine checks also run on the CPU, and CPU-only installs train and predict.
+You do not need to rent hardware or own a second vendor.
 
-One GPU closes everything except a cross-vendor identity claim: bug
-reproductions and fixes, host oracles, separating fixtures, sabotage arms,
-documentation, performance work on your own column, and a new estimator in the
-`fast` tier. Certificates in this tree are recorded on an M4, an H100 and an
-MI325X because that is what it takes to CLOSE a cross-vendor claim, and running
-those legs is a maintainer job. **Mark the columns you did not run
-`cross-vendor-pending` and stop there.** That is a complete contribution, not a
-partial one. Never infer a column you did not execute.
+One machine closes everything except a cross-vendor identity claim. Bug
+fixes, host oracles, separating fixtures, sabotage arms, documentation,
+performance work on your own hardware and new estimators all fit on one box.
+Cross-vendor certification is a maintainer job. **Mark the columns you did
+not run `cross-vendor-pending`.** That is a complete contribution. Never infer
+a column you did not execute.
 
-### Nothing here is built for the maintainer's machine
-
-If you have read a build script and concluded otherwise, it is worth being
-explicit. `bindings/build_linalg.sh` pins `--target-cpu apple-m1`, not the M4
-it usually runs on, and the Linux builds pin `x86-64-v3`, which is Haswell
-2013 and Zen 1 2017 onward. Both pins exist because targeting the build box
-shipped a wheel that crashed on other people's hardware, twice. A source build
-with no `MOJOLEARN_GPU_ARCHS` set targets YOUR GPU, which is what you want.
+Build scripts do not target any one machine. `bindings/build_linalg.sh` pins
+`--target-cpu apple-m1` and the Linux builds pin `x86-64-v3`, so wheels run on
+other people's hardware. A source build with no `MOJOLEARN_GPU_ARCHS` set
+targets your GPU.
 
 ## Before opening a pull request
 
-1. Open an issue for changes that alter a public API, numerical profile or
+1. Open an issue first for changes to a public API, a numerical profile or an
    algorithm boundary.
-2. Keep the change focused and preserve unrelated work in the tree.
+2. Keep the change focused and leave unrelated work in the tree alone.
 3. Add the smallest test that would have failed before the change.
-4. Run the relevant local checks documented by the owning module or `pixi`
-   task.
-5. State which hardware and numerical modes you actually ran. Unrun columns
-   should be marked `cross-vendor-pending`, not inferred.
+4. Run the relevant checks for the module you changed (see
+   [docs/START_HERE.md](docs/START_HERE.md) and
+   [docs/TEST_RUNTIME.md](docs/TEST_RUNTIME.md)).
+5. State which hardware and numeric modes you actually ran.
 
-## Where an algorithm comes from
+The [pull request template](.github/PULL_REQUEST_TEMPLATE.md) asks for the
+reference for any published algorithm the change implements, affected public
+APIs, effects on the `fast` and `identical` modes, tests and adversarial
+fixtures, hardware columns exercised, and performance evidence when a
+performance claim changes.
 
-Every line of Mojo here is written for this repository, and a contribution is
-expected to be written the same way. Where a contribution implements a
-published algorithm closely enough that a reader would want the reference,
-name it in the file so the next person can check the behavior against
-something. Where a lane keeps a `NOT_IMPLEMENTED.tsv`, record what the
-contribution deliberately leaves out, because a named gap is reviewable and a
-silent one is not.
+## Engineering rules
 
-Do not paste code from any other project into this one. That is true
-regardless of the license.
+These rules apply to every change. The section titles are stable so code and
+documents can cite them.
 
-## Numerical changes
+### Numerical identity
 
-Any change capable of moving `IDENTICAL` bits must name the numerical-profile
-clause or `IDENTITY_PATHS.md` row it affects and provide one of:
+Any change capable of moving `identical` bits must name the numerical-profile
+clause or [IDENTITY_PATHS.md](IDENTITY_PATHS.md) row it affects and provide
+one of the following.
 
-- evidence that the change is bit-inert;
-- a separating fixture and the required profile-version decision; or
-- a named refusal that prevents an unsupported claim.
+- Proof that the change is bit-inert.
+- A separating fixture, with the numerical profile version bumped.
+- A named refusal that prevents an unsupported configuration from claiming
+  the contract.
 
 Changes to reductions, RNG mapping, arithmetic contraction, denormal policy,
-tie-breaking, serialization and dispatch never merge solely because ordinary
-correctness tests pass. They require explicit review of the numerical DAG.
+tie-breaking, serialization and dispatch never merge because ordinary
+correctness tests pass. They need explicit review of the numerical DAG.
 
-When a numerical pin is added, the test must first show that its fixture can
-distinguish the pinned and unpinned spellings. A passing random hash that
-cannot separate them is not evidence.
+### Evidence must be able to fail
 
-## Pull-request evidence
+A test counts as evidence only if a sabotage or separating arm has been shown
+to make it fail. When a numerical pin is added, its fixture must first
+distinguish the pinned and unpinned spellings. A hash that passes under both
+has measured nothing. Uniform or random data can hide a permutation, so
+fixtures should be able to expose the defect they guard against. A check
+must also prove it reached the code it claims to test. A file no caller
+reaches is not done.
 
-The pull-request template asks for:
+### Non-default paths
 
-- the reference for any published algorithm the change implements;
-- affected public APIs;
-- FAST and IDENTICAL effects;
-- tests and adversarial fixtures;
-- hardware columns actually exercised;
-- performance evidence when a performance claim changes.
+Every switch is exercised on both sides by a named check that sets it
+explicitly. A number taken on a non-default path is provisional until a check
+has run that path, and a benchmark prints the path it took. A switch measured
+better and identical in output becomes the default. Reach is per-branch.
 
-Performance work follows the
-[performance acceptance policy](docs/PERFORMANCE_ACCEPTANCE.md). There is no
-fixed 10% or other percentage threshold. Evidence must establish the claimed
-scope, numerical or quality contract, generality, and absence of meaningful
-regressions;
-review weighs measured benefit against complexity and risk.
+### Numeric modes
 
-Maintainers run cross-vendor certification after local review. A contributor
-is not expected to own or rent a second vendor, let alone a third.
+`fast` and `deterministic` ship only for the tree learners (`gbdt`, `rf`,
+`trees`). Everything else ships `identical` only, and a withdrawn mode is a
+named refusal, never a silent absence. Report our `identical` result against
+the opponent's fastest configuration. Our `fast` over our `identical` is an
+internal cost, never a result.
+
+### Performance claims
+
+Every speed or quality claim for tree and classical estimators runs on the
+same two real datasets, which differ in kind.
+
+- **NYC TLC yellow taxi trips** (January and February 2024). A narrow,
+  mixed-type table with missing values, a temporal split, and classification
+  and regression targets.
+- **Istella-S LETOR.** A wide, numeric, imbalanced table with 220 features
+  and graded relevance.
+
+Trees run both at 1,000,000 rows or more. Classical estimators use each
+dataset at the shape where the kernel, not launch or transfer, dominates.
+Held-out quality is recorded beside every timing. A change becomes the
+default when the geometric mean of its time ratios over the two datasets is
+below 1 and quality is not worse on either dataset beyond noise
+(`tools/flip_verdict.py` prints the verdict). A win on one dataset with the
+other unmeasured is not a result. HIGGS and synthetic generators do not
+count. Neural claims use two different standard corpora, enwik8 and the
+GitHub component of the Pile. Name the opponent's threading and BLAS before
+quoting a ratio, never mix GPU models in one ratio, and report measured
+ratios rather than general speed claims. There is no fixed percentage
+threshold for performance work. Review weighs measured benefit, generality
+and regressions against complexity.
+
+### Comparing against libraries without a GPU path
+
+The opponent is the fastest thing a user can run on the same box. A library
+with a GPU path on that vendor (for example PyTorch ROCm or XGBoost ROCm on
+AMD) is measured on the GPU. A library with no GPU path for that vendor (for
+example cuML or CatBoost GPU on AMD) is measured on the same box's CPU using
+all cores, and the row is labeled CPU. Every row and table cell names GPU or
+CPU. Opponent rows are measured once per GPU model, driver, opponent version
+and dataset, and recorded in
+[bench/OPPONENT_REFERENCE.md](bench/OPPONENT_REFERENCE.md).
+
+### Algorithms and references
+
+Every line of Mojo here is written for this repository. Do not paste code from
+another project, whatever its license. Where a contribution implements a
+published algorithm, name the reference in the file so its behavior can be
+checked against it, and check against the path the reference's dispatch
+actually takes for the parameters in question. Do not reproduce a reference
+library's bugs. Where a lane keeps a `NOT_IMPLEMENTED.tsv`, record what the
+contribution leaves out.
 
 ## Automatic checks for external pull requests
 
-External PRs to the default branch receive two separate reports from
+External pull requests to the default branch receive two reports from
 [External contribution checks](.github/workflows/external-performance.yml).
-There is no push trigger. PR authors GitHub identifies as `OWNER`, `MEMBER`
-or `COLLABORATOR` are exempt from this additional workflow; existing maintainer
-CI and release work continue as before.
+Owners, members and collaborators are exempt.
 
-- The **admission report** reads changed-file metadata using the policy from
-  the trusted base commit. It does not fetch or execute the PR. Existing
-  implementation optimizations on its narrow allowlist receive `GPU_PENDING`.
-  Changes to infrastructure, dependencies, tests, contracts, public APIs or
-  files outside that allowlist receive `REVIEW_REQUIRED`. PR text, labels,
-  uploaded results and changes to the gate cannot approve the PR itself.
-- The **hosted CPU report** runs base-version packaging/version/CPU-baseline
-  checks against the candidate, parses Python and package TOML, checks binding
-  shell syntax, and runs trusted comparator negative controls against the
-  candidate helpers. It runs on a disposable GitHub-hosted Ubuntu machine
-  without cloud/release credentials, caches or a writable token. It does not
-  build Mojo, run GPU algorithms or measure GPU performance.
+- The **admission report** reads changed-file metadata under the trusted base
+  commit's policy without fetching or executing the pull request. Narrow
+  optimizations of existing code receive `GPU_PENDING`. Changes to
+  infrastructure, dependencies, tests, contracts, public APIs or other files
+  receive `REVIEW_REQUIRED`.
+- The **hosted CPU report** runs packaging, version and CPU-baseline checks
+  and comparator negative controls on a disposable GitHub-hosted machine with
+  no credentials. It does not build Mojo or run GPU code.
 
-Each report records the exact base/head commits and policy hash. Reports are
-available in the Actions job summary and its JSON artifacts. A green CPU job
-does **not** close `GPU_PENDING` or permit automatic merging. GitHub's fork
-workflow approval policy can hold a first-time contributor's CPU job; this
-repository currently uses `first_time_contributors` approval. Workflow code
-cannot override that repository/organization setting. Metadata admission
-does not require executing the fork's workflow.
-
-### GPU automation integration and current limits
-
-The admission job also emits `external-gpu-request.json`, a typed integration
-request containing exact commits, trusted recipe IDs, required vendor/mode
-evidence, bounded worker requirements and explicit missing configuration.
-Its `enabled` field is currently **false**. No GPU fleet or automatic merge
-service is configured by this change. The repository inspection for this work
-found no registered Actions runners and no repository Actions secrets;
-credentials on a maintainer's local machine are not CI configuration.
-
-The existing [manual GPU workflow](.github/workflows/gpu-validation.yml)
-targets self-hosted labels. It must not receive untrusted external PR code.
-The [release runner](tools/release_runner.sh) is also outside this trust zone.
-
-A controller can consume the request without asking the owner to start every
-run, once an administrator provides these concrete services and limits:
-
-1. A trusted GitHub App/controller with a configured recurring budget and
-   quotas, plus disposable NVIDIA, AMD and Apple GPU capacity. Provider keys
-   stay in the controller. Guest workers receive no provider, release or
-   repository-write credentials and no shared caches. One bounded worker runs
-   at a time, then is destroyed with a retained receipt.
-2. A controller that independently reloads the current PR metadata and trusted
-   base policy, checks the exact base/head commits and recipe IDs, and refuses
-   stale or contributor-supplied commands. The JSON artifact is data, not a
-   signed approval or executable job definition. Benchmark drivers and evidence
-   validators come from the trusted base. Candidate source runs only inside
-   the disposable guest; a trusted collector validates outputs outside it.
-3. Retained correctness and negative controls, unchanged legacy IDENTICAL
-   bytes, cross-vendor certificates, and at least nine interleaved before/after
-   samples on the same device. The controller must apply a reviewed,
-   fixture-specific regression/performance policy. No time is a pass merely
-   because it is faster, and no passing fixture proves every possible input.
-4. Exact-head result publication by that App and repository rules that require
-   its checks. Existing-feature optimizations can become eligible for automatic
-   acceptance only after this proof path is operational; infrastructure,
-   dependencies, test and numerical-contract changes still require review.
-   Automatic merge remains disabled until those conditions are configured.
-
-Any future self-hosted runner groups must restrict access to trusted workflows
-at the administrator level. A `runs-on` line in this workflow cannot prevent a
-fork from proposing a different workflow that requests another runner.
-Untrusted pull request code must never run in a privileged workflow event.
-
-Maintainers can run the admission negative controls locally with
+A green CPU report does not close `GPU_PENDING` or permit automatic merging.
+No GPU fleet or automatic merge is configured. Untrusted pull request code
+never runs on the [manual GPU workflow](.github/workflows/gpu-validation.yml)
+or the [release runner](tools/release_runner.sh). Maintainers can run the
+admission negative controls locally with
 `python3 -m unittest discover -s tools -p test_external_contribution_gate.py`.
-No provider account or GPU is needed for those controls.
 
-## Becoming a maintainer
+## Repository size
 
-Maintainership is intentionally transferable. Contributors who repeatedly
-demonstrate sound review, preserve the numerical and provenance contracts,
-and help other contributors may be nominated as reviewers and then
-maintainers. See [GOVERNANCE.md](GOVERNANCE.md).
-
-By contributing, you agree that your contribution is licensed under the
-repository's Apache-2.0 license and that you have the right to submit it.
-
-## Repository size and where evidence lives
-
-On 2026-09-08 a push of the previous day's evidence ran for hours and was
-then rejected by GitHub, because one file, a 119 MB `artifacts.tar` under
-`bench/results/`, was over GitHub's 100 MiB hard limit. Deleting a file in a
-later commit does not help: the push still carries the blob. The only fix
-was to rewrite nineteen commits that had never reached the remote, which
-this repository otherwise never does. Three rules follow, and two hooks
-enforce them.
-
-1. No committed file may exceed 50 MiB. GitHub warns at 50 MiB and rejects
-   at 100 MiB; the margin covers a compressed push and a careless copy.
-2. Wheels, tarballs and fixture dumps never go under `bench/results/`.
-   Wheels are on PyPI (record the sha256 and the release), tarballs are the
-   packed form of files that sit beside them, and fixture dumps are
-   regenerable from the Mojo driver. An evidence directory records what was
-   measured and how, not the bytes that were shipped.
-3. Large evidence belongs outside this repository. `bench/results/` was
-   already 1.16 GB at 0.6.0 and every campaign adds hundreds of megabytes,
-   which is why a push and a rented leg's source archive are slow. A
-   campaign's raw output goes to the evidence store (a separate repository
-   with Git LFS, or a Zenodo record per campaign cited by DOI), and this
-   repository commits the summary, the sha256 of the raw archive and where
-   it lives.
-
-Install the hooks once per clone; they then run in every worktree on every
-branch:
+No committed file may exceed 50 MiB, and wheels, tarballs and fixture dumps
+never go under `bench/results/`. Large raw evidence belongs outside the
+repository. Commit a summary, the sha256 of the raw archive and where it
+lives. Install the hooks once per clone.
 
     sh tools/hooks/install.sh
 
-`tools/hooks/pre-commit` refuses a staged file over 50 MiB or any wheel,
-tarball or dump under `bench/results/`. `tools/hooks/pre-push` scans every
-blob a push would send and refuses before the upload starts if one is over
-100 MiB, the case the commit hook cannot catch when a commit was made in a
-clone without the hook.
+`tools/hooks/pre-commit` refuses oversized or forbidden files, and
+`tools/hooks/pre-push` refuses a push carrying any blob over 100 MiB.
+
+## Maintainership and license
+
+Contributors who repeatedly show sound review, preserve the numerical and
+provenance contracts and help other contributors may be nominated as
+reviewers and then maintainers. See [GOVERNANCE.md](GOVERNANCE.md).
+
+By contributing, you agree that your contribution is licensed under the
+repository's Apache-2.0 license and that you have the right to submit it.

@@ -49,8 +49,7 @@ from ._samba_impl import SambaConfig, SambaStack
 # contraction for the weight gradient). They were exported by the shipped
 # training binding and implemented in `_training_impl.py` since the
 # transformer training lane and were omitted from this module and from
-# `__all__`, so no public path reached them (the claim-surface census,
-# docs/lanes/BRIEF_claim_surface_census_2026-09-14.md section 4). The
+# `__all__`, so no public path reached them (the claim-surface census). The
 # functions themselves are unchanged; this module now names them. The
 # same rule as the rest of this file: bounded primitives over explicit
 # float32 buffers, not an autograd framework.

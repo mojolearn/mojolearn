@@ -1,4 +1,0 @@
-TRANSPORT cholesky input 77.25 MiB outputs 3 EQUAL
-TRANSPORT cases that differ or failed: 0
-TRANSPORT cholesky input 77.25 MiB outputs 3 EQUAL
-TRANSPORT cases that differ or failed: 0

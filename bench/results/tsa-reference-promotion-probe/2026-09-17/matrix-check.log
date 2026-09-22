@@ -1,3 +1,0 @@
-mac_slot: admitted after 0.001s
-verification_matrix OK: docs/VERIFICATION_MATRIX.md matches the tree (229 lanes, 224 algorithms)
-mac_slot: {"wait_seconds": 0.0006714169999213482, "run_seconds": 2.242782000000034, "exit_code": 0}

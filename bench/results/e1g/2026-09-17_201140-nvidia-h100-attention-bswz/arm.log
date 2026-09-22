@@ -1,4 +1,0 @@
-arming a 60-minute self-kill on pod d7piefs556qlqe ...
-ARMED. Pod d7piefs556qlqe is TERMINATED through the API in 60 minutes.
-  lease: /Users/andrewhendel/mojolearn-wt/attention-speed/tools/../bench/results/runpod_leases/d7piefs556qlqe.lease
-  extend with: tools/runpod_guard.sh extend d7piefs556qlqe '-p 14882 root@103.207.149.101' <minutes>

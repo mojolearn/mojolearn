@@ -343,7 +343,7 @@ struct CatBoostOptions(Copyable, Movable):
     `check()` refuses anything but 1 UNDER SYMMETRICTREE. That is STRICTER
     than CatBoost, which accepts any value there and discards it
     (`greedy_search_helper.cpp:685`), and it is kept because an option that
-    is accepted and dropped is the failure ENGINEERING_RULES.md 3 names; their
+    is accepted and dropped is the failure CONTRIBUTING.md (Evidence must be able to fail) names; their
     own docs say the option "can be used only with the Lossguide and
     Depthwise growing policies"."""
 
@@ -668,7 +668,7 @@ struct CatBoostOptions(Copyable, Movable):
         # estimator OFF and leaves the searcher's own leaf values
         # standing. That path exists here -- it is the RMSE shortcut of
         # DEVIATION 64 -- but it has never been exercised through this
-        # option, and ENGINEERING_RULES 8 says an unexercised branch is an
+        # option, and CONTRIBUTING.md (Non-default paths) says an unexercised branch is an
         # unchecked one.
         if self.leaf_estimation_method == LEAF_ESTIMATION_SIMPLE:
             raise Error(
@@ -1051,7 +1051,7 @@ struct TCatFeatureParams(Copyable, Movable):
         `checks/ctr_apply_check.mojo` and `checks/ctr_train_check.mojo`
         each run `default()` and this one side by side, because a switch
         with one side unexercised is an unchecked branch
-        (`ENGINEERING_RULES.md` 8).
+        (`CONTRIBUTING.md` (Non-default paths)).
         """
         var simple = List[TCtrDescription]()
         simple.append(create_default_counter(PROJECTION_SIMPLE_CTR))
@@ -1231,7 +1231,7 @@ struct TCatFeatureParams(Copyable, Movable):
 # `gbdt/options/loss_description.mojo` first, beside the loss parameters
 # they read, and that was a mirror violation: `loss_description.cpp` holds
 # the PARAMETER ACCESSORS and nothing else, and these two are
-# `catboost_options.cpp`'s. ENGINEERING_RULES 4 -- their paths are our paths --
+# `catboost_options.cpp`'s. CONTRIBUTING.md -- their paths are our paths --
 # is not a filing preference, it is what makes a reviewer able to open one
 # of their files beside one of ours and diff branch for branch.
 # =========================================================================

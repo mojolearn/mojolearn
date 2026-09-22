@@ -1,5 +1,0 @@
-pod=idm1r8vmmkjxlg
-name=mojolearn-cpu-verification-tsa-controls-20260917-173002
-terminated_verified=1
-exit=1
-at=2026-09-17T17:33:41Z

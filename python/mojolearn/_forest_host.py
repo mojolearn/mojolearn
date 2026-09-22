@@ -19,10 +19,8 @@ regression float64, class labels through `_labels.decode_labels`.
 
 This module holds no arithmetic. What it promises is what the gate measured:
 tools/forest_host_gate.py compares the host predictions of a recorded model
-and fixture against the SHA-256 a GPU run recorded, and the brief in
-docs/lanes/BRIEF_forest_host_inference_2026-09-13.md records on which CPUs
-that has passed. A CPU not listed there is not certified, whatever this code
-returns on it.
+and fixture against the SHA-256 a GPU run recorded. A CPU on which that gate
+has not passed is not certified, whatever this code returns on it.
 
 The binary is loaded by path and not through `_backend.load_set`, because
 that selector refuses a binary whose vendor read-back is not a GPU API, and

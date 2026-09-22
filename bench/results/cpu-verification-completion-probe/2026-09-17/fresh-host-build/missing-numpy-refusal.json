@@ -1,6 +1,0 @@
-{
- "detail": "Verification requires NumPy. Install it with: python -m pip install numpy",
- "exit": 4,
- "format": "mojolearn.verify-all-report.v1",
- "verdict": "CANNOT RUN"
-}

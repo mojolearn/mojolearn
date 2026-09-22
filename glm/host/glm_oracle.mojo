@@ -1,10 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 # SHIPS: compiled into a CPU host binding (python/mojolearn/host_surface.py names which); product, not only a check.
-"""OLS and ridge TRAINING on the host, for a box with no GPU (workstream E
-of docs/lanes/TEMP_claim_surface_plan_2026-09-14.md, the lanes ols and
-ridge of docs/lanes/BRIEF_cpu_training_2026-09-13.md section 1.1 "ols,
-ridge, logistic", 2026-09-14).
+"""OLS and ridge TRAINING on the host, for a box with no GPU (workstream E,
+the lanes ols and ridge, 2026-09-14).
 
 HOST ONLY. Nothing here imports `max.gpu`, `std.gpu` or a `DeviceContext`,
 and no GPU binding imports this file. The Gram and the Jacobi are the PCA
@@ -237,8 +235,7 @@ def host_ols_fit(
         raise Error(
             "olsFit: n_cols > n_rows selects lstsq_min_norm (DEVIATION 550),"
             " which has no CPU restatement yet; the host OLS fit covers the"
-            " tall shape (lstsq_eig) only. See"
-            " docs/lanes/BRIEF_cpu_training_2026-09-13.md"
+            " tall shape (lstsq_eig) only."
         )
     return host_lstsq_eig(a, b, n_rows, n_cols)
 

@@ -1,3 +1,0 @@
-TRANSPORT cd input 4.88 MiB outputs 2 DIFFERS output 0: 1 of 64 bytes
-TRANSPORT gp input 4.00 MiB outputs 4 DIFFERS output 0: 1 of 4096 bytes
-TRANSPORT cases that differ or failed: 2

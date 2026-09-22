@@ -2,9 +2,8 @@
 # SPDX-License-Identifier: Apache-2.0
 """Read one ET/kNN leg and print the table plus the rate it COULD have detected.
 
-A null is reported with its bound or not at all. `docs/lanes/RF_MUTEX_RECONCILIATION`
-section 4.2.1 is the model: a zero is written up as a NULL with what it excludes, never as
-a clearance.
+A null is reported with its bound or not at all. A zero is written up as a NULL with
+what it excludes, never as a clearance.
 
     python3 tools/mutex_et_knn/summarize_leg.py <et_knn.json> [et_knn_mutex.log]
 """

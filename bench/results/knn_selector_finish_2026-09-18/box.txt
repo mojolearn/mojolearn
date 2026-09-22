@@ -1,6 +1,0 @@
-96
-model name	: AMD EPYC 7642 48-Core Processor
-Linux 6b82a082b7e2 6.8.0-117-generic #117~22.04.1-Ubuntu SMP PREEMPT_DYNAMIC Thu May  7 22:17:46 UTC  x86_64 x86_64 x86_64 GNU/Linux
-Python 3.11.10
-               total        used        free      shared  buff/cache   available
-Mem:             251          28         180           0          42         219

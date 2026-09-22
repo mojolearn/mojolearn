@@ -113,7 +113,7 @@ OBSERVED WHETHER THE BRANCH UNDER TEST EXECUTED. The gate is
 holds only the PERMUTATION-DEPENDENT CTR types; if that list is empty on the
 dataset in hand then NEITHER build ran the prep and the 2.1% belongs to
 something else entirely. A number whose mechanism was never witnessed is the
-reached-but-inert trap (ENGINEERING_RULES.md section 8: a benchmark prints
+reached-but-inert trap (CONTRIBUTING.md (Non-default paths): a benchmark prints
 which path it took, beside the timing), so the honest record said the gap was
 real and its cause unknown. This is what makes the re-run attributable."""
 
@@ -160,7 +160,7 @@ with gbdt-depthwise a clear loss at 1.012: symmetric taxi 0.9746, depthwise
 taxi 1.0092, lossguide taxi 0.9723, symmetric Istella-S 1.0248, depthwise
 Istella-S 1.0148, lossguide Istella-S 1.0093. Quality is equal in every
 cell and no model bit moves either way, so this is a pure time verdict and
-ENGINEERING_RULES section 9 refuses it. The reason the parallelism does not
+CONTRIBUTING.md (Performance claims) refuses it. The reason the parallelism does not
 pay is in the shape: the fills are parallelized but the uploads and the
 binarize kernels still enqueue serially in the same order, so the device
 stays the bottleneck and the host memcpy it removes was not on the critical
@@ -937,7 +937,7 @@ def train(
     `build_ctr_tables` had no histogram arm -- and that reason is gone:
     `predict_floats` now maps a raw category through a `Borders` table the
     same way it does a `FeatureFreq` one. A switch that outlives its
-    reason is a defect (`ENGINEERING_RULES.md` 8), so both sides stay
+    reason is a defect (`CONTRIBUTING.md` (Non-default paths)), so both sides stay
     exercised: `checks/ctr_apply_check.mojo` and
     `checks/ctr_train_check.mojo` each run the default AND
     `feature_freq_only()` explicitly.

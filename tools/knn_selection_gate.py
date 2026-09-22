@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """kNN selection gate: baseline versus candidate selector arm, IDENTICAL only.
 
-DEVIATION 2496 (lane brief: docs/lanes/BRIEF_knn_selection_2026-09-10.md).
+DEVIATION 2496.
 
 WHAT THIS IS
 ------------
@@ -189,7 +189,7 @@ FIXTURES (all from `--seed`, all recorded by sha256 in the JSON)
                  block (see the brief), which is exactly the shape a
                  warp-collective inside that loop would hang or garble
                  on. 600 queries. Sampled oracle.
-  taxi           THE TWO REAL DATASETS (DEVIATION 2524; ENGINEERING_RULES.md
+  taxi           THE TWO REAL DATASETS (DEVIATION 2524; CONTRIBUTING.md
   istella        section 9, rewritten 2026-09-11): REAL data, not from
                  `--seed`, the same two every trees and classical claim
                  quotes. `taxi` is NYC TLC yellow taxi trips (January and
@@ -229,7 +229,7 @@ FIXTURES (all from `--seed`, all recorded by sha256 in the JSON)
                  is used when its cache is on the box and SKIPPED
                  (recorded) when it is not: a checker smoke on the Mac
                  fetches nothing.
-  higgs          RETIRED (2026-09-11, ENGINEERING_RULES.md section 9): the
+  higgs          RETIRED (2026-09-11, CONTRIBUTING.md (Performance claims)): the
                  first "second kind", the 404,000-row HIGGS prefix through
                  `tools/knn_datasets.py::higgs_block` (28 raw kinematic
                  features; may download 2.6 GB unless `--higgs-download
@@ -459,7 +459,7 @@ def make_divergent_tail(seed, quick):
     }
 
 
-#: The real fixtures (ENGINEERING_RULES.md section 9): built before the
+#: The real fixtures (CONTRIBUTING.md (Performance claims)): built before the
 #: deadline, timed, each with its own cached opponent tuple. `higgs` is
 #: retired and handled beside them only so old JSON can be re-derived.
 REAL_FIXTURES = ("taxi", "istella")
@@ -467,7 +467,7 @@ REAL_FIXTURES = ("taxi", "istella")
 
 def make_real(name, quick, data_root, log):
     """One of the two real datasets (`taxi` or `istella`, DEVIATION 2524;
-    ENGINEERING_RULES.md section 9) through the shared loader
+    CONTRIBUTING.md (Performance claims)) through the shared loader
     `tools/knn_datasets.py::real_block`. Not from `--seed`. Reads the
     leading 404,000 rows of the trees harness's cache (never downloads: a
     missing cache raises with the `--download` command), so it is built
@@ -484,7 +484,7 @@ def make_real(name, quick, data_root, log):
         "n_index": n_index, "n_queries": n_queries, "d": block["d"],
         "exact": [], "dup_groups": [], "offset_groups": [],
         "oracle": "sampled", "timed": True,
-        "description": "REAL data (ENGINEERING_RULES.md section 9): %s cache rows %d..%d as the index, %d..%d as the queries, %d raw float32 features, no shuffle, no scaling, no deduplication" % (
+        "description": "REAL data (CONTRIBUTING.md (Performance claims)): %s cache rows %d..%d as the index, %d..%d as the queries, %d raw float32 features, no shuffle, no scaling, no deduplication" % (
             name, block["index_rows"][0], block["index_rows"][1] - 1, block["query_rows"][0], block["query_rows"][1] - 1, block["d"]),
         "dataset": block["dataset"], "fixture": block["fixture"],
         "index_rows": block["index_rows"], "query_rows": block["query_rows"],
@@ -493,7 +493,7 @@ def make_real(name, quick, data_root, log):
 
 
 def make_higgs(quick, data_root, download, log):
-    """RETIRED (2026-09-11; ENGINEERING_RULES.md section 9). The first
+    """RETIRED (2026-09-11; CONTRIBUTING.md (Performance claims)). The first
     second kind: the real HIGGS prefix through the shared loader
     `tools/knn_datasets.py::higgs_block`. Not from `--seed`. May download
     2.6 GB and decode 404,000 lines, so it is built BEFORE the process
@@ -818,10 +818,10 @@ def main():
     ap.add_argument("--arm-env", default="MOJOLEARN_KNN_SELECT")
     ap.add_argument("--sabotage-env", default="MOJOLEARN_KNN_SELECT_SABOTAGE")
     ap.add_argument("--cached-opponent", default="", help="k10=ms,k15=ms from bench/OPPONENT_REFERENCE.md (dyadic-v1 tuple only); reported as a cached-reference ratio")
-    ap.add_argument("--cached-opponent-taxi", default="", help="k10=ms,k15=ms from the taxi tuple in bench/OPPONENT_REFERENCE.md (ENGINEERING_RULES.md section 9; empty until that row is measured once by tools/knn_cuml_reference.py --dataset taxi); reported as a cached-reference ratio on the taxi fixture only")
+    ap.add_argument("--cached-opponent-taxi", default="", help="k10=ms,k15=ms from the taxi tuple in bench/OPPONENT_REFERENCE.md (CONTRIBUTING.md (Performance claims); empty until that row is measured once by tools/knn_cuml_reference.py --dataset taxi); reported as a cached-reference ratio on the taxi fixture only")
     ap.add_argument("--cached-opponent-istella", default="", help="k10=ms,k15=ms from the istella tuple in bench/OPPONENT_REFERENCE.md (empty until measured once by tools/knn_cuml_reference.py --dataset istella); reported as a cached-reference ratio on the istella fixture only")
     ap.add_argument("--cached-opponent-higgs", default="", help="RETIRED (2026-09-11): k10=ms,k15=ms from the HIGGS tuple in bench/OPPONENT_REFERENCE.md, for re-deriving an old JSON only; never a result")
-    ap.add_argument("--fixtures", default="large,dyadic,ties,divergent_tail,taxi,istella", help="fixtures built and checked (arm equality, row order, planted, oracle, reach); `taxi` and `istella` are the two real datasets (ENGINEERING_RULES.md section 9) and must be listed here to be timed; `higgs` is retired but still accepted")
+    ap.add_argument("--fixtures", default="large,dyadic,ties,divergent_tail,taxi,istella", help="fixtures built and checked (arm equality, row order, planted, oracle, reach); `taxi` and `istella` are the two real datasets (CONTRIBUTING.md (Performance claims)) and must be listed here to be timed; `higgs` is retired but still accepted")
     ap.add_argument("--time-fixtures", default="dyadic,large,taxi,istella", help="fixtures priced in the timing block; `dyadic` and `large` are one kind (two generators, correctness fixtures), `taxi` and `istella` the two real datasets a timing quotes")
     ap.add_argument("--higgs-download", choices=("auto", "never"), default="auto", help="RETIRED with the higgs fixture (2026-09-11); a no-op for taxi and istella, whose caches the trees harness builds (`python tools/speed_gbdt_arm.py --download taxi|istella`) and this gate never fetches. For `higgs` only: auto fetches a missing HIGGS.csv.gz, never fails instead; --selftest never downloads")
     ap.add_argument("--data-root", default=None, help="the dataset store the trees harness's caches live in (default GBM_BENCH_DATA or ~/datasets/gbm-bench)")
@@ -909,7 +909,7 @@ def main():
                 f.write(f"FAIL {failure}\n")
 
     # THE REAL FIXTURES ARE READ BEFORE THE DEADLINE IS ARMED (DEVIATION
-    # 2524; ENGINEERING_RULES.md section 9): a 355 MB cache read (or, for
+    # 2524; CONTRIBUTING.md (Performance claims)): a 355 MB cache read (or, for
     # the retired higgs, a 2.6 GB download and a 404,000-line decode) is not
     # a gate cost, and a cache miss must not spend the 300 s the requests
     # own. Each is recorded as its own timed item under
@@ -1157,7 +1157,7 @@ def run_gate(args, report, log, dump, prebuilt=None):
     for item in [s for s in args.cached_opponent.split(",") if s]:
         key, val = item.split("=")
         cached[int(key.lstrip("k"))] = float(val)
-    # One cached opponent tuple per real fixture (ENGINEERING_RULES.md
+    # One cached opponent tuple per real fixture (CONTRIBUTING.md
     # section 9: measured once per (GPU, driver, version, dataset)); the
     # retired higgs tuple rides along only to re-derive an old JSON.
     cached_real = {}

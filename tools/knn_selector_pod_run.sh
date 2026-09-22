@@ -18,8 +18,7 @@
 #
 # `MOJOLEARN_KNN_DEFINES` carries extra `-D` flags into every IDENTICAL build
 # of the profile/ref phases (an A/B arm); `<tag>` names the log set.
-# Nothing here runs on the Mac; `RUN OWED` in docs/lanes/HANDOFF_knn_selector.md
-# lists the Apple commands.
+# Nothing here runs on the Mac.
 set -u
 ROOT=${MOJOLEARN_KNN_ROOT:-/root/mojolearn}
 OUT=${MOJOLEARN_KNN_OUT:-/root/knn_out}

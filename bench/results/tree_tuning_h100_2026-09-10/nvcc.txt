@@ -1,1 +1,0 @@
-tools/trees_identical_remote.sh: 22: nvcc: not found

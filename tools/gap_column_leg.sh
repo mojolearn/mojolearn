@@ -1,7 +1,7 @@
 #!/bin/sh
 # tools/gap_column_leg.sh: the on-box body (MOJOLEARN_GEMM_LEG_EXTRA for
 # tools/gemm_remote_leg.sh) of a GPU identity column that closes vendor-class
-# gaps in docs/VERIFICATION_MATRIX.md. ONE BODY, EITHER VENDOR, LANES FROM
+# gaps in the verification matrix (tools/verification_matrix.py). ONE BODY, EITHER VENDOR, LANES FROM
 # THE ENVIRONMENT.
 #
 # THIS FILE IS NEVER MOJOLEARN_GEMM_LEG_EXTRA ITSELF. A WRAPPER IS.

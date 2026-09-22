@@ -41,7 +41,7 @@ THE FOUR GATES
     3  COMPRESSION   the `readIndices` arm of `WriteCompressedSplit`, which
                      rung 2 never takes, run at the identity permutation and
                      required to agree with the `nullptr` arm bit for bit
-                     (`ENGINEERING_RULES.md` 8: reach is per-branch)
+                     (`CONTRIBUTING.md` (Non-default paths): reach is per-branch)
     4  CONTROL       a fixture the feature-parallel searcher MUST split
                      differently on. Without it gate 1 passes for a searcher
                      that returns a constant.
@@ -58,7 +58,7 @@ MEMBERS, and only a per-document comparison sees it
 
 THE SABOTAGE TABLE, taken by EDITING the implementation and re-running
 ------------------------------------------------------------
-There is no sabotage switch in the shipped files (`ENGINEERING_RULES.md` 8: a
+There is no sabotage switch in the shipped files (`CONTRIBUTING.md` (Non-default paths): a
 switch that outlives its measurement is a defect). Each row was produced by
 making the edit, running this check at BOTH row counts, and reverting.
 `R` is red, `.` is still green.
@@ -385,7 +385,7 @@ def run_case(ctx: DeviceContext, n_rows: Int) raises -> Int:
         failures += 1
 
     # ---- GATE 3: the readIndices arm of WriteCompressedSplit ------------
-    # `ENGINEERING_RULES.md` 8 -- reach is PER BRANCH. `TSplitHelper::
+    # `CONTRIBUTING.md` (Non-default paths) -- reach is PER BRANCH. `TSplitHelper::
     # GetCompressedBits` passes `nullptr` for an ordinary feature and
     # `&DataSet.GetInverseIndices()` for a permutation-dependent one; rung 2
     # has no CTR columns, so the second arm never runs here. Run it at the

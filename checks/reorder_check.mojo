@@ -116,7 +116,7 @@ def check_reorder_one_bit(n: Int = 20000, offset: Int = 37) raises:
 
 
 def main() raises:
-    # STANDALONE DRIVER. BOTH arms `probe_main.mojo` runs under "their
+    # STANDALONE DRIVER. BOTH arms `checks/probe_main.mojo` runs under "their
     # reorder path (SortWithoutCub)": the large multi-block one and the
     # 513-row one that straddles the block width at offset 0.
     print("their reorder path (SortWithoutCub):")

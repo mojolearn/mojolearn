@@ -1,3 +1,0 @@
-shipped	shipped: default=kpack_hg body (2707) at ksplit(S=110) groups
-ksplit	ksplit(S=110) where its rule takes the call, else default=kpack_hg body (2707) at ksplit(S=110) groups
-kpack_hg	kpack_hg on the calls it takes, else default=kpack_hg body (2707) at ksplit(S=110) groups

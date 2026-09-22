@@ -2,8 +2,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The verdict steps of .github/workflows/cpu-identity-gate.yml (the CPU
-training lane, 2026-09-13; brief docs/lanes/BRIEF_cpu_training_2026-09-13.md
-section 3.4), as a tool that runs on a laptop too.
+training lane, 2026-09-13), as a tool that runs on a laptop too.
 
   readback   import the checkout's package on this CPU-only box and read
              every host binding under mojolearn/host/ back: vendor() must be

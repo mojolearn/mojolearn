@@ -2574,7 +2574,7 @@ def replication_for(
     sixteenth of the rows, all contending on the same atomics.
 
     An invented heuristic in place of a formula that was sitting in their
-    source is exactly what ENGINEERING_RULES rule 0 forbids, and it survived
+    source is exactly what CONTRIBUTING.md forbids, and it survived
     because every measurement of it was taken on an empty histogram.
     ======================================================
 
@@ -3002,7 +3002,7 @@ def launch_histograms_for_blocks[
             # family; only 129-255 runs the one-stat `TPointHistOneByte`
             # PASS family. This dispatch routed ALL one-byte shapes through
             # the PASS family until 2026-08-19, a wrong-kernel-family misimplementation
-            # of exactly the shape ENGINEERING_RULES 0b-i names: the implemented
+            # of exactly the shape CONTRIBUTING.md (Algorithms and references) names: the implemented
             # kernel was faithful and their dispatch never sends
             # `maxBins <= 128` to it. `checks/hist2_check.mojo` covers
             # both families on the same input and fingerprints WHICH family
@@ -3316,7 +3316,7 @@ def acc_i32_is_live[hist2_smem_mode: Int]() -> Bool:
     )
 
 
-# DEVIATION 2710 (docs/lanes/BRIEF_feature_freq_divergence_2026-09-13.md):
+# DEVIATION 2710:
 # the synchronized tensor driver's accumulator liveness. Both tensor entries
 # (`run_sequential_two_level_feature_freq_tree`,
 # `run_bounded_synchronized_tensor_tree`) constructed their

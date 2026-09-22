@@ -1,11 +1,9 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CPU binding for the `_mojolearn_estimators` family: KernelDensity (the
-CPU training lane, phase 1, 2026-09-13; brief
-docs/lanes/BRIEF_cpu_training_2026-09-13.md sections 1.1 kde and 3.2) and,
-since the classical host inference lane the same day, the INFERENCE entries
-of LinearRegression, Ridge, TruncatedSVD, LogisticRegression and PCA
-(docs/lanes/BRIEF_forest_host_inference_2026-09-13.md, "Classical lanes").
+CPU training lane, phase 1, 2026-09-13) and, since the classical host
+inference lane the same day, the INFERENCE entries of LinearRegression,
+Ridge, TruncatedSVD, LogisticRegression and PCA.
 
 HOST ONLY. No DeviceContext, no kernel launch, no GPU. The KDE arithmetic is
 `kde/host/kde_oracle.mojo::oracle_score_samples`, the float32 serial

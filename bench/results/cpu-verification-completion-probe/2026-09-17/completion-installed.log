@@ -1,3 +1,0 @@
-mac_slot: admitted after 0.001s
-completion {'DIVERGENT': 0, 'IDENTICAL': 45, 'N/A': 45, 'OWED': 0, 'REFUSED': 0} {'appendix_entries': 246, 'available': 144, 'excluded': 50, 'registered_lanes': 229, 'unavailable': 0, 'withheld': 35}
-mac_slot: {"wait_seconds": 0.0009462079997319961, "run_seconds": 8.548884625000028, "exit_code": 0}

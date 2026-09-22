@@ -4,8 +4,7 @@
 against the shipped kernels (and the shipped kernels against the eager
 oracle), reach of every candidate arm by sabotage, and the price of each
 arm, forward alone and forward plus backward, arms alternated inside one
-process. DEVIATIONS 2525 to 2528, brief
-`docs/lanes/BRIEF_attention_step_2026-09-11.md` (2528 is section 12).
+process. DEVIATIONS 2525 to 2528.
 
     pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 \\
         -D MOJOLEARN_ATTN_ARM_TRIAL=1 -I . \\
@@ -19,7 +18,7 @@ not the target is labeled by its own numbers in every line printed.
 
 INPUT KINDS (MOJOLEARN_ATTN_KINDS, comma separated):
   file:<dir>  REAL ACTIVATIONS, the kind a timing or promotion claim quotes
-              (ENGINEERING_RULES section 9, Andrew 2026-09-11: the two
+              (CONTRIBUTING.md (Performance claims), Andrew 2026-09-11: the two
               kinds are two ORDINARY corpora that differ in what they are,
               never an adversarial fixture). `<dir>` holds q.bin, k.bin,
               v.bin, dctx.bin and meta.txt as the backward launcher dumps
@@ -28,7 +27,7 @@ INPUT KINDS (MOJOLEARN_ATTN_KINDS, comma separated):
               of the first step, on the corpus the step was fed); the
               shape is the dump's. The leg feeds two such directories, one
               per corpus (English text, `training/corpus/enwik8`; source
-              code, `training/corpus/pile_github`; ENGINEERING_RULES 9).
+              code, `training/corpus/pile_github`; CONTRIBUTING.md (Performance claims)).
   hashed      a cheap bit-equality SMOKE only: the k-NN gate's
               `hashed_block` profile in Mojo (log-uniform magnitudes over
               2.5 e-folds, per-column octave scales, twelve cluster
@@ -123,7 +122,7 @@ them. zdot must move at odd flat rows and hold at even rows (2533's flip moves
 every row), dv and the forward must hold. `PATH` prints `zsched=`, and the
 RESOURCES readback covers the two schedule copies.
 
-DEVIATION 2653 (brief docs/lanes/BRIEF_attention_regs_2026-09-11.md). On a
+DEVIATION 2653. On a
 trial build the RESOURCES readback also covers the SECOND-ROUND FORWARD at
 its six clean instantiations (fwd_r2_r32_qres_pf, the NVIDIA default's
 forward, then _r32_qres, _r32_pf, _r32, _r64_pf and _r64), the one attention
@@ -223,7 +222,7 @@ def _env_str(name: String, default: String) -> String:
 
 
 def _path_line(role: String, arm: Int) -> String:
-    """ENGINEERING_RULES 8: the harness names the path beside the timing.
+    """CONTRIBUTING.md (Non-default paths): the harness names the path beside the timing.
     `zdot_rows` is DEVIATION 2528's resolved geometry (the arm's `_r32` /
     `_r64`, else the column's kernel-matrix row; `-` when the arm does not
     run 2528, 0 when the page does not fit and the first-round kernels
@@ -964,8 +963,7 @@ def _res_zdot_estash[DRES: Bool, SWZ: Bool = False](ctx: DeviceContext, label: S
 
 
 def _res_fwd_r2[TQ: Int, QRES: Bool, PF: Bool, SWZ: Bool = False](ctx: DeviceContext, label: String) raises:
-    """DEVIATION 2653 (brief docs/lanes/BRIEF_attention_regs_2026-09-11.md
-    sections 4 and 7): the SECOND-ROUND FORWARD kernel's own attributes. It
+    """DEVIATION 2653: the SECOND-ROUND FORWARD kernel's own attributes. It
     is the one attention kernel of the step that no readback has ever
     covered, and the NVIDIA default runs `[64, 32, True, True, False]` for
     20.7 ms of a 290 ms step, so whether it is at one block per SM or at
@@ -1081,8 +1079,7 @@ def run_resources(ctx: DeviceContext) raises:
     its own try (the two DEVIATION 2598 zdot schedule copies beside the zdot
     stash copy they reschedule), and on a trial build the two DEVIATION 2650
     / 2651 zdot copies and the six clean instantiations of the second-round
-    FORWARD (DEVIATION 2653, brief
-    docs/lanes/BRIEF_attention_regs_2026-09-11.md), whose register count no
+    FORWARD (DEVIATION 2653), whose register count no
     leg had ever read back on any column."""
     print("RESOURCES_DEVICE column=" + column_name(TARGET_COLUMN) + " source_counts=per_thread_hd64")
     try:
@@ -1126,8 +1123,7 @@ def run_resources(ctx: DeviceContext) raises:
         except e:
             print("RESOURCES_ERROR label=kvgrid_r32_bswz error=", e, sep="")
     comptime if ATTN_ARM_TRIAL:
-        # DEVIATION 2653 (brief docs/lanes/BRIEF_attention_regs_2026-09-11.md
-        # section 7): the second-round forward, the NVIDIA default's
+        # DEVIATION 2653: the second-round forward, the NVIDIA default's
         # instantiation first, then each round 3 knob on its own, so the rows
         # say what `_qres`, `_pf` and the rows count each cost in registers.
         # Every one is a pipeline a trial build already compiles.

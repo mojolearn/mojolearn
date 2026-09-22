@@ -13,7 +13,7 @@ holding only this binding refuses a gradient by name.
 
 Why a binding of its own: the reference binding carries the backward fold
 (both execution plans), and training-only code does not ship in the
-inference wheels (docs/lanes/CPU_INFERENCE_BOUNDARY_2026-09-15.md). The
+inference wheels. The
 manifest declares this family with `routes=None` and
 `serves=("_mojolearn_embedding",)`.
 

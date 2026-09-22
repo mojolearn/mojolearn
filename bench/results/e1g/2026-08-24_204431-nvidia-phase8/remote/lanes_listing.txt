@@ -1,6 +1,0 @@
-cd.identical.card
-cd.identical.check.log
-cd.identical.log
-gemm.identical.card
-gemm.identical.check.log
-gemm.identical.log

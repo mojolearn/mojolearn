@@ -115,7 +115,7 @@ COLUMN_DEFINE=""
 # measured win over the opponent's own CPU, and outside trees it has none
 # (python/mojolearn/_backend.py, `_TIERED`, has the numbers). Refusing
 # here, by name, is what keeps this an unshipped tier rather than an
-# unchecked one (ENGINEERING_RULES.md section 0b-iii and section 8).
+# unchecked one (CONTRIBUTING.md (Numeric modes) and section 8).
 [ "${MOJOLEARN_NUMERIC_MODE:-identical}" = identical ] || {
     echo 'build_hdbscan.sh: only the tree lanes (gbdt, rf, trees) ship fast and deterministic; every other binding builds MOJOLEARN_NUMERIC_MODE=identical only (DEVIATION 2490, 0.8.0).' >&2
     exit 2; }

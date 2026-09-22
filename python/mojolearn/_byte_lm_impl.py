@@ -18,8 +18,7 @@ the same little-endian `<f4` / `<i4` bytes the NumPy spelling emitted
 written here loads there, byte for byte, and the resume/compare tooling
 under tools/ reads the same file (see `save_checkpoint`).
 
-DEVICE-OWNED STEP (DEVIATION 2514, design
-docs/lanes/DESIGN_lm_device_owned_step_2026-09-11.md). With `resident=True`
+DEVICE-OWNED STEP (DEVIATION 2514). With `resident=True`
 the native session's device buffers are the ONLY copy of the parameters,
 the optimizer moments and the last gradient while it is open: this object's
 `_state['parameters']`, `['m']` and `['v']` are `None` from `_open_session`

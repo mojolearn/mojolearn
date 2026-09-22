@@ -8,10 +8,9 @@ shipped `PLAN_TUNED_128_8X8` and as `PLAN_FLAT`, and its sabotage
 instantiation must move EXACTLY the cells `gemm_step_geometry_reach` names:
 one per block for the 2540 and 2541 geometries (brief section 10.1 item 6),
 one per launched `(tile, group)` whose sabotaged cell is in the output for
-the ksplit geometries (docs/lanes/BRIEF_gemm_long_k_2026-09-11.md section
-5.6), none for `tuned128` (the old plan has no sabotage), which proves the
-arm kernel ran and names the geometry (and group count) that ran. The ragged
-part also runs `identical_gemm_step_ksplit_into` at explicit group sizes
+the ksplit geometries, none for `tuned128` (the old plan has no sabotage),
+which proves the arm kernel ran and names the geometry (and group count)
+that ran. The ragged part also runs `identical_gemm_step_ksplit_into` at explicit group sizes
 {1, 2, 4, 16, 64}. Two host checks run first and need no device work:
 `check_group_fold_is_the_contract_tree` (the long-k brief's Lemmas A to C,
 every `P` in 1 to 1,100, every power-of-two group size up to at least `2 P`)
@@ -33,9 +32,8 @@ column: the shipped dispatch's body at the column's own row, at row 0 (the
 old plan runs: nothing moves) and at row 132 (the group launch's cells move),
 and the shipped entry itself with `MOJOLEARN_GEMM_ARM` unset.
 
-DEVIATION 2599 (docs/lanes/BRIEF_gemm_kernel_2026-09-11.md sections 5 and
-6): the arms `kpack` and `kpack_wide` are geometries 10 and 11, so the
-ragged part forces both at every case (bits equal to the old plan and FLAT,
+DEVIATION 2599: the arms `kpack` and `kpack_wide` are geometries 10 and 11,
+so the ragged part forces both at every case (bits equal to the old plan and FLAT,
 reach one cell per tile in their all-leaves launch and one per `(tile, q)` in
 their group launch, `gemm_step_kpack_reach`) and the LM part sends the twelve
 calls through `identical_gemm_into` under both. Two host checks run first:
@@ -48,9 +46,8 @@ section 4.2). `check_group_fold_is_the_contract_tree` also requires the
 group nodes built with `kpack_wide`'s 12-level stack to equal the 16-level
 ones bit for bit.
 
-DEVIATIONS 2640 to 2642 (docs/lanes/BRIEF_gemm_final_2026-09-11.md sections 4
-to 6): the arms `kfoldv` and `kfoldv_leaf` are geometries 12 and 13, so the
-ragged part forces both at every case (bits equal to the old plan and FLAT,
+DEVIATIONS 2640 to 2642: the arms `kfoldv` and `kfoldv_leaf` are geometries
+12 and 13, so the ragged part forces both at every case (bits equal to the old plan and FLAT,
 reach `gemm_step_kfold_reach`: the group launch's cells plus one cell per lane
 fold block, minus the cells in both) and the LM part sends the twelve calls
 through `identical_gemm_into` under both. Two host checks run first:
@@ -96,7 +93,7 @@ workspace, so the same run only failed on reach.
 It refuses a build that defines one of `gemm_identical.mojo`'s global
 sabotage switches, because its baseline would be a sabotaged kernel.
 
-ENGINEERING_RULES 8: the switch is exercised on both sides by name. The
+CONTRIBUTING.md (Non-default paths): the switch is exercised on both sides by name. The
 `shipped` arm through the entry must equal the explicit old plan and its
 sabotage must move exactly the default's reach (nothing on a column whose
 row is 0); `tuned128` must equal it and move nothing; every other arm must
@@ -240,11 +237,10 @@ def _arm_names() -> List[String]:
     var names: List[String] = [
         "shipped", "lfold", "half", "half_ks16", "quarter", "head", "half_head",
         "ksplit", "ksplit_leaf", "tuned128", "kpack", "kpack_wide",
-        # DEVIATIONS 2640 and 2641 (docs/lanes/BRIEF_gemm_final_2026-09-11.md):
+        # DEVIATIONS 2640 and 2641:
         # geometries 12 and 13, forced in the ragged part by GEMM_GEOM_COUNT.
         "kfoldv", "kfoldv_leaf",
-        # DEVIATION 2700 (docs/lanes/BRIEF_gemm_kernel_2026-09-11.md section
-        # 12): geometry 14, the padded packed page.
+        # DEVIATION 2700: geometry 14, the padded packed page.
         "kpack_pad",
         # DEVIATION 2703: geometry 15, the same page aligned, vector loads.
         "kpack_padv",
@@ -397,8 +393,8 @@ def _group_node[
 
 
 def check_group_fold_is_the_contract_tree(mut failures: List[String]) raises:
-    """Lemmas A to C of docs/lanes/BRIEF_gemm_long_k_2026-09-11.md section 5,
-    exhaustively on the host, before any device run.
+    """The group fold lemmas (DEVIATIONS 2590 and 2591), exhaustively on the
+    host, before any device run.
 
     For every `P` in 1 to 1,100 and every power-of-two group size `gl` from 1
     up to the first at or above `2 P`: the group nodes are built as the group
@@ -808,8 +804,8 @@ def check_kpack_rule_hand_counts(mut failures: List[String]) raises:
 
 
 def check_kfold_lanes_is_the_stack_fold(mut failures: List[String]) raises:
-    """docs/lanes/BRIEF_gemm_final_2026-09-11.md sections 5.3 to 5.5, on the
-    host, before any device work.
+    """The lane fold lemmas (DEVIATIONS 2640 and 2641), on the host, before
+    any device work.
 
     For every group count `G` in 1 to `GEMM_KFOLD_MAX_GROUPS` (255) and three
     node kinds (the 13-bit significand generator; the same with about one node
@@ -1651,8 +1647,8 @@ def main() raises:
         "== gemm/checks/gemm_step_arms_check.mojo [" + numeric_mode_name() + "] trial="
         + String(GEMM_ARM_TRIAL) + " sabotage: " + gemm_sabotage_name() + " =="
     )
-    print("   DEVIATIONS 2540 to 2543; docs/lanes/BRIEF_gemm_step_2026-09-11.md sections 6 and 10")
-    print("   DEVIATIONS 2590 to 2592; docs/lanes/BRIEF_gemm_long_k_2026-09-11.md sections 4, 5 and 9")
+    print("   DEVIATIONS 2540 to 2543")
+    print("   DEVIATIONS 2590 to 2592")
     print(
         "   DEVIATION 2595; the same brief, section 10; column block parallelism row="
         + String(GEMM_KSPLIT_DEFAULT_S) + " shipped=[" + gemm_step_geometry_name(GEMM_GEOM_SHIPPED) + "]"
@@ -1663,12 +1659,12 @@ def main() raises:
             + gemm_sabotage_name() + "): its baseline would be a sabotaged kernel"
         )
     print(
-        "   DEVIATION 2599; docs/lanes/BRIEF_gemm_kernel_2026-09-11.md sections 5 and 6; kpack=["
+        "   DEVIATION 2599; kpack=["
         + gemm_step_geometry_name(GEMM_GEOM_KPACK) + "] kpack_wide=["
         + gemm_step_geometry_name(GEMM_GEOM_KPACK_WIDE) + "]"
     )
     print(
-        "   DEVIATION 2700; docs/lanes/BRIEF_gemm_kernel_2026-09-11.md section 13; kpack_pad=["
+        "   DEVIATION 2700; kpack_pad=["
         + gemm_step_geometry_name(GEMM_GEOM_KPACK_PAD) + "] kpack_padv=["
         + gemm_step_geometry_name(GEMM_GEOM_KPACK_PADV) + "]"
     )
@@ -1678,7 +1674,7 @@ def main() raises:
         + gemm_step_geometry_name(GEMM_GEOM_KPACK_HG) + "]"
     )
     print(
-        "   DEVIATIONS 2640 to 2642; docs/lanes/BRIEF_gemm_final_2026-09-11.md sections 4 to 6; kfoldv=["
+        "   DEVIATIONS 2640 to 2642; kfoldv=["
         + gemm_step_geometry_name(GEMM_GEOM_KFOLDV) + "] kfoldv_leaf=["
         + gemm_step_geometry_name(GEMM_GEOM_KFOLDV_LEAF) + "]"
     )

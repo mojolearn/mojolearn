@@ -1,8 +1,0 @@
-[07:51:35] mojolearn from /root/ml-before/tools/../python/mojolearn/__init__.py
-[07:51:35] phase 1: fit model A
-[07:51:36] phase 2: fit model B
-[07:51:36] phase 3: predict with A (prepares A's device snapshot)
-[07:51:36] phase 3 done: A predict sha256=ab11bdc3e35bda72
-[07:51:36] phase 4: del A + gc.collect() (runs forest_release_gpu)
-[07:51:36] phase 4 done: A released
-[07:51:36] phase 5: predict with B (prepares B's device snapshot) <-- the hang is here

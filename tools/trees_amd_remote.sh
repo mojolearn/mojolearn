@@ -1,6 +1,6 @@
 #!/bin/sh
 # RUNS ON THE DIGITALOCEAN AMD DROPLET (tools/trees_amd_leg.sh). Sets a fresh
-# MI325X up for the trees lane under ENGINEERING_RULES.md section 10: pixi,
+# MI325X up for the trees lane under CONTRIBUTING.md (Comparing against libraries without a GPU path): pixi,
 # the IDENTICAL-tier bindings (base, gbdt, rf, trees), the opponents that run
 # on this box (CatBoost, scikit-learn, LightGBM and XGBoost on the CPU; AMD's
 # ROCm XGBoost build `amd_xgboost` and LightGBM's OpenCL learner on the GPU

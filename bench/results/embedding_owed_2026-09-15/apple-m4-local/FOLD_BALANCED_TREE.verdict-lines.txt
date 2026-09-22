@@ -1,7 +1,0 @@
-device probe: raw 0x80c00000 + 0x00800000 -> 0x80000000 on the DEVICE, a flushed add, so EMB_NO_FLUSH_ACC is INERT on this column (contract 9.3) and clause (g) asserts that instead
-device refusal: f_oor_high REFUSED by name on the device entry point, output buffer untouched (6 poisoned cells), so nothing was launched
-device refusal: f_oor_neg REFUSED by name on the device entry point, output buffer untouched (6 poisoned cells), so nothing was launched
-device refusal: PASS, both out-of-range cases refused by name before any launch
-clause (g): arm FOLD_BALANCED_TREE -- contract 5.1 clause 2. **PROVABLY inert at every R <= 3** (contract 5.4: at R = 2 and 3 the tree IS the chain, node for node), so f_order3 at R = 3 is the sharp inert case and not merely a quiet one
-clause (g): FOLD_BALANCED_TREE BIT on f_tree4: 1 of 9 stages moved, FIRST at emb.dw, which is the stage its own clause writes.
-clause (g): FOLD_BALANCED_TREE is INERT on f_order3, 9/9 stages unmoved, which is the half that makes it a reach proof rather than a smoke test.

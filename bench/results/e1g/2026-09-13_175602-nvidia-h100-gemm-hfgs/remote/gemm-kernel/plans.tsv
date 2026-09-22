@@ -1,5 +1,0 @@
-shipped	shipped: default=ksplit(S=132) else tuned128
-kpack_padv	kpack_padv on the calls it takes, else default=ksplit(S=132) else tuned128
-kpack_hf	kpack_hf on the calls it takes, else default=ksplit(S=132) else tuned128
-kpack_gs	kpack_gs on the calls it takes, else default=ksplit(S=132) else tuned128
-kpack_hg	kpack_hg on the calls it takes, else default=ksplit(S=132) else tuned128

@@ -1,10 +1,8 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 # SHIPS: compiled into a CPU host binding (python/mojolearn/host_surface.py names which); product, not only a check.
-"""DBSCAN TRAINING on the host, for a box with no GPU (workstream E of
-docs/lanes/TEMP_claim_surface_plan_2026-09-14.md, the lane dbscan of
-docs/lanes/BRIEF_cpu_training_2026-09-13.md section 1.1 "dbscan",
-2026-09-14). The brief's census found NO host oracle for this fit; this
+"""DBSCAN TRAINING on the host, for a box with no GPU (workstream E, the
+lane dbscan, 2026-09-14). A census found NO host oracle for this fit; this
 file is that oracle, written as a second spelling of the device path.
 
 HOST ONLY. Nothing here imports `max.gpu`, `std.gpu` or a `DeviceContext`,

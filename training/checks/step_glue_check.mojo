@@ -1,8 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The step glue arms (DEVIATIONS 2645 to 2648) against the shipped step,
-BIT FOR BIT, with reach by sabotage. Brief
-docs/lanes/BRIEF_step_glue_2026-09-11.md section 6.
+BIT FOR BIT, with reach by sabotage.
 
     pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 \\
         -D MOJOLEARN_STEP_GLUE_TRIAL=1 -I . \\

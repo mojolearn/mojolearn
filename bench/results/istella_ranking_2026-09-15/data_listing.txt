@@ -1,5 +1,0 @@
-total 2804988
-drwxr-xr-x 2 root root         67 Sep 15 23:07 .
-drwxr-xr-x 3 root root         29 Sep 15 23:06 ..
--rw-r--r-- 1 root root  624022440 Sep 15 23:07 istella_rank.npz
--rw-r--r-- 1 root root 2248281826 Sep 15 23:07 istella_speed.npz

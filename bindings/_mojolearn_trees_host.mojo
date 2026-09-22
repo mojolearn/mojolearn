@@ -2,8 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CPU binding for the `_mojolearn_trees` family, the ExtraTrees classifier
 and regressor (the CPU training lane, phase 1, et-clf and et-reg,
-2026-09-14; brief docs/lanes/BRIEF_cpu_training_2026-09-13.md sections 1.1
-et-clf, et-reg and 3.2).
+2026-09-14).
 
 HOST ONLY. No DeviceContext, no kernel launch, no GPU. The fits are
 `extratrees/estimator.mojo::fit_extra_trees_classifier_host_exact` and

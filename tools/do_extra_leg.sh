@@ -205,7 +205,7 @@ LEG_EXTRA="${MOJOLEARN_GEMM_LEG_EXTRA:-}"
 
 TOKFILE="${MOJOLEARN_DO_TOKEN_FILE:-$HOME/.mojolearn_do_token}"
 STAMP="$(date -u +%Y-%m-%d_%H%M%S)"
-# THE SHARED GPU LOCK (ENGINEERING_RULES 10). A lock older than 100 minutes
+# THE SHARED GPU LOCK (CONTRIBUTING.md (Comparing against libraries without a GPU path)). A lock older than 100 minutes
 # with no GPU or mojolearn droplet live is an orphan and may be broken.
 case "$VENDOR" in
   cpu-*) _DEFAULT_LOCK="/tmp/mojolearn-do-$VENDOR.lock" ;;
@@ -268,7 +268,7 @@ cancel_deadman() {
   DEADMAN_PID=""; DEADMAN_DIR=""
 }
 
-# THE SHARED GPU LOCK (ENGINEERING_RULES 10). One GPU droplet at a time across
+# THE SHARED GPU LOCK (CONTRIBUTING.md (Comparing against libraries without a GPU path)). One GPU droplet at a time across
 # every session and lane on this Mac. Released only by the EXIT trap after the
 # destroy is confirmed, and only when the owner file still carries our nonce.
 # shellcheck disable=SC2317
@@ -969,7 +969,7 @@ if ! take_lock; then
     rm -rf "$GPU_LOCK"
     take_lock || die "REFUSING to rent: another leg took $GPU_LOCK while the stale one was being broken. Nothing was created." 3
   else
-    die "REFUSING to create $NAME: the shared GPU lock $GPU_LOCK is held (${_age:-?}s old) by: ${_owner:-no owner file}. One GPU droplet at a time across every session (ENGINEERING_RULES 10). Nothing was created." 3
+    die "REFUSING to create $NAME: the shared GPU lock $GPU_LOCK is held (${_age:-?}s old) by: ${_owner:-no owner file}. One GPU droplet at a time across every session (CONTRIBUTING.md (Comparing against libraries without a GPU path)). Nothing was created." 3
   fi
 fi
 echo "gpu_lock=taken $(date -u +%Y-%m-%dT%H:%M:%SZ) $GPU_LOCK lane=$LOCK_LANE" >> "$OUT/leg.txt"

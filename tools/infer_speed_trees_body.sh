@@ -54,7 +54,7 @@ FIXTURES="base,ties,odd,dupes,wide"
 # the MAX runtime allocator's lock held for the whole PROCESS. The `model`
 # part's reloaded estimator is what died before the batch part asked for its
 # first buffer. With the drain, both lanes run the full protocol on one GPU:
-# repeats 2, batch stable, 0 moved (docs/lanes/LANE_STATUS_lane-forest-deadlock.md).
+# repeats 2, batch stable, 0 moved.
 SKIP_CUDA="${SKIP_CUDA:-}"
 
 say() { printf '[%s body] %s\n' "$(date +%T)" "$*"; }

@@ -280,8 +280,7 @@ LANES = {
     'knn-reg': ('KNeighborsRegressor', lambda e, X: (e.predict(X[:64]),), {}),
     # lane/logistic-multiclass (2026-09-14): three classes through the
     # softmax loss; the probe is the pair (predict_proba, predict), the
-    # order of the identity_break lane body in
-    # docs/lanes/BRIEF_logistic_multiclass_2026-09-14.md section 5.
+    # order of the identity_break lane body.
     'logistic-multiclass': ('LogisticRegression',
                             lambda e, X: (e.predict_proba(X), e.predict(X)),
                             {'predict': lambda e, X: e.predict(X),

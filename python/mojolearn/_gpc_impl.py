@@ -63,7 +63,7 @@ WHAT IS HONORED AND WHAT IS REFUSED, one line per parameter:
     n_jobs                refused   anything but None; the binary fits run
                                     one after another on one device
 
-THE INFERENCE BOUNDARY (docs/lanes/CPU_INFERENCE_BOUNDARY_2026-09-15.md).
+THE INFERENCE BOUNDARY.
 `fit` on a CPU-only install refuses unless the internal verifier's
 `reference_training()` is active. `predict`, `predict_proba`,
 `latent_mean_and_variance` and `load` are public on the CPU:

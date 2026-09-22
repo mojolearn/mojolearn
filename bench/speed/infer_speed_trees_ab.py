@@ -27,7 +27,7 @@ the sequential host walk); `host-predict` and `host-proba` are
 the GBDT binding's model-text parse alone (`gbdt_model_dim`), a diagnostic
 for how much of a GPU `predict` call is the parse.
 
-The gate is the one docs/lanes/FOREST_INFERENCE_MEASUREMENT.md states: at
+The gate is at
 least five timed calls after one warmup and a max/min spread of at most
 1.10 per arm, output hashes equal across arms and rounds. A process whose
 spread exceeds the gate is written with `stable: false`; the summary

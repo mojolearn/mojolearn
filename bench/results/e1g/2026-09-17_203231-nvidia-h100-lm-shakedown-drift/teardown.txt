@@ -1,6 +1,0 @@
-pod=pibjrl033kw6oj
-armed=1
-terminated=1
-deadman_pid=17663
-exit=0
-at=2026-09-17T21:11:21Z

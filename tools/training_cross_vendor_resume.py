@@ -4,7 +4,6 @@
 
 This tool only reads, hashes, copies, and compares files. It never builds,
 executes model code, launches subprocesses, measures performance, or provisions.
-See training/PUBLIC_TRAINING_RESUME_COMMANDS.md for the serial root workflow.
 """
 import argparse
 import hashlib

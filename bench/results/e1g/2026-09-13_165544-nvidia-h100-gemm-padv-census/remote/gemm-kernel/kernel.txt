@@ -1,9 +1,0 @@
-deviations=2599,2700,2703
-brief=docs/lanes/BRIEF_gemm_kernel_2026-09-11.md
-started=2026-09-13T16:57:58Z
-root=/root/mojolearn
-arms=shipped,kpack_pad,kpack_padv
-lm_arms=kpack_pad,kpack_padv
-lmtiming=1
-check_arms=shipped,kpack_pad,kpack_padv
-out=/root/gemm_leg_out/gemm-kernel

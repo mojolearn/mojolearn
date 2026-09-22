@@ -229,7 +229,7 @@ def _sha(data):
 
 class CorpusBatches:
     """Token batches from a pinned byte corpus (DEVIATIONS 2525 to 2527;
-    ENGINEERING_RULES section 9: a neural timing claim runs on two
+    CONTRIBUTING.md (Performance claims): a neural timing claim runs on two
     ORDINARY corpora). `path` is the corpus file; `manifest.json` beside it
     (schema `mojolearn.byte-lm.corpus.v1`) must carry its sha256 and byte
     length, both checked here. Step `k` (zero-based), row `b` reads bytes

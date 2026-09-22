@@ -1,8 +1,0 @@
-vendor=nvidia
-payload=mamba
-knn_layout_only=1
-commit=9fe07a3327bae94293689dda5d28141e52eb142f
-started=2026-09-05T20:44:52Z
-pixi_install_exit=0
-layout_exit=0
-finished=2026-09-05T20:52:29Z

@@ -1,4 +1,0 @@
-arming a 60-minute self-kill on pod rf1ruxuaac3q5i ...
-ARMED. Pod rf1ruxuaac3q5i is TERMINATED through the API in 60 minutes.
-  lease: /Users/andrewhendel/mojolearn-wt/attention-replay-vendors/bench/results/attention_replay_vendors_2026-09-18/cpu_identity/lease/rf1ruxuaac3q5i.lease
-  extend with: tools/runpod_guard.sh extend rf1ruxuaac3q5i '-p 40112 root@213.192.2.99' <minutes>

@@ -4,8 +4,7 @@
 # the forward kept, eight rows per block, no K staging, no score chain, no
 # exp) and 2651 (`_estash_dres`: the same with the block's dctx rows in the
 # shared page), on the shipped NVIDIA default
-# stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 and priced against it (brief
-# docs/lanes/BRIEF_attention_step_2026-09-11.md section 20). The kept stash is
+# stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 and priced against it. The kept stash is
 # DEVIATION 2652 (one host field on LlamaDeviceStages, trial builds only).
 #
 # A MOJOLEARN_GEMM_LEG_EXTRA body. tools/gemm_remote_leg.sh has no extra-env
@@ -29,7 +28,7 @@
 # REACH_E lines), and the lean LM step of the default and both arms on
 # enwik8 and Pile GitHub (12 probes).
 #
-# Gates: brief section 20.9. Flip (brief 20.7, ENGINEERING_RULES 9): the
+# Gates: brief section 20.9. Flip (brief 20.7, CONTRIBUTING.md (Performance claims)): the
 # geometric mean of the enwik8 and pilegithub lean step ratios (arm over the
 # default, lm_summary.tsv steady medians, same pod) below 1, with
 # witnesses_equal_baseline=True for every step on both corpora. A flip changes

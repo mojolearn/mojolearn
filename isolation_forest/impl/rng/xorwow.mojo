@@ -112,9 +112,8 @@ comptime XORWOW_TABLE_WORDS = PRECALC_NUM_MATRICES * XORWOW_MATRIX_WORDS
 """25,600 words per table."""
 
 comptime XORWOW_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
-"""The CPU identity gate's negative control (the CPU training lane, brief
-docs/lanes/BRIEF_cpu_training_2026-09-13.md section 3.4; the iforest lane,
-2026-09-14). `-D MOJOLEARN_HOST_SABOTAGE=1` makes `curand_uniform` advance
+"""The CPU identity gate's negative control (the CPU training lane;
+the iforest lane, 2026-09-14). `-D MOJOLEARN_HOST_SABOTAGE=1` makes `curand_uniform` advance
 the state ONE extra step before the draw it returns, so every split
 fraction of every isolation tree moves and a host binding built that way
 diverges from the GPU columns on the iforest lane. Never passed by a

@@ -1,6 +1,0 @@
-lane=attn-replay-cpu
-commit=a9584a477cec456cdb64bc8c2eecfc647d21f07f
-dirty_tracked=0
-worktree=/Users/andrewhendel/mojolearn-wt/attention-replay-vendors
-source=3052	19951042	7a462c9cbb44adacf42adf882d2e705819264e3cf2611b40729c043a29822f89
-box_clock_minus_mac=0

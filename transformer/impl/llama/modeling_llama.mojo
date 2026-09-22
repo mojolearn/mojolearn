@@ -1551,9 +1551,7 @@ struct LlamaDeviceStages(Movable):
     dead scores/masked/sbh after forward while retaining weights and aexp.
     `ensure_attention_materialized` recomputes when weights are absent."""
     var attn_estash_cells: Int
-    """DEVIATION 2652 (trial builds only; brief
-    docs/lanes/BRIEF_attention_step_2026-09-11.md section 20): the `[B,
-    n_heads, L, S]` cell count of the fused forward's exp stash KEPT in
+    """DEVIATION 2652 (trial builds only): the `[B, n_heads, L, S]` cell count of the fused forward's exp stash KEPT in
     `aexp` by the LAST call, 0 when nothing is kept. Set by
     `eager_attention_forward` after a fused forward under an `_estash` arm
     ran into `aexp` with no eager stages needed (`attn_materialized` stays
@@ -1657,7 +1655,6 @@ struct LlamaDeviceStages(Movable):
 
         # All 30 buffers are owned by self through this fence. Preserve every
         # zero fill, but submit them together instead of waiting per buffer.
-        # See docs/NEURAL_METAL_DECODE.md for the lifetime boundary.
         step_count_sync()
         ctx.synchronize()
 
@@ -1916,7 +1913,7 @@ def llama_rms_norm(
     `llama_rms_norm_kernel` is deleted. This launcher exists so that the
     swap touches one function and no call site.
     """
-    # DEVIATION 2645 (docs/lanes/BRIEF_step_glue_2026-09-11.md section 4.1):
+    # DEVIATION 2645:
     # a trial build under an arm carrying `rows16`, `rows8` or `rows4` launches
     # the same kernel at that many threads per block. The kernel owns one
     # token row per thread and reads `block_dim` only to index its row, so

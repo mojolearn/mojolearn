@@ -3,8 +3,7 @@
 """INFERENCE-ONLY CPU binding for the `_mojolearn_hdbscan` family:
 `mojolearn.hdbscan.approximate_predict`, `membership_vector` and
 `all_points_membership_vectors` of a saved HDBSCAN on a CPU-only
-install (the neighbors and density inference lane, 2026-09-15;
-docs/lanes/CPU_INFERENCE_BOUNDARY_2026-09-15.md).
+install (the neighbors and density inference lane, 2026-09-15).
 
 This is the hdbscan binary a wheel ships. It registers
 `bindings/hdbscan_host_predict.mojo`'s `hdbscan_approximate_predict`, the

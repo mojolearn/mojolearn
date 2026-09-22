@@ -9,8 +9,7 @@ No borrowed pointer survives a call. Optional owned sessions retain device state
 Outputs are published only after successful computation, validation and
 synchronization; the stateless ABI also tears down its context before return.
 
-DEVIATION 2514 (device-owned step, design
-docs/lanes/DESIGN_lm_device_owned_step_2026-09-11.md): the `byte_lm_session_*`
+DEVIATION 2514 (device-owned step): the `byte_lm_session_*`
 entries below `byte_lm_session_run` make the session's device buffers the
 ONLY copy of the model, the optimizer state, the last gradient and the flags
 while it is open. State crosses the boundary at `open` (validated on the
@@ -192,8 +191,7 @@ struct _ContextKeeper(Defaultable, Movable):
     """DEVIATION 2513: an OPT-IN process-lifetime DeviceContext.
 
     On one RTX 4090 pod every DeviceContext created after another was
-    destroyed in the same process never returned from its first use
-    (docs/lanes/BRIEF_byte_lm_lifetime_2026-09-10.md, run 3), while a
+    destroyed in the same process never returned from its first use, while a
     second context created while the first was still alive always did.
     When MOJOLEARN_BYTE_LM_KEEP_CONTEXT=1 is set at a call that creates a
     context, `ensure()` creates ONE separate context here first and never

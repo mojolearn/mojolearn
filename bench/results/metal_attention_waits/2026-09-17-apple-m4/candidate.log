@@ -1,9 +1,0 @@
-mac_slot: admitted after 0.002s
-head_loop waits 1 launches 16
-  case 1 base_b2_l4_nrep2  B=2 L=4 S=4 dm=32 nh=2 nkv=1 hd=16 inter=64  15328 cells: 37/37 stages bit-identical
-execution 1 waits 164 launches 206 ms 560.105 oracle_cells 15328
-head_loop waits 1 launches 16
-  case 1 base_b2_l4_nrep2  B=2 L=4 S=4 dm=32 nh=2 nkv=1 hd=16 inter=64  15328 cells: 37/37 stages bit-identical
-execution 2 waits 164 launches 206 ms 679.946 oracle_cells 15328
-PASS: head-loop wait budget and all 37 stages against oracle, two executions
-mac_slot: {"wait_seconds": 0.0022038749884814024, "run_seconds": 1.512196083087474, "exit_code": 0}

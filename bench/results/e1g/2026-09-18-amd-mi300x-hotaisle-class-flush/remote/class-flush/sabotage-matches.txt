@@ -1,1 +1,0 @@
-SEAM_DIFF shipped/class i=400 a=3f7fffff b=00800000 acc=00000000 shipped=00800000 class=00800001

@@ -10,7 +10,7 @@
 # THE SIBLING, AND WHY THE LANE LISTS ARE NOT THE SAME LIST.
 # tools/gpu_class_gaps_nvidia_leg.sh (985e57519) is this file's shape, its
 # reasoning and its guards; only the lanes and the silicon differ, and the
-# difference is not cosmetic. docs/VERIFICATION_MATRIX.md's 49 lanes split
+# difference is not cosmetic. The verification matrix's 49 lanes split
 # FOUR ways by the classes they already carry, not two:
 #
 #   apple + amd, missing nvidia  18   gbdt-query-rmse, the gmm, gp, gpc,

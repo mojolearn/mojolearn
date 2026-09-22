@@ -1,4 +1,0 @@
-lowbit	0	25s	expected=pass	held=yes
-lowbit-force-flat	0	22s	expected=pass	held=yes
-lowbit-sabotage	1	21s	expected=fail	held=yes
-lowbit-host-sabotage	1	21s	expected=fail	held=yes

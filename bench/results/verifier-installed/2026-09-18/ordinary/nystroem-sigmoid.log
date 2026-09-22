@@ -1,3 +1,0 @@
-# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
-# verify --all: cpu (cpu), 1 lanes x 9 fixtures, harness wheel copy, table /Users/andrewhendel/mojolearn-evidence/verifier-installed-continuation-2026-09-18/venv/lib/python3.14/site-packages/mojolearn/verify_reference/table.json
-  nystroem-sigmoid                   kernel_methods      0.0s

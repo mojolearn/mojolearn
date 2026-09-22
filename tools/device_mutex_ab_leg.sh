@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 # SPDX-License-Identifier: Apache-2.0
-# THE STOCK ARM OF THE DEVICE MUTEX CHECK, ON gfx942. Top owed item of
-# docs/lanes/RF_MUTEX_RECONCILIATION_2026-09-16.md.
+# THE STOCK ARM OF THE DEVICE MUTEX CHECK, ON gfx942. Top owed item of the
+# 2026-09-16 random forest mutex reconciliation.
 #
 # WHY THIS LEG EXISTS. The 2026-09-16 gfx942 run of the primitive check passed the
 # REPAIRED arm only, and the repair it was built with emitted no instructions at all, so

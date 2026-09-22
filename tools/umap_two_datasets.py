@@ -3,7 +3,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """UMAP on the two datasets: OUR IDENTICAL fit_transform beside cuML UMAP,
 interleaved round by round, trustworthiness beside time (lane/knn-speed,
-2026-09-11; ENGINEERING_RULES.md section 9).
+2026-09-11; CONTRIBUTING.md (Performance claims)).
 
     python3 tools/umap_two_datasets.py race --dataset taxi --rows 100000 \\
         --data /root/ctd-data --out DIR [--rounds 3] [--arms ours,cuml-gpu]

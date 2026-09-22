@@ -1,9 +1,0 @@
-{
-  "previous_wheel_sha256": "c433556e1566beb54e43dc326c1e1bd8b25b4385576661c5aeeac15612061669",
-  "changed_entries": [
-    "mojolearn/_verification_evidence_data.py",
-    "mojolearn/identity_columns/COMMIT",
-    "mojolearn-0.8.7.dist-info/RECORD"
-  ],
-  "scope": "All numerical Python code, reference table, harness, model assets and native runtime bytes are unchanged from the passing 41-lane installed artifact."
-}

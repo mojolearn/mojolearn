@@ -9,9 +9,7 @@ gbdt-lossguide-newtoncosine, gbdt-multiclass and gbdt-onevsall lanes
 leaves and the row bootstraps through `gbdt/host/gbdt_oracle_losses.mojo`,
 the Lossguide searcher options through `gbdt/host/gbdt_oracle_depthwise.mojo`,
 MultiClass and MultiClassOneVsAll through
-`gbdt/host/gbdt_oracle_multiclass.mojo`; brief
-docs/lanes/BRIEF_cpu_training_2026-09-13.md sections 1.1 gbdt and the batch
-3 sections). `loss="RMSE"` fits through
+`gbdt/host/gbdt_oracle_multiclass.mojo`. `loss="RMSE"` fits through
 `gbdt/host/gbdt_oracle_rmse.mojo::gbdt_rmse_host_fit`.
 
 HOST ONLY. No DeviceContext, no kernel launch, no GPU. The fit is

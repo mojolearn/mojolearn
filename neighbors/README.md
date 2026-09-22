@@ -32,9 +32,7 @@ arithmetic contract; the optimization flags must preserve its output bits.
 The adversarial gate exercises non-dyadic values, duplicate rows, large
 offsets, mixed feature scales, dimensions 1/3/17/33/65, query-tile tails, and
 L2/rooted-L2 plus L1/cosine fallback. All 5,440 distance/index pairs must match
-across the four flag combinations and named GPUs. See the
-[experiment record](checks/SMALLK_DISPATCH_EXPERIMENT.md) for earlier broader
-dispatch coverage and scoped timing evidence. These correctness checks do
+across the four flag combinations and named GPUs.  These correctness checks do
 not establish that either optimization is faster for every workload/device.
 
 DEVIATION 2629 (2026-09-11, lane/knn-speed): the exact-chain admission. The

@@ -1,6 +1,0 @@
-pod=gh0ejxm05juevy
-armed=1
-terminated=1
-deadman_pid=98265
-exit=0
-at=2026-09-18T10:21:26Z

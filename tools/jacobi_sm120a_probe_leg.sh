@@ -4,7 +4,7 @@
 # arm 0; the output names ("arm1") are kept so the two 5090 records read alike.
 # tools/jacobi_sm120a_probe_leg.sh: the on-box body of the DEVIATION 2711 leg
 # (MOJOLEARN_GEMM_LEG_EXTRA for tools/gemm_remote_leg.sh nvidia --payload gemm).
-# Brief: docs/lanes/BRIEF_sm120a_jacobi_2026-09-14.md. Mac reference:
+# Mac reference:
 # bench/results/identity_break/2026-09-14_rtx5090-sm_120a/jacobi_probe.apple-m4.txt.
 #
 # What it does, on the box, from /root/mojolearn with pixi on PATH:

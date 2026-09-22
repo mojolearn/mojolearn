@@ -32,7 +32,7 @@ GPU bindings call these functions for their `sequential` engine instead of
 carrying their own copies of the loops, and the rows fan out to host threads.
 
 The restatement is a prediction until measured. tools/forest_host_gate.py is
-the measurement, and the brief in docs/lanes/ records what it has shown.
+the measurement.
 """
 from max.algorithm import sync_parallelize
 from std.os import getenv

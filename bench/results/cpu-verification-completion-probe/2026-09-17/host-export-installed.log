@@ -1,3 +1,0 @@
-mac_slot: admitted after 0.001s
-host-export {'DIVERGENT': 0, 'IDENTICAL': 198, 'N/A': 117, 'OWED': 0, 'REFUSED': 0} {'appendix_entries': 246, 'available': 150, 'excluded': 50, 'registered_lanes': 229, 'unavailable': 0, 'withheld': 29}
-mac_slot: {"wait_seconds": 0.0011699999995471444, "run_seconds": 167.53689374999976, "exit_code": 0}

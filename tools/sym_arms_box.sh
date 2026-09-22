@@ -31,7 +31,7 @@ if mountpoint -q /mnt/mojolearn-data 2>/dev/null; then
 fi
 export DEBIAN_FRONTEND=noninteractive
 BPATH="$ROOT/.pixi/envs/default/bin:$PATH"
-# The vendor from the box (ENGINEERING_RULES 10, 2026-09-11 afternoon:
+# The vendor from the box (CONTRIBUTING.md (Comparing against libraries without a GPU path), 2026-09-11 afternoon:
 # measurement moved to a RunPod NVIDIA H100): cuda under nvidia-smi, else hip.
 if command -v nvidia-smi > /dev/null 2>&1; then
     VENDOR=cuda

@@ -13,7 +13,7 @@ Two departures are recorded below.
 Nothing else from that header is here: `slice`, `columnWiseSort`, `gather`,
 `getL2Norm` and the print helpers belong to other sections or to nobody, and
 `cholesky/NOT_IMPLEMENTED.tsv` records them as such rather than leaving them as an
-invisible gap (ENGINEERING_RULES rule 3).
+invisible gap (CONTRIBUTING.md (Evidence must be able to fail)).
 
 # =========================================================================
 # DEVIATION 1644: ROW-MAJOR, WHERE THEIRS IS COLUMN-MAJOR.
@@ -53,7 +53,7 @@ invisible gap (ENGINEERING_RULES rule 3).
 # `CHOL_SAB_TRSM_RECIPROCAL` is the arm that swaps this shape in so the gate
 # can be shown to see the difference.
 #
-# The kernel is implemented anyway, because ENGINEERING_RULES rule 3 says an unimplemented
+# The kernel is implemented anyway, because CONTRIBUTING.md (Evidence must be able to fail) says an unimplemented
 # file is visible and a mis-implemented one is not, and because a FAST-mode caller
 # outside this lane may legitimately want it. It has no caller HERE.
 # =========================================================================

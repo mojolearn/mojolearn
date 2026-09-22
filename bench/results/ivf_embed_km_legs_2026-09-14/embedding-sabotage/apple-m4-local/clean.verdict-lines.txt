@@ -1,8 +1,0 @@
-mode IDENTICAL   sabotage: none   EMB_TPB: 256
-ledger: the caller expected 'none' and the binary agrees, so the -D was not silently dropped
-clause (a): 17 fixture cases, all 9 stages, device vs host oracle, BITWISE
-card: 9 records at /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/4e8829df-5da1-4c85-8680-6b52df16132c/scratchpad/legsdocs/local/embsab/clean.card, contract section 10 wants 9
-card: 9/9 tags in contract section 10's order, all unique, three of them INTEGER (contract section 6: emb.perm is where a divergent sort becomes visible before it reaches a float)
-clause (a): PASS, 17 cases, 9/9 stages bit-identical to the oracle on all 6887 cells, 9/9 card tags
-clause (a) NOTE, DEVIATION 1517: at d == 0 and at T == 0 the device backward returns BEFORE R1, R2 and R3, so emb.counts, emb.run_begin and emb.perm are never written -- while emb_backward_stages computes and records all three. Those three stages are SKIPPED on f_t0 and f_d0 and the skip is reported here rather than passed over. Contract section 8 declares both shapes LEGAL, so the two cards disagree at three of nine stages on two legal shapes.
-clause (e): SKIPPED (set MOJOLEARN_EMB_CHECK_CLAUSE_E=1). NOTE: EMB_ACCUM_BY_ADD is falsifiable ONLY here, because no kernel reads its switch, so a lane that never runs clause (e) has fifteen arms and not sixteen.

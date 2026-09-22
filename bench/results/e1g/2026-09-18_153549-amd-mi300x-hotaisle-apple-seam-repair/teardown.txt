@@ -1,5 +1,0 @@
-== teardown 2026-09-18T15:40:08Z exit=0 vm=4875e63c-f5aa-4153-b5b4-538393f3eadd ==
-delete ref=4875e63c-f5aa-4153-b5b4-538393f3eadd attempt 1 -> HTTP 204 utc=2026-09-18T15:40:14Z body=
-verified_gone ref=4875e63c-f5aa-4153-b5b4-538393f3eadd yes get=404 list=200 listed=no state=n/a utc=2026-09-18T15:40:15Z after=1s
-destroy_confirmed=1
-exit=0

@@ -1,7 +1,0 @@
-device probe: raw 0x80c00000 + 0x00800000 -> 0x80000000 on the DEVICE, a flushed add, so EMB_NO_FLUSH_ACC is INERT on this column (contract 9.3) and clause (g) asserts that instead
-device refusal: f_oor_high REFUSED by name on the device entry point, output buffer untouched (6 poisoned cells), so nothing was launched
-device refusal: f_oor_neg REFUSED by name on the device entry point, output buffer untouched (6 poisoned cells), so nothing was launched
-device refusal: PASS, both out-of-range cases refused by name before any launch
-clause (g): arm GATHER_NO_FLUSH -- seams G1 and G2, DEVIATION 1310. **NOT inert on Apple** -- a gather does no arithmetic, so a raw copy of a subnormal survives on every vendor -- which makes this the ONLY flush arm in the lane a single-column run can see move
-clause (g): GATHER_NO_FLUSH BIT on f_subw: 1 of 9 stages moved, FIRST at emb.fwd, which is the stage its own clause writes.
-clause (g): GATHER_NO_FLUSH is INERT on f_nodup, 9/9 stages unmoved, which is the half that makes it a reach proof rather than a smoke test.

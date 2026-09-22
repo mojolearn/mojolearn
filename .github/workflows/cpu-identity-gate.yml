@@ -1,5 +1,4 @@
-# CPU identity gate (the CPU training lane, 2026-09-13; brief
-# docs/lanes/BRIEF_cpu_training_2026-09-13.md section 3.4) on GitHub's free
+# CPU identity gate (the CPU training lane, 2026-09-13) on GitHub's free
 # standard runners: ARM64 Linux (Azure Cobalt 100), x86-64 Linux and Apple M1
 # macOS, the byte LM CPU gate's matrix. This is the FOURTH COLUMN of
 # tools/identity_break.py, a CPU beside the three committed GPU columns
@@ -493,7 +492,7 @@ jobs:
       # exactly as recorded (the 2026-09-14 166-lane record at 1eea14f80, the
       # batch part and 31 par-* lanes, AMD column MI325X): 1304 comparable train cells
       # (the revised lanes' cells excluded, see the step) IDENTICAL x3 and ONE DIVERGENT, kmeans-sqrt/wide, where the H100
-      # inertia stands alone (docs/lanes/BRIEF_kmeans_sqrt_wide_h100_inertia_2026-09-14.md).
+      # inertia stands alone.
       # --diff exits 1 on that cell, so the step requires exit 1 AND the exact
       # summary tokens AND that row: a second divergence, a diff that printed
       # nothing, or fewer cells changes a token and fails the step. The cell is
@@ -626,7 +625,7 @@ jobs:
           set -o pipefail
           [ "${CPU_SURFACE_MANIFEST:-}" = read ] || { echo "::error::the CPU surface manifest step did not complete (an earlier step failed), so this step has no lists to run on; fix the first failed step" >&2; exit 1; }
           if [ -z "$COVERED_LANES" ]; then
-            echo "no identity_break lane has a CPU implementation yet (COVERED_LANES is empty); phase 1 of docs/lanes/BRIEF_cpu_training_2026-09-13.md adds the first (gemm-pinned). Nothing run, nothing certified." | tee "$GATE_OUT/cpu_column.log"
+            echo "no identity_break lane has a CPU implementation yet (COVERED_LANES is empty). Nothing run, nothing certified." | tee "$GATE_OUT/cpu_column.log"
             exit 0
           fi
           python3 tools/cpu_identity_gate_check.py run-column --lanes "$COVERED_LANES" --shards "$GATE_SHARDS" \

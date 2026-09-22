@@ -7,7 +7,7 @@ WHY. Apple's native FMA flushes BEFORE rounding (`fbr`): when the exact
 `a*b + acc` lies in `[2^-126 - 2^-150, 2^-126)` it returns a signed zero where
 round-then-flush (`rtf`, the contract, what NVIDIA and AMD compute) returns the
 smallest normal `0x00800000`. Measured on the M4 over the 262,144-triple seam
-probe (docs/lanes/BRIEF_gemm_kernel_2026-09-11.md section 14.3): every Apple
+probe, every Apple
 lane hashed `fbr` `f269fc70e5625987`, the contract hashes `62a6b5621e27c707`.
 
 THE REPAIR is the kNN column's exact integer repair of 2026-09-09

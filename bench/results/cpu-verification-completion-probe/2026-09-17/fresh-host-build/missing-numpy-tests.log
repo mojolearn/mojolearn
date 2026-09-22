@@ -1,4 +1,0 @@
-mac_slot: admitted after 0.001s
-........................................................                 [100%]
-56 passed in 4.08s
-mac_slot: {"wait_seconds": 0.0011877499991896912, "run_seconds": 4.718144458000097, "exit_code": 0}

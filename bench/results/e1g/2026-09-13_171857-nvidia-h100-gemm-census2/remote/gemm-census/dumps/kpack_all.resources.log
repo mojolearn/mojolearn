@@ -1,6 +1,0 @@
-
-Resource usage:
- Common:
-  GLOBAL:0
- Function gemm_checks_gemm_identical_id6A6A6A6A6A6A_c433b7cc03a30c27:
-  REG:255 STACK:4200 SHARED:33792 LOCAL:0 CONSTANT[0]:596 TEXTURE:0 SURFACE:0 SAMPLER:0

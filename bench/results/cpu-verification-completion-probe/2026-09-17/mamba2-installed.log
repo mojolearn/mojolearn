@@ -1,3 +1,0 @@
-mac_slot: admitted after 0.001s
-mamba2 {'DIVERGENT': 0, 'IDENTICAL': 36, 'N/A': 9, 'OWED': 0, 'REFUSED': 0} {'appendix_entries': 246, 'available': 145, 'excluded': 50, 'registered_lanes': 229, 'unavailable': 0, 'withheld': 34}
-mac_slot: {"wait_seconds": 0.0010401659992567147, "run_seconds": 184.10603425000045, "exit_code": 0}

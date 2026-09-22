@@ -9,7 +9,7 @@ The serial host loops (`umap/optimizer.mojo::optimize_layout_identical`,
 attractive and repulsive move in program order into one embedding, so vertex
 `v`'s epoch is a Gauss-Seidel sweep that depends on every earlier edge in the
 epoch. That order has no parallel form, which is why the 100,000-row IDENTICAL
-optimizer took 60 s where cuML's takes 0.3 s (docs/lanes/HANDOFF_knn.md).
+optimizer took 60 s where cuML's takes 0.3 s.
 
 This file is the Jacobi form of the SAME update rule, written so its bits
 are a function of the inputs alone:
@@ -38,7 +38,7 @@ are a function of the inputs alone:
   and 256 and compares fingerprints).
 
 The bits differ from the host loops (Jacobi versus Gauss-Seidel), which is
-recorded as a re-baseline of the UMAP cards in docs/lanes/HANDOFF_umap.md;
+recorded as a re-baseline of the UMAP cards;
 `-D MOJOLEARN_UMAP_IDENTICAL_HOST_OPTIMIZER=1` keeps the host loops.
 FAST keeps `umap/optimizer_fast.mojo` untouched (one attractive move per
 edge, SplitMix64 negatives, stdlib pow); it is not compared to this.
@@ -87,7 +87,7 @@ comptime UMAP_IDENTICAL_GRAD_CLIP = Float32(4.0)
 # THE ROW IS OFF BY DEFAULT. On the second dataset the sign reverses:
 # Istella-S 100k goes 0.9737 to 0.9636 trustworthiness and 0.4832 to 0.4264
 # retention, with the time flat on both (1.003 taxi, 1.000 Istella-S).
-# ENGINEERING_RULES section 9 gates quality per dataset rather than on the
+# CONTRIBUTING.md (Performance claims) gates quality per dataset rather than on the
 # average, so this cannot be a default; it is opt-in through
 # `-D MOJOLEARN_UMAP_IDENTICAL_LIVE_ROW=1`.
 # `-D MOJOLEARN_UMAP_IDENTICAL_SNAPSHOT_FOLD=1` forces the snapshot fold even

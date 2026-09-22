@@ -185,14 +185,13 @@ from .neural_inference import (MLPInference, TransformerBlockInference, Mamba1Bl
                                Mamba2BlockInference, Mamba3BlockInference, SambaInference)
 
 # Workstream D, 2026-09-14: the door-less families of the claim-surface
-# census (docs/lanes/BRIEF_claim_surface_census_2026-09-14.md section 4)
-# given a binding and a class. `Cholesky` binds `_mojolearn_gp` (the GP
+# census given a binding and a class. `Cholesky` binds `_mojolearn_gp` (the GP
 # build already links cholesky/); the other four have their own bindings,
 # resolved on FIRST USE like every other, so an unbuilt one leaves the
 # package importable and raises BY NAME with the build command when
 # touched. Compile-checked on one Apple M4; no box has run them through
 # the Python door, and their identity_break lanes and three columns are
-# owed (docs/lanes/LANE_BODY_*.py).
+# owed.
 from ._cholesky_impl import Cholesky
 from . import kernel_methods
 from .kernel_methods import KernelRidge, Nystroem, RBFSampler

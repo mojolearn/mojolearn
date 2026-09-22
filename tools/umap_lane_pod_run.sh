@@ -15,8 +15,7 @@
 #   bash tools/umap_lane_pod_run.sh quality     ours vs cuML neighborhood_quality
 #   bash tools/umap_lane_pod_run.sh cuml1m      cuML UMAP at 1M rows, 5 rounds
 #
-# Nothing here is run on the Mac; `RUN OWED` in docs/lanes/HANDOFF_umap.md
-# lists the Apple commands.
+# Nothing here is run on the Mac.
 set -u
 ROOT=/root/mojolearn
 OUT=${MOJOLEARN_UMAP_OUT:-/root/umap_out}

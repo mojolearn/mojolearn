@@ -1,9 +1,0 @@
-3224 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x58bac0000000, nodemask=2)
-3224 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x50b6c0000000, nodemask=1)
-3224 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x50b700000000, nodemask=1)
-RANK start ours QueryRMSE gpu rows=19995 queries=166 version=0.8.5 drain=libcudart.so
-RANK warmup 1217.5 ms
-RANK fit rep=0 trees=1 ms=174.2
-RANK fit rep=0 trees=2 ms=162.7
-RANK quality rep=0 ndcg5=0.487732 ndcg10=0.546613 hash=28aec33777333302
-RANK done ours QueryRMSE median@2=162.7 fixed=185.8 per_tree=-11.547 peak=787 base=0

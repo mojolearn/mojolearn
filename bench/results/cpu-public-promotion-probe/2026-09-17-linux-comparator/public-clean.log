@@ -1,5 +1,0 @@
-# verify --all: cpu (cpu), 4 lanes x 9 fixtures, harness checkout, table /root/mojolearn/python/mojolearn/verify_reference/table.json
-  spectral                           metrics             1.0s
-  arima-exog                         arima               0.8s
-  arima-exog-seasonal                arima              10.6s
-  metrics-fowlkes-mallows            metrics             0.8s

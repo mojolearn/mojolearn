@@ -4,8 +4,7 @@
 
 Written 2026-09-15 after the M4 degraded to about 20x slower GBDT fits while
 the kernel reported "The number of queues (5041) exceeding limit (512),
-failing IOGPUCommandQueue creation". See
-docs/lanes/LANE_STATUS_lane-metal-queue-leak.md.
+failing IOGPUCommandQueue creation".
 
 TWO COUNTERS, both read without touching the GPU.
 

@@ -29,8 +29,7 @@ comptime COLUMN_INTEL = 6
 
 comptime COLUMN_SPEC_BASELINE = 7
 
-#: THE CPU COLUMN (the CPU training lane, 2026-09-13; brief
-#: docs/lanes/BRIEF_cpu_training_2026-09-13.md section 2). A build with NO
+#: THE CPU COLUMN (the CPU training lane, 2026-09-13). A build with NO
 #: accelerator target compiles this column, never `COLUMN_APPLE`, which the
 #: fallthrough of `TARGET_COLUMN` handed every host build until this column
 #: existed. It is not a vendor: no kernel is launched on it, and every
@@ -47,10 +46,9 @@ comptime COLUMN_SPEC_BASELINE = 7
 #: `comptime assert TARGET_COLUMN == COLUMN_CPU`.
 comptime COLUMN_CPU = 8
 
-#: THE TPU AND TRAINIUM COLUMNS (2026-09-14, lane/declared-graph-columns;
-#: docs/lanes/DECLARED_TPU_TRAINIUM_COLUMNS_2026-09-14.md). DECLARED, NOT
-#: BUILDABLE, and NOT SIMULATABLE: neither has a `-D MOJOLEARN_COLUMN_*`
-#: define in `TARGET_COLUMN`, so no build compiles against them and no row
+#: THE TPU AND TRAINIUM COLUMNS (2026-09-14, lane/declared-graph-columns).
+#: DECLARED, NOT BUILDABLE, and NOT SIMULATABLE: neither has a
+#: `-D MOJOLEARN_COLUMN_*` define in `TARGET_COLUMN`, so no build compiles against them and no row
 #: they answer can reach a kernel. Mojo emits code for neither. Each takes
 #: user kernels only through its vendor's own kernel language: Google's
 #: Pallas on the TPU (`jax.experimental.pallas.tpu`) and AWS's Neuron Kernel
@@ -178,7 +176,7 @@ def column_fma_instruction(column: Int) -> Int:
       operators "in sequence", documented as equivalent to two instructions
       back to back, which is the unfused spelling.
     - qualcomm, intel: PRESENT (audited 2026-09-15 against the Khronos
-      specifications, docs/lanes/DECLARED_TPU_TRAINIUM_COLUMNS_2026-09-14.md).
+      specifications).
       Both parts ship OpenCL (Adreno through Qualcomm's OpenCL driver, Xe
       through Intel's compute runtime), and the OpenCL C `fma` builtin
       "Returns the correctly rounded floating-point representation of the
@@ -1213,8 +1211,8 @@ def lib_postround_class_flush_for[column: Int]() -> Bool:
 
     Same 262,144-triple hash as shipped round-then-flush; 700-step loss and
     final-state witnesses match NVIDIA on both corpora. The product seam
-    change reduces AMD's late step by 8.43% across those corpora. See
-    docs/lanes/LANE_STATUS_amd-gemm-class.md. Fold topology is unchanged.
+    change reduces AMD's late step by 8.43% across those corpora. Fold
+    topology is unchanged.
     """
     return column == COLUMN_AMD
 
@@ -1238,7 +1236,7 @@ def attn_masked_tail_replay_for[column: Int]() -> Bool:
     NVIDIA: paired 700-step enwik8/Pile GitHub runs: 3697/1768 backward
     corner refusals become zero; every loss and state witness matches. Late
     medians 0.455439 -> 0.197157 and 0.377134 -> 0.196831 seconds (geomean
-    2.1038x). See docs/lanes/LANE_STATUS_lm-attention-fallback.md.
+    2.1038x).
 
     AMD (Hot Aisle MI300X, same probe, seed and shape): all 700 losses, the
     six state hashes at steps 0/699 AND every per-step, per-layer status and
@@ -1255,8 +1253,7 @@ def attn_masked_tail_replay_for[column: Int]() -> Bool:
     and all 130 sites equal NVIDIA's. Apple's DEFAULT arm (`stash_tiled`)
     reaches none of the replay kernels, so on Apple this row is INERT in
     default training; a reduced HD64 training witness under the NVIDIA
-    schedule define equals NVIDIA's. See
-    docs/lanes/LANE_STATUS_attention-replay-vendors.md.
+    schedule define equals NVIDIA's.
     """
     return column == COLUMN_NVIDIA or column == COLUMN_AMD or column == COLUMN_APPLE
 
@@ -1271,14 +1268,13 @@ def byte_lm_release_eager_for[column: Int]() -> Bool:
     with release): every loss, hash and routing vector equals legacy, eager
     capacity 432 bytes after every step (release active on 499 of 700 steps).
     Apple: the reduced HD64 witness with this row on equals NVIDIA's. This is
-    a storage bound, not a speed claim. See
-    docs/lanes/LANE_STATUS_attention-replay-vendors.md.
+    a storage bound, not a speed claim.
     """
     return column == COLUMN_NVIDIA or column == COLUMN_AMD or column == COLUMN_APPLE
 
 
 def attn_zdot_rows_per_block_for[column: Int]() -> Int:
-    """SCHEDULING row (DEVIATION 2528, 2026-09-11, trial arm only; brief docs/lanes/BRIEF_attention_step_2026-09-11.md section 12): query rows per 256-thread block of the fused attention's register-blocked y/dy kernel (`fused_bwd_ydy_tiled_kernel`), 64 or 32. The kernel's shared page is `(2 * rows + 128) * 20` floats (20,480 B at 64, 15,360 B at 32), and on a column whose shared memory is partitioned per compute unit the page bounds the resident blocks. The rows are a schedule, never a numeric term: every chain keeps its terms and order at either value. UNMEASURED on every column. AMD reads 32 as the variant section 11.3 named to price; the page-only count (3 blocks x 64 rows vs 4 x 32 rows per CU) does not favor it, so the AMD leg prices both through the `_r32` / `_r64` arm names and this row follows that measurement. The shipped build reads it nowhere."""
+    """SCHEDULING row (DEVIATION 2528, 2026-09-11, trial arm only): query rows per 256-thread block of the fused attention's register-blocked y/dy kernel (`fused_bwd_ydy_tiled_kernel`), 64 or 32. The kernel's shared page is `(2 * rows + 128) * 20` floats (20,480 B at 64, 15,360 B at 32), and on a column whose shared memory is partitioned per compute unit the page bounds the resident blocks. The rows are a schedule, never a numeric term: every chain keeps its terms and order at either value. UNMEASURED on every column. AMD reads 32 as the variant section 11.3 named to price; the page-only count (3 blocks x 64 rows vs 4 x 32 rows per CU) does not favor it, so the AMD leg prices both through the `_r32` / `_r64` arm names and this row follows that measurement. The shipped build reads it nowhere."""
     if column == COLUMN_AMD:
         return 32
     if column == COLUMN_CPU:
@@ -1287,7 +1283,7 @@ def attn_zdot_rows_per_block_for[column: Int]() -> Int:
 
 
 def lib_gemm_block_parallelism_for[column: Int]() -> Int:
-    """SCHEDULING row, SHIPPED since DEVIATION 2595 (2026-09-11; brief docs/lanes/BRIEF_gemm_long_k_2026-09-11.md sections 3, 4 and 10; first added by DEVIATION 2591 as a trial-arm row): how many 256-thread GEMM blocks the column runs side by side. A value above 0 TURNS ON the `ksplit` default in `gemm/checks/gemm_identical.mojo::identical_gemm_shipped_into`: every call the long-k group rule takes (section 4, rules 1, 2 and 4, at `S` = this value) runs the 128x128 group kernel over power-of-two leaf groups plus one fold launch, and every other call runs the plan `choose_gemm_plan` picks, as before. 0 turns it off: the dispatch compiles to the old line and the TUNED 128x128 plan runs exactly as it did. NVIDIA 132, MEASURED: the H100's SM count (docs/lanes/BRIEF_attention_step_2026-09-11.md section 3.1), and the value the `ksplit` arm ran at on the H100 leg that flipped it (bench/results/e1g/2026-09-11_152822-nvidia-h100-80gb-hbm3-gemm-longk, lean step geomean 0.895 on enwik8 and Pile GitHub, every step witness equal). AMD 110, MEASURED 2026-09-11 on the Hot Aisle MI300X (bench/results/e1g/2026-09-11_164818-amd-mi300x-hotaisle-gemm-longk): lean step 1.953 -> 1.198 s on both corpora, `ksplit` verdict FLIP at geomean 0.6136 and `ksplit_leaf` 0.6090, every step witness equal to shipped. The classical callers were then checked to HOLD under this row (68be1c79: SVC, kmeans, PCA and KDE on the same MI300X). This sentence previously said "AMD 0, OFF UNTIL THE MI300X LEG DECIDES" and contradicted the body below it for two days. The trial arm still runs on AMD at the column's reading through `lib_gemm_block_parallelism_trial_for`. Every other column 0 (Apple included, so the Apple identity card compiles the old line). A wrong value costs time and can never move a bit, because the group size reaches no leaf boundary and no tree level (brief section 5.5)."""
+    """SCHEDULING row, SHIPPED since DEVIATION 2595 (2026-09-11; first added by DEVIATION 2591 as a trial-arm row): how many 256-thread GEMM blocks the column runs side by side. A value above 0 TURNS ON the `ksplit` default in `gemm/checks/gemm_identical.mojo::identical_gemm_shipped_into`: every call the long-k group rule takes (section 4, rules 1, 2 and 4, at `S` = this value) runs the 128x128 group kernel over power-of-two leaf groups plus one fold launch, and every other call runs the plan `choose_gemm_plan` picks, as before. 0 turns it off: the dispatch compiles to the old line and the TUNED 128x128 plan runs exactly as it did. NVIDIA 132, MEASURED: the H100's SM count, and the value the `ksplit` arm ran at on the H100 leg that flipped it (bench/results/e1g/2026-09-11_152822-nvidia-h100-80gb-hbm3-gemm-longk, lean step geomean 0.895 on enwik8 and Pile GitHub, every step witness equal). AMD 110, MEASURED 2026-09-11 on the Hot Aisle MI300X (bench/results/e1g/2026-09-11_164818-amd-mi300x-hotaisle-gemm-longk): lean step 1.953 -> 1.198 s on both corpora, `ksplit` verdict FLIP at geomean 0.6136 and `ksplit_leaf` 0.6090, every step witness equal to shipped. The classical callers were then checked to HOLD under this row (68be1c79: SVC, kmeans, PCA and KDE on the same MI300X). This sentence previously said "AMD 0, OFF UNTIL THE MI300X LEG DECIDES" and contradicted the body below it for two days. The trial arm still runs on AMD at the column's reading through `lib_gemm_block_parallelism_trial_for`. Every other column 0 (Apple included, so the Apple identity card compiles the old line). A wrong value costs time and can never move a bit, because the group size reaches no leaf boundary and no tree level (brief section 5.5)."""
     if column == COLUMN_NVIDIA:
         return 132
     if column == COLUMN_AMD:
@@ -1304,7 +1300,7 @@ def lib_gemm_block_parallelism_for[column: Int]() -> Int:
 
 
 def lib_gemm_kernel_body_for[column: Int]() -> Int:
-    """SCHEDULING row, SHIPPED since DEVIATION 2707 (2026-09-13; brief docs/lanes/BRIEF_gemm_kernel_2026-09-11.md sections 16 to 18): which KERNEL BODY the IDENTICAL GEMM dispatch runs on every call the TUNED 128x128 plan serves. 0 is the 2595 dispatch as it stood (`identical_gemm_tuned_kernel` where the ksplit rule declines the call, `identical_gemm_ksplit_kernel` groups where it takes it). 1 is the `kpack_hg` body (DEVIATION 2706): `identical_gemm_kpack_kernel` at the shipped 128x128 geometry with the padded, 16-byte-aligned packed page (2700, 2703), ONE 8-wide conflict-free shared store per thread per window instead of sixteen scalar stores at a four-way bank conflict (gather staging), and the fold's flush spelled as the hardware `mul.rn.ftz` by one that the step seam already uses (one instruction for six); the same group rule at the same row, the same fold tree, the same words at the same addresses in the same order, so no bit moves and the M4 arms check and the H100 step check say so. NVIDIA 1, MEASURED 2026-09-13 on a RunPod H100 (bench/results/e1g/2026-09-13_175602-nvidia-h100-gemm-hfgs): lean step 0.232 -> 0.211 s on enwik8 and Pile GitHub (geomean 0.9085), GEMM sum 143 -> 122 ms (0.852), every step witness equal to shipped; the decomposition that named the two costs is bench/results/e1g/2026-09-13_174125-nvidia-h100-gemm-diag2 (staging phase a third of the window, fold a fifth). AMD 1 as well, MEASURED 2026-09-13 on a Hot Aisle MI300X (the body's comment names the leg): the gather staging is placement and applies, the fold flush is NVIDIA's instruction and compiles out there. Apple and every other column 0: they compile exactly the line they compiled before. A wrong value costs time and can never move a bit. This row is the switch: 0 here is the revert."""
+    """SCHEDULING row, SHIPPED since DEVIATION 2707 (2026-09-13): which KERNEL BODY the IDENTICAL GEMM dispatch runs on every call the TUNED 128x128 plan serves. 0 is the 2595 dispatch as it stood (`identical_gemm_tuned_kernel` where the ksplit rule declines the call, `identical_gemm_ksplit_kernel` groups where it takes it). 1 is the `kpack_hg` body (DEVIATION 2706): `identical_gemm_kpack_kernel` at the shipped 128x128 geometry with the padded, 16-byte-aligned packed page (2700, 2703), ONE 8-wide conflict-free shared store per thread per window instead of sixteen scalar stores at a four-way bank conflict (gather staging), and the fold's flush spelled as the hardware `mul.rn.ftz` by one that the step seam already uses (one instruction for six); the same group rule at the same row, the same fold tree, the same words at the same addresses in the same order, so no bit moves and the M4 arms check and the H100 step check say so. NVIDIA 1, MEASURED 2026-09-13 on a RunPod H100 (bench/results/e1g/2026-09-13_175602-nvidia-h100-gemm-hfgs): lean step 0.232 -> 0.211 s on enwik8 and Pile GitHub (geomean 0.9085), GEMM sum 143 -> 122 ms (0.852), every step witness equal to shipped; the decomposition that named the two costs is bench/results/e1g/2026-09-13_174125-nvidia-h100-gemm-diag2 (staging phase a third of the window, fold a fifth). AMD 1 as well, MEASURED 2026-09-13 on a Hot Aisle MI300X (the body's comment names the leg): the gather staging is placement and applies, the fold flush is NVIDIA's instruction and compiles out there. Apple and every other column 0: they compile exactly the line they compiled before. A wrong value costs time and can never move a bit. This row is the switch: 0 here is the revert."""
     if column == COLUMN_NVIDIA:
         return 1
     if column == COLUMN_AMD:
@@ -1327,7 +1323,7 @@ def lib_gemm_kernel_body_for[column: Int]() -> Int:
 
 
 def lib_gemm_block_parallelism_trial_for[column: Int]() -> Int:
-    """SCHEDULING row (DEVIATION 2595, 2026-09-11, trial arm only; brief docs/lanes/BRIEF_gemm_long_k_2026-09-11.md section 10): the `S` the `ksplit` TRIAL arm reads, so a leg can still force the arm on a column whose shipped row is 0. The shipped row wherever it is above 0 (NVIDIA 132, so the arm and the default split identically there). AMD 110, from a READING, not a measurement (DEVIATION 2591): the attention brief section 11.1 records 110 CUs (pinned to the MI250X; the MI325X and MI300X counts are not in the repository) and resident blocks per CU as `min(2048 // 256, 65536 // page bytes)`; the shipped 128x128 GEMM block holds two 20,480 B pages (40,960 B), so one block per CU and 110 side by side. The MI300X leg's CONTROL pair `ctl_nt_1536x1408x768` / `ctl_nt_1664x1408x768` (`bench/gemm_step_price_main.mojo`) reads the real value. Every other column 0, meaning no reading: the arm then takes the finest split the workspace cap allows. The shipped build reads it nowhere."""
+    """SCHEDULING row (DEVIATION 2595, 2026-09-11, trial arm only): the `S` the `ksplit` TRIAL arm reads, so a leg can still force the arm on a column whose shipped row is 0. The shipped row wherever it is above 0 (NVIDIA 132, so the arm and the default split identically there). AMD 110, from a READING, not a measurement (DEVIATION 2591): the attention brief section 11.1 records 110 CUs (pinned to the MI250X; the MI325X and MI300X counts are not in the repository) and resident blocks per CU as `min(2048 // 256, 65536 // page bytes)`; the shipped 128x128 GEMM block holds two 20,480 B pages (40,960 B), so one block per CU and 110 side by side. The MI300X leg's CONTROL pair `ctl_nt_1536x1408x768` / `ctl_nt_1664x1408x768` (`bench/gemm_step_price_main.mojo`) reads the real value. Every other column 0, meaning no reading: the arm then takes the finest split the workspace cap allows. The shipped build reads it nowhere."""
     comptime shipped = lib_gemm_block_parallelism_for[column]()
     if shipped > 0:
         return shipped
@@ -1339,7 +1335,7 @@ def lib_gemm_block_parallelism_trial_for[column: Int]() -> Int:
 
 
 def attn_fwd_rows_per_block_for[column: Int]() -> Int:
-    """SCHEDULING row (DEVIATION 2531, 2026-09-11; brief docs/lanes/BRIEF_attention_step_2026-09-11.md sections 14 and 15): query rows per 256-thread block of the fused attention's second-round forward kernel (`fused_attn_forward_r2_kernel`), 64 (the shipped hd-64 sstash geometry) or 32, read by the bare `_fgrid` arm token (`_fgrid_r32` / `_fgrid_r64` force it). The kernel's shared page is `(32 * 64 + rows * 35) * 4` bytes (17,152 B at 64 rows, 12,672 B at 32), and on a column whose shared memory is partitioned per compute unit the page bounds the resident blocks. The rows are a schedule, never a numeric term: the score, denominator and context chains keep their terms and order at either value, and the row maximum is an `identical_fmax` fold whose grouping is free. NVIDIA 32, MEASURED (DEVIATION 2534, H100 leg bench/results/e1g/2026-09-11_154257-nvidia-h100-80gb-hbm3-attention-round3, commit 5bcfa71d): the lean LM step under `stash_tiled_fgrid_r32` was 0.3718 / 0.3716 s against `stash_tiled` 0.3845 / 0.3819 s (enwik8 / Pile GitHub), every step witness equal, and `fgrid_r64` priced at 1.00x of stash_tiled on real activations while `fgrid_r32` priced 1.07x. AMD 32 is still the variant brief section 11.4 named to price (the page-only count, 3 blocks x 64 rows against 5 x 32 per CU, does not settle it); THE MI300X LEG DECIDES IT through the `_fgrid_r32` / `_fgrid_r64` arm names. Every other column 64, unmeasured. The shipped default arm (`attn_default_arm_for`) forces its rows with `_fgrid_r32`, so this row never moves a shipped path."""
+    """SCHEDULING row (DEVIATION 2531, 2026-09-11): query rows per 256-thread block of the fused attention's second-round forward kernel (`fused_attn_forward_r2_kernel`), 64 (the shipped hd-64 sstash geometry) or 32, read by the bare `_fgrid` arm token (`_fgrid_r32` / `_fgrid_r64` force it). The kernel's shared page is `(32 * 64 + rows * 35) * 4` bytes (17,152 B at 64 rows, 12,672 B at 32), and on a column whose shared memory is partitioned per compute unit the page bounds the resident blocks. The rows are a schedule, never a numeric term: the score, denominator and context chains keep their terms and order at either value, and the row maximum is an `identical_fmax` fold whose grouping is free. NVIDIA 32, MEASURED (DEVIATION 2534, H100 leg bench/results/e1g/2026-09-11_154257-nvidia-h100-80gb-hbm3-attention-round3, commit 5bcfa71d): the lean LM step under `stash_tiled_fgrid_r32` was 0.3718 / 0.3716 s against `stash_tiled` 0.3845 / 0.3819 s (enwik8 / Pile GitHub), every step witness equal, and `fgrid_r64` priced at 1.00x of stash_tiled on real activations while `fgrid_r32` priced 1.07x. AMD 32 is still the variant brief section 11.4 named to price (the page-only count, 3 blocks x 64 rows against 5 x 32 per CU, does not settle it); THE MI300X LEG DECIDES IT through the `_fgrid_r32` / `_fgrid_r64` arm names. Every other column 64, unmeasured. The shipped default arm (`attn_default_arm_for`) forces its rows with `_fgrid_r32`, so this row never moves a shipped path."""
     if column == COLUMN_NVIDIA:
         return 32
     if column == COLUMN_AMD:
@@ -1350,7 +1346,7 @@ def attn_fwd_rows_per_block_for[column: Int]() -> Int:
 
 
 def attn_dkdv_keys_per_block_for[column: Int]() -> Int:
-    """SCHEDULING row (DEVIATION 2597, 2026-09-11; brief docs/lanes/BRIEF_attention_step_2026-09-11.md sections 16 and 18): keys per 256-thread block of the fused attention's trial dk/dv folds over the stash (`fused_bwd_dkdv_r2_kernel`, and `fused_bwd_kvfold_r2_kernel` under the `_kvsplit` token), 64 (the shipped `fused_bwd_dkdv_tiled_pf_kernel` geometry) or 32, read by the bare `_kvgrid` arm token (`_kvgrid_r32` / `_kvgrid_r64` force it). At 32 keys a thread holds 8 dk and 8 dv accumulators instead of 16 and 16, and the joint page is `(2 * 16 * 64 + 2 * 16 * keys) * 4` bytes (16,384 B at 64, 12,288 B at 32; a `_kvsplit` fold page is half that). The keys per block are a schedule, never a numeric term: every dk and dv chain keeps its terms and its order (heads of the kv group ascending, queries ascending over the key's visible range) at either value. AMD 32, MEASURED: DigitalOcean MI325X leg bench/results/e1g/2026-09-11_180903-amd-mi325x-do-attention-dkdv (commit 5cc3b8df), `stash_tiled_fgrid_r32_qres_pf_kvgrid_r32` against `baseline` lean step 1.623 / 1.633 -> 1.376 / 1.370 s (enwik8 / Pile GitHub, FLIP geomean 0.8436, every step witness equal), in-step dk/dv 169.8 ms (baseline) -> 21.2 ms; section 16 had read 32 from the tiled dk/dv thread state (32 accumulators and 10 operand registers per thread, twice the tiled dq fold's). The AMD shipped default (`attn_default_arm_for`) forces the same 32 with `_kvgrid_r32` (brief section 18), so this row and the default agree on AMD and a bare `_kvgrid` resolves to the default's instantiation there. Every other column 64, unmeasured. A shipped build reads this row only for a default carrying bare `_kvgrid`, which no column's default does."""
+    """SCHEDULING row (DEVIATION 2597, 2026-09-11): keys per 256-thread block of the fused attention's trial dk/dv folds over the stash (`fused_bwd_dkdv_r2_kernel`, and `fused_bwd_kvfold_r2_kernel` under the `_kvsplit` token), 64 (the shipped `fused_bwd_dkdv_tiled_pf_kernel` geometry) or 32, read by the bare `_kvgrid` arm token (`_kvgrid_r32` / `_kvgrid_r64` force it). At 32 keys a thread holds 8 dk and 8 dv accumulators instead of 16 and 16, and the joint page is `(2 * 16 * 64 + 2 * 16 * keys) * 4` bytes (16,384 B at 64, 12,288 B at 32; a `_kvsplit` fold page is half that). The keys per block are a schedule, never a numeric term: every dk and dv chain keeps its terms and its order (heads of the kv group ascending, queries ascending over the key's visible range) at either value. AMD 32, MEASURED: DigitalOcean MI325X leg bench/results/e1g/2026-09-11_180903-amd-mi325x-do-attention-dkdv (commit 5cc3b8df), `stash_tiled_fgrid_r32_qres_pf_kvgrid_r32` against `baseline` lean step 1.623 / 1.633 -> 1.376 / 1.370 s (enwik8 / Pile GitHub, FLIP geomean 0.8436, every step witness equal), in-step dk/dv 169.8 ms (baseline) -> 21.2 ms; section 16 had read 32 from the tiled dk/dv thread state (32 accumulators and 10 operand registers per thread, twice the tiled dq fold's). The AMD shipped default (`attn_default_arm_for`) forces the same 32 with `_kvgrid_r32` (brief section 18), so this row and the default agree on AMD and a bare `_kvgrid` resolves to the default's instantiation there. Every other column 64, unmeasured. A shipped build reads this row only for a default carrying bare `_kvgrid`, which no column's default does."""
     if column == COLUMN_AMD:
         return 32
     if column == COLUMN_CPU:
@@ -1379,7 +1375,7 @@ its own composition (`ATTN_ARM_R3_KVGRID_R32_ESTASH_DRES_BSWZ_DEFAULT`)."""
 
 
 def attn_default_arm_for[column: Int]() -> Int:
-    """ROUTING row (DEVIATION 2534, 2026-09-11; brief docs/lanes/BRIEF_attention_step_2026-09-11.md sections 15 and 18): the attention arm word the SHIPPED build runs on this column (`ATTN_ARM_DEFAULT` in transformer/impl/llama/fused_attention.mojo; a `-D MOJOLEARN_ATTN_ARM_TRIAL=1` build runs it when MOJOLEARN_ATTN_ARM is unset and keeps every other arm selectable by name). Every arm is bit-equal to the eager oracle by the identity arguments of brief sections 4, 12, 14 and 16, so this row picks a schedule and never a result. NVIDIA `stash_tiled_fgrid_r32_qres_pf`, MEASURED: H100 leg bench/results/e1g/2026-09-11_154257-nvidia-h100-80gb-hbm3-attention-round3 (commit 5bcfa71d), lean LM step 0.3845 / 0.3819 s under stash_tiled against 0.3346 / 0.3340 s (enwik8 / Pile GitHub), every step witness equal, fwd+bwd on real activations 1.41x of stash_tiled; ENGINEERING_RULES 9 flips it. AMD `stash_tiled_fgrid_r32_qres_pf_kvgrid_r32` (ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_KVGRID_R32), MEASURED on the DigitalOcean MI325X against the previous AMD default `baseline`, every step witness equal (the comment in the body names the evidence and the verdict); a shipped build compiles its DEVIATION 2597 dk/dv kernel because the default carries it (brief section 18). Apple and every other column `stash_tiled` (unmeasured for the round 3 and 2597 arms as a price). `-D MOJOLEARN_ATTN_DEFAULT_R3_EVERY_COLUMN=1` returns the NVIDIA word on every column, so a no-trial build on a Mac reaches the shipped round 3 branch; `-D MOJOLEARN_ATTN_DEFAULT_KVGRID_EVERY_COLUMN=1` returns the previous NVIDIA word (now AMD's) on every column, so the same build reaches the shipped DEVIATION 2597 dk/dv branch; `-D MOJOLEARN_ATTN_DEFAULT_ESTASH_EVERY_COLUMN=1` returns the NVIDIA word as of the estash flip (DEVIATION 2657, without DEVIATION 2900's `_bswz` bit) on every column, so a no-trial build on a Mac reaches the shipped DEVIATION 2650 / 2651 estash branch (DEVIATION 2657, `ATTN_SHIPPED_BWD_ESTASH`; this is how the M4 gates that branch, since Apple's own default carries no estash bit). `-D MOJOLEARN_ATTN_DEFAULT_BSWZ_EVERY_COLUMN=1` returns the CURRENT NVIDIA word on every column, so a no-trial build on a Mac reaches the shipped DEVIATION 2900 branch (`ATTN_DEFAULT_BSWZ`; this is how the M4 gates a branch Apple's own default does not carry). Check knobs, the `MOJOLEARN_EXPERIMENTAL_SMALLK_IDENTICAL` pattern; never a shipped build; at most one of the four."""
+    """ROUTING row (DEVIATION 2534, 2026-09-11): the attention arm word the SHIPPED build runs on this column (`ATTN_ARM_DEFAULT` in transformer/impl/llama/fused_attention.mojo; a `-D MOJOLEARN_ATTN_ARM_TRIAL=1` build runs it when MOJOLEARN_ATTN_ARM is unset and keeps every other arm selectable by name). Every arm is bit-equal to the eager oracle by the identity arguments of brief sections 4, 12, 14 and 16, so this row picks a schedule and never a result. NVIDIA `stash_tiled_fgrid_r32_qres_pf`, MEASURED: H100 leg bench/results/e1g/2026-09-11_154257-nvidia-h100-80gb-hbm3-attention-round3 (commit 5bcfa71d), lean LM step 0.3845 / 0.3819 s under stash_tiled against 0.3346 / 0.3340 s (enwik8 / Pile GitHub), every step witness equal, fwd+bwd on real activations 1.41x of stash_tiled; CONTRIBUTING.md (Performance claims) flips it. AMD `stash_tiled_fgrid_r32_qres_pf_kvgrid_r32` (ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_KVGRID_R32), MEASURED on the DigitalOcean MI325X against the previous AMD default `baseline`, every step witness equal (the comment in the body names the evidence and the verdict); a shipped build compiles its DEVIATION 2597 dk/dv kernel because the default carries it (brief section 18). Apple and every other column `stash_tiled` (unmeasured for the round 3 and 2597 arms as a price). `-D MOJOLEARN_ATTN_DEFAULT_R3_EVERY_COLUMN=1` returns the NVIDIA word on every column, so a no-trial build on a Mac reaches the shipped round 3 branch; `-D MOJOLEARN_ATTN_DEFAULT_KVGRID_EVERY_COLUMN=1` returns the previous NVIDIA word (now AMD's) on every column, so the same build reaches the shipped DEVIATION 2597 dk/dv branch; `-D MOJOLEARN_ATTN_DEFAULT_ESTASH_EVERY_COLUMN=1` returns the NVIDIA word as of the estash flip (DEVIATION 2657, without DEVIATION 2900's `_bswz` bit) on every column, so a no-trial build on a Mac reaches the shipped DEVIATION 2650 / 2651 estash branch (DEVIATION 2657, `ATTN_SHIPPED_BWD_ESTASH`; this is how the M4 gates that branch, since Apple's own default carries no estash bit). `-D MOJOLEARN_ATTN_DEFAULT_BSWZ_EVERY_COLUMN=1` returns the CURRENT NVIDIA word on every column, so a no-trial build on a Mac reaches the shipped DEVIATION 2900 branch (`ATTN_DEFAULT_BSWZ`; this is how the M4 gates a branch Apple's own default does not carry). Check knobs, the `MOJOLEARN_EXPERIMENTAL_SMALLK_IDENTICAL` pattern; never a shipped build; at most one of the four."""
     comptime assert not (is_defined["MOJOLEARN_ATTN_DEFAULT_R3_EVERY_COLUMN"]() and is_defined["MOJOLEARN_ATTN_DEFAULT_KVGRID_EVERY_COLUMN"]()), (
         "MOJOLEARN_ATTN_DEFAULT_R3_EVERY_COLUMN and"
         " MOJOLEARN_ATTN_DEFAULT_KVGRID_EVERY_COLUMN each name a different"
@@ -1431,7 +1427,7 @@ def attn_default_arm_for[column: Int]() -> Int:
         # In-step zdot 66.4 -> 14.9 ms; on real activations the backward is
         # 7.52 -> 3.23 ms (fwd+bwd 1.85x, the forward untouched at 1.00x).
         # The runner-up on the same leg, _estash without _dres, FLIP 0.8348:
-        # ENGINEERING_RULES 9 takes the winner. The register lens (brief
+        # CONTRIBUTING.md (Performance claims) takes the winner. The register lens (brief
         # section 20.2) reads the same: the shipped zdot kernel is 134 regs and
         # 1 block per SM, _estash 125 and 2, _estash_dres 64 and 4.
         # Before it: stash_tiled_fgrid_r32_qres_pf_kvgrid_r32 (e1g/...185833,
@@ -1481,7 +1477,7 @@ def attn_default_arm_for[column: Int]() -> Int:
         # blocks per CU (the plain `_estash` variant is 116 regs, 10,432 bytes,
         # 4 blocks). So AMD goes 3 -> 5 blocks where NVIDIA went 1 -> 4, and it
         # was never as starved to begin with, which is the whole difference in
-        # the two gains. ENGINEERING_RULES 9 takes the win anyway: below 1 on
+        # the two gains. CONTRIBUTING.md (Performance claims) takes the win anyway: below 1 on
         # both corpora with the bits unmoved, and the rule sets no magnitude bar.
         # Before it: stash_tiled_fgrid_r32_qres_pf_kvgrid_r32, measured
         # 2026-09-11 on the DigitalOcean MI325X against baseline, commit
@@ -1503,7 +1499,7 @@ comptime STEP_GLUE_DEFAULT_WORD_OPTSKIP_NOSHADOW_ROWS16 = 7
 
 
 def step_glue_default_arm_for[column: Int]() -> Int:
-    """ROUTING row (DEVIATION 2649, 2026-09-12; brief docs/lanes/BRIEF_step_glue_2026-09-11.md sections 2, 4 and 5): the step glue arm word the SHIPPED build runs on this column (`STEP_GLUE_ARM_DEFAULT` in core/step_glue.mojo; a `-D MOJOLEARN_STEP_GLUE_TRIAL=1` build runs it when MOJOLEARN_STEP_GLUE_ARM is unset and keeps every other arm selectable by name). Every arm is bit-equal to the shipped step by the identity arguments of brief sections 4.1, 4.2 and 4.3 and refuses the same inputs by section 5, so this row picks a schedule and never a result. NVIDIA `optskip_noshadow_rows16`, MEASURED (the body names the evidence and the verdict). Apple and every other column `shipped`, unmeasured as a price. `-D MOJOLEARN_STEP_GLUE_DEFAULT_EVERY_COLUMN=1` returns the NVIDIA word on every column, so a no-trial build on a Mac reaches the shipped glue branch; this is how the M4 gates that branch, since Apple's own default carries no glue bit. A check knob, the `MOJOLEARN_EXPERIMENTAL_SMALLK_IDENTICAL` pattern; never a shipped build."""
+    """ROUTING row (DEVIATION 2649, 2026-09-12): the step glue arm word the SHIPPED build runs on this column (`STEP_GLUE_ARM_DEFAULT` in core/step_glue.mojo; a `-D MOJOLEARN_STEP_GLUE_TRIAL=1` build runs it when MOJOLEARN_STEP_GLUE_ARM is unset and keeps every other arm selectable by name). Every arm is bit-equal to the shipped step by the identity arguments of brief sections 4.1, 4.2 and 4.3 and refuses the same inputs by section 5, so this row picks a schedule and never a result. NVIDIA `optskip_noshadow_rows16`, MEASURED (the body names the evidence and the verdict). Apple and every other column `shipped`, unmeasured as a price. `-D MOJOLEARN_STEP_GLUE_DEFAULT_EVERY_COLUMN=1` returns the NVIDIA word on every column, so a no-trial build on a Mac reaches the shipped glue branch; this is how the M4 gates that branch, since Apple's own default carries no glue bit. A check knob, the `MOJOLEARN_EXPERIMENTAL_SMALLK_IDENTICAL` pattern; never a shipped build."""
     comptime if is_defined["MOJOLEARN_STEP_GLUE_DEFAULT_EVERY_COLUMN"]():
         return STEP_GLUE_DEFAULT_WORD_OPTSKIP_NOSHADOW_ROWS16
     if column == COLUMN_NVIDIA:
@@ -1521,7 +1517,7 @@ def step_glue_default_arm_for[column: Int]() -> Int:
         # step.opt_refuse_scan (2.175) gone; the optimizer, the scans and the
         # packing are unchanged to within 0.013 ms. The runners-up on the same
         # leg all FLIP too: optskip_noshadow_rows8 0.9734, optskip_noshadow
-        # 0.9849, rows16 0.9852, rows8 0.9873. ENGINEERING_RULES 9 takes the
+        # 0.9849, rows16 0.9852, rows8 0.9873. CONTRIBUTING.md (Performance claims) takes the
         # winner.
         return STEP_GLUE_DEFAULT_WORD_OPTSKIP_NOSHADOW_ROWS16
     if column == COLUMN_AMD:
@@ -1541,7 +1537,7 @@ def step_glue_default_arm_for[column: Int]() -> Int:
         # The gain is half of NVIDIA's (0.9723 there) and the reason is the
         # same occupancy story read the other way: 2,048 token rows at
         # LLAMA_TPB 128 are 16 blocks, which starve an H100's 132 SMs harder
-        # than they starve this board. ENGINEERING_RULES 9 sets no magnitude
+        # than they starve this board. CONTRIBUTING.md (Performance claims) sets no magnitude
         # bar, and both corpora are below 1 with the bits unmoved.
         return STEP_GLUE_DEFAULT_WORD_OPTSKIP_NOSHADOW_ROWS16
     if column == COLUMN_CPU:
@@ -2054,7 +2050,7 @@ def knn_block_topk_bounded_for[column: Int, identical: Bool]() -> Bool:
     # k 10 and the k 64 call read 88 against 65 ms (taxi 64 against 44);
     # the bound and the early leave each alone cost the tile kernel 40
     # percent (137 to 164 registers against 128, one block of 256 per SM
-    # instead of two). OFF on every column; docs/lanes/LANE_STATUS_knn-selector-speed.md.
+    # instead of two). OFF on every column.
     return False
 
 
@@ -2084,7 +2080,7 @@ def knn_block_topk_key32_for[column: Int, identical: Bool]() -> Bool:
     # 49.2 against 42.4 at k 10 (the live-slot mask tests cost more than
     # the registers bought); with DEVIATION 3062 it split, taxi k 10 19.2
     # against 24.9 ms and Istella-S k 1 46.0 against 35.3. OFF on every
-    # column; docs/lanes/LANE_STATUS_knn-selector-speed.md.
+    # column.
     return False
 
 
@@ -2112,7 +2108,7 @@ def knn_resident_derived_cache_for[column: Int, identical: Bool]() -> Bool:
 
 @always_inline
 def umap_device_optimizer_live_row_for[column: Int, identical: Bool]() -> Bool:
-    """ROUTING row (DEVIATION 2668, 2026-09-11, lane/knn-finish): whether the IDENTICAL UMAP device optimizer (`umap/optimizer_identical_device.mojo::umap_identical_epoch_kernel`) applies a vertex's own attractive and repulsive moves to its running position during its fold (cuML's per-vertex serial kernel, `optimize_batch_kernel.cuh:569-577, 608-616`) instead of summing every move from the epoch snapshot. The mirror edge's tail move stays deferred. MOVES UMAP BITS on every column (the IDENTICAL contract is one default for all columns); both forms are pure functions of the epoch snapshot with one writer per vertex, so each is independent of launch width and vendor, and the 2668 fold's 20,000-row fingerprint is one value (4040033352384472344) across launch widths 64, 128 and 256 with both UMAP identity checks passing. OFF BY DEFAULT: measured on the H200 2026-09-11 it SPLITS on the two datasets, which ENGINEERING_RULES section 9 gates per dataset. Sampled trustworthiness and 10-neighbor retention at 100,000 rows, 200 epochs: taxi 0.9062 / 0.3736 to 0.9323 / 0.3627 (trust up, retention down) and Istella-S 0.9737 / 0.4832 to 0.9636 / 0.4264 (both down), with the time flat on both (1.003 and 1.000). Quality worse on a dataset is a regression a user on that data sees, so the row stays opt-in through `-D MOJOLEARN_UMAP_IDENTICAL_LIVE_ROW=1`; `-D MOJOLEARN_UMAP_IDENTICAL_SNAPSHOT_FOLD=1` forces the snapshot fold even then. What the measurement DID establish is the cause of the cuML gap on taxi (the update order: our own serial host loop scores 0.9796 on the same graph and init against cuML's 0.9657), and that on Istella-S the shipped fold already beats cuML by a wide margin."""
+    """ROUTING row (DEVIATION 2668, 2026-09-11, lane/knn-finish): whether the IDENTICAL UMAP device optimizer (`umap/optimizer_identical_device.mojo::umap_identical_epoch_kernel`) applies a vertex's own attractive and repulsive moves to its running position during its fold (cuML's per-vertex serial kernel, `optimize_batch_kernel.cuh:569-577, 608-616`) instead of summing every move from the epoch snapshot. The mirror edge's tail move stays deferred. MOVES UMAP BITS on every column (the IDENTICAL contract is one default for all columns); both forms are pure functions of the epoch snapshot with one writer per vertex, so each is independent of launch width and vendor, and the 2668 fold's 20,000-row fingerprint is one value (4040033352384472344) across launch widths 64, 128 and 256 with both UMAP identity checks passing. OFF BY DEFAULT: measured on the H200 2026-09-11 it SPLITS on the two datasets, which CONTRIBUTING.md (Performance claims) gates per dataset. Sampled trustworthiness and 10-neighbor retention at 100,000 rows, 200 epochs: taxi 0.9062 / 0.3736 to 0.9323 / 0.3627 (trust up, retention down) and Istella-S 0.9737 / 0.4832 to 0.9636 / 0.4264 (both down), with the time flat on both (1.003 and 1.000). Quality worse on a dataset is a regression a user on that data sees, so the row stays opt-in through `-D MOJOLEARN_UMAP_IDENTICAL_LIVE_ROW=1`; `-D MOJOLEARN_UMAP_IDENTICAL_SNAPSHOT_FOLD=1` forces the snapshot fold even then. What the measurement DID establish is the cause of the cuML gap on taxi (the update order: our own serial host loop scores 0.9796 on the same graph and init against cuML's 0.9657), and that on Istella-S the shipped fold already beats cuML by a wide margin."""
     comptime if not identical:
         return False
     comptime if is_defined["MOJOLEARN_UMAP_IDENTICAL_SNAPSHOT_FOLD"]():

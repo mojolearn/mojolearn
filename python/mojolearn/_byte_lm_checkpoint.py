@@ -6,10 +6,9 @@ arrays are hex text, and it is bounded at 2 MiB
 (`_byte_lm_impl._CHECKPOINT_LIMIT`). Hex doubles the bytes, so that bound is
 about 87,381 parameters; the 162,147,840-parameter shape needs 1.95 GB for
 parameters plus both AdamW moments and the envelope refuses it by design.
-`docs/lanes/DESIGN_lm_device_owned_step_2026-09-11.md:163-166` says so in as
-many words -- "at the target shape this refuses as it does today and
-`export_state()` arrays are the checkpoint path" -- and then no durable form
-for those arrays was ever written. A caller who wanted to stop a 162M run and
+The device-owned step design said so in as many words, "at the target shape
+this refuses as it does today and `export_state()` arrays are the checkpoint
+path", and then no durable form for those arrays was ever written. A caller who wanted to stop a 162M run and
 resume it in another process had to invent a file format.
 
 This module is that durable form. It is the fourth key fact of a resume, and

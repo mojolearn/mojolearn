@@ -1,8 +1,0 @@
-mode IDENTICAL   sabotage: EMPTY_ROW_NEG_ZERO   EMB_TPB: 256
-ledger: the caller expected 'EMPTY_ROW_NEG_ZERO' and the binary agrees, so the -D was not silently dropped
-clause (a): 17 fixture cases, all 9 stages, device vs host oracle, BITWISE
-card: 9 records at /root/gemm_leg_out/embedding-sabotage/EMPTY_ROW_NEG_ZERO.card, contract section 10 wants 9
-card: 9/9 tags in contract section 10's order, all unique, three of them INTEGER (contract section 6: emb.perm is where a divergent sort becomes visible before it reaches a float)
-clause (g): arm EMPTY_ROW_NEG_ZERO -- contract 5.5, +0.0 and not -0.0. Inert on f_nodup because that case has NO empty row -- V == T and every id is distinct -- and a -0.0 seed under a nonempty run is laundered by the first add
-clause (g): EMPTY_ROW_NEG_ZERO BIT on f_empty: 2 of 9 stages moved, FIRST at emb.dw_seed, which is the stage its own clause writes.
-Unhandled exception caught during execution: embedding_check: SABOTAGE EMPTY_ROW_NEG_ZERO moved 1 stages on f_nodup, first at emb.dw_seed, and contract 11.1's PREDICTED INERT MASK requires it to move NOTHING there. An arm that moves everywhere is a smoke test; the inert case is what makes it a REACH PROOF ([[verify-reach-not-output]]).

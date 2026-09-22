@@ -23,8 +23,8 @@ new Python API checks have separate scopes. The retained September 6 NVIDIA
 run3 reports 102 forward/API checks passing in each of FAST and IDENTICAL,
 and five Mamba2/3 backward surface tests passing. Those source-run results do
 not certify an unbuilt alpha wheel or every vendor/shape/mode. See
-``mamba/PUBLIC_ALPHA_SURFACE.md`` for the exact retained paths and outstanding
-wheel qualification.
+``SUPPORT_MATRIX.md`` for the current scope and outstanding wheel
+qualification.
 
 Example with correctly shaped FP32 ``weights``, ``x`` and ``dy``::
 

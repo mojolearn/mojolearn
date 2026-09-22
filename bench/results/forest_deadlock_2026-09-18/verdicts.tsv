@@ -1,7 +1,0 @@
-lanes	before-r1nb-both	rf-clf-balanced-parallel,et-reg-bootstrap-parallel	124
-gate	before	-	0
-gate	before-scorew	-	0
-lanes	after-r1nb-both	rf-clf-balanced-parallel,et-reg-bootstrap-parallel	0
-lanes	after-full-both	rf-clf-balanced-parallel,et-reg-bootstrap-parallel	0
-gate	after	-	0
-gate	after-scorew	-	0

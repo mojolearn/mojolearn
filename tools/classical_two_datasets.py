@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Classical lanes on the two benchmark datasets (ENGINEERING_RULES.md
-section 9, DEVIATION 2570): OUR IDENTICAL arm beside scikit-learn on every
+"""Classical lanes on the two benchmark datasets (CONTRIBUTING.md (Performance claims), DEVIATION 2570): OUR IDENTICAL arm beside scikit-learn on every
 CPU core and a torch GPU arm, interleaved round by round, quality beside
 every cell.
 
@@ -333,7 +332,7 @@ def prep(args):
     for ds in datasets:
         t0 = time.perf_counter()
         base = {"dataset": ds, "data_root": harness.data_root(),
-                "rule": "ENGINEERING_RULES.md section 9; DEVIATION 2570",
+                "rule": "CONTRIBUTING.md (Performance claims); DEVIATION 2570",
                 "smoke_max_rows": cap}
         reg = None
         if "big" in blocks or "kde" in blocks:

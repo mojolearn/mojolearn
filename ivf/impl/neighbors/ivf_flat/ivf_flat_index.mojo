@@ -147,13 +147,13 @@ struct IvfFlatIndex(Movable):
     HOST-RESIDENT BETWEEN BUILD AND SEARCH, **DEVIATION 1804**. Theirs lives
     on the device from `build` to the last `search`; ours is host `List`s
     that the search uploads. That is a real departure from
-    `ENGINEERING_RULES.md` rule 2 and it is named rather than hidden: it costs
+    `CONTRIBUTING.md` and it is named rather than hidden: it costs
     an upload per search call and it changes no bit, because the upload is
     a copy. Closure condition: hold the `DeviceBuffer`s in this struct and
     give the estimator an explicit `DeviceContext` lifetime, which is a
     surface change and not a numeric one. Not done, because this lane has
     run nothing and a memory-residency choice made without a measurement is
-    the kind of invention `ENGINEERING_RULES.md` 0c is about.
+    the kind of invention `CONTRIBUTING.md` (Algorithms and references) is about.
     """
 
     var n_lists: Int
@@ -280,7 +280,7 @@ def ivf_refuse_algorithm(name: String) raises:
         raise Error(
             "hnsw: REFUSED PERMANENTLY in this repository. cuVS's"
             " cpp/include/cuvs/neighbors/hnsw.hpp dispatches to the hnswlib"
-            " CPU graph; it is not a GPU algorithm and ENGINEERING_RULES.md"
+            " CPU graph; it is not a GPU algorithm and CONTRIBUTING.md"
             " 0b-ii says there is no CPU path here. This is a refusal, not"
             " an unimplemented item, and it does not become one later."
         )

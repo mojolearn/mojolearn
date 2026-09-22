@@ -146,7 +146,7 @@ The separate `long-sequence-v1` profile adds Mamba1 L64 and Mamba3 L65.
 At `eebd7c92`, Mamba1 passed on both GPUs and all 21 public tensors matched,
 but 13 direct intermediate comparisons kept the full profile RED. Source
 `395d9421` now passes both complete profiles on AMD MI325X and NVIDIA RTX
-4090 under the explicit [compositional arithmetic contract](BACKWARD_CERTIFICATION.md).
+4090 under an explicit compositional arithmetic contract.
 All 54 baseline and 21 long-profile gradient tensors match by bits; the
 Mamba3 L65 diagnostic comparison additionally matches all 86 gradient tensors
 and nine forward operands. See the

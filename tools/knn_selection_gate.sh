@@ -18,7 +18,7 @@
 # JSON still carries the ratio, labeled cached-reference, but it is not
 # admissible against that row. cuML is NOT rerun for dyadic: the tuple
 # exists. THAT CACHED ROW IS DYADIC ONLY. The two real datasets (DEVIATION
-# 2524, ENGINEERING_RULES.md section 9, rewritten 2026-09-11), NYC taxi's
+# 2524, CONTRIBUTING.md (Performance claims), rewritten 2026-09-11), NYC taxi's
 # 11 numeric columns and Istella-S's 220 features, the gate's `taxi` and
 # `istella` fixtures, each have their own opponent tuple, measured ONCE per
 # dataset on the first leg by the optional `opponent` phase below and then
@@ -134,7 +134,7 @@ TIMING_ONLY=${MOJOLEARN_KNN_SELECTION_TIMING_ONLY_ARMS:-}
 PHASE_TIMERS=${MOJOLEARN_KNN_SELECTION_PHASE_TIMERS:-0}
 PAIRS=${MOJOLEARN_KNN_SELECTION_PAIRS:-3}
 CACHED=${MOJOLEARN_KNN_SELECTION_CACHED_OPPONENT:-k10=10.225,k15=10.817}
-# The real datasets' opponent tuples (ENGINEERING_RULES.md section 9):
+# The real datasets' opponent tuples (CONTRIBUTING.md (Performance claims)):
 # empty until each is measured once and cached in
 # bench/OPPONENT_REFERENCE.md; then k10=ms,k15=ms.
 CACHED_TAXI=${MOJOLEARN_KNN_SELECTION_CACHED_OPPONENT_TAXI:-}
@@ -309,7 +309,7 @@ else
 fi
 
 # ---- opponent (optional): the taxi and Istella cuML rows, measured ONCE --
-# ENGINEERING_RULES.md section 9: an opponent row is measured once per (GPU,
+# CONTRIBUTING.md (Performance claims): an opponent row is measured once per (GPU,
 # driver, opponent version, dataset) and cached; each real dataset is its
 # own tuple. Same venv recipe as tools/knn_reference_leg.sh (system python3,
 # --system-site-packages, the pinned NVIDIA wheels); MOJOLEARN_KNN_REF_PY

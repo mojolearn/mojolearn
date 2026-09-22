@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Native session lifetime, export and failure controls; small correctness fixtures only.
 
-DEVIATION 2514 (docs/lanes/DESIGN_lm_device_owned_step_2026-09-11.md,
-section 7) at fixture A (B2/L7/DM24, 3 layers, V513):
+DEVIATION 2514 at fixture A (B2/L7/DM24, 3 layers, V513):
 
   G1  eight resident `step_result='lean'` steps against the stateless arm:
       loss bits, exported gradient bytes and exported state after every

@@ -60,7 +60,7 @@
 #                            already ships (e1g/2026-08-28_040316-nvidia-speed-
 #                            gemmseq/remote/pip.log); else torch==2.4.1 from
 #                            the cu124 index.
-#   corpus-*       the two benchmark corpora (ENGINEERING_RULES section 9):
+#   corpus-*       the two benchmark corpora (CONTRIBUTING.md (Performance claims)):
 #                  English text (enwik8, tools/fetch_corpus_enwik8.sh) and
 #                  source code (the Pile's GitHub component,
 #                  tools/fetch_corpus_pile_github.sh), each verified against

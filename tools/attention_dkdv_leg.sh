@@ -5,8 +5,8 @@
 # (`_kvgrid_r32` / `_kvgrid_r64`: the tiled dk/dv fold's keys per block;
 # `_kvsplit`: that fold as two kernels), all on the round 3 arm
 # stash_tiled_fgrid_r32_qres_pf, priced against `baseline`, the shipped AMD
-# default (brief docs/lanes/BRIEF_attention_step_2026-09-11.md section 16).
-# AMD is the deciding column (ENGINEERING_RULES 10).
+# default.
+# AMD is the deciding column (CONTRIBUTING.md (Comparing against libraries without a GPU path)).
 #
 # A MOJOLEARN_GEMM_LEG_EXTRA body for tools/hotaisle_leg.sh,
 # tools/do_extra_leg.sh or tools/gemm_remote_leg.sh. Every setting below is a
@@ -27,7 +27,7 @@
 # `do` and `runpod-amd`: brief section 16.8.
 #
 # Gates: brief section 6 against `baseline`, plus REACH_KV proven for every
-# kv arm. Flip: ENGINEERING_RULES 9, the geometric mean of the enwik8 and
+# kv arm. Flip: CONTRIBUTING.md (Performance claims), the geometric mean of the enwik8 and
 # pilegithub lean step ratios (arm over baseline, lm_summary.tsv steady
 # medians) below 1, and witnesses_equal_baseline=True for every arm and
 # corpus.

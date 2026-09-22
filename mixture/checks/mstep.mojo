@@ -4,7 +4,7 @@
 
 NO REFERENCE FILE. See `mixture/checks/estep.mojo`'s header for the reference
 finding: cuML, cuVS and RAFT have no Gaussian mixture model at their pins, so
-`ENGINEERING_RULES.md` 0b points at nothing here and
+`CONTRIBUTING.md` (Algorithms and references) points at nothing here and
 `sklearn/mixture/_gaussian_mixture.py` is the SEMANTICS ORACLE only.
 
 WHAT SCIKIT-LEARN DOES, AND IN WHAT ORDER

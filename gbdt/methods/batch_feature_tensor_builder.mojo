@@ -180,8 +180,7 @@ REFERENCE: `RequestStream` calls `GetCudaManager().RequestStream()` once per
 new slot and hands each `TCtrBinBuilder` its stream id, so the `j` loop
 submits `buildStreams` independent bin builds concurrently.
 
-HERE: there are no streams. `ctx.stream()` raises on Metal (ENGINEERING_RULES
-rule 4) and this implementation runs one queue, so `builder_streams[j]` holds the
+HERE: there are no streams. `ctx.stream()` raises on Metal (CONTRIBUTING.md) and this implementation runs one queue, so `builder_streams[j]` holds the
 slot index `j` and the batch is built serially. The BATCH WIDTH is kept
 and so is the two-loop structure, because `buildStreams` decides the
 grouping -- how many features share a pass and which builder object each

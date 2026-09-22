@@ -1,6 +1,6 @@
 #!/bin/sh
 # tools/gemm_seam_probe_leg.sh -- DEVIATION 2701, the on-box body of the seam
-# probe (docs/lanes/BRIEF_gemm_kernel_2026-09-11.md section 14). Builds and runs
+# probe. Builds and runs
 # gemm/checks/gemm_seam_probe.mojo under IDENTICAL and leaves seam_probe.log in
 # the leg's out dir. Needs NO dataset: the probe generates its 64 words itself.
 #
@@ -18,7 +18,6 @@ mkdir -p "$OUT"
 export PATH="$HOME/.pixi/bin:$PATH"
 {
     echo "deviations=2701"
-    echo "brief=docs/lanes/BRIEF_gemm_kernel_2026-09-11.md section 14"
     echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "root=$ROOT gpu_archs=${MOJOLEARN_GPU_ARCHS:-unset} column=${MOJOLEARN_TARGET_COLUMN:-unset}"
 } > "$OUT/probe.txt"

@@ -1,4 +1,0 @@
-MATCH zdot fused=0x00000000 eager=0x00000000 repaired=True refused=False
-MATCH zdot preserve fused=0x80000000 eager=0x80000000
-stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
-Unhandled exception caught during execution: dq repair differs: fused=0x80000000 eager=0x00000000

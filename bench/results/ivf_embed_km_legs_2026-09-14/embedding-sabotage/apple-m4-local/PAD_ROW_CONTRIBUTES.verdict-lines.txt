@@ -1,9 +1,0 @@
-mode IDENTICAL   sabotage: PAD_ROW_CONTRIBUTES   EMB_TPB: 256
-ledger: the caller expected 'PAD_ROW_CONTRIBUTES' and the binary agrees, so the -D was not silently dropped
-clause (a): 17 fixture cases, all 9 stages, device vs host oracle, BITWISE
-card: 9 records at /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/4e8829df-5da1-4c85-8680-6b52df16132c/scratchpad/legsdocs/local/embsab/PAD_ROW_CONTRIBUTES.card, contract section 10 wants 9
-card: 9/9 tags in contract section 10's order, all unique, three of them INTEGER (contract section 6: emb.perm is where a divergent sort becomes visible before it reaches a float)
-clause (g): arm PAD_ROW_CONTRIBUTES -- contract section 8, DEVIATION 1311. It MUST move emb.counts, emb.run_begin and emb.perm and MUST NOT move emb.dw -- that is not a weakness, it IS the clause: the two padding_idx spellings are provably bit-equal in dW, and the card is the only instrument that can see the difference at all
-clause (g): PAD_ROW_CONTRIBUTES BIT on f_pad: 3 of 9 stages moved, FIRST at emb.counts, which is the stage its own clause writes.
-clause (g): PAD_ROW_CONTRIBUTES left emb.dw UNMOVED, which is the half that proves contract section 8's two padding_idx spellings are bit-equal. The card is the only instrument that can see this clause at all.
-clause (g): PAD_ROW_CONTRIBUTES is INERT on f_nodup, 9/9 stages unmoved, which is the half that makes it a reach proof rather than a smoke test.

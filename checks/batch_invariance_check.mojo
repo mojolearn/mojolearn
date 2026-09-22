@@ -1243,7 +1243,7 @@ def print_sabotage_prediction(l_mamba: Int) raises:
 
 
 def check_block_batch_invariance() raises:
-    """The whole gate. Called by `batch_invariance_main.mojo`."""
+    """The whole gate. Called by `checks/batch_invariance_main.mojo`."""
     var armed = sabotage_armed()
 
     print(

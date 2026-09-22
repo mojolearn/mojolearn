@@ -1,1 +1,0 @@
-python3 tools/nvidia_serial_guard.py --seconds 60 -- /root/mojolearn/.byte-lm-validation-venv/bin/python -m pytest -q tools/tests/test_byte_lm_state_compare.py 

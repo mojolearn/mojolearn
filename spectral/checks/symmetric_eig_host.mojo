@@ -5,7 +5,7 @@
 NO SINGLE REFERENCE FILE. `raft/sparse/solver/detail/lanczos.cuh:175`
 (`lanczos_solve_ritz`) hands the `ncv x ncv` projected matrix to
 `raft::linalg::eig_dc`, which is cuSOLVER `syevd` -- CLOSED, no source to
-read (ENGINEERING_RULES 0b-i's one exception). What it returns is
+read (CONTRIBUTING.md (Algorithms and references)'s one exception). What it returns is
 eigenvalues ASCENDING and eigenvectors in COLUMNS with a sign the solver
 chose. This file returns the same three things from one host routine whose
 every floating-point operation is spelled through `checks/numerics.mojo`,

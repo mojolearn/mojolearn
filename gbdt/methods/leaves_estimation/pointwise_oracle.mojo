@@ -164,8 +164,8 @@ from checks.kernel_matrix import COLUMN_NVIDIA, TARGET_COLUMN
 # `-D MOJOLEARN_2030_NO_FUSED_EST_MOVE=1` takes precedence for baseline A/B.
 # Kernel equivalence is checked by checks/gbdt_fused_move_check.mojo.
 # Native fit A/B: checks/gbdt_fused_fit_check.mojo (baseline versus define).
-# NVIDIA small-fixture fingerprints passed on L40S and H100; see
-# docs/lanes/HANDOFF_trees.md. Per-device end-to-end timing still governs
+# NVIDIA small-fixture fingerprints passed on L40S and H100. Per-device
+# end-to-end timing still governs
 # default selection. Additional A/B commands are in
 # archive/research/gbdt/UPSTREAM_SURVEY_2026-09.md and the PLAN appendix; the gates that
 # must hold are `check-fit-pointwise`, `check-logloss-train` and
@@ -1082,7 +1082,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
 
 # ================= DEVIATION 3041: the oracle's device buffers belong to the FIT =================
 # MEASURED FIRST (RTX 4090, taxi 1,000,000 x 18, IDENTICAL, 101 symmetric
-# trees under nsys, 2026-09-17, `docs/lanes/LANE_STATUS_gbdt-train-speed.md`):
+# trees under nsys, 2026-09-17):
 # 1,476 `cuMemAlloc` and 1,476 `cuMemFree`, 58.9 + 57.9 ms, against 126.3 ms of
 # GPU kernel time for the whole run. About 16 device allocations a tree, 12 of
 # them the ones `make_bin_optimized_oracle` makes for every estimation task

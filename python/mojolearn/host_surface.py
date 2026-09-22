@@ -114,8 +114,7 @@ BUILDER = "bindings/build_host_family.sh"
 #: hold against it. Since 2026-09-14 night the 166-lane record at 1eea14f80
 #: (the batch part, fifteen more par-* lanes, every lane complete on all three
 #: columns, the AMD column MI325X again) is the one; it carries one DIVERGENT
-#: training cell, kmeans-sqrt/wide (the H100 inertia stands alone,
-#: docs/lanes/BRIEF_kmeans_sqrt_wide_h100_inertia_2026-09-14.md), on a lane no
+#: training cell, kmeans-sqrt/wide (the H100 inertia stands alone), on a lane no
 #: CPU column covers, and the workflow asserts that count exactly. That cell is
 #: fixed since 9fde8f5f7 (DEVIATIONS 2715 and 2716); the kmeans lanes' cells
 #: after the fix are bench/results/identity_break/2026-09-14_kmeans-sqrt-fix,
@@ -248,8 +247,7 @@ CLASSICAL_RECORDED = (
     # container. A dedicated DigitalOcean MI325X ran the same three DBSCAN
     # lanes at `cells=27 stable=27 moved=0 refused=0` with device memory flat
     # at a 1.5 GiB plateau. The AMD predict column is owed on a card that is
-    # ours, and there is nothing to fix first. See
-    # docs/lanes/LANE_STATUS_lane-amd-dbscan-oom.md.
+    # ours, and there is nothing to fix first.
     "bench/results/classical_host/2026-09-16-amd-kmeans",
 )
 
@@ -831,7 +829,7 @@ TRAINING_LANE_NAMES = {
     # on every cell; the CPU column is a fourth CPU. This list is the set the
     # full CPU column runs, not only fits: two of these are inference, and
     # LanguageModelHostTrainer is the published CPU trainer the inference
-    # boundary (docs/lanes/CPU_INFERENCE_BOUNDARY_2026-09-15.md) keeps.
+    # boundary keeps.
     "byte-lm-host-infer": "the byte LM forward pass on its reference path (inference)",
     "byte-lm-host-infer-threaded": "the byte LM forward pass on its threaded path (inference)",
     "byte-lm-host-train": "the published byte LM host training step",
@@ -1163,10 +1161,8 @@ ADAPTED_MODULES = {
 #: (2026-09-20) this list held ONE entry ending "among them", which hid an
 #: unknown count behind a phrase. The count is 6 and it is below; the
 #: guard-by-guard enumeration each entry summarizes (50 by-name training
-#: refusal sites), with the exact refusal
-#: text and the line that raises it, is
-#: docs/lanes/BRIEF_gbdt_no_cpu_path_2026-09-20.md, and the refusals are
-#: reproduced by fitting each configuration on a CPU-only install rather than
+#: refusal sites) was checked against the exact refusal text and the line
+#: that raises it, and the refusals are reproduced by fitting each configuration on a CPU-only install rather than
 #: read off the source.
 #:
 #: WHAT IS NOT HERE, AND WAS. "eval sets ... outside the
@@ -2551,7 +2547,7 @@ FAMILIES = (
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         # Training-only reference family: source builds for internal bitwise
-        # verification, not shipped (docs/lanes/CPU_INFERENCE_BOUNDARY_2026-09-15.md).
+        # verification, not shipped.
         wheel_note=(
             "Ships: the three blocks' prefill backward, so the mamba1, mamba2 and mamba3 lanes can "
             "be checked on an installed CPU; the shipped neural family is forward only and cannot "
@@ -2821,7 +2817,7 @@ FAMILIES = (
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         # Training-only reference family: source builds for internal bitwise
-        # verification, not shipped (docs/lanes/CPU_INFERENCE_BOUNDARY_2026-09-15.md).
+        # verification, not shipped.
         wheel_note=(
             "Ships: the block's decode step and prefill backward, which the transformer and "
             "transformer-window lanes hash, so they can be checked on an installed CPU; the "
@@ -3150,7 +3146,7 @@ PUBLIC_PENDING_LANES = {
     # which is admissible and current but carries five of nine parts (no
     # `stepfull`, which is a DEFAULT part, and no batchgrad, batchscale or
     # ragged) and sits outside the tree `build_table` walks. That is a debt
-    # against the next NVIDIA leg, recorded in docs/NEXT_WHEEL_COVERAGE.md. It
+    # against the next NVIDIA leg. It
     # is a reason to take an NVIDIA column, not a reason to hide five core
     # neural blocks from the verifier a user runs.
     # lane/laneless-public-classes (2026-09-19). The lane is new, so no
@@ -3246,8 +3242,7 @@ PUBLIC_PENDING_LANES = {
     # 2026-09-18: current all-nine, full-property AMD captures now agree
     # with the CPU references for these five neural routes. The independent
     # second column clears their former "one column" reason. All-nine,
-    # twice-repeated installed CPU core replay subsequently passed; see
-    # LANE_STATUS_verifier-installed-continuation.md. Extended installed
+    # twice-repeated installed CPU core replay subsequently passed. Extended installed
     # properties and NVIDIA/current Apple completion remain owed, as does
     # the exact expanded 0.8.7 release certificate. Keep the holds explicit.
     #
@@ -3308,10 +3303,10 @@ PUBLIC_PENDING_LANES = {
     # because lane/new-lane-reference-promotion owns the shipped table.
     # Spectral, Fowlkes-Mallows and both ARIMA-exog lanes passed all nine
     # fixtures twice through the public CPU verifier, with native negative
-    # controls. See LANE_STATUS_cpu_public_promotion.md for artifact scope.
+    # controls.
     # CTR saved-model lanes were promoted after all nine fixtures passed twice
     # from an installed CPU development wheel with bundled, digest-checked models.
-    # See docs/lanes/LANE_STATUS_verification_evidence_audit.md. This is CPU
+    # This is CPU
     # inference replay, not CPU CTR training or final release qualification.
     # The other fix-record lanes passed installed reference-table replay;
     # legacy `identity` still restricts itself to its original column scope.
@@ -3399,8 +3394,7 @@ def public_reference_lanes():
     `PUBLIC_PENDING_LANES` with the reason written down. The promotion rule
     lane/expose-inference-surface set is kept: a lane is public only because a
     run was watched to read IDENTICAL for it, which is why every lane this
-    returns is in the measured run recorded in
-    docs/lanes/LANE_STATUS_lane-ship-cpu-host-families.md, and why
+    returns is in a measured run, and why
     `PUBLIC_REFERENCE_CANDIDATES` stays out until its own condition is met.
     """
     lanes = [lane for lane in covered_lanes()
@@ -3642,8 +3636,7 @@ PUBLIC_HOST_ONLY_LANES = {"tokenizer": "tokenizer", "bpe-trainer": "tokenizer",
 #: a lane here into `public_reference_lanes()` without that run would ship a
 #: claim no one has watched succeed, and would turn a user's `verify` into
 #: REFUSED or DIVERGENT if it were wrong. The run is one command per family
-#: and needs no GPU; docs/lanes/LANE_STATUS_lane-expose-inference-surface.md
-#: carries it. A lane moves from here into `public_reference_lanes()` on the
+#: and needs no GPU. A lane moves from here into `public_reference_lanes()` on the
 #: day that run reads IDENTICAL for it and the sabotage host build reads
 #: DIVERGENT for it.
 #:

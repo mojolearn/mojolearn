@@ -1,7 +1,0 @@
-mac_slot: admitted after 0.001s
-coverage {'exit': 0, 'counts': {'appendix_entries': 246, 'available': 162, 'excluded': 50, 'registered_lanes': 229, 'unavailable': 0, 'withheld': 17}, 'verdict': None}
-models {'exit': 0, 'counts': {'DIVERGENT': 0, 'IDENTICAL': 8, 'N/A': 0, 'OWED': 0, 'REFUSED': 0}, 'verdict': 'VERIFIED'}
-cpu-shards {'exit': 5, 'counts': {'DIVERGENT': 0, 'IDENTICAL': 49, 'N/A': 17, 'OWED': 19, 'REFUSED': 0}, 'verdict': 'INCOMPLETE'}
-pending-properties {'exit': 5, 'counts': {'DIVERGENT': 0, 'IDENTICAL': 0, 'N/A': 1, 'OWED': 8, 'REFUSED': 0}, 'verdict': 'NO REFERENCE'}
-pending-all {'exit': 5, 'counts': {'DIVERGENT': 0, 'IDENTICAL': 49, 'N/A': 19, 'OWED': 17, 'REFUSED': 0}, 'verdict': 'INCOMPLETE'}
-mac_slot: {"wait_seconds": 0.0006270419999054866, "run_seconds": 57.17286729099942, "exit_code": 0}

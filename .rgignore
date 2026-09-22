@@ -1,4 +1,0 @@
-# Historical records remain available, but should not flood source searches.
-# Search explicitly with: rg --no-ignore PATTERN archive/ bench/results/
-/archive/
-/bench/results/

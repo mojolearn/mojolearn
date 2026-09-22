@@ -2801,7 +2801,7 @@ def bwd_rms_norm[which: Int](
     # identical_gemm retains the completion wait. Preserve the old fences
     # in other modes, whose vendor GEMM may return asynchronously.
     var pc = StepPhaseClock(ctx)
-    # DEVIATION 2645 (docs/lanes/BRIEF_step_glue_2026-09-11.md section 4.1):
+    # DEVIATION 2645:
     # a trial build under an arm carrying `rows16`, `rows8` or `rows4` launches
     # the ONE row kernel here (the `c` fold) at that many threads per block;
     # the two cell kernels keep `BWD_TPB`. One token row per thread, the fold

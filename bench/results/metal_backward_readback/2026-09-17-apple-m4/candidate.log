@@ -1,9 +1,0 @@
-mac_slot: admitted after 0.003s
-readback waits 2 host_allocs 1 copies 37
-  case 1 base_b2_l4_nrep2  B=2 L=4 S=4 dm=32 nh=2 nkv=1 hd=16 inter=64  15328 cells: 37/37 stages bit-identical
-execution 1 waits 92 launches 206 ms 432.867 oracle_cells 15328 host_allocs 34 copies 58
-readback waits 2 host_allocs 1 copies 37
-  case 1 base_b2_l4_nrep2  B=2 L=4 S=4 dm=32 nh=2 nkv=1 hd=16 inter=64  15328 cells: 37/37 stages bit-identical
-execution 2 waits 92 launches 206 ms 528.839 oracle_cells 15328 host_allocs 34 copies 58
-PASS: logical readback bits and all 37 oracle stages, two executions
-mac_slot: {"wait_seconds": 0.002578958054073155, "run_seconds": 1.3551106250379235, "exit_code": 0}

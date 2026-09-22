@@ -1,6 +1,6 @@
 #!/bin/sh
 # tools/gemm_kernel_census_leg.sh -- DEVIATION 2702: the GEMM kernel REGISTER
-# CENSUS (docs/lanes/BRIEF_gemm_kernel_2026-09-11.md section 15). Where do 255
+# CENSUS. Where do 255
 # registers go when 64 accumulators need 64 and 16 accumulators still read 214?
 #
 # Runs ON THE POD as tools/gemm_remote_leg.sh's MOJOLEARN_GEMM_LEG_EXTRA body
@@ -24,7 +24,6 @@ export PATH="$HOME/.pixi/bin:$PATH"
 note() { echo "$*" >> "$OUT/census.txt"; }
 {
     echo "deviations=2702"
-    echo "brief=docs/lanes/BRIEF_gemm_kernel_2026-09-11.md section 15"
     echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "root=$ROOT gpu_archs=${MOJOLEARN_GPU_ARCHS:-unset}"
 } > "$OUT/census.txt"

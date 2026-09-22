@@ -1,9 +1,0 @@
-TRANSPORT dbscan input 1.22 MiB outputs 1 EQUAL
-TRANSPORT svm input 0.25 MiB outputs 2 EQUAL
-TRANSPORT queries-knn input 3.91 MiB outputs 2 EQUAL
-TRANSPORT reference-knn input 3.91 MiB outputs 2 EQUAL
-TRANSPORT hdbscan input 0.18 MiB outputs 2 EQUAL
-TRANSPORT cd input 4.88 MiB outputs 2 EQUAL
-TRANSPORT gp input 4.00 MiB outputs 4 EQUAL
-TRANSPORT iforest input 9.77 MiB outputs 1 EQUAL
-TRANSPORT cases that differ or failed: 0

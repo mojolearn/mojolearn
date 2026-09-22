@@ -1,2 +1,0 @@
-2365 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x527280000000, nodemask=1)
-make wrote /root/gemm_leg_out/forest_host/2026-09-13-gpu-gbdt_depthwise (gbdt_depthwise, GradientBoosting, vendor cuda, model sha256 1ce58bb8aebc42b79fb65e7e65156d17c4105889ac3d002a56c3594e7fbaf6f3)

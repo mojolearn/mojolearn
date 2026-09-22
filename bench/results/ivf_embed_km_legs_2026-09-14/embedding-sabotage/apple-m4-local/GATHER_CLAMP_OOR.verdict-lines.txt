@@ -1,7 +1,0 @@
-mode IDENTICAL   sabotage: GATHER_CLAMP_OOR   EMB_TPB: 256
-ledger: the caller expected 'GATHER_CLAMP_OOR' and the binary agrees, so the -D was not silently dropped
-clause (a): 17 fixture cases, all 9 stages, device vs host oracle, BITWISE
-card: 9 records at /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/4e8829df-5da1-4c85-8680-6b52df16132c/scratchpad/legsdocs/local/embsab/GATHER_CLAMP_OOR.card, contract section 10 wants 9
-card: 9/9 tags in contract section 10's order, all unique, three of them INTEGER (contract section 6: emb.perm is where a divergent sort becomes visible before it reaches a float)
-clause (g): arm GATHER_CLAMP_OOR -- contract section 8, the refusal. **NOT RUNNABLE.** Its witness needs an out-of-range id, and the CLEAN half of that comparison is emb_gather_kernel reading weight.unsafe_load(v * width + j) out of bounds (DEVIATION 1506). Running an out-of-bounds read to demonstrate that it is out of bounds is not a test
-Unhandled exception caught during execution: embedding_check: SABOTAGE GATHER_CLAMP_OOR HAS NO RUNNABLE WITNESS and this binary was built with it. contract section 8, the refusal. **NOT RUNNABLE.** Its witness needs an out-of-range id, and the CLEAN half of that comparison is emb_gather_kernel reading weight.unsafe_load(v * width + j) out of bounds (DEVIATION 1506). Running an out-of-bounds read to demonstrate that it is out of bounds is not a test A build carrying an unrunnable arm produces a verdict about nothing, and the honest report is that the arm is UNGATED.

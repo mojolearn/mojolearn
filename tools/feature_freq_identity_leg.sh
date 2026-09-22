@@ -1,6 +1,6 @@
 #!/bin/sh
 # tools/feature_freq_identity_leg.sh -- DEVIATION 2710, the owed AMD (and
-# NVIDIA) leg of docs/lanes/BRIEF_feature_freq_divergence_2026-09-13.md.
+# NVIDIA) leg of the feature frequency divergence lane.
 #
 # WHAT IT SETTLES. identity_break's `gbdt-feature-freq` lane gave three
 # answers on three vendors on 2026-09-13 while every other GBDT lane was

@@ -1,5 +1,0 @@
-# verify --all: cpu (cpu), 0 lanes x 0 fixtures, harness wheel copy, table /Users/andrewhendel/mojolearn-evidence/verifier-broad-scope/installed-env/lib/python3.14/site-packages/mojolearn/verify_reference/table.json
-  portable:rf-clf                    base        0.5s
-  portable:gbdt-symmetric            base        0.1s
-  portable:ols                       base        0.2s
-  portable:pca                       base        0.0s

@@ -26,7 +26,7 @@ and predicts the fixed rows through ONE path; `summarize` pairs the arms.
               the process.
     summarize JSON... [--before before --after after]
 
-The gate is docs/lanes/FOREST_INFERENCE_MEASUREMENT.md's: at least five timed
+The gate is at least five timed
 calls after a warmup, a max/min spread of at most 1.10 per arm, output hashes
 equal across arms and rounds. A process outside the gate is written with
 `stable: false`, and `summarize` quotes no ratio from it.
@@ -56,7 +56,7 @@ MODELS = {
     "rf-covtype-100x16": ("rf", "covtype", 100, 16),
     "et-year-100x16": ("et", "year", 100, 16),
     "rf-higgs-500x16": ("rf", "higgs", 500, 16),
-    # The two benchmark datasets of different kind (ENGINEERING_RULES.md
+    # The two benchmark datasets of different kind (CONTRIBUTING.md
     # section 9): taxi is narrow (16 columns), Istella-S is wide (220). HIGGS
     # is retired as a result dataset and never decides; the regression
     # models have ONE output and so take the scalar grove kernel, which the

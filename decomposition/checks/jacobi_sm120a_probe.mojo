@@ -43,9 +43,7 @@ trajectory.
 RUN. `mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . decomposition/checks/jacobi_sm120a_probe.mojo <odd_x.f32>`
 where `<odd_x.f32>` is `tools/identity_break.py`'s `fixture("odd")[0]`
 written with `X.tofile(...)` (12345 x 17 float32 row-major, 839,460 bytes,
-sha256 595dda3a45cf8a3e...). The Mac reference output is committed beside
-the brief (docs/lanes/BRIEF_sm120a_jacobi_2026-09-14.md); the 5090 leg is
-the wrapper body recorded there.
+sha256 595dda3a45cf8a3e...).
 """
 
 from std.gpu import thread_idx

@@ -28,7 +28,7 @@ STABLE, printed as
     identical mode (<format>) takes X.XX times the incumbent's time (<arm>) for prefill on <box>
 
 which is the ONLY comparison this repository reports (bench/OPPONENT_REFERENCE.md,
-ENGINEERING_RULES.md): our identical mode against the incumbent's fast
+CONTRIBUTING.md): our identical mode against the incumbent's fast
 default, ours over theirs, where above 1.0 ours takes longer. The
 incumbent's own determinism arm, when present, is reported the same way
 against its fast arm, so the record shows what that setting costs it.

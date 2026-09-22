@@ -1,7 +1,0 @@
-deviations=2701 (recheck, no new deviation: no shipped line changed)
-brief=docs/lanes/BRIEF_gemm_kernel_2026-09-11.md section 14, section 19
-column=apple host=M4 (local, one Metal slot, run_seconds=0.294)
-commit=712eedd16b9fe7381bc9ee305e506c43fbb3f8fa  branch=lane/gemm-next  base=origin/main 712eedd16b9fe7381bc9ee305e506c43fbb3f8fa
-mojo=Mojo 1.0.0 (ed45d567)
-build=-D MOJOLEARN_NUMERIC_IDENTICAL=1 gemm/checks/gemm_seam_probe.mojo
-dataset=none (the probe generates its own 64 words)

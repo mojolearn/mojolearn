@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""The classical GEMM callers under the ksplit default against the old plan
-(docs/lanes/BRIEF_gemm_long_k_2026-09-11.md section 11, job 2, and section 12).
+"""The classical GEMM callers under the ksplit default against the old plan.
 
-ENGINEERING_RULES.md section 9: a shared kernel's flip must hold for every
+CONTRIBUTING.md (Performance claims): a shared kernel's flip must hold for every
 lane it reaches. DEVIATION 2595 made `ksplit` the shipped GEMM plan on NVIDIA
 wherever the long-k group rule takes a call through `identical_gemm_into`,
 and classical estimators reach that entry. This file times OLS, PCA and GP

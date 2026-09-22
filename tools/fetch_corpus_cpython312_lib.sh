@@ -2,7 +2,7 @@
 # tools/fetch_corpus_cpython312_lib.sh -- rebuild the pinned source-code
 # corpus training/corpus/cpython312_lib/input.txt from the CPython 3.12.0
 # release tarball and verify it against manifest.json (DEVIATIONS 2525 to
-# 2527; ENGINEERING_RULES section 9's second neural kind). The bytes are not
+# 2527; CONTRIBUTING.md (Performance claims)'s second neural kind). The bytes are not
 # committed; this script and the manifest are the pinned artifact.
 #
 #   sh tools/fetch_corpus_cpython312_lib.sh            # writes input.txt

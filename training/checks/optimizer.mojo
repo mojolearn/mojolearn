@@ -692,8 +692,7 @@ def adam_update_oop_kernel(
     rt_bc2: Float32,
     decay_mul: Float32,
 ):
-    """DEVIATION 2647 (docs/lanes/BRIEF_step_glue_2026-09-11.md section
-    4.3): launched by `training/byte_lm.mojo` under
+    """DEVIATION 2647: launched by `training/byte_lm.mojo` under
     `-D MOJOLEARN_STEP_GLUE_TRIAL=1`, and since DEVIATION 2649 also on a
     shipped build whose column default carries `noshadow`, which is the
     NVIDIA default and no other column's. It was compiled into every build

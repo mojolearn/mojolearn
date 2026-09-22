@@ -1,6 +1,0 @@
-RANK start lightgbm lambdarank cpu rows=19995 queries=166 version=4.7.0 drain=libcudart.so
-RANK warmup 637.9 ms
-RANK fit rep=0 trees=1 ms=93.0
-RANK fit rep=0 trees=2 ms=87.9
-RANK quality rep=0 ndcg5=0.457873 ndcg10=0.528978 hash=1325b040f3b0ff1c
-RANK done lightgbm lambdarank median@2=87.9 fixed=98.1 per_tree=-5.109 peak=527 base=0

@@ -4,7 +4,7 @@
 # priced by the 2543 harnesses, then the lean LM step under each arm on both
 # benchmark corpora. VENDOR-AGNOSTIC: runs ON THE BOX as the
 # MOJOLEARN_GEMM_LEG_EXTRA body of tools/do_extra_leg.sh (DigitalOcean, AMD
-# first, ENGINEERING_RULES 10) or of tools/gemm_remote_leg.sh (RunPod, the
+# first, CONTRIBUTING.md (Comparing against libraries without a GPU path)) or of tools/gemm_remote_leg.sh (RunPod, the
 # NVIDIA confirmation column), from /root/mojolearn with pixi on PATH;
 # everything it writes under /root/gemm_leg_out/gemm-step/ comes home with
 # the leg's fetch. Structure mirrors tools/attention_step_leg.sh.
@@ -75,11 +75,11 @@
 #   lm_summary.tsv  medians, per-step witnesses, witnesses_equal_baseline
 #                 against lm-shipped-<corpus>, each arm's ratio against the
 #                 mean of the two shipped brackets, and one verdict line per
-#                 arm (ENGINEERING_RULES 9: geometric mean of the two corpus
+#                 arm (CONTRIBUTING.md (Performance claims): geometric mean of the two corpus
 #                 ratios below 1, and every step witness equal to shipped on
 #                 both corpora, else NO FLIP with the reason).
 #
-# DEVIATION 2595 (docs/lanes/BRIEF_gemm_long_k_2026-09-11.md section 10):
+# DEVIATION 2595:
 # `shipped` is the SHIPPED DEFAULT dispatch: the ksplit default where the
 # column's block parallelism row is above 0 (NVIDIA), the TUNED 128x128 plan
 # where it is 0 (AMD until the MI300X leg decides, Apple). The old plan is

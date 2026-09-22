@@ -1,7 +1,0 @@
-mode IDENTICAL   sabotage: NO_FLUSH_ACC   EMB_TPB: 256
-ledger: the caller expected 'NO_FLUSH_ACC' and the binary agrees, so the -D was not silently dropped
-clause (a): 17 fixture cases, all 9 stages, device vs host oracle, BITWISE
-card: 9 records at /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/4e8829df-5da1-4c85-8680-6b52df16132c/scratchpad/legsdocs/local/embsab/NO_FLUSH_ACC.card, contract section 10 wants 9
-card: 9/9 tags in contract section 10's order, all unique, three of them INTEGER (contract section 6: emb.perm is where a divergent sort becomes visible before it reaches a float)
-clause (g): arm NO_FLUSH_ACC -- seam E3. **INERT ON APPLE ENTIRELY** (contract 9.3): ftz is bitwise a no-op on an FTZ backend, so the pinned and unpinned spellings agree there. gemm 4.1's correction is the standing warning -- Apple's bits not moving is NOT evidence that a pin is unreached. It becomes a bit-level reach proof, with no edit, on the first non-flushing backend
-Unhandled exception caught during execution: embedding_check: SABOTAGE NO_FLUSH_ACC IS ARMED AND MOVED NO BIT on its witness case f_subacc. Either its branch was never reached at this shape or it is inert there ([[reached-but-inert]]). It falsifies NOTHING and must not be reported as a passing arm.

@@ -1,6 +1,0 @@
-column=amd arch=gfx942 started=2026-09-18T15:38:37Z
-gemm_seam_probe build=0 run=0
-gemm_rtf_boundary_check build=0 run=0
-reference=0
-card=0
-finished=2026-09-18T15:39:51Z

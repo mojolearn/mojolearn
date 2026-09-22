@@ -1,7 +1,0 @@
-Command: python -m build --wheel --no-isolation <private staged checkout>/python
-Fresh build directory; existing native artifacts reused. Final output:
-adding 'mojolearn-0.8.8.dist-info/top_level.txt'
-adding 'mojolearn-0.8.8.dist-info/RECORD'
-removing build/bdist.macosx-26.0-arm64/wheel
-{"wheel": "/Users/andrewhendel/mojolearn-evidence/hardware-gaps-088/libm-direct-build/python/dist/.tmp-7qxu9mfs/mojolearn-0.8.8-py3-none-macosx_11_0_arm64.whl", "platform_math_free": true, "native_files_checked": 66}
-Successfully built mojolearn-0.8.8-py3-none-macosx_11_0_arm64.whl

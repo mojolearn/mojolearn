@@ -1028,7 +1028,7 @@ def fit_non_symmetric_tree[
     # This driver used to hand the kernel `ws[0].ffw`, which the workspace
     # fills with 1.0 for every feature and nothing ever overwrites. A caller
     # who set `feature_weights` got them ACCEPTED AND DROPPED -- the exact
-    # failure `ENGINEERING_RULES.md` rule 3 exists to prevent, sitting under an
+    # failure `CONTRIBUTING.md` (Evidence must be able to fail) exists to prevent, sitting under an
     # options docstring that read as though they were honored. Found by an
     # audit against their source, not by a gate.
     #
@@ -2585,7 +2585,7 @@ def fit_depthwise_tree[
     drivers, one per policy, was a structure the reference does not have. CatBoost has ONE
     `TGreedySearchHelper` with `if (Options.Policy == ...)` at four sites
     (`greedy_search_helper.cpp:319`, `:465`, `:355`, `:668`), and
-    `ENGINEERING_RULES.md` 0b says the reference structure wins. So the two
+    `CONTRIBUTING.md` (Algorithms and references) says the reference structure wins. So the two
     lanes' drivers became one function with four branches, which is both
     less code and more faithful -- and it removed the surface on which the
     Depthwise arm and the Lossguide arm could drift apart in everything

@@ -1,3 +1,0 @@
-record RandomForestClassifier predict <i8 [200] sha256 4202c25dfdabe4cda3373ccd9b3564b00bdf29910edeca82b302f2a07897a502
-record RandomForestClassifier predict_proba <f4 [200, 3] sha256 49d496cff13daff8540b266415f33ee39c3b4b48a8c27f61d38af509c6b128f4
-record wrote /root/gemm_leg_out/forest_host/2026-09-13-amd-rf_classifier/expected.json (vendor hip, mode identical)

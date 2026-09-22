@@ -2,7 +2,7 @@
 # tools/attention_step_leg.sh -- DEVIATIONS 2525 to 2527, the attention
 # step lane's on-box work. VENDOR-AGNOSTIC: runs ON THE BOX as the
 # MOJOLEARN_GEMM_LEG_EXTRA body of tools/do_extra_leg.sh (DigitalOcean, AMD
-# first, ENGINEERING_RULES 10) or of tools/gemm_remote_leg.sh (RunPod, the
+# first, CONTRIBUTING.md (Comparing against libraries without a GPU path)) or of tools/gemm_remote_leg.sh (RunPod, the
 # NVIDIA confirmation column), from /root/mojolearn with pixi on PATH;
 # everything it writes under /root/gemm_leg_out/attention-step/ comes home
 # with the leg's fetch.
@@ -105,14 +105,14 @@
 #                 check's cases, statuses as expected, reach at hd 64.
 #   smoke-<arm>   the harness on the hashed and adversarial generator kinds,
 #                 bits, eager oracle (first arm) and reach only, no timing
-#                 (ENGINEERING_RULES section 9: an edge-case fixture is never
+#                 (CONTRIBUTING.md (Performance claims): an edge-case fixture is never
 #                 a timing input).
 #   build-binding-*  the base binding and the byte LM binding (bindings/
 #                 build.sh, then bindings/build_byte_lm.sh) with the trial
 #                 hook, the phase timers and the operand dump riding
 #                 MOJOLEARN_BUILD_EXTRA_DEFINES, as tools/lm_step_memory_probe.sh
 #                 builds them.
-#   corpus-*      the two BENCHMARK corpora (ENGINEERING_RULES section 9):
+#   corpus-*      the two BENCHMARK corpora (CONTRIBUTING.md (Performance claims)):
 #                 English text (training/corpus/enwik8, fetched by
 #                 tools/fetch_corpus_enwik8.sh) and source code
 #                 (training/corpus/pile_github, fetched by
@@ -306,7 +306,7 @@ if [ "${MOJOLEARN_ATTN_LEG_SHIPPED_CHECK:-0}" = "1" ]; then
 fi
 
 # ---- the smoke: hashed and adversarial kinds, bits and reach only -----------
-# (ENGINEERING_RULES section 9: never a timing input; MOJOLEARN_ATTN_TIMING=0)
+# (CONTRIBUTING.md (Performance claims): never a timing input; MOJOLEARN_ATTN_TIMING=0)
 first=1
 for arm in $(echo "$ARMS" | tr ',' ' '); do
     [ -x "$OUT/bin/attn-price" ] || break

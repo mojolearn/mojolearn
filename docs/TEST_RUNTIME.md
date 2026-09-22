@@ -68,12 +68,6 @@ for legacy callers. Prefer explicit `--mode cuda` (NVIDIA) or `--mode hip`
 (AMD), which reserve the GPU lease and check the loaded backend. None is the
 routine default.
 
-See [TEST_ORACLE_SCOPE.md](TEST_ORACLE_SCOPE.md) for what each comparison proves.
-For a narrow native gradient-transfer check on CPU or GPU, see
-[Transformer gradient readback](TRANSFORMER_GRADIENT_READBACK.md). It selects
-one small case at a time and preserves complete bytewise output comparisons.
-[Transformer weight setup](TRANSFORMER_WEIGHT_SETUP.md) documents batched
-validation, separate output/refusal groups, and CPU/Metal/CUDA/HIP comparisons.
 
 ## One fit per cell
 

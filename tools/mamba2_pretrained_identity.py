@@ -7,8 +7,7 @@
     mojolearn.identical.mamba2.fp32.v1)  ->  norm_f and the tied head on the
     host with order-defined arithmetic only  ->  greedy tokens.
 
-Run it on two vendors and `--compare` the two JSON files. Brief:
-docs/lanes/MAMBA2_PRETRAINED_IDENTITY_2026-09-15.md.
+Run it on two vendors and `--compare` the two JSON files.
 
 WHAT RUNS WHERE
   weights         the published pytorch_model.bin stores FLOAT16; every tensor

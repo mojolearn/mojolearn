@@ -628,7 +628,7 @@ def gbdt_fit(
 def gbdt_per_round_paths() -> String:
     """Which side of each gbdt speed switch this binary compiled
     (DEVIATIONS 2550, 2551, 2580, 2581), for the benchmark's path line
-    (ENGINEERING_RULES.md section 8)."""
+    (CONTRIBUTING.md (Non-default paths))."""
     var out = String("2550_borrow_x=")
     comptime if BORROW_X_COLUMNS:
         out += "1"

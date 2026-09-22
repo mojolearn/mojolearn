@@ -1,1 +1,0 @@
-pod s14hskn0y3jorl, RTX 4090 driver 580.159.04, 64 vCPU, $0.74/h, image runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04, created 2026-09-18 07:42Z

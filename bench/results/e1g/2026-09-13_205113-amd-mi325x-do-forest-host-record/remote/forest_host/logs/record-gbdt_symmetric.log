@@ -1,3 +1,0 @@
-record GradientBoosting predict <f4 [200] sha256 2bb7dc22a0c1e1706b93aa3148504232e041530abf404b4f9f39de0a78601499
-record GradientBoosting predict_proba <f8 [200, 2] sha256 29d34cc881ed9647e6b5de129a5dc48c0b94c268ef9af808dc7d9d0e1203ef24
-record wrote /root/gemm_leg_out/forest_host/2026-09-13-amd-gbdt_symmetric/expected.json (vendor hip, mode identical)

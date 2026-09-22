@@ -88,7 +88,7 @@ comptime ALIGN_VALUE = 512
 # fingerprints 18/18 equal on the H100 with both values; RF HIGGS 1M/2M
 # ours IDENTICAL medians 2475/4036 ms at 1 item, 2274/3743 ms at 4, both
 # candidates' whole range below the baseline's minimum;
-# bench/results/trees_identical/h100_2026-09-10/, docs/lanes/HANDOFF_trees.md).
+# bench/results/trees_identical/h100_2026-09-10/).
 # `-D MOJOLEARN_2011_HIST_ITEMS1=1` restores the one-item mapping; the old
 # opt-in `MOJOLEARN_2011_HIST_ITEMS4` is accepted and is now the default.
 comptime HIST_ITEMS_PER_THREAD = 1 if is_defined["MOJOLEARN_2011_HIST_ITEMS1"]() else 4
@@ -465,7 +465,7 @@ comptime RETRY_PURE_NODES = is_defined["MOJOLEARN_2502_RETRY_PURE"]()
 """DEVIATION 2502 (2026-09-10), ON BY DEFAULT since 2026-09-11 evening: opt
 out with `-D MOJOLEARN_2502_RETRY_PURE=1` to get the previous forest. It was
 taken to opt-in on 2026-09-11 morning because its win had been measured on
-ONE kind of data (HIGGS, since retired, ENGINEERING_RULES.md section 9). It
+ONE kind of data (HIGGS, since retired, CONTRIBUTING.md (Performance claims)). It
 then ran on the two datasets of section 9 at 1M rows, IDENTICAL tier, on the
 M4 (`bench/results/rf_2502_m4_2026-09-11/`): taxi 7206..7295 -> 6403..6554
 ms, logloss 0.525912 -> 0.525910; Istella-S 34667..42381 -> 16346..18130 ms,

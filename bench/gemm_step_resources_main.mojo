@@ -27,8 +27,8 @@ False`, the control: it should read like the shipped row); then `lfold`,
 `half`, `half_ks16`, `quarter`, `head` N-wide and `head` M-wide; then
 `ksplit_128x128` (DEVIATION 2593), the long-k group kernel
 `identical_gemm_ksplit_kernel` at the shipped geometry, which should also
-read like the shipped row (docs/lanes/BRIEF_gemm_long_k_2026-09-11.md
-section 5.1: same per-window body, two more Int32 arguments, a 2-D grid).
+read like the shipped row (same per-window body, two more Int32 arguments, a
+2-D grid).
 
 DEVIATION 2595 (that brief's section 10): `shipped_128x128` is the TUNED
 128x128 specialization, which the shipped dispatch still runs wherever the
@@ -38,7 +38,7 @@ rule takes run the `ksplit_128x128` row's kernel. The
 `GEMM_STEP_RESOURCES_GEOMETRY label=shipped_default` line says which is true
 on this build.
 
-DEVIATION 2599 (docs/lanes/BRIEF_gemm_kernel_2026-09-11.md section 6): four
+DEVIATION 2599: four
 rows of `identical_gemm_kpack_kernel`, `kpack_all` and `kpack_group` at the
 128x128 geometry (compare with `shipped_128x128` and `ksplit_128x128`: same
 tile, packed page, per-step loads) and `kpack_wide_all` and
@@ -46,8 +46,7 @@ tile, packed page, per-step loads) and `kpack_wide_all` and
 show here beside the fold stack) and blocks per SM are what brief section 4.2
 reads for C4.
 
-DEVIATIONS 2640 to 2642 (docs/lanes/BRIEF_gemm_final_2026-09-11.md sections 3.2
-and 4.1): two rows of FOLD kernels, launched at `FLAT_TPB` threads per block.
+DEVIATIONS 2640 to 2642: two rows of FOLD kernels, launched at `FLAT_TPB` threads per block.
 `fold_stack_shipped` is `identical_gemm_fold_stack_kernel`, the fold the
 shipped ksplit default launches on every step call (one thread per cell);
 `kfold_lanes` is `identical_gemm_kfold_lanes_kernel` at the arms' constants

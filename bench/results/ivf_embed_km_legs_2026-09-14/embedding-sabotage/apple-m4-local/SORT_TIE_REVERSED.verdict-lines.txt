@@ -1,8 +1,0 @@
-mode IDENTICAL   sabotage: SORT_TIE_REVERSED   EMB_TPB: 256
-ledger: the caller expected 'SORT_TIE_REVERSED' and the binary agrees, so the -D was not silently dropped
-clause (a): 17 fixture cases, all 9 stages, device vs host oracle, BITWISE
-card: 9 records at /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/4e8829df-5da1-4c85-8680-6b52df16132c/scratchpad/legsdocs/local/embsab/SORT_TIE_REVERSED.card, contract section 10 wants 9
-card: 9/9 tags in contract section 10's order, all unique, three of them INTEGER (contract section 6: emb.perm is where a divergent sort becomes visible before it reaches a float)
-clause (g): arm SORT_TIE_REVERSED -- contract 6.2(a), the total order. **HALF GATED BY CONSTRUCTION**: this is the PLAN_SCAN spelling of the arm and its PLAN_SORT half must be gated separately; the sort clause is half gated and half not gated at all -- contract 11.1 says so and this table repeats it
-clause (g): SORT_TIE_REVERSED BIT on f_order3: 2 of 9 stages moved, FIRST at emb.perm, which is the stage its own clause writes.
-Unhandled exception caught during execution: embedding_check: SABOTAGE SORT_TIE_REVERSED moved 1 stages on f_dupsame, first at emb.perm, and contract 11.1's PREDICTED INERT MASK requires it to move NOTHING there. An arm that moves everywhere is a smoke test; the inert case is what makes it a REACH PROOF ([[verify-reach-not-output]]).

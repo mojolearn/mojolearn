@@ -2,8 +2,7 @@
 # tools/attention_bswz_leg.sh -- the attention-speed lane's on-box body:
 # DEVIATION 2900 (`_bswz`), the causal block-index map of the four kernels the
 # shipped estash arm runs, priced against that arm on the same pod and the
-# same heat window (brief docs/lanes/BRIEF_attention_step_2026-09-11.md
-# section 22).
+# same heat window.
 #
 # The arm changes NO arithmetic: `_blk_map` hands the same set of
 # (tile, head, batch) triples to a different `block_idx.x`, so the heaviest
@@ -33,7 +32,7 @@
 # trial define, the control that names the column default), and the lean LM
 # step of the default and the arm on enwik8 and Pile GitHub.
 #
-# Gates: brief section 22. Flip (ENGINEERING_RULES 9): the geometric mean of
+# Gates: brief section 22. Flip (CONTRIBUTING.md (Performance claims)): the geometric mean of
 # the enwik8 and pilegithub lean step ratios (arm over the default,
 # lm_summary.tsv steady medians, same pod) below 1, with
 # witnesses_equal_baseline=True for every step on both corpora, and every

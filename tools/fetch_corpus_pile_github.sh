@@ -1,6 +1,6 @@
 #!/bin/sh
 # tools/fetch_corpus_pile_github.sh -- rebuild the pinned source-code corpus
-# training/corpus/pile_github/input.txt (ENGINEERING_RULES section 9's code
+# training/corpus/pile_github/input.txt (CONTRIBUTING.md (Performance claims)'s code
 # kind for every neural timing and quality claim) and verify it against
 # manifest.json. The bytes are not committed; this script and the manifest
 # are the pinned artifact.

@@ -1,6 +1,0 @@
-SCOPE: this build, this column, IDENTICAL only. Plan invariance requires the explicit clause (d) run. Still owed: **the shipped shape** V=128256 d=4096 T=4096, which contract 11.2 calls mandatory and which is 2.10 GB of dW and belongs on a rented GPU rather than this laptop; **the device-side refusal**, DEVIATION 1506, which is a real defect in a file this gate may not edit; **EMB_FOLD_VIA_GEMM_ONEHOT** and **EMB_SORT_KEY_ID_ONLY_UNSTABLE**, two of contract 11.1's eighteen arms that have no swit
-clause (f): the row-39 audit, contract section 9.1
-clause (f) control: a clean forward and a clean backward do NOT raise, so the refusal is not unconditional
-clause (f) host: PASS, 6 refusals, each fired, each NAMING its input
-DEVIATION 1506 AUDIT: a NaN planted in W at cell 4 was READ BACK OFF THE DEVICE (1 non-finite cell, so reach is MEASURED). The device forward raised: False. Non-finite cells in the device output: 1.
-Unhandled exception caught during execution: embedding_check: DEVIATION 1506 nonfinite refusal remains open. Production entry points check ID bounds, but do not refuse NaN/inf in W or dY. The planted NaN reached device W (measured), and 1 nonfinite cells returned from gather. This is an existing input-refusal gap, independent of PLAN_SCAN/PLAN_SORT integer run construction.

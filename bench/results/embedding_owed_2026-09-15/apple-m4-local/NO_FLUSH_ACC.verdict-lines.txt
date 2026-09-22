@@ -1,6 +1,0 @@
-device probe: raw 0x80c00000 + 0x00800000 -> 0x80000000 on the DEVICE, a flushed add, so EMB_NO_FLUSH_ACC is INERT on this column (contract 9.3) and clause (g) asserts that instead
-device refusal: f_oor_high REFUSED by name on the device entry point, output buffer untouched (6 poisoned cells), so nothing was launched
-device refusal: f_oor_neg REFUSED by name on the device entry point, output buffer untouched (6 poisoned cells), so nothing was launched
-device refusal: PASS, both out-of-range cases refused by name before any launch
-clause (g): arm NO_FLUSH_ACC -- seam E3. **INERT ON APPLE ENTIRELY** (contract 9.3): ftz is bitwise a no-op on an FTZ backend, so the pinned and unpinned spellings agree there. gemm 4.1's correction is the standing warning -- Apple's bits not moving is NOT evidence that a pin is unreached. It becomes a bit-level reach proof, with no edit, on the first non-flushing backend
-clause (g): NO_FLUSH_ACC INERT ON THIS COLUMN, asserted on all 17 cases: the device flushes the raw add (device probe above), so the pinned and unpinned spellings are BITWISE EQUAL here, as contract 9.3 predicts. This is a SMOKE TEST, not a reach proof: the arm's reach is shown on a non-flushing column (NVIDIA and AMD, where it BIT on f_subacc on 2026-09-14).

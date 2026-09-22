@@ -5,7 +5,7 @@
 # column: it runs ON THE BOX as the MOJOLEARN_GEMM_LEG_EXTRA body of
 # tools/gemm_remote_leg.sh (RunPod), from /root/mojolearn with pixi on PATH;
 # everything under /root/gemm_leg_out/step-breakdown/ comes home with the
-# leg's fetch. Brief: docs/lanes/BRIEF_step_breakdown_2026-09-11.md.
+# leg's fetch.
 #
 #   MOJOLEARN_RUNPOD_KEY_FILE=$HOME/.mojolearn_runpod_key \
 #   MOJOLEARN_GPU_ARCHS=sm_90a \
@@ -40,7 +40,7 @@
 #                           No trial define: both builds run the column's
 #                           shipped attention arm and GEMM dispatch.
 #   corpus-*                enwik8 and the Pile GitHub component
-#                           (ENGINEERING_RULES section 9), fetched on the box
+#                           (CONTRIBUTING.md (Performance claims)), fetched on the box
 #                           and verified against their manifests.
 #   lean-shipped-<corpus>   the shipped binding installed;
 #                           tools/lm_step_memory_probe.py --target --resident-lean

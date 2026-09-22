@@ -1,8 +1,0 @@
-PASS uneven unpack+pack bits and canaries
-PASS all empty unpack+pack bits and canaries
-PASS mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1 layer 0 unpack+pack bits and canaries
-PASS mojolearn.byte-lm.b2-l32-d32-h4-kv2-ff64-v256-blocks2.fp32.v1 layer 1 unpack+pack bits and canaries
-PASS mojolearn.byte-lm.b1-l7-d24-h3-kv1-hd8-ff40-v257-blocks3.fp32.v3 layer 0 unpack+pack bits and canaries
-PASS mojolearn.byte-lm.b1-l7-d24-h3-kv1-hd8-ff40-v257-blocks3.fp32.v3 layer 1 unpack+pack bits and canaries
-PASS mojolearn.byte-lm.b1-l7-d24-h3-kv1-hd8-ff40-v257-blocks3.fp32.v3 layer 2 unpack+pack bits and canaries
-PASS byte block copy; production dispatch unchanged

@@ -1,7 +1,0 @@
-{
-  "cpu_replay_match": true,
-  "cpu_metal_match": true,
-  "cases": 9,
-  "parts": 54,
-  "native_fault": "OWED; exploratory native flag False"
-}

@@ -33,7 +33,7 @@ for group in state serialization threads; do
     # ROCm 6.4.1/MI300X crashes in HIP exit handlers when the FIRST GPU call
     # runs on a worker, including with legacy setup. Keep that cold-worker
     # diagnostic selectable; normal ownership qualification initializes on
-    # main before dispatch. See docs/TRANSFORMER_SESSION_REUSE.md.
+    # main before dispatch.
     thread_init=worker
     if [ "$backend" = hip ]; then thread_init=main; fi
     thread_init=${MOJOLEARN_SESSION_THREAD_INIT:-$thread_init}

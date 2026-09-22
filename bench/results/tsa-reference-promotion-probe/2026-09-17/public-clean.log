@@ -1,3 +1,0 @@
-# verify --all: cpu (cpu), 2 lanes x 9 fixtures, harness wheel copy, table /Users/andrewhendel/mojolearn-evidence/tsa-reference-promotion/installed-env/lib/python3.14/site-packages/mojolearn/verify_reference/table.json
-  holtwinters                        tsa                 0.2s
-  select-d                           tsa                 0.2s

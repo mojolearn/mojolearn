@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""DEVIATIONS 2550 and 2551, both sides of both switches (ENGINEERING_RULES 8).
+"""DEVIATIONS 2550 and 2551, both sides of both switches (CONTRIBUTING.md (Non-default paths)).
 
     pixi run check-gbdt-per-round                       default IDENTICAL build: 2550 ON
                                                         and 2551 ON (both the default

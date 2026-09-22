@@ -11,8 +11,7 @@ Two warmups, `--rounds` timed rounds, medians. With `--ours-dump DIR` the
 UInt32 neighbour lists `bench/knn_reference_price_main.mojo` wrote there
 are compared row by row (as sets, and as ordered lists).
 
-`--dataset taxi` and `--dataset istella` (DEVIATION 2524; ENGINEERING_RULES.md
-section 9, rewritten 2026-09-11) price the same opponent on THE TWO REAL
+`--dataset taxi` and `--dataset istella` (DEVIATION 2524; CONTRIBUTING.md (Performance claims), rewritten 2026-09-11) price the same opponent on THE TWO REAL
 DATASETS every classical claim quotes: NYC taxi's 11 numeric columns
 (`TAXI_NUMERIC`, d = 11) and Istella-S's 220 features (d = 220), the same
 `tools/knn_datasets.py::real_block` call `tools/knn_selection_gate.py`'s
@@ -100,7 +99,7 @@ def fixture_blocks(dataset, n_index, n_queries, d, data_root=None):
             note = "RETIRED dataset (2026-09-11): HIGGS prefix, 28 raw float32 features; re-derivation of an old row only, never a result"
         else:
             block = knn_datasets.real_block(dataset, n_index, n_queries, data_root=data_root)
-            note = ("REAL data, one of the two datasets (ENGINEERING_RULES.md section 9): %s, %d raw float32 features from the trees harness's cache, "
+            note = ("REAL data, one of the two datasets (CONTRIBUTING.md (Performance claims)): %s, %d raw float32 features from the trees harness's cache, "
                     "no shuffle, no scaling, no deduplication; the same bytes tools/knn_selection_gate.py's %s fixture measures"
                     % (block["fixture"], block["d"], dataset))
         fields = {
@@ -200,7 +199,7 @@ def main():
     ap.add_argument("--features", type=int, default=32)
     ap.add_argument("--rounds", type=int, default=7)
     ap.add_argument("--ours-dump", default="")
-    ap.add_argument("--dataset", choices=("dyadic", "taxi", "istella", "higgs"), default="dyadic", help="dyadic: the dyadic-v1 generator (unchanged default); taxi | istella: the two real datasets shared with tools/knn_selection_gate.py through tools/knn_datasets.py::real_block (ENGINEERING_RULES.md section 9; --index <= 400000, --queries <= 4000, features from the data: 11 or 220; the trees harness's cache must exist, this tool never downloads); higgs: RETIRED 2026-09-11, kept to re-derive an old row only")
+    ap.add_argument("--dataset", choices=("dyadic", "taxi", "istella", "higgs"), default="dyadic", help="dyadic: the dyadic-v1 generator (unchanged default); taxi | istella: the two real datasets shared with tools/knn_selection_gate.py through tools/knn_datasets.py::real_block (CONTRIBUTING.md (Performance claims); --index <= 400000, --queries <= 4000, features from the data: 11 or 220; the trees harness's cache must exist, this tool never downloads); higgs: RETIRED 2026-09-11, kept to re-derive an old row only")
     ap.add_argument("--data-root", default=None, help="taxi/istella/higgs: the dataset store (default GBM_BENCH_DATA or ~/datasets/gbm-bench, the trees harness's)")
     ap.add_argument("--out", required=True, help="JSON file, or a directory (then <out>/cuml-reference-<dataset>.json)")
     args = ap.parse_args()
@@ -231,7 +230,7 @@ def main():
         dataset_source = dict(dataset_source)
         dataset_source["prefetch_seconds"] = time.perf_counter() - t0
         dataset_source["index_row_range_rule"] = "index = prefix rows [0, --index); queries = prefix rows [400000, 400000 + --queries)"
-        dataset_source["retired"] = "HIGGS is retired as a benchmark dataset (ENGINEERING_RULES.md section 9, 2026-09-11); this row is a re-derivation, not a result"
+        dataset_source["retired"] = "HIGGS is retired as a benchmark dataset (CONTRIBUTING.md (Performance claims), 2026-09-11); this row is a re-derivation, not a result"
         del _x, _y
 
     import cupy as cp

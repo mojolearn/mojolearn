@@ -181,8 +181,7 @@ holds that door to the synthetic cases, the rank-file and spelled-file
 loaders, a user-supplied GPT-2 vocabulary when `MOJOLEARN_GPT2_ENCODER_JSON`
 and `MOJOLEARN_GPT2_VOCAB_BPE` name the files (skipped otherwise), and every
 refusal by name. A build with `-D MOJOLEARN_TOKENIZER_HOST_SABOTAGE=1` (ids
-written in reverse) must fail it. The lane brief is
-`docs/lanes/BRIEF_expose_tokenizer_2026-09-14.md`.
+written in reverse) must fail it.
 
 `BpeTokenizer.encode_batch(documents, allow_endoftext=False)` (2026-09-15)
 passes every document to `bpe_encode_batch` in ONE call; the binding

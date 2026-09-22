@@ -1,3 +1,0 @@
-arm kmeans
-mode IDENTICAL
-column 3 lane_width 64

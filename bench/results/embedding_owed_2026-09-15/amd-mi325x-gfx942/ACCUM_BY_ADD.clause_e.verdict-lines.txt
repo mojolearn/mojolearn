@@ -1,4 +1,0 @@
-clause (e): the microbatch CARRY on f_split, T=6, every split point 1..5 plus a three-piece split, 8 cells
-clause (e): 2 vocabulary rows straddle the boundary, so the by-add control has something to move
-clause (e): PASS, the carried split reproduces the unsplit dW BIT FOR BIT at all 5 two-piece boundaries and at the three-piece split (2, 4)
-clause (e) by-add control: `dW_first + dW_second` on f_tree4 at t0 = 2 moves 1 cells on STRADDLING rows (0x3f800000 -> 0x3f800001) and 0 on rows entirely on one side, and is INERT on f_split at t0 = 3 (0 of 8 cells, one contributor after the boundary per straddling row). The carry is what the clause gates and the arm is a REACH PROOF.

@@ -1,3 +1,0 @@
-...........................................                              [100%]
-43 passed in 0.61s
-{"guard": "nvidia-root-serial-v1", "reason": null, "cpu_affinity": "0,1", "thread_limit": 2, "returncode": 0}

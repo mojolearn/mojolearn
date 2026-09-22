@@ -6,7 +6,7 @@
 The archived records carry the 2026-08 framing, which said Apple, because
 that is what the library was when 0.1.0 was minted. It is now bitwise
 identical across Apple Metal, NVIDIA CUDA and AMD HIP, and b031f2cd fixed
-.zenodo.json and CITATION.cff so every FUTURE release is named correctly.
+CITATION.cff so every FUTURE release is named correctly.
 This handles the six that already exist.
 
 A DOI IS PERMANENT AND PUBLIC, so this refuses to be casual:
@@ -40,8 +40,11 @@ API = "https://zenodo.org/api"
 
 
 def target_title(repo_root):
-    with open(os.path.join(repo_root, ".zenodo.json")) as fh:
-        return json.load(fh)["title"]
+    with open(os.path.join(repo_root, "CITATION.cff")) as fh:
+        for line in fh:
+            if line.startswith("title:"):
+                return line.split(":", 1)[1].strip().strip('"')
+    raise SystemExit("zenodo_retitle: CITATION.cff has no title")
 
 
 def call(method, url, token, payload=None):
@@ -109,7 +112,7 @@ def main():
     if not recs:
         sys.exit("no versions came back for concept record %s. Refusing to guess." % CONCEPT_ID)
 
-    print("target title, from .zenodo.json:")
+    print("target title, from CITATION.cff:")
     print("  %s\n" % want)
     todo = []
     for r in recs:

@@ -3,7 +3,7 @@
 """CPU binding for the `_mojolearn_transformer` family: the TransformerBlock
 forward (stateless prefill, carried-state prefill, decode step) and its
 zero-state prefill backward (CPU training for the transformer lanes,
-2026-09-15; brief docs/lanes/BRIEF_cpu_training_2026-09-13.md section 3.2).
+2026-09-15).
 
 HOST ONLY. No DeviceContext, no kernel launch. The arithmetic is the lane's
 two host oracles, `transformer/checks/transformer_oracle.mojo` and

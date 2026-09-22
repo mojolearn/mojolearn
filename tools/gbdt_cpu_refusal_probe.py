@@ -23,9 +23,6 @@ and this file is not one either.
 READ THE `## A` BLOCK FIRST. It is the control: those configurations must
 print OK. If any of them refuses, the probe is measuring a broken or stale
 binding and every REFUSED line below it means nothing.
-
-The refusals are grouped and explained in
-docs/lanes/BRIEF_gbdt_no_cpu_path_2026-09-20.md.
 """
 import argparse
 import sys

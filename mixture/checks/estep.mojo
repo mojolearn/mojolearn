@@ -5,8 +5,7 @@
 NO REFERENCE FILE. cuML has no Gaussian mixture model
 at `upstream/cuml-v26.08.00` (`265b9da`): no `gmm` directory, no `mixture`
 module, no `GaussianMixture` symbol outside a scikit-learn test xfail list.
-cuVS (`6ba2ce2`) and RAFT (`ebf9268`) have none either. `ENGINEERING_RULES.md`
-0b therefore **points at nothing for this lane**, and every design question
+cuVS (`6ba2ce2`) and RAFT (`ebf9268`) have none either. `CONTRIBUTING.md` (Algorithms and references) therefore **points at nothing for this lane**, and every design question
 here was answered in this lane. What applies instead is
 `mixture/README.md`'s rule: `sklearn/mixture/_gaussian_mixture.py` and
 `_base.py` define the SEMANTICS and are the ORACLE, and they are never the

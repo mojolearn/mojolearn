@@ -1,5 +1,0 @@
-patchelf 0.17.2
-gcc (Ubuntu 11.4.0-1ubuntu1~22.04) 11.4.0
-GNU ld (GNU Binutils for Ubuntu) 2.38
-release_build_exit=0
-507b28c3be733f13a82f86cd98e0cc2d2ec581697724e13d5cbdc720b43bef85  /root/gemm_leg_out/release-build/build/sets/hip/gfx942/host/_mojolearn_byte_lm_host.so

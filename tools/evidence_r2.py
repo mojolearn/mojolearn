@@ -33,9 +33,9 @@ WHAT R2 IS FOR HERE. Artifacts a rerun can regenerate and no reader needs to
 audit: wheels, .so files, logs, raw f32/i32 dumps, copied environments. They
 are reproducible outputs, not testimony.
 
-THE RULE THIS ENCODES: if deleting it would weaken a claim in
-docs/VERIFICATION_MATRIX.md or a recipe in docs/VERIFY_EXTERNALLY.md, it
-stays in git. Otherwise it belongs in the bucket.
+THE RULE THIS ENCODES: if deleting it would weaken a claim in the
+verification matrix (tools/verification_matrix.py) or a recipe in
+docs/VERIFY_EXTERNALLY.md, it stays in git. Otherwise it belongs in the bucket.
 
 VERIFY BEFORE YOU DELETE. `push` re-reads every object back from R2 and
 compares the sha256 before it prints a single `rm`, and it prints the `rm`

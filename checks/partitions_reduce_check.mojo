@@ -749,7 +749,7 @@ def check_partitions_reduce_sabotage() raises:
 
 
 def main() raises:
-    # STANDALONE DRIVER. All three arms `probe_main.mojo` runs under
+    # STANDALONE DRIVER. All three arms `checks/probe_main.mojo` runs under
     # "ComputePartitionStats vs an exact host tally (GPU)", in its order:
     # the size sweep, then the two reach arms.
     print("ComputePartitionStats vs an exact host tally (GPU):")

@@ -18,7 +18,7 @@ MI300X, and, for the lanes that have a CPU path, on a plain CPU too. The record 
 naming the boxes and commits, and `diff.*.txt`, the cell-by-cell comparison.
 The lanes and their pinned configurations are the `@lane` functions in
 `tools/identity_break.py`; a value that is not pinned there is not inside the
-claim (`docs/lanes/BRIEF_claim_surface_census_2026-09-14.md` lists what is not).
+claim.
 
 ## Recipe 1, no GPU, free: the CPU gates on GitHub's hosted runners
 

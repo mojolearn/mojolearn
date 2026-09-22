@@ -122,10 +122,10 @@ comptime SLICE_LANES = replication_lanes_for[
     TARGET_COLUMN, BUILD_MODE == NUMERIC_IDENTICAL
 ]()
 
-#: The old name, kept because `probe_main.mojo` imports it and asserts on it.
+#: The old name, kept because `checks/probe_main.mojo` imports it and asserts on it.
 #: RENAMED HERE, NOT DELETED, and the difference matters: `LANE_WIDTH` is what
 #: this constant was called while it meant two things at once, and the rename
-#: is the correction. `probe_main.mojo:278` still compares it against
+#: is the correction. `checks/probe_main.mojo:278` still compares it against
 #: `lane_width_for` -- the HARDWARE row -- so on a 64-lane column that probe
 #: will raise "the half-byte kernel is NOT reading the matrix" while the
 #: kernel is reading the right row and the probe is reading the wrong one.

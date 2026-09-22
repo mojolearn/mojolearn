@@ -43,7 +43,7 @@ gate named the tensor, `block0.w_q` element 0, with both bit patterns.
   scope the class refuses on a CPU-only install, as every public CPU fit does;
   `LanguageModelHostTrainer` stays the published CPU trainer. The `byte-lm` and
   `byte-lm-resident` identity_break lanes (three AdamW steps at that time, two
-  and one now, see docs/lanes/FIXTURE_SHRINK_SCOPE.md section A3; weight decay
+  and one now; weight decay
   0.01, the exported gradient, the logits, the checkpoint bytes and the batch
   part) read IDENTICAL x4 on all 72 train, infer, model and batch cells against
   the 166-lane record's Apple M4, NVIDIA H100 and AMD MI325X columns on the

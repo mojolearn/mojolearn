@@ -1,9 +1,8 @@
 #!/bin/sh
 # tools/gemm_ksplit_classical_amd_leg.sh -- the classical GEMM callers under
 # the ksplit default (DEVIATION 2595; AMD row 110 since 190fb7a4) against the
-# old plan, on the Hot Aisle AMD MI300X. ENGINEERING_RULES.md section 9 owes
-# this A/B for a shared kernel's flip on every lane it reaches
-# (docs/lanes/BRIEF_gemm_long_k_2026-09-11.md section 12).
+# old plan, on the Hot Aisle AMD MI300X. CONTRIBUTING.md (Performance claims) owes
+# this A/B for a shared kernel's flip on every lane it reaches.
 #
 # A tools/hotaisle_leg.sh BODY. It runs ON THE BOX inside
 # rocm/dev-ubuntu-22.04:6.4.1-complete, from /root/mojolearn after `pixi
@@ -299,7 +298,6 @@ record() {  # <name> <status> <detail>
 }
 
 {
-    echo "brief=docs/lanes/BRIEF_gemm_long_k_2026-09-11.md section 12"
     echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "root=$ROOT"
     echo "lanes=$LANES ctd_lanes=${CTD_LANES:-none} datasets=$DATASETS"

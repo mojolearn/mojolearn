@@ -1,9 +1,0 @@
-{
-  "status": "PASS",
-  "scope": "Exact input and embedding records versus previously qualified macOS candidate; previous three-vendor comparison remains fixture-scoped",
-  "profiles": [
-    "cubic128_interleaved64_64",
-    "saddle_grid64_cellcenters49"
-  ],
-  "reference": "bench/results/wheels/2026-09-05-umap-060/installed/quality-identical.json"
-}

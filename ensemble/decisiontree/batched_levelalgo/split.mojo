@@ -167,7 +167,7 @@ acquire that reads B's release. B's plain store to `split[node]` is then
 unordered against this thread's plain load of it, so this thread merges
 into a STALE slot and writes it back, and B's candidate is ERASED. That is
 a LOST CANDIDATE, one direction only, which is what the MI300X traces
-showed (`docs/lanes/RF_MUTEX_RECONCILIATION_2026-09-16.md`). The retained
+showed. The retained
 claim that "only the HOLDER writes the release value, so no ABA hides"
 is true and does NOT make the two reads equivalent; reuse of the free value
 across them is exactly the interleaving above.

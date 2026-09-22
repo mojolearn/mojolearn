@@ -5,7 +5,7 @@
     tools/with_build_lock.sh pixi run mojo run -I . \\
         ensemble/checks/sibling_column_overlap_check.mojo
 
-WHY THIS CHECK EXISTS. `docs/lanes/LANE_STATUS_nvidia-forest-speed.md` set
+WHY THIS CHECK EXISTS. The NVIDIA forest speed lane set
 out to port LightGBM's histogram-subtraction trick to the forest path: build
 the smaller child's histogram, derive the sibling as `parent - child`. The
 arithmetic premise holds here in a way it does not for LightGBM, because

@@ -48,9 +48,7 @@ and with a binding that carries `forest_host_gbdt_sigmoid_pair` (DEVIATION
 2902) not even that: both columns come from the binding in one pass.
 What it promises is what the gate measured: tools/forest_host_gate.py
 compares the host predictions of a recorded model and fixture against the
-SHA-256 a GPU run recorded, and the brief in
-docs/lanes/BRIEF_forest_host_inference_2026-09-13.md records on which CPUs
-that has passed.
+SHA-256 a GPU run recorded.
 """
 import hashlib
 import struct

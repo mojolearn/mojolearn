@@ -1,5 +1,0 @@
-MATCH production class dispatch actual=['SEAM_PROBE column=amd hwftz=False class_shipped=True lanes=shipped,fma,hwftz,swrtf,class']
-MATCH lane=shipped actual=['62a6b5621e27c707'] expected=62a6b5621e27c707
-MATCH lane=swrtf actual=['62a6b5621e27c707'] expected=62a6b5621e27c707
-MATCH lane=class actual=['989754abc7bbcbfe'] expected=62a6b5621e27c707
-FAIL class: missing, duplicate, or wrong hash

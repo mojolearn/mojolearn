@@ -30,7 +30,7 @@ gate. `summarize` pairs the JSONs into one table.
         --model /root/ab/catboost-taxi-1000.cbm --x /root/ab/x_taxi.npy --path predict \\
         --devices gpu,cpu --json /root/ab/out/catboost-taxi-1000.predict.json
 
-The gate is docs/lanes/FOREST_INFERENCE_MEASUREMENT.md's: at least five
+The gate is at least five
 timed rounds after one warmup per arm, max/min spread at most 1.10 per
 arm, output hashes equal across arms and rounds. A process whose spread
 exceeds the gate is written `stable: false` and the summary refuses to

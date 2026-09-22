@@ -1,8 +1,0 @@
-MATCH lane=shipped actual=['62a6b5621e27c707'] expected=62a6b5621e27c707
-MATCH lane=swrtf actual=['62a6b5621e27c707'] expected=62a6b5621e27c707
-MATCH lane=class actual=['62a6b5621e27c707'] expected=62a6b5621e27c707
-MATCH required=^SEAM_N 262144$ actual=['SEAM_N 262144']
-MATCH required=^SEAM_MISMATCH shipped/class count=0$ actual=['SEAM_MISMATCH shipped/class count=0']
-MATCH required=^SEAM_BOUNDARY .* shipped=00800000 .* class=00800000$ actual=['SEAM_BOUNDARY a=3f7fffff b=00800000 acc=00000000 shipped=00800000 fma=00800000 hwftz=00000000 swrtf=00800000 class=00800000']
-MATCH required=^SEAM_DONE$ actual=['SEAM_DONE']
-PASS class flush equals shipped round-then-flush

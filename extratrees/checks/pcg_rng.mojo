@@ -359,9 +359,8 @@ value is arbitrary and pinned only by `tools/rng_oracle/pcg_reference.txt`."""
 
 
 comptime PCG_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
-"""The CPU identity gate's negative control (the CPU training lane, brief
-docs/lanes/BRIEF_cpu_training_2026-09-13.md section 3.4; the ET lanes,
-2026-09-14). `-D MOJOLEARN_HOST_SABOTAGE=1` makes `SplitKey.generator()`
+"""The CPU identity gate's negative control (the CPU training lane;
+the ET lanes, 2026-09-14). `-D MOJOLEARN_HOST_SABOTAGE=1` makes `SplitKey.generator()`
 burn ONE extra draw on every keyed stream before its first real one, so
 every split threshold (the device-draw restatement `draw_threshold_device`
 and the host splitter's `uniform_threshold` alike) and every rescue pick

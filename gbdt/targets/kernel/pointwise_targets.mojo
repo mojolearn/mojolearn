@@ -236,7 +236,7 @@ comptime OBJECTIVE_YETI_RANK = 16
 #: `default:` arm throws "Unsupported loss function" before training can
 #: reach it. It is a METRIC that borrows the target kernel, and this implementation
 #: has no metric path for it to arrive by. Implementing the arm would leave a
-#: branch no caller reaches, which ENGINEERING_RULES 3 forbids.
+#: branch no caller reaches, which CONTRIBUTING.md (Evidence must be able to fail) forbids.
 
 
 def objective_from_name(name: String) raises -> Int:

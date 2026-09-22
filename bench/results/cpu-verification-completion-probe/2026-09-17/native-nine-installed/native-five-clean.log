@@ -1,6 +1,0 @@
-# verify --all: cpu (cpu), 5 lanes x 9 fixtures, harness wheel copy, table /Users/andrewhendel/mojolearn-evidence/cpu-verification-completion/installed-env/lib/python3.14/site-packages/mojolearn/verify_reference/table.json
-  dbscan                             estimators          5.0s
-  minmax-scaler                      preprocessing       0.2s
-  dbscan-brute-l1                    estimators          7.4s
-  dbscan-weighted                    estimators         42.2s
-  minmax-scaler-clip                 preprocessing       0.0s

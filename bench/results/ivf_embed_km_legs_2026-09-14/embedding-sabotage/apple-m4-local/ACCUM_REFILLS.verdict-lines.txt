@@ -1,8 +1,0 @@
-mode IDENTICAL   sabotage: ACCUM_REFILLS   EMB_TPB: 256
-ledger: the caller expected 'ACCUM_REFILLS' and the binary agrees, so the -D was not silently dropped
-clause (a): 17 fixture cases, all 9 stages, device vs host oracle, BITWISE
-card: 9 records at /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/4e8829df-5da1-4c85-8680-6b52df16132c/scratchpad/legsdocs/local/embsab/ACCUM_REFILLS.card, contract section 10 wants 9
-card: 9/9 tags in contract section 10's order, all unique, three of them INTEGER (contract section 6: emb.perm is where a divergent sort becomes visible before it reaches a float)
-clause (g): arm ACCUM_REFILLS -- contract 7.4's price. Inert on a single-microbatch gate, which is what a lane that never wrote clause (e) has
-clause (g): ACCUM_REFILLS BIT on f_accum: 2 of 9 stages moved, FIRST at emb.dw_seed, which is the stage its own clause writes.
-clause (g): ACCUM_REFILLS is INERT on f_nodup, 9/9 stages unmoved, which is the half that makes it a reach proof rather than a smoke test.

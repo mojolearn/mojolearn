@@ -1,5 +1,0 @@
-staging corpus/pile_github/input.txt ...
-ok /root/mojolearn-wt/gemm-single-leaf/training/corpus/pile_github/input.txt 97124565 52a5b4c36ab9119c15505331c10e3b23690377d40fbac3e598c7fafe13a324df
-staged 1 key(s); the box verified each against the pins
-linked corpus/pile_github/input.txt -> /root/mojolearn/training/corpus/pile_github/input.txt
-R2 STAGED 1 key(s) in 8s, 1 linked into /root/mojolearn

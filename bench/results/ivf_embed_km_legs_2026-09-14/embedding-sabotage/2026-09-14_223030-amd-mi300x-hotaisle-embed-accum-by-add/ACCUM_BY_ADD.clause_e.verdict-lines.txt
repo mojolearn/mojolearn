@@ -1,4 +1,0 @@
-clause (e): the microbatch CARRY on f_split, T=6, every split point 1..5 plus a three-piece split, 8 cells
-clause (e): 2 vocabulary rows straddle the boundary, so the by-add control has something to move
-clause (e): PASS, the carried split reproduces the unsplit dW BIT FOR BIT at all 5 two-piece boundaries and at the three-piece split (2, 4)
-Unhandled exception caught during execution: embedding_check: CLAUSE (e)'s BY-ADD CONTROL IS DEAD. `dW = ftz(dW_first + dW_second)` at t0 = 3 gave the SAME BITS as the carried call on every straddling row. Contract 7.4 says ADD does not reproduce the unsplit chain in general -- `((a0+a1)+a2)+a3` is not `(a0+a1) + (a2+a3)` -- so either this fixture's straddling runs are too short or their values are exactly representable, and clause (e) would pass on the by-add spelling as well as on the carry ([[reached-but-inert]]).

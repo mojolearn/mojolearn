@@ -1,8 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CPU binding for the `_mojolearn_training` family: the small MLP's training
-step (the mlp lane, 2026-09-14; brief docs/lanes/BRIEF_cpu_training_2026-09-13.md
-sections 1.1 and 3.2).
+step (the mlp lane, 2026-09-14).
 
 HOST ONLY. No DeviceContext, no kernel launch, no GPU. `SmallMLPTrainer`
 (`python/mojolearn/_mlp_impl.py`) composes a training step from the pinned

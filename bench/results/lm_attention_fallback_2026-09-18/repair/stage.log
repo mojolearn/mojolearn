@@ -1,5 +1,0 @@
-staging corpus/enwik8/input.txt ...
-ok /root/mojolearn-wt/lm-attention-fallback/training/corpus/enwik8/input.txt 100000000 2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8
-staged 1 key(s); the box verified each against the pins
-linked corpus/enwik8/input.txt -> /root/mojolearn/training/corpus/enwik8/input.txt
-R2 STAGED 1 key(s) in 12s, 1 linked into /root/mojolearn

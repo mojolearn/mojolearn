@@ -1,6 +1,6 @@
 # Pinned source-code corpus for the byte language model (CPython 3.12.0 Lib)
 
-The second data kind of ENGINEERING_RULES section 9 for neural timing
+The second data kind of CONTRIBUTING.md (Performance claims) for neural timing
 claims (English text is `training/corpus/tinyshakespeare`; this is source
 code). Andrew, 2026-09-11, on what the two kinds are: "2 different but
 relatively normal things to train on, not edge cases; we build our

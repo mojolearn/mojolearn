@@ -1,8 +1,0 @@
-staging corpus/enwik8/input.txt ...
-ok /root/mojolearn-wt/amd-gemm-class-measure/training/corpus/enwik8/input.txt 100000000 2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8
-staging corpus/pile_github/input.txt ...
-ok /root/mojolearn-wt/amd-gemm-class-measure/training/corpus/pile_github/input.txt 97124565 52a5b4c36ab9119c15505331c10e3b23690377d40fbac3e598c7fafe13a324df
-staged 2 key(s); the box verified each against the pins
-linked corpus/enwik8/input.txt -> /root/mojolearn/training/corpus/enwik8/input.txt
-linked corpus/pile_github/input.txt -> /root/mojolearn/training/corpus/pile_github/input.txt
-R2 STAGED 2 key(s) in 8s, 2 linked into /root/mojolearn

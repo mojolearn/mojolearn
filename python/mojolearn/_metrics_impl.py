@@ -181,8 +181,8 @@ def _as_i32_1d(x, name):
     # int64 -> int32 through `Array.astype`: the core helper `cast_elements`
     # (DEVIATION 3100), else `array.array`'s item loop, which has no Python
     # loop BODY but makes one Python int per element (69 ms per 1,000,000
-    # rows on an EPYC 7713 before the helper, 1.9 ms with it,
-    # docs/lanes/LANE_STATUS_python-hotpath.md). Exact after the range check.
+    # rows on an EPYC 7713 before the helper, 1.9 ms with it). Exact after
+    # the range check.
     return a.astype("<i4")
 
 
@@ -1486,6 +1486,6 @@ def __getattr__(name):
     if name in _UNSUPPORTED:
         raise AttributeError(
             f"mojolearn.metrics.{name} does not exist: {_UNSUPPORTED[name]}. "
-            "See docs/lanes/GPU_PIPELINE_PLAN.md for implementation scope."
+            "See SUPPORT_MATRIX.md for the supported metrics."
         )
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

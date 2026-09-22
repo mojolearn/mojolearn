@@ -1,1 +1,0 @@
-/usr/bin/python3 tools/amd_serial_guard.py --seconds 30 --rss-gib 12 --cores 2 -- /usr/bin/python3 /root/rel061-build/postflight.py /root/rel061-build 

@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Entry point for the k-means checks.
 
-Separate from the root `probe_main.mojo` on purpose. That file is the
+Separate from the root `checks/probe_main.mojo` on purpose. That file is the
 boosting side's and is under active edit by another session in this shared
 checkout; a second section adding imports to it would collide for no benefit.
 """

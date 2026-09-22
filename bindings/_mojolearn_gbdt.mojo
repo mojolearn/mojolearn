@@ -114,7 +114,7 @@ def gbdt_numeric_mode_binding() raises -> PythonObject:
 def gbdt_per_round_paths_binding() raises -> PythonObject:
     """Which side of each gbdt speed switch this binary compiled
     (DEVIATIONS 2550, 2551, 2580, 2581), printed by the benchmark beside its timing
-    (ENGINEERING_RULES.md section 8)."""
+    (CONTRIBUTING.md (Non-default paths))."""
     return PythonObject(gbdt_per_round_paths())
 
 

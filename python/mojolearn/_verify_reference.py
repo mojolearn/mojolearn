@@ -331,7 +331,7 @@ def admit(j, path, par_axis=False):
         to itself, and it passes whatever the code does.
 
     Stateable only on two devices, admissible only on one. No run on any
-    hardware could ever discharge them, while `docs/VERIFICATION_MATRIX.md`
+    hardware could ever discharge them, while the verification matrix
     listed them as thirteen gaps to go close. The evidence existed the whole
     time: bench/results/identity_break/2026-09-19_par-lane-amd-class/ carries
     117 cells at par_devices='0' and 117 at par_devices='0,1', off one build

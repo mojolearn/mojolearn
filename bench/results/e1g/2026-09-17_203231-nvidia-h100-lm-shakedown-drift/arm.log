@@ -1,4 +1,0 @@
-arming a 60-minute self-kill on pod pibjrl033kw6oj ...
-ARMED. Pod pibjrl033kw6oj is TERMINATED through the API in 60 minutes.
-  lease: /Users/andrewhendel/mojolearn-wt/lm-training-shakedown/tools/../bench/results/runpod_leases/pibjrl033kw6oj.lease
-  extend with: tools/runpod_guard.sh extend pibjrl033kw6oj '-p 16544 root@103.207.149.101' <minutes>

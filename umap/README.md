@@ -232,7 +232,7 @@ IT IS OFF BY DEFAULT, because the two datasets disagree. On Istella-S
 fold scores 0.9737 trustworthiness and 0.4832 retention and DEVIATION 2668
 scores 0.9636 and 0.4264, so the change that helps taxi hurts the wide
 numeric table; the time is flat on both (1.003 on taxi, 1.000 on Istella-S).
-ENGINEERING_RULES section 9 gates quality per dataset rather than on the
+CONTRIBUTING.md (Performance claims) gates quality per dataset rather than on the
 average, so the row is opt-in behind
 `-D MOJOLEARN_UMAP_IDENTICAL_LIVE_ROW=1` and the shipped default UMAP bits
 do not move. Istella-S is also where cuML falls apart on this shape

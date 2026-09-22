@@ -4,7 +4,6 @@
 
 Written 2026-09-15 for lane/metal-queue-leak, after the M4 accumulated
 thousands of AGXCommandQueue objects, most of them naming no live process.
-See docs/lanes/LANE_STATUS_lane-metal-queue-leak.md.
 
 This is the SMALLEST program that answers the question, with no mojolearn
 estimator in it: a loop that creates a DeviceContext, does one trivial buffer

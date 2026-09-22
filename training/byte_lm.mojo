@@ -185,8 +185,8 @@ comptime BYTE_LM_RELEASE_EAGER = (
 
 comptime BYTE_LM_CE_UNALIASED = is_defined["MOJOLEARN_BYTE_LM_CE_UNALIASED"]()
 """DEVIATION 3011: build the five `[M, V]` cross-entropy buffers as five
-SEPARATE allocations, the way they were before rank 3 of
-`docs/lanes/BRIEF_lm_step_memory_2026-09-10.md` section 3.
+SEPARATE allocations, the way they were before the LM step memory work
+aliased them.
 
 THIS DEFINE EXISTS TO BE THE OTHER ARM. Aliasing is a storage decision and
 the whole claim about it is that it moves no bit, so the claim is only worth
@@ -820,8 +820,7 @@ def byte_attention_eager_cells(tr: ByteTrainer) raises -> List[Int]:
     fused call that refused nothing. Summing them would read a healthy
     stash as a fallback.
 
-    WHY THIS EXISTS. `docs/lanes/BRIEF_lm_step_memory_2026-09-10.md`
-    section 1.5 says these ten arrays are allocated at ONE element and
+    WHY THIS EXISTS. The LM step memory study found that these ten arrays are allocated at ONE element and
     grow on demand, that the growth is data dependent per layer and per
     step (`regime_product_ok`, `regime_finite`, or a `FUSED_CORNER` hit),
     and that under the legacy policy they never leave the session. So
@@ -1437,8 +1436,7 @@ def byte_update_device(ctx: DeviceContext, mut tr: ByteTrainer) raises:
     # computing it here (it was computed after the shadow copy) is the same
     # value on both paths.
     var next_step = tr.completed_steps + 1
-    # DEVIATIONS 2646 and 2647 (docs/lanes/BRIEF_step_glue_2026-09-11.md
-    # sections 4.2, 4.3, 5.2, 5.3): a trial build under an arm carrying
+    # DEVIATIONS 2646 and 2647: a trial build under an arm carrying
     # `optskip` or `noshadow`, or (DEVIATION 2649) a shipped build whose
     # column default carries one, takes `_byte_glue_update` INSTEAD of the
     # shadow copy and `identical_optimizer_step`. On every other build
@@ -1631,7 +1629,7 @@ def _byte_glue_update(ctx: DeviceContext, mut tr: ByteTrainer, next_step: Int, a
         comptime assert not BYTE_LM_FAULT_INJECT, (
             "the step glue update path and MOJOLEARN_BYTE_LM_FAULT_INJECT are"
             " not combined: the G4 fault sites assume the shipped update order"
-            " (docs/lanes/BRIEF_step_glue_2026-09-11.md section 5.2). Since"
+            ". Since"
             " DEVIATION 2649 this refusal also covers a shipped build whose"
             " column default carries an update bit, which is the build the"
             " fault-inject harness would otherwise reach unguarded."

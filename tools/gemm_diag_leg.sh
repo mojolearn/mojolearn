@@ -12,7 +12,6 @@ mkdir -p "$OUT"
 export PATH="$HOME/.pixi/bin:$PATH"
 {
     echo "deviations=2705"
-    echo "brief=docs/lanes/BRIEF_gemm_kernel_2026-09-11.md section 16"
     echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "root=$ROOT gpu_archs=${MOJOLEARN_GPU_ARCHS:-unset}"
 } > "$OUT/diag.txt"

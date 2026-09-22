@@ -1,6 +1,0 @@
-mac_slot: admitted after 0.007s
-PASS workspace growth and queued reuse, op 0
-PASS workspace growth and queued reuse, op 1
-PASS workspace growth and queued reuse, op 2
-PASS: 9 GEMMs, 4608 cells bitwise equal to host oracle
-mac_slot: {"wait_seconds": 0.007479166961275041, "run_seconds": 0.7206342500867322, "exit_code": 0}

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Real-data fixtures shared by the kNN harnesses (DEVIATION 2524).
 
-ENGINEERING_RULES.md section 9 (rewritten 2026-09-11): a non-tree classical
+CONTRIBUTING.md (Performance claims) (rewritten 2026-09-11): a non-tree classical
 speed claim runs on THE SAME TWO real datasets, which differ in structure
 and look like ordinary tables: NYC TLC yellow taxi trips (`taxi`, the
 narrow, skewed, mixed-type business table; a classical lane takes its 11
@@ -65,7 +65,7 @@ HIGGS (RETIRED 2026-09-11)
 `higgs_present`, `higgs_paths` and `--prefetch higgs` are the first
 version of this module (the 404,000-line prefix of UCI 00280, 28 kinematic
 features). HIGGS is RETIRED as a benchmark dataset for trees and classical
-lanes (ENGINEERING_RULES.md section 9): its opponent rows in
+lanes (CONTRIBUTING.md (Performance claims)): its opponent rows in
 `bench/OPPONENT_REFERENCE.md` are history and a HIGGS ratio is never
 quoted as a result again. The functions stay, unchanged, so a JSON that
 names `higgs-prefix-404000` can still be re-read and re-derived; nothing
@@ -94,7 +94,7 @@ HIGGS_PREFIX_ROWS = HIGGS_INDEX_ROWS + HIGGS_QUERY_ROWS
 HIGGS_CACHE_NAME = "higgs_knn_prefix_%d.npz" % HIGGS_PREFIX_ROWS
 HIGGS_FIXTURE_NAME = "higgs-prefix-%d" % HIGGS_PREFIX_ROWS
 
-#: The two real datasets (ENGINEERING_RULES.md section 9). Same row layout
+#: The two real datasets (CONTRIBUTING.md (Performance claims)). Same row layout
 #: HIGGS used: index rows [0, 400,000), query rows [400,000, 404,000).
 REAL_DATASETS = ("taxi", "istella")
 REAL_INDEX_ROWS = 400_000
@@ -136,7 +136,7 @@ def _say(log, msg):
 
 
 def download_higgs(gz_path, log=None):
-    """RETIRED (HIGGS, 2026-09-11; ENGINEERING_RULES.md section 9): kept so
+    """RETIRED (HIGGS, 2026-09-11; CONTRIBUTING.md (Performance claims)): kept so
     old evidence can be re-derived, never called by a new lane.
 
     Fetch HIGGS.csv.gz to `gz_path`. A separate, timed, named step; the
@@ -176,7 +176,7 @@ def parse_higgs_prefix(gz_path, n_rows=HIGGS_PREFIX_ROWS):
 
 
 def load_higgs_prefix(root=None, download="auto", log=None):
-    """RETIRED (HIGGS, 2026-09-11; ENGINEERING_RULES.md section 9): the
+    """RETIRED (HIGGS, 2026-09-11; CONTRIBUTING.md (Performance claims)): the
     loader stays so a JSON naming `higgs-prefix-404000` can be re-read;
     new lanes call `real_block`.
 
@@ -233,7 +233,7 @@ def higgs_present(root=None):
 
 
 def higgs_block(n_index=HIGGS_INDEX_ROWS, n_queries=HIGGS_QUERY_ROWS, data_root=None, download="auto", log=None):
-    """RETIRED (HIGGS, 2026-09-11; ENGINEERING_RULES.md section 9). Kept so
+    """RETIRED (HIGGS, 2026-09-11; CONTRIBUTING.md (Performance claims)). Kept so
     old JSON can be re-read; `real_block("taxi" | "istella", ...)` is the
     fixture a lane uses now.
 

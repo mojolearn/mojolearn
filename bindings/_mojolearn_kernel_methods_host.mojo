@@ -2,8 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CPU binding for the `_mojolearn_kernel_methods` family: KernelRidge,
 Nystroem and RBFSampler (CPU training for the workstream D estimators,
-2026-09-15; brief docs/lanes/BRIEF_cpu_training_2026-09-13.md sections 1.1
-and 3.2).
+2026-09-15).
 
 HOST ONLY. No DeviceContext, no kernel launch. The fits, predictions and
 transforms are `kernel_methods/host/km_host_oracle.mojo`, the device path of

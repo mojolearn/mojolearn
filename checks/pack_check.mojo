@@ -100,7 +100,7 @@ def check_packing() raises:
 
 
 def main() raises:
-    # STANDALONE DRIVER, the same call `probe_main.mojo` makes under
+    # STANDALONE DRIVER, the same call `checks/probe_main.mojo` makes under
     # "packing round trip (GPU)".
     print("packing round trip (GPU):")
     check_packing()

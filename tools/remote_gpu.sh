@@ -57,7 +57,7 @@ cd $REMOTE_DIR
 sed -i.bak "s/^comptime TARGET_COLUMN = .*/comptime TARGET_COLUMN = $COLUMN/" \
   checks/kernel_matrix.mojo
 grep -n "^comptime TARGET_COLUMN" checks/kernel_matrix.mojo
-mojo run -I . probe_main.mojo
+mojo run -I . checks/probe_main.mojo
 REMOTE
 
 echo

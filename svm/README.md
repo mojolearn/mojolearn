@@ -144,8 +144,7 @@ origin/main 2c64a778 built on the same pod:
 | Istella-S 10,000 x 220 | 20.29 | 72.2 | 61.3 | 0.8498 | 3.02x | 0.9222 both |
 
 Geometric mean 0.869, quality not worse on either dataset and the same number
-of support vectors (5,527 and 2,400), so both flip (ENGINEERING_RULES.md
-section 9). Which change buys what, five fits per cell on the same pod: taxi
+of support vectors (5,527 and 2,400), so both flip (CONTRIBUTING.md (Performance claims)). Which change buys what, five fits per cell on the same pod: taxi
 866.3 before, 865.7 with 2665 alone, 772.2 with both; Istella-S 67.2, 60.9,
 57.8. So 2666 is the taxi win and 2665 is most of the Istella-S win, which is
 what the shapes predict, the taxi block being 11 columns wide and Istella-S

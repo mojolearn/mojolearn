@@ -52,7 +52,7 @@ host in the GPU binding (`bindings/_mojolearn_gbdt.mojo:133-149`) and the
 host binding carries the same body.
 
 The restatement is a prediction until measured. tools/forest_host_gate.py
-is the measurement, and the brief in docs/lanes/ records what it has shown.
+is the measurement.
 
 DEVIATION 2901 (lane/infer-speed-trees, 2026-09-17): THE SAME ARITHMETIC,
 LAID OUT FOR A HOST. The GPU path quantizes every row of a feature in one

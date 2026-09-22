@@ -1,8 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """DEVIATION 2630: the LM training step's per-component phase timers and
-its launch, synchronize, copy and allocation counters
-(docs/lanes/BRIEF_step_breakdown_2026-09-11.md).
+its launch, synchronize, copy and allocation counters.
 
 EVERYTHING HERE IS COMPILED ONLY UNDER `-D MOJOLEARN_STEP_PHASE_TIMERS=1`
 and switched on at run time by the block timers' switch

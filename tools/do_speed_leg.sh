@@ -28,9 +28,9 @@
 # column is FOR is the absolute: our own arm's milliseconds on a third
 # vendor, beside the same arm's milliseconds on the other two.
 # CORRECTED 2026-09-11: XGBoost has an AMD ROCm build (amd_xgboost), and
-# ENGINEERING_RULES.md section 10 makes the box's CPU, all cores, labeled CPU,
+# CONTRIBUTING.md (Comparing against libraries without a GPU path) makes the box's CPU, all cores, labeled CPU,
 # the AMD opponent for a library with no AMD GPU path (tools/trees_amd_leg.sh).
-# CORRECTED 2026-09-11 (ENGINEERING_RULES.md section 10): on AMD an opponent with no ROCm path runs on the box's CPU on all cores, labeled CPU, beside a torch ROCm arm; the AMD classical rows come from tools/classical_two_datasets_leg.sh.
+# CORRECTED 2026-09-11 (CONTRIBUTING.md (Comparing against libraries without a GPU path)): on AMD an opponent with no ROCm path runs on the box's CPU on all cores, labeled CPU, beside a torch ROCm arm; the AMD classical rows come from tools/classical_two_datasets_leg.sh.
 #
 # THE GUARDS ARE tools/e2_remote_leg.sh's, DELIBERATELY COPIED RATHER THAN
 # FACTORED OUT. DigitalOcean bills until a droplet is DESTROYED -- powering

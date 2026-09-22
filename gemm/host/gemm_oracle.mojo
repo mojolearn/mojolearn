@@ -9,7 +9,7 @@ role as the CPU implementation is not confused with check-only code.
 
 **NO REFERENCE FILE, and it replaces no reference call.** RAFT's standalone matrix
 product is `raft/linalg/gemm.hpp` -> `detail/cublaslt_wrappers.hpp` ->
-cuBLASLt, a CLOSED library with no source to mirror (`ENGINEERING_RULES.md` 0b-i:
+cuBLASLt, a CLOSED library with no source to mirror (`CONTRIBUTING.md` (Algorithms and references):
 "where the path their dispatch actually takes calls a CLOSED library we
 cannot read or implementation -- cuBLAS, cuSOLVER -- call the MAX equivalent, because
 there is nothing to implement"). There is therefore no reference
@@ -95,7 +95,7 @@ from checks.numerics import ftz, identical_mul_add
 #: gate.
 #:
 #: THIS WAS AN ORDER ARM UNTIL 2026-09-16, AND THAT ARM COULD NOT FAIL ON THE
-#: `ties` FIXTURE (docs/lanes/SABOTAGE_AUDIT_2026-09-16.md, finding 1). It
+#: `ties` FIXTURE (a 2026-09-16 sabotage audit). It
 #: walked each leaf DESCENDING. Reversing a sum whose values add EXACTLY
 #: cannot change its result, and `ties` is integer valued
 #: (`tools/identity_break.py`, `rng.integers(0, 6)`), so on that fixture

@@ -1,9 +1,0 @@
-start commit=eda607eda9959bb6b2bdb2119b2985b73be4a7d7 23:07:41
-pip_opponents=0 23:08:03
-pixi_install=0 23:10:05
-build_base=0 23:11:02
-lgbm_cuda_build=0 23:12:33
-build_gbdt=0 23:12:40
-import_identical=0 23:12:41
-selftest=0 23:12:41
-setup_done 23:12:41

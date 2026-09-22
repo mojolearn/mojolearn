@@ -1,7 +1,0 @@
-== teardown 2026-09-13T20:56:17Z exit=0 droplet=600194538 ==
-delete 600194538 attempt 1 -> HTTP 204
-verify 600194538 attempt 1 -> HTTP 200
-verify 600194538 attempt 2 -> HTTP 200
-verify 600194538 attempt 3 -> HTTP 404
-destroy_confirmed=1
-exit=0

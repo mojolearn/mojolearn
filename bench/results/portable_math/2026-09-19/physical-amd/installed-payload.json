@@ -1,6 +1,0 @@
-{
-  "candidate_wheel_sha256": "70c2647b67ea70392ee78b702b9e4f68acbb8f988fdbf32bd42448838beaf3e7",
-  "base_wheel_sha256": "61a53d9e673628f0f46ad3f65d000fdb80d4865f416f96e3ef59f813c2c99dc1",
-  "verified_archive_members": 336,
-  "scope": "Separate venv: base pip install plus changed wheel members, every archived installed file SHA256 checked against final candidate; active verifier environment untouched"
-}

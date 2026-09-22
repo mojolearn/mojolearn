@@ -1,7 +1,0 @@
-mode IDENTICAL   sabotage: ACCUM_BY_ADD   EMB_TPB: 256
-ledger: the caller expected 'ACCUM_BY_ADD' and the binary agrees, so the -D was not silently dropped
-clause (a): 17 fixture cases, all 9 stages, device vs host oracle, BITWISE
-card: 9 records at /root/gemm_leg_out/embedding-sabotage/ACCUM_BY_ADD.card, contract section 10 wants 9
-card: 9/9 tags in contract section 10's order, all unique, three of them INTEGER (contract section 6: emb.perm is where a divergent sort becomes visible before it reaches a float)
-clause (g): arm ACCUM_BY_ADD -- contract 7.4, the CARRY. **NO KERNEL READS THIS SWITCH** -- the wrong spelling lives in the CALLER -- so clause (e) computes the by-add result ITSELF on every run, armed or not, and requires it to move on the straddling rows and NOT to move on the others. The arm is gated whether or not its -D is set
-clause (g): ACCUM_BY_ADD is evaluated INSIDE CLAUSE (e), because no kernel reads its switch -- the wrong spelling lives in the caller. Run clause (e); its by-add control is this arm and it is asserted on every build.

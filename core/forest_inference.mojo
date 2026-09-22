@@ -83,8 +83,7 @@ comptime FOREST_ROW_THREADS_MAX_FEATURES = 32
 comptime FOREST_ROW_THREADS_SABOTAGE = is_defined["MOJOLEARN_FOREST_ROW_THREADS_SABOTAGE"]()
 
 #: The resident node layout. Packed is the default since
-#: lane/forest-groves-cpu-and-speed (2026-09-17, the L40S A/B in
-#: docs/lanes/LANE_STATUS_lane-forest-groves-cpu-and-speed.md);
+#: lane/forest-groves-cpu-and-speed (2026-09-17, an L40S A/B);
 #: `-D MOJOLEARN_FOREST_SEPARATE_NODES=1` selects the separate-arrays layout,
 #: the comparison arm. The old opt-in `MOJOLEARN_FOREST_PACKED_NODES` is
 #: accepted and changes nothing. The layout is a device-side cache of the

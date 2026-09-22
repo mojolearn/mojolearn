@@ -1,6 +1,0 @@
-started=2026-09-13T21:57:01Z
-vendor=unset archs=unset
-commit=unknown
-device=NVIDIA H100 80GB HBM3 
-bindings_built=16 failed= build_byte_lm
-verdict=BUILD-FAILED

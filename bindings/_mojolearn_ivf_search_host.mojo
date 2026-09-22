@@ -12,8 +12,8 @@ binding `bindings/_mojolearn_ivf_host.mojo` registers it from.
 install holding only this binding refuses a build by name.
 
 Why a binding of its own: the reference binding carries the k-means
-quantizer fit, and training-only code does not ship in the inference wheels
-(docs/lanes/CPU_INFERENCE_BOUNDARY_2026-09-15.md). The manifest declares this
+quantizer fit, and training-only code does not ship in the inference wheels.
+The manifest declares this
 family with `routes=None` and `serves=("_mojolearn_ivf",)`.
 
 The sabotage arm (`ivf_search_host_sabotage`) is

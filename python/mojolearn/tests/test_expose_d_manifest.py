@@ -136,11 +136,11 @@ def test_docs_name_the_surfaces():
     for name in CLASSES + ("bootstrap", "permutation_test", "monte_carlo_integrate", "oversampling_factor", "embedding_forward"):
         assert name in alpha, ("ALPHA_API.md", name)
         assert name in matrix, ("SUPPORT_MATRIX.md", name)
-    assert "faster" not in matrix.split("Workstream D")[1][:6000].lower(), "no speed word in the workstream D rows"
+    assert "faster" not in matrix.lower(), "no speed word in the support matrix"
 
 
 def test_every_staged_lane_body_reached_the_harness():
-    """The eight `docs/lanes/LANE_BODY_*.py` staging files are gone (2026-09-19),
+    """The eight `LANE_BODY_*.py` staging files are gone (2026-09-19),
     and this is what replaced the test that parsed them.
 
     They were lane definitions held outside `tools/identity_break.py` while

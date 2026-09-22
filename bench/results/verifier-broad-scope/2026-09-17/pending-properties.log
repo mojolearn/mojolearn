@@ -1,2 +1,0 @@
-# verify --all: cpu (cpu), 1 lanes x 1 fixtures, harness wheel copy, table /Users/andrewhendel/mojolearn-evidence/verifier-broad-scope/installed-env/lib/python3.14/site-packages/mojolearn/verify_reference/table.json
-  transformer                        transformer        13.9s

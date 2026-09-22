@@ -15,13 +15,11 @@ outputs must be bit-equal with no poison left (BITS line; a MOVED call is
 not timed and the process exits non-zero). Then `MOJOLEARN_GEMM_STEP_WARMUPS`
 (2) warmups of both and `MOJOLEARN_GEMM_STEP_ROUNDS` (7) rounds alternating
 which runs first, host-synchronized, raw samples printed. PRICE and TABLE
-lines name the plan and the geometry beside the timing (ENGINEERING_RULES
-8). The STEP line weights each call's median by its per-step count: a GEMM
+lines name the plan and the geometry beside the timing (CONTRIBUTING.md (Non-default paths)). The STEP line weights each call's median by its per-step count: a GEMM
 sum, not a step time. `MOJOLEARN_GEMM_STEP_CALLS=<comma list>` restricts the
 calls (`proj_fwd` ... `head_dB`, and the control names below).
 
-DEVIATION 2593 (docs/lanes/BRIEF_gemm_long_k_2026-09-11.md sections 3.2 and
-9). `MOJOLEARN_GEMM_STEP_CONTROLS=1` adds the six control calls of
+DEVIATION 2593. `MOJOLEARN_GEMM_STEP_CONTROLS=1` adds the six control calls of
 `gemm_step_arms.mojo` (`ctl_*`), which separate the explanations of that
 brief's section 3.2: BITS and SAMPLE lines as for an LM call, then ONE
 CONTROL line each, never weighted into STEP. Where the arm's geometry at a
@@ -55,7 +53,7 @@ ksplit default takes it, the default's group size, `choose_gemm_plan`'s
 plan, the shipped dispatch's plan and the arm's geometry
 (`tools/gemm_ksplit_classical_leg.sh`, brief section 11).
 
-DEVIATION 2599 (docs/lanes/BRIEF_gemm_kernel_2026-09-11.md section 6).
+DEVIATION 2599.
 The arms `kpack` and `kpack_wide` get PRICE and TABLE lines like every arm.
 Where the arm's own group rule takes a call, a PHASEBITS pass and a PHASE
 line with `phase_of=arm_kpack` price the allocation, the packed group launch
@@ -63,8 +61,7 @@ and the fold launch apart (`identical_gemm_step_kpack_phase_into`). Where it
 declines, the arm runs the whole leaf range in one launch and there is no
 PHASE line (as for `tuned128`).
 
-DEVIATIONS 2640 to 2642 (docs/lanes/BRIEF_gemm_final_2026-09-11.md sections 4
-and 6). The arms `kfoldv` and `kfoldv_leaf` get PRICE and TABLE lines like every
+DEVIATIONS 2640 to 2642. The arms `kfoldv` and `kfoldv_leaf` get PRICE and TABLE lines like every
 arm. Where an arm's rule takes a call, a PHASEBITS pass and a PHASE line with
 `phase_of=arm_kfold` price the allocation, the shipped group launch at the
 arm's group size and the LANE fold apart
@@ -74,7 +71,7 @@ brief section 4.4's models A to C. Where the rule declines, the arm runs the
 shipped dispatch and the call carries the shipped default's PHASE line.
 
 Operands are the hashed ordinary kind. This is a per-call kernel price; the
-default-flip input under ENGINEERING_RULES 9 is the LM step on the two
+default-flip input under CONTRIBUTING.md (Performance claims) is the LM step on the two
 corpora (`tools/gemm_step_leg.sh`), never this harness.
 """
 from std.os import getenv

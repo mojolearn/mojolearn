@@ -1,4 +1,0 @@
-arming a 60-minute self-kill on pod 2knce7572vc9k1 ...
-ARMED. Pod 2knce7572vc9k1 is TERMINATED through the API in 60 minutes.
-  lease: /Users/andrewhendel/mojolearn-wt/apple-seam/tools/../bench/results/runpod_leases/2knce7572vc9k1.lease
-  extend with: tools/runpod_guard.sh extend 2knce7572vc9k1 '-p 10054 root@103.207.149.169' <minutes>

@@ -336,7 +336,7 @@ sampler, a solver, a metric, a reduction).
     neural     mlp byte-lm byte-lm-host-infer byte-lm-host-train mamba1
                mamba2 mamba3 transformer samba
     functions  gemm-pinned metrics
-    2026-09-14 (docs/lanes/BRIEF_claim_surface_census_2026-09-14.md)
+    2026-09-14 (the claim-surface census)
       trees    rf-clf-entropy-log2-noboot rf-clf-balanced-parallel rf-reg-poisson
                rf-reg-gamma-ig et-clf-entropy-bestfirst et-reg-bootstrap-parallel
                gbdt-multiclass gbdt-onevsall gbdt-parametric-losses
@@ -358,7 +358,7 @@ sampler, a solver, a metric, a reduction).
                arima-seasonal-c gp-matern12 gp-matern32 gp-matern52-ard
       functions gemm-transposed metrics-classification tokenizer cross-val
     2026-09-15 (lane/arima-exog) arima-exog arima-exog-seasonal
-    2026-09-14 evening, workstream D (docs/lanes/LANE_BODY_*.py)
+    2026-09-14 evening, workstream D
       cholesky kernel-ridge nystroem rbf-sampler gmm gmm-random-init hdbscan
                hdbscan-leaf bootstrap permutation-test monte-carlo
                training-primitives kmeans-sqrt kmeans-classic-pp
@@ -434,8 +434,7 @@ The CPU identity gate splits its covered lanes across processes this way
 merged JSON then says `merged_separate_builds: true` and keeps each part's
 binding digests.
 
-THE FOURTH COLUMN, a CPU (the CPU training lane, 2026-09-13; brief
-docs/lanes/BRIEF_cpu_training_2026-09-13.md section 3.3). On an install whose
+THE FOURTH COLUMN, a CPU (the CPU training lane, 2026-09-13). On an install whose
 `mojolearn.vendor()` is 'cpu' (no GPU set, a host binding under
 mojolearn/host/ built), `--vendor` defaults to `cpu-<cpu model slug>` read
 from the machine, the JSON gains a `host` object (cpu model, arch, the host
@@ -1103,14 +1102,12 @@ REQUIRED_NUMERIC_PARTS = {
 # attached, and enforced by `tools/fixture_floors.py` in the push gate.
 #
 # WHY THIS IS CODE. On 2026-09-16 an audit found two shrunken cells that can no
-# longer FAIL (docs/lanes/LANE_STATUS_shrink-blindness-audit.md). One of them,
-# samba-untied-dropout-accum, had a floor WRITTEN DOWN before it was cut:
-# docs/lanes/LANE_STATUS_lane-identity-fixtures-light.md section 1f is titled
-# "LEFT BIG" and says three steps is the floor because step 3 is the first that
-# evaluates the cosine arm of the schedule. It was cut to one step anyway,
-# docs/lanes/FIXTURE_SHRINK_SCOPE.md carried forward only the ROWS half of that
-# reasoning, and docs/lanes/LANE_STATUS_lane-neural-shape-shrink.md then
-# recorded as FACT that the third step was kept. Nobody lied. The reason and
+# longer FAIL. One of them, samba-untied-dropout-accum, had a floor WRITTEN
+# DOWN before it was cut: a design note titled "LEFT BIG" said three steps is
+# the floor because step 3 is the first that evaluates the cosine arm of the
+# schedule. It was cut to one step anyway, a later scoping note carried forward
+# only the ROWS half of that reasoning, and a third note then recorded as FACT
+# that the third step was kept. Nobody lied. The reason and
 # the number lived in a different file from the fixture, so a change never had
 # to walk past them.
 #
@@ -1187,7 +1184,7 @@ NON_SIZE_REVISIONS = {
         "what changed is the VOCABULARY, not a size: the lane swapped the GPT-2 table for a 512-rank "
         "synthetic one (2026-09-16, lane/identity-fixtures-light), and a vocabulary is a constructor "
         "choice with no integer in the body to floor. The thing worth watching here is not a count but "
-        "how thin the coverage is: docs/lanes/LANE_STATUS_shrink-blindness-audit.md section 5f measured "
+        "how thin the coverage is: the 2026-09-16 shrink-blindness audit measured "
         "4088 single-byte tokens and 4 two-byte tokens over the 4096 fixture bytes, so the BPE merge "
         "loop runs four times and the endoftext branch never matches"),
     "byte-lm-resident": (
@@ -1195,33 +1192,30 @@ NON_SIZE_REVISIONS = {
         "lane/neural-shape-shrink), which is a property of the trainer rather than a count in the "
         "fixture. The lane's claim survives it by construction: it asserts the resident export equals "
         "the stateless gradient BYTE FOR BYTE at whatever shape both are built at. Its step count is "
-        "floored on the lane; see docs/lanes/LANE_STATUS_lane-neural-shape-shrink.md"),
+        "floored on the lane"),
     "umap": (
         "arithmetic, not input: UMAP.transform became row separable (2026-09-16, "
         "lane/umap-batch-determinism), so the cell moved without any fixture size moving. The lane "
-        "still fits 1024 rows, exactly as it did before; see "
-        "docs/lanes/LANE_STATUS_lane-umap-batch-fix.md"),
+        "still fits 1024 rows, exactly as it did before"),
     "mamba3": (
         "what changed is the norm WEIGHTS, not a size (2026-09-16, lane/dead-arms). `B_norm.weight` and "
         "`C_norm.weight` are the same shape and were both a vector of ones, so they were the SAME TENSOR "
         "and exchanging them on the way in was the identity function: the cell read 63de4bf6b9f8262a with "
         "and without the swap. This lane never trains, so no step count could separate them and no floor "
-        "can hold this; they now come from `_block_weights(near_one=...)`. See "
-        "docs/lanes/LANE_STATUS_dead-arms.md section 2"),
+        "can hold this; they now come from `_block_weights(near_one=...)`"),
     "transformer": (
         "the same defect as `mamba3` (2026-09-16, lane/dead-arms): `input_layernorm.weight` and "
         "`post_attention_layernorm.weight` are the same shape and were both ones, so the swap was the "
         "identity function and the cell read 295d4e62d4c78b14 either way. Not a size, and this lane does "
-        "not train. See docs/lanes/LANE_STATUS_dead-arms.md section 2"),
+        "not train"),
     "transformer-window": (
         "the same pair as `transformer`, through the same helper (2026-09-16, lane/dead-arms); the cell "
         "read 49ffb2316f238e6d with and without the swap. The shrink audit did not name this lane, which "
-        "is why the census in docs/lanes/LANE_STATUS_dead-arms.md section 2 was run over every sequence "
+        "is why the lane/dead-arms census was run over every sequence "
         "block rather than the two it listed. Not a size"),
     "par-graph-umap": (
         "the same row-separable UMAP.transform change as the `umap` lane (2026-09-16, "
-        "lane/umap-batch-determinism); this driver's fixture size did not move either. See "
-        "docs/lanes/LANE_STATUS_lane-umap-batch-fix.md"),
+        "lane/umap-batch-determinism); this driver's fixture size did not move either"),
 }
 
 
@@ -1238,9 +1232,8 @@ NON_SIZE_REVISIONS = {
 #:      gap for 0.8.6: 28 of the 30 lanes that column never reached. The owed
 #:      lanes are a contiguous tail starting exactly at `par-arima`, and two
 #:      further 60-minute Hot Aisle leases got past none of them.
-#:   2. SEVERAL CANNOT BE COVERED HONESTLY AT ALL.
-#:      docs/lanes/LANE_STATUS_lane-cpu-training-par-wave3.md: par-byte-lm-
-#:      model-pool and par-byte-lm-offload compare host arithmetic with itself
+#:   2. SEVERAL CANNOT BE COVERED HONESTLY AT ALL. par-byte-lm-model-pool
+#:      and par-byte-lm-offload compare host arithmetic with itself
 #:      under a pooled label, and 21 more are cooperative families whose split
 #:      lives inside the GPU binding with no host restatement.
 #:   3. IN A RECORD THEY ARE NOT EVEN THE TWO-DEVICE CLAIM. `_par_devices()`
@@ -1903,7 +1896,7 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("spectral")
 @floor(rows=(512, "512 rows is the SHARPER fixture, not merely the cheaper one: it resolves a smaller "
                   "relative move of column 0 than the 2000 it replaced, 1e-4 against 1e-3, measured "
-                  "2026-09-16 (docs/lanes/LANE_STATUS_shrink-blindness-audit.md section 4). Below 512 "
+                  "2026-09-16 by the shrink-blindness audit. Below 512 "
                   "nothing has been measured, and the eigenpair problem this lane hashes gets easier "
                   "as it gets smaller."))
 def _(ml, X, yc, yr, Xh=None):
@@ -1919,7 +1912,7 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("holtwinters")
 @floor(observations=(128, "128 observations still carries ten periods of the seasonal 12, and resolves a "
                           "SMALLER move than the 512 it replaced, 1e-7 against 1e-5 (2026-09-16, "
-                          "docs/lanes/LANE_STATUS_shrink-blindness-audit.md section 4, where all 128 "
+                          "the shrink-blindness audit, where all 128 "
                           "observations were also shown live one at a time). Below two seasonal periods "
                           "the initial seasonal estimate has nothing to average over."))
 def _(ml, X, yc, yr, Xh=None):
@@ -2395,7 +2388,7 @@ def _(ml, X, yc, yr, Xh=None):
                  "bitwise equal and a read-side exchange of them is the identity function: at one step "
                  "this cell CANNOT FAIL under that defect. They separate by 2.000e-03 after one step, so "
                  "step 2 is the first that can see it, measured blind at one step and detected at two "
-                 "(2026-09-16, docs/lanes/LANE_STATUS_shrink-blindness-audit.md section 2, reversed by "
+                 "(2026-09-16, the shrink-blindness audit, reversed by "
                  "lane/shrink-floors)."))
 def _(ml, X, yc, yr, Xh=None):
     """SmallByteLanguageModelTrainer (LanguageModelTrainer is the same
@@ -2859,7 +2852,7 @@ def _(ml, X, yc, yr, Xh=None):
     SHA-256 a GPU box recorded, over 24 committed fixtures (three vendors x
     eight kinds under `bench/results/forest_host/`); that gate is real and it
     passes -- re-run on the M4 at this commit, 8 Apple fixtures IDENTICAL.
-    docs/COVERAGE_AUDIT_2026-09-18.md is right that HostForest and HostGBDT
+    The 2026-09-18 coverage audit is right that HostForest and HostGBDT
     are not two unimplemented algorithms. TWO THINGS IT DOES NOT COVER.
     First, `host_predict` and `host_predict_proba`, the one-call entries the
     package exports, are reached by no gate and no lane; the gate calls
@@ -3119,11 +3112,11 @@ def _(ml, X, yc, yr, Xh=None):
                  "floor of one is honest here: its 20 parameter tensors contain no bitwise-equal "
                  "same-shape pair, so no permutation of two of them is invisible the way byte-lm's norm "
                  "weights were, and the layer-order swap and a change of the AdamW betas both move the "
-                 "ONE-step cell (2026-09-16, docs/lanes/LANE_STATUS_shrink-blindness-audit.md section 4). "
+                 "ONE-step cell (2026-09-16, the shrink-blindness audit). "
                  "Adding an arm first evaluated at a later step means raising this number first, which is "
                  "exactly what samba-untied-dropout-accum needed and did not get."),
        batch=(2, "two sequences per step is the shipped batch and the size every arm above was measured "
-                 "live at (2026-09-16, docs/lanes/LANE_STATUS_shrink-blindness-audit.md section 4). One "
+                 "live at (2026-09-16, the shrink-blindness audit). One "
                  "sequence takes the batch axis out of every kernel this stack launches."))
 def _(ml, X, yc, yr, Xh=None):
     """SambaStack, one Mamba-3 layer and one attention layer at d_model 32
@@ -3145,9 +3138,9 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 # ---------------------------------------------------------------- lanes (2026-09-14, the claim-surface census)
-# docs/lanes/BRIEF_claim_surface_census_2026-09-14.md: every public constructor
-# value that selects a DIFFERENT NUMERIC PATH (a kernel, an objective, a
-# sampler, a solver, a metric, a reduction) and that no lane above pins.
+# Every public constructor value that selects a DIFFERENT NUMERIC PATH (a
+# kernel, an objective, a sampler, a solver, a metric, a reduction) and that
+# no lane above pins.
 # Each lane below bundles the values that share a fit so the cell count stays
 # near one per uncovered kernel. Sizes match the lanes above. Where a value
 # needs a target the fixture does not have (positive, three classes, a NaN),
@@ -3325,7 +3318,7 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("gbdt-parametric-losses")
 @floor(rows=(1500, "1500 rows was measured to cost no detection against the 20000 this lane used to fit "
-                   "(2026-09-16, docs/lanes/LANE_STATUS_shrink-blindness-audit.md section 4): the eleven loss parts "
+                   "(2026-09-16, the shrink-blindness audit): the eleven loss parts "
                    "still separate into ten distinct hashes, and the union of columns the fitted "
                    "ensembles actually split on is at least 13 of 16. Nothing below 1500 is measured."))
 def _(ml, X, yc, yr, Xh=None):
@@ -3353,7 +3346,7 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("gbdt-lossguide-newtoncosine")
 @floor(rows=(1500, "at 1500 rows the fitted ensemble still splits on ALL 16 columns despite "
                    "feature_fraction=0.5, and 13 of its 20 trees still reach max_leaves=32 "
-                   "(2026-09-16, docs/lanes/LANE_STATUS_shrink-blindness-audit.md sections 4 and 5e). Fewer rows starve "
+                   "(2026-09-16, the shrink-blindness audit). Fewer rows starve "
                    "the lossguide split budget this lane exists to exercise."))
 def _(ml, X, yc, yr, Xh=None):
     """NewtonCosine, the child-hessian and split-gain and leaf-count
@@ -3560,8 +3553,7 @@ def _(ml, X, yc, yr, Xh=None):
                    "fixtures including `ties`. Until that day they hashed the SAME bytes at 1500, 6000 "
                    "and 20000, because _with_nan wrote NaN into columns 5, 6 and 7 while the fit splits "
                    "only on 3 and 4, so no row count meant anything. The floor stays at 1500 because that "
-                   "is the size the live arm was measured at; see docs/lanes/LANE_STATUS_dead-arms.md "
-                   "section 1."))
+                   "is the size the live arm was measured at."))
 def _(ml, X, yc, yr, Xh=None):
     """nan_mode Min and Max on a fixture that actually carries NaN
     (_with_nan); on a NaN-free column the quantizer collapses both to
@@ -3654,7 +3646,7 @@ def _(ml, X, yc, yr, Xh=None):
 
 @lane("gbdt-pair-logit")
 @floor(rows=(1500, "1500 rows still carries 178 query groups, 994 explicit pairs and every grade 0..4 "
-                   "(2026-09-16, docs/lanes/LANE_STATUS_shrink-blindness-audit.md section 4). A ranking loss needs "
+                   "(2026-09-16, the shrink-blindness audit). A ranking loss needs "
                    "groups holding MIXED grades, and that is what fewer rows take away first."))
 def _(ml, X, yc, yr, Xh=None):
     """PairLogit (learning to rank, pairwise derivatives on query groups):
@@ -3754,12 +3746,11 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("mamba2-dtlimit")
 @floor(seqlen=(8, "L=8 keeps everything this lane claims live: all three dt_limit changes are DETECTED "
                   "and all 8 sequence positions move the cell (2026-09-16, "
-                  "docs/lanes/LANE_STATUS_shrink-blindness-audit.md section 4). Length was never the "
+                  "the shrink-blindness audit). Length was never the "
                   "lever on the dead path here, which was the CLAMP: under the old (0.01, 0.1) every dt "
                   "saturated at the upper bound at L=16 as well as at L=8, so dt_bias was read "
                   "one-sidedly and a clamp pinned to a constant read IDENTICAL. Fixed by moving the "
-                  "clamp, not the length (2026-09-16, lane/dead-arms, "
-                  "docs/lanes/LANE_STATUS_dead-arms.md section 3)."))
+                  "clamp, not the length (2026-09-16, lane/dead-arms)."))
 def _(ml, X, yc, yr, Xh=None):
     """The active dt clamp (seam S9); at the default (0, inf) it cannot
     move a bit, which is what the mamba2 lane measures.
@@ -3767,8 +3758,8 @@ def _(ml, X, yc, yr, Xh=None):
     THE CLAMP MUST BITE ON BOTH SIDES AND ALSO NOT BITE (2026-09-16,
     lane/dead-arms). Until today this lane ran `dt_limit=(0.01, 0.1)`, and
     the dt it makes lies in [0.283, 1.110] on `base` (measured off the
-    library by bisecting each bound until the cell moves; the nine ranges
-    are in docs/lanes/LANE_STATUS_dead-arms.md). EVERY dt was therefore
+    library by bisecting each bound until the cell moves, over all nine
+    fixtures). EVERY dt was therefore
     above the upper bound, so S9 returned `hi` for every value and the lane
     read one branch of a three-branch clamp:
 
@@ -3825,7 +3816,7 @@ def _(ml, X, yc, yr, Xh=None):
                  "whatever step count both run, and its per-tensor `grads` part catches a norm-weight "
                  "exchange on the WRITE side at one step. It is blind to the READ-side exchange by the "
                  "same mechanism byte-lm was (2026-09-16, "
-                 "docs/lanes/LANE_STATUS_shrink-blindness-audit.md section 2), and byte-lm, the shipped "
+                 "the shrink-blindness audit), and byte-lm, the shipped "
                  "profile of the same trainer, is floored at two steps to carry that class for both."))
 def _(ml, X, yc, yr, Xh=None):
     """The device-owned session (resident=True, lean step results), the
@@ -3861,7 +3852,7 @@ def _(ml, X, yc, yr, Xh=None):
     flat = np.asarray(grads["flat_gradients"])
     named = {k: np.asarray(v) for k, v in grads["gradients"].items()}
     # Gate G1 of the device-owned step design (RUN OWED on the H100 since
-    # 2026-09-11, docs/lanes/DESIGN_lm_device_owned_step_2026-09-11.md):
+    # 2026-09-11):
     # the resident export equals the stateless path's returned gradient for
     # the same three steps; a byte between them reads REFUSED with the pair
     # named, never a quiet hash.
@@ -3900,14 +3891,13 @@ def _(ml, X, yc, yr, Xh=None):
                  "rational `_cos_pi_interval` / `_decide_f32` path under it, are never reached: the cell "
                  "could not tell its own schedule from a linear one or from a constant one. Measured "
                  "blind at one step and detected at three (2026-09-16, "
-                 "docs/lanes/LANE_STATUS_shrink-blindness-audit.md section 3; the same floor was written "
-                 "in prose in docs/lanes/LANE_STATUS_lane-identity-fixtures-light.md section 1f BEFORE "
-                 "the cut and did not stop it, which is why it is code now)."),
+                 "the shrink-blindness audit; the same floor was written in prose on "
+                 "lane/identity-fixtures-light BEFORE the cut and did not stop it, which is why it is "
+                 "code now)."),
        batch=(32, "32 rows per step is T = 512 tokens, the smallest size at which "
                   "`training.accumulation_is_aligned` admits the A = 4 accumulation split this lane "
                   "exists to claim; at 16 rows A = 4 is refused BY NAME, which deletes the claim rather "
-                  "than shrinking it (measured, docs/lanes/LANE_STATUS_lane-identity-fixtures-light.md "
-                  "section 1f, 2026-09-16)."))
+                  "than shrinking it (measured on lane/identity-fixtures-light, 2026-09-16)."))
 def _(ml, X, yc, yr, Xh=None):
     """Untied embeddings, dropout on, four accumulation microbatches, a
     global-norm clip and a warmup-cosine schedule: the training knobs the
@@ -4096,8 +4086,7 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("logistic-multiclass")
 def _(ml, X, yc, yr, Xh=None):
     """More than two classes route through the softmax loss (the
-    logistic-multiclass lane, docs/lanes/BRIEF_logistic_multiclass_2026-09-14.md
-    section 5). Three classes from the fixture's own labels: the binary
+    logistic-multiclass lane). Three classes from the fixture's own labels: the binary
     rule plus one for rows whose column 5 is above its median. Column 5 is
     one no fixture perturbs (denormal rewrites 0-2, dupes 14-15, the labels
     read 3-4), and the median split keeps all three classes present on
@@ -4697,8 +4686,7 @@ def _(ml, X, yc, yr, Xh=None):
     LANE_REVISIONS["tokenizer"]. The fixture bytes are the first 4,096 bytes
     of X viewed as bytes (the byte-lm lane's derivation without _ids'
     modulus), encoded with <|endoftext|> allowed, then decoded back; the
-    held-out probe encodes Xh's first 4,096 bytes
-    (docs/lanes/BRIEF_expose_tokenizer_2026-09-14.md section 3)."""
+    held-out probe encodes Xh's first 4,096 bytes."""
     tok = ml.tokenizer.BpeTokenizer._synthetic()
     raw = np.ascontiguousarray(X).tobytes()[:4096]
     ids = np.asarray(tok.encode_bytes(raw, allow_endoftext=True), dtype=np.int32)
@@ -5563,8 +5551,8 @@ def _(ml, X, yc, yr, Xh=None):
     """THE FOLD PARTITION ITSELF, AND WHAT IT FAILS TO PIN
     (lane/data-ordering-determinism, 2026-09-16).
 
-    Data ordering is link 3 of the reproducible-pipeline chain
-    (docs/lanes/PLAN_cross_vendor_llm.md). For the neural path it is
+    Data ordering is link 3 of the reproducible-pipeline chain. For the
+    neural path it is
     deliberately outside our boundary: the byte-LM trainer does not fetch or
     reorder a corpus and takes a caller-supplied `data_schedule` descriptor
     instead. Fold assignment looked like the one piece of data ordering that
@@ -5642,7 +5630,7 @@ def _(ml, X, yc, yr, Xh=None):
 # The eight families that had oracles and no door (the claim-surface census,
 # section 4) plus the six training primitives and the KMeans arms, given
 # bindings and classes on lane/expose-d; the lane bodies were written there
-# as docs/lanes/LANE_BODY_<family>.py and merged here by the harness's owner
+# as separate files and merged here by the harness's owner
 # without changing their arithmetic. Every derived input follows the
 # fixed-order host rule (`_affinity`, `_hw`, `_ids`, `_seq`).
 
@@ -5808,7 +5796,7 @@ lane("gmm-random-init-sample")(_gmm_sample_lane("random"))
                    "below it, measured across 6000/4000/3000/2000/1500/1000/750 (2026-09-16, "
                    "lane/identity-fixtures-light), and the fifth merge round is where a divergence first "
                    "shows. Detection is unchanged at 4000: the resolution ladder reads 1e-7 at 4000 and "
-                   "at 6000 (docs/lanes/LANE_STATUS_shrink-blindness-audit.md section 4)."))
+                   "at 6000 (the shrink-blindness audit)."))
 def _(ml, X, yc, yr, Xh=None):
     """HDBSCAN (python/mojolearn/hdbscan.py), cuML's runner path at its
     defaults with excess-of-mass selection: the core distances, the
@@ -5840,7 +5828,7 @@ def _(ml, X, yc, yr, Xh=None):
 @floor(rows=(2000, "leaf selection holds its fifth Boruvka round down to 2000 rows and loses it below, "
                    "measured across 6000/4000/3000/2000/1500/1000/750 (2026-09-16, "
                    "lane/identity-fixtures-light); the resolution ladder reads 1e-7 at 2000 and at 6000 "
-                   "(docs/lanes/LANE_STATUS_shrink-blindness-audit.md section 4), so the cut cost no "
+                   "(the shrink-blindness audit), so the cut cost no "
                    "detection and the round count is what sets the floor."))
 def _(ml, X, yc, yr, Xh=None):
     """The same fit under cluster_selection_method='leaf' with

@@ -648,7 +648,7 @@ def check_implemented_policy_matches_reference() raises:
     seven hand-copied integers. Two transcriptions of one reference table is
     two chances to mis-copy it, so the parameterized one is required to agree
     with the flattened one. If they ever disagree, ONE of them is wrong and
-    the reference decides which -- `ENGINEERING_RULES.md` 0c.
+    the reference decides which -- `CONTRIBUTING.md` (Algorithms and references).
     """
     # Policy4x4<float, 4>, the one RAFT's float distance kernels instantiate.
     _eq("Policy4x4 Nthreads", Policy4x4Float.nthreads, 256)

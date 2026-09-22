@@ -1,1 +1,0 @@
-+ pixi run mojo build -j 16 --emit shared-lib --target-cpu x86-64-v3 -D MOJOLEARN_COLUMN_AMD -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . -I bindings bindings/_mojolearn_rf.mojo -o /tmp/mojolearn-rf-build.4tvTQq/_mojolearn_rf.so

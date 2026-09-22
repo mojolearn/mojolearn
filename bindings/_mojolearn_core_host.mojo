@@ -1,9 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CPU binding for the base `_mojolearn` family: its HOST HELPERS (the CPU
-training lane, phase 1, 2026-09-13; brief
-docs/lanes/BRIEF_cpu_training_2026-09-13.md section 3.2) and, since the knn
-host inference lane (2026-09-14), the three k-NN INFERENCE entries.
+training lane, phase 1, 2026-09-13) and, since the knn host inference lane (2026-09-14), the three k-NN INFERENCE entries.
 
 HOST ONLY. The helpers carry NO ARITHMETIC. `python/mojolearn/_buffer.py::_native`
 resolves the input converters every estimator funnels its arrays through
@@ -21,9 +19,7 @@ gather, an argmax); none carries a fold, so none has a sabotage arm, and
 `core_host_sabotage()` reports the define truthfully so a sabotage set
 loads as one set.
 
-THE k-NN INFERENCE ENTRIES (the knn host inference lane, 2026-09-14;
-brief docs/lanes/BRIEF_forest_host_inference_2026-09-13.md, "Classical
-lanes", rank 8): `knn_search`, `knn_classify` and `knn_regress` are exported
+THE k-NN INFERENCE ENTRIES (the knn host inference lane, 2026-09-14): `knn_search`, `knn_classify` and `knn_regress` are exported
 under the GPU binding's names with the GPU binding's address contracts
 (`params` and `dist_params` lists, repeated in each docstring below), so
 `python/mojolearn/neighbors.py`'s NearestNeighbors.kneighbors,
@@ -1192,7 +1188,7 @@ def kmeans_predict_binding(
 ) raises -> PythonObject:
     """The nearest centroid of every row on the host, the GPU binding's name,
     arity and `params` (0 n_samples, 1 n_features, 2 n_clusters, 3 metric).
-    Public INFERENCE (docs/lanes/CPU_INFERENCE_BOUNDARY_2026-09-15.md): it
+    Public INFERENCE: it
     reads a fitted model's centroids and trains nothing. The arithmetic is
     `host_kmeans_fit`'s final assignment (`host_kmeans_predict`). The shape
     and metric refusals are raised BEFORE any address is read."""

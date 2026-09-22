@@ -1,7 +1,0 @@
-mac_slot: admitted after 0.001s
-mamba3 missing 36 single_class 9 classes ['cpu'] eligible False
-transformer missing 0 single_class 36 classes ['cpu'] eligible False
-transformer-window missing 0 single_class 36 classes ['cpu'] eligible False
-samba missing 32 single_class 13 classes ['cpu'] eligible False
-samba-untied-dropout-accum missing 36 single_class 9 classes ['cpu'] eligible False
-mac_slot: {"wait_seconds": 0.0006610410000575939, "run_seconds": 1.4772580419994483, "exit_code": 0}

@@ -44,8 +44,7 @@ LANES="rf-clf,rf-reg,et-clf,et-reg,rf-clf-entropy-log2-noboot,rf-clf-balanced-pa
 FIXTURES="base,ties,odd,dupes,wide"
 # The two parallel lanes hung the one-GPU box on main (lane/infer-speed-trees,
 # 2026-09-17). FIXED by DEVIATION 3010 on 2026-09-18 and no longer skipped:
-# the cause was the resident forest's teardown, not the batch protocol
-# (docs/lanes/LANE_STATUS_lane-forest-deadlock.md).
+# the cause was the resident forest's teardown, not the batch protocol.
 SKIP_CUDA="${SKIP_CUDA:-}"
 VARIANTS="${VARIANTS:-pinned:-D MOJOLEARN_FOREST_PINNED_STAGE=1|packed:-D MOJOLEARN_FOREST_PACKED_NODES=1|shared:-D MOJOLEARN_FOREST_SHARED_ROWS=1|profile:-D MOJOLEARN_FOREST_PROFILE=1}"
 

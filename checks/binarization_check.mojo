@@ -104,7 +104,7 @@ def check_binarization() raises:
 
 
 def main() raises:
-    # STANDALONE DRIVER, the same call `probe_main.mojo` makes under
+    # STANDALONE DRIVER, the same call `checks/probe_main.mojo` makes under
     # "border selection (host, as theirs is)".
     print("border selection (host, as theirs is):")
     check_binarization()

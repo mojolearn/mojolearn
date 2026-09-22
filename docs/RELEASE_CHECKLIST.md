@@ -21,9 +21,7 @@ rented or after a 16-minute macOS compile. `--list` prints the steps; `--only`
 reruns some of them.
 
 Five steps, one finish line: the file is on PyPI and installs. The longer
-runbooks (`docs/PYPI_RELEASE.md`, `docs/RELEASE_0_6_1_EXECUTION_PLAN.md`,
-`packaging/ALPHA_LINUX_061_PUBLICATION.md`, `docs/RELEASE_0_6_1_RUNPOD_PROFILE7.md`)
-are background for when a step refuses. They are not a longer version of
+runbook (`docs/PYPI_RELEASE.md`) is background for when a step refuses. They are not a longer version of
 this list.
 
 **Policy (2026-09-09).** Build what we ship, retag it, publish it. Install

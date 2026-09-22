@@ -202,14 +202,13 @@ _MODULES = (
     # NAME with the build command instead of a wrong-tier binary
     # answering under the right label (DEVIATION 869, the header above).
     "_mojolearn_transformer",
-    # Workstream D, 2026-09-14 (docs/lanes/BRIEF_claim_surface_census_2026-09-14.md
-    # section 4): four families that were built and identity-gated with no
+    # Workstream D, 2026-09-14: four families that were built and identity-gated with no
     # public door. Each is its own binding and build script, IDENTICAL only,
     # listed here and in `_build_script` both so an unbuilt one raises BY
     # NAME with the build command (DEVIATION 869). Compile-checked on one
     # Apple M4 the day they were written; no box has run them through the
     # Python door yet, and the identity_break lanes and three columns are
-    # owed (docs/lanes/LANE_BODY_*.py). The Cholesky door is inside
+    # owed. The Cholesky door is inside
     # `_mojolearn_gp` (bindings/build_gp.sh already links cholesky/).
     "_mojolearn_kernel_methods",
     "_mojolearn_mixture",
@@ -254,7 +253,7 @@ _MODULES = (
 #:
 #: This is an ALLOWLIST on purpose. A binding added tomorrow is identical
 #: only until someone measures a win and adds it here, which is the rule in
-#: ENGINEERING_RULES.md section 0b-iii: a tier we will not benchmark is a
+#: CONTRIBUTING.md (Numeric modes): a tier we will not benchmark is a
 #: tier we do not ship. The build scripts of every binding outside this set
 #: exit 2 on any other MOJOLEARN_NUMERIC_MODE, and this set is why the Python
 #: side raises a sentence a caller can act on instead of an ImportError about
@@ -813,8 +812,7 @@ def requested_mode():
 # answers 'cpu'. Nothing falls back: a GPU estimator on that box fails
 # exactly as loudly as before, only at use instead of at import.
 #
-# THE HOST BINDING SET (the CPU training lane, 2026-09-13; brief
-# docs/lanes/BRIEF_cpu_training_2026-09-13.md section 3.2). `_HOST_MODULES`
+# THE HOST BINDING SET (the CPU training lane, 2026-09-13). `_HOST_MODULES`
 # maps a `_MODULES` name to the host binding that exports the SAME function
 # names the GPU binding exports for the fits it covers. On a CPU-only
 # install `binding(name)` and the canonical `mojolearn.<name>` resolve a
@@ -1158,7 +1156,7 @@ def _no_cpu_implementation(name, item, reason, basename=None):
     )
     return (
         f"mojolearn: no CPU implementation of {name}.{item} yet; see "
-        "docs/lanes/BRIEF_cpu_training_2026-09-13.md (" + where + "; host "
+        "SUPPORT_MATRIX.md (" + where + "; host "
         f"bindings built here: {', '.join(built) or 'none'}). This process "
         "loaded NO GPU binary set, so every GPU estimator, block and trainer "
         "without a host binding is unavailable here. The surfaces that "

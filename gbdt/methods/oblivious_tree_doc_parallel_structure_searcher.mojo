@@ -503,7 +503,7 @@ def fit_oblivious_tree_structure_traced(
     # SAME per-feature normal -- the noise would have been a fixed
     # per-feature offset for the whole tree instead of a fresh draw per
     # level. Nothing caught it because no caller ever passed a non-zero
-    # `score_std_dev`, which is exactly ENGINEERING_RULES 8: a branch nothing
+    # `score_std_dev`, which is exactly CONTRIBUTING.md (Non-default paths): a branch nothing
     # reaches is a branch nothing checks.
     #
     # DEVIATION 139: theirs is one `TGpuAwareRandom` for the whole fit and
@@ -760,7 +760,7 @@ def split_stat_planes(
     gradient), and the pointwise kernels cannot take two views of one
     buffer: they declare `target` and `weight` on independent origins and
     Mojo refuses the aliasing at `enqueue_function` itself (DEVIATION 97.2,
-    `ENGINEERING_RULES` 4).
+    `CONTRIBUTING.md`).
 
     So this is a BRIDGE between two internal conventions, not an implementation of
     anything. It cost a full round trip through HOST memory when it was

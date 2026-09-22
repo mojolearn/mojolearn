@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Does the fused L2 kNN cross-block merge lose a candidate? Many launches, one fixture.
 
-`docs/lanes/RF_MUTEX_RECONCILIATION_2026-09-16.md` section 5 item 4: the fused kNN
+The question: the fused kNN
 carries the same `claim_device_mutex` protocol as the random forest and has never been
 measured. `check_fused_griddimx_merge` in `neighbors/checks/knn_check.mojo` already
 launches this merge at `grid_x > 1` and compares every slot against a host Float64
@@ -12,8 +12,7 @@ launched N times, counting how many launches disagree.
 
 WHAT IT DOES NOT MEASURE. `fused_l2_knn` pins `grid_x = 1` under `PIN_DETERMINISM`, and
 `bindings/build.sh` refuses any mode but IDENTICAL for the binding that carries this
-kernel, so NO SHIPPED BUILD REACHES THIS MUTEX. That is the finding recorded in
-`docs/lanes/LANE_STATUS_lane-mutex-extratrees-knn.md`, and it is why this probe calls
+kernel, so NO SHIPPED BUILD REACHES THIS MUTEX. That is why this probe calls
 `fused_l2_knn_launch` directly with the grid handed in. A move here is a latent defect
 on a path a user cannot take; a null here is a null about that same path.
 

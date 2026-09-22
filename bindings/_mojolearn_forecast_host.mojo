@@ -14,8 +14,8 @@ name.
 
 Why a binding of its own: the reference binding carries the whole fit
 (estimate_x0, the least squares, the L-BFGS and the finite-difference
-likelihood), and training-only code does not ship in the inference wheels
-(docs/lanes/CPU_INFERENCE_BOUNDARY_2026-09-15.md). The manifest declares
+likelihood), and training-only code does not ship in the inference wheels.
+The manifest declares
 this family with `routes=None` and `serves=("_mojolearn_arima",)`:
 `_backend` routes `_mojolearn_arima` here on a CPU-only install only when
 the reference binding is not built, and `mojolearn.host_model` binds it for

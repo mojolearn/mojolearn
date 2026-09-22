@@ -1,8 +1,0 @@
-mode IDENTICAL   sabotage: FOLD_READS_LAUNCH   EMB_TPB: 256
-ledger: the caller expected 'FOLD_READS_LAUNCH' and the binary agrees, so the -D was not silently dropped
-clause (a): 17 fixture cases, all 9 stages, device vs host oracle, BITWISE
-card: 9 records at /root/gemm_leg_out/embedding-sabotage/FOLD_READS_LAUNCH.card, contract section 10 wants 9
-card: 9/9 tags in contract section 10's order, all unique, three of them INTEGER (contract section 6: emb.perm is where a divergent sort becomes visible before it reaches a float)
-clause (g): arm FOLD_READS_LAUNCH -- contract 5.1's last paragraph. **DEVIATION 1502: the device file's 'never inert on a run of length >= 2' is FALSE.** The arm rotates by `EMB_TPB % span` and EMB_TPB is a power of two on every column, so it is bitwise INERT at R = 2, 4, 8, ... -- which is why f_tree4 (R = 4) is the inert case and f_order3 (R = 3) is the only witness
-clause (g): FOLD_READS_LAUNCH BIT on f_order3: 1 of 9 stages moved, FIRST at emb.dw, which is the stage its own clause writes.
-clause (g): FOLD_READS_LAUNCH is INERT on f_tree4, 9/9 stages unmoved, which is the half that makes it a reach proof rather than a smoke test.

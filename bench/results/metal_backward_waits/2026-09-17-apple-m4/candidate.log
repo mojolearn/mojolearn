@@ -1,9 +1,0 @@
-mac_slot: admitted after 0.003s
-initialization lean False waits 1 launches 48 ms 1.093
-  case 0 base_b1_l4_nrep1  B=1 L=4 S=4 dm=32 nh=2 nkv=2 hd=16 inter=64  13648 cells: 37/37 stages bit-identical
-fit 1 waits 172 launches 190 ms 569.366 oracle_cells 13648
-initialization lean True waits 1 launches 48 ms 3.092
-  case 0 base_b1_l4_nrep1  B=1 L=4 S=4 dm=32 nh=2 nkv=2 hd=16 inter=64  13648 cells: 37/37 stages bit-identical
-fit 2 waits 172 launches 190 ms 543.947 oracle_cells 13648
-PASS: every scratch fill and all 37 backward stages, two base fits
-mac_slot: {"wait_seconds": 0.0029010839061811566, "run_seconds": 1.8976323750102893, "exit_code": 0}

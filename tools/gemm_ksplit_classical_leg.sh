@@ -1,8 +1,7 @@
 #!/bin/sh
 # tools/gemm_ksplit_classical_leg.sh -- the classical GEMM callers under the
 # ksplit default (DEVIATION 2595) against the old plan, the A/B that
-# ENGINEERING_RULES.md section 9 owes for a shared kernel's flip
-# (docs/lanes/BRIEF_gemm_long_k_2026-09-11.md section 11, job 2).
+# CONTRIBUTING.md (Performance claims) owes for a shared kernel's flip.
 #
 # VENDOR-AGNOSTIC BODY, written for the RunPod H100. It runs ON THE BOX as the
 # MOJOLEARN_GEMM_LEG_EXTRA body of tools/gemm_remote_leg.sh, after the leg's
@@ -173,7 +172,6 @@ run() {
 }
 
 {
-    echo "brief=docs/lanes/BRIEF_gemm_long_k_2026-09-11.md section 11 (job 2)"
     echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "root=$ROOT"
     echo "lanes=$LANES datasets=$DATASETS"

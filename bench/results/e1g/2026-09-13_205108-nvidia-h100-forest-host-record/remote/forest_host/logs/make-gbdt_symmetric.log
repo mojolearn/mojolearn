@@ -1,3 +1,0 @@
-2233 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x33c500000000, nodemask=1)
-2239 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5b0b40000000, nodemask=2)
-make wrote /root/gemm_leg_out/forest_host/2026-09-13-gpu-gbdt_symmetric (gbdt_symmetric, GradientBoosting, vendor cuda, model sha256 e92aeb34b0c5b3fd4e3b022d351a70b8973de0d5aa3f863921898a4a6fd9591c)

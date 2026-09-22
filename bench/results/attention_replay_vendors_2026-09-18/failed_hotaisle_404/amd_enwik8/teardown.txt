@@ -1,4 +1,0 @@
-== teardown 2026-09-18T14:13:52Z exit=4 vm=unknown ==
-verified_gone ref=none: the 200 listing shows no VM absent from the pre-create snapshot utc=2026-09-18T14:16:05Z
-destroy_confirmed=1
-exit=4

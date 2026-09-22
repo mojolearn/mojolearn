@@ -1,3 +1,0 @@
-#!/bin/sh
-# stand-in for ssh: ignore target and options, run the piped script here with /root/ rewritten
-sed "s|/root/|/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/4e8829df-5da1-4c85-8680-6b52df16132c/scratchpad/bincache/e2e/box/root/|g" | sh -s

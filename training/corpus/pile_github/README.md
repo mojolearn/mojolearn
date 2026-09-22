@@ -1,6 +1,6 @@
 # Pinned source-code corpus for the byte language model (the Pile, GitHub)
 
-The code kind of ENGINEERING_RULES section 9 for every neural timing and
+The code kind of CONTRIBUTING.md (Performance claims) for every neural timing and
 quality claim, from 2026-09-11 night (the English kind is
 `training/corpus/enwik8`). It replaces `training/corpus/cpython312_lib`
 (4.5 MB of one project's Python, no published numbers), because Andrew

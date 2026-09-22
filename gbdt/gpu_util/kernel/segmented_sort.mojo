@@ -20,12 +20,12 @@ implementation's reach is `ComputeWeightedQuantile`
 # (`segmented_sort.cu:7-45`) sets up two `cub::DoubleBuffer`s and hands them
 # to `cub::DeviceSegmentedRadixSort::SortPairs`, so the body being implemented
 # here is the SortPairs itself. CUB is OPEN and therefore an candidate to implement
-# under ENGINEERING_RULES 0b-i, and MAX ships no device sort at all
+# under CONTRIBUTING.md (Algorithms and references), and MAX ships no device sort at all
 # (archive/reference/VENDOR_LIBS.md, re-checked 2026-08-20), so there is nothing to call.
 #
 # Their `Descending` arm (`SortPairsDescending`, `:29-36`) is NOT IMPLEMENTED:
 # `ComputeWeightedQuantile` passes the default `compareGreater = false`
-# (`segmented_sort.h:14`), and ENGINEERING_RULES 3 says a branch no caller
+# (`segmented_sort.h:14`), and CONTRIBUTING.md (Evidence must be able to fail) says a branch no caller
 # reaches is not done. `TSegmentedRadixSortContext`'s `FirstBit`/`LastBit`
 # are the two arguments `launch_segmented_radix_sort` takes.
 #

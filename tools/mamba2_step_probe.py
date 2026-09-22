@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""mamba2_step_probe: the DEVIATION 2712 probe (docs/lanes/BRIEF_resident_and_dtlimit_moved_2026-09-14.md).
+"""mamba2_step_probe: the DEVIATION 2712 probe.
 
 In the 120-lane record at 65ae7612f the `mamba2` lane's `step` and `backward`
 parts on a Hot Aisle MI300X (8core VM) differ from the Apple M4 and the H100,

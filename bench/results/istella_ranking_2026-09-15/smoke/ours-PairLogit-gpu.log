@@ -1,9 +1,0 @@
-3332 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x388a00000000, nodemask=2)
-3422 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x116380000000, nodemask=1)
-3332 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x388a40000000, nodemask=2)
-RANK start ours PairLogit gpu rows=19995 queries=166 version=0.8.5 drain=libcudart.so
-RANK warmup 1453.5 ms
-RANK fit rep=0 trees=1 ms=203.0
-RANK fit rep=0 trees=2 ms=192.2
-RANK quality rep=0 ndcg5=0.399950 ndcg10=0.487663 hash=379cdb9083a282b4
-RANK done ours PairLogit median@2=192.2 fixed=213.8 per_tree=-10.804 peak=787 base=0

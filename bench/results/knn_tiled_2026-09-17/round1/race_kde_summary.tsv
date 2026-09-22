@@ -1,5 +1,0 @@
-lane	dataset	arm	rows	ok_rounds	median_ms	min_ms	max_ms	spread	digest_stable	status	paired_ratio_over_first
-kde	taxi	base	2000	5	47.4508	47.3672	50.8564	1.0737	True	ok	
-kde	taxi	after0	2000	5	40.9330	40.8468	41.0958	1.0061	True	ok	0.8629
-kde	istella	base	2000	5	72.5562	68.3801	73.7845	1.0790	True	ok	
-kde	istella	after0	2000	5	54.0317	50.9609	54.1297	1.0622	True	ok	0.7449

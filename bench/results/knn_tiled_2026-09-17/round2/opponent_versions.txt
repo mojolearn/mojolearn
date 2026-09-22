@@ -1,5 +1,0 @@
-cuml-cu12==26.8.0
-cupy-cuda12x==14.2.0
-cuvs-cu12==26.8.1
-numpy==2.4.6
-scikit-learn==1.9.1

@@ -7,7 +7,7 @@ Our IDENTICAL LinearRegression returned R^2 -115.6 on Istella-S where
 scikit-learn gets 0.164 (classical lane, RunPod MI300X, 2026-09-11). This
 runs on a rented box and answers, on the SAME bytes for every arm:
 
-    prep     the two ENGINEERING_RULES section 9 tables as the classical
+    prep     the two CONTRIBUTING.md (Performance claims) tables as the classical
              harness builds its `big` block: taxi's 11 numeric columns
              (4,000,000 train rows) and Istella-S (2,043,304 x 220), each
              loader's test split for evaluation, float32-max and non-finite

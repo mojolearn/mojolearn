@@ -795,8 +795,7 @@ def host_umap_transform(
         # refinement from 100 epochs to 30 and moved a row by 1.36 on a map
         # whose clusters sit about 11 apart, while the same one-row growth at
         # 9,999 moved no bit at all. The count no longer reads the request
-        # size. The cost of that is measured, not asserted: see
-        # docs/lanes/LANE_STATUS_lane-umap-batch-fix.md.
+        # size. The cost of that was measured, not asserted.
         epochs = 100
     var curve = fit_umap_curve(params.min_dist, params.spread)
     return host_refine_transform(

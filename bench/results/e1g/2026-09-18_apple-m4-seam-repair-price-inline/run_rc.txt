@@ -1,4 +1,0 @@
-norepair 1 rc=0
-repair 2 rc=0
-repair 3 rc=0
-norepair 4 rc=0

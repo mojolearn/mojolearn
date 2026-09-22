@@ -1,5 +1,0 @@
-lane	dataset	arm	rows	ok_rounds	median_ms	min_ms	max_ms	spread	digest_stable	status	paired_ratio_over_first
-knn	taxi	gpu-before	4000	5	44.0704	37.6638	44.3972	1.1788	True	flagged	
-knn	taxi	gpu-after	4000	5	34.1275	28.0753	35.2179	1.2544	True	flagged	0.7753
-knn	istella	gpu-before	4000	5	129.9081	109.0509	137.9812	1.2653	True	flagged	
-knn	istella	gpu-after	4000	5	84.1805	74.4125	88.6151	1.1909	True	flagged	0.6521

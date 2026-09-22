@@ -17,7 +17,7 @@ FP16 and FP8. Nobody publishes absolute times on H100 or L40S at our sizes
 with a pinned version, so published numbers are only a sanity check that a
 row here is not misconfigured.
 
-**HIGGS IS RETIRED (2026-09-11, ENGINEERING_RULES.md section 9).** Every
+**HIGGS IS RETIRED (2026-09-11, CONTRIBUTING.md (Performance claims)).** Every
 HIGGS row and every HIGGS ratio below is history and is never quoted as a
 result again. The two benchmark datasets for trees and classical lanes are
 NYC taxi (`taxi`, `taxireg`) and Istella-S LETOR (`istella`, `istellareg`);
@@ -180,7 +180,7 @@ matches the leg you are comparing against and name it.
 | LightGBM CUDA rf boosting | 4.7.0, USE_CUDA=ON | 100 trees, depth 16, 32768 leaves, bagging 0.632/1, feature_fraction sqrt, max_bin 255; logloss 0.638510 (3 rounds) | 469654 (468691..471303) | same |
 
 Our identical arm in the same process on that H100: symmetric Logloss 775
-ms (697..1161), RMSE 806, RF 5762 (see `docs/lanes/HANDOFF_trees.md`;
+ms (697..1161), RMSE 806, RF 5762 (
 450-600 ms of each round is host-side outside the fit).
 
 Our identical arm, 2026-09-10 leg, same GPU model and image, driver
@@ -193,7 +193,7 @@ shipped, 3743 (3719..3761) with the flip; ET 1M 3314 (3272..3430), ET 2M 6099
 (5994..6335); symmetric Logloss 1M 478 (459..528), 2M 753 (741..926), RMSE 1M
 396 (377..476). Quote the cuML 1M row above (3314) against the 1M cells and
 the Aug 28 cuML 2M row (4543.0, different container) against the 2M cells,
-naming each. Detail: `docs/lanes/HANDOFF_trees.md`, "2026-09-10 H100 leg".
+naming each.
 
 Our identical arm, 2026-09-10 night leg, same GPU model and image, driver
 580.126.09, source 7cebeecf (DEVIATION 2500 native label encoding on the
@@ -214,7 +214,7 @@ Symmetric Logloss 1M 533 (490..570) against the Sep 9 CatBoost row (900)
 0.59x and the Aug 28 row (846.1) 0.63x; the Sep 10 leg's 478 was on another
 physical pod and the gap is unresolved. ET 1M 2578 (2543..2616), still no
 valid NVIDIA opponent row. Fingerprints 81/81 IDENTICAL against the Sep 10
-set. Detail: `docs/lanes/HANDOFF_trees.md`, "2026-09-10 night H100 leg".
+set.
 
 Our identical arm, 2026-09-11 confirmation leg, same GPU model and image,
 driver 580.126.09, source 352d9781 (DEVIATION 2502 pure-node leaf ON, as
@@ -240,8 +240,7 @@ CatBoost lossguide (1600.6) 1.01x. ET 1M 2504 (2476..2585), hash unchanged,
 still no valid NVIDIA opponent row. Fingerprints against the Sep 10 night
 set: rf-clf moved 9 of 9 (the DEVIATION 2502 forest), 72 of 72 IDENTICAL on
 the other eight lanes; rf-clf and rf-reg 18 of 18 IDENTICAL against the
-Apple M4 2502 set. Detail: `docs/lanes/HANDOFF_trees.md`, "2026-09-11 H100
-confirmation leg".
+Apple M4 2502 set.
 
 Extra trees therefore has NO valid NVIDIA opponent row. That measurement
 is owed (a LightGBM build with USE_CUDA, or cuML RF with `split_criterion`
@@ -616,8 +615,7 @@ table above stands as what it is, a paired measurement at bb679f19.
 ### kNN second kind (HIGGS rows)
 
 Every kNN row above is dyadic-v1, a generator, and the gate's `large`
-fixture is another generator of the same shape, so (ENGINEERING_RULES.md
-section 9) a selection win timed on both was timed on ONE kind. The second
+fixture is another generator of the same shape, so (CONTRIBUTING.md (Performance claims)) a selection win timed on both was timed on ONE kind. The second
 kind is REAL data, the HIGGS prefix `tools/knn_datasets.py::higgs_block`
 loads (UCI 00280, the first 404,000 rows of the gzip stream, the 28 raw
 float32 kinematic features, no shuffle, no scaling, no deduplication;
@@ -710,8 +708,7 @@ carry m as the log reports it.
 
 That is every cuBLAS row the Aug 25 legs measured (20 shapes). cuBLAS
 does not see our plans, so these rows serve any round of ours on an H100
-of this driver and torch pin; the OUR side of the H100 table is in
-`docs/lanes/HANDOFF_gemm_splitk.md`.
+of this driver and torch pin.
 
 Sequence models, torch 2.4.1+cu124, `e1g/2026-08-25_160520-nvidia-speed-gemmseq`
 (5 rounds), Llama-8B shapes at 512 tokens:
@@ -834,7 +831,7 @@ Ours before the 2026-09-11 lane, same pod, same window, same harness: taxi 35.69
 after/before ratios are 0.811 and 0.311, geometric mean 0.502, and the score
 digests are equal between the two arms on both datasets (taxi
 aa8ac4159ad2cbfa, Istella-S 81d11ed7fcd9eb38), so the three deviations stay
-ON by default under ENGINEERING_RULES.md section 9. cuML held one digest per
+ON by default under CONTRIBUTING.md (Performance claims). cuML held one digest per
 dataset as well (cdce01475f9e6977, 3f4541591da35fc6). The cuML taxi row is
 the first of the two races on this pod; in the second, cuML's taxi arm took
 a 22.1 ms round and read 3.56 ms median, against which ours reads 8.14x.
@@ -973,9 +970,7 @@ lane working on these blocks on an RTX 4090 reads them from here.
 **Brute-force kNN, cuML 26.8.0 (`cuml-cu12`) and cuVS 26.8.1 (`cuvs-cu12`), cupy 14.2.0.**
 Pod fc3i4usbkd8ahz, driver 580.126.09. 400,000 index rows, index and queries
 on the device and the index built BEFORE the clock, `kneighbors` / `search`
-timed with a device synchronize, medians of 5 calls after a warmup. Source:
-`bench/results/knn_tiled_2026-09-17/round2/opponents_probe.txt` and
-`docs/lanes/LANE_STATUS_lane-knn-tiled-distance.md` ("Opponents on the same box").
+timed with a device synchronize, medians of 5 calls after a warmup.
 
 | dataset | cols | k | queries | cuML brute ms | cuVS brute_force ms |
 |---|---|---|---|---|---|
@@ -1021,7 +1016,7 @@ its rows are here because the lane timed them. Source:
 Pod 0knlkeg0ni0y08, RTX 4090, driver 580.178.04, cuML 26.8.0 in the image's
 Python, its inputs on the device, 5 rounds, medians (min..max) in ms. OLS
 Istella-S is struck for quality (r2 -15111, its eigensolve on near-constant
-columns; ours 0.332). Source: `docs/lanes/LANE_STATUS_kmeans-linear-speed.md`
+columns; ours 0.332).
 ("cuML on the same box").
 
 | lane | dataset | rows x cols | cuML ms |
@@ -1036,8 +1031,7 @@ columns; ours 0.332). Source: `docs/lanes/LANE_STATUS_kmeans-linear-speed.md`
 
 Measured once on pod 2ofug65rltppi5 (RTX 4090, EPYC 7542), 5 rounds; the log is
 `~/mojolearn-evidence/gbdt-train-speed/final_pull_pause/leg_out/opponent/catboost-yeti.log`.
-Ours on the same box after DEVIATION 3040: 5,214 ms at 100 trees, 8.20 ms a tree
-(`docs/lanes/LANE_STATUS_gbdt-train-speed.md`).
+Ours on the same box after DEVIATION 3040: 5,214 ms at 100 trees, 8.20 ms a tree.
 
 | library | version | dataset | rows x cols | parameters | inputs | 100 trees ms, median (min..max) | 10 trees ms | per tree ms | rounds |
 |---|---|---|---|---|---|---|---|---|---|
@@ -1053,8 +1047,7 @@ own RandomForest fit on the same rows and settings, through its cached
 nvForest model. 100 or 500 trees, depth 16, ms per call, single call /
 eight-call block, 15 rounds; `u` marks a spread above 1.10, which is most
 cells (FIL's own call-to-call jitter on that box; its 7-round and 15-round
-medians agree). Source: `bench/results/forest_groves_2026-09-17/fil15/` and
-`docs/lanes/LANE_STATUS_lane-forest-groves-cpu-and-speed.md`.
+medians agree).
 
 | model | prediction rows | fil-ours | cuml-rf |
 |---|---|---|---|
@@ -1296,8 +1289,7 @@ No opponent was retimed in this pass. Initial and final evidence:
 
 IVF k/probe extensions, fused CDNA logical groups, wide full PCA, and UMAP
 portable host math were correctness/capability work, not new opponent timing
-rows. Their executable gates and limitations are recorded in
-`archive/docs/lanes/HANDOFF_identity_continuation_2026-09-10.md`. Existing cuML/cuBLAS
+rows. Existing cuML/cuBLAS
 prices and comparison qualifications remain unchanged.
 
 ### Sep10 GEMM operand staging (IDENTICAL, cached opponents)
@@ -1422,7 +1414,6 @@ used generic `untuned`/`dispatch` labels while actually comparing current 128×1
 against a forced 64×64 candidate. Its 0.747–0.841 ratio documents the rejected
 candidate, not a current dispatch regression. Original logs remain immutable;
 new probe output names baseline/candidate and their selectors explicitly.
-See `archive/docs/lanes/HANDOFF_speed_gemm_2026-09-10.md` for the corrected next steps.
 
 
 ## 2026-09-10 continuation: own-arm M4 measurement, no new opponent price
@@ -1463,7 +1454,7 @@ desktop activity and small-control request noise limit generalization. These
 are own-arm comparisons, not Apple/cuML opponent ratios. Raw samples, phase
 diagnostics, binary hashes and scope: `bench/results/knn_large_gate_audit_2026-09-10/`.
 Historical Apple admission used 400k rows with 1000 queries; these new runs
-cover the full 4000-query target. Decision history: `docs/lanes/PERFORMANCE_GATE_AUDIT_2026-09-10.md`.
+cover the full 4000-query target.
 
 ### Sep10 Apple kNN request-local metadata: own-arm update, no new opponent
 
@@ -1538,7 +1529,7 @@ component gain does not describe complete requests.
 
 Droplet `gpu-mi325x1-256gb` (the card reports AMD Instinct Mi325X VF,
 gfx942), AMD EPYC 9575F with 20 vCPUs, Ubuntu 24.04.2, Python 3.12.3, Mojo
-1.0.0 (ed45d567). ENGINEERING_RULES.md section 10 applies here. An opponent
+1.0.0 (ed45d567). CONTRIBUTING.md (Comparing against libraries without a GPU path) applies here. An opponent
 with an AMD GPU path runs on the GPU, one without (cuML, CatBoost GPU) runs
 on this box's CPU on all 20 cores, and each row names its device. Ours is
 the IDENTICAL tier at the default build (DEVIATION 2502 on), source 92b4bf9b
@@ -1712,7 +1703,7 @@ MI300X VF, gfx942), Intel Xeon Platinum 8470 with 13 cores and 224 GB. The
 host runs Ubuntu 24.04.4 with ROCm 7.2.4, and the leg body runs in the
 runner's default container `rocm/dev-ubuntu-22.04:6.4.1-complete` (Ubuntu
 22.04.5, glibc 2.35, ROCm 6.4.1 userland), CPython 3.12.14, Mojo 1.0.0
-(ed45d567). ENGINEERING_RULES.md section 10 applies, and these rows are a new
+(ed45d567). CONTRIBUTING.md (Comparing against libraries without a GPU path) applies, and these rows are a new
 tuple, never mixed with the MI325X rows above or with any NVIDIA row. CatBoost
 and scikit-learn have no AMD GPU path and run on this VM's CPU on all 13
 cores. Ours is the IDENTICAL tier at the default build, source 8d7e129c, which
@@ -1778,7 +1769,7 @@ amd_xgboost hash and logloss equal the MI325X Istella-S row's.
 ### AMD Instinct MI300X on RunPod
 
 Istella-S ran on one RunPod AMD pod (mdv9clyq6r73bz, verified gone with HTTP
-404) because no Hot Aisle slot was free (ENGINEERING_RULES.md section 10 box
+404) because no Hot Aisle slot was free (CONTRIBUTING.md (Comparing against libraries without a GPU path) box
 order). This pod is its own box and its rows are never set against the Hot
 Aisle table above. The card reports AMD Instinct MI300X, gfx942, amdgpu
 6.10.5. The pod shows 192 logical CPUs of two AMD EPYC 9474F 48-core
@@ -1960,7 +1951,7 @@ summary `bench/results/linear_cluster_speed_2026-09-11/istella_h200_summary.tsv`
 | pca | Istella-S | cuML PCA full | 81.32 (81.26..116.80) | EVR sum 1.0000000156 | 687.8 (687.7..689.4) | 687.4 (684.2..688.6) | 0.999 (unchanged code) | 8.45x | EVR sum 1.0000000146, e43f2f52f20f511a |
 | kmeans | Istella-S | cuML KMeans | 173.80 (173.60..176.06) | inertia 1.28555e17 (0.979 of ours), 20 iter, digest different every round | 2021.1 (2015.4..2023.3) | 805.7 (796.0..824.2) | 0.399 | 4.64x | inertia 1.31285e17, 21 iter, 7f720b0b76896308 |
 
-Flip verdict (ENGINEERING_RULES section 9, geomean of after/before over taxi and
+Flip verdict (CONTRIBUTING.md (Performance claims), geomean of after/before over taxi and
 Istella-S): OLS sqrt(0.67 x 0.624) = 0.65, k-means sqrt(0.71 x 0.399) = 0.53, both
 below 1 with bits unchanged on both datasets, so DEVIATIONS 2632 and 2633 are the
 default (merged into main). cuML's eig OLS again returns a broken fit on Istella-S
@@ -2121,7 +2112,7 @@ ours `covariance_eigh`; cuML OLS `algorithm='eig'`.
 OLS and PCA reach the device Jacobi and k-means does not, so those rows isolate
 DEVIATION 2671 (two barriers per rotation instead of four, same bits) and the
 k-means row isolates DEVIATION 2672 (host staging removed from the k-means fit).
-Flip verdicts under ENGINEERING_RULES section 9: OLS geomean 0.9610, PCA geomean
+Flip verdicts under CONTRIBUTING.md (Performance claims): OLS geomean 0.9610, PCA geomean
 0.9434, and k-means geomean 0.9449 over pooled race instances, all below 1 with
 quality equal and bits equal on both datasets, so BOTH deviations are the
 default.
@@ -2182,7 +2173,7 @@ ours `covariance_eigh`; cuML OLS `algorithm='eig'`. Evidence
 | pca | taxi | cuML PCA full | 20.04 (19.83..20.79) | EVR sum 0.9978604646 | 33.48 (32.23..38.01) | 32.71 (32.28..33.60) | 0.9771 | 1.63x | EVR sum 0.9978607071, `c790338770a4c120` |
 | pca | Istella-S | cuML PCA full | 82.11 (81.72..83.39) | EVR sum 1.0000000156 | 653.70 (651.86..657.65) | **383.23** (380.74..417.01) | **0.5862** | **4.67x** | EVR sum 1.0000000146, `e43f2f52f20f511a` |
 
-Flip verdict (ENGINEERING_RULES section 9, geomean of after/before over the
+Flip verdict (CONTRIBUTING.md (Performance claims), geomean of after/before over the
 two): **OLS sqrt(1.0077 x 0.5315) = 0.7318, PCA sqrt(0.9771 x 0.5862) =
 0.7568**, both below 1, quality not worse on either dataset and the bits
 IDENTICAL rather than merely not worse, so DEVIATION 2680 is the default.
@@ -2343,7 +2334,7 @@ underneath. Re-measure it against the new default before making it one.
 
 The row above was RUN OWED because I reaped the first pod ~20 minutes before
 these cells finished; a second pod (below) repaid the whole setup to get them.
-ENGINEERING_RULES 11 exists because of that.
+CONTRIBUTING.md exists because of that.
 
 NVIDIA H100 80GB HBM3, driver 580.126.09, 81,559 MiB, Xeon Platinum 8480+ (224
 cores); CatBoost 1.2.10, XGBoost 3.2.0, scikit-learn 1.9.1, NumPy 2.4.6. Our

@@ -1,4 +1,0 @@
-Traceback (most recent call last):
-  File "<string>", line 1, in <module>
-AttributeError: module 'catboost' has no attribute 'utils'
-catboost 1.2.10 xgboost 3.2.0 lightgbm 4.7.0 numpy 2.4.6

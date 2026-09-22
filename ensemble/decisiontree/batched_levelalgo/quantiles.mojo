@@ -54,7 +54,7 @@ compared against `global_rows` inside the sampler kernel
     from `PCGenerator`, WITH REPLACEMENT (nothing dedupes them).
 
 Both arms ship here and the check reaches both, because
-`ENGINEERING_RULES.md` rule 8 ("A non-default path is an unchecked path") cuts
+`CONTRIBUTING.md` (Non-default paths) ("A non-default path is an unchecked path") cuts
 the other way too: on a small dataset the RNG arm is the unreached one.
 
 The second dispatch question -- distributed or not -- is answered by

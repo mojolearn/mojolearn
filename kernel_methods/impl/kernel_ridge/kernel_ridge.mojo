@@ -12,7 +12,7 @@ that reaches `cupyx.lapack.posv` -- cuSOLVER's `potrf` followed by `potrs`.
 So the ALGORITHM is fully readable and is implemented here line for line;
 only the two library calls underneath it are closed, and
 `archive/reference/VENDOR_LIBS.md`'s surviving exception plus `cholesky/`'s pinned
-`potrf_lower` / `cho_solve` stand in for them. `ENGINEERING_RULES` rule 2 is why
+`potrf_lower` / `cho_solve` stand in for them. `CONTRIBUTING.md` is why
 this file exists at all: the reference control plane is on the host, so this one is.
 
 THE REFERENCE SEQUENCE, `kernel_ridge.py:48-72`, branch for branch:
@@ -140,7 +140,7 @@ and `_safe_solve`, `:26-44`:
 # lstsq.mojo` has an eigendecomposition-based least squares in this tree, so
 # the implementation is possible and is NOT done here -- wiring another lane's solver
 # into this one without a gate that drives BOTH sides of the branch would
-# create exactly the unchecked non-default path `ENGINEERING_RULES` rule 8
+# create exactly the unchecked non-default path `CONTRIBUTING.md` (Non-default paths)
 # describes. `kernel_methods/NOT_IMPLEMENTED.tsv` carries the row.
 # =========================================================================
 """

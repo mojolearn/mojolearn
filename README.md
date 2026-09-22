@@ -166,8 +166,7 @@ devices and configurations.
 - [Changelog](CHANGELOG.md)
 - [Roadmap](ROADMAP.md)
 - [Getting started as a contributor](docs/START_HERE.md)
-- [Engineering rules](ENGINEERING_RULES.md), [contributing](CONTRIBUTING.md)
-  and [governance](GOVERNANCE.md)
+- [Contributing](CONTRIBUTING.md) and [governance](GOVERNANCE.md)
 
 ## Trademarks and affiliation
 

@@ -1,8 +1,0 @@
-{
-  "exit": 0,
-  "reason": null,
-  "peak_group_rss_kib": 46752,
-  "thread_limit": 2,
-  "deadline_seconds": 60,
-  "rss_limit_kib": 1048576
-}

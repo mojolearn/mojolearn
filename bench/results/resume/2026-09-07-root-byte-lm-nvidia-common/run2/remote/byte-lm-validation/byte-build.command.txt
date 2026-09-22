@@ -1,1 +1,0 @@
-python3 tools/nvidia_serial_guard.py --seconds 900 -- bash bindings/build_byte_lm.sh 

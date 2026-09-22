@@ -1,5 +1,0 @@
-pod=rf1ruxuaac3q5i
-name=mojolearn-cpu-attn-replay-cpu-20260918-140740
-terminated_verified=1
-exit=0
-at=2026-09-18T14:19:39Z

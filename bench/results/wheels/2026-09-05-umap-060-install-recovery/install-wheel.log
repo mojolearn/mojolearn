@@ -1,6 +1,0 @@
-Looking in links: /private/tmp/mojolearn-release-wheelhouse
-Processing /Users/andrewhendel/.mojolearn-runner/_work/mojolearn/mojolearn/python/dist/mojolearn-0.6.0-py3-none-macosx_11_0_arm64.whl
-Processing /private/tmp/mojolearn-release-wheelhouse/numpy-2.5.2-cp312-cp312-macosx_14_0_arm64.whl (from mojolearn==0.6.0)
-Installing collected packages: numpy, mojolearn
-
-Successfully installed mojolearn-0.6.0 numpy-2.5.2

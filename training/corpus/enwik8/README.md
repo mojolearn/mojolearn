@@ -1,6 +1,6 @@
 # Pinned English corpus for the byte language model (enwik8)
 
-The English kind of ENGINEERING_RULES section 9 for every neural timing and
+The English kind of CONTRIBUTING.md (Performance claims) for every neural timing and
 quality claim, from 2026-09-11 night (the code kind is
 `training/corpus/pile_github`). Andrew asked for two corpora that are the
 norm, generalize and carry published benchmarks: "is shakespeare a good

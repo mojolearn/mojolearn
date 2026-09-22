@@ -1125,8 +1125,8 @@ def _fixture_floors():
 def test_no_fixture_is_shrunk_below_its_declared_floor():
     """A FLOOR IN PROSE IS NOT A FLOOR (lane/shrink-floors, 2026-09-16).
 
-    docs/lanes/LANE_STATUS_lane-identity-fixtures-light.md section 1f is
-    titled "LEFT BIG: samba-untied-dropout-accum" and says three steps is that
+    A lane status note had a section titled
+    "LEFT BIG: samba-untied-dropout-accum" that said three steps is that
     lane's floor because step 3 is the first that evaluates the cosine arm of
     its schedule. The next lane cut it to one step anyway, FIXTURE_SHRINK_SCOPE
     carried forward only the rows half of the reasoning, and a third document

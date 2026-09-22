@@ -1,7 +1,6 @@
 #!/bin/sh
-# tools/gemm_longk_leg.sh -- DEVIATION 2594, the GEMM long-k lane's on-box work
-# (docs/lanes/BRIEF_gemm_long_k_2026-09-11.md). A thin wrapper: it names the
-# arms, turns on the CONTROL and PHASE lines of DEVIATION 2593 and the
+# tools/gemm_longk_leg.sh -- DEVIATION 2594, the GEMM long-k lane's on-box work.
+# A thin wrapper: it names the arms, turns on the CONTROL and PHASE lines of DEVIATION 2593 and the
 # per-component LM timing, then runs tools/gemm_step_leg.sh (DEVIATION 2544),
 # which builds and runs the check, the resources instrument, the price runs,
 # the trial bindings and the lean LM step on enwik8 and the Pile GitHub
@@ -62,7 +61,7 @@
 # so MOJOLEARN_GEMM_STEP_LEG_LM_ARMS=shipped alone resolves to none and no LM
 # probe runs. This wrapper refuses that list before anything is built.
 #
-# The flip rule is the step leg's (ENGINEERING_RULES 9): the geometric mean
+# The flip rule is the step leg's (CONTRIBUTING.md (Performance claims)): the geometric mean
 # of the enwik8 and pilegithub lean step ratios below 1, with every step
 # witness equal to shipped on both corpora (lm_summary.tsv verdict lines,
 # which since 2595 also name the arm's plan and the shipped plan). On the
@@ -93,7 +92,6 @@ fi
 
 {
     echo "deviations=2590-2595"
-    echo "brief=docs/lanes/BRIEF_gemm_long_k_2026-09-11.md"
     echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
     echo "root=$ROOT"
     echo "arms=$MOJOLEARN_GEMM_STEP_LEG_ARMS"

@@ -1,2 +1,0 @@
-TRANSPORT gram-wide input 7.84 MiB outputs 2 DIFFERS output 0: 1 of 3084 bytes
-TRANSPORT cases that differ or failed: 1

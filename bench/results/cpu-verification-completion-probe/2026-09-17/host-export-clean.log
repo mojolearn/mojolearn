@@ -1,8 +1,0 @@
-# verify --all: cpu (cpu), 7 lanes x 9 fixtures, harness wheel copy, table /Users/andrewhendel/mojolearn-evidence/cpu-verification-completion/installed-env/lib/python3.14/site-packages/mojolearn/verify_reference/table.json
-  gbdt-parametric-losses             gbdt               14.6s
-  gbdt-lossguide-newtoncosine        gbdt               14.0s
-  gbdt-nan-modes                     gbdt               50.2s
-  gbdt-pair-logit                    gbdt               27.7s
-  gbdt-yeti-rank                     gbdt               16.5s
-  gbdt-adapter-score-weighted        gbdt               29.7s
-  rf-score-weighted                  rf                  7.9s

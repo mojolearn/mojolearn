@@ -1,5 +1,0 @@
-{
-  "wheel": "mojolearn-0.8.7-py3-none-macosx_11_0_arm64.whl",
-  "sha256": "7f09c67660a040f9ab072188d5c701c90d0b530cd3ae65c74f2fef70e7223461",
-  "status": "FAILED: low-bit linalg exports absent; 90 refused parts"
-}

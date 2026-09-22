@@ -1,9 +1,0 @@
-mac_slot: admitted after 0.001s
-Traceback (most recent call last):
-  File "/Users/andrewhendel/mojolearn-evidence/cpu-verification-completion/check_installed.py", line 22, in <module>
-    r=run(label+'-clean',['--lanes',','.join(lanes),'--repeats','2','--no-models'])
-  File "/Users/andrewhendel/mojolearn-evidence/cpu-verification-completion/check_installed.py", line 14, in run
-    assert p.returncode==0,(name,p.returncode,p.stderr[-1000:])
-           ^^^^^^^^^^^^^^^
-AssertionError: ('neural-five-clean', 4, '# verify --all: cpu (cpu), 5 lanes x 9 fixtures, harness wheel copy, table /Users/andrewhendel/mojolearn-evidence/cpu-verification-completion/installed-env/lib/python3.14/site-packages/mojolearn/verify_reference/table.json\n  byte-lm                            byte_lm             5.5s\n  gemm-bf16                          linalg              0.2s\n  gemm-int8                          linalg              0.0s\n  byte-lm-resident                   byte_lm             1.7s\n  ivf                                ivf                12.5s\n')
-mac_slot: {"wait_seconds": 0.0009270829996239627, "run_seconds": 21.93734808299996, "exit_code": 1}

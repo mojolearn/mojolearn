@@ -3,8 +3,7 @@
 # lane/catboost-parity (2026-09-19): Ordered boosting (boosting_type='Ordered')
 # and the six non-default feature_border_types, whose Apple M4 Metal column and
 # CPU host column agree bit for bit on this Mac and have no NVIDIA or AMD
-# column yet. docs/lanes/LANE_STATUS_catboost-parity.md carries the Apple
-# hashes this leg's JSON is diffed against at home.
+# column yet. This leg's JSON is diffed against the Apple hashes at home.
 #
 # WHAT IT ASKS, on one box, one source:
 #
@@ -26,7 +25,7 @@
 #                 to the one-device column. par-boosting and par-boosting-reg
 #                 ride along because the logical-shard diagnostic on the M4
 #                 read intermittent two-shard divergence on the greedy
-#                 (Plain) partition (docs/lanes/LANE_STATUS_catboost-parity.md);
+#                 (Plain) partition;
 #                 the par arm runs three repeats for that reason.
 #   host check    `check-border-types` (294 CatBoost border cases, host code)
 #                 and its sabotage, which must fail.

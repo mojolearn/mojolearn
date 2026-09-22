@@ -1,5 +1,0 @@
-# verify --all: cpu (cpu), 4 lanes x 9 fixtures, harness wheel copy, table /Users/andrewhendel/mojolearn-evidence/reference-admission-integrity/installed-env/lib/python3.14/site-packages/mojolearn/verify_reference/table.json
-  spectral                           metrics             5.4s
-  arima-exog                         arima               2.1s
-  arima-exog-seasonal                arima              31.9s
-  metrics-fowlkes-mallows            metrics             1.0s

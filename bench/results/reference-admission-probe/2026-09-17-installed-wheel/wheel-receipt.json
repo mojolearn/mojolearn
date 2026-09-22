@@ -1,6 +1,0 @@
-{
-  "wheel": "mojolearn-0.8.7-py3-none-macosx_11_0_arm64.whl",
-  "sha256": "84fa12474d70a2e604085ee4e272493e2609ed443ff3a27912d5869d754ad6cf",
-  "ctr_models": 18,
-  "scope": "CPU development wheel with reused candidate bindings; not release qualification"
-}

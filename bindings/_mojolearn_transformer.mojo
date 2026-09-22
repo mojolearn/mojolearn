@@ -74,8 +74,8 @@ DEVIATION 795 -- THE TRANSFORMER SURFACE'S OWN DEPARTURES, IN ONE BLOCK.
   computed on-device exactly as the lane's own check driver builds it.
   Legacy entry points rebuild it per call. The Python-owned session reuses
   it only for an exactly matching workspace configuration; S6-S8 are pure
-  functions of (theta, head_dim, position). See
-  docs/TRANSFORMER_SESSION_REUSE.md for ownership and refresh rules.
+  functions of (theta, head_dim, position). The ownership and refresh rules
+  are under OWNERSHIP AND REFRESH below.
 
   (iv) WHAT IS REFUSED HERE, AND WHAT GOES DOWN UNJUDGED (DEVIATION
   793's split, applied). Refused HERE: a null address, an
@@ -1128,7 +1128,7 @@ def transformer_decode_step_binding(
 # stage the block reads it writes first in the same call. No arithmetic is
 # respelled here; the only new device operations are transfers.
 #
-# OWNERSHIP AND REFRESH, the rule docs/NEURAL_METAL_DECODE.md asks for. The
+# OWNERSHIP AND REFRESH. The
 # session COPIES the weights and the cache at `open`; edits to the caller's
 # arrays after that are NOT observed until `close` and a new `open`
 # (weights) or `load_state` (cache). The caller's cache buffers are STALE

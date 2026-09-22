@@ -212,7 +212,7 @@ def check_hist_depends_on_partition() raises:
 
 
 def main() raises:
-    # STANDALONE DRIVER. `probe_main.mojo` calls this first inside
+    # STANDALONE DRIVER. `checks/probe_main.mojo` calls this first inside
     # "ONE FULL LEVEL (GPU, end to end)"; it owns its own `DeviceContext`.
     print("histogram vs partition (GPU):")
     check_hist_depends_on_partition()

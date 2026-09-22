@@ -252,7 +252,7 @@ def check_split_resolution() raises:
 
 
 def main() raises:
-    # STANDALONE DRIVER. The three calls `probe_main.mojo` makes under
+    # STANDALONE DRIVER. The three calls `checks/probe_main.mojo` makes under
     # "compressed index layout (host)", in that order.
     print("compressed index layout (host):")
     check_layout()

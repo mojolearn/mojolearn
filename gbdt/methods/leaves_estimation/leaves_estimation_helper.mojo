@@ -9,7 +9,7 @@ Reference: `catboost/cuda/methods/leaves_estimation/leaves_estimation_helper.h`
 Only those two functions are implemented. The rest of their header is pairwise
 and groupwise machinery (`MakeSupportPairsMatrix`, `ReorderPairs`,
 `FilterZeroLeafBins`) belonging to the ranking oracles, which are NOT
-IMPLEMENTED; implementing a function nothing reaches is the defect ENGINEERING_RULES 3
+IMPLEMENTED; implementing a function nothing reaches is the defect CONTRIBUTING.md (Evidence must be able to fail)
 names.
 
 ## The step of theirs this file DOES NOT do, and why that is right

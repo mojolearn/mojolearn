@@ -132,7 +132,7 @@ SHAPES = {
 SHAPE_FIELDS = ('batch', 'length', 'd_model', 'n_heads', 'n_kv', 'head_dim',
                 'intermediate', 'n_layers', 'vocab_size')
 EXPECTED_PARAMETERS = {'control': 20453376, 'target': 162147840}
-# ENGINEERING_RULES 9: enwik8 and pile_github are the two corpora from
+# CONTRIBUTING.md (Performance claims): enwik8 and pile_github are the two corpora from
 # 2026-09-11 night; tinyshakespeare and cpython312_lib are retired timing
 # corpora, still accepted so older evidence can be re-read.
 CORPORA = ('enwik8', 'pile_github', 'tinyshakespeare', 'cpython312_lib')

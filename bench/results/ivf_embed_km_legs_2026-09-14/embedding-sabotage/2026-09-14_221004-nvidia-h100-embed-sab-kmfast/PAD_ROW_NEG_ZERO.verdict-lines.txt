@@ -1,7 +1,0 @@
-mode IDENTICAL   sabotage: PAD_ROW_NEG_ZERO   EMB_TPB: 256
-ledger: the caller expected 'PAD_ROW_NEG_ZERO' and the binary agrees, so the -D was not silently dropped
-clause (a): 17 fixture cases, all 9 stages, device vs host oracle, BITWISE
-card: 9 records at /root/gemm_leg_out/embedding-sabotage/PAD_ROW_NEG_ZERO.card, contract section 10 wants 9
-card: 9/9 tags in contract section 10's order, all unique, three of them INTEGER (contract section 6: emb.perm is where a divergent sort becomes visible before it reaches a float)
-clause (g): arm PAD_ROW_NEG_ZERO -- contract section 8, +0.0 STORED at row padding_idx
-Unhandled exception caught during execution: embedding_check: SABOTAGE PAD_ROW_NEG_ZERO moved 'emb.dw_seed' FIRST on f_pad, and contract 11.1 says its own clause writes 'emb.dw'. Each arm must move the stage its OWN clause writes and no earlier one; an earlier stage means the arm is not aimed where it says it is.

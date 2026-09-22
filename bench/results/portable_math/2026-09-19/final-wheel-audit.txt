@@ -1,2 +1,0 @@
-{"wheel": "/Users/andrewhendel/mojolearn-evidence/hardware-gaps-088/libm-candidates/mojolearn-0.8.8-py3-none-macosx_11_0_arm64.whl", "platform_math_free": true, "native_files_checked": 66}
-{"wheel": "/Users/andrewhendel/mojolearn-evidence/hardware-gaps-088/libm-candidates/mojolearn-0.8.8-py3-none-manylinux_2_35_x86_64.whl", "platform_math_free": true, "native_files_checked": 124}

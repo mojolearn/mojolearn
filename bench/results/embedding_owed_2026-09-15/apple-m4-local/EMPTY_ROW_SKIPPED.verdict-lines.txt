@@ -1,7 +1,0 @@
-device probe: raw 0x80c00000 + 0x00800000 -> 0x80000000 on the DEVICE, a flushed add, so EMB_NO_FLUSH_ACC is INERT on this column (contract 9.3) and clause (g) asserts that instead
-device refusal: f_oor_high REFUSED by name on the device entry point, output buffer untouched (6 poisoned cells), so nothing was launched
-device refusal: f_oor_neg REFUSED by name on the device entry point, output buffer untouched (6 poisoned cells), so nothing was launched
-device refusal: PASS, both out-of-range cases refused by name before any launch
-clause (g): arm EMPTY_ROW_SKIPPED -- contract 5.5, the store is required. **NO INERT CASE IS ASSERTED**: the arm skips the store for EVERY cell, not only the empty rows, so against a POISONED buffer it moves everywhere. That is the arm being blunt, not the gate being weak, and the poison is what makes it visible at all
-clause (g): EMPTY_ROW_SKIPPED BIT on f_empty: 2 of 9 stages moved, FIRST at emb.dw_seed, which is the stage its own clause writes.
-clause (g): EMPTY_ROW_SKIPPED has NO ASSERTED INERT CASE. contract 5.5, the store is required. **NO INERT CASE IS ASSERTED**: the arm skips the store for EVERY cell, not only the empty rows, so against a POISONED buffer it moves everywhere. That is the arm being blunt, not the gate being weak, and the poison is what makes it visible at all

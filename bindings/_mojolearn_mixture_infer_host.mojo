@@ -4,7 +4,7 @@
 GaussianMixture's score_samples, predict_proba, predict, score, bic, aic and
 sample
 on a CPU-only install (the neighbors and density inference lane,
-2026-09-15; docs/lanes/CPU_INFERENCE_BOUNDARY_2026-09-15.md).
+2026-09-15).
 
 This is the mixture binary a wheel ships. It registers the four scoring
 entries of `bindings/mixture_host_scoring.mojo`, the same functions the

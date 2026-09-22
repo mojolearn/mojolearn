@@ -6,8 +6,8 @@
 #   bash tools/do_release061_leg.sh <frozen-40-hex-commit> <token_file>          DRY RUN, rents nothing
 #   bash tools/do_release061_leg.sh <frozen-40-hex-commit> <token_file> --rent   spends money
 #
-# DEVIATION 2268. The 0.6.1 wheel needs three per-architecture build proofs
-# (docs/RELEASE_0_6_1_EXECUTION_PLAN.md). The two CUDA proofs come from
+# DEVIATION 2268. The 0.6.1 wheel needs three per-architecture build proofs.
+# The two CUDA proofs come from
 # tools/gemm_remote_leg.sh on RunPod (MOJOLEARN_NVIDIA_CAMPAIGN=7); the only
 # AMD silicon this account can rent is a DigitalOcean MI325X, so this file is
 # the third leg. It produces the SAME evidence tree the NVIDIA legs keep under

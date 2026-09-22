@@ -1,4 +1,0 @@
-train_main: 2 documents, 20000000 bytes, vocab_size 50256, min_frequency 2
-  50256 tokens (50000 merges) from 220165 pre-token groups, 47825 ties broken
-  wrote /root/new.ranks.tsv
-  wrote /root/new.tokenizer.json

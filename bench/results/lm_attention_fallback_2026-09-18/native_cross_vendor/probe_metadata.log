@@ -1,4 +1,0 @@
-EXPECTED FAIL incorrect synthetic metadata label
-MATCH corpus metadata {'sha256': 'pinned-fixture', 'schedule': 'corpus.ids(index)'}
-MATCH actual corpus ids [[7, 8, 9]]
-MATCH no-corpus metadata synthetic uniform token ids, no corpus

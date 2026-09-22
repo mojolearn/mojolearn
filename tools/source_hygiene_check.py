@@ -6,9 +6,8 @@
     python3 tools/source_hygiene_check.py              # fail on any match
     python3 tools/source_hygiene_check.py --self-test  # prove each pattern FIRES
 
-One pattern today, from the 2026-09-16 discarded-atomic audit
-(`docs/lanes/DISCARDED_ATOMIC_AUDIT_2026-09-16.md`): an atomic whose result is
-thrown away.
+One pattern today, from the 2026-09-16 discarded-atomic audit. An atomic whose
+result is thrown away.
 
     _ = Atomic.load(...)
     _ = Atomic.compare_exchange(...)

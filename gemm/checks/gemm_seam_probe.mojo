@@ -3,7 +3,7 @@
 boundary, against the shipped per-step seam, on the 262,144 adversarial
 triples of `transformer/checks/attention_fma_boundary_check.mojo`.
 
-THE QUESTION (docs/lanes/BRIEF_gemm_kernel_2026-09-11.md section 14). The
+THE QUESTION. The
 identity contract's seam is round-then-flush, `ftz(fma_rn(a, b, acc))`. On
 NVIDIA that is two issued instructions per product step (`fma.rn` then
 `mul.rn.ftz`), which halves the reachable fp32 peak (brief 3.2), because the

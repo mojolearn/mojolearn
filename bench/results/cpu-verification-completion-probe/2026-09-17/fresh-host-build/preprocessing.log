@@ -1,8 +1,0 @@
-Imported from /Users/andrewhendel/mojolearn-evidence/cpu-verification-completion/fresh-host-source-7f5b786ae/bindings/_mojolearn_preprocessing_host.mojo:30:
-./bindings/hostptr.mojo:58:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
-        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
-        ^~~~~~
-        unsafe_memcpy
-<unknown>:0: note: 'memcpy' declared here
-ld: warning: passed two min versions (26.0, 11.0) for platform macOS. Using 11.0.
-ld: warning: object file (/private/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojo_archive-b26796d.a) was built for newer 'macOS' version (26.0) than being linked (11.0)

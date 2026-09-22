@@ -2,9 +2,8 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 # SHIPS: compiled into a CPU host binding (python/mojolearn/host_surface.py names which); product, not only a check.
 """Binary logistic regression TRAINING on the host, for a box with no GPU
-(workstream E batch 2, the logistic lane of
-docs/lanes/BRIEF_cpu_training_2026-09-13.md section 1.1 "ols, ridge,
-logistic", 2026-09-14): cuML's quasi-Newton solver, the L-BFGS arm.
+(workstream E batch 2, the logistic lane,
+2026-09-14): cuML's quasi-Newton solver, the L-BFGS arm.
 
 HOST ONLY. Nothing here imports `max.gpu`, `std.gpu` or a `DeviceContext`,
 and no GPU binding imports this file. Every kernel and every host scalar of

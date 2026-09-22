@@ -1,4 +1,0 @@
-mac_slot: admitted after 0.001s
-clean exit=0
-sabotage exit=1
-mac_slot: {"wait_seconds": 0.0010797499999171123, "run_seconds": 8.841647958000067, "exit_code": 0}

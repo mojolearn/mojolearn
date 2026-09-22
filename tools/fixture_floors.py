@@ -8,14 +8,12 @@
     python3 tools/fixture_floors.py --self-test  # prove the check REFUSES
 
 WHY THIS EXISTS. On 2026-09-16 an audit found two shrunken identity cells that
-can no longer FAIL (docs/lanes/LANE_STATUS_shrink-blindness-audit.md). One of
-them, `samba-untied-dropout-accum`, had a floor WRITTEN DOWN before it was
-cut: docs/lanes/LANE_STATUS_lane-identity-fixtures-light.md section 1f is
-titled "LEFT BIG" and says three steps is the floor because step 3 is the
-first that evaluates the cosine arm of the schedule. It was cut to one step
-anyway, docs/lanes/FIXTURE_SHRINK_SCOPE.md carried forward only the rows half
-of that reasoning, and docs/lanes/LANE_STATUS_lane-neural-shape-shrink.md then
-recorded as fact that the third step was kept. Nobody lied. A floor in prose
+can no longer FAIL. One of them, `samba-untied-dropout-accum`, had a floor
+WRITTEN DOWN before it was cut: a design note titled "LEFT BIG" said three
+steps is the floor because step 3 is the first that evaluates the cosine arm
+of the schedule. It was cut to one step anyway, a later scoping note carried
+forward only the rows half of that reasoning, and a third note then recorded
+as fact that the third step was kept. Nobody lied. A floor in prose
 is not a floor, because the reason and the number live in a different file
 from the fixture and a change never has to walk past them.
 

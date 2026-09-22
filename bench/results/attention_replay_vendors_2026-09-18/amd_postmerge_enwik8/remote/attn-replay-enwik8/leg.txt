@@ -1,1 +1,0 @@
-column=amd arch=gfx942 corpus=enwik8 third=none

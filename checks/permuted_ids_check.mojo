@@ -289,7 +289,7 @@ def check_permuted_leaf_ids(depth: Int = 0, replicas: Int = 1, permute: Bool = T
 
 
 def main() raises:
-    # STANDALONE DRIVER. The bare call `probe_main.mojo` makes under
+    # STANDALONE DRIVER. The bare call `checks/probe_main.mojo` makes under
     # "non-contiguous leaf ids (GPU)", then the FOUR-ARM leaf-id /
     # replication matrix it runs afterwards. Both are needed: the
     # dense-vs-looked-up writeback shows only on a PERMUTED id list, and

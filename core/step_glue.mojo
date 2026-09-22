@@ -1,7 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""DEVIATIONS 2645 to 2648: the byte LM step glue arms
-(docs/lanes/BRIEF_step_glue_2026-09-11.md).
+"""DEVIATIONS 2645 to 2648: the byte LM step glue arms.
 
 WHICH BUILDS COMPILE THE GLUE LAUNCHES (DEVIATION 2649 changed this). Until
 that deviation every new launch path here was compiled only under

@@ -1,9 +1,0 @@
-cells-ours-QueryRMSE-gpu=0 23:16:55
-cells-ours-PairLogit-gpu=0 23:18:06
-cells-ours-YetiRank-gpu=0 23:19:17
-cells-catboost-QueryRMSE-gpu=0 23:19:42
-cells-catboost-PairLogit-gpu=0 23:20:28
-cells-catboost-YetiRank-gpu=0 23:20:55
-cells-xgboost-rank_pairwise-gpu=1 23:21:00
-cells-xgboost-rank_ndcg-gpu=1 23:21:06
-cells-lightgbm-lambdarank-cpu=0 23:21:56

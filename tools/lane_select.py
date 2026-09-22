@@ -69,8 +69,7 @@ change look verified while checking nothing.
     python3 tools/lane_select.py --selfcheck
 
 `tools/verify_lanes.py` is the one command that RUNS what this selects, for
-one lane, for a change, or for everything. The tiers are
-docs/lanes/VERIFICATION_TIERS.md.
+one lane, for a change, or for everything.
 """
 import argparse
 import ast

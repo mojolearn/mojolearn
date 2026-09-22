@@ -291,7 +291,7 @@ def run_mape_case(
 ) raises -> Int:
     """`ComputeExactApprox`'s MAPE ARM, which had no caller in any check.
 
-    ENGINEERING_RULES 8, and it cost a real defect: this file called
+    CONTRIBUTING.md (Non-default paths), and it cost a real defect: this file called
     `compute_weighted_quantile` with `use_mape_weights=False` on every arm,
     so `compute_exact_approx`'s `is_mape` branch -- the one that runs
     `ComputeWeightsWithTargets` first -- was never executed by anything.

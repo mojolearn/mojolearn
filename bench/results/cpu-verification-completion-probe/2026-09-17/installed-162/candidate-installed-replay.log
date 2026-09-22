@@ -1,5 +1,0 @@
-mac_slot: admitted after 0.001s
-Updated candidate installed
-lowbit-twelve {'DIVERGENT': 0, 'IDENTICAL': 396, 'N/A': 144, 'OWED': 0, 'REFUSED': 0} {'appendix_entries': 246, 'available': 162, 'excluded': 50, 'registered_lanes': 229, 'unavailable': 0, 'withheld': 17}
-repaired-twenty-nine {'DIVERGENT': 0, 'IDENTICAL': 954, 'N/A': 351, 'OWED': 0, 'REFUSED': 0} {'appendix_entries': 246, 'available': 162, 'excluded': 50, 'registered_lanes': 229, 'unavailable': 0, 'withheld': 17}
-mac_slot: {"wait_seconds": 0.0006620000003749738, "run_seconds": 764.0017432919994, "exit_code": 0}

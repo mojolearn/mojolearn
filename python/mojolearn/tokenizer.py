@@ -550,7 +550,7 @@ class BpeVocabularyTrainer:
     vocabulary; `stats["backend"]` records it. The Python reference recounts
     every pair per merge in pure Python and is impractical at tens of
     thousands of ranks; the Mojo one trained 50,256 ranks on 20 MB on one
-    core (see docs/lanes/LANE_STATUS_bpe-builder-native.md).
+    core.
     `MOJOLEARN_BPE_TRAINER_SABOTAGE=1` reverses the tie-break on EITHER
     backend (the negative control).
     """

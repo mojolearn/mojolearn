@@ -2,8 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The GradientBoosting fit on the host for the NON-SYMMETRIC grow policies,
 a second spelling of the device trainer on the gbdt-depthwise and
-gbdt-lossguide lanes (workstream E batch 3, 2026-09-14; brief
-docs/lanes/BRIEF_cpu_training_2026-09-13.md, the batch 3 section).
+gbdt-lossguide lanes (workstream E batch 3, 2026-09-14).
 
 HOST ONLY. Nothing here imports `max.gpu`, `std.gpu`, a `DeviceContext` or a
 module that defines a kernel. It builds on `gbdt/host/gbdt_oracle.mojo` (the

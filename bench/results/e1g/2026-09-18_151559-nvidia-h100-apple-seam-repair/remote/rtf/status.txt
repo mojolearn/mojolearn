@@ -1,5 +1,0 @@
-column=nvidia arch=sm_90a started=2026-09-18T15:19:14Z
-gemm_seam_probe build=0 run=0
-gemm_rtf_boundary_check build=0 run=1
-reference=1
-finished=2026-09-18T15:20:00Z

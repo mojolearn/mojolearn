@@ -1589,7 +1589,7 @@ def check_device_default_dispatch() raises:
     FLAT and of the old TUNED 128x128 plan where it takes the `ksplit`
     default, and where it does not.
 
-    `docs/lanes/BRIEF_gemm_long_k_2026-09-11.md` section 10: a column whose
+    A column whose
     `lib_gemm_block_parallelism_for` row is above 0 (NVIDIA) runs the group
     kernel over power-of-two leaf groups plus one fold launch on every call
     the long-k group rule takes; a column whose row is 0 (Apple, AMD until

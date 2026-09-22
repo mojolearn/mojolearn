@@ -25,5 +25,5 @@
     "metric": "bits per byte on the Pile test split's GitHub records (the same selection applied to test.jsonl.zst of the same revision, sha256 a6cafe820e9c350af95b57ec75d35d7c8b479de2eb87caabe6fb6b567e639c3a)",
     "published": "GPT-2 small 1.7912 and GPT-3 davinci 0.5635 (Gao et al., arXiv 2101.00027); byte-level Transformer 0.655, MegaByte 0.570, SpaceByte 0.500 (arXiv 2404.14408)"
   },
-  "scope": "source-code kind for the two-corpus neural rule (ENGINEERING_RULES section 9, from 2026-09-11 night); the source is the Pile validation file, used here as training bytes for timing; input.txt is fetched by tools/fetch_corpus_pile_github.sh and is not committed"
+  "scope": "source-code kind for the two-corpus neural rule (CONTRIBUTING.md (Performance claims), from 2026-09-11 night); the source is the Pile validation file, used here as training bytes for timing; input.txt is fetched by tools/fetch_corpus_pile_github.sh and is not committed"
 }

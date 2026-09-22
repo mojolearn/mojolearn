@@ -39,9 +39,9 @@ The four groupwise-CTR kernels at the end of their file --
 ranking loss is implemented. `THistoryBasedCtrCalcer::NeedFixForGroupwiseCtr()`
 is `false` for every configuration this implementation can reach, so implementing them
 would add four kernels no caller reaches -- the exact defect
-`ENGINEERING_RULES.md` rule 3 names.
+`CONTRIBUTING.md` (Evidence must be able to fail) names.
 
-## The two spelling workarounds (`ENGINEERING_RULES.md` rule 4)
+## The two spelling workarounds (`CONTRIBUTING.md`)
 
 1. **`writeIndices` and `map` are nullable in their signatures**
    (`ctr_calcers.cu:57`, `:280`) and select between `dst[Index(idx[i])]`

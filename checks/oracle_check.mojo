@@ -414,7 +414,7 @@ def onebyte_width_for(folds: Int) raises -> Int:
 def print_policy_reach(path: String = String("bench/oracle.txt")) raises:
     """WHICH KERNELS THIS FIXTURE REACHES, printed beside its result.
 
-    ENGINEERING_RULES 8: "the benchmark prints which path it took, beside the
+    CONTRIBUTING.md (Non-default paths): "the benchmark prints which path it took, beside the
     timing. A harness that cannot name the kernel it ran can publish a number
     about a different one." The same applies to a differential, and
     the `fixed_scale` defect is what it costs when it does not -- three fixtures

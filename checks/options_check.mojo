@@ -233,6 +233,6 @@ def check_options() raises:
 
 
 def main() raises:
-    # STANDALONE DRIVER, the same call `probe_main.mojo` makes first.
+    # STANDALONE DRIVER, the same call `checks/probe_main.mojo` makes first.
     print("options:")
     check_options()

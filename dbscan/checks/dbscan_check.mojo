@@ -1036,7 +1036,7 @@ def _run_two_loop_arm(
 def check_dbscan_rbc_two_loop_arms() raises:
     """BOTH reference arms of loop 2's RBC dispatch, one named fixture each.
 
-    ENGINEERING_RULES 8: a switch is exercised on both sides or one side is
+    CONTRIBUTING.md (Non-default paths): a switch is exercised on both sides or one side is
     unchecked, and the RBC arm's loop 2 now has a switch --
     `algo.cuh:119-122` sends a batch down the ONE-PASS `max_k` form when
     loop 1's bound fits the spare room, and down the two-pass count + fill
@@ -1554,8 +1554,7 @@ def check_dbscan_manhattan_refused_on_the_ball_cover() raises:
 #
 # MEASURED, NOT ARGUED: with the fix in, `dbscan_main` at -O3 and at -O1
 # print byte-identical output (17 gates, 3248 bytes) in BOTH the FAST and
-# the IDENTICAL build on the L40S; the Apple M4 run is owed
-# (`docs/lanes/HANDOFF_dbscan_crash.md`).
+# the IDENTICAL build on the L40S; the Apple M4 run is owed.
 # ---------------------------------------------------------------------------
 
 

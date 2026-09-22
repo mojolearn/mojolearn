@@ -212,8 +212,8 @@ def device_first_nonfinite(
     step_count_d2h()
     ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=part)
     # LOAD-BEARING, category (a). `_fold_partials` reads `host` on the
-    # host on the next line. Removing this one is the sabotage in
-    # docs/lanes/LANE_STATUS_wait-removal.md section 5.
+    # host on the next line. Removing this one is a sabotage that moves
+    # the result.
     step_count_sync()
     ctx.synchronize()
     var best = _fold_partials(host, blocks)
@@ -257,8 +257,8 @@ def device_first_negative(
     step_count_d2h()
     ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=part)
     # LOAD-BEARING, category (a). `_fold_partials` reads `host` on the
-    # host on the next line. Removing this one is the sabotage in
-    # docs/lanes/LANE_STATUS_wait-removal.md section 5.
+    # host on the next line. Removing this one is a sabotage that moves
+    # the result.
     step_count_sync()
     ctx.synchronize()
     var best = _fold_partials(host, blocks)

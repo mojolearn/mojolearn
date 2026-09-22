@@ -199,5 +199,5 @@ def check_early_stop_rollback() raises:
 
 
 def main() raises:
-    # STANDALONE DRIVER, the same call `probe_main.mojo` makes.
+    # STANDALONE DRIVER, the same call `checks/probe_main.mojo` makes.
     check_early_stop_rollback()

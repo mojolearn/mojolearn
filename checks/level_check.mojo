@@ -428,7 +428,7 @@ def check_mixed_tree(max_depth: Int) raises:
 
 
 def main() raises:
-    # STANDALONE DRIVER. The depths `probe_main.mojo` runs under
+    # STANDALONE DRIVER. The depths `checks/probe_main.mojo` runs under
     # "ONE FULL LEVEL (GPU, end to end)". `check_hist_depends_on_partition`
     # runs beside these there but lives in `hist_dump_check` and has its
     # own task (`pixi run check-hist-dump`).

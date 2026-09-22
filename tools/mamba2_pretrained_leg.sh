@@ -1,7 +1,6 @@
 #!/bin/sh
 # tools/mamba2_pretrained_leg.sh -- state-spaces/mamba2-130m through
 # mojolearn's GPU Mamba2Block in IDENTICAL mode on a DigitalOcean NVIDIA H100.
-# Brief: docs/lanes/MAMBA2_PRETRAINED_IDENTITY_2026-09-15.md
 #
 # ONE FILE, TWO ROLES.
 #   sh tools/mamba2_pretrained_leg.sh dry-run   on the Mac: every local check,

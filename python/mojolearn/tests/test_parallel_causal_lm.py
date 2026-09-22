@@ -21,8 +21,7 @@ last test -- the CPU numerics driven through emulated RPC, held to the plain
 model's digest. That last one is NOT physical two-GPU evidence and says so;
 the transport is mocked.
 
-What is still owed is a run on two real CUDA or HIP devices
-(docs/lanes/LANE_STATUS_causal-lm-distributed-proof.md's outstanding item).
+What is still owed is a run on two real CUDA or HIP devices.
 A one-process-per-index CPU column is the DEGENERATE case of the device axis,
 exactly as `identity_break._par_devices`'s docstring says of every `par-*`
 lane, and it is AGREEMENT with the plain path rather than a claim that either

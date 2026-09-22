@@ -31,5 +31,5 @@
     "split": "90M train / 5M validation / 5M test, as in the Transformer-XL enwik8 script",
     "published": "Transformer-XL 12 layers 1.06, 24 layers 0.99 (arXiv 1901.02860); T12 1.11 (arXiv 1808.04444); SHA-RNN 1.076 (arXiv 1911.11423)"
   },
-  "scope": "English-text kind for the two-corpus neural rule (ENGINEERING_RULES section 9, from 2026-09-11 night); input.txt is fetched by tools/fetch_corpus_enwik8.sh and is not committed"
+  "scope": "English-text kind for the two-corpus neural rule (CONTRIBUTING.md (Performance claims), from 2026-09-11 night); input.txt is fetched by tools/fetch_corpus_enwik8.sh and is not committed"
 }

@@ -1,4 +1,0 @@
-TRANSPORT pca-full input 5.04 MiB outputs 3 EQUAL
-TRANSPORT gram-wide input 7.84 MiB outputs 2 EQUAL
-TRANSPORT cholesky input 77.25 MiB outputs 3 DIFFERS output 0: 235566 of 81000000 bytes; output 2: 16222 of 54000 bytes
-TRANSPORT cases that differ or failed: 1

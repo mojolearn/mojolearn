@@ -1,8 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CPU binding for the byte-level BPE tokenizer in the GPT-2 format
-(`tokenizer/`), the expose-tokenizer lane, 2026-09-14
-(docs/lanes/BRIEF_expose_tokenizer_2026-09-14.md).
+(`tokenizer/`), the expose-tokenizer lane, 2026-09-14.
 
 HOST ONLY, AND THE ONLY BINDING THIS FAMILY HAS. `tokenizer/` is integer
 and table work (a byte buffer, three Unicode range tables, a hash probe and

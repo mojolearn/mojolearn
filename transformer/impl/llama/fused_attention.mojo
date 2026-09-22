@@ -59,8 +59,7 @@ feature; a planted call takes the eager path. `head_dim` outside
 `head_dim > 128` is not spelled here). Every sabotage build takes the
 eager path, because the sabotage arms test the eager spelling.
 
-THE OPT-IN ARMS (DEVIATIONS 2525 to 2527, 2026-09-11, brief
-`docs/lanes/BRIEF_attention_step_2026-09-11.md`) relax "nothing
+THE OPT-IN ARMS (DEVIATIONS 2525 to 2527, 2026-09-11) relax "nothing
 materialized in HBM" where the shape makes it cheap: at the LM target
 shape (batch 1, 12 heads, L 2048) a `[B, n_heads, L, S]` scratch is 201 MB
 and the recomputation it replaces is 61 percent of the training step.
@@ -177,8 +176,6 @@ a launch whose result is then thrown away."""
 # The 700-step H100 control found refusals are intermittent and the latch
 # regresses throughput by 3.6%. It remains available to reproduce that trial.
 # The qualified default instead replays omitted masked terms with exact bits.
-# See docs/lanes/LANE_STATUS_lm-attention-fallback.md and the earlier
-# LANE_STATUS_attention-fallback-fix.md for the separate measured records.
 # ===========================================================================
 
 comptime ATTN_STICKY = is_defined["MOJOLEARN_ATTN_STICKY"]()
@@ -234,8 +231,7 @@ comptime FUSED_HW_FTZ_FMA = lib_hardware_ftz_fma_for[TARGET_COLUMN]()
 
 
 # ===========================================================================
-# THE ATTENTION ARM HOOK (DEVIATIONS 2525 to 2527, 2026-09-11; brief
-# docs/lanes/BRIEF_attention_step_2026-09-11.md).
+# THE ATTENTION ARM HOOK (DEVIATIONS 2525 to 2527, 2026-09-11).
 #
 # `-D MOJOLEARN_ATTN_ARM_TRIAL=1` (never on a shipped build) compiles every
 # candidate arm of the fused forward and backward, clean and sabotage, and
@@ -1715,7 +1711,7 @@ backward launcher writes the operands of its FIRST call in the process
 `d_attn_ctx`, as the launcher receives them, plus `meta.txt` with the
 call's geometry) into `MOJOLEARN_ATTN_OPERAND_DUMP_DIR`, so the attention
 microbenchmark can price the arms on activations the real training path
-produced on a real corpus (ENGINEERING_RULES section 9). Nothing is
+produced on a real corpus (CONTRIBUTING.md (Performance claims)). Nothing is
 written when the directory is unset or `meta.txt` already exists there;
 the dump is outside every timed region the probe reports (it precedes
 the regime scans, and only the one call pays it)."""
@@ -4039,8 +4035,7 @@ def fused_bwd_dkdv_tiled_kernel[HD: Int, SABOTAGE: Bool](
 
 
 # ===========================================================================
-# DEVIATION 2528 (arm token `_ztiled`, TRIAL BUILDS ONLY; brief
-# docs/lanes/BRIEF_attention_step_2026-09-11.md section 12.2): zdot as a
+# DEVIATION 2528 (arm token `_ztiled`, TRIAL BUILDS ONLY): zdot as a
 # register-blocked y/dy kernel plus a row z fold.
 #
 # THE READING. Under stash_tiled the backward's floor is
@@ -4297,8 +4292,7 @@ def fused_bwd_zfold_kernel[TZ: Int, PF: Bool](
 
 
 # ===========================================================================
-# DEVIATION 2533 (arm token `_pf`, TRIAL BUILDS ONLY; brief
-# docs/lanes/BRIEF_attention_step_2026-09-11.md section 14.2): preflushed
+# DEVIATION 2533 (arm token `_pf`, TRIAL BUILDS ONLY): preflushed
 # seams in the stash kernels, as COPIES beside the shipped ones.
 #
 # THE READING. `_step(a, b, acc)` flushes both operands in software on every
@@ -4812,8 +4806,7 @@ def fused_bwd_dkdv_tiled_pf_kernel[HD: Int](
 
 
 # ===========================================================================
-# DEVIATION 2597 (arm tokens `_kvgrid` and `_kvsplit`); brief
-# docs/lanes/BRIEF_attention_step_2026-09-11.md section 16. Trial builds
+# DEVIATION 2597 (arm tokens `_kvgrid` and `_kvsplit`). Trial builds
 # compile every instantiation; a shipped build compiles only the clean one
 # its column default resolves to (ATTN_SHIPPED_BWD_KV, section 18: AMD's
 # `fused_bwd_dkdv_r2_kernel[64, 32, False]`). DEVIATION 2596
@@ -5167,8 +5160,7 @@ def fused_bwd_kvfold_r2_kernel[HD: Int, BJ: Int, SAB: Bool](
 
 
 # ===========================================================================
-# DEVIATION 2598 (arm tokens `_zdefer` and `_zlag`), TRIAL BUILDS ONLY; brief
-# docs/lanes/BRIEF_attention_step_2026-09-11.md section 17.
+# DEVIATION 2598 (arm tokens `_zdefer` and `_zlag`), TRIAL BUILDS ONLY.
 #
 # THE READING (brief 17.2). On the H100 the preflushed zdot stash kernel is 66
 # of the 93 ms attention backward in the lean step. The only source
@@ -5424,8 +5416,7 @@ def fused_bwd_zdot_sched_pf_kernel[HD: Int, TQ: Int, LAG: Bool, SABN: Bool](
 
 # ===========================================================================
 # DEVIATIONS 2531 (arm token `_fgrid`) AND 2530 (arm token `_qres`), plus the
-# forward half of 2533 (`_pf`), TRIAL BUILDS ONLY; brief
-# docs/lanes/BRIEF_attention_step_2026-09-11.md sections 14.3 and 14.4.
+# forward half of 2533 (`_pf`), TRIAL BUILDS ONLY.
 #
 # THE READING. On AMD, where shared memory is partitioned per compute unit,
 # the forward sstash kernel's 17,152-byte page bounds the resident blocks

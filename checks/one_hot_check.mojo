@@ -147,7 +147,7 @@ def check_one_hot() raises:
 
 
 def main() raises:
-    # STANDALONE DRIVER, the same call `probe_main.mojo` makes. The
+    # STANDALONE DRIVER, the same call `checks/probe_main.mojo` makes. The
     # cardinality sweep is a DIFFERENT module (`one_hot_cardinality_check`,
     # `pixi run check-onehot-cardinality`) and stays there.
     check_one_hot()

@@ -1717,7 +1717,7 @@ def check_gather_matches_direct() raises:
 
 
 def main() raises:
-    # STANDALONE DRIVER. Every call `probe_main.mojo` makes under "binary
+    # STANDALONE DRIVER. Every call `checks/probe_main.mojo` makes under "binary
     # histogram correctness (GPU)", in its order and with its arguments --
     # including the four one-byte accumulator widths, the two-stat arms,
     # the 2048-row arm that accumulates four times rather than twice, and

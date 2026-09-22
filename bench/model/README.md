@@ -18,7 +18,7 @@ The claim is bit equality of the generated ids and of the first-step logits
 across columns, per prompt and per format, in the words of
 `tools/identity_break.py --diff`: IDENTICAL xN or DIVERGENT. The timing is
 one sentence per phase, the only comparison this repository reports
-(`bench/OPPONENT_REFERENCE.md`, `ENGINEERING_RULES.md` section 9): "identical
+(`bench/OPPONENT_REFERENCE.md`, `CONTRIBUTING.md` (Performance claims)): "identical
 mode takes X times the incumbent's time", ours over theirs, where above 1.0
 ours takes longer. No other speed statement is made in this directory.
 

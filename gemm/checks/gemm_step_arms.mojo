@@ -3,7 +3,7 @@
 """Host helpers of the GEMM step arms (DEVIATION 2543).
 
 The twelve GEMM calls of the byte LM training step at the target shape
-(`docs/lanes/BRIEF_gemm_step_2026-09-11.md` section 2), and the fill,
+(`gemm_step_lm_call`), and the fill,
 poison, readback, compare and median helpers that
 `gemm/checks/gemm_step_arms_check.mojo` and `bench/gemm_step_price_main.mojo`
 share.
@@ -92,9 +92,8 @@ def gemm_step_lm_call(i: Int) raises -> Tuple[Int, Int, Int, Int, Int]:
 
 #: DEVIATION 2593: control calls the price harness adds under
 #: `MOJOLEARN_GEMM_STEP_CONTROLS=1` (never weighted into the STEP line). Each
-#: separates explanations of brief docs/lanes/BRIEF_gemm_long_k_2026-09-11.md
-#: section 3.2 at a 128x128 shipped plan: TN at 36 blocks and a short k (E3,
-#: E4), NT and NN at proj_dB's 36 blocks and long k (E2), 132 against 143
+#: separates candidate explanations at a 128x128 shipped plan: TN at 36
+#: blocks and a short k (E3, E4), NT and NN at proj_dB's 36 blocks and long k (E2), 132 against 143
 #: blocks (rounds against a proportional rate, and the column's block
 #: parallelism), and 64 blocks at a long k.
 comptime GEMM_STEP_CONTROL_CALLS = 6

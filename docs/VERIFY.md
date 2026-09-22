@@ -32,8 +32,6 @@ they do not certify the installed wheel or promote a pending lane.
 
 The appendix is a historical list, not the total number of today's public
 algorithms. `additional_lanes` names registered checks outside that list.
-For the source/API/wheel comparison and the remaining qualification work, see
-[the next-wheel coverage audit](NEXT_WHEEL_COVERAGE.md).
 
 The candidate's default CPU selection now includes spectral clustering,
 Fowlkes–Mallows, and both ARIMA-with-regressors variants. To replay just those
@@ -779,9 +777,7 @@ pieces, `--lanes a,b,...` a group at a time, or check one area with
 **Maintainers: do not run a full Apple column routinely or for every alpha
 release.** Use the exact-wheel light smoke and target numerical checks at changed
 arithmetic, missing references, or a specific observed failure. A historical full
-Apple pass exceeded seven hours; it is not a publication requirement. The bounded
-alpha policy is documented in `docs/lanes/RELEASE_PROCESS_ALPHA.md` and
-`ENGINEERING_RULES.md` section 12. Full-column diagnostic guards remain in place.
+Apple pass exceeded seven hours; it is not a publication requirement. Full-column diagnostic guards remain in place.
 
 Routine checks can use an implemented CPU route. A CPU result does not establish
 Metal correctness, and a GPU-only route has no CPU evidence merely because the

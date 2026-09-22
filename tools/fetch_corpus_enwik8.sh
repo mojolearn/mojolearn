@@ -1,6 +1,6 @@
 #!/bin/sh
 # tools/fetch_corpus_enwik8.sh -- rebuild the pinned English corpus
-# training/corpus/enwik8/input.txt (ENGINEERING_RULES section 9's English
+# training/corpus/enwik8/input.txt (CONTRIBUTING.md (Performance claims)'s English
 # kind for every neural timing and quality claim) and verify it against
 # manifest.json. The bytes are not committed; this script and the manifest
 # are the pinned artifact.

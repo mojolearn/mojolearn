@@ -1,3 +1,0 @@
-out_gemm_checks_gemm_identical_id6A6A6A6A6A6A_b271817a12a7bcec.amdgcn FP-op multiset equal {'v_lshlrev_b64': (3, 2), 's_nop': (24, 26), 'v_subbrev_co_u32_e32': (7, 8), 'v_mov_b32_e32': (109, 110), 'v_subb_co_u32_e32': (6, 5)}
-out_gemm_checks_gemm_identical_id6A6A6A6A6A6A_d605fb1362e93e5b.amdgcn FP-op multiset equal {'v_subbrev_co_u32_e32': (27, 26), 'v_mov_b32_e32': (326, 324), 's_mov_b64': (138, 139), 'v_lshl_add_u64': (192, 191), 'v_subb_co_u32_e32': (1, 2)}
-kernels with identical opcode multisets: 66

@@ -375,7 +375,7 @@ struct THistoryBasedCtrCalcer(Movable):
     (`checks/ctr_device_check.mojo`), and to be compared itself against
     an independent O(n^2) tally (`checks/ctr_check.mojo`). A host
     reference used to CHECK a device answer is not a CPU path
-    (`ENGINEERING_RULES.md` 0b-ii).
+    (`CONTRIBUTING.md` (Algorithms and references)).
 
     `set_float_sample` / `VisitFloatFeatureMeanCtrs` (`:170-205`) is not
     implemented: `FloatTargetMeanValue` is not in any default description.

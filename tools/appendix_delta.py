@@ -12,7 +12,7 @@ THE NUMBER 246 DOES NOT MOVE, AND THIS FILE EXISTS SO NOBODY MOVES IT.
 `appendix-246.csv` maps the 246 algorithm/variant entries of the published
 algorithm inventory onto harness lanes. It is a record of WHAT WAS PUBLISHED.
 Adding a row for a lane that did not exist at publication would rewrite a
-published claim, and `docs/COVERAGE_AUDIT_2026-09-18.md` already refuses the
+published claim, and the 2026-09-18 coverage audit already refused the
 arithmetic in as many words:
 
     Nor can we add 26 to 246 and claim 272 unique algorithms: the

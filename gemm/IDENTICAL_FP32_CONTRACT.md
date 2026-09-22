@@ -120,7 +120,7 @@ Deferring it costs nothing and adds nothing later.
 ### 0.4 FUSED arms, enumerated and OUT OF SCOPE
 
 The charter forbids replacing a specialized FUSED contraction merely to make
-the API look general, and `ENGINEERING_RULES.md` 0b-i says the same from the
+the API look general, and `CONTRIBUTING.md` (Algorithms and references) says the same from the
 implementing side. Five arms are fused and **none is a candidate for replacement**.
 
 | arm | file | why routing it through GEMM is wrong |

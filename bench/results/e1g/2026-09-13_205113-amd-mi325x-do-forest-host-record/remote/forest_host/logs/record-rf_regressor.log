@@ -1,2 +1,0 @@
-record RandomForestRegressor predict <f4 [200] sha256 6b1e214356a98d98d8b8e83f3236f60c4a751a56c0c58ed45c85d2783da2781f
-record wrote /root/gemm_leg_out/forest_host/2026-09-13-amd-rf_regressor/expected.json (vendor hip, mode identical)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""The default-flip verdict of ENGINEERING_RULES.md section 9, from FSPEED logs.
+"""The default-flip verdict of CONTRIBUTING.md (Performance claims), from FSPEED logs.
 
     python3 tools/flip_verdict.py --taxi-before B.log --taxi-after A.log \
         --istella-before B.log --istella-after A.log [--lane L] [--arm A] [--rows N]
@@ -323,7 +323,7 @@ def verdict(args):
 
 def build_parser():
     p = argparse.ArgumentParser(
-        description="ENGINEERING_RULES.md section 9 default-flip verdict. Reads "
+        description="CONTRIBUTING.md (Performance claims) default-flip verdict. Reads "
                     "only FSPEED and FSPEED-ACC lines.")
     for ds in DATASETS:
         for side in SIDES:

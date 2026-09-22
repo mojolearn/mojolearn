@@ -1,6 +1,6 @@
 #!/bin/sh
 # tools/classical_hotaisle_leg.sh -- DEVIATION 2572, the classical opponent
-# rows (DEVIATION 2570) on a Hot Aisle AMD MI300X VM (ENGINEERING_RULES.md
+# rows (DEVIATION 2570) on a Hot Aisle AMD MI300X VM (CONTRIBUTING.md
 # sections 9 and 10; MI300X rows are a new tuple). A tools/hotaisle_leg.sh
 # body: runs ON THE BOX, inside rocm/dev-ubuntu-22.04:6.4.1-complete, from
 # /root/mojolearn after pixi install. Everything it writes is under

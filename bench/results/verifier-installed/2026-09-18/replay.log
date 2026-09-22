@@ -1,3 +1,0 @@
-mac_slot: admitted after 0.003s
-mamba3 {"command": ["/Users/andrewhendel/mojolearn-evidence/verifier-installed-continuation-2026-09-18/venv/bin/python", "-m", "mojolearn", "verify", "--all", "--include-pending", "--lanes", "mamba3", "--repeats", "2", "--batch-checks", "--no-models", "--json"], "exit": 124, "seconds": 600.011}
-mac_slot: {"wait_seconds": 0.0034764159997848765, "run_seconds": 616.98292825, "exit_code": 143}

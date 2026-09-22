@@ -4,8 +4,7 @@
 GaussianProcessRegressor's predictive mean and std and a saved
 GaussianProcessClassifier's latent mean, variance and class probability on a
 CPU-only install (the
-neighbors and density inference lane, 2026-09-15;
-docs/lanes/CPU_INFERENCE_BOUNDARY_2026-09-15.md).
+neighbors and density inference lane, 2026-09-15).
 
 This is the gp binary a wheel ships. It registers
 `bindings/gp_host_predict.mojo`'s `gpr_predict` and `gpc_predict`, the

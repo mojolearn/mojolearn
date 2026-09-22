@@ -1,3 +1,0 @@
-mac_slot: admitted after 0.001s
-wrote docs/VERIFICATION_MATRIX.md: 229 lanes, 224 algorithms, 906 columns read
-mac_slot: {"wait_seconds": 0.0006457910003518919, "run_seconds": 2.015304374999687, "exit_code": 0}

@@ -1,3 +1,0 @@
-STEP gemm arm=kpack ratio=1.5017871248729993 shipped_ms=142.490043 arm_ms=213.98971200000003 calls=12 moved=0 (per-call medians weighted by per-step counts; a GEMM sum, not a step time)
-STEP gemm arm=kpack_pad ratio=1.022806352964075 shipped_ms=142.490779 arm_ms=145.740474 calls=12 moved=0 (per-call medians weighted by per-step counts; a GEMM sum, not a step time)
-STEP gemm arm=shipped ratio=0.9998844620773957 shipped_ms=141.59853 arm_ms=141.58217 calls=12 moved=0 (per-call medians weighted by per-step counts; a GEMM sum, not a step time)

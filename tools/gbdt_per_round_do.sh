@@ -6,7 +6,7 @@
 #
 #   nohup bash tools/gbdt_per_round_do.sh > <log> 2>&1 &
 #
-# THE LOCK (ENGINEERING_RULES.md section 10; order agreed 2026-09-11 between
+# THE LOCK (CONTRIBUTING.md (Comparing against libraries without a GPU path); order agreed 2026-09-11 between
 # sessions): release-0.8.1, then the amd trees leg, then the neural attention
 # leg (owner contains "extra:"), then the GBDT A/B legs. This script takes
 # `mkdir /tmp/mojolearn-do-gpu.lock` only after an "extra:" owner has held and

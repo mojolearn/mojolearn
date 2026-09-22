@@ -9,7 +9,7 @@ reaches, shaped like `cholesky/estimator.mojo` and
 `kde/estimator.mojo::kde_score_samples_host`.
 
 **THERE IS NO UPSTREAM GAUSSIAN PROCESS.** cuML, cuVS and RAFT implement
-none at the pinned commits, so `ENGINEERING_RULES.md` 0b's settled-answer rule does
+none at the pinned commits, so `CONTRIBUTING.md` (Algorithms and references)'s settled-answer rule does
 not apply here, because there is nothing to copy. scikit-learn's
 `sklearn/gaussian_process/_gpr.py` is the SEMANTICS reference and the ORACLE
 and is never the design source; every step below cites the line of it that
@@ -800,7 +800,7 @@ def _y_dot_alpha(
     argument.** Both `y` and `dual` are already on the host at this point --
     `cholesky_solve_host` returned one of them -- so a device round trip
     would upload two `n`-vectors and drain the queue to fold `n` products.
-    That is the shape of mistake `ENGINEERING_RULES` rule 2's corollary
+    That is the shape of mistake `CONTRIBUTING.md`'s corollary
     describes ("nine drains per level became two by DELETING our
     inventions"). `chol_logdet` is on the DEVICE for the opposite reason:
     its input is `diag(L)`, which is already there, and three lanes needed
@@ -1191,7 +1191,7 @@ def gpr_predict_host(
 # ===========================================================================
 # WHAT THIS LANE REFUSES, AS ENTRY POINTS RATHER THAN AS ABSENCES
 #
-# ENGINEERING_RULES rule 3's other failure mode is an unimplemented thing that is
+# CONTRIBUTING.md (Evidence must be able to fail)'s other failure mode is an unimplemented thing that is
 # INVISIBLE. A caller reaching for classification or for posterior sampling
 # should meet a named refusal that says where the work went, not a missing
 # symbol and a guess.

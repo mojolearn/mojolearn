@@ -1,4 +1,0 @@
-mac_slot: admitted after 0.003s
-stack trace was not collected. Enable stack trace collection with environment variable `MODULAR_DEBUG=stack-trace-on-error`
-Unhandled exception caught during execution: reused workspace must not allocate or wait
-mac_slot: {"wait_seconds": 0.0025631249882280827, "run_seconds": 0.4337697080336511, "exit_code": 1}

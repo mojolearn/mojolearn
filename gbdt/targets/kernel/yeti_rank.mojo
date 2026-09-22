@@ -54,7 +54,7 @@ where each call's `NextUniformL` is drawn from a YetiRank stream of its own.
 
 ================= DEVIATION 3040: one BLOCK per task on the NVIDIA column =================
 MEASURED FIRST (RTX 4090, Istella-S LETOR 2,043,304 x 220, 19,245 queries, 2,046
-tasks, 2026-09-17, `docs/lanes/LANE_STATUS_gbdt-train-speed.md`): the
+tasks, 2026-09-17): the
 one-thread-per-task kernel above ran 29.07 ms a call, two calls a tree (the
 search gradient and the leaf estimation), 58.1 of the fit's 58.2 ms per tree
 and 88.6 percent of all GPU kernel time. One GPU thread walking 1024 positions

@@ -127,7 +127,7 @@ def build_necessary_histograms(leaves: List[LeafRecord]) raises -> LevelPlan:
     paired and subtracted. A `Zeroes` leaf holds nothing and must be built.
 
     Wiring the old version would have silently subtracted the wrong
-    histograms. See ENGINEERING_RULES.md rule 3.
+    histograms. See CONTRIBUTING.md (Evidence must be able to fail).
     ==============================================================
     """
     var compute_ids = List[UInt32]()

@@ -1,7 +1,0 @@
-embedding_sabotage ACCUM_BY_ADD exit 1 seconds 28
-embedding sabotage arm, 2026-09-14T22:34:55Z, mojo Mojo 1.0.0 (ed45d567)
-clean: PASS
-ACCUM_BY_ADD: NOT SHOWN (clause (e)): Unhandled exception caught during execution: embedding_check: CLAUSE (e)'s BY-ADD CONTROL IS DEAD. `dW = ftz(dW_first + dW_second)` at t0 = 3 gave the SAME BITS as the carried call on every straddling row. Contract 7.4 says ADD does not reproduce the unsplit chain in general -- `((a0+a1)+a2)+a3` is not `(a0+a1) + (a2+a3)` -- so either this fixture's straddling
-clause (e): the microbatch CARRY on f_split, T=6, every split point 1..5 plus a three-piece split, 8 cells
-clause (e): 2 vocabulary rows straddle the boundary, so the by-add control has something to move
-clause (e): PASS, the carried split reproduces the unsplit dW BIT FOR BIT at all 5 two-piece boundaries and at the three-piece split (2, 4)

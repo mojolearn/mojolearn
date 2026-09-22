@@ -16,9 +16,7 @@ This is an API change from published 0.7.0 and requires new native builds.
 
 GPU learners remain the product. Compiled host casting, layout conversion,
 validation, checkpoint packing and row gathering are supporting operations,
-not CPU implementations of learners. See
-[the integration and performance roadmap](../../docs/lanes/NUMPY_FREE_RESIDUAL_2026-09-10.md)
-for qualification still owed; removal of a dependency does not certify new
+not CPU implementations of learners. Removal of a dependency does not certify new
 cross-vendor training results.
 
 ## Forest fit ownership (DEVIATION 2482)

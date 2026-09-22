@@ -2907,17 +2907,15 @@ def identical_gemm_into[allow_vendor: Bool = True](
             return
     # DEVIATION 2595 -- THE SHIPPED DISPATCH. Where the column's
     # `lib_gemm_block_parallelism_for` row is above 0 (NVIDIA 132), every call
-    # the long-k group rule takes runs the `ksplit` group kernel and its fold
-    # (docs/lanes/BRIEF_gemm_long_k_2026-09-11.md sections 5 and 10). Where
-    # the row is 0 (AMD until the MI300X leg, Apple, every other column) it
+    # the long-k group rule takes runs the `ksplit` group kernel and its fold.
+    # Where the row is 0 (AMD until the MI300X leg, Apple, every other column) it
     # compiles to the line it replaced,
     # `identical_gemm_with_plan(..., choose_gemm_plan(m, n, k))`.
     identical_gemm_shipped_into(ctx, c, a, b, ws, m, n, k, op)
 
 
 # ===========================================================================
-# THE GEMM STEP ARMS (DEVIATIONS 2540 to 2542, 2026-09-11; brief
-# docs/lanes/BRIEF_gemm_step_2026-09-11.md sections 6 and 10)
+# THE GEMM STEP ARMS (DEVIATIONS 2540 to 2542, 2026-09-11)
 # ===========================================================================
 # `-D MOJOLEARN_GEMM_ARM_TRIAL=1` (never on a shipped build) makes
 # `identical_gemm_into` read the arm from the host environment on every call,
@@ -2956,17 +2954,13 @@ def identical_gemm_into[allow_vendor: Bool = True](
 #   MOJOLEARN_GEMM_ARM=kpack       2599: the shipped 128x128 block and group
 #                                  rule with the shared page packed in the
 #                                  order the accumulate reads it and one
-#                                  operand load per step (brief
-#                                  docs/lanes/BRIEF_gemm_kernel_2026-09-11.md
-#                                  section 4.1)
+#                                  operand load per step
 #   MOJOLEARN_GEMM_ARM=kpack_wide  2599: kpack on a 128x256 tile, register
 #                                  tile 8x16, K step from the page row
 #                                  (section 4.2)
 #   MOJOLEARN_GEMM_ARM=kfoldv      2640: the shipped group launch and group
 #                                  rule, the group nodes folded 16 cells per
 #                                  thread through a lane-wise register stack
-#                                  (brief docs/lanes/BRIEF_gemm_final_2026-09-11.md
-#                                  sections 4.1 and 4.2)
 #   MOJOLEARN_GEMM_ARM=kfoldv_leaf 2641: the same lane fold at `ksplit_leaf`'s
 #                                  rule, the finest group under the workspace
 #                                  cap (section 4.3)
@@ -3006,18 +3000,16 @@ comptime GEMM_ARM_KSPLIT_LEAF = 8
 #: DEVIATION 2595: the old shipped plan, TUNED 128x128, as a trial arm.
 comptime GEMM_ARM_TUNED128 = 9
 #: DEVIATION 2599: the packed-page body at the shipped tile, and on a 128x256
-#: tile (docs/lanes/BRIEF_gemm_kernel_2026-09-11.md section 4).
+#: tile.
 comptime GEMM_ARM_KPACK = 10
 comptime GEMM_ARM_KPACK_WIDE = 11
 #: DEVIATIONS 2640 and 2641: the lane fold after the shipped group launch, at
-#: the shipped rule and at `ksplit_leaf`'s (docs/lanes/BRIEF_gemm_final_2026-09-11.md
-#: section 4). Arm ids stay below GEMM_ARM_SABOTAGE.
+#: the shipped rule and at `ksplit_leaf`'s. Arm ids stay below GEMM_ARM_SABOTAGE.
 comptime GEMM_ARM_KFOLDV = 12
 comptime GEMM_ARM_KFOLDV_LEAF = 13
 #: DEVIATION 2700: `kpack` with its packed page PADDED by `GEMM_KPACK_PAD`
 #: words per line group, so the per-step B load of the 16 column threads of
-#: a warp lands on distinct bank groups instead of one
-#: (docs/lanes/BRIEF_gemm_kernel_2026-09-11.md section 13).
+#: a warp lands on distinct bank groups instead of one.
 comptime GEMM_ARM_KPACK_PAD = 14
 #: DEVIATION 2703: `kpack_pad` with the page 16-byte ALIGNED and the per-step
 #: loads spelled at that alignment, so they lower to `ld.shared.v4` instead
@@ -3850,8 +3842,7 @@ def _step_geometry_launch[
 
 
 # ===========================================================================
-# THE LONG-K GROUP ARMS (DEVIATIONS 2590 and 2591, 2026-09-11; brief
-# docs/lanes/BRIEF_gemm_long_k_2026-09-11.md sections 4 and 5)
+# THE LONG-K GROUP ARMS (DEVIATIONS 2590 and 2591, 2026-09-11)
 # ===========================================================================
 # One block owns a 128x128 output tile and a GROUP of `2^g` consecutive
 # leaves (grid.y = the group), runs the shipped per-window body over exactly
@@ -4341,11 +4332,10 @@ def _ksplit_run[
 
 
 # ===========================================================================
-# THE KSPLIT DEFAULT (DEVIATION 2595, 2026-09-11; brief
-# docs/lanes/BRIEF_gemm_long_k_2026-09-11.md section 10)
+# THE KSPLIT DEFAULT (DEVIATION 2595, 2026-09-11)
 # ===========================================================================
 # The `ksplit` arm won on the H100 (lean LM step geometric mean 0.895 over
-# enwik8 and Pile GitHub, every step witness equal) and ENGINEERING_RULES 9
+# enwik8 and Pile GitHub, every step witness equal) and CONTRIBUTING.md (Performance claims)
 # flips a winning arm in the same session. The shipped dispatch reads ONE
 # kernel matrix row, `lib_gemm_block_parallelism_for`. Above 0 it runs the
 # group rule of brief section 4 at that `S` and takes the ksplit path on every
@@ -5051,8 +5041,7 @@ def _gemm_step_arm_hook(
 
 
 # ===========================================================================
-# THE KERNEL ARMS (DEVIATION 2599, 2026-09-11; brief
-# docs/lanes/BRIEF_gemm_kernel_2026-09-11.md sections 4 and 5)
+# THE KERNEL ARMS (DEVIATION 2599, 2026-09-11)
 # ===========================================================================
 # `identical_gemm_kpack_kernel` is the shipped per-window body (the tuned
 # kernel's non-SPLIT path, the ksplit kernel's group range) with three
@@ -5315,8 +5304,7 @@ def identical_gemm_kpack_kernel[
       `kc VEC + e` order;
     - the page is `lines x KS` floats, no slack words (PAD 0, DEVIATION 2599).
 
-    DEVIATION 2700, `PAD > 0` (docs/lanes/BRIEF_gemm_kernel_2026-09-11.md
-    section 13): each line group `g` (the `RPT` A lines or `CPT` B lines one
+    DEVIATION 2700, `PAD > 0`: each line group `g` (the `RPT` A lines or `CPT` B lines one
     `accrow` or `acccol` reads) is `KS RPT + PAD` (A) or `KS CPT + PAD` (B)
     words long instead of `KS RPT` or `KS CPT`, and the PAD words at the end
     of each group are never stored or read. At PAD 0 the B groups of the 16
@@ -6201,8 +6189,7 @@ def _kpack_geometry_name[
 
 
 # ===========================================================================
-# THE LANE FOLD ARMS (DEVIATIONS 2640 and 2641, 2026-09-11; brief
-# docs/lanes/BRIEF_gemm_final_2026-09-11.md sections 4 and 5)
+# THE LANE FOLD ARMS (DEVIATIONS 2640 and 2641, 2026-09-11)
 # ===========================================================================
 # The shipped ksplit default spends 13.3 ms per H100 step in its FOLD launch
 # (brief 2.1): `identical_gemm_fold_stack_kernel`, one thread per output
@@ -6861,16 +6848,15 @@ def identical_gemm[allow_vendor: Bool = True](
     # enqueue the kernel that writes it, wait once at the end.
     #
     # THIS IS THE LARGEST SINGLE BLOCK OF WAITS ON THE STEP PATH. The byte
-    # LM census (docs/lanes/LAUNCH_BOUND_LANE_CENSUS.md 0.3) records 391
+    # LM launch census records 391
     # GEMM launches and 782 GEMM waits per instrumented run, exactly 2.0
     # per launch, and these two lines were both of them.
     identical_gemm_into[allow_vendor](ctx, c, a, b, ws, m, n, k, op)
     # LOAD-BEARING, category (c) and NOT removable. `[[mojo-buffer-freed-
     # at-last-use]]`: `_ = ws` below is `ws`'s last use, so the runtime is
     # free to release it there. Without this wait the kernel that is still
-    # reading and writing `ws` reads freed memory. Section 5 of
-    # docs/lanes/LANE_STATUS_wait-removal.md removes this one on purpose and
-    # shows the identity fingerprints move.
+    # reading and writing `ws` reads freed memory. Removing this one on
+    # purpose moves the identity fingerprints.
     step_count_sync()
     ctx.synchronize()
     _ = ws

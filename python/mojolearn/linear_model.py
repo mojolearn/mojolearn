@@ -959,7 +959,7 @@ class LogisticRegression(NumericModeMixin):
                                   name with more than two classes: an l1
                                   or elasticnet penalty (OWL-QN on the
                                   softmax objective runs but has no
-                                  identity gate; ENGINEERING_RULES 8)
+                                  identity gate; CONTRIBUTING.md (Non-default paths))
         warm_start      absent    cuML's QN has it, LogisticRegression
                                   does not expose it; w0 = 0 always
 
@@ -1097,7 +1097,7 @@ class LogisticRegression(NumericModeMixin):
                 f"{n_classes} classes selects OWL-QN on the softmax objective, "
                 "which runs but has no identity gate (glm/checks/"
                 "multinomial_check.mojo gates l2 and no penalty); refused by "
-                "name until it is gated (ENGINEERING_RULES.md section 8)"
+                "name until it is gated (CONTRIBUTING.md (Non-default paths))"
             )
         n_param = cols + (1 if self.fit_intercept else 0)
         w = zeros((n_param * n_targets,), "<f4")

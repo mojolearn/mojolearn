@@ -48,7 +48,7 @@ Their file is `cuda_util/kernel/transform.cu` and this is the mirror address
 for it. Only the two masked moves are implemented -- `Gather`, `Scatter`,
 `Reverse`, and the arithmetic transforms in the same file have no caller
 here, and implementing a function nothing reaches is the defect
-`ENGINEERING_RULES.md` rule 3 names.
+`CONTRIBUTING.md` (Evidence must be able to fail) names.
 """
 
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx

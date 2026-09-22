@@ -1,9 +1,0 @@
-3440 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x135d40000000, nodemask=1)
-3440 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3acb40000000, nodemask=2)
-3440 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3acb80000000, nodemask=2)
-RANK start ours YetiRank gpu rows=19995 queries=166 version=0.8.5 drain=libcudart.so
-RANK warmup 1290.0 ms
-RANK fit rep=0 trees=1 ms=212.9
-RANK fit rep=0 trees=2 ms=245.4
-RANK quality rep=0 ndcg5=0.433697 ndcg10=0.508695 hash=b972d3b3530905af
-RANK done ours YetiRank median@2=245.4 fixed=180.4 per_tree=32.532 peak=787 base=0

@@ -1,2 +1,0 @@
-record ExtraTreesRegressor predict <f8 [200] sha256 32f5d5961e9aa131a700cee9b6255ad7ebba09d26e74f32eb1d7b692ce88bd5c
-record wrote /root/gemm_leg_out/forest_host/2026-09-13-amd-et_regressor/expected.json (vendor hip, mode identical)

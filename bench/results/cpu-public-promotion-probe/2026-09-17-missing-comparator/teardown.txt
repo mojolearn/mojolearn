@@ -1,5 +1,0 @@
-pod=fa0upeedenmk42
-name=mojolearn-cpu-cpu-public-promotion-20260917-174656
-terminated_verified=1
-exit=1
-at=2026-09-17T17:51:30Z

@@ -767,8 +767,8 @@ if [ -n "${E2_EXTRA_CHECKS:-}" ]; then
       # the files is a weaker arrangement than one run on neither.
       train-checkpoint)
         CMD="env MOJOLEARN_TRAIN_STEPS=${TRAIN_STEPS:-8} MOJOLEARN_TRAIN_CKPT_FILE=\"\$OUT/lanes/checkpoint.ckptbin\" pixi run mojo run -I . training/checks/checkpoint_check.mojo" ;;
-      column)        CMD='pixi run mojo run -I . matrix_main.mojo' ;;
-      gpu-probe)     CMD='pixi run mojo run -I . probe_main.mojo' ;;
+      column)        CMD='pixi run mojo run -I . checks/matrix_main.mojo' ;;
+      gpu-probe)     CMD='pixi run mojo run -I . checks/probe_main.mojo' ;;
       # THE TRANSFORMER BACKWARD. The comment here said "no check driver
       # yet, so there is nothing to run" -- that was true until 2026-09-03,
       # when the driver compiled for the first time and passed all six

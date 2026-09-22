@@ -1,6 +1,0 @@
-pod=v69tyfbe8ww536
-armed=1
-terminated=1
-deadman_pid=94532
-exit=0
-at=2026-09-17T20:33:11Z

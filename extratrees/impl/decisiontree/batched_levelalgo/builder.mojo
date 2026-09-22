@@ -1334,8 +1334,7 @@ def train_regression(
 
 # ==========================================================================
 # THE HOST RESTATEMENT OF THE DEVICE TRAINER (the CPU training lane, phase
-# 1, et-clf and et-reg, 2026-09-14; brief
-# docs/lanes/BRIEF_cpu_training_2026-09-13.md section 1.1 et-clf, et-reg).
+# 1, et-clf and et-reg, 2026-09-14).
 #
 # `train_classification` and `train_regression` above are sklearn's
 # splitter on the host: `node_split_random_gini` orders candidates by the
@@ -1738,7 +1737,7 @@ def train_tree_exact_bestfirst(
 # ==========================================================================
 # DEVIATION 466's HOST ARM. The oracles the device best-first driver is
 # checked against, in the same relation `train_classification` bears to
-# `train_classification_device` (`ENGINEERING_RULES.md` 0b-ii: an oracle, not a
+# `train_classification_device` (`CONTRIBUTING.md` (Algorithms and references): an oracle, not a
 # CPU fallback).
 # ==========================================================================
 
@@ -2021,7 +2020,7 @@ def gain_per_split(
     DEVICE, which is where cuML computes it.
 
     THE FIRST FIX WAS ON THE HOST AND IT WAS A RULE-2 VIOLATION.
-    `ENGINEERING_RULES.md` 2: "If they do something on the GPU in the control
+    `CONTRIBUTING.md`: "If they do something on the GPU in the control
     plane, we do it on the GPU. If they keep a decision on the device so
     the host never learns it, we keep it on the device." cuML computes
     `GainPerSplit` inside `computeSplitKernel` and the host never sees a

@@ -1,3 +1,0 @@
-mac_slot: admitted after 0.001s
-neural-five {'DIVERGENT': 0, 'IDENTICAL': 126, 'N/A': 99, 'OWED': 0, 'REFUSED': 0} {'appendix_entries': 246, 'available': 150, 'excluded': 50, 'registered_lanes': 229, 'unavailable': 0, 'withheld': 29}
-mac_slot: {"wait_seconds": 0.0011539999995875405, "run_seconds": 12.73438383300072, "exit_code": 0}

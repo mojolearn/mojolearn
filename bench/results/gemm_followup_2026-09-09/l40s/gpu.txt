@@ -1,2 +1,0 @@
-name, driver_version
-NVIDIA L40S, 570.124.06

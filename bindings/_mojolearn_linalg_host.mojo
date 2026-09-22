@@ -1,9 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """CPU binding for `mojolearn.identical.gemm.fp32.v1`, the bit-identical
-FP32 matrix product (the CPU training lane, phase 1, 2026-09-13; brief
-docs/lanes/BRIEF_cpu_training_2026-09-13.md sections 1.1 gemm-pinned and
-3.2).
+FP32 matrix product (the CPU training lane, phase 1, 2026-09-13).
 
 HOST ONLY. No DeviceContext, no kernel, no GPU. The arithmetic is
 `gemm/host/gemm_oracle.mojo::gemm_oracle`, the NORMATIVE answer of the

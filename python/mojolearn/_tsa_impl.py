@@ -552,8 +552,7 @@ class ExponentialSmoothing:
         are not restated here, so there is one place they can drift from.
 
         On a CPU-only install this refuses by name outside the internal
-        reference context, as every other CPU fit does
-        (docs/lanes/CPU_INFERENCE_BOUNDARY_2026-09-15.md).
+        reference context, as every other CPU fit does.
         """
         from ._cpu_reference import require_training
         require_training(self)

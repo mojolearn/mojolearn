@@ -24,7 +24,7 @@ pass. The cell hash is `tools/identity_break.py`'s, so the `ties` references
 are that tool's retained H100 cells.
 
 ONE FIXTURE PER ARM THE FIX TOUCHES under IDENTICAL, because reach is per
-branch (ENGINEERING_RULES 8). At border_count 128 an integer column with k
+branch (CONTRIBUTING.md (Non-default paths)). At border_count 128 an integer column with k
 distinct values gets k-1 borders and k-1 folds (`gbdt/train.mojo`), and the
 fold count picks the arm (`gbdt/gpu_data/grid_policy.mojo`, then the maxBins
 ladder in `greedy_search_helper.mojo`):

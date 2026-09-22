@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The trees lane's DigitalOcean AMD session (ENGINEERING_RULES.md section 10):
+# The trees lane's DigitalOcean AMD session (CONTRIBUTING.md (Comparing against libraries without a GPU path)):
 # one MI325X that stays up while batches run over ssh, then is fetched,
 # flushed, destroyed and VERIFIED gone by the same process that created it.
 #

@@ -17,7 +17,7 @@
 # tools/identity_break.py, the same `--vendor`/`--json` column, over the lanes
 # that are actually owed an NVIDIA column.
 #
-# WHICH LANES, AND WHY EXACTLY THESE. docs/VERIFICATION_MATRIX.md reports 49
+# WHICH LANES, AND WHY EXACTLY THESE. tools/verification_matrix.py reports 49
 # lanes with a GPU column on fewer than three classes. Of those 49:
 #
 #   * 18 have apple AND amd and are missing ONLY nvidia. One single-device

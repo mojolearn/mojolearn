@@ -1,2 +1,0 @@
-name, driver_version, memory.total [MiB]
-NVIDIA L40S, 580.126.09, 46068 MiB

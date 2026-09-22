@@ -260,7 +260,7 @@ def check_bootstrap() raises:
 def check_bernoulli_and_poisson(ctx: DeviceContext) raises:
     """The two arms `launch_bootstrap` gained on 2026-08-21.
 
-    ENGINEERING_RULES 8: every switch is exercised on BOTH sides by a named
+    CONTRIBUTING.md (Non-default paths): every switch is exercised on BOTH sides by a named
     check per side, and "the suite covers it" is not coverage. Bayesian was
     the only arm this file ran, so adding two arms to the kernel without
     adding them here would have left them on the unchecked side of exactly
@@ -509,7 +509,7 @@ def check_bootstrap_multiclass(ctx: DeviceContext) raises:
 
 
 def main() raises:
-    # STANDALONE DRIVER, the same call `probe_main.mojo` makes.
+    # STANDALONE DRIVER, the same call `checks/probe_main.mojo` makes.
     # `check_bootstrap` builds the `DeviceContext` and hands it to
     # `check_bernoulli_and_poisson` itself, so this must NOT build one.
     check_bootstrap()

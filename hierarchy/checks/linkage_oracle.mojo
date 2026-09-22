@@ -55,8 +55,7 @@ from max.gpu.host import DeviceContext, HostBuffer
 
 comptime LINKAGE_ORACLE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 """The CPU identity gate's negative control for the agglomerative lane (the
-CPU training lane, brief docs/lanes/BRIEF_cpu_training_2026-09-13.md section
-3.4; 2026-09-14). `-D MOJOLEARN_HOST_SABOTAGE=1` makes `host_kruskal` walk
+CPU training lane, 2026-09-14). `-D MOJOLEARN_HOST_SABOTAGE=1` makes `host_kruskal` walk
 the sorted edge keys DESCENDING, so the host binding built that way returns
 the MAXIMUM spanning tree's dendrogram and labels and diverges from the GPU
 columns on every fixture. An arithmetic sabotage (a reversed distance fold)

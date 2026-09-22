@@ -4,7 +4,7 @@
 float key twiddle, gathers, fills, and the pinned serial sum.
 
 DOES NOT FOLLOW any one file. Each function names the call it stands in for.
-CUB and Thrust are OPEN (ENGINEERING_RULES 0b-i), so these are written out
+CUB and Thrust are OPEN (CONTRIBUTING.md (Algorithms and references)), so these are written out
 rather than substituted by a device-wide MAX primitive; MAX ships no device
 `select`/`partition` anyway (archive/reference/VENDOR_LIBS.md).
 

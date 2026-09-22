@@ -201,7 +201,7 @@ class Embedding(NumericModeMixin):
         continues from them; `grad` itself is not modified.
         """
         # The gradient is training: on a CPU-only install it runs only inside
-        # the internal reference context (docs/lanes/CPU_INFERENCE_BOUNDARY_2026-09-15.md);
+        # the internal reference context;
         # the shipped embedding_infer binding carries no backward at all.
         from ._cpu_reference import require_training
         require_training(self)

@@ -1,9 +1,0 @@
-commit 61e5a1373ba00a1feb9c2c110f337898cdbcb838
-8
-               total        used        free      shared  buff/cache   available
-Mem:             755         136         288           0         329         612
-Swap:              0           0           0
-CPU(s):                               128
-Model name:                           AMD EPYC 9575F 64-Core Processor
-old source sha256 fd4751832a5fe05e57747d9918f8acc17bf212a6a6660103aec7e9ba3819e48b (expect fd4751832a5fe05e57747d9918f8acc17bf212a6a6660103aec7e9ba3819e48b)
--rwxr-xr-x 1 root root 160832 Sep 18 16:49 /root/train_main_new

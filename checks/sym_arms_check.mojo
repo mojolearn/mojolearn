@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""DEVIATIONS 2580 and 2581, BOTH SIDES OF EACH SWITCH (ENGINEERING_RULES 8).
+"""DEVIATIONS 2580 and 2581, BOTH SIDES OF EACH SWITCH (CONTRIBUTING.md (Non-default paths)).
 
 `launch_histograms_for_blocks` is instantiated here with the switches set
 EXPLICITLY, so this one binary exercises every side whatever the build
