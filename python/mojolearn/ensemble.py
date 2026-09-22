@@ -390,6 +390,10 @@ BOOSTING_TYPES = ("Plain", "Ordered")
 #: `_ORDERED_MIN_ITERATIONS` iterations.
 _ORDERED_MAX_ROWS = 50000
 _ORDERED_MIN_ITERATIONS = 500
+#: The small-pool host route's bound, rows x features (`_small_pool_host`).
+_HOST_ROUTE_MAX_CELLS = 200_000
+#: auto (default), device or host (`_small_pool_host`).
+_HOST_ROUTE_ENV = "MOJOLEARN_GBDT_ROUTE"
 
 #: The greedy searcher's ranking targets form grouped gradients first, then
 #: multiply both statistic planes by row bootstrap weights, as CatBoost's
@@ -1620,6 +1624,63 @@ class GradientBoosting(NumericModeMixin):
             self.loss, n_rows, int(self.n_estimators), use_best, bfa, table)
         return _CATBOOST_LEARNING_RATE if rate is None else rate
 
+    def _small_pool_host(self, n_rows, n_features, n_weights, n_flags,
+                         n_eval_rows, grouped):
+        """The CPU host binding when this fit should train on it, else None.
+
+        THE SMALL-POOL ROUTE (perf/gbdt-small-round2, 2026-09-22). On a
+        small pool the device fit is launch and sync bound (Apple M4, depth
+        6, 10 features: Ordered 14 to 18 ms a tree at 320 to 20,000 rows,
+        Plain 4 to 5 ms) while the host binding, the CPU column's IDENTICAL
+        restatement of the same fit, costs 1.2 ms (Ordered) and 1.6 ms
+        (Plain) a tree at 320 rows and grows with the pool: at 20,000 rows
+        11 and 4.5 ms, at 50,000 rows 21 and 7.8 ms. Crossover, M4, 10
+        features: Plain between 20,000 and 32,000 rows, Ordered between
+        25,000 (Logloss) and 50,000 (RMSE). Below `_HOST_ROUTE_MAX_CELLS`
+        (rows x features) an IDENTICAL fit therefore trains on the host.
+
+        THE BITS DO NOT MOVE. The host fit is the one the verifier's CPU
+        column checks against the GPU columns on every gbdt training lane
+        (`host_surface.py`), and the model text it returns is the device
+        fit's byte for byte (measured on this route at 320 to 50,000 rows,
+        RMSE and Logloss, Ordered and Plain). Only the configurations those
+        lanes cover are routed: SymmetricTree, RMSE or Logloss, unit
+        weights, numeric columns, no groups, no eval set; anything the host
+        binding refuses by name falls back to the device.
+
+        `MOJOLEARN_GBDT_ROUTE=device` pins the device fit (the identity
+        harness sets it, so the GPU columns keep measuring the GPU),
+        `host` forces the host route whatever the pool size, and `auto`
+        (the default) is the rule above. `fit_route_` says which ran."""
+        route = os.environ.get(_HOST_ROUTE_ENV, "auto").strip().lower()
+        if route not in ("auto", "device", "host"):
+            raise ValueError(
+                f"mojolearn: {_HOST_ROUTE_ENV} must be auto, device or host, "
+                f"got {route!r}"
+            )
+        if route == "device" or _backend._CPU_ONLY is not None:
+            return None
+        if "_bind" in vars(self):
+            # the caller put its own binding on this instance (a test double,
+            # a pinned module): the fit goes where the caller sent it
+            return None
+        requested = getattr(self, "numeric_mode", None) or _backend.default_mode()
+        if str(requested).strip().lower() != "identical":
+            return None
+        if route == "auto" and n_rows * n_features > _HOST_ROUTE_MAX_CELLS:
+            return None
+        if (self.grow_policy != "SymmetricTree"
+                or self.loss not in ("RMSE", "Logloss")
+                or n_weights or n_flags or n_eval_rows or grouped):
+            return None
+        path = _backend.host_module_path("_mojolearn_gbdt_host")
+        if not os.path.exists(path):
+            return None
+        try:
+            return _backend.load_host_module("_mojolearn_gbdt_host")
+        except ImportError:
+            return None
+
     def _resolved_boosting_type(self, n_rows):
         """The boosting type a fit on `n_rows` rows uses (`boosting_type_`).
 
@@ -2114,7 +2175,7 @@ class GradientBoosting(NumericModeMixin):
 
         # Every Array whose address crosses is a local of this frame until
         # the call returns: the borrow contract at the top of `_buffer`.
-        out = self._bind("_mojolearn_gbdt").gbdt_fit(
+        fit_args = (
             addr_ro(Xa, name="X"),
             addr_ro(ya, name="y"),
             addr_ro(wa, name="sample_weight"),
@@ -2124,6 +2185,23 @@ class GradientBoosting(NumericModeMixin):
             params,
             strs,
         )
+        out = None
+        #: 'host' when this fit trained on the CPU host route, 'device' otherwise
+        self.fit_route_ = "device"
+        host = self._small_pool_host(
+            n_rows, n_features, n_weights, n_flags, n_eval_rows,
+            group_id is not None or pairs is not None,
+        )
+        if host is not None:
+            try:
+                out = host.gbdt_fit(*fit_args)
+                self.fit_route_ = "host"
+            except Exception:
+                # a configuration the host binding refuses by name trains
+                # on the device, which also raises any genuine error
+                out = None
+        if out is None:
+            out = self._bind("_mojolearn_gbdt").gbdt_fit(*fit_args)
         self.model_ = out[0]
         # the model's bias (CatBoost's `get_scale_and_bias()[1]`), parsed
         # from the text's BITS half so it round-trips exactly. 0.0 on

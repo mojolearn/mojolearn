@@ -498,6 +498,15 @@ import numpy as np
 from contextlib import contextmanager
 from pathlib import Path
 
+# A GPU COLUMN MEASURES THE GPU (perf/gbdt-small-round2, 2026-09-22).
+# `GradientBoosting.fit` trains a small IDENTICAL pool on the CPU host
+# binding (`ensemble._small_pool_host`); every lane here fits small
+# fixtures, so without this pin the GPU columns of the gbdt lanes would
+# quietly hash the host fit the CPU column already hashes. Worker
+# processes inherit it. On a CPU-only install the route is the host
+# binding whatever this says.
+os.environ["MOJOLEARN_GBDT_ROUTE"] = "device"
+
 
 def atomic_json(path, value):
     path = Path(path)
