@@ -220,6 +220,7 @@ struct _OrdSubsets(Movable):
     var g_target: List[Float32]
 
 
+@no_inline
 def _update_subsets_stats(
     mut s: _OrdSubsets, part_count: Int, sw: List[Float32], sg: List[Float32]
 ):
@@ -731,6 +732,7 @@ def _ordered_tree_structure(
     return structure^
 
 
+@no_inline
 def _dynamic_cosine_candidates(
     hp: _PwHelper,
     part_stats: List[Float32],
@@ -766,7 +768,38 @@ def _dynamic_cosine_candidates(
             var pts = part_stats[3 * test_off + 1]
             var h_learn = hist_line * (leaf * fold_count + fold) * 2
             var h_test = hist_line * (leaf * fold_count + fold + 1) * 2
-            for b in range(hist_line):
+            var hptr = hp.hist.unsafe_ptr()
+            var sptr = score.unsafe_ptr()
+            var dptr = denum.unsafe_ptr()
+            comptime W = 8
+            var vb = 0
+            while vb + W <= hist_line:
+                # W candidates per step, lane k is candidate vb + k: the
+                # scalar loop below, lane by lane (the same contraction of
+                # `x += a * b` into one fma, measured on the host compiler)
+                var lpair = hptr.unsafe_load[width = 2 * W](h_learn + 2 * vb).deinterleave()
+                var tpair = hptr.unsafe_load[width = 2 * W](h_test + 2 * vb).deinterleave()
+                var sc = sptr.unsafe_load[width=W](vb)
+                var dn = dptr.unsafe_load[width=W](vb)
+                var wel = lpair[0]
+                var sel = lpair[1]
+                var wtl = tpair[0]
+                var stl = tpair[1]
+                var zero = SIMD[DType.float32, W](0.0)
+                var wer = max(SIMD[DType.float32, W](plw) - wel, zero)
+                var ser = SIMD[DType.float32, W](pls) - sel
+                var wtr = max(SIMD[DType.float32, W](ptw) - wtl, zero)
+                var sum_tr = SIMD[DType.float32, W](pts) - stl
+                var mu_l = wel.gt(zero).select(sel / (wel + l2), zero)
+                sc += stl * mu_l
+                dn += wtl * mu_l * mu_l
+                var mu_r = wer.gt(zero).select(ser / (wer + l2), zero)
+                sc += sum_tr * mu_r
+                dn += wtr * mu_r * mu_r
+                sptr.unsafe_store(vb, sc)
+                dptr.unsafe_store(vb, dn)
+                vb += W
+            for b in range(vb, hist_line):
                 var current = 2 * b
                 var sc = score[b]
                 var dn = denum[b]
@@ -1297,6 +1330,7 @@ def _ordered_bootstrap_draws(
     return draws^
 
 
+@no_inline
 def _ordered_task_host(
     loss: GbdtHostLoss,
     estimate_size: Int,
