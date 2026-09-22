@@ -125,6 +125,7 @@ from gbdt.host.gbdt_oracle import (
     _binarize_columns,
     _choose_scale_from_magnitudes,
     _cosine_gain,
+    _cosine_gains,
     _deterministic_sum_lanes,
     _diagonal_direction,
     _half_byte_block,
@@ -1025,11 +1026,12 @@ def gbdt_losses_host_fit(
 
             var best_gain = -GBDT_FLOAT32_MAX
             var best_bin = GBDT_SENTINEL
+            var gains = _cosine_gains(
+                hist, hist_cells, part_stats, n_live, params.l2_leaf_reg,
+                score_std_dev, level_seed, bf_feature,
+            )
             for bf in range(hist_cells):
-                var gain = _cosine_gain(
-                    hist, hist_cells, part_stats, n_live, bf, params.l2_leaf_reg,
-                    score_std_dev, level_seed, bf_feature[bf],
-                )
+                var gain = gains[bf]
                 if gain > best_gain:
                     best_gain = gain
                     best_bin = UInt32(bf)

@@ -130,7 +130,10 @@ from std.sys.compile import is_defined
 from max.algorithm import sync_parallelize
 
 from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_IDENTICAL,
     ftz,
+    identical_mul_add_simd,
     identical_exp,
     identical_log,
     identical_mul_add,
@@ -199,6 +202,8 @@ comptime GBDT_BOOT_SEEDS = 65536
 
 #: The gate's negative control (see THE NEGATIVE CONTROL above).
 comptime GBDT_ORACLE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
+#: `ftz` flushes only under IDENTICAL (`checks/numerics.mojo`); `_ftz_lanes` follows it.
+comptime GBDT_HOST_FTZ_ON = GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
 comptime GBDT_HOST_BINARIZE_LINEAR = is_defined[
     "MOJOLEARN_GBDT_HOST_BINARIZE_LINEAR"
 ]()
@@ -1296,6 +1301,97 @@ def _cosine_gain(
     return ftz(ftz(final_score - score_before) * Float32(1.0))
 
 
+def _ftz_lanes[w: Int](x: SIMD[DType.float32, w]) -> SIMD[DType.float32, w]:
+    """`ftz` lane by lane as bit operations: a subnormal becomes the zero of
+    its sign, everything else passes (IDENTICAL builds only, as `ftz`)."""
+    comptime if GBDT_HOST_FTZ_ON:
+        var b = bitcast[DType.uint32, w](x)
+        var sub = (b & UInt32(0x7F800000)).eq(UInt32(0)) & (
+            b & UInt32(0x007FFFFF)
+        ).ne(UInt32(0))
+        return sub.select(bitcast[DType.float32, w](b & UInt32(0x80000000)), x)
+    return x
+
+
+def _cosine_gains(
+    hist: List[Float32],
+    hist_cells: Int,
+    part_stats: List[Float32],
+    n_live: Int,
+    lambda_l2: Float32,
+    score_std_dev: Float32,
+    level_seed: UInt64,
+    bf_feature: List[Int],
+) -> List[Float32]:
+    """`_cosine_gain` for every bin-feature at once: the same two
+    `AddLeaf`s per leaf in dense leaf order for each candidate, turned so
+    the leaf is the outer loop and 8 candidates run a step, lane by lane
+    the scalar expressions (`_add_leaf_cosine`'s pinned fmas, `ftz` as bit
+    operations); then the normalization and the noise per candidate, the
+    noise drawn once per feature (it depends on the feature only)."""
+    comptime W = 8
+    var score = List[Float32](length=hist_cells, fill=Float32(0.0))
+    var denum = List[Float32](length=hist_cells, fill=Float32(1e-10))
+    var hp = hist.unsafe_ptr()
+    var sp = score.unsafe_ptr()
+    var dp = denum.unsafe_ptr()
+    var zero = SIMD[DType.float32, W](0.0)
+    var lam_v = SIMD[DType.float32, W](lambda_l2)
+    for i in range(n_live):
+        var leaf_base = i * 2 * hist_cells
+        var ps0 = part_stats[i * 2]
+        var ps1 = part_stats[i * 2 + 1]
+        var bf = 0
+        while bf + W <= hist_cells:
+            var wl = max(hp.unsafe_load[width=W](leaf_base + bf), zero)
+            var wr = _ftz_lanes[W](max(SIMD[DType.float32, W](ps0) - wl, zero))
+            var sl = hp.unsafe_load[width=W](leaf_base + hist_cells + bf)
+            var sr = _ftz_lanes[W](SIMD[DType.float32, W](ps1) - sl)
+            var sc = sp.unsafe_load[width=W](bf)
+            var dn = dp.unsafe_load[width=W](bf)
+            var mu_l = _ftz_lanes[W](wl.gt(zero).select(sl / (wl + lam_v), zero))
+            sc = _ftz_lanes[W](identical_mul_add_simd[W](sl, mu_l, sc))
+            dn = _ftz_lanes[W](identical_mul_add_simd[W](_ftz_lanes[W](wl * mu_l), mu_l, dn))
+            var mu_r = _ftz_lanes[W](wr.gt(zero).select(sr / (wr + lam_v), zero))
+            sc = _ftz_lanes[W](identical_mul_add_simd[W](sr, mu_r, sc))
+            dn = _ftz_lanes[W](identical_mul_add_simd[W](_ftz_lanes[W](wr * mu_r), mu_r, dn))
+            sp.unsafe_store(bf, sc)
+            dp.unsafe_store(bf, dn)
+            bf += W
+        while bf < hist_cells:
+            var weight_left = max(hist[leaf_base + bf], Float32(0.0))
+            var weight_right = ftz(max(ps0 - weight_left, Float32(0.0)))
+            var sum_left = hist[leaf_base + hist_cells + bf]
+            var sum_right = ftz(ps1 - sum_left)
+            var sc = score[bf]
+            var dn = denum[bf]
+            _add_leaf_cosine(sum_left, weight_left, lambda_l2, sc, dn)
+            _add_leaf_cosine(sum_right, weight_right, lambda_l2, sc, dn)
+            score[bf] = sc
+            denum[bf] = dn
+            bf += 1
+    var gains = List[Float32](length=hist_cells, fill=Float32(0.0))
+    var last_feature = -1
+    var neg_draw = Float32(0.0)
+    for bf in range(hist_cells):
+        var final_score = score[bf]
+        var denum_sqr = denum[bf]
+        var score_before = Float32(0.0)
+        if denum_sqr > Float32(1e-15):
+            final_score = ftz(final_score / identical_sqrt(denum_sqr))
+        else:
+            final_score = -GBDT_FLOAT32_MAX
+        if score_std_dev != Float32(0.0):
+            if bf_feature[bf] != last_feature:
+                var seed = advance_seed_k(level_seed + UInt64(bf_feature[bf]), 4)
+                neg_draw = -next_normal_f(seed)[0]
+                last_feature = bf_feature[bf]
+            final_score = ftz(identical_mul_add(neg_draw, score_std_dev, final_score))
+            score_before = ftz(identical_mul_add(neg_draw, score_std_dev, score_before))
+        gains[bf] = ftz(ftz(final_score - score_before) * Float32(1.0))
+    return gains^
+
+
 # ===========================================================================
 # THE BOOTSTRAP (`gbdt/gpu_util/kernel/bootstrap.mojo`)
 # ===========================================================================
@@ -1956,11 +2052,12 @@ def gbdt_host_fit_eval(
             # the score and the device winner
             var best_gain = -GBDT_FLOAT32_MAX
             var best_bin = GBDT_SENTINEL
+            var gains = _cosine_gains(
+                hist, hist_cells, part_stats, n_live, params.l2_leaf_reg,
+                score_std_dev, level_seed, bf_feature,
+            )
             for bf in range(hist_cells):
-                var gain = _cosine_gain(
-                    hist, hist_cells, part_stats, n_live, bf, params.l2_leaf_reg,
-                    score_std_dev, level_seed, bf_feature[bf],
-                )
+                var gain = gains[bf]
                 if gain > best_gain:
                     best_gain = gain
                     best_bin = UInt32(bf)
