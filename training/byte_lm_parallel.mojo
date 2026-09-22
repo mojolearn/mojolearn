@@ -232,7 +232,14 @@ struct ByteParallelTrainer(Movable, Writable):
                 # reduce disjoint ranges, so no cross-owner sum exists.
                 for rank in range(active):
                     if self.pool_optimizer:
-                        for owner in range(width):
+                        # Visit remote owners first and this rank's local
+                        # owner last. Owner ranges are disjoint, so this does
+                        # not alter any parameter's fold. It lets remote
+                        # target work proceed while the source queues later
+                        # copies, without a subsequent source-context drain
+                        # immediately serializing the local owner's fold.
+                        for offset in range(width):
+                            var owner = (rank + 1 + offset) % width
                             var first = self.trainers[owner].buffers.optimizer_first
                             var owned = self.trainers[owner].buffers.optimizer_count
                             var part = self.trainers[rank].buffers.grad.create_sub_buffer[DType.float32](first,owned)
@@ -244,6 +251,12 @@ struct ByteParallelTrainer(Movable, Writable):
                                 self.contexts[owner].enqueue_function[_ordered_add_kernel](
                                     self.pool_totals[owner].unsafe_ptr(),self.pool_incoming[owner].unsafe_ptr(),Int32(owned),
                                     grid_dim=((owned+127)//128,1,1),block_dim=(128,1,1))
+                        # Owner ranges and contexts are disjoint. Queue every
+                        # owner's transfer/fold before waiting so independent
+                        # device work can overlap, then join the whole rank
+                        # before any incoming buffer may be reused. This keeps
+                        # each owner's logical left-fold order unchanged.
+                        for owner in range(width):
                             self.contexts[owner].synchronize()
                     else:
                         # Rank zero's gradient has entered the fold before a
