@@ -334,6 +334,26 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
     #: the seed of that call's task streams (`querywise_targets_impl.h:214`;
     #: the stream is the fit's per-tree draw, see `doc_parallel_boosting.mojo`)
     var yeti_rng: TRandom
+    #: the DEFERRED weight sums (`make_bin_optimized_oracle(...,
+    #: defer_weights=True)`): the per-leaf weight fold's host copy, read into
+    #: `weights_cpu` by `settle_weights` after the caller's next drain. None
+    #: on every oracle built the ordinary way, whose constructor drains and
+    #: fills `weights_cpu` itself.
+    var h_weight_stats: Optional[HostBuffer[DType.float32]]
+
+    def settle_weights(mut self) raises:
+        """`WeightsCpu` from the deferred weight fold (see
+        `h_weight_stats`): the SAME per-leaf float32 sums the constructor's
+        drained readback reads, widened the same way. The caller must have
+        drained the queue since construction. A no-op on an ordinary
+        oracle."""
+        if not self.h_weight_stats.__bool__():
+            return
+        var h = self.h_weight_stats.take()
+        self.weights_cpu.clear()
+        for leaf in range(self.bin_count):
+            self.weights_cpu.append(Float64(h.unsafe_ptr().unsafe_load(leaf)))
+        _ = h^
 
     def point_dim(self) -> Int:
         return self.bin_count * self.single_bin_dim
@@ -497,11 +517,35 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         identity on the kernel directly, which is what makes this line
         safe to write rather than merely plausible.
         """
+        if self.single_bin_dim == 1:
+            self.enqueue_single_dim_evaluation()
+            self.times.begin(self.ctx)
+            # KEPT (DEVIATION 1891 audit): the ONE drain per walker
+            # evaluation, and it is required -- the host reads
+            # `h_part_stats` and `h_fv` immediately below to decide the
+            # line search. Both readbacks are already batched ahead of
+            # this single drain, and no per-evaluation allocation exists
+            # on this path, so this is the floor CatBoost's pinned-memory
+            # `ReadReduce` also pays (theirs is cheaper per drain, not
+            # fewer drains).
+            self.ctx.synchronize()
+            self.times.end(self.ctx, "est.readback")
+            self.finish_single_dim_evaluation(value, gradient)
+            return
+        self._write_multi_dim_value_and_first_derivatives(value, gradient)
+
+    def enqueue_single_dim_evaluation(mut self) raises:
+        """The single-dim arm of `write_value_and_first_derivatives` up to
+        its drain: the evaluation launch, the per-leaf fold, and the two
+        readback copies, ENQUEUED. `finish_single_dim_evaluation` reads them
+        after the caller's drain. The ordinary method is exactly
+        enqueue -> drain -> finish; the Ordered fit's batched estimation
+        (`ordered_boosting.mojo`) enqueues every task's evaluation behind
+        ONE drain instead of one each."""
         var blocks = (
             self.n_rows + MSE_BLOCK_SIZE - 1
         ) // MSE_BLOCK_SIZE
-
-        if self.single_bin_dim == 1:
+        if True:
             self.times.begin(self.ctx)
             # the QUERYWISE target (QueryRMSE): `ApproximateAt` through the
             # querywise der calcer (`permutation_der_calcer.h:192-205`),
@@ -591,17 +635,13 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             self.ctx.enqueue_copy(
                 dst_ptr=self.h_fv.unsafe_ptr(), src_buf=self.d_fv
             )
-            # KEPT (DEVIATION 1891 audit): the ONE drain per walker
-            # evaluation, and it is required -- the host reads
-            # `h_part_stats` and `h_fv` immediately below to decide the
-            # line search. Both readbacks are already batched ahead of
-            # this single drain, and no per-evaluation allocation exists
-            # on this path, so this is the floor CatBoost's pinned-memory
-            # `ReadReduce` also pays (theirs is cheaper per drain, not
-            # fewer drains).
-            self.ctx.synchronize()
-            self.times.end(self.ctx, "est.readback")
 
+    def finish_single_dim_evaluation(
+        mut self, mut value: Float64, mut gradient: List[Float64]
+    ) raises:
+        """The host half of the single-dim arm, after the drain that made
+        `enqueue_single_dim_evaluation`'s copies runs."""
+        if True:
             gradient.clear()
             self.cached_der2.clear()
             for leaf in range(self.bin_count):
@@ -638,8 +678,11 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
             for b in range(self.fv_blocks):
                 fv32 += self.h_fv.unsafe_ptr().unsafe_load(b)
             value = Float64(fv32)
-            return
 
+    def _write_multi_dim_value_and_first_derivatives(
+        mut self, mut value: Float64, mut gradient: List[Float64]
+    ) raises:
+        """The rowSize > 1 arm of `write_value_and_first_derivatives`."""
         # ---- the rowSize > 1 arm: the multiclass family --------------
         var is_ova = self.objective == OBJECTIVE_MULTICLASS_OVA
         if self.objective != OBJECTIVE_MULTICLASS and not is_ova:
@@ -1401,6 +1444,7 @@ def make_bin_optimized_oracle(
     # DEVIATION 3041: handle views onto the fit's pool of one; None (every
     # check, and every column the row is off on) allocates as before
     var scratch: Optional[OracleDeviceScratch] = None,
+    defer_weights: Bool = False,
 ) raises -> BinOptimizedOracle:
     """Their ctor (`pointwise_oracle.cpp:218-246`): allocate the eval
     buffers, seed `CurrentPoint` at zero, and settle `WeightsCpu` once --
@@ -1528,7 +1572,22 @@ def make_bin_optimized_oracle(
     # WeightsCpu (`:236-243`): the weighted arm reduces the real weights;
     # the unweighted arm takes the exact integer counts (deviation block).
     var weights_cpu = List[Float64]()
-    if has_weights:
+    # `defer_weights`: the same fold, copied to its OWN host buffer and read
+    # by `settle_weights` after the caller's next drain instead of draining
+    # here (the evaluation's readback reuses `h_part_stats`, so the two
+    # copies may not share it while both are in flight)
+    var h_weight_stats = Optional[HostBuffer[DType.float32]]()
+    if has_weights and defer_weights:
+        compute_partition_stats(
+            ctx, bin_count, 0, 1, n_rows,
+            d_leaves, d_p_off, d_p_sz,
+            d_weights, d_partials, d_part_stats,
+            sm_count=sm,
+        )
+        var h_w = ctx.enqueue_create_host_buffer[DType.float32](bin_count)
+        ctx.enqueue_copy(dst_ptr=h_w.unsafe_ptr(), src_buf=d_part_stats)
+        h_weight_stats = Optional(h_w^)
+    elif has_weights:
         compute_partition_stats(
             ctx, bin_count, 0, 1, n_rows,
             d_leaves, d_p_off, d_p_sz,
@@ -1643,4 +1702,5 @@ def make_bin_optimized_oracle(
         fv_blocks,
         yeti^,
         TRandom(yeti_seed),
+        h_weight_stats^,
     )

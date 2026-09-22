@@ -26,9 +26,12 @@ from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import (
     StageTimes,
 )
 from gbdt.methods.leaves_estimation.descent_helpers import (
+    _move,
+    _update_move_direction,
     newton_like_walker_estimate,
 )
 from gbdt.methods.leaves_estimation.pointwise_oracle import (
+    BinOptimizedOracle,
     ORACLE_SCRATCH_POOLED,
     OracleDeviceScratch,
     OracleScratchPool,
@@ -941,6 +944,229 @@ def _estimate_and_apply(
     ctx.synchronize()
     stage_times.end(ctx, "est.tail_apply")
     _ = oracle^  # past the drain (step-33 race class, device side)
+
+
+struct PendingEstimation(Movable):
+    """One estimation task of `_estimate_and_apply` stopped at its walker's
+    ONE drain: everything up to that drain enqueued, the oracle holding the
+    enqueued readbacks. `_estimate_complete` is the rest of the task.
+    Built by `_estimate_prepare`."""
+
+    var oracle: BinOptimizedOracle
+    var n_rows: Int
+    var n_leaves: Int
+    var start_point: List[Float32]
+
+    def __init__(
+        out self,
+        var oracle: BinOptimizedOracle,
+        n_rows: Int,
+        n_leaves: Int,
+        var start_point: List[Float32],
+    ):
+        self.oracle = oracle^
+        self.n_rows = n_rows
+        self.n_leaves = n_leaves
+        self.start_point = start_point^
+
+
+def estimate_can_batch(
+    objective: Int, leaf_estimation_method: Int, iters: Int
+) -> Bool:
+    """Whether `_estimate_prepare`/`_estimate_complete` restate
+    `_estimate_and_apply` for this task: a single-dimensional pointwise loss
+    (no MultiClass family, no ranking target), the Newton or Gradient walker
+    at ONE iteration -- the walk whose only drain is its one evaluation's
+    readback. Everything else keeps the one-call path."""
+    if iters != 1:
+        return False
+    if not (
+        leaf_estimation_method == LEAF_ESTIMATION_NEWTON
+        or leaf_estimation_method == LEAF_ESTIMATION_GRADIENT
+    ):
+        return False
+    if (
+        objective == OBJECTIVE_MULTICLASS
+        or objective == OBJECTIVE_MULTICLASS_OVA
+        or objective == OBJECTIVE_PAIR_LOGIT
+        or objective == OBJECTIVE_YETI_RANK
+        or objective == OBJECTIVE_QUERY_RMSE
+    ):
+        return False
+    return True
+
+
+def _estimate_prepare(
+    ctx: DeviceContext,
+    n_rows: Int,
+    n_leaves: Int,
+    sizes: List[Int],
+    leaf_offsets: List[Int],
+    mut row_index: DeviceBuffer[DType.uint32],
+    mut targets: DeviceBuffer[DType.float32],
+    mut weights: DeviceBuffer[DType.float32],
+    has_weights: Bool,
+    mut cursor: DeviceBuffer[DType.float32],
+    objective: Int,
+    alpha: Float32,
+    estimator_alpha: Float32,
+    logloss_border: Float32,
+    l2_leaf_reg: Float32,
+    est_sm: Int,
+    leaf_estimation_method: Int,
+    mut est_ws: List[TEstimationWorkspace],
+    mut stage_times: StageTimes,
+) raises -> PendingEstimation:
+    """`_estimate_and_apply` for an `estimate_can_batch` task (approx_dim 1,
+    no grouping), up to its walker's evaluation readback, WITHOUT the drain
+    that settles it: the same workspace and oracle-scratch pools, the same
+    gathers and partition uploads, the same oracle (its weight fold
+    deferred, `make_bin_optimized_oracle(defer_weights=True)`), the walker's
+    first `MoveTo` and its evaluation, enqueued in the same order. Several
+    tasks prepared back to back therefore run the same kernels on the same
+    inputs as the same tasks run one at a time, behind one drain instead of
+    three each.
+
+    `est_ws` must be THIS task's workspace list and no other in-flight
+    task's: the staging (`h_po`/`h_ps`/`h_est`) and the oracle scratch are
+    rewritten by a task that reuses it, and nothing here drains."""
+    if not estimate_can_batch(objective, leaf_estimation_method, 1):
+        raise Error("_estimate_prepare: this task needs _estimate_and_apply")
+    stage_times.begin(ctx)
+    if (
+        len(est_ws) == 0
+        or est_ws[0].n_rows_key != n_rows
+        or est_ws[0].approx_dim_key != 1
+        or est_ws[0].n_leaves_cap < n_leaves
+    ):
+        est_ws.clear()
+        est_ws.append(TEstimationWorkspace(ctx, n_rows, 1, n_leaves))
+    var oracle_ws = Optional[OracleDeviceScratch]()
+    comptime if ORACLE_SCRATCH_POOLED:
+        oracle_ws = est_ws[0].oracle_scratch.take(
+            ctx, n_rows, n_leaves, objective, 0, est_sm, 0,
+        )
+    ref g_target = est_ws[0].g_target
+    ref g_weights = est_ws[0].g_weights
+    ref g_cursor = est_ws[0].g_cursor
+    ref d_p_off = est_ws[0].d_p_off
+    ref d_p_sz = est_ws[0].d_p_sz
+    ref h_po = est_ws[0].h_po
+    ref h_ps = est_ws[0].h_ps
+    launch_gather_with_mask_f32(
+        ctx, g_target, targets, row_index, n_rows,
+        UInt32(0xFFFFFFFF),
+    )
+    if has_weights:
+        launch_gather_with_mask_f32(
+            ctx, g_weights, weights, row_index, n_rows,
+            UInt32(0xFFFFFFFF),
+        )
+    launch_gather_planes_with_mask_f32(
+        ctx, g_cursor, cursor, row_index, n_rows,
+        UInt32(0xFFFFFFFF), 1, n_rows,
+    )
+    for i in range(n_leaves):
+        h_po.unsafe_ptr().unsafe_store(i, UInt32(leaf_offsets[i]))
+        h_ps.unsafe_ptr().unsafe_store(i, UInt32(sizes[i]))
+    ctx.enqueue_copy(dst_buf=d_p_off, src_ptr=h_po.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=d_p_sz, src_ptr=h_ps.unsafe_ptr())
+    stage_times.end(ctx, "est.stage_in")
+    stage_times.begin(ctx)
+    var oracle = make_bin_optimized_oracle(
+        ctx, n_rows, n_leaves, sizes,
+        g_target.copy(), g_weights.copy(), g_cursor.copy(),
+        d_p_off.copy(), d_p_sz.copy(),
+        has_weights,
+        objective,
+        alpha,
+        estimator_alpha,
+        logloss_border,
+        Float64(l2_leaf_reg),
+        est_sm,
+        leaf_estimation_method,
+        0,
+        scratch=oracle_ws^,
+        defer_weights=True,
+    )
+    stage_times.end(ctx, "est.make_oracle")
+    # `TNewtonLikeWalker::Estimate` at one iteration
+    # (`descent_helpers.newton_like_walker_estimate`), its first half:
+    # `MoveTo(startPoint)`, then the evaluation up to its readback
+    oracle.times.enabled = stage_times.enabled
+    var start = List[Float32]()
+    for _ in range(oracle.point_dim()):
+        start.append(Float32(0.0))
+    oracle.move_to(start)
+    oracle.enqueue_single_dim_evaluation()
+    return PendingEstimation(oracle^, n_rows, n_leaves, start^)
+
+
+def _estimate_complete(
+    ctx: DeviceContext,
+    mut pending: PendingEstimation,
+    mut row_index: DeviceBuffer[DType.uint32],
+    mut cursor: DeviceBuffer[DType.float32],
+    learning_rate: Float32,
+    mut leaf_values: List[Float32],
+    mut not_pd_total: Int,
+    mut trace: IdentityTrace,
+    mut stage_times: StageTimes,
+    leaf_tag: String,
+    mut est_ws: List[TEstimationWorkspace],
+) raises:
+    """The rest of a `_estimate_prepare` task, AFTER the caller's drain:
+    the walker's host half (the evaluation's readback, the second
+    derivatives, `UpdateMoveDirection`, the one step, `Regularize`,
+    `MakeEstimationResult`, the trace record), then `_estimate_and_apply`'s
+    `AppendModels` onto `cursor`, ENQUEUED: the caller drains before it
+    reuses `est_ws` or lets `pending` die (the oracle's buffers are read by
+    the launch below)."""
+    ref oracle = pending.oracle
+    oracle.settle_weights()
+    var cur_value = Float64(0.0)
+    var cur_grad = List[Float64]()
+    var cur_hess = List[Float64]()
+    oracle.finish_single_dim_evaluation(cur_value, cur_grad)
+    oracle.write_second_derivatives(cur_hess)
+    var not_pd_here = 0
+    var direction = _update_move_direction(
+        cur_grad, cur_hess, oracle.hessian_block_size(), not_pd_here
+    )
+    var result = _move(pending.start_point, direction, 1.0)
+    oracle.regularize(result)
+    var estimated = oracle.make_estimation_result(result)
+    merge_stage_times(stage_times, oracle.times)
+    trace.record_list_f32(leaf_tag, estimated)
+    not_pd_total += not_pd_here
+    leaf_values.clear()
+    for i in range(len(estimated)):
+        leaf_values.append(estimated[i])
+    var n_leaves = pending.n_leaves
+    if len(estimated) != n_leaves:
+        raise Error(
+            "the estimator returned " + String(len(estimated))
+            + " leaf values for " + String(n_leaves) + " leaves x 1 dims"
+        )
+    ref d_est = est_ws[0].d_est
+    ref h_est = est_ws[0].h_est
+    for i in range(n_leaves):
+        h_est.unsafe_ptr().unsafe_store(i, estimated[i])
+    ctx.enqueue_copy(dst_buf=d_est, src_ptr=h_est.unsafe_ptr())
+    var amv_gx = 2 * oracle.sm_count
+    if amv_gx < 1:
+        amv_gx = 1
+    ctx.enqueue_function[add_model_value_kernel](
+        oracle.d_p_off.unsafe_ptr(),
+        oracle.d_p_sz.unsafe_ptr(),
+        row_index.unsafe_ptr(),
+        d_est.unsafe_ptr(),
+        learning_rate,
+        cursor.unsafe_ptr(),
+        Int32(1), Int32(pending.n_rows),
+        grid_dim=(amv_gx, n_leaves, 1),
+        block_dim=(256, 1, 1),
+    )
 
 
 def fit_with_test(
