@@ -537,6 +537,10 @@ class GaussianProcessRegressor(NumericModeMixin):
         Whether fit had to copy X to reach float32 C order.
     """
 
+    #: scikit-learn's estimator kind: `cross_val_score` stratifies a
+    #: classifier's default folds, as scikit-learn's does.
+    _estimator_type = "regressor"
+
     _BINDING = "_mojolearn_gp"
 
     def __init__(

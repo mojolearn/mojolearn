@@ -30,7 +30,12 @@ sampler's first Python caller.
 from std.memory import memcpy
 from hostptr import copy_f32, read_f32
 from core.forest_host_predict import rf_host_predict, rf_host_trees
-from ensemble.host_layout import colmajor_from_rowmajor_f32, copy_f32_threaded
+from ensemble.host_layout import (
+    colmajor_from_rowmajor_f32,
+    copy_f32_threaded,
+    has_nan_f32_threaded,
+    RF_NAN_REFUSAL,
+)
 
 from std.os import abort
 from std.python import Python, PythonObject
@@ -361,6 +366,8 @@ def _rf_classifier_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
     var xp = _f32_ptr(Int(py=x_addr))
     var yp = _i32_ptr(Int(py=y_addr))
     var crit = Int(py=criterion)
+    if has_nan_f32_threaded(xp, n_rows * n_cols):
+        raise Error("rf_classifier_fit: " + RF_NAN_REFUSAL)
     _check_criterion("rf_classifier_fit", crit, _cls_criteria())
     var rf_params = _rf_params_from(params, crit)
 
@@ -550,6 +557,8 @@ def _rf_regressor_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
     var xp = _f32_ptr(Int(py=x_addr))
     var yp = _f32_ptr(Int(py=y_addr))
     var crit = Int(py=criterion)
+    if has_nan_f32_threaded(xp, n_rows * n_cols):
+        raise Error("rf_regressor_fit: " + RF_NAN_REFUSAL)
     _check_criterion("rf_regressor_fit", crit, _reg_criteria())
     var rf_params = _rf_params_from(params, crit)
 

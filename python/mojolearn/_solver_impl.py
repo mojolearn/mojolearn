@@ -14,6 +14,7 @@ whoever owns that file decides the public namespace.
 
 from . import _mojolearn_solver, _serialize
 from ._array import Array
+from ._mode import ParamsMixin
 from ._buffer import addr, addr_ro, as_f32_c, as_f32_colmajor, empty, zeros
 from .linear_model import _check_saved_by, _r2_host, _restore_mode, _saved_mode, _shape_of
 
@@ -54,7 +55,7 @@ _CD_FORMAT = "mojolearn-cd-1"
 
 
 
-class ElasticNet:
+class ElasticNet(ParamsMixin):
     """Elastic-net regression by coordinate descent on the GPU.
 
     Reference: `cuml.linear_model.ElasticNet(solver='cd')` and
@@ -209,6 +210,10 @@ class ElasticNet:
     entry a live trace). Under FAST the reductions are the vendor's and no
     cross-vendor claim is made.
     """
+
+    #: scikit-learn's estimator kind: `cross_val_score` stratifies a
+    #: classifier's default folds, as scikit-learn's does.
+    _estimator_type = "regressor"
 
     def __init__(self, alpha=1.0, *, l1_ratio=0.5, fit_intercept=True,
                  max_iter=1000, tol=1e-3, solver="auto", selection="cyclic",

@@ -55,6 +55,12 @@ def forest_ordered_resident_policy[
 #: Apple, NVIDIA and AMD in FAST/IDENTICAL. `_OFF` restores the former
 #: sequential IDENTICAL AUTO policy and resident FAST 32-grove graph; the
 #: positive define remains an experiment switch for other IDENTICAL columns.
+#: Since 2026-09-22 this is the DEFAULT of a per-snapshot choice
+#: (`ResidentForest.ordered`, forest_prepare_gpu's optional 4th param): an
+#: IDENTICAL caller names it, strict for `auto` (the sequential bits) and
+#: the 32-grove graph for an explicit `parallel_groves` (the recorded fold,
+#: which the CPU host groves engine also computes). As a bare compiled
+#: default it moved recorded IDENTICAL parallel_groves cells on every GPU.
 comptime FOREST_ORDERED_RESIDENT = forest_ordered_resident_policy[
     TARGET_COLUMN,
     GLOBAL_NUMERIC_MODE,
@@ -139,10 +145,16 @@ struct ResidentForest(Movable):
     var features: Int
     var outputs: Int
     var trees: Int
+    #: True launches the strict increasing-tree kernel (the sequential
+    #: route's arithmetic); False the 32-grove graph. Chosen per snapshot so
+    #: an IDENTICAL `parallel_groves` model keeps the grove fold it was
+    #: recorded with (and that the CPU host groves engine reproduces) while
+    #: IDENTICAL `auto` keeps the sequential bits on a resident snapshot.
+    var ordered: Bool
 
     def __init__(out self, offsets: List[Int32], columns: List[Int32],
         thresholds: List[Float32], left: List[Int32], leaves: List[Float32],
-        features: Int, outputs: Int) raises:
+        features: Int, outputs: Int, ordered: Bool = FOREST_ORDERED_RESIDENT) raises:
         var empty = List[Float32]()
         validate_flat_forest(offsets, columns, thresholds, left, leaves, empty, 0, features, outputs)
         self.pool = Optional[PooledForest]()
@@ -154,6 +166,7 @@ struct ResidentForest(Movable):
         self.features = features
         self.outputs = outputs
         self.trees = len(offsets) - 1
+        self.ordered = ordered
         self.ctx = Optional[DeviceContext]()
         self.offsets = Optional[DeviceBuffer[DType.int32]]()
         self.columns = Optional[DeviceBuffer[DType.int32]]()
@@ -167,7 +180,7 @@ struct ResidentForest(Movable):
         # A sharded pool combines per-device tree partitions and therefore
         # cannot express one global increasing-tree fold.  The experimental
         # ordered arm stays on one device so its arithmetic graph is exact.
-        if device_count > 1 and not FOREST_ORDERED_RESIDENT:
+        if device_count > 1 and not ordered:
             self.pool = PooledForest(offsets, columns, thresholds, left, leaves,
                 features, outputs, device_count)
             return
@@ -300,11 +313,18 @@ struct ResidentForest(Movable):
         var hout = self.ctx.value().enqueue_create_host_buffer[DType.float32](rows * outputs)
         try:
             self.ctx.value().enqueue_copy(dst_buf=dx, src_ptr=x.unsafe_ptr())
-            launch_forest_inference[RF_INPUT, not FOREST_ORDERED_RESIDENT, FOREST_PACKED_NODES](
-                self.ctx.value(), self.offsets.value(), self.columns.value(),
-                self.thresholds.value(), self.left.value(), self.leaves.value(),
-                dx, dout, rows, features, outputs, self.trees,
-            )
+            if self.ordered:
+                launch_forest_inference[RF_INPUT, False, FOREST_PACKED_NODES](
+                    self.ctx.value(), self.offsets.value(), self.columns.value(),
+                    self.thresholds.value(), self.left.value(), self.leaves.value(),
+                    dx, dout, rows, features, outputs, self.trees,
+                )
+            else:
+                launch_forest_inference[RF_INPUT, True, FOREST_PACKED_NODES](
+                    self.ctx.value(), self.offsets.value(), self.columns.value(),
+                    self.thresholds.value(), self.left.value(), self.leaves.value(),
+                    dx, dout, rows, features, outputs, self.trees,
+                )
             self.ctx.value().enqueue_copy(dst_ptr=hout.unsafe_ptr(), src_buf=dout)
             self.ctx.value().synchronize()
         except e:
@@ -352,13 +372,15 @@ struct ResidentForest(Movable):
             _predict_into_buffers[RF_INPUT](self.ctx.value(), self.offsets.value(),
                 self.columns.value(), self.thresholds.value(), self.left.value(),
                 self.leaves.value(), x, output, rows, features, outputs, self.trees,
-                self.input_workspace.value(), self.output_workspace.value(), stage, staged)
+                self.input_workspace.value(), self.output_workspace.value(), stage, staged,
+                self.ordered)
         else:
             var dx = self.ctx.value().enqueue_create_buffer[DType.float32](rows * features)
             var dout = self.ctx.value().enqueue_create_buffer[DType.float32](rows * outputs)
             _predict_into_buffers[RF_INPUT](self.ctx.value(), self.offsets.value(),
                 self.columns.value(), self.thresholds.value(), self.left.value(),
-                self.leaves.value(), x, output, rows, features, outputs, self.trees, dx, dout, x, False)
+                self.leaves.value(), x, output, rows, features, outputs, self.trees, dx, dout, x, False,
+                self.ordered)
             _ = dx^
             _ = dout^
 
@@ -428,12 +450,20 @@ struct ResidentForest(Movable):
             if not self.label_workspace:
                 self.label_workspace = self.ctx.value().enqueue_create_buffer[DType.int32](rows)
             self.ctx.value().enqueue_copy(dst_buf=self.input_workspace.value(), src_ptr=x)
-            launch_forest_inference[RF_INPUT, not FOREST_ORDERED_RESIDENT, FOREST_PACKED_NODES](
-                self.ctx.value(), self.offsets.value(), self.columns.value(),
-                self.thresholds.value(), self.left.value(), self.leaves.value(),
-                self.input_workspace.value(), self.output_workspace.value(), rows,
-                features, outputs, self.trees,
-            )
+            if self.ordered:
+                launch_forest_inference[RF_INPUT, False, FOREST_PACKED_NODES](
+                    self.ctx.value(), self.offsets.value(), self.columns.value(),
+                    self.thresholds.value(), self.left.value(), self.leaves.value(),
+                    self.input_workspace.value(), self.output_workspace.value(), rows,
+                    features, outputs, self.trees,
+                )
+            else:
+                launch_forest_inference[RF_INPUT, True, FOREST_PACKED_NODES](
+                    self.ctx.value(), self.offsets.value(), self.columns.value(),
+                    self.thresholds.value(), self.left.value(), self.leaves.value(),
+                    self.input_workspace.value(), self.output_workspace.value(), rows,
+                    features, outputs, self.trees,
+                )
             launch_forest_argmax(self.ctx.value(), self.output_workspace.value(),
                                  self.label_workspace.value(), rows, outputs)
             self.ctx.value().enqueue_copy(dst_ptr=output, src_buf=self.label_workspace.value())
@@ -453,7 +483,7 @@ def _predict_into_buffers[RF_INPUT: Bool](ctx: DeviceContext,
     x: MutPointer[Float32, MutAnyOrigin], output: MutPointer[Float32, MutAnyOrigin],
     rows: Int, features: Int, outputs: Int, trees: Int,
     mut dx: DeviceBuffer[DType.float32], mut dout: DeviceBuffer[DType.float32],
-    stage: MutPointer[Float32, MutAnyOrigin], staged: Bool) raises:
+    stage: MutPointer[Float32, MutAnyOrigin], staged: Bool, ordered: Bool) raises:
     """`stage` is the pinned host stage the upload reads when `staged`
     (DEVIATION 2962), else `x` itself; the input scan is the same predicate
     either way."""
@@ -473,8 +503,12 @@ def _predict_into_buffers[RF_INPUT: Bool](ctx: DeviceContext,
         comptime if FOREST_PROFILE:
             ctx.synchronize()
             t2 = Int(perf_counter_ns())
-        launch_forest_inference[RF_INPUT, not FOREST_ORDERED_RESIDENT, FOREST_PACKED_NODES](ctx, offsets, columns,
-            thresholds, left, leaves, dx, dout, rows, features, outputs, trees)
+        if ordered:
+            launch_forest_inference[RF_INPUT, False, FOREST_PACKED_NODES](ctx, offsets, columns,
+                thresholds, left, leaves, dx, dout, rows, features, outputs, trees)
+        else:
+            launch_forest_inference[RF_INPUT, True, FOREST_PACKED_NODES](ctx, offsets, columns,
+                thresholds, left, leaves, dx, dout, rows, features, outputs, trees)
         comptime if FOREST_PROFILE:
             ctx.synchronize()
             t3 = Int(perf_counter_ns())
@@ -516,11 +550,11 @@ comptime ET_REGISTRY = _Global[StorageType=ForestRegistry,
 
 def resident_prepare[RF_INPUT: Bool](offsets: List[Int32], columns: List[Int32],
     thresholds: List[Float32], left: List[Int32], leaves: List[Float32],
-    features: Int, outputs: Int) raises -> Int:
+    features: Int, outputs: Int, ordered: Bool = FOREST_ORDERED_RESIDENT) raises -> Int:
     var state = RF_REGISTRY.get_or_create_ptr()
     comptime if not RF_INPUT:
         state = ET_REGISTRY.get_or_create_ptr()
-    var model = ResidentForest(offsets, columns, thresholds, left, leaves, features, outputs)
+    var model = ResidentForest(offsets, columns, thresholds, left, leaves, features, outputs, ordered)
     if state[].next_id == 9223372036854775807:
         model.close()
         raise Error("resident forest handle space exhausted")

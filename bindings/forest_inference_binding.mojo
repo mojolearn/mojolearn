@@ -35,12 +35,22 @@ def forest_prepare_gpu_binding[RF_INPUT: Bool](
     quesval_addr: PythonObject, left_child_addr: PythonObject,
     leaves_addr: PythonObject, params: PythonObject,
 ) raises -> PythonObject:
-    """Prepare an owned immutable GPU snapshot. GIL serializes registry access."""
-    if len(params) != 3:
-        raise Error("forest_prepare_gpu requires features, trees, outputs")
+    """Prepare an owned immutable GPU snapshot. GIL serializes registry access.
+
+    An optional fourth entry picks the snapshot's aggregation: 1 the strict
+    increasing-tree kernel (the sequential route's bits), 0 the 32-grove
+    graph. Absent, the compiled default `FOREST_ORDERED_RESIDENT` applies."""
+    if len(params) != 3 and len(params) != 4:
+        raise Error("forest_prepare_gpu requires features, trees, outputs[, ordered]")
     var features = Int(py=params[0])
     var trees = Int(py=params[1])
     var outputs = Int(py=params[2])
+    var ordered = FOREST_ORDERED_RESIDENT
+    if len(params) == 4:
+        var flag = Int(py=params[3])
+        if flag != 0 and flag != 1:
+            raise Error("forest_prepare_gpu ordered must be 0 or 1")
+        ordered = flag == 1
     if features < 1 or trees < 1 or trees >= 2147483647 or outputs < 1:
         raise Error("invalid resident forest dimensions")
     var op = _i32_ptr(Int(py=offsets_addr))
@@ -65,7 +75,7 @@ def forest_prepare_gpu_binding[RF_INPUT: Bool](
     for i in range(nodes * outputs):
         leaves.append(vp[i])
     return PythonObject(resident_prepare[RF_INPUT](
-        offsets, columns, thresholds, left, leaves, features, outputs))
+        offsets, columns, thresholds, left, leaves, features, outputs, ordered))
 
 
 def forest_predict_resident_gpu_binding[RF_INPUT: Bool](handle: PythonObject, x_addr: PythonObject,

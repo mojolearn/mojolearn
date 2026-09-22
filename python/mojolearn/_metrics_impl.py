@@ -59,7 +59,7 @@ reachable from Python. They are gated where they live, in
 
 from . import _portable_math as math
 import numbers
-from ._buffer import _materialize, _native
+from ._buffer import _materialize, _native, materialize_f32_lists
 from ._labels import is_bool, flatten_labels, flat_view
 from ._arrays import _addr, _addr_ro
 
@@ -741,9 +741,13 @@ def r2_score(
 
 
 def _as_regression_f32_1d(x, name):
-    if _buffer_format(x) != "f":
+    # A plain Python list or tuple has no float32 spelling; it is cast once,
+    # the same rounding `as_f32_c` applies (`materialize_f32_lists`). A
+    # buffer keeps the float32-only contract (Sep 22 pip smoke: plain lists
+    # were refused as "must have dtype float32").
+    if _buffer_format(x) != "f" and not isinstance(x, (list, tuple)):
         raise TypeError(f"mojolearn regression metrics: {name} must have dtype float32; cast explicitly before scoring")
-    a = _materialize(x, "input")[0]
+    a = materialize_f32_lists(x, "input")[0]
     if a.dtype != "<f4":
         raise TypeError(
             f"mojolearn regression metrics: {name} must have dtype float32, "
@@ -1197,7 +1201,7 @@ def log_loss(y_true, y_pred, *, normalize=True, sample_weight=None, labels=None,
     mapping = {label: i for i, label in enumerate(selected)}
     if any(label not in mapping for label in _label_set(true)):
         raise ValueError("y_true contains a label missing from labels")
-    probabilities = _materialize(y_pred, "input")[0]
+    probabilities = materialize_f32_lists(y_pred, "input")[0]
     if probabilities.dtype != "<f4":
         raise TypeError("log_loss probabilities must have dtype float32")
     if probabilities.ndim not in (1, 2):
@@ -1240,7 +1244,7 @@ def _binary_ranking_inputs(y_true, y_score, sample_weight):
     classes = sorted(_label_set(true))
     if len(classes) > 2:
         raise ValueError("binary ranking metrics support at most two observed classes")
-    scores = _materialize(y_score, "input")[0]
+    scores = materialize_f32_lists(y_score, "input")[0]
     if scores.dtype != "<f4":
         raise TypeError("binary ranking scores must have dtype float32")
     if scores.ndim != 1 or len(scores) != len(true):
