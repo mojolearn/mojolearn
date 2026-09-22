@@ -184,3 +184,55 @@ def copy_ftz_f32_threaded(
             all_finite = False
     _ = flags^
     return all_finite
+
+
+comptime RF_NAN_REFUSAL = (
+    "X contains NaN; the forest has no missing-value arm (a NaN bins left"
+    " but partitions right, and the fit would not terminate)"
+)
+"""The RandomForest builders' NaN refusal, host and GPU bindings alike."""
+
+
+def has_nan_f32_threaded(
+    src: MutPointer[Float32, MutUntrackedOrigin], n: Int
+) -> Bool:
+    """True when any of `src[0:n]` is a NaN, scanned in chunks across the
+    pool (read-only; the flags pattern of `copy_ftz_f32_threaded`).
+
+    The RandomForest builders' refusal (2026-09-22, pip smoke): a NaN bins
+    to 0 in the histogram (`lower_bound`'s `values[mid] < NaN` is False) but
+    partitions RIGHT (`NaN <= quesval` is False), so a split whose left side
+    holds only NaN rows passes every child of the histogram's view and
+    hands the right child every row of its parent. At the default unlimited
+    depth that node splits forever: the fit never returns. +-inf is not
+    refused here: it bins and partitions consistently (+inf past the last
+    quantile, -inf at bin 0), measured on both builders."""
+    if n <= 0:
+        return False
+    var n_chunks = (n + HOST_COPY_CHUNK - 1) // HOST_COPY_CHUNK
+    var flags = List[UInt8](length=n_chunks, fill=UInt8(0))
+    var fp = flags.unsafe_ptr()
+    var sp = src
+
+    def _chunk(k: Int) {imm sp, imm fp, imm n}:
+        var i0 = k * HOST_COPY_CHUNK
+        var i1 = min(i0 + HOST_COPY_CHUNK, n)
+        var bad = False
+        for i in range(i0, i1):
+            var bits = bitcast[DType.uint32](sp.unsafe_load(i))
+            if (bits & UInt32(0x7FFFFFFF)) > UInt32(0x7F800000):
+                bad = True
+        if bad:
+            fp.unsafe_store(k, UInt8(1))
+
+    if n < HOST_LAYOUT_SERIAL_CELLS or n_chunks == 1:
+        for k in range(n_chunks):
+            _chunk(k)
+    else:
+        sync_parallelize(_chunk, n_chunks)
+    var any_nan = False
+    for k in range(n_chunks):
+        if flags[k] != 0:
+            any_nan = True
+    _ = flags^
+    return any_nan
