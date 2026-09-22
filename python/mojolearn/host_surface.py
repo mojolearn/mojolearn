@@ -3372,16 +3372,10 @@ PUBLIC_PENDING_LANES = {
     # ADMITTED 2026-09-20: transformer-decode-session carries cells in the shipped table now.
     # ADMITTED 2026-09-20: par-causal-lm, CPU and a two-device RTX 4090 column agree on all nine fixtures.
     # ADMITTED 2026-09-20: par-cross-val, CPU and a two-device RTX 4090 column agree on all nine fixtures.
-    # THE HOLT-WINTERS DEFAULT CHANGED (2026-09-22, feat/holtwinters-estimated-init-sep22):
-    # initialization_method="estimated" is the default, so the shipped table's
-    # cells describe the heuristic fit (identity_break LANE_REVISIONS). The CPU
-    # (arm64) and Apple columns at the new revision are in
-    # bench/results/identity_break/2026-09-22_holtwinters-estimated-init/ and agree
-    # bit for bit; NVIDIA and AMD columns are owed before the table is regenerated.
-    "holtwinters": "stale reference",
-    "holtwinters-multiplicative": "stale reference",
-    "par-holtwinters": "stale reference",
-    "par-forecast-holtwinters": "stale reference",
+    # ADMITTED 2026-09-22: holtwinters, holtwinters-multiplicative, par-holtwinters and
+    # par-forecast-holtwinters at the estimated-initialization default. Apple M4, arm64 CPU,
+    # NVIDIA H100, AMD MI325X and x86-64 CPU agree on all nine fixtures
+    # (bench/results/identity_break/2026-09-22_holtwinters-estimated-init/).
 }
 
 

@@ -48,37 +48,33 @@ block widths through the parallel arm, its f = 59 edge, the serial arm at
 f = 60, and the heuristic default unchanged) and `legs/apple-m4.hw_check.txt` (the
 existing heuristic gate, ALL OK).
 
-## What is owed before admission
+## NVIDIA, AMD and x86-64 CPU columns (admitted)
 
-1. An NVIDIA column and an AMD column at this revision, for all four lanes on
-   all nine fixtures. `legs/body_hw.sh` is the body. It runs both Mojo gates,
-   builds core and tsa, and records the four lanes with `--repeats 1`:
+All at commit `3e1b87ccf` (this branch at `ed504c033`, the parallel
+estimated-fit kernel, merged with main), one fit per cell, all nine fixtures,
+every cell STABLE. Leg body `legs/body_hw_binary.sh` (the body_hw.sh commands
+plus the gbdt-binary-columns lane); CPU command `legs/cpu_x86_cmd.sh` under
+`tools/runpod_cpu_leg.sh --build core,tsa,gbdt --sabotage-build core,tsa`.
 
-   ```sh
-   # NVIDIA, RunPod
-   MOJOLEARN_RUNPOD_KEY_FILE=~/.mojolearn_runpod_key \
-   MOJOLEARN_GEMM_LEG_EXTRA=bench/results/identity_break/2026-09-22_holtwinters-estimated-init/legs/body_hw.sh \
-     sh tools/gemm_remote_leg.sh nvidia --source-ref <branch head> --allow-concurrent --rent
-   # AMD MI325X gfx942, DigitalOcean
-   MOJOLEARN_DO_TOKEN_FILE=~/.mojolearn_do_token MOJOLEARN_GPU_ARCHS=gfx942 \
-   MOJOLEARN_GEMM_LEG_EXTRA=bench/results/identity_break/2026-09-22_holtwinters-estimated-init/legs/body_hw.sh \
-     bash tools/do_extra_leg.sh amd --skip-gates
-   ```
+| column | file | box |
+|---|---|---|
+| NVIDIA H100 (sm_90a) | `nvidia-h100-sm_90a.json` | RunPod; gate `legs/nvidia-h100.gate.txt` |
+| AMD MI325X (gfx942) | `amd-mi325x-gfx942.json` | DigitalOcean; gate `legs/amd-mi325x.gate.txt` |
+| x86-64 CPU, EPYC 9965 | `cpu-amd-epyc-9965-x86_64.json` | RunPod CPU; column verdict OK |
+| x86-64 CPU sabotage | `cpu-amd-epyc-9965-x86_64.sabotage.json` | same, `MOJOLEARN_HOST_SABOTAGE` core,tsa |
 
-   Each leg writes `/root/gemm_leg_out/hwinit/<label>.json` and `gate.txt`.
-   Copy them here, then run:
+`hw_estimate_check` and `hw_check` read ALL OK under IDENTICAL on the H100 and
+the MI325X.
 
-   ```sh
-   L=holtwinters,holtwinters-multiplicative,par-holtwinters,par-forecast-holtwinters
-   python tools/identity_break.py --diff apple-m4.json cpu-apple-m4-arm64.json \
-       <nvidia>.json <amd>.json --require-columns 4 --lanes $L
-   ```
+`diff.five-columns.txt`: Apple, arm64 CPU, H100, MI325X, x86-64 CPU,
+`--require-columns 5`: train IDENTICAL=36, infer/model IDENTICAL=72, batch
+IDENTICAL=36, exit 0. `diff.apple-vs-cpu-x86-sabotage.txt`: DIVERGENT=36,
+exit 1.
 
-2. A CPU column on x86-64 (`tools/runpod_cpu_leg.sh --build core,tsa
-   --sabotage-build core,tsa`, the body of
-   `bench/results/identity_break/2026-09-15_holtwinters-linesearch-fix/legs/cpu_cmd.sh`
-   with `LANES` set to the four lanes).
+A first NVIDIA (RTX 4090) and AMD leg ran at the previous branch head
+(`91f713c06`); both agree with the new-head columns on every cell, and only the
+new-head columns are kept here.
 
-3. Regenerate `python/mojolearn/verify_reference/table.json` with the
-   documented `verify --all --emit-reference` step (docs/VERIFY.md), and take
-   the four lanes out of `PUBLIC_PENDING_LANES` after a watched CPU-only run.
+The reference table was regenerated for the four lanes with
+`verify --all --batch-checks --emit-reference ... --reference-table ... --lanes ...`
+and the four lanes left `PUBLIC_PENDING_LANES`.
