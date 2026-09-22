@@ -1,0 +1,47 @@
+{
+  "schema": "mojolearn.byte-lm.tokens.v1",
+  "source": {
+    "path": "<scratchpad>/tok/sample.txt",
+    "sha256": "4d2a333846f25ee03d740bda8134f154b338f695899e82930bd6c7a8999e375b",
+    "bytes": 19907989,
+    "schema": "fineweb_text.lines.v1",
+    "inputs": [
+      {
+        "path": "<scratchpad>/tok/sample.txt",
+        "sha256": "56e2664ecdebf90142c2bee5c8c72730bed30075ad5af6e60c447723ed9ffc9d",
+        "bytes": 20000000
+      }
+    ],
+    "row_groups_per_shard": null
+  },
+  "vocabulary": {
+    "schema": "mojolearn.bpe-vocabulary.v1",
+    "sha256": "bfe4a401789e734c139ee6d872848833d0058b1b274757334c955236a57d9b24",
+    "n_ranks": 50256,
+    "n_vocab": 50257,
+    "endoftext_id": 50256
+  },
+  "encoder": "mojolearn.tokenizer.BpeTokenizer.encode_batch (host binding _mojolearn_tokenizer_host, tokenizer/encoding.mojo); integers and tables only",
+  "endoftext": "not inserted and not recognized (allow_endoftext=False)",
+  "document_rule": "one document per FineWeb-Edu row (or per line of a fineweb_text.py file), each encoded alone, ids concatenated in row order",
+  "n_documents": 92012,
+  "dtype": "int32",
+  "byte_order": "little",
+  "sha256": "4314b12cff46c5d2df676ffbe7f225f2f8869c997b4361adee6e973bcd996424",
+  "bytes": 16633988,
+  "tokens": 4158497,
+  "bytes_per_token": 4.787303922547016,
+  "max_id": 50255,
+  "train_range": [
+    0,
+    4156409
+  ],
+  "validation_range": [
+    4156409,
+    4158497
+  ],
+  "schedule": "train-range-modulo.v1",
+  "tokenize_seconds": 1.5397284999489784,
+  "encode_seconds": 1.1678667092928663,
+  "encode_bytes_per_second": 17046456.450543165
+}

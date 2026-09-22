@@ -25,7 +25,7 @@ from core.step_phase import STEP_PHASE_TIMERS
 from checks.numerics import ftz, identical_mul_add
 from training.byte_lm import (
     ByteTrainer, byte_gradient_device, byte_update_device,
-    byte_validate_tokens, byte_rollback, _require_device_finite,
+    byte_validate_tokens, byte_validate_optimizer, byte_rollback, _require_device_finite,
     _FAULT_NAN,
 )
 from training.byte_lm_optimizer_pool import pool_snapshot, pool_update, pool_restore, pool_maybe_fault
@@ -147,6 +147,21 @@ struct ByteParallelTrainer(Movable, Writable):
     def require_open(self) raises:
         if self.busy or not self.usable or len(self.trainers) == 0:
             raise Error("byte LM parallel: closed, busy or lost; restore an export")
+
+    def set_learning_rate(mut self, lr: Float32) raises:
+        """Replace the optimizer's learning rate on every replica before the
+        next update (a per-step schedule computed on the host). Every other
+        optimizer scalar is untouched; the new configuration is admitted by
+        `byte_validate_optimizer` exactly as the one `open` took. The step
+        scalars are derived from the configuration at each update
+        (`device_step_scalars`), so the change takes effect at the next
+        `step` or `apply_gradient` and never inside one."""
+        self.require_open()
+        var cfg = self.trainers[0].optimizer.copy()
+        cfg.lr = lr
+        byte_validate_optimizer(cfg)
+        for i in range(len(self.trainers)):
+            self.trainers[i].optimizer.lr = lr
 
     def broadcast_parameters(mut self) raises:
         # Every source range is authoritative on exactly one device. Copies

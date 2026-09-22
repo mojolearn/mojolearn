@@ -1,0 +1,78 @@
+{
+ "schema": "mojolearn.lm-segment.recipe.v1",
+ "shape": [
+  2,
+  32,
+  32,
+  4,
+  2,
+  8,
+  64,
+  2,
+  50257
+ ],
+ "logical_shards": 4,
+ "steps": 12,
+ "seed": 93261,
+ "optimizer": {
+  "betas": [
+   0.9,
+   0.95
+  ],
+  "eps": 1e-08,
+  "weight_decay": 0.1
+ },
+ "schedule": {
+  "kind": "warmup-linear-cosine",
+  "peak_lr": 0.001,
+  "warmup_steps": 2,
+  "final_ratio": 0.1,
+  "table_f32_hex": [
+   "3a03126f",
+   "3a83126f",
+   "3a802f69",
+   "3a6f9d5f",
+   "3a558465",
+   "3a34a1e0",
+   "3a102de0",
+   "39d773c0",
+   "3995aeb6",
+   "3942f985",
+   "38ffe771",
+   "38d1b717"
+  ]
+ },
+ "data": {
+  "schedule": "lm-segment.shards.v1",
+  "tokens_sha256": "2ad0c690bc4438d5ddab5cb481c4b247ba61b7dd3d841a3d7c0a7d0f94b2c253",
+  "tokens_manifest_sha256": "51898a61dc62f23fa33edcfaa00b4d526899cc55b262c75d84c0b3767b474d9a",
+  "train_range": [
+   0,
+   24141115
+  ],
+  "vocabulary": {
+   "schema": "mojolearn.bpe-vocabulary.v1",
+   "sha256": "3d547b17821cf46502f275a441dd6ded9682a4ddcacde993a1ff836f39c4122d",
+   "n_ranks": 50256,
+   "n_vocab": 50257,
+   "endoftext_id": 50256
+  }
+ },
+ "checkpoint_every": 4,
+ "boundaries": [
+  4,
+  8,
+  12
+ ],
+ "reduction": "ordered_sum",
+ "written_by": {
+  "box": {
+   "host": "Mac",
+   "machine": "arm64",
+   "system": "Darwin",
+   "python": "3.14.7"
+  },
+  "commit": "86033e1a32efc151d574ba7d4d609be30b753bd0",
+  "utc": "2026-09-22T19:26:46Z"
+ }
+}

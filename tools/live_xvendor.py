@@ -94,6 +94,9 @@ def main(argv=None):
     lo.add_argument("--steps", type=int, default=6)
     lo.add_argument("--out", required=True)
     lo.add_argument("--expect")
+    for sp in (c, w, lo):
+        sp.add_argument("--chained", action="store_true",
+                        help="the chained fold: contiguous blocks, one gradient per worker on the wire")
     args = ap.parse_args(argv)
     from mojolearn.cross_vendor import Coordinator, Worker
 
@@ -102,8 +105,8 @@ def main(argv=None):
 
     if args.cmd == "coordinator":
         rows = Coordinator(host=args.host, port=args.port, workers=args.workers, logical_shards=4,
-                           steps=args.steps, on_step=log).run()
-        _write(args.out, rows, dict(workers=args.workers))
+                           steps=args.steps, on_step=log, chained=args.chained).run()
+        _write(args.out, rows, dict(workers=args.workers, chained=args.chained))
         print(f"AGREED on {len(rows)} steps across {args.workers} workers")
         return _check(rows, args.expect)
 
@@ -113,27 +116,32 @@ def main(argv=None):
         host, port = args.address.rsplit(":", 1)
         done = Worker(state0, shards=[int(k) for k in args.shards.split(",")], batches=batches,
                       address=(host, int(port)), name=args.name, device=args.device,
-                      connect_timeout=args.connect_timeout).run()
+                      connect_timeout=args.connect_timeout, chained=args.chained).run()
         print(f"{args.name}: committed {done} steps")
         return 0
 
     # local: coordinator in a thread, workers in threads, one device under a lock
     K = 4
-    split = [list(range(K))[i::args.workers] for i in range(args.workers)]
+    if args.chained:  # contiguous blocks, shard order
+        cut = [K * i // args.workers for i in range(args.workers + 1)]
+        split = [list(range(cut[i], cut[i + 1])) for i in range(args.workers)]
+    else:
+        split = [list(range(K))[i::args.workers] for i in range(args.workers)]
     lock = threading.Lock()
     result, errors = {}, []
 
     def coord():
         try:
             result["rows"] = Coordinator(host="127.0.0.1", port=args.port, workers=args.workers,
-                                         logical_shards=K, steps=args.steps, on_step=log).run()
+                                         logical_shards=K, steps=args.steps, on_step=log, chained=args.chained).run()
         except BaseException as e:  # noqa: BLE001
             errors.append(e)
 
     def work(i):
         try:
             Worker(trainer=_Locked(_trainer(state0, 0), lock), shards=split[i], batches=batches,
-                   address=("127.0.0.1", args.port), name=f"local-{i}", connect_timeout=60).run()
+                   address=("127.0.0.1", args.port), name=f"local-{i}", connect_timeout=60,
+                   chained=args.chained).run()
         except BaseException as e:  # noqa: BLE001
             errors.append(e)
 
@@ -145,7 +153,7 @@ def main(argv=None):
     if errors:
         print("FAILED:", errors)
         return 1
-    _write(args.out, result["rows"], dict(workers=args.workers, local=True, split=split))
+    _write(args.out, result["rows"], dict(workers=args.workers, local=True, split=split, chained=args.chained))
     print(f"AGREED on {len(result['rows'])} steps across {args.workers} local workers {split}")
     return _check(result["rows"], args.expect)
 

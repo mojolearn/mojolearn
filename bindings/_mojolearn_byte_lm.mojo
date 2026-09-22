@@ -1469,6 +1469,18 @@ def byte_lm_parallel_ownership_binding(session: PythonObject) raises -> PythonOb
     return out
 
 
+def byte_lm_parallel_set_lr_binding(session: PythonObject, lr_arg: PythonObject) raises -> PythonObject:
+    """Set the learning rate of every replica for the NEXT update (a
+    per-step schedule); returns the float32 bits that were stored, so the
+    caller can hold the recorded schedule to what the device will use."""
+    _require_binding_profile()
+    var owner = session.downcast_value_ptr[ByteParallelTrainer]()
+    owner[].require_open()
+    var lr = Float32(Float64(py=lr_arg))
+    owner[].set_learning_rate(lr)
+    return PythonObject(Int(bitcast[DType.uint32](owner[].trainers[0].optimizer.lr)))
+
+
 def byte_lm_parallel_rollback_binding(session: PythonObject) raises -> PythonObject:
     var owner = session.downcast_value_ptr[ByteParallelTrainer]()
     owner[].require_open()
@@ -1746,6 +1758,7 @@ def PyInit__mojolearn_byte_lm() abi("C") -> PythonObject:
         module.def_function[byte_lm_parallel_shard_gradient_binding]("byte_lm_parallel_shard_gradient")
         module.def_function[byte_lm_parallel_apply_gradient_binding]("byte_lm_parallel_apply_gradient")
         module.def_function[byte_lm_parallel_rollback_binding]("byte_lm_parallel_rollback")
+        module.def_function[byte_lm_parallel_set_lr_binding]("byte_lm_parallel_set_lr")
         _ = module.add_type[ByteOffloadedReplay]("_ByteOffloadedReplay")
         module.def_function[byte_lm_offload_create_binding]("byte_lm_offload_create")
         module.def_function[byte_lm_offload_open_binding]("byte_lm_offload_open")

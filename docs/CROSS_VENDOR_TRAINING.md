@@ -42,10 +42,42 @@ both AdamW moments, flags). The coordinator stops, naming the workers, if any
 two differ. It also refuses to start if the workers begin from different
 states or do not own every shard exactly once.
 
+## Two protocols
+
+**Gathered** (the default): every worker sends every shard's whole gradient
+to the coordinator, which folds them all and sends the total back. K + W
+gradients on the wire per step. Right for a small model on a local network;
+41 GB a step at 162M parameters and K = 64.
+
+**Chained** (`--chained` on the coordinator, `chained=True` on every worker):
+each worker owns a CONTIGUOUS block of shards in shard order. On `step`
+every worker computes its block's gradients and holds them. Then, in shard
+order, the coordinator hands each worker the fold so far; the worker
+continues the same left fold onto it with its own shards one at a time
+(`ordered_fold(held, prefix=...)`) and returns the result; the last worker's
+result is the total, which the coordinator sends to every other worker
+(the last one already holds it and is sent only its hash). W + (W - 1)
+gradients on the wire per step instead of K + W: two workers with the
+coordinator on the first owner's box put two gradients on the wide-area
+link. The bits are the flat fold's bits because the fold is a left fold, and
+the M4 column, the gathered group and chained groups of two and three
+workers (unequal blocks) agree step for step
+(`bench/results/lm_segment_t0_2026-09-22/`). The host fold runs the
+vectorized NumPy spelling when NumPy is installed and the exact pure-Python
+one otherwise; `test_cross_vendor.py` holds the two equal.
+
+A worker holds its block's gradients in host memory until its turn
+(`shards x 4 bytes x n_total`; 44 shards of the 162M shape is 28 GB).
+
+`Worker(..., lr_for_step=f)` applies `f(step)` through `trainer.set_lr`
+before each step's gradients, so a recipe's learning-rate table drives a
+live group exactly as it drives `tools/lm_segment.py`.
+
 ## Limits
 
-- Every step sends each shard's full gradient (4 bytes per parameter) to the
-  coordinator and the total back. It suits small models on a local network.
+- The gathered protocol sends each shard's full gradient (4 bytes per
+  parameter) to the coordinator and the total back; the chained protocol
+  sends one gradient per worker each way, still 649 MB at 162M.
 - No authentication or encryption. Use a trusted network or an ssh tunnel.
 - Each worker drives one GPU. On a Mac that is the only choice.
 - Experimental: the protocol may change.

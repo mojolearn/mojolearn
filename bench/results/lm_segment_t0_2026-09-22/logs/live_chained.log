@@ -1,0 +1,12 @@
+=== gathered, 2 local workers (expect recorded column)
+AGREED on 6 steps across 2 local workers [[0, 2], [1, 3]]
+expected column bench/results/par_lm_xvendor/2026-09-21/apple-m4-1gpu.json: 6 steps compared, 0 differ []
+=== chained, 2 local workers (expect recorded column)
+AGREED on 6 steps across 2 local workers [[0, 1], [2, 3]]
+expected column bench/results/par_lm_xvendor/2026-09-21/apple-m4-1gpu.json: 6 steps compared, 0 differ []
+=== chained, 3 local workers, unequal blocks (expect recorded column)
+AGREED on 6 steps across 3 local workers [[0], [1], [2, 3]]
+expected column bench/results/par_lm_xvendor/2026-09-21/apple-m4-1gpu.json: 6 steps compared, 0 differ []
+splits: [[0, 1], [2, 3]] [[0], [1], [2, 3]]
+state hashes equal across gathered/chained2/chained3: True
+total hashes equal: True

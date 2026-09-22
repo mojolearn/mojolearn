@@ -1,0 +1,10 @@
+=== tokenize 20 MB of FineWeb-Edu text, last 50 documents held out
+sample.txt group 44: 92012 documents, 4158497 tokens, 1.5 s, 17.046 MB/s encode
+wrote <scratchpad>/tok/tokens/tokens.i32: 92012 documents, 4158497 tokens (4.79 bytes/token), train [0, 4156409), sha256 4314b12cff46c5d2, 1.5 s (17.046 MB/s encode)
+tokens 4158497 docs 92012 train_range [0, 4156409] validation_range [4156409, 4158497] max_id 50255 vocab n_vocab 50257 vocab sha bfe4a401789e734c
+encode MB/s 17.046
+=== TokenBatches reads it; recipe accepts it
+wrote <scratchpad>/tok/recipe.json: shape [2, 32, 32, 4, 2, 8, 64, 2, 50257], K=4, 8 steps, 2048 tokens, lr table 8 entries, sha256 383aed4d65525f2f
+=== decode round trip of the first document
+first document: 20 bytes -> 3 ids; round trip equal: True
+stream head equals first document ids: True
