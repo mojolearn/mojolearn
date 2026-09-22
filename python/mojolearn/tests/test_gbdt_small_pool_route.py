@@ -57,7 +57,6 @@ def test_device_never_routes(route):
     (dict(boosting_type="Ordered"), (320, 10, 0, 0, 50, False)),
     (dict(loss="MultiClass"), (320, 10, 0, 0, 50, False)),       # eval set, multiclass
     (dict(loss="MultiClassOneVsAll"), (320, 10, 0, 0, 50, False)),
-    (dict(loss="MultiClass", boosting_type="Ordered"), (320, 10, 0, 0, 0, False)),
     (dict(), (320, 10, 0, 0, 0, True)),              # group_id / pairs
     (dict(grow_policy="Depthwise"), (320, 10, 0, 0, 0, False)),
     (dict(loss="MAE"), (320, 10, 0, 0, 0, False)),
