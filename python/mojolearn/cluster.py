@@ -4,7 +4,7 @@
 
 from . import _mojolearn, _serialize
 from ._array import Array
-from ._buffer import addr, addr_ro, as_f32_c, empty, zeros
+from ._buffer import addr, addr_ro, all_finite, as_f32_c, empty, zeros
 from ._mode import NumericModeMixin
 
 #: The saved k-means model (lane/kmeans-save, 2026-09-16), read by
@@ -62,6 +62,21 @@ _METRIC_SAVED = {
     METRIC_L2_EXPANDED: "euclidean",
     METRIC_L2_SQRT_EXPANDED: "l2_sqrt_expanded",
 }
+
+
+def _refuse_non_finite(a, name, where):
+    """A NaN or an infinity in `a` is refused BY NAME before any launch.
+
+    Before this check a NaN row reached the kernel: `fit` returned a NaN
+    centroid, `inertia_` of FLT_MAX and label -1 for the row, and `predict`
+    returned -1 for a NaN query, all silently (scikit-learn's
+    `validate_data` refuses the same input)."""
+    if not all_finite(a):
+        raise ValueError(
+            f"mojolearn KMeans.{where}: {name} contains a NaN or an infinity; "
+            "a non-finite row has no distance to any center, so it is "
+            "refused by name"
+        )
 
 
 class KMeans(NumericModeMixin):
@@ -186,6 +201,7 @@ class KMeans(NumericModeMixin):
             raise RuntimeError("this estimator is not fitted yet")
         metric_code = self._metric_code()
         x, _ = as_f32_c(X, ndim=2, name="X")
+        _refuse_non_finite(x, "X", "predict/transform")
         d = x.shape[1]
         dc = centers.shape[1]
         if d != dc:
@@ -217,6 +233,7 @@ class KMeans(NumericModeMixin):
         oversampling = float(self.oversampling_factor)
 
         x, _ = as_f32_c(X, ndim=2, name="X")
+        _refuse_non_finite(x, "X", "fit")
         n, d = x.shape
         if self.n_clusters > n:
             raise ValueError(
@@ -238,6 +255,7 @@ class KMeans(NumericModeMixin):
                 )
             # A COPY, on purpose: the kernel writes the centroids in place
             # and `c0` may be a zero-copy borrow of the caller's array.
+            _refuse_non_finite(c0, "init_centroids", "fit")
             centers = c0.copy()
         else:
             centers = zeros((self.n_clusters, d), "<f4")
@@ -258,6 +276,7 @@ class KMeans(NumericModeMixin):
             # DEVIATION 2369: a 1-D vector by contract (`ndim=1`); the
             # NumPy-era `.ravel()` also accepted an (n, 1) column.
             w, _ = as_f32_c(sample_weight, ndim=1, name="sample_weight")
+            _refuse_non_finite(w, "sample_weight", "fit")
             if w.shape[0] != n:
                 raise ValueError(
                     f"mojolearn: sample_weight has {w.shape[0]} entries, X "
