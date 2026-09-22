@@ -70,7 +70,7 @@ cmd_stage() {
     neg=""
     [ "${MOJOLEARN_BINCACHE_NEGATIVE:-0}" = 1 ] && neg="--negative"
     # shellcheck disable=SC2086
-    if ! with_creds plan --partition "$arch/$slug" --image "$image" --leg-id "$leg" $neg > "$map"; then
+    if ! with_creds plan --partition "$arch/$slug" --image "$image" --leg-id "$leg" --slots "${MOJOLEARN_BINCACHE_SLOTS:-64}" $neg > "$map"; then
         rm -f "$map"
         echo "BINCACHE STAGING FAILED (plan); the body builds from source"
         return 1

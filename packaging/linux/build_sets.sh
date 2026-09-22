@@ -46,6 +46,28 @@ JOBS="${MOJOLEARN_BUILD_JOBS:-4}"
 [[ "$JOBS" =~ ^[1-9][0-9]?$ && "$JOBS" -le 16 ]] || { echo 'MOJOLEARN_BUILD_JOBS must be 1..16' >&2; exit 2; }
 BUILD_CORES=$((2 * JOBS))
 export MOJOLEARN_COMPILE_JOBS=2 MAX_JOBS=2 CMAKE_BUILD_PARALLEL_LEVEL=2
+# AN AMD GPU BINDING COMPILES WITH ONE WORKER, AND IS STILL NOT REPRODUCIBLE
+# (2026-09-22, lane/release-cpu-build-box). The Mojo compiler's gfx942 output
+# varies from run to run with a cold cache: a few register numbers or two
+# swapped instructions inside some embedded AMDGPU code objects
+# (gemm_identical, holtwinters). Measured at d181d9792 on RunPod CPU pods,
+# the Mojo cache wiped before every build:
+#   build_mixture.sh -j 2: 3 distinct binaries in 5 builds; -j 1: 1 in 5
+#   build_tsa.sh     -j 2: 2 in 4;  -j 1: 2 in 12 (8 of one, 4 of the other)
+# The variance is inside one compiler process (idle or loaded box alike), so
+# -j 1 narrows it and does not remove it; disabling ASLR to test the usual
+# cause (pointer-ordered containers) is refused inside a RunPod container.
+# A warm Mojo cache replays the first compile, which is why every single box
+# always looked reproducible. What makes a released AMD binary reproducible is
+# the binding cache: once built, the same key serves the same bytes to every
+# later build (tools/bincache.py). NVIDIA sets and the host bindings (CPU
+# codegen) keep two workers: every pair of cold builds compared matched (the
+# H100 and L40S legs against the CPU box at d181d9792, two cold CPU boxes at
+# 4756f57a9: 264 of 264 NVIDIA binaries, the host bindings on every box). The
+# host bindings in an AMD set also keep two, so they stay byte-identical to
+# the NVIDIA sets' copies (pack_wheel.py compares them).
+GPU_COMPILE_JOBS=2
+case "${MOJOLEARN_GPU_ARCHS:-}" in gfx*) GPU_COMPILE_JOBS=1 ;; esac
 export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1
 export NUMEXPR_NUM_THREADS=1 VECLIB_MAXIMUM_THREADS=1
 if [[ "$(uname -s)" != Linux ]]; then
@@ -131,7 +153,7 @@ HOST_NAMES=$(python3 python/mojolearn/host_surface.py --wheel-bindings) || exit 
 host_so() { printf 'python/mojolearn/host/%s.so' "$1"; }
 say() { echo "[$(date +%T) build_sets] $*"; }
 
-say "repo $REPO, dest $DEST, tiers: $TIERS, jobs: $JOBS"
+say "repo $REPO, dest $DEST, tiers: $TIERS, jobs: $JOBS, gpu compile workers: $GPU_COMPILE_JOBS"
 say "pixi env: $PIXI_ENV"
 export PATH="$HOME/.pixi/bin:$PATH"
 command -v pixi >/dev/null || { say "no pixi on PATH"; exit 2; }
@@ -148,6 +170,44 @@ done
 # output rather than silently replacing it. A leftover from an earlier leg
 # would therefore fail this build instead of being reused.
 for n in $HOST_NAMES; do rm -f "$(host_so "$n")"; done
+
+# ---------------------------------------------------------------- the cache
+# THE BINDING CACHE (tools/bincache.py, 2026-09-22). ON only where a runner
+# staged a URL map on this box (tools/release_linux_build.sh through
+# tools/runpod_cpu_leg.sh --release-bincache) and MOJOLEARN_BINCACHE is not 0;
+# everywhere else, the GPU legs included, every build below is the plain
+# `pixi run bash bindings/<script>` it always was. Each build DECLARES its one
+# output (several builds share this tree at once), a hit is placed only after
+# the archive's key, fields and every file's sha256 verify, and the host
+# bindings built for one set are served to the next set from a box-local hot
+# directory. $DEST/bincache/ records every build's outcome and key, and every
+# hit's origin commit; build-provenance.json carries it per binary.
+BINCACHE_MAP=${MOJOLEARN_BINCACHE_MAP:-/root/.mojolearn_bincache/urls.tsv}
+USE_BINCACHE=0
+if [[ "${MOJOLEARN_BINCACHE:-}" != 0 && -f "$BINCACHE_MAP" ]]; then USE_BINCACHE=1; fi
+say "binding cache: $([[ $USE_BINCACHE = 1 ]] && echo "ON ($BINCACHE_MAP)" || echo off)"
+declared_output() {   # tier script -> the one .so it writes, repo-relative
+  local tier="$1" s="$2" name dir
+  if [[ "$s" = build_*_host.sh ]]; then
+    name="${s#build_}"; name="${name%.sh}"
+    printf 'python/mojolearn/host/_mojolearn_%s.so' "$name"; return
+  fi
+  if [[ "$s" = build.sh ]]; then name=_mojolearn; else name="${s#build_}"; name="_mojolearn_${name%.sh}"; fi
+  case "$tier" in fast) dir=python/mojolearn ;; *) dir=python/mojolearn/$tier ;; esac
+  printf '%s/%s.so' "$dir" "$name"
+}
+run_binding() {   # tier script env-prefix...: the build, through the cache when it is on
+  local tier="$1" s="$2"
+  shift 2
+  if [[ "$USE_BINCACHE" = 1 ]]; then
+    "$@" MOJOLEARN_BINCACHE_MAP="$BINCACHE_MAP" MOJOLEARN_BINCACHE_OUT="$DEST/bincache" \
+      MOJOLEARN_BINCACHE_HOT_DIR="${MOJOLEARN_BINCACHE_HOT_DIR:-/root/.mojolearn_bincache/hot}" \
+      MOJOLEARN_BINCACHE_SHELL=bash MOJOLEARN_BINCACHE_OUTPUTS="$(declared_output "$tier" "$s")" \
+      pixi run -e "$PIXI_ENV" python3 tools/bincache.py build "bindings/$s"
+  else
+    "$@" pixi run -e "$PIXI_ENV" bash "bindings/$s"
+  fi
+}
 
 # ---------------------------------------------------------------- builds
 build_one() {
@@ -170,12 +230,12 @@ build_one() {
     # nvidia is refused", so the column is pinned to cpu for every host build.
     local fam="${s#build_}"; fam="${fam%_host.sh}"
     local FAM; FAM=$(printf '%s' "$fam" | tr 'a-z' 'A-Z')
-    MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_SKIP_BUILD_GATE=1 MOJOLEARN_TARGET_COLUMN=cpu \
-      env -u MOJOLEARN_GPU_ARCHS -u MOJOLEARN_HOST_OUTDIR -u "MOJOLEARN_${FAM}_HOST_OUTDIR" \
-      pixi run -e "$PIXI_ENV" bash "bindings/$s" >> "$log" 2>&1 || rc=$?
+    MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_SKIP_BUILD_GATE=1 MOJOLEARN_TARGET_COLUMN=cpu MOJOLEARN_COMPILE_JOBS=2 \
+      run_binding "$tier" "$s" env -u MOJOLEARN_GPU_ARCHS -u MOJOLEARN_HOST_OUTDIR -u "MOJOLEARN_${FAM}_HOST_OUTDIR" \
+      >> "$log" 2>&1 || rc=$?
   else
-    MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_SKIP_BUILD_GATE=1 \
-      pixi run -e "$PIXI_ENV" bash "bindings/$s" >> "$log" 2>&1 || rc=$?
+    MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_SKIP_BUILD_GATE=1 MOJOLEARN_COMPILE_JOBS=$GPU_COMPILE_JOBS \
+      run_binding "$tier" "$s" env >> "$log" 2>&1 || rc=$?
   fi
   if [[ "$rc" = 0 ]]; then
     echo "end $(date -u +%FT%TZ) OK" >> "$log"
