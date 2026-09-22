@@ -1,85 +1,85 @@
 NOTE: --lanes scopes this diff to 1 lane(s); 0 other lane(s) the JSONs carry are not compared
 NOTE: column cpu-apple-m4-binary-columns is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host'] commit=602000d1c714dce22e0225686d8cf17f7e12bc18
-NOTE: column cpu-amd-epyc-9965-192-core-processor is a CPU column: cpu_model='AMD EPYC 9965 192-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_gbdt_host', '_mojolearn_tsa_host'] commit=07201a6149b5f86fad77335ba7219a2588f1e66b
-| lane/fixture                 | verdict    | apple-m4-binary-columns | cpu-apple-m4-binary-columns | nvidia-rtx4090-binary-columns | amd-mi325x-binary-columns | cpu-amd-epyc-9965-192-core-processor |
-|------------------------------|------------|------------------|------------------|------------------|------------------|------------------|
-| gbdt-binary-columns/base     | IDENTICAL x5 | 9ce09bb9d2dcbef9 | 9ce09bb9d2dcbef9 | 9ce09bb9d2dcbef9 | 9ce09bb9d2dcbef9 | 9ce09bb9d2dcbef9 |
-| gbdt-binary-columns/denormal | IDENTICAL x5 | 70c1b8d2bce9a8b4 | 70c1b8d2bce9a8b4 | 70c1b8d2bce9a8b4 | 70c1b8d2bce9a8b4 | 70c1b8d2bce9a8b4 |
-| gbdt-binary-columns/denormal_ftz | IDENTICAL x5 | c0dcd60c561a3c8f | c0dcd60c561a3c8f | c0dcd60c561a3c8f | c0dcd60c561a3c8f | c0dcd60c561a3c8f |
-| gbdt-binary-columns/dupes    | IDENTICAL x5 | 08ff0119a724d4e2 | 08ff0119a724d4e2 | 08ff0119a724d4e2 | 08ff0119a724d4e2 | 08ff0119a724d4e2 |
-| gbdt-binary-columns/hashed   | IDENTICAL x5 | 74e64d64afb287d4 | 74e64d64afb287d4 | 74e64d64afb287d4 | 74e64d64afb287d4 | 74e64d64afb287d4 |
-| gbdt-binary-columns/negative | IDENTICAL x5 | b2ef305a0a1379f6 | b2ef305a0a1379f6 | b2ef305a0a1379f6 | b2ef305a0a1379f6 | b2ef305a0a1379f6 |
-| gbdt-binary-columns/odd      | IDENTICAL x5 | d1651de1c56053f0 | d1651de1c56053f0 | d1651de1c56053f0 | d1651de1c56053f0 | d1651de1c56053f0 |
-| gbdt-binary-columns/ties     | IDENTICAL x5 | 01f6566f03f99c89 | 01f6566f03f99c89 | 01f6566f03f99c89 | 01f6566f03f99c89 | 01f6566f03f99c89 |
-| gbdt-binary-columns/wide     | IDENTICAL x5 | fbabe789a906bf9e | fbabe789a906bf9e | fbabe789a906bf9e | fbabe789a906bf9e | fbabe789a906bf9e |
+NOTE: column cpu-amd-epyc-9575f-64-core-processor is a CPU column: cpu_model='AMD EPYC 9575F 64-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_gbdt_host', '_mojolearn_tsa_host'] commit=3e1b87ccf5c2288288f7c4c4002bf3593296318b
+| lane/fixture                 | verdict    | apple-m4-binary-columns | cpu-apple-m4-binary-columns | nvidia-h100-binary-columns | nvidia-rtx4090-binary-columns | amd-mi325x-binary-columns | cpu-amd-epyc-9575f-64-core-processor |
+|------------------------------|------------|------------------|------------------|------------------|------------------|------------------|------------------|
+| gbdt-binary-columns/base     | IDENTICAL x6 | 9ce09bb9d2dcbef9 | 9ce09bb9d2dcbef9 | 9ce09bb9d2dcbef9 | 9ce09bb9d2dcbef9 | 9ce09bb9d2dcbef9 | 9ce09bb9d2dcbef9 |
+| gbdt-binary-columns/denormal | IDENTICAL x6 | 70c1b8d2bce9a8b4 | 70c1b8d2bce9a8b4 | 70c1b8d2bce9a8b4 | 70c1b8d2bce9a8b4 | 70c1b8d2bce9a8b4 | 70c1b8d2bce9a8b4 |
+| gbdt-binary-columns/denormal_ftz | IDENTICAL x6 | c0dcd60c561a3c8f | c0dcd60c561a3c8f | c0dcd60c561a3c8f | c0dcd60c561a3c8f | c0dcd60c561a3c8f | c0dcd60c561a3c8f |
+| gbdt-binary-columns/dupes    | IDENTICAL x6 | 08ff0119a724d4e2 | 08ff0119a724d4e2 | 08ff0119a724d4e2 | 08ff0119a724d4e2 | 08ff0119a724d4e2 | 08ff0119a724d4e2 |
+| gbdt-binary-columns/hashed   | IDENTICAL x6 | 74e64d64afb287d4 | 74e64d64afb287d4 | 74e64d64afb287d4 | 74e64d64afb287d4 | 74e64d64afb287d4 | 74e64d64afb287d4 |
+| gbdt-binary-columns/negative | IDENTICAL x6 | b2ef305a0a1379f6 | b2ef305a0a1379f6 | b2ef305a0a1379f6 | b2ef305a0a1379f6 | b2ef305a0a1379f6 | b2ef305a0a1379f6 |
+| gbdt-binary-columns/odd      | IDENTICAL x6 | d1651de1c56053f0 | d1651de1c56053f0 | d1651de1c56053f0 | d1651de1c56053f0 | d1651de1c56053f0 | d1651de1c56053f0 |
+| gbdt-binary-columns/ties     | IDENTICAL x6 | 01f6566f03f99c89 | 01f6566f03f99c89 | 01f6566f03f99c89 | 01f6566f03f99c89 | 01f6566f03f99c89 | 01f6566f03f99c89 |
+| gbdt-binary-columns/wide     | IDENTICAL x6 | fbabe789a906bf9e | fbabe789a906bf9e | fbabe789a906bf9e | fbabe789a906bf9e | fbabe789a906bf9e | fbabe789a906bf9e |
 
 summary: IDENTICAL=9
 
-| lane/fixture                 | column | verdict      | apple-m4-binary-columns | cpu-apple-m4-binary-columns | nvidia-rtx4090-binary-columns | amd-mi325x-binary-columns | cpu-amd-epyc-9965-192-core-processor |
-|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|------------------|
-| gbdt-binary-columns/base     | infer  | IDENTICAL x5 | edc44d16d6012f36 | edc44d16d6012f36 | edc44d16d6012f36 | edc44d16d6012f36 | edc44d16d6012f36 |
-| gbdt-binary-columns/base     | model  | IDENTICAL x5 | ea18f1b187cf2432 | ea18f1b187cf2432 | ea18f1b187cf2432 | ea18f1b187cf2432 | ea18f1b187cf2432 |
-| gbdt-binary-columns/base     | batch  | IDENTICAL x5 | d8bec5bed4fb4c12 | d8bec5bed4fb4c12 | d8bec5bed4fb4c12 | d8bec5bed4fb4c12 | d8bec5bed4fb4c12 |
-| gbdt-binary-columns/base     | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  |
-| gbdt-binary-columns/base     | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
-| gbdt-binary-columns/base     | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis |
-| gbdt-binary-columns/base     | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state |
-| gbdt-binary-columns/denormal | infer  | IDENTICAL x5 | edc44d16d6012f36 | edc44d16d6012f36 | edc44d16d6012f36 | edc44d16d6012f36 | edc44d16d6012f36 |
-| gbdt-binary-columns/denormal | model  | IDENTICAL x5 | f1ca209869cb4b95 | f1ca209869cb4b95 | f1ca209869cb4b95 | f1ca209869cb4b95 | f1ca209869cb4b95 |
-| gbdt-binary-columns/denormal | batch  | IDENTICAL x5 | d8bec5bed4fb4c12 | d8bec5bed4fb4c12 | d8bec5bed4fb4c12 | d8bec5bed4fb4c12 | d8bec5bed4fb4c12 |
-| gbdt-binary-columns/denormal | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  |
-| gbdt-binary-columns/denormal | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
-| gbdt-binary-columns/denormal | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis |
-| gbdt-binary-columns/denormal | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state |
-| gbdt-binary-columns/denormal_ftz | infer  | IDENTICAL x5 | edc44d16d6012f36 | edc44d16d6012f36 | edc44d16d6012f36 | edc44d16d6012f36 | edc44d16d6012f36 |
-| gbdt-binary-columns/denormal_ftz | model  | IDENTICAL x5 | f1ca209869cb4b95 | f1ca209869cb4b95 | f1ca209869cb4b95 | f1ca209869cb4b95 | f1ca209869cb4b95 |
-| gbdt-binary-columns/denormal_ftz | batch  | IDENTICAL x5 | d8bec5bed4fb4c12 | d8bec5bed4fb4c12 | d8bec5bed4fb4c12 | d8bec5bed4fb4c12 | d8bec5bed4fb4c12 |
-| gbdt-binary-columns/denormal_ftz | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  |
-| gbdt-binary-columns/denormal_ftz | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
-| gbdt-binary-columns/denormal_ftz | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis |
-| gbdt-binary-columns/denormal_ftz | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state |
-| gbdt-binary-columns/dupes    | infer  | IDENTICAL x5 | 850953e09d3fc53c | 850953e09d3fc53c | 850953e09d3fc53c | 850953e09d3fc53c | 850953e09d3fc53c |
-| gbdt-binary-columns/dupes    | model  | IDENTICAL x5 | d24a62ef01155040 | d24a62ef01155040 | d24a62ef01155040 | d24a62ef01155040 | d24a62ef01155040 |
-| gbdt-binary-columns/dupes    | batch  | IDENTICAL x5 | ab447861bef80fee | ab447861bef80fee | ab447861bef80fee | ab447861bef80fee | ab447861bef80fee |
-| gbdt-binary-columns/dupes    | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  |
-| gbdt-binary-columns/dupes    | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
-| gbdt-binary-columns/dupes    | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis |
-| gbdt-binary-columns/dupes    | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state |
-| gbdt-binary-columns/hashed   | infer  | IDENTICAL x5 | c89857da879efdc1 | c89857da879efdc1 | c89857da879efdc1 | c89857da879efdc1 | c89857da879efdc1 |
-| gbdt-binary-columns/hashed   | model  | IDENTICAL x5 | 8e6740859d900b5b | 8e6740859d900b5b | 8e6740859d900b5b | 8e6740859d900b5b | 8e6740859d900b5b |
-| gbdt-binary-columns/hashed   | batch  | IDENTICAL x5 | 5131b43d0ce2e59c | 5131b43d0ce2e59c | 5131b43d0ce2e59c | 5131b43d0ce2e59c | 5131b43d0ce2e59c |
-| gbdt-binary-columns/hashed   | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  |
-| gbdt-binary-columns/hashed   | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
-| gbdt-binary-columns/hashed   | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis |
-| gbdt-binary-columns/hashed   | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state |
-| gbdt-binary-columns/negative | infer  | IDENTICAL x5 | 193d3b817df032c7 | 193d3b817df032c7 | 193d3b817df032c7 | 193d3b817df032c7 | 193d3b817df032c7 |
-| gbdt-binary-columns/negative | model  | IDENTICAL x5 | d794b5fe5599f132 | d794b5fe5599f132 | d794b5fe5599f132 | d794b5fe5599f132 | d794b5fe5599f132 |
-| gbdt-binary-columns/negative | batch  | IDENTICAL x5 | ef3ccdd6cc71aea3 | ef3ccdd6cc71aea3 | ef3ccdd6cc71aea3 | ef3ccdd6cc71aea3 | ef3ccdd6cc71aea3 |
-| gbdt-binary-columns/negative | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  |
-| gbdt-binary-columns/negative | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
-| gbdt-binary-columns/negative | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis |
-| gbdt-binary-columns/negative | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state |
-| gbdt-binary-columns/odd      | infer  | IDENTICAL x5 | b44b0955a348266d | b44b0955a348266d | b44b0955a348266d | b44b0955a348266d | b44b0955a348266d |
-| gbdt-binary-columns/odd      | model  | IDENTICAL x5 | 8ba1fa28516a8054 | 8ba1fa28516a8054 | 8ba1fa28516a8054 | 8ba1fa28516a8054 | 8ba1fa28516a8054 |
-| gbdt-binary-columns/odd      | batch  | IDENTICAL x5 | 910419dcef2eb4ab | 910419dcef2eb4ab | 910419dcef2eb4ab | 910419dcef2eb4ab | 910419dcef2eb4ab |
-| gbdt-binary-columns/odd      | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  |
-| gbdt-binary-columns/odd      | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
-| gbdt-binary-columns/odd      | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis |
-| gbdt-binary-columns/odd      | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state |
-| gbdt-binary-columns/ties     | infer  | IDENTICAL x5 | 566c04593d94a2f2 | 566c04593d94a2f2 | 566c04593d94a2f2 | 566c04593d94a2f2 | 566c04593d94a2f2 |
-| gbdt-binary-columns/ties     | model  | IDENTICAL x5 | 9689d350d2c3a60a | 9689d350d2c3a60a | 9689d350d2c3a60a | 9689d350d2c3a60a | 9689d350d2c3a60a |
-| gbdt-binary-columns/ties     | batch  | IDENTICAL x5 | 02aa93f5ac3479c6 | 02aa93f5ac3479c6 | 02aa93f5ac3479c6 | 02aa93f5ac3479c6 | 02aa93f5ac3479c6 |
-| gbdt-binary-columns/ties     | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  |
-| gbdt-binary-columns/ties     | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
-| gbdt-binary-columns/ties     | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis |
-| gbdt-binary-columns/ties     | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state |
-| gbdt-binary-columns/wide     | infer  | IDENTICAL x5 | eb211261c342bd1b | eb211261c342bd1b | eb211261c342bd1b | eb211261c342bd1b | eb211261c342bd1b |
-| gbdt-binary-columns/wide     | model  | IDENTICAL x5 | 3a13436902b74a54 | 3a13436902b74a54 | 3a13436902b74a54 | 3a13436902b74a54 | 3a13436902b74a54 |
-| gbdt-binary-columns/wide     | batch  | IDENTICAL x5 | d12465256d1f3507 | d12465256d1f3507 | d12465256d1f3507 | d12465256d1f3507 | d12465256d1f3507 |
-| gbdt-binary-columns/wide     | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  |
-| gbdt-binary-columns/wide     | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
-| gbdt-binary-columns/wide     | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis |
-| gbdt-binary-columns/wide     | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state |
+| lane/fixture                 | column | verdict      | apple-m4-binary-columns | cpu-apple-m4-binary-columns | nvidia-h100-binary-columns | nvidia-rtx4090-binary-columns | amd-mi325x-binary-columns | cpu-amd-epyc-9575f-64-core-processor |
+|------------------------------|--------|--------------|------------------|------------------|------------------|------------------|------------------|------------------|
+| gbdt-binary-columns/base     | infer  | IDENTICAL x6 | edc44d16d6012f36 | edc44d16d6012f36 | edc44d16d6012f36 | edc44d16d6012f36 | edc44d16d6012f36 | edc44d16d6012f36 |
+| gbdt-binary-columns/base     | model  | IDENTICAL x6 | ea18f1b187cf2432 | ea18f1b187cf2432 | ea18f1b187cf2432 | ea18f1b187cf2432 | ea18f1b187cf2432 | ea18f1b187cf2432 |
+| gbdt-binary-columns/base     | batch  | IDENTICAL x6 | d8bec5bed4fb4c12 | d8bec5bed4fb4c12 | d8bec5bed4fb4c12 | d8bec5bed4fb4c12 | d8bec5bed4fb4c12 | d8bec5bed4fb4c12 |
+| gbdt-binary-columns/base     | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  |
+| gbdt-binary-columns/base     | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| gbdt-binary-columns/base     | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| gbdt-binary-columns/base     | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state |
+| gbdt-binary-columns/denormal | infer  | IDENTICAL x6 | edc44d16d6012f36 | edc44d16d6012f36 | edc44d16d6012f36 | edc44d16d6012f36 | edc44d16d6012f36 | edc44d16d6012f36 |
+| gbdt-binary-columns/denormal | model  | IDENTICAL x6 | f1ca209869cb4b95 | f1ca209869cb4b95 | f1ca209869cb4b95 | f1ca209869cb4b95 | f1ca209869cb4b95 | f1ca209869cb4b95 |
+| gbdt-binary-columns/denormal | batch  | IDENTICAL x6 | d8bec5bed4fb4c12 | d8bec5bed4fb4c12 | d8bec5bed4fb4c12 | d8bec5bed4fb4c12 | d8bec5bed4fb4c12 | d8bec5bed4fb4c12 |
+| gbdt-binary-columns/denormal | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  |
+| gbdt-binary-columns/denormal | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| gbdt-binary-columns/denormal | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| gbdt-binary-columns/denormal | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state |
+| gbdt-binary-columns/denormal_ftz | infer  | IDENTICAL x6 | edc44d16d6012f36 | edc44d16d6012f36 | edc44d16d6012f36 | edc44d16d6012f36 | edc44d16d6012f36 | edc44d16d6012f36 |
+| gbdt-binary-columns/denormal_ftz | model  | IDENTICAL x6 | f1ca209869cb4b95 | f1ca209869cb4b95 | f1ca209869cb4b95 | f1ca209869cb4b95 | f1ca209869cb4b95 | f1ca209869cb4b95 |
+| gbdt-binary-columns/denormal_ftz | batch  | IDENTICAL x6 | d8bec5bed4fb4c12 | d8bec5bed4fb4c12 | d8bec5bed4fb4c12 | d8bec5bed4fb4c12 | d8bec5bed4fb4c12 | d8bec5bed4fb4c12 |
+| gbdt-binary-columns/denormal_ftz | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  |
+| gbdt-binary-columns/denormal_ftz | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| gbdt-binary-columns/denormal_ftz | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| gbdt-binary-columns/denormal_ftz | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state |
+| gbdt-binary-columns/dupes    | infer  | IDENTICAL x6 | 850953e09d3fc53c | 850953e09d3fc53c | 850953e09d3fc53c | 850953e09d3fc53c | 850953e09d3fc53c | 850953e09d3fc53c |
+| gbdt-binary-columns/dupes    | model  | IDENTICAL x6 | d24a62ef01155040 | d24a62ef01155040 | d24a62ef01155040 | d24a62ef01155040 | d24a62ef01155040 | d24a62ef01155040 |
+| gbdt-binary-columns/dupes    | batch  | IDENTICAL x6 | ab447861bef80fee | ab447861bef80fee | ab447861bef80fee | ab447861bef80fee | ab447861bef80fee | ab447861bef80fee |
+| gbdt-binary-columns/dupes    | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  |
+| gbdt-binary-columns/dupes    | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| gbdt-binary-columns/dupes    | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| gbdt-binary-columns/dupes    | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state |
+| gbdt-binary-columns/hashed   | infer  | IDENTICAL x6 | c89857da879efdc1 | c89857da879efdc1 | c89857da879efdc1 | c89857da879efdc1 | c89857da879efdc1 | c89857da879efdc1 |
+| gbdt-binary-columns/hashed   | model  | IDENTICAL x6 | 8e6740859d900b5b | 8e6740859d900b5b | 8e6740859d900b5b | 8e6740859d900b5b | 8e6740859d900b5b | 8e6740859d900b5b |
+| gbdt-binary-columns/hashed   | batch  | IDENTICAL x6 | 5131b43d0ce2e59c | 5131b43d0ce2e59c | 5131b43d0ce2e59c | 5131b43d0ce2e59c | 5131b43d0ce2e59c | 5131b43d0ce2e59c |
+| gbdt-binary-columns/hashed   | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  |
+| gbdt-binary-columns/hashed   | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| gbdt-binary-columns/hashed   | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| gbdt-binary-columns/hashed   | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state |
+| gbdt-binary-columns/negative | infer  | IDENTICAL x6 | 193d3b817df032c7 | 193d3b817df032c7 | 193d3b817df032c7 | 193d3b817df032c7 | 193d3b817df032c7 | 193d3b817df032c7 |
+| gbdt-binary-columns/negative | model  | IDENTICAL x6 | d794b5fe5599f132 | d794b5fe5599f132 | d794b5fe5599f132 | d794b5fe5599f132 | d794b5fe5599f132 | d794b5fe5599f132 |
+| gbdt-binary-columns/negative | batch  | IDENTICAL x6 | ef3ccdd6cc71aea3 | ef3ccdd6cc71aea3 | ef3ccdd6cc71aea3 | ef3ccdd6cc71aea3 | ef3ccdd6cc71aea3 | ef3ccdd6cc71aea3 |
+| gbdt-binary-columns/negative | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  |
+| gbdt-binary-columns/negative | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| gbdt-binary-columns/negative | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| gbdt-binary-columns/negative | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state |
+| gbdt-binary-columns/odd      | infer  | IDENTICAL x6 | b44b0955a348266d | b44b0955a348266d | b44b0955a348266d | b44b0955a348266d | b44b0955a348266d | b44b0955a348266d |
+| gbdt-binary-columns/odd      | model  | IDENTICAL x6 | 8ba1fa28516a8054 | 8ba1fa28516a8054 | 8ba1fa28516a8054 | 8ba1fa28516a8054 | 8ba1fa28516a8054 | 8ba1fa28516a8054 |
+| gbdt-binary-columns/odd      | batch  | IDENTICAL x6 | 910419dcef2eb4ab | 910419dcef2eb4ab | 910419dcef2eb4ab | 910419dcef2eb4ab | 910419dcef2eb4ab | 910419dcef2eb4ab |
+| gbdt-binary-columns/odd      | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  |
+| gbdt-binary-columns/odd      | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| gbdt-binary-columns/odd      | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| gbdt-binary-columns/odd      | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state |
+| gbdt-binary-columns/ties     | infer  | IDENTICAL x6 | 566c04593d94a2f2 | 566c04593d94a2f2 | 566c04593d94a2f2 | 566c04593d94a2f2 | 566c04593d94a2f2 | 566c04593d94a2f2 |
+| gbdt-binary-columns/ties     | model  | IDENTICAL x6 | 9689d350d2c3a60a | 9689d350d2c3a60a | 9689d350d2c3a60a | 9689d350d2c3a60a | 9689d350d2c3a60a | 9689d350d2c3a60a |
+| gbdt-binary-columns/ties     | batch  | IDENTICAL x6 | 02aa93f5ac3479c6 | 02aa93f5ac3479c6 | 02aa93f5ac3479c6 | 02aa93f5ac3479c6 | 02aa93f5ac3479c6 | 02aa93f5ac3479c6 |
+| gbdt-binary-columns/ties     | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  |
+| gbdt-binary-columns/ties     | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| gbdt-binary-columns/ties     | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| gbdt-binary-columns/ties     | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state |
+| gbdt-binary-columns/wide     | infer  | IDENTICAL x6 | eb211261c342bd1b | eb211261c342bd1b | eb211261c342bd1b | eb211261c342bd1b | eb211261c342bd1b | eb211261c342bd1b |
+| gbdt-binary-columns/wide     | model  | IDENTICAL x6 | 3a13436902b74a54 | 3a13436902b74a54 | 3a13436902b74a54 | 3a13436902b74a54 | 3a13436902b74a54 | 3a13436902b74a54 |
+| gbdt-binary-columns/wide     | batch  | IDENTICAL x6 | d12465256d1f3507 | d12465256d1f3507 | d12465256d1f3507 | d12465256d1f3507 | d12465256d1f3507 | d12465256d1f3507 |
+| gbdt-binary-columns/wide     | batchgrad | N/A          | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  | n/a:no-backward  |
+| gbdt-binary-columns/wide     | batchscale | N/A          | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set | n/a:not-in-the-serving-set |
+| gbdt-binary-columns/wide     | ragged | N/A          | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis | n/a:no-sequence-axis |
+| gbdt-binary-columns/wide     | stepfull | N/A          | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state | n/a:no-decode-state |
 
 summary (infer/model): IDENTICAL=18
 summary (batch): IDENTICAL=9
@@ -88,4 +88,4 @@ summary (batchgrad): N/A=9
 summary (batchscale): N/A=9
 summary (ragged): N/A=9
 summary (stepfull): N/A=9
-require-columns 5 over ['gbdt-binary-columns']: OK
+require-columns 6 over ['gbdt-binary-columns']: OK

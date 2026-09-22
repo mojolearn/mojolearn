@@ -1,6 +1,6 @@
 NOTE: --lanes scopes this diff to 4 lane(s); 0 other lane(s) the JSONs carry are not compared
-NOTE: column cpu-amd-epyc-9965-192-core-processor is a CPU column: cpu_model='AMD EPYC 9965 192-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_tsa_host'] commit=07201a6149b5f86fad77335ba7219a2588f1e66b
-| lane/fixture                 | verdict    | apple-m4         | cpu-amd-epyc-9965-192-core-processor |
+NOTE: column cpu-amd-epyc-9575f-64-core-processor is a CPU column: cpu_model='AMD EPYC 9575F 64-Core Processor' column=cpu families=['_mojolearn_core_host', '_mojolearn_tsa_host'] commit=3e1b87ccf5c2288288f7c4c4002bf3593296318b
+| lane/fixture                 | verdict    | apple-m4         | cpu-amd-epyc-9575f-64-core-processor |
 |------------------------------|------------|------------------|------------------|
 | holtwinters-multiplicative/base | DIVERGENT  | parts differ: forecast; agree: - | fdd5d8eba1cac612 |
 | holtwinters-multiplicative/denormal | DIVERGENT  | parts differ: forecast; agree: - | 6735b93b8cf9ec19 |
@@ -41,7 +41,7 @@ NOTE: column cpu-amd-epyc-9965-192-core-processor is a CPU column: cpu_model='AM
 
 summary: DIVERGENT=36
 
-| lane/fixture                 | column | verdict      | apple-m4         | cpu-amd-epyc-9965-192-core-processor |
+| lane/fixture                 | column | verdict      | apple-m4         | cpu-amd-epyc-9575f-64-core-processor |
 |------------------------------|--------|--------------|------------------|------------------|
 | holtwinters-multiplicative/base | infer  | ONE-COLUMN   | 1923ecf4aa468950 | REFUSED          |
 | holtwinters-multiplicative/base | model  | ONE-COLUMN   | 316342a94d89d5c1 | REFUSED          |

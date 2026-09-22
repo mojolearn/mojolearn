@@ -1,0 +1,157 @@
+1284 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x738500000000, nodemask=1)
+# vendor=nvidia-h100-binary-columns commit=3e1b87ccf5c2288288f7c4c4002bf3593296318b (commit.txt)
+# identity_break  mode=identical  2026-09-22 16:46:01  Linux-6.8.0-90-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START gbdt-binary-columns/base repeat=1/train
+1420 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x3909c0000000, nodemask=2)
+# DONE gbdt-binary-columns/base repeat=1/train 2.719s
+# START gbdt-binary-columns/base repeat=1/infer-save-reload
+# DONE gbdt-binary-columns/base repeat=1/infer-save-reload 0.012s
+# START gbdt-binary-columns/base repeat=1/batch
+# DONE gbdt-binary-columns/base repeat=1/batch 0.134s
+# START gbdt-binary-columns/base repeat=1/batchgrad
+# DONE gbdt-binary-columns/base repeat=1/batchgrad 0.000s
+# START gbdt-binary-columns/base repeat=1/batchscale
+# DONE gbdt-binary-columns/base repeat=1/batchscale 0.000s
+# START gbdt-binary-columns/base repeat=1/ragged
+# DONE gbdt-binary-columns/base repeat=1/ragged 0.000s
+# START gbdt-binary-columns/base repeat=1/stepfull
+# DONE gbdt-binary-columns/base repeat=1/stepfull 0.000s
+# CELL gbdt-binary-columns/base STABLE 2.865s
+# START gbdt-binary-columns/ties repeat=1/train
+# DONE gbdt-binary-columns/ties repeat=1/train 0.784s
+# START gbdt-binary-columns/ties repeat=1/infer-save-reload
+# DONE gbdt-binary-columns/ties repeat=1/infer-save-reload 0.007s
+# START gbdt-binary-columns/ties repeat=1/batch
+# DONE gbdt-binary-columns/ties repeat=1/batch 0.147s
+# START gbdt-binary-columns/ties repeat=1/batchgrad
+# DONE gbdt-binary-columns/ties repeat=1/batchgrad 0.000s
+# START gbdt-binary-columns/ties repeat=1/batchscale
+# DONE gbdt-binary-columns/ties repeat=1/batchscale 0.000s
+# START gbdt-binary-columns/ties repeat=1/ragged
+# DONE gbdt-binary-columns/ties repeat=1/ragged 0.000s
+# START gbdt-binary-columns/ties repeat=1/stepfull
+# DONE gbdt-binary-columns/ties repeat=1/stepfull 0.000s
+# CELL gbdt-binary-columns/ties STABLE 0.939s
+# START gbdt-binary-columns/hashed repeat=1/train
+# DONE gbdt-binary-columns/hashed repeat=1/train 0.581s
+# START gbdt-binary-columns/hashed repeat=1/infer-save-reload
+# DONE gbdt-binary-columns/hashed repeat=1/infer-save-reload 0.010s
+# START gbdt-binary-columns/hashed repeat=1/batch
+# DONE gbdt-binary-columns/hashed repeat=1/batch 0.180s
+# START gbdt-binary-columns/hashed repeat=1/batchgrad
+# DONE gbdt-binary-columns/hashed repeat=1/batchgrad 0.000s
+# START gbdt-binary-columns/hashed repeat=1/batchscale
+# DONE gbdt-binary-columns/hashed repeat=1/batchscale 0.000s
+# START gbdt-binary-columns/hashed repeat=1/ragged
+# DONE gbdt-binary-columns/hashed repeat=1/ragged 0.000s
+# START gbdt-binary-columns/hashed repeat=1/stepfull
+# DONE gbdt-binary-columns/hashed repeat=1/stepfull 0.000s
+# CELL gbdt-binary-columns/hashed STABLE 0.772s
+# START gbdt-binary-columns/wide repeat=1/train
+# DONE gbdt-binary-columns/wide repeat=1/train 0.580s
+# START gbdt-binary-columns/wide repeat=1/infer-save-reload
+# DONE gbdt-binary-columns/wide repeat=1/infer-save-reload 0.010s
+# START gbdt-binary-columns/wide repeat=1/batch
+# DONE gbdt-binary-columns/wide repeat=1/batch 0.120s
+# START gbdt-binary-columns/wide repeat=1/batchgrad
+# DONE gbdt-binary-columns/wide repeat=1/batchgrad 0.000s
+# START gbdt-binary-columns/wide repeat=1/batchscale
+# DONE gbdt-binary-columns/wide repeat=1/batchscale 0.000s
+# START gbdt-binary-columns/wide repeat=1/ragged
+# DONE gbdt-binary-columns/wide repeat=1/ragged 0.000s
+# START gbdt-binary-columns/wide repeat=1/stepfull
+# DONE gbdt-binary-columns/wide repeat=1/stepfull 0.000s
+# CELL gbdt-binary-columns/wide STABLE 0.710s
+# START gbdt-binary-columns/denormal repeat=1/train
+# DONE gbdt-binary-columns/denormal repeat=1/train 0.563s
+# START gbdt-binary-columns/denormal repeat=1/infer-save-reload
+# DONE gbdt-binary-columns/denormal repeat=1/infer-save-reload 0.010s
+# START gbdt-binary-columns/denormal repeat=1/batch
+# DONE gbdt-binary-columns/denormal repeat=1/batch 0.162s
+# START gbdt-binary-columns/denormal repeat=1/batchgrad
+# DONE gbdt-binary-columns/denormal repeat=1/batchgrad 0.000s
+# START gbdt-binary-columns/denormal repeat=1/batchscale
+# DONE gbdt-binary-columns/denormal repeat=1/batchscale 0.000s
+# START gbdt-binary-columns/denormal repeat=1/ragged
+# DONE gbdt-binary-columns/denormal repeat=1/ragged 0.000s
+# START gbdt-binary-columns/denormal repeat=1/stepfull
+# DONE gbdt-binary-columns/denormal repeat=1/stepfull 0.000s
+# CELL gbdt-binary-columns/denormal STABLE 0.735s
+# START gbdt-binary-columns/denormal_ftz repeat=1/train
+# DONE gbdt-binary-columns/denormal_ftz repeat=1/train 0.577s
+# START gbdt-binary-columns/denormal_ftz repeat=1/infer-save-reload
+# DONE gbdt-binary-columns/denormal_ftz repeat=1/infer-save-reload 0.010s
+# START gbdt-binary-columns/denormal_ftz repeat=1/batch
+# DONE gbdt-binary-columns/denormal_ftz repeat=1/batch 0.160s
+# START gbdt-binary-columns/denormal_ftz repeat=1/batchgrad
+# DONE gbdt-binary-columns/denormal_ftz repeat=1/batchgrad 0.000s
+# START gbdt-binary-columns/denormal_ftz repeat=1/batchscale
+# DONE gbdt-binary-columns/denormal_ftz repeat=1/batchscale 0.000s
+# START gbdt-binary-columns/denormal_ftz repeat=1/ragged
+# DONE gbdt-binary-columns/denormal_ftz repeat=1/ragged 0.000s
+# START gbdt-binary-columns/denormal_ftz repeat=1/stepfull
+# DONE gbdt-binary-columns/denormal_ftz repeat=1/stepfull 0.000s
+# CELL gbdt-binary-columns/denormal_ftz STABLE 0.748s
+# START gbdt-binary-columns/dupes repeat=1/train
+# DONE gbdt-binary-columns/dupes repeat=1/train 0.571s
+# START gbdt-binary-columns/dupes repeat=1/infer-save-reload
+# DONE gbdt-binary-columns/dupes repeat=1/infer-save-reload 0.009s
+# START gbdt-binary-columns/dupes repeat=1/batch
+# DONE gbdt-binary-columns/dupes repeat=1/batch 0.158s
+# START gbdt-binary-columns/dupes repeat=1/batchgrad
+# DONE gbdt-binary-columns/dupes repeat=1/batchgrad 0.000s
+# START gbdt-binary-columns/dupes repeat=1/batchscale
+# DONE gbdt-binary-columns/dupes repeat=1/batchscale 0.000s
+# START gbdt-binary-columns/dupes repeat=1/ragged
+# DONE gbdt-binary-columns/dupes repeat=1/ragged 0.000s
+# START gbdt-binary-columns/dupes repeat=1/stepfull
+# DONE gbdt-binary-columns/dupes repeat=1/stepfull 0.000s
+# CELL gbdt-binary-columns/dupes STABLE 0.740s
+# START gbdt-binary-columns/odd repeat=1/train
+# DONE gbdt-binary-columns/odd repeat=1/train 0.500s
+# START gbdt-binary-columns/odd repeat=1/infer-save-reload
+# DONE gbdt-binary-columns/odd repeat=1/infer-save-reload 0.009s
+# START gbdt-binary-columns/odd repeat=1/batch
+# DONE gbdt-binary-columns/odd repeat=1/batch 0.127s
+# START gbdt-binary-columns/odd repeat=1/batchgrad
+# DONE gbdt-binary-columns/odd repeat=1/batchgrad 0.000s
+# START gbdt-binary-columns/odd repeat=1/batchscale
+# DONE gbdt-binary-columns/odd repeat=1/batchscale 0.000s
+# START gbdt-binary-columns/odd repeat=1/ragged
+# DONE gbdt-binary-columns/odd repeat=1/ragged 0.000s
+# START gbdt-binary-columns/odd repeat=1/stepfull
+# DONE gbdt-binary-columns/odd repeat=1/stepfull 0.000s
+# CELL gbdt-binary-columns/odd STABLE 0.638s
+# START gbdt-binary-columns/negative repeat=1/train
+# DONE gbdt-binary-columns/negative repeat=1/train 0.577s
+# START gbdt-binary-columns/negative repeat=1/infer-save-reload
+# DONE gbdt-binary-columns/negative repeat=1/infer-save-reload 0.010s
+# START gbdt-binary-columns/negative repeat=1/batch
+# DONE gbdt-binary-columns/negative repeat=1/batch 0.115s
+# START gbdt-binary-columns/negative repeat=1/batchgrad
+# DONE gbdt-binary-columns/negative repeat=1/batchgrad 0.000s
+# START gbdt-binary-columns/negative repeat=1/batchscale
+# DONE gbdt-binary-columns/negative repeat=1/batchscale 0.000s
+# START gbdt-binary-columns/negative repeat=1/ragged
+# DONE gbdt-binary-columns/negative repeat=1/ragged 0.000s
+# START gbdt-binary-columns/negative repeat=1/stepfull
+# DONE gbdt-binary-columns/negative repeat=1/stepfull 0.000s
+# CELL gbdt-binary-columns/negative STABLE 0.703s
+| gbdt-binary-columns    | 9ce09bb9d2dcbef9 | 01f6566f03f99c89 | 74e64d64afb287d4 | fbabe789a906bf9e | 70c1b8d2bce9a8b4 | c0dcd60c561a3c8f | 08ff0119a724d4e2 | d1651de1c56053f0 | b2ef305a0a1379f6 |
+| gbdt-binary-columns infer | edc44d16d6012f36 | 566c04593d94a2f2 | c89857da879efdc1 | eb211261c342bd1b | edc44d16d6012f36 | edc44d16d6012f36 | 850953e09d3fc53c | b44b0955a348266d | 193d3b817df032c7 |
+| gbdt-binary-columns model | ea18f1b187cf2432 | 9689d350d2c3a60a | 8e6740859d900b5b | 3a13436902b74a54 | f1ca209869cb4b95 | f1ca209869cb4b95 | d24a62ef01155040 | 8ba1fa28516a8054 | d794b5fe5599f132 |
+| gbdt-binary-columns batch | d8bec5bed4fb4c12 | 02aa93f5ac3479c6 | 5131b43d0ce2e59c | d12465256d1f3507 | d8bec5bed4fb4c12 | d8bec5bed4fb4c12 | ab447861bef80fee | 910419dcef2eb4ab | ef3ccdd6cc71aea3 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: stable=9
+batch: stable=9
+batchgrad: n/a=9
+batchscale: n/a=9
+ragged: n/a=9
+stepfull: n/a=9
+n/a: gbdt-binary-columns batchgrad n/a:no-backward, gbdt-binary-columns batchscale n/a:not-in-the-serving-set, gbdt-binary-columns ragged n/a:no-sequence-axis, gbdt-binary-columns stepfull n/a:no-decode-state
+wrote /root/gemm_leg_out/hwinit/nvidia-h100.json
