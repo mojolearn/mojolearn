@@ -229,9 +229,10 @@ def gpu_legs(ctx):
 
 
 #: Build routes by name. A route returns the Leg list for ctx; launch, wait,
-#: pack and resume are route-independent. The CPU build box route
-#: (lane/release-cpu-build-box, tools/release_linux_build.sh) plugs in here as
-#: one Leg per set or one Leg writing all three release-build trees.
+#: pack and resume are route-independent. The GPU legs are the default and
+#: stay the default (docs/RELEASE_CHECKLIST.md section 2c, policy 2026-09-22):
+#: the release builds on the GPUs it ships for. A CPU build box route may be
+#: added here as an opt-in diagnostic, never as the default.
 BUILD_BACKENDS = {"gpu-legs": gpu_legs}
 
 

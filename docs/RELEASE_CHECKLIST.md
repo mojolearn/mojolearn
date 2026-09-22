@@ -210,7 +210,15 @@ sha256sum <sm89>/build/sets/cuda/sm_89/host/*.so <sm90a>/build/sets/cuda/sm_90a/
 differ across legs, and requires every manifest binding in every set; the
 lines above say WHICH leg is wrong before the packer says that one is.
 
-## 2c. The CPU build route: all three sets on one CPU box, no GPU
+## 2c. The CPU build route: all three sets on one CPU box, no GPU (never the default)
+
+**Policy (2026-09-22, Andrew): the release builds run on real GPU boxes, always.
+Section 2's GPU legs are the default route and stay the default.** Bitwise
+identity across GPU vendors is the point of mojolearn, and the GPU legs are
+where it is built and read back on the silicon it ships for. This CPU route is
+an opt-in diagnostic (for example, to measure build reproducibility cheaply);
+it never replaces the GPU legs, and `pixi run release` does not select it.
+
 
 ```sh
 bash tools/release_linux_build.sh $REF          # dry run: nothing rented
@@ -227,14 +235,14 @@ any GPU device node is visible, and the postflight requires the read-back
 architecture to equal the requested one. The output is
 `~/mojolearn-evidence/releases/$REF/linux-cpu-box/<stamp>/{cuda-sm_90a,cuda-sm_89,hip-gfx942}/release-build`,
 the same trees the GPU legs write; the script prints the step 3 pack command.
-It replaces the three GPU rentals of section 2 (20 to 35 minutes each).
 
 Proof at d181d9792 (0.8.14) against that release's three GPU-box builds,
 sha256 of every `.so` in each set (tiers, `host/`, `.libs/`):
 cuda/sm_90a 66 of 66 and cuda/sm_89 66 of 66 byte-identical, with
 `readback.txt`, `arch_readback.txt` and the provenance extension and
-host-binding digests identical. hip/gfx942 matched 62 of 66: the Mojo
-compiler's gfx942 output is not reproducible run to run on any box (with a
+host-binding digests identical. hip/gfx942 matched 62 of 66, an open identity defect under investigation
+(lane/amd-gfx942-identity), not yet attributed to our code or the compiler:
+the gfx942 builds were not reproducible run to run on any box (with a
 cold Mojo cache, `build_tsa.sh` gave 2 binaries in 12 builds with `-j 1`,
 `build_mixture.sh` 3 in 5 with `-j 2`; a warm cache hides it), so the MI325X
 leg's own bytes were one draw. `packaging/linux/build_sets.sh` compiles AMD
