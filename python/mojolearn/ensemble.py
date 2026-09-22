@@ -1906,7 +1906,11 @@ class GradientBoosting(NumericModeMixin):
                 f"{n_eval_rows} rows"
             )
         if not all_finite(yea):
-            raise ValueError("mojolearn: eval_set y must be finite (no NaN or infinity)")
+            # a multiclass eval target is class codes, and its refusal names
+            # them as the class-code check after this one does
+            what = ("eval_set y (the eval_set labels)"
+                    if getattr(self, "loss", None) in MULTI_OUTPUT_LOSSES else "eval_set y")
+            raise ValueError(f"mojolearn: {what} must be finite (no NaN or infinity)")
         return Xea, yea, n_eval_rows
 
     def fit(self, X, y, sample_weight=None, eval_set=None, group_id=None,
@@ -1996,7 +2000,9 @@ class GradientBoosting(NumericModeMixin):
         # ("All splits have infinite score"); CatBoost refuses NaN targets
         # at pool construction. Refused here, with inf, before the binding.
         if not all_finite(ya):
-            raise ValueError("mojolearn: y must be finite (no NaN or infinity)")
+            what = ("y (the class labels)"
+                    if getattr(self, "loss", None) in MULTI_OUTPUT_LOSSES else "y")
+            raise ValueError(f"mojolearn: {what} must be finite (no NaN or infinity)")
 
         # `nan_mode='Forbidden'` MEANS "THERE ARE NO NaNs", AND IT HAS TO BE
         # CHECKED HERE OR IT MEANS NOTHING.
