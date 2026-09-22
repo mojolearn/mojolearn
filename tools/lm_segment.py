@@ -157,9 +157,50 @@ def lr_table(peak, warmup, total, final_ratio):
     return out
 
 
-def cmd_recipe(args):
+class ManifestBatches:
+    """What `recipe` and `init` need of a token stream, from its manifest.json
+    alone: the identity (sha256, manifest sha256, train range, vocabulary)
+    and the schedule, with no 12 GB file on this machine. `ids()` is
+    deliberately absent; a box that trains opens the real `TokenBatches`,
+    which re-hashes the stream against the same manifest."""
+
+    def __init__(self, manifest_path, batch, length):
+        raw = Path(manifest_path).read_bytes()
+        self.manifest = json.loads(raw)
+        if self.manifest.get("schema") != "mojolearn.byte-lm.tokens.v1":
+            raise SystemExit("%s is not a mojolearn.byte-lm.tokens.v1 manifest" % manifest_path)
+        self.manifest_sha256 = _sha(raw)
+        self.sha256 = self.manifest["sha256"]
+        self.batch, self.length = int(batch), int(length)
+        lo, hi = self.manifest.get("train_range") or [0, int(self.manifest["tokens"])]
+        self.lo, self.hi = int(lo), int(hi)
+        self.modulus = self.hi - self.lo - self.length - 1
+        self.vocabulary = dict(self.manifest["vocabulary"])
+
+    def data_schedule(self, **extra):
+        v = self.manifest["vocabulary"]
+        out = dict(schema="mojolearn.byte-lm.tokens.v1", schedule="train-range-modulo.v1", tokens_sha256=self.sha256,
+                   corpus_sha256=self.manifest["source"]["sha256"], batch=self.batch, length=self.length,
+                   train_range=[self.lo, self.hi],
+                   vocabulary=dict(schema=v["schema"], sha256=v["sha256"], n_vocab=v["n_vocab"]))
+        out.update(extra)
+        return out
+
+
+def _batches_for(recipe_or_shape, tokens, batch, length):
+    """`TokenBatches` over a tokens directory, or `ManifestBatches` over a
+    manifest.json path (or a directory holding only the manifest)."""
     from mojolearn import lm_corpus
-    batches = lm_corpus.TokenBatches(args.tokens, args.shape[0], args.shape[1])
+    t = Path(tokens)
+    if t.is_file():
+        return ManifestBatches(t, batch, length)
+    if not (t / "tokens.i32").exists() and (t / "manifest.json").exists():
+        return ManifestBatches(t / "manifest.json", batch, length)
+    return lm_corpus.TokenBatches(t, batch, length)
+
+
+def cmd_recipe(args):
+    batches = _batches_for(None, args.tokens, args.shape[0], args.shape[1])
     if args.steps * args.shards * args.shape[0] * args.shape[1] > batches.modulus:
         print("NOTE: the run reads the train range more than once (%d tokens per pass, %d needed)"
               % (batches.modulus, args.steps * args.shards * args.shape[0] * args.shape[1]))
@@ -209,8 +250,7 @@ def data_schedule(recipe, batches):
 
 
 def open_batches(recipe, tokens_dir):
-    from mojolearn import lm_corpus
-    b = lm_corpus.TokenBatches(tokens_dir, recipe["shape"][0], recipe["shape"][1])
+    b = _batches_for(recipe, tokens_dir, recipe["shape"][0], recipe["shape"][1])
     if b.sha256 != recipe["data"]["tokens_sha256"]:
         raise SystemExit("tokens %s are not the recipe's (sha256 %s, recipe %s)"
                          % (tokens_dir, b.sha256[:16], recipe["data"]["tokens_sha256"][:16]))
@@ -578,6 +618,8 @@ def cmd_run(args):
         log_fh.flush()
 
     batches = open_batches(recipe, args.tokens)
+    if isinstance(batches, ManifestBatches):
+        raise SystemExit("REFUSED: `run` needs the token stream itself (tokens.i32 beside its manifest), not the manifest alone")
     schedule = data_schedule(recipe, batches)
     state, from_digest = load_checkpoint(args.from_ckpt, zero_moments=args.zero_moments)
     first = int(state["completed_steps"])
@@ -743,7 +785,7 @@ def main(argv=None):
     r.add_argument("--out", required=True)
     r.add_argument("--shape", nargs=9, type=int, required=True, metavar=("B", "L", "DM", "H", "KV", "HD", "FF", "LAYERS", "V"),
                    help="V is replaced by the tokens' n_vocab")
-    r.add_argument("--tokens", required=True, help="a tokens directory (tokens.i32 + manifest.json)")
+    r.add_argument("--tokens", required=True, help="a tokens directory (tokens.i32 + manifest.json), or a manifest.json alone")
     r.add_argument("--shards", type=int, required=True, help="K logical shards per optimizer step")
     r.add_argument("--steps", type=int, required=True, help="optimizer steps in the whole run")
     r.add_argument("--seed", type=int, default=93261)

@@ -106,7 +106,20 @@ fetch() {  # $1 name  $2 url  $3 sha256 ("" skips the check)
 }
 mkdir -p "$OUT/in"
 fetch recipe.json '@RECIPE_URL@' "$RECIPE_SHA" || exit 4
-fetch "$FROM_NAME" '@FROM_URL@' "$FROM_SHA" || exit 4
+if [ "$FROM_NAME" = init ]; then
+    # the first segment: the seed checkpoint is drawn HERE from the recipe's
+    # seed, pinned by its sha256, and uploaded like any other checkpoint
+    FROM_NAME=ckpt_00000000.blm
+    _t0=$(date +%s)
+    pixi run python tools/lm_segment.py init --recipe "$OUT/in/recipe.json" --tokens "$TOK" --out "$OUT/in/$FROM_NAME" > "$OUT/init.log" 2>&1; _rc=$?
+    say "init exit=$_rc secs=$(( $(date +%s) - _t0 )): $(tail -1 "$OUT/init.log" | cut -c1-200)"
+    [ "$_rc" -eq 0 ] || exit 4
+    sha256sum "$OUT/in/$FROM_NAME" > "$OUT/seed.sha256"
+    _u='@SEED_URL@'
+    if [ -n "$_u" ]; then curl -fsS --retry 3 -T "$OUT/in/$FROM_NAME" "$_u" > "$OUT/upload_seed.log" 2>&1; say "upload seed exit=$?"; fi
+else
+    fetch "$FROM_NAME" '@FROM_URL@' "$FROM_SHA" || exit 4
+fi
 EXPECT=""
 if [ -n '@EXPECT_URL@' ]; then fetch expect_chain.jsonl '@EXPECT_URL@' "" && EXPECT="--expect-chain $OUT/in/expect_chain.jsonl"; fi
 R="$OUT/in/recipe.json"

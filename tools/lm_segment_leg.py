@@ -55,8 +55,11 @@ def render(args):
     here = f"{run}/{args.route}/{args.segment}"
     from_route = args.from_route or args.route
     from_seg = args.from_segment
-    from_key = args.from_key or (f"{run}/{from_route}/{from_seg}/{args.from_ckpt}" if from_seg else f"{run}/{args.from_ckpt}")
-    from_step = int(args.from_ckpt.split("_")[1].split(".")[0])
+    init = args.from_ckpt == "init"
+    from_key = "" if init else (args.from_key or (f"{run}/{from_route}/{from_seg}/{args.from_ckpt}" if from_seg else f"{run}/{args.from_ckpt}"))
+    from_step = 0 if init else int(args.from_ckpt.split("_")[1].split(".")[0])
+    if not init and not args.from_sha:
+        raise SystemExit("--from-sha is required unless --from init")
     keys = expected_keys(recipe, from_step, args.steps, args.boundary) if args.mode != "live-worker" else \
         ["chain.jsonl", "manifest.tsv", "segment.json"]
     uploads = {k: presign_put(f"{here}/{k}", args.seconds) for k in keys}
@@ -66,7 +69,8 @@ def render(args):
         "@ROUTE@": args.route, "@SEGMENT@": args.segment, "@LABEL@": args.label,
         "@STEPS@": str(args.steps), "@BOUNDARY@": "" if args.boundary is None else str(args.boundary),
         "@TOKENS_GROUP_PARTS@": "",
-        "@FROM_NAME@": args.from_ckpt, "@FROM_URL@": presign_get(from_key, args.seconds), "@FROM_SHA@": args.from_sha,
+        "@FROM_NAME@": args.from_ckpt, "@FROM_URL@": "" if init else presign_get(from_key, args.seconds), "@FROM_SHA@": args.from_sha or "",
+        "@SEED_URL@": presign_put(f"{here}/ckpt_00000000.blm", args.seconds) if init else "",
         "@EXPECT_URL@": presign_get(args.expect_key or f"{run}/{args.expect_chain}", args.seconds) if (args.expect_chain or args.expect_key) else "",
         "@REPLAY_NAME@": args.replay or "",
         "@REPLAY_URL@": presign_get(args.replay_key or f"{run}/{args.replay_route or from_route}/{args.replay_segment or from_seg}/{args.replay}", args.seconds) if args.replay else "",
@@ -106,8 +110,8 @@ def main(argv=None):
     r.add_argument("--route", required=True)
     r.add_argument("--segment", required=True)
     r.add_argument("--label", required=True)
-    r.add_argument("--from", dest="from_ckpt", required=True, help="checkpoint file name, e.g. ckpt_00001000.blm")
-    r.add_argument("--from-sha", required=True)
+    r.add_argument("--from", dest="from_ckpt", required=True, help="checkpoint file name, e.g. ckpt_00001000.blm, or `init` to draw the seed on the box")
+    r.add_argument("--from-sha", default=None, help="required unless --from init")
     r.add_argument("--from-key", default=None, help="the checkpoint's full R2 key (overrides --from-route/--from-segment)")
     r.add_argument("--expect-key", default=None, help="the expected chain's full R2 key")
     r.add_argument("--replay-key", default=None, help="the replay checkpoint's full R2 key")
