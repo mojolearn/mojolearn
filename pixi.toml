@@ -1215,6 +1215,9 @@ check-svm-oracle = "mojo run -I . svm/svc_main.mojo -- oracle"
 check-glm-multinomial = "mojo run -j 2 -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 glm/checks/multinomial_check.mojo"
 check-glm-host-probability = "mojo run -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 glm/checks/host_probability_parallel_check.mojo"
 check-glm-qn-losses = "mojo run -j 2 -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 glm/checks/qn_losses_check.mojo"
+# The host softmax link owns disjoint output rows, so its CPU row split must
+# equal the serial spelling on every output cell (sigmoid is a serial control).
+check-glm-probability-links-parallel = "mojo run -j 2 -I . -D MOJOLEARN_NUMERIC_IDENTICAL=1 glm/checks/probability_link_parallel_check.mojo"
 # The softmax gate's negative control: the same check with the log-sum-exp
 # fold walked descending on purpose (MOJOLEARN_SOFTMAX_SABOTAGE); it must
 # FAIL at check_softmax_device_equals_host, and a pass here is the finding.
