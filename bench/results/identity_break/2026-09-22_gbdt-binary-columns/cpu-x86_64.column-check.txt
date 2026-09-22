@@ -1,0 +1,2 @@
+column cpu-binary-columns.json: vendor=cpu-amd-epyc-9965-192-core-processor commit=07201a6149b5f86fad77335ba7219a2588f1e66b host.column=cpu cpu_model='AMD EPYC 9965 192-Core Processor' families=['_mojolearn_core_host', '_mojolearn_gbdt_host', '_mojolearn_tsa_host'] cells=9 lanes=['gbdt-binary-columns'] covered=['gbdt-binary-columns']
+column verdict OK (0 failure(s))
