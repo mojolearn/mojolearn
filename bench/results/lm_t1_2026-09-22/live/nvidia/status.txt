@@ -1,0 +1,12 @@
+22:00:49 arm=nvidia mode=live-coordinator route=live segment=t1c label=nvidia-h100-live steps=3 boundary= started=2026-09-22T22:00:49Z
+22:00:49 gpu_archs=sm_90a
+22:01:57 build base exit=0 secs=68
+22:04:39 build byte_lm exit=0 secs=162
+22:04:39 tokens=/root/mojolearn-evidence/tokenized-corpus-sep18/lmcache/tokens/2b49720ec4d78c3c-3d547b17821cf465-d1048576
+22:04:40 fetch recipe.json exit=0 secs=1
+22:05:00 fetch ckpt_00000000.blm exit=0 secs=20
+22:05:07 fetch expect_chain.jsonl exit=0 secs=1
+22:05:07 ready
+23:48:32 segment exit=0 secs=6205
+[23:48:32] PASS: /root/gemm_leg_out/lm-segment-live-t1c/segment
+23:48:38 finished=2026-09-22T23:48:38Z

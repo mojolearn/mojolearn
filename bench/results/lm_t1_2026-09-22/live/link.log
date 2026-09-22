@@ -1,0 +1,6 @@
+[19:26:18 link] coordinator ready: -p 13383 root@64.247.201.61
+[19:30:13 link] worker ready: root@159.203.42.20
+[19:30:14 link] key authorized on the coordinator's box
+[19:30:15 link] private key on the worker's box
+TUNNEL_UP
+[19:30:20 link] peer file written; the worker connects through the tunnel

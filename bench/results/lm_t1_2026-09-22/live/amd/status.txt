@@ -1,0 +1,13 @@
+23:27:24 arm=amd mode=live-worker route=live segment=t1c label=amd-mi325x-live steps=3 boundary= started=2026-09-22T23:27:24Z
+23:27:24 gpu_archs=gfx942
+23:28:07 build base exit=0 secs=43
+23:29:44 build byte_lm exit=0 secs=97
+23:29:44 tokens=/root/mojolearn-evidence/tokenized-corpus-sep18/lmcache/tokens/2b49720ec4d78c3c-3d547b17821cf465-d1048576
+23:29:44 fetch recipe.json exit=0 secs=0
+23:30:01 fetch ckpt_00000000.blm exit=0 secs=17
+23:30:02 fetch expect_chain.jsonl exit=0 secs=0
+23:30:02 ready
+23:30:22 peer 127.0.0.1:7777 after 20s
+23:48:29 segment exit=139 secs=1087
+[23:48:29] PASS: /root/gemm_leg_out/lm-segment-live-t1c/segment
+23:48:29 finished=2026-09-22T23:48:29Z

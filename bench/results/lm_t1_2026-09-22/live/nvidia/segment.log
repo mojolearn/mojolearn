@@ -1,0 +1,21 @@
+1723 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x538900000000, nodemask=1)
+[22:05:12] segment: route live segment t1c label nvidia-h100-live, global steps 0..3, K=64, devices (0,), from ckpt_00000000.blm (sha256 5871ef0f4cea5499)
+[22:05:13] coordinator listening on port 7777 for 2 workers, K=64, until step 3
+1765 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x538940000000, nodemask=1)
+1765 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x538980000000, nodemask=1)
+1765 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5389c0000000, nodemask=1)
+1765 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x538a00000000, nodemask=1)
+1765 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x538a40000000, nodemask=1)
+[23:36:14] step 1 lr 399d4952 loss 10.9871 state d333b045e1141e0d grad 36aea7967b8b4d03 5461.73 s (+0.00 s hashing)
+[23:36:14] step 1 agrees with the expected chain
+[23:41:50] step 2 lr 3a1d4952 loss 10.3414 state 094b4e5a70d9609e grad 298642639276b309 335.88 s (+0.00 s hashing)
+[23:41:50] step 2 agrees with the expected chain
+[23:47:32] step 3 lr 3a17e610 loss 25.7737 state 6a408d480a1775c9 grad 086dc5eff1309b3c 341.86 s (+0.00 s hashing)
+[23:47:32] step 3 agrees with the expected chain
+1765 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x538a80000000, nodemask=1)
+[23:48:28] uploaded ckpt_00000003.blm in 47.6 s
+[23:48:28] checkpoint ckpt_00000003.blm (1945780159 bytes, sha256 5dcbb3c47c27351f, 4.5 s)
+[23:48:31] uploaded chain.jsonl in 0.4 s
+[23:48:31] uploaded segment.json in 0.4 s
+[23:48:32] uploaded manifest.tsv in 0.4 s
+[23:48:32] PASS: /root/gemm_leg_out/lm-segment-live-t1c/segment

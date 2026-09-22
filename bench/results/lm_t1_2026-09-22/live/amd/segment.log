@@ -1,0 +1,9 @@
+[23:30:24] segment: route live segment t1c label amd-mi325x-live, global steps 0..3, K=64, devices (0,), from ckpt_00000000.blm (sha256 5871ef0f4cea5499)
+[23:36:10] step 1 lr 399d4952 loss 10.9871 state d333b045e1141e0d grad 36aea7967b8b4d03 345.22 s (+0.00 s hashing)
+[23:36:10] step 1 agrees with the expected chain
+[23:41:45] step 2 lr 3a1d4952 loss 10.3414 state 094b4e5a70d9609e grad 298642639276b309 335.59 s (+0.00 s hashing)
+[23:41:45] step 2 agrees with the expected chain
+[23:47:28] step 3 lr 3a17e610 loss 25.7737 state 6a408d480a1775c9 grad 086dc5eff1309b3c 342.44 s (+0.00 s hashing)
+[23:47:28] step 3 agrees with the expected chain
+[23:48:29] PASS: /root/gemm_leg_out/lm-segment-live-t1c/segment
+Segmentation fault (core dumped)

@@ -1,0 +1,7 @@
+[17:57:55 live] commit a753567e910f80f7e18e1956544062b90fcd7f81; nvidia body <scratchpad>/t1c_nvidia_body.sh; amd body <scratchpad>/t1c_amd_body.sh (do); lease 120 min, cap $10
+[17:57:55 live] nvidia: trying NVIDIA H200
+[17:58:21 live] nvidia: no capacity for NVIDIA H200
+[17:58:21 live] nvidia: trying NVIDIA H100 80GB HBM3
+[18:00:09 live] amd runner exited before ready
+[18:00:09 live] NOT READY (nvidia 0, amd 0); telling the worker to stand down as soon as it can be reached
+t1c2 exit=1
