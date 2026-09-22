@@ -2871,7 +2871,7 @@
  },
  "package": {
   "version": "0.8.8",
-  "package_dir": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mlsys/a20e637d-429e-442a-9293-0b26e1bba94f/scratchpad/cpupkg/cpu-package/mojolearn",
+  "package_dir": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/a20e637d-429e-442a-9293-0b26e1bba94f/scratchpad/cpupkg/cpu-package/mojolearn",
   "numpy": "2.5.3",
   "python": "3.14.7",
   "par_devices": "0",

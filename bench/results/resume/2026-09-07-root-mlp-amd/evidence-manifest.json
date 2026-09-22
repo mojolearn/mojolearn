@@ -29,30 +29,6 @@
       "bytes": 586,
       "sha256": "d2fd4802adf777a5e0c701c68c37754013c0423afcf88c6825ae321bc993b816"
     },
-    "paper-anonymous-r2.guard.json": {
-      "bytes": 351,
-      "sha256": "02463036ae8bb2035a6ab5743b313fa6fc9f43b73a49c7a74135a3561e7a7f75"
-    },
-    "paper-anonymous-r2.log": {
-      "bytes": 4662,
-      "sha256": "69b49d8e93dc7670527c0bf163650c92f0b7b9b2f28e10b178a3f2d4a70925c2"
-    },
-    "paper-anonymous.guard.json": {
-      "bytes": 328,
-      "sha256": "6ab6c65454f400ab9b2f2e30b436ef6c2cddbbc30220e8f1efef1b8c3f2cd16b"
-    },
-    "paper-anonymous.log": {
-      "bytes": 4528,
-      "sha256": "d6d908b58d4c7ad580830a9ba62c3810ece06ef18f99f5f0b58aa096083ff085"
-    },
-    "paper-named.guard.json": {
-      "bytes": 352,
-      "sha256": "9399a9cc837e21068acb01d5e526dfe596adfe6eb7f4470edb1a7b8c330d3d8e"
-    },
-    "paper-named.log": {
-      "bytes": 412,
-      "sha256": "3cc59da1df5fbda538a24b3c02bdf4ff4ced5888da655174496ea955443715bc"
-    },
     "run1/arm.log": {
       "bytes": 332,
       "sha256": "541fe5f243183dd63914c58a13ff38b072338cd39b8eabece1e46dc4a73594ce"
@@ -518,5 +494,5 @@
       "sha256": "d5e42edc9356a768b0f1551d20abdc41f1ccf10c9cf1b4c4d6fd734f55e8ba70"
     }
   },
-  "scope": "Saved run, comparison and paper-build files; not a new numerical execution"
+  "scope": "Saved run and comparison files; not a new numerical execution"
 }

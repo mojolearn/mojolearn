@@ -58,7 +58,7 @@ Current counts (recompute on restart):
 
 | Inventory | Status |
 |---|---|
-| MLSys appendix algorithms/variants | 246 mapped entries, not 246 distinct classes |
+| Inventory algorithms/variants | 246 mapped entries, not 246 distinct classes |
 | Registered harness lanes | 229, including 50 parallel lanes |
 | Enumerated source API entries | 222; a separate accounting from the appendix |
 | CPU coverage inventory | 126 available, 53 withheld, 50 parallel exclusions |
@@ -101,7 +101,7 @@ remain incomplete. Do not hide missing evidence by declaring properties N/A.
    before deciding which artifact a result qualifies.
 2. Read this plan and the three lane status files linked below. Read
    `host_surface.PUBLIC_PENDING_LANES` and `_verification_catalog.py`; the latter
-   preserves the MLSys census provenance (`results/algorithm-variants-2026-09-16.json`).
+   records the census provenance.
 3. Capture installed `verify --coverage --json`, record wheel SHA-256 and binding
    digests, and compare with the source inventory. Run the matrix check. Do not
    assume an old installed 0.8.7 wheel contains current main's commands.

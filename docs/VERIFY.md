@@ -18,7 +18,7 @@ python -m mojolearn verify --coverage --json-out coverage.json
 python -m mojolearn verify --all --json-out verification.json
 ```
 
-The inventory maps **all 246 algorithms and variants from the MLSys appendix**
+The inventory maps **all 246 algorithms and variants of the algorithm inventory**
 to lanes or named alternative gates. It also lists every additional registered
 lane, so newer features cannot disappear behind the historical count. Entries
 are not distinct Python classes and mappings are not execution certificates.

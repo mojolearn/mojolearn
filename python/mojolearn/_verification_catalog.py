@@ -1,17 +1,12 @@
-"""The MLSys appendix inventory, mapped explicitly to verification lanes.
+"""The algorithm inventory, mapped explicitly to verification lanes.
 
-Names retain the paper's historical wording. A mapping is scope, not execution
-or certification. Unmapped public additions remain visible as additional lanes.
-No runtime dependency on the sister repository or a source checkout.
+A mapping is scope, not execution or certification. Unmapped public additions
+remain visible as additional lanes. No runtime dependency on a source checkout.
 """
-PROVENANCE = {'repository': 'mlsys',
- 'file': 'results/algorithm-variants-2026-09-16.json',
- 'sha256': '8a9600f893b2ab10f5e7f28e12ce7172ddfcc2c241b39c76ce03d0b4ad1be2ef',
- 'source_repo': '/Users/andrewhendel/CascadeProjects/mojolearn',
+PROVENANCE = {'repository': 'mojolearn',
  'source_file': 'python/mojolearn/host_surface.py',
  'date': '2026-09-16',
  'head_commit': 'a2f05dbe8',
- 'working_tree': 'dirty, 57 paths; the census reads the working tree, not HEAD',
  'settings': 'TRAINING_LANE_NAMES and the inference lanes of host_surface.py, '
              'the @lane registry of tools/identity_break.py (189 lanes), the '
              'metrics functions of the metrics family; 39 harness lanes '

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""WHICH HARNESS LANES THE MLSys APPENDIX DOES NOT MAP, DERIVED.
+"""WHICH HARNESS LANES THE 246-ENTRY INVENTORY DOES NOT MAP, DERIVED.
 
     python3 tools/appendix_delta.py            # print the delta
     python3 tools/appendix_delta.py --write    # rewrite the companion CSV
@@ -10,7 +10,7 @@
 THE NUMBER 246 DOES NOT MOVE, AND THIS FILE EXISTS SO NOBODY MOVES IT.
 
 `appendix-246.csv` maps the 246 algorithm/variant entries of the published
-MLSys appendix onto harness lanes. It is a record of WHAT WAS PUBLISHED.
+algorithm inventory onto harness lanes. It is a record of WHAT WAS PUBLISHED.
 Adding a row for a lane that did not exist at publication would rewrite a
 published claim, and `docs/COVERAGE_AUDIT_2026-09-18.md` already refuses the
 arithmetic in as many words:

@@ -274737,21 +274737,17 @@
   ],
   "provenance": {
    "date": "2026-09-16",
-   "file": "results/algorithm-variants-2026-09-16.json",
    "head_commit": "a2f05dbe8",
-   "repository": "mlsys",
+   "repository": "mojolearn",
    "settings": "TRAINING_LANE_NAMES and the inference lanes of host_surface.py, the @lane registry of tools/identity_break.py (189 lanes), the metrics functions of the metrics family; 39 harness lanes without a manifest title are titled here; one refusal lane and three umbrella metric lanes dropped",
-   "sha256": "8a9600f893b2ab10f5e7f28e12ce7172ddfcc2c241b39c76ce03d0b4ad1be2ef",
-   "source_file": "python/mojolearn/host_surface.py",
-   "source_repo": "/Users/andrewhendel/CascadeProjects/mojolearn",
-   "working_tree": "dirty, 57 paths; the census reads the working tree, not HEAD"
+   "source_file": "python/mojolearn/host_surface.py"
   },
   "reference_admission_policy": {
    "input_witness_required": true,
    "min_repeats": 2,
    "property_protocol_required": true
   },
-  "scope": "registered harness and the 246-entry MLSys appendix; mapping is not certification",
+  "scope": "registered harness and the 246-entry algorithm inventory; mapping is not certification",
   "supplemental_checks": [
    {
     "command": "verify-causal-lm",

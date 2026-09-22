@@ -7,45 +7,13 @@ never run them. Preserve the frozen 0.6.0 release snapshot and staged wheels.
 
 ## What the 9 / 10 / 8 audit actually counts
 
-The sibling `mlsys/results/refusal-audit-2026-09-06.json` classifies 27
+A 2026-09-06 refusal audit classifies 27
 historical round-11 refusals: nine intentional, ten implemented elsewhere
 in current source, eight needing implements or capacity changes. Two additional
 named CPU ExtraTrees configurations are host/no-card evidence. This is a
 source inventory, not a new 27-case numerical certificate. The matrix is
 round 11, commit `144aa5b`; the audit describes later library source at
 `2e53699e`. Keep those source scopes distinct.
-
-Read-only review of `mlsys/paper/gen_numbers.py` around its refusal section
-found these admission weaknesses; no sibling paper file was edited:
-
-- The assertions check total list lengths against refusal counts and host
-  list length against host/no-card counts. A duplicate replacing a missing
-  cell, a wrong cell name, or reassignment to the wrong family/category can
-  preserve both sums and pass.
-- Neither exact refusal-set membership nor disjointness of categories and
-  host sets is checked against the retained E2/E2U cell records. The script
-  does not require each listed refusal to actually have a refused verdict
-  on both vendors with the expected named error.
-- `matrix_round` and `matrix_commit` are not bound to the selected `rnd`.
-  That round is the first entry marked `reported_in_this_paper`; uniqueness
-  of that marker is not checked. A later round with the same totals could
-  silently inherit this old classification.
-- The audit's `status`, date, source revision and source-document contents
-  are not validated or hash-bound. Counts alone cannot substantiate the
-  “implemented” label or its later-source provenance. The earlier generator
-  section does assert NVIDIA/AMD aggregate-count equality; that does not
-  check the identity of the cells in either set.
-- These are Python `assert` statements, so optimized Python can remove
-  them. A future fail-closed audit should use explicit validation errors,
-  require the exact schema/category keys, and reject malformed/duplicate
-  JSON members before generating paper macros.
-
-Before changing paper classifications, require exact family-specific sets
-of refused cell IDs from both retained vendor matrices; categories must be
-pairwise disjoint and their union must equal those sets. Bind the unique
-reported round/commit and the source-audit revision explicitly. Validate the
-two host IDs and null-card scope independently. Preserve the old record and
-publish a separate new round with hashes rather than overwriting history.
 
 ## Current additive source changes, separate from frozen 0.6.0
 

@@ -1,5 +1,5 @@
 # The on-box body of the reference-regen NVIDIA leg: the twelve parallel-driver
-# lanes the MLSys appendix maps and no committed column carries a hash for.
+# lanes the algorithm inventory maps and no committed column carries a hash for.
 # One device (par_devices unset, so the harness records par_devices=0 and the
 # column is admissible to the reference table).
 set -u

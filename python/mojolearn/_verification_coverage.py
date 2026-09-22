@@ -154,7 +154,7 @@ def inventory(harness, table, vendor_class):
             multi_gpu_lanes=[n for n in entry['lanes'] if n.startswith('par-')])
         entries.append(row)
     return dict(format="mojolearn.verification-coverage.v1", execution="not run",
-                scope="registered harness and the 246-entry MLSys appendix; mapping is not certification",
+                scope="registered harness and the 246-entry algorithm inventory; mapping is not certification",
                 vendor_class=vendor_class, provenance=PROVENANCE, entries=entries, lanes=lanes,
                 evidence_provenance={k: v for k, v in HISTORICAL_EVIDENCE.items() if k != 'lanes'},
                 evidence_snapshot_matches_harness=snapshot_matches,
