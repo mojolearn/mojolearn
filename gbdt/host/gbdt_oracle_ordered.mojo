@@ -271,6 +271,15 @@ struct _PwHelper(Movable):
     var folds: List[Int]
     var hist_line: Int
     var hist: List[Float32]
+    # the slots written since the histogram was last all +0.0: the next
+    # tree zeroes these instead of allocating and filling a fresh plane
+    var dirty: List[Int]
+    var dirty_flag: List[Bool]
+
+    def mark(mut self, slot: Int):
+        if not self.dirty_flag[slot]:
+            self.dirty_flag[slot] = True
+            self.dirty.append(slot)
 
 
 def _pw_thread_points(
@@ -440,10 +449,22 @@ def _ordered_tree_structure(
     _update_subsets_stats(s, 1 << fold_bits, sw, sg)
 
     for h in range(len(helpers)):
-        helpers[h].hist = List[Float32](
-            length=(1 << max_depth) * fold_count * helpers[h].hist_line * 2,
-            fill=Float32(0.0),
-        )
+        # every slot starts the tree at +0.0: a fresh plane the first time,
+        # then only the slots the previous tree wrote are zeroed again
+        ref hz = helpers[h]
+        var slots = (1 << max_depth) * fold_count
+        var line2 = hz.hist_line * 2
+        if len(hz.hist) != slots * line2 or len(hz.dirty_flag) != slots:
+            hz.hist = List[Float32](length=slots * line2, fill=Float32(0.0))
+            hz.dirty = List[Int]()
+            hz.dirty_flag = List[Bool](length=slots, fill=False)
+        else:
+            for k in range(len(hz.dirty)):
+                var slot = hz.dirty[k]
+                for c in range(slot * line2, (slot + 1) * line2):
+                    hz.hist[c] = Float32(0.0)
+                hz.dirty_flag[slot] = False
+            hz.dirty.clear()
     var structure = List[_OrdSplit]()
     var score_before = Float32(0.0)
     var docs = List[Int](length=doc_count, fill=0)
@@ -489,6 +510,7 @@ def _ordered_tree_structure(
                     var sz = s.p_sz[data_part]
                     if sz == 0:
                         continue
+                    hp.mark(hist_slot)
                     var base = hist_slot * hist_line * 2
                     if hp.policy == POLICY_ONE_BYTE:
                         # the 8-bit fixed-point kernel: Int32 sums, the
@@ -579,9 +601,20 @@ def _ordered_tree_structure(
                         if s.p_sz[left_part] == 0 and s.p_sz[right_part] == 0:
                             continue
                         var is_left = s.p_sz[left_part] < s.p_sz[right_part]
+                        hp.mark(y * fold_count + z)
+                        hp.mark((y | ny) * fold_count + z)
                         var lslot = (y * fold_count + z) * hist_line * 2
                         var rslot = ((y | ny) * fold_count + z) * hist_line * 2
-                        for c in range(hist_line * 2):
+                        var hq = hp.hist.unsafe_ptr()
+                        comptime SW = 8
+                        var c0 = 0
+                        while c0 + SW <= hist_line * 2:
+                            var calc = hq.unsafe_load[width=SW](rslot + c0)
+                            var comp = hq.unsafe_load[width=SW](lslot + c0) - calc
+                            hq.unsafe_store(lslot + c0, calc if is_left else comp)
+                            hq.unsafe_store(rslot + c0, comp if is_left else calc)
+                            c0 += SW
+                        for c in range(c0, hist_line * 2):
                             var calc = hp.hist[rslot + c]
                             var comp = hp.hist[lslot + c] - calc
                             hp.hist[lslot + c] = calc if is_left else comp
@@ -1033,6 +1066,7 @@ def gbdt_ordered_rmse_host_fit(
             hist_line += Int(blk.folds[k])
         helpers.append(_PwHelper(
             blk.policy, gids^, offs^, firsts^, folds^, hist_line, List[Float32](),
+            List[Int](), List[Bool](),
         ))
     var feat_offset = List[Int](length=n_features, fill=0)
     var feat_shift = List[UInt32](length=n_features, fill=UInt32(0))
@@ -1449,6 +1483,7 @@ def gbdt_ordered_host_fit(
             hist_line += Int(blk.folds[k])
         helpers.append(_PwHelper(
             blk.policy, gids^, offs^, firsts^, folds^, hist_line, List[Float32](),
+            List[Int](), List[Bool](),
         ))
     var feat_offset = List[Int](length=n_features, fill=0)
     var feat_shift = List[UInt32](length=n_features, fill=UInt32(0))
