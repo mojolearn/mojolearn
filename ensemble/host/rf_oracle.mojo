@@ -110,6 +110,7 @@ from max.algorithm import sync_parallelize
 
 from checks.numerics import ftz, identical_log, identical_mul_add
 from core.host_predict_threads import host_predict_chunk, host_predict_task_count
+from ensemble.host_layout import RF_NAN_REFUSAL, has_nan_f32_threaded
 
 
 #: The gate's negative control (see THE NEGATIVE CONTROL above).
@@ -1421,6 +1422,12 @@ def rf_host_fit(
     elif len(labels_f) != n_rows:
         raise Error("rf host: y must hold n_rows targets")
     rf_host_check_params(p, classification)
+    # No missing-value arm: a NaN bins left but partitions right, and at
+    # unlimited depth the fit never returned (`has_nan_f32_threaded`).
+    if has_nan_f32_threaded(
+        x.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), len(x)
+    ):
+        raise Error(RF_NAN_REFUSAL)
     if len(weights) > 0 and not p.bootstrap:
         raise Error(
             "rf host: class weights without bootstrap reach the weighted"

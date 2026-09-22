@@ -33,6 +33,7 @@ from __future__ import annotations
 
 import array
 import struct
+import sys
 from itertools import chain
 
 # NumPy before 2.4 treats a null interface pointer as a scalar conversion,
@@ -236,6 +237,18 @@ def _restore_array(raw, shape, dtype, order, readonly):
     return Array._owned(store, shape, dtype, order)
 
 
+class _ArrayInterface:
+    """Carries only an Array's `__array_interface__`, so `Array.__array__`
+    can hand NumPy a zero-copy view without recursing into itself. NumPy
+    keeps this object (and through it the Array) alive as the view's base."""
+
+    __slots__ = ("_owner", "__array_interface__")
+
+    def __init__(self, owner):
+        self._owner = owner
+        self.__array_interface__ = owner.__array_interface__
+
+
 class Array:
     """A typed, shaped, contiguous block of memory. See the module docstring.
 
@@ -407,6 +420,28 @@ class Array:
             "strides": None if self.order == "C" else self.strides,
             "version": 3,
         }
+
+    def __array__(self, dtype=None, copy=None):
+        """`numpy.asarray(a)` through the `__array__` protocol.
+
+        NumPy itself reads `__array_interface__` above and never gets here;
+        this exists for the libraries that test `hasattr(x, "__array__")`
+        before converting. scikit-learn's `type_of_target` (reached by
+        `accuracy_score`, `f1_score`, `confusion_matrix`, ...) refused a
+        classifier's `predict` output as "Expected array-like" without it
+        (Sep 22 pip smoke). Only NumPy calls this method, so NumPy is
+        already loaded: it is read from `sys.modules`, never imported, and
+        the module keeps its no-NumPy import contract.
+        """
+        np = sys.modules.get("numpy")
+        if np is None:
+            raise TypeError("mojolearn: Array.__array__ needs NumPy loaded")
+        out = np.asarray(_ArrayInterface(self))
+        if dtype is not None and out.dtype != np.dtype(dtype):
+            if copy is False:
+                raise ValueError("mojolearn: a dtype change needs a copy")
+            return out.astype(dtype)
+        return out.copy() if copy else out
 
     def __buffer__(self, flags):
         """Python 3.12+ buffer protocol: a memoryview of the backing store

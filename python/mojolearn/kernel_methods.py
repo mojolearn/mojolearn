@@ -181,6 +181,10 @@ class KernelRidge(_KernelMethodBase):
         comes back (the fit refuses anything else by name).
     """
 
+    #: scikit-learn's estimator kind: `cross_val_score` stratifies a
+    #: classifier's default folds, as scikit-learn's does.
+    _estimator_type = "regressor"
+
     _WHERE = "KernelRidge"
 
     def __init__(self, alpha=1.0, kernel="linear", gamma=None, degree=3, coef0=1.0):

@@ -877,6 +877,10 @@ class KNeighborsClassifier(NearestNeighbors):
     outputs_2d_ : bool
     """
 
+    #: scikit-learn's estimator kind: `cross_val_score` stratifies a
+    #: classifier's default folds, as scikit-learn's does.
+    _estimator_type = "classifier"
+
     def __init__(
         self,
         n_neighbors=5,
@@ -1143,6 +1147,10 @@ class KNeighborsRegressor(NearestNeighbors):
 
     Parameters / Attributes: as KNeighborsClassifier, without `classes_`.
     """
+
+    #: scikit-learn's estimator kind: `cross_val_score` stratifies a
+    #: classifier's default folds, as scikit-learn's does.
+    _estimator_type = "regressor"
 
     def __init__(
         self,

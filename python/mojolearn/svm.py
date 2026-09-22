@@ -104,6 +104,10 @@ class LinearSVC(_LinearSVMBase):
     for two classes and the row argmax, first maximum winning, for more.
     """
 
+    #: scikit-learn's estimator kind: `cross_val_score` stratifies a
+    #: classifier's default folds, as scikit-learn's does.
+    _estimator_type = "classifier"
+
     _LOSSES = {"hinge": _QN_LOSS_SVC_L1, "squared_hinge": _QN_LOSS_SVC_L2}
 
     def __init__(self, *, penalty="l2", loss="squared_hinge", C=1.0,
@@ -200,6 +204,10 @@ class LinearSVR(_LinearSVMBase):
     OUTPUTS: `coef_` (n_features,) float32, `intercept_` a float,
     `n_iter_`, `objective_`, `retcode_`.
     """
+
+    #: scikit-learn's estimator kind: `cross_val_score` stratifies a
+    #: classifier's default folds, as scikit-learn's does.
+    _estimator_type = "regressor"
 
     _LOSSES = {"epsilon_insensitive": _QN_LOSS_SVR_L1,
                "squared_epsilon_insensitive": _QN_LOSS_SVR_L2}
