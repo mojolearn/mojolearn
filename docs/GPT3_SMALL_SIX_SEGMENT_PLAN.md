@@ -3,7 +3,10 @@
 Written 2026-09-22 at Andrew's direction, revised the same day after his
 questions (route B's last two segments were both NVIDIA, checkpoint cadence,
 what an arrival replay is, why the multi-vendor segment is bandwidth bound,
-whether the Mac can be this laptop). Supersedes the 2026-09-17 tri-vendor
+whether the Mac can be this laptop), and again after his second round (how
+the cadence meets the segment boundaries, the cross-route check at every
+boundary, both routes in parallel, and how the evidence reaches the paper,
+Zenodo and an external drive; section 11). Supersedes the 2026-09-17 tri-vendor
 plan (deleted in the 2026-09-19 lane cleanup, last revision `da9f7bc52`),
 which was costed at 25B tokens and read NOT READY. Three things changed since
 then and each one is measured. The eager attention fallback that doubled the
@@ -120,6 +123,25 @@ Because B's segment k starts from the same bytes as A's, **every per-step
 state hash of B's segment is comparable to A's**, not only the boundary. That
 is where most of the evidence in section 6 comes from.
 
+**Both routes run at the same time**, B one segment behind A. At any moment
+two segments are live, A's k+1 and B's k, and by the table in section 3 they
+are sometimes on the same vendor (A's segment 2 on AMD while B's segment 1 is
+on AMD; A's segment 5 on AMD while B's segment 4 is on AMD). That needs two
+AMD boxes at once, and DigitalOcean allows one GPU droplet per account, so the
+second AMD leg goes to Hot Aisle or RunPod. NVIDIA has the same moment
+twice (A's segment 3 pair while B's segment 2 runs on NVIDIA; A's segment 4
+while B's segment 3 pair holds an NVIDIA box), two NVIDIA legs at once on
+RunPod, which is routine.
+
+**The halt rule.** When B finishes segment k, B's checkpoint k must equal A's
+checkpoint k byte for byte (the file sha256, and the full-state hash line).
+If it does not, both routes stop, including A's segment k+1 already running,
+because A's segment k+1 is built on bytes one vendor disputes. The arrival
+replays and the CPU witness at that boundary say which vendor stands alone
+(never attribute before the column that is alone is named), the cause is
+fixed, and segment k is rerun on both routes from A's checkpoint k-1. Nothing
+after a disputed boundary is kept.
+
 ## 5. How the bits agree, and why the multi-vendor segment is bandwidth bound
 
 **Within a box.** A step is K=64 logical shards. Each shard's gradient is
@@ -199,15 +221,26 @@ m, v, flags at 4 bytes each), and is written on a cadence.
    stream export, not the array export; T1a measures the real cost, and if it
    is over 10 percent the cadence drops to every 10 steps with every step
    inside the record windows.
-2. **Checkpoints every 100 steps**, plus one exactly two steps before every
-   segment boundary and one at the boundary, pushed to R2 as they are written
-   with size and sha256 in a manifest. Every step is overkill and it is not
-   close. A checkpoint is 1.95 GB, save 11 s and a push of 10 to 20 s, so
-   every step would cost 50 to 75 percent of the run and 5,000 x 2 x 1.95 GB
-   is 19.5 TB. Every 100 steps is about 110 checkpoints, 215 GB, under 1
-   percent of the run, a few dollars a month in R2, and a dead pod loses at
-   most 100 steps (70 minutes on NVIDIA, about 3 hours on AMD). Nothing lives
-   only on a pod.
+2. **Checkpoints every 100 steps, numbered by GLOBAL step**, plus one exactly
+   two steps before every segment boundary, all pushed to R2 as they are
+   written with size and sha256 in a manifest. The cadence meets the segments
+   cleanly with no extra boundary file, because every segment length in
+   section 3 is a multiple of 100, so the boundaries fall at global steps
+   1,000, 2,000, 2,400, 3,900, 4,900 and 5,000 and each one IS a cadence
+   checkpoint. The only off-cadence files are the six at boundary minus two
+   (998, 1,998, 2,398, 3,898, 4,898, 4,998), which exist for the arrival
+   replay in item 3. A checkpoint's name is its global step and its route, so
+   nothing about the cadence depends on which segment it is in. If a segment
+   length is ever changed, keep it a multiple of 100 and this stays true.
+   Every step is overkill and it is not close. A checkpoint is 1.95 GB, save
+   11 s and a push of 10 to 20 s, so every step would cost 50 to 75 percent of
+   the run and 5,000 x 2 x 1.95 GB is 19.5 TB. Every 100 steps is 56
+   checkpoints per route, 112 in all, 218 GB, under 1 percent of the run,
+   about $3 a month in R2, and a dead pod loses at most 100 steps (70 minutes
+   on NVIDIA, about 3 hours on AMD). Nothing lives only on a pod. Route B's
+   checkpoints must be byte-identical to route A's at the same step, which is
+   itself evidence (item 3); once that is verified only one copy needs to be
+   kept long term, with the other route's sha256 in the manifest.
 3. **Arrival replay at every handoff.** Plainly. When a box receives the
    checkpoint that ends segment k, it does not start segment k+1 on trust. It
    verifies the file's sha256 against the manifest, loads it, hashes the
@@ -220,6 +253,14 @@ m, v, flags at 4 bytes each), and is written on a cadence.
    the boundary it belongs to, in two steps, instead of surfacing at the end.
    It is the bidirectional resume check of the 34,944-parameter campaign,
    made automatic and applied at all five handoffs of both routes.
+   **The same arrival step also checks across the two runs.** Before route B
+   starts segment k+1 from A's checkpoint k, the coordinator requires B's own
+   checkpoint k to equal A's checkpoint k byte for byte (file sha256 and
+   full-state hash), and every per-step hash of B's segment k to equal A's.
+   So each boundary carries three checks: the two routes agree on the segment
+   just finished, the receiver reproduces the sender's last two steps, and
+   the CPU witness reproduces one shard of it. A failure of any one is the
+   halt in section 4.
 4. **Record windows.** Two steps either side of every boundary, and steps 1 to
    3, run with the full per-step witness (every shard's gradient hash, the
    fold's intermediate hashes). These are what the CPU and Apple witnesses are
@@ -428,7 +469,45 @@ evidence artifact present.
 produced every artifact in section 6 and every negative control has been seen
 to fail.
 
-## 11. What this does not prove
+## 11. Evidence packaging: the repo, Zenodo, R2 and a drive
+
+Collect everything during the run, cheaply, and decide the cut afterward. The
+cut is a selection from what was kept; it never requires a rerun, and the
+choice of what to publish is easier with more in hand than less. Three tiers,
+by size.
+
+**Tier 1, megabytes, in the repository and in the paper's Zenodo record.**
+The per-step hash chains of both routes (10,000 lines, about 10 MB), the
+manifest with the size and sha256 of every checkpoint and token shard, every
+arrival replay log, the CPU witness logs, the negative control logs with the
+hash that differed, the environment receipts, the loss and held-out curves,
+the recipe (shape, schedule, seed, K, fold order), the vocabulary (3 MB), and
+the comparator source. This is the evidence the paper cites, and it is enough
+for anyone holding any checkpoint to verify it against the run. It goes under
+`bench/results/` like every other record. No blob above the repository's
+size rule goes in the repository.
+
+**Tier 2, under 50 GB, one Zenodo record for the paper.** The six boundary
+checkpoints of route A (11.7 GB) and the six boundary-minus-two checkpoints
+(11.7 GB), so anyone can start any segment and reproduce every arrival replay
+on their own hardware; the final weights alone as a loadable model (650 MB);
+the summed gradient at each boundary (12 x 649 MB, 7.8 GB) so the fold can be
+checked without a GPU; and tier 1. About 32 GB, inside Zenodo's 50 GB record
+limit with room for a few mid-segment checkpoints if a reviewer asks. Route
+B's checkpoints are not included because they are byte-identical to A's by
+the claim; their sha256s are in the manifest. The record is versioned, so a
+later cut replaces an earlier one without a new DOI.
+
+**Tier 3, everything, in R2 and on an external drive.** All 112 checkpoints
+(218 GB), the full record-window witnesses, the token shards (10.5 GB), and
+every log. R2 holds it during and after the run for about $3 a month. At the
+end, pull the whole bucket prefix to an external drive as a second copy that
+no provider controls; 218 GB is an evening at home download speed and a 1 TB
+drive holds two runs. The pull is verified against the manifest's sha256s,
+the same way a rented box verifies a staged dataset, before the drive is
+called a copy.
+
+## 12. What this does not prove
 
 One shape, one architecture, one optimizer without clipping, one sequence
 length, one data order, one vocabulary. Apple covers one segment and the final
