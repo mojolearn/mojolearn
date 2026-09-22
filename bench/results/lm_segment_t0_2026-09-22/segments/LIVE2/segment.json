@@ -1,0 +1,62 @@
+{
+ "schema": "mojolearn.lm-segment.run.v1",
+ "route": "L",
+ "segment": "live2",
+ "label": "m4-live",
+ "from_checkpoint": {
+  "file": "ckpt_00000004.blm",
+  "sha256": "fdd04a26b581c29a2f21b59e342e21bd5749b2f428a3aea75cd63a374597e61a",
+  "step": 4
+ },
+ "first_step": 4,
+ "last_step": 8,
+ "devices": [
+  0
+ ],
+ "logical_shards": 4,
+ "recipe_sha256": "8ffada5676d9a831c8a1ac7bd0bcf7c2bcb8d7ee5d03eef61ed753345b584e4d",
+ "tokens_sha256": "2ad0c690bc4438d5ddab5cb481c4b247ba61b7dd3d841a3d7c0a7d0f94b2c253",
+ "box": {
+  "host": "Mac",
+  "machine": "arm64",
+  "system": "Darwin",
+  "python": "3.14.7"
+ },
+ "commit": "6471822acbeebf6e3fa6e66025891eed4023e72e",
+ "zero_moments": false,
+ "expect_chain": "<scratchpad>/seg/A2/chain.jsonl",
+ "checkpoints": [
+  {
+   "step": 6,
+   "file": "ckpt_00000006.blm",
+   "bytes": 38822695,
+   "sha256": "d897af746606bb064a8dd488990faafff432a8b5e4397c0909d4c2a0dc5b6776",
+   "save_seconds": 0.058
+  },
+  {
+   "step": 8,
+   "file": "ckpt_00000008.blm",
+   "bytes": 38822696,
+   "sha256": "ce1cf689859e86072e4c7fd9f6a4c0d52146da1a76983b375b08cb6c83242668",
+   "save_seconds": 0.055
+  }
+ ],
+ "utc_start": "2026-09-22T20:36:55Z",
+ "live": {
+  "role": "coordinator",
+  "shards": [
+   0,
+   1
+  ],
+  "workers": 2,
+  "port": 7812,
+  "address": null,
+  "protocol": "chained"
+ },
+ "verdict": "PASS",
+ "disagreements": [],
+ "steps_completed": 4,
+ "last_completed": 8,
+ "utc_end": "2026-09-22T20:36:58Z",
+ "uploads": []
+}

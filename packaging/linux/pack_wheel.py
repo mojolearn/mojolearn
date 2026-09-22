@@ -68,6 +68,45 @@ import re
 import sys
 import zipfile
 
+
+def _require_pkg_env():
+    """Run under the pixi `pkg` environment or refuse BEFORE touching anything.
+
+    2026-09-22 (0.8.14): `python3 packaging/linux/pack_wheel.py` under the
+    system interpreter wrote the wheel, then died inside
+    packaging/portable_math/stage.py on `No module named 'lief'` and deleted
+    its own output. The finishing step needs lief (pinned in [feature.pkg]),
+    so the packer checks for it first: when it is missing and pixi is on
+    PATH it re-executes itself as `pixi run -e pkg python pack_wheel.py ...`
+    (once, guarded by MOJOLEARN_PACK_WHEEL_REEXEC); otherwise it refuses
+    with the command to use. `pixi run -e pkg pack-linux-wheel ...` is the
+    documented spelling.
+    """
+    try:
+        import lief  # noqa: F401
+        import tomllib  # noqa: F401
+        return
+    except ImportError as exc:
+        missing = exc.name or "lief"
+    import shutil
+    here = pathlib.Path(__file__).resolve()
+    pixi = shutil.which("pixi")
+    if pixi and os.environ.get("MOJOLEARN_PACK_WHEEL_REEXEC") != "1":
+        print(f"pack_wheel: {missing} is not importable from {sys.executable}; "
+              "re-running under `pixi run -e pkg python`", file=sys.stderr)
+        env = dict(os.environ, MOJOLEARN_PACK_WHEEL_REEXEC="1")
+        os.execve(pixi, [pixi, "run", "--manifest-path", str(here.parents[2] / "pixi.toml"),
+                         "-e", "pkg", "python", str(here), *sys.argv[1:]], env)
+    raise SystemExit(
+        f"pack_wheel: {missing} is not importable from {sys.executable}. Run it "
+        "under the pkg environment: pixi run -e pkg pack-linux-wheel <args> "
+        "(or pixi run -e pkg python packaging/linux/pack_wheel.py <args>). "
+        "Nothing was written.")
+
+
+if __name__ == "__main__":
+    _require_pkg_env()
+
 try:
     import tomllib
 except ImportError:  # pragma: no cover

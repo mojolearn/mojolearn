@@ -67,6 +67,11 @@
 #                                                               the M4 and two rented x86 hosts, ranks 06a8b273...)
 #
 # And one MULTI-SHARD group, whose members are keys in their own right:
+#   corpus/fineweb-edu-10BT/tokens/mojolearn-bpe-fineweb-edu-50257-v1/   THE GPT-3 SMALL RUN'S TOKEN STREAM
+#       tokens.i32.part00..06 + manifest.json   12,442,225,788 bytes of int32 ids in seven parts (a single
+#       PUT is capped at 5 GB): shards 000..003 train, 013 held out, one document per row, through the
+#       vocabulary above; sha256 of the joined stream 4cf7181b..., produced identically on three CPUs
+#       (bench/results/fineweb_tokens_2026-09-22). A box joins the parts: cat tokens.i32.part0? > tokens.i32
 #   corpus/fineweb-edu-10BT/NNN_00000.parquet  28,518,193,415 total, 14 shards
 #                                                 (FineWeb-Edu sample-10BT, the
 #                                                  corpus for a real LM run)
@@ -120,6 +125,7 @@ EOF
 groups() {
     cat <<'EOF'
 corpus/fineweb-edu-10BT	ROOT/training/corpus/fineweb-edu-10BT	000_00000.parquet 001_00000.parquet 002_00000.parquet 003_00000.parquet 004_00000.parquet 005_00000.parquet 006_00000.parquet 007_00000.parquet 008_00000.parquet 009_00000.parquet 010_00000.parquet 011_00000.parquet 012_00000.parquet 013_00000.parquet
+corpus/fineweb-edu-10BT/tokens/mojolearn-bpe-fineweb-edu-50257-v1	ROOT/training/corpus/fineweb-edu-10BT/tokens/mojolearn-bpe-fineweb-edu-50257-v1	tokens.i32.part00 tokens.i32.part01 tokens.i32.part02 tokens.i32.part03 tokens.i32.part04 tokens.i32.part05 tokens.i32.part06 manifest.json
 models/SmolLM2-360M	HOME/models/SmolLM2-360M	config.json generation_config.json model.safetensors tokenizer.json tokenizer_config.json special_tokens_map.json
 opponents/trees-linux-x86_64-cp311	HOME/opponent-wheels/trees-linux-x86_64-cp311	@file
 opponents/rapids-linux-x86_64-cp311	HOME/opponent-wheels/rapids-linux-x86_64-cp311	@file

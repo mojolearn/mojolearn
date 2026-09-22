@@ -1,0 +1,51 @@
+{
+ "schema": "mojolearn.lm-segment.run.v1",
+ "route": "A",
+ "segment": "1",
+ "label": "m4-a",
+ "from_checkpoint": {
+  "file": "ckpt_00000000.blm",
+  "sha256": "eb50db22b1640a9baa29a6baf912eae9dc0b47ecc54ae5290050a3d1ac4d3b54",
+  "step": 0
+ },
+ "first_step": 0,
+ "last_step": 4,
+ "devices": [
+  0
+ ],
+ "logical_shards": 4,
+ "recipe_sha256": "8ffada5676d9a831c8a1ac7bd0bcf7c2bcb8d7ee5d03eef61ed753345b584e4d",
+ "tokens_sha256": "2ad0c690bc4438d5ddab5cb481c4b247ba61b7dd3d841a3d7c0a7d0f94b2c253",
+ "box": {
+  "host": "Mac",
+  "machine": "arm64",
+  "system": "Darwin",
+  "python": "3.14.7"
+ },
+ "commit": "6471822acbeebf6e3fa6e66025891eed4023e72e",
+ "zero_moments": false,
+ "expect_chain": null,
+ "checkpoints": [
+  {
+   "step": 2,
+   "file": "ckpt_00000002.blm",
+   "bytes": 38822695,
+   "sha256": "266d1acf59d9e568fdd1624a0d2986191021cd4570ddf06e3ac54af43955a745",
+   "save_seconds": 0.044
+  },
+  {
+   "step": 4,
+   "file": "ckpt_00000004.blm",
+   "bytes": 38822695,
+   "sha256": "fdd04a26b581c29a2f21b59e342e21bd5749b2f428a3aea75cd63a374597e61a",
+   "save_seconds": 0.044
+  }
+ ],
+ "utc_start": "2026-09-22T20:36:39Z",
+ "verdict": "PASS",
+ "disagreements": [],
+ "steps_completed": 4,
+ "last_completed": 4,
+ "utc_end": "2026-09-22T20:36:41Z",
+ "uploads": []
+}

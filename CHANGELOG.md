@@ -2,6 +2,16 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
+## Unreleased
+
+### Added
+- `tools/lm_segment.py`: one segment of a checkpoint-to-checkpoint language-model run on any box. A recipe (shape, K shards, optimizer, a learning-rate table of float32 bits, the token stream's identity) never changes between segments; steps are numbered globally; every step writes a hash-chained line (state, summed gradient, losses, learning-rate bits); checkpoints stream in the `mojolearn.byte-lm-stream.v1` format on a cadence, at a boundary minus two and at the end, pinned in a manifest and PUT to presigned URLs as written; `--expect-chain` holds a run to another run's chain step for step and stops on the first difference (route B against route A, an arrival replay against the sender); `--zero-moments` is the negative control; `compare` and `manifests` hold chains and checkpoints across runs. Verified on the M4 at a small shape: three segments, a second route from the first route's checkpoints, an arrival replay, the control failing and a wrong recipe refused.
+- `ParallelByteLanguageModelTrainer.set_lr` (native `byte_lm_parallel_set_lr`): the learning rate every replica uses at its next update, for a per-step schedule; held bit for bit equal to a fresh open at that rate. `export_raw`: the four state arrays without the per-element admission pass, for hashing and checkpoints at scale.
+- `mojolearn.cross_vendor` chained protocol (`--chained`): contiguous shard blocks, one gradient per worker on the wire instead of one per shard, the same bits as the gathered fold and the one-process column; `ordered_fold(..., prefix=)` and `fold_pair` with a vectorized NumPy spelling held equal to the pure-Python one; `Worker(lr_for_step=)`.
+- `tools/fineweb_tokens.py`: FineWeb-Edu parquet shards (or `fineweb_text.py` text) to one pinned `mojolearn.byte-lm.tokens.v1` stream through the pinned vocabulary, one document per row, streamed, with a held-out tail range.
+- The GPT-3 Small run's token stream is in the R2 dataset store: FineWeb-Edu shards 000 to 003 and 013 through the pinned vocabulary, 3.11B ids in seven pinned parts, produced byte-identically on three CPUs (`bench/results/fineweb_tokens_2026-09-22`).
+- `tools/gemm_remote_leg.sh` and `tools/do_extra_leg.sh` take `--segment-lease N --dollar-cap USD`: a lease above one hour, named, and refused unless its worst case at the box's own hourly price is under the cap (RunPod: `costPerHr` after the create, the pod terminated on refusal; DigitalOcean: `price_hourly` from the sizes API before the create). `--minutes` above 60 stays refused.
+
 ## 0.8.14 (published 2026-09-22)
 
 ### Changed

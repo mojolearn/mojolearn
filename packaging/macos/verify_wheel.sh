@@ -84,7 +84,8 @@ for py in python3.10 python3.11 python3.12 python3.13 python3.14; do
     if ! "$tmp/venv/bin/pip" install --quiet 'numpy>=1.24'; then
         echo "FAIL $py: reference-test dependency installation"; okmode=0
     fi
-    if [ "${MOJOLEARN_PACKAGE_BYTE_LM:-0}" = 1 ]; then
+    # Release profile by default, like build_release_wheel.sh (2026-09-22).
+    if [ "${MOJOLEARN_PACKAGE_BYTE_LM:-1}" = 1 ]; then
         # Availability plus bounded generalized/resident native execution.
         if (cd "$tmp" && env -u PYTHONPATH -u PYTHONHOME MOJOLEARN_NUMERIC_MODE=identical \
                 "$tmp/venv/bin/python" - <<'PYBYTE'

@@ -349,6 +349,17 @@ for that segment. The run still completes.
 Ranked. None is large; the point is that it is seven things and not one.
 E1 to E5 are Python-side and are proven locally in T0 before any rental.
 
+**Status 2026-09-22 (built the same day, verified on the M4 at the small
+shape, owed at the target shape in T1):** E1 `tools/lm_segment.py`; E2
+`ParallelByteLanguageModelTrainer.set_lr` over a new native
+`byte_lm_parallel_set_lr` (held equal to a fresh open at that rate); E3
+`tools/fineweb_tokens.py` (17.7 MB/s encode on the M4, so 13 GB of text is
+about 12 minutes); E4 `--segment-lease N --dollar-cap USD` on
+`tools/gemm_remote_leg.sh` and `tools/do_extra_leg.sh`; E5 the chained fold
+in `mojolearn.cross_vendor`. Evidence in
+`bench/results/lm_segment_t0_2026-09-22/`. E6 and E7 are rentals and are not
+started.
+
 - **E1. A segment runner** (`tools/lm_segment.py`). Start from a checkpoint or
   the seed, run S optimizer steps of K shards on N devices of one box with
   `ParallelByteLanguageModelTrainer`, write the hash chain every step, push a

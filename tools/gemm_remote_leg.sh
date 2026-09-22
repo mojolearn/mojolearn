@@ -671,6 +671,19 @@ VENDOR=""
 MODE="dry"
 MINUTES="${MOJOLEARN_GEMM_LEG_MINUTES:-60}"
 MINUTES_CAP=60
+# THE SEGMENT LEASE (docs/GPT3_SMALL_SIX_SEGMENT_PLAN.md, E4). A training
+# segment is 6 to 40 hours, and the one-hour cap above is right for a
+# verification leg and wrong for it. `--segment-lease N --dollar-cap USD`
+# names a lease above one hour BY NAME and binds it to a dollar figure:
+# after the create, the pod's costPerHr is read from the API and the lease
+# is refused (and the pod terminated) if N/60 * costPerHr exceeds the cap.
+# Both flags together, never one; --minutes and --segment-lease never
+# together; 2880 minutes (48 hours) is the ceiling. Nothing else changes:
+# the on-pod watchdog, the local dead-man and the work bound all scale
+# with MINUTES already.
+SEGMENT_LEASE=""
+DOLLAR_CAP=""
+SEGMENT_CAP_MINUTES=2880
 GPU_ID=""
 IMAGE=""
 SSH_TARGET=""
@@ -716,6 +729,7 @@ leg_usage() {
     sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'
     echo
     echo "options: --rent --dry-run --minutes N --gpu ID --image REF"
+    echo "         --segment-lease N --dollar-cap USD   (a lease above one hour, priced at the pod's costPerHr)"
     echo "         --ssh TARGET --local-card PATH --column-sweep"
     echo "         --ready-timeout SECONDS"
     echo "         --payload gemm|phase8|speed|mamba"
@@ -794,6 +808,8 @@ while [ $# -gt 0 ]; do
         --rent)          MODE="rent" ;;
         --dry-run)       MODE="dry" ;;
         --minutes)       shift; MINUTES="${1:-}" ;;
+        --segment-lease) shift; SEGMENT_LEASE="${1:-}" ;;
+        --dollar-cap)    shift; DOLLAR_CAP="${1:-}" ;;
         --gpu)           shift; GPU_ID="${1:-}" ;;
         --image)         shift; IMAGE="${1:-}" ;;
         --ssh)           shift; SSH_TARGET="${1:-}" ;;
@@ -838,6 +854,26 @@ done
 
 if [ "$MODE" != "reap" ]; then
     [ -n "$VENDOR" ] || { echo "gemm_remote_leg: no vendor given." >&2; leg_usage >&2; exit 2; }
+fi
+
+# THE SEGMENT LEASE, resolved before the cap check so that a named long lease
+# passes it and an unnamed one does not.
+if [ -n "$SEGMENT_LEASE" ] || [ -n "$DOLLAR_CAP" ]; then
+    [ -n "$SEGMENT_LEASE" ] && [ -n "$DOLLAR_CAP" ] || \
+        leg_die "gemm_remote_leg: --segment-lease and --dollar-cap go together; one without the other is refused."
+    [ "$MINUTES" = "${MOJOLEARN_GEMM_LEG_MINUTES:-60}" ] || \
+        leg_die "gemm_remote_leg: --minutes and --segment-lease are two ways to say one thing; give one."
+    case "$SEGMENT_LEASE" in
+        ''|*[!0-9]*) leg_die "gemm_remote_leg: --segment-lease must be whole minutes, got '$SEGMENT_LEASE'." ;;
+    esac
+    case "$DOLLAR_CAP" in
+        ''|*[!0-9.]*|.|*.*.*) leg_die "gemm_remote_leg: --dollar-cap must be a dollar figure like 120 or 47.50, got '$DOLLAR_CAP'." ;;
+    esac
+    if [ "$SEGMENT_LEASE" -le 60 ] || [ "$SEGMENT_LEASE" -gt "$SEGMENT_CAP_MINUTES" ]; then
+        leg_die "gemm_remote_leg: --segment-lease is for leases ABOVE one hour and at most $SEGMENT_CAP_MINUTES minutes (48 h); got $SEGMENT_LEASE. Under an hour, use --minutes."
+    fi
+    MINUTES="$SEGMENT_LEASE"
+    MINUTES_CAP="$SEGMENT_CAP_MINUTES"
 fi
 
 # THE HARD CAP IS CHECKED BEFORE ANYTHING ELSE, including before the key, so
@@ -2670,6 +2706,32 @@ Path(output).write_text(json.dumps(request, indent=2) + "\n")
 PY_CREATE_REQUEST
 }
 
+# A SEGMENT LEASE IS BOUND TO A DOLLAR FIGURE AT THE POD'S OWN PRICE. The
+# create response (or a GET of the pod) carries costPerHr; a lease whose
+# worst case exceeds --dollar-cap is refused here, and the EXIT trap
+# terminates the pod, before the guard is armed and before any work.
+leg_segment_price_check() {
+    [ -n "$SEGMENT_LEASE" ] || return 0
+    COST_PER_HR=$(rp_json "d.get('costPerHr') or (d.get('pod') or {}).get('costPerHr') or ''")
+    if [ -z "$COST_PER_HR" ]; then
+        rp_call GET "$RP_PODS_PATH/$POD_ID"
+        COST_PER_HR=$(rp_json "d.get('costPerHr') or (d.get('pod') or {}).get('costPerHr') or ''")
+    fi
+    [ -n "$COST_PER_HR" ] || leg_die "segment lease: the API did not report costPerHr for $POD_ID; a lease of $MINUTES minutes cannot be priced, so it is refused and the pod is terminated."
+    MAX_COST=$("$PY" -c "import sys; print('%.2f' % (float(sys.argv[1]) * int(sys.argv[2]) / 60.0))" "$COST_PER_HR" "$MINUTES")
+    _over=$("$PY" -c "import sys; print(1 if float(sys.argv[1]) > float(sys.argv[2]) else 0)" "$MAX_COST" "$DOLLAR_CAP")
+    if [ "$_over" = 1 ]; then
+        leg_die "segment lease REFUSED: $MINUTES minutes at \$$COST_PER_HR/h is up to \$$MAX_COST, above the --dollar-cap of \$$DOLLAR_CAP. The pod is terminated."
+    fi
+    leg_say "segment lease: $MINUTES minutes at \$$COST_PER_HR/h is at most \$$MAX_COST, under the cap of \$$DOLLAR_CAP"
+    {
+        echo "segment_lease=$MINUTES"
+        echo "dollar_cap=$DOLLAR_CAP"
+        echo "cost_per_hr=$COST_PER_HR"
+        echo "max_cost=$MAX_COST"
+    } >> "$OUT/leg.txt"
+}
+
 leg_create_pod() {
     # THE INTERLOCK. The dry run spawns children of this script to exercise
     # its refusal paths; not one of them may reach a paid call even if the
@@ -2715,6 +2777,7 @@ leg_create_pod() {
     fi
     leg_say "pod $POD_ID created"
     echo "$POD_ID" > "$OUT/pod_id.txt"
+    leg_segment_price_check
     # HAND THE ID TO THE DEAD-MAN. Without it the dead-man falls back to a
     # by-name listing, which needs the API to answer at the moment it fires;
     # an id it already holds needs nothing but the DELETE.
@@ -5954,6 +6017,7 @@ COMMIT_LINE=$(git log -1 --format='%h parent %p' "$COMMIT" -- 2>/dev/null || ech
     echo "gpu_count=${MOJOLEARN_GEMM_LEG_GPU_COUNT:-1}"
     echo "image=$IMAGE"
     echo "minutes=$MINUTES"
+    if [ -n "$SEGMENT_LEASE" ]; then echo "segment_lease_requested=$SEGMENT_LEASE"; echo "dollar_cap_requested=$DOLLAR_CAP"; fi
     echo "mode=$MODE"
     echo "card_full=${CARD_FULL:-<unset>}"
     echo "trace_dump=${LEG_DUMP:-<unset>}"

@@ -8,7 +8,7 @@ identity requires cloud qualification; this module alone is not evidence.
 """
 import threading
 
-from ._byte_lm_impl import SmallByteLanguageModelTrainer, _array, _validate_state
+from ._byte_lm_impl import SmallByteLanguageModelTrainer, _array, _float32, _validate_state
 from ._byte_lm_config import state_shape
 from ._buffer import addr, addr_ro, empty
 
@@ -134,6 +134,49 @@ class ParallelByteLanguageModelTrainer:
             if step != self.step_:
                 raise RuntimeError('parallel export returned wrong step')
             return _validate_state(state)
+
+    def export_raw(self, *, rank=0):
+        """The four state arrays of one replica, freshly downloaded, as
+        `{'parameters', 'm', 'v', 'flags'}` with NO admission pass. For
+        hashing and streaming a checkpoint at scale: `state_dict()` runs
+        `_validate_state`, whose per-element Python scan of `v` and `flags`
+        costs about 16 s at 162M parameters, which a per-step hash chain
+        cannot pay. What comes back is bytes for a digest or a file, not a
+        state that anything may train from; a restore still enters through
+        `_validate_state`."""
+        with self._lock:
+            self._open()
+            out = {key: empty((self._shape.n_total,), '<f4') for key in ('parameters', 'm', 'v')}
+            out['flags'] = empty((self._shape.n_tensors,), '<i4')
+            step = self._binding.byte_lm_parallel_export(self._session,
+                [addr(out[k], name=k) for k in ('parameters', 'm', 'v', 'flags')], rank, False)
+            if step != self.step_:
+                raise RuntimeError('parallel export returned wrong step')
+            return out
+
+    def set_lr(self, lr):
+        """Set the learning rate every replica uses at its NEXT update (a
+        per-step schedule computed on the host). The value is admitted as
+        float32 exactly as the constructor's `lr` is (finite, positive);
+        the native session applies it through `byte_lm_parallel_set_lr`
+        and returns the float32 bits it stored, which must be the bits
+        that were sent. The exported state's `config['lr']` follows, so a
+        checkpoint written after this call records the rate in effect."""
+        with self._lock:
+            value = _float32(lr, 'lr')
+            if value <= 0:
+                raise ValueError('Byte-LM requires lr > 0')
+            if self._session is not None:
+                setter = getattr(self._binding, 'byte_lm_parallel_set_lr', None)
+                if not callable(setter):
+                    raise RuntimeError('this byte-LM binary predates set_lr; rebuild bindings/build_byte_lm.sh')
+                import struct
+                stored = int(setter(self._session, value))
+                (want,) = struct.unpack('<I', struct.pack('<f', value))
+                if stored != want:
+                    raise RuntimeError('byte_lm_parallel_set_lr stored 0x%08x, sent 0x%08x' % (stored, want))
+            self._state['config'] = dict(self._state['config'], lr=value)
+            return value
 
     def export_gradients(self, *, rank=0):
         with self._lock:

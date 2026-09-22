@@ -1,0 +1,19 @@
+2200 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x182580000000, nodemask=2)
+[20:04:15] segment: route A segment t1-two label nvidia-two, global steps 0..3, K=64, devices (0, 1), from ckpt_00000000.blm (sha256 5871ef0f4cea5499)
+2200 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x534740000000, nodemask=1)
+2200 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x534780000000, nodemask=1)
+2200 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5347c0000000, nodemask=1)
+2200 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x534800000000, nodemask=1)
+2200 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x534840000000, nodemask=1)
+2200 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x534880000000, nodemask=1)
+2200 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5348c0000000, nodemask=1)
+2200 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x534900000000, nodemask=1)
+2200 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x534940000000, nodemask=1)
+[20:05:00] step 1 lr 399d4952 loss 10.9871 state d333b045e1141e0d grad 36aea7967b8b4d03 30.68 s (+7.60 s hashing)
+[20:05:00] step 1 agrees with the expected chain
+[20:05:28] step 2 lr 3a1d4952 loss 10.3414 state 094b4e5a70d9609e grad 298642639276b309 20.18 s (+7.78 s hashing)
+[20:05:28] step 2 agrees with the expected chain
+2200 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x534980000000, nodemask=1)
+[20:05:56] step 3 lr 3a17e610 loss 25.7737 state 6a408d480a1775c9 grad 086dc5eff1309b3c 20.18 s (+7.59 s hashing)
+[20:05:56] step 3 agrees with the expected chain
+[20:05:56] PASS: /root/gemm_leg_out/lm-t1-nvidia/two

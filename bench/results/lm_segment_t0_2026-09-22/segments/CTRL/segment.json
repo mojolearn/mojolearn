@@ -1,0 +1,49 @@
+{
+ "schema": "mojolearn.lm-segment.run.v1",
+ "route": "B",
+ "segment": "control",
+ "label": "m4-b",
+ "from_checkpoint": {
+  "file": "ckpt_00000002.blm",
+  "sha256": "266d1acf59d9e568fdd1624a0d2986191021cd4570ddf06e3ac54af43955a745",
+  "step": 2
+ },
+ "first_step": 2,
+ "last_step": 4,
+ "devices": [
+  0
+ ],
+ "logical_shards": 4,
+ "recipe_sha256": "8ffada5676d9a831c8a1ac7bd0bcf7c2bcb8d7ee5d03eef61ed753345b584e4d",
+ "tokens_sha256": "2ad0c690bc4438d5ddab5cb481c4b247ba61b7dd3d841a3d7c0a7d0f94b2c253",
+ "box": {
+  "host": "Mac",
+  "machine": "arm64",
+  "system": "Darwin",
+  "python": "3.14.7"
+ },
+ "commit": "6471822acbeebf6e3fa6e66025891eed4023e72e",
+ "zero_moments": true,
+ "expect_chain": "<scratchpad>/seg/A1/chain.jsonl",
+ "checkpoints": [],
+ "utc_start": "2026-09-22T20:36:50Z",
+ "verdict": "FAIL",
+ "disagreements": [
+  {
+   "step": 3,
+   "fields": [
+    "state_sha256"
+   ],
+   "expected": {
+    "state_sha256": "dc72cca6b373754e46aed15039592887bfa64f67b5b84a0ef613ae2b941cfe08"
+   },
+   "got": {
+    "state_sha256": "235733174042c5bffe814a18844938d971b4dfa3721fef6e93b33f114b28c51c"
+   }
+  }
+ ],
+ "steps_completed": 1,
+ "last_completed": 3,
+ "utc_end": "2026-09-22T20:36:51Z",
+ "uploads": []
+}

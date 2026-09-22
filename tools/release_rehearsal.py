@@ -92,7 +92,9 @@ def steps(work):
                                 "--source-ref", head, "--gpu", "NVIDIA H100 80GB HBM3",
                                 "--allow-concurrent", "--minutes", "60"],
          dict(MOJOLEARN_NVIDIA_CAMPAIGN="7", MOJOLEARN_GPU_ARCHS="sm_90a")),
-        ("amd-leg-dry-run", ["bash", "tools/do_release061_leg.sh", head, token], None),
+        # The real AMD leg runs in the pinned Ubuntu 22.04 container; dry-run that.
+        ("amd-leg-dry-run", ["bash", "tools/do_release061_leg.sh", head, token],
+         dict(MOJOLEARN_RELEASE_UBUNTU22="1")),
     ]
 
 

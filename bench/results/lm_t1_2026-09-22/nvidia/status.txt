@@ -1,0 +1,16 @@
+19:55:32 arm=nvidia devices=0,1 started=2026-09-22T19:55:32Z
+19:55:32 gpu_archs=sm_90a
+19:56:35 build base exit=0 secs=63
+19:58:56 build byte_lm exit=0 secs=141
+19:58:57 binding: vendor cuda set_lr True
+19:58:57 tokens=/root/mojolearn-evidence/tokenized-corpus-sep18/lmcache/tokens/2b49720ec4d78c3c-3d547b17821cf465-d1048576
+19:58:58 recipe exit=0
+19:59:08 init exit=0 secs=10: wrote /root/gemm_leg_out/lm-t1-nvidia/ckpt_00000000.blm: step 0, 162147840 parameters, init sha256 0e36d8d036d8c4cf, file sha256 5871ef0f4cea5499, numpy 2.5.2
+20:04:11 one exit=0 secs=303
+[20:04:10] PASS: /root/gemm_leg_out/lm-t1-nvidia/one
+20:05:57 two exit=0 secs=106
+[20:05:56] PASS: /root/gemm_leg_out/lm-t1-nvidia/two
+20:07:52 replay exit=0 secs=115
+[20:07:52] PASS: /root/gemm_leg_out/lm-t1-nvidia/replay
+20:08:37 upload seed exit=0
+20:08:55 finished=2026-09-22T20:08:55Z

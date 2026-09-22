@@ -1,0 +1,138 @@
+{
+ "schema": "mojolearn.live-xvendor.v1",
+ "rows": [
+  {
+   "step": 1,
+   "losses": [
+    6.226090908050537,
+    6.235705852508545,
+    6.239563941955566,
+    6.2431254386901855
+   ],
+   "state": "9932e700be7baf9c060c68e45baa2c1c376cadef7dde6f12172ba30678236d9f",
+   "workers": {
+    "local-0": "9932e700be7baf9c060c68e45baa2c1c376cadef7dde6f12172ba30678236d9f",
+    "local-1": "9932e700be7baf9c060c68e45baa2c1c376cadef7dde6f12172ba30678236d9f"
+   },
+   "vendors": {
+    "local-0": "metal",
+    "local-1": "metal"
+   },
+   "total_sha256": "6c519fe1a6c472447924d254fff534feeedd88f7f84174df0327064a4507f26e",
+   "protocol": "chained"
+  },
+  {
+   "step": 2,
+   "losses": [
+    6.2413835525512695,
+    6.238659858703613,
+    6.251552581787109,
+    6.24491024017334
+   ],
+   "state": "ddb92404d62a16e1cc360695058e531b24a8c6c1fa42a3ad3c7c891ca2a97ad8",
+   "workers": {
+    "local-0": "ddb92404d62a16e1cc360695058e531b24a8c6c1fa42a3ad3c7c891ca2a97ad8",
+    "local-1": "ddb92404d62a16e1cc360695058e531b24a8c6c1fa42a3ad3c7c891ca2a97ad8"
+   },
+   "vendors": {
+    "local-0": "metal",
+    "local-1": "metal"
+   },
+   "total_sha256": "871b5de0c3563762be4f939238eb1c3be9d2df8d1e11810bef4ceab86edfb5a7",
+   "protocol": "chained"
+  },
+  {
+   "step": 3,
+   "losses": [
+    6.242847919464111,
+    6.243628025054932,
+    6.251028060913086,
+    6.249773025512695
+   ],
+   "state": "c4e8c600747c8d4734121e71f84f7e64fd485ca42f6a456ebaec05af239de766",
+   "workers": {
+    "local-0": "c4e8c600747c8d4734121e71f84f7e64fd485ca42f6a456ebaec05af239de766",
+    "local-1": "c4e8c600747c8d4734121e71f84f7e64fd485ca42f6a456ebaec05af239de766"
+   },
+   "vendors": {
+    "local-0": "metal",
+    "local-1": "metal"
+   },
+   "total_sha256": "39ea9d1c33b5a7e091a8a49d8ba9e1a45f0568b556927c78dfb98fbb35dfcadd",
+   "protocol": "chained"
+  },
+  {
+   "step": 4,
+   "losses": [
+    6.243257522583008,
+    6.250931739807129,
+    6.2336602210998535,
+    6.2332000732421875
+   ],
+   "state": "52c78ce6847ae49cbd32f86333a02c627b7231dedfe157cd67392dcae74397a8",
+   "workers": {
+    "local-0": "52c78ce6847ae49cbd32f86333a02c627b7231dedfe157cd67392dcae74397a8",
+    "local-1": "52c78ce6847ae49cbd32f86333a02c627b7231dedfe157cd67392dcae74397a8"
+   },
+   "vendors": {
+    "local-0": "metal",
+    "local-1": "metal"
+   },
+   "total_sha256": "d6e2923614979062125bd27e8a6ef07140fe82839151b7f0333dbe51b244162b",
+   "protocol": "chained"
+  },
+  {
+   "step": 5,
+   "losses": [
+    6.237212181091309,
+    6.233180999755859,
+    6.246124267578125,
+    6.2283759117126465
+   ],
+   "state": "c3546a777d6e628f88486c696aa41be9b959d99a9d1ee20f91fe86bb083b6d12",
+   "workers": {
+    "local-0": "c3546a777d6e628f88486c696aa41be9b959d99a9d1ee20f91fe86bb083b6d12",
+    "local-1": "c3546a777d6e628f88486c696aa41be9b959d99a9d1ee20f91fe86bb083b6d12"
+   },
+   "vendors": {
+    "local-0": "metal",
+    "local-1": "metal"
+   },
+   "total_sha256": "1a0a297b3804243e97638498ae25956128ec7fdd2bb72e1b3068a2424922f545",
+   "protocol": "chained"
+  },
+  {
+   "step": 6,
+   "losses": [
+    6.238434314727783,
+    6.2257771492004395,
+    6.247117042541504,
+    6.238979339599609
+   ],
+   "state": "0abc34974e913d929d64dc78c87b442b30b88c8ef1567474a312e05641fb18bb",
+   "workers": {
+    "local-0": "0abc34974e913d929d64dc78c87b442b30b88c8ef1567474a312e05641fb18bb",
+    "local-1": "0abc34974e913d929d64dc78c87b442b30b88c8ef1567474a312e05641fb18bb"
+   },
+   "vendors": {
+    "local-0": "metal",
+    "local-1": "metal"
+   },
+   "total_sha256": "18e434ba2c8f811705cba5a85e14a65b63e57e21689202cf35484187549860ea",
+   "protocol": "chained"
+  }
+ ],
+ "workers": 2,
+ "local": true,
+ "split": [
+  [
+   0,
+   1
+  ],
+  [
+   2,
+   3
+  ]
+ ],
+ "chained": true
+}

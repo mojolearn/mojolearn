@@ -23,7 +23,9 @@ esac
 # pack_wheel.py refuses the wheel if any host binding differs across legs.
 JOBS=${MOJOLEARN_BUILD_JOBS:-4}
 [[ "$JOBS" =~ ^[1-9][0-9]?$ && "$JOBS" -le 16 ]] || { echo 'MOJOLEARN_BUILD_JOBS must be 1..16' >&2; exit 2; }
-[[ ${MOJOLEARN_EXPECT_CORE_HOST_SHA256:-} =~ ^[0-9a-f]{64}$ ]] || { echo 'Expected NVIDIA core-host SHA256 required' >&2; exit 2; }
+# The core host probe is advisory (pack_wheel.py compares every host binding
+# across legs): `skip` lets this leg start before the NVIDIA legs finish.
+[[ ${MOJOLEARN_EXPECT_CORE_HOST_SHA256:-} =~ ^([0-9a-f]{64}|skip)$ ]] || { echo 'MOJOLEARN_EXPECT_CORE_HOST_SHA256 must be the STAGED NVIDIA set copy digest or skip' >&2; exit 2; }
 cores=$(python3 -c 'import os, sys; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:2 * int(sys.argv[1])])))' "$JOBS")
 [[ -n "$cores" ]] || { echo 'Empty CPU affinity' >&2; exit 2; }
 ncpus=$(awk -F, '{print NF}' <<< "$cores")
@@ -54,6 +56,11 @@ exec docker run --rm --pull=never --cpuset-cpus "$cores" --cpus "$ncpus" --memor
         # A small real binding proves the complete compiler/linker/stager
         # combination agrees with NVIDIA before spending a full build lease.
         probe=/root/release-toolchain-probe
+        start=$(date +%s)
+        if [[ "$MOJOLEARN_EXPECT_CORE_HOST_SHA256" = skip ]]; then
+          echo "core_host_probe=skipped (compared at pack time)"
+          exec bash tools/release061_remote_build.sh "$@"
+        fi
         [[ ! -e "$probe" ]]
         mkdir "$probe"
         start=$(date +%s)

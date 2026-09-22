@@ -1,0 +1,17 @@
+run=run1
+started=2026-09-22T19:54:04Z
+commit=69dce42467d7396bbad0046c1324883df13c0c48
+cpu=AMD EPYC 7702P 64-Core Processor
+vocab=/root/mojolearn-evidence/gpt3-small-vocab-sep21/m4-shard000/vocab.ranks.tsv
+shards_dir=/root/mojolearn-wt/gpt3-tooling/training/corpus/fineweb-edu-10BT
+pip_install_exit=0
+tokens_exit=0 seconds=1082
+wrote /root/tokens/tokens.i32: 3098101 documents, 3110556447 tokens (4.75 bytes/token), train [0, 2926502182), sha256 4cf7181ba71058e7, 1081.4 s (20.770 MB/s encode)
+4cf7181ba71058e70d7329dbae32de53c5750b49ae95331cebde4676f922209d  /root/tokens/tokens.i32
+a35d1d86f39d92458c0213d166eca0d7ea9018d1d6cb5dc744cdd131d10000ba  /root/tokens/manifest.json
+total 12150616
+-rw-r--r-- 1 root root        3937 Sep 22 20:13 manifest.json
+-rw-r--r-- 1 root root 12442225788 Sep 22 20:13 tokens.i32
+upload_tokens_exit=22 seconds=0
+upload_manifest_exit=0
+finished=2026-09-22T20:14:31Z

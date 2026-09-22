@@ -29,12 +29,25 @@ state (parameters, m, v, flags) after the update; the coordinator refuses to
 go on, naming the workers, if any two differ. Workers must also start from
 the same state hash and together own every shard exactly once.
 
-WHAT IT IS NOT. Not a fast path: every step moves each shard's full
-gradient (4 bytes per parameter) to the coordinator and the total back, so it
-suits small models on a local network. No authentication or encryption: run
-it on a trusted network or through an ssh tunnel. Each worker drives one
-device with a replicated optimizer (`ParallelByteLanguageModelTrainer(state,
-devices=(d,), pool_optimizer=False)`).
+TWO WAYS TO MOVE THE BYTES. The GATHERED protocol (the default) has every
+worker send every shard's whole gradient (4 bytes per parameter) to the
+coordinator, which folds them all and sends the total back: K + W gradients
+on the wire per step, fine for a small model on a local network, 41 GB a
+step at 162M parameters and K = 64. The CHAINED protocol (`chained=True`)
+uses the fact that the fold is a LEFT fold: each worker owns a CONTIGUOUS
+block of shards in shard order; the first block's owner folds its own
+shards and sends that ONE prefix; the next owner continues the fold onto
+the prefix with its own shards, one at a time in order, and sends the
+result on; the last owner's result is the total, which the coordinator
+sends to every other worker. Bit for bit the flat fold a single GPU
+computes, and W + (W - 1) gradients on the wire per step instead of K + W:
+with two workers and the coordinator on the first owner's box, two
+gradients cross the wide-area link. A worker holds its block's gradients
+in host memory until its turn (`shards x 4 bytes x n_total`).
+
+No authentication or encryption: run it on a trusted network or through an
+ssh tunnel. Each worker drives one device with a replicated optimizer
+(`ParallelByteLanguageModelTrainer(state, devices=(d,), pool_optimizer=False)`).
 """
 import argparse
 import array
@@ -49,7 +62,7 @@ import time
 PROTOCOL = "mojolearn.cross-vendor.v1"
 _TINY = 2.0 ** -126  # smallest normal float32
 
-__all__ = ["ordered_fold", "state_hash", "Coordinator", "Worker", "CrossVendorMismatch", "PROTOCOL"]
+__all__ = ["ordered_fold", "fold_pair", "state_hash", "Coordinator", "Worker", "CrossVendorMismatch", "PROTOCOL"]
 
 
 class CrossVendorMismatch(RuntimeError):
@@ -72,31 +85,72 @@ def _flush(bits, i):
         bits[i] = b & _SIGN
 
 
-def ordered_fold(gradients):
-    """The device reduction, on the host: copy g[0], then
-    total = ftz(ftz(total) + ftz(g[k])) with one float32 rounding per add
+def fold_pair(total, shard, *, numpy=None):
+    """One step of the device reduction on the host:
+    ftz(ftz(total) + ftz(shard)) elementwise, one float32 rounding per add
     (training/byte_lm_parallel.mojo `_ordered_add_kernel`, fma(1, a, b)).
-    `gradients` is a sequence of float32 buffers in shard order; returns
-    bytes. Exact in pure Python: a float64 sum of two float32 values,
-    rounded once to float32 on the store, is the float32 sum
-    (53 >= 2*24 + 2). No NumPy and no platform math library."""
+    Both are float32 buffers of the same length; returns bytes.
+
+    Exact in pure Python: a float64 sum of two float32 values, rounded once
+    to float32 on the store, is the float32 sum (53 >= 2*24 + 2). With
+    NumPy installed the same arithmetic runs vectorized (a float32 add IS
+    one rounding, and ftz is bit masking); the two spellings are held equal
+    by `test_cross_vendor.py`. `numpy=False` forces the pure path."""
+    t, g = _f32(total), _f32(shard)
+    if len(t) != len(g):
+        raise ValueError("fold_pair: gradients differ in length")
+    np = None
+    if numpy is not False:
+        try:
+            import numpy as np
+        except ImportError:
+            np = None
+    if np is not None:
+        tb = np.frombuffer(bytes(t.cast("B")), dtype=np.uint32)
+        gb = np.frombuffer(bytes(g.cast("B")), dtype=np.uint32)
+
+        def ftz(b):
+            sub = ((b & _EXP) == 0) & ((b & _MAN) != 0)
+            return np.where(sub, b & np.uint32(_SIGN), b)
+        with np.errstate(over="ignore", invalid="ignore"):
+            out = ftz(tb).view(np.float32) + ftz(gb).view(np.float32)
+        return ftz(out.view(np.uint32)).tobytes()
+    n = len(t)
+    out = array.array("f", t)
+    sh = array.array("f", g)
+    obits = memoryview(out).cast("B").cast("I")
+    sbits = memoryview(sh).cast("B").cast("I")
+    for i in range(n):
+        _flush(obits, i)
+        _flush(sbits, i)
+        out[i] = out[i] + sh[i]
+        _flush(obits, i)
+    return out.tobytes()
+
+
+def ordered_fold(gradients, *, prefix=None, numpy=None):
+    """The device reduction, on the host: copy g[0] (or start from `prefix`,
+    an already folded run of the shards BEFORE these), then
+    total = fold_pair(total, g[k]) in shard order. `gradients` is a
+    sequence of float32 buffers in shard order; returns bytes. A left fold,
+    so folding a prefix and then the rest equals folding everything at
+    once; that is what lets the chained protocol move one gradient per
+    worker."""
     gradients = list(gradients)
-    if not gradients:
-        raise ValueError("ordered_fold needs at least one gradient")
-    n = len(_f32(gradients[0]))
-    if any(len(_f32(g)) != n for g in gradients):
+    if prefix is None:
+        if not gradients:
+            raise ValueError("ordered_fold needs at least one gradient")
+        total = bytes(_f32(gradients[0]).cast("B"))
+        rest = gradients[1:]
+    else:
+        total = bytes(_f32(prefix).cast("B"))
+        rest = gradients
+    n = len(_f32(total))
+    if any(len(_f32(g)) != n for g in rest):
         raise ValueError("ordered_fold: gradients differ in length")
-    total = array.array("f", _f32(gradients[0]))
-    tbits = memoryview(total).cast("B").cast("I")
-    for g in gradients[1:]:
-        shard = array.array("f", _f32(g))
-        sbits = memoryview(shard).cast("B").cast("I")
-        for i in range(n):
-            _flush(tbits, i)
-            _flush(sbits, i)
-            total[i] = total[i] + shard[i]
-            _flush(tbits, i)
-    return total.tobytes()
+    for g in rest:
+        total = fold_pair(total, g, numpy=numpy)
+    return total
 
 
 def state_hash(state):
@@ -105,6 +159,14 @@ def state_hash(state):
     for key in ("parameters", "m", "v", "flags"):
         h.update(memoryview(state[key]).cast("B"))
     return h.hexdigest()
+
+
+def trainer_state_hash(trainer):
+    """`state_hash` of a trainer's current replica, through `export_raw`
+    when the trainer has it (no per-element admission pass, which costs
+    about 16 s at 162M parameters) and `state_dict` otherwise."""
+    raw = getattr(trainer, "export_raw", None)
+    return state_hash(raw() if callable(raw) else trainer.state_dict())
 
 
 # ------------------------------------------------------------ framing
@@ -148,12 +210,14 @@ class Coordinator:
     different starting state or a disagreement after any step."""
 
     def __init__(self, *, port, workers, logical_shards, steps, host="0.0.0.0",
-                 on_step=None, timeout=3600.0, accept_timeout=3600.0, max_gradient_bytes=1 << 31):
+                 on_step=None, timeout=3600.0, accept_timeout=3600.0, max_gradient_bytes=1 << 31,
+                 chained=False):
         if workers < 1 or logical_shards < workers:
             raise ValueError("need 1 <= workers <= logical_shards")
         self.host, self.port, self.n_workers = host, port, workers
         self.K, self.steps, self.on_step = logical_shards, steps, on_step
         self.timeout, self.accept_timeout, self.max_bytes = timeout, accept_timeout, max_gradient_bytes
+        self.chained = bool(chained)
         self.peers = []
         self.bound_port = None
         self.ready = threading.Event()  # set once listening; `bound_port` is then the real port
@@ -195,23 +259,55 @@ class Coordinator:
             if len({json.dumps(p[key]) for p in self.peers}) != 1:
                 self._refuse("workers start from different %s: %s" % (key, {p["name"]: p[key] for p in self.peers}))
         n_total = int(self.peers[0]["n_total"])
+        if self.chained:
+            # Contiguous blocks in shard order, so that each worker's fold of
+            # its own shards is a run of the flat left fold.
+            self.peers.sort(key=lambda p: p["shards"][0])
+            for p in self.peers:
+                if p["shards"] != list(range(p["shards"][0], p["shards"][0] + len(p["shards"]))):
+                    self._refuse("chained fold: %s must own a contiguous block, got %s" % (p["name"], p["shards"]))
+            if any(not p.get("chained") for p in self.peers):
+                self._refuse("chained fold: every worker must be started with chained=True")
         rows = []
         for step in range(int(self.peers[0]["completed"]), self.steps):
             for p in self.peers:
-                _send(p["sock"], {"cmd": "step", "step": step})
+                _send(p["sock"], {"cmd": "step", "step": step, "chained": self.chained})
             grads, losses = {}, {}
-            for p in self.peers:
-                head, payload = _recv(p["sock"], len(p["shards"]) * n_total * 4)
-                if head.get("step") != step or head.get("shards") != p["shards"]:
-                    self._refuse("%s answered the wrong step or shards" % p["name"])
-                if len(payload) != len(p["shards"]) * n_total * 4:
-                    self._refuse("%s sent %d gradient bytes" % (p["name"], len(payload)))
-                for i, k in enumerate(p["shards"]):
-                    grads[k] = payload[i * n_total * 4:(i + 1) * n_total * 4]
-                    losses[k] = head["losses"][i]
-            total = ordered_fold(grads[k] for k in range(self.K))
-            for p in self.peers:
-                _send(p["sock"], {"cmd": "apply", "step": step}, total)
+            if self.chained:
+                for p in self.peers:
+                    head, _ = _recv(p["sock"], 0)
+                    if head.get("step") != step or head.get("shards") != p["shards"]:
+                        self._refuse("%s answered the wrong step or shards" % p["name"])
+                    for i, k in enumerate(p["shards"]):
+                        losses[k] = head["losses"][i]
+                prefix = b""
+                for p in self.peers:
+                    _send(p["sock"], {"cmd": "fold", "step": step}, prefix)
+                    head, prefix = _recv(p["sock"], n_total * 4)
+                    if head.get("step") != step or len(prefix) != n_total * 4:
+                        self._refuse("%s returned a wrong fold" % p["name"])
+                total = prefix
+                last = self.peers[-1]["name"]
+                all_losses = [losses[k] for k in range(self.K)]
+                for p in self.peers:
+                    # the last folder already holds the total; send it the hash only
+                    _send(p["sock"], {"cmd": "apply", "step": step, "total_sha256": hashlib.sha256(total).hexdigest(),
+                                      "losses": all_losses}, b"" if p["name"] == last else total)
+            else:
+                for p in self.peers:
+                    head, payload = _recv(p["sock"], len(p["shards"]) * n_total * 4)
+                    if head.get("step") != step or head.get("shards") != p["shards"]:
+                        self._refuse("%s answered the wrong step or shards" % p["name"])
+                    if len(payload) != len(p["shards"]) * n_total * 4:
+                        self._refuse("%s sent %d gradient bytes" % (p["name"], len(payload)))
+                    for i, k in enumerate(p["shards"]):
+                        grads[k] = payload[i * n_total * 4:(i + 1) * n_total * 4]
+                        losses[k] = head["losses"][i]
+                total = ordered_fold(grads[k] for k in range(self.K))
+                all_losses = [losses[k] for k in range(self.K)]
+                for p in self.peers:
+                    _send(p["sock"], {"cmd": "apply", "step": step, "total_sha256": hashlib.sha256(total).hexdigest(),
+                                      "losses": all_losses}, total)
             hashes = {}
             for p in self.peers:
                 head, _ = _recv(p["sock"], 0)
@@ -222,7 +318,8 @@ class Coordinator:
                 self._refuse("replicas disagree after step %d: %s" % (step + 1, hashes))
             row = dict(step=step + 1, losses=[losses[k] for k in range(self.K)],
                        state=next(iter(hashes.values())), workers=hashes,
-                       vendors={p["name"]: p.get("vendor") for p in self.peers})
+                       vendors={p["name"]: p.get("vendor") for p in self.peers},
+                       total_sha256=hashlib.sha256(total).hexdigest(), protocol="chained" if self.chained else "gathered")
             rows.append(row)
             if self.on_step:
                 self.on_step(row)
@@ -241,7 +338,8 @@ class Worker:
     tokens; it must be the same function on every worker."""
 
     def __init__(self, state=None, *, shards, batches, address, name=None, device=0,
-                 trainer=None, connect_timeout=600.0, timeout=3600.0):
+                 trainer=None, connect_timeout=600.0, timeout=3600.0, chained=False, lr_for_step=None,
+                 on_commit=None):
         if trainer is None:
             from .parallel_training import ParallelByteLanguageModelTrainer
             trainer = ParallelByteLanguageModelTrainer(state, devices=(device,), logical_shards=1,
@@ -249,6 +347,14 @@ class Worker:
         self.trainer, self.shards, self.batches = trainer, sorted(int(k) for k in shards), batches
         self.address, self.connect_timeout, self.timeout = tuple(address), connect_timeout, timeout
         self.name = name or socket.gethostname()
+        self.chained = bool(chained)
+        #: optional `lr_for_step(step) -> float`: the per-step learning rate
+        #: (a recipe's table), applied through `trainer.set_lr` before the update
+        self.lr_for_step = lr_for_step
+        #: optional `on_commit(step_completed, row)` after each applied step, with
+        #: the state hash, every shard's loss and the total's hash; the worker is
+        #: idle inside the call, so its trainer may be exported or checkpointed
+        self.on_commit = on_commit
 
     def _connect(self):
         deadline = time.monotonic() + self.connect_timeout
@@ -266,31 +372,57 @@ class Worker:
         """Serve until the coordinator says done; returns the steps committed."""
         from . import vendor
         tr = self.trainer
-        state = tr.state_dict()
+        raw = getattr(tr, "export_raw", None)
+        state = raw() if callable(raw) else tr.state_dict()
         n_total = len(memoryview(state["parameters"]).cast("B")) // 4
         sock = self._connect()
         committed = 0
+        held, total = [], None  # chained: this block's gradients until its turn, then the fold
         try:
             _send(sock, dict(protocol=PROTOCOL, name=self.name, vendor=vendor(), shards=self.shards,
-                             completed=tr.step_, state=state_hash(state), n_total=n_total))
+                             completed=tr.step_, state=state_hash(state), n_total=n_total, chained=self.chained))
             while True:
                 head, payload = _recv(sock, n_total * 4)
                 cmd = head.get("cmd")
                 if cmd == "step":
                     if head["step"] != tr.step_:
                         raise CrossVendorMismatch("%s is at step %d, asked for %d" % (self.name, tr.step_, head["step"]))
+                    if bool(head.get("chained")) != self.chained:
+                        raise CrossVendorMismatch("%s: coordinator and worker disagree on the protocol" % self.name)
+                    if self.lr_for_step is not None:
+                        tr.set_lr(self.lr_for_step(head["step"]))
                     losses, parts = [], []
                     for k in self.shards:
                         loss, g = tr.shard_gradient(self.batches(head["step"], k))
                         losses.append(loss)
                         parts.append(memoryview(g).cast("B").tobytes())
-                    _send(sock, {"step": head["step"], "shards": self.shards, "losses": losses}, b"".join(parts))
+                    if self.chained:
+                        held, total = parts, None
+                        _send(sock, {"step": head["step"], "shards": self.shards, "losses": losses})
+                    else:
+                        _send(sock, {"step": head["step"], "shards": self.shards, "losses": losses}, b"".join(parts))
+                elif cmd == "fold":
+                    if not self.chained or not held:
+                        raise CrossVendorMismatch("%s was asked to fold with nothing held" % self.name)
+                    total = ordered_fold(held, prefix=payload if payload else None)
+                    held = []
+                    _send(sock, {"step": head["step"]}, total)
                 elif cmd == "apply":
-                    if len(payload) != n_total * 4:
+                    if payload:
+                        total = payload
+                    if total is None or len(total) != n_total * 4:
                         raise CrossVendorMismatch("summed gradient has the wrong size")
-                    tr.apply_gradient(array.array("f", payload))
+                    want = head.get("total_sha256")
+                    if want is not None and hashlib.sha256(total).hexdigest() != want:
+                        raise CrossVendorMismatch("%s holds a total whose hash is not the coordinator's" % self.name)
+                    tr.apply_gradient(array.array("f", total))
+                    total = None
                     committed += 1
-                    _send(sock, {"completed": tr.step_, "state": state_hash(tr.state_dict())})
+                    digest = trainer_state_hash(tr)
+                    if self.on_commit is not None:
+                        self.on_commit(tr.step_, dict(step=tr.step_, state=digest, total_sha256=want,
+                                                      losses=head.get("losses")))
+                    _send(sock, {"completed": tr.step_, "state": digest})
                 elif cmd == "done":
                     return committed
                 elif cmd == "refuse":
@@ -313,6 +445,8 @@ def main(argv=None):
     c.add_argument("--shards", type=int, required=True, help="logical shards per step, K")
     c.add_argument("--steps", type=int, required=True, help="train until this many steps are complete")
     c.add_argument("--log", help="append one JSON line per agreed step")
+    c.add_argument("--chained", action="store_true",
+                   help="the chained fold: contiguous blocks, one gradient per worker on the wire")
     args = ap.parse_args(argv)
 
     def on_step(row):
@@ -323,7 +457,7 @@ def main(argv=None):
                 fh.write(line + "\n")
 
     rows = Coordinator(host=args.host, port=args.port, workers=args.workers, logical_shards=args.shards,
-                       steps=args.steps, on_step=on_step).run()
+                       steps=args.steps, on_step=on_step, chained=args.chained).run()
     print("AGREED on %d steps across %d workers" % (len(rows), args.workers))
     return 0
 

@@ -1,5 +1,45 @@
 # Release checklist
 
+## The one command
+
+```sh
+pixi run release <version> --dry-run          # the plan, every command, and what is already done
+pixi run release <version>                    # everything up to publication
+pixi run release <version> --publish pypi     # ... then publish both wheels, finish line, record
+```
+
+`tools/release.py` walks this whole checklist. Write the CHANGELOG entry
+(`## <version> (published YYYY-MM-DD)`, UTC) first; the command bumps the two
+version files, runs `write-docs-facts`, commits and pushes exactly those files,
+freezes HEAD, and then runs: the rehearsal (step 0); the three Linux build legs
+in parallel, detached (step 2, the AMD leg no longer waits for NVIDIA); the
+macOS wheel with the byte LM and host bindings on, four slots; the macOS smoke
+under the Metal lock; `release-check` (step 5b, the guarantee); a wait that
+checks every leg's proof for the frozen commit and names any host binding whose
+bytes differ across legs; pack, audit and strip under the `pkg` environment
+(step 3); the Linux smoke on one rented RTX 4090 (`tools/release_wheel_smoke.sh`);
+and, only with `--publish none|testpypi|pypi`, both publishes (step 5), the
+`pip install` finish line on this Mac and the
+`bench/results/release_verification/<date>_pypi_<v>/` record, committed and
+pushed.
+
+It is resumable: rerun the same command after any stop. State lives in
+`~/mojolearn-evidence/release/<version>/state.json`, and everything after the
+freeze in `<version>/<commit12>/` (legs, wheels, smoke receipts, logs). Each
+step checks its own output (a wheel of the frozen commit, a PASSED receipt for
+that wheel's sha256, complete release-check records, the file already on PyPI)
+and skips when it is there. A running build leg is never relaunched; a failed
+one is moved aside, never deleted, and relaunched. A new commit after the freeze
+refreezes and starts the post-freeze steps in a fresh directory, unless a wheel
+of the frozen commit is already published. `--only STEP[,STEP]` runs some steps,
+`--redo STEP` discards a step's record, `--amd-expect-from <NVIDIA release-build
+dir>` restores the AMD core-host probe, `--smoke-gpu` picks the Linux smoke GPU.
+The Linux build route is one function (`launch_linux_builds`, routes in
+`BUILD_BACKENDS`), so the CPU build box route plugs in as `--build-backend`.
+
+The numbered steps below are the same work by hand: the fallback when a step
+refuses and needs a person, and the reference for what each step runs.
+
 **Alpha Python/reference patch:** use the [bounded patch path](lanes/RELEASE_PROCESS_ALPHA.md#pythonreference-patches-with-unchanged-native-inputs). Reuse unchanged native binaries, check only affected numerical references, and smoke each exact final wheel. The broader native-build and certification steps below do not apply to every such patch.
 
 ## 0. Rehearse (by hand, before anything is rented)
@@ -110,13 +150,20 @@ REF=<40-hex commit>
 # AMD gfx942 on a DigitalOcean MI325X, built in the pinned Ubuntu 22.04 container.
 # The droplet image is Ubuntu 24.04 (GCC 13); built on the host, every host binding
 # differs from the NVIDIA legs' (Ubuntu 22.04, GCC 11) and step 3 refuses the wheel.
-# The container checks its core host binding against the NVIDIA one before compiling
-# (that probe stays one compiler), then builds MOJOLEARN_BUILD_JOBS extensions at a
-# time like the NVIDIA legs (default 4, 2 x jobs cores, 16 GiB per job).
+# It builds MOJOLEARN_BUILD_JOBS extensions at a time like the NVIDIA legs
+# (default 4, 2 x jobs cores, 16 GiB per job) and starts IN PARALLEL with them:
+# the core-host probe is skipped by default, because pack_wheel.py (step 3)
+# refuses any host binding whose bytes differ across the legs.
 # The output directory ~/mojolearn-evidence/releases/$REF/hip-gfx942/release-build
 # must not pre-exist.
-MOJOLEARN_RELEASE_UBUNTU22=1 MOJOLEARN_EXPECT_CORE_HOST_SHA256=<sha256 of an NVIDIA leg's host/_mojolearn_core_host.so> \
-  bash tools/do_release061_leg.sh $REF ~/.mojolearn_do_token --rent
+MOJOLEARN_RELEASE_UBUNTU22=1 bash tools/do_release061_leg.sh $REF ~/.mojolearn_do_token --rent
+# Optional, to fail two minutes in rather than at pack time when an NVIDIA leg
+# of $REF has already finished: derive the probe's digest from its STAGED set copy
+# (<leg>/remote/release-build/build/sets/cuda/<arch>/host/_mojolearn_core_host.so,
+# after patchelf). Never hash python/mojolearn/host/ on the pod: that unstaged
+# copy differs, and typing it cost 0.8.14 an MI325X rental.
+MOJOLEARN_RELEASE_UBUNTU22=1 bash tools/do_release061_leg.sh $REF ~/.mojolearn_do_token --rent \
+  --expect-from ~/mojolearn-evidence/e1g/<stamp>-nvidia-mamba
 # NVIDIA sm_90a (RunPod H100) and sm_89 (RunPod L40S), started 90 s apart
 MOJOLEARN_RUNPOD_KEY_FILE=~/.mojolearn_runpod_key MOJOLEARN_NVIDIA_CAMPAIGN=7 MOJOLEARN_GPU_ARCHS=sm_90a \
   sh tools/gemm_remote_leg.sh nvidia --payload mamba --source-ref $REF --gpu "NVIDIA H100 80GB HBM3" --allow-concurrent --rent --minutes 60
@@ -206,8 +253,12 @@ compiled it. `--no-bincache` builds everything from source.
 
 ## 3. Pack, audit, strip (on the Mac, docker, about 10 minutes)
 
+The packer needs `lief`, which only the `pkg` environment has; under the system
+`python3` it now re-executes itself there (or refuses up front without pixi).
+Pixi tasks run at the repository root, so give absolute paths.
+
 ```sh
-python3 packaging/linux/pack_wheel.py --profile release-linux3 \
+pixi run -e pkg pack-linux-wheel --profile release-linux3 \
   --set <sm89>/build/sets/cuda --set <sm90a>/build/sets/cuda --set <hip>/build/sets/hip \
   --build-proof <sm89>/build/build-provenance.json --build-proof <sm90a>/build/build-provenance.json \
   --build-proof <hip>/build/build-provenance.json --out <dist>
@@ -258,11 +309,31 @@ bash tools/release_linux_publish.sh <dist>/final/<wheel> alpha-api-<version>-<yy
 ```
 
 For bounded alpha publication, first run the existing expanded smoke on the
-**exact final wheel**, on a CUDA host for Linux or on this Mac for macOS:
+**exact final wheel**, on a CUDA host for Linux or on this Mac for macOS.
+
+Linux: one rented RTX 4090 (sm_89, which the wheel carries), nothing shipped but
+the wheel and `tools/qualify_verifier_wheel.py`, every transfer bounded, the pod
+deleted and verified gone on every exit. Without `--rent` it is a dry run;
+`--ssh '<target>'` runs it on a CUDA box you already have up.
 
 ```sh
-python3 tools/qualify_verifier_wheel.py <final-wheel> --scope expanded \
-  --expected-source-commit <40-hex commit> --output <fresh-smoke-dir>
+bash tools/release_wheel_smoke.sh <dist>/final/<wheel> --expected-source-commit <40-hex commit> \
+  --out <fresh-smoke-dir> --rent                      # writes <fresh-smoke-dir>/results.json
+```
+
+macOS: build the wheel (the release profile, byte LM and every host binding,
+is the default of `build_release_wheel.sh` since 0.8.14; `MOJOLEARN_PACKAGE_BYTE_LM=0`
+is an explicit opt-out that no release uses), then smoke it under the Metal lock:
+
+```sh
+python3 tools/mac_slot.py --slots 4 run -- ./packaging/macos/build_release_wheel.sh   # python/dist/*.whl
+python3 tools/mac_slot.py metal -- python3 tools/qualify_verifier_wheel.py python/dist/<wheel> \
+  --scope expanded --expected-source-commit <40-hex commit> --output <fresh-smoke-dir>
+```
+
+Then publish each wheel with its own receipt:
+
+```sh
 bash tools/release_linux_publish.sh <final-wheel> \
   alpha-api-<version>-<linux-or-macos>-<yyyymmdd> pypi <workdir> \
   --light-smoke <fresh-smoke-dir>/results.json
@@ -344,7 +415,12 @@ hang guard, run the same command again at the same commit: it prints
 route: 15 lanes x 3 fixtures in 14 s; killed at 6 s with 13 cells on disk,
 the rerun completed all 45.
 
-## 6. Publish macOS (on the release Mac)
+## 6. Publish macOS through the full workflow route (not the light route)
+
+The light route above builds and smokes the macOS wheel on this Mac and
+publishes it with `release_linux_publish.sh --light-smoke`; `pixi run release`
+does that. This section is the full-certification alternative, where the
+workflow builds the wheel on an ephemeral runner.
 
 The build job compiles four extensions at a time with one compiler worker
 each, and reuses from `~/.mojolearn-bincache/macos-release` every binding whose
