@@ -1642,6 +1642,14 @@ twine = "*"
 [feature.pkg.pypi-dependencies]
 lief = "==1.0.0"
 
+# The Linux pack step needs lief (packaging/portable_math), which lives in this
+# environment only; under the system python3 it used to fail after writing the
+# wheel (0.8.14). pack_wheel.py now re-executes itself here, but this is the
+# spelling the checklist uses:
+#   pixi run -e pkg pack-linux-wheel --profile release-linux3 --set ... --out <dist>
+[feature.pkg.tasks]
+pack-linux-wheel = "python packaging/linux/pack_wheel.py"
+
 # NVIDIA's gbm-bench harness (bench/external/), which needs pandas and
 # LightGBM on top of what `bench` has. A SEPARATE feature, not additions to
 # `bench`, for the same reason `skgpu` is: adding dependencies to `bench`

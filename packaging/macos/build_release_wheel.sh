@@ -99,8 +99,18 @@ EXT_NAMES="_mojolearn_gbdt _mojolearn_rf _mojolearn_trees"
 # identical contract, so the lower tiers were slower) and no longer matters.
 IDENTICAL_ONLY_SCRIPTS="build.sh build_estimators.sh build_svm.sh build_solver.sh build_metrics.sh build_preprocessing.sh build_tsa.sh build_linalg.sh build_arima.sh build_gp.sh build_training.sh build_mamba.sh build_transformer.sh build_kernel_methods.sh build_mixture.sh build_hdbscan.sh build_resample.sh build_ivf.sh build_embedding.sh"
 IDENTICAL_ONLY_NAMES="_mojolearn _mojolearn_estimators _mojolearn_svm _mojolearn_solver _mojolearn_metrics _mojolearn_preprocessing _mojolearn_tsa _mojolearn_linalg _mojolearn_arima _mojolearn_gp _mojolearn_training _mojolearn_mamba _mojolearn_transformer _mojolearn_kernel_methods _mojolearn_mixture _mojolearn_hdbscan _mojolearn_resample _mojolearn_ivf _mojolearn_embedding"
-PACKAGE_BYTE_LM=${MOJOLEARN_PACKAGE_BYTE_LM:-0}
+# THE RELEASE PROFILE IS THE DEFAULT (2026-09-22). Until 0.8.14 this read
+# ${MOJOLEARN_PACKAGE_BYTE_LM:-0}: only release-provenance.yml set it to 1, so
+# the checklist's local command built a wheel with ZERO host bindings and the
+# smoke failed on `host/_mojolearn_neural_host.so is not built`. A published
+# wheel always carries the byte LM and every host binding, so 1 is the
+# default; MOJOLEARN_PACKAGE_BYTE_LM=0 remains an explicit opt-out for a
+# legacy or bisect build. It is exported so verify_wheel.sh (run at the end)
+# checks the same profile this script built.
+PACKAGE_BYTE_LM=${MOJOLEARN_PACKAGE_BYTE_LM:-1}
 case "$PACKAGE_BYTE_LM" in 0|1) ;; *) echo 'MOJOLEARN_PACKAGE_BYTE_LM must be 0 or 1' >&2; exit 2 ;; esac
+export MOJOLEARN_PACKAGE_BYTE_LM="$PACKAGE_BYTE_LM"
+echo "== byte LM and host bindings: MOJOLEARN_PACKAGE_BYTE_LM=$PACKAGE_BYTE_LM"
 unset MOJOLEARN_BYTE_LM_OUTDIR
 # THE HOST (CPU) BINDINGS, one per family, under python/mojolearn/host/.
 # Since 0.8.6 (the packaging lane, 2026-09-14) every host family the manifest
