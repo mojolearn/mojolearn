@@ -23,6 +23,8 @@ them is fixed here; each needs a decision that is not this lane's to make.
      document whose carried commitment is the right value in the wrong type
      -- a one-element list, the shape this repo already has a rule about --
      skips the catch and reads `self-declared`, which is in `_COMMITMENT_OK`.
+     FIXED on main by c5d483301 (it now reads MALFORMED); section B below is
+     kept as a regression check that fails if the finding returns.
 
   C  `_identity.py` drops `--require-columns 4` when `--fixtures` narrows,
      and `_identity._judge`'s regexes match only the `infer` and `model`
@@ -154,37 +156,31 @@ def probe_commitment():
               + ("   PASSES" if state in ok_states else "   gates"))
 
     print()
-    print("   THE PUBLISHED PATH IS INTACT, and it is the primary mechanism:")
+    print("   FIXED ON MAIN (c5d483301, 2026-09-20): a carried commitment in the")
+    print("   wrong type now reads MALFORMED, which outranks every other state.")
+    for label, wrap in (("a one-element list", lambda s: [s]),
+                        ("null (a stripped field)", lambda s: None)):
+        t = json.loads(json.dumps(tampered))
+        t[REVEAL]["commitment"] = wrap(t[REVEAL]["commitment"])
+        state = commitment_state(t, None, "doc")["state"]
+        assert state not in ok_states, f"{label} passes again; finding B has regressed"
     t = json.loads(json.dumps(tampered))
     t[REVEAL]["commitment"] = [t[REVEAL]["commitment"]]
     honest = commitment_digest(sealed, sealed[REVEAL]["nonce"])
     st = commitment_state(t, honest, "doc")
     print(f"     with the original published commitment -> {st['state']!r}")
-    assert st["state"] == "MISMATCH", "the published check is dead too; this is worse than reported"
-    print("   So the loss is the FREE self-catch, which is the only one a")
-    print("   document with no published commitment ever gets.")
-    print("   `challenge_state` carries the identical guard.")
+    assert st["state"] not in ok_states, "the published check passes a wrong-type commitment"
 
-    print()
-    print("   AND IT GATES. `commitment_report` turns any state problem into")
-    print("   `broken`, which `--compare` reads at _verify_all.py:2581-2588:")
-    print("     elif commitment['broken']: 'COMMITMENT BROKEN', EXIT_MISMATCH")
     other = dict(doc)
     seal_document(other)
     rep_str = commitment_report(tampered, other, "A", "B", None, None)
-    t = json.loads(json.dumps(tampered))
-    t[REVEAL]["commitment"] = [t[REVEAL]["commitment"]]
     rep_list = commitment_report(t, other, "A", "B", None, None)
-    print(f"     carried commitment a STRING -> a.state "
-          f"{rep_str['a']['state']!r}, broken={rep_str['broken']}")
-    print(f"     carried commitment a LIST   -> a.state "
-          f"{rep_list['a']['state']!r}, broken={rep_list['broken']}")
+    print(f"     carried commitment a STRING -> broken={rep_str['broken']}")
+    print(f"     carried commitment a LIST   -> a.state {rep_list['a']['state']!r}, "
+          f"broken={rep_list['broken']}")
     assert rep_str["broken"] is True, "the control arm is broken"
-    assert rep_list["broken"] is False, "it gates after all; this finding is stale"
-    print("     STRING -> COMMITMENT BROKEN, exit 1.")
-    print("     LIST   -> falls through to the cell ladder; with cells that match,")
-    print("               that is AGREE, exit 0. A document edited after sealing")
-    print("               passes because its own commitment was the wrong type.")
+    assert rep_list["a"]["state"] not in ok_states, "finding B has regressed"
+    print("   B is a regression check now: every assertion here fails if it returns.")
 
 
 # --------------------------------------------------------------------------
@@ -303,7 +299,7 @@ def main():
     print(RULE)
     print("Every assertion above is a CONTROL: it fails loudly if the shipped code")
     print("has been changed so that the finding no longer holds. A green run means")
-    print("all three are still live.")
+    print("A and C are still live and B stays fixed.")
     return 0
 
 
