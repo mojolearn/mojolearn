@@ -77,6 +77,11 @@ write-docs-facts = "python3 tools/docs_facts.py --write"
 # Python tests (which wait for the Mac's Metal slot), rents nothing. One line
 # per step and a non-zero exit when any step failed. tools/release_rehearsal.py.
 release-rehearsal = "python3 tools/release_rehearsal.py"
+# THE ONE COMMAND (2026-09-22): walks docs/RELEASE_CHECKLIST.md end to end,
+# idempotent and resumable (state under ~/mojolearn-evidence/release/<version>/).
+#   pixi run release 0.8.15 --dry-run      the plan and what is already done
+#   pixi run release 0.8.15 --publish pypi everything, including publication
+release = "python3 tools/release.py"
 
 # ---------------------------------------------------------------------------
 # THE FAST SPEED LANE (bench/speed/README.md). Ours against the vendor's own
