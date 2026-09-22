@@ -282,8 +282,9 @@ class Coordinator:
         rows = []
         for step in range(int(self.peers[0]["completed"]), self.steps):
             timing = {"step_sent": time.monotonic()}
-            for p in self.peers:
-                _send(p["sock"], {"cmd": "step", "step": step, "chained": self.chained})
+            for i, p in enumerate(self.peers):
+                # `first`: this worker's block opens the fold (no prefix will come)
+                _send(p["sock"], {"cmd": "step", "step": step, "chained": self.chained, "first": self.chained and i == 0})
             grads, losses = {}, {}
             if self.chained:
                 for p in self.peers:
@@ -397,7 +398,7 @@ class Worker:
         n_total = len(memoryview(state["parameters"]).cast("B")) // 4
         sock = self._connect()
         committed = 0
-        held, total = [], None  # chained: this block's gradients until its turn, then the fold
+        held, total, on_device = [], None, False  # chained: this block's gradients until its turn, then the fold
         try:
             _send(sock, dict(protocol=PROTOCOL, name=self.name, vendor=vendor(), shards=self.shards,
                              completed=tr.step_, state=state_hash(state), n_total=n_total, chained=self.chained))
@@ -412,20 +413,40 @@ class Worker:
                     if self.lr_for_step is not None:
                         tr.set_lr(self.lr_for_step(head["step"]))
                     losses, parts = [], []
-                    for k in self.shards:
-                        loss, g = tr.shard_gradient(self.batches(head["step"], k))
-                        losses.append(loss)
-                        parts.append(memoryview(g).cast("B").tobytes())
+                    device_fold = self.chained and bool(getattr(tr, "has_device_fold", False))
+                    if device_fold and head.get("first"):
+                        # the first block: fold on the device as the shards are
+                        # computed; nothing is downloaded until the prefix goes out
+                        tr.fold_reset(None)
+                        for k in self.shards:
+                            losses.append(tr.shard_gradient_fold(self.batches(head["step"], k)))
+                        held, total, on_device = [], None, True
+                    else:
+                        for k in self.shards:
+                            loss, g = tr.shard_gradient(self.batches(head["step"], k))
+                            losses.append(loss)
+                            parts.append(memoryview(g).cast("B").tobytes())
+                        on_device = False
                     if self.chained:
-                        held, total = parts, None
+                        if not on_device:
+                            held, total = parts, None
                         _send(sock, {"step": head["step"], "shards": self.shards, "losses": losses})
                     else:
                         _send(sock, {"step": head["step"], "shards": self.shards, "losses": losses}, b"".join(parts))
                 elif cmd == "fold":
-                    if not self.chained or not held:
+                    if not self.chained or not (held or on_device):
                         raise CrossVendorMismatch("%s was asked to fold with nothing held" % self.name)
-                    total = ordered_fold(held, prefix=payload if payload else None)
-                    held = []
+                    if on_device:
+                        total = tr.fold_export()
+                    elif bool(getattr(tr, "has_device_fold", False)):
+                        # a prefix arrived: continue the fold on the device from it
+                        tr.fold_reset(payload if payload else None)
+                        for g in held:
+                            tr.fold_add(g)
+                        total = tr.fold_export()
+                    else:
+                        total = ordered_fold(held, prefix=payload if payload else None)
+                    held, on_device = [], False
                     _send(sock, {"step": head["step"]}, total)
                 elif cmd == "apply":
                     if payload:

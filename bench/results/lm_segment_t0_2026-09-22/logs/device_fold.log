@@ -1,0 +1,5 @@
+has_device_fold: True
+=== device fold: chained 2 workers (first block folds on the device) vs the recorded column
+expected column bench/results/par_lm_xvendor/2026-09-21/apple-m4-1gpu.json: 6 steps compared, 0 differ []
+=== device fold: chained 3 workers, unequal blocks
+expected column bench/results/par_lm_xvendor/2026-09-21/apple-m4-1gpu.json: 6 steps compared, 0 differ []

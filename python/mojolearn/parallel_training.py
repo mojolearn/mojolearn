@@ -228,6 +228,60 @@ class ParallelByteLanguageModelTrainer:
             self._state['next_batch_index'] = before + 1
             return done
 
+    # ---- the device fold for a live worker (mojolearn.cross_vendor, chained) ----
+
+    def _require_fold(self):
+        self._require_split_step('shard_gradient')
+        if not callable(getattr(self._binding, 'byte_lm_parallel_fold_export', None)):
+            raise RuntimeError('this byte-LM binary predates the device fold; rebuild bindings/build_byte_lm.sh')
+
+    @property
+    def has_device_fold(self):
+        """True when the binding folds on the device (a live worker uses it
+        instead of `cross_vendor.ordered_fold` on the host)."""
+        with self._lock:
+            self._open()
+            return callable(getattr(self._binding, 'byte_lm_parallel_fold_export', None))
+
+    def fold_reset(self, prefix=None):
+        """Start this worker's device fold: empty, or from `prefix`, an
+        already folded run of the shards before this worker's block."""
+        with self._lock:
+            self._open()
+            self._require_fold()
+            if prefix is None:
+                self._binding.byte_lm_parallel_fold_reset(self._session, [])
+            else:
+                prefix = _array(_floats(prefix), (self._shape.n_total,), 'fold prefix')
+                self._binding.byte_lm_parallel_fold_reset(self._session, [addr_ro(prefix, name='fold prefix')])
+
+    def shard_gradient_fold(self, ids):
+        """One shard's gradient, folded into the device total with the
+        ordered add `train_step` uses; returns the loss. No update."""
+        with self._lock:
+            tokens = _array(ids, (self._shape.batch, self._shape.length + 1), 'shard', '<i4')
+            self._open()
+            self._require_fold()
+            return float(self._binding.byte_lm_parallel_shard_gradient_fold(self._session,
+                [addr_ro(tokens, name='shard')], self.step_))
+
+    def fold_add(self, gradient):
+        """Fold a host-held shard gradient into the device total."""
+        with self._lock:
+            gradient = _array(_floats(gradient), (self._shape.n_total,), 'shard gradient')
+            self._open()
+            self._require_fold()
+            self._binding.byte_lm_parallel_fold_add(self._session, [addr_ro(gradient, name='shard gradient')])
+
+    def fold_export(self):
+        """The device fold's total, as float32 bytes."""
+        with self._lock:
+            self._open()
+            self._require_fold()
+            out = empty((self._shape.n_total,), '<f4')
+            self._binding.byte_lm_parallel_fold_export(self._session, [addr(out, name='fold total')])
+            return memoryview(out).cast('B').tobytes()
+
     def optimizer_ownership(self):
         """Actual native ownership and moment/rollback/reduction bytes per device."""
         with self._lock:
@@ -265,6 +319,17 @@ class ParallelByteLanguageModelTrainer:
 
     def __exit__(self, *exc):
         self.close()
+
+
+def _floats(value):
+    """A float32 buffer from raw little-endian bytes (a gradient off the wire)
+    or any float32 array; `_array` then copies and admits it."""
+    if isinstance(value, (bytes, bytearray)):
+        import array as _pyarray
+        out = _pyarray.array('f')
+        out.frombytes(value)
+        return out
+    return value
 
 
 def ordered_sum_gradients(parts):

@@ -89,3 +89,17 @@ from checkpoint 4 into segment 2 with unequal blocks 0:1 and 1:4 against
 route A's segment 2. `coordinator.jsonl` is the group's own record. So a
 segment run by a live chained group of workers writes the same chain and
 the same checkpoints as the same segment on one box.
+
+## E5, the device fold (`logs/device_fold.log`, `live/devfold*.json`)
+
+After T1c measured the host fold at 184 s a step on an H100 pod's host, a
+live worker folds ON ITS GPU with the ordered-add kernel `train_step` uses:
+the first block's worker folds each shard's gradient into a device total as
+it is computed (`shard_gradient_fold`, nothing downloaded per shard); a later
+worker starts its device fold from the received prefix (`fold_reset`) and
+folds its held gradients in (`fold_add`); `fold_export` downloads the block's
+result once. On the M4, chained groups of two and three workers with the
+device fold agree with the recorded one-process column on all 6 steps, and
+`lm_segment.py --live-role coordinator` with an in-process second worker
+equals route A's one-box chains and checkpoints (`logs/live_segment.log`,
+rerun after the change).

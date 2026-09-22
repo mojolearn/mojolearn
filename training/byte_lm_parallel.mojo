@@ -32,7 +32,7 @@ from training.byte_lm_optimizer_pool import pool_snapshot, pool_update, pool_res
 from training.checks.optimizer import OPT_RECORD_INTERMEDIATES
 from training.byte_lm_config import ByteConfig
 from training.checks.optimizer_oracle import OptimizerConfig
-from training.checks.train_loop import _copy_into, _upload
+from training.checks.train_loop import _copy_into, _upload, download_f32
 from core.multi_gpu import transfer_bytes
 
 
@@ -55,6 +55,7 @@ struct ByteParallelTrainer(Movable, Writable):
     var logical_shards: Int
     var busy: Bool
     var usable: Bool
+    var fold_started: Bool
 
     def __init__(out self):
         self.contexts = List[DeviceContext]()
@@ -66,6 +67,7 @@ struct ByteParallelTrainer(Movable, Writable):
         self.logical_shards = 0
         self.busy = False
         self.usable = False
+        self.fold_started = False
 
     def write_to(self, mut writer: Some[Writer]):
         writer.write("ByteParallelTrainer")
@@ -264,6 +266,66 @@ struct ByteParallelTrainer(Movable, Writable):
             self.rollback()
             raise error
         self.busy = False
+
+    # ---- the device fold for a live worker (mojolearn.cross_vendor, chained) ----
+    # A worker's block of the flat left fold, kept ON THIS DEVICE in `total`
+    # (the same accumulator `step` folds into) with the same
+    # `_ordered_add_kernel`, so the bits are `step`'s bits and nothing is
+    # downloaded per shard. `fold_reset` starts the fold empty or from a
+    # received prefix; `shard_gradient_fold` computes one shard's gradient and
+    # folds it in; `fold_add` folds in a gradient held on the host (a shard
+    # computed before the prefix arrived); `fold_export` downloads the total.
+
+    def fold_reset(mut self, prefix: List[Float32]) raises:
+        self._require_single_replicated()
+        var n = self.trainers[0].config.n_total()
+        if len(prefix) == 0:
+            self.fold_started = False
+            return
+        if len(prefix) != n:
+            raise Error("byte LM parallel: the fold prefix has the wrong length")
+        var staged = _upload(self.contexts[0], prefix)
+        _copy_into(self.contexts[0], self.total.value(), staged, 0, 0, n)
+        self.contexts[0].synchronize()
+        _ = staged^
+        self.fold_started = True
+
+    def shard_gradient_fold(mut self, ids: List[Int32]) raises -> Float32:
+        var loss = self.shard_gradient(ids)
+        var n = self.trainers[0].config.n_total()
+        ref incoming = self.trainers[0].buffers.grad
+        if not self.fold_started:
+            _copy_into(self.contexts[0], self.total.value(), incoming, 0, 0, n)
+            self.fold_started = True
+        else:
+            self.contexts[0].enqueue_function[_ordered_add_kernel](
+                self.total.value().unsafe_ptr(), incoming.unsafe_ptr(), Int32(n),
+                grid_dim=((n + 127) // 128, 1, 1), block_dim=(128, 1, 1))
+        self.contexts[0].synchronize()
+        return loss
+
+    def fold_add(mut self, gradient: List[Float32]) raises:
+        self._require_single_replicated()
+        var n = self.trainers[0].config.n_total()
+        if len(gradient) != n:
+            raise Error("byte LM parallel: the folded gradient has the wrong length")
+        var staged = _upload(self.contexts[0], gradient)
+        if not self.fold_started:
+            _copy_into(self.contexts[0], self.total.value(), staged, 0, 0, n)
+            self.fold_started = True
+        else:
+            self.contexts[0].enqueue_function[_ordered_add_kernel](
+                self.total.value().unsafe_ptr(), staged.unsafe_ptr(), Int32(n),
+                grid_dim=((n + 127) // 128, 1, 1), block_dim=(128, 1, 1))
+        self.contexts[0].synchronize()
+        _ = staged^
+
+    def fold_export(mut self) raises -> List[Float32]:
+        self._require_single_replicated()
+        if not self.fold_started:
+            raise Error("byte LM parallel: nothing has been folded")
+        var n = self.trainers[0].config.n_total()
+        return download_f32(self.contexts[0], self.total.value(), n)
 
     def step(mut self, shards: List[List[Int32]]) raises -> List[Float32]:
         self.require_open()

@@ -1481,6 +1481,67 @@ def byte_lm_parallel_set_lr_binding(session: PythonObject, lr_arg: PythonObject)
     return PythonObject(Int(bitcast[DType.uint32](owner[].trainers[0].optimizer.lr)))
 
 
+def byte_lm_parallel_fold_reset_binding(session: PythonObject, addresses: PythonObject) raises -> PythonObject:
+    """addresses = [] (an empty fold) or [prefix float32[n]]: start this worker's
+    device fold empty or from a received prefix."""
+    _require_binding_profile()
+    var owner = session.downcast_value_ptr[ByteParallelTrainer]()
+    owner[].require_open()
+    var n = owner[].trainers[0].config.n_total()
+    if Int(py=addresses.__len__()) == 0:
+        owner[].fold_reset(List[Float32]())
+        return PythonObject(0)
+    var addr = _read_addresses(addresses, 1)
+    var cells: List[Int] = [n]
+    _validate_slot_table(addr, cells, 1)
+    owner[].fold_reset(_read_f32(addr[0], n))
+    return PythonObject(1)
+
+
+def byte_lm_parallel_shard_gradient_fold_binding(session: PythonObject, addresses: PythonObject,
+    completed_arg: PythonObject) raises -> PythonObject:
+    """addresses = [ids int32[B*(L+1)]]: one shard's gradient, folded into the
+    device total with the step's own ordered add; returns the loss."""
+    _require_binding_profile()
+    var owner = session.downcast_value_ptr[ByteParallelTrainer]()
+    owner[].require_open()
+    if Int(py=completed_arg) != owner[].trainers[0].completed_steps:
+        raise Error("byte LM parallel: completed-step mismatch")
+    var shape = owner[].trainers[0].config.copy()
+    var n_ids = shape.batch * (shape.length + 1)
+    var addr = _read_addresses(addresses, 1)
+    var cells: List[Int] = [n_ids]
+    _validate_slot_table(addr, cells, 1)
+    return PythonObject(owner[].shard_gradient_fold(_read_ids(addr[0], n_ids)))
+
+
+def byte_lm_parallel_fold_add_binding(session: PythonObject, addresses: PythonObject) raises -> PythonObject:
+    """addresses = [gradient float32[n]]: fold a host-held gradient into the device total."""
+    _require_binding_profile()
+    var owner = session.downcast_value_ptr[ByteParallelTrainer]()
+    owner[].require_open()
+    var n = owner[].trainers[0].config.n_total()
+    var addr = _read_addresses(addresses, 1)
+    var cells: List[Int] = [n]
+    _validate_slot_table(addr, cells, 1)
+    owner[].fold_add(_read_f32(addr[0], n))
+    return PythonObject(0)
+
+
+def byte_lm_parallel_fold_export_binding(session: PythonObject, addresses: PythonObject) raises -> PythonObject:
+    """addresses = [out float32[n]]: the device fold's total."""
+    _require_binding_profile()
+    var owner = session.downcast_value_ptr[ByteParallelTrainer]()
+    owner[].require_open()
+    var n = owner[].trainers[0].config.n_total()
+    var addr = _read_addresses(addresses, 1)
+    var cells: List[Int] = [n]
+    _validate_slot_table(addr, cells, 1)
+    var total = owner[].fold_export()
+    copy_f32(total.unsafe_ptr(), f32_ptr(addr[0]), n)
+    return PythonObject(n)
+
+
 def byte_lm_parallel_rollback_binding(session: PythonObject) raises -> PythonObject:
     var owner = session.downcast_value_ptr[ByteParallelTrainer]()
     owner[].require_open()
@@ -1759,6 +1820,10 @@ def PyInit__mojolearn_byte_lm() abi("C") -> PythonObject:
         module.def_function[byte_lm_parallel_apply_gradient_binding]("byte_lm_parallel_apply_gradient")
         module.def_function[byte_lm_parallel_rollback_binding]("byte_lm_parallel_rollback")
         module.def_function[byte_lm_parallel_set_lr_binding]("byte_lm_parallel_set_lr")
+        module.def_function[byte_lm_parallel_fold_reset_binding]("byte_lm_parallel_fold_reset")
+        module.def_function[byte_lm_parallel_shard_gradient_fold_binding]("byte_lm_parallel_shard_gradient_fold")
+        module.def_function[byte_lm_parallel_fold_add_binding]("byte_lm_parallel_fold_add")
+        module.def_function[byte_lm_parallel_fold_export_binding]("byte_lm_parallel_fold_export")
         _ = module.add_type[ByteOffloadedReplay]("_ByteOffloadedReplay")
         module.def_function[byte_lm_offload_create_binding]("byte_lm_offload_create")
         module.def_function[byte_lm_offload_open_binding]("byte_lm_offload_open")

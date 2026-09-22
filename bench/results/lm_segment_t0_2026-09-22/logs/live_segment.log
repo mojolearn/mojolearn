@@ -1,16 +1,16 @@
 === live coordinator + in-process extra worker, blocks 0:2 and 2:4, held to the one-box chain A1
-[16:36:52] coordinator listening on port 7811 for 2 workers, K=4, until step 4
-[16:36:53] step 1 agrees with the expected chain
-[16:36:53] step 2 agrees with the expected chain
-[16:36:53] checkpoint ckpt_00000002.blm (38822695 bytes, sha256 266d1acf59d9e568, 0.1 s)
-[16:36:54] step 3 agrees with the expected chain
-[16:36:55] step 4 agrees with the expected chain
-[16:36:55] checkpoint ckpt_00000004.blm (38822695 bytes, sha256 fdd04a26b581c29a, 0.1 s)
-[16:36:55] PASS: <scratchpad>/seg/LIVE
+[19:58:22] coordinator listening on port 7811 for 2 workers, K=4, until step 4
+[19:58:24] step 1 agrees with the expected chain
+[19:58:24] step 2 agrees with the expected chain
+[19:58:24] checkpoint ckpt_00000002.blm (38822695 bytes, sha256 266d1acf59d9e568, 0.1 s)
+[19:58:25] step 3 agrees with the expected chain
+[19:58:26] step 4 agrees with the expected chain
+[19:58:26] checkpoint ckpt_00000004.blm (38822695 bytes, sha256 fdd04a26b581c29a, 0.1 s)
+[19:58:26] PASS: <scratchpad>/seg/LIVE
 === unequal blocks 0:1 and 1:4, from A1's checkpoint 4 into segment 2, held to A2
-[16:36:58] PASS: <scratchpad>/seg/LIVE2
+[19:58:31] PASS: <scratchpad>/seg/LIVE2
 === chains and manifests against the one-box route
 steps=4 compared=16 disagreements=0
 checkpoints compared=2 disagreements=0
 steps=4 compared=16 disagreements=0
-{"losses":[10.82529354095459,10.825115203857422,10.825671195983887,10.825854301452637],"protocol":"chained","state":"c18fc996c4c5c7802fd2280c38bed94e1b0d3952fc4b15d80b097b99bf0a8cbe","step":1,"total_sha256":"d557d3a8207b3c2c5e1085fe12b7ca1be17801d1c7c88a8586cd354d307919f4","vendors":{"m4-live":"metal","m4-live-extra":"metal"},"workers":{"m4-live":"c18fc996c4c5c7802fd2280c38bed94e1b0d3952fc4b15d80b
+{"losses":[10.82529354095459,10.825115203857422,10.825671195983887,10.825854301452637],"protocol":"chained","state":"c18fc996c4c5c7802fd2280c38bed94e1b0d3952fc4b15d80b097b99bf0a8cbe","step":1,"timing":{"applied_m4-live":0.739,"applied_m4-live-extra":0.753,"apply_sent":0.491,"fold_m4-live":0.034,"fold_m4-live-extra":0.107,"gradients_m4-live":0.328,"gradients_m4-live-extra":0.328,"step_seconds":0.75
