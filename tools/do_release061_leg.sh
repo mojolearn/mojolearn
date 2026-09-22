@@ -205,10 +205,14 @@ api() { curl -s --max-time 20 -H "Authorization: Bearer $TOK" "$@"; }
 # SHIP THE COMMIT, NOT THE WORKING TREE: the whole tree at $COMMIT minus the
 # result, corpus and oracle data, which no native-inventory file lives under.
 log "archiving $COMMIT"
-git -C "$REPO" archive --format=tar "$COMMIT" -- . ':!bench/results' ':!mamba/corpus' ':!bench/oracle*' \
+git -C "$REPO" archive --format=tar "$COMMIT" -- . ':!bench/results' ':!bench/evidence' ':!mamba/corpus' ':!bench/oracle*' \
   | gzip > "$TMPD/src.tgz" || die "git archive failed"
 ARCHIVE_BYTES=$(wc -c < "$TMPD/src.tgz" | tr -d ' ')
-[ "$ARCHIVE_BYTES" -lt $((15 * 1024 * 1024)) ] || die "archive is $ARCHIVE_BYTES bytes gzipped, cap 15 MiB"
+# The cap keeps the upload short on the home uplink. 0.8.14's archive was
+# 14.46 MB against the old 15 MiB cap, most of it python/mojolearn, which the
+# build needs; one leg moved 9.6 MB in 4 s (2026-09-11), so 24 MiB is still
+# well under a minute.
+[ "$ARCHIVE_BYTES" -lt $((24 * 1024 * 1024)) ] || die "archive is $ARCHIVE_BYTES bytes gzipped, cap 24 MiB"
 ARCHIVE_SHA=$(sha256_of "$TMPD/src.tgz")
 mkdir "$TMPD/archive" && tar -xzf "$TMPD/src.tgz" -C "$TMPD/archive" || die "archive does not unpack"
 # The packer compares every proof's inventory against THIS checkout, so the
