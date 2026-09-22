@@ -42,7 +42,11 @@ from pathlib import Path
 import sys
 import time
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "python"))
+# A source checkout with its host bindings built wins; otherwise the installed
+# wheel (the published binding) is the tokenizer, as on a rented box.
+_SRC = Path(__file__).resolve().parents[1] / "python"
+if (_SRC / "mojolearn" / "host").is_dir():
+    sys.path.insert(0, str(_SRC))
 
 TOKENS_SCHEMA = "mojolearn.byte-lm.tokens.v1"
 
@@ -80,6 +84,8 @@ def main(argv=None):
     ap.add_argument("--out", required=True)
     ap.add_argument("--groups", type=int, default=None, help="only the first N row groups of each shard")
     ap.add_argument("--held-out-last", type=int, default=0, help="the last N documents form the validation range")
+    ap.add_argument("--held-out-shard", action="store_true",
+                    help="every document of the LAST parquet shard forms the validation range")
     ap.add_argument("--text-batch", type=int, default=2048, help="--text: documents per encode batch")
     args = ap.parse_args(argv)
     if bool(args.shards) == bool(args.text):
@@ -95,6 +101,7 @@ def main(argv=None):
     whole, at_token, n_docs, n_bytes, max_id = hashlib.sha256(), 0, 0, 0, -1
     doc_tokens = []  # token count per document, for the held-out cut
     inputs = []
+    last_shard_docs = 0  # documents of the last shard, for --held-out-shard
     encode_seconds, t_start = 0.0, time.perf_counter()
     with stream.open("wb") as fh:
         for path, group, docs in source:
@@ -114,6 +121,8 @@ def main(argv=None):
             n_docs += len(docs)
             if path not in [i["path"] for i in inputs]:
                 inputs.append(dict(path=path, sha256=None))
+                last_shard_docs = 0
+            last_shard_docs += len(docs)
             secs = time.perf_counter() - t_start
             print("%s group %d: %d documents, %d tokens, %.1f s, %.3f MB/s encode"
                   % (Path(path).name, group, n_docs, at_token, secs, n_bytes / max(encode_seconds, 1e-9) / 1e6), flush=True)
@@ -124,13 +133,25 @@ def main(argv=None):
                 h.update(block)
         entry["sha256"] = h.hexdigest()
         entry["bytes"] = Path(entry["path"]).stat().st_size
-    held = args.held_out_last
+    if args.held_out_shard and args.held_out_last:
+        raise SystemExit("--held-out-shard and --held-out-last are two ways to say one thing")
+    if args.held_out_shard and len(inputs) < 2:
+        raise SystemExit("--held-out-shard needs at least two shards")
+    held = last_shard_docs if args.held_out_shard else args.held_out_last
     if held < 0 or held > n_docs:
         raise SystemExit("--held-out-last must be within the document count")
     cut = at_token - sum(doc_tokens[n_docs - held:]) if held else at_token
     seconds = time.perf_counter() - t_start
+    tool_sha256 = hashlib.sha256(Path(__file__).read_bytes()).hexdigest()
+    try:
+        import mojolearn as _ml
+        package = dict(version=getattr(_ml, "__version__", None), file=_ml.__file__)
+    except Exception:  # noqa: BLE001
+        package = None
     manifest = dict(
         schema=TOKENS_SCHEMA,
+        tool=dict(name="tools/fineweb_tokens.py", sha256=tool_sha256, argv=sys.argv[1:], package=package,
+                  held_out=("last shard" if args.held_out_shard else "last %d documents" % held) if held else None),
         source=dict(path=";".join(i["path"] for i in inputs), sha256=hashlib.sha256("".join(i["sha256"] for i in inputs).encode()).hexdigest(),
                     bytes=n_bytes, schema="fineweb-edu.parquet-rows.v1" if not args.text else "fineweb_text.lines.v1",
                     inputs=inputs, row_groups_per_shard=args.groups),
