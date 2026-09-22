@@ -41,7 +41,8 @@ def fit_exponential_smoothing(estimator, *, devices=(0,), series_per_shard=1):
     data, n = estimator._check_dims(estimator.endog)
     batch = estimator.ts_num
     params = dict(seasonal=estimator.seasonal, seasonal_periods=estimator.seasonal_periods,
-                  start_periods=estimator.start_periods, eps=estimator.eps)
+                  start_periods=estimator.start_periods, eps=estimator.eps,
+                  initialization_method=estimator.initialization_method)
     pool = DevicePool(devices)
     try:
         parts = pool.map([

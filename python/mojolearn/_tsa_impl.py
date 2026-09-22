@@ -97,6 +97,11 @@ _mojolearn_tsa = _Binding()
 #: lane/inference-holtwinters, 2026-09-15).
 _HW_FORMAT = "mojolearn-holtwinters-1"
 
+#: `initialization_method` names and the code that crosses the binding
+#: (`holtwinters/impl/internal/hw_estimate.mojo`: 0 heuristic, 1 estimated).
+#: "cuml" is an alias of "heuristic": it is cuML's fit, bit for bit.
+_HW_INIT_CODES = {"estimated": 1, "heuristic": 0, "cuml": 0}
+
 
 def _series_major(y, name):
     """A C-contiguous float32 buffer whose flat order is SERIES-MAJOR.
@@ -333,6 +338,34 @@ class ExponentialSmoothing:
                                    refused by name with the reference's message.
         seasonal_periods honored   cuML's frequency; must be >= 2.
         start_periods    honored   must be >= 2 and <= seasonal_periods.
+                                   Sets the heuristic seed (the first
+                                   `start_periods` seasons), which is the
+                                   whole initialization under "heuristic"
+                                   and the optimizer's starting point under
+                                   "estimated".
+        initialization_method
+                         OURS      "estimated" (DEFAULT since 2026-09-22),
+                                   "heuristic" or its alias "cuml".
+                                   "estimated" is statsmodels' default
+                                   definition: the initial level, trend and
+                                   all `seasonal_periods` seasonal states
+                                   are estimated jointly with alpha, beta
+                                   and gamma by minimizing the SSE over all
+                                   `n` points (Levenberg-Marquardt, three
+                                   fixed starts, `holtwinters/impl/
+                                   internal/hw_estimate.mojo`). "heuristic"
+                                   is cuML's fit, BIT FOR BIT what 0.8.13
+                                   returned: level and trend from a line
+                                   through a moving average of the first
+                                   `start_periods` seasons, seasons from its
+                                   residuals, BFGS over alpha/beta/gamma
+                                   only, the first `seasonal_periods` points
+                                   left out of the SSE. It is faster and,
+                                   on a 30-series comparison, less accurate
+                                   (forecast RMSE geomean 1.121 against
+                                   1.044 estimated and statsmodels' 1.049).
+                                   Both are bitwise identical across CPU,
+                                   Apple, NVIDIA and AMD.
         ts_num           honored   the number of series; must match
                                    `endog`'s first dimension, and cuML's
                                    mismatch message is the same.
@@ -368,7 +401,11 @@ class ExponentialSmoothing:
 
         level_, trend_, season_   `(ts_num, n - seasonal_periods)` float32,
                                   the fitted components. cuML's shape.
-        sse_                      `(ts_num,)` float32. cuML's `SSE`.
+        sse_                      `(ts_num,)` float32. cuML's `SSE`
+                                  (points `seasonal_periods .. n - 1`)
+                                  under "heuristic"; the SSE over all `n`
+                                  points, the estimated objective, under
+                                  "estimated".
         alpha_, beta_, gamma_     `(ts_num,)` float32, the fitted smoothing
                                   parameters. OURS: cuML leaves these in
                                   device scratch its Python surface never
@@ -380,7 +417,11 @@ class ExponentialSmoothing:
                                   1 MIN_PARAM_DIFF, 2 MIN_ERROR_DIFF,
                                   3 MIN_GRAD_NORM. OURS, DEVIATION 665;
                                   cuML writes this only in the arm its fit
-                                  does not take.
+                                  does not take. Under "estimated" these
+                                  are the Levenberg-Marquardt iterations of
+                                  the chosen start and its stop: 0 the
+                                  iteration cap, 1 no step lowers the SSE,
+                                  2 relative SSE decrease below 1e-6.
 
     THE LINE-SEARCH LIMIT, DEVIATION 2717. When the BFGS line search hits
     its iteration limit, this implementation stores the trial point with
@@ -407,6 +448,7 @@ class ExponentialSmoothing:
         start_periods=2,
         ts_num=1,
         eps=2.24e-3,
+        initialization_method="estimated",
     ):
         if seasonal not in ("additive", "add", "multiplicative", "mul"):
             raise ValueError(
@@ -429,7 +471,14 @@ class ExponentialSmoothing:
                 "mojolearn ExponentialSmoothing: type of start_periods must "
                 f"be int. Given: {type(start_periods)}"
             )
+        if initialization_method not in _HW_INIT_CODES:
+            raise ValueError(
+                "mojolearn ExponentialSmoothing: initialization_method="
+                f"{initialization_method!r} is refused; it must be "
+                "'estimated' (the default), 'heuristic' or 'cuml'"
+            )
         self.endog = endog
+        self.initialization_method = initialization_method
         self.seasonal = seasonal
         self.seasonal_periods = seasonal_periods
         self.start_periods = start_periods
@@ -531,13 +580,15 @@ class ExponentialSmoothing:
             addr(stats, name="stats"),
             addr(flags, name="flags"),
             # ORDER MATCHES bindings/_mojolearn_tsa.mojo::holtwinters_fit_binding.
-            #   0 n, 1 batch_size, 2 frequency, 3 start_periods, 4 eps
+            #   0 n, 1 batch_size, 2 frequency, 3 start_periods, 4 eps,
+            #   5 init_method (0 heuristic, 1 estimated)
             [
                 int(n),
                 int(self.ts_num),
                 int(self.seasonal_periods),
                 int(self.start_periods),
                 float(self.eps),
+                _HW_INIT_CODES[self.initialization_method],
             ],
             self.seasonal,
         )
@@ -743,7 +794,9 @@ class ExponentialSmoothing:
         packed, time-major level, trend and season float32 buffer `fit`
         keeps), `sse`, `alpha`, `beta`, `gamma` (float32), `n_iter`,
         `criterion` (int32), `meta` `<i8` [n, ts_num, seasonal_periods,
-        start_periods], `eps` `<f8`, `seasonal` and `numeric_mode`.
+        start_periods], `eps` `<f8`, `seasonal`, `initialization_method`
+        and `numeric_mode`. A file without `initialization_method` was
+        written before it existed and loads as "heuristic".
 
         `endog` is not saved: nothing a loaded model answers reads it. A
         loaded model forecasts, predicts and answers every fitted attribute;
@@ -761,6 +814,7 @@ class ExponentialSmoothing:
             "estimator": type(self).__name__,
             "numeric_mode": _saved_mode(self),
             "seasonal": str(self.seasonal),
+            "initialization_method": str(self.initialization_method),
             "components": self._comps,
             "sse": self.sse_,
             "alpha": self.alpha_,
@@ -791,8 +845,11 @@ class ExponentialSmoothing:
         eps = _serialize.exact(arrays, "eps", "<f8")
         if eps.size != 1:
             raise ValueError(f"mojolearn: {path!r} eps holds {eps.size} values, 1 is needed")
+        init = (_serialize.scalar_str(arrays, "initialization_method")
+                if "initialization_method" in arrays else "heuristic")
         obj = cls(None, seasonal=_serialize.scalar_str(arrays, "seasonal"),
-                  seasonal_periods=f, start_periods=sp, ts_num=b, eps=float(eps[0]))
+                  seasonal_periods=f, start_periods=sp, ts_num=b, eps=float(eps[0]),
+                  initialization_method=init)
         _restore_mode(obj, arrays)
         if b < 1 or n <= f:
             raise ValueError(f"mojolearn: {path!r} records n={n}, ts_num={b}, seasonal_periods={f}")
