@@ -1,0 +1,27 @@
+
+  REFUSALS (Python side, no device)
+    pass a float64 x is refused BY NAME (no silent downcast)
+    pass the refusal message names bfloat16 (the SHIP LATER profile, FEATURE_PARITY.md section 7)
+    pass a 2-D x is refused for forward (only step squeezes)
+    pass an x whose d_model is not the weights' is refused
+    pass a multi-token step is refused (mamba_simple.py:210)
+    pass step without a state is refused
+    pass a float64 weight is refused by its own name
+    pass a transposed projection cannot cross as a plausible buffer (exact-shape refusal)
+    pass a missing weight name is refused (no silent zero weight)
+    pass a wrong-shape state buffer is refused by name
+    pass Mamba2 d_model = 40 is refused (headdim 64 / expand 2; Mamba2Dims.of carries the same rule)
+    pass Mamba3 d_model = 40 is refused (headdim 64 / expand 2; Mamba3Dims.of carries the same rule)
+    pass Mamba3: a float64 x is refused BY NAME
+    pass Mamba3: step without a state is refused
+    pass Mamba3: a multi-token step is refused
+    pass Mamba3: a wrong-shape state buffer is refused by name
+    pass Mamba3State.set_input_states: a float64 piece is refused by its own name (bits must arrive as made)
+    pass Mamba3: a transposed projection cannot cross as a plausible buffer (exact-shape refusal)
+
+  CORPUS
+    FAIL mamba/corpus found walking up from this file -- this gate runs IN-REPO; a wheel does not carry the corpus, and a skip here would be a pass with nothing behind it
+
+  19 checks, 1 failed
+
+test_mamba_surface: RED (no corpus).

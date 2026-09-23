@@ -1,0 +1,4 @@
+setup_seconds=12
+fixed_seconds=6
+main_seconds=447
+version_total_seconds=465

@@ -1,0 +1,5 @@
+== mojolearn.tests.test_linalg_identity ==
+   profile mojolearn.identical.gemm.fp32.v1
+   surface mojolearn.linalg
+
+CANNOT START: __file__

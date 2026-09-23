@@ -1,0 +1,7 @@
+parent /root/pyver/venv-py311/bin/python /root/pyver/venv-py311 3.11.15
+rc 0
+child /root/pyver/venv-py311/bin/python /root/pyver/venv-py311
+numpy 2.4.6 /root/pyver/venv-py311/lib/python3.11/site-packages/numpy/__init__.py
+
+
+env PYTHON*: {'PATH': '/root/.local/bin:/root/mojolearn/.pixi/envs/default/bin:/root/.pixi/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin'}

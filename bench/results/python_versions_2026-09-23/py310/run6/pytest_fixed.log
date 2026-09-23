@@ -1,0 +1,25 @@
+........................................................................ [ 24%]
+..........................F..........................ssssssssssssssss... [ 49%]
+.................................sss..........sssssssssssss............. [ 73%]
+........................................................................ [ 98%]
+....                                                                     [100%]
+=================================== FAILURES ===================================
+_____________ test_missing_symbol_is_a_stale_build_not_a_fallback ______________
+mojolearn/tests/test_native_convert.py:287: in test_missing_symbol_is_a_stale_build_not_a_fallback
+    with pytest.raises(ImportError, match=r"(?s)no `no_such_helper_2026`.*bindings/build\.sh"):
+E   AssertionError: Regex pattern did not match.
+E     Expected regex: re.compile('(?s)no `no_such_helper_2026`.*bindings/build\\.sh', re.DOTALL)
+E     Actual message: "mojolearn: no CPU implementation of _mojolearn.no_such_helper_2026 yet; see SUPPORT_MATRIX.md (the host binding _mojolearn_core_host is built but exports no no_such_helper_2026; host bindings built here: _mojolearn_arima_host, _mojolearn_byte_lm_host, _mojolearn_core_host, _mojolearn_embedding_host, _mojolearn_embedding_infer_host, _mojolearn_estimators_host, _mojolearn_forecast_host, _mojolearn_forest_host, _mojolearn_gbdt_host, _mojolearn_gp_host, _mojolearn_gp_infer_host, _mojolearn_hdbscan_host, _mojolearn_hdbscan_infer_host, _mojolearn_ivf_host, _mojolearn_ivf_search_host, _mojolearn_kernel_methods_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_metrics_host, _mojolearn_mixture_host, _mojolearn_mixture_infer_host, _mojolearn_neural_host, _mojolearn_preprocessing_host, _mojolearn_resample_host, _mojolearn_rf_host, _mojolearn_solver_host, _mojolearn_svm_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host, _mojolearn_trees_host, _mojolearn_tsa_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:\nmojolearn: NO SUPPORTED GPU FOUND ON THIS BOX, and there is no CPU path in this package. This install carries binary sets for ['cuda', 'hip'] under /root/pyver/repo-main-py310/python/mojolearn. What was looked for and what was found:\n  cuda:\n    /dev/nvidiactl               absent\n    /dev/nvidia0                 absent\n    libcuda.so.1                 not loadable\n    libcuda.so                   not loadable\n  hip:\n    /dev/kfd                     absent\n    libamdhip64.so.7             not loadable\n    libamdhip64.so.6             not loadable\n    libamdhip64.so               not loadable\n  MOJOLEARN_VENDOR is not set.\n\nA device node or a driver library for one of the sets above must be visible to this process. In a container that means the GPU is passed through (`--gpus all` for NVIDIA, `--device /dev/kfd --device /dev/dri` for AMD). If the device is present and this probe is wrong, MOJOLEARN_VENDOR=cuda or MOJOLEARN_VENDOR=hip picks the directory directly and the first fit reports the runtime's own error."
+=============================== warnings summary ===============================
+mojolearn/tests/test_models_loader.py::test_tokenizer_gpt2_pattern_uses_the_compiled_door_and_matches_the_oracle
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type _BpeHandle has no __module__ attribute
+
+mojolearn/tests/test_models_loader.py::test_tokenizer_gpt2_pattern_uses_the_compiled_door_and_matches_the_oracle
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type _BpeTrainedHandle has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED mojolearn/tests/test_native_convert.py::test_missing_symbol_is_a_stale_build_not_a_fallback
+SKIPPED [16] mojolearn/tests/test_native_convert.py:299: already float32 in the target layout: a borrow, tested below
+SKIPPED [16] mojolearn/tests/test_native_convert.py:315: already float32 in the target layout: a borrow, tested below
+1 failed, 259 passed, 32 skipped, 2 warnings in 4.59s
