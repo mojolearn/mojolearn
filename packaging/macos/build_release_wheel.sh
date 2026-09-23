@@ -258,6 +258,29 @@ BUILD_JOBS="${MOJOLEARN_BUILD_JOBS:-4}"
 # One compiler worker per build unless the caller says otherwise (the
 # bindings/build_*.sh default is 2); see the measurement above.
 export MOJOLEARN_COMPILE_JOBS="${MOJOLEARN_COMPILE_JOBS:-1}"
+# REUSED BINDINGS (2026-09-23, tools/release_reuse.py). With
+# MOJOLEARN_REUSE_PLAN set to a macos-plan.json and MOJOLEARN_REUSE_DIR to the
+# directory it was extracted into, a pair whose output the plan names is not
+# compiled: the published wheel's bytes for it (already staged and signed by
+# the release that shipped them, extracted and verified against that wheel's
+# RECORD by tools/release.py) are copied into the package tree, verified
+# again against the plan's sha256, and stamped like a fresh build. The
+# stager then leaves those files untouched (MOJOLEARN_STAGE_SKIP), and the
+# gate after staging requires each one to still carry the plan's sha256, so a
+# reused binding is the published one or the build fails. Every other gate
+# (readbacks, floor, ISA, GPU code, verify_wheel.sh) runs on them unchanged.
+REUSE_PLAN="${MOJOLEARN_REUSE_PLAN:-}"
+REUSE_DIR="${MOJOLEARN_REUSE_DIR:-}"
+if [ -n "$REUSE_PLAN" ]; then
+    [ -f "$REUSE_PLAN" ] && [ -d "$REUSE_DIR" ] || { echo "MOJOLEARN_REUSE_PLAN=$REUSE_PLAN needs the file and MOJOLEARN_REUSE_DIR=$REUSE_DIR the directory" >&2; exit 2; }
+    echo "== reused bindings: $(python3 -c 'import json,sys; d=json.load(open(sys.argv[1])); print(len(d["files"]), "from", d["from_release"]["version"], d["from_release"]["wheel"])' "$REUSE_PLAN")"
+fi
+export MOJOLEARN_REUSE_PLAN="$REUSE_PLAN" MOJOLEARN_REUSE_DIR="$REUSE_DIR"
+# The plan's sha256 for one output path, empty when the plan does not reuse it.
+reused_sha() {
+    [ -n "$REUSE_PLAN" ] || return 0
+    python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["files"].get(sys.argv[2], {}).get("sha256", ""))' "$REUSE_PLAN" "$1"
+}
 case "$BUILD_JOBS" in ''|*[!0-9]*|0) echo 'MOJOLEARN_BUILD_JOBS must be 1..16' >&2; exit 2;; esac
 [ "$BUILD_JOBS" -le 16 ] || { echo 'MOJOLEARN_BUILD_JOBS must be 1..16' >&2; exit 2; }
 BUILD_LOGS=$(mktemp -d "${TMPDIR:-/tmp}/mojolearn-release-builds.XXXXXX")
@@ -325,6 +348,24 @@ ordered_pairs | xargs -P "$BUILD_JOBS" -n 2 sh -c '
     case "$script" in build_*_host.sh|build_byte_lm.sh) ;; *)
         if [ "$mode" = fast ]; then output="python/mojolearn/$ext.so"; else output="python/mojolearn/$mode/$ext.so"; fi ;;
     esac
+    # A REUSED BINDING IS PLACED, NOT BUILT (the header above BUILD_JOBS).
+    if [ -n "${MOJOLEARN_REUSE_PLAN:-}" ]; then
+        want=$(python3 -c "import json,sys; print(json.load(open(sys.argv[1]))[\"files\"].get(sys.argv[2], {}).get(\"sha256\", \"\"))" "$MOJOLEARN_REUSE_PLAN" "$output")
+        if [ -n "$want" ]; then
+            src="$MOJOLEARN_REUSE_DIR/$output"
+            [ -f "$src" ] || { echo "== $script ($mode) REUSE FAILED: $src is absent"; exit 1; }
+            got=$(shasum -a 256 "$src" | cut -d" " -f1)
+            [ "$got" = "$want" ] || { echo "== $script ($mode) REUSE FAILED: $src sha256 $got, the plan says $want"; exit 1; }
+            mkdir -p "$(dirname "$output")"
+            rm -f "$output"
+            cp "$src" "$output"
+            chmod 755 "$output"
+            touch "$output"
+            python3 tools/binding_stamps.py write "$script" "$output" > "$log" 2>&1 || { echo "== $script ($mode) STAMP FAILED"; cat "$log"; exit 1; }
+            echo "== $script ($mode) REUSED from the published wheel, sha256 $got"
+            exit 0
+        fi
+    fi
     runner=bash
     if [ -n "${MOJOLEARN_BINCACHE_DIR:-}" ]; then
         runner="python3 tools/bincache.py build"
@@ -478,11 +519,30 @@ echo "package tree: exactly the $(printf '%s\n' $ALL_SOS | sort -u | wc -l | tr 
 # deleted -- invisibly, because on THIS machine the original rpath still
 # resolves into the pixi environment. The identical/ set sits one directory
 # down and gets @loader_path/../.dylibs; the stager computes that per file.
+# A REUSED EXTENSION IS ALREADY STAGED AND SIGNED (its load commands point at
+# @loader_path/.dylibs and the release that shipped it signed it), so the
+# stager must not rewrite or re-sign it: the bytes are the published ones or
+# they are nothing. It still counts toward the closure and is still verified
+# closed against the fresh .dylibs.
+STAGE_SKIP=""
+for so in $ALL_SOS; do
+    want=$(reused_sha "${so#"$here/"}")
+    [ -n "$want" ] && STAGE_SKIP="$STAGE_SKIP $so"
+done
 # shellcheck disable=SC2086
-pixi run -e pkg python "$here/packaging/macos/stage_dylibs.py" \
+MOJOLEARN_STAGE_SKIP="$STAGE_SKIP" pixi run -e pkg python "$here/packaging/macos/stage_dylibs.py" \
     $ALL_SOS "$ENV_LIB"
 pixi run -e pkg python "$here/packaging/portable_math/stage.py" "$PKG/.dylibs" \
     --receipt "$here/portable-math-build.json"
+# THE GATE ON REUSE: every reused binding still carries the plan's sha256
+# after staging. A byte moved is a build that must not ship.
+for so in $ALL_SOS; do
+    want=$(reused_sha "${so#"$here/"}")
+    [ -n "$want" ] || continue
+    got=$(shasum -a 256 "$so" | cut -d' ' -f1)
+    [ "$got" = "$want" ] || { echo "ERROR: reused ${so#$PKG/} changed after placement: $got, the plan says $want" >&2; exit 1; }
+    echo "reused: ${so#$PKG/} sha256 $got (the published bytes)"
+done
 
 
 

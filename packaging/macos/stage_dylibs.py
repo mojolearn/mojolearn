@@ -35,6 +35,7 @@ install_name_tool rewrites a load command, and an unsigned dylib is killed on
 load on Apple silicon rather than merely warned about.
 """
 
+import os
 import pathlib
 import shutil
 import subprocess
@@ -202,17 +203,28 @@ def main():
         add_rpath(dylibs / name, "@loader_path")
         sign(dylibs / name)
 
+    # REUSED EXTENSIONS (MOJOLEARN_STAGE_SKIP, build_release_wheel.sh,
+    # 2026-09-23): taken from the published wheel, so already staged and
+    # signed; rewriting a load command or re-signing would move bytes that
+    # must stay the published ones. They keep their place in the closure and
+    # in verify_closed.
+    skip = {pathlib.Path(p).resolve() for p in os.environ.get("MOJOLEARN_STAGE_SKIP", "").split() if p}
+    reused = [ext for ext in exts if ext.resolve() in skip]
+    fresh = [ext for ext in exts if ext.resolve() not in skip]
     dropped = []
-    for ext in exts:
+    for ext in fresh:
         up = "" if ext.parent == root else "../"
         add_rpath(ext, f"@loader_path/{up}.dylibs")
         dropped += strip_build_rpaths(ext)
     for name in needed:
         dropped += strip_build_rpaths(dylibs / name)
-    for ext in exts:
+    for ext in fresh:
         sign(ext)
     for name in needed:
         sign(dylibs / name)
+    if reused:
+        print(f"  left untouched (reused, already staged and signed): "
+              f"{', '.join(str(e.relative_to(root)) for e in reused)}")
     if dropped:
         print(f"  removed {len(dropped)} build-machine rpath(s):")
         for d in dropped:
