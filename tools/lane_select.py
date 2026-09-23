@@ -207,7 +207,7 @@ def reset_caches():
     this; no code path in this repository does."""
     global _ENUMERATORS, _LANE_SOURCES, _SOURCE_HASHED, _TRACKED, _CONSTANTS, _EXTENDERS
     global _MOJO_CONFORMANCE, _MOJO_IMPORTERS, _PYTHON_FILES, _PKG_IMPORT_CLOSURE
-    global _CORPUS, _CORPUS_TEXT, _REVERSE
+    global _CORPUS, _CORPUS_TEXT, _REVERSE, _REGISTRIES
     for cache in _CACHES:
         cache.clear()
     _GIT_SHOW.clear()
@@ -224,6 +224,7 @@ def reset_caches():
     _CORPUS = None
     _CORPUS_TEXT = None
     _REVERSE = None
+    _REGISTRIES = None
 
 
 @_by_path
@@ -274,13 +275,16 @@ def all_lanes():
 
 # ------------------------------------------------------------------ the map
 
-def _code_names(fn, module_globals, seen=None):
+def _code_names(fn, module_globals, seen=None, funcs=None):
     """Every name a lane function touches, following the module's own helper
     functions transitively. `ml.RandomForestClassifier(...)` leaves
     'RandomForestClassifier' in `co_names`; `_km_probe(...)` leaves the
-    helper's name, and the helper's own names come back with it."""
+    helper's name, and the helper's own names come back with it. `funcs`,
+    when given, collects every function object visited."""
     if seen is None:
         seen = set()
+    if funcs is not None:
+        funcs.append(fn)
     out = set()
     stack = [fn.__code__]
     if getattr(fn, "__closure__", None):
@@ -291,7 +295,7 @@ def _code_names(fn, module_globals, seen=None):
                 continue
             if callable(val) and hasattr(val, "__code__") and id(val) not in seen:
                 seen.add(id(val))
-                out |= _code_names(val, module_globals, seen)
+                out |= _code_names(val, module_globals, seen, funcs)
     while stack:
         code = stack.pop()
         out |= set(code.co_names)
@@ -302,29 +306,250 @@ def _code_names(fn, module_globals, seen=None):
         helper = module_globals.get(name)
         if callable(helper) and hasattr(helper, "__code__") and id(helper) not in seen:
             seen.add(id(helper))
-            out |= _code_names(helper, module_globals, seen)
+            out |= _code_names(helper, module_globals, seen, funcs)
     return out
+
+
+_FOREIGN_CACHE = {}
+
+
+def _attribute_roots(fn, module_globals):
+    """(foreign, other) for one function's source: `foreign` is every
+    attribute name that hangs on a chain rooted at a module-level name bound
+    to a module OUTSIDE the package (`hashlib.sha256(raw).digest()` roots at
+    hashlib; `np.frombuffer(b).astype` at numpy); `other` is every name used
+    any other way (a bare name, an import, an attribute on a local, on a
+    parameter, on a call's result, on the package itself)."""
+    key = id(fn.__code__)
+    if key in _FOREIGN_CACHE:
+        return _FOREIGN_CACHE[key]
+    import inspect
+    import textwrap
+    import types
+    foreign, other = set(), set()
+    try:
+        tree = ast.parse(textwrap.dedent(inspect.getsource(fn)))
+    except (OSError, TypeError, SyntaxError):
+        _FOREIGN_CACHE[key] = (foreign, other)
+        return foreign, other
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Attribute):
+            root = node.value
+            while isinstance(root, (ast.Attribute, ast.Call, ast.Subscript)):
+                root = root.func if isinstance(root, ast.Call) else root.value
+            bound = module_globals.get(root.id) if isinstance(root, ast.Name) else None
+            if isinstance(bound, types.ModuleType) and \
+                    not (bound.__name__ == "mojolearn" or bound.__name__.startswith("mojolearn.")):
+                foreign.add(node.attr)
+            else:
+                other.add(node.attr)
+        elif isinstance(node, ast.Name):
+            other.add(node.id)
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            for alias in node.names:
+                other.add(alias.asname or alias.name)
+    _FOREIGN_CACHE[key] = (foreign, other)
+    return foreign, other
+
+
+def _seed_names(fn, module_globals):
+    """The names of `_code_names` that can name a package symbol.
+
+    A NAME ON A FOREIGN OBJECT IS NOT A PACKAGE NAME (2026-09-23). `co_names`
+    holds `digest` for `hashlib.sha256(raw).digest()` in the harness's
+    `_hashed_uniform`, and python/mojolearn/_verify_causal_lm.py defines a
+    top-level `digest`, so 43 lanes with no language model in them (gbdt,
+    byte-lm, kde, ols) seeded the causal LM verifier. While its imports of the
+    `models/` subpackage did not resolve that cost one file; once they did
+    (`_python_files` recursive) it cost each of them the mamba, transformer
+    and training trees and the parallel pool, and the median file went from
+    40 lanes to 49. A name is dropped only when EVERY use of it across the
+    lane and its helpers is an attribute on a chain rooted at a module that
+    is not mojolearn; one bare use, one use on a local, keeps it."""
+    funcs = []
+    names = _code_names(fn, module_globals, funcs=funcs)
+    foreign, other = set(), set()
+    for f in funcs:
+        fo, ot = _attribute_roots(f, module_globals)
+        foreign |= fo
+        other |= ot
+    return names - (foreign - other)
 
 
 _PYTHON_FILES = None
 
 
 def _python_files():
-    """Every tracked Python file of the package, excluding its test modules
-    (a test cannot change a lane's bits).
+    """Every Python file of the package, SUBPACKAGES INCLUDED, excluding its
+    test modules (a test cannot change a lane's bits).
+
+    RECURSIVE SINCE 2026-09-23. This listed the top level of python/mojolearn
+    only (`os.listdir`), so the whole `models/` subpackage was outside the
+    corpus: `models/safetensors.py`, which every checkpoint-loading lane runs,
+    was in no lane's map, and the 0.8.16 release check (the safetensors fix
+    for Python 3.10 and 3.11) refused with UNATTRIBUTED PATH on the one file
+    the release existed to ship. `python/mojolearn/tests/` stays out.
 
     MEMOIZED: `_python_imports` asks for this listing once per package file to
-    tell a module name from a class name, and the `os.listdir` behind it is
-    the whole cost of that loop."""
+    tell a module name from a class name, and the walk behind it is the whole
+    cost of that loop."""
     global _PYTHON_FILES
     if _PYTHON_FILES is not None:
         return _PYTHON_FILES
     out = []
     base = os.path.join(ROOT, PKG)
-    for name in sorted(os.listdir(base)):
-        if name.endswith(".py"):
-            out.append(os.path.join(PKG, name))
-    _PYTHON_FILES = out
+    for dirpath, dirnames, filenames in os.walk(base):
+        rel_dir = os.path.relpath(dirpath, base)
+        dirnames[:] = sorted(d for d in dirnames if d not in ("tests", "__pycache__"))
+        for name in sorted(filenames):
+            if name.endswith(".py"):
+                out.append(os.path.join(PKG, name) if rel_dir == "." else os.path.join(PKG, rel_dir, name))
+    _PYTHON_FILES = sorted(out)
+    return _PYTHON_FILES
+
+
+def _module_paths(dotted, listing):
+    """The package files a dotted path UNDER python/mojolearn names: the leaf
+    module or the subpackage's `__init__.py`, plus the `__init__.py` of every
+    subpackage on the way (Python executes each of them when the leaf is
+    imported). Empty when nothing in the listing matches. `dotted` is
+    relative to the package root: "models.safetensors", "models", "" (the
+    package itself resolves to nothing here; `__init__.py` is a registry)."""
+    parts = [p for p in dotted.split(".") if p]
+    out = set()
+    if not parts:
+        return out
+    for k in range(1, len(parts)):
+        init = os.path.join(PKG, *parts[:k], "__init__.py")
+        if init in listing:
+            out.add(init)
+    leaf = os.path.join(PKG, *parts) + ".py"
+    init = os.path.join(PKG, *parts, "__init__.py")
+    found = {c for c in (leaf, init) if c in listing}
+    if not found:
+        return set()                        # a name, not a module: no edge from the dotted part
+    return out | found
+
+
+_REGISTRIES = None
+
+
+def _reexport_registries():
+    """The subpackage `__init__.py` files that are REGISTRIES of their
+    package: every top-level statement is a docstring, a relative import or a
+    dunder assignment (`__all__`). Such a file binds every public name of its
+    package from the module that defines it and computes nothing itself, the
+    same shape as the package's own `__init__.py`, which `enumerator_files`
+    already treats as a sink. Derived from content, recomputed per run.
+
+    WHY A SINK. `from .models import CausalLM` executes models/__init__.py,
+    which imports every module of models/: config, safetensors, causal_lm,
+    parallel_causal_lm, tokenizer. Following it wholesale handed every lane
+    that touches ONE of those the whole tokenizer tree and the parallel pool
+    (measured 2026-09-23: the median file went from 40 lanes to 49). The
+    registry is included in the closure, so a change to it selects the lanes
+    that import through it, and a NAME imported from it is resolved to the
+    module the registry binds it from (`_rebindings`), which is the edge the
+    interpreter takes for that name."""
+    global _REGISTRIES
+    if _REGISTRIES is None:
+        out = set()
+        for rel in _python_files():
+            if os.path.basename(rel) != "__init__.py" or os.path.dirname(rel) == PKG:
+                continue
+            tree = _parse(rel)
+            if tree is None:
+                continue
+            ok = True
+            for node in tree.body:
+                if isinstance(node, ast.ImportFrom) and node.level:
+                    continue
+                if isinstance(node, ast.Expr) and isinstance(getattr(node, "value", None), ast.Constant) \
+                        and isinstance(node.value.value, str):
+                    continue
+                if isinstance(node, ast.Assign) and all(
+                        isinstance(t, ast.Name) and t.id.startswith("__") for t in node.targets):
+                    continue
+                ok = False
+                break
+            if ok:
+                out.add(rel)
+        _REGISTRIES = out
+    return _REGISTRIES
+
+
+@_by_path
+def _rebindings(init):
+    """name -> the package files a registry `__init__.py` binds that name
+    from: `from .causal_lm import CausalLM` in models/__init__.py binds
+    `CausalLM` from models/causal_lm.py."""
+    out = {}
+    listing = set(_python_files())
+    tree = _parse(init)
+    for node in (tree.body if tree is not None else ()):
+        if not (isinstance(node, ast.ImportFrom) and node.level):
+            continue
+        for alias in node.names:
+            if alias.name == "*":
+                continue
+            one = ast.ImportFrom(module=node.module, names=[alias], level=node.level)
+            files = _resolve_python_import(init, one, listing) - {init}
+            if files:
+                out.setdefault(alias.name, set()).update(files)
+    return out
+
+
+def _resolve_python_import(rel, node, listing):
+    """The package files ONE import statement of `rel` names, resolved the
+    way the interpreter resolves it and AGAINST THE LISTING (see
+    `_python_imports` on why never `os.path.exists`).
+
+      from .x import A           the importer's own package, module x
+      from ..x import A          one package up
+      from . import x            x is a module or subpackage of the importer's package
+      from .pkg.mod import A     the subpackage's __init__.py and pkg/mod.py
+      from mojolearn.a.b import A, import mojolearn.a.b
+                                 absolute, from the package root
+
+    An imported NAME that is itself a module (`from . import models`,
+    `from .models import safetensors`) resolves too. Anything outside the
+    package (numpy, the standard library) resolves to nothing."""
+    out = set()
+    if isinstance(node, ast.Import):
+        for alias in node.names:
+            if alias.name.startswith("mojolearn."):
+                out |= _module_paths(alias.name[len("mojolearn."):], listing)
+        return out
+    if not isinstance(node, ast.ImportFrom):
+        return out
+    if node.level:
+        base = os.path.dirname(rel)
+        for _ in range(node.level - 1):
+            base = os.path.dirname(base)
+        if not (base == PKG or base.startswith(PKG + os.sep)):
+            return out                      # a relative import that leaves the package
+        prefix = os.path.relpath(base, PKG).replace(os.sep, ".")
+        prefix = "" if prefix == "." else prefix
+        module = node.module or ""
+    elif node.module == "mojolearn" or (node.module or "").startswith("mojolearn."):
+        prefix = ""
+        module = node.module[len("mojolearn"):].lstrip(".")
+    else:
+        return out
+    dotted = ".".join(p for p in (prefix, module) if p)
+    if module:
+        out |= _module_paths(dotted, listing)
+    registry = os.path.join(PKG, *dotted.split("."), "__init__.py") if dotted else None
+    for alias in node.names:
+        if alias.name == "*":
+            continue
+        found = _module_paths(".".join(p for p in (dotted, alias.name) if p), listing)
+        if found:
+            out |= found
+        elif registry in _reexport_registries() and registry != rel:
+            # A NAME THROUGH A REGISTRY: `from .models import CausalLM` is
+            # models/causal_lm.py, the module the registry binds it from.
+            out |= _rebindings(registry).get(alias.name, set())
     return out
 
 
@@ -350,13 +575,19 @@ def _public_rebindings(files):
     init = os.path.join(PKG, "__init__.py")
     tree = _parse(init)
     for node in (tree.body if tree is not None else ()):
-        if not (isinstance(node, ast.ImportFrom) and node.level and node.module):
-            continue
-        rel = os.path.join(PKG, node.module.split(".")[0] + ".py")
-        if rel not in listing or rel == init:
+        if not (isinstance(node, ast.ImportFrom) and node.level):
             continue
         for alias in node.names:
-            if alias.name != "*":
+            if alias.name == "*":
+                continue
+            # THE MODULE THE NAME IS BOUND FROM, resolved like the interpreter
+            # does (`_resolve_python_import`): `from .umap import UMAP` binds
+            # from umap.py; `from . import models` binds the `models`
+            # subpackage from models/__init__.py; `from .models import
+            # CausalLM` binds from models/__init__.py, which is where that
+            # name is rebound from models/causal_lm.py.
+            one = ast.ImportFrom(module=node.module, names=[alias], level=node.level)
+            for rel in _resolve_python_import(init, one, listing) - {init}:
                 out.setdefault(alias.name, set()).add(rel)
     return out
 
@@ -372,8 +603,13 @@ def _python_symbols(files):
         tree = _parse(rel)
         if tree is None:
             continue
-        index.setdefault(os.path.basename(rel)[:-3].lstrip("_"), set()).add(rel)
-        index.setdefault(os.path.basename(rel)[:-3], set()).add(rel)
+        stem = os.path.basename(rel)[:-3]
+        if stem == "__init__" and os.path.dirname(rel) != PKG:
+            # A SUBPACKAGE IS NAMED BY ITS DIRECTORY: `ml.models` is
+            # python/mojolearn/models/__init__.py, not a module called __init__.
+            stem = os.path.basename(os.path.dirname(rel))
+        index.setdefault(stem.lstrip("_"), set()).add(rel)
+        index.setdefault(stem, set()).add(rel)
         for node in tree.body:
             if isinstance(node, (ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)):
                 index.setdefault(node.name, set()).add(rel)
@@ -391,17 +627,6 @@ def _python_imports(rel):
     tree = _parse(rel)
     if tree is None:
         return out
-    names = set()
-    for node in ast.walk(tree):
-        if isinstance(node, ast.ImportFrom) and node.level:
-            if node.module:
-                names.add(node.module.split(".")[0])
-            for alias in node.names:
-                names.add(alias.name)
-        elif isinstance(node, ast.Import):
-            for alias in node.names:
-                if alias.name.startswith("mojolearn."):
-                    names.add(alias.name.split(".")[1])
     # AGAINST THE LISTING, NEVER `os.path.exists`. This asks whether a name a
     # file imports is itself a package module, and an imported name is often a
     # CLASS. On the macOS checkout the filesystem is case-insensitive, so
@@ -412,11 +637,19 @@ def _python_imports(rel):
     # umap.py, which are the public doors `__init__.py` binds those names
     # from, were in no lane's map at all. On the Linux boxes that run the CPU
     # column the same map is a different map.
+    #
+    # SUBPACKAGES RESOLVE (2026-09-23). `from .safetensors import Checkpoint`
+    # inside models/causal_lm.py means models/safetensors.py, and `from
+    # .models.safetensors import write_safetensors` at the top level means the
+    # models package and that module. Resolving every import name to
+    # python/mojolearn/<name>.py alone made both edges vanish, and with them
+    # every file of models/ (see `_python_files`). Function-local imports
+    # count like module-level ones: they run when the function does.
     listing = set(_python_files())
-    for name in names:
-        cand = os.path.join(PKG, name + ".py")
-        if cand in listing:
-            out.add(cand)
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.ImportFrom, ast.Import)):
+            out |= _resolve_python_import(rel, node, listing)
+    out.discard(rel)
     return out
 
 
@@ -1006,14 +1239,14 @@ def lane_sources():
         return seed_cache[key]
 
     sources, why = {}, {}
-    sinks = enumerator_files()
+    sinks = enumerator_files() | _reexport_registries()
 
     # PASS ONE: each lane's Python doors and the bindings they resolve. Held
     # first because the next pass needs to know which bindings EVERY lane
     # resolves, and that is a measurement over all the lanes, not a list.
     reach = {}
     for lane, fn in ib.LANES.items():
-        names = _code_names(fn, vars(ib))
+        names = _seed_names(fn, vars(ib))
         seeds, matched = set(), set()
         for name in names:
             for rel in symbols.get(name, ()):
@@ -1664,9 +1897,21 @@ def _module_patterns(stem, dotted=()):
     # ImportFrom module and a string constant (a dynamic import, a `-m`
     # argument) are (2026-09-22: `def release(self)` in _buffer.py kept
     # tools/release.py in every release's full sweep).
-    dumped = re.compile(r"""(?:alias\(name=|module=|Constant\(value=)['"](?:[\w.]*\.)?%s['"]""" % word)
+    dumped = re.compile(r"""(?:alias\(name=|module=)['"](?:[\w.]*\.)?%s['"]""" % word)
+    # A BARE STRING IS A LOAD ONLY WHERE A LOADER TAKES IT (2026-09-23). A
+    # dotted string ending in `.stem` is a module address wherever it sits,
+    # but the bare word is also a method name handed to a dispatcher:
+    # `pool.call("release", ...)` in models/parallel_causal_lm.py kept
+    # tools/release.py in the 0.8.16 release check as NOT ATTRIBUTABLE the
+    # moment the models/ subpackage entered the corpus. So the bare word
+    # counts as the first argument of `import_module`, `__import__`,
+    # `run_module`, `run_path` or `spec_from_file_location`, and nowhere else.
+    dotted_string = re.compile(r"""Constant\(value=['"][\w.]*\.%s['"]""" % word)
+    loaders = "__import__|import_module|run_module|run_path|spec_from_file_location"
+    loaded = re.compile(r"""Call\(func=(?:Name\(id='(?:%s)'|Attribute\(value=.*?attr='(?:%s)'), ctx=Load\(\)\), """
+                        r"""args=\[Constant\(value=['"]%s['"]""" % (loaders, loaders, word))
     run = re.compile(r"(?:-m|import|from)\s+(?:\w+\.)*%s(?![\w])" % word)
-    out = {"": [run], ".py": [dumped, run], ".mojo": [quoted]}
+    out = {"": [run], ".py": [dumped, dotted_string, loaded, run], ".mojo": [quoted]}
     for d in dotted:
         out[""].append(re.compile(re.escape(d)))
         out[".py"].append(re.compile(re.escape(d)))
@@ -2023,8 +2268,9 @@ def _admissible_addition(node, old_keys, corpus):
     if isinstance(node, ast.ImportFrom):
         if not node.module:
             return False
-        cand = os.path.join(PKG, node.module.split(".")[0] + ".py")
-        return cand in corpus
+        init = os.path.join(PKG, "__init__.py")
+        files = _resolve_python_import(init, node, set(_python_files()))
+        return bool(files) and files <= set(corpus)
     if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
         return not node.decorator_list and ("def", node.name) not in old_keys
     if isinstance(node, ast.ClassDef):
