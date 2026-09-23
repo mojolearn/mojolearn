@@ -2,6 +2,11 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
+## 0.8.17 (published 2026-09-24)
+
+### Fixed
+- The live cross-vendor worker runs on Python 3.10 and 3.11 from the wheel. `ParallelByteLanguageModelTrainer.fold_export`, `cross_vendor.state_hash`, the worker's parameter count and its shard gradient views called `memoryview` on the package's own `Array`, which cannot export the buffer protocol below Python 3.12 (`TypeError: memoryview: a bytes-like object is required, not 'Array'`, seen on a Python 3.11 H100 box on 2026-09-23). They read through `_buffer.flat_bytes`, which works on every supported Python. No arithmetic changed; the native libraries are the 0.8.16 bytes.
+
 ## 0.8.16 (published 2026-09-23)
 
 ### Fixed
