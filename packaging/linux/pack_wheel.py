@@ -56,15 +56,29 @@ from pyproject.toml with the same field order setuptools 84 wrote for
 0.1.0, and `--check-against <macos wheel>` diffs the two METADATA bodies so
 a drift is a visible line rather than a silent difference between the two
 artifacts of one release.
+
+REUSED BINDINGS (2026-09-23, tools/release_reuse.py). A set directory may
+carry `reuse.json`: the bindings, host bindings and runtime libraries in it
+that were TAKEN FROM THE LAST PUBLISHED WHEEL because their identity (source
+closure, toolchain, flags, builder scripts, box image) had not changed. Every
+file it names is verified here against the sha256 it records (which the
+assembler verified against the published wheel's own payload), a set whose
+bindings are all reused needs no read-back witnesses and no build proof (the
+previous release's were its witnesses), and a set a leg built still needs
+both. `--build-proof` is given once per set a leg built. LINUX_PAYLOAD.json
+then records per binding whether it was built or reused and from which
+release (`binding_origin`), and per set the same (`sets`).
 """
 
 import argparse
 import base64
+import collections
 import hashlib
 import json
 import os
 import pathlib
 import re
+import subprocess
 import sys
 import zipfile
 
@@ -177,6 +191,12 @@ def tier_names(tier, include_byte_lm=False):
 ARCH_RE = re.compile(r"^(sm_[0-9]+a?|gfx[0-9a-f]+)$")
 PYPI_LIMIT = 100 * 1024 * 1024
 LINUX_VENDORS = ("cuda", "hip")
+REUSE_SCHEMA = "mojolearn.linux.reused-bindings.v1"
+#: One loaded sets/<vendor>/<arch> directory. `reuse` is None for a set a leg
+#: built with nothing taken from the published wheel, else
+#: dict(files={set-relative path: record}, origin={version, source_commit,
+#: wheel, wheel_sha256}).
+SetDir = collections.namedtuple("SetDir", "vendor arch files libs manifest hosts reuse")
 # The combined three-architecture set. The name keeps the number the profile was
 # authored under; the profile itself is RELEASE_PROFILE (`release-linux3`) and
 # ships whatever version python/mojolearn/_version.py says. DEVIATION 2290.
@@ -226,7 +246,7 @@ def release_inventory(sets, proof_paths, version, source_root=REPO):
     `version` must be the version SOURCE_ROOT's _version.py declares
     (DEVIATION 2290); a literal never decides it.
     """
-    keys = [(v, a) for v, a, _, _, _, _ in sets]
+    keys = [(s.vendor, s.arch) for s in sets]
     keyset = set(keys)
     # DEVIATION 2293: normalise the Hopper slot before comparing, so sm_90 and
     # sm_90a are the same slot and neither can appear twice.
@@ -236,10 +256,28 @@ def release_inventory(sets, proof_paths, version, source_root=REPO):
             or len(hopper) > 1 or normalised != RELEASE_061_SETS):
         raise SystemExit(RELEASE_PROFILE + ' requires exactly CUDA sm_89, CUDA sm_90'
                          ' or sm_90a, and HIP gfx942')
-    if len(proof_paths) != 3:
-        raise SystemExit(RELEASE_PROFILE + ' requires three complete architecture build proofs')
+    # A SET A LEG BUILT NEEDS ITS PROOF; a set whose every binding was taken
+    # from the published wheel has none (its witnesses are the previous
+    # release's), so the proofs number the built sets, not three.
+    reused_of = {(s.vendor, s.arch): (s.reuse or {}).get('files', {}) for s in sets}
+    # s.files is keyed vendor/arch/<set-relative>; reuse.json is set-relative
+    built_keys = {(s.vendor, s.arch) for s in sets
+                  if any(rel.split('/', 2)[2] not in reused_of[(s.vendor, s.arch)] for rel in s.files)}
+    if len(proof_paths) != len(built_keys):
+        raise SystemExit(RELEASE_PROFILE + ' requires one complete build proof per set a leg built: '
+                         f'{len(built_keys)} built ({", ".join("/".join(k) for k in sorted(built_keys)) or "none"}), '
+                         f'{len(proof_paths)} proof(s) given')
     payload = {f'mojolearn/{rel}': sha(path).hex()
-               for _, _, files, _, _, _ in sets for rel, path in files.items()}
+               for s in sets for rel, path in s.files.items()}
+    origin = {}
+    for s in sets:
+        reused = reused_of[(s.vendor, s.arch)]
+        for rel in s.files:
+            rec = reused.get(rel.split('/', 2)[2])
+            origin[f'mojolearn/{rel}'] = (
+                dict(origin='reused', set=f'{s.vendor}/{s.arch}', from_release=s.reuse['origin'],
+                     identity_digest=rec.get('identity_digest'), rebuilt_sha256=rec.get('rebuilt_sha256'))
+                if rec else dict(origin='built', set=f'{s.vendor}/{s.arch}'))
     # The CPU training binding sits outside this map on purpose: every key here
     # is mojolearn/<vendor>/<arch>/..., and a vendor-neutral file belongs to no
     # architecture. It is recorded separately so the payload record still names
@@ -249,15 +287,22 @@ def release_inventory(sets, proof_paths, version, source_root=REPO):
     # main() has already refused legs that disagree).
     host_record = {}
     for name in HOST_NAMES:
-        seen = {f'{v}/{a}': sha(hosts[name]).hex() for v, a, _, _, _, hosts in sets if name in (hosts or {})}
+        seen = {f'{s.vendor}/{s.arch}': sha(s.hosts[name]).hex() for s in sets if name in (s.hosts or {})}
         if seen:
+            taken = [s for s in sets if f'host/{name}.so' in reused_of[(s.vendor, s.arch)]]
             host_record[name] = dict(archive_path=f'mojolearn/host/{name}.so',
                                      sha256=sorted(set(seen.values()))[0],
                                      vendor='cpu', supported_modes=['identical'],
                                      unsupported_modes=['fast', 'deterministic'],
                                      built_by=sorted(seen),
+                                     origin='reused' if taken else 'built',
+                                     from_release=taken[0].reuse['origin'] if taken else None,
                                      scope='CPU training and inference with no GPU; one '
                                            'copy for every architecture in this wheel')
+            origin[f'mojolearn/host/{name}.so'] = dict(
+                origin=host_record[name]['origin'], from_release=host_record[name]['from_release'],
+                identity_digest=taken[0].reuse['files'][f'host/{name}.so'].get('identity_digest') if taken else None,
+                built_by=[k for k in sorted(seen) if k not in {f'{s.vendor}/{s.arch}' for s in taken}])
     if set(host_record) != set(HOST_NAMES):
         raise SystemExit(RELEASE_PROFILE + ' requires every host binding the manifest ships; missing: '
                          + ', '.join(sorted(set(HOST_NAMES) - set(host_record))))
@@ -275,13 +320,25 @@ def release_inventory(sets, proof_paths, version, source_root=REPO):
         if len(covered) != 1:
             raise SystemExit('Each proof must cover exactly one advertised architecture')
         key = next(iter(covered))
+        if key not in built_keys:
+            raise SystemExit('A build proof was given for a set whose every binding is reused: ' + '/'.join(key))
         expected = {n: h for n, h in payload.items()
                     if n.startswith(f'mojolearn/{key[0]}/{key[1]}/')}
         required = {f'mojolearn/{key[0]}/{key[1]}/' +
                     ('' if mode == 'fast' else mode + '/') + name + '.so'
                     for mode in TIERS for name in tier_names(mode, True)}
-        if key in proofs or proof['extensions'] != expected or set(expected) != required:
+        # The leg built every binding of its set; the proof must name them
+        # all, and its digest must be the shipped digest for every binding
+        # the release did not take from the published wheel. For the taken
+        # ones the leg's digest is recorded beside the shipped one.
+        prefix = f'mojolearn/{key[0]}/{key[1]}/'
+        built = {n: h for n, h in expected.items() if n[len(prefix):] not in reused_of[key]}
+        if (key in proofs or set(proof['extensions']) != required or set(expected) != required
+                or {n: proof['extensions'][n] for n in built} != built):
             raise SystemExit('Duplicate, stale or incomplete architecture proof')
+        for n in expected:
+            if n not in built:
+                origin[n]['rebuilt_sha256'] = proof['extensions'][n]
         inventory = proof['source_inventory']
         if (not inventory or len(inventory) != len({p for p, _ in inventory})
                 or proof['source_sha256'] != hashlib.sha256(
@@ -303,13 +360,38 @@ def release_inventory(sets, proof_paths, version, source_root=REPO):
         inventories.append(inventory)
         proofs[key] = dict(sha256=hashlib.sha256(raw).hexdigest(),
                            source_sha256=proof['source_sha256'])
-    if len(commits) != 1 or any(i != inventories[0] for i in inventories[1:]):
+    if len(commits) > 1 or any(i != inventories[0] for i in inventories[1:]):
         raise SystemExit('Architecture sets were built from different sources')
+    if commits:
+        commit, inventory = next(iter(commits)), inventories[0]
+    else:
+        # Nothing was built: the wheel's source witness is the checkout being
+        # packed, its native inventory computed here exactly as a leg would
+        # have (tracked native source only).
+        from check_linux_release_qualification import tracked_native_inventory
+        commit = subprocess.run(['git', '-C', str(source_root), 'rev-parse', 'HEAD'],
+                                capture_output=True, text=True, timeout=10).stdout.strip()
+        if not re.fullmatch('[0-9a-f]{40}', commit):
+            raise SystemExit('No build proof and no git commit to witness the reused wheel')
+        inventory = tracked_native_inventory(source_root)
+    set_records = {}
+    for s in sets:
+        key = (s.vendor, s.arch)
+        if key in proofs:
+            set_records['/'.join(key)] = dict(proofs[key], origin='built' if not reused_of[key] else 'mixed',
+                                              reused=sorted(reused_of[key]))
+        else:
+            set_records['/'.join(key)] = dict(origin='reused', from_release=s.reuse['origin'],
+                                              reused=sorted(reused_of[key]))
+    n_reused = sum(1 for o in origin.values() if o['origin'] == 'reused')
     return dict(schema='mojolearn.linux-payload.v1', version=version,
                 release_profile='alpha-api', assembly_profile=RELEASE_PROFILE,
-                source_commit=next(iter(commits)), source_inventory=inventories[0],
-                sets={'/'.join(k): proofs[k] for k in sorted(proofs)},
+                source_commit=commit, source_inventory=inventory,
+                sets=set_records,
                 extensions=payload,
+                binding_origin=origin,
+                reuse=dict(built=len(origin) - n_reused, reused=n_reused,
+                           from_release=next((s.reuse['origin'] for s in sets if s.reuse), None)),
                 optional_native={n: {
                     'included': True, 'supported_modes': ['identical'],
                     'unsupported_modes': ['fast', 'deterministic']}
@@ -319,7 +401,7 @@ def release_inventory(sets, proof_paths, version, source_root=REPO):
                 # than leaving a reader to infer it from the archive.
                 host_native=host_record,
                 qualification='Build and file provenance only; installed runtime and numerical checks required',
-                runtime_coverage={ '/'.join(k): 'PENDING_INSTALLED_ARTIFACT' for k in sorted(proofs)})
+                runtime_coverage={'/'.join(k): 'PENDING_INSTALLED_ARTIFACT' for k in sorted(keys)})
 
 
 def urlsafe_b64(digest):
@@ -394,61 +476,78 @@ def load_set(path, include_byte_lm=False):
     for adir in arch_dirs:
         arch = adir.name
         manifest = json.loads((adir / "manifest.json").read_text())
-        # THE HOST ROWS ARE READ SEPARATELY, and by name. The CPU training
-        # binding has no device code and answers 'cpu', so folding it into the
-        # vendor and architecture comparisons below would either refuse a
-        # correct set or force those comparisons to accept 'cpu' from a GPU
-        # binary, which is the failure they exist to catch. Rows whose first
-        # field is `host` are pulled out here and checked on their own terms.
-        rb_lines = [ln.split() for ln in (adir / "readback.txt").read_text().splitlines()]
-        host_rows = [r for r in rb_lines if r and r[0] == "host"]
-        rb = [w for r in rb_lines if not (r and r[0] == "host") for w in r]
-        said = {w for w in rb if w in ("cuda", "hip", "metal", "none", "NO-READBACK")}
-        if said != {vendor}:
-            raise SystemExit(f"pack_wheel: {adir}/readback.txt says {sorted(said)}, "
-                             f"directory says {vendor}; refusing to pack a mislabeled set")
-        if any(len(r) != 3 or r[2] != "cpu" for r in host_rows):
+        reuse = load_reuse(adir, vendor, arch)
+        reused = reuse["files"] if reuse else {}
+        expected_rels = {("" if tier == "fast" else tier + "/") + name + ".so"
+                         for tier in TIERS for name in tier_names(tier, include_byte_lm)}
+        all_reused = bool(reuse) and expected_rels <= set(reused) and (
+            not include_byte_lm or all(f"host/{n}.so" in reused for n in HOST_NAMES))
+        has_witnesses = (adir / "readback.txt").is_file() and (adir / "arch_readback.txt").is_file()
+        if not has_witnesses and not all_reused:
             raise SystemExit(
-                f"pack_wheel: {adir}/readback.txt host row is not 'cpu': {host_rows}. "
-                "A GPU vendor there means the CPU-only build saw an accelerator target.")
-        host_named = [r[1] for r in host_rows]
-        if any(n not in HOST_NAMES for n in host_named) or len(set(host_named)) != len(host_named):
-            raise SystemExit(
-                f"pack_wheel: {adir}/readback.txt names host bindings the manifest does not ship, "
-                f"or one twice: {host_named}; the manifest ships {list(HOST_NAMES)}")
-        if include_byte_lm and set(host_named) != set(HOST_NAMES):
-            raise SystemExit(
-                f"pack_wheel: {adir}/readback.txt names {sorted(host_named)}; the release profile "
-                f"requires every host binding the manifest ships: {list(HOST_NAMES)}")
-        # THE ARCHITECTURE IS VERIFIED THE SAME WAY THE VENDOR IS: read back
-        # from the binaries on the box (build_sets.sh), never typed. A set
-        # whose read-back disagrees with its directory name is refused, the
-        # exact failure mode that shipped 0.3.0 as sm_90a-only.
-        ab_lines = [ln.split() for ln in (adir / "arch_readback.txt").read_text().splitlines()]
-        host_arch_rows = [r for r in ab_lines if r and r[0] == "host"]
-        ab = [w for r in ab_lines if not (r and r[0] == "host") for w in r]
-        said_arch = {w for w in ab if ARCH_RE.match(w) or "," in w}
-        if said_arch != {arch}:
-            raise SystemExit(
-                f"pack_wheel: {adir}/arch_readback.txt says {sorted(said_arch)}, "
-                f"directory says {arch}; refusing to pack a mislabeled set")
-        if any(len(r) != 3 or r[2] != "NONE-BY-DESIGN" for r in host_arch_rows):
-            raise SystemExit(
-                f"pack_wheel: {adir}/arch_readback.txt host row names architectures: "
-                f"{host_arch_rows}. A host binding must carry no device code.")
-        if sorted(r[1] for r in host_arch_rows) != sorted(host_named):
-            raise SystemExit(
-                f"pack_wheel: {adir}/arch_readback.txt and readback.txt name different host bindings")
-        if include_byte_lm:
-            expected_rows = {(tier, name) for tier in TIERS
-                             for name in tier_names(tier, True)}
-            for witness, expected_value in (('readback.txt', vendor), ('arch_readback.txt', arch)):
-                rows = [line.split() for line in (adir / witness).read_text().splitlines()
-                        if not line.startswith('host ')]
-                if (len(rows) != len(expected_rows) or any(len(row) != 3 for row in rows)
-                        or {(row[0], row[1]) for row in rows} != expected_rows
-                        or any(row[2] != expected_value for row in rows)):
-                    raise SystemExit(f'pack_wheel: incomplete release native readback in {adir / witness}')
+                f"pack_wheel: {adir} has no readback.txt or arch_readback.txt and not every binding "
+                "in it is taken from the published wheel (reuse.json); a built binding needs its read-back")
+        if not has_witnesses:
+            # EVERY BINDING WAS TAKEN FROM THE PUBLISHED WHEEL. Its vendor and
+            # architecture were read back on the box that built it, for the
+            # release that shipped it; the bytes verified above are those.
+            host_named = [n for n in HOST_NAMES if f"host/{n}.so" in reused]
+        else:
+            # THE HOST ROWS ARE READ SEPARATELY, and by name. The CPU training
+            # binding has no device code and answers 'cpu', so folding it into the
+            # vendor and architecture comparisons below would either refuse a
+            # correct set or force those comparisons to accept 'cpu' from a GPU
+            # binary, which is the failure they exist to catch. Rows whose first
+            # field is `host` are pulled out here and checked on their own terms.
+            rb_lines = [ln.split() for ln in (adir / "readback.txt").read_text().splitlines()]
+            host_rows = [r for r in rb_lines if r and r[0] == "host"]
+            rb = [w for r in rb_lines if not (r and r[0] == "host") for w in r]
+            said = {w for w in rb if w in ("cuda", "hip", "metal", "none", "NO-READBACK")}
+            if said != {vendor}:
+                raise SystemExit(f"pack_wheel: {adir}/readback.txt says {sorted(said)}, "
+                                 f"directory says {vendor}; refusing to pack a mislabeled set")
+            if any(len(r) != 3 or r[2] != "cpu" for r in host_rows):
+                raise SystemExit(
+                    f"pack_wheel: {adir}/readback.txt host row is not 'cpu': {host_rows}. "
+                    "A GPU vendor there means the CPU-only build saw an accelerator target.")
+            host_named = [r[1] for r in host_rows]
+            if any(n not in HOST_NAMES for n in host_named) or len(set(host_named)) != len(host_named):
+                raise SystemExit(
+                    f"pack_wheel: {adir}/readback.txt names host bindings the manifest does not ship, "
+                    f"or one twice: {host_named}; the manifest ships {list(HOST_NAMES)}")
+            if include_byte_lm and set(host_named) != set(HOST_NAMES):
+                raise SystemExit(
+                    f"pack_wheel: {adir}/readback.txt names {sorted(host_named)}; the release profile "
+                    f"requires every host binding the manifest ships: {list(HOST_NAMES)}")
+            # THE ARCHITECTURE IS VERIFIED THE SAME WAY THE VENDOR IS: read back
+            # from the binaries on the box (build_sets.sh), never typed. A set
+            # whose read-back disagrees with its directory name is refused, the
+            # exact failure mode that shipped 0.3.0 as sm_90a-only.
+            ab_lines = [ln.split() for ln in (adir / "arch_readback.txt").read_text().splitlines()]
+            host_arch_rows = [r for r in ab_lines if r and r[0] == "host"]
+            ab = [w for r in ab_lines if not (r and r[0] == "host") for w in r]
+            said_arch = {w for w in ab if ARCH_RE.match(w) or "," in w}
+            if said_arch != {arch}:
+                raise SystemExit(
+                    f"pack_wheel: {adir}/arch_readback.txt says {sorted(said_arch)}, "
+                    f"directory says {arch}; refusing to pack a mislabeled set")
+            if any(len(r) != 3 or r[2] != "NONE-BY-DESIGN" for r in host_arch_rows):
+                raise SystemExit(
+                    f"pack_wheel: {adir}/arch_readback.txt host row names architectures: "
+                    f"{host_arch_rows}. A host binding must carry no device code.")
+            if sorted(r[1] for r in host_arch_rows) != sorted(host_named):
+                raise SystemExit(
+                    f"pack_wheel: {adir}/arch_readback.txt and readback.txt name different host bindings")
+            if include_byte_lm:
+                expected_rows = {(tier, name) for tier in TIERS
+                                 for name in tier_names(tier, True)}
+                for witness, expected_value in (('readback.txt', vendor), ('arch_readback.txt', arch)):
+                    rows = [line.split() for line in (adir / witness).read_text().splitlines()
+                            if not line.startswith('host ')]
+                    if (len(rows) != len(expected_rows) or any(len(row) != 3 for row in rows)
+                            or {(row[0], row[1]) for row in rows} != expected_rows
+                            or any(row[2] != expected_value for row in rows)):
+                        raise SystemExit(f'pack_wheel: incomplete release native readback in {adir / witness}')
         # OPTIONAL WHEN ABSENT (generic profile only), because a set built
         # before this payload existed is still a valid set and a rebuild of an
         # older commit must not be refused. A named binding must be on disk;
@@ -486,8 +585,45 @@ def load_set(path, include_byte_lm=False):
         libs = {p.name: p for p in sorted((adir / ".libs").glob("*"))}
         if not libs:
             raise SystemExit(f"pack_wheel: {adir}/.libs is empty; stage_libs.py did not run")
-        out.append((vendor, arch, files, libs, manifest, host_payload))
+        if reuse:
+            # `files` is keyed vendor/arch/<set-relative>; reuse.json is set-relative
+            packed = {rel.split("/", 2)[2] for rel in files}
+            unknown = set(reused) - packed - {f"host/{n}.so" for n in host_named} - {f".libs/{n}" for n in libs}
+            if unknown:
+                raise SystemExit(f"pack_wheel: {adir}/reuse.json names files this set does not pack: {sorted(unknown)}")
+        out.append(SetDir(vendor, arch, files, libs, manifest, host_payload, reuse))
     return out
+
+
+def load_reuse(adir, vendor, arch):
+    """`reuse.json` of one set directory, every file it names verified
+    against the published bytes' sha256 it records; None when absent. A file
+    that differs is refused: a reused binding is the published one or it is
+    not reused."""
+    path = adir / "reuse.json"
+    if not path.is_file():
+        return None
+    doc = json.loads(path.read_text())
+    origin = doc.get("from_release") or {}
+    if (doc.get("schema") != REUSE_SCHEMA or doc.get("set") != f"{vendor}/{arch}"
+            or not isinstance(doc.get("files"), dict)
+            or not all(origin.get(k) for k in ("version", "source_commit", "wheel", "wheel_sha256"))):
+        raise SystemExit(f"pack_wheel: {path} is not a {REUSE_SCHEMA} record for {vendor}/{arch}")
+    for rel, rec in sorted(doc["files"].items()):
+        p = adir / rel
+        if pathlib.PurePosixPath(rel).is_absolute() or ".." in rel.split("/"):
+            raise SystemExit(f"pack_wheel: {path} names an unsafe path: {rel}")
+        if not p.is_file():
+            raise SystemExit(f"pack_wheel: {path} names {rel}, which is absent from {adir}")
+        want = rec.get("sha256") if isinstance(rec, dict) else None
+        if not isinstance(want, str) or not re.fullmatch("[0-9a-f]{64}", want):
+            raise SystemExit(f"pack_wheel: {path} records no sha256 for {rel}")
+        if sha(p).hex() != want:
+            raise SystemExit(
+                f"pack_wheel: {adir}/{rel} differs from the published {origin['version']} bytes reuse.json "
+                f"records ({want[:12]}); a reused binding must be the published one, refusing to pack it")
+    return dict(files=doc["files"], origin=dict(version=origin["version"], source_commit=origin["source_commit"],
+                                                wheel=origin["wheel"], wheel_sha256=origin["wheel_sha256"]))
 
 
 def sha(path):
@@ -569,13 +705,22 @@ def main():
     readme = (REPO / "README.md").read_text()
 
     sets = [t for s in a.set for t in load_set(s, include_byte_lm=a.profile == RELEASE_PROFILE)]
-    keys = [(v, arch) for v, arch, _, _, _, _ in sets]
+    keys = [(s.vendor, s.arch) for s in sets]
     if len(set(keys)) != len(keys):
         raise SystemExit(f"pack_wheel: the same (vendor, arch) given twice: {keys}")
     if a.profile == 'generic' and a.build_proof:
         raise SystemExit('--build-proof requires an explicit release profile')
+    if a.profile != RELEASE_PROFILE and any(s.reuse for s in sets):
+        raise SystemExit('pack_wheel: reuse.json (bindings taken from a published wheel) needs the release profile')
     inventory = (release_inventory(sets, a.build_proof, version)
                  if a.profile == RELEASE_PROFILE else None)
+    if inventory is not None:
+        r = inventory['reuse']
+        print(f"pack_wheel: {r['built']} binding(s) built by the legs, {r['reused']} taken from "
+              + (f"{r['from_release']['version']} ({r['from_release']['wheel']}, sha256 "
+                 f"{r['from_release']['wheel_sha256'][:12]})" if r['from_release'] else 'no previous release'))
+        for key, rec in sorted(inventory['sets'].items()):
+            print(f"pack_wheel: set {key}: {rec['origin']}, {len(rec.get('reused', []))} file(s) reused")
 
     # .libs layout: ONE shared mojolearn/.libs when every closure across
     # every (vendor, arch) set matches by name AND sha256 (2026-08-30
@@ -584,7 +729,7 @@ def main():
     # themselves -- the MAX runtime does not vary by GPU architecture, so a
     # disagreement there is a build defect, refused rather than laid out.
     lib_sha = {k: {n: sha(p) for n, p in libs.items()}
-               for k, (_, _, _, libs, _, _) in zip(keys, sets)}
+               for k, libs in zip(keys, (s.libs for s in sets))}
     first = keys[0]
     shared = all(lib_sha[k] == lib_sha[first] for k in keys)
     if not shared:
@@ -602,7 +747,7 @@ def main():
     entries["mojolearn/ALPHA_API.md"] = PKG / "ALPHA_API.md"
     entries["mojolearn/Hendel_2026_bitwise_identical_gpu_ml_preprint.pdf"] = PKG / "Hendel_2026_bitwise_identical_gpu_ml_preprint.pdf"
     seen_vendor_libs = set()
-    for vendor, arch, files, libs, _, _ in sets:
+    for vendor, arch, files, libs, _, _, _ in sets:
         for rel, p in files.items():
             entries[f"mojolearn/{rel}"] = p
         if not shared and vendor not in seen_vendor_libs:
@@ -610,7 +755,7 @@ def main():
             for n, p in libs.items():
                 entries[f"mojolearn/{vendor}/.libs/{n}"] = p
     if shared:
-        for n, p in sets[0][3].items():
+        for n, p in sets[0].libs.items():
             entries[f"mojolearn/.libs/{n}"] = p
 
     # ONE COPY OF EACH, AND EVERY SET THAT CARRIES ONE MUST CARRY THE SAME
@@ -627,7 +772,7 @@ def main():
     # every set (load_set refused a short readback.txt already).
     carried = 0
     for name in HOST_NAMES:
-        host_payloads = {(v, arch): hosts[name] for v, arch, _, _, _, hosts in sets if name in (hosts or {})}
+        host_payloads = {(s.vendor, s.arch): s.hosts[name] for s in sets if name in (s.hosts or {})}
         if not host_payloads:
             print(f"pack_wheel: NO {name} in any set; this wheel has no CPU path for that family")
             continue
@@ -780,7 +925,7 @@ def main():
 
     size = whl.stat().st_size
     per_set = {}
-    for vendor, arch, files, libs, manifest, _ in sets:
+    for vendor, arch, files, libs, manifest, _, _ in sets:
         per_set[f"{vendor}/{arch}"] = {
             "extensions_bytes": manifest["bytes_extensions"],
             "runtime_libs_bytes": manifest["bytes_staged_libs"],
