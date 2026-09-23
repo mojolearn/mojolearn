@@ -58,6 +58,13 @@ cp "$SEL" "$OUT/selection.json"
 cpu_pid=
 if [[ "${MOJOLEARN_RELEASE_COLUMN_CPU:-0}" = 1 ]]; then
   host=$(ls -d "$RB"/build/sets/"$backend"/*/host 2>/dev/null | head -1)
+  # The CPU route's package links this checkout's sources, and
+  # `_portable_math.py` loads libMojolearnMath from beside them
+  # (python/mojolearn/.libs), which the release build leaves in the set only.
+  if [[ -n "$host" && ! -e "$ROOT/python/mojolearn/.libs/libMojolearnMath.so" ]]; then
+    [[ -e "$ROOT/python/mojolearn/.libs" || -L "$ROOT/python/mojolearn/.libs" ]] \
+      || ln -s "$(dirname "$host")/.libs" "$ROOT/python/mojolearn/.libs"
+  fi
   cpu_lanes=$("$PY" - "$SEL" <<'PYCPU'
 import json, sys
 sys.path.insert(0, "tools")
@@ -86,7 +93,8 @@ if [[ "$backend" = cuda ]]; then
 else
   gpu=$(rocm-smi --showproductname 2>/dev/null | grep -i 'card series' | head -1 | sed 's/.*: *//'); prefix=amd
 fi
-label=$(printf '%s-%s' "$prefix" "${gpu:-gpu}" | tr '[:upper:] ' '[:lower:]-' | sed 's/[^a-z0-9_.-]/-/g; s/--*/-/g; s/-$//')
+label=$(printf '%s-%s' "$prefix" "${gpu:-gpu}" | tr '[:upper:] ' '[:lower:]-' \
+  | sed 's/[^a-z0-9_.-]/-/g; s/--*/-/g; s/-$//' | sed -E 's/^(nvidia|amd)-(nvidia|amd)-/\1-/')
 echo "vendor_label=$label" >> "$OUT/column.txt"
 timeout -k 30 "$seconds" "$PY" tools/verify_lanes.py --gpu-pass "$backend" --selection "$SEL" \
     --gpu-set "$RB/build/sets/$backend" --vendor "$label" --budget $((seconds - 60)) \

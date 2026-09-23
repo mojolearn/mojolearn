@@ -382,29 +382,39 @@ def gpu_package(out, set_dir, vendor):
     root = Path(out).resolve() / "gpu-package"
     pkg = root / "mojolearn"
     pkg.mkdir(parents=True, exist_ok=True)
+    # THE SOURCES ARE COPIED, NOT LINKED (2026-09-23, the first H100 proof
+    # leg). `_portable_math.py` finds libMojolearnMath through
+    # `Path(__file__).resolve().parent / ".libs"`, and resolve() follows a
+    # symlink back into the source tree, where no library was built: 40 lanes
+    # refused with "libMojolearnMath.so: cannot open shared object file".
+    # Copies behave as the wheel's files do.
+    import shutil
     for src in source.rglob("*.py"):
         rel = src.relative_to(source)
-        if "__pycache__" in rel.parts or rel.parts[0] in (vendor, "host"):
+        if "__pycache__" in rel.parts or rel.parts[0] in (vendor, "host", ".libs"):
             continue
         dst = pkg / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
-        if dst.is_symlink() and dst.resolve() == src.resolve():
-            continue
-        if dst.exists() or dst.is_symlink():
+        if dst.is_symlink():
             dst.unlink()
-        dst.symlink_to(src.resolve())
+        if not dst.exists() or dst.read_bytes() != src.read_bytes():
+            shutil.copyfile(src, dst)
     # Package DATA the lanes read through the package (reference cards, the
     # verifier's reference models): linked like the sources, never copied.
     for src in source.rglob("*"):
         rel = src.relative_to(source)
         if (not src.is_file() or src.suffix in (".py", ".pyc", ".so", ".dylib") or "__pycache__" in rel.parts
-                or rel.parts[0] in ("tests", vendor, "host", "cuda", "hip", "identical", "deterministic")):
+                or rel.parts[0] in ("tests", vendor, "host", "cuda", "hip", "identical", "deterministic", ".libs",
+                                    ".dylibs")):
             continue
         dst = pkg / rel
         if not (dst.exists() or dst.is_symlink()):
             dst.parent.mkdir(parents=True, exist_ok=True)
             dst.symlink_to(src.resolve())
-    for name, target in ((vendor, set_dir), ("host", host)):
+    # The wheel's shared `mojolearn/.libs` (pack_wheel.py: one directory when
+    # every set's closure matches): the MAX runtime closure and
+    # libMojolearnMath, which `_portable_math` loads by path.
+    for name, target in ((vendor, set_dir), ("host", host), (".libs", archs[0] / ".libs")):
         link = pkg / name
         if link.is_symlink() or link.exists():
             if link.is_symlink() and link.resolve() == target:
