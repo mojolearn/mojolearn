@@ -4,7 +4,7 @@
 # ranges of the token parts, all from R2; the chain lines 100, 101, 700, 701 ship in the repo.
 set -u
 mkdir -p "$LEG_OUT"; G="$LEG_OUT/gate.txt"; say() { echo "[$(date -u +%T)] $*" | tee -a "$G"; }
-T0=$(date +%s); HARD=$((T0 + 195 * 60))   # everything ends 195 min after the start; the lease is longer
+T0=$(date +%s); HARD=$((T0 + 145 * 60))   # everything ends 145 min after the start; the lease (180, the leg maximum) is longer
 left() { echo $(( HARD - $(date +%s) )); }
 say "started=$(date -u +%FT%TZ) commit=${MOJOLEARN_COMMIT:-unknown}"
 lscpu > "$LEG_OUT/lscpu.txt" 2>&1; nproc >> "$LEG_OUT/lscpu.txt"; free -g > "$LEG_OUT/free.txt" 2>&1
