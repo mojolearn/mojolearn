@@ -12,8 +12,38 @@ TILE = 32
 def f32(x):
     return np.float32(x)
 
+try:
+    _fma64 = math.fma
+except AttributeError:  # math.fma is Python 3.13+; the wheel supports 3.10 up
+    from fractions import Fraction
+
+    def _fma64(a, b, c):
+        """a*b+c with ONE rounding, as math.fma: exact rational arithmetic,
+        then Fraction.__float__, which CPython rounds correctly (int/int true
+        division). Non-finite operands follow math.fma: NaN propagates,
+        inf*0 and inf-inf raise ValueError, an infinite addend wins over a
+        finite product even when that product overflows a double; an exact
+        zero keeps its sign by the IEEE 754 sum rule (-0 only when both
+        addends are -0)."""
+        if math.isnan(a) or math.isnan(b) or math.isnan(c):
+            return math.nan
+        if math.isinf(a) or math.isinf(b):
+            if a == 0.0 or b == 0.0:
+                raise ValueError("invalid operation in fma")
+            product = math.copysign(math.inf, math.copysign(1.0, a) * math.copysign(1.0, b))
+            if math.isinf(c) and c != product:
+                raise ValueError("invalid operation in fma")
+            return product
+        if math.isinf(c):
+            return c
+        exact = Fraction(a) * Fraction(b) + Fraction(c)
+        if exact == 0:
+            product_negative_zero = a * b == 0.0 and math.copysign(1.0, a) != math.copysign(1.0, b)
+            return -0.0 if product_negative_zero and c == 0.0 and math.copysign(1.0, c) < 0 else 0.0
+        return float(exact)  # OverflowError past the float range, as math.fma raises
+
 def _fma32(a,b,c):
-    return f32(math.fma(float(f32(a)),float(f32(b)),float(f32(c))))
+    return f32(_fma64(float(f32(a)),float(f32(b)),float(f32(c))))
 
 def _pow2(k):
     return np.frombuffer(struct.pack('<I',(k+127)<<23),dtype='<f4')[0]
