@@ -108,6 +108,10 @@ from training.host.samba_ops_oracle import (
     host_samba_rms_norm_backward,
     host_samba_rms_norm_forward,
 )
+from training.checks.chunked_lm_head_oracle import (
+    chunked_lm_head_v2_oracle,
+    chunked_lm_head_v2_oracle_forward,
+)
 from mamba.host.device_shim import DeviceContext as HostDeviceContext
 from mamba.host.gen.philox_neural import neural_rng_host
 from training.host.mlp_oracle import (
@@ -773,6 +777,72 @@ def neural_rng_binding(
     return PythonObject(count)
 
 
+
+# ===========================================================================
+# THE CHUNKED LM HEAD, V2 (lane/exposure-leftovers, 2026-09-23). The GPU
+# binding has exported `chunked_lm_head_v2_loss` and `chunked_lm_head_v2_train`
+# since the v2 profile landed, with no Python caller and no host entry, so a
+# CPU-only install had no way to reach it. These are the same (addresses,
+# params) lists in the same order and words, over the normative CPU oracle
+# the device check compares the kernels against bit for bit
+# (training/checks/chunked_lm_head_device_check.mojo). Validation precedes
+# every write, as in the device entries.
+# ===========================================================================
+
+
+def chunked_lm_head_v2_loss_binding(
+    addresses: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """addresses = [loss (1 f32, written), max (rows f32, written), denom
+    (rows f32, written), hidden (rows*width f32), weight (vocab*width f32),
+    target (rows i32)]; params = [rows, vocab, width]. Returns rows."""
+    var a = _addrs(addresses, 6, "chunked_lm_head_v2_loss")
+    _params(params, 3, "chunked_lm_head_v2_loss")
+    var rows = Int(py=params[0])
+    var vocab = Int(py=params[1])
+    var width = Int(py=params[2])
+    var count = 0
+    with GILReleased(Python()):
+        if rows < 1 or vocab < 2 or width < 1:
+            raise Error("chunked lm head v2: rows/width must be positive and vocab >= 2")
+        var r = chunked_lm_head_v2_oracle_forward(
+            read_f32(a[3], rows * width), read_f32(a[4], vocab * width),
+            read_i32(a[5], rows), rows, vocab, width,
+        )
+        f32_ptr(a[0])[0] = r.loss
+        _write_f32(r.row_max, f32_ptr(a[1]))
+        _write_f32(r.row_denom, f32_ptr(a[2]))
+        count = rows
+    return PythonObject(count)
+
+
+def chunked_lm_head_v2_train_binding(
+    addresses: PythonObject, params: PythonObject
+) raises -> PythonObject:
+    """addresses = [loss, max, denom, dhidden (rows*width f32, written),
+    dweight (vocab*width f32, written), hidden, weight, target];
+    params = [rows, vocab, width]. Returns rows."""
+    var a = _addrs(addresses, 8, "chunked_lm_head_v2_train")
+    _params(params, 3, "chunked_lm_head_v2_train")
+    var rows = Int(py=params[0])
+    var vocab = Int(py=params[1])
+    var width = Int(py=params[2])
+    var count = 0
+    with GILReleased(Python()):
+        if rows < 1 or vocab < 2 or width < 1:
+            raise Error("chunked lm head v2: rows/width must be positive and vocab >= 2")
+        var r = chunked_lm_head_v2_oracle(
+            read_f32(a[5], rows * width), read_f32(a[6], vocab * width),
+            read_i32(a[7], rows), rows, vocab, width,
+        )
+        f32_ptr(a[0])[0] = r.loss
+        _write_f32(r.row_max, f32_ptr(a[1]))
+        _write_f32(r.row_denom, f32_ptr(a[2]))
+        _write_f32(r.d_hidden, f32_ptr(a[3]))
+        _write_f32(r.d_weight, f32_ptr(a[4]))
+        count = rows
+    return PythonObject(count)
+
 @export
 def PyInit__mojolearn_training_host() abi("C") -> PythonObject:
     try:
@@ -798,6 +868,8 @@ def PyInit__mojolearn_training_host() abi("C") -> PythonObject:
         module.def_function[linear_forward_binding]("linear_forward")
         module.def_function[linear_backward_binding]("linear_backward")
         module.def_function[neural_rng_binding]("neural_rng")
+        module.def_function[chunked_lm_head_v2_loss_binding]("chunked_lm_head_v2_loss")
+        module.def_function[chunked_lm_head_v2_train_binding]("chunked_lm_head_v2_train")
         return module.finalize()
     except error:
         abort(String("failed to create _mojolearn_training_host: ", error))

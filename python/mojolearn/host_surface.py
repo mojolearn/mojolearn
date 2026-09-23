@@ -2427,7 +2427,7 @@ FAMILIES = (
             "SmallMLPTrainer", "SGD", "Adam", "AdamW", "cross_entropy", "clip_grad_norm_",
             "accumulate_grads", "embedding_forward", "embedding_backward", "rms_norm_forward",
             "rms_norm_backward", "linear_forward", "linear_backward", "training.Generator",
-            "SambaConfig", "SambaStack",
+            "SambaConfig", "SambaStack", "chunked_lm_head_loss",
         ),
         display="the small MLP trainer, the optimizers, the gradient clip, the cross-entropy loss, the training primitives, the neural random stream and the Samba stack",
         host_modules=(
@@ -2435,6 +2435,8 @@ FAMILIES = (
             "training/checks/loss_oracle.mojo",
             "training/checks/optimizer_oracle.mojo",
             "training/host/samba_ops_oracle.mojo",
+            # lane/exposure-leftovers (2026-09-23): the chunked LM head v2
+            "training/checks/chunked_lm_head_oracle.mojo",
             "mamba/host/gen/philox_neural.mojo",
             "mamba/host/gen/philox.mojo",
             "embedding/checks/embedding_oracle.mojo",
@@ -2448,7 +2450,7 @@ FAMILIES = (
             "clip_grad_norm", "accumulate", "accumulation_is_aligned",
             "embedding_forward", "embedding_backward", "rms_norm_forward",
             "rms_norm_backward", "linear_forward", "linear_backward",
-            "neural_rng",
+            "neural_rng", "chunked_lm_head_v2_loss", "chunked_lm_head_v2_train",
         ),
         gate="tools/identity_break.py (cpu-identity-gate.yml)",
         wheel_note=(

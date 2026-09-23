@@ -1,0 +1,24 @@
+### commit b030f87af67562f1d7e8c39d1603a6261b0ab919
+portable_math exit 0
+### 1. oracle check: done on the first leg (CHUNKED_LM_HEAD_V2_OK)
+3.14.7 2.5.3 9.1.1
+cpu_only True built ['_mojolearn_training_host']
+### 2. pytest: the new door test and the training host tests beside it
+pytest exit 0
+...........SKIP: _mojolearn_mamba_host is not built
+.
+12 passed in 0.92s
+### 3. clean hashes
+sabotage False
+5 513 8 loss 358bd440 358bd440 dh 18de3ea14338860f dw 8ccce010bf7ff1fa
+16 300 12 loss c35bba40 c35bba40 dh 39fae04463807ca5 dw 3006ca6667d265d9
+### 4. sabotage hashes (MOJOLEARN_HOST_SABOTAGE training host)
+sabotage True
+5 513 8 loss 358bd440 358bd440 dh 18de3ea14338860f dw 08341afbc33bf1a9
+16 300 12 loss c35bba40 c35bba40 dh 39fae04463807ca5 dw 1f4497f83b62ca1b
+### 5. gates
+lane_accounting --check exit 0
+what the shipped verifier does with them: 215 EXPOSED, 59 NOT APPLICABLE
+public algorithms with no lane at all: 1 declared (ran)
+harness cross-check: ran
+OK: 0 problems

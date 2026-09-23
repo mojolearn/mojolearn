@@ -1,0 +1,6 @@
+lane=exposure
+commit=b030f87af67562f1d7e8c39d1603a6261b0ab919
+dirty_tracked=0
+worktree=/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a221d7598c47a2a94
+source=3246	20031028	b55579418f709ecede40517ac435393240eca56e1f47c1740707eb5ab488a384
+box_clock_minus_mac=0

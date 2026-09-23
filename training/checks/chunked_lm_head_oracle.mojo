@@ -10,6 +10,7 @@ Changing chunk size, normalizing inside a chunk, or reducing chunks as a tree
 is a different profile.
 """
 from std.memory import bitcast
+from std.sys.compile import is_defined
 
 from checks.numerics import (
     ftz,
@@ -23,6 +24,18 @@ from training.checks.loss_oracle import CE_NEG_INF_BITS, neg_by_bits, refuse_non
 
 
 comptime LM_HEAD_V2_VOCAB_CHUNK = 256
+
+#: THE NEGATIVE CONTROL for the training host binding, which is the only
+#: caller built with it (`-D MOJOLEARN_HOST_SABOTAGE=1`, the training family's
+#: define). It folds the row losses and every dWeight cell over rows
+#: DESCENDING, a fold-order fault the contract forbids, while the arithmetic
+#: of each term is unchanged. MEASURED on a RunPod x86 CPU pod (2026-09-23,
+#: bench/results/runpod_cpu/2026-09-23_233919-exposure/): dWeight moved at
+#: (5, 513, 8) and (16, 300, 12); the loss did NOT move at either shape (a
+#: reversed sum of 5 or 16 row losses rounded to the same bits), so only the
+#: dWeight part of a future lane is watched by this arm. The checks in
+#: training/checks never define it.
+comptime CHUNKED_LM_HEAD_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
 
 def chunked_lm_head_v2_peak_scratch_floats(rows: Int) -> Int:
@@ -52,11 +65,15 @@ def _logit(
     return ftz(acc)
 
 
-def chunked_lm_head_v2_oracle(
+def chunked_lm_head_v2_oracle_forward(
     hidden: List[Float32], weight: List[Float32], targets: List[Int32],
     rows: Int, vocab: Int, width: Int,
 ) raises -> ChunkedLMHeadV2Result:
-    """Mean CE and LM-head gradients under the v2 serial chunk contract."""
+    """Mean CE, row maxima and row denominators under the v2 serial chunk
+    contract, with EMPTY gradient lists. The loss-only stage the host binding
+    exports as `chunked_lm_head_v2_loss`; `chunked_lm_head_v2_oracle` runs
+    exactly this and then the two gradient folds, so the loss a caller gets
+    from either is the same arithmetic in the same order."""
     if rows < 1 or vocab < 2 or width < 1:
         raise Error("chunked lm head v2: rows/width must be positive and vocab >= 2")
     if len(hidden) != rows * width:
@@ -100,10 +117,29 @@ def chunked_lm_head_v2_oracle(
         row_loss[row] = neg_by_bits(ftz(ftz(target_shift) - ftz(logdenom)))
 
     var loss_total = Float32(0.0)
-    for row in range(rows):
+    for r in range(rows):
+        var row = r
+        comptime if CHUNKED_LM_HEAD_HOST_SABOTAGE:
+            row = rows - 1 - r
         loss_total = ftz(loss_total + row_loss[row])
+    var loss = ftz(identical_div(loss_total, Float32(rows)))
+    return ChunkedLMHeadV2Result(
+        loss, maxima^, denom^, List[Float32](), List[Float32]()
+    )
+
+
+def chunked_lm_head_v2_oracle(
+    hidden: List[Float32], weight: List[Float32], targets: List[Int32],
+    rows: Int, vocab: Int, width: Int,
+) raises -> ChunkedLMHeadV2Result:
+    """Mean CE and LM-head gradients under the v2 serial chunk contract."""
+    var fwd = chunked_lm_head_v2_oracle_forward(
+        hidden, weight, targets, rows, vocab, width
+    )
+    var loss = fwd.loss
+    var maxima = fwd.row_max.copy()
+    var denom = fwd.row_denom.copy()
     var divisor = Float32(rows)
-    var loss = ftz(identical_div(loss_total, divisor))
 
     # dHidden owns one cell and folds vocab ids globally in ascending order.
     var d_hidden = List[Float32](length=rows * width, fill=Float32(0.0))
@@ -128,7 +164,10 @@ def chunked_lm_head_v2_oracle(
         for token in range(chunk0, chunk1):
             for feature in range(width):
                 var acc = Float32(0.0)
-                for row in range(rows):
+                for r in range(rows):
+                    var row = r
+                    comptime if CHUNKED_LM_HEAD_HOST_SABOTAGE:
+                        row = rows - 1 - r
                     var shifted = ftz(ftz(_logit(hidden, weight, row, token, width)) - ftz(maxima[row]))
                     var probability = ftz(identical_div(ftz(identical_exp(shifted)), ftz(denom[row])))
                     var target = Float32(1.0) if token == Int(targets[row]) else Float32(0.0)

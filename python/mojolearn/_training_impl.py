@@ -2028,3 +2028,78 @@ def linear_backward(dc, a, weight, numeric_mode=None):
         [_addr(da), _addr(dw), _addr_ro(dc), _addr_ro(a), _addr_ro(w)],
         [int(m), int(n), int(k)])
     return da.reshape(a.shape), dw
+
+
+# ===================================================================
+# THE CHUNKED LM HEAD, V2 (lane/exposure-leftovers, 2026-09-23)
+# ===================================================================
+# Profile `mojolearn.identical.lm_head.chunked.fp32.v2`
+# (training/CHUNKED_LM_HEAD_V2.md). Both bindings have registered
+# `chunked_lm_head_v2_loss` and `chunked_lm_head_v2_train`: the GPU one over
+# the device kernels in training/chunked_lm_head_v2.mojo, the training host
+# binding over training/checks/chunked_lm_head_oracle.mojo, which the device
+# check compares those kernels against bit for bit. Until this function
+# nothing in Python reached either. No arithmetic here: shapes, dtypes and the
+# buffer order both bindings document.
+
+
+def chunked_lm_head_loss(hidden, weight, targets, return_grad=False,
+                         numeric_mode=None):
+    """Mean cross entropy of the LM head `hidden . weight^T` over class
+    indices, without ever holding the `(rows, vocab)` logits.
+
+        loss = chunked_lm_head_loss(hidden, weight, targets)
+        loss, d_hidden, d_weight = chunked_lm_head_loss(
+            hidden, weight, targets, return_grad=True)
+
+    `hidden` is `(rows, width)` float32, `weight` is `(vocab, width)` float32
+    with `vocab >= 2`, `targets` is `(rows,)` integer class indices in
+    `[0, vocab)`. There is no bias, no ignore index, no label smoothing and
+    no other reduction than the mean over rows: the v2 profile defines none of
+    them, and a caller who needs one uses `linear_forward` and
+    `cross_entropy`, which hold the full logits.
+
+    The arithmetic is fixed by the profile, not by the vocabulary chunk: for
+    each row the maximum and the exponential denominator visit vocabulary ids
+    0..vocab-1 in one serial chain, `d_hidden` folds vocabulary ids ascending,
+    and every `d_weight` cell folds rows ascending. Non-finite inputs and an
+    out-of-range target are refused by the binding before any output is
+    written. The loss is a Python float; the gradients are float32 arrays
+    shaped like `hidden` and `weight`.
+    """
+    where = "training.chunked_lm_head_loss"
+    h = _c32(hidden, "hidden", where)
+    w = _c32(weight, "weight", where)
+    if h.ndim != 2 or w.ndim != 2:
+        raise ValueError(
+            "mojolearn.%s: hidden must be (rows, width) and weight "
+            "(vocab, width)" % where)
+    rows, width = (int(d) for d in h.shape)
+    vocab, width_w = (int(d) for d in w.shape)
+    if width != width_w:
+        raise ValueError(
+            "mojolearn.%s: hidden has width %d, weight has width %d"
+            % (where, width, width_w))
+    if vocab < 2:
+        raise ValueError("mojolearn.%s: vocab must be at least 2, got %d"
+                         % (where, vocab))
+    t = as_i32_c(targets, ndim=None, name="targets")[0].reshape((-1,))
+    if int(t.size) != rows:
+        raise ValueError(
+            "mojolearn.%s: %d targets for %d rows" % (where, int(t.size), rows))
+    loss = zeros((1,), "<f4")
+    row_max = empty((rows,), "<f4")
+    row_denom = empty((rows,), "<f4")
+    plist = [rows, vocab, width]
+    binding = _load(numeric_mode)
+    if not return_grad:
+        binding.chunked_lm_head_v2_loss(
+            [_addr(loss), _addr(row_max), _addr(row_denom),
+             _addr_ro(h), _addr_ro(w), _addr_ro(t)], plist)
+        return float(loss[0])
+    d_hidden = empty((rows, width), "<f4")
+    d_weight = empty((vocab, width), "<f4")
+    binding.chunked_lm_head_v2_train(
+        [_addr(loss), _addr(row_max), _addr(row_denom), _addr(d_hidden),
+         _addr(d_weight), _addr_ro(h), _addr_ro(w), _addr_ro(t)], plist)
+    return float(loss[0]), d_hidden, d_weight
