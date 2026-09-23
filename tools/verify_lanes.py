@@ -206,28 +206,40 @@ def _selection(args):
         return [n for n in registry if n in set(named)], dict(mode="named", fallback=False), None
     sources, why = lane_select.lane_sources()
     if args.lanes_for_paths:
-        sel = lane_select.select(args.lanes_for_paths, sources=sources)
+        sel = lane_select.select(args.lanes_for_paths, sources=sources, backend=args.backend)
     elif args.changed_since:
         paths = lane_select.changed_paths(args.changed_since)
         print(f"# {len(paths)} changed path(s) against {args.changed_since}")
-        sel = lane_select.select(paths, ref=args.changed_since, sources=sources)
+        sel = lane_select.select(paths, ref=args.changed_since, sources=sources, backend=args.backend)
     else:
         raise SystemExit("REFUSING: name what to run (--all, --lane, --lanes, "
                          "--lanes-for-paths or --changed-since)")
     for path, reason in sorted(sel["reasons"].items()):
         print(f"# {path}: {reason}")
-    if sel["fallback"]:
-        print("# FALLING BACK TO EVERY LANE: the blast radius of the paths above could not be "
-              "determined. This is a full sweep, not a narrow run.")
+    if lane_select.refuse_unattributed(sel, out=lambda m: print("# " + m)):
+        raise SystemExit(3)
+    for path, why in sorted(sel.get("every_rules", {}).items()):
+        print(f"# EVERY LANE because {path}: {why}")
     return sel["lanes"], sel, sources
 
 
 def _commit():
+    """The commit being verified: MOJOLEARN_COMMIT, else `git rev-parse HEAD`,
+    else the commit.txt a leg archive carries (a rented box has no .git)."""
+    env = os.environ.get("MOJOLEARN_COMMIT", "").strip()
+    if env:
+        return env
     try:
         return subprocess.run(["git", "-C", ROOT, "rev-parse", "HEAD"],
                               capture_output=True, text=True, check=True).stdout.strip()
-    except subprocess.CalledProcessError:
-        return ""
+    except (OSError, subprocess.CalledProcessError):
+        pass
+    for name in ("commit.txt", "COMMIT"):
+        try:
+            return Path(ROOT, name).read_text().split()[0]
+        except (OSError, IndexError):
+            continue
+    return ""
 
 
 def _identity_break_cmd(lanes, out, args):
@@ -277,6 +289,134 @@ def _plan(groups, load, args, out_dir):
     print("\n# PLAN ONLY. Nothing ran and nothing was rented.")
 
 
+#: The lane_applicability column each backend's pass records.
+PASS_COLUMN = dict(cpu="cpu-host", metal="apple-metal", cuda="nvidia-1gpu", hip="amd-1gpu")
+#: The backends a release verifies, in the order their passes are selected:
+#: the CPU pass covers the union of the others, and `release-check --plan`
+#: shows each. The NVIDIA ("cuda") and AMD ("hip") release columns join this
+#: list when the release runs them (lane/release-gpu-columns).
+RELEASE_BACKENDS = ("cpu", "metal")
+
+
+class UnattributedPaths(Exception):
+    """A pass's changed paths include some the selector cannot attribute;
+    nothing may run until the mapping is fixed. `sel` is the selection."""
+
+    def __init__(self, backend, sel):
+        super().__init__(f"{backend}: {len(sel['unattributed'])} unattributed path(s)")
+        self.backend, self.sel = backend, sel
+
+
+def pass_selection(backend, fixtures=APPLE_PASS_FIXTURES, sources=None, paths=None):
+    """WHAT THE DEFAULT PASS ON `backend` WOULD RUN, without running it:
+    (lanes, sel, covers, how). The same rule `main` applies to a pass given
+    no selection: lanes changed since the last FINISHED pass on this backend
+    (`verified_anchor`), else since the newest v* tag, else every lane; the
+    backend-aware selector; and every lane that cannot run on the backend
+    left out (`sel["dropped"]`, lane -> reason). Used for the CPU pass's union
+    and for `release-check --plan`."""
+    import lane_applicability
+    if sources is None:
+        sources, _ = lane_select.lane_sources()
+    anchor = verified_anchor(backend, fixtures) if paths is None else None
+    if paths is not None:
+        # A HYPOTHETICAL CHANGE (`release-check --plan --paths`): these paths,
+        # read against HEAD, instead of the diff since the anchor.
+        sel = lane_select.select(paths, ref=None, sources=sources, backend=backend)
+        sel.update(changed=list(paths), ref=None)
+        if sel["unattributed"]:
+            raise UnattributedPaths(backend, sel)
+        import lane_applicability
+        skip = lane_applicability.degenerate(PASS_COLUMN[backend])
+        sel["dropped"] = {n: skip[n] for n in sel["lanes"] if n in skip}
+        return ([n for n in sel["lanes"] if n not in skip], sel, None,
+                f"a change to {len(paths)} path(s): {', '.join(paths)}")
+    if anchor:
+        ref, covers = anchor, dict(mode="since-record", since=anchor)
+        how = f"since {anchor[:12]}, the last finished {backend} pass on this machine"
+    else:
+        ref = last_release_tag()
+        if ref:
+            tag_commit = subprocess.run(["git", "-C", ROOT, "rev-parse", ref + "^{commit}"],
+                                        capture_output=True, text=True).stdout.strip()
+            covers = dict(mode="since-tag", since=tag_commit, tag=ref)
+            how = f"since {ref} (no finished {backend} pass qualifies as an anchor)"
+        else:
+            covers, how = dict(mode="all"), "no v* tag: every lane"
+    if ref:
+        paths = lane_select.changed_paths(ref)
+        sel = lane_select.select(paths, ref=ref, sources=sources, backend=backend)
+        sel["changed"] = paths
+        if sel["unattributed"]:
+            raise UnattributedPaths(backend, sel)
+    else:
+        sel = dict(lanes=list(sources), fallback=False, reasons={}, by_path={}, unattributed=[],
+                   inert=[], total=len(sources), changed=[])
+    if sel["fallback"]:
+        covers = dict(mode="all")
+    skip = lane_applicability.degenerate(PASS_COLUMN[backend])
+    sel["dropped"] = {n: skip[n] for n in sel["lanes"] if n in skip}
+    sel["ref"] = ref
+    return [n for n in sel["lanes"] if n not in skip], sel, covers, how
+
+
+def gpu_package(out, set_dir, vendor):
+    """A package that loads ONE Linux release set the way the wheel does
+    (lane/release-gpu-columns, 2026-09-22), for a GPU column in the same
+    rental that built the set.
+
+    `set_dir` is a leg's `release-build/build/sets/<vendor>` (holding
+    `<arch>/{identical,deterministic,host,.libs,...}`). The package is the
+    Python sources as symlinks (identity_iterate.cpu_package's staging, so no
+    product file is copied or edited), `mojolearn/<vendor>` -> that set, which
+    `_backend._layout` reads as the wheel's vendor layout, and
+    `mojolearn/host` -> the set's host bindings, as the wheel ships them. The
+    set's own RUNPATHs (`$ORIGIN/../.libs` from a tier, `$ORIGIN/.libs` from
+    the architecture directory, `$ORIGIN/../.libs` from host/) all resolve
+    inside the set, so no library is moved."""
+    set_dir = Path(set_dir).resolve()
+    archs = sorted(p for p in set_dir.iterdir() if p.is_dir() and (p / "manifest.json").is_file())
+    if len(archs) != 1:
+        raise ValueError(f"expected one architecture set under {set_dir}, found {[a.name for a in archs]}")
+    host = archs[0] / "host"
+    if not list(host.glob("_mojolearn_*_host.so")):
+        raise ValueError(f"no host bindings in {host}")
+    source = Path(ROOT) / "python" / "mojolearn"
+    root = Path(out).resolve() / "gpu-package"
+    pkg = root / "mojolearn"
+    pkg.mkdir(parents=True, exist_ok=True)
+    for src in source.rglob("*.py"):
+        rel = src.relative_to(source)
+        if "__pycache__" in rel.parts or rel.parts[0] in (vendor, "host"):
+            continue
+        dst = pkg / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        if dst.is_symlink() and dst.resolve() == src.resolve():
+            continue
+        if dst.exists() or dst.is_symlink():
+            dst.unlink()
+        dst.symlink_to(src.resolve())
+    # Package DATA the lanes read through the package (reference cards, the
+    # verifier's reference models): linked like the sources, never copied.
+    for src in source.rglob("*"):
+        rel = src.relative_to(source)
+        if (not src.is_file() or src.suffix in (".py", ".pyc", ".so", ".dylib") or "__pycache__" in rel.parts
+                or rel.parts[0] in ("tests", vendor, "host", "cuda", "hip", "identical", "deterministic")):
+            continue
+        dst = pkg / rel
+        if not (dst.exists() or dst.is_symlink()):
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            dst.symlink_to(src.resolve())
+    for name, target in ((vendor, set_dir), ("host", host)):
+        link = pkg / name
+        if link.is_symlink() or link.exists():
+            if link.is_symlink() and link.resolve() == target:
+                continue
+            link.unlink()
+        link.symlink_to(target, target_is_directory=True)
+    return root, archs[0].name
+
+
 def _run_local(groups, load, args, out_dir):
     import identity_iterate
     parts = [os.path.join(out_dir, f"part{k}.json") for k in range(len(groups))]
@@ -291,6 +431,12 @@ def _run_local(groups, load, args, out_dir):
             args.host_dir or env.get("MOJOLEARN_HOST_DIR") or Path(ROOT) / "python/mojolearn/host")
         env["PYTHONPATH"] = str(package) + os.pathsep + env["PYTHONPATH"]
         env["MOJOLEARN_HOST_DIR"] = str(host)
+    elif args.backend in ("cuda", "hip") and args.gpu_set:
+        package, arch = gpu_package(Path(out_dir), args.gpu_set, args.backend)
+        env["PYTHONPATH"] = str(package) + os.pathsep + env["PYTHONPATH"]
+        env["MOJOLEARN_VENDOR"] = args.backend
+        env.pop("MOJOLEARN_HOST_DIR", None)
+        print(f"# loading the {args.backend}/{arch} release set from {args.gpu_set}", flush=True)
     pending, running, codes = list(range(len(groups))), {}, {}
     def report():
         dest = Path(out_dir) / "run-summary.json"
@@ -527,7 +673,7 @@ def main(argv=None):
     ap.add_argument("--wait-timeout", type=float, default=60)
     ap.add_argument("--probe-group", choices=("core", "batch", "rlpair", "all"), default="core")
     ap.add_argument("--resume", action="store_true")
-    ap.add_argument("--full-selection", action="store_true", help="explicitly accept selector fallback")
+    ap.add_argument("--full-selection", action="store_true", help="accepted and inert since 2026-09-22: the selector never falls back to every lane")
     ap.add_argument("--metal-diagnostic", action="store_true")
     ap.add_argument("--cpu-pass", action="store_true",
                     help="the CPU half of a release, locally: the Apple pass's cells on the CPU route, "
@@ -536,6 +682,21 @@ def main(argv=None):
                     help="the whole Apple check: Metal, one fit per cell, the end model only "
                          f"(train, infer, save/reload), fixtures {APPLE_PASS_FIXTURES}, "
                          f"a {APPLE_PASS_BUDGET}-second total budget")
+    ap.add_argument("--gpu-pass", choices=("cuda", "hip"), default=None,
+                    help="the NVIDIA (cuda) or AMD (hip) release column: the Apple pass's cells "
+                         f"(fixtures {APPLE_PASS_FIXTURES}, one fit, end model only) on that backend, "
+                         "run in the rental that built the set (--gpu-set)")
+    ap.add_argument("--write-selection", metavar="FILE", default="",
+                    help="a pass only: work out its lanes exactly as the pass would (changed since the "
+                         "last finished pass on the backend, else the newest v* tag), write them with "
+                         "the coverage claim to FILE, and stop. The release computes the NVIDIA and AMD "
+                         "selections this way on the Mac, where the pass records live")
+    ap.add_argument("--selection", metavar="FILE", default="",
+                    help="a pass only: run exactly the lanes a --write-selection FILE names, at the "
+                         "commit it names, and record its coverage claim")
+    ap.add_argument("--gpu-set", metavar="DIR", default="",
+                    help="cuda/hip: load the Linux release set in DIR (release-build/build/sets/<vendor>) "
+                         "the way the wheel lays it out")
     ap.add_argument("--metal-shards", type=int, default=1, metavar="N",
                     help="Metal only, OPT-IN and unproven: split the lanes into N processes that share "
                          "the one GPU under a single Metal slot (1 to 3; default 1). Concurrent Metal "
@@ -576,6 +737,21 @@ def main(argv=None):
         args.fixtures = args.fixtures if args.fixtures is not None else APPLE_PASS_FIXTURES
         args.budget = args.budget if args.budget is not None else APPLE_PASS_BUDGET
         args.timeout = args.wait_timeout = args.budget
+    if args.gpu_pass:
+        # THE NVIDIA AND AMD COLUMNS OF A RELEASE (2026-09-22). The same
+        # cells as the Apple pass, on the GPU the Linux set was just built
+        # for, in the same rental. Anything that would widen refuses.
+        if args.apple_pass or args.cpu_pass or args.probe_group != "core" or args.repeats != 1 \
+                or args.exhaustive or args.backend not in ("cpu", args.gpu_pass):
+            ap.error("--gpu-pass is one GPU backend, core probes, one fit; it takes --fixtures and --budget only")
+        args.backend = args.gpu_pass
+        args.fixtures = args.fixtures if args.fixtures is not None else APPLE_PASS_FIXTURES
+        args.budget = args.budget if args.budget is not None else APPLE_PASS_BUDGET
+        args.timeout = args.wait_timeout = args.budget
+    if (args.write_selection or args.selection) and not (args.apple_pass or args.cpu_pass or args.gpu_pass):
+        ap.error("--write-selection and --selection belong to a pass (--cpu-pass, --apple-pass, --gpu-pass)")
+    if args.gpu_set and args.backend not in ("cuda", "hip"):
+        ap.error("--gpu-set is a Linux release set, for --backend cuda or hip")
     if not 1 <= args.metal_shards <= 3:
         ap.error("--metal-shards must be 1, 2 or 3")
     if args.metal_shards > 1:
@@ -612,8 +788,32 @@ def main(argv=None):
     if args.repeats < 1:
         ap.error("--repeats must be positive")
     selection_modes = sum(bool(x) for x in (args.all, args.lanes or args.lane, args.changed_since, args.lanes_for_paths))
-    is_pass = args.apple_pass or args.cpu_pass
+    is_pass = args.apple_pass or args.cpu_pass or bool(args.gpu_pass)
     covers = dict(mode="all") if args.all else None
+    given = None
+    if args.selection:
+        # A SELECTION WORKED OUT ELSEWHERE (the Mac, where this backend's pass
+        # records live) and run here. Its lanes, its commit and its coverage
+        # claim travel together, and a mismatch refuses before any fit.
+        if selection_modes:
+            ap.error("--selection names the lanes; do not also select them")
+        try:
+            given = json.loads(Path(args.selection).read_text())
+        except (OSError, ValueError) as exc:
+            ap.error(f"cannot read --selection {args.selection}: {exc}")
+        want = dict(backend=args.backend, fixtures=args.fixtures, commit=_commit())
+        bad = [f"{k}={given.get(k)!r} (this run: {v!r})" for k, v in want.items() if given.get(k) != v]
+        if bad or not isinstance(given.get("lanes"), list):
+            ap.error("--selection does not describe this run: " + "; ".join(bad or ["no lane list"]))
+        covers = given.get("covers")
+        for name, why in sorted((given.get("dropped") or {}).items()):
+            print(f"# left out on {args.backend} by the selection: {name}: {why}")
+        if not given["lanes"]:
+            print(f"# nothing to check on {args.backend}: the selection names no lane "
+                  f"({given.get('summary', 'no summary')})")
+            return 0
+        args.lanes = ",".join(given["lanes"])
+        selection_modes = 1
     if is_pass and selection_modes == 0:
         # Only what changed since this backend was last verified. The selector
         # widens to every lane by itself when a changed path cannot be
@@ -647,29 +847,69 @@ def main(argv=None):
     lanes, sel, sources = _selection(args)
     if sel.get("fallback"):
         covers = dict(mode="all")
+    union = {}
+    if args.cpu_pass and given is None and not (args.lanes or args.lane) \
+            and os.environ.get("MOJOLEARN_CPU_PASS_UNION", "1") != "0":
+        # THE CPU COLUMN IS THE REFERENCE the Apple, NVIDIA and AMD columns of
+        # this release are diffed against, so it covers every lane any of them
+        # selects (2026-09-22). Each backend's selection is its own pass's
+        # (`pass_selection`), so this is the same answer those passes reach.
+        have = set(lanes)
+        for other in RELEASE_BACKENDS[1:]:
+            try:
+                olanes, osel, _, how = pass_selection(other, args.fixtures, sources)
+            except UnattributedPaths as exc:
+                print(f"# the {other} pass's selection is refused:")
+                lane_select.refuse_unattributed(exc.sel, out=lambda m: print("# " + m))
+                return 3
+            extra = [n for n in olanes if n not in have]
+            union[other] = dict(lanes=len(olanes), added=len(extra), since=how)
+            print(f"# the CPU column also covers the {len(olanes)} lane(s) the {other} pass selects "
+                  f"({how}): +{len(extra)}")
+            have |= set(olanes)
+        lanes = [n for n in lane_select.all_lanes() if n in have]
     # CAN THIS RECORD ANCHOR THE NEXT PASS? Only if the bits it checks are its
     # commit's bits: the uncommitted and untracked paths must select no lane.
-    dirty_lanes = None
-    if is_pass and covers is not None:
+    dirty_lanes = given.get("dirty_lanes") if given is not None else None
+    if is_pass and covers is not None and given is None:
         dirty = dirty_paths()
         if dirty is not None:
             dsel = lane_select.select(dirty, ref="HEAD", sources=sources) if dirty else dict(lanes=[], fallback=False)
-            dirty_lanes = ["*"] if dsel["fallback"] else list(dsel["lanes"])
+            dirty_lanes = ["*"] if dsel.get("unattributed") else list(dsel["lanes"])
         if dirty_lanes == []:
             print("# this pass, once complete, anchors the next one on this backend")
         else:
             print(f"# this pass cannot anchor the next one: uncommitted or untracked paths select "
                   f"{'every lane' if dirty_lanes == ['*'] else dirty_lanes if dirty_lanes else 'an unknown set'}")
-    if (args.apple_pass or args.cpu_pass) and not (args.lanes or args.lane):
+    dropped = {}
+    if is_pass and not (args.lanes or args.lane):
         # A lane whose arithmetic never reaches this backend says nothing
         # here. Named lanes still refuse below; a derived selection drops
-        # them, out loud.
+        # them, out loud, each by name with its reason.
         import lane_applicability
-        skip = lane_applicability.degenerate("apple-metal" if args.apple_pass else "cpu-host")
-        dropped = [n for n in lanes if n in skip]
+        skip = lane_applicability.degenerate(PASS_COLUMN[args.backend])
+        dropped = {n: skip[n] for n in lanes if n in skip}
         lanes = [n for n in lanes if n not in skip]
         if dropped:
             print(f"# leaving out {len(dropped)} lane(s) that cannot run on {args.backend}: {','.join(dropped)}")
+            if args.gpu_pass:
+                for n, why in dropped.items():
+                    print(f"#   {n}: {why}")
+    if args.write_selection:
+        record = dict(schema="mojolearn.release-pass-selection.v1", backend=args.backend,
+                      column=PASS_COLUMN[args.backend], commit=_commit(), fixtures=args.fixtures,
+                      lanes=lanes, dropped=dropped, covers=covers, dirty_lanes=dirty_lanes,
+                      fallback=bool(sel.get("fallback")), unattributed=sel.get("unattributed", []),
+                      registry_total=len(lane_select.all_lanes()),
+                      summary=(f"{len(lanes)} of {len(lane_select.all_lanes())} lanes, "
+                               f"{len(dropped)} left out as not runnable on {args.backend}"
+                               + (f", every lane by rule ({', '.join(sel.get('every_rules') or {})})"
+                                  if sel.get("every_rules") else "")))
+        tmp = Path(args.write_selection + ".tmp")
+        tmp.write_text(json.dumps(record, indent=1) + "\n")
+        tmp.replace(args.write_selection)
+        print(f"# selection written to {args.write_selection}: {record['summary']}")
+        return 0
     print(f"# {len(lanes)} of {len(lane_select.all_lanes())} lanes selected")
     print(f"# {len(fixtures)} fixture(s): {args.fixtures}; "
           f"{len(lanes) * len(fixtures)} cells, {len(lanes) * len(fixtures) * args.repeats} independent fits")
@@ -708,7 +948,10 @@ def main(argv=None):
                     probe_group=args.probe_group, budget=args.budget, timeout=args.timeout, jobs=args.jobs,
                     registry_total=len(lane_select.all_lanes()), selection=sel.get("mode", "derived"),
                     fallback=bool(sel.get("fallback")), covers=covers, dirty_lanes=dirty_lanes,
-                    metal_shards=args.metal_shards)
+                    metal_shards=args.metal_shards,
+                    selection_file=given.get("schema") if given is not None else None,
+                    dropped=given.get("dropped") if given is not None else dropped,
+                    union=union or None)
     if args.plan or args.runner == "pods":
         _plan(groups, load, args, out_dir)
         return 0

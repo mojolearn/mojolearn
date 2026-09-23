@@ -188,8 +188,10 @@ def main(argv=None):
     if selected["inapplicable"]:
         ap.error("selected lanes are inapplicable to this backend: " +
                  json.dumps(selected["inapplicable"], sort_keys=True))
-    if selected["fallback"] and not args.full_selection:
-        ap.error("selection fell back to all lanes; inspect the plan or explicitly pass --full-selection")
+    if selected.get("unattributed"):
+        import lane_select
+        lane_select.refuse_unattributed(selected)
+        return 3
     # Metal runs whatever was selected (2026-09-19). Each cell is fitted once
     # under the shared budget, so the refusals that kept a ten-hour column off
     # the Mac have nothing left to refuse. --metal-diagnostic and
