@@ -24,7 +24,7 @@ memoryview.cast("e"), which Python 3.11 lacks. Fixed on main (4bc3fd091) after t
 - cpu/column.json sha256 47f90ade1472b2f4be5db1f34bd00b2f44c26fb03200da420ec4ed1236b6c4cb
 - metal/column.json sha256 bf1b95273d9619c67f2501f1a2d0081aee7e374b563770fed15fe4cf6554d828
 - amd column.json sha256 0f44003b76025e2d3f53816d1d1e071a09bc545f9574537a8793df11744b9b8c
-- nvidia column.json sha256 
+- nvidia column.json sha256 745de3e97e72e28485348212cb2d0d06d36ad5005140dacb2f954f3429374b50
 
 ## Wheels (light route)
 
