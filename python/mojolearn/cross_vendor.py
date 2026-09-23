@@ -396,14 +396,33 @@ class Worker:
         raw = getattr(tr, "export_raw", None)
         state = raw() if callable(raw) else tr.state_dict()
         n_total = len(memoryview(state["parameters"]).cast("B")) // 4
-        sock = self._connect()
+        hello = dict(protocol=PROTOCOL, name=self.name, vendor=vendor(), shards=self.shards,
+                     completed=tr.step_, state=state_hash(state), n_total=n_total, chained=self.chained)
+        # A tunnel accepts the TCP connection before the coordinator behind it
+        # listens (ssh -L answers locally, then closes when the far port
+        # refuses), so a closed connection right after the hello is retried
+        # like a refused one, until connect_timeout.
+        deadline = time.monotonic() + self.connect_timeout
+        while True:
+            sock = self._connect()
+            try:
+                _send(sock, hello)
+                head, payload = _recv(sock, n_total * 4)
+                break
+            except (ConnectionError, OSError):
+                sock.close()
+                if time.monotonic() > deadline:
+                    raise
+                time.sleep(5)
         committed = 0
         held, total, on_device = [], None, False  # chained: this block's gradients until its turn, then the fold
+        first_message = True
         try:
-            _send(sock, dict(protocol=PROTOCOL, name=self.name, vendor=vendor(), shards=self.shards,
-                             completed=tr.step_, state=state_hash(state), n_total=n_total, chained=self.chained))
             while True:
-                head, payload = _recv(sock, n_total * 4)
+                if first_message:
+                    first_message = False
+                else:
+                    head, payload = _recv(sock, n_total * 4)
                 cmd = head.get("cmd")
                 if cmd == "step":
                     if head["step"] != tr.step_:

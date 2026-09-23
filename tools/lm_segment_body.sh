@@ -177,8 +177,6 @@ EXPECT=""
 if [ -n '@EXPECT_URL@' ]; then fetch expect_chain.jsonl '@EXPECT_URL@' "" && EXPECT="--expect-chain $OUT/in/expect_chain.jsonl"; fi
 R="$OUT/in/recipe.json"
 S=tools/lm_segment.py
-touch /root/lm_segment_ready
-say "ready"
 
 run() {  # $1 name, rest: lm_segment run args
     _n="$1"; shift
@@ -197,6 +195,11 @@ if [ -n "$REPLAY_NAME" ]; then
         --no-checkpoints --expect-chain "$OUT/in/replay_chain.jsonl" || { say "ARRIVAL REPLAY FAILED: the segment does not start"; exit 5; }
     rm -f "$OUT/in/$REPLAY_NAME"
 fi
+
+# ---- ready: everything fetched, the arrival replay passed; a live coordinator
+# starts listening a few seconds after this mark, a live worker waits for it ----
+touch /root/lm_segment_ready
+say "ready"
 
 # ---- the segment ----
 cat > "$OUT/uploads.json" <<'UPLOADS'

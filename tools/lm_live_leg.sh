@@ -124,6 +124,17 @@ sleep 4; ss -ltn 2>/dev/null | grep -q ':$PORT ' && echo TUNNEL_UP || (cat /root
 box "$AMD" "echo '127.0.0.1 $PORT' > /root/live_peer.txt" && say "peer file written on the amd box; the worker connects through the tunnel"
 
 say "waiting for both runners to finish, fetch and delete their boxes"
+# If one side ends first (its segment failed, its lease ran out), the other
+# side's segment is stopped over ssh so that box goes to fetch and delete
+# instead of waiting out its timeout on the bill.
+while kill -0 "$NV_PID" 2>/dev/null && kill -0 "$AMD_PID" 2>/dev/null; do sleep 20; done
+if kill -0 "$NV_PID" 2>/dev/null; then
+    say "the amd runner ended first; stopping the coordinator's segment"
+    box "$NV" 'pkill -f "lm_segment.py run" || true' >/dev/null 2>&1
+elif kill -0 "$AMD_PID" 2>/dev/null; then
+    say "the nvidia runner ended first; stopping the worker's segment"
+    box "$AMD" 'pkill -f "lm_segment.py run" || true' >/dev/null 2>&1
+fi
 wait "$NV_PID"; NV_RC=$?
 wait "$AMD_PID"; AMD_RC=$?
 say "nvidia runner exit=$NV_RC, amd runner exit=$AMD_RC"
