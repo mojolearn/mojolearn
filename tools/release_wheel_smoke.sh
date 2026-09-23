@@ -575,6 +575,7 @@ rent_runpod() {  # sets POD_ID and SSH_TARGET; 1 (nothing created) when RunPod h
     say "creating $POD_NAME ($GPU) on RunPod. THE BILL STARTS HERE."
     T_POST=$(now)
     rp_call POST "$RP/pods" "$CREATE"
+    _ccode=$RP_CODE     # the listing below overwrites RP_CODE
     cp "$TMPD/rp.body" "$OUT/create_response.json"
     POD_ID=$(rp_py id)
     if [ -z "$POD_ID" ]; then
@@ -586,15 +587,15 @@ rent_runpod() {  # sets POD_ID and SSH_TARGET; 1 (nothing created) when RunPod h
             # THE FALLBACK DECISION (0.8.16, 2026-09-23). RunPod answered HTTP 200 with
             # {"error":"create pod: There are no instances currently available"}: no
             # MI300X to give, nothing created (the listing has no pod by this name).
-            say "RunPod has no '$GPU' to give (HTTP $RP_CODE: $_body); nothing was created"
-            { echo "runpod=no_stock http=$RP_CODE at=$(date -u +%FT%TZ)"; echo "runpod_body=$_body"; } >> "$OUT/provider.txt"
+            say "RunPod has no '$GPU' to give (HTTP $_ccode: $_body); nothing was created"
+            { echo "runpod=no_stock http=$_ccode at=$(date -u +%FT%TZ)"; echo "runpod_body=$_body"; } >> "$OUT/provider.txt"
             pkill -P "$DEADMAN_PID" 2>/dev/null || true
             kill "$DEADMAN_PID" 2>/dev/null && say "RunPod dead-man cancelled (pid $DEADMAN_PID); nothing to guard"
             rm -rf "$DEADMAN_DIR"; DEADMAN_PID=""; DEADMAN_DIR=""; T_POST=""
             say "FALLING BACK to DigitalOcean ($DO_SIZE, gfx942)"
             return 1
         fi
-        die "create FAILED (HTTP $RP_CODE): $_body"
+        die "create FAILED (HTTP $_ccode): $_body"
     fi
     printf '%s\n' "$POD_ID" > "$DEADMAN_DIR/pod_id.txt"
     printf '%s\n' "$POD_ID" > "$OUT/pod_id.txt"
@@ -668,6 +669,7 @@ rent_do() {  # sets DROPLET_ID and SSH_TARGET, or dies with nothing left billing
         say "creating $POD_NAME ($DO_SIZE, $_r, image $DO_IMAGE) on DigitalOcean. THE BILL STARTS HERE."
         DO_T_POST=$(now)
         do_call POST "$DO_API/droplets" "$TMPD/do-create.json"
+        _ccode=$DO_CODE     # the listing below overwrites DO_CODE
         cp "$TMPD/do.body" "$OUT/create_response-do-$_r.json"
         DROPLET_ID=$(do_py id)
         [ -n "$DROPLET_ID" ] && break
@@ -682,9 +684,9 @@ rent_do() {  # sets DROPLET_ID and SSH_TARGET, or dies with nothing left billing
             break
         fi
         DO_T_POST=""
-        case "$DO_CODE" in
+        case "$_ccode" in
             422) say "$_r refused $DO_SIZE (HTTP 422: $_body); nothing was created; trying the next region" ;;
-            *) die "create FAILED in $_r (HTTP $DO_CODE): $_body" ;;
+            *) die "create FAILED in $_r (HTTP $_ccode): $_body" ;;
         esac
     done
     [ -n "$DROPLET_ID" ] || die "no region in $DO_REGIONS would create $DO_SIZE; nothing was created"
