@@ -34,15 +34,21 @@ THE STEPS, IN ORDER
   linux-wait         every leg finished, its proof complete for this commit, and
                      every host binding byte-identical across legs (named if not)
   linux-pack         pixi run -e pkg pack-linux-wheel, audit.sh, strip
-  linux-smoke        tools/release_wheel_smoke.sh --rent (one RTX 4090 pod)
+  linux-smoke        tools/release_wheel_smoke.sh --rent (one RTX 4090 pod): the
+                     expanded smoke AND the NVIDIA release column (the lanes the
+                     release changed, from the installed wheel), diffed against
+                     the CPU column of this commit
+  amd-column         tools/release_wheel_smoke.sh --vendor hip --rent (one MI300X
+                     pod, gfx942): the AMD release column, diffed the same way
   publish-linux      tools/release_linux_publish.sh ... --light-smoke   } only with
   publish-macos      tools/release_linux_publish.sh ... --light-smoke   } --publish
   finish-line        pip install mojolearn==<version> in a fresh venv on this Mac
   record             bench/results/release_verification/<date>_pypi_<v>/, committed
 
 Nothing is published without `--publish none|testpypi|pypi`; without it the run
-stops after linux-smoke and says so. NVIDIA and AMD installed qualification is
-not a release requirement (docs/RELEASE_CHECKLIST.md section 4) and is not run.
+stops after amd-column and says so. The Linux wheel publishes only when the
+NVIDIA and AMD columns show no DIVERGENT cell against the CPU column (policy
+2026-09-22: bitwise identity across GPUs is the point; only changed lanes run).
 """
 import argparse
 import datetime as dt
@@ -571,23 +577,57 @@ class Release:
         final = self.linux_final()
         return f"{final.name} sha256 {sha256(final)}" if final else "would pack, audit and strip"
 
+    def gpu_selection(self, vendor):
+        """The release pass's lanes for this vendor, worked out by the selector
+        exactly as the pass would (verify_lanes --gpu-pass --write-selection)."""
+        path = self.rel / f"selection-{vendor}.json"
+        self.must([PY, "tools/verify_lanes.py", "--gpu-pass", vendor, "--write-selection", path],
+                  log=self.rel / f"selection-{vendor}.log", what=f"{vendor} lane selection")
+        return path
+
+    def gpu_column_ok(self, out, vendor):
+        d = out / f"diff-cpu-{vendor}.txt"
+        return (out / f"column-{vendor}.json").is_file() and d.is_file() and "DIVERGENT" not in d.read_text()
+
     def step_linux_smoke(self):
         final = self.linux_final()
         out = self.rel / "smoke-linux"
-        if final and smoke_passed(out / "results.json", final):
-            return "PASSED (receipt exists)"
+        if final and smoke_passed(out / "results.json", final) and self.gpu_column_ok(out, "cuda"):
+            return "PASSED (receipt and NVIDIA column exist)"
         if not final and not self.dry:
             raise StepFailed("no final Linux wheel; run linux-pack")
         if out.exists() and not self.dry:
             out.rename(out.with_name(out.name + ".failed-" + dt.datetime.now().strftime("%Y%m%d-%H%M%S")))
         cmd = ["bash", "tools/release_wheel_smoke.sh", final or "<final linux wheel>",
-               "--expected-source-commit", self.commit, "--out", out, "--rent"]
+               "--expected-source-commit", self.commit, "--out", out, "--rent",
+               "--column", self.gpu_selection("cuda"),
+               "--cpu-column", self.release_check_dir() / "cpu" / "column.json"]
         if self.args.smoke_gpu:
             cmd += ["--gpu", self.args.smoke_gpu]
         self.must(cmd, log=self.rel / "linux-smoke.log", what="release_wheel_smoke.sh")
         if not self.dry and not smoke_passed(out / "results.json", final):
             raise StepFailed(f"Linux smoke receipt is not PASSED for this wheel: {out / 'results.json'}")
-        return "PASSED"
+        if not self.dry and not self.gpu_column_ok(out, "cuda"):
+            raise StepFailed(f"the NVIDIA column is missing or DIVERGENT: {out}")
+        return "PASSED, NVIDIA column identical to CPU"
+
+    def step_amd_column(self):
+        final = self.linux_final()
+        out = self.rel / "column-amd"
+        if final and self.gpu_column_ok(out, "hip"):
+            return "identical to CPU (record exists)"
+        if not final and not self.dry:
+            raise StepFailed("no final Linux wheel; run linux-pack")
+        if out.exists() and not self.dry:
+            out.rename(out.with_name(out.name + ".failed-" + dt.datetime.now().strftime("%Y%m%d-%H%M%S")))
+        self.must(["bash", "tools/release_wheel_smoke.sh", final or "<final linux wheel>",
+                   "--expected-source-commit", self.commit, "--out", out, "--rent", "--vendor", "hip",
+                   "--column", self.gpu_selection("hip"),
+                   "--cpu-column", self.release_check_dir() / "cpu" / "column.json"],
+                  log=self.rel / "amd-column.log", what="release_wheel_smoke.sh --vendor hip")
+        if not self.dry and not self.gpu_column_ok(out, "hip"):
+            raise StepFailed(f"the AMD column is missing or DIVERGENT: {out}")
+        return "AMD column identical to CPU"
 
     def on_pypi(self, wheel):
         """True when PyPI already serves this exact file (name and sha256)."""
@@ -713,7 +753,7 @@ class Release:
 
     STEPS = ["freeze-version", "freeze-changelog", "freeze-docs-facts", "freeze-commit", "rehearsal",
              "linux-builds", "macos-build", "macos-smoke", "release-check", "linux-wait", "linux-pack",
-             "linux-smoke", "publish-linux", "publish-macos", "finish-line", "record"]
+             "linux-smoke", "amd-column", "publish-linux", "publish-macos", "finish-line", "record"]
     #: Every other step checks its own OUTPUT each time and returns at once when
     #: it is already there (a wheel of this commit, a PASSED receipt for that
     #: wheel, complete release-check records); these are skipped on their record.

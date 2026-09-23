@@ -33,6 +33,18 @@
 #                        from all three legs, so no build box holds it; use this for
 #                        a box you already have up.
 #   --rent               create the pod. Without it (and without --ssh): a dry run.
+#   --vendor cuda|hip    the GPU family (default cuda). hip rents a RunPod AMD
+#                        Instinct MI300X (gfx942, the wheel's AMD set) on
+#                        rocm/dev-ubuntu-22.04:6.4.1-complete with the repo's ssh
+#                        bootstrap; the expanded smoke runs on cuda only.
+#   --column SELECTION   also run the release pass's cells for the lanes in
+#                        SELECTION (a verify_lanes --write-selection file for this
+#                        vendor) from the INSTALLED wheel: fixtures base,denormal,odd,
+#                        one fit, --fail-on-refused, --require-backend <vendor>.
+#                        column.json comes home.
+#   --cpu-column FILE    with --column: diff the GPU column against this CPU
+#                        column of the same commit (tools/identity_break.py --diff);
+#                        any DIVERGENT cell fails the run, named lane/fixture/part.
 #
 # A RENTED RUN, IN ORDER: Mac dead-man armed BEFORE the create (lease + ready
 # timeout + 10 min, by id or by name); create; wait for ssh (600 s); arm the
@@ -54,6 +66,7 @@ SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLeve
 WHEEL=""; COMMIT=""; OUT=""; GPU="${MOJOLEARN_SMOKE_GPU:-NVIDIA GeForce RTX 4090}"
 IMAGE="${MOJOLEARN_SMOKE_IMAGE:-runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04}"
 CUDA="13.0"; LEASE=45; SMOKE_SECONDS=1800; SSH_GIVEN=""; RENT=0
+VENDOR=cuda; SELECTION=""; CPU_COLUMN=""; GPU_SET=0; IMAGE_SET=0; CUDA_SET=0
 
 say() { printf '[%s wheel-smoke] %s\n' "$(date +%T)" "$*"; }
 die() { printf '\nREFUSED: %s\n' "$*" >&2; exit 1; }
@@ -69,9 +82,12 @@ while [ $# -gt 0 ]; do
     case "$1" in
         --expected-source-commit) shift; COMMIT="${1:-}" ;;
         --out) shift; OUT="${1:-}" ;;
-        --gpu) shift; GPU="${1:-}" ;;
-        --image) shift; IMAGE="${1:-}" ;;
-        --cuda) shift; CUDA="${1:-}" ;;
+        --gpu) shift; GPU="${1:-}"; GPU_SET=1 ;;
+        --image) shift; IMAGE="${1:-}"; IMAGE_SET=1 ;;
+        --cuda) shift; CUDA="${1:-}"; CUDA_SET=1 ;;
+        --vendor) shift; VENDOR="${1:-}" ;;
+        --column) shift; SELECTION="${1:-}" ;;
+        --cpu-column) shift; CPU_COLUMN="${1:-}" ;;
         --lease) shift; LEASE="${1:-}" ;;
         --smoke-seconds) shift; SMOKE_SECONDS="${1:-}" ;;
         --ssh) shift; SSH_GIVEN="${1:-}" ;;
@@ -84,6 +100,30 @@ while [ $# -gt 0 ]; do
 done
 
 # ---------------------------------------------------------------- validation
+case "$VENDOR" in
+    cuda) ;;
+    hip) [ "$GPU_SET" = 1 ] || GPU="AMD Instinct MI300X OAM"
+         [ "$IMAGE_SET" = 1 ] || IMAGE="rocm/dev-ubuntu-22.04:6.4.1-complete"
+         [ "$CUDA_SET" = 1 ] || CUDA="" ;;
+    *) die "--vendor must be cuda or hip" ;;
+esac
+[ "$VENDOR" = cuda ] || [ -n "$SELECTION" ] || die "--vendor hip runs no smoke; give --column"
+LANES=""
+if [ -n "$SELECTION" ]; then
+    [ -f "$SELECTION" ] || die "no selection file $SELECTION"
+    LANES=$(python3 - "$SELECTION" "$VENDOR" <<'PY'
+import json, re, sys
+d = json.load(open(sys.argv[1]))
+if d.get("backend") != sys.argv[2]:
+    sys.exit("the selection is for backend %r, not %r" % (d.get("backend"), sys.argv[2]))
+lanes = d.get("lanes") or []
+if not lanes or not all(re.fullmatch(r"[a-z0-9][a-z0-9_.-]*", n) for n in lanes):
+    sys.exit("the selection names no lanes, or a malformed lane")
+print(",".join(lanes))
+PY
+) || die "bad --column selection: $LANES"
+fi
+[ -z "$CPU_COLUMN" ] || { [ -n "$SELECTION" ] || die "--cpu-column needs --column"; [ -f "$CPU_COLUMN" ] || die "no CPU column $CPU_COLUMN"; }
 [ -n "$WHEEL" ] && [ -f "$WHEEL" ] || die "no wheel file given ($WHEEL)"
 WHEEL=$(cd "$(dirname "$WHEEL")" && pwd)/$(basename "$WHEEL")
 case "$(basename "$WHEEL")" in mojolearn-*-manylinux*_x86_64.whl) ;; *) die "$(basename "$WHEEL") is not a final manylinux x86_64 mojolearn wheel (smoke the repaired, stripped one)" ;; esac
@@ -113,14 +153,19 @@ POD_NAME="mojolearn-smoke-$(printf '%s' "$VERSION" | tr -c 'a-z0-9\n' '-')-$STAM
 [ -n "$OUT" ] || OUT="${MOJOLEARN_EVIDENCE_ROOT:-$HOME/mojolearn-evidence}/release-smoke/$VERSION/$STAMP-linux"
 [ ! -e "$OUT/results.json" ] || die "$OUT/results.json exists; use a fresh --out"
 CREATE="$TMPD/create.json"
-python3 - "$CREATE" "$POD_NAME" "$IMAGE" "$GPU" "$CUDA" <<'PY' || die "the create request did not compose"
+python3 - "$CREATE" "$POD_NAME" "$IMAGE" "$GPU" "$CUDA" "$VENDOR" "$ROOT/tools/runpod_ssh_bootstrap.sh" <<'PY' || die "the create request did not compose"
 import json, sys
-out, name, image, gpu, cuda = sys.argv[1:]
+from pathlib import Path
+out, name, image, gpu, cuda, vendor, bootstrap = sys.argv[1:]
 req = {"name": name, "imageName": image, "gpuTypeIds": [gpu], "gpuCount": 1,
        "cloudType": "SECURE", "containerDiskInGb": 30, "volumeInGb": 0,
        "ports": ["22/tcp"], "supportPublicIp": True, "interruptible": False}
 if cuda:
     req["allowedCudaVersions"] = [v.strip() for v in cuda.split(",") if v.strip()]
+if vendor == "hip" and image.startswith("rocm/"):
+    # plain ROCm images have no ssh; the repo's bootstrap (as tools/gemm_remote_leg.sh)
+    req["dockerEntrypoint"] = ["/bin/bash", "-lc"]
+    req["dockerStartCmd"] = [Path(bootstrap).read_text()]
 open(out, "w").write(json.dumps(req, indent=2) + "\n")
 PY
 
@@ -131,13 +176,30 @@ cat > "$BOX" <<BOX_EOF
 #!/bin/bash
 set -u
 cd $RDIR || exit 9
-{ nvidia-smi --query-gpu=name,driver_version --format=csv,noheader; uname -a; } > box.txt 2>&1
+{ nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>/dev/null || rocm-smi --showproductname 2>/dev/null; uname -a; } > box.txt 2>&1
 PY=\$(command -v python3.13 || command -v python3.12 || command -v python3.11 || command -v python3.10 || command -v python3)
 echo "python=\$PY \$(\$PY --version 2>&1)" >> box.txt
 sha256sum "$(basename "$WHEEL")" qualify_verifier_wheel.py >> box.txt
+if [ "$VENDOR" = cuda ]; then
 timeout -k 20 $SMOKE_SECONDS "\$PY" qualify_verifier_wheel.py "$RDIR/$(basename "$WHEEL")" \\
     --scope expanded --python "\$PY" --expected-source-commit $COMMIT --output $RDIR/out > smoke.log 2>&1
 echo \$? > smoke.exit
+fi
+if [ -n "$LANES" ]; then
+  # The release column from the INSTALLED wheel, run outside any checkout.
+  "\$PY" -m venv $RDIR/rv > column_venv.log 2>&1 || { (apt-get update -qq && apt-get install -y -qq python3-venv) >> column_venv.log 2>&1 && "\$PY" -m venv $RDIR/rv >> column_venv.log 2>&1; }
+  $RDIR/rv/bin/pip install --disable-pip-version-check "$RDIR/$(basename "$WHEEL")" numpy >> column_venv.log 2>&1
+  echo "install_exit=\$?" > column.txt
+  mkdir -p $RDIR/run && cd $RDIR/run
+  export MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_COMMIT=$COMMIT
+  $RDIR/rv/bin/python -c 'import mojolearn as m; print("version", m.__version__, "vendor", m.vendor())' >> $RDIR/column.txt 2>&1
+  $RDIR/rv/bin/python -m mojolearn verify --self-test > $RDIR/selftest.log 2>&1; echo "selftest_exit=\$?" >> $RDIR/column.txt
+  timeout -k 20 $SMOKE_SECONDS $RDIR/rv/bin/python -m mojolearn._identity_break --lanes "$LANES" --json $RDIR/column.json \\
+      --repeats 1 --fixtures base,denormal,odd --fail-on-refused --require-backend $VENDOR --no-batch --no-rlpair > $RDIR/column.log 2>&1
+  echo \$? > $RDIR/column.exit
+  cd $RDIR
+fi
+echo done > $RDIR/box.done
 BOX_EOF
 bash -n "$BOX" || die "the box command is not valid bash"
 
@@ -285,17 +347,17 @@ with_timeout 60 ssh $SSH_OPTS $SSH_TARGET "nohup bash $RDIR/box.sh > $RDIR/box.l
 _end=$(( $(now) + SMOKE_SECONDS + 120 )); _fails=0; SMOKE_EXIT=""
 while [ "$(now)" -lt "$_end" ]; do
     sleep 15
-    _o=$(with_timeout 45 ssh $SSH_OPTS $SSH_TARGET "cat $RDIR/smoke.exit 2>/dev/null; true" 2>/dev/null)
+    _o=$(with_timeout 45 ssh $SSH_OPTS $SSH_TARGET "cat $RDIR/box.done 2>/dev/null; true" 2>/dev/null)
     if [ $? = 0 ]; then _fails=0; else _fails=$((_fails + 1)); fi
-    SMOKE_EXIT=$(printf '%s' "$_o" | tr -d '[:space:]')
-    [ -n "$SMOKE_EXIT" ] && break
+    [ -n "$(printf '%s' "$_o" | tr -d '[:space:]')" ] && break
     [ "$_fails" -lt 12 ] || { say "12 polls failed in a row; fetching what exists"; break; }
 done
+SMOKE_EXIT=$(with_timeout 45 ssh $SSH_OPTS $SSH_TARGET "cat $RDIR/smoke.exit 2>/dev/null; true" 2>/dev/null | tr -d '[:space:]')
 say "smoke exit: ${SMOKE_EXIT:-none}"
 
 say "fetching the results"
 mkdir -p "$OUT/remote"
-with_timeout 300 ssh $SSH_OPTS $SSH_TARGET "cd $RDIR && tar czf - box.txt box.log smoke.log smoke.exit out 2>/dev/null" \
+with_timeout 300 ssh $SSH_OPTS $SSH_TARGET "cd $RDIR && tar czf - box.txt box.log smoke.log smoke.exit out column.txt column_venv.log selftest.log column.log column.exit column.json column.json.errors.txt 2>/dev/null" \
     | ( cd "$OUT/remote" && tar xzf - ) || echo "  FETCH INCOMPLETE"
 [ -f "$OUT/remote/box.txt" ] && sed 's/^/  box: /' "$OUT/remote/box.txt"
 if [ -f "$OUT/remote/out/results.json" ]; then
@@ -304,6 +366,8 @@ fi
 echo "finished=$(date -u +%FT%TZ) smoke_exit=${SMOKE_EXIT:-none}" >> "$OUT/smoke.txt"
 
 # The receipt, judged here: about THIS wheel, THIS commit, and PASSED.
+_v=0
+if [ "$VENDOR" = cuda ]; then
 python3 - "$OUT/results.json" "$WHEEL_SHA" "$COMMIT" <<'PY' | tee -a "$OUT/smoke.txt"
 import json, sys
 path, sha, commit = sys.argv[1:]
@@ -324,5 +388,33 @@ print('verdict=%s jobs=%d vendor=%s%s' % ('PASSED' if not problems else 'FAILED'
 sys.exit(1 if problems else 0)
 PY
 _v=${PIPESTATUS[0]}
-[ "$_v" = 0 ] && say "PASSED. Receipt: $OUT/results.json" || say "FAILED. Logs: $OUT/remote"
+fi
+# The column, judged here: it ran to the end on this vendor, and (with
+# --cpu-column) no cell differs from the CPU column of the same commit.
+if [ -n "$LANES" ]; then
+    [ -f "$OUT/remote/column.txt" ] && sed 's/^/  column: /' "$OUT/remote/column.txt"
+    _cx=$(tr -d '[:space:]' < "$OUT/remote/column.exit" 2>/dev/null)
+    [ -f "$OUT/remote/column.json" ] && cp "$OUT/remote/column.json" "$OUT/column-$VENDOR.json"
+    if [ "$_cx" != 0 ] || [ ! -f "$OUT/remote/column.json" ]; then
+        say "COLUMN FAILED (exit ${_cx:-none}); refused cells and their errors:"
+        grep -E '^# CELL .* REFUSED' "$OUT/remote/column.log" 2>/dev/null | head -20
+        [ -f "$OUT/remote/column.json.errors.txt" ] && head -40 "$OUT/remote/column.json.errors.txt"
+        _v=1
+    else
+        cp "$OUT/remote/column.json" "$OUT/column-$VENDOR.json"
+        say "column complete: $OUT/column-$VENDOR.json"
+        if [ -n "$CPU_COLUMN" ]; then
+            python3 "$ROOT/tools/identity_break.py" --diff "$CPU_COLUMN" "$OUT/column-$VENDOR.json" > "$OUT/diff-cpu-$VENDOR.txt" 2>&1
+            _dv=$(grep -c 'DIVERGENT' "$OUT/diff-cpu-$VENDOR.txt" || true)
+            grep -E '^summary' "$OUT/diff-cpu-$VENDOR.txt" | sed 's/^/  /'
+            if [ "${_dv:-0}" != 0 ]; then
+                say "DIVERGENT against the CPU column:"; grep 'DIVERGENT' "$OUT/diff-cpu-$VENDOR.txt" | head -40
+                _v=1
+            else
+                say "no DIVERGENT cell against the CPU column ($OUT/diff-cpu-$VENDOR.txt)"
+            fi
+        fi
+    fi
+fi
+[ "$_v" = 0 ] && say "PASSED. Evidence: $OUT" || say "FAILED. Logs: $OUT/remote"
 exit "$_v"
