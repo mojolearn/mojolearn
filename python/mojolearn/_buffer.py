@@ -355,6 +355,21 @@ def addr_ro(obj, *, name):
         return b.addr
 
 
+def flat_bytes(obj, *, name="array"):
+    """A flat read-only `'B'` memoryview over any array the package hands
+    out. `Array` cannot export the buffer protocol on Python 3.10 and 3.11
+    (DEVIATION 2305; `memoryview(a)` raises TypeError there), so it is read
+    at its address; everything else goes through `memoryview`. The caller
+    keeps `obj` alive while the view is in use. The live worker's fold
+    export and the cross-vendor state hash crashed on a Python 3.11 box
+    through exactly this on 2026-09-23."""
+    if isinstance(obj, Array):
+        return memory_at(obj._addr, obj.nbytes, writable=False)
+    with Buf(obj, writable=False, name=name):
+        pass
+    return memoryview(obj).cast("B")
+
+
 # ------------------------------------------------------------ conversion
 
 
