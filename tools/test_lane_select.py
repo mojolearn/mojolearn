@@ -1491,7 +1491,14 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
         got = len(rev.get(rel, set()))
         assert got == want, f"{rel} answers {got} lanes, not {want}"
     lanes = len(lane_select.all_lanes())
-    every = [rel for rel, seen in rev.items() if len(seen) == lanes]
+    # Tracked files only: a release build drops ignored generated copies into
+    # the package (python/mojolearn/_identity_break.py, a copy of
+    # tools/identity_break.py) that no diff can ever name, and counting them
+    # made this read 56 in a built tree and 55 in a fresh checkout.
+    import subprocess
+    tracked = set(subprocess.run(["git", "-C", lane_select.ROOT,
+                                  "ls-files"], capture_output=True, text=True).stdout.split())
+    every = [rel for rel, seen in rev.items() if len(seen) == lanes and rel in tracked]
     # 41 when the per-export rule landed, 55 on 2026-09-21. The fourteen were
     # traced commit by commit and each is a REAL import into a closure every
     # lane already had, never a wider walk: `_byte_lm_host.py` importing

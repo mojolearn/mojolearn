@@ -789,6 +789,14 @@ def main(argv=None):
         ap.error("--repeats must be positive")
     selection_modes = sum(bool(x) for x in (args.all, args.lanes or args.lane, args.changed_since, args.lanes_for_paths))
     is_pass = args.apple_pass or args.cpu_pass or bool(args.gpu_pass)
+    if (args.apple_pass or args.cpu_pass) and not args.plan:
+        # A PASS OVER STALE BINARIES CHECKS NOTHING. The passes load whatever
+        # bindings sit in python/mojolearn; on 2026-09-22 a pass started over
+        # the previous commit's builds after a kernel fix had landed. Every
+        # binding must have been built from this tree's sources.
+        import binding_stamps
+        if binding_stamps.cmd_check() != 0:
+            sys.exit(2)
     covers = dict(mode="all") if args.all else None
     given = None
     if args.selection:

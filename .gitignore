@@ -142,3 +142,6 @@ bench/results/e1g/*/remote/tools-venv/
 /bench/results/resume/2026-09-06-root-training-nvidia/run3/remote/training-validation/train-gradient-capture
 /bench/results/resume/2026-09-06-root-training-nvidia/run4/remote/training-validation/train-gradient-capture
 /bench/results/resume/2026-09-07-root-mlp-amd/run1/remote/training-validation/train-gradient-capture
+
+# Which sources each built binding came from (tools/binding_stamps.py)
+python/.binding-stamps/

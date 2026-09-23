@@ -350,6 +350,7 @@ ordered_pairs | xargs -P "$BUILD_JOBS" -n 2 sh -c '
         if MOJOLEARN_NUMERIC_MODE=$mode MOJOLEARN_SKIP_BUILD_GATE=$skip MOJOLEARN_TARGET_COLUMN=cpu \
              env -u MOJOLEARN_GPU_ARCHS -u MOJOLEARN_HOST_OUTDIR -u "MOJOLEARN_${FAM}_HOST_OUTDIR" \
              $runner "./bindings/$script" > "$log" 2>&1; then
+            python3 tools/binding_stamps.py write "$script" "$output" >> "$log" 2>&1 || { echo "== $script ($mode) STAMP FAILED"; cat "$log"; exit 1; }
             { echo "== $script ($mode) OK"; cat "$log"; }
         else
             { echo "== $script ($mode) FAILED"; cat "$log"; }
@@ -358,6 +359,9 @@ ordered_pairs | xargs -P "$BUILD_JOBS" -n 2 sh -c '
         exit 0 ;;
     esac
     if MOJOLEARN_NUMERIC_MODE=$mode MOJOLEARN_SKIP_BUILD_GATE=$skip $runner "./bindings/$script" > "$log" 2>&1; then
+        # The sources this binding was built from, for the release passes
+        # (tools/binding_stamps.py check refuses a binding whose sources moved).
+        python3 tools/binding_stamps.py write "$script" "$output" >> "$log" 2>&1 || { echo "== $script ($mode) STAMP FAILED"; cat "$log"; exit 1; }
         { echo "== $script ($mode) OK"; cat "$log"; }
     else
         { echo "== $script ($mode) FAILED"; cat "$log"; }

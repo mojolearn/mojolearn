@@ -372,6 +372,12 @@ pixi run -e test apple-pass               # the Apple GPU: Metal lock + one of t
 MOJOLEARN_CPU_PASS_SLOTS=4 pixi run -e test cpu-pass   # the CPU route on the other 4 slots
 ```
 
+Both refuse to start unless every binding in `python/mojolearn` was built
+from this tree's sources (`tools/binding_stamps.py check`: the macOS release
+build stamps each binding with its source-closure digest; a missing or stale
+stamp names the binding and nothing runs). Build the macOS wheel (step 6's
+build script) first, then run the check.
+
 Both run LOCALLY. No pod, no NVIDIA or AMD box and no R2 staging is part of a
 release. Each pass is `base,denormal,odd`, fitted once, end model only.
 
