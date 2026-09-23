@@ -218,7 +218,7 @@ def gpu_legs(ctx):
         os.environ.get("MOJOLEARN_RUNPOD_KEY_FILE", "~/.mojolearn_runpod_key")),
         MOJOLEARN_NVIDIA_CAMPAIGN="7")
     legs = []
-    for arch, gpu in (("sm_90a", "NVIDIA H100 80GB HBM3"), ("sm_89", "NVIDIA L40S")):
+    for arch, gpu in ((a, NVIDIA_WALK[a][0]) for a in ("sm_90a", "sm_89")):
         out = legs_dir / f"cuda-{arch}"
         legs.append(Leg(f"cuda-{arch}", "cuda", arch,
                         ["sh", "tools/gemm_remote_leg.sh", "nvidia", "--payload", "mamba",
@@ -234,6 +234,25 @@ def gpu_legs(ctx):
                     dict(MOJOLEARN_RELEASE_UBUNTU22="1", MOJOLEARN_RELEASE_RESULTS_ROOT=str(legs_dir)),
                     legs_dir / "hip-gfx942" / "release-build", legs_dir, legs_dir / "hip-gfx942"))
     return legs
+
+
+#: RunPod stock comes and goes by GPU type. A leg or a smoke whose create is
+#: answered "no instances currently available" walks to the next type of the
+#: same architecture (0.8.16, 2026-09-23: the L40S leg failed twice on stock
+#: and the RTX 4090 smoke once, each stopping the release).
+NVIDIA_WALK = {
+    "sm_90a": ["NVIDIA H100 80GB HBM3", "NVIDIA H100 NVL", "NVIDIA H100 PCIe", "NVIDIA H200"],
+    "sm_89": ["NVIDIA L40S", "NVIDIA L40", "NVIDIA RTX 6000 Ada Generation", "NVIDIA GeForce RTX 4090"],
+}
+SMOKE_WALK = ["NVIDIA GeForce RTX 4090", "NVIDIA L40S", "NVIDIA L40", "NVIDIA RTX 6000 Ada Generation"]
+NO_STOCK = "no instances currently available"
+
+
+def no_stock(log):
+    try:
+        return NO_STOCK in log.read_text(errors="replace")
+    except OSError:
+        return False
 
 
 #: Build routes by name. A route returns the Leg list for ctx; launch, wait,
@@ -538,10 +557,24 @@ class Release:
             return "would wait for " + ", ".join(l.name for l in legs)
         if not any(l.pid() or l.exit_code() is not None for l in legs):
             launch_linux_builds(self, legs)
-        while any(l.running() for l in legs):
-            self.say("  waiting: " + ", ".join(f"{l.name}={'running' if l.running() else l.exit_code()}"
-                                                for l in legs))
-            time.sleep(60)
+        tried = {l.name: 0 for l in legs}
+        while True:
+            while any(l.running() for l in legs):
+                self.say("  waiting: " + ", ".join(f"{l.name}={'running' if l.running() else l.exit_code()}"
+                                                    for l in legs))
+                time.sleep(60)
+            again = []
+            for l in legs:
+                walk = NVIDIA_WALK.get(l.arch) if l.vendor == "cuda" else None
+                if walk and l.exit_code() != 0 and no_stock(l.log) and tried[l.name] + 1 < len(walk):
+                    tried[l.name] += 1
+                    i = l.command.index("--gpu")
+                    self.say(f"  {l.name}: {l.command[i + 1]} has no stock; trying {walk[tried[l.name]]}")
+                    l.command[i + 1] = walk[tried[l.name]]
+                    again.append(l)
+            if not again:
+                break
+            launch_linux_builds(self, again, stagger=0)
         bad = [l for l in legs if l.exit_code() != 0 or not l.proof_ok(self.commit)]
         if bad:
             raise StepFailed("build leg(s) failed: " + ", ".join(
@@ -610,15 +643,22 @@ class Release:
             return "PASSED (receipt and NVIDIA column exist)"
         if not final and not self.dry:
             raise StepFailed("no final Linux wheel; run linux-pack")
-        if out.exists() and not self.dry:
-            out.rename(out.with_name(out.name + ".failed-" + dt.datetime.now().strftime("%Y%m%d-%H%M%S")))
-        cmd = ["bash", "tools/release_wheel_smoke.sh", final or "<final linux wheel>",
-               "--expected-source-commit", self.commit, "--out", out, "--rent",
-               "--column", self.gpu_selection("cuda"),
-               "--cpu-column", self.release_check_dir() / "cpu" / "column.json"]
-        if self.args.smoke_gpu:
-            cmd += ["--gpu", self.args.smoke_gpu]
-        self.must(cmd, log=self.rel / "linux-smoke.log", what="release_wheel_smoke.sh")
+        gpus = [g for g in self.args.smoke_gpu.split("|") if g] or SMOKE_WALK
+        log = self.rel / "linux-smoke.log"
+        for i, gpu in enumerate(gpus):
+            if out.exists() and not self.dry:
+                out.rename(out.with_name(out.name + ".failed-" + dt.datetime.now().strftime("%Y%m%d-%H%M%S")))
+            cmd = ["bash", "tools/release_wheel_smoke.sh", final or "<final linux wheel>",
+                   "--expected-source-commit", self.commit, "--out", out, "--rent",
+                   "--column", self.gpu_selection("cuda"),
+                   "--cpu-column", self.release_check_dir() / "cpu" / "column.json", "--gpu", gpu]
+            rc = self.run(cmd, None, log)
+            if rc == 0:
+                break
+            if i + 1 < len(gpus) and no_stock(log):
+                self.say(f"  {gpu} has no stock; trying {gpus[i + 1]}")
+                continue
+            raise StepFailed(f"release_wheel_smoke.sh exited {rc}; log {log}")
         if not self.dry and not smoke_passed(out / "results.json", final):
             raise StepFailed(f"Linux smoke receipt is not PASSED for this wheel: {out / 'results.json'}")
         if not self.dry and not self.gpu_column_ok(out, "cuda"):
@@ -827,7 +867,7 @@ def main(argv=None):
     ap.add_argument("--build-backend", default="gpu-legs", choices=sorted(BUILD_BACKENDS))
     ap.add_argument("--amd-expect-from", default="",
                     help="an NVIDIA release-build dir: run the AMD core-host probe against its STAGED copy")
-    ap.add_argument("--smoke-gpu", default="", help="RunPod GPU for the Linux smoke (default RTX 4090)")
+    ap.add_argument("--smoke-gpu", default="", help="RunPod GPU(s) for the Linux smoke, |-separated, walked on no stock (default the 4090, L40S, L40, RTX 6000 Ada)")
     ap.add_argument("--amd-provider", default="auto", choices=["auto", "runpod", "do"],
                     help="where the AMD column rents: auto = RunPod MI300X, DigitalOcean MI325X when RunPod has no stock")
     ap.add_argument("--state-dir", default="", help=argparse.SUPPRESS)
