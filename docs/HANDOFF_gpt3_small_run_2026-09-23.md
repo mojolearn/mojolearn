@@ -48,14 +48,21 @@ handoff, and negative controls that were seen to fail.
   steps of its own; the fixed driver landed both. It surfaced and fixed three
   defects (the runner's hash under Python 3.11, single-stream token fetches
   that stall, HEAD on a presigned URL); see its README.
-- **BLOCKER for T3 as planned: DigitalOcean refuses `gpu-mi325x8-2048gb`**
-  ("creating this droplet will exceed your GPU limit", nothing live). RunPod
-  has no MI300X stock and Hot Aisle serves one or two MI300X per VM. Either
-  Andrew raises the DigitalOcean GPU limit (support request), or the T3 spec's
-  AMD segments are split for one MI325X (`amd_size` `gpu-mi325x1-256gb`,
-  `amd_devices` `0`; 139 s a step, so about 39 h per 1,000 steps against a
-  12 h lease: three or four sub-segments each). The NVIDIA segments can start
-  either way; route A halts at its AMD segment until one of the two happens.
+- **T3 is RUNNING (launched 2026-09-23 13:38 ET, `~/mojolearn-evidence/gpt3-run/t3/`)
+  with the spec changed for capacity (Andrew, 14:45 ET):** DigitalOcean refuses
+  `gpu-mi325x8-2048gb` on the account's GPU limit (a ticket is open), RunPod has
+  no MI300X and Hot Aisle offers one or two MI300X per VM with a $44 balance. So
+  route A is now the NVIDIA route (every segment on a 2-GPU H100 pod, the live
+  segment 3 keeps one MI325X worker) and route B is the other-vendor route:
+  its AMD segments run on ONE MI325X (`amd_size gpu-mi325x1-256gb`,
+  `amd_devices 0`, 139 s a step) with leases sized to the whole segment, held
+  step for step to route A's chain. That is the claim in its simplest form:
+  the same model, the same steps, on the other vendor, the same bits. Route A
+  completes in about 1.5 days on its own; route B's AMD segments take about
+  39 h per 1,000 steps until the 8x limit lands (then set `amd_size` back and
+  `amd_devices` to `0,...,7`; the driver resumes and skips landed segments).
+  NVIDIA and live caps were raised to cover a 2-GPU H100 pod for its lease
+  ($6.98 an hour; the plan's $60 refused the first pod).
 
 ## How to run it
 
