@@ -112,9 +112,13 @@ mid-run (the recipe pins the hash scheme now, but the runner archives HEAD).
 - Any DISAGREE: stop, name the column that is alone (the arrival replay and
   a CPU witness of one shard: `python -m mojolearn.cross_vendor` is not it;
   see plan section 6), and tell Andrew before anything is rerun.
-- File evidence under `bench/results/lm_t3_<date>/` as the T1 directories
-  are filed (small files only; checkpoints stay in R2), commit on a branch,
-  merge to main when verified, push (`push-local-main-always`).
+- File evidence under `bench/results/lm_t3_<date>/` with
+  `tools/lm_file_evidence.py --spec ... --out ~/mojolearn-evidence/gpt3-run/t3
+  --dest bench/results/lm_t3_2026-09-23` (rerun as segments land; it files
+  every PASSED segment's small files, reduces each chain to
+  `chain.summary.tsv` plus `chain.sha256`, and prints the README table rows;
+  checkpoints and full chains stay in R2), write the README by hand, commit
+  on a branch, merge to main when verified, push (`push-local-main-always`).
 - Cost expectation from measured steps: NVIDIA about 45 GPU-hours, AMD about
   160 GPU-hours (20 hours on the 8-GPU droplet at $30.40), live about 24 box
   hours; about $1,000 in all. Wall clock about three days with `--parallel 2`.
