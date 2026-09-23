@@ -122,7 +122,7 @@ class FakePar:
         return _loss(ids), _grad(ids).copy()
 
     def fold_add(self, g):
-        self._add(np.asarray(g, dtype=np.float32))
+        self._add(np.frombuffer(bytes(memoryview(g).cast('B')), dtype=np.float32))
 
     def fold_export(self):
         return self.fold.tobytes()
@@ -320,6 +320,44 @@ class Parse(unittest.TestCase):
         self.assertIsNone(seg.control_stamp(None, False))
         self.assertEqual(seg.control_stamp(None, True), 'zero-moments')
         self.assertEqual(seg.control_stamp(seg.parse_control('swap=1,2'), True), 'zero-moments+swap=1,2')
+
+
+class FoldExportFallback(unittest.TestCase):
+    """The 0.8.15 wheel's `fold_export` raises TypeError on Python 3.10/3.11;
+    the tool then makes the same binding call and reads the buffer itself."""
+
+    def test_the_binding_is_read_directly_when_the_method_raises(self):
+        want = np.arange(6, dtype=np.float32)
+
+        class Binding:
+            def byte_lm_parallel_fold_export(self, session, bufs):
+                bufs[0][:] = want.tobytes()
+
+        class Broken:
+            _shape = types.SimpleNamespace(n_total=6)
+            _binding, _session = Binding(), object()
+
+            def fold_export(self):
+                raise TypeError("memoryview: a bytes-like object is required, not 'Array'")
+
+            def _open(self):
+                pass
+
+            def _require_fold(self):
+                pass
+
+        buf = types.ModuleType('mojolearn._buffer')
+        buf.empty = lambda shape, dtype: bytearray(4 * shape[0])
+        buf.addr = lambda obj, name=None: obj
+        saved = sys.modules.get('mojolearn._buffer')
+        sys.modules['mojolearn._buffer'] = buf
+        try:
+            self.assertEqual(seg.fold_export(Broken()), want.tobytes())
+        finally:
+            if saved is None:
+                sys.modules.pop('mojolearn._buffer', None)
+            else:
+                sys.modules['mojolearn._buffer'] = saved
 
 
 class UlpEdit(unittest.TestCase):

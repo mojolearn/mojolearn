@@ -866,6 +866,25 @@ def ulp_edit(gradient, prefix, index):
                 survives_fold=bool(unedited != edited))
 
 
+def fold_export(trainer):
+    """`trainer.fold_export()`, as bytes. The 0.8.15 wheel's method ends in
+    `memoryview(out)` over the package's own `Array`, which has no buffer
+    protocol on Python 3.10 and 3.11 (DEVIATION 2305), so it raises
+    TypeError there (seen on the H100 controls box, Python 3.11,
+    2026-09-23). Then the SAME binding call is made here into the same
+    `empty` buffer and read through `_bytes_of`; nothing about the fold
+    changes."""
+    try:
+        return trainer.fold_export()
+    except TypeError:
+        from mojolearn._buffer import addr, empty
+        trainer._open()
+        trainer._require_fold()
+        out = empty((trainer._shape.n_total,), '<f4')
+        trainer._binding.byte_lm_parallel_fold_export(trainer._session, [addr(out, name='fold total')])
+        return bytes(_bytes_of(out))
+
+
 def split_step(trainer, shards, split, *, index=None):
     """One step as a sequence of per-shard calls (the live worker's calls,
     on one device): shards 0..split-1 folded on the device, the fold
@@ -878,17 +897,18 @@ def split_step(trainer, shards, split, *, index=None):
     trainer.fold_reset(None)
     for k in range(split):
         losses.append(trainer.shard_gradient_fold(shards[k]))
-    prefix = trainer.fold_export()
+    prefix = fold_export(trainer)
     loss, g = trainer.shard_gradient(shards[split])
     losses.append(loss)
     detail = None
     if index is not None:
         detail = ulp_edit(g, prefix, index)
     trainer.fold_reset(prefix)
-    trainer.fold_add(g)
+    trainer.fold_add(bytes(_bytes_of(g)))  # bytes, as the live worker sends a held gradient
+    del g
     for k in range(split + 1, len(shards)):
         losses.append(trainer.shard_gradient_fold(shards[k]))
-    total = trainer.fold_export()
+    total = fold_export(trainer)
     if detail is not None:
         detail["observed_total_bits"] = "%08x" % struct.unpack_from("<I", total, 4 * detail["index"])[0]
         detail["shard"] = split
