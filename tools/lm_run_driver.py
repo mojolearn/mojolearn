@@ -215,7 +215,9 @@ def render(spec, e, out, ledger, role=None):
         if not src:
             raise SystemExit("%s/%s has not landed" % (e["from_route"], e["from_segment"]))
         cmd += ["--from-sha", src["checkpoints"][e["from_ckpt"]], "--from-key", "%s/%s/%s/%s" % (run, e["from_route"], e["from_segment"], e["from_ckpt"])]
-        if mode != "live-worker":
+        # a route's first segment seeded from route A's file has no previous
+        # segment of its own and so no arrival replay
+        if mode != "live-worker" and e["replay_ckpt"]:
             cmd += ["--replay", e["replay_ckpt"], "--replay-sha", src["checkpoints"][e["replay_ckpt"]],
                     "--replay-key", "%s/%s/%s/%s" % (run, e["from_route"], e["from_segment"], e["replay_ckpt"]),
                     "--replay-chain-key", "%s/%s/%s/chain.jsonl" % (run, e["from_route"], e["from_segment"])]
