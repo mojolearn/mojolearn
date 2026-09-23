@@ -60,7 +60,9 @@ class ReleaseInventory(unittest.TestCase):
                 binary.parent.mkdir(parents=True, exist_ok=True)
                 binary.write_bytes(f'inert host {name}'.encode())
                 hosts[name] = binary
-            sets.append((vendor, arch, files, {}, {}, hosts))
+            # The seventh element (2026-09-23) is the set's reuse.json record,
+            # None for a set a leg built with nothing taken from a published wheel.
+            sets.append(packer.SetDir(vendor, arch, files, {}, {}, hosts, None))
             proof = root / f'{vendor}-{arch}.json'
             proof.write_text(json.dumps(dict(
                 schema='mojolearn.linux.build-provenance.v1', complete=True,
@@ -110,7 +112,7 @@ class ReleaseInventory(unittest.TestCase):
             version = packer.read_version(root)
             with self.assertRaises(SystemExit):
                 packer.release_inventory(sets, [proofs[0]] * 3, version, root)
-            binary = next(iter(sets[0][2].values()))
+            binary = next(iter(sets[0].files.values()))
             original = binary.read_bytes()
             binary.write_bytes(b'changed')
             with self.assertRaises(SystemExit):
@@ -125,7 +127,7 @@ class ReleaseInventory(unittest.TestCase):
             with self.subTest(misplaced=misplaced), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
                 sets, proofs = self.fixture(root)
-                vendor, arch, files, _, _, _ = sets[0]
+                vendor, arch, files = sets[0].vendor, sets[0].arch, sets[0].files
                 old = f'{vendor}/{arch}/identical/_mojolearn_byte_lm.so'
                 binary = files.pop(old)
                 if misplaced:
