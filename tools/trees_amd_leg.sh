@@ -26,8 +26,8 @@
 # returns 200) or the droplet is destroyed on the spot. The token lives in
 # 0600 curl config files and reaches the droplet on ssh stdin, never argv.
 # The source is `git archive HEAD` without results, corpora and oracles,
-# checked by sha256 on both ends. Datasets live on the persistent tor1 volume
-# (datasets stage from R2 on every leg; no volume since 2026-09-23).
+# checked by sha256 on both ends. Datasets stage from R2 on every leg
+# (docs/REMOTE_DATA_R2.md); no block-storage volume since 2026-09-23.
 set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO" || exit 9
