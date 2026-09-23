@@ -302,3 +302,64 @@ if __name__ == "__main__":
                 failed += 1
                 print(f"FAIL {name}: {exc}")
     sys.exit(1 if failed else 0)
+
+
+# ------------------------------------------------- a binding that only grew
+BINDING_BASE = '''from core.x import helper
+
+
+def a_binding(x: PythonObject) raises -> PythonObject:
+    return helper(x)
+
+
+def PyInit__mojolearn_armprobe() abi("C") -> PythonObject:
+    module.def_function[a_binding]("a")
+    return module
+'''
+
+
+def _additions(new, old=BINDING_BASE):
+    ref, path = "<armprobe ref>", "bindings/_mojolearn_armprobe.mojo"
+    lane_select._GIT_SHOW[f"{ref}:{path}"] = old
+    lane_select._read.cache[path] = new
+    try:
+        return lane_select.binding_additions(ref, path)
+    finally:
+        lane_select._GIT_SHOW.pop(f"{ref}:{path}", None)
+        lane_select._read.cache.pop(path, None)
+
+
+GROWN = BINDING_BASE.replace(
+    '\n\ndef PyInit_', '\n\ndef b_binding(x: PythonObject) raises -> PythonObject:\n    return x\n\n\ndef PyInit_').replace(
+    '    module.def_function[a_binding]("a")\n', '    module.def_function[a_binding]("a")\n    module.def_function[b_binding]("b")\n')
+
+
+def test_a_binding_that_only_gains_exports_is_attributed_to_its_users():
+    """MUST NOT NARROW, first: an edited export, an edited import, a new
+    block named like something old, and a registration of an OLD impl."""
+    assert _additions(GROWN.replace("return helper(x)", "return helper(x + 1)")) is None
+    assert _additions(GROWN.replace("from core.x import helper", "from core.y import helper")) is None
+    assert _additions(GROWN.replace("b_binding", "helper")) is None, "a new block shadowing an old name"
+    assert _additions(BINDING_BASE.replace('("a")\n', '("a")\n    module.def_function[a_binding]("a2")\n')) is None
+    assert _additions(GROWN) == {"b"}
+
+
+def test_the_real_byte_lm_growth_selects_its_users_not_every_lane():
+    """v0.8.14 -> 0.8.15 added five parallel-training exports to the byte LM
+    binding, which every lane LOADS through the buffer helpers; the lanes
+    that really use it are the byte-LM ones."""
+    base = lane_select._read("bindings/_mojolearn_byte_lm.mojo")
+    blocks = lane_select._mojo_blocks(base)
+    name = next(n for n in blocks if n.startswith("byte_lm_") and n.endswith("_binding"))
+    grown = base.replace(f"\ndef {name}(", f"\ndef armprobe_new_binding(x: PythonObject) raises -> PythonObject:\n"
+                         f"    return x\n\n\ndef {name}(", 1)
+    ref, path = "<armprobe ref>", "bindings/_mojolearn_byte_lm.mojo"
+    lane_select._GIT_SHOW[f"{ref}:{path}"] = base
+    lane_select._read.cache[path] = grown
+    try:
+        sel = lane_select.select([path], ref=ref)
+    finally:
+        lane_select._GIT_SHOW.pop(f"{ref}:{path}", None)
+        lane_select._read.cache[path] = base
+    assert not sel["unattributed"] and "only GAINED exports" in sel["reasons"][path], sel["reasons"]
+    assert 0 < len(sel["lanes"]) < 40 and "byte-lm" in sel["lanes"] and "ols" not in sel["lanes"], sel["lanes"]
