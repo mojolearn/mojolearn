@@ -67,7 +67,7 @@ def _load():
         loader = importlib.machinery.ExtensionFileLoader(_MODULE_NAME, path)
         spec = importlib.util.spec_from_loader(_MODULE_NAME, loader, origin=path)
         module = importlib.util.module_from_spec(spec)
-        loader.exec_module(module)
+        _backend._exec_binding(loader, module)
         sys.modules[_MODULE_NAME] = module
     if int(module.byte_lm_host_numeric_mode()) != _IDENTICAL_CODE:
         raise RuntimeError(f"mojolearn: {path} was not compiled IDENTICAL; rebuild it")
