@@ -59,6 +59,8 @@ import sys
 import threading
 import time
 
+from ._buffer import flat_bytes
+
 PROTOCOL = "mojolearn.cross-vendor.v1"
 _TINY = 2.0 ** -126  # smallest normal float32
 
@@ -74,7 +76,7 @@ _EXP, _MAN, _SIGN = 0x7F800000, 0x007FFFFF, 0x80000000
 
 
 def _f32(payload):
-    return memoryview(payload).cast("B").cast("f")
+    return flat_bytes(payload, name="gradient").cast("f")
 
 
 def _flush(bits, i):
@@ -142,7 +144,7 @@ def state_hash(state):
     """sha256 over parameters, m, v and flags, in that order."""
     h = hashlib.sha256()
     for key in ("parameters", "m", "v", "flags"):
-        h.update(memoryview(state[key]).cast("B"))
+        h.update(flat_bytes(state[key], name=key))
     return h.hexdigest()
 
 
@@ -369,7 +371,7 @@ class Worker:
         tr = self.trainer
         raw = getattr(tr, "export_raw", None)
         state = raw() if callable(raw) else tr.state_dict()
-        n_total = len(memoryview(state["parameters"]).cast("B")) // 4
+        n_total = len(flat_bytes(state["parameters"], name="parameters")) // 4
         hello = dict(protocol=PROTOCOL, name=self.name, vendor=vendor(), shards=self.shards,
                      completed=tr.step_, state=state_hash(state), n_total=n_total, chained=self.chained)
         # A tunnel accepts the TCP connection before the coordinator behind it
@@ -418,7 +420,7 @@ class Worker:
                         for k in self.shards:
                             loss, g = tr.shard_gradient(self.batches(head["step"], k))
                             losses.append(loss)
-                            parts.append(memoryview(g).cast("B").tobytes())
+                            parts.append(flat_bytes(g, name="shard gradient").tobytes())
                         on_device = False
                     if self.chained:
                         if not on_device:

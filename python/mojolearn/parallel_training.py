@@ -10,7 +10,7 @@ import threading
 
 from ._byte_lm_impl import SmallByteLanguageModelTrainer, _array, _float32, _validate_state
 from ._byte_lm_config import state_shape
-from ._buffer import addr, addr_ro, empty
+from ._buffer import addr, addr_ro, empty, flat_bytes
 
 
 class ParallelByteLanguageModelTrainer:
@@ -280,7 +280,7 @@ class ParallelByteLanguageModelTrainer:
             self._require_fold()
             out = empty((self._shape.n_total,), '<f4')
             self._binding.byte_lm_parallel_fold_export(self._session, [addr(out, name='fold total')])
-            return memoryview(out).cast('B').tobytes()
+            return flat_bytes(out, name='fold total').tobytes()
 
     def optimizer_ownership(self):
         """Actual native ownership and moment/rollback/reduction bytes per device."""
