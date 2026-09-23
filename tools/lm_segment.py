@@ -12,6 +12,7 @@
                                         [--devices 0,1] [--route A --segment 2 --label nvidia-h100] \\
                                         [--boundary GLOBAL_STEP] [--expect-chain CHAIN.jsonl] \\
                                         [--upload-urls URLS.json] [--record-window A:B] [--zero-moments]
+                                        [--control none|shards=N|swap=A,B|split[=S]|ulp=S,I]
     python3 tools/lm_segment.py compare CHAIN_A.jsonl CHAIN_B.jsonl [...]
 
 THE RUN IS A CHAIN OF SEGMENTS, EACH ON WHATEVER HARDWARE. A segment starts
@@ -57,7 +58,11 @@ NEGATIVE CONTROLS. `--zero-moments` restores the checkpoint with zeroed
 AdamW moments and must FAIL an `--expect-chain` at the first step; a recipe
 whose K, shape, schedule or tokens differ from the checkpoint's is refused
 by name before any device work. `mojolearn.cross_vendor` holds the one-ulp
-control for the multi-vendor segment.
+control for the multi-vendor segment. `--control` runs one of the plan's
+controls (docs/GPT3_SMALL_SIX_SEGMENT_PLAN.md, section 6 item 7) against
+the real chain; see `parse_control`. A control is STAMPED into every chain
+line (`control`) and into segment.json, writes no checkpoint and refuses
+`--upload-urls`, so its output can never be mistaken for a real run's.
 
 Nothing here is imported by `mojolearn verify`; it is the driver of one
 evidence-producing run.
@@ -693,6 +698,204 @@ class _Locked:
         return call
 
 
+# ---------------------------------------------------------------- controls
+
+CONTROL_KINDS = ("none", "shards", "swap", "split", "ulp")
+
+
+def parse_control(text):
+    """`--control`, one of:
+
+      none         the plain step, stamped: must PASS (the harness's own check)
+      shards=N     run N logical shards, the first N of the recipe's K at every
+                   step (1 <= N < K); the data of the kept shards is unchanged,
+                   so what differs is the fold's shard count alone (`k63` is
+                   shards=63)
+      swap=A,B     exchange the shards in fold positions A and B (both read
+                   their own recipe batch, in each other's slot). The fold is
+                   an ordered left fold, total = g0, then total = total + g_k,
+                   so the loss vector moves and, unless {A, B} = {0, 1} (float
+                   addition commutes, so g0 + g1 == g1 + g0 bit for bit), the
+                   rounding order of the sum moves too
+      split[=S]    the split step on one device with NO edit: shards 0..S-1
+                   folded on the device, the fold exported, shard S's gradient
+                   downloaded and folded back in by `fold_add`, shards S+1..K-1
+                   folded on the device, the total applied by `apply_gradient`
+                   (S defaults to K-1). Must PASS: it proves the ulp harness
+      ulp=S,I      the split step with ONE ulp added to element I of shard S's
+                   gradient at the segment's first step (I may be `auto`: the
+                   largest-magnitude element of that gradient whose one-ulp
+                   change survives the fold's rounding). S >= 1
+
+    Returns a dict with `kind` and `text` (the canonical stamp)."""
+    text = (text or "").strip()
+    kind, sep, rest = text.partition("=")
+    kind = kind.strip()
+    if kind == "k63" and not sep:
+        kind, sep, rest = "shards", "=", "63"
+    if kind not in CONTROL_KINDS:
+        raise SystemExit("--control: unknown control %r (one of %s)" % (text, ", ".join(CONTROL_KINDS)))
+
+    def ints(value, n, what):
+        parts = [x.strip() for x in value.split(",")]
+        if len(parts) != n:
+            raise SystemExit("--control %s needs %d comma-separated values" % (what, n))
+        try:
+            return [int(x) for x in parts]
+        except ValueError:
+            raise SystemExit("--control %s: %r is not integers" % (what, value))
+    if kind == "none":
+        if sep:
+            raise SystemExit("--control none takes no value")
+        return dict(kind="none", text="none")
+    if kind == "shards":
+        (n,) = ints(rest, 1, "shards=N")
+        if n < 1:
+            raise SystemExit("--control shards=N needs N >= 1")
+        return dict(kind="shards", shards=n, text="shards=%d" % n)
+    if kind == "swap":
+        a, b = ints(rest, 2, "swap=A,B")
+        if a == b or a < 0 or b < 0:
+            raise SystemExit("--control swap=A,B needs two different nonnegative positions")
+        a, b = min(a, b), max(a, b)
+        return dict(kind="swap", a=a, b=b, text="swap=%d,%d" % (a, b))
+    if kind == "split":
+        if not sep:
+            return dict(kind="split", shard=None, text="split")
+        (sh,) = ints(rest, 1, "split=S")
+        return dict(kind="split", shard=sh, text="split=%d" % sh)
+    parts = [x.strip() for x in rest.split(",")]
+    if len(parts) != 2:
+        raise SystemExit("--control ulp=S,I needs a shard and an element index (or auto)")
+    (sh,) = ints(parts[0], 1, "ulp=S,I")
+    if parts[1] == "auto":
+        index = "auto"
+    else:
+        (index,) = ints(parts[1], 1, "ulp=S,I")
+        if index < 0:
+            raise SystemExit("--control ulp=S,I needs I >= 0")
+    return dict(kind="ulp", shard=sh, index=index, text="ulp=%d,%s" % (sh, index))
+
+
+def control_plan(control, K):
+    """(K run, slots, split shard): the logical shard count the trainer is
+    built with, `slots[k]` = the recipe's shard (0..K-1) whose batch fills
+    fold position k, and the split shard for `split`/`ulp` (None otherwise).
+    Refuses a control that does not fit this recipe's K."""
+    kind = (control or {}).get("kind", "none")
+    slots = list(range(K))
+    if kind == "shards":
+        n = control["shards"]
+        if not 1 <= n < K:
+            raise SystemExit("--control shards=%d: need 1 <= N < K=%d (the first N of the recipe's shards)" % (n, K))
+        return n, list(range(n)), None
+    if kind == "swap":
+        a, b = control["a"], control["b"]
+        if b >= K:
+            raise SystemExit("--control swap=%d,%d: positions must lie in 0..%d" % (a, b, K - 1))
+        slots[a], slots[b] = slots[b], slots[a]
+        return K, slots, None
+    if kind in ("split", "ulp"):
+        sh = control.get("shard")
+        sh = K - 1 if sh is None else sh
+        if K < 2 or not 1 <= sh < K:
+            raise SystemExit("--control %s: the shard must lie in 1..%d (shard 0 opens the fold)" % (control["text"], K - 1))
+        return K, slots, sh
+    return K, slots, None
+
+
+def control_stamp(control, zero_moments):
+    """The string every chain line of a control carries, or None for a real run."""
+    parts = []
+    if zero_moments:
+        parts.append("zero-moments")
+    if control is not None:
+        parts.append(control["text"])
+    return "+".join(parts) or None
+
+
+def _zero_moments(state):
+    for key in ("m", "v"):
+        mv = _bytes_of(state[key], writable=True)
+        mv[:] = bytes(len(mv))
+
+
+def _f32_normal(x, np):
+    return np.isfinite(x) & (np.abs(x) >= np.finfo(np.float32).tiny)
+
+
+def ulp_edit(gradient, prefix, index):
+    """Add one ulp (the bit pattern plus one, away from zero) to element
+    `index` of `gradient` IN PLACE, and say what the fold's next add
+    (prefix + gradient, one float32 rounding, `cross_vendor.fold_pair`)
+    makes of it. `index` "auto" picks the largest-magnitude element whose
+    change survives that add, every operand and result normal (the fold's
+    flush-to-zero never touches it). `gradient` is a writable float32
+    buffer, `prefix` the exported fold of the shards before it (bytes)."""
+    import numpy as np
+    gb = np.frombuffer(_bytes_of(gradient, writable=True), dtype="<u4")
+    gf = gb.view("<f4")
+    pf = np.frombuffer(prefix if isinstance(prefix, (bytes, bytearray)) else bytes(prefix), dtype="<f4")
+    if len(pf) != len(gf):
+        raise SystemExit("ulp: the fold prefix has %d elements, the gradient %d" % (len(pf), len(gf)))
+    if index == "auto":
+        eb = gb + np.uint32(1)
+        ef = eb.view("<f4")
+        with np.errstate(over="ignore", invalid="ignore"):
+            before, after = pf + gf, pf + ef
+            ok = (_f32_normal(gf, np) & _f32_normal(ef, np) & _f32_normal(pf, np) & _f32_normal(before, np)
+                  & _f32_normal(after, np) & (before != after))
+        if not ok.any():
+            raise SystemExit("ulp auto: no element's one-ulp change survives the fold")
+        index = int(np.argmax(np.where(ok, np.abs(gf), np.float32(-1))))
+        del eb, ef, before, after, ok
+    index = int(index)
+    if not 0 <= index < len(gf):
+        raise SystemExit("ulp: element %d is outside the gradient (%d elements)" % (index, len(gf)))
+    old = int(gb[index])
+    if (old & 0x7F800000) == 0x7F800000:
+        raise SystemExit("ulp: element %d is not finite" % index)
+    p = np.float32(pf[index])
+    unedited = np.float32(p + np.float32(gf[index]))
+    gb[index] = np.uint32(old + 1)
+    edited = np.float32(p + np.float32(gf[index]))
+    return dict(index=index, gradient_bits_before="%08x" % old, gradient_bits_after="%08x" % (old + 1),
+                prefix_bits="%08x" % _f32_bits(float(p)),
+                predicted_total_bits_unedited="%08x" % _f32_bits(float(unedited)),
+                predicted_total_bits_edited="%08x" % _f32_bits(float(edited)),
+                survives_fold=bool(unedited != edited))
+
+
+def split_step(trainer, shards, split, *, index=None):
+    """One step as a sequence of per-shard calls (the live worker's calls,
+    on one device): shards 0..split-1 folded on the device, the fold
+    exported, shard `split`'s gradient downloaded, edited when `index` is
+    given (`ulp_edit`), the device fold reset to the exported prefix and the
+    gradient added by `fold_add`, shards split+1.. folded on the device, the
+    total exported and applied. Returns (losses, total bytes, edit detail)."""
+    import array
+    losses = []
+    trainer.fold_reset(None)
+    for k in range(split):
+        losses.append(trainer.shard_gradient_fold(shards[k]))
+    prefix = trainer.fold_export()
+    loss, g = trainer.shard_gradient(shards[split])
+    losses.append(loss)
+    detail = None
+    if index is not None:
+        detail = ulp_edit(g, prefix, index)
+    trainer.fold_reset(prefix)
+    trainer.fold_add(g)
+    for k in range(split + 1, len(shards)):
+        losses.append(trainer.shard_gradient_fold(shards[k]))
+    total = trainer.fold_export()
+    if detail is not None:
+        detail["observed_total_bits"] = "%08x" % struct.unpack_from("<I", total, 4 * detail["index"])[0]
+        detail["shard"] = split
+    trainer.apply_gradient(array.array("f", total))
+    return losses, total, detail
+
+
 def cmd_run(args):
     from mojolearn.parallel_training import ParallelByteLanguageModelTrainer as Par
     recipe = load_recipe(args.recipe)
@@ -712,7 +915,18 @@ def cmd_run(args):
     if isinstance(batches, ManifestBatches):
         raise SystemExit("REFUSED: `run` needs the token stream itself (tokens.i32 beside its manifest), not the manifest alone")
     schedule = data_schedule(recipe, batches)
-    state, from_digest = load_checkpoint(args.from_ckpt, zero_moments=args.zero_moments)
+    control = parse_control(args.control) if args.control is not None else None
+    stamp = control_stamp(control, args.zero_moments)
+    K_run, slots, split = control_plan(control, K)
+    if stamp is not None:
+        if args.upload_urls:
+            raise SystemExit("REFUSED: a control (%s) never uploads; its output must not reach a run's prefix" % stamp)
+        if args.live_role:
+            raise SystemExit("REFUSED: a control runs on one box, not in a live group")
+        args.no_checkpoints = True  # a control's state is never a checkpoint anyone could resume
+    if split is not None and "," in args.devices:
+        raise SystemExit("REFUSED: --control %s is the one-device split step; pass one device" % control["text"])
+    state, from_digest = load_checkpoint(args.from_ckpt)
     first = int(state["completed_steps"])
     if _canonical(state["data_schedule"]) != _canonical(schedule):
         raise SystemExit("REFUSED: the checkpoint's data schedule is not this recipe's over these tokens "
@@ -733,15 +947,19 @@ def cmd_run(args):
     manifest = Manifest(out)
     keys = expected_keys(recipe, first, args.steps, args.boundary) if not args.no_checkpoints else ["chain.jsonl", "manifest.tsv", "segment.json"]
     upload = Uploader(args.upload_urls, keys, say)
-    say("segment: route %s segment %s label %s, global steps %d..%d, K=%d, devices %s, from %s (sha256 %s)%s"
+    say("segment: route %s segment %s label %s, global steps %d..%d, K=%d, devices %s, from %s (sha256 %s)%s%s"
         % (args.route, args.segment, args.label, first, last, K, devices, Path(args.from_ckpt).name,
-           from_digest[:16], " ZEROED MOMENTS (a control that must fail)" if args.zero_moments else ""))
+           from_digest[:16], " ZEROED MOMENTS (a control that must fail)" if args.zero_moments else "",
+           " CONTROL %s (K run %d)" % (stamp, K_run) if stamp else ""))
     segment = dict(schema="mojolearn.lm-segment.run.v1", route=args.route, segment=args.segment, label=args.label,
                    from_checkpoint=dict(file=Path(args.from_ckpt).name, sha256=from_digest, step=first),
                    first_step=first, last_step=last, devices=list(devices), logical_shards=K,
                    recipe_sha256=_sha_file(args.recipe), tokens_sha256=batches.sha256, box=_box(),
                    commit=_commit(), zero_moments=bool(args.zero_moments), expect_chain=args.expect_chain,
                    checkpoints=[], utc_start=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+    if stamp is not None:
+        segment["control"] = dict(control or {}, stamp=stamp, zero_moments=bool(args.zero_moments),
+                                  logical_shards_run=K_run, slots=slots, split_shard=split)
     chain = ChainWriter(out / "chain.jsonl", first, expect, say)
     table = recipe["schedule"]["table_f32_hex"]
     scheme = hash_scheme_of(recipe)
@@ -751,6 +969,17 @@ def cmd_run(args):
             raise SystemExit("REFUSED: the expected chain was hashed under %s and this recipe names %s; the two cannot be compared"
                              % (sorted(theirs), scheme))
     segment["hash_scheme"] = scheme
+    if expect is not None and first in expect:
+        # the checkpoint's own state against the expected chain's line at its
+        # step, BEFORE any control touches it: a replay from the wrong bytes
+        # would make every later verdict meaningless
+        from_state = _hash_arrays(state, scheme)
+        segment["from_state"] = dict(sha256=from_state, expected=expect[first]["state_sha256"],
+                                     agrees=from_state == expect[first]["state_sha256"])
+        say("the checkpoint's state %s the expected chain's step %d (%s)"
+            % ("AGREES with" if segment["from_state"]["agrees"] else "DISAGREES with", first, from_state[:16]))
+    if args.zero_moments:
+        _zero_moments(state)
 
     def in_window(step):
         return any(a <= step < b for a, b in args.record_window)
@@ -764,7 +993,12 @@ def cmd_run(args):
                   first, last, wants_checkpoint)
         state = None
     else:
-        with Par(state, devices=devices, logical_shards=K) as trainer:
+        if split is not None:
+            # the live worker's trainer: one device, full optimizer replica, per-shard calls
+            trainer_cm = Par(state, devices=(devices[0],), logical_shards=1, pool_optimizer=False)
+        else:
+            trainer_cm = Par(state, devices=devices, logical_shards=K_run)
+        with trainer_cm as trainer:
             del state
             for s in range(first, last):
                 completed = s + 1
@@ -772,20 +1006,34 @@ def cmd_run(args):
                 lr_used = trainer.set_lr(_bits_f32(int(lr_hex, 16)))
                 if "%08x" % _f32_bits(lr_used) != lr_hex:
                     raise SystemExit("learning rate bits drifted between the table and the device")
-                shards = [batches.ids(s * K + k) for k in range(K)]
+                shards = [batches.ids(s * K + k) for k in slots]
                 t0 = time.perf_counter()
-                result = trainer.train_step(shards)
+                if split is not None:
+                    edit = control["index"] if (control["kind"] == "ulp" and s == first) else None
+                    losses, total, detail = split_step(trainer, shards, split, index=edit)
+                    if detail is not None:
+                        segment["control"]["edit"] = dict(detail, step=completed)
+                        say("ulp: shard %d element %d bits %s -> %s, prefix %s, total predicted %s unedited / %s edited, observed %s"
+                            % (detail["shard"], detail["index"], detail["gradient_bits_before"], detail["gradient_bits_after"],
+                               detail["prefix_bits"], detail["predicted_total_bits_unedited"],
+                               detail["predicted_total_bits_edited"], detail["observed_total_bits"]))
+                else:
+                    losses = trainer.train_step(shards)["losses"]
                 step_seconds = time.perf_counter() - t0
                 t1 = time.perf_counter()
                 raw = trainer.export_raw()
                 state_digest = _hash_arrays(raw, scheme)
-                grad_digest = _hash_gradient(trainer.export_gradients(), scheme)
+                grad_digest = _hash_gradient(total if split is not None else trainer.export_gradients(), scheme)
                 hash_seconds = time.perf_counter() - t1
                 row = dict(schema=CHAIN_SCHEMA, step=completed, route=args.route, segment=args.segment, label=args.label,
-                           lr_f32_hex=lr_hex, losses_f32_hex=["%08x" % _f32_bits(x) for x in result["losses"]],
+                           lr_f32_hex=lr_hex, losses_f32_hex=["%08x" % _f32_bits(x) for x in losses],
                            state_sha256=state_digest, gradient_sha256=grad_digest, hash_scheme=scheme,
                            batch_index=[s * K, s * K + K], seconds=round(step_seconds, 4),
                            hash_seconds=round(hash_seconds, 3))
+                if stamp is not None:
+                    row["control"] = stamp
+                    if slots != list(range(K)):
+                        row["shard_slots"] = slots
                 if in_window(s):
                     row["window"] = _window_witness(trainer, raw, shards, say)
                 if not chain.write(row):
@@ -926,6 +1174,9 @@ def main(argv=None):
     ru.add_argument("--record-window", type=_window, action="append", default=[], metavar="A:B")
     ru.add_argument("--zero-moments", action="store_true", help="NEGATIVE CONTROL: restore with zeroed AdamW moments")
     ru.add_argument("--no-checkpoints", action="store_true", help="a replay: write the chain only")
+    ru.add_argument("--control", default=None, metavar="none|shards=N|swap=A,B|split[=S]|ulp=S,I",
+                    help="NEGATIVE CONTROL (see parse_control): stamped into every chain line and segment.json, "
+                         "no checkpoints, no uploads")
     ru.add_argument("--live-role", choices=("coordinator", "worker"), default=None,
                     help="the multi-vendor segment: this box is one worker of a chained cross_vendor group")
     ru.add_argument("--live-shards", default=None, metavar="A:B", help="this box's contiguous block of shards")
