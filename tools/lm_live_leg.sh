@@ -48,6 +48,15 @@ CARD=${MOJOLEARN_LIVE_APPLE_CARD:-$HOME/mojolearn-evidence/vendor-class-gaps-sep
 AMD_WAIT_MINUTES=${MOJOLEARN_LIVE_AMD_WAIT_MINUTES:-240}
 say() { echo "[$(date +%H:%M:%S) live] $*" | tee -a "$OUT/live.log"; }
 say "commit $(git rev-parse HEAD); nvidia body $NV_BODY; amd body $AMD_BODY ($AMD_PROVIDER); lease $MINUTES min, cap \$$CAP"
+# Logs of an earlier attempt in this directory must not be read as this
+# attempt's boxes (a stale "active at" line once rented a NVIDIA pod against
+# an AMD box that no longer existed); move them aside first.
+_prev=$(ls "$OUT"/amd-[0-9]*.log "$OUT"/nvidia-*.log 2>/dev/null | head -1)
+if [ -n "$_prev" ]; then
+    _old="$OUT/previous-$(date +%Y%m%d-%H%M%S)"; mkdir -p "$_old"
+    mv "$OUT"/amd-[0-9]* "$OUT"/nvidia-* "$OUT"/amd-leg.log "$OUT"/nvidia-leg.log "$OUT"/link.log "$OUT"/live_key* "$_old"/ 2>/dev/null || true
+    say "earlier attempt's logs moved to $_old"
+fi
 
 if [ "$MINUTES" -gt 60 ]; then LEASE_ARGS=(--segment-lease "$MINUTES" --dollar-cap "$CAP"); else LEASE_ARGS=(--minutes "$MINUTES"); fi
 # The NVIDIA box: walk the GPU types in MOJOLEARN_LIVE_NVIDIA_GPUS (a | list)
