@@ -259,7 +259,10 @@ def test_the_cpu_pass_covers_every_backends_selection(monkeypatch, capsys, tmp_p
                         lambda b, fixtures, sources=None, paths=None: (other[b], {}, None, f"since v9.9.9 ({b})"))
     assert verify_lanes.main(["--cpu-pass", "--plan"]) == 0
     out = capsys.readouterr().out
-    assert "4 of" in out and "the cuda pass selects" in out, out
+    want = {"ridge"}.union(*[other[b] for b in verify_lanes.RELEASE_BACKENDS[1:]])
+    assert f"# {len(want)} of" in out, out
+    for b in verify_lanes.RELEASE_BACKENDS[1:]:
+        assert f"the {b} pass selects" in out, out
 
 
 def test_a_pass_with_no_release_tag_runs_every_lane_and_an_untouched_release_passes(monkeypatch, capsys, tmp_path):
