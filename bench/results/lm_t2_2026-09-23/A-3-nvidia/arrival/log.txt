@@ -1,0 +1,6 @@
+[14:44:04] segment: route A segment 3-arrival label nvidia-A-3, global steps 18..20, K=64, devices (0,), from ckpt_00000018.blm (sha256 d3f6128a5044f5d9)
+[14:45:06] step 19 lr 3a0380db loss 8.7170 state 9ff1f1ddecc24313 grad 54035d9b950d6cf6 48.16 s (+7.85 s hashing)
+[14:45:06] step 19 agrees with the expected chain
+[14:45:53] step 20 lr 3a006cde loss 8.7753 state b9147655ebbba571 grad b0f54bdfa2bad318 38.75 s (+7.76 s hashing)
+[14:45:53] step 20 agrees with the expected chain
+[14:45:53] PASS: /root/gemm_leg_out/lm-segment-A-3/arrival

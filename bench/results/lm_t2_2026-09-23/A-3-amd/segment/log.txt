@@ -1,0 +1,12 @@
+[14:46:20] segment: route A segment 3 label amd-A-3, global steps 20..30, K=64, devices (0,), from ckpt_00000020.blm (sha256 2f71a14f4f70ddac)
+[14:48:06] step 21 lr 39fa7096 loss 9.0464 state 22d31acd4473dc51 grad 06778e2155d81268 103.53 s (+2.40 s hashing)
+[14:49:51] step 22 lr 39f3cb3e loss 9.0455 state 924bf171358b58ae grad 159187ddc7b1813d 102.00 s (+2.41 s hashing)
+[14:51:36] step 23 lr 39eceedf loss 9.0340 state 8695d450eee446a1 grad 47ff31f3f805bc8b 102.65 s (+2.42 s hashing)
+[14:53:27] step 24 lr 39e5e0ce loss 9.2233 state 91f3a3f3d53a0249 grad cdfd3586a081e84d 109.23 s (+2.41 s hashing)
+[14:55:13] step 25 lr 39dea688 loss 9.3323 state 0972c605874bfb7b grad 155fd735c822e982 103.17 s (+2.43 s hashing)
+[14:57:00] step 26 lr 39d745aa loss 8.8171 state 01a885c186d92bd0 grad 91c3e42976d27a34 104.20 s (+2.42 s hashing)
+[14:58:47] step 27 lr 39cfc3f2 loss 8.4108 state 607ef3695023fb77 grad 8109d7d7798dba09 104.84 s (+2.39 s hashing)
+[15:00:32] step 28 lr 39c82736 loss 8.4427 state 3d5736ac8114f488 grad 12eaade590445776 102.59 s (+2.42 s hashing)
+[15:03:01] step 29 lr 39c07560 loss 8.3362 state 7313b32df8f74e0b grad 6946c4c75d4150c0 146.97 s (+2.40 s hashing)
+[15:04:46] step 30 lr 39b8b46d loss 8.2209 state b34773af42833906 grad 6a9ae510584d59eb 102.44 s (+2.40 s hashing)
+[15:05:37] PASS: /root/gemm_leg_out/lm-segment-A-3/segment

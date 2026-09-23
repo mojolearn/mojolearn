@@ -1,0 +1,19 @@
+[23:44:41] segment: route A segment 1 label nvidia-A-1, global steps 0..10, K=64, devices (0,), from ckpt_00000000.blm (sha256 a116af90a4cca3e8)
+[23:45:45] step 1 lr 3951b717 loss 10.9508 state fdc3504e7f206997 grad f4623caf2620831a 49.90 s (+7.81 s hashing)
+[23:46:33] step 2 lr 39d1b717 loss 9.9643 state a443dca994ab8be0 grad 68dc828abac30eb3 39.98 s (+7.94 s hashing)
+[23:47:20] step 3 lr 3a1d4952 loss 19.2956 state 501c98d0311e362d grad dbee4d499f879670 39.98 s (+7.95 s hashing)
+[23:48:09] step 4 lr 3a1d2dce loss 11.2427 state 82b1e41c343b55a0 grad d137e33fef601dd1 39.96 s (+8.11 s hashing)
+[23:48:56] step 5 lr 3a1cdb59 loss 10.8315 state 477a8179489b01ee grad f52c3a2946c76ec5 39.97 s (+7.95 s hashing)
+[23:49:44] step 6 lr 3a1c5232 loss 21.4615 state 01cba2c33667eedd grad 86d780d10e46591a 39.98 s (+7.86 s hashing)
+[23:50:32] step 7 lr 3a1b92c3 loss 16.5916 state a70b9a27db637da4 grad 1dd4acae94008f50 39.96 s (+7.94 s hashing)
+[23:51:20] step 8 lr 3a1a9da3 loss 12.3141 state bccb3f0dd972c8a6 grad 96cbbee6427ebcf3 39.98 s (+7.97 s hashing)
+[23:52:21] uploaded ckpt_00000008.blm in 51.1 s
+[23:52:21] checkpoint ckpt_00000008.blm (1945780160 bytes, sha256 b37d1c1c06dfeaca, 4.4 s)
+[23:53:09] step 9 lr 3a19738f loss 11.6283 state 02055cdf99c5f0d8 grad 946a21608fe22ddb 40.01 s (+7.97 s hashing)
+[23:53:57] step 10 lr 3a18156f loss 10.5870 state dbba2c5df2de409b grad 8d57bb6066a6edbf 40.01 s (+7.84 s hashing)
+[23:55:52] uploaded ckpt_00000010.blm in 106.2 s
+[23:55:53] checkpoint ckpt_00000010.blm (1945780163 bytes, sha256 600146fefb47e5c5, 4.3 s)
+[23:55:53] uploaded chain.jsonl in 0.4 s
+[23:55:53] uploaded segment.json in 0.4 s
+[23:55:54] uploaded manifest.tsv in 0.4 s
+[23:55:54] PASS: /root/gemm_leg_out/lm-segment-A-1/segment

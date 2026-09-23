@@ -1,0 +1,73 @@
+{
+ "schema": "mojolearn.lm-segment.run.v1",
+ "route": "A",
+ "segment": "3",
+ "label": "nvidia-A-3",
+ "from_checkpoint": {
+  "file": "ckpt_00000020.blm",
+  "sha256": "2f71a14f4f70ddac76371ab088aaed55043082ab6f1dfa41e94d9a603b0baa7d",
+  "step": 20
+ },
+ "first_step": 20,
+ "last_step": 30,
+ "devices": [
+  0
+ ],
+ "logical_shards": 64,
+ "recipe_sha256": "e9cc5ca9d5e97af629e89ed56e20b9149e4fb00157e5498bb46d64a23e3e31dc",
+ "tokens_sha256": "4cf7181ba71058e70d7329dbae32de53c5750b49ae95331cebde4676f922209d",
+ "box": {
+  "host": "5d2247c7fb28",
+  "machine": "x86_64",
+  "system": "Linux",
+  "python": "3.14.7",
+  "nvidia-smi": "NVIDIA H100 80GB HBM3, GPU-beff2cf7-a32f-9210-897b-0d52ffb1235a, 580.126.09"
+ },
+ "commit": null,
+ "zero_moments": false,
+ "expect_chain": null,
+ "checkpoints": [
+  {
+   "step": 28,
+   "file": "ckpt_00000028.blm",
+   "bytes": 1945780163,
+   "sha256": "551bd87866033a8ebc37f78f0d3eb69b3a4b502b8599682e8432eb3033f51325",
+   "save_seconds": 3.997
+  },
+  {
+   "step": 30,
+   "file": "ckpt_00000030.blm",
+   "bytes": 1945780163,
+   "sha256": "94367e0420f4cdb4abbe6aedad02bbbfa48c08c59a487da06695f1fbe1d6e4fd",
+   "save_seconds": 3.921
+  }
+ ],
+ "utc_start": "2026-09-23T14:46:06Z",
+ "hash_scheme": "sha256.v1",
+ "live": {
+  "role": "coordinator",
+  "shards": [
+   0,
+   44
+  ],
+  "workers": 2,
+  "port": 7777,
+  "address": null,
+  "protocol": "chained"
+ },
+ "verdict": "PASS",
+ "disagreements": [],
+ "steps_completed": 10,
+ "last_completed": 30,
+ "utc_end": "2026-09-23T15:05:37Z",
+ "uploads": [
+  {
+   "name": "ckpt_00000028.blm",
+   "seconds": 35.74
+  },
+  {
+   "name": "ckpt_00000030.blm",
+   "seconds": 36.41
+  }
+ ]
+}

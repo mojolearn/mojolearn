@@ -1,0 +1,43 @@
+{
+ "run": "runs/t2/2026-09-22",
+ "recipe": "/Users/andrewhendel/mojolearn-evidence/gpt3-run/t2_recipe.json",
+ "recipe_key": "runs/t2/2026-09-22/recipe.json",
+ "tokens_stage": "corpus/fineweb-edu-10BT/tokens/mojolearn-bpe-fineweb-edu-50257-v1",
+ "lease_minutes": 120,
+ "dollar_cap": 10,
+ "amd_provider": "do",
+ "nvidia_gpus": "NVIDIA H100 80GB HBM3|NVIDIA H200|NVIDIA H100 PCIe|NVIDIA H100 NVL|NVIDIA A100 80GB PCIe",
+ "nvidia_devices": "0",
+ "amd_devices": "0",
+ "url_seconds": 28800,
+ "routes": {
+  "A": [
+   {
+    "segment": "1",
+    "vendor": "nvidia",
+    "steps": 10
+   },
+   {
+    "segment": "2",
+    "vendor": "amd",
+    "steps": 10
+   },
+   {
+    "segment": "3",
+    "vendor": "live",
+    "steps": 10,
+    "first": "nvidia",
+    "shards": [
+     44,
+     20
+    ]
+   }
+  ]
+ },
+ "amd_providers": [
+  "do",
+  "hotaisle",
+  "runpod"
+ ],
+ "amd_wait_minutes": 240
+}

@@ -1,0 +1,49 @@
+{
+ "schema": "mojolearn.lm-segment.run.v1",
+ "route": "A",
+ "segment": "3",
+ "label": "amd-A-3",
+ "from_checkpoint": {
+  "file": "ckpt_00000020.blm",
+  "sha256": "2f71a14f4f70ddac76371ab088aaed55043082ab6f1dfa41e94d9a603b0baa7d",
+  "step": 20
+ },
+ "first_step": 20,
+ "last_step": 30,
+ "devices": [
+  0
+ ],
+ "logical_shards": 64,
+ "recipe_sha256": "e9cc5ca9d5e97af629e89ed56e20b9149e4fb00157e5498bb46d64a23e3e31dc",
+ "tokens_sha256": "4cf7181ba71058e70d7329dbae32de53c5750b49ae95331cebde4676f922209d",
+ "box": {
+  "host": "mojolearn-extra-amd",
+  "machine": "x86_64",
+  "system": "Linux",
+  "python": "3.14.7",
+  "rocm-smi": "device,Unique ID,Card Series,Card Model,Card Vendor,Card SKU,Subsystem ID,Device Rev,Node ID,GUID,GFX Version\ncard0,0x4698b47ebc68fcdb,AMD Instinct Mi325X VF,0x74b9,Advanced Micro Devices Inc. [AMD/ATI],M3250101,0x74a5,0x00,1,43855,gfx942"
+ },
+ "commit": null,
+ "zero_moments": false,
+ "expect_chain": null,
+ "checkpoints": [],
+ "utc_start": "2026-09-23T14:46:20Z",
+ "hash_scheme": "sha256.v1",
+ "live": {
+  "role": "worker",
+  "shards": [
+   44,
+   64
+  ],
+  "workers": 2,
+  "port": 7777,
+  "address": "127.0.0.1:7777",
+  "protocol": "chained"
+ },
+ "verdict": "PASS",
+ "disagreements": [],
+ "steps_completed": 10,
+ "last_completed": 30,
+ "utc_end": "2026-09-23T15:05:37Z",
+ "uploads": []
+}

@@ -1,0 +1,61 @@
+{
+ "schema": "mojolearn.lm-segment.run.v1",
+ "route": "A",
+ "segment": "2",
+ "label": "amd-A-2",
+ "from_checkpoint": {
+  "file": "ckpt_00000010.blm",
+  "sha256": "600146fefb47e5c5c764de8bc2e8555bf20ead93965a558001d1789a16c72312",
+  "step": 10
+ },
+ "first_step": 10,
+ "last_step": 20,
+ "devices": [
+  0
+ ],
+ "logical_shards": 64,
+ "recipe_sha256": "e9cc5ca9d5e97af629e89ed56e20b9149e4fb00157e5498bb46d64a23e3e31dc",
+ "tokens_sha256": "4cf7181ba71058e70d7329dbae32de53c5750b49ae95331cebde4676f922209d",
+ "box": {
+  "host": "mojolearn-extra-amd",
+  "machine": "x86_64",
+  "system": "Linux",
+  "python": "3.14.7",
+  "rocm-smi": "device,Unique ID,Card Series,Card Model,Card Vendor,Card SKU,Subsystem ID,Device Rev,Node ID,GUID,GFX Version\ncard0,0x292458c0919d7722,AMD Instinct Mi325X VF,0x74b9,Advanced Micro Devices Inc. [AMD/ATI],M3250101,0x74a5,0x00,1,43855,gfx942"
+ },
+ "commit": null,
+ "zero_moments": false,
+ "expect_chain": null,
+ "checkpoints": [
+  {
+   "step": 18,
+   "file": "ckpt_00000018.blm",
+   "bytes": 1945780163,
+   "sha256": "d3f6128a5044f5d94bc02df9f084c9436b572134b24edef90b8f13465343c50c",
+   "save_seconds": 3.105
+  },
+  {
+   "step": 20,
+   "file": "ckpt_00000020.blm",
+   "bytes": 1945780163,
+   "sha256": "2f71a14f4f70ddac76371ab088aaed55043082ab6f1dfa41e94d9a603b0baa7d",
+   "save_seconds": 3.195
+  }
+ ],
+ "utc_start": "2026-09-23T00:15:56Z",
+ "verdict": "PASS",
+ "disagreements": [],
+ "steps_completed": 10,
+ "last_completed": 20,
+ "utc_end": "2026-09-23T00:41:38Z",
+ "uploads": [
+  {
+   "name": "ckpt_00000018.blm",
+   "seconds": 52.92
+  },
+  {
+   "name": "ckpt_00000020.blm",
+   "seconds": 47.62
+  }
+ ]
+}

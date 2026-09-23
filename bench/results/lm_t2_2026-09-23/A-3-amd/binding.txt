@@ -1,0 +1,1 @@
+mojolearn 0.8.15 /root/mojolearn/python/mojolearn/__init__.py vendor hip set_lr True device_fold True

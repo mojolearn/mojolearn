@@ -1,0 +1,28 @@
+[10:35:07 live] commit f973ff8d3acc3323b6a52fd3d4801a0f309925ee; nvidia body /Users/andrewhendel/mojolearn-evidence/gpt3-run/t2/bodies/A-3-nvidia.sh; amd body /Users/andrewhendel/mojolearn-evidence/gpt3-run/t2/bodies/A-3-amd.sh (do); lease 120 min, cap $10
+[10:35:07 live] earlier attempt's logs moved to /Users/andrewhendel/mojolearn-evidence/gpt3-run/t2/legs/A-3-live/previous-20260923-103507
+[10:36:27 live] amd box exists: root@165.227.43.204; renting the NVIDIA box now
+[10:36:27 live] nvidia: trying NVIDIA H100 80GB HBM3
+[10:41:03 live] amd ready: root@165.227.43.204
+[10:46:02 live] nvidia ready: -p 17517 root@64.247.201.52
+[10:46:03 live] key authorized on the nvidia pod
+[10:46:04 live] private key on the amd box
+TUNNEL_UP
+[10:46:09 live] peer file written on the amd box; the worker connects through the tunnel
+[10:46:09 live] waiting for both runners to finish, fetch and delete their boxes
+[11:06:09 live] the nvidia runner ended first; stopping the worker's segment
+[11:06:30 live] nvidia runner exit=0, amd runner exit=0
+== amd status ==
+00:47:54 arm=amd mode=live-worker route=A segment=3 label=amd-A-3 steps=10 boundary= started=2026-09-23T00:47:54Z
+00:47:54 gpu_archs=gfx942
+00:48:36 build base exit=0 secs=42
+00:50:15 build byte_lm exit=0 secs=99
+00:50:17 joined 7 parts in 2 s: 12442225788 bytes
+00:50:18 tokens=/root/mojolearn-wt/gpt3-tooling/training/corpus/fineweb-edu-10BT/tokens/mojolearn-bpe-fineweb-edu-50257-v1
+00:50:18 fetch recipe.json exit=0 secs=0
+00:50:51 fetch ckpt_00000020.blm exit=0 secs=33
+00:50:52 ready
+01:13:27 peer 127.0.0.1:7777 after 1355s
+01:13:43 segment exit=139 secs=16
+[01:13:43] LIVE ERROR: cross_vendor: peer closed the connection
+[01:13:43] FAIL: /root/gemm_leg_out/lm-segment-A-3/segment
+01:13:43 finished=2026-09-23T01:13:43Z

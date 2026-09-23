@@ -1,0 +1,18 @@
+14:38:39 arm=nvidia mode=live-coordinator route=A segment=3 label=nvidia-A-3 steps=10 boundary=30 started=2026-09-23T14:38:39Z
+14:38:39 gpu_archs=sm_90a
+14:39:42 build base exit=0 secs=63
+14:42:04 build byte_lm exit=0 secs=142
+14:42:05 binding: mojolearn 0.8.15 /root/mojolearn/python/mojolearn/__init__.py vendor cuda set_lr True device_fold True
+14:42:49 tokens fetched by URL exit=0 secs=44
+14:42:55 joined 7 parts in 6 s: 12442225788 bytes
+14:42:56 tokens=/root/tokens_stream
+14:42:56 fetch recipe.json exit=0 secs=0
+14:43:16 fetch ckpt_00000020.blm exit=0 secs=20
+14:43:46 fetch ckpt_00000018.blm exit=0 secs=24
+14:43:52 fetch replay_chain.jsonl exit=0 secs=0
+14:45:53 arrival exit=0 secs=121
+[14:45:53] PASS: /root/gemm_leg_out/lm-segment-A-3/arrival
+14:45:53 ready
+15:05:38 segment exit=0 secs=1185
+[15:05:38] PASS: /root/gemm_leg_out/lm-segment-A-3/segment
+15:05:49 finished=2026-09-23T15:05:49Z

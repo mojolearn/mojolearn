@@ -1,0 +1,20 @@
+[14:46:06] segment: route A segment 3 label nvidia-A-3, global steps 20..30, K=64, devices (0,), from ckpt_00000020.blm (sha256 2f71a14f4f70ddac)
+[14:46:06] coordinator listening on port 7777 for 2 workers, K=64, until step 30
+[14:48:12] step 21 lr 39fa7096 loss 9.0464 state 22d31acd4473dc51 grad 06778e2155d81268 120.88 s (+4.92 s hashing)
+[14:49:57] step 22 lr 39f3cb3e loss 9.0455 state 924bf171358b58ae grad 159187ddc7b1813d 99.75 s (+5.02 s hashing)
+[14:51:42] step 23 lr 39eceedf loss 9.0340 state 8695d450eee446a1 grad 47ff31f3f805bc8b 99.73 s (+4.93 s hashing)
+[14:53:34] step 24 lr 39e5e0ce loss 9.2233 state 91f3a3f3d53a0249 grad cdfd3586a081e84d 106.82 s (+5.06 s hashing)
+[14:55:19] step 25 lr 39dea688 loss 9.3323 state 0972c605874bfb7b grad 155fd735c822e982 100.59 s (+4.98 s hashing)
+[14:57:06] step 26 lr 39d745aa loss 8.8171 state 01a885c186d92bd0 grad 91c3e42976d27a34 101.53 s (+4.88 s hashing)
+[14:58:53] step 27 lr 39cfc3f2 loss 8.4108 state 607ef3695023fb77 grad 8109d7d7798dba09 102.32 s (+4.99 s hashing)
+[15:00:38] step 28 lr 39c82736 loss 8.4427 state 3d5736ac8114f488 grad 12eaade590445776 100.16 s (+5.01 s hashing)
+[15:01:21] uploaded ckpt_00000028.blm in 35.7 s
+[15:01:21] checkpoint ckpt_00000028.blm (1945780163 bytes, sha256 551bd87866033a8e, 4.0 s)
+[15:03:08] step 29 lr 39c07560 loss 8.3362 state 7313b32df8f74e0b grad 6946c4c75d4150c0 144.80 s (+5.32 s hashing)
+[15:04:52] step 30 lr 39b8b46d loss 8.2209 state b34773af42833906 grad 6a9ae510584d59eb 98.99 s (+4.89 s hashing)
+[15:05:36] uploaded ckpt_00000030.blm in 36.4 s
+[15:05:36] checkpoint ckpt_00000030.blm (1945780163 bytes, sha256 94367e0420f4cdb4, 3.9 s)
+[15:05:37] uploaded chain.jsonl in 0.4 s
+[15:05:37] uploaded segment.json in 0.3 s
+[15:05:38] uploaded manifest.tsv in 0.4 s
+[15:05:38] PASS: /root/gemm_leg_out/lm-segment-A-3/segment

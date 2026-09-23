@@ -1,0 +1,16 @@
+00:07:33 arm=amd mode=one route=A segment=2 label=amd-A-2 steps=10 boundary=20 started=2026-09-23T00:07:33Z
+00:07:34 gpu_archs=gfx942
+00:08:16 build base exit=0 secs=42
+00:09:56 build byte_lm exit=0 secs=100
+00:09:58 joined 7 parts in 2 s: 12442225788 bytes
+00:09:59 tokens=/root/mojolearn-wt/gpt3-tooling/training/corpus/fineweb-edu-10BT/tokens/mojolearn-bpe-fineweb-edu-50257-v1
+00:09:59 fetch recipe.json exit=0 secs=0
+00:10:24 fetch ckpt_00000010.blm exit=0 secs=25
+00:10:25 ready
+00:10:48 fetch ckpt_00000008.blm exit=0 secs=23
+00:10:49 fetch replay_chain.jsonl exit=0 secs=0
+00:15:48 arrival exit=0 secs=299
+[00:15:48] PASS: /root/gemm_leg_out/lm-segment-A-2/arrival
+00:41:39 segment exit=0 secs=1551
+[00:41:39] PASS: /root/gemm_leg_out/lm-segment-A-2/segment
+00:41:41 finished=2026-09-23T00:41:41Z

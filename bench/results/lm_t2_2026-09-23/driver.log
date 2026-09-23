@@ -1,0 +1,39 @@
+[19:34:40 driver] run runs/t2/2026-09-22: 6 segments over 1 routes
+[19:34:40 driver] starting A/1 on nvidia (10 steps from init)
+[19:56:15 driver] A/1 runner exit 0; results /Users/andrewhendel/mojolearn-evidence/gpt3-run/t2/legs/A-1/leg-NVIDIA_H100_80GB_HBM3
+[19:56:15 driver] A/1 LANDED: 10 steps, checkpoints ['ckpt_00000000.blm', 'ckpt_00000008.blm', 'ckpt_00000010.blm']
+[19:56:15 driver] starting A/2 on amd (10 steps from ckpt_00000010.blm)
+[19:56:31 driver] A/2 runner exit 3; results /Users/andrewhendel/mojolearn-evidence/gpt3-run/t2/legs/A-2/leg
+[19:56:31 driver] A/2: no segment.json came home; status:
+
+[19:56:31 driver] A/2 did not land (no results); run the driver again to retry
+[19:58:34 driver] run runs/t2/2026-09-22: 6 segments over 1 routes
+[19:58:34 driver] starting A/2 on amd (10 steps from ckpt_00000010.blm)
+[19:58:44 driver] A/2 runner exit 3; results /Users/andrewhendel/mojolearn-evidence/gpt3-run/t2/legs/A-2/leg
+[19:58:44 driver] A/2: no segment.json came home; status:
+
+[19:58:44 driver] A/2 did not land (no results); run the driver again to retry
+[20:01:21 driver] run runs/t2/2026-09-22: 6 segments over 1 routes
+[20:01:21 driver] starting A/2 on amd (10 steps from ckpt_00000010.blm)
+[20:42:00 driver] A/2 runner exit 0; results /Users/andrewhendel/mojolearn-evidence/gpt3-run/t2/legs/A-2/leg-do-1
+[20:42:00 driver] A/2 LANDED: 10 steps, checkpoints ['ckpt_00000018.blm', 'ckpt_00000020.blm']
+[20:42:00 driver] starting A/3 on live (10 steps from ckpt_00000020.blm)
+[22:43:31 driver] A/3 runner exit 1; results /Users/andrewhendel/mojolearn-evidence/gpt3-run/t2/legs/A-3-live
+[22:43:31 driver] A/3: verdict FAIL, arrival None; THE RUN HALTS HERE ([{'reason': 'live group error', 'errors': ['cross_vendor: peer closed the connection']}])
+[22:46:58 driver] run runs/t2/2026-09-22: 3 segments over 1 routes
+[22:46:58 driver] starting A/3 on live (10 steps from ckpt_00000020.blm)
+[22:49:42 driver] run runs/t2/2026-09-22: 3 segments over 1 routes, up to 1 at once
+[22:49:42 driver] starting A/3 on live (10 steps from ckpt_00000020.blm)
+[01:02:43 driver] A/3 runner exit 1; results /Users/andrewhendel/mojolearn-evidence/gpt3-run/t2/legs/A-3-live
+[01:02:43 driver] A/3: verdict FAIL, arrival None; THE RUN HALTS HERE ([{'reason': 'live group error', 'errors': ['cross_vendor: peer closed the connection']}])
+[01:02:43 driver] halted: a segment failed to land; see the ledger, fix, and run the driver again
+[09:25:25 driver] run runs/t2/2026-09-22: 3 segments over 1 routes, up to 1 at once
+[09:25:25 driver] starting A/3 on live (10 steps from ckpt_00000020.blm)
+[10:27:48 driver] run runs/t2/2026-09-22: 3 segments over 1 routes, up to 1 at once
+[10:27:48 driver] starting A/3 on live (10 steps from ckpt_00000020.blm)
+[10:35:00 driver] run runs/t2/2026-09-22: 3 segments over 1 routes, up to 1 at once
+[10:35:00 driver] starting A/3 on live (10 steps from ckpt_00000020.blm)
+[11:06:30 driver] A/3 runner exit 0; results /Users/andrewhendel/mojolearn-evidence/gpt3-run/t2/legs/A-3-live
+[11:06:31 driver] A/3: verdict PASS, arrival FAIL; THE RUN HALTS HERE ([])
+[11:06:31 driver] every segment landed
+[11:09:57 driver] A/3 LANDED: 10 steps, checkpoints ['ckpt_00000028.blm', 'ckpt_00000030.blm']

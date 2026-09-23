@@ -1,0 +1,129 @@
+{
+ "schema": "mojolearn.lm-segment.recipe.v1",
+ "shape": [
+  4,
+  2048,
+  768,
+  12,
+  12,
+  64,
+  2048,
+  12,
+  50257
+ ],
+ "logical_shards": 64,
+ "steps": 60,
+ "seed": 93261,
+ "optimizer": {
+  "betas": [
+   0.9,
+   0.95
+  ],
+  "eps": 1e-08,
+  "weight_decay": 0.1
+ },
+ "schedule": {
+  "kind": "warmup-linear-cosine",
+  "peak_lr": 0.0006,
+  "warmup_steps": 3,
+  "final_ratio": 0.1,
+  "table_f32_hex": [
+   "3951b717",
+   "39d1b717",
+   "3a1d4952",
+   "3a1d2dce",
+   "3a1cdb59",
+   "3a1c5232",
+   "3a1b92c3",
+   "3a1a9da3",
+   "3a19738f",
+   "3a18156f",
+   "3a168454",
+   "3a14c175",
+   "3a12ce30",
+   "3a10ac0a",
+   "3a0e5cac",
+   "3a0be1e1",
+   "3a093d97",
+   "3a0671db",
+   "3a0380db",
+   "3a006cde",
+   "39fa7096",
+   "39f3cb3e",
+   "39eceedf",
+   "39e5e0ce",
+   "39dea688",
+   "39d745aa",
+   "39cfc3f2",
+   "39c82736",
+   "39c07560",
+   "39b8b46d",
+   "39b0ea63",
+   "39a91d50",
+   "39a15346",
+   "39999253",
+   "3991e07d",
+   "398a43c1",
+   "3982c209",
+   "3976c257",
+   "39684dca",
+   "395a31a9",
+   "394c78ea",
+   "393f2e3a",
+   "39325bed",
+   "39260bfc",
+   "391a47fa",
+   "390f190b",
+   "390487e2",
+   "38f5396c",
+   "38e2be7a",
+   "38d1ad4c",
+   "38c21328",
+   "38b3fc2d",
+   "38a77351",
+   "389c8253",
+   "389331b4",
+   "388b88b2",
+   "38858d41",
+   "38814409",
+   "387d60bc",
+   "387ba882"
+  ]
+ },
+ "data": {
+  "schedule": "lm-segment.shards.v1",
+  "tokens_sha256": "4cf7181ba71058e70d7329dbae32de53c5750b49ae95331cebde4676f922209d",
+  "tokens_manifest_sha256": "1db7fadd6dec742d5dbf6c8ec3d8d95cb3aaf809fb4a8080038598240ff81b71",
+  "train_range": [
+   0,
+   2926502182
+  ],
+  "vocabulary": {
+   "schema": "mojolearn.bpe-vocabulary.v1",
+   "sha256": "bfe4a401789e734c139ee6d872848833d0058b1b274757334c955236a57d9b24",
+   "n_ranks": 50256,
+   "n_vocab": 50257,
+   "endoftext_id": 50256
+  }
+ },
+ "checkpoint_every": 10,
+ "boundaries": [
+  10,
+  20,
+  30,
+  40,
+  50,
+  60
+ ],
+ "reduction": "ordered_sum",
+ "written_by": {
+  "box": {
+   "host": "Mac",
+   "machine": "arm64",
+   "system": "Darwin",
+   "python": "3.14.7"
+  },
+  "commit": "a753567e910f80f7e18e1956544062b90fcd7f81",
+  "utc": "2026-09-22T23:32:20Z"
+ }
+}

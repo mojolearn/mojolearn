@@ -1,0 +1,19 @@
+[00:15:56] segment: route A segment 2 label amd-A-2, global steps 10..20, K=64, devices (0,), from ckpt_00000010.blm (sha256 600146fefb47e5c5)
+[00:18:25] step 11 lr 3a168454 loss 10.0341 state ce08b3dd37835229 grad 7193498f7568f42c 142.23 s (+3.60 s hashing)
+[00:20:47] step 12 lr 3a14c175 loss 9.7708 state 730c79c499cdbbea grad e2e268445ea8aad0 138.88 s (+3.60 s hashing)
+[00:23:10] step 13 lr 3a12ce30 loss 10.2170 state 3a8c368373bdf906 grad e65be36474219179 138.86 s (+3.65 s hashing)
+[00:25:32] step 14 lr 3a10ac0a loss 10.1491 state 80e57df9650e2aed grad 603632126f2c6c95 138.87 s (+3.68 s hashing)
+[00:27:55] step 15 lr 3a0e5cac loss 10.1714 state 2c3afb6e652fe3ac grad 19dfde2c3764512d 138.83 s (+3.63 s hashing)
+[00:30:17] step 16 lr 3a0be1e1 loss 9.5261 state d3025d4ebe9f5168 grad 9c1578a8289f268d 138.83 s (+3.62 s hashing)
+[00:32:40] step 17 lr 3a093d97 loss 9.3022 state 87ce6936949c2802 grad e6c6354c65d5178d 138.86 s (+3.62 s hashing)
+[00:35:02] step 18 lr 3a0671db loss 8.9042 state dfa595a80c603856 grad 88a24ce1a455fb16 138.90 s (+3.67 s hashing)
+[00:36:00] uploaded ckpt_00000018.blm in 52.9 s
+[00:36:00] checkpoint ckpt_00000018.blm (1945780163 bytes, sha256 d3f6128a5044f5d9, 3.1 s)
+[00:38:22] step 19 lr 3a0380db loss 8.7170 state 9ff1f1ddecc24313 grad 54035d9b950d6cf6 138.74 s (+3.43 s hashing)
+[00:40:45] step 20 lr 3a006cde loss 8.7753 state b9147655ebbba571 grad b0f54bdfa2bad318 138.87 s (+3.68 s hashing)
+[00:41:38] uploaded ckpt_00000020.blm in 47.6 s
+[00:41:38] checkpoint ckpt_00000020.blm (1945780163 bytes, sha256 2f71a14f4f70ddac, 3.2 s)
+[00:41:38] uploaded chain.jsonl in 0.3 s
+[00:41:38] uploaded segment.json in 0.3 s
+[00:41:39] uploaded manifest.tsv in 0.2 s
+[00:41:39] PASS: /root/gemm_leg_out/lm-segment-A-2/segment

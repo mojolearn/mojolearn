@@ -1,0 +1,13 @@
+23:39:55 arm=nvidia mode=one route=A segment=1 label=nvidia-A-1 steps=10 boundary=10 started=2026-09-22T23:39:55Z
+23:39:56 gpu_archs=sm_90a
+23:40:56 build base exit=0 secs=60
+23:43:14 build byte_lm exit=0 secs=138
+23:43:20 joined 7 parts in 5 s: 12442225788 bytes
+23:43:21 tokens=/root/mojolearn-wt/gpt3-tooling/training/corpus/fineweb-edu-10BT/tokens/mojolearn-bpe-fineweb-edu-50257-v1
+23:43:21 fetch recipe.json exit=0 secs=0
+23:43:39 init exit=0 secs=18: wrote /root/gemm_leg_out/lm-segment-A-1/in/ckpt_00000000.blm: step 0, 162147840 parameters, init sha256 0e36d8d036d8c4cf, file sha256 a116af90a4cca3e8, numpy 2.5.2
+23:44:28 upload seed exit=0
+23:44:28 ready
+23:55:54 segment exit=0 secs=686
+[23:55:54] PASS: /root/gemm_leg_out/lm-segment-A-1/segment
+23:56:05 finished=2026-09-22T23:56:05Z
