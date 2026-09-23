@@ -183,7 +183,7 @@ def test_sparse_input_is_duck_typed_not_imported(monkeypatch):
     rows, cols, vals, n = _coo_triples(COO())
     assert n == 3
     assert rows.tolist() == [0, 1, 2] and cols.tolist() == [2, 0, 1]
-    assert bytes(vals) == array.array("f", [1.5, -2.0, 1e-300]).tobytes()
+    assert vals.tobytes() == array.array("f", [1.5, -2.0, 1e-300]).tobytes()
 
     class NotSquare(COO):
         shape = (3, 2)
