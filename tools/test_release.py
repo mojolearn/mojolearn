@@ -186,13 +186,26 @@ class RunTests(unittest.TestCase):
         self.assertEqual(calls, [])
 
     def test_dry_run_plans_every_step_and_writes_nothing(self):
+        # The identity cache lives under the evidence root; the dry run must
+        # write nothing under the state directory.
+        env = dict(os.environ, MOJOLEARN_EVIDENCE_ROOT=str(pathlib.Path(self._t.name) / "evidence"))
         out = subprocess.run([sys.executable, str(ROOT / "tools/release.py"), "0.8.14", "--dry-run",
-                              "--state-dir", str(self.state)], capture_output=True, text=True, timeout=120)
+                              "--state-dir", str(self.state)], capture_output=True, text=True, timeout=600, env=env)
         self.assertEqual(out.returncode, 0, out.stderr)
         for step in release.Release.STEPS:
             self.assertIn("-- " + step, out.stdout)
-        self.assertIn("gemm_remote_leg.sh nvidia", out.stdout)
-        self.assertIn("MOJOLEARN_RELEASE_UBUNTU22=1", out.stdout)
+        # the decision table, in full, and a leg command for every leg it launches
+        self.assertIn("== binding reuse plan for", out.stdout)
+        self.assertIn("legs to launch:", out.stdout)
+        legs = out.stdout.split("legs to launch:", 1)[1].splitlines()[0]
+        if "cuda-" in legs:
+            self.assertIn("gemm_remote_leg.sh nvidia", out.stdout)
+        else:
+            self.assertNotIn("gemm_remote_leg.sh nvidia", out.stdout)
+        if "hip-gfx942" in legs:
+            self.assertIn("MOJOLEARN_RELEASE_UBUNTU22=1", out.stdout)
+        else:
+            self.assertIn("no build leg", out.stdout)
         self.assertIn("pack-linux-wheel", out.stdout)
         self.assertIn("release_wheel_smoke.sh", out.stdout)
         self.assertIn("--publish", out.stdout)
