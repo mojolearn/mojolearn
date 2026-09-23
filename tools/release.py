@@ -38,8 +38,10 @@ THE STEPS, IN ORDER
                      expanded smoke AND the NVIDIA release column (the lanes the
                      release changed, from the installed wheel), diffed against
                      the CPU column of this commit
-  amd-column         tools/release_wheel_smoke.sh --vendor hip --rent (one MI300X
-                     pod, gfx942): the AMD release column, diffed the same way
+  amd-column         tools/release_wheel_smoke.sh --vendor hip --rent --provider
+                     auto (one RunPod MI300X, or a DigitalOcean MI325X when RunPod
+                     has no stock; gfx942 either way): the AMD release column,
+                     diffed the same way. --amd-provider runpod|do pins one.
   publish-linux      tools/release_linux_publish.sh ... --light-smoke   } only with
   publish-macos      tools/release_linux_publish.sh ... --light-smoke   } --publish
   finish-line        pip install mojolearn==<version> in a fresh venv on this Mac
@@ -634,6 +636,7 @@ class Release:
             out.rename(out.with_name(out.name + ".failed-" + dt.datetime.now().strftime("%Y%m%d-%H%M%S")))
         self.must(["bash", "tools/release_wheel_smoke.sh", final or "<final linux wheel>",
                    "--expected-source-commit", self.commit, "--out", out, "--rent", "--vendor", "hip",
+                   "--provider", self.args.amd_provider,
                    "--column", self.gpu_selection("hip"),
                    "--cpu-column", self.release_check_dir() / "cpu" / "column.json"],
                   log=self.rel / "amd-column.log", what="release_wheel_smoke.sh --vendor hip")
@@ -825,6 +828,8 @@ def main(argv=None):
     ap.add_argument("--amd-expect-from", default="",
                     help="an NVIDIA release-build dir: run the AMD core-host probe against its STAGED copy")
     ap.add_argument("--smoke-gpu", default="", help="RunPod GPU for the Linux smoke (default RTX 4090)")
+    ap.add_argument("--amd-provider", default="auto", choices=["auto", "runpod", "do"],
+                    help="where the AMD column rents: auto = RunPod MI300X, DigitalOcean MI325X when RunPod has no stock")
     ap.add_argument("--state-dir", default="", help=argparse.SUPPRESS)
     args = ap.parse_args(argv)
     if not VERSION_RE.match(args.version):
