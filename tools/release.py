@@ -409,7 +409,12 @@ class Release:
             return (f"kept at {frozen}: a wheel of it is already published, so HEAD ({head[:12]}) is not "
                     "refrozen; a new source state needs a new version")
         allowed = set(release_files()) | set(docs_fact_files())
-        dirty = [line[3:] for line in git("status", "--porcelain", "--untracked-files=no").splitlines()]
+        # NOT through git(): it strips the output, and the first porcelain line
+        # then loses its leading status blank, so ` M CITATION.cff` read as
+        # `ITATION.cff` and the release's own citation sync was refused.
+        porcelain = subprocess.run(["git", "-C", str(ROOT), "status", "--porcelain", "--untracked-files=no"],
+                                   capture_output=True, text=True, check=True).stdout
+        dirty = [line[3:] for line in porcelain.splitlines() if line.strip()]
         others = [p for p in dirty if p not in allowed]
         if others:
             raise StepFailed("tracked files changed outside the release bump; commit or revert them first: "
