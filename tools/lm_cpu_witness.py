@@ -436,6 +436,13 @@ def cmd_heldout(args):
 
 
 def _shard_range(text, K):
+    """A:B, or a comma list of shard indices (for parallel processes that
+    save their gradients and leave the fold to `fold`)."""
+    if "," in text:
+        out = [int(x) for x in text.split(",") if x.strip()]
+        if not out or any(not 0 <= x < K for x in out) or len(set(out)) != len(out):
+            raise SystemExit("--shards list must name distinct shards in [0, %d)" % K)
+        return out
     a, sep, b = text.partition(":")
     a, b = (int(a), int(b)) if sep else (int(a), int(a) + 1)
     if not 0 <= a < b <= K:
@@ -456,8 +463,9 @@ def cmd_gradient(args):
     d = recipe_dims(recipe)
     K = d["K"]
     shards = _shard_range(args.shards, K)
-    if shards[0] != 0:
-        raise SystemExit("the fold is a left fold from shard 0; --shards must start at 0")
+    folds = shards == list(range(len(shards)))  # a prefix of the left fold from shard 0
+    if not folds and not args.save_grads:
+        raise SystemExit("shards that are not a prefix 0..j of the fold must be saved (--save-grads) for `fold`")
     scheme = seg.hash_scheme_of(recipe)
     opt = recipe["optimizer"]
     lr = seg._bits_f32(int(recipe["schedule"]["table_f32_hex"][args.step - 1], 16))
@@ -484,16 +492,19 @@ def cmd_gradient(args):
         sec = time.perf_counter() - t0
         got = "%08x" % (int(bits) & 0xFFFFFFFF)
         want = line["losses_f32_hex"][s]
-        total = ordered_fold_step(total, grad, np)
         row = dict(shard=s, ids_sha256=seg._sha(ids.tobytes()), loss_want=want, loss_got=got,
                    loss_verdict="PASS" if got == want else "FAIL",
-                   gradient_sha256=seg._hash_gradient(grad, scheme), prefix_sha256=seg._hash_gradient(total, scheme),
-                   seconds=round(sec, 1))
+                   gradient_sha256=seg._hash_gradient(grad, scheme), seconds=round(sec, 1))
+        if folds:
+            total = ordered_fold_step(total, grad, np)
+            row["prefix_sha256"] = seg._hash_gradient(total, scheme)
+        if args.save_grads:
+            Path(args.save_grads).mkdir(parents=True, exist_ok=True)
+            tmp = Path(args.save_grads) / ("grad_%02d.f32.tmp" % s)
+            grad.tofile(str(tmp))
+            os.replace(tmp, Path(args.save_grads) / ("grad_%02d.f32" % s))
         rec["shards"].append(row)
         _say("shard %d: loss %s want %s %s, gradient %s, %.1f s" % (s, got, want, row["loss_verdict"], row["gradient_sha256"][:16], sec))
-        if args.save_dir:
-            Path(args.save_dir).mkdir(parents=True, exist_ok=True)
-            total.tofile(str(Path(args.save_dir) / "prefix.f32"))
         _write(args.out, dict(rec, verdict="RUNNING"))
         elapsed = time.perf_counter() - t_start
         per = elapsed / len(rec["shards"])
@@ -504,12 +515,12 @@ def cmd_gradient(args):
     losses_ok = all(r["loss_verdict"] == "PASS" for r in rec["shards"])
     rec["seconds_per_shard"] = round((time.perf_counter() - t_start) / len(done), 1)
     rec["shards_done"] = len(done)
-    if done == list(range(K)):
+    if folds and done == list(range(K)):
         rec["gradient_sha256"] = seg._hash_gradient(total, scheme)
         grad_ok = rec["gradient_sha256"] == line["gradient_sha256"]
         rec["verdict"] = "PASS" if grad_ok and losses_ok else "FAIL"
     else:
-        rec["verdict"] = ("PARTIAL: %d of %d shards; per-shard losses %s; the summed gradient was NOT compared"
+        rec["verdict"] = ("PARTIAL: %d of %d shards; per-shard losses %s; the summed gradient was NOT compared here"
                           % (len(done), K, "all PASS" if losses_ok else "FAIL"))
         if not losses_ok:
             rec["verdict"] = "FAIL (per-shard loss)"
@@ -517,6 +528,53 @@ def cmd_gradient(args):
     _write(args.out, rec)
     _say("%s -> %s" % (rec["verdict"], args.out))
     return 1 if rec["verdict"].startswith("FAIL") else 0
+
+
+def cmd_fold(args):
+    """The ordered left fold over saved shard gradients, optionally continuing
+    a prefix folded elsewhere (the chained fold: `--prefix` holds
+    fold(g_0..g_{A-1}) and `--shards A:B` continues it). When the fold reaches
+    shard K-1 from shard 0, its hash is compared to the chain line's
+    `gradient_sha256`."""
+    np = _np()
+    recipe = seg.load_recipe(args.recipe)
+    chain = load_chain(args.chain)
+    line = chain[args.step]
+    K = recipe_dims(recipe)["K"]
+    scheme = seg.hash_scheme_of(recipe)
+    shards = _shard_range(args.shards, K)
+    if shards != list(range(shards[0], shards[-1] + 1)):
+        raise SystemExit("--shards for a fold must be contiguous A:B")
+    if shards[0] != 0 and not args.prefix:
+        raise SystemExit("a fold that starts at shard %d needs --prefix (the fold of shards 0..%d)" % (shards[0], shards[0] - 1))
+    total = None
+    rec = dict(schema=SCHEMA, check="fold", step=args.step, K=K, hash_scheme=scheme, shards=[shards[0], shards[-1] + 1],
+               chain_gradient_sha256=line["gradient_sha256"], rows=[], box=_box())
+    if args.prefix:
+        total = np.fromfile(args.prefix, dtype="<f4")
+        rec["prefix"] = dict(file=Path(args.prefix).name, sha256=seg._sha_file(args.prefix),
+                             hash=seg._hash_gradient(total, scheme))
+    t0 = time.perf_counter()
+    for s in shards:
+        path = Path(args.grads) / ("grad_%02d.f32" % s)
+        g = np.fromfile(str(path), dtype="<f4")
+        if total is not None and g.size != total.size:
+            raise SystemExit("%s has %d values, the fold %d" % (path, g.size, total.size))
+        total = ordered_fold_step(total, g, np)
+        rec["rows"].append(dict(shard=s, gradient_sha256=seg._hash_gradient(g, scheme)))
+    rec["fold_seconds"] = round(time.perf_counter() - t0, 1)
+    rec["result_sha256"] = seg._hash_gradient(total, scheme)
+    if args.save_prefix:
+        total.tofile(args.save_prefix)
+        rec["saved"] = dict(file=Path(args.save_prefix).name, sha256=seg._sha_file(args.save_prefix))
+    if shards[-1] == K - 1:
+        rec["verdict"] = "PASS" if rec["result_sha256"] == line["gradient_sha256"] else "FAIL"
+    else:
+        rec["verdict"] = "PREFIX (shards 0..%d; not compared)" % shards[-1]
+    rec["utc"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    _write(args.out, rec)
+    _say("%s: fold %s, chain %s -> %s" % (rec["verdict"], rec["result_sha256"], line["gradient_sha256"], args.out))
+    return 1 if rec["verdict"] == "FAIL" else 0
 
 
 def main(argv=None):
@@ -556,12 +614,23 @@ def main(argv=None):
     p = sub.add_parser("gradient")
     common(p, chain="required")
     p.add_argument("--step", type=int, required=True)
-    p.add_argument("--shards", default="0:64", help="A:B, a prefix of the fold (A must be 0)")
+    p.add_argument("--shards", default="0:64", help="A:B (a prefix 0:B is folded here) or a comma list (saved for `fold`)")
+    p.add_argument("--save-grads", default=None, help="write each shard's gradient as DIR/grad_NN.f32")
     p.add_argument("--deadline-seconds", type=float, default=0, help="stop after the shard that would cross this")
-    p.add_argument("--save-dir", default=None, help="write the running fold prefix here")
+
+    p = sub.add_parser("fold")
+    p.add_argument("--recipe", required=True)
+    p.add_argument("--chain", required=True)
+    p.add_argument("--step", type=int, required=True)
+    p.add_argument("--grads", required=True, help="the directory of grad_NN.f32 files")
+    p.add_argument("--shards", required=True, help="A:B, contiguous")
+    p.add_argument("--prefix", default=None, help="the fold of shards 0..A-1, float32 file")
+    p.add_argument("--save-prefix", default=None, help="write the result here (a prefix for the next owner)")
+    p.add_argument("--out", required=True)
 
     args = ap.parse_args(argv)
-    return dict(plan=cmd_plan, loss=cmd_loss, heldout=cmd_heldout, gradient=cmd_gradient)[args.cmd](args)
+    return dict(plan=cmd_plan, loss=cmd_loss, heldout=cmd_heldout, gradient=cmd_gradient,
+                fold=cmd_fold)[args.cmd](args)
 
 
 if __name__ == "__main__":

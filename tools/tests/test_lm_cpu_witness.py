@@ -239,6 +239,65 @@ class Hashing(unittest.TestCase):
         self.assertEqual(w.f32_hex(w.seg._bits_f32(0x40de1f6a)), '40de1f6a')
 
 
+class FoldCommand(unittest.TestCase):
+    """`fold` over saved shard gradients: whole, chained through a prefix,
+    and a swapped pair that must FAIL."""
+
+    def _setup(self, tmp):
+        _, manifest, mb = _stream(tmp)
+        recipe = _recipe(mb, manifest)
+        (tmp / 'recipe.json').write_text(json.dumps(recipe))
+        rng = np.random.default_rng(7)
+        grads = tmp / 'grads'
+        grads.mkdir()
+        gs = [rng.normal(0, 1, 999).astype(np.float32) for _ in range(4)]
+        for k, g in enumerate(gs):
+            g.tofile(str(grads / ('grad_%02d.f32' % k)))
+        total = None
+        for g in gs:
+            total = w.ordered_fold_step(total, g, np)
+        with _NoArrayPackage():
+            digest = w.seg._hash_gradient(total, w.seg.SCHEME_V2)
+        line = dict(schema=w.seg.CHAIN_SCHEMA, step=2, losses_f32_hex=['0'] * 4, hash_scheme=w.seg.SCHEME_V2,
+                    state_sha256='ab' * 32, gradient_sha256=digest, lr_f32_hex='3a83126f')
+        (tmp / 'chain.jsonl').write_text(json.dumps(line) + '\n')
+        return grads, gs
+
+    def _fold(self, tmp, *extra):
+        base = ['fold', '--recipe', str(tmp / 'recipe.json'), '--chain', str(tmp / 'chain.jsonl'), '--step', '2',
+                '--grads', str(tmp / 'grads'), '--out', str(tmp / 'fold.json')]
+        with _NoArrayPackage():
+            rc = w.main(base + list(extra))
+        return rc, json.loads((tmp / 'fold.json').read_text())
+
+    def test_whole_and_chained_folds_pass(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            self._setup(tmp)
+            rc, rec = self._fold(tmp, '--shards', '0:4')
+            self.assertEqual((rc, rec['verdict']), (0, 'PASS'))
+            rc, rec = self._fold(tmp, '--shards', '0:2', '--save-prefix', str(tmp / 'prefix.f32'))
+            self.assertTrue(rec['verdict'].startswith('PREFIX'))
+            rc, rec = self._fold(tmp, '--shards', '2:4', '--prefix', str(tmp / 'prefix.f32'))
+            self.assertEqual((rc, rec['verdict']), (0, 'PASS'))
+
+    def test_two_shards_swapped_fail(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            grads, gs = self._setup(tmp)
+            gs[2].tofile(str(grads / 'grad_01.f32'))
+            gs[1].tofile(str(grads / 'grad_02.f32'))
+            rc, rec = self._fold(tmp, '--shards', '0:4')
+            self.assertEqual((rc, rec['verdict']), (1, 'FAIL'))
+
+    def test_a_fold_from_the_middle_needs_its_prefix(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = Path(d)
+            self._setup(tmp)
+            with self.assertRaises(SystemExit):
+                self._fold(tmp, '--shards', '2:4')
+
+
 class Verdicts(unittest.TestCase):
     def test_bits_decide(self):
         self.assertEqual(w.verdict_of('40de1f6a', '40de1f6a', False), 'PASS')
