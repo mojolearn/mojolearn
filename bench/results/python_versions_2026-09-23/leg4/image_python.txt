@@ -1,0 +1,48 @@
+== which python3.10 / python3.11 on the image
+-rwxr-xr-x 1 root root 5941864 Aug 31 10:18 /usr/bin/python3.10
+/usr/bin/python3.10
+/usr/bin/python3.10: ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, BuildID[sha1]=fba669120f896afa5e8e65e286af240e1ffc9bc1, for GNU/Linux 3.2.0, stripped
+-rwxr-xr-x 1 root root 6726072 Mar  3  2026 /usr/bin/python3.11
+/usr/bin/python3.11
+/usr/bin/python3.11: ELF 64-bit LSB executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, BuildID[sha1]=c9e2243562dfc478ef1e3e88af4135fe78499523, for GNU/Linux 3.2.0, stripped
+lrwxrwxrwx 1 root root 10 Aug  8  2024 /usr/bin/python3 -> python3.10
+/usr/bin/python3.10
+/usr/bin/python3.10: ELF 64-bit LSB pie executable, x86-64, version 1 (SYSV), dynamically linked, interpreter /lib64/ld-linux-x86-64.so.2, BuildID[sha1]=fba669120f896afa5e8e65e286af240e1ffc9bc1, for GNU/Linux 3.2.0, stripped
+== dpkg
+libpython3.10:amd64 3.10.12-1~22.04.18
+libpython3.10-dev:amd64 3.10.12-1~22.04.18
+libpython3.10-minimal:amd64 3.10.12-1~22.04.18
+libpython3.10-stdlib:amd64 3.10.12-1~22.04.18
+libpython3.11:amd64 3.11.15-1+jammy1
+libpython3.11-dev:amd64 3.11.15-1+jammy1
+libpython3.11-minimal:amd64 3.11.15-1+jammy1
+libpython3.11-stdlib:amd64 3.11.15-1+jammy1
+python3.10 3.10.12-1~22.04.18
+python3.10-dev 3.10.12-1~22.04.18
+python3.10-minimal 3.10.12-1~22.04.18
+python3.10-venv 3.10.12-1~22.04.18
+python3.11 3.11.15-1+jammy1
+python3.11-dev 3.11.15-1+jammy1
+python3.11-minimal 3.11.15-1+jammy1
+python3.11-venv 3.11.15-1+jammy1
+== env of the leg command
+HOME=/root
+LANG=C.UTF-8
+LEG_OUT=/root/leg_out
+LOGNAME=root
+MOJOLEARN_BUILD_JOBS=8
+MOJOLEARN_COMMIT=d05982ab6db4ce9ae963047a84da169541594a4c
+MOJOLEARN_LINUX_CPU=x86-64-v3
+MOJOLEARN_NUMERIC_MODE=identical
+MOTD_SHOWN=pam
+OLDPWD=/root
+PATH=/root/.local/bin:/root/mojolearn/.pixi/envs/default/bin:/root/.pixi/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin
+PIXI_HOME=/root/.pixi
+PIXI_NO_PATH_UPDATE=1
+PWD=/root/mojolearn
+SHELL=/bin/bash
+SHLVL=1
+SSH_CLIENT=10.0.31.254 59263 22
+SSH_CONNECTION=10.0.31.254 59263 10.128.39.23 22
+USER=root
+_=/usr/bin/env

@@ -1,0 +1,5 @@
+setup_seconds=19
+pytest_arms_seconds=446
+tools_seconds=5
+modules_seconds=44
+version_total_seconds=514

@@ -1,0 +1,32 @@
+{
+ "parent_executable": "/root/pyver/venv-py310/bin/python",
+ "parent_prefix": "/root/pyver/venv-py310",
+ "parent_env": {
+  "MOJOLEARN_COMMIT": "246a19949cab68dbbc282e6a1a145aa0e1757942",
+  "MOJOLEARN_BUILD_JOBS": "8",
+  "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+  "MOJOLEARN_NUMERIC_MODE": "identical"
+ },
+ "parent_path": [
+  "/root/pyver/repo-main-py310/python",
+  "/usr/lib/python310.zip",
+  "/usr/lib/python3.10",
+  "/usr/lib/python3.10/lib-dynload",
+  "/root/pyver/venv-py310/lib/python3.10/site-packages"
+ ],
+ "script": {
+  "rc": 0,
+  "out": "\nexecutable /root/pyver/venv-py310/bin/python\nprefix /root/pyver/venv-py310 /usr\nflags sys.flags(debug=0, inspect=0, interactive=0, optimize=0, dont_write_bytecode=0, no_user_site=0, no_site=0, ignore_environment=0, verbose=0, bytes_warning=0, quiet=0, hash_randomization=1, isolated=0, dev_mode=False, utf8_mode=0, warn_default_encoding=0, int_max_str_digits=-1)\npath ['/root/pyver/tmp-py310/test_probe_child0/tools', '/root/pyver/tmp-py310/test_probe_child0', '/usr/lib/python310.zip', '/usr/lib/python3.10', '/usr/lib/python3.10/lib-dynload', '/root/pyver/venv-py310/lib/python3.10/site-packages']\nenv {'PYTHONPATH': ':', 'PYTHONEXECUTABLE': '/root/mojolearn/.pixi/envs/default/bin/python3'}\nnumpy 2.2.6\n",
+  "err": ""
+ },
+ "dash_c": {
+  "rc": 0,
+  "out": "c-numpy /root/pyver/venv-py310/lib/python3.10/site-packages/numpy/__init__.py\n",
+  "err": ""
+ },
+ "script_clean_env": {
+  "rc": 0,
+  "out": "\nexecutable /root/pyver/venv-py310/bin/python\nprefix /root/pyver/venv-py310 /usr\nflags sys.flags(debug=0, inspect=0, interactive=0, optimize=0, dont_write_bytecode=0, no_user_site=0, no_site=0, ignore_environment=0, verbose=0, bytes_warning=0, quiet=0, hash_randomization=1, isolated=0, dev_mode=False, utf8_mode=1, warn_default_encoding=0, int_max_str_digits=-1)\npath ['/root/pyver/tmp-py310/test_probe_child0/tools', '/usr/lib/python310.zip', '/usr/lib/python3.10', '/usr/lib/python3.10/lib-dynload', '/root/pyver/venv-py310/lib/python3.10/site-packages']\nenv {}\nnumpy 2.2.6\n",
+  "err": ""
+ }
+}

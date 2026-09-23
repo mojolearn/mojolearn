@@ -1,0 +1,5 @@
+pod=l22cxx9i6zpb9m
+name=mojolearn-cpu-py310-311-d-20260923-154615
+terminated_verified=1
+exit=0
+at=2026-09-23T16:08:38Z
