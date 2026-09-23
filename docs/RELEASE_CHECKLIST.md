@@ -37,6 +37,32 @@ dir>` restores the AMD core-host probe, `--smoke-gpu` picks the Linux smoke GPU.
 The Linux build route is one function (`launch_linux_builds`, routes in
 `BUILD_BACKENDS`), so the CPU build box route plugs in as `--build-backend`.
 
+**Bindings are rebuilt only when their identity moved (2026-09-23,
+`tools/release_reuse.py`).** After the rehearsal the `reuse-plan` step decides,
+for every binding of every set (cuda sm_90a, cuda sm_89, hip gfx942, the host
+bindings, the runtime closure, and the macOS wheel), REUSE or BUILD. The
+identity of a binding is its source closure digest (the same walk
+`tools/binding_stamps.py` records, computed from `git archive` of the commit),
+the Mojo/MAX packages pixi.lock pins for the target platform, the build flags
+the release scripts export for it, the builder scripts, and the pinned box
+image (on macOS the Xcode and Metal toolchain instead). REUSE means the exact
+identity digest of the last PUBLISHED release (the newest
+`bench/results/release_verification/<date>_pypi_<v>/` record, its
+`binding-identities.json` when it has one, else that commit's tree); the
+published bytes then come from a local copy or PyPI, verified by sha256 against
+the record and against the wheel's own payload, and are packed again. Anything
+else, including an unreadable pin, builds. A build leg runs only for a set with
+a binding to BUILD (the leg builds the whole set as before; the pack still
+takes the published bytes for the set's REUSE bindings, which is what freezes
+a released gfx942 binary), so a Python-only release rents nothing for builds
+and packs from `<version>/<commit12>/reuse/sets/`, while the NVIDIA and AMD
+release columns still run from the packed wheel. `LINUX_PAYLOAD.json` records
+per binding `built` or `reused` and from which release (`binding_origin`,
+`sets`); the macOS build places its reused bindings from the published macOS
+wheel and refuses if a byte moves after staging. `--dry-run` prints the full
+decision table with a reason per BUILD row; `python3 tools/release_reuse.py
+plan --full` prints it on its own.
+
 The numbered steps below are the same work by hand: the fallback when a step
 refuses and needs a person, and the reference for what each step runs.
 
