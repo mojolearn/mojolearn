@@ -9,7 +9,10 @@ Profile name: `mojolearn.identical.lm_head.chunked.fp32.v2`.
 
 ## Fixed arithmetic contract
 
-- Vocabulary chunk width is exactly 256. The final chunk may be shorter.
+- Vocabulary chunks are storage only. The CPU oracle walks 256-wide chunks
+  and the device GEMM slice in `training/chunked_lm_head_v2.mojo` is 1024
+  wide (`LM_HEAD_V2_CHUNK`); neither width reaches a reduction, because
+  every fold below visits vocabulary ids or rows in one serial order.
 - An LM-head logit is one `identical_mul_add` chain over hidden features in
   ascending feature order, followed by `ftz`.
 - For each row, the global maximum visits vocabulary ids `0..V-1`. Chunk
@@ -29,6 +32,19 @@ Profile name: `mojolearn.identical.lm_head.chunked.fp32.v2`.
 - Validation precedes output mutation: positive rows/width, vocabulary at
   least two, exact buffer shapes, first non-finite hidden/weight value, then
   targets ascending.
+
+## Python
+
+`mojolearn.training.chunked_lm_head_loss(hidden, weight, targets,
+return_grad=False)` is the Python door. It returns the mean loss as a float,
+or `(loss, d_hidden, d_weight)` with `return_grad=True`. Both training
+bindings register the two entries it calls: the GPU binding over the device
+kernels, and the training host binding (`_mojolearn_training_host`) over
+`chunked_lm_head_v2_oracle_forward` and `chunked_lm_head_v2_oracle`, so a
+CPU-only install runs the normative oracle. The host binding's negative
+control, `-D MOJOLEARN_HOST_SABOTAGE=1`, folds the row losses and every
+`dWeight` cell over rows descending. No identity lane carries the door yet;
+`tools/lane_accounting.py::DECLARED_LANELESS` names what it owes.
 
 ## Integration inventory
 

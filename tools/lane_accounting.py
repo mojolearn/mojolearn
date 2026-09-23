@@ -128,7 +128,21 @@ TABLE = os.path.join(ROOT, "python", "mojolearn", "verify_reference", "table.jso
 #: declarations by name as excuses that had outlived their debt, on the first
 #: run after the merge. An empty dict here is a claim, checked on every run:
 #: every public algorithm has a lane.
-DECLARED_LANELESS = {}
+#:
+#: ONE ENTRY AGAIN SINCE 2026-09-23 (lane/exposure-leftovers), and on purpose:
+#: `training.chunked_lm_head_loss` is the Python door to the chunked LM head
+#: v2 that both training bindings registered with no caller. Its CPU arm is
+#: the host binding over the normative oracle; its GPU arm is the device
+#: kernels. A lane is what it owes, and a lane with no committed GPU hash
+#: would read OWED on every part, so this names the debt rather than adding a
+#: lane the shipped table cannot yet check.
+DECLARED_LANELESS = {
+    "training.chunked_lm_head_loss": (
+        "owed: an identity lane over the loss and both gradients on all nine "
+        "fixtures, a CPU column with the training family's sabotage define "
+        "seen to move it, and one GPU column (any vendor) agreeing with it"
+    ),
+}
 
 #: A reason has to say something. The shortest real one in the vocabulary is
 #: `no reference` at 13 characters; below this it is a placeholder.

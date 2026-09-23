@@ -28,6 +28,7 @@ from ._training_impl import (
     WarmupLinearLR,
     accumulate_grads,
     accumulation_is_aligned,
+    chunked_lm_head_loss,
     clip_grad_norm_,
     cross_entropy,
     embedding_backward,
@@ -54,6 +55,13 @@ from ._samba_impl import SambaConfig, SambaStack
 # same rule as the rest of this file: bounded primitives over explicit
 # float32 buffers, not an autograd framework.
 
+# THE CHUNKED LM HEAD, V2 (lane/exposure-leftovers, 2026-09-23).
+# `chunked_lm_head_loss` is the Python door to the v2 profile both training
+# bindings register (training/CHUNKED_LM_HEAD_V2.md): the mean cross entropy
+# of `hidden . weight^T` and its two gradients without the (rows, vocab)
+# logits. It is laneless until an identity lane carries it; see
+# tools/lane_accounting.py::DECLARED_LANELESS for what is owed.
+
 __all__ = ['SGD', 'Adam', 'AdamW', 'clip_grad_norm_', 'cross_entropy',
            'numeric_mode_used', 'vendor_used', 'ConstantLR',
            'WarmupLinearLR', 'WarmupCosineLR', 'Generator',
@@ -61,4 +69,4 @@ __all__ = ['SGD', 'Adam', 'AdamW', 'clip_grad_norm_', 'cross_entropy',
            'SambaStack',
            'embedding_forward', 'embedding_backward',
            'rms_norm_forward', 'rms_norm_backward',
-           'linear_forward', 'linear_backward']
+           'linear_forward', 'linear_backward', 'chunked_lm_head_loss']

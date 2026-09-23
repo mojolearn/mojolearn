@@ -27,9 +27,9 @@ The four kinds, for one lane:
 ## The numbers
 
 - Lanes: **274** (215 single-device, 59 `par-*` multi-GPU drivers).
-- Source public API entries enumerated from the public API: **255**.
-- Source public API entries with ALL FOUR kinds on at least one lane: **217** of 255.
-- Source public API entries with NO IDENTITY LANE AT ALL: **0**.
+- Source public API entries enumerated from the public API: **256**.
+- Source public API entries with ALL FOUR kinds on at least one lane: **217** of 256.
+- Source public API entries with NO IDENTITY LANE AT ALL: **1**.
 - Source public API entries with no lane of their own, but reached by the harness's
   CPU inference routing: **0**.
 
@@ -37,10 +37,10 @@ Per kind, over the public API entries:
 
 | kind | API entries that have it | missing |
 |---|---|---|
-| gpu column | 255 | 0 |
-| cpu verifier | 222 | 33 |
-| sabotage seen to move a build | 217 | 38 |
-| batch part or named n/a | 255 | 0 |
+| gpu column | 255 | 1 |
+| cpu verifier | 222 | 34 |
+| sabotage seen to move a build | 217 | 39 |
+| batch part or named n/a | 255 | 1 |
 
 Per kind, over the lanes:
 
@@ -64,7 +64,28 @@ Sabotage, split by what was actually watched:
 
 ## Source public API entries with no identity lane at all
 
-None.
+These are the most important gaps. An algorithm with no lane cannot
+be missing a cell, so a lane census hides it entirely. `host family`
+names the CPU host family that serves the class, where one does, which
+means a CPU path exists and only the identity lane is missing.
+
+| algorithm | kind | host family | defined in |
+|---|---|---|---|
+| `training.chunked_lm_head_loss` | function | training | `python/mojolearn/_training_impl.py` |
+
+THE SAVED-MODEL HOST INFERENCE SURFACE used to be listed here with the
+note that it had no lane ON PURPOSE, because `tools/forest_host_gate.py`
+and `tools/classical_host_gate.py` measure it against committed
+recordings instead: 25 under
+`bench/results/forest_host/` and 15 classical
+recording directories named in `host_surface.py`. Those gates are real
+and they pass. What they did not reach (lane/laneless-public-classes,
+2026-09-19) is `host_predict` and `host_predict_proba`, which no gate
+calls, and the `parallel_groves` HOST engine, which the forest gate still
+refuses by name although `core/forest_host_groves.mojo` landed on
+lane/forest-groves-cpu-and-speed. The `saved-model-host-infer` lane runs
+all three, so the surface is counted in the four kinds below; the gates
+remain a different and additional kind of evidence.
 
 ### Reached by the harness, with no lane of their own
 
@@ -328,6 +349,7 @@ A blank cell means no lane of this algorithm has that kind.
 | `training.WarmupLinearLR` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `training.accumulate_grads` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
 | `training.accumulation_is_aligned` | 1 | amd,apple,nvidia | training | seen(build) | n/a | yes |
+| `training.chunked_lm_head_loss` | **0** |  |  |  |  | NO |
 | `training.clip_grad_norm_` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `training.cross_entropy` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
 | `training.embedding_backward` | 1 | amd,apple,nvidia | training | seen(build) | part | yes |
