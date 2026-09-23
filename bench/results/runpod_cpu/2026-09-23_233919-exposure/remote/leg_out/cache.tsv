@@ -1,0 +1,4 @@
+pixi	restored	version=0.77.0
+env:default	miss	install_rc=0	restore_s=0	pixi_install_s=6
+env:test	miss	install_rc=0	restore_s=0	pixi_install_s=4
+toolchain	ok	Mojo 1.0.0 (ed45d567)

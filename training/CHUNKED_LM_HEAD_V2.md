@@ -43,7 +43,8 @@ kernels, and the training host binding (`_mojolearn_training_host`) over
 `chunked_lm_head_v2_oracle_forward` and `chunked_lm_head_v2_oracle`, so a
 CPU-only install runs the normative oracle. The host binding's negative
 control, `-D MOJOLEARN_HOST_SABOTAGE=1`, folds the row losses and every
-`dWeight` cell over rows descending. No identity lane carries the door yet;
+`dWeight` cell over rows descending; measured, it moves `dWeight` and left the
+loss bits unchanged at the two shapes tried. No identity lane carries the door yet;
 `tools/lane_accounting.py::DECLARED_LANELESS` names what it owes.
 
 ## Integration inventory

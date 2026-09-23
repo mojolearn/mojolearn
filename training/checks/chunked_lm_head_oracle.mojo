@@ -28,8 +28,12 @@ comptime LM_HEAD_V2_VOCAB_CHUNK = 256
 #: THE NEGATIVE CONTROL for the training host binding, which is the only
 #: caller built with it (`-D MOJOLEARN_HOST_SABOTAGE=1`, the training family's
 #: define). It folds the row losses and every dWeight cell over rows
-#: DESCENDING, a fold-order fault the contract forbids, so the loss and
-#: dWeight move while the arithmetic of each term is unchanged. The checks in
+#: DESCENDING, a fold-order fault the contract forbids, while the arithmetic
+#: of each term is unchanged. MEASURED on a RunPod x86 CPU pod (2026-09-23,
+#: bench/results/runpod_cpu/2026-09-23_233919-exposure/): dWeight moved at
+#: (5, 513, 8) and (16, 300, 12); the loss did NOT move at either shape (a
+#: reversed sum of 5 or 16 row losses rounded to the same bits), so only the
+#: dWeight part of a future lane is watched by this arm. The checks in
 #: training/checks never define it.
 comptime CHUNKED_LM_HEAD_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
