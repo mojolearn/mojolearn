@@ -329,6 +329,16 @@ bash tools/release_wheel_smoke.sh <dist>/final/<wheel> --expected-source-commit 
   --out <fresh-smoke-dir> --rent                      # writes <fresh-smoke-dir>/results.json
 ```
 
+The AMD column (`--vendor hip --column <selection>`) runs the same way from the
+installed wheel on gfx942. `--provider auto` (the default) rents a RunPod MI300X
+once and, when RunPod answers "There are no instances currently available"
+(0.8.16), a DigitalOcean `gpu-mi325x1-256gb` droplet in tor1 or nyc2 instead:
+token `~/.mojolearn_do_token`, the shared GPU lock `/tmp/mojolearn-do-gpu.lock`
+(held = refused), a Mac dead-man armed before the create, an on-droplet
+self-destruct verified after ssh, DELETE then GET 404 before the lock is
+released. `--provider runpod|do` pins one; `pixi run release` passes
+`--amd-provider`.
+
 macOS: build the wheel (the release profile, byte LM and every host binding,
 is the default of `build_release_wheel.sh` since 0.8.14; `MOJOLEARN_PACKAGE_BYTE_LM=0`
 is an explicit opt-out that no release uses), then smoke it under the Metal lock:
