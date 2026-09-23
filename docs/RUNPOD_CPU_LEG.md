@@ -74,6 +74,9 @@ using `tools/stage_from_r2.sh`, which lands every `gbm-bench/` key under
 (`GBM_BENCH_DATA`), so no rented pod fetches a dataset from its origin. The
 pins are in `bench/results/dataset_store/manifest.tsv`.
 
+This is the rule for every remote run, not only this leg: see
+[REMOTE_DATA_R2.md](REMOTE_DATA_R2.md).
+
 | dataset key | bytes | decoded form |
 |---|---|---|
 | `gbm-bench/taxi/taxi_speed.npz` | 419,757,252 | taxi, the regression and binary tasks |
