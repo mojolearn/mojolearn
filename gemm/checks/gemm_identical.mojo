@@ -1570,6 +1570,22 @@ def _fold_drain_local[
 # ===========================================================================
 
 
+@always_inline
+def _udiv[D: Int](x: Int) -> Int:
+    """`x // D` for `x >= 0`, unsigned. The staging and ownership index math
+    divides by comptime tile sizes; the signed forms leave a sign fix-up and
+    a division/remainder pair that Mojo 1.0.0's optimizer associated
+    differently from one cold compile to the next (see `_tuned_window_at`).
+    Unsigned by a power of two this is a shift, and it has no fix-up."""
+    return Int(UInt(x) // UInt(D))
+
+
+@always_inline
+def _urem[D: Int](x: Int) -> Int:
+    """`x % D` (equivalently `x - (x // D) * D`) for `x >= 0`, unsigned."""
+    return Int(UInt(x) % UInt(D))
+
+
 def _tuned_windows_per_leaf[KS: Int](leaf: Int) -> Int:
     """`ceil(L / KS)`, at least 1. Block-uniform, and a pure function of `L`
     and the comptime `KS`."""
@@ -1704,8 +1720,8 @@ def _tuned_g2r[
             comptime for e0 in range(NV):
                 var idx0 = tid + (s0 * VEC + e0) * NTH
                 if idx0 < ROWS * KV * VEC:
-                    var rr0 = idx0 % ROWS
-                    var cc0 = idx0 // ROWS
+                    var rr0 = _urem[ROWS](idx0)
+                    var cc0 = _udiv[ROWS](idx0)
                     var oi0 = base_outer + rr0
                     if oi0 < outer_limit and cc0 < chunk:
                         out[s0 * VEC + e0] = src.unsafe_load(
@@ -1718,8 +1734,8 @@ def _tuned_g2r[
     comptime for s in range(NSLOT):
         var idx = tid + s * NTH
         if idx < ROWS * KV:
-            var rr = idx // KV
-            var cc = (idx - rr * KV) * VEC
+            var rr = _udiv[KV](idx)
+            var cc = _urem[KV](idx) * VEC
             var oi = base_outer + rr
             if oi < outer_limit:
                 if k_stride == 1 and cc + VEC <= chunk:
@@ -1905,8 +1921,8 @@ def identical_gemm_tuned_kernel[
     # `tid` owns rows `accrow + u * TR` and columns `acccol + v * TC`. The
     # ownership is STRIDED rather than contiguous, so consecutive threads
     # write consecutive columns of `C` and the store coalesces.
-    var accrow = tid // TC
-    var acccol = tid - accrow * TC
+    var accrow = _udiv[TC](tid)
+    var acccol = _urem[TC](tid)
 
     var acc = SIMD[DType.float32, NCELL](0.0)
     # FS == 1: the single leaf partial parks in registers (no tree at all).
@@ -1962,7 +1978,7 @@ def identical_gemm_tuned_kernel[
         var win = cur
         var nxt = _tuned_window_next[KS](wt, wq, wpl, leaf, k, p_count)
         var chunk = win[1]
-        var pgw = w % PAGES
+        var pgw = _urem[PAGES](w)
         # The window's operand words, exactly once each (see
         # `TUNED_BLOCK_ADMIT`). Unused slots are +0.0 and constrain nothing.
         # A helper and not an inline `comptime if`: an empty `comptime if`
@@ -1980,14 +1996,14 @@ def identical_gemm_tuned_kernel[
                     var ia0 = tid + (sa * VEC + ea0) * NTH
                     if ia0 < BM * KS:
                         as_.unsafe_store(
-                            pgw * APAGE + (ia0 % BM) * SSTRIDE + ia0 // BM,
+                            pgw * APAGE + _urem[BM](ia0) * SSTRIDE + _udiv[BM](ia0),
                             pa[sa * VEC + ea0],
                         )
             else:
                 var ia = tid + sa * NTH
                 if ia < BM * KV:
-                    var rra = ia // KV
-                    var cca = (ia - rra * KV) * VEC
+                    var rra = _udiv[KV](ia)
+                    var cca = _urem[KV](ia) * VEC
                     var va = SIMD[DType.float32, VEC](0.0)
                     comptime for ea in range(VEC):
                         va[ea] = pa[sa * VEC + ea]
@@ -1998,14 +2014,14 @@ def identical_gemm_tuned_kernel[
                     var ib0 = tid + (sb * VEC + eb0) * NTH
                     if ib0 < BN * KS:
                         bs_.unsafe_store(
-                            pgw * BPAGE + (ib0 % BN) * SSTRIDE + ib0 // BN,
+                            pgw * BPAGE + _urem[BN](ib0) * SSTRIDE + _udiv[BN](ib0),
                             pb[sb * VEC + eb0],
                         )
             else:
                 var ib = tid + sb * NTH
                 if ib < BN * KV:
-                    var rrb = ib // KV
-                    var ccb = (ib - rrb * KV) * VEC
+                    var rrb = _udiv[KV](ib)
+                    var ccb = _urem[KV](ib) * VEC
                     var vb = SIMD[DType.float32, VEC](0.0)
                     comptime for eb in range(VEC):
                         vb[eb] = pb[sb * VEC + eb]
@@ -3576,8 +3592,8 @@ def identical_gemm_step_arm_kernel[
     var j0 = tj * BN
 
     var tid = Int(thread_idx.x)
-    var accrow = tid // TC
-    var acccol = tid - accrow * TC
+    var accrow = _udiv[TC](tid)
+    var acccol = _urem[TC](tid)
 
     var acc = SIMD[DType.float32, NCELL](0.0)
     var fl = stack_allocation[FS * NCELL, Scalar[DType.float32]]()
@@ -3620,7 +3636,7 @@ def identical_gemm_step_arm_kernel[
         var win = cur
         var nxt = _tuned_window_next[KS](wt, wq, wpl, leaf, k, p_count)
         var chunk = win[1]
-        var pgw = w % PAGES
+        var pgw = _urem[PAGES](w)
 
         # ---- REGISTERS TO SHARED, into page `w % PAGES` (shipped lines).
         comptime for sa in range(ASLOTS):
@@ -3629,14 +3645,14 @@ def identical_gemm_step_arm_kernel[
                     var ia0 = tid + (sa * VEC + ea0) * NTH
                     if ia0 < BM * KS:
                         as_.unsafe_store(
-                            pgw * APAGE + (ia0 % BM) * SSTRIDE + ia0 // BM,
+                            pgw * APAGE + _urem[BM](ia0) * SSTRIDE + _udiv[BM](ia0),
                             pa[sa * VEC + ea0],
                         )
             else:
                 var ia = tid + sa * NTH
                 if ia < BM * KV:
-                    var rra = ia // KV
-                    var cca = (ia - rra * KV) * VEC
+                    var rra = _udiv[KV](ia)
+                    var cca = _urem[KV](ia) * VEC
                     var va = SIMD[DType.float32, VEC](0.0)
                     comptime for ea in range(VEC):
                         va[ea] = pa[sa * VEC + ea]
@@ -3647,14 +3663,14 @@ def identical_gemm_step_arm_kernel[
                     var ib0 = tid + (sb * VEC + eb0) * NTH
                     if ib0 < BN * KS:
                         bs_.unsafe_store(
-                            pgw * BPAGE + (ib0 % BN) * SSTRIDE + ib0 // BN,
+                            pgw * BPAGE + _urem[BN](ib0) * SSTRIDE + _udiv[BN](ib0),
                             pb[sb * VEC + eb0],
                         )
             else:
                 var ib = tid + sb * NTH
                 if ib < BN * KV:
-                    var rrb = ib // KV
-                    var ccb = (ib - rrb * KV) * VEC
+                    var rrb = _udiv[KV](ib)
+                    var ccb = _urem[KV](ib) * VEC
                     var vb = SIMD[DType.float32, VEC](0.0)
                     comptime for eb in range(VEC):
                         vb[eb] = pb[sb * VEC + eb]
@@ -4070,8 +4086,8 @@ def identical_gemm_ksplit_kernel[
     var mn = m * n
 
     var tid = Int(thread_idx.x)
-    var accrow = tid // TC
-    var acccol = tid - accrow * TC
+    var accrow = _udiv[TC](tid)
+    var acccol = _urem[TC](tid)
 
     var acc = SIMD[DType.float32, NCELL](0.0)
     var fl = stack_allocation[FS * NCELL, Scalar[DType.float32]]()
@@ -4100,7 +4116,7 @@ def identical_gemm_ksplit_kernel[
         var win = cur
         var nxt = _tuned_window_next[KS](wt, wq, wpl, leaf, k, p_count)
         var chunk = win[1]
-        var pgw = w % PAGES
+        var pgw = _urem[PAGES](w)
 
         # ---- REGISTERS TO SHARED, into page `w % PAGES` (shipped lines).
         comptime for sa in range(ASLOTS):
@@ -4109,14 +4125,14 @@ def identical_gemm_ksplit_kernel[
                     var ia0 = tid + (sa * VEC + ea0) * NTH
                     if ia0 < BM * KS:
                         as_.unsafe_store(
-                            pgw * APAGE + (ia0 % BM) * SSTRIDE + ia0 // BM,
+                            pgw * APAGE + _urem[BM](ia0) * SSTRIDE + _udiv[BM](ia0),
                             pa[sa * VEC + ea0],
                         )
             else:
                 var ia = tid + sa * NTH
                 if ia < BM * KV:
-                    var rra = ia // KV
-                    var cca = (ia - rra * KV) * VEC
+                    var rra = _udiv[KV](ia)
+                    var cca = _urem[KV](ia) * VEC
                     var va = SIMD[DType.float32, VEC](0.0)
                     comptime for ea in range(VEC):
                         va[ea] = pa[sa * VEC + ea]
@@ -4127,14 +4143,14 @@ def identical_gemm_ksplit_kernel[
                     var ib0 = tid + (sb * VEC + eb0) * NTH
                     if ib0 < BN * KS:
                         bs_.unsafe_store(
-                            pgw * BPAGE + (ib0 % BN) * SSTRIDE + ib0 // BN,
+                            pgw * BPAGE + _urem[BN](ib0) * SSTRIDE + _udiv[BN](ib0),
                             pb[sb * VEC + eb0],
                         )
             else:
                 var ib = tid + sb * NTH
                 if ib < BN * KV:
-                    var rrb = ib // KV
-                    var ccb = (ib - rrb * KV) * VEC
+                    var rrb = _udiv[KV](ib)
+                    var ccb = _urem[KV](ib) * VEC
                     var vb = SIMD[DType.float32, VEC](0.0)
                     comptime for eb in range(VEC):
                         vb[eb] = pb[sb * VEC + eb]
@@ -4232,7 +4248,7 @@ def identical_gemm_ksplit_kernel[
             if gi < m and gj < n:
                 var node = outv[u4 * CPT + v6]
                 comptime if SAB:
-                    if tid == q % NTH and q // NTH == u4 * CPT + v6:
+                    if tid == _urem[NTH](q) and _udiv[NTH](q) == u4 * CPT + v6:
                         node = Float32(1.0e30)
                 ws.unsafe_store(q * mn + gi * n + gj, node)
 
@@ -5550,8 +5566,8 @@ def identical_gemm_kpack_kernel[
     var mn = m * n
 
     var tid = Int(thread_idx.x)
-    var accrow = tid // TC
-    var acccol = tid - accrow * TC
+    var accrow = _udiv[TC](tid)
+    var acccol = _urem[TC](tid)
 
     comptime if not GROUP:
         if p_count <= 0:
@@ -5623,7 +5639,7 @@ def identical_gemm_kpack_kernel[
         var win = cur
         var nxt = _tuned_window_next[KS](wt, wq, wpl, leaf, k, p_count)
         var chunk = win[1]
-        var pgw = w % PAGES
+        var pgw = _urem[PAGES](w)
 
         # ---- REGISTERS TO THE PACKED PAGE `w % PAGES`. Slot `(s, e)` holds
         # the `(line, step)` its mapping names; it is stored at that pair's
@@ -5777,7 +5793,7 @@ def identical_gemm_kpack_kernel[
                     # read and every node is already flushed (long-k 5.4).
                     var node = outv[u4 * CPT + v7]
                     comptime if SAB:
-                        if tid == q % NTH and q // NTH == u4 * CPT + v7:
+                        if tid == _urem[NTH](q) and _udiv[NTH](q) == u4 * CPT + v7:
                             node = Float32(1.0e30)
                     dst.unsafe_store(q * mn + gi * n + gj, node)
                 else:
