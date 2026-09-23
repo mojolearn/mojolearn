@@ -136,11 +136,14 @@ urls, out = json.load(open(sys.argv[1])), sys.argv[2]
 # 35 to 48 MB/s, and a whole-file floor of 100 KB/s never fired.
 CHUNK = 100_000_000
 def size_of(url):
-    r = subprocess.run(["curl", "-fsSI", "--max-time", "60", url], capture_output=True, text=True)
+    # a presigned GET URL refuses HEAD (403); one byte's Content-Range says the total
+    r = subprocess.run(["curl", "-fsS", "--max-time", "60", "-r", "0-0", "-D", "-", "-o", "/dev/null", url],
+                       capture_output=True, text=True)
     for line in r.stdout.splitlines():
-        if line.lower().startswith("content-length:"):
-            return int(line.split(":", 1)[1])
-    raise SystemExit("no content-length for %s" % url[:80])
+        if line.lower().startswith("content-range:"):
+            return int(line.rsplit("/", 1)[1])
+    print("FAILED size of", url[:80], r.stderr.strip()[:200], flush=True)
+    raise SystemExit(1)
 def fetch_range(item):
     name, url, i, a, b, path = item
     for attempt in range(6):
