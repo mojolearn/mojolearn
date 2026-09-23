@@ -96,7 +96,15 @@ mid-run (the recipe pins the hash scheme now, but the runner archives HEAD).
 - Boxes: NVIDIA on RunPod via `tools/gemm_remote_leg.sh` (a GPU-type walk),
   AMD on DigitalOcean via `tools/do_extra_leg.sh` (the 8x MI325X size in the
   spec, $30.40 an hour; the segment lease is priced live against the
-  per-segment `dollar_cap`). Every rental has an on-box watchdog and a local
+  per-segment `dollar_cap`). When DigitalOcean refuses, `"vultr"` in
+  `amd_providers` rents Vultr 8x MI300X bare metal (or the 8x MI325X plan,
+  `vultr_plan`) through
+  `/Users/andrewhendel/CascadeProjects/mojolearn/tools/vultr_leg.sh`, which
+  installs ROCm 6.4.0 (the DigitalOcean image's release) before the body, runs
+  the body with `vultr_devices` (default `0,1,2,3,4,5,6,7`), adds
+  `vultr_extra_minutes` (default 60) to the lease for provisioning and the
+  ROCm reboot, and needs the API key as one line in `~/.mojolearn_vultr_token`
+  (mode 600). Every rental has an on-box watchdog and a local
   dead-man; the runners fetch and verify the delete. Never reap another
   session's box.
 - Live segments: `tools/lm_live_leg.sh` rents AMD first, then NVIDIA, joins
