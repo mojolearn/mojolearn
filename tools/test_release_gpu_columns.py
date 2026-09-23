@@ -202,7 +202,9 @@ class ReleaseStepTests(Base):
                          str(r.column_selection("hip")))
         self.assertNotIn("MOJOLEARN_RELEASE_COLUMN_SELECTION", legs["cuda-sm_89"].env)
         cmd = legs["cuda-sm_90a"].command
-        self.assertGreater(int(cmd[cmd.index("--minutes") + 1]), 60)
+        self.assertGreater(int(cmd[cmd.index("--segment-lease") + 1]), 60)
+        self.assertIn("--dollar-cap", cmd)
+        self.assertEqual(legs["cuda-sm_89"].command[-2:], ["--minutes", "60"])
 
 
 class ParseTests(unittest.TestCase):

@@ -259,10 +259,13 @@ def gpu_legs(ctx):
         if column:
             env.update(MOJOLEARN_RELEASE_COLUMN_SELECTION=str(ctx.column_selection("cuda")),
                        MOJOLEARN_RELEASE_COLUMN_SECONDS=str(COLUMN_SECONDS))
+        # A lease above one hour is a SEGMENT lease with a dollar cap
+        # (gemm_remote_leg.sh refuses --minutes above 60 by name).
+        lease = (["--segment-lease", str(60 + column_minutes), "--dollar-cap", COLUMN_DOLLAR_CAP]
+                 if column else ["--minutes", "60"])
         leg = Leg(f"cuda-{arch}", "cuda", arch,
                   ["sh", "tools/gemm_remote_leg.sh", "nvidia", "--payload", "mamba",
-                   "--source-ref", ctx.commit, "--gpu", gpu, "--allow-concurrent", "--rent",
-                   "--minutes", str(60 + (column_minutes if column else 0))],
+                   "--source-ref", ctx.commit, "--gpu", gpu, "--allow-concurrent", "--rent", *lease],
                   env, out / "remote" / "release-build", legs_dir, out)
         if column:
             leg.column_backend, leg.column_dir = "cuda", out / "remote" / "column"
@@ -283,6 +286,8 @@ def gpu_legs(ctx):
 
 #: The NVIDIA and AMD columns' budget inside their build leases, seconds.
 COLUMN_SECONDS = int(os.environ.get("MOJOLEARN_RELEASE_COLUMN_SECONDS", "2700"))
+#: The H100 leg's cost cap once its lease passes one hour ($/h x hours, with room).
+COLUMN_DOLLAR_CAP = os.environ.get("MOJOLEARN_RELEASE_COLUMN_DOLLAR_CAP", "15")
 
 #: Build routes by name. A route returns the Leg list for ctx; launch, wait,
 #: pack and resume are route-independent. The GPU legs are the default and

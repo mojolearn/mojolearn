@@ -1073,8 +1073,10 @@ COLUMN_SELECTION=${MOJOLEARN_RELEASE_COLUMN_SELECTION:-}
 COLUMN_SECONDS=${MOJOLEARN_RELEASE_COLUMN_SECONDS:-2700}
 COLUMN_CPU=${MOJOLEARN_RELEASE_COLUMN_CPU:-0}
 COLUMN_ON=0
-if [ -n "$COLUMN_SELECTION" ]; then
-    [ "$NVIDIA_CAMPAIGN" = 7 ] && [ "$LEG_QUALIFY" != 1 ] || leg_die 'MOJOLEARN_RELEASE_COLUMN_SELECTION belongs to a release build (campaign 7, not a qualification)'
+# Only a release build (campaign 7, not a qualification) records a column; the
+# variable is ignored anywhere else (this script's own dry-run self-checks
+# re-run it under other campaigns with the caller's environment).
+if [ -n "$COLUMN_SELECTION" ] && [ "$NVIDIA_CAMPAIGN" = 7 ] && [ "$LEG_QUALIFY" != 1 ]; then
     [ -f "$COLUMN_SELECTION" ] || leg_die "no column selection at $COLUMN_SELECTION"
     case "$COLUMN_SECONDS" in ''|*[!0-9]*) leg_die 'MOJOLEARN_RELEASE_COLUMN_SECONDS must be seconds' ;; esac
     [ "$COLUMN_SECONDS" -ge 120 ] || leg_die 'MOJOLEARN_RELEASE_COLUMN_SECONDS must be at least 120'
@@ -6192,6 +6194,13 @@ if [ "$MODE" = "dry" ]; then
     echo "      refusal -> TERMINATE, no work, no card"
     echo "   5. key to the pod on stdin (0600), then read the pod's ps back"
     echo "   6. git archive $COMMIT -> the box; compare source sha both ways"
+    if [ "$COLUMN_ON" = 1 ]; then
+    echo "   6b. THE NVIDIA RELEASE COLUMN after a passing build, in this lease:"
+    echo "      bash tools/release_gpu_column.sh cuda <release-build> /root/column-selection.json"
+    echo "      <out>/column <=${COLUMN_SECONDS}s (box CPU column too: $COLUMN_CPU); selection:"
+    echo "      $(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("summary", "?"))' "$COLUMN_SELECTION")"
+    echo "      the leg is green only when remote/column/cuda/column.json came home complete"
+    fi
     if [ "$PAYLOAD" = "phase8" ] && [ "$_wants_phase8" = "0" ]; then
     echo "   7. bash tools/e1_bootstrap.sh, DETACHED and polled, bounded at"
     echo "      ${WORK_TIMEOUT}s so the fetch keeps its reserve. PHASE 8 IS NOT"
