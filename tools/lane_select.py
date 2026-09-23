@@ -764,6 +764,60 @@ def _binding_exports(rel):
         r"def_function\[\s*([A-Za-z0-9_]+)\s*(?:\[[^\[\]]*\])?\s*\]\s*\(\s*\"([A-Za-z0-9_]+)\"", text)}
 
 
+def binding_additions(ref, path):
+    """The export names a binding source's diff against `ref` ADDS, when the
+    diff is ONLY additions; None otherwise.
+
+    Only additions means: the text before the first top-level `fn`/`def` is
+    unchanged; every block that existed is byte-identical (trailing blank
+    lines aside) except the module init (`PyInit_*`), which may only GAIN
+    `module.def_function[<new block>]("<name>")` lines; every added block is a
+    new name; and no added name occurs as a word anywhere in the old text (so
+    nothing that existed can now resolve to it). A binding that grows exports
+    for new lanes (0.8.15: five byte-LM parallel-training exports) then does
+    not select every lane that merely loads the binding."""
+    old = _git_show(ref, path) if ref else None
+    if old is None:
+        return None
+    try:
+        new = _read(path)
+    except OSError:
+        return None
+    ob, nb = _mojo_blocks(old), _mojo_blocks(new)
+
+    def prelude(text):
+        m = re.search(r"^(?:fn|def)\s+[A-Za-z0-9_]+", text, re.M)
+        return text[:m.start()] if m else text
+    if prelude(old) != prelude(new) or not set(ob) <= set(nb):
+        return None
+    added = set(nb) - set(ob)
+    for name in added:
+        if re.search(r"\b%s\b" % re.escape(name), old):
+            return None
+    exports = set()
+    for name, body in ob.items():
+        if nb[name].rstrip() == body.rstrip():
+            continue
+        if not name.startswith("PyInit_"):
+            return None
+        olines = body.rstrip().splitlines()
+        nlines = nb[name].rstrip().splitlines()
+        it = iter(nlines)
+        if not all(any(line == cand for cand in it) for line in olines):
+            return None                      # an old line changed or moved
+        extra = list(nlines)
+        for line in olines:
+            extra.remove(line)
+        for line in extra:
+            m = re.match(r"^\s*module\.def_function\[\s*([A-Za-z0-9_]+)\s*\]\s*\(\s*\"([A-Za-z0-9_]+)\"\s*\)\s*$", line)
+            if not line.strip():
+                continue
+            if not m or m.group(1) not in added:
+                return None
+            exports.add(m.group(2))
+    return exports
+
+
 #: Calls that RESOLVE a binding by name, and the assignment targets that hold
 #: one. `_backend.binding("_mojolearn_rf")`, `self._bind("_mojolearn")`,
 #: `load_host_module(basename)`, `_BINDING = "_mojolearn_rf"`.
@@ -990,10 +1044,12 @@ def lane_sources():
         matched, files, doors, bindings = reach[lane]
         used = _called_names(doors)
         mojo = set()
+        binding_use = {}
         for binding in bindings:
             gpu_src = os.path.join("bindings", binding + ".mojo")
             wide = True if binding not in ubiquitous else \
                 ("whole" if _declared(lane, binding) else False)
+            binding_use[binding] = dict(wide=wide, exports=sorted(e for e in used if e in _binding_exports(gpu_src)))
             mojo |= binding_seeds(gpu_src, used, wide)
             host = routed.get(binding)
             if host:
@@ -1034,7 +1090,7 @@ def lane_sources():
         sources[lane] = files | extra | mojo
         why[lane] = dict(symbols=sorted(matched), python=len(files), bindings=sorted(bindings),
                          families=sorted(fams), mojo=len(mojo), exports=len(used),
-                         ubiquitous=sorted(ubiquitous))
+                         ubiquitous=sorted(ubiquitous), binding_use=binding_use)
     _LANE_SOURCES = (sources, why)
     return _LANE_SOURCES
 
@@ -3168,6 +3224,19 @@ def select(paths, ref=None, sources=None, backend=None):
                                     + ("" if ref else "; with no ref an addition cannot be read"))
             continue
         hit = rev.get(path)
+        if hit and ref and path.startswith("bindings" + os.sep) and path.endswith(".mojo"):
+            added = binding_additions(ref, path)
+            if added is not None:
+                name = os.path.basename(path)[:-5]
+                _, why_map = lane_sources()
+                users = {n for n in hit if n in why_map and (
+                    why_map[n].get("binding_use", {}).get(name, {}).get("wide") in (True, "whole")
+                    or set(why_map[n].get("binding_use", {}).get(name, {}).get("exports", ())) & added)}
+                lanes.update(users)
+                by_path[path] = set(users)
+                reasons[path] = (f"a binding that only GAINED exports ({', '.join(sorted(added)) or 'none'}): "
+                                 f"the {len(users)} lane(s) that really use it, of the {len(hit)} that load it")
+                continue
         if hit:
             lanes.update(hit)
             by_path[path] = set(hit)
