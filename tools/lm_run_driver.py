@@ -36,10 +36,26 @@ FAIL verdict stops the driver (the plan's halt rule): nothing after a
 disputed boundary is kept.
 
 RENTALS. One-box segments go through tools/gemm_remote_leg.sh (nvidia, a
-GPU-type walk) or tools/do_extra_leg.sh (amd, DigitalOcean; `amd_provider`
-runpod uses gemm_remote_leg.sh amd). Live segments go through
-tools/lm_live_leg.sh. The runners own the dead-men, the fetch and the
-verified delete. The driver never talks to a cloud API itself.
+GPU-type walk) or, for amd, the providers named in `amd_providers`, walked in
+order: `do` is tools/do_extra_leg.sh (DigitalOcean), `hotaisle` is
+tools/hotaisle_leg.sh, `vultr` is tools/vultr_leg.sh (Vultr 8x AMD bare metal,
+ROCm installed on the box before the body), anything else is
+gemm_remote_leg.sh amd (RunPod). Live segments go through
+tools/lm_live_leg.sh (DigitalOcean or RunPod on the AMD side). The runners
+own the dead-men, the fetch and the verified delete. The driver never talks
+to a cloud API itself.
+
+VULTR SPEC KEYS (all optional):
+    "vultr_plan": "vbm-256c-2048gb-8-mi300x-gpu"   # or vbm-256c-3072gb-8-mi325x-gpu
+    "vultr_region": "ord"                           # default: the plan's first location with stock
+    "vultr_devices": "0,1,2,3,4,5,6,7"              # the body's --devices on the 8-GPU box; `amd_devices`
+                                                    # is spec-wide (sized for the DigitalOcean box), so the
+                                                    # segment body is rendered again for vultr with these
+    "vultr_extra_minutes": 60                       # added to the segment lease: bare metal provisioning
+                                                    # (10 to 30 minutes), the ROCm install and its reboot
+    "vultr_dollar_cap": 150                         # the cap for a vultr lease (default the segment's cap);
+                                                    # the leg prices the plan live and refuses above it
+A vultr lease over its cap is skipped like a busy provider, never raised.
 """
 import argparse
 import json
@@ -195,7 +211,7 @@ def _status(results_dir):
 
 # ---------------------------------------------------------------- rendering and renting
 
-def render(spec, e, out, ledger, role=None):
+def render(spec, e, out, ledger, role=None, suffix=""):
     """One body for a segment (or one side of a live segment)."""
     run = spec["run"]
     arm = e["vendor"] if role is None else role
@@ -226,14 +242,14 @@ def render(spec, e, out, ledger, role=None):
         K = n_first + n_second
         block = "0:%d" % n_first if role == e["live"] else "%d:%d" % (n_first, K)
         cmd += ["--live-shards", block, "--live-workers", "2", "--live-port", str(spec.get("live_port", 7777))]
-    body = Path(out) / "bodies" / ("%s-%s%s.sh" % (e["route"], e["segment"], "-" + arm if role else ""))
+    body = Path(out) / "bodies" / ("%s-%s%s%s.sh" % (e["route"], e["segment"], "-" + arm if role else "", suffix))
     body.parent.mkdir(parents=True, exist_ok=True)
     cmd += ["--out", str(body)]
     subprocess.run(cmd, check=True, cwd=REPO)
     return body
 
 
-def rent_one(spec, e, body, out):
+def rent_one(spec, e, body, out, rerender=None):
     """Rent one box for a one-box segment; returns the results directory and the runner's exit code."""
     res = Path(out) / "legs" / ("%s-%s" % (e["route"], e["segment"]))
     res.mkdir(parents=True, exist_ok=True)
@@ -273,7 +289,7 @@ def rent_one(spec, e, body, out):
     attempt = 0
     while True:
         attempt += 1
-        result = _rent_amd_once(spec, e, res, env, lease, providers, out, attempt)
+        result = _rent_amd_once(spec, e, res, env, lease, providers, out, attempt, rerender=rerender)
         if result is not None:
             return result
         if time.monotonic() > deadline:
@@ -283,7 +299,33 @@ def rent_one(spec, e, body, out):
         time.sleep(600)
 
 
-def _rent_amd_once(spec, e, res, env, lease, providers, out, attempt):
+VULTR_DEFAULT_PLAN = "vbm-256c-2048gb-8-mi300x-gpu"
+VULTR_DEFAULT_DEVICES = "0,1,2,3,4,5,6,7"
+
+# What an AMD runner prints when the provider is busy or has no capacity:
+# the driver walks to the next provider instead of halting. do_extra_leg.sh
+# and vultr_leg.sh print "REFUSING to create" for a live box and a held lock;
+# vultr_leg.sh prints "Vultr has NO STOCK" before the create and "Vultr
+# REFUSED the create on account limits or stock" after it.
+AMD_BUSY_PHRASES = ("ONE GPU droplet at a time", "no instances currently available", "REFUSING to create",
+                    "quantity=0", "ONE Vultr GPU bare metal at a time", "Vultr REFUSED the create")
+AMD_BUSY_PHRASES_LOWER = ("no stock", "starved")
+
+
+def _amd_busy(text):
+    low = text.lower()
+    return any(p in text for p in AMD_BUSY_PHRASES) or any(p in low for p in AMD_BUSY_PHRASES_LOWER)
+
+
+def _vultr_lease(spec, e, lease):
+    """The vultr lease: the segment's minutes plus vultr_extra_minutes (provisioning,
+    ROCm, reboot), capped by vultr_dollar_cap or the segment's own cap."""
+    minutes = int(e.get("lease_minutes") or spec.get("lease_minutes", 120)) + int(spec.get("vultr_extra_minutes", 60))
+    cap = str(e.get("vultr_dollar_cap") or spec.get("vultr_dollar_cap") or e.get("dollar_cap") or spec.get("dollar_cap", 10))
+    return ["--segment-lease", str(minutes), "--dollar-cap", cap] if minutes > 60 else ["--minutes", str(minutes)]
+
+
+def _rent_amd_once(spec, e, res, env, lease, providers, out, attempt, rerender=None):
     rc = 3
     for provider in providers:
         tag = "%s-%d" % (provider, attempt)
@@ -300,14 +342,25 @@ def _rent_amd_once(spec, e, res, env, lease, providers, out, attempt):
                 # one hour is Hot Aisle's maximum and minimum; the body fetches the token parts itself
                 rc = subprocess.run(["bash", "tools/hotaisle_leg.sh", "amd", "--rent", "--skip-gates", "--minutes", "60"],
                                     cwd=REPO, env=env, stdout=log, stderr=subprocess.STDOUT).returncode
+            elif provider == "vultr":
+                # an 8-GPU box: the body is rendered again with vultr_devices (amd_devices is spec-wide)
+                venv = dict(env)
+                devices = spec.get("vultr_devices", VULTR_DEFAULT_DEVICES)
+                if rerender is not None and devices != spec.get("amd_devices", "0"):
+                    venv["MOJOLEARN_GEMM_LEG_EXTRA"] = str(rerender(devices))
+                extra = ["--plan", spec.get("vultr_plan", VULTR_DEFAULT_PLAN)]
+                if spec.get("vultr_region"):
+                    extra += ["--region", spec["vultr_region"]]
+                rc = subprocess.run(["bash", "tools/vultr_leg.sh", "amd", *_vultr_lease(spec, e, lease), *extra],
+                                    cwd=REPO, env=venv, stdout=log, stderr=subprocess.STDOUT).returncode
             else:
                 rc = subprocess.run(["sh", "tools/gemm_remote_leg.sh", "amd", "--rent", "--allow-concurrent", *lease], cwd=REPO, env=env, stdout=log, stderr=subprocess.STDOUT).returncode
         text = (res / ("leg-%s.log" % tag)).read_text()
-        busy = ("ONE GPU droplet at a time" in text or "no instances currently available" in text
-                or "REFUSING to create" in text or "quantity=0" in text or "no stock" in text.lower()
-                or "starved" in text.lower())
-        if rc != 0 and busy:
+        if rc != 0 and _amd_busy(text):
             _log(out, "amd: %s is busy or without capacity (attempt %d)" % (provider, attempt))
+            continue
+        if rc != 0 and provider == "vultr" and "above the --dollar-cap" in text:
+            _log(out, "amd: vultr's lease is over its cap (vultr_dollar_cap); skipping vultr (attempt %d)" % attempt)
             continue
         return res / ("leg-" + tag), rc
     return None
@@ -381,7 +434,8 @@ def _start(spec, e, out, ledger):
         amd_body = render(spec, e, out, ledger, role="amd")
         return rent_live(spec, e, nv_body, amd_body, out)
     body = render(spec, e, out, ledger)
-    return rent_one(spec, e, body, out)
+    rerender = lambda devices: render(dict(spec, amd_devices=devices), e, out, ledger, suffix="-vultr")  # noqa: E731
+    return rent_one(spec, e, body, out, rerender=rerender)
 
 
 def cmd_run(args):
