@@ -12,11 +12,14 @@ pixi run release <version> --publish pypi     # ... then publish both wheels, fi
 (`## <version> (published YYYY-MM-DD)`, UTC) first; the command bumps the two
 version files, runs `write-docs-facts`, commits and pushes exactly those files,
 freezes HEAD, and then runs: the rehearsal (step 0); the three Linux build legs
-in parallel, detached (step 2, the AMD leg no longer waits for NVIDIA); the
-macOS wheel with the byte LM and host bindings on, four slots; the macOS smoke
-under the Metal lock; `release-check` (step 5b, the guarantee); a wait that
-checks every leg's proof for the frozen commit and names any host binding whose
-bytes differ across legs; pack, audit and strip under the `pkg` environment
+in parallel, detached (step 2, the AMD leg no longer waits for NVIDIA), the
+H100 and MI325X legs each also recording its NVIDIA or AMD column on the lanes
+that changed (step 4); the macOS wheel with the byte LM and host bindings on,
+four slots; the macOS smoke under the Metal lock; `release-check` (step 5b, CPU
+and Apple); a wait that checks every leg's proof and column for the frozen
+commit and names any host binding whose bytes differ across legs; the NVIDIA
+and AMD columns diffed against the CPU column, stopping on any DIVERGENT cell
+by name (step 4); pack, audit and strip under the `pkg` environment
 (step 3); the Linux smoke on one rented RTX 4090 (`tools/release_wheel_smoke.sh`);
 and, only with `--publish none|testpypi|pypi`, both publishes (step 5), the
 `pip install` finish line on this Mac and the
@@ -276,39 +279,71 @@ python3 tools/strip_wheel_dir_entries.py <dist>/audit/repaired/mojolearn-*-manyl
   --receipt <dist>/final/dir-entry-strip.json
 ```
 
-## 4. Install and test on real GPUs (OPTIONAL, never required for a release)
+## 4. The NVIDIA and AMD release columns (REQUIRED, automatic, in the build rentals)
 
-A release is verified by the CPU column and the Apple pass (section 5b). This
-section is a diagnostic for a suspected NVIDIA or AMD problem and the release
-workflow admits a Linux wheel without it. Copy the three `build-provenance.json` files to a proofs directory
-as `cuda-sm_89.json`, `cuda-sm_90a.json`, `hip-gfx942.json`, then:
+`pixi run release` does all of this with no flag and no lane list; this section
+is the description of what it does, and the fallback when a step refuses.
 
-```sh
-export MOJOLEARN_LEG_MODE=qualify MOJOLEARN_QUALIFY_WHEEL=<dist>/final/<wheel> MOJOLEARN_QUALIFY_PROOFS=<proofs>
-bash tools/do_release061_leg.sh $REF ~/.mojolearn_do_token --rent                        # gfx942
-MOJOLEARN_LEG_GPU=h100 bash tools/do_release061_leg.sh $REF ~/.mojolearn_do_token --rent  # sm_90a
-MOJOLEARN_RUNPOD_KEY_FILE=~/.mojolearn_runpod_key MOJOLEARN_NVIDIA_CAMPAIGN=7 MOJOLEARN_GPU_ARCHS=sm_89 \
-  sh tools/gemm_remote_leg.sh nvidia --payload mamba --source-ref $REF --gpu "NVIDIA L40S" --allow-concurrent --rent --minutes 60
-```
-
-A failing job is a failing release: fix forward, back to step 2.
-
-Each qualification's `*.installed.json` now carries `installed_host_bindings`
-(one row per manifest binding, read back through the package's own host
-loader, digest equal to the wheel member); `verify_linux_surface_qualification.py`
-refuses a record that lacks one. On each vendor's box, from the installed
-wheel, the identity command must also pass against the shipped columns:
+**Which lanes.** Per backend, exactly the Apple pass's rule: the lanes changed
+since the last FINISHED pass on that backend (its records under
+`~/mojolearn-evidence/release-check/<commit>/<cuda|hip>/`, where every column
+that comes home is placed), else since the newest `v*` tag, every cell fitted
+once on `base,denormal,odd`. Lanes that cannot state their proposition on one
+GPU (the multi-device `par-*` drivers, the CPU host-route lanes) are left out BY
+NAME (`tools/lane_applicability.py`), as the Apple pass leaves out its 65. A
+changed path the selector cannot attribute stops the release (section 5b).
+At linux-builds the release writes the two selections on this Mac:
 
 ```sh
-python -m venv /tmp/q && /tmp/q/bin/pip install <dist>/final/<wheel> numpy
-cd /tmp && MOJOLEARN_NUMERIC_MODE=identical /tmp/q/bin/python -m mojolearn identity --check   # exit 0: harness, 3 columns, witness
-cd /tmp && MOJOLEARN_NUMERIC_MODE=identical /tmp/q/bin/python -m mojolearn identity --keep /tmp/q/local.json   # exit 0: IDENTICAL x4 on every cell
+python3 tools/verify_lanes.py --gpu-pass cuda --write-selection <rel>/gpu-columns/cuda.selection.json
+python3 tools/verify_lanes.py --gpu-pass hip  --write-selection <rel>/gpu-columns/hip.selection.json
 ```
 
-The second command runs the whole record (47 lanes, 9 fixtures, 2 fits per
-cell); keep `local.json` with the leg. On the release Mac the same two
-commands run from the venv `verify_wheel.sh` leaves, and `verify_wheel.sh`
-itself already loads every host binding and runs `identity --check`.
+**Where they run.** In the sm_90a (H100) and gfx942 (MI325X) build legs of
+section 2, in the SAME lease, right after the build passes: the leg ships the
+selection (`MOJOLEARN_RELEASE_COLUMN_SELECTION`), `tools/release_gpu_column.sh`
+runs `tools/verify_lanes.py --gpu-pass <cuda|hip> --selection ... --gpu-set
+<release-build>/build/sets/<vendor>` against the binaries just built (loaded the
+way the wheel lays them out), and the pass records come home under
+`<leg>/remote/column/cuda/` and `<leg>/column/hip/`. The lease grows by
+`MOJOLEARN_RELEASE_COLUMN_SECONDS` (default 2700): the H100 leg becomes a
+segment lease with `--dollar-cap` (default $15), the MI325X dead-man grows to
+match. A leg whose column did not come home complete is a failed leg and is
+relaunched on rerun. sm_89 builds only.
+
+```sh
+MOJOLEARN_RELEASE_COLUMN_SELECTION=<rel>/gpu-columns/cuda.selection.json MOJOLEARN_RUNPOD_KEY_FILE=~/.mojolearn_runpod_key \
+  MOJOLEARN_NVIDIA_CAMPAIGN=7 MOJOLEARN_GPU_ARCHS=sm_90a sh tools/gemm_remote_leg.sh nvidia --payload mamba \
+  --source-ref $REF --gpu "NVIDIA H100 80GB HBM3" --allow-concurrent --rent --segment-lease 105 --dollar-cap 15
+MOJOLEARN_RELEASE_COLUMN_SELECTION=<rel>/gpu-columns/hip.selection.json MOJOLEARN_RELEASE_UBUNTU22=1 \
+  bash tools/do_release061_leg.sh $REF ~/.mojolearn_do_token --rent
+```
+
+`MOJOLEARN_RELEASE_COLUMN_CPU=1` also records the box's own CPU column of the
+same lanes from the set's host bindings, a second CPU reference.
+
+**The diff (step gpu-columns, before linux-pack).**
+
+```sh
+python3 tools/release_gpu_columns.py place <leg>/remote/column cuda
+python3 tools/release_gpu_columns.py place <leg>/column hip
+python3 tools/release_gpu_columns.py compare
+```
+
+`compare` runs `tools/identity_break.py --diff` over every column of the commit
+(the CPU column, which covers the union of all four selections, and any lane it
+lacks is run on this Mac first; the Apple column; the boxes' CPU columns; NVIDIA;
+AMD), scoped to the lanes the NVIDIA and AMD columns carry, and prints every
+DIVERGENT cell as `lane/fixture part=<train|infer|model|...>` with each column's
+hash. A part only GPUs hash (a saved GPU model a CPU column loads and does not
+write) is held to the other GPU columns; a part no second column carries is
+printed as UNCOMPARED. Any DIVERGENT cell stops the release and the Linux wheel
+is not published (`publish-linux` refuses without a passing
+`gpu-columns.verdict.json` for the frozen commit). Fix forward, back to step 2.
+
+**Installed-wheel qualification** (`MOJOLEARN_LEG_MODE=qualify`, the
+`qualify-release-linux3` driver) remains a diagnostic for a suspected problem
+in the packed wheel itself; it is not part of the release.
 
 ## 5. Publish Linux (one command)
 
@@ -361,9 +396,10 @@ pass its three output directories and the proofs directory through the
 attached and checked. Use `none` first to see the workflow's own checks
 without uploading.
 
-## 5b. Release verification: CPU and the Apple GPU, nothing else
+## 5b. Release verification on this Mac: CPU and the Apple GPU
 
-A release is verified by two things (2026-09-19):
+On this Mac a release is verified by two passes (2026-09-19); the NVIDIA and
+AMD columns run in the build rentals (section 4):
 
 ```sh
 pixi run -e test release-check            # both AT ONCE, on this Mac, nothing rented
@@ -372,8 +408,8 @@ pixi run -e test apple-pass               # the Apple GPU: Metal lock + one of t
 MOJOLEARN_CPU_PASS_SLOTS=4 pixi run -e test cpu-pass   # the CPU route on the other 4 slots
 ```
 
-Both run LOCALLY. No pod, no NVIDIA or AMD box and no R2 staging is part of a
-release. Each pass is `base,denormal,odd`, fitted once, end model only.
+Both run LOCALLY. Each pass is `base,denormal,odd`, fitted once, end model
+only.
 
 **Only the lanes the release touched are required, and that is automatic.**
 With no selection given, a pass checks the lanes whose sources changed since

@@ -806,7 +806,8 @@ class Release:
     def readme(self):
         check = self.release_check_dir()
         rows, sums = [], []
-        for backend, label in (("cpu", "CPU"), ("metal", "Apple Metal")):
+        for backend, label in (("cpu", "CPU"), ("metal", "Apple Metal"), ("cuda", "NVIDIA H100 (sm_90a)"),
+                               ("hip", "AMD MI325X (gfx942)")):
             col = check / backend / "column.json"
             try:
                 cells = json.loads(col.read_text()).get("cells", {})
@@ -820,6 +821,11 @@ class Release:
                                str(check / "cpu" / "column.json"), str(check / "metal" / "column.json")],
                               capture_output=True, text=True, cwd=ROOT).stdout
         summary = [ln for ln in diff.splitlines() if ln.startswith("summary")]
+        try:
+            gpu_diff = (check / "gpu-columns.diff.txt").read_text()
+        except OSError:
+            gpu_diff = ""
+        gpu_summary = [ln for ln in gpu_diff.splitlines() if ln.startswith("summary")]
         wheels = []
         for platform, wheel, smoke in (("linux", self.linux_final(), "smoke-linux"),
                                        ("macos", self.macos_wheel(), "smoke-macos")):
@@ -837,10 +843,13 @@ class Release:
         return "\n".join([
             f"# mojolearn {self.version}", "",
             f"Source commit {self.commit}. Published {date}. See CHANGELOG.md.", "",
-            "## Release verification (CPU and Apple GPU, `pixi run -e test release-check`)", "",
+            "## Release verification (CPU and Apple GPU on this Mac; NVIDIA and AMD in the build rentals)", "",
             "| column | lanes | cells | complete |", "|---|---|---|---|", *rows, "",
             "CPU against Metal (`tools/identity_break.py --diff`):", "",
-            *[f"    {s}" for s in summary], "", *sums, "",
+            *[f"    {s}" for s in summary], "",
+            "Every column of the commit on the lanes the NVIDIA and AMD columns carry "
+            "(`tools/release_gpu_columns.py compare`, gpu-columns.diff.txt):", "",
+            *([f"    {s}" for s in gpu_summary] or ["    (not recorded)"]), "", *sums, "",
             "## Wheels (light route)", "",
             "| platform | sha256 | smoke | published |", "|---|---|---|---|", *wheels, "",
             f"`pip install mojolearn=={self.version}` on this Mac: "
