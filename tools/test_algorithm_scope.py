@@ -233,6 +233,8 @@ def test_a_pass_selects_what_changed_since_the_last_release_tag(monkeypatch, cap
     # No finished pass on record, so the tag is the anchor (a real pass
     # record on this machine would otherwise anchor it: test_release_pass_anchor).
     monkeypatch.setenv("MOJOLEARN_RELEASE_CHECK_DIR", str(tmp_path))
+    # the CPU pass's union with the other backends has its own test below
+    monkeypatch.setenv("MOJOLEARN_CPU_PASS_UNION", "0")
     monkeypatch.setattr(verify_lanes, "last_release_tag", lambda: "v9.9.9")
     seen = {}
     def selection(args):
@@ -242,6 +244,25 @@ def test_a_pass_selects_what_changed_since_the_last_release_tag(monkeypatch, cap
     assert verify_lanes.main(["--cpu-pass", "--plan"]) == 0
     assert seen == dict(changed_since="v9.9.9", all=False, full=True)
     assert "lanes changed since v9.9.9" in capsys.readouterr().out
+
+
+def test_the_cpu_pass_covers_every_backends_selection(monkeypatch, capsys, tmp_path):
+    """The CPU column is the reference the Apple, NVIDIA and AMD columns are
+    diffed against (lane/release-gpu-columns, 2026-09-22), so the CPU pass
+    runs the union of the four selections."""
+    monkeypatch.setenv("MOJOLEARN_RELEASE_CHECK_DIR", str(tmp_path))
+    monkeypatch.setattr(verify_lanes, "last_release_tag", lambda: "v9.9.9")
+    monkeypatch.setattr(verify_lanes, "_selection",
+                        lambda args: (["ridge"], dict(mode="derived", fallback=False), None))
+    other = dict(metal=["ridge", "ols"], cuda=["kmeans"], hip=["kmeans", "pca"])
+    monkeypatch.setattr(verify_lanes, "pass_selection",
+                        lambda b, fixtures, sources=None, paths=None: (other[b], {}, None, f"since v9.9.9 ({b})"))
+    assert verify_lanes.main(["--cpu-pass", "--plan"]) == 0
+    out = capsys.readouterr().out
+    want = {"ridge"}.union(*[other[b] for b in verify_lanes.RELEASE_BACKENDS[1:]])
+    assert f"# {len(want)} of" in out, out
+    for b in verify_lanes.RELEASE_BACKENDS[1:]:
+        assert f"the {b} pass selects" in out, out
 
 
 def test_a_pass_with_no_release_tag_runs_every_lane_and_an_untouched_release_passes(monkeypatch, capsys, tmp_path):

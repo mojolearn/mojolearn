@@ -130,8 +130,8 @@ def test_a_lane_is_selected_by_its_own_dependencies():
 def test_family_path_selects_its_lane_and_not_the_others():
     for path, must, must_not in FAMILY_CASES:
         sel = lane_select.select([path])
-        assert not sel["fallback"], \
-            f"{path} fell back to every lane, so this case proves nothing: {sel['reasons'][path]}"
+        assert not sel["unattributed"] and not sel["every_rules"], \
+            f"{path} was not attributed to its lanes, so this case proves nothing: {sel['reasons'][path]}"
         assert must in sel["lanes"], f"{path} did not select {must}"
         for other in must_not:
             assert other not in sel["lanes"], \
@@ -141,7 +141,7 @@ def test_family_path_selects_its_lane_and_not_the_others():
 def test_inert_paths_select_nothing_and_do_not_pretend_otherwise():
     sel = lane_select.select(["docs/START_HERE.md", "CHANGELOG.md"])
     assert sel["lanes"] == [], "a prose change selected lanes"
-    assert not sel["fallback"], "a prose change should not force the fallback"
+    assert not sel["unattributed"], "a prose change was refused"
 
 
 def test_several_paths_in_one_argument_are_never_inert():
@@ -149,11 +149,11 @@ def test_several_paths_in_one_argument_are_never_inert():
     unquoted variable, so a whole commit's file list arrived as ONE argument;
     it began with CHANGELOG.md, matched the inert prefix rule, and twelve
     changed files selected no lanes at all and said nothing. An argument that
-    is not a single path must fall back, loudly."""
+    is not a single path is REFUSED by name (2026-09-22: never widened)."""
     blob = "CHANGELOG.md cluster/host/kmeans_oracle.mojo tools/identity_break.py"
     sel = lane_select.select([blob])
-    assert sel["fallback"] is True, "a multi-path argument did not fall back"
-    assert len(sel["lanes"]) == len(lane_select.all_lanes())
+    assert sel["unattributed"] == [blob], "a multi-path argument was not refused"
+    assert sel["lanes"] == [], "a refused path selected lanes"
     assert "NOT A SINGLE PATH" in sel["reasons"][blob]
 
 
@@ -262,7 +262,7 @@ def test_a_binding_every_lane_reaches_does_not_hand_over_its_tree():
     for path in ("core/forest_host_predict.mojo", "mamba/impl/modeling/modeling_mamba.mojo",
                  "core/gbdt_host_predict.mojo"):
         sel = lane_select.select([path])
-        assert not sel["fallback"], f"{path} is no longer attributable: {sel['reasons'][path]}"
+        assert not sel["unattributed"], f"{path} is no longer attributable: {sel['reasons'][path]}"
         for other in ("ols", "kmeans", "arima"):
             assert other not in sel["lanes"], \
                 f"{path} still selects {other}; the whole-closure fallback is back"
@@ -291,15 +291,30 @@ def test_a_bindings_edge_always_has_a_door_that_resolves_it():
                 f"{lane} carries {binding} but no door of its own resolves it"
 
 
-def test_an_unattributable_path_falls_back_to_every_lane_and_says_so():
-    """The fallback is the safety property. A path the map cannot place must
-    select EVERY lane and must be named in `unattributed`, so the run cannot
-    be read as a narrow one."""
-    sel = lane_select.select(["pixi.toml"])
-    assert sel["fallback"] is True, "an unattributable path did not fall back"
+def test_an_unattributable_path_is_refused_by_name_and_selects_nothing():
+    """NO FALLBACK (Andrew, 2026-09-22). A path the map cannot place selects
+    NOTHING, is named in `unattributed`, and every caller refuses to run: the
+    CLI exits non-zero printing UNATTRIBUTED PATH. It used to widen to every
+    lane, which made a narrow run and a full sweep look alike."""
+    # The harness with no ref to diff against cannot be placed by its call
+    # graph: the plainest unattributable path the tree has.
+    sel = lane_select.select(["tools/identity_break.py"], ref=None)
+    assert sel["unattributed"] == ["tools/identity_break.py"], sel["reasons"]
+    assert sel["lanes"] == [] and not sel["fallback"]
+    lines = []
+    assert lane_select.refuse_unattributed(sel, out=lines.append)
+    assert lines[0].startswith("UNATTRIBUTED PATH: tools/identity_break.py")
+    assert any(ln.startswith("NOTHING IS VERIFIED") for ln in lines)
+    rc = subprocess.run([sys.executable, os.path.join(lane_select.ROOT, "tools", "lane_select.py"),
+                         "--lanes-for-paths", "tools/identity_break.py"], capture_output=True, text=True)
+    assert rc.returncode != 0 and "UNATTRIBUTED PATH: tools/identity_break.py" in rc.stdout, rc.stdout[-800:]
+
+
+def test_the_pinned_toolchain_selects_every_lane_by_rule_not_by_fallback():
+    sel = lane_select.select(["pixi.lock"])
+    assert not sel["unattributed"]
     assert len(sel["lanes"]) == len(lane_select.all_lanes())
-    assert "pixi.toml" in sel["unattributed"]
-    assert "NOT ATTRIBUTABLE" in sel["reasons"]["pixi.toml"]
+    assert "pixi.lock" in sel["every_rules"] and "toolchain" in sel["every_rules"]["pixi.lock"]
 
 
 def test_a_registry_change_selects_every_lane():
@@ -308,7 +323,7 @@ def test_a_registry_change_selects_every_lane():
     selects everything."""
     for path in ("python/mojolearn/_backend.py", "python/mojolearn/host_surface.py"):
         sel = lane_select.select([path])
-        assert sel["fallback"] is True, f"{path} did not select every lane"
+        assert path in sel["every_rules"], f"{path} did not select every lane by rule"
         assert len(sel["lanes"]) == len(lane_select.all_lanes())
 
 
@@ -481,9 +496,12 @@ def _harness_answer(new_text, old_text=HARNESS_BASE):
 
 def test_the_harness_falls_back_on_anything_that_is_not_a_lane_body():
     """THE ARM THAT MUST FAIL, run first. Every one of these reaches beyond
-    the lane it looks like it edits, so every one must answer every lane."""
+    the lane it looks like it edits, so none may be narrowed: each answers
+    every lane BY RULE (EVERY_LANE, a change every column runs) or is REFUSED
+    (None: the miniature's registration loop cannot be placed without the
+    imported harness)."""
     for label, text in HARNESS_MUST_FALL_BACK:
-        assert _harness_answer(text) is None, \
+        assert _harness_answer(text) in (None, lane_select.EVERY_LANE), \
             f"{label}: the harness narrowed a change that can reach any lane"
 
 
@@ -517,7 +535,7 @@ def test_the_new_narrow_answers_are_narrow_for_the_right_reason():
     assert "harness diff touches only these lane bodies" in sel["reasons"]["tools/identity_break.py"] \
         or "docstrings and comments only" in sel["reasons"]["tools/identity_break.py"], \
         f"unexpected reason: {sel['reasons']['tools/identity_break.py']}"
-    assert not sel["fallback"], "the harness against its own HEAD should not fall back"
+    assert not sel["unattributed"], "the harness against its own HEAD was refused"
 
 
 #: A path whose blast radius is empty, and the one thing that would change
@@ -613,13 +631,13 @@ def test_a_test_module_is_inert_unless_something_a_lane_reaches_names_it():
             f"{rel} is not a test module and this rule must not touch it"
 
 
-def test_a_registry_with_no_ref_to_diff_against_still_falls_back():
+def test_a_registry_with_no_ref_to_diff_against_selects_every_lane_by_rule():
     """The narrow answer for a registry is read out of a DIFF. With no ref
     there is no diff, so `--lanes-for-paths` on a registry must say every lane
     and say why, rather than looking like the rule failed."""
     sel = lane_select.select(["python/mojolearn/host_surface.py"])
-    assert sel["fallback"] is True
-    assert "no ref was given" in sel["reasons"]["python/mojolearn/host_surface.py"]
+    assert len(sel["lanes"]) == len(lane_select.all_lanes())
+    assert "with no ref an addition cannot be read" in sel["reasons"]["python/mojolearn/host_surface.py"]
 
 
 def test_the_things_a_lane_does_reach_are_never_called_unreachable():
@@ -1120,21 +1138,22 @@ def test_a_build_script_selects_the_lanes_of_the_binding_it_compiles():
     sources, _ = lane_select.lane_sources()
     rev = lane_select.reverse_map(sources)
     sel = lane_select.select(["bindings/build_svm.sh"], ref="HEAD")
-    assert not sel["fallback"], sel["reasons"]
+    assert not sel["unattributed"], sel["reasons"]
     want = rev["bindings/_mojolearn_svm.mojo"]
     assert want and set(sel["lanes"]) == want, "the build script did not select its binding's lanes"
     assert len(want) < len(sources), "the svm binding is reached by every lane; the case proves nothing"
 
 
-def test_a_build_script_whose_source_is_not_literal_still_widens():
-    """THE ARM THAT MUST WIDEN. A `mojo build` line whose source is a variable
-    cannot be attributed, and a build script is lane arithmetic."""
+def test_a_build_script_whose_source_is_not_literal_is_refused():
+    """THE ARM THAT MUST NOT NARROW. A `mojo build` line whose source is a
+    variable cannot be attributed, and a build script is lane arithmetic: the
+    path is refused by name (never widened, never dropped)."""
     path = "bindings/build_armprobe.sh"
     _with_fake(path, 'src=bindings/_mojolearn_svm.mojo\npixi run mojo build "$src" -o x.so\n')
     try:
         assert lane_select.build_script_roots(path) is None
         sel = lane_select.select([path], ref="HEAD")
-        assert sel["fallback"] and path in sel["unattributed"], sel["reasons"]
+        assert path in sel["unattributed"] and not sel["lanes"], sel["reasons"]
     finally:
         _drop_fake(path)
 
@@ -1146,11 +1165,12 @@ def test_pixi_tasks_are_inert_and_a_dependency_is_every_lane():
     try:
         ref = _with_fake("pixi.toml", tasks, base)
         sel = lane_select.select(["pixi.toml"], ref=ref)
-        assert not sel["fallback"] and not sel["lanes"], sel["reasons"]
+        assert not sel["unattributed"] and not sel["lanes"], sel["reasons"]
         assert "task tables" in sel["reasons"]["pixi.toml"]
         ref = _with_fake("pixi.toml", dep, base)
         sel = lane_select.select(["pixi.toml"], ref=ref)
-        assert sel["fallback"], "a dependency change in pixi.toml must select every lane"
+        assert "pixi.toml" in sel["every_rules"], "a dependency change in pixi.toml must select every lane"
+        assert len(sel["lanes"]) == len(lane_select.all_lanes())
     finally:
         _drop_fake("pixi.toml")
 
@@ -1164,7 +1184,7 @@ def test_native_code_the_package_loads_selects_the_loaders_lanes():
     for path in ("packaging/portable_math/stage.py", "packaging/portable_math/portable_math.c"):
         # No ref: against HEAD an unchanged file is "docstrings only" first.
         sel = lane_select.select([path])
-        assert not sel["fallback"] and set(sel["lanes"]) == rev["python/mojolearn/_portable_math.py"], \
+        assert not sel["unattributed"] and set(sel["lanes"]) == rev["python/mojolearn/_portable_math.py"], \
             f"{path}: {sel['reasons']}"
         assert "native code" in sel["reasons"][path]
 
@@ -1451,17 +1471,34 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
                                      `core.forest_host_predict`
       forest_inference     23 -> 26  three NEW lanes
       neural_inference.py  21 -> 40  nineteen NEW lanes (low-bit, decode
-                                     session, causal LM), no old lane moved"""
+                                     session, causal LM), no old lane moved
+
+    REMEASURED 2026-09-22 (274 lanes). Found red on main by
+    lane/release-gpu-columns, with main's own selector reading the same
+    numbers, so no selector change moved them:
+      gbdt_host_predict    34 -> 49  every one a boosting, forest-driver or
+                                     cross-validation lane (gbdt-binary-columns,
+                                     gbdt-stochastic-arms, the *-defaults lanes
+                                     and their par- twins were added since); no
+                                     other family entered
+      forest_host_predict  59 -> 60  the same additions"""
     rev = lane_select.reverse_map()
     for rel, want in (("cluster/host/kmeans_oracle.mojo", 21),
-                      ("core/gbdt_host_predict.mojo", 34),
-                      ("core/forest_host_predict.mojo", 59),
+                      ("core/gbdt_host_predict.mojo", 49),
+                      ("core/forest_host_predict.mojo", 60),
                       ("core/forest_inference.mojo", 26),
                       ("python/mojolearn/neural_inference.py", 40)):
         got = len(rev.get(rel, set()))
         assert got == want, f"{rel} answers {got} lanes, not {want}"
     lanes = len(lane_select.all_lanes())
-    every = [rel for rel, seen in rev.items() if len(seen) == lanes]
+    # Tracked files only: a release build drops ignored generated copies into
+    # the package (python/mojolearn/_identity_break.py, a copy of
+    # tools/identity_break.py) that no diff can ever name, and counting them
+    # made this read 56 in a built tree and 55 in a fresh checkout.
+    import subprocess
+    tracked = set(subprocess.run(["git", "-C", lane_select.ROOT,
+                                  "ls-files"], capture_output=True, text=True).stdout.split())
+    every = [rel for rel, seen in rev.items() if len(seen) == lanes and rel in tracked]
     # 41 when the per-export rule landed, 55 on 2026-09-21. The fourteen were
     # traced commit by commit and each is a REAL import into a closure every
     # lane already had, never a wider walk: `_byte_lm_host.py` importing
@@ -1597,7 +1634,6 @@ def test_runtime_controls_do_not_trigger_numerical_sweep():
     paths = ["tools/identity_iterate.py", "tools/mac_slot.py"]
     selected = lane_select.select(paths)
     assert selected["lanes"] == []
-    assert not selected["fallback"]
     assert not selected["unattributed"]
 
 
@@ -1608,6 +1644,6 @@ def test_a_file_the_harness_imports_at_run_time_selects_every_lane():
     column says, over the whole registry, so it must select every lane and
     never read as inert."""
     selected = lane_select.select(["tools/lane_applicability.py"])
-    assert selected["fallback"], selected["reasons"]
-    assert selected["unattributed"] == ["tools/lane_applicability.py"]
+    assert "tools/lane_applicability.py" in selected["every_rules"], selected["reasons"]
+    assert not selected["unattributed"]
     assert len(selected["lanes"]) == selected["total"] > 0

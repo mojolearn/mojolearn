@@ -15,7 +15,9 @@ rows x features product is 10x the 800k x 100 parity shape, far above the
 nobody chose it after seeing a number here. The run decides; this file
 only builds the fixtures.
 
-Source: CatBoost's OWN preprocessed mirror (`catboost/datasets.py`
+Source: R2 first (gbm-bench/epsilon/epsilon_{X,y}.npy through
+tools/dataset_store.sh pull, pinned size and sha256; docs/REMOTE_DATA_R2.md),
+then, only if R2 is not reachable, CatBoost's OWN preprocessed mirror (`catboost/datasets.py`
 `epsilon()`: `storage.mds.yandex.net/.../epsilon.tar.gz`, md5
 `5bbfac403ac673da7d7ee84bd532e973`, train.tsv 400000 x 2001 with the label
 in column 0). Measured 2026-08-21: their mirror moves at ~14 MB/s where
@@ -97,10 +99,27 @@ def _train_tsv():
     return tsv
 
 
+def _from_r2(xp, yp):
+    """The decoded X/y from R2 (docs/REMOTE_DATA_R2.md): pinned size and
+    sha256, no origin download and no 8.6 GB TSV parse. Returns False when
+    R2 is not reachable from here (no ~/.mojolearn_r2), so the origin mirrors
+    stay the fallback for a contributor without the bucket."""
+    store = os.path.join(os.path.dirname(os.path.abspath(__file__)), "dataset_store.sh")
+    for key, dest in (("gbm-bench/epsilon/epsilon_y.npy", yp), ("gbm-bench/epsilon/epsilon_X.npy", xp)):
+        if os.path.exists(dest):
+            continue
+        r = subprocess.run(["sh", store, "pull", key, dest])
+        if r.returncode != 0:
+            print("R2 pull of %s failed (exit %d); falling back to the origin mirrors" % (key, r.returncode))
+            return False
+    return True
+
+
 def _parse():
     xp = os.path.join(CACHE, "epsilon_X.npy")
     yp = os.path.join(CACHE, "epsilon_y.npy")
-    if os.path.exists(xp) and os.path.exists(yp):
+    os.makedirs(CACHE, exist_ok=True)
+    if (os.path.exists(xp) and os.path.exists(yp)) or _from_r2(xp, yp):
         return np.load(xp), np.load(yp)
     import pandas as pd
     tsv = _train_tsv()

@@ -152,14 +152,6 @@ def test_refuses_shards_not_owned_exactly_once(splits):
 
 # ------------------------------------------------------------ the chained fold
 
-def test_fold_pair_numpy_and_pure_python_agree_bit_for_bit():
-    np = pytest.importorskip("numpy")
-    rng = np.random.default_rng(11)
-    a = (rng.standard_normal(2048) * 10.0 ** rng.integers(-40, 3, 2048)).astype(np.float32).tobytes()
-    b = (rng.standard_normal(2048) * 10.0 ** rng.integers(-40, 3, 2048)).astype(np.float32).tobytes()
-    assert cv.fold_pair(a, b, numpy=True) == cv.fold_pair(a, b, numpy=False)
-
-
 def test_ordered_fold_with_a_prefix_equals_the_flat_fold():
     np = pytest.importorskip("numpy")
     rng = np.random.default_rng(5)

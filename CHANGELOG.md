@@ -2,7 +2,13 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
-## Unreleased
+## 0.8.15 (published 2026-09-22)
+
+### Fixed
+- AMD gfx942 builds are byte-reproducible: the GEMM and Holt-Winters kernels compute their index arithmetic with unsigned division and loop counters, so repeated builds of the same source produce the same AMD binaries (23 of 23 identical bindings across six clean builds). No floating-point operation or order changed; NVIDIA binaries are unchanged.
+
+### Changed
+- Native libraries rebuilt from source.
 
 ### Added
 - `tools/lm_segment.py`: one segment of a checkpoint-to-checkpoint language-model run on any box. A recipe (shape, K shards, optimizer, a learning-rate table of float32 bits, the token stream's identity) never changes between segments; steps are numbered globally; every step writes a hash-chained line (state, summed gradient, losses, learning-rate bits); checkpoints stream in the `mojolearn.byte-lm-stream.v1` format on a cadence, at a boundary minus two and at the end, pinned in a manifest and PUT to presigned URLs as written; `--expect-chain` holds a run to another run's chain step for step and stops on the first difference (route B against route A, an arrival replay against the sender); `--zero-moments` is the negative control; `compare` and `manifests` hold chains and checkpoints across runs. Verified on the M4 at a small shape: three segments, a second route from the first route's checkpoints, an arrival replay, the control failing and a wrong recipe refused.
