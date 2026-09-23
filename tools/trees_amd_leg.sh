@@ -27,7 +27,7 @@
 # 0600 curl config files and reaches the droplet on ssh stdin, never argv.
 # The source is `git archive HEAD` without results, corpora and oracles,
 # checked by sha256 on both ends. Datasets live on the persistent tor1 volume
-# mojolearn-data-tor1 so a second leg does not download Istella-S again.
+# (datasets stage from R2 on every leg; no volume since 2026-09-23).
 set -uo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$REPO" || exit 9
@@ -36,7 +36,6 @@ PULL_ROOT="${TREES_AMD_PULL:-$HOME/mojolearn-evidence/mi325x_2026-09-11_taxi_ist
 API=https://api.digitalocean.com/v2
 SSH_KEY_FP="df:f7:6b:0c:56:da:48:a5:6f:6d:ae:44:af:de:f3:0b"
 NAME=mojolearn-trees-amd; TAG=trees; REGION=tor1; SIZE=gpu-mi325x1-256gb; IMAGE=188571990
-VOLUME=mojolearn-data-tor1; VOL_MOUNT=/mnt/mojolearn-data
 LOCK=/tmp/mojolearn-do-gpu.lock
 WATCHDOG_SECONDS=3600
 TOKFILE="${MOJOLEARN_DO_TOKEN_FILE:-$HOME/.mojolearn_do_token}"
@@ -111,7 +110,7 @@ teardown() {
             else
                 log "!! FETCH FAILED or timed out; whatever arrived is in $PULL_DIR"
             fi
-            box "cat /root/selfkill.out 2>/dev/null; sync; umount $VOL_MOUNT && echo VOLUME_UNMOUNTED || echo VOLUME_UNMOUNT_FAILED; sync" 2>&1 | tail -3
+            box "cat /root/selfkill.out 2>/dev/null; sync" 2>&1 | tail -3
         fi
         if [ -z "$DROPLET_ID" ]; then
             http GET "$API/droplets?tag_name=$TAG&per_page=200" "$TMPD/list.json" > /dev/null
@@ -212,15 +211,10 @@ DEADMAN
     kill -0 "$DEADMAN_PID" || die "local dead-man did not start"
     log "local dead-man pid $DEADMAN_PID armed (${WATCHDOG_SECONDS}s, tag $TAG, name $NAME)"
 
-    # THE VOLUME (datasets and caches survive the lease).
-    http GET "$API/volumes?region=$REGION&per_page=200" "$TMPD/vols.json" > /dev/null
-    local vol_id; vol_id=$(jget "$TMPD/vols.json" "v=[x['id'] for x in d.get('volumes',[]) if x['name']=='$VOLUME']; print(v[0] if v else '')")
-    if [ -z "$vol_id" ]; then
-        c=$(http POST "$API/volumes" "$TMPD/vol.json" "{\"name\":\"$VOLUME\",\"region\":\"$REGION\",\"size_gigabytes\":20,\"filesystem_type\":\"ext4\"}")
-        vol_id=$(jget "$TMPD/vol.json" "print(d.get('volume',{}).get('id',''))")
-        log "created volume $VOLUME -> HTTP $c id ${vol_id:-none}"
-    fi
-    local vol_arg=""; [ -n "$vol_id" ] && vol_arg=",\"volumes\":[\"$vol_id\"]"
+    # No block-storage volume: datasets stage from R2 (stage_from_r2.sh below;
+    # docs/REMOTE_DATA_R2.md). The mojolearn-data-* volumes were deleted
+    # 2026-09-23 ($4 a month idle) and must never be recreated here.
+    local vol_arg=""
 
     CREATE_ATTEMPTED=1
     log "creating $NAME ($SIZE, $REGION, image $IMAGE); THE BILL STARTS HERE"
@@ -291,15 +285,8 @@ SELFKILL
     MOJOLEARN_STAGE_KEYS="${MOJOLEARN_STAGE_KEYS-gbm-bench/taxi/taxi_speed.npz gbm-bench/istella/istella_speed.npz}" \
         sh tools/stage_from_r2.sh "${RSH#ssh } root@$ip" 2>&1 | tail -1
 
-    # VOLUME MOUNT.
-    box "dev=/dev/disk/by-id/scsi-0DO_Volume_$VOLUME; for i in \$(seq 1 30); do [ -e \$dev ] && break; sleep 2; done
-         if [ -e \$dev ]; then mkdir -p $VOL_MOUNT; mountpoint -q $VOL_MOUNT || mount -o discard,defaults \$dev $VOL_MOUNT;
-           mkdir -p $VOL_MOUNT/gbm-bench; echo VOLUME_MOUNTED; du -sh $VOL_MOUNT/gbm-bench/* 2>/dev/null; ls -la $VOL_MOUNT/gbm-bench/*/*.npz 2>/dev/null;
-         else echo VOLUME_DEVICE_MISSING; fi" 2>&1 | sed 's/^/[volume] /'
-
     # SETUP, detached.
     box "cd /root/mojolearn && export MOJOLEARN_TREES_SKIP_XGB_ROCM=${MOJOLEARN_TREES_SKIP_XGB_ROCM:-0} MOJOLEARN_TREES_SKIP_LGBM_OPENCL=${MOJOLEARN_TREES_SKIP_LGBM_OPENCL:-0};
-         if mountpoint -q $VOL_MOUNT; then export GBM_BENCH_DATA=$VOL_MOUNT/gbm-bench PIP_CACHE_DIR=$VOL_MOUNT/pip-cache RATTLER_CACHE_DIR=$VOL_MOUNT/rattler-cache; fi;
          setsid nohup sh tools/trees_amd_remote.sh > /root/trees_out/setup_console.log 2>&1 < /dev/null & echo SETUP-STARTED"
     : > "$STATE/ready"
     log "READY: ssh via 'tools/trees_amd_leg.sh ssh ...'; hold until release or $minutes min after create"
