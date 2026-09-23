@@ -138,15 +138,57 @@ def _manifest(results_dir):
     return rows
 
 
-def _segment_json(results_dir):
-    for p in Path(results_dir).rglob("segment.json"):
+def _this_attempt(results_dir, name):
+    """Every `name` under `results_dir` that belongs to THIS attempt: a path
+    under a `previous-*` directory is an earlier attempt's, moved aside by
+    tools/lm_live_leg.sh, and is never read as this one's."""
+    for p in sorted(Path(results_dir).rglob(name)):
+        if not any(part.startswith("previous-") for part in p.relative_to(results_dir).parts):
+            yield p
+
+
+def _segment_dir(results_dir):
+    """The `segment/` directory whose segment.json lands the segment. A live
+    segment brings two home (the coordinator's, which holds the checkpoints
+    and the arrival replay beside it, and the worker's); the coordinator's is
+    the one. T2 segment 3 once landed from the worker's (no checkpoints) with
+    the arrival verdict of a previous attempt."""
+    found = []
+    for p in _this_attempt(results_dir, "segment.json"):
         if p.parent.name == "segment":
-            return json.loads(p.read_text())
-    return None
+            seg = json.loads(p.read_text())
+            live = seg.get("live") or {}
+            if live.get("role") in (None, "coordinator"):
+                found.append((seg.get("utc_start") or "", p.parent, seg))
+    if not found:
+        return None, None
+    found.sort(key=lambda t: (t[0], str(t[1])))
+    return found[-1][1], found[-1][2]
+
+
+def _segment_json(results_dir):
+    return _segment_dir(results_dir)[1]
+
+
+def _worker_verdicts(results_dir, since):
+    """label -> verdict of every live worker's segment.json that ended after
+    `since` (the coordinator's start). A worker directory an earlier attempt
+    left in place (its box fetched, the directory not moved aside) ended
+    before this coordinator started, and is not this attempt's."""
+    out = {}
+    for p in _this_attempt(results_dir, "segment.json"):
+        if p.parent.name == "segment":
+            seg = json.loads(p.read_text())
+            if (seg.get("live") or {}).get("role") == "worker" and (seg.get("utc_end") or "") >= (since or ""):
+                out[seg.get("label") or str(p.parent.parent)] = seg.get("verdict")
+    return out
 
 
 def _status(results_dir):
-    for p in Path(results_dir).rglob("status.txt"):
+    seg_dir, _ = _segment_dir(results_dir)
+    if seg_dir is not None and (seg_dir.parent / "status.txt").exists():
+        return (seg_dir.parent / "status.txt").read_text()
+    for p in _this_attempt(results_dir, "status.txt"):
         return p.read_text()
     return ""
 
@@ -287,7 +329,7 @@ def rent_live(spec, e, nv_body, amd_body, out):
 
 def land(spec, e, results, out, ledger):
     """Read the fetched results; PASS lands the segment with its checkpoint hashes."""
-    seg = _segment_json(results)
+    seg_dir, seg = _segment_dir(results)
     status = _status(results)
     if seg is None:
         _log(out, "%s/%s: no segment.json came home; status:\n%s" % (e["route"], e["segment"], status[-800:]))
@@ -301,10 +343,15 @@ def land(spec, e, results, out, ledger):
     record = dict(verdict=verdict, checkpoints=ckpts, steps_completed=seg.get("steps_completed"),
                   disagreements=seg.get("disagreements"), results=str(results), utc=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
     arrival = None
-    for p in Path(results).rglob("segment.json"):
-        if p.parent.name == "arrival":
-            arrival = json.loads(p.read_text()).get("verdict")
+    arrival_json = seg_dir.parent / "arrival" / "segment.json"
+    if arrival_json.exists():
+        arrival = json.loads(arrival_json.read_text()).get("verdict")
     record["arrival"] = arrival
+    workers = _worker_verdicts(results, seg.get("utc_start"))
+    if workers:
+        record["workers"] = workers
+        if any(v != "PASS" for v in workers.values()):
+            verdict = record["verdict"] = "FAIL-WORKER"
     if verdict != "PASS" or (e["replay_ckpt"] and arrival != "PASS"):
         _log(out, "%s/%s: verdict %s, arrival %s; THE RUN HALTS HERE (%s)" % (e["route"], e["segment"], verdict, arrival, seg.get("disagreements")))
         ledger.land(e, record)
@@ -420,18 +467,40 @@ def cmd_status(args):
     return 0
 
 
+def cmd_reland(args):
+    """Read a landed segment's fetched results again and rewrite its ledger
+    record; nothing is rented. For a record written by a landing that read
+    the wrong file."""
+    spec = load_spec(args.spec)
+    route, _, segment = args.segment.partition("/")
+    ledger = Ledger(args.out)
+    for e in segment_plan(spec):
+        if e["route"] == route and e["segment"] == segment:
+            was = ledger.landed(e)
+            if not was or not was.get("results"):
+                raise SystemExit("%s has no landed record with results to read" % args.segment)
+            ok = land(spec, e, Path(was["results"]), args.out, ledger)
+            now = ledger.landed(e)
+            print(json.dumps(dict(before={k: was.get(k) for k in ("verdict", "arrival", "checkpoints")},
+                                  after={k: now.get(k) for k in ("verdict", "arrival", "checkpoints", "workers")}), indent=1))
+            return 0 if ok else 1
+    raise SystemExit("%s is not in the spec" % args.segment)
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
-    for name in ("plan", "run", "status"):
+    for name in ("plan", "run", "status", "reland"):
         p = sub.add_parser(name)
         p.add_argument("--spec", required=True)
         if name != "plan":
             p.add_argument("--out", required=True)
         if name == "run":
             p.add_argument("--parallel", type=int, default=1, help="segments at once (on different vendor classes; a live segment runs alone)")
+        if name == "reland":
+            p.add_argument("--segment", required=True, help="ROUTE/SEGMENT whose fetched results are read again (no rental)")
     args = ap.parse_args(argv)
-    return dict(plan=cmd_plan, run=cmd_run, status=cmd_status)[args.cmd](args)
+    return dict(plan=cmd_plan, run=cmd_run, status=cmd_status, reland=cmd_reland)[args.cmd](args)
 
 
 if __name__ == "__main__":
