@@ -5,7 +5,10 @@ import subprocess
 import tempfile
 import unittest
 
-import yaml
+try:
+    import yaml
+except ImportError:  # the test env declares numpy and pytest only
+    raise unittest.SkipTest("PyYAML is not installed; this file reads workflow YAML")
 
 
 class QualificationCommandTests(unittest.TestCase):

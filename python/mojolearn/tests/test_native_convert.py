@@ -216,7 +216,7 @@ def test_empty_and_negative():
     with pytest.raises(Exception, match="cols must be non-negative"):
         col(0, 0, 3, -1)
     # a null address with a positive count is refused, not read
-    with pytest.raises(Exception, match="null buffer address"):
+    with pytest.raises(Exception, match="null (float(32|64) )?buffer address"):
         flat(0, 0, 4)
 
 
@@ -262,7 +262,7 @@ def test_transpose_f32_empty_and_negative():
         fn(0, 0, -2, 3)
     with pytest.raises(Exception, match="transpose_f32: cols must be non-negative"):
         fn(0, 0, 3, -2)
-    with pytest.raises(Exception, match="null buffer address"):
+    with pytest.raises(Exception, match="null (float(32|64) )?buffer address"):
         fn(0, 0, 2, 2)
 
 

@@ -10,7 +10,10 @@ import tempfile
 import unittest
 import zipfile
 
-import yaml
+try:
+    import yaml
+except ImportError:  # the test env declares numpy and pytest only
+    raise unittest.SkipTest("PyYAML is not installed; this file reads workflow YAML")
 
 from qualify_umap_wheel import sha
 from verify_umap_qualification import verify
