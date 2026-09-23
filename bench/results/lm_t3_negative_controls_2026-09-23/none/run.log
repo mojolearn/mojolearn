@@ -1,0 +1,17 @@
+1584 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x525e00000000, nodemask=1)
+[23:38:52] segment: route A segment controls-none label nvidia-controls-none, global steps 100..102, K=64, devices (0,), from ckpt_00000100.blm (sha256 80cd2126a89ba6d8) CONTROL none (K run 64)
+[23:38:52] the checkpoint's state AGREES with the expected chain's step 100 (2b37e85edfd701eb)
+1584 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x525e40000000, nodemask=1)
+1584 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x525e80000000, nodemask=1)
+1584 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x525ec0000000, nodemask=1)
+1584 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x525f00000000, nodemask=1)
+1584 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x525f40000000, nodemask=1)
+1584 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x525f80000000, nodemask=1)
+1584 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x525fc0000000, nodemask=1)
+1584 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x526000000000, nodemask=1)
+[23:39:51] step 101 lr 397e2cc1 loss 6.9004 state abc8b816b5c3fb15 grad 25830bfc2016dc14 46.51 s (+7.25 s hashing)
+[23:39:51] step 101 agrees with the expected chain
+1584 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x526040000000, nodemask=1)
+[23:40:36] step 102 lr 39805880 loss 6.8585 state a9421f91b947f82c grad 94c40a6e3d5ec5aa 38.68 s (+6.72 s hashing)
+[23:40:36] step 102 agrees with the expected chain
+[23:40:36] PASS: /root/gemm_leg_out/lm-controls/none

@@ -1,0 +1,2 @@
+[23:46:39] segment: route A segment controls-ulp label nvidia-controls-ulp, global steps 100..102, K=64, devices (0,), from ckpt_00000100.blm (sha256 80cd2126a89ba6d8) CONTROL ulp=63,auto (K run 64)
+[23:46:39] the checkpoint's state AGREES with the expected chain's step 100 (2b37e85edfd701eb)

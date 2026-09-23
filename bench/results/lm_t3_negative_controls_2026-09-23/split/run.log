@@ -1,0 +1,23 @@
+2143 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x31ae00000000, nodemask=1)
+[23:45:36] segment: route A segment controls-split label nvidia-controls-split, global steps 100..102, K=64, devices (0,), from ckpt_00000100.blm (sha256 80cd2126a89ba6d8) CONTROL split (K run 64)
+[23:45:36] the checkpoint's state AGREES with the expected chain's step 100 (2b37e85edfd701eb)
+2143 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x31ae40000000, nodemask=1)
+2143 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x31ae80000000, nodemask=1)
+2143 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x31aec0000000, nodemask=1)
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/lm_segment.py", line 1202, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/root/mojolearn/tools/lm_segment.py", line 1197, in main
+    return dict(recipe=cmd_recipe, init=cmd_init, keys=cmd_keys, run=cmd_run, compare=cmd_compare,
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/lm_segment.py", line 1013, in cmd_run
+    losses, total, detail = split_step(trainer, shards, split, index=edit)
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/lm_segment.py", line 881, in split_step
+    prefix = trainer.fold_export()
+             ^^^^^^^^^^^^^^^^^^^^^
+  File "/root/lm-venv/lib/python3.11/site-packages/mojolearn/parallel_training.py", line 283, in fold_export
+    return memoryview(out).cast('B').tobytes()
+           ^^^^^^^^^^^^^^^
+TypeError: memoryview: a bytes-like object is required, not 'Array'
