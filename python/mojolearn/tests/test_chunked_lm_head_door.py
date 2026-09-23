@@ -192,7 +192,7 @@ def test_refusals_fire_by_name_when_built():
         training.chunked_lm_head_loss(h, w, bad_t, return_grad=True)
     bad_h = h.copy()
     bad_h[1, 3] = np.nan
-    with pytest.raises(Exception, match="non-finite|nonfinite|finite"):
+    with pytest.raises(Exception, match="NaN in chunked lm head hidden at flat index 11"):
         training.chunked_lm_head_loss(bad_h, w, t)
 
 
