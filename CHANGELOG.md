@@ -2,6 +2,15 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
+## 0.8.16 (published 2026-09-23)
+
+### Fixed
+- Float16 safetensors checkpoints load on Python 3.10 and 3.11. `memoryview.cast("e")` exists only from Python 3.12; the F16 bytes are now copied as they are and widened from their bits on every version, the same bits as before (subnormal, negative zero and scalar tensors checked). Every F16 checkpoint read on 3.10 and 3.11 in 0.8.15 raised `memoryview: destination format must be a native single character format`.
+- `tools/lm_segment.py`: an expected chain line written before chain lines named their hash scheme is compared as the first scheme (`sha256.v1`), and the recipe names the scheme a run hashes under, so a segment replayed on another vendor is held to the recorded digests rather than to the label.
+
+### Changed
+- Native libraries rebuilt from source.
+
 ## 0.8.15 (published 2026-09-22)
 
 ### Fixed
