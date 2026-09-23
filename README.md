@@ -106,7 +106,7 @@ weaker.
 pip install mojolearn
 ```
 
-Version <!--fact:published_version-->0.8.15<!--/fact--> is on PyPI as a
+Version <!--fact:published_version-->0.8.16<!--/fact--> is on PyPI as a
 macOS arm64 wheel (Apple Metal) and a Linux x86-64 wheel carrying NVIDIA
 CUDA and AMD HIP together. Both wheels train and predict on the CPU as well.
 
