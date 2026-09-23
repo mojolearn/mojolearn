@@ -149,6 +149,14 @@ from . import host_surface
 # by the time exec_module returns, so every binding load restores the
 # caller's environment: a variable that was absent is removed again and one
 # that was set keeps its value.
+#
+# THE RUNTIME WRITES THE C ENVIRON, NOT os.environ. os.environ is a mapping
+# copied at interpreter start; a C setenv() from a loaded library changes what
+# a child inherits without changing the mapping, so `os.environ.get` read
+# None before AND after the load while the child still saw the variables
+# (pod vzzgf45v5abi16, 2026-09-23). The restore therefore goes through
+# os.unsetenv and os.putenv, which act on the C environ directly, and keeps
+# the mapping in step.
 _RUNTIME_ENV = ("PYTHONEXECUTABLE", "PYTHONPATH", "MOJO_PYTHON_LIBRARY")
 
 
@@ -161,8 +169,10 @@ def _exec_binding(loader, module):
         for k, v in before.items():
             if v is None:
                 os.environ.pop(k, None)
+                os.unsetenv(k)
             else:
                 os.environ[k] = v
+                os.putenv(k, v)
 
 # DEVIATION 869, 2026-08-24. THIS TUPLE AND `_build_script` BELOW MUST LIST
 # EVERY EXTENSION, AND THE COST OF FORGETTING ONE IS A MISLABELLED

@@ -18,13 +18,20 @@ import pytest
 
 VARS = ("PYTHONEXECUTABLE", "PYTHONPATH", "MOJO_PYTHON_LIBRARY")
 
+# The C environ, not os.environ: the runtime's setenv() never reaches the
+# mapping, and a child inherits the C environ.
 LOAD_ONE_BINDING = (
-    "import json, os, sys\n"
-    "before = {k: os.environ.get(k) for k in %r}\n"
+    "import ctypes, json, os, sys\n"
+    "_getenv = ctypes.CDLL(None).getenv\n"
+    "_getenv.restype = ctypes.c_char_p\n"
+    "def real(k):\n"
+    "    v = _getenv(k.encode())\n"
+    "    return None if v is None else v.decode()\n"
+    "before = {k: real(k) for k in %r}\n"
     "import mojolearn\n"
     "from mojolearn import _buffer\n"
     "_buffer._native('cast_f64_to_f32')\n"
-    "after = {k: os.environ.get(k) for k in %r}\n"
+    "after = {k: real(k) for k in %r}\n"
     "child = subprocess_prefix = None\n"
     "import subprocess\n"
     "r = subprocess.run([sys.executable, '-c', 'import sys, json; print(json.dumps([sys.executable, sys.prefix]))'],\n"
