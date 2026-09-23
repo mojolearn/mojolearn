@@ -134,6 +134,36 @@ import sys
 
 from . import host_surface
 
+
+# THE RUNTIME REWRITES THE PROCESS ENVIRONMENT WHEN A BINDING LOADS.
+# Measured 2026-09-23 on a RunPod CPU pod (0.8.15 wheel, a uv venv): after the
+# first Mojo binding is executed the parent process carries
+# PYTHONEXECUTABLE=<the first python3 on PATH>, PYTHONPATH=":" and
+# MOJO_PYTHON_LIBRARY, none of which were set before. The bundled runtime
+# writes them for its embedded interpreter. A child started afterwards with
+# `subprocess.run([sys.executable, ...])` inherits them, and on CPython 3.11
+# that child took its executable and prefix from PYTHONEXECUTABLE: it came up
+# as the pixi env's python3 with the venv's site-packages gone and `import
+# numpy` failing (tests/test_crossvendor_coverage.py's CLI test, red on 3.11
+# only; 3.10 and 3.14 ignore the variable on Linux). The runtime has read them
+# by the time exec_module returns, so every binding load restores the
+# caller's environment: a variable that was absent is removed again and one
+# that was set keeps its value.
+_RUNTIME_ENV = ("PYTHONEXECUTABLE", "PYTHONPATH", "MOJO_PYTHON_LIBRARY")
+
+
+def _exec_binding(loader, module):
+    """The loader's exec_module, with the process environment restored."""
+    before = {k: os.environ.get(k) for k in _RUNTIME_ENV}
+    try:
+        loader.exec_module(module)
+    finally:
+        for k, v in before.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
 # DEVIATION 869, 2026-08-24. THIS TUPLE AND `_build_script` BELOW MUST LIST
 # EVERY EXTENSION, AND THE COST OF FORGETTING ONE IS A MISLABELLED
 # MEASUREMENT RATHER THAN A FAILURE.
@@ -1105,7 +1135,7 @@ def load_host_module(basename):
         loader = importlib.machinery.ExtensionFileLoader(full, path)
         spec = importlib.util.spec_from_loader(full, loader, origin=path)
         module = importlib.util.module_from_spec(spec)
-        loader.exec_module(module)
+        _exec_binding(loader, module)
         sys.modules[full] = module
     prefix = _host_prefix(basename)
 
@@ -1370,7 +1400,7 @@ def select():
             loader = importlib.machinery.ExtensionFileLoader(full, path)
             spec = importlib.util.spec_from_loader(full, loader, origin=path)
             module = importlib.util.module_from_spec(spec)
-            loader.exec_module(module)
+            _exec_binding(loader, module)
             # WHAT THE BINARY SAYS BEATS THE DIRECTORY IT SAT IN. Raises on
             # a vendor mismatch; see the module docstring.
             _check_vendor(module, name, path)
@@ -1508,7 +1538,7 @@ def load_set(mode):
         loader = importlib.machinery.ExtensionFileLoader(full, path)
         spec = importlib.util.spec_from_loader(full, loader, origin=path)
         module = importlib.util.module_from_spec(spec)
-        loader.exec_module(module)
+        _exec_binding(loader, module)
         # WHAT THE BINARY SAYS BEATS THE DIRECTORY IT SAT IN.
         _check_vendor(module, name, path)
         sys.modules[full] = module
