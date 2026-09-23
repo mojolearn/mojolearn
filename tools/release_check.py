@@ -22,6 +22,10 @@ Each pass keeps its own records and resume behaviour
 transcript to <that directory>/../release-check.<pass>.log, and the exit
 status is non-zero if either pass is incomplete. Run the two tasks separately
 to keep the old serial behaviour.
+
+    pixi run -e test release-check --plan     what the default would run, per backend
+                                              (CPU, Apple, NVIDIA, AMD), and why; runs nothing
+    ... release-check --plan --paths=a,b      the same for a hypothetical change to those paths
 """
 import os
 import subprocess
@@ -32,7 +36,80 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 
+def plan(out=print, backends=None, paths=None):
+    """WHAT THE DEFAULT RELEASE VERIFICATION WOULD RUN, per backend, without
+    running anything (2026-09-22): the lanes each pass selects with no flags,
+    its cell count (lanes x base,denormal,odd, one fit each), why each lane is
+    in, and, when a rule selects every lane, the exact paths that made it.
+    The CPU pass covers the union, because its column is the reference the
+    other columns are diffed against."""
+    sys.path.insert(0, str(ROOT / "tools"))
+    import lane_select
+    import verify_lanes
+    fixtures = verify_lanes.APPLE_PASS_FIXTURES
+    nfix = len(fixtures.split(","))
+    sources, _ = lane_select.lane_sources()
+    total = len(sources)
+    backends = backends or verify_lanes.RELEASE_BACKENDS
+    picked, refused = {}, {}
+    for b in backends:
+        try:
+            picked[b] = verify_lanes.pass_selection(b, fixtures, sources, paths=paths)
+        except verify_lanes.UnattributedPaths as exc:
+            refused[b] = exc.sel
+    if refused:
+        for b, sel in refused.items():
+            out(f"\n== {b}: REFUSED")
+            lane_select.refuse_unattributed(sel, out=lambda m: out("   " + m))
+        out("\n== the default release verification cannot run until every changed path is attributed")
+        return 3
+    if "cpu" in picked:
+        lanes, sel, covers, how = picked["cpu"]
+        union = set(lanes)
+        for b, (ol, _, _, _) in picked.items():
+            union |= set(ol)
+        skip = set(sel["dropped"])
+        import lane_applicability
+        skip |= set(lane_applicability.degenerate("cpu-host"))
+        picked["cpu"] = ([n for n in lane_select.all_lanes() if n in union and n not in skip], sel, covers,
+                         how + "; widened to the union of every backend's selection (the reference)")
+    label = dict(cpu="CPU (this Mac)", metal="Apple GPU (this Mac)", cuda="NVIDIA H100 (build rental)",
+                 hip="AMD MI325X (build rental)")
+    grand = 0
+    for b, (lanes, sel, covers, how) in picked.items():
+        cells = len(lanes) * nfix
+        grand += cells
+        out(f"\n== {label.get(b, b)}: {len(lanes)} of {total} lanes x {nfix} fixtures = {cells} cells, "
+            f"each fitted once ({how})")
+        out(f"   {len(sel.get('changed', []))} changed path(s); {len(sel.get('inert', []))} reach no lane")
+        if sel.get("every_rules"):
+            out(f"   EVERY LANE, by rule, because of {len(sel['every_rules'])} path(s):")
+            for p, why in sel["every_rules"].items():
+                out(f"     {p}: {why}")
+        else:
+            out("   every changed path attributed to specific lanes; no every-lane rule fired")
+        why = {}
+        for p, hit in (sel.get("by_path") or {}).items():
+            for n in hit or ():
+                why.setdefault(n, []).append(p)
+        for n in lanes:
+            src = why.get(n)
+            out(f"     {n}: " + (", ".join(src[:3]) + (f" (+{len(src) - 3} more)" if len(src) > 3 else "")
+                              if src else "the union with another backend's selection"))
+        if sel.get("dropped"):
+            out(f"   left out, cannot run on {b}: {len(sel['dropped'])} lane(s): {','.join(sel['dropped'])}")
+    out(f"\n== total {grand} cells across {len(picked)} backend(s); nothing ran")
+    return 0
+
+
 def main():
+    if "--plan" in sys.argv[1:]:
+        backends = None
+        for a in sys.argv[1:]:
+            if a.startswith("--backends="):
+                backends = tuple(a.split("=", 1)[1].split(","))
+        paths = next((a.split("=", 1)[1].split(",") for a in sys.argv[1:] if a.startswith("--paths=")), None)
+        return plan(backends=backends, paths=paths)
     sys.path.insert(0, str(ROOT / "tools"))
     import verify_lanes
     slots = int(os.environ.get("MAC_SLOTS", "5"))
