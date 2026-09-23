@@ -9,6 +9,7 @@
 #   MOJOLEARN_GEMM_LEG_OUT=bench/results/e1g/$(date -u +%Y-%m-%d_%H%M%S)-amd-mi325x-attention-step \
 #   bash tools/do_extra_leg.sh amd [--minutes N] [--dry-run] [--skip-gates]
 #   bash tools/do_extra_leg.sh amd --segment-lease N --dollar-cap USD   # a lease above one hour, priced first
+#   bash tools/do_extra_leg.sh amd --size gpu-mi325x8-2048gb --region nyc2 ...   # another GPU size (8x MI325X)
 #
 #   amd   gpu-mi325x1-256gb, tor1, image 188571990
 #   nv    gpu-h100x1-80gb,   nyc2, image 236925144
@@ -143,6 +144,11 @@ VENDOR=""; MINUTES=60; DRY=0; GATES=1
 # one hour, named, and bound to a dollar figure at the size's own hourly
 # price read from the sizes API BEFORE the create. Both flags or neither.
 SEGMENT_LEASE=""; DOLLAR_CAP=""; SEGMENT_CAP_MINUTES=2880
+# --size SLUG and --region R override the vendor's droplet size and region
+# (an 8x MI325X droplet, gpu-mi325x8-2048gb in nyc2, for a training segment
+# that divides its step across eight devices); the segment lease prices the
+# chosen size, so a big box needs a cap to match.
+SIZE_OVERRIDE=""; REGION_OVERRIDE=""
 while [ $# -gt 0 ]; do
   case "$1" in
     amd|nv|cpu-intel|cpu-amd)
@@ -154,6 +160,10 @@ while [ $# -gt 0 ]; do
     --segment-lease=*) SEGMENT_LEASE="${1#--segment-lease=}" ;;
     --dollar-cap) shift; DOLLAR_CAP="${1:-}" ;;
     --dollar-cap=*) DOLLAR_CAP="${1#--dollar-cap=}" ;;
+    --size) shift; SIZE_OVERRIDE="${1:-}" ;;
+    --size=*) SIZE_OVERRIDE="${1#--size=}" ;;
+    --region) shift; REGION_OVERRIDE="${1:-}" ;;
+    --region=*) REGION_OVERRIDE="${1#--region=}" ;;
     --dry-run) DRY=1 ;;
     --skip-gates) GATES=0 ;;
     -h|--help) usage; exit 0 ;;
@@ -1029,6 +1039,13 @@ if ps -axo command= 2>/dev/null | grep -q -F -f "$TOKPAT"; then
 else
   echo "local_key_in_ps=not_visible" >> "$OUT/leg.txt"
 fi
+
+# ---- the size and region overrides (a GPU size only, never a CPU leg's) ----
+if [ -n "$SIZE_OVERRIDE" ]; then
+  case "$SIZE_OVERRIDE" in gpu-*) SIZE="$SIZE_OVERRIDE" ;; *) die "--size must be a gpu-* size slug, got '$SIZE_OVERRIDE'" 2 ;; esac
+fi
+[ -z "$REGION_OVERRIDE" ] || REGION="$REGION_OVERRIDE"
+echo "size=$SIZE region=$REGION" >> "$OUT/leg.txt" 2>/dev/null || true
 
 # ---- the segment lease is priced BEFORE the create ----
 if [ -n "$SEGMENT_LEASE" ]; then

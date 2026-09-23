@@ -78,6 +78,7 @@ def segment_plan(spec):
             prev = segs[s["index"] - 2] if s["index"] > 1 else None
             entry = dict(route=route, segment=s["segment"], index=s["index"], vendor=s["vendor"], steps=int(s["steps"]),
                          first=first, last=last, boundary=last, live=s.get("first"), shards=s.get("shards"),
+                         lease_minutes=s.get("lease_minutes"), dollar_cap=s.get("dollar_cap"),
                          from_route=("A" if route != "A" else route) if prev else None,
                          from_segment=prev["segment"] if prev else None,
                          from_ckpt=("ckpt_%08d.blm" % first) if prev else "init",
@@ -190,7 +191,10 @@ def rent_one(spec, e, body, out):
     res.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ, MOJOLEARN_GEMM_LEG_EXTRA=str(body), MOJOLEARN_STAGE_KEYS=spec["tokens_stage"],
                MOJOLEARN_GEMM_LEG_OUT=str(res / "leg"))
-    minutes, cap = int(spec.get("lease_minutes", 120)), str(spec.get("dollar_cap", 10))
+    # a segment's own lease and cap win over the run's (an AMD segment on an
+    # 8-GPU box needs both bigger); the driver never rents without a cap
+    minutes = int(e.get("lease_minutes") or spec.get("lease_minutes", 120))
+    cap = str(e.get("dollar_cap") or spec.get("dollar_cap", 10))
     lease = ["--segment-lease", str(minutes), "--dollar-cap", cap] if minutes > 60 else ["--minutes", str(minutes)]
     if e["vendor"] == "nvidia":
         rc = 3
@@ -235,7 +239,12 @@ def _rent_amd_once(spec, e, res, env, lease, providers, out, attempt):
         env["MOJOLEARN_GEMM_LEG_OUT"] = str(res / ("leg-" + tag))
         with open(res / ("leg-%s.log" % tag), "w") as log:
             if provider == "do":
-                rc = subprocess.run(["bash", "tools/do_extra_leg.sh", "amd", *lease], cwd=REPO, env=env, stdout=log, stderr=subprocess.STDOUT).returncode
+                extra = []
+                if spec.get("amd_size"):
+                    extra += ["--size", spec["amd_size"]]
+                if spec.get("amd_region"):
+                    extra += ["--region", spec["amd_region"]]
+                rc = subprocess.run(["bash", "tools/do_extra_leg.sh", "amd", *lease, *extra], cwd=REPO, env=env, stdout=log, stderr=subprocess.STDOUT).returncode
             elif provider == "hotaisle":
                 # one hour is Hot Aisle's maximum and minimum; the body fetches the token parts itself
                 rc = subprocess.run(["bash", "tools/hotaisle_leg.sh", "amd", "--rent", "--skip-gates", "--minutes", "60"],
