@@ -25,15 +25,29 @@ THE STEPS, IN ORDER
                      freeze HEAD (the tree must be clean and pushed)
   rehearsal          pixi run release-rehearsal (docs facts, ext lists, wheel
                      audit, Python suite, leg dry runs), logs kept
-  linux-builds       the three Linux sets, launched in parallel and detached
-                     (launch_linux_builds: ONE function, so the CPU build box
-                     route of lane/release-cpu-build-box plugs in as a backend)
-  macos-build        mac_slot --slots 4 run -- build_release_wheel.sh, byte LM on
+  reuse-plan         tools/release_reuse.py: for every binding of every set
+                     (cuda sm_90a, cuda sm_89, hip gfx942, the host bindings,
+                     the runtime closure, the macOS wheel) REUSE the bytes the
+                     last PUBLISHED release shipped when the binding's identity
+                     (source closure, toolchain, flags, builder scripts, box
+                     image or Apple toolchain) is unchanged, else BUILD; the
+                     table is printed, and in --dry-run in full
+  linux-builds       a leg per Linux set that has a binding to BUILD (none for a
+                     Python-only release: nothing is rented for builds), launched
+                     in parallel and detached (launch_linux_builds: ONE function,
+                     so the CPU build box route plugs in as a backend)
+  macos-build        mac_slot --slots 4 run -- build_release_wheel.sh, byte LM on;
+                     its REUSE bindings placed from the published macOS wheel
   macos-smoke        qualify_verifier_wheel.py --scope expanded under the Metal lock
   release-check      pixi run -e test release-check (CPU + Apple GPU, the guarantee)
-  linux-wait         every leg finished, its proof complete for this commit, and
-                     every host binding byte-identical across legs (named if not)
-  linux-pack         pixi run -e pkg pack-linux-wheel, audit.sh, strip
+  linux-wait         every launched leg finished, its proof complete for this
+                     commit, and every host binding byte-identical across legs
+  linux-assemble     the set directories the packer packs: each leg's set, or one
+                     synthesized from the published wheel, with every REUSE
+                     binding's published bytes verified by sha256 (reuse.json)
+  linux-pack         pixi run -e pkg pack-linux-wheel, audit.sh, strip; the
+                     payload records per binding built or reused, and from which
+                     release
   linux-smoke        tools/release_wheel_smoke.sh --rent (one RTX 4090 pod): the
                      expanded smoke AND the NVIDIA release column (the lanes the
                      release changed, from the installed wheel), diffed against
@@ -70,6 +84,8 @@ import zipfile
 ROOT = Path(__file__).resolve().parent.parent
 PY = sys.executable
 PUBLISH_CHOICES = ("none", "testpypi", "pypi")
+sys.path.insert(0, str(ROOT / "tools"))
+import release_reuse  # noqa: E402
 
 
 def sha256(path):
@@ -264,7 +280,14 @@ BUILD_BACKENDS = {"gpu-legs": gpu_legs}
 
 
 def linux_legs(ctx):
-    return BUILD_BACKENDS[ctx.args.build_backend](ctx)
+    """The legs the reuse plan says to launch: only the sets with a binding
+    to BUILD (plus the cheapest leg when only a host binding or the runtime
+    needs one). Every leg of the backend when there is no plan."""
+    legs = BUILD_BACKENDS[ctx.args.build_backend](ctx)
+    plan = ctx.plan()
+    if plan is None:
+        return legs
+    return [l for l in legs if l.name in plan["legs"]]
 
 
 def launch_linux_builds(ctx, legs, stagger=90):
@@ -327,6 +350,8 @@ class Release:
         self.runner = runner
         self.dry = args.dry_run
         self.commands_shown = 0
+        self.evidence = ev
+        self._plan = None
 
     # state
     def load(self):
@@ -471,14 +496,61 @@ class Release:
                   what="release-rehearsal")
         return "PASS, logs " + str(work)
 
+    # ------------------------------------------------------------ reuse
+    @property
+    def plan_path(self):
+        return self.rel / "reuse" / "plan.json"
+
+    def plan(self):
+        """The reuse plan of the frozen commit: read from the release
+        directory when this commit's plan is there, else computed (and kept
+        in memory only under --dry-run)."""
+        if self._plan is not None:
+            return self._plan
+        try:
+            doc = json.loads(self.plan_path.read_text())
+            if doc.get("schema") == release_reuse.PLAN_SCHEMA and doc.get("commit") == self.commit:
+                self._plan = doc
+                return doc
+        except (OSError, ValueError):
+            pass
+        self._plan = release_reuse.make_plan(self.commit, self.evidence / "release" / "identities")
+        return self._plan
+
+    def step_reuse_plan(self):
+        plan = self.plan()
+        self.say(release_reuse.render(plan, full=self.dry))
+        prev = plan.get("previous") or {}
+        summary = "%d REUSE, %d BUILD, legs: %s" % (
+            len(release_reuse.plan_rows(plan, decision="REUSE")), len(release_reuse.plan_rows(plan, decision="BUILD")),
+            ", ".join(plan["legs"]) or "none")
+        if self.dry:
+            return "would write " + str(self.plan_path) + "; " + summary
+        if not self.plan_path.is_file() or json.loads(self.plan_path.read_text()).get("commit") != self.commit:
+            self.plan_path.parent.mkdir(parents=True, exist_ok=True)
+            self.plan_path.write_text(json.dumps(plan, indent=1, sort_keys=True) + "\n")
+        return f"against {prev.get('version', 'no published release')}: {summary}; {self.plan_path}"
+
+    def previous_wheel(self, platform):
+        """The last published wheel for `platform`, verified against the
+        record (a local copy, else PyPI)."""
+        prev = (self.plan().get("previous") or {})
+        if self.dry:
+            info = prev.get(platform) or {}
+            return Path("<published %s wheel %s>" % (platform, info.get("wheel", "?")))
+        return release_reuse.published_wheel(prev, platform, self.evidence)
+
     def step_linux_builds(self):
         legs = linux_legs(self)
+        prev = (self.plan().get("previous") or {}).get("version")
+        if not legs:
+            return f"no build leg: every Linux binding is taken from {prev} (nothing rented for builds)"
         for leg in legs:
-            self.say(f"  {leg.name}: {leg.describe()}")
+            self.say(f"  {leg.name}: {leg.describe()}  [{self.plan()['leg_reasons'].get(leg.name, '')}]")
         if self.dry:
-            return f"would launch {len(legs)} legs ({self.args.build_backend})"
+            return f"would launch {len(legs)} leg(s) ({self.args.build_backend})"
         launch_linux_builds(self, legs)
-        return f"{len(legs)} legs launched or running ({self.args.build_backend})"
+        return f"{len(legs)} leg(s) launched or running ({self.args.build_backend})"
 
     def macos_wheel(self):
         found = sorted((self.rel / "macos").glob("mojolearn-*-macosx_*.whl"))
@@ -489,6 +561,16 @@ class Release:
         if w and wheel_commit(w) == self.commit:
             return "have " + w.name
         env = dict(MOJOLEARN_PACKAGE_BYTE_LM="1", MOJOLEARN_BUILD_JOBS="4", MOJOLEARN_COMPILE_JOBS="1")
+        plan = self.plan()
+        reuse = release_reuse.plan_rows(plan, release_reuse.MACOS, "REUSE")
+        if reuse:
+            store = self.rel / "reuse" / "macos"
+            if self.dry:
+                self.say(f"  {len(reuse)} macOS binding(s) would be placed from the published "
+                         f"{plan['previous']['version']} wheel, verified against its RECORD")
+            else:
+                release_reuse.assemble_macos(plan, self.previous_wheel("macos"), store, say=self.say)
+            env.update(MOJOLEARN_REUSE_PLAN=str(store / "macos-plan.json"), MOJOLEARN_REUSE_DIR=str(store))
         self.must([PY, "tools/mac_slot.py", "--slots", "4", "run", "--", "./packaging/macos/build_release_wheel.sh"],
                   env=env, log=self.rel / "macos-build.log", what="build_release_wheel.sh")
         if self.dry:
@@ -553,6 +635,8 @@ class Release:
 
     def step_linux_wait(self):
         legs = linux_legs(self)
+        if not legs:
+            return "no leg to wait for (every Linux binding is reused)"
         if self.dry:
             return "would wait for " + ", ".join(l.name for l in legs)
         if not any(l.pid() or l.exit_code() is not None for l in legs):
@@ -592,25 +676,79 @@ class Release:
         found = sorted((self.rel / "linux" / "final").glob("mojolearn-*-manylinux*.whl"))
         return found[-1] if found else None
 
+    def assembled_marker(self):
+        return self.rel / "reuse" / "sets" / "assembled.json"
+
+    def assembly_needed(self):
+        """True when the plan takes any Linux bytes from the published wheel;
+        otherwise the packer reads the legs' sets directly, as before."""
+        plan = self.plan()
+        return bool(release_reuse.plan_rows(plan, release_reuse.LINUX, "REUSE")) or plan["runtime"]["decision"] == "REUSE"
+
+    def assembled_ok(self):
+        try:
+            d = json.loads(self.assembled_marker().read_text())
+        except (OSError, ValueError):
+            return False
+        return d.get("commit") == self.commit and d.get("plan_sha256") == sha256(self.plan_path)
+
+    def step_linux_assemble(self):
+        if not self.assembly_needed():
+            return "not needed: every Linux binding is built by the legs"
+        if self.assembled_ok():
+            return "have " + str(self.assembled_marker().parent)
+        legs = {l.name: l.release_build / "build" / "sets" / l.vendor / l.arch for l in linux_legs(self)}
+        plan = self.plan()
+        if self.dry:
+            n = len(release_reuse.plan_rows(plan, release_reuse.LINUX, "REUSE"))
+            return (f"would take {n} binding(s) and the runtime closure from the published "
+                    f"{plan['previous']['version']} Linux wheel into {self.rel / 'reuse' / 'sets'}"
+                    + (f", over the sets of {', '.join(legs)}" if legs else " (no leg ran)"))
+        whl = self.previous_wheel("linux")
+        for name, d in legs.items():
+            if not d.is_dir():
+                raise StepFailed(f"{name} has no set directory at {d}; run linux-wait")
+        dest = self.rel / "reuse" / "sets"
+        release_reuse.assemble_linux(plan, whl, legs, dest, say=self.say)
+        self.assembled_marker().write_text(json.dumps(dict(
+            commit=self.commit, plan_sha256=sha256(self.plan_path), wheel=str(whl), wheel_sha256=sha256(whl),
+            legs=sorted(legs), at=now()), indent=1) + "\n")
+        return f"{dest}: sets assembled from {whl.name}" + (f" and legs {', '.join(sorted(legs))}" if legs else "")
+
+    def pack_inputs(self):
+        """(set directories, proofs, manifests) for pack_wheel.py and audit.sh:
+        the assembled sets when the release reuses anything, else the legs'."""
+        legs = linux_legs(self)
+        proofs = [leg.release_build / "build" / "build-provenance.json" for leg in legs]
+        if self.assembly_needed():
+            base = self.rel / "reuse" / "sets"
+            sets = sorted({base / vendor for vendor, _ in release_reuse.LINUX_SETS})
+            manifests = [base / vendor / arch / "manifest.json" for vendor, arch in release_reuse.LINUX_SETS]
+            return sets, proofs, manifests
+        sets = [leg.release_build / "build" / "sets" / leg.vendor for leg in legs]
+        manifests = [leg.release_build / "build" / "sets" / leg.vendor / leg.arch / "manifest.json" for leg in legs]
+        return sets, proofs, manifests
+
     def step_linux_pack(self):
         final = self.linux_final()
         if final and wheel_commit(final) == self.commit:
             return "have " + final.name
-        legs = linux_legs(self)
+        if self.assembly_needed() and not self.dry and not self.assembled_ok():
+            raise StepFailed("the assembled sets are not there or not this plan's; run linux-assemble")
+        sets, proofs, manifests = self.pack_inputs()
         dist = self.rel / "linux"
         if dist.exists() and not self.dry:
             dist.rename(dist.with_name("linux.failed-" + dt.datetime.now().strftime("%Y%m%d-%H%M%S")))
         args = ["pixi", "run", "-e", "pkg", "pack-linux-wheel", "--profile", "release-linux3"]
-        for leg in legs:
-            args += ["--set", leg.release_build / "build" / "sets" / leg.vendor]
-        for leg in legs:
-            args += ["--build-proof", leg.release_build / "build" / "build-provenance.json"]
+        for s in sets:
+            args += ["--set", s]
+        for p in proofs:
+            args += ["--build-proof", p]
         args += ["--out", dist]
         self.must(args, log=self.rel / "linux-pack.log", what="pack_wheel.py")
         packed = sorted(dist.glob("mojolearn-*-linux_x86_64.whl")) if not self.dry else [dist / "<packed>.whl"]
         if len(packed) != 1:
             raise StepFailed(f"expected one packed wheel in {dist}, found {packed}")
-        manifests = [leg.release_build / "build" / "sets" / leg.vendor / leg.arch / "manifest.json" for leg in legs]
         self.must(["bash", "packaging/linux/audit.sh", packed[0], *manifests], log=self.rel / "linux-audit.log",
                   what="audit.sh")
         repaired = sorted((dist / "audit" / "repaired").glob("mojolearn-*-manylinux*.whl")) if not self.dry \
@@ -755,6 +893,11 @@ class Release:
                 if src.is_file():
                     shutil.copy2(src, rec / name)
         (rec / "README.md").write_text(self.readme())
+        # The identity of every shipped binding and what it shipped as, so the
+        # next release decides REUSE or BUILD from this record alone (the
+        # Apple toolchain that built the macOS wheel included).
+        release_reuse.record_identities(self.plan(), self.linux_final(), self.macos_wheel(),
+                                        rec / "binding-identities.json")
         self.must(["git", "-C", ROOT, "add", "--", rec], what="git add record")
         self.must(["git", "-C", ROOT, "commit", "-q", "-m",
                    f"Record the published {self.version} wheels and their release verification", "-m",
@@ -806,9 +949,9 @@ class Release:
             f"`pip install mojolearn=={self.version}` on this Mac: "
             f"{(self.recorded('finish-line') or {}).get('result', 'not run')}.", ""])
 
-    STEPS = ["freeze-version", "freeze-changelog", "freeze-docs-facts", "freeze-commit", "rehearsal",
-             "linux-builds", "macos-build", "macos-smoke", "release-check", "linux-wait", "linux-pack",
-             "linux-smoke", "amd-column", "publish-linux", "publish-macos", "finish-line", "record"]
+    STEPS = ["freeze-version", "freeze-changelog", "freeze-docs-facts", "freeze-commit", "rehearsal", "reuse-plan",
+             "linux-builds", "macos-build", "macos-smoke", "release-check", "linux-wait", "linux-assemble",
+             "linux-pack", "linux-smoke", "amd-column", "publish-linux", "publish-macos", "finish-line", "record"]
     #: Every other step checks its own OUTPUT each time and returns at once when
     #: it is already there (a wheel of this commit, a PASSED receipt for that
     #: wheel, complete release-check records); these are skipped on their record.
