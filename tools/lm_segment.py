@@ -474,6 +474,9 @@ def _chain_index(path):
         if line.strip():
             row = json.loads(line)
             if row.get("schema") == CHAIN_SCHEMA:
+                # A line written before the field existed was hashed under the
+                # first scheme; compared as such, not as a missing value.
+                row.setdefault("hash_scheme", SCHEME_V1)
                 out[int(row["step"])] = row
     if not out:
         raise SystemExit("%s holds no chain lines" % path)
