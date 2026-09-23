@@ -103,6 +103,8 @@ gbm-bench/istella/istella_rank.npz	HOME/datasets/gbm-bench/istella/istella_rank.
 gbm-bench/higgs/higgs_speed.npz	HOME/datasets/gbm-bench/higgs/higgs_speed.npz
 gbm-bench/covtype/covtype_speed.npz	HOME/datasets/gbm-bench/covtype/covtype_speed.npz
 gbm-bench/year/year_speed.npz	HOME/datasets/gbm-bench/year/year_speed.npz
+gbm-bench/epsilon/epsilon_X.npy	HOME/.cache/mojolearn/epsilon_X.npy
+gbm-bench/epsilon/epsilon_y.npy	HOME/.cache/mojolearn/epsilon_y.npy
 corpus/enwik8/input.txt	ROOT/training/corpus/enwik8/input.txt
 corpus/pile_github/input.txt	ROOT/training/corpus/pile_github/input.txt
 vocab/mojolearn-bpe-50257-v1/ranks.tsv	HOME/mojolearn-evidence/tokenized-corpus-sep18/vocab/mojolearn-bpe-50257-v1.ranks.tsv
