@@ -206,11 +206,11 @@ def _selection(args):
         return [n for n in registry if n in set(named)], dict(mode="named", fallback=False), None
     sources, why = lane_select.lane_sources()
     if args.lanes_for_paths:
-        sel = lane_select.select(args.lanes_for_paths, sources=sources)
+        sel = lane_select.select(args.lanes_for_paths, sources=sources, backend=args.backend)
     elif args.changed_since:
         paths = lane_select.changed_paths(args.changed_since)
         print(f"# {len(paths)} changed path(s) against {args.changed_since}")
-        sel = lane_select.select(paths, ref=args.changed_since, sources=sources)
+        sel = lane_select.select(paths, ref=args.changed_since, sources=sources, backend=args.backend)
     else:
         raise SystemExit("REFUSING: name what to run (--all, --lane, --lanes, "
                          "--lanes-for-paths or --changed-since)")

@@ -124,6 +124,10 @@ SELECTION_MACHINERY = (
     os.path.join("tools", "check_python_gates.sh"),
     os.path.join("tools", "test_backend_control.py"),
     os.path.join("tools", "test_gate_scope.py"),
+    # `shard` above imports its lane split from here; its other commands run
+    # the harness as a subprocess and never enter a lane's process.
+    os.path.join("tools", "cpu_identity_gate_check.py"),
+    os.path.join("tools", "test_lane_select_harness.py"),
 )
 
 #: FILES THE HARNESS IMPORTS WHILE IT RECORDS A COLUMN. `lane_applicability.py`
@@ -1494,6 +1498,15 @@ def unreachable(path):
     tokens = [(path, False), (stem, False)]
     if "." in stem:
         tokens.append((stem.rsplit(".", 1)[0], False))
+    generic = _generic_data_name(path)
+    if generic:
+        # A SHARED DATA FILE NAME IS NOT AN ADDRESS. `manifest.json` names
+        # a file beside whatever path a reader is handed (lm_corpus opens
+        # `path.with_name("manifest.json")`); it names this one only if the
+        # reader is handed THIS directory, and then the directory, or the full
+        # path, is named in code somewhere a lane reaches. Those tokens are
+        # still searched below; only the bare name and stem are not.
+        tokens = [(path, False)]
     parts = path.split(os.sep)[:-1]
     for k in range(len(parts)):
         d = os.sep.join(parts[:k + 1])
@@ -1522,8 +1535,28 @@ def unreachable(path):
         # matching those would send every new file under umap/ to a sweep.
         if _joined_with(part, skip={path}):
             return None
+    if generic:
+        return (f"nothing reaches it: a data file whose name {stem!r} is shared by {generic} tracked "
+                "files, and nothing a lane reaches names this file's path or any directory above it, "
+                "so no reader of a file by that name is ever handed this one")
     return ("nothing reaches it: no lane's derived source set contains this path, and no file "
             "that any lane DOES reach names it, its stem or any directory above it")
+
+
+#: Suffixes of files that are READ, never run or compiled.
+DATA_SUFFIXES = (".json", ".jsonl", ".csv", ".npz", ".npy", ".bin", ".f32", ".i32", ".u8", ".yaml", ".yml")
+
+
+def _generic_data_name(path):
+    """How many tracked files share this data file's basename, when that is
+    two or more in different directories (so the name alone cannot say which
+    one a reader opens); 0 otherwise, and always 0 for code."""
+    if not path.endswith(DATA_SUFFIXES):
+        return 0
+    base = os.path.basename(path)
+    dirs = {os.path.dirname(rel) for rel in tracked_files() if os.path.basename(rel) == base}
+    dirs.add(os.path.dirname(path))
+    return len(dirs) if len(dirs) >= 2 else 0
 
 
 def _named_in_code(patterns, skip=(), literals=()):
@@ -1560,8 +1593,15 @@ def _module_patterns(stem, dotted=()):
     python/setup.py in every release's full sweep."""
     word = re.escape(stem)
     quoted = re.compile(r"""['"](?:[\w.]*\.)?%s['"]""" % word)
+    # A Python corpus file is read as its AST DUMP, where a def or a keyword
+    # argument named like the module is `FunctionDef(name='release'` or
+    # `keyword(arg='release'`: that is not a load. Only an import alias, an
+    # ImportFrom module and a string constant (a dynamic import, a `-m`
+    # argument) are (2026-09-22: `def release(self)` in _buffer.py kept
+    # tools/release.py in every release's full sweep).
+    dumped = re.compile(r"""(?:alias\(name=|module=|Constant\(value=)['"](?:[\w.]*\.)?%s['"]""" % word)
     run = re.compile(r"(?:-m|import|from)\s+(?:\w+\.)*%s(?![\w])" % word)
-    out = {"": [run], ".py": [quoted], ".mojo": [quoted]}
+    out = {"": [run], ".py": [dumped, run], ".mojo": [quoted]}
     for d in dotted:
         out[""].append(re.compile(re.escape(d)))
         out[".py"].append(re.compile(re.escape(d)))
@@ -2059,21 +2099,29 @@ def harness_lanes(ref, path=HARNESS):
     as every lane: a helper, a fixture, a constant or one of the registration
     loops that build the kde, knn, radius, gp and gmm lanes can reach any
     lane at all."""
+    key = f"{ref}:{path}"
     old = _git_show(ref, path)
     if old is None:
+        HARNESS_WHY[key] = "no copy of the harness at " + str(ref)
         return None
     try:
         new = _read(path)
         old_lanes, old_others = _harness_segments(old)
         new_lanes, new_others = _harness_segments(new)
     except (OSError, SyntaxError):
+        HARNESS_WHY[key] = "the harness could not be read or parsed"
         return None
     prose = set()
     if [d for _, _, d in old_others] != [d for _, _, d in new_others] \
             and not _only_new_functions(old_others, new_others, old_lanes):
         prose = _lane_keyed_prose(old_others, new_others, set(old_lanes) | set(new_lanes))
         if prose is None:
-            return None                     # a shared statement moved: every lane
+            # A shared statement moved. Before answering every lane, ask the
+            # call graph WHICH lanes reach what moved (2026-09-22).
+            lanes, why = harness_closure_lanes(old, new, path)
+            HARNESS_WHY[key] = why
+            return lanes
+    HARNESS_WHY[key] = "lane bodies, additions and lane-keyed prose only"
     return sorted(prose | {n for n in set(old_lanes) | set(new_lanes)
                            if old_lanes.get(n) != new_lanes.get(n)})
 
@@ -2117,6 +2165,573 @@ def _lane_keyed_prose(old_others, new_others, lane_names):
                 return None
             out.add(key.value)
     return out
+
+
+# ------------------------------------------------ the harness, by call graph
+#: THE COLUMN RECORDER'S ENTRY POINTS. `run` records a column in one process,
+#: `run_jobs` in several, `merge` joins parts into the column a release keeps.
+#: Everything these reach is shared by every lane, and a change to it selects
+#: every lane. `main` is the CLI that dispatches to them and to `diff`; a
+#: change to `main` itself selects every lane, while code reached ONLY through
+#: `main` (the `--diff` comparison) records nothing and selects no lane.
+HARNESS_DRIVERS = ("run", "run_jobs", "merge")
+HARNESS_CLI = "main"
+
+#: Container methods that change a module-level object in place. A top-level
+#: function that calls one of these on a module-level name, assigns into one,
+#: or declares `global`, is a MUTATOR: calling it can change what any lane
+#: reads, so it is treated as shared by every lane.
+_MUTATING_METHODS = frozenset({"append", "extend", "update", "setdefault", "add", "insert", "pop",
+                               "popitem", "clear", "remove", "discard", "__setitem__", "sort",
+                               "reverse"})
+
+#: Why the last `harness_lanes` call answered as it did, keyed by
+#: "<ref>:<path>", so `select` can print the reason next to the answer.
+HARNESS_WHY = {}
+
+
+def _stmt_names(node):
+    """The module-level names one top-level statement binds. `_` is not a
+    name: every decorated lane is `def _(...)`, and `_` is the throwaway
+    variable in every loop, so it would join every lane to every other."""
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return (node.name,) if node.name != "_" else ()
+    targets = []
+    if isinstance(node, ast.Assign):
+        targets = node.targets
+    elif isinstance(node, ast.AnnAssign) and node.value is not None:
+        targets = [node.target]
+    names = []
+    for t in targets:
+        for n in ast.walk(t):
+            if isinstance(n, ast.Name):
+                names.append(n.id)
+            elif not isinstance(n, (ast.Tuple, ast.List, ast.Load, ast.Store)):
+                return ()          # a subscript or attribute target mutates, it does not bind
+    return tuple(sorted(set(names) - {"_"}))
+
+
+def _lane_decorators(node):
+    """The lane names a def's decorators register, or None when any decorator
+    is something other than `lane("<const>")` or `floor(...)`."""
+    names = []
+    for dec in getattr(node, "decorator_list", []):
+        if not isinstance(dec, ast.Call) or not isinstance(dec.func, ast.Name):
+            return None
+        if dec.func.id == "lane" and len(dec.args) == 1 and isinstance(dec.args[0], ast.Constant) \
+                and isinstance(dec.args[0].value, str) and not dec.keywords:
+            names.append(dec.args[0].value)
+        elif dec.func.id != "floor":
+            return None
+    return names
+
+
+def _decl_lanes(node, known):
+    """(declarer name, keyed lanes) for a top-level lane-keyed DECLARATION, or
+    None. Two shapes: `_x_decl(spec, "lane-a", "lane-b")` (the probe tables)
+    and `lane("name")(factory(...))` (a lane registered by call). A lane name
+    is a string constant that is a registered lane; `known` is that set."""
+    if not (isinstance(node, ast.Expr) and isinstance(node.value, ast.Call)):
+        return None
+    call = node.value
+    if isinstance(call.func, ast.Name) and call.func.id.endswith("_decl"):
+        if any(isinstance(a, ast.Starred) for a in call.args) or call.keywords:
+            return None
+        lanes = [a.value for a in call.args
+                 if isinstance(a, ast.Constant) and isinstance(a.value, str) and a.value in known]
+        return (call.func.id, lanes) if lanes else None
+    inner = call.func
+    if isinstance(inner, ast.Call) and isinstance(inner.func, ast.Name) and inner.func.id == "lane" \
+            and len(inner.args) == 1 and isinstance(inner.args[0], ast.Constant) \
+            and isinstance(inner.args[0].value, str) and not inner.keywords:
+        return ("lane", [inner.args[0].value])
+    return None
+
+
+def _registers_lanes_opaquely(node):
+    """A loop or block that calls `lane(<not a constant>)`: it registers lanes
+    whose names cannot be read from the text."""
+    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+        return False
+    for n in ast.walk(node):
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) and n.func.id == "lane" \
+                and not (len(n.args) == 1 and isinstance(n.args[0], ast.Constant)):
+            return True
+    return False
+
+
+def _target_base(t):
+    """The module-level NAME an assignment target writes into, through any
+    chain of subscripts and attributes (`X[k].y = v` writes into X), or None
+    for a bare name (a local binding) and anything else."""
+    if not isinstance(t, (ast.Subscript, ast.Attribute)):
+        return None
+    while isinstance(t, (ast.Subscript, ast.Attribute)):
+        t = t.value
+    return t.id if isinstance(t, ast.Name) else None
+
+
+def _is_main_guard(node):
+    return (isinstance(node, ast.If) and isinstance(node.test, ast.Compare)
+            and isinstance(node.test.left, ast.Name) and node.test.left.id == "__name__")
+
+
+_SCOPES = (ast.FunctionDef, ast.AsyncFunctionDef, ast.Lambda)
+_COMPREHENSIONS = (ast.ListComp, ast.SetComp, ast.DictComp, ast.GeneratorExp)
+
+
+def _scope_stores(body):
+    """Names a function body binds, without descending into nested scopes
+    (a nested def or class binds its own NAME here, nothing else)."""
+    out, todo = set(), list(body)
+    while todo:
+        n = todo.pop()
+        if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            out.add(n.name)
+            todo.extend(getattr(n, "decorator_list", []))
+            continue
+        if isinstance(n, (ast.Lambda,) + _COMPREHENSIONS):
+            continue
+        if isinstance(n, ast.Name) and isinstance(n.ctx, (ast.Store, ast.Del)):
+            out.add(n.id)
+        elif isinstance(n, ast.ExceptHandler) and n.name:
+            out.add(n.name)
+        elif isinstance(n, (ast.Import, ast.ImportFrom)):
+            out |= {(a.asname or a.name).split(".")[0] for a in n.names}
+        todo.extend(ast.iter_child_nodes(n))
+    return out
+
+
+def _scope_globals(body):
+    out, todo = set(), list(body)
+    while todo:
+        n = todo.pop()
+        if isinstance(n, _SCOPES + (ast.ClassDef,)):
+            continue
+        if isinstance(n, (ast.Global, ast.Nonlocal)):
+            out |= set(n.names)
+        todo.extend(ast.iter_child_nodes(n))
+    return out
+
+
+def _module_refs(node, top):
+    """Module-level names `node` reads, with function scoping (see
+    `_HarnessModel.refs`)."""
+    out = set()
+
+    def visit(n, local):
+        if isinstance(n, _SCOPES):
+            for d in getattr(n, "decorator_list", []):
+                visit(d, local)
+            for d in list(n.args.defaults) + [x for x in n.args.kw_defaults if x is not None]:
+                visit(d, local)
+            params = {a.arg for a in n.args.args + n.args.posonlyargs + n.args.kwonlyargs}
+            params |= {a.arg for a in (n.args.vararg, n.args.kwarg) if a is not None}
+            body = n.body if isinstance(n.body, list) else [n.body]
+            glob = _scope_globals(body)
+            out.update(glob & top)
+            inner = (local | params | _scope_stores(body)) - glob
+            for b in body:
+                visit(b, inner)
+            return
+        if isinstance(n, _COMPREHENSIONS):
+            gens = n.generators
+            visit(gens[0].iter, local)
+            inner = set(local)
+            for g in gens:
+                inner |= {x.id for x in ast.walk(g.target) if isinstance(x, ast.Name)}
+            for k2, g in enumerate(gens):
+                if k2:
+                    visit(g.iter, inner)
+                for cond in g.ifs:
+                    visit(cond, inner)
+            for part in ((n.key, n.value) if isinstance(n, ast.DictComp) else (n.elt,)):
+                visit(part, inner)
+            return
+        if isinstance(n, ast.Name):
+            if n.id in top and n.id not in local:
+                out.add(n.id)
+            return
+        if isinstance(n, ast.Constant):
+            if isinstance(n.value, str) and n.value in top and n.value.startswith("_") \
+                    and len(n.value) >= 4 and not n.value.startswith("__"):
+                out.add(n.value)
+            return
+        if isinstance(n, ast.Call) and isinstance(n.func, ast.Name) \
+                and n.func.id in ("getattr", "hasattr", "setattr", "delattr") and len(n.args) >= 2 \
+                and isinstance(n.args[1], ast.Constant) and n.args[1].value in top:
+            out.add(n.args[1].value)
+        if isinstance(n, ast.Subscript) and isinstance(n.value, ast.Call) \
+                and isinstance(n.value.func, ast.Name) and n.value.func.id in ("globals", "vars") \
+                and isinstance(n.slice, ast.Constant) and n.slice.value in top:
+            out.add(n.slice.value)
+        if isinstance(n, (ast.Global, ast.Nonlocal)):
+            out.update(set(n.names) & top)
+        for child in ast.iter_child_nodes(n):
+            visit(child, local)
+
+    visit(node, set())
+    return out
+
+
+def _cli_without_diff(model, name):
+    """`main` with every `if args.diff...:` block and every `--diff`-only
+    argument removed, dumped, or None when there is no single `main`. Two
+    revisions equal under this differ only in the comparison code."""
+    import copy
+    ks = model.defs.get(name, [])
+    if len(ks) != 1:
+        return None
+    node = copy.deepcopy(model.stmts[ks[0]])
+
+    def diff_only(stmt):
+        if isinstance(stmt, ast.If):
+            return any(isinstance(n, ast.Attribute) and n.attr in ("diff", "require_columns", "owed_json")
+                       for n in ast.walk(stmt.test))
+        if isinstance(stmt, ast.Expr) and isinstance(stmt.value, ast.Call) \
+                and getattr(stmt.value.func, "attr", None) == "add_argument":
+            flags = [a.value for a in stmt.value.args if isinstance(a, ast.Constant)]
+            return bool(flags) and all(f in ("--diff", "--require-columns", "--owed-json") for f in flags)
+        return False
+
+    for n in ast.walk(node):
+        for field in ("body", "orelse"):
+            body = getattr(n, field, None)
+            if isinstance(body, list) and body and isinstance(body[0], ast.stmt):
+                kept = [b for b in body if not diff_only(b)]
+                setattr(n, field, kept or [ast.Pass()])
+    return ast.dump(node)
+
+
+class _HarnessModel:
+    """One revision of the harness as a graph of top-level statements.
+
+    Every statement is one of: a LANE DEF (`@lane(...)` def), a DECLARATION
+    keyed by lane names (`_batch_decl(..., "kmeans")`, `lane("x")(f(...))`), an
+    OPAQUE REGISTRATION (a loop registering lanes by computed name), a NAMED
+    definition (def, class, assignment), an import, or other IMPORT-TIME CODE.
+    `refs` of a statement are the module-level names it mentions, as a Name or
+    as a string constant equal to one (so `getattr(mod, "x")` counts)."""
+
+    def __init__(self, text, known_lanes=(), runtime_roots=None):
+        self.tree = _strip_docstrings(ast.parse(text))
+        self.stmts = list(self.tree.body)
+        self.defs = {}
+        for k, node in enumerate(self.stmts):
+            for name in _stmt_names(node):
+                self.defs.setdefault(name, []).append(k)
+            if isinstance(node, (ast.Import, ast.ImportFrom)):
+                for a in node.names:
+                    self.defs.setdefault((a.asname or a.name).split(".")[0], []).append(k)
+        self.top = set(self.defs)
+        self.static_lanes = {}
+        for k, node in enumerate(self.stmts):
+            names = _lane_decorators(node) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) else None
+            if names:
+                for n in names:
+                    self.static_lanes.setdefault(n, []).append(k)
+        self.known = set(known_lanes) | set(self.static_lanes)
+        self.kind, self.decl = {}, {}
+        for k, node in enumerate(self.stmts):
+            if k in {i for v in self.static_lanes.values() for i in v}:
+                self.kind[k] = "lanedef"
+            elif _decl_lanes(node, self.known):
+                self.kind[k] = "decl"
+                self.decl[k] = _decl_lanes(node, self.known)
+            elif _registers_lanes_opaquely(node):
+                self.kind[k] = "loop"
+            elif isinstance(node, (ast.Import, ast.ImportFrom)):
+                self.kind[k] = "import"
+            elif _stmt_names(node):
+                self.kind[k] = "named"
+            elif _is_main_guard(node):
+                self.kind[k] = "guard"
+            else:
+                self.kind[k] = "exec"
+        self._refs = {}
+        self.runtime_roots = runtime_roots
+
+    def refs(self, k):
+        """Module-level names statement k mentions, honouring Python's
+        scoping: a name a function binds (a parameter, an assignment, a loop
+        or `with` target) is LOCAL in that whole function and is not a
+        reference to the module-level name it shadows. `_radius_for` binds a
+        local `diff`, and reading that as the CLI's `diff` joined every radius
+        lane to the comparison code. A STRING counts as a name where Python
+        looks names up by string (`getattr(m, "x")`, `globals()["x"]`), and
+        anywhere when it is a private helper's name (`"_x..."`), the shape a
+        dispatch table keyed by function name takes."""
+        if k not in self._refs:
+            self._refs[k] = _module_refs(self.stmts[k], self.top)
+        return self._refs[k]
+
+    def closure(self, names):
+        seen, todo = set(), [n for n in names if n in self.top]
+        while todo:
+            n = todo.pop()
+            if n in seen:
+                continue
+            seen.add(n)
+            for k in self.defs.get(n, ()):
+                todo.extend(r for r in self.refs(k) if r not in seen)
+        return seen
+
+    def mutators(self):
+        """Top-level defs and classes that change module-level state when called."""
+        out = set()
+        for k, node in enumerate(self.stmts):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                continue
+            for n in ast.walk(node):
+                hit = False
+                if isinstance(n, ast.Global):
+                    hit = True
+                elif isinstance(n, (ast.Assign, ast.AugAssign, ast.Delete)):
+                    targets = n.targets if isinstance(n, (ast.Assign, ast.Delete)) else [n.target]
+                    for t in targets:
+                        base = _target_base(t)
+                        if base is not None and base in self.top:
+                            hit = True
+                elif isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute) \
+                        and n.func.attr in _MUTATING_METHODS and isinstance(n.func.value, ast.Name) \
+                        and n.func.value.id in self.top:
+                    hit = True
+                if hit:
+                    out.add(node.name)
+                    break
+        return out
+
+    def driver_roots(self, extra=()):
+        roots = set(HARNESS_DRIVERS) | set(extra) | self.mutators()
+        for k, node in enumerate(self.stmts):
+            kind = self.kind[k]
+            if kind in ("exec", "import"):
+                roots |= self.refs(k)
+            elif kind == "decl":
+                roots.add(self.decl[k][0])
+            elif kind in ("lanedef", "named") and isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                for dec in node.decorator_list:
+                    roots |= {n.id for n in ast.walk(dec) if isinstance(n, ast.Name) and n.id in self.top}
+                if isinstance(node, ast.ClassDef):
+                    for item in node.body:
+                        if not isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                            roots |= {n.id for n in ast.walk(item) if isinstance(n, ast.Name) and n.id in self.top}
+                    for b in node.bases + [kw.value for kw in node.keywords]:
+                        roots |= {n.id for n in ast.walk(b) if isinstance(n, ast.Name) and n.id in self.top}
+        return roots & self.top
+
+    def lane_roots(self):
+        """lane -> set of statement indices that define or declare it, and the
+        set of loop statements whose lanes could not be placed."""
+        roots = {n: set(ks) for n, ks in self.static_lanes.items()}
+        for k, (_, lanes) in self.decl.items():
+            for n in lanes:
+                roots.setdefault(n, set()).add(k)
+        loops = [k for k, kind in self.kind.items() if kind == "loop"]
+        opaque = set(loops)
+        if self.runtime_roots is not None and loops:
+            # A lane registered by a loop: its function's code sits in some
+            # top-level statement (a factory def, or the loop itself). Placed
+            # when that statement is the loop, or a def the loop reaches.
+            placed = set()
+            for k in loops:
+                reach = self.closure(self.refs(k))
+                for lane_name, where in self.runtime_roots.items():
+                    if lane_name in self.static_lanes:
+                        continue
+                    if where == k or (where is not None and set(_stmt_names(self.stmts[where])) & reach):
+                        roots.setdefault(lane_name, set()).update({k} | ({where} if where is not None else set()))
+                        placed.add(lane_name)
+            unplaced = [n for n in self.runtime_roots if n not in roots and n not in placed]
+            if not unplaced:
+                opaque = set()
+        return roots, opaque
+
+
+def _runtime_lane_roots(model, path):
+    """lane -> index of the top-level statement holding its function's code,
+    from the IMPORTED harness, or None when the file on disk is not the text
+    being analysed or a lane has no code object to place."""
+    if path != HARNESS:
+        return None
+    try:
+        ib = identity_break()
+        lanes = dict(ib.LANES)
+    except Exception:
+        return None
+    spans = []
+    for k, node in enumerate(model.stmts):
+        start = min([node.lineno] + [d.lineno for d in getattr(node, "decorator_list", [])])
+        spans.append((start, node.end_lineno, k))
+    out = {}
+    for name, fn in lanes.items():
+        code = getattr(fn, "__code__", None)
+        if code is None:
+            return None
+        line = code.co_firstlineno
+        hits = [k for a, b, k in spans if a <= line <= b]
+        out[name] = hits[0] if len(hits) == 1 else None
+        if out[name] is None:
+            return None
+    return out
+
+
+def _runtime_import_roots(model):
+    """Harness names the files the harness imports while it records a column
+    (HARNESS_RUNTIME_IMPORTS) read off the module object it hands them."""
+    out = set()
+    for rel in HARNESS_RUNTIME_IMPORTS:
+        tree = _parse(rel)
+        for n in ast.walk(tree or ast.Module(body=[], type_ignores=[])):
+            if isinstance(n, ast.Attribute) and n.attr in model.top:
+                out.add(n.attr)
+    return out
+
+
+def harness_closure_lanes(old_text, new_text, path=HARNESS):
+    """The lanes a harness diff reaches BY CALL GRAPH, or None for every lane,
+    with the reason either way: (lanes, why).
+
+    The line-level rule above (`harness_lanes`) narrows only when the diff is
+    lane bodies, additions and lane-keyed prose, and answers every lane for
+    anything else, including a helper one lane calls. On 2026-09-22 that sent
+    the 0.8.14 release to every lane. This reads the harness as a graph:
+
+      * each lane's CLOSURE is every module-level name its def (or its
+        declarations: `_batch_decl(..., "lane")`, `lane("x")(factory())`)
+        reaches, transitively through the harness's own functions, classes
+        and assignments. A string constant equal to a module-level name
+        counts as a reference, so `getattr(module, "name")` is not missed;
+      * the SHARED part is everything the column recorder reaches (`run`,
+        `run_jobs`, `merge`), everything executed at import that is not a
+        lane-keyed declaration, every declarer (`_batch_decl` itself), every
+        decorator, every MUTATOR (a function that writes module-level state)
+        and every name the harness's run-time imports read off it;
+      * a changed name in the shared part selects every lane, and says which
+        name; a changed name only lanes reach selects exactly those lanes; a
+        name reached only through `main`'s `--diff` branch selects none; a
+        name reached by NOTHING selects every lane, because being unsure is
+        a reason to widen, never to narrow.
+
+    Lanes registered by a loop over computed names are placed by the imported
+    harness (the statement their function's code sits in). Without that, a
+    change their loop reaches selects every lane."""
+    try:
+        runtime = None
+        probe = _HarnessModel(new_text)
+        runtime = _runtime_lane_roots(probe, path)
+        known = set(runtime or ()) | set(probe.static_lanes)
+        new = _HarnessModel(new_text, known, runtime)
+        old = _HarnessModel(old_text, known)
+    except SyntaxError:
+        return None, "the harness does not parse"
+    lanes, why = set(), []
+
+    # 1. What changed, statement by statement.
+    def keyed(model):
+        named, other = {}, []
+        for k, node in enumerate(model.stmts):
+            kind = model.kind[k]
+            names = _stmt_names(node) if kind == "named" else ()
+            if kind == "lanedef":
+                names = ("@lane",) + tuple(_lane_decorators(node))
+            if names:
+                named.setdefault(names, []).append(k)
+            else:
+                other.append(k)
+        return named, other
+    onamed, oother = keyed(old)
+    nnamed, nother = keyed(new)
+    changed_names, removed_names = set(), set()
+    for key in set(onamed) | set(nnamed):
+        ok, nk = onamed.get(key, []), nnamed.get(key, [])
+        if len(ok) > 1 or len(nk) > 1:
+            return None, f"{'/'.join(key)} is defined more than once at module level"
+        od = ast.dump(old.stmts[ok[0]]) if ok else None
+        nd = ast.dump(new.stmts[nk[0]]) if nk else None
+        if od == nd:
+            continue
+        if ok and nk and new.kind[nk[0]] == "named" and old.kind[ok[0]] == "named":
+            prose = _lane_keyed_prose([(key, old.stmts[ok[0]], od)], [(key, new.stmts[nk[0]], nd)], known)
+            if prose is not None:
+                lanes |= prose
+                why.append(f"{'/'.join(key)}: lane-keyed prose for {','.join(sorted(prose)) or 'no lane'}")
+                continue
+        for side, model, ks in ((old, old, ok), (new, new, nk)):
+            for k in ks:
+                if model.kind[k] == "lanedef":
+                    hit = {n for n in (_lane_decorators(model.stmts[k]) or []) if n in known}
+                    lanes |= hit
+                    why.append(f"lane body {'/'.join(key)}: {','.join(sorted(hit))}")
+        if key[0] == "@lane":
+            key = _stmt_names((new.stmts[nk[0]] if nk else old.stmts[ok[0]]))
+        changed_names |= set(key)
+        if not nk:
+            removed_names |= set(key)
+    ocount, ncount = {}, {}
+    for k in oother:
+        ocount.setdefault(ast.dump(old.stmts[k]), []).append(k)
+    for k in nother:
+        ncount.setdefault(ast.dump(new.stmts[k]), []).append(k)
+    roots, opaque = new.lane_roots()
+    for dump in set(ocount) | set(ncount):
+        if len(ocount.get(dump, [])) == len(ncount.get(dump, [])):
+            continue
+        for model, ks in ((old, ocount.get(dump, [])), (new, ncount.get(dump, []))):
+            for k in ks:
+                kind = model.kind[k]
+                if kind == "decl":
+                    hit = set(model.decl[k][1])
+                    lanes |= hit
+                    why.append(f"a {model.decl[k][0]} declaration: {','.join(sorted(hit))}")
+                elif kind == "loop" and model is new and k not in opaque:
+                    hit = {n for n, ks2 in roots.items() if k in ks2}
+                    lanes |= hit
+                    why.append(f"a lane registration loop (line {model.stmts[k].lineno}): {len(hit)} lane(s)")
+                elif kind == "loop":
+                    return None, (f"a loop that registers lanes by computed name changed (line "
+                                  f"{model.stmts[k].lineno}) and its lanes could not be placed: every lane")
+                elif kind == "guard":
+                    return None, "the `if __name__ == '__main__'` guard changed"
+                else:
+                    return None, (f"import-time code changed (line {model.stmts[k].lineno}, "
+                                  f"{type(model.stmts[k]).__name__}); it can reach any lane")
+
+    # 2. Who reaches each changed name.
+    names = changed_names
+    if not names:
+        return sorted(lanes), "; ".join(why) or "no code change"
+    driver = new.closure(new.driver_roots(_runtime_import_roots(new)))
+    cli = new.closure({HARNESS_CLI})
+    closures = {n: new.closure(set().union(*[new.refs(k) | set(_stmt_names(new.stmts[k])) for k in ks]))
+                for n, ks in roots.items()}
+    opaque_reach = new.closure(set().union(*[new.refs(k) for k in opaque])) if opaque else set()
+    for name in sorted(names):
+        if name == HARNESS_CLI:
+            if _cli_without_diff(old, name) is not None and \
+                    _cli_without_diff(old, name) == _cli_without_diff(new, name):
+                why.append("`main`: only its `if args.diff:` branch changed, which records no cell")
+                continue
+            return None, "`main`, the CLI that starts every column, changed outside its --diff branch"
+        if name in driver:
+            return None, (f"`{name}` is shared: the column recorder (run, run_jobs, merge), import-time "
+                          "code, a declarer, a decorator or a mutator reaches it, so every lane")
+        if name in opaque_reach:
+            return None, (f"`{name}` is reached by a loop that registers lanes by computed name, which "
+                          "the imported harness could not place: every lane")
+        hit = {n for n, c in closures.items() if name in c}
+        if hit:
+            lanes |= hit
+            why.append(f"`{name}`: reached by {len(hit)} lane(s)")
+            continue
+        if name in cli:
+            why.append(f"`{name}`: reached only through main's --diff comparison, which records no cell")
+            continue
+        if name in removed_names and name not in new.top:
+            why.append(f"`{name}`: removed, and nothing left in the harness names it")
+            continue
+        return None, f"`{name}` is reached by nothing this reader can see; unsure, so every lane"
+    return sorted(lanes & (set(roots) | known)), "; ".join(why)
 
 
 def pixi_toml_build_part(text):
@@ -2261,7 +2876,29 @@ def changed_paths(ref):
     return sorted(out)
 
 
-def select(paths, ref=None, sources=None):
+#: BUILD INPUTS OF ONE PLATFORM'S WHEEL. A column is recorded from binaries
+#: built where it runs: the CPU and Apple passes from this Mac's own builds,
+#: the NVIDIA and AMD columns from the Linux release sets. A Linux packaging
+#: input cannot reach a binary built on the Mac, nor a macOS one a Linux set,
+#: so for a `backend` given to `select`, the OTHER platform's packaging tree
+#: is inert. Without a backend nothing changes: it widens as before.
+PLATFORM_BUILD_TREES = {"linux": "packaging/linux/", "macos": "packaging/macos/"}
+
+
+def _other_platform_tree(path, backend):
+    if backend in ("cuda", "hip"):
+        own = "linux"
+    elif backend == "metal" or (backend == "cpu" and sys.platform == "darwin"):
+        own = "macos"
+    else:
+        return None
+    for plat, tree in PLATFORM_BUILD_TREES.items():
+        if plat != own and path.startswith(tree):
+            return plat
+    return None
+
+
+def select(paths, ref=None, sources=None, backend=None):
     """The lanes `paths` can affect.
 
     Returns a dict: `lanes` (sorted), `fallback` (True when the answer is
@@ -2295,6 +2932,12 @@ def select(paths, ref=None, sources=None):
             inert.append(path)
             reasons[path] = "inert (prose or evidence)"
             continue
+        other = _other_platform_tree(path, backend)
+        if other:
+            inert.append(path)
+            reasons[path] = (f"a {other} wheel build input: no binary a {backend} column runs on is built "
+                             f"from it (the {backend} column's binaries are built elsewhere)")
+            continue
         if ref and docstring_only(ref, path):
             inert.append(path)
             reasons[path] = ("docstrings and comments only: the module's code is IDENTICAL to "
@@ -2302,14 +2945,16 @@ def select(paths, ref=None, sources=None):
             continue
         if path == HARNESS:
             touched = harness_lanes(ref) if ref else None
+            detail = HARNESS_WHY.get(f"{ref}:{HARNESS}", "no ref to compare against") if ref else \
+                "no ref to compare against"
             if touched is None:
                 fallback = True
                 unattributed.append(path)
-                reasons[path] = ("the harness itself changed outside a lane body "
-                                 "(or no ref to compare against): every lane")
+                reasons[path] = f"the harness changed and its call graph says every lane: {detail}"
             else:
-                lanes |= set(touched)
-                reasons[path] = f"harness diff touches only these lane bodies: {','.join(touched) or 'none'}"
+                lanes |= set(touched) & set(every)
+                reasons[path] = (f"harness diff touches only these lane bodies: {','.join(touched) or 'none'} "
+                                 f"({detail})")
             continue
         if path in NATIVE_INPUTS:
             # BEFORE `unreachable`: stage.py is a Python file outside the
