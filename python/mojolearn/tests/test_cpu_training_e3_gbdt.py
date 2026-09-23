@@ -97,7 +97,10 @@ def test_every_fit_refusal_names_the_missing_cpu_implementation():
                  "random_strength=", "boost_from_average=True",
                  "feature_fraction=", "an X carrying NaN"):
         assert f"_refuse(" in src and what in src, f"no by-name refusal for {what}"
-    oracle = _read(ORACLE)
+    # The oracle is split by grow policy since 8b0ab3f6f (gbdt_oracle.mojo,
+    # _onehot, _depthwise, _pointwise, _ordered); the binary-policy refusal
+    # lives in the policies' files, so every oracle file is read.
+    oracle = "".join(_read(str(p.relative_to(ROOT))) for p in sorted((ROOT / "gbdt" / "host").glob("gbdt_oracle*.mojo")))
     assert "no CPU implementation of _mojolearn_gbdt.gbdt_fit for a" in oracle, (
         "the binary-policy refusal must carry the gate's sentence"
     )

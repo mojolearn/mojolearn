@@ -111,7 +111,9 @@ def test_every_entry_samba_reaches_is_on_the_host():
         # ordinary block entries, guarded by export checks in the wrappers.
         resident = {
             "mamba": {"mamba1_session_" + name for name in
-                      ("create", "open", "step", "export_state", "load_state", "info", "close")},
+                      ("create", "open", "step", "export_state", "load_state", "info", "close")}
+                | {f"mamba{v}_session_{name}" for v in (2, 3) for name in
+                   ("create", "open", "step", "export_state", "load_state", "close")},  # 769936f70, probed by `_has`
             "transformer": {"transformer_session_" + name for name in ("create", "forward", "close")}
                 | {"transformer_decode_session_" + name for name in
                    ("create", "open", "step", "forward", "export_state", "load_state", "close")},

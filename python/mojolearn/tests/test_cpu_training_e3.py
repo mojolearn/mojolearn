@@ -98,10 +98,16 @@ def test_oracle_imports_no_gpu_and_no_device_module():
     # elements that are indistinguishable, and stability is unobservable. It
     # replaced an O(n^2) insertion sort.
     #
+    # `ensemble.host_layout` was admitted 2026-09-22 (115619efa): the oracle
+    # refuses NaN in X by the same name and the same scan (`RF_NAN_REFUSAL`,
+    # `has_nan_f32`) as the device fit, which had hung on it. A refusal
+    # before the first split cannot move a bit of a fit that runs.
+    #
     # A future import needs its own sentence here before it is added.
     assert sorted(set(imports)) == [
-        "checks.numerics", "core.host_predict_threads", "max.algorithm",
-        "std.builtin.sort", "std.math", "std.memory", "std.sys.compile",
+        "checks.numerics", "core.host_predict_threads", "ensemble.host_layout",
+        "max.algorithm", "std.builtin.sort", "std.math", "std.memory",
+        "std.sys.compile",
     ], imports
 
 
