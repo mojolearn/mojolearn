@@ -427,7 +427,14 @@ class Release:
         branch = git("rev-parse", "--abbrev-ref", "HEAD")
         if branch == "HEAD":
             raise StepFailed("detached HEAD; release from a branch (main) so the commit can be pushed")
-        self.must(["git", "-C", ROOT, "push", "origin", f"HEAD:refs/heads/{branch}"], what="git push")
+        # A rerun after main moved on (a fix landed while the legs built) must
+        # not push the frozen commit over the newer main, and needs no push at
+        # all when origin already contains it (0.8.16's second run stopped
+        # here on a rejected non-fast-forward push).
+        self.must(["git", "-C", ROOT, "fetch", "-q", "origin", branch], what="git fetch")
+        contained = subprocess.run(["git", "-C", str(ROOT), "merge-base", "--is-ancestor", "HEAD", f"origin/{branch}"]).returncode == 0
+        if not contained:
+            self.must(["git", "-C", ROOT, "push", "origin", f"HEAD:refs/heads/{branch}"], what="git push")
         if self.dry:
             return f"would freeze {'the bump commit' if dirty else head}"
         head = git("rev-parse", "HEAD")
