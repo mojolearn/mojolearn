@@ -220,7 +220,7 @@ def cmd_recipe(args):
                                                                             args.final_ratio)),
         data=dict(schedule=SCHEDULE, tokens_sha256=batches.sha256, tokens_manifest_sha256=batches.manifest_sha256,
                   train_range=[batches.lo, batches.hi], vocabulary=batches.vocabulary),
-        checkpoint_every=args.checkpoint_every, boundaries=boundaries,
+        checkpoint_every=args.checkpoint_every, boundaries=boundaries, hash_scheme=args.hash_scheme,
         reduction="ordered_sum", written_by=dict(box=_box(), commit=_commit(), utc=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())),
     )
     Path(args.out).write_text(json.dumps(recipe, indent=1) + "\n")
@@ -433,19 +433,38 @@ def _pool():
     return _POOL
 
 
-def _hash_arrays(raw):
-    """The state hash: sha256 over the four arrays' sliced digests, in order."""
+SCHEME_V1 = "sha256.v1"                       # one sha256 over the four arrays in order (the T1 and T2 chains)
+SCHEME_V2 = "sliced-sha256-%d.v2" % HASH_SLICES  # sha256 of eight sliced sha256s per array, threaded
+DEFAULT_SCHEME = SCHEME_V1
+
+
+def hash_scheme_of(recipe):
+    """THE RECIPE NAMES THE HASH SCHEME, so a run cannot change it between
+    segments (T2 segment 3 once failed on exactly that: a replay hashed
+    with a newer scheme against a chain hashed with the older). A recipe
+    without the field is the first scheme."""
+    scheme = recipe.get("hash_scheme", DEFAULT_SCHEME)
+    if scheme not in (SCHEME_V1, SCHEME_V2):
+        raise SystemExit("recipe: unknown hash_scheme %r" % scheme)
+    return scheme
+
+
+def _hash_arrays(raw, scheme=DEFAULT_SCHEME):
+    """The state hash over parameters, m, v, flags in order, under `scheme`."""
     h = hashlib.sha256()
+    if scheme == SCHEME_V1:
+        for key in ARRAYS:
+            h.update(memoryview(raw[key]).cast("B"))
+        return h.hexdigest()
     for key in ARRAYS:
         h.update(_sha_sliced(raw[key], pool=_pool()).encode())
     return h.hexdigest()
 
 
-def _hash_gradient(view):
+def _hash_gradient(view, scheme=DEFAULT_SCHEME):
+    if scheme == SCHEME_V1:
+        return _sha(memoryview(view).cast("B"))
     return _sha_sliced(view, pool=_pool())
-
-
-HASH_SCHEME = "sliced-sha256-%d.v2" % HASH_SLICES
 
 
 def _chain_index(path):
@@ -555,14 +574,25 @@ def _run_live(args, recipe, batches, state, devices, chain, table, out, manifest
     last_commit = [time.perf_counter()]
     stop = {"flag": False}
 
+    scheme = hash_scheme_of(recipe)
+
     def make_commit(trainer):
         def on_commit(completed, row):
             now = time.perf_counter()
+            # the chain line's hashes under the RECIPE's scheme, from this
+            # replica's state and the total's bytes, so a live segment's chain
+            # compares with any other segment's (the group's own agreement is
+            # the coordinator's plain sha256 in coordinator.jsonl)
+            t0 = time.perf_counter()
+            state_digest = _hash_arrays(trainer.export_raw(), scheme)
+            grad_digest = _hash_gradient(row["total_bytes"], scheme) if row.get("total_bytes") is not None else row["total_sha256"]
+            hash_seconds = time.perf_counter() - t0
             line = dict(schema=CHAIN_SCHEMA, step=completed, route=args.route, segment=args.segment, label=args.label,
                         lr_f32_hex=table[completed - 1], losses_f32_hex=["%08x" % _f32_bits(x) for x in row["losses"]],
-                        state_sha256=row["state"], gradient_sha256=row["total_sha256"], hash_scheme="sha256.v1",
+                        state_sha256=state_digest, gradient_sha256=grad_digest, hash_scheme=scheme,
+                        group_state_sha256=row["state"], group_total_sha256=row["total_sha256"],
                         batch_index=[(completed - 1) * K, completed * K], seconds=round(now - last_commit[0], 4),
-                        hash_seconds=0.0, live=segment["live"])
+                        hash_seconds=round(hash_seconds, 3), live=segment["live"])
             last_commit[0] = time.perf_counter()
             if not chain.write(line):
                 stop["flag"] = True
@@ -694,6 +724,13 @@ def cmd_run(args):
                    checkpoints=[], utc_start=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
     chain = ChainWriter(out / "chain.jsonl", first, expect, say)
     table = recipe["schedule"]["table_f32_hex"]
+    scheme = hash_scheme_of(recipe)
+    if expect is not None:
+        theirs = {row.get("hash_scheme") or SCHEME_V1 for row in expect.values()}
+        if theirs != {scheme}:
+            raise SystemExit("REFUSED: the expected chain was hashed under %s and this recipe names %s; the two cannot be compared"
+                             % (sorted(theirs), scheme))
+    segment["hash_scheme"] = scheme
 
     def in_window(step):
         return any(a <= step < b for a, b in args.record_window)
@@ -721,12 +758,12 @@ def cmd_run(args):
                 step_seconds = time.perf_counter() - t0
                 t1 = time.perf_counter()
                 raw = trainer.export_raw()
-                state_digest = _hash_arrays(raw)
-                grad_digest = _hash_gradient(trainer.export_gradients())
+                state_digest = _hash_arrays(raw, scheme)
+                grad_digest = _hash_gradient(trainer.export_gradients(), scheme)
                 hash_seconds = time.perf_counter() - t1
                 row = dict(schema=CHAIN_SCHEMA, step=completed, route=args.route, segment=args.segment, label=args.label,
                            lr_f32_hex=lr_hex, losses_f32_hex=["%08x" % _f32_bits(x) for x in result["losses"]],
-                           state_sha256=state_digest, gradient_sha256=grad_digest, hash_scheme=HASH_SCHEME,
+                           state_sha256=state_digest, gradient_sha256=grad_digest, hash_scheme=scheme,
                            batch_index=[s * K, s * K + K], seconds=round(step_seconds, 4),
                            hash_seconds=round(hash_seconds, 3))
                 if in_window(s):
@@ -839,6 +876,8 @@ def main(argv=None):
     r.add_argument("--weight-decay", type=float, default=0.1)
     r.add_argument("--checkpoint-every", type=int, default=100)
     r.add_argument("--boundaries", default="", help="comma-separated global steps ending each segment")
+    r.add_argument("--hash-scheme", choices=(SCHEME_V1, SCHEME_V2), default=SCHEME_V1,
+                   help="the chain's hash scheme for the WHOLE run (v2 is about five times faster at 162M)")
 
     i = sub.add_parser("init")
     i.add_argument("--recipe", required=True)

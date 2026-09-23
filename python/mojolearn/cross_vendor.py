@@ -450,12 +450,12 @@ class Worker:
                     if want is not None and hashlib.sha256(total).hexdigest() != want:
                         raise CrossVendorMismatch("%s holds a total whose hash is not the coordinator's" % self.name)
                     tr.apply_gradient(array.array("f", total))
-                    total = None
+                    applied, total = total, None
                     committed += 1
                     digest = trainer_state_hash(tr)
                     if self.on_commit is not None:
                         self.on_commit(tr.step_, dict(step=tr.step_, state=digest, total_sha256=want,
-                                                      losses=head.get("losses")))
+                                                      losses=head.get("losses"), total_bytes=applied))
                     _send(sock, {"completed": tr.step_, "state": digest})
                 elif cmd == "done":
                     return committed
