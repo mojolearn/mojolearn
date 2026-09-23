@@ -79,8 +79,18 @@ PYCPU
   fi
 fi
 
+# The column's label names the box: nvidia-<gpu> or amd-<gpu>, from the
+# driver's own tool (identity_break refuses a placeholder label).
+if [[ "$backend" = cuda ]]; then
+  gpu=$(nvidia-smi --query-gpu=name --format=csv,noheader 2>/dev/null | head -1); prefix=nvidia
+else
+  gpu=$(rocm-smi --showproductname 2>/dev/null | grep -i 'card series' | head -1 | sed 's/.*: *//'); prefix=amd
+fi
+label=$(printf '%s-%s' "$prefix" "${gpu:-gpu}" | tr '[:upper:] ' '[:lower:]-' | sed 's/[^a-z0-9_.-]/-/g; s/--*/-/g; s/-$//')
+echo "vendor_label=$label" >> "$OUT/column.txt"
 timeout -k 30 "$seconds" "$PY" tools/verify_lanes.py --gpu-pass "$backend" --selection "$SEL" \
-    --gpu-set "$RB/build/sets/$backend" --budget $((seconds - 60)) --out "$OUT/$backend" > "$OUT/$backend.log" 2>&1
+    --gpu-set "$RB/build/sets/$backend" --vendor "$label" --budget $((seconds - 60)) \
+    --out "$OUT/$backend" > "$OUT/$backend.log" 2>&1
 rc=$?
 echo "$rc" > "$OUT/$backend.exit"
 [[ -n "$cpu_pid" ]] && wait "$cpu_pid"
