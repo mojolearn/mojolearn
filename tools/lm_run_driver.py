@@ -386,6 +386,25 @@ def _start(spec, e, out, ledger):
     return rent_one(spec, e, body, out)
 
 
+def _plan_shape(plan):
+    return [(e["route"], e["segment"], e["vendor"], e["steps"], e["first"], e["last"]) for e in plan]
+
+
+def fresh_spec(path, plan):
+    """The spec file read again when a segment starts, so that its rental
+    parameters (wheel, amd_size, amd_devices, amd_providers, nvidia_gpus,
+    caps) are the ones on disk now, not the ones at launch: a wheel with a
+    fix, or the AMD size once a provider's limit lands, reach the next
+    segment without a restart. The PLAN may not change under a run: a spec
+    whose routes, vendors or step counts differ from the launch plan is
+    refused by name and the segment is not started."""
+    spec = load_spec(path)
+    if _plan_shape(segment_plan(spec)) != _plan_shape(plan):
+        raise RuntimeError("%s: the routes, vendors or step counts changed since the driver started; "
+                           "restart the driver for a new plan" % path)
+    return spec
+
+
 def cmd_run(args):
     import threading
     spec = load_spec(args.spec)
@@ -404,7 +423,12 @@ def cmd_run(args):
 
     def worker(e, holder):
         try:
-            holder["result"] = _start(spec, e, out, ledger)
+            now = fresh_spec(args.spec, plan)
+            changed = sorted(k for k in set(now) | set(spec) if k != "routes" and now.get(k) != spec.get(k))
+            if changed:
+                _log(out, "%s/%s: spec re-read, changed since launch: %s" % (
+                    e["route"], e["segment"], ", ".join("%s=%s" % (k, json.dumps(now.get(k))) for k in changed)))
+            holder["result"] = _start(now, e, out, ledger)
         except BaseException as exc:  # noqa: BLE001
             holder["error"] = exc
 

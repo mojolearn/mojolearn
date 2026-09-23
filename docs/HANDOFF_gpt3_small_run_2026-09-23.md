@@ -86,7 +86,11 @@ mid-run (the recipe pins the hash scheme now, but the runner archives HEAD).
   if you change it (`sh tools/dataset_store.sh presign-put KEY 3600`, then
   curl -T).
 - The driver is resumable: rerun the same command and it skips landed
-  segments (`ledger.json`). It halts on a FAIL verdict (the halt rule) and
+  segments (`ledger.json`). It re-reads the spec file when each segment
+  starts, so a changed `wheel`, `amd_size`, `amd_devices`, `amd_providers`
+  or `nvidia_gpus` reaches the next segment without a restart (the log says
+  what changed); a changed plan (routes, vendors, step counts) is refused
+  by name and needs a restart. It halts on a FAIL verdict (the halt rule) and
   on a missing result; read `driver.log`, the leg's `status.txt` and the
   segment's `segment.json` disagreements before rerunning.
 - `--parallel 2` runs one NVIDIA and one AMD segment at once; a live segment
