@@ -219,6 +219,13 @@ class SafetensorsFile:
             try:
                 if t.size == 0:
                     owned = frombytes(b"", typestr, t.shape)
+                elif code == "e":
+                    # memoryview.cast("e") exists only from Python 3.12, and the
+                    # wheel supports 3.10 up; float16 is widened from its bits
+                    # below, so its bytes are copied as they are.
+                    owned = frombytes(raw.tobytes(), typestr, t.shape if t.shape else (1,))
+                    if not t.shape:
+                        owned = owned.reshape(())
                 else:
                     shape = t.shape if t.shape else (1,)
                     typed = raw.cast("B").cast(code, shape)
