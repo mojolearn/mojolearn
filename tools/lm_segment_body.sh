@@ -126,16 +126,49 @@ if [ -z "$(find /root -name tokens.i32.part00 -o -name tokens.i32 2>/dev/null | 
     # every part at once, each with its own time limit and retries: a single
     # stalled transfer once held a pod for two hours (T2 segment 3, attempt 2)
     run_py - "$OUT/tokens_urls.json" "$_td" > "$OUT/tokens_fetch.log" 2>&1 <<'PY'
-import json, subprocess, sys
+import json, os, subprocess, sys, time
 from concurrent.futures import ThreadPoolExecutor
 urls, out = json.load(open(sys.argv[1])), sys.argv[2]
+# Byte ranges of 100 MB, twenty at a time, each with a real speed floor and
+# its own retries; only the ranges still missing are fetched again. One
+# stream per part sat at 130 KB/s for 25 minutes on an H100 pod (T3
+# rehearsal, 2026-09-23) while range requests to the same objects ran at
+# 35 to 48 MB/s, and a whole-file floor of 100 KB/s never fired.
+CHUNK = 100_000_000
+def size_of(url):
+    r = subprocess.run(["curl", "-fsSI", "--max-time", "60", url], capture_output=True, text=True)
+    for line in r.stdout.splitlines():
+        if line.lower().startswith("content-length:"):
+            return int(line.split(":", 1)[1])
+    raise SystemExit("no content-length for %s" % url[:80])
+def fetch_range(item):
+    name, url, i, a, b, path = item
+    for attempt in range(6):
+        r = subprocess.run(["curl", "-fsS", "--max-time", "120", "--speed-limit", "1000000", "--speed-time", "30",
+                            "-r", "%d-%d" % (a, b), "-o", path, url], capture_output=True, text=True)
+        if r.returncode == 0 and os.path.getsize(path) == b - a + 1:
+            return True
+        time.sleep(2)
+    return False
 def get(item):
     name, url = item
-    r = subprocess.run(["curl", "-fsS", "--retry", "5", "--retry-all-errors", "--max-time", "1500", "--speed-limit", "100000",
-                        "--speed-time", "60", "-o", out + "/" + name, url], capture_output=True, text=True)
-    print("fetched" if r.returncode == 0 else "FAILED", name, r.stderr.strip()[:200], flush=True)
-    return r.returncode
-with ThreadPoolExecutor(max_workers=8) as pool:
+    t0 = time.time()
+    total = size_of(url)
+    ranges = [(i, i * CHUNK, min(total, (i + 1) * CHUNK) - 1) for i in range((total + CHUNK - 1) // CHUNK)]
+    paths = {i: "%s/.%s.r%04d" % (out, name, i) for i, _, _ in ranges}
+    with ThreadPoolExecutor(max_workers=20) as pool:
+        ok = list(pool.map(fetch_range, [(name, url, i, a, b, paths[i]) for i, a, b in ranges]))
+    if not all(ok):
+        print("FAILED", name, "ranges", [i for (i, _, _), good in zip(ranges, ok) if not good], flush=True)
+        return 1
+    with open(out + "/" + name, "wb") as f:
+        for i, _, _ in ranges:
+            with open(paths[i], "rb") as g:
+                f.write(g.read())
+            os.remove(paths[i])
+    print("fetched", name, "%d bytes in %d ranges, %.0f s" % (total, len(ranges), time.time() - t0), flush=True)
+    return 0
+with ThreadPoolExecutor(max_workers=2) as pool:
     codes = list(pool.map(get, sorted(urls.items())))
 sys.exit(0 if all(c == 0 for c in codes) else 1)
 PY
