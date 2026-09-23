@@ -30,9 +30,15 @@ THE STEPS, IN ORDER
                      route of lane/release-cpu-build-box plugs in as a backend)
   macos-build        mac_slot --slots 4 run -- build_release_wheel.sh, byte LM on
   macos-smoke        qualify_verifier_wheel.py --scope expanded under the Metal lock
-  release-check      pixi run -e test release-check (CPU + Apple GPU, the guarantee)
+  release-check      pixi run -e test release-check (CPU + Apple GPU, the guarantee;
+                     the CPU column covers every lane any backend selects)
   linux-wait         every leg finished, its proof complete for this commit, and
-                     every host binding byte-identical across legs (named if not)
+                     every host binding byte-identical across legs (named if not);
+                     the sm_90a and gfx942 legs also ran their release COLUMN
+  gpu-columns        the NVIDIA (H100, sm_90a) and AMD (MI325X, gfx942) columns,
+                     recorded in the build rentals on the lanes that changed,
+                     diffed against the CPU column of this commit; any DIVERGENT
+                     cell stops the release, named lane/fixture/part
   linux-pack         pixi run -e pkg pack-linux-wheel, audit.sh, strip
   linux-smoke        tools/release_wheel_smoke.sh --rent (one RTX 4090 pod)
   publish-linux      tools/release_linux_publish.sh ... --light-smoke   } only with
@@ -41,8 +47,19 @@ THE STEPS, IN ORDER
   record             bench/results/release_verification/<date>_pypi_<v>/, committed
 
 Nothing is published without `--publish none|testpypi|pypi`; without it the run
-stops after linux-smoke and says so. NVIDIA and AMD installed qualification is
-not a release requirement (docs/RELEASE_CHECKLIST.md section 4) and is not run.
+stops after linux-smoke and says so. The Linux wheel is never published unless
+gpu-columns passed for the frozen commit; the macOS wheel is gated by the Apple
+pass in release-check as before.
+
+WHICH LANES THE NVIDIA AND AMD COLUMNS RUN, with no flag and no list: at
+linux-builds, `tools/release_gpu_columns.py` asks `tools/verify_lanes.py
+--gpu-pass <cuda|hip> --write-selection` for the lanes changed since the last
+FINISHED pass on that backend (its records under
+~/mojolearn-evidence/release-check/<commit>/<backend>/), else since the newest
+v* tag, with every lane that cannot run on one GPU left out by name. The
+selection file rides the sm_90a and gfx942 build legs; each runs exactly those
+lanes after its build, in the same lease (tools/release_gpu_column.sh), and a
+leg whose column did not complete is a failed leg, relaunched on rerun.
 """
 import argparse
 import datetime as dt
@@ -187,6 +204,28 @@ class Leg:
         except (OSError, ValueError):
             return None
 
+    #: set by gpu_legs for a leg that also records a release column: the
+    #: backend and where the fetched column lands
+    column_backend = None
+    column_dir = None
+
+    def column_ok(self, commit):
+        """True when this leg records no column, or its column came home
+        complete for this commit."""
+        if not self.column_backend:
+            return True
+        d = Path(self.column_dir) / self.column_backend
+        try:
+            manifest = json.loads((d / "manifest.json").read_text())
+            summary = json.loads((d / "run-summary.json").read_text())
+        except (OSError, ValueError):
+            return False
+        return (manifest.get("commit") == commit and summary.get("complete") is True
+                and (d / "column.json").is_file())
+
+    def done(self, commit):
+        return self.exit_code() == 0 and self.proof_ok(commit) and self.column_ok(commit)
+
     def proof_ok(self, commit):
         """The leg's build proof: complete, exit 0, this commit, this architecture's set."""
         try:
@@ -210,23 +249,40 @@ def gpu_legs(ctx):
         os.environ.get("MOJOLEARN_RUNPOD_KEY_FILE", "~/.mojolearn_runpod_key")),
         MOJOLEARN_NVIDIA_CAMPAIGN="7")
     legs = []
-    for arch, gpu in (("sm_90a", "NVIDIA H100 80GB HBM3"), ("sm_89", "NVIDIA L40S")):
+    # THE NVIDIA AND AMD COLUMNS ride the sm_90a and gfx942 builds, in the
+    # same lease (tools/release_gpu_column.sh); sm_89 builds only. The lease
+    # grows by the column's budget.
+    column_minutes = -(-COLUMN_SECONDS // 60)
+    for arch, gpu, column in (("sm_90a", "NVIDIA H100 80GB HBM3", True), ("sm_89", "NVIDIA L40S", False)):
         out = legs_dir / f"cuda-{arch}"
-        legs.append(Leg(f"cuda-{arch}", "cuda", arch,
-                        ["sh", "tools/gemm_remote_leg.sh", "nvidia", "--payload", "mamba",
-                         "--source-ref", ctx.commit, "--gpu", gpu, "--allow-concurrent", "--rent",
-                         "--minutes", "60"],
-                        dict(runpod, MOJOLEARN_GPU_ARCHS=arch, MOJOLEARN_GEMM_LEG_OUT=str(out)),
-                        out / "remote" / "release-build", legs_dir, out))
+        env = dict(runpod, MOJOLEARN_GPU_ARCHS=arch, MOJOLEARN_GEMM_LEG_OUT=str(out))
+        if column:
+            env.update(MOJOLEARN_RELEASE_COLUMN_SELECTION=str(ctx.column_selection("cuda")),
+                       MOJOLEARN_RELEASE_COLUMN_SECONDS=str(COLUMN_SECONDS))
+        leg = Leg(f"cuda-{arch}", "cuda", arch,
+                  ["sh", "tools/gemm_remote_leg.sh", "nvidia", "--payload", "mamba",
+                   "--source-ref", ctx.commit, "--gpu", gpu, "--allow-concurrent", "--rent",
+                   "--minutes", str(60 + (column_minutes if column else 0))],
+                  env, out / "remote" / "release-build", legs_dir, out)
+        if column:
+            leg.column_backend, leg.column_dir = "cuda", out / "remote" / "column"
+        legs.append(leg)
     token = os.path.expanduser(os.environ.get("MOJOLEARN_DO_TOKEN_FILE", "~/.mojolearn_do_token"))
     amd = ["bash", "tools/do_release061_leg.sh", ctx.commit, token, "--rent"]
     if ctx.args.amd_expect_from:
         amd += ["--expect-from", ctx.args.amd_expect_from]
-    legs.append(Leg("hip-gfx942", "hip", "gfx942", amd,
-                    dict(MOJOLEARN_RELEASE_UBUNTU22="1", MOJOLEARN_RELEASE_RESULTS_ROOT=str(legs_dir)),
-                    legs_dir / "hip-gfx942" / "release-build", legs_dir, legs_dir / "hip-gfx942"))
+    leg = Leg("hip-gfx942", "hip", "gfx942", amd,
+              dict(MOJOLEARN_RELEASE_UBUNTU22="1", MOJOLEARN_RELEASE_RESULTS_ROOT=str(legs_dir),
+                   MOJOLEARN_RELEASE_COLUMN_SELECTION=str(ctx.column_selection("hip")),
+                   MOJOLEARN_RELEASE_COLUMN_SECONDS=str(COLUMN_SECONDS)),
+              legs_dir / "hip-gfx942" / "release-build", legs_dir, legs_dir / "hip-gfx942")
+    leg.column_backend, leg.column_dir = "hip", legs_dir / "hip-gfx942" / "column"
+    legs.append(leg)
     return legs
 
+
+#: The NVIDIA and AMD columns' budget inside their build leases, seconds.
+COLUMN_SECONDS = int(os.environ.get("MOJOLEARN_RELEASE_COLUMN_SECONDS", "2700"))
 
 #: Build routes by name. A route returns the Leg list for ctx; launch, wait,
 #: pack and resume are route-independent. The GPU legs are the default and
@@ -250,8 +306,8 @@ def launch_linux_builds(ctx, legs, stagger=90):
         if leg.running():
             ctx.say(f"  {leg.name}: already running (pid {leg.pid()}), log {leg.log}")
             continue
-        if leg.exit_code() == 0 and leg.proof_ok(ctx.commit):
-            ctx.say(f"  {leg.name}: already built")
+        if leg.done(ctx.commit):
+            ctx.say(f"  {leg.name}: already built" + (" and its column recorded" if leg.column_backend else ""))
             continue
         leg.workdir.mkdir(parents=True, exist_ok=True)
         if leg.exit_file.exists() or leg.log.exists():
@@ -323,6 +379,33 @@ class Release:
     @property
     def rel(self):
         return self.base / self.commit[:12]
+
+    def column_selection(self, backend):
+        return self.rel / "gpu-columns" / f"{backend}.selection.json"
+
+    def ensure_column_selections(self):
+        """THE LANES the NVIDIA and AMD columns run, worked out here where the
+        pass records live, once per frozen commit. A selection a leg already
+        took is never recomputed under it."""
+        sys.path.insert(0, str(ROOT / "tools"))
+        import release_gpu_columns as rgc
+        for backend in rgc.BACKENDS:
+            path = self.column_selection(backend)
+            if not self.dry and rgc.selection_ok(path, self.commit, backend):
+                d = json.loads(path.read_text())
+                self.say(f"  {rgc.BACKENDS[backend]} column selection: {d.get('summary')} (kept, {path})")
+                continue
+            self.say(f"  $ {' '.join(shlex.quote(c) for c in rgc.selection_cmd(backend, path))}")
+            self.commands_shown += 1
+            if self.dry:
+                continue
+            try:
+                d = rgc.write_selection(backend, path)
+            except RuntimeError as exc:
+                raise StepFailed(str(exc))
+            self.say(f"  {rgc.BACKENDS[backend]} column selection: {d.get('summary')}")
+            for name, why in sorted((d.get("dropped") or {}).items()):
+                self.say(f"    cannot run on {backend}: {name}: {why[:160]}")
 
     def mark(self, step, **data):
         self.state["steps"][step] = dict(done=True, commit=self.state.get("commit"), at=now(), **data)
@@ -433,6 +516,7 @@ class Release:
         return "PASS, logs " + str(work)
 
     def step_linux_builds(self):
+        self.ensure_column_selections()
         legs = linux_legs(self)
         for leg in legs:
             self.say(f"  {leg.name}: {leg.describe()}")
@@ -517,15 +601,18 @@ class Release:
         if self.dry:
             return "would wait for " + ", ".join(l.name for l in legs)
         if not any(l.pid() or l.exit_code() is not None for l in legs):
+            self.ensure_column_selections()
             launch_linux_builds(self, legs)
         while any(l.running() for l in legs):
             self.say("  waiting: " + ", ".join(f"{l.name}={'running' if l.running() else l.exit_code()}"
                                                 for l in legs))
             time.sleep(60)
-        bad = [l for l in legs if l.exit_code() != 0 or not l.proof_ok(self.commit)]
+        bad = [l for l in legs if not l.done(self.commit)]
         if bad:
             raise StepFailed("build leg(s) failed: " + ", ".join(
-                f"{l.name} (exit {l.exit_code()}, log {l.log})" for l in bad)
+                f"{l.name} (exit {l.exit_code()}"
+                + (", no complete column" if l.proof_ok(self.commit) and not l.column_ok(self.commit) else "")
+                + f", log {l.log})" for l in bad)
                 + ". Rerun `release` to relaunch them.")
         mismatch = host_digest_mismatches(legs)
         if mismatch:
@@ -534,6 +621,44 @@ class Release:
             raise StepFailed("host bindings differ across legs (pack_wheel.py would refuse):\n  "
                              + "\n  ".join(lines[:12]))
         return "all legs built; host bindings byte-identical across " + ", ".join(l.name for l in legs)
+
+    def step_gpu_columns(self):
+        """The NVIDIA and AMD columns against the CPU column of this commit.
+        A DIVERGENT cell stops the release, named lane/fixture/part."""
+        sys.path.insert(0, str(ROOT / "tools"))
+        import release_gpu_columns as rgc
+        if not self.dry and rgc.verdict_ok(self.commit):
+            return "IDENTICAL (verdict exists: " + str(rgc.check_dir(self.commit) / "gpu-columns.verdict.json") + ")"
+        legs = [l for l in linux_legs(self) if l.column_backend]
+        for leg in legs:
+            self.say(f"  {leg.name}: place {leg.column_dir}/{leg.column_backend} in "
+                     f"{rgc.check_dir(self.commit) / leg.column_backend}")
+        self.say(f"  $ {' '.join(rgc.python_cmd())} tools/release_gpu_columns.py compare --commit {self.commit}")
+        self.commands_shown += 1
+        if self.dry:
+            return "would compare"
+        for leg in legs:
+            try:
+                rgc.place(leg.column_dir, leg.column_backend, self.commit)
+            except RuntimeError as exc:
+                raise StepFailed(f"{leg.name}: {exc}. Rerun `release` to relaunch the leg.")
+        lines = []
+        def out(msg):
+            lines.append(msg)
+            self.say("  " + msg)
+        try:
+            verdict = rgc.compare(self.commit, out=out)
+        except RuntimeError as exc:
+            raise StepFailed(str(exc))
+        if not verdict["ok"]:
+            named = [f"{d['verdict']} {d['cell']} part={d['part']} "
+                     + " ".join(f"{n}={h}" for n, h in d["hashes"].items()) for d in verdict["divergent"]]
+            raise StepFailed("NVIDIA/AMD columns are NOT identical to the CPU column; the Linux wheel is not "
+                             "published:\n    " + "\n    ".join(named + verdict["mismatch"] + [
+                                 m for m in lines if m.startswith("# FAIL")] or ["see " + str(verdict.get("transcript"))]))
+        return (f"IDENTICAL: " + ", ".join(f"{rgc.BACKENDS[b]} {v['lanes']} lanes/{v['cells']} cells"
+                                         for b, v in verdict["backends"].items())
+                + (f"; {len(verdict['uncompared'])} part(s) uncompared (named in the log)" if verdict["uncompared"] else ""))
 
     def linux_final(self):
         found = sorted((self.rel / "linux" / "final").glob("mojolearn-*-manylinux*.whl"))
@@ -617,6 +742,11 @@ class Release:
         return f"{target} via {tag}"
 
     def step_publish_linux(self):
+        sys.path.insert(0, str(ROOT / "tools"))
+        import release_gpu_columns as rgc
+        if not self.dry and not rgc.verdict_ok(self.commit):
+            raise StepFailed("the NVIDIA and AMD columns have not passed for this commit (step gpu-columns); "
+                             "the Linux wheel is not published")
         return self.publish("linux", self.linux_final(), self.rel / "smoke-linux" / "results.json")
 
     def step_publish_macos(self):
@@ -712,7 +842,8 @@ class Release:
             f"{(self.recorded('finish-line') or {}).get('result', 'not run')}.", ""])
 
     STEPS = ["freeze-version", "freeze-changelog", "freeze-docs-facts", "freeze-commit", "rehearsal",
-             "linux-builds", "macos-build", "macos-smoke", "release-check", "linux-wait", "linux-pack",
+             "linux-builds", "macos-build", "macos-smoke", "release-check", "linux-wait", "gpu-columns",
+             "linux-pack",
              "linux-smoke", "publish-linux", "publish-macos", "finish-line", "record"]
     #: Every other step checks its own OUTPUT each time and returns at once when
     #: it is already there (a wheel of this commit, a PASSED receipt for that

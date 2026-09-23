@@ -44,7 +44,24 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
-DEADMAN_SECONDS="${DEADMAN_SECONDS:-3600}"
+# THE AMD RELEASE COLUMN, IN THE BUILD'S OWN LEASE (lane/release-gpu-columns,
+# 2026-09-22). MOJOLEARN_RELEASE_COLUMN_SELECTION names a selection written on
+# the Mac by `tools/verify_lanes.py --gpu-pass hip --write-selection`; after the
+# build passes, tools/release_gpu_column.sh runs exactly those lanes from the
+# set just built, on this droplet's MI325X, and the column comes home under
+# column/. The leg then fails unless the column is complete. The lease grows by
+# MOJOLEARN_RELEASE_COLUMN_SECONDS (default 2700). Unset: the build alone.
+COLUMN_SELECTION=${MOJOLEARN_RELEASE_COLUMN_SELECTION:-}
+COLUMN_SECONDS=${MOJOLEARN_RELEASE_COLUMN_SECONDS:-2700}
+COLUMN_CPU=${MOJOLEARN_RELEASE_COLUMN_CPU:-0}
+COLUMN_ON=0
+if [ -n "$COLUMN_SELECTION" ]; then
+  [ -f "$COLUMN_SELECTION" ] || { echo "no column selection at $COLUMN_SELECTION" >&2; exit 2; }
+  [[ "$COLUMN_SECONDS" =~ ^[0-9]+$ ]] && [ "$COLUMN_SECONDS" -ge 120 ] || { echo 'MOJOLEARN_RELEASE_COLUMN_SECONDS must be seconds >= 120' >&2; exit 2; }
+  case "$COLUMN_CPU" in 0|1) ;; *) echo 'MOJOLEARN_RELEASE_COLUMN_CPU must be 0 or 1' >&2; exit 2 ;; esac
+  COLUMN_ON=1
+fi
+DEADMAN_SECONDS="${DEADMAN_SECONDS:-$((3600 + COLUMN_ON * COLUMN_SECONDS))}"
 # DEVIATION 2294: the same guarded rental, doing the OTHER half of the release.
 # tools/linux_surface_qualification.sh runs ON the device, and until now nothing
 # carried a finished wheel to a device and brought the verdict home -- the
@@ -128,6 +145,9 @@ if [ "$LEG_MODE" = qualify ]; then
   [ -f "$QUAL_WHEEL" ] || { echo "no wheel at $QUAL_WHEEL" >&2; exit 2; }
   [ -d "$QUAL_PROOFS" ] || { echo "no proof directory at $QUAL_PROOFS" >&2; exit 2; }
   case "$QUAL_WHEEL" in *manylinux*) ;; *) echo "REFUSING: qualify the REPAIRED wheel; $QUAL_WHEEL is not manylinux-tagged" >&2; exit 2 ;; esac
+fi
+if [ "$COLUMN_ON" = 1 ] && [ "$LEG_MODE" != build ]; then
+  echo 'MOJOLEARN_RELEASE_COLUMN_SELECTION belongs to a build leg, not a qualification' >&2; exit 2
 fi
 FETCH_RESERVE="${FETCH_RESERVE:-900}"     # three tiers + MAX runtime closure come home in this
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -271,6 +291,7 @@ DRY RUN -- nothing rented. With --rent this leg would:
   prepare  apt-get patchelf/binutils if absent; pixi; pixi install --locked --environment default (guarded)
   mode     $LEG_MODE
 $WOULD_RUN
+  column   $([ "$COLUMN_ON" = 1 ] && echo "bash tools/release_gpu_column.sh $LEG_VENDOR \$REMOTE_OUT /root/column-selection.json /root/rel061-column <=${COLUMN_SECONDS}s ($(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("summary", "?"))' "$COLUMN_SELECTION"))" || echo 'none (no MOJOLEARN_RELEASE_COLUMN_SELECTION)')
   fetch    $REMOTE_OUT -> $OUT/release-build/ ; logs and leg.txt beside it
   destroy  DELETE then GET until 404; never deletes anything local
 EOF
@@ -402,6 +423,13 @@ REMOTE_SHA=$($SSH 'sha256sum /root/src.tgz' | cut -d' ' -f1)
 $SSH "test ! -e /root/mojolearn && mkdir /root/mojolearn && tar -xzf /root/src.tgz -C /root/mojolearn \
   && printf '%s\n' '$COMMIT' > /root/mojolearn/commit.txt && test -x $REMOTE_PY" || { log "remote unpack failed"; exit 6; }
 log "shipped $COMMIT"
+if [ "$COLUMN_ON" = 1 ]; then
+  COLUMN_SHA=$(sha256_of "$COLUMN_SELECTION")
+  scp -q $SSH_OPTS "$COLUMN_SELECTION" "root@$IP:/root/column-selection.json" || { log "column selection scp failed"; exit 6; }
+  [ "$($SSH 'sha256sum /root/column-selection.json' | cut -d' ' -f1)" = "$COLUMN_SHA" ] || { log "column selection sha mismatch"; exit 6; }
+  cp "$COLUMN_SELECTION" "$OUT/column-selection.json"
+  echo "column_selection_sha256=$COLUMN_SHA" >> "$STATE"
+fi
 
 if [ "$LEG_MODE" = qualify ]; then
   # THE BYTES THAT GET QUALIFIED ARE THE BYTES THAT GET PUBLISHED. The sha256
@@ -508,7 +536,7 @@ if [ "$UBUNTU22" = 1 ]; then
 fi
 
 # THE BUILD, DETACHED AND POLLED, so a dropped ssh cannot kill a 30-minute compile.
-WORK_SECONDS=$(( LEG_START + DEADMAN_SECONDS - $(date +%s) - FETCH_RESERVE ))
+WORK_SECONDS=$(( LEG_START + DEADMAN_SECONDS - $(date +%s) - FETCH_RESERVE - COLUMN_ON * COLUMN_SECONDS ))
 [ "$WORK_SECONDS" -gt 2400 ] && WORK_SECONDS=2400
 [ "$WORK_SECONDS" -ge 300 ] || { echo "build_exit=NOT_STARTED_${WORK_SECONDS}s_LEFT" >> "$STATE"; log "only ${WORK_SECONDS}s left; skipping the build"; exit 7; }
 echo "work_seconds=$WORK_SECONDS" >> "$STATE"; log "build bound ${WORK_SECONDS}s"
@@ -530,13 +558,39 @@ $SSH "cd /root/mojolearn && nohup bash -c 'export PATH=/root/release-tools/bin:/
   echo \$? > /root/rel061.exit' > /dev/null 2>&1 < /dev/null &" || { log "could not start the build"; exit 9; }
 fi
 BUILD_EXIT=""
-while [ $(date +%s) -lt $(( LEG_START + DEADMAN_SECONDS - FETCH_RESERVE + 60 )) ]; do
+while [ $(date +%s) -lt $(( LEG_START + DEADMAN_SECONDS - FETCH_RESERVE - COLUMN_ON * COLUMN_SECONDS + 60 )) ]; do
   BUILD_EXIT=$($SSH 'cat /root/rel061.exit 2>/dev/null' 2>/dev/null | tr -d '[:space:]')
   [ -n "$BUILD_EXIT" ] && break
   sleep 30
 done
 echo "build_exit=${BUILD_EXIT:-NO_EXIT_BEFORE_FETCH_RESERVE}" >> "$STATE"
 log "build exit ${BUILD_EXIT:-none}; $($SSH "tail -3 $REMOTE_LOG" 2>/dev/null | tr '\n' '|')"
+
+COLUMN_EXIT=""
+if [ "$COLUMN_ON" = 1 ] && [ "$BUILD_EXIT" = 0 ]; then
+  # The AMD release column on the set just built, on the host (the pinned
+  # container was for the compiler; the column needs only the locked Python
+  # environment and the device), detached and polled like the build.
+  COL_SECONDS=$(( LEG_START + DEADMAN_SECONDS - $(date +%s) - FETCH_RESERVE ))
+  [ "$COL_SECONDS" -gt "$COLUMN_SECONDS" ] && COL_SECONDS=$COLUMN_SECONDS
+  echo "column_seconds=$COL_SECONDS" >> "$STATE"; log "column bound ${COL_SECONDS}s"
+  if [ "$COL_SECONDS" -ge 120 ]; then
+    $SSH "cd /root/mojolearn && nohup bash -c 'MOJOLEARN_COMMIT=$COMMIT MOJOLEARN_RELEASE_COLUMN_CPU=$COLUMN_CPU \
+      timeout -k 20 $((COL_SECONDS + 20)) bash tools/release_gpu_column.sh $LEG_VENDOR $REMOTE_OUT /root/column-selection.json \
+        /root/rel061-column $COL_SECONDS > /root/rel061-column.log 2>&1; echo \$? > /root/rel061-column.exit' \
+      > /dev/null 2>&1 < /dev/null &" || log "could not start the column"
+    while [ $(date +%s) -lt $(( LEG_START + DEADMAN_SECONDS - FETCH_RESERVE + 60 )) ]; do
+      COLUMN_EXIT=$($SSH 'cat /root/rel061-column.exit 2>/dev/null' 2>/dev/null | tr -d '[:space:]')
+      [ -n "$COLUMN_EXIT" ] && break
+      sleep 30
+    done
+  fi
+  echo "column_exit=${COLUMN_EXIT:-NO_EXIT_BEFORE_FETCH_RESERVE}" >> "$STATE"
+  log "column exit ${COLUMN_EXIT:-none}; $($SSH "tail -4 /root/rel061-column.log" 2>/dev/null | tr '\n' '|')"
+  $SSH 'rm -rf /root/rel061-column/hip/gpu-package /root/rel061-column/cpu-box/cpu-package' 2>/dev/null || true
+  rsync -az -e "ssh $SSH_OPTS" "root@$IP:/root/rel061-column/" "$OUT/column/" && log "fetched column/" || log "FETCH FAILED (column/)"
+  rsync -az -e "ssh $SSH_OPTS" "root@$IP:/root/rel061-column.log" "$OUT/rel061-column.log" 2>/dev/null || true
+fi
 
 log "fetch evidence"
 rsync -az -e "ssh $SSH_OPTS" "root@$IP:$REMOTE_OUT/" "$OUT/release-build/" && log "fetched release-build/" || log "FETCH FAILED (release-build/)"
@@ -626,6 +680,12 @@ if [ "$LEG_MODE" = qualify ]; then
 else
   grep -q '^admission=BUILT_NOT_INSTALLED ' "$STATE" &&
     ! grep -q '^admission=REFUSED' "$STATE" || exit 10
+  if [ "$COLUMN_ON" = 1 ]; then
+    # A release build asked for its AMD column: no complete column, no green
+    # leg (the release relaunches a failed leg on rerun).
+    [ "${COLUMN_EXIT:-}" = 0 ] && [ -f "$OUT/column/$LEG_VENDOR/column.json" ] || {
+      log "the AMD release column did not complete (exit ${COLUMN_EXIT:-missing}); $OUT/rel061-column.log"; exit 11; }
+  fi
 fi
 # RELEASE_ADMISSION_STATUS_END
 log "done -- $OUT (leg.txt has the verdict; the droplet is destroyed by the EXIT trap next)"

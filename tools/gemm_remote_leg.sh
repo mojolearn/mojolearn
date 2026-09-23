@@ -1063,6 +1063,24 @@ if [ "$NVIDIA_CAMPAIGN" = 7 ]; then
         QUAL_SHA=$(shasum -a 256 "$QUAL_WHEEL" | cut -d' ' -f1)
     fi
 fi
+# THE NVIDIA RELEASE COLUMN, IN THE BUILD'S OWN LEASE (lane/release-gpu-columns,
+# 2026-09-22). MOJOLEARN_RELEASE_COLUMN_SELECTION names a selection written on
+# the Mac by `tools/verify_lanes.py --gpu-pass cuda --write-selection`; after
+# the build passes, tools/release_gpu_column.sh runs exactly those lanes from
+# the set just built and the column comes home under remote/column/. The leg
+# then fails unless the column is complete. Unset: the build alone, as before.
+COLUMN_SELECTION=${MOJOLEARN_RELEASE_COLUMN_SELECTION:-}
+COLUMN_SECONDS=${MOJOLEARN_RELEASE_COLUMN_SECONDS:-2700}
+COLUMN_CPU=${MOJOLEARN_RELEASE_COLUMN_CPU:-0}
+COLUMN_ON=0
+if [ -n "$COLUMN_SELECTION" ]; then
+    [ "$NVIDIA_CAMPAIGN" = 7 ] && [ "$LEG_QUALIFY" != 1 ] || leg_die 'MOJOLEARN_RELEASE_COLUMN_SELECTION belongs to a release build (campaign 7, not a qualification)'
+    [ -f "$COLUMN_SELECTION" ] || leg_die "no column selection at $COLUMN_SELECTION"
+    case "$COLUMN_SECONDS" in ''|*[!0-9]*) leg_die 'MOJOLEARN_RELEASE_COLUMN_SECONDS must be seconds' ;; esac
+    [ "$COLUMN_SECONDS" -ge 120 ] || leg_die 'MOJOLEARN_RELEASE_COLUMN_SECONDS must be at least 120'
+    case "$COLUMN_CPU" in 0|1) ;; *) leg_die 'MOJOLEARN_RELEASE_COLUMN_CPU must be 0 or 1' ;; esac
+    COLUMN_ON=1
+fi
 if [ "$NVIDIA_CAMPAIGN" != 0 ]; then
     if [ "$NVIDIA_CAMPAIGN" = 4 ] || [ "$NVIDIA_CAMPAIGN" = 5 ] || [ "$NVIDIA_CAMPAIGN" = 6 ]; then
         # Historical variable name: profiles 4/5/6 are generic remote training.
@@ -1940,6 +1958,12 @@ leg_mamba_artifacts() {
     if [ "$NVIDIA_CAMPAIGN" = 7 ]; then
         grep -q '^release_build_exit=0$' "$OUT/remote/leg.txt" || return 1
         grep -q '^release_tools_setup_exit=0$' "$OUT/remote/leg.txt" || return 1
+        if [ "$COLUMN_ON" = 1 ]; then
+            # A release build asked for its NVIDIA column: no complete column,
+            # no green leg (the release relaunches a failed leg on rerun).
+            grep -q '^release_column_exit=0$' "$OUT/remote/leg.txt" || { echo "  NVIDIA release column did not complete: $OUT/remote/release-column-console.log"; return 1; }
+            [ -f "$OUT/remote/column/cuda/column.json" ] || { echo "  no NVIDIA column.json came home"; return 1; }
+        fi
         if [ "$LEG_QUALIFY" = 1 ]; then
             python3 - "$OUT/remote/release-build" "$GPU_ARCHS" "$QUAL_SHA" <<'RELEASE_QUALIFY_ADMIT'
 import json, pathlib, sys
@@ -3130,6 +3154,23 @@ RELEASE_TOOLS_SETUP
         fi
     fi
     echo "release_build_exit=$release_rc" >> "$OUT/leg.txt"
+    if [ '@COLUMNON@' = 1 ] && [ "$release_rc" = 0 ]; then
+        # The NVIDIA release column on the set just built (lane/release-gpu-columns).
+        column_rc=124
+        column_seconds=$((@WORKTIMEOUT@ - $(date +%s) + campaign_started - 30))
+        if [ "$column_seconds" -gt '@COLUMNSECONDS@' ]; then column_seconds='@COLUMNSECONDS@'; fi
+        echo "release_column_seconds=$column_seconds" >> "$OUT/leg.txt"
+        if [ "$column_seconds" -ge 120 ]; then
+            MOJOLEARN_COMMIT='@COMMIT@' MOJOLEARN_RELEASE_COLUMN_CPU='@COLUMNCPU@' \
+              timeout -k 20 "$((column_seconds + 20))" bash tools/release_gpu_column.sh cuda \
+                "$OUT/release-build" /root/column-selection.json "$OUT/column" "$column_seconds" \
+                > "$OUT/release-column-console.log" 2>&1
+            column_rc=$?
+        fi
+        rm -rf "$OUT/column/cuda/gpu-package" "$OUT/column/cpu-box/cpu-package"
+        echo "release_column_exit=$column_rc" >> "$OUT/leg.txt"
+        release_rc=$column_rc
+    fi
     if [ '@QUALIFY@' = 1 ]; then
         echo 'scope=one actual CUDA architecture installed-wheel qualification; final combined admission still required' >> "$OUT/leg.txt"
     else
@@ -4558,6 +4599,9 @@ leg_check_remote_body() {
         -e "s|@WHEELVERSION@|$WHEEL_VERSION|g" \
         -e "s|@WHEELINDEX@|$WHEEL_INDEX|g" \
         -e "s|@GPUARCHS@|$GPU_ARCHS|g" \
+        -e "s|@COLUMNON@|$COLUMN_ON|g" \
+        -e "s|@COLUMNSECONDS@|$COLUMN_SECONDS|g" \
+        -e "s|@COLUMNCPU@|$COLUMN_CPU|g" \
         -e "s|@BYTELMPYTHON@|$BYTE_LM_PYTHON|g" \
         -e "s|@BYTELMSHAPE@|$BYTE_LM_SHAPE|g" \
         -e "s|@BYTELMSHAPEONLY@|$BYTE_LM_SHAPE_ONLY|g" \
@@ -4802,6 +4846,14 @@ RELEASE_SOURCE
             leg_ssh 'cat > /root/byte-lm-handoffs/foreign.zip' < "$TMPD/foreign.zip"
             leg_ssh "python3 -B /root/mojolearn/tools/byte_lm_handoff_transport.py unpack /root/byte-lm-handoffs/foreign.zip --output /root/byte-lm-handoffs/foreign --sha256 $BYTE_FOREIGN_SHA --vendor $_foreign_vendor --kind head64" > "$OUT/foreign-transport.log" 2>&1 || leg_die "Remote foreign handoff refused"
         fi
+    fi
+    if [ "$COLUMN_ON" = 1 ]; then
+        _csha=$(shasum -a 256 "$COLUMN_SELECTION" | cut -d' ' -f1)
+        leg_ssh 'cat > /root/column-selection.json' < "$COLUMN_SELECTION" || leg_die "column selection upload failed"
+        [ "$(leg_ssh 'sha256sum /root/column-selection.json' | cut -d' ' -f1)" = "$_csha" ] \
+            || leg_die "column selection sha mismatch after transfer"
+        cp "$COLUMN_SELECTION" "$OUT/column-selection.json"
+        leg_say "shipped the NVIDIA column selection ($(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("summary", "?"))' "$COLUMN_SELECTION"))"
     fi
     if [ "$LEG_QUALIFY" = 1 ]; then
         # THE BYTES QUALIFIED ARE THE BYTES PUBLISHED: sha compared both ends.

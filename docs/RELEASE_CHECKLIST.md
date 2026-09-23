@@ -379,16 +379,29 @@ release. Each pass is `base,denormal,odd`, fitted once, end model only.
 With no selection given, a pass checks the lanes whose sources changed since
 the last pass on the same backend that FINISHED on this Mac (complete, same
 fixtures, one fit, a clean tree, and itself anchored on a full pass, a tag or
-another such pass). With no such record it falls back to the newest `v*` tag,
-as before; 0.8.9 to 0.8.11 were cut under `alpha-api-*` tags, which is why the
-0.8.12 pass diffed 2,328 paths against v0.8.8. When a changed path cannot be
-attributed to lanes the selector widens to every lane by itself, so it can run
-too much and never too little. `--all` forces everything. Build scripts, tools
-nothing runs, check programs nothing imports, the verifier's own modules and
-pixi task edits are attributed now (tools/lane_select.py, 2026-09-21); what
-still widens to every lane is a change to `tools/identity_break.py` outside a
-lane body, a whole-surface registry, `pixi.lock`, `__main__.py` and anything
-the map genuinely cannot place.
+another such pass). With no such record it falls back to the newest `v*` tag.
+Every cell is fitted once. The CPU pass covers the union of every backend's
+selection (CPU, Apple, NVIDIA, AMD), because its column is the reference the
+others are diffed against.
+
+**The selector never widens and never guesses (2026-09-22).** Each changed
+path is attributed to exactly the lanes whose derived source set reaches it
+(kernels, bindings, host oracles, the lane's own code in
+`tools/identity_break.py` by call graph, data files the lane reads), is inert
+(prose, evidence, tools and check programs no lane runs), or selects every lane
+by a NAMED rule that is printed (the pinned toolchain in `pixi.lock` or
+`pixi.toml`, a whole-surface registry such as `_backend.py`, harness code every
+column runs, the Linux set builder for the NVIDIA and AMD columns). A path it
+cannot attribute is printed as `UNATTRIBUTED PATH: <path>` and the pass exits
+non-zero with nothing verified, until the mapping in `tools/lane_select.py` is
+fixed. `--all` is the explicit full sweep. To see what the default would run,
+per backend, with each lane's reason and the cell counts, without running
+anything:
+
+```sh
+pixi run -e test release-check --plan                       # the diff since each backend's anchor
+pixi run -e test release-check --plan --paths=a.mojo,b.py   # a hypothetical change
+```
 
 **Sharded Metal is opt-in and unproven.** `pixi run -e test apple-pass
 --metal-shards N` (N = 2 or 3) splits the lanes over N processes that share the

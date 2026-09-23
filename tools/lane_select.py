@@ -38,29 +38,35 @@ declaration that something else already enforces:
                     lanes it covers, and the family's host binding is another
                     Mojo seed for those lanes.
 
-CONSERVATIVE BY CONSTRUCTION. A selector that misses an affected lane is far
-worse than one that runs a few extra, so:
+NO FALLBACK, NO GUESS (Andrew, 2026-09-22). A selector that misses an
+affected lane is far worse than one that runs a few extra, and one that
+silently runs EVERYTHING is the other failure: the 0.8.14 release-check
+widened to 645 cells because two verifier edits and three corpus manifests
+could not be placed. So:
 
-  * a changed path this map does not attribute selects EVERY lane, and the
-    reason is printed, never swallowed;
-  * `tools/identity_break.py` selects every lane unless the diff touches
-    ONLY lane function bodies, in which case it selects exactly those lanes
-    (`harness_lanes` below, which refuses to narrow when a shared helper,
-    a fixture, a constant or a registration loop moved);
-  * only doc and evidence paths are treated as inert, by an explicit list.
-    Everything else that selects fewer than every lane rests on a DERIVED
-    rule with its own docstring and its own test that the rule still widens
-    where it must (2026-09-21, after the 0.8.12 Apple pass fell back on 148
-    paths): `build_script_roots` (a build script selects the lanes of the
-    binding it compiles), `pixi_tasks_only`, `NATIVE_INPUTS`,
-    `_outside_python_unreachable`, `_unimported_mojo_unreachable`,
-    `_package_file_unreachable`, `_lane_keyed_prose` and the corpus-only
-    reading of `test_module_inert`.
+  * a changed path is ATTRIBUTED to exactly the lanes whose derived source
+    set reaches it: kernels, bindings, host oracles, the lane's own harness
+    code by call graph (`harness_closure_lanes`), data files the lane reads;
+  * a path nothing reaches (prose, evidence, a tool no lane runs, a check
+    program no binding compiles) is inert and selects nothing, with its reason;
+  * a path that genuinely moves every lane selects every lane BY A NAMED RULE
+    (`every_rules`: the pinned toolchain, a whole-surface registry, harness
+    code every column runs, the Linux set builder for the Linux columns);
+  * a path that cannot be attributed is UNATTRIBUTED: it selects nothing and
+    every caller refuses to run, printing `UNATTRIBUTED PATH: <path>`
+    (`refuse_unattributed`), until the map is fixed. `--all` is the only full
+    sweep, and it is asked for by name.
 
-WHAT IT REFUSES TO DO. It never returns an empty selection quietly. An empty
-answer for a non-empty diff is reported as UNATTRIBUTED and reads as "run
-everything", because a selector that silently selects nothing makes every
-change look verified while checking nothing.
+Everything that selects fewer than every lane rests on a DERIVED rule with
+its own docstring and its own test that it still refuses where it must:
+`build_script_roots`, `pixi_tasks_only`, `NATIVE_INPUTS`,
+`_outside_python_unreachable`, `_unimported_mojo_unreachable`,
+`_imported_only_by_unreachable`, `_package_file_unreachable`,
+`_lane_keyed_prose`, `harness_closure_lanes` and the corpus-only reading of
+`test_module_inert`.
+
+WHAT IT REFUSES TO DO. It never returns an empty selection quietly for a path
+it could not place, and it never widens instead of saying so.
 
     python3 tools/lane_select.py --changed-since origin/main
     python3 tools/lane_select.py --lanes-for-paths glm/host/qn_oracle.mojo
@@ -1486,6 +1492,9 @@ def unreachable(path):
     if path.endswith(".py"):
         return _outside_python_unreachable(path)
     if path.endswith(".mojo") and _mojo_importers(path):
+        why = _imported_only_by_unreachable(path)
+        if why:
+            return why
         # IMPORTED BY SOMETHING, EVEN SOMETHING THE MAP DOES NOT HAVE. The
         # corpus is what a lane reaches, and a chain of files the map is
         # missing votes nowhere: `core/forest_inference_model.mojo` is
@@ -1664,18 +1673,60 @@ def _unimported_mojo_unreachable(path):
     compiles the whole directory, which `_mojo_packages_built` rules out.
     This is what keeps a new benchmark or check program under */checks/ or
     tools/ from sending a release to every lane."""
-    if _mojo_packages_built():
-        return None
-    stem = os.path.basename(path)[:-5]
-    dotted = path[:-5].replace(os.sep, ".")
-    for token in dict.fromkeys((path, os.path.basename(path), dotted)):
-        if _named_by_the_corpus(token, skip={path}):
-            return None
-    if len(stem) < 4 or _named_in_code({"": [re.compile(r"(?<![\w])%s(?![\w])" % re.escape(stem))]},
-                                       skip={path}, literals=(stem,)):
+    if _mojo_packages_built() or _mojo_named(path):
         return None
     return ("nothing reaches it: a Mojo source that no tracked Mojo source imports, so it is in no "
             "binding, and that nothing a lane reaches names by path, basename, stem or module path")
+
+
+def _mojo_named(path):
+    """Does a file a lane reaches name this Mojo source where a build could
+    take it: its path, its dotted module path, its basename, or its bare stem.
+
+    TWO READINGS THAT NAMED THE WRONG FILE (2026-09-22). The basename counts
+    only when no other tracked file shares it: `checks/forest_inference_model.mojo`
+    shares its name with `core/forest_inference_model.mojo`, which a binding
+    imports, and was read as reached. And the bare stem counts only as a word
+    that is neither the tail of ANOTHER dotted module path
+    (`core.forest_inference_model`) nor an identifier being called or
+    parametrized (`def forest_ordered_resident_policy[`) nor the stem of a
+    file with another suffix (the CatBoost reference
+    `oblivious_tree_structure_searcher.cpp` a docstring cites); these are
+    what kept two check programs and two unbuilt GBDT sources in the 0.8.14
+    release's every-lane answer."""
+    stem = os.path.basename(path)[:-5]
+    base = os.path.basename(path)
+    dotted = path[:-5].replace(os.sep, ".")
+    shared = sum(1 for rel in tracked_files() if os.path.basename(rel) == base) > 1
+    for token in dict.fromkeys((path, dotted) + (() if shared else (base,))):
+        if _named_by_the_corpus(token, skip={path}):
+            return True
+    if len(stem) < 4:
+        return True
+    return bool(_named_in_code({"": [re.compile(r"(?<![\w.])%s(?![\w(\[]|\.(?!mojo\b))" % re.escape(stem))]},
+                               skip={path}, literals=(stem,)))
+
+
+def _imported_only_by_unreachable(path, seen=None):
+    """A Mojo source that IS imported, but only by sources that are
+    themselves reached by nothing: not in any lane's map, not a binding, not
+    named where a build could take them, and imported (if at all) only by
+    such sources, followed to the end. `gbdt/methods/oblivious_tree_bin_builder.mojo`
+    is imported by the structure searcher, which only check programs import:
+    it is in no binding. A reason string, or None when anything on the way
+    could be built into a lane's binary."""
+    seen = set() if seen is None else seen
+    if path in seen:
+        return "a cycle of sources nothing else imports"
+    seen.add(path)
+    if (path in reverse_map() or path.startswith("bindings" + os.sep) or _mojo_packages_built()
+            or _mojo_named(path)):
+        return None
+    for importer in _mojo_importers(path):
+        if _imported_only_by_unreachable(importer, seen) is None:
+            return None
+    return ("nothing reaches it: every Mojo source that imports it (followed to the end) is itself in no "
+            "lane's map, no binding and no build line, so it is compiled into no binary a lane runs")
 
 
 _SHELL_CALLS = frozenset({"system", "popen", "getoutput", "getstatusoutput"})
@@ -1693,6 +1744,30 @@ def _runs_shell_strings(rel):
                 if kw.arg == "shell" and not (isinstance(kw.value, ast.Constant) and kw.value.value is False):
                     return True
     return False
+
+
+@_by_path
+def _shell_command_strings(rel):
+    """The string constants (and f-string parts) a Python file hands to a
+    shell as a COMMAND: an argument of `os.system`, `os.popen`,
+    `subprocess.getoutput`/`getstatusoutput`, or of any call made with
+    `shell=True`. A usage line printed in a message is not one."""
+    tree = _parse(rel)
+    out = []
+    for node in ast.walk(tree or ast.Module(body=[], type_ignores=[])):
+        if not isinstance(node, ast.Call):
+            continue
+        name = getattr(node.func, "attr", None) or getattr(node.func, "id", None)
+        shell = name in _SHELL_CALLS or any(
+            kw.arg == "shell" and not (isinstance(kw.value, ast.Constant) and kw.value.value is False)
+            for kw in node.keywords)
+        if not shell:
+            continue
+        for arg in list(node.args) + [kw.value for kw in node.keywords]:
+            for n in ast.walk(arg):
+                if isinstance(n, ast.Constant) and isinstance(n.value, str):
+                    out.append(n.value)
+    return out
 
 
 def _corpus_runs_shell_strings():
@@ -1763,8 +1838,15 @@ def _package_file_unreachable(path):
             pats = [re.compile(re.escape(t)) for t in ("mojolearn.__main__", "run_module", "__main__.py")]
             listed = re.compile(r"Constant\(value='-m'\), Constant\(value='mojolearn'\)")
             string = re.compile(r"-m\s+mojolearn(?![\w.])")
-            py = pats + [listed] + ([string] if _corpus_runs_shell_strings() else [])
-            patterns = {"": pats + [string], ".py": py, ".mojo": pats + [string]}
+            patterns = {"": pats + [string], ".py": pats + [listed], ".mojo": pats + [string]}
+            # A `-m mojolearn` STRING in Python runs only when that string is
+            # handed to a shell (`_shell_command_strings`); `_verify.py` and
+            # `_identity.py` carry it in usage lines they print, which kept
+            # __main__.py in the 0.8.14 release's every-lane answer.
+            if any(string.search(cmd) for rel in _reaching_corpus()
+                   if rel.endswith(".py") and rel != path and not _is_inert(rel) and rel not in _NOT_CORPUS
+                   for cmd in _shell_command_strings(rel)):
+                return None
         else:
             patterns = _module_patterns(stem, ("mojolearn." + stem,))
         if _named_in_code(patterns, skip={path}, literals=(stem,) if stem != "__main__" else ()):
@@ -2589,8 +2671,9 @@ def _runtime_import_roots(model):
 
 
 def harness_closure_lanes(old_text, new_text, path=HARNESS):
-    """The lanes a harness diff reaches BY CALL GRAPH, or None for every lane,
-    with the reason either way: (lanes, why).
+    """The lanes a harness diff reaches BY CALL GRAPH, with the reason:
+    (lanes, why), (EVERY_LANE, why) for a change every column runs, or
+    (None, why) when the change cannot be placed (the caller refuses).
 
     The line-level rule above (`harness_lanes`) narrows only when the diff is
     lane bodies, additions and lane-keyed prose, and answers every lane for
@@ -2692,10 +2775,10 @@ def harness_closure_lanes(old_text, new_text, path=HARNESS):
                     return None, (f"a loop that registers lanes by computed name changed (line "
                                   f"{model.stmts[k].lineno}) and its lanes could not be placed: every lane")
                 elif kind == "guard":
-                    return None, "the `if __name__ == '__main__'` guard changed"
+                    return EVERY_LANE, "the `if __name__ == '__main__'` guard changed"
                 else:
-                    return None, (f"import-time code changed (line {model.stmts[k].lineno}, "
-                                  f"{type(model.stmts[k]).__name__}); it can reach any lane")
+                    return EVERY_LANE, (f"import-time code changed (line {model.stmts[k].lineno}, "
+                                        f"{type(model.stmts[k]).__name__}); it runs before every lane")
 
     # 2. Who reaches each changed name.
     names = changed_names
@@ -2712,13 +2795,13 @@ def harness_closure_lanes(old_text, new_text, path=HARNESS):
                     _cli_without_diff(old, name) == _cli_without_diff(new, name):
                 why.append("`main`: only its `if args.diff:` branch changed, which records no cell")
                 continue
-            return None, "`main`, the CLI that starts every column, changed outside its --diff branch"
+            return EVERY_LANE, "`main`, the CLI that starts every column, changed outside its --diff branch"
         if name in driver:
-            return None, (f"`{name}` is shared: the column recorder (run, run_jobs, merge), import-time "
+            return EVERY_LANE, (f"`{name}` is shared: the column recorder (run, run_jobs, merge), import-time "
                           "code, a declarer, a decorator or a mutator reaches it, so every lane")
         if name in opaque_reach:
             return None, (f"`{name}` is reached by a loop that registers lanes by computed name, which "
-                          "the imported harness could not place: every lane")
+                          "the imported harness could not place")
         hit = {n for n, c in closures.items() if name in c}
         if hit:
             lanes |= hit
@@ -2730,7 +2813,8 @@ def harness_closure_lanes(old_text, new_text, path=HARNESS):
         if name in removed_names and name not in new.top:
             why.append(f"`{name}`: removed, and nothing left in the harness names it")
             continue
-        return None, f"`{name}` is reached by nothing this reader can see; unsure, so every lane"
+        return None, (f"`{name}` is reached by nothing this reader can see (no lane, no column recorder, "
+                      "no import-time code), so which lanes it moves is unknown")
     return sorted(lanes & (set(roots) | known)), "; ".join(why)
 
 
@@ -2898,20 +2982,83 @@ def _other_platform_tree(path, backend):
     return None
 
 
+#: THE TOOLCHAIN EVERY BINDING IS COMPILED WITH AND EVERY LANE RUNS UNDER.
+#: A change here is ATTRIBUTED to every lane by rule, and says so; it is not a
+#: fallback. pixi.toml counts only outside its task tables and comments
+#: (`pixi_tasks_only`).
+TOOLCHAIN_PATHS = ("pixi.lock", "pixi.toml")
+
+#: THE LINUX RELEASE SET BUILDERS. The NVIDIA and AMD columns run the binaries
+#: these build and stage (every binding of a set, with its RUNPATHs), so for
+#: those columns, and for a selection that names no backend, a change selects
+#: every lane by rule. On the Mac passes they are the other platform's tree
+#: (`_other_platform_tree`) and are inert. The rest of packaging/linux/ packs,
+#: audits and publishes a wheel no column runs from.
+LINUX_SET_BUILDERS = ("packaging/linux/build_sets.sh", "packaging/linux/stage_libs.py")
+
+#: What a caller must print for every unattributed path, and then stop.
+UNATTRIBUTED_HINT = ("no lane's derived source set contains it and no rule in tools/lane_select.py places "
+                     "it; attribute it (a rule with a reason) or make it inert, then rerun")
+
+#: The value harness_lanes returns for a change that is SHARED by every lane
+#: (attributed by the call graph, with its reason in HARNESS_WHY).
+EVERY_LANE = "every-lane"
+
+
+def _deleted(path, ref):
+    """True when `path` existed at `ref` and is gone from the tree now (not
+    tracked, not readable)."""
+    if path in tracked_files() or _git_show(ref, path) is None:
+        return False
+    try:
+        _read(path)
+        return False
+    except OSError:
+        return True
+
+
+def refuse_unattributed(sel, out=print):
+    """THE SELECTOR NEVER WIDENS AND NEVER GUESSES (Andrew, 2026-09-22). A path
+    it cannot attribute is printed by name and nothing runs: the caller exits
+    non-zero until the mapping is fixed. Returns True when it refused."""
+    if not sel.get("unattributed"):
+        return False
+    for path in sel["unattributed"]:
+        out(f"UNATTRIBUTED PATH: {path}: {sel['reasons'].get(path, '')}")
+        out(f"  hint: {UNATTRIBUTED_HINT}")
+    out(f"NOTHING IS VERIFIED: {len(sel['unattributed'])} changed path(s) could not be attributed to lanes, "
+        "and the selector neither widens to every lane nor drops them. `--all` is the explicit full sweep.")
+    return True
+
+
 def select(paths, ref=None, sources=None, backend=None):
     """The lanes `paths` can affect.
 
-    Returns a dict: `lanes` (sorted), `fallback` (True when the answer is
-    every lane), `reasons` (path -> why it selected what it did) and
-    `unattributed` (the paths that forced the fallback). The caller prints
-    every one of these; a fallback that is not said out loud is a selector
-    that lies."""
+    Returns a dict: `lanes` (sorted), `reasons` (path -> why it selected
+    what it did), `by_path` (path -> exactly the lanes it selected),
+    `every_rules` (path -> the RULE by which it selects every lane, e.g. the
+    pinned toolchain or a harness function every column runs) and
+    `unattributed` (paths nothing can place).
+
+    NO FALLBACK (2026-09-22). An unattributed path used to widen the answer to
+    every lane, which made "the lanes this change reaches" silently mean "all
+    of them" (the 0.8.14 release-check: 645 cells, eleven minutes). Now it
+    selects nothing and is REPORTED: `unattributed` is non-empty and every
+    caller refuses to run (`refuse_unattributed`). `fallback` stays in the
+    record, always False, for callers that still read it."""
     if sources is None:
         sources, _ = lane_sources()
     every = sorted(sources)
     rev = reverse_map(sources)
     lanes, reasons, unattributed, inert = set(), {}, [], []
-    fallback = False
+    by_path, every_rules = {}, {}
+
+    def all_lanes_by_rule(path, why):
+        lanes.update(every)
+        by_path[path] = set(every)
+        every_rules[path] = why
+        reasons[path] = "EVERY LANE, by rule: " + why
+
     for path in paths:
         path = path.strip()
         if not path:
@@ -2923,10 +3070,9 @@ def select(paths, ref=None, sources=None, backend=None):
             # matched the inert prefix rule, and a twelve-file commit selected
             # ZERO lanes without a word of complaint. An argument that is not
             # one path is never inert.
-            fallback = True
             unattributed.append(path)
             reasons[path] = ("NOT A SINGLE PATH (whitespace inside it, so this is several paths "
-                             "in one argument; quote it or pass them separately): every lane")
+                             "in one argument; quote it or pass them separately)")
             continue
         if _is_inert(path):
             inert.append(path)
@@ -2938,6 +3084,11 @@ def select(paths, ref=None, sources=None, backend=None):
             reasons[path] = (f"a {other} wheel build input: no binary a {backend} column runs on is built "
                              f"from it (the {backend} column's binaries are built elsewhere)")
             continue
+        if ref and _deleted(path, ref):
+            inert.append(path)
+            reasons[path] = ("deleted since " + str(ref) + ": nothing can load a file that is gone, and "
+                             "whatever imported it changed too and is attributed on its own")
+            continue
         if ref and docstring_only(ref, path):
             inert.append(path)
             reasons[path] = ("docstrings and comments only: the module's code is IDENTICAL to "
@@ -2945,15 +3096,17 @@ def select(paths, ref=None, sources=None, backend=None):
             continue
         if path == HARNESS:
             touched = harness_lanes(ref) if ref else None
-            detail = HARNESS_WHY.get(f"{ref}:{HARNESS}", "no ref to compare against") if ref else \
-                "no ref to compare against"
-            if touched is None:
-                fallback = True
+            detail = HARNESS_WHY.get(f"{ref}:{HARNESS}", "") if ref else \
+                "no ref to diff the harness against; name one (--changed-since)"
+            if touched == EVERY_LANE:
+                all_lanes_by_rule(path, f"the harness changed in code every column runs ({detail})")
+            elif touched is None:
                 unattributed.append(path)
-                reasons[path] = f"the harness changed and its call graph says every lane: {detail}"
+                reasons[path] = f"the harness changed and its call graph cannot place the change: {detail}"
             else:
-                lanes |= set(touched) & set(every)
-                reasons[path] = (f"harness diff touches only these lane bodies: {','.join(touched) or 'none'} "
+                lanes.update(set(touched) & set(every))
+                by_path[path] = set(touched) & set(every)
+                reasons[path] = (f"harness diff reaches only these lanes: {','.join(touched) or 'none'} "
                                  f"({detail})")
             continue
         if path in NATIVE_INPUTS:
@@ -2962,22 +3115,29 @@ def select(paths, ref=None, sources=None, backend=None):
             # library the package loads.
             native = native_input_lanes(path, rev)
             if native is not None:
-                lanes |= native
+                lanes.update(native)
+                by_path[path] = set(native)
                 reasons[path] = (f"native code the package loads by path ({NATIVE_LIBRARY}, "
                                  f"through {NATIVE_INPUTS[path]}): {len(native)} lane(s)")
                 continue
-        if path == "pixi.toml" and ref and pixi_tasks_only(ref, path):
-            inert.append(path)
-            reasons[path] = ("pixi.toml task tables and comments only: the environment, "
-                             "dependencies and channels are identical to " + ref)
+        if path in TOOLCHAIN_PATHS:
+            if path == "pixi.toml" and ref and pixi_tasks_only(ref, path):
+                inert.append(path)
+                reasons[path] = ("pixi.toml task tables and comments only: the environment, "
+                                 "dependencies and channels are identical to " + ref)
+                continue
+            all_lanes_by_rule(path, "the pinned toolchain and environment (Mojo, MAX, Python) every binding "
+                                    "is compiled with and every lane runs under")
+            continue
+        if path in LINUX_SET_BUILDERS:
+            all_lanes_by_rule(path, "it builds or stages every binding of the Linux release sets the NVIDIA "
+                                    "and AMD columns run")
             continue
         if path in HARNESS_RUNTIME_IMPORTS:
             # BEFORE the test-module and unreachable rules: nothing a lane
             # reaches names it, and the harness still runs it on every column.
-            fallback = True
-            unattributed.append(path)
-            reasons[path] = ("imported by the harness while it records a column, and what it "
-                             "writes there (degenerate_lanes) is derived over every lane: every lane")
+            all_lanes_by_rule(path, "imported by the harness while it records every column; what it writes "
+                                    "there (degenerate_lanes) is derived over every lane")
             continue
         why_test = test_module_inert(path)
         if why_test:
@@ -2995,46 +3155,41 @@ def select(paths, ref=None, sources=None, backend=None):
                              "cannot move a lane's bits (tools/test_lane_select.py covers it)")
             continue
         if path in GLOBAL_PATHS or path in enumerator_files():
-            if not ref:
-                fallback = True
-                unattributed.append(path)
-                reasons[path] = ("a registry of the whole binding surface. Whether this change is "
-                                 "an ADDITION can only be read from a diff, and no ref was given, "
-                                 "so: every lane. Use --changed-since to get the narrow answer")
-                continue
-            added = registry_lanes(ref, path, sources)
+            added = registry_lanes(ref, path, sources) if ref else None
             if added is not None:
-                lanes |= set(added)
+                lanes.update(added)
+                by_path[path] = set(added)
                 reasons[path] = (f"a whole-surface registry, but the diff only ADDS to it: every "
                                  f"existing statement is present and in order, and what was added "
                                  f"names {len(added)} lane(s)")
                 continue
-            fallback = True
-            unattributed.append(path)
-            reasons[path] = ("a registry of the whole binding surface, so the map drops its "
-                             "per-lane edges on purpose: every lane")
+            all_lanes_by_rule(path, "a registry of the whole binding surface (it loads, lists or dispatches "
+                                    "every family) changed other than by an addition"
+                                    + ("" if ref else "; with no ref an addition cannot be read"))
             continue
         hit = rev.get(path)
         if hit:
-            lanes |= hit
+            lanes.update(hit)
+            by_path[path] = set(hit)
             reasons[path] = f"{len(hit)} lane(s)"
             continue
         if path.startswith("bindings" + os.sep) and path.endswith(".sh"):
             roots = build_script_roots(path)
             if roots is not None:
                 built = set().union(*[rev.get(r, set()) for r in roots])
-                lanes |= built
+                lanes.update(built)
+                by_path[path] = set(built)
                 reasons[path] = (f"a build script: it compiles {len(roots)} binding source(s) "
                                  f"({','.join(sorted(roots)[:3])}{'...' if len(roots) > 3 else ''}), "
                                  f"which {len(built)} lane(s) reach")
                 continue
-        fallback = True
         unattributed.append(path)
-        reasons[path] = "NOT ATTRIBUTABLE: no lane's derived source set names it, so every lane"
-    if fallback:
-        lanes = set(every)
-    return dict(lanes=sorted(lanes, key=every.index), fallback=fallback, reasons=reasons,
-                unattributed=sorted(unattributed), inert=sorted(inert), total=len(every))
+        reasons[path] = ("NOT ATTRIBUTABLE: no lane's derived source set names it, yet something a lane "
+                         "reaches names it or its directory")
+    return dict(lanes=sorted(lanes, key=every.index), fallback=False, reasons=reasons,
+                unattributed=sorted(unattributed), inert=sorted(inert), total=len(every),
+                every_rules=every_rules,
+                by_path={p: sorted(v, key=every.index) for p, v in by_path.items()})
 
 
 # --------------------------------------------------------------- sharding
@@ -3160,10 +3315,8 @@ def main(argv=None):
 
     for path, reason in sorted(sel["reasons"].items()):
         print(f"# {path}: {reason}")
-    if sel["fallback"]:
-        print("# FALLING BACK TO EVERY LANE. The blast radius of the paths above could not be "
-              "determined, so this selection is not narrowed. Fix the map or say why, but do "
-              "not read this as a narrow run.")
+    if refuse_unattributed(sel):
+        return 3
     print(f"# {len(sel['lanes'])} of {sel['total']} lanes selected")
     if args.why:
         for lane in sel["lanes"]:
