@@ -17,7 +17,20 @@ THE SPEC (`run.json`):
                       {"segment": "2", "vendor": "amd", "steps": 10},
                       {"segment": "3", "vendor": "live", "steps": 10, "first": "nvidia", "shards": [44, 20]},
                       ...],
-                "B": [...]}}
+                "B": [...],
+                "C": [{"segment": "1", "vendor": "nvidia", "steps": 10,
+                       "nvidia_devices": "0", "nvidia_gpus": "NVIDIA H100 80GB HBM3"}]}}
+
+A segment entry may carry its own "nvidia_devices" and "nvidia_gpus"; they
+win over the spec-wide values for that segment only (its rendered
+`--devices`, the GPU types its rental walks and the GPU count it rents: one
+device is one GPU, "0,1" is two). On a live segment they apply to the NVIDIA
+side. A route may have fewer segments than route A: route C above replays
+A's segment 1 on ONE H100 where A ran it on two, held to A's chain and
+boundary, so a pass is evidence that the device fold is exact. Nothing
+depends on a route other than A, and a route other than A and B starts only
+when no ready A or B segment wants its vendor class (once started it holds
+that class until it lands, as every segment does).
 
 THE ORDER. Route A's segment k starts from route A's checkpoint k-1. Route
 B's segment k starts from ROUTE A's checkpoint k-1 (the pipeline of the plan,
@@ -84,13 +97,14 @@ def segment_plan(spec):
             entry = dict(route=route, segment=s["segment"], index=s["index"], vendor=s["vendor"], steps=int(s["steps"]),
                          first=first, last=last, boundary=last, live=s.get("first"), shards=s.get("shards"),
                          lease_minutes=s.get("lease_minutes"), dollar_cap=s.get("dollar_cap"),
+                         nvidia_devices=s.get("nvidia_devices"), nvidia_gpus=s.get("nvidia_gpus"),
                          from_route=("A" if route != "A" else route) if (prev or seed_from_a) else None,
                          from_segment=(prev["segment"] if prev else a_first) if (prev or seed_from_a) else None,
                          from_ckpt=("ckpt_%08d.blm" % first) if (prev or seed_from_a) else "init",
                          replay_ckpt=("ckpt_%08d.blm" % (first - 2)) if prev else None,
                          expect=(f"A/{s['segment']}/chain.jsonl" if route != "A" else None),
                          depends=[("A" if route != "A" else route, prev["segment"])] if prev else ([("A", a_first)] if seed_from_a else []))
-            if route != "A":
+            if route != "A" and ("A", s["segment"]) not in entry["depends"]:
                 entry["depends"].append(("A", s["segment"]))  # B's chain is held to A's; A's segment must exist
             plan.append(entry)
             at = last
@@ -100,11 +114,13 @@ def segment_plan(spec):
 def cmd_plan(args):
     spec = load_spec(args.spec)
     for e in segment_plan(spec):
-        print("%s/%s %-7s steps %d..%d from %s%s%s" % (
+        print("%s/%s %-7s steps %d..%d from %s%s%s%s%s" % (
             e["route"], e["segment"], e["vendor"], e["first"], e["last"],
             e["from_ckpt"] if e["from_ckpt"] == "init" else "%s/%s/%s" % (e["from_route"], e["from_segment"], e["from_ckpt"]),
             " replay " + e["replay_ckpt"] if e["replay_ckpt"] else "",
-            " expect " + e["expect"] if e["expect"] else ""))
+            " expect " + e["expect"] if e["expect"] else "",
+            "  devices " + e["nvidia_devices"] if e.get("nvidia_devices") else "",
+            "  gpus " + e["nvidia_gpus"] if e.get("nvidia_gpus") else ""))
     return 0
 
 
@@ -195,12 +211,25 @@ def _status(results_dir):
 
 # ---------------------------------------------------------------- rendering and renting
 
+NVIDIA_GPUS = "NVIDIA H100 80GB HBM3|NVIDIA H200|NVIDIA H100 PCIe|NVIDIA H100 NVL"
+
+
+def _nvidia_devices(spec, e):
+    """The segment's own NVIDIA devices, else the run's."""
+    return e.get("nvidia_devices") or spec.get("nvidia_devices", "0")
+
+
+def _nvidia_gpus(spec, e):
+    """The segment's own NVIDIA GPU types (a | list), else the run's."""
+    return e.get("nvidia_gpus") or spec.get("nvidia_gpus", NVIDIA_GPUS)
+
+
 def render(spec, e, out, ledger, role=None):
     """One body for a segment (or one side of a live segment)."""
     run = spec["run"]
     arm = e["vendor"] if role is None else role
     mode = "one" if role is None else ("live-coordinator" if role == e["live"] else "live-worker")
-    devices = spec.get("nvidia_devices", "0") if arm == "nvidia" else spec.get("amd_devices", "0")
+    devices = _nvidia_devices(spec, e) if arm == "nvidia" else spec.get("amd_devices", "0")
     label = "%s-%s-%s" % (arm, e["route"], e["segment"])
     cmd = [sys.executable, str(REPO / "tools" / "lm_segment_leg.py"), "render", "--run", run, "--recipe", spec["recipe"],
            "--recipe-key", spec["recipe_key"], "--arm", arm, "--mode", mode, "--devices", devices,
@@ -251,10 +280,14 @@ def rent_one(spec, e, body, out):
     lease = ["--segment-lease", str(minutes), "--dollar-cap", cap] if minutes > 60 else ["--minutes", str(minutes)]
     if e["vendor"] == "nvidia":
         rc = 3
-        for gpu in spec.get("nvidia_gpus", "NVIDIA H100 80GB HBM3|NVIDIA H200|NVIDIA H100 PCIe|NVIDIA H100 NVL").split("|"):
+        for gpu in _nvidia_gpus(spec, e).split("|"):
             slug = "".join(c for c in gpu.replace(" ", "_") if c.isalnum() or c == "_")
             env["MOJOLEARN_GEMM_LEG_OUT"] = str(res / ("leg-" + slug))
-            if spec.get("nvidia_devices", "0").count(",") == 1:
+            if e.get("nvidia_devices"):
+                # the segment names its devices: rent exactly that many GPUs,
+                # whatever the run's devices or the caller's environment say
+                env["MOJOLEARN_GEMM_LEG_GPU_COUNT"] = str(len(e["nvidia_devices"].split(",")))
+            elif spec.get("nvidia_devices", "0").count(",") == 1:
                 env["MOJOLEARN_GEMM_LEG_GPU_COUNT"] = "2"
             with open(res / ("leg-%s.log" % slug), "w") as log:
                 rc = subprocess.run(["sh", "tools/gemm_remote_leg.sh", "nvidia", "--rent", "--allow-concurrent", *lease, "--gpu", gpu],
@@ -319,7 +352,10 @@ def rent_live(spec, e, nv_body, amd_body, out):
     res = Path(out) / "legs" / ("%s-%s-live" % (e["route"], e["segment"]))
     res.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ, MOJOLEARN_LIVE_STAGE_KEYS=spec.get("runner_stage_keys", ""),
-               MOJOLEARN_LIVE_NVIDIA_GPUS=spec.get("nvidia_gpus", "NVIDIA H100 80GB HBM3|NVIDIA H200|NVIDIA H100 PCIe|NVIDIA H100 NVL"))
+               MOJOLEARN_LIVE_NVIDIA_GPUS=_nvidia_gpus(spec, e))
+    if e.get("nvidia_devices"):
+        # the coordinator's NVIDIA pod follows the segment's devices; the AMD box is untouched
+        env["MOJOLEARN_LIVE_NVIDIA_GPU_COUNT"] = str(len(e["nvidia_devices"].split(",")))
     with open(res / "live.log", "w") as log:
         rc = subprocess.run(["bash", "tools/lm_live_leg.sh", str(res), str(nv_body), str(amd_body), "--minutes",
                              str(spec.get("lease_minutes", 120)), "--dollar-cap", str(spec.get("dollar_cap", 10)),
@@ -374,6 +410,13 @@ def land(spec, e, results, out, ledger):
 
 def _vendor_class(e):
     return {"live"} if e["vendor"] == "live" else {e["vendor"]}
+
+
+def _ready_order(e):
+    """Start order among ready segments: routes A and B first, smallest global
+    step first; a further route (a replay such as route C) only takes a vendor
+    class that no ready A or B segment wants."""
+    return (e["route"] not in ("A", "B"), e["last"], e["route"])
 
 
 def _start(spec, e, out, ledger):
@@ -439,7 +482,7 @@ def cmd_run(args):
             _log(out, "halted: a segment failed to land; see the ledger, fix, and run the driver again")
             return 1
         # start what is ready, smallest global step first, never two of one vendor class at once
-        ready = sorted([e for e in pending if all(is_passed(r, sg) for r, sg in e["depends"])], key=lambda e: (e["last"], e["route"]))
+        ready = sorted([e for e in pending if all(is_passed(r, sg) for r, sg in e["depends"])], key=_ready_order)
         busy = set().union(*(_vendor_class(e) for _, e, _ in running.values())) if running else set()
         for e in ready:
             if len(running) >= parallel:

@@ -67,6 +67,9 @@ nvidia_walk() {
     for gpu in "${_gpus[@]}"; do
         slug=$(printf '%s' "$gpu" | tr ' ' '_' | tr -cd 'A-Za-z0-9_')
         say "nvidia: trying $gpu"
+        # MOJOLEARN_LIVE_NVIDIA_GPU_COUNT (set by lm_run_driver.py when a segment
+        # names its own nvidia_devices) sizes the NVIDIA pod only, never the AMD box
+        MOJOLEARN_GEMM_LEG_GPU_COUNT="${MOJOLEARN_LIVE_NVIDIA_GPU_COUNT:-${MOJOLEARN_GEMM_LEG_GPU_COUNT:-1}}" \
         MOJOLEARN_GEMM_LEG_EXTRA="$NV_BODY" MOJOLEARN_STAGE_KEYS="$TOKENS" MOJOLEARN_GEMM_LEG_OUT="$OUT/nvidia-$slug" \
             sh tools/gemm_remote_leg.sh nvidia --rent --allow-concurrent "${LEASE_ARGS[@]}" --gpu "$gpu" --local-card "$CARD" > "$OUT/nvidia-$slug.log" 2>&1
         rc=$?
