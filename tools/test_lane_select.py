@@ -238,22 +238,25 @@ def test_a_binding_every_lane_reaches_does_not_hand_over_its_tree():
     still selected every lane, which is the symptom the earlier fix was
     written to remove.
 
-    A binding everything reaches is not evidence about one lane, so it now
-    contributes its SOURCE to a lane the CPU manifest does not declare for its
-    family, and the whole binding to one the manifest does. This test pins the
-    consequence, deriving who is declared from the manifest rather than
-    listing lanes here."""
+    A binding everything reaches is not evidence about one lane, so it
+    contributes its SOURCE to a lane that reaches it only through the shared
+    helpers and calls none of its exports, and its export trees to a lane
+    whose doors call them. Since 2026-09-23 who belongs is derived from code
+    (`_declared`: reached without passing through a file every lane reaches)
+    rather than read from the manifest's lane lists; this test pins the
+    consequence by the exports a lane's doors call, listing no lanes here."""
     sources, why = lane_select.lane_sources()
-    hs = lane_select.host_surface()
-    declared = {f["family"]: set(f["training_lanes"]) | set(f["inference_lanes"])
-                for f in hs.FAMILIES}
-    rel, family = "training/byte_lm.mojo", "byte_lm"
-    assert family in declared, "the manifest no longer has a byte_lm family"
+    rel, binding = "training/byte_lm.mojo", "_mojolearn_byte_lm"
     carriers = {lane for lane, files in sources.items() if rel in files}
     assert carriers, f"{rel} is carried by no lane at all, which is the opposite failure"
-    strays = sorted(carriers - declared[family])
-    assert not strays, (f"{rel} belongs to the {family} family but {len(strays)} lane(s) the "
-                        f"manifest does not declare for it carry it: {strays[:10]}")
+    callers = {lane for lane, ev in why.items() if binding in ev["declared"]
+               or ev["binding_use"].get(binding, {}).get("exports")}
+    assert callers and "byte-lm" in callers, "no lane calls a byte LM export; the evidence is gone"
+    assert len(callers) < len(sources) // 4, f"{len(callers)} lanes call {binding}; the rule is loose"
+    strays = sorted(carriers - callers)
+    assert not strays, (f"{rel} is compiled into {binding}, but {len(strays)} lane(s) whose own doors "
+                        f"call none of its exports carry it: {strays[:10]}")
+    assert not {"ols", "kmeans", "arima"} & carriers, sorted(carriers)[:10]
 
     # The two files that still selected every lane after the syntax fix. They
     # are shared across families (`core/forest_host_predict.mojo` serves the
@@ -280,12 +283,12 @@ def test_a_bindings_edge_always_has_a_door_that_resolves_it():
     lane, which is the safe direction, and the narrowing this file has to
     protect is covered by FAMILY_CASES."""
     sources, why = lane_select.lane_sources()
-    sinks = lane_select.enumerator_files()
+    sinks = lane_select.enumerator_files() | lane_select._reexport_registries()
     for lane in sorted(sources)[::13]:
         doors = [f for f in sources[lane] if f.endswith(".py") and f not in sinks]
-        resolved = set()
-        for rel in doors:
-            resolved |= lane_select._binding_names(rel)
+        # by syntax, plus the `host_model` route of a class a door defines
+        # (`resolved_bindings`, 2026-09-23): still this lane's own doors
+        resolved = lane_select.resolved_bindings(doors)
         for binding in why[lane]["bindings"]:
             assert binding in resolved, \
                 f"{lane} carries {binding} but no door of its own resolves it"
@@ -1370,7 +1373,7 @@ def test_a_mojo_import_resolves_against_the_importing_files_own_directory():
     assert "bindings/forest_inference_binding.mojo" in lane_select._mojo_imports(rel), \
         "the sibling import the build's -I bindings resolves is not in the map"
 
-    def root_only(dotted, _rel):
+    def root_only(dotted, _rel, _names=()):
         parts = dotted.split(".")
         return {c for c in (os.path.join(*parts) + ".mojo",
                             os.path.join(*parts, "__init__.mojo"))
@@ -1491,9 +1494,16 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
                                      `_verify_causal_lm`, which imports
                                      `models.CausalLM`, whose blocks are this
                                      file's inference classes; the edge was
-                                     invisible while models/ did not resolve"""
+                                     invisible while models/ did not resolve
+
+    REMEASURED 2026-09-23 (the map derived from code, no manifest lane lists):
+      kmeans_oracle        21 -> 47  the 21 were the manifest's core family;
+                                     the 26 more are lanes whose own doors
+                                     call `kmeans_fit` (gmm, ivf, hdbscan,
+                                     spectral and their par- twins: k-means
+                                     is their initialization or quantizer)"""
     rev = lane_select.reverse_map()
-    for rel, want in (("cluster/host/kmeans_oracle.mojo", 21),
+    for rel, want in (("cluster/host/kmeans_oracle.mojo", 47),
                       ("core/gbdt_host_predict.mojo", 49),
                       ("core/forest_host_predict.mojo", 60),
                       ("core/forest_inference.mojo", 26),
