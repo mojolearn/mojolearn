@@ -1,15 +1,29 @@
 """Root-only selector checks; no native module or GPU is loaded."""
 import importlib.util
 from pathlib import Path
+import sys
+import types
 import unittest
 from unittest.mock import patch
 
 
 class IdenticalDefaultTests(unittest.TestCase):
     def setUp(self):
-        path = Path(__file__).resolve().parents[1] / 'python/mojolearn/_backend.py'
-        spec = importlib.util.spec_from_file_location('default_selector_fixture', path)
+        # _backend.py reads the host manifest with `from . import host_surface`
+        # (f74fdfc22), so it needs a parent package. A bare module object with
+        # the package directory as its __path__ gives it one WITHOUT running
+        # mojolearn/__init__.py, which is what "no native module is loaded"
+        # requires; loaded as a standalone file the import failed on every
+        # Python (found 2026-09-23 on the 3.10/3.11 pod, 3 tests red).
+        package_dir = Path(__file__).resolve().parents[1] / 'python/mojolearn'
+        package = types.ModuleType('mojolearn')
+        package.__path__ = [str(package_dir)]
+        self._modules = patch.dict(sys.modules, {'mojolearn': package})
+        self._modules.start()
+        self.addCleanup(self._modules.stop)
+        spec = importlib.util.spec_from_file_location('mojolearn._backend', package_dir / '_backend.py')
         self.backend = importlib.util.module_from_spec(spec)
+        sys.modules['mojolearn._backend'] = self.backend
         spec.loader.exec_module(self.backend)
 
     def test_unset_uses_identical_for_import_and_estimator_default(self):
