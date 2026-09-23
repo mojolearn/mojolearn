@@ -760,6 +760,10 @@ class Release:
                    f"Record the published {self.version} wheels and their release verification", "-m",
                    "Co-Authored-By: Claude Opus 5.5 (1M context) <noreply@anthropic.com>"], what="git commit record")
         branch = git("rev-parse", "--abbrev-ref", "HEAD")
+        # main has usually moved on during the builds; the record rides on top
+        # of it (0.8.16's record push was rejected as non-fast-forward)
+        self.must(["git", "-C", ROOT, "fetch", "-q", "origin", branch], what="git fetch")
+        self.must(["git", "-C", ROOT, "rebase", "-q", f"origin/{branch}"], what="git rebase record onto origin")
         self.must(["git", "-C", ROOT, "push", "origin", f"HEAD:refs/heads/{branch}"], what="git push record")
         return str(rec.relative_to(ROOT)) + " committed on " + branch
 
