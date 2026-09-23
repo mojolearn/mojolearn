@@ -400,11 +400,52 @@ def _window(text):
     return a, b
 
 
+HASH_SLICES = 8
+
+
+def _sha_sliced(view, slices=HASH_SLICES, pool=None):
+    """sha256 of the sha256s of `slices` equal byte ranges of `view`, the
+    ranges hashed in parallel threads (hashlib releases the interpreter
+    lock for a large buffer). At 1.95 GB of state a single sha256 cost 8 s
+    on an H100 pod's host, a fifth of a one-device step and two fifths of a
+    two-device step (bench/results/lm_t1_2026-09-22); this is the same
+    strength of digest at about a quarter of the wall time on four or more
+    cores. A chain line names its scheme, and two chains compare only under
+    the same scheme."""
+    view = memoryview(view).cast("B")
+    n = len(view)
+    bounds = [(n * i // slices, n * (i + 1) // slices) for i in range(slices)]
+    if pool is None:
+        parts = [_sha(view[a:b]) for a, b in bounds]
+    else:
+        parts = list(pool.map(lambda ab: _sha(view[ab[0]:ab[1]]), bounds))
+    return _sha("".join(parts).encode())
+
+
+_POOL = None
+
+
+def _pool():
+    global _POOL
+    if _POOL is None:
+        from concurrent.futures import ThreadPoolExecutor
+        _POOL = ThreadPoolExecutor(max_workers=HASH_SLICES)
+    return _POOL
+
+
 def _hash_arrays(raw):
+    """The state hash: sha256 over the four arrays' sliced digests, in order."""
     h = hashlib.sha256()
     for key in ARRAYS:
-        h.update(memoryview(raw[key]).cast("B"))
+        h.update(_sha_sliced(raw[key], pool=_pool()).encode())
     return h.hexdigest()
+
+
+def _hash_gradient(view):
+    return _sha_sliced(view, pool=_pool())
+
+
+HASH_SCHEME = "sliced-sha256-%d.v2" % HASH_SLICES
 
 
 def _chain_index(path):
@@ -420,7 +461,7 @@ def _chain_index(path):
     return out
 
 
-COMPARED = ("state_sha256", "gradient_sha256", "losses_f32_hex", "lr_f32_hex")
+COMPARED = ("state_sha256", "gradient_sha256", "losses_f32_hex", "lr_f32_hex", "hash_scheme")
 
 
 class ChainWriter:
@@ -519,7 +560,7 @@ def _run_live(args, recipe, batches, state, devices, chain, table, out, manifest
             now = time.perf_counter()
             line = dict(schema=CHAIN_SCHEMA, step=completed, route=args.route, segment=args.segment, label=args.label,
                         lr_f32_hex=table[completed - 1], losses_f32_hex=["%08x" % _f32_bits(x) for x in row["losses"]],
-                        state_sha256=row["state"], gradient_sha256=row["total_sha256"],
+                        state_sha256=row["state"], gradient_sha256=row["total_sha256"], hash_scheme="sha256.v1",
                         batch_index=[(completed - 1) * K, completed * K], seconds=round(now - last_commit[0], 4),
                         hash_seconds=0.0, live=segment["live"])
             last_commit[0] = time.perf_counter()
@@ -681,11 +722,11 @@ def cmd_run(args):
                 t1 = time.perf_counter()
                 raw = trainer.export_raw()
                 state_digest = _hash_arrays(raw)
-                grad_digest = _sha(memoryview(trainer.export_gradients()).cast("B"))
+                grad_digest = _hash_gradient(trainer.export_gradients())
                 hash_seconds = time.perf_counter() - t1
                 row = dict(schema=CHAIN_SCHEMA, step=completed, route=args.route, segment=args.segment, label=args.label,
                            lr_f32_hex=lr_hex, losses_f32_hex=["%08x" % _f32_bits(x) for x in result["losses"]],
-                           state_sha256=state_digest, gradient_sha256=grad_digest,
+                           state_sha256=state_digest, gradient_sha256=grad_digest, hash_scheme=HASH_SCHEME,
                            batch_index=[s * K, s * K + K], seconds=round(step_seconds, 4),
                            hash_seconds=round(hash_seconds, 3))
                 if in_window(s):

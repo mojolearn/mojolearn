@@ -207,6 +207,14 @@ case "$VENDOR" in
        BODY_VENDOR=cpu;    COLUMN=cpu;    GPU_LABEL=cpu-amd
        SMI_CMD='lscpu' ;;
 esac
+
+# ---- the size and region overrides (a GPU size only, never a CPU leg's) ----
+# Applied here, before anything reads SIZE or REGION (the create body, the
+# dry-run summary, the segment-lease price).
+if [ -n "$SIZE_OVERRIDE" ]; then
+  case "$SIZE_OVERRIDE" in gpu-*) SIZE="$SIZE_OVERRIDE" ;; *) echo "--size must be a gpu-* size slug, got '$SIZE_OVERRIDE'" >&2; exit 2 ;; esac
+fi
+[ -z "$REGION_OVERRIDE" ] || REGION="$REGION_OVERRIDE"
 case "$VENDOR" in
   cpu-*)
     GATES=0
@@ -1039,13 +1047,6 @@ if ps -axo command= 2>/dev/null | grep -q -F -f "$TOKPAT"; then
 else
   echo "local_key_in_ps=not_visible" >> "$OUT/leg.txt"
 fi
-
-# ---- the size and region overrides (a GPU size only, never a CPU leg's) ----
-if [ -n "$SIZE_OVERRIDE" ]; then
-  case "$SIZE_OVERRIDE" in gpu-*) SIZE="$SIZE_OVERRIDE" ;; *) die "--size must be a gpu-* size slug, got '$SIZE_OVERRIDE'" 2 ;; esac
-fi
-[ -z "$REGION_OVERRIDE" ] || REGION="$REGION_OVERRIDE"
-echo "size=$SIZE region=$REGION" >> "$OUT/leg.txt" 2>/dev/null || true
 
 # ---- the segment lease is priced BEFORE the create ----
 if [ -n "$SEGMENT_LEASE" ]; then
