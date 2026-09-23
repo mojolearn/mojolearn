@@ -45,8 +45,13 @@ def stamp_path(so, stamps=STAMPS, pkg=PKG):
 
 
 def digest(script, repo=REPO):
-    info, _ = bincache.source_digest(repo, str(Path(repo) / "bindings" / Path(script).name), [])
-    return info
+    """The closure's digest record, and the closure itself (`sources`, the
+    repository-relative files the build's own import walk reached from the
+    script's root): recorded in every stamp since 2026-09-23 so that
+    `tools/lane_map_import_graph.py --check-stamps` can hold the derived lane
+    map against what a built binding was actually compiled from."""
+    info, rels = bincache.source_digest(repo, str(Path(repo) / "bindings" / Path(script).name), [])
+    return dict(info, sources=sorted(rels))
 
 
 def commit(repo=REPO):
