@@ -33,10 +33,17 @@ declaration that something else already enforces:
   the binding       the `_mojolearn_*` names those Python files name, which
                     are `bindings/_mojolearn_*.mojo`.
   the Mojo tree     each binding's own `from a.b.c import ...` lines, resolved
-                    to `a/b/c.mojo` and followed transitively.
-  the CPU surface   `python/mojolearn/host_surface.py`: a family declares the
-                    lanes it covers, and the family's host binding is another
-                    Mojo seed for those lanes.
+                    THE WAY THE BUILD RESOLVES THEM (`bincache.resolve` over
+                    the `-I` roots the build scripts pass) and followed
+                    transitively; the same walk `binding_stamps.py` digests.
+  the CPU route     the tables `_backend` routes a CPU-only install through
+                    (`routed_modules`, `inference_routes`, `ADAPTED_MODULES`)
+                    and the `Host<Class>` dispatch of `host_model`, read as
+                    code (`host_class_routes`). NOT the manifest's lane lists
+                    or `host_modules`: since 2026-09-23 no hand-kept list
+                    places a file, and `tools/lane_map_import_graph.py
+                    --compare` reports every file this map attributes that no
+                    import path reaches.
 
 NO FALLBACK, NO GUESS (Andrew, 2026-09-22). A selector that misses an
 affected lane is far worse than one that runs a few extra, and one that
@@ -87,6 +94,8 @@ import subprocess
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(ROOT, "tools"))
+import bincache  # noqa: E402  the build's own Mojo import resolver
 PKG = os.path.join("python", "mojolearn")
 HARNESS = os.path.join("tools", "identity_break.py")
 MANIFEST = os.path.join(PKG, "host_surface.py")
@@ -134,6 +143,12 @@ SELECTION_MACHINERY = (
     # the harness as a subprocess and never enter a lane's process.
     os.path.join("tools", "cpu_identity_gate_check.py"),
     os.path.join("tools", "test_lane_select_harness.py"),
+    # The import-graph map the selector consults (2026-09-23), its test, and
+    # the build's import resolver it shares with the binding cache: they
+    # decide which lanes a path reaches, never what a lane computes.
+    os.path.join("tools", "lane_map_import_graph.py"),
+    os.path.join("tools", "tests", "test_lane_map_import_graph.py"),
+    os.path.join("tools", "bincache.py"),
 )
 
 #: FILES THE HARNESS IMPORTS WHILE IT RECORDS A COLUMN. `lane_applicability.py`
@@ -206,8 +221,8 @@ def reset_caches():
     """Drop every memo. Only a caller that edits the tree mid-process needs
     this; no code path in this repository does."""
     global _ENUMERATORS, _LANE_SOURCES, _SOURCE_HASHED, _TRACKED, _CONSTANTS, _EXTENDERS
-    global _MOJO_CONFORMANCE, _MOJO_IMPORTERS, _PYTHON_FILES, _PKG_IMPORT_CLOSURE
-    global _CORPUS, _CORPUS_TEXT, _REVERSE, _REGISTRIES
+    global _MOJO_CONFORMANCE, _MOJO_IMPORTERS, _PYTHON_FILES, _PKG_IMPORT_CLOSURE, _HOST_CLASS_ROUTES
+    global _CORPUS, _CORPUS_TEXT, _REVERSE, _REGISTRIES, _INCLUDE_ROOTS, _GRAPH_REVERSE
     for cache in _CACHES:
         cache.clear()
     _GIT_SHOW.clear()
@@ -225,6 +240,12 @@ def reset_caches():
     _CORPUS_TEXT = None
     _REVERSE = None
     _REGISTRIES = None
+    _INCLUDE_ROOTS = None
+    _GRAPH_REVERSE = None
+    _HOST_CLASS_ROUTES = None
+    if "lane_map_import_graph" in sys.modules:
+        sys.modules["lane_map_import_graph"]._DERIVED = None
+        sys.modules["lane_map_import_graph"]._CLOSURES.clear()
 
 
 @_by_path
@@ -499,6 +520,161 @@ def _rebindings(init):
     return out
 
 
+def _import_dotted(rel, node):
+    """The package-relative dotted module an ImportFrom of `rel` names ("" for
+    the package itself), or None when it names something outside the package."""
+    if node.level:
+        base = os.path.dirname(rel)
+        for _ in range(node.level - 1):
+            base = os.path.dirname(base)
+        if not (base == PKG or base.startswith(PKG + os.sep)):
+            return None                     # a relative import that leaves the package
+        prefix = os.path.relpath(base, PKG).replace(os.sep, ".")
+        prefix = "" if prefix == "." else prefix
+        module = node.module or ""
+    elif node.module == "mojolearn" or (node.module or "").startswith("mojolearn."):
+        prefix = ""
+        module = node.module[len("mojolearn"):].lstrip(".")
+    else:
+        return None
+    return ".".join(p for p in (prefix, module) if p)
+
+
+@_by_path
+def _import_edges(rel):
+    """file -> the NAMES `rel` imports from it, or None for the whole module.
+
+    THE SYMBOL-LEVEL IMPORT GRAPH (2026-09-23). `_hierarchy_impl.py` writes
+    `from .linear_model import _check_saved_by, _restore_mode, _saved_mode`:
+    three save-format helpers. Reading that edge as "the agglomerative lane
+    runs linear_model.py" made the lane a caller of `qn_fit`, and
+    glm/host/qn_oracle.mojo selected 187 lanes. What a lane asks of a binding
+    through a door it imported BY NAME is what those names do (`_region_nodes`).
+    `from . import x`, `import mojolearn.x` and `from .x import *` are the
+    whole module (None)."""
+    out = {}
+
+    def merge(files, names):
+        for f in files:
+            if f == rel:
+                continue
+            if names is None or (f in out and out[f] is None):
+                out[f] = None
+            else:
+                out.setdefault(f, set()).update(names)
+
+    tree = _parse(rel)
+    if tree is None:
+        return out
+    listing = set(_python_files())
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Import):
+            for alias in node.names:
+                if alias.name.startswith("mojolearn."):
+                    merge(_module_paths(alias.name[len("mojolearn."):], listing), None)
+        elif isinstance(node, ast.ImportFrom):
+            dotted = _import_dotted(rel, node)
+            if dotted is None:
+                continue
+            mod_files = _module_paths(dotted, listing) if node.module else set()
+            registry = os.path.join(PKG, *dotted.split("."), "__init__.py") if dotted else None
+            for alias in node.names:
+                if alias.name == "*":
+                    merge(mod_files, None)
+                    continue
+                sub = _module_paths(".".join(p for p in (dotted, alias.name) if p), listing)
+                if sub:
+                    merge(sub, None)             # a module imported whole
+                    continue
+                merge(mod_files, {alias.name})
+                if registry in _reexport_registries() and registry != rel:
+                    merge(_rebindings(registry).get(alias.name, set()), {alias.name})
+    return out
+
+
+_REGIONS = {}
+_CACHES.append(_REGIONS)
+
+
+def _region_nodes(rel, wanted):
+    """The top-level statements of `rel` that run for a lane which imported
+    `wanted` names from it: every module-level statement that is not a def or
+    a class (they run at import), the defs and classes named, and the
+    file-local defs and classes those name, transitively. `wanted` None is
+    the whole file (a seed, a module imported whole, a subclass)."""
+    key = (rel, None if wanted is None else frozenset(wanted))
+    if key in _REGIONS:
+        return _REGIONS[key]
+    tree = _parse(rel)
+    if tree is None:
+        _REGIONS[key] = []
+        return []
+    if wanted is None:
+        _REGIONS[key] = list(tree.body)
+        return _REGIONS[key]
+    index = {n.name: n for n in tree.body if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef))}
+    defs = {id(n) for n in index.values()}
+    nodes = [n for n in tree.body if id(n) not in defs]
+    seen, stack = set(), [n for n in wanted if n in index]
+    while stack:
+        name = stack.pop()
+        if name in seen:
+            continue
+        seen.add(name)
+        node = index[name]
+        nodes.append(node)
+        for sub in ast.walk(node):
+            # FILE-LOCAL FUNCTIONS FOLLOW; CLASSES DO NOT. A helper that
+            # names a class (`isinstance(est, LinearRegression)`, or builds
+            # one) does not call its methods, and it is the methods that hold
+            # a class's `_bind` and its export calls. `cluster.py` imports
+            # `_check_saved_by` from linear_model.py; following it into the
+            # GLM classes made the kmeans lane a caller of `qn_fit`. A class
+            # enters a region when it is imported by name, or the file whole.
+            if isinstance(sub, ast.Name) and sub.id in index and sub.id not in seen \
+                    and not isinstance(index[sub.id], ast.ClassDef):
+                stack.append(sub.id)
+    _REGIONS[key] = nodes
+    return nodes
+
+
+def _names_in_nodes(nodes):
+    """Attribute names and identifier-shaped string constants in `nodes`
+    (`_file_called_names` over a region)."""
+    out = set()
+    for node in nodes:
+        for sub in ast.walk(node):
+            if isinstance(sub, ast.Attribute):
+                out.add(sub.attr)
+            elif isinstance(sub, ast.Constant) and isinstance(sub.value, str) and sub.value.isidentifier():
+                out.add(sub.value)
+    return out
+
+
+def _own_walk(seeds, stop):
+    """file -> the names a lane reaches it for (None: whole file), walking
+    the symbol-level import graph from `seeds` and entering, not following,
+    the files in `stop`. A file that subclasses or patches a class reached
+    runs whole (the backward edge of `_python_closure`)."""
+    wanted, stack = {}, [(s, None) for s in seeds]
+    edges = extenders()
+    while stack:
+        rel, names = stack.pop()
+        first = rel not in wanted
+        if first:
+            wanted[rel] = None if names is None else set(names)
+        elif wanted[rel] is not None:
+            wanted[rel] = None if names is None else wanted[rel] | names
+        if not first or rel in stop:
+            continue
+        for f, n in _import_edges(rel).items():
+            stack.append((f, n))
+        for ext, targets in edges.items():
+            if rel in targets:
+                stack.append((ext, None))
+    return wanted
+
+
 def _resolve_python_import(rel, node, listing):
     """The package files ONE import statement of `rel` names, resolved the
     way the interpreter resolves it and AGAINST THE LISTING (see
@@ -522,22 +698,10 @@ def _resolve_python_import(rel, node, listing):
         return out
     if not isinstance(node, ast.ImportFrom):
         return out
-    if node.level:
-        base = os.path.dirname(rel)
-        for _ in range(node.level - 1):
-            base = os.path.dirname(base)
-        if not (base == PKG or base.startswith(PKG + os.sep)):
-            return out                      # a relative import that leaves the package
-        prefix = os.path.relpath(base, PKG).replace(os.sep, ".")
-        prefix = "" if prefix == "." else prefix
-        module = node.module or ""
-    elif node.module == "mojolearn" or (node.module or "").startswith("mojolearn."):
-        prefix = ""
-        module = node.module[len("mojolearn"):].lstrip(".")
-    else:
+    dotted = _import_dotted(rel, node)
+    if dotted is None:
         return out
-    dotted = ".".join(p for p in (prefix, module) if p)
-    if module:
+    if node.module:
         out |= _module_paths(dotted, listing)
     registry = os.path.join(PKG, *dotted.split("."), "__init__.py") if dotted else None
     for alias in node.names:
@@ -796,9 +960,40 @@ def _python_closure(seeds, sinks=()):
         stack.extend(fresh)
 
 
-def _mojo_module_files(dotted, rel):
-    """Every repository file one Mojo import could mean, resolved against the
-    repository root AND against the importing file's OWN DIRECTORY.
+_INCLUDE_ROOTS = None
+
+
+def _include_roots():
+    """The `-I` include roots every `mojo build` line under bindings/ passes,
+    read from the build scripts by `bincache.script_plan` (the same reader
+    that keys the binding cache), plus the repository root. Measured
+    2026-09-23: every one of the 56 scripts passes `-I . -I bindings`."""
+    global _INCLUDE_ROOTS
+    if _INCLUDE_ROOTS is None:
+        import glob
+        from pathlib import Path
+        roots = {Path(ROOT).resolve()}
+        for script in sorted(glob.glob(os.path.join(ROOT, "bindings", "*.sh"))):
+            plan = bincache.script_plan(Path(ROOT), Path(script), ["core"])
+            if plan is not None:
+                roots.update(Path(i).resolve() for i in plan[1])
+        _INCLUDE_ROOTS = sorted(roots)
+    return _INCLUDE_ROOTS
+
+
+def _mojo_module_files(dotted, rel, names=()):
+    """Every repository file one Mojo import could mean, RESOLVED THE WAY THE
+    BUILD RESOLVES IT (2026-09-23): `bincache.resolve` over the include roots
+    the build scripts pass (`_include_roots`) and the importing file's own
+    directory, with the `__init__.mojo` of every package on the way and, for
+    `from pkg import name`, `pkg/name.mojo` when that is a module. This is
+    the walk `tools/binding_stamps.py` digests after every build, so the
+    selector's Mojo closure and a binding's recorded source closure are the
+    same set by construction (`tools/lane_map_import_graph.py --check-stamps`).
+
+    An import that names this tree and matches nothing (`resolve` returns
+    None) is dropped here; the build widens its key to the whole tree in that
+    case, and the graph map reports the binding as WIDE.
 
     THE IMPORTER'S DIRECTORY IS ON THE INCLUDE PATH. Every binding is built
     with `-I . -I bindings` (bindings/build_rf.sh:123, build_trees.sh:134,
@@ -817,14 +1012,11 @@ def _mojo_module_files(dotted, rel):
 
     `from max.gpu.host import ...` still resolves to nothing under either root
     and is still dropped, which is what makes the toolchain fall out."""
-    parts = dotted.split(".")
-    out = set()
-    for base in ("", os.path.dirname(rel)):
-        for cand in (os.path.join(base, *parts) + ".mojo",
-                     os.path.join(base, *parts, "__init__.mojo")):
-            if os.path.exists(os.path.join(ROOT, cand)):
-                out.add(cand)
-    return out
+    from pathlib import Path
+    found = bincache.resolve(dotted, list(names), Path(ROOT, rel), _include_roots())
+    if not found:
+        return set()
+    return {os.path.relpath(Path(f).resolve(), ROOT) for f in found}
 
 
 @_by_path
@@ -838,11 +1030,12 @@ def _mojo_imports(rel):
         text = _read(rel)
     except OSError:
         return out
-    for line in text.splitlines():
-        m = _MOJO_IMPORT_RE.match(line)
-        if not m:
-            continue
-        out |= _mojo_module_files(m.group(1) or m.group(2), rel)
+    for module, names in bincache.parse_imports(text):
+        # RELATIVE IMPORTS INCLUDED. `gbdt/gpu_lib/gpu_single_worker.mojo`
+        # writes `from .tasks_queue.single_host_task_queue import ...`, and
+        # `bincache.resolve` walks the dots up from the importer's directory.
+        out |= _mojo_module_files(module, rel, names)
+    out.discard(rel)
     return out
 
 
@@ -1069,6 +1262,13 @@ def _binding_names(rel):
     every lane then hit those bindings' whole-closure fallback, and
     core/gbdt_host_predict.mojo selected every lane at once. A sentence about a
     binding is not a call into it."""
+    tree = _parse(rel)
+    return _binding_names_in(rel, list(tree.body) if tree is not None else [])
+
+
+def _binding_names_in(rel, nodes):
+    """`_binding_names` over the top-level statements `nodes` of `rel` (the
+    module's constants and tables are read from the whole file)."""
     out = set()
     tree = _parse(rel)
     if tree is None:
@@ -1078,22 +1278,67 @@ def _binding_names(rel):
         if isinstance(value, str) and value.startswith("_mojolearn"):
             out.add(value)
 
-    for node in ast.walk(tree):
-        if isinstance(node, ast.Call):
-            name = getattr(node.func, "attr", None) or getattr(node.func, "id", None)
-            if name in _BINDING_CALLS:
-                for arg in node.args:
-                    if isinstance(arg, ast.Constant):
-                        add(arg.value)
-        elif isinstance(node, ast.Assign):
-            for target in node.targets:
-                label = getattr(target, "id", None) or getattr(target, "attr", None)
-                if label and label.upper().endswith(_BINDING_TARGETS):
-                    if isinstance(node.value, ast.Constant):
-                        add(node.value.value)
-        elif isinstance(node, ast.ImportFrom):
-            for alias in node.names:
-                add(alias.name)
+    # A TABLE OF BINDINGS, READ AS CODE (2026-09-23). `_classical_host.py`
+    # loads `_backend.load_host_module(_HOST_BASENAMES[name])`, a dict of
+    # binding basenames assigned at module level, some through a module
+    # constant (`_HOST_BASENAME`). The call's argument is a subscript, not a
+    # string, so the four inference-only host bindings it names (gp, hdbscan,
+    # mixture, estimators for the scalers) were in no door's binding set and
+    # reached the map only through the manifest's hand-kept lane lists.
+    consts, tables = {}, {}
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+            if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+                consts[node.targets[0].id] = node.value.value
+            elif isinstance(node.value, ast.Dict):
+                tables[node.targets[0].id] = node.value
+
+    def table_values(name):
+        for value in tables.get(name, ast.Dict(keys=[], values=[])).values:
+            if isinstance(value, ast.Constant):
+                add(value.value)
+            elif isinstance(value, ast.Name) and value.id in consts:
+                add(consts[value.id])
+
+    # A MODULE-LEVEL BINDING CONSTANT (`_BINDING = "_mojolearn_estimators"`)
+    # is resolved by whoever READS it. Over a region (a door imported for a
+    # few names, `_region_nodes`) it counts only when a def or class of the
+    # region names it; over the whole file always. Without this, the gbdt
+    # lanes, which import `linear_model.py` for a metric helper, were
+    # "declared" for the estimators host binding through a constant only the
+    # GLM classes read, called none of its exports, and took its whole tree.
+    whole = len(nodes) == len(tree.body)
+    referenced = set()
+    if not whole:
+        for top in nodes:
+            if isinstance(top, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+                for node in ast.walk(top):
+                    if isinstance(node, ast.Name):
+                        referenced.add(node.id)
+                    elif isinstance(node, ast.Attribute):
+                        referenced.add(node.attr)
+    for top in nodes:
+        for node in ast.walk(top):
+            if isinstance(node, ast.Call):
+                name = getattr(node.func, "attr", None) or getattr(node.func, "id", None)
+                if name in _BINDING_CALLS:
+                    for arg in node.args:
+                        if isinstance(arg, ast.Constant):
+                            add(arg.value)
+                        elif isinstance(arg, ast.Subscript) and isinstance(arg.value, ast.Name):
+                            table_values(arg.value.id)
+                        elif isinstance(arg, ast.Name) and arg.id in consts:
+                            add(consts[arg.id])
+            elif isinstance(node, ast.Assign):
+                for target in node.targets:
+                    label = getattr(target, "id", None) or getattr(target, "attr", None)
+                    if label and label.upper().endswith(_BINDING_TARGETS):
+                        if isinstance(node.value, ast.Constant) and (
+                                whole or top is not node or label in referenced):
+                            add(node.value.value)
+            elif isinstance(node, ast.ImportFrom):
+                for alias in node.names:
+                    add(alias.name)
     return out
 
 
@@ -1124,6 +1369,136 @@ def _called_names(files):
     return out
 
 
+_HOST_CLASS_ROUTES = None
+
+
+def host_class_routes():
+    """public class name -> the host bindings a saved model of that class
+    loads on a CPU-only install, READ FROM CODE (2026-09-23).
+
+    `_probe_fit_host` in the harness saves any lane's estimator and predicts
+    through `host_model(path)`, which picks the `Host<Class>` for the file's
+    family: `class HostStandardScaler(_HostScaler, StandardScaler)` in
+    python/mojolearn/_classical_host.py with `_BINDING = "_mojolearn_preprocessing"`
+    inherited from `_HostScaler`, resolved through the module's
+    `_HOST_BASENAMES` table to `_mojolearn_estimators_host`. So a lane that
+    fits a `StandardScaler` reaches the estimators host binding, and the
+    manifest's `inference_lanes` used to be the only statement of that. Every
+    package file is read: a class whose body (or a base's body in the same
+    file) assigns `_BINDING` routes each of its bases defined elsewhere to the
+    table's value for that name, or to the name itself when no table maps it."""
+    global _HOST_CLASS_ROUTES
+    if _HOST_CLASS_ROUTES is not None:
+        return _HOST_CLASS_ROUTES
+    routes = {}
+    symbols = _python_symbols(_python_files())
+    for rel in _python_files():
+        tree = _parse(rel)
+        if tree is None:
+            continue
+        consts, table, classes = {}, {}, {}
+        for node in tree.body:
+            if isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name):
+                if isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
+                    consts[node.targets[0].id] = node.value.value
+                elif isinstance(node.value, ast.Dict):
+                    for k, v in zip(node.value.keys, node.value.values):
+                        if isinstance(k, ast.Constant) and isinstance(k.value, str):
+                            if isinstance(v, ast.Constant) and isinstance(v.value, str):
+                                table[k.value] = v.value
+                            elif isinstance(v, ast.Name) and v.id in consts:
+                                table[k.value] = consts[v.id]
+            elif isinstance(node, ast.ClassDef):
+                classes[node.name] = node
+        if not classes:
+            continue
+
+        def own_binding(cls, seen=()):
+            for item in cls.body:
+                if isinstance(item, ast.Assign) and isinstance(item.value, ast.Constant) \
+                        and any(isinstance(t, ast.Name) and t.id == "_BINDING" for t in item.targets):
+                    return item.value.value
+            for base in cls.bases:
+                name = getattr(base, "id", None)
+                if name in classes and name not in seen:
+                    found = own_binding(classes[name], seen + (name,))
+                    if found:
+                        return found
+            return None
+
+        def base_binding(cls, seen=()):
+            """`_BINDING` from a base defined in ANOTHER package file:
+            `HostGaussianMixture(_HostBound, GaussianMixture)` assigns none of
+            its own, and `_HostBound._bind` reads `self._BINDING`, which is
+            `GaussianMixture._BINDING = "_mojolearn_mixture"` in _mixture_impl.py."""
+            for base in cls.bases:
+                bname = getattr(base, "id", None)
+                if not bname or bname in classes or bname in seen:
+                    continue
+                for other in sorted(symbols.get(bname, ())):
+                    tree2 = _parse(other)
+                    for node2 in (tree2.body if tree2 else ()):
+                        if isinstance(node2, ast.ClassDef) and node2.name == bname:
+                            for item in node2.body:
+                                if isinstance(item, ast.Assign) and isinstance(item.value, ast.Constant) \
+                                        and any(isinstance(t, ast.Name) and t.id == "_BINDING" for t in item.targets):
+                                    return item.value.value
+            return None
+
+        for name, cls in classes.items():
+            binding = own_binding(cls) or base_binding(cls)
+            # ONLY A DISPATCH TABLE MAKES A HOST CLASS. An estimator's own
+            # `_BINDING = "_mojolearn_arima"` names the binding IT loads, and
+            # its bases (`NumericModeMixin`, which every estimator inherits)
+            # say nothing about a saved model's host route; reading those
+            # handed every lane every binding (measured 2026-09-23: the median
+            # file went from 44 lanes to 246). A host class is one whose
+            # `_BINDING` the same module maps through a table to the binding
+            # `host_model` loads for it.
+            if not isinstance(binding, str) or binding not in table:
+                continue
+            host = table[binding]
+            for base in cls.bases:
+                bname = getattr(base, "id", None)
+                if bname and bname not in classes:
+                    routes.setdefault(bname, set()).add(host)
+    _HOST_CLASS_ROUTES = routes
+    return routes
+
+
+def resolved_bindings(doors):
+    """The bindings a set of Python doors load, from code alone: every
+    `_mojolearn_*` name a door resolves by syntax (`_binding_names`) and the
+    host bindings a saved model of a class a door defines loads through
+    `host_model` (`host_class_routes`). Only names that are a binding source
+    under bindings/ count. Shared with `tools/lane_map_import_graph.py`, so
+    the narrow map and the graph map load the same bindings for a lane."""
+    routes = host_class_routes()
+    out = set()
+    for rel in doors:
+        out |= _binding_names(rel)                   # resolved by syntax, never by prose
+        tree = _parse(rel)
+        for node in (tree.body if tree else ()):
+            if isinstance(node, ast.ClassDef):
+                out |= routes.get(node.name, set())
+    return {b for b in out if os.path.exists(os.path.join(ROOT, "bindings", b + ".mojo"))}
+
+
+def host_routes(hs=None):
+    """GPU binding -> the host bindings a CPU-only install runs it through:
+    `_backend._HOST_MODULES` (`routed_modules`, the reference host binding of
+    the family) and `_backend._HOST_INFERENCE_MODULES` (`inference_routes`,
+    the inference-only binding a wheel ships when the reference one is not
+    built). Both are runtime tables `_backend` reads from the manifest, so
+    they are read here as code, not as a lane list."""
+    hs = hs or host_surface()
+    out = {}
+    for table in (hs.routed_modules(), hs.inference_routes()):
+        for gpu, host in table.items():
+            out.setdefault(gpu, set()).add(host)
+    return out
+
+
 _LANE_SOURCES = None
 
 
@@ -1141,14 +1516,8 @@ def lane_sources():
     hs = host_surface()
     py_files = _python_files()
     symbols = _python_symbols(py_files)
-    routed = hs.routed_modules()                 # GPU binding -> host binding
+    routed = host_routes(hs)                     # GPU binding -> host bindings, as _backend routes
     adapted = {k: v["family"] for k, v in hs.ADAPTED_MODULES.items()}
-
-    # family -> the lanes it declares. A family's own files are resolved PER
-    # LANE below, through the exports that lane's door actually calls.
-    family_lanes = {f["family"]: set(f["training_lanes"]) | set(f["inference_lanes"])
-                    for f in hs.FAMILIES}
-    family_by_name = {f["family"]: f for f in hs.FAMILIES}
     family_of_binding = {f["binding"]: f["family"] for f in hs.FAMILIES}
     seed_cache = {}
 
@@ -1182,19 +1551,24 @@ def lane_sources():
         another. Reaching a binding that everything reaches says nothing about
         one lane, so such a binding contributes its SOURCE only, and a change
         to the binding file still selects every lane."""
-        if wide is not True:
-            # A BINDING EVERY LANE REACHES. `wide` is False for a lane the CPU
-            # manifest does not name for this family (source only, so a change
-            # to the binding file still selects the lane) and "whole" for one
-            # it does name, which takes the binding entire because the manifest
-            # is the declaration that this lane belongs to it.
-            return _mojo_closure([src]) if wide == "whole" else {src}
+        if wide is False:
+            return {src}
         exports = _binding_exports(src)
         hit = tuple(sorted(e for e in used if e in exports))
-        key = (src, hit)
+        key = (src, hit, wide)
         if key not in seed_cache:
             if not hit:
-                seed_cache[key] = _mojo_closure([src])
+                # NO EXPORT OF THIS BINDING IS CALLED. For a binding the lane
+                # reaches on its own the answer stays wide (whole closure: "I
+                # could not tell"). For a binding EVERY lane reaches through a
+                # shared helper and this lane is not declared for (`wide` is
+                # "narrow"), no call means the lane does not run it: the source
+                # alone, so a change to the binding file still selects the
+                # lane. Since 2026-09-23 a declared lane is also PER EXPORT
+                # rather than whole: `_mode.py` resolves the core binding for
+                # every estimator, and taking `_mojolearn_core_host` entire for
+                # each of them handed the k-means oracles to the scaler lanes.
+                seed_cache[key] = {src} if wide == "narrow" else _mojo_closure([src])
             else:
                 blocks = _mojo_blocks_for(src)
                 syms = _mojo_import_symbols(src)
@@ -1244,7 +1618,10 @@ def lane_sources():
     # PASS ONE: each lane's Python doors and the bindings they resolve. Held
     # first because the next pass needs to know which bindings EVERY lane
     # resolves, and that is a measurement over all the lanes, not a list.
-    reach = {}
+    reach, seeds_of = {}, {}
+    door_bindings = resolved_bindings
+    class_routes = host_class_routes()
+
     for lane, fn in ib.LANES.items():
         names = _seed_names(fn, vars(ib))
         seeds, matched = set(), set()
@@ -1254,74 +1631,141 @@ def lane_sources():
                 matched.add(name)
         files = _python_closure(seeds, sinks)
         doors = files - set(sinks)
-        bindings = set()
-        for rel in doors:
-            bindings |= _binding_names(rel)          # resolved by syntax, never by prose
-        bindings = {b for b in bindings
-                    if os.path.exists(os.path.join(ROOT, "bindings", b + ".mojo"))}
+        bindings = door_bindings(doors)
         reach[lane] = (matched, files, doors, bindings)
+        seeds_of[lane] = seeds
     ubiquitous = set.intersection(*[b for _, _, _, b in reach.values()]) if reach else set()
+    # THE PYTHON FILES EVERY LANE REACHES: the shared helpers (`_buffer.py`,
+    # `_array.py`) and the host doors they import for their native helpers.
+    ubiquitous_py = set.intersection(*[f for _, f, _, _ in reach.values()]) if reach else set()
 
-    def _declared(lane, binding):
-        """Does the CPU manifest name this lane for the family that owns this
-        binding? That is the one declaration in the tree which says a lane
-        really belongs to a family, and it is what keeps the byte LM lanes
-        wide while `ols` is not."""
-        for b in (binding, routed.get(binding)):
-            fam = family_of_binding.get(b)
-            if fam and lane in family_lanes.get(fam, set()):
-                return True
-        return binding in adapted and lane in family_lanes.get(adapted[binding], set())
+    own_cache = {}
+
+    def _own(lane):
+        """(the bindings this lane is declared for, the names its OWN doors
+        call, the bindings a door it runs whole resolves), all from the walk
+        WITHOUT PASSING THROUGH A FILE EVERY LANE REACHES (2026-09-23; this was
+        the manifest's `training_lanes` and `inference_lanes`, a hand-kept list).
+
+        `_buffer.py` imports `_forest_host` and `_byte_lm_host` for the native
+        helpers (`_host_native`), so every lane's closure holds both doors and
+        every lane resolves both bindings. The lanes that BELONG to those
+        families reach the door another way: `language_model.py`, which a byte
+        LM lane names, imports `_byte_lm_host` itself; a CTR-table lane imports
+        `_forest_host` by name. So the walk from the lane's seeds is repeated
+        with the ubiquitous files as sinks (entered, not followed), symbol by
+        symbol (`_own_walk`), each door read only in the REGION the lane
+        imported (`_region_nodes`): a door imported for three save-format
+        helpers contributes those helpers' calls, not its classes' fits.
+        `ols` reaches `_forest_host.py` only through `_buffer.py` and is not
+        declared for the forest host; `byte-lm` reaches it from its own door
+        and is."""
+        if lane not in own_cache:
+            walk = _own_walk(seeds_of[lane], sinks | ubiquitous_py)
+            declared, whole, used = set(), set(), set()
+            for rel, wanted in walk.items():
+                if rel in sinks:
+                    continue
+                nodes = _region_nodes(rel, wanted)
+                found = _binding_names_in(rel, nodes)
+                for node in nodes:
+                    if isinstance(node, ast.ClassDef):
+                        found |= class_routes.get(node.name, set())
+                declared |= found
+                if wanted is None:
+                    # RESOLVED BY A DOOR THE LANE RUNS WHOLE (a seed, a module
+                    # imported whole, a subclass): the binding is this lane's
+                    # own and "no export named" stays wide. Resolved only inside
+                    # a few imported helpers (`_restore_mode` from
+                    # linear_model.py loads the estimators binding to read a
+                    # saved mode), what those helpers name is all the lane asks
+                    # of it, and nothing named is the source alone: the kmeans
+                    # lane took the whole GLM host tree through that helper.
+                    whole |= found
+                used |= _names_in_nodes(nodes)
+
+            def exists(b):
+                return os.path.exists(os.path.join(ROOT, "bindings", b + ".mojo"))
+            declared, whole = {b for b in declared if exists(b)}, {b for b in whole if exists(b)}
+            for group in (declared, whole):
+                for b in list(group):
+                    group |= routed.get(b, set())    # the host bindings _backend routes it to
+                    if b in adapted:
+                        group.add(f"_mojolearn_{adapted[b]}_host")
+            own_cache[lane] = (declared, used, whole)
+        return own_cache[lane]
+
+    def _whole(lane, binding):
+        """Is `binding` resolved by a door this lane runs whole (see `_own`)."""
+        return binding in _own(lane)[2]
 
     for lane in reach:
         matched, files, doors, bindings = reach[lane]
-        used = _called_names(doors)
+        # THE NAMES THIS LANE'S OWN DOORS CALL (2026-09-23; this was every
+        # door in the closure). `_byte_lm_impl.py` is in every closure through
+        # `_buffer.py` and calls every byte LM export, so names over ALL doors
+        # made every lane a caller of `byte_lm_run` and handed `ols` the mamba
+        # modeling tree, and `_glm_impl.py` reached the same way made 187 lanes
+        # callers of `qn_fit`. The own walk stops at the files every lane
+        # reaches, so its names are what this lane itself asks of a binding:
+        # `all_finite_f32` through `_buffer.py`, never `byte_lm_run`.
+        used = _own(lane)[1]
         mojo = set()
         binding_use = {}
         for binding in bindings:
             gpu_src = os.path.join("bindings", binding + ".mojo")
-            wide = True if binding not in ubiquitous else \
-                ("whole" if _declared(lane, binding) else False)
+            # PER EXPORT FOR EVERY BINDING (2026-09-23). Wide (no export named
+            # means the whole closure) only for a binding a door the lane runs
+            # whole resolves; narrow (no export named means the source alone)
+            # for one reached through a shared helper or inside a few imported
+            # helpers. Before this the fallback was whole for every binding a
+            # lane's doors named at all, and the manifest's lane lists were
+            # what kept the shared ones from handing over their trees.
+            wide = True if _whole(lane, binding) else "narrow"
             binding_use[binding] = dict(wide=wide, exports=sorted(e for e in used if e in _binding_exports(gpu_src)))
             mojo |= binding_seeds(gpu_src, used, wide)
-            host = routed.get(binding)
-            if host:
+            for host in sorted(routed.get(binding, ())):
                 host_src = os.path.join("bindings", host + ".mojo")
-                # WHOSE CPU PATH IS THIS. The manifest DECLARES which lanes a
-                # host family serves, so a lane it does not name is not served
-                # by this binding and gets only the binding source (a change to
-                # the file still selects the lane) rather than its whole oracle
+                # WHOSE CPU PATH IS THIS. A lane is served by a host binding
+                # when it reaches it on its own (`_declared`), so a lane that
+                # merely references the GPU family through a shared helper gets
+                # only the binding source (a change to the file still selects
+                # the lane) rather than its whole oracle
                 # closure. Without this rule every lane that merely referenced
                 # the GPU family inherited every oracle in its host binding:
                 # glm/host/qn_oracle.mojo selected 141 lanes on 2026-09-16,
                 # among them agglomerative, dbscan and the gbdt lanes, none of
                 # which has a quasi-Newton solver anywhere near it.
-                fam = family_of_binding.get(host)
-                if fam and lane in family_lanes.get(fam, set()):
-                    # PER EXPORT, never "whole". A host binding is the
-                    # multiplexer this rule was written for: taking
-                    # _mojolearn_core_host entire hands every core lane the
-                    # k-means, DBSCAN, k-NN and scaler oracles at once.
-                    mojo |= binding_seeds(host_src, used)
-                else:
-                    mojo.add(host_src)
-        fams = {f for f, lanes in family_lanes.items() if lane in lanes}
-        fams |= {adapted[b] for b in bindings if b in adapted}
-        extra = set()
+                # PER EXPORT, never "whole". A host binding is the multiplexer
+                # this rule was written for: taking _mojolearn_core_host entire
+                # hands every core lane the k-means, DBSCAN, k-NN and scaler
+                # oracles at once. A lane not declared for it (reached through
+                # a shared helper only) falls back to the source, not the tree.
+                mojo |= binding_seeds(host_src, used, True if _whole(lane, host) else "narrow")
+        # THE HOST FAMILIES THIS LANE BELONGS TO, from the host bindings it is
+        # declared for by code (`_declared`), never from a lane list.
+        hosts = set(bindings) | set().union(*[routed.get(b, set()) for b in bindings]) \
+            | {f"_mojolearn_{adapted[b]}_host" for b in bindings if b in adapted}
+        fams = {family_of_binding[b] for b in hosts if b in family_of_binding and _whole(lane, b)}
         for fam in fams:
-            spec = family_by_name[fam]
             src = hs.binding_source(fam)
+            # NOTHING FROM THE MANIFEST'S HAND-KEPT LISTS (2026-09-23). This
+            # used to add the family's `host_modules` when no export resolved
+            # by name, and its `loaded_by` doors always. Both are declarations
+            # a person keeps, and the day a kernel moves to a file the list does
+            # not name the short selection reads "nothing affected". The
+            # binding's own compiled closure (`binding_seeds` with no hit:
+            # `_mojo_closure([src])`, the build's walk) is the derived answer
+            # and is never narrower than the declaration; the doors are in the
+            # lane's Python closure already, or the lane does not load them.
             mojo |= binding_seeds(src, used)
             mojo.add(hs.build_shim(fam))
-            if not any(e in used for e in _binding_exports(src)):
-                # nothing resolved by name: fall back to what the manifest declares
-                mojo |= set(spec.get("host_modules", ()))
-            for door in (spec.get("loaded_by") or "").split(","):
-                door = door.strip()
-                if door and os.path.exists(os.path.join(ROOT, door)):
-                    extra.add(door)
-        sources[lane] = files | extra | mojo
+        sources[lane] = files | mojo
+        declared = {b for b, use in binding_use.items() if use["wide"] is True}
+        declared |= {h for b in bindings for h in routed.get(b, ()) if _whole(lane, h)}
+        declared |= {f"_mojolearn_{fam}_host" for fam in fams}
         why[lane] = dict(symbols=sorted(matched), python=len(files), bindings=sorted(bindings),
+                         declared=sorted(declared),
                          families=sorted(fams), mojo=len(mojo), exports=len(used),
                          ubiquitous=sorted(ubiquitous), binding_use=binding_use)
     _LANE_SOURCES = (sources, why)
@@ -3307,6 +3751,37 @@ UNATTRIBUTED_HINT = ("no lane's derived source set contains it and no rule in to
 EVERY_LANE = "every-lane"
 
 
+_GRAPH_REVERSE = None
+
+
+def compiled_into(path):
+    """The lanes a file reaches BY IMPORT ALONE: the bindings whose compiled
+    closure holds `path` (`tools/lane_map_import_graph.py`, the build's own
+    walk), then the lanes DECLARED for one of them (`lane_sources`: the lane
+    reaches the binding on its own, not only through a shared helper). When no
+    lane is declared for any of them, every lane that loads one. Empty when
+    no binding compiles the file."""
+    global _GRAPH_REVERSE
+    if _GRAPH_REVERSE is None:
+        import lane_map_import_graph
+        graph, _ = lane_map_import_graph.derive()
+        holders = {}
+        for name in lane_map_import_graph.build_scripts():
+            closure, _ = lane_map_import_graph.binding_closure(name)
+            for rel in closure or ():
+                holders.setdefault(rel, set()).add(name)
+        _GRAPH_REVERSE = (lane_map_import_graph.reverse(graph), holders)
+    loaders, holders = _GRAPH_REVERSE
+    if not path.endswith(".mojo"):
+        return set()                         # a build script is the build-script rule's, not compiled
+    bindings = holders.get(path, set())
+    if not bindings:
+        return set()
+    _, why = lane_sources()
+    declared = {lane for lane, ev in why.items() if bindings & set(ev.get("declared", ()))}
+    return declared or set(loaders.get(path, ()))
+
+
 def _deleted(path, ref):
     """True when `path` existed at `ref` and is gone from the tree now (not
     tracked, not readable)."""
@@ -3445,6 +3920,23 @@ def select(paths, ref=None, sources=None, backend=None):
         if why_test:
             inert.append(path)
             reasons[path] = why_test
+            continue
+        compiled = compiled_into(path) if path not in rev else None
+        if compiled:
+            # REACHED BY IMPORT, NOT BY ANY EXPORT A LANE CALLS (2026-09-23).
+            # The file is in the compiled closure of a binding some lanes load
+            # (`tools/lane_map_import_graph.py`, the build's own walk), yet the
+            # per-export narrowing above credits it to none of them: a package
+            # `__init__.mojo`, or an oracle a multiplexer binding imports that
+            # no door's export names yet. Before this rule such a path read
+            # NOT ATTRIBUTABLE and stopped a release; it is attributed to the
+            # lanes that load those bindings, by the graph, never to every lane
+            # unless every lane loads one.
+            hit = compiled
+            lanes.update(hit)
+            by_path[path] = set(hit)
+            reasons[path] = (f"{len(hit)} lane(s), by the import graph: compiled into a binding they "
+                             f"load, though no export they call names it")
             continue
         why_unreachable = unreachable(path)
         if why_unreachable:

@@ -736,6 +736,20 @@ what the lane set is. Where a lane list **is** needed, as in `--cross-check`,
 it is read from the registry by import, the same way `tools/lane_select.py`
 and `tools/verification_matrix.py` read it.
 
+The lane map `tools/lane_select.py` selects from is derived from code alone:
+each lane's Python entry points, closed over the package's own imports symbol
+by symbol, the bindings those doors load (by syntax, plus the tables
+`_backend` and `host_model` route a CPU-only install through), and each
+binding's Mojo sources resolved the way the build resolves them
+(`tools/bincache.py`, the walk `tools/binding_stamps.py` digests after every
+build). No list in `host_surface.py` places a file. `tools/lane_map_import_graph.py
+--compare` prints every file the selector attributes to a lane that no import
+path from that lane reaches (there must be none) and, for the record, how much
+wider the pure import graph is than the per-export narrowing; a file only the
+graph reaches is attributed to the lanes declared for the bindings that compile
+it, by name, never widened to every lane. An unattributed changed path still
+stops every caller with `UNATTRIBUTED PATH: <path>`.
+
 ## The evidence document
 
 `--json` (and `--json-out PATH`) emits the run as data rather than a verdict,

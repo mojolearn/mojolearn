@@ -282,7 +282,10 @@ def test_the_linux_set_builder_is_every_lane_for_linux_and_inert_on_the_mac():
 def test_a_one_kernel_change_selects_only_its_lanes():
     sel = lane_select.select(["cluster/host/kmeans_oracle.mojo"])
     assert not sel["unattributed"] and not sel["every_rules"]
-    assert "kmeans" in sel["lanes"] and "ols" not in sel["lanes"] and len(sel["lanes"]) < 40, sel["lanes"]
+    # 47 since 2026-09-23 (measured; see test_lane_select.py): the lanes whose
+    # own doors call `kmeans_fit`, k-means being gmm's, ivf's, hdbscan's and
+    # spectral's initialization or quantizer; never a GLM, a forest or a mamba
+    assert "kmeans" in sel["lanes"] and "ols" not in sel["lanes"] and len(sel["lanes"]) < 60, sel["lanes"]
     assert sel["by_path"]["cluster/host/kmeans_oracle.mojo"] == sel["lanes"]
 
 
