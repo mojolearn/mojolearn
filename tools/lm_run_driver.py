@@ -10,7 +10,8 @@
 THE SPEC (`run.json`):
     {"run": "runs/t2/2026-09-22", "recipe": "path/to/recipe.json", "recipe_key": "runs/t2/2026-09-22/recipe.json",
      "tokens_stage": "corpus/fineweb-edu-10BT/tokens/mojolearn-bpe-fineweb-edu-50257-v1",
-     "lease_minutes": 120, "dollar_cap": 10, "amd_provider": "do",
+     "lease_minutes": 120, "dollar_cap": 10, "amd_providers": ["do", "hotaisle", "runpod"],
+     "wheel": "0.8.15",              # run from this published wheel; omit to build from source on each box
      "nvidia_gpus": "NVIDIA H100 80GB HBM3|NVIDIA H200|...", "nvidia_devices": "0,1", "amd_devices": "0",
      "routes": {"A": [{"segment": "1", "vendor": "nvidia", "steps": 10},
                       {"segment": "2", "vendor": "amd", "steps": 10},
@@ -158,6 +159,7 @@ def render(spec, e, out, ledger, role=None):
     cmd = [sys.executable, str(REPO / "tools" / "lm_segment_leg.py"), "render", "--run", run, "--recipe", spec["recipe"],
            "--recipe-key", spec["recipe_key"], "--arm", arm, "--mode", mode, "--devices", devices,
            "--tokens-key", spec["tokens_stage"],
+           *(["--wheel", spec["wheel"]] if spec.get("wheel") else []),
            "--route", e["route"], "--segment", e["segment"], "--label", label, "--steps", str(e["steps"]),
            "--from", e["from_ckpt"], "--seconds", str(spec.get("url_seconds", 8 * 3600))]
     if mode != "live-worker":

@@ -22,6 +22,11 @@
 #   @UPLOADS@        JSON {file name: presigned PUT URL} for every expected key
 #   @LIVE_SHARDS@ @LIVE_WORKERS@ @LIVE_PORT@   the live segment's block, group size, port
 #   @RECIPE_URL@ @RECIPE_SHA@   the recipe, pinned
+#   @WHEEL@          "" builds the bindings from this commit's source on the box;
+#                    a version (e.g. 0.8.15) pip-installs that PUBLISHED wheel
+#                    into a venv and runs the tools with it, the repository's
+#                    own package kept off the path, so the run's provenance is
+#                    one wheel sha256 per platform and no build happens on a box
 #   @TOKENS_URLS@    JSON {part file name: presigned GET} of the token stream, used
 #                    only when the runner staged nothing ("" otherwise)
 #
@@ -38,6 +43,7 @@ FROM_NAME="@FROM_NAME@"; FROM_SHA="@FROM_SHA@"
 REPLAY_NAME="@REPLAY_NAME@"; REPLAY_SHA="@REPLAY_SHA@"
 LIVE_SHARDS="@LIVE_SHARDS@"; LIVE_WORKERS="@LIVE_WORKERS@"; LIVE_PORT="@LIVE_PORT@"
 RECIPE_SHA="@RECIPE_SHA@"
+WHEEL="@WHEEL@"
 ROOT=/root/mojolearn
 OUT=/root/gemm_leg_out/lm-segment-$ROUTE-$SEGMENT
 mkdir -p "$OUT"
@@ -68,17 +74,45 @@ esac
 export MOJOLEARN_GPU_ARCHS
 say "gpu_archs=$MOJOLEARN_GPU_ARCHS"
 
-# ---- the bindings, from this commit ----
-rm -f python/mojolearn/identical/_mojolearn.so python/mojolearn/identical/_mojolearn_byte_lm.so
-_t0=$(date +%s)
-MOJOLEARN_SKIP_BUILD_GATE=1 sh bindings/build.sh > "$OUT/build_base.log" 2>&1; _rc=$?
-say "build base exit=$_rc secs=$(( $(date +%s) - _t0 ))"
-[ "$_rc" -eq 0 ] || { say "base build failed; nothing run"; exit 1; }
-_t0=$(date +%s)
-MOJOLEARN_BUILD_EXTRA_DEFINES="" sh bindings/build_byte_lm.sh > "$OUT/build_byte_lm.log" 2>&1; _rc=$?
-say "build byte_lm exit=$_rc secs=$(( $(date +%s) - _t0 ))"
-[ "$_rc" -eq 0 ] || { say "byte_lm build failed; nothing run"; exit 1; }
-pixi run python -c 'import numpy' > "$OUT/numpy.log" 2>&1 || { pixi run python -m pip install numpy >> "$OUT/numpy.log" 2>&1; say "numpy pip exit=$?"; }
+# ---- the package: the published wheel, or the bindings built from this commit ----
+if [ -n "$WHEEL" ]; then
+    # THE PUBLISHED WHEEL. A venv on the box, mojolearn==WHEEL from PyPI, the
+    # tools run with the venv's interpreter and the repository's package OFF
+    # the path (PYTHONPATH unset for every python call below), so the bits
+    # come from the wheel and its sha256 is the provenance. No build.
+    _t0=$(date +%s)
+    PYSYS=""
+    for c in python3.12 python3.11 python3.10 python3; do
+        if command -v "$c" > /dev/null 2>&1 && "$c" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null; then PYSYS=$(command -v "$c"); break; fi
+    done
+    [ -n "$PYSYS" ] || { say "no python >= 3.10 on the box"; exit 1; }
+    rm -rf /root/lm-venv
+    "$PYSYS" -m venv /root/lm-venv > "$OUT/venv.log" 2>&1 || { ( apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y python3-venv ) >> "$OUT/venv.log" 2>&1; rm -rf /root/lm-venv; "$PYSYS" -m venv /root/lm-venv >> "$OUT/venv.log" 2>&1; }
+    [ -x /root/lm-venv/bin/pip ] || { say "venv failed; see venv.log"; exit 1; }
+    /root/lm-venv/bin/pip install --disable-pip-version-check --quiet numpy "mojolearn==$WHEEL" > "$OUT/pip_install.log" 2>&1; _rc=$?
+    say "pip install mojolearn==$WHEEL exit=$_rc secs=$(( $(date +%s) - _t0 ))"
+    [ "$_rc" -eq 0 ] || { say "the wheel did not install; nothing run"; exit 1; }
+    /root/lm-venv/bin/pip freeze > "$OUT/pip_freeze.txt" 2>&1
+    /root/lm-venv/bin/pip download --no-deps --quiet --dest /root/lm-wheel "mojolearn==$WHEEL" > "$OUT/wheel_download.log" 2>&1 && sha256sum /root/lm-wheel/*.whl > "$OUT/wheel.sha256" 2>&1
+    say "wheel: $(cat "$OUT/wheel.sha256" 2>/dev/null | cut -c1-100)"
+    unset PYTHONPATH
+    PYBIN=/root/lm-venv/bin/python
+    run_py() { "$PYBIN" "$@"; }
+else
+    rm -f python/mojolearn/identical/_mojolearn.so python/mojolearn/identical/_mojolearn_byte_lm.so
+    _t0=$(date +%s)
+    MOJOLEARN_SKIP_BUILD_GATE=1 sh bindings/build.sh > "$OUT/build_base.log" 2>&1; _rc=$?
+    say "build base exit=$_rc secs=$(( $(date +%s) - _t0 ))"
+    [ "$_rc" -eq 0 ] || { say "base build failed; nothing run"; exit 1; }
+    _t0=$(date +%s)
+    MOJOLEARN_BUILD_EXTRA_DEFINES="" sh bindings/build_byte_lm.sh > "$OUT/build_byte_lm.log" 2>&1; _rc=$?
+    say "build byte_lm exit=$_rc secs=$(( $(date +%s) - _t0 ))"
+    [ "$_rc" -eq 0 ] || { say "byte_lm build failed; nothing run"; exit 1; }
+    pixi run python -c 'import numpy' > "$OUT/numpy.log" 2>&1 || { pixi run python -m pip install numpy >> "$OUT/numpy.log" 2>&1; say "numpy pip exit=$?"; }
+    run_py() { pixi run python "$@"; }
+fi
+run_py -c 'import mojolearn, sys; b = mojolearn._backend.binding("_mojolearn_byte_lm", "identical"); print("mojolearn", getattr(mojolearn, "__version__", "?"), mojolearn.__file__, "vendor", b.byte_lm_vendor(), "set_lr", callable(getattr(b, "byte_lm_parallel_set_lr", None)), "device_fold", callable(getattr(b, "byte_lm_parallel_fold_export", None)))' > "$OUT/binding.txt" 2>&1
+say "binding: $(tail -1 "$OUT/binding.txt" | cut -c1-200)"
 
 # ---- the token stream: staged parts joined and verified by the manifest ----
 # A runner without R2 staging (Hot Aisle) leaves nothing under /root; then the
@@ -89,7 +123,7 @@ TOKENS_URLS
 if [ -z "$(find /root -name tokens.i32.part00 -o -name tokens.i32 2>/dev/null | head -1)" ] && [ "$(head -c 1 "$OUT/tokens_urls.json")" = "{" ]; then
     _td=/root/tokens_stream; mkdir -p "$_td"
     _t0=$(date +%s)
-    pixi run python - "$OUT/tokens_urls.json" "$_td" > "$OUT/tokens_fetch.log" 2>&1 <<'PY'
+    run_py - "$OUT/tokens_urls.json" "$_td" > "$OUT/tokens_fetch.log" 2>&1 <<'PY'
 import json, subprocess, sys
 urls, out = json.load(open(sys.argv[1])), sys.argv[2]
 for name, url in sorted(urls.items()):
@@ -130,7 +164,7 @@ if [ "$FROM_NAME" = init ]; then
     # seed, pinned by its sha256, and uploaded like any other checkpoint
     FROM_NAME=ckpt_00000000.blm
     _t0=$(date +%s)
-    pixi run python tools/lm_segment.py init --recipe "$OUT/in/recipe.json" --tokens "$TOK" --out "$OUT/in/$FROM_NAME" > "$OUT/init.log" 2>&1; _rc=$?
+    run_py tools/lm_segment.py init --recipe "$OUT/in/recipe.json" --tokens "$TOK" --out "$OUT/in/$FROM_NAME" > "$OUT/init.log" 2>&1; _rc=$?
     say "init exit=$_rc secs=$(( $(date +%s) - _t0 )): $(tail -1 "$OUT/init.log" | cut -c1-200)"
     [ "$_rc" -eq 0 ] || exit 4
     sha256sum "$OUT/in/$FROM_NAME" > "$OUT/seed.sha256"
@@ -149,7 +183,7 @@ say "ready"
 run() {  # $1 name, rest: lm_segment run args
     _n="$1"; shift
     _t0=$(date +%s)
-    pixi run python $S run --recipe "$R" --tokens "$TOK" --out "$OUT/$_n" --label "$LABEL" "$@" > "$OUT/$_n.log" 2>&1; _rc=$?
+    run_py $S run --recipe "$R" --tokens "$TOK" --out "$OUT/$_n" --label "$LABEL" "$@" > "$OUT/$_n.log" 2>&1; _rc=$?
     say "$_n exit=$_rc secs=$(( $(date +%s) - _t0 ))"
     grep -E "PASS|FAIL|REFUSED|DISAGREE|ERROR" "$OUT/$_n.log" | tail -2 >> "$ST"
     return $_rc

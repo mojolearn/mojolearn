@@ -93,6 +93,7 @@ def render(args):
         "@LIVE_SHARDS@": args.live_shards or "", "@LIVE_WORKERS@": str(args.live_workers), "@LIVE_PORT@": str(args.live_port),
         "@RECIPE_URL@": presign_get(args.recipe_key or f"{run}/recipe.json", args.seconds), "@RECIPE_SHA@": recipe_sha,
         "@TOKENS_URLS@": json.dumps(tokens_urls(args.tokens_key, args.seconds)) if args.tokens_key else "",
+        "@WHEEL@": args.wheel or "",
     }
     if args.replay and not args.replay_sha:
         raise SystemExit("--replay needs --replay-sha")
@@ -144,6 +145,7 @@ def main(argv=None):
     r.add_argument("--live-workers", type=int, default=2)
     r.add_argument("--live-port", type=int, default=7777)
     r.add_argument("--seconds", type=int, default=6 * 3600, help="URL lifetime")
+    r.add_argument("--wheel", default=None, help="run from this PUBLISHED mojolearn version (pip) instead of building on the box")
     r.add_argument("--tokens-key", default=None, help="token-stream group key: bake presigned GETs for its parts into the body (for a runner that stages nothing)")
     r.add_argument("--out", required=True)
     args = ap.parse_args(argv)
