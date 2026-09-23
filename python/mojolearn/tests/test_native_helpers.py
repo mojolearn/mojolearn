@@ -114,7 +114,7 @@ def test_all_finite_refuses_null_and_negative(width):
     typecode = "f" if width == "f32" else "d"
     fn = getattr(_ext, f"all_finite_{width}")
     buf = array.array(typecode, [1.0])
-    with pytest.raises(Exception, match="null buffer address"):
+    with pytest.raises(Exception, match="null (float(32|64) )?buffer address"):
         fn(0, 1)
     with pytest.raises(Exception, match="non-negative"):
         fn(_addr(buf), -1)
@@ -227,9 +227,9 @@ def test_column_mean_f64_refuses_bad_shapes_and_null():
         _ext.column_mean_f64(_addr(buf), 0, 1, _addr(out))
     with pytest.raises(Exception, match="cols must be positive"):
         _ext.column_mean_f64(_addr(buf), 2, 0, _addr(out))
-    with pytest.raises(Exception, match="null buffer address"):
+    with pytest.raises(Exception, match="null (float(32|64) )?buffer address"):
         _ext.column_mean_f64(0, 2, 1, _addr(out))
-    with pytest.raises(Exception, match="null buffer address"):
+    with pytest.raises(Exception, match="null (float(32|64) )?buffer address"):
         _ext.column_mean_f64(_addr(buf), 2, 1, 0)
 
 
@@ -397,11 +397,11 @@ def test_elementwise_helpers_refuse_null_and_negative_and_accept_empty():
     mean = array.array("d", [0.5])
     w = array.array("f", [2.0])
     out = array.array("f", [0.0, 0.0])
-    with pytest.raises(Exception, match="null buffer address"):
+    with pytest.raises(Exception, match="null (float(32|64) )?buffer address"):
         cen(0, 2, 1, _addr(mean), _addr(out))
-    with pytest.raises(Exception, match="null buffer address"):
+    with pytest.raises(Exception, match="null (float(32|64) )?buffer address"):
         cen(_addr(x), 2, 1, 0, _addr(out))
-    with pytest.raises(Exception, match="null buffer address"):
+    with pytest.raises(Exception, match="null (float(32|64) )?buffer address"):
         sca(_addr(x), 2, 1, _addr(w), 0)
     with pytest.raises(Exception, match="non-negative"):
         cen(_addr(x), -1, 1, _addr(mean), _addr(out))

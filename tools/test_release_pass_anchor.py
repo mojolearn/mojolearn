@@ -28,7 +28,13 @@ def _rev(ref):
                           check=True).stdout.strip()
 
 
-HEAD, PARENT = _rev("HEAD"), _rev("HEAD~1")
+try:
+    HEAD, PARENT = _rev("HEAD"), _rev("HEAD~1")
+except (subprocess.CalledProcessError, FileNotFoundError) as exc:
+    # A shipped tarball or an exported tree has no .git; the anchor tests
+    # need two real commits to name, so they skip rather than abort the
+    # collection of every file after this one.
+    pytest.skip(f"not a git checkout with two commits: {exc}", allow_module_level=True)
 
 
 def record(base, commit, backend="metal", covers=None, dirty_lanes=(), complete=True, column=True,

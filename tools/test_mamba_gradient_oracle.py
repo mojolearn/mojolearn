@@ -17,7 +17,10 @@ import unittest
 
 import numpy as np
 
-import mamba_gradient_oracle as oracle
+try:
+    import mamba_gradient_oracle as oracle
+except ImportError as exc:  # torch: the skgpu env, never the test env
+    raise unittest.SkipTest(f"mamba_gradient_oracle is not importable here: {exc}")
 
 
 class StrictGradientPolicyTests(unittest.TestCase):
