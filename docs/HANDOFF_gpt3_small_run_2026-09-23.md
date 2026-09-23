@@ -32,23 +32,24 @@ handoff, and negative controls that were seen to fail.
   (the tooling on the M4), `fineweb_tokens_2026-09-22` (the stream, identical
   on three CPUs), `lm_t1_2026-09-22/{nvidia,amd,live}` (T1: the measured
   steps, the cross-vendor passes at the target shape, the live pair).
-- **T2** (the rehearsal, 3 segments of 10 steps on the real stream, driver
-  output in `~/mojolearn-evidence/gpt3-run/t2/`): segments 1 (H100) and 2
-  (MI325X, arrival replay PASS) landed. Segment 3 (the live pair) failed
-  three times, every time on orchestration or infrastructure and never on
-  the arithmetic (T1c proved the live arithmetic): an ordering bug, a stalled
-  12 GB staging transfer, and a hash-scheme mismatch from code that changed
-  under the driver. All three are fixed on main. A fourth attempt was
-  running at handoff; check `~/mojolearn-evidence/gpt3-run/t2/driver.log`.
-  **If it passed, T2 is done. If it failed, read the cause before T3; the
-  plan's fallback for segment 3 is one vendor per route (edit the T3 spec:
-  vendor "nvidia" in A, "amd" in B), which keeps every constraint.**
-- **Not yet done, both cheap:** the 8-device MI325X check (a one-box segment
-  of 3 steps on `gpu-mi325x8-2048gb` with `amd_devices` `0,...,7`, held to the
-  T1 NVIDIA chain: `runs/t1/2026-09-22/nvidia/chain.jsonl`, from checkpoint
-  `runs/t1/2026-09-22/nvidia/ckpt_00000000.blm` sha 5871ef0f...; about $8),
-  which T3's AMD segments assume, and a rehearsal of the T3 spec itself with
-  `steps` set to 10 for one segment per vendor if anything above changed.
+- **T2 is done** (2026-09-23, `bench/results/lm_t2_2026-09-23/`): route A, 30 steps
+  at the target shape over the real stream. Segment 1 on an H100 (40.0 s a step),
+  segment 2 on an MI325X (138.9 s, arrival replay PASS), segment 3 the live
+  H100+MI325X pair (101 s a step, arrival replay PASS, both boxes' chain lines
+  equal on state, gradient, losses and lr at every step). Segment 3 took five
+  attempts, none on the arithmetic: an ordering bug, a stalled staging
+  transfer, a hash-scheme change under the run (fixed: the recipe names the
+  scheme, a line without the field is `sha256.v1`), and the driver reading a
+  previous attempt's arrival verdict (fixed: dc6c300f9, with `lm_run_driver.py
+  reland --segment A/3` to rewrite a record from the fetched results).
+- **The T3 rehearsal** (`~/mojolearn-evidence/gpt3-run/t3_rehearsal_spec.json`, run key
+  `runs/t3-rehearsal/2026-09-23`, the T3 recipe itself): segment 1 of 3 steps on a
+  2-GPU H100 pod, segment 2 of 3 steps on the 8x MI325X droplet
+  (`gpu-mi325x8-2048gb`, devices 0 to 7) with the arrival replay from the H100's
+  checkpoint 1. It is the 8-device AMD check T3's AMD segments assume, on the
+  `sliced-sha256-8.v2` scheme, through the fixed driver. Started 2026-09-23 11:13 ET;
+  results in `~/mojolearn-evidence/gpt3-run/t3-rehearsal/` (`driver.log`,
+  `ledger.json`). **T3 starts when segment 2 lands with arrival PASS.**
 
 ## How to run it
 
