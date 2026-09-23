@@ -1,0 +1,18 @@
+16:19:52 arm=amd mode=one route=A segment=2 label=amd-A-2 steps=3 boundary=6 started=2026-09-23T16:19:52Z
+16:19:52 gpu_archs=gfx942
+16:20:05 pip install mojolearn==0.8.15 exit=0 secs=13
+16:20:06 wheel: 281677583838358deb50f3a86c2505c695c1ab4ee1f42cfa3476a17ad1d9a8bd  /root/lm-wheel/mojolearn-0.8.15-py
+16:20:06 binding: mojolearn 0.8.15 /root/lm-venv/lib/python3.12/site-packages/mojolearn/__init__.py vendor hip set_lr True device_fold True
+16:20:29 tokens fetched by URL exit=0 secs=23
+16:20:32 joined 7 parts in 3 s: 12442225788 bytes
+16:20:33 tokens=/root/tokens_stream
+16:20:33 fetch recipe.json exit=0 secs=0
+16:21:07 fetch ckpt_00000003.blm exit=0 secs=34
+16:21:45 fetch ckpt_00000001.blm exit=0 secs=38
+16:21:46 fetch replay_chain.jsonl exit=0 secs=0
+16:26:38 arrival exit=0 secs=292
+[16:26:38] PASS: /root/gemm_leg_out/lm-segment-A-2/arrival
+16:26:38 ready
+16:35:51 segment exit=0 secs=553
+[16:35:51] PASS: /root/gemm_leg_out/lm-segment-A-2/segment
+16:35:53 finished=2026-09-23T16:35:53Z

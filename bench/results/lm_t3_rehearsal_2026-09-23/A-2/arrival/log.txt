@@ -1,0 +1,6 @@
+[16:21:54] segment: route A segment 2-arrival label amd-A-2, global steps 1..3, K=64, devices (0,), from ckpt_00000001.blm (sha256 a042a1217ca10c24)
+[16:24:19] step 2 lr 36a10fb0 loss 10.9242 state 6d017e7659166d9f grad 009593e3674896e4 138.73 s (+2.72 s hashing)
+[16:24:19] step 2 agrees with the expected chain
+[16:26:37] step 3 lr 36f19787 loss 10.8606 state 8a34229ccb81be86 grad 5917bdd4f83b6502 135.50 s (+2.61 s hashing)
+[16:26:37] step 3 agrees with the expected chain
+[16:26:38] PASS: /root/gemm_leg_out/lm-segment-A-2/arrival

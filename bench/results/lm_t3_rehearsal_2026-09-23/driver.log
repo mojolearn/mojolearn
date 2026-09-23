@@ -1,0 +1,71 @@
+[11:12:59 driver] run runs/t3-rehearsal/2026-09-23: 2 segments over 1 routes, up to 1 at once
+[11:12:59 driver] starting A/1 on nvidia (3 steps from init)
+[11:19:29 driver] A/1 runner exit 0; results /Users/andrewhendel/mojolearn-evidence/gpt3-run/t3-rehearsal/legs/A-1/leg-NVIDIA_H100_80GB_HBM3
+[11:19:29 driver] A/1: no segment.json came home; status:
+sm_90a
+15:15:36 pip install mojolearn==0.8.15 exit=0 secs=11
+15:15:37 wheel: 281677583838358deb50f3a86c2505c695c1ab4ee1f42cfa3476a17ad1d9a8bd  /root/lm-wheel/mojolearn-0.8.15-py
+15:15:38 binding: mojolearn 0.8.15 /root/lm-venv/lib/python3.11/site-packages/mojolearn/__init__.py vendor cuda set_lr True device_fold True
+15:16:10 tokens fetched by URL exit=0 secs=32
+15:16:15 joined 7 parts in 5 s: 12442225788 bytes
+15:16:16 tokens=/root/tokens_stream
+15:16:21 fetch recipe.json exit=0 secs=5
+15:16:40 init exit=0 secs=19: wrote /root/gemm_leg_out/lm-segment-A-1/in/ckpt_00000000.blm: step 0, 162147840 parameters, init sha256 0e36d8d036d8c4cf, file sha256 2b03554d50e7aa00, numpy 2.4.6
+15:17:46 upload seed exit=0
+15:17:46 ready
+15:18:41 segment exit=1 secs=55
+15:18:41 finished=2026-09-23T15:18:41Z
+
+[11:19:29 driver] A/1 did not land (no results); run the driver again to retry
+[11:19:29 driver] halted: a segment failed to land; see the ledger, fix, and run the driver again
+[11:21:32 driver] run runs/t3-rehearsal/2026-09-23: 2 segments over 1 routes, up to 1 at once
+[11:21:32 driver] starting A/1 on nvidia (3 steps from init)
+[12:02:02 driver] A/1 runner exit 0; results /Users/andrewhendel/mojolearn-evidence/gpt3-run/t3-rehearsal/legs/A-1/leg-NVIDIA_H100_80GB_HBM3
+[12:02:02 driver] A/1 LANDED: 3 steps, checkpoints ['ckpt_00000000.blm', 'ckpt_00000001.blm', 'ckpt_00000003.blm']
+[12:02:02 driver] starting A/2 on amd (3 steps from ckpt_00000003.blm)
+[12:03:02 driver] A/2 runner exit 4; results /Users/andrewhendel/mojolearn-evidence/gpt3-run/t3-rehearsal/legs/A-2/leg-do-1
+[12:03:02 driver] A/2: no segment.json came home; status:
+
+[12:03:02 driver] A/2 did not land (no results); run the driver again to retry
+[12:03:02 driver] halted: a segment failed to land; see the ledger, fix, and run the driver again
+[12:03:35 driver] run runs/t3-rehearsal/2026-09-23: 2 segments over 1 routes, up to 1 at once
+[12:03:35 driver] starting A/2 on amd (3 steps from ckpt_00000003.blm)
+[12:06:35 driver] A/2 runner exit 0; results /Users/andrewhendel/mojolearn-evidence/gpt3-run/t3-rehearsal/legs/A-2/leg-do-1
+[12:06:35 driver] A/2: no segment.json came home; status:
+16:05:51 arm=amd mode=one route=A segment=2 label=amd-A-2 steps=3 boundary=6 started=2026-09-23T16:05:51Z
+16:05:51 gpu_archs=gfx942
+16:06:05 pip install mojolearn==0.8.15 exit=0 secs=14
+16:06:05 wheel: 281677583838358deb50f3a86c2505c695c1ab4ee1f42cfa3476a17ad1d9a8bd  /root/lm-wheel/mojolearn-0.8.15-py
+16:06:06 binding: mojolearn 0.8.15 /root/lm-venv/lib/python3.12/site-packages/mojolearn/__init__.py vendor hip set_lr True device_fold True
+16:06:06 tokens fetched by URL exit=1 secs=0
+16:06:06 no staged token stream with a manifest under /root
+
+[12:06:35 driver] A/2 did not land (no results); run the driver again to retry
+[12:06:35 driver] halted: a segment failed to land; see the ledger, fix, and run the driver again
+[12:07:22 driver] run runs/t3-rehearsal/2026-09-23: 2 segments over 1 routes, up to 1 at once
+[12:07:22 driver] starting A/2 on amd (3 steps from ckpt_00000003.blm)
+[12:17:22 driver] A/2 runner exit 0; results /Users/andrewhendel/mojolearn-evidence/gpt3-run/t3-rehearsal/legs/A-2/leg-do-1
+[12:17:22 driver] A/2: no segment.json came home; status:
+51 pip install mojolearn==0.8.15 exit=0 secs=13
+16:09:51 wheel: 281677583838358deb50f3a86c2505c695c1ab4ee1f42cfa3476a17ad1d9a8bd  /root/lm-wheel/mojolearn-0.8.15-py
+16:09:51 binding: mojolearn 0.8.15 /root/lm-venv/lib/python3.12/site-packages/mojolearn/__init__.py vendor hip set_lr True device_fold True
+16:10:12 tokens fetched by URL exit=0 secs=21
+16:10:15 joined 7 parts in 3 s: 12442225788 bytes
+16:10:16 tokens=/root/tokens_stream
+16:10:16 fetch recipe.json exit=0 secs=0
+16:11:16 fetch ckpt_00000003.blm exit=0 secs=60
+16:11:43 fetch ckpt_00000001.blm exit=0 secs=26
+16:11:44 fetch replay_chain.jsonl exit=0 secs=0
+16:16:35 arrival exit=0 secs=291
+[16:16:35] PASS: /root/gemm_leg_out/lm-segment-A-2/arrival
+16:16:35 ready
+16:16:49 segment exit=1 secs=14
+16:16:49 finished=2026-09-23T16:16:49Z
+
+[12:17:22 driver] A/2 did not land (no results); run the driver again to retry
+[12:17:22 driver] halted: a segment failed to land; see the ledger, fix, and run the driver again
+[12:17:37 driver] run runs/t3-rehearsal/2026-09-23: 2 segments over 1 routes, up to 1 at once
+[12:17:37 driver] starting A/2 on amd (3 steps from ckpt_00000003.blm)
+[12:36:38 driver] A/2 runner exit 0; results /Users/andrewhendel/mojolearn-evidence/gpt3-run/t3-rehearsal/legs/A-2/leg-do-1
+[12:36:38 driver] A/2 LANDED: 3 steps, checkpoints ['ckpt_00000004.blm', 'ckpt_00000006.blm']
+[12:36:38 driver] every segment landed

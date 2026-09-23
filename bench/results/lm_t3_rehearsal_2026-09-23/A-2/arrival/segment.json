@@ -1,0 +1,38 @@
+{
+ "schema": "mojolearn.lm-segment.run.v1",
+ "route": "A",
+ "segment": "2-arrival",
+ "label": "amd-A-2",
+ "from_checkpoint": {
+  "file": "ckpt_00000001.blm",
+  "sha256": "a042a1217ca10c242f76becbb1072c38744cb0a54193a3295d655a9bfb8f3b34",
+  "step": 1
+ },
+ "first_step": 1,
+ "last_step": 3,
+ "devices": [
+  0
+ ],
+ "logical_shards": 64,
+ "recipe_sha256": "9f7f695b9a0bae175bf241632767ace67c542a4a116a98e36b9c306f3eebe051",
+ "tokens_sha256": "4cf7181ba71058e70d7329dbae32de53c5750b49ae95331cebde4676f922209d",
+ "box": {
+  "host": "mojolearn-extra-amd",
+  "machine": "x86_64",
+  "system": "Linux",
+  "python": "3.12.3",
+  "rocm-smi": "device,Unique ID,Card Series,Card Model,Card Vendor,Card SKU,Subsystem ID,Device Rev,Node ID,GUID,GFX Version\ncard0,0x1b3fd5305c48f3de,AMD Instinct Mi325X VF,0x74b9,Advanced Micro Devices Inc. [AMD/ATI],M3250101,0x74a5,0x00,1,43855,gfx942"
+ },
+ "commit": null,
+ "zero_moments": false,
+ "expect_chain": "/root/gemm_leg_out/lm-segment-A-2/in/replay_chain.jsonl",
+ "checkpoints": [],
+ "utc_start": "2026-09-23T16:21:54Z",
+ "hash_scheme": "sliced-sha256-8.v2",
+ "verdict": "PASS",
+ "disagreements": [],
+ "steps_completed": 2,
+ "last_completed": 3,
+ "utc_end": "2026-09-23T16:26:38Z",
+ "uploads": []
+}

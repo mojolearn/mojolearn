@@ -1,0 +1,37 @@
+{
+ "run": "runs/t3-rehearsal/2026-09-23",
+ "recipe": "/Users/andrewhendel/mojolearn-evidence/gpt3-run/t3_recipe.json",
+ "recipe_key": "runs/t3/2026-09-22/recipe.json",
+ "tokens_stage": "corpus/fineweb-edu-10BT/tokens/mojolearn-bpe-fineweb-edu-50257-v1",
+ "wheel": "0.8.15",
+ "lease_minutes": 1440,
+ "dollar_cap": 120,
+ "amd_providers": [
+  "do"
+ ],
+ "amd_size": "gpu-mi325x1-256gb",
+ "amd_region": "nyc2",
+ "amd_devices": "0",
+ "amd_wait_minutes": 720,
+ "nvidia_gpus": "NVIDIA H100 80GB HBM3|NVIDIA H200|NVIDIA H100 NVL|NVIDIA H100 PCIe",
+ "nvidia_devices": "0,1",
+ "url_seconds": 172800,
+ "routes": {
+  "A": [
+   {
+    "segment": "1",
+    "vendor": "nvidia",
+    "steps": 3,
+    "lease_minutes": 60,
+    "dollar_cap": 10
+   },
+   {
+    "segment": "2",
+    "vendor": "amd",
+    "steps": 3,
+    "lease_minutes": 90,
+    "dollar_cap": 12
+   }
+  ]
+ }
+}

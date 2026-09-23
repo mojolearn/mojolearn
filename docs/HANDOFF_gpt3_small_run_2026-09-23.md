@@ -42,14 +42,20 @@ handoff, and negative controls that were seen to fail.
   scheme, a line without the field is `sha256.v1`), and the driver reading a
   previous attempt's arrival verdict (fixed: dc6c300f9, with `lm_run_driver.py
   reland --segment A/3` to rewrite a record from the fetched results).
-- **The T3 rehearsal** (`~/mojolearn-evidence/gpt3-run/t3_rehearsal_spec.json`, run key
-  `runs/t3-rehearsal/2026-09-23`, the T3 recipe itself): segment 1 of 3 steps on a
-  2-GPU H100 pod, segment 2 of 3 steps on the 8x MI325X droplet
-  (`gpu-mi325x8-2048gb`, devices 0 to 7) with the arrival replay from the H100's
-  checkpoint 1. It is the 8-device AMD check T3's AMD segments assume, on the
-  `sliced-sha256-8.v2` scheme, through the fixed driver. Started 2026-09-23 11:13 ET;
-  results in `~/mojolearn-evidence/gpt3-run/t3-rehearsal/` (`driver.log`,
-  `ledger.json`). **T3 starts when segment 2 lands with arrival PASS.**
+- **The T3 rehearsal PASSED** (`bench/results/lm_t3_rehearsal_2026-09-23/`): 3
+  steps on a 2-GPU H100 from the wheel, then a MI325X replayed the H100's steps
+  from its checkpoint (arrival PASS under `sliced-sha256-8.v2`) and trained 3
+  steps of its own; the fixed driver landed both. It surfaced and fixed three
+  defects (the runner's hash under Python 3.11, single-stream token fetches
+  that stall, HEAD on a presigned URL); see its README.
+- **BLOCKER for T3 as planned: DigitalOcean refuses `gpu-mi325x8-2048gb`**
+  ("creating this droplet will exceed your GPU limit", nothing live). RunPod
+  has no MI300X stock and Hot Aisle serves one or two MI300X per VM. Either
+  Andrew raises the DigitalOcean GPU limit (support request), or the T3 spec's
+  AMD segments are split for one MI325X (`amd_size` `gpu-mi325x1-256gb`,
+  `amd_devices` `0`; 139 s a step, so about 39 h per 1,000 steps against a
+  12 h lease: three or four sub-segments each). The NVIDIA segments can start
+  either way; route A halts at its AMD segment until one of the two happens.
 
 ## How to run it
 

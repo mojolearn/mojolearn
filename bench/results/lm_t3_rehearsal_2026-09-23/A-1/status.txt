@@ -1,0 +1,15 @@
+15:24:23 arm=nvidia mode=one route=A segment=1 label=nvidia-A-1 steps=3 boundary=3 started=2026-09-23T15:24:23Z
+15:24:23 gpu_archs=sm_90a
+15:25:08 pip install mojolearn==0.8.15 exit=0 secs=45
+15:25:14 wheel: 281677583838358deb50f3a86c2505c695c1ab4ee1f42cfa3476a17ad1d9a8bd  /root/lm-wheel/mojolearn-0.8.15-py
+15:25:15 binding: mojolearn 0.8.15 /root/lm-venv/lib/python3.11/site-packages/mojolearn/__init__.py vendor cuda set_lr True device_fold True
+15:51:52 tokens fetched by URL exit=1 secs=1597
+15:51:58 joined 7 parts in 6 s: 12442225788 bytes
+15:51:58 tokens=/root/tokens_stream
+15:51:59 fetch recipe.json exit=0 secs=1
+15:52:22 init exit=0 secs=23: wrote /root/gemm_leg_out/lm-segment-A-1/in/ckpt_00000000.blm: step 0, 162147840 parameters, init sha256 0e36d8d036d8c4cf, file sha256 2b03554d50e7aa00, numpy 2.4.6
+15:54:03 upload seed exit=0
+15:54:03 ready
+16:00:53 segment exit=0 secs=410
+[16:00:52] PASS: /root/gemm_leg_out/lm-segment-A-1/segment
+16:01:08 finished=2026-09-23T16:01:08Z

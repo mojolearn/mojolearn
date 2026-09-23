@@ -1,0 +1,8 @@
+fetched manifest.json 
+fetched tokens.i32.part06 
+fetched tokens.i32.part02 
+fetched tokens.i32.part01 
+fetched tokens.i32.part03 
+fetched tokens.i32.part00 
+FAILED tokens.i32.part04 curl: (28) Operation timed out after 1500000 milliseconds with 370933760 out of 2000000000 bytes received
+FAILED tokens.i32.part05 curl: (28) Operation timed out after 1500000 milliseconds with 973340672 out of 2000000000 bytes received

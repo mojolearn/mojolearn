@@ -1,0 +1,12 @@
+[16:26:45] segment: route A segment 2 label amd-A-2, global steps 3..6, K=64, devices (0,), from ckpt_00000003.blm (sha256 671c7f0c428a4e58)
+[16:29:11] step 4 lr 37210fb0 loss 10.7648 state d08896cfa2ec6c14 grad 36d8a27c1821b646 138.88 s (+2.77 s hashing)
+[16:30:27] uploaded ckpt_00000004.blm in 71.5 s
+[16:30:27] checkpoint ckpt_00000004.blm (1945780162 bytes, sha256 049d02b9dbc8346f, 3.1 s)
+[16:32:45] step 5 lr 3749539c loss 10.6699 state 4048a07157dae6a3 grad 998e0d89d27ba387 135.51 s (+2.31 s hashing)
+[16:35:03] step 6 lr 37719787 loss 10.5163 state 72c35480f1e37075 grad 92bba37415a738cc 135.49 s (+2.62 s hashing)
+[16:35:50] uploaded ckpt_00000006.blm in 42.6 s
+[16:35:50] checkpoint ckpt_00000006.blm (1945780164 bytes, sha256 d6f082e736e27da4, 3.1 s)
+[16:35:51] uploaded chain.jsonl in 0.2 s
+[16:35:51] uploaded segment.json in 0.2 s
+[16:35:51] uploaded manifest.tsv in 0.2 s
+[16:35:51] PASS: /root/gemm_leg_out/lm-segment-A-2/segment

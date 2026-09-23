@@ -1,0 +1,29 @@
+{
+ "landed": {
+  "A/1": {
+   "verdict": "PASS",
+   "checkpoints": {
+    "ckpt_00000001.blm": "a042a1217ca10c242f76becbb1072c38744cb0a54193a3295d655a9bfb8f3b34",
+    "ckpt_00000003.blm": "671c7f0c428a4e5807dc2d6109581af3d216b0f4f5ad7b216fa0dde80b66042c",
+    "ckpt_00000000.blm": "2b03554d50e7aa0027db27afdc13472b5eb4d5a5297068d1f2fb457d0bba1143"
+   },
+   "steps_completed": 3,
+   "disagreements": [],
+   "results": "/Users/andrewhendel/mojolearn-evidence/gpt3-run/t3-rehearsal/legs/A-1/leg-NVIDIA_H100_80GB_HBM3",
+   "utc": "2026-09-23T16:02:02Z",
+   "arrival": null
+  },
+  "A/2": {
+   "verdict": "PASS",
+   "checkpoints": {
+    "ckpt_00000004.blm": "049d02b9dbc8346f5bcdea56bb951d45036f20609700cf34ee3a9ecd549e475f",
+    "ckpt_00000006.blm": "d6f082e736e27da44dd5b69ddb7c92ecea7e0202f4a74030bac02c90d1f189ab"
+   },
+   "steps_completed": 3,
+   "disagreements": [],
+   "results": "/Users/andrewhendel/mojolearn-evidence/gpt3-run/t3-rehearsal/legs/A-2/leg-do-1",
+   "utc": "2026-09-23T16:36:38Z",
+   "arrival": "PASS"
+  }
+ }
+}
