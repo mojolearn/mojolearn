@@ -38,6 +38,11 @@ mkdir -p "$OUT"; OUT=$(cd "$OUT" && pwd)
 REPO=$(cd "$(dirname "$0")/.." && pwd); cd "$REPO" || exit 9
 READY_SECONDS=${MOJOLEARN_LIVE_READY_SECONDS:-3600}
 TOKENS=${MOJOLEARN_LIVE_STAGE_KEYS:-corpus/fineweb-edu-10BT/tokens/mojolearn-bpe-fineweb-edu-50257-v1}
+# The NVIDIA runner's step 1 generates an Apple reference card on this Mac
+# unless given one; a card taken while another Metal job holds the lock is
+# refused, so a recorded card is always passed (nothing here compares to it).
+CARD=${MOJOLEARN_LIVE_APPLE_CARD:-$HOME/mojolearn-evidence/vendor-class-gaps-sep19/apple.card}
+AMD_WAIT_MINUTES=${MOJOLEARN_LIVE_AMD_WAIT_MINUTES:-240}
 say() { echo "[$(date +%H:%M:%S) live] $*" | tee -a "$OUT/live.log"; }
 say "commit $(git rev-parse HEAD); nvidia body $NV_BODY; amd body $AMD_BODY ($AMD_PROVIDER); lease $MINUTES min, cap \$$CAP"
 
@@ -51,7 +56,7 @@ nvidia_walk() {
         slug=$(printf '%s' "$gpu" | tr ' ' '_' | tr -cd 'A-Za-z0-9_')
         say "nvidia: trying $gpu"
         MOJOLEARN_GEMM_LEG_EXTRA="$NV_BODY" MOJOLEARN_STAGE_KEYS="$TOKENS" MOJOLEARN_GEMM_LEG_OUT="$OUT/nvidia-$slug" \
-            sh tools/gemm_remote_leg.sh nvidia --rent --allow-concurrent "${LEASE_ARGS[@]}" --gpu "$gpu" > "$OUT/nvidia-$slug.log" 2>&1
+            sh tools/gemm_remote_leg.sh nvidia --rent --allow-concurrent "${LEASE_ARGS[@]}" --gpu "$gpu" --local-card "$CARD" > "$OUT/nvidia-$slug.log" 2>&1
         rc=$?
         if grep -q "no instances currently available" "$OUT/nvidia-$slug/create_response.json" 2>/dev/null; then
             say "nvidia: no capacity for $gpu"; continue
@@ -61,31 +66,62 @@ nvidia_walk() {
     done
     say "nvidia: NO CAPACITY on any type"; return 3
 }
-nvidia_walk &
-NV_PID=$!
-sleep 5
-case "$AMD_PROVIDER" in
-    do)
-        MOJOLEARN_GEMM_LEG_EXTRA="$AMD_BODY" MOJOLEARN_GPU_ARCHS=gfx942 MOJOLEARN_STAGE_KEYS="$TOKENS" MOJOLEARN_GEMM_LEG_OUT="$OUT/amd" \
-            bash tools/do_extra_leg.sh amd "${LEASE_ARGS[@]}" > "$OUT/amd-leg.log" 2>&1 &
-        AMD_PID=$! ;;
-    runpod)
-        MOJOLEARN_GEMM_LEG_EXTRA="$AMD_BODY" MOJOLEARN_GPU_ARCHS=gfx942 MOJOLEARN_STAGE_KEYS="$TOKENS" MOJOLEARN_GEMM_LEG_OUT="$OUT/amd" \
-            sh tools/gemm_remote_leg.sh amd --rent --allow-concurrent "${LEASE_ARGS[@]}" > "$OUT/amd-leg.log" 2>&1 &
-        AMD_PID=$! ;;
-    *) echo "--amd must be do or runpod" >&2; exit 2 ;;
-esac
+# started below, once the AMD box exists: AMD is the scarce side, and a
+# NVIDIA pod idling on the bill while AMD is walked for hours is the wrong
+# order (the AMD worker body waits an hour for its peer, plenty for the
+# NVIDIA box to come up)
+NV_PID=""
+# The AMD box: the one DigitalOcean GPU droplet may be another leg's, and
+# RunPod's MI300X may have no capacity; keep trying every 10 minutes for up
+# to AMD_WAIT_MINUTES. The worker body waits an hour for its peer once up,
+# and the coordinator's box waits for the worker, so the wait costs only the
+# NVIDIA lease while it lasts.
+amd_walk() {
+    _deadline=$(( $(date +%s) + AMD_WAIT_MINUTES * 60 ))
+    _n=0
+    while :; do
+        _n=$(( _n + 1 ))
+        case "$AMD_PROVIDER" in
+            do)     MOJOLEARN_GEMM_LEG_EXTRA="$AMD_BODY" MOJOLEARN_GPU_ARCHS=gfx942 MOJOLEARN_STAGE_KEYS="$TOKENS" MOJOLEARN_GEMM_LEG_OUT="$OUT/amd-$_n" \
+                        bash tools/do_extra_leg.sh amd "${LEASE_ARGS[@]}" > "$OUT/amd-$_n.log" 2>&1 ;;
+            runpod) MOJOLEARN_GEMM_LEG_EXTRA="$AMD_BODY" MOJOLEARN_GPU_ARCHS=gfx942 MOJOLEARN_STAGE_KEYS="$TOKENS" MOJOLEARN_GEMM_LEG_OUT="$OUT/amd-$_n" \
+                        sh tools/gemm_remote_leg.sh amd --rent --allow-concurrent "${LEASE_ARGS[@]}" > "$OUT/amd-$_n.log" 2>&1 ;;
+            *) echo "--amd must be do or runpod" >&2; return 2 ;;
+        esac
+        _rc=$?
+        ln -sf "amd-$_n.log" "$OUT/amd-leg.log"
+        if grep -q -E "ONE GPU droplet at a time|no instances currently available|REFUSING to create" "$OUT/amd-$_n.log" 2>/dev/null \
+           && [ "$(date +%s)" -lt "$_deadline" ]; then
+            say "amd: busy or without capacity (attempt $_n); trying again in 10 minutes"
+            sleep 600
+            continue
+        fi
+        return $_rc
+    done
+}
+amd_walk &
+AMD_PID=$!
 
 SSH_BASE=(-o StrictHostKeyChecking=accept-new -o "UserKnownHostsFile=$OUT/known_hosts" -o BatchMode=yes -o ConnectTimeout=20 -o ServerAliveInterval=30)
 nv_target() { cat "$OUT"/nvidia-*.log 2>/dev/null | grep -m1 'ssh target:' | sed 's/.*ssh target: //'; }
 amd_target() {
     case "$AMD_PROVIDER" in
-        do) _ip=$(grep -m1 'active at ' "$OUT/amd-leg.log" 2>/dev/null | sed 's/.*active at //'); [ -n "$_ip" ] && echo "root@$_ip" ;;
-        runpod) grep -m1 'ssh target:' "$OUT/amd-leg.log" 2>/dev/null | sed 's/.*ssh target: //' ;;
+        do) _ip=$(cat "$OUT"/amd-[0-9]*.log 2>/dev/null | grep -m1 'active at ' | sed 's/.*active at //'); [ -n "$_ip" ] && echo "root@$_ip" ;;
+        runpod) cat "$OUT"/amd-[0-9]*.log 2>/dev/null | grep -m1 'ssh target:' | sed 's/.*ssh target: //' ;;
     esac
 }
 # shellcheck disable=SC2086  # a target is several ssh words on purpose
 box() { ssh "${SSH_BASE[@]}" $1 "$2"; }
+
+# wait for the AMD box to exist (an address), then rent the NVIDIA box
+while kill -0 "$AMD_PID" 2>/dev/null && [ -z "$(amd_target)" ]; do sleep 20; done
+if [ -z "$(amd_target)" ]; then
+    say "no AMD box came up (the walk ended); nothing else is rented"
+    wait; exit 1
+fi
+say "amd box exists: $(amd_target); renting the NVIDIA box now"
+nvidia_walk &
+NV_PID=$!
 
 NV_READY=0; AMD_READY=0
 deadline=$(( $(date +%s) + READY_SECONDS ))

@@ -77,15 +77,19 @@ def segment_plan(spec):
         for s in segs:
             first, last = at, at + int(s["steps"])
             prev = segs[s["index"] - 2] if s["index"] > 1 else None
+            a_first = spec["routes"]["A"][0]["segment"]
+            # the seed: route A's first segment draws it on its box; every other
+            # route's first segment starts from THAT file, never a seed of its own
+            seed_from_a = route != "A" and prev is None
             entry = dict(route=route, segment=s["segment"], index=s["index"], vendor=s["vendor"], steps=int(s["steps"]),
                          first=first, last=last, boundary=last, live=s.get("first"), shards=s.get("shards"),
                          lease_minutes=s.get("lease_minutes"), dollar_cap=s.get("dollar_cap"),
-                         from_route=("A" if route != "A" else route) if prev else None,
-                         from_segment=prev["segment"] if prev else None,
-                         from_ckpt=("ckpt_%08d.blm" % first) if prev else "init",
+                         from_route=("A" if route != "A" else route) if (prev or seed_from_a) else None,
+                         from_segment=(prev["segment"] if prev else a_first) if (prev or seed_from_a) else None,
+                         from_ckpt=("ckpt_%08d.blm" % first) if (prev or seed_from_a) else "init",
                          replay_ckpt=("ckpt_%08d.blm" % (first - 2)) if prev else None,
                          expect=(f"A/{s['segment']}/chain.jsonl" if route != "A" else None),
-                         depends=[("A" if route != "A" else route, prev["segment"])] if prev else [])
+                         depends=[("A" if route != "A" else route, prev["segment"])] if prev else ([("A", a_first)] if seed_from_a else []))
             if route != "A":
                 entry["depends"].append(("A", s["segment"]))  # B's chain is held to A's; A's segment must exist
             plan.append(entry)
@@ -192,7 +196,9 @@ def rent_one(spec, e, body, out):
     res = Path(out) / "legs" / ("%s-%s" % (e["route"], e["segment"]))
     res.mkdir(parents=True, exist_ok=True)
     env = dict(os.environ, MOJOLEARN_GEMM_LEG_EXTRA=str(body), MOJOLEARN_STAGE_KEYS=spec["tokens_stage"],
-               MOJOLEARN_GEMM_LEG_OUT=str(res / "leg"))
+               MOJOLEARN_GEMM_LEG_OUT=str(res / "leg"),
+               # a recorded Apple card: the NVIDIA runner would otherwise take one on this Mac and refuse under the Metal lock
+               MOJOLEARN_GEMM_LEG_LOCAL_CARD=spec.get("apple_card", os.path.expanduser("~/mojolearn-evidence/vendor-class-gaps-sep19/apple.card")))
     # a segment's own lease and cap win over the run's (an AMD segment on an
     # 8-GPU box needs both bigger); the driver never rents without a cap
     minutes = int(e.get("lease_minutes") or spec.get("lease_minutes", 120))
@@ -316,42 +322,92 @@ def land(spec, e, results, out, ledger):
     return True
 
 
+def _vendor_class(e):
+    return {"live"} if e["vendor"] == "live" else {e["vendor"]}
+
+
+def _start(spec, e, out, ledger):
+    """Render and rent one segment; returns (results, rc) or raises."""
+    if e["vendor"] == "live":
+        nv_body = render(spec, e, out, ledger, role="nvidia")
+        amd_body = render(spec, e, out, ledger, role="amd")
+        return rent_live(spec, e, nv_body, amd_body, out)
+    body = render(spec, e, out, ledger)
+    return rent_one(spec, e, body, out)
+
+
 def cmd_run(args):
+    import threading
     spec = load_spec(args.spec)
     out = Path(args.out); out.mkdir(parents=True, exist_ok=True)
     ledger = Ledger(out)
+    lock = threading.Lock()
     plan = segment_plan(spec)
-    _log(out, "run %s: %d segments over %d routes" % (spec["run"], len(plan), len(spec["routes"])))
-    pending = [e for e in plan if not (ledger.landed(e) or {}).get("verdict") == "PASS"]
-    while pending:
-        ready = [e for e in pending if all((ledger.landed(dict(route=r, segment=s)) or {}).get("verdict") == "PASS" for r, s in e["depends"])]
-        if not ready:
+    parallel = int(getattr(args, "parallel", 1) or 1)
+    _log(out, "run %s: %d segments over %d routes, up to %d at once" % (spec["run"], len(plan), len(spec["routes"]), parallel))
+
+    def is_passed(route, segment):
+        return (ledger.landed(dict(route=route, segment=segment)) or {}).get("verdict") == "PASS"
+
+    running = {}   # key -> (thread, entry, result holder)
+    halted = {"flag": False}
+
+    def worker(e, holder):
+        try:
+            holder["result"] = _start(spec, e, out, ledger)
+        except BaseException as exc:  # noqa: BLE001
+            holder["error"] = exc
+
+    while True:
+        # collect finished segments
+        for key in list(running):
+            th, e, holder = running[key]
+            if th.is_alive():
+                continue
+            del running[key]
+            if "error" in holder:
+                _log(out, "%s/%s: the rental could not be started: %s" % (e["route"], e["segment"], holder["error"]))
+                halted["flag"] = True
+                continue
+            results, rc = holder["result"]
+            _log(out, "%s/%s runner exit %s; results %s" % (e["route"], e["segment"], rc, results))
+            with lock:
+                ok = land(spec, e, results, out, ledger)
+            if ok is False:
+                halted["flag"] = True
+            elif ok is None:
+                _log(out, "%s/%s did not land (no results); run the driver again to retry" % (e["route"], e["segment"]))
+                halted["flag"] = True
+        pending = [e for e in plan if not is_passed(e["route"], e["segment"]) and "%s/%s" % (e["route"], e["segment"]) not in running]
+        if not pending and not running:
+            _log(out, "every segment landed")
+            return 0
+        if halted["flag"]:
+            if running:
+                time.sleep(30)
+                continue
+            _log(out, "halted: a segment failed to land; see the ledger, fix, and run the driver again")
+            return 1
+        # start what is ready, smallest global step first, never two of one vendor class at once
+        ready = sorted([e for e in pending if all(is_passed(r, sg) for r, sg in e["depends"])], key=lambda e: (e["last"], e["route"]))
+        busy = set().union(*(_vendor_class(e) for _, e, _ in running.values())) if running else set()
+        for e in ready:
+            if len(running) >= parallel:
+                break
+            cls = _vendor_class(e)
+            if cls & busy or ("live" in busy) or ("live" in cls and busy):
+                continue
+            key = "%s/%s" % (e["route"], e["segment"])
+            _log(out, "starting %s on %s (%d steps from %s)" % (key, e["vendor"], e["steps"], e["from_ckpt"]))
+            holder = {}
+            th = threading.Thread(target=worker, args=(e, holder), name=key, daemon=True)
+            th.start()
+            running[key] = (th, e, holder)
+            busy |= cls
+        if not running:
             _log(out, "nothing is ready and nothing is running: a dependency failed; see the ledger")
             return 1
-        e = ready[0]  # one segment at a time in this driver; concurrency across routes is a later refinement
-        _log(out, "starting %s/%s on %s (%d steps from %s)" % (e["route"], e["segment"], e["vendor"], e["steps"], e["from_ckpt"]))
-        try:
-            if e["vendor"] == "live":
-                first = e["live"]; second = "amd" if first == "nvidia" else "nvidia"
-                nv_body = render(spec, e, out, ledger, role="nvidia")
-                amd_body = render(spec, e, out, ledger, role="amd")
-                results, rc = rent_live(spec, e, nv_body if first == "nvidia" else nv_body, amd_body, out)
-            else:
-                body = render(spec, e, out, ledger)
-                results, rc = rent_one(spec, e, body, out)
-        except subprocess.CalledProcessError as exc:
-            _log(out, "render failed for %s/%s: %s" % (e["route"], e["segment"], exc))
-            return 1
-        _log(out, "%s/%s runner exit %s; results %s" % (e["route"], e["segment"], rc, results))
-        ok = land(spec, e, results, out, ledger)
-        if ok is False:
-            return 1
-        if ok is None:
-            _log(out, "%s/%s did not land (no results); run the driver again to retry" % (e["route"], e["segment"]))
-            return 2
-        pending = [x for x in pending if not (x["route"] == e["route"] and x["segment"] == e["segment"])]
-    _log(out, "every segment landed")
-    return 0
+        time.sleep(30)
 
 
 def cmd_status(args):
@@ -371,6 +427,8 @@ def main(argv=None):
         p.add_argument("--spec", required=True)
         if name != "plan":
             p.add_argument("--out", required=True)
+        if name == "run":
+            p.add_argument("--parallel", type=int, default=1, help="segments at once (on different vendor classes; a live segment runs alone)")
     args = ap.parse_args(argv)
     return dict(plan=cmd_plan, run=cmd_run, status=cmd_status)[args.cmd](args)
 
