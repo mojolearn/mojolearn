@@ -49,20 +49,24 @@ class _TorchCudaLike:
         return (2, 0)
 
 
-class _TorchCpuLike:
-    """A CPU tensor: DLPack reporting kDLCPU (1) AND a host buffer."""
+class _TorchCpuLike(array.array):
+    """A CPU tensor: DLPack reporting kDLCPU (1) AND a host buffer.
 
-    def __init__(self):
-        self._storage = array.array("f", [1.0, 2.0, 3.0, 4.0])
+    An array.array subclass rather than a class with `__buffer__`: a
+    pure-Python `__buffer__` is honored from 3.12 only, so on 3.10 and
+    3.11 the old fake exported no buffer at all and `_materialize` read it
+    as a scalar (red on the 2026-09-23 pod, green on 3.14). A real host
+    tensor exports its buffer from C on every Python; so does this.
+    """
+
+    def __new__(cls):
+        return super().__new__(cls, "f", [1.0, 2.0, 3.0, 4.0])
 
     def __dlpack__(self, *args, **kwargs):
         raise RuntimeError("not called: a host tensor takes the buffer path")
 
     def __dlpack_device__(self):
         return (1, 0)
-
-    def __buffer__(self, flags):
-        return memoryview(self._storage)
 
 
 class _BadDlpackDevice:
