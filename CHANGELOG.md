@@ -7,6 +7,8 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 ### Fixed
 - Float16 safetensors checkpoints load on Python 3.10 and 3.11. `memoryview.cast("e")` exists only from Python 3.12; the F16 bytes are now copied as they are and widened from their bits on every version, the same bits as before (subnormal, negative zero and scalar tensors checked). Every F16 checkpoint read on 3.10 and 3.11 in 0.8.15 raised `memoryview: destination format must be a native single character format`.
 - `tools/lm_segment.py`: an expected chain line written before chain lines named their hash scheme is compared as the first scheme (`sha256.v1`), and the recipe names the scheme a run hashes under, so a segment replayed on another vendor is held to the recorded digests rather than to the label.
+- Loading a native binding no longer leaves `PYTHONEXECUTABLE`, `PYTHONPATH` and `MOJO_PYTHON_LIBRARY` set in the process environment. The bundled runtime sets them in the C environ when a binding loads, so a child interpreter started with `sys.executable` could lose its virtual environment (seen on Python 3.11: no NumPy in the child). Every binding load now restores the three variables as it found them, through the C environ.
+- The Python test suite runs on Python 3.10 and 3.11 (`bench/results/python_versions_2026-09-23`): `bytes(Array)`, a `math.fma` use and two test fixtures that relied on Python 3.12 or 3.13 behavior are fixed, and the tools tests skip rather than abort without optional packages.
 
 ### Changed
 - Native libraries rebuilt from source.
