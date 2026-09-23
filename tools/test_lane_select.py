@@ -784,7 +784,10 @@ def test_every_lane_that_reaches_an_importer_reaches_what_it_imports():
     lanes(F) must be a subset of lanes(B). A break here means the import walk
     stopped somewhere it should not have."""
     sources, rev = _lane_sets()
-    sinks = lane_select.enumerator_files()
+    # A subpackage registry (`models/__init__.py`) is included and not
+    # followed, like the enumerators: a name imported from it resolves to the
+    # module it is bound from, so the edge is F -> that module, not F -> init.
+    sinks = lane_select.enumerator_files() | lane_select._reexport_registries()
     bad = []
     for f in lane_select._python_files():
         if f in sinks:
@@ -1481,13 +1484,20 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
                                      gbdt-stochastic-arms, the *-defaults lanes
                                      and their par- twins were added since); no
                                      other family entered
-      forest_host_predict  59 -> 60  the same additions"""
+      forest_host_predict  59 -> 60  the same additions
+
+    REMEASURED 2026-09-23 (subpackages resolve):
+      neural_inference.py  40 -> 41  `hf-checkpoint` imports
+                                     `_verify_causal_lm`, which imports
+                                     `models.CausalLM`, whose blocks are this
+                                     file's inference classes; the edge was
+                                     invisible while models/ did not resolve"""
     rev = lane_select.reverse_map()
     for rel, want in (("cluster/host/kmeans_oracle.mojo", 21),
                       ("core/gbdt_host_predict.mojo", 49),
                       ("core/forest_host_predict.mojo", 60),
                       ("core/forest_inference.mojo", 26),
-                      ("python/mojolearn/neural_inference.py", 40)):
+                      ("python/mojolearn/neural_inference.py", 41)):
         got = len(rev.get(rel, set()))
         assert got == want, f"{rel} answers {got} lanes, not {want}"
     lanes = len(lane_select.all_lanes())
@@ -1580,8 +1590,8 @@ def test_the_public_door_a_name_is_bound_from_is_in_the_map():
         wide = sorted(lanes - naming)
         assert not wide, (f"{rel} answers {len(lanes)} lanes and {wide[:5]} name nothing it "
                           f"binds ({sorted(bound)}); the door rule has gone wide")
-    assert len(rev.get("python/mojolearn/neural_inference.py", ())) == 40, \
-        "the re-export rule moved neural_inference.py off its measured 40 lanes"
+    assert len(rev.get("python/mojolearn/neural_inference.py", ())) == 41, \
+        "the re-export rule moved neural_inference.py off its measured 41 lanes (40 + hf-checkpoint, 2026-09-23)"
 
     # THE FAILING SIDE: with no public rebindings the lane each door is
     # checked for loses it. Held per LANE and not per file since 2026-09-21:
@@ -1647,3 +1657,55 @@ def test_a_file_the_harness_imports_at_run_time_selects_every_lane():
     assert "tools/lane_applicability.py" in selected["every_rules"], selected["reasons"]
     assert not selected["unattributed"]
     assert len(selected["lanes"]) == selected["total"] > 0
+
+
+def test_a_subpackage_module_is_attributed_to_the_lanes_that_load_it():
+    """THE 0.8.16 BLOCKER (2026-09-23). `release-check --plan` at 0a89e39cb
+    refused with UNATTRIBUTED PATH on python/mojolearn/models/safetensors.py,
+    the one file that release existed to ship: `_python_files` listed the top
+    level of the package only, and `_python_imports` resolved an import name
+    to python/mojolearn/<name>.py alone, so the whole models/ subpackage was
+    outside the corpus and no relative import inside it resolved. The changed
+    path list is handed to the selector directly, as the plan does."""
+    sel = lane_select.select(["python/mojolearn/models/safetensors.py"])
+    assert not sel["unattributed"] and not sel["every_rules"], sel["reasons"]
+    assert {"hf-checkpoint", "hf-causal-lm"} <= set(sel["lanes"]), sel["lanes"]
+    assert "kmeans" not in sel["lanes"] and "gbdt-rmse" not in sel["lanes"], sel["lanes"]
+    # every file of the subpackage is in the corpus and in some lane's map
+    rev = lane_select.reverse_map()
+    for name in ("__init__", "causal_lm", "config", "parallel_causal_lm", "safetensors", "tokenizer"):
+        rel = os.path.join(lane_select.PKG, "models", name + ".py")
+        assert rel in lane_select._python_files(), rel
+        assert rev.get(rel), f"{rel} is in no lane's map"
+    # the four import forms resolve against the importer's own directory
+    listing = set(lane_select._python_files())
+    models = os.path.join(lane_select.PKG, "models")
+    tree = ast.parse("from .safetensors import Checkpoint\nfrom .. import lowbit\n"
+                     "from .._array import Array\nimport mojolearn.models.config\n")
+    got = set()
+    for node in tree.body:
+        got |= lane_select._resolve_python_import(os.path.join(models, "causal_lm.py"), node, listing)
+    assert os.path.join(models, "safetensors.py") in got, got
+    assert os.path.join(lane_select.PKG, "lowbit.py") in got, got
+    assert os.path.join(lane_select.PKG, "_array.py") in got, got
+    assert os.path.join(models, "config.py") in got and os.path.join(models, "__init__.py") in got, got
+    # `from .models.safetensors import write_safetensors` at the top level
+    assert os.path.join(models, "safetensors.py") in lane_select._python_imports(
+        os.path.join(lane_select.PKG, "_causal_lm_fixtures.py"))
+
+
+def test_a_name_on_a_foreign_object_does_not_seed_a_package_file():
+    """`hashlib.sha256(raw).digest()` in the harness's `_hashed_uniform` left
+    `digest` in 43 lanes' names, and python/mojolearn/_verify_causal_lm.py
+    defines a top-level `digest`, so gbdt, kde and ols lanes seeded the causal
+    LM verifier. Once models/ resolved (the test above) that handed each of
+    them the mamba, transformer and training trees. A name used only on a
+    chain rooted at a module outside the package is not a package name."""
+    rev = lane_select.reverse_map()
+    lanes = rev.get("python/mojolearn/_verify_causal_lm.py", set())
+    assert "hf-checkpoint" in lanes, lanes           # it imports the module by name
+    assert not lanes & {"gbdt-rmse", "kde", "ols", "kmeans"}, sorted(lanes)
+    ib = lane_select.identity_break()
+    names = lane_select._seed_names(ib.LANES["gbdt-binary-columns"], vars(ib))
+    assert "digest" not in names
+    assert "digest" in lane_select._code_names(ib.LANES["gbdt-binary-columns"], vars(ib))
