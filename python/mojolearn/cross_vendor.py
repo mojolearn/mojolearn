@@ -85,47 +85,21 @@ def _flush(bits, i):
         bits[i] = b & _SIGN
 
 
-def fold_pair(total, shard, *, numpy=None):
+def fold_pair(total, shard):
     """One step of the device reduction on the host:
     ftz(ftz(total) + ftz(shard)) elementwise, one float32 rounding per add
     (training/byte_lm_parallel.mojo `_ordered_add_kernel`, fma(1, a, b)).
     Both are float32 buffers of the same length; returns bytes.
 
     Exact in pure Python: a float64 sum of two float32 values, rounded once
-    to float32 on the store, is the float32 sum (53 >= 2*24 + 2). With
-    NumPy installed the same arithmetic runs vectorized (a float32 add IS
-    one rounding, and ftz is bit masking); the two spellings are held equal
-    by `test_cross_vendor.py`. `numpy=False` forces the pure path."""
+    to float32 on the store, is the float32 sum (53 >= 2*24 + 2). The shipped
+    package imports nothing but the standard library and its own bindings
+    (packaging/portable_math/wheel.py), so there is no NumPy spelling here;
+    a live worker folds on its device (`ParallelByteLanguageModelTrainer`
+    `fold_*`), which is the fast path at training size."""
     t, g = _f32(total), _f32(shard)
     if len(t) != len(g):
         raise ValueError("fold_pair: gradients differ in length")
-    np = None
-    if numpy is not False:
-        try:
-            import numpy as np
-        except ImportError:
-            np = None
-    if np is not None:
-        # In place, over views of the callers' buffers: one owned copy of
-        # each operand's bits, flushed where subnormal, one float32 add
-        # into the first, one flush of the sum. No bytes() round trips and
-        # no np.where temporaries: at 162M elements each of those was a
-        # 649 MB allocation, and a 44-shard fold took 184 s on an H100 pod's
-        # host (bench/results/lm_t1_2026-09-22/live).
-        tb = np.array(np.frombuffer(t.cast("B"), dtype=np.uint32), copy=True)
-        gb = np.array(np.frombuffer(g.cast("B"), dtype=np.uint32), copy=True)
-
-        def ftz_(b):
-            sub = (b & _EXP) == 0
-            sub &= (b & _MAN) != 0
-            b[sub] &= np.uint32(_SIGN)
-        ftz_(tb)
-        ftz_(gb)
-        tf = tb.view(np.float32)
-        with np.errstate(over="ignore", invalid="ignore"):
-            np.add(tf, gb.view(np.float32), out=tf)
-        ftz_(tb)
-        return tb.tobytes()
     n = len(t)
     out = array.array("f", t)
     sh = array.array("f", g)
@@ -139,7 +113,7 @@ def fold_pair(total, shard, *, numpy=None):
     return out.tobytes()
 
 
-def ordered_fold(gradients, *, prefix=None, numpy=None):
+def ordered_fold(gradients, *, prefix=None):
     """The device reduction, on the host: copy g[0] (or start from `prefix`,
     an already folded run of the shards BEFORE these), then
     total = fold_pair(total, g[k]) in shard order. `gradients` is a
@@ -160,7 +134,7 @@ def ordered_fold(gradients, *, prefix=None, numpy=None):
     if any(len(_f32(g)) != n for g in rest):
         raise ValueError("ordered_fold: gradients differ in length")
     for g in rest:
-        total = fold_pair(total, g, numpy=numpy)
+        total = fold_pair(total, g)
     return total
 
 
