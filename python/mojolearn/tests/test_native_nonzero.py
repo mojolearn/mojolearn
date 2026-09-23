@@ -86,7 +86,12 @@ def _as_bytes(triple):
     rows, cols, vals, n = triple
     assert rows.dtype == "<i4" and cols.dtype == "<i4" and vals.dtype == "<f4"
     assert rows.shape == cols.shape == vals.shape
-    return bytes(rows), bytes(cols), bytes(vals), n
+    # `bytes(array)` reads the buffer protocol, which a pure-Python Array
+    # exports on 3.12+ only; on 3.10 and 3.11 `bytes()` iterates the Python
+    # scalars instead and fails on the first float. `tobytes()` is the raw
+    # store on every supported Python (measured 2026-09-23, 26 cells red on
+    # 3.10 and 3.11 for this line alone).
+    return rows.tobytes(), cols.tobytes(), vals.tobytes(), n
 
 
 def _run_both(monkeypatch, A):

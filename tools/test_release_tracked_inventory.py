@@ -17,7 +17,14 @@ import check_linux_release_qualification as gate
 ROOT = Path(__file__).resolve().parent.parent
 _spec = importlib.util.spec_from_file_location('pack_wheel_tracked', ROOT / 'packaging/linux/pack_wheel.py')
 packer = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(packer)
+try:
+    _spec.loader.exec_module(packer)
+except SystemExit as exc:
+    # pack_wheel.py refuses to import below Python 3.11 (tomllib). A SystemExit
+    # at collection time is not a test result: under pytest it aborted the
+    # WHOLE tools session (INTERNALERROR, 2026-09-23 on 3.10), so nothing
+    # after this file ran. It is a skip with the packer's own sentence.
+    raise unittest.SkipTest(str(exc))
 
 IGNORED = {
     'portable-math-build.json': '{"local": true}\n',
