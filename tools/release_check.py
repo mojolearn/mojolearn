@@ -40,7 +40,7 @@ def plan(out=print, backends=None, paths=None):
     """WHAT THE DEFAULT RELEASE VERIFICATION WOULD RUN, per backend, without
     running anything (2026-09-22): the lanes each pass selects with no flags,
     its cell count (lanes x base,denormal,odd, one fit each), why each lane is
-    in, and, when a pass widens to every lane, the exact paths that made it.
+    in, and, when a rule selects every lane, the exact paths that made it.
     CPU and Apple run here; NVIDIA and AMD run in the Linux build rentals
     (`pixi run release`). The CPU pass covers the union, because its column is
     the reference the other three are diffed against."""
