@@ -293,7 +293,7 @@ def load_checkpoint(path, *, zero_moments=False):
     if zero_moments:
         for key in ("m", "v"):
             arr = state[key]
-            mv = memoryview(arr).cast("B")
+            mv = _bytes_of(arr, writable=True)
             mv[:] = bytes(len(mv))
     return state, digest
 
@@ -400,6 +400,23 @@ def _window(text):
     return a, b
 
 
+def _bytes_of(obj, writable=False):
+    """A flat `'B'` memoryview of any array the package hands out. NumPy
+    arrays and bytes export the buffer protocol; mojolearn's own `Array`
+    (what `export_raw` and the token batches return on a box without NumPy,
+    and what the wheel's `empty` builds) cannot on Python 3.10 and 3.11
+    (`python/mojolearn/_array.py`, DEVIATION 2305), so it is read through
+    the package's `_buffer` at its address. The T3 rehearsal's first segment
+    (Python 3.11 venv on the box) crashed at its first hash on exactly this.
+    The caller keeps `obj` alive while the view is in use."""
+    from mojolearn._array import Array
+    if isinstance(obj, Array):
+        from mojolearn._buffer import addr, addr_ro, memory_at
+        a = addr(obj, name="array") if writable else addr_ro(obj, name="array")
+        return memory_at(a, obj.nbytes, writable=writable)
+    return memoryview(obj).cast("B")
+
+
 HASH_SLICES = 8
 
 
@@ -412,7 +429,7 @@ def _sha_sliced(view, slices=HASH_SLICES, pool=None):
     strength of digest at about a quarter of the wall time on four or more
     cores. A chain line names its scheme, and two chains compare only under
     the same scheme."""
-    view = memoryview(view).cast("B")
+    view = _bytes_of(view)
     n = len(view)
     bounds = [(n * i // slices, n * (i + 1) // slices) for i in range(slices)]
     if pool is None:
@@ -454,7 +471,7 @@ def _hash_arrays(raw, scheme=DEFAULT_SCHEME):
     h = hashlib.sha256()
     if scheme == SCHEME_V1:
         for key in ARRAYS:
-            h.update(memoryview(raw[key]).cast("B"))
+            h.update(_bytes_of(raw[key]))
         return h.hexdigest()
     for key in ARRAYS:
         h.update(_sha_sliced(raw[key], pool=_pool()).encode())
@@ -463,7 +480,7 @@ def _hash_arrays(raw, scheme=DEFAULT_SCHEME):
 
 def _hash_gradient(view, scheme=DEFAULT_SCHEME):
     if scheme == SCHEME_V1:
-        return _sha(memoryview(view).cast("B"))
+        return _sha(_bytes_of(view))
     return _sha_sliced(view, pool=_pool())
 
 
@@ -795,10 +812,10 @@ def _window_witness(trainer, raw, shards, say):
     so a divergence can be told from a data mismatch. Per-shard gradients
     belong to the one-shard replays `mojolearn.cross_vendor` and
     `tools/par_lm_xvendor.py` take from the boundary checkpoints."""
-    return dict(parameters=_sha(memoryview(raw["parameters"]).cast("B")),
-                m=_sha(memoryview(raw["m"]).cast("B")), v=_sha(memoryview(raw["v"]).cast("B")),
-                flags=_sha(memoryview(raw["flags"]).cast("B")),
-                shards_sha256=[_sha(memoryview(x).cast("B")) for x in shards])
+    return dict(parameters=_sha(_bytes_of(raw["parameters"])),
+                m=_sha(_bytes_of(raw["m"])), v=_sha(_bytes_of(raw["v"])),
+                flags=_sha(_bytes_of(raw["flags"])),
+                shards_sha256=[_sha(_bytes_of(x)) for x in shards])
 
 
 # ---------------------------------------------------------------- compare

@@ -69,5 +69,27 @@ class ChainCompare(unittest.TestCase):
             seg.hash_scheme_of({'hash_scheme': 'md5'})
 
 
+class ArrayBytes(unittest.TestCase):
+    """The hashes read mojolearn's Array through the package's buffer helper,
+    the path Python 3.10 and 3.11 take (no buffer protocol on a pure-Python
+    class), and the same bytes on every version."""
+
+    def test_array_hashes_as_its_bytes(self):
+        from mojolearn._array import Array
+        a = Array.from_list([1.5, -2.0, 0.0, 3.25], dtype='<f4')
+        self.assertEqual(seg._sha(seg._bytes_of(a)), seg._sha(a.tobytes()))
+        self.assertEqual(seg._sha_sliced(a), seg._sha_sliced(a.tobytes()))
+        self.assertEqual(seg._hash_arrays(dict(parameters=a, m=a, v=a, flags=a), seg.SCHEME_V1),
+                         seg._hash_arrays(dict(parameters=a.tobytes(), m=a.tobytes(), v=a.tobytes(), flags=a.tobytes()), seg.SCHEME_V1))
+        self.assertEqual(seg._hash_gradient(a, seg.SCHEME_V2), seg._hash_gradient(a.tobytes(), seg.SCHEME_V2))
+
+    def test_array_zeroed_in_place(self):
+        from mojolearn._array import Array
+        a = Array.from_list([1.5, -2.0], dtype='<f4')
+        mv = seg._bytes_of(a, writable=True)
+        mv[:] = bytes(len(mv))
+        self.assertEqual(a.tobytes(), bytes(8))
+
+
 if __name__ == '__main__':
     unittest.main()
