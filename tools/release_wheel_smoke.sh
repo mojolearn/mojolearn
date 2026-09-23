@@ -357,7 +357,7 @@ say "smoke exit: ${SMOKE_EXIT:-none}"
 
 say "fetching the results"
 mkdir -p "$OUT/remote"
-with_timeout 300 ssh $SSH_OPTS $SSH_TARGET "cd $RDIR && tar czf - box.txt box.log smoke.log smoke.exit out column.txt column_venv.log selftest.log column.log column.exit column.json 2>/dev/null" \
+with_timeout 300 ssh $SSH_OPTS $SSH_TARGET "cd $RDIR && tar czf - box.txt box.log smoke.log smoke.exit out column.txt column_venv.log selftest.log column.log column.exit column.json column.json.errors.txt 2>/dev/null" \
     | ( cd "$OUT/remote" && tar xzf - ) || echo "  FETCH INCOMPLETE"
 [ -f "$OUT/remote/box.txt" ] && sed 's/^/  box: /' "$OUT/remote/box.txt"
 if [ -f "$OUT/remote/out/results.json" ]; then
@@ -394,8 +394,11 @@ fi
 if [ -n "$LANES" ]; then
     [ -f "$OUT/remote/column.txt" ] && sed 's/^/  column: /' "$OUT/remote/column.txt"
     _cx=$(tr -d '[:space:]' < "$OUT/remote/column.exit" 2>/dev/null)
+    [ -f "$OUT/remote/column.json" ] && cp "$OUT/remote/column.json" "$OUT/column-$VENDOR.json"
     if [ "$_cx" != 0 ] || [ ! -f "$OUT/remote/column.json" ]; then
-        say "COLUMN FAILED (exit ${_cx:-none}); tail of column.log:"; tail -20 "$OUT/remote/column.log" 2>/dev/null
+        say "COLUMN FAILED (exit ${_cx:-none}); refused cells and their errors:"
+        grep -E '^# CELL .* REFUSED' "$OUT/remote/column.log" 2>/dev/null | head -20
+        [ -f "$OUT/remote/column.json.errors.txt" ] && head -40 "$OUT/remote/column.json.errors.txt"
         _v=1
     else
         cp "$OUT/remote/column.json" "$OUT/column-$VENDOR.json"
