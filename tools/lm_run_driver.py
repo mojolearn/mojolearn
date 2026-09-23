@@ -156,6 +156,7 @@ def render(spec, e, out, ledger, role=None):
     label = "%s-%s-%s" % (arm, e["route"], e["segment"])
     cmd = [sys.executable, str(REPO / "tools" / "lm_segment_leg.py"), "render", "--run", run, "--recipe", spec["recipe"],
            "--recipe-key", spec["recipe_key"], "--arm", arm, "--mode", mode, "--devices", devices,
+           "--tokens-key", spec["tokens_stage"],
            "--route", e["route"], "--segment", e["segment"], "--label", label, "--steps", str(e["steps"]),
            "--from", e["from_ckpt"], "--seconds", str(spec.get("url_seconds", 8 * 3600))]
     if mode != "live-worker":
@@ -207,14 +208,49 @@ def rent_one(spec, e, body, out):
                 continue
             return res / ("leg-" + slug), rc
         return res, rc
-    provider = spec.get("amd_provider", "do")
     env["MOJOLEARN_GPU_ARCHS"] = "gfx942"
-    with open(res / "leg.log", "w") as log:
-        if provider == "do":
-            rc = subprocess.run(["bash", "tools/do_extra_leg.sh", "amd", *lease], cwd=REPO, env=env, stdout=log, stderr=subprocess.STDOUT).returncode
-        else:
-            rc = subprocess.run(["sh", "tools/gemm_remote_leg.sh", "amd", "--rent", "--allow-concurrent", *lease], cwd=REPO, env=env, stdout=log, stderr=subprocess.STDOUT).returncode
-    return res / "leg", rc
+    providers = spec.get("amd_providers") or [spec.get("amd_provider", "do")]
+    rc = 3
+    # AMD capacity is the choke point (one DigitalOcean GPU droplet per account,
+    # RunPod MI300X and Hot Aisle often without stock): walk the providers, and
+    # when every one is busy, wait and walk again, for up to amd_wait_minutes.
+    deadline = time.monotonic() + 60 * int(spec.get("amd_wait_minutes", 180))
+    attempt = 0
+    while True:
+        attempt += 1
+        result = _rent_amd_once(spec, e, res, env, lease, providers, out, attempt)
+        if result is not None:
+            return result
+        if time.monotonic() > deadline:
+            _log(out, "amd: no provider had capacity within amd_wait_minutes; giving up on this attempt")
+            return res, rc
+        _log(out, "amd: every provider busy or without capacity; waiting 10 minutes (attempt %d)" % attempt)
+        time.sleep(600)
+
+
+def _rent_amd_once(spec, e, res, env, lease, providers, out, attempt):
+    rc = 3
+    for provider in providers:
+        tag = "%s-%d" % (provider, attempt)
+        env["MOJOLEARN_GEMM_LEG_OUT"] = str(res / ("leg-" + tag))
+        with open(res / ("leg-%s.log" % tag), "w") as log:
+            if provider == "do":
+                rc = subprocess.run(["bash", "tools/do_extra_leg.sh", "amd", *lease], cwd=REPO, env=env, stdout=log, stderr=subprocess.STDOUT).returncode
+            elif provider == "hotaisle":
+                # one hour is Hot Aisle's maximum and minimum; the body fetches the token parts itself
+                rc = subprocess.run(["bash", "tools/hotaisle_leg.sh", "amd", "--rent", "--skip-gates", "--minutes", "60"],
+                                    cwd=REPO, env=env, stdout=log, stderr=subprocess.STDOUT).returncode
+            else:
+                rc = subprocess.run(["sh", "tools/gemm_remote_leg.sh", "amd", "--rent", "--allow-concurrent", *lease], cwd=REPO, env=env, stdout=log, stderr=subprocess.STDOUT).returncode
+        text = (res / ("leg-%s.log" % tag)).read_text()
+        busy = ("ONE GPU droplet at a time" in text or "no instances currently available" in text
+                or "REFUSING to create" in text or "quantity=0" in text or "no stock" in text.lower()
+                or "starved" in text.lower())
+        if rc != 0 and busy:
+            _log(out, "amd: %s is busy or without capacity (attempt %d)" % (provider, attempt))
+            continue
+        return res / ("leg-" + tag), rc
+    return None
 
 
 def rent_live(spec, e, nv_body, amd_body, out):

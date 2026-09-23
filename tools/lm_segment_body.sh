@@ -22,6 +22,8 @@
 #   @UPLOADS@        JSON {file name: presigned PUT URL} for every expected key
 #   @LIVE_SHARDS@ @LIVE_WORKERS@ @LIVE_PORT@   the live segment's block, group size, port
 #   @RECIPE_URL@ @RECIPE_SHA@   the recipe, pinned
+#   @TOKENS_URLS@    JSON {part file name: presigned GET} of the token stream, used
+#                    only when the runner staged nothing ("" otherwise)
 #
 # The live worker waits for /root/live_peer.txt ("HOST PORT"), written by
 # the orchestrator once the tunnel to the coordinator's box is up, and every
@@ -79,6 +81,23 @@ say "build byte_lm exit=$_rc secs=$(( $(date +%s) - _t0 ))"
 pixi run python -c 'import numpy' > "$OUT/numpy.log" 2>&1 || { pixi run python -m pip install numpy >> "$OUT/numpy.log" 2>&1; say "numpy pip exit=$?"; }
 
 # ---- the token stream: staged parts joined and verified by the manifest ----
+# A runner without R2 staging (Hot Aisle) leaves nothing under /root; then the
+# parts are fetched here by the presigned GETs the renderer baked in.
+cat > "$OUT/tokens_urls.json" <<'TOKENS_URLS'
+@TOKENS_URLS@
+TOKENS_URLS
+if [ -z "$(find /root -name tokens.i32.part00 -o -name tokens.i32 2>/dev/null | head -1)" ] && [ "$(head -c 1 "$OUT/tokens_urls.json")" = "{" ]; then
+    _td=/root/tokens_stream; mkdir -p "$_td"
+    _t0=$(date +%s)
+    pixi run python - "$OUT/tokens_urls.json" "$_td" > "$OUT/tokens_fetch.log" 2>&1 <<'PY'
+import json, subprocess, sys
+urls, out = json.load(open(sys.argv[1])), sys.argv[2]
+for name, url in sorted(urls.items()):
+    subprocess.run(["curl", "-fsS", "--retry", "3", "-o", out + "/" + name, url], check=True)
+    print("fetched", name, flush=True)
+PY
+    say "tokens fetched by URL exit=$? secs=$(( $(date +%s) - _t0 ))"
+fi
 TOK=$(dirname "$(find /root -name tokens.i32.part00 2>/dev/null | head -1)")
 if [ -n "$TOK" ] && [ -f "$TOK/manifest.json" ]; then
     if [ ! -f "$TOK/tokens.i32" ]; then
