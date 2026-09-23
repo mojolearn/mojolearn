@@ -123,12 +123,21 @@ TOKENS_URLS
 if [ -z "$(find /root -name tokens.i32.part00 -o -name tokens.i32 2>/dev/null | head -1)" ] && [ "$(head -c 1 "$OUT/tokens_urls.json")" = "{" ]; then
     _td=/root/tokens_stream; mkdir -p "$_td"
     _t0=$(date +%s)
+    # every part at once, each with its own time limit and retries: a single
+    # stalled transfer once held a pod for two hours (T2 segment 3, attempt 2)
     run_py - "$OUT/tokens_urls.json" "$_td" > "$OUT/tokens_fetch.log" 2>&1 <<'PY'
 import json, subprocess, sys
+from concurrent.futures import ThreadPoolExecutor
 urls, out = json.load(open(sys.argv[1])), sys.argv[2]
-for name, url in sorted(urls.items()):
-    subprocess.run(["curl", "-fsS", "--retry", "3", "-o", out + "/" + name, url], check=True)
-    print("fetched", name, flush=True)
+def get(item):
+    name, url = item
+    r = subprocess.run(["curl", "-fsS", "--retry", "5", "--retry-all-errors", "--max-time", "1500", "--speed-limit", "100000",
+                        "--speed-time", "60", "-o", out + "/" + name, url], capture_output=True, text=True)
+    print("fetched" if r.returncode == 0 else "FAILED", name, r.stderr.strip()[:200], flush=True)
+    return r.returncode
+with ThreadPoolExecutor(max_workers=8) as pool:
+    codes = list(pool.map(get, sorted(urls.items())))
+sys.exit(0 if all(c == 0 for c in codes) else 1)
 PY
     say "tokens fetched by URL exit=$? secs=$(( $(date +%s) - _t0 ))"
 fi

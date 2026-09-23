@@ -37,7 +37,10 @@ done
 mkdir -p "$OUT"; OUT=$(cd "$OUT" && pwd)
 REPO=$(cd "$(dirname "$0")/.." && pwd); cd "$REPO" || exit 9
 READY_SECONDS=${MOJOLEARN_LIVE_READY_SECONDS:-3600}
-TOKENS=${MOJOLEARN_LIVE_STAGE_KEYS:-corpus/fineweb-edu-10BT/tokens/mojolearn-bpe-fineweb-edu-50257-v1}
+# The runners' own R2 staging is off by default (MOJOLEARN_LIVE_STAGE_KEYS ""):
+# the body fetches the token parts itself, in parallel with time limits. A
+# stalled staging transfer once held a pod for two hours.
+TOKENS=${MOJOLEARN_LIVE_STAGE_KEYS-}
 # The NVIDIA runner's step 1 generates an Apple reference card on this Mac
 # unless given one; a card taken while another Metal job holds the lock is
 # refused, so a recorded card is always passed (nothing here compares to it).

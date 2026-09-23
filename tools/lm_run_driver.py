@@ -195,7 +195,8 @@ def rent_one(spec, e, body, out):
     """Rent one box for a one-box segment; returns the results directory and the runner's exit code."""
     res = Path(out) / "legs" / ("%s-%s" % (e["route"], e["segment"]))
     res.mkdir(parents=True, exist_ok=True)
-    env = dict(os.environ, MOJOLEARN_GEMM_LEG_EXTRA=str(body), MOJOLEARN_STAGE_KEYS=spec["tokens_stage"],
+    # the body fetches the token parts itself (parallel, timed); the runners stage nothing
+    env = dict(os.environ, MOJOLEARN_GEMM_LEG_EXTRA=str(body), MOJOLEARN_STAGE_KEYS=spec.get("runner_stage_keys", ""),
                MOJOLEARN_GEMM_LEG_OUT=str(res / "leg"),
                # a recorded Apple card: the NVIDIA runner would otherwise take one on this Mac and refuse under the Metal lock
                MOJOLEARN_GEMM_LEG_LOCAL_CARD=spec.get("apple_card", os.path.expanduser("~/mojolearn-evidence/vendor-class-gaps-sep19/apple.card")))
@@ -273,7 +274,7 @@ def _rent_amd_once(spec, e, res, env, lease, providers, out, attempt):
 def rent_live(spec, e, nv_body, amd_body, out):
     res = Path(out) / "legs" / ("%s-%s-live" % (e["route"], e["segment"]))
     res.mkdir(parents=True, exist_ok=True)
-    env = dict(os.environ, MOJOLEARN_LIVE_STAGE_KEYS=spec["tokens_stage"],
+    env = dict(os.environ, MOJOLEARN_LIVE_STAGE_KEYS=spec.get("runner_stage_keys", ""),
                MOJOLEARN_LIVE_NVIDIA_GPUS=spec.get("nvidia_gpus", "NVIDIA H100 80GB HBM3|NVIDIA H200|NVIDIA H100 PCIe|NVIDIA H100 NVL"))
     with open(res / "live.log", "w") as log:
         rc = subprocess.run(["bash", "tools/lm_live_leg.sh", str(res), str(nv_body), str(amd_body), "--minutes",
