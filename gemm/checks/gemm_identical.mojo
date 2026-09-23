@@ -1570,6 +1570,22 @@ def _fold_drain_local[
 # ===========================================================================
 
 
+@always_inline
+def _udiv[D: Int](x: Int) -> Int:
+    """`x // D` for `x >= 0`, unsigned. The staging and ownership index math
+    divides by comptime tile sizes; the signed forms leave a sign fix-up and
+    a division/remainder pair that Mojo 1.0.0's optimizer associated
+    differently from one cold compile to the next (see `_tuned_window_at`).
+    Unsigned by a power of two this is a shift, and it has no fix-up."""
+    return Int(UInt(x) // UInt(D))
+
+
+@always_inline
+def _urem[D: Int](x: Int) -> Int:
+    """`x % D` (equivalently `x - (x // D) * D`) for `x >= 0`, unsigned."""
+    return Int(UInt(x) % UInt(D))
+
+
 def _tuned_windows_per_leaf[KS: Int](leaf: Int) -> Int:
     """`ceil(L / KS)`, at least 1. Block-uniform, and a pure function of `L`
     and the comptime `KS`."""
@@ -1602,7 +1618,25 @@ def _tuned_window[
     fires exactly once per leaf whatever the raggedness.
     """
     var t = w // wpl
-    var ww = w - t * wpl
+    return _tuned_window_at[KS](t, w - t * wpl, wpl, leaf, k, p_count)
+
+
+@always_inline
+def _tuned_window_at[
+    KS: Int
+](t: Int, ww: Int, wpl: Int, leaf: Int, k: Int, p_count: Int) -> Tuple[Int, Int, Int]:
+    """`_tuned_window` of the window at fold position `t`, offset `ww`
+    (`w = t * wpl + ww`, `0 <= ww < wpl`), with no division.
+
+    THE KERNELS CARRY `(t, ww)` AS COUNTERS (2026-09-22). Recomputing
+    `w // wpl` and `w - (w // wpl) * wpl` at the three call sites per window
+    left several division/remainder pairs in one function, and Mojo 1.0.0's
+    optimization pipeline then associated the integer adds around them
+    differently from one cold compile to the next: the gfx942 code objects
+    of every tuned GEMM instantiation differed in integer index code
+    (tools/amd_codegen/probe_gemm.mojo; the minimal reproducer with no
+    mojolearn code is tools/amd_codegen/repro_floormod.mojo). Same values,
+    one less thing for the optimizer to order."""
     var lb = _leaf_bounds(_leaf_at(t, p_count), leaf, k)
     var p0 = lb[0] + ww * KS
     var chunk = lb[1] - p0
@@ -1614,6 +1648,16 @@ def _tuned_window[
     if ww == wpl - 1:
         last = 1
     return (p0, chunk, last)
+
+
+@always_inline
+def _tuned_window_next[
+    KS: Int
+](t: Int, ww: Int, wpl: Int, leaf: Int, k: Int, p_count: Int) -> Tuple[Int, Int, Int]:
+    """`_tuned_window_at` of the window after `(t, ww)`: `_tuned_window[KS](w + 1, ...)`."""
+    if ww + 1 == wpl:
+        return _tuned_window_at[KS](t + 1, 0, wpl, leaf, k, p_count)
+    return _tuned_window_at[KS](t, ww + 1, wpl, leaf, k, p_count)
 
 
 # ===========================================================================
@@ -1676,8 +1720,8 @@ def _tuned_g2r[
             comptime for e0 in range(NV):
                 var idx0 = tid + (s0 * VEC + e0) * NTH
                 if idx0 < ROWS * KV * VEC:
-                    var rr0 = idx0 % ROWS
-                    var cc0 = idx0 // ROWS
+                    var rr0 = _urem[ROWS](idx0)
+                    var cc0 = _udiv[ROWS](idx0)
                     var oi0 = base_outer + rr0
                     if oi0 < outer_limit and cc0 < chunk:
                         out[s0 * VEC + e0] = src.unsafe_load(
@@ -1690,8 +1734,8 @@ def _tuned_g2r[
     comptime for s in range(NSLOT):
         var idx = tid + s * NTH
         if idx < ROWS * KV:
-            var rr = idx // KV
-            var cc = (idx - rr * KV) * VEC
+            var rr = _udiv[KV](idx)
+            var cc = _urem[KV](idx) * VEC
             var oi = base_outer + rr
             if oi < outer_limit:
                 if k_stride == 1 and cc + VEC <= chunk:
@@ -1865,7 +1909,9 @@ def identical_gemm_tuned_kernel[
         tile = n_tiles - 1 - raw
     elif swizzle == SWIZZLE_TRANSPOSE:
         tile = (raw % tiles_i) * tiles_j + (raw // tiles_i)
-    var ti = tile // tiles_j
+    # Unsigned: `tile >= 0` and `tiles_j > 0` here, and a signed floor division
+    # is one more sign fix-up for the optimizer to associate (`_tuned_window_at`).
+    var ti = Int(UInt(tile) // UInt(tiles_j))
     var tj = tile - ti * tiles_j
     var i0 = ti * BM
     var j0 = tj * BN
@@ -1875,8 +1921,8 @@ def identical_gemm_tuned_kernel[
     # `tid` owns rows `accrow + u * TR` and columns `acccol + v * TC`. The
     # ownership is STRIDED rather than contiguous, so consecutive threads
     # write consecutive columns of `C` and the store coalesces.
-    var accrow = tid // TC
-    var acccol = tid - accrow * TC
+    var accrow = _udiv[TC](tid)
+    var acccol = _urem[TC](tid)
 
     var acc = SIMD[DType.float32, NCELL](0.0)
     # FS == 1: the single leaf partial parks in registers (no tree at all).
@@ -1907,14 +1953,20 @@ def identical_gemm_tuned_kernel[
     var wpl = _tuned_windows_per_leaf[KS](leaf)
     var w_total = p_count * wpl
     var w = 0
+    var wt = 0  # w // wpl, carried (see `_tuned_window_at`)
+    var wq = 0  # w - wt * wpl
     var w_end = w_total
     comptime if SPLIT:
         # This block's leaf only: the flat windows `[t * wpl, (t + 1) * wpl)`.
         w = t_pos * wpl
+        wt = t_pos
         w_end = w + wpl
 
     # ---- PROLOGUE: the first window, DRAM to registers.
-    var w0 = _tuned_window[KS](w, wpl, leaf, k, p_count)
+    var w0 = _tuned_window_at[KS](wt, wq, wpl, leaf, k, p_count)
+    # The window after `w`, computed ONCE per iteration and carried into the
+    # next one (see `_tuned_window_at`): no window is computed twice.
+    var cur = w0
     var pa = _tuned_g2r[ASLOTS, VEC, KV, BM, NTH](
         a, a_si, a_sp, i0, m, w0[0], w0[1], tid
     )
@@ -1923,9 +1975,10 @@ def identical_gemm_tuned_kernel[
     )
 
     while w < w_end:
-        var win = _tuned_window[KS](w, wpl, leaf, k, p_count)
+        var win = cur
+        var nxt = _tuned_window_next[KS](wt, wq, wpl, leaf, k, p_count)
         var chunk = win[1]
-        var pgw = w % PAGES
+        var pgw = _urem[PAGES](w)
         # The window's operand words, exactly once each (see
         # `TUNED_BLOCK_ADMIT`). Unused slots are +0.0 and constrain nothing.
         # A helper and not an inline `comptime if`: an empty `comptime if`
@@ -1943,14 +1996,14 @@ def identical_gemm_tuned_kernel[
                     var ia0 = tid + (sa * VEC + ea0) * NTH
                     if ia0 < BM * KS:
                         as_.unsafe_store(
-                            pgw * APAGE + (ia0 % BM) * SSTRIDE + ia0 // BM,
+                            pgw * APAGE + _urem[BM](ia0) * SSTRIDE + _udiv[BM](ia0),
                             pa[sa * VEC + ea0],
                         )
             else:
                 var ia = tid + sa * NTH
                 if ia < BM * KV:
-                    var rra = ia // KV
-                    var cca = (ia - rra * KV) * VEC
+                    var rra = _udiv[KV](ia)
+                    var cca = _urem[KV](ia) * VEC
                     var va = SIMD[DType.float32, VEC](0.0)
                     comptime for ea in range(VEC):
                         va[ea] = pa[sa * VEC + ea]
@@ -1961,14 +2014,14 @@ def identical_gemm_tuned_kernel[
                     var ib0 = tid + (sb * VEC + eb0) * NTH
                     if ib0 < BN * KS:
                         bs_.unsafe_store(
-                            pgw * BPAGE + (ib0 % BN) * SSTRIDE + ib0 // BN,
+                            pgw * BPAGE + _urem[BN](ib0) * SSTRIDE + _udiv[BN](ib0),
                             pb[sb * VEC + eb0],
                         )
             else:
                 var ib = tid + sb * NTH
                 if ib < BN * KV:
-                    var rrb = ib // KV
-                    var ccb = (ib - rrb * KV) * VEC
+                    var rrb = _udiv[KV](ib)
+                    var ccb = _urem[KV](ib) * VEC
                     var vb = SIMD[DType.float32, VEC](0.0)
                     comptime for eb in range(VEC):
                         vb[eb] = pb[sb * VEC + eb]
@@ -1984,7 +2037,7 @@ def identical_gemm_tuned_kernel[
         # `w`.
         comptime if PAGES == 2:
             if w + 1 < w_end:
-                var wn = _tuned_window[KS](w + 1, wpl, leaf, k, p_count)
+                var wn = nxt
                 pa = _tuned_g2r[ASLOTS, VEC, KV, BM, NTH](
                     a, a_si, a_sp, i0, m, wn[0], wn[1], tid
                 )
@@ -2058,7 +2111,7 @@ def identical_gemm_tuned_kernel[
             # `identical_gemm_tiled_kernel`'s two-barrier shape exactly.
             barrier()
             if w + 1 < w_end:
-                var wn1 = _tuned_window[KS](w + 1, wpl, leaf, k, p_count)
+                var wn1 = nxt
                 pa = _tuned_g2r[ASLOTS, VEC, KV, BM, NTH](
                     a, a_si, a_sp, i0, m, wn1[0], wn1[1], tid
                 )
@@ -2113,6 +2166,11 @@ def identical_gemm_tuned_kernel[
             acc = SIMD[DType.float32, NCELL](0.0)
 
         w = w + 1
+        cur = nxt
+        wq += 1
+        if wq == wpl:
+            wq = 0
+            wt += 1
 
     comptime if TUNED_BLOCK_ADMIT:
         comptime assert (NTH & (NTH - 1)) == 0, "block admission: NTH power of two"
@@ -3526,14 +3584,16 @@ def identical_gemm_step_arm_kernel[
     var raw = Int(block_idx.y) * Int(grid_dim.x) + Int(block_idx.x)
     if raw >= n_tiles:
         return
-    var ti = raw // tiles_j
+    # Unsigned: `raw >= 0` and `tiles_j > 0` here, and a signed floor division
+    # is one more sign fix-up for the optimizer to associate (`_tuned_window_at`).
+    var ti = Int(UInt(raw) // UInt(tiles_j))
     var tj = raw - ti * tiles_j
     var i0 = ti * BM
     var j0 = tj * BN
 
     var tid = Int(thread_idx.x)
-    var accrow = tid // TC
-    var acccol = tid - accrow * TC
+    var accrow = _udiv[TC](tid)
+    var acccol = _urem[TC](tid)
 
     var acc = SIMD[DType.float32, NCELL](0.0)
     var fl = stack_allocation[FS * NCELL, Scalar[DType.float32]]()
@@ -3557,9 +3617,14 @@ def identical_gemm_step_arm_kernel[
     var wpl = _tuned_windows_per_leaf[KS](leaf)
     var w_end = p_count * wpl
     var w = 0
+    var wt = 0  # w // wpl, carried (see `_tuned_window_at`)
+    var wq = 0  # w - wt * wpl
 
     # ---- PROLOGUE: the first window, DRAM to registers (shipped lines).
-    var w0 = _tuned_window[KS](w, wpl, leaf, k, p_count)
+    var w0 = _tuned_window_at[KS](wt, wq, wpl, leaf, k, p_count)
+    # The window after `w`, computed ONCE per iteration and carried into the
+    # next one (see `_tuned_window_at`): no window is computed twice.
+    var cur = w0
     var pa = _tuned_g2r[ASLOTS, VEC, KV, BM, NTH](
         a, a_si, a_sp, i0, m, w0[0], w0[1], tid
     )
@@ -3568,9 +3633,10 @@ def identical_gemm_step_arm_kernel[
     )
 
     while w < w_end:
-        var win = _tuned_window[KS](w, wpl, leaf, k, p_count)
+        var win = cur
+        var nxt = _tuned_window_next[KS](wt, wq, wpl, leaf, k, p_count)
         var chunk = win[1]
-        var pgw = w % PAGES
+        var pgw = _urem[PAGES](w)
 
         # ---- REGISTERS TO SHARED, into page `w % PAGES` (shipped lines).
         comptime for sa in range(ASLOTS):
@@ -3579,14 +3645,14 @@ def identical_gemm_step_arm_kernel[
                     var ia0 = tid + (sa * VEC + ea0) * NTH
                     if ia0 < BM * KS:
                         as_.unsafe_store(
-                            pgw * APAGE + (ia0 % BM) * SSTRIDE + ia0 // BM,
+                            pgw * APAGE + _urem[BM](ia0) * SSTRIDE + _udiv[BM](ia0),
                             pa[sa * VEC + ea0],
                         )
             else:
                 var ia = tid + sa * NTH
                 if ia < BM * KV:
-                    var rra = ia // KV
-                    var cca = (ia - rra * KV) * VEC
+                    var rra = _udiv[KV](ia)
+                    var cca = _urem[KV](ia) * VEC
                     var va = SIMD[DType.float32, VEC](0.0)
                     comptime for ea in range(VEC):
                         va[ea] = pa[sa * VEC + ea]
@@ -3597,14 +3663,14 @@ def identical_gemm_step_arm_kernel[
                     var ib0 = tid + (sb * VEC + eb0) * NTH
                     if ib0 < BN * KS:
                         bs_.unsafe_store(
-                            pgw * BPAGE + (ib0 % BN) * SSTRIDE + ib0 // BN,
+                            pgw * BPAGE + _urem[BN](ib0) * SSTRIDE + _udiv[BN](ib0),
                             pb[sb * VEC + eb0],
                         )
             else:
                 var ib = tid + sb * NTH
                 if ib < BN * KV:
-                    var rrb = ib // KV
-                    var ccb = (ib - rrb * KV) * VEC
+                    var rrb = _udiv[KV](ib)
+                    var ccb = _urem[KV](ib) * VEC
                     var vb = SIMD[DType.float32, VEC](0.0)
                     comptime for eb in range(VEC):
                         vb[eb] = pb[sb * VEC + eb]
@@ -3614,7 +3680,7 @@ def identical_gemm_step_arm_kernel[
         # ---- PREFETCH window w+1 (shipped lines, DEVIATION 1256).
         comptime if PAGES == 2:
             if w + 1 < w_end:
-                var wn = _tuned_window[KS](w + 1, wpl, leaf, k, p_count)
+                var wn = nxt
                 pa = _tuned_g2r[ASLOTS, VEC, KV, BM, NTH](
                     a, a_si, a_sp, i0, m, wn[0], wn[1], tid
                 )
@@ -3670,7 +3736,7 @@ def identical_gemm_step_arm_kernel[
         comptime if PAGES == 1:
             barrier()
             if w + 1 < w_end:
-                var wn1 = _tuned_window[KS](w + 1, wpl, leaf, k, p_count)
+                var wn1 = nxt
                 pa = _tuned_g2r[ASLOTS, VEC, KV, BM, NTH](
                     a, a_si, a_sp, i0, m, wn1[0], wn1[1], tid
                 )
@@ -3707,6 +3773,11 @@ def identical_gemm_step_arm_kernel[
             acc = SIMD[DType.float32, NCELL](0.0)
 
         w = w + 1
+        cur = nxt
+        wq += 1
+        if wq == wpl:
+            wq = 0
+            wt += 1
 
     comptime if LFOLD:
         # Brief 10.1 item 2: `_fold_drain_local`'s element expression per
@@ -4006,15 +4077,17 @@ def identical_gemm_ksplit_kernel[
         lend = p_count
     if lbeg >= lend:
         return
-    var ti = raw // tiles_j
+    # Unsigned: `raw >= 0` and `tiles_j > 0` here, and a signed floor division
+    # is one more sign fix-up for the optimizer to associate (`_tuned_window_at`).
+    var ti = Int(UInt(raw) // UInt(tiles_j))
     var tj = raw - ti * tiles_j
     var i0 = ti * BM
     var j0 = tj * BN
     var mn = m * n
 
     var tid = Int(thread_idx.x)
-    var accrow = tid // TC
-    var acccol = tid - accrow * TC
+    var accrow = _udiv[TC](tid)
+    var acccol = _urem[TC](tid)
 
     var acc = SIMD[DType.float32, NCELL](0.0)
     var fl = stack_allocation[FS * NCELL, Scalar[DType.float32]]()
@@ -4023,10 +4096,15 @@ def identical_gemm_ksplit_kernel[
     var wpl = _tuned_windows_per_leaf[KS](leaf)
     # THE ONLY CHANGE IN THE WINDOW LOOP: its range (brief 5.1).
     var w = lbeg * wpl
+    var wt = lbeg  # w // wpl, carried (see `_tuned_window_at`)
+    var wq = 0  # w - wt * wpl
     var w_end = lend * wpl
 
     # ---- PROLOGUE: the first window, DRAM to registers (shipped lines).
-    var w0 = _tuned_window[KS](w, wpl, leaf, k, p_count)
+    var w0 = _tuned_window_at[KS](wt, wq, wpl, leaf, k, p_count)
+    # The window after `w`, computed ONCE per iteration and carried into the
+    # next one (see `_tuned_window_at`): no window is computed twice.
+    var cur = w0
     var pa = _tuned_g2r[ASLOTS, VEC, KV, BM, NTH](
         a, a_si, a_sp, i0, m, w0[0], w0[1], tid
     )
@@ -4035,9 +4113,10 @@ def identical_gemm_ksplit_kernel[
     )
 
     while w < w_end:
-        var win = _tuned_window[KS](w, wpl, leaf, k, p_count)
+        var win = cur
+        var nxt = _tuned_window_next[KS](wt, wq, wpl, leaf, k, p_count)
         var chunk = win[1]
-        var pgw = w % PAGES
+        var pgw = _urem[PAGES](w)
 
         # ---- REGISTERS TO SHARED, into page `w % PAGES` (shipped lines).
         comptime for sa in range(ASLOTS):
@@ -4046,14 +4125,14 @@ def identical_gemm_ksplit_kernel[
                     var ia0 = tid + (sa * VEC + ea0) * NTH
                     if ia0 < BM * KS:
                         as_.unsafe_store(
-                            pgw * APAGE + (ia0 % BM) * SSTRIDE + ia0 // BM,
+                            pgw * APAGE + _urem[BM](ia0) * SSTRIDE + _udiv[BM](ia0),
                             pa[sa * VEC + ea0],
                         )
             else:
                 var ia = tid + sa * NTH
                 if ia < BM * KV:
-                    var rra = ia // KV
-                    var cca = (ia - rra * KV) * VEC
+                    var rra = _udiv[KV](ia)
+                    var cca = _urem[KV](ia) * VEC
                     var va = SIMD[DType.float32, VEC](0.0)
                     comptime for ea in range(VEC):
                         va[ea] = pa[sa * VEC + ea]
@@ -4064,14 +4143,14 @@ def identical_gemm_ksplit_kernel[
                     var ib0 = tid + (sb * VEC + eb0) * NTH
                     if ib0 < BN * KS:
                         bs_.unsafe_store(
-                            pgw * BPAGE + (ib0 % BN) * SSTRIDE + ib0 // BN,
+                            pgw * BPAGE + _urem[BN](ib0) * SSTRIDE + _udiv[BN](ib0),
                             pb[sb * VEC + eb0],
                         )
             else:
                 var ib = tid + sb * NTH
                 if ib < BN * KV:
-                    var rrb = ib // KV
-                    var ccb = (ib - rrb * KV) * VEC
+                    var rrb = _udiv[KV](ib)
+                    var ccb = _urem[KV](ib) * VEC
                     var vb = SIMD[DType.float32, VEC](0.0)
                     comptime for eb in range(VEC):
                         vb[eb] = pb[sb * VEC + eb]
@@ -4081,7 +4160,7 @@ def identical_gemm_ksplit_kernel[
         # ---- PREFETCH window w+1 (shipped lines, DEVIATION 1256).
         comptime if PAGES == 2:
             if w + 1 < w_end:
-                var wn = _tuned_window[KS](w + 1, wpl, leaf, k, p_count)
+                var wn = nxt
                 pa = _tuned_g2r[ASLOTS, VEC, KV, BM, NTH](
                     a, a_si, a_sp, i0, m, wn[0], wn[1], tid
                 )
@@ -4137,7 +4216,7 @@ def identical_gemm_ksplit_kernel[
         comptime if PAGES == 1:
             barrier()
             if w + 1 < w_end:
-                var wn1 = _tuned_window[KS](w + 1, wpl, leaf, k, p_count)
+                var wn1 = nxt
                 pa = _tuned_g2r[ASLOTS, VEC, KV, BM, NTH](
                     a, a_si, a_sp, i0, m, wn1[0], wn1[1], tid
                 )
@@ -4154,6 +4233,11 @@ def identical_gemm_ksplit_kernel[
             acc = SIMD[DType.float32, NCELL](0.0)
 
         w = w + 1
+        cur = nxt
+        wq += 1
+        if wq == wpl:
+            wq = 0
+            wt += 1
 
     # ---- THE GROUP NODE: the group's own drain (Lemmas A and B), stored.
     var outv = _fold_drain_local[NCELL, FS](fl, occ)
@@ -4164,7 +4248,7 @@ def identical_gemm_ksplit_kernel[
             if gi < m and gj < n:
                 var node = outv[u4 * CPT + v6]
                 comptime if SAB:
-                    if tid == q % NTH and q // NTH == u4 * CPT + v6:
+                    if tid == _urem[NTH](q) and _udiv[NTH](q) == u4 * CPT + v6:
                         node = Float32(1.0e30)
                 ws.unsafe_store(q * mn + gi * n + gj, node)
 
@@ -5473,15 +5557,17 @@ def identical_gemm_kpack_kernel[
         if q >= groups or p_count <= 0 or gleaves < 1:
             # The launcher never sends `k == 0` to the group launch.
             return
-    var ti = raw // tiles_j
+    # Unsigned: `raw >= 0` and `tiles_j > 0` here, and a signed floor division
+    # is one more sign fix-up for the optimizer to associate (`_tuned_window_at`).
+    var ti = Int(UInt(raw) // UInt(tiles_j))
     var tj = raw - ti * tiles_j
     var i0 = ti * BM
     var j0 = tj * BN
     var mn = m * n
 
     var tid = Int(thread_idx.x)
-    var accrow = tid // TC
-    var acccol = tid - accrow * TC
+    var accrow = _udiv[TC](tid)
+    var acccol = _urem[TC](tid)
 
     comptime if not GROUP:
         if p_count <= 0:
@@ -5505,6 +5591,8 @@ def identical_gemm_kpack_kernel[
 
     var wpl = _tuned_windows_per_leaf[KS](leaf)
     var w = 0
+    var wt = 0  # w // wpl, carried (see `_tuned_window_at`)
+    var wq = 0  # w - wt * wpl
     var w_end = p_count * wpl
     comptime if GROUP:
         # The ksplit kernel's window range: this block's group of leaves.
@@ -5515,10 +5603,14 @@ def identical_gemm_kpack_kernel[
         if lbeg >= lend:
             return
         w = lbeg * wpl
+        wt = lbeg
         w_end = lend * wpl
 
     # ---- PROLOGUE: the first window, DRAM to registers (shipped lines).
-    var w0 = _tuned_window[KS](w, wpl, leaf, k, p_count)
+    var w0 = _tuned_window_at[KS](wt, wq, wpl, leaf, k, p_count)
+    # The window after `w`, computed ONCE per iteration and carried into the
+    # next one (see `_tuned_window_at`): no window is computed twice.
+    var cur = w0
     var pa = SIMD[DType.float32, AREG * VEC](0.0)
     var pb = SIMD[DType.float32, BREG * VEC](0.0)
     # GATHER's registers and (group, step) ownership (2706); unused otherwise.
@@ -5544,9 +5636,10 @@ def identical_gemm_kpack_kernel[
         barrier()
 
     while w < w_end:
-        var win = _tuned_window[KS](w, wpl, leaf, k, p_count)
+        var win = cur
+        var nxt = _tuned_window_next[KS](wt, wq, wpl, leaf, k, p_count)
         var chunk = win[1]
-        var pgw = w % PAGES
+        var pgw = _urem[PAGES](w)
 
         # ---- REGISTERS TO THE PACKED PAGE `w % PAGES`. Slot `(s, e)` holds
         # the `(line, step)` its mapping names; it is stored at that pair's
@@ -5583,7 +5676,7 @@ def identical_gemm_kpack_kernel[
          # ---- PREFETCH window w+1 (shipped lines, DEVIATION 1256).
          comptime if PAGES == 2:
             if w + 1 < w_end:
-                var wn = _tuned_window[KS](w + 1, wpl, leaf, k, p_count)
+                var wn = nxt
                 comptime if GATHER:
                     pga = _kpack_gather[RPT, TR](a, a_si, a_sp, i0, m, wn[0], wn[1], ga[0], ga[1])
                     pgb = _kpack_gather[CPT, TC](b, b_sj, b_sp, j0, n, wn[0], wn[1], gb[0], gb[1])
@@ -5654,7 +5747,7 @@ def identical_gemm_kpack_kernel[
             # One page: `identical_gemm_tuned_kernel`'s two-barrier shape.
             barrier()
             if w + 1 < w_end:
-                var wn1 = _tuned_window[KS](w + 1, wpl, leaf, k, p_count)
+                var wn1 = nxt
                 comptime if GATHER:
                     pga = _kpack_gather[RPT, TR](a, a_si, a_sp, i0, m, wn1[0], wn1[1], ga[0], ga[1])
                     pgb = _kpack_gather[CPT, TC](b, b_sj, b_sp, j0, n, wn1[0], wn1[1], gb[0], gb[1])
@@ -5681,6 +5774,11 @@ def identical_gemm_kpack_kernel[
                 acc = SIMD[DType.float32, NCELL](0.0)
 
         w = w + 1
+        cur = nxt
+        wq += 1
+        if wq == wpl:
+            wq = 0
+            wt += 1
 
     var outv = _fold_drain_local[NCELL, FS, HWFOLD](fl, occ)
     comptime if DIAG == 4 or DIAG == 5:
@@ -5695,7 +5793,7 @@ def identical_gemm_kpack_kernel[
                     # read and every node is already flushed (long-k 5.4).
                     var node = outv[u4 * CPT + v7]
                     comptime if SAB:
-                        if tid == q % NTH and q // NTH == u4 * CPT + v7:
+                        if tid == _urem[NTH](q) and _udiv[NTH](q) == u4 * CPT + v7:
                             node = Float32(1.0e30)
                     dst.unsafe_store(q * mn + gi * n + gj, node)
                 else:

@@ -331,8 +331,12 @@ def _est_eval_plain(
     for p in range(f):
         sw.unsafe_store(p, th.unsafe_load(5 + p))
     var sse = Float32(0.0)
+    # `p` is `t % f`, carried as the phase counter `ph` (see hw_eval.mojo: a signed
+    # 64-bit floor modulus here made the gfx942 code object differ between
+    # cold compiles).
+    var ph = 0
     for t in range(n):
-        var p = t % f
+        var p = ph
         var y = _f(ts.unsafe_load(tid + t * batch_size) * sc)
         var st = _est_step(y, sw.unsafe_load(p), l, tr, a, b, g, oma, omb, omg, additive)
         sse = _sse_add(sse, st.e)
@@ -347,6 +351,9 @@ def _est_eval_plain(
                 season.unsafe_store(k, _f(st.sn * inv_sc))
             else:
                 season.unsafe_store(k, st.sn)
+        ph += 1
+        if ph >= f:
+            ph = 0
     return sse
 
 
@@ -390,8 +397,12 @@ def _est_eval_jac(
         for j in range(d):
             ds.unsafe_store(p * d + j, Float32(1.0) if j == 5 + p else Float32(0.0))
     var sse = Float32(0.0)
+    # `p` is `t % f`, carried as the phase counter `ph` (see hw_eval.mojo: a signed
+    # 64-bit floor modulus here made the gfx942 code object differ between
+    # cold compiles).
+    var ph = 0
     for t in range(n):
-        var p = t % f
+        var p = ph
         var pd = p * d
         var y = _f(ts.unsafe_load(tid + t * batch_size) * sc)
         var st = _est_step(y, sw.unsafe_load(p), l, tr, a, b, g, oma, omb, omg, additive)
@@ -417,6 +428,9 @@ def _est_eval_jac(
         l = st.ln
         tr = st.bn
         sw.unsafe_store(p, st.sn)
+        ph += 1
+        if ph >= f:
+            ph = 0
     return sse
 
 
@@ -757,9 +771,13 @@ def _blk_eval_jac[
         for p in range(f):
             sw.unsafe_store(p, sh.unsafe_load(_SH_TH + 5 + p))
     var sse = Float32(0.0)
+    # `p` is `t % f`, carried as the phase counter `ph` (see hw_eval.mojo: a signed
+    # 64-bit floor modulus here made the gfx942 code object differ between
+    # cold compiles).
+    var ph = 0
     for t in range(n):
-        var p = t % f
-        var S = _SH_S + (t % 2) * 16
+        var p = ph
+        var S = _SH_S + (t & 1) * 16
         if j == 0:
             var y = _f(ts.unsafe_load(s + t * batch_size) * sc)
             var st = _est_step(y, sw.unsafe_load(p), l, tr, a, b, g, oma, omb, omg, additive)
@@ -804,6 +822,9 @@ def _blk_eval_jac[
             db = _est_dbn(j, st, b, omb, dnj, dl, db, lold, trold)
             dl = dnj
             dsj.unsafe_store(p, _est_dsn(j, st, cg, omg, dnj, dspj))
+        ph += 1
+        if ph >= f:
+            ph = 0
     if j == 0:
         sh.unsafe_store(_SH_CTL, sse)
     barrier()
