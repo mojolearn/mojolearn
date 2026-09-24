@@ -54,7 +54,18 @@ on one H100. Target under 60 s with identical bits (per shard 2.17 s to under
 
 Leg 1 cost $2.24 (balance 44.65 -> 42.41). VM verified gone 15:14:41Z.
 
-NEXT (leg 2, `tools/amd_step_time_leg2.sh`; push /root/urls with
+LEG 2 (15:19-16:05 UTC, $2.19): same-box baseline 141.0 s; launch bound
+62.7 s; + AMD leaf split (`lib_gemm_leaf_split_for`, the branch HEAD) 57.5 s a
+step; all replays PASS; 19/20 identity lanes VERIFIED (0 divergent). Full
+write-up: README.md in this directory.
+
+NEXT: leg 3 (`tools/amd_step_time_leg3.sh`, gates ON): all device bindings,
+gemm backward/workspace checks, verify over the 201 GEMM-reaching non-par
+lanes. Then the MI325X confirmation on DigitalOcean after ~22:00 UTC
+(leg 2 body works there too: `tools/do_extra_leg.sh amd --segment-lease N
+--dollar-cap USD`, push /root/urls + /root/amd_in after the droplet is up).
+
+(old) NEXT (leg 2, `tools/amd_step_time_leg2.sh`; push /root/urls with
 `tools/amd_step_time_urls.py` and /root/amd_in/{A-1.chain.partial.jsonl,
 A-2.chain.jsonl} after the VM is up): GEMM arm prices (trial arms, k768
 dispatch arms), same-box baseline replay, identity lanes, then GEMM occupancy.
@@ -102,3 +113,4 @@ dispatch arms), same-box baseline replay, identity lanes, then GEMM occupancy.
 ## Costs
 
 - Leg 1 Hot Aisle MI300X 13core: $2.24.
+- Leg 2 Hot Aisle MI300X 13core: $2.19 (balance $40.07).
