@@ -64,6 +64,25 @@ handoff, and negative controls that were seen to fail.
   NVIDIA and live caps were raised to cover a 2-GPU H100 pod for its lease
   ($6.98 an hour; the plan's $60 refused the first pod).
 
+## The plan as of 2026-09-24 13:30 UTC (Andrew's layout)
+
+| segment | 1 | 2 | 3 | 4 | 5 | 6 |
+|---|---|---|---|---|---|---|
+| route A | NVIDIA x2 (done) | NVIDIA x2 (done) | NVIDIA + AMD live (running) | AMD | NVIDIA | Apple (M4) |
+| route B | AMD | AMD + NVIDIA live, 1,000 steps | AMD | NVIDIA x1 | AMD | NVIDIA |
+
+Every segment runs on different hardware in the two routes; route B is held
+step for step to route A's chain. The 14:50 ET Sep 23 layout (route A all
+NVIDIA, route B with NVIDIA in segments 2 and 5) broke that rule for two
+segments and is superseded. B/1 waits for A/3 (`after`) because the account
+has one DigitalOcean GPU box at a time. Wheel: A/1 and A/2 ran 0.8.15, A/3
+onward 0.8.17 (same binding bytes; the Python-only fix for the live worker on
+Python 3.10 and 3.11). Apple's arm in the driver is being built
+(`lane/lm-apple-arm`); until it lands, A/6 halts the driver rather than
+running on the wrong vendor. AMD capacity is the bottleneck: 5,500 AMD
+steps on one MI325X are about 175 hours in series; an 8x box (Vultr,
+`lane/vultr-leg`) cuts that to about 25 box-hours.
+
 ## How to run it
 
 Everything is driven from a CLEAN worktree at main (a dirty tracked file
