@@ -1,0 +1,56 @@
+18:19:27 leg6 started=2026-09-24T18:19:27Z
+18:19:33 mfma probe2 build exit=0
+18:19:35 mfma probe2 exit=0: MFMA2_MODE v=0 n=8388608 subnormal_mfma_results=0 mfma_vs_fma=60544 mul_vs_ftz=2240 pkmul_vs_ftz=2240 class_not_subnormal=0 MFMA2_MODE v=1 n=8388608 subnormal_mfma_results=0 mfma_vs_fma=60544 mul_vs_ftz=2240 pkmul_vs_ftz=2240 class_not_subnormal=0 MFMA2_MODE v=2 n=8388608 subnormal_mfma_results=58304 mfma_vs_fma=0 mul_vs_ftz=0 pkmul_vs_ftz=0 class_not_subnormal=0 MFMA2_MODE v=3 n=8388608 subnormal_mfma_results=58304 mfma_vs_fma=0 mul_vs_ftz=58304 pkmul_vs_ftz=58304 class_not_subnormal=0 
+18:20:51 base exit=0
+18:20:51 leg6 holding
+18:27:46 ab mfma2 hashes IDENTICAL
+18:28:25 tokens ready in 38 s: 12442225788 bytes
+18:28:48 checkpoints ready in 23 s
+18:28:48 fetch exit=0
+18:30:29 byte_lm head exit=0
+18:30:30 byte_lm mfma exit=0
+18:30:30 binding now mfma
+18:33:21 replay-mfma-ckpt_00000100 exit=0 secs=171: [18:33:20] PASS: /root/gemm_leg_out/amd-step-time/replay-mfma-ckpt_00000100 
+18:33:21 binding now head
+18:34:28 lean head: 0.7630804334999084 ['5516ffe5f550', '77477af42588', '4e439a8a9751']
+18:34:28 binding now mfma
+18:35:35 lean mfma: 0.6173366849999411 ['5516ffe5f550', '77477af42588', '4e439a8a9751']
+18:35:35 binding now mfma
+18:37:39 replay-mfma-ckpt_00001998 exit=0 secs=124: [18:37:39] PASS: /root/gemm_leg_out/amd-step-time/replay-mfma-ckpt_00001998 
+18:37:39 mf_run done
+18:40:22 base6 exit=0 secs=46
+18:40:46 build6 embedding exit=0 secs=24
+18:41:06 build6 linalg exit=0 secs=44
+18:41:16 build6 training exit=0 secs=54
+18:41:45 build6 estimators exit=0 secs=83
+18:41:54 build6 transformer exit=0 secs=92
+18:43:11 build6 byte_lm exit=0 secs=169
+18:43:21 build6 preprocessing exit=0 secs=10
+18:44:02 build6 kernel_methods exit=0 secs=51
+18:44:06 build6 gp exit=0 secs=55
+18:44:07 build6 svm exit=0 secs=56
+18:44:14 build6 mixture exit=0 secs=63
+18:44:51 build6 metrics exit=0 secs=100
+18:45:13 build6 resample exit=0 secs=22
+18:45:30 build6 trees exit=0 secs=39
+18:45:32 build6 rf exit=0 secs=41
+18:45:40 build6 solver exit=0 secs=49
+18:45:54 build6 hdbscan exit=0 secs=63
+18:47:19 build6 gbdt exit=0 secs=148
+18:47:37 build6 tsa exit=0 secs=18
+18:47:37 build6 arima exit=0 secs=18
+18:47:58 build6 ivf exit=0 secs=39
+18:48:42 build6 mamba exit=0 secs=83
+18:49:13 gemm_device_check exit=0: gemm device kernel + gates: all green [IDENTICAL]  (8 gates, sabotage: none)
+18:49:44 gemm_backward_check exit=0: gemm backward routing + gates: all green [IDENTICAL]  (10 gates, bwd sabotage: none, fwd sabotage: none)
+18:50:07 gemm_workspace_check exit=0: PASS: 9 GEMMs, 4608 cells bitwise equal to host oracle
+18:50:49 verify6 chunk00 exit=4 secs=41: RESULT: INCOMPLETE (verified 764 of 1241 cell parts (0 divergent, 0 owed, 135 refused, 342 n/a); 22 verified, 0 not applicable, 0 owed, 0 held, 3 REFUSED, of 25 lanes). 40.0s. exit 4
+18:52:04 verify6 chunk01 exit=4 secs=75: RESULT: INCOMPLETE (verified 908 of 1241 cell parts (0 divergent, 0 owed, 135 refused, 198 n/a); 22 verified, 0 not applicable, 0 owed, 0 held, 3 REFUSED, of 25 lanes). 74.8s. exit 4
+18:53:21 verify6 chunk02 exit=4 secs=77: RESULT: INCOMPLETE (verified 827 of 1241 cell parts (0 divergent, 0 owed, 45 refused, 369 n/a); 24 verified, 0 not applicable, 0 owed, 0 held, 1 REFUSED, of 25 lanes). 75.8s. exit 4
+18:55:31 verify6 chunk03 exit=0 secs=130: RESULT: VERIFIED (verified 980 of 1241 cell parts (0 divergent, 0 owed, 0 refused, 261 n/a); 25 verified, 0 not applicable, 0 owed, 0 held, of 25 lanes). 128.4s. exit 0
+18:56:02 verify6 chunk04 exit=4 secs=31: RESULT: INCOMPLETE (verified 863 of 1241 cell parts (0 divergent, 0 owed, 45 refused, 333 n/a); 24 verified, 0 not applicable, 0 owed, 0 held, 1 REFUSED, of 25 lanes). 30.3s. exit 4
+18:56:34 verify6 chunk05 exit=4 secs=32: RESULT: INCOMPLETE (verified 827 of 1241 cell parts (0 divergent, 0 owed, 45 refused, 369 n/a); 24 verified, 0 not applicable, 0 owed, 0 held, 1 REFUSED, of 25 lanes). 30.6s. exit 4
+18:56:59 verify6 chunk06 exit=4 secs=25: RESULT: INCOMPLETE (verified 701 of 1241 cell parts (0 divergent, 0 owed, 270 refused, 270 n/a); 19 verified, 0 not applicable, 0 owed, 0 held, 6 REFUSED, of 25 lanes). 24.5s. exit 4
+18:57:26 verify6 chunk07 exit=4 secs=27: RESULT: INCOMPLETE (verified 791 of 1241 cell parts (0 divergent, 0 owed, 225 refused, 225 n/a); 20 verified, 0 not applicable, 0 owed, 0 held, 5 REFUSED, of 25 lanes). 25.2s. exit 4
+18:57:35 verify6 chunk08 exit=0 secs=9: RESULT: VERIFIED (verified 152 of 161 cell parts (0 divergent, 0 owed, 0 refused, 9 n/a); 1 verified, 0 not applicable, 0 owed, 0 held, of 1 lanes). 8.3s. exit 0
+18:57:35 ver6 done

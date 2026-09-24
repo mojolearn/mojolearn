@@ -1,0 +1,7 @@
+[18:35:50] segment: route A segment amdstep-replay-mfma-ckpt_00001998 label amd-step-time-replay-mfma-ckpt_00001998, global steps 1998..2000, K=64, devices (0,), from ckpt_00001998.blm (sha256 b8d980905332fa84)
+[18:35:50] the checkpoint's state AGREES with the expected chain's step 1998 (bcf572cbf42c5e16)
+[18:36:52] step 1999 lr 39e5f6c0 loss 3.5280 state dcb05e4e668a81e1 grad 6170c58b93c1ec4a 47.65 s (+7.10 s hashing)
+[18:36:52] step 1999 agrees with the expected chain
+[18:37:39] step 2000 lr 39e5e0ce loss 3.5538 state 0e39ed2bfe9bcbae grad 7c100f6927db84d3 39.60 s (+6.99 s hashing)
+[18:37:39] step 2000 agrees with the expected chain
+[18:37:39] PASS: /root/gemm_leg_out/amd-step-time/replay-mfma-ckpt_00001998
