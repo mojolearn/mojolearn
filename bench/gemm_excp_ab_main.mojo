@@ -123,7 +123,7 @@ def main() raises:
     ]
     # forward (m, n, k) of each kind at OP_NT
     var fm: List[Int] = [M, M, M, M, M, M, M, M, M, M, M, M]
-    var fn: List[Int] = [768, 768, 768, 2048, 2048, 2048, 768, 768, 768, 50257, 50257, 50257]
+    var fnn: List[Int] = [768, 768, 768, 2048, 2048, 2048, 768, 768, 768, 50257, 50257, 50257]
     var fk: List[Int] = [768, 768, 768, 768, 768, 768, 2048, 2048, 2048, 768, 768, 768]
     var calls_env = String(getenv("MOJOLEARN_EXCP_AB_CALLS"))
     var kinds_env = String(getenv("MOJOLEARN_EXCP_AB_KINDS"))
@@ -138,7 +138,7 @@ def main() raises:
         if calls_env != "" and not ("," + calls_env + ",").__contains__("," + call + ","):
             continue
         var m = fm[ci]
-        var n = fn[ci]
+        var n = fnn[ci]
         var k = fk[ci]
         var which = ci % 3
         # operands of each call, row-major: forward A[m,k], B[n,k] -> C[m,n];

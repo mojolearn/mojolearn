@@ -115,7 +115,8 @@ the normative `(d, q)` addressing).
 CALLER owns and the caller keeps alive past `ctx.synchronize()`.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from std.gpu import block_dim, block_idx, grid_dim, thread_idx, MAX_THREADS_PER_BLOCK_METADATA
+from std.utils import StaticTuple
 from std.memory import bitcast, stack_allocation
 from std.os import getenv
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -1490,6 +1491,16 @@ def _rtf_group_node(
 #: `k` range and no partial sum crosses a thread boundary.
 comptime TUNED_TPB = lib_block_size_for[K_LIB_GEMM_CONTRACTION, TARGET_COLUMN]()
 
+#: lane/amd-step-time (2026-09-24): the launch bound the two step GEMM kernels
+#: declare (`MAX_THREADS_PER_BLOCK_METADATA`), which is their real launch size.
+#: Without it the gfx942 backend assumes 1,024 threads a block, budgets 128
+#: VGPRs a lane and SPILLED the 128x128 register tile: 630 VGPR spills in the
+#: tuned kernel and 396 in the kpack body (`.vgpr_spill_count`, bench/results/
+#: amd_step_time_2026-09-24). At 256 both read 0. Register allocation only; no
+#: operation, operand or order changes. `-D MOJOLEARN_GEMM_NO_LAUNCH_BOUND=1`
+#: restores the old 1,024 (the A/B arm).
+comptime GEMM_LAUNCH_BOUND = 1024 if is_defined["MOJOLEARN_GEMM_NO_LAUNCH_BOUND"]() else TUNED_TPB
+
 #: The width of a staged copy, in floats. `PINNED_VECLEN`, RAFT's own
 #: `Veclen = 4`.
 #:
@@ -1856,6 +1867,7 @@ def _tuned_g2r[
 # ===========================================================================
 
 
+@__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(GEMM_LAUNCH_BOUND)))
 def identical_gemm_tuned_kernel[
     RPT: Int, CPT: Int, TC: Int, KS: Int, FS: Int, PAGES: Int, SPLIT: Bool = False
 ](
@@ -5458,6 +5470,7 @@ def _kpack_step[DIAG: Int](a: Float32, b: Float32, acc: Float32) -> Float32:
     return _tuned_step(a, b, acc)
 
 
+@__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(GEMM_LAUNCH_BOUND)))
 def identical_gemm_kpack_kernel[
     RPT: Int, CPT: Int, TC: Int, KS: Int, FS: Int, PAGES: Int, GROUP: Bool, SAB: Bool,
     PAD: Int = 0,

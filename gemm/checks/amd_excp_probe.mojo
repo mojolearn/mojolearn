@@ -35,6 +35,7 @@ Build (on an AMD box, column amd):
 from std.gpu import block_idx, thread_idx
 from std.memory import bitcast
 from std.sys import llvm_intrinsic
+from std.sys._assembly import inlined_assembly
 from std.math import fma
 from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
@@ -50,6 +51,33 @@ comptime TRAPSTS_EXCP = 3 | (8 << 11)
 def excp_clear():
     comptime if TARGET_COLUMN == COLUMN_AMD:
         llvm_intrinsic["llvm.amdgcn.s.setreg", NoneType](Int32(TRAPSTS_EXCP), Int32(0))
+
+
+@always_inline
+def excp_clear_dep(x: Float32) -> Float32:
+    """Clear the EXCP bits and return `x` through the same asm statement, so
+    every FP use of the result is ordered after the clear."""
+    return inlined_assembly[
+        "s_setreg_imm32_b32 hwreg(HW_REG_TRAPSTS, 0, 9), 0\n\ts_nop 7\n\tv_mov_b32 $0, $1",
+        Float32, constraints="=v,v", has_side_effect=True,
+    ](x)
+
+
+@always_inline
+def excp_read_dep(x: Float32) -> Int32:
+    """Read TRAPSTS (all 32 bits) after `x` is computed (x is an input)."""
+    return inlined_assembly[
+        "s_nop 7\n\ts_nop 7\n\ts_getreg_b32 $0, hwreg(HW_REG_TRAPSTS)\n\t; $1",
+        Int32, constraints="=s,v", has_side_effect=True,
+    ](x)
+
+
+@always_inline
+def mode_read_dep(x: Float32) -> Int32:
+    return inlined_assembly[
+        "s_getreg_b32 $0, hwreg(HW_REG_MODE)\n\t; $1",
+        Int32, constraints="=s,v", has_side_effect=True,
+    ](x)
 
 
 @always_inline
@@ -76,7 +104,8 @@ def case_kernel(
     var b = words.unsafe_load(3 * c + 1)
     var acc = words.unsafe_load(3 * c + 2)
     var mode = c % 6
-    excp_clear()
+    acc = excp_clear_dep(acc)
+    a = excp_clear_dep(a)
     var r = Float32(0.0)
     if mode == 0:
         r = identical_mul_add(a, b, acc)
@@ -96,11 +125,13 @@ def case_kernel(
     else:
         r = acc
     vals.unsafe_store(2 * c, r)
-    bits.unsafe_store(c, excp_read())
+    bits.unsafe_store(c, excp_read_dep(r))
+    if c == 0:
+        bits.unsafe_store(n_cases, mode_read_dep(r))
 
 
 def chain_kernel(
-    out: MutPointer[Float32, MutAnyOrigin],
+    outp: MutPointer[Float32, MutAnyOrigin],
     flags: MutPointer[Int32, MutAnyOrigin],
     words: MutPointer[Float32, MutAnyOrigin],
     count_in: Int32,
@@ -118,20 +149,21 @@ def chain_kernel(
     var acc = ftz(words.unsafe_load(i // (count * count)))
     var a2 = ftz(words.unsafe_load((i * 7 + 3) % count))
     var b2 = ftz(words.unsafe_load((i * 13 + 5) % count))
-    excp_clear()
+    acc = excp_clear_dep(acc)
+    a = excp_clear_dep(a)
     var x2 = Float32(0.0)
     if packed != 0:
         var p1 = fma(SIMD[DType.float32, 2](a, b), SIMD[DType.float32, 2](b, a), SIMD[DType.float32, 2](acc, acc))
         var p2 = fma(SIMD[DType.float32, 2](a2, b2), SIMD[DType.float32, 2](b2, a2), p1)
         x2 = p2[0]
-        out.unsafe_store(3 * i + 2, p2[1])
+        outp.unsafe_store(3 * i + 2, p2[1])
     else:
         var x1 = identical_mul_add(a, b, acc)
         x2 = identical_mul_add(a2, b2, x1)
-    out.unsafe_store(3 * i, x2)
-    flags.unsafe_store(i, excp_read())
+    outp.unsafe_store(3 * i, x2)
+    flags.unsafe_store(i, excp_read_dep(x2))
     var y2 = _tuned_step(a2, b2, _tuned_step(a, b, acc))
-    out.unsafe_store(3 * i + 1, y2)
+    outp.unsafe_store(3 * i + 1, y2)
 
 
 def _hex(w: UInt32) -> String:
@@ -181,16 +213,17 @@ def main() raises:
             cw.append(bitcast[DType.float32](triples[3 * t + 2]))
     var cin = _upload(ctx, cw)
     var cvals = _zeros(ctx, 2 * n_cases)
-    var cbits = ctx.enqueue_create_buffer[DType.int32](n_cases)
+    var cbits = ctx.enqueue_create_buffer[DType.int32](n_cases + 1)
     ctx.enqueue_function[case_kernel](
         cvals.unsafe_ptr(), cbits.unsafe_ptr(), cin.unsafe_ptr(), Int32(n_cases),
         grid_dim=(n_cases, 1, 1), block_dim=(64, 1, 1),
     )
     ctx.synchronize()
     var hv = _download(ctx, cvals, 2 * n_cases)
-    var hb = ctx.enqueue_create_host_buffer[DType.int32](n_cases)
+    var hb = ctx.enqueue_create_host_buffer[DType.int32](n_cases + 1)
     ctx.enqueue_copy(dst_buf=hb, src_buf=cbits)
     ctx.synchronize()
+    print("EXCP_MODE_REG " + _hex(UInt32(hb.unsafe_ptr()[n_cases])))
     var modes: List[String] = ["fma", "pk_fma", "sw_ftz", "class_ftz", "shipped_step", "none"]
     for c in range(n_cases):
         var line = String("EXCP_CASE name=") + names[c // 6] + " mode=" + modes[c % 6]
@@ -241,7 +274,7 @@ def main() raises:
         var shown = 0
         for i in range(n):
             var f = UInt32(hf.unsafe_ptr()[i])
-            var set_ = (f & UInt32(0x12)) != UInt32(0)  # input denormal | underflow
+            var set_ = (f & UInt32(0x2)) != UInt32(0)  # input denormal
             var x = _ftz_word(bitcast[DType.uint32](ho[3 * i]))
             var y = bitcast[DType.uint32](ho[3 * i + 1])
             if packed == 1 and bitcast[DType.uint32](ho[3 * i]) != bitcast[DType.uint32](ho[3 * i + 2]):
