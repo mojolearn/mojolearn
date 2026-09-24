@@ -144,7 +144,7 @@ from gemm.checks.gemm_oracle import (
     fold_level_width,
     fold_node_total,
 )
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add, identical_mul_add_simd
 from checks.rtf_seam import RTF_REPAIR, rtf_mul_add
 from checks.kernel_matrix import (
     K_LIB_GEMM_CONTRACTION,
@@ -160,6 +160,7 @@ from checks.kernel_matrix import (
     lib_hardware_ftz_fma_for,
     lib_gemm_stage_ftz_for,
     lib_postround_class_flush_for,
+    lib_gemm_excp_fast_for,
     gemm_wide_split_for,
     lib_gemm_block_parallelism_for,
     lib_gemm_kernel_body_for,
@@ -1292,6 +1293,76 @@ comptime TUNED_BLOCK_ADMIT = (
 comptime _EXP_NONE = UInt32(0x7F800000)
 
 
+#: lane/amd-step-time (2026-09-24): the EXCP seam, `lib_gemm_excp_fast_for`.
+#: Where it is compiled in, the tuned and kpack kernels' full-window
+#: accumulate runs BARE packed FMAs (`identical_mul_add_simd`, one rounding
+#: each, the same operands in the same ascending `p` order per cell) and the
+#: wave's sticky TRAPSTS.EXCP bits decide afterwards whether any FMA consumed
+#: a subnormal. Clear: the stored cells are the contract's (the row's
+#: docstring has the argument). Set: every cell of the wave is recomputed with
+#: the exact step (`_rtf_cell`, `_rtf_group_node`) and overwritten. Never on a
+#: column with the block admission (Apple), never in a non-IDENTICAL build.
+comptime GEMM_EXCP_FAST = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and lib_gemm_excp_fast_for[TARGET_COLUMN]()
+    and not TUNED_BLOCK_ADMIT
+)
+#: hwreg(HW_REG_TRAPSTS = 3, offset 0, width 9): the nine EXCP status bits.
+comptime _TRAPSTS_EXCP = 3 | (8 << 11)
+#: EXCP[1] input denormal, EXCP[4] underflow. Either one sends the wave to the
+#: exact recompute (underflow is redundant by the argument and only adds
+#: recomputes; it is kept as a second witness).
+comptime _EXCP_SUBNORMAL_BITS = Int32(0x12)
+
+
+@always_inline
+def _excp_clear():
+    """Zero the wave's EXCP status bits (every lane, one scalar write)."""
+    comptime if GEMM_EXCP_FAST:
+        llvm_intrinsic["llvm.amdgcn.s.setreg", NoneType](Int32(_TRAPSTS_EXCP), Int32(0))
+
+
+@always_inline
+def _excp_subnormal_seen() -> Bool:
+    """True when some FP instruction of this wave consumed a subnormal (or
+    underflowed) since `_excp_clear`. Called only AFTER the wave's cells are
+    stored: the getreg is a side-effecting instruction and is not reordered
+    above the stores, and the stores consume every FMA result; the waitcnt
+    drains them first."""
+    comptime if GEMM_EXCP_FAST:
+        llvm_intrinsic["llvm.amdgcn.s.waitcnt", NoneType](Int32(0))
+        var v = llvm_intrinsic["llvm.amdgcn.s.getreg", Int32](Int32(_TRAPSTS_EXCP))
+        comptime if is_defined["MOJOLEARN_GEMM_EXCP_ALWAYS_EXACT"]():
+            _ = v
+            return True  # test arm: every wave takes the exact recompute
+        comptime if is_defined["MOJOLEARN_GEMM_SABOTAGE_EXCP_NEVER"]():
+            _ = v
+            return False  # sabotage: the detector is ignored
+        return (v & _EXCP_SUBNORMAL_BITS) != Int32(0)
+    return False
+
+
+@always_inline
+def _fast_rows[
+    NR: Int, CPT: Int, NCELL: Int, RW: Int, RS: Int, RO: Int
+](
+    mut acc: SIMD[DType.float32, NCELL],
+    ra: SIMD[DType.float32, RW],
+    rb: SIMD[DType.float32, CPT],
+):
+    """One `p` step of the EXCP seam for a thread's `NR x CPT` register tile:
+    row `u` gets `fma(ra[u * RS + RO], rb[v], acc[u, v])` for every
+    `v`, as one `CPT`-wide FMA (packed on gfx942). Per cell exactly one FMA of
+    the same operands as `_tuned_step`'s, without its flush."""
+    comptime for u in range(NR):
+        var row = SIMD[DType.float32, CPT](0.0)
+        comptime for v in range(CPT):
+            row[v] = acc[u * CPT + v]
+        row = identical_mul_add_simd[CPT](SIMD[DType.float32, CPT](ra[u * RS + RO]), rb, row)
+        comptime for v2 in range(CPT):
+            acc[u * CPT + v2] = row[v2]
+
+
 @always_inline
 def _tuned_step_admitted(a: Float32, b: Float32, acc: Float32) -> Float32:
     """The tuned kernel's step: without the inline repair when the block
@@ -1369,6 +1440,28 @@ def _rtf_cell(
         )
         _ = _fold_push(stack, occ, part)
     return ftz(_fold_drain(stack, occ))
+
+
+@always_inline
+def _rtf_group_node(
+    a: MutPointer[Float32, MutAnyOrigin],
+    b: MutPointer[Float32, MutAnyOrigin],
+    i: Int, j: Int, lbeg: Int, lend: Int, p_count: Int, leaf: Int, k: Int,
+    a_si: Int, a_sp: Int, b_sp: Int, b_sj: Int,
+) -> Float32:
+    """The ksplit/kpack GROUP node of cell (i, j) over fold positions
+    `[lbeg, lend)`, exactly as `identical_gemm_kpack_kernel[GROUP=True]`
+    stores it: each leaf partial with the exact step, pushed in ascending
+    position into the contract's tree, drained, and returned UNFLUSHED (the
+    fold kernels flush on read). The EXCP seam's recompute (lane/amd-step-time)."""
+    var stack = SIMD[DType.float32, GEMM_FOLD_SLOTS](0.0)
+    var occ = 0
+    for t in range(lbeg, lend):
+        var part = _rtf_leaf_partial(
+            a, b, i, j, t, p_count, leaf, k, a_si, a_sp, b_sp, b_sj
+        )
+        _ = _fold_push(stack, occ, part)
+    return _fold_drain(stack, occ)
 
 
 
@@ -1821,6 +1914,7 @@ def identical_gemm_tuned_kernel[
     be greater than warp size" constraint.
     """
     comptime NTH = TUNED_TPB
+    comptime FASTK = GEMM_EXCP_FAST and TUNED_STAGE_FTZ and not SPLIT
     comptime TR = NTH // TC
     comptime BM = RPT * TR
     comptime BN = CPT * TC
@@ -1974,6 +2068,8 @@ def identical_gemm_tuned_kernel[
         b, b_sj, b_sp, j0, n, w0[0], w0[1], tid
     )
 
+    comptime if FASTK:
+        _excp_clear()
     while w < w_end:
         var win = cur
         var nxt = _tuned_window_next[KS](wt, wq, wpl, leaf, k, p_count)
@@ -2076,7 +2172,13 @@ def identical_gemm_tuned_kernel[
                     var bfl = SIMD[DType.float32, CPT](0.0)
                     comptime for v2 in range(NCOL):
                         bfl[v2] = _tuned_loaded_operand(rb[v2 * VEC + e3])
-                    comptime for u2 in range(NR):
+                    comptime if FASTK:
+                        # lane/amd-step-time: the EXCP seam, one packed FMA
+                        # per row; the wave's EXCP bits are read after the
+                        # stores and a set bit recomputes the wave's cells.
+                        _fast_rows[NR, CPT, NCELL, RPT * VEC, VEC, e3](acc, ra, bfl)
+                    else:
+                     comptime for u2 in range(NR):
                         # 5a, likewise.
                         var afl = _tuned_loaded_operand(ra[u2 * VEC + e3])
                         comptime for v3 in range(NCOL):
@@ -2254,6 +2356,20 @@ def identical_gemm_tuned_kernel[
             if gi < m and gj < n:
                 # 5g: the output cell as stored.
                 c.unsafe_store(gi * n + gj, ftz(outv[u4 * CPT + v6]))
+    comptime if FASTK:
+        # lane/amd-step-time: some FMA of this wave consumed a subnormal, so
+        # its bare chain may differ from the contract's; recompute and
+        # overwrite every cell this thread owns with the exact step.
+        if _excp_subnormal_seen():
+            comptime for ux in range(NR):
+                comptime for vx in range(NCOL):
+                    var xi = i0 + accrow + ux * TR
+                    var xj = j0 + acccol + vx * TC
+                    if xi < m and xj < n:
+                        c.unsafe_store(
+                            xi * n + xj,
+                            _rtf_cell(a, b, xi, xj, p_count, leaf, k, a_si, a_sp, b_sp, b_sj),
+                        )
 
 
 # ===========================================================================
@@ -5443,6 +5559,7 @@ def identical_gemm_kpack_kernel[
     `gemm_step_kpack_reach` counts both.
     """
     comptime NTH = TUNED_TPB
+    comptime FASTK = GEMM_EXCP_FAST and TUNED_STAGE_FTZ and DIAG == 0
     comptime TR = NTH // TC
     comptime BM = RPT * TR
     comptime BN = CPT * TC
@@ -5635,6 +5752,8 @@ def identical_gemm_kpack_kernel[
             bs_.store[alignment=ALIGN](initial_page * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
         barrier()
 
+    comptime if FASTK:
+        _excp_clear()
     while w < w_end:
         var win = cur
         var nxt = _tuned_window_next[KS](wt, wq, wpl, leaf, k, p_count)
@@ -5709,7 +5828,10 @@ def identical_gemm_kpack_kernel[
             comptime for c0 in range(KS):
                 var ra = as_.load[width=RPT, alignment=ALIGN](abase + c0 * RPT)
                 var rb = bs_.load[width=CPT, alignment=ALIGN](bbase + c0 * CPT)
-                comptime if TUNED_STAGE_FTZ:
+                comptime if FASTK:
+                    # lane/amd-step-time: the EXCP seam (see the tuned kernel).
+                    _fast_rows[NR, CPT, NCELL, RPT, 1, 0](acc, ra, rb)
+                elif TUNED_STAGE_FTZ:
                     # 5a and 5b were applied at staging (`_tuned_g2r`), where
                     # `_tuned_loaded_operand` is the identity: read the loads.
                     comptime for u2 in range(NR):
@@ -5804,6 +5926,32 @@ def identical_gemm_kpack_kernel[
                             if tid == 0:
                                 cell = _gemm_step_arm_sabotage(cell)
                     dst.unsafe_store(gi * n + gj, cell)
+    comptime if FASTK:
+        # lane/amd-step-time: the wave consumed a subnormal somewhere; every
+        # cell (or group node) this thread owns is recomputed exactly.
+        if _excp_subnormal_seen():
+            var xbeg = 0
+            var xend = p_count
+            comptime if GROUP:
+                xbeg = q * gleaves
+                xend = xbeg + gleaves
+                if xend > p_count:
+                    xend = p_count
+            comptime for ux in range(NR):
+                comptime for vx in range(NCOL):
+                    var xi = i0 + accrow + ux * TR
+                    var xj = j0 + acccol + vx * TC
+                    if xi < m and xj < n:
+                        comptime if GROUP:
+                            dst.unsafe_store(
+                                q * mn + xi * n + xj,
+                                _rtf_group_node(a, b, xi, xj, xbeg, xend, p_count, leaf, k, a_si, a_sp, b_sp, b_sj),
+                            )
+                        else:
+                            dst.unsafe_store(
+                                xi * n + xj,
+                                _rtf_cell(a, b, xi, xj, p_count, leaf, k, a_si, a_sp, b_sp, b_sj),
+                            )
 
 
 def _kpack_launch[
