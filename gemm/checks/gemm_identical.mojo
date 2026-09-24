@@ -1359,7 +1359,7 @@ def _fast_rows[
         row = identical_mul_add_simd[CPT](SIMD[DType.float32, CPT](ra[u * RS + RO]), rb, row)
         comptime for v2 in range(CPT):
             acc[u * CPT + v2] = row[v2]
-            seen = seen or _is_subnormal(row[v2])
+            seen = seen | _is_subnormal(row[v2])  # bitwise: no short-circuit branch
 
 
 @always_inline
