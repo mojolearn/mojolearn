@@ -90,8 +90,16 @@ def segment_plan(spec):
                          replay_ckpt=("ckpt_%08d.blm" % (first - 2)) if prev else None,
                          expect=(f"A/{s['segment']}/chain.jsonl" if route != "A" else None),
                          depends=[("A" if route != "A" else route, prev["segment"])] if prev else ([("A", a_first)] if seed_from_a else []))
-            if route != "A":
+            if route != "A" and ("A", s["segment"]) not in entry["depends"]:
                 entry["depends"].append(("A", s["segment"]))  # B's chain is held to A's; A's segment must exist
+            # "after": ["A/3"] on a segment: it also waits for those segments to
+            # land. One AMD box on the account means route B's AMD segments
+            # would otherwise hold it for days while route A's live segment
+            # waits for its AMD worker; route A's path comes first.
+            for dep in s.get("after", []):
+                r, _, sg = str(dep).partition("/")
+                if (r, sg) not in entry["depends"]:
+                    entry["depends"].append((r, sg))
             plan.append(entry)
             at = last
     return plan
@@ -104,7 +112,11 @@ def cmd_plan(args):
             e["route"], e["segment"], e["vendor"], e["first"], e["last"],
             e["from_ckpt"] if e["from_ckpt"] == "init" else "%s/%s/%s" % (e["from_route"], e["from_segment"], e["from_ckpt"]),
             " replay " + e["replay_ckpt"] if e["replay_ckpt"] else "",
-            " expect " + e["expect"] if e["expect"] else ""))
+            " expect " + e["expect"] if e["expect"] else "",
+            ))
+        extra = [d for d in e["depends"] if d not in {(e["from_route"], e["from_segment"]), ("A", e["segment"])}]
+        if extra:
+            print("      after %s" % ", ".join("%s/%s" % d for d in extra))
     return 0
 
 
@@ -387,7 +399,7 @@ def _start(spec, e, out, ledger):
 
 
 def _plan_shape(plan):
-    return [(e["route"], e["segment"], e["vendor"], e["steps"], e["first"], e["last"]) for e in plan]
+    return [(e["route"], e["segment"], e["vendor"], e["steps"], e["first"], e["last"], tuple(e["depends"])) for e in plan]
 
 
 def fresh_spec(path, plan):
@@ -462,12 +474,20 @@ def cmd_run(args):
                 continue
             _log(out, "halted: a segment failed to land; see the ledger, fix, and run the driver again")
             return 1
-        # start what is ready, smallest global step first, never two of one vendor class at once
-        ready = sorted([e for e in pending if all(is_passed(r, sg) for r, sg in e["depends"])], key=lambda e: (e["last"], e["route"]))
+        # start what is ready: route A first (it is the critical path; route B
+        # hangs off A's checkpoints and can never overtake it), then smallest
+        # global step; never two of one vendor class at once. A ready live
+        # segment of route A needs the driver idle, so no other route's
+        # segment starts ahead of it.
+        ready = sorted([e for e in pending if all(is_passed(r, sg) for r, sg in e["depends"])],
+                       key=lambda e: (e["route"] != "A", e["last"], e["route"]))
+        live_a_ready = any(e["route"] == "A" and e["vendor"] == "live" for e in ready)
         busy = set().union(*(_vendor_class(e) for _, e, _ in running.values())) if running else set()
         for e in ready:
             if len(running) >= parallel:
                 break
+            if live_a_ready and e["route"] != "A":
+                continue
             cls = _vendor_class(e)
             if cls & busy or ("live" in busy) or ("live" in cls and busy):
                 continue
