@@ -1,0 +1,1 @@
+15:31:25 bind baseline defines=[MOJOLEARN_GEMM_NO_LAUNCH_BOUND=1] exit=0 secs=175

@@ -1,0 +1,1022 @@
+{
+  "schema": "mojolearn.lm-step-memory-probe.v3",
+  "shape": {
+    "batch": 4,
+    "length": 2048,
+    "d_model": 768,
+    "n_heads": 12,
+    "n_kv": 12,
+    "head_dim": 64,
+    "intermediate": 2048,
+    "n_layers": 12,
+    "vocab_size": 50257
+  },
+  "parameters": 162147840,
+  "steps_completed": 1,
+  "resident": true,
+  "step_result": "lean",
+  "witness_every_step": false,
+  "witness_source": "export_gradients(named=False) + export_state() once after the last untimed step",
+  "corpus": null,
+  "attention_arm": "stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32",
+  "attention_arm_source": "binding",
+  "attention_arm_requested": null,
+  "attention_arm_default": "stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32",
+  "attention_arm_is_default": true,
+  "attention_arm_resolved_hd64": "stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32",
+  "attention_arm_trial_build": false,
+  "gemm_arm": null,
+  "gemm_plan": null,
+  "step_glue_arm": "optskip_noshadow_rows16",
+  "step_glue_arm_requested": null,
+  "step_glue_trial_build": false,
+  "step_witnesses": [
+    {
+      "step": 1,
+      "completed_steps": 1,
+      "sha256": {
+        "loss": "676298dabb30bfc447f559ec749969a51a51a5c8a60a884d6a185a0d75760e8e"
+      }
+    }
+  ],
+  "final_witness": {
+    "step": 1,
+    "completed_steps": 1,
+    "sha256": {
+      "gradients": "222551acedc86be39bdd374a7869c41751a7b05dbb50140370e93da8179466e9",
+      "parameters": "5516ffe5f550c0ca9370e288f40aa4c0c0fd5165ea3748ec9a42edb05ddfed8c",
+      "m": "4067b3e959bc497a39a9782c99a94314894d9df2a78a41346e1f0013ad63b6d3",
+      "v": "d65224fdf2e00685f91db419898013f61f74371718aaf1a853b0e963bd9403e6",
+      "flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb"
+    },
+    "export_seconds": 13.01529582000012,
+    "source": "export_gradients(named=False) + export_state() once after the last untimed step"
+  },
+  "first_call_seconds": 13.13572805800004,
+  "steady_step_seconds": [],
+  "steady_median_seconds": null,
+  "steady_median_tokens_per_second": null,
+  "peak_device_process_bytes": "unavailable",
+  "peak_device_wide_bytes": 188633763840,
+  "process_ru_maxrss_bytes": 8734904320,
+  "budget_seconds": 600.0,
+  "limited": false,
+  "component_timing_step_seconds": 0.9026805220000824,
+  "component_timing_steps": 2,
+  "component_timing_step_seconds_all": [
+    0.9014306730000499,
+    0.903930371000115
+  ],
+  "component_timing_witnesses": [],
+  "qualification": "complete-step probe; device peak from a polled vendor tool; host RSS is a separate boundary; no opponent, no default gate, no target-scale qualification claim",
+  "component_timing_ms": {
+    "attn.bwd_corner_flag": 0.7584344999999999,
+    "attn.bwd_dq_tiled_pf": 64.9912745,
+    "attn.bwd_kvgrid_dkdv_pf": 67.4336075,
+    "attn.bwd_regime_scan": 3.5231190000000003,
+    "attn.bwd_scratch_alloc": 0.233566,
+    "attn.bwd_zdot_estash_dres_pf": 34.0537745,
+    "attn.core": 75.78133650000001,
+    "attn.fwd_corner_flag": 0.578126,
+    "attn.fwd_r2_keep_kernel": 72.53528399999999,
+    "attn.fwd_regime_scan": 2.4988355,
+    "attn.o_proj": 11.6730035,
+    "attn.qkv_proj": 35.534216,
+    "attn.rope_and_cache": 1.8956365000000002,
+    "block.attention_total": 124.921346,
+    "block.mlp_and_residuals": 99.702922,
+    "block.norm1": 5.3929565,
+    "bwd.after_attention": 79.7299185,
+    "bwd.attention": 171.16715299999998,
+    "bwd.before_attention": 0.008531,
+    "bwd.mlp_through_oproj": 219.6273145,
+    "envelope.blocks_backward": 470.626166,
+    "envelope.blocks_forward": 230.07824399999998,
+    "envelope.native_call": 901.9858335000208,
+    "fwd.down_proj": 30.6837135,
+    "fwd.gate_mul": 1.0209125000000001,
+    "fwd.gate_proj": 30.106811999999998,
+    "fwd.k_proj": 11.4867755,
+    "fwd.norm1": 4.2244265,
+    "fwd.norm2": 3.7898215,
+    "fwd.o_proj": 11.5604455,
+    "fwd.q_proj": 12.0683115,
+    "fwd.refuse_call": 1.0656645,
+    "fwd.residual1_add": 0.450485,
+    "fwd.residual2_add": 0.49417599999999995,
+    "fwd.silu": 1.0437005,
+    "fwd.up_proj": 31.630405500000002,
+    "fwd.v_proj": 11.724654000000001,
+    "gemm.down_dA": 30.929327,
+    "gemm.down_dB": 31.3942705,
+    "gemm.down_fwd": 30.6837135,
+    "gemm.gateup_dA": 62.2212375,
+    "gemm.gateup_dB": 62.910810999999995,
+    "gemm.gateup_fwd": 61.7372175,
+    "gemm.head_dA": 57.994353000000004,
+    "gemm.head_dB": 54.4066315,
+    "gemm.head_fwd": 56.5168885,
+    "gemm.norm_dW": 1.5102305,
+    "gemm.proj_dA": 49.428861999999995,
+    "gemm.proj_dB": 47.736442999999994,
+    "gemm.proj_fwd": 46.8401865,
+    "grad.down_dA": 30.929327,
+    "grad.down_dB": 31.3942705,
+    "grad.gate_dA": 31.047941,
+    "grad.gate_dB": 31.5119075,
+    "grad.gate_mul": 1.9259955,
+    "grad.gateup_fanin": 0.4852915,
+    "grad.k_dA": 12.4191505,
+    "grad.k_dB": 11.7923385,
+    "grad.kv_slice": 0.662157,
+    "grad.norm1_dW": 0.75222,
+    "grad.norm1_kernels": 2.46973,
+    "grad.norm2_dW": 0.7580104999999999,
+    "grad.norm2_kernels": 2.627036,
+    "grad.o_copy": 0.01048,
+    "grad.o_dA": 12.2158555,
+    "grad.o_dB": 11.946884,
+    "grad.q_dA": 12.421303,
+    "grad.q_dB": 11.696629999999999,
+    "grad.qkv_fanin": 0.50894,
+    "grad.refuse_scan": 0.6924335,
+    "grad.residual1_add": 0.009929,
+    "grad.residual2_copy": 0.47308950000000005,
+    "grad.rope": 1.1021275,
+    "grad.silu": 0.014843,
+    "grad.up_dA": 31.1732965,
+    "grad.up_dB": 31.398903500000003,
+    "grad.v_dA": 12.372553,
+    "grad.v_dB": 12.300590499999998,
+    "grad.x_add": 0.4763215,
+    "step.bind_final_sync": 0.001214,
+    "step.bind_publish": 0.01056,
+    "step.bind_scalar_admission": 0.006449,
+    "step.ce_backward": 3.071956,
+    "step.ce_forward": 12.2483815,
+    "step.ce_refuse_scan": 1.4977935,
+    "step.embedding_backward": 8.647238,
+    "step.embedding_forward": 0.102053,
+    "step.head_backward_da": 58.004934000000006,
+    "step.head_backward_db": 54.4129565,
+    "step.head_forward": 56.534789,
+    "step.loss_download": 0.039220500000000005,
+    "step.optimizer": 1.658958,
+    "step.pack_grads": 0.6973425,
+    "step.py_flags": 0.10944899986498058,
+    "step.py_tokens": 0.4553164999379078,
+    "step.unpack_weights": 0.7230559999999999,
+    "step.upload_inputs": 0.1867425,
+    "step.validate_after_scan": 2.5623325,
+    "step.validate_grads_scan": 0.5796045000000001
+  },
+  "component_timing_ms_per_step": {
+    "attn.bwd_corner_flag": [
+      0.761628,
+      0.7552409999999999
+    ],
+    "attn.bwd_dq_tiled_pf": [
+      64.81217,
+      65.170379
+    ],
+    "attn.bwd_kvgrid_dkdv_pf": [
+      66.903362,
+      67.963853
+    ],
+    "attn.bwd_regime_scan": [
+      3.50924,
+      3.536998
+    ],
+    "attn.bwd_scratch_alloc": [
+      0.229884,
+      0.23724800000000001
+    ],
+    "attn.bwd_zdot_estash_dres_pf": [
+      34.128296,
+      33.979253
+    ],
+    "attn.core": [
+      75.754512,
+      75.808161
+    ],
+    "attn.fwd_corner_flag": [
+      0.586388,
+      0.569864
+    ],
+    "attn.fwd_r2_keep_kernel": [
+      72.463691,
+      72.606877
+    ],
+    "attn.fwd_regime_scan": [
+      2.534201,
+      2.46347
+    ],
+    "attn.o_proj": [
+      11.672555,
+      11.673452
+    ],
+    "attn.qkv_proj": [
+      35.571883,
+      35.496549
+    ],
+    "attn.rope_and_cache": [
+      1.897632,
+      1.8936410000000001
+    ],
+    "block.attention_total": [
+      124.933156,
+      124.909536
+    ],
+    "block.mlp_and_residuals": [
+      99.63342,
+      99.772424
+    ],
+    "block.norm1": [
+      5.392819,
+      5.393094
+    ],
+    "bwd.after_attention": [
+      79.680071,
+      79.779766
+    ],
+    "bwd.attention": [
+      170.51887,
+      171.815436
+    ],
+    "bwd.before_attention": [
+      0.008764000000000001,
+      0.008298
+    ],
+    "bwd.mlp_through_oproj": [
+      219.54862500000002,
+      219.706004
+    ],
+    "envelope.blocks_backward": [
+      469.852469,
+      471.399863
+    ],
+    "envelope.blocks_forward": [
+      230.021861,
+      230.134627
+    ],
+    "envelope.native_call": [
+      900.7047079999211,
+      903.2669590001206
+    ],
+    "fwd.down_proj": [
+      30.656865,
+      30.710562
+    ],
+    "fwd.gate_mul": [
+      1.02252,
+      1.019305
+    ],
+    "fwd.gate_proj": [
+      30.093334,
+      30.12029
+    ],
+    "fwd.k_proj": [
+      11.502793,
+      11.470758
+    ],
+    "fwd.norm1": [
+      4.211978,
+      4.2368749999999995
+    ],
+    "fwd.norm2": [
+      3.791011,
+      3.7886319999999998
+    ],
+    "fwd.o_proj": [
+      11.563074,
+      11.557817
+    ],
+    "fwd.q_proj": [
+      12.055905,
+      12.080718
+    ],
+    "fwd.refuse_call": [
+      1.077578,
+      1.053751
+    ],
+    "fwd.residual1_add": [
+      0.451345,
+      0.449625
+    ],
+    "fwd.residual2_add": [
+      0.494743,
+      0.49360899999999996
+    ],
+    "fwd.silu": [
+      1.042719,
+      1.0446819999999999
+    ],
+    "fwd.up_proj": [
+      31.59152,
+      31.669291
+    ],
+    "fwd.v_proj": [
+      11.755101,
+      11.694207
+    ],
+    "gemm.down_dA": [
+      30.923005,
+      30.935648999999998
+    ],
+    "gemm.down_dB": [
+      31.333929,
+      31.454612
+    ],
+    "gemm.down_fwd": [
+      30.656865,
+      30.710562
+    ],
+    "gemm.gateup_dA": [
+      62.216578,
+      62.225897
+    ],
+    "gemm.gateup_dB": [
+      62.948059,
+      62.873563
+    ],
+    "gemm.gateup_fwd": [
+      61.684854,
+      61.789581
+    ],
+    "gemm.head_dA": [
+      57.84157,
+      58.147136
+    ],
+    "gemm.head_dB": [
+      54.250014,
+      54.563249
+    ],
+    "gemm.head_fwd": [
+      56.461029,
+      56.572748
+    ],
+    "gemm.norm_dW": [
+      1.501796,
+      1.518665
+    ],
+    "gemm.proj_dA": [
+      49.47629,
+      49.381434
+    ],
+    "gemm.proj_dB": [
+      47.643418,
+      47.829468
+    ],
+    "gemm.proj_fwd": [
+      46.876873,
+      46.8035
+    ],
+    "grad.down_dA": [
+      30.923005,
+      30.935648999999998
+    ],
+    "grad.down_dB": [
+      31.333929,
+      31.454612
+    ],
+    "grad.gate_dA": [
+      31.005122,
+      31.09076
+    ],
+    "grad.gate_dB": [
+      31.576271,
+      31.447544
+    ],
+    "grad.gate_mul": [
+      1.929618,
+      1.9223729999999999
+    ],
+    "grad.gateup_fanin": [
+      0.484488,
+      0.486095
+    ],
+    "grad.k_dA": [
+      12.456294,
+      12.382007
+    ],
+    "grad.k_dB": [
+      11.75226,
+      11.832417
+    ],
+    "grad.kv_slice": [
+      0.658741,
+      0.665573
+    ],
+    "grad.norm1_dW": [
+      0.754001,
+      0.750439
+    ],
+    "grad.norm1_kernels": [
+      2.459276,
+      2.480184
+    ],
+    "grad.norm2_dW": [
+      0.747795,
+      0.768226
+    ],
+    "grad.norm2_kernels": [
+      2.619449,
+      2.634623
+    ],
+    "grad.o_copy": [
+      0.010558999999999999,
+      0.010401
+    ],
+    "grad.o_dA": [
+      12.20058,
+      12.231131
+    ],
+    "grad.o_dB": [
+      11.955828,
+      11.937940000000001
+    ],
+    "grad.q_dA": [
+      12.395445,
+      12.447161
+    ],
+    "grad.q_dB": [
+      11.687826,
+      11.705434
+    ],
+    "grad.qkv_fanin": [
+      0.506304,
+      0.511576
+    ],
+    "grad.refuse_scan": [
+      0.68847,
+      0.696397
+    ],
+    "grad.residual1_add": [
+      0.009876,
+      0.009982
+    ],
+    "grad.residual2_copy": [
+      0.47222000000000003,
+      0.473959
+    ],
+    "grad.rope": [
+      1.106724,
+      1.097531
+    ],
+    "grad.silu": [
+      0.014779,
+      0.014907
+    ],
+    "grad.up_dA": [
+      31.211456000000002,
+      31.135137
+    ],
+    "grad.up_dB": [
+      31.371788000000002,
+      31.426019
+    ],
+    "grad.v_dA": [
+      12.423971,
+      12.321135
+    ],
+    "grad.v_dB": [
+      12.247504,
+      12.353677
+    ],
+    "grad.x_add": [
+      0.47647300000000004,
+      0.47617
+    ],
+    "step.bind_final_sync": [
+      0.001197,
+      0.001231
+    ],
+    "step.bind_publish": [
+      0.010456,
+      0.010664
+    ],
+    "step.bind_scalar_admission": [
+      0.007037,
+      0.005861
+    ],
+    "step.ce_backward": [
+      3.068743,
+      3.075169
+    ],
+    "step.ce_forward": [
+      12.247776,
+      12.248987
+    ],
+    "step.ce_refuse_scan": [
+      1.499723,
+      1.495864
+    ],
+    "step.embedding_backward": [
+      8.496649,
+      8.797827
+    ],
+    "step.embedding_forward": [
+      0.106454,
+      0.097652
+    ],
+    "step.head_backward_da": [
+      57.852876,
+      58.156992
+    ],
+    "step.head_backward_db": [
+      54.256886,
+      54.569027
+    ],
+    "step.head_forward": [
+      56.479002,
+      56.590576
+    ],
+    "step.loss_download": [
+      0.038656,
+      0.039785
+    ],
+    "step.optimizer": [
+      1.646494,
+      1.671422
+    ],
+    "step.pack_grads": [
+      0.697984,
+      0.696701
+    ],
+    "step.py_flags": [
+      0.11195399974894826,
+      0.1069439999810129
+    ],
+    "step.py_tokens": [
+      0.4745530000036524,
+      0.43607999987216317
+    ],
+    "step.unpack_weights": [
+      0.744436,
+      0.701676
+    ],
+    "step.upload_inputs": [
+      0.228724,
+      0.144761
+    ],
+    "step.validate_after_scan": [
+      2.545309,
+      2.579356
+    ],
+    "step.validate_grads_scan": [
+      0.579026,
+      0.580183
+    ]
+  },
+  "component_bytes": {
+    "step.bind_publish_bytes": 444,
+    "step.ce_refuse_scan_bytes": 1646821376,
+    "step.ce_refuse_scan_download_bytes": 32768,
+    "step.loss_download_bytes": 4,
+    "step.pack_grads_bytes": 648591360,
+    "step.py_flags_bytes": 440,
+    "step.py_tokens_bytes": 32784,
+    "step.unpack_weights_bytes": 648591360,
+    "step.upload_inputs_bytes": 65536,
+    "step.validate_after_scan_bytes": 2594365440,
+    "step.validate_grads_scan_bytes": 648591360
+  },
+  "component_counts": {
+    "count.copies_d2d": 24.0,
+    "count.copies_d2h": 154.0,
+    "count.copies_h2d": 2.0,
+    "count.device_allocs": 446.0,
+    "count.host_allocs": 151.0,
+    "count.launches": 1075.0,
+    "count.native_steps": 1.0,
+    "count.synchronizes": 847.0,
+    "launches.bwd.mlp_through_oproj": 300.0,
+    "launches.fwd.down_proj": 24.0,
+    "launches.fwd.gate_mul": 12.0,
+    "launches.fwd.gate_proj": 24.0,
+    "launches.fwd.k_proj": 24.0,
+    "launches.fwd.norm1": 12.0,
+    "launches.fwd.norm2": 12.0,
+    "launches.fwd.o_proj": 24.0,
+    "launches.fwd.q_proj": 24.0,
+    "launches.fwd.refuse_call": 24.0,
+    "launches.fwd.residual1_add": 12.0,
+    "launches.fwd.residual2_add": 12.0,
+    "launches.fwd.silu": 12.0,
+    "launches.fwd.up_proj": 24.0,
+    "launches.fwd.v_proj": 24.0,
+    "launches.gemm.down_dA": 24.0,
+    "launches.gemm.down_dB": 24.0,
+    "launches.gemm.down_fwd": 24.0,
+    "launches.gemm.gateup_dA": 48.0,
+    "launches.gemm.gateup_dB": 48.0,
+    "launches.gemm.gateup_fwd": 48.0,
+    "launches.gemm.head_dA": 2.0,
+    "launches.gemm.head_dB": 0.0,
+    "launches.gemm.head_fwd": 1.0,
+    "launches.gemm.norm_dW": 48.0,
+    "launches.gemm.proj_dA": 96.0,
+    "launches.gemm.proj_dB": 96.0,
+    "launches.gemm.proj_fwd": 96.0,
+    "launches.grad.down_dA": 24.0,
+    "launches.grad.down_dB": 24.0,
+    "launches.grad.gate_dA": 24.0,
+    "launches.grad.gate_dB": 24.0,
+    "launches.grad.gate_mul": 12.0,
+    "launches.grad.gateup_fanin": 12.0,
+    "launches.grad.k_dA": 24.0,
+    "launches.grad.k_dB": 24.0,
+    "launches.grad.kv_slice": 12.0,
+    "launches.grad.norm1_dW": 24.0,
+    "launches.grad.norm1_kernels": 36.0,
+    "launches.grad.norm2_dW": 24.0,
+    "launches.grad.norm2_kernels": 36.0,
+    "launches.grad.o_copy": 0.0,
+    "launches.grad.o_dA": 24.0,
+    "launches.grad.o_dB": 24.0,
+    "launches.grad.q_dA": 24.0,
+    "launches.grad.q_dB": 24.0,
+    "launches.grad.qkv_fanin": 12.0,
+    "launches.grad.refuse_scan": 12.0,
+    "launches.grad.residual1_add": 0.0,
+    "launches.grad.residual2_copy": 12.0,
+    "launches.grad.rope": 24.0,
+    "launches.grad.silu": 0.0,
+    "launches.grad.up_dA": 24.0,
+    "launches.grad.up_dB": 24.0,
+    "launches.grad.v_dA": 24.0,
+    "launches.grad.v_dB": 24.0,
+    "launches.grad.x_add": 12.0,
+    "syncs.bwd.mlp_through_oproj": 120.0,
+    "syncs.fwd.down_proj": 12.0,
+    "syncs.fwd.gate_mul": 0.0,
+    "syncs.fwd.gate_proj": 12.0,
+    "syncs.fwd.k_proj": 12.0,
+    "syncs.fwd.norm1": 0.0,
+    "syncs.fwd.norm2": 0.0,
+    "syncs.fwd.o_proj": 12.0,
+    "syncs.fwd.q_proj": 12.0,
+    "syncs.fwd.refuse_call": 24.0,
+    "syncs.fwd.residual1_add": 0.0,
+    "syncs.fwd.residual2_add": 0.0,
+    "syncs.fwd.silu": 0.0,
+    "syncs.fwd.up_proj": 12.0,
+    "syncs.fwd.v_proj": 12.0,
+    "syncs.gemm.down_dA": 12.0,
+    "syncs.gemm.down_dB": 12.0,
+    "syncs.gemm.down_fwd": 12.0,
+    "syncs.gemm.gateup_dA": 24.0,
+    "syncs.gemm.gateup_dB": 24.0,
+    "syncs.gemm.gateup_fwd": 24.0,
+    "syncs.gemm.head_dA": 1.0,
+    "syncs.gemm.head_dB": 0.0,
+    "syncs.gemm.head_fwd": 0.0,
+    "syncs.gemm.norm_dW": 24.0,
+    "syncs.gemm.proj_dA": 48.0,
+    "syncs.gemm.proj_dB": 48.0,
+    "syncs.gemm.proj_fwd": 48.0,
+    "syncs.grad.down_dA": 12.0,
+    "syncs.grad.down_dB": 12.0,
+    "syncs.grad.gate_dA": 12.0,
+    "syncs.grad.gate_dB": 12.0,
+    "syncs.grad.gate_mul": 0.0,
+    "syncs.grad.gateup_fanin": 0.0,
+    "syncs.grad.k_dA": 12.0,
+    "syncs.grad.k_dB": 12.0,
+    "syncs.grad.kv_slice": 0.0,
+    "syncs.grad.norm1_dW": 12.0,
+    "syncs.grad.norm1_kernels": 0.0,
+    "syncs.grad.norm2_dW": 12.0,
+    "syncs.grad.norm2_kernels": 0.0,
+    "syncs.grad.o_copy": 0.0,
+    "syncs.grad.o_dA": 12.0,
+    "syncs.grad.o_dB": 12.0,
+    "syncs.grad.q_dA": 12.0,
+    "syncs.grad.q_dB": 12.0,
+    "syncs.grad.qkv_fanin": 0.0,
+    "syncs.grad.refuse_scan": 12.0,
+    "syncs.grad.residual1_add": 0.0,
+    "syncs.grad.residual2_copy": 0.0,
+    "syncs.grad.rope": 0.0,
+    "syncs.grad.silu": 0.0,
+    "syncs.grad.up_dA": 12.0,
+    "syncs.grad.up_dB": 12.0,
+    "syncs.grad.v_dA": 12.0,
+    "syncs.grad.v_dB": 12.0,
+    "syncs.grad.x_add": 0.0
+  },
+  "component_line_counts": {
+    "attn.bwd_corner_flag": 12,
+    "attn.bwd_dq_tiled_pf": 12,
+    "attn.bwd_kvgrid_dkdv_pf": 12,
+    "attn.bwd_regime_scan": 12,
+    "attn.bwd_scratch_alloc": 12,
+    "attn.bwd_zdot_estash_dres_pf": 12,
+    "attn.core": 12,
+    "attn.fwd_corner_flag": 12,
+    "attn.fwd_r2_keep_kernel": 12,
+    "attn.fwd_regime_scan": 12,
+    "attn.o_proj": 12,
+    "attn.qkv_proj": 12,
+    "attn.rope_and_cache": 12,
+    "block.attention_total": 12,
+    "block.mlp_and_residuals": 12,
+    "block.norm1": 12,
+    "bwd.after_attention": 12,
+    "bwd.attention": 12,
+    "bwd.before_attention": 12,
+    "bwd.mlp_through_oproj": 12,
+    "count.copies_d2d": 1,
+    "count.copies_d2h": 1,
+    "count.copies_h2d": 1,
+    "count.device_allocs": 1,
+    "count.host_allocs": 1,
+    "count.launches": 1,
+    "count.native_steps": 1,
+    "count.synchronizes": 1,
+    "envelope.blocks_backward": 1,
+    "envelope.blocks_forward": 1,
+    "envelope.native_call": 1,
+    "fwd.down_proj": 12,
+    "fwd.gate_mul": 12,
+    "fwd.gate_proj": 12,
+    "fwd.k_proj": 12,
+    "fwd.norm1": 12,
+    "fwd.norm2": 12,
+    "fwd.o_proj": 12,
+    "fwd.q_proj": 12,
+    "fwd.refuse_call": 12,
+    "fwd.residual1_add": 12,
+    "fwd.residual2_add": 12,
+    "fwd.silu": 12,
+    "fwd.up_proj": 12,
+    "fwd.v_proj": 12,
+    "gemm.down_dA": 12,
+    "gemm.down_dB": 12,
+    "gemm.down_fwd": 12,
+    "gemm.gateup_dA": 24,
+    "gemm.gateup_dB": 24,
+    "gemm.gateup_fwd": 24,
+    "gemm.head_dA": 1,
+    "gemm.head_dB": 1,
+    "gemm.head_fwd": 1,
+    "gemm.norm_dW": 24,
+    "gemm.proj_dA": 48,
+    "gemm.proj_dB": 48,
+    "gemm.proj_fwd": 48,
+    "grad.down_dA": 12,
+    "grad.down_dB": 12,
+    "grad.gate_dA": 12,
+    "grad.gate_dB": 12,
+    "grad.gate_mul": 12,
+    "grad.gateup_fanin": 12,
+    "grad.k_dA": 12,
+    "grad.k_dB": 12,
+    "grad.kv_slice": 12,
+    "grad.norm1_dW": 12,
+    "grad.norm1_kernels": 12,
+    "grad.norm2_dW": 12,
+    "grad.norm2_kernels": 12,
+    "grad.o_copy": 12,
+    "grad.o_dA": 12,
+    "grad.o_dB": 12,
+    "grad.q_dA": 12,
+    "grad.q_dB": 12,
+    "grad.qkv_fanin": 12,
+    "grad.refuse_scan": 12,
+    "grad.residual1_add": 12,
+    "grad.residual2_copy": 12,
+    "grad.rope": 12,
+    "grad.silu": 12,
+    "grad.up_dA": 12,
+    "grad.up_dB": 12,
+    "grad.v_dA": 12,
+    "grad.v_dB": 12,
+    "grad.x_add": 12,
+    "launches.bwd.mlp_through_oproj": 12,
+    "launches.fwd.down_proj": 12,
+    "launches.fwd.gate_mul": 12,
+    "launches.fwd.gate_proj": 12,
+    "launches.fwd.k_proj": 12,
+    "launches.fwd.norm1": 12,
+    "launches.fwd.norm2": 12,
+    "launches.fwd.o_proj": 12,
+    "launches.fwd.q_proj": 12,
+    "launches.fwd.refuse_call": 12,
+    "launches.fwd.residual1_add": 12,
+    "launches.fwd.residual2_add": 12,
+    "launches.fwd.silu": 12,
+    "launches.fwd.up_proj": 12,
+    "launches.fwd.v_proj": 12,
+    "launches.gemm.down_dA": 12,
+    "launches.gemm.down_dB": 12,
+    "launches.gemm.down_fwd": 12,
+    "launches.gemm.gateup_dA": 24,
+    "launches.gemm.gateup_dB": 24,
+    "launches.gemm.gateup_fwd": 24,
+    "launches.gemm.head_dA": 1,
+    "launches.gemm.head_dB": 1,
+    "launches.gemm.head_fwd": 1,
+    "launches.gemm.norm_dW": 24,
+    "launches.gemm.proj_dA": 48,
+    "launches.gemm.proj_dB": 48,
+    "launches.gemm.proj_fwd": 48,
+    "launches.grad.down_dA": 12,
+    "launches.grad.down_dB": 12,
+    "launches.grad.gate_dA": 12,
+    "launches.grad.gate_dB": 12,
+    "launches.grad.gate_mul": 12,
+    "launches.grad.gateup_fanin": 12,
+    "launches.grad.k_dA": 12,
+    "launches.grad.k_dB": 12,
+    "launches.grad.kv_slice": 12,
+    "launches.grad.norm1_dW": 12,
+    "launches.grad.norm1_kernels": 12,
+    "launches.grad.norm2_dW": 12,
+    "launches.grad.norm2_kernels": 12,
+    "launches.grad.o_copy": 12,
+    "launches.grad.o_dA": 12,
+    "launches.grad.o_dB": 12,
+    "launches.grad.q_dA": 12,
+    "launches.grad.q_dB": 12,
+    "launches.grad.qkv_fanin": 12,
+    "launches.grad.refuse_scan": 12,
+    "launches.grad.residual1_add": 12,
+    "launches.grad.residual2_copy": 12,
+    "launches.grad.rope": 12,
+    "launches.grad.silu": 12,
+    "launches.grad.up_dA": 12,
+    "launches.grad.up_dB": 12,
+    "launches.grad.v_dA": 12,
+    "launches.grad.v_dB": 12,
+    "launches.grad.x_add": 12,
+    "step.bind_final_sync": 1,
+    "step.bind_publish": 1,
+    "step.bind_publish_bytes": 1,
+    "step.bind_scalar_admission": 1,
+    "step.ce_backward": 1,
+    "step.ce_forward": 1,
+    "step.ce_refuse_scan": 1,
+    "step.ce_refuse_scan_bytes": 1,
+    "step.ce_refuse_scan_download_bytes": 1,
+    "step.embedding_backward": 1,
+    "step.embedding_forward": 1,
+    "step.head_backward_da": 1,
+    "step.head_backward_db": 1,
+    "step.head_forward": 1,
+    "step.loss_download": 1,
+    "step.loss_download_bytes": 1,
+    "step.optimizer": 1,
+    "step.pack_grads": 1,
+    "step.pack_grads_bytes": 1,
+    "step.py_flags": 1,
+    "step.py_flags_bytes": 1,
+    "step.py_tokens": 1,
+    "step.py_tokens_bytes": 1,
+    "step.unpack_weights": 1,
+    "step.unpack_weights_bytes": 1,
+    "step.upload_inputs": 1,
+    "step.upload_inputs_bytes": 1,
+    "step.validate_after_scan": 1,
+    "step.validate_after_scan_bytes": 1,
+    "step.validate_grads_scan": 1,
+    "step.validate_grads_scan_bytes": 1,
+    "syncs.bwd.mlp_through_oproj": 12,
+    "syncs.fwd.down_proj": 12,
+    "syncs.fwd.gate_mul": 12,
+    "syncs.fwd.gate_proj": 12,
+    "syncs.fwd.k_proj": 12,
+    "syncs.fwd.norm1": 12,
+    "syncs.fwd.norm2": 12,
+    "syncs.fwd.o_proj": 12,
+    "syncs.fwd.q_proj": 12,
+    "syncs.fwd.refuse_call": 12,
+    "syncs.fwd.residual1_add": 12,
+    "syncs.fwd.residual2_add": 12,
+    "syncs.fwd.silu": 12,
+    "syncs.fwd.up_proj": 12,
+    "syncs.fwd.v_proj": 12,
+    "syncs.gemm.down_dA": 12,
+    "syncs.gemm.down_dB": 12,
+    "syncs.gemm.down_fwd": 12,
+    "syncs.gemm.gateup_dA": 24,
+    "syncs.gemm.gateup_dB": 24,
+    "syncs.gemm.gateup_fwd": 24,
+    "syncs.gemm.head_dA": 1,
+    "syncs.gemm.head_dB": 1,
+    "syncs.gemm.head_fwd": 1,
+    "syncs.gemm.norm_dW": 24,
+    "syncs.gemm.proj_dA": 48,
+    "syncs.gemm.proj_dB": 48,
+    "syncs.gemm.proj_fwd": 48,
+    "syncs.grad.down_dA": 12,
+    "syncs.grad.down_dB": 12,
+    "syncs.grad.gate_dA": 12,
+    "syncs.grad.gate_dB": 12,
+    "syncs.grad.gate_mul": 12,
+    "syncs.grad.gateup_fanin": 12,
+    "syncs.grad.k_dA": 12,
+    "syncs.grad.k_dB": 12,
+    "syncs.grad.kv_slice": 12,
+    "syncs.grad.norm1_dW": 12,
+    "syncs.grad.norm1_kernels": 12,
+    "syncs.grad.norm2_dW": 12,
+    "syncs.grad.norm2_kernels": 12,
+    "syncs.grad.o_copy": 12,
+    "syncs.grad.o_dA": 12,
+    "syncs.grad.o_dB": 12,
+    "syncs.grad.q_dA": 12,
+    "syncs.grad.q_dB": 12,
+    "syncs.grad.qkv_fanin": 12,
+    "syncs.grad.refuse_scan": 12,
+    "syncs.grad.residual1_add": 12,
+    "syncs.grad.residual2_copy": 12,
+    "syncs.grad.rope": 12,
+    "syncs.grad.silu": 12,
+    "syncs.grad.up_dA": 12,
+    "syncs.grad.up_dB": 12,
+    "syncs.grad.v_dA": 12,
+    "syncs.grad.v_dB": 12,
+    "syncs.grad.x_add": 12
+  },
+  "component_timing_steps_parsed": 2,
+  "component_timing_uneven": [],
+  "component_timing_total_ms": 902.1004879998029,
+  "component_timing_excluded_from_total": [
+    "attn.bwd_corner_flag",
+    "attn.bwd_dq_tiled_pf",
+    "attn.bwd_kvgrid_dkdv_pf",
+    "attn.bwd_regime_scan",
+    "attn.bwd_scratch_alloc",
+    "attn.bwd_zdot_estash_dres_pf",
+    "attn.core",
+    "attn.fwd_corner_flag",
+    "attn.fwd_r2_keep_kernel",
+    "attn.fwd_regime_scan",
+    "attn.o_proj",
+    "attn.qkv_proj",
+    "attn.rope_and_cache",
+    "envelope.blocks_backward",
+    "envelope.blocks_forward",
+    "envelope.native_call",
+    "fwd.down_proj",
+    "fwd.gate_mul",
+    "fwd.gate_proj",
+    "fwd.k_proj",
+    "fwd.norm1",
+    "fwd.norm2",
+    "fwd.o_proj",
+    "fwd.q_proj",
+    "fwd.refuse_call",
+    "fwd.residual1_add",
+    "fwd.residual2_add",
+    "fwd.silu",
+    "fwd.up_proj",
+    "fwd.v_proj",
+    "gemm.down_dA",
+    "gemm.down_dB",
+    "gemm.down_fwd",
+    "gemm.gateup_dA",
+    "gemm.gateup_dB",
+    "gemm.gateup_fwd",
+    "gemm.head_dA",
+    "gemm.head_dB",
+    "gemm.head_fwd",
+    "gemm.norm_dW",
+    "gemm.proj_dA",
+    "gemm.proj_dB",
+    "gemm.proj_fwd",
+    "grad.down_dA",
+    "grad.down_dB",
+    "grad.gate_dA",
+    "grad.gate_dB",
+    "grad.gate_mul",
+    "grad.gateup_fanin",
+    "grad.k_dA",
+    "grad.k_dB",
+    "grad.kv_slice",
+    "grad.norm1_dW",
+    "grad.norm1_kernels",
+    "grad.norm2_dW",
+    "grad.norm2_kernels",
+    "grad.o_copy",
+    "grad.o_dA",
+    "grad.o_dB",
+    "grad.q_dA",
+    "grad.q_dB",
+    "grad.qkv_fanin",
+    "grad.refuse_scan",
+    "grad.residual1_add",
+    "grad.residual2_copy",
+    "grad.rope",
+    "grad.silu",
+    "grad.up_dA",
+    "grad.up_dB",
+    "grad.v_dA",
+    "grad.v_dB",
+    "grad.x_add"
+  ],
+  "step_seconds": 0.9026805220000824,
+  "component_timing_covered_fraction": 0.9993574315761302,
+  "component_timing_boundary": "one step under MOJOLEARN_TRANSFORMER_TIMING=1; every tick waits on the device, so neither the parts nor step_seconds are a timing sample; the uncovered remainder (1 - covered fraction) is time no timer brackets"
+}

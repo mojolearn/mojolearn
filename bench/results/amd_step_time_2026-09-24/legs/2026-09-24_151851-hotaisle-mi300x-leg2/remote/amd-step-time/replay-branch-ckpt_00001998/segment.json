@@ -1,0 +1,43 @@
+{
+ "schema": "mojolearn.lm-segment.run.v1",
+ "route": "A",
+ "segment": "amdstep-replay-branch-ckpt_00001998",
+ "label": "amd-step-time-replay-branch-ckpt_00001998",
+ "from_checkpoint": {
+  "file": "ckpt_00001998.blm",
+  "sha256": "b8d980905332fa84006ac9ea82b6559195b87545b31062af2c288d7af14901d4",
+  "step": 1998
+ },
+ "first_step": 1998,
+ "last_step": 2000,
+ "devices": [
+  0
+ ],
+ "logical_shards": 64,
+ "recipe_sha256": "9f7f695b9a0bae175bf241632767ace67c542a4a116a98e36b9c306f3eebe051",
+ "tokens_sha256": "4cf7181ba71058e70d7329dbae32de53c5750b49ae95331cebde4676f922209d",
+ "box": {
+  "host": "enc1-gpuvm002",
+  "machine": "x86_64",
+  "system": "Linux",
+  "python": "3.14.7",
+  "rocm-smi": "device,Unique ID,Card Series,Card Model,Card Vendor,Card SKU,Subsystem ID,Device Rev,Node ID,GUID,GFX Version\ncard0,0x6104e2a75685060a,AMD Instinct MI300X VF,0x74b5,Advanced Micro Devices Inc. [AMD/ATI],M3000108,0x74a1,0x00,1,46235,gfx942"
+ },
+ "commit": null,
+ "zero_moments": false,
+ "expect_chain": "/root/amd_in/A-2.chain.jsonl",
+ "checkpoints": [],
+ "utc_start": "2026-09-24T15:42:22Z",
+ "hash_scheme": "sliced-sha256-8.v2",
+ "from_state": {
+  "sha256": "bcf572cbf42c5e16eeb3fffa855594b42fa16fc62406273a70eea4c503b717c0",
+  "expected": "bcf572cbf42c5e16eeb3fffa855594b42fa16fc62406273a70eea4c503b717c0",
+  "agrees": true
+ },
+ "verdict": "PASS",
+ "disagreements": [],
+ "steps_completed": 2,
+ "last_completed": 2000,
+ "utc_end": "2026-09-24T15:44:58Z",
+ "uploads": []
+}

@@ -1,0 +1,59 @@
+15:21:52 leg2 started=2026-09-24T15:21:52Z
+15:23:08 build base exit=0 secs=76
+15:23:33 ab build branch exit=0
+15:24:14 ab build trial exit=0
+15:24:35 ab build k768kpack exit=0
+15:24:56 ab build k768p64 exit=0
+15:25:19 ab build onepage exit=0
+15:25:22 ab branch exit=0 hashes_vs_branch=IDENTICAL sum_ms=212.928
+15:25:31 ab k768kpack exit=0 hashes_vs_branch=IDENTICAL sum_ms=210.052
+15:25:39 ab k768p64 exit=0 hashes_vs_branch=IDENTICAL sum_ms=234.251
+15:25:48 ab onepage exit=0 hashes_vs_branch=IDENTICAL sum_ms=240.021
+15:25:57 ab arm-shipped exit=0 hashes_vs_branch=IDENTICAL sum_ms=213.833
+15:26:05 ab arm-tuned128 exit=0 hashes_vs_branch=IDENTICAL sum_ms=235.449
+15:26:15 ab arm-lfold exit=0 hashes_vs_branch=IDENTICAL sum_ms=580.967
+15:26:24 ab arm-half exit=0 hashes_vs_branch=IDENTICAL sum_ms=242.979
+15:26:32 ab arm-half_ks16 exit=0 hashes_vs_branch=IDENTICAL sum_ms=207.727
+15:26:41 ab arm-quarter exit=0 hashes_vs_branch=IDENTICAL sum_ms=297.772
+15:26:50 ab arm-kpack exit=0 hashes_vs_branch=IDENTICAL sum_ms=289.865
+15:26:59 ab arm-kpack_wide exit=0 hashes_vs_branch=IDENTICAL sum_ms=335.623
+15:27:07 ab arm-kpack_hg exit=0 hashes_vs_branch=IDENTICAL sum_ms=210.76
+15:27:16 ab arm-ksplit exit=0 hashes_vs_branch=IDENTICAL sum_ms=213.352
+15:27:24 ab arm-ksplit_leaf exit=0 hashes_vs_branch=IDENTICAL sum_ms=189.433
+15:27:33 ab arm-kfoldv exit=0 hashes_vs_branch=IDENTICAL sum_ms=216.243
+15:28:30 bind branch defines=[] exit=0 secs=191
+15:30:38 ab leaf build 0
+15:31:25 bind baseline defines=[MOJOLEARN_GEMM_NO_LAUNCH_BOUND=1] exit=0 secs=175
+15:31:25 bindings built: /root/amd_bin/byte_lm.baseline.so /root/amd_bin/byte_lm.branch.so 
+15:32:13 tokens ready in 48 s: 12442225788 bytes
+15:32:38 checkpoints ready in 25 s
+15:32:38 fetch exit=0
+15:32:38 binding now baseline
+15:33:29 bind leafsplit 0
+15:38:06 replay-baseline-ckpt_00000100 exit=0 secs=328: [15:38:06] PASS: /root/gemm_leg_out/amd-step-time/replay-baseline-ckpt_00000100 
+15:38:06 binding now branch
+15:42:07 replay-branch-ckpt_00000100 exit=0 secs=241: [15:42:07] PASS: /root/gemm_leg_out/amd-step-time/replay-branch-ckpt_00000100 
+15:42:07 binding now branch
+15:44:58 replay-branch-ckpt_00001998 exit=0 secs=171: [15:44:58] PASS: /root/gemm_leg_out/amd-step-time/replay-branch-ckpt_00001998 
+15:44:58 binding now branch
+15:45:00 verify branch exit=143 secs=2: # verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit. # verify --all: hip (amd), 20 lanes x 9 fixtures, harness checkout, table /root/mojolearn/python/mojolearn/verify_reference/table.json Terminated 
+15:45:00 leg2 scripted part done; holding
+15:45:03 verify deferred behind the leaf-split measurements
+15:45:07 ab leaf hashes_vs_branch=IDENTICAL sum_ms=188.94
+15:45:07 binding now leafsplit
+15:48:51 replay-leafsplit-ckpt_00000100 exit=0 secs=224: [15:48:51] PASS: /root/gemm_leg_out/amd-step-time/replay-leafsplit-ckpt_00000100 
+15:48:51 binding now leafsplit
+15:49:02 verify leafsplit exit=1 secs=11: Scope: selected fixtures and properties only; use verify --coverage for omissions. RESULT: MISMATCH (verified 166 of 1016 cell parts (0 divergent, 0 owed, 823 refused, 27 n/a); 3 verified, 0 not applicable, 0 owed, 0 held, 17 REFUSED, of 20 lanes; comparator self-test failed). 9.7s. exit 1 # evidenc
+15:52:48 build embedding exit=0 secs=23
+15:53:08 build linalg exit=0 secs=43
+15:53:18 build training exit=0 secs=53
+15:53:49 build estimators exit=0 secs=84
+15:53:58 build transformer exit=0 secs=93
+15:53:58 binding now leafsplit
+15:54:14 verify leafsplit exit=4 secs=16: Scope: selected fixtures and properties only; use verify --coverage for omissions. RESULT: INCOMPLETE (verified 573 of 1016 cell parts (0 divergent, 0 owed, 101 refused, 342 n/a); 19 verified, 0 not applicable, 0 owed, 0 held, 1 REFUSED, of 20 lanes). 14.8s. exit 4 # evidence written to /root/gemm_l
+16:02:19 bind timers-leaf 0
+16:02:19 binding now timers-leaf
+16:03:00 item timers-leaf 0
+# shards timed 2, kept 1; top level (step.* + envelope.*) 1806.366 ms a shard; gemm.* 594.806 ms a shard
+16:03:00 binding now leafsplit
+16:04:08 lean-leaf 0

@@ -1,0 +1,71 @@
+/root/mojolearn/bench/gemm_excp_ab_main.mojo:3:4: warning: doc string summary should begin with a capital letter or non-alpha character, but this begins with 'l'
+"""lane/amd-step-time (2026-09-24): the twelve GEMM calls of ONE T3 shard
+   ^
+/root/mojolearn/bench/gemm_excp_ab_main.mojo:91:48: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        h = (h ^ UInt64(bitcast[DType.uint32](p[i]))) * UInt64(0x100000001B3)
+                                              ~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bench/gemm_excp_ab_main.mojo:35:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5775:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            as_.store[alignment=ALIGN](initial_page * APAGE + ga[0] * ASTRIDE + ga[1] * RPT, pga)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/bench/gemm_excp_ab_main.mojo:35:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5776:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            bs_.store[alignment=ALIGN](initial_page * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/bench/gemm_excp_ab_main.mojo:35:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5793:14: warning: 'store' is deprecated, use 'unsafe_store' instead
+          as_.store[alignment=ALIGN](pgw * APAGE + ga[0] * ASTRIDE + ga[1] * RPT, pga)
+          ~~~^~~~~~
+              unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/bench/gemm_excp_ab_main.mojo:35:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5794:14: warning: 'store' is deprecated, use 'unsafe_store' instead
+          bs_.store[alignment=ALIGN](pgw * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
+          ~~~^~~~~~
+              unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/bench/gemm_excp_ab_main.mojo:35:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5842:26: warning: 'load' is deprecated, use 'unsafe_load' instead
+            var ra1 = as_.load[width=RPT, alignment=ALIGN](abase)
+                      ~~~^~~~~
+                          unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/bench/gemm_excp_ab_main.mojo:35:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5843:26: warning: 'load' is deprecated, use 'unsafe_load' instead
+            var rb1 = bs_.load[width=CPT, alignment=ALIGN](bbase)
+                      ~~~^~~~~
+                          unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/bench/gemm_excp_ab_main.mojo:35:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5852:29: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var ra = as_.load[width=RPT, alignment=ALIGN](abase + c0 * RPT)
+                         ~~~^~~~~
+                             unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/bench/gemm_excp_ab_main.mojo:35:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5853:29: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rb = bs_.load[width=CPT, alignment=ALIGN](bbase + c0 * CPT)
+                         ~~~^~~~~
+                             unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/bench/gemm_excp_ab_main.mojo:35:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5879:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var ra2 = as_.load[width=RPT, alignment=ALIGN](abase + cc * RPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/bench/gemm_excp_ab_main.mojo:35:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:5880:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rb2 = bs_.load[width=CPT, alignment=ALIGN](bbase + cc * CPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Included from /root/mojolearn/bench/gemm_excp_ab_main.mojo:35:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:3549:19: warning: assignment to 's' was never used; assign to '_' instead?
+    var s = String("")
+                  ^

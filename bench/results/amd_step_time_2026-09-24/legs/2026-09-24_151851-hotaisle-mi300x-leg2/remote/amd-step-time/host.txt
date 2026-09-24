@@ -1,0 +1,6 @@
+Linux enc1-gpuvm002 6.8.0-124-generic #124-Ubuntu SMP PREEMPT_DYNAMIC Tue May 26 13:00:45 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+13
+model name	: Intel(R) Xeon(R) Platinum 8470
+               total        used        free      shared  buff/cache   available
+Mem:             220           4         192           0          23         214
+Swap:              3           0           3
