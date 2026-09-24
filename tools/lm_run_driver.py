@@ -95,6 +95,7 @@ def segment_plan(spec):
             # route's first segment starts from THAT file, never a seed of its own
             seed_from_a = route != "A" and prev is None
             entry = dict(route=route, segment=s["segment"], index=s["index"], vendor=s["vendor"], steps=int(s["steps"]),
+                         hold=s.get("hold") or None,
                          first=first, last=last, boundary=last, live=s.get("first"), shards=s.get("shards"),
                          lease_minutes=s.get("lease_minutes"), dollar_cap=s.get("dollar_cap"),
                          nvidia_devices=s.get("nvidia_devices"), nvidia_gpus=s.get("nvidia_gpus"),
@@ -132,6 +133,8 @@ def cmd_plan(args):
         extra = [d for d in e["depends"] if d not in {(e["from_route"], e["from_segment"]), ("A", e["segment"])}]
         if extra:
             print("      after %s" % ", ".join("%s/%s" % d for d in extra))
+        if e.get("hold"):
+            print("      HELD: %s" % e["hold"])
     return 0
 
 
@@ -444,7 +447,8 @@ def _start(spec, e, out, ledger):
 
 
 def _plan_shape(plan):
-    return [(e["route"], e["segment"], e["vendor"], e["steps"], e["first"], e["last"], tuple(e["depends"])) for e in plan]
+    return [(e["route"], e["segment"], e["vendor"], e["steps"], e["first"], e["last"], tuple(e["depends"]), e.get("hold"))
+            for e in plan]
 
 
 def fresh_spec(path, plan):
@@ -525,7 +529,9 @@ def cmd_run(args):
         # segment of route A needs the driver idle, so no other route's
         # segment starts ahead of it. Routes beyond A and B (a route C replay)
         # come after both, by _ready_order.
-        ready = sorted([e for e in pending if all(is_passed(r, sg) for r, sg in e["depends"])],
+        # a held segment ("hold": "<reason>" in the spec) is never ready: it
+        # waits for a person to remove the hold and relaunch (a plan change)
+        ready = sorted([e for e in pending if not e.get("hold") and all(is_passed(r, sg) for r, sg in e["depends"])],
                        key=lambda e: (e["route"] != "A", _ready_order(e)))
         live_a_ready = any(e["route"] == "A" and e["vendor"] == "live" for e in ready)
         busy = set().union(*(_vendor_class(e) for _, e, _ in running.values())) if running else set()
@@ -545,7 +551,11 @@ def cmd_run(args):
             running[key] = (th, e, holder)
             busy |= cls
         if not running:
-            _log(out, "nothing is ready and nothing is running: a dependency failed; see the ledger")
+            held = ["%s/%s" % (e["route"], e["segment"]) for e in pending if e.get("hold")]
+            if held:
+                _log(out, "nothing is ready and nothing is running; held: %s (remove the hold from the spec and run the driver again)" % ", ".join(held))
+            else:
+                _log(out, "nothing is ready and nothing is running: a dependency failed; see the ledger")
             return 1
         time.sleep(30)
 

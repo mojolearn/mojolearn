@@ -92,3 +92,23 @@ def test_a_live_segment_rents_with_its_own_lease_and_cap(tmp_path, monkeypatch):
     drv.rent_live(spec, e2, tmp_path / "nv.sh", tmp_path / "amd.sh", tmp_path)
     argv = calls[-1]
     assert argv[argv.index("--minutes") + 1] == "1440" and argv[argv.index("--dollar-cap") + 1] == "120"
+
+
+def test_a_held_segment_never_starts_and_the_driver_says_so(tmp_path, monkeypatch, capsys):
+    p = tmp_path / "spec.json"
+    p.write_text(json.dumps({"run": "runs/x", "recipe": "r.json", "recipe_key": "k", "tokens_stage": "t",
+                             "routes": {"A": [{"segment": "1", "vendor": "nvidia", "steps": 10},
+                                              {"segment": "2", "vendor": "amd", "steps": 10, "hold": "AMD step time under optimization"}]}}))
+    plan = drv.segment_plan(drv.load_spec(p))
+    assert plan[1]["hold"] == "AMD step time under optimization"
+    monkeypatch.setattr(drv, "_start", lambda *a: (_ for _ in ()).throw(RuntimeError("must not start")))
+    monkeypatch.setattr(drv.time, "sleep", lambda s: None)
+    out = tmp_path / "out"; out.mkdir()
+    drv.Ledger(out).land(dict(route="A", segment="1"), dict(verdict="PASS", checkpoints={}))
+    rc = drv.cmd_run(type("A", (), dict(spec=str(p), out=str(out), parallel=2))())
+    assert rc == 1 and "held: A/2" in (out / "driver.log").read_text()
+    drv.cmd_plan(type("A", (), dict(spec=str(p)))())
+    assert "HELD: AMD step time under optimization" in capsys.readouterr().out
+    d = json.loads(p.read_text()); del d["routes"]["A"][1]["hold"]; p.write_text(json.dumps(d))
+    with pytest.raises(RuntimeError):
+        drv.fresh_spec(p, plan)
