@@ -60,6 +60,20 @@ grep -h '^timing ' "$OUT/item-timers.log" "$OUT/item-timers"/*.log 2>/dev/null >
 python3 tools/amd_step_timing_summary.py "$OUT/item-timers.timing.txt" --skip-shards 1 --tsv "$OUT/item-timers.summary.tsv" > /dev/null 2>&1
 say "item timers: $(tail -1 "$OUT/item-timers.summary.tsv")"
 
+# where the time goes on this GPU: a kernel trace of one lean step (branch)
+$S use branch > /dev/null
+mkdir -p "$OUT/prof"
+timeout 600 rocprofv3 --kernel-trace --stats -d "$OUT/prof/trace" -o lean -- /root/mojolearn/.pixi/envs/default/bin/python \
+    tools/lm_step_memory_probe.py --out "$OUT/lean-traced" --shape 4 2048 768 12 12 64 2048 12 50257 --steps 2 \
+    --resident-lean --budget-seconds 500 > "$OUT/prof/trace.log" 2>&1
+say "kernel trace exit=$?"
+find "$OUT/prof/trace" -name '*stats*' -exec cp {} "$OUT/prof/" \; 2>/dev/null
+find "$OUT/prof/trace" -name '*kernel_trace*.csv' -exec gzip -9 {} \; 2>/dev/null
+# the 16x16x1 MFMA layout (for a four-chain variant of the matrix-core GEMM)
+pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_AMD --target-accelerator gfx942 -I . \
+    gemm/checks/amd_mfma_probe2.mojo -o "$BIN/mfma_probe2" > "$OUT/mfma2_build.log" 2>&1 && "$BIN/mfma_probe2" > "$OUT/mfma_probe2.log" 2>&1
+say "mfma probe2 exit=$?: $(grep MFMA2_MODE "$OUT/mfma_probe2.log" | tr '\n' ' ' | cut -c1-400)"
+
 # the launch-bound decorator on other targets (compile only, no device)
 for t in sm_90a apple_m4 metal; do
     pixi run mojo build tools/amd_codegen/lb_target_$t.mojo -o "$BIN/lbt_$t" > "$OUT/lb_target_$t.log" 2>&1 && "$BIN/lbt_$t" >> "$OUT/lb_target_$t.log" 2>&1
