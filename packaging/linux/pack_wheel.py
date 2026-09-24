@@ -263,10 +263,16 @@ def release_inventory(sets, proof_paths, version, source_root=REPO):
     # s.files is keyed vendor/arch/<set-relative>; reuse.json is set-relative
     built_keys = {(s.vendor, s.arch) for s in sets
                   if any(rel.split('/', 2)[2] not in reused_of[(s.vendor, s.arch)] for rel in s.files)}
-    if len(proof_paths) != len(built_keys):
+    # A HOST BINDING BUILT FOR THIS RELEASE while every GPU set is the
+    # published one: one leg (release_reuse's cheapest) built it and read it
+    # back, so exactly one proof is required, that leg's.
+    host_built = {n for s in sets for n in (s.hosts or {}) if f'host/{n}.so' not in reused_of[(s.vendor, s.arch)]}
+    proofs_needed = len(built_keys) if built_keys else (1 if host_built else 0)
+    if len(proof_paths) != proofs_needed:
         raise SystemExit(RELEASE_PROFILE + ' requires one complete build proof per set a leg built: '
                          f'{len(built_keys)} built ({", ".join("/".join(k) for k in sorted(built_keys)) or "none"}), '
-                         f'{len(proof_paths)} proof(s) given')
+                         f'{len(host_built)} host binding(s) built ({", ".join(sorted(host_built)) or "none"}), '
+                         f'{proofs_needed} proof(s) needed, {len(proof_paths)} given')
     payload = {f'mojolearn/{rel}': sha(path).hex()
                for s in sets for rel, path in s.files.items()}
     origin = {}
@@ -320,7 +326,7 @@ def release_inventory(sets, proof_paths, version, source_root=REPO):
         if len(covered) != 1:
             raise SystemExit('Each proof must cover exactly one advertised architecture')
         key = next(iter(covered))
-        if key not in built_keys:
+        if key not in built_keys and not host_built:
             raise SystemExit('A build proof was given for a set whose every binding is reused: ' + '/'.join(key))
         expected = {n: h for n, h in payload.items()
                     if n.startswith(f'mojolearn/{key[0]}/{key[1]}/')}
@@ -455,9 +461,38 @@ def metadata_text(proj, readme):
 HOST_NAMES = wheel_host_bindings()
 
 
-def load_set(path, include_byte_lm=False):
+def host_witnesses(set_paths):
+    """name -> sha256 of every host binding some architecture directory under
+    `set_paths` READ BACK as `cpu` (a `host <name> cpu` row in its
+    readback.txt, the binary beside it). A host binding has no device code and
+    the same bytes are placed into every set; a set that reuses every GPU
+    binding from the published wheel has no read-back of its own, so a host
+    binding built for this release is proven there by the leg that built and
+    read it back, byte for byte (release_reuse's linux-wait requires the host
+    bindings to be byte-identical across the legs)."""
+    out = {}
+    for sp in set_paths:
+        sp = pathlib.Path(sp).resolve()
+        for adir in sorted(d for d in sp.iterdir() if d.is_dir() and ARCH_RE.match(d.name)):
+            rb = adir / "readback.txt"
+            if not rb.is_file():
+                continue
+            for line in rb.read_text().splitlines():
+                row = line.split()
+                if len(row) == 3 and row[0] == "host" and row[2] == "cpu" and (adir / "host" / f"{row[1]}.so").is_file():
+                    digest = sha(adir / "host" / f"{row[1]}.so")
+                    if out.setdefault(row[1], digest) != digest:
+                        raise SystemExit(f"pack_wheel: host binding {row[1]} was read back with different bytes in two sets; "
+                                         "one of them is not this release's")
+    return out
+
+
+def load_set(path, include_byte_lm=False, host_witnesses_by_name=None):
     """Every (vendor, arch, files, libs, manifest) under one sets/<vendor>
-    directory. One tuple per architecture subdirectory."""
+    directory. One tuple per architecture subdirectory. `host_witnesses_by_name`
+    (see `host_witnesses`) lets a set that reuses every GPU binding carry a
+    host binding built for this release when a witnessed set holds the same
+    bytes."""
     path = pathlib.Path(path).resolve()
     vendor = path.name
     if vendor not in LINUX_VENDORS:
@@ -483,15 +518,33 @@ def load_set(path, include_byte_lm=False):
         all_reused = bool(reuse) and expected_rels <= set(reused) and (
             not include_byte_lm or all(f"host/{n}.so" in reused for n in HOST_NAMES))
         has_witnesses = (adir / "readback.txt").is_file() and (adir / "arch_readback.txt").is_file()
+        witnessed_built = []
         if not has_witnesses and not all_reused:
-            raise SystemExit(
-                f"pack_wheel: {adir} has no readback.txt or arch_readback.txt and not every binding "
-                "in it is taken from the published wheel (reuse.json); a built binding needs its read-back")
+            missing = expected_rels - set(reused)
+            if include_byte_lm:
+                missing |= {f"host/{n}.so" for n in HOST_NAMES if f"host/{n}.so" not in reused}
+            built_host = {rel for rel in missing if rel.startswith("host/")}
+            if not reuse or built_host != missing or not host_witnesses_by_name:
+                raise SystemExit(
+                    f"pack_wheel: {adir} has no readback.txt or arch_readback.txt and not every binding "
+                    "in it is taken from the published wheel (reuse.json); a built binding needs its read-back")
+            # EVERY GPU BINDING IS THE PUBLISHED ONE; the host bindings built
+            # for this release were read back as `cpu` by the leg that built
+            # them, in a set that holds the same bytes.
+            for rel in sorted(built_host):
+                name = rel[len("host/"):-len(".so")]
+                so = adir / rel
+                if not so.is_file() or host_witnesses_by_name.get(name) != sha(so):
+                    raise SystemExit(
+                        f"pack_wheel: {adir}/{rel} was built for this release and no set with a read-back holds "
+                        "the same bytes; a built binding needs its read-back")
+                witnessed_built.append(name)
         if not has_witnesses:
-            # EVERY BINDING WAS TAKEN FROM THE PUBLISHED WHEEL. Its vendor and
+            # EVERY GPU BINDING WAS TAKEN FROM THE PUBLISHED WHEEL. Its vendor and
             # architecture were read back on the box that built it, for the
-            # release that shipped it; the bytes verified above are those.
-            host_named = [n for n in HOST_NAMES if f"host/{n}.so" in reused]
+            # release that shipped it; the bytes verified above are those. A
+            # host binding built for this release is witnessed in another set.
+            host_named = [n for n in HOST_NAMES if f"host/{n}.so" in reused or n in witnessed_built]
         else:
             # THE HOST ROWS ARE READ SEPARATELY, and by name. The CPU training
             # binding has no device code and answers 'cpu', so folding it into the
@@ -704,7 +757,8 @@ def main():
                          f"_version.py says {version}")
     readme = (REPO / "README.md").read_text()
 
-    sets = [t for s in a.set for t in load_set(s, include_byte_lm=a.profile == RELEASE_PROFILE)]
+    witnesses = host_witnesses(a.set)
+    sets = [t for s in a.set for t in load_set(s, include_byte_lm=a.profile == RELEASE_PROFILE, host_witnesses_by_name=witnesses)]
     keys = [(s.vendor, s.arch) for s in sets]
     if len(set(keys)) != len(keys):
         raise SystemExit(f"pack_wheel: the same (vendor, arch) given twice: {keys}")
