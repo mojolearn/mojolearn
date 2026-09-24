@@ -1,0 +1,3 @@
+tuned128 v_fmac_f32=0 v_fma_f32=0 v_pk_fma_f32=544 v_cmp_class_f32=960 s_nop=236 v_cndmask_b32=1696 ds_read=136 ds_write=24 scratch_=659 buffer_=0 global_load=72 s_getreg=0 s_setreg=0
+kpack_all v_fmac_f32=0 v_fma_f32=0 v_pk_fma_f32=544 v_cmp_class_f32=960 s_nop=794 v_cndmask_b32=1700 ds_read=68 ds_write=4 scratch_=1310 buffer_=0 global_load=32 s_getreg=0 s_setreg=0
+kpack_grp v_fmac_f32=0 v_fma_f32=0 v_pk_fma_f32=544 v_cmp_class_f32=960 s_nop=765 v_cndmask_b32=1636 ds_read=68 ds_write=4 scratch_=471 buffer_=0 global_load=32 s_getreg=0 s_setreg=0

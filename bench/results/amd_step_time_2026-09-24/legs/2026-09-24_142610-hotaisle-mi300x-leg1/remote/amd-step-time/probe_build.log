@@ -1,0 +1,15 @@
+/root/mojolearn/gemm/checks/amd_excp_probe.mojo:2:4: warning: doc string summary should begin with a capital letter or non-alpha character, but this begins with 'l'
+"""lane/amd-step-time, 2026-09-24: does the gfx942 wave's sticky exception
+   ^
+/root/mojolearn/gemm/checks/amd_excp_probe.mojo:103:8: error: expected argument name
+    out: MutPointer[Float32, MutAnyOrigin],
+       ^
+/root/mojolearn/gemm/checks/amd_excp_probe.mojo:200:55: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        line += " excp=" + _hex(UInt32(hb.unsafe_ptr()[c]))
+                                       ~~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/gemm/checks/amd_excp_probe.mojo:243:43: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var f = UInt32(hf.unsafe_ptr()[i])
+                           ~~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module

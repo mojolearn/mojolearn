@@ -1,0 +1,29 @@
+14:43:01 base build 0
+14:43:25 lb build 0
+14:43:35 base run 0
+14:43:46 lb run 0
+HASHES IDENTICAL 28
+14:44:00 asm detect 1
+14:44:29 det build 0
+14:46:24 bind timers-lb done
+14:46:24 binding now timers-lb
+14:47:06 item timers-lb 0
+# shards timed 2, kept 1; top level (step.* + envelope.*) 1975.818 ms a shard; gemm.* 678.158 ms a shard
+14:47:24 det run 0
+DET HASHES IDENTICAL 28
+14:53:14 bind timers-lb-attn -rwxr-xr-x 1 root root 5227672 Sep 24 14:53 /root/amd_bin/by
+14:53:14 binding now timers-lb-attn
+14:53:57 item timers-lb-attn 0
+# shards timed 2, kept 1; top level (step.* + envelope.*) 2000.264 ms a shard; gemm.* 677.808 ms a shard
+14:56:44 binding now lean-lb
+14:57:52 lean-lb 0
+15:00:52 fetch done 0
+15:02:32 bind branch done
+15:02:32 binding now branch
+15:03:45 det2 build 0
+15:06:32 replay-branch-ckpt_00000100 exit=0 secs=240: [15:06:32] PASS: /root/gemm_leg_out/amd-step-time/replay-branch-ckpt_00000100 
+15:06:35 binding now branch
+15:09:26 replay-branch-ckpt_00001998 exit=0 secs=171: [15:09:26] PASS: /root/gemm_leg_out/amd-step-time/replay-branch-ckpt_00001998 
+15:09:43 det2 run 0
+DET2 HASHES IDENTICAL 24
+cp: cannot stat '/root/amd_bin/byte_lm.detect2.so': No such file or directory

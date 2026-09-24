@@ -1,0 +1,7 @@
+  Marketing Name:          Intel(R) Xeon(R) Platinum 8470     
+  Max Clock Freq. (MHz):   0                                  
+  Compute Unit:            13                                 
+  Name:                    gfx942                             
+  Marketing Name:          AMD Instinct MI300X VF             
+  Max Clock Freq. (MHz):   2100                               
+  Compute Unit:            304                                

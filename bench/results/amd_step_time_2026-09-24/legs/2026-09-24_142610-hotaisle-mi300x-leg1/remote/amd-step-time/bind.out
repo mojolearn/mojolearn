@@ -1,0 +1,4 @@
+14:34:51 bind timers-shipped defines=[MOJOLEARN_STEP_PHASE_TIMERS=1 MOJOLEARN_ATTN_PHASE_TIMERS=1 MOJOLEARN_GEMM_NO_EXCP_FAST=1] exit=0 secs=194
+14:34:51 binding now timers-shipped
+14:38:44 bind timers-excp defines=[MOJOLEARN_STEP_PHASE_TIMERS=1 MOJOLEARN_ATTN_PHASE_TIMERS=1] exit=0 secs=186
+14:38:44 binding now timers-excp

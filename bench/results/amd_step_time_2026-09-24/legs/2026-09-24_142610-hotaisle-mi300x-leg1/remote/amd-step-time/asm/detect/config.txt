@@ -1,0 +1,1 @@
+### config detect_seam=True tuned_pages=2 kpack_pages=2 kpack_page_bytes=16896

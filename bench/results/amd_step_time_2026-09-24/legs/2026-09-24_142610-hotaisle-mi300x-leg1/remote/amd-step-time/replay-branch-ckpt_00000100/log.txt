@@ -1,0 +1,9 @@
+[15:02:47] segment: route A segment amdstep-replay-branch-ckpt_00000100 label amd-step-time-replay-branch-ckpt_00000100, global steps 100..103, K=64, devices (0,), from ckpt_00000100.blm (sha256 80cd2126a89ba6d8)
+[15:02:47] the checkpoint's state AGREES with the expected chain's step 100 (2b37e85edfd701eb)
+[15:04:12] step 101 lr 397e2cc1 loss 6.9004 state abc8b816b5c3fb15 grad 25830bfc2016dc14 71.22 s (+6.97 s hashing)
+[15:04:12] step 101 agrees with the expected chain
+[15:05:22] step 102 lr 39805880 loss 6.8585 state a9421f91b947f82c grad 94c40a6e3d5ec5aa 62.81 s (+7.07 s hashing)
+[15:05:22] step 102 agrees with the expected chain
+[15:06:32] step 103 lr 39819a9f loss 6.8373 state fcdb48b8ab51f2ef grad 19a43804ef4065de 62.74 s (+7.08 s hashing)
+[15:06:32] step 103 agrees with the expected chain
+[15:06:32] PASS: /root/gemm_leg_out/amd-step-time/replay-branch-ckpt_00000100

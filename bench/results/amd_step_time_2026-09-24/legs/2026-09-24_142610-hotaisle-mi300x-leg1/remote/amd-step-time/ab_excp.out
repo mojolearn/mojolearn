@@ -1,0 +1,16 @@
+14:31:37 ab excp build FAILED
+/root/mojolearn/bench/gemm_excp_ab_main.mojo:3:4: warning: doc string summary should begin with a capital letter or non-alpha character, but this begins with 'l'
+"""lane/amd-step-time (2026-09-24): the twelve GEMM calls of ONE T3 shard
+   ^
+/root/mojolearn/bench/gemm_excp_ab_main.mojo:89:48: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        h = (h ^ UInt64(bitcast[DType.uint32](p[i]))) * UInt64(0x100000001B3)
+                                              ~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bench/gemm_excp_ab_main.mojo:126:9: error: 'fn' has been removed; use 'def' instead
+    var fn: List[Int] = [768, 768, 768, 2048, 2048, 2048, 768, 768, 768, 50257, 50257, 50257]
+        ^~
+        def
+/root/mojolearn/bench/gemm_excp_ab_main.mojo:126:11: error: expected '(' for argument list
+    var fn: List[Int] = [768, 768, 768, 2048, 2048, 2048, 768, 768, 768, 50257, 50257, 50257]
+          ^
+/root/mojolearn/.pixi/envs/default/bin/mojo: error: failed to parse the provided Mojo source module

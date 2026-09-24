@@ -1,0 +1,85 @@
+EXCP_PROBE column=amd
+EXCP_MODE_REG 000003f0
+EXCP_CASE name=normal mode=fma result=40400000 excp=80000000
+EXCP_CASE name=normal mode=pk_fma result=40400000 result_hi=40400000 excp=80000000
+EXCP_CASE name=normal mode=sw_ftz result=3f800000 excp=80000000
+EXCP_CASE name=normal mode=class_ftz result=3f800000 excp=80000000
+EXCP_CASE name=normal mode=shipped_step result=40400000 excp=80000000
+EXCP_CASE name=normal mode=none result=3f800000 excp=80000000
+EXCP_CASE name=sub_acc mode=fma result=3f800000 excp=80000000
+EXCP_CASE name=sub_acc mode=pk_fma result=3f800000 result_hi=3f800000 excp=80000000
+EXCP_CASE name=sub_acc mode=sw_ftz result=00000000 excp=80000000
+EXCP_CASE name=sub_acc mode=class_ftz result=00000000 excp=80000000
+EXCP_CASE name=sub_acc mode=shipped_step result=3f800000 excp=80000000
+EXCP_CASE name=sub_acc mode=none result=00000001 excp=80000000
+EXCP_CASE name=sub_a mode=fma result=3f800000 excp=80000000
+EXCP_CASE name=sub_a mode=pk_fma result=3f800000 result_hi=3f800000 excp=80000000
+EXCP_CASE name=sub_a mode=sw_ftz result=3f800000 excp=80000000
+EXCP_CASE name=sub_a mode=class_ftz result=3f800000 excp=80000000
+EXCP_CASE name=sub_a mode=shipped_step result=3f800000 excp=80000000
+EXCP_CASE name=sub_a mode=none result=3f800000 excp=80000000
+EXCP_CASE name=sub_result mode=fma result=00080000 excp=80000000
+EXCP_CASE name=sub_result mode=pk_fma result=00080000 result_hi=00080000 excp=80000000
+EXCP_CASE name=sub_result mode=sw_ftz result=00000000 excp=80000000
+EXCP_CASE name=sub_result mode=class_ftz result=00000000 excp=80000000
+EXCP_CASE name=sub_result mode=shipped_step result=00000000 excp=80000000
+EXCP_CASE name=sub_result mode=none result=00000000 excp=80000000
+EXCP_CASE name=sub_result_exact mode=fma result=00080000 excp=80000000
+EXCP_CASE name=sub_result_exact mode=pk_fma result=00080000 result_hi=00080000 excp=80000000
+EXCP_CASE name=sub_result_exact mode=sw_ftz result=00000000 excp=80000000
+EXCP_CASE name=sub_result_exact mode=class_ftz result=00000000 excp=80000000
+EXCP_CASE name=sub_result_exact mode=shipped_step result=00000000 excp=80000000
+EXCP_CASE name=sub_result_exact mode=none result=00000000 excp=80000000
+EXCP_CASE name=boundary mode=fma result=00800000 excp=80000000
+EXCP_CASE name=boundary mode=pk_fma result=00800000 result_hi=00800000 excp=80000000
+EXCP_CASE name=boundary mode=sw_ftz result=00000000 excp=80000000
+EXCP_CASE name=boundary mode=class_ftz result=00000000 excp=80000000
+EXCP_CASE name=boundary mode=shipped_step result=00800000 excp=80000000
+EXCP_CASE name=boundary mode=none result=00000000 excp=80000000
+EXCP_CASE name=zero_acc mode=fma result=3f800000 excp=80000000
+EXCP_CASE name=zero_acc mode=pk_fma result=3f800000 result_hi=3f800000 excp=80000000
+EXCP_CASE name=zero_acc mode=sw_ftz result=00000000 excp=80000000
+EXCP_CASE name=zero_acc mode=class_ftz result=00000000 excp=80000000
+EXCP_CASE name=zero_acc mode=shipped_step result=3f800000 excp=80000000
+EXCP_CASE name=zero_acc mode=none result=00000000 excp=80000000
+EXCP_CASE name=huge mode=fma result=7f800000 excp=80000000
+EXCP_CASE name=huge mode=pk_fma result=7f800000 result_hi=7f800000 excp=80000000
+EXCP_CASE name=huge mode=sw_ftz result=00000000 excp=80000000
+EXCP_CASE name=huge mode=class_ftz result=00000000 excp=80000000
+EXCP_CASE name=huge mode=shipped_step result=7f800000 excp=80000000
+EXCP_CASE name=huge mode=none result=00000000 excp=80000000
+EXCP_CLEAR_MISMATCH i=500 fast=80000000 exact=00000000 excp=80000000
+EXCP_CLEAR_MISMATCH i=501 fast=00800000 exact=00000000 excp=80000000
+EXCP_CLEAR_MISMATCH i=522 fast=80000000 exact=00000000 excp=80000000
+EXCP_CLEAR_MISMATCH i=640 fast=80000000 exact=00000000 excp=80000000
+EXCP_CLEAR_MISMATCH i=641 fast=00800000 exact=00000000 excp=80000000
+EXCP_CLEAR_MISMATCH i=662 fast=80000000 exact=00000000 excp=80000000
+EXCP_CLEAR_MISMATCH i=1660 fast=80000000 exact=00000000 excp=80000000
+EXCP_CLEAR_MISMATCH i=1880 fast=80000000 exact=00000000 excp=80000000
+EXCP_CLEAR_MISMATCH i=1881 fast=88781117 exact=8878110e excp=80000000
+EXCP_CLEAR_MISMATCH i=1992 fast=80000000 exact=00000000 excp=80000000
+EXCP_CLEAR_MISMATCH i=2263 fast=0a265082 exact=0a26507f excp=80000000
+EXCP_CLEAR_MISMATCH i=2360 fast=80000000 exact=00000000 excp=80000000
+EXCP_CLEAR_MISMATCH i=3063 fast=044e0397 exact=044e573a excp=80000000
+EXCP_CLEAR_MISMATCH i=3313 fast=0a26507d exact=0a26507f excp=80000000
+EXCP_CLEAR_MISMATCH i=3560 fast=80000000 exact=00000000 excp=80000000
+EXCP_CLEAR_MISMATCH i=3623 fast=044e56b2 exact=044e573a excp=80000000
+EXCP_CHAIN lane=scalar triples=343000 flagged=0 flagged_mismatch=0 clear_mismatch=229 packed_half_mismatch=0
+EXCP_CLEAR_MISMATCH i=500 fast=80000000 exact=00000000 excp=80000000
+EXCP_CLEAR_MISMATCH i=501 fast=00800000 exact=00000000 excp=80000000
+EXCP_CLEAR_MISMATCH i=522 fast=80000000 exact=00000000 excp=80000000
+EXCP_CLEAR_MISMATCH i=640 fast=80000000 exact=00000000 excp=80000000
+EXCP_CLEAR_MISMATCH i=641 fast=00800000 exact=00000000 excp=80000000
+EXCP_CLEAR_MISMATCH i=662 fast=80000000 exact=00000000 excp=80000000
+EXCP_CLEAR_MISMATCH i=1660 fast=80000000 exact=00000000 excp=80000000
+EXCP_CLEAR_MISMATCH i=1880 fast=80000000 exact=00000000 excp=80000000
+EXCP_CLEAR_MISMATCH i=1881 fast=88781117 exact=8878110e excp=80000000
+EXCP_CLEAR_MISMATCH i=1992 fast=80000000 exact=00000000 excp=80000000
+EXCP_CLEAR_MISMATCH i=2263 fast=0a265082 exact=0a26507f excp=80000000
+EXCP_CLEAR_MISMATCH i=2360 fast=80000000 exact=00000000 excp=80000000
+EXCP_CLEAR_MISMATCH i=3063 fast=044e0397 exact=044e573a excp=80000000
+EXCP_CLEAR_MISMATCH i=3313 fast=0a26507d exact=0a26507f excp=80000000
+EXCP_CLEAR_MISMATCH i=3560 fast=80000000 exact=00000000 excp=80000000
+EXCP_CLEAR_MISMATCH i=3623 fast=044e56b2 exact=044e573a excp=80000000
+EXCP_CHAIN lane=packed triples=343000 flagged=0 flagged_mismatch=0 clear_mismatch=229 packed_half_mismatch=0
+EXCP_DONE

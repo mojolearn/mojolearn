@@ -1,0 +1,37 @@
+14:31:36 asm excp done in 11 s
+tuned128 v_fmac_f32=64 v_fma_f32=0 v_pk_fma_f32=544 v_cmp_class_f32=0 s_nop=562 v_cndmask_b32=4715 ds_read=136 ds_write=24 scratch_=829 buffer_=0 global_load=200 s_getreg=1 s_setreg=1
+kpack_all v_fmac_f32=64 v_fma_f32=0 v_pk_fma_f32=544 v_cmp_class_f32=0 s_nop=466 v_cndmask_b32=4821 ds_read=68 ds_write=4 scratch_=568 buffer_=0 global_load=160 s_getreg=1 s_setreg=1
+kpack_grp v_fmac_f32=64 v_fma_f32=0 v_pk_fma_f32=544 v_cmp_class_f32=0 s_nop=384 v_cndmask_b32=4795 ds_read=68 ds_write=4 scratch_=534 buffer_=0 global_load=160 s_getreg=1 s_setreg=1
+tuned128: 		.amdhsa_group_segment_fixed_size 40960
+tuned128: 		.amdhsa_private_segment_fixed_size 5216
+tuned128: 		.amdhsa_next_free_vgpr 128
+tuned128: 		.amdhsa_accum_offset 128
+tuned128:     .group_segment_fixed_size: 40960
+tuned128:     .max_flat_workgroup_size: 1024
+tuned128:     .private_segment_fixed_size: 5216
+tuned128:     .sgpr_count:     106
+tuned128:     .sgpr_spill_count: 220
+tuned128:     .vgpr_count:     128
+tuned128:     .vgpr_spill_count: 533
+kpack_all: 		.amdhsa_group_segment_fixed_size 33792
+kpack_all: 		.amdhsa_private_segment_fixed_size 4736
+kpack_all: 		.amdhsa_next_free_vgpr 128
+kpack_all: 		.amdhsa_accum_offset 128
+kpack_all:     .group_segment_fixed_size: 33792
+kpack_all:     .max_flat_workgroup_size: 1024
+kpack_all:     .private_segment_fixed_size: 4736
+kpack_all:     .sgpr_count:     106
+kpack_all:     .sgpr_spill_count: 214
+kpack_all:     .vgpr_count:     128
+kpack_all:     .vgpr_spill_count: 289
+kpack_grp: 		.amdhsa_group_segment_fixed_size 33792
+kpack_grp: 		.amdhsa_private_segment_fixed_size 4672
+kpack_grp: 		.amdhsa_next_free_vgpr 128
+kpack_grp: 		.amdhsa_accum_offset 128
+kpack_grp:     .group_segment_fixed_size: 33792
+kpack_grp:     .max_flat_workgroup_size: 1024
+kpack_grp:     .private_segment_fixed_size: 4672
+kpack_grp:     .sgpr_count:     106
+kpack_grp:     .sgpr_spill_count: 160
+kpack_grp:     .vgpr_count:     128
+kpack_grp:     .vgpr_spill_count: 267

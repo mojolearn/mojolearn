@@ -1,0 +1,5 @@
+6.4.1-83
+/opt/rocm
+/opt/rocm-6.4.1
+/usr/bin/rocprofv3
+/usr/bin/rocprof

@@ -1,0 +1,34 @@
+14:30:00 leg1 started=2026-09-24T14:30:00Z archs=gfx942
+14:31:16 build base exit=0 secs=76
+14:31:17 probe build exit=1 secs=0
+14:31:25 asm shipped done in 8 s
+14:31:36 asm excp done in 11 s
+14:31:36 ab shipped build FAILED
+14:31:37 ab excp build FAILED
+14:34:51 bind timers-shipped defines=[MOJOLEARN_STEP_PHASE_TIMERS=1 MOJOLEARN_ATTN_PHASE_TIMERS=1 MOJOLEARN_GEMM_NO_EXCP_FAST=1] exit=0 secs=194
+14:34:51 binding now timers-shipped
+14:35:38 itemization timers-shipped exit=0 secs=47
+14:35:38 itemization timers-shipped: # shards timed 2, kept 1; top level (step.* + envelope.*) 4409.101 ms a shard; gemm.* 1891.624 ms a shard
+14:37:27 asm lb256 done in 7 s
+14:38:44 bind timers-excp defines=[MOJOLEARN_STEP_PHASE_TIMERS=1 MOJOLEARN_ATTN_PHASE_TIMERS=1] exit=0 secs=186
+14:38:44 binding now timers-excp
+14:39:28 itemization timers-excp exit=0 secs=44
+14:39:28 itemization timers-excp: # shards timed 2, kept 1; top level (step.* + envelope.*) 2998.652 ms a shard; gemm.* 1190.872 ms a shard
+14:39:28 leg1 scripted part done; holding
+14:44:00 asm detect build FAILED
+14:46:24 bind timers-lb defines=[MOJOLEARN_STEP_PHASE_TIMERS=1 MOJOLEARN_ATTN_PHASE_TIMERS=1 MOJOLEARN_GEMM_NO_EXCP_FAST=1] exit=0 secs=179
+14:46:24 binding now timers-lb
+14:47:11 asm detect done in 12 s
+14:53:14 bind timers-lb-attn defines=[MOJOLEARN_STEP_PHASE_TIMERS=1 MOJOLEARN_ATTN_PHASE_TIMERS=1] exit=0 secs=175
+14:53:14 binding now timers-lb-attn
+14:56:44 bind lean-lb defines=[] exit=0 secs=167
+14:56:44 binding now lean-lb
+15:00:21 tokens ready in 37 s: 12442225788 bytes
+15:00:52 checkpoints ready in 30 s
+15:02:32 bind branch defines=[] exit=0 secs=168
+15:02:32 binding now branch
+15:02:33 asm detect2 done in 13 s
+15:06:32 replay-branch-ckpt_00000100 exit=0 secs=240: [15:06:32] PASS: /root/gemm_leg_out/amd-step-time/replay-branch-ckpt_00000100 
+15:06:35 binding now branch
+15:06:53 bind detect2 defines=[MOJOLEARN_GEMM_DETECT_SEAM=1] exit=1 secs=188
+15:09:26 replay-branch-ckpt_00001998 exit=0 secs=171: [15:09:26] PASS: /root/gemm_leg_out/amd-step-time/replay-branch-ckpt_00001998 
