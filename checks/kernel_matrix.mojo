@@ -1279,11 +1279,18 @@ def lib_gemm_mfma_for[column: Int]() -> Bool:
     its accumulator, `fma_rn`, measured equal to the VALU fma) followed by the
     flush as a product by one under the wave's MODE f32 output flush (measured
     equal to `ftz` on every element). Same operands, same order, same
-    rounding, same fold tree. AMD only, a TRIAL until its A/B and replay:
-    `-D MOJOLEARN_GEMM_MFMA=1`."""
-    comptime if is_defined["MOJOLEARN_GEMM_MFMA"]():
-        return column == COLUMN_AMD
-    return False
+    rounding, same fold tree. AMD only.
+
+    MEASURED on a Hot Aisle MI300X (2026-09-24, leg 6): the T3-shape GEMM
+    A/B, 28 of 28 output hashes identical to the VALU kernels (the kind that
+    forces subnormal intermediates included), most calls about 1.9x faster;
+    lean B4 step 0.763 -> 0.617 s with every step witness equal; the T3
+    replays of steps 101..103 (ckpt 100) and 1999..2000 (ckpt 1998) PASS
+    against the H100 chain at 39.5 s a step (49.1 s before).
+    `-D MOJOLEARN_GEMM_NO_MFMA=1` is the revert arm."""
+    comptime if is_defined["MOJOLEARN_GEMM_NO_MFMA"]():
+        return False
+    return column == COLUMN_AMD
 
 
 def lib_zero_fma_repair_for[column: Int]() -> Bool:
