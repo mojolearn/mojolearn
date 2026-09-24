@@ -1539,7 +1539,20 @@ def attn_default_arm_for[column: Int]() -> Int:
         # 5cc3b8df (e1g/2026-09-11_180903-amd-mi325x-do-attention-dkdv, FLIP
         # geomean=0.8436, in-step dk/dv 169.8 -> 21.2 ms); before that baseline
         # (e1g/2026-09-11_171959-amd-mi300x-runpod-attention-three).
-        return ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_ESTASH_DRES_KVGRID_R32
+        #
+        # DEVIATION 2900 ON AMD TOO (lane/amd-step-time, 2026-09-24): NVIDIA's
+        # causal block-index map `_bswz`, measured on a Hot Aisle MI300X at the
+        # T3 shard shape (batch 4, length 2048) with the GEMM launch bound, the
+        # AMD leaf split and the class-spelled ftz in place, one VM and one
+        # heat window, the trial build against itself
+        # (bench/results/amd_step_time_2026-09-24/legs/*-leg5):
+        #   lean B4 step 0.8179 (this word) -> 0.7632 s (+ _bswz), 0.9331x;
+        #   every step witness (loss, gradients, parameters, m, v, flags)
+        #   equal to the default's and to the shipped build's.
+        # A bijection over block_idx.x: the same (tile, head, batch) triples
+        # heaviest first. `_kvgrid_r64`, with or without `_bswz`, was 2.4 to
+        # 2.7 s (not taken).
+        return ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_ESTASH_DRES_KVGRID_R32_BSWZ
     if column == COLUMN_CPU:
         # The non-vendor default, the word the Apple fallthrough compiled into
         # the byte LM host binding. No fused attention kernel runs on the
