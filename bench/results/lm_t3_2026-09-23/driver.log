@@ -1,0 +1,16 @@
+[13:37:29 driver] run runs/t3/2026-09-22: 12 segments over 2 routes, up to 1 at once
+[13:37:29 driver] starting A/1 on nvidia (1000 steps from init)
+[13:37:59 driver] A/1 runner exit 1; results /Users/andrewhendel/mojolearn-evidence/gpt3-run/t3/legs/A-1/leg-NVIDIA_H100_80GB_HBM3
+[13:37:59 driver] A/1: no segment.json came home; status:
+
+[13:37:59 driver] A/1 did not land (no results); run the driver again to retry
+[13:37:59 driver] halted: a segment failed to land; see the ledger, fix, and run the driver again
+[13:38:20 driver] run runs/t3/2026-09-22: 12 segments over 2 routes, up to 1 at once
+[13:38:20 driver] starting A/1 on nvidia (1000 steps from init)
+[21:37:57 driver] A/1 runner exit 0; results /Users/andrewhendel/mojolearn-evidence/gpt3-run/t3/legs/A-1/leg-NVIDIA_H100_80GB_HBM3
+[21:37:57 driver] A/1 LANDED: 1000 steps, checkpoints ['ckpt_00000000.blm', 'ckpt_00000100.blm', 'ckpt_00000200.blm', 'ckpt_00000300.blm', 'ckpt_00000400.blm', 'ckpt_00000500.blm', 'ckpt_00000600.blm', 'ckpt_00000700.blm', 'ckpt_00000800.blm', 'ckpt_00000900.blm', 'ckpt_00000998.blm', 'ckpt_00001000.blm']
+[21:37:57 driver] starting B/1 on amd (1000 steps from ckpt_00000000.blm)
+[21:38:27 driver] B/1: the rental could not be started: None
+[21:38:27 driver] halted: a segment failed to land; see the ledger, fix, and run the driver again
+[21:40:23 driver] run runs/t3/2026-09-22: 12 segments over 2 routes, up to 2 at once
+[21:40:23 driver] starting A/2 on nvidia (1000 steps from ckpt_00001000.blm)
