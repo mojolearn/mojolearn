@@ -1,7 +1,10 @@
 #!/bin/sh
 # tools/lm_controls_body.sh -- the negative controls of the GPT-3 Small run
 # (docs/GPT3_SMALL_SIX_SEGMENT_PLAN.md, section 6 item 7) on ONE rented NVIDIA
-# box, as a MOJOLEARN_GEMM_LEG_EXTRA body for tools/gemm_remote_leg.sh.
+# box, as a MOJOLEARN_GEMM_LEG_EXTRA body for tools/gemm_remote_leg.sh. With
+# `--arm amd` it runs on an AMD box (tools/hotaisle_leg.sh or
+# tools/do_extra_leg.sh), and `--controls "" --steps N --devices 0,1` makes it
+# a rehearsal: the positive replay alone, N steps on every device of the box.
 # Rendered by `tools/lm_segment_leg.py controls`, which fills every
 # @PLACEHOLDER@ and mints every URL on the Mac (GETs only: a control uploads
 # nothing, anywhere).
@@ -24,6 +27,9 @@
 # off the path); only tools/lm_segment.py comes from the shipped commit.
 # POSIX sh. Never `set -e`: a failure is a result and its log comes home.
 set -u
+ARM="@ARM@"
+DEVICES="@DEVICES@"
+STEPS="@STEPS@"
 FROM_NAME="@FROM_NAME@"
 FROM_STEP="@FROM_STEP@"
 RECIPE_SHA="@RECIPE_SHA@"
@@ -36,11 +42,20 @@ cd "$ROOT" || exit 9
 ST="$OUT/status.txt"
 export MOJOLEARN_NUMERIC_MODE=identical
 say() { echo "$(date -u +%H:%M:%S) $*" >> "$ST"; }
-say "controls from $FROM_NAME (global step $FROM_STEP), wheel $WHEEL, started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+say "controls from $FROM_NAME (global step $FROM_STEP), arm $ARM, devices $DEVICES, $STEPS steps, wheel $WHEEL, started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 uname -a > "$OUT/uname.txt" 2>&1
-nvidia-smi --query-gpu=name,uuid,driver_version,memory.total --format=csv,noheader > "$OUT/gpu.txt" 2>&1
-export MOJOLEARN_TARGET_COLUMN=nvidia
-if [ -z "${MOJOLEARN_GPU_ARCHS:-}" ]; then
+if [ "$ARM" = amd ]; then
+    rocm-smi --showproductname --showbus --showuniqueid > "$OUT/gpu.txt" 2>&1
+else
+    nvidia-smi --query-gpu=name,uuid,driver_version,memory.total --format=csv,noheader > "$OUT/gpu.txt" 2>&1
+fi
+export MOJOLEARN_TARGET_COLUMN="$ARM"
+if [ "$ARM" = amd ]; then
+    if [ -z "${MOJOLEARN_GPU_ARCHS:-}" ]; then
+        MOJOLEARN_GPU_ARCHS=$(rocminfo 2>/dev/null | awk '$1 == "Name:" && $2 ~ /^gfx[0-9a-f]+$/ {print $2; exit}')
+    fi
+    [ -n "${MOJOLEARN_GPU_ARCHS:-}" ] || { say "arch unknown (no MOJOLEARN_GPU_ARCHS and no gfx agent in rocminfo)"; exit 2; }
+elif [ -z "${MOJOLEARN_GPU_ARCHS:-}" ]; then
     cap=$(nvidia-smi -i 0 --query-gpu=compute_cap --format=csv,noheader 2>/dev/null | head -1 | tr -d ' ')
     case "$cap" in
         9.0) MOJOLEARN_GPU_ARCHS=sm_90a ;;
@@ -155,8 +170,8 @@ S=tools/lm_segment.py
 run() {  # $1 name, rest: extra lm_segment run args
     _n="$1"; shift
     _t0=$(date +%s)
-    "$PYBIN" $S run --recipe "$R" --tokens "$TOK" --from "$OUT/in/$FROM_NAME" --steps 2 --devices 0 \
-        --route A --segment "controls-$_n" --label "nvidia-controls-$_n" --no-checkpoints \
+    "$PYBIN" $S run --recipe "$R" --tokens "$TOK" --from "$OUT/in/$FROM_NAME" --steps "$STEPS" --devices "$DEVICES" \
+        --route A --segment "controls-$_n" --label "$ARM-controls-$_n" --no-checkpoints \
         --expect-chain "$OUT/in/expect_chain.jsonl" --out "$OUT/$_n" "$@" > "$OUT/$_n.log" 2>&1; _rc=$?
     say "$_n exit=$_rc secs=$(( $(date +%s) - _t0 )): $(grep -E 'PASS:|FAIL:|REFUSED|DISAGREE|Error|error' "$OUT/$_n.log" | tail -2 | tr '\n' ' ' | cut -c1-300)"
     return $_rc
