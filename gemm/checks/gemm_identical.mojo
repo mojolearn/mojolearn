@@ -3617,6 +3617,7 @@ def _gemm_step_arm_sabotage(v: Float32) -> Float32:
     return bitcast[DType.float32](bits + UInt32(1))
 
 
+@__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(GEMM_LAUNCH_BOUND)))
 def identical_gemm_step_arm_kernel[
     RPT: Int, CPT: Int, TC: Int, KS: Int, PAGES: Int, LFOLD: Bool, SAB: Bool
 ](
@@ -4085,6 +4086,7 @@ comptime GEMM_REUSE_GROUP_WS = (
 comptime GEMM_KSPLIT_MAX_GROUP_LEAVES = 1 << 20
 
 
+@__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(GEMM_LAUNCH_BOUND)))
 def identical_gemm_ksplit_kernel[
     RPT: Int, CPT: Int, TC: Int, KS: Int, PAGES: Int, SAB: Bool
 ](
@@ -4646,11 +4648,21 @@ def _shipped_body_kpack_hg[
     # NVIDIA and Apple have opposite results at the same shapes.  The forced
     # plan and packed body have the same leaf/fold DAG and were bit-equal over
     # every output cell in the GPT-3-small production-shape matrix.
-    comptime if not SAB and TARGET_COLUMN == COLUMN_AMD:
+    # lane/amd-step-time (2026-09-24): measured again once the kernels stopped
+    # spilling (GEMM_LAUNCH_BOUND). Trial arms, scheduling only:
+    # `-D MOJOLEARN_GEMM_AMD_NO_K768_TUNED=1` sends these calls to the packed
+    # body like every other column, `-D MOJOLEARN_GEMM_AMD_K768_PLAN64=1` to
+    # the TUNED 64x64 plan (Apple's choice at these shapes).
+    comptime if not SAB and TARGET_COLUMN == COLUMN_AMD and not is_defined["MOJOLEARN_GEMM_AMD_NO_K768_TUNED"]():
         if k == 768 and (m >= 4096 or (m >= 2048 and n >= 1024)):
-            identical_gemm_with_plan(
-                ctx, c, a, b, ws, m, n, k, op, PLAN_TUNED_128_8X8
-            )
+            comptime if is_defined["MOJOLEARN_GEMM_AMD_K768_PLAN64"]():
+                identical_gemm_with_plan(
+                    ctx, c, a, b, ws, m, n, k, op, PLAN_TUNED_64_4X4
+                )
+            else:
+                identical_gemm_with_plan(
+                    ctx, c, a, b, ws, m, n, k, op, PLAN_TUNED_128_8X8
+                )
             return
     if choose_gemm_plan(m, n, k) == PLAN_TUNED_128_8X8:
         # L40S, 2026-09-20: GPT-3-small Q/K/V/O dWeight has six contract
