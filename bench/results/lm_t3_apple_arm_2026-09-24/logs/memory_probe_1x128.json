@@ -1,0 +1,23 @@
+{
+ "schema": "mojolearn.apple-memory-probe.v1",
+ "mojolearn": "0.8.17",
+ "file": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/b3b5cdf7-59b8-44de-8e38-6027d9f71497/scratchpad/venv/lib/python3.14/site-packages/mojolearn/__init__.py",
+ "process_base": [
+  40731152,
+  40731152
+ ],
+ "rows": [
+  {
+   "batch": 1,
+   "length": 128,
+   "tokens": 128,
+   "n_total": 162147840,
+   "footprint_before": 5230203080,
+   "footprint_after_step": 12746808544,
+   "lifetime_max": 17081887184,
+   "first_step_seconds": 13.342,
+   "second_step_seconds": 1.279
+  }
+ ],
+ "utc": "2026-09-24T13:36:03Z"
+}
