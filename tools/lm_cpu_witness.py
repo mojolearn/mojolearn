@@ -339,6 +339,11 @@ def _host_loss(host, recipe, state, ids, threaded):
 
 
 def _write(path, rec):
+    try:
+        import resource
+        rec["max_rss_gib"] = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / (1 << 20), 2)  # KiB on Linux
+    except (ImportError, OSError):
+        pass
     Path(path).parent.mkdir(parents=True, exist_ok=True)
     Path(path).write_text(json.dumps(rec, indent=1) + "\n")
 
