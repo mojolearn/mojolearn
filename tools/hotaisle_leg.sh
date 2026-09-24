@@ -16,7 +16,12 @@
 #   MOJOLEARN_HOTAISLE_SPEC=2gpu MOJOLEARN_HOTAISLE_GPU_ONLY=1 \
 #   bash tools/hotaisle_leg.sh amd --rent --test-2gpu          the pinning test, before any real 2gpu use
 #
-#   bash tools/hotaisle_leg.sh status        this team's VMs, descriptions, states, slots (both legs of a 2gpu VM), balance
+#   MOJOLEARN_HOTAISLE_SPEC=2gpu MOJOLEARN_HOTAISLE_GPU_ONLY=1 MOJOLEARN_GEMM_LEG_EXTRA=<body> \
+#   bash tools/hotaisle_leg.sh amd --rent --one-body --segment-lease N --dollar-cap USD
+#                                  ONE body that sees BOTH GPUs of the 2x MI300X VM, for a whole
+#                                  training segment (N minutes above 60, priced live, refused above the cap)
+#
+#   bash tools/hotaisle_leg.sh status       this team's VMs, descriptions, states, slots (both legs of a 2gpu VM), balance
 #   bash tools/hotaisle_leg.sh reap <vm>     DELETE ?force=true a mojolearn:* VM, verify gone
 #
 #   (no mode)  DRY RUN: no key read, no API call, nothing created
@@ -40,6 +45,13 @@
 #   MOJOLEARN_HOTAISLE_RUNTIME    auto (default: docker, else podman, else native), docker, podman, native
 #   MOJOLEARN_HOTAISLE_IMAGE      default rocm/dev-ubuntu-22.04:6.4.1-complete (the RunPod AMD image)
 #   MOJOLEARN_HOTAISLE_TEAM       default andrews-team
+#   MOJOLEARN_HOTAISLE_STOCK_WAIT_MINUTES, MOJOLEARN_HOTAISLE_SLOT_WAIT_MINUTES
+#                                 how long to wait for stock (30) and a free slot (240); the run driver
+#                                 sets both short so that it can walk to another AMD provider
+#   MOJOLEARN_HOTAISLE_API, MOJOLEARN_HOTAISLE_SSH_BIN, MOJOLEARN_HOTAISLE_SSH_KEY, MOJOLEARN_HOTAISLE_SSH_KEY_FP,
+#   MOJOLEARN_HOTAISLE_SLOT_PREFIX, MOJOLEARN_HOTAISLE_CREATE_LOCK, MOJOLEARN_HOTAISLE_POLL_SECONDS
+#                                 for tools/tests/test_hotaisle_leg_shim.py only (a local stand-in API
+#                                 and box); a real leg leaves them unset
 # The body sees MOJOLEARN_TARGET_COLUMN=amd and MOJOLEARN_GPU_ARCHS exported,
 # /root/mojolearn (git archive of HEAD, no .git), /root/gemm_leg_out, pixi on
 # PATH with `pixi install` done, exactly as tools/do_extra_leg.sh provides.
@@ -55,10 +67,13 @@
 #      minutes whose owner's VM is absent is logged as possibly broken, and
 #      removed only when its owner pid is also dead.
 #   b. Balance at or above 500 cents or the leg refuses by name. The chosen
-#      spec must show Quantity > 0; otherwise wait and retry up to 30 minutes.
-#      13core and 8core match exactly one GPU; only 2gpu picks the 2x MI300X
-#      offering (exactly two MI300X GPUs), and it also needs a balance at or
-#      above that offering's minimum reservation price.
+#      spec must show Quantity > 0; otherwise wait and retry up to 30 minutes
+#      (MOJOLEARN_HOTAISLE_STOCK_WAIT_MINUTES). 13core and 8core match exactly
+#      one GPU; only 2gpu picks the 2x MI300X offering (exactly two MI300X
+#      GPUs). Before the create the balance must cover THE WHOLE LEASE at the
+#      offering's live OnDemandPrice (never less than its minimum reservation)
+#      PLUS the 500-cent floor: Hot Aisle bills a VM from the prepaid balance
+#      until it is deleted, so a lease the balance cannot pay is refused.
 #   c. A detached Mac-side dead-man armed BEFORE the create, keyed by the VM's
 #      deployment_id as soon as the create returns it. At the deadline it
 #      DELETEs with force and verifies, even if this script is gone.
@@ -71,7 +86,9 @@
 #      VM is absent from a 200 listing (not merely stopped). The verification
 #      line is logged. Unverified: banner, dead-man left armed, slot kept.
 #   f. --minutes defaults to 60 and 60 is the maximum. More is refused. On
-#      2gpu 60 is also the minimum (the offering's minimum reservation).
+#      2gpu 60 is also the minimum (the offering's minimum reservation). A
+#      lease above one hour is a SEGMENT LEASE (below), named with
+#      --segment-lease N --dollar-cap USD, never with --minutes.
 #   g. The description is PATCHed to mojolearn:<lane>:<utc> right after the
 #      create. reap, status and every delete refuse a VM whose description is
 #      not mojolearn:* (the leg's own VM may also be empty if the PATCH never
@@ -81,6 +98,40 @@
 #   The key is read by the builtin `read`, written by the builtin `printf` into
 #   a 0600 curl config read with `curl -K`, reaches the VM on ssh stdin, and is
 #   in no argv on either machine. Both process lists are searched for it.
+#
+# THE SEGMENT LEASE (--segment-lease N --dollar-cap USD; the GPT-3 Small run's
+# AMD segments, 20 to 35 hours each, docs/HANDOFF_gpt3_small_run_2026-09-23.md).
+# The 60-minute rule of f. is this tool's, not the provider's. The API
+# (swagger read 2026-09-24) has NO maximum: AvailableVirtualMachineTypes
+# carries only MinimumReservationMinutes; a VM is billed hourly from the
+# team's prepaid balance until it is DELETEd (BalanceInfo.estimated_runout_time
+# is when the balance would run out at the current hourly_rate; what happens
+# to a VM at runout is not documented). So the real limit is the balance, and
+# this tool's own cap is 2880 minutes (48 h, the same as tools/do_extra_leg.sh).
+#   1. Both flags or neither; N above 60 and at most 2880; the cap a dollar
+#      figure. --minutes and --segment-lease are two ways to say one thing.
+#   2. PRICED LIVE before the dead-man and the create: the chosen offering's
+#      OnDemandPrice (cents/h) from GET .../virtual_machines/available/ times N
+#      minutes, rounded up to a cent, is the lease's price. Above the cap:
+#      "segment lease REFUSED ... above the --dollar-cap", nothing created.
+#      The balance must hold that price plus the 500-cent floor (b.).
+#   3. The Mac dead-man and the on-box watchdog take the long deadline
+#      (create + N minutes); the body's timeout(1) is the deadline minus the
+#      fetch reserve; slots, the stock wait, the verified delete and the
+#      trap are unchanged.
+#   4. While the body runs, every MOJOLEARN_HOTAISLE_STATUS_EVERY seconds
+#      (default 600) the leg copies the body's status files
+#      (/root/gemm_leg_out/*/status.txt) to <out>/status_live.txt, so a Mac
+#      crash in hour 20 still leaves the segment's last status on disk.
+#   5. leg.txt: segment_lease, dollar_cap, price_cents_per_hour, max_cost,
+#      balance_required_cents; vm_id; gpu_agents; the host's rocm-smi in
+#      <out>/gpu.txt.
+# --one-body (2gpu only): ONE body, and its container gets /dev/kfd and the
+# whole /dev/dri, so it sees BOTH GPUs (a training segment with --devices
+# 0,1); no pin calibration, no GPU 1 body. The host must show exactly two
+# GPU agents in rocminfo or the VM is deleted unused. Its leg.txt says
+# spec=2gpu body_gpus=all size=mi300x-2gpu-vm. MOJOLEARN_HOTAISLE_GPU_ONLY=1
+# and the CPU opponent scan still apply (26 cores is not the 13-core tuple).
 #
 # TEST-ONLY FLAGS (they exist to prove the guards; a real leg never uses them)
 #   --test-watchdog  ships nothing. The Mac issues no delete before deadline +
@@ -255,21 +306,25 @@ fi
 
 REPO="${MOJOLEARN_HOTAISLE_REPO:?}"
 cd "$REPO" || exit 2
-API=https://admin.hotaisle.app/api
+API="${MOJOLEARN_HOTAISLE_API:-https://admin.hotaisle.app/api}"
 TEAM="${MOJOLEARN_HOTAISLE_TEAM:-andrews-team}"
 KEYFILE="${MOJOLEARN_HOTAISLE_KEY_FILE:-$HOME/.mojolearn_hotaisle_key}"
 SPEC="${MOJOLEARN_HOTAISLE_SPEC:-13core}"
 RUNTIME_WANT="${MOJOLEARN_HOTAISLE_RUNTIME:-auto}"
 IMAGE="${MOJOLEARN_HOTAISLE_IMAGE:-rocm/dev-ubuntu-22.04:6.4.1-complete}"
-SSH_KEY="$HOME/.ssh/id_ed25519"
-SSH_KEY_FP="SHA256:pqDQ15Jijc636E5M3/2IvTGR7YKL11+JzQwGYtBvtQU"
-SLOT_PREFIX=/tmp/mojolearn-hotaisle-slot
-CREATE_LOCK=/tmp/mojolearn-hotaisle-create.lock
+SSH_KEY="${MOJOLEARN_HOTAISLE_SSH_KEY:-$HOME/.ssh/id_ed25519}"
+SSH_KEY_FP="${MOJOLEARN_HOTAISLE_SSH_KEY_FP:-SHA256:pqDQ15Jijc636E5M3/2IvTGR7YKL11+JzQwGYtBvtQU}"
+SSH_BIN="${MOJOLEARN_HOTAISLE_SSH_BIN:-ssh}"
+SLOT_PREFIX="${MOJOLEARN_HOTAISLE_SLOT_PREFIX:-/tmp/mojolearn-hotaisle-slot}"
+CREATE_LOCK="${MOJOLEARN_HOTAISLE_CREATE_LOCK:-/tmp/mojolearn-hotaisle-create.lock}"
+POLL_SECONDS="${MOJOLEARN_HOTAISLE_POLL_SECONDS:-30}"
+STATUS_EVERY="${MOJOLEARN_HOTAISLE_STATUS_EVERY:-600}"
 MAX_SLOTS=3
 MIN_BALANCE_CENTS=500
 SLOT_STALE_SECONDS=6000
 SLOT_WAIT_MINUTES="${MOJOLEARN_HOTAISLE_SLOT_WAIT_MINUTES:-240}"
-STOCK_WAIT_MINUTES=30
+STOCK_WAIT_MINUTES="${MOJOLEARN_HOTAISLE_STOCK_WAIT_MINUTES:-30}"
+SEGMENT_CAP_MINUTES=2880   # this tool's own cap on a segment lease (48 h); the provider has none
 FETCH_RESERVE="${FETCH_RESERVE:-240}"
 MAX_BUNDLE_BYTES="${MOJOLEARN_HOTAISLE_MAX_BYTES:-15000000}"
 BOX_DIR=/var/lib/mojolearn-hotaisle
@@ -282,7 +337,7 @@ TEST2_HOLD_TICKS=12   # --test-2gpu: each tiny body holds 12 x 10 s
 CPU_OPPONENT_DENY="trees_leg.sh trees_amd_leg.sh trees_amd_remote.sh trees_identical_remote.sh trees_identical_ab.sh vendor_trees_leg.sh vendor_preflight.sh local_speed_run.sh do_speed_leg.sh gbdt_accuracy_ab.sh grow_policy_ab.sh nvidia_bench.sh nvidia_forest_bench.sh knn_reference_leg.sh speed_gbdt_arm.py speed_cuml_arm.py vendor_preflight.py catboost_arm.py catboost_end2end_arm.py catboost_logloss_arm.py catboost_multiclass_arm.py catboost_reference.py knn_cuml_reference.py forest_speed_arm.py classical_ladder_arm.py nvidia_identical_trees.py rf_higgs_columns_ab.py forest_inference_ab.py"
 CPU_OPPONENT_ENV_DENY="MOJOLEARN_SPEED_ MOJOLEARN_VT_ MOJOLEARN_TREES_ MOJOLEARN_LADDER_ MOJOLEARN_KNN_REF_"
 
-usage() { sed -n '2,48p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,/^# SAFETY, BAKED IN/p' "${BASH_SOURCE[0]}" | sed '$d' | sed 's/^# \{0,1\}//'; }
 log() { printf '[%s hotaisle] %s\n' "$(date +%T)" "$*"; }
 die() { printf '\n%s\n' "$1" >&2; exit "${2:-1}"; }
 utc() { date -u +%Y-%m-%dT%H:%M:%SZ; }
@@ -292,7 +347,7 @@ sha256_of() { if command -v shasum > /dev/null 2>&1; then shasum -a 256 "$1"; el
 
 # ------------------------------------------------------------------ arguments
 CMD=leg; MODE=dry; MINUTES=60; GATES=1; TEST_WATCHDOG=0; BARE=0; REAP_REF=""
-TEST_2GPU=0
+TEST_2GPU=0; ONE_BODY=0; SEGMENT_LEASE=""; DOLLAR_CAP=""; MINUTES_GIVEN=0; CAP_CENTS=""
 while [ $# -gt 0 ]; do
   case "$1" in
     amd) ;;
@@ -302,8 +357,13 @@ while [ $# -gt 0 ]; do
     --probe) MODE=probe ;;
     --rent) MODE=rent ;;
     --dry-run) MODE=dry ;;
-    --minutes) shift; MINUTES="${1:-}" ;;
-    --minutes=*) MINUTES="${1#--minutes=}" ;;
+    --minutes) shift; MINUTES="${1:-}"; MINUTES_GIVEN=1 ;;
+    --minutes=*) MINUTES="${1#--minutes=}"; MINUTES_GIVEN=1 ;;
+    --segment-lease) shift; SEGMENT_LEASE="${1:-}" ;;
+    --segment-lease=*) SEGMENT_LEASE="${1#--segment-lease=}" ;;
+    --dollar-cap) shift; DOLLAR_CAP="${1:-}" ;;
+    --dollar-cap=*) DOLLAR_CAP="${1#--dollar-cap=}" ;;
+    --one-body) ONE_BODY=1 ;;
     --skip-gates) GATES=0 ;;
     --test-watchdog) TEST_WATCHDOG=1 ;;
     --bare) BARE=1 ;;
@@ -316,8 +376,21 @@ while [ $# -gt 0 ]; do
   shift
 done
 case "$MINUTES" in ''|*[!0-9]*) echo "--minutes must be a whole number" >&2; exit 2 ;; esac
-if [ "$MINUTES" -gt 60 ]; then
-  echo "--minutes $MINUTES REFUSED: 60 is the maximum lease (a second leg, never an extension)" >&2; exit 2
+if [ -n "$SEGMENT_LEASE" ] || [ -n "$DOLLAR_CAP" ]; then
+  { [ -n "$SEGMENT_LEASE" ] && [ -n "$DOLLAR_CAP" ]; } || { echo "--segment-lease and --dollar-cap go together" >&2; exit 2; }
+  [ "$MINUTES_GIVEN" = 0 ] || { echo "--minutes and --segment-lease are two ways to say one thing; give one" >&2; exit 2; }
+  case "$SEGMENT_LEASE" in ''|*[!0-9]*) echo "--segment-lease must be whole minutes" >&2; exit 2 ;; esac
+  case "$DOLLAR_CAP" in ''|*[!0-9.]*|.|*.*.*) echo "--dollar-cap must be a dollar figure like 120 or 47.50" >&2; exit 2 ;; esac
+  if [ "$SEGMENT_LEASE" -le 60 ] || [ "$SEGMENT_LEASE" -gt "$SEGMENT_CAP_MINUTES" ]; then
+    echo "--segment-lease is for leases ABOVE one hour and at most $SEGMENT_CAP_MINUTES minutes (48 h); got $SEGMENT_LEASE" >&2; exit 2
+  fi
+  { [ "$TEST_WATCHDOG" = 0 ] && [ "$BARE" = 0 ] && [ "$TEST_2GPU" = 0 ]; } \
+    || { echo "--segment-lease is for a real body; --test-watchdog, --bare and --test-2gpu keep their short leases" >&2; exit 2; }
+  MINUTES=$SEGMENT_LEASE
+  # the cap in whole cents, compared with the live price in cents
+  CAP_CENTS=$(awk -v d="$DOLLAR_CAP" 'BEGIN { printf "%d", d * 100 + 0.5 }')
+elif [ "$MINUTES" -gt 60 ]; then
+  echo "--minutes $MINUTES REFUSED: 60 is the maximum lease (a second leg, never an extension); a training segment names its lease with --segment-lease N --dollar-cap USD" >&2; exit 2
 fi
 _min=10; [ "$BARE" = 1 ] && _min=5; [ "$TEST_WATCHDOG" = 1 ] && _min=3
 [ "$MINUTES" -ge "$_min" ] || { echo "--minutes must be at least $_min for this mode" >&2; exit 2; }
@@ -329,6 +402,16 @@ case "$SPEC" in
   2gpu)   SPEC_CORES=26; SPEC_DESC="2x MI300X" ;;
   *) echo "MOJOLEARN_HOTAISLE_SPEC='$SPEC': 13core, 8core or 2gpu (2gpu is the 2x MI300X VM: GPU rows only)" >&2; exit 2 ;;
 esac
+TWO_BODY=0
+if [ "$ONE_BODY" = 1 ]; then
+  [ "$SPEC" = 2gpu ] || { echo "--one-body is the 2x MI300X VM with one body on both GPUs: it needs --spec 2gpu" >&2; exit 2; }
+  [ "$TEST_2GPU" = 0 ] || { echo "--one-body and --test-2gpu are different uses of the 2gpu VM" >&2; exit 2; }
+elif [ "$SPEC" = 2gpu ]; then
+  TWO_BODY=1
+  if [ -n "$SEGMENT_LEASE" ]; then
+    echo "--segment-lease on --spec 2gpu needs --one-body (two pinned bodies on a long lease are not a supported use)" >&2; exit 2
+  fi
+fi
 if [ "$SPEC" = 2gpu ]; then
   if [ "$MINUTES" -lt 60 ]; then
     echo "--minutes $MINUTES REFUSED for --spec 2gpu: the 2x MI300X offering bills a 60-minute minimum reservation, so a 2gpu lease is 60 minutes" >&2; exit 2
@@ -336,7 +419,7 @@ if [ "$SPEC" = 2gpu ]; then
   if [ "$TEST_WATCHDOG" = 1 ] || [ "$BARE" = 1 ]; then
     echo "--test-watchdog and --bare are single-GPU tests; the 2gpu spec has --test-2gpu" >&2; exit 2
   fi
-  if [ "$RUNTIME_WANT" = native ]; then
+  if [ "$RUNTIME_WANT" = native ] && [ "$TWO_BODY" = 1 ]; then
     echo "MOJOLEARN_HOTAISLE_RUNTIME=native REFUSED for --spec 2gpu: each body needs its own pinned container" >&2; exit 2
   fi
   [ "$FETCH_RESERVE" -ge 360 ] 2>/dev/null || FETCH_RESERVE=360   # two fetches
@@ -359,7 +442,7 @@ VMREF=""; VMNAME=""; DEPLOY_ID=""; SSH_IP=""; SSH_PORT=22; DESC=""
 CREATE_ATTEMPTED=0; CREATE_LOCK_HELD=0; DESTROY_CONFIRMED=0
 DEADMAN_PID=""; DEADMAN_DIR=""; DEADLINE_EPOCH=0; LEG_START=0
 SLOT=""; NONCE="$$-$(date -u +%Y%m%dT%H%M%SZ)"; WATCHDOG_OK=0; WDT_DONE=0
-KEY_RED=0; FETCH_RED=0; BODY_STATE=not_started; SSH=(ssh); SSHN=(ssh -n)
+KEY_RED=0; FETCH_RED=0; BODY_STATE=not_started; SSH=("$SSH_BIN"); SSHN=("$SSH_BIN" -n)
 BAL_BEFORE=""
 # 2gpu state: index 0 is GPU 0 (host /root/leg-a), index 1 is GPU 1 (/root/leg-b).
 LETTERS=(a b); OUT_B=""; REAL_OUT_B=""; OUTS=("" ""); LANE_A=""; LANE_B=""
@@ -702,9 +785,13 @@ fi
 LEG_EXTRA_B="${MOJOLEARN_GEMM_LEG_EXTRA_B:-}"
 EXTRA_ENV_B="${MOJOLEARN_HOTAISLE_EXTRA_ENV_B:-}"
 if [ "$MODE" != probe ]; then
-  if [ "$SPEC" != 2gpu ]; then
+  if [ "$TWO_BODY" = 0 ]; then
     if [ -n "$LEG_EXTRA_B${MOJOLEARN_GEMM_LEG_OUT_B:-}$EXTRA_ENV_B${MOJOLEARN_HOTAISLE_LANE_B:-}" ]; then
-      die "REFUSED: MOJOLEARN_GEMM_LEG_EXTRA_B, MOJOLEARN_GEMM_LEG_OUT_B, MOJOLEARN_HOTAISLE_EXTRA_ENV_B and MOJOLEARN_HOTAISLE_LANE_B belong to the GPU 1 body of --spec 2gpu; the $SPEC spec runs one body and will not silently drop the other" 2
+      die "REFUSED: MOJOLEARN_GEMM_LEG_EXTRA_B, MOJOLEARN_GEMM_LEG_OUT_B, MOJOLEARN_HOTAISLE_EXTRA_ENV_B and MOJOLEARN_HOTAISLE_LANE_B belong to the GPU 1 body of --spec 2gpu without --one-body; this leg runs one body and will not silently drop the other" 2
+    fi
+    if [ "$ONE_BODY" = 1 ]; then
+      [ "${MOJOLEARN_HOTAISLE_GPU_ONLY:-0}" = 1 ] \
+        || die "REFUSED: --spec 2gpu needs MOJOLEARN_HOTAISLE_GPU_ONLY=1, the caller's word that the body is not a CPU opponent row (26 cores is not the 13-core CPU tuple)" 2
     fi
   else
     [ "${MOJOLEARN_HOTAISLE_GPU_ONLY:-0}" = 1 ] \
@@ -723,7 +810,7 @@ LANE="${MOJOLEARN_HOTAISLE_LANE:-$(basename "${LEG_EXTRA:-probe}" .sh)}"
 if [ "$TEST_2GPU" = 1 ]; then LANE="${MOJOLEARN_HOTAISLE_LANE:-test2gpu}"; fi
 case "$LANE" in ''|*[!A-Za-z0-9_.-]*) die "MOJOLEARN_HOTAISLE_LANE='$LANE': letters, digits and _.- only (it goes in the VM description)" 2 ;; esac
 LANE_A="$LANE"
-if [ "$SPEC" = 2gpu ]; then
+if [ "$TWO_BODY" = 1 ]; then
   _lane_b=$(basename "${LEG_EXTRA_B:-probe}" .sh)
   if [ "$TEST_2GPU" = 1 ]; then _lane_b=test2gpu; fi
   LANE_B="${MOJOLEARN_HOTAISLE_LANE_B:-$_lane_b}"
@@ -772,21 +859,24 @@ cpu_opponent_marks() {  # <body path> <env words>
 }
 if [ "$SPEC" = 2gpu ] && [ "$MODE" != probe ] && [ "$TEST_2GPU" = 0 ]; then
   _marks_a=$(cpu_opponent_marks "$LEG_EXTRA" "$EXTRA_ENV")
-  _marks_b=$(cpu_opponent_marks "$LEG_EXTRA_B" "$EXTRA_ENV_B")
+  _marks_b=""
+  [ "$TWO_BODY" = 1 ] && _marks_b=$(cpu_opponent_marks "$LEG_EXTRA_B" "$EXTRA_ENV_B")
   if [ -n "$_marks_a$_marks_b" ]; then
     die "REFUSED on --spec 2gpu: a body marks a CPU opponent row, whose tuple is the 13-core VM (this VM has 26 cores):
 $( { printf '%s\n' "$_marks_a" | grep . | sed 's/^/  GPU 0 body: /'; printf '%s\n' "$_marks_b" | grep . | sed 's/^/  GPU 1 body: /'; } )" 2
   fi
 fi
 
-if [ "$SPEC" = 2gpu ]; then
+if [ "$TWO_BODY" = 1 ]; then
   OUT="${MOJOLEARN_GEMM_LEG_OUT:-bench/results/e1g/${STAMP}-amd-${LEG2_LABEL}-hotaisle-${LANE_A}-gpu0}"
+elif [ "$ONE_BODY" = 1 ]; then
+  OUT="${MOJOLEARN_GEMM_LEG_OUT:-bench/results/e1g/${STAMP}-amd-${LEG2_LABEL}-hotaisle-${LANE}}"
 else
   OUT="${MOJOLEARN_GEMM_LEG_OUT:-bench/results/e1g/${STAMP}-amd-mi300x-hotaisle-${LANE}}"
 fi
 case "$OUT" in /*) ;; *) OUT="$REPO/$OUT" ;; esac
 REAL_OUT="$OUT"
-if [ "$SPEC" = 2gpu ] && [ "$MODE" != probe ]; then
+if [ "$TWO_BODY" = 1 ] && [ "$MODE" != probe ]; then
   OUT_B="${MOJOLEARN_GEMM_LEG_OUT_B:-bench/results/e1g/${STAMP}-amd-${LEG2_LABEL}-hotaisle-${LANE_B}-gpu1}"
   case "$OUT_B" in /*) ;; *) OUT_B="$REPO/$OUT_B" ;; esac
   REAL_OUT_B="$OUT_B"
@@ -941,7 +1031,21 @@ if [ "$TEST_2GPU" = 1 ]; then SHIPS_SOURCE=0; fi
 
 COMMIT="$(git -C "$REPO" rev-parse HEAD)" || die "not a git checkout: $REPO" 2
 COMMIT_LINE="$(git -C "$REPO" log -1 --format='%h parent %p' "$COMMIT")"
-if [ "$SPEC" = 2gpu ]; then
+LEASE_NOTE=""
+[ -n "$SEGMENT_LEASE" ] && LEASE_NOTE=" SEGMENT LEASE, cap \$$DOLLAR_CAP, priced live before the create"
+if [ "$ONE_BODY" = 1 ]; then
+  echo "== hotaisle_leg: one Hot Aisle 2x MI300X VM running ONE extra body that sees both GPUs =="
+  echo "   mode      $MODE"
+  echo "   commit    $COMMIT_LINE"
+  echo "   spec      2gpu --one-body (2x MI300X, $SPEC_CORES cores; ONE VM, ONE slot, ONE watchdog, ONE delete), team $TEAM"
+  echo "   lease     $MINUTES minutes$LEASE_NOTE (Mac dead-man and on-box watchdog at that deadline)"
+  echo "   label     $LEG2_LABEL, body_gpus=all (never mixed with 1x MI300X VM rows)"
+  echo "   body      $LEG_EXTRA   lane $LANE"
+  echo "   gates     $( [ "$GATES" = 1 ] && echo 'device check + card' || echo 'SKIPPED (--skip-gates)')"
+  echo "   archs     ${GPU_ARCHS:-<unset: read from rocminfo on the VM>}   column amd"
+  echo "   runtime   $RUNTIME_WANT (image $IMAGE; the container gets /dev/kfd and the whole /dev/dri)"
+  echo "   out       $REAL_OUT"
+elif [ "$TWO_BODY" = 1 ]; then
   echo "== hotaisle_leg: one Hot Aisle 2x MI300X VM running two extra bodies, one pinned container per GPU =="
   echo "   mode      $MODE$( [ "$TEST_2GPU" = 1 ] && echo ' TEST-2GPU')"
   echo "   commit    $COMMIT_LINE"
@@ -962,7 +1066,7 @@ else
   echo "   mode      $MODE$( [ "$TEST_WATCHDOG" = 1 ] && echo ' TEST-WATCHDOG')$( [ "$BARE" = 1 ] && echo ' BARE')"
   echo "   commit    $COMMIT_LINE"
   echo "   spec      $SPEC (1x MI300X, $SPEC_CORES cores), team $TEAM"
-  echo "   lease     $MINUTES minutes (Mac dead-man and on-box watchdog at that deadline)"
+  echo "   lease     $MINUTES minutes$LEASE_NOTE (Mac dead-man and on-box watchdog at that deadline)"
   echo "   body      $LEG_EXTRA   lane $LANE"
   echo "   gates     $( [ "$GATES" = 1 ] && echo 'device check + card' || echo 'SKIPPED (--skip-gates)')"
   echo "   archs     ${GPU_ARCHS:-<unset: read from rocminfo on the VM>}   column amd"
@@ -1016,7 +1120,7 @@ else
   else
     rbad "MOJOLEARN_HOTAISLE_EXTRA_ENV is refused: $(grep '^# REFUSED' "$OUT/extra_env.sh" | tr '\n' ' ')"
   fi
-  if [ "$SPEC" = 2gpu ]; then
+  if [ "$TWO_BODY" = 1 ]; then
     if sh -n "$LEG_EXTRA_B" 2> "$TMPD/extra_syntax_b.err"; then
       rok "the GPU 1 extra body is valid sh: $LEG_EXTRA_B"
     else
@@ -1230,6 +1334,7 @@ if command -v rocminfo > /dev/null 2>&1; then
     # The agent Name: field only. A bare `grep -Eo 'gfx[0-9a-f]+'` also matched
     # a stray "gfx9" on the MI300X (2026-09-11) and counted two archs.
     rocminfo 2>/dev/null | awk '$1 == "Name:" && $2 ~ /^gfx[0-9a-f]+$/ {print "GFX=" $2}' | sort -u
+    echo "GPU_AGENTS=$(rocminfo 2>/dev/null | awk '$1 == "Name:" && $2 ~ /^gfx[0-9a-f]+$/' | wc -l | tr -d ' ')"
 else
     echo ROCMINFO_ABSENT
 fi
@@ -1689,7 +1794,7 @@ calibrate_pins() {  # <calibration output>: sets PIN_* per GPU; 0 only when both
   [ -n "${PIN_BUS[0]}" ] && [ -n "${PIN_BUS[1]}" ] && [ "$(bdf_tail "${PIN_BUS[0]}")" != "$(bdf_tail "${PIN_BUS[1]}")" ]
 }
 legs_write() {  # the slot's legs file, which `status` prints
-  { [ "$SPEC" = 2gpu ] && [ -n "$SLOT" ] && [ -d "$SLOT" ]; } || return 0
+  { [ "$TWO_BODY" = 1 ] && [ -n "$SLOT" ] && [ -d "$SLOT" ]; } || return 0
   grep -qx "nonce=$NONCE" "$SLOT/owner" 2>/dev/null || return 0
   {
     printf 'gpu0\t%s\t%s\t%s\t%s\t%s\t%s\n' "$LANE_A" "${LEG_EXTRA:-runner-test-body}" "$REAL_OUT" "${B_SINCE[0]}" "${B_STATE[0]}" "${B_EXIT[0]}"
@@ -1771,7 +1876,7 @@ for _t in remote_body watchdog watchdog_arm remote_unpack remote_start pull_star
 done
 check_posix "$TMPD/device_probe.sh" device_probe.sh || _ok=0
 [ "$_ok" = 1 ] && rok "the remote body, watchdog, arm, unpack, start, pull and Mac dead-man scripts substitute cleanly and pass sh -n, dash -n and the bashism scan"
-if [ "$SPEC" = 2gpu ]; then
+if [ "$TWO_BODY" = 1 ]; then
   _ok2=1
   set_example_pins
   WORK_SECONDS=$((MINUTES * 60 - FETCH_RESERVE - 600))   # EXAMPLE only; the real bound is computed when the bodies start
@@ -1822,7 +1927,18 @@ cp "$TMPD/check_remote_body.sh" "$OUT/remote_body.sh"
   echo "mode=$MODE"
   echo "started=$(utc)"
 } > "$OUT/leg.txt"
-if [ "$SPEC" = 2gpu ]; then
+if [ "$ONE_BODY" = 1 ]; then
+  {
+    echo "size=$LEG2_LABEL"
+    echo "body_gpus=all"
+    echo "vm_share=one 2x MI300X VM, ONE body whose container sees both GPUs (/dev/kfd and the whole /dev/dri); never mixed with 1x MI300X VM rows"
+    echo "gpu_only_ack=${MOJOLEARN_HOTAISLE_GPU_ONLY:-0}"
+  } >> "$OUT/leg.txt"
+fi
+if [ -n "$SEGMENT_LEASE" ]; then
+  { echo "segment_lease=$MINUTES"; echo "dollar_cap=$DOLLAR_CAP"; } >> "$OUT/leg.txt"
+fi
+if [ "$TWO_BODY" = 1 ]; then
   {
     echo "size=$LEG2_LABEL"
     echo "vm_share=one 2x MI300X VM, two bodies, one pinned container per GPU; this dir is GPU 0 and holds the VM records"
@@ -1866,7 +1982,7 @@ if [ "$SPEC" = 2gpu ]; then
   } > "$OUT_B/leg.txt"
 fi
 
-if [ "$MODE" = dry ] && [ "$SPEC" = 2gpu ]; then
+if [ "$MODE" = dry ] && [ "$TWO_BODY" = 1 ]; then
   set_example_pins
   WORK_SECONDS=$((MINUTES * 60 - FETCH_RESERVE - 600))
   gen_calibrate "$OUT/pin_calibrate.example.sh"
@@ -1941,7 +2057,9 @@ if [ "$MODE" = dry ]; then
   echo "== what --rent does, in order =="
   echo "   1. refuse a dirty tree (when source ships), a bad key file, a broken script, an oversized bundle"
   echo "   2. GET teams (operator role, VM limit), take a slot (/tmp/mojolearn-hotaisle-slot.N), balance >= $MIN_BALANCE_CENTS cents"
-  echo "   3. wait for Quantity > 0 on the $SPEC spec (up to $STOCK_WAIT_MINUTES min); print price and balance"
+  echo "   3. wait for Quantity > 0 on the $SPEC spec (up to $STOCK_WAIT_MINUTES min); price the whole $MINUTES-minute lease at its"
+  echo "      live cents/hour$( [ -n "$SEGMENT_LEASE" ] && echo ", refused above the \$$DOLLAR_CAP cap"); the balance must hold it plus the \$5.00 floor"
+  [ "$ONE_BODY" = 1 ] && echo "      (--one-body: after the device probe the host must show exactly 2 GPU agents, else delete unused)"
   echo "   4. ARM THE MAC DEAD-MAN, then under the create lock: snapshot, POST   [THE BILL STARTS HERE]"
   echo "   5. PATCH description mojolearn:$LANE:<utc>, verify it; wait for running; ssh settle as hotaisle; sudo -n"
   echo "   6. key to $BOX_RC on stdin; arm the watchdog; verify pid (two sessions), ref, GET 200 + description"
@@ -1996,7 +2114,7 @@ while :; do
 done
 echo "slot=$SLOT taken $(utc)" >> "$OUT/leg.txt"
 log "slot $SLOT taken (lane $LANE)"
-if [ "$SPEC" = 2gpu ]; then
+if [ "$TWO_BODY" = 1 ]; then
   { echo "spec=2gpu"; echo "out_b=$REAL_OUT_B"; } >> "$SLOT/owner"
   _now=$(date +%s); B_SINCE=("$_now" "$_now")
   legs_write
@@ -2021,18 +2139,35 @@ done
 if [ "$SPEC" = 2gpu ]; then
   [ "$_minres" -le "$MINUTES" ] 2>/dev/null \
     || die "REFUSED: the 2x MI300X offering has MinimumReservationMinutes $_minres, above the $MINUTES-minute lease. Nothing was created." 3
-  _floor=$(( _price * _minres / 60 + 1 ))
-  [ "$_floor" -ge "$MIN_BALANCE_CENTS" ] || _floor=$MIN_BALANCE_CENTS
-  [ "$BAL_BEFORE" -ge "$_floor" ] 2>/dev/null \
-    || die "REFUSED: balance $(dollars "$BAL_BEFORE") is below $(dollars "$_floor"), the 2x MI300X minimum reservation ($_minres min at $_price cents/h). Nothing was created." 3
-  echo "cpu_cores=$_cores balance_floor_cents=$_floor" >> "$OUT/leg.txt"
+  echo "cpu_cores=$_cores" >> "$OUT/leg.txt"
 else
   [ "$_minres" -le 10 ] || die "REFUSED: the $SPEC spec has MinimumReservationMinutes $_minres. Nothing was created." 3
 fi
 cp "$TMPD/create_request.json" "$OUT/create_request.json"
 cp "$TMPD/avail.json" "$OUT/offering.json"
-log "spec $SPEC: quantity $_qty, $_price cents/hour, minimum reservation $_minres min; $MINUTES min costs at most $(dollars $(( _price * MINUTES / 60 + 1 )))"
 echo "price_cents_per_hour=$_price min_reservation_minutes=$_minres" >> "$OUT/leg.txt"
+# THE WHOLE LEASE, priced live: the offering's cents/hour times the lease (never
+# less than its minimum reservation), rounded up to a cent. Hot Aisle bills the
+# prepaid balance until the DELETE, so the balance must hold all of it.
+case "$_price" in ''|*[!0-9]*) _price=0 ;; esac
+_bill_minutes=$MINUTES
+[ "${_minres:-0}" -gt "$_bill_minutes" ] 2>/dev/null && _bill_minutes=$_minres
+LEASE_CENTS=$(( (_price * _bill_minutes + 59) / 60 ))
+if [ -n "$SEGMENT_LEASE" ]; then
+  [ "$_price" -gt 0 ] || die "segment lease REFUSED: the $SPEC_DESC offering shows no OnDemandPrice, so a $MINUTES-minute lease cannot be priced; nothing was created" 2
+  { echo "max_cost=$(dollars "$LEASE_CENTS")"; echo "max_cost_cents=$LEASE_CENTS"; echo "cap_cents=$CAP_CENTS"; } >> "$OUT/leg.txt"
+  if [ "$LEASE_CENTS" -gt "$CAP_CENTS" ]; then
+    echo "segment_lease_verdict=REFUSED_OVER_CAP" >> "$OUT/leg.txt"
+    die "segment lease REFUSED: $MINUTES minutes of the $SPEC_DESC VM at $(dollars "$_price")/h is up to $(dollars "$LEASE_CENTS"), above the --dollar-cap of \$$DOLLAR_CAP; nothing was created" 2
+  fi
+  echo "segment_lease_verdict=UNDER_CAP" >> "$OUT/leg.txt"
+  log "segment lease: $MINUTES minutes of the $SPEC_DESC VM at $(dollars "$_price")/h is at most $(dollars "$LEASE_CENTS"), under the cap of \$$DOLLAR_CAP"
+fi
+BAL_NEED=$(( LEASE_CENTS + MIN_BALANCE_CENTS ))
+{ echo "lease_cents=$LEASE_CENTS"; echo "balance_required_cents=$BAL_NEED"; } >> "$OUT/leg.txt"
+[ "$BAL_BEFORE" -ge "$BAL_NEED" ] 2>/dev/null \
+  || die "REFUSED: balance $(dollars "$BAL_BEFORE") is below $(dollars "$BAL_NEED"), the whole lease ($_bill_minutes min at $_price cents/h = $(dollars "$LEASE_CENTS")) plus the \$5.00 floor. Nothing was created." 3
+log "spec $SPEC: quantity $_qty, $_price cents/hour, minimum reservation $_minres min; $MINUTES min costs at most $(dollars "$LEASE_CENTS"); balance $(dollars "$BAL_BEFORE") covers it plus the floor"
 
 # ---- c. the Mac dead-man, BEFORE the create ----
 LEG_START=$(date +%s)
@@ -2108,7 +2243,7 @@ fi
 case "$VMREF" in *[!A-Za-z0-9_.-]*) die "the VM ref '$VMREF' has unexpected characters" 4 ;; esac
 printf '%s\n' "$VMREF" > "$DEADMAN_DIR/vm_ref.txt"
 printf 'vm_ref=%s\nvm_name=%s\n' "$VMREF" "$VMNAME" >> "$SLOT/owner"
-printf 'vm_ref=%s\nvm_name=%s\n' "$VMREF" "$VMNAME" >> "$OUT/leg.txt"
+printf 'vm_ref=%s\nvm_name=%s\nvm_id=%s\n' "$VMREF" "$VMNAME" "${DEPLOY_ID:-$VMREF}" >> "$OUT/leg.txt"
 log "VM $VMNAME deployment_id $VMREF (Mac dead-man now keyed by it)"
 
 # {vm} is "name or deployment ID": prove the deployment_id form answers, else use the name.
@@ -2155,8 +2290,8 @@ echo "ssh=hotaisle@$SSH_IP:$SSH_PORT running_after_seconds=$(( $(date +%s) - LEG
 
 SSH_OPTS=(-p "$SSH_PORT" -i "$SSH_KEY" -o IdentitiesOnly=yes -o BatchMode=yes -o StrictHostKeyChecking=accept-new
           -o "UserKnownHostsFile=$TMPD/known_hosts" -o ConnectTimeout=15 -o ServerAliveInterval=30 -o ServerAliveCountMax=4)
-SSH=(ssh "${SSH_OPTS[@]}" "hotaisle@$SSH_IP")
-SSHN=(ssh -n "${SSH_OPTS[@]}" "hotaisle@$SSH_IP")
+SSH=("$SSH_BIN" "${SSH_OPTS[@]}" "hotaisle@$SSH_IP")
+SSHN=("$SSH_BIN" -n "${SSH_OPTS[@]}" "hotaisle@$SSH_IP")
 _ok=0
 for _i in $(seq 1 90); do
   if "${SSHN[@]}" true 2>/dev/null; then _ok=$((_ok + 1)); [ "$_ok" -ge 3 ] && break; else _ok=0; fi
@@ -2225,7 +2360,7 @@ esac
 grep -q '^KFD_PRESENT' "$OUT/device_probe.txt" || die "/dev/kfd is absent on the VM: no AMD compute device. Deleting." 6
 echo "runtime=$RUNTIME" >> "$OUT/leg.txt"
 log "runtime $RUNTIME"
-if [ "$SPEC" = 2gpu ]; then
+if [ "$TWO_BODY" = 1 ]; then
   echo "runtime=$RUNTIME" >> "$OUT_B/leg.txt"
   [ "$RUNTIME" != native ] || die "the 2gpu spec needs docker or podman on the VM (one pinned container per GPU) and the runtime is native. Deleting." 6
 fi
@@ -2283,6 +2418,15 @@ else
   fi
 fi
 echo "gpu_archs=$S_ARCHS" >> "$OUT/leg.txt"
+printf '%s\n' '{ rocm-smi --showproductname --showbus --showuniqueid 2>&1 || echo "rocm-smi did not answer"; }' > "$TMPD/gpu_txt.sh"
+rexec "$TMPD/gpu_txt.sh" > "$OUT/gpu.txt" 2>&1
+GPU_AGENTS=$(sed -n 's/^GPU_AGENTS=//p' "$OUT/device_probe.txt" | tr -d '\r' | tail -1)
+echo "gpu_agents=${GPU_AGENTS:-unknown}" >> "$OUT/leg.txt"
+if [ "$ONE_BODY" = 1 ]; then
+  [ "${GPU_AGENTS:-}" = 2 ] \
+    || die "--one-body on the 2x MI300X VM: rocminfo on the host shows ${GPU_AGENTS:-no} GPU agents, not 2 ($OUT/gpu.txt). Deleting." 6
+  log "the host shows 2 GPU agents; the body's container gets /dev/kfd and the whole /dev/dri"
+fi
 
 # ---- the source ----
 with_deadline() {  # <seconds> <stdin file> <cmd...>: the command's status, or 124 at the deadline
@@ -2303,7 +2447,7 @@ with_deadline() {  # <seconds> <stdin file> <cmd...>: the command's status, or 1
 # The 2gpu flow from the GPU map to its exit (header: THE 2GPU SPEC, steps 3 to
 # 8). The EXIT trap is the same one delete for the whole VM. The single-GPU
 # flow below this block never runs on 2gpu and is unchanged.
-if [ "$SPEC" = 2gpu ]; then
+if [ "$TWO_BODY" = 1 ]; then
   echo
   echo "== the GPU map (2gpu) =="
   rexec "$TMPD/gpu_map.sh" > "$OUT/gpu_map.txt" 2>&1
@@ -2549,10 +2693,22 @@ rexec "$OUT/remote_start.sh" > "$OUT/remote_start.log" 2>&1
 RPID=$(sed -n 's/^REMOTE_PID=//p' "$OUT/remote_start.log" | tr -d '\r' | tail -1)
 case "$RPID" in ''|*[!0-9]*) die "THE PAYLOAD DID NOT START (no pid). Read $OUT/remote_start.log." 8 ;; esac
 BODY_STATE=running
-log "remote pid $RPID ($RUNTIME), bound ${WORK_SECONDS}s; polling every 30 s"
+log "remote pid $RPID ($RUNTIME), bound ${WORK_SECONDS}s; polling every ${POLL_SECONDS} s"
 POLL_DEADLINE=$((DEADLINE_EPOCH - FETCH_RESERVE + 60))
 _unreach=0
+_status_at=0
+# THE LIVE STATUS MIRROR (header, THE SEGMENT LEASE 4.): the body's status
+# files, copied here every STATUS_EVERY seconds, so the segment's last status
+# is on this Mac even if this process dies in hour 20.
+status_mirror() {
+  # shellcheck disable=SC2016  # expanded on the VM
+  "${SSHN[@]}" 'sudo -n sh -c '"'"'for f in /root/gemm_leg_out/status.txt /root/gemm_leg_out/*/status.txt; do if [ -f "$f" ]; then echo "== $f"; tail -n 60 "$f"; fi; done'"'" \
+    > "$TMPD/status_live.txt" 2>/dev/null || return 0
+  { echo "mirrored_utc=$(utc) vm=$VMREF lease_left_seconds=$(( DEADLINE_EPOCH - $(date +%s) ))"; cat "$TMPD/status_live.txt"; } > "$OUT/status_live.txt.tmp" \
+    && mv -f "$OUT/status_live.txt.tmp" "$OUT/status_live.txt"
+}
 while :; do
+  if [ $(( $(date +%s) - _status_at )) -ge "$STATUS_EVERY" ]; then status_mirror; _status_at=$(date +%s); fi
   if [ "$(date +%s)" -ge "$POLL_DEADLINE" ]; then
     log "OUTER POLL DEADLINE reached. Fetching what exists."; BODY_STATE=partial_deadline; FETCH_RED=1; break
   fi
@@ -2568,8 +2724,9 @@ while :; do
       _unreach=$((_unreach + 1))
       [ "$_unreach" = 1 ] && log "poll: the VM did not answer (the body is detached; retrying)" ;;
   esac
-  nap 30
+  nap "$POLL_SECONDS"
 done
+status_mirror
 echo "body=$BODY_STATE" >> "$OUT/leg.txt"
 
 echo
