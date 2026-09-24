@@ -40,7 +40,24 @@ on one H100. Target under 60 s with identical bits (per shard 2.17 s to under
    this device (probe `gemm/checks/amd_excp_probe.mojo`).
 3. DETECT seam (software subnormal witness): bit-identical but SLOWER than the
    plain seam once spills are gone; row off by default (trial define).
-4. Same launch bound added to the 7 shipped attention kernels (measuring).
+4. Same launch bound on the 7 shipped attention kernels: SLOWER (fwd r2 73.4 ->
+   77.4, dq 66.2 -> 74.1 ms); removed (attention file equals main).
+5. DETECT v2 (bitwise OR; hot loop VALU 3.6 -> 1.5 slots per product step):
+   24/24 hashes identical but still slower than the plain seam (proj_fwd 1.28 ->
+   1.64 ms): the kernel is not VALU-issue bound at 1 wave per SIMD. Off.
+6. CHAIN PROOF: the branch binding (GEMM launch bound only) replayed steps
+   101..103 from ckpt 100 (A-1 chain) and 1999..2000 from ckpt 1998 (A-2
+   chain) on the MI300X: PASS, every state/gradient hash equal to the H100
+   chain; 62.7 s a step (+7.1 s host hashing) against 139 s before (MI325X,
+   T1). Same-box baseline owed (leg 2).
+7. VGPRs now 260-290 per lane (accum offset 256): still 1 wave per SIMD.
+
+Leg 1 cost $2.24 (balance 44.65 -> 42.41). VM verified gone 15:14:41Z.
+
+NEXT (leg 2, `tools/amd_step_time_leg2.sh`; push /root/urls with
+`tools/amd_step_time_urls.py` and /root/amd_in/{A-1.chain.partial.jsonl,
+A-2.chain.jsonl} after the VM is up): GEMM arm prices (trial arms, k768
+dispatch arms), same-box baseline replay, identity lanes, then GEMM occupancy.
 
 ## Findings so far (from the repository and its history, no new measurement)
 
@@ -84,4 +101,4 @@ on one H100. Target under 60 s with identical bits (per shard 2.17 s to under
 
 ## Costs
 
-- (nothing rented yet)
+- Leg 1 Hot Aisle MI300X 13core: $2.24.
