@@ -2577,7 +2577,7 @@ def _mfma_row(r: Int, lane: Int) -> Int:
 
 @__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(GEMM_LAUNCH_BOUND)))
 def identical_gemm_mfma_kernel[
-    KS: Int, FS: Int, PAGES: Int, SPLIT: Bool = False
+    KS: Int, FS: Int, PAGES: Int, GROUP: Bool = False
 ](
     c: MutPointer[Float32, MutAnyOrigin],
     a: MutPointer[Float32, MutAnyOrigin],
@@ -2591,15 +2591,18 @@ def identical_gemm_mfma_kernel[
     a_sp_in: Int32,
     b_sp_in: Int32,
     b_sj_in: Int32,
+    gleaves_in: Int32,
+    groups_in: Int32,
     one: Float32,
 ):
     """The 128x128 matrix-core IDENTICAL GEMM (see the section comment).
-    `SPLIT = False`: a block owns one output tile and all of its leaves and
-    stores `ftz(root)` (5g). `SPLIT = True`: block (tile, `t = block_idx.y`)
-    owns ONE fold position's leaf and stores its partial `ftz(acc)` (5d) to
-    `c[t m n + cell]` (`c` is then the workspace the fold kernel reads),
-    exactly the tuned kernel's SPLIT mode. Staging, windows, pages and
-    barriers are the tuned kernel's lines."""
+    `GROUP = False`: a block owns one output tile and all of its leaves and
+    stores `ftz(root)` (5g). `GROUP = True`: block (tile, `q = block_idx.y`)
+    walks the leaves `[q G, min((q + 1) G, P))` (G = `gleaves_in`, a power of
+    two), pushes their partials through the same local fold stack, and stores
+    the group's node UNFLUSHED to `c[q m n + cell]` (`c` is then the node
+    workspace `_ksplit_fold_launch` folds), exactly the packed kernel's GROUP
+    mode. Staging, windows, pages and barriers are the tuned kernel's lines."""
     comptime NTH = TUNED_TPB
     comptime BM = 128
     comptime BN = 128
@@ -2637,9 +2640,12 @@ def identical_gemm_mfma_kernel[
     var tiles_j = (n + BN - 1) // BN
     var n_tiles = tiles_i * tiles_j
     var raw = Int(block_idx.x)
-    var t_pos = 0
-    comptime if SPLIT:
-        t_pos = Int(block_idx.y)
+    var q = 0
+    var gleaves = Int(gleaves_in)
+    comptime if GROUP:
+        q = Int(block_idx.y)
+        if q >= Int(groups_in) or p_count <= 0 or gleaves < 1:
+            return
     if raw >= n_tiles:
         return
     var ti = Int(UInt(raw) // UInt(tiles_j))
@@ -2656,7 +2662,7 @@ def identical_gemm_mfma_kernel[
 
     if p_count <= 0:
         # `k == 0`, contract section 8: every cell +0.0, STORED.
-        comptime if SPLIT:
+        comptime if GROUP:
             return
         comptime for t0 in range(2):
             comptime for r0 in range(32):
@@ -2680,10 +2686,14 @@ def identical_gemm_mfma_kernel[
     var wt = 0
     var wq = 0
     var w_end = p_count * wpl
-    comptime if SPLIT:
-        w = t_pos * wpl
-        wt = t_pos
-        w_end = w + wpl
+    comptime if GROUP:
+        var lbeg = q * gleaves
+        var lend = lbeg + gleaves
+        if lend > p_count:
+            lend = p_count
+        w = lbeg * wpl
+        wt = lbeg
+        w_end = lend * wpl
 
     var w0 = _tuned_window_at[KS](wt, wq, wpl, leaf, k, p_count)
     var cur = w0
@@ -2775,15 +2785,7 @@ def identical_gemm_mfma_kernel[
             comptime for r1 in range(32):
                 part[r1] = ftz(acc0[r1])
                 part[32 + r1] = ftz(acc1[r1])
-            comptime if SPLIT:
-                comptime for t1 in range(2):
-                    comptime for r2 in range(32):
-                        var si = i0 + qr + _mfma_row(r2, lane)
-                        var sj = j0 + qc + 32 * t1 + ccol
-                        if si < m and sj < n:
-                            c.unsafe_store(t_pos * (m * n) + si * n + sj, part[32 * t1 + r2])
-            else:
-                _ = _fold_push_local[NCELL, FS](fl, occ, part)
+            _ = _fold_push_local[NCELL, FS](fl, occ, part)
             acc0 = SIMD[DType.float32, 32](0.0)
             acc1 = SIMD[DType.float32, 32](0.0)
 
@@ -2794,15 +2796,18 @@ def identical_gemm_mfma_kernel[
             wq = 0
             wt += 1
 
-    comptime if SPLIT:
-        return
     var outv = _fold_drain_local[NCELL, FS](fl, occ)
     comptime for t2 in range(2):
         comptime for r3 in range(32):
             var gi = i0 + qr + _mfma_row(r3, lane)
             var gj = j0 + qc + 32 * t2 + ccol
             if gi < m and gj < n:
-                c.unsafe_store(gi * n + gj, ftz(outv[32 * t2 + r3]))
+                comptime if GROUP:
+                    # The group's node, unflushed; the fold kernels flush on
+                    # read and every node is already flushed (long-k 5.4).
+                    c.unsafe_store(q * (m * n) + gi * n + gj, outv[32 * t2 + r3])
+                else:
+                    c.unsafe_store(gi * n + gj, ftz(outv[32 * t2 + r3]))
 
 
 def _mfma_run(
@@ -2814,11 +2819,12 @@ def _mfma_run(
     n: Int,
     k: Int,
     op: Int,
-    split: Bool,
+    group_leaves: Int,
 ) raises:
-    """One matrix-core call: all leaves in one launch into `c` (asynchronous),
-    or `split`: one launch over (tiles, P) writing the leaf partials to a
-    fresh `m n P` workspace, then the fold kernel into `c`, then a wait."""
+    """One matrix-core call: `group_leaves <= 0`, all leaves in one launch
+    into `c` (asynchronous); otherwise the group launch over (tiles, groups)
+    into a fresh `m n groups` node workspace, `_ksplit_fold_launch`, a wait
+    (the packed body's `_kpack_run` lines)."""
     if m <= 0 or n <= 0:
         return
     comptime KS = 16
@@ -2830,37 +2836,35 @@ def _mfma_run(
     var p_count = part[1]
     var st = gemm_operand_strides(op, m, n, k)
     var tiles = ((m + 127) // 128) * ((n + 127) // 128)
-    if not split or p_count <= 1:
+    if group_leaves <= 0 or p_count <= 1:
         comptime kern = identical_gemm_mfma_kernel[KS, TUNED_FOLD_SLOTS, PAGES, False]
         step_count_launch()
         ctx.enqueue_function[kern](
             c.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(),
             Int32(m), Int32(n), Int32(k), Int32(leaf), Int32(p_count),
-            Int32(st[0]), Int32(st[1]), Int32(st[2]), Int32(st[3]), Float32(1.0),
+            Int32(st[0]), Int32(st[1]), Int32(st[2]), Int32(st[3]),
+            Int32(0), Int32(0), Float32(1.0),
             grid_dim=(tiles, 1, 1), block_dim=(TUNED_TPB, 1, 1),
         )
         return
+    var rg = _ksplit_resolve_leaves(group_leaves, p_count)
     step_count_device_alloc()
-    var ws = ctx.enqueue_create_buffer[DType.float32](m * n * p_count)
-    comptime kern_s = identical_gemm_mfma_kernel[KS, 1, PAGES, True]
+    var ws = ctx.enqueue_create_buffer[DType.float32](m * n * rg[1])
+    comptime kern_g = identical_gemm_mfma_kernel[KS, TUNED_FOLD_SLOTS, PAGES, True]
     step_count_launch()
-    ctx.enqueue_function[kern_s](
+    ctx.enqueue_function[kern_g](
         ws.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(),
         Int32(m), Int32(n), Int32(k), Int32(leaf), Int32(p_count),
-        Int32(st[0]), Int32(st[1]), Int32(st[2]), Int32(st[3]), Float32(1.0),
-        grid_dim=(tiles, p_count, 1), block_dim=(TUNED_TPB, 1, 1),
+        Int32(st[0]), Int32(st[1]), Int32(st[2]), Int32(st[3]),
+        Int32(rg[0]), Int32(rg[1]), Float32(1.0),
+        grid_dim=(tiles, rg[1], 1), block_dim=(TUNED_TPB, 1, 1),
     )
-    step_count_launch()
-    ctx.enqueue_function[identical_gemm_fold_stack_kernel](
-        c.unsafe_ptr(), ws.unsafe_ptr(), Int32(m * n), Int32(p_count),
-        grid_dim=((m * n + FLAT_TPB - 1) // FLAT_TPB, 1, 1), block_dim=(FLAT_TPB, 1, 1),
-    )
+    _ksplit_fold_launch(ctx, c, ws, m, n, rg[1])
     step_count_sync()
     ctx.synchronize()
     _ = ws
 
 
-# ===========================================================================
 # THE HOST ENTRY POINTS
 # ===========================================================================
 
@@ -4419,11 +4423,14 @@ comptime GEMM_BODY_ROW = lib_gemm_kernel_body_for[TARGET_COLUMN]()
 comptime GEMM_IDENTICAL_MFMA = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and lib_gemm_mfma_for[TARGET_COLUMN]()
 )
-#: Below this many 128x128 output tiles a matrix-core call splits its leaves
-#: over the grid (four tiles a CU on the 304-CU MI300X/MI325X). A schedule.
-comptime GEMM_MFMA_SPLIT_TILES = 1216
-#: Above this many leaves a split call stays on the leaf-split path.
-comptime GEMM_MFMA_MAX_SPLIT_LEAVES = 16
+#: The smallest group a matrix-core group launch takes (a schedule: groups
+#: are powers of two aligned at leaf 0, so any size is the same tree).
+#: Trial defines price 2, 4 and 16.
+comptime GEMM_MFMA_MIN_GROUP_LEAVES = (
+    16 if is_defined["MOJOLEARN_GEMM_MFMA_GMIN16"]() else
+    4 if is_defined["MOJOLEARN_GEMM_MFMA_GMIN4"]() else
+    2 if is_defined["MOJOLEARN_GEMM_MFMA_GMIN2"]() else 1
+)
 comptime GEMM_IDENTICAL_LEAF_SPLIT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and lib_gemm_leaf_split_for[TARGET_COLUMN]()
 )
@@ -5005,15 +5012,17 @@ def _shipped_body_kpack_hg[
     # tiles a CU and the partials fit the workspace cap.
     comptime if not SAB and GEMM_IDENTICAL_MFMA:
         if choose_gemm_plan(m, n, k) == PLAN_TUNED_128_8X8:
-            var mp = contract_partition(k)[1]
-            var mtiles = ((m + 127) // 128) * ((n + 127) // 128)
-            var msplit = mp > 1 and mtiles < GEMM_MFMA_SPLIT_TILES and m * n * mp <= SPLITK_MAX_WORKSPACE_FLOATS
-            # Long-k small outputs (the weight gradients, P = 64 at the T3
-            # shape) measured faster on the leaf split below (2.6 against
-            # 3.2 ms); every other TUNED call is faster here.
-            if not (msplit and mp > GEMM_MFMA_MAX_SPLIT_LEAVES):
-                _mfma_run(ctx, c, a, b, m, n, k, op, msplit)
-                return
+            # The group size is the leaf split's rule (the finest power-of-two
+            # group whose node workspace fits the cap, where the rule takes
+            # the call); 0 runs all leaves in one launch.
+            comptime if is_defined["MOJOLEARN_GEMM_MFMA_NO_GROUPS"]():
+                _mfma_run(ctx, c, a, b, m, n, k, op, 0)
+            else:
+                var mgl = gemm_step_ksplit_group_leaves(GEMM_GEOM_KSPLIT_LEAF, m, n, k)
+                if mgl > 0 and mgl < GEMM_MFMA_MIN_GROUP_LEAVES:
+                    mgl = GEMM_MFMA_MIN_GROUP_LEAVES
+                _mfma_run(ctx, c, a, b, m, n, k, op, mgl)
+            return
     # lane/amd-step-time (2026-09-24): `lib_gemm_leaf_split_for` (AMD): the
     # `ksplit_leaf` geometry on every call its rule takes, before the rest.
     comptime if not SAB and GEMM_IDENTICAL_LEAF_SPLIT:
