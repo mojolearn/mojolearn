@@ -1217,24 +1217,29 @@ def lib_postround_class_flush_for[column: Int]() -> Bool:
     return column == COLUMN_AMD
 
 
-def lib_gemm_excp_fast_for[column: Int]() -> Bool:
+def lib_gemm_detect_seam_for[column: Int]() -> Bool:
     """SPELLING row (lane/amd-step-time, 2026-09-24): the IDENTICAL GEMM's
-    per-step seam as a BARE FMA whose flush is PROVEN unneeded by the wave's
-    sticky exception status, with an exact recompute where it is not.
+    per-step seam as a BARE (packed) FMA plus a per-thread subnormal witness,
+    with an exact recompute of every cell of a thread that saw one.
 
     The contract step is `ftz(fma_rn(a, b, acc))` with `a`, `b` flushed at
-    staging and `acc` the previous flushed step. A bare-FMA chain differs from
-    it only after some step's rounded result is subnormal. Such a result is
-    either the leaf's last step (the leaf partial `ftz(acc)`, seam 5d, flushes
-    it the same way) or it is the `acc` INPUT of the next FMA, which sets the
-    wave's TRAPSTS.EXCP input-denormal bit. So a wave whose bit stayed clear
-    computed the contract's bits; a wave whose bit is set recomputes every one
-    of its cells with the exact contract step in the contract's order and
-    overwrites them. Same operands, same order, same rounding, same fold tree.
-    AMD only (the bit is a gfx9 hardware register). Device proof:
-    `gemm/checks/amd_excp_probe.mojo`. `-D MOJOLEARN_GEMM_NO_EXCP_FAST` is the
-    revert arm (the shipped class-flush seam)."""
-    comptime if is_defined["MOJOLEARN_GEMM_NO_EXCP_FAST"]():
+    staging and `acc` the previous flushed step. A bare-FMA chain equals it
+    step for step until some rounded step result is subnormal (a normal, zero,
+    infinite or NaN result is its own flush). Each thread tests every step
+    result of its cells with one class compare OR-ed into a flag; a thread
+    whose flag stayed clear stored the contract's bits, a thread whose flag is
+    set recomputes all of its cells with the exact contract step in the
+    contract's order and fold tree and overwrites them. Same operands, same
+    order, same rounding: a spelling, not a numeric change. It replaces the
+    select-and-mask flush (a compare, a mask and a select per step on AMD) by
+    the compare alone, and lets the FMAs pack two to an instruction.
+
+    AMD only. The hardware alternative (the wave's sticky TRAPSTS.EXCP bits)
+    was measured on an MI300X on 2026-09-24 to record NOTHING, not even an FMA
+    consuming a subnormal (`gemm/checks/amd_excp_probe.mojo`), so the witness
+    is computed in software. `-D MOJOLEARN_GEMM_NO_DETECT_SEAM` is the revert
+    arm (the shipped class-flush seam)."""
+    comptime if is_defined["MOJOLEARN_GEMM_NO_DETECT_SEAM"]():
         return False
     return column == COLUMN_AMD
 

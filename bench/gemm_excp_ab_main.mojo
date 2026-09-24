@@ -7,8 +7,9 @@
 `_b_into` backward, all at `OP_NT`), on three operand kinds, printing a hash
 of every output and a median time.
 
-Built twice, once as the branch builds (the EXCP seam on AMD) and once with
-`-D MOJOLEARN_GEMM_NO_EXCP_FAST=1` (the shipped class-flush seam), the two
+Built twice, once as the branch builds (the DETECT seam and the launch bound
+on AMD) and once with `-D MOJOLEARN_GEMM_NO_DETECT_SEAM=1
+-D MOJOLEARN_GEMM_NO_LAUNCH_BOUND=1` (the shipped kernels), the two
 runs' HASH columns must be identical line for line: that is the bit proof of
 the seam at the production shapes, and the ms columns are its price.
 
@@ -31,7 +32,8 @@ from std.os import getenv
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
 from gemm.checks.gemm_identical import (
-    GEMM_EXCP_FAST,
+    GEMM_DETECT_SEAM,
+    GEMM_LAUNCH_BOUND,
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
     gemm_shipped_dispatch_name,
@@ -55,9 +57,9 @@ def _mix(x: UInt32) -> UInt32:
     return h ^ (h >> UInt32(16))
 
 
-def fill_kernel(dst: MutPointer[Float32, MutAnyOrigin], n: Int, seed: UInt32, kind: Int32):
+def fill_kernel(dst: MutPointer[Float32, MutAnyOrigin], n: Int64, seed: UInt32, kind: Int32):
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
-    if i >= n:
+    if i >= Int(n):
         return
     var h = _mix(UInt32(i) ^ _mix(seed))
     var h2 = _mix(h ^ UInt32(0x5BD1E995))
@@ -74,7 +76,7 @@ def fill_kernel(dst: MutPointer[Float32, MutAnyOrigin], n: Int, seed: UInt32, ki
 
 def _fill(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int, seed: UInt32, kind: Int) raises:
     ctx.enqueue_function[fill_kernel](
-        buf.unsafe_ptr(), n, seed, Int32(kind),
+        buf.unsafe_ptr(), Int64(n), seed, Int32(kind),
         grid_dim=((n + 255) // 256, 1, 1), block_dim=(256, 1, 1),
     )
 
@@ -130,7 +132,7 @@ def main() raises:
     var rounds_env = String(getenv("MOJOLEARN_EXCP_AB_ROUNDS"))
     var rounds = 3 if rounds_env == "" else Int(rounds_env)
     var kind_names: List[String] = ["ordinary", "tiny", "mixed"]
-    print("EXCP_AB_HEADER column=" + column_name(TARGET_COLUMN) + " excp_fast=" + String(GEMM_EXCP_FAST)
+    print("EXCP_AB_HEADER column=" + column_name(TARGET_COLUMN) + " detect_seam=" + String(GEMM_DETECT_SEAM) + " launch_bound=" + String(GEMM_LAUNCH_BOUND)
           + " rounds=" + String(rounds))
     var ctx = DeviceContext()
     for ci in range(len(names)):
