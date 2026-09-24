@@ -78,3 +78,17 @@ def test_route_a_starts_first_and_a_ready_live_a_segment_holds_route_b(tmp_path,
     monkeypatch.setattr(drv.time, "sleep", lambda s: None)
     rc = drv.cmd_run(type("A", (), dict(spec=str(p), out=str(out), parallel=2))())
     assert rc == 1 and started == ["A/2"]
+
+
+def test_a_live_segment_rents_with_its_own_lease_and_cap(tmp_path, monkeypatch):
+    calls = []
+    monkeypatch.setattr(drv.subprocess, "run", lambda argv, **kw: (calls.append(argv), type("R", (), {"returncode": 0})())[1])
+    spec = {"run": "runs/x", "lease_minutes": 1440, "dollar_cap": 120, "routes": {}}
+    e = dict(route="B", segment="2", vendor="live", lease_minutes=2000, dollar_cap=260)
+    drv.rent_live(spec, e, tmp_path / "nv.sh", tmp_path / "amd.sh", tmp_path)
+    argv = calls[-1]
+    assert argv[argv.index("--minutes") + 1] == "2000" and argv[argv.index("--dollar-cap") + 1] == "260"
+    e2 = dict(route="A", segment="3", vendor="live")
+    drv.rent_live(spec, e2, tmp_path / "nv.sh", tmp_path / "amd.sh", tmp_path)
+    argv = calls[-1]
+    assert argv[argv.index("--minutes") + 1] == "1440" and argv[argv.index("--dollar-cap") + 1] == "120"

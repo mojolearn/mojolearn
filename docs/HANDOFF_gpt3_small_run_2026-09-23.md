@@ -106,6 +106,13 @@ mid-run (the recipe pins the hash scheme now, but the runner archives HEAD).
 - Live segments: `tools/lm_live_leg.sh` rents AMD first, then NVIDIA, joins
   them by an ssh tunnel on the AMD box, and stops the survivor if one side
   ends. Bodies fetch the token parts themselves (eight at once, timed).
+- A route C may replay one of route A's segments on a different NVIDIA
+  device count or model: add `"C": [{"segment": "1", "vendor": "nvidia",
+  "steps": 1000, "nvidia_devices": "0", "nvidia_gpus": "NVIDIA H100 80GB
+  HBM3"}]` to the spec's `routes` and the driver runs it from route A's
+  checkpoint on one H100, held to route A's chain and boundary checkpoint (a
+  pass is evidence the 2-GPU device fold is exact); nothing waits on it
+  (`tools/lm_run_driver.py`, docstring).
 
 ## What to watch and what to report
 
