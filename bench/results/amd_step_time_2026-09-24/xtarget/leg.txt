@@ -1,0 +1,6 @@
+lane=amd-xtarget
+commit=93f16715cf28ba556d12a3ea8bd759c911eb5f4c
+dirty_tracked=0
+worktree=/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-a66ed12de5c578ebc
+source=3276	20112716	eba9e88c87b9cafc9a881b6be0f6a422458162e206b23129b5829e144907e41c
+box_clock_minus_mac=0

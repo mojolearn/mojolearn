@@ -1,0 +1,24 @@
+; ModuleID = 'lb_target_sm_90a.mojo'
+source_filename = "lb_target_sm_90a.mojo"
+target datalayout = "e-p3:32:32-p4:32:32-p5:32:32-p6:32:32-p7:32:32-p101:32:32-i64:64-i128:128-i256:256-v16:16-v32:32-n16:32:64"
+target triple = "nvptx64-nvidia-cuda"
+
+; Function Attrs: norecurse
+define dso_local ptx_kernel void @lb_target_sm_90a_k1_Pointer6A6AoA6A6AcB6A_d8fc7bb2c71de576(ptr noundef %0) #0 {
+  %2 = call i32 @llvm.nvvm.read.ptx.sreg.tid.x()
+  %3 = zext i32 %2 to i64
+  %4 = getelementptr inbounds float, ptr %0, i64 %3
+  store float 1.000000e+00, ptr %4, align 4
+  ret void
+}
+
+; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)
+declare noundef range(i32 0, 1024) i32 @llvm.nvvm.read.ptx.sreg.tid.x() #1
+
+attributes #0 = { norecurse "nvvm.maxntid"="256" "target-cpu"="sm_90a" "target-features"="+ptx85,+sm_90a" "tune-cpu"="sm_90a" }
+attributes #1 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }
+
+!llvm.module.flags = !{!0}
+
+!0 = !{i32 2, !"Debug Info Version", i32 3}
+

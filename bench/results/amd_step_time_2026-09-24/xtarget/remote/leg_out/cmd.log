@@ -1,0 +1,5 @@
+ab sm_90a build exit=0 secs=19
+byte_lm sm_90a build exit=0 secs=121
+lb_target sm_90a exit=0: attributes #0 = { norecurse "nvvm.maxntid"="256" "target-cpu"="sm_90a" "target-features"="+ptx85,+sm_90a" "tune-cpu"="sm_90a" } 
+lb_target apple_m4 exit=0: 
+lb_target metal exit=1: /root/mojolearn/tools/amd_codegen/lb_target_metal.mojo:14:5: error: function instantiation failed /root/mojolearn/.pixi/envs/default/bin/mojo: error: failed to run the pass manager 

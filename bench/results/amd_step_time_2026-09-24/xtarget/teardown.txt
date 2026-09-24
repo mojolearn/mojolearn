@@ -1,0 +1,5 @@
+pod=5paub3cf7rpa8q
+name=mojolearn-cpu-amd-xtarget-20260924-200342
+terminated_verified=1
+exit=0
+at=2026-09-24T20:08:19Z
