@@ -1,0 +1,5 @@
+pod=obrolmxw4auf1f
+name=mojolearn-cpu-lm-cpu-witness-losses-20260924-030916
+terminated_verified=1
+exit=0
+at=2026-09-24T04:22:22Z

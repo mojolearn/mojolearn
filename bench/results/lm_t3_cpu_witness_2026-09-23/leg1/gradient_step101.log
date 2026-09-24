@@ -1,0 +1,2 @@
+[23:35:02] gradient: step 101 shard 0
+/root/leg_user_cmd.sh: line 44:   630 Killed                  "$@"

@@ -1,0 +1,87 @@
+{
+ "schema": "mojolearn.lm-cpu-witness.v1",
+ "check": "loss",
+ "step": 101,
+ "shard": 6,
+ "shard_index": 6406,
+ "row_starts": [
+  52477952,
+  52480000,
+  52482048,
+  52484096
+ ],
+ "ids_sha256": "32dd8c0f1e4ca99f87024fcd063503c982931f1d94f1f905ff0ceeec1f7f9af9",
+ "fetched": [
+  {
+   "part": "tokens.i32.part00",
+   "byte_range": [
+    209911808,
+    209920004
+   ]
+  },
+  {
+   "part": "tokens.i32.part00",
+   "byte_range": [
+    209920000,
+    209928196
+   ]
+  },
+  {
+   "part": "tokens.i32.part00",
+   "byte_range": [
+    209928192,
+    209936388
+   ]
+  },
+  {
+   "part": "tokens.i32.part00",
+   "byte_range": [
+    209936384,
+    209944580
+   ]
+  }
+ ],
+ "chain_batch_index": [
+  6400,
+  6464
+ ],
+ "chain_label": "nvidia-A-1",
+ "recipe_sha256": "9f7f695b9a0bae175bf241632767ace67c542a4a116a98e36b9c306f3eebe051",
+ "checkpoint": {
+  "file": "ckpt_00000100.blm",
+  "sha256": "80cd2126a89ba6d8a444cc7c9ca61cdadb4c67090511adcb4424e06ccf45b114",
+  "step": 100,
+  "state_sha256": "2b37e85edfd701eb0deb8b3cb960722ce2dbc92ff7fa93c9b4d40df4767d1942",
+  "hash_scheme": "sliced-sha256-8.v2",
+  "load_seconds": 4.33,
+  "hash_seconds": 0.2,
+  "data_schedule_is_recipe": true,
+  "chain_state_sha256": "2b37e85edfd701eb0deb8b3cb960722ce2dbc92ff7fa93c9b4d40df4767d1942",
+  "state_matches_chain": true
+ },
+ "binding": {
+  "package_version": "0.8.15",
+  "package_file": "/root/wv/lib/python3.14/site-packages/mojolearn/__init__.py",
+  "binding_file": "/root/wv/lib/python3.14/site-packages/mojolearn/host/_mojolearn_byte_lm_host.so",
+  "binding_sha256": "3aa40d5679c60e154c178aa7b367f4c5e6c841a2ef5da66605a39614d7466929",
+  "vendor": "cpu",
+  "numeric_mode": 1
+ },
+ "box": {
+  "host": "0ecb14021474",
+  "machine": "x86_64",
+  "system": "Linux",
+  "python": "3.14.7",
+  "cpus": 32,
+  "cpu": "AMD EPYC 4564P 16-Core Processor"
+ },
+ "threaded": true,
+ "seconds": 122.09,
+ "want_f32_hex": "40d3b632",
+ "got_f32_hex": "40d3b632",
+ "want": 6.61599063873291,
+ "got": 6.61599063873291,
+ "verdict": "PASS",
+ "utc": "2026-09-24T03:16:02Z",
+ "max_rss_gib": 8.81
+}

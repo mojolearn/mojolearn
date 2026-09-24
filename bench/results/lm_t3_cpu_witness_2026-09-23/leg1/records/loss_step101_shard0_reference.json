@@ -1,0 +1,86 @@
+{
+ "schema": "mojolearn.lm-cpu-witness.v1",
+ "check": "loss",
+ "step": 101,
+ "shard": 0,
+ "shard_index": 6400,
+ "row_starts": [
+  52428800,
+  52430848,
+  52432896,
+  52434944
+ ],
+ "ids_sha256": "c0bb1b07b79059521f6b4e0e2775d5e4e3480fc0fd5bbc315015a01b7a1e7501",
+ "fetched": [
+  {
+   "part": "tokens.i32.part00",
+   "byte_range": [
+    209715200,
+    209723396
+   ]
+  },
+  {
+   "part": "tokens.i32.part00",
+   "byte_range": [
+    209723392,
+    209731588
+   ]
+  },
+  {
+   "part": "tokens.i32.part00",
+   "byte_range": [
+    209731584,
+    209739780
+   ]
+  },
+  {
+   "part": "tokens.i32.part00",
+   "byte_range": [
+    209739776,
+    209747972
+   ]
+  }
+ ],
+ "chain_batch_index": [
+  6400,
+  6464
+ ],
+ "chain_label": "nvidia-A-1",
+ "recipe_sha256": "9f7f695b9a0bae175bf241632767ace67c542a4a116a98e36b9c306f3eebe051",
+ "checkpoint": {
+  "file": "ckpt_00000100.blm",
+  "sha256": "80cd2126a89ba6d8a444cc7c9ca61cdadb4c67090511adcb4424e06ccf45b114",
+  "step": 100,
+  "state_sha256": "2b37e85edfd701eb0deb8b3cb960722ce2dbc92ff7fa93c9b4d40df4767d1942",
+  "hash_scheme": "sliced-sha256-8.v2",
+  "load_seconds": 3.07,
+  "hash_seconds": 0.11,
+  "data_schedule_is_recipe": true,
+  "chain_state_sha256": "2b37e85edfd701eb0deb8b3cb960722ce2dbc92ff7fa93c9b4d40df4767d1942",
+  "state_matches_chain": true
+ },
+ "binding": {
+  "package_version": "0.8.15",
+  "package_file": "/root/wv/lib/python3.14/site-packages/mojolearn/__init__.py",
+  "binding_file": "/root/wv/lib/python3.14/site-packages/mojolearn/host/_mojolearn_byte_lm_host.so",
+  "binding_sha256": "3aa40d5679c60e154c178aa7b367f4c5e6c841a2ef5da66605a39614d7466929",
+  "vendor": "cpu",
+  "numeric_mode": 1
+ },
+ "box": {
+  "host": "5ac6b2fc2aca",
+  "machine": "x86_64",
+  "system": "Linux",
+  "python": "3.14.7",
+  "cpus": 32,
+  "cpu": "AMD EPYC 4564P 16-Core Processor"
+ },
+ "threaded": false,
+ "seconds": 3268.11,
+ "want_f32_hex": "40de1f6a",
+ "got_f32_hex": "40de1f6a",
+ "want": 6.9413347244262695,
+ "got": 6.9413347244262695,
+ "verdict": "PASS",
+ "utc": "2026-09-24T00:35:36Z"
+}

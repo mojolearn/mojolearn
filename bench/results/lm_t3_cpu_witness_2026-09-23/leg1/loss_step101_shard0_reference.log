@@ -1,0 +1,2 @@
+[23:41:08] loss: step 101 shard 0 from ckpt_00000100.blm (state 2b37e85edfd701eb), reference path
+[00:35:36] PASS: want 40de1f6a got 40de1f6a (6.941335 vs 6.941335) in 3268.1 s -> /root/leg_out/records/loss_step101_shard0_reference.json

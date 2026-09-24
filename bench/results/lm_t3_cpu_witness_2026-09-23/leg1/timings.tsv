@@ -1,0 +1,12 @@
+create (POST to ssh up)	58
+arm (on-pod watchdog)	7
+stage (source + R2 URL maps)	16
+env (pixi binary + envs)	7
+build (host bindings)	0
+run (command)	3712
+create to first result (POST to command end)	3802
+cache upload (misses only)	0
+fetch	2
+teardown (DELETE to verified gone)	2
+billed (POST to verified gone)	3828
+spend	$0.7826 at $0.736/hr

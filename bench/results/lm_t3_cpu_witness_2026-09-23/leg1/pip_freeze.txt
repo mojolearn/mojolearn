@@ -1,0 +1,2 @@
+mojolearn @ file:///root/wheel/mojolearn-0.8.15-py3-none-manylinux_2_35_x86_64.whl#sha256=281677583838358deb50f3a86c2505c695c1ab4ee1f42cfa3476a17ad1d9a8bd
+numpy==2.5.3

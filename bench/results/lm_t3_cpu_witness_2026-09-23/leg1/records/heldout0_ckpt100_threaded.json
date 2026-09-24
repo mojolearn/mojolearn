@@ -1,0 +1,82 @@
+{
+ "schema": "mojolearn.lm-cpu-witness.v1",
+ "check": "heldout",
+ "heldout_index": 0,
+ "row_starts": [
+  2926502182,
+  2926504230,
+  2926506278,
+  2926508326
+ ],
+ "validation_range": [
+  2926502182,
+  3110556447
+ ],
+ "definition": "FineWeb-Edu shard 013 = the stream's validation_range; batch h reads rows [vlo + (h*B*L + b*L) % (vhi - vlo - L - 1) : + L + 1], b = 0..B-1 (train-range-modulo.v1 over the validation range)",
+ "ids_sha256": "e266419932ca83aa20c462079a38bfaa0916fadf58122ac0390a6623f4642349",
+ "fetched": [
+  {
+   "part": "tokens.i32.part05",
+   "byte_range": [
+    1706008728,
+    1706016924
+   ]
+  },
+  {
+   "part": "tokens.i32.part05",
+   "byte_range": [
+    1706016920,
+    1706025116
+   ]
+  },
+  {
+   "part": "tokens.i32.part05",
+   "byte_range": [
+    1706025112,
+    1706033308
+   ]
+  },
+  {
+   "part": "tokens.i32.part05",
+   "byte_range": [
+    1706033304,
+    1706041500
+   ]
+  }
+ ],
+ "recipe_sha256": "9f7f695b9a0bae175bf241632767ace67c542a4a116a98e36b9c306f3eebe051",
+ "checkpoint": {
+  "file": "ckpt_00000100.blm",
+  "sha256": "80cd2126a89ba6d8a444cc7c9ca61cdadb4c67090511adcb4424e06ccf45b114",
+  "step": 100,
+  "state_sha256": "2b37e85edfd701eb0deb8b3cb960722ce2dbc92ff7fa93c9b4d40df4767d1942",
+  "hash_scheme": "sliced-sha256-8.v2",
+  "load_seconds": 2.77,
+  "hash_seconds": 0.11,
+  "data_schedule_is_recipe": true,
+  "chain_state_sha256": "2b37e85edfd701eb0deb8b3cb960722ce2dbc92ff7fa93c9b4d40df4767d1942",
+  "state_matches_chain": true
+ },
+ "binding": {
+  "package_version": "0.8.15",
+  "package_file": "/root/wv/lib/python3.14/site-packages/mojolearn/__init__.py",
+  "binding_file": "/root/wv/lib/python3.14/site-packages/mojolearn/host/_mojolearn_byte_lm_host.so",
+  "binding_sha256": "3aa40d5679c60e154c178aa7b367f4c5e6c841a2ef5da66605a39614d7466929",
+  "vendor": "cpu",
+  "numeric_mode": 1
+ },
+ "box": {
+  "host": "5ac6b2fc2aca",
+  "machine": "x86_64",
+  "system": "Linux",
+  "python": "3.14.7",
+  "cpus": 32,
+  "cpu": "AMD EPYC 4564P 16-Core Processor"
+ },
+ "threaded": true,
+ "seconds": 45.28,
+ "loss_f32_hex": "40da1f68",
+ "loss": 6.816333770751953,
+ "verdict": "RECORDED",
+ "utc": "2026-09-23T23:37:26Z"
+}

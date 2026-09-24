@@ -1,0 +1,2 @@
+[23:38:20] heldout: batch 0 at ckpt_00000700.blm (state 983700bf6fedbe79)
+[23:39:06] RECORDED: held-out loss 40864a82 (4.196595) in 45.4 s -> /root/leg_out/records/heldout0_ckpt700_threaded.json
