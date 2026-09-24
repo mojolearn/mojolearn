@@ -1,0 +1,26 @@
+{
+ "landed": {
+  "A/1": {
+   "verdict": "PASS",
+   "checkpoints": {
+    "ckpt_00000100.blm": "80cd2126a89ba6d8a444cc7c9ca61cdadb4c67090511adcb4424e06ccf45b114",
+    "ckpt_00000200.blm": "b6ee073bee7848dfe9ca3e1f8333bcf789e496e617afaa7fe69a6362bca22052",
+    "ckpt_00000300.blm": "3454c9f72f61be387fc70e7a671b5d46da935d254cc0a057397a52d0882234a3",
+    "ckpt_00000400.blm": "0e8bc80b0573243d1f14557a22dcffcb388979b0ada532e8de171aa62f3a2ea8",
+    "ckpt_00000500.blm": "f726b31336066b98dea80ae5023868089c1d9f5604533c1643ae06c32381e238",
+    "ckpt_00000600.blm": "62f81aab55a2e3e1e23f410b83efbc79b209ba3cb001cf4d7839dc4fd4380ab0",
+    "ckpt_00000700.blm": "e08d0b5d603ade72f73622cf75f4184cf8b14ca674b676395f4b6c49c4e7f24f",
+    "ckpt_00000800.blm": "5573991c8dc07e94844ba07648894b9553815a36a49bfe8fb31b7b11d6084b8b",
+    "ckpt_00000900.blm": "79db5ab5efc724f47461ed94d11694280456a4bebbb182f7f69e54ed5aa36cc4",
+    "ckpt_00000998.blm": "8e9f857595c005cc0155fa932ec1735b9093d567a1a773359fd4a53e4097dd8a",
+    "ckpt_00001000.blm": "ce8c6b98e45bd42dd9cfb400c376e0b25c2eea1f2e4acc17f4df304241540f03",
+    "ckpt_00000000.blm": "2b03554d50e7aa0027db27afdc13472b5eb4d5a5297068d1f2fb457d0bba1143"
+   },
+   "steps_completed": 1000,
+   "disagreements": [],
+   "results": "/Users/andrewhendel/mojolearn-evidence/gpt3-run/t3/legs/A-1/leg-NVIDIA_H100_80GB_HBM3",
+   "utc": "2026-09-24T01:37:57Z",
+   "arrival": null
+  }
+ }
+}
