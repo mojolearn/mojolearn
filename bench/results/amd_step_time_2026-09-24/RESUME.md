@@ -27,12 +27,13 @@ on one H100. Target under 60 s with identical bits (per shard 2.17 s to under
 
 ## HEADLINE (update me)
 
-MI300X: 141.0 s (main) -> 39.5 s a step (branch head), level with one H100
-(39.9 s). Every replay PASS against the H100 chain; 181/201 GEMM lanes
+MI300X: 141.0 s (main) -> 32.3 s a step (branch head, leg 7), ahead of one
+H100 (39.9 s). Every replay PASS against the H100 chain; 181/201 GEMM lanes
 IDENTICAL, 0 divergent, 20 refused for unbuilt bindings; GEMM device,
 backward, workspace checks green. Changes (all AMD-only rows except the GEMM
 launch bound): launch bound (spills), leaf split, class ftz, attention
-`_bswz`, matrix-core GEMM (`lib_gemm_mfma_for`). README.md is the write-up.
+`_bswz`, matrix-core GEMM (`lib_gemm_mfma_for`) with its group launch
+(`GEMM_MFMA_MIN_GROUP_LEAVES` = 4). README.md is the write-up.
 
 NEXT: MI325X confirmation on DigitalOcean after ~22:00 UTC
 (`tools/amd_step_time_leg_mi325x.sh` with `tools/do_extra_leg.sh amd`; push

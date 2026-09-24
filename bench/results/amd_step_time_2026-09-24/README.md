@@ -20,7 +20,8 @@ binding built from this branch's source on the box with
 | leafsplit | GEMM launch bound + AMD leaf-split dispatch | 57.5 | PASS, steps 101 to 103 from ckpt 100 |
 | ftz (leg 4) | + `ftz` spelled as one class compare in AMD device code | 52.6 | PASS, steps 101 to 103 and 1999 to 2000 |
 | bswz (leg 5) | + NVIDIA's attention block map `_bswz` as AMD's default | 49.1 | PASS, steps 101 to 103 |
-| mfma (leg 6, the branch head) | + the TUNED GEMM calls on the matrix cores | **39.5** | PASS, steps 101 to 103 and 1999 to 2000 |
+| mfma (leg 6) | + the TUNED GEMM calls on the matrix cores | 39.5 | PASS, steps 101 to 103 and 1999 to 2000 |
+| mfma groups (leg 7, the branch head) | + the matrix-core group launch (leaf groups of at least 4) | **32.3** | PASS, steps 101 to 103 and 1999 to 2000 |
 
 Same VM, same leg (leg 2), `tools/lm_segment.py run --no-checkpoints
 --expect-chain`, the published T3 checkpoints (sha256 80cd2126... and
@@ -40,7 +41,8 @@ fcdb48b8ab51f2ef on all three bindings; at 1999 and 2000 dcb05e4e668a81e1 and
 The ftz, bswz and mfma rows ran on later VMs of the same host type (legs 4,
 5 and 6); the lean B4 step on the same VM as its predecessor: 0.896 -> 0.819
 s (ftz), 0.818 -> 0.763 s (bswz, trial build against itself), 0.763 -> 0.617
-s (mfma). The H100 takes 39.9 s a step (T1); the MI300X now takes 39.5 s. Every lean step wrote
+s (mfma), 0.617 -> 0.504 s (mfma groups, leg 7). The H100 takes 39.9 s a step
+on one GPU (T1); the MI300X now takes 32.3 s. Every lean step wrote
 the same six witnesses (loss, gradients, parameters, m, v, flags) on every
 build of every leg (`lean-*/result.json`).
 
@@ -170,7 +172,7 @@ group GEMM kernel 439 ms (253 launches), the three head GEMMs not split 55 +
 product and a wave's VALU issue is about 0.7 instructions a cycle, at one wave
 per SIMD.
 
-## The matrix cores (legs 5 and 6): 49.1 -> 39.5 s
+## The matrix cores (legs 5 to 7): 49.1 -> 39.5 -> 32.3 s
 
 The contract step is `ftz(fma_rn(a, b, acc))`, one product per step. Two
 device facts make it a matrix-core instruction plus one VALU product:
@@ -204,6 +206,17 @@ every device binding with this default: `gemm_device_check` (8 gates),
 `gemm_backward_check` (10 gates) and `gemm_workspace_check` (4,608 cells
 against the host oracle) green, and the 201 GEMM-reaching lanes 181
 VERIFIED, 0 DIVERGENT, the same 20 refused (`verify6/`).
+
+Leg 7 gave the kernel the packed kernel's GROUP mode (a block walks a
+power-of-two group of leaves aligned at leaf 0, folds them on its local stack
+and stores the group's node unflushed; `_ksplit_fold_launch` folds the
+nodes), with the group size from the leaf split's rule and a floor of 4
+leaves (`GEMM_MFMA_MIN_GROUP_LEAVES`, priced at 1, 2, 4 and 16). Every build's
+28 hashes (floors 1, 2, 4, 16 and no groups) equal the VALU build's; the
+weight gradients went from 2.6 to 1.4 ms and head dA from 43.8 to 30.4 ms;
+the step from 39.5 to 32.3 s with both replays PASS; on a rebuild of every
+binding: device, backward and workspace checks green and the 201 lanes 181
+VERIFIED, 0 DIVERGENT (`verify7/`).
 
 Per call (ms, MI300X, one of each at the T3 shape, before -> after): proj
 forward 0.99 -> 0.53, proj dA 0.97 -> 0.53, proj dB 0.95 -> 0.51, gate/up
@@ -242,8 +255,8 @@ dB 54.1 -> 31.4; the weight gradients with 64 leaves stayed on the leaf split
 
 ## The remaining gap to the H100, kernel by kernel
 
-At 39.5 s a step the MI300X is level with the H100's 39.9 s (0.617 s a shard
-lean against about 0.62). The paragraphs below describe the 57.5 s state, kept
+At 32.3 s a step the MI300X is ahead of one H100's 39.9 s (0.504 s a shard
+lean against about 0.62); two H100s take 19.5 s. The paragraphs below describe the 57.5 s state, kept
 for the record; since then the ftz and bswz changes took about 0.13 s a shard
 from attention, the norms and the GEMM fold, and the matrix cores about 0.15
 s a shard from the GEMM. What is left on AMD per shard (leg 5 trace, before
@@ -282,7 +295,8 @@ percent and attention at 29 percent of the step. What is left on AMD:
 ## Costs
 
 Leg 1 $2.24 (48 min), leg 2 $2.19 (47 min), leg 3 $1.90 (41 min), leg 4
-$1.75, leg 5 $1.59, leg 6 $2.05; Hot Aisle balance $44.65 -> $32.29.
+$1.75, leg 5 $1.59, leg 6 $2.05, leg 7 $1.64; Hot Aisle balance $44.65 ->
+$30.60 ($14.05 in all).
 
 ## Files
 
