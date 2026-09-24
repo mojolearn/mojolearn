@@ -75,15 +75,17 @@ from std.sys.info import is_amd_gpu
 def ftz(x: Float32) -> Float32:
     """IDENTITY_PATHS row 10's construction: the denormal policy.
 
-    lane/amd-step-time (2026-09-24), trial `-D MOJOLEARN_FTZ_CLASS_AMD`: in
-    code compiled FOR an AMD GPU the same function is spelled as one
-    `v_cmp_class_f32` (mask 0x90, the two subnormal classes) and a select of
-    the signed zero, the spelling the GEMM seam already ships on AMD
-    (`gemm_identical._ftz_class`, 2026-09-18). It returns the same word for
-    every input: a subnormal becomes its signed zero, everything else is
-    returned unchanged. Host code and every other target keep the integer
-    spelling."""
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_FTZ_CLASS_AMD"]() and is_amd_gpu():
+    lane/amd-step-time (2026-09-24): in code compiled FOR an AMD GPU the
+    same function is spelled as one `v_cmp_class_f32` (mask 0x90, the two
+    subnormal classes) and a select of the signed zero, the spelling the GEMM
+    seam already ships on AMD (`gemm_identical._ftz_class`, 2026-09-18). It
+    returns the same word for every input: a subnormal becomes its signed
+    zero, everything else is returned unchanged. Host code and every other
+    target keep the integer spelling. MEASURED on an MI300X at the T3 shape:
+    lean B4 step 0.896 -> 0.819 s, optimizer step 57.5 -> 52.6 s, the replay
+    of steps 101..103 PASS against the H100 chain and 10 identity lanes
+    IDENTICAL. `-D MOJOLEARN_FTZ_NO_CLASS=1` is the revert arm."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_FTZ_NO_CLASS"]() and is_amd_gpu():
         var subnormal = llvm_intrinsic[
             "llvm.amdgcn.class.f32", Bool, has_side_effect=False
         ](x, Int32(0x90))
