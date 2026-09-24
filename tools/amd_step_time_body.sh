@@ -11,7 +11,7 @@
 #      rocprofv3/rocprof availability, uname, CPU;
 #   2. the base binding and the byte LM binding built from this commit
 #      (MOJOLEARN_TARGET_COLUMN=amd, IDENTICAL), the byte LM .so kept as
-#      bin/byte_lm.branch.so;
+#      /root/amd_bin/byte_lm.branch.so (outside the fetched tree);
 #   3. gemm/checks/amd_excp_probe.mojo built and run (probe.log): the device
 #      facts the EXCP seam rests on, before anything else relies on them;
 #   4. /root/amd_step_ready is written; then the body waits.
@@ -21,7 +21,8 @@
 set -u
 ROOT=/root/mojolearn
 OUT=/root/gemm_leg_out/amd-step-time
-mkdir -p "$OUT/bin"
+BIN=/root/amd_bin
+mkdir -p "$OUT" "$BIN"
 cd "$ROOT" || exit 9
 ST="$OUT/status.txt"
 PATH="$HOME/.pixi/bin:$PATH"; export PATH
@@ -43,14 +44,14 @@ rm -f python/mojolearn/identical/_mojolearn_byte_lm.so
 _t0=$(date +%s)
 MOJOLEARN_BUILD_EXTRA_DEFINES="" sh bindings/build_byte_lm.sh > "$OUT/build_byte_lm.log" 2>&1; _rc=$?
 say "build byte_lm (branch) exit=$_rc secs=$(( $(date +%s) - _t0 ))"
-[ "$_rc" -eq 0 ] && cp python/mojolearn/identical/_mojolearn_byte_lm.so "$OUT/bin/byte_lm.branch.so"
+[ "$_rc" -eq 0 ] && cp python/mojolearn/identical/_mojolearn_byte_lm.so "$BIN/byte_lm.branch.so"
 pixi run python -c 'import numpy' > "$OUT/numpy.log" 2>&1 || { pixi run python -m pip install numpy >> "$OUT/numpy.log" 2>&1; say "numpy pip exit=$?"; }
 
 _t0=$(date +%s)
 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_AMD --target-accelerator "$MOJOLEARN_GPU_ARCHS" \
-    -I . gemm/checks/amd_excp_probe.mojo -o "$OUT/bin/amd_excp_probe" > "$OUT/probe_build.log" 2>&1; _rc=$?
+    -I . gemm/checks/amd_excp_probe.mojo -o "$BIN/amd_excp_probe" > "$OUT/probe_build.log" 2>&1; _rc=$?
 say "probe build exit=$_rc secs=$(( $(date +%s) - _t0 ))"
-[ "$_rc" -eq 0 ] && { "$OUT/bin/amd_excp_probe" > "$OUT/probe.log" 2>&1; say "probe exit=$?: $(grep EXCP_CHAIN "$OUT/probe.log" | tr '\n' ' ' | cut -c1-300)"; }
+[ "$_rc" -eq 0 ] && { "$BIN/amd_excp_probe" > "$OUT/probe.log" 2>&1; say "probe exit=$?: $(grep EXCP_CHAIN "$OUT/probe.log" | tr '\n' ' ' | cut -c1-300)"; }
 
 touch /root/amd_step_ready
 say "ready; holding for the lane's session"
