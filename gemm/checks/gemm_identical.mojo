@@ -164,6 +164,7 @@ from checks.kernel_matrix import (
     lib_postround_class_flush_for,
     lib_gemm_detect_seam_for,
     lib_gemm_leaf_split_for,
+    lib_gemm_mfma_for,
     gemm_wide_split_for,
     lib_gemm_block_parallelism_for,
     lib_gemm_kernel_body_for,
@@ -2524,6 +2525,342 @@ def _launch_split[
 
 
 # ===========================================================================
+# THE MATRIX-CORE PLAN (lane/amd-step-time, 2026-09-24): `lib_gemm_mfma_for`
+# ===========================================================================
+# The contract step `ftz(fma_rn(a, b, acc))` on the gfx942 matrix cores:
+#   - `v_mfma_f32_32x32x1f32` has K = 1, so every output it writes is ONE
+#     product plus ITS accumulator: `fma_rn(a, b, acc)`, measured equal to
+#     the VALU fma on every element tried, subnormal results included, in
+#     IEEE mode and with the MODE flush set (gemm/checks/amd_mfma_probe.mojo,
+#     amd_mfma_probe2.mojo);
+#   - the flush after each step is `acc * one` on the VALU with the wave's
+#     MODE f32 FP_DENORM field at 2 (set once at kernel entry), where a
+#     product by one returned `ftz(x)` exactly on every element, signed zero
+#     included, and the MFMA kept its unflushed IEEE result
+#     (amd_mfma_probe2.mojo `MFMA2_MODE v=2`); `one` is a kernel ARGUMENT
+#     equal to 1.0, so the compiler cannot fold the product away.
+# So per cell: one accumulator, seeded +0.0 per leaf, one product per `p`
+# ascending, each result flushed: the contract's chain (7.1, 4, 5c), then the
+# same leaf partial, local fold stack and output seam as the tuned kernel.
+# Ownership is the MFMA's: 4 waves, each a 64x64 quarter of the 128x128 tile,
+# two instructions per step (columns 0..31 and 32..63 of the quarter), each
+# lane holding 64 cells. Under MODE 2 every other FP operation in the kernel
+# (the fold's adds of flushed operands, the class tests of the staging flush)
+# computes what it computed before: the class test was measured unchanged,
+# and a sum of two binary32 words is a multiple of 2^-149 and cannot lie in
+# the round-up window below 2^-126.
+
+#: hwreg(HW_REG_MODE = 1, offset 4, width 2): the f32 FP_DENORM field.
+comptime _MODE_F32_DENORM = 1 | (4 << 6) | (1 << 11)
+#: The field value measured to make a VALU product by one flush a subnormal
+#: result while the MFMA keeps its IEEE result (amd_mfma_probe2.mojo).
+comptime _MODE_MFMA_FLUSH = 2
+
+
+@always_inline
+def _mfma_step(a: Float32, b: Float32, acc: SIMD[DType.float32, 32]) -> SIMD[DType.float32, 32]:
+    comptime if is_amd_gpu():
+        return llvm_intrinsic["llvm.amdgcn.mfma.f32.32x32x1f32", SIMD[DType.float32, 32]](
+            a, b, acc, Int32(0), Int32(0), Int32(0)
+        )
+    # Not reachable (the plan is AMD only); keeps other targets compiling.
+    return acc
+
+
+@always_inline
+def _mfma_row(r: Int, lane: Int) -> Int:
+    """Row, inside a wave's 64-row quarter, of accumulator register `r` of
+    `lane` for `v_mfma_f32_32x32x1f32` (two 32x32 blocks, block `r div 16`),
+    read off the device (amd_mfma_probe2.mojo `MFMA_LAYOUT`)."""
+    return 32 * (r // 16) + 8 * ((r % 16) // 4) + 4 * (lane // 32) + (r % 4)
+
+
+@__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(GEMM_LAUNCH_BOUND)))
+def identical_gemm_mfma_kernel[
+    KS: Int, FS: Int, PAGES: Int, SPLIT: Bool = False
+](
+    c: MutPointer[Float32, MutAnyOrigin],
+    a: MutPointer[Float32, MutAnyOrigin],
+    b: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32,
+    n_in: Int32,
+    k_in: Int32,
+    leaf_in: Int32,
+    p_in: Int32,
+    a_si_in: Int32,
+    a_sp_in: Int32,
+    b_sp_in: Int32,
+    b_sj_in: Int32,
+    one: Float32,
+):
+    """The 128x128 matrix-core IDENTICAL GEMM (see the section comment).
+    `SPLIT = False`: a block owns one output tile and all of its leaves and
+    stores `ftz(root)` (5g). `SPLIT = True`: block (tile, `t = block_idx.y`)
+    owns ONE fold position's leaf and stores its partial `ftz(acc)` (5d) to
+    `c[t m n + cell]` (`c` is then the workspace the fold kernel reads),
+    exactly the tuned kernel's SPLIT mode. Staging, windows, pages and
+    barriers are the tuned kernel's lines."""
+    comptime NTH = TUNED_TPB
+    comptime BM = 128
+    comptime BN = 128
+    comptime VEC = TUNED_VECLEN
+    comptime KV = KS // VEC
+    comptime SSTRIDE = KS + VEC
+    comptime APAGE = BM * SSTRIDE
+    comptime BPAGE = BN * SSTRIDE
+    comptime NCELL = 64
+    comptime ASLOTS = (BM * KV + NTH - 1) // NTH
+    comptime BSLOTS = (BN * KV + NTH - 1) // NTH
+    comptime assert NTH == 256, "identical_gemm_mfma_kernel: four waves of 64"
+    comptime assert KS % VEC == 0, "identical_gemm_mfma_kernel: KS a VEC multiple"
+
+    var m = Int(m_in)
+    var n = Int(n_in)
+    var k = Int(k_in)
+    var leaf = Int(leaf_in)
+    var p_count = Int(p_in)
+    var a_si = Int(a_si_in)
+    var a_sp = Int(a_sp_in)
+    var b_sp = Int(b_sp_in)
+    var b_sj = Int(b_sj_in)
+    var a_outer_fast = a_sp != 1 and a_si == 1
+    var b_outer_fast = b_sp != 1 and b_sj == 1
+
+    var as_ = stack_allocation[
+        PAGES * APAGE, Scalar[DType.float32], address_space = AddressSpace.SHARED,
+    ]()
+    var bs_ = stack_allocation[
+        PAGES * BPAGE, Scalar[DType.float32], address_space = AddressSpace.SHARED,
+    ]()
+
+    var tiles_i = (m + BM - 1) // BM
+    var tiles_j = (n + BN - 1) // BN
+    var n_tiles = tiles_i * tiles_j
+    var raw = Int(block_idx.x)
+    var t_pos = 0
+    comptime if SPLIT:
+        t_pos = Int(block_idx.y)
+    if raw >= n_tiles:
+        return
+    var ti = Int(UInt(raw) // UInt(tiles_j))
+    var tj = raw - ti * tiles_j
+    var i0 = ti * BM
+    var j0 = tj * BN
+
+    var tid = Int(thread_idx.x)
+    var wv = _udiv[64](tid)
+    var lane = _urem[64](tid)
+    var qr = _udiv[2](wv) * 64  # the wave's quarter: rows qr .. qr+63
+    var qc = _urem[2](wv) * 64  # and columns qc .. qc+63
+    var ccol = _urem[32](lane)
+
+    if p_count <= 0:
+        # `k == 0`, contract section 8: every cell +0.0, STORED.
+        comptime if SPLIT:
+            return
+        comptime for t0 in range(2):
+            comptime for r0 in range(32):
+                var zi = i0 + qr + _mfma_row(r0, lane)
+                var zj = j0 + qc + 32 * t0 + ccol
+                if zi < m and zj < n:
+                    c.unsafe_store(zi * n + zj, Float32(0.0))
+        return
+
+    comptime if is_amd_gpu():
+        llvm_intrinsic["llvm.amdgcn.s.setreg", NoneType](Int32(_MODE_F32_DENORM), Int32(_MODE_MFMA_FLUSH))
+
+    var acc0 = SIMD[DType.float32, 32](0.0)
+    var acc1 = SIMD[DType.float32, 32](0.0)
+    var ones = SIMD[DType.float32, 32](one)
+    var fl = stack_allocation[FS * NCELL, Scalar[DType.float32]]()
+    var occ = 0
+
+    var wpl = _tuned_windows_per_leaf[KS](leaf)
+    var w = 0
+    var wt = 0
+    var wq = 0
+    var w_end = p_count * wpl
+    comptime if SPLIT:
+        w = t_pos * wpl
+        wt = t_pos
+        w_end = w + wpl
+
+    var w0 = _tuned_window_at[KS](wt, wq, wpl, leaf, k, p_count)
+    var cur = w0
+    var pa = _tuned_g2r[ASLOTS, VEC, KV, BM, NTH](a, a_si, a_sp, i0, m, w0[0], w0[1], tid)
+    var pb = _tuned_g2r[BSLOTS, VEC, KV, BN, NTH](b, b_sj, b_sp, j0, n, w0[0], w0[1], tid)
+
+    while w < w_end:
+        var win = cur
+        var nxt = _tuned_window_next[KS](wt, wq, wpl, leaf, k, p_count)
+        var chunk = win[1]
+        var pgw = _urem[PAGES](w)
+
+        # ---- REGISTERS TO SHARED (the tuned kernel's lines).
+        comptime for sa in range(ASLOTS):
+            if a_outer_fast:
+                comptime for ea0 in range(VEC):
+                    var ia0 = tid + (sa * VEC + ea0) * NTH
+                    if ia0 < BM * KS:
+                        as_.unsafe_store(
+                            pgw * APAGE + _urem[BM](ia0) * SSTRIDE + _udiv[BM](ia0),
+                            pa[sa * VEC + ea0],
+                        )
+            else:
+                var ia = tid + sa * NTH
+                if ia < BM * KV:
+                    var rra = _udiv[KV](ia)
+                    var cca = _urem[KV](ia) * VEC
+                    var va = SIMD[DType.float32, VEC](0.0)
+                    comptime for ea in range(VEC):
+                        va[ea] = pa[sa * VEC + ea]
+                    as_.unsafe_store(pgw * APAGE + rra * SSTRIDE + cca, va)
+        comptime for sb in range(BSLOTS):
+            if b_outer_fast:
+                comptime for eb0 in range(VEC):
+                    var ib0 = tid + (sb * VEC + eb0) * NTH
+                    if ib0 < BN * KS:
+                        bs_.unsafe_store(
+                            pgw * BPAGE + _urem[BN](ib0) * SSTRIDE + _udiv[BN](ib0),
+                            pb[sb * VEC + eb0],
+                        )
+            else:
+                var ib = tid + sb * NTH
+                if ib < BN * KV:
+                    var rrb = _udiv[KV](ib)
+                    var ccb = _urem[KV](ib) * VEC
+                    var vb = SIMD[DType.float32, VEC](0.0)
+                    comptime for eb in range(VEC):
+                        vb[eb] = pb[sb * VEC + eb]
+                    bs_.unsafe_store(pgw * BPAGE + rrb * SSTRIDE + ccb, vb)
+        barrier()
+
+        comptime if PAGES == 2:
+            if w + 1 < w_end:
+                var wn = nxt
+                pa = _tuned_g2r[ASLOTS, VEC, KV, BM, NTH](a, a_si, a_sp, i0, m, wn[0], wn[1], tid)
+                pb = _tuned_g2r[BSLOTS, VEC, KV, BN, NTH](b, b_sj, b_sp, j0, n, wn[0], wn[1], tid)
+
+        # ---- ACCUMULATE: per `p` ascending, one MFMA step per 32x32 block
+        # pair, then the flush of every accumulator.
+        var abase = pgw * APAGE + (qr + lane) * SSTRIDE
+        var bbase0 = pgw * BPAGE + (qc + ccol) * SSTRIDE
+        var bbase1 = bbase0 + 32 * SSTRIDE
+        if chunk == KS:
+            comptime for kc in range(KV):
+                var av = as_.unsafe_load[width=VEC](abase + kc * VEC)
+                var bv0 = bs_.unsafe_load[width=VEC](bbase0 + kc * VEC)
+                var bv1 = bs_.unsafe_load[width=VEC](bbase1 + kc * VEC)
+                comptime for e in range(VEC):
+                    acc0 = _mfma_step(av[e], bv0[e], acc0) * ones
+                    acc1 = _mfma_step(av[e], bv1[e], acc1) * ones
+        else:
+            for cc in range(chunk):
+                var av2 = as_.unsafe_load(abase + cc)
+                var bw0 = bs_.unsafe_load(bbase0 + cc)
+                var bw1 = bs_.unsafe_load(bbase1 + cc)
+                acc0 = _mfma_step(av2, bw0, acc0) * ones
+                acc1 = _mfma_step(av2, bw1, acc1) * ones
+
+        comptime if PAGES == 1:
+            barrier()
+            if w + 1 < w_end:
+                var wn1 = nxt
+                pa = _tuned_g2r[ASLOTS, VEC, KV, BM, NTH](a, a_si, a_sp, i0, m, wn1[0], wn1[1], tid)
+                pb = _tuned_g2r[BSLOTS, VEC, KV, BN, NTH](b, b_sj, b_sp, j0, n, wn1[0], wn1[1], tid)
+
+        # ---- THE LEAF BOUNDARY (5d), once per logical leaf.
+        if win[2] == 1:
+            var part = SIMD[DType.float32, NCELL](0.0)
+            comptime for r1 in range(32):
+                part[r1] = ftz(acc0[r1])
+                part[32 + r1] = ftz(acc1[r1])
+            comptime if SPLIT:
+                comptime for t1 in range(2):
+                    comptime for r2 in range(32):
+                        var si = i0 + qr + _mfma_row(r2, lane)
+                        var sj = j0 + qc + 32 * t1 + ccol
+                        if si < m and sj < n:
+                            c.unsafe_store(t_pos * (m * n) + si * n + sj, part[32 * t1 + r2])
+            else:
+                _ = _fold_push_local[NCELL, FS](fl, occ, part)
+            acc0 = SIMD[DType.float32, 32](0.0)
+            acc1 = SIMD[DType.float32, 32](0.0)
+
+        w = w + 1
+        cur = nxt
+        wq += 1
+        if wq == wpl:
+            wq = 0
+            wt += 1
+
+    comptime if SPLIT:
+        return
+    var outv = _fold_drain_local[NCELL, FS](fl, occ)
+    comptime for t2 in range(2):
+        comptime for r3 in range(32):
+            var gi = i0 + qr + _mfma_row(r3, lane)
+            var gj = j0 + qc + 32 * t2 + ccol
+            if gi < m and gj < n:
+                c.unsafe_store(gi * n + gj, ftz(outv[32 * t2 + r3]))
+
+
+def _mfma_run(
+    ctx: DeviceContext,
+    mut c: DeviceBuffer[DType.float32],
+    mut a: DeviceBuffer[DType.float32],
+    mut b: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    k: Int,
+    op: Int,
+    split: Bool,
+) raises:
+    """One matrix-core call: all leaves in one launch into `c` (asynchronous),
+    or `split`: one launch over (tiles, P) writing the leaf partials to a
+    fresh `m n P` workspace, then the fold kernel into `c`, then a wait."""
+    if m <= 0 or n <= 0:
+        return
+    comptime KS = 16
+    comptime SSTRIDE = KS + TUNED_VECLEN
+    comptime PAGE_BYTES = (128 + 128) * SSTRIDE * 4
+    comptime PAGES = 1 if is_defined["MOJOLEARN_GEMM_ONE_PAGE"]() else lib_smem_pages_for[TARGET_COLUMN, PAGE_BYTES]()
+    var part = contract_partition(k)
+    var leaf = part[0]
+    var p_count = part[1]
+    var st = gemm_operand_strides(op, m, n, k)
+    var tiles = ((m + 127) // 128) * ((n + 127) // 128)
+    if not split or p_count <= 1:
+        comptime kern = identical_gemm_mfma_kernel[KS, TUNED_FOLD_SLOTS, PAGES, False]
+        step_count_launch()
+        ctx.enqueue_function[kern](
+            c.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(),
+            Int32(m), Int32(n), Int32(k), Int32(leaf), Int32(p_count),
+            Int32(st[0]), Int32(st[1]), Int32(st[2]), Int32(st[3]), Float32(1.0),
+            grid_dim=(tiles, 1, 1), block_dim=(TUNED_TPB, 1, 1),
+        )
+        return
+    step_count_device_alloc()
+    var ws = ctx.enqueue_create_buffer[DType.float32](m * n * p_count)
+    comptime kern_s = identical_gemm_mfma_kernel[KS, 1, PAGES, True]
+    step_count_launch()
+    ctx.enqueue_function[kern_s](
+        ws.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(),
+        Int32(m), Int32(n), Int32(k), Int32(leaf), Int32(p_count),
+        Int32(st[0]), Int32(st[1]), Int32(st[2]), Int32(st[3]), Float32(1.0),
+        grid_dim=(tiles, p_count, 1), block_dim=(TUNED_TPB, 1, 1),
+    )
+    step_count_launch()
+    ctx.enqueue_function[identical_gemm_fold_stack_kernel](
+        c.unsafe_ptr(), ws.unsafe_ptr(), Int32(m * n), Int32(p_count),
+        grid_dim=((m * n + FLAT_TPB - 1) // FLAT_TPB, 1, 1), block_dim=(FLAT_TPB, 1, 1),
+    )
+    step_count_sync()
+    ctx.synchronize()
+    _ = ws
+
+
+# ===========================================================================
 # THE HOST ENTRY POINTS
 # ===========================================================================
 
@@ -4079,6 +4416,14 @@ comptime GEMM_KSPLIT_DEFAULT_ON = GEMM_KSPLIT_DEFAULT_S > 0
 #: body (`_shipped_body_kpack_hg`), at the ksplit row's group sizes; 0 is the
 #: 2595 dispatch and compiles no kpack kernel into the shipped build.
 comptime GEMM_BODY_ROW = lib_gemm_kernel_body_for[TARGET_COLUMN]()
+comptime GEMM_IDENTICAL_MFMA = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and lib_gemm_mfma_for[TARGET_COLUMN]()
+)
+#: Below this many 128x128 output tiles a matrix-core call splits its leaves
+#: over the grid (four tiles a CU on the 304-CU MI300X/MI325X). A schedule.
+comptime GEMM_MFMA_SPLIT_TILES = 1216
+#: Above this many leaves a split call stays on the leaf-split path.
+comptime GEMM_MFMA_MAX_SPLIT_LEAVES = 16
 comptime GEMM_IDENTICAL_LEAF_SPLIT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and lib_gemm_leaf_split_for[TARGET_COLUMN]()
 )
@@ -4654,6 +4999,21 @@ def _shipped_body_kpack_hg[
     # NVIDIA and Apple have opposite results at the same shapes.  The forced
     # plan and packed body have the same leaf/fold DAG and were bit-equal over
     # every output cell in the GPT-3-small production-shape matrix.
+    # lane/amd-step-time (2026-09-24): `lib_gemm_mfma_for` (AMD): the
+    # matrix-core plan on every call the TUNED 128x128 plan would serve; the
+    # leaf partials split over the grid where the output alone is under four
+    # tiles a CU and the partials fit the workspace cap.
+    comptime if not SAB and GEMM_IDENTICAL_MFMA:
+        if choose_gemm_plan(m, n, k) == PLAN_TUNED_128_8X8:
+            var mp = contract_partition(k)[1]
+            var mtiles = ((m + 127) // 128) * ((n + 127) // 128)
+            var msplit = mp > 1 and mtiles < GEMM_MFMA_SPLIT_TILES and m * n * mp <= SPLITK_MAX_WORKSPACE_FLOATS
+            # Long-k small outputs (the weight gradients, P = 64 at the T3
+            # shape) measured faster on the leaf split below (2.6 against
+            # 3.2 ms); every other TUNED call is faster here.
+            if not (msplit and mp > GEMM_MFMA_MAX_SPLIT_LEAVES):
+                _mfma_run(ctx, c, a, b, m, n, k, op, msplit)
+                return
     # lane/amd-step-time (2026-09-24): `lib_gemm_leaf_split_for` (AMD): the
     # `ksplit_leaf` geometry on every call its rule takes, before the rest.
     comptime if not SAB and GEMM_IDENTICAL_LEAF_SPLIT:

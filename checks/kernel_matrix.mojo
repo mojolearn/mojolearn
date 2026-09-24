@@ -1272,6 +1272,20 @@ def lib_gemm_leaf_split_for[column: Int]() -> Bool:
     return column == COLUMN_AMD
 
 
+def lib_gemm_mfma_for[column: Int]() -> Bool:
+    """SPELLING row (lane/amd-step-time, 2026-09-24): the IDENTICAL GEMM's
+    TUNED 128x128 calls on the matrix cores (`identical_gemm_mfma_kernel`):
+    each contract step is one `v_mfma_f32_32x32x1f32` (K = 1: one product plus
+    its accumulator, `fma_rn`, measured equal to the VALU fma) followed by the
+    flush as a product by one under the wave's MODE f32 output flush (measured
+    equal to `ftz` on every element). Same operands, same order, same
+    rounding, same fold tree. AMD only, a TRIAL until its A/B and replay:
+    `-D MOJOLEARN_GEMM_MFMA=1`."""
+    comptime if is_defined["MOJOLEARN_GEMM_MFMA"]():
+        return column == COLUMN_AMD
+    return False
+
+
 def lib_zero_fma_repair_for[column: Int]() -> Bool:
     """NUMERIC row (lane `lane/apple-seam-repair`, 2026-09-18): the column's
     native FMA flushes BEFORE rounding, so an rtf-spelled seam
