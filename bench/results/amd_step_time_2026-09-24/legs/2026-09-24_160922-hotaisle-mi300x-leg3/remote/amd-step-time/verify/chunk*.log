@@ -1,0 +1,260 @@
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+# no reference card ships with this install; running `verify --quick` against the reference table instead (`verify --all` is the full check)
+# verify --all: hip (amd), 28 lanes x 1 fixtures, harness checkout, table /root/mojolearn/python/mojolearn/verify_reference/table.json
+  rf-clf                             rf                  0.0s
+  et-clf                             trees               1.0s
+  gbdt-symmetric                     gbdt                0.3s
+  kmeans                             core                0.2s
+  dbscan                             estimators          0.3s
+  lasso                              solver              0.0s
+  svc                                svm                 0.1s
+  spectral                           metrics             0.1s
+  holtwinters                        tsa                 0.0s
+  gemm-pinned                        linalg              0.0s
+  arima                              arima               0.0s
+  gp                                 gp                  0.2s
+  standard-scaler                    preprocessing       0.0s
+  mlp                                training            0.1s
+  byte-lm                            byte_lm             0.3s
+  mamba1                             mamba               0.1s
+  transformer                        transformer         0.1s
+  saved-model-host-infer             forest              0.0s
+  tokenizer                          tokenizer           0.1s
+  hf-causal-lm                       neural              0.3s
+  cross-val-folds                    other               0.0s
+  kernel-ridge                       kernel_methods      0.0s
+  gmm                                mixture             0.1s
+  hdbscan                            hdbscan             0.2s
+  bootstrap                          resample            0.5s
+  ivf                                ivf                 0.1s
+  embedding                          embedding           0.0s
+  par-boosting                       parallel drivers    1.5s
+  portable:rf-clf                    base        0.2s
+  portable:gbdt-symmetric            base        0.2s
+  portable:ols                       base        0.0s
+  portable:pca                       base        0.0s
+  portable:kernel-ridge-laplacian    base        0.0s
+  portable:kernel-ridge-laplacian    denormal    0.0s
+  portable:kernel-ridge-laplacian    denormal_ftz    0.0s
+  portable:kernel-ridge-laplacian    dupes       0.0s
+  portable:kernel-ridge-laplacian    hashed      0.1s
+  portable:kernel-ridge-laplacian    negative    0.0s
+  portable:kernel-ridge-laplacian    odd         0.0s
+  portable:kernel-ridge-laplacian    ties        0.0s
+  portable:kernel-ridge-laplacian    wide        0.0s
+  portable:kernel-ridge-poly         base        0.0s
+  portable:kernel-ridge-poly         denormal    0.0s
+  portable:kernel-ridge-poly         denormal_ftz    0.0s
+  portable:kernel-ridge-poly         dupes       0.0s
+  portable:kernel-ridge-poly         hashed      0.0s
+  portable:kernel-ridge-poly         negative    0.0s
+  portable:kernel-ridge-poly         odd         0.0s
+  portable:kernel-ridge-poly         ties        0.0s
+  portable:kernel-ridge-poly         wide        0.0s
+  portable:kernel-ridge-sigmoid      base        0.0s
+  portable:kernel-ridge-sigmoid      denormal    0.0s
+  portable:kernel-ridge-sigmoid      denormal_ftz    0.0s
+  portable:kernel-ridge-sigmoid      dupes       0.0s
+  portable:kernel-ridge-sigmoid      hashed      0.0s
+  portable:kernel-ridge-sigmoid      negative    0.0s
+  portable:kernel-ridge-sigmoid      odd         0.0s
+  portable:kernel-ridge-sigmoid      ties        0.0s
+  portable:kernel-ridge-sigmoid      wide        0.0s
+  portable:nystroem-laplacian        base        0.0s
+  portable:nystroem-laplacian        denormal    0.0s
+  portable:nystroem-laplacian        denormal_ftz    0.0s
+  portable:nystroem-laplacian        dupes       0.0s
+  portable:nystroem-laplacian        hashed      0.0s
+  portable:nystroem-laplacian        negative    0.0s
+  portable:nystroem-laplacian        odd         0.0s
+  portable:nystroem-laplacian        ties        0.0s
+  portable:nystroem-laplacian        wide        0.0s
+  portable:nystroem-poly             base        0.0s
+  portable:nystroem-poly             denormal    0.0s
+  portable:nystroem-poly             denormal_ftz    0.0s
+  portable:nystroem-poly             dupes       0.0s
+  portable:nystroem-poly             hashed      0.0s
+  portable:nystroem-poly             negative    0.0s
+  portable:nystroem-poly             odd         0.0s
+  portable:nystroem-poly             ties        0.0s
+  portable:nystroem-poly             wide        0.0s
+  portable:nystroem-sigmoid          base        0.0s
+  portable:nystroem-sigmoid          denormal    0.0s
+  portable:nystroem-sigmoid          denormal_ftz    0.0s
+  portable:nystroem-sigmoid          dupes       0.0s
+  portable:nystroem-sigmoid          hashed      0.0s
+  portable:nystroem-sigmoid          negative    0.0s
+  portable:nystroem-sigmoid          odd         0.0s
+  portable:nystroem-sigmoid          ties        0.0s
+  portable:nystroem-sigmoid          wide        0.0s
+# python -m mojolearn verify --all
+# mojolearn 0.8.17  commit unknown (none (no witness in this install))
+# mode identical  vendor hip (class amd)  device AMD card0,AMD Instinct MI300X VF,0x74b5,Advanced Micro Devices Inc. [AMD/ATI],M3000108,0x74a1,0x00,1,46235,gfx942
+# cpu Intel(R) Xeon(R) Platinum 8470  Linux-6.8.0-124-generic-x86_64-with-glibc2.35  python 3.14.7  numpy 2.5.2
+# reference table /root/mojolearn/python/mojolearn/verify_reference/table.json (sha256 3bc1195294200650, 626 records)
+# depth quick: 28 lanes x 1 fixtures, 1 repeat(s), 58 portable model(s)
+
+| family           | lanes | IDENTICAL | DIVERGENT | OWED | REFUSED | N/A |
+|------------------|-------|-----------|-----------|------|---------|-----|
+| rf               |     1 |         0 |         0 |    0 |       5 |   0 |
+| trees            |     1 |         4 |         0 |    0 |       0 |   1 |
+| gbdt             |     1 |         4 |         0 |    0 |       0 |   1 |
+| core             |     1 |         4 |         0 |    0 |       0 |   1 |
+| estimators       |     1 |         4 |         0 |    0 |       0 |   1 |
+| solver           |     1 |         4 |         0 |    0 |       0 |   1 |
+| svm              |     1 |         4 |         0 |    0 |       0 |   1 |
+| metrics          |     1 |         4 |         0 |    0 |       0 |   1 |
+| tsa              |     1 |         4 |         0 |    0 |       0 |   1 |
+| linalg           |     1 |         2 |         0 |    0 |       0 |   3 |
+| arima            |     1 |         0 |         0 |    0 |       5 |   0 |
+| gp               |     1 |         4 |         0 |    0 |       0 |   1 |
+| preprocessing    |     1 |         4 |         0 |    0 |       0 |   1 |
+| training         |     1 |         4 |         0 |    0 |       0 |   1 |
+| byte_lm          |     1 |         4 |         0 |    0 |       0 |   1 |
+| mamba            |     1 |         4 |         0 |    0 |       0 |   1 |
+| transformer      |     1 |         4 |         0 |    0 |       0 |   1 |
+| forest           |     1 |         0 |         0 |    0 |       5 |   0 |
+| tokenizer        |     1 |         0 |         0 |    0 |       5 |   0 |
+| neural           |     1 |         3 |         0 |    0 |       0 |   2 |
+| other            |     1 |         1 |         0 |    0 |       0 |   4 |
+| kernel_methods   |     1 |         4 |         0 |    0 |       0 |   1 |
+| mixture          |     1 |         4 |         0 |    0 |       0 |   1 |
+| hdbscan          |     1 |         4 |         0 |    0 |       0 |   1 |
+| resample         |     1 |         2 |         0 |    0 |       0 |   3 |
+| ivf              |     1 |         4 |         0 |    0 |       0 |   1 |
+| embedding        |     1 |         3 |         0 |    0 |       0 |   2 |
+| parallel drivers |     1 |         4 |         0 |    0 |       0 |   1 |
+| portable models  |    10 |       116 |         0 |    0 |       0 |   0 |
+| all              |    38 |       203 |         0 |    0 |      20 |  33 |
+
+REFUSED (20):
+  rf-clf train: OSError: /root/mojolearn/python/mojolearn/.libs/libMojolearnMath.so: cannot open shared object file: No such file or directory
+      Traceback (most recent call last):
+        File "/root/mojolearn/python/mojolearn/_verify_all.py", line 317, in run_cell
+          fit = harness.LANES[lane](ml, X, yc, yr, held.copy())
+        File "/root/mojolearn/tools/identity_break.py", line 1392, in _
+          m = ml.RandomForestClassifier(n_estimators=16, max_depth=8, random_state=7).fit(X, yc)
+        File "/root/mojolearn/python/mojolearn/_mode.py", line 52, in guarded
+          return method(self, *args, **kwargs)
+        File "/root/mojolearn/python/mojolearn/randomforest.py", line 644, in fit
+          return self._fit_with_tree_start(X, y)
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+        File "/root/mojolearn/python/mojolearn/_mode.py", line 52, in guarded
+          return method(self, *args, **kwargs)
+        File "/root/mojolearn/python/mojolearn/randomforest.py", line 675, in _fit_with_tree_start
+          return self._fit_arrays(X, y32, self.n_classes_, fit_fn, rowmajor_fn)
+                 ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        File "/root/mojolearn/python/mojolearn/randomforest.py", line 484, in _fit_arrays
+          params = self._fit_params(n_rows, n_features, n_classes)
+        File "/root/mojolearn/python/mojolearn/randomforest.py", line 449, in _fit_params
+          _max_features_fraction(cfg["max_features"], n_features),
+          ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        File "/root/mojolearn/python/mojolearn/randomforest.py", line 256, in _max_features_fraction
+          return math.sqrt(n_features) / n_features
+                 ~~~~~~~~~^^^^^^^^^^^^
+        File "/root/mojolearn/python/mojolearn/_portable_math.py", line 65, in sqrt
+          return _native("sqrt", x)
+        File "/root/mojolearn/python/mojolearn/_portable_math.py", line 36, in _native
+          lib = ctypes.CDLL(str(path))
+        File "/root/mojolearn/.pixi/envs/default/lib/python3.14/ctypes/__init__.py", line 433, in __init__
+          self._handle = self._load_library(name, mode, handle, winmode)
+                         ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        File "/root/mojolearn/.pixi/envs/default/lib/python3.14/ctypes/__init__.py", line 475, in _load_library
+          return _dlopen(name, mode)
+      OSError: /root/mojolearn/python/mojolearn/.libs/libMojolearnMath.so: cannot open shared object file: No such file or directory
+  arima train: OSError: /root/mojolearn/python/mojolearn/.libs/libMojolearnMath.so: cannot open shared object file: No such file or directory
+      Traceback (most recent call last):
+        File "/root/mojolearn/python/mojolearn/_verify_all.py", line 317, in run_cell
+          fit = harness.LANES[lane](ml, X, yc, yr, held.copy())
+        File "/root/mojolearn/tools/identity_break.py", line 2250, in _
+          m = ml.ARIMA(order=(1, 0, 0)).fit(series)
+        File "/root/mojolearn/python/mojolearn/_mode.py", line 52, in guarded
+          return method(self, *args, **kwargs)
+        File "/root/mojolearn/python/mojolearn/_arima_impl.py", line 665, in fit
+          log_t = math.log(T) if T > 0 else 0.0
+                  ~~~~~~~~^^^
+        File "/root/mojolearn/python/mojolearn/_portable_math.py", line 72, in log
+          result = _native("log", x)
+        File "/root/mojolearn/python/mojolearn/_portable_math.py", line 36, in _native
+          lib = ctypes.CDLL(str(path))
+        File "/root/mojolearn/.pixi/envs/default/lib/python3.14/ctypes/__init__.py", line 433, in __init__
+          self._handle = self._load_library(name, mode, handle, winmode)
+                         ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        File "/root/mojolearn/.pixi/envs/default/lib/python3.14/ctypes/__init__.py", line 475, in _load_library
+          return _dlopen(name, mode)
+      OSError: /root/mojolearn/python/mojolearn/.libs/libMojolearnMath.so: cannot open shared object file: No such file or directory
+  saved-model-host-infer train: OSError: /root/mojolearn/python/mojolearn/.libs/libMojolearnMath.so: cannot open shared object file: No such file or directory
+      Traceback (most recent call last):
+        File "/root/mojolearn/python/mojolearn/_verify_all.py", line 317, in run_cell
+          fit = harness.LANES[lane](ml, X, yc, yr, held.copy())
+        File "/root/mojolearn/tools/identity_break.py", line 2907, in _
+          rf = ml.RandomForestClassifier(n_estimators=16, max_depth=8, random_state=7).fit(X, yc)
+        File "/root/mojolearn/python/mojolearn/_mode.py", line 52, in guarded
+          return method(self, *args, **kwargs)
+        File "/root/mojolearn/python/mojolearn/randomforest.py", line 644, in fit
+          return self._fit_with_tree_start(X, y)
+                 ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^
+        File "/root/mojolearn/python/mojolearn/_mode.py", line 52, in guarded
+          return method(self, *args, **kwargs)
+        File "/root/mojolearn/python/mojolearn/randomforest.py", line 675, in _fit_with_tree_start
+          return self._fit_arrays(X, y32, self.n_classes_, fit_fn, rowmajor_fn)
+                 ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        File "/root/mojolearn/python/mojolearn/randomforest.py", line 484, in _fit_arrays
+          params = self._fit_params(n_rows, n_features, n_classes)
+        File "/root/mojolearn/python/mojolearn/randomforest.py", line 449, in _fit_params
+          _max_features_fraction(cfg["max_features"], n_features),
+          ~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        File "/root/mojolearn/python/mojolearn/randomforest.py", line 256, in _max_features_fraction
+          return math.sqrt(n_features) / n_features
+                 ~~~~~~~~~^^^^^^^^^^^^
+        File "/root/mojolearn/python/mojolearn/_portable_math.py", line 65, in sqrt
+          return _native("sqrt", x)
+        File "/root/mojolearn/python/mojolearn/_portable_math.py", line 36, in _native
+          lib = ctypes.CDLL(str(path))
+        File "/root/mojolearn/.pixi/envs/default/lib/python3.14/ctypes/__init__.py", line 433, in __init__
+          self._handle = self._load_library(name, mode, handle, winmode)
+                         ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        File "/root/mojolearn/.pixi/envs/default/lib/python3.14/ctypes/__init__.py", line 475, in _load_library
+          return _dlopen(name, mode)
+      OSError: /root/mojolearn/python/mojolearn/.libs/libMojolearnMath.so: cannot open shared object file: No such file or directory
+  tokenizer train: ImportError: mojolearn: /root/mojolearn/python/mojolearn/host/_mojolearn_tokenizer_host.so is not built. Build it with bindings/build_tokenizer_host.sh
+      Traceback (most recent call last):
+        File "/root/mojolearn/python/mojolearn/_verify_all.py", line 317, in run_cell
+          fit = harness.LANES[lane](ml, X, yc, yr, held.copy())
+        File "/root/mojolearn/tools/identity_break.py", line 4690, in _
+          tok = ml.tokenizer.BpeTokenizer._synthetic()
+        File "/root/mojolearn/python/mojolearn/tokenizer.py", line 279, in _synthetic
+          tok = cls.from_token_bytes(_tokenizer_synthetic.vocabulary())
+        File "/root/mojolearn/python/mojolearn/tokenizer.py", line 208, in from_token_bytes
+          tok = cls(path)
+        File "/root/mojolearn/python/mojolearn/tokenizer.py", line 165, in __init__
+          self._m = _binding()
+                    ~~~~~~~~^^
+        File "/root/mojolearn/python/mojolearn/tokenizer.py", line 119, in _binding
+          return _Entries(_backend.load_host_module(_EXTENSION))
+                          ~~~~~~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^
+        File "/root/mojolearn/python/mojolearn/_backend.py", line 1138, in load_host_module
+          raise ImportError(
+          ...<2 lines>...
+          )
+      ImportError: mojolearn: /root/mojolearn/python/mojolearn/host/_mojolearn_tokenizer_host.so is not built. Build it with bindings/build_tokenizer_host.sh
+
+LANE ACCOUNTING: 274 of 274 harness lanes accounted for; 23 VERIFIED, 251 not.
+  a lane that is not VERIFIED is not checked, whatever its state says:
+  NOT RUN (188): agglomerative, arima-011, arima-exog, arima-exog-seasonal, arima-seasonal-c, bpe-trainer, ... 182 more
+      exposed, but this run did not select it
+  NOT APPLICABLE (59): par-arima, par-boosting, par-boosting-clf, par-boosting-pointwise, par-boosting-reg, par-border-types, ... 53 more
+      claim requires two devices: a par-* driver claims that a TWO-DEVICE column hashes equal to the one-device column cell for cell. `verify` is always a one-device run (it refuses MOJOLEARN_PAR_DEVICES), and on one device the comparison is a run against itself, which passes whatever the code does. Owed: a two-GPU box running `MOJOLEARN_PAR_DEVICES=0,1 python3 tools/identity_break.py --repeats 2 --lanes <lane> --json par2.json` beside the same lanes at MOJOLEARN_PAR_DEVICES=0, admitted with _verify_reference.admit(par_axis=True)
+  REFUSED (4)  [not checked]: arima, rf-clf, saved-model-host-infer, tokenizer
+      a part raised, so it did not run
+  NOT APPLICABLE leaves nothing unknown, so it does not cost the run its pass; it is reported because an absence a user cannot see is worse than a gap they can. Every other state above does cost it.
+  this run's scope is 28 lanes, 23 VERIFIED, 1 not applicable, 4 not checked; the verdict cannot be VERIFIED
+
+UNVERIFIED LANES (4):
+  rf-clf: REFUSED: a part raised, so it did not run
+  arima: REFUSED: a part raised, so it did not run
+  saved-model-host-infer: REFUSED: a part raised, so it did not run
+  tokenizer: REFUSED: a part raised, so it did not run
+Batch invariance: IDENTICAL=81, DIVERGENT=0, OWED=0, REFUSED=4, N/A=1
+Scope: selected fixtures and properties only; use verify --coverage for omissions.
+RESULT: INCOMPLETE (verified 203 of 256 cell parts (0 divergent, 0 owed, 20 refused, 33 n/a); 23 verified, 1 not applicable, 0 owed, 0 held, 4 REFUSED, of 28 lanes). 8.0s. exit 4

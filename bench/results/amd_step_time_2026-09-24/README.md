@@ -115,6 +115,28 @@ Baseline and launch bound: leg 1 VM; leaf split: leg 2 VM (same host).
    The gemm-* and core lanes ran on base/linalg bindings with the launch
    bound; the others on bindings with both changes.
 
+4. Leg 3 (a fresh VM, every device binding built from the branch head, the
+   runner's gates on): `gemm_device_check` all green (8 gates: oracle
+   agreement, launch and batch invariance, the default dispatch, 5 shapes
+   bit-identical to FLAT and the old plan); `gemm_backward_check` all green
+   (10 gates); `gemm_workspace_check` PASS (9 GEMMs, 4,608 cells bitwise equal
+   to the host oracle; it needs `-D MOJOLEARN_STEP_PHASE_TIMERS=1`); the AMD
+   card built (`amd.card`). Then `python -m mojolearn verify` over the 201
+   non-par lanes that reach `gemm/checks/gemm_identical.mojo`, in chunks of
+   25 (`verify/chunk*.log`): **181 lanes VERIFIED, 6,813 cell parts
+   IDENTICAL, 0 DIVERGENT, 0 OWED; 20 REFUSED**, every refusal a binding this
+   leg did not build (the byte LM, tokenizer and saved-model HOST bindings,
+   samba, the random forest family, arima, and a few gbdt/gp/metrics/ols
+   variants), none a disagreement: arima, byte-lm-host-infer,
+   byte-lm-host-infer-threaded, byte-lm-host-train, gbdt-catboost-defaults,
+   gbdt-multiclass-defaults, gbdt-stochastic-arms, gp-normalize-y,
+   language-model-config, metrics-classification, ols-weighted, rf-clf,
+   rf-clf-balanced-parallel, rf-clf-entropy-log2-noboot, rf-reg-poisson,
+   rf-score-weighted, samba, samba-bf16w, samba-int8w,
+   samba-untied-dropout-accum, saved-model-host-infer, tokenizer (the
+   per-chunk summaries count 20; the list is the union of names the reports
+   print).
+
 ## Tried and not taken (all bit-identical where they ran)
 
 - EXCP seam (bare FMA, the wave's sticky TRAPSTS exception bits as the
@@ -166,13 +188,14 @@ percent and attention at 29 percent of the step. What is left on AMD:
   the leaf split and every other change is AMD-only). NVIDIA bits and speed
   are not re-measured in this lane (no NVIDIA rental).
 - The MI325X confirmation of the step time (this lane measured on MI300X).
-- The rest of the AMD column for the lanes that reach the GEMM file (leg 3).
+- The 20 refused lanes of leg 3 (their bindings), and the 59 par-* drivers
+  (two devices), on AMD.
 - A release (0.8.18) carrying the new bindings.
 
 ## Costs
 
-Leg 1 $2.24 (48 min), leg 2 $2.19 (47 min), Hot Aisle balance $44.65 ->
-$40.07.
+Leg 1 $2.24 (48 min), leg 2 $2.19 (47 min), leg 3 $1.90 (41 min); Hot
+Aisle balance $44.65 -> $38.07.
 
 ## Files
 

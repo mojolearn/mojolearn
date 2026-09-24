@@ -1,0 +1,38 @@
+16:13:28 leg3 started=2026-09-24T16:13:28Z
+16:14:46 build base exit=0 secs=77
+16:15:28 build linalg exit=0 secs=42
+16:15:38 build training exit=0 secs=52
+16:16:08 build estimators exit=0 secs=82
+16:17:58 build byte_lm exit=0 secs=192
+16:18:21 build embedding exit=0 secs=23
+16:18:49 build kernel_methods exit=0 secs=51
+16:18:51 build gp exit=0 secs=53
+16:19:30 build transformer exit=0 secs=92
+16:19:40 build preprocessing exit=0 secs=10
+16:20:25 build svm exit=0 secs=55
+16:20:32 build mixture exit=0 secs=62
+16:21:09 build metrics exit=0 secs=99
+16:21:31 build resample exit=0 secs=22
+16:21:49 build rf exit=0 secs=40
+16:21:57 build solver exit=0 secs=48
+16:23:36 build gbdt exit=0 secs=147
+16:24:14 build trees exit=0 secs=38
+16:24:16 build ivf exit=0 secs=40
+16:24:40 build hdbscan exit=0 secs=64
+16:25:00 build mamba exit=0 secs=84
+16:25:19 build tsa exit=0 secs=19
+16:25:19 build arima exit=0 secs=19
+16:25:49 gemm_backward_check exit=0 secs=30: gemm backward routing + gates: all green [IDENTICAL]  (10 gates, bwd sabotage: none, fwd sabotage: none)
+16:26:01 gemm_workspace_check exit=1 secs=12: /root/mojolearn/.pixi/envs/default/bin/mojo: error: failed to run the pass manager
+16:26:11 verify 201 lanes exit=4 secs=10: RESULT: INCOMPLETE (verified 203 of 256 cell parts (0 divergent, 0 owed, 20 refused, 33 n/a); 23 verified, 1 not applicable, 0 owed, 0 held, 4 REFUSED, of 28 lanes). 8.3s. exit 4
+16:26:12 leg3 scripted part done; holding
+16:32:07 verify chunk* exit=4 secs=9: RESULT: INCOMPLETE (verified 203 of 256 cell parts (0 divergent, 0 owed, 20 refused, 33 n/a); 23 verified, 1 not applicable, 0 owed, 0 held, 4 REFUSED, of 28 lanes). 8.0s. exit 4
+16:38:42 verify chunk00 exit=4 secs=39: RESULT: INCOMPLETE (verified 764 of 1241 cell parts (0 divergent, 0 owed, 135 refused, 342 n/a); 22 verified, 0 not applicable, 0 owed, 0 held, 3 REFUSED, of 25 lanes). 37.4s. exit 4
+16:39:57 verify chunk01 exit=4 secs=75: RESULT: INCOMPLETE (verified 908 of 1241 cell parts (0 divergent, 0 owed, 135 refused, 198 n/a); 22 verified, 0 not applicable, 0 owed, 0 held, 3 REFUSED, of 25 lanes). 74.3s. exit 4
+16:41:19 verify chunk02 exit=4 secs=82: RESULT: INCOMPLETE (verified 827 of 1241 cell parts (0 divergent, 0 owed, 45 refused, 369 n/a); 24 verified, 0 not applicable, 0 owed, 0 held, 1 REFUSED, of 25 lanes). 80.8s. exit 4
+16:43:28 verify chunk03 exit=0 secs=129: RESULT: VERIFIED (verified 980 of 1241 cell parts (0 divergent, 0 owed, 0 refused, 261 n/a); 25 verified, 0 not applicable, 0 owed, 0 held, of 25 lanes). 128.3s. exit 0
+16:44:00 verify chunk04 exit=4 secs=32: RESULT: INCOMPLETE (verified 863 of 1241 cell parts (0 divergent, 0 owed, 45 refused, 333 n/a); 24 verified, 0 not applicable, 0 owed, 0 held, 1 REFUSED, of 25 lanes). 30.5s. exit 4
+16:44:32 verify chunk05 exit=4 secs=32: RESULT: INCOMPLETE (verified 827 of 1241 cell parts (0 divergent, 0 owed, 45 refused, 369 n/a); 24 verified, 0 not applicable, 0 owed, 0 held, 1 REFUSED, of 25 lanes). 30.9s. exit 4
+16:44:58 verify chunk06 exit=4 secs=26: RESULT: INCOMPLETE (verified 701 of 1241 cell parts (0 divergent, 0 owed, 270 refused, 270 n/a); 19 verified, 0 not applicable, 0 owed, 0 held, 6 REFUSED, of 25 lanes). 24.7s. exit 4
+16:45:24 verify chunk07 exit=4 secs=26: RESULT: INCOMPLETE (verified 791 of 1241 cell parts (0 divergent, 0 owed, 225 refused, 225 n/a); 20 verified, 0 not applicable, 0 owed, 0 held, 5 REFUSED, of 25 lanes). 25.3s. exit 4
+16:45:33 verify chunk08 exit=0 secs=9: RESULT: VERIFIED (verified 152 of 161 cell parts (0 divergent, 0 owed, 0 refused, 9 n/a); 1 verified, 0 not applicable, 0 owed, 0 held, of 1 lanes). 8.3s. exit 0
