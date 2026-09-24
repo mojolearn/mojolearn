@@ -1251,6 +1251,27 @@ def lib_gemm_detect_seam_for[column: Int]() -> Bool:
     return False
 
 
+def lib_gemm_leaf_split_for[column: Int]() -> Bool:
+    """SCHEDULING row (lane/amd-step-time, 2026-09-24): every IDENTICAL GEMM
+    call `choose_gemm_plan` sends to the TUNED 128x128 plan runs the
+    `ksplit_leaf` geometry wherever its rule takes the call: the 128x128 group
+    kernel over the FINEST power-of-two leaf groups whose node workspace fits
+    the cap, then the group fold (DEVIATION 2591's arm, unchanged). A group size
+    reaches no leaf boundary and no tree level (long-k brief section 5), so it
+    is a schedule and never a result.
+
+    AMD, MEASURED on a Hot Aisle MI300X with the launch bound in place (T3
+    shard shapes, `bench/gemm_excp_ab_main.mojo`, every output hash equal to
+    the shipped dispatch): the twelve step calls weighted by their per-shard
+    counts 685 -> 606 ms (head_dA 79.9 -> 58.0, proj_fwd 1.26 -> 1.01,
+    proj_dA 1.29 -> 1.00, gateup_dA 3.20 -> 2.73, down_fwd 3.26 -> 2.71 ms).
+    Every other column False (unmeasured). `-D MOJOLEARN_GEMM_NO_LEAF_SPLIT=1`
+    is the revert arm."""
+    comptime if is_defined["MOJOLEARN_GEMM_NO_LEAF_SPLIT"]():
+        return False
+    return column == COLUMN_AMD
+
+
 def lib_zero_fma_repair_for[column: Int]() -> Bool:
     """NUMERIC row (lane `lane/apple-seam-repair`, 2026-09-18): the column's
     native FMA flushes BEFORE rounding, so an rtf-spelled seam

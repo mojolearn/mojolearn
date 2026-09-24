@@ -15,7 +15,7 @@ def k1(p: MutPointer[Float32, MutAnyOrigin]):
     p.unsafe_store(Int(thread_idx.x), Float32(1.0))
 
 
-@__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](256), `rocdl.waves_per_eu`=Int32(2))
+@__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](256), `rocdl.waves_per_eu`=Int(2))
 def k3(p: MutPointer[Float32, MutAnyOrigin]):
     p.unsafe_store(Int(thread_idx.x), Float32(1.0))
 

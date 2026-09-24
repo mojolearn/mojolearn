@@ -163,6 +163,7 @@ from checks.kernel_matrix import (
     lib_gemm_stage_ftz_for,
     lib_postround_class_flush_for,
     lib_gemm_detect_seam_for,
+    lib_gemm_leaf_split_for,
     gemm_wide_split_for,
     lib_gemm_block_parallelism_for,
     lib_gemm_kernel_body_for,
@@ -4078,6 +4079,9 @@ comptime GEMM_KSPLIT_DEFAULT_ON = GEMM_KSPLIT_DEFAULT_S > 0
 #: body (`_shipped_body_kpack_hg`), at the ksplit row's group sizes; 0 is the
 #: 2595 dispatch and compiles no kpack kernel into the shipped build.
 comptime GEMM_BODY_ROW = lib_gemm_kernel_body_for[TARGET_COLUMN]()
+comptime GEMM_IDENTICAL_LEAF_SPLIT = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and lib_gemm_leaf_split_for[TARGET_COLUMN]()
+)
 comptime GEMM_BODY_KPACK_HG = GEMM_BODY_ROW == 1
 comptime GEMM_REUSE_GROUP_WS = (
     is_defined["MOJOLEARN_GEMM_REUSE_GROUP_WS"]()
@@ -4650,6 +4654,14 @@ def _shipped_body_kpack_hg[
     # NVIDIA and Apple have opposite results at the same shapes.  The forced
     # plan and packed body have the same leaf/fold DAG and were bit-equal over
     # every output cell in the GPT-3-small production-shape matrix.
+    # lane/amd-step-time (2026-09-24): `lib_gemm_leaf_split_for` (AMD): the
+    # `ksplit_leaf` geometry on every call its rule takes, before the rest.
+    comptime if not SAB and GEMM_IDENTICAL_LEAF_SPLIT:
+        if choose_gemm_plan(m, n, k) == PLAN_TUNED_128_8X8:
+            var lgl = gemm_step_ksplit_group_leaves(GEMM_GEOM_KSPLIT_LEAF, m, n, k)
+            if lgl > 0 and contract_partition(k)[1] > 0:
+                _ksplit_run[False](ctx, c, a, b, m, n, k, op, lgl)
+                return
     # lane/amd-step-time (2026-09-24): measured again once the kernels stopped
     # spilling (GEMM_LAUNCH_BOUND). Trial arms, scheduling only:
     # `-D MOJOLEARN_GEMM_AMD_NO_K768_TUNED=1` sends these calls to the packed
