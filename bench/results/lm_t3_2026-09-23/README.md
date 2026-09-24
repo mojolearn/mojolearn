@@ -19,6 +19,8 @@ beside `chain.sha256`; the full chains and the checkpoints are in R2 under
 |---|---|---|---|---|---|---|
 | A/1 | NVIDIA H100 80GB HBM3 x2 (RunPod, wheel 0.8.15, commit 30076479a) | 0 to 1000 | 19.5 | 6.7 | none (the seed) | 0, 100, 200, ..., 900, 998, 1000 |
 | A/2 | NVIDIA H100 80GB HBM3 x2 (RunPod, another pod, wheel 0.8.15, commit cccf58415) | 1000 to 2000 | 19.5 | 6.6 | PASS (steps 999, 1000 from ckpt 998) | 1100, ..., 1900, 1998, 2000 |
+| A/3 (nvidia, coordinator) | NVIDIA H100 80GB HBM3 x1 (RunPod tymq1131yvbhoy, wheel 0.8.17, Python 3.11) | 2000 to 2400 | 101.2 | 4.0 | PASS (steps 1999, 2000 from ckpt 1998) | 2100, 2200, 2300, 2398, 2400 |
+| A/3 (amd, worker) | AMD Instinct MI325X x1 (DigitalOcean 603274624, wheel 0.8.17, Python 3.12) | 2000 to 2400 | 103.6 | 1.6 | worker | the coordinator's |
 
 ## A/1
 
@@ -49,6 +51,29 @@ the live segment, on the published 0.8.17 wheel (the Python-only release
 that fixes the live worker's array reads on Python 3.10 and 3.11; every
 binding in it is the 0.8.15 bytes, see
 `bench/results/lm_t3_negative_controls_2026-09-23/wheel-0.8.17/`).
+
+## A/3, the live cross-vendor segment
+
+One NVIDIA box and one AMD box trained the same 400 optimizer steps together
+through `mojolearn.cross_vendor` over an ssh tunnel, both from the published
+0.8.17 wheel (the Python-only release whose bindings are the 0.8.15 bytes),
+the H100 as coordinator computing shards 0 to 43 and folding first, the
+MI325X as worker computing shards 44 to 63. The H100 first fetched
+`ckpt_00001998.blm`, replayed steps 1999 and 2000 on its own hardware and
+landed on A/2's chain lines bit for bit (`A-3-nvidia/arrival/`). Then, at
+every one of the 400 steps, the two boxes wrote the same state digest, the
+same gradient digest, the same 64 losses and the same learning-rate bits
+(`A-3-nvidia/segment/chain.summary.tsv` and `A-3-amd/segment/chain.summary.tsv`
+agree line for line; the worker's own verdict PASS is recorded in the
+ledger). Mean loss 3.552 at step 2001, 3.583 at step 2400. Median 101 s a
+step on the H100 side and 104 s on the MI325X side; that pace is the
+exchange between the boxes, not either box's arithmetic (T1 measured 40 s
+for 64 shards on one H100 and 139 s on one MI325X). Wall clock 10:03 to
+22:01 UTC; the pod and the droplet were confirmed gone by 22:04 UTC.
+Cost about $88. After A/3 the run paused on Andrew's instruction: no AMD
+segment runs before the next PyPI release carries the AMD step-time work
+(`bench/results/amd_step_time_2026-09-24/`), so A/4 and every route B
+segment that needs AMD are held in `spec.json`.
 
 ## Files
 

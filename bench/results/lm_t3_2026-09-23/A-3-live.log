@@ -1,0 +1,12 @@
+[05:55:37 live] commit cccf58415b763651eae25c9b306657d82a66af42; nvidia body /Users/andrewhendel/mojolearn-evidence/gpt3-run/t3/bodies/A-3-nvidia.sh; amd body /Users/andrewhendel/mojolearn-evidence/gpt3-run/t3/bodies/A-3-amd.sh (do); lease 1440 min, cap $120
+[05:56:57 live] amd box exists: root@143.198.44.57; renting the NVIDIA box now
+[05:56:57 live] nvidia: trying NVIDIA H100 80GB HBM3
+[05:58:50 live] amd ready: root@143.198.44.57
+[06:03:01 live] nvidia ready: -p 18200 root@64.247.201.35
+[06:03:01 live] key authorized on the nvidia pod
+[06:03:02 live] private key on the amd box
+TUNNEL_UP
+[06:03:07 live] peer file written on the amd box; the worker connects through the tunnel
+[06:03:07 live] waiting for both runners to finish, fetch and delete their boxes
+[18:01:35 live] the amd runner ended first; stopping the coordinator's segment
+[18:01:48 live] nvidia runner exit=0, amd runner exit=0

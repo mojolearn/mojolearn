@@ -1,0 +1,7 @@
+[10:01:01] segment: route A segment 3-arrival label nvidia-A-3, global steps 1998..2000, K=64, devices (0,), from ckpt_00001998.blm (sha256 b8d980905332fa84)
+[10:01:01] the checkpoint's state AGREES with the expected chain's step 1998 (bcf572cbf42c5e16)
+[10:02:02] step 1999 lr 39e5f6c0 loss 3.5280 state dcb05e4e668a81e1 grad 6170c58b93c1ec4a 48.67 s (+6.79 s hashing)
+[10:02:02] step 1999 agrees with the expected chain
+[10:02:47] step 2000 lr 39e5e0ce loss 3.5538 state 0e39ed2bfe9bcbae grad 7c100f6927db84d3 38.54 s (+6.48 s hashing)
+[10:02:47] step 2000 agrees with the expected chain
+[10:02:47] PASS: /root/gemm_leg_out/lm-segment-A-3/arrival

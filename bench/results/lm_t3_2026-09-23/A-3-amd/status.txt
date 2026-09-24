@@ -1,0 +1,15 @@
+09:57:57 arm=amd mode=live-worker route=A segment=3 label=amd-A-3 steps=400 boundary= started=2026-09-24T09:57:57Z
+09:57:57 gpu_archs=gfx942
+09:58:12 pip install mojolearn==0.8.17 exit=0 secs=15
+09:58:12 wheel: dd3899f0e28d5e1c64f3827735937a7be1731b04f37758a02b4bd13b1be66c69  /root/lm-wheel/mojolearn-0.8.17-py
+09:58:12 binding: mojolearn 0.8.17 /root/lm-venv/lib/python3.12/site-packages/mojolearn/__init__.py vendor hip set_lr True device_fold True
+09:58:24 tokens fetched by URL exit=0 secs=12
+09:58:27 joined 7 parts in 3 s: 12442225788 bytes
+09:58:28 tokens=/root/tokens_stream
+09:58:28 fetch recipe.json exit=0 secs=0
+09:58:42 fetch ckpt_00002000.blm exit=0 secs=14
+09:58:43 ready
+10:03:08 peer 127.0.0.1:7777 after 265s
+22:01:00 segment exit=0 secs=43072
+[22:01:00] PASS: /root/gemm_leg_out/lm-segment-A-3/segment
+22:01:00 finished=2026-09-24T22:01:00Z

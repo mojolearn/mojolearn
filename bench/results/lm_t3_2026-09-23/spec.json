@@ -49,7 +49,8 @@
     "vendor": "amd",
     "steps": 1500,
     "lease_minutes": 4056,
-    "dollar_cap": 276
+    "dollar_cap": 276,
+    "hold": "AMD step time under optimization (Andrew 2026-09-24): no AMD segment starts until the lane lands and the bits are re-proven"
    },
    {
     "segment": "5",
@@ -75,7 +76,8 @@
     "dollar_cap": 192,
     "after": [
      "A/3"
-    ]
+    ],
+    "hold": "AMD step time under optimization (Andrew 2026-09-24): no AMD segment starts until the lane lands and the bits are re-proven"
    },
    {
     "segment": "2",
@@ -87,14 +89,16 @@
      44
     ],
     "lease_minutes": 2000,
-    "dollar_cap": 260
+    "dollar_cap": 260,
+    "hold": "AMD step time under optimization (Andrew 2026-09-24): no AMD segment starts until the lane lands and the bits are re-proven"
    },
    {
     "segment": "3",
     "vendor": "amd",
     "steps": 400,
     "lease_minutes": 1120,
-    "dollar_cap": 80
+    "dollar_cap": 80,
+    "hold": "AMD step time under optimization (Andrew 2026-09-24): no AMD segment starts until the lane lands and the bits are re-proven"
    },
    {
     "segment": "4",
@@ -110,7 +114,8 @@
     "vendor": "amd",
     "steps": 1000,
     "lease_minutes": 2724,
-    "dollar_cap": 192
+    "dollar_cap": 192,
+    "hold": "AMD step time under optimization (Andrew 2026-09-24): no AMD segment starts until the lane lands and the bits are re-proven"
    },
    {
     "segment": "6",
