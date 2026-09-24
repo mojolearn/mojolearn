@@ -4660,13 +4660,14 @@ def _shipped_body_kpack_hg[
         if choose_gemm_plan(m, n, k) == PLAN_TUNED_128_8X8:
             var lgl = gemm_step_ksplit_group_leaves(GEMM_GEOM_KSPLIT_LEAF, m, n, k)
             if lgl > 0 and contract_partition(k)[1] > 0:
-                # The packed body (`identical_gemm_kpack_kernel` in GROUP
-                # mode, the kpack-hg geometry both vendors ship) at the
-                # finest groups: rocprofv3 on an MI300X counted about 8.4
-                # VALU instructions per product in the older ksplit kernel
-                # against 3.6 in the packed loop. Same group nodes, same fold.
-                # `-D MOJOLEARN_GEMM_LEAF_SPLIT_KSPLIT_BODY=1` keeps the old body.
-                comptime if is_defined["MOJOLEARN_GEMM_LEAF_SPLIT_KSPLIT_BODY"]():
+                # The ksplit group kernel. Trial arm
+                # `-D MOJOLEARN_GEMM_LEAF_SPLIT_KPACK_BODY=1` runs the packed
+                # body in GROUP mode instead: rocprofv3 on an MI300X counted
+                # about 8.4 VALU instructions a product in the ksplit kernel
+                # against 3.6 in the packed loop, yet the packed body measured
+                # SLOWER here (twelve calls 183.9 -> 192.7 ms, lean B4 step
+                # 0.763 -> 0.816 s, bits equal): the kernel is not issue bound.
+                comptime if not is_defined["MOJOLEARN_GEMM_LEAF_SPLIT_KPACK_BODY"]():
                     _ksplit_run[False](ctx, c, a, b, m, n, k, op, lgl)
                 else:
                     _kpack_run[
