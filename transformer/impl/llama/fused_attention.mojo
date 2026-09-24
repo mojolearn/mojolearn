@@ -92,8 +92,7 @@ mechanism, brief sections 15 and 18), and never a DEVIATION 2598 kernel.
 come through the kernel matrix.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx, MAX_THREADS_PER_BLOCK_METADATA
-from std.utils import StaticTuple
+from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from std.os import getenv
 from std.sys import llvm_intrinsic
@@ -182,14 +181,6 @@ a launch whose result is then thrown away."""
 comptime ATTN_STICKY = is_defined["MOJOLEARN_ATTN_STICKY"]()
 
 comptime FUSED_THREADS = 256
-#: lane/amd-step-time (2026-09-24): the launch bound the shipped step
-#: attention kernels declare. 1,024 is the backend's own default, so the
-#: shipped value compiles exactly what it compiled before. The real launch
-#: size, FUSED_THREADS (256), is the trial arm `-D MOJOLEARN_ATTN_LAUNCH_BOUND=1`:
-#: it removed the GEMM kernels' spills, but on these kernels it measured
-#: SLOWER on an MI300X (B4 shard: forward r2 73.4 -> 77.4 ms, dq 66.2 -> 74.1
-#: ms, dk/dv 67.9 -> 67.8 ms), so it is not taken.
-comptime ATTN_LAUNCH_BOUND = FUSED_THREADS if is_defined["MOJOLEARN_ATTN_LAUNCH_BOUND"]() else 1024
 """Threads per block for the row-tiled kernels: `TQ * head_dim`."""
 
 comptime NEG_ZERO_BITS: UInt32 = 0x80000000
@@ -4339,7 +4330,6 @@ def fused_bwd_zfold_kernel[TZ: Int, PF: Bool](
 # ===========================================================================
 
 
-@__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(ATTN_LAUNCH_BOUND)))
 def fused_bwd_zdot_stash_pf_kernel[HD: Int, TQ: Int, SABN: Bool](
     zdot: MutPointer[Float32, MutAnyOrigin],
     corner: MutPointer[Float32, MutAnyOrigin],
@@ -4523,7 +4513,6 @@ def _masked_tail_dy[HD: Int](
     return ftz(dy)
 
 
-@__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(ATTN_LAUNCH_BOUND)))
 def fused_bwd_dq_tiled_pf_kernel[HD: Int, SWZ: Bool = False](
     dq: MutPointer[Float32, MutAnyOrigin],
     corner: MutPointer[Float32, MutAnyOrigin],
@@ -4673,7 +4662,6 @@ def fused_bwd_dq_tiled_pf_kernel[HD: Int, SWZ: Bool = False](
                 dq.unsafe_store((bb * l + t) * nh * HD + h * HD + tc + v * 16, x)
 
 
-@__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(ATTN_LAUNCH_BOUND)))
 def fused_bwd_dkdv_tiled_pf_kernel[HD: Int](
     dk: MutPointer[Float32, MutAnyOrigin],
     dv: MutPointer[Float32, MutAnyOrigin],
@@ -4870,7 +4858,6 @@ def fused_bwd_dkdv_tiled_pf_kernel[HD: Int](
 # ===========================================================================
 
 
-@__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(ATTN_LAUNCH_BOUND)))
 def fused_bwd_dkdv_r2_kernel[HD: Int, BJ: Int, SAB: Bool, SWZ: Bool = False](
     dk: MutPointer[Float32, MutAnyOrigin],
     dv: MutPointer[Float32, MutAnyOrigin],
@@ -5039,7 +5026,6 @@ def fused_bwd_dkdv_r2_kernel[HD: Int, BJ: Int, SAB: Bool, SWZ: Bool = False](
                 dv.unsafe_store(kvbase + jc * HD + tc + v * 16, dv_acc[u * CPT + v])
 
 
-@__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(ATTN_LAUNCH_BOUND)))
 def fused_bwd_kvfold_r2_kernel[HD: Int, BJ: Int, SAB: Bool](
     dst: MutPointer[Float32, MutAnyOrigin],
     corner: MutPointer[Float32, MutAnyOrigin],
@@ -5471,7 +5457,6 @@ def fused_bwd_zdot_sched_pf_kernel[HD: Int, TQ: Int, LAG: Bool, SABN: Bool](
 # ===========================================================================
 
 
-@__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(ATTN_LAUNCH_BOUND)))
 def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool, SWZ: Bool = False](
     ctxv: MutPointer[Float32, MutAnyOrigin],
     amax: MutPointer[Float32, MutAnyOrigin],
@@ -5703,7 +5688,6 @@ def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: B
 # ===========================================================================
 
 
-@__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(ATTN_LAUNCH_BOUND)))
 def fused_bwd_zdot_estash_kernel[HD: Int, TQ: Int, DRES: Bool, SABN: Bool, SWZ: Bool = False](
     zdot: MutPointer[Float32, MutAnyOrigin],
     corner: MutPointer[Float32, MutAnyOrigin],
