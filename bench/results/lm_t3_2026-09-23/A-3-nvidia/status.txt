@@ -1,0 +1,18 @@
+09:58:52 arm=nvidia mode=live-coordinator route=A segment=3 label=nvidia-A-3 steps=400 boundary=2400 started=2026-09-24T09:58:52Z
+09:58:52 gpu_archs=sm_90a
+09:58:59 pip install mojolearn==0.8.17 exit=0 secs=7
+09:59:00 wheel: dd3899f0e28d5e1c64f3827735937a7be1731b04f37758a02b4bd13b1be66c69  /root/lm-wheel/mojolearn-0.8.17-py
+09:59:01 binding: mojolearn 0.8.17 /root/lm-venv/lib/python3.11/site-packages/mojolearn/__init__.py vendor cuda set_lr True device_fold True
+09:59:51 tokens fetched by URL exit=0 secs=50
+09:59:56 joined 7 parts in 5 s: 12442225788 bytes
+09:59:56 tokens=/root/tokens_stream
+09:59:56 fetch recipe.json exit=0 secs=0
+10:00:14 fetch ckpt_00002000.blm exit=0 secs=18
+10:00:42 fetch ckpt_00001998.blm exit=0 secs=22
+10:00:48 fetch replay_chain.jsonl exit=0 secs=0
+10:02:47 arrival exit=0 secs=119
+[10:02:47] PASS: /root/gemm_leg_out/lm-segment-A-3/arrival
+10:02:48 ready
+22:01:02 segment exit=0 secs=43094
+[22:01:01] PASS: /root/gemm_leg_out/lm-segment-A-3/segment
+22:01:30 finished=2026-09-24T22:01:30Z

@@ -18,3 +18,12 @@
 [05:55:31 driver] A/2 LANDED: 1000 steps, checkpoints ['ckpt_00001100.blm', 'ckpt_00001200.blm', 'ckpt_00001300.blm', 'ckpt_00001400.blm', 'ckpt_00001500.blm', 'ckpt_00001600.blm', 'ckpt_00001700.blm', 'ckpt_00001800.blm', 'ckpt_00001900.blm', 'ckpt_00001998.blm', 'ckpt_00002000.blm']
 [05:55:31 driver] starting A/3 on live (400 steps from ckpt_00002000.blm)
 [05:55:31 driver] A/3: spec re-read, changed since launch: wheel="0.8.17"
+[18:02:10 driver] A/3 runner exit 0; results /Users/andrewhendel/mojolearn-evidence/gpt3-run/t3/legs/A-3-live
+[18:02:10 driver] A/3 LANDED: 400 steps, checkpoints ['ckpt_00002100.blm', 'ckpt_00002200.blm', 'ckpt_00002300.blm', 'ckpt_00002398.blm', 'ckpt_00002400.blm']
+[18:02:10 driver] starting A/4 on nvidia (1500 steps from ckpt_00002400.blm)
+[18:02:10 driver] starting B/1 on amd (1000 steps from ckpt_00000000.blm)
+[18:02:40 driver] A/4: the rental could not be started: /Users/andrewhendel/mojolearn-evidence/gpt3-run/t3_spec.json: the routes, vendors or step counts changed since the driver started; restart the driver for a new plan
+[18:02:40 driver] B/1: the rental could not be started: /Users/andrewhendel/mojolearn-evidence/gpt3-run/t3_spec.json: the routes, vendors or step counts changed since the driver started; restart the driver for a new plan
+[18:02:40 driver] halted: a segment failed to land; see the ledger, fix, and run the driver again
+[18:04:30 driver] run runs/t3/2026-09-22: 12 segments over 2 routes, up to 2 at once
+[18:04:30 driver] nothing is ready and nothing is running; held: A/4, B/1, B/2, B/3, B/5 (remove the hold from the spec and run the driver again)
