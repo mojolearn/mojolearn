@@ -45,6 +45,7 @@ abbuild branch
 abbuild trial MOJOLEARN_GEMM_ARM_TRIAL=1
 abbuild k768kpack MOJOLEARN_GEMM_AMD_NO_K768_TUNED=1
 abbuild k768p64 MOJOLEARN_GEMM_AMD_K768_PLAN64=1
+abbuild onepage MOJOLEARN_GEMM_ONE_PAGE=1
 # the byte LM bindings build on the CPU while the A/B runs on the GPU
 ( $S bind branch > "$OUT/bind_branch.out" 2>&1; cp "$BIN/byte_lm.branch.so" "$BIN/keep.branch.so" 2>/dev/null
   rm -f python/mojolearn/identical/_mojolearn_byte_lm.so
@@ -62,6 +63,7 @@ abrun() {  # label, binary, env...
 abrun branch branch
 abrun k768kpack k768kpack
 abrun k768p64 k768p64
+abrun onepage onepage
 for arm in shipped tuned128 lfold half half_ks16 quarter kpack kpack_wide kpack_hg ksplit ksplit_leaf kfoldv; do
     abrun "arm-$arm" trial MOJOLEARN_GEMM_ARM=$arm
 done
