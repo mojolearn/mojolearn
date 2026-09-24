@@ -551,12 +551,19 @@ def published_wheel(prev, platform, evidence_root, download=True):
     candidates = [store / name]
     candidates += sorted((ev / "release" / prev["version"]).glob(f"*/linux/final/{name}"))
     candidates += sorted((ev / "release" / prev["version"]).glob(f"*/macos/{name}"))
+    passed_over = []
     for c in candidates:
         if c.is_file():
             if sha256(c) == want:
                 return c
-            raise SystemExit(f"release_reuse: {c} is not the published {name}: sha256 differs from the record ({want[:12]})")
+            # a wheel of the same name from another freeze of that release (a
+            # release refrozen before publication leaves one behind): not the
+            # published bytes, so not this one, and no reason to stop looking
+            passed_over.append(c)
     if not download:
+        if passed_over:
+            raise SystemExit(f"release_reuse: no local copy of the published {name} (sha256 {want[:12]}); "
+                             f"passed over {len(passed_over)} of another freeze: {', '.join(str(c) for c in passed_over)}")
         return None
     with urllib.request.urlopen(f"https://pypi.org/pypi/mojolearn/{prev['version']}/json", timeout=30) as r:
         files = json.load(r).get("urls", [])

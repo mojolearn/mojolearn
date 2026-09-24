@@ -420,10 +420,17 @@ class AssemblyTests(unittest.TestCase):
         store.mkdir(parents=True)
         (store / self.whl.name).write_bytes(self.whl.read_bytes())
         self.assertEqual(rr.published_wheel(self.prev, "linux", ev, download=False), store / self.whl.name)
+        # a copy of another freeze under the store's name is passed over, not fatal:
+        # the published one further down the candidates is taken
         (store / self.whl.name).write_bytes(self.whl.read_bytes() + b"x")
+        other = ev / "release" / self.prev["version"] / "cafe" / "linux" / "final"
+        other.mkdir(parents=True)
+        (other / self.whl.name).write_bytes(self.whl.read_bytes())
+        self.assertEqual(rr.published_wheel(self.prev, "linux", ev, download=False), other / self.whl.name)
+        (other / self.whl.name).unlink()
         with self.assertRaises(SystemExit) as cm:
             rr.published_wheel(self.prev, "linux", ev, download=False)
-        self.assertIn("sha256 differs from the record", str(cm.exception))
+        self.assertIn("passed over 1 of another freeze", str(cm.exception))
         (store / self.whl.name).unlink()
         self.assertIsNone(rr.published_wheel(self.prev, "linux", ev, download=False))
 
