@@ -1238,10 +1238,17 @@ def lib_gemm_detect_seam_for[column: Int]() -> Bool:
     was measured on an MI300X on 2026-09-24 to record NOTHING, not even an FMA
     consuming a subnormal (`gemm/checks/amd_excp_probe.mojo`), so the witness
     is computed in software. `-D MOJOLEARN_GEMM_NO_DETECT_SEAM` is the revert
-    arm (the shipped class-flush seam)."""
-    comptime if is_defined["MOJOLEARN_GEMM_NO_DETECT_SEAM"]():
-        return False
-    return column == COLUMN_AMD
+    arm (the shipped class-flush seam).
+
+    MEASURED AND NOT TAKEN (MI300X, 2026-09-24): bit-identical to the shipped
+    seam on all 28 T3-shape GEMM cases, but SLOWER once the kernels stopped
+    spilling (proj_fwd 1.28 -> 1.63 ms, head_fwd 56.6 -> 66.2 ms), and the
+    recompute makes operand words near 2^-110 cost 4x to 16x. So the row is
+    off on every column; `-D MOJOLEARN_GEMM_DETECT_SEAM=1` turns it on for
+    AMD as a trial arm."""
+    comptime if is_defined["MOJOLEARN_GEMM_DETECT_SEAM"]():
+        return column == COLUMN_AMD
+    return False
 
 
 def lib_zero_fma_repair_for[column: Int]() -> Bool:

@@ -11,7 +11,7 @@
 from std.compile import compile_info
 from std.gpu.host import get_gpu_target
 from gemm.checks.gemm_identical import *
-from gemm.checks.gemm_identical import TARGET_COLUMN, lib_smem_pages_for, GEMM_EXCP_FAST
+from gemm.checks.gemm_identical import TARGET_COLUMN, lib_smem_pages_for, GEMM_DETECT_SEAM
 
 comptime T = get_gpu_target["mi300x"]()
 
@@ -24,7 +24,7 @@ def main():
     comptime KB = (GEMM_KPACK_RPT * TR * GEMM_KPACK_KS + TR * GEMM_KPACK_PAD
                    + GEMM_KPACK_CPT * TUNED_TC * GEMM_KPACK_KS + TUNED_TC * GEMM_KPACK_PAD) * 4
     comptime P_k = lib_smem_pages_for[TARGET_COLUMN, KB + GEMM_KPACK_PAGE_GUARD_BYTES]()
-    print("### config excp_fast=" + String(GEMM_EXCP_FAST) + " tuned_pages=" + String(P_t)
+    print("### config detect_seam=" + String(GEMM_DETECT_SEAM) + " tuned_pages=" + String(P_t)
           + " kpack_pages=" + String(P_k) + " kpack_page_bytes=" + String(KB))
     print("### tuned128 asm")
     print(compile_info[identical_gemm_tuned_kernel[TUNED_RPT * 2, TUNED_CPT * 2, TUNED_TC, 16, TUNED_FOLD_SLOTS, P_t], emission_kind="asm", target=T]().asm)
