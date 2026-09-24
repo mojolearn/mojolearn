@@ -18,6 +18,7 @@ beside `chain.sha256`; the full chains and the checkpoints are in R2 under
 | segment | box | steps | s per step (median) | hash s | arrival replay | checkpoints |
 |---|---|---|---|---|---|---|
 | A/1 | NVIDIA H100 80GB HBM3 x2 (RunPod, wheel 0.8.15, commit 30076479a) | 0 to 1000 | 19.5 | 6.7 | none (the seed) | 0, 100, 200, ..., 900, 998, 1000 |
+| A/2 | NVIDIA H100 80GB HBM3 x2 (RunPod, another pod, wheel 0.8.15, commit cccf58415) | 1000 to 2000 | 19.5 | 6.6 | PASS (steps 999, 1000 from ckpt 998) | 1100, ..., 1900, 1998, 2000 |
 
 ## A/1
 
@@ -33,6 +34,21 @@ gone at 01:37 UTC (`A-1/leg.txt`, the leg's teardown record in
 (a first segment is held to nothing; every later segment of route A replays
 its last two steps on arrival, and every segment of route B is held to A's
 chain).
+
+## A/2
+
+Two H100s on a different RunPod pod (other GPU UUIDs, `A-2/gpu.txt`), the
+same wheel. On arrival it fetched `ckpt_00000998.blm`, replayed steps 999
+and 1000 on its own hardware and landed on A/1's chain lines bit for bit
+(`A-2/arrival/`, verdict PASS), then trained steps 1001 to 2000 from
+`ckpt_00001000.blm`. Mean loss 3.928 at step 1001, 3.554 at step 2000.
+Median 19.5 s a step and 6.6 s hashing; eleven checkpoints pushed. Wall
+clock 01:58 to 09:53 UTC; the pod was confirmed gone at 09:55 UTC. Verdict
+PASS, no disagreements. The driver then re-read the spec and started A/3,
+the live segment, on the published 0.8.17 wheel (the Python-only release
+that fixes the live worker's array reads on Python 3.10 and 3.11; every
+binding in it is the 0.8.15 bytes, see
+`bench/results/lm_t3_negative_controls_2026-09-23/wheel-0.8.17/`).
 
 ## Files
 
