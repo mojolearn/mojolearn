@@ -68,10 +68,27 @@ struct NumericMode(Copyable, Movable):
 
 
 from std.memory import bitcast
+from std.sys import llvm_intrinsic
+from std.sys.info import is_amd_gpu
 
 
 def ftz(x: Float32) -> Float32:
-    """IDENTITY_PATHS row 10's construction: the denormal policy."""
+    """IDENTITY_PATHS row 10's construction: the denormal policy.
+
+    lane/amd-step-time (2026-09-24), trial `-D MOJOLEARN_FTZ_CLASS_AMD`: in
+    code compiled FOR an AMD GPU the same function is spelled as one
+    `v_cmp_class_f32` (mask 0x90, the two subnormal classes) and a select of
+    the signed zero, the spelling the GEMM seam already ships on AMD
+    (`gemm_identical._ftz_class`, 2026-09-18). It returns the same word for
+    every input: a subnormal becomes its signed zero, everything else is
+    returned unchanged. Host code and every other target keep the integer
+    spelling."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and is_defined["MOJOLEARN_FTZ_CLASS_AMD"]() and is_amd_gpu():
+        var subnormal = llvm_intrinsic[
+            "llvm.amdgcn.class.f32", Bool, has_side_effect=False
+        ](x, Int32(0x90))
+        var zero = bitcast[DType.float32](bitcast[DType.uint32](x) & UInt32(0x80000000))
+        return zero if subnormal else x
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
         var b = bitcast[DType.uint32](x)
         if (b & UInt32(0x7F800000)) == UInt32(0) and (
