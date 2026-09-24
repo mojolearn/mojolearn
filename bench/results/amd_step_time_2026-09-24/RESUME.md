@@ -35,6 +35,12 @@ launch bound): launch bound (spills), leaf split, class ftz, attention
 `_bswz`, matrix-core GEMM (`lib_gemm_mfma_for`) with its group launch
 (`GEMM_MFMA_MIN_GROUP_LEAVES` = 4). README.md is the write-up.
 
+MERGED: origin/main fast-forwarded to the branch at b573f2b40 (2026-09-24
+~20:10 UTC, at Andrew's request), after the cross-target compile check
+(`xtarget/`: NVIDIA sm_90a builds with `.maxntid 256`, Apple M4 compiles and
+carries no bound). The worktree at ~/mojolearn-wt/release-0814 has `main`
+checked out at the old tip; it was not touched.
+
 NEXT: MI325X confirmation on DigitalOcean after ~22:00 UTC
 (`tools/amd_step_time_leg_mi325x.sh` with `tools/do_extra_leg.sh amd`; push
 /root/urls and /root/amd_in after the droplet is up; the scratchpad helper
