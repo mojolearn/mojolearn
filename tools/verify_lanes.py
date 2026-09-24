@@ -48,6 +48,7 @@ rents or falls through to local execution. See docs/TEST_RUNTIME.md.
 
 """
 import argparse
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -177,6 +178,47 @@ def verified_anchor(backend, fixtures, base=None, depth=0, _commit_filter=None):
         if best is None or when > best[0]:
             best = (when, commit)
     return best[1] if best else None
+
+
+def inherit_record(backend, anchor, covers, fixtures, dropped, base=None, commit=None):
+    """A pass whose selection is empty because nothing changed since its
+    anchor (the last finished pass on this backend) writes a record of its
+    own at this commit: the anchor's column.json, byte for byte, with a
+    manifest and summary that say where it came from. Without it a release
+    frozen one commit after a verified one has no column to diff its GPU
+    smoke against, and no anchor for the next pass. The record chains to its
+    anchor through `covers`, exactly as a narrow pass does, so a record
+    without a full or tag-anchored pass underneath still vouches for nothing.
+    Returns the record directory, or None when the anchor's record cannot be
+    read (then nothing is written and the caller says so)."""
+    base = base or pass_base_dir()
+    src = os.path.join(base, anchor[:12], backend)
+    got = _record(src)
+    if got is None or not os.path.isfile(os.path.join(src, "column.json")):
+        print(f"# the anchor {anchor[:12]} has no readable {backend} record under {base}; nothing inherited")
+        return None
+    manifest, summary = got
+    if manifest.get("commit") != anchor or summary.get("complete") is not True or summary.get("validation_failures"):
+        print(f"# the record under {src} is not a complete pass at {anchor[:12]}; nothing inherited")
+        return None
+    commit = commit or _commit()
+    out = os.path.join(base, (commit or "unknown")[:12], backend)
+    os.makedirs(out, exist_ok=True)
+    column = Path(src) / "column.json"
+    (Path(out) / "column.json").write_bytes(column.read_bytes())
+    digest = hashlib.sha256(column.read_bytes()).hexdigest()
+    new_manifest = dict(commit=commit, lanes=[], shards=[], weights=[], fixtures=fixtures, repeats=1,
+                        runner="inherited", backend=backend, probe_group=manifest.get("probe_group", "core"),
+                        budget=0, timeout=0, jobs=0, registry_total=len(lane_select.all_lanes()),
+                        selection="derived", fallback=False, covers=covers, dirty_lanes=[], metal_shards=1,
+                        selection_file=None, dropped=dropped, union=None,
+                        inherited_from=dict(commit=anchor, record=src, column_sha256=digest,
+                                            lanes=len(manifest.get("lanes") or [])))
+    (Path(out) / "manifest.json").write_text(json.dumps(new_manifest, indent=1) + "\n")
+    (Path(out) / "run-summary.json").write_text(json.dumps(dict(
+        pending=[], running=[], exit_codes={}, complete=True, execution_complete=True, budget=0,
+        elapsed_seconds=0.0, validation_failures=[], inherited_from=anchor), indent=2) + "\n")
+    return out
 
 
 def dirty_paths():
@@ -923,6 +965,12 @@ def main(argv=None):
           f"{len(lanes) * len(fixtures)} cells, {len(lanes) * len(fixtures) * args.repeats} independent fits")
     if not lanes and is_pass:
         print(f"# nothing to check on {args.backend}: the release touched no lane that runs there")
+        anchor = covers.get("since") if isinstance(covers, dict) and covers.get("mode") == "since-record" else None
+        if anchor and dirty_lanes == []:
+            written = inherit_record(args.backend, anchor, covers, args.fixtures, dropped)
+            if written:
+                print(f"# record inherited from the {anchor[:12]} pass at {written}: no lane's source moved since "
+                      f"it ran, so its column is this commit's column")
         return 0
     if not lanes:
         print("# REFUSING: the selection is empty. An empty run is not a pass; if the change "
