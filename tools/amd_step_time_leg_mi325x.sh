@@ -22,7 +22,7 @@ BIN=/root/amd_bin; mkdir -p "$BIN"
 S="sh tools/amd_step_time_session.sh"
 ST="$OUT/session.txt"
 say() { echo "$(date -u +%H:%M:%S) $*" >> "$ST"; }
-say "leg5 started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+say "mi325x leg started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 { uname -a; nproc; grep -m1 'model name' /proc/cpuinfo; free -g; } > "$OUT/host.txt" 2>&1
 rocm-smi --showproductname --showuniqueid --showclocks > "$OUT/gpu.txt" 2>&1
 { cat /opt/rocm/.info/version 2>/dev/null; ls -d /opt/rocm* 2>/dev/null; } > "$OUT/rocm.txt" 2>&1
@@ -60,7 +60,13 @@ grep -h '^timing ' "$OUT/item-timers.log" "$OUT/item-timers"/*.log 2>/dev/null >
 python3 tools/amd_step_timing_summary.py "$OUT/item-timers.timing.txt" --skip-shards 1 --tsv "$OUT/item-timers.summary.tsv" > /dev/null 2>&1
 say "item timers: $(tail -1 "$OUT/item-timers.summary.tsv")"
 
+# the launch-bound decorator on other targets (compile only, no device)
+for t in sm_90a apple_m4 metal; do
+    pixi run mojo build tools/amd_codegen/lb_target_$t.mojo -o "$BIN/lbt_$t" > "$OUT/lb_target_$t.log" 2>&1 && "$BIN/lbt_$t" >> "$OUT/lb_target_$t.log" 2>&1
+    say "launch-bound decorator on $t: exit=$? $(grep -iE 'maxntid|max_total_threads|flat-work|error' "$OUT/lb_target_$t.log" | head -3 | tr '\n' ' ' | cut -c1-200)"
+done
+
 touch /root/amd_step_ready
-say "leg5 scripted part done; holding"
+say "MI325X leg scripted part done; holding"
 while [ ! -e /root/amd_step_done ]; do sleep 20; done
 exit 0
