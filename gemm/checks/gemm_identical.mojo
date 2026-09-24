@@ -2784,7 +2784,9 @@ def _launch_tuned[
     #: Apple column. `[[ALWAYS GPU-agnostic]]`: that divergence is a matrix
     #: row, not an `if apple`.
     comptime PAGE_BYTES = (BM + BN) * SSTRIDE * 4
-    comptime PAGES = lib_smem_pages_for[TARGET_COLUMN, PAGE_BYTES]()
+    # lane/amd-step-time trial arm: one page (half the LDS, so more blocks can
+    # be resident per CU); scheduling only.
+    comptime PAGES = 1 if is_defined["MOJOLEARN_GEMM_ONE_PAGE"]() else lib_smem_pages_for[TARGET_COLUMN, PAGE_BYTES]()
     comptime kern = identical_gemm_tuned_kernel[RPT, CPT, TC, KS, FS, PAGES]
     var g = _tile_grid(m, n, BM, BN, two_d)
     step_count_launch()
@@ -6002,7 +6004,7 @@ def _kpack_launch[
     # DEVIATION 2700: the kernel's page is `TR` A line groups of `KS RPT + PAD`
     # words and `TC` B line groups of `KS CPT + PAD` (PAD 0 is 2599's page).
     comptime PAGE_BYTES = (BM * KS + TR * PAD + BN * KS + TC * PAD) * 4
-    comptime PAGES = lib_smem_pages_for[
+    comptime PAGES = 1 if is_defined["MOJOLEARN_GEMM_ONE_PAGE"]() else lib_smem_pages_for[
         TARGET_COLUMN, PAGE_BYTES + GEMM_KPACK_PAGE_GUARD_BYTES
     ]()
     comptime assert lib_smem_page_fits_for[TARGET_COLUMN, PAGE_BYTES](), (
