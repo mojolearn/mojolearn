@@ -40,3 +40,41 @@ def test_an_unchanged_spec_reads_back_equal(tmp_path):
     p = _spec(tmp_path)
     spec = drv.load_spec(p)
     assert drv.fresh_spec(p, drv.segment_plan(spec)) == spec
+
+
+def test_after_adds_a_dependency_and_a_changed_after_is_a_plan_change(tmp_path):
+    p = _spec(tmp_path)
+    spec = drv.load_spec(p)
+    plan = drv.segment_plan(spec)
+    b1 = [e for e in plan if e["route"] == "B"][0]
+    assert b1["depends"] == [("A", "1")]  # the seed and the chain it is held to are one dependency
+    d = json.loads(p.read_text())
+    d["routes"]["B"][0]["after"] = ["A/1", "A/9"]
+    p.write_text(json.dumps(d))
+    b1 = [e for e in drv.segment_plan(drv.load_spec(p)) if e["route"] == "B"][0]
+    assert b1["depends"] == [("A", "1"), ("A", "9")]
+    with pytest.raises(RuntimeError):
+        drv.fresh_spec(p, plan)
+
+
+def test_route_a_starts_first_and_a_ready_live_a_segment_holds_route_b(tmp_path, monkeypatch):
+    p = tmp_path / "spec.json"
+    p.write_text(json.dumps({"run": "runs/x", "recipe": "r.json", "recipe_key": "k", "tokens_stage": "t",
+                             "routes": {"A": [{"segment": "1", "vendor": "nvidia", "steps": 10},
+                                              {"segment": "2", "vendor": "live", "steps": 4, "first": "nvidia", "shards": [44, 20]}],
+                                        "B": [{"segment": "1", "vendor": "amd", "steps": 10, "after": ["A/2"]},
+                                              {"segment": "2", "vendor": "live", "steps": 4, "first": "amd", "shards": [20, 44]}]}}))
+    started = []
+
+    def fake_start(spec, e, out, ledger):
+        started.append("%s/%s" % (e["route"], e["segment"]))
+        raise RuntimeError("stop after the first start")
+
+    monkeypatch.setattr(drv, "_start", fake_start)
+    out = tmp_path / "out"
+    out.mkdir()
+    # A/1 landed: A/2 (live) and B/1 (after A/2) and B/2 (needs A/2) are the candidates; only A/2 may start
+    drv.Ledger(out).land(dict(route="A", segment="1"), dict(verdict="PASS", checkpoints={}))
+    monkeypatch.setattr(drv.time, "sleep", lambda s: None)
+    rc = drv.cmd_run(type("A", (), dict(spec=str(p), out=str(out), parallel=2))())
+    assert rc == 1 and started == ["A/2"]
