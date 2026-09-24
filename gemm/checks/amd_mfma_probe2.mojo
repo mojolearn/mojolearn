@@ -47,6 +47,22 @@ def layout_kernel(outp: MutPointer[Float32, MutAnyOrigin], which: Int32):
         outp.unsafe_store(lane * 32 + r, d[r])
 
 
+def layout16_kernel(outp: MutPointer[Float32, MutAnyOrigin], which: Int32):
+    """`v_mfma_f32_16x16x1f32` (four 16x16 blocks, K = 1): 16 accumulators a
+    lane; same read-off as `layout_kernel`."""
+    var lane = Int(thread_idx.x)
+    var a = Float32(lane) if which == 0 else Float32(1.0)
+    var b = Float32(1.0) if which == 0 else Float32(lane)
+    var c = SIMD[DType.float32, 16](0.0)
+    var d = c
+    comptime if TARGET_COLUMN == COLUMN_AMD:
+        d = llvm_intrinsic["llvm.amdgcn.mfma.f32.16x16x1f32", SIMD[DType.float32, 16]](
+            a, b, c, Int32(0), Int32(0), Int32(0)
+        )
+    comptime for r in range(16):
+        outp.unsafe_store(lane * 16 + r, d[r])
+
+
 def mode_kernel(
     outp: MutPointer[Float32, MutAnyOrigin],
     words: MutPointer[Float32, MutAnyOrigin],
@@ -119,6 +135,26 @@ def main() raises:
         for r in range(32):
             line += String(Int(cols[l * 32 + r])) + ("," if r < 31 else "")
         print(line)
+
+    var lay16 = _zeros(ctx, 64 * 16)
+    var rows16 = List[Float32]()
+    var cols16 = List[Float32]()
+    for which16 in range(2):
+        ctx.enqueue_function[layout16_kernel](lay16.unsafe_ptr(), Int32(which16), grid_dim=(1, 1, 1), block_dim=(64, 1, 1))
+        ctx.synchronize()
+        var h16 = _download(ctx, lay16, 64 * 16)
+        if which16 == 0:
+            rows16 = h16.copy()
+        else:
+            cols16 = h16.copy()
+    for l16 in range(64):
+        var line16 = String("MFMA16_LAYOUT lane=") + String(l16) + " a_lanes="
+        for r in range(16):
+            line16 += String(Int(rows16[l16 * 16 + r])) + ("," if r < 15 else "")
+        line16 += " b_lanes="
+        for r in range(16):
+            line16 += String(Int(cols16[l16 * 16 + r])) + ("," if r < 15 else "")
+        print(line16)
 
     var words: List[UInt32] = [
         0, 0x80000000, 1, 0x80000001, 0x007fffff, 0x807fffff,
