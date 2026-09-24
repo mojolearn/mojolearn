@@ -467,11 +467,11 @@ def test_segment_lease_happy_path(world):
     assert "mac_deadman=cancelled" in (world.out / "deadman.txt").read_text()
     # the body's timeout(1) is the long lease less the fetch reserve
     assert int(leg["work_seconds"]) > (LEASE - 10) * 60
-    # the body ran and came home, and its status was mirrored while it ran
+    # the body ran and came home, and its status was copied here while it ran
     assert "BODY_RAN" in (world.out / "remote" / "extra.log").read_text()
     assert "archs=gfx942 column=amd" in (world.out / "remote" / "extra.log").read_text()
     live = (world.out / "status_live.txt").read_text()
-    assert live.startswith("mirrored_utc=") and "lm-segment-B-1/status.txt" in live and "segment verdict PASS" in live
+    assert live.startswith("copied_utc=") and "lm-segment-B-1/status.txt" in live and "segment verdict PASS" in live
     remote = kv(world.out / "remote" / "leg.txt")
     assert remote["provider"] == "hotaisle" and remote["size"] == "mi300x-2gpu-vm" and remote["extra_exit"] == "0"
     assert leg["source_sha256_match"] == "yes" and leg["local_key_in_ps"] == "not_visible" and leg["box_key_in_ps"] == "not_visible"

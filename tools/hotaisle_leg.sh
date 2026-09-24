@@ -2697,18 +2697,18 @@ log "remote pid $RPID ($RUNTIME), bound ${WORK_SECONDS}s; polling every ${POLL_S
 POLL_DEADLINE=$((DEADLINE_EPOCH - FETCH_RESERVE + 60))
 _unreach=0
 _status_at=0
-# THE LIVE STATUS MIRROR (header, THE SEGMENT LEASE 4.): the body's status
+# THE LIVE STATUS COPY (header, THE SEGMENT LEASE 4.): the body's status
 # files, copied here every STATUS_EVERY seconds, so the segment's last status
 # is on this Mac even if this process dies in hour 20.
-status_mirror() {
+status_copy() {
   # shellcheck disable=SC2016  # expanded on the VM
   "${SSHN[@]}" 'sudo -n sh -c '"'"'for f in /root/gemm_leg_out/status.txt /root/gemm_leg_out/*/status.txt; do if [ -f "$f" ]; then echo "== $f"; tail -n 60 "$f"; fi; done'"'" \
     > "$TMPD/status_live.txt" 2>/dev/null || return 0
-  { echo "mirrored_utc=$(utc) vm=$VMREF lease_left_seconds=$(( DEADLINE_EPOCH - $(date +%s) ))"; cat "$TMPD/status_live.txt"; } > "$OUT/status_live.txt.tmp" \
+  { echo "copied_utc=$(utc) vm=$VMREF lease_left_seconds=$(( DEADLINE_EPOCH - $(date +%s) ))"; cat "$TMPD/status_live.txt"; } > "$OUT/status_live.txt.tmp" \
     && mv -f "$OUT/status_live.txt.tmp" "$OUT/status_live.txt"
 }
 while :; do
-  if [ $(( $(date +%s) - _status_at )) -ge "$STATUS_EVERY" ]; then status_mirror; _status_at=$(date +%s); fi
+  if [ $(( $(date +%s) - _status_at )) -ge "$STATUS_EVERY" ]; then status_copy; _status_at=$(date +%s); fi
   if [ "$(date +%s)" -ge "$POLL_DEADLINE" ]; then
     log "OUTER POLL DEADLINE reached. Fetching what exists."; BODY_STATE=partial_deadline; FETCH_RED=1; break
   fi
@@ -2726,7 +2726,7 @@ while :; do
   esac
   nap "$POLL_SECONDS"
 done
-status_mirror
+status_copy
 echo "body=$BODY_STATE" >> "$OUT/leg.txt"
 
 echo
