@@ -46,10 +46,10 @@
    },
    {
     "segment": "4",
-    "vendor": "nvidia",
+    "vendor": "amd",
     "steps": 1500,
-    "lease_minutes": 1200,
-    "dollar_cap": 150
+    "lease_minutes": 4056,
+    "dollar_cap": 276
    },
    {
     "segment": "5",
@@ -60,10 +60,10 @@
    },
    {
     "segment": "6",
-    "vendor": "nvidia",
+    "vendor": "apple",
     "steps": 100,
-    "lease_minutes": 180,
-    "dollar_cap": 120
+    "lease_minutes": 600,
+    "dollar_cap": 0
    }
   ],
   "B": [
@@ -79,43 +79,45 @@
    },
    {
     "segment": "2",
-    "vendor": "nvidia",
-    "steps": 1000,
-    "lease_minutes": 900,
-    "dollar_cap": 120
-   },
-   {
-    "segment": "3",
     "vendor": "live",
-    "steps": 400,
+    "steps": 1000,
     "first": "amd",
     "shards": [
      20,
      44
     ],
-    "lease_minutes": 1200,
-    "dollar_cap": 150
+    "lease_minutes": 2000,
+    "dollar_cap": 260
+   },
+   {
+    "segment": "3",
+    "vendor": "amd",
+    "steps": 400,
+    "lease_minutes": 1120,
+    "dollar_cap": 80
    },
    {
     "segment": "4",
-    "vendor": "amd",
+    "vendor": "nvidia",
     "steps": 1500,
-    "lease_minutes": 4056,
-    "dollar_cap": 276
+    "nvidia_devices": "0",
+    "nvidia_gpus": "NVIDIA H100 80GB HBM3|NVIDIA H100 NVL|NVIDIA H200",
+    "lease_minutes": 1200,
+    "dollar_cap": 80
    },
    {
     "segment": "5",
-    "vendor": "nvidia",
+    "vendor": "amd",
     "steps": 1000,
-    "lease_minutes": 900,
-    "dollar_cap": 120
+    "lease_minutes": 2724,
+    "dollar_cap": 192
    },
    {
     "segment": "6",
-    "vendor": "amd",
+    "vendor": "nvidia",
     "steps": 100,
-    "lease_minutes": 326,
-    "dollar_cap": 40
+    "lease_minutes": 180,
+    "dollar_cap": 20
    }
   ]
  }
