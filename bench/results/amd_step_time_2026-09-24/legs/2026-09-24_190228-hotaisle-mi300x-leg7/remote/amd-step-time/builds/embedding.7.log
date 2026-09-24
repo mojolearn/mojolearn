@@ -1,0 +1,84 @@
+!! MOJOLEARN_GPU_ARCHS=gfx942 (--target-accelerator); read the architecture back out of the built .so
+Imported from /root/mojolearn/bindings/_mojolearn_embedding.mojo:30:
+./bindings/hostptr.mojo:58:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_embedding.mojo:30:
+./bindings/hostptr.mojo:69:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_embedding.mojo:39:
+Imported from ./embedding/checks/embedding_identical.mojo:540:
+/root/mojolearn/./gemm/checks/gemm_identical.mojo:6172:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            as_.store[alignment=ALIGN](initial_page * APAGE + ga[0] * ASTRIDE + ga[1] * RPT, pga)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_embedding.mojo:39:
+Imported from ./embedding/checks/embedding_identical.mojo:540:
+/root/mojolearn/./gemm/checks/gemm_identical.mojo:6173:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            bs_.store[alignment=ALIGN](initial_page * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_embedding.mojo:39:
+Imported from ./embedding/checks/embedding_identical.mojo:540:
+/root/mojolearn/./gemm/checks/gemm_identical.mojo:6190:14: warning: 'store' is deprecated, use 'unsafe_store' instead
+          as_.store[alignment=ALIGN](pgw * APAGE + ga[0] * ASTRIDE + ga[1] * RPT, pga)
+          ~~~^~~~~~
+              unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_embedding.mojo:39:
+Imported from ./embedding/checks/embedding_identical.mojo:540:
+/root/mojolearn/./gemm/checks/gemm_identical.mojo:6191:14: warning: 'store' is deprecated, use 'unsafe_store' instead
+          bs_.store[alignment=ALIGN](pgw * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
+          ~~~^~~~~~
+              unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_embedding.mojo:39:
+Imported from ./embedding/checks/embedding_identical.mojo:540:
+/root/mojolearn/./gemm/checks/gemm_identical.mojo:6239:26: warning: 'load' is deprecated, use 'unsafe_load' instead
+            var ra1 = as_.load[width=RPT, alignment=ALIGN](abase)
+                      ~~~^~~~~
+                          unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_embedding.mojo:39:
+Imported from ./embedding/checks/embedding_identical.mojo:540:
+/root/mojolearn/./gemm/checks/gemm_identical.mojo:6240:26: warning: 'load' is deprecated, use 'unsafe_load' instead
+            var rb1 = bs_.load[width=CPT, alignment=ALIGN](bbase)
+                      ~~~^~~~~
+                          unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_embedding.mojo:39:
+Imported from ./embedding/checks/embedding_identical.mojo:540:
+/root/mojolearn/./gemm/checks/gemm_identical.mojo:6249:29: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var ra = as_.load[width=RPT, alignment=ALIGN](abase + c0 * RPT)
+                         ~~~^~~~~
+                             unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_embedding.mojo:39:
+Imported from ./embedding/checks/embedding_identical.mojo:540:
+/root/mojolearn/./gemm/checks/gemm_identical.mojo:6250:29: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rb = bs_.load[width=CPT, alignment=ALIGN](bbase + c0 * CPT)
+                         ~~~^~~~~
+                             unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_embedding.mojo:39:
+Imported from ./embedding/checks/embedding_identical.mojo:540:
+/root/mojolearn/./gemm/checks/gemm_identical.mojo:6276:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var ra2 = as_.load[width=RPT, alignment=ALIGN](abase + cc * RPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_embedding.mojo:39:
+Imported from ./embedding/checks/embedding_identical.mojo:540:
+/root/mojolearn/./gemm/checks/gemm_identical.mojo:6277:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rb2 = bs_.load[width=CPT, alignment=ALIGN](bbase + cc * CPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+built python/mojolearn/identical/_mojolearn_embedding.so (kernel-launch smoke skipped; binary checks ran)
