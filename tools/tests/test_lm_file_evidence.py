@@ -43,6 +43,7 @@ def run(tmp_path):
     box = leg / "remote" / "lm-segment-A-1"
     (box / "segment").mkdir(parents=True)
     (leg / "commit.txt").write_text("d" * 40 + "\n")
+    (leg / "pod_id.txt").write_text("podabc123\n")
     (leg / "leg.txt").write_text("commit=local\n")
     (box / "leg.txt").write_text("vendor=nvidia\n")
     (box / "gpu.txt").write_text("NVIDIA H100 80GB HBM3, GPU-abc, 550.90, 81559 MiB\n")
@@ -110,7 +111,8 @@ def test_files_small_files_and_summarizes_the_chain(run):
     assert sha[0] == "%s  chain.jsonl" % digest
     assert sha[1] == "lines 2" and sha[2] == "bytes %d" % src.stat().st_size
     # the table row for the README
-    assert "| A/1 | NVIDIA H100 80GB HBM3 | 0 to 10 | 41.0 | 7.5 | none (the seed) | 8, 10 |" in stdout
+    assert "| A/1 | NVIDIA H100 80GB HBM3 (RunPod podabc123) | 0 to 10 | 41.0 | 7.5 | none (the seed) | 8, 10 |" in stdout
+    assert (dest / "A-1" / "provider.txt").read_text() == "provider=runpod\nbox_id=podabc123\n"
 
 
 def test_live_segment_files_both_boxes_and_not_the_stale_worker(run):
@@ -119,8 +121,8 @@ def test_live_segment_files_both_boxes_and_not_the_stale_worker(run):
     assert (dest / "A-2-nvidia" / "segment" / "chain.summary.tsv").exists()
     assert (dest / "A-2-amd" / "segment" / "chain.summary.tsv").exists()
     assert (dest / "A-2-live.log").read_text() == "orchestrator\n"
-    assert "| A/2 (nvidia) | NVIDIA H100 80GB HBM3 | 10 to 20 | 100.0 | 5.0 | none | 20 |" in stdout
-    assert "| A/2 (amd) | AMD Instinct Mi325X VF | 10 to 20 | 100.0 | 5.0 | worker | the coordinator's |" in stdout
+    assert "| A/2 (nvidia) | NVIDIA H100 80GB HBM3 (unknown ?) | 10 to 20 | 100.0 | 5.0 | none | 20 |" in stdout
+    assert "| A/2 (amd) | AMD Instinct Mi325X VF (unknown ?) | 10 to 20 | 100.0 | 5.0 | worker | the coordinator's |" in stdout
     # the stale worker (ended before the coordinator started) is one box, not two
     assert stdout.count("| A/2 (amd) |") == 1
 

@@ -13,7 +13,8 @@ What goes in (the layout bench/results/lm_t2_2026-09-23 was filed by hand):
   <route>-<segment>-<vendor> for each box of a live segment, plus
   <route>-<segment>-live.log (the live orchestrator's log), holding
   status.txt, leg.txt, gpu.txt, uname.txt, binding.txt, commit.txt,
-  wheel.sha256, checkpoints.sha256, uploads.json, and under segment/ and
+  wheel.sha256, checkpoints.sha256, uploads.json, provider.txt (the rental's
+  provider and box id, read from the leg's own files), and under segment/ and
   arrival/ the segment.json, manifest.tsv and log.txt.
 
 The chain (chain.jsonl, about 1.2 KB a step, 1.2 MB for a 1,000-step
@@ -114,6 +115,8 @@ def file_box(box_root, results, dest_dir, cap, skipped):
     """One box's small files and its chain summaries; returns (seconds, hash_seconds, arrival verdict, checkpoints)."""
     box_root = Path(box_root)
     dest_dir.mkdir(parents=True, exist_ok=True)
+    provider, box_id = provider_of(box_root, results)
+    (dest_dir / "provider.txt").write_text("provider=%s\nbox_id=%s\n" % (provider, box_id))
     for name in BOX_FILES:
         for root in _roots(box_root, results):
             if (root / name).exists():
@@ -142,6 +145,35 @@ def file_box(box_root, results, dest_dir, cap, skipped):
             if (d / extra).exists():
                 _copy(d / extra, dest_dir / sub / extra, cap, skipped, "%s/%s/%s" % (dest_dir.name, sub, extra))
     return secs, hsecs, arrival, ckpts
+
+
+PROVIDER_NAMES = {"digitalocean": "DigitalOcean", "runpod": "RunPod", "hotaisle": "Hot Aisle", "vultr": "Vultr"}
+
+
+def provider_of(box_root, results):
+    """(provider, box id) of the rental that ran a box, from the leg's own files:
+    `provider=` in leg.txt where the leg writes it (DigitalOcean, Hot Aisle,
+    Vultr), else the id file each runner leaves (droplet_id.txt is a
+    DigitalOcean droplet, pod_id.txt a RunPod pod)."""
+    provider, box_id = None, None
+    for root in _roots(box_root, results):
+        leg = root / "leg.txt"
+        if leg.exists():
+            for line in leg.read_text().splitlines():
+                k, _, v = line.partition("=")
+                if k == "provider" and v and not provider:
+                    provider = v.strip()
+                if k in ("droplet", "pod", "vm", "instance") and v and not box_id:
+                    box_id = v.strip()
+        if (root / "droplet_id.txt").exists():
+            provider = provider or "digitalocean"
+            box_id = box_id or (root / "droplet_id.txt").read_text().strip()
+        if (root / "pod_id.txt").exists():
+            provider = provider or "runpod"
+            box_id = box_id or (root / "pod_id.txt").read_text().strip()
+        if provider and box_id:
+            break
+    return provider or "unknown", box_id or "?"
 
 
 def _gpu_name(dest_dir):
@@ -185,8 +217,10 @@ def file_segment(e, record, dest, cap, skipped):
         dest_dir = dest / name
         secs, hsecs, arrival, ckpts = file_box(box_root, results, dest_dir, cap, skipped)
         first, last = sj.get("first_step"), sj.get("last_completed") or sj.get("last_step")
-        rows.append("| %s/%s%s | %s | %s to %s | %s | %s | %s | %s |" % (
+        provider, box_id = provider_of(box_root, results)
+        rows.append("| %s/%s%s | %s (%s %s) | %s to %s | %s | %s | %s | %s |" % (
             e["route"], e["segment"], "" if e["vendor"] != "live" else " (%s)" % vendor, _gpu_name(dest_dir),
+            PROVIDER_NAMES.get(provider, provider), box_id,
             first, last, "%.1f" % statistics.median(secs) if secs else "?",
             "%.1f" % statistics.median(hsecs) if hsecs else "?",
             arrival or ("none (the seed)" if e["from_ckpt"] == "init" else "worker" if (sj.get("live") or {}).get("role") == "worker" else "none"),

@@ -1,0 +1,2 @@
+provider=runpod
+box_id=9r426aedj12ykh
