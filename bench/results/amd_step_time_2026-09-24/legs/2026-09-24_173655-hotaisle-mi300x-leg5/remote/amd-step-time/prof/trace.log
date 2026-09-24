@@ -1,0 +1,19 @@
+{
+  "exit_code": 0,
+  "timed_out": false,
+  "elapsed_seconds": 43.604226258999915,
+  "budget_seconds": 500.0,
+  "shape": [
+    4,
+    2048,
+    768,
+    12,
+    12,
+    64,
+    2048,
+    12,
+    50257
+  ],
+  "limitation": false
+}
+E20260924 17:57:05.363298 137705659291392 output_stream.cpp:105] Opened result file: /root/gemm_leg_out/amd-step-time/prof/trace/lean_agent_info.csv

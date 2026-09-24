@@ -1,0 +1,6 @@
+EXCP_AB_HEADER column=amd detect_seam=False launch_bound=256 rounds=1
+E20260924 17:56:16.771672 140089536681728 output_stream.cpp:105] Opened result file: /root/gemm_leg_out/amd-step-time/prof/pmc-head_dA-SQ_INSTS_SALU/pmc_agent_info.csv
+EXCP_AB call=head_dA kind=ordinary m=8192 n=50257 k=768 hash=219804c3c5b3ea5a rehash_equal=True ms=57.020467 samples=57.020467
+EXCP_AB_DONE
+E20260924 17:56:21.158270 135874401888320 output_stream.cpp:105] Opened result file: /root/gemm_leg_out/amd-step-time/prof/pmc-head_dA-SQ_INSTS_SALU/pmc_counter_collection.csv
+E20260924 17:56:21.164944 135874401888320 output_stream.cpp:105] Opened result file: /root/gemm_leg_out/amd-step-time/prof/pmc-head_dA-SQ_INSTS_SALU/pmc_agent_info.csv

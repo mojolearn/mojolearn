@@ -1,0 +1,64 @@
+17:40:02 leg5 started=2026-09-24T17:40:02Z
+17:41:18 base exit=0 secs=76
+17:41:44 ab build exit=0
+17:44:28 byte_lm branch exit=0 secs=190
+17:45:03 byte_lm trial exit=0 secs=225
+17:45:03 binding now branch
+17:46:11 lean branch: 0.8179941244999895 stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 ['5516ffe5f550', '77477af42588', '4e439a8a9751']
+17:46:11 binding now branch
+17:46:12 kernel trace exit=1 secs=1
+17:46:12 pmc proj_fwd SQ_WAVES exit=127
+17:46:12 pmc proj_fwd SQ_INSTS_LDS exit=127
+17:46:12 pmc proj_fwd SQ_INSTS_SALU exit=127
+17:46:12 pmc gateup_dA SQ_WAVES exit=127
+17:46:12 pmc gateup_dA SQ_INSTS_LDS exit=127
+17:46:12 pmc gateup_dA SQ_INSTS_SALU exit=127
+17:46:12 pmc head_dA SQ_WAVES exit=127
+17:46:12 pmc head_dA SQ_INSTS_LDS exit=127
+17:46:12 pmc head_dA SQ_INSTS_SALU exit=127
+17:46:12 binding now trial
+17:47:20 lean arm-stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32: 0.8178998919999572 stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 ['5516ffe5f550', '77477af42588', '4e439a8a9751']
+17:47:20 binding now trial
+17:48:27 lean arm-stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz: 0.7631938975000025 stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz ['5516ffe5f550', '77477af42588', '4e439a8a9751']
+17:48:27 binding now trial
+17:49:35 lean arm-stash_tiled_fgrid_r32_qres_pf_estash_kvgrid_r32: 0.8177507605000187 stash_tiled_fgrid_r32_qres_pf_estash_kvgrid_r32 ['5516ffe5f550', '77477af42588', '4e439a8a9751']
+17:49:35 binding now trial
+17:50:48 lean arm-stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r64: 2.749413566000044 stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r64 ['5516ffe5f550', '77477af42588', '4e439a8a9751']
+17:50:48 binding now trial
+17:50:52 lean arm-stash_tiled_fgrid_r64_pf_estash_dres_kvgrid_r32: FileNotFoundError: [Errno 2] No such file or directory: '/root/gemm_leg_out/amd-step-time/lean-arm-stash_tiled_fgrid_r64_pf_estash_dres_kvgrid_r32/result.json'
+17:50:52 binding now trial
+17:50:57 lean arm-stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_kvsplit: FileNotFoundError: [Errno 2] No such file or directory: '/root/gemm_leg_out/amd-step-time/lean-arm-stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_kvsplit/result.json'
+17:50:57 binding now trial
+17:52:09 lean arm-stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r64_bswz: 2.41934229550003 stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r64_bswz ['5516ffe5f550', '77477af42588', '4e439a8a9751']
+17:52:09 binding now branch
+17:53:17 lean branch2: 0.8184496884999817 stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32 ['5516ffe5f550', '77477af42588', '4e439a8a9751']
+17:53:17 leg5 scripted part done; holding
+17:55:33 pmc proj_fwd SQ_WAVES exit=0
+17:55:39 pmc proj_fwd SQ_INSTS_LDS exit=0
+17:55:45 pmc proj_fwd SQ_INSTS_SALU exit=0
+17:55:51 pmc gateup_dA SQ_WAVES exit=0
+17:55:57 pmc gateup_dA SQ_INSTS_LDS exit=0
+17:56:03 pmc gateup_dA SQ_INSTS_SALU exit=0
+17:56:09 pmc head_dA SQ_WAVES exit=0
+17:56:15 pmc head_dA SQ_INSTS_LDS exit=0
+17:56:21 pmc head_dA SQ_INSTS_SALU exit=0
+17:56:21 binding now branch
+17:57:05 kernel trace exit=0
+17:57:05 prof done
+17:58:55 byte_lm bswz (shipped default) exit=0
+17:59:36 tokens ready in 41 s: 12442225788 bytes
+18:00:02 checkpoints ready in 26 s
+18:00:02 fetch exit=0
+18:00:02 binding now bswz
+18:03:21 replay-bswz-ckpt_00000100 exit=0 secs=199: [18:03:21] PASS: /root/gemm_leg_out/amd-step-time/replay-bswz-ckpt_00000100 
+18:03:21 binding now bswz
+18:04:29 lean bswz: 0.7646026009999787 stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz ['5516ffe5f550', '77477af42588', '4e439a8a9751']
+18:04:37 ab lk build exit=0
+18:04:40 ab leg5-branch sum_ms=183.927
+18:04:48 ab leg5-lk sum_ms=192.662
+18:04:48 ab lk hashes IDENTICAL to branch
+18:07:22 byte_lm lk exit=0
+18:07:22 binding now lk
+18:08:29 lean lk: 0.8158117694999873 stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz ['5516ffe5f550', '77477af42588', '4e439a8a9751']
+18:08:29 binding now lk
+18:12:00 replay-lk-ckpt_00000100 exit=0 secs=211: [18:11:59] PASS: /root/gemm_leg_out/amd-step-time/replay-lk-ckpt_00000100 

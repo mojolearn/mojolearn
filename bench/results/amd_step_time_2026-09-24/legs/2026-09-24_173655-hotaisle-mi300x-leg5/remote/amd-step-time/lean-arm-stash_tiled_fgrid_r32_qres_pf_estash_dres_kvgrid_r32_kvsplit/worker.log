@@ -1,0 +1,19 @@
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/lm_step_memory_probe.py", line 716, in <module>
+    main()
+    ~~~~^^
+  File "/root/mojolearn/tools/lm_step_memory_probe.py", line 681, in main
+    raise SystemExit(worker(args))
+                     ~~~~~~^^^^^^
+  File "/root/mojolearn/tools/lm_step_memory_probe.py", line 348, in worker
+    runtime = trainer.run_metadata()
+  File "/root/mojolearn/python/mojolearn/_byte_lm_impl.py", line 847, in run_metadata
+    self._binding()
+    ~~~~~~~~~~~~~^^
+  File "/root/mojolearn/python/mojolearn/_byte_lm_impl.py", line 836, in _binding
+    self._runtime = _binding_metadata(binding, state_shape(self._state))
+                    ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_byte_lm_impl.py", line 375, in _binding_metadata
+    arm, default, trial, resolved = binding.byte_lm_attention_arm()
+                                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^^
+Exception: attention arm 'stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_kvsplit': _estash replaces the zdot kernel and takes the joint dk/dv fold, so it does not compose with _ztiled, _zdefer, _zlag, _kvrecompute or _kvsplit

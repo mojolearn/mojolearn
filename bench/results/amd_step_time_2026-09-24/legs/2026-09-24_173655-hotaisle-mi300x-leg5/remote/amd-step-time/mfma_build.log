@@ -1,0 +1,15 @@
+/root/mojolearn/gemm/checks/amd_mfma_probe.mojo:2:4: warning: doc string summary should begin with a capital letter or non-alpha character, but this begins with 'l'
+"""lane/amd-step-time, 2026-09-24: is one gfx942 FP32 matrix-core step,
+   ^
+Imported from /root/mojolearn/gemm/checks/amd_mfma_probe.mojo:32:
+/root/mojolearn/transformer/impl/llama/modeling_llama.mojo:745:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/gemm/checks/amd_mfma_probe.mojo:32:
+/root/mojolearn/transformer/impl/llama/modeling_llama.mojo:777:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
