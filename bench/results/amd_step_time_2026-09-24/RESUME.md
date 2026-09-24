@@ -25,6 +25,23 @@ on one H100. Target under 60 s with identical bits (per shard 2.17 s to under
   `docker exec mojolearn-leg` (scratch helper hx.sh). Evidence lands in
   `legs/<stamp>-hotaisle-mi300x-leg1/remote/amd-step-time/`.
 
+## HEADLINE (update me)
+
+MI300X, same host type: 141.0 s (main) -> 49.1 s a step (branch head), every
+replay PASS against the H100 chain, 181/201 GEMM lanes IDENTICAL (0
+divergent). Changes: GEMM launch bound (spills), AMD leaf split, class ftz in
+AMD device code, AMD attention `_bswz`. README.md is the write-up.
+
+IN PROGRESS (leg 6, 2026-09-24 ~18:30 UTC): a matrix-core IDENTICAL GEMM.
+Facts so far: `v_mfma_f32_32x32x1f32` == VALU fma exactly (8.65M elements),
+ignores MODE flush. Plan: MFMA for the FMA, the flush as `acc * one` (one =
+1.0 from a kernel argument, unfoldable) with the wave's MODE set to flush f32
+outputs (a product by one is exact, so flush-before-round cannot bite); probe 2
+checks layout, modes 0..3, the multiply flush and class under each mode.
+If it holds: new kernel behind an AMD row, A/B hashes, device check,
+replay. MI325X confirmation on DigitalOcean after ~22:00 UTC
+(`tools/amd_step_time_leg_mi325x.sh`).
+
 ## RESULTS SO FAR (MI300X, leg 1)
 
 1. ROOT CAUSE: VGPR SPILLS. Without a launch bound the gfx942 backend budgets
