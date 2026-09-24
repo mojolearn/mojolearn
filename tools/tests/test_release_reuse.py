@@ -558,11 +558,11 @@ class HostBuiltIntoReusedSets(unittest.TestCase):
             tmp = pathlib.Path(d)
             set_paths, proof_ext = self._sets(tmp)
             witnesses = pack_wheel.host_witnesses(set_paths)
-            self.assertEqual(sha(HOST_BYTES + b"NEW _mojolearn_training_host"), witnesses["_mojolearn_training_host"])
+            self.assertEqual(sha(HOST_BYTES + b"NEW _mojolearn_training_host"), witnesses["_mojolearn_training_host"].hex())
             sets = [s for sp in set_paths for s in pack_wheel.load_set(sp, True, host_witnesses_by_name=witnesses)]
             for s in sets:
                 self.assertIn("_mojolearn_training_host", s.hosts)
-                self.assertEqual(sha(s.hosts["_mojolearn_training_host"].read_bytes()), witnesses["_mojolearn_training_host"])
+                self.assertEqual(sha(s.hosts["_mojolearn_training_host"].read_bytes()), witnesses["_mojolearn_training_host"].hex())
             self.assertEqual([s.arch for s in sets if (s.reuse or {}).get("files", {}).get("host/_mojolearn_training_host.so")], [])
             inventory = tracked_native_inventory(ROOT)
             commit = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
