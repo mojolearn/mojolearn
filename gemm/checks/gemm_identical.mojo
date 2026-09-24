@@ -1309,10 +1309,11 @@ comptime GEMM_EXCP_FAST = (
 )
 #: hwreg(HW_REG_TRAPSTS = 3, offset 0, width 9): the nine EXCP status bits.
 comptime _TRAPSTS_EXCP = 3 | (8 << 11)
-#: EXCP[1] input denormal, EXCP[4] underflow. Either one sends the wave to the
-#: exact recompute (underflow is redundant by the argument and only adds
-#: recomputes; it is kept as a second witness).
-comptime _EXCP_SUBNORMAL_BITS = Int32(0x12)
+#: EXCP[1] input denormal: the bit the argument needs. `-D
+#: MOJOLEARN_GEMM_EXCP_UNDERFLOW=1` adds EXCP[4] underflow as a second witness
+#: (redundant by the argument; it also fires on a tiny product rounding to
+#: zero, which is exact, so it only adds recomputes).
+comptime _EXCP_SUBNORMAL_BITS = Int32(0x12) if is_defined["MOJOLEARN_GEMM_EXCP_UNDERFLOW"]() else Int32(0x2)
 
 
 @always_inline

@@ -21,6 +21,7 @@ every build):
   ordinary  sign and 23 mantissa bits hashed, exponent in [2^-8, 2^1)
   tiny      exponent in [2^-66, 2^-60): products near 2^-126, so bare FMA
             chains produce and consume subnormals and the exact recompute runs
+            (by default only on proj_* and down_fwd: the recompute is slow)
   mixed     ordinary, with one word in 64 scaled into [2^-110, 2^-100)
 Lines: `EXCP_AB call=... kind=... m= n= k= hash=<16 hex> ms=<median> samples=...`.
 """
@@ -159,6 +160,11 @@ def main() raises:
         var ws = ctx.enqueue_create_buffer[DType.float32](ws_n if ws_n > 0 else 1)
         for kd in range(3):
             if kinds_env != "" and not ("," + kinds_env + ",").__contains__("," + kind_names[kd] + ","):
+                continue
+            # The tiny kind makes (nearly) every wave take the exact recompute,
+            # which is slow by design; by default it runs on the k = 768
+            # projection calls and down_fwd only.
+            if kd == 1 and kinds_env == "" and not (call.startswith("proj_") or call == "down_fwd"):
                 continue
             _fill(ctx, x, nx, UInt32(1000 + 7 * ci), kd)
             _fill(ctx, y, ny, UInt32(2000 + 7 * ci), kd)
