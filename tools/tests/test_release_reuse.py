@@ -510,3 +510,83 @@ class PayloadTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class HostBuiltIntoReusedSets(unittest.TestCase):
+    """A release whose only rebuilt binding is a host one: every GPU set is the
+    published one, the cheapest leg (cuda-sm_89) built the host binding and
+    read it back, and the sets without a read-back of their own carry that
+    binding by byte-equality with the witnessed copy (the 0.8.17 shape)."""
+
+    def _sets(self, tmp, tamper=False):
+        whl, prev = published_wheel_fixture(tmp)
+        plan = linux_plan(prev, build={"linux-64/host/-/host/_mojolearn_training_host"})
+        leg = tmp / "leg" / "cuda" / "sm_89"
+        proof_ext = {}
+        for r in rr.plan_rows(plan, rr.LINUX):
+            if r["tier"] == "host" or (r["vendor"], r["arch"]) != ("cuda", "sm_89"):
+                continue
+            p = leg / r["set_rel"]
+            p.parent.mkdir(parents=True, exist_ok=True)
+            # an NVIDIA rebuild reproduces the published bytes (the fixture wheel's)
+            data = elf_stub(["libcuda.so.1", "libc.so.6"]) + r["archive_path"].encode()
+            p.write_bytes(data)
+            proof_ext[r["archive_path"]] = sha(data)
+        (leg / "host").mkdir()
+        for name in pack_wheel.HOST_NAMES:
+            new = b"NEW " if name == "_mojolearn_training_host" else b""
+            (leg / "host" / f"{name}.so").write_bytes(HOST_BYTES + new + name.encode())
+        (leg / ".libs").mkdir()
+        (leg / ".libs" / "libAsyncRTMojoBindings.so").write_bytes(b"runtime")
+        (leg / "manifest.json").write_text(json.dumps(dict(bytes_extensions=1, bytes_staged_libs=1,
+                                                           driver_libs_not_staged=["libcuda.so.1"],
+                                                           staged_libs=[dict(name="libAsyncRTMojoBindings.so")])))
+        rows = [(tier, name) for tier in pack_wheel.TIERS for name in pack_wheel.tier_names(tier, True)]
+        (leg / "readback.txt").write_text("".join(f"{t} {n} cuda\n" for t, n in rows)
+                                          + "".join(f"host {n} cpu\n" for n in pack_wheel.HOST_NAMES))
+        (leg / "arch_readback.txt").write_text("".join(f"{t} {n} sm_89\n" for t, n in rows)
+                                               + "".join(f"host {n} NONE-BY-DESIGN\n" for n in pack_wheel.HOST_NAMES))
+        rr.assemble_linux(plan, whl, {"cuda-sm_89": leg}, tmp / "sets", say=lambda *_: None)
+        if tamper:
+            p = tmp / "sets" / "hip" / "gfx942" / "host" / "_mojolearn_training_host.so"
+            p.write_bytes(p.read_bytes() + b"x")
+        return [tmp / "sets" / "cuda", tmp / "sets" / "hip"], proof_ext
+
+    def test_a_witnessed_host_build_packs_into_every_set(self):
+        from check_linux_release_qualification import tracked_native_inventory, inventory_digest
+        with tempfile.TemporaryDirectory() as d:
+            tmp = pathlib.Path(d)
+            set_paths, proof_ext = self._sets(tmp)
+            witnesses = pack_wheel.host_witnesses(set_paths)
+            self.assertEqual(sha(HOST_BYTES + b"NEW _mojolearn_training_host"), witnesses["_mojolearn_training_host"])
+            sets = [s for sp in set_paths for s in pack_wheel.load_set(sp, True, host_witnesses_by_name=witnesses)]
+            for s in sets:
+                self.assertIn("_mojolearn_training_host", s.hosts)
+                self.assertEqual(sha(s.hosts["_mojolearn_training_host"].read_bytes()), witnesses["_mojolearn_training_host"])
+            self.assertEqual([s.arch for s in sets if (s.reuse or {}).get("files", {}).get("host/_mojolearn_training_host.so")], [])
+            inventory = tracked_native_inventory(ROOT)
+            commit = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True).stdout.strip()
+            proof = tmp / "cuda-sm_89.json"
+            proof.write_text(json.dumps(dict(schema="mojolearn.linux.build-provenance.v1", complete=True, build_exit=0,
+                                             action="build", source_commit=commit, source_inventory=inventory,
+                                             source_sha256=inventory_digest(inventory), extensions=proof_ext)))
+            inv = pack_wheel.release_inventory(sets, [proof], pack_wheel.read_version(), ROOT)
+            host = inv["host_native"]["_mojolearn_training_host"]
+            self.assertEqual(host["origin"], "built")
+            self.assertEqual(host["sha256"], witnesses["_mojolearn_training_host"].hex())
+            self.assertEqual(inv["host_native"]["_mojolearn_forest_host"]["origin"], "reused")
+            # without a proof, or with two, the host build is not accounted for
+            with self.assertRaises(SystemExit):
+                pack_wheel.release_inventory(sets, [], pack_wheel.read_version(), ROOT)
+
+    def test_a_host_build_without_a_witness_of_the_same_bytes_is_refused(self):
+        with tempfile.TemporaryDirectory() as d:
+            tmp = pathlib.Path(d)
+            set_paths, _ = self._sets(tmp, tamper=True)
+            witnesses = pack_wheel.host_witnesses(set_paths)
+            pack_wheel.load_set(set_paths[0], True, host_witnesses_by_name=witnesses)
+            with self.assertRaises(SystemExit) as err:
+                pack_wheel.load_set(set_paths[1], True, host_witnesses_by_name=witnesses)
+            self.assertIn("no set with a read-back holds the same bytes", str(err.exception))
+            with self.assertRaises(SystemExit):
+                pack_wheel.load_set(set_paths[1], True)
