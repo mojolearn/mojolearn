@@ -114,3 +114,27 @@ about 71 s. Token fetch 51 s (12.4 GB, ranged), checkpoint fetch 10 s.
 control `segment.json`, `chain.jsonl` (two lines for a pass, one for a
 fail), `log.txt` and `run.log` (stdout and stderr). The full leg directory
 stays in `~/mojolearn-evidence/gpt3-run/t3-controls/`.
+
+## The same controls with the published 0.8.17 wheel (2026-09-24, `wheel-0.8.17/`)
+
+0.8.17 is the Python-only release that fixes the `fold_export` and
+cross-vendor `memoryview(Array)` crash on Python 3.10 and 3.11 found above;
+every GPU and host binding in it is the 0.8.16 wheel's bytes, which are the
+0.8.15 wheel's. One H100 (RunPod, Python 3.11 venv, wheel sha256
+`dd3899f0e28d...`), from route A's `ckpt_00000100.blm`, two optimizer steps
+each, held to the real chain's lines 101 and 102 with `--expect-chain`:
+
+| control | expected | observed | first differing step | fields |
+|---|---|---|---|---|
+| positive (plain replay) | PASS | PASS at 101 and 102 | none | none |
+| `--control none` | PASS | PASS | none | none |
+| `--control split` (the device fold export path the live worker takes) | PASS | PASS | none | none; the path that raised `TypeError` in 0.8.15 runs |
+| `--control ulp=63,auto` | FAIL | FAIL | 101 | state `d3eefb6d...` against `abc8b816...`, gradient `f386db39...` against `25830bfc...`; the 64 losses equal |
+
+So the published 0.8.17 reproduces the running segment's steps bit for bit
+on Python 3.11 through the fold export, and one ulp in one element of one
+shard's gradient is caught at the first step. The T3 spec names wheel 0.8.17
+from segment A/3 on (the driver re-reads the spec per segment); segments A/1
+and A/2 ran 0.8.15, whose bindings are the same bytes. Pod
+`ge6s83dbffmzae`, 02:52 to 03:03 UTC, deleted and confirmed gone (HTTP 404,
+`wheel-0.8.17/leg_teardown.txt`), about $0.65.

@@ -1,0 +1,7 @@
+[02:59:21] segment: route A segment controls-split label nvidia-controls-split, global steps 100..102, K=64, devices (0,), from ckpt_00000100.blm (sha256 80cd2126a89ba6d8) CONTROL split (K run 64)
+[02:59:22] the checkpoint's state AGREES with the expected chain's step 100 (2b37e85edfd701eb)
+[03:00:23] step 101 lr 397e2cc1 loss 6.9004 state abc8b816b5c3fb15 grad 25830bfc2016dc14 53.04 s (+3.40 s hashing)
+[03:00:23] step 101 agrees with the expected chain
+[03:01:14] step 102 lr 39805880 loss 6.8585 state a9421f91b947f82c grad 94c40a6e3d5ec5aa 47.37 s (+3.54 s hashing)
+[03:01:14] step 102 agrees with the expected chain
+[03:01:14] PASS: /root/gemm_leg_out/lm-controls/split
