@@ -1,0 +1,5 @@
+pod=9gml0ret9c7uxx
+name=mojolearn-cpu-lm-cpu-witness-grad-20260924-003809
+terminated_verified=1
+exit=0
+at=2026-09-24T03:08:27Z

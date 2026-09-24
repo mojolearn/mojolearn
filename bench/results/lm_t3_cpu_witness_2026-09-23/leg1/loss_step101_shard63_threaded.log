@@ -1,0 +1,2 @@
+[23:40:02] loss: step 101 shard 63 from ckpt_00000100.blm (state 2b37e85edfd701eb), threaded path
+[23:41:03] PASS: want 40def7ee got 40def7ee (6.967765 vs 6.967765) in 60.3 s -> /root/leg_out/records/loss_step101_shard63_threaded.json

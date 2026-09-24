@@ -1,0 +1,2 @@
+[23:39:10] loss: step 101 shard 0 from ckpt_00000100.blm (state 2b37e85edfd701eb), threaded path
+[23:39:58] FAIL (EXPECTED, control): want 40de1f6a got 40de1f69 (6.941335 vs 6.941334) in 47.5 s -> /root/leg_out/records/control_param_step101_shard0.json

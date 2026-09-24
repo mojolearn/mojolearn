@@ -1,0 +1,2 @@
+[23:37:31] loss: step 701 shard 0 from ckpt_00000700.blm (state 983700bf6fedbe79), threaded path
+[23:38:16] PASS: want 40814591 got 40814591 (4.039742 vs 4.039742) in 45.0 s -> /root/leg_out/records/loss_step701_shard0_threaded.json

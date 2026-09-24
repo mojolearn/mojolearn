@@ -1,0 +1,22 @@
+[23:33:44] started=2026-09-23T23:33:44Z commit=22e0278dd784669e0533b662e987d0927de20619
+[23:33:44] cpu=AMD EPYC 4564P 16-Core Processor nproc=16 mem=124G
+9f7f695b9a0bae175bf241632767ace67c542a4a116a98e36b9c306f3eebe051  /root/witness/recipe.json
+1db7fadd6dec742d5dbf6c8ec3d8d95cb3aaf809fb4a8080038598240ff81b71  /root/witness/manifest.json
+39e632c8d6c52418644ef0f7d6d5e5c963ed5d332582c1c63b4ab34e71943a8b  /root/witness/chain.jsonl
+281677583838358deb50f3a86c2505c695c1ab4ee1f42cfa3476a17ad1d9a8bd  /root/wheel/mojolearn-0.8.15-py3-none-manylinux_2_35_x86_64.whl
+[23:33:52] pip_install_exit=0
+3.14.7 0.8.15 /root/wv/lib/python3.14/site-packages/mojolearn/__init__.py
+ckpt100_exit=0 seconds=40
+ckpt700_exit=0 seconds=26
+80cd2126a89ba6d8a444cc7c9ca61cdadb4c67090511adcb4424e06ccf45b114  /root/witness/ckpt/ckpt_00000100.blm
+e08d0b5d603ade72f73622cf75f4184cf8b14ca674b676395f4b6c49c4e7f24f  /root/witness/ckpt/ckpt_00000700.blm
+[23:35:48] loss_step101_shard0_threaded exit=0 [23:35:48] PASS: want 40de1f6a got 40de1f6a (6.941335 vs 6.941335) in 45.6 s -> /root/leg_out/records/loss_step101_shard0_threaded.json
+[23:36:37] control_token_step101_shard0 exit=0 [23:36:36] FAIL (EXPECTED, control): want 40de1f6a got 40de1fe6 (6.941335 vs 6.941394) in 44.4 s -> /root/leg_out/records/control_token_step101_shard0.json
+[23:37:26] heldout0_ckpt100_threaded exit=0 [23:37:26] RECORDED: held-out loss 40da1f68 (6.816334) in 45.3 s -> /root/leg_out/records/heldout0_ckpt100_threaded.json
+[23:38:16] loss_step701_shard0_threaded exit=0 [23:38:16] PASS: want 40814591 got 40814591 (4.039742 vs 4.039742) in 45.0 s -> /root/leg_out/records/loss_step701_shard0_threaded.json
+[23:39:06] heldout0_ckpt700_threaded exit=0 [23:39:06] RECORDED: held-out loss 40864a82 (4.196595) in 45.4 s -> /root/leg_out/records/heldout0_ckpt700_threaded.json
+[23:39:58] control_param_step101_shard0 exit=0 [23:39:58] FAIL (EXPECTED, control): want 40de1f6a got 40de1f69 (6.941335 vs 6.941334) in 47.5 s -> /root/leg_out/records/control_param_step101_shard0.json
+[23:41:03] loss_step101_shard63_threaded exit=0 [23:41:03] PASS: want 40def7ee got 40def7ee (6.967765 vs 6.967765) in 60.3 s -> /root/leg_out/records/loss_step101_shard63_threaded.json
+gradient_exit=137
+[00:35:36] loss_step101_shard0_reference exit=0 [00:35:36] PASS: want 40de1f6a got 40de1f6a (6.941335 vs 6.941335) in 3268.1 s -> /root/leg_out/records/loss_step101_shard0_reference.json
+[00:35:36] finished=2026-09-24T00:35:36Z seconds=3712

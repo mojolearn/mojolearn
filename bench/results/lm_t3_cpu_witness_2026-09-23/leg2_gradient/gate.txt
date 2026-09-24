@@ -1,0 +1,11 @@
+[00:39:43] started=2026-09-24T00:39:43Z commit=31ae6de26b486ec584befdb1f47b5ed57204cf7b
+[00:39:43] cpu=AMD Ryzen Threadripper 7960X 24-Cores nproc=16 cgroup_memory=cat: /sys/fs/cgroup/memory.max: No such file or directory
+9f7f695b9a0bae175bf241632767ace67c542a4a116a98e36b9c306f3eebe051  /root/witness/recipe.json
+1db7fadd6dec742d5dbf6c8ec3d8d95cb3aaf809fb4a8080038598240ff81b71  /root/witness/manifest.json
+39e632c8d6c52418644ef0f7d6d5e5c963ed5d332582c1c63b4ab34e71943a8b  /root/witness/chain.jsonl
+281677583838358deb50f3a86c2505c695c1ab4ee1f42cfa3476a17ad1d9a8bd  /root/wheel/mojolearn-0.8.15-py3-none-manylinux_2_35_x86_64.whl
+[00:39:49] pip_install_exit=0
+ckpt100_exit=0 seconds=20
+80cd2126a89ba6d8a444cc7c9ca61cdadb4c67090511adcb4424e06ccf45b114  /root/witness/ckpt/ckpt_00000100.blm
+[03:08:09] gradient_exit=124 [00:40:10] gradient: step 101 shard 0
+[03:08:09] peak_rss_gib=54.60 finished=2026-09-24T03:08:09Z seconds=8906
