@@ -4660,7 +4660,20 @@ def _shipped_body_kpack_hg[
         if choose_gemm_plan(m, n, k) == PLAN_TUNED_128_8X8:
             var lgl = gemm_step_ksplit_group_leaves(GEMM_GEOM_KSPLIT_LEAF, m, n, k)
             if lgl > 0 and contract_partition(k)[1] > 0:
-                _ksplit_run[False](ctx, c, a, b, m, n, k, op, lgl)
+                # The packed body (`identical_gemm_kpack_kernel` in GROUP
+                # mode, the kpack-hg geometry both vendors ship) at the
+                # finest groups: rocprofv3 on an MI300X counted about 8.4
+                # VALU instructions per product in the older ksplit kernel
+                # against 3.6 in the packed loop. Same group nodes, same fold.
+                # `-D MOJOLEARN_GEMM_LEAF_SPLIT_KSPLIT_BODY=1` keeps the old body.
+                comptime if is_defined["MOJOLEARN_GEMM_LEAF_SPLIT_KSPLIT_BODY"]():
+                    _ksplit_run[False](ctx, c, a, b, m, n, k, op, lgl)
+                else:
+                    _kpack_run[
+                        GEMM_KPACK_RPT, GEMM_KPACK_CPT, TUNED_TC, GEMM_KPACK_KS,
+                        GEMM_KPACK_FS, False, GEMM_KPACK_PAD, GEMM_KPACK_ALIGN,
+                        0, True, True,
+                    ](ctx, c, a, b, m, n, k, op, lgl)
                 return
     # lane/amd-step-time (2026-09-24): measured again once the kernels stopped
     # spilling (GEMM_LAUNCH_BOUND). Trial arms, scheduling only:
