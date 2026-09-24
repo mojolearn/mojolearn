@@ -112,9 +112,60 @@ def render(args):
     return 0
 
 
+DEFAULT_CONTROLS = ("none:none zero-moments:zero-moments k63:shards=63 swap-5-40:swap=5,40 swap-0-1:swap=0,1 "
+                    "split:split ulp:ulp=63,auto")
+
+
+def render_controls(args):
+    """The negative-controls body (tools/lm_controls_body.sh): GETs only, the
+    expected chain's lines for the two steps after the checkpoint embedded."""
+    from lm_segment import load_recipe
+    load_recipe(args.recipe)
+    recipe_sha = hashlib.sha256(Path(args.recipe).read_bytes()).hexdigest()
+    name = args.from_key.rsplit("/", 1)[1]
+    step = int(name.split("_")[1].split(".")[0])
+    rows = {}
+    for line in Path(args.expect_chain).read_text().splitlines():
+        if line.strip():
+            row = json.loads(line)
+            rows[int(row["step"])] = line.strip()
+    missing = [s for s in (step, step + 1, step + 2) if s not in rows]
+    if missing:
+        raise SystemExit("the expected chain has no line for step(s) %s" % missing)
+    for flag in args.controls.split():
+        if ":" not in flag:
+            raise SystemExit("--controls entries are NAME:FLAG, got %r" % flag)
+    subst = {
+        "@FROM_NAME@": name, "@FROM_STEP@": str(step), "@RECIPE_SHA@": recipe_sha, "@WHEEL@": args.wheel,
+        "@CONTROLS@": args.controls,
+        "@TOKENS_URLS@": json.dumps(tokens_urls(args.tokens_key, args.seconds)),
+        "@RECIPE_URL@": presign_get(args.recipe_key, args.seconds),
+        "@CKPT_URLS@": json.dumps({name: presign_get(args.from_key, args.seconds)}),
+        "@EXPECT_LINES@": "\n".join(rows[s] for s in (step, step + 1, step + 2)),
+    }
+    body = (REPO / "tools" / "lm_controls_body.sh").read_text()
+    for k, v in subst.items():
+        body = body.replace(k, v)
+    Path(args.out).write_text(body)
+    subprocess.run(["sh", "-n", args.out], check=True)
+    print("rendered %s: controls from %s (step %d), expected lines %d..%d, wheel %s, controls: %s"
+          % (args.out, args.from_key, step, step, step + 2, args.wheel, args.controls))
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = ap.add_subparsers(dest="cmd", required=True)
+    c = sub.add_parser("controls", help="the negative-controls body (plan section 6 item 7)")
+    c.add_argument("--recipe", required=True, help="the local recipe.json (pinned by its sha256 on the box)")
+    c.add_argument("--recipe-key", required=True)
+    c.add_argument("--from-key", required=True, help="the checkpoint's full R2 key (read only)")
+    c.add_argument("--tokens-key", required=True)
+    c.add_argument("--expect-chain", required=True, help="a local chain holding the checkpoint's step and the two after it")
+    c.add_argument("--wheel", required=True)
+    c.add_argument("--controls", default=DEFAULT_CONTROLS, help="space-separated NAME:FLAG (FLAG zero-moments or a --control value)")
+    c.add_argument("--seconds", type=int, default=6 * 3600)
+    c.add_argument("--out", required=True)
     r = sub.add_parser("render")
     r.add_argument("--run", required=True, help="the run's R2 prefix, e.g. runs/gpt3-small/2026-09-25")
     r.add_argument("--recipe", required=True, help="the local recipe.json (its R2 copy is --recipe-key)")
@@ -149,7 +200,7 @@ def main(argv=None):
     r.add_argument("--tokens-key", default=None, help="token-stream group key: bake presigned GETs for its parts into the body (for a runner that stages nothing)")
     r.add_argument("--out", required=True)
     args = ap.parse_args(argv)
-    return render(args)
+    return render_controls(args) if args.cmd == "controls" else render(args)
 
 
 if __name__ == "__main__":

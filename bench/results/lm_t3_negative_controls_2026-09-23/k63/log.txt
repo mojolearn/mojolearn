@@ -1,0 +1,5 @@
+[23:42:02] segment: route A segment controls-k63 label nvidia-controls-k63, global steps 100..102, K=64, devices (0,), from ckpt_00000100.blm (sha256 80cd2126a89ba6d8) CONTROL shards=63 (K run 63)
+[23:42:03] the checkpoint's state AGREES with the expected chain's step 100 (2b37e85edfd701eb)
+[23:42:59] step 101 lr 397e2cc1 loss 6.8994 state 1a77ebc67e783e4f grad 75d90aeed2ad7a4b 45.19 s (+6.36 s hashing)
+[23:42:59] DISAGREE at step 101 on ['state_sha256', 'gradient_sha256', 'losses_f32_hex']; the segment stops here
+[23:42:59] FAIL: /root/gemm_leg_out/lm-controls/k63

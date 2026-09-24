@@ -1,0 +1,18 @@
+23:35:18 controls from ckpt_00000100.blm (global step 100), wheel 0.8.15, started=2026-09-23T23:35:18Z
+23:35:18 gpu_archs=sm_90a
+23:35:26 pip install mojolearn==0.8.15 exit=0 secs=8
+23:35:27 wheel: 281677583838358deb50f3a86c2505c695c1ab4ee1f42cfa3476a17ad1d9a8bd  /root/lm-wheel/mojolearn-0.8.15-py
+23:35:27 binding: mojolearn 0.8.15 /root/lm-venv/lib/python3.11/site-packages/mojolearn/__init__.py vendor cuda set_lr True device_fold True
+23:36:19 tokens fetched exit=0 secs=51
+23:36:25 joined tokens in 6 s: 12442225788 bytes
+23:36:35 checkpoint fetched exit=0 secs=10
+23:36:41 checkpoint sha256 80cd2126a89ba6d8a444cc7c9ca61cdadb4c67090511adcb4424e06ccf45b114
+23:38:39 positive exit=0 secs=118: [23:38:38] PASS: /root/gemm_leg_out/lm-controls/positive 
+23:40:37 none exit=0 secs=118: [23:40:36] PASS: /root/gemm_leg_out/lm-controls/none 
+23:41:49 zero-moments exit=1 secs=72: [23:41:49] DISAGREE at step 101 on ['state_sha256']; the segment stops here [23:41:49] FAIL: /root/gemm_leg_out/lm-controls/zero-moments 
+23:43:00 k63 exit=1 secs=71: [23:42:59] DISAGREE at step 101 on ['state_sha256', 'gradient_sha256', 'losses_f32_hex']; the segment stops here [23:42:59] FAIL: /root/gemm_leg_out/lm-controls/k63 
+23:44:11 swap-5-40 exit=1 secs=71: [23:44:10] DISAGREE at step 101 on ['state_sha256', 'gradient_sha256', 'losses_f32_hex']; the segment stops here [23:44:10] FAIL: /root/gemm_leg_out/lm-controls/swap-5-40 
+23:45:23 swap-0-1 exit=1 secs=72: [23:45:22] DISAGREE at step 101 on ['losses_f32_hex']; the segment stops here [23:45:22] FAIL: /root/gemm_leg_out/lm-controls/swap-0-1 
+23:46:26 split exit=1 secs=63: TypeError: memoryview: a bytes-like object is required, not 'Array' 
+23:47:30 ulp exit=1 secs=64: TypeError: memoryview: a bytes-like object is required, not 'Array' 
+23:47:30 finished=2026-09-23T23:47:30Z

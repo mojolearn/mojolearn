@@ -1,0 +1,5 @@
+[23:43:13] segment: route A segment controls-swap-5-40 label nvidia-controls-swap-5-40, global steps 100..102, K=64, devices (0,), from ckpt_00000100.blm (sha256 80cd2126a89ba6d8) CONTROL swap=5,40 (K run 64)
+[23:43:13] the checkpoint's state AGREES with the expected chain's step 100 (2b37e85edfd701eb)
+[23:44:10] step 101 lr 397e2cc1 loss 6.9004 state c34ac3e30fb0adb9 grad 69052888b6e623d4 45.94 s (+6.27 s hashing)
+[23:44:10] DISAGREE at step 101 on ['state_sha256', 'gradient_sha256', 'losses_f32_hex']; the segment stops here
+[23:44:10] FAIL: /root/gemm_leg_out/lm-controls/swap-5-40

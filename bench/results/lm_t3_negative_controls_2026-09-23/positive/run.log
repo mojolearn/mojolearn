@@ -1,0 +1,18 @@
+1441 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x32f6c0000000, nodemask=1)
+1441 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x796c00000000, nodemask=2)
+[23:36:54] segment: route A segment controls-positive label nvidia-controls-positive, global steps 100..102, K=64, devices (0,), from ckpt_00000100.blm (sha256 80cd2126a89ba6d8)
+[23:36:54] the checkpoint's state AGREES with the expected chain's step 100 (2b37e85edfd701eb)
+1441 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x796c40000000, nodemask=2)
+1441 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x796c80000000, nodemask=2)
+1441 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x796cc0000000, nodemask=2)
+1441 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x796d00000000, nodemask=2)
+1441 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x796d40000000, nodemask=2)
+1441 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x796d80000000, nodemask=2)
+1441 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x796dc0000000, nodemask=2)
+1441 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x796e00000000, nodemask=2)
+[23:37:54] step 101 lr 397e2cc1 loss 6.9004 state abc8b816b5c3fb15 grad 25830bfc2016dc14 47.95 s (+6.23 s hashing)
+[23:37:54] step 101 agrees with the expected chain
+1441 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x796e40000000, nodemask=2)
+[23:38:38] step 102 lr 39805880 loss 6.8585 state a9421f91b947f82c grad 94c40a6e3d5ec5aa 38.77 s (+5.98 s hashing)
+[23:38:38] step 102 agrees with the expected chain
+[23:38:38] PASS: /root/gemm_leg_out/lm-controls/positive

@@ -1,0 +1,2 @@
+[23:45:36] segment: route A segment controls-split label nvidia-controls-split, global steps 100..102, K=64, devices (0,), from ckpt_00000100.blm (sha256 80cd2126a89ba6d8) CONTROL split (K run 64)
+[23:45:36] the checkpoint's state AGREES with the expected chain's step 100 (2b37e85edfd701eb)

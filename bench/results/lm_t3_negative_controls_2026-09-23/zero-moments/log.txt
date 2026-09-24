@@ -1,0 +1,5 @@
+[23:40:50] segment: route A segment controls-zero-moments label nvidia-controls-zero-moments, global steps 100..102, K=64, devices (0,), from ckpt_00000100.blm (sha256 80cd2126a89ba6d8) ZEROED MOMENTS (a control that must fail) CONTROL zero-moments (K run 64)
+[23:40:50] the checkpoint's state AGREES with the expected chain's step 100 (2b37e85edfd701eb)
+[23:41:49] step 101 lr 397e2cc1 loss 6.9004 state 7bcaf6fc113b58a9 grad 25830bfc2016dc14 46.82 s (+6.66 s hashing)
+[23:41:49] DISAGREE at step 101 on ['state_sha256']; the segment stops here
+[23:41:49] FAIL: /root/gemm_leg_out/lm-controls/zero-moments
