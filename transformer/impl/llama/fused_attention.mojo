@@ -183,11 +183,13 @@ comptime ATTN_STICKY = is_defined["MOJOLEARN_ATTN_STICKY"]()
 
 comptime FUSED_THREADS = 256
 #: lane/amd-step-time (2026-09-24): the launch bound the shipped step
-#: attention kernels declare, their real launch size. Without it the gfx942
-#: backend budgets registers for 1,024 threads a block (the GEMM kernels
-#: spilled 630 and 396 VGPRs that way). Register allocation only.
-#: `-D MOJOLEARN_ATTN_NO_LAUNCH_BOUND=1` restores the old 1,024 (the A/B arm).
-comptime ATTN_LAUNCH_BOUND = 1024 if is_defined["MOJOLEARN_ATTN_NO_LAUNCH_BOUND"]() else FUSED_THREADS
+#: attention kernels declare. 1,024 is the backend's own default, so the
+#: shipped value compiles exactly what it compiled before. The real launch
+#: size, FUSED_THREADS (256), is the trial arm `-D MOJOLEARN_ATTN_LAUNCH_BOUND=1`:
+#: it removed the GEMM kernels' spills, but on these kernels it measured
+#: SLOWER on an MI300X (B4 shard: forward r2 73.4 -> 77.4 ms, dq 66.2 -> 74.1
+#: ms, dk/dv 67.9 -> 67.8 ms), so it is not taken.
+comptime ATTN_LAUNCH_BOUND = FUSED_THREADS if is_defined["MOJOLEARN_ATTN_LAUNCH_BOUND"]() else 1024
 """Threads per block for the row-tiled kernels: `TQ * head_dim`."""
 
 comptime NEG_ZERO_BITS: UInt32 = 0x80000000
