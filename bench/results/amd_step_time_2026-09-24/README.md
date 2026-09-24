@@ -19,7 +19,8 @@ binding built from this branch's source on the box with
 | branch | GEMM launch bound | 62.7 | PASS, steps 101 to 103 from ckpt 100 and 1999 to 2000 from ckpt 1998 |
 | leafsplit | GEMM launch bound + AMD leaf-split dispatch | 57.5 | PASS, steps 101 to 103 from ckpt 100 |
 | ftz (leg 4) | + `ftz` spelled as one class compare in AMD device code | 52.6 | PASS, steps 101 to 103 and 1999 to 2000 |
-| bswz (leg 5, the branch head) | + NVIDIA's attention block map `_bswz` as AMD's default | **49.1** | PASS, steps 101 to 103 |
+| bswz (leg 5) | + NVIDIA's attention block map `_bswz` as AMD's default | 49.1 | PASS, steps 101 to 103 |
+| mfma (leg 6, the branch head) | + the TUNED GEMM calls on the matrix cores | **39.5** | PASS, steps 101 to 103 and 1999 to 2000 |
 
 Same VM, same leg (leg 2), `tools/lm_segment.py run --no-checkpoints
 --expect-chain`, the published T3 checkpoints (sha256 80cd2126... and
@@ -36,9 +37,10 @@ state digests at steps 101, 102, 103 are abc8b816b5c3fb15, a9421f91b947f82c,
 fcdb48b8ab51f2ef on all three bindings; at 1999 and 2000 dcb05e4e668a81e1 and
 0e39ed2bfe9bcbae.
 
-The ftz and bswz rows ran on later VMs of the same host type (legs 4 and
-5); the lean B4 step on the same VM as its predecessor: 0.896 -> 0.819 s (ftz),
-0.818 -> 0.763 s (bswz, trial build against itself). Every lean step wrote
+The ftz, bswz and mfma rows ran on later VMs of the same host type (legs 4,
+5 and 6); the lean B4 step on the same VM as its predecessor: 0.896 -> 0.819
+s (ftz), 0.818 -> 0.763 s (bswz, trial build against itself), 0.763 -> 0.617
+s (mfma). The H100 takes 39.9 s a step (T1); the MI300X now takes 39.5 s. Every lean step wrote
 the same six witnesses (loss, gradients, parameters, m, v, flags) on every
 build of every leg (`lean-*/result.json`).
 
@@ -168,14 +170,47 @@ group GEMM kernel 439 ms (253 launches), the three head GEMMs not split 55 +
 product and a wave's VALU issue is about 0.7 instructions a cycle, at one wave
 per SIMD.
 
-## The matrix cores (probe, leg 5)
+## The matrix cores (legs 5 and 6): 49.1 -> 39.5 s
 
-`gemm/checks/amd_mfma_probe.mojo`: one `v_mfma_f32_32x32x1f32` step (K = 1,
-one product per output) returned exactly the VALU `fma_rn(a, b, c)` on all
-8,652,800 elements tried, subnormal results included, and the wave's MODE
-output-flush setting did not change a single one. So a matrix-core step IS
-the contract's FMA; only the flush after each step stays on the VALU. That
-is the next lever (in progress, see RESUME.md).
+The contract step is `ftz(fma_rn(a, b, acc))`, one product per step. Two
+device facts make it a matrix-core instruction plus one VALU product:
+
+1. `v_mfma_f32_32x32x1f32` has K = 1, so every output it writes is one
+   product plus its accumulator. It returned exactly the VALU `fma_rn` on
+   8,652,800 elements (subnormal results included), in IEEE mode and with the
+   wave's MODE flush set (`gemm/checks/amd_mfma_probe.mojo`).
+2. With the MODE f32 FP_DENORM field at 2, a VALU product by one returned
+   `ftz(x)` exactly on 8,388,608 elements (signed zero included) while the
+   MFMA kept its unflushed IEEE result; at 3 (the default) the product does
+   not flush, and at 0 or 1 the MFMA flushes too
+   (`gemm/checks/amd_mfma_probe2.mojo`, `MFMA2_MODE` lines). The class test
+   the staging flush uses reads the same under every mode.
+
+`identical_gemm_mfma_kernel` (`gemm/checks/gemm_identical.mojo`, row
+`lib_gemm_mfma_for`, AMD only, `-D MOJOLEARN_GEMM_NO_MFMA=1` reverts) keeps
+the tuned kernel's staging, windows, pages, barriers, leaf partial, local fold
+stack and output seam; per `p` ascending each wave issues two MFMA steps
+(its 64x64 quarter of the 128x128 tile) and multiplies both 32-float
+accumulators by `one`, a kernel argument equal to 1.0 so the compiler cannot
+fold the product; MODE is set once at kernel entry. The output layout was read
+off the device (`MFMA_LAYOUT`). Small outputs split their leaves over the
+grid (the tuned kernel's SPLIT mode, the same fold kernel); the long-k weight
+gradients stay on the leaf split, which priced faster for them.
+
+Proofs: 28 of 28 T3-shape GEMM hashes identical to the VALU kernels, the kind
+that forces subnormal intermediates included (`ab/leg6-*.hashes`); the lean
+B4 witnesses identical; the replays PASS at 39.5 s a step; on a rebuild of
+every device binding with this default: `gemm_device_check` (8 gates),
+`gemm_backward_check` (10 gates) and `gemm_workspace_check` (4,608 cells
+against the host oracle) green, and the 201 GEMM-reaching lanes 181
+VERIFIED, 0 DIVERGENT, the same 20 refused (`verify6/`).
+
+Per call (ms, MI300X, one of each at the T3 shape, before -> after): proj
+forward 0.99 -> 0.53, proj dA 0.97 -> 0.53, proj dB 0.95 -> 0.51, gate/up
+forward 2.56 -> 1.32, gate/up dA 2.66 -> 1.73, down forward 2.62 -> 1.73,
+down dA 2.66 -> 1.42, head forward 54.9 -> 28.6, head dA 56.5 -> 43.8, head
+dB 54.1 -> 31.4; the weight gradients with 64 leaves stayed on the leaf split
+(2.6 ms).
 
 ## Tried and not taken (all bit-identical where they ran)
 
@@ -207,10 +242,15 @@ is the next lever (in progress, see RESUME.md).
 
 ## The remaining gap to the H100, kernel by kernel
 
-At 49.1 s a step the MI300X shard is about 0.765 s (lean) against the H100's
-0.62 s (39.9 s / 64). The paragraphs below describe the 57.5 s state; the
-ftz and bswz changes took about 0.13 s a shard from attention, the norms and
-the GEMM fold. GEMM is 595 ms of it (6.07 TFLOP, 10.2 TFLOP/s); attention
+At 39.5 s a step the MI300X is level with the H100's 39.9 s (0.617 s a shard
+lean against about 0.62). The paragraphs below describe the 57.5 s state, kept
+for the record; since then the ftz and bswz changes took about 0.13 s a shard
+from attention, the norms and the GEMM fold, and the matrix cores about 0.15
+s a shard from the GEMM. What is left on AMD per shard (leg 5 trace, before
+the matrix cores): attention about 0.19 s of kernel time (its chains still
+flush on the VALU; the same MFMA-plus-product spelling applies to its dot
+chains and is the next lever), the remaining VALU GEMMs (the 64-leaf weight
+gradients), then launches, scans and copies. GEMM is 595 ms of it (6.07 TFLOP, 10.2 TFLOP/s); attention
 about 250 ms; everything else about 60 ms. On the H100 the 2026-09-17 B1
 itemization (`history_h100_b1_breakdown_2026-09-17.tsv`) put GEMM at 58
 percent and attention at 29 percent of the step. What is left on AMD:
@@ -242,7 +282,7 @@ percent and attention at 29 percent of the step. What is left on AMD:
 ## Costs
 
 Leg 1 $2.24 (48 min), leg 2 $2.19 (47 min), leg 3 $1.90 (41 min), leg 4
-$1.75, leg 5 $1.59; Hot Aisle balance $44.65 -> $34.49.
+$1.75, leg 5 $1.59, leg 6 $2.05; Hot Aisle balance $44.65 -> $32.29.
 
 ## Files
 
