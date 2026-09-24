@@ -1,0 +1,162 @@
+{
+ "schema": "mojolearn.lm-segment.run.v1",
+ "route": "A",
+ "segment": "2",
+ "label": "nvidia-A-2",
+ "from_checkpoint": {
+  "file": "ckpt_00001000.blm",
+  "sha256": "ce8c6b98e45bd42dd9cfb400c376e0b25c2eea1f2e4acc17f4df304241540f03",
+  "step": 1000
+ },
+ "first_step": 1000,
+ "last_step": 2000,
+ "devices": [
+  0,
+  1
+ ],
+ "logical_shards": 64,
+ "recipe_sha256": "9f7f695b9a0bae175bf241632767ace67c542a4a116a98e36b9c306f3eebe051",
+ "tokens_sha256": "4cf7181ba71058e70d7329dbae32de53c5750b49ae95331cebde4676f922209d",
+ "box": {
+  "host": "a03018f77050",
+  "machine": "x86_64",
+  "system": "Linux",
+  "python": "3.11.10",
+  "nvidia-smi": "NVIDIA H100 80GB HBM3, GPU-edface88-e511-3b21-14ca-855cf2dbc4cd, 580.126.09\nNVIDIA H100 80GB HBM3, GPU-b4ebdbae-3b99-d3b4-0e08-f21ea895c02f, 580.126.09"
+ },
+ "commit": null,
+ "zero_moments": false,
+ "expect_chain": null,
+ "checkpoints": [
+  {
+   "step": 1100,
+   "file": "ckpt_00001100.blm",
+   "bytes": 1945780169,
+   "sha256": "d531a79126c8b27cb6a252d86c24b7ea61f05aecb6b4fa7ea61b845c2773e71d",
+   "save_seconds": 4.568
+  },
+  {
+   "step": 1200,
+   "file": "ckpt_00001200.blm",
+   "bytes": 1945780168,
+   "sha256": "7024c24a7d5c64ebeace158e232683e6d7601f64550cc4231269b3c9c612faa1",
+   "save_seconds": 4.585
+  },
+  {
+   "step": 1300,
+   "file": "ckpt_00001300.blm",
+   "bytes": 1945780169,
+   "sha256": "3d8e7c5cca2d7a0b920ea4c0bdc27003473fb75322e22f3179378b48260434b1",
+   "save_seconds": 4.491
+  },
+  {
+   "step": 1400,
+   "file": "ckpt_00001400.blm",
+   "bytes": 1945780168,
+   "sha256": "acef02d5c48c8ec30d6ae9908e47d3855ea06587ba8849843febe9c8acf226d0",
+   "save_seconds": 4.576
+  },
+  {
+   "step": 1500,
+   "file": "ckpt_00001500.blm",
+   "bytes": 1945780169,
+   "sha256": "30cb33d798989375e7b244294729a6267a05dc5439727290c52e95a8c6c4ee5f",
+   "save_seconds": 4.612
+  },
+  {
+   "step": 1600,
+   "file": "ckpt_00001600.blm",
+   "bytes": 1945780169,
+   "sha256": "95b40c6f3c5ed22d43f4d0eea2c8e385323cbeb559b39499958a1fba344f6ead",
+   "save_seconds": 4.616
+  },
+  {
+   "step": 1700,
+   "file": "ckpt_00001700.blm",
+   "bytes": 1945780169,
+   "sha256": "470213b170c7662c847603148dfffa7ac869a82e5dd8244370b71842700f43bf",
+   "save_seconds": 4.612
+  },
+  {
+   "step": 1800,
+   "file": "ckpt_00001800.blm",
+   "bytes": 1945780169,
+   "sha256": "0bd3c265a678ac041d230512473fec427a0a12d5ca419c1df680fff316da4725",
+   "save_seconds": 4.593
+  },
+  {
+   "step": 1900,
+   "file": "ckpt_00001900.blm",
+   "bytes": 1945780168,
+   "sha256": "013f9543c0cd90843d1d44eed10b32aad971d9fea2dd3b82b019ec3b3aa09b01",
+   "save_seconds": 4.609
+  },
+  {
+   "step": 1998,
+   "file": "ckpt_00001998.blm",
+   "bytes": 1945780170,
+   "sha256": "b8d980905332fa84006ac9ea82b6559195b87545b31062af2c288d7af14901d4",
+   "save_seconds": 4.606
+  },
+  {
+   "step": 2000,
+   "file": "ckpt_00002000.blm",
+   "bytes": 1945780169,
+   "sha256": "f03471f9afa90120d84788f4ac980b133b25c2d8f48b485d593d189e551b3c97",
+   "save_seconds": 4.614
+  }
+ ],
+ "utc_start": "2026-09-24T01:58:14Z",
+ "hash_scheme": "sliced-sha256-8.v2",
+ "verdict": "PASS",
+ "disagreements": [],
+ "steps_completed": 1000,
+ "last_completed": 2000,
+ "utc_end": "2026-09-24T09:53:02Z",
+ "uploads": [
+  {
+   "name": "ckpt_00001100.blm",
+   "seconds": 170.77
+  },
+  {
+   "name": "ckpt_00001200.blm",
+   "seconds": 162.86
+  },
+  {
+   "name": "ckpt_00001300.blm",
+   "seconds": 205.63
+  },
+  {
+   "name": "ckpt_00001400.blm",
+   "seconds": 134.39
+  },
+  {
+   "name": "ckpt_00001500.blm",
+   "seconds": 419.85
+  },
+  {
+   "name": "ckpt_00001600.blm",
+   "seconds": 144.55
+  },
+  {
+   "name": "ckpt_00001700.blm",
+   "seconds": 188.43
+  },
+  {
+   "name": "ckpt_00001800.blm",
+   "seconds": 147.56
+  },
+  {
+   "name": "ckpt_00001900.blm",
+   "seconds": 150.82
+  },
+  {
+   "name": "ckpt_00001998.blm",
+   "seconds": 190.8
+  },
+  {
+   "name": "ckpt_00002000.blm",
+   "seconds": 344.77
+  }
+ ]
+}

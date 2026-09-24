@@ -14,3 +14,7 @@
 [21:38:27 driver] halted: a segment failed to land; see the ledger, fix, and run the driver again
 [21:40:23 driver] run runs/t3/2026-09-22: 12 segments over 2 routes, up to 2 at once
 [21:40:23 driver] starting A/2 on nvidia (1000 steps from ckpt_00001000.blm)
+[05:55:31 driver] A/2 runner exit 0; results /Users/andrewhendel/mojolearn-evidence/gpt3-run/t3/legs/A-2/leg-NVIDIA_H100_80GB_HBM3
+[05:55:31 driver] A/2 LANDED: 1000 steps, checkpoints ['ckpt_00001100.blm', 'ckpt_00001200.blm', 'ckpt_00001300.blm', 'ckpt_00001400.blm', 'ckpt_00001500.blm', 'ckpt_00001600.blm', 'ckpt_00001700.blm', 'ckpt_00001800.blm', 'ckpt_00001900.blm', 'ckpt_00001998.blm', 'ckpt_00002000.blm']
+[05:55:31 driver] starting A/3 on live (400 steps from ckpt_00002000.blm)
+[05:55:31 driver] A/3: spec re-read, changed since launch: wheel="0.8.17"

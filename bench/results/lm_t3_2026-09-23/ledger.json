@@ -21,6 +21,27 @@
    "results": "/Users/andrewhendel/mojolearn-evidence/gpt3-run/t3/legs/A-1/leg-NVIDIA_H100_80GB_HBM3",
    "utc": "2026-09-24T01:37:57Z",
    "arrival": null
+  },
+  "A/2": {
+   "verdict": "PASS",
+   "checkpoints": {
+    "ckpt_00001100.blm": "d531a79126c8b27cb6a252d86c24b7ea61f05aecb6b4fa7ea61b845c2773e71d",
+    "ckpt_00001200.blm": "7024c24a7d5c64ebeace158e232683e6d7601f64550cc4231269b3c9c612faa1",
+    "ckpt_00001300.blm": "3d8e7c5cca2d7a0b920ea4c0bdc27003473fb75322e22f3179378b48260434b1",
+    "ckpt_00001400.blm": "acef02d5c48c8ec30d6ae9908e47d3855ea06587ba8849843febe9c8acf226d0",
+    "ckpt_00001500.blm": "30cb33d798989375e7b244294729a6267a05dc5439727290c52e95a8c6c4ee5f",
+    "ckpt_00001600.blm": "95b40c6f3c5ed22d43f4d0eea2c8e385323cbeb559b39499958a1fba344f6ead",
+    "ckpt_00001700.blm": "470213b170c7662c847603148dfffa7ac869a82e5dd8244370b71842700f43bf",
+    "ckpt_00001800.blm": "0bd3c265a678ac041d230512473fec427a0a12d5ca419c1df680fff316da4725",
+    "ckpt_00001900.blm": "013f9543c0cd90843d1d44eed10b32aad971d9fea2dd3b82b019ec3b3aa09b01",
+    "ckpt_00001998.blm": "b8d980905332fa84006ac9ea82b6559195b87545b31062af2c288d7af14901d4",
+    "ckpt_00002000.blm": "f03471f9afa90120d84788f4ac980b133b25c2d8f48b485d593d189e551b3c97"
+   },
+   "steps_completed": 1000,
+   "disagreements": [],
+   "results": "/Users/andrewhendel/mojolearn-evidence/gpt3-run/t3/legs/A-2/leg-NVIDIA_H100_80GB_HBM3",
+   "utc": "2026-09-24T09:55:31Z",
+   "arrival": "PASS"
   }
  }
 }

@@ -3,7 +3,7 @@
  "recipe": "/Users/andrewhendel/mojolearn-evidence/gpt3-run/t3_recipe.json",
  "recipe_key": "runs/t3/2026-09-22/recipe.json",
  "tokens_stage": "corpus/fineweb-edu-10BT/tokens/mojolearn-bpe-fineweb-edu-50257-v1",
- "wheel": "0.8.15",
+ "wheel": "0.8.17",
  "lease_minutes": 1440,
  "dollar_cap": 120,
  "amd_providers": [
