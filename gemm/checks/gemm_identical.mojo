@@ -4425,11 +4425,13 @@ comptime GEMM_IDENTICAL_MFMA = (
 )
 #: The smallest group a matrix-core group launch takes (a schedule: groups
 #: are powers of two aligned at leaf 0, so any size is the same tree).
-#: Trial defines price 2, 4 and 16.
+#: MEASURED on an MI300X (leg 7, every hash equal to the VALU kernels):
+#: lean B4 step 0.512 s at 1, 0.504 s at 4; the per-call prices at 1, 2, 4
+#: and 16 are in the leg's `ab/leg7-*.log`. Trial defines price 1, 2, 16.
 comptime GEMM_MFMA_MIN_GROUP_LEAVES = (
     16 if is_defined["MOJOLEARN_GEMM_MFMA_GMIN16"]() else
-    4 if is_defined["MOJOLEARN_GEMM_MFMA_GMIN4"]() else
-    2 if is_defined["MOJOLEARN_GEMM_MFMA_GMIN2"]() else 1
+    2 if is_defined["MOJOLEARN_GEMM_MFMA_GMIN2"]() else
+    1 if is_defined["MOJOLEARN_GEMM_MFMA_GMIN1"]() else 4
 )
 comptime GEMM_IDENTICAL_LEAF_SPLIT = (
     GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and lib_gemm_leaf_split_for[TARGET_COLUMN]()
