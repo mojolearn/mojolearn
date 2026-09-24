@@ -2,6 +2,11 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
+## 0.8.18 (published 2026-09-25)
+
+### Changed
+- AMD (gfx942) training is about 4.4 times faster per optimizer step at the GPT-3 Small shape, with the same bits. On a Hot Aisle MI300X one optimizer step of 64 shards (batch 4, length 2048, 162,147,840 parameters) went from 141.0 s to 32.3 s (`bench/results/amd_step_time_2026-09-24/`): the two IDENTICAL GEMM kernels declare their real 256-thread launch size so the gfx942 backend no longer spills the 128x128 register tile; the tuned GEMM calls run on the matrix cores (`v_mfma_f32_32x32x1f32`, one product per step, the flush spelled as a product by one) with a grouped launch; the AMD leaf-split dispatch; `ftz` spelled as one class compare in AMD device code; and the NVIDIA attention block map as AMD's default. Every replayed optimizer step from the run's checkpoints (steps 101 to 103 and 1999 to 2000) equals the H100 chain line by line on state, gradient, the 64 losses and the learning-rate bits; 181 of the 201 GEMM-reaching identity lanes read IDENTICAL on AMD against the shipped references and none divergent (20 refused for bindings the box did not build). The GEMM launch bound is the one change that reaches NVIDIA binaries (`.maxntid 256` on sm_89 and sm_90a); Apple carries no bound. The NVIDIA and AMD release columns and a two-step replay against the live chain on each vendor gate this release.
+
 ## 0.8.17 (published 2026-09-24)
 
 ### Fixed
