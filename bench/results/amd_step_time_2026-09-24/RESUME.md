@@ -20,6 +20,27 @@ on one H100. Target under 60 s with identical bits (per shard 2.17 s to under
   $44.65), RunPod MI300X stock None, DigitalOcean GPU lock held by the run
   (`extra:A-3-amd`) until about 22:00 UTC.
 - Kernel map: `kernel_map.md` in this directory (written before any rental).
+- 14:26 UTC: Hot Aisle 1x MI300X leg 1 (60 min cap, $2.99/h), body
+  `tools/amd_step_time_leg1.sh`, worked interactively through
+  `docker exec mojolearn-leg` (scratch helper hx.sh). Evidence lands in
+  `legs/<stamp>-hotaisle-mi300x-leg1/remote/amd-step-time/`.
+
+## RESULTS SO FAR (MI300X, leg 1)
+
+1. ROOT CAUSE: VGPR SPILLS. Without a launch bound the gfx942 backend budgets
+   for 1,024-thread blocks (128 VGPRs) and SPILLS the 128x128 register tile:
+   `.vgpr_spill_count` tuned128 630, kpack 396/390. Fix: declare
+   `MAX_THREADS_PER_BLOCK_METADATA` = 256 (the real launch size) on the two
+   GEMM kernels (`GEMM_LAUNCH_BOUND`, revert `-D MOJOLEARN_GEMM_NO_LAUNCH_BOUND`)
+   -> spills 0. T3-shape GEMM A/B (`bench/gemm_excp_ab_main.mojo`): 28 of 28
+   output hashes IDENTICAL, every call about 3x faster (proj_fwd 3.71 -> 1.28 ms,
+   head_fwd 170 -> 56.6, head_dA 249 -> 80.5, head_dB 170 -> 55.5).
+   Timed B4 shard (random init): 2205 ms -> 988 ms; GEMM 1892 -> 678 ms.
+2. EXCP seam DEAD: TRAPSTS reads 0x80000000 always; no sticky EXCP bits on
+   this device (probe `gemm/checks/amd_excp_probe.mojo`).
+3. DETECT seam (software subnormal witness): bit-identical but SLOWER than the
+   plain seam once spills are gone; row off by default (trial define).
+4. Same launch bound added to the 7 shipped attention kernels (measuring).
 
 ## Findings so far (from the repository and its history, no new measurement)
 
@@ -54,7 +75,12 @@ on one H100. Target under 60 s with identical bits (per shard 2.17 s to under
 
 ## Owed / open
 
-- (nothing yet)
+- Chain replay (steps 101..103 from ckpt 100, and 1999..2000 from ckpt 1998
+  against A/2's chain, local copy of the chain in the scratchpad) on the
+  branch binding; the identity lanes on AMD; the MI325X before/after step.
+- NVIDIA re-proof: the launch-bound metadata is in shared source (it emits
+  `.maxntid 256` on NVIDIA); NVIDIA bits and speed must be re-proven before a
+  release (not rented in this lane).
 
 ## Costs
 
