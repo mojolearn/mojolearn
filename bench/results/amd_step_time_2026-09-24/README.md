@@ -17,7 +17,9 @@ binding built from this branch's source on the box with
 |---|---|---|---|
 | baseline | main's GEMM kernels (`-D MOJOLEARN_GEMM_NO_LAUNCH_BOUND=1`) | 141.0 | PASS, steps 101 to 102 from ckpt 100 |
 | branch | GEMM launch bound | 62.7 | PASS, steps 101 to 103 from ckpt 100 and 1999 to 2000 from ckpt 1998 |
-| leafsplit (the branch head) | GEMM launch bound + AMD leaf-split dispatch | **57.5** | PASS, steps 101 to 103 from ckpt 100 |
+| leafsplit | GEMM launch bound + AMD leaf-split dispatch | 57.5 | PASS, steps 101 to 103 from ckpt 100 |
+| ftz (leg 4) | + `ftz` spelled as one class compare in AMD device code | 52.6 | PASS, steps 101 to 103 and 1999 to 2000 |
+| bswz (leg 5, the branch head) | + NVIDIA's attention block map `_bswz` as AMD's default | **49.1** | PASS, steps 101 to 103 |
 
 Same VM, same leg (leg 2), `tools/lm_segment.py run --no-checkpoints
 --expect-chain`, the published T3 checkpoints (sha256 80cd2126... and
@@ -33,6 +35,12 @@ digest, gradient digest, the 64 shard losses and the learning-rate bits. The
 state digests at steps 101, 102, 103 are abc8b816b5c3fb15, a9421f91b947f82c,
 fcdb48b8ab51f2ef on all three bindings; at 1999 and 2000 dcb05e4e668a81e1 and
 0e39ed2bfe9bcbae.
+
+The ftz and bswz rows ran on later VMs of the same host type (legs 4 and
+5); the lean B4 step on the same VM as its predecessor: 0.896 -> 0.819 s (ftz),
+0.818 -> 0.763 s (bswz, trial build against itself). Every lean step wrote
+the same six witnesses (loss, gradients, parameters, m, v, flags) on every
+build of every leg (`lean-*/result.json`).
 
 ## What was wrong: the GEMM kernels spilled their registers on gfx942
 
@@ -137,6 +145,38 @@ Baseline and launch bound: leg 1 VM; leaf split: leg 2 VM (same host).
    per-chunk summaries count 20; the list is the union of names the reports
    print).
 
+## Two more changes, both bit-for-bit the same function
+
+- `checks/numerics.mojo::ftz` in AMD device code: one `v_cmp_class_f32`
+  (the two subnormal classes) and a select of the signed zero, the spelling
+  the GEMM seam already used, instead of the integer test. Same word for every
+  input. It is in every IDENTICAL kernel (attention chains, norms, loss, the
+  GEMM fold), which is why it moved the whole step: 57.5 -> 52.6 s. Leg 4
+  re-ran the 201 GEMM-reaching lanes on this default: 181 VERIFIED, 0
+  DIVERGENT, the same 20 refused. `-D MOJOLEARN_FTZ_NO_CLASS=1` reverts.
+- AMD's attention default arm takes `_bswz` (DEVIATION 2900, NVIDIA's
+  default since 2026-09-17): a bijection over `block_idx.x` that hands the
+  causal tiles out heaviest first. 52.6 -> 49.1 s.
+
+## Where the time goes now (rocprofv3, leg 5, one lean B4 step on the ftz build)
+
+`prof/lean_kernel_stats.csv` (two steps traced, per step below): the ksplit
+group GEMM kernel 439 ms (253 launches), the three head GEMMs not split 55 +
+53 + 8 ms, the group folds 19 ms, the four attention kernels 54 + 53 + 51 +
+28 ms, everything else about 30 ms. Counters on three GEMM calls
+(`prof/pmc-*`): the group kernel issues about 8.4 VALU instructions per
+product and a wave's VALU issue is about 0.7 instructions a cycle, at one wave
+per SIMD.
+
+## The matrix cores (probe, leg 5)
+
+`gemm/checks/amd_mfma_probe.mojo`: one `v_mfma_f32_32x32x1f32` step (K = 1,
+one product per output) returned exactly the VALU `fma_rn(a, b, c)` on all
+8,652,800 elements tried, subnormal results included, and the wave's MODE
+output-flush setting did not change a single one. So a matrix-core step IS
+the contract's FMA; only the flush after each step stays on the VALU. That
+is the next lever (in progress, see RESUME.md).
+
 ## Tried and not taken (all bit-identical where they ran)
 
 - EXCP seam (bare FMA, the wave's sticky TRAPSTS exception bits as the
@@ -151,6 +191,11 @@ Baseline and launch bound: leg 1 VM; leaf split: leg 2 VM (same host).
   So the loop is not issue-bound at one wave per SIMD. Off by default.
 - The same launch bound on the seven attention kernels: slower (forward
   73.4 -> 77.4, dq 66.2 -> 74.1 ms). Not applied.
+- The packed (kpack) body in the leaf split instead of the ksplit body: bits
+  equal, but slower (lean 0.763 -> 0.816 s, 49.1 -> 52.4 s a step, replay
+  PASS). Trial define `MOJOLEARN_GEMM_LEAF_SPLIT_KPACK_BODY`.
+- Attention arms `_kvgrid_r64` (2.4 to 2.7 s lean), `_estash` without
+  `_dres` (equal), `_fgrid_r64` and `_kvsplit` (not valid with this word).
 - One LDS page, the TUNED 64x64 plan and the packed body for AMD's k=768
   calls, and every GEMM step arm (`half`, `half_ks16`, `quarter`, `lfold`,
   `kpack`, `kpack_wide`, `kpack_hg`, `ksplit`, `kfoldv`): 207.7 to 581.0 ms
@@ -162,8 +207,10 @@ Baseline and launch bound: leg 1 VM; leaf split: leg 2 VM (same host).
 
 ## The remaining gap to the H100, kernel by kernel
 
-At 57.5 s a step the MI300X shard is about 0.90 s against the H100's 0.62 s
-(39.9 s / 64). GEMM is 595 ms of it (6.07 TFLOP, 10.2 TFLOP/s); attention
+At 49.1 s a step the MI300X shard is about 0.765 s (lean) against the H100's
+0.62 s (39.9 s / 64). The paragraphs below describe the 57.5 s state; the
+ftz and bswz changes took about 0.13 s a shard from attention, the norms and
+the GEMM fold. GEMM is 595 ms of it (6.07 TFLOP, 10.2 TFLOP/s); attention
 about 250 ms; everything else about 60 ms. On the H100 the 2026-09-17 B1
 itemization (`history_h100_b1_breakdown_2026-09-17.tsv`) put GEMM at 58
 percent and attention at 29 percent of the step. What is left on AMD:
@@ -194,8 +241,8 @@ percent and attention at 29 percent of the step. What is left on AMD:
 
 ## Costs
 
-Leg 1 $2.24 (48 min), leg 2 $2.19 (47 min), leg 3 $1.90 (41 min); Hot
-Aisle balance $44.65 -> $38.07.
+Leg 1 $2.24 (48 min), leg 2 $2.19 (47 min), leg 3 $1.90 (41 min), leg 4
+$1.75, leg 5 $1.59; Hot Aisle balance $44.65 -> $34.49.
 
 ## Files
 
