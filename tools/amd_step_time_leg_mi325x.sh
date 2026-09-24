@@ -38,7 +38,7 @@ blm() {  # tag, defines
 t0=$(date +%s)
 MOJOLEARN_SKIP_BUILD_GATE=1 sh bindings/build.sh > "$OUT/builds/base.log" 2>&1
 say "base exit=$? secs=$(( $(date +%s) - t0 ))"
-( blm baseline "-D MOJOLEARN_GEMM_NO_LAUNCH_BOUND=1 -D MOJOLEARN_GEMM_NO_LEAF_SPLIT=1" ) &
+( blm baseline "-D MOJOLEARN_GEMM_NO_LAUNCH_BOUND=1 -D MOJOLEARN_GEMM_NO_LEAF_SPLIT=1 -D MOJOLEARN_GEMM_NO_MFMA=1 -D MOJOLEARN_FTZ_NO_CLASS=1" ) &
 ( blm branch "" ) &
 ( blm timers "-D MOJOLEARN_STEP_PHASE_TIMERS=1 -D MOJOLEARN_ATTN_PHASE_TIMERS=1" ) &
 while [ ! -s /root/urls/tokens.json ] || [ ! -s /root/amd_in/A-1.chain.partial.jsonl ]; do sleep 10; done
