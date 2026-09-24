@@ -1,0 +1,11 @@
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/lm_step_memory_probe.py", line 716, in <module>
+    main()
+    ~~~~^^
+  File "/root/mojolearn/tools/lm_step_memory_probe.py", line 682, in main
+    args.out.mkdir(parents=True, exist_ok=False)
+    ~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/.pixi/envs/default/lib/python3.14/pathlib/__init__.py", line 1011, in mkdir
+    os.mkdir(self, mode)
+    ~~~~~~~~^^^^^^^^^^^^
+FileExistsError: [Errno 17] File exists: '/root/gemm_leg_out/amd-step-time/lean-ftz'

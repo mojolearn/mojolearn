@@ -1,0 +1,50 @@
+commit=1f8c81549 parent b0171fa0a
+commit_sha=1f8c8154987907769c98e3f99eb3753a53cc97c7
+provider=hotaisle
+vendor=amd
+team=andrews-team
+spec=13core
+lane=amd-step-time
+minutes=60
+gates=0
+bare=0
+test_watchdog=0
+gpu_archs_requested=gfx942
+target_column=amd
+runtime_requested=auto
+image=rocm/dev-ubuntu-22.04:6.4.1-complete
+extra=tools/amd_step_time_leg4.sh
+extra_sha256=d4224644b7b31a4f71c231f0b0dcf1d928a65df236cd9e5e4e3a27c1ecc9c28a
+bundle_bytes=14509173
+bundle_sha256=37585b1f6da2b609beb2c75a963d40bd80b033c13b0e9d56efcb3ceae6e0ee1b
+source_sha256_local=a234d9039f9f08bf905c297a7d5299eb89fff82147143e447ffc3296027ec29f
+mode=rent
+started=2026-09-24T16:54:09Z
+balance_before_cents=3798
+slot=/tmp/mojolearn-hotaisle-slot.1 taken 2026-09-24T16:54:12Z
+price_cents_per_hour=299 min_reservation_minutes=1
+local_key_in_ps=not_visible
+create_http=200 create_utc=2026-09-24T16:54:18Z
+vm_ref=99f0d37b-de3e-46b1-862b-86fa0f96d556
+vm_name=enc1-gpuvm002
+description=mojolearn:amd-step-time:20260924T165412Z
+ssh=hotaisle@23.183.40.67:22 running_after_seconds=11
+box_key_in_ps=not_visible
+runtime=docker
+box_gfx=gfx942
+gpu_archs=gfx942
+upload_seconds=3
+image_pull=pull_exit=0 pull_seconds=101
+work_seconds=3204
+body=done
+source_sha256_match=yes
+remote_pixi_install_exit=0
+remote_pixi_install_seconds=3
+remote_device_check_exit=SKIPPED
+remote_card_exit=SKIPPED
+remote_extra_exit=0
+remote_body_exit=0
+finished=2026-09-24T17:32:42Z
+lease_used_seconds=2310
+slot=released /tmp/mojolearn-hotaisle-slot.1 2026-09-24T17:32:50Z
+balance_after_cents=3623

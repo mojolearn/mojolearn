@@ -1,0 +1,63 @@
+16:57:06 leg4 started=2026-09-24T16:57:06Z
+16:58:21 base (ftzclass) exit=0 secs=75
+16:58:45 embedding (ftzclass) exit=0
+16:59:04 linalg exit=0
+16:59:41 estimators (ftzclass) exit=0
+17:01:32 byte_lm ftz exit=0 secs=191
+17:01:38 byte_lm lean exit=0 secs=197
+17:01:39 byte_lm timersftz exit=0 secs=198
+17:01:42 byte_lm timers exit=0 secs=201
+17:01:42 binding now timers
+17:02:25 item timers: # shards timed 2, kept 1; top level (step.* + envelope.*) 1805.535 ms a shard; gemm.* 595.197 ms a shard
+17:02:25 binding now timersftz
+17:03:07 item timersftz: # shards timed 2, kept 1; top level (step.* + envelope.*) 1661.922 ms a shard; gemm.* 576.620 ms a shard
+17:03:07 binding now lean
+17:04:15 lean lean: "steady_median_seconds": 0.8961505290000105
+17:04:15 binding now ftz
+17:05:22 lean ftz: "steady_median_seconds": 0.8193963495000389
+17:05:22 binding now lean
+17:05:22 lean lean: "steady_median_seconds": 0.8961505290000105
+17:05:23 binding now ftz
+17:05:23 lean ftz: "steady_median_seconds": 0.8193963495000389
+17:06:02 tokens ready in 39 s: 12442225788 bytes
+17:06:29 checkpoints ready in 27 s
+17:06:29 binding now ftz
+17:10:00 replay-ftz-ckpt_00000100 exit=0 secs=211: [17:09:59] PASS: /root/gemm_leg_out/amd-step-time/replay-ftz-ckpt_00000100 
+17:10:00 binding now ftz
+17:10:14 verify ftz exit=4: RESULT: INCOMPLETE (verified 393 of 566 cell parts (0 divergent, 0 owed, 56 refused, 117 n/a); 10 verified, 0 not applicable, 0 owed, 0 held, of 10 lanes). 13.1s. exit 4
+17:10:14 leg4 scripted part done; holding
+17:12:17 binding now ftz
+17:14:47 replay-ftz-ckpt_00001998 exit=0 secs=150: [17:14:47] PASS: /root/gemm_leg_out/amd-step-time/replay-ftz-ckpt_00001998 
+17:15:52 base2 exit=0 secs=65
+17:16:33 build2 linalg exit=0 secs=41
+17:16:44 build2 training exit=0 secs=52
+17:16:59 build2 estimators exit=0 secs=67
+17:17:19 build2 transformer exit=0 secs=87
+17:18:39 build2 byte_lm exit=0 secs=167
+17:19:02 build2 embedding exit=0 secs=23
+17:19:29 build2 kernel_methods exit=0 secs=50
+17:19:32 build2 gp exit=0 secs=53
+17:19:34 build2 svm exit=0 secs=55
+17:19:41 build2 mixture exit=0 secs=62
+17:19:51 build2 preprocessing exit=0 secs=10
+17:20:02 build2 resample exit=0 secs=21
+17:20:21 build2 rf exit=0 secs=40
+17:20:27 build2 solver exit=0 secs=46
+17:21:19 build2 metrics exit=0 secs=98
+17:21:56 build2 trees exit=0 secs=37
+17:21:59 build2 ivf exit=0 secs=40
+17:22:23 build2 hdbscan exit=0 secs=64
+17:22:45 build2 mamba exit=0 secs=86
+17:23:46 build2 gbdt exit=0 secs=147
+17:24:04 build2 tsa exit=0 secs=18
+17:24:04 build2 arima exit=0 secs=18
+17:24:41 verify chunk00 exit=4 secs=37: RESULT: INCOMPLETE (verified 764 of 1241 cell parts (0 divergent, 0 owed, 135 refused, 342 n/a); 22 verified, 0 not applicable, 0 owed, 0 held, 3 REFUSED, of 25 lanes). 36.2s. exit 4
+17:25:57 verify chunk01 exit=4 secs=76: RESULT: INCOMPLETE (verified 908 of 1241 cell parts (0 divergent, 0 owed, 135 refused, 198 n/a); 22 verified, 0 not applicable, 0 owed, 0 held, 3 REFUSED, of 25 lanes). 74.4s. exit 4
+17:27:13 verify chunk02 exit=4 secs=76: RESULT: INCOMPLETE (verified 827 of 1241 cell parts (0 divergent, 0 owed, 45 refused, 369 n/a); 24 verified, 0 not applicable, 0 owed, 0 held, 1 REFUSED, of 25 lanes). 75.5s. exit 4
+17:29:22 verify chunk03 exit=0 secs=129: RESULT: VERIFIED (verified 980 of 1241 cell parts (0 divergent, 0 owed, 0 refused, 261 n/a); 25 verified, 0 not applicable, 0 owed, 0 held, of 25 lanes). 128.1s. exit 0
+17:29:54 verify chunk04 exit=4 secs=32: RESULT: INCOMPLETE (verified 863 of 1241 cell parts (0 divergent, 0 owed, 45 refused, 333 n/a); 24 verified, 0 not applicable, 0 owed, 0 held, 1 REFUSED, of 25 lanes). 30.5s. exit 4
+17:30:26 verify chunk05 exit=4 secs=32: RESULT: INCOMPLETE (verified 827 of 1241 cell parts (0 divergent, 0 owed, 45 refused, 369 n/a); 24 verified, 0 not applicable, 0 owed, 0 held, 1 REFUSED, of 25 lanes). 30.7s. exit 4
+17:30:51 verify chunk06 exit=4 secs=25: RESULT: INCOMPLETE (verified 701 of 1241 cell parts (0 divergent, 0 owed, 270 refused, 270 n/a); 19 verified, 0 not applicable, 0 owed, 0 held, 6 REFUSED, of 25 lanes). 24.0s. exit 4
+17:31:17 verify chunk07 exit=4 secs=26: RESULT: INCOMPLETE (verified 791 of 1241 cell parts (0 divergent, 0 owed, 225 refused, 225 n/a); 20 verified, 0 not applicable, 0 owed, 0 held, 5 REFUSED, of 25 lanes). 25.0s. exit 4
+17:31:26 verify chunk08 exit=0 secs=9: RESULT: VERIFIED (verified 152 of 161 cell parts (0 divergent, 0 owed, 0 refused, 9 n/a); 1 verified, 0 not applicable, 0 owed, 0 held, of 1 lanes). 8.3s. exit 0
+17:31:26 leg4b done
