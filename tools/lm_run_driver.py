@@ -36,6 +36,9 @@ THE ORDER. Route A's segment k starts from route A's checkpoint k-1. Route
 B's segment k starts from ROUTE A's checkpoint k-1 (the pipeline of the plan,
 section 4) and is held to route A's chain for segment k (`--expect-chain`),
 so it can run as soon as A's segment k-1 has landed, one segment behind A.
+A route named in the spec's `"own_chain": ["B"]` instead starts segment k
+from ITS OWN checkpoint k-1 (a separate run from the shared seed), still held
+to route A's chain for segment k, so it runs once its own k-1 and A's k landed.
 Every segment after the first does the arrival replay from the previous
 segment's boundary-minus-two checkpoint on its own hardware first.
 
@@ -148,18 +151,24 @@ def segment_plan(spec):
             # the seed: route A's first segment draws it on its box; every other
             # route's first segment starts from THAT file, never a seed of its own
             seed_from_a = route != "A" and prev is None
+            # a route in "own_chain" (spec) chains from ITS OWN previous
+            # segment, independent of route A's checkpoints; it is still held
+            # to route A's chain for the same segment, so both runs must end
+            # at the same bits. Every other route hangs off route A's
+            # checkpoints (the pipeline of the plan, section 4; route C).
+            src = route if (route == "A" or route in spec.get("own_chain", [])) else "A"
             entry = dict(route=route, segment=s["segment"], index=s["index"], vendor=s["vendor"], steps=int(s["steps"]),
                          hold=s.get("hold") or None,
                          first=first, last=last, boundary=last, live=s.get("first"), shards=s.get("shards"),
                          lease_minutes=s.get("lease_minutes"), dollar_cap=s.get("dollar_cap"),
                          nvidia_devices=s.get("nvidia_devices"), nvidia_gpus=s.get("nvidia_gpus"),
                          provider=s.get("provider"), hotaisle_dollar_cap=s.get("hotaisle_dollar_cap"),
-                         from_route=("A" if route != "A" else route) if (prev or seed_from_a) else None,
+                         from_route=(src if prev else "A") if (prev or seed_from_a) else None,
                          from_segment=(prev["segment"] if prev else a_first) if (prev or seed_from_a) else None,
                          from_ckpt=("ckpt_%08d.blm" % first) if (prev or seed_from_a) else "init",
                          replay_ckpt=("ckpt_%08d.blm" % (first - 2)) if prev else None,
                          expect=(f"A/{s['segment']}/chain.jsonl" if route != "A" else None),
-                         depends=[("A" if route != "A" else route, prev["segment"])] if prev else ([("A", a_first)] if seed_from_a else []))
+                         depends=[(src, prev["segment"])] if prev else ([("A", a_first)] if seed_from_a else []))
             if route != "A" and ("A", s["segment"]) not in entry["depends"]:
                 entry["depends"].append(("A", s["segment"]))  # B's chain is held to A's; A's segment must exist
             # "after": ["A/3"] on a segment: it also waits for those segments to

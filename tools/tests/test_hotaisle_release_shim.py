@@ -17,6 +17,7 @@ writes, over the unpacked archive's real native inventory). Nothing here rents.
 """
 import hashlib
 import json
+import re
 import os
 from pathlib import Path
 import subprocess
@@ -527,7 +528,14 @@ def test_build_leg_builds_fetches_and_deletes(world):
                      gfx="gfx942", build_exit="0", expect_core_host_sha256="skip source=none",
                      build_environment="ROCm 6.4.1 Ubuntu 22.04 pinned container").items():
         assert state.get(k) == v, (k, state.get(k), v)
-    assert state["admission"].startswith("BUILT_NOT_INSTALLED hip/gfx942 29 extensions, fetched bytes match proof"), state
+    # the extension count follows the wheel's manifest (the FAST tier for the
+    # classical models added bindings on 2026-09-25), so it is read from the
+    # proof the leg fetched, never from a literal
+    m = re.match(r"BUILT_NOT_INSTALLED hip/gfx942 (\d+) extensions, fetched bytes match proof", state["admission"])
+    assert m, state
+    proofs = list(world.out.rglob("build-provenance.json"))
+    assert proofs, "no build-provenance.json came home"
+    assert int(m.group(1)) == len(json.loads(proofs[0].read_text())["extensions"]), state["admission"]
     assert state["destroyed"].split()[1].startswith("verified_gone")
     assert state["container_helper_sha256"] == hashlib.sha256((REPO / "tools/release_ubuntu22_build.sh").read_bytes()).hexdigest()
     assert int(state["work_seconds"]) <= 2400

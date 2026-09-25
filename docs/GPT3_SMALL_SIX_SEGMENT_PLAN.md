@@ -75,25 +75,27 @@ The constraint that makes two routes into a proof is per segment, not per
 route. Every segment must be run by different hardware in route A and route B.
 Then if both routes end at the same bits, no vendor diverged at any step,
 because a divergence at step t was produced on different hardware in each route
-and the finals could not agree. A second constraint, added in the revision,
-is that **every one of the five handoffs changes vendor in both routes**, so
-each handoff is a real cross-hardware checkpoint continuation and never a
-same-box resume. The first draft had route B on NVIDIA for segments 5 and 6.
+and the finals could not agree. The first revision also asked every handoff
+to change vendor in both routes. The plan as run (revised 2026-09-24 and
+2026-09-25) keeps the per-segment constraint and gives up two handoffs: A's
+1 to 2 and B's 3 to 4 are NVIDIA to NVIDIA, because AMD capacity is the
+bottleneck.
 
 | segment | 1 | 2 | 3 | 4 | 5 | 6 |
 |---|---|---|---|---|---|---|
 | optimizer steps | 1,000 | 1,000 | 400 | 1,500 | 1,000 | 100 |
-| **route A** | NVIDIA | AMD | **NVIDIA + AMD** (NVIDIA folds first) | NVIDIA | AMD | **Apple** |
-| **route B** | AMD | NVIDIA | **AMD + NVIDIA** (AMD folds first) | AMD | NVIDIA | AMD |
-| differs between routes | yes | yes | yes, ownership and fold order swapped | yes | yes | yes |
-| handoff into it changes vendor, A / B | seed | yes / yes | yes / yes | yes / yes | yes / yes | yes / yes |
+| **route A** | NVIDIA | NVIDIA | **NVIDIA + AMD** (NVIDIA folds first) | AMD | NVIDIA | **Apple** |
+| **route B** | AMD (MI325X) | AMD (MI300X) | NVIDIA | NVIDIA (one GPU) | AMD | NVIDIA |
+| differs between routes | yes | yes | yes | yes | yes | yes |
+| handoff into it changes vendor, A / B | seed | no / no (chip model changes in B) | yes / yes | yes / no | yes / yes | yes / yes |
 
-**Segment 3 is the multi-cluster segment and it is in both routes**, as
-Andrew asked. It is the same recipe in both, one NVIDIA box and one AMD box
-training the same step together through `mojolearn.cross_vendor`, and it still
-satisfies the per-segment constraint because the two routes swap which vendor
-owns which shards and which vendor computes the first half of the ordered
-fold. Section 5 says how it works at this size.
+**The multi-cluster segment is route A's segment 3 only**: one NVIDIA box and
+one AMD box training the same steps together through `mojolearn.cross_vendor`.
+Route B's segment 2 was a second one with the roles swapped (AMD folds
+first); it was dropped on 2026-09-25 for AMD alone, because the swap adds
+little proof (each shard's gradient is already identical on either vendor and
+the fold order is fixed) at the run's largest cost, about 28 hours on two
+rented boxes at A/3's measured 102 s a step. Section 5 says how it works.
 
 **Apple appears exactly once, in segment 6 of route A**, the shortest segment
 and the last one. Section 7 argues last over first. What is lost is that Apple
@@ -109,38 +111,23 @@ a segment.
 
 ## 4. Two routes at one wall clock
 
-Route A is strictly sequential, A0 to A1 to A2 and so on. Route B does not
-chain. **Route B's segment k starts from route A's checkpoint k-1** and its
-result is compared to A's checkpoint k. If B1 equals A1 then feeding A1 into
-B's segment 2 is feeding the identical bytes chained route B would have fed
-it, so B2 equals what chained B would have produced, and the induction carries
-to the final. Every segment of B finishes one segment after the matching
-segment of A, so two routes cost two times the GPU hours at about one times the
-wall clock, and a failure is localized to one segment on one vendor instead of
-being bisected across the run.
+**The two routes are separate runs.** Each is strictly sequential and chains
+from its own checkpoints: route B's segment k starts from route B's checkpoint
+k-1, and only B's first segment shares anything with A, the seed checkpoint
+at step 0. (The first revision started B's segment k from A's checkpoint k-1
+to halve the wall clock; that made B a replay of A's segments rather than a
+second run, and was dropped on 2026-09-25.) The driver says this with
+`"own_chain": ["B"]` in the spec.
 
-Because B's segment k starts from the same bytes as A's, **every per-step
-state hash of B's segment is comparable to A's**, not only the boundary. That
-is where most of the evidence in section 6 comes from.
+**Every per-step state hash of B is still comparable to A's.** B's segment k
+is held to A's chain for segment k (`--expect-chain`), so it starts once B's
+k-1 and A's k have landed and a disagreement stops it at the step it happens,
+on the vendor that produced it. If the two runs agree at every step they end
+at the same bits.
 
-**Both routes run at the same time**, B one segment behind A. At any moment
-two segments are live, A's k+1 and B's k, and by the table in section 3 they
-are sometimes on the same vendor (A's segment 2 on AMD while B's segment 1 is
-on AMD; A's segment 5 on AMD while B's segment 4 is on AMD). That needs two
-AMD boxes at once, and DigitalOcean allows one GPU droplet per account, so the
-second AMD leg goes to Hot Aisle or RunPod. NVIDIA has the same moment
-twice (A's segment 3 pair while B's segment 2 runs on NVIDIA; A's segment 4
-while B's segment 3 pair holds an NVIDIA box), two NVIDIA legs at once on
-RunPod, which is routine.
-
-**The halt rule.** When B finishes segment k, B's checkpoint k must equal A's
-checkpoint k byte for byte (the file sha256, and the full-state hash line).
-If it does not, both routes stop, including A's segment k+1 already running,
-because A's segment k+1 is built on bytes one vendor disputes. The arrival
-replays and the CPU witness at that boundary say which vendor stands alone
-(never attribute before the column that is alone is named), the cause is
-fixed, and segment k is rerun on both routes from A's checkpoint k-1. Nothing
-after a disputed boundary is kept.
+Both routes can be live at once when their vendors differ; route A has
+priority, and at most one segment holds each box class (AMD on DigitalOcean,
+AMD on Hot Aisle, NVIDIA) at a time.
 
 ## 5. How the bits agree, and why the multi-vendor segment is bandwidth bound
 
