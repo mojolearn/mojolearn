@@ -1272,6 +1272,68 @@ def lib_gemm_leaf_split_for[column: Int]() -> Bool:
     return column == COLUMN_AMD
 
 
+def lib_gemm_window_admit_for[column: Int]() -> Bool:
+    """SPELLING row (lane/nvidia-step-time, 2026-09-25): the IDENTICAL kpack
+    GEMM drops the per-step flush multiply on a WINDOW it has proven cannot
+    produce a subnormal step result, and runs the contract's exact step
+    everywhere else.
+
+    The contract step is `ftz(fma_rn(a, b, acc))` with `a`, `b` flushed at
+    staging and `acc` the previous flushed step (NVIDIA spells the flush as
+    `mul.rn.ftz` by one). While a window is staged, the block takes the
+    minimum biased exponent field `Ea` over the NONZERO words of its A tile
+    and `Eb` over its B tile (zeros constrain nothing; Inf and NaN read 255).
+    Every nonzero flushed operand is a multiple of 2^(E - 150), so every
+    product the window forms is a multiple of G = 2^(Ea + Eb - 300). If
+    `Ea + Eb >= 174`, G >= 2^-126; if in addition every accumulator entering
+    the window is a multiple of 2^-126 (true at a leaf start, where it is
+    +0.0, and after every admitted window), then every exact step result is a
+    multiple of 2^-126, every rounded one is too (a multiple of G below 2^24 G
+    is representable; above, it rounds to a multiple of its ulp, a power of
+    two at least G), and a nonzero multiple of 2^-126 is not subnormal. So
+    `ftz` is the identity on every step result of the window and the bare
+    `fma.rn` IS the contract's step: the same instruction on the same
+    operands in the same order, one rounding each. A window that fails the
+    test, and every later window of the same leaf, runs the exact
+    two-instruction step. The decision is block-uniform.
+
+    NVIDIA only (the column whose step is `fma.rn` + `mul.rn.ftz`).
+    MEASURED on a RunPod H100 80GB HBM3 (2026-09-25, leg 2): the T3-shape
+    GEMM A/B hashes equal the shipped step's on all 36 cases (ordinary
+    operands, the subnormal-forcing kind, and the mixed kind); the sabotage
+    arm differs on all 12 subnormal-forcing cases; every call about 20
+    percent faster; the lean B4 step 0.608 -> 0.532 s with equal witnesses;
+    the T3 replays of steps 101..103 and 1999..2000 PASS against the H100
+    chain at 33.80 and 34.04 s a step (38.83 before); GEMM 401.7 -> 323.6 ms
+    a shard.
+    `-D MOJOLEARN_GEMM_NO_WINDOW_ADMIT=1` is the revert arm (the shipped
+    step on every window); `-D MOJOLEARN_GEMM_SABOTAGE_ADMIT_ALWAYS=1`
+    admits every window and must FAIL the subnormal-forcing operands."""
+    comptime if is_defined["MOJOLEARN_GEMM_NO_WINDOW_ADMIT"]():
+        return False
+    return column == COLUMN_NVIDIA
+
+
+def lib_gemm_kpack_narrow_for[column: Int]() -> Bool:
+    """SCHEDULING row (lane/nvidia-step-time, 2026-09-25): the IDENTICAL kpack
+    GEMM kernel runs a 128x64 output tile (a thread's register tile 8x4, 32
+    cells instead of 64) under a 512-thread launch bound on its 256-thread
+    launch, which budgets 128 registers a thread so two blocks share an SM
+    and each hides the other's staging barrier, prefetch and fold. A thread's
+    cells, each cell's ascending chain, its leaves and its fold tree are
+    unchanged: a tile shape is a schedule and never a result.
+
+    NVIDIA, MEASURED on a RunPod H100 80GB HBM3 (2026-09-25, leg 2): the
+    T3-shape GEMM A/B hashes equal the 128x128 kernel's on all 36 cases
+    (three operand kinds), every call 5 to 9 percent faster; the lean B4 step
+    0.534 -> 0.508 s with equal witnesses; the T3 replay of steps 101..103
+    PASS at 32.43 s a step. Every other column False (their kernels compile
+    exactly as before). `-D MOJOLEARN_GEMM_NO_KPACK_NARROW=1` is the revert."""
+    comptime if is_defined["MOJOLEARN_GEMM_NO_KPACK_NARROW"]():
+        return False
+    return column == COLUMN_NVIDIA
+
+
 def lib_gemm_mfma_for[column: Int]() -> Bool:
     """SPELLING row (lane/amd-step-time, 2026-09-24): the IDENTICAL GEMM's
     TUNED 128x128 calls on the matrix cores (`identical_gemm_mfma_kernel`):
@@ -1448,6 +1510,35 @@ block-index map of the four kernels that arm runs. The matrix cannot import
 transformer/impl/llama/fused_attention.mojo (that file imports this one), so
 the word is a literal here and that file asserts at build time that it equals
 its own composition (`ATTN_ARM_R3_KVGRID_R32_ESTASH_DRES_BSWZ_DEFAULT`)."""
+
+
+def attn_fwd_launch_bound_for[column: Int]() -> Int:
+    """SCHEDULING row (lane/nvidia-step-time, 2026-09-25): the launch bound
+    `fused_attn_forward_r2_kernel` declares on its 256-thread launch. NVIDIA
+    1024: 64 registers a thread, so four blocks share an SM and hide the
+    kernel's stash round trips. MEASURED on a RunPod H100 80GB HBM3 (leg 3,
+    T3 shape): 5.69 ms a launch at 256 (96 registers, two blocks an SM),
+    4.18 at 768, 3.57 at 1024; lean B4 step 0.506 -> 0.481 s with equal
+    witnesses (with the dq row below); replay of steps 101..103 PASS at 30.55
+    s a step. Every other column 1024, the bound its backend assumes without
+    a declaration (gfx942's default flat work-group size; Metal carries none),
+    so they are expected to compile what they compiled before (the AMD
+    re-proof is owed before a release). `-D MOJOLEARN_ATTN_NO_LAUNCH_BOUND=1`
+    gives NVIDIA 256 (the 255-register budget it had with no declaration).
+    Register allocation only: no operation, operand or order changes."""
+    comptime if is_defined["MOJOLEARN_ATTN_NO_LAUNCH_BOUND"]():
+        return 256 if column == COLUMN_NVIDIA else 1024
+    return 1024
+
+
+def attn_dq_launch_bound_for[column: Int]() -> Int:
+    """SCHEDULING row (lane/nvidia-step-time, 2026-09-25): the same for
+    `fused_bwd_dq_tiled_pf_kernel`. NVIDIA 768 (85 registers, three blocks an
+    SM): 2.49 -> 2.43 ms a launch; 1024 (64 registers) was slower (2.62).
+    Every other column 1024 (its backend's default, see above)."""
+    comptime if is_defined["MOJOLEARN_ATTN_NO_LAUNCH_BOUND"]():
+        return 256 if column == COLUMN_NVIDIA else 1024
+    return 768 if column == COLUMN_NVIDIA else 1024
 
 
 def attn_default_arm_for[column: Int]() -> Int:

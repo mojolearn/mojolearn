@@ -1,0 +1,53 @@
+# folded 2197 of 3398 activities (cut at 1201); kernel+copy time 1095.613 ms; wall span 14853.270 ms
+name	launches	total_ms	mean_us	share	reg_per_thread	static_smem	dyn_smem	grid	block	full_name
+gemm_checks_gemm_identical_id6A6A6A6A6A6A_6e0e904c41851a9e	342	451.219	1319.4	0.4118	128	0.026	0.000	768x1x1	256x1x1	gemm_checks_gemm_identical_id6A6A6A6A6A6A_6e0e904c41851a9e
+fused_6#e8ff	24	142.260	5927.5	0.1298	95	0.021	0.000	3072x1x1	256x1x1	transformer_impl_llama_fused_6A6A6A6A6A6A_ea5e02c1382b1cb1
+gemm_checks_gemm_identical_id6A6A6A6A6A6A_4756606400325dd8	168	136.119	810.2	0.1242	128	0.026	0.000	192x8x1	256x1x1	gemm_checks_gemm_identical_id6A6A6A6A6A6A_4756606400325dd8
+[CUDA memcpy Device-to-Host]	323	83.582	258.8	0.0763				xx	xx	[CUDA memcpy Device-to-Host]
+fused_6#5c2b	24	67.837	2826.5	0.0619	63	0.010	0.000	6144x1x1	256x1x1	transformer_impl_llama_fused_6A6A6A6A6A6A_02d8dd47cde62a5a
+fused_6#bac9	24	59.686	2486.9	0.0545	128	0.008	0.000	1536x1x1	256x1x1	transformer_impl_llama_fused_6A6A6A6A6A6A_fb2c898df8c53490
+fused_6#2e67	24	50.464	2102.7	0.0461	63	0.012	0.000	3072x1x1	256x1x1	transformer_impl_llama_fused_6A6A6A6A6A6A_964c2d2a2e133c3e
+gemm_checks_gemm_identical_id6A6A6A6A6A6A_eb2603ea9b3de8e2	2	12.019	6009.4	0.0110	46	0.003	0.000	256x1x1	256x1x1	gemm_checks_gemm_identical_id6A6A6A6A6A6A_eb2603ea9b3de8e2
+core_device_scan_nonfinite_par6A6A6A6A_28fad9a019791bcb	88	11.070	125.8	0.0101	16	0.001	0.000	512x1x1	256x1x1	core_device_scan_nonfinite_par6A6A6A6A_28fad9a019791bcb
+gemm_checks_gemm_identical_id6A6A6A6A6A6A_9e709e2daee4e9cf	168	8.873	52.8	0.0081	38	0.000	0.000	6144x1x1	256x1x1	gemm_checks_gemm_identical_id6A6A6A6A6A6A_9e709e2daee4e9cf
+transformer_impl_llama_modeli6A6A6A6A6A6A_cf267eddc9538886	48	8.577	178.7	0.0078	22	0.000	0.000	512x1x1	16x1x1	transformer_impl_llama_modeli6A6A6A6A6A6A_cf267eddc9538886
+training_checks_loss_ce_dlogi6A6A6A6A6A6A_c04c84fcbf303eae	2	4.486	2242.8	0.0041	24	0.000	0.000	1608224x1x1	256x1x1	training_checks_loss_ce_dlogi6A6A6A6A6A6A_c04c84fcbf303eae
+training_checks_loss_ce_shift6A6A6A6A6A6A_218766696ebd603c	2	4.481	2240.7	0.0041	30	0.000	0.000	1608224x1x1	256x1x1	training_checks_loss_ce_shift6A6A6A6A6A6A_218766696ebd603c
+transformer_checks_transformer6A6A6A6A_701f75a72b36f978	24	4.312	179.7	0.0039	17	0.000	0.000	131072x1x1	128x1x1	transformer_checks_transformer6A6A6A6A_701f75a72b36f978
+fused_6#a5fd	168	4.030	24.0	0.0037	16	0.001	0.000	512x1x1	256x1x1	transformer_impl_llama_fused_6A6A6A6A6A6A_b136a97923f44f48
+transformer_checks_transformer6A6A6A6A_e6813cc77d2443a7	48	3.958	82.5	0.0036	27	0.000	0.000	512x1x1	16x1x1	transformer_checks_transformer6A6A6A6A_e6813cc77d2443a7
+training_checks_loss_ce_weigh6A6A6A6A6A6A_f4c7b7465777cbde	2	3.827	1913.3	0.0035	28	0.000	0.000	1608224x1x1	256x1x1	training_checks_loss_ce_weigh6A6A6A6A6A6A_f4c7b7465777cbde
+training_checks_optimizer_ada6A6A6A6A6A6A_81eff4f0d5b107d6	2	3.488	1744.0	0.0032	28	0.000	0.000	633390x1x1	256x1x1	training_checks_optimizer_ada6A6A6A6A6A6A_81eff4f0d5b107d6
+transformer_impl_llama_modeli6A6A6A6A6A6A_ba47439a475ad0ae	48	3.393	70.7	0.0031	32	0.000	0.000	49152x1x1	128x1x1	transformer_impl_llama_modeli6A6A6A6A6A6A_ba47439a475ad0ae
+transformer_checks_transformer6A6A6A6A_9e49fedb5168a455	48	3.351	69.8	0.0031	34	0.000	0.000	49152x1x1	128x1x1	transformer_checks_transformer6A6A6A6A_9e49fedb5168a455
+transformer_checks_transformer6A6A6A6A_3506fb0dafb8105c	48	2.825	58.9	0.0026	30	0.000	0.000	49152x1x1	128x1x1	transformer_checks_transformer6A6A6A6A_3506fb0dafb8105c
+core_device_scan_negative_part6A6A6A6A_c691e2646998e577	4	2.064	516.0	0.0019	16	0.001	0.000	512x1x1	256x1x1	core_device_scan_negative_part6A6A6A6A_c691e2646998e577
+transformer_impl_llama_modeli6A6A6A6A6A6A_4bcd8fe7b706401a	24	1.947	81.1	0.0018	16	0.000	0.000	131072x1x1	128x1x1	transformer_impl_llama_modeli6A6A6A6A6A6A_4bcd8fe7b706401a
+transformer_impl_llama_modeli6A6A6A6A6A6A_1ab8d6c2c317d533	24	1.937	80.7	0.0018	16	0.000	0.000	131072x1x1	128x1x1	transformer_impl_llama_modeli6A6A6A6A6A6A_1ab8d6c2c317d533
+embedding_checks_embedding_ide6A6A6A6A_7c4e8ec94604f999	2	1.731	865.6	0.0016	22	0.000	0.000	197x1x1	256x1x1	embedding_checks_embedding_ide6A6A6A6A_7c4e8ec94604f999
+transformer_checks_transformer6A6A6A6A_e0aadbba61216e38	24	1.669	69.5	0.0015	34	0.000	0.000	49152x1x1	128x1x1	transformer_checks_transformer6A6A6A6A_e0aadbba61216e38
+transformer_impl_llama_modeli6A6A6A6A6A6A_d15039e611f15d2f	24	1.579	65.8	0.0014	32	0.000	0.000	49152x1x1	128x1x1	transformer_impl_llama_modeli6A6A6A6A6A6A_d15039e611f15d2f
+mamba_impl_modeling_modeling_6A6A6A6A6A6A_7bdf59c912a151a2	48	1.550	32.3	0.0014	16	0.000	0.000	49152x1x1	128x1x1	mamba_impl_modeling_modeling_6A6A6A6A6A6A_7bdf59c912a151a2
+training_checks_loss_ce_row_m6A6A6A6A6A6A_997b99fb729e07d6	2	1.536	767.8	0.0014	18	0.001	0.000	8192x1x1	256x1x1	training_checks_loss_ce_row_m6A6A6A6A6A6A_997b99fb729e07d6
+transformer_checks_transformer6A6A6A6A_6755bf37231227cb	48	1.518	31.6	0.0014	16	0.000	0.000	49152x1x1	128x1x1	transformer_checks_transformer6A6A6A6A_6755bf37231227cb
+transformer_checks_transformer6A6A6A6A_9ffe5e8f5d25dc0e	48	1.516	31.6	0.0014	28	0.000	0.000	49152x1x1	128x1x1	transformer_checks_transformer6A6A6A6A_9ffe5e8f5d25dc0e
+training_checks_train_loop_tr6A6A6A6A6A6A_801597e5bf0ab752	8	1.467	183.4	0.0013	16	0.000	0.000	301542x1x1	128x1x1	training_checks_train_loop_tr6A6A6A6A6A6A_801597e5bf0ab752
+training_byte_lm_block_copy__b6A6A6A6A_4f839612f5023304	24	1.136	47.3	0.0010	16	0.000	0.000	6144x9x1	256x1x1	training_byte_lm_block_copy__b6A6A6A6A_4f839612f5023304
+training_byte_lm_block_copy__b6A6A6A6A_55bde5b169c3b214	24	1.135	47.3	0.0010	16	0.000	0.000	6144x9x1	256x1x1	training_byte_lm_block_copy__b6A6A6A6A_55bde5b169c3b214
+transformer_checks_transformer6A6A6A6A_5f42150e59e36fb0	24	0.954	39.8	0.0009	16	0.000	0.000	49152x1x1	128x1x1	transformer_checks_transformer6A6A6A6A_5f42150e59e36fb0
+gemm_checks_gemm_identical_id6A6A6A6A6A6A_99adfa7b2bcdfe0e	48	0.911	19.0	0.0008	127	0.041	0.000	3x64x1	256x1x1	gemm_checks_gemm_identical_id6A6A6A6A6A6A_99adfa7b2bcdfe0e
+[CUDA memcpy Device-to-Device]	48	0.824	17.2	0.0008				xx	xx	[CUDA memcpy Device-to-Device]
+transformer_checks_transformer6A6A6A6A_c48a0c1f6177d9d0	24	0.739	30.8	0.0007	16	0.000	0.000	49152x1x1	128x1x1	transformer_checks_transformer6A6A6A6A_c48a0c1f6177d9d0
+embedding_checks_embedding_ide6A6A6A6A_8abd8314df0ff543	2	0.657	328.6	0.0006	20	0.000	0.000	197x1x1	256x1x1	embedding_checks_embedding_ide6A6A6A6A_8abd8314df0ff543
+embedding_checks_embedding_ide6A6A6A6A_b184d11bcef68fe0	2	0.239	119.7	0.0002	24	0.000	0.000	150771x1x1	256x1x1	embedding_checks_embedding_ide6A6A6A6A_b184d11bcef68fe0
+embedding_checks_embedding_ide6A6A6A6A_4fb48ea6c937e0eb	2	0.183	91.7	0.0002	16	0.000	0.000	150771x1x1	256x1x1	embedding_checks_embedding_ide6A6A6A6A_4fb48ea6c937e0eb
+gemm_checks_gemm_identical_id6A6A6A6A6A6A_55fe6c135aba7469	50	0.167	3.3	0.0002	21	0.008	0.000	1x1x1	256x1x1	gemm_checks_gemm_identical_id6A6A6A6A6A6A_55fe6c135aba7469
+embedding_checks_embedding_ide6A6A6A6A_5cfa05e12c6f7255	2	0.141	70.5	0.0001	32	0.001	0.000	1x1x1	256x1x1	embedding_checks_embedding_ide6A6A6A6A_5cfa05e12c6f7255
+embedding_checks_embedding_ide6A6A6A6A_a7ec9023618e6adf	2	0.071	35.6	0.0001	20	0.000	0.000	24576x1x1	256x1x1	embedding_checks_embedding_ide6A6A6A6A_a7ec9023618e6adf
+[CUDA memset]	48	0.041	0.9	0.0000				xx	xx	[CUDA memset]
+[CUDA memcpy Host-to-Device]	4	0.016	4.1	0.0000				xx	xx	[CUDA memcpy Host-to-Device]
+gemm_checks_gemm_identical_id6A6A6A6A6A6A_d3026edf3dadc3c0	2	0.012	6.2	0.0000	70	0.009	0.000	1x64x1	256x1x1	gemm_checks_gemm_identical_id6A6A6A6A6A6A_d3026edf3dadc3c0
+training_checks_loss_ce_nll_k6A6A6A6A6A6A_2c9bba806d31a4e3	2	0.005	2.4	0.0000	16	0.000	0.000	32x1x1	256x1x1	training_checks_loss_ce_nll_k6A6A6A6A6A6A_2c9bba806d31a4e3
+training_checks_loss_ce_logde6A6A6A6A6A6A_d35a11b1836f73dc	2	0.003	1.7	0.0000	16	0.000	0.000	32x1x1	256x1x1	training_checks_loss_ce_logde6A6A6A6A6A6A_d35a11b1836f73dc
+training_checks_loss_ce_row_n6A6A6A6A6A6A_2bb60afb8c8084e0	2	0.003	1.4	0.0000	16	0.000	0.000	32x1x1	256x1x1	training_checks_loss_ce_row_n6A6A6A6A6A6A_2bb60afb8c8084e0
+training_checks_loss_ce_divid6A6A6A6A6A6A_05fcd2ee21816cf8	2	0.003	1.3	0.0000	16	0.000	0.000	1x1x1	1x1x1	training_checks_loss_ce_divid6A6A6A6A6A6A_05fcd2ee21816cf8

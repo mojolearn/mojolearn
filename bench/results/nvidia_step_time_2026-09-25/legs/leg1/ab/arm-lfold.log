@@ -1,0 +1,20 @@
+9819 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x122a40000000, nodemask=1)
+EXCP_AB_HEADER column=nvidia detect_seam=False launch_bound=256 rounds=3
+9819 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5b4880000000, nodemask=2)
+EXCP_AB_DISPATCH call=proj_fwd DEFAULT kpack_hg body (DEVIATION 2707) kpack_hg 128x128 reg8x8 TC=16 KS=16 page=packed(group,step,line) pad=4 align=16 fold_flush=hw stage=gather page_bytes=16896 pages=2 load=per-step fold=lane-wide local FS=16 tpb=256 hwftz=True groups where its rule takes the call (S=132 slack=4), else all leaves in one launch all leaves in one launch
+EXCP_AB call=proj_fwd kind=ordinary m=8192 n=768 k=768 hash=3b093775ef2152bd rehash_equal=True ms=3.041538 samples=3.017031,3.041538,3.056571
+EXCP_AB call=proj_dA kind=ordinary m=8192 n=768 k=768 hash=5e7d375e8b1a9d26 rehash_equal=True ms=3.034945 samples=2.99256,3.034945,3.050446
+EXCP_AB call=proj_dB kind=ordinary m=8192 n=768 k=768 hash=061bd3b38158a525 rehash_equal=True ms=7.236768 samples=7.16783,7.236768,7.238707
+EXCP_AB_DISPATCH call=gateup_fwd DEFAULT kpack_hg body (DEVIATION 2707) kpack_hg 128x128 reg8x8 TC=16 KS=16 page=packed(group,step,line) pad=4 align=16 fold_flush=hw stage=gather page_bytes=16896 pages=2 load=per-step fold=lane-wide local FS=16 tpb=256 hwftz=True groups where its rule takes the call (S=132 slack=4), else all leaves in one launch all leaves in one launch
+EXCP_AB call=gateup_fwd kind=ordinary m=8192 n=2048 k=768 hash=69883f9d4520fce8 rehash_equal=True ms=7.551694 samples=7.526726,7.551694,7.552454
+EXCP_AB call=gateup_dA kind=ordinary m=8192 n=2048 k=768 hash=1f32c6d75e1ae635 rehash_equal=True ms=7.686142 samples=7.667218,7.686142,7.710793
+EXCP_AB call=gateup_dB kind=ordinary m=8192 n=2048 k=768 hash=6416c32304a5a9e1 rehash_equal=True ms=9.015369 samples=8.865172,9.015369,9.125353
+EXCP_AB_DISPATCH call=down_fwd DEFAULT kpack_hg body (DEVIATION 2707) kpack_hg 128x128 reg8x8 TC=16 KS=16 page=packed(group,step,line) pad=4 align=16 fold_flush=hw stage=gather page_bytes=16896 pages=2 load=per-step fold=lane-wide local FS=16 tpb=256 hwftz=True groups where its rule takes the call (S=132 slack=4), else all leaves in one launch all leaves in one launch
+EXCP_AB call=down_fwd kind=ordinary m=8192 n=768 k=2048 hash=3b97ab14d7768c45 rehash_equal=True ms=7.641229 samples=7.576293,7.641229,7.718767
+EXCP_AB call=down_dA kind=ordinary m=8192 n=768 k=2048 hash=5cf60a67344cda5e rehash_equal=True ms=7.545919 samples=7.524094,7.545919,7.546319
+EXCP_AB call=down_dB kind=ordinary m=8192 n=768 k=2048 hash=5459fe3eb5123824 rehash_equal=True ms=9.024983 samples=8.791198,9.024983,9.103019
+EXCP_AB_DISPATCH call=head_fwd DEFAULT kpack_hg body (DEVIATION 2707) kpack_hg 128x128 reg8x8 TC=16 KS=16 page=packed(group,step,line) pad=4 align=16 fold_flush=hw stage=gather page_bytes=16896 pages=2 load=per-step fold=lane-wide local FS=16 tpb=256 hwftz=True groups where its rule takes the call (S=132 slack=4), else all leaves in one launch all leaves in one launch
+EXCP_AB call=head_fwd kind=ordinary m=8192 n=50257 k=768 hash=e403705bfa7ca2ff rehash_equal=True ms=175.799142 samples=175.771396,175.799142,175.86487
+EXCP_AB call=head_dA kind=ordinary m=8192 n=50257 k=768 hash=219804c3c5b3ea5a rehash_equal=True ms=186.518471 samples=186.112143,186.518471,187.08648
+EXCP_AB call=head_dB kind=ordinary m=8192 n=50257 k=768 hash=9eaa7bd3eda51464 rehash_equal=True ms=176.512009 samples=176.032919,176.512009,176.530774
+EXCP_AB_DONE

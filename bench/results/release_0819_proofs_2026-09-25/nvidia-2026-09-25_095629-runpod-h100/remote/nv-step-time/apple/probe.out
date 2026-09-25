@@ -1,0 +1,18 @@
+7525 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x79f800000000, nodemask=2)
+### emb_run_begin_block_kernel bytes=6342
+target triple = "air64-apple-macosx"
+attributes #0 = { convergent }
+attributes #1 = { convergent norecurse "metal.kernel"="true" "target-cpu"="apple-m4" "target-features"="+metal3_2,+air2_7_0" }
+### fused_attn_forward_r2_kernel[64,32,True,True,False] bytes=635372
+target triple = "air64-apple-macosx"
+attributes #0 = { convergent }
+attributes #1 = { "target-cpu"="apple-m4" "target-features"="+metal3_2,+air2_7_0" }
+attributes #2 = { convergent norecurse "metal.kernel"="true" "nvvm.maxntid"="1024" "target-cpu"="apple-m4" "target-features"="+metal3_2,+air2_7_0" }
+attributes #3 = { nocallback nocreateundeforpoison nofree nosync nounwind speculatable willreturn memory(none) }
+### fused_bwd_dq_tiled_pf_kernel[64] bytes=451615
+target triple = "air64-apple-macosx"
+attributes #0 = { convergent }
+attributes #1 = { "target-cpu"="apple-m4" "target-features"="+metal3_2,+air2_7_0" }
+attributes #2 = { convergent norecurse "metal.kernel"="true" "nvvm.maxntid"="1024" "target-cpu"="apple-m4" "target-features"="+metal3_2,+air2_7_0" }
+attributes #3 = { nocallback nocreateundeforpoison nofree nosync nounwind speculatable willreturn memory(none) }
+APPLE_COMPILE_PROBE done

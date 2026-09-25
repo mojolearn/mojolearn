@@ -1,0 +1,4 @@
+MFMA3_PROBE column=amd
+MFMA3_MODE v=2 n=4194304 subnormal_mfma_results=15072 mfma_vs_fma=14080 mul_vs_ftz=0 pkmul_vs_ftz=0
+MFMA3_MODE v=3 n=4194304 subnormal_mfma_results=29152 mfma_vs_fma=0 mul_vs_ftz=29152 pkmul_vs_ftz=29152
+MFMA3_DONE

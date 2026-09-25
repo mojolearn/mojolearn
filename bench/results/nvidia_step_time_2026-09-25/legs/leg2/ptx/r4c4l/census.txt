@@ -1,0 +1,6 @@
+tuned128 fma.rn.f32=1088 mul.rn.ftz.f32=1088 ld.shared=272 st.shared=32 ld.global=96 st.global=127 bar.sync=1 ld.local=191 st.local=64
+tuned128 sass FFMA=1088 FMUL=1088 LDS=80 STS=20 LDG=96 STG=127 LDL=232 STL=154 BAR=1
+kpack_all fma.rn.f32=527 mul.rn.ftz.f32=400 ld.shared=84 st.shared=4 ld.global=16 st.global=32 bar.sync=1 ld.local=47 st.local=16
+kpack_all sass FFMA=527 FMUL=400 LDS=68 STS=4 LDG=16 STG=32 LDL=23 STL=8 BAR=1
+kpack_grp fma.rn.f32=527 mul.rn.ftz.f32=384 ld.shared=84 st.shared=4 ld.global=16 st.global=16 bar.sync=1 ld.local=47 st.local=16
+kpack_grp sass FFMA=527 FMUL=384 LDS=68 STS=4 LDG=16 STG=16 LDL=23 STL=8 BAR=1

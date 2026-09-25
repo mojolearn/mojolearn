@@ -1,0 +1,53 @@
+!! MOJOLEARN_GPU_ARCHS=sm_90a (--target-accelerator); read the architecture back out of the built .so
+3410 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x70abc0000000, nodemask=1)
+Imported from /root/mojolearn/bindings/_mojolearn_arima.mojo:80:
+./bindings/hostptr.mojo:58:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_arima.mojo:90:
+Imported from ./arima/estimator.mojo:92:
+/root/mojolearn/./core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_arima.mojo:90:
+Imported from ./arima/estimator.mojo:92:
+/root/mojolearn/./core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_arima.mojo:90:
+Imported from ./arima/estimator.mojo:92:
+/root/mojolearn/./core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_arima.mojo:90:
+Imported from ./arima/estimator.mojo:92:
+/root/mojolearn/./core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_arima.mojo:90:
+Imported from ./arima/estimator.mojo:92:
+/root/mojolearn/./core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+/root/mojolearn/bindings/_mojolearn_arima.mojo:226:19: warning: assignment to 'written' was never used; assign to '_' instead?
+    var written = 0
+                  ^
+/root/mojolearn/bindings/_mojolearn_arima.mojo:305:19: warning: assignment to 'written' was never used; assign to '_' instead?
+    var written = 0
+                  ^
+/root/mojolearn/bindings/_mojolearn_arima.mojo:392:19: warning: assignment to 'written' was never used; assign to '_' instead?
+    var written = 0
+                  ^
+built python/mojolearn/identical/_mojolearn_arima.so (kernel-launch smoke skipped; binary checks ran)

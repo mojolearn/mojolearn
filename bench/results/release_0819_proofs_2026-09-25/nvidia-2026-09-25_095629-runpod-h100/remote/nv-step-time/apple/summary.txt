@@ -1,0 +1,8 @@
+apple probe exit=1 secs=0
+ab apple-m4 build exit=1 secs=19
+                  ^
+/root/mojolearn/bench/gemm_excp_ab_main.mojo:1:1: error: Metal Compiler failed to compile metallib. Please submit a bug report.
+# SPDX-License-Identifier: Apache-2.0
+^
+/root/mojolearn/.pixi/envs/default/bin/mojo: error: failed to run the pass manager
+apple probe (rerun, byte_length fix) exit=0

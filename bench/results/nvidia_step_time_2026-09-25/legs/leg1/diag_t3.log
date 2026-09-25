@@ -1,0 +1,321 @@
+9554 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x50a480000000, nodemask=1)
+DIAG_BEGIN deviation=2705 variants=base,nomul,noload,nostage,nofold,floor rounds=3 warmups=1 body=kpack_hg (pad=4 align=16) EVERY VARIANT BUT base COMPUTES WRONG BITS BY DESIGN
+NEGATIVE call=proj_fwd moved=384 first=0
+MATCH call=proj_fwd shipped=0x26070bf1ee5da57a base=0x26070bf1ee5da57a moved=0
+SAMPLE proj_fwd variant=base round=0 ns=634531
+SAMPLE proj_fwd variant=base round=1 ns=635463
+SAMPLE proj_fwd variant=base round=2 ns=634241
+SAMPLE proj_fwd variant=nomul round=0 ns=471153
+SAMPLE proj_fwd variant=nomul round=1 ns=466773
+SAMPLE proj_fwd variant=nomul round=2 ns=469162
+SAMPLE proj_fwd variant=noload round=0 ns=621700
+SAMPLE proj_fwd variant=noload round=1 ns=620937
+SAMPLE proj_fwd variant=noload round=2 ns=618487
+SAMPLE proj_fwd variant=nostage round=0 ns=437476
+SAMPLE proj_fwd variant=nostage round=1 ns=436408
+SAMPLE proj_fwd variant=nostage round=2 ns=435389
+SAMPLE proj_fwd variant=nofold round=0 ns=530606
+SAMPLE proj_fwd variant=nofold round=1 ns=529165
+SAMPLE proj_fwd variant=nofold round=2 ns=539080
+SAMPLE proj_fwd variant=floor round=0 ns=198648
+SAMPLE proj_fwd variant=floor round=1 ns=197566
+SAMPLE proj_fwd variant=floor round=2 ns=195885
+DIAG call=proj_fwd op=1 m=8192 n=768 k=768 per_step=48 group_leaves=0 variant=base median_ms=0.634531 ratio=1.0
+DIAG call=proj_fwd op=1 m=8192 n=768 k=768 per_step=48 group_leaves=0 variant=nomul median_ms=0.469162 ratio=0.7393838914095608
+DIAG call=proj_fwd op=1 m=8192 n=768 k=768 per_step=48 group_leaves=0 variant=noload median_ms=0.620937 ratio=0.9785763028126285
+DIAG call=proj_fwd op=1 m=8192 n=768 k=768 per_step=48 group_leaves=0 variant=nostage median_ms=0.436408 ratio=0.6877646639801681
+DIAG call=proj_fwd op=1 m=8192 n=768 k=768 per_step=48 group_leaves=0 variant=nofold median_ms=0.530606 ratio=0.836217615845404
+DIAG call=proj_fwd op=1 m=8192 n=768 k=768 per_step=48 group_leaves=0 variant=floor median_ms=0.197566 ratio=0.31135752232751435
+NEGATIVE call=proj_dA moved=384 first=0
+MATCH call=proj_dA shipped=0xb28e5ba571010635 base=0xb28e5ba571010635 moved=0
+SAMPLE proj_dA variant=base round=0 ns=630123
+SAMPLE proj_dA variant=base round=1 ns=633435
+SAMPLE proj_dA variant=base round=2 ns=631024
+SAMPLE proj_dA variant=nomul round=0 ns=463828
+SAMPLE proj_dA variant=nomul round=1 ns=464135
+SAMPLE proj_dA variant=nomul round=2 ns=464682
+SAMPLE proj_dA variant=noload round=0 ns=615050
+SAMPLE proj_dA variant=noload round=1 ns=615356
+SAMPLE proj_dA variant=noload round=2 ns=613830
+SAMPLE proj_dA variant=nostage round=0 ns=435823
+SAMPLE proj_dA variant=nostage round=1 ns=434121
+SAMPLE proj_dA variant=nostage round=2 ns=437197
+SAMPLE proj_dA variant=nofold round=0 ns=526556
+SAMPLE proj_dA variant=nofold round=1 ns=527483
+SAMPLE proj_dA variant=nofold round=2 ns=526444
+SAMPLE proj_dA variant=floor round=0 ns=195176
+SAMPLE proj_dA variant=floor round=1 ns=195521
+SAMPLE proj_dA variant=floor round=2 ns=196333
+DIAG call=proj_dA op=0 m=8192 n=768 k=768 per_step=48 group_leaves=0 variant=base median_ms=0.631024 ratio=1.0
+DIAG call=proj_dA op=0 m=8192 n=768 k=768 per_step=48 group_leaves=0 variant=nomul median_ms=0.464135 ratio=0.7355266994599254
+DIAG call=proj_dA op=0 m=8192 n=768 k=768 per_step=48 group_leaves=0 variant=noload median_ms=0.61505 ratio=0.9746855904054361
+DIAG call=proj_dA op=0 m=8192 n=768 k=768 per_step=48 group_leaves=0 variant=nostage median_ms=0.435823 ratio=0.690659943203428
+DIAG call=proj_dA op=0 m=8192 n=768 k=768 per_step=48 group_leaves=0 variant=nofold median_ms=0.526556 ratio=0.83444686731408
+DIAG call=proj_dA op=0 m=8192 n=768 k=768 per_step=48 group_leaves=0 variant=floor median_ms=0.195521 ratio=0.3098471690458683
+NEGATIVE call=proj_dB moved=576 first=0
+MATCH call=proj_dB shipped=0xa22c507e5d4afa37 base=0xa22c507e5d4afa37 moved=0
+SAMPLE proj_dB variant=base round=0 ns=750200
+SAMPLE proj_dB variant=base round=1 ns=747360
+SAMPLE proj_dB variant=base round=2 ns=746289
+SAMPLE proj_dB variant=nomul round=0 ns=569551
+SAMPLE proj_dB variant=nomul round=1 ns=565174
+SAMPLE proj_dB variant=nomul round=2 ns=568743
+SAMPLE proj_dB variant=noload round=0 ns=736942
+SAMPLE proj_dB variant=noload round=1 ns=738057
+SAMPLE proj_dB variant=noload round=2 ns=732138
+SAMPLE proj_dB variant=nostage round=0 ns=528861
+SAMPLE proj_dB variant=nostage round=1 ns=525658
+SAMPLE proj_dB variant=nostage round=2 ns=527154
+SAMPLE proj_dB variant=nofold round=0 ns=658134
+SAMPLE proj_dB variant=nofold round=1 ns=654466
+SAMPLE proj_dB variant=nofold round=2 ns=655653
+SAMPLE proj_dB variant=floor round=0 ns=265151
+SAMPLE proj_dB variant=floor round=1 ns=264654
+SAMPLE proj_dB variant=floor round=2 ns=264972
+DIAG call=proj_dB op=2 m=768 n=768 k=8192 per_step=48 group_leaves=4 variant=base median_ms=0.74736 ratio=1.0
+DIAG call=proj_dB op=2 m=768 n=768 k=8192 per_step=48 group_leaves=4 variant=nomul median_ms=0.568743 ratio=0.7610027296082209
+DIAG call=proj_dB op=2 m=768 n=768 k=8192 per_step=48 group_leaves=4 variant=noload median_ms=0.736942 ratio=0.9860602654677799
+DIAG call=proj_dB op=2 m=768 n=768 k=8192 per_step=48 group_leaves=4 variant=nostage median_ms=0.527154 ratio=0.7053548490687219
+DIAG call=proj_dB op=2 m=768 n=768 k=8192 per_step=48 group_leaves=4 variant=nofold median_ms=0.655653 ratio=0.8772920680796403
+DIAG call=proj_dB op=2 m=768 n=768 k=8192 per_step=48 group_leaves=4 variant=floor median_ms=0.264972 ratio=0.3545439948619139
+NEGATIVE call=gateup_fwd moved=1024 first=0
+MATCH call=gateup_fwd shipped=0xbb10a0bbb448fceb base=0xbb10a0bbb448fceb moved=0
+SAMPLE gateup_fwd variant=base round=0 ns=1670236
+SAMPLE gateup_fwd variant=base round=1 ns=1667123
+SAMPLE gateup_fwd variant=base round=2 ns=1668109
+SAMPLE gateup_fwd variant=nomul round=0 ns=1219413
+SAMPLE gateup_fwd variant=nomul round=1 ns=1223501
+SAMPLE gateup_fwd variant=nomul round=2 ns=1219627
+SAMPLE gateup_fwd variant=noload round=0 ns=1624812
+SAMPLE gateup_fwd variant=noload round=1 ns=1625238
+SAMPLE gateup_fwd variant=noload round=2 ns=1626609
+SAMPLE gateup_fwd variant=nostage round=0 ns=1135957
+SAMPLE gateup_fwd variant=nostage round=1 ns=1130793
+SAMPLE gateup_fwd variant=nostage round=2 ns=1130074
+SAMPLE gateup_fwd variant=nofold round=0 ns=1374040
+SAMPLE gateup_fwd variant=nofold round=1 ns=1373271
+SAMPLE gateup_fwd variant=nofold round=2 ns=1373663
+SAMPLE gateup_fwd variant=floor round=0 ns=500494
+SAMPLE gateup_fwd variant=floor round=1 ns=500331
+SAMPLE gateup_fwd variant=floor round=2 ns=499887
+DIAG call=gateup_fwd op=1 m=8192 n=2048 k=768 per_step=24 group_leaves=0 variant=base median_ms=1.668109 ratio=1.0
+DIAG call=gateup_fwd op=1 m=8192 n=2048 k=768 per_step=24 group_leaves=0 variant=nomul median_ms=1.219627 ratio=0.73114346844241
+DIAG call=gateup_fwd op=1 m=8192 n=2048 k=768 per_step=24 group_leaves=0 variant=noload median_ms=1.625238 ratio=0.9742996410906002
+DIAG call=gateup_fwd op=1 m=8192 n=2048 k=768 per_step=24 group_leaves=0 variant=nostage median_ms=1.130793 ratio=0.6778891547255005
+DIAG call=gateup_fwd op=1 m=8192 n=2048 k=768 per_step=24 group_leaves=0 variant=nofold median_ms=1.373663 ratio=0.8234851559460443
+DIAG call=gateup_fwd op=1 m=8192 n=2048 k=768 per_step=24 group_leaves=0 variant=floor median_ms=0.500331 ratio=0.29993903276104855
+NEGATIVE call=gateup_dA moved=384 first=0
+MATCH call=gateup_dA shipped=0x9aea77547acc4af8 base=0x9aea77547acc4af8 moved=0
+SAMPLE gateup_dA variant=base round=0 ns=1663236
+SAMPLE gateup_dA variant=base round=1 ns=1663701
+SAMPLE gateup_dA variant=base round=2 ns=1662674
+SAMPLE gateup_dA variant=nomul round=0 ns=1217475
+SAMPLE gateup_dA variant=nomul round=1 ns=1217715
+SAMPLE gateup_dA variant=nomul round=2 ns=1216689
+SAMPLE gateup_dA variant=noload round=0 ns=1619453
+SAMPLE gateup_dA variant=noload round=1 ns=1620540
+SAMPLE gateup_dA variant=noload round=2 ns=1617958
+SAMPLE gateup_dA variant=nostage round=0 ns=1129072
+SAMPLE gateup_dA variant=nostage round=1 ns=1128202
+SAMPLE gateup_dA variant=nostage round=2 ns=1129403
+SAMPLE gateup_dA variant=nofold round=0 ns=1436370
+SAMPLE gateup_dA variant=nofold round=1 ns=1443375
+SAMPLE gateup_dA variant=nofold round=2 ns=1437685
+SAMPLE gateup_dA variant=floor round=0 ns=493742
+SAMPLE gateup_dA variant=floor round=1 ns=493958
+SAMPLE gateup_dA variant=floor round=2 ns=494428
+DIAG call=gateup_dA op=0 m=8192 n=768 k=2048 per_step=24 group_leaves=0 variant=base median_ms=1.663236 ratio=1.0
+DIAG call=gateup_dA op=0 m=8192 n=768 k=2048 per_step=24 group_leaves=0 variant=nomul median_ms=1.217475 ratio=0.7319917317806974
+DIAG call=gateup_dA op=0 m=8192 n=768 k=2048 per_step=24 group_leaves=0 variant=noload median_ms=1.619453 ratio=0.9736760147086764
+DIAG call=gateup_dA op=0 m=8192 n=768 k=2048 per_step=24 group_leaves=0 variant=nostage median_ms=1.129072 ratio=0.6788405253373545
+DIAG call=gateup_dA op=0 m=8192 n=768 k=2048 per_step=24 group_leaves=0 variant=nofold median_ms=1.437685 ratio=0.8643902609130636
+DIAG call=gateup_dA op=0 m=8192 n=768 k=2048 per_step=24 group_leaves=0 variant=floor median_ms=0.493958 ratio=0.2969861162216306
+NEGATIVE call=gateup_dB moved=768 first=0
+MATCH call=gateup_dB shipped=0x465d985e256d9089 base=0x465d985e256d9089 moved=0
+SAMPLE gateup_dB variant=base round=0 ns=1735893
+SAMPLE gateup_dB variant=base round=1 ns=1739982
+SAMPLE gateup_dB variant=base round=2 ns=1738787
+SAMPLE gateup_dB variant=nomul round=0 ns=1302957
+SAMPLE gateup_dB variant=nomul round=1 ns=1303771
+SAMPLE gateup_dB variant=nomul round=2 ns=1305407
+SAMPLE gateup_dB variant=noload round=0 ns=1708568
+SAMPLE gateup_dB variant=noload round=1 ns=1707903
+SAMPLE gateup_dB variant=noload round=2 ns=1711715
+SAMPLE gateup_dB variant=nostage round=0 ns=1168999
+SAMPLE gateup_dB variant=nostage round=1 ns=1168680
+SAMPLE gateup_dB variant=nostage round=2 ns=1167775
+SAMPLE gateup_dB variant=nofold round=0 ns=1477603
+SAMPLE gateup_dB variant=nofold round=1 ns=1478318
+SAMPLE gateup_dB variant=nofold round=2 ns=1479190
+SAMPLE gateup_dB variant=floor round=0 ns=558185
+SAMPLE gateup_dB variant=floor round=1 ns=559453
+SAMPLE gateup_dB variant=floor round=2 ns=559629
+DIAG call=gateup_dB op=2 m=2048 n=768 k=8192 per_step=24 group_leaves=8 variant=base median_ms=1.738787 ratio=1.0
+DIAG call=gateup_dB op=2 m=2048 n=768 k=8192 per_step=24 group_leaves=8 variant=nomul median_ms=1.303771 ratio=0.7498163949926011
+DIAG call=gateup_dB op=2 m=2048 n=768 k=8192 per_step=24 group_leaves=8 variant=noload median_ms=1.708568 ratio=0.9826206430114787
+DIAG call=gateup_dB op=2 m=2048 n=768 k=8192 per_step=24 group_leaves=8 variant=nostage median_ms=1.16868 ratio=0.6721237276331142
+DIAG call=gateup_dB op=2 m=2048 n=768 k=8192 per_step=24 group_leaves=8 variant=nofold median_ms=1.478318 ratio=0.8502007433918013
+DIAG call=gateup_dB op=2 m=2048 n=768 k=8192 per_step=24 group_leaves=8 variant=floor median_ms=0.559453 ratio=0.32174901238622095
+NEGATIVE call=down_fwd moved=384 first=0
+MATCH call=down_fwd shipped=0x7fbac4a161d4273 base=0x7fbac4a161d4273 moved=0
+SAMPLE down_fwd variant=base round=0 ns=1675053
+SAMPLE down_fwd variant=base round=1 ns=1673859
+SAMPLE down_fwd variant=base round=2 ns=1675282
+SAMPLE down_fwd variant=nomul round=0 ns=1227739
+SAMPLE down_fwd variant=nomul round=1 ns=1228644
+SAMPLE down_fwd variant=nomul round=2 ns=1227099
+SAMPLE down_fwd variant=noload round=0 ns=1630417
+SAMPLE down_fwd variant=noload round=1 ns=1629975
+SAMPLE down_fwd variant=noload round=2 ns=1631708
+SAMPLE down_fwd variant=nostage round=0 ns=1124891
+SAMPLE down_fwd variant=nostage round=1 ns=1129007
+SAMPLE down_fwd variant=nostage round=2 ns=1128857
+SAMPLE down_fwd variant=nofold round=0 ns=1441358
+SAMPLE down_fwd variant=nofold round=1 ns=1440611
+SAMPLE down_fwd variant=nofold round=2 ns=1441593
+SAMPLE down_fwd variant=floor round=0 ns=493827
+SAMPLE down_fwd variant=floor round=1 ns=492858
+SAMPLE down_fwd variant=floor round=2 ns=493534
+DIAG call=down_fwd op=1 m=8192 n=768 k=2048 per_step=12 group_leaves=0 variant=base median_ms=1.675053 ratio=1.0
+DIAG call=down_fwd op=1 m=8192 n=768 k=2048 per_step=12 group_leaves=0 variant=nomul median_ms=1.227739 ratio=0.7329553154437501
+DIAG call=down_fwd op=1 m=8192 n=768 k=2048 per_step=12 group_leaves=0 variant=noload median_ms=1.630417 ratio=0.9733524849661473
+DIAG call=down_fwd op=1 m=8192 n=768 k=2048 per_step=12 group_leaves=0 variant=nostage median_ms=1.128857 ratio=0.6739231534763378
+DIAG call=down_fwd op=1 m=8192 n=768 k=2048 per_step=12 group_leaves=0 variant=nofold median_ms=1.441358 ratio=0.8604850115190386
+DIAG call=down_fwd op=1 m=8192 n=768 k=2048 per_step=12 group_leaves=0 variant=floor median_ms=0.493534 ratio=0.29463784131009585
+NEGATIVE call=down_dA moved=1024 first=0
+MATCH call=down_dA shipped=0xd6eb97b0a6de32f2 base=0xd6eb97b0a6de32f2 moved=0
+SAMPLE down_dA variant=base round=0 ns=1659173
+SAMPLE down_dA variant=base round=1 ns=1660494
+SAMPLE down_dA variant=base round=2 ns=1659244
+SAMPLE down_dA variant=nomul round=0 ns=1213330
+SAMPLE down_dA variant=nomul round=1 ns=1213677
+SAMPLE down_dA variant=nomul round=2 ns=1214049
+SAMPLE down_dA variant=noload round=0 ns=1618014
+SAMPLE down_dA variant=noload round=1 ns=1616892
+SAMPLE down_dA variant=noload round=2 ns=1615333
+SAMPLE down_dA variant=nostage round=0 ns=1129836
+SAMPLE down_dA variant=nostage round=1 ns=1130698
+SAMPLE down_dA variant=nostage round=2 ns=1129934
+SAMPLE down_dA variant=nofold round=0 ns=1371424
+SAMPLE down_dA variant=nofold round=1 ns=1372266
+SAMPLE down_dA variant=nofold round=2 ns=1372000
+SAMPLE down_dA variant=floor round=0 ns=500669
+SAMPLE down_dA variant=floor round=1 ns=500759
+SAMPLE down_dA variant=floor round=2 ns=500495
+DIAG call=down_dA op=0 m=8192 n=2048 k=768 per_step=12 group_leaves=0 variant=base median_ms=1.659244 ratio=1.0
+DIAG call=down_dA op=0 m=8192 n=2048 k=768 per_step=12 group_leaves=0 variant=nomul median_ms=1.213677 ratio=0.7314638473907393
+DIAG call=down_dA op=0 m=8192 n=2048 k=768 per_step=12 group_leaves=0 variant=noload median_ms=1.616892 ratio=0.9744751224051436
+DIAG call=down_dA op=0 m=8192 n=2048 k=768 per_step=12 group_leaves=0 variant=nostage median_ms=1.129934 ratio=0.6809932716345517
+DIAG call=down_dA op=0 m=8192 n=2048 k=768 per_step=12 group_leaves=0 variant=nofold median_ms=1.372 ratio=0.8268826043668082
+DIAG call=down_dA op=0 m=8192 n=2048 k=768 per_step=12 group_leaves=0 variant=floor median_ms=0.500669 ratio=0.3017452526572343
+NEGATIVE call=down_dB moved=768 first=0
+MATCH call=down_dB shipped=0x267fabafd6f7c74e base=0x267fabafd6f7c74e moved=0
+SAMPLE down_dB variant=base round=0 ns=1736920
+SAMPLE down_dB variant=base round=1 ns=1734018
+SAMPLE down_dB variant=base round=2 ns=1735227
+SAMPLE down_dB variant=nomul round=0 ns=1304488
+SAMPLE down_dB variant=nomul round=1 ns=1307091
+SAMPLE down_dB variant=nomul round=2 ns=1302249
+SAMPLE down_dB variant=noload round=0 ns=1706666
+SAMPLE down_dB variant=noload round=1 ns=1714282
+SAMPLE down_dB variant=noload round=2 ns=1701308
+SAMPLE down_dB variant=nostage round=0 ns=1167469
+SAMPLE down_dB variant=nostage round=1 ns=1170923
+SAMPLE down_dB variant=nostage round=2 ns=1166566
+SAMPLE down_dB variant=nofold round=0 ns=1479385
+SAMPLE down_dB variant=nofold round=1 ns=1474989
+SAMPLE down_dB variant=nofold round=2 ns=1477130
+SAMPLE down_dB variant=floor round=0 ns=556995
+SAMPLE down_dB variant=floor round=1 ns=558304
+SAMPLE down_dB variant=floor round=2 ns=557141
+DIAG call=down_dB op=2 m=768 n=2048 k=8192 per_step=12 group_leaves=8 variant=base median_ms=1.735227 ratio=1.0
+DIAG call=down_dB op=2 m=768 n=2048 k=8192 per_step=12 group_leaves=8 variant=nomul median_ms=1.304488 ratio=0.75176792431192
+DIAG call=down_dB op=2 m=768 n=2048 k=8192 per_step=12 group_leaves=8 variant=noload median_ms=1.706666 ratio=0.9835404820233894
+DIAG call=down_dB op=2 m=768 n=2048 k=8192 per_step=12 group_leaves=8 variant=nostage median_ms=1.167469 ratio=0.6728047684827403
+DIAG call=down_dB op=2 m=768 n=2048 k=8192 per_step=12 group_leaves=8 variant=nofold median_ms=1.47713 ratio=0.8512603826473424
+DIAG call=down_dB op=2 m=768 n=2048 k=8192 per_step=12 group_leaves=8 variant=floor median_ms=0.557141 ratio=0.3210767236793803
+NEGATIVE call=head_fwd moved=25152 first=0
+MATCH call=head_fwd shipped=0xdd7336ac34f40e03 base=0xdd7336ac34f40e03 moved=0
+SAMPLE head_fwd variant=base round=0 ns=40783604
+SAMPLE head_fwd variant=base round=1 ns=40571098
+SAMPLE head_fwd variant=base round=2 ns=40753790
+SAMPLE head_fwd variant=nomul round=0 ns=30677717
+SAMPLE head_fwd variant=nomul round=1 ns=30685867
+SAMPLE head_fwd variant=nomul round=2 ns=30689408
+SAMPLE head_fwd variant=noload round=0 ns=39470155
+SAMPLE head_fwd variant=noload round=1 ns=39477027
+SAMPLE head_fwd variant=noload round=2 ns=39530804
+SAMPLE head_fwd variant=nostage round=0 ns=26805174
+SAMPLE head_fwd variant=nostage round=1 ns=26813227
+SAMPLE head_fwd variant=nostage round=2 ns=26828541
+SAMPLE head_fwd variant=nofold round=0 ns=36263134
+SAMPLE head_fwd variant=nofold round=1 ns=36240529
+SAMPLE head_fwd variant=nofold round=2 ns=36240589
+SAMPLE head_fwd variant=floor round=0 ns=11651036
+SAMPLE head_fwd variant=floor round=1 ns=11653469
+SAMPLE head_fwd variant=floor round=2 ns=11651972
+DIAG call=head_fwd op=1 m=8192 n=50257 k=768 per_step=1 group_leaves=0 variant=base median_ms=40.75379 ratio=1.0
+DIAG call=head_fwd op=1 m=8192 n=50257 k=768 per_step=1 group_leaves=0 variant=nomul median_ms=30.685867 ratio=0.7529573813871052
+DIAG call=head_fwd op=1 m=8192 n=50257 k=768 per_step=1 group_leaves=0 variant=noload median_ms=39.477027 ratio=0.9686713063987422
+DIAG call=head_fwd op=1 m=8192 n=50257 k=768 per_step=1 group_leaves=0 variant=nostage median_ms=26.813227 ratio=0.6579321088909768
+DIAG call=head_fwd op=1 m=8192 n=50257 k=768 per_step=1 group_leaves=0 variant=nofold median_ms=36.240589 ratio=0.889256901014605
+DIAG call=head_fwd op=1 m=8192 n=50257 k=768 per_step=1 group_leaves=0 variant=floor median_ms=11.651972 ratio=0.28591137167856046
+NEGATIVE call=head_dA moved=384 first=0
+MATCH call=head_dA shipped=0x6f7e81965c009478 base=0x6f7e81965c009478 moved=0
+SAMPLE head_dA variant=base round=0 ns=40648089
+SAMPLE head_dA variant=base round=1 ns=40651040
+SAMPLE head_dA variant=base round=2 ns=40699569
+SAMPLE head_dA variant=nomul round=0 ns=29706970
+SAMPLE head_dA variant=nomul round=1 ns=29700272
+SAMPLE head_dA variant=nomul round=2 ns=29715894
+SAMPLE head_dA variant=noload round=0 ns=39578118
+SAMPLE head_dA variant=noload round=1 ns=39568583
+SAMPLE head_dA variant=noload round=2 ns=39568853
+SAMPLE head_dA variant=nostage round=0 ns=27500333
+SAMPLE head_dA variant=nostage round=1 ns=27473718
+SAMPLE head_dA variant=nostage round=2 ns=27288133
+SAMPLE head_dA variant=nofold round=0 ns=34962975
+SAMPLE head_dA variant=nofold round=1 ns=34991053
+SAMPLE head_dA variant=nofold round=2 ns=34950035
+SAMPLE head_dA variant=floor round=0 ns=11710170
+SAMPLE head_dA variant=floor round=1 ns=11711191
+SAMPLE head_dA variant=floor round=2 ns=11709027
+DIAG call=head_dA op=0 m=8192 n=768 k=50257 per_step=1 group_leaves=0 variant=base median_ms=40.65104 ratio=1.0
+DIAG call=head_dA op=0 m=8192 n=768 k=50257 per_step=1 group_leaves=0 variant=nomul median_ms=29.70697 ratio=0.7307800735233342
+DIAG call=head_dA op=0 m=8192 n=768 k=50257 per_step=1 group_leaves=0 variant=noload median_ms=39.568853 ratio=0.973378614667669
+DIAG call=head_dA op=0 m=8192 n=768 k=50257 per_step=1 group_leaves=0 variant=nostage median_ms=27.473718 ratio=0.6758429304637716
+DIAG call=head_dA op=0 m=8192 n=768 k=50257 per_step=1 group_leaves=0 variant=nofold median_ms=34.962975 ratio=0.8600757815790199
+DIAG call=head_dA op=0 m=8192 n=768 k=50257 per_step=1 group_leaves=0 variant=floor median_ms=11.71017 ratio=0.28806569278424365
+NEGATIVE call=head_dB moved=2358 first=0
+MATCH call=head_dB shipped=0xf53563ad5211ca94 base=0xf53563ad5211ca94 moved=0
+SAMPLE head_dB variant=base round=0 ns=39437035
+SAMPLE head_dB variant=base round=1 ns=39439582
+SAMPLE head_dB variant=base round=2 ns=39452493
+SAMPLE head_dB variant=nomul round=0 ns=28697435
+SAMPLE head_dB variant=nomul round=1 ns=28700463
+SAMPLE head_dB variant=nomul round=2 ns=28698816
+SAMPLE head_dB variant=noload round=0 ns=38462949
+SAMPLE head_dB variant=noload round=1 ns=38463334
+SAMPLE head_dB variant=noload round=2 ns=38469701
+SAMPLE head_dB variant=nostage round=0 ns=26383509
+SAMPLE head_dB variant=nostage round=1 ns=26542471
+SAMPLE head_dB variant=nostage round=2 ns=26416608
+SAMPLE head_dB variant=nofold round=0 ns=33945876
+SAMPLE head_dB variant=nofold round=1 ns=33946599
+SAMPLE head_dB variant=nofold round=2 ns=33905277
+SAMPLE head_dB variant=floor round=0 ns=11375414
+SAMPLE head_dB variant=floor round=1 ns=11374276
+SAMPLE head_dB variant=floor round=2 ns=11375429
+DIAG call=head_dB op=2 m=50257 n=768 k=8192 per_step=1 group_leaves=0 variant=base median_ms=39.439582 ratio=1.0
+DIAG call=head_dB op=2 m=50257 n=768 k=8192 per_step=1 group_leaves=0 variant=nomul median_ms=28.698816 ratio=0.7276653185624533
+DIAG call=head_dB op=2 m=50257 n=768 k=8192 per_step=1 group_leaves=0 variant=noload median_ms=38.463334 ratio=0.975246999321646
+DIAG call=head_dB op=2 m=50257 n=768 k=8192 per_step=1 group_leaves=0 variant=nostage median_ms=26.416608 ratio=0.6697993908758972
+DIAG call=head_dB op=2 m=50257 n=768 k=8192 per_step=1 group_leaves=0 variant=nofold median_ms=33.945876 ratio=0.8607057752285507
+DIAG call=head_dB op=2 m=50257 n=768 k=8192 per_step=1 group_leaves=0 variant=floor median_ms=11.375414 ratio=0.2884263327131611
+DIAGSTEP variant=base sum_ms=399.98178800000005 ratio=1.0 (per-call medians weighted by per-step counts; base is kpack_hg)
+DIAGSTEP variant=nomul sum_ms=295.921373 ratio=0.7398371172839499 (per-call medians weighted by per-step counts; base is kpack_hg)
+DIAGSTEP variant=noload sum_ms=390.53572199999996 ratio=0.9763837597525813 (per-call medians weighted by per-step counts; base is kpack_hg)
+DIAGSTEP variant=nostage sum_ms=271.27423300000004 ratio=0.678216461695501 (per-call medians weighted by per-step counts; base is kpack_hg)
+DIAGSTEP variant=nofold sum_ms=341.80240000000003 ratio=0.8545449074296353 (per-call medians weighted by per-step counts; base is kpack_hg)
+DIAGSTEP variant=floor sum_ms=122.230324 ratio=0.30558972350011093 (per-call medians weighted by per-step counts; base is kpack_hg)
+DIAG_DONE

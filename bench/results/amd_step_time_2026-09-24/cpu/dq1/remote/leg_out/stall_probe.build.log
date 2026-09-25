@@ -1,0 +1,3 @@
+/root/mojolearn/tools/amd_codegen/stall_probe.mojo:3:4: warning: doc string summary should begin with a capital letter or non-alpha character, but this begins with 'l'
+"""lane/amd-step-time-2 (2026-09-25): the launch-plus-synchronize stall
+   ^

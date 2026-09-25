@@ -1,0 +1,4 @@
+arming a 40-minute self-kill on pod gdhsbwneqjxzrl ...
+ARMED. Pod gdhsbwneqjxzrl is TERMINATED through the API in 40 minutes.
+  lease: bench/results/amd_step_time_2026-09-24/cpu/dkdv1/lease/gdhsbwneqjxzrl.lease
+  extend with: tools/runpod_guard.sh extend gdhsbwneqjxzrl '-p 40670 root@157.157.221.30' <minutes>

@@ -1,0 +1,475 @@
+!! MOJOLEARN_GPU_ARCHS=sm_90a (--target-accelerator); read the architecture back out of the built .so
+2846 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1a9640000000, nodemask=2)
+/root/mojolearn/bindings/_mojolearn_trees.mojo:113:7: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    op[0] = 0
+    ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_trees.mojo:121:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            cp[total + i] = node.colid
+            ~~^~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_trees.mojo:122:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            tp[total + i] = node.quesval
+            ~~^~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_trees.mojo:123:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            lp[total + i] = node.left_child_id
+            ~~^~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_trees.mojo:127:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        op[t + 1] = Int32(total)
+        ~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_trees.mojo:164:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        out.append(p[i])
+                   ~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_trees.mojo:169:4: warning: doc string summary should end with a period '.', exclamation mark '!', question mark '?', or backtick '`', but this ends with ':'
+"""`params` for both fit entry points, in this exact order -- the wrapper
+   ^
+/root/mojolearn/bindings/_mojolearn_trees.mojo:508:32: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var n_nodes = Int(offsets_p[n_trees])
+                      ~~~~~~~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_trees.mojo:509:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    if Int(offsets_p[0]) != 0 or n_nodes < n_trees:
+           ~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_trees.mojo:524:15: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            op[i] = out[i]
+            ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_trees.mojo:558:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var nodes = Int(offsets_p[trees])
+                    ~~~~~~~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_trees.mojo:569:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            offsets.append(offsets_p[i])
+                           ~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_trees.mojo:571:37: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            columns.append(columns_p[i])
+                           ~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_trees.mojo:572:43: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            thresholds.append(thresholds_p[i])
+                              ~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_trees.mojo:573:31: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            left.append(left_p[i])
+                        ~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_trees.mojo:575:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            leaves.append(leaves_p[i])
+                          ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_trees.mojo:577:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            x.append(x_p[i])
+                     ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+/root/mojolearn/bindings/_mojolearn_trees.mojo:584:18: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            out_p[i] = result[i]
+            ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:35:
+/root/mojolearn/bindings/forest_inference_binding.mojo:61:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var nodes = Int(op[trees])
+                    ~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:35:
+/root/mojolearn/bindings/forest_inference_binding.mojo:70:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        offsets.append(op[i])
+                       ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:35:
+/root/mojolearn/bindings/forest_inference_binding.mojo:72:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        columns.append(cp[i])
+                       ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:35:
+/root/mojolearn/bindings/forest_inference_binding.mojo:73:29: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        thresholds.append(tp[i])
+                          ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:35:
+/root/mojolearn/bindings/forest_inference_binding.mojo:74:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        left.append(lp[i])
+                    ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:35:
+/root/mojolearn/bindings/forest_inference_binding.mojo:76:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        leaves.append(vp[i])
+                      ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:35:
+/root/mojolearn/bindings/forest_inference_binding.mojo:96:20: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        x.append(xp[i])
+                 ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:35:
+/root/mojolearn/bindings/forest_inference_binding.mojo:99:11: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        op[i] = result[i]
+        ~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:65:
+./core/forest_host_predict.mojo:288:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var count = Int(offsets_p[t + 1]) - lo
+                        ~~~~~~~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:65:
+./core/forest_host_predict.mojo:292:32: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            _check_node(colid_p[i], left_p[i], i - lo, count, n_cols)
+                        ~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:65:
+./core/forest_host_predict.mojo:292:43: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            _check_node(colid_p[i], left_p[i], i - lo, count, n_cols)
+                                    ~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:65:
+./core/forest_host_predict.mojo:294:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                EtNode[DType.float32](colid_p[i], quesval_p[i], 0.0, left_p[i], 0)
+                                      ~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:65:
+./core/forest_host_predict.mojo:294:60: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                EtNode[DType.float32](colid_p[i], quesval_p[i], 0.0, left_p[i], 0)
+                                                  ~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:65:
+./core/forest_host_predict.mojo:294:76: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                EtNode[DType.float32](colid_p[i], quesval_p[i], 0.0, left_p[i], 0)
+                                                                     ~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:65:
+./core/forest_host_predict.mojo:297:38: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                vleaf.append(leaves_p[i * num_outputs + k])
+                             ~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:66:
+/root/mojolearn/bindings/hostptr.mojo:58:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:72:
+/root/mojolearn/bindings/forest_export_binding.mojo:93:33: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        memcpy(dest=destination + offset, src=values.unsafe_ptr(), count=len(values))
+                    ~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:72:
+/root/mojolearn/bindings/forest_export_binding.mojo:93:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=destination + offset, src=values.unsafe_ptr(), count=len(values))
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:64:
+Imported from ./extratrees/impl/randomforest/randomforest.mojo:97:
+./extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:2513:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=h_data.unsafe_ptr(), src=x_col_major.unsafe_ptr(), count=count)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:64:
+Imported from ./extratrees/impl/randomforest/randomforest.mojo:97:
+./extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:2514:5: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+    memcpy(dest=h_labels.unsafe_ptr(), src=class_ids.unsafe_ptr(), count=Int(n_rows))
+    ^~~~~~
+    unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:64:
+Imported from ./extratrees/impl/randomforest/randomforest.mojo:97:
+Imported from ./extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:81:
+./core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:64:
+Imported from ./extratrees/impl/randomforest/randomforest.mojo:97:
+Imported from ./extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:2464:
+./ensemble/host_layout.mojo:84:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=dst, src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:64:
+Imported from ./extratrees/impl/randomforest/randomforest.mojo:97:
+Imported from ./extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:2464:
+./ensemble/host_layout.mojo:93:24: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        memcpy(dest=dp + i0, src=sp + i0, count=i1 - i0)
+                    ~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:64:
+Imported from ./extratrees/impl/randomforest/randomforest.mojo:97:
+Imported from ./extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:2464:
+./ensemble/host_layout.mojo:93:37: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+        memcpy(dest=dp + i0, src=sp + i0, count=i1 - i0)
+                                 ~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:64:
+Imported from ./extratrees/impl/randomforest/randomforest.mojo:97:
+Imported from ./extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:2464:
+./ensemble/host_layout.mojo:93:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=dp + i0, src=sp + i0, count=i1 - i0)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:64:
+Imported from ./extratrees/impl/randomforest/randomforest.mojo:97:
+Imported from ./extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:81:
+./core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:64:
+Imported from ./extratrees/impl/randomforest/randomforest.mojo:97:
+Imported from ./extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:81:
+./core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:64:
+Imported from ./extratrees/impl/randomforest/randomforest.mojo:97:
+Imported from ./extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:81:
+./core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:35:
+Imported from /root/mojolearn/bindings/forest_inference_binding.mojo:10:
+Imported from ./core/forest_inference_model.mojo:20:
+./core/forest_inference_pool.mojo:344:54: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                staged[first + i] = host.unsafe_ptr()[i]
+                                    ~~~~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:35:
+Imported from /root/mojolearn/bindings/forest_inference_binding.mojo:10:
+Imported from ./core/forest_inference_model.mojo:20:
+./core/forest_inference_pool.mojo:350:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            output[i] = staged[i]
+            ~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:65:
+./core/forest_host_predict.mojo:121:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var lo = Int(offsets_p[t])
+                 ~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:65:
+./core/forest_host_predict.mojo:122:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    var hi = Int(offsets_p[t + 1])
+                 ~~~~~~~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:64:
+Imported from ./extratrees/impl/randomforest/randomforest.mojo:97:
+Imported from ./extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:81:
+./core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:35:
+Imported from /root/mojolearn/bindings/forest_inference_binding.mojo:10:
+Imported from ./core/forest_inference_model.mojo:20:
+./core/forest_inference_pool.mojo:213:44: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            result.append(host.unsafe_ptr()[i])
+                          ~~~~~~~~~~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:42:
+./core/forest_inference.mojo:280:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:42:
+./core/forest_inference.mojo:301:21: warning: '@parameter for' is deprecated; use 'comptime for'
+                    @parameter
+                    ^~~~~~~~~~
+                    comptime 
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:42:
+./core/forest_inference.mojo:310:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:42:
+./core/forest_inference.mojo:316:5: warning: '@parameter for' is deprecated; use 'comptime for'
+    @parameter
+    ^~~~~~~~~~
+    comptime 
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:42:
+./core/forest_inference.mojo:323:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:42:
+./core/forest_inference.mojo:329:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:42:
+./core/forest_inference.mojo:405:17: warning: '@parameter for' is deprecated; use 'comptime for'
+                @parameter
+                ^~~~~~~~~~
+                comptime 
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:42:
+./core/forest_inference.mojo:410:13: warning: '@parameter for' is deprecated; use 'comptime for'
+            @parameter
+            ^~~~~~~~~~
+            comptime 
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:42:
+./core/forest_inference.mojo:415:17: warning: '@parameter for' is deprecated; use 'comptime for'
+                @parameter
+                ^~~~~~~~~~
+                comptime 
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:42:
+./core/forest_inference.mojo:422:21: warning: '@parameter for' is deprecated; use 'comptime for'
+                    @parameter
+                    ^~~~~~~~~~
+                    comptime 
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:42:
+./core/forest_inference.mojo:426:9: warning: '@parameter for' is deprecated; use 'comptime for'
+        @parameter
+        ^~~~~~~~~~
+        comptime 
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:45:
+./extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo:711:18: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            s_min[warp * FT + j] = wmin
+            ~~~~~^~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:45:
+./extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo:712:18: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            s_max[warp * FT + j] = wmax
+            ~~~~~^~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:45:
+./extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo:713:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            s_miss[warp * FT + j] = wmiss
+            ~~~~~~^~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:45:
+./extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo:717:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var bmin = s_min[t]
+                   ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:45:
+./extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo:718:25: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var bmax = s_max[t]
+                   ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:45:
+./extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo:719:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var bmiss = s_miss[t]
+                    ~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:45:
+./extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo:721:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var a = s_min[w * FT + t]
+                    ~~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:45:
+./extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo:722:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var b = s_max[w * FT + t]
+                    ~~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:45:
+./extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo:725:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            bmiss += s_miss[w * FT + t]
+                     ~~~~~~^~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:45:
+./extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo:1810:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            s_nl[warp * (FT + 1) + j] = wl
+            ~~~~^~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:45:
+./extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo:1811:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            s_al[warp * (FT + 1) + j] = wa
+            ~~~~^~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:45:
+./extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo:1815:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        s_nl[warp * (FT + 1) + FT] = ws
+        ~~~~^~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:45:
+./extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo:1816:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        s_al[warp * (FT + 1) + FT] = wt
+        ~~~~^~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:45:
+./extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo:1825:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            bl += s_nl[w * (FT + 1) + t]
+                  ~~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:45:
+./extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo:1826:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ba += s_al[w * (FT + 1) + t]
+                  ~~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:45:
+./extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo:1827:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            bs += s_nl[w * (FT + 1) + FT]
+                  ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:45:
+./extratrees/impl/decisiontree/batched_levelalgo/kernels/builder_kernels_impl.mojo:1828:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            bt += s_al[w * (FT + 1) + FT]
+                  ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:64:
+Imported from ./extratrees/impl/randomforest/randomforest.mojo:97:
+./extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:3367:24: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            var lb = sp.bitcast[UInt8]()
+                     ~~^~~~~~~~
+                        unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:64:
+Imported from ./extratrees/impl/randomforest/randomforest.mojo:97:
+./extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:3368:24: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            var lh = hp.bitcast[UInt8]()
+                     ~~^~~~~~~~
+                        unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:64:
+Imported from ./extratrees/impl/randomforest/randomforest.mojo:97:
+./extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:3370:16: warning: 'if' condition always evaluates to 'True'; 'else' branch is unreachable
+            if True:
+               ^
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:64:
+Imported from ./extratrees/impl/randomforest/randomforest.mojo:97:
+./extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:3386:13: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+            memcpy(dest=hp, src=sp, count=live)
+            ^~~~~~
+            unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:64:
+Imported from ./extratrees/impl/randomforest/randomforest.mojo:97:
+./extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:3403:24: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            var sb = sp.bitcast[UInt8]()
+                     ~~^~~~~~~~
+                        unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:64:
+Imported from ./extratrees/impl/randomforest/randomforest.mojo:97:
+./extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:3404:24: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            var hb = hp.bitcast[UInt8]()
+                     ~~^~~~~~~~
+                        unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_trees.mojo:64:
+Imported from ./extratrees/impl/randomforest/randomforest.mojo:97:
+./extratrees/impl/decisiontree/batched_levelalgo/builder.mojo:3424:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=hp, src=sp, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Included from /root/mojolearn/bindings/_mojolearn_trees.mojo:65:
+./core/forest_host_predict.mojo:356:13: warning: 'except' logic is unreachable, try doesn't raise an exception
+            fp.unsafe_store(c, 1)
+            ^
+/root/mojolearn/bindings/_mojolearn_trees.mojo:514:17: warning: assignment to 'wrote' was never used; assign to '_' instead?
+    var wrote = 0
+                ^
+built python/mojolearn/identical/_mojolearn_trees.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)

@@ -24,6 +24,15 @@ every build):
             chains produce and consume subnormals and the exact recompute runs
             (by default only on proj_* and down_fwd: the recompute is slow)
   mixed     ordinary, with one word in 64 scaled into [2^-110, 2^-100)
+  skew      (2026-09-25) A words in [2^-125, 2^-114), B ordinary: subnormal
+            products, exponent sums 121..139, never admitted by the
+            matrix-core kernel's exact admission (a test that read one
+            operand only would admit them and keep the subnormals)
+  border    both operands in [2^-40, 2^-33): exponent sums 174..186, every
+            window admitted, products down to 2^-80 (the admission bound)
+  sparse    ordinary, with one word in 4096 in [2^-110, 2^-100): about a
+            third of the windows admitted, the rest not, leaves switching
+The first three kinds' hashes are unchanged by the added kinds.
 Lines: `EXCP_AB call=... kind=... m= n= k= hash=<16 hex> ms=<median> samples=...`.
 """
 from std.gpu import block_idx, block_dim, thread_idx
@@ -71,6 +80,13 @@ def fill_kernel(dst: MutPointer[Float32, MutAnyOrigin], n: Int64, seed: UInt32, 
     elif kind == 2:
         if (h2 >> UInt32(26)) == UInt32(0):
             e = UInt32(17) + (h2 % UInt32(10))  # 2^-110 .. 2^-101
+    elif kind == 3:
+        e = UInt32(2) + (h2 % UInt32(11))  # 2^-125 .. 2^-115 (skew's A)
+    elif kind == 4:
+        e = UInt32(87) + (h2 % UInt32(7))  # 2^-40 .. 2^-34
+    elif kind == 5:
+        if (h2 >> UInt32(20)) == UInt32(0):
+            e = UInt32(17) + (h2 % UInt32(10))  # one in 4096: 2^-110 .. 2^-101
     dst.unsafe_store(i, bitcast[DType.float32](sign | (e << UInt32(23)) | mant))
 
 
@@ -131,7 +147,7 @@ def main() raises:
     var kinds_env = String(getenv("MOJOLEARN_EXCP_AB_KINDS"))
     var rounds_env = String(getenv("MOJOLEARN_EXCP_AB_ROUNDS"))
     var rounds = 3 if rounds_env == "" else Int(rounds_env)
-    var kind_names: List[String] = ["ordinary", "tiny", "mixed"]
+    var kind_names: List[String] = ["ordinary", "tiny", "mixed", "skew", "border", "sparse"]
     print("EXCP_AB_HEADER column=" + column_name(TARGET_COLUMN) + " detect_seam=" + String(GEMM_DETECT_SEAM) + " launch_bound=" + String(GEMM_LAUNCH_BOUND)
           + " rounds=" + String(rounds))
     var ctx = DeviceContext()
@@ -160,7 +176,7 @@ def main() raises:
         var y = ctx.enqueue_create_buffer[DType.float32](ny)
         var out = ctx.enqueue_create_buffer[DType.float32](nout)
         var ws = ctx.enqueue_create_buffer[DType.float32](ws_n if ws_n > 0 else 1)
-        for kd in range(3):
+        for kd in range(len(kind_names)):
             if kinds_env != "" and not ("," + kinds_env + ",").__contains__("," + kind_names[kd] + ","):
                 continue
             # The tiny kind makes (nearly) every wave take the exact recompute,
@@ -168,8 +184,9 @@ def main() raises:
             # projection calls and down_fwd only.
             if kd == 1 and kinds_env == "" and not (call.startswith("proj_") or call == "down_fwd"):
                 continue
+            # skew: tiny A words (kind 3) against ordinary B words (kind 0)
             _fill(ctx, x, nx, UInt32(1000 + 7 * ci), kd)
-            _fill(ctx, y, ny, UInt32(2000 + 7 * ci), kd)
+            _fill(ctx, y, ny, UInt32(2000 + 7 * ci), 0 if kd == 3 else kd)
             ctx.synchronize()
             _run(ctx, call, out, x, y, ws, m, n, k, which)  # warmup and the hashed run
             var h = _hash(ctx, out, nout)

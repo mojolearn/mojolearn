@@ -1,0 +1,10 @@
+10:26:49 verify chunk aa exit=4 secs=25: RESULT: INCOMPLETE (verified 764 of 1241 cell parts (0 divergent, 0 owed, 135 refused, 342 n/a); 22 verified, 0 not applicable, 0 owed, 0 held, 3 REFUSED, of 25 lanes). 22.7s. exit 4
+10:27:42 verify chunk ab exit=4 secs=53: RESULT: INCOMPLETE (verified 908 of 1241 cell parts (0 divergent, 0 owed, 135 refused, 198 n/a); 22 verified, 0 not applicable, 0 owed, 0 held, 3 REFUSED, of 25 lanes). 52.0s. exit 4
+10:28:05 verify chunk ac exit=4 secs=23: RESULT: INCOMPLETE (verified 827 of 1241 cell parts (0 divergent, 0 owed, 45 refused, 369 n/a); 24 verified, 0 not applicable, 0 owed, 0 held, 1 REFUSED, of 25 lanes). 21.7s. exit 4
+10:30:04 verify chunk ad exit=0 secs=119: RESULT: VERIFIED (verified 980 of 1241 cell parts (0 divergent, 0 owed, 0 refused, 261 n/a); 25 verified, 0 not applicable, 0 owed, 0 held, of 25 lanes). 116.8s. exit 0
+10:30:12 verify chunk ae exit=4 secs=8: RESULT: INCOMPLETE (verified 863 of 1241 cell parts (0 divergent, 0 owed, 45 refused, 333 n/a); 24 verified, 0 not applicable, 0 owed, 0 held, 1 REFUSED, of 25 lanes). 6.1s. exit 4
+10:30:26 verify chunk af exit=4 secs=14: RESULT: INCOMPLETE (verified 827 of 1241 cell parts (0 divergent, 0 owed, 45 refused, 369 n/a); 24 verified, 0 not applicable, 0 owed, 0 held, 1 REFUSED, of 25 lanes). 13.2s. exit 4
+10:30:38 verify chunk ag exit=4 secs=12: RESULT: INCOMPLETE (verified 701 of 1241 cell parts (0 divergent, 0 owed, 270 refused, 270 n/a); 19 verified, 0 not applicable, 0 owed, 0 held, 6 REFUSED, of 25 lanes). 10.3s. exit 4
+10:30:49 verify chunk ah exit=4 secs=11: RESULT: INCOMPLETE (verified 791 of 1241 cell parts (0 divergent, 0 owed, 225 refused, 225 n/a); 20 verified, 0 not applicable, 0 owed, 0 held, 5 REFUSED, of 25 lanes). 9.6s. exit 4
+10:30:54 verify chunk ai exit=0 secs=5: RESULT: VERIFIED (verified 152 of 161 cell parts (0 divergent, 0 owed, 0 refused, 9 n/a); 1 verified, 0 not applicable, 0 owed, 0 held, of 1 lanes). 3.1s. exit 0
+10:30:54 verify done

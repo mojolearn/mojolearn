@@ -1,0 +1,17 @@
+W: https://repo.radeon.com/amdgpu/6.4.1/ubuntu/dists/jammy/InRelease: Key is stored in legacy trusted.gpg keyring (/etc/apt/trusted.gpg), see the DEPRECATION section in apt-key(8) for details.
+W: https://repo.radeon.com/rocm/apt/6.4.1/dists/jammy/InRelease: Key is stored in legacy trusted.gpg keyring (/etc/apt/trusted.gpg), see the DEPRECATION section in apt-key(8) for details.
+debconf: delaying package configuration, since apt-utils is not installed
+Selecting previously unselected package libdw1:amd64.
+(Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 26594 files and directories currently installed.)
+Preparing to unpack .../libdw1_0.186-1ubuntu0.1_amd64.deb ...
+Unpacking libdw1:amd64 (0.186-1ubuntu0.1) ...
+Selecting previously unselected package libasm1:amd64.
+Preparing to unpack .../libasm1_0.186-1ubuntu0.1_amd64.deb ...
+Unpacking libasm1:amd64 (0.186-1ubuntu0.1) ...
+Selecting previously unselected package elfutils.
+Preparing to unpack .../elfutils_0.186-1ubuntu0.1_amd64.deb ...
+Unpacking elfutils (0.186-1ubuntu0.1) ...
+Setting up libdw1:amd64 (0.186-1ubuntu0.1) ...
+Setting up libasm1:amd64 (0.186-1ubuntu0.1) ...
+Setting up elfutils (0.186-1ubuntu0.1) ...
+Processing triggers for libc-bin (2.35-0ubuntu3.9) ...

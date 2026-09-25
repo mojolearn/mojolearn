@@ -1,0 +1,89 @@
+{
+  "schema": "mojolearn.lm-step-memory-probe.v3",
+  "shape": {
+    "batch": 4,
+    "length": 2048,
+    "d_model": 768,
+    "n_heads": 12,
+    "n_kv": 12,
+    "head_dim": 64,
+    "intermediate": 2048,
+    "n_layers": 12,
+    "vocab_size": 50257
+  },
+  "parameters": 162147840,
+  "steps_completed": 3,
+  "resident": true,
+  "step_result": "lean",
+  "witness_every_step": true,
+  "witness_source": "export_gradients(named=False) + export_state() after every step (outside the timed boundary)",
+  "corpus": null,
+  "attention_arm": "stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz",
+  "attention_arm_source": "binding",
+  "attention_arm_requested": null,
+  "attention_arm_default": "stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz",
+  "attention_arm_is_default": true,
+  "attention_arm_resolved_hd64": "stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz",
+  "attention_arm_trial_build": false,
+  "gemm_arm": null,
+  "gemm_plan": null,
+  "step_glue_arm": "optskip_noshadow_rows16",
+  "step_glue_arm_requested": null,
+  "step_glue_trial_build": false,
+  "step_witnesses": [
+    {
+      "step": 1,
+      "completed_steps": 1,
+      "sha256": {
+        "loss": "676298dabb30bfc447f559ec749969a51a51a5c8a60a884d6a185a0d75760e8e",
+        "gradients": "222551acedc86be39bdd374a7869c41751a7b05dbb50140370e93da8179466e9",
+        "parameters": "5516ffe5f550c0ca9370e288f40aa4c0c0fd5165ea3748ec9a42edb05ddfed8c",
+        "m": "4067b3e959bc497a39a9782c99a94314894d9df2a78a41346e1f0013ad63b6d3",
+        "v": "d65224fdf2e00685f91db419898013f61f74371718aaf1a853b0e963bd9403e6",
+        "flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb"
+      }
+    },
+    {
+      "step": 2,
+      "completed_steps": 2,
+      "sha256": {
+        "loss": "afc46227a37262b07bc9ec863ba5f69968de54986f42518628d2d83dffe69e7b",
+        "gradients": "1cae5724e3d261730c2b9f53c02dc2c8c2f48037b7c0c8b3c9a1db424741b129",
+        "parameters": "77477af425887a754a15fcdd6959cac646522afa6962a6103b2b733eb5cabaaf",
+        "m": "3403d7f32a5405e04d1b890846b237a8889ab2c5220c72deb89e8bba05fdc5e0",
+        "v": "fbf6148b12fe31c24065e0f69614127b5d9ee91e088d8a69edbb8f2e629a5e87",
+        "flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb"
+      }
+    },
+    {
+      "step": 3,
+      "completed_steps": 3,
+      "sha256": {
+        "loss": "34fe4c49b0dda4f5bc851fa6ccb5a74376ffca6cecedc0fd4a904556182880fc",
+        "gradients": "1cee014ac69d346cc99d0d91005274b3741f12bef00388a225ae21f3225814b2",
+        "parameters": "4e439a8a9751cb6f008ce7ffc217ec6fa9d84f6748b4c91320338526c0c9a86d",
+        "m": "709c5798e954e6c3177680c9d067e7899f8280aa38b4382f07208c681a40d014",
+        "v": "4b4206d7e76935d49aea6e8b1fa9238c68316998ca2585e47802e5cb7ab4167e",
+        "flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb"
+      }
+    }
+  ],
+  "final_witness": null,
+  "first_call_seconds": 12.211637267027982,
+  "steady_step_seconds": [
+    0.48193142598029226,
+    0.4809488910250366
+  ],
+  "steady_median_seconds": 0.4814401585026644,
+  "steady_median_tokens_per_second": 17015.614205258833,
+  "peak_device_process_bytes": 37346082816,
+  "peak_device_wide_bytes": 37359714304,
+  "process_ru_maxrss_bytes": 8223965184,
+  "budget_seconds": 600.0,
+  "limited": false,
+  "component_timing_step_seconds": null,
+  "component_timing_steps": 0,
+  "component_timing_step_seconds_all": [],
+  "component_timing_witnesses": [],
+  "qualification": "complete-step probe; device peak from a polled vendor tool; host RSS is a separate boundary; no opponent, no default gate, no target-scale qualification claim"
+}

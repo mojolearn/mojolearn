@@ -1,0 +1,5 @@
+00:58:57 tokens ready in 74 s: 12442225788 bytes
+9f7f695b9a0bae175bf241632767ace67c542a4a116a98e36b9c306f3eebe051  /root/amd_in/recipe.json
+80cd2126a89ba6d8a444cc7c9ca61cdadb4c67090511adcb4424e06ccf45b114  /root/amd_in/ckpt_00000100.blm
+b8d980905332fa84006ac9ea82b6559195b87545b31062af2c288d7af14901d4  /root/amd_in/ckpt_00001998.blm
+00:59:21 checkpoints ready in 23 s

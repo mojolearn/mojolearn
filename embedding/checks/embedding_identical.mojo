@@ -33,7 +33,9 @@ from embedding.checks.embedding_oracle import (
     emb_refuse_shape,
     refuse_nonfinite,
 )
-from std.memory import bitcast
+from std.memory import bitcast, stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 
 
 
@@ -269,6 +271,49 @@ def emb_run_begin_kernel(
     run_begin.unsafe_store(vocab, acc)
 
 
+
+
+#: lane/nvidia-step-time (2026-09-25): threads of the one-block scan below.
+comptime EMB_RUN_BEGIN_THREADS = 256
+
+
+def emb_run_begin_block_kernel(
+    run_begin: MutPointer[Int32, MutAnyOrigin],
+    counts: MutPointer[Int32, MutAnyOrigin],
+    vocab_in: Int32,
+):
+    """`emb_run_begin_kernel`'s exclusive prefix sum of `counts`, by ONE
+    block of `EMB_RUN_BEGIN_THREADS` threads instead of one thread: thread
+    `t` sums its contiguous chunk, thread 0 scans the chunk sums, each
+    thread writes its chunk's prefixes. Integer addition is exactly
+    associative (contract 6.1; the counts sum to the position count, far
+    below 2^31), so every `run_begin` word equals the serial kernel's. At the
+    T3 vocabulary (50,257) the serial kernel took 2.05 ms a shard on an
+    H100 (lane/nvidia-step-time leg 1 nsys)."""
+    comptime NT = EMB_RUN_BEGIN_THREADS
+    var part = stack_allocation[NT, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var vocab = Int(vocab_in)
+    var t = Int(thread_idx.x)
+    var chunk = (vocab + NT - 1) // NT
+    var lo = t * chunk
+    var hi = min(lo + chunk, vocab)
+    var sum = Int32(0)
+    for v in range(lo, hi):
+        sum = sum + counts.unsafe_load(v)
+    part.unsafe_store(t, sum)
+    barrier()
+    if t == 0:
+        var acc = Int32(0)
+        for i in range(NT):
+            var x = part.unsafe_load(i)
+            part.unsafe_store(i, acc)
+            acc = acc + x
+        run_begin.unsafe_store(vocab, acc)
+    barrier()
+    var run = part.unsafe_load(t)
+    for v in range(lo, hi):
+        run_begin.unsafe_store(v, run)
+        run = run + counts.unsafe_load(v)
 
 
 def emb_perm_kernel(
@@ -818,13 +863,23 @@ def _emb_backward_launch(
         )
 
         step_count_launch()
-        ctx.enqueue_function[emb_run_begin_kernel](
-            run_begin.unsafe_ptr(),
-            counts.unsafe_ptr(),
-            Int32(cfg.vocab),
-            grid_dim=(1, 1, 1),
-            block_dim=(1, 1, 1),
-        )
+        comptime if is_defined["MOJOLEARN_EMB_SERIAL_RUN_BEGIN"]():
+            # The revert arm: the single-thread scan.
+            ctx.enqueue_function[emb_run_begin_kernel](
+                run_begin.unsafe_ptr(),
+                counts.unsafe_ptr(),
+                Int32(cfg.vocab),
+                grid_dim=(1, 1, 1),
+                block_dim=(1, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[emb_run_begin_block_kernel](
+                run_begin.unsafe_ptr(),
+                counts.unsafe_ptr(),
+                Int32(cfg.vocab),
+                grid_dim=(1, 1, 1),
+                block_dim=(EMB_RUN_BEGIN_THREADS, 1, 1),
+            )
 
         step_count_launch()
         ctx.enqueue_function[emb_perm_kernel](

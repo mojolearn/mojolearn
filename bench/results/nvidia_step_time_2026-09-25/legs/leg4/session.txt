@@ -1,0 +1,51 @@
+03:09:22 leg4 started=2026-09-25T03:09:22Z
+03:10:24 build base exit=0 secs=62
+03:10:41 build embedding exit=0 secs=17
+03:10:50 build linalg exit=0 secs=26
+03:10:58 build kernel_methods exit=0 secs=34
+03:10:58 build training exit=0 secs=34
+03:10:58 build svm exit=0 secs=34
+03:10:58 build gp exit=0 secs=34
+03:11:16 build transformer exit=0 secs=52
+03:11:16 build estimators exit=0 secs=52
+03:11:25 build preprocessing exit=0 secs=9
+03:11:31 build resample exit=0 secs=15
+03:11:44 build trees exit=0 secs=28
+03:11:45 build rf exit=0 secs=29
+03:11:46 build solver exit=0 secs=30
+03:11:59 build mixture exit=0 secs=43
+03:12:18 build metrics exit=0 secs=62
+03:12:55 build gbdt exit=0 secs=99
+03:13:08 build tsa exit=0 secs=13
+03:13:09 build arima exit=0 secs=14
+03:13:22 build ivf exit=0 secs=27
+03:13:35 build hdbscan exit=0 secs=40
+03:13:52 build mamba exit=0 secs=57
+03:15:06 bind ref defines=[MOJOLEARN_GEMM_NO_WINDOW_ADMIT=1 MOJOLEARN_GEMM_NO_KPACK_NARROW=1 MOJOLEARN_ATTN_NO_LAUNCH_BOUND=1 MOJOLEARN_EMB_SERIAL_RUN_BEGIN=1] exit=0 secs=131
+03:15:09 bind head defines=[] exit=0 secs=134
+03:15:11 bind timers defines=[MOJOLEARN_STEP_PHASE_TIMERS=1 MOJOLEARN_ATTN_PHASE_TIMERS=1] exit=0 secs=136
+03:15:41 ab ref exit=0 cases=36 vs_ref=IDENTICAL secs=30: proj_fwd=0.635731 proj_dA=0.630342 proj_dB=0.750524 gateup_fwd=1.672809 gateup_dA=1.665076 gateup_dB=1.738939 down_fwd=1.674682 down_dA=1.662122 down_dB=1.73981 head_fwd=40.712199 head_dA=40.547439 head_dB=39.280364 
+03:16:09 ab head exit=0 cases=36 vs_ref=IDENTICAL secs=28: proj_fwd=0.476471 proj_dA=0.474537 proj_dB=0.541739 gateup_fwd=1.245202 gateup_dA=1.255468 gateup_dB=1.328097 down_fwd=1.258352 down_dA=1.235567 down_dB=1.325143 head_fwd=30.717321 head_dA=31.567877 head_dB=29.514403 
+03:16:36 ab sabotage exit=0 cases=36 vs_ref=DIFFER secs=27: proj_fwd=0.46964 proj_dA=0.466345 proj_dB=0.526867 gateup_fwd=1.208026 gateup_dA=1.227565 gateup_dB=1.280045 down_fwd=1.238092 down_dA=1.200354 down_dB=1.278543 head_fwd=30.582437 head_dA=30.782099 head_dB=29.234339 
+03:17:03 ab narrowonly exit=0 cases=36 vs_ref=IDENTICAL secs=27: proj_fwd=0.566426 proj_dA=0.563161 proj_dB=0.654659 gateup_fwd=1.478986 gateup_dA=1.489692 gateup_dB=1.645387 down_fwd=1.505766 down_dA=1.480488 down_dB=1.658116 head_fwd=36.217034 head_dA=37.492502 head_dB=35.830059 
+03:17:12 ptx head:     2104 bytes stack frame, 56 bytes spill stores, 112 bytes spill loads ptxas_new info    : Used 128 registers, used 1 barriers, 2104 bytes cumulative stack size, 25728 bytes smem     2088 bytes stack frame, 40 bytes spill stores, 40 bytes spill loads ptxas_new info    : Used 128 registers, used 1 barriers, 2088 bytes cumulative stack size, 25728 bytes smem     4096 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads ptxas_new info    : Used 208 registers, used 1 barriers, 4096 bytes cumulative stack size, 40960 bytes smem 
+03:17:41 gemm_backward_check exit=0 secs=29: gemm backward routing + gates: all green [IDENTICAL]  (10 gates, bwd sabotage: none, fwd sabotage: none)
+03:18:02 gemm_workspace_check exit=0 secs=21: PASS: 9 GEMMs, 4608 cells bitwise equal to host oracle
+03:18:35 tokens ready in 33 s: 12442225788 bytes
+03:18:53 checkpoints ready in 18 s
+03:18:53 binding now ref
+03:19:56 lean ref: 0.6081784050329588 ['5516ffe5f550', '77477af42588', '4e439a8a9751'] ['676298dabb30', 'afc46227a372', '34fe4c49b0dd']
+03:19:57 binding now head
+03:20:58 lean head: 0.4814401585026644 ['5516ffe5f550', '77477af42588', '4e439a8a9751'] ['676298dabb30', 'afc46227a372', '34fe4c49b0dd']
+03:20:58 binding now head
+03:23:20 replay-head-ckpt_00000100 exit=0 secs=142: [03:22:03] step 101 lr 397e2cc1 loss 6.9004 state abc8b816b5c3fb15 grad 25830bfc2016dc14 39.11 s (+7.40 s hashing)|[03:22:03] step 101 agrees with the expected chain|[03:22:41] step 102 lr 39805880 loss 6.8585 state a9421f91b947f82c grad 94c40a6e3d5ec5aa 30.67 s (+7.38 s hashing)|[03:22:41] step 102 agrees with the expected chain|[03:23:19] step 103 lr 39819a9f loss 6.8373 state fcdb48b8ab51f2ef grad 19a43804ef4065de 30.68 s (+7.28 s hashing)|[03:23:19] step 103 agrees with the expected chain|[03:23:19] PASS: /root/gemm_leg_out/nv-step-time/replay-head-ckpt_00000100|
+03:23:20 binding now head
+03:25:02 replay-head-ckpt_00001998 exit=0 secs=102: [03:24:24] step 1999 lr 39e5f6c0 loss 3.5280 state dcb05e4e668a81e1 grad 6170c58b93c1ec4a 39.15 s (+6.88 s hashing)|[03:24:24] step 1999 agrees with the expected chain|[03:25:02] step 2000 lr 39e5e0ce loss 3.5538 state 0e39ed2bfe9bcbae grad 7c100f6927db84d3 30.77 s (+6.46 s hashing)|[03:25:02] step 2000 agrees with the expected chain|[03:25:02] PASS: /root/gemm_leg_out/nv-step-time/replay-head-ckpt_00001998|
+03:25:02 binding now timers
+03:25:40 item timers secs=38: name	calls_per_shard	ms_per_shard	share_of_top envelope.native_call	1.0	492.544	0.5001 envelope.blocks_backward	1.0	250.927	0.2548 envelope.blocks_forward	1.0	127.143	0.1291 bwd.mlp_through_oproj	12.0	114.027	0.1158 
+03:25:40 binding now head
+03:26:20 nsys head secs=40: # folded 2197 of 3398 activities (cut at 1201); kernel+copy time 1037.630 ms; wall span 13786.034 ms|name	launches	total_ms	mean_us	share	reg_per_thread	static_smem	dyn_smem	grid	block	full_name|gemm_checks_gemm_identical_id6A6A6A6A6A6A_6e0e904c41851a9e	342	451.542	1320.3	0.4352	128	0.026	0.000	768x1x1	256x1x1	gemm_checks_gemm_identical_id6A6A|gemm_checks_gemm_identical_id6A6A6A6A6A6A_4756606400325dd8	168	135.997	809.5	0.1311	128	0.026	0.000	192x8x1	256x1x1	gemm_checks_gemm_identical_id6A6A6|fused_6#e8ff	24	85.570	3565.4	0.0825	64	0.015	0.000	3072x1x1	256x1x1	transformer_impl_llama_fused_6A6A6A6A6A6A_ea5e02c1382b1cb1|[CUDA memcpy Device-to-Host]	323	83.567	258.7	0.0805				xx	xx	[CUDA memcpy Device-to-Host]|fused_6#5c2b	24	67.820	2825.8	0.0654	63	0.010	0.000	6144x1x1	256x1x1	transformer_impl_llama_fused_6A6A6A6A6A6A_02d8dd47cde62a5a|fused_6#bac9	24	58.290	2428.7	0.0562	80	0.008	0.000	1536x1x1	256x1x1	transformer_impl_llama_fused_6A6A6A6A6A6A_fb2c898df8c53490|
+03:30:21 verify: 03:30:21 verify done
+03:32:47 byte_lm gfx942 (AMD column) build exit=0 secs=146
+03:32:47 leg4 scripted part done; holding
+03:33:43 ab s264 exit=0 cases=36 vs_ref=IDENTICAL secs=27: proj_fwd=0.474457 proj_dA=0.471904 proj_dB=0.570983 gateup_fwd=1.246564 gateup_dA=1.253655 gateup_dB=1.366776 down_fwd=1.265703 down_dA=1.2374 down_dB=1.355148 head_fwd=30.708728 head_dA=31.511852 head_dB=29.655736 

@@ -1,0 +1,31 @@
+00:49:13 leg1 started=2026-09-25T00:49:13Z
+00:50:27 build base exit=0 secs=72
+00:51:03 ab branch exit=0 cases=36 vs_branch=IDENTICAL secs=36: proj_fwd=0.636065 proj_dA=0.631249 proj_dB=0.74406 gateup_fwd=1.66744 gateup_dA=1.666944 gateup_dB=1.739402 down_fwd=1.673312 down_dA=1.663446 down_dB=1.73759 head_fwd=40.876302 head_dA=40.656414 head_dB=39.549936 
+00:51:10 ptx branch: 
+00:51:18 ptx cap1024: 
+00:52:11 nsys install: /usr/local/cuda/bin/nsys secs=177
+00:52:13 ptxas: Build cuda_12.9.r12.9/compiler.36037853_0
+00:52:34 ptx branch:     4096 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads ptxas_new info    : Used 255 registers, used 1 barriers, 4096 bytes cumulative stack size, 33792 bytes smem     4104 bytes stack frame, 4 bytes spill stores, 4 bytes spill loads ptxas_new info    : Used 255 registers, used 1 barriers, 4104 bytes cumulative stack size, 33792 bytes smem     4096 bytes stack frame, 0 bytes spill stores, 0 bytes spill loads ptxas_new info    : Used 208 registers, used 1 barriers, 4096 bytes cumulative stack size, 40960 bytes smem 
+00:52:40 ptx cap1024:     5016 bytes stack frame, 7004 bytes spill stores, 7152 bytes spill loads ptxas_new info    : Used 32 registers, used 1 barriers, 5016 bytes cumulative stack size, 33792 bytes smem     5048 bytes stack frame, 7092 bytes spill stores, 7116 bytes spill loads ptxas_new info    : Used 32 registers, used 1 barriers, 5048 bytes cumulative stack size, 33792 bytes smem     4776 bytes stack frame, 2628 bytes spill stores, 3000 bytes spill loads ptxas_new info    : Used 64 registers, used 1 barriers, 4776 bytes cumulative stack size, 40960 bytes smem 
+00:53:25 bind branch defines=[] exit=0 secs=178
+00:53:34 bind timers defines=[MOJOLEARN_STEP_PHASE_TIMERS=1 MOJOLEARN_ATTN_PHASE_TIMERS=1] exit=0 secs=187
+00:57:43 bind base0817 defines=[] exit=0 secs=249
+00:57:43 overlay restored
+00:58:16 ptx lb512:     4440 bytes stack frame, 560 bytes spill stores, 572 bytes spill loads ptxas_new info    : Used 128 registers, used 1 barriers, 4440 bytes cumulative stack size, 33792 bytes smem     4472 bytes stack frame, 592 bytes spill stores, 528 bytes spill loads ptxas_new info    : Used 128 registers, used 1 barriers, 4472 bytes cumulative stack size, 33792 bytes smem     4448 bytes stack frame, 520 bytes spill stores, 648 bytes spill loads ptxas_new info    : Used 128 registers, used 1 barriers, 4448 bytes cumulative stack size, 40960 bytes smem 
+00:58:57 tokens ready in 74 s: 12442225788 bytes
+00:59:21 checkpoints ready in 23 s
+00:59:21 binding now branch
+01:00:39 lean branch: 0.6108677228912711 ['5516ffe5f550', '77477af42588', '4e439a8a9751'] ['676298dabb30', 'afc46227a372', '34fe4c49b0dd']
+01:00:39 binding now base0817
+01:01:59 lean base0817: 0.6107320440933108 ['5516ffe5f550', '77477af42588', '4e439a8a9751'] ['676298dabb30', 'afc46227a372', '34fe4c49b0dd']
+01:01:59 binding now base0817
+01:04:05 replay-base0817-ckpt_00000100 exit=0 secs=126: [01:03:18] step 101 lr 397e2cc1 loss 6.9004 state abc8b816b5c3fb15 grad 25830bfc2016dc14 48.01 s (+7.80 s hashing)|[01:03:18] step 101 agrees with the expected chain|[01:04:04] step 102 lr 39805880 loss 6.8585 state a9421f91b947f82c grad 94c40a6e3d5ec5aa 38.83 s (+7.54 s hashing)|[01:04:04] step 102 agrees with the expected chain|[01:04:04] PASS: /root/gemm_leg_out/nv-step-time/replay-base0817-ckpt_00000100|
+01:04:05 binding now branch
+01:06:56 replay-branch-ckpt_00000100 exit=0 secs=171: [01:05:24] step 101 lr 397e2cc1 loss 6.9004 state abc8b816b5c3fb15 grad 25830bfc2016dc14 47.90 s (+7.80 s hashing)|[01:05:24] step 101 agrees with the expected chain|[01:06:09] step 102 lr 39805880 loss 6.8585 state a9421f91b947f82c grad 94c40a6e3d5ec5aa 38.83 s (+6.57 s hashing)|[01:06:09] step 102 agrees with the expected chain|[01:06:55] step 103 lr 39819a9f loss 6.8373 state fcdb48b8ab51f2ef grad 19a43804ef4065de 38.82 s (+7.71 s hashing)|[01:06:55] step 103 agrees with the expected chain|[01:06:56] PASS: /root/gemm_leg_out/nv-step-time/replay-branch-ckpt_00000100|
+01:06:56 binding now branch
+01:09:02 replay-branch-ckpt_00001998 exit=0 secs=126: [01:08:15] step 1999 lr 39e5f6c0 loss 3.5280 state dcb05e4e668a81e1 grad 6170c58b93c1ec4a 48.28 s (+7.51 s hashing)|[01:08:15] step 1999 agrees with the expected chain|[01:09:02] step 2000 lr 39e5e0ce loss 3.5538 state 0e39ed2bfe9bcbae grad 7c100f6927db84d3 38.79 s (+7.61 s hashing)|[01:09:02] step 2000 agrees with the expected chain|[01:09:02] PASS: /root/gemm_leg_out/nv-step-time/replay-branch-ckpt_00001998|
+01:09:02 binding now timers
+01:10:08 item timers secs=65: name	calls_per_shard	ms_per_shard	share_of_top envelope.native_call	1.0	617.093	0.4999 envelope.blocks_backward	1.0	297.167	0.2408 envelope.blocks_forward	1.0	174.228	0.1412 bwd.mlp_through_oproj	12.0	147.506	0.1195 
+01:10:08 binding now branch
+01:11:00 nsys branch secs=52: 
+01:11:00 leg1 scripted part done; holding

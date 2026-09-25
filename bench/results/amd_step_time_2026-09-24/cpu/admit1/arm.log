@@ -1,0 +1,4 @@
+arming a 40-minute self-kill on pod flv599ei57u0pt ...
+ARMED. Pod flv599ei57u0pt is TERMINATED through the API in 40 minutes.
+  lease: bench/results/amd_step_time_2026-09-24/cpu/admit1/lease/flv599ei57u0pt.lease
+  extend with: tools/runpod_guard.sh extend flv599ei57u0pt '-p 42096 root@38.80.152.147' <minutes>

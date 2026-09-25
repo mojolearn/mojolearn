@@ -20,6 +20,7 @@ that dispatches them (a separate module would need a circular import).
 """
 from std.memory import bitcast
 from std.os import getenv
+from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from gemm.checks.gemm_backward import gemm_backward_a_call, gemm_backward_b_call
@@ -27,7 +28,9 @@ from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN
 
 #: `TARGET_SHAPE` in `tools/lm_step_memory_probe.py`: 12 layers, DM 768,
 #: FF 2048, V 50257, L 2048, batch 1.
-comptime GEMM_STEP_TOKENS = 2048
+#: lane/nvidia-step-time (2026-09-25): `-D MOJOLEARN_GEMM_STEP_T3=1` prices the
+#: T3 shard instead (batch 4: 8,192 token rows).
+comptime GEMM_STEP_TOKENS = 8192 if is_defined["MOJOLEARN_GEMM_STEP_T3"]() else 2048
 comptime GEMM_STEP_DM = 768
 comptime GEMM_STEP_FF = 2048
 comptime GEMM_STEP_VOCAB = 50257

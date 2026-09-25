@@ -1,0 +1,25 @@
+build c4 exit=0
+build r4c4l exit=0
+build c4l exit=0
+build r4l exit=0
+ptx c4: 0 bytes spill stores Used 168 registers 0 bytes spill stores Used 213 registers 0 bytes spill stores Used 208 registers 
+ptx r4c4l: 0 bytes spill stores Used 97 registers 0 bytes spill stores Used 128 registers 520 bytes spill stores Used 128 registers 
+ptx c4l: 56 bytes spill stores Used 128 registers 40 bytes spill stores Used 128 registers 520 bytes spill stores Used 128 registers 
+ptx r4l: 0 bytes spill stores Used 128 registers 0 bytes spill stores Used 128 registers 520 bytes spill stores Used 128 registers 
+ab c4 vs_noadm=IDENTICAL proj_fwd=0.651886 proj_dA=0.644316 proj_dB=0.728861 gateup_fwd=1.597318 gateup_dA=1.800638 gateup_dB=1.807144 down_fwd=1.821458 down_dA=1.579391 down_dB=1.8307 head_fwd=45.974634 head_dA=44.041816 head_dB=42.811449 
+ab c4l vs_noadm=IDENTICAL proj_fwd=0.474432 proj_dA=0.472013 proj_dB=0.537091 gateup_fwd=1.236183 gateup_dA=1.242327 gateup_dB=1.315153 down_fwd=1.25698 down_dA=1.224326 down_dB=1.323681 head_fwd=30.556876 head_dA=31.393363 head_dB=29.561014 
+ab r4l vs_noadm=IDENTICAL proj_fwd=0.479649 proj_dA=0.475259 proj_dB=0.564229 gateup_fwd=1.251754 gateup_dA=1.262805 gateup_dB=1.404862 down_fwd=1.278218 down_dA=1.238367 down_dB=1.420497 head_fwd=31.935279 head_dA=31.959878 head_dB=30.604796 
+ab r4c4l vs_noadm=IDENTICAL proj_fwd=0.604296 proj_dA=0.602559 proj_dB=0.693095 gateup_fwd=1.520005 gateup_dA=1.574929 gateup_dB=1.699298 down_fwd=1.616318 down_dA=1.519883 down_dB=1.682562 head_fwd=40.41362 head_dA=40.866704 head_dB=38.78625 
+build c4le exit=0
+build r4c4l768 exit=0
+build c4l768 exit=0
+build ae exit=0
+ptx c4le: 56 bytes spill stores Used 128 registers 40 bytes spill stores Used 128 registers 520 bytes spill stores Used 128 registers 
+ptx r4c4l768: 0 bytes spill stores Used 80 registers 20 bytes spill stores Used 80 registers 1840 bytes spill stores Used 80 registers 
+ptx c4l768: 280 bytes spill stores Used 80 registers 276 bytes spill stores Used 80 registers 1840 bytes spill stores Used 80 registers 
+ptx ae: 0 bytes spill stores Used 255 registers 8 bytes spill stores Used 255 registers 0 bytes spill stores Used 208 registers 
+ab c4l vs_noadm=IDENTICAL proj_fwd=0.475417 proj_dA=0.472239 proj_dB=0.53923 gateup_fwd=1.244749 gateup_dA=1.252541 gateup_dB=1.327773 down_fwd=1.26102 down_dA=1.230772 down_dB=1.325938 head_fwd=30.718604 head_dA=31.44543 head_dB=29.685065 
+ab c4le vs_noadm=IDENTICAL proj_fwd=0.480567 proj_dA=0.479564 proj_dB=0.543198 gateup_fwd=1.267386 gateup_dA=1.280131 gateup_dB=1.337348 down_fwd=1.285259 down_dA=1.261102 down_dB=1.335236 head_fwd=30.996158 head_dA=31.976734 head_dB=30.387139 
+ab c4l768 vs_noadm=IDENTICAL proj_fwd=0.522795 proj_dA=0.521233 proj_dB=0.560617 gateup_fwd=1.364552 gateup_dA=1.346508 gateup_dB=1.38687 down_fwd=1.349705 down_dA=1.358181 down_dB=1.381838 head_fwd=31.638319 head_dA=34.050508 head_dB=31.733282 
+ab r4c4l768 vs_noadm=IDENTICAL proj_fwd=0.535335 proj_dA=0.532743 proj_dB=0.595218 gateup_fwd=1.356576 gateup_dA=1.425815 gateup_dB=1.476575 down_fwd=1.439437 down_dA=1.354324 down_dB=1.484887 head_fwd=34.624673 head_dA=35.762839 head_dB=33.812866 
+ab ae vs_noadm=IDENTICAL proj_fwd=0.527053 proj_dA=0.523686 proj_dB=0.634334 gateup_fwd=1.388598 gateup_dA=1.376421 gateup_dB=1.463504 down_fwd=1.395004 down_dA=1.377966 down_dB=1.464795 head_fwd=34.578985 head_dA=33.586125 head_dB=32.532 

@@ -358,6 +358,146 @@ percent and attention at 29 percent of the step. What is left on AMD:
 - The per-step host hashing on the 13-core Hot Aisle VM (7.0 s) is outside
   the step seconds; on the DigitalOcean MI325X host it is 1.6 s.
 
+## Pass 2 (branch lane/amd-step-time-2, from 0.8.18)
+
+### Where the 32.3 s goes (first pass leg 8, rocprofv3, one lean B4 shard)
+
+| what | ms a shard | share |
+|---|---|---|
+| matrix-core GEMM (group and split launches) | 238.8 | 48 % |
+| attention: forward 37.0, dq 32.7, dk/dv 32.2, zdot 22.1 | 124.0 | 25 % |
+| head GEMM forward and dB (whole-leaf launches) | 59.2 | 12 % |
+| GEMM group folds + one VALU GEMM call | 19.4 | 4 % |
+| norms, embedding backward, scans, fills, cross entropy, copies, AdamW | about 51 | 10 % |
+
+Source: `legs/2026-09-24_204925-hotaisle-mi300x-leg8/remote/amd-step-time/prof/lean_kernel_stats.csv`
+(0.503 s lean shard, 0.493 s of kernel time). Counters on the matrix-core
+GEMM: 33 VALU instructions per MFMA; the gfx942 asm
+(`cpu/admit1/remote/leg_out/mfma.s.gz`) issues each MFMA pair, waits
+(`s_nop 15`), then 14 `v_mul_f32` and 25 `v_pk_mul_f32` (the flush of 64
+accumulators) before the next pair: the kernel is bound by the flush
+serialized behind the matrix core, not by the matrix core.
+
+### Levers built (all AMD-only code; NVIDIA and Apple compile the files unchanged)
+
+1. EXACT ADMISSION in `identical_gemm_mfma_kernel` (default on,
+   `-D MOJOLEARN_GEMM_MFMA_NO_ADMIT=1` reverts). If the smallest nonzero
+   exponent fields of the block's staged A words and B words in a window
+   sum to at least 174, every product is a multiple of 2^-126; from a +0.0
+   leaf start every accumulator then stays a multiple of 2^-126, so no
+   rounded step result can be subnormal and `ftz(fma_rn(a, b, acc))` equals
+   `fma_rn(a, b, acc)` on every word. The MFMA step alone is then the
+   contract step (same operands, same order, same single rounding) and the
+   product by one is not issued. A window that fails the test switches the
+   rest of its leaf to the shipped step. The admitted loop is back-to-back
+   MFMAs (asm above). New A/B operand kinds: `skew` (subnormal products that
+   a test reading one operand would wrongly admit), `border` (every window
+   admitted at the bound) and `sparse` (leaves switching mid-way).
+2. Attention chains on the matrix cores, as TRIAL defines until proven:
+   dq (`MOJOLEARN_ATTN_DQ_MFMA`), dk/dv (`MOJOLEARN_ATTN_DKDV_MFMA`), the
+   forward context chain (`MOJOLEARN_ATTN_FWD_MFMA`). Each is
+   `v_mfma_f32_16x16x1f32` (K = 1) plus the product by one under MODE 2
+   (set only around the chain), 16 rows (or keys) a wave by 64 columns; a
+   key (or query) that not every row of the wave sees is stepped on the VALU
+   for exactly the visible cells, so every chain takes the same steps in the
+   same order. `gemm/checks/amd_mfma_probe3.mojo` measures the 16x16x1 step
+   against the host fma and the flush before any of it counts.
+
+All of it compiles for gfx942 and the A/B harness and the byte LM binding
+still build for sm_90a (`cpu/admit1/`, `cpu/dq1/`, `cpu/dkdv1/`,
+`cpu/fwd1/`, RunPod CPU pods, about $0.02 each).
+
+### Pass 2 leg 1 (2026-09-25 08:54 to 09:37 UTC, Hot Aisle 1x MI300X, $2.14)
+
+Evidence: `legs/2026-09-25_085416-hotaisle-mi300x-pass2-leg1/remote/amd-step-time/`
+(`session.txt` is the running record). Body `tools/amd_step_time2_leg1.sh`
+at 79ff2d56f; every build compiled on the box for gfx942, IDENTICAL, column
+amd. Builds: `noadmit` = 0.8.18's matrix-core GEMM
+(`-D MOJOLEARN_GEMM_MFMA_NO_ADMIT=1`), `admit` = the branch default, `dq`,
+`dqkv`, `attn3` = admit plus the attention trial defines (dq; dq + dk/dv;
+dq + dk/dv + forward context).
+
+| build | lever | lean B4 shard s (same VM) | kernel ms a shard (rocprofv3) | s a step (replay, steady) | GEMM A/B hashes vs VALU (64 lines, 6 kinds) | lean witnesses (6 x 3 steps) vs admit | replays against the H100 chain |
+|---|---|---|---|---|---|---|---|
+| noadmit | 0.8.18 (before) | 0.503 | 496.0 | 32.3 (leg 7, earlier VM; not replayed here) | IDENTICAL | EQUAL | not run here (PASS in legs 6 and 7) |
+| admit | exact admission in the matrix-core GEMM | 0.459 | 453.3 | **29.7** (101 to 103: 29.73, 29.67; 2000: 29.76) | IDENTICAL | (reference) | PASS 101 to 103, PASS 1999 to 2000 |
+| dq | + attention dq on the matrix cores (trial) | 0.439 | not traced | not replayed | n/a (GEMM unchanged) | EQUAL | not run (the script replays dqkv and attn3 only) |
+| dqkv | + dk/dv (trial) | 0.421 | not traced | 27.0 (102, 103: 27.00, 27.00) | n/a | EQUAL | PASS 101 to 103 |
+| attn3 | + forward context (trial) | 0.414 | 403.9 | **26.4** (102, 103: 26.36, 26.35; 2000: 26.39) | n/a | EQUAL | PASS 101 to 103, PASS 1999 to 2000 |
+
+The first step of every replay carries setup (34 to 38 s) and is left out of
+the steady seconds. Host hashing adds about 7.0 s a step, outside these
+seconds. The lean witnesses of all five builds are the same six digests at
+each of the three steps (step 3: loss 34fe4c49b0dda4f5, gradients
+1cee014ac69d346c, parameters 4e439a8a9751cb6f, m 709c5798e954e6c3, v
+4b4206d7e76935d4, flags 360d579dbd14759b), and the parameter digests equal
+leg 7's (5516ffe5f550, 77477af42588, 4e439a8a9751).
+
+Replayed state digests (every line equal to the H100 chain: state, gradient,
+the 64 shard losses, learning-rate bits), identical on admit, dqkv and attn3:
+
+| step | state | gradient |
+|---|---|---|
+| 101 | abc8b816b5c3fb15 | 25830bfc2016dc14 |
+| 102 | a9421f91b947f82c | 94c40a6e3d5ec5aa |
+| 103 | fcdb48b8ab51f2ef | 19a43804ef4065de |
+| 1999 | dcb05e4e668a81e1 | 6170c58b93c1ec4a |
+| 2000 | 0e39ed2bfe9bcbae | 7c100f6927db84d3 |
+
+GEMM A/B (`ab/p2l1-*.hashes`): 64 hash lines per build (12 calls x ordinary,
+mixed, skew, border, sparse, and 4 tiny), 64 distinct hashes, every rehash
+equal; valu, noadmit and admit files are byte-identical. Summed call time
+over three rounds per kind, noadmit -> admit: ordinary 101.0 -> 87.1 ms,
+border 100.2 -> 86.9, but skew 99.9 -> 108.3, mixed 100.9 -> 109.3, sparse
+100.8 -> 104.7 (operands that fail the test pay for the test). Ordinary
+calls, ms, noadmit -> admit: proj_fwd 0.525 -> 0.451, gateup_fwd 1.364 ->
+1.162, down_fwd 1.432 -> 1.135, head_fwd 28.90 -> 23.68, head_dA 30.59 ->
+26.15, head_dB 31.52 -> 28.96.
+
+Kernel trace (two lean B4 shards on each of noadmit, admit, attn3;
+`prof/`, `prof/noadmit/`, `prof/attn3/`), ms a shard: the matrix-core GEMM
+(group and split launches) 240.4 -> 204.0 (admit) -> 202.7 (attn3); the head
+whole-leaf launches 59.6 -> 51.9 -> 52.2; attention forward 37.3 -> 37.9 ->
+28.4; attention dq + dk/dv 65.3 -> 65.3 -> 27.2 (13.1 and 14.1 in attn3); zdot
+21.9 -> 22.7 -> 22.8 (unchanged kernel). The body's own trace failed
+(`libdw.so.1` missing from the image; leg 8 had installed `libdw1`); the
+three traces above were run by hand in the same container after installing
+it, while the CPU-only binding builds ran (the GPU was otherwise idle). The
+body now installs `libdw1`.
+
+Identity checks on the admit default (every device binding rebuilt from the
+branch): `gemm_device_check` all green (8 gates), `gemm_backward_check` all
+green (10 gates), `gemm_workspace_check` PASS (9 GEMMs, 4608 cells bitwise
+equal to the host oracle). The 201 GEMM-reaching non-par lanes against the
+shipped reference table: 181 VERIFIED, **0 DIVERGENT**, 0 OWED, 20 REFUSED
+(6,813 cell parts verified); the 20 refused lanes are exactly leg 7's
+(bindings or parts this VM does not build: byte-lm-host-*, gbdt-catboost/
+multiclass/stochastic defaults, gp-normalize-y, language-model-config,
+metrics-classification, ols-weighted, rf-*, samba*, saved-model-host-infer).
+
+FINDING, the matrix-core attention step (`gemm/checks/amd_mfma_probe3.mojo`,
+`mfma_probe3.log`): the probe's own pass line is NOT met. Under MODE
+FP_DENORM 2, the raw `v_mfma_f32_16x16x1f32` output differs from the host
+`fma(a, b, c)` on 14,080 of 4,194,304 words (`mfma_vs_fma=14080`,
+`subnormal_mfma_results=15072`); under MODE 3 it equals fma on every word
+(`mfma_vs_fma=0`). The 32x32x1 step the GEMM uses reads 0 at MODE 2
+(probe2, pass 1). The product by one after the MFMA (scalar and packed)
+equals `ftz(fma)` on every word at MODE 2 (`mul_vs_ftz=0`,
+`pkmul_vs_ftz=0`), which is the value the attention kernels carry, and the
+three trial kernels wrote equal witnesses and PASSed their replays. That the
+raw MODE 2 16x16x1 output is not fma on subnormal results is not explained
+yet, so the argument the attention kernels rest on is not closed. They stay
+off by default.
+
+### Prepared, not run: the MI325X stall probe
+
+`tools/amd_mi325x_perflevel_probe.sh` (with `tools/amd_codegen/stall_probe.mojo`)
+times a one-kernel-plus-synchronize loop on one DigitalOcean MI325X under
+performance level auto, `rocm-smi --setperfdeterminism 1900`,
+`--setperflevel high` and auto again, to tell whether the ~100 ms stalls
+about every 250 ms the MI325X step showed are a power-state effect. Run it
+after T3's A/4 has landed (the command line is in the script's header).
+
 ## Owed
 
 - NVIDIA re-proof before any release: `GEMM_LAUNCH_BOUND` is in shared
@@ -376,6 +516,7 @@ percent and attention at 29 percent of the step. What is left on AMD:
 Leg 1 $2.24 (48 min), leg 2 $2.19 (47 min), leg 3 $1.90 (41 min), leg 4
 $1.75, leg 5 $1.59, leg 6 $2.05, leg 7 $1.64; Hot Aisle balance $44.65 ->
 $30.60 ($14.05 in all).
+Pass 2: leg 1 $2.14 (43 min, 2026-09-25; balance $27.71 -> $25.67 at teardown, $25.57 after the last billing tick).
 
 ## Files
 

@@ -1,0 +1,78 @@
+{
+  "schema": "mojolearn.lm-step-memory-probe.v3",
+  "shape": {
+    "batch": 4,
+    "length": 2048,
+    "d_model": 768,
+    "n_heads": 12,
+    "n_kv": 12,
+    "head_dim": 64,
+    "intermediate": 2048,
+    "n_layers": 12,
+    "vocab_size": 50257
+  },
+  "parameters": 162147840,
+  "steps_completed": 2,
+  "resident": true,
+  "step_result": "lean",
+  "witness_every_step": false,
+  "witness_source": "export_gradients(named=False) + export_state() once after the last untimed step",
+  "corpus": null,
+  "attention_arm": "stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz",
+  "attention_arm_source": "binding",
+  "attention_arm_requested": null,
+  "attention_arm_default": "stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz",
+  "attention_arm_is_default": true,
+  "attention_arm_resolved_hd64": "stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz",
+  "attention_arm_trial_build": false,
+  "gemm_arm": null,
+  "gemm_plan": null,
+  "step_glue_arm": "optskip_noshadow_rows16",
+  "step_glue_arm_requested": null,
+  "step_glue_trial_build": false,
+  "step_witnesses": [
+    {
+      "step": 1,
+      "completed_steps": 1,
+      "sha256": {
+        "loss": "676298dabb30bfc447f559ec749969a51a51a5c8a60a884d6a185a0d75760e8e"
+      }
+    },
+    {
+      "step": 2,
+      "completed_steps": 2,
+      "sha256": {
+        "loss": "afc46227a37262b07bc9ec863ba5f69968de54986f42518628d2d83dffe69e7b"
+      }
+    }
+  ],
+  "final_witness": {
+    "step": 2,
+    "completed_steps": 2,
+    "sha256": {
+      "gradients": "1cae5724e3d261730c2b9f53c02dc2c8c2f48037b7c0c8b3c9a1db424741b129",
+      "parameters": "77477af425887a754a15fcdd6959cac646522afa6962a6103b2b733eb5cabaaf",
+      "m": "3403d7f32a5405e04d1b890846b237a8889ab2c5220c72deb89e8bba05fdc5e0",
+      "v": "fbf6148b12fe31c24065e0f69614127b5d9ee91e088d8a69edbb8f2e629a5e87",
+      "flags": "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb"
+    },
+    "export_seconds": 13.13481756100009,
+    "source": "export_gradients(named=False) + export_state() once after the last untimed step"
+  },
+  "first_call_seconds": 14.162055769999824,
+  "steady_step_seconds": [
+    0.41425379800011797
+  ],
+  "steady_median_seconds": 0.41425379800011797,
+  "steady_median_tokens_per_second": 19775.316580193834,
+  "peak_device_process_bytes": "unavailable",
+  "peak_device_wide_bytes": 188633812992,
+  "process_ru_maxrss_bytes": 9485733888,
+  "budget_seconds": 250.0,
+  "limited": false,
+  "component_timing_step_seconds": null,
+  "component_timing_steps": 0,
+  "component_timing_step_seconds_all": [],
+  "component_timing_witnesses": [],
+  "qualification": "complete-step probe; device peak from a polled vendor tool; host RSS is a separate boundary; no opponent, no default gate, no target-scale qualification claim"
+}

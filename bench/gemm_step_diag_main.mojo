@@ -12,6 +12,9 @@ pricing what is left against the unmodified body on the same twelve LM calls:
     nostage  no staging stores, no barrier, no prefetch (DIAG 3)
     nofold   no fold push at the leaf boundary (DIAG 4)
     floor    all four removed: the FMA chain alone (DIAG 5)
+    nobar    no staging barrier only (DIAG 6, lane/nvidia-step-time)
+    nopref   no prefetch loads only (DIAG 7)
+    nosts    no staging stores only (DIAG 8, the gather body)
 
 EVERY VARIANT BUT base COMPUTES WRONG BITS BY DESIGN. Nothing here is an arm,
 a geometry or a candidate; it needs -D MOJOLEARN_GEMM_DIAG=1 to compile, and
@@ -53,7 +56,7 @@ from gemm.checks.gemm_step_arms import (
     gemm_step_operand_counts,
 )
 
-comptime VARIANTS = 6
+comptime VARIANTS = 9
 
 
 def _variant_name(v: Int) -> String:
@@ -67,6 +70,12 @@ def _variant_name(v: Int) -> String:
         return String("nostage")
     if v == 4:
         return String("nofold")
+    if v == 6:
+        return String("nobar")
+    if v == 7:
+        return String("nopref")
+    if v == 8:
+        return String("nosts")
     return String("floor")
 
 
@@ -112,6 +121,12 @@ def _launch(
         _run[3](ctx, dc, da, db, m, n, k, op, gl)
     elif v == 4:
         _run[4](ctx, dc, da, db, m, n, k, op, gl)
+    elif v == 6:
+        _run[6](ctx, dc, da, db, m, n, k, op, gl)
+    elif v == 7:
+        _run[7](ctx, dc, da, db, m, n, k, op, gl)
+    elif v == 8:
+        _run[8](ctx, dc, da, db, m, n, k, op, gl)
     else:
         _run[5](ctx, dc, da, db, m, n, k, op, gl)
 

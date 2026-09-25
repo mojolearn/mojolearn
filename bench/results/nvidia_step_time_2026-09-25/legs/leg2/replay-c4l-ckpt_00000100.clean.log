@@ -1,0 +1,9 @@
+[01:50:56] segment: route A segment nvstep-replay-c4l-ckpt_00000100 label nv-step-time-replay-c4l-ckpt_00000100, global steps 100..103, K=64, devices (0,), from ckpt_00000100.blm (sha256 80cd2126a89ba6d8)
+[01:50:57] the checkpoint's state AGREES with the expected chain's step 100 (2b37e85edfd701eb)
+[01:51:52] step 101 lr 397e2cc1 loss 6.9004 state abc8b816b5c3fb15 grad 25830bfc2016dc14 40.94 s (+7.18 s hashing)
+[01:51:52] step 101 agrees with the expected chain
+[01:52:31] step 102 lr 39805880 loss 6.8585 state a9421f91b947f82c grad 94c40a6e3d5ec5aa 32.44 s (+7.14 s hashing)
+[01:52:31] step 102 agrees with the expected chain
+[01:53:11] step 103 lr 39819a9f loss 6.8373 state fcdb48b8ab51f2ef grad 19a43804ef4065de 32.43 s (+7.35 s hashing)
+[01:53:11] step 103 agrees with the expected chain
+[01:53:11] PASS: /root/gemm_leg_out/nv-step-time/replay-c4l-ckpt_00000100
