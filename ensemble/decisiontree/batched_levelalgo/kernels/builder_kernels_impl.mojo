@@ -477,6 +477,19 @@ unchanged, taxireg 0.993, taxi 1.018 -- the mutex is not the cost here.
 build default; its forests move run to run and its build gate refuses).
 """
 
+comptime SMALL_NODE_FUSED_DEFAULT = (
+    BUILD_MODE == NUMERIC_FAST
+    and is_defined["MOJOLEARN_RF_SMALL_NODE_FUSED"]()
+)
+"""FAST experiment: a batch whose every node fits one block's walk runs
+`small_node_split_kernel` (histogram in shared memory + split search in
+one launch) instead of zero + histogram + find_best_splits."""
+
+comptime SMALL_NODE_ROWS = 256 if is_defined[
+    "MOJOLEARN_RF_SMALL_NODE_256"
+]() else (1024 if is_defined["MOJOLEARN_RF_SMALL_NODE_1024"]() else 4096)
+"""The largest node `small_node_split_kernel` takes."""
+
 comptime HIST_ZERO_AFTER_READ_DEFAULT = (
     BUILD_MODE == NUMERIC_FAST
     and not is_defined["MOJOLEARN_RF_FAST_HIST_ZERO_OFF"]()
@@ -3027,6 +3040,114 @@ def find_best_splits_kernel[
         while z < cells:
             histogram[unsafe_offset=z] = O.BinT()
             z += TPB
+
+
+def small_node_split_kernel[
+    O: ObjectiveLike,
+    TPB: Int,
+    SLOTS: Int,
+    sampled_labels: Bool = False,
+](
+    argsp: MutPointer[FindBestSplitsArgs[O], MutAnyOrigin],
+    work_items: MutPointer[NodeWorkItem, MutAnyOrigin],
+    col_start: Int32,
+    column_samples: MutPointer[Int32, MutAnyOrigin],
+    mutex: MutPointer[Int32, MutAnyOrigin],
+    splits: MutPointer[Split[O.DataT], MutAnyOrigin],
+    max_n_bins: Int32,
+):
+    """FAST (`SMALL_NODE_FUSED_DEFAULT`): `build_histograms_kernel` and
+    `find_best_splits_kernel` for ONE (node, column) in ONE block, for a
+    batch whose every node fits one block's walk. Grid `(n_nodes, columns)`.
+    The histogram lives in shared memory only: the binned inner loop fills
+    it exactly as the histogram kernel's shared arm does (integer / fixed-
+    point bins, so the cells are the same integers in any order), and the
+    tail below is `find_best_splits_kernel`'s body on that copy -- same
+    scans, same `Gain`, same reduction, same publish, same pure mark. No
+    global histogram is written, zeroed or read, and one launch replaces
+    two (three with the zero)."""
+    ref args = argsp[unsafe_offset=0]
+    var dataset = args.dataset.copy()
+    var objective = args.objective.copy()
+    var nid = Int32(Int(block_idx.x))
+    ref work_item = work_items[unsafe_offset = Int(nid)]
+    var range_start = Int(work_item.instances.begin)
+    var end = range_start + Int(work_item.instances.count)
+    var col_index = col_start + Int32(Int(block_idx.y))
+    var col = column_samples[
+        unsafe_offset = Int(nid) * Int(dataset.n_sampled_cols) + Int(col_index)
+    ]
+    var n_bins = args.quantiles.n_bins_array[unsafe_offset = Int(col)]
+    var n_classes = objective.NumClasses()
+    var cells = Int(n_bins) * Int(n_classes)
+    var histogram = stack_allocation[
+        SLOTS, O.BinT, address_space = AddressSpace.SHARED
+    ]()
+    var z = Int(thread_idx.x)
+    while z < cells:
+        histogram[unsafe_offset=z] = O.BinT()
+        z += TPB
+    barrier()
+    _histogram_inner_loop_binned[sampled_labels=sampled_labels](
+        objective,
+        dataset,
+        histogram,
+        col,
+        n_bins,
+        range_start,
+        end,
+        Int(thread_idx.x),
+        TPB,
+    )
+    barrier()
+
+    comptime N_SPLIT_SCRATCH = ceildiv(TPB, WARP_SIZE)
+    var split_scratch = stack_allocation[
+        N_SPLIT_SCRATCH,
+        Split[O.DataT],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var quantiles_for_split = args.quantiles.quantiles_array.unsafe_offset(
+        Int(max_n_bins) * Int(col)
+    )
+    var scan_histogram = histogram.unsafe_bitcast[ScanBin[O.BinT]]()
+    var global_sample_count = Int64(0)
+    var max_class_count = Int64(0)
+    for c in range(Int(n_classes)):
+        var total = pdf_to_cdf[
+            ScanBin[O.BinT], TPB, address_space = AddressSpace.SHARED
+        ](
+            scan_histogram.unsafe_offset(Int(n_bins) * c)
+            .unsafe_origin_cast[MutAnyOrigin](),
+            n_bins,
+        )
+        var class_count = Int64(Int(total.b.Count()))
+        if class_count > max_class_count:
+            max_class_count = class_count
+        global_sample_count += class_count
+    barrier()
+    var sp = objective.Gain(
+        histogram, quantiles_for_split, col, global_sample_count, n_bins
+    )
+    var node_pure = (
+        n_classes > Int32(1)
+        and global_sample_count > Int64(0)
+        and max_class_count == global_sample_count
+        and objective.PureNodeIsTerminal()
+    )
+    sp.pure = Int32(1) if node_pure else Int32(0)
+    barrier()
+    sp.eval_best_split(
+        split_scratch,
+        splits.unsafe_offset(Int(nid)),
+        mutex.unsafe_offset(Int(nid)),
+        quantiles_for_split,
+        n_bins,
+    )
+    if Int(block_idx.y) == 0 and Int(thread_idx.x) == 0:
+        Split[O.DataT].pure_flag_ptr(splits.unsafe_offset(Int(nid)))[
+            unsafe_offset=0
+        ] = sp.pure
 
 
 def launch_find_best_splits_kernel[

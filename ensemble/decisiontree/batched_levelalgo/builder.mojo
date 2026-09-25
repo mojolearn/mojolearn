@@ -41,6 +41,9 @@ from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import
     launch_find_best_splits_kernel,
     HIST_ZERO_AFTER_READ_DEFAULT,
     HIST_SPLIT_CANDIDATES_DEFAULT,
+    SMALL_NODE_FUSED_DEFAULT,
+    SMALL_NODE_ROWS,
+    small_node_split_kernel,
     merge_split_candidates_kernel,
     launch_gather_sampled_order_kernel,
     launch_leaf_kernel,
@@ -79,6 +82,9 @@ comptime TPB_DEFAULT = 128
 # `builder.cuh:203` -- "number of blocks used to parallelize column-wise
 # computations". A plain member initialised to 10 and never reassigned.
 comptime N_BLKS_FOR_COLS = 10
+
+comptime SMALL_NODE_SLOTS = 2048
+"""Shared bins `small_node_split_kernel` holds per block."""
 
 # `builder.cuh:205` -- "Memory alignment value"
 comptime ALIGN_VALUE = 512
@@ -2101,13 +2107,46 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
 
         # `:497-500` -- ten columns per launch.
         instr.times.stop_host("host_launch_setup", t_h)
+        var small_batch = False
+        comptime if SMALL_NODE_FUSED_DEFAULT:
+            if dataset.has_bins and not instr.trace.enabled and Int(
+                self.params.max_n_bins
+            ) * Int(
+                self.num_outputs
+            ) <= SMALL_NODE_SLOTS:
+                small_batch = True
+                for i in range(n):
+                    if Int(work_items[i].instances.count) > SMALL_NODE_ROWS:
+                        small_batch = False
+                        break
         var c = 0
         while c < n_sampled_cols:
-            self._compute_split(
-                ctx, dataset, c, n_blocks_dimx, n,
-                n_sampled_cols, smem_config, instr, tag_prefix,
-                hist_argsp, find_argsp,
-            )
+            if small_batch:
+                var dimy = min(N_BLKS_FOR_COLS, n_sampled_cols - c)
+                log_launch_ctx(ctx, "small_node_split")
+                ctx.enqueue_function[
+                    small_node_split_kernel[
+                        Self.O, TPB_DEFAULT, SMALL_NODE_SLOTS,
+                        Self.sampled_labels,
+                    ]
+                ](
+                    find_argsp.unsafe_origin_cast[MutAnyOrigin](),
+                    self._work_items_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                    Int32(c),
+                    self.column_samples.unsafe_ptr()
+                    .unsafe_origin_cast[MutAnyOrigin](),
+                    self.mutex.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                    self._splits_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                    Int32(self.params.max_n_bins),
+                    grid_dim=(n, dimy),
+                    block_dim=TPB_DEFAULT,
+                )
+            else:
+                self._compute_split(
+                    ctx, dataset, c, n_blocks_dimx, n,
+                    n_sampled_cols, smem_config, instr, tag_prefix,
+                    hist_argsp, find_argsp,
+                )
             c += N_BLKS_FOR_COLS
         t_h = instr.times.start()
         self._enqueue_splits_download(ctx, n)
