@@ -23,6 +23,7 @@ from checks.numerics import (
 )
 from checks.rtf_seam import rtf_mul_add
 from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 from core.gram_multi_gpu import pinned_gemm_nt_gram_kernel, parallel_gram_outputs
 
 from gemm.checks.gemm_identical import (
@@ -305,6 +306,9 @@ def gemm_tn_via_transpose(
 from linalg.gemv import gemv_gpu
 
 
+comptime GEMV_FAST_PINNED_MAX_K = 64
+
+
 def gemv_n(
     ctx: DeviceContext,
     mut z: DeviceBuffer[DType.float32],
@@ -325,6 +329,24 @@ def gemv_n(
             block_dim=(PINNED_GEMM_TPB, 1, 1),
         )
         return
+    # FAST on Apple, k <= GEMV_FAST_PINNED_MAX_K: the one-thread-per-row
+    # kernel beats the vendor gemv on narrow matrices.
+    # `-D MOJOLEARN_GEMV_FAST_VENDOR` keeps the vendor gemv.
+    comptime if (
+        has_apple_gpu_accelerator()
+        and not is_defined["MOJOLEARN_GEMV_FAST_VENDOR"]()
+    ):
+        if k <= GEMV_FAST_PINNED_MAX_K:
+            ctx.enqueue_function[pinned_gemv_n_kernel](
+                z.unsafe_ptr(),
+                x.unsafe_ptr(),
+                y.unsafe_ptr(),
+                Int32(m),
+                Int32(k),
+                grid_dim=((m + PINNED_GEMM_TPB - 1) // PINNED_GEMM_TPB, 1, 1),
+                block_dim=(PINNED_GEMM_TPB, 1, 1),
+            )
+            return
     var tz = TileTensor(z, row_major(m, Int(1)))
     var tx = TileTensor(x, row_major(m, k))
     var ty = TileTensor(y, row_major(k, Int(1)))
