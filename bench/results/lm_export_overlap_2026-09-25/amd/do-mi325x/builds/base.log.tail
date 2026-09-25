@@ -1,0 +1,20 @@
+Included from ./cluster/estimator.mojo:128:
+./cluster/impl/detail/min_cluster_distance_compute.mojo:205:50: warning: assignment to 'centroid_batch' was never used; assign to '_' instead?
+    var centroid_batch = get_centroids_batch_size(batch_centroids, n_clusters)
+                                                 ^
+Included from /root/mojolearn/bindings/_mojolearn.mojo:108:
+Included from ./neighbors/impl/detail/knn_brute_force.mojo:138:
+./neighbors/checks/select_smallk_identical_candidate.mojo:1618:28: warning: assignment to 'block_digest' was never used; assign to '_' instead?
+        var block_digest = digest
+                           ^
+Included from /root/mojolearn/bindings/_mojolearn.mojo:110:
+Included from ./neighbors/resident_index.mojo:41:
+./neighbors/estimator.mojo:1196:9: warning: ref 'i' was never used, remove it?
+    for i in range(n_outputs):
+        ^
+Included from /root/mojolearn/bindings/_mojolearn.mojo:110:
+Included from ./neighbors/resident_index.mojo:41:
+./neighbors/estimator.mojo:1386:9: warning: ref 'i' was never used, remove it?
+    for i in range(n_outputs):
+        ^
+built python/mojolearn/identical/_mojolearn.so (gate SKIPPED by MOJOLEARN_SKIP_BUILD_GATE)

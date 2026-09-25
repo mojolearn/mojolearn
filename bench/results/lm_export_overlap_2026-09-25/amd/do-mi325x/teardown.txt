@@ -1,0 +1,7 @@
+== teardown 2026-09-25T18:43:38Z exit=0 droplet=603695135 ==
+delete 603695135 attempt 1 -> HTTP 204
+verify 603695135 attempt 1 -> HTTP 200
+verify 603695135 attempt 2 -> HTTP 200
+verify 603695135 attempt 3 -> HTTP 404
+destroy_confirmed=1
+exit=0

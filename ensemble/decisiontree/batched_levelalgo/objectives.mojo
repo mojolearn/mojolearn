@@ -451,6 +451,25 @@ trait ObjectiveLike(Copyable & Deinitable):
         """`objectives.cuh:163-177` / `:381-397`."""
         ...
 
+    def GainStrided[
+        ho: MutOrigin,
+        aspace: AddressSpace,
+        qo: MutOrigin,
+        qs: AddressSpace, //,
+    ](
+        self,
+        shist: MutPointer[Self.BinT, ho, address_space=aspace],
+        squantiles: MutPointer[Scalar[Self.DataT], qo, address_space=qs],
+        col: Int32,
+        len: Int64,
+        n_bins: Int32,
+        first: Int32,
+        step: Int32,
+    ) -> Split[Self.DataT]:
+        """`Gain` over bins `first, first + step, ...` (`Gain` is this with
+        the thread's index and the block width)."""
+        ...
+
     @staticmethod
     def SetLeafVector[
         ho: MutOrigin,
@@ -787,8 +806,32 @@ struct ClassificationObjectiveFunction[
     ) -> Split[Self.dtype]:
         """`objectives.cuh:163-177`. One `Split` per thread, strided over
         the bins; the block reduction is `split.cuh`'s job."""
+        return self.GainStrided(
+            shist,
+            squantiles,
+            col,
+            len,
+            n_bins,
+            Int32(Int(thread_idx.x)),
+            Int32(Int(block_dim.x)),
+        )
+
+    @always_inline
+    def GainStrided[
+        ho: MutOrigin, aspace: AddressSpace, qo: MutOrigin, qs: AddressSpace, //
+    ](
+        self,
+        shist: MutPointer[Self.BinT, ho, address_space=aspace],
+        squantiles: MutPointer[Scalar[Self.dtype], qo, address_space=qs],
+        col: Int32,
+        len: Int64,
+        n_bins: Int32,
+        first: Int32,
+        step: Int32,
+    ) -> Split[Self.dtype]:
+        """`Gain` over bins `first, first + step, ...`."""
         var sp = Split[Self.dtype]()
-        var i = Int32(Int(thread_idx.x))
+        var i = first
         while i < n_bins:
             # `:168-169`
             var nLeft = count_left(shist, i, n_bins, self.nclasses)
@@ -808,7 +851,7 @@ struct ClassificationObjectiveFunction[
                         nLeft,
                         i,
                     )
-            i += Int32(Int(block_dim.x))
+            i += step
         return sp
 
     @staticmethod
@@ -1327,8 +1370,32 @@ struct RegressionObjectiveFunction[
         """`objectives.cuh:364-378`. Their `CountLeft` here is called with
         `IdxT{1}` (`:369`), not `nclasses`: a regression histogram has one
         plane."""
+        return self.GainStrided(
+            shist,
+            squantiles,
+            col,
+            len,
+            n_bins,
+            Int32(Int(thread_idx.x)),
+            Int32(Int(block_dim.x)),
+        )
+
+    @always_inline
+    def GainStrided[
+        ho: MutOrigin, aspace: AddressSpace, qo: MutOrigin, qs: AddressSpace, //
+    ](
+        self,
+        shist: MutPointer[Self.BinT, ho, address_space=aspace],
+        squantiles: MutPointer[Scalar[Self.dtype], qo, address_space=qs],
+        col: Int32,
+        len: Int64,
+        n_bins: Int32,
+        first: Int32,
+        step: Int32,
+    ) -> Split[Self.dtype]:
+        """`Gain` over bins `first, first + step, ...`."""
         var sp = Split[Self.dtype]()
-        var i = Int32(Int(thread_idx.x))
+        var i = first
         while i < n_bins:
             # `:369-370`
             var nLeft = count_left(shist, i, n_bins, Int32(1))
@@ -1348,7 +1415,7 @@ struct RegressionObjectiveFunction[
                         nLeft,
                         i,
                     )
-            i += Int32(Int(block_dim.x))
+            i += step
         return sp
 
     @staticmethod

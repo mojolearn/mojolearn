@@ -12,7 +12,8 @@ from checks.kernel_matrix import TARGET_COLUMN, column_shared_limit
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
-from core.launch_log import log_launch, log_launch_ctx
+from core.launch_log import log_launch
+from core.launch_clock import log_launch_ctx
 from core.device_zero import enqueue_zero_bytes
 from ensemble.instruments import FitInstruments
 from ensemble.decisiontree.batched_levelalgo.bins import Bin, BinScales
@@ -1962,6 +1963,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             self.split_cand.unsafe_ptr()
             .unsafe_origin_cast[MutUntrackedOrigin]()
             .unsafe_bitcast[Split[Self.O.DataT]](),
+            n_classes,
         )
         comptime if HIST_SPLIT_CANDIDATES_DEFAULT:
             log_launch_ctx(ctx, "merge_split_candidates")

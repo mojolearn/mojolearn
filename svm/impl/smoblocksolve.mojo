@@ -87,6 +87,8 @@ from std.sys.info import has_apple_gpu_accelerator
 from svm.impl.fast_smo_reduce import fast_argext, fast_argmin_argmax
 from checks.kernel_matrix import (
     TARGET_COLUMN,
+)
+from checks.kernel_matrix_svm import (
     SVM_SCHED_FUSED_TREE,
     SVM_SCHED_RARY_TREE,
     SVM_SCHED_TREE,

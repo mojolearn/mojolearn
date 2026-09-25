@@ -1,0 +1,360 @@
+diff --git a/bindings/_mojolearn_byte_lm.mojo b/bindings/_mojolearn_byte_lm.mojo
+index 373545b6d..779d925db 100644
+--- a/bindings/_mojolearn_byte_lm.mojo
++++ b/bindings/_mojolearn_byte_lm.mojo
+@@ -42,7 +42,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+ from checks.vendor import COMPILED_VENDOR
+ from gemm.checks.gemm_identical import TUNED_STAGE_FTZ, GEMM_REUSE_GROUP_WS
+ from training.checks.optimizer_oracle import OptimizerConfig
+-from training.checks.train_loop import download_f32
++from training.checks.train_loop import download_f32, download_f32_into
+ from training.byte_lm_config import ByteConfig
+ from training.byte_lm import (
+     BYTE_PROFILE, ByteTrainer, byte_train_step, byte_train_step_resident,
+@@ -1370,8 +1370,7 @@ def byte_lm_parallel_shard_gradient_binding(session: PythonObject, addresses: Py
+     var cells: List[Int] = [n_ids, n]
+     _validate_slot_table(addr, cells, 1)
+     var loss = owner[].shard_gradient(_read_ids(addr[0], n_ids))
+-    var g = download_f32(owner[].contexts[0], owner[].trainers[0].buffers.grad, n)
+-    copy_f32(g.unsafe_ptr(), f32_ptr(addr[1]), n)
++    download_f32_into(owner[].contexts[0], owner[].trainers[0].buffers.grad, n, f32_ptr(addr[1]))  # DEVIATION 3120
+     return PythonObject(loss)
+ 
+ 
+@@ -1413,29 +1412,38 @@ def byte_lm_parallel_export_binding(session: PythonObject, addresses: PythonObje
+     if owner[].pool_optimizer:
+         for i in range(len(owner[].trainers)):
+             owner[].trainers[i].validate_device_state(owner[].contexts[i], tr.completed_steps)
++    # DEVIATION 3120: every array goes from the device straight into the
++    # caller's memory (`download_f32_into`, one transfer each): no pinned
++    # host buffer, no element loop into a List, no second host copy. The
++    # pooled m/v land at each owner's `optimizer_first`, which is where the
++    # old List concatenation put them (owners are contiguous, in order,
++    # and cover [0, n); checked below before any copy). On a raise the
++    # caller's arrays hold an unspecified partial export.
+     if gradients:
+         if tr.grad_step != tr.completed_steps:
+             raise Error("byte LM parallel: no committed gradient")
+-        var g = download_f32(ctx, tr.buffers.grad, n)
+-        copy_f32(g.unsafe_ptr(), f32_ptr(addr[0]), n)
++        download_f32_into(ctx, tr.buffers.grad, n, f32_ptr(addr[0]))
+     else:
+-        var p = download_f32(ctx, tr.buffers.param, n)
+-        var m = List[Float32]()
+-        var v = List[Float32]()
+         if owner[].pool_optimizer:
++            var at = 0
+             for i in range(len(owner[].trainers)):
++                if owner[].trainers[i].buffers.optimizer_first != at:
++                    raise Error("byte LM parallel: pooled optimizer ranges are not contiguous")
++                at += owner[].trainers[i].buffers.optimizer_count
++            if at != n:
++                raise Error("byte LM parallel: pooled optimizer ranges do not cover the model")
++        download_f32_into(ctx, tr.buffers.param, n, f32_ptr(addr[0]))
++        if owner[].pool_optimizer:
++            for i in range(len(owner[].trainers)):
++                var first = owner[].trainers[i].buffers.optimizer_first
+                 var owned = owner[].trainers[i].buffers.optimizer_count
+-                var local_m = download_f32(owner[].contexts[i], owner[].trainers[i].buffers.m_state, owned)
+-                var local_v = download_f32(owner[].contexts[i], owner[].trainers[i].buffers.v_state, owned)
+-                for j in range(owned):
+-                    m.append(local_m[j])
+-                    v.append(local_v[j])
++                download_f32_into(owner[].contexts[i], owner[].trainers[i].buffers.m_state, owned,
++                                  f32_ptr(addr[1] + 4 * first))
++                download_f32_into(owner[].contexts[i], owner[].trainers[i].buffers.v_state, owned,
++                                  f32_ptr(addr[2] + 4 * first))
+         else:
+-            m = download_f32(ctx, tr.buffers.m_state, n)
+-            v = download_f32(ctx, tr.buffers.v_state, n)
+-        copy_f32(p.unsafe_ptr(), f32_ptr(addr[0]), n)
+-        copy_f32(m.unsafe_ptr(), f32_ptr(addr[1]), n)
+-        copy_f32(v.unsafe_ptr(), f32_ptr(addr[2]), n)
++            download_f32_into(ctx, tr.buffers.m_state, n, f32_ptr(addr[1]))
++            download_f32_into(ctx, tr.buffers.v_state, n, f32_ptr(addr[2]))
+         _write_flags(addr[3], tr.buffers.buf_initialized)
+     return PythonObject(tr.completed_steps)
+ 
+@@ -1537,8 +1545,7 @@ def byte_lm_parallel_fold_export_binding(session: PythonObject, addresses: Pytho
+     var addr = _read_addresses(addresses, 1)
+     var cells: List[Int] = [n]
+     _validate_slot_table(addr, cells, 1)
+-    var total = owner[].fold_export()
+-    copy_f32(total.unsafe_ptr(), f32_ptr(addr[0]), n)
++    owner[].fold_export_into(f32_ptr(addr[0]))  # DEVIATION 3120
+     return PythonObject(n)
+ 
+ 
+diff --git a/python/mojolearn/parallel_training.py b/python/mojolearn/parallel_training.py
+index 85a632c50..23996405e 100644
+--- a/python/mojolearn/parallel_training.py
++++ b/python/mojolearn/parallel_training.py
+@@ -10,7 +10,36 @@ import threading
+ 
+ from ._byte_lm_impl import SmallByteLanguageModelTrainer, _array, _float32, _validate_state
+ from ._byte_lm_config import state_shape
+-from ._buffer import addr, addr_ro, empty, flat_bytes
++from ._buffer import Buf, addr, addr_ro, empty, flat_bytes, typestr_of
++
++STATE_ARRAYS = ('parameters', 'm', 'v', 'flags')
++
++
++def _export_target(obj, count, typestr, name):
++    """The address of a caller-provided export buffer (the `into=` forms).
++
++    DEVIATION 3120: a per-step export at 162M parameters allocated four
++    fresh zero-filled 648.6 MB arrays every call (about 1.4 s a step on an
++    H100 host). A caller that exports every step passes the same buffers
++    back instead. Each must be a writable, C-contiguous, one-dimensional
++    buffer of exactly `count` elements of `typestr`; anything else is
++    refused BEFORE the binding is called, so nothing is written to it. The
++    caller keeps `obj` alive for the call, as for `addr`. If the export
++    then raises, the buffer holds an unspecified partial export."""
++    with Buf(obj, writable=True, name=name) as b:
++        if b.readonly:
++            raise ValueError('mojolearn: %s is read-only, refusing to write to it' % name)
++        try:
++            got = typestr_of(b)
++        except TypeError:
++            got = b.format
++        if got != typestr:
++            raise TypeError('mojolearn: %s must be %s, got %s' % (name, typestr, got))
++        if b.ndim != 1 or not b.c_contiguous:
++            raise ValueError('mojolearn: %s must be a contiguous one-dimensional buffer' % name)
++        if b.shape[0] != count or b.nbytes != count * b.itemsize:
++            raise ValueError('mojolearn: %s must hold exactly %d elements, got %d' % (name, count, b.shape[0]))
++        return b.addr
+ 
+ 
+ class ParallelByteLanguageModelTrainer:
+@@ -135,7 +164,7 @@ class ParallelByteLanguageModelTrainer:
+                 raise RuntimeError('parallel export returned wrong step')
+             return _validate_state(state)
+ 
+-    def export_raw(self, *, rank=0):
++    def export_raw(self, *, rank=0, into=None):
+         """The four state arrays of one replica, freshly downloaded, as
+         `{'parameters', 'm', 'v', 'flags'}` with NO admission pass. For
+         hashing and streaming a checkpoint at scale: `state_dict()` runs
+@@ -143,13 +172,25 @@ class ParallelByteLanguageModelTrainer:
+         costs about 16 s at 162M parameters, which a per-step hash chain
+         cannot pay. What comes back is bytes for a digest or a file, not a
+         state that anything may train from; a restore still enters through
+-        `_validate_state`."""
++        `_validate_state`.
++
++        `into`, when given, is a dict with exactly those four keys holding
++        caller-owned buffers (float32[n_total] three times, int32[n_tensors]
++        for flags) that are written in place and returned as the dict;
++        nothing is allocated. The bytes are the same as the no-argument
++        form's (`_export_target` says what is refused)."""
+         with self._lock:
++            if into is None:
++                out = {key: empty((self._shape.n_total,), '<f4') for key in ('parameters', 'm', 'v')}
++                out['flags'] = empty((self._shape.n_tensors,), '<i4')
++            else:
++                if not isinstance(into, dict) or set(into) != set(STATE_ARRAYS):
++                    raise ValueError('mojolearn: into must be a dict with keys %s' % (STATE_ARRAYS,))
++                out = into
++            addresses = [_export_target(out[k], self._shape.n_tensors if k == 'flags' else self._shape.n_total,
++                                        '<i4' if k == 'flags' else '<f4', k) for k in STATE_ARRAYS]
+             self._open()
+-            out = {key: empty((self._shape.n_total,), '<f4') for key in ('parameters', 'm', 'v')}
+-            out['flags'] = empty((self._shape.n_tensors,), '<i4')
+-            step = self._binding.byte_lm_parallel_export(self._session,
+-                [addr(out[k], name=k) for k in ('parameters', 'm', 'v', 'flags')], rank, False)
++            step = self._binding.byte_lm_parallel_export(self._session, addresses, rank, False)
+             if step != self.step_:
+                 raise RuntimeError('parallel export returned wrong step')
+             return out
+@@ -178,12 +219,15 @@ class ParallelByteLanguageModelTrainer:
+             self._state['config'] = dict(self._state['config'], lr=value)
+             return value
+ 
+-    def export_gradients(self, *, rank=0):
++    def export_gradients(self, *, rank=0, into=None):
++        """The summed gradient of the last committed step, float32[n_total].
++        `into`, when given, is a caller-owned float32[n_total] buffer written
++        in place and returned; nothing is allocated (same bytes)."""
+         with self._lock:
++            out = empty((self._shape.n_total,), '<f4') if into is None else into
++            target = _export_target(out, self._shape.n_total, '<f4', 'gradients')
+             self._open()
+-            out = empty((self._shape.n_total,), '<f4')
+-            step = self._binding.byte_lm_parallel_export(self._session,
+-                [addr(out, name='gradients')], rank, True)
++            step = self._binding.byte_lm_parallel_export(self._session, [target], rank, True)
+             if step != self.step_:
+                 raise RuntimeError('parallel gradient export returned wrong step')
+             return out
+@@ -273,13 +317,19 @@ class ParallelByteLanguageModelTrainer:
+             self._require_fold()
+             self._binding.byte_lm_parallel_fold_add(self._session, [addr_ro(gradient, name='shard gradient')])
+ 
+-    def fold_export(self):
+-        """The device fold's total, as float32 bytes."""
++    def fold_export(self, *, into=None):
++        """The device fold's total, as float32 bytes. With `into` (a
++        caller-owned float32[n_total] buffer) the total is written there
++        and `into` is returned instead, with no allocation and no copy to
++        `bytes`; its bytes are the ones the no-argument form returns."""
+         with self._lock:
++            out = empty((self._shape.n_total,), '<f4') if into is None else into
++            target = _export_target(out, self._shape.n_total, '<f4', 'fold total')
+             self._open()
+             self._require_fold()
+-            out = empty((self._shape.n_total,), '<f4')
+-            self._binding.byte_lm_parallel_fold_export(self._session, [addr(out, name='fold total')])
++            self._binding.byte_lm_parallel_fold_export(self._session, [target])
++            if into is not None:
++                return into
+             return flat_bytes(out, name='fold total').tobytes()
+ 
+     def optimizer_ownership(self):
+diff --git a/tools/lm_segment.py b/tools/lm_segment.py
+index e2815da74..b23d45fdb 100644
+--- a/tools/lm_segment.py
++++ b/tools/lm_segment.py
+@@ -521,6 +521,43 @@ def _hash_gradient(view, scheme=DEFAULT_SCHEME):
+     return _sha_sliced(view, pool=_pool())
+ 
+ 
++class ExportBuffers:
++    """The per-step read-back into host buffers allocated ONCE (DEVIATION
++    3120). A package whose `export_raw`/`export_gradients` take `into=`
++    writes the state and the summed gradient into the same five arrays
++    every step; an older package (no `into=`) gets the fresh-array calls it
++    always made. The digests read the same bytes either way. A step's
++    arrays are overwritten by the next step's read-back, so nothing may
++    hold them past the step's line (`_window_witness` and the digests use
++    them within the step)."""
++
++    def __init__(self, trainer):
++        import inspect
++        try:
++            self.reuse = ("into" in inspect.signature(trainer.export_raw).parameters
++                          and "into" in inspect.signature(trainer.export_gradients).parameters)
++        except (TypeError, ValueError):
++            self.reuse = False
++        self.raw = None
++        self.gradient = None
++
++    def state(self, trainer):
++        if not self.reuse:
++            return trainer.export_raw()
++        if self.raw is None:
++            self.raw = trainer.export_raw()
++            return self.raw
++        return trainer.export_raw(into=self.raw)
++
++    def gradients(self, trainer):
++        if not self.reuse:
++            return trainer.export_gradients()
++        if self.gradient is None:
++            self.gradient = trainer.export_gradients()
++            return self.gradient
++        return trainer.export_gradients(into=self.gradient)
++
++
+ def _chain_index(path):
+     """Lines of an expected chain by global step."""
+     out = {}
+@@ -1053,6 +1090,7 @@ def cmd_run(args):
+         with trainer_cm as trainer:
+             del state
+             progress_due = False
++            exports = ExportBuffers(trainer)
+             for s in range(first, last):
+                 completed = s + 1
+                 lr_hex = table[s]  # the rate used to reach step s+1
+@@ -1074,9 +1112,9 @@ def cmd_run(args):
+                     losses = trainer.train_step(shards)["losses"]
+                 step_seconds = time.perf_counter() - t0
+                 t1 = time.perf_counter()
+-                raw = trainer.export_raw()
++                raw = exports.state(trainer)
+                 state_digest = _hash_arrays(raw, scheme)
+-                grad_digest = _hash_gradient(total if split is not None else trainer.export_gradients(), scheme)
++                grad_digest = _hash_gradient(total if split is not None else exports.gradients(trainer), scheme)
+                 hash_seconds = time.perf_counter() - t1
+                 row = dict(schema=CHAIN_SCHEMA, step=completed, route=args.route, segment=args.segment, label=args.label,
+                            lr_f32_hex=lr_hex, losses_f32_hex=["%08x" % _f32_bits(x) for x in losses],
+diff --git a/training/byte_lm_parallel.mojo b/training/byte_lm_parallel.mojo
+index 41470b2dd..af3e3d385 100644
+--- a/training/byte_lm_parallel.mojo
++++ b/training/byte_lm_parallel.mojo
+@@ -32,7 +32,7 @@ from training.byte_lm_optimizer_pool import pool_snapshot, pool_update, pool_res
+ from training.checks.optimizer import OPT_RECORD_INTERMEDIATES
+ from training.byte_lm_config import ByteConfig
+ from training.checks.optimizer_oracle import OptimizerConfig
+-from training.checks.train_loop import _copy_into, _upload, download_f32
++from training.checks.train_loop import _copy_into, _upload, download_f32, download_f32_into
+ from core.multi_gpu import transfer_bytes
+ 
+ 
+@@ -327,6 +327,15 @@ struct ByteParallelTrainer(Movable, Writable):
+         var n = self.trainers[0].config.n_total()
+         return download_f32(self.contexts[0], self.total.value(), n)
+ 
++    def fold_export_into(mut self, dst: MutPointer[Float32, MutUntrackedOrigin]) raises:
++        """`fold_export` written straight into caller memory of `n_total`
++        floats (DEVIATION 3120): one device-to-host copy, no List."""
++        self._require_single_replicated()
++        if not self.fold_started:
++            raise Error("byte LM parallel: nothing has been folded")
++        var n = self.trainers[0].config.n_total()
++        download_f32_into(self.contexts[0], self.total.value(), n, dst)
++
+     def step(mut self, shards: List[List[Int32]]) raises -> List[Float32]:
+         self.require_open()
+         if len(shards) != self.logical_shards:
+diff --git a/training/checks/train_loop.mojo b/training/checks/train_loop.mojo
+index 83bf9489d..3fd198fc9 100644
+--- a/training/checks/train_loop.mojo
++++ b/training/checks/train_loop.mojo
+@@ -809,6 +809,45 @@ def download_f32(
+     return out^
+ 
+ 
++def download_f32_into(
++    ctx: DeviceContext,
++    mut buf: DeviceBuffer[DType.float32],
++    n: Int,
++    dst: MutPointer[Float32, MutUntrackedOrigin],
++) raises:
++    """`n` elements of a device buffer written straight into `dst`, host
++    memory the CALLER owns and keeps alive for the whole call; waits inside.
++
++    DEVIATION 3120: the byte-LM exports (state, gradient, device fold) used
++    `download_f32` and then copied the returned List into the caller's
++    array: a pinned host buffer allocated per call, a device-to-host copy
++    into it, an element loop appending into a List, then a third pass into
++    the caller. At 162M parameters that was about 4 s a step for 2.59 GB.
++    Here the copy engine writes the caller's pages directly, one transfer,
++    no host buffer and no loop: the same bytes, as `cluster/estimator.mojo`
++    (DEVIATION 2672) already does on every vendor. `n` IS PASSED, as in
++    `download_f32`; a prefix of a larger buffer goes through a sub-buffer.
++    On a raise the caller's memory holds an unspecified prefix of the copy;
++    a caller that must not see a partial export stages it elsewhere.
++    """
++    if n < 1:
++        return
++    if n > len(buf):
++        raise Error("download_f32_into: " + String(n) + " elements from a buffer of " + String(len(buf)))
++    if n == len(buf):
++        step_count_d2h()
++        ctx.enqueue_copy(dst_ptr=dst, src_buf=buf)
++        step_count_sync()
++        ctx.synchronize()
++    else:
++        var view = buf.create_sub_buffer[DType.float32](0, n)
++        step_count_d2h()
++        ctx.enqueue_copy(dst_ptr=dst, src_buf=view)
++        step_count_sync()
++        ctx.synchronize()
++        _ = view^
++
++
+ def digest_of_lists(
+     param: List[Float32],
+     m_state: List[Float32],

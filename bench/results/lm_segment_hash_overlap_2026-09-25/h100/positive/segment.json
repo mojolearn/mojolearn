@@ -1,0 +1,79 @@
+{
+ "schema": "mojolearn.lm-segment.run.v1",
+ "route": "A",
+ "segment": "controls-positive",
+ "label": "nvidia-controls-positive",
+ "from_checkpoint": {
+  "file": "ckpt_00000100.blm",
+  "sha256": "80cd2126a89ba6d8a444cc7c9ca61cdadb4c67090511adcb4424e06ccf45b114",
+  "step": 100
+ },
+ "first_step": 100,
+ "last_step": 103,
+ "devices": [
+  0
+ ],
+ "logical_shards": 64,
+ "recipe_sha256": "9f7f695b9a0bae175bf241632767ace67c542a4a116a98e36b9c306f3eebe051",
+ "tokens_sha256": "4cf7181ba71058e70d7329dbae32de53c5750b49ae95331cebde4676f922209d",
+ "box": {
+  "host": "34073d84ba1e",
+  "machine": "x86_64",
+  "system": "Linux",
+  "python": "3.11.10",
+  "nvidia-smi": "NVIDIA H100 80GB HBM3, GPU-b0fa9c9d-7d4d-288d-debd-7802a64f47c2, 580.178.04"
+ },
+ "commit": null,
+ "zero_moments": false,
+ "expect_chain": "/root/gemm_leg_out/lm-controls/in/expect_chain.jsonl",
+ "checkpoints": [],
+ "utc_start": "2026-09-25T15:16:12Z",
+ "hash_scheme": "sliced-sha256-8.v2",
+ "from_state": {
+  "sha256": "2b37e85edfd701eb0deb8b3cb960722ce2dbc92ff7fa93c9b4d40df4767d1942",
+  "expected": "2b37e85edfd701eb0deb8b3cb960722ce2dbc92ff7fa93c9b4d40df4767d1942",
+  "agrees": true
+ },
+ "digests": "overlapped",
+ "digest_timings": [
+  {
+   "step": 101,
+   "seconds": 48.6235,
+   "readback_seconds": 6.656,
+   "digests_ready_after_seconds": 39.272,
+   "hash_seconds": 6.661,
+   "waited_for_previous_seconds": 0.0,
+   "digest_start_seconds": 0.0048,
+   "digest_threads_started": true,
+   "wall_since_previous_step": null
+  },
+  {
+   "step": 102,
+   "seconds": 38.8978,
+   "readback_seconds": 6.375,
+   "digests_ready_after_seconds": 44.605,
+   "hash_seconds": 6.38,
+   "waited_for_previous_seconds": 0.0,
+   "digest_start_seconds": 0.0047,
+   "digest_threads_started": true,
+   "wall_since_previous_step": 45.28
+  },
+  {
+   "step": 103,
+   "seconds": 38.9675,
+   "readback_seconds": 5.631,
+   "digests_ready_after_seconds": 0.362,
+   "hash_seconds": 5.636,
+   "waited_for_previous_seconds": 0.0,
+   "digest_start_seconds": 0.0045,
+   "digest_threads_started": true,
+   "wall_since_previous_step": 44.606
+  }
+ ],
+ "verdict": "PASS",
+ "disagreements": [],
+ "steps_completed": 3,
+ "last_completed": 103,
+ "utc_end": "2026-09-25T15:18:43Z",
+ "uploads": []
+}

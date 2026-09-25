@@ -1,0 +1,20 @@
+15:14:46 controls from ckpt_00000100.blm (global step 100), arm nvidia, devices 0, 3 steps, wheel 0.8.18, started=2026-09-25T15:14:46Z
+15:14:46 gpu_archs=sm_90a
+15:14:55 pip install mojolearn==0.8.18 exit=0 secs=9
+15:14:57 wheel: c160fb6d5101f1d0ff6a4747ff11c5ed2bbaacfd522506de64ab262f6b9e3836  /root/lm-wheel/mojolearn-0.8.18-py
+15:14:57 binding: mojolearn 0.8.18 /root/lm-venv/lib/python3.11/site-packages/mojolearn/__init__.py vendor cuda set_lr True device_fold True
+15:15:38 tokens fetched exit=0 secs=41
+15:15:43 joined tokens in 5 s: 12442225788 bytes
+15:15:50 checkpoint fetched exit=0 secs=7
+15:15:56 checkpoint sha256 80cd2126a89ba6d8a444cc7c9ca61cdadb4c67090511adcb4424e06ccf45b114
+15:18:44 positive exit=0 secs=168: [15:18:43] PASS: /root/gemm_leg_out/lm-controls/positive 
+15:21:27 none exit=0 secs=163: [15:21:26] PASS: /root/gemm_leg_out/lm-controls/none 
+15:21:27 host: 160 cpus, Model name:                              Intel(R) Xeon(R) Platinum 8460Y+, sha_ni=160
+15:21:27 runners: 5f97828ce3d554bceb94ef3a8ac48959c71aac6ef3297cbf22d33913f1d59c46  tools/lm_segment.py 7f649b2ddadff1759920177e12de04fb14880847126005d61da23658782e1d8f  tools/lm_segment_main.py 
+15:24:11 old-positive exit=0 secs=164: [15:24:11] PASS: /root/gemm_leg_out/lm-controls/old-positive 
+15:24:11 compare new vs old: steps=3 compared=15 disagreements=0
+15:26:28 ckpt-old exit=0 secs=137: [15:26:27] PASS: /root/ckpt-old 
+15:28:51 ckpt-new exit=0 secs=128: [15:28:50] PASS: /root/ckpt-new 
+15:29:03 checkpoints: old and new files EQUAL: c6e512797785c600816e998b4a133c6c85eddf18e7e98b0ae06a6b03950cf9d6  ckpt_00000101.blm b043a0015be6e0d974a1190c350e8bda6380d023d3293b23164fe1d05e8e9122  ckpt_00000102.blm 
+15:31:09 box_split exit=0 secs=126: 1509b5ba1edcbbcb288404fd9db707114ab27fb5736f76d2d9", "25830bfc2016dc14371c3f2bc72b099bcf6a859ce706ff3c96cf4254bc5759e6"], "new": ["abc8b816b5c3fb1509b5ba1edcbbcb288404fd9db707114ab27fb5736f76d2d9", "25830bfc2016dc14371c3f2bc72b099bcf6a859ce706ff3c96cf4254bc5759e6"], "old_equals_new": true, "expected": ["abc8b816b5c3fb1509b5ba1edcbbcb288404fd9db707114ab27fb5736f76d2d9", "25830bfc2016dc14371c3f2bc72b099bcf6a859ce706ff3c96cf4254bc5759e6"], "equals_expected": true, "overlap_start_s": 0.0049, "overlap_all_started": true, "overlap_step_s": 38.83, "overlap_after_step_s": 0.0, "overlap_equals": true} 
+15:31:09 finished=2026-09-25T15:31:09Z

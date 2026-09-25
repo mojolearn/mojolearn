@@ -1,0 +1,32 @@
+entry: {'route': 'A', 'segment': '5', 'first': 100, 'last': 109, 'from_ckpt': 'ckpt_00000100.blm', 'replay_ckpt': 'ckpt_00000098.blm'}
+[13:41:26 driver] A/5: no chain came home; reading the chain and manifest the box PUT to R2 as it ran
+[13:41:27 driver] A/5: PARTIAL: checkpoints ['ckpt_00000102.blm', 'ckpt_00000104.blm'] landed, chain to step 105 saved (/Users/andrewhendel/mojolearn-evidence/lm-export-overlap-nvidia/resume/out/legs/A-5/partial.chain.jsonl); the next start resumes from ckpt_00000104.blm with 5 steps
+recorded now: 104 | ledger partial resume_from: 104
+{
+ "resume_from": 104,
+ "checkpoints": {
+  "ckpt_00000102.blm": "b043a0015be6e0d974a1190c350e8bda6380d023d3293b23164fe1d05e8e9122",
+  "ckpt_00000104.blm": "517998d5a64e0132818a55fa4d875134757af71631e0bfac388a966e989fe5d6"
+ },
+ "chain": "/Users/andrewhendel/mojolearn-evidence/lm-export-overlap-nvidia/resume/out/legs/A-5/partial.chain.jsonl",
+ "chain_steps": [
+  101,
+  105
+ ],
+ "arrival": "PASS",
+ "attempts": [
+  {
+   "n": 1,
+   "dir": "/Users/andrewhendel/mojolearn-evidence/lm-export-overlap-nvidia/resume/out/legs/A-5/attempt-1",
+   "first_step": 100,
+   "last_chain_step": 105,
+   "checkpoints": {
+    "ckpt_00000102.blm": "b043a0015be6e0d974a1190c350e8bda6380d023d3293b23164fe1d05e8e9122",
+    "ckpt_00000104.blm": "517998d5a64e0132818a55fa4d875134757af71631e0bfac388a966e989fe5d6"
+   },
+   "refused": {},
+   "utc": "2026-09-25T17:41:27Z",
+   "from_r2": true
+  }
+ ]
+}

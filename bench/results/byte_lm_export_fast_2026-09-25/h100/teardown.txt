@@ -1,0 +1,15 @@
+[11:49:35 nvidia] pod ko6m6qc11l8ngl created
+[11:49:58 nvidia] ssh target: -p 19989 root@103.207.149.137
+--
+[12:08:25 nvidia]   the payload finished (its sentinel is on the box)
+    REMOTE_BODY_DONE
+--
+  lease at exit:
+    ko6m6qc11l8ngl: 41 minutes left of a 60-minute lease
+--
+    DELETE /v1/pods/ko6m6qc11l8ngl -> HTTP 204
+  VERIFIED: ko6m6qc11l8ngl is gone (HTTP 404).
+
+--
+  lease at exit:
+    NO LEASE for ko6m6qc11l8ngl -- it is unguarded.

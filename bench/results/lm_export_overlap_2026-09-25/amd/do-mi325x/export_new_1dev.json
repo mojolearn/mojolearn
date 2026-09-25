@@ -1,0 +1,83 @@
+{
+ "label": "new_0",
+ "host": "mojolearn-extra-amd",
+ "python": "3.14.7",
+ "cpus": 20,
+ "devices": [
+  0
+ ],
+ "scheme": "sliced-sha256-8.v2",
+ "from_step": 100,
+ "reps": 3,
+ "step_s": [
+  71.6324
+ ],
+ "package_has_into": true,
+ "state_fresh_s": [
+  0.514,
+  0.479,
+  0.4739
+ ],
+ "grad_fresh_s": [
+  0.1578,
+  0.1691,
+  0.1566
+ ],
+ "alloc_s": [
+  0.4107
+ ],
+ "state_direct_s": [
+  0.0636,
+  0.0461,
+  0.0461
+ ],
+ "grad_direct_s": [
+  0.0318,
+  0.019,
+  0.019
+ ],
+ "state_into_s": [
+  0.0866,
+  0.0463,
+  0.0462
+ ],
+ "grad_into_s": [
+  0.0341,
+  0.0189,
+  0.0189
+ ],
+ "sha256": {
+  "parameters": [
+   "189a49eee383450f1bb08ff0c2da7ce973f31f1f040de0ef3875a0d77c5e258b"
+  ],
+  "m": [
+   "ceaca18311d713f050f706d7362b99596f4052faad528494e37b7d5bf1733c92"
+  ],
+  "v": [
+   "ef5df7ac3c40c1847b8aa22538653e0199937c5feb570f9565e5685fa5192a34"
+  ],
+  "flags": [
+   "360d579dbd14759b41afdf7fb5e80c0101e15150ae401d59f92a1e32d129f7cb"
+  ],
+  "gradient": [
+   "5caaccdbf79eec9b2459088ef489d8cc047db9c3550ad9fd88526de759e04378"
+  ]
+ },
+ "forms_agree": true,
+ "step": 101,
+ "chain_state": "abc8b816b5c3fb1509b5ba1edcbbcb288404fd9db707114ab27fb5736f76d2d9",
+ "chain_gradient": "25830bfc2016dc14371c3f2bc72b099bcf6a859ce706ff3c96cf4254bc5759e6",
+ "expected": [
+  "abc8b816b5c3fb1509b5ba1edcbbcb288404fd9db707114ab27fb5736f76d2d9",
+  "25830bfc2016dc14371c3f2bc72b099bcf6a859ce706ff3c96cf4254bc5759e6"
+ ],
+ "equals_expected": true,
+ "step_median_s": 71.6324,
+ "state_fresh_median_s": 0.479,
+ "grad_fresh_median_s": 0.1578,
+ "alloc_median_s": 0.4107,
+ "state_direct_median_s": 0.0461,
+ "grad_direct_median_s": 0.019,
+ "state_into_median_s": 0.0463,
+ "grad_into_median_s": 0.0189
+}
