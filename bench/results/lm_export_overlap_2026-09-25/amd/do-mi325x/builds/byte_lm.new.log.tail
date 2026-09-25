@@ -1,0 +1,20 @@
+Included from ./training/byte_lm.mojo:77:
+./training/checks/optimizer.mojo:589:20: warning: assignment to 'v' was never used; assign to '_' instead?
+    var v = Float32(0.0)
+                   ^
+Included from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:48:
+Included from ./training/byte_lm.mojo:77:
+./training/checks/optimizer.mojo:609:21: warning: assignment to 'dn' was never used; assign to '_' instead?
+    var dn = Float32(0.0)
+                    ^
+Included from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:48:
+Included from ./training/byte_lm.mojo:77:
+./training/checks/optimizer.mojo:610:20: warning: assignment to 'q' was never used; assign to '_' instead?
+    var q = Float32(0.0)
+                   ^
+Included from /root/mojolearn/bindings/_mojolearn_byte_lm.mojo:48:
+Included from ./training/byte_lm.mojo:77:
+./training/checks/optimizer.mojo:657:24: warning: assignment to 'p_out' was never used; assign to '_' instead?
+    var p_out = Float32(0.0)
+                       ^
+built /root/xf_bin/out_new/_mojolearn_byte_lm.so; attention_memory_profile=estash; root must read byte_lm_numeric_mode/vendor/profile and retain guard exit evidence
