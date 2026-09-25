@@ -4665,7 +4665,8 @@ def fused_bwd_dq_tiled_pf_kernel[HD: Int, SWZ: Bool = False](
 
 # ===========================================================================
 # THE dq FOLD ON THE MATRIX CORES (lane/amd-step-time-2, 2026-09-25; AMD
-# only, `ATTN_DQ_MFMA`, `-D MOJOLEARN_ATTN_NO_MFMA=1` reverts).
+# only, `ATTN_DQ_MFMA`; TRIAL: on only under `-D MOJOLEARN_ATTN_DQ_MFMA=1`
+# until its bits are proven on the device).
 #
 # `fused_bwd_dq_tiled_pf_kernel`'s chain per output cell (t, c) is
 #     acc = ftz(fma_rn(dcell[t][j], k[j][c], acc))   for the keys j the row
@@ -4698,7 +4699,7 @@ def fused_bwd_dq_tiled_pf_kernel[HD: Int, SWZ: Bool = False](
 # stepped by full keys but never stored.
 # ===========================================================================
 comptime ATTN_DQ_MFMA = (
-    TARGET_COLUMN == COLUMN_AMD and not is_defined["MOJOLEARN_ATTN_NO_MFMA"]()
+    TARGET_COLUMN == COLUMN_AMD and is_defined["MOJOLEARN_ATTN_DQ_MFMA"]()
 )
 #: hwreg(HW_REG_MODE = 1, offset 4, width 2): the f32 FP_DENORM field.
 comptime _ATTN_MODE_F32_DENORM = 1 | (4 << 6) | (1 << 11)
