@@ -1,0 +1,64 @@
+23:51:25 mi325x leg started=2026-09-24T23:51:25Z
+23:52:10 base exit=0 secs=45
+23:52:31 tokens ready in 21 s: 12442225788 bytes
+23:52:43 checkpoints ready in 12 s
+23:52:43 fetch exit=0
+23:53:53 byte_lm branch exit=0 secs=103
+23:53:55 byte_lm timers exit=0 secs=105
+23:54:20 byte_lm baseline exit=0 secs=130
+23:54:20 binding now baseline
+23:59:12 replay-baseline-ckpt_00000100 exit=0 secs=292: [23:59:12] PASS: /root/gemm_leg_out/amd-step-time/replay-baseline-ckpt_00000100 
+23:59:12 binding now branch
+00:03:03 replay-branch-ckpt_00000100 exit=0 secs=231: [00:03:03] PASS: /root/gemm_leg_out/amd-step-time/replay-branch-ckpt_00000100 
+00:03:03 binding now branch
+00:05:42 replay-branch-ckpt_00001998 exit=0 secs=159: [00:05:42] PASS: /root/gemm_leg_out/amd-step-time/replay-branch-ckpt_00001998 
+00:05:42 binding now branch
+00:06:15 lean branch: 0.8956630390000555 ['5516ffe5f550', '77477af42588', '4e439a8a9751']
+00:06:15 binding now baseline
+00:06:56 lean baseline: 3.5495987440000363 ['5516ffe5f550', '77477af42588', '4e439a8a9751']
+00:06:56 binding now timers
+00:07:18 item timers: # shards timed 2, kept 1; top level (step.* + envelope.*) 1912.022 ms a shard; gemm.* 668.882 ms a shard
+00:07:18 binding now branch
+00:07:43 build linalg exit=0 secs=25
+00:07:48 build training exit=0 secs=30
+00:08:06 build estimators exit=0 secs=48
+00:08:10 build transformer exit=0 secs=52
+00:08:24 build embedding exit=0 secs=14
+00:08:39 build kernel_methods exit=0 secs=29
+00:08:41 build gp exit=0 secs=31
+00:08:41 build svm exit=0 secs=31
+00:08:47 build preprocessing exit=0 secs=6
+00:08:53 build resample exit=0 secs=12
+00:09:18 build mixture exit=0 secs=37
+00:09:39 build metrics exit=0 secs=58
+00:10:02 build trees exit=0 secs=23
+00:10:03 build rf exit=0 secs=24
+00:10:06 build solver exit=0 secs=27
+00:11:07 build gbdt exit=0 secs=88
+00:11:17 build arima exit=0 secs=10
+00:11:30 build ivf exit=0 secs=23
+00:11:42 build hdbscan exit=0 secs=35
+00:11:57 build mamba exit=0 secs=50
+00:12:08 build tsa exit=0 secs=11
+00:12:08 builds done
+00:12:26 gemm_device_check exit=0 secs=18: gemm device kernel + gates: all green [IDENTICAL]  (8 gates, sabotage: none)
+00:12:43 gemm_backward_check exit=0 secs=17: gemm backward routing + gates: all green [IDENTICAL]  (10 gates, bwd sabotage: none, fwd sabotage: none)
+00:12:56 gemm_workspace_check exit=0 secs=13: PASS: 9 GEMMs, 4608 cells bitwise equal to host oracle
+00:13:01 verify chunk* exit=4 secs=5: RESULT: INCOMPLETE (verified 203 of 256 cell parts (0 divergent, 0 owed, 20 refused, 33 n/a); 23 verified, 1 not applicable, 0 owed, 0 held, 4 REFUSED, of 28 lanes). 4.4s. exit 4
+00:13:01 MI325X leg scripted part done; holding (at most 15 min)
+00:13:33 verify (lane list pushed; the body's copy was not in the bundle): 9 chunks
+00:13:56 verify chunk00 exit=4 secs=23: RESULT: INCOMPLETE (verified 764 of 1241 cell parts (0 divergent, 0 owed, 135 refused, 342 n/a); 22 verified, 0 not applicable, 0 owed, 0 held, 3 REFUSED, of 25 lanes). 21.8s. exit 4
+00:14:52 verify chunk01 exit=4 secs=56: RESULT: INCOMPLETE (verified 908 of 1241 cell parts (0 divergent, 0 owed, 135 refused, 198 n/a); 22 verified, 0 not applicable, 0 owed, 0 held, 3 REFUSED, of 25 lanes). 56.4s. exit 4
+00:15:50 verify chunk02 exit=4 secs=58: RESULT: INCOMPLETE (verified 827 of 1241 cell parts (0 divergent, 0 owed, 45 refused, 369 n/a); 24 verified, 0 not applicable, 0 owed, 0 held, 1 REFUSED, of 25 lanes). 57.4s. exit 4
+00:17:01 verify chunk03 exit=0 secs=71: RESULT: VERIFIED (verified 980 of 1241 cell parts (0 divergent, 0 owed, 0 refused, 261 n/a); 25 verified, 0 not applicable, 0 owed, 0 held, of 25 lanes). 69.7s. exit 0
+00:17:19 verify chunk04 exit=4 secs=18: RESULT: INCOMPLETE (verified 863 of 1241 cell parts (0 divergent, 0 owed, 45 refused, 333 n/a); 24 verified, 0 not applicable, 0 owed, 0 held, 1 REFUSED, of 25 lanes). 17.9s. exit 4
+00:17:34 verify chunk05 exit=4 secs=15: RESULT: INCOMPLETE (verified 827 of 1241 cell parts (0 divergent, 0 owed, 45 refused, 369 n/a); 24 verified, 0 not applicable, 0 owed, 0 held, 1 REFUSED, of 25 lanes). 14.8s. exit 4
+00:17:48 verify chunk06 exit=4 secs=14: RESULT: INCOMPLETE (verified 701 of 1241 cell parts (0 divergent, 0 owed, 270 refused, 270 n/a); 19 verified, 0 not applicable, 0 owed, 0 held, 6 REFUSED, of 25 lanes). 13.0s. exit 4
+00:18:01 verify chunk07 exit=4 secs=13: RESULT: INCOMPLETE (verified 791 of 1241 cell parts (0 divergent, 0 owed, 225 refused, 225 n/a); 20 verified, 0 not applicable, 0 owed, 0 held, 5 REFUSED, of 25 lanes). 12.9s. exit 4
+00:18:04 verify chunk08 exit=0 secs=3: RESULT: VERIFIED (verified 152 of 161 cell parts (0 divergent, 0 owed, 0 refused, 9 n/a); 1 verified, 0 not applicable, 0 owed, 0 held, of 1 lanes). 2.8s. exit 0
+00:18:05 verify done
+00:18:19 ab mi325x built in 14 s
+00:18:23 ab mi325x exit=0 in 18 s
+00:18:23 ab mi325x: proj_fwd=0.746759 proj_dA=0.70783 proj_dB=0.690779 gateup_fwd=1.593059 gateup_dA=1.660518 gateup_dB=1.587758 down_fwd=1.520049 down_dA=1.523119 down_dB=1.544199 head_fwd=25.583889 head_dA=28.281906 head_dB=28.897967 
+00:18:23 remote extra done
+00:19:56 lean branch2 (diagnostic repeat, clocks sampled): "steady_median_seconds": 0.9077523509999992

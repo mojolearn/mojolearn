@@ -23,6 +23,83 @@ binding built from this branch's source on the box with
 | mfma (leg 6) | + the TUNED GEMM calls on the matrix cores | 39.5 | PASS, steps 101 to 103 and 1999 to 2000 |
 | mfma groups (leg 7, the branch head) | + the matrix-core group launch (leaf groups of at least 4) | **32.3** | PASS, steps 101 to 103 and 1999 to 2000 |
 
+### MI325X (DigitalOcean gpu-mi325x1-256gb, nyc2, 2026-09-24 23:48 to 2026-09-25 00:21 UTC)
+
+One leg, `tools/do_extra_leg.sh amd --size gpu-mi325x1-256gb --region nyc2
+--segment-lease 120 --dollar-cap 10` with body
+`tools/amd_step_time_leg_mi325x.sh` (gates on), every binding built on the
+box from origin/main d76fcc7b4 plus the body commit (gfx942, IDENTICAL). Evidence:
+`/Users/andrewhendel/CascadeProjects/mojolearn/bench/results/amd_step_time_2026-09-24/legs/2026-09-24_234736-do-mi325x/remote/amd-step-time/`.
+
+| binding | what it is | s per optimizer step (steady) | chain replay against the H100 chain |
+|---|---|---|---|
+| baseline | main before the lane: `-D MOJOLEARN_GEMM_NO_LAUNCH_BOUND=1 -D MOJOLEARN_GEMM_NO_LEAF_SPLIT=1 -D MOJOLEARN_GEMM_NO_MFMA=1 -D MOJOLEARN_FTZ_NO_CLASS=1`, attention trial build run on the pre-lane AMD word `stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32` | 135.6 (step 101: 139.2) | PASS, steps 101 to 102 from ckpt 100 |
+| branch head (origin/main) | every change of the lane | **70.1** (70.05, 70.18; 70.07 at step 2000) | PASS, steps 101 to 103 from ckpt 100 and 1999 to 2000 from ckpt 1998 |
+
+Host hashing 2.6 to 2.8 s a step, outside the seconds above. Replay digests
+(state / gradient, first 16 hex; the full words are in each
+`replay-*/chain.jsonl`), equal to the H100 chain lines and to the MI300X
+legs, are 101 abc8b816b5c3fb15 / 25830bfc2016dc14, 102 a9421f91b947f82c /
+94c40a6e3d5ec5aa, 103 fcdb48b8ab51f2ef / 19a43804ef4065de, 1999
+dcb05e4e668a81e1 / 6170c58b93c1ec4a, 2000 0e39ed2bfe9bcbae /
+7c100f6927db84d3. Checkpoint sha256 and recipe sha256 as on the MI300X legs
+(`ckpt.sha256`, `recipe.sha256`).
+
+The lean B4 step takes 0.896 s on the branch (a repeat, 0.908 s) and 3.550
+s on the baseline (above the 2.12 s a shard its replay implies; not
+explained); every step witness is equal on both builds and equal to the
+MI300X legs' (parameters 5516ffe5f550, 77477af42588, 4e439a8a9751). The 28
+T3-shape GEMM hashes (`ab/mi325x.hashes`) equal the MI300X leg 7 branch
+build's (`leg7-g4.hashes`) byte for byte. Per call in ms, proj 0.69 to 0.75, gate/up
+1.59 to 1.66, down 1.52 to 1.54, head forward 25.6, head dA 28.3, head dB
+28.9.
+
+Identity on the MI325X (every device binding rebuilt from the branch head).
+The runner's `gemm_device_check` gate and card green; `gemm_device_check`
+(8 gates) and `gemm_backward_check` (10 gates) all green;
+`gemm_workspace_check` PASS (9 GEMMs, 4,608 cells bitwise equal to the host
+oracle); `python -m mojolearn verify` over the 201 GEMM-reaching non-par
+lanes (`verify/chunk00..08.log`) reads **181 VERIFIED, 6,813 cell parts
+IDENTICAL, 0 DIVERGENT, 0 OWED, 20 REFUSED** (the same 20 bindings this leg
+did not build, byte-lm-host-infer, byte-lm-host-infer-threaded,
+byte-lm-host-train, gbdt-catboost-defaults, gbdt-multiclass-defaults,
+gbdt-stochastic-arms, gp-normalize-y, language-model-config,
+metrics-classification, ols-weighted, rf-clf, rf-clf-balanced-parallel,
+rf-clf-entropy-log2-noboot, rf-reg-poisson, rf-score-weighted, samba,
+samba-bf16w, samba-int8w, samba-untied-dropout-accum,
+saved-model-host-infer). The body's own verify pass read its lane list
+from `bench/results/`, which the bundle leaves out, so it ran with an empty
+list (`verify/chunk-emptylist.log`, 28 default lanes, 0 divergent); the 201
+lanes then ran from a pushed copy of the list on the same box.
+
+**The MI325X step is 70.1 s, not the MI300X's 32.3 s. The kernels are not
+the reason.** In the timed B4 itemization (`item-timers.timing.txt`) almost
+every phase is at or below the MI300X's (q projection 8.7 against 11.6 ms a
+shard, gate dB 18.8 against 30.4, attention backward 91 against 138), but
+about every 250 ms of shard wall time ONE call, whichever is running,
+takes about 100 ms more than its siblings. In the kept shard a v projection
+took 102.9 ms (its eleven siblings 0.70 to 0.87 ms), head dB 133.4 (28.8 in
+the other shard), an up dB 107.1 (siblings 1.55 to 1.71) and
+`validate_after_scan` 107.6 (2.6 on the MI300X); in the first timed shard
+head forward 131.8 (25.4), a down dA 103.7 and an o dA 105.1. That is about
+0.42 s of a 0.96 s timed shard. A stall per unit of wall time would also
+fit the MI325X baseline (135.6 s) sitting near the MI300X's (141.0 s)
+although its kernels are faster; the baseline was not itemized here, so
+that is not shown. During a lean run `rocm-smi` read sclk moving between
+137 MHz (level S) and 2,095 MHz with the GPU mostly idle between samples,
+performance level auto (`lean-branch2.smi.txt`; `gpu_after.txt` reads 417 W
+of 1,000 W). The cause of the stall is NOT measured. A power-state
+transition, a host or hypervisor event and a driver poll all fit what is
+recorded. A probe that times a trivial kernel plus
+synchronize loop on the same droplet, then the same under
+`rocm-smi --setperfdeterminism` or `--setperflevel high`, would separate
+them.
+
+Leg cost, droplet created 23:48:09Z, destroy confirmed (GET 404)
+00:20:46Z, 32.6 minutes at $3.80/h, about $2.07.
+
+### MI300X (Hot Aisle), notes on the first table
+
 Same VM, same leg (leg 2), `tools/lm_segment.py run --no-checkpoints
 --expect-chain`, the published T3 checkpoints (sha256 80cd2126... and
 b8d98090..., equal to `bench/results/lm_t3_2026-09-23/ledger.json`), the
@@ -287,7 +364,9 @@ percent and attention at 29 percent of the step. What is left on AMD:
   source and emits `.maxntid 256` on NVIDIA (the kernels' real launch size;
   the leaf split and every other change is AMD-only). NVIDIA bits and speed
   are not re-measured in this lane (no NVIDIA rental).
-- The MI325X confirmation of the step time (this lane measured on MI300X).
+- The MI325X step (measured 2026-09-24/25: 135.6 -> 70.1 s, bits identical,
+  0 DIVERGENT): the periodic ~100 ms stall on the DigitalOcean MI325X
+  (section MI325X above) is unexplained and costs about 0.4 s a shard.
 - The 20 refused lanes of leg 3 (their bindings), and the 59 par-* drivers
   (two devices), on AMD.
 - A release (0.8.18) carrying the new bindings.

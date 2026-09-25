@@ -93,12 +93,8 @@ for c in gemm_device_check gemm_backward_check gemm_workspace_check; do
         -I . gemm/checks/$c.mojo > "$OUT/$c.log" 2>&1
     say "$c exit=$? secs=$(( $(date +%s) - t0 )): $(grep -E 'all green|PASS|FAIL' "$OUT/$c.log" | tail -1 | cut -c1-200)"
 done
-# bench/results is not in the do_extra_leg bundle: the lane pushes the list to /root/amd_in
-LIST=/root/amd_in/lanes_gemm_nonpar.txt
-[ -s "$LIST" ] || { say "verify REFUSED: $LIST missing (push it with the chains)"; LIST=/dev/null; }
-split -l 25 -d "$LIST" "$BIN/lanechunk"
+split -l 25 -d bench/results/amd_step_time_2026-09-24/lanes_gemm_nonpar.txt "$BIN/lanechunk"
 for f in "$BIN"/lanechunk*; do
-    [ -s "$f" ] || continue
     k=$(basename "$f" | sed 's/lanechunk//')
     t0=$(date +%s)
     pixi run python -m mojolearn verify --lanes "$(tr '\n' ',' < "$f" | sed 's/,$//')" --json-out "$OUT/verify/chunk$k.json" > "$OUT/verify/chunk$k.log" 2>&1
