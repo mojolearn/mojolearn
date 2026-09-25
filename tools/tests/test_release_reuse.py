@@ -211,7 +211,9 @@ class DecisionTests(unittest.TestCase):
         self.assertEqual([(r["vendor"], r["arch"], r["tier"], r["name"]) for r in builds],
                          [("hip", "gfx942", "identical", "_mojolearn_gbdt")])
         self.assertEqual(builds[0]["reason"], "changed: closure")
-        self.assertEqual(len(rr.plan_rows(plan, rr.LINUX, "REUSE")), 118)
+        # every Linux binding but the one built: the count follows the manifest
+        # (the classical FAST tier added bindings on 2026-09-25), never a literal
+        self.assertEqual(len(rr.plan_rows(plan, rr.LINUX, "REUSE")), len(rr.bindings(rr.LINUX)) - 1)
 
     def test_host_only_change_takes_the_cheapest_leg(self):
         def mutate(b, ident):
@@ -323,7 +325,8 @@ class AssemblyTests(unittest.TestCase):
             self.assertEqual(doc["schema"], rr.REUSE_SCHEMA)
             self.assertEqual(doc["set"], key)
             self.assertEqual(doc["from_release"]["wheel_sha256"], self.prev["linux"]["sha256"])
-            self.assertEqual(len(doc["files"]), 29 + len(pack_wheel.HOST_NAMES) + 1)
+            per_set = sum(len(pack_wheel.tier_names(t, True)) for t in pack_wheel.TIERS)
+            self.assertEqual(len(doc["files"]), per_set + len(pack_wheel.HOST_NAMES) + 1)
             for rel, rec in doc["files"].items():
                 self.assertEqual(rr.sha256(sdir / rel), rec["sha256"])
             manifest = json.loads((sdir / "manifest.json").read_text())
@@ -448,7 +451,8 @@ class PayloadTests(unittest.TestCase):
             version = pack_wheel.read_version()
             inv = pack_wheel.release_inventory(sets, [], version, ROOT)
             self.assertEqual(inv["reuse"]["built"], 0)
-            self.assertEqual(inv["reuse"]["reused"], 3 * 29 + len(pack_wheel.HOST_NAMES))
+            per_set = sum(len(pack_wheel.tier_names(t, True)) for t in pack_wheel.TIERS)
+            self.assertEqual(inv["reuse"]["reused"], 3 * per_set + len(pack_wheel.HOST_NAMES))
             self.assertEqual({v["origin"] for v in inv["sets"].values()}, {"reused"})
             self.assertEqual(inv["sets"]["hip/gfx942"]["from_release"]["version"], "0.8.15")
             self.assertEqual(inv["binding_origin"]["mojolearn/host/_mojolearn_core_host.so"]["origin"], "reused")
