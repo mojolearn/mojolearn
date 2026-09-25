@@ -385,8 +385,7 @@ ha_rent() {
     ha_call GET "teams/$HA_TEAM/balance/"
     HA_BAL_BEFORE=$(ha_py balance); HA_BAL_BEFORE=${HA_BAL_BEFORE:--1}
     ha_rec "balance_before_cents=$HA_BAL_BEFORE"
-    [ "$HA_BAL_BEFORE" -ge "$HA_MIN_BALANCE_CENTS" ] 2>/dev/null \
-        || { ha_refuse "balance $(ha_dollars "$HA_BAL_BEFORE") is below the \$5.00 floor"; return 1; }
+    # no balance floor: the team balance tops up automatically (2026-09-25)
     ha_call GET "user/ssh_keys/"
     [ "$HA_CODE" = 200 ] && [ "$(ha_py sshkey "$HA_SSH_KEY_FP")" = yes ] \
         || { ha_refuse "the ssh key $HA_SSH_KEY_FP is not registered on the account (HTTP $HA_CODE)"; return 1; }

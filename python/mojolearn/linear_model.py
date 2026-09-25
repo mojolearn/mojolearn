@@ -1089,7 +1089,7 @@ class LogisticRegression(NumericModeMixin):
         n_targets = 1 if n_classes == 2 else n_classes
         loss = _QN_LOSS_LOGISTIC if n_targets == 1 else _QN_LOSS_SOFTMAX
         # Label encoding, the permitted O(rows) Python loop.
-        y_enc = Array.from_list([float(c) for c in codes], "<f4")
+        y_enc = Array.from_list(codes, "<f4")  # dense codes < 2**24: exact
         l1, l2 = self._get_qn_params()
         if n_targets > 1 and l1 != 0.0:
             raise NotImplementedError(

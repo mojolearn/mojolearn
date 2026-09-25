@@ -77,8 +77,14 @@ name.
 ============ IDENTICAL IS A FLOAT32 CONSTRUCTION, NOT A HOST libm CALL ====
 REFERENCE: `norm_log_probabilities` (`:112-141`) is host float64 through
 `np.log` and `math.lgamma`.
-HERE, FAST: the same, host float64 through `std.math.log`/`lgamma`, cast
-to float32 once (`log_kernel_norm_fast`).
+HERE, FAST: the same formulas, host float64 through `std.math.log`, cast
+to float32 once (`log_kernel_norm_fast`). `lgamma` is NOT `std.math.lgamma`:
+that is an external call into the platform libm, and a shipped binding may
+import no platform math (packaging/portable_math/wheel.py refused the 0.8.19
+macOS FAST `_mojolearn_estimators.so` for exactly this import, 2026-09-25).
+Every `lgamma` argument here is an integer or a half-integer, so FAST takes
+the same Gamma recurrence as IDENTICAL below, in float64
+(`_lgamma_half_fast`): no libm, float64 precision.
 HERE, IDENTICAL: a host libm's `log` and `lgamma` are not one arithmetic
 across hosts (IDENTITY_PATHS row 18's class: cross-vendor is cross-HOST),
 and `checks/numerics.mojo` has no portable float64 log or lgamma. So
@@ -95,7 +101,7 @@ every host. HAND-OFF: a `portable_log64`/`portable_lgamma64` in
 is not this lane's.
 """
 
-from std.math import lgamma, log, pi, sqrt
+from std.math import log, pi, sqrt
 from std.memory import bitcast
 
 from std.gpu import block_dim, block_idx, thread_idx
@@ -621,8 +627,9 @@ def _cosine_radial_integral_identical(n: Int) -> Float32:
 
 
 def log_kernel_norm_fast(kernel: Int, h: Float64, d: Int) raises -> Float32:
-    """The reference float64 host arithmetic, `std.math` for `np.log`/`math.lgamma`,
-    in the same order; cast to float32 once at the end."""
+    """The reference float64 host arithmetic, `std.math.log` for `np.log` and
+    the float64 Gamma recurrence for `math.lgamma` (`_lgamma_half_fast`), in
+    the same order; cast to float32 once at the end."""
     var dd = Float64(d)
     var factor: Float64
     if kernel == KDE_KERNEL_GAUSSIAN:
@@ -632,7 +639,7 @@ def log_kernel_norm_fast(kernel: Int, h: Float64, d: Int) raises -> Float32:
     elif kernel == KDE_KERNEL_EPANECHNIKOV:
         factor = _log_vn_fast(d) + log(2.0 / (dd + 2.0))
     elif kernel == KDE_KERNEL_EXPONENTIAL:
-        factor = _log_sn_fast(d - 1) + lgamma(dd)
+        factor = _log_sn_fast(d - 1) + _lgamma_half_fast(2 * d)
     elif kernel == KDE_KERNEL_LINEAR:
         factor = _log_vn_fast(d) - log(dd + 1.0)
     elif kernel == KDE_KERNEL_COSINE:
@@ -647,7 +654,32 @@ def log_kernel_norm_fast(kernel: Int, h: Float64, d: Int) raises -> Float32:
 
 def _log_vn_fast(n: Int) -> Float64:
     """`logVn(n) = 0.5 * n * log(pi) - lgamma(0.5 * n + 1)` (`:112-113`)."""
-    return 0.5 * Float64(n) * log(Float64(pi)) - lgamma(0.5 * Float64(n) + 1.0)
+    return 0.5 * Float64(n) * log(Float64(pi)) - _lgamma_half_fast(n + 2)
+
+
+def _lgamma_half_fast(two_x: Int) -> Float64:
+    """`lgamma(two_x / 2)` for `two_x >= 1` in float64, WITHOUT the platform
+    libm: `_lgamma_half_identical`'s Gamma recurrence (`Gamma(k) = (k-1)!`;
+    `Gamma(k + 1/2) = sqrt(pi) * prod_{i=1..k}(i-1/2)`) as an ascending
+    float64 sum of `std.math.log`, which Mojo compiles into the binding
+    (no libm import). The FAST normalization is cast to float32 once, and
+    this sum's float64 rounding (about `two_x / 2` roundings of a value near
+    `d log d`) is far below that cast for every `d` this estimator takes."""
+    var acc = Float64(0.0)
+    if two_x % 2 == 0:
+        var k = two_x // 2
+        var i = 2
+        while i <= k - 1:
+            acc += log(Float64(i))
+            i += 1
+        return acc
+    var k = (two_x - 1) // 2
+    acc = 0.5 * log(Float64(pi))
+    var i = 1
+    while i <= k:
+        acc += log(Float64(i) - 0.5)
+        i += 1
+    return acc
 
 
 def _log_sn_fast(n: Int) -> Float64:

@@ -664,8 +664,9 @@ def test_plain_label_lists_match_the_label_loop(name):
     y = _label_lists()[name]
     plain = name in ("ints", "floats", "zeros a", "zeros b", "nan", "bools mixed",
                      "int and float", "strs", "int64 edge", "many classes", "short",
-                     "one class", "big ints")
-    big = name == "huge ints"  # plain types, but `math.isnan` cannot hold 2**2000
+                     "one class", "big ints", "huge ints")
+    # plain types; the NaN test is `v != v`, which holds 2**2000 too
+    big = name == "huge ints"
     if isinstance(y, list):
         _pinned(_labels, "_sorted_plain_classes", lambda: _labels.sorted_classes(y),
                 answers=plain)
