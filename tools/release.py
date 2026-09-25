@@ -272,7 +272,7 @@ def gpu_legs(ctx):
         legs.append(Leg(f"cuda-{arch}", "cuda", arch,
                         ["sh", "tools/gemm_remote_leg.sh", "nvidia", "--payload", "mamba",
                          "--source-ref", ctx.commit, "--gpu", gpu, "--allow-concurrent", "--rent",
-                         "--minutes", "60"],
+                         "--segment-lease", "120", "--dollar-cap", "15"],
                         dict(runpod, MOJOLEARN_GPU_ARCHS=arch, MOJOLEARN_GEMM_LEG_OUT=str(out)),
                         out / "remote" / "release-build", legs_dir, out))
     route, why = amd_build_route(ctx)
@@ -795,13 +795,14 @@ class Release:
         if not any(l.pid() or l.exit_code() is not None for l in legs):
             launch_detached(self, legs)
         tried = {l.name: 0 for l in legs}
+        # A leg that failed on stock walks to its next GPU type AT ONCE, while
+        # the other legs keep running (0.8.19: the sm_89 leg sat an hour behind
+        # the AMD build before its walk).
         while True:
-            while any(l.running() for l in legs):
-                self.say("  waiting: " + ", ".join(f"{l.name}={'running' if l.running() else l.exit_code()}"
-                                                    for l in legs))
-                time.sleep(60)
             again = []
             for l in legs:
+                if l.running() or l.exit_code() is None:
+                    continue
                 if (l.vendor == "hip" and l.exit_code() != 0 and getattr(l, "provider", "") == "do"
                         and amd_build_want(self.args) == "auto" and do_refused_live(l.log)):
                     # a GPU droplet went live after the route was chosen: walk to Hot Aisle
@@ -818,9 +819,14 @@ class Release:
                     self.say(f"  {l.name}: {l.command[i + 1]} has no stock; trying {walk[tried[l.name]]}")
                     l.command[i + 1] = walk[tried[l.name]]
                     again.append(l)
-            if not again:
+            if again:
+                launch_detached(self, again)
+                continue
+            if not any(l.running() for l in legs):
                 break
-            launch_detached(self, again)
+            self.say("  waiting: " + ", ".join(f"{l.name}={'running' if l.running() else l.exit_code()}"
+                                                for l in legs))
+            time.sleep(60)
         bad = [l for l in legs if l.exit_code() != 0 or not l.proof_ok(self.commit)]
         if bad:
             raise StepFailed("build leg(s) failed: " + ", ".join(
@@ -1028,13 +1034,12 @@ class Release:
         """Wait for every column leg; walk the NVIDIA leg to its next GPU type
         when RunPod had no stock, and wait again."""
         work = legs[0].workdir
+        # the walk runs AT ONCE for a column out of stock, while the others run
         while True:
-            while any(l.running() for l in legs):
-                self.say("  waiting: " + ", ".join(f"{l.name}={'running' if l.running() else l.exit_code()}"
-                                                    for l in legs))
-                self.sleep(60)
             again = []
             for l in legs:
+                if l.running() or l.exit_code() is None:
+                    continue
                 walk = getattr(l, "walk", None)
                 if (walk and not l.done(self.commit) and l.exit_code() != 0
                         and no_stock(l.log, l.out_dir) and l.at + 1 < len(walk)):
@@ -1044,9 +1049,14 @@ class Release:
                     work.mkdir(parents=True, exist_ok=True)
                     (work / "nvidia.gpu").write_text(str(l.at))
                     again.append(l)
-            if not again:
+            if again:
+                launch_detached(self, again)
+                continue
+            if not any(l.running() for l in legs):
                 return
-            launch_detached(self, again)
+            self.say("  waiting: " + ", ".join(f"{l.name}={'running' if l.running() else l.exit_code()}"
+                                                for l in legs))
+            self.sleep(60)
 
     def joint_diff(self):
         """Every column of this release in ONE tools/identity_break.py --diff:

@@ -191,6 +191,17 @@ class Columns(unittest.TestCase):
         self.assertEqual((r.rel / "columns" / "nvidia.gpu").read_text(), "1")
         self.assertEqual(len(list((r.rel / "columns").glob("nvidia.log.failed-*"))), 1)
 
+    def test_the_walk_does_not_wait_for_the_other_column(self):
+        # 0.8.19: an out-of-stock leg sat idle until every other leg finished
+        self.reference("metal")
+        r = self.release()
+        seen = []
+        self.hooks = [lambda r: self.finish(r, "nvidia", rc=1, log="create: There are no instances currently available"),
+                      lambda r: (seen.append(len(self.spawned)), self.finish(r, "amd")),
+                      lambda r: self.finish(r, "nvidia")]
+        r.step_gpu_columns()
+        self.assertEqual(seen, [3], "the NVIDIA walk launched while AMD was still running")
+
     def test_no_reference_column_refuses_before_any_rental(self):
         r = self.release()
         with self.assertRaises(release.StepFailed) as cm:

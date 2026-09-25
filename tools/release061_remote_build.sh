@@ -173,7 +173,7 @@ record = dict(schema='mojolearn.release061.build-preflight.v1', source_commit=co
 PYPROBE
 run resource-prefix-tests 45 "$PY" "$ROOT/tools/test_linux_surface_resource_caps.py"
 run physical-source-preflight 60 "$PY" "$OUT/preflight.py" "$ROOT" "$OUT" "$vendor" "$arch" "$commit" "$NO_DEVICE"
-run full46-build 2400 bash "$ROOT/tools/linux_surface_qualification.sh" build "$OUT/build"
+run full46-build "$seconds" bash "$ROOT/tools/linux_surface_qualification.sh" build "$OUT/build"
 cat > "$OUT/postflight.py" <<'PYPOST'
 import json, pathlib, sys
 out = pathlib.Path(sys.argv[1])
