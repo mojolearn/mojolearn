@@ -1,0 +1,107 @@
+probe_mfma exit=0 secs=5
+mfma_plain insts=7422 v_mfma=34 v_mul_f32=227 v_pk_mul_f32=431 v_accvgpr_read=252 v_accvgpr_write=23 v_cndmask=608 v_cmp_class=480 s_nop=336 ds_read=26 ds_write=24 ds_bpermute=0 ds_swizzle=0 v_mov_b32_dpp=0 s_barrier=1 scratch_=112 buffer_=0 global_load=72
+    .amdhsa_group_segment_fixed_size 40960
+    .amdhsa_private_segment_fixed_size 4104
+    .amdhsa_accum_offset 256
+    - .agpr_count:     54
+    .group_segment_fixed_size: 40960
+    .private_segment_fixed_size: 4104
+    .sgpr_count:     106
+    .sgpr_spill_count: 110
+    .vgpr_count:     310
+    .vgpr_spill_count: 0
+mfma_admit insts=8003 v_mfma=68 v_mul_f32=225 v_pk_mul_f32=432 v_accvgpr_read=102 v_accvgpr_write=33 v_cndmask=630 v_cmp_class=480 s_nop=340 ds_read=56 ds_write=25 ds_bpermute=12 ds_swizzle=0 v_mov_b32_dpp=0 s_barrier=1 scratch_=112 buffer_=0 global_load=72
+    .amdhsa_group_segment_fixed_size 41024
+    .amdhsa_private_segment_fixed_size 4104
+    .amdhsa_accum_offset 256
+    - .agpr_count:     34
+    .group_segment_fixed_size: 41024
+    .private_segment_fixed_size: 4104
+    .sgpr_count:     106
+    .sgpr_spill_count: 117
+    .vgpr_count:     290
+    .vgpr_spill_count: 0
+mfma_admit_group insts=7309 v_mfma=68 v_mul_f32=223 v_pk_mul_f32=433 v_accvgpr_read=91 v_accvgpr_write=34 v_cndmask=567 v_cmp_class=417 s_nop=275 ds_read=56 ds_write=25 ds_bpermute=12 ds_swizzle=0 v_mov_b32_dpp=0 s_barrier=1 scratch_=112 buffer_=0 global_load=72
+    .amdhsa_group_segment_fixed_size 41024
+    .amdhsa_private_segment_fixed_size 4104
+    .amdhsa_accum_offset 256
+    - .agpr_count:     36
+    .group_segment_fixed_size: 41024
+    .private_segment_fixed_size: 4104
+    .sgpr_count:     106
+    .sgpr_spill_count: 118
+    .vgpr_count:     292
+    .vgpr_spill_count: 0
+ab gfx942 build exit=0 secs=33
+ab sm_90a build exit=0 secs=30
+probe_dq exit=0
+dq_valu insts=20056 v_mfma=0 v_mul_f32=52 v_pk_mul_f32=0 v_accvgpr_read=0 v_accvgpr_write=0 v_cndmask=3509 v_cmp_class=3506 s_nop=3026 ds_read=117 ds_write=9 ds_bpermute=0 ds_swizzle=0 v_mov_b32_dpp=0 s_barrier=3 scratch_=60 buffer_=0 global_load=541
+    .amdhsa_group_segment_fixed_size 8448
+    .amdhsa_private_segment_fixed_size 160
+    .amdhsa_accum_offset 128
+    - .agpr_count:     0
+    .group_segment_fixed_size: 8448
+    .private_segment_fixed_size: 160
+    .sgpr_count:     68
+    .sgpr_spill_count: 0
+    .vgpr_count:     128
+    .vgpr_spill_count: 39
+dq_mfma insts=20671 v_mfma=16 v_mul_f32=52 v_pk_mul_f32=128 v_accvgpr_read=0 v_accvgpr_write=0 v_cndmask=3518 v_cmp_class=3506 s_nop=3242 ds_read=556 ds_write=9 ds_bpermute=0 ds_swizzle=0 v_mov_b32_dpp=0 s_barrier=3 scratch_=0 buffer_=0 global_load=541
+    .amdhsa_group_segment_fixed_size 8448
+    .amdhsa_private_segment_fixed_size 0
+    .amdhsa_accum_offset 120
+    - .agpr_count:     0
+    .group_segment_fixed_size: 8448
+    .private_segment_fixed_size: 0
+    .sgpr_count:     82
+    .sgpr_spill_count: 0
+    .vgpr_count:     119
+    .vgpr_spill_count: 0
+dkdv_valu insts=3164 v_mfma=0 v_mul_f32=9 v_pk_mul_f32=0 v_accvgpr_read=0 v_accvgpr_write=0 v_cndmask=277 v_cmp_class=266 s_nop=103 ds_read=130 ds_write=6 ds_bpermute=0 ds_swizzle=0 v_mov_b32_dpp=0 s_barrier=2 scratch_=0 buffer_=0 global_load=12
+    .amdhsa_group_segment_fixed_size 12288
+    .amdhsa_private_segment_fixed_size 0
+    .amdhsa_accum_offset 96
+    - .agpr_count:     0
+    .group_segment_fixed_size: 12288
+    .private_segment_fixed_size: 0
+    .sgpr_count:     104
+    .sgpr_spill_count: 0
+    .vgpr_count:     94
+    .vgpr_spill_count: 0
+dkdv_mfma insts=5777 v_mfma=16 v_mul_f32=9 v_pk_mul_f32=128 v_accvgpr_read=0 v_accvgpr_write=0 v_cndmask=295 v_cmp_class=265 s_nop=294 ds_read=544 ds_write=6 ds_bpermute=0 ds_swizzle=0 v_mov_b32_dpp=0 s_barrier=2 scratch_=0 buffer_=0 global_load=12
+    .amdhsa_group_segment_fixed_size 12288
+    .amdhsa_private_segment_fixed_size 0
+    .amdhsa_accum_offset 88
+    - .agpr_count:     0
+    .group_segment_fixed_size: 12288
+    .private_segment_fixed_size: 0
+    .sgpr_count:     106
+    .sgpr_spill_count: 36
+    .vgpr_count:     86
+    .vgpr_spill_count: 0
+fwd_valu insts=7420 v_mfma=0 v_mul_f32=32 v_pk_mul_f32=2 v_accvgpr_read=0 v_accvgpr_write=0 v_cndmask=831 v_cmp_class=681 s_nop=443 ds_read=306 ds_write=36 ds_bpermute=0 ds_swizzle=0 v_mov_b32_dpp=0 s_barrier=20 scratch_=0 buffer_=0 global_load=32
+    .amdhsa_group_segment_fixed_size 15232
+    .amdhsa_private_segment_fixed_size 0
+    .amdhsa_accum_offset 120
+    - .agpr_count:     0
+    .group_segment_fixed_size: 15232
+    .private_segment_fixed_size: 0
+    .sgpr_count:     81
+    .sgpr_spill_count: 0
+    .vgpr_count:     118
+    .vgpr_spill_count: 0
+fwd_mfma insts=13062 v_mfma=32 v_mul_f32=32 v_pk_mul_f32=258 v_accvgpr_read=0 v_accvgpr_write=0 v_cndmask=1108 v_cmp_class=945 s_nop=787 ds_read=1264 ds_write=36 ds_bpermute=0 ds_swizzle=0 v_mov_b32_dpp=0 s_barrier=20 scratch_=0 buffer_=0 global_load=32
+    .amdhsa_group_segment_fixed_size 15232
+    .amdhsa_private_segment_fixed_size 0
+    .amdhsa_accum_offset 100
+    - .agpr_count:     0
+    .group_segment_fixed_size: 15232
+    .private_segment_fixed_size: 0
+    .sgpr_count:     87
+    .sgpr_spill_count: 0
+    .vgpr_count:     98
+    .vgpr_spill_count: 0
+build gemm/checks/amd_mfma_probe3.mojo exit=0
+build tools/amd_codegen/stall_probe.mojo exit=0
+byte_lm amd build exit=0 secs=212
+byte_lm nvidia build exit=0 secs=209
