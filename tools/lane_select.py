@@ -3755,7 +3755,9 @@ TOOLCHAIN_PATHS = ("pixi.lock", "pixi.toml")
 #: every lane by rule. On the Mac passes they are the other platform's tree
 #: (`_other_platform_tree`) and are inert. The rest of packaging/linux/ packs,
 #: audits and publishes a wheel no column runs from.
-LINUX_SET_BUILDERS = ("packaging/linux/build_sets.sh", "packaging/linux/stage_libs.py")
+LINUX_SET_BUILDERS = ("packaging/linux/build_sets.sh", "packaging/linux/stage_libs.py",
+                      # sourced by build_sets.sh: the per-binding time bound
+                      "packaging/linux/binding_timeout.sh")
 
 #: What a caller must print for every unattributed path, and then stop.
 UNATTRIBUTED_HINT = ("no lane's derived source set contains it and no rule in tools/lane_select.py places "

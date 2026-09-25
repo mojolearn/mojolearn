@@ -78,6 +78,11 @@ command -v taskset >/dev/null || { echo 'taskset required for CPU cap' >&2; exit
 BUILD_CPUS=$(python3 -c 'import os, sys; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:int(sys.argv[1])])))' "$BUILD_CORES") || exit 2
 [[ -n "$BUILD_CPUS" ]] || { echo 'Empty CPU affinity' >&2; exit 2; }
 taskset -pc "$BUILD_CPUS" $$ || exit 2
+# ONE BINDING, BOUNDED (packaging/linux/binding_timeout.sh, 2026-09-25): a
+# build past RELEASE_BINDING_TIMEOUT_SECONDS (default 1200) is stopped and
+# named as a FINDING while the rest of the pool carries on.
+. "$REPO/packaging/linux/binding_timeout.sh"
+BINDING_TIMEOUT=$(binding_timeout_seconds) || exit 2
 python3 -c 'import os, sys; assert 1 <= len(os.sched_getaffinity(0)) <= int(sys.argv[1]), "build affinity exceeds 2 x jobs"' "$BUILD_CORES" || exit 2
 TIERS="${MOJOLEARN_BUILD_TIERS:-fast deterministic identical}"
 # THE TWO LISTS BELOW ARE THE LINUX WHEEL'S CONTENTS AND THEY GO STALE
@@ -158,7 +163,7 @@ HOST_NAMES=$(python3 python/mojolearn/host_surface.py --wheel-bindings) || exit 
 host_so() { printf 'python/mojolearn/host/%s.so' "$1"; }
 say() { echo "[$(date +%T) build_sets] $*"; }
 
-say "repo $REPO, dest $DEST, tiers: $TIERS, jobs: $JOBS, gpu compile workers: $GPU_COMPILE_JOBS"
+say "repo $REPO, dest $DEST, tiers: $TIERS, jobs: $JOBS, gpu compile workers: $GPU_COMPILE_JOBS, per-binding bound: ${BINDING_TIMEOUT}s"
 say "pixi env: $PIXI_ENV"
 export PATH="$HOME/.pixi/bin:$PATH"
 command -v pixi >/dev/null || { say "no pixi on PATH"; exit 2; }
@@ -236,17 +241,22 @@ build_one() {
     local fam="${s#build_}"; fam="${fam%_host.sh}"
     local FAM; FAM=$(printf '%s' "$fam" | tr 'a-z' 'A-Z')
     MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_SKIP_BUILD_GATE=1 MOJOLEARN_TARGET_COLUMN=cpu MOJOLEARN_COMPILE_JOBS=2 \
+      with_binding_timeout "$BINDING_TIMEOUT" "$log" \
       run_binding "$tier" "$s" env -u MOJOLEARN_GPU_ARCHS -u MOJOLEARN_HOST_OUTDIR -u "MOJOLEARN_${FAM}_HOST_OUTDIR" \
-      >> "$log" 2>&1 || rc=$?
+      || rc=$?
   else
     MOJOLEARN_NUMERIC_MODE=$tier MOJOLEARN_SKIP_BUILD_GATE=1 MOJOLEARN_COMPILE_JOBS=$GPU_COMPILE_JOBS \
-      run_binding "$tier" "$s" env >> "$log" 2>&1 || rc=$?
+      with_binding_timeout "$BINDING_TIMEOUT" "$log" run_binding "$tier" "$s" env || rc=$?
   fi
   if [[ "$rc" = 0 ]]; then
     echo "end $(date -u +%FT%TZ) OK" >> "$log"
     say "built $tier bindings/$s"
   else
     echo "end $(date -u +%FT%TZ) FAILED" >> "$log"
+    if [[ "$rc" = 124 ]]; then
+      say "FINDING: $tier bindings/$s TIMED OUT after ${BINDING_TIMEOUT}s (RELEASE_BINDING_TIMEOUT_SECONDS); log $log"
+      return 1
+    fi
     say "FINDING: $tier bindings/$s did not build; first error:"
     grep -m2 -E 'error:|constraint failed' "$log" | cut -c1-200 | sed 's/^/      /'
     return 1

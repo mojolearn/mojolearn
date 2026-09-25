@@ -85,7 +85,8 @@ LINUX_SETS = (("cuda", "sm_90a"), ("cuda", "sm_89"), ("hip", "gfx942"))
 #: The leg that builds when only a host binding or the runtime needs one.
 HOST_LEG = ("cuda", "sm_89")
 LINUX_BUILDERS = ("packaging/linux/build_sets.sh", "packaging/linux/stage_libs.py",
-                  "tools/release061_remote_build.sh", "tools/linux_surface_qualification.sh")
+                  "tools/release061_remote_build.sh", "tools/linux_surface_qualification.sh",
+                  "packaging/linux/binding_timeout.sh")
 MACOS_BUILDERS = ("packaging/macos/build_release_wheel.sh", "packaging/macos/stage_dylibs.py",
                   "python/setup.py")
 PORTABLE_MATH = "packaging/portable_math"

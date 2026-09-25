@@ -690,11 +690,19 @@ SSH_TARGET=""
 LOCAL_CARD="${MOJOLEARN_GEMM_LEG_LOCAL_CARD:-}"
 LEG_EXTRA="${MOJOLEARN_GEMM_LEG_EXTRA:-}"
 # DEVIATION 2501: parallel extension builds for the release campaign only.
-BUILD_JOBS="${MOJOLEARN_BUILD_JOBS:-4}"
-case "$BUILD_JOBS" in ''|*[!0-9]*) echo "MOJOLEARN_BUILD_JOBS must be 1..16" >&2; exit 2;; esac
-[ "$BUILD_JOBS" -ge 1 ] && [ "$BUILD_JOBS" -le 16 ] || { echo "MOJOLEARN_BUILD_JOBS must be 1..16" >&2; exit 2; }
+# `auto` (the default since 2026-09-25): the box sizes the build
+# (tools/build_sizing.py, run by release061_remote_build.sh on the pod), so
+# campaign 7 keeps every permitted core (BUILD_CORES=0) until then.
+# MOJOLEARN_BUILD_JOBS=N (1..16) is an explicit override, as before.
+BUILD_JOBS="${MOJOLEARN_BUILD_JOBS:-auto}"
 BUILD_CORES=2
-if [ "${MOJOLEARN_NVIDIA_CAMPAIGN:-}" = 7 ]; then BUILD_CORES=$((2 * BUILD_JOBS)); fi
+if [ "$BUILD_JOBS" != auto ]; then
+    case "$BUILD_JOBS" in ''|*[!0-9]*) echo "MOJOLEARN_BUILD_JOBS must be auto or 1..16" >&2; exit 2;; esac
+    [ "$BUILD_JOBS" -ge 1 ] && [ "$BUILD_JOBS" -le 16 ] || { echo "MOJOLEARN_BUILD_JOBS must be auto or 1..16" >&2; exit 2; }
+    if [ "${MOJOLEARN_NVIDIA_CAMPAIGN:-}" = 7 ]; then BUILD_CORES=$((2 * BUILD_JOBS)); fi
+elif [ "${MOJOLEARN_NVIDIA_CAMPAIGN:-}" = 7 ]; then
+    BUILD_CORES=0
+fi
 SWEEP=0
 READY_TIMEOUT="${MOJOLEARN_GEMM_LEG_READY_TIMEOUT:-600}"
 CARD_FULL="${MOJOLEARN_GEMM_CARD_FULL:-}"
@@ -2946,7 +2954,9 @@ export OMP_NUM_THREADS=1 OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_TH
 export MAX_JOBS=2 CMAKE_BUILD_PARALLEL_LEVEL=2
 # DEVIATION 2501: campaign 7 (the release build) gets 2 x MOJOLEARN_BUILD_JOBS
 # cores for its parallel extension builds; every other campaign stays on two.
-cores=$(python3 -c 'import os, sys; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:int(sys.argv[1])])))' '@BUILDCORES@')
+# 0 (MOJOLEARN_BUILD_JOBS=auto) keeps every permitted core: the release build
+# sizes itself from them and narrows its own affinity.
+cores=$(python3 -c 'import os, sys; n = int(sys.argv[1]); a = sorted(os.sched_getaffinity(0)); print(",".join(map(str, a[:n] if n else a)))' '@BUILDCORES@')
 taskset -pc "$cores" $$ > "$OUT/cpu-affinity.log" 2>&1 || exit 9
 {
   echo "vendor=@VENDOR@"
@@ -3131,6 +3141,9 @@ RELEASE_TOOLS_SETUP
         fi
     fi
     echo "release_build_exit=$release_rc" >> "$OUT/leg.txt"
+    # The box's build sizing (tools/build_sizing.py): jobs, RSS cap, cores, RAM.
+    grep -E '^(build_jobs|build_cores|build_rss_gib|build_sizing|box_cores|box_mem_available_gib|build_per_job_gib)=' \
+        "$OUT/release-build/campaign.txt" >> "$OUT/leg.txt" 2>/dev/null || true
     if [ '@QUALIFY@' = 1 ]; then
         echo 'scope=one actual CUDA architecture installed-wheel qualification; final combined admission still required' >> "$OUT/leg.txt"
     else

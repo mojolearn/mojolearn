@@ -16,6 +16,9 @@ import sys
 import time
 
 
+RSS_GIB_MAX = 64
+
+
 def gpu_memory():
     result = subprocess.run(
         ['nvidia-smi', '--query-gpu=memory.used,memory.total',
@@ -61,8 +64,11 @@ def stop_group(group):
 def run(args):
     if sys.platform != 'linux' or not Path('/proc').is_dir():
         raise RuntimeError('Refusing local work: this guard requires Linux NVIDIA')
-    if not args.command or args.seconds < 1 or not 1 <= args.rss_gib <= 16:
-        raise ValueError('Require command, positive deadline and RSS cap of 1..16 GiB')
+    # RSS_GIB_MAX: the release build's cap is sized from the box
+    # (tools/build_sizing.py: 3 GiB per job + 2, at most 16 jobs = 50 GiB);
+    # every other job keeps the 12 GiB default.
+    if not args.command or args.seconds < 1 or not 1 <= args.rss_gib <= RSS_GIB_MAX:
+        raise ValueError('Require command, positive deadline and RSS cap of 1..%d GiB' % RSS_GIB_MAX)
     core_count = getattr(args, 'cores', 2)
     if not 1 <= core_count <= 64:
         raise ValueError('Require a CPU core count of 1..64')
@@ -93,9 +99,14 @@ def run(args):
     # skips the GPU check for that tick; a minute without one stops the job.
     gpu_misses = 0
     used, total = 0, 1
+    # Sampled once a second: the process group's peak RSS and the lowest
+    # host MemAvailable, so a build's per-job memory is measured, not guessed.
+    peak_rss, min_available = 0, None
     try:
         while proc.poll() is None:
             rss, available = memory(proc.pid)
+            peak_rss = max(peak_rss, rss)
+            min_available = available if min_available is None else min(min_available, available)
             try:
                 used, total = gpu_memory()
                 gpu_misses = 0
@@ -124,6 +135,9 @@ def run(args):
         lock.close()
     print(json.dumps({'guard': 'nvidia-root-serial-v1', 'reason': reason,
                       'cpu_affinity': cores, 'thread_limit': 2,
+                      'rss_cap_gib': args.rss_gib, 'peak_rss_bytes': peak_rss,
+                      'min_host_available_bytes': min_available,
+                      'elapsed_seconds': round(time.monotonic() - started, 1),
                       'returncode': proc.returncode}), flush=True)
     return 124 if reason else proc.returncode
 
