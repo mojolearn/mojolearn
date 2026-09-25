@@ -120,6 +120,9 @@ from core.identity_trace import IdentityTrace
 from core.gram_splitk import gemm_tn_splitk_into, gram_splitk_applies
 from std.math import sqrt
 from std.sys.compile import is_defined
+from std.os import getenv
+from std.time import perf_counter_ns
+from std.sys.info import has_apple_gpu_accelerator
 from gemm.checks.gemm_identical import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
@@ -489,6 +492,178 @@ def fast_resp_colsums_finish_kernel(
         nk[unsafe_offset=k] = tot + ten_eps
     else:
         raw[unsafe_offset = k * d + j] = tot
+
+
+comptime GMM_FUSED_COV = (
+    GMM_FAST_GRAM
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_GMM_FAST_FUSED_COV_OFF"]()
+)
+"""FAST on Apple: every component's covariance in ONE pass over X
+(`fused_cov_partial_kernel`) instead of a center-and-scale write plus a
+split-K Gram per component. `-D MOJOLEARN_GMM_FAST_FUSED_COV_OFF` keeps the
+per-component Grams."""
+comptime GMM_FUSED_TPB = 256
+comptime GMM_FUSED_TILE = 4096
+comptime GMM_FUSED_BLOCKS = 512
+comptime GMM_FUSED_MAX_CD = 512
+
+
+def _gmm_fused_dp(d: Int) -> Int:
+    """`d` padded to a multiple of the 4 x 4 register tile."""
+    return (d + 3) // 4 * 4
+
+
+def gmm_fused_cov_applies(n: Int, d: Int, ncomp: Int) -> Bool:
+    """The shapes the fused pass holds: `ncomp * dp` staged values per row
+    fit the tile and the mean cache, the 4 x 4 cell groups fit one block,
+    and the partials fit the `n * d` scratch."""
+    var dp = _gmm_fused_dp(d)
+    var cdp = ncomp * dp
+    var groups = ncomp * (dp // 4) * (dp // 4)
+    return (
+        cdp <= GMM_FUSED_MAX_CD
+        and groups <= GMM_FUSED_TPB
+        and GMM_FUSED_BLOCKS * ncomp * d * d <= n * d
+    )
+
+
+def fused_cov_partial_kernel(
+    x: MutPointer[Float32, MutAnyOrigin],
+    means: MutPointer[Float32, MutAnyOrigin],
+    resp: MutPointer[Float32, MutAnyOrigin],
+    partials: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    d_in: Int32,
+    ncomp_in: Int32,
+):
+    """GMM_FUSED_COV: block b sums, over its slice of rows, every
+    component's `sqrt(r)(x - mu) (sqrt(r)(x - mu))^T`. A tile of rows is
+    staged as `sqrt(resp[r, c]) * (x[r, i] - means[c, i])` for all (c, i)
+    (zero-padded to `dp`); each thread owns one component's 4 x 4 block of
+    cells and one lane of the tile's rows, and the lanes fold at the end."""
+    var n = Int(n_in)
+    var d = Int(d_in)
+    var ncomp = Int(ncomp_in)
+    var dp = _gmm_fused_dp(d)
+    var cdp = ncomp * dp
+    var q4 = dp // 4
+    var groups = ncomp * q4 * q4
+    var lanes = GMM_FUSED_TPB // groups
+    var t = Int(thread_idx.x)
+    var b = Int(block_idx.x)
+    var g = t % groups
+    var lane = t // groups
+    var active = lane < lanes
+    var c = g // (q4 * q4)
+    var gi = (g % (q4 * q4)) // q4
+    var gj = g % q4
+    var oi = c * dp + 4 * gi
+    var oj = c * dp + 4 * gj
+    var rows_tile = GMM_FUSED_TILE // cdp
+    if rows_tile > GMM_FUSED_TPB // ncomp:
+        rows_tile = GMM_FUSED_TPB // ncomp
+    # staging: thread t stages (row st_r, component st_c) of the tile
+    var st_r = t // ncomp
+    var st_c = t % ncomp
+    var s = stack_allocation[
+        GMM_FUSED_TILE, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var mu = stack_allocation[
+        GMM_FUSED_MAX_CD, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var e0 = t
+    while e0 < cdp:
+        var cc = e0 // dp
+        var ii = e0 % dp
+        mu[e0] = means.unsafe_load(cc * d + ii) if ii < d else Float32(0)
+        e0 += GMM_FUSED_TPB
+    var chunk = (n + GMM_FUSED_BLOCKS - 1) // GMM_FUSED_BLOCKS
+    var r0 = b * chunk
+    var r1 = r0 + chunk
+    if r1 > n:
+        r1 = n
+    var acc = SIMD[DType.float32, 16](0.0)
+    barrier()
+    var base = r0
+    while base < r1:
+        var nr = r1 - base
+        if nr > rows_tile:
+            nr = rows_tile
+        if st_r < nr:
+            var row = base + st_r
+            var w = resp.unsafe_load(row * ncomp + st_c)
+            var sw = sqrt(w) if w > Float32(0) else Float32(0)
+            var so = st_r * cdp + st_c * dp
+            for ii in range(dp):
+                var v = Float32(0)
+                if ii < d:
+                    v = sw * (x.unsafe_load(row * d + ii) - mu[st_c * dp + ii])
+                s[so + ii] = v
+        barrier()
+        if active:
+            var r = lane
+            while r < nr:
+                var a = SIMD[DType.float32, 4](
+                    s[r * cdp + oi], s[r * cdp + oi + 1],
+                    s[r * cdp + oi + 2], s[r * cdp + oi + 3],
+                )
+                var bb = SIMD[DType.float32, 4](
+                    s[r * cdp + oj], s[r * cdp + oj + 1],
+                    s[r * cdp + oj + 2], s[r * cdp + oj + 3],
+                )
+                comptime for u in range(4):
+                    comptime for v in range(4):
+                        acc[u * 4 + v] += a[u] * bb[v]
+                r += lanes
+        barrier()
+        base += nr
+    # fold the row lanes through the (now free) tile
+    if active:
+        comptime for u in range(16):
+            s[t * 16 + u] = acc[u]
+    barrier()
+    if lane == 0:
+        var tot = acc
+        for l in range(1, lanes):
+            comptime for u in range(16):
+                tot[u] += s[(l * groups + g) * 16 + u]
+        comptime for u in range(4):
+            comptime for v in range(4):
+                var i = 4 * gi + u
+                var jj = 4 * gj + v
+                if i < d and jj < d:
+                    partials.unsafe_store(
+                        (b * ncomp + c) * d * d + i * d + jj, tot[u * 4 + v]
+                    )
+
+
+def fused_cov_finish_kernel(
+    partials: MutPointer[Float32, MutAnyOrigin],
+    nk: MutPointer[Float32, MutAnyOrigin],
+    cov: MutPointer[Float32, MutAnyOrigin],
+    d_in: Int32,
+    ncomp_in: Int32,
+    reg_covar: Float32,
+):
+    """GMM_FUSED_COV: sum the blocks' partials, then `cov_finish_kernel`'s
+    `raw / nk[k]` and diagonal `+ reg_covar`, for every component."""
+    var d = Int(d_in)
+    var dd = d * d
+    var cells = Int(ncomp_in) * dd
+    var cell = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if cell >= cells:
+        return
+    var v = Float32(0.0)
+    for b in range(GMM_FUSED_BLOCKS):
+        v += partials.unsafe_load(b * cells + cell)
+    var kc = cell // dd
+    var rem = cell % dd
+    v = ftz(v)
+    v = ftz(identical_div(v, ftz(nk.unsafe_load(kc))))
+    if rem // d == rem % d:
+        v = ftz(v + reg_covar)
+    cov.unsafe_store(cell, v)
 
 
 def center_sqrt_scale_kernel(
@@ -969,6 +1144,11 @@ def gmm_m_step(
         2 * n * d + raw_max, 1
     )
 
+    var ph_on = String(getenv("MOJOLEARN_GMM_MSTEP_TIMES")) == "1"
+    var ph_t = 0
+    if ph_on:
+        ctx.synchronize()
+        ph_t = Int(perf_counter_ns())
     var grid_cells = (n * ncomp + elem_tpb - 1) // elem_tpb
     if sabotage == GMM_SAB_NO_FTZ_RESP:
         ctx.enqueue_function[sabotage_resp_exp_kernel](
@@ -990,6 +1170,11 @@ def gmm_m_step(
             block_dim=(elem_tpb, 1, 1),
         )
     trace.record_device(ctx, tag + ".resp", resp, n * ncomp)
+    if ph_on:
+        ctx.synchronize()
+        var now = Int(perf_counter_ns())
+        print("GMM_MSTEP resp_us=" + String((now - ph_t) // 1000))
+        ph_t = now
 
     var grid_comp = (ncomp + comp_tpb - 1) // comp_tpb
     var fast_sums = False
@@ -1082,14 +1267,37 @@ def gmm_m_step(
         block_dim=(elem_tpb, 1, 1),
     )
     trace.record_device(ctx, tag + ".means", means, ncomp * d)
+    if ph_on:
+        ctx.synchronize()
+        var now = Int(perf_counter_ns())
+        print("GMM_MSTEP sums_weights_means_us=" + String((now - ph_t) // 1000))
+        ph_t = now
 
     var grid_nd = (n * d + elem_tpb - 1) // elem_tpb
     var grid_dd = (d * d + elem_tpb - 1) // elem_tpb
     var divide_after = Int32(0) if sabotage == GMM_SAB_COV_PRESCALE else Int32(1)
     var fast_gram = False
+    var ncomp_loop = ncomp
     comptime if GMM_FAST_GRAM:
         fast_gram = sabotage == 0 and gram_splitk_applies(d, d, n)
-    for kc in range(ncomp):
+    comptime if GMM_FUSED_COV:
+        if fast_gram and divide_after != 0 and gmm_fused_cov_applies(n, d, ncomp):
+            ctx.enqueue_function[fused_cov_partial_kernel](
+                x.unsafe_ptr(), means.unsafe_ptr(), resp.unsafe_ptr(),
+                scaled.unsafe_ptr(), Int32(n), Int32(d), Int32(ncomp),
+                grid_dim=(GMM_FUSED_BLOCKS, 1, 1),
+                block_dim=(GMM_FUSED_TPB, 1, 1),
+            )
+            var cells = ncomp * d * d
+            ctx.enqueue_function[fused_cov_finish_kernel](
+                scaled.unsafe_ptr(), nk.unsafe_ptr(), cov.unsafe_ptr(),
+                Int32(d), Int32(ncomp), reg_covar,
+                grid_dim=((cells + 255) // 256, 1, 1),
+                block_dim=(256, 1, 1),
+            )
+            fast_gram = False
+            ncomp_loop = 0
+    for kc in range(ncomp_loop):
         if fast_gram:
             ctx.enqueue_function[center_sqrt_scale_kernel](
                 x.unsafe_ptr(),
@@ -1162,6 +1370,10 @@ def gmm_m_step(
             block_dim=(elem_tpb, 1, 1),
         )
     trace.record_device(ctx, tag + ".covariances", cov, ncomp * d * d)
+    if ph_on:
+        ctx.synchronize()
+        var now = Int(perf_counter_ns())
+        print("GMM_MSTEP cov_us=" + String((now - ph_t) // 1000))
 
     _ = diff^
     _ = scaled^
