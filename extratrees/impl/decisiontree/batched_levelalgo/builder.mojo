@@ -67,6 +67,8 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl
     node_split_kernel,
     node_feature_range_kernel,
     node_feature_range_tiled_kernel,
+    et_snap_code,
+    ET_QSTRIDE,
     node_feature_score_reg_tiled_kernel,
     node_feature_score_finalize_kernel,
     node_feature_score_kernel,
@@ -112,6 +114,7 @@ from checks.numerics import (
     identical_mul,
 )
 from core.philox import launch_uniform_int
+from ensemble.decisiontree.batched_levelalgo.quantiles import compute_quantiles
 from extratrees.checks.pcg_rng import row_sample_seed
 
 
@@ -2385,6 +2388,83 @@ def transpose_to_row_major_kernel(
     out_rm[unsafe_offset=o] = in_cm[unsafe_offset = c * nr + r]
 
 
+#: FAST on Apple, REGRESSION with the row-major tiled search on wide data:
+#: the range and score passes read X as 16-bit codes over up to ET_BINS
+#: quantile borders per feature (half the bytes per row). The range pass
+#: publishes the borders of the node's lowest and highest codes, the
+#: threshold is drawn in VALUE space from them as before, and every
+#: threshold is snapped down to a border (`et_snap_code`): the score pass
+#: compares codes against the border's code and `et_code_threshold_kernel`
+#: stores the border itself, so the score, the partition and prediction
+#: split the rows the same way (code(x) <= c  <=>  x <= q[c]). Measured on
+#: the M4 at 1M rows: istellareg 86 -> 67 s, year 23.2 -> 18.0 s, RMSE equal
+#: to float X (8-bit codes from 1024 sampled rows, or thresholds drawn in
+#: code space, both moved RMSE). `-D MOJOLEARN_ET_BINNED_OFF` keeps float X.
+comptime ET_BINNED_REG = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_ET_BINNED_OFF"]()
+)
+comptime ET_BINS = ET_QSTRIDE
+comptime ET_CODE = DType.uint16
+#: Binning pays in bytes per row, so it is taken only on wide data: at 16
+#: columns (taxi) the border pass costs more than the smaller reads save.
+comptime ET_BINNED_MIN_COLS = 64
+
+
+def et_code_threshold_kernel(
+    q: MutPointer[Float32, MutAnyOrigin],
+    c: MutPointer[Int32, MutAnyOrigin],
+    quant: MutPointer[Float32, MutAnyOrigin],
+    nbins: MutPointer[Int32, MutAnyOrigin],
+    n_in: Int32,
+):
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_in):
+        return
+    var col = Int(c[i])
+    if col < 0:
+        return
+    var t = et_snap_code(quant + col * ET_BINS, nbins[col], q[i])
+    if t < 0:
+        t = 0
+    # The top code also holds every value above the sampled maximum
+    # (`lower_bound_aspace` clamps), so `code <= top` is "every row": +inf.
+    if t >= Int(nbins[col]) - 1:
+        q[i] = Float32.MAX
+        return
+    q[i] = quant[col * ET_BINS + t]
+
+
+def et_bin_rows_kernel(
+    data: MutPointer[Float32, MutAnyOrigin],
+    codes: MutPointer[Scalar[ET_CODE], MutAnyOrigin],
+    quant: MutPointer[Float32, MutAnyOrigin],
+    nbins: MutPointer[Int32, MutAnyOrigin],
+    n_rows: Int32,
+    n_cols: Int32,
+):
+    """Column-major X to row-major codes: `lower_bound` over the column's
+    borders, clamped to the top code (RandomForest's `bin_dataset_kernel`,
+    wider codes)."""
+    var col = Int(block_idx.y)
+    var nb = nbins[col]
+    var qc = quant + col * ET_BINS
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_rows):
+        return
+    var v = data[col * Int(n_rows) + i]
+    var lo = Int32(0)
+    var hi = nb - 1
+    while lo < hi:
+        var mid = (lo + hi) // 2
+        if qc[Int(mid)] >= v:
+            hi = mid
+        else:
+            lo = mid + 1
+    codes[i * Int(n_cols) + col] = Scalar[ET_CODE](Int(lo))
+
+
 @fieldwise_init
 struct DeviceDataset(Movable):
     """The dataset, resident on the device for a whole FOREST.
@@ -2429,6 +2509,51 @@ struct DeviceDataset(Movable):
     `ensure_row_major` only when a fit samples at least half the features;
     one element otherwise."""
     var has_rm: Bool
+    var d_bins_rm: DeviceBuffer[ET_CODE]
+    """ET_BINNED_REG: X as row-major 8-bit quantile codes (one element
+    until `ensure_binned`)."""
+    var d_quant: DeviceBuffer[DType.float32]
+    """ET_BINNED_REG: the per-feature borders, `n_cols x ET_BINS`."""
+    var d_nbins: DeviceBuffer[DType.int32]
+    var has_bins: Bool
+
+    def ensure_binned(mut self, ctx: DeviceContext) raises:
+        """Build the row-major codes and their borders (RandomForest's
+        `compute_quantiles`, then `et_bin_rows_kernel`): code c means
+        `q[col][c-1] < x <= q[col][c]`, the top code also every larger x."""
+        comptime if not ET_BINNED_REG:
+            return
+        if self.has_bins:
+            return
+        var nr = Int(self.n_rows)
+        var nc = Int(self.n_cols)
+        var qr = compute_quantiles(ctx, self.d_data, ET_BINS, nr, nc)
+        self.d_quant = ctx.enqueue_create_buffer[DType.float32](nc * ET_BINS)
+        self.d_nbins = ctx.enqueue_create_buffer[DType.int32](nc)
+        ctx.enqueue_copy(
+            dst_buf=self.d_quant,
+            src_buf=qr.quantiles_array.create_sub_buffer[DType.float32](
+                0, nc * ET_BINS
+            ),
+        )
+        ctx.enqueue_copy(
+            dst_buf=self.d_nbins,
+            src_buf=qr.n_bins_array.create_sub_buffer[DType.int32](0, nc),
+        )
+        self.d_bins_rm = ctx.enqueue_create_buffer[ET_CODE](nr * nc)
+        ctx.enqueue_function[et_bin_rows_kernel](
+            self.d_data.unsafe_ptr(),
+            self.d_bins_rm.unsafe_ptr(),
+            self.d_quant.unsafe_ptr(),
+            self.d_nbins.unsafe_ptr(),
+            Int32(nr),
+            Int32(nc),
+            grid_dim=(ceildiv(nr, 256), nc, 1),
+            block_dim=(256, 1, 1),
+        )
+        ctx.synchronize()
+        _ = qr^
+        self.has_bins = True
 
     def ensure_row_major(mut self, ctx: DeviceContext, k: Int) raises:
         """Build `d_data_rm` on the device when this build has a row-major
@@ -2518,8 +2643,13 @@ def upload_dataset(
     ctx.synchronize()
     boundary_times.stop_host("boundary_dataset_upload", boundary_start)
     boundary_times.report()
+    var d_bins_rm = ctx.enqueue_create_buffer[ET_CODE](1)
+    var d_quant = ctx.enqueue_create_buffer[DType.float32](1)
+    var d_nbins = ctx.enqueue_create_buffer[DType.int32](1)
+    ctx.synchronize()
     return DeviceDataset(
-        d_data^, d_labels^, n_rows, n_cols, n_classes, d_data_rm^, False
+        d_data^, d_labels^, n_rows, n_cols, n_classes, d_data_rm^, False,
+        d_bins_rm^, d_quant^, d_nbins^, False,
     )
 
 
@@ -3933,6 +4063,7 @@ def search_batch(
             d_colids.unsafe_ptr(),
             n_cols,
             Int32(k),
+            dataset.d_quant.unsafe_ptr(),
             grid_dim=(plan.n_blocks_dimx, ceildiv(Int(k), ET_FEATURE_TILE), 1),
             block_dim=(TPB, 1, 1),
         )
@@ -5233,7 +5364,26 @@ def search_batch_regression(
     var tiled_range = False
     comptime if ET_RANGE_TILED:
         tiled_range = dataset.has_rm
-    if tiled_range:
+    if tiled_range and dataset.has_bins:
+        ctx.enqueue_function[
+            node_feature_range_tiled_kernel[TPB, ET_FEATURE_TILE, ET_CODE]
+        ](
+            d_minkey.unsafe_ptr(),
+            d_maxkey.unsafe_ptr(),
+            d_missing.unsafe_ptr(),
+            d_merges.unsafe_ptr(),
+            dataset.d_bins_rm.unsafe_ptr(),
+            d_row_ids.unsafe_ptr(),
+            d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
+            d_colids.unsafe_ptr(),
+            n_cols,
+            Int32(k),
+            dataset.d_quant.unsafe_ptr(),
+            grid_dim=(plan.n_blocks_dimx, ceildiv(Int(k), ET_FEATURE_TILE), 1),
+            block_dim=(TPB, 1, 1),
+        )
+    elif tiled_range:
         ctx.enqueue_function[
             node_feature_range_tiled_kernel[TPB, ET_FEATURE_TILE]
         ](
@@ -5248,6 +5398,7 @@ def search_batch_regression(
             d_colids.unsafe_ptr(),
             n_cols,
             Int32(k),
+            dataset.d_quant.unsafe_ptr(),
             grid_dim=(plan.n_blocks_dimx, ceildiv(Int(k), ET_FEATURE_TILE), 1),
             block_dim=(TPB, 1, 1),
         )
@@ -5325,7 +5476,34 @@ def search_batch_regression(
     var tiled_score = False
     comptime if ET_SCORE_TILED:
         tiled_score = dataset.has_rm
-    if tiled_score:
+    if tiled_score and dataset.has_bins:
+        ctx.enqueue_function[
+            node_feature_score_reg_tiled_kernel[TPB, ET_FEATURE_TILE, ET_CODE]
+        ](
+            d_nleft.unsafe_ptr(),
+            d_ntotal.unsafe_ptr(),
+            d_accl.unsafe_ptr(),
+            d_acct.unsafe_ptr(),
+            d_nblocks.unsafe_ptr(),
+            d_min.unsafe_ptr(),
+            d_max.unsafe_ptr(),
+            d_missing.unsafe_ptr(),
+            dataset.d_bins_rm.unsafe_ptr(),
+            d_row_ids.unsafe_ptr(),
+            dataset.d_labels.unsafe_ptr(),
+            d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
+            d_colids.unsafe_ptr(),
+            ws.d_tree.unsafe_ptr(),
+            n_cols,
+            Int32(k),
+            seed,
+            dataset.d_quant.unsafe_ptr(),
+            dataset.d_nbins.unsafe_ptr(),
+            grid_dim=(plan.n_blocks_dimx, ceildiv(Int(k), ET_FEATURE_TILE), 1),
+            block_dim=(TPB, 1, 1),
+        )
+    elif tiled_score:
         ctx.enqueue_function[
             node_feature_score_reg_tiled_kernel[TPB, ET_FEATURE_TILE]
         ](
@@ -5347,6 +5525,8 @@ def search_batch_regression(
             n_cols,
             Int32(k),
             seed,
+            dataset.d_quant.unsafe_ptr(),
+            dataset.d_nbins.unsafe_ptr(),
             grid_dim=(plan.n_blocks_dimx, ceildiv(Int(k), ET_FEATURE_TILE), 1),
             block_dim=(TPB, 1, 1),
         )
@@ -5484,6 +5664,12 @@ def search_batch_regression(
         )
         ctx.enqueue_copy(dst_buf=ws.o_ties, src_buf=ws.d_ties)
 
+    if dataset.has_bins:
+        ctx.enqueue_function[et_code_threshold_kernel](
+            r_q.unsafe_ptr(), r_c.unsafe_ptr(), dataset.d_quant.unsafe_ptr(),
+            dataset.d_nbins.unsafe_ptr(),
+            Int32(n_nodes), grid_dim=ceildiv(n_nodes, 64), block_dim=64,
+        )
     ref o_q = ws.o_q
     ref o_c = ws.o_c
     ref o_l = ws.o_l
@@ -5747,6 +5933,9 @@ def train_forest_regression_device_timed(
             )
 
         dataset.ensure_row_major(ctx, Int(k))
+        comptime if ET_RANGE_TILED and ET_SCORE_TILED:
+            if dataset.has_rm and Int(dataset.n_cols) >= ET_BINNED_MIN_COLS:
+                dataset.ensure_binned(ctx)
         var ws = make_level_workspace(
             ctx,
             Int(params.max_batch_size),

@@ -630,20 +630,43 @@ def _warp_fold_sum_i32(v: Int32) -> Int32:
     return x
 
 
+comptime ET_QSTRIDE = 65536
+"""Row stride of the FAST ExtraTrees border table (`builder.ET_BINS`)."""
+
+
+@always_inline
+def et_snap_code(
+    qc: MutPointer[Float32, MutAnyOrigin], nb: Int32, thr: Float32
+) -> Int:
+    """The largest code c with `qc[c] <= thr` (-1 when none): a value-space
+    threshold snapped down to a border, so `code <= c` and `x <= qc[c]`
+    split the rows the same way."""
+    var lo = Int32(0)
+    var hi = nb
+    while lo < hi:
+        var mid = (lo + hi) // 2
+        if qc[Int(mid)] <= thr:
+            lo = mid + 1
+        else:
+            hi = mid
+    return Int(lo) - 1
+
+
 def node_feature_range_tiled_kernel[
-    TPB: Int, FT: Int
+    TPB: Int, FT: Int, DT: DType = DType.float32
 ](
     out_minkey: MutPointer[UInt32, MutAnyOrigin],
     out_maxkey: MutPointer[UInt32, MutAnyOrigin],
     out_n_missing: MutPointer[Int32, MutAnyOrigin],
     out_n_merges: MutPointer[Int32, MutAnyOrigin],
-    data_rm: MutPointer[Float32, MutAnyOrigin],
+    data_rm: MutPointer[Scalar[DT], MutAnyOrigin],
     row_ids: MutPointer[Int32, MutAnyOrigin],
     work_items: MutPointer[NodeWorkItem, MutAnyOrigin],
     workload_info: MutPointer[WorkloadInfo, MutAnyOrigin],
     colids: MutPointer[Int32, MutAnyOrigin],
     n_in: Int32,
     n_sampled_cols_in: Int32,
+    quant: MutPointer[Float32, MutAnyOrigin],
 ):
     """FAST (`-D MOJOLEARN_ET_RANGE_TILED`): `node_feature_range_kernel` for
     up to `FT` sampled features per block over a ROW-MAJOR copy of X. Each
@@ -678,7 +701,7 @@ def node_feature_range_tiled_kernel[
         var base = Int(row_ids[unsafe_offset=i]) * n
         comptime for j in range(FT):
             if j < nf:
-                var v = data_rm[unsafe_offset = base + Int(cols[j])]
+                var v = Float32(data_rm[unsafe_offset = base + Int(cols[j])])
                 if v != v:
                     lmiss[j] += 1
                 else:
@@ -723,6 +746,14 @@ def node_feature_range_tiled_kernel[
             bmin = a if a < bmin else bmin
             bmax = b if b > bmax else bmax
             bmiss += s_miss[w * FT + t]
+        comptime if DT != DType.float32:
+            # Codes: publish the borders they stand for (monotone, so the
+            # cross-block min/max fold is unchanged).
+            var qc = quant + Int(cols[t]) * ET_QSTRIDE
+            if bmin != inf[DType.float32]():
+                bmin = qc[Int(bmin)]
+            if bmax != -inf[DType.float32]():
+                bmax = qc[Int(bmax)]
         var kmin = range_key(bmin)
         var kmax = range_key(bmax)
         var slot = nid * k + f0 + t
@@ -1712,7 +1743,7 @@ def node_feature_score_kernel[
 
 
 def node_feature_score_reg_tiled_kernel[
-    TPB: Int, FT: Int
+    TPB: Int, FT: Int, DT: DType = DType.float32
 ](
     out_n_left: MutPointer[Int32, MutAnyOrigin],
     out_n_total: MutPointer[Int32, MutAnyOrigin],
@@ -1722,7 +1753,7 @@ def node_feature_score_reg_tiled_kernel[
     in_min: MutPointer[Float32, MutAnyOrigin],
     in_max: MutPointer[Float32, MutAnyOrigin],
     in_n_missing: MutPointer[Int32, MutAnyOrigin],
-    data_rm: MutPointer[Float32, MutAnyOrigin],
+    data_rm: MutPointer[Scalar[DT], MutAnyOrigin],
     row_ids: MutPointer[Int32, MutAnyOrigin],
     labels_q: MutPointer[Int32, MutAnyOrigin],
     work_items: MutPointer[NodeWorkItem, MutAnyOrigin],
@@ -1732,6 +1763,8 @@ def node_feature_score_reg_tiled_kernel[
     n_in: Int32,
     n_sampled_cols_in: Int32,
     seed: UInt64,
+    quant: MutPointer[Float32, MutAnyOrigin],
+    nbins: MutPointer[Int32, MutAnyOrigin],
 ):
     """FAST (`-D MOJOLEARN_ET_SCORE_TILED`): the REGRESSION arm of
     `node_feature_score_kernel` (`CLASSIFICATION=False`, one accumulator,
@@ -1774,6 +1807,22 @@ def node_feature_score_reg_tiled_kernel[
                 active[j] = 1
                 var key = key_for(seed, tree, node_id, UInt32(col))
                 thr[j] = draw_threshold_device(key, extent, True)
+    comptime if DT != DType.float32:
+        # Compare codes against the snapped border's code: thread j searches
+        # feature j's borders once for the whole block.
+        var s_code = stack_allocation[
+            FT, Scalar[DType.float32], address_space = AddressSpace.SHARED
+        ]()
+        var tj = Int(thread_idx.x)
+        if tj < nf and active[tj] != 0:
+            var cj = Int(cols[tj])
+            s_code[tj] = Float32(
+                et_snap_code(quant + cj * ET_QSTRIDE, nbins[cj], thr[tj])
+            )
+        barrier()
+        comptime for j in range(FT):
+            if j < nf and active[j] != 0:
+                thr[j] = s_code[j]
     var n_left = SIMD[DType.int32, FT](0)
     var acc_left = SIMD[DType.int32, FT](0)
     var n_seen = Int32(0)
@@ -1789,7 +1838,7 @@ def node_feature_score_reg_tiled_kernel[
         var base = row * n
         comptime for j in range(FT):
             if j < nf and active[j] != 0:
-                if data_rm[unsafe_offset = base + Int(cols[j])] <= thr[j]:
+                if Float32(data_rm[unsafe_offset = base + Int(cols[j])]) <= thr[j]:
                     n_left[j] += 1
                     acc_left[j] += q
         i += stride
