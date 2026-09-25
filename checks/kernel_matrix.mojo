@@ -1272,6 +1272,40 @@ def lib_gemm_leaf_split_for[column: Int]() -> Bool:
     return column == COLUMN_AMD
 
 
+def lib_gemm_window_admit_for[column: Int]() -> Bool:
+    """SPELLING row (lane/nvidia-step-time, 2026-09-25): the IDENTICAL kpack
+    GEMM drops the per-step flush multiply on a WINDOW it has proven cannot
+    produce a subnormal step result, and runs the contract's exact step
+    everywhere else.
+
+    The contract step is `ftz(fma_rn(a, b, acc))` with `a`, `b` flushed at
+    staging and `acc` the previous flushed step (NVIDIA spells the flush as
+    `mul.rn.ftz` by one). While a window is staged, the block takes the
+    minimum biased exponent field `Ea` over the NONZERO words of its A tile
+    and `Eb` over its B tile (zeros constrain nothing; Inf and NaN read 255).
+    Every nonzero flushed operand is a multiple of 2^(E - 150), so every
+    product the window forms is a multiple of G = 2^(Ea + Eb - 300). If
+    `Ea + Eb >= 174`, G >= 2^-126; if in addition every accumulator entering
+    the window is a multiple of 2^-126 (true at a leaf start, where it is
+    +0.0, and after every admitted window), then every exact step result is a
+    multiple of 2^-126, every rounded one is too (a multiple of G below 2^24 G
+    is representable; above, it rounds to a multiple of its ulp, a power of
+    two at least G), and a nonzero multiple of 2^-126 is not subnormal. So
+    `ftz` is the identity on every step result of the window and the bare
+    `fma.rn` IS the contract's step: the same instruction on the same
+    operands in the same order, one rounding each. A window that fails the
+    test, and every later window of the same leaf, runs the exact
+    two-instruction step. The decision is block-uniform.
+
+    NVIDIA only (the column whose step is `fma.rn` + `mul.rn.ftz`).
+    `-D MOJOLEARN_GEMM_NO_WINDOW_ADMIT=1` is the revert arm (the shipped
+    step on every window); `-D MOJOLEARN_GEMM_SABOTAGE_ADMIT_ALWAYS=1`
+    admits every window and must FAIL the subnormal-forcing operands."""
+    comptime if is_defined["MOJOLEARN_GEMM_NO_WINDOW_ADMIT"]():
+        return False
+    return column == COLUMN_NVIDIA
+
+
 def lib_gemm_mfma_for[column: Int]() -> Bool:
     """SPELLING row (lane/amd-step-time, 2026-09-24): the IDENTICAL GEMM's
     TUNED 128x128 calls on the matrix cores (`identical_gemm_mfma_kernel`):

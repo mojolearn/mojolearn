@@ -42,7 +42,14 @@ A-1 chain from `~/mojolearn-evidence/gpt3-run/witness/A-1.chain.partial.jsonl`
     MOJOLEARN_GEMM_LEG_EXTRA=tools/nvidia_step_time/legN.sh \
     MOJOLEARN_GEMM_LEG_OUT=~/mojolearn-evidence/nvidia-step-time/<stamp>-legN \
     sh tools/gemm_remote_leg.sh nvidia --rent --allow-concurrent \
-       --segment-lease 90 --dollar-cap 7 --gpu "NVIDIA H100 80GB HBM3"
+       --segment-lease 90 --dollar-cap 7 --gpu "NVIDIA H100 80GB HBM3" \
+       --local-card ~/mojolearn-evidence/e1g/2026-09-22_224304-nvidia/local/apple.card
+
+ALWAYS pass `--local-card`: without it the runner compiles and runs the
+Apple GEMM card on this Mac (a Mojo build plus Metal work, against the
+no-heavy-compute rule). The first leg-1 start did exactly that and was
+stopped before any pod was created. The reused card is from 2026-09-22; the
+leg's card diff is therefore not a proof in this lane (the replays are).
 
 After the pod is up, push `urls/`, `amd_in/` and `base0817.tgz` to `/root/`
 over the ssh target the runner prints; the body waits for them. The body
@@ -54,7 +61,29 @@ Evidence is copied from the leg OUT into this directory (small files only).
 
 - 2026-09-24 (lane day 0): branch created; tools written
   (`tools/nvidia_step_time/{session.sh,leg1.sh,probe_gemm_ptx.mojo,nsys_fold.py}`).
-  Leg 1 (profile) about to rent.
+- 2026-09-25 00:43-01:18 UTC LEG 1 (RunPod H100 80GB HBM3, driver 580.126.09,
+  224 cores, pod fml7v57ou28d1f, verified deleted, about $2.05). Evidence
+  `legs/leg1/`. Results:
+  - 0.8.17 GEMM source (same box): lean B4 0.6107 s, replay 101..102 PASS,
+    38.83 s a step (steady). origin/main (launch bound): lean 0.6109 s (same
+    witnesses), replay 101..103 PASS 38.83 s, 1999..2000 PASS 38.79 s. The
+    launch bound changes nothing on NVIDIA (255 registers either way).
+  - Per shard (timers build, 617 ms envelope): GEMM 401.7 ms (65 percent),
+    attention 158 ms (fwd_r2 68.5, zdot 34.1, dq 30.0, dkdv 25.4), cross
+    entropy 14, the rest about 45. nsys agrees (kernel time = step time: no
+    launch or host gap to win).
+  - GEMM kernels (kpack all-leaves and group): 255 registers, 4 KB local
+    fold stack, 33.8 KB smem, ONE block (8 warps) an SM. 15.2 TFLOP/s, 45
+    percent of the FFMA+FMUL issue ceiling. DIAG decomposition at T3 (sum
+    400 ms): no flush multiply -26 percent, no staging (stores, barrier,
+    prefetch) -32 percent, no fold -15 percent, FMA floor -69 percent.
+  - Launch bound 512 (128 registers, two blocks an SM): spills 560 B,
+    neutral (-7 to +3 percent per call). Every trial arm: kpack_hg is best.
+- 2026-09-25 LEG 2 prepared: GEMM WINDOW ADMISSION
+  (`lib_gemm_window_admit_for`, NVIDIA only; revert
+  `-D MOJOLEARN_GEMM_NO_WINDOW_ADMIT=1`; sabotage
+  `-D MOJOLEARN_GEMM_SABOTAGE_ADMIT_ALWAYS=1`) and DIAG 6/7/8 (no barrier,
+  no prefetch, no staging store). Body `tools/nvidia_step_time/leg2.sh`.
 
 ## Findings so far (source reading, no NVIDIA measurement yet)
 

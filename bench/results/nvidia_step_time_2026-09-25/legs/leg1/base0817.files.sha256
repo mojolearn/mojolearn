@@ -1,0 +1,3 @@
+4caaae0b86204561f8cf89fedd231ced58539037d6e01a91e937fa724c21cf6c  checks/kernel_matrix.mojo
+c169ccf1f1859693e7b89eff3ccd9dc86aeffe9fb646952074d4d54de89efa12  checks/numerics.mojo
+f93167dbd11f0986d2399c340e184769f4d171663ce470bc50a6758e48149589  gemm/checks/gemm_identical.mojo

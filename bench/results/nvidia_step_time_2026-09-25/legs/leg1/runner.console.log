@@ -1,0 +1,123 @@
+== gemm.fp32.v1 remote leg (DEVIATION 536) ==
+   profile:  mojolearn.identical.gemm.fp32.v1
+   vendor:   nvidia    label in the diff: NVIDIA
+   payload:  gemm
+   mode:     rent
+   gpu:      NVIDIA H100 80GB HBM3
+   image:    runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04
+   lease:    90 minutes (hard cap 2880)
+   out:      /Users/andrewhendel/mojolearn-evidence/nvidia-step-time/leg1
+
+   commit:   cf938b3f1 parent f2293183c
+
+== step 1: the Apple reference card ==
+[20:42:54 nvidia] local card SUPPLIED (not generated): /Users/andrewhendel/mojolearn-evidence/nvidia-step-time/leg1/local/apple.card
+[20:42:54 nvidia]   nothing here can check it came from this commit. That is on the operator.
+  local card: /Users/andrewhendel/mojolearn-evidence/nvidia-step-time/leg1/local/apple.card (61 lines)
+
+== step 2: pre-flight ==
+  pre-flight: this machine's uplink
+    uplink up on all three probes
+  pre-flight: existing leases on this machine
+    2w7wair8gqbquf   EXPIRED 6001 min ago
+    6unpt1svcjgy5t   EXPIRED 6270 min ago
+  pre-flight: pods already up on this account
+    CONCURRENT: pod(s) already up and NOT reaped: q6ce5f4vk46spx
+    --allow-concurrent was passed. This leg creates its own
+    pod, terminates BY ITS OWN POD ID, and arms a dead-man
+    keyed to its own name, so it will not touch those. YOU
+    are now responsible for confirming ALL of them are gone:
+      tools/gemm_remote_leg.sh reap <pod-id>
+    none named mojolearn-gemm-*
+
+== step 3: the box ==
+[20:43:10 nvidia] dead-man ARMED before the create: pid 77713, fires in 6300s, keyed by name mojolearn-gemm-nvidia-2026-09-24_204254-77466
+[20:43:10 nvidia]   cancel by hand only after the pod is confirmed gone:  kill 77713; rm -rf /var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T//mojolearn-gemm-deadman-77466
+[20:43:10 nvidia] creating mojolearn-gemm-nvidia-2026-09-24_204254-77466 (NVIDIA H100 80GB HBM3, runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04)
+[20:43:10 nvidia]   THE BILL STARTS HERE and the box is NOT YET ARMED.
+[20:43:12 nvidia] pod fml7v57ou28d1f created
+[20:43:12 nvidia] segment lease: 90 minutes at $3.49/h is at most $5.24, under the cap of $7
+[20:43:46 nvidia] ssh target: -p 17314 root@103.207.149.138
+[20:43:49 nvidia] ssh up after 1 attempt(s)
+
+== step 4: the lease, BEFORE any work ==
+[20:43:49 nvidia] ARMING THE LEASE BEFORE ANY WORK (90 minutes)
+    arming a 90-minute self-kill on pod fml7v57ou28d1f ...
+    ARMED. Pod fml7v57ou28d1f is TERMINATED through the API in 90 minutes.
+      lease: /Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-ad52900fc55db0c7d/tools/../bench/results/runpod_leases/fml7v57ou28d1f.lease
+      extend with: tools/runpod_guard.sh extend fml7v57ou28d1f '-p 17314 root@103.207.149.138' <minutes>
+    fml7v57ou28d1f: 90 minutes left of a 90-minute lease
+
+== step 5: the key on the pod, and where it is visible ==
+    -rw------- 1 root root 50 Sep 25 00:44 /root/.mojolearn-rp.key
+    KEY_NOT_IN_PS
+
+== step 6: the source ==
+[20:44:08 nvidia] shipping the COMMIT (cf938b3f1da7386a0dcab8ba5730e162fa6839f5), not the working tree
+[20:44:14 nvidia]   archive source sha256: b2b00b78db59ef23db6faea0c7edc4a2
+[20:45:19 nvidia] R2 STAGED 2 key(s) in 18s, 2 linked into /root/mojolearn
+[20:45:27 nvidia] BINCACHE STAGED partition=sm_90a/runpod-runpod-pytorch-2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04 leg=20260925T004522Z-46e16187 entries=6
+[20:45:31 nvidia] shipped the extra body: tools/nvidia_step_time/leg1.sh
+[20:45:35 nvidia] starting the payload DETACHED on the box, then polling for it
+    REMOTE_PID=778
+[20:45:39 nvidia]   remote pid 778; polling every 30s, giving up after 5001s
+[21:16:41 nvidia]   the payload finished (its sentinel is on the box)
+    REMOTE_BODY_DONE
+
+== step 7: fetch ==
+    source_sha256.txt
+    uname.txt
+    nvidia.card
+    pixi_env.log
+    gpu.txt
+    extra.log
+    nv-step-time
+    device_check.log
+    pixi_install.log
+    pixi_which.txt
+    mojo_version.txt
+    leg.txt
+    nvidia.card.log
+    card_driver.log
+
+== step 8: what came home ==
+  remote card: mode read back from the run itself = [IDENTICAL]
+  remote device check: mode read back from the run itself = [IDENTICAL]
+  SOURCE SHA MISMATCH -- the box did not run what was shipped.
+    here:   b2b00b78db59ef23db6faea0c7edc4a20504dc8dc75727e836bb68d837e1a85c
+    there:  8199aa5c4a3c2b9380e798639b181a3802968c8d426a479b12aaaf4eb7cbc353
+    Every comparison below is void: this is not one variable.
+  gpu on the box:
+    NVIDIA H100 80GB HBM3, 580.126.09, 81559 MiB, 0 MiB, 81079 MiB
+    vendor=nvidia
+    commit=cf938b3f1da7386a0dcab8ba5730e162fa6839f5
+    card_full=
+    trace_dump=
+    started=2026-09-25T00:45:39Z
+    pixi_install_exit=0
+    device_check_exit=0
+    card_exit=0
+    extra_exit=0
+    finished=2026-09-25T01:16:20Z
+  the device kernel's own gates: GREEN on this silicon
+
+== step 9: Apple vs NVIDIA ==
+  NOT DIFFING. Something above is unsound and a stage name produced
+  from an unsound pair is worse than no stage name at all.
+
+== step 10: terminate at the end of the WORK ==
+  lease at exit:
+    fml7v57ou28d1f: 57 minutes left of a 90-minute lease
+  terminating fml7v57ou28d1f (layer two, from this machine)
+    DELETE /v1/pods/fml7v57ou28d1f -> HTTP 204
+  VERIFIED: fml7v57ou28d1f is gone (HTTP 404).
+
+artifacts: /Users/andrewhendel/mojolearn-evidence/nvidia-step-time/leg1
+next: archive/evidence/gemm/E1G_RUNBOOK.md, 'reading the result'. Write the row into
+E1G_RESULTS.md before the pod's details are only in this scrollback.
+
+== teardown (exit 1) ==
+  lease at exit:
+    NO LEASE for fml7v57ou28d1f -- it is unguarded.
+  dead-man cancelled (pid 77713)
+/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T//mojolearn-leg-snapshot-77466/gemm_remote_leg.sh: line 2599: 77713 Terminated: 15          nohup sh -c 'trap "" HUP INT; exec sh "$0"' "$DEADMAN_DIR/deadman.sh" > /dev/null 2>&1 < /dev/null
