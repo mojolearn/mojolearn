@@ -15,8 +15,8 @@
 #   b. PRICED BEFORE THE CREATE: the offering's live OnDemandPrice (cents/h)
 #      times the WHOLE horizon (the Mac dead-man's deadline, never less than
 #      the offering's minimum reservation), rounded up to a cent. Above the
-#      caller's dollar cap: refused. The balance must hold it plus the 500-cent
-#      floor: Hot Aisle bills the prepaid balance until the DELETE.
+#      caller's dollar cap: refused. The balance is recorded, not enforced beyond
+#      the 500-cent floor: Hot Aisle tops it up automatically (Andrew, 2026-09-25).
 #   c. SPEC: 1gpu (one MI300X, any core count), 2gpu (the 2x MI300X VM, 60
 #      minutes minimum) or auto (1gpu, and 2gpu only when no 1x VM is in
 #      stock). On a 2gpu VM the release uses GPU 0 only; the caller pins it.
@@ -385,8 +385,7 @@ ha_rent() {
     ha_call GET "teams/$HA_TEAM/balance/"
     HA_BAL_BEFORE=$(ha_py balance); HA_BAL_BEFORE=${HA_BAL_BEFORE:--1}
     ha_rec "balance_before_cents=$HA_BAL_BEFORE"
-    [ "$HA_BAL_BEFORE" -ge "$HA_MIN_BALANCE_CENTS" ] 2>/dev/null \
-        || { ha_refuse "balance $(ha_dollars "$HA_BAL_BEFORE") is below the \$5.00 floor"; return 1; }
+    # no balance floor: the team balance tops up automatically (2026-09-25)
     ha_call GET "user/ssh_keys/"
     [ "$HA_CODE" = 200 ] && [ "$(ha_py sshkey "$HA_SSH_KEY_FP")" = yes ] \
         || { ha_refuse "the ssh key $HA_SSH_KEY_FP is not registered on the account (HTTP $HA_CODE)"; return 1; }
@@ -425,8 +424,12 @@ ha_rent() {
     ha_rec "lease_minutes=$_lease horizon_minutes=$_horizon billed_minutes_at_most=$_bill max_cost_cents=$HA_LEASE_CENTS cap_cents=$_cap"
     [ "$HA_LEASE_CENTS" -le "$_cap" ] \
         || { ha_refuse "the $HA_SPEC_USED VM for up to $_bill minutes at $(ha_dollars "$HA_PRICE")/h is up to $(ha_dollars "$HA_LEASE_CENTS"), above the cap of $(ha_dollars "$_cap"); nothing was created"; return 1; }
+    # THE BALANCE IS NOT A LIMIT (Andrew, 2026-09-25): Hot Aisle tops the team
+    # balance up automatically, so a lease is never refused for exceeding it;
+    # the balance is recorded before and after for the cost record, and only
+    # an account below the $5.00 floor (a dead or empty account) refuses above.
     [ "$HA_BAL_BEFORE" -ge $(( HA_LEASE_CENTS + HA_MIN_BALANCE_CENTS )) ] \
-        || { ha_refuse "balance $(ha_dollars "$HA_BAL_BEFORE") is below $(ha_dollars $(( HA_LEASE_CENTS + HA_MIN_BALANCE_CENTS ))), the whole lease ($(ha_dollars "$HA_LEASE_CENTS")) plus the \$5.00 floor"; return 1; }
+        || say "note: balance $(ha_dollars "$HA_BAL_BEFORE") is below the whole lease ($(ha_dollars "$HA_LEASE_CENTS")) plus the floor; Hot Aisle tops up automatically, proceeding"
     say "Hot Aisle $HA_SPEC_USED MI300X VM ($HA_CORES cores) at $(ha_dollars "$HA_PRICE")/h; at most $(ha_dollars "$HA_LEASE_CENTS") for $_bill minutes; balance $(ha_dollars "$HA_BAL_BEFORE")"
     # d. the Mac dead-man, BEFORE the create
     HA_DEADLINE=$(( $(date +%s) + _horizon * 60 ))

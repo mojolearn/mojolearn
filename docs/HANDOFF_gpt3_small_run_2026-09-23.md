@@ -88,9 +88,9 @@ account has one DigitalOcean GPU box, so Hot Aisle's 2x MI300X VM now runs
 whole AMD segments beside it: `/Users/andrewhendel/CascadeProjects/mojolearn/tools/hotaisle_leg.sh`
 takes `--segment-lease N --dollar-cap USD` with `--spec 2gpu --one-body` (one
 body on both GPUs, `--devices 0,1`), priced live from the offering and refused
-above the cap; the provider has no maximum lease (only a 60-minute minimum;
-it bills the prepaid balance until the delete), so the balance must hold the
-whole lease plus $5 and the tool's own cap is 48 hours. In
+above the cap; the provider has no maximum lease (only a 60-minute minimum),
+the team balance tops up automatically (Andrew, 2026-09-25) so it is recorded
+and not a limit, and the tool's own cap is 48 hours. In
 `/Users/andrewhendel/CascadeProjects/mojolearn/tools/lm_run_driver.py` the AMD
 vendor class is per provider, so a DigitalOcean segment and a Hot Aisle segment
 run at once under `--parallel 2`. To put B/1 on Hot Aisle: merge the lane,

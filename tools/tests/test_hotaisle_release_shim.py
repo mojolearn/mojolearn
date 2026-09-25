@@ -431,8 +431,6 @@ def test_2gpu_vm_when_no_1x_stock_pins_gpu_0(world):
 
 
 @pytest.mark.parametrize("setup, phrase", [
-    (lambda c: setattr(c, "balance", 600), "balance $6.00 is below $6.50, the whole lease ($1.50) plus the $5.00 floor"),
-    (lambda c: setattr(c, "balance", 400), "balance $4.00 is below the $5.00 floor"),
     (lambda c: (setattr(c, "q1", 0), setattr(c, "q2", 0)), "no stock: no MI300X VM of spec auto is available"),
 ])
 def test_refusals_create_nothing(world, setup, phrase):
@@ -444,6 +442,16 @@ def test_refusals_create_nothing(world, setup, phrase):
     assert not world.cloud.creates and not commands(world)
     assert not list(world.tmp.glob("slot.*")), "the slot is released on a refusal"
     assert "hotaisle_refused=" in (world.out / "provider.txt").read_text()
+
+
+def test_a_low_balance_still_creates(world):
+    """The team balance tops up automatically (2026-09-25): a balance under
+    $5 is recorded, never a refusal."""
+    world.cloud.balance = 400
+    rc, text = smoke(world)
+    assert rc == 0, text
+    assert "REFUSED" not in text and world.cloud.creates
+    assert_verified_delete(world, world.out / "teardown.txt")
 
 
 def test_cap_refuses_the_2gpu_vm(world):
