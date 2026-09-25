@@ -135,6 +135,12 @@ record = dict(schema='mojolearn.linux.build-provenance.v1', source_commit=commit
               source_inventory=files, source_sha256=hashlib.sha256(json.dumps(files, separators=(',', ':')).encode()).hexdigest(),
               extensions=outputs, host_extension=host_outputs,
               complete=(status == 0 and action == 'build' and len(outputs) == full_count))
+# THE BOX'S BUILD SIZING (tools/build_sizing.py via release061_remote_build.sh):
+# jobs, RSS cap, usable cores and available memory. Scheduling only; the
+# binaries do not depend on it (MOJOLEARN_BUILD_JOBS is byte-neutral, bincache).
+sizing_file = os.environ.get('RELEASE_BUILD_SIZING_FILE')
+if sizing_file and pathlib.Path(sizing_file).is_file():
+    record['build_resources'] = json.loads(pathlib.Path(sizing_file).read_text())
 # THE BINDING CACHE, PER BINARY (packaging/linux/build_sets.sh, 2026-09-22).
 # Present only when the build ran through tools/bincache.py. For every shipped
 # member: how it was obtained (a build, or a hit and from where), the cache
