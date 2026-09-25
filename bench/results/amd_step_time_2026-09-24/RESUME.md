@@ -63,6 +63,35 @@ the matrix-core time.
   replays, kernel trace, all bindings + 201 lanes). Launcher waits for
   13core stock (0 since 02:10 UTC; only the 2x MI300X offering at $5.98/h).
 
+### 2026-09-25 07:20 UTC: NO GPU LEG RAN. Hot Aisle had no stock for 5 hours
+
+Hot Aisle listed no 1x MI300X (13core) from 02:10 to 07:17 UTC; from about
+03:20 it listed no offering at all (the 2x MI300X also went). The launcher
+was stopped at 07:18 UTC so nothing rents unattended. Balance unchanged,
+$27.71. RunPod CPU pods for compile checks: 6 created, 2 of them never
+reached ssh (refused by the runner, deleted, verified gone), about $0.10 total.
+
+TO RUN LEG 1 (nothing else is needed; about 55 minutes, about $2.99):
+1. `python3 tools/amd_step_time_urls.py <dir>/urls runs/t3/2026-09-22/A/1/ckpt_00000100.blm runs/t3/2026-09-22/A/2/ckpt_00001998.blm`
+   (the presigned URLs last 12 h), and put `A-1.chain.partial.jsonl`
+   (= `~/mojolearn-evidence/gpt3-run/witness/A-1.chain.partial.jsonl`),
+   `A-2.chain.jsonl` (= the H100 A/2 leg's `segment/chain.jsonl`) and
+   `lanes_gemm_nonpar.txt` in `<dir>/amd_in`.
+2. `MOJOLEARN_GEMM_LEG_EXTRA=tools/amd_step_time2_leg1.sh MOJOLEARN_GEMM_LEG_OUT=bench/results/amd_step_time_2026-09-24/legs/<stamp>-hotaisle-mi300x-pass2-leg1 MOJOLEARN_STAGE_KEYS="" MOJOLEARN_HOTAISLE_LANE=amd-step-time-2 MOJOLEARN_GPU_ARCHS=gfx942 bash tools/hotaisle_leg.sh amd --rent --minutes 60 --skip-gates`
+3. Once `vm_details.json` shows the address: `tar czf - -C <dir> urls amd_in | ssh hotaisle@<ip> 'sudo tar xzf - -C /root'`
+   (the body waits for these files before the step half).
+4. Read `remote/amd-step-time/session.txt`: `ab <tag> ... hashes_vs_valu=`
+   must read IDENTICAL for noadmit and admit on every line (six kinds);
+   lean witnesses of admit, noadmit, dq, dqkv, attn3 must be equal; every
+   replay PASS; `gemm_*_check` green; verify chunks 0 DIVERGENT. Any
+   difference: revert that lever (admission: its define; the attention
+   kernels are already off by default).
+
+STATUS OF THE BRANCH DEFAULTS: exact admission is ON by default in the AMD
+GEMM on this branch and is NOT yet proven on a device (the proof is the
+argument in the source plus the leg 1 checks above). Do not merge before
+leg 1 reads IDENTICAL. The three attention kernels are OFF by default.
+
 ### The plan (levers in order, each one leg, bits proven after each)
 
 1. GEMM EXACT ADMISSION (AMD only, `identical_gemm_mfma_kernel`, trial
