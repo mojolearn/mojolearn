@@ -11,7 +11,7 @@ from checks.kernel_matrix import TARGET_COLUMN, column_shared_limit
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
-from core.launch_log import log_launch
+from core.launch_log import log_launch, log_launch_ctx
 from core.device_zero import enqueue_zero_bytes
 from ensemble.instruments import FitInstruments
 from ensemble.decisiontree.batched_levelalgo.bins import Bin, BinScales
@@ -39,6 +39,7 @@ from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import
     TUNABLE_SPLIT_HISTOGRAM_DYNAMIC_SMEM_LIMIT_BYTES,
     launch_build_histograms_kernel,
     launch_find_best_splits_kernel,
+    HIST_ZERO_AFTER_READ_DEFAULT,
     launch_gather_sampled_order_kernel,
     launch_leaf_kernel,
     launch_node_split_kernel,
@@ -980,7 +981,7 @@ def flush_splits_downloads[
         return
     staging.d_view.ensure(staging.d, extent)
     staging.h_view.ensure(staging.h, extent)
-    log_launch("xfer_splits_download")
+    log_launch_ctx(ctx, "xfer_splits_download")
     ctx.enqueue_copy(dst_buf=staging.h_view.view, src_buf=staging.d_view.view)
 
 
@@ -1116,6 +1117,10 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
     var splits_d_view: _DevPrefixView
     var splits_h_view: _HostPrefixView
     var hist_view: _DevPrefixView
+    var hist_clean: Bool
+    """HIST_ZERO_AFTER_READ_DEFAULT: the whole histogram workspace is
+    known zero (zeroed once, then every consumer hands its cells back
+    zeroed), so a round needs no `hist_zero` launch."""
 
     # --- DEVIATION 128a's argument blobs, one per launcher --------------
     # DEVIATION 1909: staged PER TREE, not per round/batch. Inside one
@@ -1342,6 +1347,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         self.hist_view = _DevPrefixView(
             self.histograms, size_of[Self.O.BinT]() * max_len_histograms
         )
+        self.hist_clean = False
 
         self.hist_args = DeviceArgs[HistogramArgs[Self.O]](ctx)
         self.find_args = DeviceArgs[FindBestSplitsArgs[Self.O]](ctx)
@@ -1695,7 +1701,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         if nbytes == 0:
             return
         self.phase_view.ensure(self.d_buff, nbytes)
-        log_launch("xfer_phase_upload")
+        log_launch_ctx(ctx, "xfer_phase_upload")
         ctx.enqueue_copy(
             dst_buf=self.phase_view.view,
             src_ptr=self.h_phase.unsafe_ptr(),
@@ -1707,7 +1713,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         # `:479` -- their count is `work_items.size()`.
         self.splits_h_view.ensure(self.h_splits, nbytes)
         self.splits_d_view.ensure(self.splits, nbytes)
-        log_launch("xfer_splits_download")
+        log_launch_ctx(ctx, "xfer_splits_download")
         ctx.enqueue_copy(
             dst_buf=self.splits_h_view.view,
             src_buf=self.splits_d_view.view,
@@ -1844,12 +1850,24 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         # 14.4 s HIGGS 1M FAST fit on the M4, `core/device_zero.mojo`);
         # the launch costs 10 us and writes the same zeros.
         var t_h = instr.times.start()
-        log_launch("hist_zero")
-        enqueue_zero_bytes(
-            ctx,
-            self._hist_ptr().unsafe_bitcast[UInt8](),
-            size_of[Self.O.BinT]() * len_histograms,
-        )
+        comptime if HIST_ZERO_AFTER_READ_DEFAULT:
+            if not self.hist_clean:
+                # Once per builder: the WHOLE workspace, so every cell a
+                # later round's (node, column) block can touch starts zero.
+                log_launch_ctx(ctx, "hist_zero")
+                enqueue_zero_bytes(
+                    ctx,
+                    self._hist_ptr().unsafe_bitcast[UInt8](),
+                    len(self.histograms),
+                )
+                self.hist_clean = True
+        else:
+            log_launch_ctx(ctx, "hist_zero")
+            enqueue_zero_bytes(
+                ctx,
+                self._hist_ptr().unsafe_bitcast[UInt8](),
+                size_of[Self.O.BinT]() * len_histograms,
+            )
         instr.times.stop_host("host_hist_zero", t_h)
         t_h = instr.times.start()
 
@@ -1897,7 +1915,9 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         # DEVIATION 302: their `if (distributed) allReduceHistograms(...)`
         # sits exactly here (`:613`) and is unreachable on one device.
         t_h = instr.times.start()
-        launch_find_best_splits_kernel[Self.O](
+        launch_find_best_splits_kernel[
+            Self.O, zero_after=HIST_ZERO_AFTER_READ_DEFAULT
+        ](
             ctx,
             self._hist_ptr(),
             n_bins,
@@ -2408,7 +2428,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         var sp_bytes = n * size_of[Split[Self.O.DataT]]()
         if sp_bytes > 0:
             self.splits_d_view.ensure(self.splits, sp_bytes)
-            log_launch("xfer_splits_upload")
+            log_launch_ctx(ctx, "xfer_splits_upload")
             ctx.enqueue_copy(
                 dst_buf=self.splits_d_view.view,
                 src_ptr=self.h_splits.unsafe_ptr(),
@@ -2594,7 +2614,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             var dt = self.leaf_d_tree.create_sub_buffer[DType.uint8](
                 0, size_of[SparseTreeNode[Self.O.DataT]]() * size
             )
-            log_launch("xfer_leaf_tree")
+            log_launch_ctx(ctx, "xfer_leaf_tree")
             ctx.enqueue_copy(
                 dst_buf=dt,
                 src_ptr=self.leaf_h_tree.unsafe_ptr().unsafe_offset(
@@ -2604,7 +2624,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             var dr = self.leaf_d_ranges.create_sub_buffer[DType.uint8](
                 0, size_of[InstanceRange]() * size
             )
-            log_launch("xfer_leaf_ranges")
+            log_launch_ctx(ctx, "xfer_leaf_ranges")
             ctx.enqueue_copy(
                 dst_buf=dr,
                 src_ptr=self.leaf_h_ranges.unsafe_ptr().unsafe_offset(
@@ -2644,7 +2664,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             var dls = self.leaf_d_leaves.create_sub_buffer[Self.O.DataT](
                 0, size * n_out
             )
-            log_launch("xfer_leaf_download")
+            log_launch_ctx(ctx, "xfer_leaf_download")
             ctx.enqueue_copy(dst_buf=hl, src_buf=dls)
             d_views.append(dt^)
             d_views.append(dr^)

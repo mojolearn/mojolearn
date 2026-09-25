@@ -98,6 +98,22 @@ the real value.
 """
 
 from std.bit import bit_width
+from std.sys.compile import is_defined
+
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+
+comptime LCG_MERSENNE_REDUCE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and not is_defined["MOJOLEARN_FAST_LCG_MODULO"]()
+)
+"""FAST only: `lcg_next` reduces `48271 * x` modulo 2^31 - 1 with the
+Mersenne fold `(t & M) + (t >> 31)` and one conditional subtract instead of
+a 64-bit `%`. For `x < M` the product is below 2^47, the fold is below 2M,
+and the result is the SAME integer, so every draw, every Feistel key and
+every sampled feature is unchanged. Apple GPUs have no 64-bit integer
+divide; the `%` was a software division per draw, 48 draws per sampled
+feature per sampling round (the RF `phase_setup` launch measured about
+0.4 ms on the M4 at taxi 1M). `-D MOJOLEARN_FAST_LCG_MODULO` restores `%`."""
 
 # --- cuda::std::minstd_rand ------------------------------------------------
 # `linear_congruential_engine.h:403`:
@@ -158,7 +174,14 @@ def lcg_next(mut x: UInt64) -> UInt64:
     seed itself. Getting this backwards shifts the entire stream by one and
     still looks random.
     """
-    x = (LCG_A * x) % LCG_M
+    comptime if LCG_MERSENNE_REDUCE:
+        var t = LCG_A * x
+        var r = (t & LCG_M) + (t >> 31)
+        if r >= LCG_M:
+            r -= LCG_M
+        x = r
+    else:
+        x = (LCG_A * x) % LCG_M
     return x
 
 
@@ -260,6 +283,9 @@ struct FeistelBijection(Copyable, Movable):
           64. Doing that shift in 64 bits is a real and invisible bug: it
           only differs when `B_k`'s top bit is live.
         """
+        comptime if LCG_MERSENNE_REDUCE:
+            if self.left_bits < 32:
+                return self._round_trip_u32(val)
         var l = (val >> self.right_bits) & 0xFFFFFFFF
         var r = val & self.right_mask
         for i in range(FEISTEL_ROUNDS):
@@ -276,6 +302,36 @@ struct FeistelBijection(Copyable, Movable):
             l = l_prime & self.left_mask
             r = r_prime & self.right_mask
         return (l << self.right_bits) | r
+
+    @always_inline
+    def _round_trip_u32(self, val: UInt64) -> UInt64:
+        """`_round_trip` in 32-bit lanes (FAST, `LCG_MERSENNE_REDUCE`).
+
+        `l < 2^32`, so `M0 * l mod 2^64` is exactly
+        `(M0_hi * l mod 2^32) << 32` plus the WIDENING product `M0_lo * l`:
+        the low word of that product is `B_k`, and its high word plus
+        `M0_hi * l` (both mod 2^32) is `F_k`'s multiplicand. Every shift and
+        mask below is the 64-bit version's, taken in `UInt32`, whose
+        wraparound is the C++ `uint32_t` truncation the original spells as
+        `& 0xFFFFFFFF`. Same integers; no emulated 64 x 64 multiply."""
+        comptime M0_LO = UInt32(Int(FEISTEL_M0 & 0xFFFFFFFF))
+        comptime M0_HI = UInt32(Int((FEISTEL_M0 >> 32) & 0xFFFFFFFF))
+        var rb = UInt32(Int(self.right_bits))
+        var lb = UInt32(Int(self.left_bits))
+        var lmask = UInt32(Int(self.left_mask))
+        var rmask = UInt32(Int(self.right_mask))
+        var l = UInt32(Int((val >> self.right_bits) & 0xFFFFFFFF))
+        var r = UInt32(Int(val & self.right_mask))
+        for i in range(FEISTEL_ROUNDS):
+            var lo = UInt64(M0_LO) * UInt64(l)
+            var hi = M0_HI * l + UInt32(Int(lo >> 32))
+            var f_k = hi ^ self.keys[i]
+            var b_k = UInt32(Int(lo & 0xFFFFFFFF))
+            var l_prime = f_k ^ r
+            var r_prime = (b_k << (rb - lb)) | (r >> lb)
+            l = l_prime & lmask
+            r = r_prime & rmask
+        return (UInt64(Int(l)) << self.right_bits) | UInt64(Int(r))
 
     @always_inline
     def __call__(self, index: Int) -> Int:
