@@ -26,7 +26,7 @@ from ._buffer import (
 )
 from ._labels import (
     argmax_rows, classes_from_member, classes_member, decode_labels,
-    flatten_labels, sorted_classes,
+    encode_labels, flatten_labels, sorted_classes,
 )
 from ._mode import NumericModeMixin
 
@@ -1071,15 +1071,17 @@ class LogisticRegression(NumericModeMixin):
             )
         x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
         rows, cols = x.shape
-        labels, shape = _labels_1d(y)
-        if labels is None:
+        if len(_shape_of(y)) != 1:
             raise ValueError("mojolearn LogisticRegression requires a 1-D y")
-        if len(labels) != rows:
-            raise ValueError("mojolearn LogisticRegression X and y lengths differ")
         # LabelEncoder: sorted unique classes -> 0..k-1
         # (logistic_regression.py:383), under the package-wide ORDER RULE
-        # (`_labels.sorted_classes`, DEVIATION 2340): a Python list.
-        self.classes_, codes = sorted_classes(labels)
+        # (DEVIATION 2340) through `encode_labels`: the native encoder for a
+        # numeric buffer (DEVIATION 2500, as the forests take it), the
+        # `sorted_classes` routine for everything else. Same classes, same
+        # codes (`tests/test_labels_native.py`).
+        self.classes_, codes = encode_labels(y)
+        if len(codes) != rows:
+            raise ValueError("mojolearn LogisticRegression X and y lengths differ")
         n_classes = len(self.classes_)
         if n_classes < 2:
             raise ValueError("mojolearn LogisticRegression: y has one class")
@@ -1089,7 +1091,7 @@ class LogisticRegression(NumericModeMixin):
         n_targets = 1 if n_classes == 2 else n_classes
         loss = _QN_LOSS_LOGISTIC if n_targets == 1 else _QN_LOSS_SOFTMAX
         # Label encoding, the permitted O(rows) Python loop.
-        y_enc = Array.from_list(codes, "<f4")  # dense codes < 2**24: exact
+        y_enc = codes.astype("<f4")  # dense codes < 2**24: exact
         l1, l2 = self._get_qn_params()
         if n_targets > 1 and l1 != 0.0:
             raise NotImplementedError(
