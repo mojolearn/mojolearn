@@ -1,4 +1,4 @@
-"""The Linux release builds default to CPU pods (Andrew, 2026-09-25): one
+"""The CPU-pod build route is opt-in (--build-backend cpu-box, Andrew 2026-09-25): one
 tools/release_linux_build.sh per set, all three launched together, each
 writing the release-build tree pack_wheel.py and proof_ok read; the GPU legs
 stay available by name and a CPU leg never takes the NVIDIA GPU walk."""
@@ -20,11 +20,11 @@ class CpuBox(unittest.TestCase):
     def setUp(self):
         self.ctx = argparse.Namespace(rel=Path(tempfile.mkdtemp()), commit=C)
 
-    def test_default_backend_is_cpu_box(self):
+    def test_default_backend_is_gpu_legs_cpu_box_opt_in(self):
         self.assertIs(rel.BUILD_BACKENDS["cpu-box"], rel.cpu_legs)
-        self.assertIn("gpu-legs", rel.BUILD_BACKENDS)
+        self.assertIs(rel.BUILD_BACKENDS["gpu-legs"], rel.gpu_legs)
         src = (Path(__file__).resolve().parent / "release.py").read_text()
-        self.assertIn('ap.add_argument("--build-backend", default="cpu-box"', src)
+        self.assertIn('ap.add_argument("--build-backend", default="gpu-legs"', src)
 
     def test_three_legs_one_set_each(self):
         legs = rel.cpu_legs(self.ctx)

@@ -375,7 +375,7 @@ CPU_BOX_FLAVORS = "cpu5g,cpu3g,cpu5m,cpu3m"
 
 
 def cpu_legs(ctx):
-    """THE DEFAULT ROUTE (Andrew, 2026-09-25): the three Linux sets compile on
+    """OPT-IN ROUTE (--build-backend cpu-box): the three Linux sets compile on
     RunPod CPU pods, one pod per set, all three at once, with no GPU present
     (tools/release_linux_build.sh --archs <one>: Mojo compiles each set ahead
     of time from --target-accelerator alone). CPU pods do not wait on GPU
@@ -396,8 +396,8 @@ def cpu_legs(ctx):
     return legs
 
 
-#: "cpu-box" is the default since 2026-09-25 (Andrew: a release is light
-#: checks, not hours of waiting on GPU stock); "gpu-legs" stays available.
+#: "gpu-legs" is the default (Andrew, 2026-09-25: no CPU anywhere by default);
+#: "cpu-box" is opt-in by name.
 BUILD_BACKENDS = {"cpu-box": cpu_legs, "gpu-legs": gpu_legs}
 
 
@@ -1142,7 +1142,7 @@ def main(argv=None):
                     help="publish the two wheels (none = the workflow's checks without uploading)")
     ap.add_argument("--only", default="", help="comma-separated step names to run (others are skipped)")
     ap.add_argument("--redo", default="", help="comma-separated steps whose record is discarded first")
-    ap.add_argument("--build-backend", default="cpu-box", choices=sorted(BUILD_BACKENDS))
+    ap.add_argument("--build-backend", default="gpu-legs", choices=sorted(BUILD_BACKENDS))
     ap.add_argument("--amd-expect-from", default="",
                     help="an NVIDIA release-build dir: run the AMD core-host probe against its STAGED copy")
     ap.add_argument("--smoke-gpu", default="", help="RunPod GPU(s) for the Linux smoke, |-separated, walked on no stock (default the 4090, L40S, L40, RTX 6000 Ada)")

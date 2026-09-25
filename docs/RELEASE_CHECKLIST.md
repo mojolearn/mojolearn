@@ -261,17 +261,11 @@ sha256sum <sm89>/build/sets/cuda/sm_89/host/*.so <sm90a>/build/sets/cuda/sm_90a/
 differ across legs, and requires every manifest binding in every set; the
 lines above say WHICH leg is wrong before the packer says that one is.
 
-## 2c. The CPU build route: the DEFAULT since 2026-09-25
+## 2c. The CPU build route: opt-in only
 
-**Policy (2026-09-25, Andrew, replacing 2026-09-22's GPU-box default): the
-Linux sets compile on RunPod CPU pods, one per set, all three at once**
-(`pixi run release` uses `--build-backend cpu-box`; `gpu-legs` remains by
-name). Compiling needs no GPU and CPU pods do not wait on GPU stock; 0.8.19
-lost hours to RunPod having no H100 or L40S and to a cold gfx942 build on a
-GPU droplet. Identity is still read back on the silicon it ships for: the
-NVIDIA and AMD wheel columns run the built wheel on real GPUs, on the changed
-lanes, before anything publishes.
-
+**Policy (2026-09-25, Andrew): no CPU anywhere by default.** `pixi run release`
+compiles on the GPU legs of section 2. The CPU pods below run only with
+`--build-backend cpu-box`.
 
 ```sh
 bash tools/release_linux_build.sh $REF          # dry run: nothing rented

@@ -323,14 +323,12 @@ class RunTests(unittest.TestCase):
         self.assertIn("== binding reuse plan for", out.stdout)
         self.assertIn("legs to launch:", out.stdout)
         legs = out.stdout.split("legs to launch:", 1)[1].splitlines()[0]
-        # the default route is the CPU pods (2026-09-25): one
-        # release_linux_build.sh per set, never a GPU rental for the build
-        self.assertNotIn("gemm_remote_leg.sh nvidia", out.stdout)
-        for name in ("cuda-sm_90a", "cuda-sm_89", "hip-gfx942"):
-            arch = name.split("-", 1)[1]
-            if name in legs:
-                self.assertIn("tools/release_linux_build.sh", out.stdout)
-                self.assertIn("--archs " + arch, out.stdout)
+        # the default route is the GPU legs (2026-09-25: no CPU by default)
+        self.assertNotIn("tools/release_linux_build.sh", out.stdout)
+        if "cuda-" in legs:
+            self.assertIn("gemm_remote_leg.sh nvidia", out.stdout)
+        if "hip-gfx942" in legs:
+            self.assertIn("MOJOLEARN_RELEASE_UBUNTU22=1", out.stdout)
         if not any(n in legs for n in ("cuda-", "hip-")):
             self.assertIn("no build leg", out.stdout)
         self.assertIn("pack-linux-wheel", out.stdout)
