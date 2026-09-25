@@ -53,7 +53,8 @@ cmd="${@: -1}"
 case "$cmd" in
   *"nohup bash "*"/box.sh "*)
     d="$FAKE_BOX_DIR"
-    printf '{"lanes": {}}\n' > "$d/column.json"; echo 0 > "$d/column.exit"
+    if [ -n "${FAKE_COLUMN:-}" ]; then cp "$FAKE_COLUMN" "$d/column.json"; else printf '{"lanes": {}}\n' > "$d/column.json"; fi
+    echo 0 > "$d/column.exit"
     echo install_exit=0 > "$d/column.txt"; echo done > "$d/box.done"
     echo STARTED; exit 0 ;;
 esac
@@ -264,15 +265,56 @@ class SmokeTests(unittest.TestCase):
                 'MOJOLEARN_DO_TOKEN_FILE': str(self.dir / 'do.token'),
                 'MOJOLEARN_SMOKE_REMOTE_DIR': str(box), 'FAKE_BOX_DIR': str(box)}
 
-    def rent(self, provider, runpod='nostock', refuse_regions=(), env=None):
+    def rent(self, provider, runpod='nostock', refuse_regions=(), env=None, extra=()):
         base = self.start_cloud(runpod, refuse_regions)
         e = self.rented_env(base)
         e.update(env or {})
         out = self.dir / 'out'
         r = self.run_smoke(str(self.wheel), '--expected-source-commit', COMMIT, '--vendor', 'hip',
                            '--provider', provider, '--column', self.selection(), '--rent',
-                           '--lease', '10', '--smoke-seconds', '60', '--out', str(out), env=e, timeout=240)
+                           '--lease', '10', '--smoke-seconds', '60', '--out', str(out), *extra, env=e, timeout=240)
         return r, out, self.cloud.log
+
+    # ---------------------------------------------------------------- reference columns
+    def columns(self, amd_hash):
+        """The Apple reference and the column the fake AMD box brings home."""
+        def col(vendor, h):
+            return {'mode': 'identical', 'repeats': 1, 'vendor': vendor, 'commit': COMMIT, 'complete': True,
+                    'cells': {'rf-clf/base': {'verdict': 'STABLE', 'hashes': [h], 'parts': [{'predict': h}]}}}
+        apple, amd = self.dir / 'apple.json', self.dir / 'amd.json'
+        apple.write_text(json.dumps(col('apple-m4', 'aaaa')))
+        amd.write_text(json.dumps(col('amd-mi300x', amd_hash)))
+        return apple, amd
+
+    def test_column_agreeing_with_the_apple_reference_passes(self):
+        apple, amd = self.columns('aaaa')
+        r, out, _ = self.rent('do', env={'FAKE_COLUMN': str(amd)}, extra=('--ref-column', str(apple)))
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn('no DIVERGENT cell against the reference column(s)', r.stdout)
+        self.assertIn('summary: IDENTICAL=1', (out / 'diff-ref-hip.txt').read_text())
+
+    def test_a_divergent_cell_against_the_apple_reference_fails(self):
+        apple, amd = self.columns('bbbb')
+        r, out, _ = self.rent('do', env={'FAKE_COLUMN': str(amd)}, extra=('--ref-column', str(apple)))
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn('DIVERGENT against the reference column(s)', r.stdout)
+        self.assertIn('rf-clf/base', r.stdout)
+        self.assertIn('destroy_confirmed=1', (out / 'teardown.txt').read_text())
+
+    def test_cpu_column_is_still_a_reference_by_its_old_name(self):
+        apple, amd = self.columns('bbbb')
+        r, out, _ = self.rent('do', env={'FAKE_COLUMN': str(amd)}, extra=('--cpu-column', str(apple)))
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn('DIVERGENT against the reference column(s)', r.stdout)
+
+    def test_ref_column_refusals(self):
+        apple, _ = self.columns('aaaa')
+        r = self.run_smoke(str(self.wheel), '--expected-source-commit', COMMIT, '--ref-column', str(apple))
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn('--ref-column needs --column', r.stderr)
+        r = self.run_smoke(str(self.wheel), '--expected-source-commit', COMMIT, '--vendor', 'hip',
+                           '--column', self.selection(), '--ref-column', str(self.dir / 'missing.json'))
+        self.assertIn('no reference column', r.stderr)
 
     def posts(self, log, path):
         return [x for x in log if x[0] == 'POST' and x[1] == path]
