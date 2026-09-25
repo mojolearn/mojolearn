@@ -241,8 +241,16 @@ LISTING="$(api -w '\nHTTP %{http_code}' "$API/droplets?per_page=200")"
 [ "$(printf '%s' "$LISTING" | tail -1)" = "HTTP 200" ] || die "API not reachable: $(printf '%s' "$LISTING" | tail -1)"
 GPU_LIVE="$(printf '%s' "$LISTING" | sed '$d' | python3 -c "import json,sys
 d=json.load(sys.stdin); print(' '.join('%s:%s:%s'%(x['id'],x['name'],x.get('size_slug','')) for x in d.get('droplets',[]) if x['name']=='$NAME' or str(x.get('size_slug','')).startswith('gpu-')))")"
-[ -z "$GPU_LIVE" ] || die "GPU droplet(s) already live, destroy or adopt them first: $GPU_LIVE"
-log "API reachable, no GPU droplet live, no droplet named $NAME"
+if [ -n "$GPU_LIVE" ]; then
+  # a rental refuses: one GPU droplet at a time on this account. A DRY RUN
+  # creates nothing, so it only says what is live (2026-09-25: the GPT-3
+  # Small run holds the account's MI325X for days, and the release rehearsal
+  # dry-runs this leg; the real AMD column then rents elsewhere or waits).
+  [ $RENT = 0 ] || die "GPU droplet(s) already live, destroy or adopt them first: $GPU_LIVE"
+  log "API reachable; GPU droplet(s) live (a rental would refuse): $GPU_LIVE"
+else
+  log "API reachable, no GPU droplet live, no droplet named $NAME"
+fi
 
 # THIS DESK'S UPLINK IS PART OF THE RENTAL (DEVIATION 2292). The build start,
 # the fetch and the destroy that stops the bill all run over it.
