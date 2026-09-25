@@ -52,9 +52,11 @@ jobs:
               on = d.get(True, d.get("on"))
               auto = sorted(set(on) & {"push", "schedule"}) if isinstance(on, dict) else []
               name = f.rsplit("/", 1)[-1]
-              if auto and name not in ("light-checks.yml", "issue-hygiene.yml"):
+              # prebuild-bindings.yml: a hosted-runner PLAN only (Python, no build,
+              # no rental, ten minutes), path-filtered to binding inputs.
+              if auto and name not in ("light-checks.yml", "issue-hygiene.yml", "prebuild-bindings.yml"):
                   bad.append(f"{name} starts by itself on {auto}")
-          print("\n".join(bad) or "ok: only light-checks (and the daily issue bot) start by themselves")
+          print("\n".join(bad) or "ok: only light-checks (plus the daily issue bot and the prebuild plan) start by themselves")
           sys.exit(1 if bad else 0)
           PY
       - name: Scheduler and checkpoint regressions (CPU only, no bindings)
