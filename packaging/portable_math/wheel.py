@@ -19,9 +19,22 @@ from stage import stage
 # dependency must fail closed instead of being silently removed by the patcher.
 ROOTS = "acos acosh asin asinh atan atan2 atanh cbrt ceil copysign cos cosh erf erfc exp exp2 expm1 fabs fdim floor fma fmax fmin fmod frexp hypot ilogb ldexp lgamma llrint llround log log10 log1p log2 logb lrint lround modf nearbyint nextafter nexttoward pow remainder remquo rint round scalbln scalbn sin sincos sinh sqrt tan tanh tgamma trunc".split()
 MATH_SYMBOLS = {root + suffix for root in ROOTS for suffix in ("", "f", "l")}
+# Apple's compiler lowers sin+cos pairs (and sinpi/cospi) to these private
+# libSystem entry points; 0.8.19's macOS audit missed __sincosf_stret.
+MATH_SYMBOLS |= {"__sincosf_stret", "__sincos_stret", "__sincospif_stret", "__sincospi_stret",
+                 "__sinpif", "__cospif", "__tanpif", "__sinpi", "__cospi", "__tanpi",
+                 "__exp10f", "__exp10"}
+# Apple's compiler lowers sin+cos pairs (and sinpi/cospi) to these private
+# libSystem entry points; 0.8.19's macOS audit missed __sincosf_stret.
+MATH_SYMBOLS |= {"__sincosf_stret", "__sincos_stret", "__sincospif_stret", "__sincospi_stret",
+                 "__sinpif", "__cospif", "__tanpif", "__sinpi", "__cospi", "__tanpi",
+                 "__exp10f", "__exp10"}
 #: A FAST-tier binding of a Linux GPU set: mojolearn/<cuda|hip>/<arch>/<name>.so
 #: with no tier directory (identical/ and deterministic/ sit one level deeper).
-FAST_SET = re.compile(r"^mojolearn/(cuda|hip)/[^/]+/_mojolearn[^/]*\.so$")
+FAST_SET = re.compile(r"^mojolearn/(cuda|hip)/[^/]+/_mojolearn[^/]*\.so$"
+                      # macOS: FAST GPU bindings sit at the package root; host/,
+                      # identical/ and deterministic/ are directories below it.
+                      r"|^mojolearn/_mojolearn[^/]*\.so$")
 # These entry points run independent tests; none is imported by estimators.
 NUMPY_ORACLES = {
     "mojolearn/_identity_break.py", "mojolearn/_identity.py",

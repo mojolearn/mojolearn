@@ -500,8 +500,17 @@ NVIDIA_WALK = {
     "sm_90a": ["NVIDIA H100 80GB HBM3", "NVIDIA H100 NVL", "NVIDIA H100 PCIe", "NVIDIA H200"],
     "sm_89": ["NVIDIA L40S", "NVIDIA L40", "NVIDIA RTX 6000 Ada Generation", "NVIDIA GeForce RTX 4090"],
 }
-SMOKE_WALK = ["NVIDIA GeForce RTX 4090", "NVIDIA L40S", "NVIDIA L40", "NVIDIA RTX 6000 Ada Generation"]
+#: The NVIDIA column needs any NVIDIA GPU (it tests the wheel's set for the
+#: GPU it lands on); the H100 and H200 close the walk when no sm_89 box has
+#: stock (0.8.19: none did for hours).
+SMOKE_WALK = ["NVIDIA GeForce RTX 4090", "NVIDIA L40S", "NVIDIA L40", "NVIDIA RTX 6000 Ada Generation",
+              "NVIDIA H100 80GB HBM3", "NVIDIA H200"]
 NO_STOCK = "no instances currently available"
+#: RunPod create failures that say nothing about our request, so the walk
+#: tries the next GPU type (0.8.19: "Something went wrong" ended the sm_89
+#: walk one type short of the RTX 4090).
+CREATE_TRANSIENT = ("no longer any instances available", "Something went wrong",
+                    "Please try again later")
 
 
 def no_stock(log, *dirs):
@@ -512,7 +521,8 @@ def no_stock(log, *dirs):
     texts = [log] + [p for d in dirs if d for p in Path(d).glob("**/create_response.json")]
     for t in texts:
         try:
-            if NO_STOCK in Path(t).read_text(errors="replace"):
+            text = Path(t).read_text(errors="replace")
+            if NO_STOCK in text or any(phrase in text for phrase in CREATE_TRANSIENT):
                 return True
         except OSError:
             pass
