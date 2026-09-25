@@ -1,0 +1,87 @@
+{
+ "schema": "mojolearn.lm-cpu-witness.v1",
+ "check": "loss",
+ "step": 2001,
+ "shard": 59,
+ "shard_index": 128059,
+ "row_starts": [
+  1049059328,
+  1049061376,
+  1049063424,
+  1049065472
+ ],
+ "ids_sha256": "51c69fac89c959261c84ea217cb57a17f617faae2949b13acc1dc25e7669ab45",
+ "fetched": [
+  {
+   "part": "tokens.i32.part02",
+   "byte_range": [
+    196237312,
+    196245508
+   ]
+  },
+  {
+   "part": "tokens.i32.part02",
+   "byte_range": [
+    196245504,
+    196253700
+   ]
+  },
+  {
+   "part": "tokens.i32.part02",
+   "byte_range": [
+    196253696,
+    196261892
+   ]
+  },
+  {
+   "part": "tokens.i32.part02",
+   "byte_range": [
+    196261888,
+    196270084
+   ]
+  }
+ ],
+ "chain_batch_index": [
+  128000,
+  128064
+ ],
+ "chain_label": "nvidia-A-3",
+ "recipe_sha256": "9f7f695b9a0bae175bf241632767ace67c542a4a116a98e36b9c306f3eebe051",
+ "checkpoint": {
+  "file": "ckpt_00002000.blm",
+  "sha256": "f03471f9afa90120d84788f4ac980b133b25c2d8f48b485d593d189e551b3c97",
+  "step": 2000,
+  "state_sha256": "0e39ed2bfe9bcbaed6320440d701d075ab95e3186504b424826ddc6a519bbd37",
+  "hash_scheme": "sliced-sha256-8.v2",
+  "load_seconds": 5.17,
+  "hash_seconds": 0.14,
+  "data_schedule_is_recipe": true,
+  "chain_state_sha256": "0e39ed2bfe9bcbaed6320440d701d075ab95e3186504b424826ddc6a519bbd37",
+  "state_matches_chain": true
+ },
+ "binding": {
+  "package_version": "0.8.18",
+  "package_file": "/root/wv/lib/python3.14/site-packages/mojolearn/__init__.py",
+  "binding_file": "/root/wv/lib/python3.14/site-packages/mojolearn/host/_mojolearn_byte_lm_host.so",
+  "binding_sha256": "3aa40d5679c60e154c178aa7b367f4c5e6c841a2ef5da66605a39614d7466929",
+  "vendor": "cpu",
+  "numeric_mode": 1
+ },
+ "box": {
+  "host": "d369a80123ae",
+  "machine": "x86_64",
+  "system": "Linux",
+  "python": "3.14.7",
+  "cpus": 32,
+  "cpu": "AMD EPYC 4564P 16-Core Processor"
+ },
+ "threaded": true,
+ "seconds": 90.85,
+ "want_f32_hex": "4049f390",
+ "got_f32_hex": "4049f390",
+ "want": 3.1554908752441406,
+ "got": 3.1554908752441406,
+ "verdict": "PASS",
+ "utc": "2026-09-25T03:03:32Z",
+ "max_rss_gib": 8.81
+}
