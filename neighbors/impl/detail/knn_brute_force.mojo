@@ -205,6 +205,11 @@ from neighbors.impl.detail.fused_l2_knn import (
     fused_l2_knn,
     fused_l2_knn_grid,
 )
+from neighbors.impl.detail.fast_topk_knn import (
+    FAST_TOPK_KNN_ENABLED,
+    fast_topk_knn,
+    fast_topk_knn_applies,
+)
 from neighbors.impl.distance.detail.distance_ops import (
     COSINE_NORM_TPB,
     DIST_COSINE_EXPANDED,
@@ -1724,6 +1729,28 @@ def brute_force_knn_impl(
     var mtr = resolve_metric(metric, is_sqrt)
 
     # THEIR FOURTH CONDITION, `:444-447`, as a value test.
+    # FAST on Apple: fused distance + top-k, no distance tile
+    # (neighbors/impl/detail/fast_topk_knn.mojo).
+    comptime if FAST_TOPK_KNN_ENABLED:
+        var l2 = (
+            mtr == DIST_L2_UNEXPANDED
+            or mtr == DIST_L2_SQRT_UNEXPANDED
+            or mtr == DIST_L2_EXPANDED
+            or mtr == DIST_L2_SQRT_EXPANDED
+        )
+        if (
+            l2
+            and row_major_query
+            and row_major_index
+            and fast_topk_knn_applies(n_features, k)
+        ):
+            fast_topk_knn(
+                ctx, queries, index, out_dist, out_idx, n_queries, n_index,
+                n_features, k,
+                mtr == DIST_L2_SQRT_UNEXPANDED or mtr == DIST_L2_SQRT_EXPANDED,
+            )
+            return
+
     var metric_is_fusable = (
         mtr == DIST_L2_UNEXPANDED
         or mtr == DIST_L2_SQRT_UNEXPANDED
@@ -1815,6 +1842,10 @@ def brute_force_knn_impl(
             else:
                 var g = fused_l2_knn_grid(n_queries, n_index)
                 want_fused = g[0] == 1
+                comptime if is_defined["MOJOLEARN_KNN_FAST_FORCE_FUSED"]():
+                    want_fused = True
+                comptime if is_defined["MOJOLEARN_KNN_FAST_FORCE_TILED"]():
+                    want_fused = False
 
     # DEVIATION 512: THE ARM MUST EXIST ON THIS COLUMN BEFORE AUTO PICKS IT.
     #
