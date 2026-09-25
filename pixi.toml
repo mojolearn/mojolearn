@@ -412,6 +412,7 @@ check-leaf-partition = "mojo run -I . checks/leaf_partition_check.mojo"
 # device partition with the host one on every build; claim 2 prints one
 # MODEL_HASH per lane, which must be equal across the three builds.
 check-gbdt-per-round = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . checks/gbdt_per_round_check.mojo"
+check-gbdt-per-round-fast = "mojo run -I . checks/gbdt_per_round_check.mojo"
 check-gbdt-per-round-2550-host-copy = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_2550_HOST_COPY=1 -I . checks/gbdt_per_round_check.mojo"
 check-gbdt-per-round-2551-host-partition = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_2551_DEVICE_PARTITION_OFF=1 -I . checks/gbdt_per_round_check.mojo"
 

@@ -34,7 +34,9 @@ from gbdt.methods.leaves_estimation.doc_parallel_leaves_estimator import (
     partition_from_bins,
 )
 from gbdt.models.model_text import model_text
-from gbdt.train import TrainedModel, train
+from gbdt.train import TrainedModel, predict_floats, train
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from std.math import exp, log
 
 
 comptime N_ROWS = 20000
@@ -84,7 +86,7 @@ def fit_text(
     max_leaves: Int,
     max_samples: Int,
     borrow: Bool,
-) raises -> String:
+) raises -> TrainedModel:
     var one_hot = List[Bool]()
     for feat in range(N_FEATURES):
         one_hot.append(feat == N_FEATURES - 1)
@@ -119,7 +121,31 @@ def fit_text(
             grow_policy=policy,
             max_leaves=max_leaves,
         )
-    return model_text(tm)
+    return tm^
+
+
+comptime FAST_LOGLOSS_TOL = 0.01
+comptime FAST_ACC_TOL = 0.01
+comptime FAST_LEARNED_LOGLOSS = 0.6
+"""Below log(2) = 0.693 by a margin: the fit learned the target."""
+
+
+def train_quality(
+    ctx: DeviceContext, tm: TrainedModel, x: List[Float32], y: List[Float32]
+) raises -> Tuple[Float64, Float64]:
+    """Training logloss and accuracy of `tm` (raw Logloss scores)."""
+    var raw = predict_floats(ctx, tm, x, N_ROWS)
+    var ll = Float64(0.0)
+    var hits = 0
+    for r in range(N_ROWS):
+        var z = Float64(raw[r])
+        var p = 1.0 / (1.0 + exp(-z))
+        p = min(max(p, 1e-12), 1.0 - 1e-12)
+        var t = Float64(y[r])
+        ll -= t * log(p) + (1.0 - t) * log(1.0 - p)
+        if (z > 0.0) == (t > 0.5):
+            hits += 1
+    return (ll / Float64(N_ROWS), Float64(hits) / Float64(N_ROWS))
 
 
 def read_rows(
@@ -255,17 +281,44 @@ def main() raises:
             max_leaves = 32
         elif lanes[i] == "symmetric":
             policy = String("SymmetricTree")
-        var t_list = fit_text(ctx, x, y, policy, max_leaves, max_samples, False)
-        var t_borrow = fit_text(ctx, x, y, policy, max_leaves, max_samples, True)
+        var m_list = fit_text(ctx, x, y, policy, max_leaves, max_samples, False)
+        var m_borrow = fit_text(ctx, x, y, policy, max_leaves, max_samples, True)
+        var t_list = model_text(m_list)
+        var t_borrow = model_text(m_borrow)
         var h = fnv1a64(t_list)
         print("MODEL_HASH lane=" + lanes[i] + " hash=" + String(h))
-        if t_list != t_borrow:
-            failures += 1
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+            # IDENTICAL promises the same bits from either entry.
+            if t_list != t_borrow:
+                failures += 1
+                print(
+                    "  FAIL lane " + lanes[i] + ": List entry and borrowed"
+                    " entry gave different models (" + String(h) + " vs "
+                    + String(fnv1a64(t_borrow)) + ")"
+                )
+        else:
+            # FAST promises no bits, run to run or entry to entry (float
+            # atomics), only the same quality: both entries must learn the
+            # target and agree on training logloss and accuracy.
+            var q_list = train_quality(ctx, m_list, x, y)
+            var q_borrow = train_quality(ctx, m_borrow, x, y)
             print(
-                "  FAIL lane " + lanes[i] + ": List entry and borrowed entry"
-                " gave different models (" + String(h) + " vs "
-                + String(fnv1a64(t_borrow)) + ")"
+                "QUALITY lane=" + lanes[i] + " list_logloss="
+                + String(q_list[0]) + " borrow_logloss=" + String(q_borrow[0])
+                + " list_acc=" + String(q_list[1]) + " borrow_acc="
+                + String(q_borrow[1]) + " same_bits=" + String(t_list == t_borrow)
             )
+            if (
+                abs(q_list[0] - q_borrow[0]) > FAST_LOGLOSS_TOL
+                or abs(q_list[1] - q_borrow[1]) > FAST_ACC_TOL
+                or q_list[0] > FAST_LEARNED_LOGLOSS
+                or q_borrow[0] > FAST_LEARNED_LOGLOSS
+            ):
+                failures += 1
+                print(
+                    "  FAIL lane " + lanes[i] + ": List and borrowed entries"
+                    " differ in quality or did not learn"
+                )
     if failures != 0:
         raise Error("gbdt_per_round_check: " + String(failures) + " failures")
     print("GBDT_PER_ROUND_CHECK PASS")
