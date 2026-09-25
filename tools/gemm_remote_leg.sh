@@ -1047,6 +1047,14 @@ if [ "$NVIDIA_CAMPAIGN" = 7 ]; then
     # is still refused is any architecture that is not one of the three the
     # release profile ships.
     case "$GPU_ARCHS" in sm_89|sm_90|sm_90a) ;; *) leg_die 'Release profile 7 requires explicit actual sm_89, sm_90 or sm_90a' ;; esac
+    # A route overlay (tools/route_overlay_lib.sh) is refused here, before any rental.
+    if [ -n "${MOJOLEARN_ROUTE_OVERLAY:-}" ]; then
+        . "$(dirname "$0")/route_overlay_lib.sh"
+        _ro_tmp=$(mktemp -d "${TMPDIR:-/tmp}/route-overlay.XXXXXX")
+        ro_prepare "$MOJOLEARN_ROUTE_OVERLAY" "${MOJOLEARN_ROUTE_OVERLAY_SHA256:-}" "$_ro_tmp" \
+            || { rm -rf "$_ro_tmp"; leg_die "route overlay refused"; }
+        rm -rf "$_ro_tmp"
+    fi
     # DEVIATION 2298: the same profile-7 rental, doing the OTHER half. Ada
     # (sm_89) is the one architecture DigitalOcean cannot supply -- its L40S
     # and Ada cards report no available regions -- so the installed
@@ -4696,7 +4704,10 @@ leg_ship_and_run() {
     leg_source_sha_recipe "$TMPD/archive" > "$OUT/source_sha256_local.txt"
     if [ "$NVIDIA_CAMPAIGN" = 7 ]; then
         # Keep imports from adding untracked bytecode to the source transport manifest.
-        python3 -B - "$TMPD/archive" "$REPO" > "$OUT/source_inventory_local.json" <<'RELEASE_SOURCE'
+        # The source checkout the packer reads: this one, or the frozen
+        # source checkout tools/release.py names when the release tooling
+        # runs from a newer commit (MOJOLEARN_SOURCE_CHECKOUT).
+        python3 -B - "$TMPD/archive" "${MOJOLEARN_SOURCE_CHECKOUT:-$REPO}" > "$OUT/source_inventory_local.json" <<'RELEASE_SOURCE'
 import json, pathlib, subprocess, sys
 archive, local=map(pathlib.Path, sys.argv[1:])
 sys.path.insert(0,str(archive/'tools'))
@@ -4724,6 +4735,18 @@ RELEASE_SOURCE
         leg_ssh 'rm -rf /root/mojolearn /root/gemm_leg_out && mkdir -p /root/mojolearn' \
             > /dev/null
         leg_ssh 'cd /root/mojolearn && tar xzf -' < "$TMPD/src.tgz"
+    fi
+    # THE ROUTE OVERLAY (tools/route_overlay_lib.sh): the release tooling's
+    # copy of each box-side tool that differs from the source commit's,
+    # extracted over the unpacked source; before and after sha256 recorded.
+    if [ -n "${MOJOLEARN_ROUTE_OVERLAY:-}" ]; then
+        . "$(dirname "$0")/route_overlay_lib.sh"
+        ro_prepare "$MOJOLEARN_ROUTE_OVERLAY" "${MOJOLEARN_ROUTE_OVERLAY_SHA256:-}" "$TMPD" \
+            || leg_die "route overlay refused"
+        leg_ssh "$(ro_remote_cmd /root/mojolearn)" < "$MOJOLEARN_ROUTE_OVERLAY" > "$OUT/route-overlay.txt" \
+            || leg_die "route overlay failed on the box"
+        ro_verify "$OUT/route-overlay.txt" || leg_die "route overlay not verified"
+        leg_say "  route overlay from the tooling checkout: $RO_FILES"
     fi
     # DEVIATION 2704 (Andrew, 2026-09-13): every leg stages its datasets and
     # corpora from R2 here, after the source is unpacked and before any body
