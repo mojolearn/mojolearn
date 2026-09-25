@@ -215,6 +215,42 @@ class DecisionTests(unittest.TestCase):
         # (the classical FAST tier added bindings on 2026-09-25), never a literal
         self.assertEqual(len(rr.plan_rows(plan, rr.LINUX, "REUSE")), len(rr.bindings(rr.LINUX)) - 1)
 
+    def test_set_identity_moves_with_its_set_the_host_bindings_and_the_overlay_only(self):
+        """What makes a completed leg reusable under a later freeze
+        (tools/release.py): one digest per set over its bindings, every host
+        binding and the runtime closure."""
+        import copy
+        prev = self.record(self.cur, dict(xcode="16"))
+        plan = rr.make_plan(self.cur, self.cache, self.repo, host_toolchain=dict(xcode="16"), prev=prev)
+        base = {s: rr.set_identity(plan, *s)["digest"] for s in rr.LINUX_SETS}
+        self.assertEqual(len(set(base.values())), 3, "each set has its own identity")
+        moved = copy.deepcopy(plan)
+        for r in moved["rows"]:
+            if (r["target"], r["vendor"], r["arch"], r["name"]) == (rr.LINUX, "hip", "gfx942", "_mojolearn_gbdt"):
+                r["identity_digest"] = "9" * 64
+        self.assertEqual(rr.set_identity(moved, "cuda", "sm_90a")["digest"], base[("cuda", "sm_90a")])
+        self.assertNotEqual(rr.set_identity(moved, "hip", "gfx942")["digest"], base[("hip", "gfx942")])
+        host = copy.deepcopy(plan)
+        for r in host["rows"]:
+            if r["target"] == rr.LINUX and r["tier"] == "host":
+                r["identity_digest"] = "8" * 64
+                break
+        for s in rr.LINUX_SETS:
+            self.assertNotEqual(rr.set_identity(host, *s)["digest"], base[s], "every leg builds the host bindings")
+        # a builder the route overlay replaces is part of every identity
+        over = rr.make_plan(self.cur, self.cache, self.repo, host_toolchain=dict(xcode="16"), prev=prev,
+                            builders_override={"tools/release061_remote_build.sh": "7" * 64})
+        self.assertEqual(over["builders_override"], {"tools/release061_remote_build.sh": "7" * 64})
+        for s in rr.LINUX_SETS:
+            self.assertNotEqual(rr.set_identity(over, *s)["digest"], base[s])
+        self.assertEqual(over["legs"], ["cuda-sm_90a", "cuda-sm_89", "hip-gfx942"], "and it rebuilds")
+        with self.assertRaises(SystemExit):
+            rr.make_plan(self.cur, self.cache, self.repo, prev=prev, builders_override={"tools/unknown.sh": "1" * 64})
+        # an unreadable binding identity makes a set unreusable
+        broken = copy.deepcopy(plan)
+        next(r for r in broken["rows"] if r["vendor"] == "cuda" and r["arch"] == "sm_89")["identity"] = None
+        self.assertIsNone(rr.set_identity(broken, "cuda", "sm_89"))
+
     def test_host_only_change_takes_the_cheapest_leg(self):
         def mutate(b, ident):
             return dict(ident, flags=dict(ident["flags"], compile_jobs="9")) if b.name == "_mojolearn_core_host" else ident
@@ -517,6 +553,65 @@ class PayloadTests(unittest.TestCase):
             with self.assertRaises(SystemExit) as cm:
                 pack_wheel.release_inventory(sets, [proof, proof], pack_wheel.read_version(), ROOT)
             self.assertIn("one complete build proof per set a leg built", str(cm.exception))
+
+    def test_a_leg_of_an_earlier_freeze_packs_with_its_origin_and_no_proof(self):
+        """tools/release.py took a completed hip/gfx942 leg of an earlier freeze
+        (its set identity and build tooling equal this freeze's): its bytes are
+        packed with their origin, the plan's REUSE rows still come from the
+        published wheel, and a byte that moved is refused by name."""
+        with tempfile.TemporaryDirectory() as d:
+            tmp = pathlib.Path(d)
+            whl, prev = published_wheel_fixture(tmp)
+            build = {r["key"] for r in linux_plan(prev)["rows"]
+                     if r["tier"] != "host" and (r["vendor"], r["arch"]) == ("hip", "gfx942")}
+            plan = linux_plan(prev, build=build)
+            old = tmp / "old" / "hip" / "gfx942"
+            for r in rr.plan_rows(plan, rr.LINUX):
+                if r["tier"] == "host" or (r["vendor"], r["arch"]) != ("hip", "gfx942"):
+                    continue
+                p = old / r["set_rel"]
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_bytes(elf_stub(["libamdhip64.so.6"]) + b"EARLIER LEG " + r["set_rel"].encode())
+            (old / "host").mkdir()
+            for name in pack_wheel.HOST_NAMES:
+                (old / "host" / f"{name}.so").write_bytes(HOST_BYTES + name.encode())
+            (old / ".libs").mkdir()
+            (old / ".libs" / "libAsyncRTMojoBindings.so").write_bytes(b"runtime")
+            (old / "manifest.json").write_text(json.dumps(dict(bytes_extensions=1, bytes_staged_libs=1,
+                                                               driver_libs_not_staged=["libamdhip64.so.6"],
+                                                               staged_libs=[dict(name="libAsyncRTMojoBindings.so")])))
+            rows = [(tier, name) for tier in pack_wheel.TIERS for name in pack_wheel.tier_names(tier, True)]
+            (old / "readback.txt").write_text("".join(f"{t} {n} hip\n" for t, n in rows)
+                                              + "".join(f"host {n} cpu\n" for n in pack_wheel.HOST_NAMES))
+            (old / "arch_readback.txt").write_text("".join(f"{t} {n} gfx942\n" for t, n in rows)
+                                                   + "".join(f"host {n} NONE-BY-DESIGN\n" for n in pack_wheel.HOST_NAMES))
+            origin = dict(source_commit="e" * 40, leg="hip-gfx942", proof_sha256="p" * 64, admitted_for=CUR_COMMIT,
+                          set_identity_digest="d" * 64, tooling_digest="t" * 64)
+            out = rr.assemble_linux(plan, whl, {}, tmp / "sets", say=lambda *_: None,
+                                    leg_reuse={"hip-gfx942": dict(dir=old, origin=origin)})
+            doc = json.loads((out["hip/gfx942"] / "reuse.json").read_text())
+            self.assertEqual(doc["from_legs"]["hip-gfx942"], origin)
+            gbdt = doc["files"]["identical/_mojolearn_gbdt.so"]
+            self.assertEqual((gbdt["source"], gbdt["leg"]), ("leg", "hip-gfx942"))
+            self.assertNotIn("source", doc["files"]["host/_mojolearn_core_host.so"], "a REUSE row is the published copy")
+            sets = [s for vendor in ("cuda", "hip") for s in pack_wheel.load_set(tmp / "sets" / vendor, True)]
+            inv = pack_wheel.release_inventory(sets, [], pack_wheel.read_version(), ROOT)
+            o = inv["binding_origin"]["mojolearn/hip/gfx942/identical/_mojolearn_gbdt.so"]
+            self.assertEqual((o["origin"], o["from_leg"]["source_commit"], o["from_release"]), ("reused", "e" * 40, None))
+            self.assertEqual(inv["sets"]["hip/gfx942"]["from_legs"]["hip-gfx942"]["admitted_for"], CUR_COMMIT)
+            self.assertIn("hip-gfx942", inv["reuse"]["from_legs"])
+            self.assertEqual(inv["reuse"]["built"], 0)
+            target = out["hip/gfx942"] / "identical" / "_mojolearn_gbdt.so"
+            target.write_bytes(target.read_bytes() + b"\0")
+            with self.assertRaises(SystemExit) as cm:
+                pack_wheel.load_set(tmp / "sets" / "hip", True)
+            self.assertIn("leg hip-gfx942 of eeeeeeeeeeee", str(cm.exception))
+            # an origin that does not name what was taken is not a reuse record
+            doc["from_legs"]["hip-gfx942"].pop("tooling_digest")
+            (out["hip/gfx942"] / "reuse.json").write_text(json.dumps(doc))
+            with self.assertRaises(SystemExit) as cm:
+                pack_wheel.load_set(tmp / "sets" / "hip", True)
+            self.assertIn("is not a", str(cm.exception))
 
 
 if __name__ == "__main__":

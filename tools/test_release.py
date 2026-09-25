@@ -247,6 +247,7 @@ class AmdRouteTests(unittest.TestCase):
                             runner=lambda cmd, env, log, detach=False: spawned.append((cmd, env)) or 999999)
         r.state["commit"] = COMMIT
         r.say = lambda msg: None
+        r.leg_env = lambda: {"MOJOLEARN_SOURCE_CHECKOUT": "/frozen/source"}
         saved = release.linux_legs
         release.linux_legs = lambda ctx: [hip]
         try:

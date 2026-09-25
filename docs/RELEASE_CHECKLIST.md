@@ -4,52 +4,91 @@
 
 ```sh
 pixi run release <version> --dry-run          # the plan, every command, and what is already done
+pixi run release <version> --status           # per pipeline, leg and column: done, failed (log), owed; runs nothing
 pixi run release <version>                    # everything up to publication
-pixi run release <version> --publish pypi     # ... then publish both wheels, finish line, record
+pixi run release <version> --publish pypi     # ... then publish each wheel as its pipeline passes, finish line, record
 ```
 
 `tools/release.py` walks this whole checklist. Write the CHANGELOG entry
 (`## <version> (published YYYY-MM-DD)`, UTC) first; the command bumps the two
 version files, runs `write-docs-facts`, commits and pushes exactly those files,
-freezes HEAD, runs the rehearsal (step 0), and then a release is LIGHT and
-PARALLEL, in three phases:
+freezes HEAD, runs the rehearsal (step 0) and the reuse plan, and then runs
+TWO PIPELINES AT ONCE, each publishing as soon as its own gates pass:
 
-1. **Build, all at once.** The three Linux build legs (step 2) are launched
-   together, detached, with no stagger, and the macOS wheel (byte LM and host
-   bindings on, four slots) builds beside them. A wait checks every leg's proof
-   for the frozen commit and names any host binding whose bytes differ across
-   legs; then pack, audit and strip under the `pkg` environment (step 3).
-2. **Check, all at once, the changed lanes only, each cell fitted once.** The
-   macOS smoke and `release-check` (step 5b: the Apple column) run on this Mac
-   under the Metal lock. The `gpu-columns` step then launches the NVIDIA column
-   (the expanded smoke plus the column, one rented RTX 4090, walking to the
-   next GPU type on no stock) and the AMD column (RunPod MI300X, then Hot Aisle
-   MI300X, then DigitalOcean MI325X) together as detached
-   `tools/release_wheel_smoke.sh` runs from the installed wheel, awaits both,
-   and reports both; one failing never stops the other. Each GPU column is
-   diffed against the Apple column of this release, then every column is
-   diffed together (`<version>/<commit12>/diff-columns.txt`), so NVIDIA is also
-   checked against AMD. Any DIVERGENT or MOVED cell stops the release. The CPU
-   pass is opt-in: `--cpu-column` runs it in `release-check` and adds the CPU
-   column to every diff.
-3. **Publish,** only with `--publish none|testpypi|pypi`: both publishes (step
-   5), the `pip install` finish line on this Mac and the
-   `bench/results/release_verification/<date>_pypi_<v>/` record, committed and
-   pushed.
+- **macos**: macos-build, macos-smoke, `release-check` (the Apple column,
+  step 5b), publish-macos. These share the Mac and run one at a time.
+- **linux**: linux-builds (the legs of step 2, launched together, detached),
+  linux-wait, linux-assemble, linux-pack (step 3), gpu-columns, publish-linux.
+  The `gpu-columns` step launches the NVIDIA column (the expanded smoke plus
+  the column, one rented RTX 4090, walking to the next GPU type on no stock)
+  and the AMD column (RunPod MI300X, then Hot Aisle MI300X, then DigitalOcean
+  MI325X) together as detached `tools/release_wheel_smoke.sh` runs from the
+  installed wheel, diffs each against the Apple column, then diffs every
+  column together (`<version>/<commit12>/diff-columns.txt`). Any DIVERGENT or
+  MOVED cell stops the Linux publish.
 
-It is resumable: rerun the same command after any stop. State lives in
-`~/mojolearn-evidence/release/<version>/state.json`, and everything after the
-freeze in `<version>/<commit12>/` (legs, wheels, smoke receipts, logs). Each
-step checks its own output (a wheel of the frozen commit, a PASSED receipt for
-that wheel's sha256, complete release-check records, the file already on PyPI)
-and skips when it is there. A running build leg is never relaunched; a failed
-one is moved aside, never deleted, and relaunched. A new commit after the freeze
-refreezes and starts the post-freeze steps in a fresh directory, unless a wheel
-of the frozen commit is already published. `--only STEP[,STEP]` runs some steps,
-`--redo STEP` discards a step's record, `--amd-expect-from <NVIDIA release-build
-dir>` restores the AMD core-host probe, `--smoke-gpu` picks the Linux smoke GPU.
-The build legs and the GPU columns share one launcher (`launch_detached`;
-build routes in `BUILD_BACKENDS`, chosen with `--build-backend`).
+A failure in one pipeline never blocks or undoes the other, with one
+dependency by design: the Linux columns are diffed against the Apple column,
+so a failed `release-check` holds the Linux publish too. The run ends with
+both outcomes and exits non-zero unless both published. The finish line
+checks each published platform (`pip install` on this Mac for macOS; `pip
+download` of the Linux file with its sha256 compared) and the
+`bench/results/release_verification/<date>_pypi_<v>/` record covers what is
+published; both run again when the other platform publishes. The CPU pass is
+opt-in: `--cpu-column` runs it in `release-check` and adds the CPU column to
+every diff. Only changed lanes run, each cell fitted once.
+
+**The shipped source and the release tooling are two commits.** The freeze
+pins the source commit in `state.json`; it never moves because main moved,
+and only `--refreeze` moves it to HEAD (refused once a wheel of it is
+published). `tools/release.py` and everything it drives (the leg runners, the
+guards, the wheel smoke, the publisher) run from the checkout the command is
+run in, normally current main, so a tooling fix lands without a refreeze. The
+steps that read the source (the macOS build, `release-check`, the pack, the
+rehearsal, the lane selection) run in the source checkout: this one when HEAD
+is the source commit, else a detached worktree under
+`<version>/source/<commit12>/` (or `--source-checkout`). A build leg's box
+unpacks the source archive and then the route overlay
+(`tools/release_tooling.py`, `tools/route_overlay_lib.sh`): the tooling copy
+of each box-side tool that differs (the remote build driver, the serial
+guards, the binding cache), sha256 before and after in
+`<leg>/route-overlay.txt`. Nothing in the source inventory is ever overlaid
+(Mojo files, `bindings/`, `packaging/`, `python/`, `tokenizer/`, `pixi.*`,
+`tools/linux_surface_qualification.sh`), and an overlaid builder enters the
+binding identities with the bytes that ran. Every leg, column and record
+names both commits (`<legs>/<leg>.provenance.json`,
+`column-provenance.json`, the record's `release-provenance.json`).
+
+**Results are keyed to what they built.** Under a new freeze, a completed
+build leg of an earlier freeze is taken (not launched) only when its set
+identity (`release_reuse.set_identity`: every binding identity of the set,
+the host bindings and the runtime closure) and its build tooling digest are
+equal, its proof is complete, every binary on disk is the proof's bytes and
+its overlay verified; `<legs>/<leg>.reused.json` says built from X, admitted
+for Y and why, and the pack names those files in `reuse.json` with that
+origin. A GPU column is taken only for a byte-identical wheel (sha256) and the
+same lane selection, and is diffed again against this release's references.
+Anything unequal, unreadable or uncommitted rebuilds or reruns. Every leg and
+column PASS is recorded once in the ledger in R2
+(`tools/release_ledger.py`, `release-ledger/v1/` in `mojolearn-data`, keyed
+by set identity and tooling digest, or wheel sha256, vendor and lane
+selection); the release consults it before launching, and admits a ledger
+PASS only when its evidence is on this machine and verifies.
+
+It is resumable: rerun the same command after any stop, and only what is not
+done runs. State lives in `~/mojolearn-evidence/release/<version>/state.json`,
+and everything after the freeze in `<version>/<commit12>/` (legs, wheels,
+smoke receipts, logs). Each step checks its own output (a wheel of the frozen
+commit, a PASSED receipt for that wheel's sha256, complete release-check
+records, the file already on PyPI) and skips when it is there. A running
+build leg is never relaunched; a failed one is moved aside, never deleted, and
+relaunched. `--only STEP[,STEP]` runs some steps, `--redo STEP` discards a
+step's record, `--amd-expect-from <NVIDIA release-build dir>` restores the AMD
+core-host probe, `--smoke-gpu` picks the Linux smoke GPU. The build legs and
+the GPU columns share one launcher (`launch_detached`; build routes in
+`BUILD_BACKENDS`, chosen with `--build-backend`). A pipeline is `PIPELINES`'
+named builds, checks and one publish, so the Linux pipeline can split into
+per-package pipelines without a new scheduler.
 
 **Bindings are rebuilt only when their identity moved (2026-09-23,
 `tools/release_reuse.py`).** After the rehearsal the `reuse-plan` step decides,

@@ -148,7 +148,10 @@ ARCHIVE_BYTES=$(wc -c < "$TMPD/src.tgz" | tr -d ' ')
 [ "$ARCHIVE_BYTES" -lt $((24 * 1024 * 1024)) ] || die "archive is $ARCHIVE_BYTES bytes gzipped, cap 24 MiB"
 ARCHIVE_SHA=$(sha256_of "$TMPD/src.tgz")
 mkdir "$TMPD/archive" && tar -xzf "$TMPD/src.tgz" -C "$TMPD/archive" || die "archive does not unpack"
-python3 -B - "$TMPD/archive" "$REPO" > "$TMPD/source_inventory_local.json" <<'PY' || die "native inventory differs between $COMMIT and the working tree; freeze first"
+# The source checkout the packer reads: this one, or the frozen source
+# checkout tools/release.py names when the tooling runs from a newer commit.
+SOURCE_CHECKOUT=${MOJOLEARN_SOURCE_CHECKOUT:-$REPO}
+python3 -B - "$TMPD/archive" "$SOURCE_CHECKOUT" > "$TMPD/source_inventory_local.json" <<'PY' || die "native inventory differs between $COMMIT and the source checkout $SOURCE_CHECKOUT; freeze first"
 import json, pathlib, subprocess, sys
 archive, local = map(pathlib.Path, sys.argv[1:])
 sys.path.insert(0, str(archive / 'tools'))
@@ -162,7 +165,14 @@ if a != l:
     raise SystemExit('differs: ' + ' '.join(names[:8]))
 print(json.dumps(a, separators=(',', ':')))
 PY
-log "archive $ARCHIVE_BYTES bytes, sha256 $ARCHIVE_SHA, native inventory matches working tree"
+log "archive $ARCHIVE_BYTES bytes, sha256 $ARCHIVE_SHA, native inventory matches $SOURCE_CHECKOUT"
+# THE ROUTE OVERLAY (tools/route_overlay_lib.sh), refused here, before anything is rented.
+RO_FILES=""
+if [ -n "${MOJOLEARN_ROUTE_OVERLAY:-}" ]; then
+  . "$REPO/tools/route_overlay_lib.sh"
+  ro_prepare "$MOJOLEARN_ROUTE_OVERLAY" "${MOJOLEARN_ROUTE_OVERLAY_SHA256:-}" "$TMPD" || die "route overlay refused"
+  log "route overlay $RO_SHA: $RO_FILES"
+fi
 HELPER="$REPO/tools/release_ubuntu22_build.sh"
 [ -f "$HELPER" ] || die "no $HELPER"
 
@@ -211,6 +221,7 @@ DRY RUN -- nothing rented. With --rent this leg would:
   guards   slot ($HA_SLOT_PREFIX.N), balance >= lease + \$5, Mac dead-man before the create, description PATCH,
            on-box watchdog in $BOX_GUARD verified from two sessions, DELETE ?force=true then GET 404 or absent
   upload   $TMPD/src.tgz ($ARCHIVE_BYTES bytes, sha256 $ARCHIVE_SHA) -> $BR/mojolearn + commit.txt=$COMMIT
+  overlay  ${RO_FILES:-none (every box tool is the source commit's)}
   prepare  as root: patchelf/docker/python3-venv if absent; pixi; pixi install --locked --environment default (guarded); patchelf 0.17.2.4
   build    MOJOLEARN_COMMIT=$COMMIT MOJOLEARN_RELEASE_BUILD_SECONDS=<=2400 MOJOLEARN_BUILD_JOBS=$BUILD_JOBS
            bash $BR/release_ubuntu22_build.sh run hip gfx942 $REMOTE_OUT > $REMOTE_LOG
@@ -281,6 +292,13 @@ ha_ssh 120 "test ! -e $BR/mojolearn && mkdir $BR/mojolearn && tar -xzf $BR/src.t
   && printf '%s\n' '$COMMIT' > $BR/mojolearn/commit.txt && test -x $REMOTE_PY && echo UNPACKED" < /dev/null | grep -q UNPACKED \
   || { log "remote unpack failed"; exit 6; }
 log "shipped $COMMIT"
+if [ -n "$RO_FILES" ]; then
+  ha_ssh 120 "$(ro_remote_cmd "$BR/mojolearn")" < "$MOJOLEARN_ROUTE_OVERLAY" > "$OUT/route-overlay.txt" \
+    || { log "route overlay failed on the box"; exit 6; }
+  ro_verify "$OUT/route-overlay.txt" || { log "route overlay not verified"; exit 6; }
+  echo "route_overlay_sha256=$RO_SHA" >> "$STATE"
+  log "route overlay from the tooling checkout: $RO_FILES"
+fi
 
 PREP_SECONDS=$(( HA_T_CREATE + LEASE * 60 - $(date +%s) - FETCH_RESERVE - 600 ))
 [ "$PREP_SECONDS" -gt 900 ] && PREP_SECONDS=900

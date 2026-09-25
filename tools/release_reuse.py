@@ -426,11 +426,20 @@ def previous_identities(prev, cache_dir, root=ROOT):
 
 
 # ---------------------------------------------------------------- the plan
-def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None):
+def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, builders_override=None):
+    """The REUSE/BUILD plan of COMMIT. `builders_override` ({builder: sha256})
+    replaces a builder's bytes in every identity: the release's route overlay
+    runs the tooling checkout's copy of a builder on the box
+    (tools/release_tooling.py), so the identity is the bytes that ran."""
     commit = git("rev-parse", commit + "^{commit}", root=root).strip()
     if prev is None:
         prev = previous_release(root)
     facts = facts_for_commit(commit, cache_dir, root)
+    if builders_override:
+        unknown = set(builders_override) - set(facts["builders"])
+        if unknown:
+            raise SystemExit("release_reuse: the overlay names builders no identity reads: " + ", ".join(sorted(unknown)))
+        facts = dict(facts, builders=dict(facts["builders"], **builders_override))
     if host_toolchain is None:
         host_toolchain = darwin_toolchain()
     if prev:
@@ -485,7 +494,37 @@ def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None):
             " need a build box and no set does: the cheapest leg builds them"
     return dict(schema=PLAN_SCHEMA, commit=commit, made=dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
                 previous=prev, previous_identities_from=prev_source, rows=rows, runtime=runtime,
-                legs=legs, leg_reasons=why, host_toolchain=host_toolchain)
+                legs=legs, leg_reasons=why, host_toolchain=host_toolchain,
+                builders_override=dict(sorted((builders_override or {}).items())))
+
+
+def set_identity(plan, vendor, arch):
+    """What a Linux build leg of (vendor, arch) produces, as one digest: the
+    identity of every binding of its set, of every host binding (every leg
+    builds them) and of the runtime closure it stages. Two plans with the same
+    digest ask the leg for the same bytes. A binding without a readable
+    identity (a new one, an unreadable pin) makes the set unreusable: None."""
+    rows = {}
+    for r in plan_rows(plan, LINUX):
+        if r["tier"] == "host" or (r["vendor"], r["arch"]) == (vendor, arch):
+            if not r.get("identity_digest") or unreadable(r.get("identity")):
+                return None
+            rows[r["key"]] = r["identity_digest"]
+    rt = plan["runtime"]
+    if not rows or not rt.get("identity_digest") or unreadable_runtime(rt.get("identity")):
+        return None
+    doc = dict(set=f"{vendor}/{arch}", bindings=rows, runtime=rt["identity_digest"])
+    return dict(doc, digest=digest_of(doc))
+
+
+def unreadable_runtime(ident):
+    if not ident or not (ident.get("toolchain") or {}).get("packages"):
+        return "no Mojo/MAX packages"
+    if any(v is None for v in (ident.get("builders") or {}).values()):
+        return "builder script missing"
+    if not ident.get("image") or any(v is None for v in ident["image"].values()):
+        return "box image pin unreadable"
+    return None
 
 
 def plan_rows(plan, target=None, decision=None):
@@ -614,43 +653,77 @@ def elf_driver_libs(paths):
     return sorted(driver)
 
 
-def assemble_linux(plan, whl, legs, dest, say=print):
+def assemble_linux(plan, whl, legs, dest, say=print, leg_reuse=None):
     """The set directories pack_wheel.py packs, one per (vendor, arch): a
-    leg's set copied whole when the leg ran, else synthesized from the
-    published wheel; then the plan's REUSE bindings, host bindings and the
-    runtime closure written from the published bytes, each verified against
-    the wheel's payload, with reuse.json naming every reused file.
+    leg's set copied whole when the leg ran, the set of a completed leg of an
+    earlier freeze when tools/release.py admitted it (`leg_reuse`: its set
+    identity and build tooling equal this freeze's), else synthesized from
+    the published wheel; then the plan's REUSE bindings, host bindings and
+    the runtime closure written from the published bytes, each verified
+    against the wheel's payload, with reuse.json naming every reused file and
+    where it came from (`source` release or leg).
 
-    `legs` maps "vendor-arch" to the leg's sets/<vendor>/<arch> directory.
+    `legs` maps "vendor-arch" to the sets/<vendor>/<arch> directory of a leg
+    that built at this freeze; `leg_reuse` maps "vendor-arch" to
+    {"dir": that directory of the earlier leg, "origin": {source_commit, leg,
+    proof_sha256, admitted_for, set_identity_digest, tooling_digest, ...}}.
+    `whl` (the published wheel) may be None when nothing is taken from it.
     Returns {"vendor/arch": set dir}."""
-    prev = plan["previous"]
-    payload = linux_payload(whl)
-    if payload.get("source_commit") != prev.get("source_commit"):
-        raise SystemExit("release_reuse: the published wheel's payload names commit %s, the record %s" % (
-            (payload.get("source_commit") or "?")[:12], (prev.get("source_commit") or "?")[:12]))
-    origin = dict(version=prev["version"], source_commit=prev["source_commit"], wheel=Path(whl).name,
-                  wheel_sha256=sha256(whl))
+    prev = plan["previous"] or {}
+    leg_reuse = leg_reuse or {}
+    need_published = bool(plan_rows(plan, LINUX, "REUSE")) or plan["runtime"]["decision"] == "REUSE" or any(
+        not legs.get(f"{v}-{a}") and not leg_reuse.get(f"{v}-{a}") for v, a in LINUX_SETS)
+    if need_published and whl is None:
+        raise SystemExit("release_reuse: the plan takes bytes from the published wheel and none was given")
+    payload, origin, members = {}, None, set()
+    if whl is not None:
+        payload = linux_payload(whl)
+        if payload.get("source_commit") != prev.get("source_commit"):
+            raise SystemExit("release_reuse: the published wheel's payload names commit %s, the record %s" % (
+                (payload.get("source_commit") or "?")[:12], (prev.get("source_commit") or "?")[:12]))
+        origin = dict(version=prev["version"], source_commit=prev["source_commit"], wheel=Path(whl).name,
+                      wheel_sha256=sha256(whl))
     dest = Path(dest)
     if dest.exists():
         shutil.rmtree(dest)
     rows = {r["archive_path"]: r for r in plan_rows(plan, LINUX)}
     host_rows = [r for r in rows.values() if r["tier"] == "host"]
     out = {}
-    with zipfile.ZipFile(whl) as z:
-        members = set(z.namelist())
+    z = zipfile.ZipFile(whl) if whl is not None else None
+    try:
+        if z is not None:
+            members = set(z.namelist())
         shared = payload.get("runtime_layout") == "shared"
         for vendor, arch in LINUX_SETS:
             key = f"{vendor}/{arch}"
-            leg = legs.get(f"{vendor}-{arch}")
+            name = f"{vendor}-{arch}"
+            leg = legs.get(name)
+            old = leg_reuse.get(name)
             sdir = dest / vendor / arch
-            reused = {}
+            reused, from_legs = {}, {}
+            gpu = [r for r in rows.values() if r["tier"] != "host" and (r["vendor"], r["arch"]) == (vendor, arch)]
             if leg:
                 shutil.copytree(leg, sdir, symlinks=False)
                 say(f"  {key}: the leg's set copied from {leg}")
+            elif old:
+                # A COMPLETED LEG OF AN EARLIER FREEZE whose set identity and
+                # build tooling equal this freeze's: every file it built is
+                # taken whole, byte for byte, and named in reuse.json.
+                shutil.copytree(old["dir"], sdir, symlinks=False)
+                from_legs[name] = dict(old["origin"])
+                for r in gpu + host_rows:
+                    p = sdir / r["set_rel"]
+                    if p.is_file():
+                        reused[r["set_rel"]] = dict(sha256=sha256(p), source="leg", leg=name,
+                                                    identity_digest=r["identity_digest"])
+                for p in sorted((sdir / ".libs").glob("*")) if (sdir / ".libs").is_dir() else []:
+                    if p.is_file():
+                        reused[".libs/" + p.name] = dict(sha256=sha256(p), source="leg", leg=name)
+                say(f"  {key}: the set of leg {name} built at {old['origin']['source_commit'][:12]} taken whole "
+                    f"(set identity {old['origin']['set_identity_digest'][:12]} unchanged)")
             else:
                 sdir.mkdir(parents=True)
-            gpu = [r for r in rows.values() if r["tier"] != "host" and (r["vendor"], r["arch"]) == (vendor, arch)]
-            if not leg and any(r["decision"] != "REUSE" for r in gpu):
+            if not leg and not old and any(r["decision"] != "REUSE" for r in gpu):
                 raise SystemExit(f"release_reuse: {key} has bindings to BUILD and no leg ran")
             for r in gpu:
                 if r["decision"] != "REUSE":
@@ -689,16 +762,27 @@ def assemble_linux(plan, whl, legs, dest, say=print):
                                                 rebuilt_sha256=rebuilt)
                 elif not target.is_file():
                     built = [(n, d / r["set_rel"]) for n, d in legs.items() if (d / r["set_rel"]).is_file()]
-                    if not built:
+                    taken = [(n, o) for n, o in leg_reuse.items() if (Path(o["dir"]) / r["set_rel"]).is_file()]
+                    if built:
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(built[0][1], target)
+                    elif taken:
+                        n, o = taken[0]
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(Path(o["dir"]) / r["set_rel"], target)
+                        from_legs[n] = dict(o["origin"])
+                        reused[r["set_rel"]] = dict(sha256=sha256(target), source="leg", leg=n,
+                                                    identity_digest=r["identity_digest"])
+                    else:
                         raise SystemExit(f"release_reuse: host binding {r['name']} must be built and no leg built it")
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(built[0][1], target)
             # the runtime closure
             libs = sdir / ".libs"
             if plan["runtime"]["decision"] == "REUSE":
                 prefix = "mojolearn/.libs/" if shared else f"mojolearn/{vendor}/.libs/"
                 if libs.exists():
                     shutil.rmtree(libs)
+                for k in [k for k in reused if k.startswith(".libs/")]:
+                    del reused[k]
                 for member, want in sorted(payload.get("runtime_sha256", {}).items()):
                     if member.startswith(prefix):
                         got = extract_member(z, member, libs / member[len(prefix):], want)
@@ -707,10 +791,18 @@ def assemble_linux(plan, whl, legs, dest, say=print):
                     raise SystemExit(f"release_reuse: no runtime closure under {prefix} in the published wheel")
             elif not libs.is_dir():
                 built = [d / ".libs" for d in legs.values() if (d / ".libs").is_dir()]
-                if not built:
+                taken = [(n, Path(o["dir"]) / ".libs", o) for n, o in leg_reuse.items() if (Path(o["dir"]) / ".libs").is_dir()]
+                if built:
+                    shutil.copytree(built[0], libs)
+                elif taken:
+                    n, src, o = taken[0]
+                    shutil.copytree(src, libs)
+                    from_legs[n] = dict(o["origin"])
+                    for p in sorted(libs.iterdir()):
+                        reused[".libs/" + p.name] = dict(sha256=sha256(p), source="leg", leg=n)
+                else:
                     raise SystemExit("release_reuse: the runtime closure must be built and no leg built it")
-                shutil.copytree(built[0], libs)
-            if not leg:
+            if not leg and not old:
                 exts = [sdir / r["set_rel"] for r in gpu]
                 staged = [dict(name=p.name, sha256=sha256(p), bytes=p.stat().st_size) for p in sorted(libs.iterdir())]
                 manifest = dict(schema="mojolearn.linux.reused-set-manifest.v1", set=str(sdir), reused_from=origin,
@@ -718,11 +810,19 @@ def assemble_linux(plan, whl, legs, dest, say=print):
                                 bytes_staged_libs=sum(s["bytes"] for s in staged), staged_libs=staged,
                                 driver_libs_not_staged=elf_driver_libs(exts))
                 (sdir / "manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
-            (sdir / "reuse.json").write_text(json.dumps(dict(
-                schema=REUSE_SCHEMA, set=key, from_release=origin, files=reused), indent=2, sort_keys=True) + "\n")
-            say(f"  {key}: {len(reused)} file(s) taken from {origin['wheel']}"
-                + ("" if leg else " (no leg; set synthesized)"))
+            if origin is not None or reused:
+                doc = dict(schema=REUSE_SCHEMA, set=key, from_release=origin, files=reused)
+                if from_legs:
+                    doc["from_legs"] = from_legs
+                (sdir / "reuse.json").write_text(json.dumps(doc, indent=2, sort_keys=True) + "\n")
+            n_leg = sum(1 for r in reused.values() if r.get("source") == "leg")
+            say(f"  {key}: {len(reused) - n_leg} file(s) taken from {origin['wheel'] if origin else 'no published wheel'}"
+                + (f", {n_leg} from the earlier leg(s) {', '.join(sorted(from_legs))}" if n_leg else "")
+                + ("" if leg or old else " (no leg; set synthesized)"))
             out[key] = sdir
+    finally:
+        if z is not None:
+            z.close()
     return out
 
 
