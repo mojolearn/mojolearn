@@ -1,0 +1,7 @@
+[22:22:22] segment: route A segment controls-none label nvidia-controls-none, global steps 100..102, K=64, devices (0,), from ckpt_00000100.blm (sha256 80cd2126a89ba6d8) CONTROL none (K run 64)
+[22:22:22] the checkpoint's state AGREES with the expected chain's step 100 (2b37e85edfd701eb)
+[22:23:11] step 101 lr 397e2cc1 loss 6.9004 state abc8b816b5c3fb15 grad 25830bfc2016dc14 37.92 s (+6.43 s hashing)
+[22:23:11] step 101 agrees with the expected chain
+[22:23:48] step 102 lr 39805880 loss 6.8585 state a9421f91b947f82c grad 94c40a6e3d5ec5aa 30.40 s (+6.28 s hashing)
+[22:23:48] step 102 agrees with the expected chain
+[22:23:48] PASS: /root/gemm_leg_out/lm-controls/none
