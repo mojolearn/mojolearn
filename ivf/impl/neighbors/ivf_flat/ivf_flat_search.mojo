@@ -81,6 +81,13 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.expand_distances import expand_distances_kernel
 from core.gemm import gemm_nt
 from core.identity_trace import IdentityTrace
+from ivf.impl.neighbors.ivf_flat.fast_ivf_scan import (
+    FIVF_MAX_DIM,
+    FIVF_QPB,
+    fast_ivf_scan_kernel,
+)
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 from ivf.checks.list_layout import (
     ListLayout,
     gather_candidate_indices,
@@ -110,6 +117,7 @@ from ivf.impl.neighbors.ivf_flat.ivf_flat_index import (
 )
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
+    NUMERIC_FAST,
     NUMERIC_IDENTICAL,
     PIN_DETERMINISM,
     numeric_mode_name,
@@ -137,6 +145,15 @@ arm, matching the 256 `knn_brute_force.mojo:200` launches
 width reaches no fold and no accumulator; `check_launch_invariance` moves
 it anyway, because "reaches no fold" is an argument and the check is a
 measurement."""
+
+comptime IVF_FAST_SCAN = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_IVF_FAST_SCAN_OFF"]()
+)
+"""FAST on Apple: steps 3-5 for every query in one launch
+(`fast_ivf_scan.mojo`) instead of a host round trip per query."""
+
 
 
 @fieldwise_init
@@ -516,6 +533,74 @@ def ivf_flat_search_traced(
             probe_i32.append(Int32(probe_ids[i]))
         trace.record_list_i32("ivf.probe_lists", probe_i32)
 
+    # ---- steps 3-5, FAST on Apple: every query in one launch ------------
+    comptime if IVF_FAST_SCAN:
+        if (
+            not trace.enabled
+            and not partial_storage
+            and k <= 32
+            and dim <= FIVF_MAX_DIM
+        ):
+            var counts = List[Int32]()
+            var enough = True
+            for q in range(n_queries):
+                var c = 0
+                for p in range(n_probes):
+                    c += index.list_size(Int(probe_ids[q * n_probes + p]))
+                counts.append(Int32(c))
+                if c < k:
+                    enough = False
+            if enough:
+                var h_off = ctx.enqueue_create_host_buffer[DType.int32](
+                    n_lists + 1
+                )
+                for i in range(n_lists + 1):
+                    h_off.unsafe_ptr().unsafe_store(i, index.list_offsets[i])
+                var h_ind = ctx.enqueue_create_host_buffer[DType.uint32](
+                    index.n_rows
+                )
+                for i in range(index.n_rows):
+                    h_ind.unsafe_ptr().unsafe_store(i, index.list_indices[i])
+                var d_off = ctx.enqueue_create_buffer[DType.int32](n_lists + 1)
+                var d_ind = ctx.enqueue_create_buffer[DType.uint32](index.n_rows)
+                ctx.enqueue_copy(dst_buf=d_off, src_ptr=h_off.unsafe_ptr())
+                ctx.enqueue_copy(dst_buf=d_ind, src_ptr=h_ind.unsafe_ptr())
+                var d_od = ctx.enqueue_create_buffer[DType.float32](n_queries * k)
+                var d_oi = ctx.enqueue_create_buffer[DType.uint32](n_queries * k)
+                var grid = (n_queries + FIVF_QPB - 1) // FIVF_QPB
+                comptime for KM in [8, 16, 32]:
+                    if k <= KM and (KM == 8 or k > KM // 2):
+                        ctx.enqueue_function[fast_ivf_scan_kernel[KM]](
+                            dq.unsafe_ptr(), dlist_data.unsafe_ptr(),
+                            d_off.unsafe_ptr(), d_ind.unsafe_ptr(),
+                            dprobe_idx.unsafe_ptr(),
+                            d_od.unsafe_ptr(), d_oi.unsafe_ptr(),
+                            Int32(n_queries), Int32(dim), Int32(n_probes),
+                            Int32(k),
+                            grid_dim=grid, block_dim=FIVF_QPB * 32,
+                        )
+                var fd = download_f32(ctx, d_od, n_queries * k)
+                var fi = download_u32(ctx, d_oi, n_queries * k)
+                if not dist_is_identity:
+                    postprocess_distances(fd, index.metric)
+                _ = h_off^
+                _ = h_ind^
+                _ = d_off^
+                _ = d_ind^
+                _ = d_od^
+                _ = d_oi^
+                _ = dq^
+                _ = dcenters^
+                _ = dcenter_norm^
+                _ = dlist_data^
+                _ = dq_norm^
+                _ = dlist_norm^
+                _ = dcoarse^
+                _ = dprobe_dist^
+                _ = dprobe_idx^
+                _ = dpbuf_val^
+                _ = dpbuf_idx^
+                return IvfSearchResult(fd^, fi^, counts^)
     # ---- steps 3-5: the candidates of each query -----------------------
     var layout = ListLayout(
         n_lists,
