@@ -1,0 +1,5 @@
+pod='c4h0hnqjtbd5nz'
+target='-p 16293 root@216.81.151.47'
+armed_utc='2026-09-25T02:30:58Z'
+deadline_epoch=1790305858
+minutes=40
