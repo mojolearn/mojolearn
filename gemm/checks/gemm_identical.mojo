@@ -161,6 +161,11 @@ from checks.kernel_matrix import (
     TARGET_COLUMN,
     lib_block_size_for,
     lib_hardware_ftz_fma_for,
+    lib_lane_width_for,
+    lib_smem_page_fits_for,
+    lib_smem_pages_for,
+)
+from checks.kernel_matrix_gemm import (
     lib_gemm_stage_ftz_for,
     lib_postround_class_flush_for,
     lib_gemm_detect_seam_for,
@@ -172,9 +177,6 @@ from checks.kernel_matrix import (
     lib_gemm_block_parallelism_for,
     lib_gemm_kernel_body_for,
     lib_gemm_block_parallelism_trial_for,
-    lib_lane_width_for,
-    lib_smem_page_fits_for,
-    lib_smem_pages_for,
 )
 
 # DEVIATION 1876 -- THE FAST ARM REACHES THE VENDOR KERNEL. See

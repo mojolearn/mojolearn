@@ -43,7 +43,8 @@ from extratrees.impl.decisiontree.batched_levelalgo.builder import (
     row_ids_tiled_sequence_kernel,
 )
 from core.device_liveness import assert_device_alive
-from core.launch_log import log_launch, log_launch_ctx
+from core.launch_log import log_launch
+from core.launch_clock import log_launch_ctx
 from ensemble.instruments import FitInstruments
 from core.philox import (
     RNG_BLOCK_THREADS,

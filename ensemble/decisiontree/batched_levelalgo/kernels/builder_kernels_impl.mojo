@@ -399,7 +399,8 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from core.block_reduce import block_flush_count_i32, block_reduce_sum
-from core.launch_log import log_launch, log_launch_ctx
+from core.launch_log import log_launch
+from core.launch_clock import log_launch_ctx
 from core.block_scan import BlockScanElement, pdf_to_cdf
 from core.scan_by_key import (
     ScanByKeyElement,

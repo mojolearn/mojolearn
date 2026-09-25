@@ -38,9 +38,6 @@ one.
 
 from std.ffi import _Global
 from std.os import getenv
-from std.time import perf_counter_ns
-
-from max.gpu.host import DeviceContext
 
 
 struct _LaunchLogState(Defaultable, Movable):
@@ -80,21 +77,3 @@ def log_launch(name: StringSlice) raises:
         return
     with open(st[].path, "a") as fh:
         fh.write(String(name) + "\n")
-
-
-def log_launch_ctx(ctx: DeviceContext, name: StringSlice) raises:
-    """`log_launch`, plus the `RF_LAUNCH_CLOCK` drain when that is set."""
-    var st = _LAUNCH_LOG.get_or_create_ptr()
-    if not st[].enabled:
-        return
-    if not st[].clock:
-        with open(st[].path, "a") as fh:
-            fh.write(String(name) + "\n")
-        return
-    ctx.synchronize()
-    var now = Int(perf_counter_ns())
-    with open(st[].path, "a") as fh:
-        if st[].last_name != "":
-            fh.write(st[].last_name + "\t" + String(now - st[].last_ns) + "\n")
-    st[].last_name = String(name)
-    st[].last_ns = Int(perf_counter_ns())
