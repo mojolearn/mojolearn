@@ -2097,8 +2097,7 @@ read -r _op TEAM_MAX_VMS < <(J teams "$TMPD/teams.json" "$TEAM")
 BAL_BEFORE=$(balance_cents)
 log "team $TEAM balance at the start $(dollars "$BAL_BEFORE") ($BAL_BEFORE cents); VM limit $TEAM_MAX_VMS, slots $(slot_cap)"
 echo "balance_before_cents=$BAL_BEFORE" >> "$OUT/leg.txt"
-[ "$BAL_BEFORE" -ge "$MIN_BALANCE_CENTS" ] 2>/dev/null \
-  || die "REFUSED: balance $(dollars "$BAL_BEFORE") is below the \$5.00 floor ($MIN_BALANCE_CENTS cents). Nothing was created." 3
+# no balance floor: the team balance tops up automatically (2026-09-25)
 c=$(api GET "user/ssh_keys/" "$TMPD/keys.json")
 [ "$c" = 200 ] && [ "$(J sshkey "$TMPD/keys.json" "$SSH_KEY_FP")" = yes ] \
   || die "REFUSING to rent: $SSH_KEY_FP is not registered on the account (HTTP $c); ssh would fail. Nothing was created." 2
