@@ -41,6 +41,14 @@ class NoStock(unittest.TestCase):
         (self.leg / "create_response.json").write_text('{"error":"unauthorized","status":401}')
         self.assertFalse(rel.no_stock(self.log, self.leg))
 
+    def test_a_transient_create_failure_walks_too(self):
+        (self.leg / "create_response.json").write_text(
+            '{"error":"create pod: Something went wrong. Please try again later or contact support.","status":500}')
+        self.assertTrue(rel.no_stock(self.log, self.leg))
+
+    def test_the_nvidia_column_ends_its_walk_on_the_h100(self):
+        self.assertEqual(rel.SMOKE_WALK[-2:], ["NVIDIA H100 80GB HBM3", "NVIDIA H200"])
+
     def test_the_log_still_counts(self):
         self.log.write_text("There are no instances currently available\n")
         self.assertTrue(rel.no_stock(self.log))

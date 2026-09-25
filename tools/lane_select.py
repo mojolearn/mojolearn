@@ -3679,6 +3679,9 @@ NATIVE_INPUTS = {
     "packaging/portable_math/portable_math.c": "python/mojolearn/_portable_math.py",
     "packaging/portable_math/powers_of_ten.h": "python/mojolearn/_portable_math.py",
     "packaging/portable_math/stage.py": "python/mojolearn/_portable_math.py",
+    # wheel.py finalizes every wheel through stage.py (the import rewrite) and
+    # audits it; it shapes the same shipped bytes stage.py does.
+    "packaging/portable_math/wheel.py": "python/mojolearn/_portable_math.py",
 }
 NATIVE_LIBRARY = "libMojolearnMath"
 
