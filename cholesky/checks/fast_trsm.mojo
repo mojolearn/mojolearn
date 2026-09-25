@@ -19,7 +19,8 @@ over `B` (`n x nrhs` row-major), FAST arithmetic.
 """
 
 from std.gpu import WARP_SIZE, block_dim, block_idx, thread_idx
-from std.gpu.primitives.warp import sum as warp_sum
+from std.gpu.primitives.warp import shuffle_idx, sum as warp_sum
+from std.gpu import lane_id
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
@@ -226,3 +227,49 @@ def fast_cho_solve(
                 block_dim=(FTS_UPD_TPB, 1, 1),
             )
         hi = lo
+
+
+comptime FTP_REGS = 8
+comptime FTP_MAX_NB = 32 * FTP_REGS
+
+
+def fast_trsm_panel_kernel(
+    a: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    j0_in: Int32,
+    nb_in: Int32,
+    n_trail_in: Int32,
+):
+    """`trsm_panel_kernel` (L21 = A21 L11^-T, row by row) with a SIMDGROUP
+    per row: lane l keeps the row's solved values y[l + 32 m] in registers,
+    every column's dot product over the earlier columns is split across the
+    lanes (L11's row read coalesced) and folded with a warp sum, and lane 0
+    finishes y_c and broadcasts it. nb <= FTP_MAX_NB."""
+    var n = Int(n_in)
+    var j0 = Int(j0_in)
+    var nb = Int(nb_in)
+    var gw = (Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)) // 32
+    if gw >= Int(n_trail_in):
+        return
+    var lane = Int(lane_id())
+    var r = j0 + nb + gw
+    var y = InlineArray[Float32, FTP_REGS](fill=0.0)
+    for c in range(nb):
+        var jc = j0 + c
+        var p = Float32(0)
+        comptime for m in range(FTP_REGS):
+            var k = lane + 32 * m
+            if k < c:
+                p += a[jc * n + j0 + k] * y[m]
+        var s = warp_sum(p)
+        var yc = Float32(0)
+        if lane == 0:
+            yc = (a[r * n + jc] - s) / a[jc * n + jc]
+        yc = shuffle_idx(yc, UInt32(0))
+        comptime for m in range(FTP_REGS):
+            if c == lane + 32 * m:
+                y[m] = yc
+    comptime for m in range(FTP_REGS):
+        var k = lane + 32 * m
+        if k < nb:
+            a[r * n + j0 + k] = y[m]

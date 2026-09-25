@@ -295,6 +295,7 @@ The one thing in the RAPIDS trees that IS portable source and IS implemented her
 # =========================================================================
 """
 
+from cholesky.checks.fast_trsm import FTP_MAX_NB, fast_trsm_panel_kernel
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -381,6 +382,7 @@ def chol_default_nb_hint() -> Int:
     return CHOL_NB_PINNED
 
 
+comptime CHOL_FAST_CB = 2048
 comptime CHOL_FAST_NB = 64 if is_defined["MOJOLEARN_CHOL_FAST_NB64"]() else (
     128 if is_defined["MOJOLEARN_CHOL_FAST_NB128"]() else (
         512 if is_defined["MOJOLEARN_CHOL_FAST_NB512"]() else 256
@@ -761,6 +763,53 @@ def pack_panel_kernel(
     dst.unsafe_store(idx, a.unsafe_load((j0 + nb + i) * n + j0 + c))
 
 
+def subtract_lower_2d_kernel(
+    a: MutPointer[Float32, MutAnyOrigin],
+    g: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    base_in: Int32,
+    n_trail_in: Int32,
+):
+    """CHOL_FAST_APPLE: `subtract_lower_kernel` on a 2-D grid -- row =
+    block y, column = block x * 256 + thread -- so no thread divides, and
+    a block wholly above the diagonal returns at once."""
+    var i = Int(block_idx.y)
+    var j = Int(block_idx.x) * 256 + Int(thread_idx.x)
+    if j > i:
+        return
+    var n = Int(n_in)
+    var base = Int(base_in)
+    var nt = Int(n_trail_in)
+    var ai = (base + i) * n + base + j
+    a[ai] = a[ai] - g[i * nt + j]
+
+
+def subtract_block_2d_kernel(
+    a: MutPointer[Float32, MutAnyOrigin],
+    gb: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    base_in: Int32,
+    row0_in: Int32,
+    col0_in: Int32,
+    cbw_in: Int32,
+):
+    """CHOL_FAST_APPLE lower-blocked trailing update: the product block
+    `gb` ((n_trail - row0) x cbw, row-major) holds rows >= row0 of columns
+    [col0, col0 + cbw); subtract its lower-triangle cells from `a`."""
+    var i = Int(row0_in) + Int(block_idx.y)
+    var jj = Int(block_idx.x) * 256 + Int(thread_idx.x)
+    var cbw = Int(cbw_in)
+    if jj >= cbw:
+        return
+    var j = Int(col0_in) + jj
+    if j > i:
+        return
+    var n = Int(n_in)
+    var base = Int(base_in)
+    var ai = (base + i) * n + base + j
+    a[ai] = a[ai] - gb[Int(block_idx.y) * cbw + jj]
+
+
 def subtract_lower_kernel(
     a: MutPointer[Float32, MutAnyOrigin],
     g: MutPointer[Float32, MutAnyOrigin],
@@ -1123,6 +1172,12 @@ def potrf_lower(
                     grid_dim=(solve_grid, 1, 1),
                     block_dim=(solve_tpb, 1, 1),
                 )
+            elif CHOL_FAST_APPLE and w <= FTP_MAX_NB:
+                ctx.enqueue_function[fast_trsm_panel_kernel](
+                    a.unsafe_ptr(), Int32(n), Int32(j0), Int32(w), Int32(n_trail),
+                    grid_dim=((n_trail * 32 + 255) // 256, 1, 1),
+                    block_dim=(256, 1, 1),
+                )
             else:
                 ctx.enqueue_function[trsm_panel_kernel](
                     a.unsafe_ptr(),
@@ -1172,7 +1227,31 @@ def potrf_lower(
             var vendor = sabotage == CHOL_SAB_VENDOR_MATMUL
             comptime if CHOL_FAST_APPLE:
                 vendor = True
-            if vendor:
+            var lower_blocked = False
+            comptime if CHOL_FAST_APPLE:
+                lower_blocked = sabotage == CHOL_SAB_NONE and n_trail > CHOL_FAST_CB
+            if lower_blocked:
+                # rows >= cb of each CHOL_FAST_CB-wide column block only:
+                # about half the product of the full square
+                var cb = 0
+                while cb < n_trail:
+                    var cbw = min(CHOL_FAST_CB, n_trail - cb)
+                    var rows_b = n_trail - cb
+                    var xa = packed.create_sub_buffer[DType.float32](cb * w, rows_b * w)
+                    var yb = packed_b.create_sub_buffer[DType.float32](cb * w, cbw * w)
+                    var gb = g.create_sub_buffer[DType.float32](0, rows_b * cbw)
+                    gemm_nt(ctx, gb, xa, yb, rows_b, cbw, w)
+                    ctx.enqueue_function[subtract_block_2d_kernel](
+                        a.unsafe_ptr(), gb.unsafe_ptr(), Int32(n),
+                        Int32(j0 + w), Int32(cb), Int32(cb), Int32(cbw),
+                        grid_dim=((cbw + 255) // 256, rows_b, 1),
+                        block_dim=(256, 1, 1),
+                    )
+                    _ = xa^
+                    _ = yb^
+                    _ = gb^
+                    cb += cbw
+            elif vendor:
                 # ARM: `linalg.matmul` through `core/gemm.mojo::gemm_nt`. Its
                 # k-split is a per-vendor summation order; DEVIATION 1636.
                 gemm_nt(ctx, g, packed, packed_b, n_trail, n_trail, w)
@@ -1188,15 +1267,27 @@ def potrf_lower(
                     )
 
             var sub_cells = n_trail * n_trail
-            ctx.enqueue_function[subtract_lower_kernel](
-                a.unsafe_ptr(),
-                g.unsafe_ptr(),
-                Int32(n),
-                Int32(j0 + w),
-                Int32(n_trail),
-                grid_dim=((sub_cells + elem_tpb - 1) // elem_tpb, 1, 1),
-                block_dim=(elem_tpb, 1, 1),
-            )
+            if lower_blocked:
+                sub_cells = 0
+            comptime if CHOL_FAST_APPLE:
+                if sub_cells > 0:
+                    ctx.enqueue_function[subtract_lower_2d_kernel](
+                        a.unsafe_ptr(), g.unsafe_ptr(), Int32(n), Int32(j0 + w),
+                        Int32(n_trail),
+                        grid_dim=((n_trail + 255) // 256, n_trail, 1),
+                        block_dim=(256, 1, 1),
+                    )
+                sub_cells = 0
+            if sub_cells > 0:
+                ctx.enqueue_function[subtract_lower_kernel](
+                    a.unsafe_ptr(),
+                    g.unsafe_ptr(),
+                    Int32(n),
+                    Int32(j0 + w),
+                    Int32(n_trail),
+                    grid_dim=((sub_cells + elem_tpb - 1) // elem_tpb, 1, 1),
+                    block_dim=(elem_tpb, 1, 1),
+                )
             trace.record_device(
                 ctx, chol_panel_tag("chol", p, "trailing"), a, n * n
             )
