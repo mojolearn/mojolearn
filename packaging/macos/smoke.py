@@ -250,7 +250,19 @@ def _linalg():                                            # _mojolearn_linalg
     # (`_linalg_impl.py`, `require_identical`, after a mislabeled
     # deterministic build on the 2026-08-29 Apple stability run).
     _a = rng.random((8, 4)).astype(np.float32)
-    _p = mojolearn.linalg.matmul(_a, _a.T)
+    if _tier == "identical":
+        _p = mojolearn.linalg.matmul(_a, _a.T)
+    else:
+        # Classical FAST (2026-09-25): the identity-claiming call still
+        # refuses by name outside IDENTICAL; the fast product must compute.
+        try:
+            mojolearn.linalg.matmul(_a, _a.T)
+        except RuntimeError as _exc:
+            assert "identical" in str(_exc).lower(), _exc
+        else:
+            raise AssertionError("linalg.matmul claimed identity under " + _tier)
+        _p = np.asarray(mojolearn.linalg.matmul(_a, _a.T, identical=False))
+        assert np.allclose(_p, _a @ _a.T, rtol=1e-4, atol=1e-5), "fast matmul is wrong"
     assert _p.shape == (8, 8), _p.shape
 
 
