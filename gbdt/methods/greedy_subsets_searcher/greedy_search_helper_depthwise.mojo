@@ -7,7 +7,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from core.device_zero import enqueue_fill
 
 from checks.fixed_point import choose_scale
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from gbdt.gpu_lib.gpu_manager import TCudaManager
 from gbdt.data.leaf_path import TLeafPath, split_leaf_path
 from gbdt.data.permutation import TRandom
@@ -885,6 +885,12 @@ def fit_non_symmetric_tree[
     # DEVIATION 2007a: no override, so the pool's cached machine constant.
     if sm_count <= 0:
         sm_count = ws[0].sm_count
+        # Measurement arms (FAST): scale the machine-sized split-chain grids.
+        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
+            comptime if is_defined["MOJOLEARN_GBDT_SM_X8"]():
+                sm_count *= 8
+            elif is_defined["MOJOLEARN_GBDT_SM_X4"]():
+                sm_count *= 4
     # ============ DEVIATION 1911/1912: is the quantized family running? ====
     # The vendor/mode half is COMPTIME (`QUANTIZED_HIST_LIVE`, the
     # `greedy_quantized_hist_for` row -- False under IDENTICAL, so that
