@@ -85,15 +85,17 @@ bottleneck.
 |---|---|---|---|---|---|---|
 | optimizer steps | 1,000 | 1,000 | 400 | 1,500 | 1,000 | 100 |
 | **route A** | NVIDIA | NVIDIA | **NVIDIA + AMD** (NVIDIA folds first) | AMD | NVIDIA | **Apple** |
-| **route B** | AMD | **AMD + NVIDIA** (AMD folds first) | NVIDIA | NVIDIA (one GPU) | AMD | NVIDIA |
+| **route B** | AMD (MI325X) | AMD (MI300X) | NVIDIA | NVIDIA (one GPU) | AMD | NVIDIA |
 | differs between routes | yes | yes | yes | yes | yes | yes |
-| handoff into it changes vendor, A / B | seed | no / yes | yes / yes | yes / no | yes / yes | yes / yes |
+| handoff into it changes vendor, A / B | seed | no / no (chip model changes in B) | yes / yes | yes / no | yes / yes | yes / yes |
 
-**The multi-cluster segment is in both routes**, segment 3 of A and segment
-2 of B: one NVIDIA box and one AMD box training the same step together
-through `mojolearn.cross_vendor`, with ownership of the shards and the first
-half of the ordered fold swapped between the routes. Section 5 says how it
-works at this size.
+**The multi-cluster segment is route A's segment 3 only**: one NVIDIA box and
+one AMD box training the same steps together through `mojolearn.cross_vendor`.
+Route B's segment 2 was a second one with the roles swapped (AMD folds
+first); it was dropped on 2026-09-25 for AMD alone, because the swap adds
+little proof (each shard's gradient is already identical on either vendor and
+the fold order is fixed) at the run's largest cost, about 28 hours on two
+rented boxes at A/3's measured 102 s a step. Section 5 says how it works.
 
 **Apple appears exactly once, in segment 6 of route A**, the shortest segment
 and the last one. Section 7 argues last over first. What is lost is that Apple
