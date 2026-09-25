@@ -138,3 +138,29 @@ from segment A/3 on (the driver re-reads the spec per segment); segments A/1
 and A/2 ran 0.8.15, whose bindings are the same bytes. Pod
 `ge6s83dbffmzae`, 02:52 to 03:03 UTC, deleted and confirmed gone (HTTP 404,
 `wheel-0.8.17/leg_teardown.txt`), about $0.65.
+
+## The published 0.8.18 wheel on both vendors (2026-09-25, `wheel-0.8.18/`)
+
+0.8.18 rebuilds every binding: the AMD step-time work
+(`bench/results/amd_step_time_2026-09-24/`, MI300X 141.0 to 32.3 s an
+optimizer step, DigitalOcean MI325X 135.6 to 70.1 s) and the GEMM launch
+bound that reaches NVIDIA binaries too. Before any AMD segment resumed on it,
+the same replay ran from the published wheel (sha256 `c160fb6d5101...`) on
+one H100 (RunPod, Python 3.11) and on one MI325X (DigitalOcean, Python
+3.12), two steps each from route A's `ckpt_00000100.blm` held to the live
+chain's lines 101 and 102:
+
+| control | H100 | MI325X |
+|---|---|---|
+| positive (plain replay) | PASS | PASS |
+| `--control none` | PASS | PASS |
+| `--control split` (fold export path) | PASS | not run (a one-box worker path) |
+| `--control ulp=63,auto` | FAIL at 101 on state and gradient | FAIL at 101 on state and gradient |
+
+The release's own columns on the same wheel read 618 cells IDENTICAL and
+none DIVERGENT against the CPU column on a 4090 and on an MI325X
+(`bench/results/release_verification/2026-09-25_pypi_0818/`). Both check
+boxes were deleted and confirmed gone (`wheel-0.8.18/*/leg_teardown.txt`);
+about $1 and $3. Segment A/4 (AMD) started on 0.8.18 at 02:07 UTC; route B
+stays held on Andrew's instruction while the AMD and NVIDIA step-time lanes
+continue.

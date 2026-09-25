@@ -1,0 +1,6 @@
+[02:00:46] segment: route A segment controls-ulp label nvidia-controls-ulp, global steps 100..102, K=64, devices (0,), from ckpt_00000100.blm (sha256 80cd2126a89ba6d8) CONTROL ulp=63,auto (K run 64)
+[02:00:46] the checkpoint's state AGREES with the expected chain's step 100 (2b37e85edfd701eb)
+[02:01:48] ulp: shard 63 element 123585811 bits 3e4e221f -> 3e4e2220, prefix 4136b553, total predicted 4139eddb unedited / 4139eddc edited, observed 4139eddc
+[02:01:52] step 101 lr 397e2cc1 loss 6.9004 state d3eefb6dba8781f1 grad f386db390c347834 57.16 s (+3.55 s hashing)
+[02:01:52] DISAGREE at step 101 on ['state_sha256', 'gradient_sha256']; the segment stops here
+[02:01:52] FAIL: /root/gemm_leg_out/lm-controls/ulp
