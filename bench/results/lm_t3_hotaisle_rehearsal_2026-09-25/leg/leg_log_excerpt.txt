@@ -1,0 +1,32 @@
+== hotaisle_leg: one Hot Aisle 2x MI300X VM running ONE extra body that sees both GPUs ==
+   mode      rent
+   commit    8571c2cbe parent 75d3c3ad4 14c4e5ab8
+   spec      2gpu --one-body (2x MI300X, 26 cores; ONE VM, ONE slot, ONE watchdog, ONE delete), team andrews-team
+   lease     70 minutes SEGMENT LEASE, cap $9, priced live before the create (Mac dead-man and on-box watchdog at that deadline)
+   label     mi300x-2gpu-vm, body_gpus=all (never mixed with 1x MI300X VM rows)
+   body      /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/b3b5cdf7-59b8-44de-8e38-6027d9f71497/scratchpad/rehearsal_body.sh   lane lm-rehearsal-A-1-s101
+   gates     SKIPPED (--skip-gates)
+   archs     gfx942   column amd
+   runtime   auto (image rocm/dev-ubuntu-22.04:6.4.1-complete; the container gets /dev/kfd and the whole /dev/dri)
+   out       /Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-ae872eaed31f681a8/bench/results/lm_t3_hotaisle_rehearsal_2026-09-25/leg
+
+== local checks ==
+  ok     the tree is clean (minus bench/results)
+  ok     the extra body is valid sh: /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/b3b5cdf7-59b8-44de-8e38-6027d9f71497/scratchpad/rehearsal_body.sh
+  ok     the extra body environment: 0 export(s)
+  ok     key file present, 0600, outside the repository
+  ok     ssh key /Users/andrewhendel/.ssh/id_ed25519 is the registered one (SHA256:pqDQ15Jijc636E5M3/2IvTGR7YKL11+JzQwGYtBvtQU)
+  info   slots:
+         slot 1  free
+         slot 2  free
+         slot 3  free
+  ok     bundle 14630989 bytes gzipped, 3298 files, sha256 02bd57e24a8285a1
+  ok     the remote body, watchdog, arm, unpack, start, pull and Mac dead-man scripts substitute cleanly and pass sh -n, dash -n and the bashism scan
+
+== pre-flight ==
+[08:44:05 hotaisle] team andrews-team balance at the start $42.84 (4284 cents); VM limit 2, slots 2
+[08:44:06 hotaisle] slot /tmp/mojolearn-hotaisle-slot.1 taken (lane lm-rehearsal-A-1-s101)
+[09:45:57 hotaisle] released /tmp/mojolearn-hotaisle-slot.1
+[09:45:58 hotaisle] team balance at the end $42.84 (at the start $42.84)
+[08:44:06 hotaisle] no stock on 2gpu (HTTP 200, none, quantity 0); retrying in 60 s
+[09:45:52 hotaisle] no stock on 2gpu (HTTP 200, none, quantity 0); retrying in 60 s

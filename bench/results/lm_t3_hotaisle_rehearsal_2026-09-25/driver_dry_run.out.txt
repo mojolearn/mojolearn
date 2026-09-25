@@ -1,0 +1,51 @@
+[08:55:18 driver] A/4: PARTIAL: checkpoints ['ckpt_00002500.blm', 'ckpt_00002600.blm'] landed, chain to step 2699 saved (/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/b3b5cdf7-59b8-44de-8e38-6027d9f71497/scratchpad/dry/out/legs/A-4/partial.chain.jsonl); the next start resumes from ckpt_00002600.blm with 1300 steps
+== the partial entry (ledger.json 'partial'['A/4'])
+{
+ "resume_from": 2600,
+ "checkpoints": {
+  "ckpt_00002500.blm": "374ec7a1a408e22f616ad787eddf1dd4a91326d3e42d995e05fe001518d98cc0",
+  "ckpt_00002600.blm": "756b0c9f0fbc0a8cdda63833dbcfd470ce82573ece29da34e64c6bccefac4605"
+ },
+ "chain": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/b3b5cdf7-59b8-44de-8e38-6027d9f71497/scratchpad/dry/out/legs/A-4/partial.chain.jsonl",
+ "chain_steps": [
+  2401,
+  2699
+ ],
+ "arrival": "PASS",
+ "attempts": [
+  {
+   "n": 1,
+   "dir": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/b3b5cdf7-59b8-44de-8e38-6027d9f71497/scratchpad/dry/out/legs/A-4/attempt-1",
+   "first_step": 2400,
+   "last_chain_step": 2699,
+   "checkpoints": {
+    "ckpt_00002500.blm": "374ec7a1a408e22f616ad787eddf1dd4a91326d3e42d995e05fe001518d98cc0",
+    "ckpt_00002600.blm": "756b0c9f0fbc0a8cdda63833dbcfd470ce82573ece29da34e64c6bccefac4605"
+   },
+   "refused": {},
+   "utc": "2026-09-25T12:55:18Z",
+   "results": "/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/b3b5cdf7-59b8-44de-8e38-6027d9f71497/scratchpad/dry/out/legs/A-4/previous-attempt-1-leg-do-1"
+  }
+ ]
+}
+[08:55:18 driver] A/4: RESUMING from its own ckpt_00002600.blm (200 of 1500 steps landed), 1300 steps left
+
+== the renders (the second is the Hot Aisle body)
+/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/test/bin/python /Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-ae872eaed31f681a8/tools/lm_segment_leg.py render --run runs/t3/2026-09-22 --recipe /Users/andrewhendel/mojolearn-evidence/gpt3-run/t3_recipe.json --recipe-key runs/t3/2026-09-22/recipe.json --arm amd --mode one --devices 0 --tokens-key corpus/fineweb-edu-10BT/tokens/mojolearn-bpe-fineweb-edu-50257-v1 --wheel 0.8.18 --route A --segment 4 --label amd-A-4 --steps 1300 --from ckpt_00002600.blm --seconds 172800 --boundary 3900 --from-sha 756b0c9f0fbc0a8cdda63833dbcfd470ce82573ece29da34e64c6bccefac4605 --from-key runs/t3/2026-09-22/A/4/ckpt_00002600.blm --expect-key runs/t3/2026-09-22/A/4/partial.chain.jsonl --out /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/b3b5cdf7-59b8-44de-8e38-6027d9f71497/scratchpad/dry/out/bodies/A-4.sh
+   --from ckpt_00002600.blm  --steps 1300  --devices 0  --from-sha 756b0c9f0fbc0a8cdda63833dbcfd470ce82573ece29da34e64c6bccefac4605  --from-key runs/t3/2026-09-22/A/4/ckpt_00002600.blm  --expect-key runs/t3/2026-09-22/A/4/partial.chain.jsonl  --out /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/b3b5cdf7-59b8-44de-8e38-6027d9f71497/scratchpad/dry/out/bodies/A-4.sh
+/Users/andrewhendel/CascadeProjects/mojolearn/.pixi/envs/test/bin/python /Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-ae872eaed31f681a8/tools/lm_segment_leg.py render --run runs/t3/2026-09-22 --recipe /Users/andrewhendel/mojolearn-evidence/gpt3-run/t3_recipe.json --recipe-key runs/t3/2026-09-22/recipe.json --arm amd --mode one --devices 0,1 --tokens-key corpus/fineweb-edu-10BT/tokens/mojolearn-bpe-fineweb-edu-50257-v1 --wheel 0.8.18 --route A --segment 4 --label amd-A-4 --steps 1300 --from ckpt_00002600.blm --seconds 172800 --boundary 3900 --from-sha 756b0c9f0fbc0a8cdda63833dbcfd470ce82573ece29da34e64c6bccefac4605 --from-key runs/t3/2026-09-22/A/4/ckpt_00002600.blm --expect-key runs/t3/2026-09-22/A/4/partial.chain.jsonl --out /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/b3b5cdf7-59b8-44de-8e38-6027d9f71497/scratchpad/dry/out/bodies/A-4-hotaisle.sh
+   --from ckpt_00002600.blm  --steps 1300  --devices 0,1  --from-sha 756b0c9f0fbc0a8cdda63833dbcfd470ce82573ece29da34e64c6bccefac4605  --from-key runs/t3/2026-09-22/A/4/ckpt_00002600.blm  --expect-key runs/t3/2026-09-22/A/4/partial.chain.jsonl  --out /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/b3b5cdf7-59b8-44de-8e38-6027d9f71497/scratchpad/dry/out/bodies/A-4-hotaisle.sh
+
+== the partial chain the driver PUTs first (mocked; its R2 key is the --expect-key)
+   curl -T /private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/b3b5cdf7-59b8-44de-8e38-6027d9f71497/scratchpad/dry/out/legs/A-4/partial.chain.jsonl <presigned PUT>
+
+== the leg
+MOJOLEARN_GEMM_LEG_EXTRA=/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/b3b5cdf7-59b8-44de-8e38-6027d9f71497/scratchpad/dry/out/bodies/A-4-hotaisle.sh MOJOLEARN_GEMM_LEG_LOCAL_CARD=/Users/andrewhendel/mojolearn-evidence/vendor-class-gaps-sep19/apple.card MOJOLEARN_GEMM_LEG_OUT=/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/b3b5cdf7-59b8-44de-8e38-6027d9f71497/scratchpad/dry/out/legs/A-4/leg-hotaisle-1 MOJOLEARN_GPU_ARCHS=gfx942 MOJOLEARN_HOTAISLE_GPU_ONLY=1 MOJOLEARN_HOTAISLE_LANE=lm-A-4 MOJOLEARN_HOTAISLE_SLOT_WAIT_MINUTES=5 MOJOLEARN_HOTAISLE_SPEC=2gpu MOJOLEARN_HOTAISLE_STOCK_WAIT_MINUTES=5 MOJOLEARN_STAGE_KEYS=
+   bash tools/hotaisle_leg.sh amd --rent --skip-gates --spec 2gpu --one-body --segment-lease 2130 --dollar-cap 140
+
+== _start returned (PosixPath('/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/b3b5cdf7-59b8-44de-8e38-6027d9f71497/scratchpad/dry/out/legs/A-4/leg-hotaisle-1'), 0)
+
+== driver.log
+[08:55:18 driver] A/4: PARTIAL: checkpoints ['ckpt_00002500.blm', 'ckpt_00002600.blm'] landed, chain to step 2699 saved (/private/tmp/claude-501/-Users-andrewhendel-CascadeProjects-mojolearn/b3b5cdf7-59b8-44de-8e38-6027d9f71497/scratchpad/dry/out/legs/A-4/partial.chain.jsonl); the next start resumes from ckpt_00002600.blm with 1300 steps
+[08:55:18 driver] A/4: RESUMING from its own ckpt_00002600.blm (200 of 1500 steps landed), 1300 steps left
+
