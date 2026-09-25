@@ -40,6 +40,8 @@ from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import
     launch_build_histograms_kernel,
     launch_find_best_splits_kernel,
     HIST_ZERO_AFTER_READ_DEFAULT,
+    HIST_SPLIT_CANDIDATES_DEFAULT,
+    merge_split_candidates_kernel,
     launch_gather_sampled_order_kernel,
     launch_leaf_kernel,
     launch_node_split_kernel,
@@ -1121,6 +1123,9 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
     """HIST_ZERO_AFTER_READ_DEFAULT: the whole histogram workspace is
     known zero (zeroed once, then every consumer hands its cells back
     zeroed), so a round needs no `hist_zero` launch."""
+    var split_cand: DeviceBuffer[DType.uint8]
+    """HIST_SPLIT_CANDIDATES_DEFAULT: one `Split` slot per (node, column
+    block) of a round; one byte otherwise."""
 
     # --- DEVIATION 128a's argument blobs, one per launcher --------------
     # DEVIATION 1909: staged PER TREE, not per round/batch. Inside one
@@ -1348,6 +1353,12 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             self.histograms, size_of[Self.O.BinT]() * max_len_histograms
         )
         self.hist_clean = False
+        comptime if HIST_SPLIT_CANDIDATES_DEFAULT:
+            self.split_cand = ctx.enqueue_create_buffer[DType.uint8](
+                size_of[Split[Self.O.DataT]]() * max_batch * N_BLKS_FOR_COLS
+            )
+        else:
+            self.split_cand = ctx.enqueue_create_buffer[DType.uint8](1)
 
         self.hist_args = DeviceArgs[HistogramArgs[Self.O]](ctx)
         self.find_args = DeviceArgs[FindBestSplitsArgs[Self.O]](ctx)
@@ -1916,7 +1927,9 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
         # sits exactly here (`:613`) and is unreachable on one device.
         t_h = instr.times.start()
         launch_find_best_splits_kernel[
-            Self.O, zero_after=HIST_ZERO_AFTER_READ_DEFAULT
+            Self.O,
+            zero_after=HIST_ZERO_AFTER_READ_DEFAULT,
+            candidates=HIST_SPLIT_CANDIDATES_DEFAULT,
         ](
             ctx,
             self._hist_ptr(),
@@ -1930,7 +1943,24 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             n_work_items,
             n_blocks_dimy,
             find_argsp,
+            self.split_cand.unsafe_ptr()
+            .unsafe_origin_cast[MutUntrackedOrigin]()
+            .unsafe_bitcast[Split[Self.O.DataT]](),
         )
+        comptime if HIST_SPLIT_CANDIDATES_DEFAULT:
+            log_launch_ctx(ctx, "merge_split_candidates")
+            ctx.enqueue_function[
+                merge_split_candidates_kernel[Self.O.DataT]
+            ](
+                self._splits_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                self.split_cand.unsafe_ptr()
+                .unsafe_origin_cast[MutAnyOrigin]()
+                .unsafe_bitcast[Split[Self.O.DataT]](),
+                Int32(n_work_items),
+                Int32(n_blocks_dimy),
+                grid_dim=ceildiv(n_work_items, 128),
+                block_dim=128,
+            )
         instr.times.stop_host("host_best_launch", t_h)
 
     def enqueue_best_splits(

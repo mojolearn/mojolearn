@@ -822,6 +822,9 @@ def arm_c_cdf_and_splits[
         C_NODES,
         C_SLOTS,
         argsp,
+        splits.unsafe_ptr()
+        .unsafe_origin_cast[MutUntrackedOrigin]()
+        .unsafe_bitcast[Split[DT]](),
     )
     ctx.synchronize()
     # KEEP-ALIVE, and it is not decoration -- see `upload_i32`'s comment.

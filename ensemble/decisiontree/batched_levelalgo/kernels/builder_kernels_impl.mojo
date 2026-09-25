@@ -463,6 +463,20 @@ comptime SAMPLE_PER_NODE_DEFAULT = (
 each node's 24-key bijection once instead of `k` times. Same columns.
 `-D MOJOLEARN_RF_FAST_SAMPLE_PER_COLUMN` restores the per-column arm."""
 
+comptime HIST_SPLIT_CANDIDATES_DEFAULT = (
+    BUILD_MODE == NUMERIC_FAST
+    and is_defined["MOJOLEARN_RF_SPLIT_CANDIDATES"]()
+)
+"""FAST only: each `find_best_splits` block stores its winner in its own
+candidate slot and `merge_split_candidates_kernel` folds a node's slots
+with `Split.update` (a total order), instead of every block spinning on
+the node's device mutex. Same winner. OPT-IN (`-D
+MOJOLEARN_RF_SPLIT_CANDIDATES=1`), NOT FLIPPED: Apple M4 1M rows, hashes
+unchanged, taxireg 0.993, taxi 1.018 -- the mutex is not the cost here.
+`MOJOLEARN_RF_EXP_NO_SPLIT_MUTEX` is the racy pricing arm (never a
+build default; its forests move run to run and its build gate refuses).
+"""
+
 comptime HIST_ZERO_AFTER_READ_DEFAULT = (
     BUILD_MODE == NUMERIC_FAST
     and not is_defined["MOJOLEARN_RF_FAST_HIST_ZERO_OFF"]()
@@ -2615,7 +2629,13 @@ def launch_build_histograms_kernel[
             comptime USE4 = (
                 DEFAULT4 or is_defined["MOJOLEARN_RF_HIST_COLUMNS4"]()
             )
-            comptime TILE = 4 if USE4 else 2
+            comptime TILE = 10 if is_defined[
+                "MOJOLEARN_RF_HIST_COLUMNS10"
+            ]() else (
+                8 if is_defined["MOJOLEARN_RF_HIST_COLUMNS8"]() else (
+                    4 if USE4 else 2
+                )
+            )
             comptime ENABLED = (
                 USE4 or is_defined["MOJOLEARN_RF_HIST_COLUMNS2"]()
             )
@@ -2809,6 +2829,7 @@ def find_best_splits_kernel[
     sabotage: Int = 0,
     pinned_reduce: Bool = SPLIT_REDUCE_PINNED_DEFAULT,
     zero_after: Bool = False,
+    candidates: Bool = False,
 ](
     argsp: MutPointer[FindBestSplitsArgs[O], MutAnyOrigin],
     histograms: MutPointer[O.BinT, MutAnyOrigin],
@@ -2817,6 +2838,7 @@ def find_best_splits_kernel[
     column_samples: MutPointer[Int32, MutAnyOrigin],
     mutex: MutPointer[Int32, MutAnyOrigin],
     splits: MutPointer[Split[O.DataT], MutAnyOrigin],
+    cand: MutPointer[Split[O.DataT], MutAnyOrigin],
 ):
     """`findBestSplitsKernel`, `:353-393`.
 
@@ -2954,7 +2976,17 @@ def find_best_splits_kernel[
     # no warp primitives), the reference warp-shuffle reduction under
     # FAST. At `WARP_SIZE == 32` the two arms are the same function --
     # `builder_kernels_check.mojo`'s arm C-pinned holds that per cell.
-    comptime if pinned_reduce:
+    comptime if candidates:
+        # HIST_SPLIT_CANDIDATES_DEFAULT: this block's own slot, no mutex.
+        sp.eval_best_split_to_candidate(
+            split_scratch,
+            cand.unsafe_offset(
+                Int(nid) * Int(grid_dim.y) + Int(block_idx.y)
+            ),
+            quantiles_for_split,
+            n_bins,
+        )
+    elif pinned_reduce:
         sp.eval_best_split_pinned(
             split_scratch,
             splits.unsafe_offset(Int(nid)),
@@ -3003,6 +3035,7 @@ def launch_find_best_splits_kernel[
     sabotage: Int = 0,
     pinned_reduce: Bool = SPLIT_REDUCE_PINNED_DEFAULT,
     zero_after: Bool = False,
+    candidates: Bool = False,
 ](
     ctx: DeviceContext,
     histograms: MutPointer[O.BinT, MutUntrackedOrigin],
@@ -3014,6 +3047,7 @@ def launch_find_best_splits_kernel[
     split_grid_x: Int,
     split_grid_y: Int,
     argsp: MutPointer[FindBestSplitsArgs[O], MutUntrackedOrigin],
+    cand: MutPointer[Split[O.DataT], MutUntrackedOrigin],
 ) raises:
     """`launchFindBestSplitsKernel`, `:423-445`.
 
@@ -3024,7 +3058,7 @@ def launch_find_best_splits_kernel[
     if split_grid_x <= 0 or split_grid_y <= 0:
         return
     comptime k = find_best_splits_kernel[
-        O, TPB, sabotage, pinned_reduce, zero_after
+        O, TPB, sabotage, pinned_reduce, zero_after, candidates
     ]
     log_launch_ctx(ctx, "find_best_splits")
     ctx.enqueue_function[k](
@@ -3035,10 +3069,46 @@ def launch_find_best_splits_kernel[
         column_samples.unsafe_origin_cast[MutAnyOrigin](),
         mutex.unsafe_origin_cast[MutAnyOrigin](),
         splits.unsafe_origin_cast[MutAnyOrigin](),
+        (cand if candidates else splits).unsafe_origin_cast[MutAnyOrigin](),
         grid_dim=(split_grid_x, split_grid_y),
         block_dim=TPB,
     )
 
+
+
+def merge_split_candidates_kernel[
+    dtype: DType
+](
+    splits: MutPointer[Split[dtype], MutAnyOrigin],
+    cand: MutPointer[Split[dtype], MutAnyOrigin],
+    n_nodes: Int32,
+    n_cand: Int32,
+):
+    """HIST_SPLIT_CANDIDATES_DEFAULT's fold: one thread per node merges its
+    `n_cand` column blocks' candidates into `splits[nid]` with `update`
+    (their total order) and carries `pure` exactly as `_publish_to_global`
+    does on a successful update."""
+    var nid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if nid >= Int(n_nodes):
+        return
+    var reg = splits[unsafe_offset=nid].copy()
+    var changed = False
+    for y in range(Int(n_cand)):
+        var c = cand[unsafe_offset = nid * Int(n_cand) + y].copy()
+        if not c.IsValid():
+            continue
+        if reg.update(
+            c.quesval,
+            c.colid,
+            c.best_metric_val,
+            c.global_nLeft,
+            c.split_start,
+            c.split_end,
+        ):
+            reg.pure = c.pure
+            changed = True
+    if changed:
+        splits[unsafe_offset=nid] = reg.copy()
 
 
 # ===========================================================================
