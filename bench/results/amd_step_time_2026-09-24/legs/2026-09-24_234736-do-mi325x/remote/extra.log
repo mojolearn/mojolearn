@@ -1,0 +1,2 @@
+split: cannot open 'bench/results/amd_step_time_2026-09-24/lanes_gemm_nonpar.txt' for reading: No such file or directory
+/root/gemm_leg_extra.sh: 100: cannot open /root/amd_bin/lanechunk*: No such file

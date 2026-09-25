@@ -48,6 +48,36 @@ hx.sh speaks `docker exec` for Hot Aisle, a DO droplet is plain root ssh).
 Then (optional) attention on the matrix cores (its dot chains take the same
 MFMA + product-by-one spelling).
 
+## 2026-09-25 00:21 UTC: MI325X confirmation DONE (branch lane/amd-step-time-mi325x)
+
+DigitalOcean gpu-mi325x1-256gb nyc2, one leg through `tools/do_extra_leg.sh
+amd --size gpu-mi325x1-256gb --region nyc2 --segment-lease 120 --dollar-cap
+10`, body `tools/amd_step_time_leg_mi325x.sh`, evidence
+`legs/2026-09-24_234736-do-mi325x/`. Droplet 23:48:09Z to verified 404 at
+00:20:46Z, about $2.07.
+
+- Step seconds on the MI325X, baseline (main before the lane, attention on
+  the pre-lane word) 135.6 -> branch head 70.1 (not 32.3 as on the MI300X).
+- Replays PASS against the H100 chain, baseline 101..102, branch 101..103
+  and 1999..2000; state digests abc8b816b5c3fb15, a9421f91b947f82c,
+  fcdb48b8ab51f2ef, dcb05e4e668a81e1, 0e39ed2bfe9bcbae (the README's).
+- GEMM device (8), backward (10), workspace (4,608 cells) green; 201
+  GEMM-reaching lanes 181 VERIFIED, 6,813 parts IDENTICAL, 0 DIVERGENT, 20
+  REFUSED (unbuilt bindings, the same set). The 28 T3-shape GEMM hashes equal
+  the MI300X's byte for byte; lean witnesses equal the MI300X's.
+- FINDING: the MI325X kernels run at or below the MI300X's per call, but about
+  every 250 ms one call (any kernel, or the host's validate_after_scan) takes
+  ~100 ms extra; about 0.42 s of a 0.96 s timed shard. Cause NOT measured
+  (power state, host or hypervisor, driver poll all fit). README section
+  "MI325X" has the call-by-call numbers.
+- Body bug fixed after the leg: its lane list lived under bench/results,
+  which the bundle leaves out; the 201 lanes ran from a pushed copy on the
+  same box. The body now reads /root/amd_in/lanes_gemm_nonpar.txt.
+
+NEXT: a stall probe on one MI325X droplet (trivial kernel + synchronize loop,
+latency histogram; then `rocm-smi --setperfdeterminism` / `--setperflevel
+high`), before any further kernel work is judged on the MI325X.
+
 ## RESULTS SO FAR (MI300X, leg 1)
 
 1. ROOT CAUSE: VGPR SPILLS. Without a launch bound the gfx942 backend budgets
