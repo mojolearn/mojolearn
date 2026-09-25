@@ -40,6 +40,29 @@ Counters on the matrix-core GEMM (leg 8 pmc): 33 VALU instructions per MFMA
 (the flush, 128 cycles unpacked). So the kernel is VALU bound at about twice
 the matrix-core time.
 
+### 2026-09-25 03:00 UTC: built, compile-checked, waiting for Hot Aisle stock
+
+- Exact admission in `identical_gemm_mfma_kernel` (default ON, AMD only,
+  `-D MOJOLEARN_GEMM_MFMA_NO_ADMIT=1` reverts). CPU-box asm
+  (`cpu/admit1/`): the admitted loop is back-to-back
+  `v_mfma_f32_32x32x1_2b_f32` with no VALU between steps; the shipped path
+  issues the pair, `s_nop 15`, then 14 `v_mul_f32` + 25 `v_pk_mul_f32` per
+  pair, so the flush already packs but is serialized behind the MFMA pair.
+  No spills (290 VGPRs).
+- Attention on the matrix cores, three TRIAL kernels (AMD only, opt-in
+  defines, off by default until proven): dq (`MOJOLEARN_ATTN_DQ_MFMA`),
+  dk/dv (`MOJOLEARN_ATTN_DKDV_MFMA`), forward context (`MOJOLEARN_ATTN_FWD_MFMA`),
+  each `v_mfma_f32_16x16x1f32` + product by one under MODE 2 set only
+  around the chain, masked keys on the VALU for exactly the visible cells.
+  Compile and asm on the CPU box (`cpu/dq1/`, `cpu/dkdv1/`, `cpu/fwd1/`):
+  dq 16 MFMA per 16-key tile, no spills (the shipped VALU dq kernel
+  spills 39 VGPRs); `gemm/checks/amd_mfma_probe3.mojo` measures the 16x16x1
+  step against host fma and the flush (not yet run).
+- Leg 1 body `tools/amd_step_time2_leg1.sh` (GEMM A/B over 6 operand kinds
+  for valu/noadmit/admit, lean witnesses for admit/noadmit/dq/dqkv/attn3,
+  replays, kernel trace, all bindings + 201 lanes). Launcher waits for
+  13core stock (0 since 02:10 UTC; only the 2x MI300X offering at $5.98/h).
+
 ### The plan (levers in order, each one leg, bits proven after each)
 
 1. GEMM EXACT ADMISSION (AMD only, `identical_gemm_mfma_kernel`, trial
