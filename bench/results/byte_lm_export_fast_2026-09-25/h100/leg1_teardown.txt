@@ -1,0 +1,4 @@
+[11:45:05 nvidia] pod m4xan0j62h7wud created
+[11:48:39 nvidia]   the payload finished (its sentinel is on the box)
+    DELETE /v1/pods/m4xan0j62h7wud -> HTTP 204
+  VERIFIED: m4xan0j62h7wud is gone (HTTP 404).
