@@ -65,9 +65,13 @@
 #                        vendor) from the INSTALLED wheel: fixtures base,denormal,odd,
 #                        one fit, --fail-on-refused, --require-backend <vendor>.
 #                        column.json comes home.
-#   --cpu-column FILE    with --column: diff the GPU column against this CPU
-#                        column of the same commit (tools/identity_break.py --diff);
+#   --ref-column FILE    with --column, repeatable: diff the GPU column against
+#                        these columns of the same commit in ONE
+#                        tools/identity_break.py --diff (diff-ref-<vendor>.txt);
 #                        any DIVERGENT cell fails the run, named lane/fixture/part.
+#                        tools/release.py passes the Apple (Metal) column of the
+#                        release, and the CPU column too when it ran one.
+#   --cpu-column FILE    the same as --ref-column FILE (kept for old command lines).
 #
 # A RENTED RUNPOD RUN, IN ORDER: Mac dead-man armed BEFORE the create (lease +
 # ready timeout + 10 min, by id or by name); create; wait for ssh (600 s); arm
@@ -119,7 +123,7 @@ SSH_OPTS="-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o LogLeve
 WHEEL=""; COMMIT=""; OUT=""; GPU="${MOJOLEARN_SMOKE_GPU:-NVIDIA GeForce RTX 4090}"
 IMAGE="${MOJOLEARN_SMOKE_IMAGE:-runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04}"
 CUDA="13.0"; LEASE=45; SMOKE_SECONDS=1800; SSH_GIVEN=""; RENT=0
-VENDOR=cuda; SELECTION=""; CPU_COLUMN=""; GPU_SET=0; IMAGE_SET=0; CUDA_SET=0
+VENDOR=cuda; SELECTION=""; REFS=(); GPU_SET=0; IMAGE_SET=0; CUDA_SET=0
 PROVIDER=auto
 DO_SIZE="${MOJOLEARN_SMOKE_DO_SIZE:-gpu-mi325x1-256gb}"
 DO_REGIONS="${MOJOLEARN_SMOKE_DO_REGIONS:-tor1,nyc2}"
@@ -165,7 +169,7 @@ while [ $# -gt 0 ]; do
         --hotaisle-spec) shift; HA_SPEC_ARG="${1:-}" ;;
         --hotaisle-cap) shift; HA_CAP_USD="${1:-}" ;;
         --column) shift; SELECTION="${1:-}" ;;
-        --cpu-column) shift; CPU_COLUMN="${1:-}" ;;
+        --ref-column|--cpu-column) shift; REFS+=("${1:-}") ;;
         --lease) shift; LEASE="${1:-}" ;;
         --smoke-seconds) shift; SMOKE_SECONDS="${1:-}" ;;
         --ssh) shift; SSH_GIVEN="${1:-}" ;;
@@ -212,7 +216,10 @@ print(",".join(lanes))
 PY
 ) || die "bad --column selection: $LANES"
 fi
-[ -z "$CPU_COLUMN" ] || { [ -n "$SELECTION" ] || die "--cpu-column needs --column"; [ -f "$CPU_COLUMN" ] || die "no CPU column $CPU_COLUMN"; }
+for _ref in ${REFS[@]+"${REFS[@]}"}; do
+    [ -n "$SELECTION" ] || die "--ref-column needs --column"
+    [ -f "$_ref" ] || die "no reference column $_ref"
+done
 [ -n "$WHEEL" ] && [ -f "$WHEEL" ] || die "no wheel file given ($WHEEL)"
 WHEEL=$(cd "$(dirname "$WHEEL")" && pwd)/$(basename "$WHEEL")
 case "$(basename "$WHEEL")" in mojolearn-*-manylinux*_x86_64.whl) ;; *) die "$(basename "$WHEEL") is not a final manylinux x86_64 mojolearn wheel (smoke the repaired, stripped one)" ;; esac
@@ -924,7 +931,7 @@ PY
 _v=${PIPESTATUS[0]}
 fi
 # The column, judged here: it ran to the end on this vendor, and (with
-# --cpu-column) no cell differs from the CPU column of the same commit.
+# --ref-column) no cell differs from any reference column of the same commit.
 if [ -n "$LANES" ]; then
     [ -f "$OUT/remote/column.txt" ] && sed 's/^/  column: /' "$OUT/remote/column.txt"
     _cx=$(tr -d '[:space:]' < "$OUT/remote/column.exit" 2>/dev/null)
@@ -937,15 +944,18 @@ if [ -n "$LANES" ]; then
     else
         cp "$OUT/remote/column.json" "$OUT/column-$VENDOR.json"
         say "column complete: $OUT/column-$VENDOR.json"
-        if [ -n "$CPU_COLUMN" ]; then
-            python3 "$ROOT/tools/identity_break.py" --diff "$CPU_COLUMN" "$OUT/column-$VENDOR.json" > "$OUT/diff-cpu-$VENDOR.txt" 2>&1
-            _dv=$(grep -c 'DIVERGENT' "$OUT/diff-cpu-$VENDOR.txt" || true)
-            grep -E '^summary' "$OUT/diff-cpu-$VENDOR.txt" | sed 's/^/  /'
-            if [ "${_dv:-0}" != 0 ]; then
-                say "DIVERGENT against the CPU column:"; grep 'DIVERGENT' "$OUT/diff-cpu-$VENDOR.txt" | head -40
+        if [ "${#REFS[@]}" -gt 0 ]; then
+            python3 "$ROOT/tools/identity_break.py" --diff "${REFS[@]}" "$OUT/column-$VENDOR.json" > "$OUT/diff-ref-$VENDOR.txt" 2>&1
+            _dv=$(grep -c 'DIVERGENT' "$OUT/diff-ref-$VENDOR.txt" || true)
+            grep -E '^summary' "$OUT/diff-ref-$VENDOR.txt" | sed 's/^/  /'
+            if ! grep -q '^summary' "$OUT/diff-ref-$VENDOR.txt"; then
+                say "the reference diff printed no summary:"; tail -20 "$OUT/diff-ref-$VENDOR.txt"
+                _v=1
+            elif [ "${_dv:-0}" != 0 ]; then
+                say "DIVERGENT against the reference column(s) ${REFS[*]}:"; grep 'DIVERGENT' "$OUT/diff-ref-$VENDOR.txt" | head -40
                 _v=1
             else
-                say "no DIVERGENT cell against the CPU column ($OUT/diff-cpu-$VENDOR.txt)"
+                say "no DIVERGENT cell against the reference column(s) ($OUT/diff-ref-$VENDOR.txt)"
             fi
         fi
     fi

@@ -1,30 +1,26 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""The whole local release verification, CPU and Apple GPU AT ONCE
-(2026-09-21).
+"""The local release verification: the Apple (Metal) column of the changed
+lanes, one fit per cell, and the CPU column only when asked (2026-09-25).
 
-    pixi run -e test release-check
+    pixi run -e test release-check                  the Apple pass
+    pixi run -e test release-check --cpu-column     the Apple pass and the CPU pass AT ONCE
 
-`release-check` ran `cpu-pass` and then `apple-pass`, one after the other:
-602 s and then 591 s for 0.8.12, twenty minutes during which the GPU sat idle
-for the first ten and four of the five CPU slots for the last ten. The two
-passes share nothing but the Mac's slot scheduler (tools/mac_slot.py), so
-they run together here: the Apple pass holds the Metal lock and ONE of the
+The Apple column is the reference tools/release.py diffs the NVIDIA and AMD
+wheel columns against, so the CPU pass is OPT-IN. With --cpu-column the two
+passes run together: the Apple pass holds the Metal lock and ONE of the
 MAC_SLOTS (default 5), and the CPU pass takes the rest (MAC_SLOTS - 1 shards,
-through MOJOLEARN_CPU_PASS_SLOTS). The Apple release budget of five cores is
-the scheduler's own limit, so it cannot be exceeded. The CPU slots run at
-nice 19 and the Metal job at normal priority, so the CPU pass yields to the
-GPU's host thread rather than starving it.
+through MOJOLEARN_CPU_PASS_SLOTS), at nice 19 so it yields to the GPU's host
+thread.
 
 Each pass keeps its own records and resume behaviour
 (~/mojolearn-evidence/release-check/<commit>/{cpu,metal}/), writes its
 transcript to <that directory>/../release-check.<pass>.log, and the exit
-status is non-zero if either pass is incomplete. Run the two tasks separately
-to keep the old serial behaviour.
+status is non-zero if any pass run is incomplete.
 
-    pixi run -e test release-check --plan     what the default would run, per backend
-                                              (CPU, Apple, NVIDIA, AMD), and why; runs nothing
+    pixi run -e test release-check --plan     what the default would run, per backend, and
+                                              why; runs nothing (--cpu-column adds the CPU pass)
     ... release-check --plan --paths=a,b      the same for a hypothetical change to those paths
 """
 import os
@@ -42,7 +38,7 @@ def plan(out=print, backends=None, paths=None):
     its cell count (lanes x base,denormal,odd, one fit each), why each lane is
     in, and, when a rule selects every lane, the exact paths that made it.
     The CPU pass covers the union, because its column is the reference the
-    other columns are diffed against."""
+    other columns are diffed against when it runs."""
     sys.path.insert(0, str(ROOT / "tools"))
     import lane_select
     import verify_lanes
@@ -50,7 +46,7 @@ def plan(out=print, backends=None, paths=None):
     nfix = len(fixtures.split(","))
     sources, _ = lane_select.lane_sources()
     total = len(sources)
-    backends = backends or verify_lanes.RELEASE_BACKENDS
+    backends = backends or default_backends()
     picked, refused = {}, {}
     for b in backends:
         try:
@@ -102,6 +98,12 @@ def plan(out=print, backends=None, paths=None):
     return 0
 
 
+def default_backends(argv=None):
+    """The passes release-check runs: Metal always, the CPU pass with --cpu-column."""
+    argv = sys.argv[1:] if argv is None else argv
+    return ("cpu", "metal") if "--cpu-column" in argv else ("metal",)
+
+
 def main():
     if "--plan" in sys.argv[1:]:
         backends = None
@@ -112,15 +114,20 @@ def main():
         return plan(backends=backends, paths=paths)
     sys.path.insert(0, str(ROOT / "tools"))
     import verify_lanes
+    passes = [("apple", "--apple-pass", {})]
     slots = int(os.environ.get("MAC_SLOTS", "5"))
-    if slots < 2:
-        raise SystemExit("REFUSING: release-check needs MAC_SLOTS >= 2 (one for Metal, one for the CPU pass)")
+    if "cpu" in default_backends():
+        if slots < 2:
+            raise SystemExit("REFUSING: release-check --cpu-column needs MAC_SLOTS >= 2 "
+                             "(one for Metal, one for the CPU pass)")
+        passes.append(("cpu", "--cpu-pass", {"MOJOLEARN_CPU_PASS_SLOTS": str(slots - 1)}))
+    else:
+        print("# the CPU pass is off (opt-in: --cpu-column)", flush=True)
     logs = Path(verify_lanes.pass_out_dir("metal")).parent
     logs.mkdir(parents=True, exist_ok=True)
     runs = {}
     started = time.monotonic()
-    for name, flag, env in (("apple", "--apple-pass", {}),
-                            ("cpu", "--cpu-pass", {"MOJOLEARN_CPU_PASS_SLOTS": str(slots - 1)})):
+    for name, flag, env in passes:
         log = logs / f"release-check.{name}.log"
         fh = open(log, "w")
         proc = subprocess.Popen([sys.executable, str(ROOT / "tools" / "verify_lanes.py"), flag],

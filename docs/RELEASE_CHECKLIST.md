@@ -11,17 +11,31 @@ pixi run release <version> --publish pypi     # ... then publish both wheels, fi
 `tools/release.py` walks this whole checklist. Write the CHANGELOG entry
 (`## <version> (published YYYY-MM-DD)`, UTC) first; the command bumps the two
 version files, runs `write-docs-facts`, commits and pushes exactly those files,
-freezes HEAD, and then runs: the rehearsal (step 0); the three Linux build legs
-in parallel, detached (step 2, the AMD leg no longer waits for NVIDIA); the
-macOS wheel with the byte LM and host bindings on, four slots; the macOS smoke
-under the Metal lock; `release-check` (step 5b, the guarantee); a wait that
-checks every leg's proof for the frozen commit and names any host binding whose
-bytes differ across legs; pack, audit and strip under the `pkg` environment
-(step 3); the Linux smoke on one rented RTX 4090 (`tools/release_wheel_smoke.sh`);
-and, only with `--publish none|testpypi|pypi`, both publishes (step 5), the
-`pip install` finish line on this Mac and the
-`bench/results/release_verification/<date>_pypi_<v>/` record, committed and
-pushed.
+freezes HEAD, runs the rehearsal (step 0), and then a release is LIGHT and
+PARALLEL, in three phases:
+
+1. **Build, all at once.** The three Linux build legs (step 2) are launched
+   together, detached, with no stagger, and the macOS wheel (byte LM and host
+   bindings on, four slots) builds beside them. A wait checks every leg's proof
+   for the frozen commit and names any host binding whose bytes differ across
+   legs; then pack, audit and strip under the `pkg` environment (step 3).
+2. **Check, all at once, the changed lanes only, each cell fitted once.** The
+   macOS smoke and `release-check` (step 5b: the Apple column) run on this Mac
+   under the Metal lock. The `gpu-columns` step then launches the NVIDIA column
+   (the expanded smoke plus the column, one rented RTX 4090, walking to the
+   next GPU type on no stock) and the AMD column (RunPod MI300X, then Hot Aisle
+   MI300X, then DigitalOcean MI325X) together as detached
+   `tools/release_wheel_smoke.sh` runs from the installed wheel, awaits both,
+   and reports both; one failing never stops the other. Each GPU column is
+   diffed against the Apple column of this release, then every column is
+   diffed together (`<version>/<commit12>/diff-columns.txt`), so NVIDIA is also
+   checked against AMD. Any DIVERGENT or MOVED cell stops the release. The CPU
+   pass is opt-in: `--cpu-column` runs it in `release-check` and adds the CPU
+   column to every diff.
+3. **Publish,** only with `--publish none|testpypi|pypi`: both publishes (step
+   5), the `pip install` finish line on this Mac and the
+   `bench/results/release_verification/<date>_pypi_<v>/` record, committed and
+   pushed.
 
 It is resumable: rerun the same command after any stop. State lives in
 `~/mojolearn-evidence/release/<version>/state.json`, and everything after the
@@ -34,8 +48,8 @@ refreezes and starts the post-freeze steps in a fresh directory, unless a wheel
 of the frozen commit is already published. `--only STEP[,STEP]` runs some steps,
 `--redo STEP` discards a step's record, `--amd-expect-from <NVIDIA release-build
 dir>` restores the AMD core-host probe, `--smoke-gpu` picks the Linux smoke GPU.
-The Linux build route is one function (`launch_linux_builds`, routes in
-`BUILD_BACKENDS`), so the CPU build box route plugs in as `--build-backend`.
+The build legs and the GPU columns share one launcher (`launch_detached`;
+build routes in `BUILD_BACKENDS`, chosen with `--build-backend`).
 
 **Bindings are rebuilt only when their identity moved (2026-09-23,
 `tools/release_reuse.py`).** After the rehearsal the `reuse-plan` step decides,
@@ -190,7 +204,7 @@ MOJOLEARN_RELEASE_UBUNTU22=1 bash tools/do_release061_leg.sh $REF ~/.mojolearn_d
 # copy differs, and typing it cost 0.8.14 an MI325X rental.
 MOJOLEARN_RELEASE_UBUNTU22=1 bash tools/do_release061_leg.sh $REF ~/.mojolearn_do_token --rent \
   --expect-from ~/mojolearn-evidence/e1g/<stamp>-nvidia-mamba
-# NVIDIA sm_90a (RunPod H100) and sm_89 (RunPod L40S), started 90 s apart
+# NVIDIA sm_90a (RunPod H100) and sm_89 (RunPod L40S), started together
 MOJOLEARN_RUNPOD_KEY_FILE=~/.mojolearn_runpod_key MOJOLEARN_NVIDIA_CAMPAIGN=7 MOJOLEARN_GPU_ARCHS=sm_90a \
   sh tools/gemm_remote_leg.sh nvidia --payload mamba --source-ref $REF --gpu "NVIDIA H100 80GB HBM3" --allow-concurrent --rent --minutes 60
 MOJOLEARN_RUNPOD_KEY_FILE=~/.mojolearn_runpod_key MOJOLEARN_NVIDIA_CAMPAIGN=7 MOJOLEARN_GPU_ARCHS=sm_89 \
@@ -325,8 +339,8 @@ python3 tools/strip_wheel_dir_entries.py <dist>/audit/repaired/mojolearn-*-manyl
 
 ## 4. Install and test on real GPUs (OPTIONAL, never required for a release)
 
-A release is verified by the CPU column and the Apple pass (section 5b). This
-section is a diagnostic for a suspected NVIDIA or AMD problem and the release
+A release is verified by the Apple column (section 5b) and the NVIDIA and AMD
+wheel columns (`gpu-columns`). This section is a diagnostic for a suspected NVIDIA or AMD problem and the release
 workflow admits a Linux wheel without it. Copy the three `build-provenance.json` files to a proofs directory
 as `cuda-sm_89.json`, `cuda-sm_90a.json`, `hip-gfx942.json`, then:
 
@@ -419,16 +433,18 @@ pass its three output directories and the proofs directory through the
 attached and checked. Use `none` first to see the workflow's own checks
 without uploading.
 
-## 5b. Release verification: CPU and the Apple GPU, nothing else
-
-A release is verified by two things (2026-09-19):
+## 5b. Release verification on this Mac: the Apple column (the CPU column opt-in)
 
 ```sh
-pixi run -e test release-check            # both AT ONCE, on this Mac, nothing rented
+pixi run -e test release-check                # the Apple pass, on this Mac, nothing rented
+pixi run -e test release-check --cpu-column   # opt-in: the Apple pass and the CPU pass AT ONCE
 # which is, concurrently (tools/release_check.py):
 pixi run -e test apple-pass               # the Apple GPU: Metal lock + one of the 5 Mac slots
 MOJOLEARN_CPU_PASS_SLOTS=4 pixi run -e test cpu-pass   # the CPU route on the other 4 slots
 ```
+
+The Apple column is the reference the NVIDIA and AMD wheel columns are diffed
+against (`gpu-columns`, above).
 
 Both refuse to start unless every binding in `python/mojolearn` was built
 from this tree's sources (`tools/binding_stamps.py check`: the macOS release
@@ -436,17 +452,15 @@ build stamps each binding with its source-closure digest; a missing or stale
 stamp names the binding and nothing runs). Build the macOS wheel (step 6's
 build script) first, then run the check.
 
-Both run LOCALLY. No pod, no NVIDIA or AMD box and no R2 staging is part of a
-release. Each pass is `base,denormal,odd`, fitted once, end model only.
+Both run LOCALLY, with no pod and no R2 staging. Each pass is `base,denormal,odd`, fitted once, end model only.
 
 **Only the lanes the release touched are required, and that is automatic.**
 With no selection given, a pass checks the lanes whose sources changed since
 the last pass on the same backend that FINISHED on this Mac (complete, same
 fixtures, one fit, a clean tree, and itself anchored on a full pass, a tag or
 another such pass). With no such record it falls back to the newest `v*` tag.
-Every cell is fitted once. The CPU pass covers the union of its own and the
-Apple pass's selection, because its column is the reference the Apple column
-is diffed against.
+Every cell is fitted once. When it runs, the CPU pass covers the union of its
+own and the Apple pass's selection.
 
 **The selector never widens and never guesses (2026-09-22).** Each changed
 path is attributed to exactly the lanes whose derived source set reaches it

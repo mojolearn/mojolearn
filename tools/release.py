@@ -33,18 +33,21 @@ THE STEPS, IN ORDER
                      image or Apple toolchain) is unchanged, else BUILD; the
                      table is printed, and in --dry-run in full
   linux-builds       a leg per Linux set that has a binding to BUILD (none for a
-                     Python-only release: nothing is rented for builds), launched
-                     in parallel and detached (launch_linux_builds: ONE function,
-                     so the CPU build box route plugs in as a backend). The AMD
-                     leg rents a DigitalOcean MI325X, or, when DigitalOcean has a
-                     GPU droplet live (the leg's live-droplet refusal) or no
-                     token, a Hot Aisle 1x MI300X (tools/hotaisle_release_leg.sh,
-                     gfx942 either way); --amd-build-provider do|hotaisle or
-                     MOJOLEARN_AMD_PROVIDER pins one
-  macos-build        mac_slot --slots 4 run -- build_release_wheel.sh, byte LM on;
-                     its REUSE bindings placed from the published macOS wheel
+                     Python-only release: nothing is rented for builds), all
+                     launched AT ONCE, detached, with no stagger. The default
+                     backend `gpu-legs` builds on the GPU boxes: RunPod NVIDIA
+                     (walking NVIDIA_WALK on no stock) and a DigitalOcean MI325X,
+                     or a Hot Aisle 1x MI300X when DigitalOcean has a GPU
+                     droplet live or no token (--amd-build-provider do|hotaisle
+                     or MOJOLEARN_AMD_PROVIDER pins one). `cpu-box` (one RunPod
+                     CPU pod per set) is opt-in by name
+  macos-build        mac_slot --slots 4 run -- build_release_wheel.sh, byte LM on,
+                     while the Linux legs build; its REUSE bindings placed from
+                     the published macOS wheel
   macos-smoke        qualify_verifier_wheel.py --scope expanded under the Metal lock
-  release-check      pixi run -e test release-check (CPU + Apple GPU, the guarantee)
+  release-check      pixi run -e test release-check: the Apple (Metal) column of
+                     the changed lanes, one fit per cell. The CPU pass runs too
+                     only with --cpu-column (opt-in)
   linux-wait         every launched leg finished, its proof complete for this
                      commit, and every host binding byte-identical across legs
   linux-assemble     the set directories the packer packs: each leg's set, or one
@@ -53,24 +56,29 @@ THE STEPS, IN ORDER
   linux-pack         pixi run -e pkg pack-linux-wheel, audit.sh, strip; the
                      payload records per binding built or reused, and from which
                      release
-  linux-smoke        tools/release_wheel_smoke.sh --rent (one RTX 4090 pod): the
-                     expanded smoke AND the NVIDIA release column (the lanes the
-                     release changed, from the installed wheel), diffed against
-                     the CPU column of this commit
-  amd-column         tools/release_wheel_smoke.sh --vendor hip --rent --provider
-                     auto (one RunPod MI300X; a Hot Aisle MI300X when RunPod has no
-                     stock; a DigitalOcean MI325X when Hot Aisle refuses before a
-                     create; gfx942 every way): the AMD release column, diffed
-                     the same way. --amd-provider runpod|hotaisle|do pins one.
+  gpu-columns        the NVIDIA and AMD wheel columns AT ONCE, each a detached
+                     tools/release_wheel_smoke.sh on the changed lanes from the
+                     installed wheel, one fit per cell:
+                       NVIDIA  --rent (one RTX 4090 pod, walking SMOKE_WALK on no
+                               stock): the expanded smoke AND the NVIDIA column
+                       AMD     --vendor hip --rent --provider auto (RunPod MI300X,
+                               then Hot Aisle MI300X, then DigitalOcean MI325X;
+                               gfx942 every way; --amd-provider pins one)
+                     each diffed against the Apple column of this release (and
+                     the CPU column with --cpu-column); both are awaited and both
+                     reported, and a column with a PASSED record for this wheel
+                     is not rerun. Then ONE diff of every column together
+                     (Apple, NVIDIA, AMD[, CPU]): any DIVERGENT or MOVED cell
+                     stops the release
   publish-linux      tools/release_linux_publish.sh ... --light-smoke   } only with
   publish-macos      tools/release_linux_publish.sh ... --light-smoke   } --publish
   finish-line        pip install mojolearn==<version> in a fresh venv on this Mac
   record             bench/results/release_verification/<date>_pypi_<v>/, committed
 
 Nothing is published without `--publish none|testpypi|pypi`; without it the run
-stops after amd-column and says so. The Linux wheel publishes only when the
-NVIDIA and AMD columns show no DIVERGENT cell against the CPU column (policy
-2026-09-22: bitwise identity across GPUs is the point; only changed lanes run).
+stops after gpu-columns and says so. The Linux wheel publishes only when no
+column (Apple, NVIDIA, AMD, and CPU when run) shows a DIVERGENT cell against
+any other (bitwise identity across GPUs is the point; only changed lanes run).
 """
 import argparse
 import datetime as dt
@@ -227,9 +235,28 @@ class Leg:
                 and proof.get("source_commit") == commit
                 and (self.release_build / "build" / "sets" / self.vendor / self.arch).is_dir())
 
+    def done(self, commit):
+        """Finished and its output checks out, so a (re)launch leaves it alone."""
+        return self.exit_code() == 0 and self.proof_ok(commit)
+
+
+class ColumnLeg(Leg):
+    """One GPU wheel column (tools/release_wheel_smoke.sh), run detached like a
+    build leg: its own session, its exit code written last, a failed attempt
+    moved aside before a relaunch. `check` says whether its output (a PASSED
+    receipt for this wheel, a column with no DIVERGENT cell) is already there,
+    whatever the exit file says."""
+
+    def __init__(self, name, vendor, command, workdir, out_dir, check):
+        super().__init__(name, vendor, "", command, {}, out_dir, workdir, out_dir)
+        self.check = check
+
+    def done(self, commit):
+        return bool(self.check())
+
 
 def gpu_legs(ctx):
-    """THE CURRENT ROUTE: two RunPod NVIDIA legs and one DigitalOcean MI325X leg,
+    """THE DEFAULT ROUTE: two RunPod NVIDIA legs and one DigitalOcean MI325X leg,
     exactly docs/RELEASE_CHECKLIST.md section 2's commands, output directories
     pinned under the release directory so this script can find them. The AMD
     leg does not wait for NVIDIA: its core-host probe is skipped and
@@ -363,10 +390,8 @@ def no_stock(log, *dirs):
 
 
 #: Build routes by name. A route returns the Leg list for ctx; launch, wait,
-#: pack and resume are route-independent. The GPU legs are the default and
-#: stay the default (docs/RELEASE_CHECKLIST.md section 2c, policy 2026-09-22):
-#: the release builds on the GPUs it ships for. A CPU build box route may be
-#: added here as an opt-in diagnostic, never as the default.
+#: pack and resume are route-independent. The GPU legs are the default (the
+#: release builds on the GPUs it ships for); the CPU pods are opt-in by name.
 #: RunPod CPU flavors a release build pod may land on, 32 vCPU each: general
 #: purpose (4 GiB per vCPU) then memory optimized (8). 0.8.19's first CPU
 #: launch found neither general-purpose flavor in stock; compute optimized
@@ -412,32 +437,31 @@ def linux_legs(ctx):
     return [l for l in legs if l.name in plan["legs"]]
 
 
-def launch_linux_builds(ctx, legs, stagger=90):
-    """THE ONE LAUNCH POINT for the Linux builds. Each leg runs detached (its own
-    session, so this script can exit or be interrupted without killing a paid
-    rental) and writes its exit code last. A leg that is running is left alone;
-    a leg that finished but failed is moved aside (never deleted) and relaunched."""
+def launch_detached(ctx, legs):
+    """THE ONE LAUNCH POINT for the Linux builds and the GPU columns. Every leg
+    is launched at once, with no stagger (Andrew, 2026-09-25: a release is
+    parallel only). Each runs detached (its own session, so this script can
+    exit or be interrupted without killing a paid rental) and writes its exit
+    code last. A leg that is running is left alone, a leg whose output checks
+    out is not rerun, and a leg that finished but failed is moved aside (never
+    deleted) and relaunched."""
     started = 0
     for leg in legs:
         if leg.running():
             ctx.say(f"  {leg.name}: already running (pid {leg.pid()}), log {leg.log}")
             continue
-        if leg.exit_code() == 0 and leg.proof_ok(ctx.commit):
-            ctx.say(f"  {leg.name}: already built")
+        if leg.done(ctx.commit):
+            ctx.say(f"  {leg.name}: already done")
             continue
         leg.workdir.mkdir(parents=True, exist_ok=True)
-        if leg.exit_file.exists() or leg.log.exists():
-            stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
-            for p in (leg.log, leg.exit_file, leg.pid_file):
-                if p.exists():
-                    p.rename(p.with_name(p.name + f".failed-{stamp}"))
-            out = leg.out_dir
-            if out.exists():
-                out.rename(out.with_name(out.name + f".failed-{stamp}"))
-                ctx.say(f"  {leg.name}: previous attempt moved aside to {out.name}.failed-{stamp}")
-        if started and stagger:
-            ctx.say(f"  waiting {stagger} s before the next launch (the checklist's stagger)")
-            ctx.sleep(stagger)
+        stamp = dt.datetime.now().strftime("%Y%m%d-%H%M%S")
+        for p in (leg.log, leg.exit_file, leg.pid_file):
+            if p.exists():
+                p.rename(p.with_name(p.name + f".failed-{stamp}"))
+        out = leg.out_dir
+        if out.exists():
+            out.rename(out.with_name(out.name + f".failed-{stamp}"))
+            ctx.say(f"  {leg.name}: previous attempt moved aside to {out.name}.failed-{stamp}")
         wrapped = (f"{' '.join(shlex.quote(c) for c in leg.command)} > {shlex.quote(str(leg.log))} 2>&1; "
                    f"echo $? > {shlex.quote(str(leg.exit_file))}")
         proc = ctx.spawn(["sh", "-c", wrapped], dict(os.environ, **leg.env))
@@ -671,7 +695,7 @@ class Release:
             self.say(f"  {leg.name}: {leg.describe()}  [{self.plan()['leg_reasons'].get(leg.name, '')}]")
         if self.dry:
             return f"would launch {len(legs)} leg(s) ({self.args.build_backend})"
-        launch_linux_builds(self, legs)
+        launch_detached(self, legs)
         return f"{len(legs)} leg(s) launched or running ({self.args.build_backend})"
 
     def macos_wheel(self):
@@ -733,8 +757,13 @@ class Release:
         base = os.environ.get("MOJOLEARN_RELEASE_CHECK_DIR") or os.path.expanduser("~/mojolearn-evidence/release-check")
         return Path(base) / self.commit[:12]
 
+    def check_backends(self):
+        """The release-check passes this release runs: the Apple (Metal) column
+        always, the CPU column only with --cpu-column (opt-in, 2026-09-25)."""
+        return ("metal", "cpu") if getattr(self.args, "cpu_column", False) else ("metal",)
+
     def release_check_complete(self):
-        for backend in ("cpu", "metal"):
+        for backend in self.check_backends():
             d = self.release_check_dir() / backend
             try:
                 s = json.loads((d / "run-summary.json").read_text())
@@ -749,8 +778,10 @@ class Release:
             return "complete at " + str(self.release_check_dir())
         if not self.dry and git("rev-parse", "HEAD") != self.commit:
             raise StepFailed("HEAD moved off the frozen commit; release-check verifies HEAD")
-        self.must(["pixi", "run", "-e", "test", "release-check"], log=self.rel / "release-check.log",
-                  what="release-check")
+        cmd = ["pixi", "run", "-e", "test", "release-check"]
+        if "cpu" in self.check_backends():
+            cmd.append("--cpu-column")
+        self.must(cmd, log=self.rel / "release-check.log", what="release-check")
         if not self.dry and not self.release_check_complete():
             raise StepFailed("release-check exited 0 but its records are not complete")
         return "complete"
@@ -762,7 +793,7 @@ class Release:
         if self.dry:
             return "would wait for " + ", ".join(l.name for l in legs)
         if not any(l.pid() or l.exit_code() is not None for l in legs):
-            launch_linux_builds(self, legs)
+            launch_detached(self, legs)
         tried = {l.name: 0 for l in legs}
         while True:
             while any(l.running() for l in legs):
@@ -789,7 +820,7 @@ class Release:
                     again.append(l)
             if not again:
                 break
-            launch_linux_builds(self, again, stagger=0)
+            launch_detached(self, again)
         bad = [l for l in legs if l.exit_code() != 0 or not l.proof_ok(self.commit)]
         if bad:
             raise StepFailed("build leg(s) failed: " + ", ".join(
@@ -901,57 +932,138 @@ class Release:
                   log=self.rel / f"selection-{vendor}.log", what=f"{vendor} lane selection")
         return path
 
+    def column_refs(self):
+        """The columns the NVIDIA and AMD columns are diffed against: the Apple
+        (Metal) column of this release, and the CPU column with --cpu-column."""
+        d = self.release_check_dir()
+        return [d / b / "column.json" for b in self.check_backends()]
+
+    def ref_names(self):
+        return " and ".join({"metal": "Apple", "cpu": "CPU"}[b] for b in self.check_backends())
+
     def gpu_column_ok(self, out, vendor):
-        d = out / f"diff-cpu-{vendor}.txt"
+        d = out / f"diff-ref-{vendor}.txt"
         return (out / f"column-{vendor}.json").is_file() and d.is_file() and "DIVERGENT" not in d.read_text()
 
-    def step_linux_smoke(self):
-        final = self.linux_final()
-        out = self.rel / "smoke-linux"
-        if final and smoke_passed(out / "results.json", final) and self.gpu_column_ok(out, "cuda"):
-            return "PASSED (receipt and NVIDIA column exist)"
-        if not final and not self.dry:
-            raise StepFailed("no final Linux wheel; run linux-pack")
-        gpus = [g for g in self.args.smoke_gpu.split("|") if g] or SMOKE_WALK
-        log = self.rel / "linux-smoke.log"
-        for i, gpu in enumerate(gpus):
-            if out.exists() and not self.dry:
-                out.rename(out.with_name(out.name + ".failed-" + dt.datetime.now().strftime("%Y%m%d-%H%M%S")))
-            cmd = ["bash", "tools/release_wheel_smoke.sh", final or "<final linux wheel>",
-                   "--expected-source-commit", self.commit, "--out", out, "--rent",
-                   "--column", self.gpu_selection("cuda"),
-                   "--cpu-column", self.release_check_dir() / "cpu" / "column.json", "--gpu", gpu]
-            rc = self.run(cmd, None, log)
-            if rc == 0:
-                break
-            if i + 1 < len(gpus) and no_stock(log, out):
-                self.say(f"  {gpu} has no stock; trying {gpus[i + 1]}")
-                continue
-            raise StepFailed(f"release_wheel_smoke.sh exited {rc}; log {log}")
-        if not self.dry and not smoke_passed(out / "results.json", final):
-            raise StepFailed(f"Linux smoke receipt is not PASSED for this wheel: {out / 'results.json'}")
-        if not self.dry and not self.gpu_column_ok(out, "cuda"):
-            raise StepFailed(f"the NVIDIA column is missing or DIVERGENT: {out}")
-        return "PASSED, NVIDIA column identical to CPU"
+    def nvidia_column_ok(self):
+        final, out = self.linux_final(), self.rel / "smoke-linux"
+        return bool(final) and smoke_passed(out / "results.json", final) and self.gpu_column_ok(out, "cuda")
 
-    def step_amd_column(self):
+    def amd_column_ok(self):
+        return bool(self.linux_final()) and self.gpu_column_ok(self.rel / "column-amd", "hip")
+
+    def column_legs(self):
+        """The two GPU wheel columns as detached legs, each only when its
+        record for this wheel is not already there. The NVIDIA leg carries its
+        GPU walk (SMOKE_WALK or --smoke-gpu; the position survives a rerun in
+        <columns>/nvidia.gpu); the AMD leg's provider walk (RunPod, Hot Aisle,
+        DigitalOcean) is release_wheel_smoke.sh's own --provider auto."""
+        final = str(self.linux_final() or "<final linux wheel>")
+        work = self.rel / "columns"
+        refs = [a for r in self.column_refs() for a in ("--ref-column", str(r))]
+        legs = []
+        if not self.nvidia_column_ok():
+            walk = [g for g in self.args.smoke_gpu.split("|") if g] or SMOKE_WALK
+            try:
+                at = min(int((work / "nvidia.gpu").read_text()), len(walk) - 1)
+            except (OSError, ValueError):
+                at = 0
+            out = self.rel / "smoke-linux"
+            leg = ColumnLeg("nvidia", "cuda",
+                            ["bash", "tools/release_wheel_smoke.sh", final, "--expected-source-commit", self.commit,
+                             "--out", str(out), "--rent", "--column", str(self.gpu_selection("cuda")), *refs,
+                             "--gpu", walk[at]], work, out, self.nvidia_column_ok)
+            leg.walk, leg.at = walk, at
+            legs.append(leg)
+        if not self.amd_column_ok():
+            out = self.rel / "column-amd"
+            legs.append(ColumnLeg("amd", "hip",
+                                  ["bash", "tools/release_wheel_smoke.sh", final, "--expected-source-commit",
+                                   self.commit, "--out", str(out), "--rent", "--vendor", "hip",
+                                   "--provider", self.args.amd_provider,
+                                   "--column", str(self.gpu_selection("hip")), *refs],
+                                  work, out, self.amd_column_ok))
+        return legs
+
+    def step_gpu_columns(self):
+        """THE NVIDIA AND AMD COLUMNS, CONCURRENTLY (2026-09-25). Both are
+        launched at once as detached legs and both are awaited; one failing
+        never stops the other, and the step reports each. Then every column of
+        this release is diffed together, so NVIDIA against AMD is checked as
+        well as each against Apple."""
         final = self.linux_final()
-        out = self.rel / "column-amd"
-        if final and self.gpu_column_ok(out, "hip"):
-            return "identical to CPU (record exists)"
         if not final and not self.dry:
             raise StepFailed("no final Linux wheel; run linux-pack")
-        if out.exists() and not self.dry:
-            out.rename(out.with_name(out.name + ".failed-" + dt.datetime.now().strftime("%Y%m%d-%H%M%S")))
-        self.must(["bash", "tools/release_wheel_smoke.sh", final or "<final linux wheel>",
-                   "--expected-source-commit", self.commit, "--out", out, "--rent", "--vendor", "hip",
-                   "--provider", self.args.amd_provider,
-                   "--column", self.gpu_selection("hip"),
-                   "--cpu-column", self.release_check_dir() / "cpu" / "column.json"],
-                  log=self.rel / "amd-column.log", what="release_wheel_smoke.sh --vendor hip")
-        if not self.dry and not self.gpu_column_ok(out, "hip"):
-            raise StepFailed(f"the AMD column is missing or DIVERGENT: {out}")
-        return "AMD column identical to CPU"
+        missing = [str(r) for r in self.column_refs() if not r.is_file()]
+        if missing and not self.dry:
+            raise StepFailed("no reference column " + ", ".join(missing) + "; run release-check")
+        legs = self.column_legs()
+        for name in ("nvidia", "amd"):
+            if not any(l.name == name for l in legs):
+                self.say(f"  {name}: PASSED for this wheel (record exists), not rerun")
+        for leg in legs:
+            self.say(f"  {leg.name}: {leg.describe().strip()}")
+        if self.dry:
+            if legs:
+                self.say(f"  would launch {', '.join(l.name for l in legs)} at once and wait for every one")
+            return self.joint_diff()
+        if legs:
+            launch_detached(self, legs)
+            self.wait_columns(legs)
+        failed = []
+        for name, vendor, ok, out in (("NVIDIA", "cuda", self.nvidia_column_ok, self.rel / "smoke-linux"),
+                                      ("AMD", "hip", self.amd_column_ok, self.rel / "column-amd")):
+            if ok():
+                self.say(f"  {name} column: PASSED, no DIVERGENT cell against {self.ref_names()}")
+                continue
+            leg = next((l for l in legs if l.vendor == vendor), None)
+            failed.append(f"{name} column missing, not PASSED or DIVERGENT: {out}"
+                          + (f" (exit {leg.exit_code()}, log {leg.log})" if leg else ""))
+            self.say(f"  {failed[-1]}")
+        if failed:
+            raise StepFailed("; ".join(failed) + ". Rerun `release` to relaunch the failed column(s).")
+        return self.joint_diff()
+
+    def wait_columns(self, legs):
+        """Wait for every column leg; walk the NVIDIA leg to its next GPU type
+        when RunPod had no stock, and wait again."""
+        work = legs[0].workdir
+        while True:
+            while any(l.running() for l in legs):
+                self.say("  waiting: " + ", ".join(f"{l.name}={'running' if l.running() else l.exit_code()}"
+                                                    for l in legs))
+                self.sleep(60)
+            again = []
+            for l in legs:
+                walk = getattr(l, "walk", None)
+                if (walk and not l.done(self.commit) and l.exit_code() != 0
+                        and no_stock(l.log, l.out_dir) and l.at + 1 < len(walk)):
+                    l.at += 1
+                    self.say(f"  {l.name}: {walk[l.at - 1]} has no stock; trying {walk[l.at]}")
+                    l.command[l.command.index("--gpu") + 1] = walk[l.at]
+                    work.mkdir(parents=True, exist_ok=True)
+                    (work / "nvidia.gpu").write_text(str(l.at))
+                    again.append(l)
+            if not again:
+                return
+            launch_detached(self, again)
+
+    def joint_diff(self):
+        """Every column of this release in ONE tools/identity_break.py --diff:
+        Apple, NVIDIA, AMD (and CPU with --cpu-column). Any DIVERGENT or MOVED
+        cell stops the release; the diff is kept at <release>/diff-columns.txt."""
+        cols = self.column_refs() + [self.rel / "smoke-linux" / "column-cuda.json",
+                                     self.rel / "column-amd" / "column-hip.json"]
+        cmd = [PY, str(ROOT / "tools" / "identity_break.py"), "--diff", *[str(c) for c in cols]]
+        path = self.rel / "diff-columns.txt"
+        self.say("  $ " + " ".join(shlex.quote(c) for c in cmd) + " > " + str(path))
+        self.commands_shown += 1
+        if self.dry:
+            return "pending: would run the command(s) above"
+        got = subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT)
+        text = got.stdout + got.stderr
+        path.write_text(text)
+        return judge_joint_diff(text, path, say=self.say)
 
     def on_pypi(self, wheel):
         """True when PyPI already serves this exact file (name and sha256)."""
@@ -1044,8 +1156,11 @@ class Release:
     def readme(self):
         check = self.release_check_dir()
         rows, sums = [], []
-        for backend, label in (("cpu", "CPU"), ("metal", "Apple Metal")):
-            col = check / backend / "column.json"
+        cols = [(check / b / "column.json", {"metal": "Apple Metal", "cpu": "CPU"}[b], b + "/column.json")
+                for b in self.check_backends()]
+        cols += [(self.rel / "smoke-linux" / "column-cuda.json", "NVIDIA (installed wheel)", "column-cuda.json"),
+                 (self.rel / "column-amd" / "column-hip.json", "AMD (installed wheel)", "column-hip.json")]
+        for col, label, name in cols:
             try:
                 cells = json.loads(col.read_text()).get("cells", {})
             except (OSError, ValueError):
@@ -1053,10 +1168,11 @@ class Release:
             lanes = {k.split("/")[0] for k in cells}
             rows.append(f"| {label} | {len(lanes)} | {len(cells)} | {'yes' if cells else 'no'} |")
             if col.is_file():
-                sums.append(f"- {backend}/column.json sha256 {sha256(col)}")
-        diff = subprocess.run([PY, str(ROOT / "tools" / "identity_break.py"), "--diff",
-                               str(check / "cpu" / "column.json"), str(check / "metal" / "column.json")],
-                              capture_output=True, text=True, cwd=ROOT).stdout
+                sums.append(f"- {name} sha256 {sha256(col)}")
+        try:
+            diff = (self.rel / "diff-columns.txt").read_text()
+        except OSError:
+            diff = ""
         summary = [ln for ln in diff.splitlines() if ln.startswith("summary")]
         wheels = []
         for platform, wheel, smoke in (("linux", self.linux_final(), "smoke-linux"),
@@ -1075,9 +1191,9 @@ class Release:
         return "\n".join([
             f"# mojolearn {self.version}", "",
             f"Source commit {self.commit}. Published {date}. See CHANGELOG.md.", "",
-            "## Release verification (CPU and Apple GPU, `pixi run -e test release-check`)", "",
+            "## Release verification (the changed lanes, one fit per cell)", "",
             "| column | lanes | cells | complete |", "|---|---|---|---|", *rows, "",
-            "CPU against Metal (`tools/identity_break.py --diff`):", "",
+            "Every column together (`tools/identity_break.py --diff`, diff-columns.txt):", "",
             *[f"    {s}" for s in summary], "", *sums, "",
             "## Wheels (light route)", "",
             "| platform | sha256 | smoke | published |", "|---|---|---|---|", *wheels, "",
@@ -1086,7 +1202,7 @@ class Release:
 
     STEPS = ["freeze-version", "freeze-changelog", "freeze-docs-facts", "freeze-commit", "rehearsal", "reuse-plan",
              "linux-builds", "macos-build", "macos-smoke", "release-check", "linux-wait", "linux-assemble",
-             "linux-pack", "linux-smoke", "amd-column", "publish-linux", "publish-macos", "finish-line", "record"]
+             "linux-pack", "gpu-columns", "publish-linux", "publish-macos", "finish-line", "record"]
     #: Every other step checks its own OUTPUT each time and returns at once when
     #: it is already there (a wheel of this commit, a PASSED receipt for that
     #: wheel, complete release-check records); these are skipped on their record.
@@ -1133,6 +1249,32 @@ class StepFailed(Exception):
     pass
 
 
+def judge_joint_diff(text, path, say=print):
+    """The verdict of the all-columns diff: a StepFailed on any DIVERGENT or
+    MOVED cell (any part), else a one-line summary. Cells only one column
+    hashed (a lane one vendor alone selects or can run) are counted in the
+    result, never read as agreement."""
+    bad, one = [], 0
+    for line in text.splitlines():
+        if line.startswith("summary"):
+            say("  " + line)
+            for key, n in re.findall(r"([A-Z_-]+)=(\d+)", line):
+                if int(n) and ("DIVERGENT" in key or "MOVED" in key):
+                    bad.append(f"{line.split(':')[0]} {key}={n}")
+                if key == "ONE-COLUMN" and line.startswith("summary:"):
+                    one += int(n)
+    if "DIVERGENT" in text and not any("DIVERGENT" in b for b in bad):
+        bad.append("DIVERGENT")
+    if bad:
+        rows = [l for l in text.splitlines() if "DIVERGENT" in l or "MOVED" in l][:20]
+        raise StepFailed("the columns of this release disagree (" + ", ".join(bad) + f"), {path}:\n  "
+                         + "\n  ".join(rows))
+    if "summary:" not in text:
+        raise StepFailed(f"the all-columns diff printed no summary; see {path}")
+    return (f"NVIDIA and AMD columns PASSED; no DIVERGENT cell across the columns ({path})"
+            + (f"; {one} cell(s) hashed by one column only" if one else ""))
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0],
                                  formatter_class=argparse.RawDescriptionHelpFormatter, epilog=__doc__)
@@ -1143,6 +1285,8 @@ def main(argv=None):
     ap.add_argument("--only", default="", help="comma-separated step names to run (others are skipped)")
     ap.add_argument("--redo", default="", help="comma-separated steps whose record is discarded first")
     ap.add_argument("--build-backend", default="gpu-legs", choices=sorted(BUILD_BACKENDS))
+    ap.add_argument("--cpu-column", action="store_true",
+                    help="also run release-check's CPU pass (opt-in) and diff the GPU columns against it too")
     ap.add_argument("--amd-expect-from", default="",
                     help="an NVIDIA release-build dir: run the AMD core-host probe against its STAGED copy")
     ap.add_argument("--smoke-gpu", default="", help="RunPod GPU(s) for the Linux smoke, |-separated, walked on no stock (default the 4090, L40S, L40, RTX 6000 Ada)")

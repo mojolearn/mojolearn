@@ -21,7 +21,8 @@ COMMIT = "a" * 40
 
 def args(**kw):
     base = dict(version="0.8.14", dry_run=False, publish=None, only="", redo="", build_backend="gpu-legs",
-                amd_expect_from="", smoke_gpu="", state_dir="", amd_build_provider=None, amd_provider="auto")
+                amd_expect_from="", smoke_gpu="", state_dir="", amd_build_provider=None, amd_provider="auto",
+                cpu_column=False)
     base.update(kw)
     return argparse.Namespace(**base)
 
@@ -34,7 +35,7 @@ def wheel(path, commit=COMMIT):
 
 
 class Ctx:
-    """The slice of Release that launch_linux_builds uses."""
+    """The slice of Release that launch_detached uses."""
 
     def __init__(self, commit=COMMIT):
         self.commit, self.spawned, self.slept, self.lines = commit, [], 0, []
@@ -91,11 +92,15 @@ class LegTests(unittest.TestCase):
     def tearDown(self):
         self._t.cleanup()
 
-    def test_launch_staggers_and_detaches(self):
+    def test_launch_is_all_at_once_and_detaches(self):
+        # no stagger for any backend (Andrew, 2026-09-25): every leg launched
+        # back to back, nothing slept between them
         ctx = Ctx()
-        legs = [leg(self.tmp), leg(self.tmp, "cuda-sm_90a", "cuda", "sm_90a")]
-        self.assertEqual(release.launch_linux_builds(ctx, legs), 2)
-        self.assertEqual(ctx.slept, 90)
+        legs = [leg(self.tmp), leg(self.tmp, "cuda-sm_90a", "cuda", "sm_90a"), leg(self.tmp, "hip-gfx942", "hip", "gfx942")]
+        self.assertEqual(release.launch_detached(ctx, legs), 3)
+        self.assertEqual(ctx.slept, 0)
+        self.assertFalse([l for l in ctx.lines if "waiting" in l or "stagger" in l], ctx.lines)
+        self.assertEqual(len(ctx.spawned), 3)
         self.assertTrue(all(env["X"] == "1" for _, env in ctx.spawned))
         self.assertIn("echo $? >", ctx.spawned[0][0][2])
         self.assertEqual(legs[0].pid(), 999999)
@@ -109,7 +114,7 @@ class LegTests(unittest.TestCase):
         bad.out_dir.mkdir(parents=True)
         bad.exit_file.write_text("10\n")
         bad.log.write_text("boom")
-        self.assertEqual(release.launch_linux_builds(ctx, [good, bad]), 1)
+        self.assertEqual(release.launch_detached(ctx, [good, bad]), 1)
         self.assertEqual(len(ctx.spawned), 1)
         self.assertFalse(bad.out_dir.exists())
         self.assertEqual(len(list(self.tmp.glob("legs/hip-gfx942.failed-*"))), 1)
@@ -323,6 +328,16 @@ class RunTests(unittest.TestCase):
         self.assertIn("== binding reuse plan for", out.stdout)
         self.assertIn("legs to launch:", out.stdout)
         legs = out.stdout.split("legs to launch:", 1)[1].splitlines()[0]
+        # the two GPU columns are one step, launched together, diffed against
+        # the Apple column, never the CPU column by default
+        gpu = out.stdout.split("-- gpu-columns", 1)[1].split("-- publish-linux", 1)[0]
+        self.assertIn("nvidia: ", gpu)
+        self.assertIn("amd: ", gpu)
+        self.assertIn("would launch nvidia, amd at once", gpu)
+        self.assertIn("metal/column.json", gpu)
+        self.assertNotIn("cpu/column.json", gpu)
+        self.assertIn("identity_break.py --diff", gpu)
+        self.assertNotIn("--cpu-column", out.stdout.split("-- release-check", 1)[1].split("-- linux-wait", 1)[0])
         # the default route is the GPU legs (2026-09-25: no CPU by default)
         self.assertNotIn("tools/release_linux_build.sh", out.stdout)
         if "cuda-" in legs:
