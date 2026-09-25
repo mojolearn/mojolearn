@@ -1,0 +1,4 @@
+attn arm=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz: 0.5113461734727025 ['5516ffe5f550', '77477af42588', '4e439a8a9751']
+attn arm=stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r64_bswz: 0.5144954985007644 ['5516ffe5f550', '77477af42588', '4e439a8a9751']
+attn arm=stash_tiled_fgrid_r32_qres_pf_zdefer_estash_dres_kvgrid_r32_bswz: FileNotFoundError: [Errno 2] No such file or directory: '/root/gemm_leg_out/nv-step-time/attn-stash_tiled_fgrid_r32_qres_pf_zdefer_estash_dres_kvgrid_r32_bswz/result.json'
+attn arm=stash_tiled_fgrid_r32_qres_pf_zlag_estash_dres_kvgrid_r32_bswz: FileNotFoundError: [Errno 2] No such file or directory: '/root/gemm_leg_out/nv-step-time/attn-stash_tiled_fgrid_r32_qres_pf_zlag_estash_dres_kvgrid_r32_bswz/result.json'

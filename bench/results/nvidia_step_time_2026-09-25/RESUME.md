@@ -79,7 +79,23 @@ Evidence is copied from the leg OUT into this directory (small files only).
     prefetch) -32 percent, no fold -15 percent, FMA floor -69 percent.
   - Launch bound 512 (128 registers, two blocks an SM): spills 560 B,
     neutral (-7 to +3 percent per call). Every trial arm: kpack_hg is best.
-- 2026-09-25 LEG 2 prepared: GEMM WINDOW ADMISSION
+- 2026-09-25 01:24-02:02 UTC LEG 2 (pod arbmyyyar6y89p, verified deleted,
+  about $2.21). Evidence `legs/leg2/`. WINDOW ADMISSION: GEMM A/B 36/36
+  identical to main's step (ordinary, tiny, mixed kinds), sabotage differs on
+  the 12 tiny cases, calls about 20 percent faster; lean 0.608 -> 0.532 s
+  (same witnesses); replays PASS 101..103 (33.80 s) and 1999..2000 (34.04 s);
+  GEMM 401.7 -> 323.6 ms a shard. Staging decomposition: no-barrier -5
+  percent, no-prefetch or no-store -30 percent (the global gather is the
+  exposed cost at one block an SM). Geometry trials (all 36/36 identical):
+  128x64 tile + 512 bound (128 registers, 2 blocks an SM) best, calls 5 to 9
+  percent faster than admission alone; lean 0.508 s; replay 101..103 PASS at
+  32.43 s. Early prefetch, 80-register 3-block variants, 64x64: slower.
+  Attention arms (kvgrid_r64, zdefer, zlag): default is best / others invalid.
+- Then made the 128x64 tile the NVIDIA default (`lib_gemm_kpack_narrow_for`,
+  kpack-only launch bound 512 `GEMM_KPACK_LAUNCH_BOUND`; revert
+  `-D MOJOLEARN_GEMM_NO_KPACK_NARROW=1`). LEG 3 (`leg3.sh`): prove and time
+  the head defaults, backward/workspace checks, 201 GEMM lanes.
+- (older) LEG 2 prepared: GEMM WINDOW ADMISSION
   (`lib_gemm_window_admit_for`, NVIDIA only; revert
   `-D MOJOLEARN_GEMM_NO_WINDOW_ADMIT=1`; sabotage
   `-D MOJOLEARN_GEMM_SABOTAGE_ADMIT_ALWAYS=1`) and DIAG 6/7/8 (no barrier,

@@ -1,0 +1,44 @@
+10701 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x129480000000, nodemask=1)
+EXCP_AB_HEADER column=nvidia detect_seam=False launch_bound=512 rounds=3
+EXCP_AB_DISPATCH call=proj_fwd DEFAULT kpack_hg body (DEVIATION 2707) kpack_hg 128x64 reg8x4 TC=16 KS=16 page=packed(group,step,line) pad=4 align=16 fold_flush=hw stage=gather page_bytes=12800 pages=2 load=per-step fold=lane-wide local FS=16 tpb=256 hwftz=True groups where its rule takes the call (S=132 slack=4), else all leaves in one launch (NOT RUN: no -D MOJOLEARN_GEMM_ARM_TRIAL=1, the shipped default ran) all leaves in one launch
+EXCP_AB call=proj_fwd kind=ordinary m=8192 n=768 k=768 hash=3b093775ef2152bd rehash_equal=True ms=0.480567 samples=0.480036,0.480567,0.50555
+EXCP_AB call=proj_fwd kind=tiny m=8192 n=768 k=768 hash=1f0a5f50a8dd15e0 rehash_equal=True ms=0.614917 samples=0.61263,0.614917,0.619678
+EXCP_AB call=proj_fwd kind=mixed m=8192 n=768 k=768 hash=89b625cee08a1ab4 rehash_equal=True ms=0.61323 samples=0.612795,0.61323,0.617018
+EXCP_AB call=proj_dA kind=ordinary m=8192 n=768 k=768 hash=5e7d375e8b1a9d26 rehash_equal=True ms=0.479564 samples=0.479159,0.479564,0.48521
+EXCP_AB call=proj_dA kind=tiny m=8192 n=768 k=768 hash=ee338ca4dd8299a1 rehash_equal=True ms=0.61432 samples=0.611997,0.61432,0.618285
+EXCP_AB call=proj_dA kind=mixed m=8192 n=768 k=768 hash=baee965659d2d7c1 rehash_equal=True ms=0.613146 samples=0.612985,0.613146,0.617735
+EXCP_AB call=proj_dB kind=ordinary m=8192 n=768 k=768 hash=061bd3b38158a525 rehash_equal=True ms=0.543198 samples=0.541585,0.543198,0.563882
+EXCP_AB call=proj_dB kind=tiny m=8192 n=768 k=768 hash=654eb9e377023011 rehash_equal=True ms=0.683017 samples=0.681893,0.683017,0.689282
+EXCP_AB call=proj_dB kind=mixed m=8192 n=768 k=768 hash=82bb9fde5269b82e rehash_equal=True ms=0.682096 samples=0.681952,0.682096,0.688128
+EXCP_AB_DISPATCH call=gateup_fwd DEFAULT kpack_hg body (DEVIATION 2707) kpack_hg 128x64 reg8x4 TC=16 KS=16 page=packed(group,step,line) pad=4 align=16 fold_flush=hw stage=gather page_bytes=12800 pages=2 load=per-step fold=lane-wide local FS=16 tpb=256 hwftz=True groups where its rule takes the call (S=132 slack=4), else all leaves in one launch (NOT RUN: no -D MOJOLEARN_GEMM_ARM_TRIAL=1, the shipped default ran) all leaves in one launch
+EXCP_AB call=gateup_fwd kind=ordinary m=8192 n=2048 k=768 hash=69883f9d4520fce8 rehash_equal=True ms=1.267386 samples=1.260712,1.267386,1.269316
+EXCP_AB call=gateup_fwd kind=tiny m=8192 n=2048 k=768 hash=2ea89213d5c64c4a rehash_equal=True ms=1.600292 samples=1.599736,1.600292,1.611265
+EXCP_AB call=gateup_fwd kind=mixed m=8192 n=2048 k=768 hash=440b0bde6ae51a26 rehash_equal=True ms=1.607658 samples=1.604998,1.607658,1.61143
+EXCP_AB call=gateup_dA kind=ordinary m=8192 n=2048 k=768 hash=1f32c6d75e1ae635 rehash_equal=True ms=1.280131 samples=1.275987,1.280131,1.282298
+EXCP_AB call=gateup_dA kind=tiny m=8192 n=2048 k=768 hash=03115bc7323fce7a rehash_equal=True ms=1.63189 samples=1.621768,1.63189,1.641282
+EXCP_AB call=gateup_dA kind=mixed m=8192 n=2048 k=768 hash=7e8d97ece64787e4 rehash_equal=True ms=1.641963 samples=1.628228,1.641963,1.645157
+EXCP_AB call=gateup_dB kind=ordinary m=8192 n=2048 k=768 hash=6416c32304a5a9e1 rehash_equal=True ms=1.337348 samples=1.333059,1.337348,1.346108
+EXCP_AB call=gateup_dB kind=tiny m=8192 n=2048 k=768 hash=89110d43ca2eb346 rehash_equal=True ms=1.71109 samples=1.709666,1.71109,1.716531
+EXCP_AB call=gateup_dB kind=mixed m=8192 n=2048 k=768 hash=6545a6bfc431bcac rehash_equal=True ms=1.708243 samples=1.706995,1.708243,1.716065
+EXCP_AB_DISPATCH call=down_fwd DEFAULT kpack_hg body (DEVIATION 2707) kpack_hg 128x64 reg8x4 TC=16 KS=16 page=packed(group,step,line) pad=4 align=16 fold_flush=hw stage=gather page_bytes=12800 pages=2 load=per-step fold=lane-wide local FS=16 tpb=256 hwftz=True groups where its rule takes the call (S=132 slack=4), else all leaves in one launch (NOT RUN: no -D MOJOLEARN_GEMM_ARM_TRIAL=1, the shipped default ran) all leaves in one launch
+EXCP_AB call=down_fwd kind=ordinary m=8192 n=768 k=2048 hash=3b97ab14d7768c45 rehash_equal=True ms=1.285259 samples=1.285002,1.285259,1.289253
+EXCP_AB call=down_fwd kind=tiny m=8192 n=768 k=2048 hash=5f862f3223fec155 rehash_equal=True ms=1.648553 samples=1.64464,1.648553,1.655393
+EXCP_AB call=down_fwd kind=mixed m=8192 n=768 k=2048 hash=61f3ba0391caa8fb rehash_equal=True ms=1.652355 samples=1.6493,1.652355,1.653879
+EXCP_AB call=down_dA kind=ordinary m=8192 n=768 k=2048 hash=5cf60a67344cda5e rehash_equal=True ms=1.261102 samples=1.260041,1.261102,1.264158
+10701 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x1ad400000000, nodemask=2)
+EXCP_AB call=down_dA kind=tiny m=8192 n=768 k=2048 hash=ca87fa4055c7ded3 rehash_equal=True ms=1.653004 samples=1.615307,1.653004,1.66283
+EXCP_AB call=down_dA kind=mixed m=8192 n=768 k=2048 hash=8fd4383649a4581b rehash_equal=True ms=1.619339 samples=1.610304,1.619339,1.628129
+EXCP_AB call=down_dB kind=ordinary m=8192 n=768 k=2048 hash=5459fe3eb5123824 rehash_equal=True ms=1.335236 samples=1.334034,1.335236,1.348595
+EXCP_AB call=down_dB kind=tiny m=8192 n=768 k=2048 hash=71f471a663fc1d09 rehash_equal=True ms=1.70873 samples=1.708416,1.70873,1.719937
+EXCP_AB call=down_dB kind=mixed m=8192 n=768 k=2048 hash=68f8372c3b3a2e7b rehash_equal=True ms=1.708807 samples=1.708783,1.708807,1.720514
+EXCP_AB_DISPATCH call=head_fwd DEFAULT kpack_hg body (DEVIATION 2707) kpack_hg 128x64 reg8x4 TC=16 KS=16 page=packed(group,step,line) pad=4 align=16 fold_flush=hw stage=gather page_bytes=12800 pages=2 load=per-step fold=lane-wide local FS=16 tpb=256 hwftz=True groups where its rule takes the call (S=132 slack=4), else all leaves in one launch (NOT RUN: no -D MOJOLEARN_GEMM_ARM_TRIAL=1, the shipped default ran) all leaves in one launch
+EXCP_AB call=head_fwd kind=ordinary m=8192 n=50257 k=768 hash=e403705bfa7ca2ff rehash_equal=True ms=30.996158 samples=30.970961,30.996158,31.137244
+EXCP_AB call=head_fwd kind=tiny m=8192 n=50257 k=768 hash=dd40ba6c1bd72c88 rehash_equal=True ms=39.005882 samples=38.99091,39.005882,39.048997
+EXCP_AB call=head_fwd kind=mixed m=8192 n=50257 k=768 hash=b2502719172b00aa rehash_equal=True ms=39.006172 samples=38.985352,39.006172,39.006489
+EXCP_AB call=head_dA kind=ordinary m=8192 n=50257 k=768 hash=219804c3c5b3ea5a rehash_equal=True ms=31.976734 samples=31.600669,31.976734,32.073712
+EXCP_AB call=head_dA kind=tiny m=8192 n=50257 k=768 hash=f75c0e4496af892c rehash_equal=True ms=40.911394 samples=40.852024,40.911394,40.913294
+EXCP_AB call=head_dA kind=mixed m=8192 n=50257 k=768 hash=a18de604aef4c6fa rehash_equal=True ms=40.811607 samples=40.173099,40.811607,40.853286
+EXCP_AB call=head_dB kind=ordinary m=8192 n=50257 k=768 hash=9eaa7bd3eda51464 rehash_equal=True ms=30.387139 samples=30.330712,30.387139,30.393861
+EXCP_AB call=head_dB kind=tiny m=8192 n=50257 k=768 hash=52f62f699ee59e59 rehash_equal=True ms=39.227463 samples=39.210342,39.227463,39.229385
+EXCP_AB call=head_dB kind=mixed m=8192 n=50257 k=768 hash=88be4c8a2886dd5d rehash_equal=True ms=39.211244 samples=39.210513,39.211244,39.283641
+EXCP_AB_DONE

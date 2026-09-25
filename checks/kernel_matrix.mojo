@@ -1298,10 +1298,38 @@ def lib_gemm_window_admit_for[column: Int]() -> Bool:
     two-instruction step. The decision is block-uniform.
 
     NVIDIA only (the column whose step is `fma.rn` + `mul.rn.ftz`).
+    MEASURED on a RunPod H100 80GB HBM3 (2026-09-25, leg 2): the T3-shape
+    GEMM A/B hashes equal the shipped step's on all 36 cases (ordinary
+    operands, the subnormal-forcing kind, and the mixed kind); the sabotage
+    arm differs on all 12 subnormal-forcing cases; every call about 20
+    percent faster; the lean B4 step 0.608 -> 0.532 s with equal witnesses;
+    the T3 replays of steps 101..103 and 1999..2000 PASS against the H100
+    chain at 33.80 and 34.04 s a step (38.83 before); GEMM 401.7 -> 323.6 ms
+    a shard.
     `-D MOJOLEARN_GEMM_NO_WINDOW_ADMIT=1` is the revert arm (the shipped
     step on every window); `-D MOJOLEARN_GEMM_SABOTAGE_ADMIT_ALWAYS=1`
     admits every window and must FAIL the subnormal-forcing operands."""
     comptime if is_defined["MOJOLEARN_GEMM_NO_WINDOW_ADMIT"]():
+        return False
+    return column == COLUMN_NVIDIA
+
+
+def lib_gemm_kpack_narrow_for[column: Int]() -> Bool:
+    """SCHEDULING row (lane/nvidia-step-time, 2026-09-25): the IDENTICAL kpack
+    GEMM kernel runs a 128x64 output tile (a thread's register tile 8x4, 32
+    cells instead of 64) under a 512-thread launch bound on its 256-thread
+    launch, which budgets 128 registers a thread so two blocks share an SM
+    and each hides the other's staging barrier, prefetch and fold. A thread's
+    cells, each cell's ascending chain, its leaves and its fold tree are
+    unchanged: a tile shape is a schedule and never a result.
+
+    NVIDIA, MEASURED on a RunPod H100 80GB HBM3 (2026-09-25, leg 2): the
+    T3-shape GEMM A/B hashes equal the 128x128 kernel's on all 36 cases
+    (three operand kinds), every call 5 to 9 percent faster; the lean B4 step
+    0.534 -> 0.508 s with equal witnesses; the T3 replay of steps 101..103
+    PASS at 32.43 s a step. Every other column False (their kernels compile
+    exactly as before). `-D MOJOLEARN_GEMM_NO_KPACK_NARROW=1` is the revert."""
+    comptime if is_defined["MOJOLEARN_GEMM_NO_KPACK_NARROW"]():
         return False
     return column == COLUMN_NVIDIA
 

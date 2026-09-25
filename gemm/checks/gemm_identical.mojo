@@ -167,6 +167,7 @@ from checks.kernel_matrix import (
     lib_gemm_leaf_split_for,
     lib_gemm_mfma_for,
     lib_gemm_window_admit_for,
+    lib_gemm_kpack_narrow_for,
     gemm_wide_split_for,
     lib_gemm_block_parallelism_for,
     lib_gemm_kernel_body_for,
@@ -1550,8 +1551,13 @@ comptime TUNED_TPB = lib_block_size_for[K_LIB_GEMM_CONTRACTION, TARGET_COLUMN]()
 #: 512 on a 256-thread launch, which on NVIDIA budgets 128 registers a thread
 #: (65,536 / 512) so two blocks fit an SM. Register allocation only.
 comptime GEMM_LAUNCH_BOUND = 1024 if is_defined["MOJOLEARN_GEMM_NO_LAUNCH_BOUND"]() else (
-    2 * TUNED_TPB if is_defined["MOJOLEARN_GEMM_LB512"]() else TUNED_TPB
+    2 * TUNED_TPB if is_defined["MOJOLEARN_GEMM_LB512"]() else (
+        3 * TUNED_TPB if is_defined["MOJOLEARN_GEMM_LB768"]() else TUNED_TPB
+    )
 )
+#: lane/nvidia-step-time trial: the kpack gather of the next window issued
+#: before the staging barrier instead of after it.
+comptime GEMM_PREFETCH_EARLY = is_defined["MOJOLEARN_GEMM_PREFETCH_EARLY"]()
 
 #: The width of a staged copy, in floats. `PINNED_VECLEN`, RAFT's own
 #: `Veclen = 4`.
@@ -5731,8 +5737,18 @@ def _gemm_step_arm_hook(
 #: allocation (`bench/results/gemm_resources_2026-09-10/README.md`).
 comptime GEMM_KPACK_PAGE_GUARD_BYTES = 1024
 #: `kpack`: the shipped 128x128 geometry.
-comptime GEMM_KPACK_RPT = TUNED_RPT * 2
-comptime GEMM_KPACK_CPT = TUNED_CPT * 2
+#: lane/nvidia-step-time (2026-09-25), trial geometry defines (schedule only:
+#: a thread's cells, their chains and their fold are unchanged):
+#: `-D MOJOLEARN_GEMM_KPACK_RPT4=1` (64-row tile), `-D MOJOLEARN_GEMM_KPACK_CPT4=1`
+#: (64-column tile).
+comptime GEMM_KPACK_RPT = TUNED_RPT if is_defined["MOJOLEARN_GEMM_KPACK_RPT4"]() else TUNED_RPT * 2
+comptime GEMM_KPACK_CPT = TUNED_CPT if (
+    is_defined["MOJOLEARN_GEMM_KPACK_CPT4"]() or lib_gemm_kpack_narrow_for[TARGET_COLUMN]()
+) else TUNED_CPT * 2
+#: The kpack kernel's declared launch bound: twice its 256-thread launch
+#: where the narrow tile runs (`lib_gemm_kpack_narrow_for`, NVIDIA: 128
+#: registers a thread, two blocks an SM), else the GEMM kernels' bound.
+comptime GEMM_KPACK_LAUNCH_BOUND = 2 * TUNED_TPB if lib_gemm_kpack_narrow_for[TARGET_COLUMN]() else GEMM_LAUNCH_BOUND
 comptime GEMM_KPACK_KS = 16
 comptime GEMM_KPACK_FS = TUNED_FOLD_SLOTS
 #: DEVIATION 2700, `kpack_pad`: words of padding after each line group of
@@ -5930,7 +5946,7 @@ def _kpack_step[DIAG: Int](a: Float32, b: Float32, acc: Float32) -> Float32:
     return _tuned_step(a, b, acc)
 
 
-@__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(GEMM_LAUNCH_BOUND)))
+@__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(GEMM_KPACK_LAUNCH_BOUND)))
 def identical_gemm_kpack_kernel[
     RPT: Int, CPT: Int, TC: Int, KS: Int, FS: Int, PAGES: Int, GROUP: Bool, SAB: Bool,
     PAD: Int = 0,
@@ -6287,13 +6303,21 @@ def identical_gemm_kpack_kernel[
                         pgw * BPAGE + gemm_kpack_addr(slb[0], slb[1], TC, CPT, KS, PAD),
                         pb[sb * VEC + eb],
                     )
+         # lane/nvidia-step-time (trial `-D MOJOLEARN_GEMM_PREFETCH_EARLY=1`):
+         # the gather of window w+1 issued BEFORE the barrier, after this
+         # thread's stores of window w read the same registers. Placement only.
+         comptime if PAGES == 2 and GATHER and GEMM_PREFETCH_EARLY and DIAG != 7:
+            if w + 1 < w_end:
+                var wn_e = nxt
+                pga = _kpack_gather[RPT, TR](a, a_si, a_sp, i0, m, wn_e[0], wn_e[1], ga[0], ga[1])
+                pgb = _kpack_gather[CPT, TC](b, b_sj, b_sp, j0, n, wn_e[0], wn_e[1], gb[0], gb[1])
          # lane/nvidia-step-time DIAGNOSTIC variants (wrong bits by design):
          # 6 no barrier, 7 no prefetch, 8 no staging stores.
          comptime if DIAG != 6:
             barrier()
 
          # ---- PREFETCH window w+1 (shipped lines, DEVIATION 1256).
-         comptime if PAGES == 2 and DIAG != 7:
+         comptime if PAGES == 2 and DIAG != 7 and not (GATHER and GEMM_PREFETCH_EARLY):
             if w + 1 < w_end:
                 var wn = nxt
                 comptime if GATHER:
