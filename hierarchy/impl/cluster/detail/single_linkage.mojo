@@ -29,10 +29,29 @@ from hierarchy.impl.cluster.detail.agglomerative import (
     extract_flattened_clusters,
 )
 from hierarchy.impl.cluster.detail.connectivities import (
+    DISTANCE_L2_EXPANDED,
+    DISTANCE_L2_SQRT_EXPANDED,
     LINKAGE_PAIRWISE,
     get_distance_graph,
 )
 from hierarchy.impl.cluster.detail.mst import build_sorted_mst
+from hierarchy.impl.cluster.detail.fast_boruvka import fast_euclidean_mst
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
+
+comptime SL_FAST_BORUVKA = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_SL_FAST_BORUVKA_OFF"]()
+)
+"""FAST on Apple: the PAIRWISE Euclidean MST from Boruvka rounds with the
+distances computed on the fly (`fast_boruvka.mojo`) instead of the dense
+`m * m` graph, which the M4 cannot allocate from ~38k rows up."""
+
+comptime SL_FAST_BORUVKA_MIN_ROWS = 4096
+"""Up to here the dense route is as fast (5,000 rows: 0.16 s either way)
+and keeps the reference's arithmetic, NaN refusal counts included."""
 from neighbors.checks.pinned_distance_tile import PINNED_TILE_TPB
 
 
@@ -68,6 +87,26 @@ def build_dist_linkage(
     sabotage: Int32 = LINK_SAB_NONE,
 ) raises -> Int:
     """`single_linkage.cuh:139-205`. Returns the Boruvka round count."""
+    comptime if SL_FAST_BORUVKA:
+        if (
+            dist_type == LINKAGE_PAIRWISE
+            and sabotage == LINK_SAB_NONE
+            and (
+                metric == DISTANCE_L2_SQRT_EXPANDED
+                or metric == DISTANCE_L2_EXPANDED
+            )
+            and n <= 64
+            and m > SL_FAST_BORUVKA_MIN_ROWS
+        ):
+            var r = fast_euclidean_mst(
+                ctx, x, m, n, metric == DISTANCE_L2_SQRT_EXPANDED,
+                mst_rows, mst_cols, mst_weights,
+            )
+            build_dendrogram_host(
+                ctx, mst_rows, mst_cols, mst_weights, m - 1,
+                out_dendrogram, out_distances, out_sizes,
+            )
+            return r
     # `:153-168` 1. Construct distance graph. PAIRWISE needs indptr m+1,
     # indices/data m*m (their `resize`s inside the impl, `:199-200`).
     var nnz = m * m
