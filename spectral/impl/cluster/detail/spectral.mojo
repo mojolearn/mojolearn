@@ -47,7 +47,9 @@ from spectral.checks.device_io import download_f32, download_u32, upload_f32
 from spectral.host.spectral_predict_host import SpectralPredictionState
 from spectral.impl.preprocessing.detail.spectral_embedding import (
     SpectralEmbeddingParams,
+    _use_fast_graph,
     create_connectivity_graph,
+    transform_dataset_keep,
     transform_graph_keep,
 )
 from spectral.impl.sparse.coo import CooGraph
@@ -109,6 +111,33 @@ def fit_predict_graph_keep(
         seed=config.seed,
     )
     var n_out = transform_graph_keep(ctx, emb_params, connectivity_graph, embedding_out, state, keep, trace)
+    _cluster_embedding(ctx, config, n_samples, n_out, labels, embedding_out, state, keep, trace)
+
+
+def _embedding_params(config: SpectralClusteringParams) -> SpectralEmbeddingParams:
+    return SpectralEmbeddingParams(
+        n_components=config.n_components,
+        n_neighbors=config.n_neighbors,
+        norm_laplacian=True,
+        drop_first=False,
+        tolerance=config.tolerance,
+        has_seed=True,
+        seed=config.seed,
+    )
+
+
+def _cluster_embedding(
+    ctx: DeviceContext,
+    config: SpectralClusteringParams,
+    n_samples: Int,
+    n_out: Int,
+    mut labels: List[Int32],
+    mut embedding_out: List[Float32],
+    mut state: SpectralPredictionState,
+    keep: Bool,
+    mut trace: IdentityTrace,
+) raises:
+    """The k-means half of `fit_predict` (`:47-61`) on the embedding."""
     # embedding_row_major (:47-52): ours is row-major already.
     var n_features = n_out
 
@@ -227,6 +256,20 @@ def fit_predict_dataset_keep(
     reader diffing the two will see a difference that is not one, and
     because a later edit that made `create_connectivity_graph` read one of
     those fields would be a live bug in the reference and not here."""
+    if _use_fast_graph(n_samples, config.n_neighbors, trace):
+        # FAST on Apple: the graph and Laplacian on the device
+        # (`fast_graph.mojo`); the same matrix, so the same embedding.
+        if config.n_clusters < 1 or config.n_clusters > n_samples:
+            raise Error(
+                "spectral clustering: n_clusters=" + String(config.n_clusters)
+                + " must satisfy 1 <= n_clusters <= n_samples"
+            )
+        var n_out = transform_dataset_keep(
+            ctx, _embedding_params(config), dataset, n_samples, n_features,
+            embedding_out, state, keep, trace,
+        )
+        _cluster_embedding(ctx, config, n_samples, n_out, labels, embedding_out, state, keep, trace)
+        return
     var embed_params = SpectralEmbeddingParams.default_with(
         config.n_components, config.n_neighbors
     )
