@@ -707,6 +707,7 @@ struct SmoSolver(Movable):
         # phase and is not a timing. Zero cost when unset.
         var st = StageTimes()
         var t_fit = st.start()
+        self.host_nan_flag.unsafe_ptr().unsafe_store(0, Int32(0))
         while keep_going:
             var t0 = st.start()
             ctx.enqueue_function[fill_f32_kernel](
@@ -829,7 +830,11 @@ struct SmoSolver(Movable):
             ctx.enqueue_copy(
                 dst_ptr=self.host_nan_flag.unsafe_ptr(), src_buf=self.nan_flag
             )
-            ctx.synchronize()
+            # FAST_SMO_SYNCS: no drain of its own; the flag lands with the
+            # next iteration's drain (read below one iteration late) and
+            # the loop's exit drains and checks the last one.
+            comptime if not FAST_SMO_SYNCS:
+                ctx.synchronize()
             st.stop(ctx, "smo.nan_scan_readback", t0)
 
             var diff = self.host_return_buff.unsafe_ptr().unsafe_load(0)
@@ -876,6 +881,16 @@ struct SmoSolver(Movable):
                 self.trace.inner_iter_seq.append(inner)
                 self.trace.nnz_seq.append(nnz_da)
 
+        comptime if FAST_SMO_SYNCS:
+            ctx.synchronize()
+            if self.host_nan_flag.unsafe_ptr().unsafe_load(0) != Int32(0):
+                raise Error(
+                    "SMO error: NaN found during fitting. This might be caused by"
+                    " floating point overflow. In such case using fp64 could"
+                    " help. Alternatively, try gamma='scale' kernel parameter."
+                    " (DEVIATION 637: NaN in alpha or f after outer iteration "
+                    + String(self.n_outer_iter) + ")"
+                )
         # CUML_LOG_DEBUG("SMO solver finished after %d outer iterations...")
         var t_res = st.start()
         var res = Results(ctx, n_rows, n_cols, self.svmType)
