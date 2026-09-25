@@ -81,7 +81,10 @@ from std.sys.compile import is_defined
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from checks.numerics import ftz, identical_mul_add
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
+from std.gpu import WARP_SIZE
+from std.sys.info import has_apple_gpu_accelerator
+from svm.impl.fast_smo_reduce import fast_argext, fast_argmin_argmax
 from checks.kernel_matrix import (
     TARGET_COLUMN,
     SVM_SCHED_FUSED_TREE,
@@ -171,6 +174,26 @@ def smo_block_solve_kernel[
     #: DEVIATION 2627's trailing barrier after each lane-0 fold (on unless
     #: `-D MOJOLEARN_SVM_LANE0_NO_TRAILING`).
     comptime LANE0_PROTECT = not is_defined["MOJOLEARN_SVM_LANE0_NO_TRAILING"]()
+    #: FAST on Apple: `svm/impl/fast_smo_reduce.mojo` (the f_u argmin and
+    #: f_max argmax in one pass, both levels butterflies, per-site slots, no
+    #: trailing barriers). Same selections as every pinned schedule.
+    #: `-D MOJOLEARN_SVM_FAST_FUSED_OFF` restores the pinned schedule.
+    comptime FAST_FUSED = (
+        GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+        and has_apple_gpu_accelerator()
+        and not SAB_FMAX_ANY
+        and not is_defined["MOJOLEARN_SVM_FAST_FUSED_OFF"]()
+        and WSIZE >= WARP_SIZE
+        and WSIZE % WARP_SIZE == 0
+        and WSIZE // WARP_SIZE <= WARP_SIZE
+    )
+    comptime FW = 2 * (WSIZE // WARP_SIZE) if FAST_FUSED else 1
+    var fa_v = stack_allocation[FW, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var fa_k = stack_allocation[FW, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var fa_t = stack_allocation[FW, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var fb_v = stack_allocation[FW, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var fb_k = stack_allocation[FW, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var fb_t = stack_allocation[FW, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
 
     var Kd = stack_allocation[
         WSIZE, Scalar[DType.float32], address_space = AddressSpace.SHARED
@@ -224,7 +247,12 @@ def smo_block_solve_kernel[
         # DEVIATION 635: the key-tied argmax; `f_max` is the winner's own
         # bits (+0.0 or -0.0 as that sample holds it), decided by the key.
         var f_max: Float32
-        comptime if SCHED == SVM_SCHED_FUSED_TREE:
+        comptime if FAST_FUSED:
+            var rf = fast_argmin_argmax[WSIZE](f_tmp, f_lo, key, fa_v, fa_k, fa_t)
+            f_u = rf[0]
+            u = Int(rf[1])
+            f_max = rf[2]
+        elif SCHED == SVM_SCHED_FUSED_TREE:
             # DEVIATION 2628: one tree for the argmin (with its thread) and
             # the argmax, no ballot.
             var rf = pinned_block_argmin_argmax_tid[WSIZE](f_tmp, f_lo, key)
@@ -303,7 +331,10 @@ def smo_block_solve_kernel[
         else:
             f_tmp = neg_inf
         var l: Int
-        comptime if WARP_FOLDS:
+        comptime if FAST_FUSED:
+            var res2 = fast_argext[WSIZE, True](f_tmp, key, fb_v, fb_k, fb_t)
+            l = Int(res2[1])
+        elif WARP_FOLDS:
             var res2 = block_argext[WSIZE, True](f_tmp, key)
             l = Int(res2[2])
         elif SCHED == SVM_SCHED_WARP_LANE0:
@@ -346,7 +377,7 @@ def smo_block_solve_kernel[
         # The second barrier protects `sh_tmp` for a write in the next
         # segment; only the tree ballot writes it there, so the R-ary
         # schedule may drop it (DEVIATION 2628).
-        comptime if UPDATE_SECOND_BARRIER:
+        comptime if UPDATE_SECOND_BARRIER and not FAST_FUSED:
             barrier()
         if tid == u:
             a = ftz(a + q * y)
