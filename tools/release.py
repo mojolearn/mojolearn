@@ -367,6 +367,13 @@ def no_stock(log, *dirs):
 #: stay the default (docs/RELEASE_CHECKLIST.md section 2c, policy 2026-09-22):
 #: the release builds on the GPUs it ships for. A CPU build box route may be
 #: added here as an opt-in diagnostic, never as the default.
+#: RunPod CPU flavors a release build pod may land on, 32 vCPU each: general
+#: purpose (4 GiB per vCPU) then memory optimized (8). 0.8.19's first CPU
+#: launch found neither general-purpose flavor in stock; compute optimized
+#: (2 GiB per vCPU) is left out, too little memory for 16 compile jobs.
+CPU_BOX_FLAVORS = "cpu5g,cpu3g,cpu5m,cpu3m"
+
+
 def cpu_legs(ctx):
     """THE DEFAULT ROUTE (Andrew, 2026-09-25): the three Linux sets compile on
     RunPod CPU pods, one pod per set, all three at once, with no GPU present
@@ -384,7 +391,7 @@ def cpu_legs(ctx):
         out = legs_dir / name
         legs.append(Leg(name, vendor, arch,
                         ["bash", "tools/release_linux_build.sh", ctx.commit, "--rent", "--archs", arch,
-                         "--out", str(out)],
+                         "--flavors", CPU_BOX_FLAVORS, "--out", str(out)],
                         {}, out / name / "release-build", legs_dir, out))
     return legs
 
