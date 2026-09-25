@@ -102,7 +102,13 @@ from std.math import ceildiv, fma
 from std.sys.compile import is_defined
 from std.sys.info import size_of
 
-from checks.numerics import ftz, identical_div, identical_mul
+from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_FAST,
+    ftz,
+    identical_div,
+    identical_mul,
+)
 from core.philox import launch_uniform_int
 from extratrees.checks.pcg_rng import row_sample_seed
 
@@ -3003,6 +3009,16 @@ comptime FOREST_SAB_SHARED_ROW_BASE = Int32(2)
 0, so their partitions overwrite each other. The forest must move -- this is
 the gate watching that the slot offsets are what isolate the trees."""
 
+comptime ET_STAGE_LIVE_PREFIX = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and not is_defined["MOJOLEARN_ET_STAGE_FULL_CAPACITY"]()
+)
+"""FAST only: `stage_batch` compares, snapshots and uploads each staging
+slot's LIVE prefix (the batch's nodes and workload blocks) instead of the
+workspace's full capacity. At the Apple FAST batch width (32768 nodes, about
+40k workload blocks at 1M rows) the full-capacity path moved every slot's
+whole capacity each batch. `-D MOJOLEARN_ET_STAGE_FULL_CAPACITY` restores it."""
+
 comptime PHASE_SETUP = 0
 comptime PHASE_STAGE = 1
 comptime PHASE_RANGE = 2
@@ -3015,7 +3031,8 @@ comptime PHASE_LEAF = 8
 comptime PHASE_HOST_PUSH = 9
 comptime PHASE_SEED = 10
 comptime PHASE_SAMPLER = 11
-comptime N_PHASES = 12
+comptime PHASE_STAGE_BATCH = 12
+comptime N_PHASES = 13
 
 
 struct PhaseClock(Movable):
@@ -3090,6 +3107,8 @@ struct PhaseClock(Movable):
             return "stage_batch + fused seeders (of stage)"
         if phase == PHASE_SAMPLER:
             return "feature sampler (of stage)"
+        if phase == PHASE_STAGE_BATCH:
+            return "stage_batch alone (of stage)"
         return "?"
 
 
@@ -3153,6 +3172,7 @@ def _stage_upload_if_changed[
     n: Int,
     seen_before: Bool,
     payload_slot: Bool,
+    live: Int = -1,
 ) raises:
     """DEVIATION 472: enqueue one of `stage_batch`'s H2D copies ONLY when
     its bytes moved since the last enqueue.
@@ -3200,6 +3220,39 @@ def _stage_upload_if_changed[
     """
     var sp = src.unsafe_ptr()
     var hp = shadow.unsafe_ptr()
+    comptime if ET_STAGE_LIVE_PREFIX:
+        # FAST: compare, snapshot and send the LIVE prefix only. Every
+        # kernel bound and address derives from the live counts (see the
+        # sabotage paragraph above), so no kernel reads past `live`. The
+        # FIRST upload of a slot still sends the full capacity below, so
+        # the shadow equals the device over every byte from then on and a
+        # later, longer prefix can never skip against unsent bytes.
+        if seen_before and live >= 0 and live < n:
+            if live == 0:
+                return
+            var lb = sp.bitcast[UInt8]()
+            var lh = hp.bitcast[UInt8]()
+            var bytes = live * size_of[Scalar[dt]]()
+            if True:
+                var same_live = True
+                var j = 0
+                while j + 16 <= bytes:
+                    if lh.unsafe_load[width=16](j) != lb.unsafe_load[width=16](j):
+                        same_live = False
+                        break
+                    j += 16
+                if same_live:
+                    while j < bytes:
+                        if lh.unsafe_load(j) != lb.unsafe_load(j):
+                            same_live = False
+                            break
+                        j += 1
+                if same_live:
+                    return
+            memcpy(dest=hp, src=sp, count=live)
+            var view = dst.create_sub_buffer[dt](0, live)
+            ctx.enqueue_copy(dst_buf=view, src_ptr=sp)
+            return
     if seen_before:
         comptime if is_defined["MOJOLEARN_ET_SAB_STAGE_SKIP_ALWAYS"]():
             if payload_slot:
@@ -3325,12 +3378,14 @@ def stage_batch(
         ws.cap_nodes * size_of[NodeWorkItem](),
         seen,
         False,
+        n_nodes * size_of[NodeWorkItem](),
     )
     _stage_upload_if_changed(
-        ctx, ws.d_tree, ws.h_tree, ws.s_tree, ws.cap_nodes, seen, True
+        ctx, ws.d_tree, ws.h_tree, ws.s_tree, ws.cap_nodes, seen, True, n_nodes
     )
     _stage_upload_if_changed(
-        ctx, ws.d_tsalt, ws.h_tsalt, ws.s_tsalt, ws.cap_nodes, seen, True
+        ctx, ws.d_tsalt, ws.h_tsalt, ws.s_tsalt, ws.cap_nodes, seen, True,
+        n_nodes,
     )
     _stage_upload_if_changed(
         ctx,
@@ -3340,12 +3395,13 @@ def stage_batch(
         ws.cap_blocks * size_of[WorkloadInfo](),
         seen,
         False,
+        plan.n_blocks_dimx * size_of[WorkloadInfo](),
     )
     _stage_upload_if_changed(
-        ctx, ws.d_nb, ws.h_nb, ws.s_nb, ws.cap_nodes, seen, True
+        ctx, ws.d_nb, ws.h_nb, ws.s_nb, ws.cap_nodes, seen, True, n_nodes
     )
     _stage_upload_if_changed(
-        ctx, ws.d_nc, ws.h_nc, ws.s_nc, ws.cap_nodes, seen, True
+        ctx, ws.d_nc, ws.h_nc, ws.s_nc, ws.cap_nodes, seen, True, n_nodes
     )
     _stage_upload_if_changed(
         ctx,
@@ -3355,6 +3411,7 @@ def stage_batch(
         ws.cap_nodes,
         seen,
         False,
+        n_nodes,
     )
     ws.stage_valid = True
     # DEVIATION 450: no trailing synchronize. The copies above are queue-
@@ -3594,6 +3651,7 @@ def search_batch(
     ref h_colids = ws.h_colids
 
     stage_batch(ctx, ws, work_items, item_trees, plan, Int(k))
+    clock.tick(ctx, PHASE_STAGE_BATCH)
 
     # =================================================================
     # DEVIATION 470 -- TWO fused seeder launches replace this cycle's
