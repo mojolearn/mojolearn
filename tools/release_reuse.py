@@ -750,8 +750,12 @@ def assemble_macos(plan, whl, dest, say=print):
             want = record.get(r["archive_path"])
             if want is None:
                 raise SystemExit(f"release_reuse: {r['archive_path']} is not in the published macOS wheel's RECORD")
-            got = extract_member(z, r["archive_path"], dest / r["package_rel"], want)
-            files[r["package_rel"]] = dict(sha256=got, archive_path=r["archive_path"], identity_digest=r["identity_digest"])
+            # a plan row carries archive_path, not package_rel (Binding.package_rel
+            # is "python/" + archive_path, where build_release_wheel.sh writes it);
+            # 0.8.19 was the first release to reuse a macOS binding and hit this
+            package_rel = r.get("package_rel") or "python/" + r["archive_path"]
+            got = extract_member(z, r["archive_path"], dest / package_rel, want)
+            files[package_rel] = dict(sha256=got, archive_path=r["archive_path"], identity_digest=r.get("identity_digest"))
     doc = dict(schema="mojolearn.macos.reused-bindings.v1", from_release=dict(
         version=prev["version"], source_commit=prev["source_commit"], wheel=Path(whl).name, wheel_sha256=sha256(whl)),
         files=files)

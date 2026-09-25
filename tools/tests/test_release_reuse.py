@@ -597,3 +597,41 @@ class HostBuiltIntoReusedSets(unittest.TestCase):
             self.assertIn("no set with a read-back holds the same bytes", str(err.exception))
             with self.assertRaises(SystemExit):
                 pack_wheel.load_set(set_paths[1], True)
+
+
+class MacosAssembleTests(unittest.TestCase):
+    """assemble_macos takes the REUSE rows of the macOS target from the published
+    macOS wheel into dest/python/mojolearn/..., keyed by the package path the
+    macOS build script writes (a plan row carries archive_path only)."""
+
+    def test_reused_macos_bindings_land_under_python_and_the_plan_names_them(self):
+        import base64
+        with tempfile.TemporaryDirectory() as d:
+            tmp = pathlib.Path(d)
+            rows = [b.row() for b in rr.bindings(rr.MACOS)]
+            self.assertTrue(rows and all("package_rel" not in r for r in rows))
+            reuse = rows[:2]
+            whl = tmp / "mojolearn-0.8.18-py3-none-macosx_11_0_arm64.whl"
+            record_lines = []
+            data = {}
+            with zipfile.ZipFile(whl, "w") as z:
+                for r in reuse:
+                    payload = b"METAL " + r["archive_path"].encode()
+                    z.writestr(r["archive_path"], payload)
+                    digest = hashlib.sha256(payload).digest()
+                    record_lines.append("%s,sha256=%s,%d" % (r["archive_path"], base64.urlsafe_b64encode(digest).rstrip(b"=").decode(), len(payload)))
+                    data[r["archive_path"]] = payload
+                z.writestr("mojolearn-0.8.18.dist-info/RECORD", "\n".join(record_lines) + "\n")
+            plan = dict(schema=rr.PLAN_SCHEMA, commit=CUR_COMMIT,
+                        previous=dict(version="0.8.18", source_commit=PREV_COMMIT),
+                        rows=[dict(r, decision="REUSE", reason="test", identity_digest="d" * 64) for r in reuse]
+                        + [dict(r, decision="BUILD", reason="test", identity_digest="e" * 64) for r in rows[2:]],
+                        legs=[], leg_reasons={}, runtime=dict(decision="REUSE"))
+            out = rr.assemble_macos(plan, whl, tmp / "macos", say=lambda *_: None)
+            doc = json.loads(pathlib.Path(out).read_text())
+            for r in reuse:
+                rel = "python/" + r["archive_path"]
+                self.assertIn(rel, doc["files"])
+                self.assertEqual((tmp / "macos" / rel).read_bytes(), data[r["archive_path"]])
+                self.assertEqual(doc["files"][rel]["archive_path"], r["archive_path"])
+            self.assertEqual(len(doc["files"]), 2)
