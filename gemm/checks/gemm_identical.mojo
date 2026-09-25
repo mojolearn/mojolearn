@@ -1336,6 +1336,38 @@ comptime GEMM_WINDOW_ADMIT = (
 comptime GEMM_ADMIT_EXP_SUM = 0 if is_defined["MOJOLEARN_GEMM_SABOTAGE_ADMIT_ALWAYS"]() else 174
 
 
+#: lane/apple-identical-gemm (2026-09-25): the WINDOW ADMISSION on the Apple
+#: tuned kernel (`lib_gemm_window_admit_for`, the same argument as NVIDIA's
+#: kpack window). The tuned kernel's step on Apple is
+#: `ftz(identical_mul_add(a, b, acc))` under the block admission
+#: (`TUNED_BLOCK_ADMIT`). On a full window whose staged operand words prove
+#: `Ea + Eb >= 174` (nonzero words of the flushed operands; a word with a zero
+#: exponent field flushes to zero and constrains nothing) and whose entering
+#: accumulators are multiples of 2^-126 (a leaf start, or only admitted windows
+#: since), every exact step result is zero or at least 2^-126 in magnitude, so
+#: the device FMA returns a normal or a zero under either rounding model
+#: (round then flush, or Apple's flush before round) and `ftz` is the identity:
+#: the bare FMA returns the same word the shipped step returns. Every other
+#: window, and every later window of its leaf, runs the shipped step. The block
+#: admission and its exact recompute are untouched. The decision is block
+#: uniform (warp minima published in shared memory before the staging barrier).
+comptime TUNED_WINDOW_ADMIT = (
+    TUNED_BLOCK_ADMIT
+    and lib_gemm_window_admit_for[TARGET_COLUMN]()
+)
+
+
+@always_inline
+def _tuned_admit_step(a: Float32, b: Float32, acc: Float32) -> Float32:
+    """The tuned kernel's step on an ADMITTED window: the shipped step without
+    its flush, which the window proved is the identity. The sabotage arm
+    `MOJOLEARN_GEMM_SABOTAGE_WINDOW_ADMIT_STEP` perturbs it so a check can
+    show that it reaches admitted windows (it must FAIL the ordinary fixtures)."""
+    comptime if is_defined["MOJOLEARN_GEMM_SABOTAGE_WINDOW_ADMIT_STEP"]():
+        return identical_mul_add(a, b, acc) * Float32(1.0000001)
+    return identical_mul_add(a, b, acc)
+
+
 @always_inline
 def _admit_exp_min[W: Int](v: SIMD[DType.float32, W]) -> UInt32:
     """Minimum biased exponent field over the NONZERO words of `v` (flushed
@@ -2055,6 +2087,15 @@ def identical_gemm_tuned_kernel[
         Scalar[DType.float32],
         address_space = AddressSpace.SHARED,
     ]()
+    # `TUNED_WINDOW_ADMIT`: per page, NWA warp minima of the staged A words'
+    # exponent fields, then NWA of B's.
+    comptime NWA = NTH // WARP_SIZE
+    var wadm_s = stack_allocation[
+        2 * PAGES * NWA if TUNED_WINDOW_ADMIT else 1,
+        Scalar[DType.uint32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var wadm_exact = True  # every accumulator of this leaf is a multiple of 2^-126
 
     var tiles_i = (m + BM - 1) // BM
     var tiles_j = (n + BN - 1) // BN
@@ -2151,6 +2192,14 @@ def identical_gemm_tuned_kernel[
         # block inside this loop changed the gfx942 schedule of five tuned
         # kernels (integer address arithmetic only, bisected 2026-09-18).
         _admit_track(pa, pb, emin_a, emin_b)
+        comptime if TUNED_WINDOW_ADMIT:
+            # This window's staged words, reduced over the warp; lane 0
+            # publishes them in page `pgw`'s slots before the barrier below.
+            var wadm_ma = _admit_warp_min(_admit_exp_min(pa))
+            var wadm_mb = _admit_warp_min(_admit_exp_min(pb))
+            if _urem[WARP_SIZE](tid) == 0:
+                wadm_s.unsafe_store(pgw * 2 * NWA + _udiv[WARP_SIZE](tid), wadm_ma)
+                wadm_s.unsafe_store(pgw * 2 * NWA + NWA + _udiv[WARP_SIZE](tid), wadm_mb)
 
         # ---- REGISTERS TO SHARED, into page `w % PAGES`.
         # The slot -> (row, column) expression is `_tuned_g2r`'s, in both
@@ -2214,6 +2263,21 @@ def identical_gemm_tuned_kernel[
         # ---- ACCUMULATE. Contract 7.1, 4 and 5, character for character
         # the FLAT plan's step with the two loads served from threadgroup
         # memory and the operand flushes hoisted (DEVIATION 1252).
+        # `TUNED_WINDOW_ADMIT`: block uniform, every thread reads the minima
+        # published for this page before the staging barrier.
+        var wadm_now = False
+        comptime if TUNED_WINDOW_ADMIT:
+            if chunk == KS and wadm_exact:
+                var wadm_na = UInt32(0xFF)
+                var wadm_nb = UInt32(0xFF)
+                comptime for ww in range(NWA):
+                    var wadm_xa = wadm_s.unsafe_load(pgw * 2 * NWA + ww)
+                    var wadm_xb = wadm_s.unsafe_load(pgw * 2 * NWA + NWA + ww)
+                    wadm_na = wadm_xa if wadm_xa < wadm_na else wadm_na
+                    wadm_nb = wadm_xb if wadm_xb < wadm_nb else wadm_nb
+                wadm_now = (wadm_na + wadm_nb) >= UInt32(GEMM_ADMIT_EXP_SUM)
+            if not wadm_now:
+                wadm_exact = False
         var abase = pgw * APAGE + accrow * SSTRIDE
         var bbase = pgw * BPAGE + acccol * SSTRIDE
         if chunk == KS:
@@ -2221,43 +2285,76 @@ def identical_gemm_tuned_kernel[
             # ascending `p` steps out of them. `e` ascends inside `kc`
             # ascending, so every accumulator sums its terms in exactly the
             # order the scalar path below sums them in.
-            comptime for kc in range(KV):
-                var ra = SIMD[DType.float32, RPT * VEC](0.0)
-                comptime for u in range(NR):
-                    var ta = as_.unsafe_load[width=VEC](
-                        abase + u * TR * SSTRIDE + kc * VEC
-                    )
-                    comptime for e in range(VEC):
-                        ra[u * VEC + e] = ta[e]
-                var rb = SIMD[DType.float32, CPT * VEC](0.0)
-                comptime for v in range(NCOL):
-                    var tb = bs_.unsafe_load[width=VEC](
-                        bbase + v * TC * SSTRIDE + kc * VEC
-                    )
-                    comptime for e2 in range(VEC):
-                        rb[v * VEC + e2] = tb[e2]
-                comptime for e3 in range(VEC):
-                    # 5b: already flushed at staging when enabled; otherwise
-                    # once per shared-loaded B value rather than once per cell.
-                    var bfl = SIMD[DType.float32, CPT](0.0)
-                    comptime for v2 in range(NCOL):
-                        bfl[v2] = _tuned_loaded_operand(rb[v2 * VEC + e3])
-                    comptime if FASTK:
-                        # lane/amd-step-time: the DETECT seam, one packed FMA
-                        # per row plus one class test per result; a thread
-                        # that saw a subnormal recomputes its cells at the end.
-                        _fast_rows[NR, CPT, NCELL, RPT * VEC, VEC, e3](acc, ra, bfl, sub_seen)
-                    else:
-                     comptime for u2 in range(NR):
-                        # 5a, likewise.
-                        var afl = _tuned_loaded_operand(ra[u2 * VEC + e3])
-                        comptime for v3 in range(NCOL):
-                            # 4 (one fused rounding) and 5c (the accumulator
-                            # flushed after EVERY step). 5c is per cell per
-                            # step and is NOT hoisted, because it cannot be.
-                            acc[u2 * CPT + v3] = _tuned_step_admitted(
-                                afl, bfl[v3], acc[u2 * CPT + v3]
-                            )
+            var fastw = False
+            comptime if TUNED_WINDOW_ADMIT:
+                fastw = wadm_now
+            if fastw:
+                # An ADMITTED window: the same loads, the same operand flushes,
+                # the same cells in the same ascending `p` order, the step
+                # without its flush (proven the identity on this window).
+                comptime for kca in range(KV):
+                    var raa = SIMD[DType.float32, RPT * VEC](0.0)
+                    comptime for ua in range(NR):
+                        var taa = as_.unsafe_load[width=VEC](
+                            abase + ua * TR * SSTRIDE + kca * VEC
+                        )
+                        comptime for ea in range(VEC):
+                            raa[ua * VEC + ea] = taa[ea]
+                    var rba = SIMD[DType.float32, CPT * VEC](0.0)
+                    comptime for va in range(NCOL):
+                        var tba = bs_.unsafe_load[width=VEC](
+                            bbase + va * TC * SSTRIDE + kca * VEC
+                        )
+                        comptime for eb in range(VEC):
+                            rba[va * VEC + eb] = tba[eb]
+                    comptime for ec in range(VEC):
+                        var bfa = SIMD[DType.float32, CPT](0.0)
+                        comptime for vb in range(NCOL):
+                            bfa[vb] = _tuned_loaded_operand(rba[vb * VEC + ec])
+                        comptime for ub in range(NR):
+                            var afa = _tuned_loaded_operand(raa[ub * VEC + ec])
+                            comptime for vc in range(NCOL):
+                                acc[ub * CPT + vc] = _tuned_admit_step(
+                                    afa, bfa[vc], acc[ub * CPT + vc]
+                                )
+            else:
+                comptime for kc in range(KV):
+                    var ra = SIMD[DType.float32, RPT * VEC](0.0)
+                    comptime for u in range(NR):
+                        var ta = as_.unsafe_load[width=VEC](
+                            abase + u * TR * SSTRIDE + kc * VEC
+                        )
+                        comptime for e in range(VEC):
+                            ra[u * VEC + e] = ta[e]
+                    var rb = SIMD[DType.float32, CPT * VEC](0.0)
+                    comptime for v in range(NCOL):
+                        var tb = bs_.unsafe_load[width=VEC](
+                            bbase + v * TC * SSTRIDE + kc * VEC
+                        )
+                        comptime for e2 in range(VEC):
+                            rb[v * VEC + e2] = tb[e2]
+                    comptime for e3 in range(VEC):
+                        # 5b: already flushed at staging when enabled; otherwise
+                        # once per shared-loaded B value rather than once per cell.
+                        var bfl = SIMD[DType.float32, CPT](0.0)
+                        comptime for v2 in range(NCOL):
+                            bfl[v2] = _tuned_loaded_operand(rb[v2 * VEC + e3])
+                        comptime if FASTK:
+                            # lane/amd-step-time: the DETECT seam, one packed FMA
+                            # per row plus one class test per result; a thread
+                            # that saw a subnormal recomputes its cells at the end.
+                            _fast_rows[NR, CPT, NCELL, RPT * VEC, VEC, e3](acc, ra, bfl, sub_seen)
+                        else:
+                         comptime for u2 in range(NR):
+                            # 5a, likewise.
+                            var afl = _tuned_loaded_operand(ra[u2 * VEC + e3])
+                            comptime for v3 in range(NCOL):
+                                # 4 (one fused rounding) and 5c (the accumulator
+                                # flushed after EVERY step). 5c is per cell per
+                                # step and is NOT hoisted, because it cannot be.
+                                acc[u2 * CPT + v3] = _tuned_step_admitted(
+                                    afl, bfl[v3], acc[u2 * CPT + v3]
+                                )
         else:
             # THE RAGGED PATH, and the EMPTY one: `chunk` may be 0. Scalar
             # shared reads, same ascending `p`, same seams. No zero slot is
@@ -2336,6 +2433,7 @@ def identical_gemm_tuned_kernel[
                     else:
                         _ = _fold_push_local[NCELL, FS](fl, occ, part)
             acc = SIMD[DType.float32, NCELL](0.0)
+            wadm_exact = True  # the next leaf starts at +0.0
 
         w = w + 1
         cur = nxt
