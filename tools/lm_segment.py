@@ -714,23 +714,30 @@ class StepPipeline:
         t_digest = time.perf_counter()
         digests = Digests(arrays, gradient, self.scheme)
         gate = time.perf_counter() - t_digest
+        # THE LINE'S hash_seconds when overlapped: what this step's line cost
+        # the loop outside the step, from the end of its compute to the start
+        # of the next (the read-back, the wait for the previous line, starting
+        # the digests). The digests themselves finish during the next step and
+        # the writer thread sees them only when that step hands back the
+        # interpreter lock, so their own wall clock is not a cost and is kept
+        # apart in `digest_timings`.
+        blocked = time.perf_counter() - t_readback
         # the main loop's wall clock from the previous step's submit to this one's
         wall = None if self.last_submit is None else t_digest - self.last_submit
         self.last_submit = t_digest
-        self.pending = self.writer.submit(self._job, row, digests, arrays, t_readback, t_digest, readback_seconds,
+        self.pending = self.writer.submit(self._job, row, digests, arrays, blocked, t_digest, readback_seconds,
                                           self.waited, gate, wall, window_shards, checkpoint_meta, upload, manifest,
                                           out)
 
-    def _job(self, row, digests, arrays, t_readback, t_digest, readback_seconds, waited, gate, wall, window_shards,
+    def _job(self, row, digests, arrays, blocked, t_digest, readback_seconds, waited, gate, wall, window_shards,
              checkpoint_meta, upload, manifest, out):
         state_digest, grad_digest = digests.result()
         done = time.perf_counter()
-        row = dict(row, state_sha256=state_digest, gradient_sha256=grad_digest,
-                   hash_seconds=round(done - t_readback, 3))
+        row = dict(row, state_sha256=state_digest, gradient_sha256=grad_digest, hash_seconds=round(blocked, 3))
         if window_shards is not None:
             row["window"] = _window_witness(None, arrays, window_shards, self.say)
         timing = dict(step=row["step"], seconds=row["seconds"], readback_seconds=round(readback_seconds, 3),
-                      digest_seconds=round(done - t_digest, 3), hash_seconds=row["hash_seconds"],
+                      digests_ready_after_seconds=round(done - t_digest, 3), hash_seconds=row["hash_seconds"],
                       waited_for_previous_seconds=round(waited, 3), digest_start_seconds=round(gate, 4),
                       digest_threads_started=digests.started_all,
                       wall_since_previous_step=None if wall is None else round(wall, 3))
