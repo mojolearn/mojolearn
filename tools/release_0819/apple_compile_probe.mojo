@@ -17,7 +17,7 @@ from transformer.impl.llama.fused_attention import (
 
 
 def _attrs(name: String, ir: String):
-    print("### " + name + " bytes=" + String(len(ir)))
+    print("### " + name + " bytes=" + String(ir.byte_length()))
     for line in ir.split("\n"):
         if line.startswith("attributes #") or line.startswith("target triple"):
             print(line)
