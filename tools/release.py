@@ -367,7 +367,31 @@ def no_stock(log, *dirs):
 #: stay the default (docs/RELEASE_CHECKLIST.md section 2c, policy 2026-09-22):
 #: the release builds on the GPUs it ships for. A CPU build box route may be
 #: added here as an opt-in diagnostic, never as the default.
-BUILD_BACKENDS = {"gpu-legs": gpu_legs}
+def cpu_legs(ctx):
+    """THE DEFAULT ROUTE (Andrew, 2026-09-25): the three Linux sets compile on
+    RunPod CPU pods, one pod per set, all three at once, with no GPU present
+    (tools/release_linux_build.sh --archs <one>: Mojo compiles each set ahead
+    of time from --target-accelerator alone). CPU pods do not wait on GPU
+    stock. Proven at d181d9792 (0.8.14): cuda/sm_90a and cuda/sm_89 132 of 132
+    binaries byte-identical to the GPU-box builds; gfx942 codegen varies run to
+    run on ANY box, so the binding cache freezes it either way. Identity is
+    still read back on the silicon: the NVIDIA and AMD wheel columns run the
+    built wheel on real GPUs before anything publishes."""
+    legs_dir = ctx.rel / "legs"
+    legs = []
+    for vendor, arch in (("cuda", "sm_90a"), ("cuda", "sm_89"), ("hip", "gfx942")):
+        name = f"{vendor}-{arch}"
+        out = legs_dir / name
+        legs.append(Leg(name, vendor, arch,
+                        ["bash", "tools/release_linux_build.sh", ctx.commit, "--rent", "--archs", arch,
+                         "--out", str(out)],
+                        {}, out / name / "release-build", legs_dir, out))
+    return legs
+
+
+#: "cpu-box" is the default since 2026-09-25 (Andrew: a release is light
+#: checks, not hours of waiting on GPU stock); "gpu-legs" stays available.
+BUILD_BACKENDS = {"cpu-box": cpu_legs, "gpu-legs": gpu_legs}
 
 
 def linux_legs(ctx):
@@ -749,7 +773,7 @@ class Release:
                     self._amd_route = ("hotaisle", l.provider_reason)
                     again.append(l)
                     continue
-                walk = NVIDIA_WALK.get(l.arch) if l.vendor == "cuda" else None
+                walk = NVIDIA_WALK.get(l.arch) if l.vendor == "cuda" and "--gpu" in l.command else None
                 if walk and l.exit_code() != 0 and no_stock(l.log, l.workdir / l.name, l.out_dir) and tried[l.name] + 1 < len(walk):
                     tried[l.name] += 1
                     i = l.command.index("--gpu")
@@ -1111,7 +1135,7 @@ def main(argv=None):
                     help="publish the two wheels (none = the workflow's checks without uploading)")
     ap.add_argument("--only", default="", help="comma-separated step names to run (others are skipped)")
     ap.add_argument("--redo", default="", help="comma-separated steps whose record is discarded first")
-    ap.add_argument("--build-backend", default="gpu-legs", choices=sorted(BUILD_BACKENDS))
+    ap.add_argument("--build-backend", default="cpu-box", choices=sorted(BUILD_BACKENDS))
     ap.add_argument("--amd-expect-from", default="",
                     help="an NVIDIA release-build dir: run the AMD core-host probe against its STAGED copy")
     ap.add_argument("--smoke-gpu", default="", help="RunPod GPU(s) for the Linux smoke, |-separated, walked on no stock (default the 4090, L40S, L40, RTX 6000 Ada)")

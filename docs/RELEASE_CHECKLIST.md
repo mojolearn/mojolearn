@@ -261,14 +261,16 @@ sha256sum <sm89>/build/sets/cuda/sm_89/host/*.so <sm90a>/build/sets/cuda/sm_90a/
 differ across legs, and requires every manifest binding in every set; the
 lines above say WHICH leg is wrong before the packer says that one is.
 
-## 2c. The CPU build route: all three sets on one CPU box, no GPU (never the default)
+## 2c. The CPU build route: the DEFAULT since 2026-09-25
 
-**Policy (2026-09-22, Andrew): the release builds run on real GPU boxes, always.
-Section 2's GPU legs are the default route and stay the default.** Bitwise
-identity across GPU vendors is the point of mojolearn, and the GPU legs are
-where it is built and read back on the silicon it ships for. This CPU route is
-an opt-in diagnostic (for example, to measure build reproducibility cheaply);
-it never replaces the GPU legs, and `pixi run release` does not select it.
+**Policy (2026-09-25, Andrew, replacing 2026-09-22's GPU-box default): the
+Linux sets compile on RunPod CPU pods, one per set, all three at once**
+(`pixi run release` uses `--build-backend cpu-box`; `gpu-legs` remains by
+name). Compiling needs no GPU and CPU pods do not wait on GPU stock; 0.8.19
+lost hours to RunPod having no H100 or L40S and to a cold gfx942 build on a
+GPU droplet. Identity is still read back on the silicon it ships for: the
+NVIDIA and AMD wheel columns run the built wheel on real GPUs, on the changed
+lanes, before anything publishes.
 
 
 ```sh
