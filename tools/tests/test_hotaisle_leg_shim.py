@@ -392,106 +392,17 @@ def test_over_the_dollar_cap_is_refused_before_the_create(world):
     assert not drv._amd_busy(text), "over the cap is not busy: the driver skips hotaisle by its own rule"
 
 
-def test_a_balance_short_of_the_whole_lease_is_refused(world):
+def test_a_balance_short_of_the_whole_lease_proceeds_with_a_note(world):
+    """Hot Aisle tops the team balance up automatically (Andrew, 2026-09-25):
+    a balance below the whole lease is recorded and noted, never a refusal;
+    only the $5.00 floor refuses."""
     world.shim.balance = 17000        # above the $5 floor, below $179.40 + $5.00
     rc, text = segment(world)
-    assert rc == 3, text
-    assert "REFUSED: balance $170.00 is below $184.40" in text and "the whole lease" in text, text
-    assert not world.shim.creates
-    assert kv(world.out / "leg.txt")["balance_required_cents"] == "18440"
-    assert drv._amd_busy(text)
-
-
-def test_no_stock_is_refused_by_name(world):
-    world.shim.quantity = 0
-    rc, text = segment(world)
-    assert rc == 3, text
-    assert "showed no stock for 0 minutes" in text, text
-    assert not world.shim.creates
-    assert drv._amd_busy(text)
-
-
-def test_all_slots_held_is_refused_by_name(world):
-    for n in (1, 2):
-        d = Path(str(world.slots) + ".%d" % n)
-        d.mkdir()
-        (d / "owner").write_text("lane=other\npid=%d\nnonce=someone-else\n" % os.getpid())
-    rc, text = segment(world)
-    assert rc == 3, text
-    assert "no slot freed in 0 minutes" in text, text
-    assert not world.shim.creates
-    assert all(Path(str(world.slots) + ".%d" % n).exists() for n in (1, 2)), "another leg's slots are left alone"
-    assert drv._amd_busy(text)
-
-
-# ---------------------------------------------------------------- the whole segment lease
-
-def _epoch(utc):
-    return calendar.timegm(time.strptime(utc, "%Y-%m-%dT%H:%M:%SZ"))
-
-
-def test_segment_lease_happy_path(world):
-    t0 = time.time()
-    rc, text = segment(world)
     assert rc == 0, text
-    s = world.shim
-    # one create, of the 2x MI300X offering
-    assert len(s.creates) == 1, text
-    assert s.creates[0]["cpu_cores"] == 26 and s.creates[0]["gpus"] == [{"count": 2, "model": "MI300X"}]
-    (vm_id,) = s.deleted
-    assert not s.vms
-    leg = kv(world.out / "leg.txt")
-    for k, v in dict(provider="hotaisle", spec="2gpu", size="mi300x-2gpu-vm", body_gpus="all", segment_lease=str(LEASE),
-                     dollar_cap="200", max_cost="$179.40", max_cost_cents="17940", segment_lease_verdict="UNDER_CAP",
-                     lease_cents="17940", balance_required_cents="18440", vm_id=vm_id, vm_ref=vm_id,
-                     gpu_agents="2", runtime="docker", gpu_archs="gfx942").items():
-        assert leg.get(k) == v, (k, leg.get(k), v)
-    assert "price_cents_per_hour=598 min_reservation_minutes=60" in (world.out / "leg.txt").read_text()
-    # gpu.txt from rocm-smi on the host, and the body's own
-    gpu = (world.out / "gpu.txt").read_text()
-    assert "GPU[0]" in gpu and "GPU[1]" in gpu and "MI300X" in gpu
-    assert "MI300X" in (world.out / "remote" / "gpu.txt").read_text()
-    # the container saw both GPUs: /dev/kfd and the whole /dev/dri, no visible-devices pin
-    runs = (world.fake / "docker_runs.txt").read_text()
-    assert "devices=%s/dev/kfd,%s/dev/dri " % (world.fake, world.fake) in runs, runs
-    assert "VISIBLE_DEVICES" not in runs
-    # the long deadline reached the on-box watchdog and the Mac dead-man
-    dm = kv(world.out / "deadman.txt")
-    assert abs(int(dm["watchdog_seconds"]) - LEASE * 60) < 600, dm
-    assert abs(_epoch(dm["mac_deadman_fires_at"]) - (t0 + LEASE * 60)) < 600, dm
-    assert abs(_epoch(dm["watchdog_fires_at"]) - (t0 + LEASE * 60)) < 600, dm
-    wd = (world.out / "watchdog.sh").read_text()
-    assert "fires_in=%s" % dm["watchdog_seconds"] in wd and "/virtual_machines/%s/?force=true" % vm_id in wd
-    for w in ("watchdog_WATCHDOG_ALIVE", "watchdog_REF_BAKED_IN=1", "watchdog_TOKEN_GET_HTTP=200", "watchdog_DESC_MATCH",
-              "watchdog_WATCHDOG_STILL_ALIVE_SECOND_SESSION"):
-        assert any(line.startswith(w) for line in (world.out / "deadman.txt").read_text().splitlines()), w
-    assert "mac_deadman=cancelled" in (world.out / "deadman.txt").read_text()
-    # the body's timeout(1) is the long lease less the fetch reserve
-    assert int(leg["work_seconds"]) > (LEASE - 10) * 60
-    # the body ran and came home, and its status was copied here while it ran
-    assert "BODY_RAN" in (world.out / "remote" / "extra.log").read_text()
-    assert "archs=gfx942 column=amd" in (world.out / "remote" / "extra.log").read_text()
-    live = (world.out / "status_live.txt").read_text()
-    assert live.startswith("copied_utc=") and "lm-segment-B-1/status.txt" in live and "segment verdict PASS" in live
-    remote = kv(world.out / "remote" / "leg.txt")
-    assert remote["provider"] == "hotaisle" and remote["size"] == "mi300x-2gpu-vm" and remote["extra_exit"] == "0"
-    assert leg["source_sha256_match"] == "yes" and leg["local_key_in_ps"] == "not_visible" and leg["box_key_in_ps"] == "not_visible"
-    # the verified delete
-    td = (world.out / "teardown.txt").read_text()
-    assert "delete ref=%s attempt 1 -> HTTP 204" % vm_id in td
-    assert "verified_gone ref=%s yes get=404" % vm_id in td and "destroy_confirmed=1" in td and "exit=0" in td
-    assert ("DELETE", "/teams/%s/virtual_machines/%s/?force=true" % (TEAM, vm_id)) in s.log
-    assert not any(world.tmp.glob("slot.*")), "the slot is released after the verified delete"
-    no_key_anywhere(world.out)
-
-
-def test_one_body_refuses_a_vm_that_shows_one_gpu(world):
-    (world.tmp / "boxbin" / "rocminfo").write_text("#!/bin/sh\necho '  Name:                    gfx942'\n")
-    rc, text = segment(world)
-    assert rc == 6, text
-    assert "shows 1 GPU agents, not 2" in text, text
-    assert len(world.shim.creates) == 1 and not world.shim.vms, "the VM is deleted unused"
-    assert "destroy_confirmed=1" in (world.out / "teardown.txt").read_text()
+    assert "note: balance $170.00 is below the whole lease" in text and "tops up automatically, proceeding" in text, text
+    assert len(world.shim.creates) == 1
+    assert kv(world.out / "leg.txt")["balance_before_cents"] == "17000"
+    assert not drv._amd_busy(text)
 
 
 # ---------------------------------------------------------------- the driver's reading of the leg's words

@@ -431,7 +431,6 @@ def test_2gpu_vm_when_no_1x_stock_pins_gpu_0(world):
 
 
 @pytest.mark.parametrize("setup, phrase", [
-    (lambda c: setattr(c, "balance", 600), "balance $6.00 is below $6.50, the whole lease ($1.50) plus the $5.00 floor"),
     (lambda c: setattr(c, "balance", 400), "balance $4.00 is below the $5.00 floor"),
     (lambda c: (setattr(c, "q1", 0), setattr(c, "q2", 0)), "no stock: no MI300X VM of spec auto is available"),
 ])

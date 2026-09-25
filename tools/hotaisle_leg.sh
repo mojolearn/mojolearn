@@ -114,7 +114,8 @@
 #      OnDemandPrice (cents/h) from GET .../virtual_machines/available/ times N
 #      minutes, rounded up to a cent, is the lease's price. Above the cap:
 #      "segment lease REFUSED ... above the --dollar-cap", nothing created.
-#      The balance must hold that price plus the 500-cent floor (b.).
+#      The balance is recorded, not enforced beyond the 500-cent floor (b.):
+#      Hot Aisle tops it up automatically (Andrew, 2026-09-25).
 #   3. The Mac dead-man and the on-box watchdog take the long deadline
 #      (create + N minutes); the body's timeout(1) is the deadline minus the
 #      fetch reserve; slots, the stock wait, the verified delete and the
@@ -2066,7 +2067,7 @@ if [ "$MODE" = dry ]; then
   echo "   1. refuse a dirty tree (when source ships), a bad key file, a broken script, an oversized bundle"
   echo "   2. GET teams (operator role, VM limit), take a slot (/tmp/mojolearn-hotaisle-slot.N), balance >= $MIN_BALANCE_CENTS cents"
   echo "   3. wait for Quantity > 0 on the $SPEC spec (up to $STOCK_WAIT_MINUTES min); price the whole $MINUTES-minute lease at its"
-  echo "      live cents/hour$( [ -n "$SEGMENT_LEASE" ] && echo ", refused above the \$$DOLLAR_CAP cap"); the balance must hold it plus the \$5.00 floor"
+  echo "      live cents/hour$( [ -n "$SEGMENT_LEASE" ] && echo ", refused above the \$$DOLLAR_CAP cap"); the balance is recorded (Hot Aisle tops it up automatically)"
   [ "$ONE_BODY" = 1 ] && echo "      (--one-body: after the device probe the host must show exactly 2 GPU agents, else delete unused)"
   echo "   4. ARM THE MAC DEAD-MAN, then under the create lock: snapshot, POST   [THE BILL STARTS HERE]"
   echo "   5. PATCH description mojolearn:$LANE:<utc>, verify it; wait for running; ssh settle as hotaisle; sudo -n"
@@ -2173,9 +2174,12 @@ if [ -n "$SEGMENT_LEASE" ]; then
 fi
 BAL_NEED=$(( LEASE_CENTS + MIN_BALANCE_CENTS ))
 { echo "lease_cents=$LEASE_CENTS"; echo "balance_required_cents=$BAL_NEED"; } >> "$OUT/leg.txt"
+# THE BALANCE IS NOT A LIMIT (Andrew, 2026-09-25): Hot Aisle tops the team
+# balance up automatically. The lease is priced against the cap above; the
+# balance is recorded for the cost record and only the $5.00 floor refuses.
 [ "$BAL_BEFORE" -ge "$BAL_NEED" ] 2>/dev/null \
-  || die "REFUSED: balance $(dollars "$BAL_BEFORE") is below $(dollars "$BAL_NEED"), the whole lease ($_bill_minutes min at $_price cents/h = $(dollars "$LEASE_CENTS")) plus the \$5.00 floor. Nothing was created." 3
-log "spec $SPEC: quantity $_qty, $_price cents/hour, minimum reservation $_minres min; $MINUTES min costs at most $(dollars "$LEASE_CENTS"); balance $(dollars "$BAL_BEFORE") covers it plus the floor"
+  || log "note: balance $(dollars "$BAL_BEFORE") is below the whole lease ($_bill_minutes min at $_price cents/h = $(dollars "$LEASE_CENTS")) plus the floor; Hot Aisle tops up automatically, proceeding"
+log "spec $SPEC: quantity $_qty, $_price cents/hour, minimum reservation $_minres min; $MINUTES min costs at most $(dollars "$LEASE_CENTS"); balance $(dollars "$BAL_BEFORE")"
 
 # ---- c. the Mac dead-man, BEFORE the create ----
 LEG_START=$(date +%s)
