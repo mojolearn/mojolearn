@@ -550,7 +550,8 @@ def render(spec, e, out, ledger, role=None, suffix=""):
     segment with a `partial` ledger entry (and resuming allowed) runs only
     its remaining steps, from its own last landed checkpoint. `suffix` names a
     second rendering of the same segment for another box (Hot Aisle's
-    devices); it resumes exactly as the first and does not log again."""
+    devices); it resumes exactly as the first, and neither logs the resume
+    nor uploads the partial chain again."""
     run = spec["run"]
     arm = e["vendor"] if role is None else role
     mode = "one" if role is None else ("live-coordinator" if role == e["live"] else "live-worker")
@@ -577,7 +578,8 @@ def render(spec, e, out, ledger, role=None, suffix=""):
                 "--from-key", "%s/%s/%s/%s" % (run, e["route"], e["segment"], from_ckpt)]
         if e["route"] == "A":
             key = "%s/%s/%s/partial.chain.jsonl" % (run, e["route"], e["segment"])
-            if not r2_put(key, resume["chain"]):
+            # a second rendering (suffix) follows a first whose upload succeeded
+            if not suffix and not r2_put(key, resume["chain"]):
                 raise SystemExit("%s/%s: the partial chain could not be uploaded to %s; not resuming blind" % (e["route"], e["segment"], key))
             cmd += ["--expect-key", key]
         else:

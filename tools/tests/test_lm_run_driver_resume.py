@@ -355,7 +355,8 @@ class ResumeOnHotaisle(Base):
         self.assertEqual(len(legs), 1)
         self.assertEqual(legs[0][:8], ['bash', 'tools/hotaisle_leg.sh', 'amd', '--rent', '--skip-gates', '--spec', '2gpu', '--one-body'])
         self.assertEqual(legs[0][8:], ['--segment-lease', '2130', '--dollar-cap', '140'])
-        # the resume is logged once, not once per rendering
+        # the partial chain is uploaded once and the resume logged once, not once per rendering
+        self.assertEqual([c[2:4] for c in fake.calls if str(c[1]).endswith('dataset_store.sh')], [['presign-put', key]])
         self.assertEqual((self.out / 'driver.log').read_text().count('RESUMING'), 1)
 
 
