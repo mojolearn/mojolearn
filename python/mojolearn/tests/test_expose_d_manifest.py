@@ -60,7 +60,11 @@ def test_backend_registers_both_places():
     for name, (script, _) in NEW.items():
         assert name in _backend._MODULES, name
         assert _backend._build_script(name) == script, (name, _backend._build_script(name))
-        assert name in _backend._IDENTICAL_ONLY, name + " must be identical only"
+        if name == "_mojolearn_embedding":
+            assert name in _backend._IDENTICAL_ONLY, name + " (neural) must be identical only"
+        else:
+            assert name in _backend._CLASSICAL_FAST, name + " (classical) ships fast"
+            assert not _backend._offers(name, "deterministic"), name
     assert mojolearn._NOT_YET == {}, sorted(mojolearn._NOT_YET)
 
 

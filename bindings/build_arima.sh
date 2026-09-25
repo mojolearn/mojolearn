@@ -135,16 +135,13 @@ COLUMN_DEFINE=""
 # NOT carry a private mode-aware loader; it uses `NumericModeMixin._bind`
 # and cross-checks `arima_numeric_mode()` against the tier the package
 # resolved, so an identical run cannot silently get the FAST binary.
-# ONE TIER (DEVIATION 2490, 2026-09-10): ONLY THE TREE LANES SHIP fast AND
-# deterministic (build_gbdt.sh, build_rf.sh, build_trees.sh). Every other
-# binding, this one included, builds IDENTICAL only. Cross-vendor bitwise
-# identity is the product; a fast tier is shipped only where it has a
-# measured win over the opponent's own CPU, and outside trees it has none
-# (python/mojolearn/_backend.py, `_TIERED`, has the numbers). Refusing
-# here, by name, is what keeps this an unshipped tier rather than an
-# unchecked one (CONTRIBUTING.md (Numeric modes) and section 8).
-[ "${MOJOLEARN_NUMERIC_MODE:-identical}" = identical ] || {
-    echo 'build_arima.sh: only the tree lanes (gbdt, rf, trees) ship fast and deterministic; every other binding builds MOJOLEARN_NUMERIC_MODE=identical only (DEVIATION 2490, 0.8.0).' >&2
+# TWO TIERS (2026-09-25, reversing DEVIATION 2490 for classical ML): this
+# binding builds IDENTICAL (the default, bitwise across vendors) or FAST
+# (per-vendor speed, same quality, no bit promise). The DETERMINISTIC tier
+# stays tree-only (build_gbdt.sh, build_rf.sh, build_trees.sh); refusing it
+# here, by name, keeps it an unshipped tier rather than an unchecked one.
+[ "${MOJOLEARN_NUMERIC_MODE:-identical}" != deterministic ] || {
+    echo 'build_arima.sh: the deterministic tier ships for the tree lanes (gbdt, rf, trees) only; classical bindings build MOJOLEARN_NUMERIC_MODE=identical (default) or fast.' >&2
     exit 2; }
 MODE_DEFINE=""
 OUTDIR="python/mojolearn"
@@ -377,19 +374,19 @@ for t in range(n_obs):
     y[:, t] = acc
 
 m = _arima_impl.ARIMA(order=(1, 0, 0), trend="n").fit(y)
-assert m.params_.shape == (batch, 2), m.params_.shape      # ar, sigma2
-ar = m.params_[:, 0]
+assert np.asarray(m.params_).shape == (batch, 2), np.asarray(m.params_).shape      # ar, sigma2
+ar = np.asarray(m.params_)[:, 0]
 assert np.all(np.abs(ar - 0.6) < 0.35), ar
 assert len(set(np.round(ar, 6))) == batch, ar              # not broadcast
-assert m.llf_.shape == (batch,) and np.all(np.isfinite(m.llf_)), m.llf_
-assert m.aic_.shape == (batch,) and np.all(m.aic_ > -2.0 * m.llf_), m.aic_
-assert m.bic_.shape == (batch,)
+assert np.asarray(m.llf_).shape == (batch,) and np.all(np.isfinite(np.asarray(m.llf_))), np.asarray(m.llf_)
+assert np.asarray(m.aic_).shape == (batch,) and np.all(np.asarray(m.aic_) > -2.0 * np.asarray(m.llf_)), np.asarray(m.aic_)
+assert np.asarray(m.bic_).shape == (batch,)
 
-p = m.predict(0, n_obs)
+p = np.asarray(m.predict(0, n_obs))
 assert p.shape == (batch, n_obs), p.shape
 assert np.isfinite(p).all(), "d == 0, nothing should be NaN"
 
-f = m.forecast(4)
+f = np.asarray(m.forecast(4))
 assert f.shape == (batch, 4), f.shape
 assert np.isfinite(f).all(), f
 # a stationary AR(1) forecast decays toward the mean, so |f| cannot grow
@@ -398,11 +395,11 @@ assert np.all(np.abs(f[:, 3]) <= np.abs(f[:, 0]) + 1e-5), f
 # THE DIFFERENCING PATH. A random walk with drift, d = 1.
 w = np.cumsum(rng.standard_normal((batch, n_obs)) + 0.05, axis=1).astype(np.float32)
 md = _arima_impl.ARIMA(order=(1, 1, 1), trend="c").fit(w)
-assert md.params_.shape == (batch, 4), md.params_.shape    # mu, ar, ma, sigma2
-pd_ = md.predict(0, n_obs)
+assert np.asarray(md.params_).shape == (batch, 4), np.asarray(md.params_).shape    # mu, ar, ma, sigma2
+pd_ = np.asarray(md.predict(0, n_obs))
 assert np.isnan(pd_[:, 0]).all(), "step 0 is undefined when d == 1"
 assert np.isfinite(pd_[:, 1:]).all(), pd_
-fd = md.forecast(3)
+fd = np.asarray(md.forecast(3))
 assert fd.shape == (batch, 3) and np.isfinite(fd).all(), fd
 
 # THE REFUSALS, made to fire. Neither reaches a kernel, and BOTH are raised
@@ -413,12 +410,12 @@ assert fd.shape == (batch, 3) and np.isfinite(fd).all(), fd
 # values, and refused by name on a shape that does not match.
 xg = np.asarray(rng.standard_normal((batch, n_obs, 2)), dtype=np.float32)
 mx = _arima_impl.ARIMA(order=(1, 0, 0), trend="c").fit(y, xg)
-assert mx.beta_.shape == (batch, 2), mx.beta_.shape
-assert mx.params_.shape == (batch, 1 + 2 + 1 + 1), mx.params_.shape
+assert np.asarray(mx.beta_).shape == (batch, 2), np.asarray(mx.beta_).shape
+assert np.asarray(mx.params_).shape == (batch, 1 + 2 + 1 + 1), np.asarray(mx.params_).shape
 fx = np.asarray(rng.standard_normal((batch, 3, 2)), dtype=np.float32)
-fcx = mx.forecast(3, exog=fx)
+fcx = np.asarray(mx.forecast(3, exog=fx))
 assert fcx.shape == (batch, 3) and np.isfinite(fcx).all(), fcx
-px = mx.predict(n_obs, n_obs + 3, exog=fx)
+px = np.asarray(mx.predict(n_obs, n_obs + 3, exog=fx))
 assert np.asarray(px).tobytes() == np.asarray(fcx).tobytes(), "forecast != predict with exog"
 try:
     mx.forecast(3)
