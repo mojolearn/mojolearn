@@ -324,8 +324,11 @@ from gemm.checks.gemm_identical import (
     identical_gemm_workspace_max_floats,
 )
 from gemm.checks.gemm_oracle import OP_NT
+from std.sys.info import has_apple_gpu_accelerator
+from std.sys.compile import is_defined
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
+    NUMERIC_FAST,
     NUMERIC_IDENTICAL,
     ftz,
     identical_div,
@@ -352,6 +355,37 @@ comptime CHOL_PROFILE = "mojolearn.identical.cholesky.fp32.v1"
 #: update, which is legal under the gemm profile and correct, and is a v2
 #: decision rather than a free one.
 comptime CHOL_NB_PINNED = 32
+
+#: FAST on Apple: `potrf_lower` runs the trailing update through the vendor
+#: GEMM (MAX `matmul`, the Apple simdgroup path) instead of the pinned
+#: `identical_gemm_into`, with a wider panel (CHOL_FAST_NB) for callers that ask
+#: `chol_default_nb_hint()`. A wider panel needs LESS workspace
+#: ((n - nb) * nb + (n - nb)^2 = (n - nb) * n), and the vendor GEMM none of
+#: its own, so every caller's pinned-width workspace still covers it.
+#: `-D MOJOLEARN_CHOL_FAST_PINNED` keeps the pinned schedule; `-D
+#: MOJOLEARN_CHOL_FAST_NB64|128|512` are panel-width arms (M4 KernelRidge
+#: n = 20,000: 64 22.5 s, 128 14.6 s, 256 11.6 s, 512 11.7 s).
+comptime CHOL_FAST_APPLE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_CHOL_FAST_PINNED"]()
+)
+
+
+def chol_default_nb_hint() -> Int:
+    """The panel width a production caller asks for: CHOL_FAST_NB under
+    CHOL_FAST_APPLE (the hint is honored under FAST), the pinned width
+    everywhere else."""
+    comptime if CHOL_FAST_APPLE:
+        return CHOL_FAST_NB
+    return CHOL_NB_PINNED
+
+
+comptime CHOL_FAST_NB = 64 if is_defined["MOJOLEARN_CHOL_FAST_NB64"]() else (
+    128 if is_defined["MOJOLEARN_CHOL_FAST_NB128"]() else (
+        512 if is_defined["MOJOLEARN_CHOL_FAST_NB512"]() else 256
+    )
+)
 
 #: SCHEDULING. Threads in the single panel block. Free in both modes.
 comptime CHOL_PANEL_TPB = 128
@@ -997,7 +1031,13 @@ def potrf_lower(
             nb = n
         if nb < 1:
             nb = 1
-    var need = chol_workspace_floats(n, nb)
+    var need: Int
+    comptime if CHOL_FAST_APPLE:
+        need = (n - nb) * n
+        if need < 1:
+            need = 1
+    else:
+        need = chol_workspace_floats(n, nb)
     if len(ws) < need:
         raise Error(
             "potrf_lower: the workspace holds "
@@ -1129,7 +1169,10 @@ def potrf_lower(
                 block_dim=(elem_tpb, 1, 1),
             )
 
-            if sabotage == CHOL_SAB_VENDOR_MATMUL:
+            var vendor = sabotage == CHOL_SAB_VENDOR_MATMUL
+            comptime if CHOL_FAST_APPLE:
+                vendor = True
+            if vendor:
                 # ARM: `linalg.matmul` through `core/gemm.mojo::gemm_nt`. Its
                 # k-split is a per-vendor summation order; DEVIATION 1636.
                 gemm_nt(ctx, g, packed, packed_b, n_trail, n_trail, w)

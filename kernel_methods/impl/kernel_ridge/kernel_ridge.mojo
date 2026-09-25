@@ -149,6 +149,7 @@ from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from cholesky.checks.potrf import (
+    chol_default_nb_hint,
     CHOL_ELEM_TPB,
     CHOL_NB_PINNED,
     CHOL_PANEL_TPB,
@@ -312,7 +313,7 @@ def kernel_ridge_solve(
         ws,
         n,
         trace,
-        CHOL_NB_PINNED,
+        chol_default_nb_hint(),
         panel_tpb,
         elem_tpb,
     )

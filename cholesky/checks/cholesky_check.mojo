@@ -984,6 +984,33 @@ def check_pivot_failure_is_identical() raises:
             + " device info="
             + String(dev.info)
         )
+    # FAST (Apple's `CHOL_FAST_APPLE`: vendor-GEMM trailing updates, wider
+    # panels) promises the pivot, not the bits: `info` above must match, and
+    # the FINISHED columns [0, info - 1) must agree to float32 tolerance. The
+    # cells past the failing column are LAPACK-unspecified schedule state.
+    comptime if not IDENTICAL:
+        var done_cols = dev.info - 1
+        var worst = 0.0
+        for i in range(n):
+            for j in range(min(i + 1, done_cols)):
+                var dv = Float64(dev.l[i * n + j])
+                var ov = Float64(ora.l[i * n + j])
+                var rel = abs(dv - ov) / max(abs(ov), 1e-6)
+                if rel > worst:
+                    worst = rel
+        if worst > 1e-3:
+            raise Error(
+                "check_pivot_failure_is_identical FAILED [FAST]: the finished"
+                " columns of the partial factor differ by relative "
+                + String(worst)
+            )
+        print(
+            "check_pivot_failure_is_identical OK [FAST]: info="
+            + String(dev.info)
+            + " on device and oracle; finished columns agree to relative "
+            + String(worst)
+        )
+        return
     # THE PARTIAL FACTOR, cell by cell. `info != 0` means the upper triangle
     # was NOT zeroed, so this compares every cell of the working matrix as
     # the two runs left it -- which is the strong form of the claim.

@@ -76,7 +76,20 @@ from cholesky.checks.chol_sabotage import (
     sabotage_trsm_lower_kernel,
     sabotage_trsm_upper_kernel,
 )
-from checks.numerics import ftz, identical_div, identical_mul_add
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_div, identical_mul_add
+from std.sys.info import has_apple_gpu_accelerator
+from cholesky.checks.fast_trsm import fast_cho_solve
+
+#: FAST on Apple: `cho_solve` takes the blocked solves of
+#: `cholesky/checks/fast_trsm.mojo` (a threadgroup per diagonal block, a
+#: parallel update of the rows below) instead of one thread per right-hand
+#: side walking all n rows. `-D MOJOLEARN_CHOL_FAST_SERIAL_SOLVE` keeps the
+#: pinned substitution.
+comptime FAST_CHO_SOLVE = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_CHOL_FAST_SERIAL_SOLVE"]()
+)
 
 
 #: SCHEDULING. Threads per block for the solve kernels. Free in both modes,
@@ -400,6 +413,10 @@ def cho_solve(
             raise Error("multi-GPU cho_solve does not execute sabotage probes")
         _cho_solve_columns(ctx, l, b, n, nrhs, trace, tpb, owners)
         return
+    comptime if FAST_CHO_SOLVE:
+        if sabotage == CHOL_SAB_NONE and not trace.enabled:
+            fast_cho_solve(ctx, l, b, n, nrhs)
+            return
     trsm_lower(ctx, l, b, n, nrhs, trace, "chol.solve.forward", tpb, sabotage)
     trsm_upper(ctx, l, b, n, nrhs, trace, "chol.solve.back", tpb, sabotage)
 
