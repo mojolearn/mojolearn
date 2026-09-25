@@ -160,7 +160,21 @@ class ProgressUploads(unittest.TestCase):
         seg.save_checkpoint = save
         self.addCleanup(setattr, seg, 'save_checkpoint', self.saved_save)
 
-    def run_with(self, name, keys):
+        def save_snapshot(meta, arrays, step, directory, *, manifest, upload):  # the overlapped loop's writer
+            name = seg.checkpoint_name(step)
+            path = Path(directory) / name
+            path.write_bytes(arrays['parameters'].tobytes())
+            digest = seg._sha_file(path)
+            manifest.pin(name, path.stat().st_size, digest)
+            upload(name, path)
+            return dict(step=step, file=name, bytes=path.stat().st_size, sha256=digest, save_seconds=0.0)
+        self.saved_snapshot = seg.save_snapshot_checkpoint
+        seg.save_snapshot_checkpoint = save_snapshot
+        self.addCleanup(setattr, seg, 'save_snapshot_checkpoint', self.saved_snapshot)
+
+    LOOPS = (('overlapped', []), ('sync', ['--sync-hash']))
+
+    def run_with(self, name, keys, extra=()):
         """Steps 4..10 from checkpoint 3 (checkpoint_every 5: checkpoints 5 and 10)."""
         urls = self.dir / (name + '.urls.json')
         urls.write_text(json.dumps({k: 'https://put/' + k for k in keys}))
@@ -173,7 +187,7 @@ class ProgressUploads(unittest.TestCase):
         out = self.dir / name
         with mock.patch.object(seg.subprocess, 'run', side_effect=run):
             rc = seg.main(['run', '--recipe', str(self.h.recipe), '--tokens', str(self.dir), '--from', str(self.dir / 'c.blm'),
-                           '--steps', '7', '--out', str(out), '--upload-urls', str(urls)])
+                           '--steps', '7', '--out', str(out), '--upload-urls', str(urls), *extra])
         self.assertEqual(rc, 0)
         return puts, out
 
@@ -182,7 +196,12 @@ class ProgressUploads(unittest.TestCase):
         return seg.expected_keys(recipe, 3, 7, None)
 
     def test_the_chain_to_the_step_after_each_checkpoint_goes_up(self):
-        puts, out = self.run_with('p', self.keys() + list(seg.PROGRESS_KEYS))
+        for loop, extra in self.LOOPS:
+            with self.subTest(loop=loop):
+                self._chain_goes_up('p-' + loop, extra)
+
+    def _chain_goes_up(self, name, extra):
+        puts, out = self.run_with(name, self.keys() + list(seg.PROGRESS_KEYS), extra)
         names = [n for n, _ in puts]
         self.assertEqual(names, ['ckpt_00000005.blm', 'manifest.progress.tsv', 'chain.progress.jsonl',
                                  'ckpt_00000010.blm', 'chain.jsonl', 'segment.json', 'manifest.tsv'])
@@ -194,8 +213,13 @@ class ProgressUploads(unittest.TestCase):
         self.assertEqual(dict(puts)['manifest.progress.tsv'].decode().split('\t')[0], 'ckpt_00000005.blm')
 
     def test_bits_and_chain_do_not_change(self):
-        with_progress, a = self.run_with('a', self.keys() + list(seg.PROGRESS_KEYS))
-        without, b = self.run_with('b', self.keys())
+        for loop, extra in self.LOOPS:
+            with self.subTest(loop=loop):
+                self._bits_do_not_change(loop, extra)
+
+    def _bits_do_not_change(self, loop, extra):
+        with_progress, a = self.run_with('a-' + loop, self.keys() + list(seg.PROGRESS_KEYS), extra)
+        without, b = self.run_with('b-' + loop, self.keys(), extra)
         def untimed(path):   # every field but the wall-clock ones (and `prev`, which hashes them)
             return [{k: v for k, v in json.loads(l).items() if k not in ('seconds', 'hash_seconds', 'prev')}
                     for l in path.read_text().splitlines()]
@@ -209,6 +233,11 @@ class ProgressUploads(unittest.TestCase):
                                                    'segment.json', 'manifest.tsv'])
 
     def test_a_failed_progress_put_never_stops_the_segment(self):
+        for loop, extra in self.LOOPS:
+            with self.subTest(loop=loop):
+                self._failed_put(loop, extra)
+
+    def _failed_put(self, loop, extra):
         urls = self.dir / 'f.urls.json'
         urls.write_text(json.dumps({k: 'https://put/' + k for k in self.keys() + list(seg.PROGRESS_KEYS)}))
 
@@ -217,9 +246,9 @@ class ProgressUploads(unittest.TestCase):
             return mock.Mock(returncode=22 if bad else 0, stdout='', stderr='403' if bad else '')
         with mock.patch.object(seg.subprocess, 'run', side_effect=run):
             rc = seg.main(['run', '--recipe', str(self.h.recipe), '--tokens', str(self.dir), '--from', str(self.dir / 'c.blm'),
-                           '--steps', '7', '--out', str(self.dir / 'f'), '--upload-urls', str(urls)])
+                           '--steps', '7', '--out', str(self.dir / ('f-' + loop)), '--upload-urls', str(urls), *extra])
         self.assertEqual(rc, 0)
-        self.assertIn('the segment trains on', (self.dir / 'f' / 'log.txt').read_text())
+        self.assertIn('the segment trains on', (self.dir / ('f-' + loop) / 'log.txt').read_text())
 
 
 class RenderedUrls(unittest.TestCase):

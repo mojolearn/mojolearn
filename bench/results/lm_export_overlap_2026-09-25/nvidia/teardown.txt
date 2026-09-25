@@ -1,0 +1,6 @@
+pod=onxornly141vbg
+armed=1
+terminated=1
+deadman_pid=51762
+exit=0
+at=2026-09-25T17:40:36Z

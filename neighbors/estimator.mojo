@@ -585,6 +585,66 @@ def knn_search_resident(
     )
 
 
+def knn_self_search_device_indices(
+    ctx: DeviceContext,
+    data_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n: Int,
+    n_features: Int,
+    k: Int,
+) raises -> DeviceBuffer[DType.uint32]:
+    """The `n x k` neighbor indices of `data` searched against itself
+    (L2SqrtExpanded), LEFT ON THE DEVICE and in the selector's own order
+    within a row: no readback and no host sort. For callers that use the
+    neighbor SET only (the FAST spectral graph). The refusals, the plan and
+    the search are `knn_search`'s, so the set is the one it returns."""
+    var plan = _knn_search_plan(
+        data_ptr, n, data_ptr, n, n_features, k, True, DEFAULT_QUERY_TILE,
+        KNN_METHOD_AUTO, METRIC_FROM_IS_SQRT, Float32(2.0),
+    )
+    var mtr = plan[0]
+    var devices = plan[1]
+    var query_tile = plan[2]
+    var buf_len = plan[3]
+    var index = ctx.enqueue_create_buffer[DType.float32](n * n_features)
+    var queries = ctx.enqueue_create_buffer[DType.float32](n * n_features)
+    var index_norm = ctx.enqueue_create_buffer[DType.float32](n)
+    var query_norm = ctx.enqueue_create_buffer[DType.float32](n)
+    var dist_tile = ctx.enqueue_create_buffer[DType.float32](
+        tiled_distance_tile_cells(query_tile, n, n_features, k, mtr)
+    )
+    var buf_val = ctx.enqueue_create_buffer[DType.float32](query_tile * 2 * buf_len)
+    var buf_idx = ctx.enqueue_create_buffer[DType.uint32](query_tile * 2 * buf_len)
+    var out_dist = ctx.enqueue_create_buffer[DType.float32](n * k)
+    var out_idx = ctx.enqueue_create_buffer[DType.uint32](n * k)
+    var out_i32 = ctx.enqueue_create_buffer[DType.int32](n * k)
+    ctx.enqueue_copy(dst_buf=index, src_ptr=data_ptr)
+    ctx.enqueue_copy(dst_buf=queries, src_ptr=data_ptr)
+    compute_norms_for_metric(ctx, index, index_norm, n, n_features, mtr)
+    compute_norms_for_metric(ctx, queries, query_norm, n, n_features, mtr)
+    if devices > 1:
+        _ = parallel_knn_rows(ctx, queries, query_norm, index, index_norm,
+            out_dist, out_idx, n, n, n_features, k, query_tile, buf_len,
+            True, KNN_METHOD_AUTO, mtr, Float32(2.0), devices)
+    else:
+        brute_force_knn_impl(
+            ctx, queries, query_norm, index, index_norm, dist_tile, buf_val,
+            buf_idx, out_dist, out_idx, out_i32, n, n, n_features, k,
+            query_tile, buf_len, True, False, True, True, KNN_METHOD_AUTO,
+            mtr, Float32(2.0), KnnIndexCachePointer(None),
+        )
+    ctx.synchronize()
+    _ = index^
+    _ = queries^
+    _ = index_norm^
+    _ = query_norm^
+    _ = dist_tile^
+    _ = buf_val^
+    _ = buf_idx^
+    _ = out_dist^
+    _ = out_i32^
+    return out_idx^
+
+
 def _knn_search_on_device_index(
     ctx: DeviceContext,
     mut trace: IdentityTrace,

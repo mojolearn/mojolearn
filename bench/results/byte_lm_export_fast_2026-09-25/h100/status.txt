@@ -1,0 +1,17 @@
+15:52:54 started=2026-09-25T15:52:54Z
+15:52:55 reverse patch exit=0
+15:54:13 build base exit=0 secs=78
+15:54:36 tokens ready in 101 s: 12442225788 bytes
+15:55:00 inputs ready: 80cd2126a89ba6d8
+15:55:56 bind old exit=0 secs=181
+15:55:56 binding now old
+15:57:54 measure old exit=0 secs=118: {'step_median_s': 42.6841, 'state_fresh_median_s': 5.8898, 'grad_fresh_median_s': 1.4257, 'alloc_median_s': 1.1346, 'state_direct_median_s': 4.1708, 'grad_direct_median_s': 0.9003} agree True expected True
+16:00:18 replay-old (old) exit=0 secs=144: [15:59:03] step 101 lr 397e2cc1 loss 6.9004 state abc8b816b5c3fb15 grad 25830bfc2016dc14 39.37 s (+7.15 s hashing)|[15:59:03] step 101 agrees with the expected chain|[15:59:40] step 102 lr 39805880 loss 6.8585 state a9421f91b947f82c grad 94c40a6e3d5ec5aa 30.66 s (+5.93 s hashing)|[15:59:40] step 102 agrees with the expected chain|[16:00:18] step 103 lr 39819a9f loss 6.8373 state fcdb48b8ab51f2ef grad 19a43804ef4065de 30.68 s (+7.16 s hashing)|[16:00:18] step 103 agrees with the expected chain|[16:00:18] PASS: /root/gemm_leg_out/export-fast/replay-old|
+16:00:18 forward patch exit=0; tree back to the commit: yes
+16:03:11 bind new exit=0 secs=173
+16:03:11 binding now new
+16:04:41 measure new exit=0 secs=90: {'step_median_s': 39.6315, 'state_fresh_median_s': 1.2605, 'grad_fresh_median_s': 0.4082, 'alloc_median_s': 1.1097, 'state_direct_median_s': 0.1521, 'grad_direct_median_s': 0.0515, 'state_into_median_s': 0.1443, 'grad_into_median_s': 0.0519} agree True expected True
+16:06:49 replay-new (new) exit=0 secs=128: [16:05:45] step 101 lr 397e2cc1 loss 6.9004 state abc8b816b5c3fb15 grad 25830bfc2016dc14 39.87 s (+1.82 s hashing)|[16:05:45] step 101 agrees with the expected chain|[16:06:16] step 102 lr 39805880 loss 6.8585 state a9421f91b947f82c grad 94c40a6e3d5ec5aa 30.65 s (+0.58 s hashing)|[16:06:16] step 102 agrees with the expected chain|[16:06:48] step 103 lr 39819a9f loss 6.8373 state fcdb48b8ab51f2ef grad 19a43804ef4065de 30.65 s (+0.95 s hashing)|[16:06:48] step 103 agrees with the expected chain|[16:06:48] PASS: /root/gemm_leg_out/export-fast/replay-new|
+16:07:58 split-new (new) exit=0 secs=69: [16:07:58] step 101 lr 397e2cc1 loss 6.9004 state abc8b816b5c3fb15 grad 25830bfc2016dc14 44.92 s (+1.65 s hashing)|[16:07:58] step 101 agrees with the expected chain|[16:07:58] PASS: /root/gemm_leg_out/export-fast/split-new|
+16:07:58 scripted part done; holding for /root/xf_done (at most 10 minutes)
+16:08:08 done

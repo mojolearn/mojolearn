@@ -1,0 +1,9 @@
+Linux bf334563df0f 6.8.0-106-generic #106-Ubuntu SMP PREEMPT_DYNAMIC Fri Mar  6 07:58:08 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+224
+model name	: Intel(R) Xeon(R) Platinum 8480+
+sha_ni=224
+               total        used        free      shared  buff/cache   available
+Mem:            2015          53         292          22        1668        1921
+Swap:              0           0           0
+Filesystem      Size  Used Avail Use% Mounted on
+overlay          60G  3.2G   57G   6% /

@@ -80,11 +80,12 @@ def _stream(tmp, n_tokens=4000, train_hi=3000, vocab=64):
 
 
 class Schedule(unittest.TestCase):
-    @unittest.skipIf(_package() is None, 'mojolearn does not import here (no bindings built)')
     def test_rows_are_token_batches_rows(self):
         """row_starts is TokenBatches.ids: row b of index i starts at
         lo + (i*B*L + b*L) % (hi - lo - L - 1)."""
-        lm_corpus = _package()
+        lm_corpus = _package()  # asked when the test runs, not at collection
+        if lm_corpus is None:
+            self.skipTest('mojolearn does not import here (no bindings built)')
         with tempfile.TemporaryDirectory() as d:
             tmp = Path(d)
             ids, manifest, _ = _stream(tmp)

@@ -196,14 +196,33 @@ def compute_graph_laplacian(
     var cols = upload_i32(ctx, sorted_g.cols)
     var vals = upload_f32(ctx, sorted_g.vals)
     var indptr = upload_i32(ctx, indptr_h)
-    var degrees = ctx.enqueue_create_buffer[DType.float32](g.n)
+    return laplacian_from_sorted_device(
+        ctx, g.n, nnz, rows^, cols^, vals^, indptr^, tpb
+    )
+
+
+def laplacian_from_sorted_device(
+    ctx: DeviceContext,
+    n: Int,
+    nnz: Int,
+    var rows: DeviceBuffer[DType.int32],
+    var cols: DeviceBuffer[DType.int32],
+    var vals: DeviceBuffer[DType.float32],
+    var indptr: DeviceBuffer[DType.int32],
+    tpb: Int = LAPLACIAN_TPB,
+) raises -> DeviceCoo:
+    """`compute_graph_laplacian`'s device half (the degree fold and `D -
+    A`) over a row-sorted COO that already holds one diagonal entry per
+    row, as `_mark_and_insert_diagonal` leaves it."""
+    var g_n = n
+    var degrees = ctx.enqueue_create_buffer[DType.float32](g_n)
     ctx.enqueue_memset(degrees, Float32(0.0))
     ctx.enqueue_function[degree_kernel](
         indptr.unsafe_ptr(),
         vals.unsafe_ptr(),
         degrees.unsafe_ptr(),
-        Int32(g.n),
-        grid_dim=((g.n + tpb - 1) // tpb, 1, 1),
+        Int32(g_n),
+        grid_dim=((g_n + tpb - 1) // tpb, 1, 1),
         block_dim=(tpb, 1, 1),
     )
     ctx.enqueue_function[d_minus_a_kernel](
@@ -217,7 +236,7 @@ def compute_graph_laplacian(
     )
     ctx.synchronize()
     _ = degrees^
-    return DeviceCoo(g.n, nnz, rows^, cols^, vals^, indptr^)
+    return DeviceCoo(g_n, nnz, rows^, cols^, vals^, indptr^)
 
 
 def laplacian_normalized(
@@ -231,6 +250,16 @@ def laplacian_normalized(
     replaced by ones (the vector `compute_eigenpairs` divides the
     eigenvectors by). `diagonal_out` must hold `n` floats."""
     var lap = compute_graph_laplacian(ctx, g, tpb)
+    return laplacian_normalize_device(ctx, lap^, diagonal_out, tpb)
+
+
+def laplacian_normalize_device(
+    ctx: DeviceContext,
+    var lap: DeviceCoo,
+    mut diagonal_out: DeviceBuffer[DType.float32],
+    tpb: Int = LAPLACIAN_TPB,
+) raises -> DeviceCoo:
+    """`laplacian_normalized`'s scaling of a device Laplacian `D - A`."""
     var n = lap.n
     var nnz = lap.nnz
     ctx.enqueue_memset(diagonal_out, Float32(0.0))

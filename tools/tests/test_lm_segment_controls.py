@@ -81,6 +81,11 @@ class FakePar:
     def __exit__(self, *exc):
         return False
 
+    @property
+    def _state(self):
+        """The checkpoint metadata the overlapped loop hands its writer."""
+        return dict(completed_steps=self.step_)
+
     def set_lr(self, lr):
         self.lr = np.float32(lr)
         return float(self.lr)

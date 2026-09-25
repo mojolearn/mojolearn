@@ -1,0 +1,36 @@
+{
+ "run": "scratch/progress-proof-nvidia-2026-09-25",
+ "recipe": "/Users/andrewhendel/mojolearn-evidence/gpt3-run/t3_recipe.json",
+ "recipe_key": null,
+ "tokens_stage": "corpus/fineweb-edu-10BT/tokens/mojolearn-bpe-fineweb-edu-50257-v1",
+ "wheel": "0.8.18",
+ "lease_minutes": 1440,
+ "dollar_cap": 120,
+ "amd_providers": [
+  "hotaisle",
+  "do"
+ ],
+ "amd_size": "gpu-mi325x1-256gb",
+ "amd_region": "nyc2",
+ "amd_devices": "0",
+ "amd_wait_minutes": 720,
+ "nvidia_gpus": "NVIDIA H100 80GB HBM3|NVIDIA H200|NVIDIA H100 NVL|NVIDIA H100 PCIe",
+ "nvidia_devices": "0,1",
+ "url_seconds": 172800,
+ "routes": {
+  "A": [
+   {
+    "segment": "1",
+    "vendor": "nvidia",
+    "steps": 100
+   },
+   {
+    "segment": "5",
+    "vendor": "nvidia",
+    "steps": 9
+   }
+  ]
+ },
+ "hotaisle_devices": "0,1",
+ "hotaisle_extra_minutes": 30
+}

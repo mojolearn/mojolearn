@@ -74,6 +74,12 @@ class ArrayBytes(unittest.TestCase):
     the path Python 3.10 and 3.11 take (no buffer protocol on a pure-Python
     class), and the same bytes on every version."""
 
+    def setUp(self):
+        try:
+            import mojolearn._array  # noqa: F401
+        except ImportError:
+            self.skipTest('mojolearn does not import here (no bindings built)')
+
     def test_array_hashes_as_its_bytes(self):
         from mojolearn._array import Array
         a = Array.from_list([1.5, -2.0, 0.0, 3.25], dtype='<f4')
