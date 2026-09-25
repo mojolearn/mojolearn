@@ -3013,7 +3013,9 @@ comptime PHASE_PARTITION = 6
 comptime PHASE_HOST_QUEUE = 7
 comptime PHASE_LEAF = 8
 comptime PHASE_HOST_PUSH = 9
-comptime N_PHASES = 10
+comptime PHASE_SEED = 10
+comptime PHASE_SAMPLER = 11
+comptime N_PHASES = 12
 
 
 struct PhaseClock(Movable):
@@ -3084,6 +3086,10 @@ struct PhaseClock(Movable):
             return "host: queue push (children of the batch)"
         if phase == PHASE_LEAF:
             return "leaf pass"
+        if phase == PHASE_SEED:
+            return "stage_batch + fused seeders (of stage)"
+        if phase == PHASE_SAMPLER:
+            return "feature sampler (of stage)"
         return "?"
 
 
@@ -3672,6 +3678,7 @@ def search_batch(
             block_dim=PHASE_SETUP_TPB,
         )
 
+    clock.tick(ctx, PHASE_SEED)
     # --- 3. the range pass -------------------------------------------
     # --- feature sampling, WHERE cuML DOES IT (deviation 201), unless the
     # caller already chose the columns. DEVIATION 205's rescue does: its
@@ -3711,7 +3718,7 @@ def search_batch(
             Int(k),
         )
 
-    clock.tick(ctx, PHASE_STAGE)
+    clock.tick(ctx, PHASE_SAMPLER)
     # DEVIATION 470: the range cells were seeded by fused half A above.
     ctx.enqueue_function[node_feature_range_kernel[TPB]](
         d_minkey.unsafe_ptr(),

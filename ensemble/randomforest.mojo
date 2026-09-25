@@ -39,7 +39,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.builder import (
     row_ids_tiled_sequence_kernel,
 )
 from core.device_liveness import assert_device_alive
-from core.launch_log import log_launch
+from core.launch_log import log_launch, log_launch_ctx
 from ensemble.instruments import FitInstruments
 from core.philox import (
     RNG_BLOCK_THREADS,
@@ -1404,7 +1404,7 @@ def compute_oob_score[
 
     # The masks, back on the host. `:717` indexes them per tree.
     var hm = ctx.enqueue_create_host_buffer[DType.uint8](n_trees * n_rows)
-    log_launch("xfer_oob_masks")
+    log_launch_ctx(ctx, "xfer_oob_masks")
     ctx.enqueue_copy(dst_buf=hm, src_buf=sampler.bootstrap_masks)
 
     # X, row-major, because `predict_one` walks a row (`:366` does the
@@ -1415,11 +1415,11 @@ def compute_oob_score[
         n_rows * n_cols if host_x_addr == 0 else 0
     )
     if host_x_addr == 0:
-        log_launch("xfer_oob_x")
+        log_launch_ctx(ctx, "xfer_oob_x")
         ctx.enqueue_copy(dst_buf=hx, src_buf=x)
 
     var hy = ctx.enqueue_create_host_buffer[O.LabelT](n_rows)
-    log_launch("xfer_oob_y")
+    log_launch_ctx(ctx, "xfer_oob_y")
     ctx.enqueue_copy(dst_buf=hy, src_buf=y)
     ctx.synchronize()
 
@@ -1757,7 +1757,7 @@ def sort_selected_rows[
         # the answer.
         var src = rows_u32 if bit % 2 == 0 else keys_u32
         var dst = keys_u32 if bit % 2 == 0 else rows_u32
-        log_launch("rows_sort_scan_bit")
+        log_launch_ctx(ctx, "rows_sort_scan_bit")
         ctx.enqueue_function[seg_scan_key_bit_kernel](
             src,
             Int32(bit),
@@ -1768,7 +1768,7 @@ def sort_selected_rows[
             grid_dim=(blocks_wide, 1, 1),
             block_dim=(SORT_BLOCK, 1, 1),
         )
-        log_launch("rows_sort_block_sums")
+        log_launch_ctx(ctx, "rows_sort_block_sums")
         ctx.enqueue_function[seg_scan_block_sums_kernel](
             block_sums_p,
             Int32(n),
@@ -1776,7 +1776,7 @@ def sort_selected_rows[
             grid_dim=(1, 1, 1),
             block_dim=(1, 1, 1),
         )
-        log_launch("rows_sort_carry")
+        log_launch_ctx(ctx, "rows_sort_carry")
         ctx.enqueue_function[seg_add_block_carry_kernel](
             offsets_p,
             block_sums_p,
@@ -1785,7 +1785,7 @@ def sort_selected_rows[
             grid_dim=(blocks_wide, 1, 1),
             block_dim=(SORT_BLOCK, 1, 1),
         )
-        log_launch("rows_sort_reorder")
+        log_launch_ctx(ctx, "rows_sort_reorder")
         ctx.enqueue_function[seg_reorder_one_bit_kernel](
             src,
             offsets_p,
@@ -1859,7 +1859,7 @@ def launch_bootstrap_rows_labels[
     var need_blocks = _ceildiv(n, RNG_BLOCK_THREADS)
     var n_blocks = min(full_blocks, need_blocks)
     comptime k = bootstrap_rows_labels_kernel[label_dtype, sabotage]
-    log_launch("philox_uniform_int_gather")
+    log_launch_ctx(ctx, "philox_uniform_int_gather")
     ctx.enqueue_function[k](
         rows.unsafe_ptr(),
         labels.unsafe_origin_cast[MutAnyOrigin](),
@@ -2157,7 +2157,7 @@ struct RowSampler(Movable):
             return
         # `:178` -- `checked_mul<std::size_t>(tree_id, n_rows_)`
         var offset = Int64(Int(tree_id)) * Int64(self.n_rows)
-        log_launch("bootstrap_mask_fill")
+        log_launch_ctx(ctx, "bootstrap_mask_fill")
         ctx.enqueue_function[bootstrap_mask_fill_kernel](
             self.bootstrap_masks.unsafe_ptr(),
             offset,
@@ -2166,7 +2166,7 @@ struct RowSampler(Movable):
             block_dim=256,
         )
         if self.n_selected > 0:
-            log_launch("bootstrap_mask_scatter")
+            log_launch_ctx(ctx, "bootstrap_mask_scatter")
             ctx.enqueue_function[bootstrap_mask_scatter_kernel](
                 self.bootstrap_masks.unsafe_ptr(),
                 offset,
@@ -2230,7 +2230,7 @@ struct RowSampler(Movable):
                         hi = mid
                 p.unsafe_store(i, Int32(lo))
             self.n_selected = self.n_sampled_rows
-            log_launch("xfer_sampled_rows")
+            log_launch_ctx(ctx, "xfer_sampled_rows")
             ctx.enqueue_copy(
                 dst_buf=self.selected_rows_[slot],
                 src_ptr=self.h_rows.unsafe_ptr(),
@@ -2280,7 +2280,7 @@ struct RowSampler(Movable):
                     "sample_weight values must contain at least one"
                     " positive value (randomforest.cuh:94)"
                 )
-            log_launch("xfer_sampled_rows")
+            log_launch_ctx(ctx, "xfer_sampled_rows")
             ctx.enqueue_copy(
                 dst_buf=self.selected_rows_[slot],
                 src_ptr=self.h_rows.unsafe_ptr(),
@@ -2291,7 +2291,7 @@ struct RowSampler(Movable):
         # fill. Consumers use this queue, so no host staging or wait is needed.
         # Weighted arms above retain their original sampling and synchronization.
         self.n_selected = self.n_sampled_rows
-        log_launch("sampled_rows_sequence")
+        log_launch_ctx(ctx, "sampled_rows_sequence")
         ctx.enqueue_function[row_ids_tiled_sequence_kernel](
             self.selected_rows_[slot].unsafe_ptr(),
             Int32(self.n_sampled_rows),
@@ -2551,7 +2551,7 @@ def fit_forest[
     # BEFORE the quantile pass, which is the first kernel that reads it.
     # See `ftz_features_kernel`. FAST never enqueues this.
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        log_launch("ftz_features")
+        log_launch_ctx(ctx, "ftz_features")
         ctx.enqueue_function[ftz_features_kernel](
             x.unsafe_ptr(),
             Int64(n_rows * n_cols),
