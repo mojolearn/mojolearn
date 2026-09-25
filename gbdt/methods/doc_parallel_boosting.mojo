@@ -191,7 +191,8 @@ from gbdt.gpu_data.kernel.query_helper import launch_inverse_permutation
 comptime FAST_DEPTHWISE_DEVICE_PARTITION = not is_defined[
     "MOJOLEARN_GBDT_FAST_DEPTHWISE_HOST_PARTITION"
 ]()
-"""Use the existing stable device leaf partition for FAST Depthwise fits.
+"""Use the existing stable device leaf partition for FAST Depthwise and
+Lossguide fits.
 
 The define restores the former host materialization for performance A/Bs;
 it is not a second production policy.
@@ -2049,13 +2050,15 @@ def fit_with_test(
     # DEVIATION 2551: the non-symmetric estimator's device partition, the
     # FIT's pool of one (empty and never touched on the default side)
     var leaf_parts = List[DeviceLeafPartitioner]()
-    # FAST depthwise fits otherwise download and counting-sort every row,
-    # then upload the same stable row order once per tree/permutation. The
-    # existing device partitioner produces identical integer partitions and
-    # is already the IDENTICAL default. Keep Lossguide and symmetric routing
-    # unchanged while eliminating that 1M-row host materialization here.
+    # FAST Depthwise and Lossguide fits otherwise download and counting-sort
+    # every row, then upload the same stable row order once per
+    # tree/permutation. The existing device partitioner produces identical
+    # integer partitions and is already the IDENTICAL default. Symmetric
+    # routing is unchanged (its learn permutation keeps the searcher's own
+    # partition).
     var device_leaf_partition = DEVICE_LEAF_PARTITION or (
-        HIST_BUILD_MODE == NUMERIC_FAST and grow_policy == GROW_DEPTHWISE
+        HIST_BUILD_MODE == NUMERIC_FAST
+        and (grow_policy == GROW_DEPTHWISE or grow_policy == GROW_LOSSGUIDE)
         and FAST_DEPTHWISE_DEVICE_PARTITION
     )
 
