@@ -3009,6 +3009,21 @@ comptime FOREST_SAB_SHARED_ROW_BASE = Int32(2)
 0, so their partitions overwrite each other. The forest must move -- this is
 the gate watching that the slot offsets are what isolate the trees."""
 
+comptime PART_ROWS_PER_THREAD = (
+    SEARCH_ROWS_PER_THREAD
+    if GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and is_defined["MOJOLEARN_ET_PART_ROWS"]()
+    else 1
+)
+"""FAST: the partition's four kernels fold the search's rows per thread
+too, on the SAME `TPB * R` workload tile the search staged, so a plain cycle
+no longer restages `d_wl` and drains before partitioning, and each block
+pays its scans once per `TPB * R` rows instead of per `TPB`. Row order
+within a side stays stable by block and by thread; nothing downstream
+reads it (DEVIATION 203). OPT-IN (`-D MOJOLEARN_ET_PART_ROWS=1`), NOT
+FLIPPED: Apple M4 1M rows, same hashes, taxi 0.979, Istella-S 1.010, taxireg
+1.024 -- a wash."""
+
 comptime ET_STAGE_LIVE_PREFIX = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and not is_defined["MOJOLEARN_ET_STAGE_FULL_CAPACITY"]()
@@ -3348,7 +3363,9 @@ def stage_batch(
         # so this repeats the running sum it performs -- deviation 203's
         # scan pass needs that base and the device cannot derive it.
         ws.h_blk_base.unsafe_ptr().unsafe_store(i, Int32(base_acc))
-        var nb_i = ceildiv(Int(work_items[i].instances.count), TPB)
+        var nb_i = ceildiv(
+            Int(work_items[i].instances.count), TPB * PART_ROWS_PER_THREAD
+        )
         if nb_i < 1:
             nb_i = 1
         base_acc += nb_i
@@ -4576,7 +4593,9 @@ def train_forest_classification_device_timed(
                     part_splits.append(splits[i])
             var n_part = len(part_items)
 
-            var plan = build_workload_info(part_items, TPB)
+            var plan = build_workload_info(
+                part_items, TPB * PART_ROWS_PER_THREAD
+            )
             if bestfirst:
                 # DEVIATION 469's synchronization price: the search batch
                 # and the partition batch are DIFFERENT SETS here, so
@@ -4585,7 +4604,10 @@ def train_forest_classification_device_timed(
                 # 205's rescue fires.
                 stage_batch(ctx, ws, part_items, part_trees, plan, Int(k))
                 ctx.synchronize()
-            elif len(retry) > 0 or SEARCH_ROWS_PER_THREAD > 1:
+            elif (
+                len(retry) > 0
+                or SEARCH_ROWS_PER_THREAD != PART_ROWS_PER_THREAD
+            ):
                 # The sub-batches left THEIR work items on the device. The
                 # partition below reads `d_items` and `d_wl`, so put this
                 # batch's back.
@@ -4615,7 +4637,9 @@ def train_forest_classification_device_timed(
             ctx.enqueue_copy(
                 dst_buf=ws.d_splits, src_ptr=ws.h_splits.unsafe_ptr()
             )
-            ctx.enqueue_function[partition_count_kernel[TPB]](
+            ctx.enqueue_function[
+                partition_count_kernel[TPB, PART_ROWS_PER_THREAD]
+            ](
                 ws.d_blk_left.unsafe_ptr(),
                 d_row_ids.unsafe_ptr(),
                 dataset.d_data.unsafe_ptr(),
@@ -4629,7 +4653,9 @@ def train_forest_classification_device_timed(
                 grid_dim=(plan.n_blocks_dimx, 1, 1),
                 block_dim=(TPB, 1, 1),
             )
-            ctx.enqueue_function[partition_scan_kernel[TPB]](
+            ctx.enqueue_function[
+                partition_scan_kernel[TPB, PART_ROWS_PER_THREAD]
+            ](
                 ws.d_blk_off.unsafe_ptr(),
                 ws.d_blk_left.unsafe_ptr(),
                 ws.d_blk_base.unsafe_ptr(),
@@ -4641,7 +4667,9 @@ def train_forest_classification_device_timed(
                 grid_dim=(n_part, 1, 1),
                 block_dim=(TPB, 1, 1),
             )
-            ctx.enqueue_function[partition_scatter_kernel[TPB]](
+            ctx.enqueue_function[
+                partition_scatter_kernel[TPB, PART_ROWS_PER_THREAD]
+            ](
                 ws.d_row_alt.unsafe_ptr(),
                 d_row_ids.unsafe_ptr(),
                 ws.d_blk_off.unsafe_ptr(),
@@ -4656,7 +4684,9 @@ def train_forest_classification_device_timed(
                 grid_dim=(plan.n_blocks_dimx, 1, 1),
                 block_dim=(TPB, 1, 1),
             )
-            ctx.enqueue_function[partition_writeback_kernel[TPB]](
+            ctx.enqueue_function[
+                partition_writeback_kernel[TPB, PART_ROWS_PER_THREAD]
+            ](
                 d_row_ids.unsafe_ptr(),
                 ws.d_row_alt.unsafe_ptr(),
                 ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
@@ -5780,7 +5810,9 @@ def train_forest_regression_device_timed(
                     part_splits.append(splits[i])
             var n_part = len(part_items)
 
-            var plan = build_workload_info(part_items, TPB)
+            var plan = build_workload_info(
+                part_items, TPB * PART_ROWS_PER_THREAD
+            )
             if bestfirst:
                 # DEVIATION 469's synchronization price: the search batch
                 # and the partition batch are DIFFERENT SETS here, so
@@ -5789,7 +5821,10 @@ def train_forest_regression_device_timed(
                 # 205's rescue fires.
                 stage_batch(ctx, ws, part_items, part_trees, plan, Int(k))
                 ctx.synchronize()
-            elif len(retry) > 0 or SEARCH_ROWS_PER_THREAD > 1:
+            elif (
+                len(retry) > 0
+                or SEARCH_ROWS_PER_THREAD != PART_ROWS_PER_THREAD
+            ):
                 # DEVIATION 2020 (restage leg) -- see the classification
                 # twin for the full block: the plain cycle's restage skip
                 # was sound only while the partition's TPB plan was
@@ -5812,7 +5847,9 @@ def train_forest_regression_device_timed(
             ctx.enqueue_copy(
                 dst_buf=ws.d_splits, src_ptr=ws.h_splits.unsafe_ptr()
             )
-            ctx.enqueue_function[partition_count_kernel[TPB]](
+            ctx.enqueue_function[
+                partition_count_kernel[TPB, PART_ROWS_PER_THREAD]
+            ](
                 ws.d_blk_left.unsafe_ptr(),
                 d_row_ids.unsafe_ptr(),
                 dataset.d_data.unsafe_ptr(),
@@ -5826,7 +5863,9 @@ def train_forest_regression_device_timed(
                 grid_dim=(plan.n_blocks_dimx, 1, 1),
                 block_dim=(TPB, 1, 1),
             )
-            ctx.enqueue_function[partition_scan_kernel[TPB]](
+            ctx.enqueue_function[
+                partition_scan_kernel[TPB, PART_ROWS_PER_THREAD]
+            ](
                 ws.d_blk_off.unsafe_ptr(),
                 ws.d_blk_left.unsafe_ptr(),
                 ws.d_blk_base.unsafe_ptr(),
@@ -5838,7 +5877,9 @@ def train_forest_regression_device_timed(
                 grid_dim=(n_part, 1, 1),
                 block_dim=(TPB, 1, 1),
             )
-            ctx.enqueue_function[partition_scatter_kernel[TPB]](
+            ctx.enqueue_function[
+                partition_scatter_kernel[TPB, PART_ROWS_PER_THREAD]
+            ](
                 ws.d_row_alt.unsafe_ptr(),
                 d_row_ids.unsafe_ptr(),
                 ws.d_blk_off.unsafe_ptr(),
@@ -5853,7 +5894,9 @@ def train_forest_regression_device_timed(
                 grid_dim=(plan.n_blocks_dimx, 1, 1),
                 block_dim=(TPB, 1, 1),
             )
-            ctx.enqueue_function[partition_writeback_kernel[TPB]](
+            ctx.enqueue_function[
+                partition_writeback_kernel[TPB, PART_ROWS_PER_THREAD]
+            ](
                 d_row_ids.unsafe_ptr(),
                 ws.d_row_alt.unsafe_ptr(),
                 ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),

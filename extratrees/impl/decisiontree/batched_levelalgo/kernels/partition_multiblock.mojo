@@ -148,7 +148,7 @@ def _skip_node(
 
 
 def partition_count_kernel[
-    TPB: Int
+    TPB: Int, ROWS: Int = 1
 ](
     blk_left: MutPointer[Int32, MutAnyOrigin],
     row_ids: MutPointer[Int32, MutAnyOrigin],
@@ -192,6 +192,21 @@ def partition_count_kernel[
     var col_offset = Int(splits[unsafe_offset=nid].colid) * Int(m_in)
     var quesval = splits[unsafe_offset=nid].quesval
 
+    comptime if ROWS > 1:
+        # ROWS consecutive rows per thread; the block covers TPB * ROWS.
+        var first = ob * TPB * ROWS + tid * ROWS
+        var mine = Int32(0)
+        for r in range(ROWS):
+            if first + r < range_len:
+                mine += _goes_left(
+                    data, row_ids, range_start + first + r, col_offset,
+                    quesval,
+                )
+        var total = block_sum[block_size=TPB, broadcast=False](mine)
+        if tid == 0:
+            blk_left[unsafe_offset=b] = total
+        return
+
     var row_index = ob * TPB + tid
     var flag = Int32(0)
     if row_index < range_len:
@@ -205,7 +220,7 @@ def partition_count_kernel[
 
 
 def partition_scan_kernel[
-    TPB: Int
+    TPB: Int, ROWS: Int = 1
 ](
     blk_off: MutPointer[Int32, MutAnyOrigin],
     blk_left: MutPointer[Int32, MutAnyOrigin],
@@ -238,7 +253,7 @@ def partition_scan_kernel[
 
     var base = Int(blk_base[unsafe_offset=n])
     var count = Int(work_items[unsafe_offset=n].instances.count)
-    var nb = (count + TPB - 1) // TPB
+    var nb = (count + TPB * ROWS - 1) // (TPB * ROWS)
     if nb < 1:
         nb = 1
 
@@ -257,7 +272,7 @@ def partition_scan_kernel[
 
 
 def partition_scatter_kernel[
-    TPB: Int
+    TPB: Int, ROWS: Int = 1
 ](
     row_ids_out: MutPointer[Int32, MutAnyOrigin],
     row_ids: MutPointer[Int32, MutAnyOrigin],
@@ -302,6 +317,42 @@ def partition_scatter_kernel[
     var quesval = splits[unsafe_offset=nid].quesval
     var n_left = Int(splits[unsafe_offset=nid].n_left)
 
+    comptime if ROWS > 1:
+        # Stable within the block: thread t's ROWS rows follow thread t-1's.
+        var tile = TPB * ROWS
+        var first = ob * tile + tid * ROWS
+        var flags = SIMD[DType.int32, ROWS](0)
+        var mine = Int32(0)
+        var valid = 0
+        for r in range(ROWS):
+            if first + r < range_len:
+                var f = _goes_left(
+                    data, row_ids, range_start + first + r, col_offset,
+                    quesval,
+                )
+                flags[r] = f
+                mine += f
+                valid += 1
+        var scanned_m = _block_scan[TPB](mine)
+        var left_before_m = Int(blk_off[unsafe_offset=b])
+        if sabotage_in == PART_MB_SAB_NO_SCAN:
+            left_before_m = 0
+        # rows of this node before thread t's first row, all of them valid
+        var left_t = left_before_m + Int(scanned_m[0])
+        var right_t = first - left_t
+        for r in range(ROWS):
+            if r < valid:
+                var row = row_ids[unsafe_offset = range_start + first + r]
+                if flags[r] != 0:
+                    row_ids_out[unsafe_offset = range_start + left_t] = row
+                    left_t += 1
+                else:
+                    row_ids_out[
+                        unsafe_offset = range_start + n_left + right_t
+                    ] = row
+                    right_t += 1
+        return
+
     var row_index = ob * TPB + tid
     var flag = Int32(0)
     if row_index < range_len:
@@ -331,7 +382,7 @@ def partition_scatter_kernel[
 
 
 def partition_writeback_kernel[
-    TPB: Int
+    TPB: Int, ROWS: Int = 1
 ](
     row_ids: MutPointer[Int32, MutAnyOrigin],
     row_ids_out: MutPointer[Int32, MutAnyOrigin],
@@ -363,6 +414,14 @@ def partition_writeback_kernel[
         return
     var range_start = Int(work_items[unsafe_offset=nid].instances.begin)
     var range_len = Int(work_items[unsafe_offset=nid].instances.count)
+    comptime if ROWS > 1:
+        var first = ob * TPB * ROWS + tid * ROWS
+        for r in range(ROWS):
+            if first + r < range_len:
+                row_ids[unsafe_offset = range_start + first + r] = row_ids_out[
+                    unsafe_offset = range_start + first + r
+                ]
+        return
     var row_index = ob * TPB + tid
     if row_index < range_len:
         row_ids[unsafe_offset = range_start + row_index] = row_ids_out[
