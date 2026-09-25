@@ -126,14 +126,14 @@ nsys)
     NSYS=$(command -v nsys || ls /opt/nvidia/nsight-systems*/bin/nsys /usr/local/cuda/bin/nsys 2>/dev/null | head -1)
     [ -n "$NSYS" ] || { say "nsys: not on this box"; exit 5; }
     sh "$0" use "$tag" > /dev/null || exit 1
-    D="$OUT/nsys-$tag"; rm -rf "$D" "$BIN/nsys-$tag"*; mkdir -p "$D"
+    D="$OUT/nsys-$tag"; rm -rf "$D" "$BIN"/nsys-"$tag".* "$BIN"/nsys-"$tag"-trace*; mkdir -p "$D"
     t0=$(date +%s)
     "$NSYS" profile -t cuda --sample=none --cpuctxsw=none -o "$BIN/nsys-$tag" -f true \
         pixi run python tools/lm_step_memory_probe.py --out "$BIN/nsys-lean-$tag" --shape $SHAPE \
         --steps 2 --resident-lean --budget-seconds 600 > "$D/profile.log" 2>&1
-    "$NSYS" stats -r cuda_gpu_kern_sum -f csv -o "$D/k" "$BIN/nsys-$tag.nsys-rep" > "$D/stats.log" 2>&1
-    "$NSYS" stats -r cuda_gpu_trace -f csv -o "$BIN/nsys-$tag-trace" "$BIN/nsys-$tag.nsys-rep" >> "$D/stats.log" 2>&1
-    "$NSYS" stats -r cuda_gpu_mem_time_sum,cuda_api_sum -f csv -o "$D/m" "$BIN/nsys-$tag.nsys-rep" >> "$D/stats.log" 2>&1
+    "$NSYS" stats --force-export=true -r cuda_gpu_kern_sum -f csv -o "$D/k" "$BIN/nsys-$tag.nsys-rep" > "$D/stats.log" 2>&1
+    "$NSYS" stats --force-export=true -r cuda_gpu_trace -f csv -o "$BIN/nsys-$tag-trace" "$BIN/nsys-$tag.nsys-rep" >> "$D/stats.log" 2>&1
+    "$NSYS" stats --force-export=true -r cuda_gpu_mem_time_sum,cuda_api_sum -f csv -o "$D/m" "$BIN/nsys-$tag.nsys-rep" >> "$D/stats.log" 2>&1
     python3 tools/nvidia_step_time/nsys_fold.py "$BIN/nsys-$tag-trace_cuda_gpu_trace.csv" > "$D/kernels.tsv" 2>> "$D/stats.log"
     say "nsys $tag secs=$(( $(date +%s) - t0 )): $(head -8 "$D/kernels.tsv" | cut -c1-150 | tr '\n' '|')" ;;
 verify)

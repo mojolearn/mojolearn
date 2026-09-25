@@ -95,6 +95,25 @@ Evidence is copied from the leg OUT into this directory (small files only).
   kpack-only launch bound 512 `GEMM_KPACK_LAUNCH_BOUND`; revert
   `-D MOJOLEARN_GEMM_NO_KPACK_NARROW=1`). LEG 3 (`leg3.sh`): prove and time
   the head defaults, backward/workspace checks, 201 GEMM lanes.
+- 2026-09-25 02:04-03:05 UTC LEG 3 (pod tbvn4orty7hlq3, verified deleted,
+  about $3.55). Evidence `legs/leg3/`. Head (admission + narrow tile): GEMM
+  A/B 36/36 identical to main's GEMM (ref), sabotage differs; lean 0.607 ->
+  0.508 s (same witnesses); replays PASS 101..103 at 32.40 s and 1999..2000 at
+  32.52 s; gemm_device_check (runner, 8 gates), gemm_backward_check (10
+  gates), gemm_workspace_check (4,608 cells) green; verify over the 201
+  GEMM-reaching lanes: 181 VERIFIED, 6,813 cell parts IDENTICAL, 0
+  DIVERGENT, 20 REFUSED (the same unbuilt host/samba/rf bindings as the AMD
+  lane). Then trials on the box: attention forward stages a whole key block
+  with 16-byte loads (`k2`): slower (5.69 -> 5.93 ms), dropped; embedding
+  run-start scan in one block: 2.05 ms -> about 0.1 ms, kept; attention launch
+  bounds: forward 1024 (64 registers, 4 blocks) 5.69 -> 3.57 ms, dq 768 2.49
+  -> 2.43 ms; lean 0.506 -> 0.481 s (same witnesses); replay 101..103 PASS at
+  30.55 s a step (`f1024`).
+- Made them defaults: `attn_fwd_launch_bound_for` (NVIDIA 1024),
+  `attn_dq_launch_bound_for` (NVIDIA 768), other columns 1024 (their backend
+  default); revert `-D MOJOLEARN_ATTN_NO_LAUNCH_BOUND=1`; embedding
+  `emb_run_begin_block_kernel` (revert `-D MOJOLEARN_EMB_SERIAL_RUN_BEGIN=1`).
+  LEG 4 (`leg4.sh`) proves the final head.
 - (older) LEG 2 prepared: GEMM WINDOW ADMISSION
   (`lib_gemm_window_admit_for`, NVIDIA only; revert
   `-D MOJOLEARN_GEMM_NO_WINDOW_ADMIT=1`; sabotage

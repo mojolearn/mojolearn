@@ -1512,6 +1512,35 @@ the word is a literal here and that file asserts at build time that it equals
 its own composition (`ATTN_ARM_R3_KVGRID_R32_ESTASH_DRES_BSWZ_DEFAULT`)."""
 
 
+def attn_fwd_launch_bound_for[column: Int]() -> Int:
+    """SCHEDULING row (lane/nvidia-step-time, 2026-09-25): the launch bound
+    `fused_attn_forward_r2_kernel` declares on its 256-thread launch. NVIDIA
+    1024: 64 registers a thread, so four blocks share an SM and hide the
+    kernel's stash round trips. MEASURED on a RunPod H100 80GB HBM3 (leg 3,
+    T3 shape): 5.69 ms a launch at 256 (96 registers, two blocks an SM),
+    4.18 at 768, 3.57 at 1024; lean B4 step 0.506 -> 0.481 s with equal
+    witnesses (with the dq row below); replay of steps 101..103 PASS at 30.55
+    s a step. Every other column 1024, the bound its backend assumes without
+    a declaration (gfx942's default flat work-group size; Metal carries none),
+    so they are expected to compile what they compiled before (the AMD
+    re-proof is owed before a release). `-D MOJOLEARN_ATTN_NO_LAUNCH_BOUND=1`
+    gives NVIDIA 256 (the 255-register budget it had with no declaration).
+    Register allocation only: no operation, operand or order changes."""
+    comptime if is_defined["MOJOLEARN_ATTN_NO_LAUNCH_BOUND"]():
+        return 256 if column == COLUMN_NVIDIA else 1024
+    return 1024
+
+
+def attn_dq_launch_bound_for[column: Int]() -> Int:
+    """SCHEDULING row (lane/nvidia-step-time, 2026-09-25): the same for
+    `fused_bwd_dq_tiled_pf_kernel`. NVIDIA 768 (85 registers, three blocks an
+    SM): 2.49 -> 2.43 ms a launch; 1024 (64 registers) was slower (2.62).
+    Every other column 1024 (its backend's default, see above)."""
+    comptime if is_defined["MOJOLEARN_ATTN_NO_LAUNCH_BOUND"]():
+        return 256 if column == COLUMN_NVIDIA else 1024
+    return 768 if column == COLUMN_NVIDIA else 1024
+
+
 def attn_default_arm_for[column: Int]() -> Int:
     """ROUTING row (DEVIATION 2534, 2026-09-11): the attention arm word the SHIPPED build runs on this column (`ATTN_ARM_DEFAULT` in transformer/impl/llama/fused_attention.mojo; a `-D MOJOLEARN_ATTN_ARM_TRIAL=1` build runs it when MOJOLEARN_ATTN_ARM is unset and keeps every other arm selectable by name). Every arm is bit-equal to the eager oracle by the identity arguments of brief sections 4, 12, 14 and 16, so this row picks a schedule and never a result. NVIDIA `stash_tiled_fgrid_r32_qres_pf`, MEASURED: H100 leg bench/results/e1g/2026-09-11_154257-nvidia-h100-80gb-hbm3-attention-round3 (commit 5bcfa71d), lean LM step 0.3845 / 0.3819 s under stash_tiled against 0.3346 / 0.3340 s (enwik8 / Pile GitHub), every step witness equal, fwd+bwd on real activations 1.41x of stash_tiled; CONTRIBUTING.md (Performance claims) flips it. AMD `stash_tiled_fgrid_r32_qres_pf_kvgrid_r32` (ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_KVGRID_R32), MEASURED on the DigitalOcean MI325X against the previous AMD default `baseline`, every step witness equal (the comment in the body names the evidence and the verdict); a shipped build compiles its DEVIATION 2597 dk/dv kernel because the default carries it (brief section 18). Apple and every other column `stash_tiled` (unmeasured for the round 3 and 2597 arms as a price). `-D MOJOLEARN_ATTN_DEFAULT_R3_EVERY_COLUMN=1` returns the NVIDIA word on every column, so a no-trial build on a Mac reaches the shipped round 3 branch; `-D MOJOLEARN_ATTN_DEFAULT_KVGRID_EVERY_COLUMN=1` returns the previous NVIDIA word (now AMD's) on every column, so the same build reaches the shipped DEVIATION 2597 dk/dv branch; `-D MOJOLEARN_ATTN_DEFAULT_ESTASH_EVERY_COLUMN=1` returns the NVIDIA word as of the estash flip (DEVIATION 2657, without DEVIATION 2900's `_bswz` bit) on every column, so a no-trial build on a Mac reaches the shipped DEVIATION 2650 / 2651 estash branch (DEVIATION 2657, `ATTN_SHIPPED_BWD_ESTASH`; this is how the M4 gates that branch, since Apple's own default carries no estash bit). `-D MOJOLEARN_ATTN_DEFAULT_BSWZ_EVERY_COLUMN=1` returns the CURRENT NVIDIA word on every column, so a no-trial build on a Mac reaches the shipped DEVIATION 2900 branch (`ATTN_DEFAULT_BSWZ`; this is how the M4 gates a branch Apple's own default does not carry). Check knobs, the `MOJOLEARN_EXPERIMENTAL_SMALLK_IDENTICAL` pattern; never a shipped build; at most one of the four."""
     comptime assert not (is_defined["MOJOLEARN_ATTN_DEFAULT_R3_EVERY_COLUMN"]() and is_defined["MOJOLEARN_ATTN_DEFAULT_KVGRID_EVERY_COLUMN"]()), (
