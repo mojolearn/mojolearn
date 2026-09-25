@@ -163,6 +163,21 @@ HARNESS_RUNTIME_IMPORTS = (
     os.path.join("tools", "lane_applicability.py"),
 )
 
+#: RENTAL MEASUREMENT TOOLING (2026-09-25). Leg bodies, session scripts and
+#: probes that run on a rented box to build a binding from the checkout, time
+#: an optimizer step kernel by kernel and replay recorded steps against a
+#: chain. No lane computes through them: what they build is the same source
+#: every lane is built from, and what they prove is proven by the lanes they
+#: run on the box. They are named by one another and by release leg bodies,
+#: which is why the reaching walk found them, and they are not prose, so
+#: "inert (prose or evidence)" would misdescribe them. A change here selects
+#: no lane and says what the file is.
+MEASUREMENT_TOOLING_PREFIXES = (
+    os.path.join("tools", "nvidia_step_time") + os.sep,
+    os.path.join("tools", "amd_step_time"),
+    os.path.join("tools", "release_0819") + os.sep,
+)
+
 #: Tools whose text is not evidence that a lane reaches a path.
 _NOT_CORPUS = SELECTION_MACHINERY + HARNESS_RUNTIME_IMPORTS
 
@@ -3947,6 +3962,12 @@ def select(paths, ref=None, sources=None, backend=None):
             inert.append(path)
             reasons[path] = ("the selection machinery itself: it decides which lanes run and "
                              "cannot move a lane's bits (tools/test_lane_select.py covers it)")
+            continue
+        if path.startswith(MEASUREMENT_TOOLING_PREFIXES):
+            inert.append(path)
+            reasons[path] = ("rental measurement tooling: a leg body, session script or probe that runs "
+                             "on a rented box to build and time a binding and replay recorded steps; no "
+                             "lane computes through it (MEASUREMENT_TOOLING_PREFIXES)")
             continue
         if path in GLOBAL_PATHS or path in enumerator_files():
             added = registry_lanes(ref, path, sources) if ref else None
