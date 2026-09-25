@@ -57,6 +57,22 @@ holds at the end until `/root/nv_step_done` exists (touch it over ssh when
 the interactive work is over, or the lease runs out and the runner fetches).
 Evidence is copied from the leg OUT into this directory (small files only).
 
+## HEADLINE (update me)
+
+One H100: 38.83 s (0.8.17 and origin/main, same box) -> **30.67 s** a step
+(head, leg 4; 30.77 s at 1999..2000), every replay PASS against the H100
+chain, 181/201 GEMM lanes VERIFIED with 0 DIVERGENT (20 refused for unbuilt
+bindings), GEMM device/backward/workspace checks green. Changes: GEMM window
+admission, 128x64 kpack tile under a 512 bound, attention forward/dq launch
+bounds (NVIDIA rows), one-block embedding run-start scan (every column).
+README.md is the write-up. Cost so far $9.31 (four legs).
+
+NEXT (optional, in order of expected seconds): window admission in the
+attention dot chains; asynchronous GEMM staging (cp.async, dynamic shared
+memory); overlap the host hashing with the next step (segment runner, shared
+with the paused run: ask first). OWED before a release: AMD re-proof
+(replays + 201 lanes on gfx942), Apple compile of the embedding scan.
+
 ## State (update every session)
 
 - 2026-09-24 (lane day 0): branch created; tools written
@@ -114,6 +130,13 @@ Evidence is copied from the leg OUT into this directory (small files only).
   default); revert `-D MOJOLEARN_ATTN_NO_LAUNCH_BOUND=1`; embedding
   `emb_run_begin_block_kernel` (revert `-D MOJOLEARN_EMB_SERIAL_RUN_BEGIN=1`).
   LEG 4 (`leg4.sh`) proves the final head.
+- 2026-09-25 03:07-03:34 UTC LEG 4 (pod dq12p1wmrnlj1u, verified deleted,
+  $1.59): the head. GEMM A/B 36/36 identical to the ref, sabotage differs;
+  device/backward/workspace checks green; lean ref 0.608 -> head 0.481 s
+  (same witnesses); replays PASS 101..103 at 30.67 s, 1999..2000 at 30.77 s;
+  verify 201 lanes: 181 VERIFIED, 6,813 IDENTICAL, 0 DIVERGENT, 20 REFUSED;
+  byte LM builds for gfx942 (AMD column) from the head. Trial: ksplit S=264
+  slower (not taken). README.md written.
 - (older) LEG 2 prepared: GEMM WINDOW ADMISSION
   (`lib_gemm_window_admit_for`, NVIDIA only; revert
   `-D MOJOLEARN_GEMM_NO_WINDOW_ADMIT=1`; sabotage

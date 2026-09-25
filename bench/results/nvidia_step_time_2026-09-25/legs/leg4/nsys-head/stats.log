@@ -1,0 +1,11 @@
+Generating SQLite file /root/nv_bin/nsys-head.sqlite from /root/nv_bin/nsys-head.nsys-rep
+Processing [/root/nv_bin/nsys-head.sqlite] with [/opt/nvidia/nsight-systems/2023.4.4/host-linux-x64/reports/cuda_gpu_kern_sum.py] to [/root/gemm_leg_out/nv-step-time/nsys-head/k_cuda_gpu_kern_sum.csv]... PROCESSED
+
+Generating SQLite file /root/nv_bin/nsys-head.sqlite from /root/nv_bin/nsys-head.nsys-rep
+Processing [/root/nv_bin/nsys-head.sqlite] with [/opt/nvidia/nsight-systems/2023.4.4/host-linux-x64/reports/cuda_gpu_trace.py] to [/root/nv_bin/nsys-head-trace_cuda_gpu_trace.csv]... PROCESSED
+
+Generating SQLite file /root/nv_bin/nsys-head.sqlite from /root/nv_bin/nsys-head.nsys-rep
+Processing [/root/nv_bin/nsys-head.sqlite] with [/opt/nvidia/nsight-systems/2023.4.4/host-linux-x64/reports/cuda_gpu_mem_time_sum.py] to [/root/gemm_leg_out/nv-step-time/nsys-head/m_cuda_gpu_mem_time_sum.csv]... PROCESSED
+
+Processing [/root/nv_bin/nsys-head.sqlite] with [/opt/nvidia/nsight-systems/2023.4.4/host-linux-x64/reports/cuda_api_sum.py] to [/root/gemm_leg_out/nv-step-time/nsys-head/m_cuda_api_sum.csv]... PROCESSED
+

@@ -19,8 +19,8 @@ column and what the H100 measured. Per shard unless marked.
 | `GEMM_LAUNCH_BOUND` (shared) | 256 | 256 | `.maxntid 256`; on NVIDIA it changes nothing (255 registers with or without it) |
 | `lib_gemm_window_admit_for` (this lane) | True | False | admitted windows run bare `fma.rn` |
 | `lib_gemm_kpack_narrow_for` (this lane) | True | False | 128x64 kpack tile, 512 bound (128 registers, 2 blocks an SM) |
-| `attn_default_arm_for` | `stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz` | same word | attention kernels `fwd_r2`, `zdot_estash_dres_pf`, `dq_tiled_pf`, `kvgrid_dkdv_pf` |
-| `attn_fwd_kfull_for` (this lane, leg 4) | True | False | forward pass 0 stages a whole key block, 16-byte q/k loads |
+| `attn_default_arm_for` | `stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz` | its own word (the row) | attention kernels `fwd_r2`, `zdot_estash_dres_pf`, `dq_tiled_pf`, `kvgrid_dkdv_pf` |
+| `attn_fwd_launch_bound_for`, `attn_dq_launch_bound_for` (this lane) | 1024, 768 | 1024, 1024 (the backend default) | registers of the attention forward and dq kernels |
 
 ## Kernels, measured (leg 1, origin/main, one lean B4 step, nsys)
 

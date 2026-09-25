@@ -1,0 +1,120 @@
+10952 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x538640000000, nodemask=1)
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+10982 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x506d80000000, nodemask=1)
+# verify --all: cuda (nvidia), 25 lanes x 9 fixtures, harness checkout, table /root/mojolearn/python/mojolearn/verify_reference/table.json
+  kmeans                             core                2.7s
+  kde                                estimators          0.3s
+  kmeans-random                      core                2.1s
+  kmeans-array                       core                1.4s
+  kmeans-weighted                    core                1.4s
+  kde-tophat-sqeuclidean             estimators          0.2s
+  kde-epanechnikov-l1                estimators          0.1s
+  kde-exponential-chebyshev          estimators          0.1s
+  kde-linear-cosine                  estimators          0.2s
+  kde-cosine-minkowski               estimators          0.2s
+  kde-weighted                       estimators          0.1s
+  hf-checkpoint                      linalg              0.4s
+  hf-causal-lm                       neural              1.6s
+  kernel-ridge                       kernel_methods      0.1s
+  kernel-ridge-poly                  kernel_methods      0.1s
+  kernel-ridge-sigmoid               kernel_methods      0.1s
+  kernel-ridge-laplacian             kernel_methods      0.1s
+  hdbscan-leaf                       hdbscan             0.4s
+  ivf                                ivf                 0.7s
+  ivf-euclidean                      ivf                 0.7s
+  ivf-extend                         ivf                 0.5s
+  kmeans-sqrt                        core                1.4s
+  kmeans-classic-pp                  core                1.3s
+  iforest                            svm                43.9s
+  iforest-tuned                      svm                44.7s
+  portable:rf-clf                    base        0.2s
+  portable:gbdt-symmetric            base        0.1s
+  portable:ols                       base        0.0s
+  portable:pca                       base        0.0s
+  portable:kernel-ridge-laplacian    base        0.0s
+  portable:kernel-ridge-laplacian    denormal    0.0s
+  portable:kernel-ridge-laplacian    denormal_ftz    0.0s
+  portable:kernel-ridge-laplacian    dupes       0.0s
+  portable:kernel-ridge-laplacian    hashed      0.0s
+  portable:kernel-ridge-laplacian    negative    0.0s
+  portable:kernel-ridge-laplacian    odd         0.0s
+  portable:kernel-ridge-laplacian    ties        0.0s
+  portable:kernel-ridge-laplacian    wide        0.0s
+  portable:kernel-ridge-poly         base        0.0s
+  portable:kernel-ridge-poly         denormal    0.0s
+  portable:kernel-ridge-poly         denormal_ftz    0.0s
+  portable:kernel-ridge-poly         dupes       0.0s
+  portable:kernel-ridge-poly         hashed      0.0s
+  portable:kernel-ridge-poly         negative    0.0s
+  portable:kernel-ridge-poly         odd         0.0s
+  portable:kernel-ridge-poly         ties        0.0s
+  portable:kernel-ridge-poly         wide        0.0s
+  portable:kernel-ridge-sigmoid      base        0.0s
+  portable:kernel-ridge-sigmoid      denormal    0.0s
+  portable:kernel-ridge-sigmoid      denormal_ftz    0.0s
+  portable:kernel-ridge-sigmoid      dupes       0.0s
+  portable:kernel-ridge-sigmoid      hashed      0.0s
+  portable:kernel-ridge-sigmoid      negative    0.0s
+  portable:kernel-ridge-sigmoid      odd         0.0s
+  portable:kernel-ridge-sigmoid      ties        0.0s
+  portable:kernel-ridge-sigmoid      wide        0.0s
+  portable:nystroem-laplacian        base        0.0s
+  portable:nystroem-laplacian        denormal    0.0s
+  portable:nystroem-laplacian        denormal_ftz    0.0s
+  portable:nystroem-laplacian        dupes       0.0s
+  portable:nystroem-laplacian        hashed      0.0s
+  portable:nystroem-laplacian        negative    0.0s
+  portable:nystroem-laplacian        odd         0.0s
+  portable:nystroem-laplacian        ties        0.0s
+  portable:nystroem-laplacian        wide        0.0s
+  portable:nystroem-poly             base        0.0s
+  portable:nystroem-poly             denormal    0.0s
+  portable:nystroem-poly             denormal_ftz    0.0s
+  portable:nystroem-poly             dupes       0.0s
+  portable:nystroem-poly             hashed      0.0s
+  portable:nystroem-poly             negative    0.0s
+  portable:nystroem-poly             odd         0.0s
+  portable:nystroem-poly             ties        0.0s
+  portable:nystroem-poly             wide        0.0s
+  portable:nystroem-sigmoid          base        0.0s
+  portable:nystroem-sigmoid          denormal    0.0s
+  portable:nystroem-sigmoid          denormal_ftz    0.0s
+  portable:nystroem-sigmoid          dupes       0.0s
+  portable:nystroem-sigmoid          hashed      0.0s
+  portable:nystroem-sigmoid          negative    0.0s
+  portable:nystroem-sigmoid          odd         0.0s
+  portable:nystroem-sigmoid          ties        0.0s
+  portable:nystroem-sigmoid          wide        0.0s
+# python -m mojolearn verify --all
+# mojolearn 0.8.18  commit unknown (none (no witness in this install))
+# mode identical  vendor cuda (class nvidia)  device NVIDIA NVIDIA H100 80GB HBM3, 580.159.03
+# cpu AMD EPYC 9554 64-Core Processor  Linux-6.8.0-111-generic-x86_64-with-glibc2.35  python 3.14.7  numpy 2.5.2
+# reference table /root/mojolearn/python/mojolearn/verify_reference/table.json (sha256 3bc1195294200650, 626 records)
+# depth full: 25 lanes x 9 fixtures, 1 repeat(s), 58 portable model(s)
+
+| family          | lanes | IDENTICAL | DIVERGENT | OWED | REFUSED | N/A |
+|-----------------|-------|-----------|-----------|------|---------|-----|
+| core            |     6 |       216 |         0 |    0 |       0 |  54 |
+| estimators      |     7 |       252 |         0 |    0 |       0 |  63 |
+| linalg          |     1 |         9 |         0 |    0 |       0 |  36 |
+| neural          |     1 |        27 |         0 |    0 |       0 |  18 |
+| kernel_methods  |     4 |       144 |         0 |    0 |       0 |  36 |
+| hdbscan         |     1 |        36 |         0 |    0 |       0 |   9 |
+| ivf             |     3 |       108 |         0 |    0 |       0 |  27 |
+| svm             |     2 |        72 |         0 |    0 |       0 |  18 |
+| portable models |    10 |       116 |         0 |    0 |       0 |   0 |
+| all             |    35 |       980 |         0 |    0 |       0 | 261 |
+
+LANE ACCOUNTING: 274 of 274 harness lanes accounted for; 25 VERIFIED, 249 not.
+  a lane that is not VERIFIED is not checked, whatever its state says:
+  NOT RUN (190): agglomerative, arima, arima-011, arima-exog, arima-exog-seasonal, arima-seasonal-c, ... 184 more
+      exposed, but this run did not select it
+  NOT APPLICABLE (59): par-arima, par-boosting, par-boosting-clf, par-boosting-pointwise, par-boosting-reg, par-border-types, ... 53 more
+      claim requires two devices: a par-* driver claims that a TWO-DEVICE column hashes equal to the one-device column cell for cell. `verify` is always a one-device run (it refuses MOJOLEARN_PAR_DEVICES), and on one device the comparison is a run against itself, which passes whatever the code does. Owed: a two-GPU box running `MOJOLEARN_PAR_DEVICES=0,1 python3 tools/identity_break.py --repeats 2 --lanes <lane> --json par2.json` beside the same lanes at MOJOLEARN_PAR_DEVICES=0, admitted with _verify_reference.admit(par_axis=True)
+  NOT APPLICABLE leaves nothing unknown, so it does not cost the run its pass; it is reported because an absence a user cannot see is worse than a gap they can. Every other state above does cost it.
+  this run's scope is 25 lanes, 25 VERIFIED, 0 not applicable, 0 not checked
+
+Batch invariance: IDENTICAL=274, DIVERGENT=0, OWED=0, REFUSED=0, N/A=9
+Scope: selected fixtures and properties only; use verify --coverage for omissions.
+RESULT: VERIFIED (verified 980 of 1241 cell parts (0 divergent, 0 owed, 0 refused, 261 n/a); 25 verified, 0 not applicable, 0 owed, 0 held, of 25 lanes). 105.7s. exit 0
+# evidence written to /root/gemm_leg_out/nv-step-time/verify/chunk-ad.json

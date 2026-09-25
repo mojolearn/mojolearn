@@ -1,0 +1,6 @@
+ptxas_new info    : 0 bytes gmem
+ptxas_new info    : Compiling entry function 'gemm_checks_gemm_identical_id6A6A6A6A6A6A_6e0e904c41851a9e' for 'sm_90a'
+ptxas_new info    : Function properties for gemm_checks_gemm_identical_id6A6A6A6A6A6A_6e0e904c41851a9e
+    2104 bytes stack frame, 56 bytes spill stores, 112 bytes spill loads
+ptxas_new info    : Used 128 registers, used 1 barriers, 2104 bytes cumulative stack size, 25728 bytes smem
+ptxas_new info    : Compile time = 138.488 ms
