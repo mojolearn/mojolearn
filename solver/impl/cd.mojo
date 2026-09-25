@@ -105,9 +105,14 @@ sentence true.
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_dim, block_idx, thread_idx
+from std.memory import stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 from std.sys.compile import is_defined
 
-from core.gemm import gemv_n
+from core.gemm import gemm_nt, gemv_n
+from checks.numerics import NUMERIC_FAST
+from std.sys.info import has_apple_gpu_accelerator
 from core.identity_trace import IdentityTrace
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
 from solver.checks.profile_dot import (
@@ -152,6 +157,58 @@ comptime SAB_ZERO_FOLD_MAX_SWAPPED = is_defined[
 
 #: `cd.cuh:62`'s guard, `math_t(1e-5)`.
 comptime CD_SQUARED_GUARD = Float32(1.0e-5)
+
+#: FAST on Apple: coordinate descent in GRAM form when the data is tall
+#: (n_rows >= 4 * n_cols, n_cols <= CD_GRAM_MAX_COLS). One product
+#: [X ; y] [X ; y]^T gives G = X^T X and c = X^T y; every sweep then runs on
+#: the host in float64 over p-sized vectors -- rho = c_j + G_jj w_j, the
+#: same soft-threshold / (G_jj + l2) update and guard, c -= G[:, j] dw --
+#: instead of two axpys and a dot over all n_rows per coordinate. The same
+#: cyclic algorithm and convergence test on the same objective; only the
+#: rounding differs. `-D MOJOLEARN_CD_FAST_GRAM_OFF` keeps the row sweeps.
+comptime CD_FAST_GRAM = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_CD_FAST_GRAM_OFF"]()
+)
+comptime CD_GRAM_MAX_COLS = 256
+comptime CD_GRAM_ROWS = 256
+comptime CD_GRAM_CELLS = 1024
+
+
+def cd_gram_partial_kernel(
+    b: MutPointer[Float32, MutAnyOrigin],
+    part: MutPointer[Float32, MutAnyOrigin],
+    p1_in: Int32,
+    n_in: Int32,
+):
+    """CD_FAST_GRAM: block k's float32 partial of [X ; y] [X ; y]^T over
+    rows [k * CD_GRAM_ROWS, ...), one thread per cell; the host sums the
+    partials in float64 so the Gram is not one 1M-long float32 chain."""
+    var p1 = Int(p1_in)
+    var n = Int(n_in)
+    var t = Int(thread_idx.x)
+    var r0 = Int(block_idx.x) * CD_GRAM_ROWS
+    var r1 = r0 + CD_GRAM_ROWS
+    if r1 > n:
+        r1 = n
+    var sh = stack_allocation[
+        CD_GRAM_ROWS * 32, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var e = t
+    while e < p1 * CD_GRAM_ROWS:
+        var a = e // CD_GRAM_ROWS
+        var i = e % CD_GRAM_ROWS
+        sh[e] = b[a * n + r0 + i] if r0 + i < r1 else Float32(0)
+        e += CD_GRAM_CELLS
+    barrier()
+    if t < p1 * p1:
+        var a = t // p1
+        var c = t % p1
+        var acc = Float32(0)
+        for i in range(r1 - r0):
+            acc += sh[a * CD_GRAM_ROWS + i] * sh[c * CD_GRAM_ROWS + i]
+        part[Int(block_idx.x) * p1 * p1 + t] = acc
 
 
 @fieldwise_init
@@ -449,7 +506,103 @@ def cd_fit_traced(
     var h_conv = ctx.enqueue_create_host_buffer[DType.float32](3)
 
     var n_iter = 0
-    while n_iter < epochs:
+    var device_sweeps = True
+    comptime if CD_FAST_GRAM:
+        if (
+            not trace.enabled
+            and not want_residual
+            and n_cols <= CD_GRAM_MAX_COLS
+            and n_rows >= 4 * n_cols
+        ):
+            device_sweeps = False
+            var p = n_cols
+            var p1 = p + 1
+            # B = [X^T rows | y] as (p + 1) x n_rows row-major: X is column-
+            # major, so its columns are already the first p rows.
+            var bmat = ctx.enqueue_create_buffer[DType.float32](p1 * n_rows)
+            ctx.enqueue_copy(
+                dst_buf=bmat.create_sub_buffer[DType.float32](0, p * n_rows),
+                src_buf=x.create_sub_buffer[DType.float32](0, p * n_rows),
+            )
+            ctx.enqueue_copy(
+                dst_buf=bmat.create_sub_buffer[DType.float32](p * n_rows, n_rows),
+                src_buf=labels.create_sub_buffer[DType.float32](0, n_rows),
+            )
+            var gsum = List[Float64](capacity=p1 * p1)
+            for _ in range(p1 * p1):
+                gsum.append(0.0)
+            var n_parts = (n_rows + CD_GRAM_ROWS - 1) // CD_GRAM_ROWS
+            var gext = ctx.enqueue_create_buffer[DType.float32](
+                p1 * p1 if p1 * p1 > CD_GRAM_CELLS else n_parts * p1 * p1
+            )
+            var bview = bmat.create_sub_buffer[DType.float32](0, p1 * n_rows)
+            var hg = ctx.enqueue_create_host_buffer[DType.float32](len(gext))
+            if p1 * p1 > CD_GRAM_CELLS:
+                gemm_nt(ctx, gext, bmat, bview, p1, p1, n_rows)
+                n_parts = 1
+            else:
+                ctx.enqueue_function[cd_gram_partial_kernel](
+                    bmat.unsafe_ptr(), gext.unsafe_ptr(), Int32(p1),
+                    Int32(n_rows), grid_dim=(n_parts, 1, 1),
+                    block_dim=(CD_GRAM_CELLS, 1, 1),
+                )
+            ctx.enqueue_copy(dst_buf=hg, src_buf=gext)
+            ctx.synchronize()
+            for k in range(n_parts):
+                for q in range(p1 * p1):
+                    gsum[q] += Float64(hg.unsafe_ptr().unsafe_load(k * p1 * p1 + q))
+            var G = List[Float64](capacity=p * p)
+            var c = List[Float64](capacity=p)
+            for a in range(p):
+                for b in range(p):
+                    G.append(gsum[a * p1 + b])
+                c.append(gsum[a * p1 + p])
+            var w = List[Float64](capacity=p)
+            var sq = List[Float64](capacity=p)
+            for j in range(p):
+                w.append(0.0)
+                sq.append(G[j * p + j] + Float64(l2_alpha))
+            var l1 = Float64(l1_alpha)
+            var tol64 = Float64(tol)
+            while n_iter < epochs:
+                var coef_max = 0.0
+                var diff_max = 0.0
+                for jj in range(p):
+                    var j = ri[jj]
+                    var old = w[j]
+                    var rho = c[j] + G[j * p + j] * old
+                    var r = 0.0
+                    if rho > l1:
+                        r = rho - l1
+                    elif rho < -l1:
+                        r = rho + l1
+                    if sq[j] > Float64(CD_SQUARED_GUARD):
+                        r = r / sq[j]
+                    else:
+                        r = 0.0
+                    var dw = r - old
+                    if dw != 0.0:
+                        for k in range(p):
+                            c[k] -= G[k * p + j] * dw
+                    w[j] = r
+                    if abs(dw) > diff_max:
+                        diff_max = abs(dw)
+                    if abs(r) > coef_max:
+                        coef_max = abs(r)
+                n_iter += 1
+                if coef_max < tol64 or (diff_max / coef_max) < tol64:
+                    break
+            var hw = ctx.enqueue_create_host_buffer[DType.float32](p)
+            for j in range(p):
+                hw.unsafe_ptr().unsafe_store(j, Float32(w[j]))
+            ctx.enqueue_copy(dst_buf=coef, src_buf=hw)
+            ctx.synchronize()
+            _ = bview^
+            _ = bmat^
+            _ = gext^
+            _ = hg^
+            _ = hw^
+    while device_sweeps and n_iter < epochs:
         # shuffle=true refused above; ri stays the identity.
         ctx.enqueue_memset(conv, Float32(0.0))
         for j in range(n_cols):
