@@ -44,7 +44,7 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
-DEADMAN_SECONDS="${DEADMAN_SECONDS:-3600}"
+DEADMAN_SECONDS="${DEADMAN_SECONDS:-7200}"   # a full 240-binding cold build ran past 40 min (0.8.19)
 # DEVIATION 2294: the same guarded rental, doing the OTHER half of the release.
 # tools/linux_surface_qualification.sh runs ON the device, and until now nothing
 # carried a finished wheel to a device and brought the verdict home -- the
@@ -267,7 +267,7 @@ if [ "$LEG_MODE" = qualify ]; then
 else
   DRY_ENTRY=tools/release061_remote_build.sh
   [ "$UBUNTU22" = 1 ] && DRY_ENTRY="/root/release_ubuntu22_build.sh run (pinned Ubuntu 22.04 container, core host probe: $CORE_HOST_SHA from $CORE_HOST_SOURCE)"
-  WOULD_RUN="  build    MOJOLEARN_COMMIT=$COMMIT MOJOLEARN_PYTHON=$REMOTE_PY MOJOLEARN_RELEASE_BUILD_SECONDS=<=2400
+  WOULD_RUN="  build    MOJOLEARN_COMMIT=$COMMIT MOJOLEARN_PYTHON=$REMOTE_PY MOJOLEARN_RELEASE_BUILD_SECONDS=<=${MOJOLEARN_RELEASE_BUILD_CAP:-5700}
            MOJOLEARN_BUILD_JOBS=$BUILD_JOBS (affinity $((2 * BUILD_JOBS)) cores)
            bash $DRY_ENTRY $LEG_VENDOR $LEG_ARCH \$REMOTE_OUT > \$REMOTE_LOG"
 fi
@@ -517,7 +517,11 @@ fi
 
 # THE BUILD, DETACHED AND POLLED, so a dropped ssh cannot kill a 30-minute compile.
 WORK_SECONDS=$(( LEG_START + DEADMAN_SECONDS - $(date +%s) - FETCH_RESERVE ))
-[ "$WORK_SECONDS" -gt 2400 ] && WORK_SECONDS=2400
+# 0.8.19 (2026-09-25): a release that reuses nothing rebuilds all 240
+# bindings cold, which ran past the old 2400 s bound on a DO MI325X
+# (exit 124). The bound follows the lease; the cap only stops a runaway.
+BUILD_CAP="${MOJOLEARN_RELEASE_BUILD_CAP:-5700}"
+[ "$WORK_SECONDS" -gt "$BUILD_CAP" ] && WORK_SECONDS=$BUILD_CAP
 [ "$WORK_SECONDS" -ge 300 ] || { echo "build_exit=NOT_STARTED_${WORK_SECONDS}s_LEFT" >> "$STATE"; log "only ${WORK_SECONDS}s left; skipping the build"; exit 7; }
 echo "work_seconds=$WORK_SECONDS" >> "$STATE"; log "build bound ${WORK_SECONDS}s"
 if [ "$LEG_MODE" = qualify ]; then
