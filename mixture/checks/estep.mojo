@@ -79,6 +79,8 @@ from std.gpu import WARP_SIZE, block_dim, block_idx, thread_idx
 from std.gpu.primitives.warp import shuffle_xor
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
+from std.math import exp as fast_exp, log as fast_log
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.memory import bitcast
@@ -482,6 +484,125 @@ def log_resp_kernel(
     )
 
 
+comptime GMM_FAST_ESTEP = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_GMM_FAST_FUSED_ESTEP_OFF"]()
+)
+"""FAST on Apple: the E-step's per-component `X . P_k` GEMMs, `mu_k . P_k`,
+Mahalanobis folds, weighted log probabilities and logsumexp in ONE
+thread-per-row launch (`fast_estep_kernel`): every component's precision
+factor and `mu_k . P_k` staged in threadgroup memory, the row in registers
+padded to a comptime width. `-D MOJOLEARN_GMM_FAST_FUSED_ESTEP_OFF` keeps
+the pinned path."""
+comptime FE_TPB = 256
+comptime FE_SMEM = 7936
+
+
+def fast_estep_width(d: Int) -> Int:
+    """The comptime row width `fast_estep_kernel` is instantiated at, 0 when
+    none holds `d`."""
+    if d <= 4:
+        return 4
+    if d <= 8:
+        return 8
+    if d <= 16:
+        return 16
+    if d <= 32:
+        return 32
+    return 0
+
+
+def fast_estep_applies(d: Int, ncomp: Int) -> Bool:
+    var w = fast_estep_width(d)
+    return w > 0 and ncomp * w * (w + 1) <= FE_SMEM
+
+
+def fast_estep_kernel[
+    D: Int
+](
+    x: MutPointer[Float32, MutAnyOrigin],
+    means: MutPointer[Float32, MutAnyOrigin],
+    prec: MutPointer[Float32, MutAnyOrigin],
+    log_det_chol: MutPointer[Float32, MutAnyOrigin],
+    log_weights: MutPointer[Float32, MutAnyOrigin],
+    wlp: MutPointer[Float32, MutAnyOrigin],
+    rowmax: MutPointer[Float32, MutAnyOrigin],
+    lse: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    d_in: Int32,
+    ncomp_in: Int32,
+    d_log_2pi: Float32,
+):
+    """GMM_FAST_ESTEP: row i's `wlp[i, :]`, `rowmax[i]` and `lse[i]`, the
+    same quantities the pinned stages write (the same strict-`>` row max and
+    all-`-inf` guard), in FAST arithmetic."""
+    var n = Int(n_in)
+    var d = Int(d_in)
+    var ncomp = Int(ncomp_in)
+    var t = Int(thread_idx.x)
+    comptime DD = D * D
+    var sp = stack_allocation[
+        FE_SMEM, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var mbase = ncomp * DD
+    var e = t
+    while e < ncomp * DD:
+        var c = e // DD
+        var r = e % DD
+        var i = r // D
+        var j = r % D
+        var v = Float32(0)
+        if i < d and j < d:
+            v = prec.unsafe_load(c * d * d + i * d + j)
+        sp[e] = v
+        e += FE_TPB
+    barrier()
+    e = t
+    while e < ncomp * D:
+        var c = e // D
+        var j = e % D
+        var acc = Float32(0)
+        for i in range(d):
+            acc += means.unsafe_load(c * d + i) * sp[c * DD + i * D + j]
+        sp[mbase + e] = acc
+        e += FE_TPB
+    barrier()
+    var row = Int(block_idx.x) * FE_TPB + t
+    if row >= n:
+        return
+    var xv = SIMD[DType.float32, D](0)
+    comptime for i in range(D):
+        if i < d:
+            xv[i] = x.unsafe_load(row * d + i)
+    var neg_inf = bitcast[DType.float32](GMM_NEG_INF_BITS)
+    var maxv = neg_inf
+    var first = True
+    for c in range(ncomp):
+        var y = SIMD[DType.float32, D](0)
+        comptime for i in range(D):
+            var prow = SIMD[DType.float32, D](0)
+            comptime for j in range(D):
+                prow[j] = sp[c * DD + i * D + j]
+            y += xv[i] * prow
+        comptime for j in range(D):
+            y[j] -= sp[mbase + c * D + j]
+        var m = (y * y).reduce_add()
+        var w = Float32(-0.5) * (d_log_2pi + m) + log_det_chol.unsafe_load(c) + log_weights.unsafe_load(c)
+        wlp.unsafe_store(row * ncomp + c, w)
+        if first or w > maxv:
+            maxv = w
+            first = False
+    rowmax.unsafe_store(row, maxv)
+    if maxv == neg_inf:
+        lse.unsafe_store(row, maxv)
+        return
+    var ssum = Float32(0)
+    for c in range(ncomp):
+        ssum += fast_exp(wlp.unsafe_load(row * ncomp + c) - maxv)
+    lse.unsafe_store(row, fast_log(ssum) + maxv)
+
+
 comptime GMM_FAST_MEANLL = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and not is_defined["MOJOLEARN_GMM_FAST_SERIAL_MEANLL"]()
@@ -739,7 +860,50 @@ def gmm_e_step(
     var y = scratch.create_sub_buffer[DType.float32](0, n * d)
     var murow = scratch.create_sub_buffer[DType.float32](n * d, d)
 
-    for kc in range(ncomp):
+    var fused = False
+    comptime if GMM_FAST_ESTEP:
+        fused = (
+            sabotage == GMM_SAB_NONE
+            and not trace.enabled
+            and fast_estep_applies(d, ncomp)
+        )
+    if fused:
+        var fe_dl2pi = Float32(d) * gmm_log_2pi()
+        var fe_grid = (n + FE_TPB - 1) // FE_TPB
+        var w = fast_estep_width(d)
+        if w == 4:
+            ctx.enqueue_function[fast_estep_kernel[4]](
+                x.unsafe_ptr(), means.unsafe_ptr(), prec.unsafe_ptr(),
+                log_det_chol.unsafe_ptr(), log_weights.unsafe_ptr(),
+                wlp.unsafe_ptr(), rowmax.unsafe_ptr(), lse.unsafe_ptr(),
+                Int32(n), Int32(d), Int32(ncomp), fe_dl2pi,
+                grid_dim=(fe_grid, 1, 1), block_dim=(FE_TPB, 1, 1),
+            )
+        elif w == 8:
+            ctx.enqueue_function[fast_estep_kernel[8]](
+                x.unsafe_ptr(), means.unsafe_ptr(), prec.unsafe_ptr(),
+                log_det_chol.unsafe_ptr(), log_weights.unsafe_ptr(),
+                wlp.unsafe_ptr(), rowmax.unsafe_ptr(), lse.unsafe_ptr(),
+                Int32(n), Int32(d), Int32(ncomp), fe_dl2pi,
+                grid_dim=(fe_grid, 1, 1), block_dim=(FE_TPB, 1, 1),
+            )
+        elif w == 16:
+            ctx.enqueue_function[fast_estep_kernel[16]](
+                x.unsafe_ptr(), means.unsafe_ptr(), prec.unsafe_ptr(),
+                log_det_chol.unsafe_ptr(), log_weights.unsafe_ptr(),
+                wlp.unsafe_ptr(), rowmax.unsafe_ptr(), lse.unsafe_ptr(),
+                Int32(n), Int32(d), Int32(ncomp), fe_dl2pi,
+                grid_dim=(fe_grid, 1, 1), block_dim=(FE_TPB, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[fast_estep_kernel[32]](
+                x.unsafe_ptr(), means.unsafe_ptr(), prec.unsafe_ptr(),
+                log_det_chol.unsafe_ptr(), log_weights.unsafe_ptr(),
+                wlp.unsafe_ptr(), rowmax.unsafe_ptr(), lse.unsafe_ptr(),
+                Int32(n), Int32(d), Int32(ncomp), fe_dl2pi,
+                grid_dim=(fe_grid, 1, 1), block_dim=(FE_TPB, 1, 1),
+            )
+    for kc in range(0 if fused else ncomp):
         var pk = prec.create_sub_buffer[DType.float32](kc * d * d, d * d)
         var muk = means.create_sub_buffer[DType.float32](kc * d, d)
 
@@ -797,6 +961,35 @@ def gmm_e_step(
 
     var d_log_2pi = ftz(identical_mul(Float32(d), gmm_log_2pi()))
     var grid_cells = (n * ncomp + elem_tpb - 1) // elem_tpb
+    if fused:
+        ctx.enqueue_function[log_resp_kernel](
+            wlp.unsafe_ptr(),
+            lse.unsafe_ptr(),
+            logresp.unsafe_ptr(),
+            Int32(n),
+            Int32(ncomp),
+            grid_dim=(grid_cells, 1, 1),
+            block_dim=(elem_tpb, 1, 1),
+        )
+        comptime if GMM_FAST_MEANLL:
+            ctx.enqueue_function[fast_meanll_kernel](
+                lse.unsafe_ptr(),
+                meanll.unsafe_ptr(),
+                Int32(n),
+                grid_dim=(1, 1, 1),
+                block_dim=(FAST_MEANLL_TPB, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[meanll_kernel](
+                lse.unsafe_ptr(),
+                meanll.unsafe_ptr(),
+                Int32(n),
+                grid_dim=(1, 1, 1),
+                block_dim=(1, 1, 1),
+            )
+        _ = y^
+        _ = murow^
+        return
     ctx.enqueue_function[weighted_log_prob_kernel](
         mahal.unsafe_ptr(),
         log_det_chol.unsafe_ptr(),
