@@ -782,7 +782,16 @@ def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None, buil
         unknown = set(builders_override) - set(facts["builders"])
         if unknown:
             raise SystemExit("release_reuse: the overlay names builders no identity reads: " + ", ".join(sorted(unknown)))
-        facts = dict(facts, builders=dict(facts["builders"], **builders_override))
+        # The v2 identities read per-binding builder views, not the whole-file
+        # digest: an overridden builder's bytes are known only by their sha,
+        # so every view of it (each binding's and the runtime's) becomes a
+        # digest of that sha, and the overlay moves every identity that reads it.
+        views = dict(facts.get("builder_views") or {})
+        for rel, digest in builders_override.items():
+            names = (views.get(rel) or {}).keys() or [b.name for t in (LINUX, MACOS) for b in bindings(t)] + [RUNTIME_VIEW]
+            views[rel] = {name: hashlib.sha256(("%s\0%s\0override\0%s" % (BUILDER_RULE, rel, digest)).encode()).hexdigest()
+                          for name in names}
+        facts = dict(facts, builders=dict(facts["builders"], **builders_override), builder_views=views)
     if host_toolchain is None:
         host_toolchain = darwin_toolchain()
     if prev:

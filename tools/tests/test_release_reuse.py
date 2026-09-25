@@ -836,17 +836,19 @@ class BuilderViewTests(unittest.TestCase):
 
     # (b) anything that can change this binding's bytes
     def test_moving_this_binding_between_tier_lists_moves_it(self):
+        # _mojolearn_solver is FAST classical on both targets (FAST svm is
+        # Apple-only since 69a519c15, so the Linux list no longer holds svm)
         for rel in (LINUX_SETS_SH, MACOS_WHEEL_SH):
             text = real(rel)
-            after = edit_line(text, 'FAST_CLASSICAL_NAMES="', lambda line: line.replace(" _mojolearn_svm", ""))
-            after = edit_line(after, 'FAST_CLASSICAL_SCRIPTS="', lambda line: line.replace(" build_svm.sh", ""))
-            after = add_to_list(add_to_list(after, "IDENTICAL_ONLY_NAMES", "_mojolearn_svm"),
-                                "IDENTICAL_ONLY_SCRIPTS", "build_svm.sh")
+            after = edit_line(text, 'FAST_CLASSICAL_NAMES="', lambda line: line.replace(" _mojolearn_solver", ""))
+            after = edit_line(after, 'FAST_CLASSICAL_SCRIPTS="', lambda line: line.replace(" build_solver.sh", ""))
+            after = add_to_list(add_to_list(after, "IDENTICAL_ONLY_NAMES", "_mojolearn_solver"),
+                                "IDENTICAL_ONLY_SCRIPTS", "build_solver.sh")
             self.assertViews(rel, text, after, same=("_mojolearn_gbdt", "_mojolearn_training", "_mojolearn"),
-                             moved=("_mojolearn_svm",))
+                             moved=("_mojolearn_solver",))
             # the name alone or the script alone moving is enough
-            only_name = edit_line(text, 'FAST_CLASSICAL_NAMES="', lambda line: line.replace(" _mojolearn_svm", ""))
-            self.assertViews(rel, text, only_name, same=("_mojolearn_gbdt",), moved=("_mojolearn_svm",))
+            only_name = edit_line(text, 'FAST_CLASSICAL_NAMES="', lambda line: line.replace(" _mojolearn_solver", ""))
+            self.assertViews(rel, text, only_name, same=("_mojolearn_gbdt",), moved=("_mojolearn_solver",))
 
     def test_any_code_line_of_a_builder_moves_every_binding(self):
         text = real(LINUX_SETS_SH)
