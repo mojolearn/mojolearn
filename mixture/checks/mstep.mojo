@@ -99,7 +99,11 @@ preference.
 ==========================================================================
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from std.gpu import WARP_SIZE, block_dim, block_idx, thread_idx
+from std.gpu.primitives.warp import shuffle_xor
+from std.memory import stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from cholesky.checks.potrf import (
@@ -113,6 +117,9 @@ from cholesky.checks.potrf import (
 )
 from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_lower
 from core.identity_trace import IdentityTrace
+from core.gram_splitk import gemm_tn_splitk_into, gram_splitk_applies
+from std.math import sqrt
+from std.sys.compile import is_defined
 from gemm.checks.gemm_identical import (
     identical_gemm_into,
     identical_gemm_workspace_max_floats,
@@ -139,6 +146,8 @@ from mixture.checks.gmm_sabotage import (
     sabotage_resp_exp_kernel,
 )
 from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_FAST,
     ftz,
     identical_div,
     identical_exp,
@@ -383,6 +392,127 @@ def center_scale_kernel(
     diff.unsafe_store(idx, dv)
     var r = ftz(resp.unsafe_load(i * ncomp + kc))
     scaled.unsafe_store(idx, ftz(identical_mul(r, dv)))
+
+
+comptime GMM_FAST_GRAM = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and not is_defined["MOJOLEARN_GMM_FAST_PINNED_COV"]()
+)
+"""FAST only: each component's covariance is the split-K Gram `y^T y` of
+`y = sqrt(resp_k) * (X - mean_k)` (`center_sqrt_scale_kernel`,
+`core/gram_splitk`) instead of the pinned `(resp_k * diff)^T diff` GEMM,
+whose million-deep reduction ran in one threadgroup on Apple (about 30 ms
+per component at 1M x 16 on the M4). The same matrix up to rounding; FAST
+promises no bits. `-D MOJOLEARN_GMM_FAST_PINNED_COV` restores the pinned
+product."""
+
+
+comptime GMM_FAST_COLS = 32
+"""The widest `d` the FAST column-sum kernel holds in registers."""
+comptime GMM_FAST_CHUNKS = 64
+comptime GMM_FAST_TPB = 256
+
+
+def fast_resp_colsums_partial_kernel(
+    x: MutPointer[Float32, MutAnyOrigin],
+    resp: MutPointer[Float32, MutAnyOrigin],
+    partial: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    d_in: Int32,
+    ncomp_in: Int32,
+):
+    """GMM_FAST_GRAM: block (k, c) sums `resp[i, k] * x[i, j]` for every j
+    and `resp[i, k]` over its chunk of rows into
+    `partial[(k * CHUNKS + c) * (d + 1) + j]` (j == d is the mass). Warp
+    shuffles, then one barrier and a fold over the warps."""
+    comptime N_WARPS = GMM_FAST_TPB // WARP_SIZE
+    var n = Int(n_in)
+    var d = Int(d_in)
+    var ncomp = Int(ncomp_in)
+    var k = Int(block_idx.x)
+    var c = Int(block_idx.y)
+    var acc = SIMD[DType.float32, GMM_FAST_COLS](0)
+    var mass = Float32(0)
+    var i = c * GMM_FAST_TPB + Int(thread_idx.x)
+    var stride = GMM_FAST_CHUNKS * GMM_FAST_TPB
+    while i < n:
+        var r = resp[unsafe_offset = i * ncomp + k]
+        mass += r
+        comptime for j in range(GMM_FAST_COLS):
+            if j < d:
+                acc[j] += r * x[unsafe_offset = i * d + j]
+        i += stride
+    var sh = stack_allocation[
+        N_WARPS * (GMM_FAST_COLS + 1), Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var warp = Int(thread_idx.x) // WARP_SIZE
+    var lane = Int(thread_idx.x) % WARP_SIZE
+    comptime for j in range(GMM_FAST_COLS + 1):
+        var v = mass if j == GMM_FAST_COLS else acc[j]
+        comptime for step in range(8):
+            comptime off = WARP_SIZE >> (step + 1)
+            comptime if off > 0:
+                v += shuffle_xor(v, UInt32(off))
+        if lane == 0:
+            sh[warp * (GMM_FAST_COLS + 1) + j] = v
+    barrier()
+    var t = Int(thread_idx.x)
+    if t <= d:
+        var col = GMM_FAST_COLS if t == d else t
+        var tot = Float32(0)
+        for w in range(N_WARPS):
+            tot += sh[w * (GMM_FAST_COLS + 1) + col]
+        partial[unsafe_offset = (k * GMM_FAST_CHUNKS + c) * (d + 1) + t] = tot
+
+
+def fast_resp_colsums_finish_kernel(
+    partial: MutPointer[Float32, MutAnyOrigin],
+    raw: MutPointer[Float32, MutAnyOrigin],
+    nk: MutPointer[Float32, MutAnyOrigin],
+    d_in: Int32,
+    ncomp_in: Int32,
+    ten_eps: Float32,
+):
+    """Fold the chunks: `raw[k, j]` (the means' numerators) and
+    `nk[k] = mass + 10 eps` (the constant after the sum, as `nk_kernel`)."""
+    var d = Int(d_in)
+    var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if idx >= Int(ncomp_in) * (d + 1):
+        return
+    var k = idx // (d + 1)
+    var j = idx % (d + 1)
+    var tot = Float32(0)
+    for c in range(GMM_FAST_CHUNKS):
+        tot += partial[unsafe_offset = (k * GMM_FAST_CHUNKS + c) * (d + 1) + j]
+    if j == d:
+        nk[unsafe_offset=k] = tot + ten_eps
+    else:
+        raw[unsafe_offset = k * d + j] = tot
+
+
+def center_sqrt_scale_kernel(
+    x: MutPointer[Float32, MutAnyOrigin],
+    means: MutPointer[Float32, MutAnyOrigin],
+    resp: MutPointer[Float32, MutAnyOrigin],
+    y: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    d_in: Int32,
+    kcomp_in: Int32,
+    ncomp_in: Int32,
+):
+    """GMM_FAST_GRAM: `y = sqrt(resp[:, k]) * (X - means[k])`, one thread
+    per cell, so `y^T y` is component k's weighted scatter."""
+    var d = Int(d_in)
+    var kc = Int(kcomp_in)
+    var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if idx >= Int(n_in) * d:
+        return
+    var i = idx // d
+    var j = idx % d
+    var r = resp.unsafe_load(i * Int(ncomp_in) + kc)
+    var w = sqrt(r) if r > Float32(0) else Float32(0)
+    y.unsafe_store(idx, w * (x.unsafe_load(idx) - means.unsafe_load(kc * d + j)))
 
 
 def cov_finish_kernel(
@@ -862,7 +992,31 @@ def gmm_m_step(
     trace.record_device(ctx, tag + ".resp", resp, n * ncomp)
 
     var grid_comp = (ncomp + comp_tpb - 1) // comp_tpb
-    if sabotage == GMM_SAB_NK_DESCENDING:
+    var fast_sums = False
+    comptime if GMM_FAST_GRAM:
+        fast_sums = sabotage == 0 and d <= GMM_FAST_COLS
+    if fast_sums:
+        ctx.enqueue_function[fast_resp_colsums_partial_kernel](
+            x.unsafe_ptr(),
+            resp.unsafe_ptr(),
+            scaled.unsafe_ptr(),
+            Int32(n),
+            Int32(d),
+            Int32(ncomp),
+            grid_dim=(ncomp, GMM_FAST_CHUNKS, 1),
+            block_dim=(GMM_FAST_TPB, 1, 1),
+        )
+        ctx.enqueue_function[fast_resp_colsums_finish_kernel](
+            scaled.unsafe_ptr(),
+            raw.unsafe_ptr(),
+            nk.unsafe_ptr(),
+            Int32(d),
+            Int32(ncomp),
+            gmm_ten_eps(),
+            grid_dim=((ncomp * (d + 1) + 255) // 256, 1, 1),
+            block_dim=(256, 1, 1),
+        )
+    elif sabotage == GMM_SAB_NK_DESCENDING:
         ctx.enqueue_function[sabotage_nk_kernel](
             resp.unsafe_ptr(),
             nk.unsafe_ptr(),
@@ -915,7 +1069,8 @@ def gmm_m_step(
     # means = (resp^T . X) / nk.  OP_TN: A is `k x m` = `n x K`, B is
     # `k x n_cols` = `n x d`, C is `K x d`. `linalg.matmul` is REFUSED here;
     # DEVIATION 1729.
-    identical_gemm_into(ctx, raw, resp, x, gws, ncomp, d, n, OP_TN)
+    if not fast_sums:
+        identical_gemm_into(ctx, raw, resp, x, gws, ncomp, d, n, OP_TN)
     var grid_md = (ncomp * d + elem_tpb - 1) // elem_tpb
     ctx.enqueue_function[means_divide_kernel](
         raw.unsafe_ptr(),
@@ -931,7 +1086,36 @@ def gmm_m_step(
     var grid_nd = (n * d + elem_tpb - 1) // elem_tpb
     var grid_dd = (d * d + elem_tpb - 1) // elem_tpb
     var divide_after = Int32(0) if sabotage == GMM_SAB_COV_PRESCALE else Int32(1)
+    var fast_gram = False
+    comptime if GMM_FAST_GRAM:
+        fast_gram = sabotage == 0 and gram_splitk_applies(d, d, n)
     for kc in range(ncomp):
+        if fast_gram:
+            ctx.enqueue_function[center_sqrt_scale_kernel](
+                x.unsafe_ptr(),
+                means.unsafe_ptr(),
+                resp.unsafe_ptr(),
+                diff.unsafe_ptr(),
+                Int32(n),
+                Int32(d),
+                Int32(kc),
+                Int32(ncomp),
+                grid_dim=(grid_nd, 1, 1),
+                block_dim=(elem_tpb, 1, 1),
+            )
+            gemm_tn_splitk_into(ctx, raw, diff, scaled, d, n)
+            ctx.enqueue_function[cov_finish_kernel](
+                raw.unsafe_ptr(),
+                nk.unsafe_ptr(),
+                cov.unsafe_ptr(),
+                Int32(d),
+                Int32(kc),
+                reg_covar,
+                divide_after,
+                grid_dim=(grid_dd, 1, 1),
+                block_dim=(elem_tpb, 1, 1),
+            )
+            continue
         if sabotage == GMM_SAB_COV_PRESCALE:
             ctx.enqueue_function[sabotage_center_scale_kernel](
                 x.unsafe_ptr(),

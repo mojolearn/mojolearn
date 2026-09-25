@@ -75,7 +75,12 @@ keeping it out of the E-step keeps the E-step total: given parameters, it
 cannot fail.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from std.gpu import WARP_SIZE, block_dim, block_idx, thread_idx
+from std.gpu.primitives.warp import shuffle_xor
+from std.memory import stack_allocation
+from std.sys.compile import is_defined
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -98,6 +103,8 @@ from mixture.checks.gmm_sabotage import (
     sabotage_mahal_kernel,
 )
 from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_FAST,
     ftz,
     identical_div,
     identical_exp,
@@ -475,6 +482,45 @@ def log_resp_kernel(
     )
 
 
+comptime GMM_FAST_MEANLL = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and not is_defined["MOJOLEARN_GMM_FAST_SERIAL_MEANLL"]()
+)
+comptime FAST_MEANLL_TPB = 1024
+
+
+def fast_meanll_kernel(
+    lse: MutPointer[Float32, MutAnyOrigin],
+    out_scalar: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """FAST (`GMM_FAST_MEANLL`): `meanll_kernel`'s mean, folded by a
+    1024-thread block (grid-stride sums, warp shuffles, one barrier) instead
+    of one thread walking n values. FAST promises no bits."""
+    comptime N_WARPS = FAST_MEANLL_TPB // WARP_SIZE
+    var n = Int(n_in)
+    var acc = Float32(0)
+    var i = Int(thread_idx.x)
+    while i < n:
+        acc += lse[unsafe_offset=i]
+        i += FAST_MEANLL_TPB
+    comptime for step in range(8):
+        comptime off = WARP_SIZE >> (step + 1)
+        comptime if off > 0:
+            acc += shuffle_xor(acc, UInt32(off))
+    var sh = stack_allocation[
+        N_WARPS, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    if Int(thread_idx.x) % WARP_SIZE == 0:
+        sh[Int(thread_idx.x) // WARP_SIZE] = acc
+    barrier()
+    if Int(thread_idx.x) == 0:
+        var tot = Float32(0)
+        for w in range(N_WARPS):
+            tot += sh[w]
+        out_scalar[unsafe_offset=0] = tot / Float32(n)
+
+
 def meanll_kernel(
     lse: MutPointer[Float32, MutAnyOrigin],
     out_scalar: MutPointer[Float32, MutAnyOrigin],
@@ -808,13 +854,22 @@ def gmm_e_step(
     # ONE BLOCK, ONE THREAD. The launch is written out rather than defaulted
     # so that a reader of the driver sees the fold's shape without opening
     # the kernel, and so no future edit can widen it by changing a default.
-    ctx.enqueue_function[meanll_kernel](
-        lse.unsafe_ptr(),
-        meanll.unsafe_ptr(),
-        Int32(n),
-        grid_dim=(1, 1, 1),
-        block_dim=(1, 1, 1),
-    )
+    comptime if GMM_FAST_MEANLL:
+        ctx.enqueue_function[fast_meanll_kernel](
+            lse.unsafe_ptr(),
+            meanll.unsafe_ptr(),
+            Int32(n),
+            grid_dim=(1, 1, 1),
+            block_dim=(FAST_MEANLL_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[meanll_kernel](
+            lse.unsafe_ptr(),
+            meanll.unsafe_ptr(),
+            Int32(n),
+            grid_dim=(1, 1, 1),
+            block_dim=(1, 1, 1),
+        )
     trace.record_device(ctx, tag + ".meanll", meanll, 1)
     _ = y^
     _ = murow^
