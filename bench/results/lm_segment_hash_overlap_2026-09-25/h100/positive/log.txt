@@ -1,0 +1,9 @@
+[15:16:12] segment: route A segment controls-positive label nvidia-controls-positive, global steps 100..103, K=64, devices (0,), from ckpt_00000100.blm (sha256 80cd2126a89ba6d8)
+[15:16:12] the checkpoint's state AGREES with the expected chain's step 100 (2b37e85edfd701eb)
+[15:17:52] step 101 lr 397e2cc1 loss 6.9004 state abc8b816b5c3fb15 grad 25830bfc2016dc14 48.62 s (+6.66 s hashing)
+[15:17:52] step 101 agrees with the expected chain
+[15:18:42] step 102 lr 39805880 loss 6.8585 state a9421f91b947f82c grad 94c40a6e3d5ec5aa 38.90 s (+6.38 s hashing)
+[15:18:42] step 102 agrees with the expected chain
+[15:18:43] step 103 lr 39819a9f loss 6.8373 state fcdb48b8ab51f2ef grad 19a43804ef4065de 38.97 s (+5.64 s hashing)
+[15:18:43] step 103 agrees with the expected chain
+[15:18:43] PASS: /root/gemm_leg_out/lm-controls/positive
