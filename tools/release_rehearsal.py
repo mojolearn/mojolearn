@@ -95,6 +95,9 @@ def steps(work):
         # The real AMD leg runs in the pinned Ubuntu 22.04 container; dry-run that.
         ("amd-leg-dry-run", ["bash", "tools/do_release061_leg.sh", head, token],
          dict(MOJOLEARN_RELEASE_UBUNTU22="1")),
+        # The same build on Hot Aisle, the route release.py takes when DigitalOcean
+        # has a GPU droplet live: the archive, the scripts and the free stock GET.
+        ("amd-hotaisle-leg-dry-run", ["bash", "tools/hotaisle_release_leg.sh", head], None),
     ]
 
 
