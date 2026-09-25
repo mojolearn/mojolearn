@@ -30,6 +30,7 @@ import time
 from nvidia_serial_guard import memory, stop_group
 
 GIB = 2**30
+RSS_GIB_MAX = 64
 LOCK_PATHS = ('/tmp/mojolearn-root-gpu-job.lock',
               '/tmp/mojolearn-nvidia-root-job.lock')
 PCI_SUBSYSTEM = Path('/sys/bus/pci')
@@ -144,8 +145,12 @@ def run(args):
     """
     if sys.platform != 'linux' or not Path('/proc').is_dir():
         raise RuntimeError('Refusing local work: this guard requires remote Linux AMD')
-    if not args.command or args.seconds < 1 or not 1 <= args.rss_gib <= 12:
-        raise ValueError('Require command, positive deadline and RSS cap of 1..12 GiB')
+    # RSS_GIB_MAX, lifted from 12 on 2026-09-25 (lane/build-parallelism): the
+    # release build's cap is sized from the box by tools/build_sizing.py
+    # (3 GiB per job + 2, at most 16 jobs = 50 GiB; measured 1.44 to 1.66 GiB
+    # per job at four jobs on gfx942). Every other job keeps the 12 default.
+    if not args.command or args.seconds < 1 or not 1 <= args.rss_gib <= RSS_GIB_MAX:
+        raise ValueError('Require command, positive deadline and RSS cap of 1..%d GiB' % RSS_GIB_MAX)
     core_count = getattr(args, 'cores', 2)
     if not 1 <= core_count <= 64:
         raise ValueError('Require a CPU core count of 1..64')

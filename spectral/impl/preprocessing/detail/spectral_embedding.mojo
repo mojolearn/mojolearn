@@ -51,7 +51,9 @@ from std.math import isfinite
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
-from checks.numerics import ftz
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 from neighbors.estimator import knn_search
 from spectral.checks.device_io import download_f32, upload_f32
 from spectral.host.spectral_predict_host import (
@@ -82,6 +84,19 @@ from spectral.impl.sparse.solver.lanczos_types import (
     LANCZOS_LA,
     LanczosSolverConfig,
 )
+
+
+#: FAST on Apple: the Lanczos basis width for sparse Laplacians (fewer
+#: than `FAST_NCV_DENSE_ROW` entries per row), in place of the reference's
+#: `max(2k + 1, 20)`; still clamped to `n - k`. Same tolerance, same
+#: residual test. `-D MOJOLEARN_SPECTRAL_NCV_FAST_OFF` keeps the reference.
+comptime SPECTRAL_NCV_FAST = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_SPECTRAL_NCV_FAST_OFF"]()
+)
+comptime FAST_NCV = 48
+comptime FAST_NCV_DENSE_ROW = 64
 
 
 @fieldwise_init
@@ -292,6 +307,13 @@ def compute_eigenpairs_keep(
     var ncv_hi = 2 * k + 1
     if ncv_hi < 20:
         ncv_hi = 20
+    comptime if SPECTRAL_NCV_FAST:
+        # FAST on Apple, sparse rows: a wider Krylov basis. Restarts cost
+        # launches and syncs that a sparse matvec does not amortize (UMAP
+        # 100k: 362 restarts at ncv 20, 73 at 48); dense kNN rows keep
+        # the reference basis, their matvec is the cost.
+        if laplacian.nnz < FAST_NCV_DENSE_ROW * n_samples and ncv_hi < FAST_NCV:
+            ncv_hi = FAST_NCV
     var ncv = n_samples - k
     if ncv_hi < ncv:
         ncv = ncv_hi
