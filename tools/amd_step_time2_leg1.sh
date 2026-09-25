@@ -11,7 +11,8 @@
 #   2. byte LM binding: admit, noadmit, and dq (admit + the attention dq fold
 #      on the matrix cores, -D MOJOLEARN_ATTN_DQ_MFMA=1; probe3 first);
 #      lean B4 step (witnesses) on each; dq replays only if its witnesses
-#      equal admit's
+#      equal admit's; dqkv adds the dk/dv folds (-D MOJOLEARN_ATTN_DKDV_MFMA=1),
+#      attn3 also the forward context fold (-D MOJOLEARN_ATTN_FWD_MFMA=1)
 #   3. replays held to the H100 chain on admit: steps 101..103 from ckpt 100
 #      (A-1 chain) and 1999..2000 from ckpt 1998 (A-2 chain)
 #   4. rocprofv3 kernel trace of one lean B4 step on admit
@@ -66,6 +67,7 @@ say "base exit=$? secs=$(( $(date +%s) - t0 ))"
 ( blm noadmit "-D MOJOLEARN_GEMM_MFMA_NO_ADMIT=1" ) &
 ( blm dq "-D MOJOLEARN_ATTN_DQ_MFMA=1" ) &
 ( blm dqkv "-D MOJOLEARN_ATTN_DQ_MFMA=1 -D MOJOLEARN_ATTN_DKDV_MFMA=1" ) &
+( blm attn3 "-D MOJOLEARN_ATTN_DQ_MFMA=1 -D MOJOLEARN_ATTN_DKDV_MFMA=1 -D MOJOLEARN_ATTN_FWD_MFMA=1" ) &
 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_AMD --target-accelerator "$MOJOLEARN_GPU_ARCHS" -I . \
     gemm/checks/amd_mfma_probe3.mojo -o "$BIN/mfma_probe3" > "$OUT/mfma3_build.log" 2>&1 && "$BIN/mfma_probe3" > "$OUT/mfma_probe3.log" 2>&1
 say "mfma probe3 exit=$?: $(grep MFMA3_MODE "$OUT/mfma_probe3.log" | tr '\n' ' ')"
@@ -90,6 +92,7 @@ lean admit
 lean noadmit
 [ -s "$BIN/byte_lm.dq.so" ] && lean dq
 [ -s "$BIN/byte_lm.dqkv.so" ] && lean dqkv
+[ -s "$BIN/byte_lm.attn3.so" ] && lean attn3
 $S replay admit ckpt_00000100.blm A-1.chain.partial.jsonl 3 > /dev/null 2>&1
 $S replay admit ckpt_00001998.blm A-2.chain.jsonl 2 > /dev/null 2>&1
 # the dq trial (GEMM admission + dq on the matrix cores): replay only if its
@@ -99,7 +102,6 @@ import json,sys
 a=json.load(open('$OUT/lean-admit/result.json'));d=json.load(open('$OUT/lean-dq/result.json'))
 sys.exit(0 if [w['sha256'] for w in a['step_witnesses']]==[w['sha256'] for w in d['step_witnesses']] else 1)"; then
     say "lean dq witnesses EQUAL admit's"
-    $S replay dq ckpt_00000100.blm A-1.chain.partial.jsonl 3 > /dev/null 2>&1
 else
     say "lean dq witnesses DIFFER from admit's (or dq missing): no dq replay"
 fi
@@ -109,9 +111,18 @@ a=json.load(open('$OUT/lean-admit/result.json'));d=json.load(open('$OUT/lean-dqk
 sys.exit(0 if [w['sha256'] for w in a['step_witnesses']]==[w['sha256'] for w in d['step_witnesses']] else 1)"; then
     say "lean dqkv witnesses EQUAL admit's"
     $S replay dqkv ckpt_00000100.blm A-1.chain.partial.jsonl 3 > /dev/null 2>&1
-    $S replay dqkv ckpt_00001998.blm A-2.chain.jsonl 2 > /dev/null 2>&1
 else
     say "lean dqkv witnesses DIFFER from admit's (or dqkv missing): no dqkv replay"
+fi
+if [ -s "$OUT/lean-attn3/result.json" ] && python3 -c "
+import json,sys
+a=json.load(open('$OUT/lean-admit/result.json'));d=json.load(open('$OUT/lean-attn3/result.json'))
+sys.exit(0 if [w['sha256'] for w in a['step_witnesses']]==[w['sha256'] for w in d['step_witnesses']] else 1)"; then
+    say "lean attn3 witnesses EQUAL admit's"
+    $S replay attn3 ckpt_00000100.blm A-1.chain.partial.jsonl 3 > /dev/null 2>&1
+    $S replay attn3 ckpt_00001998.blm A-2.chain.jsonl 2 > /dev/null 2>&1
+else
+    say "lean attn3 witnesses DIFFER from admit's (or attn3 missing): no attn3 replay"
 fi
 
 # ---- 4. the kernel trace of one lean step on admit ----

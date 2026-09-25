@@ -8,6 +8,8 @@ from transformer.impl.llama.fused_attention import (
     fused_bwd_dq_mfma_kernel,
     fused_bwd_dkdv_r2_kernel,
     fused_bwd_dkdv_mfma_kernel,
+    fused_attn_forward_r2_kernel,
+    fused_attn_forward_r2_mfma_kernel,
 )
 
 comptime T = get_gpu_target["mi300x"]()
@@ -22,4 +24,8 @@ def main():
     print(compile_info[fused_bwd_dkdv_r2_kernel[64, 32, False, True], emission_kind="asm", target=T]().asm)
     print("### dkdv_mfma asm")
     print(compile_info[fused_bwd_dkdv_mfma_kernel[64, True], emission_kind="asm", target=T]().asm)
+    print("### fwd_valu asm")
+    print(compile_info[fused_attn_forward_r2_kernel[64, 32, True, True, False, True], emission_kind="asm", target=T]().asm)
+    print("### fwd_mfma asm")
+    print(compile_info[fused_attn_forward_r2_mfma_kernel[64, 32, True, True, False, True], emission_kind="asm", target=T]().asm)
     print("### end")

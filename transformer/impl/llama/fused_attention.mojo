@@ -6099,6 +6099,269 @@ def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: B
 
 
 # ===========================================================================
+# THE FORWARD CONTEXT FOLD ON THE MATRIX CORES (lane/amd-step-time-2,
+# 2026-09-25; AMD only, `ATTN_FWD_MFMA`; TRIAL: on only under
+# `-D MOJOLEARN_ATTN_FWD_MFMA=1` until its bits are proven on the device).
+#
+# `fused_attn_forward_r2_kernel[64, TQ, QRES, True, False]` computes, in pass
+# 3, the context chain per (t, c): acc = ftz(fma_rn(w[t][j], v[j][c], acc))
+# over the keys j the row sees, ascending, from +0.0 (`_step_preflushed` on
+# the staged, flushed V and the flushed weights of the tile). This copy runs
+# that chain as the dq section does: waves 0 .. TQ/16 - 1 own rows
+# 16 w .. 16 w + 15 and all 64 columns, one `v_mfma_f32_16x16x1f32` step
+# plus the product by `one` under MODE 2 for a key every row of the wave
+# sees, the VALU step on exactly the visible cells otherwise; the other
+# waves only stage. Passes 1 and 2, the statistics, the stash and the -0.0
+# corner test are the original's lines (the corner test reads the same
+# per-row upper bound).
+# ===========================================================================
+comptime ATTN_FWD_MFMA = (
+    TARGET_COLUMN == COLUMN_AMD and is_defined["MOJOLEARN_ATTN_FWD_MFMA"]()
+)
+
+
+def fused_attn_forward_r2_mfma_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool, SWZ: Bool = False](
+    ctxv: MutPointer[Float32, MutAnyOrigin],
+    amax: MutPointer[Float32, MutAnyOrigin],
+    denom: MutPointer[Float32, MutAnyOrigin],
+    corner: MutPointer[Float32, MutAnyOrigin],
+    sstash: MutPointer[Float32, MutAnyOrigin],
+    q_rope: MutPointer[Float32, MutAnyOrigin],
+    k_cache: MutPointer[Float32, MutAnyOrigin],
+    v_cache: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32, l_in: Int32, nh_in: Int32, nkv_in: Int32,
+    s_in: Int32, pos0_in: Int32, key_lo_in: Int32, window_in: Int32,
+    scale_in: Float32,
+    one: Float32,
+):
+    """`fused_attn_forward_r2_kernel` with the pass-3 context chain on the
+    matrix cores (see THE FORWARD CONTEXT FOLD ON THE MATRIX CORES); every
+    other line is that kernel's. Clean, preflushed instantiations only."""
+    comptime RPT = TQ // 16
+    comptime CPT = HD // 16
+    comptime BK = ATTN_FR2_BK
+    comptime KS = ATTN_FR2_KS
+    comptime STRIDE = KS + 4
+    comptime KOFF = TQ * HD if QRES else 0
+    comptime SPG = TQ * HD + BK * STRIDE if QRES else BK * HD
+    var stg = stack_allocation[SPG, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var tile = stack_allocation[TQ * 33, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var stats = stack_allocation[2 * TQ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    comptime assert HD == 64 and PF and not SABN, "fused_attn_forward_r2_mfma_kernel: HD 64, PF, clean"
+    comptime assert TQ % 16 == 0, "fused_attn_forward_r2_mfma_kernel: TQ a multiple of 16"
+    var tid = Int(thread_idx.x)
+    var tr = tid // 16
+    var tc = tid % 16
+    var wv = tid // 64
+    var mlane = tid % 64
+    var wr = wv * 16
+    var lq = (mlane // 16) * 4
+    var lc = mlane % 16
+    var l = Int(l_in)
+    var nh = Int(nh_in)
+    var nkv = Int(nkv_in)
+    var s = Int(s_in)
+    var pos0 = Int(pos0_in)
+    var key_lo = Int(key_lo_in)
+    var window = Int(window_in)
+    var ntb = (l + TQ - 1) // TQ
+    var raw = Int(block_idx.x)
+    # DEVIATION 2900 under SWZ: the same set of (tile, head, batch)
+    # triples, handed out heaviest first.
+    var bm = _blk_map[SWZ, True](raw, ntb, nh, Int(b_in))
+    var t0 = bm[0] * TQ
+    var h = bm[1]
+    var bb = bm[2]
+    var kvbase = (bb * nkv + h // (nh // nkv)) * s * HD
+    var stbase = (bb * nh + h) * l * s
+    var t1 = min(t0 + TQ - 1, l - 1)
+    var r0 = _row_range(t0, pos0, key_lo, window, s)
+    var r1 = _row_range(t1, pos0, key_lo, window, s)
+    var kb_lo = r0[0] // BK
+    var kb_hi = r1[1] // BK
+    var negmax = bitcast[DType.float32](UInt32(0xFF7FFFFF))
+    var mpart = SIMD[DType.float32, RPT](negmax)
+    var dacc = Float32(0.0)
+    var cm = SIMD[DType.float32, 16](0.0)
+    var ones = SIMD[DType.float32, 16](one)
+    # The context waves (rows 16 w .. 16 w + 15, w < TQ / 16): their full-key
+    # window and each lane's four rows' key ranges.
+    var cwave = wv < TQ // 16
+    var cwt0 = t0 + wr
+    var cvalid = cwave and cwt0 < l
+    var full_lo = 0
+    var full_hi = -1
+    if cvalid:
+        full_lo = _row_range(min(cwt0 + 15, l - 1), pos0, key_lo, window, s)[0]
+        full_hi = _row_range(cwt0, pos0, key_lo, window, s)[1]
+    var clo = SIMD[DType.int32, 4](0)
+    var chi = SIMD[DType.int32, 4](-1)
+    comptime for q in range(4):
+        var tq = t0 + wr + lq + q
+        if cwave and tq < l:
+            var rq = _row_range(tq, pos0, key_lo, window, s)
+            clo[q] = Int32(rq[0])
+            chi[q] = Int32(rq[1])
+    comptime if QRES:
+        # DEVIATION 2530: the block's query rows, once, coalesced [TQ][HD].
+        comptime for si in range(TQ * HD // 256):
+            var i = tid + si * 256
+            var r = i // HD
+            var t = t0 + r
+            var x = Float32(0.0)
+            if t < l:
+                x = ftz(q_rope.unsafe_load((bb * l + t) * nh * HD + h * HD + i % HD))
+            comptime if SABN:
+                stg.unsafe_store(i, _flip_ulp(x))
+            else:
+                stg.unsafe_store(i, x)
+        barrier()
+    comptime for phase in range(3):
+        for kb in range(kb_lo, kb_hi + 1):
+            comptime if phase == 0:
+                var dots = SIMD[DType.float32, RPT * 2](0.0)
+                comptime for pw in range(HD // KS):
+                    comptime if QRES:
+                        # K only: [BK][KS] at stride KS + 4, after the Q rows.
+                        comptime for si in range(BK * KS // 256):
+                            var i = tid + si * 256
+                            var r = i // KS
+                            var p = i % KS
+                            var j = kb * BK + r
+                            var x = Float32(0.0)
+                            if j < s:
+                                x = ftz(k_cache.unsafe_load(kvbase + j * HD + pw * KS + p))
+                            stg.unsafe_store(KOFF + r * STRIDE + p, x)
+                    else:
+                        comptime for si in range((TQ + BK) * KS // 256):
+                            var i = tid + si * 256
+                            var r = i // KS
+                            var p = i % KS
+                            var x = Float32(0.0)
+                            if r < TQ:
+                                var t = t0 + r
+                                if t < l:
+                                    x = ftz(q_rope.unsafe_load((bb * l + t) * nh * HD + h * HD + pw * KS + p))
+                            else:
+                                var j = kb * BK + r - TQ
+                                if j < s:
+                                    x = ftz(k_cache.unsafe_load(kvbase + j * HD + pw * KS + p))
+                            stg.unsafe_store(r * STRIDE + p, x)
+                    barrier()
+                    comptime for p in range(KS):
+                        var qa = SIMD[DType.float32, RPT](0.0)
+                        var ka = SIMD[DType.float32, 2](0.0)
+                        comptime if QRES:
+                            comptime for u in range(RPT):
+                                qa[u] = stg.unsafe_load((tr + u * 16) * HD + pw * KS + p)
+                            comptime for v in range(2):
+                                ka[v] = stg.unsafe_load(KOFF + (tc + v * 16) * STRIDE + p)
+                        else:
+                            comptime for u in range(RPT):
+                                qa[u] = stg.unsafe_load((tr + u * 16) * STRIDE + p)
+                            comptime for v in range(2):
+                                ka[v] = stg.unsafe_load((TQ + tc + v * 16) * STRIDE + p)
+                        comptime for u in range(RPT):
+                            comptime for v in range(2):
+                                dots[u * 2 + v] = _step_preflushed(qa[u], ka[v], dots[u * 2 + v])
+                    barrier()
+                comptime for u in range(RPT):
+                    var r = tr + u * 16
+                    var t = t0 + r
+                    var rr = _row_range(t, pos0, key_lo, window, s)
+                    comptime for v in range(2):
+                        var jj = tc + v * 16
+                        var j = kb * BK + jj
+                        if t < l and j >= rr[0] and j <= rr[1]:
+                            var masked = ftz(_pmul(dots[u * 2 + v], scale_in) + Float32(0.0))
+                            mpart[u] = identical_fmax(mpart[u], masked)
+                            var cell = _estash_cell[ATTN_V1_PACKED_ESTASH](bb, h, t, j, l, nh, s, pos0, key_lo, window)
+                            sstash.unsafe_store(cell, masked)
+            else:
+                comptime for u in range(RPT):
+                    var r = tr + u * 16
+                    var t = t0 + r
+                    var rr = _row_range(t, pos0, key_lo, window, s)
+                    comptime for v in range(2):
+                        var jj = tc + v * 16
+                        var j = kb * BK + jj
+                        if t < l and j >= rr[0] and j <= rr[1]:
+                            var cell = _estash_cell[ATTN_V1_PACKED_ESTASH](bb, h, t, j, l, nh, s, pos0, key_lo, window)
+                            comptime if phase == 1:
+                                var masked = sstash.unsafe_load(cell)
+                                var e = ftz(identical_exp(ftz(ftz(masked) - ftz(stats.unsafe_load(r)))))
+                                sstash.unsafe_store(cell, e)
+                                tile.unsafe_store(r * 33 + jj, e)
+                            else:
+                                var e = sstash.unsafe_load(cell)
+                                var w = ftz(identical_div(ftz(e), ftz(stats.unsafe_load(TQ + r))))
+                                comptime if SABN and not QRES and not PF:
+                                    w = _flip_ulp(w)
+                                tile.unsafe_store(r * 33 + jj, w)
+            barrier()
+            comptime if phase == 1:
+                if tid < TQ and t0 + tid < l:
+                    var rr = _row_range(t0 + tid, pos0, key_lo, window, s)
+                    comptime for jj in range(BK):
+                        var j = kb * BK + jj
+                        if j >= rr[0] and j <= rr[1]:
+                            dacc = ftz(ftz(dacc) + ftz(tile.unsafe_load(tid * 33 + jj)))
+            elif phase == 2:
+                # V over the Q+K page (or, under QRES, over the Q rows, which
+                # pass 1 was the last to read).
+                comptime for si in range(BK * HD // 256):
+                    var i = tid + si * 256
+                    var j = kb * BK + i // HD
+                    var x = Float32(0.0)
+                    if j < s:
+                        x = ftz(v_cache.unsafe_load(kvbase + j * HD + i % HD))
+                    stg.unsafe_store(i, x)
+                barrier()
+                if cvalid:
+                    _attn_set_mode(2)
+                    comptime for jj in range(BK):
+                        var j = kb * BK + jj
+                        if j >= full_lo and j <= full_hi:
+                            cm = _mfma16_step(
+                                tile.unsafe_load((wr + lc) * 33 + jj), stg.unsafe_load(jj * HD + mlane), cm
+                            ) * ones
+                        else:
+                            comptime for r in range(16):
+                                if Int32(j) >= clo[r % 4] and Int32(j) <= chi[r % 4]:
+                                    cm[r] = _step_preflushed(
+                                        tile.unsafe_load((wr + lq + r % 4) * 33 + jj),
+                                        stg.unsafe_load(jj * HD + 16 * (r // 4) + lc),
+                                        cm[r],
+                                    )
+                    _attn_set_mode(3)
+            barrier()
+        comptime if phase == 0:
+            comptime for u in range(RPT):
+                tile.unsafe_store((tr + u * 16) * 16 + tc, mpart[u])
+            barrier()
+            if tid < TQ and t0 + tid < l:
+                var m = negmax
+                comptime for c in range(16):
+                    m = identical_fmax(m, tile.unsafe_load(tid * 16 + c))
+                stats.unsafe_store(tid, m)
+                amax.unsafe_store((bb * nh + h) * l + t0 + tid, m)
+        elif phase == 1:
+            if tid < TQ and t0 + tid < l:
+                stats.unsafe_store(TQ + tid, ftz(dacc))
+                denom.unsafe_store((bb * nh + h) * l + t0 + tid, ftz(dacc))
+        barrier()
+    if cwave:
+        comptime for r in range(16):
+            var t = t0 + wr + lq + r % 4
+            if t < l:
+                var col = 16 * (r // 4) + lc
+                var x = cm[r]
+                if bitcast[DType.uint32](x) == NEG_ZERO_BITS and Int(chi[r % 4]) < s - 1:
+                    corner.unsafe_store(0, Float32(1.0))
+                ctxv.unsafe_store((bb * l + t) * nh * HD + h * HD + col, x)
+
+
+# ===========================================================================
 # DEVIATIONS 2650 AND 2651 (brief section 20): the zdot kernel that reads
 # the forward's kept exp stash. `fused_bwd_zdot_stash_pf_kernel` with the y
 # lane gone: a 256-thread block is EIGHT query rows of one head times 32
@@ -6818,17 +7081,30 @@ def _launch_fwd_r2_keep[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool, SWZ:
     only the clean copy its column default resolves to, and only when that
     default carries the estash bits (DEVIATION 2657,
     `ATTN_SHIPPED_BWD_ESTASH`)."""
-    comptime kr = fused_attn_forward_r2_kernel[HD, TQ, QRES, PF, SABN, SWZ]
-    step_count_launch()
-    ctx.enqueue_function[kr](
-        ctxv.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
-        corner.unsafe_ptr(), sstash.unsafe_ptr(), q_rope.unsafe_ptr(),
-        k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), Int32(b), Int32(l),
-        Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
-        Int32(window), scale,
-        grid_dim=(b * nh * ((l + TQ - 1) // TQ), 1, 1),
-        block_dim=(FUSED_THREADS, 1, 1),
-    )
+    comptime if ATTN_FWD_MFMA and HD == 64 and PF and not SABN:
+        comptime km = fused_attn_forward_r2_mfma_kernel[HD, TQ, QRES, PF, SABN, SWZ]
+        step_count_launch()
+        ctx.enqueue_function[km](
+            ctxv.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
+            corner.unsafe_ptr(), sstash.unsafe_ptr(), q_rope.unsafe_ptr(),
+            k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), Int32(b), Int32(l),
+            Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
+            Int32(window), scale, Float32(1.0),
+            grid_dim=(b * nh * ((l + TQ - 1) // TQ), 1, 1),
+            block_dim=(FUSED_THREADS, 1, 1),
+        )
+    else:
+        comptime kr = fused_attn_forward_r2_kernel[HD, TQ, QRES, PF, SABN, SWZ]
+        step_count_launch()
+        ctx.enqueue_function[kr](
+            ctxv.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
+            corner.unsafe_ptr(), sstash.unsafe_ptr(), q_rope.unsafe_ptr(),
+            k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), Int32(b), Int32(l),
+            Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
+            Int32(window), scale,
+            grid_dim=(b * nh * ((l + TQ - 1) // TQ), 1, 1),
+            block_dim=(FUSED_THREADS, 1, 1),
+        )
     step_count_sync()
     ctx.synchronize()
     _attn_tick(ctx, on, tk, "fwd_r2_keep_kernel")
