@@ -34,7 +34,7 @@ PY=${MOJOLEARN_PYTHON:?existing absolute stdlib Python executable required}
 commit=${MOJOLEARN_COMMIT:?full frozen source commit required}
 seconds=${MOJOLEARN_RELEASE_BUILD_SECONDS:?remaining work seconds, excluding fetch reserve}
 [[ "$PY" = /* && -x "$PY" && "$commit" =~ ^[0-9a-f]{40}$ ]] || exit 2
-[[ "$seconds" =~ ^[0-9]+$ ]] && ((seconds >= 120 && seconds <= 2400)) || exit 2
+[[ "$seconds" =~ ^[0-9]+$ ]] && ((seconds >= 120 && seconds <= 6000)) || exit 2
 [[ "$OUT" = /* && ! -e "$OUT" && ! -L "$OUT" ]] || { echo 'New absolute output directory required' >&2; exit 2; }
 command -v taskset >/dev/null
 command -v pixi >/dev/null
