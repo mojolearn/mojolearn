@@ -17,6 +17,54 @@ start, $5 floor); compile checks and gfx942 asm on a RunPod CPU pod
 (`tools/amd_step_time2_cpu_check.sh` through `tools/runpod_cpu_leg.sh
 --cmd-file`, about $0.02 each), never on the Mac.
 
+### 2026-09-25 09:45 UTC: LEG 1 RAN. Admission PROVEN; attention trials NOT
+
+Branch `lane/amd-step-time-2-proof` (from lane/amd-step-time-2 79ff2d56f).
+Hot Aisle 1x MI300X, 08:54:34 to 09:37:42 UTC (VM verified gone, 404),
+$2.04 (balance $27.71 -> $25.67). Evidence
+`legs/2026-09-25_085416-hotaisle-mi300x-pass2-leg1/`, write-up and table in
+README.md, "Pass 2 leg 1".
+
+PROVEN on the device (admit, the branch default):
+- GEMM A/B: valu, noadmit and admit hash files byte-identical, 64 lines over
+  all six kinds (ordinary, tiny, mixed, skew, border, sparse), every rehash
+  equal.
+- Lean B4 witnesses (loss, gradients, parameters, m, v, flags at 3 steps)
+  equal across admit, noadmit, dq, dqkv, attn3 and equal to leg 7's.
+- Replays PASS against the H100 chain: 101 abc8b816b5c3fb15, 102
+  a9421f91b947f82c, 103 fcdb48b8ab51f2ef, 1999 dcb05e4e668a81e1, 2000
+  0e39ed2bfe9bcbae.
+- gemm device (8 gates), backward (10 gates) and workspace (4608 cells)
+  checks green; 201 GEMM lanes: 181 VERIFIED, 0 DIVERGENT, 20 REFUSED (the
+  same 20 as leg 7).
+- Step: 29.7 s a step steady (leg 7's 0.8.18 build: 32.3 s); lean shard
+  0.503 -> 0.459 s on the same VM; kernel time 496.0 -> 453.3 ms a shard.
+
+NOT PROVEN (the attention trial kernels, off by default):
+- Their witnesses equal admit's and dqkv (101 to 103) and attn3 (101 to 103,
+  1999 to 2000) replays PASS with the same digests; attn3 is 26.4 s a step,
+  kernel time 403.9 ms a shard. BUT `amd_mfma_probe3` misses its own pass
+  line: under MODE 2 the raw 16x16x1 MFMA differs from host fma on 14,080 of
+  4,194,304 words (0 under MODE 3; the GEMM's 32x32x1 is 0 under MODE 2).
+  The product by one still equals ftz(fma) on every word (0 mismatches), and
+  that is the value the kernels carry, but the difference is unexplained, so
+  the argument is open. The dq-only build was not replayed, and no lane or
+  gemm check covers the attention trial kernels.
+
+WHAT A RELEASE MAY TAKE FROM THIS BRANCH: the GEMM exact admission (default
+on, AMD only), and nothing else from pass 2. The attention defines stay off.
+The NVIDIA re-proof owed from pass 1 (`GEMM_LAUNCH_BOUND`, shared source)
+still stands. Admission's code is AMD-only.
+
+Fixed: the leg 1 body now installs `libdw1` (rocprofv3 needs `libdw.so.1`;
+the scripted trace failed and was rerun by hand in the container).
+
+NEXT: explain the probe3 MODE 2 difference (dump the differing words: is it
+the subnormal result rounding, or the sign of a flushed zero?) before any
+attention trial counts; then lever 2 (packed flush on steps that are not
+admitted: skew, mixed and sparse operands ran 4 to 8 % slower with admission
+than without).
+
 ### 2026-09-25 02:30 UTC: the ranking at 32.3 s (before renting)
 
 Source: the first pass's leg 8 (2026-09-24 20:49, Hot Aisle MI300X, branch
@@ -87,8 +135,8 @@ TO RUN LEG 1 (nothing else is needed; about 55 minutes, about $2.99):
    difference: revert that lever (admission: its define; the attention
    kernels are already off by default).
 
-STATUS OF THE BRANCH DEFAULTS: exact admission is ON by default in the AMD
-GEMM on this branch and is NOT yet proven on a device (the proof is the
+STATUS OF THE BRANCH DEFAULTS (superseded 09:45 UTC: leg 1 proved admission): exact admission is ON by default in the AMD
+GEMM on this branch and was NOT yet proven on a device (the proof is the
 argument in the source plus the leg 1 checks above). Do not merge before
 leg 1 reads IDENTICAL. The three attention kernels are OFF by default.
 

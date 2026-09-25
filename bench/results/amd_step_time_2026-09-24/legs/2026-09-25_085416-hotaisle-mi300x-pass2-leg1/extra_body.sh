@@ -38,8 +38,6 @@ say() { echo "$(date -u +%H:%M:%S) $*" >> "$ST"; }
 say "pass2 leg1 started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 { uname -a; nproc; free -g; } > "$OUT/host.txt" 2>&1
 rocm-smi --showproductname --showuniqueid > "$OUT/gpu.txt" 2>&1
-# rocprofv3 needs libdw.so.1, absent from the image (pass 2 leg 1 traced only after a manual install)
-( apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq libdw1 elfutils ) > "$OUT/apt.log" 2>&1
 pixi run python -c 'import numpy' > /dev/null 2>&1 || pixi run python -m pip install numpy > "$OUT/numpy.log" 2>&1
 
 abb() {  # tag, defines...

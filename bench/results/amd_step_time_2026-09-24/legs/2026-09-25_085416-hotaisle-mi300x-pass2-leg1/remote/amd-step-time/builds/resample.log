@@ -1,0 +1,55 @@
+!! MOJOLEARN_GPU_ARCHS=gfx942 (--target-accelerator); read the architecture back out of the built .so
+Imported from /root/mojolearn/bindings/_mojolearn_resample.mojo:22:
+./bindings/hostptr.mojo:58:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_resample.mojo:31:
+Imported from ./resample/estimator.mojo:42:
+/root/mojolearn/./core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_resample.mojo:31:
+Imported from ./resample/estimator.mojo:42:
+/root/mojolearn/./core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_resample.mojo:31:
+Imported from ./resample/estimator.mojo:42:
+/root/mojolearn/./core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_resample.mojo:31:
+Imported from ./resample/estimator.mojo:42:
+/root/mojolearn/./core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_resample.mojo:31:
+Imported from ./resample/estimator.mojo:42:
+/root/mojolearn/./core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+/root/mojolearn/bindings/_mojolearn_resample.mojo:288:27: warning: assignment to 'integral' was never used; assign to '_' instead?
+    var integral = Float32(0.0)
+                          ^
+/root/mojolearn/bindings/_mojolearn_resample.mojo:289:23: warning: assignment to 'mean' was never used; assign to '_' instead?
+    var mean = Float32(0.0)
+                      ^
+/root/mojolearn/bindings/_mojolearn_resample.mojo:290:25: warning: assignment to 'volume' was never used; assign to '_' instead?
+    var volume = Float32(0.0)
+                        ^
+/root/mojolearn/bindings/_mojolearn_resample.mojo:291:25: warning: assignment to 'closed' was never used; assign to '_' instead?
+    var closed = Float32(0.0)
+                        ^
+built python/mojolearn/identical/_mojolearn_resample.so (kernel-launch smoke skipped; binary checks ran)

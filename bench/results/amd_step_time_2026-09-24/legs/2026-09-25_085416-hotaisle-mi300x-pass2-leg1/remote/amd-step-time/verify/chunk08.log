@@ -1,0 +1,87 @@
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+# verify --all: hip (amd), 1 lanes x 9 fixtures, harness checkout, table /root/mojolearn/python/mojolearn/verify_reference/table.json
+  umap                               metrics             5.9s
+  portable:rf-clf                    base        0.2s
+  portable:gbdt-symmetric            base        0.2s
+  portable:ols                       base        0.0s
+  portable:pca                       base        0.0s
+  portable:kernel-ridge-laplacian    base        0.0s
+  portable:kernel-ridge-laplacian    denormal    0.0s
+  portable:kernel-ridge-laplacian    denormal_ftz    0.0s
+  portable:kernel-ridge-laplacian    dupes       0.0s
+  portable:kernel-ridge-laplacian    hashed      0.1s
+  portable:kernel-ridge-laplacian    negative    0.0s
+  portable:kernel-ridge-laplacian    odd         0.0s
+  portable:kernel-ridge-laplacian    ties        0.0s
+  portable:kernel-ridge-laplacian    wide        0.0s
+  portable:kernel-ridge-poly         base        0.0s
+  portable:kernel-ridge-poly         denormal    0.0s
+  portable:kernel-ridge-poly         denormal_ftz    0.0s
+  portable:kernel-ridge-poly         dupes       0.0s
+  portable:kernel-ridge-poly         hashed      0.0s
+  portable:kernel-ridge-poly         negative    0.0s
+  portable:kernel-ridge-poly         odd         0.0s
+  portable:kernel-ridge-poly         ties        0.0s
+  portable:kernel-ridge-poly         wide        0.0s
+  portable:kernel-ridge-sigmoid      base        0.0s
+  portable:kernel-ridge-sigmoid      denormal    0.0s
+  portable:kernel-ridge-sigmoid      denormal_ftz    0.0s
+  portable:kernel-ridge-sigmoid      dupes       0.0s
+  portable:kernel-ridge-sigmoid      hashed      0.0s
+  portable:kernel-ridge-sigmoid      negative    0.0s
+  portable:kernel-ridge-sigmoid      odd         0.0s
+  portable:kernel-ridge-sigmoid      ties        0.0s
+  portable:kernel-ridge-sigmoid      wide        0.0s
+  portable:nystroem-laplacian        base        0.0s
+  portable:nystroem-laplacian        denormal    0.0s
+  portable:nystroem-laplacian        denormal_ftz    0.0s
+  portable:nystroem-laplacian        dupes       0.0s
+  portable:nystroem-laplacian        hashed      0.0s
+  portable:nystroem-laplacian        negative    0.0s
+  portable:nystroem-laplacian        odd         0.0s
+  portable:nystroem-laplacian        ties        0.0s
+  portable:nystroem-laplacian        wide        0.0s
+  portable:nystroem-poly             base        0.0s
+  portable:nystroem-poly             denormal    0.0s
+  portable:nystroem-poly             denormal_ftz    0.0s
+  portable:nystroem-poly             dupes       0.0s
+  portable:nystroem-poly             hashed      0.0s
+  portable:nystroem-poly             negative    0.0s
+  portable:nystroem-poly             odd         0.0s
+  portable:nystroem-poly             ties        0.0s
+  portable:nystroem-poly             wide        0.0s
+  portable:nystroem-sigmoid          base        0.0s
+  portable:nystroem-sigmoid          denormal    0.0s
+  portable:nystroem-sigmoid          denormal_ftz    0.0s
+  portable:nystroem-sigmoid          dupes       0.0s
+  portable:nystroem-sigmoid          hashed      0.0s
+  portable:nystroem-sigmoid          negative    0.0s
+  portable:nystroem-sigmoid          odd         0.0s
+  portable:nystroem-sigmoid          ties        0.0s
+  portable:nystroem-sigmoid          wide        0.0s
+# python -m mojolearn verify --all
+# mojolearn 0.8.18  commit unknown (none (no witness in this install))
+# mode identical  vendor hip (class amd)  device AMD card0,AMD Instinct MI300X VF,0x74b5,Advanced Micro Devices Inc. [AMD/ATI],M3000108,0x74a1,0x00,1,46235,gfx942
+# cpu Intel(R) Xeon(R) Platinum 8470  Linux-6.8.0-124-generic-x86_64-with-glibc2.35  python 3.14.7  numpy 2.5.2
+# reference table /root/mojolearn/python/mojolearn/verify_reference/table.json (sha256 3bc1195294200650, 626 records)
+# depth full: 1 lanes x 9 fixtures, 1 repeat(s), 58 portable model(s)
+
+| family          | lanes | IDENTICAL | DIVERGENT | OWED | REFUSED | N/A |
+|-----------------|-------|-----------|-----------|------|---------|-----|
+| metrics         |     1 |        36 |         0 |    0 |       0 |   9 |
+| portable models |    10 |       116 |         0 |    0 |       0 |   0 |
+| all             |    11 |       152 |         0 |    0 |       0 |   9 |
+
+LANE ACCOUNTING: 274 of 274 harness lanes accounted for; 1 VERIFIED, 273 not.
+  a lane that is not VERIFIED is not checked, whatever its state says:
+  NOT RUN (214): agglomerative, arima, arima-011, arima-exog, arima-exog-seasonal, arima-seasonal-c, ... 208 more
+      exposed, but this run did not select it
+  NOT APPLICABLE (59): par-arima, par-boosting, par-boosting-clf, par-boosting-pointwise, par-boosting-reg, par-border-types, ... 53 more
+      claim requires two devices: a par-* driver claims that a TWO-DEVICE column hashes equal to the one-device column cell for cell. `verify` is always a one-device run (it refuses MOJOLEARN_PAR_DEVICES), and on one device the comparison is a run against itself, which passes whatever the code does. Owed: a two-GPU box running `MOJOLEARN_PAR_DEVICES=0,1 python3 tools/identity_break.py --repeats 2 --lanes <lane> --json par2.json` beside the same lanes at MOJOLEARN_PAR_DEVICES=0, admitted with _verify_reference.admit(par_axis=True)
+  NOT APPLICABLE leaves nothing unknown, so it does not cost the run its pass; it is reported because an absence a user cannot see is worse than a gap they can. Every other state above does cost it.
+  this run's scope is 1 lanes, 1 VERIFIED, 0 not applicable, 0 not checked
+
+Batch invariance: IDENTICAL=67, DIVERGENT=0, OWED=0, REFUSED=0, N/A=0
+Scope: selected fixtures and properties only; use verify --coverage for omissions.
+RESULT: VERIFIED (verified 152 of 161 cell parts (0 divergent, 0 owed, 0 refused, 9 n/a); 1 verified, 0 not applicable, 0 owed, 0 held, of 1 lanes). 8.4s. exit 0
+# evidence written to /root/gemm_leg_out/amd-step-time/verify/chunk08.json

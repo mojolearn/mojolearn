@@ -1,0 +1,145 @@
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+# verify --all: hip (amd), 25 lanes x 9 fixtures, harness checkout, table /root/mojolearn/python/mojolearn/verify_reference/table.json
+  metrics                            metrics             4.6s
+  minmax-scaler                      preprocessing       0.3s
+  mlp                                training            1.1s
+  mamba1                             mamba               0.9s
+  mamba2                             mamba               1.6s
+  mamba3                             mamba               2.2s
+  mamba1-bf16w                       mamba               1.1s
+  mamba1-int8w                       mamba               1.2s
+  mamba2-bf16w                       mamba               1.7s
+  mamba2-int8w                       mamba               1.8s
+  mamba3-bf16w                       mamba               2.4s
+  mamba3-int8w                       mamba               2.4s
+  mlp-bf16w                          training            0.2s
+  mlp-int8w                          training            0.2s
+  lowbit-conversions                 linalg              0.7s
+  mamba2-dtlimit                     mamba               1.8s
+  minmax-scaler-clip                 preprocessing       0.3s
+/root/mojolearn/tools/identity_break.py:4606: RuntimeWarning: Precision is ill-defined and being set to 0.0 due to zero denominator; use zero_division to control this behavior.
+  parts[f"{fn.__name__}:{avg}"] = _h(np.asarray(fn(yt, yp, average=avg), dtype=np.float64))
+  metrics-classification             metrics             0.4s
+  metrics-homogeneity-completeness   metrics             0.4s
+  metrics-fowlkes-mallows            metrics             1.0s
+  nystroem                           kernel_methods      0.4s
+  nystroem-poly                      kernel_methods      0.3s
+  nystroem-laplacian                 kernel_methods      0.3s
+  monte-carlo                        resample            0.0s
+  mamba1-decode-session              mamba               0.9s
+  portable:rf-clf                    base        0.2s
+  portable:gbdt-symmetric            base        0.2s
+  portable:ols                       base        0.0s
+  portable:pca                       base        0.0s
+  portable:kernel-ridge-laplacian    base        0.0s
+  portable:kernel-ridge-laplacian    denormal    0.0s
+  portable:kernel-ridge-laplacian    denormal_ftz    0.0s
+  portable:kernel-ridge-laplacian    dupes       0.0s
+  portable:kernel-ridge-laplacian    hashed      0.1s
+  portable:kernel-ridge-laplacian    negative    0.0s
+  portable:kernel-ridge-laplacian    odd         0.0s
+  portable:kernel-ridge-laplacian    ties        0.0s
+  portable:kernel-ridge-laplacian    wide        0.0s
+  portable:kernel-ridge-poly         base        0.0s
+  portable:kernel-ridge-poly         denormal    0.0s
+  portable:kernel-ridge-poly         denormal_ftz    0.0s
+  portable:kernel-ridge-poly         dupes       0.0s
+  portable:kernel-ridge-poly         hashed      0.0s
+  portable:kernel-ridge-poly         negative    0.0s
+  portable:kernel-ridge-poly         odd         0.0s
+  portable:kernel-ridge-poly         ties        0.0s
+  portable:kernel-ridge-poly         wide        0.0s
+  portable:kernel-ridge-sigmoid      base        0.0s
+  portable:kernel-ridge-sigmoid      denormal    0.0s
+  portable:kernel-ridge-sigmoid      denormal_ftz    0.0s
+  portable:kernel-ridge-sigmoid      dupes       0.0s
+  portable:kernel-ridge-sigmoid      hashed      0.0s
+  portable:kernel-ridge-sigmoid      negative    0.0s
+  portable:kernel-ridge-sigmoid      odd         0.0s
+  portable:kernel-ridge-sigmoid      ties        0.0s
+  portable:kernel-ridge-sigmoid      wide        0.0s
+  portable:nystroem-laplacian        base        0.0s
+  portable:nystroem-laplacian        denormal    0.0s
+  portable:nystroem-laplacian        denormal_ftz    0.0s
+  portable:nystroem-laplacian        dupes       0.0s
+  portable:nystroem-laplacian        hashed      0.0s
+  portable:nystroem-laplacian        negative    0.0s
+  portable:nystroem-laplacian        odd         0.0s
+  portable:nystroem-laplacian        ties        0.0s
+  portable:nystroem-laplacian        wide        0.0s
+  portable:nystroem-poly             base        0.0s
+  portable:nystroem-poly             denormal    0.0s
+  portable:nystroem-poly             denormal_ftz    0.0s
+  portable:nystroem-poly             dupes       0.0s
+  portable:nystroem-poly             hashed      0.0s
+  portable:nystroem-poly             negative    0.0s
+  portable:nystroem-poly             odd         0.0s
+  portable:nystroem-poly             ties        0.0s
+  portable:nystroem-poly             wide        0.0s
+  portable:nystroem-sigmoid          base        0.0s
+  portable:nystroem-sigmoid          denormal    0.0s
+  portable:nystroem-sigmoid          denormal_ftz    0.0s
+  portable:nystroem-sigmoid          dupes       0.0s
+  portable:nystroem-sigmoid          hashed      0.0s
+  portable:nystroem-sigmoid          negative    0.0s
+  portable:nystroem-sigmoid          odd         0.0s
+  portable:nystroem-sigmoid          ties        0.0s
+  portable:nystroem-sigmoid          wide        0.0s
+# python -m mojolearn verify --all
+# mojolearn 0.8.18  commit unknown (none (no witness in this install))
+# mode identical  vendor hip (class amd)  device AMD card0,AMD Instinct MI300X VF,0x74b5,Advanced Micro Devices Inc. [AMD/ATI],M3000108,0x74a1,0x00,1,46235,gfx942
+# cpu Intel(R) Xeon(R) Platinum 8470  Linux-6.8.0-124-generic-x86_64-with-glibc2.35  python 3.14.7  numpy 2.5.2
+# reference table /root/mojolearn/python/mojolearn/verify_reference/table.json (sha256 3bc1195294200650, 626 records)
+# depth full: 25 lanes x 9 fixtures, 1 repeat(s), 58 portable model(s)
+
+| family          | lanes | IDENTICAL | DIVERGENT | OWED | REFUSED | N/A |
+|-----------------|-------|-----------|-----------|------|---------|-----|
+| metrics         |     4 |        27 |         0 |    0 |      45 | 108 |
+| preprocessing   |     2 |        72 |         0 |    0 |       0 |  18 |
+| training        |     3 |        90 |         0 |    0 |       0 |  45 |
+| mamba           |    11 |       387 |         0 |    0 |       0 | 108 |
+| linalg          |     1 |        18 |         0 |    0 |       0 |  27 |
+| kernel_methods  |     3 |       108 |         0 |    0 |       0 |  27 |
+| resample        |     1 |         9 |         0 |    0 |       0 |  36 |
+| portable models |    10 |       116 |         0 |    0 |       0 |   0 |
+| all             |    35 |       827 |         0 |    0 |      45 | 369 |
+
+REFUSED (45):
+  metrics-classification train: OSError: /root/mojolearn/python/mojolearn/.libs/libMojolearnMath.so: cannot open shared object file: No such file or directory
+      Traceback (most recent call last):
+        File "/root/mojolearn/python/mojolearn/_verify_all.py", line 317, in run_cell
+          fit = harness.LANES[lane](ml, X, yc, yr, held.copy())
+        File "/root/mojolearn/tools/identity_break.py", line 4612, in _
+          parts["entropy:base2"] = _h(np.float64(mt.entropy(labels, base=2)))
+                                                 ~~~~~~~~~~^^^^^^^^^^^^^^^^
+        File "/root/mojolearn/python/mojolearn/_metrics_impl.py", line 490, in entropy
+          value = math.log(math.exp(value), base)
+                           ~~~~~~~~^^^^^^^
+        File "/root/mojolearn/python/mojolearn/_portable_math.py", line 85, in exp
+          result = _native("exp", x)
+        File "/root/mojolearn/python/mojolearn/_portable_math.py", line 36, in _native
+          lib = ctypes.CDLL(str(path))
+        File "/root/mojolearn/.pixi/envs/default/lib/python3.14/ctypes/__init__.py", line 433, in __init__
+          self._handle = self._load_library(name, mode, handle, winmode)
+                         ~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        File "/root/mojolearn/.pixi/envs/default/lib/python3.14/ctypes/__init__.py", line 475, in _load_library
+          return _dlopen(name, mode)
+      OSError: /root/mojolearn/python/mojolearn/.libs/libMojolearnMath.so: cannot open shared object file: No such file or directory
+
+LANE ACCOUNTING: 274 of 274 harness lanes accounted for; 24 VERIFIED, 250 not.
+  a lane that is not VERIFIED is not checked, whatever its state says:
+  NOT RUN (190): agglomerative, arima, arima-011, arima-exog, arima-exog-seasonal, arima-seasonal-c, ... 184 more
+      exposed, but this run did not select it
+  NOT APPLICABLE (59): par-arima, par-boosting, par-boosting-clf, par-boosting-pointwise, par-boosting-reg, par-border-types, ... 53 more
+      claim requires two devices: a par-* driver claims that a TWO-DEVICE column hashes equal to the one-device column cell for cell. `verify` is always a one-device run (it refuses MOJOLEARN_PAR_DEVICES), and on one device the comparison is a run against itself, which passes whatever the code does. Owed: a two-GPU box running `MOJOLEARN_PAR_DEVICES=0,1 python3 tools/identity_break.py --repeats 2 --lanes <lane> --json par2.json` beside the same lanes at MOJOLEARN_PAR_DEVICES=0, admitted with _verify_reference.admit(par_axis=True)
+  REFUSED (1)  [not checked]: metrics-classification
+      a part raised, so it did not run
+  NOT APPLICABLE leaves nothing unknown, so it does not cost the run its pass; it is reported because an absence a user cannot see is worse than a gap they can. Every other state above does cost it.
+  this run's scope is 25 lanes, 24 VERIFIED, 0 not applicable, 1 not checked; the verdict cannot be VERIFIED
+
+UNVERIFIED LANES (1):
+  metrics-classification: REFUSED: a part raised, so it did not run
+Batch invariance: IDENTICAL=211, DIVERGENT=0, OWED=0, REFUSED=9, N/A=63
+Scope: selected fixtures and properties only; use verify --coverage for omissions.
+RESULT: INCOMPLETE (verified 827 of 1241 cell parts (0 divergent, 0 owed, 45 refused, 369 n/a); 24 verified, 0 not applicable, 0 owed, 0 held, 1 REFUSED, of 25 lanes). 30.7s. exit 4
+# evidence written to /root/gemm_leg_out/amd-step-time/verify/chunk05.json
