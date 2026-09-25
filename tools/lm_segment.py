@@ -832,6 +832,43 @@ class StepPipeline:
             self.uploader.shutdown(wait=True)
 
 
+class ExportBuffers:
+    """The per-step read-back into host buffers allocated ONCE (DEVIATION
+    3120). A package whose `export_raw`/`export_gradients` take `into=`
+    writes the state and the summed gradient into the same five arrays
+    every step; an older package (no `into=`) gets the fresh-array calls it
+    always made. The digests read the same bytes either way. A step's
+    arrays are overwritten by the next step's read-back, so nothing may
+    hold them past the step's line (`_window_witness` and the digests use
+    them within the step)."""
+
+    def __init__(self, trainer):
+        import inspect
+        try:
+            self.reuse = ("into" in inspect.signature(trainer.export_raw).parameters
+                          and "into" in inspect.signature(trainer.export_gradients).parameters)
+        except (TypeError, ValueError):
+            self.reuse = False
+        self.raw = None
+        self.gradient = None
+
+    def state(self, trainer):
+        if not self.reuse:
+            return trainer.export_raw()
+        if self.raw is None:
+            self.raw = trainer.export_raw()
+            return self.raw
+        return trainer.export_raw(into=self.raw)
+
+    def gradients(self, trainer):
+        if not self.reuse:
+            return trainer.export_gradients()
+        if self.gradient is None:
+            self.gradient = trainer.export_gradients()
+            return self.gradient
+        return trainer.export_gradients(into=self.gradient)
+
+
 def _chain_index(path):
     """Lines of an expected chain by global step."""
     out = {}
@@ -1403,6 +1440,7 @@ def _train_loop(args, trainer, batches, table, K, slots, split, control, stamp, 
     step N finishes in `pipe`'s writer thread while step N+1 computes. The
     chain lines are the same either way."""
     progress_due = False
+    exports = ExportBuffers(trainer)
     for s in range(first, last):
         completed = s + 1
         lr_hex = table[s]  # the rate used to reach step s+1
@@ -1444,9 +1482,9 @@ def _train_loop(args, trainer, batches, table, K, slots, split, control, stamp, 
                         upload=upload, manifest=manifest, out=out)
             continue
         t1 = time.perf_counter()
-        raw = trainer.export_raw()
+        raw = exports.state(trainer)
         state_digest = _hash_arrays(raw, scheme)
-        grad_digest = _hash_gradient(total if split is not None else trainer.export_gradients(), scheme)
+        grad_digest = _hash_gradient(total if split is not None else exports.gradients(trainer), scheme)
         hash_seconds = time.perf_counter() - t1
         row.update(state_sha256=state_digest, gradient_sha256=grad_digest, hash_seconds=round(hash_seconds, 3))
         if in_window(s):

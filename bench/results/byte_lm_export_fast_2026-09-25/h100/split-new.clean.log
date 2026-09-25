@@ -1,0 +1,5 @@
+[16:07:04] segment: route A segment export-fast-split-new label export-fast-split-new, global steps 100..101, K=64, devices (0,), from ckpt_00000100.blm (sha256 80cd2126a89ba6d8) CONTROL split (K run 64)
+[16:07:04] the checkpoint's state AGREES with the expected chain's step 100 (2b37e85edfd701eb)
+[16:07:58] step 101 lr 397e2cc1 loss 6.9004 state abc8b816b5c3fb15 grad 25830bfc2016dc14 44.92 s (+1.65 s hashing)
+[16:07:58] step 101 agrees with the expected chain
+[16:07:58] PASS: /root/gemm_leg_out/export-fast/split-new

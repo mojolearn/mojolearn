@@ -32,7 +32,7 @@ from training.byte_lm_optimizer_pool import pool_snapshot, pool_update, pool_res
 from training.checks.optimizer import OPT_RECORD_INTERMEDIATES
 from training.byte_lm_config import ByteConfig
 from training.checks.optimizer_oracle import OptimizerConfig
-from training.checks.train_loop import _copy_into, _upload, download_f32
+from training.checks.train_loop import _copy_into, _upload, download_f32, download_f32_into
 from core.multi_gpu import transfer_bytes
 
 
@@ -326,6 +326,15 @@ struct ByteParallelTrainer(Movable, Writable):
             raise Error("byte LM parallel: nothing has been folded")
         var n = self.trainers[0].config.n_total()
         return download_f32(self.contexts[0], self.total.value(), n)
+
+    def fold_export_into(mut self, dst: MutPointer[Float32, MutUntrackedOrigin]) raises:
+        """`fold_export` written straight into caller memory of `n_total`
+        floats (DEVIATION 3120): one device-to-host copy, no List."""
+        self._require_single_replicated()
+        if not self.fold_started:
+            raise Error("byte LM parallel: nothing has been folded")
+        var n = self.trainers[0].config.n_total()
+        download_f32_into(self.contexts[0], self.total.value(), n, dst)
 
     def step(mut self, shards: List[List[Int32]]) raises -> List[Float32]:
         self.require_open()

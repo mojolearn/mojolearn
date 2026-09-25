@@ -10,7 +10,36 @@ import threading
 
 from ._byte_lm_impl import SmallByteLanguageModelTrainer, _array, _float32, _validate_state
 from ._byte_lm_config import state_shape
-from ._buffer import addr, addr_ro, empty, flat_bytes
+from ._buffer import Buf, addr, addr_ro, empty, flat_bytes, typestr_of
+
+STATE_ARRAYS = ('parameters', 'm', 'v', 'flags')
+
+
+def _export_target(obj, count, typestr, name):
+    """The address of a caller-provided export buffer (the `into=` forms).
+
+    DEVIATION 3120: a per-step export at 162M parameters allocated four
+    fresh zero-filled 648.6 MB arrays every call (about 1.4 s a step on an
+    H100 host). A caller that exports every step passes the same buffers
+    back instead. Each must be a writable, C-contiguous, one-dimensional
+    buffer of exactly `count` elements of `typestr`; anything else is
+    refused BEFORE the binding is called, so nothing is written to it. The
+    caller keeps `obj` alive for the call, as for `addr`. If the export
+    then raises, the buffer holds an unspecified partial export."""
+    with Buf(obj, writable=True, name=name) as b:
+        if b.readonly:
+            raise ValueError('mojolearn: %s is read-only, refusing to write to it' % name)
+        try:
+            got = typestr_of(b)
+        except TypeError:
+            got = b.format
+        if got != typestr:
+            raise TypeError('mojolearn: %s must be %s, got %s' % (name, typestr, got))
+        if b.ndim != 1 or not b.c_contiguous:
+            raise ValueError('mojolearn: %s must be a contiguous one-dimensional buffer' % name)
+        if b.shape[0] != count or b.nbytes != count * b.itemsize:
+            raise ValueError('mojolearn: %s must hold exactly %d elements, got %d' % (name, count, b.shape[0]))
+        return b.addr
 
 
 class ParallelByteLanguageModelTrainer:
@@ -135,7 +164,7 @@ class ParallelByteLanguageModelTrainer:
                 raise RuntimeError('parallel export returned wrong step')
             return _validate_state(state)
 
-    def export_raw(self, *, rank=0):
+    def export_raw(self, *, rank=0, into=None):
         """The four state arrays of one replica, freshly downloaded, as
         `{'parameters', 'm', 'v', 'flags'}` with NO admission pass. For
         hashing and streaming a checkpoint at scale: `state_dict()` runs
@@ -143,13 +172,25 @@ class ParallelByteLanguageModelTrainer:
         costs about 16 s at 162M parameters, which a per-step hash chain
         cannot pay. What comes back is bytes for a digest or a file, not a
         state that anything may train from; a restore still enters through
-        `_validate_state`."""
+        `_validate_state`.
+
+        `into`, when given, is a dict with exactly those four keys holding
+        caller-owned buffers (float32[n_total] three times, int32[n_tensors]
+        for flags) that are written in place and returned as the dict;
+        nothing is allocated. The bytes are the same as the no-argument
+        form's (`_export_target` says what is refused)."""
         with self._lock:
+            if into is None:
+                out = {key: empty((self._shape.n_total,), '<f4') for key in ('parameters', 'm', 'v')}
+                out['flags'] = empty((self._shape.n_tensors,), '<i4')
+            else:
+                if not isinstance(into, dict) or set(into) != set(STATE_ARRAYS):
+                    raise ValueError('mojolearn: into must be a dict with keys %s' % (STATE_ARRAYS,))
+                out = into
+            addresses = [_export_target(out[k], self._shape.n_tensors if k == 'flags' else self._shape.n_total,
+                                        '<i4' if k == 'flags' else '<f4', k) for k in STATE_ARRAYS]
             self._open()
-            out = {key: empty((self._shape.n_total,), '<f4') for key in ('parameters', 'm', 'v')}
-            out['flags'] = empty((self._shape.n_tensors,), '<i4')
-            step = self._binding.byte_lm_parallel_export(self._session,
-                [addr(out[k], name=k) for k in ('parameters', 'm', 'v', 'flags')], rank, False)
+            step = self._binding.byte_lm_parallel_export(self._session, addresses, rank, False)
             if step != self.step_:
                 raise RuntimeError('parallel export returned wrong step')
             return out
@@ -178,12 +219,15 @@ class ParallelByteLanguageModelTrainer:
             self._state['config'] = dict(self._state['config'], lr=value)
             return value
 
-    def export_gradients(self, *, rank=0):
+    def export_gradients(self, *, rank=0, into=None):
+        """The summed gradient of the last committed step, float32[n_total].
+        `into`, when given, is a caller-owned float32[n_total] buffer written
+        in place and returned; nothing is allocated (same bytes)."""
         with self._lock:
+            out = empty((self._shape.n_total,), '<f4') if into is None else into
+            target = _export_target(out, self._shape.n_total, '<f4', 'gradients')
             self._open()
-            out = empty((self._shape.n_total,), '<f4')
-            step = self._binding.byte_lm_parallel_export(self._session,
-                [addr(out, name='gradients')], rank, True)
+            step = self._binding.byte_lm_parallel_export(self._session, [target], rank, True)
             if step != self.step_:
                 raise RuntimeError('parallel gradient export returned wrong step')
             return out
@@ -273,13 +317,19 @@ class ParallelByteLanguageModelTrainer:
             self._require_fold()
             self._binding.byte_lm_parallel_fold_add(self._session, [addr_ro(gradient, name='shard gradient')])
 
-    def fold_export(self):
-        """The device fold's total, as float32 bytes."""
+    def fold_export(self, *, into=None):
+        """The device fold's total, as float32 bytes. With `into` (a
+        caller-owned float32[n_total] buffer) the total is written there
+        and `into` is returned instead, with no allocation and no copy to
+        `bytes`; its bytes are the ones the no-argument form returns."""
         with self._lock:
+            out = empty((self._shape.n_total,), '<f4') if into is None else into
+            target = _export_target(out, self._shape.n_total, '<f4', 'fold total')
             self._open()
             self._require_fold()
-            out = empty((self._shape.n_total,), '<f4')
-            self._binding.byte_lm_parallel_fold_export(self._session, [addr(out, name='fold total')])
+            self._binding.byte_lm_parallel_fold_export(self._session, [target])
+            if into is not None:
+                return into
             return flat_bytes(out, name='fold total').tobytes()
 
     def optimizer_ownership(self):

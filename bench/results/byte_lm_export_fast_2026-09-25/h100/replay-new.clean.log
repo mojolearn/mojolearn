@@ -1,0 +1,9 @@
+[16:04:56] segment: route A segment export-fast-replay-new label export-fast-replay-new, global steps 100..103, K=64, devices (0,), from ckpt_00000100.blm (sha256 80cd2126a89ba6d8)
+[16:04:56] the checkpoint's state AGREES with the expected chain's step 100 (2b37e85edfd701eb)
+[16:05:45] step 101 lr 397e2cc1 loss 6.9004 state abc8b816b5c3fb15 grad 25830bfc2016dc14 39.87 s (+1.82 s hashing)
+[16:05:45] step 101 agrees with the expected chain
+[16:06:16] step 102 lr 39805880 loss 6.8585 state a9421f91b947f82c grad 94c40a6e3d5ec5aa 30.65 s (+0.58 s hashing)
+[16:06:16] step 102 agrees with the expected chain
+[16:06:48] step 103 lr 39819a9f loss 6.8373 state fcdb48b8ab51f2ef grad 19a43804ef4065de 30.65 s (+0.95 s hashing)
+[16:06:48] step 103 agrees with the expected chain
+[16:06:48] PASS: /root/gemm_leg_out/export-fast/replay-new
