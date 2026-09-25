@@ -1,0 +1,95 @@
+name: Binding prebuild plan
+
+# COMPILE ON MERGE, NOT ON RELEASE DAY (lane/prebuild-on-merge, 2026-09-25).
+# By hand after a merge that can change a binding, list which release bindings the R2
+# binding cache lacks for each Linux target (cuda sm_90a, cuda sm_89, the
+# gfx942 CPU-pod partition) and post the counts as the job summary. One hosted
+# runner, Python only, no Mojo, no GPU, no rental, ten minutes at most.
+#
+# THE CACHE CHECK needs four repository secrets (a READ-ONLY R2 token is
+# enough for the plan): R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY,
+# R2_BUCKET. Without them the plan still prints every predicted key and how
+# many changed since the previous main commit, with the cache state "unknown".
+#
+# RENTING FROM HERE IS OFF. `rent: true` on a manual run is refused unless the
+# repository also holds RUNPOD_API_KEY and a READ-WRITE R2 token (the leg
+# promotes uploads) AND the variable PREBUILD_RENT_ENABLED is "1". The leg
+# scripts expect an ssh client and the Mac's evidence layout; the supported
+# route today is the Mac: `pixi run prebuild --rent --targets cuda-sm_89`.
+#
+# MANUAL ONLY: only light-checks starts by itself (light-checks.yml refuses
+# any other workflow with a push or schedule trigger). Run it by hand after a
+# merge that can change a binding, or `pixi run prebuild` on the Mac.
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: "commit or ref to plan (default: the selected ref)"
+        required: false
+        default: ""
+      targets:
+        description: "comma list: cuda-sm_90a,cuda-sm_89,hip-gfx942 (default all)"
+        required: false
+        default: ""
+      rent:
+        description: "rent one build per target with missing bindings (needs the secrets above)"
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: prebuild-plan-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Planner self-test (mocked cache, no network)
+        run: python3 -m unittest discover -s tools -p test_prebuild_changed.py -v
+      - name: Plan
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          IN_COMMIT: ${{ inputs.commit }}
+          IN_TARGETS: ${{ inputs.targets }}
+        run: |
+          set -eu
+          commit=HEAD
+          if [ -n "${IN_COMMIT:-}" ]; then
+            git fetch --depth=2 origin "$IN_COMMIT"
+            commit=FETCH_HEAD
+          fi
+          args="--commit $commit --json prebuild-plan.json --summary $GITHUB_STEP_SUMMARY"
+          if git rev-parse -q --verify "$commit^" > /dev/null; then args="$args --base $commit^"; fi
+          if [ -n "${IN_TARGETS:-}" ]; then args="$args --targets $IN_TARGETS"; fi
+          # shellcheck disable=SC2086
+          python3 tools/prebuild_changed.py plan $args
+      - name: Rent (manual, off by default)
+        if: ${{ inputs.rent }}
+        env:
+          ENABLED: ${{ vars.PREBUILD_RENT_ENABLED }}
+        run: |
+          if [ "${ENABLED:-0}" != 1 ]; then
+            echo "Renting from Actions is not enabled (repository variable PREBUILD_RENT_ENABLED != 1)."
+            echo "Run it from the Mac: pixi run prebuild --rent --targets <target>"
+            exit 1
+          fi
+          echo "PREBUILD_RENT_ENABLED=1 but no Actions rent route is wired yet (see the header)." >&2
+          exit 1
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: prebuild-plan
+          path: prebuild-plan.json
+          if-no-files-found: ignore
