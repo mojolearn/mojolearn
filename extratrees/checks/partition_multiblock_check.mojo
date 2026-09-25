@@ -631,6 +631,8 @@ def _launch_multiblock(
     # slot no block wrote comes back wild instead of plausible.
     ctx.enqueue_memset(d_row_alt, ALT_SENTINEL)
     ctx.enqueue_memset(d_blk_left, Int32(0))
+    # The FLAGS arm's byte plane; this check runs the default (FLAGS off).
+    var d_flags_unused = ctx.enqueue_create_buffer[DType.uint8](1)
     ctx.enqueue_memset(d_blk_off, Int32(0))
     ctx.synchronize()
 
@@ -645,6 +647,7 @@ def _launch_multiblock(
         MIN_IMPURITY_DECREASE,
         MIN_SAMPLES_LEAF,
         sabotage,
+        d_flags_unused.unsafe_ptr(),
         grid_dim=(n_blocks, 1, 1),
         block_dim=(TPB, 1, 1),
     )
@@ -672,6 +675,7 @@ def _launch_multiblock(
         MIN_IMPURITY_DECREASE,
         MIN_SAMPLES_LEAF,
         sabotage,
+        d_flags_unused.unsafe_ptr(),
         grid_dim=(n_blocks, 1, 1),
         block_dim=(TPB, 1, 1),
     )
@@ -693,6 +697,7 @@ def _launch_multiblock(
     var o_off = ctx.enqueue_create_host_buffer[DType.int32](n_blocks)
     ctx.enqueue_copy(dst_buf=o_row_ids, src_buf=d_row_ids)
     ctx.enqueue_copy(dst_buf=o_left, src_buf=d_blk_left)
+    _ = d_flags_unused.unsafe_ptr()
     ctx.enqueue_copy(dst_buf=o_off, src_buf=d_blk_off)
     ctx.synchronize()
 

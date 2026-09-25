@@ -611,6 +611,7 @@ def check_objective[
             Int32(n_acc),
             seed,
             sab,
+            Int32(0),
             grid_dim=(n_blocks_dimx, N_COLS, 1),
             block_dim=(TPB, 1, 1),
         )

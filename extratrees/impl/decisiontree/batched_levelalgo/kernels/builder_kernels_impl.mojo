@@ -69,6 +69,15 @@ def _search_rows_per_thread() -> Int:
         return 4
     if is_defined["MOJOLEARN_ET_SEARCH_RPT_2"]():
         return 2
+    if is_defined["MOJOLEARN_ET_SEARCH_RPT_1"]():
+        return 1
+    # APPLE FAST: 16. Apple M4, 1M rows, 100 trees, alternating processes,
+    # same model hash in every arm (2026-09-25): taxi 1 -> 16 0.766,
+    # 16 -> 8 0.978, 16 -> 32 0.995, 1 -> 64 0.811; Istella-S 1 -> 16
+    # 0.585. Metal pays far more per search block than the RTX 4090 above
+    # did. `_1=1` restores one row per thread on Apple for an A/B.
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+        return 16
     return 1
 
 
@@ -235,15 +244,21 @@ def draw_threshold_raw(key: SplitKey, extent: FeatureRange) -> Float32:
 # ============================================================================
 
 from std.atomic import Atomic, Ordering
+from std.gpu.primitives.warp import shuffle_xor
 from std.memory import bitcast
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from std.gpu import WARP_SIZE, block_dim, block_idx, grid_dim, thread_idx
 from std.math import ceildiv, inf
 from max.gpu.primitives.block import max as block_max
 from max.gpu.primitives.block import min as block_min
 from max.gpu.primitives.block import sum as block_sum
 from max.gpu.sync import barrier
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
+from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_FAST,
+    NUMERIC_IDENTICAL,
+    ftz,
+)
 
 @always_inline
 def _search_barrier():
@@ -447,7 +462,7 @@ def node_feature_range_decode_kernel(
 
 
 def node_feature_range_kernel[
-    TPB: Int
+    TPB: Int, ROW_MAJOR: Bool = False
 ](
     out_minkey: MutPointer[UInt32, MutAnyOrigin],
     out_maxkey: MutPointer[UInt32, MutAnyOrigin],
@@ -466,6 +481,11 @@ def node_feature_range_kernel[
     """Min, max and NaN count of one feature over one node's rows, on device."""
     var wb = Int(block_idx.x)
     var fslot = Int(block_idx.y)
+    comptime if ROW_MAJOR:
+        # the feature slot is the FAST axis, so the blocks reading one row
+        # chunk's features are dispatched together and share its lines
+        wb = Int(block_idx.y)
+        fslot = Int(block_idx.x)
     var nid = Int(workload_info[unsafe_offset=wb].nodeid)
     var offset_blockid = Int(workload_info[unsafe_offset=wb].offset_blockid)
     var num_blocks = Int(workload_info[unsafe_offset=wb].num_blocks)
@@ -495,10 +515,13 @@ def node_feature_range_kernel[
         if sabotage == RANGE_SAB_NO_ROW_IDS:
             slot_row = i
         var v: Float32
-        if sabotage == RANGE_SAB_ROW_MAJOR:
+        comptime if ROW_MAJOR:
             v = data[unsafe_offset = slot_row * n + col]
         else:
-            v = data[unsafe_offset = col_offset + slot_row]
+            if sabotage == RANGE_SAB_ROW_MAJOR:
+                v = data[unsafe_offset = slot_row * n + col]
+            else:
+                v = data[unsafe_offset = col_offset + slot_row]
 
         if v != v and sabotage != RANGE_SAB_NAN_AS_VALUE:
             local_missing += 1
@@ -572,6 +595,149 @@ def node_feature_range_kernel[
         else:
             _publish_min_max(out_minkey, out_maxkey, slot, kmin, kmax)
         _publish_add(out_n_missing, slot, blk_missing, single)
+        _publish_add(out_n_merges, slot, Int32(1), single)
+
+
+@always_inline
+def _warp_fold_min_f32(v: Float32) -> Float32:
+    var x = v
+    comptime for step in range(8):
+        comptime off = WARP_SIZE >> (step + 1)
+        comptime if off > 0:
+            var y = shuffle_xor(x, UInt32(off))
+            x = y if y < x else x
+    return x
+
+
+@always_inline
+def _warp_fold_max_f32(v: Float32) -> Float32:
+    var x = v
+    comptime for step in range(8):
+        comptime off = WARP_SIZE >> (step + 1)
+        comptime if off > 0:
+            var y = shuffle_xor(x, UInt32(off))
+            x = y if y > x else x
+    return x
+
+
+@always_inline
+def _warp_fold_sum_i32(v: Int32) -> Int32:
+    var x = v
+    comptime for step in range(8):
+        comptime off = WARP_SIZE >> (step + 1)
+        comptime if off > 0:
+            x += shuffle_xor(x, UInt32(off))
+    return x
+
+
+def node_feature_range_tiled_kernel[
+    TPB: Int, FT: Int
+](
+    out_minkey: MutPointer[UInt32, MutAnyOrigin],
+    out_maxkey: MutPointer[UInt32, MutAnyOrigin],
+    out_n_missing: MutPointer[Int32, MutAnyOrigin],
+    out_n_merges: MutPointer[Int32, MutAnyOrigin],
+    data_rm: MutPointer[Float32, MutAnyOrigin],
+    row_ids: MutPointer[Int32, MutAnyOrigin],
+    work_items: MutPointer[NodeWorkItem, MutAnyOrigin],
+    workload_info: MutPointer[WorkloadInfo, MutAnyOrigin],
+    colids: MutPointer[Int32, MutAnyOrigin],
+    n_in: Int32,
+    n_sampled_cols_in: Int32,
+):
+    """FAST (`-D MOJOLEARN_ET_RANGE_TILED`): `node_feature_range_kernel` for
+    up to `FT` sampled features per block over a ROW-MAJOR copy of X. Each
+    row's `row_ids` entry is read once and its features come from one row's
+    bytes instead of `FT` separate column gathers. Grid `(row blocks,
+    ceil(k / FT))`; every cell gets the same min, max and NaN count as the
+    one-feature kernel publishes, through the same publish helpers."""
+    var wb = Int(block_idx.x)
+    var ftile = Int(block_idx.y)
+    var nid = Int(workload_info[unsafe_offset=wb].nodeid)
+    var offset_blockid = Int(workload_info[unsafe_offset=wb].offset_blockid)
+    var num_blocks = Int(workload_info[unsafe_offset=wb].num_blocks)
+    var range_start = Int(work_items[unsafe_offset=nid].instances.begin)
+    var range_len = Int(work_items[unsafe_offset=nid].instances.count)
+    var n = Int(n_in)
+    var k = Int(n_sampled_cols_in)
+    var f0 = ftile * FT
+    var nf = k - f0
+    if nf > FT:
+        nf = FT
+    var cols = SIMD[DType.int32, FT](0)
+    comptime for j in range(FT):
+        if j < nf:
+            cols[j] = colids[unsafe_offset = nid * k + f0 + j]
+    var lmin = SIMD[DType.float32, FT](inf[DType.float32]())
+    var lmax = SIMD[DType.float32, FT](-inf[DType.float32]())
+    var lmiss = SIMD[DType.int32, FT](0)
+    var end = range_start + range_len
+    var stride = TPB * num_blocks
+    var i = range_start + Int(thread_idx.x) + offset_blockid * TPB
+    while i < end:
+        var base = Int(row_ids[unsafe_offset=i]) * n
+        comptime for j in range(FT):
+            if j < nf:
+                var v = data_rm[unsafe_offset = base + Int(cols[j])]
+                if v != v:
+                    lmiss[j] += 1
+                else:
+                    if range_key(v) < range_key(lmin[j]):
+                        lmin[j] = v
+                    if range_key(v) > range_key(lmax[j]):
+                        lmax[j] = v
+        i += stride
+    # One barrier for the whole tile: each warp folds its FT features with
+    # shuffles, lane 0 parks them in shared memory, and thread j folds
+    # feature j across the warps. Same min, max and count as the block
+    # reductions this replaces.
+    comptime N_WARPS = TPB // WARP_SIZE
+    var s_min = stack_allocation[
+        N_WARPS * FT, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var s_max = stack_allocation[
+        N_WARPS * FT, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var s_miss = stack_allocation[
+        N_WARPS * FT, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    var warp = Int(thread_idx.x) // WARP_SIZE
+    var lane = Int(thread_idx.x) % WARP_SIZE
+    comptime for j in range(FT):
+        var wmin = _warp_fold_min_f32(lmin[j])
+        var wmax = _warp_fold_max_f32(lmax[j])
+        var wmiss = _warp_fold_sum_i32(lmiss[j])
+        if lane == 0:
+            s_min[warp * FT + j] = wmin
+            s_max[warp * FT + j] = wmax
+            s_miss[warp * FT + j] = wmiss
+    barrier()
+    var t = Int(thread_idx.x)
+    if t < nf:
+        var bmin = s_min[t]
+        var bmax = s_max[t]
+        var bmiss = s_miss[t]
+        for w in range(1, N_WARPS):
+            var a = s_min[w * FT + t]
+            var b = s_max[w * FT + t]
+            bmin = a if a < bmin else bmin
+            bmax = b if b > bmax else bmax
+            bmiss += s_miss[w * FT + t]
+        var kmin = range_key(bmin)
+        var kmax = range_key(bmax)
+        var slot = nid * k + f0 + t
+        var single = num_blocks == 1
+        comptime if SINGLE_WRITER_PLAIN_PUBLISH:
+            if single:
+                if kmin < out_minkey[unsafe_offset=slot]:
+                    out_minkey[unsafe_offset=slot] = kmin
+                if kmax > out_maxkey[unsafe_offset=slot]:
+                    out_maxkey[unsafe_offset=slot] = kmax
+            else:
+                _publish_min_max(out_minkey, out_maxkey, slot, kmin, kmax)
+        else:
+            _publish_min_max(out_minkey, out_maxkey, slot, kmin, kmax)
+        _publish_add(out_n_missing, slot, bmiss, single)
         _publish_add(out_n_merges, slot, Int32(1), single)
 
 
@@ -1314,7 +1480,7 @@ def shared_class_counts_mask() -> Int:
 
 
 def node_feature_score_kernel[
-    TPB: Int, MAX_ACC: Int, CLASSIFICATION: Bool
+    TPB: Int, MAX_ACC: Int, CLASSIFICATION: Bool, ROW_MAJOR: Bool = False
 ](
     out_n_left: MutPointer[Int32, MutAnyOrigin],
     out_n_total: MutPointer[Int32, MutAnyOrigin],
@@ -1336,10 +1502,14 @@ def node_feature_score_kernel[
     n_acc_in: Int32,
     seed: UInt64,
     sabotage_in: Int32,
+    n_cols_in: Int32,
 ):
     """Steps 2, 3 and 4 of DEVIATION 137: skip, draw, and accumulate."""
     var wb = Int(block_idx.x)
     var fslot = Int(block_idx.y)
+    comptime if ROW_MAJOR:
+        wb = Int(block_idx.y)
+        fslot = Int(block_idx.x)
     var nid = Int(workload_info[unsafe_offset=wb].nodeid)
     var offset_blockid = Int(workload_info[unsafe_offset=wb].offset_blockid)
     var num_blocks = Int(workload_info[unsafe_offset=wb].num_blocks)
@@ -1428,7 +1598,11 @@ def node_feature_score_kernel[
         var row = Int(row_ids[unsafe_offset=i])
         if sabotage == SCORE_SAB_NO_ROW_IDS:
             row = i
-        var v = data[unsafe_offset = col_offset + row]
+        var v: Float32
+        comptime if ROW_MAJOR:
+            v = data[unsafe_offset = row * Int(n_cols_in) + col]
+        else:
+            v = data[unsafe_offset = col_offset + row]
         var lab = Int(labels_q[unsafe_offset=row])
         n_seen += 1
 
@@ -1535,6 +1709,130 @@ def node_feature_score_kernel[
         if Int(thread_idx.x) == 0 and publishes:
             _publish_add(out_acc_left, slot * n_acc + k, bl, single)
             _publish_add(out_acc_total, slot * n_acc + k, bt, single)
+
+
+def node_feature_score_reg_tiled_kernel[
+    TPB: Int, FT: Int
+](
+    out_n_left: MutPointer[Int32, MutAnyOrigin],
+    out_n_total: MutPointer[Int32, MutAnyOrigin],
+    out_acc_left: MutPointer[Int32, MutAnyOrigin],
+    out_acc_total: MutPointer[Int32, MutAnyOrigin],
+    out_n_blocks: MutPointer[Int32, MutAnyOrigin],
+    in_min: MutPointer[Float32, MutAnyOrigin],
+    in_max: MutPointer[Float32, MutAnyOrigin],
+    in_n_missing: MutPointer[Int32, MutAnyOrigin],
+    data_rm: MutPointer[Float32, MutAnyOrigin],
+    row_ids: MutPointer[Int32, MutAnyOrigin],
+    labels_q: MutPointer[Int32, MutAnyOrigin],
+    work_items: MutPointer[NodeWorkItem, MutAnyOrigin],
+    workload_info: MutPointer[WorkloadInfo, MutAnyOrigin],
+    colids: MutPointer[Int32, MutAnyOrigin],
+    tree_ids: MutPointer[Int32, MutAnyOrigin],
+    n_in: Int32,
+    n_sampled_cols_in: Int32,
+    seed: UInt64,
+):
+    """FAST (`-D MOJOLEARN_ET_SCORE_TILED`): the REGRESSION arm of
+    `node_feature_score_kernel` (`CLASSIFICATION=False`, one accumulator,
+    no sabotage) for up to `FT` sampled features per block over a row-major
+    X. Each row's id and quantized label are read once. A feature the
+    one-feature kernel would skip (missing values, constant) publishes
+    nothing here either; every other cell gets the same integer counts and
+    sums through the same publish helpers."""
+    var wb = Int(block_idx.x)
+    var ftile = Int(block_idx.y)
+    var nid = Int(workload_info[unsafe_offset=wb].nodeid)
+    var offset_blockid = Int(workload_info[unsafe_offset=wb].offset_blockid)
+    var num_blocks = Int(workload_info[unsafe_offset=wb].num_blocks)
+    var range_start = Int(work_items[unsafe_offset=nid].instances.begin)
+    var range_len = Int(work_items[unsafe_offset=nid].instances.count)
+    var node_id = UInt32(Int(work_items[unsafe_offset=nid].idx))
+    var n = Int(n_in)
+    var k = Int(n_sampled_cols_in)
+    var f0 = ftile * FT
+    var nf = k - f0
+    if nf > FT:
+        nf = FT
+    var cols = SIMD[DType.int32, FT](0)
+    var thr = SIMD[DType.float32, FT](0)
+    var active = SIMD[DType.int32, FT](0)
+    var tree = tree_ids[unsafe_offset=nid].cast[DType.uint32]()
+    comptime for j in range(FT):
+        if j < nf:
+            var slot = nid * k + f0 + j
+            var col = Int(colids[unsafe_offset=slot])
+            cols[j] = Int32(col)
+            var extent = FeatureRange(
+                in_min[unsafe_offset=slot],
+                in_max[unsafe_offset=slot],
+                in_n_missing[unsafe_offset=slot],
+            )
+            if extent.n_missing == Int32(0) and not node_feature_is_constant(
+                extent, Int32(range_len)
+            ):
+                active[j] = 1
+                var key = key_for(seed, tree, node_id, UInt32(col))
+                thr[j] = draw_threshold_device(key, extent, True)
+    var n_left = SIMD[DType.int32, FT](0)
+    var acc_left = SIMD[DType.int32, FT](0)
+    var n_seen = Int32(0)
+    var acc_total = Int32(0)
+    var end = range_start + range_len
+    var stride = TPB * num_blocks
+    var i = range_start + Int(thread_idx.x) + offset_blockid * TPB
+    while i < end:
+        var row = Int(row_ids[unsafe_offset=i])
+        var q = labels_q[unsafe_offset=row]
+        n_seen += 1
+        acc_total += q
+        var base = row * n
+        comptime for j in range(FT):
+            if j < nf and active[j] != 0:
+                if data_rm[unsafe_offset = base + Int(cols[j])] <= thr[j]:
+                    n_left[j] += 1
+                    acc_left[j] += q
+        i += stride
+    # One barrier for the whole tile (see node_feature_range_tiled_kernel).
+    comptime N_WARPS = TPB // WARP_SIZE
+    var s_nl = stack_allocation[
+        N_WARPS * (FT + 1), Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    var s_al = stack_allocation[
+        N_WARPS * (FT + 1), Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    var warp = Int(thread_idx.x) // WARP_SIZE
+    var lane = Int(thread_idx.x) % WARP_SIZE
+    comptime for j in range(FT):
+        var wl = _warp_fold_sum_i32(n_left[j])
+        var wa = _warp_fold_sum_i32(acc_left[j])
+        if lane == 0:
+            s_nl[warp * (FT + 1) + j] = wl
+            s_al[warp * (FT + 1) + j] = wa
+    var ws = _warp_fold_sum_i32(n_seen)
+    var wt = _warp_fold_sum_i32(acc_total)
+    if lane == 0:
+        s_nl[warp * (FT + 1) + FT] = ws
+        s_al[warp * (FT + 1) + FT] = wt
+    barrier()
+    var t = Int(thread_idx.x)
+    if t < nf and active[t] != 0:
+        var bl = Int32(0)
+        var ba = Int32(0)
+        var bs = Int32(0)
+        var bt = Int32(0)
+        for w in range(N_WARPS):
+            bl += s_nl[w * (FT + 1) + t]
+            ba += s_al[w * (FT + 1) + t]
+            bs += s_nl[w * (FT + 1) + FT]
+            bt += s_al[w * (FT + 1) + FT]
+        var single = num_blocks == 1
+        var slot = nid * k + f0 + t
+        _publish_add(out_n_left, slot, bl, single)
+        _publish_add(out_n_total, slot, bs, single)
+        _publish_add(out_n_blocks, slot, Int32(1), single)
+        _publish_add(out_acc_left, slot, ba, single)
+        _publish_add(out_acc_total, slot, bt, single)
 
 
 def node_feature_score_finalize_kernel[

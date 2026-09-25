@@ -441,6 +441,7 @@ struct Fixture(Movable):
             .unsafe_origin_cast[MutUntrackedOrigin]()
             .unsafe_bitcast[UInt8](),
             False,
+        False,
         )
 
     def quantiles(mut self) -> Quantiles[DT]:
@@ -774,6 +775,7 @@ def arm_c_cdf_and_splits[
         .unsafe_origin_cast[MutUntrackedOrigin]()
         .unsafe_bitcast[UInt8](),
         False,
+        False,
     )
     var quantiles = Quantiles[DT](
         q_arr.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
@@ -820,6 +822,9 @@ def arm_c_cdf_and_splits[
         C_NODES,
         C_SLOTS,
         argsp,
+        splits.unsafe_ptr()
+        .unsafe_origin_cast[MutUntrackedOrigin]()
+        .unsafe_bitcast[Split[DT]](),
     )
     ctx.synchronize()
     # KEEP-ALIVE, and it is not decoration -- see `upload_i32`'s comment.
@@ -986,6 +991,7 @@ def arm_d_partition[
         fx.data.unsafe_ptr()
         .unsafe_origin_cast[MutUntrackedOrigin]()
         .unsafe_bitcast[UInt8](),
+        False,
         False,
     )
 

@@ -48,15 +48,44 @@ rental is retried by running the driver again. A segment that lands with a
 FAIL verdict stops the driver (the plan's halt rule): nothing after a
 disputed boundary is kept.
 
+A HUNG SEGMENT RESUMES. A one-box segment that brings no segment.json
+home (a box that hung and was stopped, a lease that ran out) is read for
+what it DID land: the last checkpoint that its manifest.tsv pins, its log
+says was uploaded, its checkpoints.sha256 (when the box wrote one) agrees
+with, and that is in R2 at the manifest's size, with at least one chain
+line after it. The ledger's `partial` entry records that step
+(`resume_from`), the checkpoints landed so far, the attempt's chain (saved
+under `legs/<route>-<segment>/`) and the attempt's small files
+(`legs/<route>-<segment>/attempt-<n>/`); the attempt's results directory
+is moved aside as `previous-attempt-<n>-*`. The next start of the segment
+runs only the remaining steps from the segment's OWN checkpoint in R2, with
+the same boundary. It is held to the hung attempt's chain (route A: the
+chain is uploaded as `<run>/A/<segment>/partial.chain.jsonl`; the resumed
+box re-derives every step the hung box wrote after the checkpoint and must
+agree on each, and the checkpoint's state must equal the chain's line at
+its step) or to route A's chain as before (every other route). The arrival
+replay is not repeated; the first attempt's verdict stands. Landing takes
+the union: both attempts' checkpoints, the steps summed, the resumed run's
+verdict, and the joined chain uploaded as `chain.union.jsonl`, which every
+later segment is then held to or replays against. `"resume": false` on a
+segment (or on the spec) restarts it from its start instead. A segment
+with no such checkpoint restarts from its start, as before. Live segments
+are never resumed.
+
 RENTALS. One-box segments go through tools/gemm_remote_leg.sh (nvidia, a
 GPU-type walk) or tools/do_extra_leg.sh (amd, DigitalOcean; `amd_provider`
 runpod uses gemm_remote_leg.sh amd). Live segments go through
 tools/lm_live_leg.sh. The runners own the dead-men, the fetch and the
-verified delete. The driver never talks to a cloud API itself.
+verified delete. The driver never talks to a cloud API itself; its only
+network use is R2 by presigned URLs minted by tools/dataset_store.sh (a
+one-byte read to see a checkpoint is there, a PUT of a chain).
 """
 import argparse
+import hashlib
 import json
 import os
+import re
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -153,6 +182,17 @@ class Ledger:
 
     def land(self, e, record):
         self.data["landed"][self.key(e)] = record
+        self._save()
+
+    def partial(self, e):
+        """What a segment that did not land left behind (see record_partial)."""
+        return self.data.get("partial", {}).get(self.key(e))
+
+    def set_partial(self, e, record):
+        self.data.setdefault("partial", {})[self.key(e)] = record
+        self._save()
+
+    def _save(self):
         self.path.write_text(json.dumps(self.data, indent=1) + "\n")
 
 
@@ -223,6 +263,232 @@ def _status(results_dir):
     return ""
 
 
+# ---------------------------------------------------------------- resuming a segment that did not land
+
+ATTEMPT_FILE_CAP = 8_000_000  # bytes; an attempt's files above this stay where they are (checkpoints live in R2)
+
+
+def _ckpt(step):
+    return "ckpt_%08d.blm" % step
+
+
+def _step_of(name):
+    return int(name.split("_")[1].split(".")[0])
+
+
+def r2_bytes(key, seconds=900):
+    """The size of an R2 object by one byte of a presigned GET (a presigned
+    URL refuses HEAD), or None when it cannot be read. The URL is minted on
+    this machine by tools/dataset_store.sh, as every body's are."""
+    from lm_segment_leg import presign_get
+    try:
+        url = presign_get(key, seconds)
+    except subprocess.CalledProcessError:
+        return None
+    r = subprocess.run(["curl", "-fsS", "--max-time", "60", "-r", "0-0", "-D", "-", "-o", os.devnull, url],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        return None
+    for line in (r.stdout or "").splitlines():
+        if line.lower().startswith("content-range:"):
+            return int(line.rsplit("/", 1)[1])
+    return None
+
+
+def r2_put(key, path, seconds=900):
+    """Upload one small file to R2 by a presigned PUT; True when curl says so."""
+    from lm_segment_leg import presign_put
+    try:
+        url = presign_put(key, seconds)
+    except subprocess.CalledProcessError:
+        return False
+    return subprocess.run(["curl", "-fsS", "--retry", "3", "-T", str(path), url],
+                          capture_output=True, text=True).returncode == 0
+
+
+def _chain_lines(path, linked=True):
+    """[(step, line)] of a chain a box wrote, in order, byte-exact. Reading
+    stops at the first line that does not parse (a line cut by the kill),
+    does not follow its predecessor's step, or (linked) does not carry its
+    predecessor's sha256 in `prev`, as tools/lm_segment.py writes them."""
+    out = []
+    p = Path(path)
+    if not p.exists():
+        return out
+    for text in p.read_text(errors="replace").splitlines():
+        if not text.strip():
+            continue
+        try:
+            row = json.loads(text)
+            step = int(row["step"])
+        except (ValueError, KeyError, TypeError):
+            break
+        if out and (step != out[-1][0] + 1 or
+                    (linked and row.get("prev") != hashlib.sha256(out[-1][1].encode()).hexdigest())):
+            break
+        out.append((step, text))
+    return out
+
+
+def _write_chain(path, lines):
+    Path(path).write_text("".join(text + "\n" for _, text in lines))
+
+
+def _resume_allowed(spec, e):
+    segs = spec["routes"].get(e["route"]) or []
+    s = segs[e["index"] - 1] if 0 < e.get("index", 0) <= len(segs) else {}
+    return bool(s.get("resume", spec.get("resume", True)))
+
+
+def resume_point(spec, e, ledger, out=None):
+    """The ledger's partial entry when this segment resumes from it, else None."""
+    part = ledger.partial(e)
+    if not part or e["vendor"] == "live":
+        return None
+    if not _resume_allowed(spec, e):
+        if out is not None:
+            _log(out, "%s/%s: \"resume\": false; restarting from %s although %s landed"
+                 % (e["route"], e["segment"], e["from_ckpt"], _ckpt(part["resume_from"])))
+        return None
+    if not (e["first"] < part["resume_from"] < e["last"]):
+        return None
+    if out is not None:
+        _log(out, "%s/%s: RESUMING from its own %s (%d of %d steps landed), %d steps left"
+             % (e["route"], e["segment"], _ckpt(part["resume_from"]), part["resume_from"] - e["first"], e["steps"],
+                e["last"] - part["resume_from"]))
+    return part
+
+
+def _attempt_box(results):
+    """The box directory (holding segment/) of THIS attempt's chain, or None."""
+    for p in _this_attempt(results, "chain.jsonl"):
+        if p.parent.name == "segment":
+            return p.parent.parent
+    return None
+
+
+def record_partial(spec, e, results, out, ledger):
+    """A one-box segment brought no segment.json home: record what it landed.
+
+    A checkpoint counts as landed when the segment's manifest.tsv pins it,
+    its log.txt says `uploaded <name>`, the box's checkpoints.sha256 (when
+    the body lived to write it) carries the same sha256, R2 holds an object
+    of the manifest's size under `<run>/<route>/<segment>/<name>` (unless
+    the spec says `"resume_check_r2": false`), and the chain has at least
+    one line after it (the resumed box must re-derive a step the hung box
+    wrote). The next box fetches it by that sha256, so a wrong object is
+    refused on the box before it trains. Returns the partial entry or None."""
+    key = "%s/%s" % (e["route"], e["segment"])
+    if e["vendor"] == "live":
+        _log(out, "%s: a live segment is not resumed; it restarts from %s" % (key, e["from_ckpt"]))
+        return None
+    box = _attempt_box(results)
+    prev = ledger.partial(e)
+    start = prev["resume_from"] if prev else e["first"]
+    if box is None:
+        _log(out, "%s: no chain came home; nothing to resume from" % key)
+        return None
+    lines = _chain_lines(box / "segment" / "chain.jsonl")
+    if not lines or lines[0][0] != start + 1:
+        _log(out, "%s: the fetched chain does not start at step %d; it is not this attempt's, nothing recorded" % (key, start + 1))
+        return None
+    last_line = lines[-1][0]
+    pinned = {}
+    mf = box / "segment" / "manifest.tsv"
+    if mf.exists():
+        for row in mf.read_text().splitlines():
+            parts = row.split("\t")
+            if len(parts) == 3 and parts[0].startswith("ckpt_"):
+                pinned[parts[0]] = (int(parts[1]), parts[2])
+    log_txt = box / "segment" / "log.txt"
+    uploaded = set(re.findall(r"uploaded (ckpt_\d{8}\.blm) in", log_txt.read_text(errors="replace"))) if log_txt.exists() else set()
+    on_box = None
+    if (box / "checkpoints.sha256").exists():
+        on_box = {}
+        for row in (box / "checkpoints.sha256").read_text().splitlines():
+            if row.strip():
+                digest, path = row.split(None, 1)
+                on_box[Path(path.strip()).name] = digest
+    landed, refused = {}, {}
+    for name in sorted(pinned):
+        step = _step_of(name)
+        if not (start < step < e["last"] and step < last_line):
+            continue
+        size, digest = pinned[name]
+        if name not in uploaded:
+            refused[name] = "the log has no upload line"
+        elif on_box is not None and on_box.get(name) != digest:
+            refused[name] = "checkpoints.sha256 says %s, the manifest %s" % (on_box.get(name), digest)
+        elif spec.get("resume_check_r2", True) and r2_bytes("%s/%s/%s" % (spec["run"], key, name)) != size:
+            refused[name] = "R2 has no object of %d bytes under its key" % size
+        else:
+            landed[name] = digest
+    for name, why in refused.items():
+        _log(out, "%s: %s does not count as landed: %s" % (key, name, why))
+    arrival = prev["arrival"] if prev else None
+    if not prev and e["replay_ckpt"]:
+        aj = box / "arrival" / "segment.json"
+        arrival = json.loads(aj.read_text()).get("verdict") if aj.exists() else None
+        if arrival != "PASS":
+            _log(out, "%s: the arrival replay did not pass on this attempt (%s); nothing to resume" % (key, arrival))
+            return None
+    seed = {}
+    if e["from_ckpt"] == "init" and not prev and (box / "seed.sha256").exists() \
+            and "upload seed exit=0" in ((box / "status.txt").read_text() if (box / "status.txt").exists() else ""):
+        # the first segment drew and uploaded the seed; later routes start from it
+        seed[_ckpt(0)] = (box / "seed.sha256").read_text().split()[0]
+    seg_root = Path(out) / "legs" / ("%s-%s" % (e["route"], e["segment"]))
+    # numbered past every attempt directory already there (an attempt that
+    # landed nothing keeps its files but has no ledger entry)
+    n = 1
+    while (seg_root / ("attempt-%d" % n)).exists():
+        n += 1
+    dest = seg_root / ("attempt-%d" % n)
+    # the attempt's small files in the box's layout (lm_file_evidence reads
+    # them so), then the runner's top-level files where the box has none
+    for p in sorted(box.rglob("*")):
+        rel = p.relative_to(box)
+        if p.is_file() and rel.parts[0] != "in" and p.stat().st_size <= ATTEMPT_FILE_CAP:
+            (dest / rel).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(p, dest / rel)
+    for p in sorted(Path(results).iterdir()):
+        if p.is_file() and not (dest / p.name).exists() and p.stat().st_size <= ATTEMPT_FILE_CAP:
+            shutil.copyfile(p, dest / p.name)
+    attempt = dict(n=n, dir=str(dest), first_step=start, last_chain_step=last_line, checkpoints=landed,
+                   refused=refused, utc=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+    # the results directory is moved aside so the next rental fetches into a
+    # clean one; _this_attempt never reads a `previous-*` directory
+    if Path(results).resolve() != seg_root.resolve() and Path(results).exists():
+        aside = Path(results).parent / ("previous-attempt-%d-%s" % (n, Path(results).name))
+        k = 1
+        while aside.exists():
+            k += 1
+            aside = Path(results).parent / ("previous-attempt-%d.%d-%s" % (n, k, Path(results).name))
+        Path(results).rename(aside)
+        attempt["results"] = str(aside)
+    if not landed:
+        if prev:
+            prev["attempts"].append(attempt)
+            ledger.set_partial(e, prev)
+            _log(out, "%s: attempt %d landed no new checkpoint; the next start resumes from %s again"
+                 % (key, n, _ckpt(prev["resume_from"])))
+            return prev
+        _log(out, "%s: no checkpoint past step %d landed; the next start restarts from %s (attempt files in %s)"
+             % (key, start, e["from_ckpt"], dest))
+        return None
+    resume_from = max(_step_of(name) for name in landed)
+    earlier = [l for l in _chain_lines(prev["chain"], linked=False) if l[0] <= start] if prev else []
+    chain = seg_root / "partial.chain.jsonl"
+    _write_chain(chain, earlier + lines)
+    record = dict(resume_from=resume_from, checkpoints=dict(prev["checkpoints"] if prev else {}, **seed, **landed),
+                  chain=str(chain), chain_steps=[(earlier or lines)[0][0], last_line], arrival=arrival,
+                  attempts=(prev["attempts"] if prev else []) + [attempt])
+    ledger.set_partial(e, record)
+    _log(out, "%s: PARTIAL: checkpoints %s landed, chain to step %d saved (%s); the next start resumes from %s with %d steps"
+         % (key, sorted(landed), last_line, chain, _ckpt(resume_from), e["last"] - resume_from))
+    return record
+
+
 # ---------------------------------------------------------------- rendering and renting
 
 NVIDIA_GPUS = "NVIDIA H100 80GB HBM3|NVIDIA H200|NVIDIA H100 PCIe|NVIDIA H100 NVL"
@@ -238,22 +504,56 @@ def _nvidia_gpus(spec, e):
     return e.get("nvidia_gpus") or spec.get("nvidia_gpus", NVIDIA_GPUS)
 
 
+def _chain_key(run, ledger, route, segment):
+    """The R2 key of a landed segment's whole chain: its box's chain.jsonl,
+    or for a resumed segment the joined chain the landing uploaded. A resumed
+    segment whose joined chain is not in R2 is refused by name: holding a
+    later segment to the resumed box's part alone would compare fewer steps."""
+    rec = ledger.landed(dict(route=route, segment=segment)) or {}
+    if rec.get("resumed_from") is not None:
+        if not rec.get("chain_key"):
+            raise SystemExit("%s/%s was resumed and its joined chain is not in R2; run `reland --segment %s/%s`"
+                             % (route, segment, route, segment))
+        return rec["chain_key"]
+    return "%s/%s/%s/chain.jsonl" % (run, route, segment)
+
+
 def render(spec, e, out, ledger, role=None):
-    """One body for a segment (or one side of a live segment)."""
+    """One body for a segment (or one side of a live segment). A one-box
+    segment with a `partial` ledger entry (and resuming allowed) runs only
+    its remaining steps, from its own last landed checkpoint."""
     run = spec["run"]
     arm = e["vendor"] if role is None else role
     mode = "one" if role is None else ("live-coordinator" if role == e["live"] else "live-worker")
     devices = _nvidia_devices(spec, e) if arm == "nvidia" else spec.get("amd_devices", "0")
     label = "%s-%s-%s" % (arm, e["route"], e["segment"])
+    resume = resume_point(spec, e, ledger, out) if role is None else None
+    from_ckpt, steps = e["from_ckpt"], e["steps"]
+    if resume:
+        from_ckpt = _ckpt(resume["resume_from"])
+        steps = e["last"] - resume["resume_from"]
     cmd = [sys.executable, str(REPO / "tools" / "lm_segment_leg.py"), "render", "--run", run, "--recipe", spec["recipe"],
            "--recipe-key", spec["recipe_key"], "--arm", arm, "--mode", mode, "--devices", devices,
            "--tokens-key", spec["tokens_stage"],
            *(["--wheel", spec["wheel"]] if spec.get("wheel") else []),
-           "--route", e["route"], "--segment", e["segment"], "--label", label, "--steps", str(e["steps"]),
-           "--from", e["from_ckpt"], "--seconds", str(spec.get("url_seconds", 8 * 3600))]
+           "--route", e["route"], "--segment", e["segment"], "--label", label, "--steps", str(steps),
+           "--from", from_ckpt, "--seconds", str(spec.get("url_seconds", 8 * 3600))]
     if mode != "live-worker":
         cmd += ["--boundary", str(e["boundary"])]
-    if e["from_ckpt"] != "init":
+    if resume:
+        # the segment's OWN checkpoint, by the sha256 its box pinned; the
+        # arrival replay passed on the first attempt and is not repeated:
+        # the resumed box is held to the chain instead
+        cmd += ["--from-sha", resume["checkpoints"][from_ckpt],
+                "--from-key", "%s/%s/%s/%s" % (run, e["route"], e["segment"], from_ckpt)]
+        if e["route"] == "A":
+            key = "%s/%s/%s/partial.chain.jsonl" % (run, e["route"], e["segment"])
+            if not r2_put(key, resume["chain"]):
+                raise SystemExit("%s/%s: the partial chain could not be uploaded to %s; not resuming blind" % (e["route"], e["segment"], key))
+            cmd += ["--expect-key", key]
+        else:
+            cmd += ["--expect-key", _chain_key(run, ledger, "A", e["segment"])]
+    elif e["from_ckpt"] != "init":
         src = ledger.landed(dict(route=e["from_route"], segment=e["from_segment"]))
         if not src:
             raise SystemExit("%s/%s has not landed" % (e["from_route"], e["from_segment"]))
@@ -263,9 +563,10 @@ def render(spec, e, out, ledger, role=None):
         if mode != "live-worker" and e["replay_ckpt"]:
             cmd += ["--replay", e["replay_ckpt"], "--replay-sha", src["checkpoints"][e["replay_ckpt"]],
                     "--replay-key", "%s/%s/%s/%s" % (run, e["from_route"], e["from_segment"], e["replay_ckpt"]),
-                    "--replay-chain-key", "%s/%s/%s/chain.jsonl" % (run, e["from_route"], e["from_segment"])]
-    if e["expect"]:
-        cmd += ["--expect-key", "%s/%s" % (run, e["expect"])]
+                    "--replay-chain-key", _chain_key(run, ledger, e["from_route"], e["from_segment"])]
+    if e["expect"] and not resume:
+        route, _, rest = e["expect"].partition("/")
+        cmd += ["--expect-key", _chain_key(run, ledger, route, rest.partition("/")[0])]
     if role is not None:
         n_first, n_second = e["shards"]
         K = n_first + n_second
@@ -388,7 +689,10 @@ def land(spec, e, results, out, ledger):
     status = _status(results)
     if seg is None:
         _log(out, "%s/%s: no segment.json came home; status:\n%s" % (e["route"], e["segment"], status[-800:]))
+        record_partial(spec, e, results, out, ledger)
         return None
+    if e["vendor"] != "live" and seg.get("first_step") is not None and int(seg["first_step"]) != e["first"]:
+        return _land_resumed(spec, e, results, out, ledger, seg_dir, seg)
     verdict = seg.get("verdict")
     ckpts = {c["file"]: c["sha256"] for c in seg.get("checkpoints", [])}
     if e["from_ckpt"] == "init":
@@ -422,6 +726,77 @@ def land(spec, e, results, out, ledger):
                 return False
     ledger.land(e, record)
     _log(out, "%s/%s LANDED: %d steps, checkpoints %s" % (e["route"], e["segment"], seg.get("steps_completed") or 0, sorted(ckpts)))
+    return True
+
+
+def _land_resumed(spec, e, results, out, ledger, seg_dir, seg):
+    """Land a segment whose box started from its own partial checkpoint: the
+    union of every attempt. The resumed box's verdict decides; its loaded
+    checkpoint's state must equal the chain's line at that step (lm_segment
+    compared it, `from_state`), the arrival verdict is the first attempt's,
+    and the joined chain (the earlier attempts' lines up to the checkpoint,
+    then the resumed box's) goes to R2 as chain.union.jsonl for every later
+    segment to be held to."""
+    key = "%s/%s" % (e["route"], e["segment"])
+    part = ledger.partial(e)
+    first = int(seg["first_step"])
+    record = dict(verdict=seg.get("verdict"), steps_completed=None, disagreements=seg.get("disagreements"),
+                  results=str(results), utc=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), resumed_from=first)
+    if not part or part["resume_from"] != first:
+        record.update(verdict="FAIL-RESUME", checkpoints={c["file"]: c["sha256"] for c in seg.get("checkpoints", [])})
+        _log(out, "%s: the box started at step %d and the ledger has no partial entry at that step; THE RUN HALTS HERE" % (key, first))
+        ledger.land(e, record)
+        return False
+    ckpts = dict(part["checkpoints"])
+    ckpts.update({c["file"]: c["sha256"] for c in seg.get("checkpoints", [])})
+    record.update(checkpoints=ckpts, arrival=part.get("arrival"), attempts=part["attempts"],
+                  partial_chain=part["chain"],
+                  steps_completed=(first - e["first"]) + int(seg.get("steps_completed") or 0))
+    verdict = record["verdict"]
+    fs = seg.get("from_state") or {}
+    if verdict == "PASS" and not fs.get("agrees"):
+        verdict = record["verdict"] = "FAIL-RESUME"
+        record["disagreements"] = (record["disagreements"] or []) + [dict(
+            reason="the resumed checkpoint's state was not shown equal to the chain's line at step %d" % first, from_state=fs)]
+    if verdict != "PASS" or (e["replay_ckpt"] and record["arrival"] != "PASS"):
+        _log(out, "%s: resumed from %d, verdict %s, arrival %s; THE RUN HALTS HERE (%s)"
+             % (key, first, verdict, record["arrival"], record["disagreements"]))
+        ledger.land(e, record)
+        return False
+    if e["route"] != "A":
+        a = ledger.landed(dict(route="A", segment=e["segment"]))
+        if a:
+            boundary = _ckpt(e["last"])
+            if a["checkpoints"].get(boundary) != ckpts.get(boundary):
+                _log(out, "%s: boundary checkpoint %s differs from route A's; THE RUN HALTS HERE" % (key, boundary))
+                record["verdict"] = "FAIL-BOUNDARY"
+                ledger.land(e, record)
+                return False
+    earlier = [l for l in _chain_lines(part["chain"], linked=False) if l[0] <= first]
+    resumed = _chain_lines(seg_dir / "chain.jsonl")
+    joined = earlier + resumed
+    steps = [s for s, _ in joined]
+    last = seg.get("last_completed") or e["last"]
+    if steps != list(range(e["first"] + 1, last + 1)):
+        record["verdict"] = "FAIL-RESUME"
+        record["disagreements"] = [dict(reason="the joined chain does not run step by step from %d to %d" % (e["first"] + 1, last),
+                                        earlier=[earlier[0][0], earlier[-1][0]] if earlier else None,
+                                        resumed=[resumed[0][0], resumed[-1][0]] if resumed else None)]
+        _log(out, "%s: %s; THE RUN HALTS HERE" % (key, record["disagreements"][0]["reason"]))
+        ledger.land(e, record)
+        return False
+    union = Path(out) / "legs" / ("%s-%s" % (e["route"], e["segment"])) / "chain.union.jsonl"
+    union.parent.mkdir(parents=True, exist_ok=True)
+    _write_chain(union, joined)
+    record["chain"] = str(union)
+    record["chain_sha256"] = hashlib.sha256(union.read_bytes()).hexdigest()
+    chain_key = "%s/%s/chain.union.jsonl" % (spec["run"], key)
+    if r2_put(chain_key, union):
+        record["chain_key"] = chain_key
+    else:
+        _log(out, "%s: the joined chain did not upload to %s; later segments refuse until `reland --segment %s`" % (key, chain_key, key))
+    ledger.land(e, record)
+    _log(out, "%s LANDED (resumed from %s): %d steps, checkpoints %s" % (key, _ckpt(first), record["steps_completed"], sorted(ckpts)))
     return True
 
 
@@ -511,7 +886,9 @@ def cmd_run(args):
             if ok is False:
                 halted["flag"] = True
             elif ok is None:
-                _log(out, "%s/%s did not land (no results); run the driver again to retry" % (e["route"], e["segment"]))
+                part = resume_point(spec, e, ledger)
+                _log(out, "%s/%s did not land (no results); run the driver again to %s" % (
+                    e["route"], e["segment"], "resume it from %s" % _ckpt(part["resume_from"]) if part else "retry"))
                 halted["flag"] = True
         pending = [e for e in plan if not is_passed(e["route"], e["segment"]) and "%s/%s" % (e["route"], e["segment"]) not in running]
         if not pending and not running:
@@ -565,7 +942,14 @@ def cmd_status(args):
     ledger = Ledger(args.out)
     for e in segment_plan(spec):
         rec = ledger.landed(e) or {}
-        print("%s/%s %-7s %s %s" % (e["route"], e["segment"], e["vendor"], rec.get("verdict", "pending"), rec.get("utc", "")))
+        print("%s/%s %-7s %s %s%s" % (e["route"], e["segment"], e["vendor"], rec.get("verdict", "pending"), rec.get("utc", ""),
+                                      "  (resumed from step %d)" % rec["resumed_from"] if rec.get("resumed_from") is not None else ""))
+        part = ledger.partial(e)
+        if part and rec.get("verdict") != "PASS":
+            print("      partial: resume from step %d%s; checkpoints landed %s; chain to step %d (%s); %d attempt(s), last in %s"
+                  % (part["resume_from"], "" if _resume_allowed(spec, e) else " (\"resume\": false: restarts from its start)",
+                     ", ".join(sorted(part["checkpoints"])), part["chain_steps"][1], part["chain"],
+                     len(part["attempts"]), part["attempts"][-1]["dir"]))
     return 0
 
 

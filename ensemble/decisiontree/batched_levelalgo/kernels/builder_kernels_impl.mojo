@@ -398,7 +398,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from core.block_reduce import block_flush_count_i32, block_reduce_sum
-from core.launch_log import log_launch
+from core.launch_log import log_launch, log_launch_ctx
 from core.block_scan import BlockScanElement, pdf_to_cdf
 from core.scan_by_key import (
     ScanByKeyElement,
@@ -424,7 +424,11 @@ from ensemble.decisiontree.batched_levelalgo.split import (
     PINNED_SPLIT_REDUCE_LANES,
     Split,
 )
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
+from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_FAST,
+    NUMERIC_IDENTICAL,
+)
 from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels import (
     InstanceRange,
     NodeWorkItem,
@@ -432,6 +436,7 @@ from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels import (
     WorkloadInfo,
     recombine_seed_halves,
     sampled_column_at,
+    sampled_columns_for_node,
 )
 from ensemble.flatnode import SparseTreeNode
 
@@ -448,6 +453,55 @@ comptime TPB_DEFAULT = 128
 # the global.
 comptime BUILD_MODE = GLOBAL_NUMERIC_MODE
 comptime SPLIT_REDUCE_PINNED_DEFAULT = BUILD_MODE == NUMERIC_IDENTICAL
+
+comptime SAMPLE_PER_NODE_DEFAULT = (
+    BUILD_MODE == NUMERIC_FAST
+    and not is_defined["MOJOLEARN_RF_FAST_SAMPLE_PER_COLUMN"]()
+)
+"""FAST only: the fused setup's feature sampler runs one thread per node
+(`sampled_columns_for_node`) instead of one per (node, column), drawing
+each node's 24-key bijection once instead of `k` times. Same columns.
+`-D MOJOLEARN_RF_FAST_SAMPLE_PER_COLUMN` restores the per-column arm."""
+
+comptime HIST_SPLIT_CANDIDATES_DEFAULT = (
+    BUILD_MODE == NUMERIC_FAST
+    and is_defined["MOJOLEARN_RF_SPLIT_CANDIDATES"]()
+)
+"""FAST only: each `find_best_splits` block stores its winner in its own
+candidate slot and `merge_split_candidates_kernel` folds a node's slots
+with `Split.update` (a total order), instead of every block spinning on
+the node's device mutex. Same winner. OPT-IN (`-D
+MOJOLEARN_RF_SPLIT_CANDIDATES=1`), NOT FLIPPED: Apple M4 1M rows, hashes
+unchanged, taxireg 0.993, taxi 1.018 -- the mutex is not the cost here.
+`MOJOLEARN_RF_EXP_NO_SPLIT_MUTEX` is the racy pricing arm (never a
+build default; its forests move run to run and its build gate refuses).
+"""
+
+comptime SMALL_NODE_FUSED_DEFAULT = (
+    BUILD_MODE == NUMERIC_FAST
+    and is_defined["MOJOLEARN_RF_SMALL_NODE_FUSED"]()
+)
+"""FAST experiment: a batch whose every node fits one block's walk runs
+`small_node_split_kernel` (histogram in shared memory + split search in
+one launch) instead of zero + histogram + find_best_splits."""
+
+comptime SMALL_NODE_ROWS = 256 if is_defined[
+    "MOJOLEARN_RF_SMALL_NODE_256"
+]() else (1024 if is_defined["MOJOLEARN_RF_SMALL_NODE_1024"]() else 4096)
+"""The largest node `small_node_split_kernel` takes."""
+
+comptime HIST_ZERO_AFTER_READ_DEFAULT = (
+    BUILD_MODE == NUMERIC_FAST
+    and not is_defined["MOJOLEARN_RF_FAST_HIST_ZERO_OFF"]()
+)
+"""FAST only: `find_best_splits_kernel` re-zeroes the histogram cells it
+consumed, so the builder zeroes the histogram workspace ONCE and every later
+sampling round skips its `hist_zero` launch. On Metal each launch is its own
+command buffer (about 0.2 ms of GPU timeline at 1M rows on the M4), and the
+per-round zero was one launch in five. The histogram kernel writes exactly the
+`n_bins * n_classes` cells each (node, column) block of this kernel reads, so
+the workspace is all-zero again when the kernel retires. Same zeros, same
+model. `-D MOJOLEARN_RF_FAST_HIST_ZERO_OFF` restores the per-round launch."""
 
 # `builder.cuh:163`. Their comment: "Tunable performance heuristic for the
 # shared-memory histogram path. Large per-block histograms, usually from
@@ -674,7 +728,7 @@ struct DeviceArgs[F: Copyable & Deinitable](Movable):
         # padding stays the stable bytes `cmp` carries.
         for i in range(nbytes):
             hp.unsafe_store(i, cp.unsafe_load(i))
-        log_launch("xfer_args_upload")
+        log_launch_ctx(ctx, "xfer_args_upload")
         ctx.enqueue_copy(dst_buf=self.dev, src_ptr=self.host.unsafe_ptr())
         self.staged = True
         return self.device_ptr()
@@ -752,6 +806,23 @@ def phase_setup_kernel[
         extent = Int(n_column_samples)
     var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)
+    comptime if SAMPLE_PER_NODE_DEFAULT:
+        # FAST: one thread per NODE draws its bijection once and writes its
+        # `k` columns (`sampled_columns_for_node`); same integers as the
+        # per-sample arm below, `k` times fewer key streams.
+        var n_nodes = Int(n_column_samples) // Int(k)
+        while idx < extent:
+            if idx < Int(n_splits):
+                splits[unsafe_offset=idx] = Split[dtype]()
+            if idx < Int(n_mutex):
+                mutex[unsafe_offset=idx] = Int32(0)
+            if idx < n_nodes:
+                sampled_columns_for_node(
+                    work_items, idx, seed, treeid, sample_offset, n_cols, k,
+                    column_samples.unsafe_offset(idx * Int(k)),
+                )
+            idx += stride
+        return
     while idx < extent:
         if idx < Int(n_splits):
             # `split.cuh:284-289` -- a default-constructed Split.
@@ -801,7 +872,7 @@ def launch_phase_setup_kernel[
     var lo_u = (seed & 0xFFFFFFFF).cast[DType.uint32]()
     var hi_arg = hi_u.cast[DType.int32]()
     var lo_arg = lo_u.cast[DType.int32]()
-    log_launch("phase_setup")
+    log_launch_ctx(ctx, "phase_setup")
     ctx.enqueue_function[phase_setup_kernel[dtype]](
         splits.unsafe_origin_cast[MutAnyOrigin](),
         Int32(n_work_items),
@@ -1522,7 +1593,7 @@ def launch_node_split_kernel[
     comptime RESET_TPB = 128
     var reset_grid = ceildiv(n_work_items, RESET_TPB)
     comptime k_reset = reset_local_left_counts_kernel[dtype]
-    log_launch("nodesplit_reset")
+    log_launch_ctx(ctx, "nodesplit_reset")
     ctx.enqueue_function[k_reset](
         splits.unsafe_origin_cast[MutAnyOrigin](),
         scratch.local_nleft.unsafe_ptr(),
@@ -1536,7 +1607,7 @@ def launch_node_split_kernel[
     comptime k_count = count_local_left_kernel[
         dtype, label_dtype, TPB, count_sab
     ]
-    log_launch("nodesplit_count_left")
+    log_launch_ctx(ctx, "nodesplit_count_left")
     ctx.enqueue_function[k_count](
         argsp.unsafe_origin_cast[MutAnyOrigin](),
         work_items.unsafe_origin_cast[MutAnyOrigin](),
@@ -1550,7 +1621,7 @@ def launch_node_split_kernel[
     # DEVIATION 127: their 64-bit atomic landed straight in the field;
     # ours widens the shadow into it here, before `:113` reads it.
     comptime k_pub = publish_local_left_counts_kernel[dtype]
-    log_launch("nodesplit_publish")
+    log_launch_ctx(ctx, "nodesplit_publish")
     ctx.enqueue_function[k_pub](
         splits.unsafe_origin_cast[MutAnyOrigin](),
         scratch.local_nleft.unsafe_ptr(),
@@ -1606,7 +1677,7 @@ def launch_node_split_kernel[
         if not ops_same:
             for i in range(size_of[OpsST]()):
                 ops_hp.unsafe_store(i, ops_cp.unsafe_load(i))
-            log_launch("xfer_nodesplit_ops")
+            log_launch_ctx(ctx, "xfer_nodesplit_ops")
             ctx.enqueue_copy(
                 dst_buf=scratch.ops_dev,
                 src_ptr=scratch.ops_host.unsafe_ptr(),
@@ -1632,7 +1703,7 @@ def launch_node_split_kernel[
         comptime k_copy_s = node_split_copy_back_sampled_kernel[
             dtype, label_dtype, TPB, copy_sab
         ]
-        log_launch("nodesplit_copy_back")
+        log_launch_ctx(ctx, "nodesplit_copy_back")
         ctx.enqueue_function[k_copy_s](
             argsp.unsafe_origin_cast[MutAnyOrigin](),
             work_items.unsafe_origin_cast[MutAnyOrigin](),
@@ -1668,7 +1739,7 @@ def launch_node_split_kernel[
         if not ops_same:
             for i in range(size_of[OpsT]()):
                 ops_hp.unsafe_store(i, ops_cp.unsafe_load(i))
-            log_launch("xfer_nodesplit_ops")
+            log_launch_ctx(ctx, "xfer_nodesplit_ops")
             ctx.enqueue_copy(
                 dst_buf=scratch.ops_dev,
                 src_ptr=scratch.ops_host.unsafe_ptr(),
@@ -1694,7 +1765,7 @@ def launch_node_split_kernel[
         comptime k_copy = node_split_copy_back_kernel[
             dtype, label_dtype, TPB, copy_sab
         ]
-        log_launch("nodesplit_copy_back")
+        log_launch_ctx(ctx, "nodesplit_copy_back")
         ctx.enqueue_function[k_copy](
             argsp.unsafe_origin_cast[MutAnyOrigin](),
             work_items.unsafe_origin_cast[MutAnyOrigin](),
@@ -1810,7 +1881,7 @@ def launch_gather_sampled_order_kernel[
     if n_sampled_rows <= 0:
         return
     comptime k = gather_sampled_order_kernel[label_dtype, TPB, sabotage]
-    log_launch("gather_sampled_order")
+    log_launch_ctx(ctx, "gather_sampled_order")
     ctx.enqueue_function[k](
         labels.unsafe_origin_cast[MutAnyOrigin](),
         sample_weight.unsafe_origin_cast[MutAnyOrigin](),
@@ -2003,7 +2074,7 @@ def launch_leaf_kernel[
     comptime k = leaf_kernel[
         O, TPB, LEAF_SMEM_BIN_SLOTS, sabotage, zero_fill, sampled_labels
     ]
-    log_launch("leaf")
+    log_launch_ctx(ctx, "leaf")
     ctx.enqueue_function[k](
         argsp.unsafe_origin_cast[MutAnyOrigin](),
         tree.unsafe_origin_cast[MutAnyOrigin](),
@@ -2527,7 +2598,7 @@ def launch_build_histograms_kernel[
             comptime kgb = build_histograms_kernel[
                 O, TPB, 1, True, sabotage, True, sampled_labels
             ]
-            log_launch("histogram_global_binned")
+            log_launch_ctx(ctx, "histogram_global_binned")
             ctx.enqueue_function[kgb](
                 argsp.unsafe_origin_cast[MutAnyOrigin](),
                 histograms.unsafe_origin_cast[MutAnyOrigin](),
@@ -2543,7 +2614,7 @@ def launch_build_histograms_kernel[
         comptime kg = build_histograms_kernel[
             O, TPB, 1, True, sabotage, False, sampled_labels
         ]
-        log_launch("histogram_global")
+        log_launch_ctx(ctx, "histogram_global")
         ctx.enqueue_function[kg](
             argsp.unsafe_origin_cast[MutAnyOrigin](),
             histograms.unsafe_origin_cast[MutAnyOrigin](),
@@ -2571,7 +2642,13 @@ def launch_build_histograms_kernel[
             comptime USE4 = (
                 DEFAULT4 or is_defined["MOJOLEARN_RF_HIST_COLUMNS4"]()
             )
-            comptime TILE = 4 if USE4 else 2
+            comptime TILE = 10 if is_defined[
+                "MOJOLEARN_RF_HIST_COLUMNS10"
+            ]() else (
+                8 if is_defined["MOJOLEARN_RF_HIST_COLUMNS8"]() else (
+                    4 if USE4 else 2
+                )
+            )
             comptime ENABLED = (
                 USE4 or is_defined["MOJOLEARN_RF_HIST_COLUMNS2"]()
             )
@@ -2581,7 +2658,7 @@ def launch_build_histograms_kernel[
                     comptime SLOTS = BYTES // size_of[O.BinT]()
                     if num_outputs > 0 and need > 0 and need <= SLOTS * size_of[O.BinT]():
                         comptime tiled = build_histograms_binned_columns_kernel[O, TPB, TILE, SLOTS, sampled_labels]
-                        log_launch("histogram_binned_columns" + String(TILE) + "_" + String(BYTES))
+                        log_launch_ctx(ctx, "histogram_binned_columns" + String(TILE) + "_" + String(BYTES))
                         ctx.enqueue_function[tiled](
                             argsp.unsafe_origin_cast[MutAnyOrigin](),
                             histograms.unsafe_origin_cast[MutAnyOrigin](),
@@ -2610,7 +2687,7 @@ def launch_build_histograms_kernel[
                 sampled_labels,
                 SMEM_COPIES,
             ]
-            log_launch("histogram_binned")
+            log_launch_ctx(ctx, "histogram_binned")
             ctx.enqueue_function[ksb](
                 argsp.unsafe_origin_cast[MutAnyOrigin](),
                 histograms.unsafe_origin_cast[MutAnyOrigin](),
@@ -2710,7 +2787,7 @@ def launch_build_histograms_kernel[
                             False,
                             sampled_labels,
                         ]
-                        log_launch("histogram_shared_" + String(TIER_BYTES))
+                        log_launch_ctx(ctx, "histogram_shared_" + String(TIER_BYTES))
                         ctx.enqueue_function[kt](
                             argsp.unsafe_origin_cast[MutAnyOrigin](),
                             histograms.unsafe_origin_cast[MutAnyOrigin](),
@@ -2734,7 +2811,7 @@ def launch_build_histograms_kernel[
             comptime ks = build_histograms_kernel[
                 O, TPB, SMEM_BIN_SLOTS, False, sabotage, False, sampled_labels
             ]
-            log_launch("histogram_shared")
+            log_launch_ctx(ctx, "histogram_shared")
             ctx.enqueue_function[ks](
                 argsp.unsafe_origin_cast[MutAnyOrigin](),
                 histograms.unsafe_origin_cast[MutAnyOrigin](),
@@ -2764,6 +2841,8 @@ def find_best_splits_kernel[
     TPB: Int,
     sabotage: Int = 0,
     pinned_reduce: Bool = SPLIT_REDUCE_PINNED_DEFAULT,
+    zero_after: Bool = False,
+    candidates: Bool = False,
 ](
     argsp: MutPointer[FindBestSplitsArgs[O], MutAnyOrigin],
     histograms: MutPointer[O.BinT, MutAnyOrigin],
@@ -2772,6 +2851,7 @@ def find_best_splits_kernel[
     column_samples: MutPointer[Int32, MutAnyOrigin],
     mutex: MutPointer[Int32, MutAnyOrigin],
     splits: MutPointer[Split[O.DataT], MutAnyOrigin],
+    cand: MutPointer[Split[O.DataT], MutAnyOrigin],
 ):
     """`findBestSplitsKernel`, `:353-393`.
 
@@ -2909,7 +2989,17 @@ def find_best_splits_kernel[
     # no warp primitives), the reference warp-shuffle reduction under
     # FAST. At `WARP_SIZE == 32` the two arms are the same function --
     # `builder_kernels_check.mojo`'s arm C-pinned holds that per cell.
-    comptime if pinned_reduce:
+    comptime if candidates:
+        # HIST_SPLIT_CANDIDATES_DEFAULT: this block's own slot, no mutex.
+        sp.eval_best_split_to_candidate(
+            split_scratch,
+            cand.unsafe_offset(
+                Int(nid) * Int(grid_dim.y) + Int(block_idx.y)
+            ),
+            quantiles_for_split,
+            n_bins,
+        )
+    elif pinned_reduce:
         sp.eval_best_split_pinned(
             split_scratch,
             splits.unsafe_offset(Int(nid)),
@@ -2939,12 +3029,134 @@ def find_best_splits_kernel[
             unsafe_offset=0
         ] = sp.pure
 
+    # HIST_ZERO_AFTER_READ_DEFAULT: hand the block's cells back zeroed. Every
+    # read of them (the scans, `Gain`, the split reduce) is behind the
+    # barrier; nothing after this kernel reads them before the next
+    # round's histogram accumulates into them.
+    comptime if zero_after:
+        barrier()
+        var z = Int(thread_idx.x)
+        var cells = Int(n_bins) * Int(n_classes)
+        while z < cells:
+            histogram[unsafe_offset=z] = O.BinT()
+            z += TPB
+
+
+def small_node_split_kernel[
+    O: ObjectiveLike,
+    TPB: Int,
+    SLOTS: Int,
+    sampled_labels: Bool = False,
+](
+    argsp: MutPointer[FindBestSplitsArgs[O], MutAnyOrigin],
+    work_items: MutPointer[NodeWorkItem, MutAnyOrigin],
+    col_start: Int32,
+    column_samples: MutPointer[Int32, MutAnyOrigin],
+    mutex: MutPointer[Int32, MutAnyOrigin],
+    splits: MutPointer[Split[O.DataT], MutAnyOrigin],
+    max_n_bins: Int32,
+):
+    """FAST (`SMALL_NODE_FUSED_DEFAULT`): `build_histograms_kernel` and
+    `find_best_splits_kernel` for ONE (node, column) in ONE block, for a
+    batch whose every node fits one block's walk. Grid `(n_nodes, columns)`.
+    The histogram lives in shared memory only: the binned inner loop fills
+    it exactly as the histogram kernel's shared arm does (integer / fixed-
+    point bins, so the cells are the same integers in any order), and the
+    tail below is `find_best_splits_kernel`'s body on that copy -- same
+    scans, same `Gain`, same reduction, same publish, same pure mark. No
+    global histogram is written, zeroed or read, and one launch replaces
+    two (three with the zero)."""
+    ref args = argsp[unsafe_offset=0]
+    var dataset = args.dataset.copy()
+    var objective = args.objective.copy()
+    var nid = Int32(Int(block_idx.x))
+    ref work_item = work_items[unsafe_offset = Int(nid)]
+    var range_start = Int(work_item.instances.begin)
+    var end = range_start + Int(work_item.instances.count)
+    var col_index = col_start + Int32(Int(block_idx.y))
+    var col = column_samples[
+        unsafe_offset = Int(nid) * Int(dataset.n_sampled_cols) + Int(col_index)
+    ]
+    var n_bins = args.quantiles.n_bins_array[unsafe_offset = Int(col)]
+    var n_classes = objective.NumClasses()
+    var cells = Int(n_bins) * Int(n_classes)
+    var histogram = stack_allocation[
+        SLOTS, O.BinT, address_space = AddressSpace.SHARED
+    ]()
+    var z = Int(thread_idx.x)
+    while z < cells:
+        histogram[unsafe_offset=z] = O.BinT()
+        z += TPB
+    barrier()
+    _histogram_inner_loop_binned[sampled_labels=sampled_labels](
+        objective,
+        dataset,
+        histogram,
+        col,
+        n_bins,
+        range_start,
+        end,
+        Int(thread_idx.x),
+        TPB,
+    )
+    barrier()
+
+    comptime N_SPLIT_SCRATCH = ceildiv(TPB, WARP_SIZE)
+    var split_scratch = stack_allocation[
+        N_SPLIT_SCRATCH,
+        Split[O.DataT],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var quantiles_for_split = args.quantiles.quantiles_array.unsafe_offset(
+        Int(max_n_bins) * Int(col)
+    )
+    var scan_histogram = histogram.unsafe_bitcast[ScanBin[O.BinT]]()
+    var global_sample_count = Int64(0)
+    var max_class_count = Int64(0)
+    for c in range(Int(n_classes)):
+        var total = pdf_to_cdf[
+            ScanBin[O.BinT], TPB, address_space = AddressSpace.SHARED
+        ](
+            scan_histogram.unsafe_offset(Int(n_bins) * c)
+            .unsafe_origin_cast[MutAnyOrigin](),
+            n_bins,
+        )
+        var class_count = Int64(Int(total.b.Count()))
+        if class_count > max_class_count:
+            max_class_count = class_count
+        global_sample_count += class_count
+    barrier()
+    var sp = objective.Gain(
+        histogram, quantiles_for_split, col, global_sample_count, n_bins
+    )
+    var node_pure = (
+        n_classes > Int32(1)
+        and global_sample_count > Int64(0)
+        and max_class_count == global_sample_count
+        and objective.PureNodeIsTerminal()
+    )
+    sp.pure = Int32(1) if node_pure else Int32(0)
+    barrier()
+    sp.eval_best_split(
+        split_scratch,
+        splits.unsafe_offset(Int(nid)),
+        mutex.unsafe_offset(Int(nid)),
+        quantiles_for_split,
+        n_bins,
+    )
+    if Int(block_idx.y) == 0 and Int(thread_idx.x) == 0:
+        Split[O.DataT].pure_flag_ptr(splits.unsafe_offset(Int(nid)))[
+            unsafe_offset=0
+        ] = sp.pure
+
 
 def launch_find_best_splits_kernel[
     O: ObjectiveLike,
     TPB: Int = TPB_DEFAULT,
     sabotage: Int = 0,
     pinned_reduce: Bool = SPLIT_REDUCE_PINNED_DEFAULT,
+    zero_after: Bool = False,
+    candidates: Bool = False,
 ](
     ctx: DeviceContext,
     histograms: MutPointer[O.BinT, MutUntrackedOrigin],
@@ -2956,6 +3168,7 @@ def launch_find_best_splits_kernel[
     split_grid_x: Int,
     split_grid_y: Int,
     argsp: MutPointer[FindBestSplitsArgs[O], MutUntrackedOrigin],
+    cand: MutPointer[Split[O.DataT], MutUntrackedOrigin],
 ) raises:
     """`launchFindBestSplitsKernel`, `:423-445`.
 
@@ -2965,8 +3178,10 @@ def launch_find_best_splits_kernel[
     """
     if split_grid_x <= 0 or split_grid_y <= 0:
         return
-    comptime k = find_best_splits_kernel[O, TPB, sabotage, pinned_reduce]
-    log_launch("find_best_splits")
+    comptime k = find_best_splits_kernel[
+        O, TPB, sabotage, pinned_reduce, zero_after, candidates
+    ]
+    log_launch_ctx(ctx, "find_best_splits")
     ctx.enqueue_function[k](
         argsp.unsafe_origin_cast[MutAnyOrigin](),
         histograms.unsafe_origin_cast[MutAnyOrigin](),
@@ -2975,10 +3190,46 @@ def launch_find_best_splits_kernel[
         column_samples.unsafe_origin_cast[MutAnyOrigin](),
         mutex.unsafe_origin_cast[MutAnyOrigin](),
         splits.unsafe_origin_cast[MutAnyOrigin](),
+        (cand if candidates else splits).unsafe_origin_cast[MutAnyOrigin](),
         grid_dim=(split_grid_x, split_grid_y),
         block_dim=TPB,
     )
 
+
+
+def merge_split_candidates_kernel[
+    dtype: DType
+](
+    splits: MutPointer[Split[dtype], MutAnyOrigin],
+    cand: MutPointer[Split[dtype], MutAnyOrigin],
+    n_nodes: Int32,
+    n_cand: Int32,
+):
+    """HIST_SPLIT_CANDIDATES_DEFAULT's fold: one thread per node merges its
+    `n_cand` column blocks' candidates into `splits[nid]` with `update`
+    (their total order) and carries `pure` exactly as `_publish_to_global`
+    does on a successful update."""
+    var nid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if nid >= Int(n_nodes):
+        return
+    var reg = splits[unsafe_offset=nid].copy()
+    var changed = False
+    for y in range(Int(n_cand)):
+        var c = cand[unsafe_offset = nid * Int(n_cand) + y].copy()
+        if not c.IsValid():
+            continue
+        if reg.update(
+            c.quesval,
+            c.colid,
+            c.best_metric_val,
+            c.global_nLeft,
+            c.split_start,
+            c.split_end,
+        ):
+            reg.pure = c.pure
+            changed = True
+    if changed:
+        splits[unsafe_offset=nid] = reg.copy()
 
 
 # ===========================================================================
@@ -2996,6 +3247,7 @@ def bin_dataset_kernel[dtype: DType](
     n_cols: Int32,
     row_stride: Int64,
     col_stride: Int64,
+    bins_row_major: Int32,
 ):
     """DEVIATION 314. One thread per (row, col): store
     `lower_bound(quantiles[col], value)` as a uint8, at the SAME offset
@@ -3020,7 +3272,10 @@ def bin_dataset_kernel[dtype: DType](
             Int64(i) * row_stride + Int64(Int(col)) * col_stride
         )
         var b = lower_bound_aspace(q, n_bins, data[unsafe_offset=off])
-        bins[unsafe_offset=off] = UInt8(Int(b))
+        if bins_row_major != 0:
+            bins[unsafe_offset = i * Int(n_cols) + Int(col)] = UInt8(Int(b))
+        else:
+            bins[unsafe_offset=off] = UInt8(Int(b))
         i += stride
 
 
@@ -3035,13 +3290,14 @@ def launch_bin_dataset[dtype: DType](
     n_cols: Int,
     row_stride: Int,
     col_stride: Int,
+    bins_row_major: Bool = False,
 ) raises:
     """DEVIATION 314's one launch, once per forest, right after
     `compute_quantiles`. The caller guards `max_n_bins <= 256`."""
     if n_rows <= 0 or n_cols <= 0:
         return
     var blocks_x = ceildiv(n_rows, 256)
-    log_launch("bin_dataset")
+    log_launch_ctx(ctx, "bin_dataset")
     ctx.enqueue_function[bin_dataset_kernel[dtype]](
         data.unsafe_origin_cast[MutAnyOrigin](),
         bins_buf.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
@@ -3052,6 +3308,7 @@ def launch_bin_dataset[dtype: DType](
         Int32(n_cols),
         Int64(row_stride),
         Int64(col_stride),
+        Int32(1) if bins_row_major else Int32(0),
         grid_dim=(blocks_x, n_cols),
         block_dim=256,
     )

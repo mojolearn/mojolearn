@@ -134,7 +134,8 @@ from gbdt.data.permutation import TRandom
 from std.sys.compile import is_defined
 from std.gpu import block_idx, thread_idx
 
-from checks.kernel_matrix import COLUMN_NVIDIA, TARGET_COLUMN
+from checks.kernel_matrix import COLUMN_APPLE, COLUMN_NVIDIA, TARGET_COLUMN
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 # ================= DEVIATION BLOCK 2030 =================
 # FUSED MoveTo + evaluation for the Newton walker (single-dim losses).
@@ -175,8 +176,15 @@ from checks.kernel_matrix import COLUMN_NVIDIA, TARGET_COLUMN
 # ====================================================
 comptime FUSED_EST_MOVE_2030 = (
     is_defined["MOJOLEARN_2030_FUSED_EST_MOVE"]()
-    and not is_defined["MOJOLEARN_2030_NO_FUSED_EST_MOVE"]()
-)
+    or (
+        # APPLE FAST default: M4 taxi 1M symmetric 0.962 alone (hash
+        # unchanged); the owed gates (check-fit-pointwise,
+        # check-logloss-train, check-ordered-boosting, gbdt_fused_move_check,
+        # gbdt_fused_fit_check) run on the M4 with the define.
+        TARGET_COLUMN == COLUMN_APPLE
+        and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    )
+) and not is_defined["MOJOLEARN_2030_NO_FUSED_EST_MOVE"]()
 
 
 def merge_stage_times(mut dst: StageTimes, src: StageTimes):
@@ -1121,7 +1129,11 @@ def oracle_scratch_pooled_for[column: Int]() -> Bool:
         return False
     comptime if is_defined["MOJOLEARN_3041_ORACLE_POOL"]():
         return True
-    return column == COLUMN_NVIDIA
+    # Apple FAST: M4 taxi 1M symmetric 0.940 (6 rounds each, hash
+    # fd9c4c8144c2ea4e both arms); with 2030, Istella-S 0.968, taxi 0.960.
+    return column == COLUMN_NVIDIA or (
+        column == COLUMN_APPLE and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    )
 
 
 comptime ORACLE_SCRATCH_POOLED = oracle_scratch_pooled_for[TARGET_COLUMN]()

@@ -881,6 +881,7 @@ def main() raises:
             Int32(N_ACC),
             SEED,
             sab,
+            Int32(0),
             grid_dim=(plan.n_blocks_dimx, N_COLS, 1),
             block_dim=(TPB, 1, 1),
         )

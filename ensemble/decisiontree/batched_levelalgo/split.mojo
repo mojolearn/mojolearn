@@ -268,6 +268,7 @@ counts, and local counts are filled just before partitioning."
 """
 
 from std.atomic import Atomic, Ordering
+from std.sys.compile import is_defined
 from core.device_mutex import claim_device_mutex
 from std.bit import log2_floor
 from max.gpu.memory import AddressSpace
@@ -697,6 +698,45 @@ struct Split[dtype: DType](TrivialRegisterPassable):
             if thread_idx.x == 0 and self.IsValid():
                 self._publish_to_global(split, mutex, quantiles, n_bins)
 
+    def eval_best_split_to_candidate[
+        so: MutOrigin,
+        sas: AddressSpace,
+        go: MutOrigin,
+        qo: MutOrigin, //
+    ](
+        mut self,
+        split_scratch: MutPointer[Self, so, address_space=sas],
+        cand: MutPointer[Self, go],
+        quantiles: MutPointer[Scalar[Self.dtype], qo],
+        n_bins: Int32,
+    ):
+        """FAST (`HIST_SPLIT_CANDIDATES_DEFAULT`): `eval_best_split`'s
+        reductions, then thread 0 stores the block's winner -- midpoint
+        applied, exactly what `_publish_to_global` would merge -- into its
+        OWN candidate slot with a plain store, or a default `Split` when it
+        is not valid. `merge_split_candidates_kernel` folds a node's slots
+        with `update`, a total order, so the node's split is the one the
+        mutex path would publish in any arrival order."""
+        self.warp_reduce()
+        var warp = Int(thread_idx.x) // WARP_SIZE
+        var n_warps = Int(block_dim.x) // WARP_SIZE
+        var lane = lane_id()
+        if lane == 0:
+            split_scratch[unsafe_offset=warp] = self.copy()
+        barrier()
+        if warp == 0:
+            if lane < n_warps:
+                self = split_scratch[unsafe_offset=lane].copy()
+            else:
+                self = Self()
+            self.warp_reduce()
+            if thread_idx.x == 0:
+                if self.IsValid():
+                    self.select_split_range_midpoint(quantiles, n_bins)
+                    cand[unsafe_offset=0] = self.copy()
+                else:
+                    cand[unsafe_offset=0] = Self()
+
     @always_inline
     def _publish_to_global[
         go: MutOrigin, mo: MutOrigin, qo: MutOrigin, //
@@ -719,7 +759,8 @@ struct Split[dtype: DType](TrivialRegisterPassable):
         # `__threadfence()` at `:255`, as the shared claim: acquire-load
         # spin, weak relaxed claim, ACQUIRE FENCE. See DEVIATION 106 above
         # and `core/device_mutex.mojo` for why the fence is the repair.
-        claim_device_mutex(mutex, Int32(0), Int32(1))
+        comptime if not is_defined["MOJOLEARN_RF_EXP_NO_SPLIT_MUTEX"]():
+            claim_device_mutex(mutex, Int32(0), Int32(1))
 
         # `:253-259` -- read the current global split into a
         # register copy. Their field-by-field read exists because
@@ -757,7 +798,8 @@ struct Split[dtype: DType](TrivialRegisterPassable):
         # `:270-271` -- their `__threadfence(); atomicExch(mutex,
         # 0);` folded into one RELEASE store, which orders the
         # publish above before the handback.
-        Atomic.store[ordering = Ordering.RELEASE](mutex, Int32(0))
+        comptime if not is_defined["MOJOLEARN_RF_EXP_NO_SPLIT_MUTEX"]():
+            Atomic.store[ordering = Ordering.RELEASE](mutex, Int32(0))
 
     @always_inline
     def eval_best_split_pinned[

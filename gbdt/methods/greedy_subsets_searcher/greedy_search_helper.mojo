@@ -5441,6 +5441,8 @@ def run_tree_layout_traced[
             sp_feats, sp_bins, flags, seq, n_live, sm_count,
         )
         mgr.stream_kernel()
+        times.end(ctx, "sym.split.flags")
+        times.begin(ctx)
 
         launch_stable_partition_routed[HIST_BUILD_MODE == NUMERIC_IDENTICAL](
             ctx, n_live, max_live_rows, dense_ids, p_off, p_sz, flags,
@@ -5448,6 +5450,8 @@ def run_tree_layout_traced[
             sm_count=sm_count,
         )
         mgr.stream_kernel()
+        times.end(ctx, "sym.split.partition")
+        times.begin(ctx)
 
         # their `TSplitPointsKernel::Run` (`split_points.cpp:64-136`), the
         # whole if/else in one call because it is one function of theirs.
@@ -5495,6 +5499,8 @@ def run_tree_layout_traced[
             )
         for _ in range(reorder_launches):
             mgr.stream_kernel()
+        times.end(ctx, "sym.split.reorder")
+        times.begin(ctx)
 
         # their `CopyHistogram(LeafIdToSplit, RightLeafIdAfterSplit, ...)`
         # (`split_points.cpp:326`), issued right before the partition update

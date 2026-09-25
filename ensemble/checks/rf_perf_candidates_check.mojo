@@ -367,6 +367,7 @@ struct Fixture(Movable):
             # DEVIATION 314's matrix -- the BINNED path is the subject.
             self.bins.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
             True,
+        False,
         )
 
     def quantiles(mut self) -> Quantiles[DT]:

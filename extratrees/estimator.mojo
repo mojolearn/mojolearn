@@ -137,6 +137,9 @@ from extratrees.impl.randomforest.randomforest import (
 )
 from max.gpu.host import DeviceContext
 from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
+
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 
 comptime DEPTH_SLACK: Int32 = 16
@@ -472,10 +475,20 @@ def _et_device_batch() -> Int:
     grid axis y (65535). The workspace grows as batch x n_cols cells
     (DEVIATION 205's survey reads every column). None is set by a build script.
     """
+    if is_defined["MOJOLEARN_ET_DEVICE_BATCH_65536"]():
+        return 65536
     if is_defined["MOJOLEARN_ET_DEVICE_BATCH_32768"]():
         return 32768
     if is_defined["MOJOLEARN_ET_DEVICE_BATCH_4096"]():
         return 4096
+    if is_defined["MOJOLEARN_ET_DEVICE_BATCH_16384"]():
+        return 16384
+    # APPLE FAST: 32768. Apple M4, 1M rows, alternating processes, same
+    # model hash in every arm (2026-09-25): taxi 16384 -> 32768 0.952,
+    # 32768 -> 65536 1.046, 16384 -> 4096 1.239; Istella-S 16384 -> 32768
+    # 0.953. `_16384=1` restores the previous width for an A/B.
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+        return 32768
     return 16384
 
 

@@ -126,7 +126,7 @@ from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from ensemble.decisiontree.batched_levelalgo.random_utils import (
     fnv1a32_hash_seed_tree_node,
 )
-from core.shuffle_iterator import shuffled_feature
+from core.shuffle_iterator import FeistelBijection, shuffled_feature
 
 
 @fieldwise_init
@@ -363,3 +363,27 @@ def lower_bound[
         else:
             end = mid
     return start
+
+
+@always_inline
+def sampled_columns_for_node(
+    work_items: MutPointer[NodeWorkItem, MutAnyOrigin],
+    node_idx: Int,
+    seed: UInt64,
+    treeid: Int32,
+    sample_offset: Int32,
+    n: Int32,
+    k: Int32,
+    out_cols: MutPointer[Int32, MutAnyOrigin],
+):
+    """`sampled_column_at` for all `k` columns of one node, drawing the
+    node's bijection ONCE: `out_cols[j] == sampled_column_at(work_items,
+    node_idx * k + j, ...)` for every `j`, because that function builds the
+    same `FeistelBijection(n, fnv1a32_hash_seed_tree_node(seed, treeid,
+    nodeid))` for every `j` and only the walked index `sample_offset + j`
+    differs. FAST's fused setup uses it (see `phase_setup_kernel`)."""
+    var nodeid = UInt32(work_items[unsafe_offset=node_idx].idx)
+    var rng_seed = fnv1a32_hash_seed_tree_node(seed, treeid, nodeid)
+    var bij = FeistelBijection(Int(n), rng_seed)
+    for j in range(Int(k)):
+        out_cols[unsafe_offset=j] = Int32(bij(Int(sample_offset) + j))
