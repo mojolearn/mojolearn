@@ -11,8 +11,10 @@ step 101 from the same checkpoint).
 
 ## Where it ran
 
-Hot Aisle's 2x MI300X offering had no stock from 17:10 UTC on (and no
-MI300X offering of any size). The leg ran on the DigitalOcean fallback, one
+Hot Aisle's 2x MI300X offering had no stock from 17:10 UTC to 20:13 UTC
+(and no MI300X offering of any size). The runner waited 170 minutes, then
+refused and created nothing (`the 2gpu 2x MI300X spec showed no stock for
+170 minutes`); afterwards the team's only VM was A/4's. The leg ran on the DigitalOcean fallback, one
 AMD Instinct MI325X (gfx942, droplet 603695135, tor1), so **the two-device
 pooled export is still not proven on AMD**. The body
 (`tools/byte_lm_export_fast/leg_2gpu_amd.sh`) counts the GPU agents and
@@ -127,7 +129,7 @@ thread right after the 69.5 s upload of `ckpt_00000104.blm`.
 DigitalOcean `gpu-mi325x1-256gb`, droplet 603695135, 18:29:02 to 18:43:50
 UTC (861 s of lease). The droplet was deleted and confirmed gone (HTTP 404,
 `do-mi325x/teardown.txt`). The Hot Aisle leg waiting for stock created no
-VM.
+VM, and at 20:14 UTC DigitalOcean listed no droplets on the account.
 
 ## Files
 
