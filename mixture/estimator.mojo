@@ -68,6 +68,8 @@ from cluster.impl.kmeans_params import (
     METRIC_L2_EXPANDED,
 )
 from core.identity_trace import IdentityTrace
+from std.os import getenv
+from std.time import perf_counter_ns
 from core.philox import philox4x32_10
 from mixture.checks.estep import (
     GMM_COMP_TPB,
@@ -822,20 +824,40 @@ def gaussian_mixture_fit(
     var hll = ctx.enqueue_create_host_buffer[DType.float32](1)
     ctx.synchronize()
 
+    # MOJOLEARN_STAGE_TIMES=1: drain around each EM phase and print the
+    # totals (a diagnostic; the drains make it a different program).
+    var st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
+    var st_e = 0
+    var st_m = 0
+    var st_c = 0
+    var st_t = 0
     for it in range(1, params.max_iter + 1):
         var tag = gmm_iter_prefix(card_prefix, it)
         var prev = lower_bound
 
+        if st_on:
+            ctx.synchronize()
+            st_t = Int(perf_counter_ns())
         gmm_e_step_dispatch(
             ctx, dx, means, prec, linv, log_det_chol, log_weights,
             escratch, gws, mahal, wlp, rowmax, lse, logresp, meanll,
             n, d, ncomp, trace, tag, elem_tpb, row_tpb, sabotage,
         )
+        if st_on:
+            ctx.synchronize()
+            var now = Int(perf_counter_ns())
+            st_e += now - st_t
+            st_t = now
         gmm_m_step(
             ctx, dx, logresp, resp, nk, weights, log_weights, means, cov,
             mscratch, gws, n, d, ncomp, params.reg_covar, False, trace,
             tag, elem_tpb, comp_tpb, sabotage,
         )
+        if st_on:
+            ctx.synchronize()
+            var now = Int(perf_counter_ns())
+            st_m += now - st_t
+            st_t = now
         var p2 = gmm_precision_cholesky(
             ctx, cov, chol_l, linv, prec, log_det_chol, cws, dwork, d,
             ncomp, trace, tag, elem_tpb, solve_tpb, panel_tpb,
@@ -843,6 +865,9 @@ def gaussian_mixture_fit(
         )
         if p2.info != 0:
             raise Error(_collapse_message(it, p2, params))
+        if st_on:
+            ctx.synchronize()
+            st_c += Int(perf_counter_ns()) - st_t
 
         # THE ONE DRAIN PER ITERATION. See this function's docstring.
         ctx.enqueue_copy(dst_ptr=hll.unsafe_ptr(), src_buf=meanll)
@@ -865,6 +890,12 @@ def gaussian_mixture_fit(
             converged = True
             break
 
+    if st_on:
+        print(
+            "GMM_STAGE_TIMES iters=" + String(n_iter) + " estep_ms="
+            + String(st_e // 1000000) + " mstep_ms=" + String(st_m // 1000000)
+            + " chol_ms=" + String(st_c // 1000000)
+        )
     var card = List[Int32]()
     card.append(Int32(n_iter))
     card.append(Int32(1) if converged else Int32(0))
