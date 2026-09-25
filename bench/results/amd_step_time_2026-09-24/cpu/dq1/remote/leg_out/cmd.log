@@ -1,0 +1,8 @@
+probe_mfma exit=0 secs=7
+ab gfx942 build exit=0 secs=40
+ab sm_90a build exit=0 secs=37
+probe_dq exit=0
+build gemm/checks/amd_mfma_probe3.mojo exit=0
+build tools/amd_codegen/stall_probe.mojo exit=0
+byte_lm amd build exit=0 secs=315
+byte_lm nvidia build exit=0 secs=286

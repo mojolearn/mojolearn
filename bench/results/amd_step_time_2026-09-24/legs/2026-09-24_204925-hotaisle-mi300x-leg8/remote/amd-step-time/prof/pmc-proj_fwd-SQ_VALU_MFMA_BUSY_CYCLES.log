@@ -1,0 +1,7 @@
+EXCP_AB_HEADER column=amd detect_seam=False launch_bound=256 rounds=1
+E20260924 20:54:35.932488 134397815191296 output_stream.cpp:105] Opened result file: /root/gemm_leg_out/amd-step-time/prof/pmc-proj_fwd-SQ_VALU_MFMA_BUSY_CYCLES/pmc_agent_info.csv
+EXCP_AB_DISPATCH call=proj_fwd DEFAULT kpack_hg body (DEVIATION 2707) kpack_hg 128x128 reg8x8 TC=16 KS=16 page=packed(group,step,line) pad=4 align=16 fold_flush=hw stage=gather page_bytes=16896 pages=2 load=per-step fold=lane-wide local FS=16 tpb=256 hwftz=False groups where its rule takes the call (S=110 slack=4), else all leaves in one launch (NOT RUN: no -D MOJOLEARN_GEMM_ARM_TRIAL=1, the shipped default ran) all leaves in one launch
+EXCP_AB call=proj_fwd kind=ordinary m=8192 n=768 k=768 hash=3b093775ef2152bd rehash_equal=True ms=0.713903 samples=0.713903
+EXCP_AB_DONE
+E20260924 20:54:40.267013 129318100752448 output_stream.cpp:105] Opened result file: /root/gemm_leg_out/amd-step-time/prof/pmc-proj_fwd-SQ_VALU_MFMA_BUSY_CYCLES/pmc_counter_collection.csv
+E20260924 20:54:40.284510 129318100752448 output_stream.cpp:105] Opened result file: /root/gemm_leg_out/amd-step-time/prof/pmc-proj_fwd-SQ_VALU_MFMA_BUSY_CYCLES/pmc_agent_info.csv

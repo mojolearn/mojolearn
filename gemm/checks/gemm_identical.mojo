@@ -133,6 +133,7 @@ from max.gpu.sync import barrier
 from std.sys import llvm_intrinsic
 from std.sys.compile import is_defined
 from std.sys.info import is_amd_gpu
+from std.gpu.primitives.warp import shuffle_xor
 from std.time import perf_counter_ns
 
 from gemm.checks.gemm_oracle import (
@@ -2634,9 +2635,51 @@ def _mfma_row(r: Int, lane: Int) -> Int:
     return 32 * (r // 16) + 8 * ((r % 16) // 4) + 4 * (lane // 32) + (r % 4)
 
 
+# EXACT ADMISSION (lane/amd-step-time-2, 2026-09-25): when the flush after a
+# step is the identity, the matrix-core step needs no VALU product.
+#
+# THE ARGUMENT. Staged operands are flushed, so each is +-0 or a normal word
+# `m 2^(E-150)` with an integer mantissa `m` (biased exponent E >= 1). A
+# product of two nonzero staged words is an integer multiple of
+# `2^(Ea+Eb-300)`. If `Ea + Eb >= 174` for every product of a leaf, every
+# product is a multiple of G = 2^-126. The leaf's accumulator starts at +0.0,
+# a multiple of G; if `acc` is a multiple of G then the exact `a b + acc` is
+# a multiple of G, and so is its rounding (below 2^-102 it is exactly
+# representable; at or above, the result's ulp is at least 2^-125). A nonzero
+# multiple of G has magnitude at least 2^-126, and zero stays a signed zero,
+# so no rounded step result is subnormal and `ftz(fma_rn(a, b, acc))` equals
+# `fma_rn(a, b, acc)` word for word, sign of zero included (ftz never touches
+# a zero). The MFMA step alone therefore IS the contract step: same operands,
+# same order, same single rounding; only the product by one, which returns
+# its operand unchanged on every such word, is not issued.
+#
+# THE TEST, per window, per block: the smallest nonzero exponent field over
+# the A words the block stages and over the B words, summed, at least 174.
+# A block covers every product of its tile's cells in the window, so the
+# test bounds them all. The invariant needs EVERY window of the leaf so far
+# to pass: a window that fails switches the rest of the leaf to the shipped
+# step (acc times one under MODE 2), and the next leaf starts admitted again.
+# Zero words never bound (their products are signed zeros). Inf and NaN
+# (field 255) never lower the minimum; they produce no subnormal either.
+# `-D MOJOLEARN_GEMM_MFMA_NO_ADMIT=1` is the revert arm.
+comptime GEMM_MFMA_ADMIT = not is_defined["MOJOLEARN_GEMM_MFMA_NO_ADMIT"]()
+comptime _ADMIT_EXP_SUM = 174
+
+
+@always_inline
+def _min_exp_nz[W: Int](v: SIMD[DType.float32, W]) -> UInt32:
+    """The smallest nonzero biased exponent field over the lanes of `v`
+    (255 if every lane is zero)."""
+    var m = UInt32(255)
+    comptime for i in range(W):
+        var x = (bitcast[DType.uint32](v[i]) >> UInt32(23)) & UInt32(0xFF)
+        m = min(m, x if x != UInt32(0) else UInt32(255))
+    return m
+
+
 @__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(GEMM_LAUNCH_BOUND)))
 def identical_gemm_mfma_kernel[
-    KS: Int, FS: Int, PAGES: Int, GROUP: Bool = False
+    KS: Int, FS: Int, PAGES: Int, GROUP: Bool = False, ADMIT: Bool = False
 ](
     c: MutPointer[Float32, MutAnyOrigin],
     a: MutPointer[Float32, MutAnyOrigin],
@@ -2739,6 +2782,10 @@ def identical_gemm_mfma_kernel[
     var ones = SIMD[DType.float32, 32](one)
     var fl = stack_allocation[FS * NCELL, Scalar[DType.float32]]()
     var occ = 0
+    # EXACT ADMISSION: per-wave exponent minima, two slot sets by window
+    # parity (a fast wave's next-window write never meets a slow wave's read).
+    var adm_s = stack_allocation[16, Scalar[DType.uint32], address_space = AddressSpace.SHARED]()
+    var adm_leaf = True
 
     var wpl = _tuned_windows_per_leaf[KS](leaf)
     var w = 0
@@ -2764,6 +2811,17 @@ def identical_gemm_mfma_kernel[
         var nxt = _tuned_window_next[KS](wt, wq, wpl, leaf, k, p_count)
         var chunk = win[1]
         var pgw = _urem[PAGES](w)
+
+        comptime if ADMIT:
+            var mea = _min_exp_nz[ASLOTS * VEC](pa)
+            var meb = _min_exp_nz[BSLOTS * VEC](pb)
+            comptime for sh in range(6):
+                mea = min(mea, shuffle_xor(mea, UInt32(32 >> sh)))
+                meb = min(meb, shuffle_xor(meb, UInt32(32 >> sh)))
+            if lane == 0:
+                var sw = _urem[2](w) * 8
+                adm_s.unsafe_store(sw + wv, mea)
+                adm_s.unsafe_store(sw + 4 + wv, meb)
 
         # ---- REGISTERS TO SHARED (the tuned kernel's lines).
         comptime for sa in range(ASLOTS):
@@ -2815,7 +2873,32 @@ def identical_gemm_mfma_kernel[
         var abase = pgw * APAGE + (qr + lane) * SSTRIDE
         var bbase0 = pgw * BPAGE + (qc + ccol) * SSTRIDE
         var bbase1 = bbase0 + 32 * SSTRIDE
-        if chunk == KS:
+        var bare = False
+        comptime if ADMIT:
+            var sr = _urem[2](w) * 8
+            var ma = min(min(adm_s[sr], adm_s[sr + 1]), min(adm_s[sr + 2], adm_s[sr + 3]))
+            var mb = min(min(adm_s[sr + 4], adm_s[sr + 5]), min(adm_s[sr + 6], adm_s[sr + 7]))
+            if ma + mb < UInt32(_ADMIT_EXP_SUM):
+                adm_leaf = False
+            bare = adm_leaf
+        if bare:
+            # Admitted: the MFMA step is the contract step (EXACT ADMISSION).
+            if chunk == KS:
+                comptime for kc2 in range(KV):
+                    var avx = as_.unsafe_load[width=VEC](abase + kc2 * VEC)
+                    var bvx0 = bs_.unsafe_load[width=VEC](bbase0 + kc2 * VEC)
+                    var bvx1 = bs_.unsafe_load[width=VEC](bbase1 + kc2 * VEC)
+                    comptime for e2 in range(VEC):
+                        acc0 = _mfma_step(avx[e2], bvx0[e2], acc0)
+                        acc1 = _mfma_step(avx[e2], bvx1[e2], acc1)
+            else:
+                for cc2 in range(chunk):
+                    var avy = as_.unsafe_load(abase + cc2)
+                    var bwy0 = bs_.unsafe_load(bbase0 + cc2)
+                    var bwy1 = bs_.unsafe_load(bbase1 + cc2)
+                    acc0 = _mfma_step(avy, bwy0, acc0)
+                    acc1 = _mfma_step(avy, bwy1, acc1)
+        elif chunk == KS:
             comptime for kc in range(KV):
                 var av = as_.unsafe_load[width=VEC](abase + kc * VEC)
                 var bv0 = bs_.unsafe_load[width=VEC](bbase0 + kc * VEC)
@@ -2847,6 +2930,7 @@ def identical_gemm_mfma_kernel[
             _ = _fold_push_local[NCELL, FS](fl, occ, part)
             acc0 = SIMD[DType.float32, 32](0.0)
             acc1 = SIMD[DType.float32, 32](0.0)
+            adm_leaf = True
 
         w = w + 1
         cur = nxt
@@ -2896,7 +2980,7 @@ def _mfma_run(
     var st = gemm_operand_strides(op, m, n, k)
     var tiles = ((m + 127) // 128) * ((n + 127) // 128)
     if group_leaves <= 0 or p_count <= 1:
-        comptime kern = identical_gemm_mfma_kernel[KS, TUNED_FOLD_SLOTS, PAGES, False]
+        comptime kern = identical_gemm_mfma_kernel[KS, TUNED_FOLD_SLOTS, PAGES, False, GEMM_MFMA_ADMIT]
         step_count_launch()
         ctx.enqueue_function[kern](
             c.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(),
@@ -2909,7 +2993,7 @@ def _mfma_run(
     var rg = _ksplit_resolve_leaves(group_leaves, p_count)
     step_count_device_alloc()
     var ws = ctx.enqueue_create_buffer[DType.float32](m * n * rg[1])
-    comptime kern_g = identical_gemm_mfma_kernel[KS, TUNED_FOLD_SLOTS, PAGES, True]
+    comptime kern_g = identical_gemm_mfma_kernel[KS, TUNED_FOLD_SLOTS, PAGES, True, GEMM_MFMA_ADMIT]
     step_count_launch()
     ctx.enqueue_function[kern_g](
         ws.unsafe_ptr(), a.unsafe_ptr(), b.unsafe_ptr(),

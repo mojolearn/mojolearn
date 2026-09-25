@@ -1,0 +1,6 @@
+EXCP_AB_HEADER column=amd detect_seam=False launch_bound=256 rounds=1
+E20260924 20:54:41.896372 132353827424000 output_stream.cpp:105] Opened result file: /root/gemm_leg_out/amd-step-time/prof/pmc-gateup_dB-SQ_WAVES/pmc_agent_info.csv
+EXCP_AB call=gateup_dB kind=ordinary m=8192 n=2048 k=768 hash=6416c32304a5a9e1 rehash_equal=True ms=1.651248 samples=1.651248
+EXCP_AB_DONE
+E20260924 20:54:46.167633 134678425434176 output_stream.cpp:105] Opened result file: /root/gemm_leg_out/amd-step-time/prof/pmc-gateup_dB-SQ_WAVES/pmc_counter_collection.csv
+E20260924 20:54:46.174815 134678425434176 output_stream.cpp:105] Opened result file: /root/gemm_leg_out/amd-step-time/prof/pmc-gateup_dB-SQ_WAVES/pmc_agent_info.csv

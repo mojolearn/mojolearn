@@ -1,0 +1,81 @@
+08:57:20 pass2 leg1 started=2026-09-25T08:57:20Z
+08:58:37 base exit=0 secs=76
+08:58:43 mfma probe3 exit=0: MFMA3_MODE v=2 n=4194304 subnormal_mfma_results=15072 mfma_vs_fma=14080 mul_vs_ftz=0 pkmul_vs_ftz=0 MFMA3_MODE v=3 n=4194304 subnormal_mfma_results=29152 mfma_vs_fma=0 mul_vs_ftz=29152 pkmul_vs_ftz=29152 
+08:59:10 ab build valu exit=0
+08:59:33 ab build noadmit exit=0
+08:59:57 ab build admit exit=0
+09:01:52 byte_lm admit exit=0 secs=195
+09:01:52 byte_lm noadmit exit=0 secs=195
+09:01:52 byte_lm dq exit=0 secs=195
+09:01:53 byte_lm dqkv exit=0 secs=196
+09:01:54 byte_lm attn3 exit=0 secs=197
+09:02:06 ab valu lines=64 hashes_vs_valu=IDENTICAL: proj_fwd=0.955615 proj_dA=0.936159 proj_dB=0.944465 gateup_fwd=2.704447 gateup_dA=2.563277 gateup_dB=2.628837 down_fwd=2.618084 down_dA=2.653286 down_dB=2.603385 head_fwd=55.076193 head_dA=56.498911 head_dB=54.139367 
+09:02:22 ab noadmit lines=64 hashes_vs_valu=IDENTICAL: proj_fwd=0.525473 proj_dA=0.520945 proj_dB=0.483721 gateup_fwd=1.3643 gateup_dA=1.506163 gateup_dB=1.460269 down_fwd=1.431604 down_dA=1.357902 down_dB=1.386969 head_fwd=28.900362 head_dA=30.585436 head_dB=31.515938 
+09:02:38 ab admit lines=64 hashes_vs_valu=IDENTICAL: proj_fwd=0.450735 proj_dA=0.44966 proj_dB=0.417988 gateup_fwd=1.161631 gateup_dA=1.159173 gateup_dB=1.169772 down_fwd=1.134966 down_dA=1.165016 down_dB=1.171347 head_fwd=23.683011 head_dA=26.152136 head_dB=28.955223 
+09:03:10 tokens ready in 32 s: 12442225788 bytes
+09:03:33 checkpoints ready in 23 s
+09:03:33 fetch exit=0
+09:03:33 binding now admit
+09:04:41 lean admit: 0.45925981900018087 ['5516ffe5f550', '77477af42588', '4e439a8a9751'] ['676298dabb30', 'afc46227a372', '34fe4c49b0dd']
+09:04:41 binding now noadmit
+09:05:48 lean noadmit: 0.503001934500162 ['5516ffe5f550', '77477af42588', '4e439a8a9751'] ['676298dabb30', 'afc46227a372', '34fe4c49b0dd']
+09:05:48 binding now dq
+09:06:54 lean dq: 0.43932809149987406 ['5516ffe5f550', '77477af42588', '4e439a8a9751'] ['676298dabb30', 'afc46227a372', '34fe4c49b0dd']
+09:06:54 binding now dqkv
+09:08:00 lean dqkv: 0.4213781759997346 ['5516ffe5f550', '77477af42588', '4e439a8a9751'] ['676298dabb30', 'afc46227a372', '34fe4c49b0dd']
+09:08:00 binding now attn3
+09:09:07 lean attn3: 0.4135622690000673 ['5516ffe5f550', '77477af42588', '4e439a8a9751'] ['676298dabb30', 'afc46227a372', '34fe4c49b0dd']
+09:09:07 binding now admit
+09:11:28 replay-admit-ckpt_00000100 exit=0 secs=141: [09:11:28] PASS: /root/gemm_leg_out/amd-step-time/replay-admit-ckpt_00000100 
+09:11:28 binding now admit
+09:13:12 replay-admit-ckpt_00001998 exit=0 secs=104: [09:13:12] PASS: /root/gemm_leg_out/amd-step-time/replay-admit-ckpt_00001998 
+09:13:12 lean dq witnesses EQUAL admit's
+09:13:12 lean dqkv witnesses EQUAL admit's
+09:13:13 binding now dqkv
+09:15:26 replay-dqkv-ckpt_00000100 exit=0 secs=133: [09:15:26] PASS: /root/gemm_leg_out/amd-step-time/replay-dqkv-ckpt_00000100 
+09:15:26 lean attn3 witnesses EQUAL admit's
+09:15:26 binding now attn3
+09:17:37 replay-attn3-ckpt_00000100 exit=0 secs=131: [09:17:37] PASS: /root/gemm_leg_out/amd-step-time/replay-attn3-ckpt_00000100 
+09:17:37 binding now attn3
+09:19:14 replay-attn3-ckpt_00001998 exit=0 secs=97: [09:19:14] PASS: /root/gemm_leg_out/amd-step-time/replay-attn3-ckpt_00001998 
+09:19:14 binding now admit
+09:19:14 kernel trace exit=127 secs=0
+09:19:57 build linalg exit=0 secs=43
+09:20:07 build training exit=0 secs=53
+09:20:37 build estimators exit=0 secs=83
+09:20:46 build transformer exit=0 secs=92
+09:21:10 build embedding exit=0 secs=24
+09:21:29 kernel trace (manual rerun after libdw1 install) exit=0 secs=43
+09:21:37 build kernel_methods exit=0 secs=51
+09:21:40 build gp exit=0 secs=54
+09:21:41 build svm exit=0 secs=55
+09:21:52 build preprocessing exit=0 secs=11
+09:22:03 build resample exit=0 secs=22
+09:22:28 kernel trace attn3 (manual) exit=0 secs=43
+09:22:45 build mixture exit=0 secs=64
+09:23:11 kernel trace noadmit (manual) exit=0 secs=43
+09:23:22 build metrics exit=0 secs=101
+09:24:00 build trees exit=0 secs=38
+09:24:01 build rf exit=0 secs=39
+09:24:09 build solver exit=0 secs=47
+09:25:49 build gbdt exit=0 secs=147
+09:26:07 build arima exit=0 secs=18
+09:26:29 build ivf exit=0 secs=40
+09:26:51 build hdbscan exit=0 secs=62
+09:27:13 build mamba exit=0 secs=84
+09:27:31 build tsa exit=0 secs=18
+09:27:31 binding now admit
+09:27:31 builds done
+09:28:01 gemm_device_check exit=0 secs=30: gemm device kernel + gates: all green [IDENTICAL]  (8 gates, sabotage: none)
+09:28:32 gemm_backward_check exit=0 secs=31: gemm backward routing + gates: all green [IDENTICAL]  (10 gates, bwd sabotage: none, fwd sabotage: none)
+09:28:55 gemm_workspace_check exit=0 secs=23: PASS: 9 GEMMs, 4608 cells bitwise equal to host oracle
+09:29:36 verify chunk00 exit=4 secs=41: RESULT: INCOMPLETE (verified 764 of 1241 cell parts (0 divergent, 0 owed, 135 refused, 342 n/a); 22 verified, 0 not applicable, 0 owed, 0 held, 3 REFUSED, of 25 lanes). 39.9s. exit 4
+09:30:52 verify chunk01 exit=4 secs=76: RESULT: INCOMPLETE (verified 908 of 1241 cell parts (0 divergent, 0 owed, 135 refused, 198 n/a); 22 verified, 0 not applicable, 0 owed, 0 held, 3 REFUSED, of 25 lanes). 74.7s. exit 4
+09:32:09 verify chunk02 exit=4 secs=77: RESULT: INCOMPLETE (verified 827 of 1241 cell parts (0 divergent, 0 owed, 45 refused, 369 n/a); 24 verified, 0 not applicable, 0 owed, 0 held, 1 REFUSED, of 25 lanes). 75.7s. exit 4
+09:34:19 verify chunk03 exit=0 secs=130: RESULT: VERIFIED (verified 980 of 1241 cell parts (0 divergent, 0 owed, 0 refused, 261 n/a); 25 verified, 0 not applicable, 0 owed, 0 held, of 25 lanes). 128.3s. exit 0
+09:34:51 verify chunk04 exit=4 secs=32: RESULT: INCOMPLETE (verified 863 of 1241 cell parts (0 divergent, 0 owed, 45 refused, 333 n/a); 24 verified, 0 not applicable, 0 owed, 0 held, 1 REFUSED, of 25 lanes). 30.6s. exit 4
+09:35:23 verify chunk05 exit=4 secs=32: RESULT: INCOMPLETE (verified 827 of 1241 cell parts (0 divergent, 0 owed, 45 refused, 369 n/a); 24 verified, 0 not applicable, 0 owed, 0 held, 1 REFUSED, of 25 lanes). 30.7s. exit 4
+09:35:48 verify chunk06 exit=4 secs=25: RESULT: INCOMPLETE (verified 701 of 1241 cell parts (0 divergent, 0 owed, 270 refused, 270 n/a); 19 verified, 0 not applicable, 0 owed, 0 held, 6 REFUSED, of 25 lanes). 24.4s. exit 4
+09:36:15 verify chunk07 exit=4 secs=27: RESULT: INCOMPLETE (verified 791 of 1241 cell parts (0 divergent, 0 owed, 225 refused, 225 n/a); 20 verified, 0 not applicable, 0 owed, 0 held, 5 REFUSED, of 25 lanes). 25.5s. exit 4
+09:36:25 verify chunk08 exit=0 secs=10: RESULT: VERIFIED (verified 152 of 161 cell parts (0 divergent, 0 owed, 0 refused, 9 n/a); 1 verified, 0 not applicable, 0 owed, 0 held, of 1 lanes). 8.4s. exit 0
+09:36:26 pass2 leg1 scripted part done; holding (at most 10 min)
