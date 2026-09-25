@@ -1,0 +1,5 @@
+== teardown 2026-09-24T21:46:23Z exit=1 vm=d75831cb-2bac-4b7f-842f-9f3d52eb0e4d ==
+delete ref=d75831cb-2bac-4b7f-842f-9f3d52eb0e4d attempt 1 -> HTTP 204 utc=2026-09-24T21:46:29Z body=
+verified_gone ref=d75831cb-2bac-4b7f-842f-9f3d52eb0e4d yes get=404 list=200 listed=no state=n/a utc=2026-09-24T21:46:30Z after=1s
+destroy_confirmed=1
+exit=1

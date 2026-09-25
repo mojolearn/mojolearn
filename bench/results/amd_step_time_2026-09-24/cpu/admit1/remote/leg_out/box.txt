@@ -1,0 +1,14 @@
+Linux af1f61bd957c 6.17.0-35-generic #35~24.04.1-Ubuntu SMP PREEMPT_DYNAMIC Tue May 26 19:30:42 UTC 2 x86_64 x86_64 x86_64 GNU/Linux
+8
+model name	: AMD EPYC 7713 64-Core Processor
+avx2
+PRETTY_NAME="Ubuntu 22.04.5 LTS"
+NAME="Ubuntu"
+VERSION_ID="22.04"
+VERSION="22.04.5 LTS (Jammy Jellyfish)"
+               total        used        free      shared  buff/cache   available
+Mem:            1007         208          70           0         728         792
+overlay          40G   85M   40G   1% /
+3.14.7 2.5.2
+369 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x101500000000, nodemask=1)
+Mojo 1.0.0 (ed45d567)

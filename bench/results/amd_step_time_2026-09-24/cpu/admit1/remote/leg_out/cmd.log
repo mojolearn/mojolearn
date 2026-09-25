@@ -1,0 +1,3 @@
+probe_mfma exit=0 secs=6
+ab gfx942 build exit=0 secs=33
+ab sm_90a build exit=0 secs=38

@@ -1,0 +1,5 @@
+pod=flv599ei57u0pt
+name=mojolearn-cpu-amd2-cpu-20260925-022011
+terminated_verified=1
+exit=0
+at=2026-09-25T02:23:26Z

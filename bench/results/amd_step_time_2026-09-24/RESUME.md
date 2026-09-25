@@ -7,6 +7,73 @@ Never merge or push main from this lane. Never touch the live T3 run
 (`~/mojolearn-wt/gpt3-tooling`, `~/mojolearn-evidence/gpt3-run/t3/`, R2
 `runs/t3/2026-09-22/`, its MI325X droplet and its RunPod H100).
 
+## PASS 2 (branch lane/amd-step-time-2, from origin/main 34c86fc66 = 0.8.18)
+
+Worktree `/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-aff3e16a28427aacd`.
+Never merge or push main. Never touch T3 (running A/4 on the only
+DigitalOcean MI325X from 02:07 UTC Sep 25, about 30 h), never rent on
+DigitalOcean or NVIDIA. Hot Aisle only for GPU minutes (balance $27.71 at the
+start, $5 floor); compile checks and gfx942 asm on a RunPod CPU pod
+(`tools/amd_step_time2_cpu_check.sh` through `tools/runpod_cpu_leg.sh
+--cmd-file`, about $0.02 each), never on the Mac.
+
+### 2026-09-25 02:30 UTC: the ranking at 32.3 s (before renting)
+
+Source: the first pass's leg 8 (2026-09-24 20:49, Hot Aisle MI300X, branch
+head = 0.8.18's AMD code), rocprofv3 kernel trace of two lean B4 steps
+(`legs/2026-09-24_204925-hotaisle-mi300x-leg8/remote/amd-step-time/prof/lean_kernel_stats.csv`,
+copied into this branch; the leg itself timed out after the trace, $2.69).
+Lean step 0.503 s a shard; kernel time 0.493 s a shard. Per shard:
+
+| rank | what | ms a shard | share | note |
+|---|---|---|---|---|
+| 1 | matrix-core GEMM, all calls but the two whole-leaf head calls | 238.8 | 48 % | `identical_gemm_mfma_kernel`, 253 launches |
+| 2 | attention (4 kernels x 12 layers) | 124.0 | 25 % | forward `fwd_r2` 37.0, dq 32.7, dk/dv 32.2, zdot 22.1; VALU chains, `_step_preflushed` |
+| 3 | head GEMM forward and dB (whole-leaf MFMA launches) | 59.2 | 12 % | head dA is inside rank 1 (group launch) |
+| 4 | GEMM group folds + the one VALU GEMM call | 19.4 | 4 % | `_ksplit_fold`, 8.0 ms VALU call |
+| 5 | everything else | ~51 | 10 % | norms 7.1, embedding backward 7.9, nonfinite scans 6.7, buffer fills 4.2, cross entropy 5.2, copies, AdamW 1.5 (once a step in T3) |
+| - | host (hashing outside the step; AdamW + validation once a step) | ~0.1 s a step | | the step is 64 x shard |
+
+Counters on the matrix-core GEMM (leg 8 pmc): 33 VALU instructions per MFMA
+(head forward: 10.2e9 VALU, 309e6 MFMA). Each `v_mfma_f32_32x32x1f32`
+(64 cycles on the matrix pipe) is followed by 32 products by one on the VALU
+(the flush, 128 cycles unpacked). So the kernel is VALU bound at about twice
+the matrix-core time.
+
+### The plan (levers in order, each one leg, bits proven after each)
+
+1. GEMM EXACT ADMISSION (AMD only, `identical_gemm_mfma_kernel`, trial
+   define `-D MOJOLEARN_GEMM_MFMA_NO_ADMIT=1` reverts). When every product of
+   a leaf is a multiple of 2^-126 (smallest nonzero exponent fields of the
+   block's staged A and B words sum to at least 174, tested per window),
+   the flush after each step is provably the identity on every word (the
+   argument is in the source comment), so the MFMA step alone is the
+   contract step and the 32 VALU products are not issued. A window that
+   fails switches the rest of its leaf to the shipped step. Expected: up to
+   2x on rank 1 and 3 (about 150 ms a shard, 9 s a step) on data that admits.
+   Proof: the 28 shipped A/B hashes plus three new kinds (skew: subnormal
+   products that a one-sided test would wrongly admit; border: every window
+   admitted at the bound; sparse: leaves switching) equal to the VALU build
+   and to the MFMA build without admission; replays; lanes.
+2. GEMM: the packed flush (`v_pk_mul_f32`, 16 instead of 32 VALU per MFMA)
+   on the steps that are not admitted, and four independent accumulators
+   per wave if the asm shows the MFMA dependency is then the limit.
+3. ATTENTION on the matrix cores: the score chains (q.k over 64 head
+   dimensions, from +0.0, `_step_preflushed`) and the context / gradient
+   chains are the same `ftz(fma_rn(a, b, acc))` ascending chain, so
+   `v_mfma_f32_32x32x1f32` plus the product by one (and exact admission)
+   apply. Masked cells are skipped by the chains, never stepped with a zero
+   (a zero step can turn -0.0 into +0.0), so only full key blocks go to the
+   matrix cores; the diagonal block keeps the VALU step on the same
+   accumulator registers. Largest single piece of work; after 1 and 2.
+4. The rest (norms, embedding backward, scans, fills): about 50 ms a shard,
+   not attempted unless 1 to 3 finish.
+
+Reach: all of the above is AMD-only code (the MFMA kernel is only
+instantiated under `lib_gemm_mfma_for` = AMD; attention MFMA would be behind
+an AMD kernel-matrix row). NVIDIA and Apple compile the same files; the CPU
+check builds the A/B harness for sm_90a to show they still compile.
+
 ## Goal
 
 One optimizer step at the T3 shape (162,147,840 parameters, batch 4, length
