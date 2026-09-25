@@ -66,6 +66,8 @@ from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels_impl
     leaf_kernel,
     node_split_kernel,
     node_feature_range_kernel,
+    node_feature_range_tiled_kernel,
+    node_feature_score_reg_tiled_kernel,
     node_feature_score_finalize_kernel,
     node_feature_score_kernel,
     partition_samples,
@@ -100,7 +102,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from std.gpu import WARP_SIZE, block_dim, block_idx, grid_dim, thread_idx
 from std.math import ceildiv, fma
 from std.sys.compile import is_defined
-from std.sys.info import size_of
+from std.sys.info import has_apple_gpu_accelerator, size_of
 
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
@@ -2365,6 +2367,24 @@ def fill_row_slots(
     _ = d_row_ids.unsafe_ptr()
 
 
+def transpose_to_row_major_kernel(
+    out_rm: MutPointer[Float32, MutAnyOrigin],
+    in_cm: MutPointer[Float32, MutAnyOrigin],
+    n_rows: Int32,
+    n_cols: Int32,
+):
+    """`out_rm[r * n_cols + c] = in_cm[c * n_rows + r]`, one element per
+    thread, writes coalesced. A pure move."""
+    var o = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var nr = Int(n_rows)
+    var nc = Int(n_cols)
+    if o >= nr * nc:
+        return
+    var r = o // nc
+    var c = o - r * nc
+    out_rm[unsafe_offset=o] = in_cm[unsafe_offset = c * nr + r]
+
+
 @fieldwise_init
 struct DeviceDataset(Movable):
     """The dataset, resident on the device for a whole FOREST.
@@ -2404,6 +2424,41 @@ struct DeviceDataset(Movable):
     var n_rows: Int32
     var n_cols: Int32
     var n_classes: Int32
+    var d_data_rm: DeviceBuffer[DType.float32]
+    """A row-major copy of X for the FAST tiled search kernels, built by
+    `ensure_row_major` only when a fit samples at least half the features;
+    one element otherwise."""
+    var has_rm: Bool
+
+    def ensure_row_major(mut self, ctx: DeviceContext, k: Int) raises:
+        """Build `d_data_rm` on the device when this build has a row-major
+        consumer and the fit samples `2k >= n_cols` features: the tiled
+        kernels read one row's sampled features from one row, which only
+        saves traffic when most of the row is sampled (Apple M4, 1M rows:
+        taxi and Istella-S regression 0.34 and 0.48, Istella-S
+        classification at k = 15 of 220 slower, 1.81)."""
+        comptime if not ET_RM_DATA:
+            return
+        if self.has_rm or 2 * k < Int(self.n_cols):
+            return
+        var nr = Int(self.n_rows)
+        var nc = Int(self.n_cols)
+        self.d_data_rm = ctx.enqueue_create_buffer[DType.float32](nr * nc)
+        ctx.enqueue_function[transpose_to_row_major_kernel](
+            self.d_data_rm.unsafe_ptr(),
+            self.d_data.unsafe_ptr(),
+            Int32(nr),
+            Int32(nc),
+            grid_dim=ceildiv(nr * nc, 256),
+            block_dim=256,
+        )
+        self.has_rm = True
+
+    def search_data_ptr(mut self) -> MutPointer[Float32, MutAnyOrigin]:
+        """The matrix the range and score passes read."""
+        comptime if ET_ROW_MAJOR:
+            return self.d_data_rm.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
+        return self.d_data.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin]()
 
 
 from ensemble.host_layout import colmajor_from_rowmajor_f32, copy_f32_threaded
@@ -2459,10 +2514,13 @@ def upload_dataset(
     memcpy(dest=h_labels.unsafe_ptr(), src=class_ids.unsafe_ptr(), count=Int(n_rows))
     ctx.enqueue_copy(dst_buf=d_data, src_ptr=h_data.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_labels, src_ptr=h_labels.unsafe_ptr())
+    var d_data_rm = ctx.enqueue_create_buffer[DType.float32](1)
     ctx.synchronize()
     boundary_times.stop_host("boundary_dataset_upload", boundary_start)
     boundary_times.report()
-    return DeviceDataset(d_data^, d_labels^, n_rows, n_cols, n_classes)
+    return DeviceDataset(
+        d_data^, d_labels^, n_rows, n_cols, n_classes, d_data_rm^, False
+    )
 
 
 def train_classification_device(
@@ -3009,6 +3067,53 @@ comptime FOREST_SAB_SHARED_ROW_BASE = Int32(2)
 0, so their partitions overwrite each other. The forest must move -- this is
 the gate watching that the slot offsets are what isolate the trees."""
 
+comptime ET_ROW_MAJOR = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and is_defined["MOJOLEARN_ET_ROW_MAJOR"]()
+)
+
+comptime ET_TILED_SEARCH_APPLE_DEFAULT = (
+    has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_ET_TILED_SEARCH_OFF"]()
+)
+"""Apple FAST default for the two tiled search kernels below. Apple M4, 1M
+rows, 100 trees, alternating processes, model hashes unchanged: taxireg
+(k = 16 of 16) 20.7 -> 6.4 s (0.310), Istella-S regression (k = 220 of 220)
+182.6 -> 87.6 s (0.480); classification (k = 4 of 16, 15 of 220) takes the
+original kernels through `ensure_row_major`'s `2k >= n` gate, 0.991 both.
+`-D MOJOLEARN_ET_TILED_SEARCH_OFF` turns both off on Apple."""
+
+comptime ET_RANGE_TILED = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and (
+    is_defined["MOJOLEARN_ET_RANGE_TILED"]() or ET_TILED_SEARCH_APPLE_DEFAULT
+)
+"""FAST experiment: the range pass reads a row-major X with up to
+`ET_FEATURE_TILE` sampled features per block
+(`node_feature_range_tiled_kernel`)."""
+
+comptime ET_FEATURE_TILE = 16
+
+comptime ET_SCORE_TILED = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and (
+    is_defined["MOJOLEARN_ET_SCORE_TILED"]() or ET_TILED_SEARCH_APPLE_DEFAULT
+)
+"""FAST experiment: the REGRESSION score pass reads a row-major X with up to
+`ET_FEATURE_TILE` sampled features per block
+(`node_feature_score_reg_tiled_kernel`)."""
+
+comptime ET_RM_DATA = ET_ROW_MAJOR or ET_RANGE_TILED or ET_SCORE_TILED
+"""FAST experiment: a row-major copy of X feeds the range and score passes,
+whose grids put the feature slot on the fast axis so the blocks reading
+one row chunk's features run together and share its cache lines."""
+
+
+@always_inline
+def search_grid(row_blocks: Int, k: Int) -> Tuple[Int, Int, Int]:
+    """The range/score grid: (row blocks, features), swapped under
+    ET_ROW_MAJOR."""
+    comptime if ET_ROW_MAJOR:
+        return (k, row_blocks, 1)
+    return (row_blocks, k, 1)
+
+
 comptime PART_ROWS_PER_THREAD = (
     SEARCH_ROWS_PER_THREAD
     if GLOBAL_NUMERIC_MODE == NUMERIC_FAST
@@ -3496,7 +3601,7 @@ def _enqueue_classification_score[MAX_ACC: Int](
     """
     comptime TPB = DEVICE_TPB
     ctx.enqueue_function[
-        node_feature_score_kernel[TPB, MAX_ACC, True]
+        node_feature_score_kernel[TPB, MAX_ACC, True, ET_ROW_MAJOR]
     ](
         ws.d_nleft.unsafe_ptr(),
         ws.d_ntotal.unsafe_ptr(),
@@ -3506,7 +3611,7 @@ def _enqueue_classification_score[MAX_ACC: Int](
         ws.d_min.unsafe_ptr(),
         ws.d_max.unsafe_ptr(),
         ws.d_missing.unsafe_ptr(),
-        dataset.d_data.unsafe_ptr(),
+        dataset.search_data_ptr(),
         d_row_ids.unsafe_ptr(),
         dataset.d_labels.unsafe_ptr(),
         ws.d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
@@ -3518,7 +3623,8 @@ def _enqueue_classification_score[MAX_ACC: Int](
         n_classes,
         seed,
         Int32(0),
-        grid_dim=(n_blocks_dimx, Int(k), 1),
+        dataset.n_cols,
+        grid_dim=search_grid(n_blocks_dimx, Int(k)),
         block_dim=(TPB, 1, 1),
     )
     ctx.enqueue_function[
@@ -3795,23 +3901,45 @@ def search_batch(
 
     clock.tick(ctx, PHASE_SAMPLER)
     # DEVIATION 470: the range cells were seeded by fused half A above.
-    ctx.enqueue_function[node_feature_range_kernel[TPB]](
-        d_minkey.unsafe_ptr(),
-        d_maxkey.unsafe_ptr(),
-        d_missing.unsafe_ptr(),
-        d_merges.unsafe_ptr(),
-        dataset.d_data.unsafe_ptr(),
-        d_row_ids.unsafe_ptr(),
-        d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
-        d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
-        d_colids.unsafe_ptr(),
-        n_rows,
-        n_cols,
-        Int32(k),
-        Int32(0),
-        grid_dim=(plan.n_blocks_dimx, Int(k), 1),
-        block_dim=(TPB, 1, 1),
-    )
+    var tiled_range = False
+    comptime if ET_RANGE_TILED:
+        tiled_range = dataset.has_rm
+    if tiled_range:
+        ctx.enqueue_function[
+            node_feature_range_tiled_kernel[TPB, ET_FEATURE_TILE]
+        ](
+            d_minkey.unsafe_ptr(),
+            d_maxkey.unsafe_ptr(),
+            d_missing.unsafe_ptr(),
+            d_merges.unsafe_ptr(),
+            dataset.d_data_rm.unsafe_ptr(),
+            d_row_ids.unsafe_ptr(),
+            d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
+            d_colids.unsafe_ptr(),
+            n_cols,
+            Int32(k),
+            grid_dim=(plan.n_blocks_dimx, ceildiv(Int(k), ET_FEATURE_TILE), 1),
+            block_dim=(TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[node_feature_range_kernel[TPB, ET_ROW_MAJOR]](
+            d_minkey.unsafe_ptr(),
+            d_maxkey.unsafe_ptr(),
+            d_missing.unsafe_ptr(),
+            d_merges.unsafe_ptr(),
+            dataset.search_data_ptr(),
+            d_row_ids.unsafe_ptr(),
+            d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
+            d_colids.unsafe_ptr(),
+            n_rows,
+            n_cols,
+            Int32(k),
+            Int32(0),
+            grid_dim=search_grid(plan.n_blocks_dimx, Int(k)),
+            block_dim=(TPB, 1, 1),
+        )
     # DEVIATION 204: the merge produced order-preserving KEYS; this
     # turns them back into the `(min, max)` floats every later pass
     # reads, and applies the empty-cell sentinel.
@@ -4296,6 +4424,7 @@ def train_forest_classification_device_timed(
         # THE WORKSPACE, ONCE PER GROUP (deviation 202, further). Its two
         # row-scaled pieces -- the workload bound and the partition's
         # alternate buffer -- are sized to the GROUP's rows.
+        dataset.ensure_row_major(ctx, Int(k))
         var ws = make_level_workspace(
             ctx,
             Int(params.max_batch_size),
@@ -5081,23 +5210,45 @@ def search_batch_regression(
 
     clock.tick(ctx, PHASE_STAGE)
     # DEVIATION 470: the range cells were seeded by fused half A above.
-    ctx.enqueue_function[node_feature_range_kernel[TPB]](
-        d_minkey.unsafe_ptr(),
-        d_maxkey.unsafe_ptr(),
-        d_missing.unsafe_ptr(),
-        d_merges.unsafe_ptr(),
-        dataset.d_data.unsafe_ptr(),
-        d_row_ids.unsafe_ptr(),
-        d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
-        d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
-        d_colids.unsafe_ptr(),
-        n_rows,
-        n_cols,
-        Int32(k),
-        Int32(0),
-        grid_dim=(plan.n_blocks_dimx, Int(k), 1),
-        block_dim=(TPB, 1, 1),
-    )
+    var tiled_range = False
+    comptime if ET_RANGE_TILED:
+        tiled_range = dataset.has_rm
+    if tiled_range:
+        ctx.enqueue_function[
+            node_feature_range_tiled_kernel[TPB, ET_FEATURE_TILE]
+        ](
+            d_minkey.unsafe_ptr(),
+            d_maxkey.unsafe_ptr(),
+            d_missing.unsafe_ptr(),
+            d_merges.unsafe_ptr(),
+            dataset.d_data_rm.unsafe_ptr(),
+            d_row_ids.unsafe_ptr(),
+            d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
+            d_colids.unsafe_ptr(),
+            n_cols,
+            Int32(k),
+            grid_dim=(plan.n_blocks_dimx, ceildiv(Int(k), ET_FEATURE_TILE), 1),
+            block_dim=(TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[node_feature_range_kernel[TPB, ET_ROW_MAJOR]](
+            d_minkey.unsafe_ptr(),
+            d_maxkey.unsafe_ptr(),
+            d_missing.unsafe_ptr(),
+            d_merges.unsafe_ptr(),
+            dataset.search_data_ptr(),
+            d_row_ids.unsafe_ptr(),
+            d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
+            d_colids.unsafe_ptr(),
+            n_rows,
+            n_cols,
+            Int32(k),
+            Int32(0),
+            grid_dim=search_grid(plan.n_blocks_dimx, Int(k)),
+            block_dim=(TPB, 1, 1),
+        )
     # DEVIATION 204: the merge produced order-preserving KEYS; this
     # turns them back into the `(min, max)` floats every later pass
     # reads, and applies the empty-cell sentinel.
@@ -5151,32 +5302,62 @@ def search_batch_regression(
     # DEVIATION 470: the score cells and the one-output accumulators were
     # seeded by fused half B above (the survey skips half B and returned
     # already).
-    ctx.enqueue_function[
-        node_feature_score_kernel[TPB, MAX_ACC, False]
-    ](
-        d_nleft.unsafe_ptr(),
-        d_ntotal.unsafe_ptr(),
-        d_accl.unsafe_ptr(),
-        d_acct.unsafe_ptr(),
-        d_nblocks.unsafe_ptr(),
-        d_min.unsafe_ptr(),
-        d_max.unsafe_ptr(),
-        d_missing.unsafe_ptr(),
-        dataset.d_data.unsafe_ptr(),
-        d_row_ids.unsafe_ptr(),
-        dataset.d_labels.unsafe_ptr(),
-        d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
-        d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
-        d_colids.unsafe_ptr(),
-        ws.d_tree.unsafe_ptr(),
-        n_rows,
-        Int32(k),
-        Int32(1),
-        seed,
-        Int32(0),
-        grid_dim=(plan.n_blocks_dimx, Int(k), 1),
-        block_dim=(TPB, 1, 1),
-    )
+    var tiled_score = False
+    comptime if ET_SCORE_TILED:
+        tiled_score = dataset.has_rm
+    if tiled_score:
+        ctx.enqueue_function[
+            node_feature_score_reg_tiled_kernel[TPB, ET_FEATURE_TILE]
+        ](
+            d_nleft.unsafe_ptr(),
+            d_ntotal.unsafe_ptr(),
+            d_accl.unsafe_ptr(),
+            d_acct.unsafe_ptr(),
+            d_nblocks.unsafe_ptr(),
+            d_min.unsafe_ptr(),
+            d_max.unsafe_ptr(),
+            d_missing.unsafe_ptr(),
+            dataset.d_data_rm.unsafe_ptr(),
+            d_row_ids.unsafe_ptr(),
+            dataset.d_labels.unsafe_ptr(),
+            d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
+            d_colids.unsafe_ptr(),
+            ws.d_tree.unsafe_ptr(),
+            n_cols,
+            Int32(k),
+            seed,
+            grid_dim=(plan.n_blocks_dimx, ceildiv(Int(k), ET_FEATURE_TILE), 1),
+            block_dim=(TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[
+            node_feature_score_kernel[TPB, MAX_ACC, False, ET_ROW_MAJOR]
+        ](
+            d_nleft.unsafe_ptr(),
+            d_ntotal.unsafe_ptr(),
+            d_accl.unsafe_ptr(),
+            d_acct.unsafe_ptr(),
+            d_nblocks.unsafe_ptr(),
+            d_min.unsafe_ptr(),
+            d_max.unsafe_ptr(),
+            d_missing.unsafe_ptr(),
+            dataset.search_data_ptr(),
+            d_row_ids.unsafe_ptr(),
+            dataset.d_labels.unsafe_ptr(),
+            d_items.unsafe_ptr().unsafe_bitcast[NodeWorkItem](),
+            d_wl.unsafe_ptr().unsafe_bitcast[WorkloadInfo](),
+            d_colids.unsafe_ptr(),
+            ws.d_tree.unsafe_ptr(),
+            n_rows,
+            Int32(k),
+            Int32(1),
+            seed,
+            Int32(0),
+            dataset.n_cols,
+            grid_dim=search_grid(plan.n_blocks_dimx, Int(k)),
+            block_dim=(TPB, 1, 1),
+        )
     ctx.enqueue_function[
         node_feature_score_finalize_kernel[MAX_ACC, False]
     ](
@@ -5545,6 +5726,7 @@ def train_forest_regression_device_timed(
                 ctx, String("g") + String(gi) + ".bootstrap.rowids", d_row_ids
             )
 
+        dataset.ensure_row_major(ctx, Int(k))
         var ws = make_level_workspace(
             ctx,
             Int(params.max_batch_size),
