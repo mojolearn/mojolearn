@@ -377,6 +377,11 @@ def test_column_on_a_1x_vm(world):
     for s in ("WATCHDOG_ALIVE pid=", "REF_BAKED_IN=1", "TOKEN_GET_HTTP=200", "DESC_MATCH", "WATCHDOG_STILL_ALIVE_SECOND_SESSION"):
         assert s in wd, (s, wd)
     assert "virtual_machines/%s/?force=true" % vm in (world.out / "hotaisle_watchdog.sh").read_text()
+    # the watchdog fires at the lease (10 min from the create), and the record says so
+    # (a with_timeout call once overwrote the recorded number with 60, 2026-09-25)
+    secs = int(kv(world.out / "provider.txt")["watchdog_seconds"].split()[0])
+    assert 540 <= secs <= 600, secs
+    assert "fires_in=%ds" % secs in (world.out / "hotaisle_watchdog.sh").read_text()
     # every box command ran as root through sudo, in this order, and the column came home
     cmds = commands(world)
     box = str(world.tmp / "box" / "wheel-smoke")

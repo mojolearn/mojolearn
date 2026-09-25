@@ -520,8 +520,8 @@ ha_rent() {
     ha_ssh 60 'echo SUDO_OK' < /dev/null 2>&1 | grep -q SUDO_OK || die "passwordless sudo is not available for hotaisle; deleting unused"
     say "ssh settled as hotaisle@$HA_SSH_IP:$HA_SSH_PORT after $(( $(date +%s) - HA_T_CREATE ))s"
     # e. the on-box watchdog, before any work
-    _secs=$(( HA_T_CREATE + _lease * 60 - $(date +%s) )); [ "$_secs" -ge 120 ] || _secs=120
-    ha_write_watchdog "$TMPD/ha_watchdog.sh" "$HA_GUARD" "$_secs" "$HA_VMREF" || die "the on-box watchdog did not compose; deleting unused"
+    _wd_secs=$(( HA_T_CREATE + _lease * 60 - $(date +%s) )); [ "$_wd_secs" -ge 120 ] || _wd_secs=120
+    ha_write_watchdog "$TMPD/ha_watchdog.sh" "$HA_GUARD" "$_wd_secs" "$HA_VMREF" || die "the on-box watchdog did not compose; deleting unused"
     cp "$TMPD/ha_watchdog.sh" "$_out/hotaisle_watchdog.sh"
     ha_ssh 60 "umask 077; mkdir -p $HA_GUARD && chmod 700 $HA_GUARD && cat > $HA_GUARD/curlrc && chmod 600 $HA_GUARD/curlrc" < "$HA_CURLRC" \
         || die "could not deliver the key for the watchdog; deleting unused"
@@ -548,8 +548,8 @@ if grep -q '\"description\": *\"$HA_DESC\"' $HA_GUARD/self.json; then echo DESC_
       && grep -q WATCHDOG_STILL_ALIVE_SECOND_SESSION "$_out/hotaisle_watchdog_check.txt"; } \
         || die "THE ON-BOX WATCHDOG COULD NOT BE VERIFIED (pid, second session, ref, GET 200 or description); deleting the VM unused"
     HA_WATCHDOG_OK=1
-    ha_rec "watchdog_seconds=$_secs watchdog_verified=1"
-    say "on-box watchdog ARMED and verified (pid $_wpid in two sessions, ref $HA_VMREF, GET 200, description matches, ${_secs}s)"
+    ha_rec "watchdog_seconds=$_wd_secs watchdog_verified=1"
+    say "on-box watchdog ARMED and verified (pid $_wpid in two sessions, ref $HA_VMREF, GET 200, description matches, ${_wd_secs}s)"
     # the device: /dev/kfd and gfx942 from rocminfo's agent Name: field
     ha_ssh 90 'test -e /dev/kfd && echo KFD_PRESENT; rocminfo 2>/dev/null | awk '"'"'$1 == "Name:" && $2 ~ /^gfx[0-9a-f]+$/ {print "GFX=" $2}'"'"'; echo "GPU_AGENTS=$(rocminfo 2>/dev/null | awk '"'"'$1 == "Name:" && $2 ~ /^gfx[0-9a-f]+$/'"'"' | wc -l | tr -d " ")"; rocm-smi --showproductname 2>&1 | grep -i "card series" | head -4' \
         < /dev/null > "$_out/hotaisle_device.txt" 2>&1

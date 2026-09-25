@@ -1,0 +1,70 @@
+== release_wheel_smoke: RENT ==
+  wheel    mojolearn-0.8.18-py3-none-manylinux_2_35_x86_64.whl  sha256 c160fb6d5101f1d0ff6a4747ff11c5ed2bbaacfd522506de64ab262f6b9e3836  commit f2293183c729059331cb31afcb8319f528143e55
+  ships    the wheel + tools/qualify_verifier_wheel.py (sha256 63a8bd190097e31d...) and nothing else
+  smoke    qualify_verifier_wheel.py --scope expanded, bounded 1800s
+  out      /Users/andrewhendel/mojolearn-evidence/release-hotaisle/2026-09-25/column-0818
+  provider hotaisle (Hot Aisle only)
+  hotaisle MI300X VM spec auto, team andrews-team, lease 45m, horizon 65m priced live, cap $10, box commands as root via sudo -n bash -c
+  Hot Aisle dead-men compose (Mac dead-man sh -n; on-box watchdog sh -n)
+[07:07:54 wheel-smoke] renting from Hot Aisle: MI300X VM spec auto, lease 45m, cap $10
+[07:07:57 wheel-smoke] Hot Aisle 2gpu MI300X VM (26 cores) at $5.98/h; at most $6.48 for 65 minutes; balance $48.82
+[07:07:58 wheel-smoke] Hot Aisle dead-man ARMED before the create: pid 24991, fires in 3899s
+[07:07:59 wheel-smoke] creating the Hot Aisle 2gpu MI300X VM. THE BILL STARTS HERE.
+[07:08:05 wheel-smoke] VM enc1-gpuvm005 deployment_id fa15f2e1-4ee2-4432-b705-92a10143d336, description mojolearn:release-smoke-0.8.18:20260925T110757Z
+[07:08:24 wheel-smoke] ssh settled as hotaisle@23.183.40.70:22 after 25s
+    WATCHDOG_ALIVE pid=3641
+    REF_BAKED_IN=1
+    TOKEN_GET_HTTP=200
+    DESC_MATCH
+    WATCHDOG_STILL_ALIVE_SECOND_SESSION
+[07:08:34 wheel-smoke] on-box watchdog ARMED and verified (pid 3641 in two sessions, ref fa15f2e1-4ee2-4432-b705-92a10143d336, GET 200, description matches, 60s)
+    [box] KFD_PRESENT
+    [box] GFX=gfx942
+    [box] GFX=gfx942
+    [box] GPU_AGENTS=2
+    [box] GPU[0]		: Card Series: 		AMD Instinct MI300X VF
+    [box] GPU[1]		: Card Series: 		AMD Instinct MI300X VF
+[07:08:36 wheel-smoke] uploading the wheel (80913817 bytes, bound 524s) and the smoke driver
+[07:08:49 wheel-smoke] both files landed, sha256 verified on the box
+[07:08:49 wheel-smoke] starting the smoke (detached; bound 1800s)
+[07:13:19 wheel-smoke] smoke exit: none
+[07:13:19 wheel-smoke] fetching the results
+  box: nvidia-smi not found. This is AMD country.
+  box: Linux enc1-gpuvm005 6.8.0-124-generic #124-Ubuntu SMP PREEMPT_DYNAMIC Tue May 26 13:00:45 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+  box: python=/usr/bin/python3.12 Python 3.12.3
+  box: c160fb6d5101f1d0ff6a4747ff11c5ed2bbaacfd522506de64ab262f6b9e3836  mojolearn-0.8.18-py3-none-manylinux_2_35_x86_64.whl
+  box: 63a8bd190097e31d5d3c9a86a939575d7912664e0e9dd85a2b8dae21897d7ae8  qualify_verifier_wheel.py
+  column: install_exit=0
+  column: version 0.8.18 vendor hip
+  column: selftest_exit=0
+[07:13:20 wheel-smoke] column complete: /Users/andrewhendel/mojolearn-evidence/release-hotaisle/2026-09-25/column-0818/column-hip.json
+  summary: IDENTICAL=618, ONE-COLUMN=27
+  summary (infer/model): IDENTICAL=972, N/A=291, ONE-COLUMN=27
+  summary (batch): N/A=645
+  summary (rlpair): N/A=60
+  summary (batchgrad): IDENTICAL=48, N/A=597
+  summary (batchscale): IDENTICAL=81, N/A=558, ONE-COLUMN=6
+  summary (ragged): IDENTICAL=54, N/A=585, ONE-COLUMN=6
+  summary (stepfull): IDENTICAL=54, N/A=591
+[07:13:21 wheel-smoke] no DIVERGENT cell against the CPU column (/Users/andrewhendel/mojolearn-evidence/release-hotaisle/2026-09-25/column-0818/diff-cpu-hip.txt)
+[07:13:21 wheel-smoke] PASSED. Evidence: /Users/andrewhendel/mojolearn-evidence/release-hotaisle/2026-09-25/column-0818
+
+== teardown (exit 0): Hot Aisle ==
+[07:13:25 wheel-smoke] DELETE fa15f2e1-4ee2-4432-b705-92a10143d336 ?force=true -> HTTP 204
+[07:13:26 wheel-smoke] verified_gone ref=fa15f2e1-4ee2-4432-b705-92a10143d336 yes get=404 list=200 listed=no utc=2026-09-25T11:13:26Z after=1s
+[07:13:26 wheel-smoke] Hot Aisle dead-man cancelled (pid 24991)
+[07:13:26 wheel-smoke] released the Hot Aisle slot /tmp/mojolearn-hotaisle-slot.1
+  delete ref=fa15f2e1-4ee2-4432-b705-92a10143d336 attempt 1 -> HTTP 204 utc=2026-09-25T11:13:25Z
+  verified_gone ref=fa15f2e1-4ee2-4432-b705-92a10143d336 yes get=404 list=200 listed=no utc=2026-09-25T11:13:26Z after=1s
+  destroy_confirmed=1
+  mac_deadman=cancelled 2026-09-25T11:13:26Z
+  slot=released /tmp/mojolearn-hotaisle-slot.1 2026-09-25T11:13:26Z
+  provider=hotaisle
+  vm=fa15f2e1-4ee2-4432-b705-92a10143d336
+  name=enc1-gpuvm005
+  spec=2gpu
+  destroy_confirmed=1
+  exit=0
+  at=2026-09-25T11:13:28Z
+  balance_before_cents=4882 balance_after_cents=4284
+  spend_estimate=$5.98 (329 s up, billed at least 60 min at $5.98/h)

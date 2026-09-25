@@ -1,0 +1,6 @@
+KFD_PRESENT
+GFX=gfx942
+GFX=gfx942
+GPU_AGENTS=2
+GPU[0]		: Card Series: 		AMD Instinct MI300X VF
+GPU[1]		: Card Series: 		AMD Instinct MI300X VF
