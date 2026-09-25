@@ -330,7 +330,7 @@ All of it compiles for gfx942 and the A/B harness and the byte LM binding
 still build for sm_90a (`cpu/admit1/`, `cpu/dq1/`, `cpu/dkdv1/`,
 `cpu/fwd1/`, RunPod CPU pods, about $0.02 each).
 
-### Pass 2 leg 1 (2026-09-25 08:54 to 09:37 UTC, Hot Aisle 1x MI300X, $2.04)
+### Pass 2 leg 1 (2026-09-25 08:54 to 09:37 UTC, Hot Aisle 1x MI300X, $2.14)
 
 Evidence: `legs/2026-09-25_085416-hotaisle-mi300x-pass2-leg1/remote/amd-step-time/`
 (`session.txt` is the running record). Body `tools/amd_step_time2_leg1.sh`
@@ -437,7 +437,7 @@ after T3's A/4 has landed (the command line is in the script's header).
 Leg 1 $2.24 (48 min), leg 2 $2.19 (47 min), leg 3 $1.90 (41 min), leg 4
 $1.75, leg 5 $1.59, leg 6 $2.05, leg 7 $1.64; Hot Aisle balance $44.65 ->
 $30.60 ($14.05 in all).
-Pass 2: leg 1 $2.04 (43 min, 2026-09-25; balance $27.71 -> $25.67).
+Pass 2: leg 1 $2.14 (43 min, 2026-09-25; balance $27.71 -> $25.67 at teardown, $25.57 after the last billing tick).
 
 ## Files
 

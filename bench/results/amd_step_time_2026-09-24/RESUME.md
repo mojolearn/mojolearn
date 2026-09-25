@@ -21,7 +21,7 @@ start, $5 floor); compile checks and gfx942 asm on a RunPod CPU pod
 
 Branch `lane/amd-step-time-2-proof` (from lane/amd-step-time-2 79ff2d56f).
 Hot Aisle 1x MI300X, 08:54:34 to 09:37:42 UTC (VM verified gone, 404),
-$2.04 (balance $27.71 -> $25.67). Evidence
+$2.14 (balance $27.71 -> $25.57 after the last billing tick). Evidence
 `legs/2026-09-25_085416-hotaisle-mi300x-pass2-leg1/`, write-up and table in
 README.md, "Pass 2 leg 1".
 
