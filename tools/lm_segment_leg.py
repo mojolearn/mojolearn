@@ -12,7 +12,8 @@
 Everything a box needs reaches it as a presigned URL baked into the body:
 the recipe (GET), the checkpoint it starts from (GET), the chain it is held
 to (GET), the arrival replay's checkpoint and chain (GET), and one PUT per
-artifact the segment will write (from `tools/lm_segment.py keys`). The Mac
+artifact the segment will write (from `tools/lm_segment.py keys`, and for a
+one-box segment the two progress keys a resume reads). The Mac
 mints them with tools/dataset_store.sh, so no credential leaves it, and the
 run's objects live under `<run>/<route>/<segment>/<file>` in R2.
 
@@ -61,7 +62,7 @@ def tokens_urls(group, seconds):
 
 
 def render(args):
-    from lm_segment import expected_keys, load_recipe
+    from lm_segment import PROGRESS_KEYS, expected_keys, load_recipe
     recipe = load_recipe(args.recipe)
     recipe_sha = hashlib.sha256(Path(args.recipe).read_bytes()).hexdigest()
     run = args.run.rstrip("/")
@@ -75,6 +76,11 @@ def render(args):
         raise SystemExit("--from-sha is required unless --from init")
     keys = expected_keys(recipe, from_step, args.steps, args.boundary) if args.mode != "live-worker" else \
         ["chain.jsonl", "manifest.tsv", "segment.json"]
+    if args.mode == "one":
+        # the chain and manifest as they stand after each checkpoint, so a box
+        # stopped mid-segment can be resumed from R2 alone (lm_run_driver's
+        # record_partial reads them when no chain came home)
+        keys = keys + list(PROGRESS_KEYS)
     uploads = {k: presign_put(f"{here}/{k}", args.seconds) for k in keys}
     body = (REPO / "tools" / "lm_segment_body.sh").read_text()
     subst = {
