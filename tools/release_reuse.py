@@ -30,7 +30,10 @@ THE IDENTITY OF A BINDING is everything that can reach its bytes:
   * the builder scripts that drive the compile and stage the result
     (packaging/linux/build_sets.sh, stage_libs.py, tools/release061_remote_build.sh,
     tools/linux_surface_qualification.sh; on macOS build_release_wheel.sh,
-    stage_dylibs.py and python/setup.py);
+    stage_dylibs.py and python/setup.py), each read through THIS binding's
+    view (BUILDER_RULE below: the binding lists reduced to this binding's
+    own membership, comments out where unambiguous, every other byte kept),
+    so another binding joining a list does not rebuild this one;
   * the pinned box image (the RunPod NVIDIA image, the ROCm container digest)
     or, on macOS, the Xcode and Metal toolchain that built it, which the
     release records; a previous release without that record is not reused.
@@ -76,7 +79,15 @@ import bincache  # noqa: E402
 import stage_libs  # noqa: E402
 from pack_wheel import HOST_NAMES, TIERS, tier_names  # noqa: E402
 
-SCHEMA = "mojolearn.binding-identity.v1"
+SCHEMA = "mojolearn.binding-identity.v2"
+#: The identity every release up to 0.8.18 recorded: builder files by
+#: whole-file sha256. A record in it is upgraded only by reproducing it
+#: exactly from the release's own commit (previous_identities).
+SCHEMA_V1 = "mojolearn.binding-identity.v1"
+#: The tree-facts cache (per commit); v2 added the builder views.
+FACTS_SCHEMA = "mojolearn.release-tree-facts.v2"
+#: The builder view of the runtime closure: every list kept whole.
+RUNTIME_VIEW = ""
 PLAN_SCHEMA = "mojolearn.release-reuse-plan.v1"
 REUSE_SCHEMA = "mojolearn.linux.reused-bindings.v1"
 LINUX = "linux-64"
@@ -115,6 +126,262 @@ def digest_of(identity):
 def git(*args, root=ROOT):
     return subprocess.run(["git", "-C", str(root), *args], capture_output=True, text=True,
                           check=True).stdout
+
+
+# ---------------------------------------------------------------- builder views
+# A builder file is shared by every binding, so its whole-file sha256 made any
+# edit to it (one more name on EXT_NAMES, a reworded comment) a new identity
+# for all 240 bindings. A binding's identity now reads the builder through a
+# VIEW OF THAT BINDING: the file's bytes with exactly two things taken out,
+# each only where the file format makes it unambiguous, and nothing else
+# (every flag, compile line, function, heredoc and embedded script stays
+# byte for byte):
+#
+#   1. binding lists. A shell line at column 0 of the exact form
+#        VAR="tok tok ..."   or   VAR="${ENV:-tok tok ...}"
+#      where VAR is SCRIPTS or ends in _NAMES / _SCRIPTS and EVERY token is a
+#      binding name (_mojolearn, _mojolearn_x) or a build script (build.sh,
+#      build_x.sh), read at the top level of the script (not inside a quote,
+#      heredoc or continuation), is replaced by the same line keeping only
+#      the tokens that name THIS binding (its name or its script). So the
+#      view records whether the binding is in each list, which list (the
+#      tier lists are separate variables) and every list's variable and
+#      environment override; another binding joining or leaving a list does
+#      not reach it. The runtime closure's view keeps every list whole (a new
+#      binding can need another MAX library in .libs).
+#   2. comments. Python (stage_libs.py, stage_dylibs.py, setup.py): every
+#      COMMENT token the tokenizer reports, except a line-1 shebang and a
+#      coding cookie; comment-only lines are dropped, a trailing comment is
+#      cut with the whitespace before it. Shell: only FULL-LINE comments and
+#      blank lines at the top level, with the leading indentation of top
+#      level lines; the scan stops taking anything out (the rest of the file
+#      is hashed verbatim) at the first construct it does not model: a
+#      backtick, $'...', a heredoc marker it cannot parse, a ${...} inside
+#      double quotes that does not close on its own line or holds a quote or
+#      another expansion, a case statement inside $( ), a heredoc whose
+#      marker line ends inside a quote or a continuation. Lines inside a
+#      $( ) that spans lines, heredoc bodies, multi-line strings and
+#      continuation lines are never touched. The shebang stays.
+#
+# A file that is not UTF-8 or that Python cannot tokenize is hashed whole.
+# The rule has a name (BUILDER_RULE) that is part of every identity, so a
+# change to it compares as changed, never silently equal.
+BUILDER_RULE = "builder-view.v1: lists by this binding's membership; full-line shell comments; python comments"
+_LIST_LINE = re.compile(
+    r'^(?P<var>(?:[A-Z][A-Z0-9_]*_)?(?:NAMES|SCRIPTS))='
+    r'"(?:\$\{(?P<env>[A-Z][A-Z0-9_]*):-(?P<dv>[^"$`\\{}]*)\}|(?P<v>[^"$`\\{}]*))"$')
+_LIST_TOKEN = re.compile(r"^(?:_mojolearn(?:_[a-z0-9_]+)?|build(?:_[a-z0-9_]+)?\.sh)$")
+_HEREDOC = re.compile(r"<<(-?)[ \t]*(?:'([A-Za-z_][A-Za-z0-9_]*)'|\"([A-Za-z_][A-Za-z0-9_]*)\"|([A-Za-z_][A-Za-z0-9_]*))")
+_SEPARATORS = " \t;&|()<>"
+
+
+class _Unmodeled(Exception):
+    """A shell construct the view does not model: stop taking anything out."""
+
+
+def _close_param(line, i):
+    """Index just past the `}` closing the `${` at line[i] inside double
+    quotes, on this line and holding no quote, backtick, backslash or nested
+    expansion; else _Unmodeled."""
+    j = i + 2
+    while j < len(line):
+        c = line[j]
+        if c in "'\"`\\${":
+            raise _Unmodeled
+        if c == "}":
+            return j + 1
+        j += 1
+    raise _Unmodeled
+
+
+def _scan_shell_line(line, st):
+    """Advance the lexer state `st` over one line that is not a heredoc body.
+    st["stack"] is the nesting, innermost last: "TOP" (the script), "CMD"
+    (inside $( ), with its open-paren depth in st["depth"]), "SQ", "DQ";
+    st["continued"] is a trailing backslash at a command level; heredoc
+    markers seen are queued in st["heredocs"]."""
+    stack, depth = st["stack"], st["depth"]
+    i, n, word_start = 0, len(line), True
+    st["continued"] = False
+    while i < n:
+        c = line[i]
+        mode = stack[-1]
+        if mode == "SQ":
+            if c == "'":
+                stack.pop()
+            i += 1
+            continue
+        if mode == "DQ":
+            if c == "\\":
+                if i == n - 1:
+                    return
+                i += 2
+            elif c == '"':
+                stack.pop()
+                i += 1
+            elif c == "`":
+                raise _Unmodeled
+            elif line.startswith("$(", i):
+                stack.append("CMD")
+                depth.append(0)
+                i += 2
+                word_start = True
+            elif line.startswith("${", i):
+                i = _close_param(line, i)
+            else:
+                i += 1
+            continue
+        # a command level: the script itself or a $( ) substitution
+        if c == "\\":
+            if i == n - 1:
+                st["continued"] = True
+                return
+            i += 2
+            word_start = False
+        elif c == "'":
+            stack.append("SQ")
+            i += 1
+            word_start = False
+        elif c == '"':
+            stack.append("DQ")
+            i += 1
+            word_start = False
+        elif c == "`" or line.startswith("$'", i):
+            raise _Unmodeled
+        elif c == "#" and word_start:
+            return
+        elif mode == "CMD" and word_start and re.match(r"(case|esac)\b", line[i:]):
+            raise _Unmodeled
+        elif line.startswith("$(", i):
+            stack.append("CMD")
+            depth.append(0)
+            i += 2
+            word_start = True
+        elif mode == "CMD" and c == "(":
+            depth[-1] += 1
+            i += 1
+            word_start = True
+        elif mode == "CMD" and c == ")":
+            if depth[-1] == 0:
+                stack.pop()
+                depth.pop()
+                word_start = False
+            else:
+                depth[-1] -= 1
+                word_start = True
+            i += 1
+        elif line.startswith("<<<", i):
+            i += 3
+            word_start = True
+        elif line.startswith("<<", i):
+            m = _HEREDOC.match(line, i)
+            if not m:
+                raise _Unmodeled
+            st["heredocs"].append((m.group(2) or m.group(3) or m.group(4), m.group(1) == "-"))
+            i = m.end()
+            word_start = False
+        else:
+            word_start = c in _SEPARATORS
+            i += 1
+
+
+def _list_line(line, members):
+    """The view of a binding-list assignment, or None when `line` is not one."""
+    m = _LIST_LINE.match(line)
+    if not m:
+        return None
+    value = m.group("dv") if m.group("env") else m.group("v")
+    tokens = value.split()
+    if not tokens or not all(_LIST_TOKEN.match(t) for t in tokens):
+        return None
+    kept = " ".join(t for t in tokens if t in members)
+    if m.group("env"):
+        return '%s="${%s:-%s}"' % (m.group("var"), m.group("env"), kept)
+    return '%s="%s"' % (m.group("var"), kept)
+
+
+def shell_view(text, members):
+    """The shell builder as binding `members` ({name, script}; None keeps every
+    list whole) sees it. See the rule above."""
+    out = []
+    st = dict(stack=["TOP"], depth=[], continued=False, heredocs=[])
+    body = None  # (word, dash) of the heredoc whose body is being read
+    lines = text.split("\n")
+    for k, line in enumerate(lines):
+        if body is not None:
+            out.append(line)
+            if (line.lstrip("\t") if body[1] else line) == body[0]:
+                body = st["heredocs"].pop(0) if st["heredocs"] else None
+            continue
+        top = st["stack"] == ["TOP"] and not st["continued"] and k > 0
+        stripped = line.lstrip(" \t")
+        if top and stripped == "":
+            continue
+        if top and stripped.startswith("#"):
+            continue
+        view = _list_line(line, members) if top and members is not None else None
+        out.append(view if view is not None else (stripped if top else line))
+        try:
+            _scan_shell_line(line, st)
+        except _Unmodeled:
+            out.extend(lines[k + 1:])
+            return "\n".join(out)
+        if st["heredocs"]:
+            if st["stack"][-1] in ("SQ", "DQ") or st["continued"]:
+                out.extend(lines[k + 1:])
+                return "\n".join(out)
+            body = st["heredocs"].pop(0)
+    return "\n".join(out)
+
+
+def python_view(text):
+    """The Python builder without its comments (tokenizer-reported only), or
+    None when it does not tokenize."""
+    import io
+    import tokenize
+    cuts = {}
+    try:
+        for tok in tokenize.generate_tokens(io.StringIO(text).readline):
+            if tok.type != tokenize.COMMENT:
+                continue
+            row, col = tok.start
+            if row == 1 and col == 0 and tok.string.startswith("#!"):
+                continue
+            if row <= 2 and re.match(r"^[ \t\f]*#.*?coding[:=]", tok.line):
+                continue
+            cuts[row] = col
+    except (tokenize.TokenError, IndentationError, SyntaxError):
+        return None
+    out = []
+    for row, line in enumerate(text.split("\n"), 1):
+        if row in cuts:
+            code = line[:cuts[row]].rstrip(" \t")
+            if code.strip(" \t\f") == "":
+                continue
+            line = code
+        out.append(line)
+    return "\n".join(out)
+
+
+def builder_view(rel, data, members):
+    """sha256 of builder `rel`'s bytes as seen by a binding with identifiers
+    `members` (None: the runtime, every list kept)."""
+    try:
+        text = data.decode("utf-8")
+    except UnicodeDecodeError:
+        return hashlib.sha256(data).hexdigest()
+    if rel.endswith(".py"):
+        view = python_view(text)
+        if view is None:
+            return hashlib.sha256(data).hexdigest()
+    else:
+        view = shell_view(text, members)
+    return hashlib.sha256(("%s\0%s\0" % (BUILDER_RULE, rel) + view).encode()).hexdigest()
+
+
+def binding_members(name):
+    """The list tokens that name a binding: its name and its build script."""
+    return frozenset((name, "build.sh" if name == "_mojolearn" else "build_" + name[len("_mojolearn_"):] + ".sh"))
 
 
 # ---------------------------------------------------------------- the bindings
@@ -268,11 +535,18 @@ def tree_facts(tree):
             continue
         info, rels = bincache.source_digest(tree, str(path), [])
         closures[script] = dict(info, sources=sorted(rels))
-    files = {}
+    files, views = {}, {}
+    names = sorted({b.name for t in (LINUX, MACOS) for b in bindings(t)})
     for rel in LINUX_BUILDERS + MACOS_BUILDERS:
         p = tree / rel
         files[rel] = sha256(p) if p.is_file() else None
-    return dict(closures=closures, builders=files, image=image_pins(tree),
+        if not p.is_file():
+            views[rel] = None
+            continue
+        data = p.read_bytes()
+        views[rel] = {name: builder_view(rel, data, binding_members(name)) for name in names}
+        views[rel][RUNTIME_VIEW] = builder_view(rel, data, None)
+    return dict(closures=closures, builders=files, builder_views=views, image=image_pins(tree),
                 toolchain={LINUX: toolchain(tree, LINUX), MACOS: toolchain(tree, MACOS)},
                 generators=dir_digest(tree, GENERATORS), portable_math=dir_digest(tree, PORTABLE_MATH))
 
@@ -285,7 +559,7 @@ def facts_for_commit(commit, cache_dir, root=ROOT):
     if cache.is_file():
         try:
             d = json.loads(cache.read_text())
-            if d.get("commit") == commit and d.get("schema") == SCHEMA:
+            if d.get("commit") == commit and d.get("schema") == FACTS_SCHEMA:
                 return d["facts"]
         except (OSError, ValueError):
             pass
@@ -295,7 +569,7 @@ def facts_for_commit(commit, cache_dir, root=ROOT):
         facts = tree_facts(d)
     cache.parent.mkdir(parents=True, exist_ok=True)
     tmp = cache.with_suffix(".tmp")
-    tmp.write_text(json.dumps(dict(schema=SCHEMA, commit=commit, facts=facts), sort_keys=True) + "\n")
+    tmp.write_text(json.dumps(dict(schema=FACTS_SCHEMA, commit=commit, facts=facts), sort_keys=True) + "\n")
     tmp.replace(cache)
     return facts
 
@@ -309,18 +583,34 @@ def darwin_toolchain():
 
 
 # ---------------------------------------------------------------- identities
-def identity(b, facts, host_toolchain=None):
+def builder_digests(facts, rels, view):
+    """{builder: digest} for one view (a binding name, or RUNTIME_VIEW);
+    None for a builder the tree does not have or a view it has no entry for
+    (unreadable() then builds)."""
+    views = facts.get("builder_views") or {}
+    return {rel: (views.get(rel) or {}).get(view) for rel in rels}
+
+
+def identity(b, facts, host_toolchain=None, schema=SCHEMA):
     """The identity dict of binding `b` under `facts`, or None when that tree
-    has no build script for it (a new binding)."""
+    has no build script for it (a new binding). `schema=SCHEMA_V1` gives the
+    identity 0.8.18 and earlier recorded (whole-file builder digests), used
+    only to prove a recorded one reproduces before upgrading it."""
     closure = facts["closures"].get(b.script)
     if closure is None:
         return None
     builders = LINUX_BUILDERS if b.target == LINUX else MACOS_BUILDERS
-    ident = dict(schema=SCHEMA, target=b.target, vendor=b.vendor, arch=b.arch, tier=b.tier, name=b.name,
+    if schema == SCHEMA_V1:
+        builder_ids = {rel: facts["builders"].get(rel) for rel in builders}
+    else:
+        builder_ids = builder_digests(facts, builders, b.name)
+    ident = dict(schema=schema, target=b.target, vendor=b.vendor, arch=b.arch, tier=b.tier, name=b.name,
                  script=b.script, closure=dict(scope=closure["scope"], digest=closure["digest"]),
                  generators=facts["generators"] if any(s.startswith("tokenizer/") for s in closure["sources"]) else None,
                  toolchain=facts["toolchain"][b.target], flags=b.flags(),
-                 builders={rel: facts["builders"].get(rel) for rel in builders})
+                 builders=builder_ids)
+    if schema != SCHEMA_V1:
+        ident["builder_rule"] = BUILDER_RULE
     if b.target == LINUX:
         ident["image"] = facts["image"].get("cuda" if b.host or b.vendor == "cuda" else "hip")
         if b.host:
@@ -332,18 +622,27 @@ def identity(b, facts, host_toolchain=None):
     return ident
 
 
-def runtime_identity(facts):
+def runtime_identity(facts, schema=SCHEMA):
     """The Linux runtime closure (.libs: the MAX runtime the toolchain ships
-    plus the portable math helper cc builds on the box)."""
-    return dict(schema=SCHEMA, target=LINUX, what="runtime", toolchain=facts["toolchain"][LINUX],
-                image=dict(facts["image"]), portable_math=facts["portable_math"],
-                builders={rel: facts["builders"].get(rel) for rel in LINUX_BUILDERS})
+    plus the portable math helper cc builds on the box). Its builder view
+    keeps every binding list whole: a binding joining a list can need one
+    more MAX library in .libs."""
+    ident = dict(schema=schema, target=LINUX, what="runtime", toolchain=facts["toolchain"][LINUX],
+                 image=dict(facts["image"]), portable_math=facts["portable_math"])
+    if schema == SCHEMA_V1:
+        ident["builders"] = {rel: facts["builders"].get(rel) for rel in LINUX_BUILDERS}
+    else:
+        ident["builders"] = builder_digests(facts, LINUX_BUILDERS, RUNTIME_VIEW)
+        ident["builder_rule"] = BUILDER_RULE
+    return ident
 
 
 def unreadable(ident):
     """A pin this identity could not read. Any doubt builds."""
     if ident is None:
         return "no build script"
+    if ident.get("upgrade_refused"):
+        return ident["upgrade_refused"]
     if ident.get("toolchain") is None or not ident["toolchain"].get("packages"):
         return "no Mojo/MAX packages for %s in pixi.lock" % ident.get("target")
     if any(v is None for v in ident["builders"].values()):
@@ -366,6 +665,8 @@ def compare(cur, prev):
     why = unreadable(prev)
     if why:
         return "BUILD", "previous release: " + why
+    if prev.get("schema") != cur.get("schema"):
+        return "BUILD", "previous release: identity recorded as %s, not %s" % (prev.get("schema"), cur.get("schema"))
     if digest_of(cur) == digest_of(prev):
         return "REUSE", "identity unchanged"
     changed = [k for k in sorted(set(cur) | set(prev)) if cur.get(k) != prev.get(k)]
@@ -417,12 +718,54 @@ def previous_identities(prev, cache_dir, root=ROOT):
     if prev.get("identities"):
         doc = json.loads(Path(prev["identities"]).read_text())
         rows = {r["key"]: r.get("identity") for r in doc.get("rows", [])}
-        return rows, doc.get("runtime", {}).get("identity"), "record " + prev["identities"]
+        runtime = doc.get("runtime", {}).get("identity")
+        source = "record " + prev["identities"]
+        commit = doc.get("commit") or prev.get("source_commit")
+        olds = [v for v in list(rows.values()) + [runtime] if v]
+        if commit and any(v.get("schema") == SCHEMA_V1 for v in olds):
+            rows, runtime, n = upgrade_v1(rows, runtime, commit, cache_dir, root)
+            source += " (%s identities upgraded after reproducing %d of them exactly from %s)" % (
+                SCHEMA_V1, n, commit[:12])
+        return rows, runtime, source
     if not prev.get("source_commit"):
         return {}, None, "no source commit recorded"
     facts = facts_for_commit(prev["source_commit"], cache_dir, root)
     rows = {b.key: identity(b, facts, None) for t in (LINUX, MACOS) for b in bindings(t)}
     return rows, runtime_identity(facts), "git archive " + prev["source_commit"][:12]
+
+
+def upgrade_v1(rows, runtime, commit, cache_dir, root=ROOT):
+    """Recorded v1 identities (whole-file builder digests) in today's schema.
+
+    A v1 identity is upgraded ONLY when recomputing it in v1 from `commit`,
+    the commit the record was made at (with the Apple toolchain the record
+    names), gives exactly the recorded digest: that proves this code reads
+    the same closure, toolchain, flags, image and builder bytes the release
+    recorded, and the v2 identity is then computed from those same bytes.
+    One that does not reproduce is marked refused, and compare() builds it.
+    Returns (rows, runtime, number upgraded)."""
+    facts = facts_for_commit(commit, cache_dir, root)
+    by_key = {b.key: b for t in (LINUX, MACOS) for b in bindings(t)}
+    refused = "its %s identity does not reproduce from %s" % (SCHEMA_V1, commit[:12])
+    out, n = {}, 0
+    for key, old in rows.items():
+        b = by_key.get(key)
+        if old is None or old.get("schema") != SCHEMA_V1 or b is None:
+            out[key] = old
+            continue
+        again = identity(b, facts, old.get("host_toolchain"), schema=SCHEMA_V1)
+        if again is not None and digest_of(again) == digest_of(old):
+            out[key] = identity(b, facts, old.get("host_toolchain"))
+            n += 1
+        else:
+            out[key] = dict(old, upgrade_refused=refused)
+    if runtime and runtime.get("schema") == SCHEMA_V1:
+        if digest_of(runtime_identity(facts, SCHEMA_V1)) == digest_of(runtime):
+            runtime = runtime_identity(facts)
+            n += 1
+        else:
+            runtime = dict(runtime, upgrade_refused=refused)
+    return out, runtime, n
 
 
 # ---------------------------------------------------------------- the plan
@@ -463,6 +806,9 @@ def make_plan(commit, cache_dir, root=ROOT, host_toolchain=None, prev=None):
         rt_decision, rt_reason = "BUILD", "no published Linux wheel"
     elif prev_runtime is None:
         rt_decision, rt_reason = "BUILD", "previous release: no runtime identity"
+    elif unreadable(prev_runtime) or prev_runtime.get("schema") != rt.get("schema"):
+        rt_decision, rt_reason = "BUILD", "previous release: " + (
+            unreadable(prev_runtime) or "identity recorded as %s" % prev_runtime.get("schema"))
     elif digest_of(rt) == digest_of(prev_runtime):
         rt_decision, rt_reason = "REUSE", "identity unchanged"
     else:
