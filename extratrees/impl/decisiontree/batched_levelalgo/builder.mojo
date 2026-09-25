@@ -2410,6 +2410,8 @@ comptime ET_CODE = DType.uint16
 #: Binning pays in bytes per row, so it is taken only on wide data: at 16
 #: columns (taxi) the border pass costs more than the smaller reads save.
 comptime ET_BINNED_MIN_COLS = 64
+comptime ET_CODE_TILE = 8
+"""Features per block for the code passes (M4 istellareg: 4 -> 53 s, 8 -> 49 s, 16 -> 67 s, 32 -> 79 s)."""
 
 
 def et_code_threshold_kernel(
@@ -5366,7 +5368,7 @@ def search_batch_regression(
         tiled_range = dataset.has_rm
     if tiled_range and dataset.has_bins:
         ctx.enqueue_function[
-            node_feature_range_tiled_kernel[TPB, ET_FEATURE_TILE, ET_CODE]
+            node_feature_range_tiled_kernel[TPB, ET_CODE_TILE, ET_CODE]
         ](
             d_minkey.unsafe_ptr(),
             d_maxkey.unsafe_ptr(),
@@ -5380,7 +5382,7 @@ def search_batch_regression(
             n_cols,
             Int32(k),
             dataset.d_quant.unsafe_ptr(),
-            grid_dim=(plan.n_blocks_dimx, ceildiv(Int(k), ET_FEATURE_TILE), 1),
+            grid_dim=(plan.n_blocks_dimx, ceildiv(Int(k), ET_CODE_TILE), 1),
             block_dim=(TPB, 1, 1),
         )
     elif tiled_range:
@@ -5478,7 +5480,7 @@ def search_batch_regression(
         tiled_score = dataset.has_rm
     if tiled_score and dataset.has_bins:
         ctx.enqueue_function[
-            node_feature_score_reg_tiled_kernel[TPB, ET_FEATURE_TILE, ET_CODE]
+            node_feature_score_reg_tiled_kernel[TPB, ET_CODE_TILE, ET_CODE]
         ](
             d_nleft.unsafe_ptr(),
             d_ntotal.unsafe_ptr(),
@@ -5500,7 +5502,7 @@ def search_batch_regression(
             seed,
             dataset.d_quant.unsafe_ptr(),
             dataset.d_nbins.unsafe_ptr(),
-            grid_dim=(plan.n_blocks_dimx, ceildiv(Int(k), ET_FEATURE_TILE), 1),
+            grid_dim=(plan.n_blocks_dimx, ceildiv(Int(k), ET_CODE_TILE), 1),
             block_dim=(TPB, 1, 1),
         )
     elif tiled_score:
