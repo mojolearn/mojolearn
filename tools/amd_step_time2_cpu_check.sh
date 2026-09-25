@@ -24,6 +24,25 @@ for col in "AMD gfx942" "NVIDIA sm_90a"; do
         bench/gemm_excp_ab_main.mojo -o /tmp/ab_$2 > "$OUT/ab_$2.log" 2>&1
     echo "ab $2 build exit=$? secs=$(( $(date +%s) - t0 ))" | tee -a "$OUT/summary.txt"
 done
+# the attention dq kernels' asm
+pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_AMD -I . \
+    tools/amd_codegen/probe_attn_dq.mojo -o /tmp/probe_dq > "$OUT/probe_dq.build.log" 2>&1 && /tmp/probe_dq > "$OUT/dq.s" 2>&1
+echo "probe_dq exit=$?" | tee -a "$OUT/summary.txt"
+python3 tools/amd_codegen/mfma_census.py "$OUT/dq.s" >> "$OUT/summary.txt" 2>&1
+gzip -9 -f "$OUT/dq.s"
+# device programs: build only (no GPU here)
+for f in gemm/checks/amd_mfma_probe3.mojo tools/amd_codegen/stall_probe.mojo; do
+    pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_AMD --target-accelerator gfx942 -I . "$f" -o /tmp/dev_$(basename "$f" .mojo) > "$OUT/$(basename "$f" .mojo).build.log" 2>&1
+    echo "build $f exit=$?" | tee -a "$OUT/summary.txt"
+done
+# the byte LM binding for both GPU columns (build only)
+for col in "amd gfx942" "nvidia sm_90a"; do
+    set -- $col
+    t0=$(date +%s)
+    mkdir -p /tmp/blm_$1
+    MOJOLEARN_GPU_ARCHS=$2 MOJOLEARN_TARGET_COLUMN=$1 MOJOLEARN_BYTE_LM_OUTDIR=/tmp/blm_$1 sh bindings/build_byte_lm.sh > "$OUT/byte_lm_$1.log" 2>&1
+    echo "byte_lm $1 build exit=$? secs=$(( $(date +%s) - t0 ))" | tee -a "$OUT/summary.txt"
+done
 for f in ${AMD2_EXTRA_MOJO:-}; do
     b=$(basename "$f" .mojo)
     pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_AMD -I . "$f" -o /tmp/x_$b > "$OUT/$b.build.log" 2>&1 && /tmp/x_$b > "$OUT/$b.out" 2>&1

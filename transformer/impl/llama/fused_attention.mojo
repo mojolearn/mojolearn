@@ -97,6 +97,7 @@ from std.memory import bitcast, stack_allocation
 from std.os import getenv
 from std.sys import llvm_intrinsic
 from std.sys.compile import is_defined
+from std.sys.info import is_amd_gpu
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
 # DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
@@ -4662,6 +4663,231 @@ def fused_bwd_dq_tiled_pf_kernel[HD: Int, SWZ: Bool = False](
                 dq.unsafe_store((bb * l + t) * nh * HD + h * HD + tc + v * 16, x)
 
 
+# ===========================================================================
+# THE dq FOLD ON THE MATRIX CORES (lane/amd-step-time-2, 2026-09-25; AMD
+# only, `ATTN_DQ_MFMA`, `-D MOJOLEARN_ATTN_NO_MFMA=1` reverts).
+#
+# `fused_bwd_dq_tiled_pf_kernel`'s chain per output cell (t, c) is
+#     acc = ftz(fma_rn(dcell[t][j], k[j][c], acc))   for the keys j the row
+# t sees, ascending, from +0.0: one product per step. Everything before the
+# chain (the staged K tile through `ftz`, the dcell values and their store
+# over `dy_st`, the zdot slots) and after it (the -0.0 corner flag and the
+# masked-tail replay) is that kernel's code, unchanged.
+#
+# THE STEP. `v_mfma_f32_16x16x1f32` (four 16x16 blocks, K = 1) writes, per
+# output, ONE product plus its accumulator, `fma_rn(a, b, acc)`, the fact
+# the GEMM's 32x32x1 step rests on, re-proven for this instruction by
+# gemm/checks/amd_mfma_probe3.mojo; the flush is the product by `one` (a
+# kernel argument, 1.0) with the wave's MODE f32 FP_DENORM field at 2,
+# measured to return `ftz(x)` on every word (probe2, v=2). MODE is set to 2
+# only around the tile's chain steps and back to 3 (the kernel default)
+# before anything else runs.
+#
+# OWNERSHIP. Wave w owns rows 16w .. 16w+15 of the block's 64 and all 64
+# columns: lane l supplies A = dcell of row (l mod 16) and B = k[j][l]; its
+# accumulator register r holds row 4 (l div 16) + (r mod 4), column
+# 16 (r div 4) + (l mod 16) (the MFMA16_LAYOUT lines of probe2).
+#
+# THE MASK. A chain skips the keys its row does not see (a zero step could
+# turn -0.0 into +0.0). For each key, ascending: if every row of the wave
+# sees it (it lies inside the LAST valid row's lower bound and the FIRST
+# row's upper bound; both bounds are nondecreasing in t), one MFMA step;
+# otherwise each lane steps, with the VALU `_step_preflushed`, exactly those
+# of its accumulator cells whose row sees the key (possibly none). Either
+# way each chain takes the same steps in the same order. Rows past `l` are
+# stepped by full keys but never stored.
+# ===========================================================================
+comptime ATTN_DQ_MFMA = (
+    TARGET_COLUMN == COLUMN_AMD and not is_defined["MOJOLEARN_ATTN_NO_MFMA"]()
+)
+#: hwreg(HW_REG_MODE = 1, offset 4, width 2): the f32 FP_DENORM field.
+comptime _ATTN_MODE_F32_DENORM = 1 | (4 << 6) | (1 << 11)
+
+
+@always_inline
+def _mfma16_step(a: Float32, b: Float32, acc: SIMD[DType.float32, 16]) -> SIMD[DType.float32, 16]:
+    comptime if is_amd_gpu():
+        return llvm_intrinsic["llvm.amdgcn.mfma.f32.16x16x1f32", SIMD[DType.float32, 16]](
+            a, b, acc, Int32(0), Int32(0), Int32(0)
+        )
+    return acc
+
+
+@always_inline
+def _attn_set_mode(v: Int):
+    comptime if is_amd_gpu():
+        if v == 2:
+            llvm_intrinsic["llvm.amdgcn.s.setreg", NoneType](Int32(_ATTN_MODE_F32_DENORM), Int32(2))
+        else:
+            llvm_intrinsic["llvm.amdgcn.s.setreg", NoneType](Int32(_ATTN_MODE_F32_DENORM), Int32(3))
+
+
+def fused_bwd_dq_mfma_kernel[HD: Int, SWZ: Bool = False](
+    dq: MutPointer[Float32, MutAnyOrigin],
+    corner: MutPointer[Float32, MutAnyOrigin],
+    y_st: MutPointer[Float32, MutAnyOrigin],
+    dy_st: MutPointer[Float32, MutAnyOrigin],
+    k_cache: MutPointer[Float32, MutAnyOrigin],
+    zdot: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32,
+    l_in: Int32,
+    nh_in: Int32,
+    nkv_in: Int32,
+    s_in: Int32,
+    pos0_in: Int32,
+    key_lo_in: Int32,
+    window_in: Int32,
+    scale_in: Float32,
+    dctx: MutPointer[Float32, MutAnyOrigin],
+    v_cache: MutPointer[Float32, MutAnyOrigin],
+    one: Float32,
+):
+    """`fused_bwd_dq_tiled_pf_kernel` with its chain on the matrix cores
+    (see the section comment). 256 threads, `TQ = 64` rows per block, HD 64."""
+    comptime assert HD == 64, "fused_bwd_dq_mfma_kernel: head dim 64 only"
+    comptime TQ = 64
+    comptime TK = TILED_TK
+    comptime assert TK == 16, "fused_bwd_dq_mfma_kernel: 16 keys a tile"
+    var kst = stack_allocation[TK * HD, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var dst = stack_allocation[TQ * TK, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var zs = stack_allocation[TQ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+
+    var b = Int(b_in)
+    var l = Int(l_in)
+    var nh = Int(nh_in)
+    var nkv = Int(nkv_in)
+    var s = Int(s_in)
+    var pos0 = Int(pos0_in)
+    var key_lo = Int(key_lo_in)
+    var window = Int(window_in)
+    var n_rep = nh // nkv
+
+    var ntb = (l + TQ - 1) // TQ
+    var raw = Int(block_idx.x)
+    var bm = _blk_map[SWZ, True](raw, ntb, nh, b)
+    var tb = bm[0]
+    var h = bm[1]
+    var bb = bm[2]
+    if bb >= b:
+        return
+    var kvh = h // n_rep
+
+    var tid = Int(thread_idx.x)
+    var wv = tid // 64
+    var lane = tid % 64
+    var wr = wv * 16
+    var lq = (lane // 16) * 4
+    var lc = lane % 16
+    var t0 = tb * TQ
+    var t1 = t0 + TQ - 1
+    if t1 > l - 1:
+        t1 = l - 1
+    var r0 = _row_range(t0, pos0, key_lo, window, s)
+    var r1 = _row_range(t1, pos0, key_lo, window, s)
+    var kb_lo = r0[0] // TK
+    var kb_hi = r1[1] // TK
+
+    var kvbase = (bb * nkv + kvh) * s * HD
+    var hbase = (bb * nh + h) * l
+
+    # The wave's full-key window: [lo of its last valid row, hi of its first].
+    var wt0 = t0 + wr
+    var wvalid = wt0 < l
+    var wt1 = min(wt0 + 15, l - 1)
+    var full_lo = 0
+    var full_hi = -1
+    if wvalid:
+        full_lo = _row_range(wt1, pos0, key_lo, window, s)[0]
+        full_hi = _row_range(wt0, pos0, key_lo, window, s)[1]
+    # The lane's four rows (accumulator registers r with r mod 4 = q).
+    var lo = SIMD[DType.int32, 4](0)
+    var hi = SIMD[DType.int32, 4](-1)
+    comptime for q in range(4):
+        var t = t0 + wr + lq + q
+        if t < l:
+            var rr = _row_range(t, pos0, key_lo, window, s)
+            lo[q] = Int32(rr[0])
+            hi[q] = Int32(rr[1])
+    if tid < TQ:
+        var zv = Float32(0.0)
+        if t0 + tid < l:
+            zv = ftz(zdot.unsafe_load(hbase + t0 + tid))
+        zs.unsafe_store(tid, zv)
+    barrier()
+
+    var acc = SIMD[DType.float32, 16](0.0)
+    var ones = SIMD[DType.float32, 16](one)
+    for kb in range(kb_lo, kb_hi + 1):
+        var j0 = kb * TK
+        comptime for si in range(TK * HD // 256):
+            var i = tid + si * 256
+            var r = i // HD
+            var c = i - r * HD
+            var jc = j0 + r
+            var kv = Float32(0.0)
+            if jc < s:
+                kv = ftz(k_cache.unsafe_load(kvbase + jc * HD + c))
+            kst.unsafe_store(i, kv)
+        comptime for si in range(TQ * TK // 256):
+            var i = tid + si * 256
+            var r = i // TK
+            var c = i - r * TK
+            var t = t0 + r
+            var jc = j0 + c
+            var dcell = Float32(0.0)
+            if t < l and jc < s:
+                var rr = _row_range(t, pos0, key_lo, window, s)
+                if jc >= rr[0] and jc <= rr[1]:
+                    var cell = (hbase + t) * s + jc
+                    var yv = ftz(y_st.unsafe_load(cell))
+                    var dv = ftz(dy_st.unsafe_load(cell))
+                    var ds = _pmul(yv, ftz(ftz(dv) - ftz(zs.unsafe_load(r))))
+                    dcell = _pmul(ftz(ds), scale_in)
+                    dy_st.unsafe_store(cell, dcell)
+            dst.unsafe_store(i, dcell)
+        barrier()
+        if wvalid:
+            var arow = dst.unsafe_load[width=TK]((wr + lc) * TK)
+            _attn_set_mode(2)
+            comptime for jk in range(TK):
+                var jc = j0 + jk
+                if jc >= full_lo and jc <= full_hi:
+                    acc = _mfma16_step(arow[jk], kst.unsafe_load(jk * HD + lane), acc) * ones
+                else:
+                    comptime for r in range(16):
+                        if Int32(jc) >= lo[r % 4] and Int32(jc) <= hi[r % 4]:
+                            acc[r] = _step_preflushed(
+                                dst.unsafe_load((wr + lq + r % 4) * TK + jk),
+                                kst.unsafe_load(jk * HD + 16 * (r // 4) + lc),
+                                acc[r],
+                            )
+            _attn_set_mode(3)
+        barrier()
+    comptime for r in range(16):
+        var q = r % 4
+        var rl = wr + lq + q
+        var t = t0 + rl
+        var col = 16 * (r // 4) + lc
+        if t < l:
+            var x = acc[r]
+            if bitcast[DType.uint32](x) == NEG_ZERO_BITS and Int(hi[q]) < s - 1:
+                comptime if ATTN_REPAIR_MASKED_TAIL:
+                    corner.unsafe_store(2, Float32(1.0))
+                    comptime if not ATTN_REPAIR_SAB_DQ:
+                        var rowbase = (bb * l + t) * nh * HD + h * HD
+                        var z = ftz(zs.unsafe_load(rl))
+                        for j in range(Int(hi[q]) + 1, s):
+                            var dy = _masked_tail_dy[HD](dctx, v_cache, rowbase, kvbase, j)
+                            var ds = _pmul(Float32(0.0), ftz(dy - z))
+                            var dcell = _pmul(ftz(ds), scale_in)
+                            x = _step_preflushed(dcell, ftz(k_cache.unsafe_load(kvbase + j * HD + col)), x)
+                            if bitcast[DType.uint32](x) != NEG_ZERO_BITS:
+                                break
+                else:
+                    corner.unsafe_store(0, Float32(1.0))
+            dq.unsafe_store((bb * l + t) * nh * HD + h * HD + col, x)
+
+
 def fused_bwd_dkdv_tiled_pf_kernel[HD: Int](
     dk: MutPointer[Float32, MutAnyOrigin],
     dv: MutPointer[Float32, MutAnyOrigin],
@@ -7025,7 +7251,13 @@ def _launch_bwd_estash[HD: Int, DRES: Bool, SABN: Bool, SWZ: Bool = False](
     var dq_blocks = b * nh * ((l + 63) // 64)
     comptime qp = fused_bwd_dq_tiled_pf_kernel[HD, SWZ]
     step_count_launch()
-    comptime if ATTN_V1_ALIAS_Y_ESTASH:
+    comptime if ATTN_DQ_MFMA and HD == 64:
+        comptime qm = fused_bwd_dq_mfma_kernel[HD, SWZ]
+        comptime if ATTN_V1_ALIAS_Y_ESTASH:
+            ctx.enqueue_function[qm](dq.unsafe_ptr(), corner.unsafe_ptr(), kept.unsafe_ptr(), dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale, dctx.unsafe_ptr(), v_cache.unsafe_ptr(), Float32(1.0), grid_dim=(dq_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1))
+        else:
+            ctx.enqueue_function[qm](dq.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(), dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale, dctx.unsafe_ptr(), v_cache.unsafe_ptr(), Float32(1.0), grid_dim=(dq_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1))
+    elif ATTN_V1_ALIAS_Y_ESTASH:
         ctx.enqueue_function[qp](dq.unsafe_ptr(), corner.unsafe_ptr(), kept.unsafe_ptr(), dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale, dctx.unsafe_ptr(), v_cache.unsafe_ptr(), grid_dim=(dq_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1))
     else:
         ctx.enqueue_function[qp](dq.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(), dy_st.unsafe_ptr(), k_cache.unsafe_ptr(), zdot.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale, dctx.unsafe_ptr(), v_cache.unsafe_ptr(), grid_dim=(dq_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1))
