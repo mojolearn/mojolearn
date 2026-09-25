@@ -69,6 +69,15 @@ def _search_rows_per_thread() -> Int:
         return 4
     if is_defined["MOJOLEARN_ET_SEARCH_RPT_2"]():
         return 2
+    if is_defined["MOJOLEARN_ET_SEARCH_RPT_1"]():
+        return 1
+    # APPLE FAST: 16. Apple M4, 1M rows, 100 trees, alternating processes,
+    # same model hash in every arm (2026-09-25): taxi 1 -> 16 0.766,
+    # 16 -> 8 0.978, 16 -> 32 0.995, 1 -> 64 0.811; Istella-S 1 -> 16
+    # 0.585. Metal pays far more per search block than the RTX 4090 above
+    # did. `_1=1` restores one row per thread on Apple for an A/B.
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
+        return 16
     return 1
 
 
@@ -243,7 +252,12 @@ from max.gpu.primitives.block import min as block_min
 from max.gpu.primitives.block import sum as block_sum
 from max.gpu.sync import barrier
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
+from checks.numerics import (
+    GLOBAL_NUMERIC_MODE,
+    NUMERIC_FAST,
+    NUMERIC_IDENTICAL,
+    ftz,
+)
 
 @always_inline
 def _search_barrier():
