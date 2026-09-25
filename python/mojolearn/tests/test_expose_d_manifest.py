@@ -75,7 +75,8 @@ def test_packaging_lists_agree():
     for path, how, var, ident in c.SOURCES:
         got = how(path, var)
         if ident:
-            got = got | how(path, ident)
+            # every-tier + classical fast-and-identical + identical-only
+            got = got | how(path, ident) | how(path, c.CLASSICAL_VAR)
         assert got == want, (path, sorted(want ^ got))
     smoke = _read("packaging/linux/smoke.py")
     for name in NEW:
@@ -120,7 +121,11 @@ def test_build_scripts_exist_and_name_their_binding():
         assert p.exists() and os.access(p, os.X_OK), script
         text = p.read_text()
         assert f"bindings/{name}.mojo" in text and f"{name}.so" in text, script
-        assert "MOJOLEARN_NUMERIC_MODE=identical only" in text or "identical only" in text, script
+        if name in _backend._IDENTICAL_ONLY:
+            assert "MOJOLEARN_NUMERIC_MODE=identical only" in text or "identical only" in text, script
+        else:
+            # classical: fast and identical build, deterministic refuses by name
+            assert '!= deterministic ]' in text and "classical bindings build" in text, script
 
 
 def test_classes_exported():
