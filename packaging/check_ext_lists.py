@@ -159,6 +159,11 @@ def _backend_tiered():
     return _backend_names("_TIERED")
 
 
+def _backend_classical_fast():
+    """`_backend._CLASSICAL_FAST`: fast + identical, never deterministic."""
+    return _backend_names("_CLASSICAL_FAST")
+
+
 def from_python_tuple(path, varname):
     """Names inside `VARNAME = ( ... )`, quoted, up to the closing paren."""
     text = (ROOT / path).read_text()
@@ -199,12 +204,19 @@ SOURCES = [
     ("packaging/linux/build_sets.sh", from_shell_string, "EXT_NAMES", "IDENTICAL_ONLY_NAMES"),
     ("packaging/macos/build_release_wheel.sh", from_shell_string, "EXT_NAMES", "IDENTICAL_ONLY_NAMES"),
 ]
+#: Since 2026-09-25 each pair above is a TRIPLE: FAST_CLASSICAL_NAMES (fast +
+#: identical) must equal `_backend._CLASSICAL_FAST` in every file that has an
+#: identical-only half.
+CLASSICAL_VAR = "FAST_CLASSICAL_NAMES"
 #: The Linux admission side (tools/verify_linux_surface_qualification.py)
 #: spells the every-tier set on its own because it never imports the package;
 #: it must equal `_backend._TIERED` too, or the release legs refuse a correct
 #: build as "Incomplete build outputs" (2026-09-10, first 0.8.0 AMD leg).
 TIERED_MIRRORS = [
     ("tools/verify_linux_surface_qualification.py", from_python_frozenset, "TIERED"),
+]
+CLASSICAL_MIRRORS = [
+    ("tools/verify_linux_surface_qualification.py", "CLASSICAL_FAST"),
 ]
 
 
@@ -243,6 +255,17 @@ def main():
             bad += 1
         else:
             print(f"  OK        {path} {var} ({len(got)}) == _backend._TIERED")
+    classical = set(_backend_classical_fast())
+    for path, var in CLASSICAL_MIRRORS:
+        vs = importlib.util.spec_from_file_location("check_ext_lists_classical", ROOT / path)
+        vm = importlib.util.module_from_spec(vs)
+        vs.loader.exec_module(vm)
+        got = set(getattr(vm, var, set()))
+        if got != classical:
+            print(f"  MISMATCH  {path} {var} ({len(got)}) is not _backend._CLASSICAL_FAST")
+            bad += 1
+        else:
+            print(f"  OK        {path} {var} ({len(got)}) == _backend._CLASSICAL_FAST")
     # The admission side's identical set, BINDINGS (without the byte LM, which
     # expected_bindings adds). A short BINDINGS refused every complete 0.8.6
     # release build as "Incomplete build outputs" (2026-09-15, six bindings
@@ -279,8 +302,13 @@ def main():
                 bad += 1
                 print(f"  MISMATCH  {path} {var} ({len(got)}) is not _backend._TIERED")
                 print(f"              every-tier list must be exactly: {', '.join(sorted(tiered))}")
-            got = got | ident
-            label = f"{var} + {ident_var}"
+            fastc = how(path, CLASSICAL_VAR)
+            if fastc != classical:
+                bad += 1
+                print(f"  MISMATCH  {path} {CLASSICAL_VAR} ({0 if fastc is None else len(fastc)}) is not _backend._CLASSICAL_FAST")
+                fastc = fastc or set()
+            got = got | ident | fastc
+            label = f"{var} + {CLASSICAL_VAR} + {ident_var}"
         text = (ROOT / path).read_text()
         for name in profile_only:
             if name not in text:

@@ -121,16 +121,13 @@ COLUMN_DEFINE=""
 # `NumericModeMixin._bind` and cross-checks `gp_numeric_mode()` against
 # the tier the package resolved, so an identical run cannot silently get
 # the FAST binary.
-# ONE TIER (DEVIATION 2490, 2026-09-10): ONLY THE TREE LANES SHIP fast AND
-# deterministic (build_gbdt.sh, build_rf.sh, build_trees.sh). Every other
-# binding, this one included, builds IDENTICAL only. Cross-vendor bitwise
-# identity is the product; a fast tier is shipped only where it has a
-# measured win over the opponent's own CPU, and outside trees it has none
-# (python/mojolearn/_backend.py, `_TIERED`, has the numbers). Refusing
-# here, by name, is what keeps this an unshipped tier rather than an
-# unchecked one (CONTRIBUTING.md (Numeric modes) and section 8).
-[ "${MOJOLEARN_NUMERIC_MODE:-identical}" = identical ] || {
-    echo 'build_gp.sh: only the tree lanes (gbdt, rf, trees) ship fast and deterministic; every other binding builds MOJOLEARN_NUMERIC_MODE=identical only (DEVIATION 2490, 0.8.0).' >&2
+# TWO TIERS (2026-09-25, reversing DEVIATION 2490 for classical ML): this
+# binding builds IDENTICAL (the default, bitwise across vendors) or FAST
+# (per-vendor speed, same quality, no bit promise). The DETERMINISTIC tier
+# stays tree-only (build_gbdt.sh, build_rf.sh, build_trees.sh); refusing it
+# here, by name, keeps it an unshipped tier rather than an unchecked one.
+[ "${MOJOLEARN_NUMERIC_MODE:-identical}" != deterministic ] || {
+    echo 'build_gp.sh: the deterministic tier ships for the tree lanes (gbdt, rf, trees) only; classical bindings build MOJOLEARN_NUMERIC_MODE=identical (default) or fast.' >&2
     exit 2; }
 MODE_DEFINE=""
 OUTDIR="python/mojolearn"
@@ -360,17 +357,17 @@ y = (np.sin(x[:, 0]) + 0.5 * x[:, 1]).astype(np.float32)
 m = _gp_impl.GaussianProcessRegressor(
     kernel=_gp_impl.RBF(1.0), alpha=2.0 ** -20).fit(x, y)
 assert m.info_ == 0, f"info_={m.info_}: the factorization failed"
-assert m.L_.shape == (n, n) and m.alpha_.shape == (n,)
+assert np.asarray(m.L_).shape == (n, n) and np.asarray(m.alpha_).shape == (n,)
 assert np.isfinite(m.log_marginal_likelihood_value_)
 
-mean, std = m.predict(x, return_std=True)
+mean, std = (np.asarray(v) for v in m.predict(x, return_std=True))
 assert mean.shape == (n,) and std.shape == (n,)
 worst = float(np.max(np.abs(mean - y)))
 assert worst < 1e-2, f"posterior mean missed the training targets by {worst}"
 assert (std >= 0.0).all(), "a negative std escaped the clamp"
-assert m.clamped_.shape == (n,) and int(m.clamped_.sum()) == m.n_clamped_
+assert np.asarray(m.clamped_).shape == (n,) and int(np.asarray(m.clamped_).sum()) == m.n_clamped_
 
-alone = m.predict(x[:8])                    # the return_std=0 arm
+alone = np.asarray(m.predict(x[:8]))        # the return_std=0 arm
 assert alone.shape == (8,), alone.shape
 assert np.isfinite(alone).all(), alone
 

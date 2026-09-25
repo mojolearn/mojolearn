@@ -138,11 +138,19 @@ def expected_jobs(audit):
 # mojolearn._backend._TIERED; it is spelled here because this module is the
 # read-only admission side and never imports the package.
 TIERED = frozenset({'_mojolearn_gbdt', '_mojolearn_rf', '_mojolearn_trees'})
+# Classical ML ships the fast tier too (2026-09-25); deterministic stays
+# tree-only. packaging/check_ext_lists.py holds this to _backend._CLASSICAL_FAST.
+CLASSICAL_FAST = frozenset({'_mojolearn' + suffix for suffix in (
+    '', '_estimators', '_svm', '_solver', '_metrics', '_preprocessing', '_tsa',
+    '_linalg', '_arima', '_gp', '_kernel_methods', '_mixture', '_hdbscan',
+    '_resample', '_ivf')})
 
 
 def expected_bindings(mode, byte_lm=False):
     if mode == 'identical':
         return BINDINGS | ({'_mojolearn_byte_lm'} if byte_lm else set())
+    if mode == 'fast':
+        return set(TIERED | CLASSICAL_FAST)
     return set(TIERED)
 
 

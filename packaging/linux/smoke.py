@@ -77,8 +77,17 @@ def designed_refusals(lane_names):
     lane that SUCCEEDS is the failure. `gemm-pinned` was the first such pair
     (matmul(identical=True) under a tier that makes no identity claim); as
     of DEVIATION 2490 every non-tree lane joins it."""
-    return {(lane, tier) for lane in lane_names if lane not in TREE_LANES
-            for tier in LOWER_TIERS}
+    # Since 2026-09-25 classical ML ships fast too: a classical lane refuses
+    # only the deterministic tier (tree-only), and `gemm-pinned` still
+    # refuses both lower tiers because it asks for identity by name.
+    out = set()
+    for lane in lane_names:
+        if lane in TREE_LANES:
+            continue
+        out.add((lane, "deterministic"))
+        if lane == "gemm-pinned":
+            out.add((lane, "fast"))
+    return out
 
 
 def load_lanes(repo):
@@ -155,14 +164,23 @@ ALL_BINDINGS = (
 #: removed. `main()` checks this set against the installed package's own
 #: `_backend._IDENTICAL_ONLY`, so the two cannot drift apart unnoticed.
 IDENTICAL_ONLY_BINDINGS = frozenset({
-    "_mojolearn", "_mojolearn_estimators", "_mojolearn_svm",
-    "_mojolearn_solver", "_mojolearn_metrics", "_mojolearn_preprocessing",
-    "_mojolearn_tsa", "_mojolearn_linalg", "_mojolearn_arima", "_mojolearn_gp",
-    "_mojolearn_training", "_mojolearn_mamba", "_mojolearn_transformer",
-    "_mojolearn_byte_lm",
-    "_mojolearn_kernel_methods", "_mojolearn_mixture", "_mojolearn_hdbscan",
-    "_mojolearn_resample", "_mojolearn_ivf", "_mojolearn_embedding",
+    "_mojolearn_training", "_mojolearn_mamba",
+    "_mojolearn_transformer", "_mojolearn_byte_lm", "_mojolearn_embedding",
 })
+#: Classical ML (2026-09-25): loads under fast and identical, must REFUSE
+#: under deterministic. Checked against `_backend._CLASSICAL_FAST` in main().
+CLASSICAL_FAST_BINDINGS = frozenset({
+    "_mojolearn", "_mojolearn_estimators", "_mojolearn_svm", "_mojolearn_solver",
+    "_mojolearn_metrics", "_mojolearn_preprocessing", "_mojolearn_tsa",
+    "_mojolearn_linalg", "_mojolearn_arima", "_mojolearn_gp",
+    "_mojolearn_kernel_methods", "_mojolearn_mixture", "_mojolearn_hdbscan",
+    "_mojolearn_resample", "_mojolearn_ivf",
+})
+
+
+def _must_refuse(name, mode):
+    return ((name in IDENTICAL_ONLY_BINDINGS and mode != "identical")
+            or (name in CLASSICAL_FAST_BINDINGS and mode == "deterministic"))
 
 
 #: Lines MAX appends to a message that carry no cause. A message made only
@@ -262,13 +280,17 @@ def main():
             "IDENTICAL_ONLY_BINDINGS in this smoke != _backend._IDENTICAL_ONLY "
             f"in the installed package: smoke-only {sorted(IDENTICAL_ONLY_BINDINGS - set(_backend._IDENTICAL_ONLY))}, "
             f"package-only {sorted(set(_backend._IDENTICAL_ONLY) - IDENTICAL_ONLY_BINDINGS)}")
+    if frozenset(getattr(_backend, "_CLASSICAL_FAST", ())) != CLASSICAL_FAST_BINDINGS:
+        failures.append(
+            "CLASSICAL_FAST_BINDINGS in this smoke != _backend._CLASSICAL_FAST "
+            "in the installed package")
 
     per = {}
     names_to_load = ALL_BINDINGS
     if os.environ.get("MOJOLEARN_PACKAGE_BYTE_LM", "0") == "1" and mode == "identical":
         names_to_load += ("_mojolearn_byte_lm",)
     for name in names_to_load:
-        must_refuse = name in IDENTICAL_ONLY_BINDINGS and mode != "identical"
+        must_refuse = _must_refuse(name, mode)
         try:
             per[name] = _backend.read_vendor(_backend.binding(name))
         except Exception as exc:
@@ -339,7 +361,7 @@ def main():
         report["host_bindings"] = hosts
     used = {}
     for name, ctor in PER_BINDING.items():
-        must_refuse = name in IDENTICAL_ONLY_BINDINGS and mode != "identical"
+        must_refuse = _must_refuse(name, mode)
         try:
             used[name] = ctor(ml).vendor_used()
         except Exception as exc:

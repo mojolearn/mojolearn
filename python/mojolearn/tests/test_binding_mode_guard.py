@@ -4,13 +4,13 @@ import pytest
 from mojolearn import _backend
 
 
-@pytest.mark.parametrize('name', ['_mojolearn', '_mojolearn_gbdt', '_mojolearn_rf', '_mojolearn_trees'])
+@pytest.mark.parametrize('name', ['_mojolearn', '_mojolearn_gbdt', '_mojolearn_rf', '_mojolearn_trees', '_mojolearn_estimators', '_mojolearn_svm'])
 @pytest.mark.parametrize('mode,code', [('fast', 0), ('identical', 1), ('deterministic', 2)])
 def test_actual_module_mode(monkeypatch, name, mode, code):
-    if name in _backend._IDENTICAL_ONLY and mode != 'identical':
-        # DEVIATION 2490: only the tree lanes have a lower tier. The base
-        # binding refuses BY NAME before any set is loaded, so the sabotage
-        # below is unreachable there; that refusal is its own test.
+    if not _backend._offers(name, mode):
+        # The base binding (and every neural family) has no lower tier and
+        # refuses BY NAME before any set is loaded, so the sabotage below is
+        # unreachable there; that refusal is its own test.
         monkeypatch.setattr(_backend, 'load_set', lambda _: pytest.fail('load_set reached'))
         with pytest.raises(ValueError, match='has no .* tier'):
             _backend.binding(name, mode)
@@ -52,14 +52,25 @@ def test_invalid_mode_never_falls_back(monkeypatch, mode):
 
 
 @pytest.mark.parametrize('mode', ['fast', 'deterministic'])
-def test_identical_only_lanes_refuse_lower_tiers_by_name(monkeypatch, mode):
-    """DEVIATION 2490: every binding but the three tree lanes refuses a
-    lower tier at the choke point, before any set is loaded, with a sentence
-    that names the rule. The tree lanes are the allowlist."""
+def test_lanes_refuse_tiers_they_do_not_ship_by_name(monkeypatch, mode):
+    """Trees ship fast and deterministic, classical ML ships fast, the neural
+    families and the base binding ship identical only. Every refusal happens
+    at the choke point, before any set is loaded, with a sentence that names
+    the rule and the binding."""
     monkeypatch.setattr(_backend, 'load_set', lambda _: pytest.fail('load_set reached'))
     assert _backend._TIERED == frozenset({'_mojolearn_gbdt', '_mojolearn_rf', '_mojolearn_trees'})
-    assert _backend._IDENTICAL_ONLY == frozenset(_backend._MODULES) - _backend._TIERED
-    for name in _backend._IDENTICAL_ONLY:
+    assert _backend._FAST_TIERED == _backend._TIERED | _backend._CLASSICAL_FAST
+    assert _backend._IDENTICAL_ONLY == frozenset(_backend._MODULES) - _backend._FAST_TIERED
+    for neural in ('_mojolearn_training', '_mojolearn_byte_lm', '_mojolearn_mamba',
+                   '_mojolearn_transformer', '_mojolearn_embedding'):
+        assert neural in _backend._IDENTICAL_ONLY, neural
+    refused = [n for n in _backend._MODULES if not _backend._offers(n, mode)]
+    assert refused
+    for name in refused:
         with pytest.raises(ValueError, match='tree lanes') as info:
             _backend.binding(name, mode)
         assert name in str(info.value) and mode in str(info.value)
+    if mode == 'fast':
+        assert set(refused) == set(_backend._IDENTICAL_ONLY)
+    else:
+        assert set(refused) == set(_backend._MODULES) - _backend._TIERED

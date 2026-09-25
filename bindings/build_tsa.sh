@@ -130,16 +130,13 @@ COLUMN_DEFINE=""
 # `_backend.requested_mode()` and refuses BY NAME rather than silently falling
 # back to the fast binary. Adding the two lines to `_backend.py` makes that
 # fallback loader dead code, which is the right end state.
-# ONE TIER (DEVIATION 2490, 2026-09-10): ONLY THE TREE LANES SHIP fast AND
-# deterministic (build_gbdt.sh, build_rf.sh, build_trees.sh). Every other
-# binding, this one included, builds IDENTICAL only. Cross-vendor bitwise
-# identity is the product; a fast tier is shipped only where it has a
-# measured win over the opponent's own CPU, and outside trees it has none
-# (python/mojolearn/_backend.py, `_TIERED`, has the numbers). Refusing
-# here, by name, is what keeps this an unshipped tier rather than an
-# unchecked one (CONTRIBUTING.md (Numeric modes) and section 8).
-[ "${MOJOLEARN_NUMERIC_MODE:-identical}" = identical ] || {
-    echo 'build_tsa.sh: only the tree lanes (gbdt, rf, trees) ship fast and deterministic; every other binding builds MOJOLEARN_NUMERIC_MODE=identical only (DEVIATION 2490, 0.8.0).' >&2
+# TWO TIERS (2026-09-25, reversing DEVIATION 2490 for classical ML): this
+# binding builds IDENTICAL (the default, bitwise across vendors) or FAST
+# (per-vendor speed, same quality, no bit promise). The DETERMINISTIC tier
+# stays tree-only (build_gbdt.sh, build_rf.sh, build_trees.sh); refusing it
+# here, by name, keeps it an unshipped tier rather than an unchecked one.
+[ "${MOJOLEARN_NUMERIC_MODE:-identical}" != deterministic ] || {
+    echo 'build_tsa.sh: the deterministic tier ships for the tree lanes (gbdt, rf, trees) only; classical bindings build MOJOLEARN_NUMERIC_MODE=identical (default) or fast.' >&2
     exit 2; }
 MODE_DEFINE=""
 OUTDIR="python/mojolearn"
@@ -274,12 +271,12 @@ endog = np.stack([
 es = _tsa_impl.ExponentialSmoothing(
     endog, seasonal="additive", seasonal_periods=4, start_periods=2, ts_num=2
 ).fit()
-fc = es.forecast(3)
+fc = np.asarray(es.forecast(3))  # mojolearn Arrays are NumPy-free
 # (h, ts_num), which is cuML's own orientation for the index=None,
 # ts_num > 1 case (holtwinters.pyx:420 returns forecasted_points[:, :h].T).
 assert fc.shape == (3, 2), fc.shape
 assert np.isfinite(fc).all(), fc
-assert es.level_.shape == (2, 24 - 4), es.level_.shape
+assert np.asarray(es.level_).shape == (2, 24 - 4), es.level_.shape
 
 # KPSS: an AR(1) around a mean is stationary, a random walk is not. The
 # assertion is on the SHAPES and finiteness, not on the two verdicts:
@@ -291,9 +288,9 @@ for i in range(1, n_obs):
     ar[i] = np.float32(0.5) * ar[i - 1] + np.float32(rng.standard_normal())
 rw = np.cumsum(rng.standard_normal(n_obs)).astype(np.float32)
 y = np.stack([ar, rw], axis=1)          # (n_obs, batch), cuML's layout
-flags = _tsa_impl.kpss_test(y, d=1)
+flags = np.asarray(_tsa_impl.kpss_test(y, d=1))
 assert flags.shape == (2,), flags.shape
-d = _tsa_impl.select_d(y, D=0, s=0)
+d = np.asarray(_tsa_impl.select_d(y, D=0, s=0))
 assert d.shape == (2,) and ((d >= 0) & (d <= 2)).all(), d
 
 print("  smoke: holtwinters fit + forecast and kpss_test + select_d each launched")

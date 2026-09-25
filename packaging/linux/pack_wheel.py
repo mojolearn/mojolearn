@@ -161,16 +161,17 @@ EXT_NAMES = (
 #: the miss the header above is about. `tier_names()` is the one place that
 #: decides, and it is the same shape `build_sets.sh` uses. The reasoning and
 #: the numbers are on `_TIERED` in python/mojolearn/_backend.py.
-IDENTICAL_ONLY_NAMES = (
-    "_mojolearn", "_mojolearn_estimators", "_mojolearn_svm",
-    "_mojolearn_solver", "_mojolearn_metrics", "_mojolearn_preprocessing",
-    "_mojolearn_tsa", "_mojolearn_linalg", "_mojolearn_arima", "_mojolearn_gp",
-    "_mojolearn_training", "_mojolearn_mamba", "_mojolearn_transformer",
-    # Workstream D, 2026-09-14: the four door-less families given a binding.
+#: CLASSICAL ML (2026-09-25): fast and identical, never deterministic.
+FAST_CLASSICAL_NAMES = (
+    "_mojolearn", "_mojolearn_estimators", "_mojolearn_svm", "_mojolearn_solver",
+    "_mojolearn_metrics", "_mojolearn_preprocessing", "_mojolearn_tsa",
+    "_mojolearn_linalg", "_mojolearn_arima", "_mojolearn_gp",
     "_mojolearn_kernel_methods", "_mojolearn_mixture", "_mojolearn_hdbscan",
-    "_mojolearn_resample",
-    # 2026-09-14: IVFIndex and Embedding left `_NOT_YET`.
-    "_mojolearn_ivf", "_mojolearn_embedding",
+    "_mojolearn_resample", "_mojolearn_ivf",
+)
+IDENTICAL_ONLY_NAMES = (
+    "_mojolearn_training", "_mojolearn_mamba",
+    "_mojolearn_transformer", "_mojolearn_embedding",
 )
 TIERS = ("fast", "deterministic", "identical")
 
@@ -183,6 +184,8 @@ def tier_names(tier, include_byte_lm=False):
     EXACTLY is refused, in both directions.
     """
     names = EXT_NAMES
+    if tier in ("identical", "fast"):
+        names = names + FAST_CLASSICAL_NAMES
     if tier == "identical":
         names = names + IDENTICAL_ONLY_NAMES
         if include_byte_lm:
@@ -398,10 +401,14 @@ def release_inventory(sets, proof_paths, version, source_root=REPO):
                 binding_origin=origin,
                 reuse=dict(built=len(origin) - n_reused, reused=n_reused,
                            from_release=next((s.reuse['origin'] for s in sets if s.reuse), None)),
-                optional_native={n: {
+                optional_native={**{n: {
                     'included': True, 'supported_modes': ['identical'],
                     'unsupported_modes': ['fast', 'deterministic']}
                     for n in ('_mojolearn_byte_lm',) + tuple(host_record) + IDENTICAL_ONLY_NAMES},
+                    **{n: {
+                    'included': True, 'supported_modes': ['fast', 'identical'],
+                    'unsupported_modes': ['deterministic']}
+                    for n in FAST_CLASSICAL_NAMES}},
                 # One record per host binding, keyed by basename, so the
                 # payload says which host families this wheel carries rather
                 # than leaving a reader to infer it from the archive.

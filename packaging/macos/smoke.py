@@ -250,7 +250,19 @@ def _linalg():                                            # _mojolearn_linalg
     # (`_linalg_impl.py`, `require_identical`, after a mislabeled
     # deterministic build on the 2026-08-29 Apple stability run).
     _a = rng.random((8, 4)).astype(np.float32)
-    _p = mojolearn.linalg.matmul(_a, _a.T)
+    if _tier == "identical":
+        _p = mojolearn.linalg.matmul(_a, _a.T)
+    else:
+        # Classical FAST (2026-09-25): the identity-claiming call still
+        # refuses by name outside IDENTICAL; the fast product must compute.
+        try:
+            mojolearn.linalg.matmul(_a, _a.T)
+        except RuntimeError as _exc:
+            assert "identical" in str(_exc).lower(), _exc
+        else:
+            raise AssertionError("linalg.matmul claimed identity under " + _tier)
+        _p = np.asarray(mojolearn.linalg.matmul(_a, _a.T, identical=False))
+        assert np.allclose(_p, _a @ _a.T, rtol=1e-4, atol=1e-5), "fast matmul is wrong"
     assert _p.shape == (8, 8), _p.shape
 
 
@@ -377,17 +389,25 @@ IDENTICAL_ONLY_LAUNCHES = [
     ("_mojolearn_ivf", _ivf),
     ("_mojolearn_embedding", _embedding),
 ]
+# Since 2026-09-25 the list holds every NON-TREE binding: the classical ones
+# (`_backend._CLASSICAL_FAST`) must LAUNCH under fast and identical and refuse
+# deterministic; the neural ones must refuse both lower tiers. `_offers`
+# decides, and the coverage below keeps the list equal to the package's.
 _covered = {name for name, _ in IDENTICAL_ONLY_LAUNCHES}
-_expected = set(mojolearn._backend._IDENTICAL_ONLY) - {"_mojolearn_byte_lm"}
+_expected = (set(mojolearn._backend._MODULES) - set(mojolearn._backend._TIERED)
+             - {"_mojolearn_byte_lm"})
 assert _covered == _expected, (
-    "this smoke's identical-only launches and _backend._IDENTICAL_ONLY "
-    f"disagree: smoke-only {sorted(_covered - _expected)}, "
+    "this smoke's non-tree launches and _backend disagree: "
+    f"smoke-only {sorted(_covered - _expected)}, "
     f"package-only {sorted(_expected - _covered)}")
-assert not (set(mojolearn._backend._TIERED) & _covered), "a tree lane is in the identical-only list"
+assert not (set(mojolearn._backend._TIERED) & _covered), "a tree lane is in the non-tree list"
 
+_launched_lower = 0
 for _name, _launch in IDENTICAL_ONLY_LAUNCHES:
-    if _tier == "identical":
+    if mojolearn._backend._offers(_name, _tier):
         _launch()
+        if _tier != "identical":
+            _launched_lower += 1
         continue
     try:
         _launch()
@@ -403,8 +423,8 @@ for _name, _launch in IDENTICAL_ONLY_LAUNCHES:
     else:
         raise AssertionError(
             f"{_name} ({_launch.__name__}) ANSWERED on the {_tier} tier, "
-            f"where it must refuse: only the tree lanes ship {_tier}, and a "
-            f"{_tier} binary of {_name} must not exist (DEVIATION 2490)")
+            f"where it must refuse: {_name} does not ship {_tier}, and a "
+            f"{_tier} binary of it must not exist")
 
 # THE MODE THAT ACTUALLY LOADED, read back from the binary where it can be.
 # verify_wheel.sh runs this file once per mode and checks the word.
@@ -467,5 +487,6 @@ print(
        f" metrics preprocessing arima gp linalg training mamba transformer"
        f" kernel_methods mixture hdbscan resample ivf embedding ok"
        if _tier == "identical" else
-       f" | {len(IDENTICAL_ONLY_LAUNCHES)} identical-only launches REFUSED by name under {_tier}")
+       f" | {_launched_lower} classical launches ran and "
+       f"{len(IDENTICAL_ONLY_LAUNCHES) - _launched_lower} REFUSED by name under {_tier}")
 )

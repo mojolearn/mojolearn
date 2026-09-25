@@ -109,16 +109,13 @@ COLUMN_DEFINE=""
 # under python/mojolearn/identical/. The build-time smoke gate imports the
 # FAST package, so it is skipped for an identical build.
 #
-# ONE TIER (DEVIATION 2490, 2026-09-10): ONLY THE TREE LANES SHIP fast AND
-# deterministic (build_gbdt.sh, build_rf.sh, build_trees.sh). Every other
-# binding, this one included, builds IDENTICAL only. Cross-vendor bitwise
-# identity is the product; a fast tier is shipped only where it has a
-# measured win over the opponent's own CPU, and outside trees it has none
-# (python/mojolearn/_backend.py, `_TIERED`, has the numbers). Refusing
-# here, by name, is what keeps this an unshipped tier rather than an
-# unchecked one (CONTRIBUTING.md (Numeric modes) and section 8).
-[ "${MOJOLEARN_NUMERIC_MODE:-identical}" = identical ] || {
-    echo 'build_ivf.sh: only the tree lanes (gbdt, rf, trees) ship fast and deterministic; every other binding builds MOJOLEARN_NUMERIC_MODE=identical only (DEVIATION 2490, 0.8.0).' >&2
+# TWO TIERS (2026-09-25, reversing DEVIATION 2490 for classical ML): this
+# binding builds IDENTICAL (the default, bitwise across vendors) or FAST
+# (per-vendor speed, same quality, no bit promise). The DETERMINISTIC tier
+# stays tree-only (build_gbdt.sh, build_rf.sh, build_trees.sh); refusing it
+# here, by name, keeps it an unshipped tier rather than an unchecked one.
+[ "${MOJOLEARN_NUMERIC_MODE:-identical}" != deterministic ] || {
+    echo 'build_ivf.sh: the deterministic tier ships for the tree lanes (gbdt, rf, trees) only; classical bindings build MOJOLEARN_NUMERIC_MODE=identical (default) or fast.' >&2
     exit 2; }
 MODE_DEFINE=""
 OUTDIR="python/mojolearn"
@@ -230,7 +227,12 @@ if [ "$(uname)" = "Darwin" ]; then
     # fresh build/search with all lists probed returns the exact self rows.
     # Keep both contributing families covered instead of requiring a
     # nonexistent ivf-prefixed kernel.
-    for _pair in cluster:10 neighbors:2; do
+    # FAST takes the vendor matmul for distances, so the pinned distance
+    # tile (IDENTICAL only) is absent: one neighbors blob, measured
+    # 2026-09-25 on the M4 (cluster 22, neighbors 1, core 2).
+    _nmin=2
+    [ "${MOJOLEARN_NUMERIC_MODE:-identical}" = fast ] && _nmin=1
+    for _pair in cluster:10 neighbors:$_nmin; do
         _s=${_pair%%:*}
         _min=${_pair#*:}
         _n=$(printf '%s\n' "$_air" | grep -c "^${_s}" || true)

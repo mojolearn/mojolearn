@@ -304,18 +304,49 @@ _TIERED = frozenset({
     "_mojolearn_trees",  # ExtraTrees
 })
 
-_IDENTICAL_ONLY = frozenset(_MODULES) - _TIERED
+#: Classical ML ships a FAST tier too (2026-09-25, reversing DEVIATION 2490
+#: for everything that is not a neural network). IDENTICAL stays the default
+#: everywhere; FAST is opt-in and promises speed and quality, not bits. The
+#: DETERMINISTIC tier stays tree-only.
+_CLASSICAL_FAST = frozenset({
+    "_mojolearn",  # k-means and k-NN; buffer helpers stay IDENTICAL
+    "_mojolearn_estimators",
+    "_mojolearn_svm",
+    "_mojolearn_solver",
+    "_mojolearn_metrics",
+    "_mojolearn_preprocessing",
+    "_mojolearn_tsa",
+    "_mojolearn_linalg",
+    "_mojolearn_arima",
+    "_mojolearn_gp",
+    "_mojolearn_kernel_methods",
+    "_mojolearn_mixture",
+    "_mojolearn_hdbscan",
+    "_mojolearn_resample",
+    "_mojolearn_ivf",
+})
+_FAST_TIERED = _TIERED | _CLASSICAL_FAST
+_IDENTICAL_ONLY = frozenset(_MODULES) - _FAST_TIERED
+
+
+def _offers(name, mode):
+    """Whether binding `name` ships tier `mode`."""
+    if mode == "identical":
+        return True
+    if mode == "fast":
+        return name in _FAST_TIERED
+    return name in _TIERED
 _SELECTED = None
 
 _IDENTICAL_ONLY_REASON = (
-    "Only the tree lanes (GradientBoosting, RandomForest, ExtraTrees) ship "
-    "fast and deterministic tiers; every other family ships IDENTICAL only "
-    "(DEVIATION 2490)."
+    "Trees and classical ML ship a fast tier and only the tree lanes "
+    "(GradientBoosting, RandomForest, ExtraTrees) ship a deterministic tier; "
+    "the neural families ship IDENTICAL only."
 )
 
 
 def _identical_only_reason(name):
-    """The sentence that explains why this binding has one tier."""
+    """The sentence that explains why this binding lacks a tier."""
     return _IDENTICAL_ONLY_REASON
 
 
@@ -1356,7 +1387,7 @@ def select():
         # binaries are imported by the estimator modules, not here.
         for name in _MODULES:
             full = f"{pkg.__name__}.{name}"
-            if name in _IDENTICAL_ONLY:
+            if not _offers(name, "fast"):
                 # BEFORE the on-disk check, on purpose. A fast `.so` of an
                 # identical-only lane is never a legitimate artifact, only a
                 # stale one (the lane's build script exits 2 on this tier),
@@ -1390,7 +1421,7 @@ def select():
     missing = []
     for name in _MODULES:
         full = f"{pkg.__name__}.{name}"
-        if name in _IDENTICAL_ONLY and mode != "identical":
+        if not _offers(name, mode):
             module = _IdenticalOnlyTier(full, name, mode)
             sys.modules[full] = module
             setattr(pkg, name, module)
@@ -1484,7 +1515,7 @@ class _ModeSet:
             return self._modules[name]
         except KeyError:
             pass
-        if name in _IDENTICAL_ONLY and self.mode != "identical":
+        if not _offers(name, self.mode):
             raise ImportError(
                 f"mojolearn: {name} has no {self.mode!r} tier. "
                 f"{_identical_only_reason(name)} See _IDENTICAL_ONLY."
@@ -1523,7 +1554,7 @@ def load_set(mode):
         # An identical-only lane is not "not built yet" in the lower tiers, it
         # is not offered there. Skipping it keeps `missing` meaning what the
         # _ModeSet error message says it means.
-        if name in _IDENTICAL_ONLY and mode != "identical":
+        if not _offers(name, mode):
             continue
         path = os.path.join(tier_dir_, name + ".so")
         if not os.path.exists(path):
@@ -1608,7 +1639,7 @@ def binding(name, mode=None):
     if not isinstance(requested, str) or requested.strip().lower() not in _MODE_CODE:
         raise ValueError("numeric_mode must be fast, deterministic, identical or None")
     requested = requested.strip().lower()
-    if name in _IDENTICAL_ONLY and requested != "identical":
+    if not _offers(name, requested):
         raise ValueError(
             f"mojolearn: {name} has no {requested!r} tier. "
             f"{_identical_only_reason(name)} "

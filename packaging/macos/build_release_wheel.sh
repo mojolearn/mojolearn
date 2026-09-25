@@ -97,8 +97,13 @@ EXT_NAMES="_mojolearn_gbdt _mojolearn_rf _mojolearn_trees"
 # Before this the split was neural-only (three lanes, 2026-09-10 morning);
 # the reason for THOSE was different (their fused kernels were gated on the
 # identical contract, so the lower tiers were slower) and no longer matters.
-IDENTICAL_ONLY_SCRIPTS="build.sh build_estimators.sh build_svm.sh build_solver.sh build_metrics.sh build_preprocessing.sh build_tsa.sh build_linalg.sh build_arima.sh build_gp.sh build_training.sh build_mamba.sh build_transformer.sh build_kernel_methods.sh build_mixture.sh build_hdbscan.sh build_resample.sh build_ivf.sh build_embedding.sh"
-IDENTICAL_ONLY_NAMES="_mojolearn _mojolearn_estimators _mojolearn_svm _mojolearn_solver _mojolearn_metrics _mojolearn_preprocessing _mojolearn_tsa _mojolearn_linalg _mojolearn_arima _mojolearn_gp _mojolearn_training _mojolearn_mamba _mojolearn_transformer _mojolearn_kernel_methods _mojolearn_mixture _mojolearn_hdbscan _mojolearn_resample _mojolearn_ivf _mojolearn_embedding"
+# CLASSICAL ML (2026-09-25): fast and identical, never deterministic. They
+# build in the identical tier and, when MODES names it, the fast tier; the
+# build scripts refuse deterministic by name.
+FAST_CLASSICAL_SCRIPTS="build.sh build_estimators.sh build_svm.sh build_solver.sh build_metrics.sh build_preprocessing.sh build_tsa.sh build_linalg.sh build_arima.sh build_gp.sh build_kernel_methods.sh build_mixture.sh build_hdbscan.sh build_resample.sh build_ivf.sh"
+FAST_CLASSICAL_NAMES="_mojolearn _mojolearn_estimators _mojolearn_svm _mojolearn_solver _mojolearn_metrics _mojolearn_preprocessing _mojolearn_tsa _mojolearn_linalg _mojolearn_arima _mojolearn_gp _mojolearn_kernel_methods _mojolearn_mixture _mojolearn_hdbscan _mojolearn_resample _mojolearn_ivf"
+IDENTICAL_ONLY_SCRIPTS="build_training.sh build_mamba.sh build_transformer.sh build_embedding.sh"
+IDENTICAL_ONLY_NAMES="_mojolearn_training _mojolearn_mamba _mojolearn_transformer _mojolearn_embedding"
 # THE RELEASE PROFILE IS THE DEFAULT (2026-09-22). Until 0.8.14 this read
 # ${MOJOLEARN_PACKAGE_BYTE_LM:-0}: only release-provenance.yml set it to 1, so
 # the checklist's local command built a wheel with ZERO host bindings and the
@@ -289,6 +294,7 @@ build_pairs() {
         [ "$mode" = identical ] || continue
         for script in $BUILD_SCRIPTS; do printf '%s %s\n' "$mode" "$script"; done
         for script in $IDENTICAL_ONLY_SCRIPTS; do printf '%s %s\n' "$mode" "$script"; done
+        for script in $FAST_CLASSICAL_SCRIPTS; do printf '%s %s\n' "$mode" "$script"; done
         if [ "$PACKAGE_BYTE_LM" = 1 ]; then printf '%s %s\n' "$mode" build_byte_lm.sh; fi
         # The host bindings. Identical only, and built with no accelerator
         # target, which is why they are named here rather than added to a
@@ -300,6 +306,9 @@ build_pairs() {
     for mode in $MODES; do
         [ "$mode" = identical ] && continue
         for script in $BUILD_SCRIPTS; do printf '%s %s\n' "$mode" "$script"; done
+        if [ "$mode" = fast ]; then
+            for script in $FAST_CLASSICAL_SCRIPTS; do printf '%s %s\n' "$mode" "$script"; done
+        fi
     done
 }
 # HEAVIEST FIRST. The seconds are the 0.8.13 cold compile times (one worker,
@@ -430,7 +439,11 @@ for n in $EXT_NAMES; do
 done
 # The identical-only lanes are gated in ONE tier, whatever MODES says.
 case " $MODES " in *" identical "*)
-    for n in $IDENTICAL_ONLY_NAMES; do ALL_SOS="$ALL_SOS $PKG/identical/$n.so"; done ;;
+    for n in $IDENTICAL_ONLY_NAMES $FAST_CLASSICAL_NAMES; do ALL_SOS="$ALL_SOS $PKG/identical/$n.so"; done ;;
+esac
+# Classical ML also ships the fast tier (the package directory itself).
+case " $MODES " in *" fast "*)
+    for n in $FAST_CLASSICAL_NAMES; do ALL_SOS="$ALL_SOS $PKG/$n.so"; done ;;
 esac
 if [ "$PACKAGE_BYTE_LM" = 1 ]; then
     # Every host binding is gated for existence and staleness like every

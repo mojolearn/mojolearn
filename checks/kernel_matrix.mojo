@@ -1308,10 +1308,23 @@ def lib_gemm_window_admit_for[column: Int]() -> Bool:
     a shard.
     `-D MOJOLEARN_GEMM_NO_WINDOW_ADMIT=1` is the revert arm (the shipped
     step on every window); `-D MOJOLEARN_GEMM_SABOTAGE_ADMIT_ALWAYS=1`
-    admits every window and must FAIL the subnormal-forcing operands."""
+    admits every window and must FAIL the subnormal-forcing operands.
+
+    Apple (lane/apple-identical-gemm, 2026-09-25): the same admission on the
+    tuned kernel (`TUNED_WINDOW_ADMIT` in gemm/checks/gemm_identical.mojo),
+    whose step there is `ftz(fma)` under the block admission. An admitted
+    window drops the `ftz`: every exact step result is zero or at least
+    2^-126 in magnitude, so Apple's flush before round FMA returns the same
+    normal or zero a round then flush FMA does, and the flush is the identity.
+    The block admission and its exact recompute are unchanged. PROVEN bit for
+    bit on the M4 at small shapes (gemm_rtf_boundary_check, adversarial and
+    mixed exponent operands, before and after hashes equal; the reach
+    sabotage `-D MOJOLEARN_GEMM_SABOTAGE_WINDOW_ADMIT_STEP=1` fails). Speed
+    NOT measured on Apple (owed). `-D MOJOLEARN_GEMM_NO_WINDOW_ADMIT=1` is
+    the revert arm on both columns."""
     comptime if is_defined["MOJOLEARN_GEMM_NO_WINDOW_ADMIT"]():
         return False
-    return column == COLUMN_NVIDIA
+    return column == COLUMN_NVIDIA or column == COLUMN_APPLE
 
 
 def lib_gemm_kpack_narrow_for[column: Int]() -> Bool:
