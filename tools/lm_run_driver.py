@@ -56,7 +56,10 @@ home (a box that hung and was stopped, a lease that ran out) is read for
 what it DID land: the last checkpoint that its manifest.tsv pins, its log
 says was uploaded, its checkpoints.sha256 (when the box wrote one) agrees
 with, and that is in R2 at the manifest's size, with at least one chain
-line after it. The ledger's `partial` entry records that step
+line after it. A box stopped before its results came home is read from
+R2 instead: tools/lm_segment.py PUTs its chain and manifest as they stand
+(`chain.progress.jsonl`, `manifest.progress.tsv`) after the first step past
+each checkpoint. The ledger's `partial` entry records that step
 (`resume_from`), the checkpoints landed so far, the attempt's chain (saved
 under `legs/<route>-<segment>/`) and the attempt's small files
 (`legs/<route>-<segment>/attempt-<n>/`); the attempt's results directory
@@ -117,6 +120,7 @@ import shutil
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -342,6 +346,35 @@ def r2_put(key, path, seconds=900):
                           capture_output=True, text=True).returncode == 0
 
 
+def r2_get(key, path, seconds=900):
+    """Fetch one small R2 object to `path` by a presigned GET; True when curl says so."""
+    from lm_segment_leg import presign_get
+    try:
+        url = presign_get(key, seconds)
+    except subprocess.CalledProcessError:
+        return False
+    Path(path).parent.mkdir(parents=True, exist_ok=True)
+    ok = subprocess.run(["curl", "-fsS", "--retry", "3", "--max-time", "300", "-o", str(path), url],
+                        capture_output=True, text=True).returncode == 0
+    if not ok or not Path(path).exists():
+        Path(path).unlink(missing_ok=True)
+        return False
+    return True
+
+
+def _progress_box(spec, e, box):
+    """Fill `box` (a scratch directory, never under the results, so no later
+    attempt reads it as its own) in a box's layout from what the box PUT to
+    R2 as it ran: its chain.progress.jsonl and manifest.progress.tsv (see
+    tools/lm_segment.py PROGRESS FOR A RESUME). None when R2 holds no
+    progress chain."""
+    here = "%s/%s/%s" % (spec["run"], e["route"], e["segment"])
+    if not r2_get(here + "/chain.progress.jsonl", Path(box) / "segment" / "chain.jsonl"):
+        return None
+    r2_get(here + "/manifest.progress.tsv", Path(box) / "segment" / "manifest.tsv")
+    return Path(box)
+
+
 def _chain_lines(path, linked=True):
     """[(step, line)] of a chain a box wrote, in order, byte-exact. Reading
     stops at the first line that does not parse (a line cut by the kill),
@@ -404,6 +437,15 @@ def _attempt_box(results):
 
 
 def record_partial(spec, e, results, out, ledger):
+    """See _record_partial; R2's progress copies go to a scratch directory removed after."""
+    scratch = Path(tempfile.mkdtemp(prefix="r2-progress-"))
+    try:
+        return _record_partial(spec, e, results, out, ledger, scratch)
+    finally:
+        shutil.rmtree(scratch, ignore_errors=True)
+
+
+def _record_partial(spec, e, results, out, ledger, scratch):
     """A one-box segment brought no segment.json home: record what it landed.
 
     A checkpoint counts as landed when the segment's manifest.tsv pins it,
@@ -413,7 +455,14 @@ def record_partial(spec, e, results, out, ledger):
     the spec says `"resume_check_r2": false`), and the chain has at least
     one line after it (the resumed box must re-derive a step the hung box
     wrote). The next box fetches it by that sha256, so a wrong object is
-    refused on the box before it trains. Returns the partial entry or None."""
+    refused on the box before it trains. Returns the partial entry or None.
+
+    When no chain came home (a box stopped before its results were fetched)
+    the chain and manifest are read from the progress copies the box PUT to
+    R2 after each checkpoint. Then the upload evidence is R2 itself: the
+    manifest was PUT only after its checkpoints' uploads returned, and every
+    checkpoint is held to R2's size whatever `resume_check_r2` says. The
+    arrival replay passed, since the body trains only after it passes."""
     key = "%s/%s" % (e["route"], e["segment"])
     if e["vendor"] == "live":
         _log(out, "%s: a live segment is not resumed; it restarts from %s" % (key, e["from_ckpt"]))
@@ -421,9 +470,14 @@ def record_partial(spec, e, results, out, ledger):
     box = _attempt_box(results)
     prev = ledger.partial(e)
     start = prev["resume_from"] if prev else e["first"]
+    from_r2 = False
     if box is None:
-        _log(out, "%s: no chain came home; nothing to resume from" % key)
-        return None
+        box = _progress_box(spec, e, scratch)
+        if box is None:
+            _log(out, "%s: no chain came home and R2 holds no progress chain; nothing to resume from" % key)
+            return None
+        from_r2 = True
+        _log(out, "%s: no chain came home; reading the chain and manifest the box PUT to R2 as it ran" % key)
     lines = _chain_lines(box / "segment" / "chain.jsonl")
     if not lines or lines[0][0] != start + 1:
         _log(out, "%s: the fetched chain does not start at step %d; it is not this attempt's, nothing recorded" % (key, start + 1))
@@ -438,6 +492,8 @@ def record_partial(spec, e, results, out, ledger):
                 pinned[parts[0]] = (int(parts[1]), parts[2])
     log_txt = box / "segment" / "log.txt"
     uploaded = set(re.findall(r"uploaded (ckpt_\d{8}\.blm) in", log_txt.read_text(errors="replace"))) if log_txt.exists() else set()
+    if from_r2:
+        uploaded = set(pinned)
     on_box = None
     if (box / "checkpoints.sha256").exists():
         on_box = {}
@@ -455,7 +511,7 @@ def record_partial(spec, e, results, out, ledger):
             refused[name] = "the log has no upload line"
         elif on_box is not None and on_box.get(name) != digest:
             refused[name] = "checkpoints.sha256 says %s, the manifest %s" % (on_box.get(name), digest)
-        elif spec.get("resume_check_r2", True) and r2_bytes("%s/%s/%s" % (spec["run"], key, name)) != size:
+        elif (from_r2 or spec.get("resume_check_r2", True)) and r2_bytes("%s/%s/%s" % (spec["run"], key, name)) != size:
             refused[name] = "R2 has no object of %d bytes under its key" % size
         else:
             landed[name] = digest
@@ -465,6 +521,10 @@ def record_partial(spec, e, results, out, ledger):
     if not prev and e["replay_ckpt"]:
         aj = box / "arrival" / "segment.json"
         arrival = json.loads(aj.read_text()).get("verdict") if aj.exists() else None
+        if from_r2:
+            # tools/lm_segment_body.sh exits 5 before the segment when the
+            # arrival replay fails, so a chain in R2 means it passed
+            arrival = "PASS"
         if arrival != "PASS":
             _log(out, "%s: the arrival replay did not pass on this attempt (%s); nothing to resume" % (key, arrival))
             return None
@@ -487,11 +547,13 @@ def record_partial(spec, e, results, out, ledger):
         if p.is_file() and rel.parts[0] != "in" and p.stat().st_size <= ATTEMPT_FILE_CAP:
             (dest / rel).parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(p, dest / rel)
-    for p in sorted(Path(results).iterdir()):
+    for p in sorted(Path(results).iterdir()) if Path(results).is_dir() else []:
         if p.is_file() and not (dest / p.name).exists() and p.stat().st_size <= ATTEMPT_FILE_CAP:
             shutil.copyfile(p, dest / p.name)
     attempt = dict(n=n, dir=str(dest), first_step=start, last_chain_step=last_line, checkpoints=landed,
                    refused=refused, utc=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+    if from_r2:
+        attempt["from_r2"] = True
     # the results directory is moved aside so the next rental fetches into a
     # clean one; _this_attempt never reads a `previous-*` directory
     if Path(results).resolve() != seg_root.resolve() and Path(results).exists():

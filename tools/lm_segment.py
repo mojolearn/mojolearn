@@ -41,6 +41,15 @@ file is PUT to its presigned URL as soon as it is written and its sha256
 verified, so nothing lives only on the box; a key with no URL is refused
 BEFORE the first step so a missing upload cannot pass silently.
 
+PROGRESS FOR A RESUME. `chain.jsonl` and `manifest.tsv` are uploaded whole
+only at the end. So a box that is stopped mid-segment still leaves enough
+in R2 to resume from, the chain and the manifest as they stand are PUT
+as `chain.progress.jsonl` and `manifest.progress.tsv` after the first step
+that follows each checkpoint. That is the first moment the checkpoint has
+the chain line after it that tools/lm_run_driver.py's resume needs. The two
+keys are optional. A body rendered without them skips them, and a failed
+progress PUT is logged and the segment trains on. Nothing written changes.
+
 THE LEARNING-RATE SCHEDULE IS A TABLE, NOT A FORMULA. `recipe` evaluates
 warmup and cosine decay ONCE, on the machine that writes the recipe, and
 stores one float32 bit pattern per step. A box reads its step's bits from
@@ -349,6 +358,29 @@ class Uploader:
             self.log("upload of %s failed (attempt %d): %s" % (name, attempt, r.stderr.strip()[:200]))
             time.sleep(5 * attempt)
         raise SystemExit("upload of %s failed three times; the segment stops rather than run unrecorded" % name)
+
+    def progress(self, chain_path, manifest_path, step):
+        """PUT the chain and the manifest as they stand to their progress keys
+        (see PROGRESS FOR A RESUME). Optional: no URL skips it, a failure is
+        logged and never stops the segment."""
+        if self.urls is None:
+            return
+        for name, path in ((PROGRESS_MANIFEST, manifest_path), (PROGRESS_CHAIN, chain_path)):
+            url = self.urls.get(name)
+            if url is None:
+                continue
+            t0 = time.perf_counter()
+            r = subprocess.run(["curl", "-sS", "--fail", "--retry", "2", "-T", str(path), url],
+                               capture_output=True, text=True)
+            if r.returncode == 0:
+                self.log("progress: %s to step %d in %.1f s" % (name, step, time.perf_counter() - t0))
+            else:
+                self.log("progress: %s to step %d failed (the segment trains on): %s" % (name, step, r.stderr.strip()[:200]))
+
+
+PROGRESS_CHAIN = "chain.progress.jsonl"
+PROGRESS_MANIFEST = "manifest.progress.tsv"
+PROGRESS_KEYS = (PROGRESS_CHAIN, PROGRESS_MANIFEST)
 
 
 def expected_keys(recipe, from_step, steps, boundary):
@@ -1020,6 +1052,7 @@ def cmd_run(args):
             trainer_cm = Par(state, devices=devices, logical_shards=K_run)
         with trainer_cm as trainer:
             del state
+            progress_due = False
             for s in range(first, last):
                 completed = s + 1
                 lr_hex = table[s]  # the rate used to reach step s+1
@@ -1058,9 +1091,13 @@ def cmd_run(args):
                     row["window"] = _window_witness(trainer, raw, shards, say)
                 if not chain.write(row):
                     break
+                if progress_due:
+                    upload.progress(chain.path, manifest.path, completed)
+                    progress_due = False
                 if wants_checkpoint(completed):
                     info = save_checkpoint(trainer, out, manifest=manifest, upload=upload)
                     segment["checkpoints"].append(info)
+                    progress_due = True
                     say("checkpoint %s (%d bytes, sha256 %s, %.1f s)" % (info["file"], info["bytes"], info["sha256"][:16], info["save_seconds"]))
     verdict, disagreements, done = chain.close(last)
     segment.update(verdict=verdict, disagreements=disagreements, steps_completed=done - first, last_completed=done,
