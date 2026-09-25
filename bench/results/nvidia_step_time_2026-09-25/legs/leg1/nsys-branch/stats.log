@@ -1,0 +1,25 @@
+Generating SQLite file /root/nv_bin/nsys-branch.sqlite from /root/nv_bin/nsys-branch.nsys-rep
+Processing [/root/nv_bin/nsys-branch.sqlite] with [/opt/nvidia/nsight-systems/2023.4.4/host-linux-x64/reports/cuda_gpu_kern_sum.py] to [/root/gemm_leg_out/nv-step-time/nsys-branch/k_cuda_gpu_kern_sum.csv]... PROCESSED
+
+
+WARNING: Existing SQLite export found: /root/nv_bin/nsys-branch.sqlite
+         File is older than input file: /root/nv_bin/nsys-branch.nsys-rep
+         Use --force-export=true to update export file.
+
+usage: nsys stats [<args>] <input-file>
+Try 'nsys stats --help' for more information.
+
+WARNING: Existing SQLite export found: /root/nv_bin/nsys-branch.sqlite
+         File is older than input file: /root/nv_bin/nsys-branch.nsys-rep
+         Use --force-export=true to update export file.
+
+usage: nsys stats [<args>] <input-file>
+Try 'nsys stats --help' for more information.
+Traceback (most recent call last):
+  File "/root/mojolearn/tools/nvidia_step_time/nsys_fold.py", line 90, in <module>
+    sys.exit(main(sys.argv))
+             ^^^^^^^^^^^^^^
+  File "/root/mojolearn/tools/nvidia_step_time/nsys_fold.py", line 44, in main
+    rows = list(csv.reader(open(path, newline="", errors="replace")))
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+FileNotFoundError: [Errno 2] No such file or directory: '/root/nv_bin/nsys-branch-trace_cuda_gpu_trace.csv'

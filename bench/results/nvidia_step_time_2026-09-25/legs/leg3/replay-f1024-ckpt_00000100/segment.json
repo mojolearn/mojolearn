@@ -1,0 +1,43 @@
+{
+ "schema": "mojolearn.lm-segment.run.v1",
+ "route": "A",
+ "segment": "nvstep-replay-f1024-ckpt_00000100",
+ "label": "nv-step-time-replay-f1024-ckpt_00000100",
+ "from_checkpoint": {
+  "file": "ckpt_00000100.blm",
+  "sha256": "80cd2126a89ba6d8a444cc7c9ca61cdadb4c67090511adcb4424e06ccf45b114",
+  "step": 100
+ },
+ "first_step": 100,
+ "last_step": 103,
+ "devices": [
+  0
+ ],
+ "logical_shards": 64,
+ "recipe_sha256": "9f7f695b9a0bae175bf241632767ace67c542a4a116a98e36b9c306f3eebe051",
+ "tokens_sha256": "4cf7181ba71058e70d7329dbae32de53c5750b49ae95331cebde4676f922209d",
+ "box": {
+  "host": "38e5ab5eea44",
+  "machine": "x86_64",
+  "system": "Linux",
+  "python": "3.14.7",
+  "nvidia-smi": "NVIDIA H100 80GB HBM3, GPU-b2357bca-7c4c-7788-d901-a0ab673725a8, 580.126.09"
+ },
+ "commit": null,
+ "zero_moments": false,
+ "expect_chain": "/root/amd_in/A-1.chain.partial.jsonl",
+ "checkpoints": [],
+ "utc_start": "2026-09-25T03:02:14Z",
+ "hash_scheme": "sliced-sha256-8.v2",
+ "from_state": {
+  "sha256": "2b37e85edfd701eb0deb8b3cb960722ce2dbc92ff7fa93c9b4d40df4767d1942",
+  "expected": "2b37e85edfd701eb0deb8b3cb960722ce2dbc92ff7fa93c9b4d40df4767d1942",
+  "agrees": true
+ },
+ "verdict": "PASS",
+ "disagreements": [],
+ "steps_completed": 3,
+ "last_completed": 103,
+ "utc_end": "2026-09-25T03:04:20Z",
+ "uploads": []
+}

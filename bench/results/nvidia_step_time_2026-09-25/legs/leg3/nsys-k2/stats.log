@@ -1,0 +1,19 @@
+Generating SQLite file /root/nv_bin/nsys-k2.sqlite from /root/nv_bin/nsys-k2.nsys-rep
+Processing [/root/nv_bin/nsys-k2.sqlite] with [/opt/nvidia/nsight-systems/2023.4.4/host-linux-x64/reports/cuda_gpu_kern_sum.py] to [/root/gemm_leg_out/nv-step-time/nsys-k2/k_cuda_gpu_kern_sum.csv]... PROCESSED
+
+
+NOTICE: Existing SQLite export found: /root/nv_bin/nsys-k2.sqlite
+        It is assumed file was previously exported from: /root/nv_bin/nsys-k2.nsys-rep
+        Consider using --force-export=true if needed.
+
+Processing [/root/nv_bin/nsys-k2.sqlite] with [/opt/nvidia/nsight-systems/2023.4.4/host-linux-x64/reports/cuda_gpu_trace.py] to [/root/nv_bin/nsys-k2-trace_cuda_gpu_trace.csv]... PROCESSED
+
+
+NOTICE: Existing SQLite export found: /root/nv_bin/nsys-k2.sqlite
+        It is assumed file was previously exported from: /root/nv_bin/nsys-k2.nsys-rep
+        Consider using --force-export=true if needed.
+
+Processing [/root/nv_bin/nsys-k2.sqlite] with [/opt/nvidia/nsight-systems/2023.4.4/host-linux-x64/reports/cuda_gpu_mem_time_sum.py] to [/root/gemm_leg_out/nv-step-time/nsys-k2/m_cuda_gpu_mem_time_sum.csv]... PROCESSED
+
+Processing [/root/nv_bin/nsys-k2.sqlite] with [/opt/nvidia/nsight-systems/2023.4.4/host-linux-x64/reports/cuda_api_sum.py] to [/root/gemm_leg_out/nv-step-time/nsys-k2/m_cuda_api_sum.csv]... PROCESSED
+

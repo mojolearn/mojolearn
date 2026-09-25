@@ -1,0 +1,3 @@
+.version 8.5
+.target sm_90a
+.maxntid 768

@@ -115,7 +115,8 @@ the normative `(d, q)` addressing).
 CALLER owns and the caller keeps alive past `ctx.synchronize()`.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx, MAX_THREADS_PER_BLOCK_METADATA
+from std.gpu import block_dim, block_idx, grid_dim, thread_idx, MAX_THREADS_PER_BLOCK_METADATA, WARP_SIZE
+from std.gpu.primitives.warp import shuffle_xor
 from std.utils import StaticTuple
 from std.memory import bitcast, stack_allocation
 from std.os import getenv
@@ -165,6 +166,8 @@ from checks.kernel_matrix import (
     lib_gemm_detect_seam_for,
     lib_gemm_leaf_split_for,
     lib_gemm_mfma_for,
+    lib_gemm_window_admit_for,
+    lib_gemm_kpack_narrow_for,
     gemm_wide_split_for,
     lib_gemm_block_parallelism_for,
     lib_gemm_kernel_body_for,
@@ -1316,6 +1319,52 @@ comptime GEMM_DETECT_SEAM = (
 )
 
 
+#: lane/nvidia-step-time (2026-09-25): the WINDOW ADMISSION,
+#: `lib_gemm_window_admit_for` (the argument is in that row's docstring). The
+#: kpack kernel's full windows run the bare `fma.rn` where the block proved
+#: the flush is the identity on every step result, the exact step elsewhere.
+comptime GEMM_WINDOW_ADMIT = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and TUNED_HW_FTZ_FMA
+    and TUNED_STAGE_FTZ
+    and lib_gemm_window_admit_for[TARGET_COLUMN]()
+    and not GEMM_DETECT_SEAM
+    and not TUNED_BLOCK_ADMIT
+)
+#: The admission bound on `Ea + Eb` (biased exponent fields): 174 puts the
+#: products' common grain at 2^-126. The sabotage arm admits every window.
+comptime GEMM_ADMIT_EXP_SUM = 0 if is_defined["MOJOLEARN_GEMM_SABOTAGE_ADMIT_ALWAYS"]() else 174
+
+
+@always_inline
+def _admit_exp_min[W: Int](v: SIMD[DType.float32, W]) -> UInt32:
+    """Minimum biased exponent field over the NONZERO words of `v` (flushed
+    operands: a zero field is a zero word and constrains nothing, so it reads
+    255, as Inf and NaN do)."""
+    var e = (bitcast[DType.uint32](v) >> SIMD[DType.uint32, W](23)) & SIMD[DType.uint32, W](0xFF)
+    var ez = e.eq(SIMD[DType.uint32, W](0)).select(SIMD[DType.uint32, W](0xFF), e)
+    return ez.reduce_min()
+
+
+@always_inline
+def _admit_warp_min(v: UInt32) -> UInt32:
+    """The minimum over the warp, in every lane (an integer butterfly: the
+    order of an integer minimum cannot matter)."""
+    var m = v
+    comptime for _s in range(8):
+        comptime if (1 << _s) < WARP_SIZE:
+            var o = shuffle_xor(m, UInt32(1 << _s))
+            m = o if o < m else m
+    return m
+
+
+@always_inline
+def _admit_step(a: Float32, b: Float32, acc: Float32) -> Float32:
+    """The contract step on an ADMITTED window: `fma.rn`, the first of
+    `_tuned_step`'s two instructions; its flush is proven the identity."""
+    return llvm_intrinsic["llvm.nvvm.fma.rn.f", Float32, has_side_effect=False](a, b, acc)
+
+
 @always_inline
 def _is_subnormal(x: Float32) -> Bool:
     """True exactly when `x` is a nonzero subnormal (either sign): one
@@ -1498,7 +1547,17 @@ comptime TUNED_TPB = lib_block_size_for[K_LIB_GEMM_CONTRACTION, TARGET_COLUMN]()
 #: amd_step_time_2026-09-24). At 256 both read 0. Register allocation only; no
 #: operation, operand or order changes. `-D MOJOLEARN_GEMM_NO_LAUNCH_BOUND=1`
 #: restores the old 1,024 (the A/B arm).
-comptime GEMM_LAUNCH_BOUND = 1024 if is_defined["MOJOLEARN_GEMM_NO_LAUNCH_BOUND"]() else TUNED_TPB
+#: lane/nvidia-step-time (2026-09-25): `-D MOJOLEARN_GEMM_LB512=1` (trial) declares
+#: 512 on a 256-thread launch, which on NVIDIA budgets 128 registers a thread
+#: (65,536 / 512) so two blocks fit an SM. Register allocation only.
+comptime GEMM_LAUNCH_BOUND = 1024 if is_defined["MOJOLEARN_GEMM_NO_LAUNCH_BOUND"]() else (
+    2 * TUNED_TPB if is_defined["MOJOLEARN_GEMM_LB512"]() else (
+        3 * TUNED_TPB if is_defined["MOJOLEARN_GEMM_LB768"]() else TUNED_TPB
+    )
+)
+#: lane/nvidia-step-time trial: the kpack gather of the next window issued
+#: before the staging barrier instead of after it.
+comptime GEMM_PREFETCH_EARLY = is_defined["MOJOLEARN_GEMM_PREFETCH_EARLY"]()
 
 #: The width of a staged copy, in floats. `PINNED_VECLEN`, RAFT's own
 #: `Veclen = 4`.
@@ -5678,8 +5737,18 @@ def _gemm_step_arm_hook(
 #: allocation (`bench/results/gemm_resources_2026-09-10/README.md`).
 comptime GEMM_KPACK_PAGE_GUARD_BYTES = 1024
 #: `kpack`: the shipped 128x128 geometry.
-comptime GEMM_KPACK_RPT = TUNED_RPT * 2
-comptime GEMM_KPACK_CPT = TUNED_CPT * 2
+#: lane/nvidia-step-time (2026-09-25), trial geometry defines (schedule only:
+#: a thread's cells, their chains and their fold are unchanged):
+#: `-D MOJOLEARN_GEMM_KPACK_RPT4=1` (64-row tile), `-D MOJOLEARN_GEMM_KPACK_CPT4=1`
+#: (64-column tile).
+comptime GEMM_KPACK_RPT = TUNED_RPT if is_defined["MOJOLEARN_GEMM_KPACK_RPT4"]() else TUNED_RPT * 2
+comptime GEMM_KPACK_CPT = TUNED_CPT if (
+    is_defined["MOJOLEARN_GEMM_KPACK_CPT4"]() or lib_gemm_kpack_narrow_for[TARGET_COLUMN]()
+) else TUNED_CPT * 2
+#: The kpack kernel's declared launch bound: twice its 256-thread launch
+#: where the narrow tile runs (`lib_gemm_kpack_narrow_for`, NVIDIA: 128
+#: registers a thread, two blocks an SM), else the GEMM kernels' bound.
+comptime GEMM_KPACK_LAUNCH_BOUND = 2 * TUNED_TPB if lib_gemm_kpack_narrow_for[TARGET_COLUMN]() else GEMM_LAUNCH_BOUND
 comptime GEMM_KPACK_KS = 16
 comptime GEMM_KPACK_FS = TUNED_FOLD_SLOTS
 #: DEVIATION 2700, `kpack_pad`: words of padding after each line group of
@@ -5877,7 +5946,7 @@ def _kpack_step[DIAG: Int](a: Float32, b: Float32, acc: Float32) -> Float32:
     return _tuned_step(a, b, acc)
 
 
-@__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(GEMM_LAUNCH_BOUND)))
+@__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(GEMM_KPACK_LAUNCH_BOUND)))
 def identical_gemm_kpack_kernel[
     RPT: Int, CPT: Int, TC: Int, KS: Int, FS: Int, PAGES: Int, GROUP: Bool, SAB: Bool,
     PAD: Int = 0,
@@ -6174,6 +6243,20 @@ def identical_gemm_kpack_kernel[
         barrier()
 
     var sub_seen = False  # DETECT seam: some step result of my cells was subnormal
+    # lane/nvidia-step-time: the WINDOW ADMISSION (`GEMM_WINDOW_ADMIT`). Per
+    # page, NW warp minima of the staged A words' exponent fields and NW of
+    # B's; `adm_exact` says every accumulator of this leaf so far is a
+    # multiple of 2^-126 (true at a leaf start, kept by admitted windows).
+    comptime ADMIT = GEMM_WINDOW_ADMIT and GATHER and DIAG == 0 and not FASTK
+    comptime NW = NTH // WARP_SIZE
+    var adm_s = stack_allocation[
+        4 * NW if ADMIT else 1,
+        Scalar[DType.uint32],
+        alignment=16,
+        address_space = AddressSpace.SHARED,
+    ]()
+    var adm_exact = True
+    var adm = False
     while w < w_end:
         var win = cur
         var nxt = _tuned_window_next[KS](wt, wq, wpl, leaf, k, p_count)
@@ -6187,8 +6270,18 @@ def identical_gemm_kpack_kernel[
         # whatever it holds.)
         comptime if DIAG != 3 and DIAG != 5:
          comptime if GATHER:
-          as_.store[alignment=ALIGN](pgw * APAGE + ga[0] * ASTRIDE + ga[1] * RPT, pga)
-          bs_.store[alignment=ALIGN](pgw * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
+          comptime if DIAG != 8:
+            as_.store[alignment=ALIGN](pgw * APAGE + ga[0] * ASTRIDE + ga[1] * RPT, pga)
+            bs_.store[alignment=ALIGN](pgw * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
+          comptime if ADMIT:
+            # The exponent minima of the words this thread staged (window
+            # w, flushed), reduced over the warp; lane 0 publishes them in
+            # the page's slots before the barrier below.
+            var adm_ma = _admit_warp_min(_admit_exp_min(pga))
+            var adm_mb = _admit_warp_min(_admit_exp_min(pgb))
+            if _urem[WARP_SIZE](tid) == 0:
+                adm_s.unsafe_store(pgw * 2 * NW + _udiv[WARP_SIZE](tid), adm_ma)
+                adm_s.unsafe_store(pgw * 2 * NW + NW + _udiv[WARP_SIZE](tid), adm_mb)
          else:
           comptime for sa in range(ASLOTS):
             comptime for ea in range(VEC):
@@ -6210,10 +6303,21 @@ def identical_gemm_kpack_kernel[
                         pgw * BPAGE + gemm_kpack_addr(slb[0], slb[1], TC, CPT, KS, PAD),
                         pb[sb * VEC + eb],
                     )
-         barrier()
+         # lane/nvidia-step-time (trial `-D MOJOLEARN_GEMM_PREFETCH_EARLY=1`):
+         # the gather of window w+1 issued BEFORE the barrier, after this
+         # thread's stores of window w read the same registers. Placement only.
+         comptime if PAGES == 2 and GATHER and GEMM_PREFETCH_EARLY and DIAG != 7:
+            if w + 1 < w_end:
+                var wn_e = nxt
+                pga = _kpack_gather[RPT, TR](a, a_si, a_sp, i0, m, wn_e[0], wn_e[1], ga[0], ga[1])
+                pgb = _kpack_gather[CPT, TC](b, b_sj, b_sp, j0, n, wn_e[0], wn_e[1], gb[0], gb[1])
+         # lane/nvidia-step-time DIAGNOSTIC variants (wrong bits by design):
+         # 6 no barrier, 7 no prefetch, 8 no staging stores.
+         comptime if DIAG != 6:
+            barrier()
 
          # ---- PREFETCH window w+1 (shipped lines, DEVIATION 1256).
-         comptime if PAGES == 2:
+         comptime if PAGES == 2 and DIAG != 7 and not (GATHER and GEMM_PREFETCH_EARLY):
             if w + 1 < w_end:
                 var wn = nxt
                 comptime if GATHER:
@@ -6231,6 +6335,20 @@ def identical_gemm_kpack_kernel[
         # per step, steps ascending. The operands of step `c` are one
         # `RPT`-wide load (this thread's A lines) and one `CPT`-wide load (its
         # B lines), read in the order the page was packed.
+        comptime if ADMIT:
+            # Block-uniform: every thread reads the same published minima.
+            adm = False
+            if chunk == KS and adm_exact:
+                var adm_na = UInt32(0xFF)
+                var adm_nb = UInt32(0xFF)
+                comptime for ww in range(NW):
+                    var adm_xa = adm_s.unsafe_load(pgw * 2 * NW + ww)
+                    var adm_xb = adm_s.unsafe_load(pgw * 2 * NW + NW + ww)
+                    adm_na = adm_xa if adm_xa < adm_na else adm_na
+                    adm_nb = adm_xb if adm_xb < adm_nb else adm_nb
+                adm = (adm_na + adm_nb) >= UInt32(GEMM_ADMIT_EXP_SUM)
+            if not adm:
+                adm_exact = False
         var abase = pgw * APAGE + accrow * ASTRIDE
         var bbase = pgw * BPAGE + acccol * BSTRIDE
         if chunk == KS:
@@ -6245,6 +6363,19 @@ def identical_gemm_kpack_kernel[
                             ra1[u6], rb1[v8], acc[u6 * CPT + v8]
                         )
           else:
+           var fastw = False
+           comptime if ADMIT:
+            fastw = adm
+           if fastw:
+            # An ADMITTED window: the same loads, the same cells in the same
+            # ascending steps, the bare `fma.rn` (its flush proven the identity).
+            comptime for ca in range(KS):
+                var raa = as_.load[width=RPT, alignment=ALIGN](abase + ca * RPT)
+                var rba = bs_.load[width=CPT, alignment=ALIGN](bbase + ca * CPT)
+                comptime for ua in range(NR):
+                    comptime for va in range(NCOL):
+                        acc[ua * CPT + va] = _admit_step(raa[ua], rba[va], acc[ua * CPT + va])
+           else:
             comptime for c0 in range(KS):
                 var ra = as_.load[width=RPT, alignment=ALIGN](abase + c0 * RPT)
                 var rb = bs_.load[width=CPT, alignment=ALIGN](bbase + c0 * CPT)
@@ -6314,6 +6445,8 @@ def identical_gemm_kpack_kernel[
                     part[pe] = _fold_flush[HWFOLD](acc[pe])  # 5d, the leaf partial
                 _ = _fold_push_local[NCELL, FS, HWFOLD](fl, occ, part)
                 acc = SIMD[DType.float32, NCELL](0.0)
+            comptime if ADMIT:
+                adm_exact = True
 
         w = w + 1
         cur = nxt

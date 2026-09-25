@@ -92,7 +92,8 @@ mechanism, brief sections 15 and 18), and never a DEVIATION 2598 kernel.
 come through the kernel matrix.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from std.gpu import block_dim, block_idx, grid_dim, thread_idx, MAX_THREADS_PER_BLOCK_METADATA
+from std.utils import StaticTuple
 from std.memory import bitcast, stack_allocation
 from std.os import getenv
 from std.sys import llvm_intrinsic
@@ -130,6 +131,8 @@ from checks.kernel_matrix import (
     attn_masked_tail_replay_for,
     attn_dkdv_keys_per_block_for,
     attn_fwd_rows_per_block_for,
+    attn_fwd_launch_bound_for,
+    attn_dq_launch_bound_for,
     attn_zdot_rows_per_block_for,
     lib_hardware_ftz_fma_for,
     lib_smem_page_fits_for,
@@ -1121,6 +1124,11 @@ comptime ATTN_FR2_BK = 32
 hd-64 forward's BK)."""
 comptime ATTN_FR2_KS = 16
 """The p-window width of the same kernel (the shipped hd-64 forward's KS)."""
+
+#: lane/nvidia-step-time (2026-09-25): the launch bounds the forward and dq
+#: kernels declare (`attn_fwd_launch_bound_for`, `attn_dq_launch_bound_for`).
+comptime ATTN_FWD_LAUNCH_BOUND = attn_fwd_launch_bound_for[TARGET_COLUMN]()
+comptime ATTN_DQ_LAUNCH_BOUND = attn_dq_launch_bound_for[TARGET_COLUMN]()
 
 
 def _fwd_r2_page_bytes(rows: Int, qres: Bool) -> Int:
@@ -4513,6 +4521,7 @@ def _masked_tail_dy[HD: Int](
     return ftz(dy)
 
 
+@__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(ATTN_DQ_LAUNCH_BOUND)))
 def fused_bwd_dq_tiled_pf_kernel[HD: Int, SWZ: Bool = False](
     dq: MutPointer[Float32, MutAnyOrigin],
     corner: MutPointer[Float32, MutAnyOrigin],
@@ -5457,6 +5466,7 @@ def fused_bwd_zdot_sched_pf_kernel[HD: Int, TQ: Int, LAG: Bool, SABN: Bool](
 # ===========================================================================
 
 
+@__llvm_metadata(MAX_THREADS_PER_BLOCK_METADATA=StaticTuple[Int32, 1](Int32(ATTN_FWD_LAUNCH_BOUND)))
 def fused_attn_forward_r2_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool, SWZ: Bool = False](
     ctxv: MutPointer[Float32, MutAnyOrigin],
     amax: MutPointer[Float32, MutAnyOrigin],
