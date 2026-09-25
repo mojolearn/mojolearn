@@ -1962,6 +1962,7 @@ struct Builder[O: ObjectiveLike, sampled_labels: Bool = False](Movable):
             self.split_cand.unsafe_ptr()
             .unsafe_origin_cast[MutUntrackedOrigin]()
             .unsafe_bitcast[Split[Self.O.DataT]](),
+            n_classes,
         )
         comptime if HIST_SPLIT_CANDIDATES_DEFAULT:
             log_launch_ctx(ctx, "merge_split_candidates")
