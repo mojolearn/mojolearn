@@ -1,0 +1,6 @@
+lane=amd2-cpu
+commit=f7e4a200fa7d968ca8ac10560c277c44cbe3b5aa
+dirty_tracked=0
+worktree=/Users/andrewhendel/CascadeProjects/mojolearn/.claude/worktrees/agent-aff3e16a28427aacd
+source=3284	20129937	e22cf401fd7839562cb03bbc8a8ced69a0aca7c9996fe03e1c5d26eeba3a16d4
+box_clock_minus_mac=0
