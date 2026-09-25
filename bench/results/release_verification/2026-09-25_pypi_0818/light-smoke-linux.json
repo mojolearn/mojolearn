@@ -1,0 +1,124 @@
+{
+  "wheel": "/root/wheel-smoke/mojolearn-0.8.18-py3-none-manylinux_2_35_x86_64.whl",
+  "wheel_sha256": "c160fb6d5101f1d0ff6a4747ff11c5ed2bbaacfd522506de64ab262f6b9e3836",
+  "status": "PASSED",
+  "jobs": [
+    {
+      "name": "create-venv",
+      "exit_code": 0,
+      "output": "/root/wheel-smoke/out/create-venv.log"
+    },
+    {
+      "name": "install",
+      "exit_code": 0,
+      "output": "/root/wheel-smoke/out/install.log"
+    },
+    {
+      "name": "dependencies",
+      "exit_code": 0,
+      "output": "/root/wheel-smoke/out/dependencies.log"
+    },
+    {
+      "name": "installed",
+      "exit_code": 0,
+      "output": "/root/wheel-smoke/out/installed.json"
+    },
+    {
+      "name": "expanded-api",
+      "exit_code": 0,
+      "output": "/root/wheel-smoke/out/expanded-api.json"
+    },
+    {
+      "name": "loaded-lm-cpu",
+      "exit_code": 0,
+      "output": "/root/wheel-smoke/out/loaded-lm-cpu.log"
+    },
+    {
+      "name": "loaded-lm-gpu",
+      "exit_code": 0,
+      "output": "/root/wheel-smoke/out/loaded-lm-gpu.log"
+    },
+    {
+      "name": "loaded-lm-cpu-gpu-compare",
+      "exit_code": 0,
+      "output": "/root/wheel-smoke/out/loaded-lm-cpu-gpu-compare.log"
+    },
+    {
+      "name": "coverage",
+      "exit_code": 0,
+      "output": "/root/wheel-smoke/out/coverage.json"
+    },
+    {
+      "name": "models",
+      "exit_code": 0,
+      "output": "/root/wheel-smoke/out/models.json"
+    },
+    {
+      "name": "batch",
+      "exit_code": 0,
+      "output": "/root/wheel-smoke/out/batch.json"
+    },
+    {
+      "name": "extended",
+      "exit_code": 0,
+      "output": "/root/wheel-smoke/out/extended.json"
+    },
+    {
+      "name": "self-test",
+      "exit_code": 0,
+      "output": "/root/wheel-smoke/out/self-test.json"
+    }
+  ],
+  "scope": "expanded",
+  "source_commit": "f2293183c729059331cb31afcb8319f528143e55",
+  "release_qualified": false,
+  "expanded": {
+    "scope": "expanded",
+    "release_qualified": false,
+    "physical_execution_trace": "OWED",
+    "native_fault_controls": "SEPARATE_GATE",
+    "cross_validation": "OWED",
+    "multi_gpu": "OWED",
+    "apis": {
+      "apis": {
+        "mojolearn.models": [
+          "CausalLM",
+          "ParallelCausalLM"
+        ],
+        "mojolearn.parallel_ivf": [
+          "DistributedIVFIndex"
+        ],
+        "mojolearn.parallel_model_selection": [
+          "cross_val_score"
+        ],
+        "mojolearn.parallel_gaussian_process": [
+          "fit_gaussian_process_classifier",
+          "predict_gaussian_process_classifier"
+        ],
+        "mojolearn.parallel_forecasting": [
+          "predict_arima",
+          "forecast_arima",
+          "predict_exponential_smoothing",
+          "forecast_exponential_smoothing"
+        ]
+      },
+      "ivf_symbols": [
+        "ivf_flat_partial_search",
+        "ivf_finalize_distances"
+      ],
+      "gbdt_symbols": [
+        "gbdt_fit"
+      ],
+      "gbdt_binding": "/tmp/mojolearn-verifier-wheel-107_dv63/venv/lib/python3.11/site-packages/mojolearn/cuda/sm_89/identical/_mojolearn_gbdt.so",
+      "gbdt_sha256": "cced26eab4b16a245b6ad883dbc15be97e89a03a9e73aed1df665a0cf046da02",
+      "binding": "/tmp/mojolearn-verifier-wheel-107_dv63/venv/lib/python3.11/site-packages/mojolearn/cuda/sm_89/identical/_mojolearn_ivf.so",
+      "binding_sha256": "f4da141bed361ddd081100f1aecbb33e4610c9a813d870927a2966e657d4563e"
+    }
+  },
+  "installed": {
+    "package": "/tmp/mojolearn-verifier-wheel-107_dv63/venv/lib/python3.11/site-packages/mojolearn/__init__.py",
+    "version": "0.8.18",
+    "vendor": "cuda"
+  },
+  "unqualified_properties": []
+}
