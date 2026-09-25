@@ -1183,6 +1183,8 @@ class Release:
         ident = self.set_identity(vendor, arch)
         if not ident:
             return None, "the set identity is unreadable (no plan, or a binding without a readable identity)"
+        if not self.packer_takes_legs():
+            return None, "the frozen source's packer predates leg origins in reuse.json"
         t = self.tooling()
         if not t["digest"]:
             return None, "the build tooling has uncommitted changes (" + ", ".join(t["dirty"]) + ")"
@@ -1215,6 +1217,11 @@ class Release:
                 write_json(self.admission_path(name), doc)
             return doc, None
         return None, "; ".join(why) or "no completed leg of an earlier freeze with this set identity"
+
+    def packer_takes_legs(self):
+        """The pack runs the SOURCE's pack_wheel.py; one older than leg
+        origins would pack a taken leg's files as the published release's."""
+        return "LEG_ORIGIN_KEYS" in (file_at(self.commit, "packaging/linux/pack_wheel.py") or "")
 
     def leg_origin(self, doc):
         """reuse.json's origin of an admitted leg (pack_wheel.LEG_ORIGIN_KEYS)."""

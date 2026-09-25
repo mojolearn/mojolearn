@@ -69,6 +69,7 @@ class Base(unittest.TestCase):
         r.say = r.lines.append
         r.sleep = lambda s: None
         r.leg_env = lambda: {"MOJOLEARN_SOURCE_CHECKOUT": "/frozen/source"}
+        r.packer_takes_legs = lambda: True
         return r
 
 
@@ -304,6 +305,19 @@ class Legs(Base):
         r.tooling = lambda: dict(commit=HEAD, digest=None, dirty=["tools/gemm_remote_leg.sh"], files={})
         r.step_linux_builds()
         self.assertEqual(len(self.spawned), 1, "uncommitted tooling: nothing is taken")
+
+    def test_a_source_whose_packer_predates_leg_origins_rebuilds(self):
+        self.setup_earlier_freeze("cuda-sm_90a", "cuda", "sm_90a", "D90")
+        r = self.release()
+        r._plan = plan(["cuda-sm_90a"])
+        self.identities(r, {"cuda-sm_90a": "D90"})
+        del r.packer_takes_legs
+        with mock.patch.object(release, "file_at", return_value="def load_reuse(): pass\n"):
+            r.step_linux_builds()
+        self.assertEqual(len(self.spawned), 1)
+        self.assertTrue(any("packer predates" in l for l in r.lines), r.lines)
+        with mock.patch.object(release, "file_at", return_value="LEG_ORIGIN_KEYS = ()\n"):
+            self.assertTrue(r.packer_takes_legs())
 
     def test_an_unreadable_set_identity_rebuilds(self):
         self.setup_earlier_freeze("cuda-sm_90a", "cuda", "sm_90a", "D90")
