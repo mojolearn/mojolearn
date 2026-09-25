@@ -363,11 +363,11 @@ def kernel_op(
             var count = Int(setting)
             if count < 1 or count > 64 or GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
                 raise Error("parallel SVM kernels require IDENTICAL and 1..64 devices")
-            _kernel_rows(ctx, kp, out, a, b, m, n, k, norm_a, norm_b, count)
+            comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL: _kernel_rows(ctx, kp, out, a, b, m, n, k, norm_a, norm_b, count)
             return
     # DEVIATION 2492: FAST RBF in one fused kernel when k fits a register row.
-    # Apple only: its 16 width-unrolled kernels never finished compiling for
-    # NVPTX or AMDGPU (0.8.19); elsewhere FAST takes the GEMM route below.
+    # Apple only. 0.8.19's NVPTX/AMDGPU FAST hang was NOT these kernels: it was the
+    # kernel_op -> _kernel_rows -> kernel_op cycle reaching MAX matmul (gated above).
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
         if kp.kernel == KERNEL_RBF and k <= RBF_FUSED_KREG:
             if rbf_fused_tile(ctx, out, a, b, norm_a, norm_b, m, n, k, Float32(kp.gamma)):

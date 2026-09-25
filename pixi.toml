@@ -77,6 +77,13 @@ write-docs-facts = "python3 tools/docs_facts.py --write"
 # Python tests (which wait for the Mac's Metal slot), rents nothing. One line
 # per step and a non-zero exit when any step failed. tools/release_rehearsal.py.
 release-rehearsal = "python3 tools/release_rehearsal.py"
+# THE PRE-RELEASE CROSS-COMPILE GATE (2026-09-25): every Linux binding whose
+# source closure changed since the last v* tag, compiled on the Mac for sm_89
+# and gfx942 in each tier the Linux lists ship, one at a time, with a
+# per-binding bound (CROSS_COMPILE_SECONDS, tools/release_limits.sh). Catches
+# a compile that hangs for NVPTX/AMDGPU before a rental waits on it (0.8.19's
+# FAST svm). Arguments pass through: --ref, --archs, --limit, --only, --dry-run.
+cross-compile-check = "python3 tools/cross_compile_check.py"
 # THE ONE COMMAND (2026-09-22): walks docs/RELEASE_CHECKLIST.md end to end,
 # idempotent and resumable (state under ~/mojolearn-evidence/release/<version>/).
 #   pixi run release 0.8.15 --dry-run      the plan and what is already done
