@@ -1,6 +1,10 @@
 # tools/hotaisle_vm_lib.sh -- sourced, never run. ONE guarded Hot Aisle MI300X
 # VM for the RELEASE: the AMD column (tools/release_wheel_smoke.sh --provider
 # hotaisle) and the AMD build leg (tools/hotaisle_release_leg.sh), 2026-09-25.
+# tools/hotaisle_leg.sh (the segment and lane leg) sources it too, for the
+# shared settings (API, team, key file, ssh key, slot prefix, create lock,
+# slot count, balance floor) and ha_dollars / ha_lease_cents, so every Hot
+# Aisle runner counts the same slots and prices a lease the same way.
 #
 # The guards are tools/hotaisle_leg.sh's (read its header for the API and the
 # runner results of 2026-09-11), re-stated here as functions so the two release
@@ -64,6 +68,10 @@ HA_WATCHDOG_OK=0; HA_GONE_LINE=""; HA_RECORD=/dev/null; HA_GUARD=""
 ha_utc() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 ha_dollars() { [ "$1" -ge 0 ] 2>/dev/null && printf '$%d.%02d' $(( $1 / 100 )) $(( $1 % 100 )) || printf 'unknown'; }
 ha_rec() { printf '%s\n' "$*" >> "$HA_RECORD"; }
+ha_lease_cents() {  # <cents/hour> <minutes> <minimum reservation minutes>: the whole lease, rounded up to a cent
+    _lc_bill=$2; [ "${3:-0}" -gt "$_lc_bill" ] 2>/dev/null && _lc_bill=$3
+    echo $(( ($1 * _lc_bill + 59) / 60 ))
+}
 
 # ---------------------------------------------------------------- the key and the API
 ha_key_hygiene() {  # a reason on stdout and 1 when the key file must not be used
@@ -412,7 +420,7 @@ ha_rent() {
     [ "$HA_PRICE" -gt 0 ] || { ha_refuse "the $HA_SPEC_USED offering shows no OnDemandPrice, so the lease cannot be priced"; return 1; }
     _horizon=$(( _lease + HA_READY_SECONDS / 60 + 10 ))   # the Mac dead-man's deadline, the worst case billed
     _bill=$_horizon; [ "$HA_MINRES" -gt "$_bill" ] && _bill=$HA_MINRES
-    HA_LEASE_CENTS=$(( (HA_PRICE * _bill + 59) / 60 ))
+    HA_LEASE_CENTS=$(ha_lease_cents "$HA_PRICE" "$_horizon" "$HA_MINRES")
     ha_rec "spec=$HA_SPEC_USED cpu_cores=$HA_CORES price_cents_per_hour=$HA_PRICE min_reservation_minutes=$HA_MINRES"
     ha_rec "lease_minutes=$_lease horizon_minutes=$_horizon billed_minutes_at_most=$_bill max_cost_cents=$HA_LEASE_CENTS cap_cents=$_cap"
     [ "$HA_LEASE_CENTS" -le "$_cap" ] \

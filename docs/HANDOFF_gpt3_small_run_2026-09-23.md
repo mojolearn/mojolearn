@@ -83,6 +83,35 @@ running on the wrong vendor. AMD capacity is the bottleneck: 5,500 AMD
 steps on one MI325X are about 175 hours in series; an 8x box (Vultr,
 `lane/vultr-leg`) cuts that to about 25 box-hours.
 
+**Hot Aisle as the second AMD source (`lane/hotaisle-segments`).** The
+account has one DigitalOcean GPU box, so Hot Aisle's 2x MI300X VM now runs
+whole AMD segments beside it: `/Users/andrewhendel/CascadeProjects/mojolearn/tools/hotaisle_leg.sh`
+takes `--segment-lease N --dollar-cap USD` with `--spec 2gpu --one-body` (one
+body on both GPUs, `--devices 0,1`), priced live from the offering and refused
+above the cap; the provider has no maximum lease (only a 60-minute minimum;
+it bills the prepaid balance until the delete), so the balance must hold the
+whole lease plus $5 and the tool's own cap is 48 hours. In
+`/Users/andrewhendel/CascadeProjects/mojolearn/tools/lm_run_driver.py` the AMD
+vendor class is per provider, so a DigitalOcean segment and a Hot Aisle segment
+run at once under `--parallel 2`. To put B/1 on Hot Aisle: merge the lane,
+give B/1 `"provider": "hotaisle"` in `/Users/andrewhendel/mojolearn-evidence/gpt3-run/t3_spec.json`,
+drop its `"after": ["A/3"]`, set `"hotaisle_dollar_cap"` to the lease's price,
+and restart the driver while no segment of the run is in flight (the running
+driver predates the per-provider class and a changed `after` is a new plan; a
+restarted driver starts every ready unlanded segment again, so a restart
+during A/3 would rent A/3 twice). B/1 still carries Andrew's AMD `hold`
+note. The 2x MI300X offering listed 598 cents an hour on 2026-09-11 and was
+absent from the listing on 2026-09-24 with the balance at $44.65, so the
+3-step rehearsal on it has not run and the seconds a step on two MI300X are
+NOT MEASURED. Projection only: half the MI325X's 139 s if the two-device fold
+scales linearly, about 70 s a step, so B/1 (1,000 steps) about 19.5 hours
+plus 30 minutes of provisioning, about $120 at $5.98 an hour; the rehearsal
+(`--controls "" --arm amd --devices 0,1 --steps 3` of
+`/Users/andrewhendel/CascadeProjects/mojolearn/tools/lm_segment_leg.py controls`) measures it before any lease is sized. The MI300X and the MI325X
+are both gfx942 and load the same binding bytes, but they are different AMD
+models, so a route B that mixes them adds a hardware axis to the claim (both
+run the wheel's binding; nothing is built on the box).
+
 ## How to run it
 
 Everything is driven from a CLEAN worktree at main (a dirty tracked file

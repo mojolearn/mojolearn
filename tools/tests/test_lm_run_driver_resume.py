@@ -327,6 +327,39 @@ class Resume(Base):
         self.assertEqual(self.render(spec, 'B/4')[0], self.fresh_argv('B'))
 
 
+class ResumeOnHotaisle(Base):
+    """A resumed segment whose provider is Hot Aisle: the spec-wide body and
+    the body rendered again for the 2x MI300X VM both run the remaining steps
+    from the segment's own checkpoint, held to the partial chain; only the
+    devices differ."""
+
+    def test_a4_resumes_from_2600_on_both_mi300x(self):
+        spec = self.load(_spec(provider='hotaisle', lease_minutes=2100, dollar_cap=140))
+        self.land(spec, 'A/4', self.hung())
+        fake = FakeRun(self.r2)
+        with mock.patch.object(drv.subprocess, 'run', side_effect=fake), mock.patch.object(drv.time, 'sleep'):
+            drv._start(spec, self.entry(spec, 'A/4'), self.out, self.ledger)
+        renders = fake.renders()
+        self.assertEqual(len(renders), 2)
+        key = RUN + '/A/4/partial.chain.jsonl'
+        for argv, devices, body in ((renders[0], '0', 'A-4.sh'), (renders[1], '0,1', 'A-4-hotaisle.sh')):
+            self.assertEqual(argv[argv.index('--devices') + 1], devices)
+            self.assertEqual(argv[argv.index('--from') + 1], 'ckpt_00002600.blm')
+            self.assertEqual(argv[argv.index('--steps') + 1], '1300')
+            self.assertEqual(argv[argv.index('--from-sha') + 1], _sha(2600))
+            self.assertEqual(argv[argv.index('--from-key') + 1], RUN + '/A/4/ckpt_00002600.blm')
+            self.assertEqual(argv[argv.index('--expect-key') + 1], key)
+            self.assertNotIn('--replay', argv)
+            self.assertEqual(argv[argv.index('--out') + 1], str(self.out / 'bodies' / body))
+        legs = [c for c in fake.calls if c[0] == 'bash']
+        self.assertEqual(len(legs), 1)
+        self.assertEqual(legs[0][:8], ['bash', 'tools/hotaisle_leg.sh', 'amd', '--rent', '--skip-gates', '--spec', '2gpu', '--one-body'])
+        self.assertEqual(legs[0][8:], ['--segment-lease', '2130', '--dollar-cap', '140'])
+        # the partial chain is uploaded once and the resume logged once, not once per rendering
+        self.assertEqual([c[2:4] for c in fake.calls if str(c[1]).endswith('dataset_store.sh')], [['presign-put', key]])
+        self.assertEqual((self.out / 'driver.log').read_text().count('RESUMING'), 1)
+
+
 class LandUnion(Base):
     def hang_then_resume(self, **kw):
         spec = self.load(_spec())
