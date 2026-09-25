@@ -162,8 +162,10 @@ EXT_NAMES = (
 #: decides, and it is the same shape `build_sets.sh` uses. The reasoning and
 #: the numbers are on `_TIERED` in python/mojolearn/_backend.py.
 #: CLASSICAL ML (2026-09-25): fast and identical, never deterministic.
+#: The Linux wheel's FAST svm is off (0.8.19: it never finished compiling for
+#: NVPTX or AMDGPU); svm ships IDENTICAL only here. _backend._APPLE_ONLY_FAST.
 FAST_CLASSICAL_NAMES = (
-    "_mojolearn", "_mojolearn_estimators", "_mojolearn_svm", "_mojolearn_solver",
+    "_mojolearn", "_mojolearn_estimators", "_mojolearn_solver",
     "_mojolearn_metrics", "_mojolearn_preprocessing", "_mojolearn_tsa",
     "_mojolearn_linalg", "_mojolearn_arima", "_mojolearn_gp",
     "_mojolearn_kernel_methods", "_mojolearn_mixture", "_mojolearn_hdbscan",
@@ -171,7 +173,7 @@ FAST_CLASSICAL_NAMES = (
 )
 IDENTICAL_ONLY_NAMES = (
     "_mojolearn_training", "_mojolearn_mamba",
-    "_mojolearn_transformer", "_mojolearn_embedding",
+    "_mojolearn_transformer", "_mojolearn_embedding", "_mojolearn_svm",
 )
 TIERS = ("fast", "deterministic", "identical")
 
