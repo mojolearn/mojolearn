@@ -2235,6 +2235,8 @@ def fit_non_symmetric_tree[
                     block_dim=(32, 1, 1),
                 )
                 mgr.stream_kernel()
+            stage_times.end(ctx, "split.chain.stats")
+            stage_times.begin(ctx)
 
             # their `TSplitPointsKernel`, whose five steps are five calls
             # here (`split_points.cpp:64-136`): flag and sequence, stable
@@ -2258,6 +2260,8 @@ def fit_non_symmetric_tree[
                 block_dim=(SPLIT_BLOCK_SIZE, 1, 1),
             )
             mgr.stream_kernel()
+            stage_times.end(ctx, "split.chain.flags")
+            stage_times.begin(ctx)
 
             launch_stable_partition_routed[SPLIT_COST_IDENTICAL](
                 ctx, n_split, n_rows, d_left, p_off, p_sz, flags,
@@ -2265,6 +2269,8 @@ def fit_non_symmetric_tree[
                 sm_count=sm_count,
             )
             mgr.stream_kernel()
+            stage_times.end(ctx, "split.chain.partition")
+            stage_times.begin(ctx)
 
             var reorder_launches = 0
 
@@ -2283,6 +2289,8 @@ def fit_non_symmetric_tree[
                 )
             for _ in range(reorder_launches):
                 mgr.stream_kernel()
+            stage_times.end(ctx, "split.chain.reorder")
+            stage_times.begin(ctx)
 
             # their `CopyHistograms(leftLeaves, rightLeaves, ...)`
             # (`split_points.cpp:139-140`) -- the MULTI-leaf call, which is
