@@ -337,6 +337,44 @@ python3 tools/strip_wheel_dir_entries.py <dist>/audit/repaired/mojolearn-*-manyl
   --receipt <dist>/final/dir-entry-strip.json
 ```
 
+### 3b. The split Linux packages (the packer's default profile)
+
+`release-linux3` above packs the ONE combined wheel and is what
+`tools/release.py` asks for. The packer's default is the split
+(`python/mojolearn/gpu_plugins.py`), three PyPI projects released in lockstep
+so NVIDIA and AMD can ship independently:
+
+| wheel | holds | requires |
+|---|---|---|
+| `mojolearn-<v>-py3-none-manylinux_2_35_x86_64.whl` | Python, `mojolearn/host/`, `mojolearn/.libs/`; no GPU set | `[cuda]`: `mojolearn-cuda==<v>`, `[rocm]`: `mojolearn-rocm==<v>` |
+| `mojolearn_cuda-<v>-...whl` | `mojolearn/cuda/<arch>/...` only | `mojolearn==<v>` |
+| `mojolearn_rocm-<v>-...whl` | `mojolearn/hip/<arch>/...` only | `mojolearn==<v>` |
+
+The three are a partition of the combined wheel: same members, same archive
+paths, same bytes, only each `.dist-info` is its own
+(`packaging/linux/test_split_wheels.py`). A plugin installs into the core's
+package directory, so every binding's RUNPATH resolves `mojolearn/.libs`
+exactly as before. The macOS wheel is unchanged.
+
+```sh
+# all three from all three legs, release checks and proofs as release-linux3
+pixi run -e pkg pack-linux-wheel --profile release-split \
+  --set <sm89>/build/sets/cuda --set <sm90a>/build/sets/cuda --set <hip>/build/sets/hip \
+  --build-proof ... --out <dist>
+# NVIDIA alone: the core and mojolearn-cuda from the two NVIDIA legs
+pixi run -e pkg pack-linux-wheel --profile release-split --wheels core-linux,cuda \
+  --set <sm89>/build/sets/cuda --set <sm90a>/build/sets/cuda --build-proof ... --out <dist>
+# re-check any split set: ownership, exact pins, markers, one version, one tag
+python3 tools/wheel_api_audit.py --split --require-complete <dist>/*.whl
+```
+
+`packaging/linux/audit.sh` runs once per wheel (a plugin's DT_NEEDED runtime
+is in the core, so pass every manifest for the `--exclude` list). Owed before
+the first split upload: the PyPI projects `mojolearn-cuda` and
+`mojolearn-rocm` registered by the owner with trusted publishing configured
+for this repository, and the release workflow's Linux admission (one staged
+`mojolearn-*.whl` today) taught to stage the plugin wheels.
+
 ## 4. Install and test on real GPUs (OPTIONAL, never required for a release)
 
 A release is verified by the Apple column (section 5b) and the NVIDIA and AMD

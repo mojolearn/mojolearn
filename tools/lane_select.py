@@ -115,7 +115,11 @@ INERT_PREFIXES = (
 #: Paths whose change reaches every lane at once. The harness is here with a
 #: refinement (`harness_lanes`); the manifest is here without one, because it
 #: decides which lanes have a CPU route at all.
-GLOBAL_PATHS = (HARNESS, MANIFEST)
+#: THE GPU PLUGIN TABLE (2026-09-25) is here too: only `_backend.py`, a
+#: registry sink, imports it, and it decides which vendor set every lane
+#: loads on a Linux install, so no one lane owns a change to it.
+GPU_PLUGINS = os.path.join(PKG, "gpu_plugins.py")
+GLOBAL_PATHS = (HARNESS, MANIFEST, GPU_PLUGINS)
 
 #: THE SELECTION MACHINERY ITSELF. These files decide WHICH lanes run; they
 #: cannot change what any lane computes, because nothing the harness or the

@@ -72,6 +72,7 @@ def _reset(pkg, probe_result, vendor_env=None,
     higher level, so the function under test is the real one, unmodified.
     `device` is what `_device_arch()` answers for ANY vendor."""
     B._LAYOUT = None
+    B._SPLIT = None          # re-read the (absent) split-core marker per case
     B._VENDOR_SELECTED = None
     B._VENDOR_HOW = None
     B._ARCH_SELECTED = None

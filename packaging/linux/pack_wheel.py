@@ -1,13 +1,33 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
-"""Pack the fetched CUDA and HIP sets into ONE Linux wheel. Pure Python.
+"""Pack the fetched CUDA and HIP sets into the Linux wheels. Pure Python.
 
     python3 packaging/linux/pack_wheel.py \\
         --set bench/results/wheels/<stamp1>-nvidia/sets/cuda \\
         --set bench/results/wheels/<stamp2>-nvidia/sets/cuda \\
         --set bench/results/wheels/<stamp3>-amd/sets/hip \\
         --out python/dist
+
+THREE WHEELS BY DEFAULT (2026-09-25, python/mojolearn/gpu_plugins.py), so
+NVIDIA and AMD release independently:
+
+    mojolearn-<v>-py3-none-manylinux_2_35_x86_64.whl       core-linux: Python,
+                                    mojolearn/host/, mojolearn/.libs/, no set
+    mojolearn_cuda-<v>-py3-none-manylinux_2_35_x86_64.whl  cuda: mojolearn/cuda/ only
+    mojolearn_rocm-<v>-py3-none-manylinux_2_35_x86_64.whl  rocm: mojolearn/hip/ only
+
+`--profile split` (the default) or `release-split` (release-linux3's checks
+and proofs, per plugin); `--wheels core-linux,cuda,rocm` picks a subset, so
+the core and the NVIDIA plugin can be packed from the NVIDIA legs alone.
+The three are a PARTITION of the one combined payload: every member is
+written from the same file to the same archive path it has in the combined
+wheel, and only each wheel's .dist-info is its own (test_split_wheels.py
+proves the union equals the combined wheel byte for byte). A plugin's files
+install into the core's package directory, where each binding's RUNPATH
+finds mojolearn/.libs exactly as before. `--profile generic` and
+`release-linux3` still write the ONE combined wheel (tools/release.py asks
+for release-linux3 by name).
 
 EVERY SET CARRIES AN ARCHITECTURE LEVEL (2026-08-30): a `--set` directory is
 `sets/<vendor>/` holding one or more `<arch>/` subdirectories (`sm_80`,
@@ -27,7 +47,8 @@ correct RECORD. It refuses if the two version files disagree, if a set is
 missing a tier or a binding, if a set's `readback.txt` names a vendor other
 than its directory, or if the finished archive is over PyPI's limit.
 
-THE TAG IT WRITES IS `linux_x86_64`, DELIBERATELY. PyPI refuses that tag,
+THE COMBINED PROFILES' TAG IS `linux_x86_64`, DELIBERATELY (the split
+profiles write the measured manylinux_2_35_x86_64; see SPLIT_PLAT). PyPI refuses that tag,
 so the wheel this produces CANNOT be uploaded until `auditwheel` has looked
 at it and rewritten the tag to the manylinux level it actually measured
 (`packaging/linux/audit.sh`). The manylinux floor of the MAX runtime is one
@@ -231,7 +252,25 @@ RELEASE_HOPPER_ALTS = {("cuda", "sm_90"), ("cuda", "sm_90a")}
 # 'release-0.6.1'; the version was never published under that number.
 sys.path.append(str(REPO / "tools"))
 from verify_linux_surface_qualification import (  # noqa: E402
-    RELEASE_PROFILE, RELEASE_PROFILES, release_version, wheel_host_bindings)
+    RELEASE_PROFILE, RELEASE_PROFILES, load_gpu_plugins, release_version, wheel_host_bindings)
+# THE SPLIT (2026-09-25): which plugin ships which vendor directory, read from
+# python/mojolearn/gpu_plugins.py by path, the table the loader reads too.
+gpu_plugins = load_gpu_plugins()
+#: The profiles that emit THREE wheels from the same inputs: `mojolearn`
+#: (core-linux), `mojolearn-cuda` and `mojolearn-rocm`. `split` is the
+#: default and checks sets the way `generic` does; `release-split` checks
+#: them the way `release-linux3` does, per plugin (split_release_slots).
+SPLIT_PROFILE = "split"
+RELEASE_SPLIT_PROFILE = "release-split"
+SPLIT_PROFILES = (SPLIT_PROFILE, RELEASE_SPLIT_PROFILE)
+#: The wheels a split profile can emit; `--wheels` picks a subset.
+WHEEL_KINDS = (gpu_plugins.CORE_PROFILE,) + tuple(r["profile"] for r in gpu_plugins.PLUGINS.values())
+#: The platform tag the split profiles write. MEASURED, not typed: auditwheel
+#: measured the combined 0.8.16 and 0.8.18 wheels at manylinux_2_35_x86_64
+#: (packaging/linux/audit.sh, show.txt), and every split wheel holds a subset
+#: of those files, so none needs a newer glibc. audit.sh still re-measures
+#: each one; the combined profiles keep writing linux_x86_64 for it to retag.
+SPLIT_PLAT = "manylinux_2_35_x86_64"
 # BY FILE PATH, not `from mojolearn import host_surface`: importing a
 # submodule runs the package's __init__, which selects a backend and refuses
 # on a box with no built binary (the release inventory test, Wheel CI).
@@ -243,24 +282,46 @@ sys.modules[_hs_spec.name] = host_surface
 _hs_spec.loader.exec_module(host_surface)
 
 
-def release_inventory(sets, proof_paths, version, source_root=REPO):
+def split_release_slots(vendors):
+    """The release architecture slots the plugins of `vendors` carry, for
+    the split release profile: cuda -> sm_89 and the Hopper slot, hip ->
+    gfx942. The one definition is RELEASE_061_SETS (DEVIATION 2290); a
+    plugin's slots are its vendor's share of it."""
+    return {k for k in RELEASE_061_SETS if k[0] in vendors}
+
+
+def release_inventory(sets, proof_paths, version, source_root=REPO, required=None,
+                      profile=None):
     """Bind the explicit release-linux3 payload to complete per-architecture builds.
 
     File inspection only. Build provenance is not installed/runtime admission.
     Byte-LM is required only in IDENTICAL; legacy generic sets remain unchanged.
     `version` must be the version SOURCE_ROOT's _version.py declares
     (DEVIATION 2290); a literal never decides it.
+
+    `required` is the exact set of architecture slots (Hopper normalised to
+    ('cuda', 'sm_90')) the sets must fill: RELEASE_061_SETS for the combined
+    wheel, a vendor's share of it for the split profile, which packs a
+    plugin from its own vendor's legs alone (NVIDIA and AMD release
+    independently). `profile` names the assembly profile recorded.
     """
+    profile = profile or RELEASE_PROFILE
+    required = RELEASE_061_SETS if required is None else set(required)
     keys = [(s.vendor, s.arch) for s in sets]
     keyset = set(keys)
     # DEVIATION 2293: normalise the Hopper slot before comparing, so sm_90 and
     # sm_90a are the same slot and neither can appear twice.
     hopper = keyset & RELEASE_HOPPER_ALTS
     normalised = (keyset - RELEASE_HOPPER_ALTS) | ({("cuda", "sm_90")} if hopper else set())
-    if (version != read_version(source_root) or len(keys) != 3
-            or len(hopper) > 1 or normalised != RELEASE_061_SETS):
-        raise SystemExit(RELEASE_PROFILE + ' requires exactly CUDA sm_89, CUDA sm_90'
-                         ' or sm_90a, and HIP gfx942')
+    if (version != read_version(source_root) or len(keys) != len(required)
+            or len(hopper) > 1 or normalised != required):
+        if required == RELEASE_061_SETS:
+            raise SystemExit(profile + ' requires exactly CUDA sm_89, CUDA sm_90'
+                             ' or sm_90a, and HIP gfx942')
+        raise SystemExit(profile + ' requires exactly the sets '
+                         + ', '.join('/'.join(k) for k in sorted(required))
+                         + ' (the Hopper slot spelled sm_90 or sm_90a); given '
+                         + (', '.join('/'.join(k) for k in sorted(keys)) or 'none'))
     # A SET A LEG BUILT NEEDS ITS PROOF; a set whose every binding was taken
     # from the published wheel has none (its witnesses are the previous
     # release's), so the proofs number the built sets, not three.
@@ -274,7 +335,7 @@ def release_inventory(sets, proof_paths, version, source_root=REPO):
     host_built = {n for s in sets for n in (s.hosts or {}) if f'host/{n}.so' not in reused_of[(s.vendor, s.arch)]}
     proofs_needed = len(built_keys) if built_keys else (1 if host_built else 0)
     if len(proof_paths) != proofs_needed:
-        raise SystemExit(RELEASE_PROFILE + ' requires one complete build proof per set a leg built: '
+        raise SystemExit(profile + ' requires one complete build proof per set a leg built: '
                          f'{len(built_keys)} built ({", ".join("/".join(k) for k in sorted(built_keys)) or "none"}), '
                          f'{len(host_built)} host binding(s) built ({", ".join(sorted(host_built)) or "none"}), '
                          f'{proofs_needed} proof(s) needed, {len(proof_paths)} given')
@@ -315,7 +376,7 @@ def release_inventory(sets, proof_paths, version, source_root=REPO):
                 identity_digest=taken[0].reuse['files'][f'host/{name}.so'].get('identity_digest') if taken else None,
                 built_by=[k for k in sorted(seen) if k not in {f'{s.vendor}/{s.arch}' for s in taken}])
     if set(host_record) != set(HOST_NAMES):
-        raise SystemExit(RELEASE_PROFILE + ' requires every host binding the manifest ships; missing: '
+        raise SystemExit(profile + ' requires every host binding the manifest ships; missing: '
                          + ', '.join(sorted(set(HOST_NAMES) - set(host_record))))
     proofs, inventories, commits = {}, [], set()
     for path in proof_paths:
@@ -396,7 +457,7 @@ def release_inventory(sets, proof_paths, version, source_root=REPO):
                                               reused=sorted(reused_of[key]))
     n_reused = sum(1 for o in origin.values() if o['origin'] == 'reused')
     return dict(schema='mojolearn.linux-payload.v1', version=version,
-                release_profile='alpha-api', assembly_profile=RELEASE_PROFILE,
+                release_profile='alpha-api', assembly_profile=profile,
                 source_commit=commit, source_inventory=inventory,
                 sets=set_records,
                 extensions=payload,
@@ -431,8 +492,13 @@ def read_version(root=REPO):
         raise SystemExit("pack_wheel: " + str(exc))
 
 
-def metadata_text(proj, readme):
-    """Metadata 2.4, field order as setuptools 84 wrote it for 0.1.0."""
+def metadata_text(proj, readme, extras=()):
+    """Metadata 2.4, field order as setuptools 84 wrote it for 0.1.0.
+
+    `extras` is ((extra, requirement), ...): the split core's `[cuda]` and
+    `[rocm]`, each pinning its plugin at exactly this version. Written after
+    the unconditional requirements and before `Dynamic`, so the combined
+    wheel's METADATA (no extras) is byte-for-byte what it always was."""
     lines = ["Metadata-Version: 2.4", f"Name: {proj['name']}",
              f"Version: {proj['version']}", f"Summary: {proj['description']}"]
     if proj.get("authors"):
@@ -454,8 +520,65 @@ def metadata_text(proj, readme):
         lines.append(f"License-File: {lf}")
     for d in proj.get("dependencies", []):
         lines.append(f"Requires-Dist: {d}")
+    for extra, requirement in extras:
+        lines.append(f"Provides-Extra: {extra}")
+        lines.append(f'Requires-Dist: {requirement}; extra == "{extra}"')
     lines.append("Dynamic: license-file")
     return "\n".join(lines) + "\n\n" + readme
+
+
+def core_extras(version):
+    """The split core's extras: `[cuda]` -> mojolearn-cuda==<version>,
+    `[rocm]` -> mojolearn-rocm==<version>, from gpu_plugins.py."""
+    return tuple((row["extra"], f"{row['distribution']}=={version}")
+                 for row in gpu_plugins.PLUGINS.values())
+
+
+def plugin_project(proj, vendor, version, arches):
+    """The pyproject-shaped fields of one plugin distribution: the core's
+    authorship, licence, URLs, classifiers and Python floor, its own name and
+    summary, and exactly one requirement, the core at this very version."""
+    row = gpu_plugins.plugin(vendor)
+    out = {k: proj[k] for k in ("authors", "maintainers", "license", "urls", "keywords",
+                                "classifiers", "requires-python", "license-files") if k in proj}
+    out.update(name=row["distribution"], version=version,
+               description=(f"{row['label']} GPU binaries for mojolearn {version} "
+                            f"({', '.join(sorted(arches))}); install as mojolearn[{row['extra']}]"),
+               dependencies=[f"{gpu_plugins.CORE_DISTRIBUTION}=={version}"])
+    readme = (f"# {row['distribution']}\n\n"
+              f"The {row['label']} binary sets of [mojolearn](https://pypi.org/project/mojolearn/) "
+              f"{version}: every numeric tier for {', '.join(sorted(arches))}. It holds no Python "
+              f"and is useless alone; install it through the core:\n\n"
+              f"    {gpu_plugins.install_command(vendor)}\n\n"
+              f"It is released in lockstep with mojolearn and requires exactly mojolearn=={version}. "
+              f"Its files install at mojolearn/{vendor}/, the paths the combined wheel used, so the "
+              "binaries and the way they load are those of the combined wheel byte for byte.\n")
+    return out, readme
+
+
+def wheel_file_text(tag):
+    return ("Wheel-Version: 1.0\nGenerator: mojolearn pack_wheel.py\n"
+            f"Root-Is-Purelib: false\nTag: {tag}\n")
+
+
+def write_wheel(whl, entries, generated, dist):
+    """Write one wheel: `entries` (archive path -> file) then `generated`
+    (archive path -> bytes), in that order, and a RECORD. The combined
+    wheel's writer, unchanged, shared by the split profiles."""
+    if whl.exists():
+        raise SystemExit('pack_wheel: refusing to overwrite existing artifact: ' + str(whl))
+    record = []
+    with zipfile.ZipFile(whl, "w", zipfile.ZIP_DEFLATED) as z:
+        for arc, src in entries.items():
+            data = src.read_bytes()
+            z.writestr(arc, data)
+            record.append(f"{arc},sha256={urlsafe_b64(hashlib.sha256(data).digest())},{len(data)}")
+        for arc, data in generated.items():
+            z.writestr(arc, data)
+            record.append(f"{arc},sha256={urlsafe_b64(hashlib.sha256(data).digest())},{len(data)}")
+        record.append(f"{dist}/RECORD,,")
+        z.writestr(f"{dist}/RECORD", "\n".join(record) + "\n")
+    return whl
 
 
 #: The host (CPU) bindings. Vendor-neutral and tier-neutral: one copy of each
@@ -741,23 +864,45 @@ def python_package_entries():
     return entries
 
 
-def main():
+def main(argv=None, _gates=True):
+    """Pack. Returns 0, or 1 when a wheel is over PyPI's limit.
+
+    `_gates=False` is for the file-only tests alone (packaging/linux/
+    test_split_wheels.py), whose sets are inert bytes rather than ELF: it
+    skips the two steps that read binaries and the checkout's API surface
+    (portable_math/wheel.py and wheel_api_audit.audit). No command line
+    reaches it."""
     ap = argparse.ArgumentParser()
     ap.add_argument("--set", action="append", required=True,
                     help="a sets/<vendor> directory from build_sets.sh; give both")
     ap.add_argument("--out", default=str(PY_DIR / "dist"))
-    ap.add_argument("--plat", default="linux_x86_64")
+    ap.add_argument("--plat", default="",
+                    help="platform tag; default " + SPLIT_PLAT + " for the split profiles, "
+                         "linux_x86_64 (for audit.sh to retag) for the combined ones")
     # DEVIATION 2290: `release-0.6.1` is the deprecated alias of release-linux3.
-    ap.add_argument('--profile', choices=('generic', RELEASE_PROFILE, 'release-0.6.1'), default='generic')
+    # THE DEFAULT IS THE SPLIT (2026-09-25): three wheels, the core and one
+    # plugin per GPU vendor. `generic` and `release-linux3` still pack the one
+    # combined wheel and are what tools/release.py asks for by name.
+    ap.add_argument('--profile', choices=SPLIT_PROFILES + ('generic', RELEASE_PROFILE, 'release-0.6.1'),
+                    default=SPLIT_PROFILE)
+    ap.add_argument('--wheels', default='',
+                    help='split profiles: comma list of ' + ','.join(WHEEL_KINDS)
+                         + '; default the core plus the plugin of every vendor given')
     ap.add_argument('--build-proof', action='append', default=[],
-                    help='complete per-architecture build-provenance.json; three required for ' + RELEASE_PROFILE)
+                    help='complete per-architecture build-provenance.json; one per built set for '
+                         + RELEASE_PROFILE + ' and ' + RELEASE_SPLIT_PROFILE)
     ap.add_argument("--check-against", default="",
                     help="a macOS wheel whose METADATA must match this one's")
     ap.add_argument("--portable-math-helper", type=pathlib.Path,
                     help="Linux-built libMojolearnMath.so; required when packing on macOS")
-    a = ap.parse_args()
+    a = ap.parse_args(argv)
     if a.profile in RELEASE_PROFILES:
         a.profile = RELEASE_PROFILE  # DEVIATION 2290: the alias maps to the same path
+    split = a.profile in SPLIT_PROFILES
+    strict = a.profile in (RELEASE_PROFILE, RELEASE_SPLIT_PROFILE)
+    if a.wheels and not split:
+        raise SystemExit("pack_wheel: --wheels needs a split profile (split, release-split)")
+    plat = a.plat or (SPLIT_PLAT if split else "linux_x86_64")
 
     proj = tomllib.loads((PY_DIR / "pyproject.toml").read_text())["project"]
     version = read_version()
@@ -767,16 +912,28 @@ def main():
     readme = (REPO / "README.md").read_text()
 
     witnesses = host_witnesses(a.set)
-    sets = [t for s in a.set for t in load_set(s, include_byte_lm=a.profile == RELEASE_PROFILE, host_witnesses_by_name=witnesses)]
+    sets = [t for s in a.set for t in load_set(s, include_byte_lm=strict, host_witnesses_by_name=witnesses)]
     keys = [(s.vendor, s.arch) for s in sets]
     if len(set(keys)) != len(keys):
         raise SystemExit(f"pack_wheel: the same (vendor, arch) given twice: {keys}")
-    if a.profile == 'generic' and a.build_proof:
+    if not strict and a.build_proof:
         raise SystemExit('--build-proof requires an explicit release profile')
-    if a.profile != RELEASE_PROFILE and any(s.reuse for s in sets):
+    if not strict and any(s.reuse for s in sets):
         raise SystemExit('pack_wheel: reuse.json (bindings taken from a published wheel) needs the release profile')
-    inventory = (release_inventory(sets, a.build_proof, version)
-                 if a.profile == RELEASE_PROFILE else None)
+    kinds = split_kinds(a.wheels, {v for v, _ in keys}) if split else ()
+    if a.profile == RELEASE_PROFILE:
+        inventory = release_inventory(sets, a.build_proof, version)
+    elif a.profile == RELEASE_SPLIT_PROFILE:
+        plugin_vendors = {gpu_plugins.by_profile(k) for k in kinds if k != gpu_plugins.CORE_PROFILE}
+        # A plugin is packed from its own vendor's sets and nothing else; the
+        # core alone (host bindings and runtime) from whichever release sets
+        # were given. Either way every set given is proven like release-linux3's.
+        required = (split_release_slots(plugin_vendors) if plugin_vendors
+                    else {("cuda", "sm_90") if k in RELEASE_HOPPER_ALTS else k for k in keys} & RELEASE_061_SETS)
+        inventory = release_inventory(sets, a.build_proof, version, required=required,
+                                      profile=RELEASE_SPLIT_PROFILE)
+    else:
+        inventory = None
     if inventory is not None:
         r = inventory['reuse']
         print(f"pack_wheel: {r['built']} binding(s) built by the legs, {r['reused']} taken from "
@@ -804,6 +961,15 @@ def main():
                     "MAX runtime closure; the runtime does not vary by GPU "
                     "architecture, so one of these sets is broken: "
                     f"{[k[1] for k in ks]}")
+    if split and not shared:
+        # THE CORE CARRIES THE RUNTIME its host bindings load, at
+        # mojolearn/.libs, where every set's RUNPATH also looks. A per-vendor
+        # closure would have to ship inside a plugin and leave the core's host
+        # bindings with none, so the split refuses rather than lay that out.
+        raise SystemExit(
+            "pack_wheel: the split profiles need ONE runtime closure shared by every set "
+            "(mojolearn/.libs in the core); these sets' closures differ: "
+            + ", ".join(f"{v}/{arch}" for v, arch in keys))
     entries = {}  # archive path -> filesystem path
     entries["mojolearn_diagnostics.py"] = PY_DIR / "mojolearn_diagnostics.py"
     entries.update(python_package_entries())
@@ -899,12 +1065,10 @@ def main():
                          "(no release proof and no git checkout)")
 
     dist = f"mojolearn-{version}.dist-info"
-    tag = f"py3-none-{a.plat}"
+    tag = f"py3-none-{plat}"
     generated = {
         f"{dist}/METADATA": metadata_text(proj, readme).encode(),
-        f"{dist}/WHEEL": (
-            "Wheel-Version: 1.0\nGenerator: mojolearn pack_wheel.py\n"
-            f"Root-Is-Purelib: false\nTag: {tag}\n").encode(),
+        f"{dist}/WHEEL": wheel_file_text(tag).encode(),
         f"{dist}/entry_points.txt": (
             "[console_scripts]\n" + "".join(
                 f"{k} = {v}\n" for k, v in proj.get("scripts", {}).items())).encode(),
@@ -935,6 +1099,11 @@ def main():
     generated["mojolearn/CITATION.cff"] = (REPO / "CITATION.cff").read_bytes()
     generated["mojolearn/identity_columns/COMMIT"] = (witness + "\n").encode()
 
+    if split:
+        # The split core's METADATA is the combined wheel's plus the two
+        # extras, each pinning its plugin at exactly this version.
+        generated[f"{dist}/METADATA"] = metadata_text(proj, readme, core_extras(version)).encode()
+
     if a.check_against:
         with zipfile.ZipFile(a.check_against) as z:
             names = [n for n in z.namelist() if n.endswith(".dist-info/METADATA")]
@@ -946,47 +1115,53 @@ def main():
             for ln in difflib.unified_diff(theirs.splitlines(), ours.splitlines(),
                                            "macos", "linux", lineterm="", n=0):
                 print("  " + ln)
-            print("  (a Linux classifier or a version bump is an expected line;"
-                  " anything else is drift)")
+            print("  (a Linux classifier, a version bump or the split core's [cuda]/[rocm]"
+                  " extras are expected lines; anything else is drift)")
 
     out = pathlib.Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
-    whl = out / f"mojolearn-{version}-{tag}.whl"
-    if whl.exists():
-        raise SystemExit('pack_wheel: refusing to overwrite existing artifact: ' + str(whl))
-    record = []
-    with zipfile.ZipFile(whl, "w", zipfile.ZIP_DEFLATED) as z:
-        for arc, src in entries.items():
-            data = src.read_bytes()
-            z.writestr(arc, data)
-            record.append(f"{arc},sha256={urlsafe_b64(hashlib.sha256(data).digest())},{len(data)}")
-        for arc, data in generated.items():
-            z.writestr(arc, data)
-            record.append(f"{arc},sha256={urlsafe_b64(hashlib.sha256(data).digest())},{len(data)}")
-        record.append(f"{dist}/RECORD,,")
-        z.writestr(f"{dist}/RECORD", "\n".join(record) + "\n")
+    if not split:
+        whl = out / f"mojolearn-{version}-{tag}.whl"
+        built = [(write_wheel(whl, entries, generated, dist), None)]
+    else:
+        built = write_split(out, kinds, entries, generated, dist, proj, version, tag, inventory, sets)
 
-    # Finalize cached runtime closures too; never trust an older set to be libm-free.
-    import subprocess
-    command = [sys.executable, str(REPO / "packaging/portable_math/wheel.py"), str(whl)]
-    if a.portable_math_helper:
-        command += ["--helper", str(a.portable_math_helper)]
     try:
-        subprocess.run(command, check=True)
-    except Exception:
-        whl.unlink(missing_ok=True)
+        if _gates:
+            # Finalize cached runtime closures too; never trust an older set to
+            # be libm-free. A plugin carries no runtime directory, so it is
+            # AUDITED (every binary it ships, the same audit the combined wheel
+            # got) and not rewritten: its bytes stay exactly the sets' bytes.
+            import subprocess
+            for whl, vendor in built:
+                command = [sys.executable, str(REPO / "packaging/portable_math/wheel.py"), str(whl)]
+                if vendor is not None:
+                    command.append("--audit-only")
+                elif a.portable_math_helper:
+                    command += ["--helper", str(a.portable_math_helper)]
+                subprocess.run(command, check=True)
+
+            # Audit independently of the package allow-list above, so adding an API
+            # without updating packaging fails at build time rather than after upload.
+            from wheel_api_audit import audit
+            surface = audit([w for w, vendor in built if vendor is None])
+            (out / f"API-{version}-linux.json").write_text(json.dumps(surface, indent=2) + "\n")
+            if not surface['wheels'][0]['source_payload_complete']:
+                raise SystemExit('pack_wheel: incomplete source/API payload; see API report')
+        if split:
+            # EACH PLUGIN HOLDS EXACTLY ITS SETS AND THE CORE HOLDS NONE, the pins
+            # and extras are exact, and no file is in two wheels (wheel_api_audit).
+            from wheel_api_audit import split_audit
+            report = split_audit([w for w, _ in built])
+            (out / f"SPLIT-{version}-linux.json").write_text(json.dumps(report, indent=2) + "\n")
+            if report["problems"]:
+                raise SystemExit("pack_wheel: the split wheels fail their audit:\n  "
+                                 + "\n  ".join(report["problems"]))
+    except BaseException:
+        for whl, _ in built:
+            whl.unlink(missing_ok=True)
         raise
 
-    # Audit independently of the package allow-list above, so adding an API
-    # without updating packaging fails at build time rather than after upload.
-    from wheel_api_audit import audit
-    surface = audit([whl])
-    (out / f"API-{version}-linux.json").write_text(json.dumps(surface, indent=2) + "\n")
-    if not surface['wheels'][0]['source_payload_complete']:
-        whl.unlink()
-        raise SystemExit('pack_wheel: incomplete source/API payload; see API report')
-
-    size = whl.stat().st_size
     per_set = {}
     for vendor, arch, files, libs, manifest, _, _ in sets:
         per_set[f"{vendor}/{arch}"] = {
@@ -994,21 +1169,135 @@ def main():
             "runtime_libs_bytes": manifest["bytes_staged_libs"],
             "driver_libs_not_staged": manifest["driver_libs_not_staged"],
         }
-    sizes = {
-        "wheel": str(whl), "compressed_bytes": size,
-        "compressed_mb": round(size / 1e6, 2),
-        "pypi_limit_bytes": PYPI_LIMIT, "over_limit": size > PYPI_LIMIT,
-        "libs_layout": "shared mojolearn/.libs" if shared else "per-vendor <vendor>/.libs",
-        "sets": per_set, "tag": tag,
-    }
+    if not split:
+        whl = built[0][0]
+        size = whl.stat().st_size
+        sizes = {
+            "wheel": str(whl), "compressed_bytes": size,
+            "compressed_mb": round(size / 1e6, 2),
+            "pypi_limit_bytes": PYPI_LIMIT, "over_limit": size > PYPI_LIMIT,
+            "libs_layout": "shared mojolearn/.libs" if shared else "per-vendor <vendor>/.libs",
+            "sets": per_set, "tag": tag,
+        }
+    else:
+        wheels = {}
+        for whl, vendor in built:
+            size = whl.stat().st_size
+            wheels[whl.name] = {
+                "distribution": (gpu_plugins.plugin(vendor)["distribution"] if vendor
+                                 else gpu_plugins.CORE_DISTRIBUTION),
+                "compressed_bytes": size, "compressed_mb": round(size / 1e6, 2),
+                "over_limit": size > PYPI_LIMIT}
+        sizes = {
+            "wheels": wheels, "pypi_limit_bytes": PYPI_LIMIT,
+            "over_limit": any(w["over_limit"] for w in wheels.values()),
+            "libs_layout": "shared mojolearn/.libs (core)", "sets": per_set, "tag": tag,
+            "profile": a.profile,
+        }
     (out / f"SIZES-{version}-linux.json").write_text(json.dumps(sizes, indent=2))
     print(json.dumps(sizes, indent=2))
-    if size > PYPI_LIMIT:
+    if sizes["over_limit"]:
         print(f"\nOVER PyPI's {PYPI_LIMIT/1e6:.0f} MB LIMIT. STOP. Report the numbers "
               "above; do not split the name without them.", file=sys.stderr)
         return 1
     return 0
 
+
+def split_kinds(text, vendors_given):
+    """The wheels a split profile emits, in WHEEL_KINDS order: `--wheels`
+    when given, else the core plus the plugin of every vendor a set was given
+    for. A plugin asked for with no set of its vendor is refused."""
+    if not text:
+        kinds = [gpu_plugins.CORE_PROFILE] + [row["profile"] for v, row in gpu_plugins.PLUGINS.items()
+                                             if v in vendors_given]
+    else:
+        kinds = [k.strip() for k in text.split(",") if k.strip()]
+        unknown = [k for k in kinds if k not in WHEEL_KINDS]
+        if unknown or not kinds or len(set(kinds)) != len(kinds):
+            raise SystemExit(f"pack_wheel: --wheels {text!r}: name each of {', '.join(WHEEL_KINDS)} "
+                             "at most once, nothing else")
+    for kind in kinds:
+        if kind != gpu_plugins.CORE_PROFILE and gpu_plugins.by_profile(kind) not in vendors_given:
+            raise SystemExit(f"pack_wheel: --wheels names {kind} but no "
+                             f"{gpu_plugins.by_profile(kind)} set was given")
+    return tuple(k for k in WHEEL_KINDS if k in kinds)
+
+
+def split_payload(entries, generated, dist):
+    """Partition the combined wheel's payload by owner: vendor -> (entries,
+    generated) for each plugin and None -> the core's. Every member lands in
+    exactly one part by construction (gpu_plugins.member_vendor); the
+    combined wheel's .dist-info is left out, each wheel writes its own."""
+    parts = {}
+    for arc, src in entries.items():
+        parts.setdefault(gpu_plugins.member_vendor(arc), ({}, {}))[0][arc] = src
+    for arc, data in generated.items():
+        if arc.startswith(dist + "/"):
+            continue
+        parts.setdefault(gpu_plugins.member_vendor(arc), ({}, {}))[1][arc] = data
+    return parts
+
+
+def write_split(out, kinds, entries, generated, dist, proj, version, tag, inventory, sets):
+    """Write the split wheels `kinds` asks for from the combined payload.
+    Returns [(wheel path, vendor or None for the core), ...]. The bytes of
+    every member are the combined wheel's; only the .dist-info differs."""
+    parts = split_payload(entries, generated, dist)
+    core_entries, core_payload = parts.get(None, ({}, {}))
+    licenses = {k: v for k, v in generated.items() if k.startswith(f"{dist}/licenses/")}
+    built = []
+
+    def payload_doc(role, distribution, members):
+        doc = dict(inventory)
+        doc["split"] = dict(role=role, distribution=distribution, profile=RELEASE_SPLIT_PROFILE,
+                            native_members=sorted(n for n in members
+                                                  if n.endswith(".so") or "/.libs/" in n))
+        return (json.dumps(doc, sort_keys=True, indent=2) + "\n").encode()
+
+    try:
+        for kind in kinds:
+            if kind == gpu_plugins.CORE_PROFILE:
+                core_generated = {}
+                for arc, data in generated.items():
+                    if not arc.startswith(dist + "/"):
+                        continue
+                    if arc == f"{dist}/LINUX_PAYLOAD.json":
+                        data = payload_doc(kind, gpu_plugins.CORE_DISTRIBUTION, core_entries)
+                    core_generated[arc] = data
+                core_generated[f"{dist}/{gpu_plugins.CORE_MARKER}"] = (
+                    json.dumps(gpu_plugins.core_marker(version), sort_keys=True, indent=2) + "\n").encode()
+                core_generated.update(core_payload)
+                whl = out / f"mojolearn-{version}-{tag}.whl"
+                built.append((write_wheel(whl, core_entries, core_generated, dist), None))
+                continue
+            vendor = gpu_plugins.by_profile(kind)
+            row = gpu_plugins.plugin(vendor)
+            ventries, vpayload = parts.get(vendor, ({}, {}))
+            if not ventries:
+                raise SystemExit(f"pack_wheel: {row['distribution']} would be empty; no {vendor} set")
+            arches = sorted({s.arch for s in sets if s.vendor == vendor})
+            pproj, preadme = plugin_project(proj, vendor, version, arches)
+            pdist = f"{row['wheel_name']}-{version}.dist-info"
+            pgen = {
+                f"{pdist}/METADATA": metadata_text(pproj, preadme).encode(),
+                f"{pdist}/WHEEL": wheel_file_text(tag).encode(),
+            }
+            if inventory is not None:
+                pgen[f"{pdist}/LINUX_PAYLOAD.json"] = payload_doc(kind, row["distribution"], ventries)
+            for arc, data in licenses.items():
+                pgen[pdist + arc[len(dist):]] = data
+            pgen[f"{pdist}/{gpu_plugins.PLUGIN_MARKER}"] = (json.dumps(
+                gpu_plugins.plugin_marker(vendor, version, arches), sort_keys=True, indent=2) + "\n").encode()
+            pgen.update(vpayload)
+            whl = out / f"{row['wheel_name']}-{version}-{tag}.whl"
+            built.append((write_wheel(whl, ventries, pgen, pdist), vendor))
+    except BaseException:
+        for whl, _ in built:
+            whl.unlink(missing_ok=True)
+        raise
+    for whl, vendor in built:
+        print(f"pack_wheel: wrote {whl.name} ({'core' if vendor is None else vendor + ' plugin'})")
+    return built
 
 if __name__ == "__main__":
     sys.exit(main())

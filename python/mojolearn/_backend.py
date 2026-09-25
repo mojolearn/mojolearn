@@ -113,6 +113,27 @@ order:
      install always did). More than one and no answer refuses, naming
      `MOJOLEARN_GPU_ARCH`.
 
+THE PLUGIN PACKAGES (2026-09-25, gpu_plugins.py)
+-----------------------------------------------
+Since the split, the Linux `mojolearn` wheel carries no GPU set: the CUDA sets
+come from `mojolearn-cuda` and the HIP sets from `mojolearn-rocm`, each of
+which installs its files at the very paths above (mojolearn/cuda/...,
+mojolearn/hip/...) so every RUNPATH resolves exactly as it did in the combined
+wheel. `_layout()` therefore finds a plugin's sets the way it always found
+them, on disk, and ADDS three refusals when this install is the split core (a
+`gpu_plugins.json` in its .dist-info), each a `GpuPluginError` that
+`select()` never turns into the CPU-only set:
+
+  * a box whose probe shows a GPU for which no plugin is installed beside
+    this core refuses at import, naming the pip command
+    (`pip install "mojolearn[cuda]==<version>"`); MOJOLEARN_VENDOR=cpu runs
+    the CPU bindings on purpose instead;
+  * a plugin whose version is not this core's exactly refuses, naming both;
+  * sets under mojolearn/<vendor>/ that no installed plugin owns refuse.
+
+The old combined wheel, the macOS wheel and a source checkout carry no marker
+and none of this applies to them.
+
 A vendor directory whose binaries sit directly in it (no architecture
 subdirectory) keeps working as before: that is every set built before the
 axis existed, and the flat/legacy behaviour is a supported layout, not a
@@ -128,11 +149,13 @@ binaries; `NumericModeMixin.vendor_used()` reports it per estimator.
 
 import importlib.machinery
 import importlib.util
+import json
 import os
 import re
 import sys
 
-from . import host_surface
+from . import gpu_plugins, host_surface
+from ._version import __version__ as _CORE_VERSION
 
 
 # THE RUNTIME REWRITES THE PROCESS ENVIRONMENT WHEN A BINDING LOADS.
@@ -496,6 +519,158 @@ def _probe_lines(probe, only=None):
 
 
 # ===================================================================
+# THE PLUGIN PACKAGES. See the module docstring and gpu_plugins.py.
+# ===================================================================
+
+
+class GpuPluginError(ImportError):
+    """A GPU plugin refusal: a GPU on this box with no plugin installed for
+    it, a plugin of another version, or sets no plugin owns. `select()`
+    re-raises it instead of installing the CPU-only set, because serving a
+    GPU box's fits from the host bindings would be exactly the silent CPU
+    fallback this refusal exists to prevent. MOJOLEARN_VENDOR=cpu is the way
+    to run on the CPU on purpose."""
+
+
+#: The core's marker document when this install is the split core, False
+#: when it is not, None until read.
+_SPLIT = None
+#: vendor -> {distribution, version, location} of every plugin installed
+#: beside this core (the split core only).
+_PLUGINS_FOUND = {}
+
+
+def _site_dir():
+    """The directory this package sits in (site-packages on an install). A
+    plugin's files resolve their runtime only from here, so this is also the
+    ONLY place a plugin's distribution is looked for."""
+    return os.path.dirname(_pkg_dir())
+
+
+def _find_distribution(name, paths):
+    """The installed distribution `name` whose .dist-info is in one of
+    `paths`, or None. Never raises."""
+    try:
+        from importlib import metadata
+        for dist in metadata.distributions(name=name, path=list(paths)):
+            return dist
+    except Exception:
+        return None
+    return None
+
+
+def _split_core():
+    """The core's gpu_plugins.json when THIS install is the split Linux core,
+    else None. Read from the .dist-info beside this package directory only,
+    so another environment's install never answers for this one."""
+    global _SPLIT
+    if _SPLIT is not None:
+        return _SPLIT or None
+    _SPLIT = False
+    dist = _find_distribution(gpu_plugins.CORE_DISTRIBUTION, [_site_dir()])
+    if dist is None:
+        return None
+    try:
+        text = dist.read_text(gpu_plugins.CORE_MARKER)
+    except Exception:
+        text = None
+    if not text:
+        return None
+    try:
+        doc = json.loads(text)
+    except ValueError:
+        doc = None
+    if not isinstance(doc, dict) or doc.get("schema") != gpu_plugins.CORE_SCHEMA:
+        raise GpuPluginError(
+            f"mojolearn: the {gpu_plugins.CORE_MARKER} in this install's .dist-info "
+            f"({_site_dir()}) is not a {gpu_plugins.CORE_SCHEMA} document; "
+            "reinstall mojolearn")
+    _SPLIT = doc
+    return doc
+
+
+def gpu_plugin():
+    """{distribution, version, location} of the plugin whose sets this
+    process loads, or None (CPU-only, macOS, the combined wheel, a source
+    checkout)."""
+    if _CPU_ONLY is not None:
+        return None
+    _layout()
+    return _PLUGINS_FOUND.get(_VENDOR_SELECTED)
+
+
+def _check_plugins(pkg, present):
+    """On the split core: every plugin installed beside it must be this
+    core's version and must own the sets on disk, and every set on disk must
+    be owned by an installed plugin. Records what it found."""
+    _PLUGINS_FOUND.clear()
+    for vendor in gpu_plugins.vendors():
+        row = gpu_plugins.plugin(vendor)
+        dist = _find_distribution(row["distribution"], [_site_dir()])
+        vdir = os.path.join(pkg, vendor)
+        fix = gpu_plugins.install_command(vendor, _CORE_VERSION)
+        if dist is None:
+            if vendor in present:
+                raise GpuPluginError(
+                    f"mojolearn: {vdir} carries {row['label']} sets but no "
+                    f"{row['distribution']} is installed beside this mojolearn "
+                    f"{_CORE_VERSION} ({_site_dir()}) to own them; they are not "
+                    f"this release's. Reinstall the plugin:\n    {fix}")
+            continue
+        version = dist.version
+        if version != _CORE_VERSION:
+            raise GpuPluginError(
+                f"mojolearn: {row['distribution']} {version} is installed beside "
+                f"mojolearn {_CORE_VERSION}; the two are released together and must "
+                f"be the same version exactly. Install the matching plugin:\n    {fix}")
+        if vendor not in present:
+            raise GpuPluginError(
+                f"mojolearn: {row['distribution']} {version} is installed but {vdir} "
+                f"holds no set; the plugin's files are missing. Reinstall it:\n"
+                f"    pip install --force-reinstall \"{row['distribution']}=={version}\"")
+        try:
+            location = str(dist.locate_file(""))
+        except Exception:
+            location = _site_dir()
+        _PLUGINS_FOUND[vendor] = {"distribution": row["distribution"],
+                                  "version": version, "location": location}
+
+
+def _missing_plugin_error(vendors, probe, present, forced=None):
+    """The refusal for a GPU on this box whose plugin is not installed."""
+    lines = []
+    for vendor in vendors:
+        row = gpu_plugins.plugin(vendor)
+        elsewhere = None
+        try:
+            from importlib import metadata
+            other = metadata.distribution(row["distribution"])
+            elsewhere = f"{other.version} at {other.locate_file('')}"
+        except Exception:
+            pass
+        why = ("MOJOLEARN_VENDOR=" + forced) if forced else "this box shows a device"
+        lines.append(
+            f"mojolearn: {why} for {row['label']}, and {row['distribution']}, the "
+            f"package that carries the {row['label']} binaries, is not installed "
+            f"beside this mojolearn {_CORE_VERSION} ({_site_dir()}). Install it:\n"
+            f"    {gpu_plugins.install_command(vendor, _CORE_VERSION)}")
+        if elsewhere:
+            lines.append(
+                f"  A {row['distribution']} {elsewhere} is importable, but a plugin "
+                "must be installed into the same environment (site-packages) as "
+                "mojolearn itself.")
+    if probe is not None:
+        lines.append("What was looked for and found:")
+        lines.extend(_probe_lines(probe))
+    if present:
+        lines.append(f"Installed plugins carry: {present}.")
+    lines.append(
+        "mojolearn does not fall back to the CPU on a box with a GPU. To run on "
+        "the CPU on purpose, set MOJOLEARN_VENDOR=cpu before import.")
+    return GpuPluginError("\n".join(lines))
+
+
+# ===================================================================
 # THE ARCHITECTURE AXIS. See the module docstring.
 # ===================================================================
 
@@ -717,18 +892,50 @@ def _layout():
     pkg = _pkg_dir()
     present = [v for v in _LINUX_VENDORS
                if _vendor_has_set(os.path.join(pkg, v))]
+    forced = os.environ.get("MOJOLEARN_VENDOR", "").strip().lower()
+    probe = None
+    if _split_core() is not None:
+        # THE SPLIT CORE (gpu_plugins.py). Its GPU sets come from plugins
+        # installed beside it; a plugin of another version, or sets no plugin
+        # owns, refuse whatever the box is.
+        _check_plugins(pkg, present)
+        if forced == "cpu":
+            raise ImportError(
+                "mojolearn: MOJOLEARN_VENDOR=cpu; no GPU set is loaded, on request "
+                f"(installed plugins: {present or 'none'})")
+        if forced in _LINUX_VENDORS and forced not in present:
+            raise _missing_plugin_error([forced], None, present, forced=forced)
+        if not forced:
+            # A GPU ON THIS BOX WITHOUT ITS PLUGIN REFUSES, BY NAME. The core
+            # alone would otherwise import as the CPU-only set and serve a
+            # GPU box's fits from the host bindings, which no install of the
+            # combined wheel ever did.
+            probe = _probe_box()
+            hits = [v for v in present if probe[v]["found"]]
+            missing = [v for v in _LINUX_VENDORS if probe[v]["found"] and v not in present]
+            if missing and not hits:
+                raise _missing_plugin_error(missing, probe, present)
+            if not present:
+                raise ImportError(
+                    "mojolearn: no supported GPU found on this box and no GPU plugin "
+                    f"({', '.join(r['distribution'] for r in gpu_plugins.PLUGINS.values())}) "
+                    "is installed; only the CPU bindings under mojolearn/host/ load.\n"
+                    + "\n".join(_probe_lines(probe)))
     if not present:
         # macOS, or a Linux source checkout. The vendor is whatever the
         # binaries say; `vendor()` reads it after `select()` has loaded them.
         _LAYOUT = ("flat", pkg)
         _VENDOR_HOW = "flat layout; read from the loaded binaries"
         return _LAYOUT
-    forced = os.environ.get("MOJOLEARN_VENDOR", "").strip().lower()
     if forced:
         if forced not in _LINUX_VENDORS:
+            # `cpu` lands here too on the combined wheel, and select() then
+            # installs the CPU-only set when a host binding is built, exactly
+            # as it does for any refusal of this function.
             raise ImportError(
                 f"mojolearn: MOJOLEARN_VENDOR={forced!r}; it must be "
-                f"'cuda' or 'hip' (this install carries {present})"
+                f"'cuda' or 'hip' to load a GPU set, or 'cpu' to load none "
+                f"(this install carries {present})"
             )
         if forced not in present:
             raise ImportError(
@@ -781,7 +988,7 @@ def _layout():
         _VENDOR_HOW = "MOJOLEARN_VENDOR in the environment"
         _LAYOUT = ("vendor", base)
         return _LAYOUT
-    probe = _probe_box()
+    probe = probe or _probe_box()
     hits = [v for v in present if probe[v]["found"]]
     if len(hits) == 1:
         base = _vendor_base(pkg, hits[0])
@@ -1368,6 +1575,10 @@ def select():
     # 2615 turns it into by-name stubs only when the CPU binding is built.
     try:
         ident_dir = tier_dir(mode)
+    except GpuPluginError:
+        # A GPU box without its plugin, or a mismatched plugin: never the
+        # CPU-only set (see GpuPluginError).
+        raise
     except ImportError as exc:
         if not host_binding_built():
             raise
