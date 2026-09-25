@@ -2,6 +2,14 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
+## 0.8.19 (published 2026-09-25)
+
+### Changed
+- NVIDIA (sm_90a) training takes 30.7 s per optimizer step at the GPT-3 Small shape on one H100, down from 38.8 s, with the same bits (`bench/results/nvidia_step_time_2026-09-25/`). Three NVIDIA-only changes: GEMM window admission (a 16-deep window whose staged operands provably cannot produce a subnormal step result runs the bare `fma.rn`, which is then the contract step exactly; every other window keeps the two-instruction step; `-D MOJOLEARN_GEMM_NO_WINDOW_ADMIT=1` reverts); a 128x64 kpack GEMM tile under a 512-thread launch bound (a schedule: every cell's chain, leaves and fold are unchanged; `-D MOJOLEARN_GEMM_NO_KPACK_NARROW=1` reverts); and launch bounds on the attention forward (1024) and dq (768) kernels, register allocation only (`-D MOJOLEARN_ATTN_NO_LAUNCH_BOUND=1` reverts). Every other column declares 1024 on those two attention kernels.
+- AMD (gfx942) training takes 29.1 s per optimizer step at the same shape on one MI300X, down from 32.3 s in 0.8.18, with the same bits (`bench/results/amd_step_time_2026-09-24/`, "Pass 2"). The matrix-core GEMM applies the same exact-admission argument per window: where the block's staged operands prove every accumulator stays a multiple of 2^-126, the MFMA step alone is the contract step and the product by one is not issued (AMD only; `-D MOJOLEARN_GEMM_MFMA_NO_ADMIT=1` reverts). The AMD attention kernels on the matrix cores are not in this release; they stay off by default until their 16x16x1 step is explained.
+- Every column: the embedding backward's run-start prefix sum runs in one block of 256 threads instead of one thread. Integer addition is exact, so every word equals the serial kernel's (`-D MOJOLEARN_EMB_SERIAL_RUN_BEGIN=1` reverts).
+- Proofs of the merged source, built from source on each box (`bench/results/release_0819_proofs_2026-09-25/`): on a Hot Aisle MI300X and on a RunPod H100, the replays of steps 101 to 103 and 1999 to 2000 from the run's checkpoints equal the H100 chain line by line (state digests abc8b816b5c3fb15, a9421f91b947f82c, fcdb48b8ab51f2ef, dcb05e4e668a81e1, 0e39ed2bfe9bcbae; gradients, the 64 losses and the learning-rate bits); the T3-shape GEMM hashes equal the VALU kernels on AMD (64 of 64 lines over six operand kinds) and 0.8.18's NVIDIA GEMM on NVIDIA (72 of 72), the NVIDIA admission sabotage differs on 12 lines, and the 64 AMD lines equal the NVIDIA ones hash for hash; the GEMM device, backward and workspace checks are green on both; 181 of the 201 GEMM-reaching identity lanes read IDENTICAL on each vendor (6,813 cell parts) and none divergent, with the same 20 refused on both for bindings the boxes did not build. Apple: the changed kernels compile to AIR for apple-m4 on a Linux host; no Apple GPU ran for this release.
+
 ## 0.8.18 (published 2026-09-25)
 
 ### Changed

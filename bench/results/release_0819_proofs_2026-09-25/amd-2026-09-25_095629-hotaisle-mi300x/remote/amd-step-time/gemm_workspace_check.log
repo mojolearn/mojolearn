@@ -1,0 +1,116 @@
+Imported from /root/mojolearn/gemm/checks/gemm_workspace_check.mojo:13:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:2878:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ma = min(min(adm_s[sr], adm_s[sr + 1]), min(adm_s[sr + 2], adm_s[sr + 3]))
+                             ~~~~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/gemm/checks/gemm_workspace_check.mojo:13:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:2878:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ma = min(min(adm_s[sr], adm_s[sr + 1]), min(adm_s[sr + 2], adm_s[sr + 3]))
+                                        ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/gemm/checks/gemm_workspace_check.mojo:13:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:2878:66: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ma = min(min(adm_s[sr], adm_s[sr + 1]), min(adm_s[sr + 2], adm_s[sr + 3]))
+                                                            ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/gemm/checks/gemm_workspace_check.mojo:13:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:2878:81: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ma = min(min(adm_s[sr], adm_s[sr + 1]), min(adm_s[sr + 2], adm_s[sr + 3]))
+                                                                           ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/gemm/checks/gemm_workspace_check.mojo:13:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:2879:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mb = min(min(adm_s[sr + 4], adm_s[sr + 5]), min(adm_s[sr + 6], adm_s[sr + 7]))
+                             ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/gemm/checks/gemm_workspace_check.mojo:13:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:2879:50: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mb = min(min(adm_s[sr + 4], adm_s[sr + 5]), min(adm_s[sr + 6], adm_s[sr + 7]))
+                                            ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/gemm/checks/gemm_workspace_check.mojo:13:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:2879:70: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mb = min(min(adm_s[sr + 4], adm_s[sr + 5]), min(adm_s[sr + 6], adm_s[sr + 7]))
+                                                                ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/gemm/checks/gemm_workspace_check.mojo:13:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:2879:85: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mb = min(min(adm_s[sr + 4], adm_s[sr + 5]), min(adm_s[sr + 6], adm_s[sr + 7]))
+                                                                               ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/gemm/checks/gemm_workspace_check.mojo:13:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:6324:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            as_.store[alignment=ALIGN](initial_page * APAGE + ga[0] * ASTRIDE + ga[1] * RPT, pga)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/gemm/checks/gemm_workspace_check.mojo:13:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:6325:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            bs_.store[alignment=ALIGN](initial_page * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/gemm/checks/gemm_workspace_check.mojo:13:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:6357:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            as_.store[alignment=ALIGN](pgw * APAGE + ga[0] * ASTRIDE + ga[1] * RPT, pga)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/gemm/checks/gemm_workspace_check.mojo:13:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:6358:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            bs_.store[alignment=ALIGN](pgw * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/gemm/checks/gemm_workspace_check.mojo:13:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:6440:26: warning: 'load' is deprecated, use 'unsafe_load' instead
+            var ra1 = as_.load[width=RPT, alignment=ALIGN](abase)
+                      ~~~^~~~~
+                          unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/gemm/checks/gemm_workspace_check.mojo:13:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:6441:26: warning: 'load' is deprecated, use 'unsafe_load' instead
+            var rb1 = bs_.load[width=CPT, alignment=ALIGN](bbase)
+                      ~~~^~~~~
+                          unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/gemm/checks/gemm_workspace_check.mojo:13:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:6456:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var raa = as_.load[width=RPT, alignment=ALIGN](abase + ca * RPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/gemm/checks/gemm_workspace_check.mojo:13:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:6457:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rba = bs_.load[width=CPT, alignment=ALIGN](bbase + ca * CPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/gemm/checks/gemm_workspace_check.mojo:13:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:6463:29: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var ra = as_.load[width=RPT, alignment=ALIGN](abase + c0 * RPT)
+                         ~~~^~~~~
+                             unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/gemm/checks/gemm_workspace_check.mojo:13:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:6464:29: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rb = bs_.load[width=CPT, alignment=ALIGN](bbase + c0 * CPT)
+                         ~~~^~~~~
+                             unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/gemm/checks/gemm_workspace_check.mojo:13:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:6490:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var ra2 = as_.load[width=RPT, alignment=ALIGN](abase + cc * RPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/gemm/checks/gemm_workspace_check.mojo:13:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:6491:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rb2 = bs_.load[width=CPT, alignment=ALIGN](bbase + cc * CPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+PASS workspace growth and queued reuse, op 0
+PASS workspace growth and queued reuse, op 1
+PASS workspace growth and queued reuse, op 2
+PASS: 9 GEMMs, 4608 cells bitwise equal to host oracle

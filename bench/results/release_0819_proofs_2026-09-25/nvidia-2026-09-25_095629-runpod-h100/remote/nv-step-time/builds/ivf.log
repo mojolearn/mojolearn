@@ -1,0 +1,738 @@
+!! MOJOLEARN_GPU_ARCHS=sm_90a (--target-accelerator); read the architecture back out of the built .so
+3423 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x116500000000, nodemask=1)
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:27:
+./bindings/hostptr.mojo:58:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:71:
+/root/mojolearn/./core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:71:
+/root/mojolearn/./core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:71:
+/root/mojolearn/./core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:72:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo:75:
+Imported from /root/mojolearn/./core/row_norms.mojo:60:
+/root/mojolearn/./core/pinned_reduce.mojo:125:8: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+    red[tid] = value
+    ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:72:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo:75:
+Imported from /root/mojolearn/./core/row_norms.mojo:60:
+/root/mojolearn/./core/pinned_reduce.mojo:130:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            v[j] = red[tid + j * P]
+                   ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:72:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo:75:
+Imported from /root/mojolearn/./core/row_norms.mojo:60:
+/root/mojolearn/./core/pinned_reduce.mojo:136:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        red[tid] = v[0]
+        ~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:72:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo:75:
+Imported from /root/mojolearn/./core/row_norms.mojo:60:
+/root/mojolearn/./core/pinned_reduce.mojo:140:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        w[t] = red[t]
+               ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:27:
+./bindings/hostptr.mojo:69:9: warning: 'memcpy' is deprecated, use 'unsafe_memcpy' instead
+        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        ^~~~~~
+        unsafe_memcpy
+<unknown>:0: note: 'memcpy' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:71:
+/root/mojolearn/./core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:71:
+/root/mojolearn/./core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:202:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_K] = Int32(k)
+        ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:203:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_LEN] = Int32(length)
+        ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:204:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_PREVIOUS_LEN] = Int32(length)
+        ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:205:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_OUT_CNT] = Int32(0)
+        ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:206:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        kth_bits[0] = UInt64(0)
+        ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:230:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var current_len = Int(ctr[CTR_LEN])
+                              ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:231:32: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var current_k = Int(ctr[CTR_K])
+                            ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:232:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var previous_len = Int(ctr[CTR_PREVIOUS_LEN])
+                               ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:242:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        hist[tid] = Int32(0)
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:244:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_FILTER_CNT] = Int32(0)
+            ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:249:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var kth = kth_bits[0]
+                  ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:293:69: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var scanned = block_prefix_sum[block_size=SELECT_BLOCK](hist[tid])
+                                                                ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:294:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        hist[tid] = scanned
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:299:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            prev_count = hist[tid - 1]
+                         ~~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:300:29: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var cur_count = hist[tid]
+                        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:302:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_K] = Int32(current_k - Int(prev_count))
+            ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:303:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_LEN] = Int32(Int(cur_count) - Int(prev_count))
+            ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:304:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kth_bits[0] = kth_bits[0] | (
+            ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:304:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kth_bits[0] = kth_bits[0] | (
+                          ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:309:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_PREVIOUS_LEN] = Int32(current_len)
+            ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:312:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES_64 - 1:
+               ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:312:40: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES_64 - 1:
+                                    ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:318:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var lf_kth = kth_bits[0]
+                         ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:360:14: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        s_val[slot] = o_val.unsafe_load(slot)
+        ~~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:361:14: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        s_idx[slot] = o_idx.unsafe_load(slot)
+        ~~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:366:40: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var key_t = composite_key(s_val[slot], s_idx[slot], select_min)
+                                  ~~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:366:53: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var key_t = composite_key(s_val[slot], s_idx[slot], select_min)
+                                               ~~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:369:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if composite_key(s_val[j], s_idx[j], select_min) < key_t:
+                             ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:369:45: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            if composite_key(s_val[j], s_idx[j], select_min) < key_t:
+                                       ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:371:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        o_val.unsafe_store(rank, s_val[slot])
+                                 ~~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:123:
+/root/mojolearn/./neighbors/checks/select_radix_identical.mojo:372:39: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        o_idx.unsafe_store(rank, s_idx[slot])
+                                 ~~~~~^~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:126:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:220:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_K] = Int32(k)
+        ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:126:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:221:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_LEN] = Int32(length)
+        ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:126:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:222:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_PREVIOUS_LEN] = Int32(length)
+        ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:126:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:223:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_OUT_CNT] = Int32(0)
+        ~~~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:126:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:224:12: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        ctr[CTR_OUT_BACK_CNT] = Int32(0)
+        ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:126:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:225:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        kth_bits[0] = UInt32(0)
+        ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:126:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:251:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var current_len = Int(ctr[CTR_LEN])
+                              ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:126:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:252:32: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var current_k = Int(ctr[CTR_K])
+                            ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:126:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:253:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var previous_len = Int(ctr[CTR_PREVIOUS_LEN])
+                               ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:126:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:265:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        hist[tid] = Int32(0)
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:126:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:267:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_FILTER_CNT] = Int32(0)
+            ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:126:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:272:27: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var kth = kth_bits[0]
+                  ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:126:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:330:69: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var scanned = block_prefix_sum[block_size=SELECT_BLOCK](hist[tid])
+                                                                ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:126:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:331:13: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        hist[tid] = scanned
+        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:126:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:337:30: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            prev_count = hist[tid - 1]
+                         ~~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:126:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:338:29: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        var cur_count = hist[tid]
+                        ~~~~^~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:126:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:342:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_K] = Int32(current_k - Int(prev_count))
+            ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:126:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:343:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_LEN] = Int32(Int(cur_count) - Int(prev_count))
+            ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:126:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:344:21: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kth_bits[0] = kth_bits[0] | (UInt32(tid) << UInt32(start_bit))
+            ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:126:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:344:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            kth_bits[0] = kth_bits[0] | (UInt32(tid) << UInt32(start_bit))
+                          ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:126:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:347:16: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            ctr[CTR_PREVIOUS_LEN] = Int32(current_len)
+            ~~~^~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:126:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:351:19: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES - 1:
+               ~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:126:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:351:40: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        if Int(ctr[CTR_LEN]) == Int(ctr[CTR_K]) or pass_id == NUM_PASSES - 1:
+                                    ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:126:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:353:34: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var lf_kth = kth_bits[0]
+                         ~~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:126:
+/root/mojolearn/./neighbors/impl/matrix/detail/select_radix.mojo:355:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var needed = Int(ctr[CTR_K])
+                             ~~~^~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:72:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo:68:
+Imported from /root/mojolearn/./cluster/impl/detail/kmeans.mojo:74:
+Imported from /root/mojolearn/./cluster/checks/reduce_by_key.mojo:63:
+/root/mojolearn/./cluster/impl/distance/fused_distance_nn/simt_kernel.mojo:477:28: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    s_xnorm[i] = nv
+                    ~~~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:72:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo:68:
+Imported from /root/mojolearn/./cluster/impl/detail/kmeans.mojo:74:
+Imported from /root/mojolearn/./cluster/checks/reduce_by_key.mojo:63:
+/root/mojolearn/./cluster/impl/distance/fused_distance_nn/simt_kernel.mojo:485:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                s_ynorm[i2] = nv2
+                ~~~~~~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:72:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo:68:
+Imported from /root/mojolearn/./cluster/impl/detail/kmeans.mojo:74:
+Imported from /root/mojolearn/./cluster/checks/reduce_by_key.mojo:63:
+/root/mojolearn/./cluster/impl/distance/fused_distance_nn/simt_kernel.mojo:493:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                rxn[i] = s_xnorm[i * tr + accrowid]
+                         ~~~~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:72:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo:68:
+Imported from /root/mojolearn/./cluster/impl/detail/kmeans.mojo:74:
+Imported from /root/mojolearn/./cluster/checks/reduce_by_key.mojo:63:
+/root/mojolearn/./cluster/impl/distance/fused_distance_nn/simt_kernel.mojo:496:33: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                ryn[j] = s_ynorm[j * tc + acccolid]
+                         ~~~~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:72:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo:68:
+Imported from /root/mojolearn/./cluster/impl/detail/kmeans.mojo:63:
+/root/mojolearn/./cluster/checks/plus_plus.mojo:247:14: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+        carry[0] = Float32(0.0)
+        ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:72:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo:68:
+Imported from /root/mojolearn/./cluster/impl/detail/kmeans.mojo:63:
+/root/mojolearn/./cluster/checks/plus_plus.mojo:258:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            csum.unsafe_store(i, base + carry[0] + inc)
+                                        ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:72:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo:68:
+Imported from /root/mojolearn/./cluster/impl/detail/kmeans.mojo:63:
+/root/mojolearn/./cluster/checks/plus_plus.mojo:261:18: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            carry[0] = carry[0] + inc
+            ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:72:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo:68:
+Imported from /root/mojolearn/./cluster/impl/detail/kmeans.mojo:63:
+/root/mojolearn/./cluster/checks/plus_plus.mojo:261:29: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            carry[0] = carry[0] + inc
+                       ~~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:82:
+Imported from /root/mojolearn/./core/gemm.mojo:29:
+/root/mojolearn/./gemm/checks/gemm_identical.mojo:2878:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ma = min(min(adm_s[sr], adm_s[sr + 1]), min(adm_s[sr + 2], adm_s[sr + 3]))
+                             ~~~~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:82:
+Imported from /root/mojolearn/./core/gemm.mojo:29:
+/root/mojolearn/./gemm/checks/gemm_identical.mojo:2878:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ma = min(min(adm_s[sr], adm_s[sr + 1]), min(adm_s[sr + 2], adm_s[sr + 3]))
+                                        ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:82:
+Imported from /root/mojolearn/./core/gemm.mojo:29:
+/root/mojolearn/./gemm/checks/gemm_identical.mojo:2878:66: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ma = min(min(adm_s[sr], adm_s[sr + 1]), min(adm_s[sr + 2], adm_s[sr + 3]))
+                                                            ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:82:
+Imported from /root/mojolearn/./core/gemm.mojo:29:
+/root/mojolearn/./gemm/checks/gemm_identical.mojo:2878:81: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ma = min(min(adm_s[sr], adm_s[sr + 1]), min(adm_s[sr + 2], adm_s[sr + 3]))
+                                                                           ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:82:
+Imported from /root/mojolearn/./core/gemm.mojo:29:
+/root/mojolearn/./gemm/checks/gemm_identical.mojo:2879:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mb = min(min(adm_s[sr + 4], adm_s[sr + 5]), min(adm_s[sr + 6], adm_s[sr + 7]))
+                             ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:82:
+Imported from /root/mojolearn/./core/gemm.mojo:29:
+/root/mojolearn/./gemm/checks/gemm_identical.mojo:2879:50: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mb = min(min(adm_s[sr + 4], adm_s[sr + 5]), min(adm_s[sr + 6], adm_s[sr + 7]))
+                                            ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:82:
+Imported from /root/mojolearn/./core/gemm.mojo:29:
+/root/mojolearn/./gemm/checks/gemm_identical.mojo:2879:70: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mb = min(min(adm_s[sr + 4], adm_s[sr + 5]), min(adm_s[sr + 6], adm_s[sr + 7]))
+                                                                ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:82:
+Imported from /root/mojolearn/./core/gemm.mojo:29:
+/root/mojolearn/./gemm/checks/gemm_identical.mojo:2879:85: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mb = min(min(adm_s[sr + 4], adm_s[sr + 5]), min(adm_s[sr + 6], adm_s[sr + 7]))
+                                                                               ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:82:
+Imported from /root/mojolearn/./core/gemm.mojo:29:
+/root/mojolearn/./gemm/checks/gemm_identical.mojo:6324:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            as_.store[alignment=ALIGN](initial_page * APAGE + ga[0] * ASTRIDE + ga[1] * RPT, pga)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:82:
+Imported from /root/mojolearn/./core/gemm.mojo:29:
+/root/mojolearn/./gemm/checks/gemm_identical.mojo:6325:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            bs_.store[alignment=ALIGN](initial_page * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:82:
+Imported from /root/mojolearn/./core/gemm.mojo:29:
+/root/mojolearn/./gemm/checks/gemm_identical.mojo:6357:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            as_.store[alignment=ALIGN](pgw * APAGE + ga[0] * ASTRIDE + ga[1] * RPT, pga)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:82:
+Imported from /root/mojolearn/./core/gemm.mojo:29:
+/root/mojolearn/./gemm/checks/gemm_identical.mojo:6358:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            bs_.store[alignment=ALIGN](pgw * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:82:
+Imported from /root/mojolearn/./core/gemm.mojo:29:
+/root/mojolearn/./gemm/checks/gemm_identical.mojo:6440:26: warning: 'load' is deprecated, use 'unsafe_load' instead
+            var ra1 = as_.load[width=RPT, alignment=ALIGN](abase)
+                      ~~~^~~~~
+                          unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:82:
+Imported from /root/mojolearn/./core/gemm.mojo:29:
+/root/mojolearn/./gemm/checks/gemm_identical.mojo:6441:26: warning: 'load' is deprecated, use 'unsafe_load' instead
+            var rb1 = bs_.load[width=CPT, alignment=ALIGN](bbase)
+                      ~~~^~~~~
+                          unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:82:
+Imported from /root/mojolearn/./core/gemm.mojo:29:
+/root/mojolearn/./gemm/checks/gemm_identical.mojo:6456:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var raa = as_.load[width=RPT, alignment=ALIGN](abase + ca * RPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:82:
+Imported from /root/mojolearn/./core/gemm.mojo:29:
+/root/mojolearn/./gemm/checks/gemm_identical.mojo:6457:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rba = bs_.load[width=CPT, alignment=ALIGN](bbase + ca * CPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:82:
+Imported from /root/mojolearn/./core/gemm.mojo:29:
+/root/mojolearn/./gemm/checks/gemm_identical.mojo:6463:29: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var ra = as_.load[width=RPT, alignment=ALIGN](abase + c0 * RPT)
+                         ~~~^~~~~
+                             unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:82:
+Imported from /root/mojolearn/./core/gemm.mojo:29:
+/root/mojolearn/./gemm/checks/gemm_identical.mojo:6464:29: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rb = bs_.load[width=CPT, alignment=ALIGN](bbase + c0 * CPT)
+                         ~~~^~~~~
+                             unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:82:
+Imported from /root/mojolearn/./core/gemm.mojo:29:
+/root/mojolearn/./gemm/checks/gemm_identical.mojo:6490:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var ra2 = as_.load[width=RPT, alignment=ALIGN](abase + cc * RPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Imported from ./ivf/estimator.mojo:80:
+Imported from ./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:82:
+Imported from /root/mojolearn/./core/gemm.mojo:29:
+/root/mojolearn/./gemm/checks/gemm_identical.mojo:6491:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rb2 = bs_.load[width=CPT, alignment=ALIGN](bbase + cc * CPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Included from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Included from ./ivf/estimator.mojo:80:
+./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:630:13: warning: ref 'i' was never used, remove it?
+        for i in range(selected, k):
+            ^
+Included from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Included from ./ivf/estimator.mojo:80:
+./ivf/impl/neighbors/ivf_flat/ivf_flat_search.mojo:592:17: warning: ref 'i' was never used, remove it?
+            for i in range(k):
+                ^
+Included from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Included from ./ivf/estimator.mojo:72:
+Included from ./ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo:68:
+Included from /root/mojolearn/./cluster/impl/detail/kmeans.mojo:104:
+/root/mojolearn/./cluster/impl/detail/min_cluster_distance_compute.mojo:204:41: warning: assignment to 'data_batch' was never used; assign to '_' instead?
+    var data_batch = get_data_batch_size(batch_samples, n_samples)
+                                        ^
+Included from /root/mojolearn/bindings/_mojolearn_ivf.mojo:45:
+Included from ./ivf/estimator.mojo:72:
+Included from ./ivf/impl/neighbors/ivf_flat/ivf_flat_build.mojo:68:
+Included from /root/mojolearn/./cluster/impl/detail/kmeans.mojo:104:
+/root/mojolearn/./cluster/impl/detail/min_cluster_distance_compute.mojo:205:50: warning: assignment to 'centroid_batch' was never used; assign to '_' instead?
+    var centroid_batch = get_centroids_batch_size(batch_centroids, n_clusters)
+                                                 ^
+built python/mojolearn/identical/_mojolearn_ivf.so (kernel-launch smoke skipped; binary checks ran)

@@ -1,0 +1,5 @@
+== teardown 2026-09-25T10:32:15Z exit=0 vm=a1bc47ba-f330-496e-a47c-befe2f110270 ==
+delete ref=a1bc47ba-f330-496e-a47c-befe2f110270 attempt 1 -> HTTP 204 utc=2026-09-25T10:32:21Z body=
+verified_gone ref=a1bc47ba-f330-496e-a47c-befe2f110270 yes get=404 list=200 listed=no state=n/a utc=2026-09-25T10:32:22Z after=1s
+destroy_confirmed=1
+exit=0

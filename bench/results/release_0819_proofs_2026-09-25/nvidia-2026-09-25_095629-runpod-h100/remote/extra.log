@@ -1,0 +1,11 @@
+10:10:41 bind merged defines=[] exit=0 secs=188
+10:11:18 ab ref exit=0 cases=36 vs_ref=IDENTICAL secs=37: proj_fwd=0.637827 proj_dA=0.632404 proj_dB=0.750359 gateup_fwd=1.673373 gateup_dA=1.675307 gateup_dB=1.744932 down_fwd=1.682726 down_dA=1.665531 down_dB=1.742991 head_fwd=40.892443 head_dA=40.884266 head_dB=39.216062 
+10:11:52 ab merged exit=0 cases=36 vs_ref=IDENTICAL secs=34: proj_fwd=0.47614 proj_dA=0.473036 proj_dB=0.53869 gateup_fwd=1.243761 gateup_dA=1.250722 gateup_dB=1.327127 down_fwd=1.262549 down_dA=1.237753 down_dB=1.324581 head_fwd=30.67095 head_dA=31.370088 head_dB=29.497317 
+10:12:25 ab sabotage exit=0 cases=36 vs_ref=DIFFER secs=33: proj_fwd=0.469458 proj_dA=0.46477 proj_dB=0.527506 gateup_fwd=1.206391 gateup_dA=1.231004 gateup_dB=1.279175 down_fwd=1.23331 down_dA=1.20053 down_dB=1.273292 head_fwd=30.371557 head_dA=30.519044 head_dB=29.223409 
+10:12:41 ab ref3 exit=0 cases=36 vs_ref3=IDENTICAL secs=16: 
+10:12:56 ab merged3 exit=0 cases=36 vs_ref3=IDENTICAL secs=15: 
+10:22:08 lean merged: 0.4806547020561993 ['5516ffe5f550', '77477af42588', '4e439a8a9751'] ['676298dabb30', 'afc46227a372', '34fe4c49b0dd']
+10:22:08 binding now merged
+10:24:36 replay-merged-ckpt_00000100 exit=0 secs=148: [10:23:19] step 101 lr 397e2cc1 loss 6.9004 state abc8b816b5c3fb15 grad 25830bfc2016dc14 39.89 s (+7.62 s hashing)|[10:23:19] step 101 agrees with the expected chain|[10:23:57] step 102 lr 39805880 loss 6.8585 state a9421f91b947f82c grad 94c40a6e3d5ec5aa 30.66 s (+7.45 s hashing)|[10:23:57] step 102 agrees with the expected chain|[10:24:35] step 103 lr 39819a9f loss 6.8373 state fcdb48b8ab51f2ef grad 19a43804ef4065de 30.66 s (+7.37 s hashing)|[10:24:35] step 103 agrees with the expected chain|[10:24:35] PASS: /root/gemm_leg_out/nv-step-time/replay-merged-ckpt_00000100|
+10:24:36 binding now merged
+10:26:24 replay-merged-ckpt_00001998 exit=0 secs=108: [10:25:46] step 1999 lr 39e5f6c0 loss 3.5280 state dcb05e4e668a81e1 grad 6170c58b93c1ec4a 39.77 s (+7.08 s hashing)|[10:25:46] step 1999 agrees with the expected chain|[10:26:24] step 2000 lr 39e5e0ce loss 3.5538 state 0e39ed2bfe9bcbae grad 7c100f6927db84d3 30.79 s (+7.41 s hashing)|[10:26:24] step 2000 agrees with the expected chain|[10:26:24] PASS: /root/gemm_leg_out/nv-step-time/replay-merged-ckpt_00001998|

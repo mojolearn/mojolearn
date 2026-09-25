@@ -1,0 +1,18 @@
+6856 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x738f40000000, nodemask=1)
+6856 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x593f80000000, nodemask=2)
+[10:24:51] segment: route A segment nvstep-replay-merged-ckpt_00001998 label nv-step-time-replay-merged-ckpt_00001998, global steps 1998..2000, K=64, devices (0,), from ckpt_00001998.blm (sha256 b8d980905332fa84)
+[10:24:51] the checkpoint's state AGREES with the expected chain's step 1998 (bcf572cbf42c5e16)
+6856 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x593fc0000000, nodemask=2)
+6856 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x594000000000, nodemask=2)
+6856 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x594040000000, nodemask=2)
+6856 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x594080000000, nodemask=2)
+6856 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5940c0000000, nodemask=2)
+6856 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x594100000000, nodemask=2)
+6856 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x594140000000, nodemask=2)
+6856 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x594180000000, nodemask=2)
+[10:25:46] step 1999 lr 39e5f6c0 loss 3.5280 state dcb05e4e668a81e1 grad 6170c58b93c1ec4a 39.77 s (+7.08 s hashing)
+[10:25:46] step 1999 agrees with the expected chain
+6856 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x5941c0000000, nodemask=2)
+[10:26:24] step 2000 lr 39e5e0ce loss 3.5538 state 0e39ed2bfe9bcbae grad 7c100f6927db84d3 30.79 s (+7.41 s hashing)
+[10:26:24] step 2000 agrees with the expected chain
+[10:26:24] PASS: /root/gemm_leg_out/nv-step-time/replay-merged-ckpt_00001998
