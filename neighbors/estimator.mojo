@@ -116,6 +116,8 @@ The host sort below is unchanged and still does its own job: it fixes the
 ORDER of the set, which is a different property from WHICH set.
 """
 
+from std.builtin.sort import sort
+from std.memory import bitcast
 from core.identity_trace import IdentityTrace
 from neighbors.impl.multi_gpu import knn_device_count, parallel_knn_rows
 from std.sys.compile import is_defined
@@ -812,8 +814,50 @@ def _knn_search_on_device_index(
     # the set. It cannot repair the separate issue of WHICH of
     # several equidistant neighbours lands in the set at all.
     var order_changed = False
+    var keys = List[UInt64](capacity=k)
     for i in range(n_queries):
         var base = i * k
+        # Already in (distance, index) order: nothing to do. Otherwise, when
+        # no distance is a NaN or a -0.0, the insertion sort below has ONE
+        # answer -- the ascending (distance, index) order, indices being
+        # distinct -- and a composite-key sort reaches it in O(k log k)
+        # instead of O(k^2) (k = 1,000 per query in SpectralEmbedding's
+        # graph made this loop 10 s at 10,000 rows). Rows with a NaN or a
+        # -0.0 keep the insertion sort's exact semantics.
+        var sorted_already = True
+        var plain = True
+        for a in range(k):
+            var dv = hd.unsafe_ptr().unsafe_load(base + a)
+            var db = bitcast[DType.uint32](dv)
+            if dv != dv or db == UInt32(0x80000000):
+                plain = False
+            if a > 0:
+                var dp = hd.unsafe_ptr().unsafe_load(base + a - 1)
+                var ip = hi.unsafe_ptr().unsafe_load(base + a - 1)
+                var iv = hi.unsafe_ptr().unsafe_load(base + a)
+                if not (dp < dv or (dp == dv and ip <= iv)):
+                    sorted_already = False
+        if sorted_already:
+            continue
+        if plain and k > 32:
+            order_changed = True
+            keys.clear()
+            for a in range(k):
+                var ub = bitcast[DType.uint32](hd.unsafe_ptr().unsafe_load(base + a))
+                # the monotone float -> uint map (negatives flipped whole)
+                var tw = ub ^ UInt32(0xFFFFFFFF) if (ub >> 31) == 1 else ub | UInt32(0x80000000)
+                keys.append(
+                    (UInt64(tw) << 32)
+                    | UInt64(hi.unsafe_ptr().unsafe_load(base + a))
+                )
+            sort(keys)
+            for a in range(k):
+                var kk = keys[a]
+                var tw = UInt32(kk >> 32)
+                var ub = tw ^ UInt32(0x80000000) if (tw >> 31) == 1 else tw ^ UInt32(0xFFFFFFFF)
+                hd.unsafe_ptr().unsafe_store(base + a, bitcast[DType.float32](ub))
+                hi.unsafe_ptr().unsafe_store(base + a, UInt32(kk & 0xFFFFFFFF))
+            continue
         for a in range(1, k):
             var dv = hd.unsafe_ptr().unsafe_load(base + a)
             var iv = hi.unsafe_ptr().unsafe_load(base + a)
