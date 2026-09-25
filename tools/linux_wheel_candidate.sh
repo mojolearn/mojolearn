@@ -43,7 +43,9 @@ args=()
 for setdir in "${sets[@]}"; do [[ ! -d "$setdir" ]] || args+=(--set "$setdir"); done
 [[ ${#args[@]} = 2 ]] || { echo 'Expected exactly one vendor set'; exit 2; }
 vendor=$(basename "${args[1]}")
-"$PY" packaging/linux/pack_wheel.py "${args[@]}" --out "$DEST/dist" > "$DEST/pack.log" 2>&1
+# One combined wheel (the audit below expects exactly one): pack_wheel.py's
+# default is the split profile (mojolearn + the mojolearn-cuda/-rocm plugins).
+"$PY" packaging/linux/pack_wheel.py --profile generic "${args[@]}" --out "$DEST/dist" > "$DEST/pack.log" 2>&1
 phase=audit
 "$PY" - "$DEST" "${args[1]}" <<'PYAUDIT'
 import json, pathlib, re, subprocess, sys, zipfile

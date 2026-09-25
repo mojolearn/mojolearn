@@ -236,6 +236,10 @@ def main():
     ap.add_argument("--repo", default=os.environ.get(
         "MOJOLEARN_REPO", str(pathlib.Path(__file__).resolve().parents[2])))
     ap.add_argument("--lanes", default="", help="comma list; default all")
+    ap.add_argument("--expect-plugin", action="store_true",
+                    help="the install is the split Linux core plus a GPU plugin "
+                         "(python/mojolearn/gpu_plugins.py): the sets must come from the "
+                         "vendor's plugin distribution at exactly the core's version")
     a = ap.parse_args()
 
     want_mode = os.environ.get("MOJOLEARN_NUMERIC_MODE", "fast").strip().lower() or "fast"
@@ -281,6 +285,21 @@ def main():
         failures.append(
             f"gpu_arch() read back {_backend.gpu_arch()!r} "
             f"({_backend.gpu_arch_how()}), the leg built {a.arch!r}")
+
+    # THE SPLIT (2026-09-25): on the split core the loaded sets come from a
+    # plugin distribution, and it must be this vendor's at this very version.
+    # The loader already refuses a mismatch at import; this records which
+    # plugin answered, and with --expect-plugin requires that one did.
+    plugin = getattr(_backend, "gpu_plugin", lambda: None)()
+    report["gpu_plugin"] = plugin
+    if plugin is not None or a.expect_plugin:
+        from mojolearn import gpu_plugins
+        want = gpu_plugins.PLUGINS.get(a.vendor, {}).get("distribution")
+        if plugin is None:
+            failures.append(f"--expect-plugin: no GPU plugin answered; {want} {ml.__version__} was expected")
+        elif (plugin.get("distribution"), plugin.get("version")) != (want, ml.__version__):
+            failures.append(f"gpu_plugin() is {plugin.get('distribution')} {plugin.get('version')}, "
+                            f"want {want} {ml.__version__}")
 
     if frozenset(_backend._IDENTICAL_ONLY) != IDENTICAL_ONLY_BINDINGS:
         failures.append(
