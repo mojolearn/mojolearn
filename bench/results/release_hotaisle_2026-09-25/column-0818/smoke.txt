@@ -1,0 +1,9 @@
+wheel=/Users/andrewhendel/mojolearn-evidence/release/0.8.18/f2293183c729/linux/final/mojolearn-0.8.18-py3-none-manylinux_2_35_x86_64.whl
+wheel_sha256=c160fb6d5101f1d0ff6a4747ff11c5ed2bbaacfd522506de64ab262f6b9e3836
+commit=f2293183c729059331cb31afcb8319f528143e55
+qualify_sha256=63a8bd190097e31d5d3c9a86a939575d7912664e0e9dd85a2b8dae21897d7ae8
+target=rented, provider hotaisle
+started=2026-09-25T11:07:54Z
+rented=hotaisle target=-p 22 -i /Users/andrewhendel/.ssh/id_ed25519 -o IdentitiesOnly=yes hotaisle@23.183.40.70
+box_sudo=1 box_env=ROCR_VISIBLE_DEVICES=0 HIP_VISIBLE_DEVICES=0
+finished=2026-09-25T11:13:20Z smoke_exit=none

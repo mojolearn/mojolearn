@@ -1,0 +1,8 @@
+summary: IDENTICAL=618, ONE-COLUMN=27
+summary (infer/model): IDENTICAL=972, N/A=291, ONE-COLUMN=27
+summary (batch): N/A=645
+summary (rlpair): N/A=60
+summary (batchgrad): IDENTICAL=48, N/A=597
+summary (batchscale): IDENTICAL=81, N/A=558, ONE-COLUMN=6
+summary (ragged): IDENTICAL=54, N/A=585, ONE-COLUMN=6
+summary (stepfull): IDENTICAL=54, N/A=591

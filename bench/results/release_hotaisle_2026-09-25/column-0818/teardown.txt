@@ -1,0 +1,14 @@
+delete ref=fa15f2e1-4ee2-4432-b705-92a10143d336 attempt 1 -> HTTP 204 utc=2026-09-25T11:13:25Z
+verified_gone ref=fa15f2e1-4ee2-4432-b705-92a10143d336 yes get=404 list=200 listed=no utc=2026-09-25T11:13:26Z after=1s
+destroy_confirmed=1
+mac_deadman=cancelled 2026-09-25T11:13:26Z
+slot=released /tmp/mojolearn-hotaisle-slot.1 2026-09-25T11:13:26Z
+provider=hotaisle
+vm=fa15f2e1-4ee2-4432-b705-92a10143d336
+name=enc1-gpuvm005
+spec=2gpu
+destroy_confirmed=1
+exit=0
+at=2026-09-25T11:13:28Z
+balance_before_cents=4882 balance_after_cents=4284
+spend_estimate=$5.98 (329 s up, billed at least 60 min at $5.98/h)

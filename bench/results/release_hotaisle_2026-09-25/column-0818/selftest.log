@@ -1,0 +1,19 @@
+# verifier CPU thread budget: 1; one algorithm at a time. This is not a memory limit.
+  clean      ols/base train -> 3d1d7c30b12d9872
+  perturbed  ols/base train -> dd42c9b607526efe
+# python -m mojolearn verify --self-test
+
+Ran the ols/base lane twice through the ordinary comparison, once untouched and
+once with X[:, 0] moved one ULP up, every value of column 0: 20000 values, the first 0.1257302165031433 -> 0.1257302314043045.
+
+  untouched   3d1d7c30b12d9872   vs reference 3d1d7c30b12d9872   -> IDENTICAL
+  perturbed   dd42c9b607526efe   vs reference 3d1d7c30b12d9872   -> DIVERGENT
+
+RESULT: THE VERIFIER WORKS ON THIS MACHINE. The comparison reproduced the
+recorded bytes on the untouched input and DETECTED A WRONG ANSWER on an input
+differing by one bit, in this installation, using the same code path that
+judges every other lane. A VERIFIED from this install is therefore a result
+that could have failed.
+
+It does not re-measure any vendor, and it speaks for the machinery, not for
+the arithmetic of the other lanes.

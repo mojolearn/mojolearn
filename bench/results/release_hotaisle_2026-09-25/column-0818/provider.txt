@@ -1,0 +1,13 @@
+balance_before_cents=4882
+slot=/tmp/mojolearn-hotaisle-slot.1 taken 2026-09-25T11:07:57Z
+spec=2gpu cpu_cores=26 price_cents_per_hour=598 min_reservation_minutes=60
+lease_minutes=45 horizon_minutes=65 billed_minutes_at_most=65 max_cost_cents=648 cap_cents=1000
+mac_deadman_pid=24991 fires_at_epoch=1790338377
+create_http=200 create_utc=2026-09-25T11:08:03Z
+vm_ref=fa15f2e1-4ee2-4432-b705-92a10143d336
+vm_name=enc1-gpuvm005
+description=mojolearn:release-smoke-0.8.18:20260925T110757Z
+ssh=hotaisle@23.183.40.70:22 running_after_seconds=9
+watchdog_seconds=60 watchdog_verified=1
+gfx=gfx942 gpu_agents=2
+provider=hotaisle vm=fa15f2e1-4ee2-4432-b705-92a10143d336 name=enc1-gpuvm005 spec=2gpu ip=23.183.40.70 port=22 price_cents_per_hour=598 gfx=gfx942 pin=ROCR_VISIBLE_DEVICES=0 HIP_VISIBLE_DEVICES=0

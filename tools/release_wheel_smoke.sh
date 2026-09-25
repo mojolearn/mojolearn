@@ -38,12 +38,22 @@
 #                        rocm/dev-ubuntu-22.04:6.4.1-complete with the repo's ssh
 #                        bootstrap, or a DigitalOcean MI325X (gfx942 too, see
 #                        --provider); the expanded smoke runs on cuda only.
-#   --provider P         where the box is rented: runpod | do | auto (default auto).
-#                        runpod rents from RunPod only; do rents a DigitalOcean GPU
-#                        droplet only; auto tries RunPod ONCE and, when RunPod answers
-#                        "There are no instances currently available" (0.8.16,
-#                        2026-09-23: no MI300X stock), rents from DigitalOcean instead.
+#   --provider P         where the box is rented: runpod | hotaisle | do | auto
+#                        (default auto). runpod rents from RunPod only; hotaisle rents
+#                        a Hot Aisle MI300X VM only; do rents a DigitalOcean GPU
+#                        droplet only; auto walks runpod, hotaisle, do: RunPod ONCE,
+#                        and when RunPod answers "There are no instances currently
+#                        available" (0.8.16, 2026-09-23: no MI300X stock) Hot Aisle,
+#                        and when Hot Aisle refuses BEFORE creating anything (no key,
+#                        no stock, no slot, the balance, the cap) DigitalOcean.
 #                        --vendor cuda rents from RunPod only (auto means runpod there).
+#   --hotaisle-spec S    1gpu | 2gpu | auto (default auto, MOJOLEARN_HOTAISLE_RELEASE_SPEC):
+#                        the 1x MI300X VM, the 2x MI300X VM (60-minute minimum,
+#                        GPU 0 only: ROCR_VISIBLE_DEVICES=0 HIP_VISIBLE_DEVICES=0),
+#                        or 1gpu with 2gpu only when no 1x VM is in stock
+#   --hotaisle-cap USD   refuse a Hot Aisle VM whose whole horizon (lease + ready
+#                        timeout + 10 min, at the live price, never less than the
+#                        offering's minimum reservation) costs more (default 10)
 #   --do-size SLUG       the DigitalOcean size (default gpu-mi325x1-256gb: one MI325X,
 #                        gfx942, the wheel's AMD set; $3.80/h on 2026-09-11)
 #   --do-regions LIST    DigitalOcean regions tried in order (default tor1,nyc2; tor1 is
@@ -81,6 +91,18 @@
 # Then the SAME box-side flow as RunPod. DELETE, then GET until 404 (a 204 only
 # acknowledges), and only after the 404 are the lock released and the dead-man
 # cancelled. DigitalOcean bills until DESTROYED, never on power-off.
+#
+# A RENTED HOT AISLE RUN (--vendor hip with --provider hotaisle, or auto after
+# RunPod had no stock), 2026-09-25: tools/hotaisle_vm_lib.sh's guards (its
+# header): key ~/.mojolearn_hotaisle_key (0600, in no argv), a slot shared with
+# tools/hotaisle_leg.sh, the whole horizon priced live and refused above
+# --hotaisle-cap or when the balance cannot hold it plus $5, a Mac dead-man
+# BEFORE the create, the description PATCHed, ssh as hotaisle with sudo, an
+# ON-BOX watchdog verified from two sessions, gfx942 read from rocminfo. Then
+# the SAME box-side flow as the others, every command run as root through
+# `sudo -n bash -c`, natively on the VM's Ubuntu 24.04 host as on the
+# DigitalOcean droplet. DELETE ?force=true, then GET 404 or absent from the
+# listing; only then are the dead-man cancelled and the slot released.
 set -u
 
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
@@ -110,6 +132,10 @@ DO_TAG=smoke
 DO_TOKFILE="${MOJOLEARN_DO_TOKEN_FILE:-$HOME/.mojolearn_do_token}"
 DO_GPU_LOCK="${MOJOLEARN_DO_GPU_LOCK:-/tmp/mojolearn-do-gpu.lock}"
 DO_LOCK_STALE_SECONDS=6000
+HA_SPEC_ARG="${MOJOLEARN_HOTAISLE_RELEASE_SPEC:-auto}"
+HA_CAP_USD=10
+BOX_SUDO=0          # 1 on Hot Aisle: every box command runs as root through sudo -n bash -c
+BOX_ENV=""          # the column's GPU pin on a 2x MI300X VM
 
 say() { printf '[%s wheel-smoke] %s\n' "$(date +%T)" "$*"; }
 die() { printf '\nREFUSED: %s\n' "$*" >&2; exit 1; }
@@ -121,6 +147,8 @@ DO_CURLRC="$TMPD/do.curlrc"
 POD_NAME=""
 # shellcheck source=tools/runpod_pod_lib.sh
 . "$ROOT/tools/runpod_pod_lib.sh"
+# shellcheck source=tools/hotaisle_vm_lib.sh
+. "$ROOT/tools/hotaisle_vm_lib.sh"
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -134,6 +162,8 @@ while [ $# -gt 0 ]; do
         --do-size) shift; DO_SIZE="${1:-}" ;;
         --do-regions) shift; DO_REGIONS="${1:-}" ;;
         --do-image) shift; DO_IMAGE="${1:-}" ;;
+        --hotaisle-spec) shift; HA_SPEC_ARG="${1:-}" ;;
+        --hotaisle-cap) shift; HA_CAP_USD="${1:-}" ;;
         --column) shift; SELECTION="${1:-}" ;;
         --cpu-column) shift; CPU_COLUMN="${1:-}" ;;
         --lease) shift; LEASE="${1:-}" ;;
@@ -155,11 +185,14 @@ case "$VENDOR" in
          [ "$CUDA_SET" = 1 ] || CUDA="" ;;
     *) die "--vendor must be cuda or hip" ;;
 esac
-case "$PROVIDER" in runpod|do|auto) ;; *) die "--provider must be runpod, do or auto" ;; esac
+case "$PROVIDER" in runpod|hotaisle|do|auto) ;; *) die "--provider must be runpod, hotaisle, do or auto" ;; esac
 if [ "$VENDOR" = cuda ]; then
-    [ "$PROVIDER" != do ] || die "--provider do is for --vendor hip; the cuda smoke rents from RunPod"
+    case "$PROVIDER" in do|hotaisle) die "--provider $PROVIDER is for --vendor hip; the cuda smoke rents from RunPod" ;; esac
     PROVIDER=runpod
 fi
+case "$HA_SPEC_ARG" in 1gpu|2gpu|auto) HA_SPEC_WANT=$HA_SPEC_ARG ;; *) die "--hotaisle-spec must be 1gpu, 2gpu or auto" ;; esac
+printf '%s' "$HA_CAP_USD" | grep -Eq '^[0-9]+(\.[0-9]{1,2})?$' || die "--hotaisle-cap must be a dollar figure like 10 or 7.50"
+HA_CAP_CENTS=$(awk -v d="$HA_CAP_USD" 'BEGIN { printf "%d", d * 100 + 0.5 }')
 printf '%s' "$DO_SIZE" | grep -Eq '^gpu-[a-z0-9-]+$' || die "--do-size '$DO_SIZE' is not a DigitalOcean GPU size slug"
 printf '%s' "$DO_REGIONS" | grep -Eq '^[a-z0-9]+(,[a-z0-9]+)*$' || die "--do-regions must be region slugs separated by commas"
 printf '%s' "$DO_IMAGE" | grep -Eq '^[0-9]+$' || die "--do-image must be a numeric DigitalOcean image id"
@@ -430,18 +463,26 @@ echo "  smoke    qualify_verifier_wheel.py --scope expanded, bounded ${SMOKE_SEC
 echo "  out      $OUT"
 if [ -z "$SSH_GIVEN" ]; then
     case "$PROVIDER" in
-        auto) echo "  provider auto: RunPod once, DigitalOcean when RunPod has no '$GPU' to give" ;;
+        auto) echo "  provider auto: RunPod once, Hot Aisle when RunPod has no '$GPU' to give, DigitalOcean when Hot Aisle refuses before a create" ;;
         runpod) echo "  provider runpod" ;;
+        hotaisle) echo "  provider hotaisle (Hot Aisle only)" ;;
         do) echo "  provider do (DigitalOcean only)" ;;
     esac
-    if [ "$PROVIDER" != do ]; then
+    if [ "$PROVIDER" = runpod ] || [ "$PROVIDER" = auto ]; then
         echo "  pod      $POD_NAME  gpu '$GPU'  image $IMAGE  cuda [$CUDA]  lease ${LEASE}m"
         echo "  create   $(python3 -c 'import json,sys; print(json.dumps(json.load(open(sys.argv[1]))))' "$CREATE")"
         write_deadman "$TMPD/dm-check" 60 || die "the dead-man script did not compose"
         rm -rf "$TMPD/dm-check"
         echo "  dead-man composes (sh -n)"
     fi
-    if [ "$PROVIDER" != runpod ]; then
+    if [ "$PROVIDER" = hotaisle ] || [ "$PROVIDER" = auto ]; then
+        echo "  hotaisle MI300X VM spec $HA_SPEC_WANT, team $HA_TEAM, lease ${LEASE}m, horizon $(( LEASE + HA_READY_SECONDS / 60 + 10 ))m priced live, cap \$$HA_CAP_USD, box commands as root via sudo -n bash -c"
+        ha_write_deadman "$TMPD/ha-dm-check" "$(( $(now) + 60 ))" /dev/null || die "the Hot Aisle dead-man did not compose"
+        ha_write_watchdog "$TMPD/ha-dm-check/watchdog.sh" "${RDIR}-guard" 60 DRYRUN_REF || die "the Hot Aisle on-box watchdog did not compose"
+        rm -rf "$TMPD/ha-dm-check"
+        echo "  Hot Aisle dead-men compose (Mac dead-man sh -n; on-box watchdog sh -n)"
+    fi
+    if [ "$PROVIDER" = do ] || [ "$PROVIDER" = auto ]; then
         echo "  droplet  $POD_NAME  size $DO_SIZE  regions $DO_REGIONS (in order)  image $DO_IMAGE  tag $DO_TAG  ssh key $DO_SSH_KEY_FP  lease ${LEASE}m"
         echo "  create   $(do_create_json "$DO_FIRST_REGION")"
         do_write_deadman "$TMPD/do-dm-check" 60 || die "the DigitalOcean dead-man did not compose"
@@ -456,16 +497,31 @@ if [ -z "$SSH_GIVEN" ]; then
     fi
 fi
 if [ "$RENT" = 0 ] && [ -z "$SSH_GIVEN" ]; then
-    if [ "$PROVIDER" != do ]; then
+    if [ "$PROVIDER" = runpod ] || [ "$PROVIDER" = auto ]; then
         if load_key; then
             rp_call GET "$RP/pods"
             echo "  pod listing HTTP $RP_CODE; mojolearn-smoke pods live:"
             rp_py names | awk -F'\t' '$2 ~ /^mojolearn-smoke-/ {print "    " $0}'
         else
-            echo "  no RunPod key here; a rent would $([ "$PROVIDER" = auto ] && echo 'go straight to DigitalOcean' || echo refuse)"
+            echo "  no RunPod key here; a rent would $([ "$PROVIDER" = auto ] && echo 'go straight to Hot Aisle' || echo refuse)"
         fi
     fi
-    if [ "$PROVIDER" != runpod ]; then
+    if [ "$PROVIDER" = hotaisle ] || [ "$PROVIDER" = auto ]; then
+        if _why=$(ha_key_hygiene) && ha_load_key; then
+            echo "  key      $HA_KEYFILE present, 0600, outside the repository"
+            ha_call GET "teams/$HA_TEAM/balance/"
+            echo "  balance  HTTP $HA_CODE; $(ha_dollars "$(ha_py balance)")"
+            ha_call GET "teams/$HA_TEAM/virtual_machines/available/"
+            echo "  stock    HTTP $HA_CODE:"; ha_py offers | sed 's/^/    /'
+            read -r _f _spec _q _p _m _c <<< "$(ha_py pick "$HA_SPEC_WANT" "$TMPD/ha_pick.json")"
+            echo "  pick     spec $HA_SPEC_WANT -> $_f $_spec quantity $_q ${_p} cents/h min_reservation $_m min"
+            ha_call GET "teams/$HA_TEAM/virtual_machines/"
+            echo "  VMs      HTTP $HA_CODE; $(ha_py count) live on the team"
+        else
+            echo "  no Hot Aisle key here (${_why:-empty key file}); a rent would $([ "$PROVIDER" = auto ] && echo 'go on to DigitalOcean' || echo refuse)"
+        fi
+    fi
+    if [ "$PROVIDER" = do ] || [ "$PROVIDER" = auto ]; then
         if _why=$(do_token_hygiene) && do_load_token; then
             echo "  token    $DO_TOKFILE present, 0600, outside the repository"
             do_call GET "$DO_API/sizes?per_page=200"
@@ -512,6 +568,18 @@ teardown() {
         { echo "droplet=${DROPLET_ID:-unknown}"; echo "name=$POD_NAME"; echo "region=$DO_REGION"; echo "destroy_confirmed=$DO_GONE"
           echo "exit=$_rc"; echo "at=$(date -u +%FT%TZ)"
           [ -n "$DO_COST_HR" ] && [ -n "$DO_T_POST" ] && python3 -c "import sys; print('spend=\$%.4f at \$%s/hr, %d s' % (float(sys.argv[1]) * (int(sys.argv[2]) - int(sys.argv[3])) / 3600, sys.argv[1], int(sys.argv[2]) - int(sys.argv[3])))" "$DO_COST_HR" "$_t" "$DO_T_POST"
+        } >> "$OUT/teardown.txt"
+        sed 's/^/  /' "$OUT/teardown.txt"
+    fi
+    if [ "$HA_CREATE_ATTEMPTED" = 1 ] || [ -n "$HA_DEADMAN_PID" ] || [ -n "$HA_SLOT" ]; then
+        echo; echo "== teardown (exit $_rc): Hot Aisle =="
+        HA_RECORD="$OUT/teardown.txt"
+        ha_teardown || { [ "$_rc" = 0 ] && _rc=1; }
+        _hb=""
+        if [ -n "$HA_CURLRC" ]; then ha_call GET "teams/$HA_TEAM/balance/"; _hb=$(ha_py balance); fi
+        { echo "provider=hotaisle"; echo "vm=${HA_VMREF:-none}"; echo "name=${HA_VMNAME:-none}"; echo "spec=${HA_SPEC_USED:-none}"
+          echo "destroy_confirmed=$HA_GONE"; echo "exit=$_rc"; echo "at=$(date -u +%FT%TZ)"
+          echo "balance_before_cents=${HA_BAL_BEFORE:-unknown} balance_after_cents=${_hb:-unknown}"; ha_spend
         } >> "$OUT/teardown.txt"
         sed 's/^/  /' "$OUT/teardown.txt"
     fi
@@ -592,7 +660,7 @@ rent_runpod() {  # sets POD_ID and SSH_TARGET; 1 (nothing created) when RunPod h
             pkill -P "$DEADMAN_PID" 2>/dev/null || true
             kill "$DEADMAN_PID" 2>/dev/null && say "RunPod dead-man cancelled (pid $DEADMAN_PID); nothing to guard"
             rm -rf "$DEADMAN_DIR"; DEADMAN_PID=""; DEADMAN_DIR=""; T_POST=""
-            say "FALLING BACK to DigitalOcean ($DO_SIZE, gfx942)"
+            say "RunPod created nothing; FALLING BACK to the next provider (Hot Aisle, then DigitalOcean; gfx942 either way)"
             return 1
         fi
         die "create FAILED (HTTP $_ccode): $_body"
@@ -739,54 +807,91 @@ curl -s --max-time 20 -o /dev/null -w 'TOKEN_GET_%{http_code}\n' -K $GUARD/curlr
     PROVIDER_USED=do
 }
 
+rent_hotaisle() {  # sets SSH_TARGET and BOX_SUDO; 1 when NOTHING was created (HA_REFUSED says why)
+    say "renting from Hot Aisle: MI300X VM spec $HA_SPEC_WANT, lease ${LEASE}m, cap \$$HA_CAP_USD"
+    ha_rent "release-smoke-$(printf '%s' "$VERSION" | tr -c 'A-Za-z0-9.\n' '-')" "$LEASE" "$HA_CAP_CENTS" \
+        "$OUT/provider.txt" "${RDIR}-guard" "$OUT" || return 1
+    SSH_TARGET="$HA_TARGET"; BOX_SUDO=1
+    # The release column is a one-GPU column: on the 2x VM it runs on GPU 0 only.
+    [ "$HA_SPEC_USED" = 2gpu ] && BOX_ENV="ROCR_VISIBLE_DEVICES=0 HIP_VISIBLE_DEVICES=0"
+    echo "provider=hotaisle vm=$HA_VMREF name=$HA_VMNAME spec=$HA_SPEC_USED ip=$HA_SSH_IP port=$HA_SSH_PORT price_cents_per_hour=$HA_PRICE gfx=$HA_GFX${BOX_ENV:+ pin=$BOX_ENV}" >> "$OUT/provider.txt"
+    PROVIDER_USED=hotaisle
+}
+
 if [ -z "$SSH_GIVEN" ]; then
     trap teardown EXIT
     trap 'exit 130' INT
     trap 'exit 143' TERM
-    if [ "$PROVIDER" != do ]; then
+    if [ "$PROVIDER" = runpod ] || [ "$PROVIDER" = auto ]; then
         if load_key; then
             rent_runpod || true
         elif [ "$PROVIDER" = runpod ]; then
             die "no RunPod key (MOJOLEARN_RUNPOD_KEY_FILE or ~/.mojolearn_runpod_key)"
         else
-            say "no RunPod key here (MOJOLEARN_RUNPOD_KEY_FILE or ~/.mojolearn_runpod_key); auto goes to DigitalOcean"
+            say "no RunPod key here (MOJOLEARN_RUNPOD_KEY_FILE or ~/.mojolearn_runpod_key); auto goes on to Hot Aisle"
             echo "runpod=no_key" >> "$OUT/provider.txt"
+        fi
+    fi
+    if [ -z "$SSH_TARGET" ] && { [ "$PROVIDER" = hotaisle ] || [ "$PROVIDER" = auto ]; }; then
+        if ! rent_hotaisle; then
+            [ "$PROVIDER" = auto ] || die "Hot Aisle: $HA_REFUSED"
+            say "Hot Aisle created nothing ($HA_REFUSED); FALLING BACK to DigitalOcean ($DO_SIZE, gfx942)"
         fi
     fi
     [ -n "$SSH_TARGET" ] || rent_do
     echo "rented=$PROVIDER_USED target=$SSH_TARGET" >> "$OUT/smoke.txt"
 fi
 
+# THE BOX FLOW, the same on every provider. bx runs one command on the box as
+# root: directly on RunPod, DigitalOcean and --ssh, through `sudo -n bash -c`
+# on Hot Aisle (whose login is the hotaisle user). stdin passes through.
+bx() {  # <seconds> <command>
+    _bs=$1; shift
+    if [ "$BOX_SUDO" = 1 ]; then
+        # shellcheck disable=SC2086
+        with_timeout "$_bs" ssh $SSH_OPTS $SSH_TARGET "$(ha_root_cmd "$1")"
+    else
+        # shellcheck disable=SC2086
+        with_timeout "$_bs" ssh $SSH_OPTS $SSH_TARGET "$1"
+    fi
+}
+BOX_START="nohup bash $RDIR/box.sh > $RDIR/box.log 2>&1 < /dev/null & echo STARTED"
+if [ "$BOX_SUDO" = 1 ]; then
+    # detached from the ssh session and sudo, as tools/hotaisle_leg.sh starts its body
+    BOX_START="cd / && if command -v setsid > /dev/null 2>&1; then S=setsid; else S=; fi; ${BOX_ENV:+env $BOX_ENV }\$S nohup bash $RDIR/box.sh > $RDIR/box.log 2>&1 < /dev/null & echo STARTED"
+    echo "box_sudo=1${BOX_ENV:+ box_env=$BOX_ENV}" >> "$OUT/smoke.txt"
+fi
+
 # Uploads: two files, each bounded, each hashed on the box.
 _wb=$(wc -c < "$WHEEL" | tr -d ' ')
 _up_secs=$(( 120 + _wb / 200000 ))     # 200 kB/s floor on the Mac's uplink
 say "uploading the wheel ($_wb bytes, bound ${_up_secs}s) and the smoke driver"
-with_timeout 60 ssh $SSH_OPTS $SSH_TARGET "rm -rf $RDIR && mkdir -p $RDIR" || die "could not prepare $RDIR"
-with_timeout "$_up_secs" ssh $SSH_OPTS $SSH_TARGET "cat > $RDIR/$(basename "$WHEEL")" < "$WHEEL" || die "wheel upload failed or exceeded ${_up_secs}s"
-with_timeout 60 ssh $SSH_OPTS $SSH_TARGET "cat > $RDIR/qualify_verifier_wheel.py" < "$QUALIFY" || die "driver upload failed"
-with_timeout 60 ssh $SSH_OPTS $SSH_TARGET "cat > $RDIR/box.sh" < "$BOX" || die "box command upload failed"
-_remote=$(with_timeout 120 ssh $SSH_OPTS $SSH_TARGET "cd $RDIR && sha256sum $(basename "$WHEEL") qualify_verifier_wheel.py" 2>&1)
+bx 60 "rm -rf $RDIR && mkdir -p $RDIR" < /dev/null || die "could not prepare $RDIR"
+bx "$_up_secs" "cat > $RDIR/$(basename "$WHEEL")" < "$WHEEL" || die "wheel upload failed or exceeded ${_up_secs}s"
+bx 60 "cat > $RDIR/qualify_verifier_wheel.py" < "$QUALIFY" || die "driver upload failed"
+bx 60 "cat > $RDIR/box.sh" < "$BOX" || die "box command upload failed"
+_remote=$(bx 120 "cd $RDIR && sha256sum $(basename "$WHEEL") qualify_verifier_wheel.py" < /dev/null 2>&1)
 printf '%s\n' "$_remote" | grep -q "^$WHEEL_SHA " || die "wheel sha256 differs on the box: $_remote"
 printf '%s\n' "$_remote" | grep -q "^$QUALIFY_SHA " || die "driver sha256 differs on the box: $_remote"
 say "both files landed, sha256 verified on the box"
 
 say "starting the smoke (detached; bound ${SMOKE_SECONDS}s)"
-with_timeout 60 ssh $SSH_OPTS $SSH_TARGET "nohup bash $RDIR/box.sh > $RDIR/box.log 2>&1 < /dev/null & echo STARTED" | grep -q STARTED \
+bx 60 "$BOX_START" < /dev/null | grep -q STARTED \
     || die "the smoke did not start"
 _end=$(( $(now) + SMOKE_SECONDS + 120 )); _fails=0; SMOKE_EXIT=""
 while [ "$(now)" -lt "$_end" ]; do
     sleep 15
-    _o=$(with_timeout 45 ssh $SSH_OPTS $SSH_TARGET "cat $RDIR/box.done 2>/dev/null; true" 2>/dev/null)
+    _o=$(bx 45 "cat $RDIR/box.done 2>/dev/null; true" < /dev/null 2>/dev/null)
     if [ $? = 0 ]; then _fails=0; else _fails=$((_fails + 1)); fi
     [ -n "$(printf '%s' "$_o" | tr -d '[:space:]')" ] && break
     [ "$_fails" -lt 12 ] || { say "12 polls failed in a row; fetching what exists"; break; }
 done
-SMOKE_EXIT=$(with_timeout 45 ssh $SSH_OPTS $SSH_TARGET "cat $RDIR/smoke.exit 2>/dev/null; true" 2>/dev/null | tr -d '[:space:]')
+SMOKE_EXIT=$(bx 45 "cat $RDIR/smoke.exit 2>/dev/null; true" < /dev/null 2>/dev/null | tr -d '[:space:]')
 say "smoke exit: ${SMOKE_EXIT:-none}"
 
 say "fetching the results"
 mkdir -p "$OUT/remote"
-with_timeout 300 ssh $SSH_OPTS $SSH_TARGET "cd $RDIR && tar czf - box.txt box.log smoke.log smoke.exit out column.txt column_venv.log selftest.log column.log column.exit column.json column.json.errors.txt 2>/dev/null" \
+bx 300 "cd $RDIR && tar czf - box.txt box.log smoke.log smoke.exit out column.txt column_venv.log selftest.log column.log column.exit column.json column.json.errors.txt 2>/dev/null" < /dev/null \
     | ( cd "$OUT/remote" && tar xzf - ) || echo "  FETCH INCOMPLETE"
 [ -f "$OUT/remote/box.txt" ] && sed 's/^/  box: /' "$OUT/remote/box.txt"
 if [ -f "$OUT/remote/out/results.json" ]; then
