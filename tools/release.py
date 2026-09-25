@@ -347,11 +347,19 @@ SMOKE_WALK = ["NVIDIA GeForce RTX 4090", "NVIDIA L40S", "NVIDIA L40", "NVIDIA RT
 NO_STOCK = "no instances currently available"
 
 
-def no_stock(log):
-    try:
-        return NO_STOCK in log.read_text(errors="replace")
-    except OSError:
-        return False
+def no_stock(log, *dirs):
+    """Whether RunPod answered the create with no stock. The leg's log carries
+    only "create returned HTTP 500"; RunPod's words are in the
+    create_response.json it keeps in its output directory (0.8.19,
+    2026-09-25: both NVIDIA legs failed on stock and never walked)."""
+    texts = [log] + [p for d in dirs if d for p in Path(d).glob("**/create_response.json")]
+    for t in texts:
+        try:
+            if NO_STOCK in Path(t).read_text(errors="replace"):
+                return True
+        except OSError:
+            pass
+    return False
 
 
 #: Build routes by name. A route returns the Leg list for ctx; launch, wait,
@@ -742,7 +750,7 @@ class Release:
                     again.append(l)
                     continue
                 walk = NVIDIA_WALK.get(l.arch) if l.vendor == "cuda" else None
-                if walk and l.exit_code() != 0 and no_stock(l.log) and tried[l.name] + 1 < len(walk):
+                if walk and l.exit_code() != 0 and no_stock(l.log, l.workdir / l.name, l.out_dir) and tried[l.name] + 1 < len(walk):
                     tried[l.name] += 1
                     i = l.command.index("--gpu")
                     self.say(f"  {l.name}: {l.command[i + 1]} has no stock; trying {walk[tried[l.name]]}")
@@ -885,7 +893,7 @@ class Release:
             rc = self.run(cmd, None, log)
             if rc == 0:
                 break
-            if i + 1 < len(gpus) and no_stock(log):
+            if i + 1 < len(gpus) and no_stock(log, out):
                 self.say(f"  {gpu} has no stock; trying {gpus[i + 1]}")
                 continue
             raise StepFailed(f"release_wheel_smoke.sh exited {rc}; log {log}")
