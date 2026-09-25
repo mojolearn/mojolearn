@@ -38,6 +38,9 @@ from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from gbdt.gpu_util.kernel.radix_sort import launch_radix_sort_bins
+from core.fast_radix_sort import fast_radix_sort_pairs_u32, frs_counts_len
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from std.sys.info import has_apple_gpu_accelerator
 from gbdt.gpu_util.kernel.reorder_one_bit import REORDER_BLOCK
 from svm.checks.device_select import (
     SEL_TPB,
@@ -63,6 +66,15 @@ from svm.impl.ws_util import (
 #: `check_ws_sequence_is_pure_in_f_and_index` on the duplicated-rows
 #: fixture; must not move a fixture with no equal f.
 comptime SAB_WS_TIE = is_defined["MOJOLEARN_SVM_SABOTAGE_WS_TIE"]()
+#: FAST on Apple: the working-set sort takes `core/fast_radix_sort.mojo`
+#: (8-bit digits, 12 launches) instead of the one-bit sort (128 launches).
+#: Both are stable sorts by the full key, so the order is the same.
+#: `-D MOJOLEARN_SVM_FAST_SORT_OFF` restores the one-bit sort.
+comptime FAST_WS_SORT = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_SVM_FAST_SORT_OFF"]()
+)
 
 
 def _grid(n: Int) -> Int:
@@ -151,7 +163,12 @@ struct WorkingSet(Movable):
         self.f_idx_sorted = ctx.enqueue_create_buffer[DType.uint32](nt)
         self.tmp_keys = ctx.enqueue_create_buffer[DType.uint32](nt)
         self.tmp_vals = ctx.enqueue_create_buffer[DType.uint32](nt)
-        self.sort_offsets = ctx.enqueue_create_buffer[DType.int32](nt)
+        # FAST_WS_SORT reuses this as its (digit, tile) count table
+        var n_off = nt
+        comptime if FAST_WS_SORT:
+            if frs_counts_len(nt) > n_off:
+                n_off = frs_counts_len(nt)
+        self.sort_offsets = ctx.enqueue_create_buffer[DType.int32](n_off)
         self.sort_block_sums = ctx.enqueue_create_buffer[DType.int32](
             (nt + REORDER_BLOCK - 1) // REORDER_BLOCK
         )
@@ -246,11 +263,17 @@ struct WorkingSet(Movable):
                 self.f_idx_sorted.unsafe_ptr(), Int32(nt),
                 grid_dim=_grid(nt), block_dim=SEL_TPB,
             )
-        launch_radix_sort_bins(
-            ctx, nt, 0, 32, self.f_keys, self.f_idx_sorted,
-            self.tmp_keys, self.tmp_vals, self.sort_offsets,
-            self.sort_block_sums,
-        )
+        comptime if FAST_WS_SORT:
+            fast_radix_sort_pairs_u32(
+                ctx, nt, self.f_keys, self.f_idx_sorted,
+                self.tmp_keys, self.tmp_vals, self.sort_offsets,
+            )
+        else:
+            launch_radix_sort_bins(
+                ctx, nt, 0, 32, self.f_keys, self.f_idx_sorted,
+                self.tmp_keys, self.tmp_vals, self.sort_offsets,
+                self.sort_block_sums,
+            )
 
         # Select n_ws/2 elements from the upper set with the smallest f value
         ctx.enqueue_function[set_upper_kernel](
