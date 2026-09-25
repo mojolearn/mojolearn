@@ -809,6 +809,45 @@ def download_f32(
     return out^
 
 
+def download_f32_into(
+    ctx: DeviceContext,
+    mut buf: DeviceBuffer[DType.float32],
+    n: Int,
+    dst: MutPointer[Float32, MutUntrackedOrigin],
+) raises:
+    """`n` elements of a device buffer written straight into `dst`, host
+    memory the CALLER owns and keeps alive for the whole call; waits inside.
+
+    DEVIATION 3120: the byte-LM exports (state, gradient, device fold) used
+    `download_f32` and then copied the returned List into the caller's
+    array: a pinned host buffer allocated per call, a device-to-host copy
+    into it, an element loop appending into a List, then a third pass into
+    the caller. At 162M parameters that was about 4 s a step for 2.59 GB.
+    Here the copy engine writes the caller's pages directly, one transfer,
+    no host buffer and no loop: the same bytes, as `cluster/estimator.mojo`
+    (DEVIATION 2672) already does on every vendor. `n` IS PASSED, as in
+    `download_f32`; a prefix of a larger buffer goes through a sub-buffer.
+    On a raise the caller's memory holds an unspecified prefix of the copy;
+    a caller that must not see a partial export stages it elsewhere.
+    """
+    if n < 1:
+        return
+    if n > len(buf):
+        raise Error("download_f32_into: " + String(n) + " elements from a buffer of " + String(len(buf)))
+    if n == len(buf):
+        step_count_d2h()
+        ctx.enqueue_copy(dst_ptr=dst, src_buf=buf)
+        step_count_sync()
+        ctx.synchronize()
+    else:
+        var view = buf.create_sub_buffer[DType.float32](0, n)
+        step_count_d2h()
+        ctx.enqueue_copy(dst_ptr=dst, src_buf=view)
+        step_count_sync()
+        ctx.synchronize()
+        _ = view^
+
+
 def digest_of_lists(
     param: List[Float32],
     m_state: List[Float32],
