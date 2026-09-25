@@ -112,6 +112,32 @@ mid-run (the recipe pins the hash scheme now, but the runner archives HEAD).
   by name and needs a restart. It halts on a FAIL verdict (the halt rule) and
   on a missing result; read `driver.log`, the leg's `status.txt` and the
   segment's `segment.json` disagreements before rerunning.
+- A hung segment resumes from its last uploaded checkpoint. On 2026-09-25
+  segment A/4 hung at step 2700 after uploading checkpoints 2500 and 2600;
+  the driver then could only restart it from 2400. Now, when a one-box
+  segment brings no `segment.json` home, `tools/lm_run_driver.py` records a
+  `partial` entry in `ledger.json`: the last checkpoint that the segment's
+  `manifest.tsv` pins, its `log.txt` says was uploaded, its
+  `checkpoints.sha256` agrees with, and R2 holds at the manifest's size,
+  with at least one chain line after it. The hung attempt's small files go
+  to `legs/<route>-<segment>/attempt-<n>/` and its chain to
+  `legs/<route>-<segment>/partial.chain.jsonl`; its results directory is
+  renamed `previous-attempt-<n>-*`. `status` prints the entry. Rerun the
+  driver and that segment starts from its OWN checkpoint
+  (`<run>/<route>/<segment>/ckpt_<step>.blm`, by its recorded sha256) with
+  only the remaining steps and the same boundary. Route A's resumed box is
+  held to the hung box's chain (uploaded as `partial.chain.jsonl`), so it
+  re-derives every step the hung box wrote after the checkpoint (2601 to
+  2699 for A/4) and must agree on each, and the checkpoint's state must
+  equal the chain's line at its step; other routes stay held to route A's
+  chain. The arrival replay is not repeated. The landing is the union of
+  both attempts (checkpoints, steps summed, `resumed_from`), and the joined
+  chain goes to R2 as `chain.union.jsonl`, which later segments are held to
+  and replay against. `"resume": false` on the segment's spec entry
+  restarts it from its start instead; a segment with no such checkpoint,
+  and every live segment, restarts from its start as before.
+  `tools/lm_file_evidence.py` files each earlier attempt under
+  `<route>-<segment>/segment-attempt-<n>/`.
 - `--parallel 2` runs one NVIDIA and one AMD segment at once; a live segment
   runs alone. AMD is the choke point: one DigitalOcean GPU droplet per
   account (other sessions use it too), RunPod MI300X and Hot Aisle often

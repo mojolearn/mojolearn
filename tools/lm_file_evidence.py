@@ -27,6 +27,11 @@ the driver's out directory; the summary keeps every digest a cross-vendor
 comparison reads. Any other file above --cap bytes is skipped and listed in
 SKIPPED.txt with its size.
 
+A segment the driver resumed after an attempt that did not land (see
+tools/lm_run_driver.py) also files each earlier attempt's small files and
+chain summary under <route>-<segment>/segment-attempt-<n>/, with a row of
+its own.
+
 Only PASSED, landed segments are filed (the ledger decides); --segments
 narrows to a list like A/1,A/2. Rerunning adds newly landed segments and
 rewrites what it filed before. The tool prints one README table row per
@@ -225,6 +230,22 @@ def file_segment(e, record, dest, cap, skipped):
             "%.1f" % statistics.median(hsecs) if hsecs else "?",
             arrival or ("none (the seed)" if e["from_ckpt"] == "init" else "worker" if (sj.get("live") or {}).get("role") == "worker" else "none"),
             ", ".join(c.replace("ckpt_", "").replace(".blm", "").lstrip("0") or "0" for c in ckpts) or ("the coordinator's" if (sj.get("live") or {}).get("role") == "worker" else "?")))
+    # a resumed segment: every earlier attempt's small files (saved by the
+    # driver in the box's layout) under segment-attempt-<n>/, its chain
+    # reduced to a summary like the landed box's, one row each
+    for a in record.get("attempts") or []:
+        adir = Path(a["dir"])
+        if not adir.is_dir():
+            continue
+        name = "%s-%s" % (e["route"], e["segment"])
+        dest_dir = dest / name / ("segment-attempt-%d" % a["n"])
+        secs, hsecs, arrival, _ = file_box(adir, adir, dest_dir, cap, skipped)
+        provider, box_id = provider_of(adir, adir)
+        rows.append("| %s/%s (attempt %d, did not land) | %s (%s %s) | %s to %s | %s | %s | %s | %s |" % (
+            e["route"], e["segment"], a["n"], _gpu_name(dest_dir), PROVIDER_NAMES.get(provider, provider), box_id,
+            a["first_step"], a["last_chain_step"], "%.1f" % statistics.median(secs) if secs else "?",
+            "%.1f" % statistics.median(hsecs) if hsecs else "?", arrival or "none",
+            ", ".join(c.replace("ckpt_", "").replace(".blm", "").lstrip("0") or "0" for c in sorted(a.get("checkpoints") or {})) or "none"))
     return rows
 
 
