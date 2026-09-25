@@ -62,7 +62,7 @@ def test_lanes_refuse_tiers_they_do_not_ship_by_name(monkeypatch, mode):
     assert _backend._FAST_TIERED == _backend._TIERED | _backend._CLASSICAL_FAST
     assert _backend._IDENTICAL_ONLY == frozenset(_backend._MODULES) - _backend._FAST_TIERED
     for neural in ('_mojolearn_training', '_mojolearn_byte_lm', '_mojolearn_mamba',
-                   '_mojolearn_transformer', '_mojolearn_embedding', '_mojolearn'):
+                   '_mojolearn_transformer', '_mojolearn_embedding'):
         assert neural in _backend._IDENTICAL_ONLY, neural
     refused = [n for n in _backend._MODULES if not _backend._offers(n, mode)]
     assert refused

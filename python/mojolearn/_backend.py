@@ -309,6 +309,7 @@ _TIERED = frozenset({
 #: everywhere; FAST is opt-in and promises speed and quality, not bits. The
 #: DETERMINISTIC tier stays tree-only.
 _CLASSICAL_FAST = frozenset({
+    "_mojolearn",  # k-means and k-NN; buffer helpers stay IDENTICAL
     "_mojolearn_estimators",
     "_mojolearn_svm",
     "_mojolearn_solver",
@@ -340,7 +341,7 @@ _SELECTED = None
 _IDENTICAL_ONLY_REASON = (
     "Trees and classical ML ship a fast tier and only the tree lanes "
     "(GradientBoosting, RandomForest, ExtraTrees) ship a deterministic tier; "
-    "the neural families and the base binding ship IDENTICAL only."
+    "the neural families ship IDENTICAL only."
 )
 
 
