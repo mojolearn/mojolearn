@@ -118,7 +118,9 @@ DEFAULT_CONTROLS = ("none:none zero-moments:zero-moments k63:shards=63 swap-5-40
 
 def render_controls(args):
     """The negative-controls body (tools/lm_controls_body.sh): GETs only, the
-    expected chain's lines for the two steps after the checkpoint embedded."""
+    expected chain's lines for the checkpoint's step and the --steps steps
+    after it embedded (two by default). `--arm amd --devices 0,1 --controls ""
+    --steps 3` is a rehearsal on an AMD box: the positive replay alone."""
     from lm_segment import load_recipe
     load_recipe(args.recipe)
     recipe_sha = hashlib.sha256(Path(args.recipe).read_bytes()).hexdigest()
@@ -129,27 +131,29 @@ def render_controls(args):
         if line.strip():
             row = json.loads(line)
             rows[int(row["step"])] = line.strip()
-    missing = [s for s in (step, step + 1, step + 2) if s not in rows]
+    held = list(range(step, step + args.steps + 1))
+    missing = [s for s in held if s not in rows]
     if missing:
         raise SystemExit("the expected chain has no line for step(s) %s" % missing)
     for flag in args.controls.split():
         if ":" not in flag:
             raise SystemExit("--controls entries are NAME:FLAG, got %r" % flag)
     subst = {
+        "@ARM@": args.arm, "@DEVICES@": args.devices, "@STEPS@": str(args.steps),
         "@FROM_NAME@": name, "@FROM_STEP@": str(step), "@RECIPE_SHA@": recipe_sha, "@WHEEL@": args.wheel,
         "@CONTROLS@": args.controls,
         "@TOKENS_URLS@": json.dumps(tokens_urls(args.tokens_key, args.seconds)),
         "@RECIPE_URL@": presign_get(args.recipe_key, args.seconds),
         "@CKPT_URLS@": json.dumps({name: presign_get(args.from_key, args.seconds)}),
-        "@EXPECT_LINES@": "\n".join(rows[s] for s in (step, step + 1, step + 2)),
+        "@EXPECT_LINES@": "\n".join(rows[s] for s in held),
     }
     body = (REPO / "tools" / "lm_controls_body.sh").read_text()
     for k, v in subst.items():
         body = body.replace(k, v)
     Path(args.out).write_text(body)
     subprocess.run(["sh", "-n", args.out], check=True)
-    print("rendered %s: controls from %s (step %d), expected lines %d..%d, wheel %s, controls: %s"
-          % (args.out, args.from_key, step, step, step + 2, args.wheel, args.controls))
+    print("rendered %s: controls from %s (step %d), expected lines %d..%d, arm %s, devices %s, wheel %s, controls: %s"
+          % (args.out, args.from_key, step, step, step + args.steps, args.arm, args.devices, args.wheel, args.controls or "none (positive only)"))
     return 0
 
 
@@ -165,6 +169,9 @@ def main(argv=None):
     c.add_argument("--wheel", required=True)
     c.add_argument("--controls", default=DEFAULT_CONTROLS, help="space-separated NAME:FLAG (FLAG zero-moments or a --control value)")
     c.add_argument("--seconds", type=int, default=6 * 3600)
+    c.add_argument("--arm", choices=("nvidia", "amd"), default="nvidia")
+    c.add_argument("--devices", default="0", help="the devices every run uses, e.g. 0,1 for both GPUs of a 2-GPU box")
+    c.add_argument("--steps", type=int, default=2, help="optimizer steps per run, held to the expected chain's lines")
     c.add_argument("--out", required=True)
     r = sub.add_parser("render")
     r.add_argument("--run", required=True, help="the run's R2 prefix, e.g. runs/gpt3-small/2026-09-25")
