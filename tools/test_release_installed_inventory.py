@@ -56,7 +56,7 @@ class InstalledInventoryTests(unittest.TestCase):
             return set(loaded), context['readback']
 
     def test_all_advertised_bindings_and_only_supported_tiers_load(self):
-        for mode, count in [('fast', 3), ('deterministic', 3), ('identical', 23)]:
+        for mode, count in [('fast', 18), ('deterministic', 3), ('identical', 23)]:
             with self.subTest(mode=mode):
                 loaded, rows = self.readback(mode)
                 self.assertEqual(loaded, expected_bindings(mode, True))
