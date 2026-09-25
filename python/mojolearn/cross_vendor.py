@@ -59,7 +59,13 @@ import sys
 import threading
 import time
 
-from ._buffer import flat_bytes
+try:
+    from ._buffer import flat_bytes
+except ImportError:  # loaded by file path outside the package (tools/tests do this
+    # for the host fold, which needs only the standard library): a memoryview
+    # is enough there, since the package's Array never reaches such a caller
+    def flat_bytes(obj, *, name="array"):
+        return memoryview(obj).cast("B")
 
 PROTOCOL = "mojolearn.cross-vendor.v1"
 _TINY = 2.0 ** -126  # smallest normal float32
