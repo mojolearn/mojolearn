@@ -248,7 +248,8 @@ def smo_block_solve_kernel[
         # bits (+0.0 or -0.0 as that sample holds it), decided by the key.
         var f_max: Float32
         comptime if FAST_FUSED:
-            var rf = fast_argmin_argmax[WSIZE](f_tmp, f_lo, key, fa_v, fa_k, fa_t)
+            var rf = fast_argmin_argmax[WSIZE](
+                f_tmp, key, Int32(tid), f_lo, key, Int32(tid), fa_v, fa_k, fa_t)
             f_u = rf[0]
             u = Int(rf[1])
             f_max = rf[2]
@@ -332,7 +333,7 @@ def smo_block_solve_kernel[
             f_tmp = neg_inf
         var l: Int
         comptime if FAST_FUSED:
-            var res2 = fast_argext[WSIZE, True](f_tmp, key, fb_v, fb_k, fb_t)
+            var res2 = fast_argext[WSIZE, True](f_tmp, key, Int32(tid), fb_v, fb_k, fb_t)
             l = Int(res2[1])
         elif WARP_FOLDS:
             var res2 = block_argext[WSIZE, True](f_tmp, key)

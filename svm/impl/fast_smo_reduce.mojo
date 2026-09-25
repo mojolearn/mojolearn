@@ -83,22 +83,26 @@ def fast_argmin_argmax[
     o1: MutOrigin, o2: MutOrigin, o3: MutOrigin, //, block_size: Int
 ](
     vmin: Float32,
+    kmin: Int32,
+    pmin: Int32,
     vmax: Float32,
-    key: Int32,
+    kmax: Int32,
+    pmax: Int32,
     sv: MutPointer[Float32, o1, address_space = AddressSpace.SHARED],
     sk: MutPointer[Int32, o2, address_space = AddressSpace.SHARED],
     st: MutPointer[Int32, o3, address_space = AddressSpace.SHARED],
 ) -> Tuple[Float32, Int32, Float32]:
-    """(f_u, thread of f_u, f_max) to every thread. `sv`, `sk`, `st` hold
+    """(f_u, `pos` of f_u, f_max) to every thread (`pos` is the caller's
+    element id: the thread, or a register slot's working-set position). `sv`, `sk`, `st` hold
     2 * block_size / WARP_SIZE slots owned by this call site."""
     comptime WARPS = block_size // WARP_SIZE
     var tid = Int32(thread_idx.x)
     var nv = vmin
-    var nk = key
-    var nt = tid
+    var nk = kmin
+    var nt = pmin
     var xv = vmax
-    var xk = key
-    var xt = tid
+    var xk = kmax
+    var xt = pmax
     _warp_fold2[WARP_SIZE](nv, nk, nt, xv, xk, xt)
     var lane = Int(lane_id())
     if lane == 0:
@@ -132,17 +136,18 @@ def fast_argext[
 ](
     value: Float32,
     key: Int32,
+    pos: Int32,
     sv: MutPointer[Float32, o1, address_space = AddressSpace.SHARED],
     sk: MutPointer[Int32, o2, address_space = AddressSpace.SHARED],
     st: MutPointer[Int32, o3, address_space = AddressSpace.SHARED],
 ) -> Tuple[Float32, Int32]:
-    """(value, thread) of the arg-extremum to every thread; `block_size /
+    """(value, `pos`) of the arg-extremum to every thread; `block_size /
     WARP_SIZE` slots owned by this call site."""
     comptime WARPS = block_size // WARP_SIZE
     var tid = Int32(thread_idx.x)
     var v = value
     var k = key
-    var t = tid
+    var t = pos
     _warp_fold1[MAX, WARP_SIZE](v, k, t)
     var lane = Int(lane_id())
     if lane == 0:

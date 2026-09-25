@@ -92,6 +92,7 @@ from svm.checks.device_select import (
 from svm.impl.kernelcache import BatchDescriptor, KernelCache
 from svm.impl.results import Results
 from svm.impl.smoblocksolve import SMO_WS_SIZE, smo_block_solve_kernel
+from svm.impl.fast_block_solve import smo_block_solve_ept_kernel
 from svm.impl.svm_parameter import (
     C_SVC,
     EPSILON_SVR,
@@ -127,6 +128,17 @@ comptime FAST_SMO_SYNCS = (
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_SVM_FAST_SYNCS_OFF"]()
 )
+
+
+#: FAST on Apple: a 1024-wide working set solves in
+#: `fast_block_solve.mojo`'s kernel, `FAST_EPT` elements per thread (the
+#: same selections and updates, bit for bit). Measurement arms
+#: `-D MOJOLEARN_SVM_FAST_EPT4|8` (measured slower than 2 on the M4);
+#: `-D MOJOLEARN_SVM_FAST_EPT_OFF` keeps one thread per element.
+comptime FAST_EPT = 4 if is_defined["MOJOLEARN_SVM_FAST_EPT4"]() else (
+    8 if is_defined["MOJOLEARN_SVM_FAST_EPT8"]() else 2
+)
+comptime FAST_EPT_ON = FAST_SMO_SYNCS and not is_defined["MOJOLEARN_SVM_FAST_EPT_OFF"]()
 
 
 def fold_order_rank_kernel(
@@ -280,6 +292,17 @@ def launch_block_solve(
             "svm launch_block_solve: threads=" + String(threads)
             + " < n_ws=" + String(n_ws)
         )
+    comptime if FAST_EPT_ON:
+        if threads == 1024:
+            comptime T = 1024 // FAST_EPT
+            ctx.enqueue_function[smo_block_solve_ept_kernel[T, FAST_EPT]](
+                y.unsafe_ptr(), Int32(n_train), alpha.unsafe_ptr(), Int32(n_ws),
+                delta_alpha.unsafe_ptr(), f.unsafe_ptr(), kernel_tile.unsafe_ptr(),
+                ws_idx.unsafe_ptr(), C_vec.unsafe_ptr(), eps,
+                return_buff.unsafe_ptr(), Int32(max_iter),
+                grid_dim=1, block_dim=T,
+            )
+            return
     if threads == 32:
         ctx.enqueue_function[smo_block_solve_kernel[32]](
             y.unsafe_ptr(), Int32(n_train), alpha.unsafe_ptr(), Int32(n_ws),
