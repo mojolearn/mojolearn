@@ -108,6 +108,7 @@ WHAT IS NOT HERE YET, NAMED SO IT IS NOT MISTAKEN FOR DONE
 from max.gpu.host import DeviceContext
 
 from dbscan.impl.dbscan import dbscan_fit_impl_weighted
+from std.os import getenv
 from dbscan.impl.runner import EPS_NN_BRUTE_FORCE, EPS_NN_RBC
 from dbscan.impl.neighbors.epsilon_neighborhood import (
     DBSCAN_METRIC_L1,
@@ -234,7 +235,7 @@ def dbscan_fit(
         max_mbytes_per_batch,
         cap,
         eps_nn_method,
-        False,
+        String(getenv("MOJOLEARN_DBSCAN_PHASES")) == "1",
         metric,
         has_weights,
         out_core_addr,

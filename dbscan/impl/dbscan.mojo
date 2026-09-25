@@ -42,6 +42,9 @@ the dataset, takes 80% of what is left, and divides by a per-row estimate.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 from dbscan.impl.adjgraph.algo import scan_blocks_needed
 from dbscan.impl.runner import EPS_NN_BRUTE_FORCE, EPS_NN_RBC, dbscan_fit
@@ -257,7 +260,19 @@ def dbscan_fit_impl_weighted(
             + String(batch)
         )
 
-    var adj = ctx.enqueue_create_buffer[DType.uint8](batch * n_rows)
+    # FAST on Apple: the sparse RBC arm (the runner's `sparse_rbc_mode`,
+    # same test) emits CSR and never reads the dense `batch x n_rows`
+    # adjacency, which is 2 GB at 50,000 rows; it gets one byte.
+    # `-D MOJOLEARN_DBSCAN_FAST_DENSE_ADJ` keeps the full allocation.
+    var adj_len = batch * n_rows
+    comptime if (
+        GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+        and has_apple_gpu_accelerator()
+        and not is_defined["MOJOLEARN_DBSCAN_FAST_DENSE_ADJ"]()
+    ):
+        if eps_nn_method == EPS_NN_RBC and n_features <= 2147483647 // n_rows:
+            adj_len = 1
+    var adj = ctx.enqueue_create_buffer[DType.uint8](adj_len)
     var core = ctx.enqueue_create_buffer[DType.uint8](n_rows)
     var vd = ctx.enqueue_create_buffer[DType.int32](batch + 1)
     var ex_scan = ctx.enqueue_create_buffer[DType.int32](batch + 1)
