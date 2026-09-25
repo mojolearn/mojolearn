@@ -53,6 +53,11 @@ say "started=$(date -u +%Y-%m-%dT%H:%M:%SZ) archs=$MOJOLEARN_GPU_ARCHS"
 pixi run mojo --version > "$OUT/mojo_version.txt" 2>&1
 pixi run python -c 'import numpy' > /dev/null 2>&1 || pixi run python -m pip install numpy > "$OUT/numpy.log" 2>&1
 sha256sum $FILES > "$OUT/files.new.sha256"
+# two devices whenever the box has two (the point of the leg); a one-GPU box
+# (a DigitalOcean fallback) runs the same steps on device 0 and says so
+NGPU=$(rocminfo 2>/dev/null | grep -c -E '^ +Name: +gfx')
+if [ "$NGPU" -ge 2 ]; then DEVS=0,1; else DEVS=0; fi
+say "gpu agents=$NGPU devices=$DEVS"
 
 # ---- inputs, in the background as soon as the URLs are pushed (at most 30 minutes)
 fetch() {
@@ -98,15 +103,15 @@ wait $FETCH
 # ---- 1. the export, two devices, once
 t0=$(date +%s)
 pixi run python "$EV/box_export.py" "$IN/recipe.json" /root/tokens_stream "$IN/ckpt_00000100.blm" \
-    "$IN/A-1.chain.partial.jsonl" "$OUT/export_new_2dev.json" --devices 0,1 --label new_2dev > "$OUT/export_new_2dev.log" 2>&1; rc=$?
-say "export new 2dev exit=$rc secs=$(( $(date +%s) - t0 )): $(python3 -c "import json;r=json.load(open('$OUT/export_new_2dev.json'));print({k:v for k,v in r.items() if k.endswith('median_s')}, 'agree', r['forms_agree'], 'expected', r['equals_expected'])" 2>&1 | tail -1)"
+    "$IN/A-1.chain.partial.jsonl" "$OUT/export_new_2dev.json" --devices "$DEVS" --label "new_$DEVS" > "$OUT/export_new_2dev.log" 2>&1; rc=$?
+say "export new devices $DEVS exit=$rc secs=$(( $(date +%s) - t0 )): $(python3 -c "import json;r=json.load(open('$OUT/export_new_2dev.json'));print({k:v for k,v in r.items() if k.endswith('median_s')}, 'agree', r['forms_agree'], 'expected', r['equals_expected'])" 2>&1 | tail -1)"
 
 # ---- 2. one overlapped run, two devices, checkpoints every 2, progress PUTs, SIGKILL after step 105's
 NAME=run-new-2dev
 rm -rf "$RUNS/$NAME"; mkdir -p "$RUNS/$NAME"
 t0=$(date +%s)
 pixi run python tools/lm_segment.py run --recipe "$IN/recipe_ck2.json" --tokens /root/tokens_stream --from "$IN/ckpt_00000100.blm" \
-    --steps 10 --devices 0,1 --route A --segment 4 --label export-overlap-amd \
+    --steps 10 --devices "$DEVS" --route A --segment 4 --label export-overlap-amd \
     --expect-chain "$IN/A-1.chain.partial.jsonl" --upload-urls /root/urls/uploads.json --out "$RUNS/$NAME" > "$OUT/$NAME.log" 2>&1 &
 RUNPID=$!
 killed=no
