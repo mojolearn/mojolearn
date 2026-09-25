@@ -118,7 +118,7 @@ from cholesky.checks.potrf import (
 from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_lower
 from core.identity_trace import IdentityTrace
 from core.gram_splitk import gemm_tn_splitk_into, gram_splitk_applies
-from std.math import sqrt
+from std.math import log, sqrt
 from std.sys.compile import is_defined
 from std.os import getenv
 from std.time import perf_counter_ns
@@ -666,6 +666,118 @@ def fused_cov_finish_kernel(
     cov.unsafe_store(cell, v)
 
 
+comptime GMM_FUSED_CHOL = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_GMM_FAST_FUSED_CHOL_OFF"]()
+)
+"""FAST on Apple: every component's Cholesky, inverse factor and log
+determinant in ONE launch (`fused_precision_cholesky_kernel`, a threadgroup
+per component) with one readback of the pivot flags, instead of about five
+drains per component. `-D MOJOLEARN_GMM_FAST_FUSED_CHOL_OFF` keeps the
+per-component potrf / trsm."""
+comptime GMM_CHOL_MAX_D = 32
+comptime GMM_CHOL_TPB = 256
+
+
+def fused_precision_cholesky_kernel(
+    cov: MutPointer[Float32, MutAnyOrigin],
+    chol_l: MutPointer[Float32, MutAnyOrigin],
+    linv: MutPointer[Float32, MutAnyOrigin],
+    prec: MutPointer[Float32, MutAnyOrigin],
+    log_det_chol: MutPointer[Float32, MutAnyOrigin],
+    info: MutPointer[Int32, MutAnyOrigin],
+    d_in: Int32,
+):
+    """GMM_FUSED_CHOL, block k = component k: `L L^T = cov_k` (right-
+    looking, in threadgroup memory; `info = j + 1` at the first pivot that
+    is not positive), `linv = L^{-1}` by forward substitution one column per
+    thread, `prec = linv^T`, and `log_det_chol = -sum log L_jj`."""
+    var d = Int(d_in)
+    var dd = d * d
+    var k = Int(block_idx.x)
+    var t = Int(thread_idx.x)
+    var a = stack_allocation[
+        GMM_CHOL_MAX_D * GMM_CHOL_MAX_D, Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var xinv = stack_allocation[
+        GMM_CHOL_MAX_D * GMM_CHOL_MAX_D, Scalar[DType.float32],
+        address_space = AddressSpace.SHARED,
+    ]()
+    var flag = stack_allocation[
+        1, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    var e = t
+    while e < dd:
+        var v = cov.unsafe_load(k * dd + e)
+        if e // d == e % d:
+            v = ftz(v + GMM_CHOL_JITTER)
+        a[e] = v
+        e += GMM_CHOL_TPB
+    if t == 0:
+        flag[0] = 0
+    barrier()
+    for j in range(d):
+        if t == 0:
+            var p = a[j * d + j]
+            if p > Float32(0):
+                a[j * d + j] = sqrt(p)
+            else:
+                flag[0] = Int32(j + 1)
+        barrier()
+        if flag[0] != 0:
+            break
+        var pj = a[j * d + j]
+        var i = j + 1 + t
+        while i < d:
+            a[i * d + j] = a[i * d + j] / pj
+            i += GMM_CHOL_TPB
+        barrier()
+        # trailing update of the lower triangle, cells (r, c), j < c <= r
+        var m = d - 1 - j
+        var cell = t
+        while cell < m * m:
+            var r = j + 1 + cell // m
+            var c = j + 1 + cell % m
+            if c <= r:
+                a[r * d + c] = a[r * d + c] - a[r * d + j] * a[c * d + j]
+            cell += GMM_CHOL_TPB
+        barrier()
+    var bad = flag[0]
+    if t == 0:
+        info.unsafe_store(k, bad)
+    if bad != 0:
+        return
+    if t < d:
+        var c = t
+        for i in range(d):
+            var v = Float32(0.0)
+            if i == c:
+                v = Float32(1.0) / a[i * d + i]
+            elif i > c:
+                for m2 in range(c, i):
+                    v -= a[i * d + m2] * xinv[m2 * d + c]
+                v = v / a[i * d + i]
+            xinv[i * d + c] = v
+    barrier()
+    e = t
+    while e < dd:
+        var r = e // d
+        var c = e % d
+        var lv = a[e] if c <= r else Float32(0)
+        chol_l.unsafe_store(k * dd + e, lv)
+        var xv = xinv[e] if c <= r else Float32(0)
+        linv.unsafe_store(k * dd + e, xv)
+        prec.unsafe_store(k * dd + c * d + r, xv)
+        e += GMM_CHOL_TPB
+    if t == 0:
+        var sl = Float32(0)
+        for j in range(d):
+            sl += log(a[j * d + j])
+        log_det_chol.unsafe_store(k, -sl)
+
+
 def center_sqrt_scale_kernel(
     x: MutPointer[Float32, MutAnyOrigin],
     means: MutPointer[Float32, MutAnyOrigin],
@@ -925,6 +1037,32 @@ def gmm_precision_cholesky(
     var logdet_host = List[Float32]()
 
     var grid_dd = (dd + elem_tpb - 1) // elem_tpb
+
+    comptime if GMM_FUSED_CHOL:
+        if sabotage == GMM_SAB_NONE and not trace.enabled and d <= GMM_CHOL_MAX_D:
+            var d_info = ctx.enqueue_create_buffer[DType.int32](ncomp)
+            var h_info = ctx.enqueue_create_host_buffer[DType.int32](ncomp)
+            ctx.enqueue_function[fused_precision_cholesky_kernel](
+                cov.unsafe_ptr(), chol_l.unsafe_ptr(), linv.unsafe_ptr(),
+                prec.unsafe_ptr(), log_det_chol.unsafe_ptr(),
+                d_info.unsafe_ptr(), Int32(d),
+                grid_dim=(ncomp, 1, 1), block_dim=(GMM_CHOL_TPB, 1, 1),
+            )
+            ctx.enqueue_copy(dst_ptr=h_info.unsafe_ptr(), src_buf=d_info)
+            ctx.synchronize()
+            var fail_k = -1
+            var fail_info = 0
+            for kc in range(ncomp):
+                var inf_k = Int(h_info.unsafe_ptr().unsafe_load(kc))
+                if inf_k != 0 and fail_k < 0:
+                    fail_k = kc
+                    fail_info = inf_k
+            _ = d_info^
+            _ = h_info^
+            _ = identity^
+            _ = scal^
+            _ = work^
+            return GmmMStepRun(fail_info, fail_k)
 
     for kc in range(ncomp):
         # (1) the working copy
