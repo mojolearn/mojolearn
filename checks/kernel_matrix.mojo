@@ -1896,6 +1896,12 @@ def svm_block_solve_schedule_for[column: Int, width: Int]() -> Int:
         return SVM_SCHED_FUSED_TREE
     comptime if is_defined["MOJOLEARN_SVM_SCHED_RARY_TREE"]():
         return SVM_SCHED_RARY_TREE
+    # APPLE (2026-09-25): the lane-0 cross-warp fold (5 barriers per inner
+    # iteration against WARP's 8). Apple M4 SVC taxi 20k, alternating: WARP
+    # 6,171 ms, WARP_LANE0 5,821 ms (0.943), RARY_TREE 5,950 ms; the same
+    # fit in every arm (selection under a total order).
+    if column == COLUMN_APPLE and svm_block_solve_warp_folds_for[column, width]():
+        return SVM_SCHED_WARP_LANE0
     if svm_block_solve_warp_folds_for[column, width]():
         return SVM_SCHED_WARP
     # DEVIATION 2666 (2026-09-11): the column DEVIATION 2623 sends to the
