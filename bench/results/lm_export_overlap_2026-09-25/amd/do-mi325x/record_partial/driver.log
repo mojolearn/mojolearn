@@ -1,0 +1,2 @@
+[14:43:41 driver] A/4: no chain came home; reading the chain and manifest the box PUT to R2 as it ran
+[14:43:43 driver] A/4: PARTIAL: checkpoints ['ckpt_00000102.blm', 'ckpt_00000104.blm'] landed, chain to step 105 saved (/Users/andrewhendel/mojolearn-evidence/lm-export-overlap-amd/partial-do/out/legs/A-4/partial.chain.jsonl); the next start resumes from ckpt_00000104.blm with 6 steps
