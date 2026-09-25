@@ -370,10 +370,23 @@ class Loop(unittest.TestCase):
         sys.modules['mojolearn.parallel_training'] = fake
         self.saves = []
         sys.modules['mojolearn._byte_lm_checkpoint'] = fake_ck_module(self.saves)
+        # `from mojolearn import X` reads the package's attribute first: a
+        # package imported by an earlier test carries the real submodules
+        self.pkg = sys.modules.get('mojolearn')
+        self.saved_attrs = {n: getattr(self.pkg, n, None) for n in ('parallel_training', '_byte_lm_checkpoint')}
+        if self.pkg is not None:
+            self.pkg.parallel_training = fake
+            self.pkg._byte_lm_checkpoint = sys.modules['mojolearn._byte_lm_checkpoint']
         FakePar.made = []
 
     def tearDown(self):
         seg.open_batches, seg.data_schedule, seg.load_checkpoint = self.saved
+        if self.pkg is not None:
+            for n, mod in self.saved_attrs.items():
+                if mod is None:
+                    self.pkg.__dict__.pop(n, None)
+                else:
+                    setattr(self.pkg, n, mod)
         for n, mod in self.saved_mods.items():
             if mod is None:
                 sys.modules.pop(n, None)

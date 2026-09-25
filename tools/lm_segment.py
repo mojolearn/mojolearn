@@ -708,9 +708,10 @@ class StepPipeline:
     job is ever pending: `after_step` waits for it (and re-raises anything it
     raised) before the next job may be submitted."""
 
-    def __init__(self, chain, scheme, say, out, *, save=save_snapshot_checkpoint):
+    def __init__(self, chain, scheme, say, out, *, save=None):
         from concurrent.futures import ThreadPoolExecutor
-        self.chain, self.scheme, self.say, self.save = chain, scheme, say, save
+        self.chain, self.scheme, self.say = chain, scheme, say
+        self.save = save if save is not None else save_snapshot_checkpoint
         self.writer = ThreadPoolExecutor(max_workers=1, thread_name_prefix="lm-chain")
         self.uploader = ThreadPoolExecutor(max_workers=1, thread_name_prefix="lm-upload")
         self.pending = None

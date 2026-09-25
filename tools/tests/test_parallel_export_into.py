@@ -19,9 +19,12 @@ import numpy as np
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
+_BEFORE = {k: v for k, v in sys.modules.items() if k == 'mojolearn' or k.startswith('mojolearn.')}
+_STUB = False
 try:
     import mojolearn.parallel_training as pt
 except ImportError:
+    _STUB = True
     # a checkout without built bindings: load the modules under test
     # without the package's binding selection
     for name in [m for m in sys.modules if m == 'mojolearn' or m.startswith('mojolearn.')]:
@@ -32,6 +35,20 @@ except ImportError:
     import mojolearn.parallel_training as pt
 from mojolearn._buffer import empty, flat_bytes
 from mojolearn._byte_lm_config import ByteLanguageModelConfig
+
+
+
+@pytest.fixture(scope='module', autouse=True)
+def _restore_package():
+    """The stub package above must not outlive this module: a later test
+    that installs its own `mojolearn.*` stand-ins would be shadowed by the
+    real submodules left as attributes on it."""
+    yield
+    if _STUB:
+        for name in [m for m in sys.modules if m == 'mojolearn' or m.startswith('mojolearn.')]:
+            del sys.modules[name]
+        sys.modules.update(_BEFORE)
+
 
 SHAPE = ByteLanguageModelConfig()
 N, NT = SHAPE.n_total, SHAPE.n_tensors
