@@ -3108,7 +3108,8 @@ RELEASE_TOOLS_SETUP
     work_remaining=$((@WORKTIMEOUT@ - $(date +%s) + campaign_started))
     if [ "$work_remaining" -ge 150 ]; then
         release_seconds=$((work_remaining - 20))
-        if [ "$release_seconds" -gt 2400 ]; then release_seconds=2400; fi
+        # 0.8.19: a release that rebuilds every binding cold ran past 2400 s (exit 124)
+        if [ "$release_seconds" -gt 6000 ]; then release_seconds=6000; fi
         printf '%s\n' '@COMMIT@' > "$ROOT/commit.txt"
         if [ '@QUALIFY@' = 1 ]; then
             # DEVIATION 2298: 25 installed jobs from the wheel's own bytes on

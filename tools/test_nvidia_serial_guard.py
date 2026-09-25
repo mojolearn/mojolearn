@@ -67,6 +67,42 @@ class GuardTests(unittest.TestCase):
             guard.run(argparse.Namespace(command=['fake-command'], seconds=10, rss_gib=1, cores=4))
             self.assertEqual(launch.call_args.args[0][:3], ['taskset', '-c', '0,1,2'])
 
+    def run_with_gpu_reads(self, reads, polls):
+        """reads: gpu_memory results in call order (an exception class is raised)."""
+        proc = Mock(pid=4321, returncode=0)
+        proc.poll.side_effect = polls
+        calls = iter(reads)
+        def gpu():
+            r = next(calls, (0, 24000))
+            if isinstance(r, type):
+                raise r(['nvidia-smi'], 15)
+            return r
+        with tempfile.TemporaryFile() as lock, contextlib.ExitStack() as stack:
+            stack.enter_context(patch.object(guard.sys, 'platform', 'linux'))
+            stack.enter_context(patch.object(guard.Path, 'is_dir', return_value=True))
+            stack.enter_context(patch('builtins.open', return_value=lock))
+            stack.enter_context(patch.object(guard.fcntl, 'flock'))
+            stack.enter_context(patch.object(guard, 'gpu_memory', side_effect=gpu))
+            stack.enter_context(patch.object(guard, 'memory', return_value=(0, 8 * 2**30)))
+            stack.enter_context(patch.object(guard.os, 'sched_getaffinity', return_value={0, 1, 2}, create=True))
+            stack.enter_context(patch.object(guard.signal, 'signal'))
+            stack.enter_context(patch.object(guard.time, 'sleep'))
+            stack.enter_context(patch.object(guard.subprocess, 'Popen', return_value=proc))
+            stop = stack.enter_context(patch.object(guard, 'stop_group'))
+            return guard.run(argparse.Namespace(command=['fake-command'], seconds=10, rss_gib=1)), stop
+
+    def test_a_slow_nvidia_smi_does_not_kill_a_healthy_build(self):
+        # 0.8.19: one 5 s nvidia-smi timeout crashed the guard and the H100 build
+        slow = guard.subprocess.TimeoutExpired
+        rc, _ = self.run_with_gpu_reads([(0, 24000), slow, slow, slow], [None, None, None, None, None, 0])
+        self.assertEqual(rc, 0)
+
+    def test_nvidia_smi_gone_for_a_minute_stops_the_job(self):
+        slow = guard.subprocess.TimeoutExpired
+        rc, stop = self.run_with_gpu_reads([(0, 24000)] + [slow] * 10, [None] * 20 + [0])
+        self.assertNotEqual(rc, 0)
+        stop.assert_called_once_with(4321)
+
     def test_rss_stops_entire_group(self):
         self.exercise('rss')
 
