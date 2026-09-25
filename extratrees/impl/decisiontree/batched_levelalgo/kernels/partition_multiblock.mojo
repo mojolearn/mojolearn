@@ -148,7 +148,7 @@ def _skip_node(
 
 
 def partition_count_kernel[
-    TPB: Int, ROWS: Int = 1
+    TPB: Int, ROWS: Int = 1, FLAGS: Bool = False
 ](
     blk_left: MutPointer[Int32, MutAnyOrigin],
     row_ids: MutPointer[Int32, MutAnyOrigin],
@@ -160,6 +160,7 @@ def partition_count_kernel[
     min_impurity_decrease: Float32,
     min_samples_leaf: Int32,
     sabotage_in: Int32,
+    flags: MutPointer[UInt8, MutAnyOrigin],
 ):
     """Pass 1: how many of block `b`'s rows go left.
 
@@ -213,6 +214,9 @@ def partition_count_kernel[
         flag = _goes_left(
             data, row_ids, range_start + row_index, col_offset, quesval
         )
+        comptime if FLAGS:
+            # ET_PART_FLAGS: the scatter reads this instead of re-gathering.
+            flags[unsafe_offset = range_start + row_index] = UInt8(Int(flag))
 
     var scanned = _block_scan[TPB](flag)
     if tid == 0:
@@ -272,7 +276,7 @@ def partition_scan_kernel[
 
 
 def partition_scatter_kernel[
-    TPB: Int, ROWS: Int = 1
+    TPB: Int, ROWS: Int = 1, FLAGS: Bool = False
 ](
     row_ids_out: MutPointer[Int32, MutAnyOrigin],
     row_ids: MutPointer[Int32, MutAnyOrigin],
@@ -285,6 +289,7 @@ def partition_scatter_kernel[
     min_impurity_decrease: Float32,
     min_samples_leaf: Int32,
     sabotage_in: Int32,
+    flags: MutPointer[UInt8, MutAnyOrigin],
 ):
     """Pass 3: write every row to its final slot.
 
@@ -356,9 +361,12 @@ def partition_scatter_kernel[
     var row_index = ob * TPB + tid
     var flag = Int32(0)
     if row_index < range_len:
-        flag = _goes_left(
-            data, row_ids, range_start + row_index, col_offset, quesval
-        )
+        comptime if FLAGS:
+            flag = Int32(Int(flags[unsafe_offset = range_start + row_index]))
+        else:
+            flag = _goes_left(
+                data, row_ids, range_start + row_index, col_offset, quesval
+            )
 
     var scanned = _block_scan[TPB](flag)
 

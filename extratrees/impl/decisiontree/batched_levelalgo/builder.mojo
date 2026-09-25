@@ -2759,6 +2759,7 @@ struct LevelWorkspace(Movable):
     var d_blk_base: DeviceBuffer[DType.int32]
     var h_blk_base: HostBuffer[DType.int32]
     var d_row_alt: DeviceBuffer[DType.int32]
+    var d_part_flags: DeviceBuffer[DType.uint8]
     var d_splits: DeviceBuffer[DType.uint8]
     var h_colids: HostBuffer[DType.int32]
     var h_items: HostBuffer[DType.uint8]
@@ -2886,6 +2887,9 @@ def make_level_workspace(
         d_blk_base=ctx.enqueue_create_buffer[DType.int32](nodes),
         h_blk_base=ctx.enqueue_create_host_buffer[DType.int32](nodes),
         d_row_alt=ctx.enqueue_create_buffer[DType.int32](Int(n_rows)),
+        d_part_flags=ctx.enqueue_create_buffer[DType.uint8](
+            Int(n_rows) if ET_PART_FLAGS else 1
+        ),
         d_splits=ctx.enqueue_create_buffer[DType.uint8](nodes * size_of[Split]()),
         h_colids=ctx.enqueue_create_host_buffer[DType.int32](cells),
         h_items=ctx.enqueue_create_host_buffer[DType.uint8](nodes * size_of[NodeWorkItem]()),
@@ -3128,6 +3132,16 @@ within a side stays stable by block and by thread; nothing downstream
 reads it (DEVIATION 203). OPT-IN (`-D MOJOLEARN_ET_PART_ROWS=1`), NOT
 FLIPPED: Apple M4 1M rows, same hashes, taxi 0.979, Istella-S 1.010, taxireg
 1.024 -- a wash."""
+
+comptime ET_PART_FLAGS = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and PART_ROWS_PER_THREAD == 1
+    and not is_defined["MOJOLEARN_ET_PART_FLAGS_OFF"]()
+)
+"""FAST: the partition's count pass stores each row's direction as one byte
+(`LevelWorkspace.d_part_flags`) and the scatter pass reads it instead of
+gathering the split column again. Same directions, same partition.
+`-D MOJOLEARN_ET_PART_FLAGS_OFF` restores the second gather."""
 
 comptime ET_STAGE_LIVE_PREFIX = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
@@ -4767,7 +4781,9 @@ def train_forest_classification_device_timed(
                 dst_buf=ws.d_splits, src_ptr=ws.h_splits.unsafe_ptr()
             )
             ctx.enqueue_function[
-                partition_count_kernel[TPB, PART_ROWS_PER_THREAD]
+                partition_count_kernel[
+                    TPB, PART_ROWS_PER_THREAD, ET_PART_FLAGS
+                ]
             ](
                 ws.d_blk_left.unsafe_ptr(),
                 d_row_ids.unsafe_ptr(),
@@ -4779,6 +4795,7 @@ def train_forest_classification_device_timed(
                 params.min_impurity_decrease,
                 params.min_samples_leaf,
                 PART_MB_SAB_NONE,
+                ws.d_part_flags.unsafe_ptr(),
                 grid_dim=(plan.n_blocks_dimx, 1, 1),
                 block_dim=(TPB, 1, 1),
             )
@@ -4797,7 +4814,9 @@ def train_forest_classification_device_timed(
                 block_dim=(TPB, 1, 1),
             )
             ctx.enqueue_function[
-                partition_scatter_kernel[TPB, PART_ROWS_PER_THREAD]
+                partition_scatter_kernel[
+                    TPB, PART_ROWS_PER_THREAD, ET_PART_FLAGS
+                ]
             ](
                 ws.d_row_alt.unsafe_ptr(),
                 d_row_ids.unsafe_ptr(),
@@ -4810,6 +4829,7 @@ def train_forest_classification_device_timed(
                 params.min_impurity_decrease,
                 params.min_samples_leaf,
                 PART_MB_SAB_NONE,
+                ws.d_part_flags.unsafe_ptr(),
                 grid_dim=(plan.n_blocks_dimx, 1, 1),
                 block_dim=(TPB, 1, 1),
             )
@@ -6030,7 +6050,9 @@ def train_forest_regression_device_timed(
                 dst_buf=ws.d_splits, src_ptr=ws.h_splits.unsafe_ptr()
             )
             ctx.enqueue_function[
-                partition_count_kernel[TPB, PART_ROWS_PER_THREAD]
+                partition_count_kernel[
+                    TPB, PART_ROWS_PER_THREAD, ET_PART_FLAGS
+                ]
             ](
                 ws.d_blk_left.unsafe_ptr(),
                 d_row_ids.unsafe_ptr(),
@@ -6042,6 +6064,7 @@ def train_forest_regression_device_timed(
                 params.min_impurity_decrease,
                 params.min_samples_leaf,
                 PART_MB_SAB_NONE,
+                ws.d_part_flags.unsafe_ptr(),
                 grid_dim=(plan.n_blocks_dimx, 1, 1),
                 block_dim=(TPB, 1, 1),
             )
@@ -6060,7 +6083,9 @@ def train_forest_regression_device_timed(
                 block_dim=(TPB, 1, 1),
             )
             ctx.enqueue_function[
-                partition_scatter_kernel[TPB, PART_ROWS_PER_THREAD]
+                partition_scatter_kernel[
+                    TPB, PART_ROWS_PER_THREAD, ET_PART_FLAGS
+                ]
             ](
                 ws.d_row_alt.unsafe_ptr(),
                 d_row_ids.unsafe_ptr(),
@@ -6073,6 +6098,7 @@ def train_forest_regression_device_timed(
                 params.min_impurity_decrease,
                 params.min_samples_leaf,
                 PART_MB_SAB_NONE,
+                ws.d_part_flags.unsafe_ptr(),
                 grid_dim=(plan.n_blocks_dimx, 1, 1),
                 block_dim=(TPB, 1, 1),
             )
