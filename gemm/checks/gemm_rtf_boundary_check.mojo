@@ -65,6 +65,37 @@ def _mix(x: UInt64) -> UInt64:
     return z ^ (z >> UInt64(31))
 
 
+def _mix32(x: UInt32) -> UInt32:
+    var h = x * UInt32(0x9E3779B1)
+    h = h ^ (h >> UInt32(15))
+    h = h * UInt32(0x85EBCA77)
+    h = h ^ (h >> UInt32(13))
+    h = h * UInt32(0xC2B2AE3D)
+    return h ^ (h >> UInt32(16))
+
+
+def _kind_word(i: Int, seed: UInt32, kind: Int) -> Float32:
+    """The operand kinds of `bench/gemm_excp_ab_main.mojo::fill_kernel` (the
+    AMD and NVIDIA admission A/B), filled on the host at small shapes:
+    0 ordinary, 2 mixed, 3 skew's A, 4 border, 5 sparse."""
+    var h = _mix32(UInt32(i) ^ _mix32(seed))
+    var h2 = _mix32(h ^ UInt32(0x5BD1E995))
+    var sign = h & UInt32(0x80000000)
+    var mant = h & UInt32(0x007FFFFF)
+    var e = UInt32(119) + (h2 % UInt32(9))
+    if kind == 2:
+        if (h2 >> UInt32(26)) == UInt32(0):
+            e = UInt32(17) + (h2 % UInt32(10))
+    elif kind == 3:
+        e = UInt32(2) + (h2 % UInt32(11))
+    elif kind == 4:
+        e = UInt32(87) + (h2 % UInt32(7))
+    elif kind == 5:
+        if (h2 >> UInt32(20)) == UInt32(0):
+            e = UInt32(17) + (h2 % UInt32(10))
+    return bitcast[DType.float32](sign | (e << UInt32(23)) | mant)
+
+
 def _fnv(v: List[Float32]) -> UInt64:
     var h = UInt64(0xCBF29CE484222325)
     for i in range(len(v)):
@@ -191,6 +222,43 @@ def main() raises:
     for i in range(k2 * n2):
         hb2.append(bitcast[DType.float32](UInt32(0x3F000000) | UInt32(_mix(UInt64(i + 77777)) & 0x80FFFFFF)))
     _case(ctx, "admitted", ha2, hb2, m2, n2, k2, fails)
+    # MIXED (lane/apple-identical-gemm): the block admission holds (A's
+    # smallest nonzero words near 2^-97 (exponent field 30 or 31), B in [0.5, 2): exponent fields sum
+    # to at least 156, above 151) but every fifth 16-deep window of A holds
+    # the small words, so those windows fail the window admission (sum below
+    # 174) and the rest of their leaf runs the shipped step, while the other
+    # leaves and windows are admitted. Signs and mantissas vary.
+    var m3 = 192
+    var n3 = 160
+    var k3 = 640
+    var ha3 = List[Float32]()
+    var hb3 = List[Float32]()
+    for i in range(m3 * k3):
+        var p = i % k3
+        var hi = UInt32(0x0F000000) if (p // 16) % 5 == 2 else UInt32(0x3F000000)
+        ha3.append(bitcast[DType.float32](hi | UInt32(_mix(UInt64(i + 555)) & 0x80FFFFFF)))
+    for i in range(k3 * n3):
+        hb3.append(bitcast[DType.float32](UInt32(0x3F000000) | UInt32(_mix(UInt64(i + 999)) & 0x80FFFFFF)))
+    _case(ctx, "mixed", ha3, hb3, m3, n3, k3, fails)
+    # The admission A/B's adversarial operand kinds (`bench/gemm_excp_ab_main.mojo`)
+    # at a small shape with the production k = 768: mixed (one word in 64
+    # near 2^-105), skew (A in [2^-125, 2^-114), B ordinary: subnormal
+    # products), border (both in [2^-40, 2^-33): exponent sums 174..186,
+    # the window admission's bound), sparse (one word in 4096 near 2^-105).
+    var kind_names: List[String] = ["kmixed", "kskew", "kborder", "ksparse"]
+    var kind_ids: List[Int] = [2, 3, 4, 5]
+    var m4 = 160
+    var n4 = 192
+    var k4 = 768
+    for kd in range(len(kind_ids)):
+        var kid = kind_ids[kd]
+        var ha4 = List[Float32]()
+        var hb4 = List[Float32]()
+        for i in range(m4 * k4):
+            ha4.append(_kind_word(i, UInt32(1000 + 7 * kd), kid))
+        for i in range(k4 * n4):
+            hb4.append(_kind_word(i, UInt32(2000 + 7 * kd), 0 if kid == 3 else kid))
+        _case(ctx, kind_names[kd], ha4, hb4, m4, n4, k4, fails)
     print("RTFGEMM DONE fails=" + String(fails))
     if fails > 0:
         raise Error("gemm_rtf_boundary_check: " + String(fails) + " plan/case pairs differ from the oracle")
