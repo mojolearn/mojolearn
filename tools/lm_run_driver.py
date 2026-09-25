@@ -73,12 +73,37 @@ with no such checkpoint restarts from its start, as before. Live segments
 are never resumed.
 
 RENTALS. One-box segments go through tools/gemm_remote_leg.sh (nvidia, a
-GPU-type walk) or tools/do_extra_leg.sh (amd, DigitalOcean; `amd_provider`
-runpod uses gemm_remote_leg.sh amd). Live segments go through
-tools/lm_live_leg.sh. The runners own the dead-men, the fetch and the
-verified delete. The driver never talks to a cloud API itself; its only
-network use is R2 by presigned URLs minted by tools/dataset_store.sh (a
-one-byte read to see a checkpoint is there, a PUT of a chain).
+GPU-type walk) or, for amd, the providers named in `amd_providers`, walked in
+order: `do` is tools/do_extra_leg.sh (DigitalOcean), `hotaisle` is
+tools/hotaisle_leg.sh, anything else is gemm_remote_leg.sh amd (RunPod).
+Live segments go through tools/lm_live_leg.sh. The runners own the
+dead-men, the fetch and the verified delete. The driver never talks to a
+cloud API itself; its only network use is R2 by presigned URLs minted by
+tools/dataset_store.sh (a one-byte read to see a checkpoint is there, a PUT
+of a chain).
+
+AN AMD SEGMENT'S PROVIDER. A segment entry may name `"provider": "hotaisle"`
+(or "do", "runpod"); it then rents from that provider only. Without it the
+segment walks `amd_providers`. The vendor class is per box source: an amd
+segment holds one class per provider it may use ("amd:do", "amd:hotaisle"),
+so under `--parallel 2` a DigitalOcean AMD segment and a Hot Aisle AMD
+segment run at once, while a segment that walks both providers holds both.
+
+HOT AISLE SPEC KEYS (all optional):
+    "hotaisle_devices": "0,1"          # the body's --devices on the 2x MI300X VM; `amd_devices` is
+                                       # spec-wide (sized for the DigitalOcean box), so the segment
+                                       # body is rendered again for hotaisle with these
+    "hotaisle_extra_minutes": 30       # added to the segment lease: provisioning, the image pull,
+                                       # the wheel install and the fetch
+    "hotaisle_dollar_cap": 250         # the cap for a hotaisle lease (default the segment's cap); the
+                                       # leg prices the offering live and refuses above it
+    "hotaisle_stock_wait_minutes": 5   # how long the leg waits for stock or a slot before it says
+                                       # busy and the driver walks on
+The leg rents the 2x MI300X VM with ONE body on both GPUs
+(`hotaisle_leg.sh --spec 2gpu --one-body`). A hotaisle lease over its cap is
+skipped like a busy provider, never raised. A RESUMED segment on Hot Aisle is
+rendered again the same way: from its own checkpoint with the remaining steps
+and the partial chain as its expect chain, on `hotaisle_devices`.
 """
 import argparse
 import hashlib
@@ -128,6 +153,7 @@ def segment_plan(spec):
                          first=first, last=last, boundary=last, live=s.get("first"), shards=s.get("shards"),
                          lease_minutes=s.get("lease_minutes"), dollar_cap=s.get("dollar_cap"),
                          nvidia_devices=s.get("nvidia_devices"), nvidia_gpus=s.get("nvidia_gpus"),
+                         provider=s.get("provider"), hotaisle_dollar_cap=s.get("hotaisle_dollar_cap"),
                          from_route=("A" if route != "A" else route) if (prev or seed_from_a) else None,
                          from_segment=(prev["segment"] if prev else a_first) if (prev or seed_from_a) else None,
                          from_ckpt=("ckpt_%08d.blm" % first) if (prev or seed_from_a) else "init",
@@ -152,13 +178,14 @@ def segment_plan(spec):
 def cmd_plan(args):
     spec = load_spec(args.spec)
     for e in segment_plan(spec):
-        print("%s/%s %-7s steps %d..%d from %s%s%s%s%s" % (
+        print("%s/%s %-7s steps %d..%d from %s%s%s%s%s%s" % (
             e["route"], e["segment"], e["vendor"], e["first"], e["last"],
             e["from_ckpt"] if e["from_ckpt"] == "init" else "%s/%s/%s" % (e["from_route"], e["from_segment"], e["from_ckpt"]),
             " replay " + e["replay_ckpt"] if e["replay_ckpt"] else "",
             " expect " + e["expect"] if e["expect"] else "",
             "  devices " + e["nvidia_devices"] if e.get("nvidia_devices") else "",
-            "  gpus " + e["nvidia_gpus"] if e.get("nvidia_gpus") else ""))
+            "  gpus " + e["nvidia_gpus"] if e.get("nvidia_gpus") else "",
+            "  provider " + e["provider"] if e.get("provider") else ""))
         extra = [d for d in e["depends"] if d not in {(e["from_route"], e["from_segment"]), ("A", e["segment"])}]
         if extra:
             print("      after %s" % ", ".join("%s/%s" % d for d in extra))
@@ -518,16 +545,19 @@ def _chain_key(run, ledger, route, segment):
     return "%s/%s/%s/chain.jsonl" % (run, route, segment)
 
 
-def render(spec, e, out, ledger, role=None):
+def render(spec, e, out, ledger, role=None, suffix=""):
     """One body for a segment (or one side of a live segment). A one-box
     segment with a `partial` ledger entry (and resuming allowed) runs only
-    its remaining steps, from its own last landed checkpoint."""
+    its remaining steps, from its own last landed checkpoint. `suffix` names a
+    second rendering of the same segment for another box (Hot Aisle's
+    devices); it resumes exactly as the first, and neither logs the resume
+    nor uploads the partial chain again."""
     run = spec["run"]
     arm = e["vendor"] if role is None else role
     mode = "one" if role is None else ("live-coordinator" if role == e["live"] else "live-worker")
     devices = _nvidia_devices(spec, e) if arm == "nvidia" else spec.get("amd_devices", "0")
     label = "%s-%s-%s" % (arm, e["route"], e["segment"])
-    resume = resume_point(spec, e, ledger, out) if role is None else None
+    resume = resume_point(spec, e, ledger, None if suffix else out) if role is None else None
     from_ckpt, steps = e["from_ckpt"], e["steps"]
     if resume:
         from_ckpt = _ckpt(resume["resume_from"])
@@ -548,7 +578,8 @@ def render(spec, e, out, ledger, role=None):
                 "--from-key", "%s/%s/%s/%s" % (run, e["route"], e["segment"], from_ckpt)]
         if e["route"] == "A":
             key = "%s/%s/%s/partial.chain.jsonl" % (run, e["route"], e["segment"])
-            if not r2_put(key, resume["chain"]):
+            # a second rendering (suffix) follows a first whose upload succeeded
+            if not suffix and not r2_put(key, resume["chain"]):
                 raise SystemExit("%s/%s: the partial chain could not be uploaded to %s; not resuming blind" % (e["route"], e["segment"], key))
             cmd += ["--expect-key", key]
         else:
@@ -572,14 +603,14 @@ def render(spec, e, out, ledger, role=None):
         K = n_first + n_second
         block = "0:%d" % n_first if role == e["live"] else "%d:%d" % (n_first, K)
         cmd += ["--live-shards", block, "--live-workers", "2", "--live-port", str(spec.get("live_port", 7777))]
-    body = Path(out) / "bodies" / ("%s-%s%s.sh" % (e["route"], e["segment"], "-" + arm if role else ""))
+    body = Path(out) / "bodies" / ("%s-%s%s%s.sh" % (e["route"], e["segment"], "-" + arm if role else "", suffix))
     body.parent.mkdir(parents=True, exist_ok=True)
     cmd += ["--out", str(body)]
     subprocess.run(cmd, check=True, cwd=REPO)
     return body
 
 
-def rent_one(spec, e, body, out):
+def rent_one(spec, e, body, out, rerender=None):
     """Rent one box for a one-box segment; returns the results directory and the runner's exit code."""
     res = Path(out) / "legs" / ("%s-%s" % (e["route"], e["segment"]))
     res.mkdir(parents=True, exist_ok=True)
@@ -614,7 +645,7 @@ def rent_one(spec, e, body, out):
             return res / ("leg-" + slug), rc
         return res, rc
     env["MOJOLEARN_GPU_ARCHS"] = "gfx942"
-    providers = spec.get("amd_providers") or [spec.get("amd_provider", "do")]
+    providers = _amd_providers(spec, e)
     rc = 3
     # AMD capacity is the choke point (one DigitalOcean GPU droplet per account,
     # RunPod MI300X and Hot Aisle often without stock): walk the providers, and
@@ -623,7 +654,7 @@ def rent_one(spec, e, body, out):
     attempt = 0
     while True:
         attempt += 1
-        result = _rent_amd_once(spec, e, res, env, lease, providers, out, attempt)
+        result = _rent_amd_once(spec, e, res, env, lease, providers, out, attempt, rerender=rerender)
         if result is not None:
             return result
         if time.monotonic() > deadline:
@@ -633,7 +664,42 @@ def rent_one(spec, e, body, out):
         time.sleep(600)
 
 
-def _rent_amd_once(spec, e, res, env, lease, providers, out, attempt):
+HOTAISLE_DEFAULT_DEVICES = "0,1"
+
+# What an AMD runner prints when the provider is busy, without capacity or
+# short of balance: the driver walks to the next provider (and waits and
+# walks again) instead of halting. do_extra_leg.sh prints "ONE GPU droplet at
+# a time" and "REFUSING to create"; hotaisle_leg.sh prints "no stock", "no
+# slot freed", "REFUSED: balance" (below the floor or the whole lease) and
+# "create REFUSED by the API" (the team's VM limit, balance or stock at the
+# create).
+AMD_BUSY_PHRASES = ("ONE GPU droplet at a time", "no instances currently available", "REFUSING to create",
+                    "quantity=0", "no slot freed", "REFUSED: balance", "create REFUSED by the API")
+AMD_BUSY_PHRASES_LOWER = ("no stock", "starved")
+
+
+def _amd_busy(text):
+    low = text.lower()
+    return any(p in text for p in AMD_BUSY_PHRASES) or any(p in low for p in AMD_BUSY_PHRASES_LOWER)
+
+
+def _amd_providers(spec, e):
+    """The providers an amd segment rents from: its own `provider`, else the run's walk."""
+    if e.get("provider"):
+        return [e["provider"]]
+    return list(spec.get("amd_providers") or [spec.get("amd_provider", "do")])
+
+
+def _hotaisle_lease(spec, e):
+    """The hotaisle lease: the segment's minutes plus hotaisle_extra_minutes (provisioning,
+    the pull, the wheel, the fetch), capped by hotaisle_dollar_cap or the segment's own cap.
+    The 2x MI300X offering's minimum reservation is 60 minutes, so a shorter lease is 60."""
+    minutes = int(e.get("lease_minutes") or spec.get("lease_minutes", 120)) + int(spec.get("hotaisle_extra_minutes", 30))
+    cap = str(e.get("hotaisle_dollar_cap") or spec.get("hotaisle_dollar_cap") or e.get("dollar_cap") or spec.get("dollar_cap", 10))
+    return ["--segment-lease", str(minutes), "--dollar-cap", cap] if minutes > 60 else ["--minutes", "60"]
+
+
+def _rent_amd_once(spec, e, res, env, lease, providers, out, attempt, rerender=None):
     rc = 3
     for provider in providers:
         tag = "%s-%d" % (provider, attempt)
@@ -647,17 +713,27 @@ def _rent_amd_once(spec, e, res, env, lease, providers, out, attempt):
                     extra += ["--region", spec["amd_region"]]
                 rc = subprocess.run(["bash", "tools/do_extra_leg.sh", "amd", *lease, *extra], cwd=REPO, env=env, stdout=log, stderr=subprocess.STDOUT).returncode
             elif provider == "hotaisle":
-                # one hour is Hot Aisle's maximum and minimum; the body fetches the token parts itself
-                rc = subprocess.run(["bash", "tools/hotaisle_leg.sh", "amd", "--rent", "--skip-gates", "--minutes", "60"],
-                                    cwd=REPO, env=env, stdout=log, stderr=subprocess.STDOUT).returncode
+                # the 2x MI300X VM, ONE body on both GPUs, for the whole segment: the body is
+                # rendered again with hotaisle_devices (amd_devices is spec-wide)
+                henv = dict(env)
+                devices = spec.get("hotaisle_devices", HOTAISLE_DEFAULT_DEVICES)
+                if rerender is not None and devices != spec.get("amd_devices", "0"):
+                    henv["MOJOLEARN_GEMM_LEG_EXTRA"] = str(rerender(devices))
+                wait = str(spec.get("hotaisle_stock_wait_minutes", 5))
+                henv.update(MOJOLEARN_HOTAISLE_SPEC="2gpu", MOJOLEARN_HOTAISLE_GPU_ONLY="1",
+                            MOJOLEARN_HOTAISLE_LANE="lm-%s-%s" % (e["route"], e["segment"]),
+                            MOJOLEARN_HOTAISLE_STOCK_WAIT_MINUTES=wait, MOJOLEARN_HOTAISLE_SLOT_WAIT_MINUTES=wait)
+                rc = subprocess.run(["bash", "tools/hotaisle_leg.sh", "amd", "--rent", "--skip-gates", "--spec", "2gpu",
+                                     "--one-body", *_hotaisle_lease(spec, e)],
+                                    cwd=REPO, env=henv, stdout=log, stderr=subprocess.STDOUT).returncode
             else:
                 rc = subprocess.run(["sh", "tools/gemm_remote_leg.sh", "amd", "--rent", "--allow-concurrent", *lease], cwd=REPO, env=env, stdout=log, stderr=subprocess.STDOUT).returncode
         text = (res / ("leg-%s.log" % tag)).read_text()
-        busy = ("ONE GPU droplet at a time" in text or "no instances currently available" in text
-                or "REFUSING to create" in text or "quantity=0" in text or "no stock" in text.lower()
-                or "starved" in text.lower())
-        if rc != 0 and busy:
+        if rc != 0 and _amd_busy(text):
             _log(out, "amd: %s is busy or without capacity (attempt %d)" % (provider, attempt))
+            continue
+        if rc != 0 and provider == "hotaisle" and "above the --dollar-cap" in text:
+            _log(out, "amd: hotaisle's lease is over its cap (hotaisle_dollar_cap); skipping hotaisle (attempt %d)" % attempt)
             continue
         return res / ("leg-" + tag), rc
     return None
@@ -800,8 +876,15 @@ def _land_resumed(spec, e, results, out, ledger, seg_dir, seg):
     return True
 
 
-def _vendor_class(e):
-    return {"live"} if e["vendor"] == "live" else {e["vendor"]}
+def _vendor_class(e, spec=None):
+    """The classes a segment holds while it runs; two segments that share one never
+    run at once. An amd segment holds one class per box source it may rent from
+    ("amd:do", "amd:hotaisle"), so AMD segments on different providers run together."""
+    if e["vendor"] == "live":
+        return {"live"}
+    if e["vendor"] == "amd":
+        return {"amd:%s" % p for p in _amd_providers(spec or {}, e)}
+    return {e["vendor"]}
 
 
 def _ready_order(e):
@@ -818,7 +901,9 @@ def _start(spec, e, out, ledger):
         amd_body = render(spec, e, out, ledger, role="amd")
         return rent_live(spec, e, nv_body, amd_body, out)
     body = render(spec, e, out, ledger)
-    return rent_one(spec, e, body, out)
+    # a provider whose box has another device count renders the body again with its devices
+    rerender = lambda devices: render(dict(spec, amd_devices=devices), e, out, ledger, suffix="-hotaisle")  # noqa: E731
+    return rent_one(spec, e, body, out, rerender=rerender)
 
 
 def _plan_shape(plan):
@@ -911,13 +996,13 @@ def cmd_run(args):
         ready = sorted([e for e in pending if not e.get("hold") and all(is_passed(r, sg) for r, sg in e["depends"])],
                        key=lambda e: (e["route"] != "A", _ready_order(e)))
         live_a_ready = any(e["route"] == "A" and e["vendor"] == "live" for e in ready)
-        busy = set().union(*(_vendor_class(e) for _, e, _ in running.values())) if running else set()
+        busy = set().union(*(_vendor_class(e, spec) for _, e, _ in running.values())) if running else set()
         for e in ready:
             if len(running) >= parallel:
                 break
             if live_a_ready and e["route"] != "A":
                 continue
-            cls = _vendor_class(e)
+            cls = _vendor_class(e, spec)
             if cls & busy or ("live" in busy) or ("live" in cls and busy):
                 continue
             key = "%s/%s" % (e["route"], e["segment"])
