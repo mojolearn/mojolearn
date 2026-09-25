@@ -16,6 +16,7 @@ from checks.numerics import (
 
 from ensemble.decisiontree.batched_levelalgo.bins import Bin
 from ensemble.decisiontree.batched_levelalgo.builder import (
+    n_sampled_cols_for,
     Builder,
     SplitStaging,
     TreeState,
@@ -27,7 +28,10 @@ from ensemble.decisiontree.batched_levelalgo.kernels.builder_kernels_impl import
 from ensemble.flatnode import SparseTreeNode
 from ensemble.decisiontree.batched_levelalgo.bins import BinScales
 from ensemble.decisiontree.batched_levelalgo.objectives import ObjectiveLike
-from ensemble.decisiontree.batched_levelalgo.dataset import DatasetView
+from ensemble.decisiontree.batched_levelalgo.dataset import (
+    DatasetView,
+    RF_BINS_ROW_MAJOR,
+)
 from ensemble.decisiontree.batched_levelalgo.quantiles import (
     compute_quantiles,
     Quantiles,
@@ -2609,6 +2613,16 @@ def fit_forest[
     # 500k x 50. uint8 caps the index at 255, so `max_n_bins > 256`
     # keeps the searching path; the buffer is a 1-byte dummy then.
     var use_bins = Int(rf_params.tree_params.max_n_bins) <= 256
+    # RF_BINS_ROW_MAJOR (FAST): row-major bins when a row's bins fit one
+    # 64-byte line or the trees sample at least half the features.
+    var bins_row_major = False
+    comptime if RF_BINS_ROW_MAJOR:
+        bins_row_major = use_bins and (
+            n_cols <= 64
+            or 2 * n_sampled_cols_for(
+                rf_params.tree_params.max_features, n_cols
+            ) >= n_cols
+        )
     var d_bins = ctx.enqueue_create_buffer[DType.uint8](
         n_rows * n_cols if use_bins else 1
     )
@@ -2627,6 +2641,7 @@ def fit_forest[
             n_cols,
             n_cols if row_major else 1,
             1 if row_major else n_rows,
+            bins_row_major,
         )
         instr.times.stop(ctx, "bin_dataset", t_stage)
         # DEVIATION 401 -- the pre-binned index matrix (DEVIATION 314),
@@ -2832,6 +2847,7 @@ def fit_forest[
                     MutUntrackedOrigin
                 ](),
                 use_bins,
+                bins_row_major,
             )
             # DEVIATION 2001 -- gather this tree's sampled-order stat
             # streams and repoint the view at them; every args blob the
@@ -2974,6 +2990,7 @@ def fit_forest[
                         MutUntrackedOrigin
                     ](),
                     use_bins,
+                    bins_row_major,
                 )
                 # DEVIATION 2001 -- as in the prime loop above.
                 comptime if LABELS_SAMPLED_ORDER:

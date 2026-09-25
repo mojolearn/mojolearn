@@ -66,6 +66,24 @@ passed as a `DatasetView`, not as loose scalars.
 =================================================================
 """
 
+from std.sys.compile import is_defined
+
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+
+
+
+comptime RF_BINS_ROW_MAJOR = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and not is_defined["MOJOLEARN_RF_BINS_COLUMN_MAJOR"]()
+)
+"""FAST only: a forest whose rows' bins fit one 64-byte line
+(`n_cols <= 64`) or whose trees sample at least half the features
+(`2k >= n_cols`) stores DEVIATION 314's uint8 bins ROW-major
+(`row * n_cols + col`, `DatasetView.bins_row_major`), so the histogram
+kernel's column tile reads one row's bins from one cache line instead of
+one line per column. Same indices. Apple M4, 1M rows: taxireg (k 16 of 16)
+0.681, taxi (k 4 of 16) 0.921, Istella-S (k 15 of 220) 1.197 when forced --
+hence the gate. `-D MOJOLEARN_RF_BINS_COLUMN_MAJOR` turns it off."""
 
 @fieldwise_init
 struct DatasetView[dtype: DType, label_dtype: DType](Copyable, Movable):
@@ -119,6 +137,8 @@ struct DatasetView[dtype: DType, label_dtype: DType](Copyable, Movable):
     # theirs does.
     var bins: MutPointer[UInt8, MutUntrackedOrigin]
     var has_bins: Bool
+    # FAST (`RF_BINS_ROW_MAJOR`): `bins` is ROW-major for this forest.
+    var bins_row_major: Bool
 
     @always_inline
     def value(self, row: Int32, col: Int32) -> Scalar[Self.dtype]:
@@ -134,7 +154,19 @@ struct DatasetView[dtype: DType, label_dtype: DType](Copyable, Movable):
     def bin_of(self, row: Int32, col: Int32) -> Int32:
         """DEVIATION 314: the precomputed `lower_bound` index for
         (row, col). Valid only when `has_bins`; same offset formula as
-        `value` above."""
+        `value` above, or ROW-major under `RF_BINS_ROW_MAJOR` (FAST)."""
+        comptime if RF_BINS_ROW_MAJOR:
+            if self.bins_row_major:
+                return Int32(
+                    Int(
+                        self.bins[
+                            unsafe_offset = Int(
+                                Int64(Int(row)) * self.n_cols
+                                + Int64(Int(col))
+                            )
+                        ]
+                    )
+                )
         return Int32(
             Int(
                 self.bins[

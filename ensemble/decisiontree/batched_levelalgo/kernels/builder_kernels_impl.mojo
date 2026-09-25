@@ -3056,6 +3056,7 @@ def bin_dataset_kernel[dtype: DType](
     n_cols: Int32,
     row_stride: Int64,
     col_stride: Int64,
+    bins_row_major: Int32,
 ):
     """DEVIATION 314. One thread per (row, col): store
     `lower_bound(quantiles[col], value)` as a uint8, at the SAME offset
@@ -3080,7 +3081,10 @@ def bin_dataset_kernel[dtype: DType](
             Int64(i) * row_stride + Int64(Int(col)) * col_stride
         )
         var b = lower_bound_aspace(q, n_bins, data[unsafe_offset=off])
-        bins[unsafe_offset=off] = UInt8(Int(b))
+        if bins_row_major != 0:
+            bins[unsafe_offset = i * Int(n_cols) + Int(col)] = UInt8(Int(b))
+        else:
+            bins[unsafe_offset=off] = UInt8(Int(b))
         i += stride
 
 
@@ -3095,6 +3099,7 @@ def launch_bin_dataset[dtype: DType](
     n_cols: Int,
     row_stride: Int,
     col_stride: Int,
+    bins_row_major: Bool = False,
 ) raises:
     """DEVIATION 314's one launch, once per forest, right after
     `compute_quantiles`. The caller guards `max_n_bins <= 256`."""
@@ -3112,6 +3117,7 @@ def launch_bin_dataset[dtype: DType](
         Int32(n_cols),
         Int64(row_stride),
         Int64(col_stride),
+        Int32(1) if bins_row_major else Int32(0),
         grid_dim=(blocks_x, n_cols),
         block_dim=256,
     )
