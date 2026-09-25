@@ -117,8 +117,11 @@ if [ "${MOJOLEARN_RELEASE_UBUNTU22:-0}" = 1 ] && [ -z "$CORE_HOST_SHA" ]; then
 fi
 # Extension builds at a time, on the host and in the Ubuntu 22.04 container
 # alike (tools/release_ubuntu22_build.sh sizes the container to 2 x jobs cores).
-BUILD_JOBS=${MOJOLEARN_BUILD_JOBS:-4}
-[[ "$BUILD_JOBS" =~ ^[1-9][0-9]?$ && "$BUILD_JOBS" -le 16 ]] || { echo 'MOJOLEARN_BUILD_JOBS must be 1..16' >&2; exit 2; }
+# `auto` (default): the box sizes the build (tools/build_sizing.py, run on
+# the box by release_ubuntu22_build.sh or release061_remote_build.sh); N is an
+# explicit override, 1..16.
+BUILD_JOBS=${MOJOLEARN_BUILD_JOBS:-auto}
+[[ "$BUILD_JOBS" = auto || ( "$BUILD_JOBS" =~ ^[1-9][0-9]?$ && "$BUILD_JOBS" -le 16 ) ]] || { echo 'MOJOLEARN_BUILD_JOBS must be auto or 1..16' >&2; exit 2; }
 if [ "$UBUNTU22" = 1 ] && [[ ! "$CORE_HOST_SHA" =~ ^([0-9a-f]{64}|skip)$ ]]; then
   echo 'MOJOLEARN_EXPECT_CORE_HOST_SHA256 must be 64 lowercase hex (the STAGED NVIDIA set copy) or skip' >&2; exit 2
 fi
@@ -278,7 +281,7 @@ else
   DRY_ENTRY=tools/release061_remote_build.sh
   [ "$UBUNTU22" = 1 ] && DRY_ENTRY="/root/release_ubuntu22_build.sh run (pinned Ubuntu 22.04 container, core host probe: $CORE_HOST_SHA from $CORE_HOST_SOURCE)"
   WOULD_RUN="  build    MOJOLEARN_COMMIT=$COMMIT MOJOLEARN_PYTHON=$REMOTE_PY MOJOLEARN_RELEASE_BUILD_SECONDS=<=${MOJOLEARN_RELEASE_BUILD_CAP:-5700}
-           MOJOLEARN_BUILD_JOBS=$BUILD_JOBS (affinity $((2 * BUILD_JOBS)) cores)
+           MOJOLEARN_BUILD_JOBS=$BUILD_JOBS (auto: sized from the box, tools/build_sizing.py)
            bash $DRY_ENTRY $LEG_VENDOR $LEG_ARCH \$REMOTE_OUT > \$REMOTE_LOG"
 fi
   cat <<EOF

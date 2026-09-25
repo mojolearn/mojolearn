@@ -3,7 +3,8 @@
 # transport, benchmark, packing or publication. One actual architecture/build.
 # bash tools/release061_remote_build.sh cuda sm_89 /absolute/NEW_OUT
 # Required: MOJOLEARN_COMMIT(full SHA), MOJOLEARN_PYTHON(existing absolute Python),
-# MOJOLEARN_RELEASE_BUILD_SECONDS(120..2400, already excludes lease fetch reserve).
+# MOJOLEARN_RELEASE_BUILD_SECONDS(120..6000, already excludes lease fetch reserve).
+# Optional: MOJOLEARN_BUILD_JOBS (auto, the default, or 1..16; tools/build_sizing.py).
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
@@ -49,16 +50,25 @@ export MOJOLEARN_GPU_ARCHS="$arch" MOJOLEARN_COMMIT="$commit"
 export MOJOLEARN_TARGET_COLUMN="$column" MOJOLEARN_LINUX_CPU=x86-64-v3
 unset MOJOLEARN_GPU_ARCH MOJOLEARN_VENDOR PYTHONHOME PYTHONPATH
 export PYTHONNOUSERSITE=1 PYTHONUNBUFFERED=1
-# DEVIATION 2501: the 23 extension builds run MOJOLEARN_BUILD_JOBS at a time
-# (default 4), each still capped at two compiler workers and one BLAS thread;
-# the campaign's affinity is 2 x jobs cores and only the build step's guard
-# is widened to it. Every other step keeps the serial two-core cap.
-BUILD_JOBS=${MOJOLEARN_BUILD_JOBS:-4}
-[[ "$BUILD_JOBS" =~ ^[1-9][0-9]?$ && "$BUILD_JOBS" -le 16 ]] || { echo 'MOJOLEARN_BUILD_JOBS must be 1..16' >&2; exit 2; }
+# DEVIATION 2501: the extension builds run MOJOLEARN_BUILD_JOBS at a time,
+# each still capped at two compiler workers and one BLAS thread; the
+# campaign's affinity is 2 x jobs cores and only the build step's guard is
+# widened to it. Every other step keeps the serial two-core, 12 GiB cap.
+# THE BOX SIZES THE BUILD (tools/build_sizing.py, 2026-09-25): unset or
+# `auto`, jobs = min(16, usable cores / 2, 0.6 x available GiB / per-job GiB)
+# and the build step's RSS cap is per-job GiB x jobs + 2; a box too small for
+# one job is refused here, before anything compiles. MOJOLEARN_BUILD_JOBS=N
+# stays an explicit override (the cap still follows N). The CPU build box
+# (NO_DEVICE=1) keeps its 16 GiB per job.
+sizing=$("$PY" "$ROOT/tools/build_sizing.py" --jobs "${MOJOLEARN_BUILD_JOBS:-auto}" --shell) || {
+    echo 'Build sizing refused (tools/build_sizing.py); nothing was built' >&2; exit 2;
+}
+BUILD_JOBS= BUILD_RSS_GIB= BOX_CORES= BOX_MEM_GIB= BUILD_PER_JOB_GIB= BUILD_SIZING=
+eval "$sizing"
+[[ "$BUILD_JOBS" =~ ^[1-9][0-9]?$ && "$BUILD_JOBS" -le 16 && "$BUILD_RSS_GIB" =~ ^[1-9][0-9]*$ ]] || { echo 'MOJOLEARN_BUILD_JOBS must be auto or 1..16' >&2; exit 2; }
+# A leg that sized the build before a container narrowed the box says so.
+[[ -n "${RELEASE_BUILD_SIZED_BY:-}" ]] && BUILD_SIZING="$BUILD_SIZING ($RELEASE_BUILD_SIZED_BY)"
 BUILD_CORES=$((2 * BUILD_JOBS))
-# The GPU guards cap the build's process group at 12 GiB (their maximum is
-# 16). The CPU box runs more builds at once and is sized at 16 GiB per job.
-BUILD_RSS_GIB=12
 [[ "$NO_DEVICE" = 1 ]] && BUILD_RSS_GIB=$((16 * BUILD_JOBS))
 export MOJOLEARN_BUILD_JOBS=$BUILD_JOBS MOJOLEARN_COMPILE_JOBS=2 MAX_JOBS=2 CMAKE_BUILD_PARALLEL_LEVEL=2
 export MOJOLEARN_CPU_THREADS=2 CARGO_BUILD_JOBS=2 RAYON_NUM_THREADS=2
@@ -94,6 +104,7 @@ cp "$ROOT/tools/release061_remote_build.sh" "$OUT/campaign-source.sh"
 printf '%s\n' "vendor=$vendor" "architecture=$arch" "source_commit=$commit" \
     "cpu_affinity=$cores" "build_jobs=$BUILD_JOBS" "build_cores=$BUILD_CORES" "work_seconds=$seconds" 'rss_gib=12' 'pixi_environment=default' \
     "kernel_column=$column" 'linux_cpu=x86-64-v3' "patchelf=$(command -v patchelf)" "no_device=$NO_DEVICE" "build_rss_gib=$BUILD_RSS_GIB" \
+    "build_sizing=$BUILD_SIZING" "box_cores=$BOX_CORES" "box_mem_available_gib=$BOX_MEM_GIB" "build_per_job_gib=$BUILD_PER_JOB_GIB" \
     'scope=one architecture full46 build; byte LM IDENTICAL only; no installed wheel or numerical admission' > "$OUT/campaign.txt"
 run() {
     local name=$1 cap=$2 remaining status
@@ -173,6 +184,10 @@ record = dict(schema='mojolearn.release061.build-preflight.v1', source_commit=co
 PYPROBE
 run resource-prefix-tests 45 "$PY" "$ROOT/tools/test_linux_surface_resource_caps.py"
 run physical-source-preflight 60 "$PY" "$OUT/preflight.py" "$ROOT" "$OUT" "$vendor" "$arch" "$commit" "$NO_DEVICE"
+# The sizing record, copied into build-provenance.json as build_resources.
+printf '{"jobs": %s, "rss_cap_gib": %s, "cores": %s, "mem_available_gib": %s, "per_job_gib": %s, "sizing": "%s", "build_cores": %s}\n' \
+    "$BUILD_JOBS" "$BUILD_RSS_GIB" "$BOX_CORES" "$BOX_MEM_GIB" "$BUILD_PER_JOB_GIB" "$BUILD_SIZING" "$BUILD_CORES" > "$OUT/build-sizing.json"
+export RELEASE_BUILD_SIZING_FILE="$OUT/build-sizing.json"
 run full46-build "$seconds" bash "$ROOT/tools/linux_surface_qualification.sh" build "$OUT/build"
 cat > "$OUT/postflight.py" <<'PYPOST'
 import json, pathlib, sys

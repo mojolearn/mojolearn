@@ -17,12 +17,19 @@ case ${1:-} in
 esac
 [[ $# = 3 && $1 = hip && $2 = gfx942 && $3 = /root/* ]] || exit 2
 # The same parallel build as the NVIDIA legs (packaging/linux/build_sets.sh):
-# MOJOLEARN_BUILD_JOBS extensions at a time, default 4, each capped at two
-# compiler workers, so the container gets 2 x jobs cores and 16 GiB per job
-# (at most three quarters of the droplet's memory). The byte compare in
+# MOJOLEARN_BUILD_JOBS extensions at a time, each capped at two compiler
+# workers (one for gfx942), so the container gets 2 x jobs cores and 16 GiB
+# per job (at most three quarters of the box's memory). `auto` (the default)
+# sizes the jobs from THIS box before the container narrows it
+# (tools/build_sizing.py); N is an explicit override. The byte compare in
 # pack_wheel.py refuses the wheel if any host binding differs across legs.
-JOBS=${MOJOLEARN_BUILD_JOBS:-4}
-[[ "$JOBS" =~ ^[1-9][0-9]?$ && "$JOBS" -le 16 ]] || { echo 'MOJOLEARN_BUILD_JOBS must be 1..16' >&2; exit 2; }
+sizing=$(python3 tools/build_sizing.py --jobs "${MOJOLEARN_BUILD_JOBS:-auto}" --shell) || {
+    echo 'Build sizing refused (tools/build_sizing.py); nothing was built' >&2; exit 2;
+}
+BUILD_JOBS= BUILD_RSS_GIB= BOX_CORES= BOX_MEM_GIB= BUILD_SIZING=
+eval "$sizing"
+JOBS=$BUILD_JOBS
+[[ "$JOBS" =~ ^[1-9][0-9]?$ && "$JOBS" -le 16 ]] || { echo 'MOJOLEARN_BUILD_JOBS must be auto or 1..16' >&2; exit 2; }
 # The core host probe is advisory (pack_wheel.py compares every host binding
 # across legs): `skip` lets this leg start before the NVIDIA legs finish.
 [[ ${MOJOLEARN_EXPECT_CORE_HOST_SHA256:-} =~ ^([0-9a-f]{64}|skip)$ ]] || { echo 'MOJOLEARN_EXPECT_CORE_HOST_SHA256 must be the STAGED NVIDIA set copy digest or skip' >&2; exit 2; }
@@ -31,7 +38,9 @@ cores=$(python3 -c 'import os, sys; print(",".join(map(str, sorted(os.sched_geta
 ncpus=$(awk -F, '{print NF}' <<< "$cores")
 mem_gib=$(awk -v jobs="$JOBS" '/^MemTotal:/ {cap = int($2 / 1048576 * 3 / 4); want = 16 * jobs; print (want < cap ? want : cap)}' /proc/meminfo)
 [[ "$mem_gib" =~ ^[0-9]+$ && "$mem_gib" -ge 16 ]] || { echo 'Container build needs at least 16 GiB' >&2; exit 2; }
-echo "container_build_jobs=$JOBS cpuset=$cores cpus=$ncpus memory=${mem_gib}g"
+# The guard's process-group cap must bind before the container's OOM killer.
+((mem_gib >= BUILD_RSS_GIB + 4)) || { echo "Container memory ${mem_gib}g is below the build RSS cap ${BUILD_RSS_GIB} GiB + 4" >&2; exit 2; }
+echo "container_build_jobs=$JOBS cpuset=$cores cpus=$ncpus memory=${mem_gib}g sizing=$BUILD_SIZING box_cores=$BOX_CORES box_mem_available_gib=$BOX_MEM_GIB build_rss_gib=$BUILD_RSS_GIB"
 # /root is the disposable rental's source, locked Pixi environment, tools and
 # output tree. Keeping those paths identical preserves the compiler witnesses.
 exec docker run --rm --pull=never --cpuset-cpus "$cores" --cpus "$ncpus" --memory "${mem_gib}g" \
@@ -41,6 +50,7 @@ exec docker run --rm --pull=never --cpuset-cpus "$cores" --cpus "$ncpus" --memor
     --env MOJOLEARN_COMMIT --env MOJOLEARN_RELEASE_BUILD_SECONDS \
     --env MOJOLEARN_EXPECT_CORE_HOST_SHA256 \
     --env MOJOLEARN_BUILD_JOBS="$JOBS" \
+    --env RELEASE_BUILD_SIZED_BY="$BUILD_SIZING on the host: cores=$BOX_CORES mem_available_gib=$BOX_MEM_GIB" \
     --env MOJOLEARN_PYTHON=/root/mojolearn/.pixi/envs/default/bin/python \
     --env PATH=/root/mojolearn/.pixi/envs/default/bin:/root/release-tools/bin:/root/.pixi/bin:/opt/rocm/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin \
     --entrypoint bash "$IMAGE" -c '
