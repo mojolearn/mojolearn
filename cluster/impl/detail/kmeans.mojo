@@ -70,6 +70,9 @@ from cluster.checks.plus_plus import (
     write_inclusive_scan_kernel,
 )
 from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
+from std.gpu import block_dim, block_idx, thread_idx
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from cluster.checks.reduce_by_key import (
     blocked_acc_table_cells,
     launch_accumulate_centroid_sums_blocked,
@@ -536,6 +539,80 @@ def _assign_to_candidates(
     )
 
 
+#: FAST on Apple: k-means|| folds only the candidates each round ADDED into
+#: the running (min_dist, label) instead of reassigning every sample against
+#: every candidate so far (`fold_new_candidates_kernel`; a strict `<` keeps
+#: the earlier candidate on a tie, as the full argmin does).
+#: `-D MOJOLEARN_KMEANS_FAST_INCR_INIT_OFF` reassigns in full.
+comptime KMEANS_FAST_INCR_INIT = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_KMEANS_FAST_INCR_INIT_OFF"]()
+)
+
+
+def fold_new_candidates_kernel(
+    min_dist: MutPointer[Float32, MutAnyOrigin],
+    labels: MutPointer[UInt32, MutAnyOrigin],
+    new_dist: MutPointer[Float32, MutAnyOrigin],
+    new_labels: MutPointer[UInt32, MutAnyOrigin],
+    offset: UInt32,
+    n_in: Int32,
+):
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_in):
+        return
+    var nd = new_dist.unsafe_load(i)
+    if nd < min_dist.unsafe_load(i):
+        min_dist.unsafe_store(i, nd)
+        labels.unsafe_store(i, new_labels.unsafe_load(i) + offset)
+
+
+def _assign_to_candidates_fast(
+    ctx: DeviceContext,
+    mut x: DeviceBuffer[DType.float32],
+    mut x_norm: DeviceBuffer[DType.float32],
+    mut cand: DeviceBuffer[DType.float32],
+    mut dist_buf: DeviceBuffer[DType.float32],
+    mut labels: DeviceBuffer[DType.uint32],
+    mut min_dist: DeviceBuffer[DType.float32],
+    mut new_labels: DeviceBuffer[DType.uint32],
+    mut new_dist: DeviceBuffer[DType.float32],
+    params: KMeansParams,
+    n_samples: Int,
+    n_features: Int,
+    assigned: Int,
+    cand_count: Int,
+) raises -> Int:
+    """KMEANS_FAST_INCR_INIT: fold candidates `[assigned, cand_count)` into
+    (min_dist, labels); a full `_assign_to_candidates` when nothing is
+    assigned yet. Returns the new assigned count."""
+    if assigned == 0:
+        _assign_to_candidates(
+            ctx, x, x_norm, cand, dist_buf, labels, min_dist,
+            params, n_samples, n_features, cand_count,
+        )
+        return cand_count
+    var n_new = cand_count - assigned
+    if n_new <= 0:
+        return assigned
+    var sub = cand.create_sub_buffer[DType.float32](
+        assigned * n_features, n_new * n_features
+    )
+    _assign_to_candidates(
+        ctx, x, x_norm, sub, dist_buf, new_labels, new_dist,
+        params, n_samples, n_features, n_new,
+    )
+    ctx.enqueue_function[fold_new_candidates_kernel](
+        min_dist.unsafe_ptr(), labels.unsafe_ptr(), new_dist.unsafe_ptr(),
+        new_labels.unsafe_ptr(), UInt32(assigned), Int32(n_samples),
+        grid_dim=((n_samples + 255) // 256, 1, 1),
+        block_dim=(256, 1, 1),
+    )
+    _ = sub^
+    return cand_count
+
+
 def init_scalable_kmeans_plus_plus(
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32],
@@ -691,11 +768,26 @@ def init_scalable_kmeans_plus_plus(
     # <<< Step-3 >>> (`:660-720`): each round recomputes the distances and
     # the cost against the WHOLE current candidate set -- theirs is not
     # incremental across rounds and neither is this.
+    # KMEANS_FAST_INCR_INIT: the one candidate is already folded in above
+    var incr_assigned = cand_count
+    var incr_labels = ctx.enqueue_create_buffer[DType.uint32](
+        n_samples if KMEANS_FAST_INCR_INIT else 1
+    )
+    var incr_dist = ctx.enqueue_create_buffer[DType.float32](
+        n_samples if KMEANS_FAST_INCR_INIT else 1
+    )
     for _iter in range(niter):
-        _assign_to_candidates(
-            ctx, x, x_norm, cand_buf, dist_buf, labels, min_dist,
-            params, n_samples, d, cand_count,
-        )
+        comptime if KMEANS_FAST_INCR_INIT:
+            incr_assigned = _assign_to_candidates_fast(
+                ctx, x, x_norm, cand_buf, dist_buf, labels, min_dist,
+                incr_labels, incr_dist, params, n_samples, d,
+                incr_assigned, cand_count,
+            )
+        else:
+            _assign_to_candidates(
+                ctx, x, x_norm, cand_buf, dist_buf, labels, min_dist,
+                params, n_samples, d, cand_count,
+            )
         _sum_device(
             ctx, min_dist, ones, partials, d_psi, n_samples, SUM_MODE_PLAIN
         )
@@ -809,10 +901,17 @@ def init_scalable_kmeans_plus_plus(
             grid_dim=((cand_count + 255) // 256, 1, 1),
             block_dim=(256, 1, 1),
         )
-        _assign_to_candidates(
-            ctx, x, x_norm, cand_buf, dist_buf, labels, min_dist,
-            params, n_samples, d, cand_count,
-        )
+        comptime if KMEANS_FAST_INCR_INIT:
+            incr_assigned = _assign_to_candidates_fast(
+                ctx, x, x_norm, cand_buf, dist_buf, labels, min_dist,
+                incr_labels, incr_dist, params, n_samples, d,
+                incr_assigned, cand_count,
+            )
+        else:
+            _assign_to_candidates(
+                ctx, x, x_norm, cand_buf, dist_buf, labels, min_dist,
+                params, n_samples, d, cand_count,
+            )
         ctx.enqueue_function[count_labels_kernel](
             weight.unsafe_ptr(),
             labels.unsafe_ptr(),
