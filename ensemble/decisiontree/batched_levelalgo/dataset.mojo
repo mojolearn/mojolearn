@@ -67,6 +67,7 @@ passed as a `DatasetView`, not as loose scalars.
 """
 
 from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
@@ -74,9 +75,10 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 comptime RF_BINS_ROW_MAJOR = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_RF_BINS_COLUMN_MAJOR"]()
 )
-"""FAST only: a forest whose rows' bins fit one 64-byte line
+"""Apple FAST only (measured there alone): a forest whose rows' bins fit one 64-byte line
 (`n_cols <= 64`) or whose trees sample at least half the features
 (`2k >= n_cols`) stores DEVIATION 314's uint8 bins ROW-major
 (`row * n_cols + col`, `DatasetView.bins_row_major`), so the histogram
