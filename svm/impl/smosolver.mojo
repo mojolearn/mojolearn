@@ -73,7 +73,11 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from core.identity_trace import IdentityTrace, fnv1a64_bytes, FNV_OFFSET
 from ensemble.instruments import StageTimes
-from checks.numerics import ftz, identical_mul_add
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
+from std.memory import stack_allocation
+from std.sys.info import has_apple_gpu_accelerator
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 from svm.checks.device_select import (
     SEL_TPB,
     SelectScratch,
@@ -110,6 +114,45 @@ comptime SAB_NO_FTZ = is_defined["MOJOLEARN_SVM_SABOTAGE_NO_FTZ"]()
 
 #: `int max_inner_iter = 10000` (`smosolver.h:124`, `Solve`'s default).
 comptime SMO_MAX_INNER_ITER = 10000
+
+#: FAST on Apple: two of the outer iteration's drains go. DEVIATION 634's
+#: fold order is ranked on the device (`fold_order_rank_kernel`, the same
+#: permutation `fold_order_for` computes, since the indices are distinct)
+#: instead of read back, sorted on the host and uploaded; and the nonzero
+#: delta_alpha values scatter through the offsets the index select just
+#: scanned from the same flags instead of scanning them again.
+#: `-D MOJOLEARN_SVM_FAST_SYNCS_OFF` restores both.
+comptime FAST_SMO_SYNCS = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_SVM_FAST_SYNCS_OFF"]()
+)
+
+
+def fold_order_rank_kernel(
+    nz_idx: MutPointer[Int32, MutAnyOrigin],
+    n_in: Int32,
+    order: MutPointer[Int32, MutAnyOrigin],
+):
+    """One block of `SMO_WS_SIZE` threads: `order[rank(p)] = p`, rank by
+    training index (distinct within a working set), `fold_order_for` on
+    the device."""
+    var n = Int(n_in)
+    var t = Int(thread_idx.x)
+    var sh = stack_allocation[
+        SMO_WS_SIZE, Scalar[DType.int32], address_space = AddressSpace.SHARED
+    ]()
+    var mine = Int32(0)
+    if t < n:
+        mine = nz_idx.unsafe_load(t)
+        sh[t] = mine
+    barrier()
+    if t < n:
+        var r = 0
+        for q in range(n):
+            if sh[q] < mine:
+                r += 1
+        order.unsafe_store(r, Int32(t))
 
 
 def _grid(n: Int) -> Int:
@@ -689,26 +732,38 @@ struct SmoSolver(Movable):
             var nnz_da = self.select.select_i32(
                 ctx, cache.ws_idx_mod, self.nz_flags, self.nz_da_idx, n_ws
             )
-            _ = self.select.select_f32(
-                ctx, self.delta_alpha, self.nz_flags, self.nz_da, n_ws
-            )
+            comptime if FAST_SMO_SYNCS:
+                self.select.scatter_f32_rescan_free(
+                    ctx, self.delta_alpha, self.nz_flags, self.nz_da, n_ws
+                )
+            else:
+                _ = self.select.select_f32(
+                    ctx, self.delta_alpha, self.nz_flags, self.nz_da, n_ws
+                )
             st.stop(ctx, "smo.nonzero_select", t0)
             # The following should be performed only for elements with
             # nonzero delta_alpha
             if nnz_da > 0:
                 t0 = st.start()
                 # DEVIATION 634: the fold order, from the host.
-                var nz_host = read_i32(ctx, self.nz_da_idx, nnz_da)
-                var order = fold_order_for(nz_host)
-                var hord = ctx.enqueue_create_host_buffer[DType.int32](nnz_da)
-                for r in range(nnz_da):
-                    hord.unsafe_ptr().unsafe_store(r, order[r])
-                ctx.enqueue_copy(
-                    dst_buf=self.fold_order.create_sub_buffer[DType.int32](0, nnz_da),
-                    src_ptr=hord.unsafe_ptr(),
-                )
-                ctx.synchronize()
-                _ = hord^
+                comptime if FAST_SMO_SYNCS:
+                    ctx.enqueue_function[fold_order_rank_kernel](
+                        self.nz_da_idx.unsafe_ptr(), Int32(nnz_da),
+                        self.fold_order.unsafe_ptr(),
+                        grid_dim=1, block_dim=SMO_WS_SIZE,
+                    )
+                else:
+                    var nz_host = read_i32(ctx, self.nz_da_idx, nnz_da)
+                    var order = fold_order_for(nz_host)
+                    var hord = ctx.enqueue_create_host_buffer[DType.int32](nnz_da)
+                    for r in range(nnz_da):
+                        hord.unsafe_ptr().unsafe_store(r, order[r])
+                    ctx.enqueue_copy(
+                        dst_buf=self.fold_order.create_sub_buffer[DType.int32](0, nnz_da),
+                        src_ptr=hord.unsafe_ptr(),
+                    )
+                    ctx.synchronize()
+                    _ = hord^
                 st.stop(ctx, "smo.fold_order_host", t0)
                 var bd = cache.init_full_tile_batching(ctx, x, self.nz_da_idx, nnz_da)
                 t0 = st.start()

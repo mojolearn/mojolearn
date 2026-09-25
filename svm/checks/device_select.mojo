@@ -440,6 +440,23 @@ struct SelectScratch(Movable):
             )
         return count
 
+    def scatter_f32_rescan_free(
+        mut self,
+        ctx: DeviceContext,
+        mut src: DeviceBuffer[DType.float32],
+        mut flags: DeviceBuffer[DType.uint8],
+        mut out: DeviceBuffer[DType.float32],
+        n: Int,
+    ) raises:
+        """`select_f32` for flags the LAST scan of this scratch already
+        covered (same buffer, same n): the offsets are reused, no drain."""
+        if n > 0:
+            ctx.enqueue_function[scatter_flagged_f32_kernel](
+                out.unsafe_ptr(), src.unsafe_ptr(), flags.unsafe_ptr(),
+                self.offsets.unsafe_ptr(), Int32(n),
+                grid_dim=_grid(n), block_dim=SEL_TPB,
+            )
+
     def select_f32(
         mut self,
         ctx: DeviceContext,
