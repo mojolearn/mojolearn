@@ -62,3 +62,14 @@ mojolearn/host/*.so
 
 # Copies of the checked-in GPU-trained CTR verification fixtures.
 mojolearn/verify_reference/ctr_models/
+# The Expose D bindings (2026-09-14). Fourth instance: they built IDENTICAL
+# only, under mojolearn/identical/, until classical FAST (2026-09-25) put the
+# FAST builds in the package directory, where the 0.8.19 release-check saw
+# them as changed paths it could not attribute. Embedding stays IDENTICAL only
+# and is listed so a future FAST build cannot repeat this.
+mojolearn/_mojolearn_kernel_methods.so
+mojolearn/_mojolearn_mixture.so
+mojolearn/_mojolearn_hdbscan.so
+mojolearn/_mojolearn_resample.so
+mojolearn/_mojolearn_ivf.so
+mojolearn/_mojolearn_embedding.so
