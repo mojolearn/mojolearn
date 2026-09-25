@@ -29,6 +29,7 @@ layout, not an arithmetic, and.
 """
 
 from std.builtin.sort import sort
+from std.sys.info import has_apple_gpu_accelerator
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -521,8 +522,10 @@ def svc_predict(
     var dual = upload_f32(ctx, model.dual_coefs)
     var d_preds = ctx.enqueue_create_buffer[DType.float32](n_rows)
     # DEVIATION 2493: FAST with no card recording folds the decision inside
-    # the kernel evaluation; no tile, no batch loop.
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
+    # the kernel evaluation; no tile, no batch loop. Apple only, like the
+    # other FAST SVM paths: the width-unrolled kernels never finished
+    # compiling for NVPTX or AMDGPU (0.8.19); elsewhere the tiled path runs.
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
         if not card.enabled and n_cols <= SVC_FUSED_KREG and (
             kp.kernel == KERNEL_RBF or kp.kernel == KERNEL_LINEAR
         ):

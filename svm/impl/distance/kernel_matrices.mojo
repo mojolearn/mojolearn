@@ -40,6 +40,7 @@ This implementation, both modes the same association, the pins under IDENTICAL:
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
+from std.sys.info import has_apple_gpu_accelerator
 from std.math import exp
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
@@ -365,7 +366,9 @@ def kernel_op(
             _kernel_rows(ctx, kp, out, a, b, m, n, k, norm_a, norm_b, count)
             return
     # DEVIATION 2492: FAST RBF in one fused kernel when k fits a register row.
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST:
+    # Apple only: its 16 width-unrolled kernels never finished compiling for
+    # NVPTX or AMDGPU (0.8.19); elsewhere FAST takes the GEMM route below.
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_FAST and has_apple_gpu_accelerator():
         if kp.kernel == KERNEL_RBF and k <= RBF_FUSED_KREG:
             if rbf_fused_tile(ctx, out, a, b, norm_a, norm_b, m, n, k, Float32(kp.gamma)):
                 return
