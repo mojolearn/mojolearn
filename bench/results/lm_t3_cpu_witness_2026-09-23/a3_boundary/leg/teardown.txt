@@ -1,0 +1,5 @@
+pod=q2hgnzt6dhkg8d
+name=mojolearn-cpu-lm-a3-boundary-20260925-023508
+terminated_verified=1
+exit=0
+at=2026-09-25T03:06:42Z

@@ -113,3 +113,70 @@ binding), the check logs, `gate.txt`, `lscpu.txt`, `wheel.sha256`,
 `checkpoints.sha256`, `inputs.sha256`, `pip_freeze.txt`, `timings.tsv` and
 `teardown.txt` (the verified delete). Rerun: `python3 tools/lm_cpu_witness.py
 --help`; tests `tools/tests/test_lm_cpu_witness.py`.
+
+## The A/2 to A/3 boundary and segment 3, 2026-09-25
+
+The same CPU witness column, run once more against the T3 live segment
+(route A segment 3, two vendors: an H100 coordinator and an MI325X worker,
+`docs/GPT3_SMALL_SIX_SEGMENT_PLAN.md`): from A/2's final checkpoint
+(`runs/t3/2026-09-22/A/2/ckpt_00002000.blm`), every one of the 64 shard
+losses of step 2001 against A/3's own chain line 2001; from A/3's final
+checkpoint (`runs/t3/2026-09-22/A/3/ckpt_00002400.blm`), the held-out loss
+(shard 013, batch 0); one negative control; and, as an extra cheap check,
+route A segment 1's step-101 shard-0 loss recomputed on the newer published
+wheel. One RunPod CPU pod, `tools/runpod_cpu_leg.sh`, the PUBLISHED wheel
+mojolearn 0.8.18 (manylinux, sha256
+`c160fb6d5101f1d0ff6a4747ff11c5ed2bbaacfd522506de64ab262f6b9e3836`, binding
+`_mojolearn_byte_lm_host.so` sha256
+`3aa40d5679c60e154c178aa7b367f4c5e6c841a2ef5da66605a39614d7466929`, the same
+binding bytes as the 0.8.15 run above; nothing built). Same shape and recipe
+(sha256 `9f7f695b9a0bae175bf...`), same hash scheme `sliced-sha256-8.v2`.
+
+Every check first loaded its checkpoint, hashed its state and held it to the
+chain: `ckpt_00002000.blm` (A/2, step 2000) to a state-only line built from
+A/2's own filed `chain.summary.tsv` row 2000 (`state_matches_chain: true`,
+state `0e39ed2b...`), `ckpt_00002400.blm` (A/3, step 2400) the same way from
+A/3-nvidia's filed `chain.summary.tsv` row 2400 (state `12fd12e8...`), and
+`ckpt_00000100.blm` (A/1, step 100) to the existing `chain_excerpt.jsonl`
+above (state `2b37e85e...`). The step 2001 chain line (all 64
+`losses_f32_hex`, needed for the shard comparison and not present in any
+`chain.summary.tsv`) was copied from the live segment's own
+`legs/A-3-live/.../segment/chain.jsonl`, read only, into
+`a3_boundary/chain_excerpt_a3.jsonl`.
+
+## Results
+
+| check | from | compared to | want | got | verdict | seconds |
+|---|---|---|---|---|---|---|
+| loss, **all 64 shards**, threaded, four at a time | ckpt 2000 (A/2, step 2000) | chain line 2001 `losses_f32_hex[0..63]` (A/3, H100+MI325X live) | 64 values | 64 equal | **64 PASS** | mean 92.0, min 42.8, max 112.0 |
+| CONTROL: one token id + 1 (row 0, position 0, 288 to 289) | ckpt 2000, step 2001 shard 0 | chain line 2001 shard 0 | `407449a6` | `407458cf` | **FAIL, expected** | 37.7 |
+| held-out batch 0 (shard 013) | ckpt 2400 (A/3, step 2400) | recorded for other columns | | `405fad2e` (3.494945) | RECORDED | 38.2 |
+| loss, shard 0, threaded, on 0.8.18 | ckpt 100 (A/1, step 100) | chain line 101 `losses_f32_hex[0]` (same line as above) | `40de1f6a` | `40de1f6a` | **PASS** | 38.8 |
+
+The CPU loss is the live segment's loss bit for bit for every one of the 64
+shards of step 2001, the boundary from A/2's own checkpoint into A/3's
+first live step, on the threaded path; one changed token moves it off; and
+route A segment 1's step-101 shard-0 loss reads the same bits on 0.8.18 as
+it read on 0.8.15 (`40de1f6a` both times), the host binding unchanged. The
+held-out loss of A/3's own final checkpoint is recorded (`405fad2e`,
+3.494945) for a later vendor to be held to.
+
+## Cost (A/2 to A/3 boundary leg)
+
+| leg | pod | CPU | billed | spend |
+|---|---|---|---|---|
+| a3_boundary: 64 shard losses, one control, one held-out, the A/1 recheck | q2hgnzt6dhkg8d, cpu5g 16 vCPU | AMD EPYC 4564P | 1,890 s | $0.39 |
+
+The pod was deleted by `tools/runpod_cpu_leg.sh` and verified gone (HTTP
+404, `a3_boundary/leg/teardown.txt`). All three checkpoints (1.95 GB each)
+were fetched from R2 in parallel with the wheel install; token ids came as
+byte ranges of the stream's parts.
+
+## Files (a3_boundary/)
+
+`chain_excerpt_a3.jsonl` (the three chain lines used: state-only 2000 and
+2400, full per-shard 2001), `a3_boundary.cmd` (the pod body, presigned URLs
+as placeholders), `leg/records/*.json` (one record per check),
+`leg/losses.tsv` (the 64 shard verdicts), `leg/gate.txt`, `leg/lscpu.txt`,
+`leg/wheel.sha256`, `leg/checkpoints.sha256`, `leg/inputs.sha256`,
+`leg/pip_freeze.txt`, `leg/timings.tsv`, `leg/teardown.txt`, `leg/pod_id.txt`.

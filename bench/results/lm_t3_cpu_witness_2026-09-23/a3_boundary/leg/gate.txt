@@ -1,0 +1,20 @@
+[02:36:30] started=2026-09-25T02:36:30Z commit=6a5428593407dd54363bf7f8fbb4388786c15804
+[02:36:30] cpu=AMD EPYC 4564P 16-Core Processor nproc=16
+9f7f695b9a0bae175bf241632767ace67c542a4a116a98e36b9c306f3eebe051  /root/witness/recipe.json
+1db7fadd6dec742d5dbf6c8ec3d8d95cb3aaf809fb4a8080038598240ff81b71  /root/witness/manifest.json
+d8012c6dc7951ca82b4381b74c3b75808b0c5083e80916bd6c043d3c440baacd  /root/witness/chain_a3.jsonl
+39e632c8d6c52418644ef0f7d6d5e5c963ed5d332582c1c63b4ab34e71943a8b  /root/witness/chain_a1.jsonl
+c160fb6d5101f1d0ff6a4747ff11c5ed2bbaacfd522506de64ab262f6b9e3836  /root/wheel/mojolearn-0.8.18-py3-none-manylinux_2_35_x86_64.whl
+[02:36:36] pip_install_exit=0
+3.14.7 0.8.18 /root/wv/lib/python3.14/site-packages/mojolearn/__init__.py
+ckpt100_exit=0
+ckpt2000_exit=0
+ckpt2400_exit=0
+80cd2126a89ba6d8a444cc7c9ca61cdadb4c67090511adcb4424e06ccf45b114  /root/witness/ckpt/ckpt_00000100.blm
+f03471f9afa90120d84788f4ac980b133b25c2d8f48b485d593d189e551b3c97  /root/witness/ckpt/ckpt_00002000.blm
+82249517f68c8e0dd7997869e4bd649136434a7105e970fecf928e39bb726598  /root/witness/ckpt/ckpt_00002400.blm
+[03:04:22] step2001: PASS=64 FAIL=0 records=64
+[03:05:04] control_token_step2001_shard0 exit=0 [03:05:04] FAIL (EXPECTED, control): want 407449a6 got 407458cf (3.816995 vs 3.817920) in 37.7 s -> /root/leg_out/records/control_token_step2001_shard0.json
+[03:05:47] heldout0_ckpt2400_threaded exit=0 [03:05:46] RECORDED: held-out loss 405fad2e (3.494945) in 38.2 s -> /root/leg_out/records/heldout0_ckpt2400_threaded.json
+[03:06:30] loss_step101_shard0_threaded_0818 exit=0 [03:06:29] PASS: want 40de1f6a got 40de1f6a (6.941335 vs 6.941335) in 38.8 s -> /root/leg_out/records/loss_step101_shard0_threaded_0818.json
+[03:06:30] finished=2026-09-25T03:06:30Z seconds=1800
