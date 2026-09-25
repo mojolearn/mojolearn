@@ -1,0 +1,39 @@
+{
+ "host": "34073d84ba1e",
+ "python": "3.11.10",
+ "cpus": 160,
+ "devices": [
+  0
+ ],
+ "scheme": "sliced-sha256-8.v2",
+ "from_step": 100,
+ "step_s": 46.779,
+ "export_raw_s": 5.348,
+ "export_grad_s": 1.22,
+ "old_hash_s": 0.342,
+ "alloc_s": 1.432,
+ "snapshot_first_s": 6.322,
+ "snapshot_reuse_s": 3.962,
+ "new_hash_s": 0.13,
+ "one_core_s": 1.534,
+ "step": 101,
+ "old": [
+  "abc8b816b5c3fb1509b5ba1edcbbcb288404fd9db707114ab27fb5736f76d2d9",
+  "25830bfc2016dc14371c3f2bc72b099bcf6a859ce706ff3c96cf4254bc5759e6"
+ ],
+ "new": [
+  "abc8b816b5c3fb1509b5ba1edcbbcb288404fd9db707114ab27fb5736f76d2d9",
+  "25830bfc2016dc14371c3f2bc72b099bcf6a859ce706ff3c96cf4254bc5759e6"
+ ],
+ "old_equals_new": true,
+ "expected": [
+  "abc8b816b5c3fb1509b5ba1edcbbcb288404fd9db707114ab27fb5736f76d2d9",
+  "25830bfc2016dc14371c3f2bc72b099bcf6a859ce706ff3c96cf4254bc5759e6"
+ ],
+ "equals_expected": true,
+ "overlap_start_s": 0.0049,
+ "overlap_all_started": true,
+ "overlap_step_s": 38.83,
+ "overlap_after_step_s": 0.0,
+ "overlap_equals": true
+}
