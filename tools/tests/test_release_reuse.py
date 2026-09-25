@@ -215,6 +215,42 @@ class DecisionTests(unittest.TestCase):
         # (the classical FAST tier added bindings on 2026-09-25), never a literal
         self.assertEqual(len(rr.plan_rows(plan, rr.LINUX, "REUSE")), len(rr.bindings(rr.LINUX)) - 1)
 
+    def test_set_identity_moves_with_its_set_the_host_bindings_and_the_overlay_only(self):
+        """What makes a completed leg reusable under a later freeze
+        (tools/release.py): one digest per set over its bindings, every host
+        binding and the runtime closure."""
+        import copy
+        prev = self.record(self.cur, dict(xcode="16"))
+        plan = rr.make_plan(self.cur, self.cache, self.repo, host_toolchain=dict(xcode="16"), prev=prev)
+        base = {s: rr.set_identity(plan, *s)["digest"] for s in rr.LINUX_SETS}
+        self.assertEqual(len(set(base.values())), 3, "each set has its own identity")
+        moved = copy.deepcopy(plan)
+        for r in moved["rows"]:
+            if (r["target"], r["vendor"], r["arch"], r["name"]) == (rr.LINUX, "hip", "gfx942", "_mojolearn_gbdt"):
+                r["identity_digest"] = "9" * 64
+        self.assertEqual(rr.set_identity(moved, "cuda", "sm_90a")["digest"], base[("cuda", "sm_90a")])
+        self.assertNotEqual(rr.set_identity(moved, "hip", "gfx942")["digest"], base[("hip", "gfx942")])
+        host = copy.deepcopy(plan)
+        for r in host["rows"]:
+            if r["target"] == rr.LINUX and r["tier"] == "host":
+                r["identity_digest"] = "8" * 64
+                break
+        for s in rr.LINUX_SETS:
+            self.assertNotEqual(rr.set_identity(host, *s)["digest"], base[s], "every leg builds the host bindings")
+        # a builder the route overlay replaces is part of every identity
+        over = rr.make_plan(self.cur, self.cache, self.repo, host_toolchain=dict(xcode="16"), prev=prev,
+                            builders_override={"tools/release061_remote_build.sh": "7" * 64})
+        self.assertEqual(over["builders_override"], {"tools/release061_remote_build.sh": "7" * 64})
+        for s in rr.LINUX_SETS:
+            self.assertNotEqual(rr.set_identity(over, *s)["digest"], base[s])
+        self.assertEqual(over["legs"], ["cuda-sm_90a", "cuda-sm_89", "hip-gfx942"], "and it rebuilds")
+        with self.assertRaises(SystemExit):
+            rr.make_plan(self.cur, self.cache, self.repo, prev=prev, builders_override={"tools/unknown.sh": "1" * 64})
+        # an unreadable binding identity makes a set unreusable
+        broken = copy.deepcopy(plan)
+        next(r for r in broken["rows"] if r["vendor"] == "cuda" and r["arch"] == "sm_89")["identity"] = None
+        self.assertIsNone(rr.set_identity(broken, "cuda", "sm_89"))
+
     def test_host_only_change_takes_the_cheapest_leg(self):
         def mutate(b, ident):
             return dict(ident, flags=dict(ident["flags"], compile_jobs="9")) if b.name == "_mojolearn_core_host" else ident
@@ -518,6 +554,65 @@ class PayloadTests(unittest.TestCase):
                 pack_wheel.release_inventory(sets, [proof, proof], pack_wheel.read_version(), ROOT)
             self.assertIn("one complete build proof per set a leg built", str(cm.exception))
 
+    def test_a_leg_of_an_earlier_freeze_packs_with_its_origin_and_no_proof(self):
+        """tools/release.py took a completed hip/gfx942 leg of an earlier freeze
+        (its set identity and build tooling equal this freeze's): its bytes are
+        packed with their origin, the plan's REUSE rows still come from the
+        published wheel, and a byte that moved is refused by name."""
+        with tempfile.TemporaryDirectory() as d:
+            tmp = pathlib.Path(d)
+            whl, prev = published_wheel_fixture(tmp)
+            build = {r["key"] for r in linux_plan(prev)["rows"]
+                     if r["tier"] != "host" and (r["vendor"], r["arch"]) == ("hip", "gfx942")}
+            plan = linux_plan(prev, build=build)
+            old = tmp / "old" / "hip" / "gfx942"
+            for r in rr.plan_rows(plan, rr.LINUX):
+                if r["tier"] == "host" or (r["vendor"], r["arch"]) != ("hip", "gfx942"):
+                    continue
+                p = old / r["set_rel"]
+                p.parent.mkdir(parents=True, exist_ok=True)
+                p.write_bytes(elf_stub(["libamdhip64.so.6"]) + b"EARLIER LEG " + r["set_rel"].encode())
+            (old / "host").mkdir()
+            for name in pack_wheel.HOST_NAMES:
+                (old / "host" / f"{name}.so").write_bytes(HOST_BYTES + name.encode())
+            (old / ".libs").mkdir()
+            (old / ".libs" / "libAsyncRTMojoBindings.so").write_bytes(b"runtime")
+            (old / "manifest.json").write_text(json.dumps(dict(bytes_extensions=1, bytes_staged_libs=1,
+                                                               driver_libs_not_staged=["libamdhip64.so.6"],
+                                                               staged_libs=[dict(name="libAsyncRTMojoBindings.so")])))
+            rows = [(tier, name) for tier in pack_wheel.TIERS for name in pack_wheel.tier_names(tier, True)]
+            (old / "readback.txt").write_text("".join(f"{t} {n} hip\n" for t, n in rows)
+                                              + "".join(f"host {n} cpu\n" for n in pack_wheel.HOST_NAMES))
+            (old / "arch_readback.txt").write_text("".join(f"{t} {n} gfx942\n" for t, n in rows)
+                                                   + "".join(f"host {n} NONE-BY-DESIGN\n" for n in pack_wheel.HOST_NAMES))
+            origin = dict(source_commit="e" * 40, leg="hip-gfx942", proof_sha256="p" * 64, admitted_for=CUR_COMMIT,
+                          set_identity_digest="d" * 64, tooling_digest="t" * 64)
+            out = rr.assemble_linux(plan, whl, {}, tmp / "sets", say=lambda *_: None,
+                                    leg_reuse={"hip-gfx942": dict(dir=old, origin=origin)})
+            doc = json.loads((out["hip/gfx942"] / "reuse.json").read_text())
+            self.assertEqual(doc["from_legs"]["hip-gfx942"], origin)
+            gbdt = doc["files"]["identical/_mojolearn_gbdt.so"]
+            self.assertEqual((gbdt["source"], gbdt["leg"]), ("leg", "hip-gfx942"))
+            self.assertNotIn("source", doc["files"]["host/_mojolearn_core_host.so"], "a REUSE row is the published copy")
+            sets = [s for vendor in ("cuda", "hip") for s in pack_wheel.load_set(tmp / "sets" / vendor, True)]
+            inv = pack_wheel.release_inventory(sets, [], pack_wheel.read_version(), ROOT)
+            o = inv["binding_origin"]["mojolearn/hip/gfx942/identical/_mojolearn_gbdt.so"]
+            self.assertEqual((o["origin"], o["from_leg"]["source_commit"], o["from_release"]), ("reused", "e" * 40, None))
+            self.assertEqual(inv["sets"]["hip/gfx942"]["from_legs"]["hip-gfx942"]["admitted_for"], CUR_COMMIT)
+            self.assertIn("hip-gfx942", inv["reuse"]["from_legs"])
+            self.assertEqual(inv["reuse"]["built"], 0)
+            target = out["hip/gfx942"] / "identical" / "_mojolearn_gbdt.so"
+            target.write_bytes(target.read_bytes() + b"\0")
+            with self.assertRaises(SystemExit) as cm:
+                pack_wheel.load_set(tmp / "sets" / "hip", True)
+            self.assertIn("leg hip-gfx942 of eeeeeeeeeeee", str(cm.exception))
+            # an origin that does not name what was taken is not a reuse record
+            doc["from_legs"]["hip-gfx942"].pop("tooling_digest")
+            (out["hip/gfx942"] / "reuse.json").write_text(json.dumps(doc))
+            with self.assertRaises(SystemExit) as cm:
+                pack_wheel.load_set(tmp / "sets" / "hip", True)
+            self.assertIn("is not a", str(cm.exception))
+
 
 if __name__ == "__main__":
     unittest.main()
@@ -639,3 +734,329 @@ class MacosAssembleTests(unittest.TestCase):
                 self.assertEqual((tmp / "macos" / rel).read_bytes(), data[r["archive_path"]])
                 self.assertEqual(doc["files"][rel]["archive_path"], r["archive_path"])
             self.assertEqual(len(doc["files"]), 2)
+
+
+# ---------------------------------------------------------------- builder views
+LINUX_SETS_SH = "packaging/linux/build_sets.sh"
+MACOS_WHEEL_SH = "packaging/macos/build_release_wheel.sh"
+SHELL_BUILDERS = (LINUX_SETS_SH, MACOS_WHEEL_SH, "tools/release061_remote_build.sh",
+                  "tools/linux_surface_qualification.sh")
+# bindings read through the views below: one per list kind
+VIEWERS = ("_mojolearn_svm", "_mojolearn_gbdt", "_mojolearn_training", "_mojolearn", "_mojolearn_byte_lm",
+           "_mojolearn_core_host")
+
+
+def real(rel):
+    return (ROOT / rel).read_text()
+
+
+def view(rel, text, name):
+    return rr.builder_view(rel, text.encode(), rr.binding_members(name))
+
+
+def edit_line(text, startswith, fn):
+    """`text` with the one line that starts with `startswith` rewritten."""
+    lines = text.split("\n")
+    hits = [i for i, line in enumerate(lines) if line.startswith(startswith)]
+    assert len(hits) == 1, (startswith, hits)
+    lines[hits[0]] = fn(lines[hits[0]])
+    return "\n".join(lines)
+
+
+def add_to_list(text, var, token):
+    return edit_line(text, var + '="', lambda line: line[:-1] + " " + token + '"' if not line.endswith('}"')
+                     else line[:-2] + " " + token + '}"')
+
+
+class BuilderViewTests(unittest.TestCase):
+    """The builder part of an identity: another binding joining a list, or a
+    comment, does not move it; anything that can change this binding's bytes
+    does. Runs on the REAL builder files."""
+
+    def assertViews(self, rel, before, after, same, moved):
+        for name in same:
+            self.assertEqual(view(rel, before, name), view(rel, after, name), f"{rel}: {name} moved")
+        for name in moved:
+            self.assertNotEqual(view(rel, before, name), view(rel, after, name), f"{rel}: {name} did not move")
+
+    # (a) another binding joining a list
+    def test_an_unrelated_binding_joining_a_list_moves_no_other_binding(self):
+        for rel in (LINUX_SETS_SH, MACOS_WHEEL_SH):
+            text = real(rel)
+            scripts_var = "SCRIPTS" if rel == LINUX_SETS_SH else "BUILD_SCRIPTS"
+            for names_var, scripts in (("EXT_NAMES", scripts_var), ("FAST_CLASSICAL_NAMES", "FAST_CLASSICAL_SCRIPTS"),
+                                       ("IDENTICAL_ONLY_NAMES", "IDENTICAL_ONLY_SCRIPTS")):
+                after = add_to_list(add_to_list(text, names_var, "_mojolearn_newthing"), scripts, "build_newthing.sh")
+                self.assertNotEqual(text, after)
+                self.assertViews(rel, text, after, same=VIEWERS, moved=("_mojolearn_newthing",))
+                # the runtime closure keeps every list whole: a new binding
+                # can need one more MAX library in .libs
+                self.assertNotEqual(rr.builder_view(rel, text.encode(), None), rr.builder_view(rel, after.encode(), None))
+            # a binding leaving a list moves only that binding
+            after = edit_line(text, 'FAST_CLASSICAL_NAMES="', lambda line: line.replace(" _mojolearn_ivf", ""))
+            after = edit_line(after, 'FAST_CLASSICAL_SCRIPTS="', lambda line: line.replace(" build_ivf.sh", ""))
+            self.assertViews(rel, text, after, same=VIEWERS, moved=("_mojolearn_ivf",))
+            # reordering a list moves nothing
+            after = edit_line(text, 'EXT_NAMES="', lambda line: 'EXT_NAMES="_mojolearn_trees _mojolearn_rf _mojolearn_gbdt"')
+            self.assertViews(rel, text, after, same=VIEWERS + ("_mojolearn_rf",), moved=())
+
+    def test_the_whole_identity_does_not_move_when_another_binding_joins(self):
+        with tempfile.TemporaryDirectory() as d:
+            repo, prev, cur, env = tiny_repo(d)
+            for rel in (LINUX_SETS_SH, MACOS_WHEEL_SH):
+                (repo / rel).write_text(real(rel))
+            subprocess.run(["git", "-C", str(repo), "commit", "-q", "-am", "real builders"], check=True, env=env)
+            cache = pathlib.Path(d) / "cache"
+            a = rr.facts_for_commit("HEAD", cache, repo)
+            for rel in (LINUX_SETS_SH, MACOS_WHEEL_SH):
+                text = (repo / rel).read_text()
+                text = add_to_list(text, "FAST_CLASSICAL_NAMES", "_mojolearn_newthing")
+                text = add_to_list(text, "FAST_CLASSICAL_SCRIPTS", "build_newthing.sh")
+                (repo / rel).write_text(text)
+            subprocess.run(["git", "-C", str(repo), "commit", "-q", "-am", "a new binding"], check=True, env=env)
+            b = rr.facts_for_commit("HEAD", cache, repo)
+            self.assertNotEqual(a["builders"], b["builders"])  # the whole files did move
+            gpu, host, mac = two_bindings()
+            for binding in (gpu, host, mac):
+                self.assertEqual(rr.compare(rr.identity(binding, b, dict(xcode="16")),
+                                            rr.identity(binding, a, dict(xcode="16"))), ("REUSE", "identity unchanged"))
+            self.assertNotEqual(rr.digest_of(rr.runtime_identity(a)), rr.digest_of(rr.runtime_identity(b)))
+            # the same binding moved to another tier list rebuilds
+            for rel in (LINUX_SETS_SH, MACOS_WHEEL_SH):
+                text = (repo / rel).read_text()
+                text = edit_line(text, 'FAST_CLASSICAL_NAMES="', lambda line: line.replace(" _mojolearn_svm", ""))
+                text = add_to_list(text, "IDENTICAL_ONLY_NAMES", "_mojolearn_svm")
+                (repo / rel).write_text(text)
+            subprocess.run(["git", "-C", str(repo), "commit", "-q", "-am", "svm tier"], check=True, env=env)
+            c = rr.facts_for_commit("HEAD", cache, repo)
+            for binding in (gpu, mac):
+                self.assertEqual(rr.compare(rr.identity(binding, c, dict(xcode="16")),
+                                            rr.identity(binding, b, dict(xcode="16"))), ("BUILD", "changed: builders"))
+            self.assertEqual(rr.compare(rr.identity(host, c), rr.identity(host, b))[0], "REUSE")
+
+    # (b) anything that can change this binding's bytes
+    def test_moving_this_binding_between_tier_lists_moves_it(self):
+        # _mojolearn_solver is FAST classical on both targets (FAST svm is
+        # Apple-only since 69a519c15, so the Linux list no longer holds svm)
+        for rel in (LINUX_SETS_SH, MACOS_WHEEL_SH):
+            text = real(rel)
+            after = edit_line(text, 'FAST_CLASSICAL_NAMES="', lambda line: line.replace(" _mojolearn_solver", ""))
+            after = edit_line(after, 'FAST_CLASSICAL_SCRIPTS="', lambda line: line.replace(" build_solver.sh", ""))
+            after = add_to_list(add_to_list(after, "IDENTICAL_ONLY_NAMES", "_mojolearn_solver"),
+                                "IDENTICAL_ONLY_SCRIPTS", "build_solver.sh")
+            self.assertViews(rel, text, after, same=("_mojolearn_gbdt", "_mojolearn_training", "_mojolearn"),
+                             moved=("_mojolearn_solver",))
+            # the name alone or the script alone moving is enough
+            only_name = edit_line(text, 'FAST_CLASSICAL_NAMES="', lambda line: line.replace(" _mojolearn_solver", ""))
+            self.assertViews(rel, text, only_name, same=("_mojolearn_gbdt",), moved=("_mojolearn_solver",))
+
+    def test_any_code_line_of_a_builder_moves_every_binding(self):
+        text = real(LINUX_SETS_SH)
+        edits = [
+            # a flag on the compile line
+            lambda t: t.replace("MOJOLEARN_COMPILE_JOBS=2 \\", "MOJOLEARN_COMPILE_JOBS=3 \\", 1),
+            # the tier default
+            lambda t: t.replace('TIERS="${MOJOLEARN_BUILD_TIERS:-fast deterministic identical}"',
+                                'TIERS="${MOJOLEARN_BUILD_TIERS:-deterministic identical}"'),
+            # the tier_names function body
+            lambda t: t.replace('if [[ "$1" = identical || "$1" = fast ]]; then printf \' %s\' "$FAST_CLASSICAL_NAMES"; fi',
+                                'if [[ "$1" = identical ]]; then printf \' %s\' "$FAST_CLASSICAL_NAMES"; fi'),
+            # a line inside an embedded Python heredoc, and a '#' line there
+            lambda t: t.replace("import importlib.machinery, importlib.util, sys",
+                                "import importlib.machinery, importlib.util, sys, os", 1),
+            lambda t: t.replace("import importlib.machinery, importlib.util, sys",
+                                "# a heredoc line is data\nimport importlib.machinery, importlib.util, sys", 1),
+            # a list variable renamed, or its environment override renamed
+            lambda t: t.replace('EXT_NAMES="', 'EXTN_NAMES="', 1),
+            lambda t: t.replace("${MOJOLEARN_BUILD_SCRIPTS:-", "${MOJOLEARN_SCRIPTS:-", 1),
+            # a list that holds something other than bindings is kept whole
+            lambda t: t.replace('EXT_NAMES="_mojolearn_gbdt _mojolearn_rf _mojolearn_trees"',
+                                'EXT_NAMES="_mojolearn_gbdt _mojolearn_rf _mojolearn_trees $EXTRA"'),
+            # indentation after a continuation line
+            lambda t: t.replace("MOJOLEARN_COMPILE_JOBS=2 \\\n", "MOJOLEARN_COMPILE_JOBS=2 \\\n ", 1),
+            # the shebang
+            lambda t: ("#!/bin/sh" + t[len("#!/usr/bin/env bash"):]) if t.startswith("#!/usr/bin/env bash")
+            else "#!/bin/sh\n" + t,
+        ]
+        for k, fn in enumerate(edits):
+            after = fn(text)
+            self.assertNotEqual(after, text, f"edit {k} did not apply")
+            self.assertViews(LINUX_SETS_SH, text, after, same=(), moved=VIEWERS)
+        for rel in rr.LINUX_BUILDERS + rr.MACOS_BUILDERS:
+            text = real(rel)
+            after = text + "\necho one more line\n" if rel.endswith(".sh") else text + "\nX = 1\n"
+            self.assertViews(rel, text, after, same=(), moved=VIEWERS)
+
+    def test_its_own_build_script_moves_it(self):
+        with tempfile.TemporaryDirectory() as d:
+            repo, prev, cur, env = tiny_repo(d)
+            cache = pathlib.Path(d) / "cache"
+            a = rr.facts_for_commit("HEAD", cache, repo)
+            p = repo / "bindings" / "build_svm.sh"
+            p.write_text(p.read_text().replace("mojo build", "mojo build -O2"))
+            subprocess.run(["git", "-C", str(repo), "commit", "-q", "-am", "script"], check=True, env=env)
+            b = rr.facts_for_commit("HEAD", cache, repo)
+            gpu, host, _ = two_bindings()
+            self.assertEqual(rr.compare(rr.identity(gpu, b), rr.identity(gpu, a)), ("BUILD", "changed: closure"))
+            self.assertEqual(rr.compare(rr.identity(host, b), rr.identity(host, a))[0], "REUSE")
+
+    # (c) comments
+    def test_full_line_shell_comments_and_blank_lines_do_not_move_it(self):
+        for rel in SHELL_BUILDERS:
+            text = real(rel)
+            lines = text.split("\n")
+            first = [i for i, line in enumerate(lines[:120]) if line.startswith("# ") and i > 0][0]
+            after = "\n".join(lines[:first] + ["# reworded", "", "   # indented comment"] + lines[first + 1:])
+            self.assertViews(rel, text, after, same=VIEWERS, moved=())
+
+    def test_shell_comments_that_are_not_unambiguous_move_it(self):
+        base = "#!/usr/bin/env bash\nX=1\n"
+        cases = [
+            # a trailing comment: kept (only full-line comments come out)
+            ("echo a  # one\n", "echo a  # two\n"),
+            # a '#' line inside a multi-line string is data
+            ("s='\n# one\n'\n", "s='\n# two\n'\n"),
+            ('s="\n# one\n"\n', 's="\n# two\n"\n'),
+            # inside a heredoc body
+            ("cat <<EOF\n# one\nEOF\n", "cat <<EOF\n# two\nEOF\n"),
+            ("cat <<-'EOF'\n\t# one\n\tEOF\n", "cat <<-'EOF'\n\t# two\n\tEOF\n"),
+            # after a continuation line a comment line ends the command
+            ("echo a \\\n# one\n", "echo a \\\n# two\n"),
+            # after a construct the view does not model, everything is kept
+            ("x=`date`\n# one\n", "x=`date`\n# two\n"),
+            ("x=$'a\\'b'\n# one\n", "x=$'a\\'b'\n# two\n"),
+            ('x="${a:-"b"}"\n# one\n', 'x="${a:-"b"}"\n# two\n'),
+            ("y=$((1 << 2))\n# one\n", "y=$((1 << 2))\n# two\n"),
+            ("y=$(case $a in b) echo;; esac)\n# one\n", "y=$(case $a in b) echo;; esac)\n# two\n"),
+        ]
+        for one, two in cases:
+            self.assertNotEqual(view("x.sh", base + one, "_mojolearn_svm"), view("x.sh", base + two, "_mojolearn_svm"),
+                                repr(one))
+        # and these are modeled, so the comment after them comes out
+        modeled = ['x="$(dirname "$0")"\n', "x='a # b'\n", 'x="a # b"\n', "echo a\\ #b\n",
+                   "v=$(python3 - <<'PY'\nprint(1)\nPY\n)\n", "echo \"${#a}\" ${a#b}\n"]
+        for code in modeled:
+            self.assertEqual(view("x.sh", base + code + "# one\n", "_mojolearn_svm"),
+                             view("x.sh", base + code + "# two\n", "_mojolearn_svm"), repr(code))
+
+    def test_list_lines_are_normalized_only_at_the_top_level(self):
+        base = "#!/usr/bin/env bash\n"
+        for wrap in ("cat <<EOF\n%sEOF\n", "s='\n%s'\n", "f() { :\n  %s}\n"):
+            a = base + wrap % 'EXT_NAMES="_mojolearn_gbdt"\n'
+            b = base + wrap % 'EXT_NAMES="_mojolearn_gbdt _mojolearn_new"\n'
+            self.assertNotEqual(view("x.sh", a, "_mojolearn_svm"), view("x.sh", b, "_mojolearn_svm"), wrap)
+        a = base + 'EXT_NAMES="_mojolearn_gbdt"\n'
+        b = base + 'EXT_NAMES="_mojolearn_gbdt _mojolearn_new"\n'
+        self.assertEqual(view("x.sh", a, "_mojolearn_svm"), view("x.sh", b, "_mojolearn_svm"))
+
+    def test_python_comments_do_not_move_it_but_code_and_strings_do(self):
+        for rel in ("packaging/linux/stage_libs.py", "packaging/macos/stage_dylibs.py", "python/setup.py"):
+            text = real(rel)
+            self.assertIsNotNone(rr.python_view(text))
+            lines = text.split("\n")
+            first = [i for i, line in enumerate(lines) if line.startswith("# ") and i > 1][0]
+            after = "\n".join(lines[:first] + ["# reworded", "    # indented"] + lines[first + 1:])
+            self.assertViews(rel, text, after, same=VIEWERS, moved=())
+        rel = "packaging/linux/stage_libs.py"
+        a = "#!/usr/bin/env python3\nx = 1  # one\ns = '''\n# one\n'''\n"
+        self.assertEqual(rr.builder_view(rel, a.encode(), None),
+                         rr.builder_view(rel, a.replace("x = 1  # one", "x = 1  # two").encode(), None))
+        for b in (a.replace("x = 1", "x = 2"), a.replace("'''\n# one", "'''\n# two"), a.replace("python3", "python3.12"),
+                  a.replace("x = 1", "x =  1")):
+            self.assertNotEqual(rr.builder_view(rel, a.encode(), None), rr.builder_view(rel, b.encode(), None), b)
+        # not Python: hashed whole
+        self.assertNotEqual(rr.builder_view(rel, b"def (:\n# one\n", None), rr.builder_view(rel, b"def (:\n# two\n", None))
+
+    def test_bash_parses_the_view_as_it_parses_the_file(self):
+        """The shell view with every list kept is the script bash reads: bash's
+        own re-serialization of each real builder (wrapped in a function, never
+        run) is byte-identical with and without the comments the view drops."""
+        bash = "/bin/bash"
+        if not os.path.exists(bash):
+            self.skipTest("no /bin/bash")
+
+        def canon(text):
+            with tempfile.NamedTemporaryFile("w", suffix=".sh", delete=False) as f:
+                f.write("__v() {\n" + text + "\n}\ndeclare -f __v\n")
+            try:
+                r = subprocess.run([bash, f.name], capture_output=True, text=True)
+            finally:
+                os.unlink(f.name)
+            self.assertEqual(r.returncode, 0, r.stderr)
+            return r.stdout
+
+        for rel in SHELL_BUILDERS:
+            text = real(rel)
+            dropped = rr.shell_view(text, None)
+            self.assertLess(len(dropped), len(text), rel)
+            self.assertEqual(canon(text), canon(dropped), rel)
+            # and the check can fail: a code edit shows in bash's reading
+            self.assertNotEqual(canon(text), canon(text + "\necho sentinel\n"), rel)
+
+
+class IdentityUpgradeTests(unittest.TestCase):
+    """0.8.18 and earlier recorded v1 identities (whole-file builder digests).
+    They compare in today's schema only after reproducing exactly."""
+
+    def setUp(self):
+        self._t = tempfile.TemporaryDirectory()
+        self.repo, self.prev, self.cur, self.env = tiny_repo(self._t.name)
+        self.cache = pathlib.Path(self._t.name) / "cache"
+        for target in (rr.LINUX, rr.MACOS):
+            for b in rr.bindings(target):
+                p = self.repo / "bindings" / b.script
+                if not p.exists():
+                    p.write_text(f"mojo build k.mojo -o python/mojolearn/x/{b.name}.so\n")
+        (self.repo / LINUX_SETS_SH).write_text(real(LINUX_SETS_SH))
+        subprocess.run(["git", "-C", str(self.repo), "add", "-A"], check=True, env=self.env)
+        subprocess.run(["git", "-C", str(self.repo), "commit", "-q", "-m", "all scripts"], check=True, env=self.env)
+        self.at = subprocess.run(["git", "-C", str(self.repo), "rev-parse", "HEAD"], capture_output=True,
+                                 text=True).stdout.strip()
+
+    def tearDown(self):
+        self._t.cleanup()
+
+    def v1_record(self, tamper=None):
+        facts = rr.facts_for_commit(self.at, self.cache, self.repo)
+        rows = []
+        for target in (rr.LINUX, rr.MACOS):
+            for b in rr.bindings(target):
+                ident = rr.identity(b, facts, dict(xcode="16"), schema=rr.SCHEMA_V1)
+                if tamper:
+                    ident = tamper(b, ident)
+                rows.append(dict(key=b.key, identity=ident))
+        path = pathlib.Path(self._t.name) / "binding-identities.json"
+        path.write_text(json.dumps(dict(commit=self.at, rows=rows,
+                                        runtime=dict(identity=rr.runtime_identity(facts, rr.SCHEMA_V1)))))
+        return dict(version="0.8.18", source_commit=self.at, identities=str(path),
+                    linux=dict(wheel="l.whl", sha256="0" * 64), macos=dict(wheel="m.whl", sha256="1" * 64))
+
+    def test_a_v1_record_that_reproduces_is_upgraded_and_one_that_does_not_builds(self):
+        text = add_to_list(real(LINUX_SETS_SH), "EXT_NAMES", "_mojolearn_newthing")
+        (self.repo / LINUX_SETS_SH).write_text(text)
+        subprocess.run(["git", "-C", str(self.repo), "commit", "-q", "-am", "a list edit"], check=True, env=self.env)
+        plan = rr.make_plan("HEAD", self.cache, self.repo, host_toolchain=dict(xcode="16"), prev=self.v1_record())
+        self.assertIn("upgraded after reproducing", plan["previous_identities_from"])
+        self.assertEqual({r["decision"] for r in plan["rows"]}, {"REUSE"})
+        # the runtime keeps every list whole, so it builds, on the cheapest leg
+        self.assertEqual(plan["runtime"]["decision"], "BUILD")
+        self.assertEqual(plan["legs"], ["cuda-sm_89"])
+
+        # one recorded identity that the commit does not reproduce
+        def tamper(b, ident):
+            if b.name == "_mojolearn_gbdt" and b.target == rr.LINUX and b.arch == "gfx942" and b.tier == "fast":
+                return dict(ident, flags=dict(ident["flags"], compile_jobs="7"))
+            return ident
+        plan = rr.make_plan("HEAD", self.cache, self.repo, host_toolchain=dict(xcode="16"), prev=self.v1_record(tamper))
+        builds = rr.plan_rows(plan, decision="BUILD")
+        self.assertEqual([(r["arch"], r["tier"], r["name"]) for r in builds], [("gfx942", "fast", "_mojolearn_gbdt")])
+        self.assertIn("does not reproduce", builds[0]["reason"])
+
+    def test_identities_of_two_schemas_never_compare_equal(self):
+        facts = rr.facts_for_commit(self.at, self.cache, self.repo)
+        gpu, _, _ = two_bindings()
+        v1, v2 = rr.identity(gpu, facts, schema=rr.SCHEMA_V1), rr.identity(gpu, facts)
+        decision, reason = rr.compare(v2, v1)
+        self.assertEqual(decision, "BUILD")
+        self.assertIn(rr.SCHEMA_V1, reason)
+        self.assertEqual(v2["builder_rule"], rr.BUILDER_RULE)

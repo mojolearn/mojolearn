@@ -1,0 +1,9 @@
+[15:24:25] segment: route A segment hash-ckpt label nvidia-hash-ckpt, global steps 100..102, K=64, devices (0,), from ckpt_00000100.blm (sha256 80cd2126a89ba6d8)
+[15:24:25] the checkpoint's state AGREES with the expected chain's step 100 (2b37e85edfd701eb)
+[15:25:24] step 101 lr 397e2cc1 loss 6.9004 state abc8b816b5c3fb15 grad 25830bfc2016dc14 46.76 s (+6.94 s hashing)
+[15:25:24] step 101 agrees with the expected chain
+[15:25:33] checkpoint ckpt_00000101.blm (1945780167 bytes, sha256 c6e512797785c600, 4.3 s)
+[15:26:18] step 102 lr 39805880 loss 6.8585 state a9421f91b947f82c grad 94c40a6e3d5ec5aa 38.56 s (+6.99 s hashing)
+[15:26:18] step 102 agrees with the expected chain
+[15:26:27] checkpoint ckpt_00000102.blm (1945780168 bytes, sha256 b043a0015be6e0d9, 4.2 s)
+[15:26:27] PASS: /root/ckpt-old

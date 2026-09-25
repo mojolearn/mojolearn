@@ -1,0 +1,10 @@
+vendor=nvidia
+commit=12c42503b6907205a4c459396fea45774cd3ed2e
+card_full=
+trace_dump=
+started=2026-09-25T17:26:17Z
+pixi_install_exit=0
+device_check_exit=0
+card_exit=0
+extra_exit=0
+finished=2026-09-25T17:40:20Z

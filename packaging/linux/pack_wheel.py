@@ -67,7 +67,11 @@ bindings are all reused needs no read-back witnesses and no build proof (the
 previous release's were its witnesses), and a set a leg built still needs
 both. `--build-proof` is given once per set a leg built. LINUX_PAYLOAD.json
 then records per binding whether it was built or reused and from which
-release (`binding_origin`), and per set the same (`sets`).
+release (`binding_origin`), and per set the same (`sets`). A file whose
+record says `source: leg` was taken from a completed build leg of an earlier
+freeze of the same release (tools/release.py: its set identity and build
+tooling equal this freeze's); `from_legs` names that leg's commit, proof and
+admission, and the set needs no proof here either.
 """
 
 import argparse
@@ -286,7 +290,7 @@ def release_inventory(sets, proof_paths, version, source_root=REPO):
         for rel in s.files:
             rec = reused.get(rel.split('/', 2)[2])
             origin[f'mojolearn/{rel}'] = (
-                dict(origin='reused', set=f'{s.vendor}/{s.arch}', from_release=s.reuse['origin'],
+                dict(origin='reused', set=f'{s.vendor}/{s.arch}', **reuse_origin(s, rec),
                      identity_digest=rec.get('identity_digest'), rebuilt_sha256=rec.get('rebuilt_sha256'))
                 if rec else dict(origin='built', set=f'{s.vendor}/{s.arch}'))
     # The CPU training binding sits outside this map on purpose: every key here
@@ -307,11 +311,13 @@ def release_inventory(sets, proof_paths, version, source_root=REPO):
                                      unsupported_modes=['fast', 'deterministic'],
                                      built_by=sorted(seen),
                                      origin='reused' if taken else 'built',
-                                     from_release=taken[0].reuse['origin'] if taken else None,
+                                     **(reuse_origin(taken[0], taken[0].reuse['files'][f'host/{name}.so'])
+                                        if taken else dict(from_release=None)),
                                      scope='CPU training and inference with no GPU; one '
                                            'copy for every architecture in this wheel')
             origin[f'mojolearn/host/{name}.so'] = dict(
                 origin=host_record[name]['origin'], from_release=host_record[name]['from_release'],
+                **({'from_leg': host_record[name]['from_leg']} if 'from_leg' in host_record[name] else {}),
                 identity_digest=taken[0].reuse['files'][f'host/{name}.so'].get('identity_digest') if taken else None,
                 built_by=[k for k in sorted(seen) if k not in {f'{s.vendor}/{s.arch}' for s in taken}])
     if set(host_record) != set(HOST_NAMES):
@@ -393,7 +399,8 @@ def release_inventory(sets, proof_paths, version, source_root=REPO):
                                               reused=sorted(reused_of[key]))
         else:
             set_records['/'.join(key)] = dict(origin='reused', from_release=s.reuse['origin'],
-                                              reused=sorted(reused_of[key]))
+                                              reused=sorted(reused_of[key]),
+                                              **({'from_legs': s.reuse['legs']} if s.reuse.get('legs') else {}))
     n_reused = sum(1 for o in origin.values() if o['origin'] == 'reused')
     return dict(schema='mojolearn.linux-payload.v1', version=version,
                 release_profile='alpha-api', assembly_profile=RELEASE_PROFILE,
@@ -402,7 +409,8 @@ def release_inventory(sets, proof_paths, version, source_root=REPO):
                 extensions=payload,
                 binding_origin=origin,
                 reuse=dict(built=len(origin) - n_reused, reused=n_reused,
-                           from_release=next((s.reuse['origin'] for s in sets if s.reuse), None)),
+                           from_release=next((s.reuse['origin'] for s in sets if s.reuse and s.reuse['origin']), None),
+                           from_legs={k: v for s in sets if s.reuse for k, v in (s.reuse.get('legs') or {}).items()}),
                 optional_native={**{n: {
                     'included': True, 'supported_modes': ['identical'],
                     'unsupported_modes': ['fast', 'deterministic']}
@@ -667,9 +675,21 @@ def load_reuse(adir, vendor, arch):
         return None
     doc = json.loads(path.read_text())
     origin = doc.get("from_release") or {}
+    legs = doc.get("from_legs") or {}
+    files = doc.get("files")
+    # A file comes from the published wheel (`source` release, the default)
+    # or from a completed build leg of an earlier freeze of this release whose
+    # set identity equals this freeze's (`source` leg, tools/release.py).
+    sources = {(rec.get("source") or "release") if isinstance(rec, dict) else None
+               for rec in (files or {}).values()} if isinstance(files, dict) else {None}
+    published_ok = all(origin.get(k) for k in ("version", "source_commit", "wheel", "wheel_sha256"))
+    legs_ok = isinstance(legs, dict) and all(
+        isinstance(o, dict) and all(o.get(k) for k in LEG_ORIGIN_KEYS) for o in legs.values())
     if (doc.get("schema") != REUSE_SCHEMA or doc.get("set") != f"{vendor}/{arch}"
-            or not isinstance(doc.get("files"), dict)
-            or not all(origin.get(k) for k in ("version", "source_commit", "wheel", "wheel_sha256"))):
+            or not isinstance(files, dict) or not sources <= {"release", "leg"}
+            or (("release" in sources or not files) and not published_ok)
+            or ("leg" in sources and not legs_ok)
+            or any(rec.get("leg") not in legs for rec in files.values() if rec.get("source") == "leg")):
         raise SystemExit(f"pack_wheel: {path} is not a {REUSE_SCHEMA} record for {vendor}/{arch}")
     for rel, rec in sorted(doc["files"].items()):
         p = adir / rel
@@ -681,11 +701,27 @@ def load_reuse(adir, vendor, arch):
         if not isinstance(want, str) or not re.fullmatch("[0-9a-f]{64}", want):
             raise SystemExit(f"pack_wheel: {path} records no sha256 for {rel}")
         if sha(p).hex() != want:
+            whence = (f"leg {rec.get('leg')} of {legs[rec['leg']]['source_commit'][:12]}"
+                      if (rec.get("source") or "release") == "leg" else f"published {origin['version']}")
             raise SystemExit(
-                f"pack_wheel: {adir}/{rel} differs from the published {origin['version']} bytes reuse.json "
-                f"records ({want[:12]}); a reused binding must be the published one, refusing to pack it")
-    return dict(files=doc["files"], origin=dict(version=origin["version"], source_commit=origin["source_commit"],
-                                                wheel=origin["wheel"], wheel_sha256=origin["wheel_sha256"]))
+                f"pack_wheel: {adir}/{rel} differs from the {whence} bytes reuse.json "
+                f"records ({want[:12]}); a reused binding must be those bytes, refusing to pack it")
+    return dict(files=doc["files"],
+                origin=dict(version=origin["version"], source_commit=origin["source_commit"],
+                            wheel=origin["wheel"], wheel_sha256=origin["wheel_sha256"]) if published_ok else None,
+                legs={name: dict(o) for name, o in legs.items()})
+
+
+#: What a reused build leg's origin must name (tools/release.py writes it).
+LEG_ORIGIN_KEYS = ("source_commit", "leg", "proof_sha256", "admitted_for", "set_identity_digest", "tooling_digest")
+
+
+def reuse_origin(s, rec):
+    """The origin fields of one reused file of set S: the published release
+    it came from, or the earlier freeze's build leg."""
+    if (rec.get("source") or "release") == "leg":
+        return dict(from_release=None, from_leg=s.reuse["legs"][rec["leg"]])
+    return dict(from_release=s.reuse["origin"])
 
 
 def sha(path):

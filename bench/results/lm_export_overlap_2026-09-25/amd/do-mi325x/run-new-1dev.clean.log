@@ -1,0 +1,22 @@
+[18:34:48] segment: route A segment 4 label export-overlap-amd, global steps 100..110, K=64, devices (0,), from ckpt_00000100.blm (sha256 80cd2126a89ba6d8)
+[18:34:48] the checkpoint's state AGREES with the expected chain's step 100 (2b37e85edfd701eb)
+[18:37:16] step 101 lr 397e2cc1 loss 6.9004 state abc8b816b5c3fb15 grad 25830bfc2016dc14 71.45 s (+0.72 s hashing)
+[18:37:16] step 101 agrees with the expected chain
+[18:38:28] step 102 lr 39805880 loss 6.8585 state a9421f91b947f82c grad 94c40a6e3d5ec5aa 72.12 s (+0.68 s hashing)
+[18:38:28] step 102 agrees with the expected chain
+[18:38:32] checkpoint ckpt_00000102.blm (1945780168 bytes, sha256 b043a0015be6e0d9, 3.4 s)
+[18:39:41] step 103 lr 39819a9f loss 6.8373 state fcdb48b8ab51f2ef grad 19a43804ef4065de 72.16 s (+3.48 s hashing)
+[18:39:41] step 103 agrees with the expected chain
+[18:40:54] uploaded ckpt_00000102.blm in 142.3 s
+[18:40:54] step 104 lr 3982dcbf loss 6.8105 state 64ca50a4cb8adaa7 grad 88dc6074614bae71 69.36 s (+0.10 s hashing)
+[18:40:54] step 104 agrees with the expected chain
+[18:40:54] progress: manifest.progress.tsv to step 103 in 0.2 s
+[18:40:55] progress: chain.progress.jsonl to step 103 in 0.3 s
+[18:40:57] checkpoint ckpt_00000104.blm (1945780167 bytes, sha256 517998d5a64e0132, 3.3 s)
+[18:42:07] step 105 lr 39841ede loss 6.7733 state d1e5bb8778c0b2a8 grad ea62cef5ad7d41bb 72.75 s (+3.44 s hashing)
+[18:42:07] step 105 agrees with the expected chain
+[18:42:07] uploaded ckpt_00000104.blm in 69.5 s
+[18:43:20] progress: manifest.progress.tsv to step 105 in 72.8 s
+[18:43:20] step 106 lr 398560fd loss 6.8748 state 575ba19c183c5d9a grad ebbcef53fe391824 69.40 s (+0.08 s hashing)
+[18:43:20] step 106 agrees with the expected chain
+[18:43:20] progress: chain.progress.jsonl to step 105 in 0.3 s

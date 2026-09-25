@@ -606,3 +606,57 @@ def test_build_leg_cap_and_lease_refusals(world):
     assert not world.cloud.creates
     rc, text = leg(world, "--rent", "--lease", "90")
     assert rc == 2 and "--lease must be 30..60 minutes" in text
+
+
+def overlay_tarball(w, members):
+    """A route overlay (tools/release_tooling.py write_overlay's shape)."""
+    import io
+    import tarfile
+    raw = io.BytesIO()
+    with tarfile.open(fileobj=raw, mode="w:gz") as t:
+        for name, data in members.items():
+            info = tarfile.TarInfo(name)
+            info.size, info.mode = len(data), 0o755
+            t.addfile(info, io.BytesIO(data))
+    p = w.tmp / ("overlay-%d.tgz" % len(list(w.tmp.glob("overlay-*.tgz"))))
+    p.write_bytes(raw.getvalue())
+    return p, hashlib.sha256(raw.getvalue()).hexdigest()
+
+
+def test_build_leg_applies_the_route_overlay_after_the_source(world):
+    """The release tooling's copy of a box-side tool replaces the frozen
+    source's after the unpack, before the build, with both digests recorded."""
+    new = b"# the tooling checkout's guard (route overlay)\n"
+    tgz, digest = overlay_tarball(world, {"tools/amd_serial_guard.py": new})
+    world.env.update(MOJOLEARN_ROUTE_OVERLAY=str(tgz), MOJOLEARN_ROUTE_OVERLAY_SHA256=digest,
+                     MOJOLEARN_SOURCE_CHECKOUT=str(REPO))
+    rc, text = leg(world, "--rent")
+    assert rc == 0, text
+    assert (world.br / "mojolearn" / "tools" / "amd_serial_guard.py").read_bytes() == new
+    ro = (world.out / "route-overlay.txt").read_text()
+    old = hashlib.sha256((REPO / "tools" / "amd_serial_guard.py").read_bytes()).hexdigest()
+    assert "before tools/amd_serial_guard.py " + old in ro, ro
+    assert "after tools/amd_serial_guard.py " + hashlib.sha256(new).hexdigest() in ro, ro
+    assert "overlay_sha256=" + digest in ro
+    assert kv(world.out / "leg.txt")["route_overlay_sha256"] == digest
+    flat = "\n".join(commands(world))
+    br = str(world.br)
+    order = ["test ! -e %s/mojolearn && mkdir %s/mojolearn" % (br, br), "cd %s/mojolearn || exit 1" % br,
+             "bash %s/hotaisle_host_prep.sh" % br]
+    pos = [flat.index(o) for o in order]
+    assert pos == sorted(pos), order
+    assert_verified_delete(world, world.out / "hotaisle.txt")
+
+
+def test_build_leg_refuses_an_overlay_of_source_before_renting(world):
+    tgz, digest = overlay_tarball(world, {"bindings/build.sh": b"echo not tooling\n"})
+    world.env.update(MOJOLEARN_ROUTE_OVERLAY=str(tgz), MOJOLEARN_ROUTE_OVERLAY_SHA256=digest)
+    rc, text = leg(world, "--rent")
+    assert rc == 2, text
+    assert "REFUSING bindings/build.sh, it is in the build's source inventory" in text, text
+    assert not world.cloud.creates and not commands(world)
+    tgz, _ = overlay_tarball(world, {"tools/amd_serial_guard.py": b"x\n"})
+    world.env.update(MOJOLEARN_ROUTE_OVERLAY=str(tgz), MOJOLEARN_ROUTE_OVERLAY_SHA256="0" * 64)
+    rc, text = leg(world, "--rent")
+    assert rc == 2 and "is not the recorded" in text, text
+    assert not world.cloud.creates

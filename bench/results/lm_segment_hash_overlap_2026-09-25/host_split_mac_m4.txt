@@ -1,0 +1,9 @@
+n=162147840 (648.6 MB an array), digests equal: 046418c2c6129fb3
+alloc                0.515 s
+host_copy            1.050 s
+old_hash             0.729 s
+new_hash             0.438 s
+one_core             2.237 s
+overlap_start        0.062 s
+overlap_after_hold   0.000 s
+overlap_all_started  True

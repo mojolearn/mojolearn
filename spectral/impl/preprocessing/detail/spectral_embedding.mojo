@@ -63,7 +63,12 @@ from spectral.impl.sparse.linalg.detail.laplacian import (
     DeviceCoo,
     LAPLACIAN_TPB,
     compute_graph_laplacian,
+    laplacian_normalize_device,
     laplacian_normalized,
+)
+from spectral.impl.preprocessing.detail.fast_graph import (
+    fast_graph_eligible,
+    fast_knn_graph,
 )
 from spectral.impl.sparse.linalg.detail.symmetrize import coo_symmetrize
 from spectral.impl.sparse.op.coo_ops import coo_remove_scalar, coo_sort
@@ -415,6 +420,95 @@ def transform_graph_keep(
     return n_out
 
 
+def _use_fast_graph(n_samples: Int, k: Int, trace: IdentityTrace) -> Bool:
+    """FAST on Apple (`fast_graph.mojo`'s gate), a shape it serves, and no
+    identity trace asking for the host COO stages."""
+    return fast_graph_eligible(n_samples, k) and not trace.enabled
+
+
+def create_laplacian_fast(
+    ctx: DeviceContext,
+    params: SpectralEmbeddingParams,
+    dataset: List[Float32],
+    n_samples: Int,
+    n_features: Int,
+    mut diagonal: DeviceBuffer[DType.float32],
+    tpb: Int = LAPLACIAN_TPB,
+) raises -> DeviceCoo:
+    """`create_connectivity_graph` + `create_laplacian` with the graph built
+    on the device (`fast_graph.mojo`); the refusals are
+    `create_connectivity_graph`'s, in its order."""
+    var k_search = params.n_neighbors
+    if n_samples <= 0 or n_features <= 0:
+        raise Error("spectral: dataset must be n_samples x n_features with both positive")
+    if len(dataset) != n_samples * n_features:
+        raise Error("spectral: dataset length does not match n_samples x n_features")
+    if k_search < 1 or k_search > n_samples:
+        raise Error(
+            "spectral: n_neighbors=" + String(k_search)
+            + " must satisfy 1 <= n_neighbors <= n_samples (" + String(n_samples) + ")"
+        )
+    for i in range(len(dataset)):
+        var x = dataset[i]
+        if not isfinite(x):
+            raise Error(
+                "spectral: dataset has a non-finite value at index " + String(i)
+                + " -- refused by name (a NaN may not reach a card)"
+            )
+    var lap = fast_knn_graph(ctx, dataset, n_samples, n_features, k_search, tpb)
+    if params.norm_laplacian:
+        lap = laplacian_normalize_device(ctx, lap^, diagonal, tpb)
+    ctx.enqueue_function[negate_kernel](
+        lap.vals.unsafe_ptr(),
+        Int32(lap.nnz),
+        grid_dim=((lap.nnz + tpb - 1) // tpb, 1, 1),
+        block_dim=(tpb, 1, 1),
+    )
+    ctx.synchronize()
+    return lap^
+
+
+def transform_dataset_keep(
+    ctx: DeviceContext,
+    params: SpectralEmbeddingParams,
+    dataset: List[Float32],
+    n_samples: Int,
+    n_features: Int,
+    mut embedding: List[Float32],
+    mut state: SpectralPredictionState,
+    keep: Bool,
+    mut trace: IdentityTrace,
+    laplacian_tpb: Int = LAPLACIAN_TPB,
+    lanczos_tpb: Int = LANCZOS_TPB,
+    scratch_pad: Int = 0,
+    scratch_poison: Float32 = 0.0,
+) raises -> Int:
+    """`transform` on a dataset (`:207-223`): the kNN graph, then
+    `transform_graph_keep`. Records the graph as `spectral.W.*`. On FAST
+    Apple the graph and Laplacian are built on the device instead
+    (`create_laplacian_fast`, the same matrix)."""
+    if _use_fast_graph(n_samples, params.n_neighbors, trace):
+        var diagonal = ctx.enqueue_create_buffer[DType.float32](n_samples)
+        var lap = create_laplacian_fast(
+            ctx, params, dataset, n_samples, n_features, diagonal, laplacian_tpb
+        )
+        var n_out = compute_eigenpairs_keep(
+            ctx, params, n_samples, lap, diagonal, embedding, state, keep,
+            trace, lanczos_tpb, scratch_pad, scratch_poison,
+        )
+        _ = diagonal^
+        _ = lap^
+        return n_out
+    var graph = create_connectivity_graph(ctx, params, dataset, n_samples, n_features, trace)
+    trace.record_list_i32("spectral.W.rows", graph.rows)
+    trace.record_list_i32("spectral.W.cols", graph.cols)
+    trace.record_list_f32("spectral.W.vals", graph.vals)
+    return transform_graph_keep(
+        ctx, params, graph, embedding, state, keep, trace, laplacian_tpb,
+        lanczos_tpb, scratch_pad, scratch_poison,
+    )
+
+
 def transform_dataset(
     ctx: DeviceContext,
     params: SpectralEmbeddingParams,
@@ -430,10 +524,8 @@ def transform_dataset(
 ) raises -> Int:
     """`transform` on a dataset (`:207-223`): the kNN graph, then
     `transform_graph`. Records the graph as `spectral.W.*`."""
-    var graph = create_connectivity_graph(ctx, params, dataset, n_samples, n_features, trace)
-    trace.record_list_i32("spectral.W.rows", graph.rows)
-    trace.record_list_i32("spectral.W.cols", graph.cols)
-    trace.record_list_f32("spectral.W.vals", graph.vals)
-    return transform_graph(
-        ctx, params, graph, embedding, trace, laplacian_tpb, lanczos_tpb, scratch_pad, scratch_poison
+    var state = SpectralPredictionState()
+    return transform_dataset_keep(
+        ctx, params, dataset, n_samples, n_features, embedding, state, False,
+        trace, laplacian_tpb, lanczos_tpb, scratch_pad, scratch_poison,
     )

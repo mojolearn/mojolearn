@@ -119,15 +119,19 @@ from core.device_scan import (
     nonfinite_partial_kernel,
 )
 from checks.kernel_matrix import (
+    COLUMN_AMD,
+    COLUMN_NVIDIA,
+    TARGET_COLUMN,
+    lib_hardware_ftz_fma_for,
+    lib_smem_page_fits_for,
+)
+from checks.kernel_matrix_attn import (
     ATTN_DEFAULT_WORD_BASELINE,
     ATTN_DEFAULT_WORD_STASH_TILED,
     ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF,
     ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_ESTASH_DRES_KVGRID_R32,
     ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_ESTASH_DRES_KVGRID_R32_BSWZ,
     ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_KVGRID_R32,
-    COLUMN_AMD,
-    COLUMN_NVIDIA,
-    TARGET_COLUMN,
     attn_default_arm_for,
     attn_masked_tail_replay_for,
     attn_dkdv_keys_per_block_for,
@@ -135,8 +139,6 @@ from checks.kernel_matrix import (
     attn_fwd_launch_bound_for,
     attn_dq_launch_bound_for,
     attn_zdot_rows_per_block_for,
-    lib_hardware_ftz_fma_for,
-    lib_smem_page_fits_for,
 )
 from checks.numerics import (
     ftz,

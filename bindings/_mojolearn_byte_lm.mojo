@@ -42,7 +42,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.vendor import COMPILED_VENDOR
 from gemm.checks.gemm_identical import TUNED_STAGE_FTZ, GEMM_REUSE_GROUP_WS
 from training.checks.optimizer_oracle import OptimizerConfig
-from training.checks.train_loop import download_f32
+from training.checks.train_loop import download_f32, download_f32_into
 from training.byte_lm_config import ByteConfig
 from training.byte_lm import (
     BYTE_PROFILE, ByteTrainer, byte_train_step, byte_train_step_resident,
@@ -1370,8 +1370,7 @@ def byte_lm_parallel_shard_gradient_binding(session: PythonObject, addresses: Py
     var cells: List[Int] = [n_ids, n]
     _validate_slot_table(addr, cells, 1)
     var loss = owner[].shard_gradient(_read_ids(addr[0], n_ids))
-    var g = download_f32(owner[].contexts[0], owner[].trainers[0].buffers.grad, n)
-    copy_f32(g.unsafe_ptr(), f32_ptr(addr[1]), n)
+    download_f32_into(owner[].contexts[0], owner[].trainers[0].buffers.grad, n, f32_ptr(addr[1]))  # DEVIATION 3120
     return PythonObject(loss)
 
 
@@ -1413,29 +1412,38 @@ def byte_lm_parallel_export_binding(session: PythonObject, addresses: PythonObje
     if owner[].pool_optimizer:
         for i in range(len(owner[].trainers)):
             owner[].trainers[i].validate_device_state(owner[].contexts[i], tr.completed_steps)
+    # DEVIATION 3120: every array goes from the device straight into the
+    # caller's memory (`download_f32_into`, one transfer each): no pinned
+    # host buffer, no element loop into a List, no second host copy. The
+    # pooled m/v land at each owner's `optimizer_first`, which is where the
+    # old List concatenation put them (owners are contiguous, in order,
+    # and cover [0, n); checked below before any copy). On a raise the
+    # caller's arrays hold an unspecified partial export.
     if gradients:
         if tr.grad_step != tr.completed_steps:
             raise Error("byte LM parallel: no committed gradient")
-        var g = download_f32(ctx, tr.buffers.grad, n)
-        copy_f32(g.unsafe_ptr(), f32_ptr(addr[0]), n)
+        download_f32_into(ctx, tr.buffers.grad, n, f32_ptr(addr[0]))
     else:
-        var p = download_f32(ctx, tr.buffers.param, n)
-        var m = List[Float32]()
-        var v = List[Float32]()
+        if owner[].pool_optimizer:
+            var at = 0
+            for i in range(len(owner[].trainers)):
+                if owner[].trainers[i].buffers.optimizer_first != at:
+                    raise Error("byte LM parallel: pooled optimizer ranges are not contiguous")
+                at += owner[].trainers[i].buffers.optimizer_count
+            if at != n:
+                raise Error("byte LM parallel: pooled optimizer ranges do not cover the model")
+        download_f32_into(ctx, tr.buffers.param, n, f32_ptr(addr[0]))
         if owner[].pool_optimizer:
             for i in range(len(owner[].trainers)):
+                var first = owner[].trainers[i].buffers.optimizer_first
                 var owned = owner[].trainers[i].buffers.optimizer_count
-                var local_m = download_f32(owner[].contexts[i], owner[].trainers[i].buffers.m_state, owned)
-                var local_v = download_f32(owner[].contexts[i], owner[].trainers[i].buffers.v_state, owned)
-                for j in range(owned):
-                    m.append(local_m[j])
-                    v.append(local_v[j])
+                download_f32_into(owner[].contexts[i], owner[].trainers[i].buffers.m_state, owned,
+                                  f32_ptr(addr[1] + 4 * first))
+                download_f32_into(owner[].contexts[i], owner[].trainers[i].buffers.v_state, owned,
+                                  f32_ptr(addr[2] + 4 * first))
         else:
-            m = download_f32(ctx, tr.buffers.m_state, n)
-            v = download_f32(ctx, tr.buffers.v_state, n)
-        copy_f32(p.unsafe_ptr(), f32_ptr(addr[0]), n)
-        copy_f32(m.unsafe_ptr(), f32_ptr(addr[1]), n)
-        copy_f32(v.unsafe_ptr(), f32_ptr(addr[2]), n)
+            download_f32_into(ctx, tr.buffers.m_state, n, f32_ptr(addr[1]))
+            download_f32_into(ctx, tr.buffers.v_state, n, f32_ptr(addr[2]))
         _write_flags(addr[3], tr.buffers.buf_initialized)
     return PythonObject(tr.completed_steps)
 
@@ -1537,8 +1545,7 @@ def byte_lm_parallel_fold_export_binding(session: PythonObject, addresses: Pytho
     var addr = _read_addresses(addresses, 1)
     var cells: List[Int] = [n]
     _validate_slot_table(addr, cells, 1)
-    var total = owner[].fold_export()
-    copy_f32(total.unsafe_ptr(), f32_ptr(addr[0]), n)
+    owner[].fold_export_into(f32_ptr(addr[0]))  # DEVIATION 3120
     return PythonObject(n)
 
 
