@@ -281,6 +281,64 @@ percent and attention at 29 percent of the step. What is left on AMD:
 - The per-step host hashing on the 13-core Hot Aisle VM (7.0 s) is outside
   the step seconds; on the DigitalOcean MI325X host it is 1.6 s.
 
+## Pass 2 (branch lane/amd-step-time-2, from 0.8.18)
+
+### Where the 32.3 s goes (first pass leg 8, rocprofv3, one lean B4 shard)
+
+| what | ms a shard | share |
+|---|---|---|
+| matrix-core GEMM (group and split launches) | 238.8 | 48 % |
+| attention: forward 37.0, dq 32.7, dk/dv 32.2, zdot 22.1 | 124.0 | 25 % |
+| head GEMM forward and dB (whole-leaf launches) | 59.2 | 12 % |
+| GEMM group folds + one VALU GEMM call | 19.4 | 4 % |
+| norms, embedding backward, scans, fills, cross entropy, copies, AdamW | about 51 | 10 % |
+
+Source: `legs/2026-09-24_204925-hotaisle-mi300x-leg8/remote/amd-step-time/prof/lean_kernel_stats.csv`
+(0.503 s lean shard, 0.493 s of kernel time). Counters on the matrix-core
+GEMM: 33 VALU instructions per MFMA; the gfx942 asm
+(`cpu/admit1/remote/leg_out/mfma.s.gz`) issues each MFMA pair, waits
+(`s_nop 15`), then 14 `v_mul_f32` and 25 `v_pk_mul_f32` (the flush of 64
+accumulators) before the next pair: the kernel is bound by the flush
+serialized behind the matrix core, not by the matrix core.
+
+### Levers built (all AMD-only code; NVIDIA and Apple compile the files unchanged)
+
+1. EXACT ADMISSION in `identical_gemm_mfma_kernel` (default on,
+   `-D MOJOLEARN_GEMM_MFMA_NO_ADMIT=1` reverts). If the smallest nonzero
+   exponent fields of the block's staged A words and B words in a window
+   sum to at least 174, every product is a multiple of 2^-126; from a +0.0
+   leaf start every accumulator then stays a multiple of 2^-126, so no
+   rounded step result can be subnormal and `ftz(fma_rn(a, b, acc))` equals
+   `fma_rn(a, b, acc)` on every word. The MFMA step alone is then the
+   contract step (same operands, same order, same single rounding) and the
+   product by one is not issued. A window that fails the test switches the
+   rest of its leaf to the shipped step. The admitted loop is back-to-back
+   MFMAs (asm above). New A/B operand kinds: `skew` (subnormal products that
+   a test reading one operand would wrongly admit), `border` (every window
+   admitted at the bound) and `sparse` (leaves switching mid-way).
+2. Attention chains on the matrix cores, as TRIAL defines until proven:
+   dq (`MOJOLEARN_ATTN_DQ_MFMA`), dk/dv (`MOJOLEARN_ATTN_DKDV_MFMA`), the
+   forward context chain (`MOJOLEARN_ATTN_FWD_MFMA`). Each is
+   `v_mfma_f32_16x16x1f32` (K = 1) plus the product by one under MODE 2
+   (set only around the chain), 16 rows (or keys) a wave by 64 columns; a
+   key (or query) that not every row of the wave sees is stepped on the VALU
+   for exactly the visible cells, so every chain takes the same steps in the
+   same order. `gemm/checks/amd_mfma_probe3.mojo` measures the 16x16x1 step
+   against the host fma and the flush before any of it counts.
+
+All of it compiles for gfx942 and the A/B harness and the byte LM binding
+still build for sm_90a (`cpu/admit1/`, `cpu/dq1/`, `cpu/dkdv1/`,
+`cpu/fwd1/`, RunPod CPU pods, about $0.02 each).
+
+### Prepared, not run: the MI325X stall probe
+
+`tools/amd_mi325x_perflevel_probe.sh` (with `tools/amd_codegen/stall_probe.mojo`)
+times a one-kernel-plus-synchronize loop on one DigitalOcean MI325X under
+performance level auto, `rocm-smi --setperfdeterminism 1900`,
+`--setperflevel high` and auto again, to tell whether the ~100 ms stalls
+about every 250 ms the MI325X step showed are a power-state effect. Run it
+after T3's A/4 has landed (the command line is in the script's header).
+
 ## Owed
 
 - NVIDIA re-proof before any release: `GEMM_LAUNCH_BOUND` is in shared
