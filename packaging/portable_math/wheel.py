@@ -19,6 +19,9 @@ from stage import stage
 # dependency must fail closed instead of being silently removed by the patcher.
 ROOTS = "acos acosh asin asinh atan atan2 atanh cbrt ceil copysign cos cosh erf erfc exp exp2 expm1 fabs fdim floor fma fmax fmin fmod frexp hypot ilogb ldexp lgamma llrint llround log log10 log1p log2 logb lrint lround modf nearbyint nextafter nexttoward pow remainder remquo rint round scalbln scalbn sin sincos sinh sqrt tan tanh tgamma trunc".split()
 MATH_SYMBOLS = {root + suffix for root in ROOTS for suffix in ("", "f", "l")}
+#: A FAST-tier binding of a Linux GPU set: mojolearn/<cuda|hip>/<arch>/<name>.so
+#: with no tier directory (identical/ and deterministic/ sit one level deeper).
+FAST_SET = re.compile(r"^mojolearn/(cuda|hip)/[^/]+/_mojolearn[^/]*\.so$")
 # These entry points run independent tests; none is imported by estimators.
 NUMPY_ORACLES = {
     "mojolearn/_identity_break.py", "mojolearn/_identity.py",
@@ -149,10 +152,15 @@ def audit_tree(root, python_only=False):
                 errors.append(relative + ": owned helper has unresolved imports or missing exports")
         bad_symbols = sorted(set(imports) & MATH_SYMBOLS)
         bad_deps = [dep for dep in deps if LIBM.match(Path(dep).name)]
-        if bad_symbols or bad_deps:
+        # FAST promises no bits across machines (per-vendor speed tier), so a
+        # FAST-tier GPU set may call the platform's math; it is recorded, not
+        # refused. IDENTICAL, deterministic and host binaries stay enforced.
+        fast_tier = bool(FAST_SET.match(relative))
+        if (bad_symbols or bad_deps) and not fast_tier:
             errors.append(f"{relative}: math imports={bad_symbols}, dependencies={bad_deps}")
         binaries.append({"file": relative, "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
-                         "math_imports": bad_symbols, "math_dependencies": bad_deps})
+                         "math_imports": bad_symbols, "math_dependencies": bad_deps,
+                         **({"fast_tier_exempt": True} if fast_tier and (bad_symbols or bad_deps) else {})})
     if python_only:
         if errors:
             raise ValueError("platform math audit failed:\n" + "\n".join(errors))
