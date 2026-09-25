@@ -64,6 +64,19 @@ def coo_sort(g: CooGraph) raises -> CooGraph:
     DEVIATION 777 below and `refuse_repeated_keys`, which carries the
     refusal at the one place the ambiguity bites."""
     var nnz = g.nnz()
+    # Two stable counting passes -- by column, then by row -- give the same
+    # unique (row, col, original index) order as the merge sort below in
+    # O(nnz + n) instead of O(nnz log nnz): 20M entries at 10,000 rows of a
+    # SpectralEmbedding graph. Taken when every index lies in [0, n).
+    var in_range = g.n > 0
+    for i in range(nnz):
+        var r = Int(g.rows[i])
+        var c = Int(g.cols[i])
+        if r < 0 or r >= g.n or c < 0 or c >= g.n:
+            in_range = False
+            break
+    if in_range:
+        return _coo_sort_counting(g)
     var order = List[Int]()
     for i in range(nnz):
         order.append(i)
@@ -85,6 +98,50 @@ def coo_sort(g: CooGraph) raises -> CooGraph:
         cols.append(g.cols[src])
         vals.append(g.vals[src])
     return CooGraph(g.n, rows^, cols^, vals^)
+
+
+def _coo_sort_counting(g: CooGraph) raises -> CooGraph:
+    """`coo_sort` for indices in [0, n): LSD counting sort, column pass then
+    row pass, both stable, so ties keep the original index order."""
+    var nnz = g.nnz()
+    var n = g.n
+    var cnt = List[Int](capacity=n + 1)
+    for _ in range(n + 1):
+        cnt.append(0)
+    for i in range(nnz):
+        cnt[Int(g.cols[i]) + 1] += 1
+    for k in range(n):
+        cnt[k + 1] += cnt[k]
+    var by_col = List[Int32](capacity=nnz)
+    for _ in range(nnz):
+        by_col.append(0)
+    for i in range(nnz):
+        var c = Int(g.cols[i])
+        by_col[cnt[c]] = Int32(i)
+        cnt[c] += 1
+    for k in range(n + 1):
+        cnt[k] = 0
+    for i in range(nnz):
+        cnt[Int(g.rows[i]) + 1] += 1
+    for k in range(n):
+        cnt[k + 1] += cnt[k]
+    var order = List[Int32](capacity=nnz)
+    for _ in range(nnz):
+        order.append(0)
+    for q in range(nnz):
+        var i = Int(by_col[q])
+        var r = Int(g.rows[i])
+        order[cnt[r]] = Int32(i)
+        cnt[r] += 1
+    var rows = List[Int32](capacity=nnz)
+    var cols = List[Int32](capacity=nnz)
+    var vals = List[Float32](capacity=nnz)
+    for q in range(nnz):
+        var src = Int(order[q])
+        rows.append(g.rows[src])
+        cols.append(g.cols[src])
+        vals.append(g.vals[src])
+    return CooGraph(n, rows^, cols^, vals^)
 
 
 def refuse_repeated_keys(g: CooGraph) raises:

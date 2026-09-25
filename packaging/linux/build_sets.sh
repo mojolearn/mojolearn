@@ -104,10 +104,10 @@ EXT_NAMES="_mojolearn_gbdt _mojolearn_rf _mojolearn_trees"
 # the reason for THOSE was different (their fused kernels were gated on the
 # identical contract, so the lower tiers were slower) and no longer matters.
 # CLASSICAL ML (2026-09-25): fast and identical, never deterministic.
-FAST_CLASSICAL_SCRIPTS="build.sh build_estimators.sh build_svm.sh build_solver.sh build_metrics.sh build_preprocessing.sh build_tsa.sh build_linalg.sh build_arima.sh build_gp.sh build_kernel_methods.sh build_mixture.sh build_hdbscan.sh build_resample.sh build_ivf.sh"
-FAST_CLASSICAL_NAMES="_mojolearn _mojolearn_estimators _mojolearn_svm _mojolearn_solver _mojolearn_metrics _mojolearn_preprocessing _mojolearn_tsa _mojolearn_linalg _mojolearn_arima _mojolearn_gp _mojolearn_kernel_methods _mojolearn_mixture _mojolearn_hdbscan _mojolearn_resample _mojolearn_ivf"
-IDENTICAL_ONLY_SCRIPTS="build_training.sh build_mamba.sh build_transformer.sh build_embedding.sh"
-IDENTICAL_ONLY_NAMES="_mojolearn_training _mojolearn_mamba _mojolearn_transformer _mojolearn_embedding"
+FAST_CLASSICAL_SCRIPTS="build.sh build_estimators.sh build_solver.sh build_metrics.sh build_preprocessing.sh build_tsa.sh build_linalg.sh build_arima.sh build_gp.sh build_kernel_methods.sh build_mixture.sh build_hdbscan.sh build_resample.sh build_ivf.sh"
+FAST_CLASSICAL_NAMES="_mojolearn _mojolearn_estimators _mojolearn_solver _mojolearn_metrics _mojolearn_preprocessing _mojolearn_tsa _mojolearn_linalg _mojolearn_arima _mojolearn_gp _mojolearn_kernel_methods _mojolearn_mixture _mojolearn_hdbscan _mojolearn_resample _mojolearn_ivf"
+IDENTICAL_ONLY_SCRIPTS="build_training.sh build_mamba.sh build_transformer.sh build_embedding.sh build_svm.sh"
+IDENTICAL_ONLY_NAMES="_mojolearn_training _mojolearn_mamba _mojolearn_transformer _mojolearn_embedding _mojolearn_svm"
 PACKAGE_BYTE_LM=${MOJOLEARN_PACKAGE_BYTE_LM:-0}
 case "$PACKAGE_BYTE_LM" in 0|1) ;; *) echo 'MOJOLEARN_PACKAGE_BYTE_LM must be 0 or 1' >&2; exit 2 ;; esac
 unset MOJOLEARN_BYTE_LM_OUTDIR

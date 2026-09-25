@@ -20,7 +20,7 @@ def gpu_memory():
     result = subprocess.run(
         ['nvidia-smi', '--query-gpu=memory.used,memory.total',
          '--format=csv,noheader,nounits'], capture_output=True, text=True,
-        check=True, timeout=5)
+        check=True, timeout=15)
     rows = [tuple(map(int, row.split(','))) for row in result.stdout.splitlines()]
     if len(rows) != 1:
         raise RuntimeError('Requires exactly one NVIDIA GPU')
@@ -88,10 +88,22 @@ def run(args):
                             env=env, start_new_session=True)
     started = time.monotonic()
     reason = None
+    # nvidia-smi can stall under a full compile load (0.8.19: a 5 s timeout
+    # crashed this guard and killed a healthy H100 build). A missed reading
+    # skips the GPU check for that tick; a minute without one stops the job.
+    gpu_misses = 0
+    used, total = 0, 1
     try:
         while proc.poll() is None:
             rss, available = memory(proc.pid)
-            used, total = gpu_memory()
+            try:
+                used, total = gpu_memory()
+                gpu_misses = 0
+            except (subprocess.TimeoutExpired, subprocess.CalledProcessError):
+                gpu_misses += 1
+                if gpu_misses >= 4:
+                    reason = 'nvidia-smi unresponsive for a minute'
+                    break
             if time.monotonic() - started > args.seconds:
                 reason = 'deadline exceeded'
             elif rss > args.rss_gib * 2**30:

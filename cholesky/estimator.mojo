@@ -44,6 +44,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
 from cholesky.checks.potrf import (
+    chol_default_nb_hint,
     CHOL_ELEM_TPB,
     CHOL_NB_PINNED,
     CHOL_PANEL_TPB,
@@ -167,7 +168,7 @@ def cholesky_factor_host(
     add_jitter(ctx, da, n, jitter, elem_tpb)
     trace.record_device(ctx, "chol.jittered", da, n * n)
     var run = potrf_lower(
-        ctx, da, ws, n, trace, CHOL_NB_PINNED, panel_tpb, elem_tpb
+        ctx, da, ws, n, trace, chol_default_nb_hint(), panel_tpb, elem_tpb
     )
     var logdet = Float32(0.0)
     if run.info == 0:

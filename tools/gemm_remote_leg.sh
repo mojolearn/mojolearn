@@ -1047,6 +1047,14 @@ if [ "$NVIDIA_CAMPAIGN" = 7 ]; then
     # is still refused is any architecture that is not one of the three the
     # release profile ships.
     case "$GPU_ARCHS" in sm_89|sm_90|sm_90a) ;; *) leg_die 'Release profile 7 requires explicit actual sm_89, sm_90 or sm_90a' ;; esac
+    # A route overlay (tools/route_overlay_lib.sh) is refused here, before any rental.
+    if [ -n "${MOJOLEARN_ROUTE_OVERLAY:-}" ]; then
+        . "$(dirname "$0")/route_overlay_lib.sh"
+        _ro_tmp=$(mktemp -d "${TMPDIR:-/tmp}/route-overlay.XXXXXX")
+        ro_prepare "$MOJOLEARN_ROUTE_OVERLAY" "${MOJOLEARN_ROUTE_OVERLAY_SHA256:-}" "$_ro_tmp" \
+            || { rm -rf "$_ro_tmp"; leg_die "route overlay refused"; }
+        rm -rf "$_ro_tmp"
+    fi
     # DEVIATION 2298: the same profile-7 rental, doing the OTHER half. Ada
     # (sm_89) is the one architecture DigitalOcean cannot supply -- its L40S
     # and Ada cards report no available regions -- so the installed
@@ -1399,7 +1407,7 @@ LEG_SOURCE_PATHS_PHASE8="tools/e1_bootstrap.sh tools/repeat_run_stability.py too
 # millisecond. But a benchmark driver, a lane it imports, or a vendor arm
 # script CAN, so all three are in here.
 LEG_SOURCE_PATHS_SPEED="bench/speed tools/speed_gemm_arm.py tools/speed_cuml_arm.py tools/speed_torch_seq.py tools/speed_gbdt_arm.py tools/vendor_gemm_price.py tools/fast_speed_table.py tools/leg_status.py bench/gemm_shapes.mojo core gemm original bindings python/mojolearn pixi.toml pixi.lock"
-LEG_SOURCE_PATHS_MAMBA=".gitattributes tools/mamba_backward_certify.sh tools/mamba_backward_identity.py tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh mamba/__init__.mojo mamba/checks mamba/impl mamba/corpus/gen_corpus.py checks/__init__.mojo checks/numerics.mojo checks/kernel_matrix.mojo core/__init__.mojo core/identity_trace.mojo gemm/__init__.mojo gemm/checks pixi.toml pixi.lock umap neighbors spectral core checks/hardware_matrix.mojo tools/umap_identity_compare.py tools/umap_mamba_followup.sh tools/umap_quality_check.py tools/umap_transform_quality_check.py bench/__init__.mojo bench/knn_smallk_dispatch_check.mojo bench/knn_smallk_dispatch_price.mojo bench/knn_smallk_dispatch_fixture.mojo bench/knn_smallk_price_fixture.mojo tools/knn_smallk_dispatch_price.sh bindings python metrics checks/vendor.mojo cluster checks gbdt tools/continued_cert_checks.sh bench/knn_layout_adversarial_check.mojo tools/mamba3_backward_arithmetic.py tools/mamba3_join_diagnostics.py"
+LEG_SOURCE_PATHS_MAMBA=".gitattributes tools/mamba_backward_certify.sh tools/mamba_backward_identity.py tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh mamba/__init__.mojo mamba/checks mamba/impl mamba/corpus/gen_corpus.py checks/__init__.mojo checks/numerics.mojo checks/kernel_matrix.mojo checks/kernel_matrix_gemm.mojo core/__init__.mojo core/identity_trace.mojo gemm/__init__.mojo gemm/checks pixi.toml pixi.lock umap neighbors spectral core checks/hardware_matrix.mojo tools/umap_identity_compare.py tools/umap_mamba_followup.sh tools/umap_quality_check.py tools/umap_transform_quality_check.py bench/__init__.mojo bench/knn_smallk_dispatch_check.mojo bench/knn_smallk_dispatch_price.mojo bench/knn_smallk_dispatch_fixture.mojo bench/knn_smallk_price_fixture.mojo tools/knn_smallk_dispatch_price.sh bindings python metrics checks/vendor.mojo cluster checks gbdt tools/continued_cert_checks.sh bench/knn_layout_adversarial_check.mojo tools/mamba3_backward_arithmetic.py tools/mamba3_join_diagnostics.py"
 # The certificate needs the Mamba implementation plus three small shared
 # numerical modules. The Python oracle imports the forward definitions from
 # mamba/corpus/gen_corpus.py, but it constructs fixtures directly and reads
@@ -1407,7 +1415,7 @@ LEG_SOURCE_PATHS_MAMBA=".gitattributes tools/mamba_backward_certify.sh tools/mam
 # larger than the work payload itself.
 # Keep this a git-archive pathspec so every shipped byte still comes from the
 # pinned commit; do not replace it with a working-tree tar.
-LEG_ARCHIVE_PATHS_MAMBA=".gitattributes mamba/__init__.mojo mamba/checks mamba/impl mamba/corpus/gen_corpus.py tools/mamba_backward_certify.sh tools/mamba_backward_identity.py tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh checks/__init__.mojo checks/numerics.mojo checks/kernel_matrix.mojo core/__init__.mojo core/identity_trace.mojo gemm/__init__.mojo gemm/checks pixi.toml pixi.lock umap neighbors spectral core checks/hardware_matrix.mojo tools/umap_identity_compare.py tools/umap_mamba_followup.sh tools/umap_quality_check.py tools/umap_transform_quality_check.py bench/__init__.mojo bench/knn_smallk_dispatch_check.mojo bench/knn_smallk_dispatch_price.mojo bench/knn_smallk_dispatch_fixture.mojo bench/knn_smallk_price_fixture.mojo tools/knn_smallk_dispatch_price.sh bindings python metrics checks/vendor.mojo cluster checks gbdt tools/continued_cert_checks.sh bench/knn_layout_adversarial_check.mojo tools/mamba3_backward_arithmetic.py tools/mamba3_join_diagnostics.py"
+LEG_ARCHIVE_PATHS_MAMBA=".gitattributes mamba/__init__.mojo mamba/checks mamba/impl mamba/corpus/gen_corpus.py tools/mamba_backward_certify.sh tools/mamba_backward_identity.py tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh checks/__init__.mojo checks/numerics.mojo checks/kernel_matrix.mojo checks/kernel_matrix_gemm.mojo core/__init__.mojo core/identity_trace.mojo gemm/__init__.mojo gemm/checks pixi.toml pixi.lock umap neighbors spectral core checks/hardware_matrix.mojo tools/umap_identity_compare.py tools/umap_mamba_followup.sh tools/umap_quality_check.py tools/umap_transform_quality_check.py bench/__init__.mojo bench/knn_smallk_dispatch_check.mojo bench/knn_smallk_dispatch_price.mojo bench/knn_smallk_dispatch_fixture.mojo bench/knn_smallk_price_fixture.mojo tools/knn_smallk_dispatch_price.sh bindings python metrics checks/vendor.mojo cluster checks gbdt tools/continued_cert_checks.sh bench/knn_layout_adversarial_check.mojo tools/mamba3_backward_arithmetic.py tools/mamba3_join_diagnostics.py"
 LEG_MAMBA_ARCHIVE_MAX_BYTES=10485760
 # Campaign 7 carries the complete release sources and verifier assets, not
 # only a Mamba certificate. Keep that payload bounded separately.
@@ -2281,7 +2289,7 @@ leg_archive_required() {
             echo "bench/knn_layout_dispatch_check.mojo bench/knn_layout_dispatch_price.mojo tools/knn_layout_dispatch_price.sh pixi.toml pixi.lock"
             return
         fi
-        echo "tools/mamba_backward_certify.sh tools/mamba_backward_identity.py tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh mamba/corpus/gen_corpus.py checks/kernel_matrix.mojo mamba/checks/mamba_backward_device_tail_dump.mojo mamba/checks/mamba2_backward_tail_dump.mojo mamba/checks/mamba3_backward_tail_dump.mojo"
+        echo "tools/mamba_backward_certify.sh tools/mamba_backward_identity.py tools/mamba_gradient_oracle.py tools/with_identical_mode.sh tools/with_build_lock.sh mamba/corpus/gen_corpus.py checks/kernel_matrix.mojo checks/kernel_matrix_gemm.mojo mamba/checks/mamba_backward_device_tail_dump.mojo mamba/checks/mamba2_backward_tail_dump.mojo mamba/checks/mamba3_backward_tail_dump.mojo"
         if [ "$NVIDIA_CAMPAIGN" != 0 ]; then
             echo "tools/nvidia_campaign.sh tools/nvidia_feature_finish.sh tools/nvidia_feature_finish_validate.py tools/nvidia_serial_guard.py tools/nvidia_public_compare.py tools/speed_torch_seq.py transformer/checks/transformer_backward_check.mojo transformer/corpus/gen_corpus.py bench/gemv_serial_layout_main.mojo bench/knn_index_layout_main.mojo"
         fi
@@ -3108,7 +3116,8 @@ RELEASE_TOOLS_SETUP
     work_remaining=$((@WORKTIMEOUT@ - $(date +%s) + campaign_started))
     if [ "$work_remaining" -ge 150 ]; then
         release_seconds=$((work_remaining - 20))
-        if [ "$release_seconds" -gt 2400 ]; then release_seconds=2400; fi
+        # 0.8.19: a release that rebuilds every binding cold ran past 2400 s (exit 124)
+        if [ "$release_seconds" -gt 6000 ]; then release_seconds=6000; fi
         printf '%s\n' '@COMMIT@' > "$ROOT/commit.txt"
         if [ '@QUALIFY@' = 1 ]; then
             # DEVIATION 2298: 25 installed jobs from the wheel's own bytes on
@@ -4695,7 +4704,10 @@ leg_ship_and_run() {
     leg_source_sha_recipe "$TMPD/archive" > "$OUT/source_sha256_local.txt"
     if [ "$NVIDIA_CAMPAIGN" = 7 ]; then
         # Keep imports from adding untracked bytecode to the source transport manifest.
-        python3 -B - "$TMPD/archive" "$REPO" > "$OUT/source_inventory_local.json" <<'RELEASE_SOURCE'
+        # The source checkout the packer reads: this one, or the frozen
+        # source checkout tools/release.py names when the release tooling
+        # runs from a newer commit (MOJOLEARN_SOURCE_CHECKOUT).
+        python3 -B - "$TMPD/archive" "${MOJOLEARN_SOURCE_CHECKOUT:-$REPO}" > "$OUT/source_inventory_local.json" <<'RELEASE_SOURCE'
 import json, pathlib, subprocess, sys
 archive, local=map(pathlib.Path, sys.argv[1:])
 sys.path.insert(0,str(archive/'tools'))
@@ -4723,6 +4735,18 @@ RELEASE_SOURCE
         leg_ssh 'rm -rf /root/mojolearn /root/gemm_leg_out && mkdir -p /root/mojolearn' \
             > /dev/null
         leg_ssh 'cd /root/mojolearn && tar xzf -' < "$TMPD/src.tgz"
+    fi
+    # THE ROUTE OVERLAY (tools/route_overlay_lib.sh): the release tooling's
+    # copy of each box-side tool that differs from the source commit's,
+    # extracted over the unpacked source; before and after sha256 recorded.
+    if [ -n "${MOJOLEARN_ROUTE_OVERLAY:-}" ]; then
+        . "$(dirname "$0")/route_overlay_lib.sh"
+        ro_prepare "$MOJOLEARN_ROUTE_OVERLAY" "${MOJOLEARN_ROUTE_OVERLAY_SHA256:-}" "$TMPD" \
+            || leg_die "route overlay refused"
+        leg_ssh "$(ro_remote_cmd /root/mojolearn)" < "$MOJOLEARN_ROUTE_OVERLAY" > "$OUT/route-overlay.txt" \
+            || leg_die "route overlay failed on the box"
+        ro_verify "$OUT/route-overlay.txt" || leg_die "route overlay not verified"
+        leg_say "  route overlay from the tooling checkout: $RO_FILES"
     fi
     # DEVIATION 2704 (Andrew, 2026-09-13): every leg stages its datasets and
     # corpora from R2 here, after the source is unpacked and before any body

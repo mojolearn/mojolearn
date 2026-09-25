@@ -383,6 +383,7 @@ from std.gpu import (
     block_dim,
     block_idx,
     grid_dim,
+    lane_id,
     thread_idx,
 )
 from std.sys.info import (
@@ -398,7 +399,8 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from core.block_reduce import block_flush_count_i32, block_reduce_sum
-from core.launch_log import log_launch, log_launch_ctx
+from core.launch_log import log_launch
+from core.launch_clock import log_launch_ctx
 from core.block_scan import BlockScanElement, pdf_to_cdf
 from core.scan_by_key import (
     ScanByKeyElement,
@@ -463,9 +465,12 @@ comptime SAMPLE_PER_NODE_DEFAULT = (
 each node's 24-key bijection once instead of `k` times. Same columns.
 `-D MOJOLEARN_RF_FAST_SAMPLE_PER_COLUMN` restores the per-column arm."""
 
-comptime HIST_SPLIT_CANDIDATES_DEFAULT = (
-    BUILD_MODE == NUMERIC_FAST
-    and is_defined["MOJOLEARN_RF_SPLIT_CANDIDATES"]()
+comptime HIST_SPLIT_CANDIDATES_DEFAULT = BUILD_MODE == NUMERIC_FAST and (
+    is_defined["MOJOLEARN_RF_SPLIT_CANDIDATES"]()
+    or (
+        has_apple_gpu_accelerator()
+        and not is_defined["MOJOLEARN_RF_SPLIT_CANDIDATES_OFF"]()
+    )
 )
 """FAST only: each `find_best_splits` block stores its winner in its own
 candidate slot and `merge_split_candidates_kernel` folds a node's slots
@@ -473,6 +478,10 @@ with `Split.update` (a total order), instead of every block spinning on
 the node's device mutex. Same winner. OPT-IN (`-D
 MOJOLEARN_RF_SPLIT_CANDIDATES=1`), NOT FLIPPED: Apple M4 1M rows, hashes
 unchanged, taxireg 0.993, taxi 1.018 -- the mutex is not the cost here.
+ON BY DEFAULT on Apple since the SIMD-group split kernel
+(`FBS_WARP_DEFAULT`): with 40 columns per pass every node's mutex took
+up to 40 publishes; 5 trees 1M x 220 regression split time 5.1 -> 3.6 s,
+same forest (`-D MOJOLEARN_RF_SPLIT_CANDIDATES_OFF`).
 `MOJOLEARN_RF_EXP_NO_SPLIT_MUTEX` is the racy pricing arm (never a
 build default; its forests move run to run and its build gate refuses).
 """
@@ -3150,6 +3159,153 @@ def small_node_split_kernel[
         ] = sp.pure
 
 
+comptime FBS_WARP_DEFAULT = (
+    BUILD_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_RF_FBS_WARP_OFF"]()
+)
+"""FAST on Apple: `find_best_splits` gives each (node, column) ONE SIMD
+group instead of a 128-thread block (`find_best_splits_warp_kernel`). The
+cumulative histogram is built in threadgroup memory (per-lane chunk sums,
+then each lane adds the chunks before it: integer / fixed-point bins, so
+the same cells in any order), the gain scan is `GainStrided` over the
+lane's bins, and lane 0 publishes through the same `_publish_to_global`.
+At depth a level holds hundreds of thousands of (node, column) cells, each
+of which paid a 128-thread block and a barrier-bound scan."""
+
+comptime FBS_WARP_CELLS = 4
+
+
+def find_best_splits_warp_kernel[
+    O: ObjectiveLike,
+    SLOTS: Int,
+    zero_after: Bool,
+    candidates: Bool = False,
+](
+    argsp: MutPointer[FindBestSplitsArgs[O], MutAnyOrigin],
+    histograms: MutPointer[O.BinT, MutAnyOrigin],
+    max_n_bins: Int32,
+    col_start: Int32,
+    column_samples: MutPointer[Int32, MutAnyOrigin],
+    mutex: MutPointer[Int32, MutAnyOrigin],
+    splits: MutPointer[Split[O.DataT], MutAnyOrigin],
+    cand: MutPointer[Split[O.DataT], MutAnyOrigin],
+    n_cells_y: Int32,
+):
+    """`find_best_splits_kernel` (non-candidate, warp-shuffle arm) with
+    `FBS_WARP_CELLS` (node, column) cells per block, one per SIMD group.
+    Grid `(n_nodes, ceil(n_cells_y / FBS_WARP_CELLS))`; the global
+    histogram layout is unchanged (`(nid * n_cells_y + y)` cells)."""
+    ref args = argsp[unsafe_offset=0]
+    var objective = args.objective.copy()
+    var nid = Int(block_idx.x)
+    var warp = Int(thread_idx.x) // WARP_SIZE
+    var lane = Int(lane_id())
+    var y = Int(block_idx.y) * FBS_WARP_CELLS + warp
+    var active = y < Int(n_cells_y)
+    var n_classes = Int(objective.NumClasses())
+    var s_hist = stack_allocation[
+        FBS_WARP_CELLS * SLOTS, O.BinT, address_space=AddressSpace.SHARED
+    ]()
+    var s_tot = stack_allocation[
+        FBS_WARP_CELLS * WARP_SIZE, O.BinT, address_space=AddressSpace.SHARED
+    ]()
+    var mine = s_hist.unsafe_offset(warp * SLOTS)
+    var tots = s_tot.unsafe_offset(warp * WARP_SIZE)
+    var col = Int32(0)
+    var n_bins = Int32(0)
+    if active:
+        col = column_samples[
+            unsafe_offset = nid * Int(args.dataset.n_sampled_cols)
+            + Int(col_start)
+            + y
+        ]
+        n_bins = args.quantiles.n_bins_array[unsafe_offset = Int(col)]
+    var nb = Int(n_bins)
+    var per = (nb + WARP_SIZE - 1) // WARP_SIZE
+    var hist = histograms.unsafe_offset(
+        (nid * Int(n_cells_y) + y) * Int(max_n_bins) * n_classes
+    )
+    var b0 = lane * per
+    for c in range(n_classes):
+        if active:
+            var acc = O.BinT()
+            for j in range(per):
+                var b = b0 + j
+                if b < nb:
+                    acc = acc + hist[unsafe_offset = c * nb + b]
+                    mine[unsafe_offset = c * nb + b] = acc
+            tots[unsafe_offset=lane] = acc
+        barrier()
+        if active:
+            var pre = O.BinT()
+            for l in range(lane):
+                pre = pre + tots[unsafe_offset=l]
+            for j in range(per):
+                var b = b0 + j
+                if b < nb:
+                    mine[unsafe_offset = c * nb + b] = (
+                        mine[unsafe_offset = c * nb + b] + pre
+                    )
+        barrier()
+    var sp = Split[O.DataT]()
+    var quantiles_for_split = args.quantiles.quantiles_array.unsafe_offset(
+        Int(max_n_bins) * Int(col)
+    )
+    if active:
+        var global_sample_count = Int64(0)
+        var max_class_count = Int64(0)
+        for c in range(n_classes):
+            var cc = Int64(Int(mine[unsafe_offset = c * nb + nb - 1].Count()))
+            if cc > max_class_count:
+                max_class_count = cc
+            global_sample_count += cc
+        sp = objective.GainStrided(
+            mine,
+            quantiles_for_split,
+            col,
+            global_sample_count,
+            n_bins,
+            Int32(lane),
+            Int32(WARP_SIZE),
+        )
+        var node_pure = (
+            n_classes > 1
+            and global_sample_count > Int64(0)
+            and max_class_count == global_sample_count
+            and objective.PureNodeIsTerminal()
+        )
+        sp.pure = Int32(1) if node_pure else Int32(0)
+    sp.warp_reduce()
+    if active and lane == 0:
+        comptime if candidates:
+            var slot = cand.unsafe_offset(nid * Int(n_cells_y) + y)
+            if sp.IsValid():
+                sp.select_split_range_midpoint(quantiles_for_split, n_bins)
+                slot[unsafe_offset=0] = sp.copy()
+            else:
+                slot[unsafe_offset=0] = Split[O.DataT]()
+        else:
+            if sp.IsValid():
+                sp._publish_to_global(
+                    splits.unsafe_offset(nid),
+                    mutex.unsafe_offset(nid),
+                    quantiles_for_split,
+                    n_bins,
+                )
+        if y == 0:
+            Split[O.DataT].pure_flag_ptr(splits.unsafe_offset(nid))[
+                unsafe_offset=0
+            ] = sp.pure
+    comptime if zero_after:
+        if active:
+            var z = lane
+            var cells = nb * n_classes
+            while z < cells:
+                hist[unsafe_offset=z] = O.BinT()
+                z += WARP_SIZE
+
+
 def launch_find_best_splits_kernel[
     O: ObjectiveLike,
     TPB: Int = TPB_DEFAULT,
@@ -3169,6 +3325,7 @@ def launch_find_best_splits_kernel[
     split_grid_y: Int,
     argsp: MutPointer[FindBestSplitsArgs[O], MutUntrackedOrigin],
     cand: MutPointer[Split[O.DataT], MutUntrackedOrigin],
+    num_outputs: Int = 0,
 ) raises:
     """`launchFindBestSplitsKernel`, `:423-445`.
 
@@ -3178,6 +3335,33 @@ def launch_find_best_splits_kernel[
     """
     if split_grid_x <= 0 or split_grid_y <= 0:
         return
+    comptime if FBS_WARP_DEFAULT and not pinned_reduce and sabotage == 0:
+        if num_outputs > 0:
+            var need = max_n_bins * num_outputs * size_of[O.BinT]()
+            comptime for BYTES in [1024, 2048, 4096]:
+                comptime SLOTS = BYTES // size_of[O.BinT]()
+                if need <= BYTES:
+                    comptime kw = find_best_splits_warp_kernel[
+                        O, SLOTS, zero_after, candidates
+                    ]
+                    log_launch_ctx(ctx, "find_best_splits_warp")
+                    ctx.enqueue_function[kw](
+                        argsp.unsafe_origin_cast[MutAnyOrigin](),
+                        histograms.unsafe_origin_cast[MutAnyOrigin](),
+                        Int32(max_n_bins),
+                        Int32(col_start),
+                        column_samples.unsafe_origin_cast[MutAnyOrigin](),
+                        mutex.unsafe_origin_cast[MutAnyOrigin](),
+                        splits.unsafe_origin_cast[MutAnyOrigin](),
+                        (cand if candidates else splits).unsafe_origin_cast[MutAnyOrigin](),
+                        Int32(split_grid_y),
+                        grid_dim=(
+                            split_grid_x,
+                            ceildiv(split_grid_y, FBS_WARP_CELLS),
+                        ),
+                        block_dim=FBS_WARP_CELLS * WARP_SIZE,
+                    )
+                    return
     comptime k = find_best_splits_kernel[
         O, TPB, sabotage, pinned_reduce, zero_after, candidates
     ]

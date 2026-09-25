@@ -219,7 +219,10 @@ mkdir "$TMPD/archive" && tar -xzf "$TMPD/src.tgz" -C "$TMPD/archive" || die "arc
 # commit and the working tree must agree on every TRACKED native-inventory file
 # now. Ignored and untracked files (generated tables, local test output) never
 # ship in the archive, so they are not compared; an uncommitted edit still is.
-python3 -B - "$TMPD/archive" "$REPO" > "$TMPD/source_inventory_local.json" <<'PY' || die "native inventory differs between $COMMIT and the working tree; freeze first"
+# The source checkout the packer reads: this one, or the frozen source
+# checkout tools/release.py names when the tooling runs from a newer commit.
+SOURCE_CHECKOUT=${MOJOLEARN_SOURCE_CHECKOUT:-$REPO}
+python3 -B - "$TMPD/archive" "$SOURCE_CHECKOUT" > "$TMPD/source_inventory_local.json" <<'PY' || die "native inventory differs between $COMMIT and the source checkout $SOURCE_CHECKOUT; freeze first"
 import json, pathlib, subprocess, sys
 archive, local = map(pathlib.Path, sys.argv[1:])
 sys.path.insert(0, str(archive / 'tools'))
@@ -233,7 +236,14 @@ if a != l:
     raise SystemExit('differs: ' + ' '.join(names[:8]))
 print(json.dumps(a, separators=(',', ':')))
 PY
-log "archive $ARCHIVE_BYTES bytes, sha256 $ARCHIVE_SHA, native inventory matches working tree"
+log "archive $ARCHIVE_BYTES bytes, sha256 $ARCHIVE_SHA, native inventory matches $SOURCE_CHECKOUT"
+# THE ROUTE OVERLAY (tools/route_overlay_lib.sh), refused here, before anything is rented.
+RO_FILES=""
+if [ -n "${MOJOLEARN_ROUTE_OVERLAY:-}" ]; then
+  . "$REPO/tools/route_overlay_lib.sh"
+  ro_prepare "$MOJOLEARN_ROUTE_OVERLAY" "${MOJOLEARN_ROUTE_OVERLAY_SHA256:-}" "$TMPD" || die "route overlay refused"
+  log "route overlay $RO_SHA: $RO_FILES"
+fi
 
 # A GET that costs nothing: proves the token and shows any droplet already
 # wearing our name or any GPU droplet at all (one lease at a time, no orphans).
@@ -410,6 +420,13 @@ REMOTE_SHA=$($SSH 'sha256sum /root/src.tgz' | cut -d' ' -f1)
 $SSH "test ! -e /root/mojolearn && mkdir /root/mojolearn && tar -xzf /root/src.tgz -C /root/mojolearn \
   && printf '%s\n' '$COMMIT' > /root/mojolearn/commit.txt && test -x $REMOTE_PY" || { log "remote unpack failed"; exit 6; }
 log "shipped $COMMIT"
+if [ -n "$RO_FILES" ]; then
+  $SSH "$(ro_remote_cmd /root/mojolearn)" < "$MOJOLEARN_ROUTE_OVERLAY" > "$OUT/route-overlay.txt" \
+    || { log "route overlay failed on the box"; exit 6; }
+  ro_verify "$OUT/route-overlay.txt" || { log "route overlay not verified"; exit 6; }
+  echo "route_overlay_sha256=$RO_SHA" >> "$STATE"
+  log "route overlay from the tooling checkout: $RO_FILES"
+fi
 
 if [ "$LEG_MODE" = qualify ]; then
   # THE BYTES THAT GET QUALIFIED ARE THE BYTES THAT GET PUBLISHED. The sha256

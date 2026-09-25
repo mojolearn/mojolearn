@@ -79,7 +79,9 @@ from arima.impl.timeSeries.arima_helpers import (
     prepare_future_data,
 )
 from arima.impl.tsa.arima_common import ARIMAOrder, ARIMAParams, unpack, validate_order
-from checks.numerics import ftz
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 from tsa.impl.timeSeries.arima_helpers import prepare_data
 
 
@@ -580,6 +582,89 @@ def batched_loglike_grad(
     return r^
 
 
+#: FAST on Apple: the forward-difference gradient's N + 1 log-likelihoods
+#: (base, then one per perturbed parameter) are ONE batched evaluation over
+#: (N + 1) x batch_size members -- the series replicated, member m's
+#: parameters perturbed in parameter m - 1 -- instead of N + 1 sequential
+#: filter passes. Members are independent threads of the same kernel, so
+#: every log-likelihood, and so the gradient, is the one the sequential form
+#: computes. `-D MOJOLEARN_ARIMA_FAST_BATCH_GRAD_OFF` keeps the sequence.
+comptime ARIMA_FAST_BATCH_GRAD = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_ARIMA_FAST_BATCH_GRAD_OFF"]()
+)
+
+
+def _batched_loglike_grad_stacked(
+    ctx: DeviceContext,
+    mut d_y: DeviceBuffer[DType.float32],
+    mut d_exog: DeviceBuffer[DType.float32],
+    batch_size: Int,
+    n_obs: Int,
+    order: ARIMAOrder,
+    mut d_x: DeviceBuffer[DType.float32],
+    mut d_grad: DeviceBuffer[DType.float32],
+    h: Float32,
+    trans: Bool,
+    mut d_x_pert: DeviceBuffer[DType.float32],
+    check_finite: Bool,
+) raises -> List[Float32]:
+    var N = order.complexity()
+    var M1 = N + 1
+    var eb = M1 * batch_size
+    var nb_y = batch_size * n_obs
+    var nb_x = batch_size * N
+    var y_ext = ctx.enqueue_create_buffer[DType.float32](eb * n_obs)
+    var x_ext = ctx.enqueue_create_buffer[DType.float32](eb * N)
+    for m in range(M1):
+        ctx.enqueue_copy(
+            dst_buf=y_ext.create_sub_buffer[DType.float32](m * nb_y, nb_y),
+            src_buf=d_y.create_sub_buffer[DType.float32](0, nb_y),
+        )
+        ctx.enqueue_copy(
+            dst_buf=x_ext.create_sub_buffer[DType.float32](m * nb_x, nb_x),
+            src_buf=d_x.create_sub_buffer[DType.float32](0, nb_x),
+        )
+    comptime TPB = 128
+    var grid = (batch_size + TPB - 1) // TPB
+    for i in range(N):
+        var blk = x_ext.unsafe_ptr().unsafe_offset((i + 1) * nb_x)
+        var blk_src = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(blk))
+        ctx.enqueue_function[perturb_kernel](
+            blk, blk_src, Int32(batch_size), Int32(N), Int32(i), h,
+            grid_dim=(grid, 1, 1), block_dim=(TPB, 1, 1),
+        )
+    var p_ext = ARIMAParams(ctx, order, eb)
+    var r = batched_loglike_packed_x(
+        ctx, y_ext, d_exog, eb, n_obs, order, x_ext, trans, p_ext, check_finite
+    )
+    for i in range(N):
+        ctx.enqueue_function[grad_kernel](
+            d_grad.unsafe_ptr(),
+            r.ws.loglike.unsafe_ptr().unsafe_offset((i + 1) * batch_size),
+            MutPointer[Float32, MutAnyOrigin](
+                unsafe_from_address=Int(r.ws.loglike.unsafe_ptr())
+            ),
+            Int32(batch_size), Int32(N), Int32(i), h,
+            grid_dim=(grid, 1, 1), block_dim=(TPB, 1, 1),
+        )
+    # the caller's scratch ends equal to d_x, as the sequential form leaves it
+    ctx.enqueue_copy(
+        dst_buf=d_x_pert.create_sub_buffer[DType.float32](0, nb_x),
+        src_buf=d_x.create_sub_buffer[DType.float32](0, nb_x),
+    )
+    ctx.synchronize()
+    var ll = List[Float32](capacity=batch_size)
+    for b in range(batch_size):
+        ll.append(r.loglike[b])
+    _ = y_ext^
+    _ = x_ext^
+    _ = p_ext^
+    _ = r^
+    return ll^
+
+
 def batched_loglike_grad_x(
     ctx: DeviceContext,
     mut d_y: DeviceBuffer[DType.float32],
@@ -609,6 +694,12 @@ def batched_loglike_grad_x(
     sabotage (g) moved nothing against it. See
     `check_grad_reset_preserves_negative_zero`."""
     var N = order.complexity()
+    comptime if ARIMA_FAST_BATCH_GRAD:
+        if order.n_exog == 0:
+            return _batched_loglike_grad_stacked(
+                ctx, d_y, d_exog, batch_size, n_obs, order, d_x, d_grad, h,
+                trans, d_x_pert, check_finite,
+            )
     ctx.enqueue_copy(dst_buf=d_x_pert.create_sub_buffer[DType.float32](0, N * batch_size), src_buf=d_x.create_sub_buffer[DType.float32](0, N * batch_size))
     var base = batched_loglike_packed_x(
         ctx, d_y, d_exog, batch_size, n_obs, order, d_x, trans, params, check_finite

@@ -33,12 +33,138 @@ always, the same numbers.
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from checks.numerics import ftz
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz
+from std.memory import stack_allocation
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 from spectral.impl.sparse.coo import CooGraph
 from spectral.checks.device_io import download_f32, download_i32, upload_f32, upload_i32
 from spectral.impl.sparse.op.coo_ops import sorted_coo_to_csr
 
-comptime SYMMETRIZE_TPB = 128  # `coo_symmetrize<128, ...>` at the call site
+comptime SYMMETRIZE_TPB = 128
+
+#: FAST on Apple: each row's (column << 12 | position) keys are sorted once
+#: (`fs_sort_rows_kernel`, a bitonic sort in threadgroup memory) and the
+#: transpose lookup is a binary search instead of a scan of the whole row
+#: (k = 3,000 neighbors per row made the scan 22 s at 30,000 rows). The
+#: search returns the LOWEST position among equal columns, the entry the
+#: ascending scan stops at, so the output is the same. Rows longer than
+#: FS_MAX_ROW or n >= 2^20 keep the scan.
+#: `-D MOJOLEARN_SYMMETRIZE_FAST_OFF` keeps the scan.
+comptime SYMMETRIZE_FAST = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_SYMMETRIZE_FAST_OFF"]()
+)
+comptime FS_MAX_ROW = 4096
+comptime FS_TPB = 1024
+
+
+def fs_sort_rows_kernel(
+    row_ind: MutPointer[Int32, MutAnyOrigin],
+    cols: MutPointer[Int32, MutAnyOrigin],
+    skeys: MutPointer[UInt32, MutAnyOrigin],
+    kp_in: Int32,
+):
+    var row = Int(block_idx.x)
+    var t = Int(thread_idx.x)
+    var kp = Int(kp_in)
+    var start = Int(row_ind[row])
+    var ln = Int(row_ind[row + 1]) - start
+    var sh = stack_allocation[
+        FS_MAX_ROW, Scalar[DType.uint32], address_space = AddressSpace.SHARED
+    ]()
+    var i = t
+    while i < kp:
+        sh[i] = (UInt32(Int(cols[start + i])) << 12) | UInt32(i) if i < ln else UInt32(0xFFFFFFFF)
+        i += FS_TPB
+    barrier()
+    var size = 2
+    while size <= kp:
+        var stride = size // 2
+        while stride > 0:
+            var e = t
+            while e < kp // 2:
+                var lo = 2 * e - (e & (stride - 1))
+                var hi = lo + stride
+                var up = (lo & size) == 0
+                var a = sh[lo]
+                var b = sh[hi]
+                if (a > b) == up:
+                    sh[lo] = b
+                    sh[hi] = a
+                e += FS_TPB
+            barrier()
+            stride //= 2
+        size *= 2
+    i = t
+    while i < ln:
+        skeys[row * kp + i] = sh[i]
+        i += FS_TPB
+
+
+def fs_symmetrize_kernel(
+    row_ind: MutPointer[Int32, MutAnyOrigin],
+    rows: MutPointer[Int32, MutAnyOrigin],
+    cols: MutPointer[Int32, MutAnyOrigin],
+    vals: MutPointer[Float32, MutAnyOrigin],
+    skeys: MutPointer[UInt32, MutAnyOrigin],
+    orows: MutPointer[Int32, MutAnyOrigin],
+    ocols: MutPointer[Int32, MutAnyOrigin],
+    ovals: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    kp_in: Int32,
+):
+    """`coo_symmetrize_kernel` with the transpose found by binary search in
+    the lookup row's sorted keys."""
+    var row = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var n = Int(n_in)
+    if row >= n:
+        return
+    var kp = Int(kp_in)
+    var start_idx = Int(row_ind.unsafe_load(row))
+    var stop_idx = Int(row_ind.unsafe_load(row + 1))
+    var row_nnz = 0
+    var out_start_idx = start_idx * 2
+    for idx in range(0, stop_idx - start_idx):
+        var cur_row = rows.unsafe_load(start_idx + idx)
+        var cur_col = cols.unsafe_load(start_idx + idx)
+        var cur_val = vals.unsafe_load(start_idx + idx)
+        var lookup_row = Int(cur_col)
+        var t_start = Int(row_ind.unsafe_load(lookup_row))
+        var t_len = Int(row_ind.unsafe_load(lookup_row + 1)) - t_start
+        var target = UInt32(Int(cur_row)) << 12
+        var lo = 0
+        var hi = t_len
+        var base = lookup_row * kp
+        while lo < hi:
+            var mid = (lo + hi) // 2
+            if skeys[base + mid] < target:
+                lo = mid + 1
+            else:
+                hi = mid
+        var transpose = Float32(0.0)
+        var found_match = False
+        if lo < t_len:
+            var key = skeys[base + lo]
+            if (key >> 12) == UInt32(Int(cur_row)):
+                var t_idx = t_start + Int(key & UInt32(0xFFF))
+                if rows.unsafe_load(t_idx) == cur_col:
+                    transpose = vals.unsafe_load(t_idx)
+                    found_match = True
+        var res = ftz(Float32(0.5) * ftz(cur_val + transpose))
+        if (not found_match) and cur_val != Float32(0.0):
+            orows.unsafe_store(out_start_idx + row_nnz, cur_col)
+            ocols.unsafe_store(out_start_idx + row_nnz, cur_row)
+            ovals.unsafe_store(out_start_idx + row_nnz, res)
+            row_nnz += 1
+        if res != Float32(0.0):
+            orows.unsafe_store(out_start_idx + row_nnz, cur_row)
+            ocols.unsafe_store(out_start_idx + row_nnz, cur_col)
+            ovals.unsafe_store(out_start_idx + row_nnz, res)
+            row_nnz += 1  # `coo_symmetrize<128, ...>` at the call site
 
 
 def coo_symmetrize_kernel(
@@ -115,18 +241,44 @@ def coo_symmetrize(
     ctx.enqueue_memset(d_orows, Int32(0))
     ctx.enqueue_memset(d_ocols, Int32(0))
     ctx.enqueue_memset(d_ovals, Float32(0.0))
-    ctx.enqueue_function[coo_symmetrize_kernel](
-        d_row_ind.unsafe_ptr(),
-        d_rows.unsafe_ptr(),
-        d_cols.unsafe_ptr(),
-        d_vals.unsafe_ptr(),
-        d_orows.unsafe_ptr(),
-        d_ocols.unsafe_ptr(),
-        d_ovals.unsafe_ptr(),
-        Int32(n),
-        grid_dim=((n + tpb - 1) // tpb, 1, 1),
-        block_dim=(tpb, 1, 1),
-    )
+    var fast_done = False
+    comptime if SYMMETRIZE_FAST:
+        var max_len = 0
+        for r in range(n):
+            var l = Int(row_ind[r + 1]) - Int(row_ind[r])
+            if l > max_len:
+                max_len = l
+        if max_len > 0 and max_len <= FS_MAX_ROW and n < (1 << 20):
+            var kp = 2
+            while kp < max_len:
+                kp *= 2
+            var d_skeys = ctx.enqueue_create_buffer[DType.uint32](n * kp)
+            ctx.enqueue_function[fs_sort_rows_kernel](
+                d_row_ind.unsafe_ptr(), d_cols.unsafe_ptr(), d_skeys.unsafe_ptr(),
+                Int32(kp), grid_dim=(n, 1, 1), block_dim=(FS_TPB, 1, 1),
+            )
+            ctx.enqueue_function[fs_symmetrize_kernel](
+                d_row_ind.unsafe_ptr(), d_rows.unsafe_ptr(), d_cols.unsafe_ptr(),
+                d_vals.unsafe_ptr(), d_skeys.unsafe_ptr(), d_orows.unsafe_ptr(),
+                d_ocols.unsafe_ptr(), d_ovals.unsafe_ptr(), Int32(n), Int32(kp),
+                grid_dim=((n + tpb - 1) // tpb, 1, 1), block_dim=(tpb, 1, 1),
+            )
+            ctx.synchronize()
+            _ = d_skeys^
+            fast_done = True
+    if not fast_done:
+        ctx.enqueue_function[coo_symmetrize_kernel](
+            d_row_ind.unsafe_ptr(),
+            d_rows.unsafe_ptr(),
+            d_cols.unsafe_ptr(),
+            d_vals.unsafe_ptr(),
+            d_orows.unsafe_ptr(),
+            d_ocols.unsafe_ptr(),
+            d_ovals.unsafe_ptr(),
+            Int32(n),
+            grid_dim=((n + tpb - 1) // tpb, 1, 1),
+            block_dim=(tpb, 1, 1),
+        )
     var orows = download_i32(ctx, d_orows, 2 * nnz)
     var ocols = download_i32(ctx, d_ocols, 2 * nnz)
     var ovals = download_f32(ctx, d_ovals, 2 * nnz)

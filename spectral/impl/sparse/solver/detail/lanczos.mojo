@@ -156,6 +156,12 @@ the re-orthogonalization, which no fixture here produces; the clamp at
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
+from std.gpu.primitives.warp import sum as _fl_warp_sum
+from std.memory import stack_allocation
+from std.math import sqrt as _fl_sqrt
+from std.sys.info import has_apple_gpu_accelerator
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -164,6 +170,7 @@ from gemm.checks.gemm_identical import identical_gemm
 from gemm.checks.gemm_oracle import OP_NT, OP_TN, gemm_oracle
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
+    NUMERIC_FAST,
     NUMERIC_IDENTICAL,
     ftz,
     identical_mul_add,
@@ -468,6 +475,285 @@ def _norm2(
 # ---------------------------------------------------------------------------
 
 
+#: FAST on Apple: a Lanczos step stays on the device. alpha / beta live in
+#: device arrays (uploaded once per `lanczos_aux` call, read back once at its
+#: end), the dots and the norm are block-partial reductions, and the
+#: re-orthogonalization is two fused kernels -- no host round trip per step,
+#: where the pinned step drains about six times. Same recurrence, clamps and
+#: normalization; FAST arithmetic. `-D MOJOLEARN_LANCZOS_FAST_OFF` keeps the
+#: pinned step.
+comptime LANCZOS_FAST = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_LANCZOS_FAST_OFF"]()
+)
+comptime FL_TPB = 256
+comptime FL_G = 256
+
+
+@always_inline
+def _fl_block_sum(v: Float32) -> Float32:
+    var red = stack_allocation[
+        FL_TPB // 32, Scalar[DType.float32], address_space = AddressSpace.SHARED
+    ]()
+    var t = Int(thread_idx.x)
+    var s = _fl_warp_sum(v)
+    if t % 32 == 0:
+        red[t // 32] = s
+    barrier()
+    var tot = Float32(0)
+    if t == 0:
+        for w in range(FL_TPB // 32):
+            tot += red[w]
+    return tot
+
+
+def fl_dot_partial_kernel(
+    x: MutPointer[Float32, MutAnyOrigin],
+    y: MutPointer[Float32, MutAnyOrigin],
+    part: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """part[block] = sum over the block's grid-stride slice of x . y."""
+    var n = Int(n_in)
+    var i = Int(block_idx.x) * FL_TPB + Int(thread_idx.x)
+    var acc = Float32(0)
+    while i < n:
+        acc += x[i] * y[i]
+        i += FL_G * FL_TPB
+    var s = _fl_block_sum(acc)
+    if Int(thread_idx.x) == 0:
+        part[Int(block_idx.x)] = s
+
+
+def fl_alpha0_kernel(
+    part: MutPointer[Float32, MutAnyOrigin],
+    scal: MutPointer[Float32, MutAnyOrigin],
+):
+    """scal[0] = the partials' sum (the step's raw alpha)."""
+    var t = Int(thread_idx.x)
+    var s = _fl_block_sum(part[t] if t < FL_G else Float32(0))
+    if t == 0:
+        scal[0] = s
+
+
+def fl_three_term_kernel(
+    u: MutPointer[Float32, MutAnyOrigin],
+    v: MutPointer[Float32, MutAnyOrigin],
+    vprev: MutPointer[Float32, MutAnyOrigin],
+    scal: MutPointer[Float32, MutAnyOrigin],
+    beta: MutPointer[Float32, MutAnyOrigin],
+    prev_in: Int32,
+    n_in: Int32,
+):
+    """u -= alpha * v + beta[prev] * V[prev]."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_in):
+        return
+    var vv = scal[0] * v[i] + beta[Int(prev_in)] * vprev[i]
+    u[i] = u[i] - vv
+
+
+def fl_reorth_partial_kernel(
+    V: MutPointer[Float32, MutAnyOrigin],
+    u: MutPointer[Float32, MutAnyOrigin],
+    part: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """part[r * FL_G + block] = partial of V[r] . u (grid.y = r)."""
+    var n = Int(n_in)
+    var r = Int(block_idx.y)
+    var i = Int(block_idx.x) * FL_TPB + Int(thread_idx.x)
+    var acc = Float32(0)
+    while i < n:
+        acc += V[r * n + i] * u[i]
+        i += FL_G * FL_TPB
+    var s = _fl_block_sum(acc)
+    if Int(thread_idx.x) == 0:
+        part[r * FL_G + Int(block_idx.x)] = s
+
+
+def fl_reorth_finish_kernel(
+    part: MutPointer[Float32, MutAnyOrigin],
+    uu: MutPointer[Float32, MutAnyOrigin],
+    scal: MutPointer[Float32, MutAnyOrigin],
+    alpha: MutPointer[Float32, MutAnyOrigin],
+    i_in: Int32,
+):
+    """uu[r] = sum of row r's partials (block r); block i also finishes
+    alpha[i] = clamp_down(alpha + uu[i])."""
+    var r = Int(block_idx.x)
+    var t = Int(thread_idx.x)
+    var s = _fl_block_sum(part[r * FL_G + t] if t < FL_G else Float32(0))
+    if t == 0:
+        uu[r] = s
+        if r == Int(i_in):
+            var a = scal[0] + s
+            if abs(a) < LANCZOS_ALPHA_CLAMP:
+                a = Float32(0.0)
+            alpha[r] = a
+
+
+def fl_reorth_sub_kernel(
+    V: MutPointer[Float32, MutAnyOrigin],
+    uu: MutPointer[Float32, MutAnyOrigin],
+    u: MutPointer[Float32, MutAnyOrigin],
+    part: MutPointer[Float32, MutAnyOrigin],
+    rows_in: Int32,
+    n_in: Int32,
+):
+    """u -= V[0:rows]^T uu, then part[block] = partial of |u|^2."""
+    var n = Int(n_in)
+    var rows = Int(rows_in)
+    var i = Int(block_idx.x) * FL_TPB + Int(thread_idx.x)
+    var acc = Float32(0)
+    while i < n:
+        var x = u[i]
+        for r in range(rows):
+            x -= V[r * n + i] * uu[r]
+        u[i] = x
+        acc += x * x
+        i += FL_G * FL_TPB
+    var s = _fl_block_sum(acc)
+    if Int(thread_idx.x) == 0:
+        part[Int(block_idx.x)] = s
+
+
+def fl_beta_kernel(
+    part: MutPointer[Float32, MutAnyOrigin],
+    beta: MutPointer[Float32, MutAnyOrigin],
+    i_in: Int32,
+):
+    var t = Int(thread_idx.x)
+    var s = _fl_block_sum(part[t] if t < FL_G else Float32(0))
+    if t == 0:
+        var b = _fl_sqrt(s)
+        if abs(b) < LANCZOS_BETA_CLAMP:
+            b = Float32(0.0)
+        beta[Int(i_in)] = b
+
+
+def fl_clamp_normalize_kernel(
+    u: MutPointer[Float32, MutAnyOrigin],
+    v: MutPointer[Float32, MutAnyOrigin],
+    vnext: MutPointer[Float32, MutAnyOrigin],
+    beta: MutPointer[Float32, MutAnyOrigin],
+    i_in: Int32,
+    write_next: Int32,
+    n_in: Int32,
+):
+    """clamp_down_vector(u), then (unless last) v = V[i+1] = u / beta[i]."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_in):
+        return
+    var x = u[i]
+    if abs(x) < LANCZOS_U_CLAMP:
+        x = Float32(0.0)
+    u[i] = x
+    if write_next != 0:
+        var b = beta[Int(i_in)]
+        var val = x / (Float32(1.0) if b == Float32(0.0) else b)
+        v[i] = val
+        vnext[i] = val
+
+
+def lanczos_aux_fast(
+    ctx: DeviceContext,
+    mut A: DeviceCoo,
+    mut V: DeviceBuffer[DType.float32],
+    mut u: DeviceBuffer[DType.float32],
+    mut alpha: List[Float32],
+    mut beta: List[Float32],
+    start_idx: Int,
+    end_idx: Int,
+    ncv: Int,
+    mut v: DeviceBuffer[DType.float32],
+    mut step: Int,
+    tpb: Int,
+) raises:
+    """`lanczos_aux` with the step on the device (LANCZOS_FAST)."""
+    var n = A.n
+    var d_alpha = ctx.enqueue_create_buffer[DType.float32](ncv)
+    var d_beta = ctx.enqueue_create_buffer[DType.float32](ncv)
+    var h_ab = ctx.enqueue_create_host_buffer[DType.float32](2 * ncv)
+    var scal = ctx.enqueue_create_buffer[DType.float32](2)
+    var part = ctx.enqueue_create_buffer[DType.float32](ncv * FL_G)
+    var uu = ctx.enqueue_create_buffer[DType.float32](ncv)
+    ctx.synchronize()
+    for j in range(ncv):
+        h_ab.unsafe_ptr().unsafe_store(j, alpha[j])
+        h_ab.unsafe_ptr().unsafe_store(ncv + j, beta[j])
+    ctx.enqueue_copy(dst_buf=d_alpha, src_ptr=h_ab.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=d_beta, src_ptr=h_ab.unsafe_ptr() + ncv)
+    ctx.enqueue_function[copy_kernel](
+        v.unsafe_ptr(),
+        V.unsafe_ptr().unsafe_offset(start_idx * n),
+        Int32(n),
+        grid_dim=(_grid(n, tpb), 1, 1),
+        block_dim=(tpb, 1, 1),
+    )
+    for i in range(start_idx, end_idx):
+        ctx.enqueue_function[spmv_kernel](
+            u.unsafe_ptr(), A.indptr.unsafe_ptr(), A.cols.unsafe_ptr(),
+            A.vals.unsafe_ptr(), v.unsafe_ptr(), Int32(n),
+            grid_dim=(_grid(n, tpb), 1, 1), block_dim=(tpb, 1, 1),
+        )
+        ctx.enqueue_function[fl_dot_partial_kernel](
+            v.unsafe_ptr(), u.unsafe_ptr(), part.unsafe_ptr(), Int32(n),
+            grid_dim=(FL_G, 1, 1), block_dim=(FL_TPB, 1, 1),
+        )
+        ctx.enqueue_function[fl_alpha0_kernel](
+            part.unsafe_ptr(), scal.unsafe_ptr(),
+            grid_dim=(1, 1, 1), block_dim=(FL_TPB, 1, 1),
+        )
+        var prev = (i - 1 + ncv) % ncv
+        ctx.enqueue_function[fl_three_term_kernel](
+            u.unsafe_ptr(), v.unsafe_ptr(),
+            V.unsafe_ptr().unsafe_offset(prev * n), scal.unsafe_ptr(),
+            d_beta.unsafe_ptr(), Int32(prev), Int32(n),
+            grid_dim=(_grid(n, tpb), 1, 1), block_dim=(tpb, 1, 1),
+        )
+        ctx.enqueue_function[fl_reorth_partial_kernel](
+            V.unsafe_ptr(), u.unsafe_ptr(), part.unsafe_ptr(), Int32(n),
+            grid_dim=(FL_G, i + 1, 1), block_dim=(FL_TPB, 1, 1),
+        )
+        ctx.enqueue_function[fl_reorth_finish_kernel](
+            part.unsafe_ptr(), uu.unsafe_ptr(), scal.unsafe_ptr(),
+            d_alpha.unsafe_ptr(), Int32(i),
+            grid_dim=(i + 1, 1, 1), block_dim=(FL_TPB, 1, 1),
+        )
+        ctx.enqueue_function[fl_reorth_sub_kernel](
+            V.unsafe_ptr(), uu.unsafe_ptr(), u.unsafe_ptr(), part.unsafe_ptr(),
+            Int32(i + 1), Int32(n),
+            grid_dim=(FL_G, 1, 1), block_dim=(FL_TPB, 1, 1),
+        )
+        ctx.enqueue_function[fl_beta_kernel](
+            part.unsafe_ptr(), d_beta.unsafe_ptr(), Int32(i),
+            grid_dim=(1, 1, 1), block_dim=(FL_TPB, 1, 1),
+        )
+        var last = i >= end_idx - 1
+        var nxt = (i + 1) if not last else i
+        ctx.enqueue_function[fl_clamp_normalize_kernel](
+            u.unsafe_ptr(), v.unsafe_ptr(),
+            V.unsafe_ptr().unsafe_offset(nxt * n), d_beta.unsafe_ptr(),
+            Int32(i), Int32(0) if last else Int32(1), Int32(n),
+            grid_dim=(_grid(n, tpb), 1, 1), block_dim=(tpb, 1, 1),
+        )
+        step += 1
+    ctx.enqueue_copy(dst_ptr=h_ab.unsafe_ptr(), src_buf=d_alpha)
+    ctx.enqueue_copy(dst_ptr=h_ab.unsafe_ptr() + ncv, src_buf=d_beta)
+    ctx.synchronize()
+    for j in range(start_idx, end_idx):
+        alpha[j] = h_ab.unsafe_ptr().unsafe_load(j)
+        beta[j] = h_ab.unsafe_ptr().unsafe_load(ncv + j)
+    _ = d_alpha^
+    _ = d_beta^
+    _ = scal^
+    _ = part^
+    _ = uu^
+    _ = h_ab^
+
+
 def lanczos_aux(
     ctx: DeviceContext,
     mut A: DeviceCoo,
@@ -488,6 +774,12 @@ def lanczos_aux(
 ) raises:
     """`lanczos_aux` (`:247-399`), line for line. `step` is the running
     Lanczos step counter the card tags are named by."""
+    comptime if LANCZOS_FAST:
+        if not trace.enabled:
+            lanczos_aux_fast(
+                ctx, A, V, u, alpha, beta, start_idx, end_idx, ncv, v, step, tpb
+            )
+            return
     var n = A.n
     # raft::copy(v, V[start_idx])  (:279-280)
     ctx.enqueue_function[copy_kernel](

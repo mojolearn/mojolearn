@@ -34,7 +34,7 @@ PY=${MOJOLEARN_PYTHON:?existing absolute stdlib Python executable required}
 commit=${MOJOLEARN_COMMIT:?full frozen source commit required}
 seconds=${MOJOLEARN_RELEASE_BUILD_SECONDS:?remaining work seconds, excluding fetch reserve}
 [[ "$PY" = /* && -x "$PY" && "$commit" =~ ^[0-9a-f]{40}$ ]] || exit 2
-[[ "$seconds" =~ ^[0-9]+$ ]] && ((seconds >= 120 && seconds <= 2400)) || exit 2
+[[ "$seconds" =~ ^[0-9]+$ ]] && ((seconds >= 120 && seconds <= 6000)) || exit 2
 [[ "$OUT" = /* && ! -e "$OUT" && ! -L "$OUT" ]] || { echo 'New absolute output directory required' >&2; exit 2; }
 command -v taskset >/dev/null
 command -v pixi >/dev/null
@@ -173,7 +173,7 @@ record = dict(schema='mojolearn.release061.build-preflight.v1', source_commit=co
 PYPROBE
 run resource-prefix-tests 45 "$PY" "$ROOT/tools/test_linux_surface_resource_caps.py"
 run physical-source-preflight 60 "$PY" "$OUT/preflight.py" "$ROOT" "$OUT" "$vendor" "$arch" "$commit" "$NO_DEVICE"
-run full46-build 2400 bash "$ROOT/tools/linux_surface_qualification.sh" build "$OUT/build"
+run full46-build "$seconds" bash "$ROOT/tools/linux_surface_qualification.sh" build "$OUT/build"
 cat > "$OUT/postflight.py" <<'PYPOST'
 import json, pathlib, sys
 out = pathlib.Path(sys.argv[1])
