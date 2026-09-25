@@ -15,6 +15,12 @@ import zipfile
 
 from stage import stage
 
+# The IDENTICAL CUDA PTX rounding audit lives beside the Linux set builder
+# that applies it (packaging/linux/build_sets.sh).
+import sys as _sys
+_sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "linux"))
+import ptx_contract  # noqa: E402
+
 # C99 math entry points, including float/long-double variants. A new runtime
 # dependency must fail closed instead of being silently removed by the patcher.
 ROOTS = "acos acosh asin asinh atan atan2 atanh cbrt ceil copysign cos cosh erf erfc exp exp2 expm1 fabs fdim floor fma fmax fmin fmod frexp hypot ilogb ldexp lgamma llrint llround log log10 log1p log2 logb lrint lround modf nearbyint nextafter nexttoward pow remainder remquo rint round scalbln scalbn sin sincos sinh sqrt tan tanh tgamma trunc".split()
@@ -179,6 +185,10 @@ def audit_tree(root, python_only=False):
             raise ValueError("platform math audit failed:\n" + "\n".join(errors))
         return {"numpy_runtime_free": True, "platform_math_free_python": True, "binaries": [],
                 "scope": "staged source tree, Python files only (release rehearsal)"}
+    # IDENTICAL-tier CUDA PTX must carry a rounding modifier on every float
+    # mul/add/sub/fma, or the driver JIT may contract it (packaging/linux/ptx_contract.py).
+    ptx_errors, ptx_rows = ptx_contract.audit_tree(root)
+    errors.extend(ptx_errors)
     if (root / "mojolearn/_portable_math.py").exists() and not any(
             (root / "mojolearn" / path).is_file() for path in
             (".libs/libMojolearnMath.so", ".dylibs/libMojolearnMath.dylib")):
@@ -187,7 +197,8 @@ def audit_tree(root, python_only=False):
         errors.append("wheel contains no native binaries")
     if errors:
         raise ValueError("platform math audit failed:\n" + "\n".join(errors))
-    return {"numpy_runtime_free": True, "numpy_oracles": sorted(NUMPY_ORACLES), "platform_math_free": True, "scope": "wheel files and direct native/Python math imports; excludes Python and OS dependencies", "binaries": binaries}
+    return {"numpy_runtime_free": True, "numpy_oracles": sorted(NUMPY_ORACLES), "platform_math_free": True, "scope": "wheel files and direct native/Python math imports; excludes Python and OS dependencies", "binaries": binaries,
+            "identical_ptx_rounding_pinned": True, "identical_ptx": ptx_rows}
 
 
 def finalize(wheel, helper=None, audit_only=False):

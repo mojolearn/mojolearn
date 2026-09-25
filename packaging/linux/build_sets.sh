@@ -483,6 +483,26 @@ fi
 cp "$READBACK" "$SET/readback.txt"
 cp "$ARCHBACK" "$SET/arch_readback.txt"
 
+# ------------------------------------------- IDENTICAL PTX, ROUNDING PINNED
+# The CUDA sets ship PTX only and the driver JIT compiles it with fmad on, so
+# a plain `mul.f32` feeding a plain `add.f32` may become one FFMA on the
+# user's box. packaging/linux/ptx_contract.py gives every plain float
+# mul/add/sub in the IDENTICAL set its `.rn` spelling, in place and
+# length-preserving, which ptxas never contracts; the wheel audit
+# (packaging/portable_math/wheel.py) refuses a set that still carries one.
+# HERE, before the manifest hashes the set, so every recorded sha256 (the
+# manifest, LINUX_PAYLOAD.json, release_reuse) is of the shipped bytes.
+if [[ "$VENDOR" = cuda ]] && ls "$SET"/identical/*.so > /dev/null 2>&1; then
+  python3 "$REPO/packaging/linux/ptx_contract.py" patch "$SET"/identical/*.so > "$DEST/ptx_rn.jsonl" \
+    || { say "REFUSING: the IDENTICAL PTX .rn pass failed (read $DEST/ptx_rn.jsonl)"; exit 5; }
+  if ! python3 "$REPO/packaging/linux/ptx_contract.py" audit "$SET"/identical/*.so > "$DEST/ptx_audit.jsonl"; then
+    say "REFUSING: IDENTICAL PTX still carries a float op without a rounding modifier:"
+    grep -v '"plain_float_ops": 0' "$DEST/ptx_audit.jsonl" | head -5 | cut -c1-240 | sed 's/^/    /'
+    exit 5
+  fi
+  say "IDENTICAL PTX: $(python3 -c 'import json,sys; print(sum(json.loads(l)["rewritten"] for l in open(sys.argv[1])))' "$DEST/ptx_rn.jsonl") float ops given .rn"
+fi
+
 # ------------------------------------------------- CPU ISA BASELINE
 # RUNS AFTER THE MOVE, not before it. Placed before it, this block named
 # $SET sixty lines before that variable was assigned, and `set -u` ended

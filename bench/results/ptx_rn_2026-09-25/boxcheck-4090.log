@@ -1,0 +1,3 @@
+SUMMARY local_sm=89 driver=13000 {"text_changed": 1390, "orig_fmad_true_eq_false": 2124, "patched_fmad_true_eq_orig_fmad_false": 2216, "jit_loaded": 1108, "jit_patched_eq_jit_orig": 1062, "modules": 2216, "arch_sm_89": 1108, "arch_sm_90a": 1108}
+patched fmad=true != orig fmad=false: 0 []
+JIT opcode delta over modules whose JIT SASS changed: {'NOP': -5, 'FADD': 460, 'FFMA': -460, 'FMUL': 233, 'MOV': -3, 'SHF': 8, 'IMAD': 0, 'CS2R': -6, 'ULEA': -1, 'PLOP3': -1, 'SEL': -2, 'S2R': 4, 'R2UR': 1, 'IADD3': -5, 'UISETP': 2, 'ULOP3': 3, 'ULDC': 4, 'USEL': 3, 'UIMAD': 1, 'LOP3': -2, 'FSETP': 3, 'FSEL': 3} modules: 46

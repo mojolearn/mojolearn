@@ -3758,7 +3758,10 @@ TOOLCHAIN_PATHS = ("pixi.lock", "pixi.toml")
 #: every lane by rule. On the Mac passes they are the other platform's tree
 #: (`_other_platform_tree`) and are inert. The rest of packaging/linux/ packs,
 #: audits and publishes a wheel no column runs from.
-LINUX_SET_BUILDERS = ("packaging/linux/build_sets.sh", "packaging/linux/stage_libs.py")
+#: ptx_contract.py rewrites every IDENTICAL CUDA binary of a set in place
+#: (build_sets.sh runs it before the manifest hashes the set).
+LINUX_SET_BUILDERS = ("packaging/linux/build_sets.sh", "packaging/linux/stage_libs.py",
+                      "packaging/linux/ptx_contract.py")
 
 #: What a caller must print for every unattributed path, and then stop.
 UNATTRIBUTED_HINT = ("no lane's derived source set contains it and no rule in tools/lane_select.py places "
