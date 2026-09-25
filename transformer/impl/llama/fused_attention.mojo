@@ -5253,6 +5253,205 @@ def fused_bwd_dkdv_r2_kernel[HD: Int, BJ: Int, SAB: Bool, SWZ: Bool = False](
                 dv.unsafe_store(kvbase + jc * HD + tc + v * 16, dv_acc[u * CPT + v])
 
 
+# ===========================================================================
+# THE dk / dv FOLDS ON THE MATRIX CORES (lane/amd-step-time-2, 2026-09-25;
+# AMD only, `ATTN_DKDV_MFMA`; TRIAL: on only under
+# `-D MOJOLEARN_ATTN_DKDV_MFMA=1` until its bits are proven on the device).
+#
+# `fused_bwd_dkdv_r2_kernel[HD, 32, False]`'s chains, per output (j, c):
+#     dk: acc = ftz(fma_rn(dcell[t][j], q[t][c], acc))
+#     dv: acc = ftz(fma_rn(y[t][j], dctx[t][c], acc))
+# over the heads of the kv group ascending, then the queries t the key j
+# sees, ascending, from +0.0. The staging (Q and dctx through `ftz`, the
+# stash cells as stored, zero where the query does not see the key), the
+# head-end `-0.0` corner test (with its `may_launder` guard) and the stores
+# are that kernel's code. The step is the dq section's: one
+# `v_mfma_f32_16x16x1f32` step (K = 1) then the product by `one` under MODE
+# 2, set only around the tile's steps.
+#
+# OWNERSHIP. Waves 0 and 1 fold dk for keys 0..15 and 16..31 of the block,
+# waves 2 and 3 fold dv for the same keys; lane l supplies A = the cell of
+# key (l mod 16) and B = the column value of d = l; register r holds key
+# 4 (l div 16) + (r mod 4), column 16 (r div 4) + (l mod 16).
+#
+# THE MASK. A query every key of the wave sees (inside the LAST valid key's
+# lower bound and the FIRST key's upper bound; `_key_query_range` bounds are
+# nondecreasing in j) is one MFMA step; any other query is stepped on the
+# VALU for exactly the cells whose key sees it. Each chain takes the same
+# steps in the same order. Keys past `s` are stepped by full queries but
+# never stored, and their cells never reach the corner test.
+# ===========================================================================
+comptime ATTN_DKDV_MFMA = (
+    TARGET_COLUMN == COLUMN_AMD and is_defined["MOJOLEARN_ATTN_DKDV_MFMA"]()
+)
+
+
+def fused_bwd_dkdv_mfma_kernel[HD: Int, SWZ: Bool = False](
+    dk: MutPointer[Float32, MutAnyOrigin],
+    dv: MutPointer[Float32, MutAnyOrigin],
+    corner: MutPointer[Float32, MutAnyOrigin],
+    y_st: MutPointer[Float32, MutAnyOrigin],
+    ds_st: MutPointer[Float32, MutAnyOrigin],
+    q_rope: MutPointer[Float32, MutAnyOrigin],
+    dctx: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32,
+    l_in: Int32,
+    nh_in: Int32,
+    nkv_in: Int32,
+    s_in: Int32,
+    pos0_in: Int32,
+    key_lo_in: Int32,
+    window_in: Int32,
+    one: Float32,
+):
+    """`fused_bwd_dkdv_r2_kernel[HD, 32, False, SWZ]` with its chains on the
+    matrix cores (see the section comment). 256 threads, 32 keys a block."""
+    comptime assert HD == 64, "fused_bwd_dkdv_mfma_kernel: head dim 64 only"
+    comptime BJ = 32
+    comptime TT = ATTN_KV_TT
+    var qs = stack_allocation[TT * HD, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var dcs = stack_allocation[TT * HD, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var ys = stack_allocation[TT * BJ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var dss = stack_allocation[TT * BJ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+
+    var b = Int(b_in)
+    var l = Int(l_in)
+    var nh = Int(nh_in)
+    var nkv = Int(nkv_in)
+    var s = Int(s_in)
+    var pos0 = Int(pos0_in)
+    var key_lo = Int(key_lo_in)
+    var window = Int(window_in)
+    var n_rep = nh // nkv
+
+    var njb = (s + BJ - 1) // BJ
+    var raw = Int(block_idx.x)
+    var bm = _blk_map[SWZ, False](raw, njb, nkv, b)
+    var jb = bm[0]
+    var kvh = bm[1]
+    var bb = bm[2]
+    if bb >= b:
+        return
+
+    var tid = Int(thread_idx.x)
+    var wv = tid // 64
+    var lane = tid % 64
+    var isdv = wv >= 2
+    var kr = (wv % 2) * 16
+    var lq = (lane // 16) * 4
+    var lc = lane % 16
+    var j0 = jb * BJ
+    var j1 = j0 + BJ - 1
+    if j1 > s - 1:
+        j1 = s - 1
+    var q0 = _key_query_range(j0, pos0, key_lo, window, l)
+    var q1 = _key_query_range(j1, pos0, key_lo, window, l)
+    var tb_lo = q0[0] // TT
+    var tb_hi = q1[1] // TT
+    if q1[1] < q0[0]:
+        tb_hi = tb_lo - 1
+
+    var kvbase = (bb * nkv + kvh) * s * HD
+
+    # The wave's full-query window: [lo of its last valid key, hi of its first].
+    var wj0 = j0 + kr
+    var wvalid = wj0 < s
+    var wj1 = min(wj0 + 15, s - 1)
+    var full_lo = 0
+    var full_hi = -1
+    if wvalid:
+        full_lo = _key_query_range(wj1, pos0, key_lo, window, l)[0]
+        full_hi = _key_query_range(wj0, pos0, key_lo, window, l)[1]
+    # The lane's four keys (registers r with r mod 4 = q).
+    var lo = SIMD[DType.int32, 4](0)
+    var hi = SIMD[DType.int32, 4](-1)
+    comptime for q in range(4):
+        var jc = j0 + kr + lq + q
+        if jc < s:
+            var qr = _key_query_range(jc, pos0, key_lo, window, l)
+            lo[q] = Int32(qr[0])
+            hi[q] = Int32(qr[1])
+
+    var cellp = dss
+    var colp = qs
+    if isdv:
+        cellp = ys
+        colp = dcs
+    var acc = SIMD[DType.float32, 16](0.0)
+    var ones = SIMD[DType.float32, 16](one)
+    var hit = False
+    for hh in range(n_rep):
+        var h = kvh * n_rep + hh
+        var hbase = (bb * nh + h) * l
+        for tb in range(tb_lo, tb_hi + 1):
+            var tq0 = tb * TT
+            comptime for si in range(TT * HD // 256):
+                var i = tid + si * 256
+                var r = i // HD
+                var c = i - r * HD
+                var t = tq0 + r
+                var qv = Float32(0.0)
+                var dcv = Float32(0.0)
+                if t < l:
+                    var off = (bb * l + t) * nh * HD + h * HD + c
+                    qv = ftz(q_rope.unsafe_load(off))
+                    dcv = ftz(dctx.unsafe_load(off))
+                qs.unsafe_store(i, qv)
+                dcs.unsafe_store(i, dcv)
+            comptime for si in range(TT * BJ // 256):
+                var i = tid + si * 256
+                var r = i // BJ
+                var c = i - r * BJ
+                var t = tq0 + r
+                var jc = j0 + c
+                var yv = Float32(0.0)
+                var dsv = Float32(0.0)
+                if t < l and jc < s:
+                    var cr = _key_query_range(jc, pos0, key_lo, window, l)
+                    if t >= cr[0] and t <= cr[1]:
+                        var cell = (hbase + t) * s + jc
+                        yv = y_st.unsafe_load(cell)
+                        dsv = ds_st.unsafe_load(cell)
+                ys.unsafe_store(i, yv)
+                dss.unsafe_store(i, dsv)
+            barrier()
+            if wvalid:
+                _attn_set_mode(2)
+                comptime for tk in range(TT):
+                    var t = tq0 + tk
+                    if t < l and t >= full_lo and t <= full_hi:
+                        acc = _mfma16_step(
+                            cellp.unsafe_load(tk * BJ + kr + lc), colp.unsafe_load(tk * HD + lane), acc
+                        ) * ones
+                    else:
+                        comptime for r in range(16):
+                            if t < l and Int32(t) >= lo[r % 4] and Int32(t) <= hi[r % 4]:
+                                acc[r] = _step_preflushed(
+                                    cellp.unsafe_load(tk * BJ + kr + lq + r % 4),
+                                    colp.unsafe_load(tk * HD + 16 * (r // 4) + lc),
+                                    acc[r],
+                                )
+                _attn_set_mode(3)
+            barrier()
+        comptime for r in range(16):
+            var may_launder = True
+            comptime if ATTN_EXACT_TAIL_GUARD:
+                may_launder = Int(hi[r % 4]) < l - 1 or (hh < n_rep - 1 and Int(lo[r % 4]) > 0)
+            if may_launder:
+                if bitcast[DType.uint32](acc[r]) == NEG_ZERO_BITS:
+                    hit = True
+    comptime for r in range(16):
+        var jc = j0 + kr + lq + r % 4
+        var col = 16 * (r // 4) + lc
+        if jc < s:
+            if hit:
+                corner.unsafe_store(0, Float32(1.0))
+            if isdv:
+                dv.unsafe_store(kvbase + jc * HD + col, acc[r])
+            else:
+                dk.unsafe_store(kvbase + jc * HD + col, acc[r])
+
+
 def fused_bwd_kvfold_r2_kernel[HD: Int, BJ: Int, SAB: Bool](
     dst: MutPointer[Float32, MutAnyOrigin],
     corner: MutPointer[Float32, MutAnyOrigin],
@@ -7169,6 +7368,17 @@ def _estash_dkdv_launch[HD: Int, BJ: Int, SWZ: Bool = False](
             grid_dim=(kv_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
         )
     else:
+        comptime if ATTN_DKDV_MFMA and HD == 64 and BJ == 32 and not ATTN_TAIL_GUARD_SABOTAGE:
+            comptime jkm = fused_bwd_dkdv_mfma_kernel[HD, SWZ]
+            step_count_launch()
+            ctx.enqueue_function[jkm](
+                dk.unsafe_ptr(), dv.unsafe_ptr(), corner.unsafe_ptr(),
+                y_st.unsafe_ptr(), dy_st.unsafe_ptr(), q_rope.unsafe_ptr(),
+                dctx.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
+                Int32(s), Int32(pos0), Int32(key_lo), Int32(window), Float32(1.0),
+                grid_dim=(kv_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
+            )
+            return
         comptime jkc = fused_bwd_dkdv_r2_kernel[HD, BJ, False, SWZ]
         step_count_launch()
         ctx.enqueue_function[jkc](
