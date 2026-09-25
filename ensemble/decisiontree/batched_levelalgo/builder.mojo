@@ -5,7 +5,8 @@
 from std.gpu import WARP_SIZE
 from std.sys.compile import is_defined
 from std.math import ceildiv
-from std.sys.info import size_of
+from std.sys.info import has_apple_gpu_accelerator, size_of
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 from checks.kernel_matrix import TARGET_COLUMN, column_shared_limit
 
@@ -81,7 +82,16 @@ comptime TPB_DEFAULT = 128
 
 # `builder.cuh:203` -- "number of blocks used to parallelize column-wise
 # computations". A plain member initialised to 10 and never reassigned.
-comptime N_BLKS_FOR_COLS = 10
+# FAST on Apple: 40 columns per histogram/best-split pass. A forest that
+# samples every feature (regression, max_features=1.0) otherwise spends one
+# histogram launch and one split launch per 10 columns, each re-reading
+# every row of the batch; the workspace grows 4x (168 MB at 4096 nodes x
+# 128 bins, 8-byte bins). `-D MOJOLEARN_RF_COLS10` keeps 10.
+comptime N_BLKS_FOR_COLS = 40 if (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_RF_COLS10"]()
+) else 10
 
 comptime SMALL_NODE_SLOTS = 2048
 """Shared bins `small_node_split_kernel` holds per block."""
