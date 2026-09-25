@@ -80,12 +80,13 @@ def designed_refusals(lane_names):
     # Since 2026-09-25 classical ML ships fast too: a classical lane refuses
     # only the deterministic tier (tree-only), and `gemm-pinned` still
     # refuses both lower tiers because it asks for identity by name.
+    # The svm lanes refuse fast too on Linux: FAST svm is Apple only (0.8.19).
     out = set()
     for lane in lane_names:
         if lane in TREE_LANES:
             continue
         out.add((lane, "deterministic"))
-        if lane == "gemm-pinned":
+        if lane == "gemm-pinned" or lane.startswith(("svc", "svr")):
             out.add((lane, "fast"))
     return out
 
@@ -170,7 +171,7 @@ IDENTICAL_ONLY_BINDINGS = frozenset({
 #: Classical ML (2026-09-25): loads under fast and identical, must REFUSE
 #: under deterministic. Checked against `_backend._CLASSICAL_FAST` in main().
 CLASSICAL_FAST_BINDINGS = frozenset({
-    "_mojolearn", "_mojolearn_estimators", "_mojolearn_svm", "_mojolearn_solver",
+    "_mojolearn", "_mojolearn_estimators", "_mojolearn_solver",
     "_mojolearn_metrics", "_mojolearn_preprocessing", "_mojolearn_tsa",
     "_mojolearn_linalg", "_mojolearn_arima", "_mojolearn_gp",
     "_mojolearn_kernel_methods", "_mojolearn_mixture", "_mojolearn_hdbscan",
@@ -178,8 +179,14 @@ CLASSICAL_FAST_BINDINGS = frozenset({
 })
 
 
+#: Classical bindings whose FAST tier is Apple only (_backend._APPLE_ONLY_FAST):
+#: identical on Linux, refused by name under both lower tiers.
+LINUX_IDENTICAL_ONLY_CLASSICAL = frozenset({"_mojolearn_svm"})
+
+
 def _must_refuse(name, mode):
     return ((name in IDENTICAL_ONLY_BINDINGS and mode != "identical")
+            or (name in LINUX_IDENTICAL_ONLY_CLASSICAL and mode != "identical")
             or (name in CLASSICAL_FAST_BINDINGS and mode == "deterministic"))
 
 
@@ -280,7 +287,7 @@ def main():
             "IDENTICAL_ONLY_BINDINGS in this smoke != _backend._IDENTICAL_ONLY "
             f"in the installed package: smoke-only {sorted(IDENTICAL_ONLY_BINDINGS - set(_backend._IDENTICAL_ONLY))}, "
             f"package-only {sorted(set(_backend._IDENTICAL_ONLY) - IDENTICAL_ONLY_BINDINGS)}")
-    if frozenset(getattr(_backend, "_CLASSICAL_FAST", ())) != CLASSICAL_FAST_BINDINGS:
+    if frozenset(getattr(_backend, "_CLASSICAL_FAST_LINUX", ())) != CLASSICAL_FAST_BINDINGS:
         failures.append(
             "CLASSICAL_FAST_BINDINGS in this smoke != _backend._CLASSICAL_FAST "
             "in the installed package")

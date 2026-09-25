@@ -327,6 +327,12 @@ _CLASSICAL_FAST = frozenset({
 })
 _FAST_TIERED = _TIERED | _CLASSICAL_FAST
 _IDENTICAL_ONLY = frozenset(_MODULES) - _FAST_TIERED
+#: Classical bindings whose FAST tier ships on Apple only (0.8.19): the FAST
+#: svm binding never finished compiling for NVPTX or AMDGPU, so the Linux
+#: wheel carries its IDENTICAL tier alone and FAST refuses by name there.
+_APPLE_ONLY_FAST = frozenset({"_mojolearn_svm"})
+#: `_CLASSICAL_FAST` as the Linux wheel ships it (packaging/check_ext_lists.py).
+_CLASSICAL_FAST_LINUX = _CLASSICAL_FAST - _APPLE_ONLY_FAST
 
 
 def _offers(name, mode):
@@ -334,7 +340,7 @@ def _offers(name, mode):
     if mode == "identical":
         return True
     if mode == "fast":
-        return name in _FAST_TIERED
+        return name in _FAST_TIERED and not (name in _APPLE_ONLY_FAST and sys.platform != "darwin")
     return name in _TIERED
 _SELECTED = None
 
@@ -347,6 +353,9 @@ _IDENTICAL_ONLY_REASON = (
 
 def _identical_only_reason(name):
     """The sentence that explains why this binding lacks a tier."""
+    if name in _APPLE_ONLY_FAST and sys.platform != "darwin":
+        return ("SVC and SVR ship FAST on Apple only in this release (their FAST "
+                "kernels do not yet compile for NVIDIA or AMD); IDENTICAL runs here.")
     return _IDENTICAL_ONLY_REASON
 
 

@@ -159,9 +159,11 @@ def _backend_tiered():
     return _backend_names("_TIERED")
 
 
-def _backend_classical_fast():
-    """`_backend._CLASSICAL_FAST`: fast + identical, never deterministic."""
-    return _backend_names("_CLASSICAL_FAST")
+def _backend_classical_fast(linux=False):
+    """`_backend._CLASSICAL_FAST`: fast + identical, never deterministic. The
+    Linux lists mirror `_CLASSICAL_FAST_LINUX` (FAST svm is Apple only)."""
+    full = set(_backend_names("_CLASSICAL_FAST"))
+    return full - set(_backend_names("_APPLE_ONLY_FAST")) if linux else full
 
 
 def from_python_tuple(path, varname):
@@ -255,7 +257,7 @@ def main():
             bad += 1
         else:
             print(f"  OK        {path} {var} ({len(got)}) == _backend._TIERED")
-    classical = set(_backend_classical_fast())
+    classical = set(_backend_classical_fast(linux=True))   # every mirror is Linux admission
     for path, var in CLASSICAL_MIRRORS:
         vs = importlib.util.spec_from_file_location("check_ext_lists_classical", ROOT / path)
         vm = importlib.util.module_from_spec(vs)
@@ -303,6 +305,7 @@ def main():
                 print(f"  MISMATCH  {path} {var} ({len(got)}) is not _backend._TIERED")
                 print(f"              every-tier list must be exactly: {', '.join(sorted(tiered))}")
             fastc = how(path, CLASSICAL_VAR)
+            classical = set(_backend_classical_fast(linux=path.startswith("packaging/linux/")))
             if fastc != classical:
                 bad += 1
                 print(f"  MISMATCH  {path} {CLASSICAL_VAR} ({0 if fastc is None else len(fastc)}) is not _backend._CLASSICAL_FAST")
