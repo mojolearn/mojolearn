@@ -1,5 +1,5 @@
 #!/bin/sh
-# bench/results/byte_lm_export_fast_2026-09-25/leg.sh -- lane/byte-lm-export-fast:
+# tools/byte_lm_export_fast/leg.sh -- lane/byte-lm-export-fast:
 # the MOJOLEARN_GEMM_LEG_EXTRA body of one rented H100 (tools/gemm_remote_leg.sh
 # nvidia). Before and after on the same box, from the same checkpoint:
 #
@@ -21,7 +21,7 @@ ROOT=/root/mojolearn
 OUT=/root/gemm_leg_out/export-fast
 BIN=/root/xf_bin
 IN=/root/amd_in
-EV=bench/results/byte_lm_export_fast_2026-09-25
+EV=tools/byte_lm_export_fast  # bench/results is not shipped (the archive drops every results/ directory)
 mkdir -p "$OUT/builds" "$BIN" "$IN"
 cd "$ROOT" || exit 9
 PATH="$HOME/.pixi/bin:/usr/local/cuda/bin:$PATH"; export PATH
