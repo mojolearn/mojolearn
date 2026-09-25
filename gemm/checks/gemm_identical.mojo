@@ -133,7 +133,6 @@ from max.gpu.sync import barrier
 from std.sys import llvm_intrinsic
 from std.sys.compile import is_defined
 from std.sys.info import is_amd_gpu
-from std.gpu.primitives.warp import shuffle_xor
 from std.time import perf_counter_ns
 
 from gemm.checks.gemm_oracle import (
