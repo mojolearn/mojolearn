@@ -69,6 +69,19 @@ from glm.impl.qn.glm_linear import (
 )
 from glm.impl.qn.glm_logistic import logistic_loss_dz_kernel
 from glm.impl.qn.multi_gpu import gradient_columns
+from glm.impl.qn.fast_xtdz import fast_xtdz, fast_xtdz_applies
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from std.sys.info import has_apple_gpu_accelerator
+from std.sys.compile import is_defined
+
+comptime QN_FAST_XTDZ = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_QN_FAST_XTDZ_OFF"]()
+)
+"""FAST on Apple: the gradient's `X^T dZ` through `fast_xtdz` (rows split
+across blocks, X read once) instead of one block per output cell walking
+every row at a stride of D floats."""
 from glm.impl.qn.glm_regularizer import tikhonov_reg_grad_kernel
 from glm.impl.qn.glm_softmax import (
     add_bias_multi_kernel,
@@ -268,7 +281,12 @@ def linear_bwd(
     # AUDIT (i): unreached at C == 1; the C == 1 body below is certified.
     if dims.C > 1:
         var cd = dims.C * d
-        if not distributed:
+        var fast_done = False
+        comptime if QN_FAST_XTDZ:
+            if not distributed and fast_xtdz_applies(d, dims.C):
+                fast_xtdz(ctx, xtdz, x, dz, n_rows, d, dims.C)
+                fast_done = True
+        if not distributed and not fast_done:
             ctx.enqueue_function[xtdz_multi_kernel](
                 xtdz.unsafe_ptr(), x.unsafe_ptr(), dz.unsafe_ptr(),
                 Int32(n_rows), Int32(d), Int32(dims.C),
@@ -287,7 +305,12 @@ def linear_bwd(
                 grid_dim=(dims.C, 1, 1), block_dim=(STATS_TPB, 1, 1),
             )
         return
-    if not distributed:
+    var fast_done1 = False
+    comptime if QN_FAST_XTDZ:
+        if not distributed and fast_xtdz_applies(d, 1):
+            fast_xtdz(ctx, xtdz, x, dz, n_rows, d, 1)
+            fast_done1 = True
+    if not distributed and not fast_done1:
         ctx.enqueue_function[xty_kernel](
             xtdz.unsafe_ptr(), x.unsafe_ptr(), dz.unsafe_ptr(),
             Int32(n_rows), Int32(d),

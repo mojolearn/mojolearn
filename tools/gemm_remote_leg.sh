@@ -366,6 +366,9 @@ fi
 REPO="$(pwd)"
 MOJOLEARN_LEG_REPO="$REPO"
 export MOJOLEARN_LEG_REPO
+# Build-path time limits: tools/release_limits.sh is their one source
+# (read from the repository, not the /tmp snapshot of this file).
+. "$REPO/tools/release_limits.sh"
 
 # ---------------------------------------------------------------------------
 # DEVIATION 1882 -- RUN FROM AN IMMUTABLE SNAPSHOT OF THIS FILE.
@@ -3127,7 +3130,8 @@ RELEASE_TOOLS_SETUP
     if [ "$work_remaining" -ge 150 ]; then
         release_seconds=$((work_remaining - 20))
         # 0.8.19: a release that rebuilds every binding cold ran past 2400 s (exit 124)
-        if [ "$release_seconds" -gt 6000 ]; then release_seconds=6000; fi
+        # the cap is RUNPOD_RELEASE_BUILD_CAP in tools/release_limits.sh
+        if [ "$release_seconds" -gt @RELEASEBUILDCAP@ ]; then release_seconds=@RELEASEBUILDCAP@; fi
         printf '%s\n' '@COMMIT@' > "$ROOT/commit.txt"
         if [ '@QUALIFY@' = 1 ]; then
             # DEVIATION 2298: 25 installed jobs from the wheel's own bytes on
@@ -4559,6 +4563,7 @@ leg_check_remote_body() {
         -e "s|@SWEEP@|$SWEEP|g" \
         -e "s|@DUMP@|$LEG_DUMP|g" \
         -e "s|@WORKTIMEOUT@|$WORK_TIMEOUT|g" \
+        -e "s|@RELEASEBUILDCAP@|$RUNPOD_RELEASE_BUILD_CAP|g" \
         -e "s|@NVIDIACAMPAIGN@|$NVIDIA_CAMPAIGN|g" \
         -e "s|@BUILDJOBS@|$BUILD_JOBS|g" \
         -e "s|@BUILDCORES@|$BUILD_CORES|g" \

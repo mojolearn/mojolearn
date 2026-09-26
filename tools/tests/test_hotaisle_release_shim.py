@@ -546,7 +546,10 @@ def test_build_leg_builds_fetches_and_deletes(world):
     assert int(m.group(1)) == len(json.loads(proofs[0].read_text())["extensions"]), state["admission"]
     assert state["destroyed"].split()[1].startswith("verified_gone")
     assert state["container_helper_sha256"] == hashlib.sha256((REPO / "tools/release_ubuntu22_build.sh").read_bytes()).hexdigest()
-    assert int(state["work_seconds"]) <= 2400
+    # the bound follows the lease (60 min less the 600 s fetch reserve) and
+    # never passes HOTAISLE_RELEASE_BUILD_CAP (tools/release_limits.sh)
+    cap = int(re.search(r"^HOTAISLE_RELEASE_BUILD_CAP=(\d+)$", (REPO / "tools/release_limits.sh").read_text(), re.M).group(1))
+    assert int(state["work_seconds"]) <= min(cap, 60 * 60 - 600)
     # the same tree tools/release.py reads, with the proof of this commit
     rb = world.out / "release-build"
     proof = json.loads((rb / "build" / "build-provenance.json").read_text())
@@ -569,7 +572,7 @@ def test_build_leg_builds_fetches_and_deletes(world):
     pos = [flat.index(o) for o in order]
     assert pos == sorted(pos), order
     start = [x for x in commands(world) if "release_ubuntu22_build.sh run" in x][0]
-    for s in ("MOJOLEARN_COMMIT=" + head(), "MOJOLEARN_EXPECT_CORE_HOST_SHA256=skip", "MOJOLEARN_BUILD_JOBS=4",
+    for s in ("MOJOLEARN_COMMIT=" + head(), "MOJOLEARN_EXPECT_CORE_HOST_SHA256=skip", "MOJOLEARN_BUILD_JOBS=auto",
               "MOJOLEARN_PYTHON=/bin/sh", "export HOME=" + br):
         assert s in start, s
     prep = (world.out / "host_prep.sh").read_text()

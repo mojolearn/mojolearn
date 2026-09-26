@@ -25,6 +25,10 @@ from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
+from layout import TileTensor
+from layout.tile_layout import row_major
+from linalg.matmul import matmul
+from std.utils.index import IndexList
 
 comptime FTS_BLOCK = 512
 comptime FTS_TPB = 256
@@ -273,3 +277,113 @@ def fast_trsm_panel_kernel(
         var k = lane + 32 * m
         if k < nb:
             a[r * n + j0 + k] = y[m]
+
+
+def fast_gemm_nt_sub_lower(
+    ctx: DeviceContext,
+    a: MutPointer[Float32, MutAnyOrigin],
+    n: Int,
+    base: Int,
+    off: Int,
+    mut shape: DeviceBuffer[DType.float32],
+    mut x: DeviceBuffer[DType.float32],
+    mut y: DeviceBuffer[DType.float32],
+    m: Int,
+    cols: Int,
+    k: Int,
+) raises:
+    """`A[base + off + r, base + off + c] -= (x y^T)[r, c]` for every `c <= r`
+    (the lower triangle), `x` `m x k`, `y` `cols x k`, row-major. The
+    subtraction rides the vendor GEMM's epilogue, so the product is never
+    stored and read back. `shape` only gives the output tensor its extent
+    (`m * cols` floats; nothing is written to it)."""
+
+    @parameter
+    @always_inline
+    def epi[
+        dtype: DType, width: SIMDLength, *, alignment: Int = 1
+    ](idx: IndexList[2], val: SIMD[dtype, width]) capturing -> None:
+        var i = off + idx[0]
+        comptime for w in range(Int(width)):
+            var j = off + idx[1] + w
+            if j <= i:
+                var p = (base + i) * n + base + j
+                a[p] = a[p] - rebind[Float32](val[w].cast[DType.float32]())
+
+    var tz = TileTensor(shape, row_major(m, cols))
+    var tx = TileTensor(x, row_major(m, k))
+    var ty = TileTensor(y, row_major(cols, k))
+    matmul[
+        transpose_b=True, target="gpu", elementwise_lambda_fn=epi
+    ](tz, tx, ty, ctx)
+
+
+def fts_identity_kernel(b: MutPointer[Float32, MutAnyOrigin], w_in: Int32):
+    var w = Int(w_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= w * w:
+        return
+    b[i] = Float32(1.0) if i // w == i % w else Float32(0.0)
+
+
+def fts_unpack_panel_kernel(
+    a: MutPointer[Float32, MutAnyOrigin],
+    packed: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    j0_in: Int32,
+    w_in: Int32,
+    n_trail_in: Int32,
+):
+    """`a[j0 + w + r, j0 + c] = packed[r * w + c]` (the inverse of
+    `pack_panel_kernel`)."""
+    var w = Int(w_in)
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_trail_in) * w:
+        return
+    var r = i // w
+    var c = i % w
+    var n = Int(n_in)
+    var j0 = Int(j0_in)
+    a[(j0 + w + r) * n + j0 + c] = packed[i]
+
+
+def fast_panel_solve_inv(
+    ctx: DeviceContext,
+    mut a: DeviceBuffer[DType.float32],
+    n: Int,
+    j0: Int,
+    w: Int,
+    n_trail: Int,
+    mut linv: DeviceBuffer[DType.float32],
+    mut praw: DeviceBuffer[DType.float32],
+    mut packed: DeviceBuffer[DType.float32],
+) raises:
+    """`L21 = A21 L11^{-T}` as `L11^{-1}` (the blocked forward solve against
+    the identity, `w <= FTS_BLOCK`) and one vendor GEMM. `praw` holds the
+    packed `A21` on entry (`n_trail x w`); `packed` receives `L21` packed,
+    and `a` gets it back in place."""
+    var ww = w * w
+    ctx.enqueue_function[fts_identity_kernel](
+        linv.unsafe_ptr(), Int32(w),
+        grid_dim=((ww + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+    )
+    var l11 = a.unsafe_ptr() + j0 * n + j0
+    ctx.enqueue_function[fts_lower_diag_kernel](
+        l11, linv.unsafe_ptr(), Int32(n), Int32(w), Int32(0), Int32(w),
+        grid_dim=(w, 1, 1), block_dim=(FTS_TPB, 1, 1),
+    )
+    var lv = linv.create_sub_buffer[DType.float32](0, ww)
+    var pr = praw.create_sub_buffer[DType.float32](0, n_trail * w)
+    var pk = packed.create_sub_buffer[DType.float32](0, n_trail * w)
+    var tz = TileTensor(pk, row_major(n_trail, w))
+    var tx = TileTensor(pr, row_major(n_trail, w))
+    var ty = TileTensor(lv, row_major(w, w))
+    matmul[transpose_b=True, target="gpu"](tz, tx, ty, ctx)
+    ctx.enqueue_function[fts_unpack_panel_kernel](
+        a.unsafe_ptr(), pk.unsafe_ptr(), Int32(n), Int32(j0), Int32(w),
+        Int32(n_trail),
+        grid_dim=((n_trail * w + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+    )
+    _ = lv^
+    _ = pr^
+    _ = pk^

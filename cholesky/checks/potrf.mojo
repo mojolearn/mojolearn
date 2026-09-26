@@ -295,7 +295,7 @@ The one thing in the RAPIDS trees that IS portable source and IS implemented her
 # =========================================================================
 """
 
-from cholesky.checks.fast_trsm import FTP_MAX_NB, fast_trsm_panel_kernel
+from cholesky.checks.fast_trsm import FTP_MAX_NB, FTS_BLOCK, fast_trsm_panel_kernel, fast_gemm_nt_sub_lower, fast_panel_solve_inv
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -371,6 +371,29 @@ comptime CHOL_FAST_APPLE = (
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_CHOL_FAST_PINNED"]()
 )
+comptime CHOL_TRSM_INV = CHOL_FAST_APPLE and not is_defined[
+    "MOJOLEARN_CHOL_TRSM_INV_OFF"
+]()
+"""CHOL_FAST_APPLE: the panel solve `L21 = A21 L11^{-T}` as `L11^{-1}`
+(blocked forward solve against the identity) and one vendor GEMM
+(`fast_panel_solve_inv`), instead of a simdgroup per row walking the
+panel's columns in sequence."""
+comptime CHOL_RECURSIVE_PANEL = CHOL_TRSM_INV and not is_defined[
+    "MOJOLEARN_CHOL_RECURSIVE_PANEL_OFF"
+]()
+"""CHOL_FAST_APPLE: a diagonal block wider than CHOL_INNER_NB is factored
+blocked (`fast_diag_factor`) instead of by the one-block unblocked kernel."""
+comptime CHOL_INNER_NB = 64
+comptime CHOL_INV_MIN_N = 2048
+"""The explicit `L11^{-1}` rounds where the column-by-column solve is exact
+on exactly representable data; below this size the solve is not where the
+time goes, so small factorizations keep the exact route."""
+comptime CHOL_FUSED_SUB = CHOL_FAST_APPLE and not is_defined[
+    "MOJOLEARN_CHOL_FUSED_SUB_OFF"
+]()
+"""CHOL_FAST_APPLE: the lower-blocked trailing update subtracts in the
+vendor GEMM's epilogue (`fast_gemm_nt_sub_lower`) instead of storing the
+product block and subtracting it in a second kernel."""
 
 
 def chol_default_nb_hint() -> Int:
@@ -1019,6 +1042,55 @@ def chol_panel_tag(prefix: String, p: Int, leaf: String) -> String:
     return prefix + ".panel" + s + "." + leaf
 
 
+def fast_diag_factor(
+    ctx: DeviceContext,
+    mut a: DeviceBuffer[DType.float32],
+    mut dinfo: DeviceBuffer[DType.int32],
+    n: Int,
+    j0: Int,
+    w: Int,
+    mut linv: DeviceBuffer[DType.float32],
+    mut praw: DeviceBuffer[DType.float32],
+    mut pk: DeviceBuffer[DType.float32],
+    mut shape: DeviceBuffer[DType.float32],
+    panel_tpb: Int,
+    elem_tpb: Int,
+) raises:
+    """CHOL_RECURSIVE_PANEL: the `w x w` diagonal block at `j0` factored as
+    a blocked Cholesky of its own, CHOL_INNER_NB columns at a time: the
+    unblocked `panel_factor_kernel` on each inner diagonal block, the inner
+    panel solve through `fast_panel_solve_inv`, and the inner trailing
+    update through the GEMM epilogue. `info` is the unblocked kernel's."""
+    var s0 = 0
+    while s0 < w:
+        var sw = min(CHOL_INNER_NB, w - s0)
+        ctx.enqueue_function[panel_factor_kernel](
+            a.unsafe_ptr(), dinfo.unsafe_ptr(), Int32(n), Int32(j0 + s0),
+            Int32(sw),
+            grid_dim=(1, 1, 1), block_dim=(panel_tpb, 1, 1),
+        )
+        var rem = w - s0 - sw
+        if rem > 0:
+            ctx.enqueue_function[pack_panel_kernel](
+                praw.unsafe_ptr(), a.unsafe_ptr(), Int32(n), Int32(j0 + s0),
+                Int32(sw), Int32(rem),
+                grid_dim=((rem * sw + elem_tpb - 1) // elem_tpb, 1, 1),
+                block_dim=(elem_tpb, 1, 1),
+            )
+            fast_panel_solve_inv(ctx, a, n, j0 + s0, sw, rem, linv, praw, pk)
+            var xa = pk.create_sub_buffer[DType.float32](0, rem * sw)
+            var yb = pk.create_sub_buffer[DType.float32](0, rem * sw)
+            var sh = shape.create_sub_buffer[DType.float32](0, rem * rem)
+            fast_gemm_nt_sub_lower(
+                ctx, a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                n, j0 + s0 + sw, 0, sh, xa, yb, rem, rem, sw,
+            )
+            _ = xa^
+            _ = yb^
+            _ = sh^
+        s0 += sw
+
+
 def potrf_lower(
     ctx: DeviceContext,
     mut a: DeviceBuffer[DType.float32],
@@ -1118,6 +1190,18 @@ def potrf_lower(
     var info = 0
     var p = 0
     var j0 = 0
+    var inv_linv = ctx.enqueue_create_buffer[DType.float32](
+        nb * nb if CHOL_TRSM_INV else 1
+    )
+    var inv_praw = ctx.enqueue_create_buffer[DType.float32](
+        max(nt_max * nb, 1) if CHOL_TRSM_INV else 1
+    )
+    var inv_pk = ctx.enqueue_create_buffer[DType.float32](
+        nb * nb if CHOL_RECURSIVE_PANEL else 1
+    )
+    var inv_shape = ctx.enqueue_create_buffer[DType.float32](
+        nb * nb if CHOL_RECURSIVE_PANEL else 1
+    )
     while j0 < n:
         var w = nb
         if j0 + w > n:
@@ -1135,6 +1219,11 @@ def potrf_lower(
                 Int32(sabotage),
                 grid_dim=(1, 1, 1),
                 block_dim=(panel_tpb, 1, 1),
+            )
+        elif CHOL_RECURSIVE_PANEL and w > CHOL_INNER_NB and n >= CHOL_INV_MIN_N:
+            fast_diag_factor(
+                ctx, a, dinfo, n, j0, w, inv_linv, inv_praw, inv_pk,
+                inv_shape, panel_tpb, elem_tpb,
             )
         else:
             ctx.enqueue_function[panel_factor_kernel](
@@ -1158,6 +1247,7 @@ def potrf_lower(
             p += 1
             break
 
+        var packed_by_solve = False
         if n_trail > 0:
             # ---- the panel solve, L21 = A21 . L11^{-T} -----------------
             var solve_grid = (n_trail + solve_tpb - 1) // solve_tpb
@@ -1172,6 +1262,25 @@ def potrf_lower(
                     grid_dim=(solve_grid, 1, 1),
                     block_dim=(solve_tpb, 1, 1),
                 )
+            elif CHOL_TRSM_INV and w <= FTS_BLOCK and n >= CHOL_INV_MIN_N:
+                ctx.enqueue_function[pack_panel_kernel](
+                    inv_praw.unsafe_ptr(),
+                    a.unsafe_ptr(),
+                    Int32(n),
+                    Int32(j0),
+                    Int32(w),
+                    Int32(n_trail),
+                    grid_dim=((n_trail * w + elem_tpb - 1) // elem_tpb, 1, 1),
+                    block_dim=(elem_tpb, 1, 1),
+                )
+                var pk_inv = ws.create_sub_buffer[DType.float32](
+                    off_pack, n_trail * w
+                )
+                fast_panel_solve_inv(
+                    ctx, a, n, j0, w, n_trail, inv_linv, inv_praw, pk_inv
+                )
+                _ = pk_inv^
+                packed_by_solve = True
             elif CHOL_FAST_APPLE and w <= FTP_MAX_NB:
                 ctx.enqueue_function[fast_trsm_panel_kernel](
                     a.unsafe_ptr(), Int32(n), Int32(j0), Int32(w), Int32(n_trail),
@@ -1191,6 +1300,7 @@ def potrf_lower(
             trace.record_device(
                 ctx, chol_panel_tag("chol", p, "solved"), a, n * n
             )
+
 
             # ---- the trailing update, A22 -= L21 L21^T ------------------
             var packed = ws.create_sub_buffer[DType.float32](
@@ -1213,16 +1323,19 @@ def potrf_lower(
             var gws = ws.create_sub_buffer[DType.float32](off_gws, gws_len)
 
             var pack_cells = n_trail * w
-            ctx.enqueue_function[pack_panel_kernel](
-                packed.unsafe_ptr(),
-                a.unsafe_ptr(),
-                Int32(n),
-                Int32(j0),
-                Int32(w),
-                Int32(n_trail),
-                grid_dim=((pack_cells + elem_tpb - 1) // elem_tpb, 1, 1),
-                block_dim=(elem_tpb, 1, 1),
-            )
+            if packed_by_solve:
+                pack_cells = 0
+            if pack_cells > 0:
+                ctx.enqueue_function[pack_panel_kernel](
+                    packed.unsafe_ptr(),
+                    a.unsafe_ptr(),
+                    Int32(n),
+                    Int32(j0),
+                    Int32(w),
+                    Int32(n_trail),
+                    grid_dim=((pack_cells + elem_tpb - 1) // elem_tpb, 1, 1),
+                    block_dim=(elem_tpb, 1, 1),
+                )
 
             var vendor = sabotage == CHOL_SAB_VENDOR_MATMUL
             comptime if CHOL_FAST_APPLE:
@@ -1240,13 +1353,19 @@ def potrf_lower(
                     var xa = packed.create_sub_buffer[DType.float32](cb * w, rows_b * w)
                     var yb = packed_b.create_sub_buffer[DType.float32](cb * w, cbw * w)
                     var gb = g.create_sub_buffer[DType.float32](0, rows_b * cbw)
-                    gemm_nt(ctx, gb, xa, yb, rows_b, cbw, w)
-                    ctx.enqueue_function[subtract_block_2d_kernel](
-                        a.unsafe_ptr(), gb.unsafe_ptr(), Int32(n),
-                        Int32(j0 + w), Int32(cb), Int32(cb), Int32(cbw),
-                        grid_dim=((cbw + 255) // 256, rows_b, 1),
-                        block_dim=(256, 1, 1),
-                    )
+                    comptime if CHOL_FUSED_SUB:
+                        fast_gemm_nt_sub_lower(
+                            ctx, a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                            n, j0 + w, cb, gb, xa, yb, rows_b, cbw, w,
+                        )
+                    else:
+                        gemm_nt(ctx, gb, xa, yb, rows_b, cbw, w)
+                        ctx.enqueue_function[subtract_block_2d_kernel](
+                            a.unsafe_ptr(), gb.unsafe_ptr(), Int32(n),
+                            Int32(j0 + w), Int32(cb), Int32(cb), Int32(cbw),
+                            grid_dim=((cbw + 255) // 256, rows_b, 1),
+                            block_dim=(256, 1, 1),
+                        )
                     _ = xa^
                     _ = yb^
                     _ = gb^

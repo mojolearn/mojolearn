@@ -18,6 +18,8 @@
 set -euo pipefail
 ROOT=$(cd "$(dirname "$0")/.." && pwd)
 cd "$ROOT"
+# Build-path time limits: tools/release_limits.sh is their one source.
+. "$ROOT/tools/release_limits.sh"
 OUT=${1:?output directory}
 shift
 ARCHS=("$@")
@@ -119,7 +121,7 @@ for arch in "${ARCHS[@]}"; do
     status=0
     env -u MOJOLEARN_NUMERIC_MODE -u PYTHONPATH \
         MOJOLEARN_RELEASE_NO_DEVICE=1 MOJOLEARN_COMMIT="$commit" MOJOLEARN_PYTHON="$PY" \
-        MOJOLEARN_RELEASE_BUILD_SECONDS=2400 MOJOLEARN_BUILD_JOBS="$MOJOLEARN_BUILD_JOBS" \
+        MOJOLEARN_RELEASE_BUILD_SECONDS="$CPU_BOX_RELEASE_BUILD_SECONDS" MOJOLEARN_BUILD_JOBS="$MOJOLEARN_BUILD_JOBS" \
         bash tools/release061_remote_build.sh "$vendor" "$arch" "$dest/release-build" \
         > "$dest/release-build-console.log" 2>&1 || status=$?
     t1=$(date +%s)
