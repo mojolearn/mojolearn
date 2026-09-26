@@ -20,6 +20,7 @@ from stage import stage
 import sys as _sys
 _sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "linux"))
 import ptx_contract  # noqa: E402
+import cubin_contract  # noqa: E402
 
 # C99 math entry points, including float/long-double variants. A new runtime
 # dependency must fail closed instead of being silently removed by the patcher.
@@ -184,6 +185,10 @@ def audit_tree(root, python_only=False):
     # mul/add/sub/fma, or the driver JIT may contract it (packaging/linux/ptx_contract.py).
     ptx_errors, ptx_rows = ptx_contract.audit_tree(root)
     errors.extend(ptx_errors)
+    # ...and must carry machine code for its set's architecture, so the
+    # user's driver never JIT-compiles it (packaging/linux/cubin_contract.py).
+    fatbin_errors, fatbin_rows = cubin_contract.audit_tree(root)
+    errors.extend(fatbin_errors)
     if (root / "mojolearn/_portable_math.py").exists() and not any(
             (root / "mojolearn" / path).is_file() for path in
             (".libs/libMojolearnMath.so", ".dylibs/libMojolearnMath.dylib")):
@@ -193,7 +198,8 @@ def audit_tree(root, python_only=False):
     if errors:
         raise ValueError("platform math audit failed:\n" + "\n".join(errors))
     return {"numpy_runtime_free": True, "numpy_oracles": sorted(NUMPY_ORACLES), "platform_math_free": True, "scope": "wheel files and direct native/Python math imports; excludes Python and OS dependencies", "binaries": binaries,
-            "identical_ptx_rounding_pinned": True, "identical_ptx": ptx_rows}
+            "identical_ptx_rounding_pinned": True, "identical_ptx": ptx_rows,
+            "identical_cuda_machine_code": True, "identical_cuda_fatbins": fatbin_rows}
 
 
 def finalize(wheel, helper=None, audit_only=False):

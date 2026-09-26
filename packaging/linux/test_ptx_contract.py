@@ -118,6 +118,12 @@ def test_wheel_audit_refuses_unpinned_identical_ptx(tmp_path):
     with pytest.raises(ValueError, match="without a rounding modifier"):
         audit.audit_tree(tmp_path)
     pc.patch_file(so)
+    # rounding pinned, but still PTX the driver would JIT: cubin_contract refuses it
+    with pytest.raises(ValueError, match="no fatbin embedded"):
+        audit.audit_tree(tmp_path)
+    import test_cubin_contract as tcc
+    so.write_bytes(b"not an ELF" + b"\0" + tcc.fake_fatbin(90, accel=True) + b"\0")
     report = audit.audit_tree(tmp_path)
-    assert report["identical_ptx_rounding_pinned"]
+    assert report["identical_ptx_rounding_pinned"] and report["identical_cuda_machine_code"]
     assert report["identical_ptx"][0]["plain_float_ops"] == 0
+    assert report["identical_cuda_fatbins"][0]["arches"] == ["sm_90a"]

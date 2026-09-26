@@ -511,6 +511,37 @@ if [[ "$VENDOR" = cuda ]] && ls "$SET"/identical/*.so > /dev/null 2>&1; then
     exit 5
   fi
   say "IDENTICAL PTX: $(python3 -c 'import json,sys; print(sum(json.loads(l)["rewritten"] for l in open(sys.argv[1])))' "$DEST/ptx_rn.jsonl") float ops given .rn"
+
+  # ----------------------------------- IDENTICAL MACHINE CODE, NO DRIVER JIT
+  # The .rn PTX above is still compiled by the USER's driver (the Mojo runtime
+  # hands the embedded bytes to cuModuleLoadDataEx). packaging/linux/cubin_contract.py
+  # compiles every module HERE with a pinned ptxas, contraction off, and
+  # writes a zstd-compressed fatbin over the PTX in place; the driver then only
+  # loads it. The pinned toolkit is the pip wheel nvidia-cuda-nvcc (ptxas and
+  # fatbinary are static binaries; --no-deps keeps the CUDA runtime out).
+  CUDA_TOOLS_VERSION=13.0.88
+  CUDA_TOOLS="${MOJOLEARN_CUDA_TOOLS_DIR:-$DEST/cuda-tools-$CUDA_TOOLS_VERSION}"
+  if [[ ! -x "$CUDA_TOOLS/nvidia/cu13/bin/ptxas" ]]; then
+    python3 -m pip install -q --disable-pip-version-check --no-deps --target "$CUDA_TOOLS" \
+      "nvidia-cuda-nvcc==$CUDA_TOOLS_VERSION" > "$DEST/cuda_tools_pip.log" 2>&1 \
+      || { say "REFUSING: could not install the pinned ptxas (nvidia-cuda-nvcc==$CUDA_TOOLS_VERSION); read $DEST/cuda_tools_pip.log"; exit 5; }
+  fi
+  PTXAS="$CUDA_TOOLS/nvidia/cu13/bin/ptxas"; FATBINARY="$CUDA_TOOLS/nvidia/cu13/bin/fatbinary"
+  chmod +x "$PTXAS" "$FATBINARY" 2>/dev/null
+  if ! "$PTXAS" --version 2>/dev/null | grep -q "V$CUDA_TOOLS_VERSION"; then
+    say "REFUSING: $PTXAS is not ptxas V$CUDA_TOOLS_VERSION"; exit 5
+  fi
+  if ! python3 "$REPO/packaging/linux/cubin_contract.py" patch --arch "$ARCH" --ptxas "$PTXAS" --fatbinary "$FATBINARY" \
+      "$SET"/identical/*.so > "$DEST/cubin.jsonl"; then
+    say "REFUSING: an IDENTICAL module's fatbin does not fit its PTX and it is not JIT-invariant (read $DEST/cubin.jsonl)"
+    exit 5
+  fi
+  if ! python3 "$REPO/packaging/linux/cubin_contract.py" audit --arch "$ARCH" "$SET"/identical/*.so > "$DEST/cubin_audit.jsonl"; then
+    say "REFUSING: IDENTICAL CUDA binaries the driver would still JIT:"
+    grep '"errors": \[".' "$DEST/cubin_audit.jsonl" | head -5 | cut -c1-240 | sed 's/^/    /'
+    exit 5
+  fi
+  say "IDENTICAL machine code: $(python3 -c 'import json,sys; r=[json.loads(l) for l in open(sys.argv[1])][1:]; print(sum(x["converted"] for x in r), "modules now fatbin (ptxas --fmad=false),", sum(len(x["left_ptx"]) for x in r), "JIT-invariant ones left PTX")' "$DEST/cubin.jsonl")"
 fi
 
 # ------------------------------------------------- CPU ISA BASELINE
