@@ -69,6 +69,27 @@ from neighbors.impl.detail.knn_brute_force import (
     compute_norms,
     tiled_brute_force_knn,
 )
+from neighbors.impl.detail.fast_mma_knn import (
+    FAST_MMA_KNN_ENABLED,
+    fast_mma_knn_applies,
+)
+from neighbors.impl.detail.fast_topk_knn import (
+    FAST_TOPK_KNN_ENABLED,
+    fast_topk_knn_applies,
+)
+
+
+def _apple_fast_arm_takes(n_features: Int, k: Int) -> Bool:
+    """FAST on Apple, AUTO first offers the request to the simdgroup-matrix
+    arm, then the fused distance + top-k arm (knn_brute_force.mojo); both
+    write `out_idx` (UInt32). Whether either takes this shape."""
+    comptime if FAST_MMA_KNN_ENABLED:
+        if fast_mma_knn_applies(n_features, k):
+            return True
+    comptime if FAST_TOPK_KNN_ENABLED:
+        if fast_topk_knn_applies(n_features, k):
+            return True
+    return False
 
 
 comptime KNN_INDEX = 4096
@@ -1127,6 +1148,11 @@ def check_dispatch_takes_fused() raises:
     var want_fused_small = (
         False if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else g_small[0] == 1
     )
+    # FAST on Apple the default takes the Apple arms before DEVIATION 36's
+    # geometry (commits 3c33ed941, 6dbb238db); they write `out_idx` too.
+    var apple_arm = _apple_fast_arm_takes(FCHK_FEATURES, kf)
+    if apple_arm:
+        want_fused_small = True
     if (not want_fused_small) and untouched3 != FCHK_QUERIES * kf:
         raise Error(
             "DEFAULT DISPATCH at k=8 on the (53 x 4,093) fixture wrote"
@@ -1149,6 +1175,8 @@ def check_dispatch_takes_fused() raises:
             # Whichever arm ran wrote its own output buffer: the tiled arm
             # fills `out_idx32` and the fused arm `out_idx`.
             var got3 = Int(got_i.unsafe_ptr().unsafe_load(i * kf + s3))
+            if apple_arm:
+                got3 = Int(got_u.unsafe_ptr().unsafe_load(i * kf + s3))
             var found3 = False
             for t in range(FCHK_MAX_K):
                 if truth[i * FCHK_MAX_K + t] == got3:

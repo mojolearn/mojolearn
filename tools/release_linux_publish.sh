@@ -58,6 +58,8 @@ case "${5:-}" in
     exit 2 ;;
   *) echo "expected --light-smoke <results.json> or --full" >&2; exit 2 ;;
 esac
+# A manylinux wheel is the combined Linux wheel, or one package of the split
+# set: the core mojolearn-*, the plugins mojolearn_cuda-* / mojolearn_rocm-*.
 case "$WHL" in
   *manylinux*) ;;
   *macosx*)
@@ -131,10 +133,18 @@ if ! gh release view "$TAG" >/dev/null 2>&1; then
   NOTES="Linux x86-64 wheel with CUDA sm_89, CUDA sm_90a and HIP gfx942 sets in fast, deterministic and identical modes, built from $ARTIFACT_SOURCE_COMMIT; packaging/publishing tools at $HEAD_SHA. See CHANGELOG.md."
   [ -n "$TAR" ] && NOTES="$NOTES linux-qualification.tar.gz is the install-and-test record on each architecture." \
                 || NOTES="$NOTES Installed per-architecture qualification was not run for this release."
+  # THE SPLIT LINUX PACKAGES (python/mojolearn/gpu_plugins.py): one package per release.
+  case "$(basename "$WHL")" in
+    mojolearn_cuda-*) NOTES="mojolearn-cuda: the NVIDIA (CUDA) sets of mojolearn $VERSION for Linux x86-64, installed with pip install \"mojolearn[cuda]\"; built from $ARTIFACT_SOURCE_COMMIT; packaging/publishing tools at $HEAD_SHA. See CHANGELOG.md." ;;
+    mojolearn_rocm-*) NOTES="mojolearn-rocm: the AMD (ROCm/HIP) sets of mojolearn $VERSION for Linux x86-64, installed with pip install \"mojolearn[rocm]\"; built from $ARTIFACT_SOURCE_COMMIT; packaging/publishing tools at $HEAD_SHA. See CHANGELOG.md." ;;
+    *manylinux*) if python3 -c 'import sys,zipfile; sys.exit(0 if any(n.endswith(".dist-info/gpu_plugins.json") for n in zipfile.ZipFile(sys.argv[1]).namelist()) else 1)' "$WHL"; then
+        NOTES="mojolearn $VERSION Linux x86-64 core (Python, host bindings, MAX runtime); its GPU sets are the mojolearn-cuda and mojolearn-rocm packages (pip install \"mojolearn[cuda]\" or \"mojolearn[rocm]\"); built from $ARTIFACT_SOURCE_COMMIT; packaging/publishing tools at $HEAD_SHA. See CHANGELOG.md."
+      fi ;;
+  esac
   [ "$LIGHT_PLATFORM" != macos ] || NOTES="macOS arm64 wheel built from $ARTIFACT_SOURCE_COMMIT; packaging/publishing tools at $HEAD_SHA. See CHANGELOG.md."
   [ -z "$LIGHT_ASSET" ] || NOTES="$NOTES Exact installed wheel passed the expanded smoke; its receipt is attached."
   # shellcheck disable=SC2086
-  gh release create "$TAG" --latest --target "$HEAD_SHA" --title "mojolearn $VERSION $LIGHT_PLATFORM" --notes "$NOTES" \
+  gh release create "$TAG" --latest --target "$HEAD_SHA" --title "$(basename "$WHL" | cut -d- -f1 | tr _ -) $VERSION $LIGHT_PLATFORM" --notes "$NOTES" \
     "$ART/$(basename "$WHL")" "$ART/alpha-manifest.json" ${TAR:+"$TAR"} ${LIGHT_ASSET:+"$LIGHT_ASSET"}
 fi
 

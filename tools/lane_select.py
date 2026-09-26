@@ -3769,6 +3769,13 @@ LINUX_SET_BUILDERS = ("packaging/linux/build_sets.sh", "packaging/linux/stage_li
                       "packaging/linux/binding_timeout.sh",
                       "packaging/linux/ptx_contract.py")
 
+#: THE LINUX WHEEL AUDIT. `auditwheel repair` rewrites the packed wheel the
+#: NVIDIA and AMD columns install, and whatever its --exclude list leaves out
+#: it grafts beside the bindings and patches their RPATH, so a change to it can
+#: move how every binding of a set loads: every lane by rule for those columns
+#: (on the Mac passes it is the other platform's tree and inert).
+LINUX_WHEEL_AUDIT = ("packaging/linux/audit.sh",)
+
 #: What a caller must print for every unattributed path, and then stop.
 UNATTRIBUTED_HINT = ("no lane's derived source set contains it and no rule in tools/lane_select.py places "
                      "it; attribute it (a rule with a reason) or make it inert, then rerun")
@@ -3936,6 +3943,10 @@ def select(paths, ref=None, sources=None, backend=None):
         if path in LINUX_SET_BUILDERS:
             all_lanes_by_rule(path, "it builds or stages every binding of the Linux release sets the NVIDIA "
                                     "and AMD columns run")
+            continue
+        if path in LINUX_WHEEL_AUDIT:
+            all_lanes_by_rule(path, "it repairs the wheel the NVIDIA and AMD columns install; what its "
+                                    "--exclude list leaves out is grafted beside every binding")
             continue
         if path in HARNESS_RUNTIME_IMPORTS:
             # BEFORE the test-module and unreachable rules: nothing a lane

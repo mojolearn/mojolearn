@@ -127,6 +127,52 @@ class ExpandedWheelTests(unittest.TestCase):
                 with self.assertRaises(SystemExit): main()
                 spawn.assert_not_called()
 
+    def _split_wheels(self, root, plugin_version='0.8.7'):
+        import json, zipfile
+        core = root/'mojolearn-0.8.7-py3-none-manylinux_2_35_x86_64.whl'
+        with zipfile.ZipFile(core,'w') as archive:
+            archive.writestr('mojolearn/verify_reference/models/models.json',json.dumps({'models':[]}))
+            archive.writestr('mojolearn/identity_columns/COMMIT','a'*40)
+        plugin = root/f'mojolearn_cuda-{plugin_version}-py3-none-manylinux_2_35_x86_64.whl'
+        with zipfile.ZipFile(plugin,'w') as archive:
+            archive.writestr('mojolearn/cuda/sm_89/_mojolearn_knn.so','inert')
+        return core, plugin
+
+    def test_split_plugin_is_installed_with_the_core_and_named_in_the_receipt(self):
+        import hashlib, json, tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+        from qualify_verifier_wheel import main
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp); core, plugin = self._split_wheels(root)
+            argv=['qualifier',str(core),'--plugin',str(plugin),'--output',str(root/'out')]
+            commands=[]
+            def spawn(command, **kw):
+                commands.append(command)
+                class P:
+                    pid=0
+                    def wait(self, timeout=None): return 0 if len(commands)==1 else 1
+                return P()
+            with patch('sys.argv',argv), patch('subprocess.Popen', side_effect=spawn):
+                self.assertEqual(main(), 1)
+            install = commands[1]
+            self.assertIn(str(core.resolve()), install); self.assertIn(str(plugin.resolve()), install)
+            receipt = json.loads((root/'out'/'results.json').read_text())
+            self.assertEqual(receipt['plugins'], [dict(wheel=str(plugin.resolve()), distribution='mojolearn-cuda',
+                wheel_sha256=hashlib.sha256(plugin.read_bytes()).hexdigest())])
+
+    def test_split_plugin_of_another_version_refused_before_install(self):
+        import tempfile
+        from pathlib import Path
+        from unittest.mock import patch
+        from qualify_verifier_wheel import main
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp); core, plugin = self._split_wheels(root, plugin_version='0.8.6')
+            argv=['qualifier',str(core),'--plugin',str(plugin),'--output',str(root/'out')]
+            with patch('sys.argv',argv), patch('subprocess.Popen') as spawn:
+                with self.assertRaises(SystemExit): main()
+                spawn.assert_not_called()
+
     def test_optimized_interpreter_cannot_disable_admission_checks(self):
         import os, subprocess, sys
         from pathlib import Path
