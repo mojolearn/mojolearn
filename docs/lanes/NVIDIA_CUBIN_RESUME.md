@@ -14,7 +14,32 @@ and (2) the NVIDIA payload shrinks.
 
 r1 (4090, pod eq7wr46p6rc9l2, ~4 min, verified gone, box script bug) ~$0.05;
 r2 (4090, pod b11cqjkymdxu0l, $0.74/h, 59 min, verified gone) ~$0.73.
-Total ~$0.78 of the $25 cap. RunPod NVIDIA only.
+r3 (4090, pod nd4pf5m1yj11mk, ~11 min, verified gone) ~$0.14.
+Total ~$0.92 of the $25 cap. RunPod NVIDIA only.
+
+## PROVEN on r3 (sm_89, RTX 4090, driver 580.x): NO JIT AT ALL, same bits
+
+Evidence `~/mojolearn-evidence/nvidia-cubin-2026-09-26/r3-4090/`. Wheel built
+on the box by `scripts/box/mkcubin.py` with the lea-moving cubin_contract.py
+(commit 8b4b7146a): sha256 47b1ad452eac593c50c33bfe8a718ffcf8a5414821df1e65fe23f73f9de43f82
+(a copy is in that directory), REPRODUCIBLE (built twice, same sha256).
+sm_89: 1,745 fatbins in place + 40 moved + 1 left PTX; sm_90a: 1,713 + 72 + 1.
+
+- `CUDA_DISABLE_PTX_JIT=1`, full 0.8.19 release column (209 lanes,
+  base/denormal/odd): exit 0, 145 s. The PTX wheel under the same variable
+  fails every kernel load (r2 negative control).
+- JIT allowed, fresh private `CUDA_CACHE_PATH`: 0 files in the JIT cache
+  after the whole column (the PTX wheel: 794 modules, 15.1 MB).
+- Both columns vs the recorded 0.8.19 Apple + AMD + NVIDIA columns:
+  IDENTICAL=627, infer/model IDENTICAL=984, 0 DIVERGENT
+  (diff-ref-cubin_nojit.txt, diff-ref-cubin.txt).
+- The one left PTX module per set is `embedding_checks_embedding_ide*`
+  (2,949 bytes, integer only) in `_mojolearn_embedding.so`: its fatbin
+  (5.7 KB; ptxas unrolls it to 15.8 KB SASS) fits no free region of that
+  binary (largest PTX span 3.9 KB). It is JIT-invariant and no release lane
+  loads it (the JIT-disabled column passed). The audit admits exactly this
+  class (<= 4,096 bytes, no approx op, every float op rounding-pinned) and
+  reports it as `jit_invariant_ptx`.
 
 ## PROVEN on r2 (sm_89, RTX 4090): the runtime loads the fatbins unchanged, same bits
 
@@ -103,11 +128,11 @@ compression do to the wheel size.
 
 ## Exact next step
 
-Close the leftover gap (41 sm_89 / 73 sm_90a embedded PTX modules whose
-compressed fatbin exceeds the PTX text): relocate their fatbins into the
-NUL padding freed by converted modules and repoint the host-code references
-(lea rel32 / R_X86_64_RELATIVE) to the PTX start, then re-run the column with
-`CUDA_DISABLE_PTX_JIT=1` (must pass) and the diff. Then sm_90a on an H100.
+sm_90a on an H100: upload the r3 wheel (same file carries both sets), run
+`scripts/box/all.sh` (JIT-disabled column + JIT-cache count), diff against the
+0.8.19 references. Then docs/CHANGELOG and hand-off for a real release build
+(build_sets.sh already wired; first build after merge rebuilds every CUDA set
+because cubin_contract.py is a LINUX_BUILDERS input).
 
 ## Commands / scripts
 

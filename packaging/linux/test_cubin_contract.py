@@ -118,17 +118,24 @@ def test_a_module_too_big_in_place_is_moved_and_its_leas_repointed(tmp_path):
     assert d[1] == d[2] != d[0]
 
 
-def test_a_module_nothing_references_is_left_and_refused(tmp_path):
+def test_an_unplaceable_module_stays_ptx_only_if_jit_invariant(tmp_path):
     so = tmp_path / "_mojolearn.so"
     so.write_bytes(blob(PTX89))
     rows = cc.patch_files([so], *fake_tools(tmp_path, size=len(PTX89) + 1))
     assert rows[0]["moved"] == 0 and len(rows[0]["unplaced"]) == 1
     assert rows[0]["unplaced"][0]["why"] == "no RIP-relative lea reaches it"
-    assert cc.audit_bytes(so.read_bytes(), arch="sm_89")["errors"]
+    assert rows[0]["unplaced"][0]["jit_invariant"]
+    r = cc.audit_bytes(so.read_bytes() + fake_fatbin(89), arch="sm_89")
+    assert r["jit_invariant_ptx"] == 1 and r["errors"] == []
+    approx = PTX89.replace(b"\tret;", b"\tex2.approx.ftz.f32 %r1, %r2;\n\tret;")
+    so.write_bytes(blob(approx))
+    rows = cc.patch_files([so], *fake_tools(tmp_path, size=len(approx) + 1))
+    assert not rows[0]["unplaced"][0]["jit_invariant"]
+    assert cc.audit_bytes(so.read_bytes() + fake_fatbin(89), arch="sm_89")["errors"]
 
 
 def test_audit_refuses_ptx_wrong_arch_and_ptx_inside_a_fatbin():
-    r = cc.audit_bytes(blob(PTX89, fake_fatbin(89)), arch="sm_89")
+    r = cc.audit_bytes(blob(PTX89.replace(BODY, BODY * 10), fake_fatbin(89)), arch="sm_89")
     assert any("JIT" in e for e in r["errors"])
     r = cc.audit_bytes(blob(fake_fatbin(90, accel=True)), arch="sm_89")
     assert any("architecture" in e for e in r["errors"])

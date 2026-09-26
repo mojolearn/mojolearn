@@ -36,9 +36,14 @@ repointing rewrites its disp32. Every candidate is decoded again by objdump
 before it is touched. The old PTX is then zeroed, so a reference this missed
 fails loudly (an invalid image) instead of quietly JIT-compiling.
 
-THE AUDIT refuses an IDENTICAL-tier CUDA binary that embeds any PTX module,
-no fatbin at all, a fatbin for another architecture, or a fatbin carrying a
-non-ELF (PTX) image.
+A module that can be neither converted in place nor moved stays PTX only if it
+is JIT-invariant (jit_invariant: small, no approximate instruction, every float
+op rounding-pinned), so whatever ptxas the driver carries makes the same
+arithmetic of it; it is reported by name. One such module per set in 0.8.19.
+
+THE AUDIT refuses an IDENTICAL-tier CUDA binary that embeds a PTX module
+outside that rule, no fatbin at all, a fatbin for another architecture, or a
+fatbin carrying a non-ELF (PTX) image.
 """
 import argparse
 import concurrent.futures as cf
@@ -202,10 +207,19 @@ def compile_ptx(text, arch, ptxas, fatbinary):
             return f.read()
 
 
+#: The largest PTX module the audit lets stay PTX, and only when it is
+#: JIT-invariant. The one measured case (0.8.19, both arches): the
+#: 2,949-byte integer-only `embedding_checks_embedding_ide*` kernel in
+#: _mojolearn_embedding.so, whose fatbin (5.7 KB; ptxas unrolls it to 15.8 KB of
+#: SASS) fits no free region of that binary, whose largest PTX span is 3.9 KB.
+#: No release lane loads it (the 0.8.19 column passes with the JIT disabled).
+MAX_LEFTOVER = 4096
+
+
 def jit_invariant(text):
-    """A PTX module any ptxas compiles to the same arithmetic: no approximate
-    instruction, every float mul/add/sub/fma rounding-pinned (reported only)."""
-    return not APPROX.search(text) and not plain_ops(text)
+    """A PTX module any ptxas compiles to the same arithmetic: small, no
+    approximate instruction, every float mul/add/sub/fma rounding-pinned."""
+    return len(text) <= MAX_LEFTOVER and not APPROX.search(text) and not plain_ops(text)
 
 
 def _patch_one(path, data, built, objdump):
@@ -301,22 +315,24 @@ def patch_files(paths, ptxas, fatbinary, jobs=None, arch=None, objdump=None):
 
 # ------------------------------------------------------------------ audit
 def audit_bytes(data, arch=None):
-    """{ptx_modules, fatbins, arches, errors}."""
+    """{ptx_modules, jit_invariant_ptx, fatbins, arches, errors}."""
     errors = []
     ptx = modules(data)
+    loose = [(s, e) for s, e in ptx if not jit_invariant(data[s:e])]
     fbs = fatbins(data)
     arches = sorted({a for _, imgs in fbs for _, a in imgs})
     kinds = sorted({k for _, imgs in fbs for k, _ in imgs})
-    if ptx:
-        errors.append(f"{len(ptx)} PTX module(s) the driver would JIT (first {ptx[0][1] - ptx[0][0]} bytes,"
-                      f" .target {ptx_arch(data[ptx[0][0]:ptx[0][1]])})")
+    if loose:
+        errors.append(f"{len(loose)} PTX module(s) the driver would JIT that are not JIT-invariant"
+                      f" (first {loose[0][1] - loose[0][0]} bytes, .target {ptx_arch(data[loose[0][0]:loose[0][1]])})")
     if not fbs:
         errors.append("no fatbin embedded")
     if any(k != _FATBIN_KIND_ELF for k in kinds):
         errors.append(f"a fatbin carries a non-ELF image (kinds {kinds}); PTX inside a fatbin is JIT too")
     if arch and any(a != arch for a in arches):
         errors.append(f"fatbin architecture(s) {arches}, the set is {arch}")
-    return {"ptx_modules": len(ptx), "fatbins": len(fbs), "arches": arches, "errors": errors}
+    return {"ptx_modules": len(ptx), "jit_invariant_ptx": len(ptx) - len(loose), "fatbins": len(fbs),
+            "arches": arches, "errors": errors}
 
 
 def audit_tree(root):
@@ -353,7 +369,7 @@ def main():
         rows = patch_files(a.paths, a.ptxas, a.fatbinary, a.jobs, a.arch, a.objdump)
         for r in rows:
             print(json.dumps(r))
-        return int(any(r["unplaced"] for r in rows))
+        return int(any(not u["jit_invariant"] for r in rows for u in r["unplaced"]))
     rc = 0
     for p in a.paths:
         r = audit_bytes(p.read_bytes(), a.arch)
