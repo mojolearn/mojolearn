@@ -132,6 +132,7 @@ the branch is written and unreached, and an unreached branch is an unchecked
 one (CONTRIBUTING.md (Non-default paths)).
 """
 
+from arima.impl.fast_kalman_scan import fast_kalman_scan
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
@@ -170,6 +171,13 @@ comptime KALMAN_FAST_RD = (
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_KALMAN_FAST_RD_OFF"]()
 )
+
+comptime KALMAN_TIME_SCAN = KALMAN_FAST_RD and not is_defined[
+    "MOJOLEARN_KALMAN_TIME_SCAN_OFF"
+]()
+"""FAST on Apple: once `P` has converged the filter is a constant linear
+recursion, solved in chunks in parallel (`fast_kalman_scan.mojo`)."""
+comptime KALMAN_TIME_SCAN_MIN_OBS = 4096
 
 
 def _grid(n: Int, tpb: Int) -> Int:
@@ -901,52 +909,92 @@ def batched_kalman_filter_x(
     var kl_done = False
     comptime if KALMAN_FAST_RD:
         if rd == 1:
-            ctx.enqueue_function[batched_kalman_loop_kernel[1]](
-                d_ys.unsafe_ptr(), ws.T.unsafe_ptr(), ws.Z.unsafe_ptr(), ws.RQR.unsafe_ptr(),
-                ws.P.unsafe_ptr(), ws.alpha.unsafe_ptr(), params.mu.unsafe_ptr(),
-                ws.pred.unsafe_ptr(), ws.vs.unsafe_ptr(), ws.Fs.unsafe_ptr(),
-                ws.loglike.unsafe_ptr(), ws.fc.unsafe_ptr(),
-                ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
-                Int32(rd), Int32(nobs), Int32(batch_size), Int32(order.k), Int32(n_diff), Int32(fc_steps),
-                Int32(1 if has_exog else 0),
-                grid_dim=(_grid(batch_size, kalman_tpb), 1, 1), block_dim=(kalman_tpb, 1, 1),
-            )
+            comptime if KALMAN_TIME_SCAN:
+                if nobs >= KALMAN_TIME_SCAN_MIN_OBS:
+                    fast_kalman_scan[1](
+                        ctx, d_ys, ws.T, ws.Z, ws.RQR, ws.P, ws.alpha, params.mu,
+                        ws.pred, ws.vs, ws.Fs, ws.loglike, ws.fc, ws.info_loop,
+                        ws.obs, ws.obs_fut, nobs, batch_size, order.k, n_diff,
+                        fc_steps, has_exog,
+                    )
+                    kl_done = True
+            if not kl_done:
+                ctx.enqueue_function[batched_kalman_loop_kernel[1]](
+                    d_ys.unsafe_ptr(), ws.T.unsafe_ptr(), ws.Z.unsafe_ptr(), ws.RQR.unsafe_ptr(),
+                    ws.P.unsafe_ptr(), ws.alpha.unsafe_ptr(), params.mu.unsafe_ptr(),
+                    ws.pred.unsafe_ptr(), ws.vs.unsafe_ptr(), ws.Fs.unsafe_ptr(),
+                    ws.loglike.unsafe_ptr(), ws.fc.unsafe_ptr(),
+                    ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
+                    Int32(rd), Int32(nobs), Int32(batch_size), Int32(order.k), Int32(n_diff), Int32(fc_steps),
+                    Int32(1 if has_exog else 0),
+                    grid_dim=(_grid(batch_size, kalman_tpb), 1, 1), block_dim=(kalman_tpb, 1, 1),
+                )
             kl_done = True
         elif rd == 2:
-            ctx.enqueue_function[batched_kalman_loop_kernel[2]](
-                d_ys.unsafe_ptr(), ws.T.unsafe_ptr(), ws.Z.unsafe_ptr(), ws.RQR.unsafe_ptr(),
-                ws.P.unsafe_ptr(), ws.alpha.unsafe_ptr(), params.mu.unsafe_ptr(),
-                ws.pred.unsafe_ptr(), ws.vs.unsafe_ptr(), ws.Fs.unsafe_ptr(),
-                ws.loglike.unsafe_ptr(), ws.fc.unsafe_ptr(),
-                ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
-                Int32(rd), Int32(nobs), Int32(batch_size), Int32(order.k), Int32(n_diff), Int32(fc_steps),
-                Int32(1 if has_exog else 0),
-                grid_dim=(_grid(batch_size, kalman_tpb), 1, 1), block_dim=(kalman_tpb, 1, 1),
-            )
+            comptime if KALMAN_TIME_SCAN:
+                if nobs >= KALMAN_TIME_SCAN_MIN_OBS:
+                    fast_kalman_scan[2](
+                        ctx, d_ys, ws.T, ws.Z, ws.RQR, ws.P, ws.alpha, params.mu,
+                        ws.pred, ws.vs, ws.Fs, ws.loglike, ws.fc, ws.info_loop,
+                        ws.obs, ws.obs_fut, nobs, batch_size, order.k, n_diff,
+                        fc_steps, has_exog,
+                    )
+                    kl_done = True
+            if not kl_done:
+                ctx.enqueue_function[batched_kalman_loop_kernel[2]](
+                    d_ys.unsafe_ptr(), ws.T.unsafe_ptr(), ws.Z.unsafe_ptr(), ws.RQR.unsafe_ptr(),
+                    ws.P.unsafe_ptr(), ws.alpha.unsafe_ptr(), params.mu.unsafe_ptr(),
+                    ws.pred.unsafe_ptr(), ws.vs.unsafe_ptr(), ws.Fs.unsafe_ptr(),
+                    ws.loglike.unsafe_ptr(), ws.fc.unsafe_ptr(),
+                    ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
+                    Int32(rd), Int32(nobs), Int32(batch_size), Int32(order.k), Int32(n_diff), Int32(fc_steps),
+                    Int32(1 if has_exog else 0),
+                    grid_dim=(_grid(batch_size, kalman_tpb), 1, 1), block_dim=(kalman_tpb, 1, 1),
+                )
             kl_done = True
         elif rd == 3:
-            ctx.enqueue_function[batched_kalman_loop_kernel[3]](
-                d_ys.unsafe_ptr(), ws.T.unsafe_ptr(), ws.Z.unsafe_ptr(), ws.RQR.unsafe_ptr(),
-                ws.P.unsafe_ptr(), ws.alpha.unsafe_ptr(), params.mu.unsafe_ptr(),
-                ws.pred.unsafe_ptr(), ws.vs.unsafe_ptr(), ws.Fs.unsafe_ptr(),
-                ws.loglike.unsafe_ptr(), ws.fc.unsafe_ptr(),
-                ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
-                Int32(rd), Int32(nobs), Int32(batch_size), Int32(order.k), Int32(n_diff), Int32(fc_steps),
-                Int32(1 if has_exog else 0),
-                grid_dim=(_grid(batch_size, kalman_tpb), 1, 1), block_dim=(kalman_tpb, 1, 1),
-            )
+            comptime if KALMAN_TIME_SCAN:
+                if nobs >= KALMAN_TIME_SCAN_MIN_OBS:
+                    fast_kalman_scan[3](
+                        ctx, d_ys, ws.T, ws.Z, ws.RQR, ws.P, ws.alpha, params.mu,
+                        ws.pred, ws.vs, ws.Fs, ws.loglike, ws.fc, ws.info_loop,
+                        ws.obs, ws.obs_fut, nobs, batch_size, order.k, n_diff,
+                        fc_steps, has_exog,
+                    )
+                    kl_done = True
+            if not kl_done:
+                ctx.enqueue_function[batched_kalman_loop_kernel[3]](
+                    d_ys.unsafe_ptr(), ws.T.unsafe_ptr(), ws.Z.unsafe_ptr(), ws.RQR.unsafe_ptr(),
+                    ws.P.unsafe_ptr(), ws.alpha.unsafe_ptr(), params.mu.unsafe_ptr(),
+                    ws.pred.unsafe_ptr(), ws.vs.unsafe_ptr(), ws.Fs.unsafe_ptr(),
+                    ws.loglike.unsafe_ptr(), ws.fc.unsafe_ptr(),
+                    ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
+                    Int32(rd), Int32(nobs), Int32(batch_size), Int32(order.k), Int32(n_diff), Int32(fc_steps),
+                    Int32(1 if has_exog else 0),
+                    grid_dim=(_grid(batch_size, kalman_tpb), 1, 1), block_dim=(kalman_tpb, 1, 1),
+                )
             kl_done = True
         elif rd == 4:
-            ctx.enqueue_function[batched_kalman_loop_kernel[4]](
-                d_ys.unsafe_ptr(), ws.T.unsafe_ptr(), ws.Z.unsafe_ptr(), ws.RQR.unsafe_ptr(),
-                ws.P.unsafe_ptr(), ws.alpha.unsafe_ptr(), params.mu.unsafe_ptr(),
-                ws.pred.unsafe_ptr(), ws.vs.unsafe_ptr(), ws.Fs.unsafe_ptr(),
-                ws.loglike.unsafe_ptr(), ws.fc.unsafe_ptr(),
-                ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
-                Int32(rd), Int32(nobs), Int32(batch_size), Int32(order.k), Int32(n_diff), Int32(fc_steps),
-                Int32(1 if has_exog else 0),
-                grid_dim=(_grid(batch_size, kalman_tpb), 1, 1), block_dim=(kalman_tpb, 1, 1),
-            )
+            comptime if KALMAN_TIME_SCAN:
+                if nobs >= KALMAN_TIME_SCAN_MIN_OBS:
+                    fast_kalman_scan[4](
+                        ctx, d_ys, ws.T, ws.Z, ws.RQR, ws.P, ws.alpha, params.mu,
+                        ws.pred, ws.vs, ws.Fs, ws.loglike, ws.fc, ws.info_loop,
+                        ws.obs, ws.obs_fut, nobs, batch_size, order.k, n_diff,
+                        fc_steps, has_exog,
+                    )
+                    kl_done = True
+            if not kl_done:
+                ctx.enqueue_function[batched_kalman_loop_kernel[4]](
+                    d_ys.unsafe_ptr(), ws.T.unsafe_ptr(), ws.Z.unsafe_ptr(), ws.RQR.unsafe_ptr(),
+                    ws.P.unsafe_ptr(), ws.alpha.unsafe_ptr(), params.mu.unsafe_ptr(),
+                    ws.pred.unsafe_ptr(), ws.vs.unsafe_ptr(), ws.Fs.unsafe_ptr(),
+                    ws.loglike.unsafe_ptr(), ws.fc.unsafe_ptr(),
+                    ws.info_loop.unsafe_ptr(), ws.obs.unsafe_ptr(), ws.obs_fut.unsafe_ptr(),
+                    Int32(rd), Int32(nobs), Int32(batch_size), Int32(order.k), Int32(n_diff), Int32(fc_steps),
+                    Int32(1 if has_exog else 0),
+                    grid_dim=(_grid(batch_size, kalman_tpb), 1, 1), block_dim=(kalman_tpb, 1, 1),
+                )
             kl_done = True
     if not kl_done:
         ctx.enqueue_function[batched_kalman_loop_kernel[0]](
