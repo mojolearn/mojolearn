@@ -74,7 +74,7 @@
 #   --cpu-column FILE    the same as --ref-column FILE (kept for old command lines).
 #   --plugin WHEEL       THE SPLIT LINUX PACKAGES (python/mojolearn/gpu_plugins.py):
 #                        <wheel> is then the core `mojolearn` and WHEEL the plugin
-#                        of this --vendor (mojolearn_cuda-* for cuda, mojolearn_rocm-*
+#                        of this --vendor (mojolearn_nvidia-* for cuda, mojolearn_amd-*
 #                        for hip), same version. Both are shipped, sha256-checked on
 #                        the box and installed together, by the smoke and by the
 #                        column; the receipt names the plugin and its sha256. With a
@@ -211,7 +211,7 @@ printf '%s' "$DO_SIZE" | grep -Eq '^gpu-[a-z0-9-]+$' || die "--do-size '$DO_SIZE
 printf '%s' "$DO_REGIONS" | grep -Eq '^[a-z0-9]+(,[a-z0-9]+)*$' || die "--do-regions must be region slugs separated by commas"
 printf '%s' "$DO_IMAGE" | grep -Eq '^[0-9]+$' || die "--do-image must be a numeric DigitalOcean image id"
 # The expanded smoke runs on cuda, and on hip when a split plugin is given
-# (the rocm plugin's light-route receipt); a combined wheel's hip leg is its
+# (the amd plugin's light-route receipt); a combined wheel's hip leg is its
 # column alone.
 RUN_SMOKE=0
 { [ "$VENDOR" = cuda ] || [ -n "$PLUGIN" ]; } && RUN_SMOKE=1
@@ -261,7 +261,7 @@ WHEEL_SHA=${WHEEL_INFO%% *}; VERSION=${WHEEL_INFO##* }
 if [ -n "$PLUGIN" ]; then
     [ -f "$PLUGIN" ] || die "no plugin wheel $PLUGIN"
     PLUGIN=$(cd "$(dirname "$PLUGIN")" && pwd)/$(basename "$PLUGIN")
-    case "$VENDOR" in cuda) _pfx=mojolearn_cuda ;; *) _pfx=mojolearn_rocm ;; esac
+    case "$VENDOR" in cuda) _pfx=mojolearn_nvidia ;; *) _pfx=mojolearn_amd ;; esac
     case "$(basename "$PLUGIN")" in
         "$_pfx-$VERSION-"*-manylinux*_x86_64.whl) ;;
         *) die "$(basename "$PLUGIN") is not the $_pfx $VERSION manylinux x86_64 plugin of --vendor $VENDOR" ;;

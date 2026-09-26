@@ -385,9 +385,15 @@ so NVIDIA and AMD can ship independently:
 
 | wheel | holds | requires |
 |---|---|---|
-| `mojolearn-<v>-py3-none-manylinux_2_35_x86_64.whl` | Python, `mojolearn/host/`, `mojolearn/.libs/`; no GPU set | `[cuda]`: `mojolearn-cuda==<v>`, `[rocm]`: `mojolearn-rocm==<v>` |
-| `mojolearn_cuda-<v>-...whl` | `mojolearn/cuda/<arch>/...` only | `mojolearn==<v>` |
-| `mojolearn_rocm-<v>-...whl` | `mojolearn/hip/<arch>/...` only | `mojolearn==<v>` |
+| `mojolearn-<v>-py3-none-manylinux_2_35_x86_64.whl` | Python, `mojolearn/host/`, `mojolearn/.libs/`; no GPU set | its ordinary dependencies; no extras, no plugin |
+| `mojolearn_nvidia-<v>-...whl` | `mojolearn/cuda/<arch>/...` only | `mojolearn==<v>` |
+| `mojolearn_amd-<v>-...whl` | `mojolearn/hip/<arch>/...` only | `mojolearn==<v>` |
+
+A user installs `pip install mojolearn-nvidia` or `pip install mojolearn-amd`;
+the plugin's exact pin brings the core of the same version, and
+`pip install -U mojolearn-nvidia` upgrades both. The core declares no extras.
+The package names say the vendor; the directories inside keep the runtime
+vendor axis (`cuda`, `hip`) that the loader and `MOJOLEARN_VENDOR` use.
 
 The three are a partition of the combined wheel: same members, same archive
 paths, same bytes, only each `.dist-info` is its own
@@ -400,8 +406,8 @@ exactly as before. The macOS wheel is unchanged.
 pixi run -e pkg pack-linux-wheel --profile release-split \
   --set <sm89>/build/sets/cuda --set <sm90a>/build/sets/cuda --set <hip>/build/sets/hip \
   --build-proof ... --out <dist>
-# NVIDIA alone: the core and mojolearn-cuda from the two NVIDIA legs
-pixi run -e pkg pack-linux-wheel --profile release-split --wheels core-linux,cuda \
+# NVIDIA alone: the core and mojolearn-nvidia from the two NVIDIA legs
+pixi run -e pkg pack-linux-wheel --profile release-split --wheels core-linux,nvidia \
   --set <sm89>/build/sets/cuda --set <sm90a>/build/sets/cuda --build-proof ... --out <dist>
 # re-check any split set: ownership, exact pins, markers, one version, one tag
 python3 tools/wheel_api_audit.py --split --require-complete <dist>/*.whl
@@ -413,20 +419,20 @@ ships (`mojolearn/.libs/`), so for a plugin the script reads those library
 names from the core wheel beside it and adds them to the `--exclude` list (it
 refuses a plugin with no core beside it); the manifests still supply the
 driver libraries. The core's logs keep their names (`show.txt`, `repair.txt`,
-`twine.txt`), a plugin's are `show-mojolearn_cuda.txt` and so on, and any
+`twine.txt`), a plugin's are `show-mojolearn_nvidia.txt` and so on, and any
 top-level `*.libs/` directory in a repaired wheel fails the run.
 
 Publishing the split packages with `pixi run release <version> --split-linux`
 (or `MOJOLEARN_RELEASE_SPLIT_LINUX=1`; the default stays the combined wheel)
 works like this. `linux-pack` packs `--profile release-split`, audits and strips each wheel and
 runs `split_audit` on the final set; the NVIDIA column installs the core with
-`mojolearn-cuda` and the AMD column the core with `mojolearn-rocm` (the
+`mojolearn-nvidia` and the AMD column the core with `mojolearn-amd` (the
 expanded smoke runs on the AMD box too, so each plugin has a receipt of its own
 vendor); `linux-joint-diff` diffs every PASSED column with the Apple column;
-then `publish-core-linux` (on either vendor's receipt), `publish-cuda` (NVIDIA
-column) and `publish-rocm` (AMD column) are three GitHub releases and three
+then `publish-core-linux` (on either vendor's receipt), `publish-nvidia` (NVIDIA
+column) and `publish-amd` (AMD column) are three GitHub releases and three
 dispatches, and a plugin publishes only after the core. A failed AMD column
-holds `mojolearn-rocm` alone; a DIVERGENT cell holds all three. The same set
+holds `mojolearn-amd` alone; a DIVERGENT cell holds all three. The same set
 can go through the full route by staging it in `~/.mojolearn-linux-wheel`
 (core, plugins, each with its `.sha256` sidecar); installed qualification of
 a split set is checked on the whole set,
@@ -434,7 +440,7 @@ a split set is checked on the whole set,
 whose records name the set digest (sha256 over the sorted `<file> <sha256>`
 lines) where a combined qualification names the wheel's sha256.
 
-#### Registering mojolearn-cuda and mojolearn-rocm on PyPI
+#### Registering mojolearn-nvidia and mojolearn-amd on PyPI
 
 Once, by the owner of the `mojolearn` PyPI account, before the first
 `--split-linux` release. Nothing in the repository changes afterwards.
@@ -445,13 +451,13 @@ Once, by the owner of the `mojolearn` PyPI account, before the first
 
    | PyPI project name | Owner | Repository name | Workflow name | Environment name |
    |---|---|---|---|---|
-   | `mojolearn-cuda` | `mojolearn` | `mojolearn` | `release-provenance.yml` | `pypi-cuda` |
-   | `mojolearn-rocm` | `mojolearn` | `mojolearn` | `release-provenance.yml` | `pypi-rocm` |
+   | `mojolearn-nvidia` | `mojolearn` | `mojolearn` | `release-provenance.yml` | `pypi-nvidia` |
+   | `mojolearn-amd` | `mojolearn` | `mojolearn` | `release-provenance.yml` | `pypi-amd` |
 
 2. **TestPyPI**, the same at https://test.pypi.org/manage/account/publishing/
-   with environments `testpypi-cuda` and `testpypi-rocm`.
+   with environments `testpypi-nvidia` and `testpypi-amd`.
 3. **GitHub environments.** In the repository's Settings, Environments, create
-   `pypi-cuda`, `pypi-rocm`, `testpypi-cuda` and `testpypi-rocm`, with the
+   `pypi-nvidia`, `pypi-amd`, `testpypi-nvidia` and `testpypi-amd`, with the
    same protection rules (required reviewers, deployment branches and tags)
    as `pypi` and `testpypi`. A job naming a missing environment would create
    it unprotected on first use, so create them first.

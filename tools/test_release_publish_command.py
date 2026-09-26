@@ -32,7 +32,7 @@ class PublishCommandTests(unittest.TestCase):
             plugins, vendor = [], 'cuda' if platform == 'linux' else 'metal'
             if split:
                 # a split plugin publishes alone; the receipt installed it beside the core
-                core, vendor = wheel, {'cuda': 'cuda', 'rocm': 'hip'}[split]
+                core, vendor = wheel, {'nvidia': 'cuda', 'amd': 'hip'}[split]
                 wheel = root / f'mojolearn_{split}-0.8.9-py3-none-manylinux_2_35_x86_64.whl'
                 with zipfile.ZipFile(wheel, 'w') as archive:
                     archive.writestr(f'mojolearn/{vendor}/x/_mojolearn_knn.so', 'inert')
@@ -85,14 +85,15 @@ class PublishCommandTests(unittest.TestCase):
                 self.assertEqual(manifest['light_smoke']['source_commit'], 'a' * 40)
 
     def test_a_split_plugin_publishes_alone_on_its_own_vendors_receipt(self):
-        for split in ('cuda', 'rocm'):
+        for split in ('nvidia', 'amd'):
             with self.subTest(split=split):
                 result, calls, manifest = self.invoke('linux', split=split)
                 self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                 self.assertEqual(list(manifest['files']), [f'mojolearn_{split}-0.8.9-py3-none-manylinux_2_35_x86_64.whl'])
                 self.assertIn('light_platform=linux', calls)
                 self.assertIn(f'--title mojolearn-{split} 0.8.9 linux', calls)
-                self.assertIn(f'mojolearn[{split}]', calls)
+                self.assertIn(f'pip install mojolearn-{split} (which brings mojolearn 0.8.9', calls)
+                self.assertNotIn('mojolearn[', calls)
 
     def test_failed_smoke_never_reaches_github(self):
         result, calls, _ = self.invoke('linux', failed=True)

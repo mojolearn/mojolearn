@@ -111,17 +111,19 @@ macOS arm64 wheel (Apple Metal) and a Linux x86-64 wheel carrying NVIDIA
 CUDA and AMD HIP together. Both wheels train and predict on the CPU as well.
 
 Later Linux releases ship the GPU binaries as plugin packages, released in
-lockstep with `mojolearn` (each pins the other at the same version):
+lockstep with `mojolearn`. Each plugin requires exactly the `mojolearn` of
+its own version, so installing or upgrading the plugin (`pip install -U`)
+brings the matching `mojolearn` with it:
 
 ```sh
-pip install "mojolearn[cuda]"   # NVIDIA: mojolearn + mojolearn-cuda
-pip install "mojolearn[rocm]"   # AMD:    mojolearn + mojolearn-rocm
-pip install mojolearn           # CPU only
+pip install mojolearn          # Mac (Apple Metal) or CPU only
+pip install mojolearn-nvidia   # NVIDIA GPU
+pip install mojolearn-amd      # AMD GPU
 ```
 
 On a Linux box with a GPU whose plugin is not installed, `import mojolearn`
 refuses and prints the command above; `MOJOLEARN_VENDOR=cpu` runs on the CPU
-on purpose. On macOS `pip install mojolearn` carries the Metal binaries.
+on purpose.
 
 ```sh
 mojolearn doctor

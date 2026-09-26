@@ -40,7 +40,7 @@ class Switch(SplitBase):
         self.assertFalse(r.split)
         self.assertEqual(r.STEPS, release.Release.STEPS)
         self.assertIn("publish-linux", r.STEPS)
-        self.assertNotIn("publish-cuda", r.STEPS)
+        self.assertNotIn("publish-nvidia", r.STEPS)
 
     def test_the_environment_turns_it_on_and_the_flags_override(self):
         with mock.patch.dict(os.environ, {release.SPLIT_LINUX_ENV: "1"}):
@@ -67,12 +67,12 @@ class Switch(SplitBase):
 
     def test_the_split_pipelines(self):
         r = self.release()
-        self.assertEqual(list(r.PIPELINES), ["macos", "core-linux", "cuda", "rocm"])
+        self.assertEqual(list(r.PIPELINES), ["macos", "core-linux", "nvidia", "amd"])
         for p in r.PIPELINES.values():
             for s in p["builds"] + p["checks"] + [p["publish"]]:
                 self.assertIn(s, r.STEPS)
-        self.assertEqual(set(r.NEEDS["publish-cuda"]), {"publish-core-linux", "gpu-column-nvidia", "linux-joint-diff"})
-        self.assertEqual(set(r.NEEDS["publish-rocm"]), {"publish-core-linux", "gpu-column-amd", "linux-joint-diff"})
+        self.assertEqual(set(r.NEEDS["publish-nvidia"]), {"publish-core-linux", "gpu-column-nvidia", "linux-joint-diff"})
+        self.assertEqual(set(r.NEEDS["publish-amd"]), {"publish-core-linux", "gpu-column-amd", "linux-joint-diff"})
         self.assertEqual(r.NEEDS["publish-core-linux"], ["linux-joint-diff"])
         self.assertEqual(set(r.AFTER["linux-joint-diff"]), {"gpu-column-nvidia", "gpu-column-amd"})
 
@@ -108,33 +108,33 @@ class Gates(SplitBase):
     def test_everything_passing_publishes_the_three_packages_and_macos(self):
         r, order = self.staged()
         self.assertEqual(r.go(), 0)
-        self.assertEqual(self.published(r), ["cuda", "linux", "macos", "rocm"])
-        self.assertLess(order.index("publish-core-linux"), order.index("publish-cuda"))
-        self.assertLess(order.index("publish-core-linux"), order.index("publish-rocm"))
+        self.assertEqual(self.published(r), ["amd", "linux", "macos", "nvidia"])
+        self.assertLess(order.index("publish-core-linux"), order.index("publish-nvidia"))
+        self.assertLess(order.index("publish-core-linux"), order.index("publish-amd"))
 
-    def test_a_failed_amd_column_holds_only_rocm(self):
+    def test_a_failed_amd_column_holds_only_amd(self):
         r, _ = self.staged(fail={"gpu-column-amd"})
         self.assertEqual(r.go(), 1)
-        self.assertEqual(self.published(r), ["cuda", "linux", "macos"])
-        self.assertIn("rocm: FAILED at gpu-column-amd", "\n".join(r.lines))
+        self.assertEqual(self.published(r), ["linux", "macos", "nvidia"])
+        self.assertIn("amd: FAILED at gpu-column-amd", "\n".join(r.lines))
 
-    def test_a_failed_nvidia_column_holds_only_cuda(self):
+    def test_a_failed_nvidia_column_holds_only_nvidia(self):
         r, _ = self.staged(fail={"gpu-column-nvidia"})
         self.assertEqual(r.go(), 1)
-        self.assertEqual(self.published(r), ["linux", "macos", "rocm"])
+        self.assertEqual(self.published(r), ["amd", "linux", "macos"])
 
     def test_a_divergent_joint_diff_holds_all_three(self):
         r, order = self.staged(fail={"linux-joint-diff"})
         self.assertEqual(r.go(), 1)
         self.assertEqual(self.published(r), ["macos"])
-        for s in ("publish-core-linux", "publish-cuda", "publish-rocm"):
+        for s in ("publish-core-linux", "publish-nvidia", "publish-amd"):
             self.assertNotIn(s, order)
 
     def test_a_failed_core_publish_holds_both_plugins(self):
         r, order = self.staged(fail={"publish-core-linux"})
         self.assertEqual(r.go(), 1)
         self.assertEqual(self.published(r), ["macos"])
-        self.assertNotIn("publish-cuda", order)
+        self.assertNotIn("publish-nvidia", order)
 
     def test_the_joint_diff_waits_for_both_columns_to_settle(self):
         r, order = self.staged(fail={"gpu-column-nvidia"})
@@ -180,12 +180,12 @@ class Pack(SplitBase):
         self.assertIn("--profile", calls[0])
         self.assertEqual(calls[0][calls[0].index("--profile") + 1], "release-split")
         audits = [pathlib.Path(c[2]).name.split("-")[0] for c in calls if c[:2] == ["bash", "packaging/linux/audit.sh"]]
-        self.assertEqual(audits, ["mojolearn", "mojolearn_cuda", "mojolearn_rocm"], "the core first")
+        self.assertEqual(audits, ["mojolearn", "mojolearn_nvidia", "mojolearn_amd"], "the core first")
         self.assertEqual(sum(1 for c in calls if c[1].endswith("strip_wheel_dir_entries.py")), 3)
         report = json.loads((r.rel / "linux" / "final" / "split-audit.json").read_text())
         self.assertEqual(report["problems"], [])
         self.assertEqual(r.state["linux_layout"], "split")
-        self.assertIn("mojolearn_rocm-", result)
+        self.assertIn("mojolearn_amd-", result)
         # done means done: a rerun takes the three finals as they are
         calls.clear()
         self.assertTrue(r.step_linux_pack().startswith("have "))
@@ -205,8 +205,8 @@ class ColumnsAndPublish(SplitBase):
     def finals(self, r):
         final = r.rel / "linux" / "final"
         core = fake_wheel(final / "mojolearn-0.8.99-py3-none-manylinux_2_35_x86_64.whl", sev.Y)
-        cuda = fake_wheel(final / "mojolearn_cuda-0.8.99-py3-none-manylinux_2_35_x86_64.whl", data=b"cuda")
-        rocm = fake_wheel(final / "mojolearn_rocm-0.8.99-py3-none-manylinux_2_35_x86_64.whl", data=b"rocm")
+        cuda = fake_wheel(final / "mojolearn_nvidia-0.8.99-py3-none-manylinux_2_35_x86_64.whl", data=b"cuda")
+        rocm = fake_wheel(final / "mojolearn_amd-0.8.99-py3-none-manylinux_2_35_x86_64.whl", data=b"rocm")
         return core, cuda, rocm
 
     def receipt(self, out, core, plugin, vendor):
@@ -265,13 +265,13 @@ class ColumnsAndPublish(SplitBase):
         core, cuda, rocm = self.finals(r)
         self.receipt(r.rel / "smoke-linux", core, cuda, "cuda")
         self.receipt(r.rel / "column-amd", core, rocm, "hip")
-        for step in ("publish_core_linux", "publish_cuda", "publish_rocm"):
+        for step in ("publish_core_linux", "publish_nvidia", "publish_amd"):
             result, data = getattr(r, "step_" + step)()
             self.assertIn("testpypi via alpha-api-0.8.99-", result)
         published = [(pathlib.Path(c[2]).name.split("-")[0], c[3].split("-")[3], pathlib.Path(c[-1]).parent.name)
                      for c in calls]
-        self.assertEqual(published, [("mojolearn", "linux", "smoke-linux"), ("mojolearn_cuda", "cuda", "smoke-linux"),
-                                     ("mojolearn_rocm", "rocm", "column-amd")])
+        self.assertEqual(published, [("mojolearn", "linux", "smoke-linux"), ("mojolearn_nvidia", "nvidia", "smoke-linux"),
+                                     ("mojolearn_amd", "amd", "column-amd")])
 
     def test_a_plugin_is_not_published_on_a_receipt_that_did_not_install_it(self):
         r = self.release(publish="testpypi")
@@ -279,8 +279,8 @@ class ColumnsAndPublish(SplitBase):
         r.on_pypi = lambda wheel: False
         core, cuda, rocm = self.finals(r)
         self.receipt(r.rel / "column-amd", core, cuda, "hip")
-        with self.assertRaisesRegex(release.StepFailed, "did not install mojolearn_rocm"):
-            r.step_publish_rocm()
+        with self.assertRaisesRegex(release.StepFailed, "did not install mojolearn_amd"):
+            r.step_publish_amd()
 
     def test_on_pypi_asks_the_plugins_own_project(self):
         r = self.release()
@@ -292,7 +292,7 @@ class ColumnsAndPublish(SplitBase):
             raise OSError("offline")
         with mock.patch.object(release.urllib.request, "urlopen", urlopen):
             self.assertFalse(r.on_pypi(cuda))
-        self.assertEqual(seen, ["https://pypi.org/pypi/mojolearn-cuda/0.8.99/json"])
+        self.assertEqual(seen, ["https://pypi.org/pypi/mojolearn-nvidia/0.8.99/json"])
 
 
 class Reuse(unittest.TestCase):
@@ -304,10 +304,10 @@ class Reuse(unittest.TestCase):
             with zipfile.ZipFile(core, "w") as z:
                 z.writestr("mojolearn/__init__.py", "")
                 z.writestr("mojolearn-1.dist-info/LINUX_PAYLOAD.json", json.dumps(dict(a=1, split=dict(role="core-linux"))))
-            cuda = tmp / "mojolearn_cuda-1-py3-none-manylinux_2_35_x86_64.whl"
+            cuda = tmp / "mojolearn_nvidia-1-py3-none-manylinux_2_35_x86_64.whl"
             with zipfile.ZipFile(cuda, "w") as z:
                 z.writestr("mojolearn/cuda/sm_89/_mojolearn_knn.so", "bin")
-                z.writestr("mojolearn_cuda-1.dist-info/METADATA", "x")
+                z.writestr("mojolearn_nvidia-1.dist-info/METADATA", "x")
             merged = release.merge_split([core, cuda], tmp / "out" / core.name)
             with zipfile.ZipFile(merged) as z:
                 self.assertEqual(sorted(z.namelist()), ["mojolearn-1.dist-info/LINUX_PAYLOAD.json",

@@ -152,7 +152,7 @@ class CombinedLinuxTests(unittest.TestCase):
 
 
 class SplitLinuxTests(unittest.TestCase):
-    """THE SPLIT LINUX PACKAGES: mojolearn (core), mojolearn_cuda, mojolearn_rocm,
+    """THE SPLIT LINUX PACKAGES: mojolearn (core), mojolearn_nvidia, mojolearn_amd,
     one wheel per manifest (each package publishes on its own)."""
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
@@ -183,9 +183,8 @@ class SplitLinuxTests(unittest.TestCase):
         members = {prefix + 'WHEEL': ('Wheel-Version: 1.0\nRoot-Is-Purelib: false\nTag: ' + tag + '\n').encode(),
                    prefix + 'LINUX_PAYLOAD.json': json.dumps(payload).encode()}
         if vendor is None:
-            for row in P.PLUGINS.values():
-                meta += ['Provides-Extra: ' + row['extra'],
-                         f'Requires-Dist: {row["distribution"]}=={v}; extra == "{row["extra"]}"']
+            # the core declares no extras and requires no plugin
+            meta.append('Requires-Dist: numpy>=1.24')
             members[prefix + P.CORE_MARKER] = json.dumps(P.core_marker(v)).encode()
             members['mojolearn/__init__.py'] = b'# fixture\n'
             members['mojolearn/identity_columns/COMMIT'] = b'a' * 40 + b'\n'
@@ -219,7 +218,7 @@ class SplitLinuxTests(unittest.TestCase):
         return hashlib.sha256(raw).hexdigest()
 
     def test_each_split_wheel_admits_alone(self):
-        for kind in ('core', 'cuda', 'rocm'):
+        for kind in ('core', 'nvidia', 'amd'):
             with self.subTest(kind=kind):
                 result = gate.verify(self.dist, self.stage(kind), None, self.root)
                 self.assertTrue(result['passed'])
@@ -246,35 +245,41 @@ class SplitLinuxTests(unittest.TestCase):
                             (other_vendor, 'outside mojolearn/cuda/'), (wrong_marker, 'marker'),
                             (combined_profile, 'profile/role')):
             with self.subTest(mutate=mutate.__name__):
-                digest = self.stage('cuda', mutate)
+                digest = self.stage('nvidia', mutate)
                 with self.assertRaisesRegex(ValueError, why):
                     gate.verify(self.dist, digest, None, self.root)
 
-    def test_core_extras_and_ownership_are_checked(self):
-        def no_rocm_extra(prefix, members):
-            members[prefix + 'METADATA'] = b'\n'.join(
-                l for l in members[prefix + 'METADATA'].split(b'\n') if b'rocm' not in l)
+    def test_core_no_extras_and_ownership_are_checked(self):
+        def gpu_extra(prefix, members):
+            members[prefix + 'METADATA'] = members[prefix + 'METADATA'].replace(
+                b'\n\nFixture only', b'\nProvides-Extra: nvidia\n'
+                b'Requires-Dist: mojolearn-nvidia==9.9.9; extra == "nvidia"\n\nFixture only')
+
+        def requires_plugin(prefix, members):
+            members[prefix + 'METADATA'] = members[prefix + 'METADATA'].replace(
+                b'\n\nFixture only', b'\nRequires-Dist: mojolearn_amd==9.9.9\n\nFixture only')
 
         def gpu_set_in_core(prefix, members):
             members['mojolearn/cuda/sm_89/_mojolearn_knn.so'] = b'FAKE'
-        for mutate, why in ((no_rocm_extra, 'pin every plugin'), (gpu_set_in_core, 'GPU set member')):
+        for mutate, why in ((gpu_extra, 'no extras'), (requires_plugin, 'require no GPU plugin'),
+                            (gpu_set_in_core, 'GPU set member')):
             with self.subTest(mutate=mutate.__name__):
                 digest = self.stage('core', mutate)
                 with self.assertRaisesRegex(ValueError, why):
                     gate.verify(self.dist, digest, None, self.root)
 
     def test_a_split_wheel_of_another_version_is_refused(self):
-        digest = self.stage('rocm')
+        digest = self.stage('amd')
         (self.root / 'python/mojolearn/_version.py').write_text('__version__ = "9.9.10"\n')
         with self.assertRaises(ValueError):
             gate.verify(self.dist, digest, None, self.root)
 
     def test_unknown_distribution_prefix_is_refused(self):
-        digest = self.stage('cuda')
+        digest = self.stage('nvidia')
         name = next(p for p in self.dist.iterdir() if p.suffix == '.whl')
-        name.rename(name.with_name(name.name.replace('mojolearn_cuda', 'mojolearn_vulkan')))
+        name.rename(name.with_name(name.name.replace('mojolearn_nvidia', 'mojolearn_vulkan')))
         manifest = json.loads((self.dist / 'alpha-manifest.json').read_text())
-        manifest['files'] = {name.name.replace('mojolearn_cuda', 'mojolearn_vulkan'): list(manifest['files'].values())[0]}
+        manifest['files'] = {name.name.replace('mojolearn_nvidia', 'mojolearn_vulkan'): list(manifest['files'].values())[0]}
         raw = json.dumps(manifest).encode()
         (self.dist / 'alpha-manifest.json').write_bytes(raw)
         with self.assertRaisesRegex(ValueError, 'filename'):

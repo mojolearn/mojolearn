@@ -54,8 +54,8 @@ def wheel_host_members():
     return tuple('mojolearn/host/' + name + '.so' for name in wheel_host_bindings())
 
 
-# THE LINUX GPU PLUGIN PACKAGES (2026-09-25): mojolearn-cuda carries
-# mojolearn/cuda/..., mojolearn-rocm carries mojolearn/hip/..., the core
+# THE LINUX GPU PLUGIN PACKAGES (2026-09-25): mojolearn-nvidia carries
+# mojolearn/cuda/..., mojolearn-amd carries mojolearn/hip/..., the core
 # carries neither. The one table is python/mojolearn/gpu_plugins.py, read BY
 # PATH like the host manifest above, so this module still never imports the
 # package; the packer, the wheel audit and check_ext_lists read it here.
@@ -128,7 +128,7 @@ def arch_set_ok(keys):
 
 
 #: Each plugin's share of the release architectures: the split profile packs
-#: `mojolearn-cuda` from exactly PLUGIN_ARCHES['cuda'] and `mojolearn-rocm`
+#: `mojolearn-nvidia` from exactly PLUGIN_ARCHES['cuda'] and `mojolearn-amd`
 #: from exactly PLUGIN_ARCHES['hip']. Derived, never spelled a second time.
 PLUGIN_ARCHES = {vendor: frozenset(k for k in RELEASE_ARCHES if k.split('/')[0] == vendor)
                  for vendor in ('cuda', 'hip')}

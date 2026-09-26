@@ -49,8 +49,8 @@ RELEASE_ARCHES_ACCEPTED = RELEASE_ARCHES | {'cuda/sm_90a'}
 #: Both GPU vendors: what the combined release-linux3 wheel must carry.
 BOTH_VENDORS = ('cuda', 'hip')
 #: THE SPLIT LINUX PACKAGES (python/mojolearn/gpu_plugins.py): the packer
-#: profile that writes the core `mojolearn` and the plugins `mojolearn-cuda`
-#: and `mojolearn-rocm` (packaging/linux/pack_wheel.py --profile release-split).
+#: profile that writes the core `mojolearn` and the plugins `mojolearn-nvidia`
+#: and `mojolearn-amd` (packaging/linux/pack_wheel.py --profile release-split).
 SPLIT_PROFILE = 'release-split'
 
 
@@ -465,12 +465,12 @@ def check_release061(wheel, qualification_root, source_root, wheel_sha=None, ven
     # to compare against; its identity across vendors is the release
     # columns' (tools/release.py gpu-columns), not this file check's.
     for cuda in sorted(k for k in directories if k.startswith('cuda/') and 'hip/gfx942' in directories):
-        umap = surface.compare(directories['hip/gfx942'], directories[cuda],
+        umap = surface.compare(directories['hip/gfx942'], directories[nvidia],
                                allowances.get('hip/gfx942', frozenset()),
                                allowances.get(cuda, frozenset()))
-        ordered = compare_ordered_python.compare(directories['hip/gfx942'], directories[cuda])
+        ordered = compare_ordered_python.compare(directories['hip/gfx942'], directories[nvidia])
         require(umap.get('status') == ordered.get('status') == 'PASSED', 'Architecture identity comparison failed')
-        comparisons[cuda] = dict(umap=umap, ordered=ordered)
+        comparisons[nvidia] = dict(umap=umap, ordered=ordered)
     return dict(schema='mojolearn.linux.release-admission.v2', status='PASSED',
                 assembly_profile=surface.RELEASE_PROFILE, wheel=wheel.name, wheel_sha256=wheel_sha or digest_file(wheel),
                 source_sha256=inventory_digest(inventory), jobs_per_runtime_architecture=len(surface.expected_jobs({'assembly_profile': surface.RELEASE_PROFILE})),

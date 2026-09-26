@@ -697,9 +697,9 @@ def previous_release(root=ROOT):
         return None
     _, d, linux = best
     rec = dict(version=linux["version"], record_dir=str(d), source_commit=linux.get("light_smoke", {}).get("source_commit"))
-    # "cuda" and "rocm": the split Linux plugins (python/mojolearn/gpu_plugins.py),
+    # "nvidia" and "amd": the split Linux plugins (python/mojolearn/gpu_plugins.py),
     # recorded beside the core's alpha-manifest-linux.json by a split release
-    for platform in ("linux", "macos", "cuda", "rocm"):
+    for platform in ("linux", "macos", "nvidia", "amd"):
         try:
             doc = json.loads((d / f"alpha-manifest-{platform}.json").read_text())
         except (OSError, ValueError):
@@ -962,7 +962,7 @@ def published_wheel(prev, platform, evidence_root, download=True):
             raise SystemExit(f"release_reuse: no local copy of the published {name} (sha256 {want[:12]}); "
                              f"passed over {len(passed_over)} of another freeze: {', '.join(str(c) for c in passed_over)}")
         return None
-    project = name.split("-")[0].replace("_", "-")      # mojolearn, mojolearn-cuda, mojolearn-rocm
+    project = name.split("-")[0].replace("_", "-")      # mojolearn, mojolearn-nvidia, mojolearn-amd
     with urllib.request.urlopen(f"https://pypi.org/pypi/{project}/{prev['version']}/json", timeout=30) as r:
         files = json.load(r).get("urls", [])
     urls = [f["url"] for f in files if f.get("filename") == name and f.get("digests", {}).get("sha256") == want]

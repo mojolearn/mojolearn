@@ -112,18 +112,18 @@ class AuditSplit(unittest.TestCase):
         return {words[i + 1] for i, w in enumerate(words) if w == "--exclude"}
 
     def test_each_wheel_of_the_set_is_audited_into_one_directory(self):
-        for prefix in ("mojolearn", "mojolearn_cuda", "mojolearn_rocm"):
+        for prefix in ("mojolearn", "mojolearn_nvidia", "mojolearn_amd"):
             r = self.audit(self.wheel(prefix))
             self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         audit = self.dist / "audit"
         self.assertEqual(sorted(p.name.split("-")[0] for p in (audit / "repaired").glob("*.whl")),
-                         ["mojolearn", "mojolearn_cuda", "mojolearn_rocm"])
-        for log in ("show.txt", "repair.txt", "twine.txt", "show-mojolearn_cuda.txt", "repair-mojolearn_rocm.txt",
-                    "twine-mojolearn_rocm.txt"):
+                         ["mojolearn", "mojolearn_amd", "mojolearn_nvidia"])
+        for log in ("show.txt", "repair.txt", "twine.txt", "show-mojolearn_nvidia.txt", "repair-mojolearn_amd.txt",
+                    "twine-mojolearn_amd.txt"):
             self.assertTrue((audit / log).is_file(), log)
         twine = [c[-1] for c in self.calls() if "twine check" in c[-1]]
         self.assertEqual(twine, [f"pip install -q twine >/dev/null 2>&1 && twine check /r/{d}-*.whl"
-                                 for d in ("mojolearn", "mojolearn_cuda", "mojolearn_rocm")])
+                                 for d in ("mojolearn", "mojolearn_nvidia", "mojolearn_amd")])
 
     def test_a_plugin_excludes_the_core_runtime_by_name(self):
         with zipfile.ZipFile(self.wheel("mojolearn")) as z:
@@ -132,7 +132,7 @@ class AuditSplit(unittest.TestCase):
         # even with manifests that name nothing, the core's closure is excluded
         empty = self.work / "empty.json"
         empty.write_text(json.dumps(dict(staged_libs=[], driver_libs_not_staged=[])))
-        r = self.audit(self.wheel("mojolearn_cuda"), [str(empty)])
+        r = self.audit(self.wheel("mojolearn_nvidia"), [str(empty)])
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertEqual(self.excluded(), core_libs)
 
@@ -143,13 +143,13 @@ class AuditSplit(unittest.TestCase):
 
     def test_a_plugin_with_no_core_beside_it_is_refused(self):
         self.wheel("mojolearn").unlink()
-        r = self.audit(self.wheel("mojolearn_rocm"))
+        r = self.audit(self.wheel("mojolearn_amd"))
         self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
         self.assertIn("no mojolearn-", r.stdout)
         self.assertFalse(self.log.exists())
 
     def test_a_grafted_top_level_libs_directory_fails(self):
-        r = self.audit(self.wheel("mojolearn_cuda"), FAKE_GRAFT="1")
+        r = self.audit(self.wheel("mojolearn_nvidia"), FAKE_GRAFT="1")
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
         self.assertIn("top-level *.libs entries (want 0): 1", r.stdout)
 

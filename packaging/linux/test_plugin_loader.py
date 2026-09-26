@@ -122,21 +122,21 @@ class PluginLoader(unittest.TestCase):
         self.split_core()
         exc = self.refusal(cuda=True)
         self.assertIsInstance(exc, self.B.GpuPluginError)
-        self.assertIn(f'pip install "mojolearn[cuda]=={self.version}"', str(exc))
+        self.assertIn(f'pip install "mojolearn-nvidia=={self.version}"', str(exc))
         self.assertIn("MOJOLEARN_VENDOR=cpu", str(exc))
         # twin: the same box with the plugin installed loads it
         self.plugin("cuda", ["sm_90a"])
         kind, base = self.layout(cuda=True)
         self.assertEqual((kind, base), ("vendor", str(self.pkg / "cuda" / "sm_90a")))
-        self.assertEqual(self.B._PLUGINS_FOUND["cuda"]["distribution"], "mojolearn-cuda")
+        self.assertEqual(self.B._PLUGINS_FOUND["cuda"]["distribution"], "mojolearn-nvidia")
         self.assertEqual(self.B._PLUGINS_FOUND["cuda"]["version"], self.version)
 
-    def test_amd_gpu_names_the_rocm_extra(self):
+    def test_amd_gpu_names_the_amd_plugin(self):
         self.split_core()
         exc = self.refusal(hip=True)
         self.assertIsInstance(exc, self.B.GpuPluginError)
-        self.assertIn(f'pip install "mojolearn[rocm]=={self.version}"', str(exc))
-        self.assertNotIn("mojolearn[cuda]", str(exc))
+        self.assertIn(f'pip install "mojolearn-amd=={self.version}"', str(exc))
+        self.assertNotIn("mojolearn-nvidia", str(exc))
         self.plugin("hip", ["gfx942"])
         self.assertEqual(self.layout(hip=True), ("vendor", str(self.pkg / "hip" / "gfx942")))
 
@@ -152,7 +152,7 @@ class PluginLoader(unittest.TestCase):
         self.plugin("hip", ["gfx942"])
         exc = self.refusal(cuda=True)
         self.assertIsInstance(exc, self.B.GpuPluginError)
-        self.assertIn("mojolearn[cuda]", str(exc))
+        self.assertIn('pip install "mojolearn-nvidia==', str(exc))
         # twin: the AMD box takes the AMD plugin
         self.assertEqual(self.layout(hip=True)[0], "vendor")
 
@@ -173,8 +173,8 @@ class PluginLoader(unittest.TestCase):
         self.plugin("cuda", ["sm_90a"], version="0.0.1")
         exc = self.refusal(cuda=True)
         self.assertIsInstance(exc, self.B.GpuPluginError)
-        self.assertIn("mojolearn-cuda 0.0.1", str(exc))
-        self.assertIn(f"mojolearn[cuda]=={self.version}", str(exc))
+        self.assertIn("mojolearn-nvidia 0.0.1", str(exc))
+        self.assertIn(f"mojolearn-nvidia=={self.version}", str(exc))
         # even on a box with no GPU: a mismatched plugin is never loaded or ignored
         self.assertIsInstance(self.refusal(), self.B.GpuPluginError)
 
@@ -183,11 +183,11 @@ class PluginLoader(unittest.TestCase):
         self.sets("cuda", ["sm_90a"])
         exc = self.refusal(cuda=True)
         self.assertIsInstance(exc, self.B.GpuPluginError)
-        self.assertIn("no mojolearn-cuda is installed", str(exc))
+        self.assertIn("no mojolearn-nvidia is installed", str(exc))
 
     def test_a_plugin_without_its_files_refuses(self):
         self.split_core()
-        self.dist_info("mojolearn-cuda", self.version)
+        self.dist_info("mojolearn-nvidia", self.version)
         exc = self.refusal(cuda=True)
         self.assertIsInstance(exc, self.B.GpuPluginError)
         self.assertIn("--force-reinstall", str(exc))
@@ -205,16 +205,16 @@ class PluginLoader(unittest.TestCase):
         os.environ["MOJOLEARN_VENDOR"] = "cuda"
         exc = self.refusal(cuda=True, hip=True)
         self.assertIsInstance(exc, self.B.GpuPluginError)
-        self.assertIn("mojolearn[cuda]", str(exc))
+        self.assertIn('pip install "mojolearn-nvidia==', str(exc))
         os.environ["MOJOLEARN_VENDOR"] = "hip"
         self.assertEqual(self.layout(cuda=True, hip=True)[0], "vendor")
 
     def test_a_plugin_in_another_environment_is_named(self):
         self.split_core()
         other = Path(self.tmp.name) / "elsewhere"
-        d = other / f"mojolearn_cuda-{self.version}.dist-info"
+        d = other / f"mojolearn_nvidia-{self.version}.dist-info"
         d.mkdir(parents=True)
-        (d / "METADATA").write_text(f"Metadata-Version: 2.4\nName: mojolearn-cuda\nVersion: {self.version}\n")
+        (d / "METADATA").write_text(f"Metadata-Version: 2.4\nName: mojolearn-nvidia\nVersion: {self.version}\n")
         sys.path.insert(0, str(other))
         self.addCleanup(sys.path.remove, str(other))
         exc = self.refusal(cuda=True)

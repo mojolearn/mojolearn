@@ -58,16 +58,16 @@
 
 # THE SPLIT LINUX PACKAGES (python/mojolearn/gpu_plugins.py, 2026-09-25).
 # On Linux mojolearn may ship as three PyPI projects: the core `mojolearn`,
-# and the GPU plugins `mojolearn-cuda` and `mojolearn-rocm`. A trusted
+# and the GPU plugins `mojolearn-nvidia` and `mojolearn-amd`. A trusted
 # publisher mints a token for the projects that trust ONE (workflow,
 # environment) pair, so each project is uploaded by its own job in its own
 # environment: `testpypi`/`pypi` for mojolearn (unchanged, macOS and the Linux
-# core), `testpypi-cuda`/`pypi-cuda` for mojolearn-cuda and
-# `testpypi-rocm`/`pypi-rocm` for mojolearn-rocm. The plugin jobs run after the
+# core), `testpypi-nvidia`/`pypi-nvidia` for mojolearn-nvidia and
+# `testpypi-amd`/`pypi-amd` for mojolearn-amd. The plugin jobs run after the
 # core's upload succeeded (or when the dispatch carries no core), so
-# `pip install "mojolearn[cuda]"` never resolves a plugin whose core is not
+# `pip install mojolearn-nvidia` never resolves a plugin whose core is not
 # there. The PyPI side is docs/RELEASE_CHECKLIST.md, "Registering
-# mojolearn-cuda and mojolearn-rocm on PyPI". The combined single Linux wheel
+# mojolearn-nvidia and mojolearn-amd on PyPI". The combined single Linux wheel
 # still publishes exactly as before through the `mojolearn` jobs.
 name: Release provenance
 
@@ -191,7 +191,7 @@ jobs:
       # job checks the artifact against THIS, not against a count.
       wheel_manifest: ${{ steps.digest.outputs.wheel_manifest }}
       # The split Linux plugins staged with the core, as a JSON list of
-      # plugin names ("cuda", "rocm"); [] for a combined wheel or none.
+      # plugin names ("amd", "nvidia"); [] for a combined wheel or none.
       linux_plugins: ${{ steps.linux.outputs.plugins || '[]' }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -397,7 +397,7 @@ jobs:
       # WHAT MAY BE STAGED: ONE combined wheel (mojolearn-*.whl, both vendors'
       # sets inside), OR a SPLIT SET: exactly one core mojolearn-*.whl whose
       # .dist-info carries gpu_plugins.json, plus at least one of
-      # mojolearn_cuda-*.whl and mojolearn_rocm-*.whl (python/mojolearn/
+      # mojolearn_nvidia-*.whl and mojolearn_amd-*.whl (python/mojolearn/
       # gpu_plugins.py). Anything else in the directory is refused by name.
       #
       # Every staged wheel is admitted only if ALL of these hold, and each is
@@ -442,9 +442,9 @@ jobs:
             base=$(basename "$WHL")
             case "$base" in
               "mojolearn-$v_toml-"*) cores=$((cores + 1)) ;;
-              "mojolearn_cuda-$v_toml-"*) plugins="$plugins cuda" ;;
-              "mojolearn_rocm-$v_toml-"*) plugins="$plugins rocm" ;;
-              *) echo "::error::$base is not version $v_toml of mojolearn, mojolearn_cuda or mojolearn_rocm"; exit 1 ;;
+              "mojolearn_nvidia-$v_toml-"*) plugins="$plugins nvidia" ;;
+              "mojolearn_amd-$v_toml-"*) plugins="$plugins amd" ;;
+              *) echo "::error::$base is not version $v_toml of mojolearn, mojolearn_nvidia or mojolearn_amd"; exit 1 ;;
             esac
             test -f "$WHL.sha256" || { echo "::error::$base has no .sha256 sidecar"; exit 1; }
             want=$(cut -d' ' -f1 < "$WHL.sha256" | tr -d '[:space:]')
@@ -464,7 +464,7 @@ jobs:
           try: print(int(any(n.endswith(".dist-info/gpu_plugins.json") for n in zipfile.ZipFile(sys.argv[1]).namelist())))
           except zipfile.BadZipFile: print(0)' "$CORE")
           if [ "$split" = 1 ]; then
-            test -n "$plugins" || { echo "::error::the split core is staged with no plugin; stage mojolearn_cuda and/or mojolearn_rocm beside it"; exit 1; }
+            test -n "$plugins" || { echo "::error::the split core is staged with no plugin; stage mojolearn_nvidia and/or mojolearn_amd beside it"; exit 1; }
             python3 - "$DIR" <<'PY'
           import pathlib, sys
           sys.path.insert(0, 'tools')
@@ -748,9 +748,9 @@ jobs:
       fail-fast: false
       matrix:
         plugin: ${{ fromJSON(needs.build.outputs.linux_plugins) }}
-    # ONE ENVIRONMENT PER PROJECT: the Trusted Publisher of mojolearn-cuda is
-    # configured against `pypi-cuda` (`testpypi-cuda` on TestPyPI), that of
-    # mojolearn-rocm against `pypi-rocm` (`testpypi-rocm`).
+    # ONE ENVIRONMENT PER PROJECT: the Trusted Publisher of mojolearn-nvidia is
+    # configured against `pypi-nvidia` (`testpypi-nvidia` on TestPyPI), that of
+    # mojolearn-amd against `pypi-amd` (`testpypi-amd`).
     environment:
       name: ${{ inputs.publish }}-${{ matrix.plugin }}
       url: ${{ inputs.publish == 'pypi' && format('https://pypi.org/p/mojolearn-{0}', matrix.plugin) || format('https://test.pypi.org/project/mojolearn-{0}/', matrix.plugin) }}
@@ -802,7 +802,7 @@ jobs:
       linux_qualification: ${{ steps.linux_qualification.outputs.required }}
       # Which PyPI projects this candidate carries: `core` is true when a
       # mojolearn-*.whl (macOS, the combined Linux wheel or the split core)
-      # is in it; `plugins` is the JSON list of split plugins ("cuda", "rocm").
+      # is in it; `plugins` is the JSON list of split plugins ("amd", "nvidia").
       core: ${{ steps.projects.outputs.core }}
       plugins: ${{ steps.projects.outputs.plugins }}
     if: inputs.alpha_candidate_tag != ''
@@ -889,7 +889,7 @@ jobs:
           python3 - <<'PYPROJECTS'
           import json, os, pathlib
           names = [p.name for p in pathlib.Path('dist').glob('*.whl')]
-          plugins = sorted(n.split('-')[0].split('_', 1)[1] for n in names if n.startswith(('mojolearn_cuda-', 'mojolearn_rocm-')))
+          plugins = sorted(n.split('-')[0].split('_', 1)[1] for n in names if n.startswith(('mojolearn_nvidia-', 'mojolearn_amd-')))
           core = any(n.startswith('mojolearn-') for n in names)
           if len(plugins) + core == 0 or len(plugins) + sum(n.startswith('mojolearn-') for n in names) != len(names):
               raise SystemExit('the candidate carries a wheel of no known project: ' + ', '.join(names))
@@ -1008,8 +1008,8 @@ jobs:
       fail-fast: false
       matrix:
         plugin: ${{ fromJSON(needs.alpha_stage.outputs.plugins) }}
-    # ONE ENVIRONMENT PER PROJECT (see the header): pypi-cuda / testpypi-cuda,
-    # pypi-rocm / testpypi-rocm.
+    # ONE ENVIRONMENT PER PROJECT (see the header): pypi-nvidia / testpypi-nvidia,
+    # pypi-amd / testpypi-amd.
     environment:
       name: ${{ inputs.publish }}-${{ matrix.plugin }}
     permissions:

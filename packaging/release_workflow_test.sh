@@ -165,31 +165,31 @@ refuses "$B" "qualification-verifier refusal propagates" "TEST VERIFIER: qualifi
 
 echo "== admit: the split Linux set (core + plugins) =="
 CORE=mojolearn-0.3.0-py3-none-manylinux_2_35_x86_64.whl
-CUDA=mojolearn_cuda-0.3.0-py3-none-manylinux_2_35_x86_64.whl
-ROCM=mojolearn_rocm-0.3.0-py3-none-manylinux_2_35_x86_64.whl
-B=$(mkbox 0.3.0); stage_zip "$B" "$CORE" 1; stage_zip "$B" "$CUDA"; stage_zip "$B" "$ROCM"
-run_admit "$B" && [ -f "$B/python/dist/$CORE" ] && [ -f "$B/python/dist/$CUDA" ] && [ -f "$B/python/dist/$ROCM" ] \
-  && grep -q '"release-split"' "$B/verifier-invocation.json" && grep -q "$ROCM" "$B/split-audit-invocation.txt" \
-  && grep -qx 'plugins=\["cuda", "rocm"\]' "$B/gho.txt" \
+NVIDIA=mojolearn_nvidia-0.3.0-py3-none-manylinux_2_35_x86_64.whl
+AMD=mojolearn_amd-0.3.0-py3-none-manylinux_2_35_x86_64.whl
+B=$(mkbox 0.3.0); stage_zip "$B" "$CORE" 1; stage_zip "$B" "$NVIDIA"; stage_zip "$B" "$AMD"
+run_admit "$B" && [ -f "$B/python/dist/$CORE" ] && [ -f "$B/python/dist/$NVIDIA" ] && [ -f "$B/python/dist/$AMD" ] \
+  && grep -q '"release-split"' "$B/verifier-invocation.json" && grep -q "$AMD" "$B/split-audit-invocation.txt" \
+  && grep -qx 'plugins=\["amd", "nvidia"\]' "$B/gho.txt" \
   && ok "the split set is admitted, split-audited and qualified as a set" || no "split set admitted" "$(tail -3 "$B/admit.out")"
 
-B=$(mkbox 0.3.0); stage_zip "$B" "$CORE" 1; stage_zip "$B" "$CUDA"; rmdir "$B/stage/qualification"
-run_admit "$B" && [ -f "$B/python/dist/$CUDA" ] && grep -qx 'plugins=\["cuda"\]' "$B/gho.txt" \
-  && ok "the core and the NVIDIA plugin alone are admitted (no qualification staged)" || no "core+cuda" "$(tail -3 "$B/admit.out")"
+B=$(mkbox 0.3.0); stage_zip "$B" "$CORE" 1; stage_zip "$B" "$NVIDIA"; rmdir "$B/stage/qualification"
+run_admit "$B" && [ -f "$B/python/dist/$NVIDIA" ] && grep -qx 'plugins=\["nvidia"\]' "$B/gho.txt" \
+  && ok "the core and the NVIDIA plugin alone are admitted (no qualification staged)" || no "core+nvidia" "$(tail -3 "$B/admit.out")"
 
 B=$(mkbox 0.3.0); stage_zip "$B" "$CORE" 1
 refuses "$B" "a split core with no plugin is REFUSED" "with no plugin"
 
-B=$(mkbox 0.3.0); stage_zip "$B" "mojolearn-0.3.0-py3-none-manylinux_2_28_x86_64.whl"; stage_zip "$B" "$CUDA"
+B=$(mkbox 0.3.0); stage_zip "$B" "mojolearn-0.3.0-py3-none-manylinux_2_28_x86_64.whl"; stage_zip "$B" "$NVIDIA"
 refuses "$B" "a plugin beside a COMBINED wheel is REFUSED" "a combined wheel ships alone"
 
 B=$(mkbox 0.3.0); stage_zip "$B" "$CORE" 1; stage_zip "$B" "mojolearn_vulkan-0.3.0-py3-none-manylinux_2_35_x86_64.whl"
 refuses "$B" "a wheel of no known project is REFUSED" "is not version 0.3.0 of mojolearn"
 
-B=$(mkbox 0.3.0); stage_zip "$B" "$CORE" 1; stage_zip "$B" "mojolearn_cuda-0.2.0-py3-none-manylinux_2_35_x86_64.whl"
+B=$(mkbox 0.3.0); stage_zip "$B" "$CORE" 1; stage_zip "$B" "mojolearn_nvidia-0.2.0-py3-none-manylinux_2_35_x86_64.whl"
 refuses "$B" "a plugin of the WRONG VERSION is REFUSED" "is not version 0.3.0"
 
-B=$(mkbox 0.3.0); stage_zip "$B" "$CORE" 1; stage_zip "$B" "$CUDA"; : > "$B/refuse-split"
+B=$(mkbox 0.3.0); stage_zip "$B" "$CORE" 1; stage_zip "$B" "$NVIDIA"; : > "$B/refuse-split"
 refuses "$B" "a split set failing split_audit is REFUSED" "TEST SPLIT AUDIT: refused"
 [ ! -e "$B/python/dist/$CORE" ] && ok "a refused split set is never copied" || no "refused split set copied" "copied"
 
@@ -207,11 +207,11 @@ run_admit "$B" && run_digest "$B" \
   && ok "two wheels, macOS FIRST in the manifest" \
   || no "two-wheel manifest" "$(sed -n '/wheel_manifest/,/MANIFEST_EOF/p' "$B/gho2.txt")"
 
-B=$(mkbox 0.3.0); stage_zip "$B" "$CORE" 1; stage_zip "$B" "$CUDA"; stage_zip "$B" "$ROCM"
+B=$(mkbox 0.3.0); stage_zip "$B" "$CORE" 1; stage_zip "$B" "$NVIDIA"; stage_zip "$B" "$AMD"
 run_admit "$B" && run_digest "$B" \
   && [ "$(sed -n '/wheel_manifest<</,/MANIFEST_EOF/p' "$B/gho2.txt" | grep -c '\.whl$')" = 4 ] \
   && [ "$(sed -n '/wheel_manifest<</,/MANIFEST_EOF/p' "$B/gho2.txt" | grep -n 'macosx' | cut -d: -f1)" = 2 ] \
-  && sed -n '/wheel_manifest<</,/MANIFEST_EOF/p' "$B/gho2.txt" | grep -q "  $ROCM\$" \
+  && sed -n '/wheel_manifest<</,/MANIFEST_EOF/p' "$B/gho2.txt" | grep -q "  $AMD\$" \
   && ok "the split set's four wheels, macOS FIRST, plugins in the manifest" \
   || no "split manifest" "$(sed -n '/wheel_manifest/,/MANIFEST_EOF/p' "$B/gho2.txt")"
 

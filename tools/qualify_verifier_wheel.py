@@ -15,7 +15,7 @@ import zipfile
 #: wheel-name prefix -> distribution of the split Linux GPU plugins
 #: (python/mojolearn/gpu_plugins.py; spelled here because this driver ships
 #: alone to the box, stdlib only, with no checkout beside it).
-PLUGIN_DISTRIBUTIONS = {"mojolearn_cuda": "mojolearn-cuda", "mojolearn_rocm": "mojolearn-rocm"}
+PLUGIN_DISTRIBUTIONS = {"mojolearn_nvidia": "mojolearn-nvidia", "mojolearn_amd": "mojolearn-amd"}
 
 
 def admit(kind, doc, models):
@@ -133,8 +133,8 @@ def main():
     parser.add_argument("--python", default="python3.12")
     parser.add_argument("--wheelhouse", type=Path)
     # THE SPLIT LINUX PACKAGES (python/mojolearn/gpu_plugins.py): the positional
-    # wheel is the core `mojolearn`, and each --plugin (mojolearn_cuda-*.whl,
-    # mojolearn_rocm-*.whl of the same version) is installed beside it in the
+    # wheel is the core `mojolearn`, and each --plugin (mojolearn_nvidia-*.whl,
+    # mojolearn_amd-*.whl of the same version) is installed beside it in the
     # same pip command. The receipt names every plugin by name and sha256, so
     # tools/check_light_release.py can tie it to the plugin a release publishes.
     parser.add_argument("--plugin", type=Path, action="append", default=[],
@@ -171,7 +171,7 @@ def main():
     for plugin in (p.resolve() for p in args.plugin):
         parts = plugin.name.split("-")
         if not (plugin.is_file() and parts[0] in PLUGIN_DISTRIBUTIONS and len(parts) >= 5 and parts[1] == version):
-            parser.error(f"--plugin {plugin.name} is not a mojolearn_cuda/mojolearn_rocm wheel of version {version}")
+            parser.error(f"--plugin {plugin.name} is not a mojolearn_nvidia/mojolearn_amd wheel of version {version}")
         plugins.append(dict(wheel=str(plugin), wheel_sha256=hashlib.sha256(plugin.read_bytes()).hexdigest(),
                             distribution=PLUGIN_DISTRIBUTIONS[parts[0]]))
     if len({p["distribution"] for p in plugins}) != len(plugins):

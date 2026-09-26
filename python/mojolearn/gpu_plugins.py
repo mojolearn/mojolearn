@@ -5,15 +5,18 @@
 On Linux mojolearn ships as three PyPI projects (2026-09-25), the plugin
 pattern JAX and CuPy use, so NVIDIA and AMD can release independently:
 
-    mojolearn        pure Python, the host (CPU) bindings under mojolearn/host/
-                     and the MAX runtime closure under mojolearn/.libs/
-    mojolearn-cuda   ONLY mojolearn/cuda/<arch>/... (every tier of every
-                     NVIDIA architecture the release carries)
-    mojolearn-rocm   ONLY mojolearn/hip/<arch>/...  (AMD, gfx942)
+    mojolearn          pure Python, the host (CPU) bindings under mojolearn/host/
+                       and the MAX runtime closure under mojolearn/.libs/
+    mojolearn-nvidia   ONLY mojolearn/cuda/<arch>/... (every tier of every
+                       NVIDIA architecture the release carries)
+    mojolearn-amd      ONLY mojolearn/hip/<arch>/...  (AMD, gfx942)
 
-`pip install "mojolearn[cuda]"` pulls the NVIDIA plugin, `[rocm]` the AMD
-one. The versions are locked both ways: the core's extra pins the plugin at
-exactly its own version and the plugin requires exactly its core.
+`pip install mojolearn-nvidia` installs the NVIDIA plugin and its core,
+`pip install mojolearn-amd` the AMD one. The core declares NO extras: each
+plugin requires exactly `mojolearn==<its own version>`, so installing or
+upgrading a plugin installs or upgrades the core with it. The package names
+say the vendor; the directories inside them keep the runtime vendor axis
+(`cuda`, `hip`) that the loader, the bindings and MOJOLEARN_VENDOR use.
 
 A PLUGIN INSTALLS INTO THE CORE'S OWN PACKAGE DIRECTORY, at the very paths
 the single combined wheel used (mojolearn/cuda/sm_90a/identical/...). That is
@@ -34,17 +37,15 @@ load it by path (the host_surface.py pattern).
 #: name under mojolearn/ and the string `<prefix>_vendor()` answers.
 PLUGINS = {
     "cuda": {
-        "distribution": "mojolearn-cuda",
-        "wheel_name": "mojolearn_cuda",
-        "extra": "cuda",
-        "profile": "cuda",
+        "distribution": "mojolearn-nvidia",
+        "wheel_name": "mojolearn_nvidia",
+        "profile": "nvidia",
         "label": "NVIDIA (CUDA)",
     },
     "hip": {
-        "distribution": "mojolearn-rocm",
-        "wheel_name": "mojolearn_rocm",
-        "extra": "rocm",
-        "profile": "rocm",
+        "distribution": "mojolearn-amd",
+        "wheel_name": "mojolearn_amd",
+        "profile": "amd",
         "label": "AMD (ROCm/HIP)",
     },
 }
@@ -75,7 +76,7 @@ def plugin(vendor):
 
 
 def by_profile(profile):
-    """vendor for a plugin profile name ('cuda' -> 'cuda', 'rocm' -> 'hip')."""
+    """vendor for a plugin profile name ('nvidia' -> 'cuda', 'amd' -> 'hip')."""
     for vendor, row in PLUGINS.items():
         if row["profile"] == profile:
             return vendor
@@ -92,16 +93,16 @@ def member_vendor(arcname):
 
 
 def install_command(vendor, version=None):
-    """The pip command that installs the plugin for `vendor`."""
+    """The pip command that installs the plugin for `vendor` and, through
+    the plugin's exact pin, the core of the same version."""
     pin = f"=={version}" if version else ""
-    return f'pip install "mojolearn[{PLUGINS[vendor]["extra"]}]{pin}"'
+    return f'pip install "{PLUGINS[vendor]["distribution"]}{pin}"'
 
 
 def core_marker(version):
     """The core's marker document."""
     return {"schema": CORE_SCHEMA, "version": version,
-            "plugins": {v: {"distribution": r["distribution"], "extra": r["extra"]}
-                        for v, r in PLUGINS.items()}}
+            "plugins": {v: {"distribution": r["distribution"]} for v, r in PLUGINS.items()}}
 
 
 def plugin_marker(vendor, version, arches):
