@@ -101,7 +101,12 @@ def pinned_mul(a: Float32, b: Float32) -> Float32:
     contract marks PRODUCT: S3's two products, S10's two discretizations,
     S13, S15's `B ⊙ decay`, S18's decay scale, S20's `x * D`, S21's gate
     and products."""
-    return identical_mul_add(a, b, Float32(-0.0))
+    # `identical_mul` is the pinned product (`pinned_mul_f32` under IDENTICAL);
+    # `fma(a, b, -0.0)` was not: LLVM folds it into a contractable product
+    # (lane/pinned-mul-contract-free, 2026-09-26).
+    from checks.numerics import identical_mul
+
+    return identical_mul(a, b)
 
 
 def m2_refuse_bad_inputs(

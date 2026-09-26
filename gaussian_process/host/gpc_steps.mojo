@@ -70,7 +70,7 @@ There is no float64 erf in `checks/numerics.mojo` (its `identical_erf` is
 float32 Cephes, DEVIATION 822), so `gpc_erf64` below is new: the Maclaurin
 series (79 terms) below |x| = 3, the Laplace continued fraction for erfc
 (40 levels, evaluated bottom-up) from 3 to 6, and +-1 from 6 on, every
-product through `fma(a, b, -0.0)` and the exponential through
+product through `pinned_mul_f64` and the exponential through
 `identical_exp64`. Its largest error against CPython's `math.erf` over
 [-7, 7] on a 200001-point grid is 8.9e-14. A latent variance that is not
 positive (zero in the limit of a training point with an exact fit) takes
@@ -91,6 +91,7 @@ from checks.numerics import (
     identical_sigmoid,
     identical_softplus,
     identical_sqrt,
+    pinned_mul_f64,
 )
 from core.host_predict_threads import (
     host_predict_chunk,
@@ -349,8 +350,10 @@ def gpc_latent_var(
 
 def _mul64(a: Float64, b: Float64) -> Float64:
     """A float64 product no code generator may contract into a neighbor's
-    add (IDENTITY_PATHS row 9's pin, `identical_mul`'s float64 twin)."""
-    return fma(a, b, Float64(-0.0))
+    add (IDENTITY_PATHS row 9's pin, `identical_mul`'s float64 twin):
+    `pinned_mul_f64`. It was `fma(a, b, -0.0)`, which LLVM folds into a
+    contractable product (lane/pinned-mul-contract-free, 2026-09-26)."""
+    return pinned_mul_f64(a, b)
 
 
 def gpc_erf64(x: Float64) -> Float64:

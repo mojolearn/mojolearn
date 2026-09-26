@@ -280,7 +280,12 @@ def pinned_mul(a: Float32, b: Float32) -> Float32:
     share only `checks/numerics.mojo`. The two bodies being identical is
     the point, and the gate that diffs the two cards is what holds them so.
     """
-    return identical_mul_add(a, b, Float32(-0.0))
+    # `identical_mul` is the pinned product (`pinned_mul_f32` under IDENTICAL);
+    # `fma(a, b, -0.0)` was not: LLVM folds it into a contractable product
+    # (lane/pinned-mul-contract-free, 2026-09-26).
+    from checks.numerics import identical_mul
+
+    return identical_mul(a, b)
 
 
 # ===========================================================================

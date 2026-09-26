@@ -376,8 +376,9 @@ def _mean_of_sum(total: Float32, n: Int) -> Float32:
 @always_inline
 def quantile_position(m: Int, q: Float32) -> Float32:
     """`h = (m - 1) * q`, Hyndman-Fan type 7. One multiply, correctly
-    rounded, no contraction to pin because there is no addend."""
-    return Float32(m - 1) * q
+    rounded. PINNED: inlined, every caller's `h - lo` had this product
+    fused into it by the default build (lane/pinned-mul-contract-free)."""
+    return identical_mul(Float32(m - 1), q)
 
 
 @always_inline

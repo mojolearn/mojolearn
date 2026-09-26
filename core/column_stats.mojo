@@ -200,7 +200,7 @@ def shift_columns_kernel(
     # and `numerics.ftz`'s own docstring says so).
     var xv = ftz(x.unsafe_load(idx))
     var mv = ftz(mu.unsafe_load(col))
-    var shifted = ftz(xv + sign_in * mv)
+    var shifted = ftz(identical_mul_add(sign_in, mv, xv))  # the default build's fused op (lane/pinned-mul-contract-free)
     x.unsafe_store(idx, shifted)
 
 

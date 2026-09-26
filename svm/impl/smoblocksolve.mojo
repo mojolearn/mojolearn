@@ -383,9 +383,9 @@ def smo_block_solve_kernel[
         comptime if UPDATE_SECOND_BARRIER and not FAST_FUSED:
             barrier()
         if tid == u:
-            a = ftz(a + q * y)
+            a = ftz(identical_mul_add(q, y, a))  # the default build's fused op (lane/pinned-mul-contract-free)
         if tid == l:
-            a = ftz(a - q * y)
+            a = ftz(identical_mul_add(-q, y, a))  # the default build's fused op (lane/pinned-mul-contract-free)
         f = ftz(identical_mul_add(q, ftz(Kui - Kli), f))
         if q == Float32(0.0):
             # Probably fp underflow

@@ -102,7 +102,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from checks.kernel_matrix import COLUMN_NVIDIA, TARGET_COLUMN
-from checks.numerics import ftz, identical_pow
+from checks.numerics import ftz, identical_mul, identical_pow
 from gbdt.data.yeti_rank_tasks import (
     YETI_TASK_POSITIONS,
     yeti_rank_cuda_seed,
@@ -268,7 +268,7 @@ def yeti_rank_task_kernel(
                     s = _advance_seed32(s)
                     # `NextUniformFloat32`: `v * 2.328306435996595e-10f`, whose
                     # float is exactly 2^-32
-                    var uni = Float32(s) * Float32(2.328306435996595e-10)
+                    var uni = identical_mul(Float32(s), Float32(2.328306435996595e-10))  # exact; pinned (lane/pinned-mul-contract-free)
                     val = val * (uni / (Float32(1.000001) - uni))
                     var bits = bitcast[DType.uint32](val)
                     if (bits & UInt32(0x80000000)) != UInt32(0):
@@ -467,7 +467,7 @@ def yeti_rank_task_block_kernel(
             s = _advance_seed32(s)
             # `NextUniformFloat32`: `v * 2.328306435996595e-10f`, whose
             # float is exactly 2^-32
-            var uni = Float32(s) * Float32(2.328306435996595e-10)
+            var uni = identical_mul(Float32(s), Float32(2.328306435996595e-10))  # exact; pinned (lane/pinned-mul-contract-free)
             val = val * (uni / (Float32(1.000001) - uni))
             var bits = bitcast[DType.uint32](val)
             if (bits & UInt32(0x80000000)) != UInt32(0):

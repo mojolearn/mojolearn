@@ -3,6 +3,7 @@
 """RAFT's Philox generator and `uniformInt`, the thing that decides which rows every tree in the forest is trained on."""
 
 from core.launch_log import log_launch
+from std.math import fma
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import ceildiv
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -351,7 +352,7 @@ def custom_next_uniform_double(
 ) -> Float64:
     """`custom_next` for `UniformDistParams<double>`, `rng_device.cuh:163-173`: OutType res; gen.next(res); *val = (res * (params.end - params.start)) + params.start; Note the ORDER: multiply by the span, THEN add the start."""
     var res = philox_next_double(gen)
-    return (res * (end - start)) + start
+    return fma(res, end - start, start)  # the default build's fused op (lane/pinned-mul-contract-free)
 
 
 def uniform_double_host(

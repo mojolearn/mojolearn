@@ -61,6 +61,7 @@ The Langevin hooks at `:141-147` and `:190-196` are omitted, not stubbed;
 `oracle_interface.mojo` records why and what putting them back requires.
 """
 
+from std.math import fma
 from core.identity_trace import IdentityTrace
 from gbdt.methods.greedy_subsets_searcher.depthwise_stage_times import (
     StageTimes,
@@ -190,7 +191,7 @@ def _move(
     var moved = List[Float32]()
     for i in range(len(point)):
         moved.append(
-            Float32(Float64(point[i]) + step * Float64(direction[i]))
+            Float32(fma(step, Float64(direction[i]), Float64(point[i])))  # the default build's fused op (lane/pinned-mul-contract-free)
         )
     return moved^
 

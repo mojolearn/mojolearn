@@ -27,7 +27,7 @@ from std.math import floor
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from checks.numerics import ftz
+from checks.numerics import ftz, identical_mul
 
 
 @always_inline
@@ -43,7 +43,9 @@ def hist2_dither(pos: Int) -> Float32:
     h ^= h >> 16
     h = h * UInt32(2246822519)
     h ^= h >> 13
-    return Float32(Int(h >> 8)) * Float32(5.9604645e-08)  # / 2^24
+    # / 2^24, pinned: callers add it (`frac + u`) and the PTX left a plain
+    # mul.f32 feeding that add.f32, which ptxas may fuse (lane/pinned-mul-contract-free)
+    return identical_mul(Float32(Int(h >> 8)), Float32(5.9604645e-08))
 
 
 @always_inline

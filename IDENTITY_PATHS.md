@@ -500,6 +500,48 @@ consumer -- the mamba lane is the first, and no kernel in the tree calls
 these yet.
 
 
+## Contraction independence (row 9), 2026-09-26
+
+**THE RULE.** IDENTICAL arithmetic must give the same bits whether the
+compiler contracts (`mojo build`'s default `--fp-mode contract=fast`) or not
+(`contract=off`). A multiply whose result an add or subtract consumes is
+written in one of exactly two ways:
+
+- `identical_mul_add(a, b, c)` / explicit `fma(a, b, c)`: ONE rounding, the
+  spelling for a pair the reference (or the default build) fuses;
+- `identical_mul(a, b)` / `identical_mul64(a, b)` (`pinned_mul_f32` /
+  `pinned_mul_f64` under IDENTICAL): the correctly rounded product, which no
+  code generator can fuse into the add that follows.
+
+A bare `a * b + c` on an IDENTICAL path is a defect even when every backend
+fuses it today: `ftz(...)` does not stop LLVM (it sees through the select),
+nor does a function boundary once inlined, nor a `* 0.5` spelled `/ 2.0`.
+`fma(a, b, -0.0)` is NOT a pinned product: LLVM folds it to a contractable
+multiply (arm64 `fmadd`; on an M4 65506 of 65536 separating triples came
+back fused). The pinned product is per target (`checks/numerics.mojo`):
+`llvm.arithmetic.fence(a*b)` on CPUs, `v_mul_f32` / `v_mul_f64` as inline
+asm on AMD GPUs (gfx942 refused the fence on a uniform value, "illegal VGPR
+to SGPR copy"), PTX `mul.rn` on NVIDIA
+(a fenced multiply reaches PTX as a plain `mul.f32` that ptxas may fuse),
+and `llvm.fma(a, b, -0.0)` without fast-math flags on Apple GPUs (the Metal
+compiler honours the missing `contract` flag and crashes on the fence).
+Per-backend proof: `~/mojolearn-evidence/pinned-mul-contract-free/probes/`.
+
+**THE CHECKS.** `tools/contraction_census.py` builds every binding's
+assembly twice (default, `contract=off`) for the host (arm64), NVIDIA
+(sm_90a PTX) and AMD (gfx942), cross-compiled on the Mac without a GPU, and
+names each source line whose fused multiply-adds differ; kernels compiled
+into an IDENTICAL binding but reachable only under FAST are listed in its
+`FAST_ONLY` table with their gate. Metal compiles in the driver, so its half
+of the claim is the column comparison: every binding built with
+`MOJOLEARN_MOJO_BUILD_FLAGS="--fp-mode contract=off"` and the release lane
+set compared with `identity_break --diff` against the release columns, 0
+moved. The census is an OPT-IN release rehearsal step
+(`python3 tools/release_rehearsal.py --with contraction-census`, host
+families, about an hour); the full comparison is run by hand before a
+release that touches IDENTICAL arithmetic.
+
+
 ## Row-number registry, assigned 2026-09-01
 
 **The ledger above ends at row 63, and four lanes had independently proposed

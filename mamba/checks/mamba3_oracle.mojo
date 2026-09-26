@@ -146,7 +146,12 @@ def pinned_mul(a: Float32, b: Float32) -> Float32:
     """DEVIATION 720's construction, the sibling oracles' copy: a MULTIPLY
     no codegen may contract into a neighboring add, spelled
     `identical_mul_add(a, b, -0.0)`."""
-    return identical_mul_add(a, b, Float32(-0.0))
+    # `identical_mul` is the pinned product (`pinned_mul_f32` under IDENTICAL);
+    # `fma(a, b, -0.0)` was not: LLVM folds it into a contractable product
+    # (lane/pinned-mul-contract-free, 2026-09-26).
+    from checks.numerics import identical_mul
+
+    return identical_mul(a, b)
 
 
 def m3_neg_inf() -> Float32:
@@ -163,8 +168,11 @@ def m3_mod_2pi(x: Float32) -> Float32:
     (the pinned_mul rule)."""
     from std.math import floor
 
+    # ONE rounding, as every 0.8.19 build computed it: the old pin,
+    # `fma(a, b, -0.0)`, folded to a contractable product that fused
+    # into this subtract. Spelled out now that pinned_mul truly pins (lane/pinned-mul-contract-free).
     return ftz(
-        x - pinned_mul(M3_TWO_PI, floor(identical_div(x, M3_TWO_PI)))
+        identical_mul_add(-M3_TWO_PI, floor(identical_div(x, M3_TWO_PI)), x)
     )
 
 

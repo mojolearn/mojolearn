@@ -69,7 +69,8 @@ struct NumericMode(Copyable, Movable):
 
 from std.memory import bitcast
 from std.sys import llvm_intrinsic
-from std.sys.info import is_amd_gpu
+from std.sys._assembly import inlined_assembly
+from std.sys.info import is_amd_gpu, is_apple_gpu, is_nvidia_gpu
 
 
 def ftz(x: Float32) -> Float32:
@@ -114,8 +115,81 @@ def _fma_f32(a: Float32, b: Float32, c: Float32) -> Float32:
 
 
 def identical_mul(a: Float32, b: Float32) -> Float32:
-    """DEVIATION 826 (2026-08-24): the OTHER half of row 9's contraction pin, and it belongs beside `identical_mul_add` rather than in three other directories."""
-    return identical_mul_add(a, b, Float32(-0.0))
+    """DEVIATION 826 (2026-08-24): the OTHER half of row 9's contraction pin, and it belongs beside `identical_mul_add` rather than in three other directories.
+
+    Under IDENTICAL it is `pinned_mul_f32`. It used to be `fma(a, b, -0.0)`,
+    which LLVM folds into a plain contractable product that a following add
+    then fused with (lane/pinned-mul-contract-free, 2026-09-26)."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        return pinned_mul_f32(a, b)
+    return a * b
+
+
+def identical_mul64(a: Float64, b: Float64) -> Float64:
+    """`identical_mul`'s float64 twin: `pinned_mul_f64` under IDENTICAL, `a * b` otherwise."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        return pinned_mul_f64(a, b)
+    return a * b
+
+
+# THE PINNED PRODUCT (IDENTITY_PATHS row 9, lane/pinned-mul-contract-free,
+# 2026-09-26). `pinned_mul_f32(a, b)` / `pinned_mul_f64(a, b)` are the
+# correctly rounded product `a*b`, bit for bit, as a value no code generator
+# can fuse into a neighboring add or subtract, whatever contraction mode the
+# build uses. `fma(a, b, -0.0)` is NOT that: LLVM folds it to `fmul contract`
+# and the backend then fuses that fmul with the add it feeds. The spelling is
+# per target, each one checked in that target's own output (the probes:
+# ~/mojolearn-evidence/pinned-mul-contract-free/probes/):
+#   host CPU (arm64, x86-64): `llvm.arithmetic.fence(a * b)`; the fence is a
+#     no-op in the machine code and a wall to contraction (arm64 `fmul`+`fadd`,
+#     x86-64-v3 `vmulss`+`vaddss`). It also stops the vectorizer where a pinned
+#     product sits in a loop: a host speed cost, never a bit.
+#   AMD GPU: the instruction itself, `v_mul_f32` / `v_mul_f64` as inline asm
+#     on VGPRs. The fence was the first spelling and gfx942 codegen refused it
+#     on a uniform value ("illegal VGPR to SGPR copy", a row-norm kernel).
+#   NVIDIA: `llvm.nvvm.mul.rn.{f,d}`, i.e. PTX `mul.rn`. A fenced `fmul`
+#     reaches PTX as a plain `mul.f32`, which ptxas may still fuse with an
+#     `add.f32`; the `.rn` modifier forbids that (PTX ISA, `mul`).
+#   Apple GPU: `llvm.fma(a, b, -0.0)` called WITHOUT fast-math flags; LLVM
+#     folds it to an fmul without `contract`, which the Metal compiler does
+#     not fuse (measured on an M4: 0 of 65536 fused, `a*b + c` 65506). The
+#     Metal compiler service crashes on `llvm.arithmetic.fence`.
+@always_inline
+def pinned_mul_f32(a: Float32, b: Float32) -> Float32:
+    """`a*b`, correctly rounded, never fused into a neighbor. See above."""
+    comptime if is_nvidia_gpu():
+        return llvm_intrinsic["llvm.nvvm.mul.rn.f", Float32, has_side_effect=False](a, b)
+    elif is_amd_gpu():
+        return inlined_assembly[
+            "v_mul_f32 $0, $1, $2", Float32, constraints="=v,v,v", has_side_effect=False
+        ](a, b)
+    elif is_apple_gpu():
+        return llvm_intrinsic["llvm.fma.f32", Float32, has_side_effect=False](
+            a, b, Float32(-0.0)
+        )
+    else:
+        return llvm_intrinsic[
+            "llvm.arithmetic.fence.f32", Float32, has_side_effect=False
+        ](a * b)
+
+
+@always_inline
+def pinned_mul_f64(a: Float64, b: Float64) -> Float64:
+    """`pinned_mul_f32`'s float64 twin (no Apple GPU arm: Metal has no float64)."""
+    comptime if is_nvidia_gpu():
+        return llvm_intrinsic["llvm.nvvm.mul.rn.d", Float64, has_side_effect=False](a, b)
+    elif is_amd_gpu():
+        return inlined_assembly[
+            "v_mul_f64 $0, $1, $2", Float64, constraints="=v,v,v", has_side_effect=False
+        ](a, b)
+    elif is_apple_gpu():
+        return llvm_intrinsic["llvm.fma.f64", Float64, has_side_effect=False](
+            a, b, Float64(-0.0)
+        )
+    else:
+        return llvm_intrinsic[
+            "llvm.arithmetic.fence.f64", Float64, has_side_effect=False
+        ](a * b)
 
 
 
@@ -155,7 +229,10 @@ def portable_expf(x: Float32) -> Float32:
     var k1 = k >> 1
     var k2 = k - k1
     y = y * bitcast[DType.float32](UInt32((k1 + 127) << 23))
-    y = y * bitcast[DType.float32](UInt32((k2 + 127) << 23))
+    # Pinned: every `portable_expf(..) + 1` caller (sigmoid, silu, tanh,
+    # softplus) had this exact power-of-two scaling fused into its add by the
+    # default build (lane/pinned-mul-contract-free, 2026-09-26).
+    y = pinned_mul_f32(y, bitcast[DType.float32](UInt32((k2 + 127) << 23)))
     if y < Float32(1.1754943508222875e-38):
         return Float32(0.0)
     return y
@@ -252,9 +329,12 @@ def portable_sqrtf(x_in: Float32) -> Float32:
         scaled_down = True
     var bits = rebind[UInt32](x.to_bits())
     var y = bitcast[DType.float32]((bits >> 1) + UInt32(0x1FBD1DF5))
-    y = Float32(0.5) * (y + x / y)
-    y = Float32(0.5) * (y + x / y)
-    y = Float32(0.5) * (y + x / y)
+    # Pinned halvings: the default build fused each `0.5 * s` into the next
+    # step's `y + x / y` (exact in this range, so the same bits, but a
+    # contraction choice all the same; lane/pinned-mul-contract-free).
+    y = pinned_mul_f32(Float32(0.5), y + x / y)
+    y = pinned_mul_f32(Float32(0.5), y + x / y)
+    y = pinned_mul_f32(Float32(0.5), y + x / y)
     var yb = rebind[UInt32](y.to_bits())
     var best = y
     var r_best = abs(_fma_f32(-y, y, x))
@@ -976,7 +1056,11 @@ def portable_erff(x_in: Float32) -> Float32:
     p = _fma_f32(p, z, Float32(1.128358514861418e-1))
     p = _fma_f32(p, z, Float32(-3.761262582423300e-1))
     p = _fma_f32(p, z, Float32(1.128379165726710))
-    return x * p
+    # Pinned: a caller's `1 + erf` (the exact gelu) sits across this branch's
+    # join from the product; no build fuses it today (the PTX of every gelu
+    # kernel keeps `mul.f32` then `add.f32`), and the pin keeps it that way
+    # for ptxas and for any future inlining (lane/pinned-mul-contract-free).
+    return pinned_mul_f32(x, p)
 
 
 def portable_gelu_erf(x_in: Float32) -> Float32:

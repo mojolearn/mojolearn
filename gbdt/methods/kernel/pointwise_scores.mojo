@@ -243,6 +243,7 @@ is not expressible; the loop is written out as a Mojo `comptime for` over
 16 iterations, which is the same unroll and the same order.
 """
 
+from std.math import fma
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -254,6 +255,7 @@ from std.math import copysign
 # the stdlib under FAST and the portable pair under IDENTICAL
 from checks.numerics import (
     identical_log,
+    identical_mul,
     identical_mul_add,
     identical_pow,
     identical_sqrt,
@@ -382,9 +384,10 @@ struct ScoreCalcer[score_function: Int](Copyable, ImplicitlyCopyable, Movable):
             #             ? (-sum * sum) * (1 + 2 * log(weight + 1.0)) / weight
             #             : 0);
             if weight > Float32(1e-20):
+                # `1 + 2*log(w + 1)` is the fma the default build fused (lane/pinned-mul-contract-free)
                 self.score += (
                     (-sum * sum)
-                    * (Float32(1.0) + Float32(2.0) * identical_log(weight + Float32(1.0)))
+                    * fma(Float32(2.0), identical_log(weight + Float32(1.0)), Float32(1.0))
                 ) / weight
 
         comptime if (
@@ -409,12 +412,14 @@ struct ScoreCalcer[score_function: Int](Copyable, ImplicitlyCopyable, Movable):
             else:
                 # `weight` cannot be 0 on this arm: `leafScore != 0` implies
                 # the `weight > 1e-20f` branch above was taken.
-                self.score += (
+                # pinned: LLVM leaves this product unfused (a plain PTX mul.f32
+                # feeding the add.f32, which ptxas may fuse) (lane/pinned-mul-contract-free)
+                self.score += identical_mul(
                     copysign(
                         identical_pow(abs(leaf_score) / weight, self.meta_exponent),
                         leaf_score,
-                    )
-                    * weight
+                    ),
+                    weight,
                 )
 
         comptime if Self.score_function == SCORE_FUNCTION_LOO_L2:
@@ -445,17 +450,18 @@ struct ScoreCalcer[score_function: Int](Copyable, ImplicitlyCopyable, Movable):
             # Copied; a guard would be a fork.
             var adjust_s = Float32(0.0)
             if weight > Float32(2.0):
+                # `w*w - 3*w` and the score accumulation are the fmas the
+                # default build fused (lane/pinned-mul-contract-free)
                 adjust_s = (
                     weight
                     * (weight - Float32(2.0))
                     / (
-                        weight * weight
-                        - Float32(3.0) * weight
+                        fma(weight, weight, Float32(-3.0) * weight)
                         + Float32(1.0)
                     )
                 )
             if weight > Float32(0.0):
-                self.score += adjust_s * ((-sum * sum) / weight)
+                self.score = fma(adjust_s, (-sum * sum) / weight, self.score)
 
         comptime if (
             Self.score_function == SCORE_FUNCTION_COSINE
@@ -760,10 +766,9 @@ def find_optimal_split_solar_kernel[
                     mu_l = sum_estimate_left / (
                         weight_estimate_left + Float32(1e-15)
                     )
-                left_score += (
-                    Float32(-2.0) * mu_l * sum_test_left
-                    + weight_test_left * mu_l * mu_l
-                )
+                left_score += fma(
+                    weight_test_left * mu_l, mu_l, Float32(-2.0) * mu_l * sum_test_left
+                )  # the default build's fused op (lane/pinned-mul-contract-free)
                 left_total_weight += weight_test_left
 
                 var mu_r = Float32(0.0)
@@ -772,30 +777,33 @@ def find_optimal_split_solar_kernel[
                         weight_estimate_right + Float32(1e-15)
                     )
                 right_total_weight += weight_test_right
-                right_score += (
-                    Float32(-2.0) * mu_r * sum_test_right
-                    + weight_test_right * mu_r * mu_r
-                )
+                right_score += fma(
+                    weight_test_right * mu_r, mu_r, Float32(-2.0) * mu_r * sum_test_right
+                )  # the default build's fused op (lane/pinned-mul-contract-free)
 
                 fold += 2
 
             if left_total_weight > Float32(2.0):
-                score += left_score * (
-                    Float32(1.0)
-                    + Float32(2.0) * identical_log(left_total_weight + Float32(1.0))
-                )
+                score = fma(
+                    left_score,
+                    fma(Float32(2.0), identical_log(left_total_weight + Float32(1.0)), Float32(1.0)),
+                    score,
+                )  # the default build's fused op (lane/pinned-mul-contract-free)
             if right_total_weight > Float32(2.0):
-                score += right_score * (
-                    Float32(1.0)
-                    + Float32(2.0) * identical_log(right_total_weight + Float32(1.0))
-                )
+                score = fma(
+                    right_score,
+                    fma(Float32(2.0), identical_log(right_total_weight + Float32(1.0)), Float32(1.0)),
+                    score,
+                )  # the default build's fused op (lane/pinned-mul-contract-free)
 
         # `:117-120`
         var feature_id = Int(bf.unsafe_load(3 * b))
-        score *= ldg(cat_features_weights.unsafe_offset(feature_id))
-        var gain = (score - score_before_split) * ldg(
+        # `score * cat_w - before` in ONE rounding, as the default build fused it (lane/pinned-mul-contract-free)
+        var cat_w = ldg(cat_features_weights.unsafe_offset(feature_id))
+        var gain = fma(score, cat_w, -score_before_split) * ldg(
             bin_features_weights.unsafe_offset(feature_id)
         )
+        score *= cat_w
 
         if gain < best_gain:
             best_score = score
@@ -937,8 +945,10 @@ def find_optimal_split_single_fold_kernel[
         var score = calcer.get_score()
 
         var feature_id = Int(bf.unsafe_load(3 * b))
-        score *= ldg(cat_features_weights.unsafe_offset(feature_id))
-        var gain = score - score_before_split
+        # `score * cat_w - before` in ONE rounding, as the default build fused it (lane/pinned-mul-contract-free)
+        var cat_w = ldg(cat_features_weights.unsafe_offset(feature_id))
+        var gain = fma(score, cat_w, -score_before_split)
+        score *= cat_w
         gain *= ldg(bin_features_weights.unsafe_offset(feature_id))
 
         if gain < best_gain:

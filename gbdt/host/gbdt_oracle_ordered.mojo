@@ -83,7 +83,7 @@ tools/identity_break.py on the gbdt-ordered-rmse lane is the measurement.
 from std.math import ceil, isfinite, log2
 
 from checks.fixed_point import choose_scale
-from checks.numerics import ftz, identical_mul, identical_mul_add, identical_mul_add_simd, identical_sqrt
+from checks.numerics import ftz, identical_mul, identical_mul64, identical_mul_add, identical_mul_add_simd, identical_sqrt
 from gbdt.data.quantization import NAN_TREATMENT_AS_IS
 from gbdt.gpu_data.compressed_index_builder import build_layout
 from gbdt.gpu_data.feature_blocks import blocks_for
@@ -1155,8 +1155,9 @@ def _ordered_estimate_and_apply(
     # `_ordered_apply_kernel` over every apply position
     for i in range(apply_size):
         var leaf = bins[permutation[i]]
-        var scaled = identical_mul(leaves[leaf], rate)
-        cursor[i] = identical_mul_add(scaled, Float32(1), cursor[i])
+        # ONE fma, as 0.8.19 computed it (the old pin fused `leaf * rate`
+        # into this add); dynamic_boosting.mojo's kernel says why (lane/pinned-mul-contract-free)
+        cursor[i] = identical_mul_add(leaves[leaf], rate, cursor[i])
     return leaves^
 
 
@@ -1562,8 +1563,9 @@ def _ordered_task_host(
     )
     for i in range(apply_size):
         var leaf = bins[permutation[i]]
-        var scaled = identical_mul(leaves[leaf], rate)
-        cursor[i] = identical_mul_add(scaled, Float32(1), cursor[i])
+        # ONE fma, as 0.8.19 computed it (the old pin fused `leaf * rate`
+        # into this add); dynamic_boosting.mojo's kernel says why (lane/pinned-mul-contract-free)
+        cursor[i] = identical_mul_add(leaves[leaf], rate, cursor[i])
     return leaves^
 
 
@@ -1771,8 +1773,9 @@ def gbdt_ordered_host_fit(
                         var q = ftz(sg[i] / w)
                         terms[i] = ftz(ftz(q * q) * w)
             var s2 = _deterministic_sum_lanes(terms, 1, total)[0]
+            # the product pinned, as the device binding spells it (lane/pinned-mul-contract-free)
             var mult = ordered_model_length_mult(
-                n, Float64(iteration) * Float64(lr)
+                n, identical_mul64(Float64(iteration), Float64(lr))
             )
             score_std = Float32(
                 mult * sqrt(Float64(s2) / (Float64(quality_count) + 1e-100))

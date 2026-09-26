@@ -37,6 +37,7 @@ from the read-back matrix (DEVIATION 650's split) in Int64, which holds
 `nC2` of any count below 2^32.
 """
 
+from std.math import fma
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
@@ -137,10 +138,12 @@ def adjusted_rand_index_from_contingency_traced(
     var expected_index = (
         Float64(a_c_two_sum) * Float64(b_c_two_sum) / n_choose_two
     )
-    var max_index = (Float64(b_c_two_sum) + Float64(a_c_two_sum)) / 2.0
+    # `max_index - expected_index` in ONE rounding: `/ 2.0` is the exact
+    # `* 0.5`, which the default build fused into the subtract (lane/pinned-mul-contract-free)
+    var span = fma(Float64(b_c_two_sum) + Float64(a_c_two_sum), 0.5, -expected_index)
     var index = Float64(n_choose_two_sum)
-    if max_index - expected_index != 0.0:
-        return (index - expected_index) / (max_index - expected_index)
+    if span != 0.0:
+        return (index - expected_index) / span
     return 0.0
 
 

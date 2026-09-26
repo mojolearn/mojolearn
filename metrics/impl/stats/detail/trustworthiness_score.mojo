@@ -64,6 +64,7 @@ holds the k+1 neighbor distances).
 
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
 from bindings.hostptr import copy_f32
+from std.math import fma
 from std.atomic import Atomic
 from std.gpu import thread_idx
 from std.math import ceildiv
@@ -305,4 +306,6 @@ def trustworthiness_score_traced(
     # (:204), in double
     var nn = Float64(n)
     var kk = Float64(n_neighbors)
-    return 1.0 - ((2.0 / ((nn * kk) * ((2.0 * nn) - (3.0 * kk) - 1.0))) * t)
+    # `1 - q*t` in ONE rounding, as the default build fused it (lane/pinned-mul-contract-free)
+    # and `2n - 3k` is the fma the default build fused (exact for these integers)
+    return fma(-(2.0 / ((nn * kk) * (fma(-3.0, kk, 2.0 * nn) - 1.0))), t, 1.0)

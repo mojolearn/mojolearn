@@ -110,6 +110,7 @@ WHAT IS NOT HERE YET, NAMED SO IT IS NOT MISTAKEN FOR DONE
   `python/mojolearn/cluster.py`); this sentence used to say it did not.
 """
 
+from std.math import fma
 from max.algorithm import sync_parallelize
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_dim, block_idx, thread_idx
@@ -340,9 +341,13 @@ def plan_sum_scale_certified(
     """
     var n_chunks = (n_samples + DEVICE_SCALE_CHUNK - 1) // DEVICE_SCALE_CHUNK
     var height = DEVICE_SCALE_CHUNK + n_chunks
+    # the second product fused into the first sum, as the default build did (lane/pinned-mul-contract-free)
     var delta = (
-        2.0 * (2.0 * Float64(height) * 5.9604644775390625e-08)
-        + 2.0 * Float64(n_samples) * 2.220446049250313e-16
+        fma(
+            2.0 * Float64(n_samples),
+            2.220446049250313e-16,
+            2.0 * (2.0 * Float64(height) * 5.9604644775390625e-08),
+        )
         + 9.5367431640625e-07
     )
     if delta >= 0.0625:

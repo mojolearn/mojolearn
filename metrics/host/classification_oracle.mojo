@@ -83,6 +83,7 @@ The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the metrics-classification lane is the
 measurement.
 """
+from std.math import fma
 from std.memory import bitcast
 from max.algorithm import sync_parallelize
 
@@ -663,4 +664,6 @@ def host_trustworthiness(
     var t = Float64(total)
     var nn = Float64(n)
     var kk = Float64(n_neighbors)
-    return 1.0 - ((2.0 / ((nn * kk) * ((2.0 * nn) - (3.0 * kk) - 1.0))) * t)
+    # `1 - q*t` in ONE rounding, as the default build fused it (lane/pinned-mul-contract-free)
+    # and `2n - 3k` is the fma the default build fused (exact for these integers)
+    return fma(-(2.0 / ((nn * kk) * (fma(-3.0, kk, 2.0 * nn) - 1.0))), t, 1.0)
