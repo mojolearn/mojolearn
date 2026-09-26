@@ -54,7 +54,7 @@ and the pairwise oracle is not implemented. It is in `gbdt/NOT_IMPLEMENTED.tsv`.
 # =========================================================================
 """
 
-from std.math import sqrt
+from std.math import fma, sqrt
 
 
 def solve_linear_system_cholesky(
@@ -88,6 +88,9 @@ def solve_linear_system_cholesky(
         target[0] = target[0] / matrix[0]
         return 0
 
+    # Every `x -= a * b` below is written as ONE fma, the fusion the default
+    # (contract=fast) build formed on every backend, so the bits do not
+    # depend on the contraction mode (lane/explicit-fma-contract-proof).
     # ---- dpotrf: the Cholesky factorization, lower triangle -------------
     # `A = L L^T`, computed in place. Theirs asks for 'U' storage on a
     # COLUMN-major array, which for a symmetric matrix is the same
@@ -98,7 +101,7 @@ def solve_linear_system_cholesky(
         var s = matrix[j * n + j]
         for k in range(j):
             var ljk = matrix[j * n + k]
-            s -= ljk * ljk
+            s = fma(-ljk, ljk, s)
         if s <= 0.0:
             # the leading minor of order j+1 is not positive definite:
             # `info = j + 1`, and `target` is left as it was
@@ -108,7 +111,7 @@ def solve_linear_system_cholesky(
         for i in range(j + 1, n):
             var t = matrix[i * n + j]
             for k in range(j):
-                t -= matrix[i * n + k] * matrix[j * n + k]
+                t = fma(-matrix[i * n + k], matrix[j * n + k], t)
             matrix[i * n + j] = t / ljj
 
     # ---- dpotrs: forward substitution, then back substitution -----------
@@ -116,14 +119,14 @@ def solve_linear_system_cholesky(
     for i in range(n):
         var t = target[i]
         for k in range(i):
-            t -= matrix[i * n + k] * target[k]
+            t = fma(-matrix[i * n + k], target[k], t)
         target[i] = t / matrix[i * n + i]
     # solve `L^T x = y`
     for ii in range(n):
         var i = n - 1 - ii
         var t = target[i]
         for k in range(i + 1, n):
-            t -= matrix[k * n + i] * target[k]
+            t = fma(-matrix[k * n + i], target[k], t)
         target[i] = t / matrix[i * n + i]
 
     return 0

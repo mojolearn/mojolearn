@@ -132,8 +132,11 @@ def portable_expf(x: Float32) -> Float32:
     if x < Float32(-87.33655):
         return Float32(0.0)
 
-    var t = x * Float32(1.4426950408889634)
-    t = t + Float32(0.5)
+    # ONE rounding, written out: `x * log2(e) + 0.5` is what every default
+    # (contract=fast) build fused this pair into, so the explicit fma keeps
+    # those bits and makes them independent of the contraction mode
+    # (lane/explicit-fma-contract-proof, 2026-09-26).
+    var t = _fma_f32(x, Float32(1.4426950408889634), Float32(0.5))
     var zf = floor(t)  # exact
     var k = Int(zf)
     var r = _fma_f32(zf, Float32(-0.693359375), x)
@@ -352,7 +355,8 @@ def portable_exp64(x: Float64) -> Float64:
         return bitcast[DType.float64](UInt64(0x7FF0000000000000))  # +inf
     if x < -708.3964185322641:
         return Float64(0.0)
-    var k = floor(x * 1.4426950408889634 + 0.5)
+    # one rounding, as the default contract=fast build fused it (portable_expf's note)
+    var k = floor(fma(x, 1.4426950408889634, 0.5))
     var r = fma(k, -6.93145751953125e-1, x)
     r = fma(k, -1.42860682030941723212e-6, r)
     var xx = r * r

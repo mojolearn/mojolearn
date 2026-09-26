@@ -95,6 +95,7 @@ from checks.numerics import (
     ftz,
     identical_exp,
     identical_log,
+    identical_mul_add,
     identical_pow,
 )
 
@@ -402,8 +403,12 @@ def target_score[objective: Int](
         # `TMAPETarget::Score` (`:147-149`)
         return abs(t - p) / max(Float32(1.0), abs(t))
     elif objective == OBJECTIVE_POISSON:
-        # `TPoissonTarget::Score` (`:164-166`)
-        return routed_exp(p) - t * p
+        # `TPoissonTarget::Score` (`:164-166`), `exp(p) - t * p` in ONE
+        # rounding: every default (contract=fast) build fused the product
+        # into the subtraction, and the host oracle
+        # (`gbdt_oracle_losses._target_score`) spells the same fma. Explicit,
+        # so a contract=off build keeps CPU and GPU agreeing (lane/explicit-fma-contract-proof, 2026-09-26)
+        return identical_mul_add(-t, p, routed_exp(p))
     elif objective == OBJECTIVE_LQ:
         # `TLqTarget::Score` (`:204-207`); their `__powf`
         var abs_loss = abs(t - p)
@@ -432,7 +437,8 @@ def target_score[objective: Int](
         var mismatch = abs(t - p)
         if mismatch < alpha:
             return Float32(0.5) * mismatch * mismatch
-        return alpha * (mismatch - Float32(0.5) * alpha)
+        # `mismatch - 0.5 * alpha` in ONE rounding, the default build's fusion
+        return alpha * identical_mul_add(Float32(-0.5), alpha, mismatch)
     else:
         return Float32(0.0)
 
@@ -485,10 +491,11 @@ def target_der[objective: Int](
         )
         return Float32(2.0) * multiplier * val
     elif objective == OBJECTIVE_TWEEDIE:
-        # `:46-50`
-        var der = t * routed_exp((Float32(1.0) - alpha) * p)
+        # `:46-50`, `t * e1 - e2` in ONE rounding (the default build's
+        # fusion, written out; the host oracle spells the same fma)
+        var e1 = routed_exp((Float32(1.0) - alpha) * p)
         var delta = routed_exp((Float32(2.0) - alpha) * p)
-        return der - delta
+        return identical_mul_add(t, e1, -delta)
     elif objective == OBJECTIVE_HUBER:
         # `:77-84`
         var diff = t - p
@@ -553,11 +560,10 @@ def target_der2[objective: Int](
             * routed_exp((Float32(1.0) - alpha) * p)
             * (Float32(1.0) - alpha)
         )
-        var delta = (
-            routed_exp((Float32(2.0) - alpha) * p)
-            * (Float32(2.0) - alpha)
-        )
-        return -der2 + delta
+        # `-der2 + e2 * (2 - alpha)` in ONE rounding on the SECOND product,
+        # the one the default build fused (the host oracle spells the same)
+        var e2 = routed_exp((Float32(2.0) - alpha) * p)
+        return identical_mul_add(e2, Float32(2.0) - alpha, -der2)
     elif objective == OBJECTIVE_HUBER:
         # `:86-93`. Theirs writes `-HUBER_DER2` where
         # `HUBER_DER2 = -1.0` (`:62`), i.e. 1.0; the double negation is
@@ -1064,7 +1070,9 @@ def cross_entropy_kernel[
                 log_exp_val_plus_one = routed_log(
                     Float32(1.0) + exp_val
                 )
-            score = weight * (c * val - log_exp_val_plus_one)
+            # `c * val - log(1 + e)` in ONE rounding, the default build's
+            # fusion written out (the host oracle spells the same)
+            score = weight * identical_mul_add(c, val, -log_exp_val_plus_one)
         var total = pinned_block_sum[block_size=MSE_BLOCK_SIZE](score)
         if thread_idx.x == 0:
             function_value.unsafe_store(Int(block_idx.x), total)

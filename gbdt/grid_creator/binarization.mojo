@@ -45,7 +45,7 @@ The border between two bins is the MIDPOINT of the values either side
 
 from std.sys.compile import is_defined
 
-from checks.numerics import ftz, portable_log64
+from checks.numerics import ftz, identical_mul_add, portable_log64
 
 comptime LINEAR_BOUNDS_2635 = is_defined["MOJOLEARN_2635_LINEAR_BOUNDS"]()
 """DEVIATION 2635: `-D MOJOLEARN_2635_LINEAR_BOUNDS=1` restores the linear
@@ -287,8 +287,12 @@ def best_split(
         if bins[i].is_first():
             continue
         var s = bins[i].bin_start
+        # ONE rounding on the first product: the default (contract=fast)
+        # build fused `0.5 * below` into the add, which moves a border only
+        # where a half is inexact (subnormal columns); explicit so the
+        # border's bits do not depend on the contraction mode (lane/explicit-fma-contract-proof)
         borders.append(
-            Float32(0.5) * clean[s - 1] + Float32(0.5) * clean[s]
+            identical_mul_add(Float32(0.5), clean[s - 1], Float32(0.5) * clean[s])
         )
     _sort_ascending(borders)
 

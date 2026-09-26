@@ -81,7 +81,7 @@ predictions move. The symmetric arm's walker sabotage never runs here.
 The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the gbdt-rmse lane is the measurement.
 """
-from std.math import exp, log
+from std.math import exp, fma, log
 from std.memory import bitcast
 from checks.numerics import ftz, identical_mul_add
 from gbdt.data.permutation import TRandom
@@ -341,9 +341,10 @@ def gbdt_rmse_host_fit(
         # tree whether or not the noise is on
         var noise_mult = Float64(0.0)
         if random_strength != Float32(0.0):
+            # `log(n) - iteration * lr` in ONE rounding, as the default
+            # (contract=fast) build fused it (lane/explicit-fma-contract-proof)
             var model_left = exp(
-                log(Float64(n_rows))
-                - Float64(iteration) * Float64(params.learning_rate)
+                fma(-Float64(iteration), Float64(params.learning_rate), log(Float64(n_rows)))
             )
             noise_mult = model_left / (1.0 + model_left)
         var tree_seed = noise_rand.next_uniform_l()

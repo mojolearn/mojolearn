@@ -22,6 +22,7 @@ non-integer weights of very different magnitudes; the unweighted fit sums
 integers and is exact either way.
 """
 
+from std.math import fma
 from std.sys.compile import is_defined
 
 comptime SAMPLE_QUANTILE_SABOTAGE = is_defined[
@@ -153,7 +154,9 @@ def calc_sample_quantile(
         total = Float64(0.0)
         for i in range(n):
             total += Float64(weights[i])
-    var need = total * alpha
+    # `total * alpha - eps` in ONE rounding: the default (contract=fast)
+    # build fused the product into the subtraction (lane/explicit-fma-contract-proof)
+    var need_floor = fma(total, alpha, -SQ_DBL_EPSILON)
     if n < 100:
         # `CalcSampleQuantileLinearSearch` (`:79-100`)
         var v = sample.copy()
@@ -166,7 +169,7 @@ def calc_sample_quantile(
         var acc = Float64(0.0)
         for i in range(n):
             acc += Float64(w[i]) if has_weights else 1.0
-            if acc >= need - SQ_DBL_EPSILON:
+            if acc >= need_floor:
                 return Float64(v[i])
         return Float64(v[n - 1])
     # `CalcSampleQuantileBinarySearch` (`:18-77`)
@@ -214,7 +217,7 @@ def calc_sample_quantile(
             left_weight = Float64(0.0)
             for i in range(l, point):
                 left_weight += Float64(ew[i])
-        if collected + left_weight < need - SQ_DBL_EPSILON:
+        if collected + left_weight < need_floor:
             l = point
             l_q = q
             collected += left_weight
@@ -247,7 +250,6 @@ def calculate_weighted_target_quantile(
             total = Float64(0.0)
             for i in range(n):
                 total += Float64(weights[i])
-        var need = total * alpha
         var less = Float64(0.0)
         var equal = Float64(0.0)
         for i in range(n):
@@ -256,7 +258,8 @@ def calculate_weighted_target_quantile(
                 less += wi
             elif Float64(target[i]) == q:
                 equal += wi
-        if less + equal * alpha >= need - SQ_DBL_EPSILON:
+        # both sides in ONE rounding, as the default build fused them (lane/explicit-fma-contract-proof)
+        if fma(equal, alpha, less) >= fma(total, alpha, -SQ_DBL_EPSILON):
             q -= delta
         else:
             q += delta

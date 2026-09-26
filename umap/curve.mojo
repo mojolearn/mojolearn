@@ -4,7 +4,7 @@
 
 from checks.numerics import identical_exp64, identical_log64, identical_pow64
 
-from std.math import isfinite
+from std.math import fma, isfinite
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 
@@ -29,10 +29,10 @@ def _loss(a: Float64, b: Float64, min_dist: Float64, spread: Float64) -> Float64
     while i < 300:
         var x = spread * Float64(3.0) * Float64(i) / Float64(299.0)
         var p = Float64(0.0) if i == 0 else identical_pow64(x, Float64(2.0) * b)
-        var residual = Float64(1.0) / (Float64(1.0) + a * p) - (
+        var residual = Float64(1.0) / fma(a, p, Float64(1.0)) - (
             _target(x, min_dist, spread)
         )
-        loss += residual * residual
+        loss = fma(residual, residual, loss)
         i += 1
     return loss
 
@@ -70,26 +70,29 @@ def fit_umap_curve(
         while i < 300:
             var x = spread * Float64(3.0) * Float64(i) / Float64(299.0)
             var p = identical_pow64(x, Float64(2.0) * b)
-            var denominator = Float64(1.0) + a * p
+            # Every `x + a * b` of this fit is ONE fma, the fusion the default
+            # (contract=fast) build formed, so a and b do not depend on the
+            # contraction mode (lane/explicit-fma-contract-proof, 2026-09-26).
+            var denominator = fma(a, p, Float64(1.0))
             var fitted = Float64(1.0) / denominator
             var residual = fitted - _target(x, min_dist, spread)
             var ja = -p / (denominator * denominator)
             var jb = -a * p * Float64(2.0) * identical_log64(x) / (
                 denominator * denominator
             )
-            haa += ja * ja
-            hab += ja * jb
-            hbb += jb * jb
-            ga += ja * residual
-            gb += jb * residual
+            haa = fma(ja, ja, haa)
+            hab = fma(ja, jb, hab)
+            hbb = fma(jb, jb, hbb)
+            ga = fma(ja, residual, ga)
+            gb = fma(jb, residual, gb)
             i += 1
         haa += damping
         hbb += damping
-        var determinant = haa * hbb - hab * hab
+        var determinant = fma(haa, hbb, -(hab * hab))
         if not (determinant > Float64(0.0)):
             raise Error("UMAP curve fit normal equations are singular")
-        var da = (-hbb * ga + hab * gb) / determinant
-        var db = (hab * ga - haa * gb) / determinant
+        var da = fma(hab, gb, -(hbb * ga)) / determinant
+        var db = fma(hab, ga, -(haa * gb)) / determinant
         var next_a = a + da
         var next_b = b + db
         var accepted = False

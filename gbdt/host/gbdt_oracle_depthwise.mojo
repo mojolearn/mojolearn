@@ -114,7 +114,7 @@ and therefore every later tree's structure and every prediction move.
 The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the two lanes is the measurement.
 """
-from std.math import exp, log, sqrt
+from std.math import exp, fma, log, sqrt
 from std.memory import bitcast
 
 from checks.fixed_point import choose_scale
@@ -962,7 +962,8 @@ def _sample_tree_folds(
     for f in range(len(folds)):
         if folds[f] > 0:
             eligible.append(f)
-    var count = max(1, Int(Float64(len(eligible)) * fraction + 0.5))
+    # one rounding, as the default (contract=fast) build fused it
+    var count = max(1, Int(fma(Float64(len(eligible)), fraction, 0.5)))
     if count >= len(eligible):
         return folds.copy()
     var result = List[Int](length=len(folds), fill=0)
@@ -1132,8 +1133,9 @@ def gbdt_host_fit_non_symmetric(
         var noise_mult = Float64(0.0)
         if params.random_strength != Float32(0.0):
             var model_exp_length = log(Float64(n_rows))
+            # one rounding, as the default (contract=fast) build fused it
             var model_left = exp(
-                model_exp_length - Float64(iteration) * Float64(base.learning_rate)
+                fma(-Float64(iteration), Float64(base.learning_rate), model_exp_length)
             )
             noise_mult = model_left / (1.0 + model_left)
         var tree_seed = noise_rand.next_uniform_l()

@@ -150,7 +150,7 @@ out="$tmpdir/_mojolearn_resample.so"
 # the import fails with "dynamic module does not define module export
 # function".
 # shellcheck disable=SC2086  # the flag strings are deliberately word-split
-pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib \
+pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} \
     $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE \
     ${MOJOLEARN_BUILD_EXTRA_DEFINES:-} \
     $LINK_FLAGS \

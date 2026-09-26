@@ -83,7 +83,7 @@ tools/identity_break.py on the gbdt-ordered-rmse lane is the measurement.
 from std.math import ceil, isfinite, log2
 
 from checks.fixed_point import choose_scale
-from checks.numerics import ftz, identical_mul, identical_mul_add, identical_sqrt
+from checks.numerics import ftz, identical_mul, identical_mul_add, identical_mul_add_simd, identical_sqrt
 from gbdt.data.quantization import NAN_TREATMENT_AS_IS
 from gbdt.gpu_data.compressed_index_builder import build_layout
 from gbdt.gpu_data.feature_blocks import blocks_for
@@ -965,8 +965,8 @@ def _dynamic_cosine_candidates(
             var vb = 0
             while vb + W <= hist_line:
                 # W candidates per step, lane k is candidate vb + k: the
-                # scalar loop below, lane by lane (the same contraction of
-                # `x += a * b` into one fma, measured on the host compiler)
+                # scalar loop below, lane by lane (each `x += a * b` one fma,
+                # written out rather than left to the compiler's contraction)
                 var lpair = hptr.unsafe_load[width = 2 * W](h_learn + 2 * vb).deinterleave()
                 var tpair = hptr.unsafe_load[width = 2 * W](h_test + 2 * vb).deinterleave()
                 var sc = sptr.unsafe_load[width=W](vb)
@@ -981,11 +981,11 @@ def _dynamic_cosine_candidates(
                 var wtr = max(SIMD[DType.float32, W](ptw) - wtl, zero)
                 var sum_tr = SIMD[DType.float32, W](pts) - stl
                 var mu_l = wel.gt(zero).select(sel / (wel + l2), zero)
-                sc += stl * mu_l
-                dn += wtl * mu_l * mu_l
+                sc = identical_mul_add_simd[W](stl, mu_l, sc)
+                dn = identical_mul_add_simd[W](wtl * mu_l, mu_l, dn)
                 var mu_r = wer.gt(zero).select(ser / (wer + l2), zero)
-                sc += sum_tr * mu_r
-                dn += wtr * mu_r * mu_r
+                sc = identical_mul_add_simd[W](sum_tr, mu_r, sc)
+                dn = identical_mul_add_simd[W](wtr * mu_r, mu_r, dn)
                 sptr.unsafe_store(vb, sc)
                 dptr.unsafe_store(vb, dn)
                 vb += W
@@ -1004,13 +1004,15 @@ def _dynamic_cosine_candidates(
                 var mu_l = Float32(0.0)
                 if wel > Float32(0.0):
                     mu_l = sel / (wel + l2)
-                sc += stl * mu_l
-                dn += wtl * mu_l * mu_l
+                # the four accumulates in ONE rounding each, the fusion the
+                # default (contract=fast) build formed (lane/explicit-fma-contract-proof)
+                sc = identical_mul_add(stl, mu_l, sc)
+                dn = identical_mul_add(wtl * mu_l, mu_l, dn)
                 var mu_r = Float32(0.0)
                 if wer > Float32(0.0):
                     mu_r = ser / (wer + l2)
-                sc += sum_tr * mu_r
-                dn += wtr * mu_r * mu_r
+                sc = identical_mul_add(sum_tr, mu_r, sc)
+                dn = identical_mul_add(wtr * mu_r, mu_r, dn)
                 score[b] = sc
                 denum[b] = dn
             fold += 2
