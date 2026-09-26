@@ -95,7 +95,16 @@ import numpy as np
 # `bench/external/run_gbm_bench.sh` arranges it.
 _HERE = os.path.dirname(os.path.abspath(__file__))
 _ROOT = os.path.abspath(os.path.join(_HERE, "..", ".."))
-for _p in (os.path.join(_ROOT, "tools"), os.path.join(_ROOT, "python")):
+#
+# MOJOLEARN_BENCH_INSTALLED=1 (tools/bench_board.py) keeps `python/` OFF the
+# path, so `import mojolearn` resolves to the INSTALLED wheel. The shipped
+# tree carries `python/mojolearn/` without compiled bindings, so on a box that
+# measures the PyPI wheel the in-repo copy would shadow the wheel and then
+# refuse for a missing .so (or, worse, time a stale local build).
+_PATHS = [os.path.join(_ROOT, "tools")]
+if os.environ.get("MOJOLEARN_BENCH_INSTALLED", "0").strip() in ("", "0"):
+    _PATHS.append(os.path.join(_ROOT, "python"))
+for _p in _PATHS:
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
@@ -302,7 +311,7 @@ def our_et_arm(lane, cfg, data, extra=None):
                     sync=_our_sync, library="mojolearn")
 
 
-def our_iforest_arm(lane, cfg, data):
+def our_iforest_arm(lane, cfg, data, extra=None):
     """`mojolearn.IsolationForest`, the cuML IsolationForest implementation.
 
     WHAT `fit` ACTUALLY DOES HERE, AND IT CHANGES WHAT THIS ROW MEANS
@@ -323,15 +332,21 @@ def our_iforest_arm(lane, cfg, data):
     not exist."""
     import mojolearn
 
+    params = dict(
+        n_estimators=cfg["n_estimators"],
+        max_samples=cfg["max_samples"],
+        max_features=cfg["max_features"],
+        bootstrap=cfg["bootstrap"],
+        contamination="auto",
+        random_state=cfg["seed"],
+    )
+    if extra:
+        # `--ours-ab`: one keyword changed (numeric_mode='fast' is the Apple
+        # board's FAST arm, interleaved beside IDENTICAL).
+        params.update(extra)
+
     def make():
-        return mojolearn.IsolationForest(
-            n_estimators=cfg["n_estimators"],
-            max_samples=cfg["max_samples"],
-            max_features=cfg["max_features"],
-            bootstrap=cfg["bootstrap"],
-            contamination="auto",
-            random_state=cfg["seed"],
-        )
+        return mojolearn.IsolationForest(**params)
 
     def fit(model, d):
         return model.fit(d._ours_X)
@@ -439,8 +454,8 @@ def build_ours(lane, cfg, data, name="ours", extra=None):
     (the `--ours-ab` arm) changes one GBDT estimator keyword."""
     try:
         if extra:
-            if lane not in ("rf", "et") and not lane.startswith("gbdt-"):
-                raise RuntimeError("--ours-ab reaches the gbdt, rf and et lanes only")
+            if lane not in ("rf", "et", "iforest") and not lane.startswith("gbdt-"):
+                raise RuntimeError("--ours-ab reaches the gbdt, rf, et and iforest lanes only")
             arm = OUR_BUILDERS[lane](lane, cfg, data, extra=extra)
             arm.name = name
         else:
@@ -493,7 +508,7 @@ def build_parser():
                         "except one estimator keyword (a Python literal, "
                         "e.g. use_pointwise_searcher=True or "
                         "numeric_mode='fast'), timed round by round beside "
-                        "`ours` in this process; gbdt, rf and et lanes, and "
+                        "`ours` in this process; gbdt, rf, et and iforest lanes, and "
                         "it runs under --ours-only too")
     p.add_argument("--opponents-first", action="store_true",
                    help="import and construct the opponents BEFORE our "

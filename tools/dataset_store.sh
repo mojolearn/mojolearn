@@ -448,14 +448,21 @@ cmd_box_cmd() {
     # pile_github to the same file, read enwik8's 100,000,000 bytes against
     # pile_github's 97,124,565 pin and FAILED the whole staging. The fallback
     # is keyed on the R2 key itself, which is unique by construction.
-    case "$_lp" in "$HOME"/*) _rp="/root/${_lp#"$HOME"/}" ;; *) _rp="/root/r2-stage/$key" ;; esac
+    #
+    # MOJOLEARN_STAGE_BOX_HOME replaces /root as the box's home (default
+    # /root, unchanged for every Linux leg). A remote Mac benchmark box has no
+    # writable /root, so tools/bench_board.py's Apple leg stages with its
+    # absolute home, e.g. MOJOLEARN_STAGE_BOX_HOME=/Users/bench.
+    _bh="${MOJOLEARN_STAGE_BOX_HOME:-/root}"
+    case "$_lp" in "$HOME"/*) _rp="$_bh/${_lp#"$HOME"/}" ;; *) _rp="$_bh/r2-stage/$key" ;; esac
     cat <<EOF
 # run ON THE BOX; \$URL is a presigned URL minted on the Mac (no credentials here)
 mkdir -p "\$(dirname $_rp)"
 curl -sS -C - --retry 8 --retry-delay 5 --retry-all-errors -o "$_rp" "\$URL"
 sz=\$(wc -c < "$_rp" | tr -d ' ')
 [ "\$sz" = "$_wsz" ] || { echo "size \$sz, pinned $_wsz" >&2; exit 1; }
-sh=\$(sha256sum "$_rp" | cut -d' ' -f1)
+# macOS ships shasum, not sha256sum (a remote Mac is a box too)
+if command -v sha256sum > /dev/null 2>&1; then sh=\$(sha256sum "$_rp" | cut -d' ' -f1); else sh=\$(shasum -a 256 "$_rp" | cut -d' ' -f1); fi
 [ "\$sh" = "$_wsh" ] || { echo "sha256 \$sh, pinned $_wsh" >&2; exit 1; }
 echo "ok $_rp \$sz \$sh"
 EOF
