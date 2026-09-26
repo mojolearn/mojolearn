@@ -116,6 +116,9 @@ def test_device_and_host_share_one_estimate_function():
 @pytest.mark.parametrize("name", ["heuristic", "cuml"])
 def test_heuristic_reproduces_0813_bits(key, name):
     np = pytest.importorskip("numpy")
+    import mojolearn as _ml
+    if _ml._backend.requested_mode() != "identical":
+        pytest.skip("DIGESTS_0813 pin IDENTICAL-tier bits; FAST is not bitwise")
     seasonal, n, b, f, sp = key
     m = _fit_or_skip(_series(np, n, b, f), seasonal=seasonal, seasonal_periods=f, start_periods=sp,
                      ts_num=b, initialization_method=name)
