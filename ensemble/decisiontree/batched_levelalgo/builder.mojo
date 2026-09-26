@@ -6,7 +6,7 @@ from std.gpu import WARP_SIZE
 from std.sys.compile import is_defined
 from std.math import ceildiv
 from std.sys.info import has_apple_gpu_accelerator, size_of
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 from checks.kernel_matrix import TARGET_COLUMN, column_shared_limit
 
@@ -88,14 +88,8 @@ comptime TPB_DEFAULT = 128
 # histogram launch and one split launch per 10 columns, each re-reading
 # every row of the batch; the workspace grows 4x (168 MB at 4096 nodes x
 # 128 bins, 8-byte bins). `-D MOJOLEARN_RF_COLS10` keeps 10.
-# IDENTICAL on Apple too: the width only groups (node, column) blocks into
-# launches. Each column's histogram and best split are the same computation
-# at any width, and the cross-block merge is `Split::update` over DISTINCT
-# colids -- a maximum on a total order, arrival-order free (split.mojo,
-# "WHAT REMAINS OPEN AFTER THIS PIN") -- so the chosen split, and the
-# forest, are the same bits as at 10 on every vendor.
 comptime N_BLKS_FOR_COLS = 40 if (
-    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_RF_COLS10"]()
 ) else 10
