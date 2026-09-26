@@ -26,23 +26,47 @@ spells, pinned: see the commit messages. Shared helpers pinned:
 portable_sqrtf halvings, portable_expf's last scaling (every `exp + 1`),
 portable_erff's `x*p`.
 
-## Running / next
+## Result (2026-09-26 ~14:00Z): merged to main
 
-1. ORIGINAL-tree census (git archive db66ff952, ~/mojolearn-wt/pmcf-orig):
-   host/nvidia/amd default -> census/orig. Queue log census/queue_orig.log.
-2. Snapshot census r2 (git archive c46fe29fb, ~/mojolearn-wt/pmcf-snap):
-   host/nvidia/amd default+off -> census/r2 (queue_r2.log). Then
-   `contraction_census.py compare census/r2/T/default census/r2/T/off` per T;
-   residual bindings get `build --debug --only <binding>` + `locate`.
-   Bit-neutrality on AMD (no AMD column): compare census/orig/amd/default with
-   census/r2/amd/default per kernel: fused counts must be equal except where a
-   site was deliberately pinned (exact products).
-3. Columns: all bindings default -> Metal + CPU vs 0.8.19; contract=off ->
-   Metal + CPU; NVIDIA leg (`nvidia_wrap.sh` in the evidence dir: both
-   variants, 209 lanes, RTX 4090, cap $6) vs the 0.8.19 CUDA column
-   (~/mojolearn-evidence/release/0.8.19/69a519c1522d/smoke-linux/column-cuda.json;
-   Metal reference ~/mojolearn-evidence/release-check/69a519c1522d/metal/column.json).
-4. Merge to main only when all of the above pass.
+Merged tree `b3bde9d7e` (lane + origin/main, clean), columns against the 0.8.19
+references (Metal `release-check/69a519c1522d/metal`, CUDA and HIP
+`release/0.8.19/69a519c1522d`), 209 lanes x base/denormal/odd, one fit each:
+
+| build | Metal | CPU | vs 0.8.19 Metal / CUDA / HIP |
+|---|---|---|---|
+| default | 627/627 COMPLETE | 627/627 COMPLETE | 0 differ |
+| `--fp-mode contract=off` | 627/627 COMPLETE | 627/627 COMPLETE | 0 differ |
+
+NVIDIA L40S (lane tip c5713df7d, both builds): 621/621 equal to the 0.8.19 CUDA
+column, 6 byte-lm cells REFUSED (binding not built on that leg).
+Evidence: `~/mojolearn-evidence/pinned-mul-contract-free/m-*` and `nvidia2/`.
+
+The first local run (fe91bde48) read INCOMPLETE for two reasons, neither the pin:
+
+1. **The AIR blob floor undercounted.** `air_blobs()` in every
+   `bindings/build*.sh` matched `<name>_<16 hex>air`, i.e. only a kernel whose
+   next string-table entry is an `air.*` intrinsic. With the Apple pin
+   (`llvm.fma.f32`) the next entry of many gp, kernel_methods and mamba kernels
+   became `llvm.fma.f32` or the bare version tag `32023.883air64-...`, and their
+   floors failed (gp 0 of 3) with every kernel present. The regex now accepts
+   `air`, `llvm.` or `<version>air64` after the hash; checked equal to the MTLB
+   header count on every IDENTICAL binding main ships (gp 53, mamba 131,
+   kernel_methods 59, gbdt 221), old names a subset of new on all 22.
+2. **`libMojolearnMath.dylib` was never built in the worktree** (gitignored;
+   `packaging/portable_math/stage.py` build()): 114 cells refused on import.
+
+## Open: the AMD column
+
+No AMD box was rentable on 2026-09-26 (Hot Aisle and RunPod out of stock;
+DigitalOcean's one GPU droplet is the GPT-3 B-1 segment). A Hot Aisle leg waits
+for stock (`amd2.out`, body `amd_wrap.sh`: default build, 209 lanes, 60-minute
+lease). Offline: the r3 AMD census (default vs off) is CLEAN, but 0.8.19 vs lane
+fused-op counts on gfx942 differ by small amounts in 14 kernel families NVIDIA
+does not show (arima jones, gbdt pointwise/multilogit, glm logistic/softmax,
+mamba ssd/selective scan, gmm estep logsumexp, lm head, llama fused, umap),
+not provably bit-neutral from the assembly. The release AMD column decides; a
+DISAGREE there is a defect in this lane, fixed by making the site an explicit
+fma on every backend.
 
 ## Original-vs-new census findings (census/orig_vs_round1_nvidia.txt, host fusedtext)
 
@@ -65,6 +89,9 @@ portable_erff's `x*p`.
   the columns decide.
 
 ## Spend
+
+- 12:53Z RunPod MI300X create refused (no instances): $0. Hot Aisle 12:41Z to
+  ~14:00Z no stock on 13core, 8core or 2gpu: $0 so far.
 
 - 09:02Z RTX 4090 create refused (no instances): $0.
 - 09:04Z L40S pod bdmyb7no2e9uzk, lease 150 min at $1.09/h (at most $2.73),

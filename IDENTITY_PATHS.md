@@ -519,7 +519,9 @@ nor does a function boundary once inlined, nor a `* 0.5` spelled `/ 2.0`.
 `fma(a, b, -0.0)` is NOT a pinned product: LLVM folds it to a contractable
 multiply (arm64 `fmadd`; on an M4 65506 of 65536 separating triples came
 back fused). The pinned product is per target (`checks/numerics.mojo`):
-`llvm.arithmetic.fence(a*b)` on CPUs and AMD GPUs, PTX `mul.rn` on NVIDIA
+`llvm.arithmetic.fence(a*b)` on CPUs, `v_mul_f32` / `v_mul_f64` as inline
+asm on AMD GPUs (gfx942 refused the fence on a uniform value, "illegal VGPR
+to SGPR copy"), PTX `mul.rn` on NVIDIA
 (a fenced multiply reaches PTX as a plain `mul.f32` that ptxas may fuse),
 and `llvm.fma(a, b, -0.0)` without fast-math flags on Apple GPUs (the Metal
 compiler honours the missing `contract` flag and crashes on the fence).
