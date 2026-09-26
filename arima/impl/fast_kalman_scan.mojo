@@ -69,6 +69,11 @@ comptime FK_CHUNK = 512
 comptime FK_TPB = 64
 comptime FK_TOL = Float32(1.0e-7)
 comptime FK_SETTLE = 3
+# A P that wobbles by an ulp never meets FK_TOL (about one Float32 ulp): it
+# is converged once its step has not shrunk for FK_STALL steps while below
+# FK_TOL_FLOOR relative, which is the rounding floor, not a stopping point.
+comptime FK_STALL = 16
+comptime FK_TOL_FLOOR = Float32(1.0e-5)
 
 
 def fk_converge_kernel[RD_C: Int](
@@ -128,6 +133,8 @@ def fk_converge_kernel[RD_C: Int](
     var b_ys = bid * nobs
     var mu = d_mu[bid] if intercept_in != 0 else Float32(0.0)
     var settled = 0
+    var best_d = Float32.MAX
+    var stall = 0
     var last_F = Float32(0.0)
     var t_next = nobs
     for it in range(nobs):
@@ -187,7 +194,15 @@ def fk_converge_kernel[RD_C: Int](
         for i in range(rd2):
             maxd = max(maxd, abs(l_P[i] - P_old[i]))
             maxp = max(maxp, abs(l_P[i]))
-        if it >= n_diff and fs > Float32(0.0) and maxd <= FK_TOL * maxp:
+        if maxd < best_d:
+            best_d = maxd
+            stall = 0
+        else:
+            stall += 1
+        if it >= n_diff and fs > Float32(0.0) and (
+            maxd <= FK_TOL * maxp
+            or (stall >= FK_STALL and maxd <= FK_TOL_FLOOR * maxp)
+        ):
             settled += 1
         else:
             settled = 0

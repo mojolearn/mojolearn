@@ -72,7 +72,12 @@ from std.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
 from std.memory import bitcast
 
-from arima.impl.batched_kalman import KalmanWorkspace, batched_kalman_filter_x
+from arima.impl.batched_kalman import (
+    KalmanWorkspace,
+    batched_kalman_filter_x,
+    kalman_raise_info_init,
+    kalman_raise_info_loop,
+)
 from arima.impl.timeSeries.arima_helpers import (
     batched_jones_transform,
     finalize_forecast,
@@ -663,6 +668,116 @@ def _batched_loglike_grad_stacked(
     _ = p_ext^
     _ = r^
     return ll^
+
+
+def batched_loglike_grad_host(
+    ctx: DeviceContext,
+    mut d_y: DeviceBuffer[DType.float32],
+    mut d_exog: DeviceBuffer[DType.float32],
+    batch_size: Int,
+    n_obs: Int,
+    order: ARIMAOrder,
+    mut d_x: DeviceBuffer[DType.float32],
+    h: Float32,
+    trans: Bool,
+    xin: List[Float32],
+    mut ll_out: List[Float32],
+    mut g_out: List[Float32],
+) raises:
+    """FAST (`ARIMA_FAST_BATCH_GRAD`, no exog): upload `xin`, evaluate the
+    base and the `N` forward-difference points as ONE stacked batch, and
+    bring the base log-likelihood, the gradient and both Kalman refusal
+    codes back with ONE synchronize. `_batched_loglike_grad_stacked` plus
+    `eval_batch`'s upload and download take six; the refusals are raised
+    from the same codes, after the wait instead of between launches."""
+    var N = order.complexity()
+    var M1 = N + 1
+    var eb = M1 * batch_size
+    var nb_y = batch_size * n_obs
+    var nb_x = batch_size * N
+    var y_ext = ctx.enqueue_create_buffer[DType.float32](eb * n_obs)
+    var x_ext = ctx.enqueue_create_buffer[DType.float32](eb * N)
+    var d_grad = ctx.enqueue_create_buffer[DType.float32](max(1, nb_x))
+    ctx.enqueue_copy(
+        dst_buf=d_x.create_sub_buffer[DType.float32](0, nb_x), src_ptr=xin.unsafe_ptr()
+    )
+    for m in range(M1):
+        ctx.enqueue_copy(
+            dst_buf=y_ext.create_sub_buffer[DType.float32](m * nb_y, nb_y),
+            src_buf=d_y.create_sub_buffer[DType.float32](0, nb_y),
+        )
+        ctx.enqueue_copy(
+            dst_buf=x_ext.create_sub_buffer[DType.float32](m * nb_x, nb_x),
+            src_buf=d_x.create_sub_buffer[DType.float32](0, nb_x),
+        )
+    comptime TPB = 128
+    var grid = (batch_size + TPB - 1) // TPB
+    for i in range(N):
+        var blk = x_ext.unsafe_ptr().unsafe_offset((i + 1) * nb_x)
+        var blk_src = MutPointer[Float32, MutAnyOrigin](unsafe_from_address=Int(blk))
+        ctx.enqueue_function[perturb_kernel](
+            blk, blk_src, Int32(batch_size), Int32(N), Int32(i), h,
+            grid_dim=(grid, 1, 1), block_dim=(TPB, 1, 1),
+        )
+    var p_ext = ARIMAParams(ctx, order, eb)
+    unpack(ctx, p_ext, order, eb, x_ext)
+    validate_order(order)
+    var t_params = ARIMAParams(ctx, order, eb)
+    if trans:
+        batched_jones_transform(ctx, order, eb, False, p_ext, t_params)
+    else:
+        _copy_params(ctx, p_ext, t_params, order, eb)
+    var fut = _placeholder(ctx)
+    var ws = batched_kalman_filter_x(
+        ctx, y_ext, d_exog, fut, n_obs, t_params, order, eb, 0, 32, True
+    )
+    for i in range(N):
+        ctx.enqueue_function[grad_kernel](
+            d_grad.unsafe_ptr(),
+            ws.loglike.unsafe_ptr().unsafe_offset((i + 1) * batch_size),
+            MutPointer[Float32, MutAnyOrigin](
+                unsafe_from_address=Int(ws.loglike.unsafe_ptr())
+            ),
+            Int32(batch_size), Int32(N), Int32(i), h,
+            grid_dim=(grid, 1, 1), block_dim=(TPB, 1, 1),
+        )
+    var h_ll = ctx.enqueue_create_host_buffer[DType.float32](max(1, batch_size))
+    var h_g = ctx.enqueue_create_host_buffer[DType.float32](max(1, nb_x))
+    var h_i0 = ctx.enqueue_create_host_buffer[DType.int32](max(1, eb))
+    var h_i1 = ctx.enqueue_create_host_buffer[DType.int32](max(1, eb))
+    ctx.enqueue_copy(
+        dst_ptr=h_ll.unsafe_ptr(),
+        src_buf=ws.loglike.create_sub_buffer[DType.float32](0, batch_size),
+    )
+    ctx.enqueue_copy(
+        dst_ptr=h_g.unsafe_ptr(),
+        src_buf=d_grad.create_sub_buffer[DType.float32](0, nb_x),
+    )
+    ctx.enqueue_copy(dst_ptr=h_i0.unsafe_ptr(), src_buf=ws.info_init)
+    ctx.enqueue_copy(dst_ptr=h_i1.unsafe_ptr(), src_buf=ws.info_loop)
+    ctx.synchronize()
+    var i0 = List[Int32](capacity=eb)
+    var i1 = List[Int32](capacity=eb)
+    for b in range(eb):
+        i0.append(h_i0.unsafe_ptr()[b])
+        i1.append(h_i1.unsafe_ptr()[b])
+    kalman_raise_info_init(i0)
+    kalman_raise_info_loop(i1, order.n_diff())
+    for b in range(batch_size):
+        ll_out[b] = h_ll.unsafe_ptr()[b]
+    for t in range(nb_x):
+        g_out[t] = h_g.unsafe_ptr()[t]
+    _ = y_ext^
+    _ = x_ext^
+    _ = d_grad^
+    _ = p_ext^
+    _ = t_params^
+    _ = fut^
+    _ = ws^
+    _ = h_ll^
+    _ = h_g^
+    _ = h_i0^
+    _ = h_i1^
 
 
 def batched_loglike_grad_x(

@@ -854,6 +854,7 @@ def batched_kalman_filter_x(
     batch_size: Int,
     fc_steps: Int,
     kalman_tpb: Int = KALMAN_TPB,
+    defer_checks: Bool = False,
 ) raises -> KalmanWorkspace:
     """`batched_kalman_filter` (:1248-1303) -> `_batched_kalman_filter`
     (:889-1139) -> `batched_kalman_loop` (:746-819, the `rd <= 8` arm),
@@ -894,13 +895,8 @@ def batched_kalman_filter_x(
         Int32(batch_size), Int32(rd), Int32(r), Int32(n_diff), Int32(order.k),
         grid_dim=(_grid(batch_size, INIT_TPB), 1, 1), block_dim=(INIT_TPB, 1, 1),
     )
-    var info0 = _read_info(ctx, ws.info_init, batch_size)
-    for b in range(batch_size):
-        if info0[b] != 0:
-            raise Error(
-                "batched_kalman_filter: series " + String(b) + ": the initial-state system (I - T (x) T, or I - T* for the intercept) is singular at column "
-                + String(info0[b]) + "; a unit-root parameter set is refused by name rather than filtered with a non-finite P0"
-            )
+    if not defer_checks:
+        kalman_raise_info_init(_read_info(ctx, ws.info_init, batch_size))
     # keep P0 / alpha0 (the loop kernel reads them into registers and never
     # writes them back, so the buffers hold the initial state already; the
     # copies are the card's stages by name)
@@ -1007,8 +1003,25 @@ def batched_kalman_filter_x(
             Int32(1 if has_exog else 0),
             grid_dim=(_grid(batch_size, kalman_tpb), 1, 1), block_dim=(kalman_tpb, 1, 1),
         )
-    var info1 = _read_info(ctx, ws.info_loop, batch_size)
-    for b in range(batch_size):
+    if not defer_checks:
+        kalman_raise_info_loop(_read_info(ctx, ws.info_loop, batch_size), n_diff)
+    return ws^
+
+
+def kalman_raise_info_init(info0: List[Int32]) raises:
+    """The initial-state refusal of `batched_kalman_filter_x`; a caller that
+    passed `defer_checks` reads `ws.info_init` itself and calls this."""
+    for b in range(len(info0)):
+        if info0[b] != 0:
+            raise Error(
+                "batched_kalman_filter: series " + String(b) + ": the initial-state system (I - T (x) T, or I - T* for the intercept) is singular at column "
+                + String(info0[b]) + "; a unit-root parameter set is refused by name rather than filtered with a non-finite P0"
+            )
+
+
+def kalman_raise_info_loop(info1: List[Int32], n_diff: Int) raises:
+    """The innovation-variance refusal, for `ws.info_loop`."""
+    for b in range(len(info1)):
         if info1[b] > 0:
             raise Error(
                 "batched_kalman_filter: series " + String(b) + ": innovation variance F <= 0 at step "
@@ -1022,4 +1035,3 @@ def batched_kalman_filter_x(
                 + "log-likelihood); refused by name rather than carrying 1/F = inf into the gain "
                 + "(DEVIATION 677)"
             )
-    return ws^

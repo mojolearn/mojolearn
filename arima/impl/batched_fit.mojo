@@ -105,7 +105,12 @@ a compile slot should replace both with what it sees, exactly as
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from arima.impl.batched_arima import _refuse_non_finite, batched_loglike_grad_x
+from arima.impl.batched_arima import (
+    ARIMA_FAST_BATCH_GRAD,
+    _refuse_non_finite,
+    batched_loglike_grad_host,
+    batched_loglike_grad_x,
+)
 from arima.impl.estimate_x0 import StartParamsResult, estimate_x0_x
 from arima.impl.lbfgs_host import (
     armijo_ok,
@@ -267,6 +272,19 @@ def eval_batch(
     before the loop. Leaving it on would copy the whole series to the host
     and synchronize `(N + 1)` times per candidate point, hundreds of times
     over, to re-answer a question about data nobody has touched."""
+    comptime if ARIMA_FAST_BATCH_GRAD:
+        if order_kf.n_exog == 0:
+            var llh = _zeros(batch_size)
+            var gh = _zeros(len(xin))
+            batched_loglike_grad_host(
+                ctx, d_y_kf, d_exog_kf, batch_size, n_obs_kf, order_kf, d_x, h,
+                True, xin, llh, gh,
+            )
+            for b in range(batch_size):
+                fout[b] = -llh[b] / scale
+            for i in range(len(xin)):
+                gout[i] = -gh[i] / scale
+            return
     _upload(ctx, d_x, xin)
     var ll = batched_loglike_grad_x(
         ctx, d_y_kf, d_exog_kf, batch_size, n_obs_kf, order_kf, d_x, d_grad, h, True,
