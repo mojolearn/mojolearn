@@ -30,3 +30,25 @@ create_http=200 create_utc=2026-09-26T14:53:28Z
 vm_ref=e88eb7c0-854b-4238-934f-5777fa52200c
 vm_name=enc1-gpuvm002
 vm_id=e88eb7c0-854b-4238-934f-5777fa52200c
+description=mojolearn:step_body:20260926T145322Z
+ssh=hotaisle@23.183.40.67:22 running_after_seconds=10
+box_key_in_ps=not_visible
+runtime=docker
+box_gfx=gfx942
+gpu_archs=gfx942
+gpu_agents=1
+upload_seconds=4
+image_pull=pull_exit=0 pull_seconds=98
+work_seconds=3218
+body=done
+source_sha256_match=yes
+remote_pixi_install_exit=0
+remote_pixi_install_seconds=3
+remote_device_check_exit=0
+remote_card_exit=0
+remote_extra_exit=0
+remote_body_exit=0
+finished=2026-09-26T15:03:17Z
+lease_used_seconds=595
+slot=released /tmp/mojolearn-hotaisle-slot.2 2026-09-26T15:03:24Z
+balance_after_cents=4578

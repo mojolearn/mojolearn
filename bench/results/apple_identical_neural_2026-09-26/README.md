@@ -17,9 +17,12 @@ Branch `lane/apple-identical-neural`. Evidence only; nothing here is run by `moj
    backward/workspace green on NVIDIA.
 4. **The whole training step agrees.** Byte LM, 1 x 2048, d768, 12 heads, FF 2048, 2 layers,
    V 50,257, four resident lean steps witnessed every step (sha256 of loss, gradients, parameters,
-   m, v): the H100 on this branch (`nvidia-h100/step/result.json`, f8f5c5f7b) equals the M4 on this
-   branch (`apple-m4/step_new`) equals the M4 on origin/main 06b4ec239 (`apple-m4/step_main`), all
-   four steps.
+   m, v): the H100 (`nvidia-h100/step/result.json`) and the MI300X
+   (`amd-mi300x-hotaisle-step/remote/step/result.json`), both on this branch at f8f5c5f7b, equal the
+   M4 on this branch (`apple-m4/step_new`), which equals the M4 on origin/main 06b4ec239
+   (`apple-m4/step_main`), all four steps.
+5. **Every extension still builds.** The macOS release wheel (`packaging/macos/build_release_wheel.sh`,
+   three tiers, 76 extensions) built green on this branch with all five interpreter smokes passing.
 
 ## Speed (Apple M4, 10-core GPU, fanless; alternating builds)
 

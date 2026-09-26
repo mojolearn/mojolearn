@@ -19,15 +19,15 @@ export HOME
   echo "started=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
   echo "provider=hotaisle"
   echo "size=mi300x-13core"
-  echo "runtime=native"
+  echo "runtime=docker"
   echo "image=rocm/dev-ubuntu-22.04:6.4.1-complete"
   echo "gates=1"
   echo "bare=0"
-  echo "gpu_archs="
+  echo "gpu_archs=gfx942"
   echo "target_column=amd"
 } > "$OUT/leg.txt"
 
-MOJOLEARN_GPU_ARCHS=""
+MOJOLEARN_GPU_ARCHS="gfx942"
 export MOJOLEARN_GPU_ARCHS
 MOJOLEARN_TARGET_COLUMN=amd
 export MOJOLEARN_TARGET_COLUMN
