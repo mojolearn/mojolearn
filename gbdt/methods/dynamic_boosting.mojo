@@ -97,8 +97,14 @@ def _ordered_apply_kernel(
         # Upstream Rescale(step) precedes AppendModels. Round the stored
         # model value before adding, so exported-model prediction and the
         # training cursor use the same arithmetic across multiple trees.
-        var scaled = identical_mul(leaves.unsafe_load(leaf), rate)
-        cursor.unsafe_store(i, identical_mul_add(scaled, Float32(1), cursor.unsafe_load(i)))
+        # NOTE: every 0.8.19 build FUSED `leaf * rate` into this add (the old
+        # pin, `fma(a, b, -0.0)`, folded to a contractable product), so the
+        # cursor never saw the rounded model value the comment above wants.
+        # Kept as that one fma so the bits do not move (lane/pinned-mul-contract-free);
+        # rounding first is a separate, bit-moving decision.
+        cursor.unsafe_store(
+            i, identical_mul_add(leaves.unsafe_load(leaf), rate, cursor.unsafe_load(i))
+        )
 
 
 def ordered_estimate_and_apply(

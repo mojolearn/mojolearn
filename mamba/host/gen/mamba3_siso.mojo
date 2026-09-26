@@ -159,8 +159,11 @@ def m3_mod_2pi(x: Float32) -> Float32:
     pinned_mul rule."""
     from std.math import floor
 
+    # ONE rounding, as every 0.8.19 build computed it: the old pin,
+    # `fma(a, b, -0.0)`, folded to a contractable product that fused
+    # into this subtract. Spelled out now that pinned_mul truly pins (lane/pinned-mul-contract-free).
     return ftz(
-        x - pinned_mul(M3_TWO_PI, floor(identical_div(x, M3_TWO_PI)))
+        identical_mul_add(-M3_TWO_PI, floor(identical_div(x, M3_TWO_PI)), x)
     )
 
 
