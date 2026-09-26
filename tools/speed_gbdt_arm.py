@@ -2812,6 +2812,13 @@ def opponent_builders(lane, cfg, data, devices):
 
 def accel_visible():
     """Is this a GPU vendor's box?"""
+    # NOT on macOS: importing torch there loads torch's libomp before
+    # LightGBM's, and LightGBM's first train in the same process then
+    # segfaults (exit 139; lightgbm 4.7.0 + torch 2.13.0, M4, 2026-09-26: the
+    # bench board's rf race died in lightgbm-cpu's warm-up). torch.cuda is
+    # never available on a Mac, so the import could only ever answer False.
+    if sys.platform == "darwin":
+        return False
     try:
         import torch                                   # noqa: PLC0415
         if torch.cuda.is_available():

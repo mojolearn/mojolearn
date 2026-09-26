@@ -54,23 +54,31 @@ WHAT IT REUSES (it re-implements no measurement)
              `ours-fast` arm. Every lane's settings and mismatches are its
              LANE_CONFIG.
   neural     tools/bench_board_neural.py race (the classical racer's worker
-             protocol and JSON shape): the wheel's public
-             LanguageModelTrainer.train_step, LanguageModelTrainer.logits and
-             mojolearn.linalg.matmul against torch eager fp32 (TF32 off) on the
-             box's GPU (MPS, CUDA, ROCm); the LM model is
-             tools/torch_lm_step_opponent.py's twin. `--neural-shape full` is
-             the 20.45 M-parameter control shape and a 4096^3 GEMM; `small` is
-             a smoke.
+             protocol and JSON shape): the wheel's public neural surface
+             (LanguageModelTrainer train step and logits, linalg.matmul,
+             TransformerBlock, Mamba1/2/3Block, SambaStack train step and
+             forward, SmallMLPTrainer, and the CPU *Inference classes) against
+             torch at every fast setting it supports on the box: eager and
+             torch.compile, fp32, TF32 (NVIDIA CUDA only) and bf16 autocast,
+             one arm each, the precision in the arm name (bench_board_neural's
+             `opponents`). The torch models are the repo's twins
+             (tools/torch_lm_step_opponent.py, tools/speed_torch_seq.py
+             LlamaEager, mamba/corpus/gen_corpus.py). `--neural-shape full` is
+             the board; `small` is a smoke.
+  inference  tools/bench_board_infer.py: the trees driver's `--infer` phase
+             (FSPEED-INFER lines, batches `test` and `large`) and the classical
+             racer's `race --infer` (kmeans/pca/ols/svc), each arm predicting
+             with its own model from the race's fit rounds; `--no-infer` skips.
   parsing    tools/bench_all_summarize.py's FSPEED parser.
   rosters    tools/bench_all_ours.sh's per-lane NVIDIA rosters.
 
-NEURAL, NOT COVERED YET: the Mamba blocks, TransformerBlock on its own,
-SambaStack and SmallMLPTrainer (public, not raced); torch's compile, TF32 and
-bf16 columns (another precision, or labeled nondeterministic by
-tools/torch_lm_step_opponent.py); the GPT-3-small target shape (the board uses
-the smaller control shape so one shape runs on every box, a 16 GB Mac included). tools/speed_gemm_arm.py, tools/speed_torch_seq.py
-and bench/model/harness.py time source-built Mojo binaries, not the wheel, and
-are not used here.
+NEURAL, NOT COVERED: bench_board_neural.NOT_COVERED and NOT_PLANNED (the
+Mamba opponents are pure-PyTorch references, not mamba-ssm's fused kernels;
+the blocks' backward and decode are not raced; TF32 exists on NVIDIA CUDA
+only; the GPT-3-small target shape is off the board). tools/speed_gemm_arm.py,
+tools/speed_torch_seq.py's timing harness and bench/model/harness.py time
+source-built Mojo binaries, not the wheel, and are not used here (the board
+reuses speed_torch_seq.py's LlamaEager twin only).
 
 THE BOARD NEVER STATES A DIRECTION. It prints times, ratios and quality
 numbers only (CONTRIBUTING.md, "never say we are faster"). A ratio column is
@@ -91,6 +99,7 @@ import statistics
 import subprocess
 import sys
 import time
+import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
@@ -102,11 +111,7 @@ TREE_ROW_FLOOR = 1_000_000
 
 TREE_LANES = ("gbdt-symmetric", "gbdt-depthwise", "gbdt-lossguide", "rf", "et", "iforest")
 CLASSICAL_LANES = ("kmeans", "pca", "ols", "knn", "kde", "svc", "dbscan", "hdbscan")
-NEURAL_LANES = ("lm-train-step", "lm-forward", "gemm")
 FAMILIES = ("trees", "classical", "classical2", "neural")
-#: The data a neural lane reads (tools/bench_board_neural.py DATA_OF). No R2
-#: dataset: the driver builds its inputs from seed 7.
-NEURAL_DATA = {"lm-train-step": "bytes", "lm-forward": "bytes", "gemm": "gaussian"}
 NEURAL_SHAPES = ("full", "small")
 DATASETS = ("taxi", "istella")
 VENDORS = ("apple", "nvidia", "amd")
@@ -205,11 +210,6 @@ CLASSICAL_OPPONENTS = {
     },
 }
 
-#: Neural opponents: torch eager fp32 (TF32 off) on the box's GPU, every
-#: vendor and lane (tools/bench_board_neural.py; MPS, CUDA, ROCm).
-NEURAL_OPPONENTS = {v: {lane: ("torch-eager-fp32",) for lane in NEURAL_LANES} for v in VENDORS}
-
-
 def family_lanes(fam):
     return {"trees": TREE_LANES, "classical": CLASSICAL_LANES, "classical2": MORE_LANES,
             "neural": NEURAL_LANES}[fam]
@@ -274,6 +274,10 @@ AMD_TORCH_ROCM = (
     "cp312-cp312-linux_x86_64.whl"
     "#sha256=6b141e1a03148b007c6217519cd9947d760123ded5caebadffec22cba7358d2d")
 DEFAULT_TORCH_SPEC = {"apple": "torch==2.13.0", "nvidia": "", "amd": AMD_TORCH_ROCM}
+#: The neural family's one extra pin: einops, which mamba/corpus/gen_corpus.py's
+#: verbatim selective_scan_ref (the Mamba-1 torch twin) imports (pixi.toml
+#: carries einops >= 0.8 for the same reference).
+NEURAL_PINS = ["einops==0.8.1"]
 
 
 def now_utc():
@@ -304,6 +308,27 @@ def _load_tool(name):
 #: standard library at import time, so the orchestrator can read them).
 MORE = _load_tool("bench_board_more")
 MORE_LANES = MORE.LANE_ORDER
+
+#: The neural driver's tables (standard library only at import time): its
+#: lanes, the data each reads (no R2 dataset: inputs are built from seed 7)
+#: and the torch arms per vendor and lane, one per fast setting torch
+#: supports there (eager/compile x fp32/tf32/bf16; TF32 on NVIDIA CUDA only;
+#: the CPU *Inference lanes race torch on the CPU).
+NEURAL = _load_tool("bench_board_neural")
+NEURAL_LANES = NEURAL.LANES
+NEURAL_DATA = dict(NEURAL.DATA_OF)
+NEURAL_OPPONENTS = {v: {lane: NEURAL.opponents(v, lane) for lane in NEURAL_LANES} for v in VENDORS}
+
+#: INFERENCE cells (tools/bench_board_infer.py): after a race's fit rounds each
+#: arm predicts with its own fitted model, timed and raced the same way. Trees
+#: and the classical kmeans/pca/ols/svc lanes; on unless --no-infer. The cells
+#: live in a race record's `infer_cells`, apart from the fit `cells`.
+INFER = _load_tool("bench_board_infer")
+
+
+def _bb():
+    """This module's helpers, for bench_board_infer (it imports nothing from here)."""
+    return types.SimpleNamespace(**globals())
 
 
 # ---------------------------------------------------------------------------
@@ -759,6 +784,14 @@ def setup_python(args, vendor, out, log):
         if rc != 0:
             print("bench_board: classical2 opponent install rc %d for %s (their arms will refuse "
                   "by name)" % (rc, " ".join(MORE_PINS[vendor])), flush=True)
+    if "neural" in (args.families or ""):
+        cmd = list(pip)
+        if args.opponent_wheels:
+            cmd += ["--no-index", "--find-links", os.path.abspath(args.opponent_wheels)]
+        rc = run_logged(cmd + NEURAL_PINS, None, log, 3600)
+        if rc != 0:
+            print("bench_board: neural opponent install rc %d for %s (the Mamba-1 torch arms will "
+                  "refuse by name)" % (rc, " ".join(NEURAL_PINS)), flush=True)
     torch_spec = args.torch_spec if args.torch_spec is not None else DEFAULT_TORCH_SPEC[vendor]
     if torch_spec:
         cmd = list(pip)
@@ -868,6 +901,8 @@ def tree_cmd(ctx, race):
         cmd += ["--ours-only"]
     if "ours-ab" in ours:
         cmd += ["--ours-ab", "numeric_mode='%s'" % ours["ours-ab"]]
+    if ctx.get("infer"):
+        cmd += INFER.driver_args(race)
     env = {"MOJOLEARN_NUMERIC_MODE": primary,
            "MOJOLEARN_SPEED_EXPECTED_VENDOR": VENDOR_API[ctx["vendor"]],
            "MOJOLEARN_SPEED_ROUNDS": str(ctx["rounds"]),
@@ -987,6 +1022,8 @@ def classical_cmd(ctx, race):
            "--warmup-seconds", str(max(rsec, 600)),
            "--ours-python", shlex.quote(ctx["python"]),
            "--theirs-python", shlex.quote(ctx["python"])]
+    if ctx.get("infer"):
+        cmd += INFER.driver_args(race)
     env = {k: os.environ.get(k, v) for k, v in DBSCAN_DEFAULTS.items()}
     ceiling = 600 + max(rsec, 600) * len(race["arms"]) + rsec * ctx["rounds"] * len(race["arms"]) + 900
     return cmd, env, ceiling
@@ -1163,34 +1200,6 @@ def base_cell(ctx, race, arm, mode):
 _SETTINGS_CACHE = {}
 
 
-NEURAL_SETTINGS = {
-    "lm-train-step": {
-        "ours_call": "mojolearn.LanguageModelTrainer(resident=True, step_result='lean').train_step(ids)",
-        "torch_call": "tools/torch_lm_step_opponent.py build_model; zero_grad; forward + mean CE; "
-                      "backward; torch.optim.AdamW step; loss.item()",
-        "optimizer": "AdamW lr 1e-3, betas (0.9, 0.999), eps 1e-8, weight decay 0.01 on both",
-        "clock": "ids host to device, one training step, loss back on the host, synchronized; "
-                 "parameters and AdamW state device-resident on both sides; round r is step r+1",
-        "quality": "loss_first_step, loss_last_step (same init, same batches), "
-                   "loss_last_abs_diff_vs_ours"},
-    "lm-forward": {
-        "ours_call": "mojolearn.LanguageModelTrainer(resident=True).logits(ids)",
-        "torch_call": "no_grad forward of the same twin to logits; logits.cpu()",
-        "clock": "ids host to device, forward, float32 logits [B, L, V] back on the host",
-        "quality": "mean_nll of the logits (float64), max_abs_diff_vs_ours"},
-    "gemm": {
-        "ours_call": "mojolearn.linalg.matmul(a, b)",
-        "torch_call": "a.to(dev) @ b.to(dev), .cpu()",
-        "clock": "A and B host to device, the product, C back on the host",
-        "quality": "max_rel_err_vs_fp64, max_abs_diff_vs_ours"},
-}
-NEURAL_SHAPE_TEXT = {
-    "full": {"lm": "B1 L2048 DM384 H6 KV6 HD64 FF1024 8 layers V8192, 20,453,376 parameters "
-                   "(tools/torch_lm_step_opponent.py control shape)", "gemm": "m=n=k=4096"},
-    "small": {"lm": "B2 L64 DM64 H4 KV2 HD16 FF128 2 layers V256 (smoke)", "gemm": "m=n=k=256 (smoke)"},
-}
-
-
 def race_settings(ctx, race):
     key = (race["family"], race["lane"], race.get("shape"))
     if key not in _SETTINGS_CACHE:
@@ -1199,12 +1208,13 @@ def race_settings(ctx, race):
         if race["family"] == "neural":
             s["driver"] = "tools/bench_board_neural.py"
             s["numeric_mode"] = "identical (the only tier the neural surface builds)"
-            s["opponent_mode"] = ("torch eager float32, TF32 off: tools/torch_lm_step_opponent.py's "
-                                  "eager_fp32, the opponent's fast setting at our precision")
+            s["opponent_mode"] = ("torch at every fast setting it supports on this box, one arm "
+                                  "each (eager/compile x fp32/tf32/bf16 autocast; "
+                                  "tools/torch_lm_step_opponent.py COLUMNS); the arm name "
+                                  "carries the setting")
             s["shape"] = race.get("shape")
-            s["shape_dims"] = NEURAL_SHAPE_TEXT[race.get("shape") or "full"][
-                "gemm" if race["lane"] == "gemm" else "lm"]
-            s.update(NEURAL_SETTINGS[race["lane"]])
+            s["shape_dims"] = NEURAL.shape_text(race["lane"], race.get("shape") or "full")
+            s.update(NEURAL.lane_settings(race["lane"]))
         elif race["family"] == "classical2":
             s["driver"] = "tools/bench_board_more.py"
             s["block"] = MORE.block_of(race["lane"])
@@ -1271,6 +1281,8 @@ def run_race(ctx, race):
         rec["notes"] = parsed["notes"]
         rec["fit_verdict_line"] = parsed["verdict_line"]
         cells = tree_cells(ctx, race, parsed)
+        if ctx.get("infer"):
+            rec["infer_cells"] = INFER.tree_cells(_bb(), ctx, race, log, cells)
     elif race["family"] == "neural":
         cmd, extra, ceiling = neural_cmd(ctx, race)
         tag = "%s.%s.shape-%s" % (race["lane"], race["dataset"], race.get("shape") or "full")
@@ -1319,6 +1331,8 @@ def run_race(ctx, race):
                           status="UNKNOWN(no race json, rc %d)" % rc) for a in race["arms"]]
         else:
             cells = classical_cells(ctx, race, r)
+            if ctx.get("infer"):
+                rec["infer_cells"] = INFER.classical_cells(_bb(), ctx, race, r)
         # the arms' saved outputs are only for the conductor's quality pass
         work = os.path.join(ctx["out"], "work")
         if os.path.isdir(work):
@@ -1389,6 +1403,8 @@ QUALITY_NOTE = {
     "loss_first_step": "same init and batches on every arm",
     "loss_last_step": "same init and batches on every arm",
     "loss_last_abs_diff_vs_ours": "0 is our value exactly",
+    "loss_first_abs_diff_vs_ours": "0 is our value exactly",
+    "max_rel_diff_vs_ours": "0 is our output exactly",
     "mean_nll": "lower is better", "max_abs_diff_vs_ours": "0 is our output exactly",
     "max_rel_err_vs_fp64": "lower is better",
     "trustworthiness_k15": "higher is better, 1 at most",
@@ -1467,12 +1483,24 @@ def render_board(result):
              "unavoidable mismatch with its reason are in the cells' `settings.lane_config`. "
              "Quality is one float64 NumPy function per lane over each arm's saved outputs.")
     L.append("- Neural: our IDENTICAL arm only (the neural surface builds no other tier, on any "
-             "vendor) against torch eager float32 with TF32 off on this box's GPU (MPS, CUDA or "
-             "ROCm). Every clock is host in, host out: ids or operands to the device, the call, "
-             "the result back on the host, synchronized. The LM lanes start from the same "
-             "parameters and read the same batches on every arm, so their losses and logits are "
-             "comparable; `max_abs_diff_vs_ours` is the opponent's output against ours.")
+             "vendor) against torch at every fast setting it supports on this box, one arm each, "
+             "the setting in the arm name: `torch-eager-fp32` (TF32 off), `torch-compile-fp32` "
+             "(torch.compile, inductor), `torch-eager-tf32` / `torch-compile-tf32` (NVIDIA CUDA "
+             "only), `torch-eager-bf16` / `torch-compile-bf16` (bf16 autocast mixed precision). "
+             "TF32 and bf16 arms are ANOTHER PRECISION than ours; their quality columns show how "
+             "far. The `*-infer` lanes are the CPU *Inference classes and race `torch-cpu-*` "
+             "arms. An arm torch cannot run on this box is REFUSED by name in its cell. Every "
+             "clock is host in, host out, synchronized. Every arm starts from the same "
+             "parameters and reads the same inputs, so losses and outputs are comparable; "
+             "`max_abs_diff_vs_ours` / `max_rel_diff_vs_ours` are the arm's output against ours.")
     L.append("- `installed_wheel` confirms our binding loaded from site-packages, not the repo tree.")
+    L.append("- Inference: after a race's fit rounds each arm predicts with its own fitted model "
+             "(no fit retimed), same rows, same output kind, one warm-up then the timed rounds "
+             "interleaved. Trees: batch `test` (the held-out split) and `large` (1,000,000 "
+             "training rows, capped at the training rows), host rows in and host predictions "
+             "out on every arm; each arm's call is printed under its table. Classical: kmeans "
+             "predict, pca transform, ols predict and svc predict on the eval rows, with the "
+             "fit's clock span. Ratios are per batch, ours over each opponent.")
     L.append("")
     races = result.get("races") or {}
     planned = result.get("plan") or []
@@ -1488,6 +1516,10 @@ def render_board(result):
     L.append("Races: %d planned, %d done, %d failed, %d pending. Cells: %d (%s)."
              % (len(planned), done, failed, max(0, len(planned) - done - failed), len(cells),
                 ", ".join("%s %d" % kv for kv in sorted(st.items())) or "none"))
+    icov = INFER.coverage(races)
+    if icov:
+        L.append("")
+        L.append(icov)
     L.append("")
 
     # Quality at a glance
@@ -1515,6 +1547,7 @@ def render_board(result):
                 q(fast), q(ident),
                 "; ".join("%s %s" % (c["arm"], q(c)) for c in opps) or "-"))
     L.append("")
+    L.extend(INFER.render_glance(_bb(), races))
 
     for fam in FAMILIES:
         fam_races = [races[r] for r in sorted(races) if races[r]["family"] == fam]
@@ -1563,6 +1596,7 @@ def render_board(result):
             if rr.get("fit_verdict_line"):
                 L.append("")
                 L.append("FSPEED-FIT-VERDICT: `%s`" % clean(rr["fit_verdict_line"]))
+            L.extend(INFER.render_race(_bb(), rr))
             L.append("")
     L.append("## Not covered by this board")
     L.append("")
@@ -1574,11 +1608,12 @@ def render_board(result):
              "ARIMA quality work does).")
     for why in MORE.NOT_PLANNED.get(vendor, []):
         L.append("- Classical, wave 2, not planned on this vendor: %s" % clean(why))
-    L.append("- Neural: the Mamba blocks, TransformerBlock on its own, SambaStack and "
-             "SmallMLPTrainer are public and not raced yet; torch's compile, TF32 and bf16 "
-             "columns are another precision or labeled nondeterministic and are not raced; the "
-             "GPT-3-small target shape is not on the board (it uses the smaller control shape "
-             "so one shape runs on every box, a 16 GB Mac included).")
+    for why in INFER.NOT_COVERED:
+        L.append("- %s" % clean(why))
+    for why in NEURAL.NOT_COVERED:
+        L.append("- Neural: %s" % clean(why))
+    for why in NEURAL.NOT_PLANNED.get(vendor, []):
+        L.append("- Neural, not planned on this vendor: %s" % clean(why))
     L.append("")
     return "\n".join(L) + "\n"
 
@@ -1604,9 +1639,9 @@ def build_parser():
     p.add_argument("--rows", default="full",
                    help="full (default) or a row cap for a smoke test (the board says SMOKE)")
     p.add_argument("--neural-shape", default="full", choices=NEURAL_SHAPES,
-                   help="neural family shape: full (the 20.45 M-parameter LM control shape, "
-                        "4096^3 GEMM) or small (a smoke; the board says SMOKE). --rows does not "
-                        "apply to neural lanes")
+                   help="neural family shape: full (the board; the 20.45 M-parameter LM "
+                        "control shape, 4096^3 GEMM, L2048 blocks) or small (a smoke; the board "
+                        "says SMOKE). --rows does not apply to neural lanes")
     p.add_argument("--rounds", type=int, default=DEFAULT_ROUNDS,
                    help="timed rounds after one warm-up (default 5)")
     p.add_argument("--mojolearn-version", default=None, help="pip install mojolearn==<V>")
@@ -1645,6 +1680,9 @@ def build_parser():
     p.add_argument("--nice", type=int, default=0)
     p.add_argument("--skip-failed", action="store_true",
                    help="on resume, do not retry races that failed (default: retry them)")
+    p.add_argument("--no-infer", action="store_true",
+                   help="time training only: skip the inference cells (trees, and the classical "
+                        "kmeans/pca/ols/svc lanes) that are timed after each race's fit rounds")
     p.add_argument("--dry-run", action="store_true", help="print the plan and run nothing")
     p.add_argument("--render-only", action="store_true", help="re-render BOARD.md from board.json")
     p.add_argument("--tree-driver", default=os.path.join(REPO, "bench", "speed", "forest_speed_arm.py"),
@@ -1683,9 +1721,13 @@ def print_plan(vendor, modes, races, args, rows, data):
     print("vendor=%s api=%s modes=%s rounds=%d warmup=1 seed=%d rows=%s"
           % (vendor, VENDOR_API[vendor], ",".join(modes), args.rounds, SEED, rows_tag(rows)))
     if any(r["family"] == "neural" for r in races):
-        t = NEURAL_SHAPE_TEXT[args.neural_shape]
-        print("neural: IDENTICAL only; opponent torch eager fp32 (TF32 off) on the GPU; "
-              "shape %s (LM %s; GEMM %s)" % (args.neural_shape, t["lm"], t["gemm"]))
+        print("neural: IDENTICAL only; opponents torch %s on the GPU, %s on the CPU for the "
+              "*-infer lanes; shape %s (LM %s; GEMM %s)" % (
+                  "/".join(NEURAL.GPU_SETTINGS[vendor]), "/".join(NEURAL.CPU_SETTINGS),
+                  args.neural_shape, NEURAL.shape_text("lm-train-step", args.neural_shape),
+                  NEURAL.shape_text("gemm", args.neural_shape)))
+        for why in NEURAL.NOT_PLANNED[vendor]:
+            print("neural not planned: %s" % why)
     print("mojolearn=%s (from the installed wheel; %s)" % (
         args.mojolearn_version or "<--mojolearn-version>",
         "python %s" % args.python_env if args.python_env else "venv %s" % (args.venv or "<cache>/venv")))
@@ -1708,6 +1750,14 @@ def print_plan(vendor, modes, races, args, rows, data):
     for fam, f in sorted(s["by_family"].items()):
         print("family %-10s races=%d cells=%d" % (fam, f["races"], f["cells"]))
     print("TOTAL races=%d cells=%d" % (s["races"], s["cells"]))
+    if not args.no_infer:
+        inf = {}
+        for r in races:
+            n = len(INFER.plan_cells(r))
+            if n:
+                inf[r["family"]] = inf.get(r["family"], 0) + n
+        print("INFER cells=%d (%s; each arm's own model after the fit rounds; --no-infer skips)"
+              % (sum(inf.values()), ", ".join("%s %d" % kv for kv in sorted(inf.items())) or "none"))
 
 
 def main(argv=None):
@@ -1783,7 +1833,7 @@ def main(argv=None):
            "commit": repo_commit(), "mojolearn_version": args.mojolearn_version,
            "wheel": wheel, "arm_budget_s": args.arm_budget_s,
            "race_deadline_s": args.race_deadline_s, "round_seconds": args.round_seconds,
-           "nice": args.nice, "ptxas": ptxas,
+           "nice": args.nice, "ptxas": ptxas, "infer": not args.no_infer,
            "tree_driver": os.path.abspath(args.tree_driver),
            "classical_driver": os.path.abspath(args.classical_driver),
            "neural_driver": os.path.abspath(args.neural_driver),
@@ -1806,7 +1856,7 @@ def main(argv=None):
         result["box"] = box
     result["config"] = {"vendor": vendor, "modes": modes, "families": families,
                         "lanes": lanes, "datasets": datasets, "rows": rows,
-                        "rounds": args.rounds, "seed": SEED,
+                        "rounds": args.rounds, "seed": SEED, "infer": not args.no_infer,
                         "neural_shape": args.neural_shape if "neural" in families else None,
                         "smoke": (bool(rows) and rows < TREE_ROW_FLOOR
                                   and any(r["family"] != "neural" for r in races))
