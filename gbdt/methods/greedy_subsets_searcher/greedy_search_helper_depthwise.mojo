@@ -582,9 +582,20 @@ def select_leaves_to_visit(leaves: List[TLeaf]) raises -> List[Int]:
 #: logloss/AUC equal or better. Default 16; arms `-D
 #: MOJOLEARN_GBDT_LG_BATCH2|4|8|32`; `-D MOJOLEARN_GBDT_LG_BATCH_OFF` keeps
 #: one leaf per iteration.
+#: OFF BY DEFAULT since 2026-09-26 (lane/apple-identical-neural): a quality
+#: check against best-first (one leaf per iteration), five 300k training
+#: subsets each, 300 trees, max_leaves 31, paired by subset, found the batch
+#: of 16 systematically worse: Istella regression test RMSE 0.5950-0.5970 ->
+#: 0.6072-0.6089 (about +2% on every subset), taxi AUC 0.6127 -> 0.6123 and
+#: log-loss 0.53820 -> 0.53831 (mean). When the leaf budget binds, the batch
+#: splits a different set of leaves than best-first. FAST may differ in bits
+#: but not in quality, so best-first stays the FAST default;
+#: `-D MOJOLEARN_GBDT_LG_BATCH=1` turns the batch on as a trial arm (fit
+#: time taxi 23 -> 10.5 s, Istella ~50 -> 17 s on the M4).
 comptime _LG_FAST_APPLE = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_GBDT_LG_BATCH"]()
     and not is_defined["MOJOLEARN_GBDT_LG_BATCH_OFF"]()
 )
 comptime GBDT_LG_BATCH = 1 if not _LG_FAST_APPLE else (
