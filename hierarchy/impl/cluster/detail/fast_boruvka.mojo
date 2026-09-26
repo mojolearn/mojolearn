@@ -31,8 +31,10 @@ comptime FB_TPB = 128
 comptime FB_TILE = 64
 
 
-def fb_nearest_other_kernel[DMAX: Int](
+def fb_nearest_other_kernel[DMAX: Int, MR: Bool = False](
     x: MutPointer[Float32, MutAnyOrigin],
+    core: MutPointer[Float32, MutAnyOrigin],
+    inv_alpha: Float32,
     comp: MutPointer[Int32, MutAnyOrigin],
     best_d: MutPointer[Float32, MutAnyOrigin],
     best_j: MutPointer[Int32, MutAnyOrigin],
@@ -56,6 +58,13 @@ def fb_nearest_other_kernel[DMAX: Int](
     var tcomp = stack_allocation[
         FB_TILE, Int32, address_space=AddressSpace.SHARED
     ]()
+    var tcore = stack_allocation[
+        FB_TILE, Float32, address_space=AddressSpace.SHARED
+    ]()
+    var cri = Float32(0)
+    comptime if MR:
+        if live:
+            cri = core[i]
     var bd = Float32.MAX
     var bj = Int32(-1)
     var bad = False
@@ -73,6 +82,8 @@ def fb_nearest_other_kernel[DMAX: Int](
         if Int(thread_idx.x) < FB_TILE:
             var jj = j0 + Int(thread_idx.x)
             tcomp[Int(thread_idx.x)] = comp[jj] if jj < m else ci
+            comptime if MR:
+                tcore[Int(thread_idx.x)] = core[jj] if jj < m else Float32(0)
         barrier()
         if live:
             var jn = min(FB_TILE, m - j0)
@@ -82,6 +93,10 @@ def fb_nearest_other_kernel[DMAX: Int](
                     comptime for t in range(DMAX):
                         var df = xi[t] - tile[u * DMAX + t]
                         dd += df * df
+                    comptime if MR:
+                        # Mutual reachability (reachability.cuh:222-255):
+                        # max(core_j, max(core_i, (1/alpha) * d)).
+                        dd = max(tcore[u], max(cri, inv_alpha * sqrt(dd)))
                     # Exponent bits, not a float compare: FAST arithmetic
                     # may assume no inf / NaN and fold the compare away.
                     if (bitcast[DType.uint32](dd) & 0x7F800000) == 0x7F800000:
@@ -128,6 +143,11 @@ def fast_euclidean_mst(
     mut mst_rows: DeviceBuffer[DType.int32],
     mut mst_cols: DeviceBuffer[DType.int32],
     mut mst_weights: DeviceBuffer[DType.float32],
+    mutual_reach: Bool = False,
+    core_ptr: MutPointer[Float32, MutAnyOrigin] = MutPointer[
+        Float32, MutAnyOrigin
+    ](unsafe_from_address=0),
+    inv_alpha: Float32 = 1.0,
 ) raises -> Int:
     """`m - 1` edges into the three buffers, ascending by (weight, src,
     dst): weight, then discovery order. Returns the Boruvka round count. `x` is `m x n` row-major,
@@ -159,11 +179,20 @@ def fast_euclidean_mst(
         ctx.enqueue_copy(dst_buf=comp_d, src_ptr=comp_h.unsafe_ptr())
         comptime for DM in [8, 16, 32, 64]:
             if n <= DM and (DM == 8 or n > DM // 2):
-                ctx.enqueue_function[fb_nearest_other_kernel[DM]](
-                    x.unsafe_ptr(), comp_d.unsafe_ptr(), bd_d.unsafe_ptr(),
-                    bj_d.unsafe_ptr(), Int32(m), Int32(n),
-                    grid_dim=grid, block_dim=FB_TPB,
-                )
+                if mutual_reach:
+                    ctx.enqueue_function[fb_nearest_other_kernel[DM, True]](
+                        x.unsafe_ptr(), core_ptr, inv_alpha,
+                        comp_d.unsafe_ptr(), bd_d.unsafe_ptr(),
+                        bj_d.unsafe_ptr(), Int32(m), Int32(n),
+                        grid_dim=grid, block_dim=FB_TPB,
+                    )
+                else:
+                    ctx.enqueue_function[fb_nearest_other_kernel[DM]](
+                        x.unsafe_ptr(), core_ptr, inv_alpha,
+                        comp_d.unsafe_ptr(), bd_d.unsafe_ptr(),
+                        bj_d.unsafe_ptr(), Int32(m), Int32(n),
+                        grid_dim=grid, block_dim=FB_TPB,
+                    )
         ctx.enqueue_copy(dst_ptr=bd_h.unsafe_ptr(), src_buf=bd_d)
         ctx.enqueue_copy(dst_ptr=bj_h.unsafe_ptr(), src_buf=bj_d)
         ctx.synchronize()
@@ -228,7 +257,7 @@ def fast_euclidean_mst(
         hr.unsafe_ptr().unsafe_store(t, es[e])
         hc.unsafe_ptr().unsafe_store(t, ed[e])
         var w = ew[e]
-        if is_sqrt:
+        if is_sqrt and not mutual_reach:
             w = sqrt(w)
         hw.unsafe_ptr().unsafe_store(t, w)
     if ne > 0:
