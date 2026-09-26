@@ -97,7 +97,7 @@ LINUX_SETS = (("cuda", "sm_90a"), ("cuda", "sm_89"), ("hip", "gfx942"))
 HOST_LEG = ("cuda", "sm_89")
 LINUX_BUILDERS = ("packaging/linux/build_sets.sh", "packaging/linux/stage_libs.py",
                   "tools/release061_remote_build.sh", "tools/linux_surface_qualification.sh",
-                  "packaging/linux/binding_timeout.sh")
+                  "packaging/linux/binding_timeout.sh", "packaging/linux/ptx_contract.py")
 MACOS_BUILDERS = ("packaging/macos/build_release_wheel.sh", "packaging/macos/stage_dylibs.py",
                   "python/setup.py")
 PORTABLE_MATH = "packaging/portable_math"
