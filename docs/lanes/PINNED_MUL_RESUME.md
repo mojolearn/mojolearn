@@ -44,6 +44,19 @@ portable_erff's `x*p`.
    Metal reference ~/mojolearn-evidence/release-check/69a519c1522d/metal/column.json).
 4. Merge to main only when all of the above pass.
 
+## Original-vs-new census findings (census/orig_vs_round1_nvidia.txt, host fusedtext)
+
+- 0.8.19 FUSED some identical_mul / pinned_mul products into the add they fed
+  (the old pin folded): mamba3 `m3_mod_2pi`, the dynamic-boosting cursor
+  (kernel + host oracle), now explicit fma (bits kept).
+- Box-Muller `identical_mul_add(ftz(identical_mul(r, c)), 1.0, 0.0)` (gp
+  sample_y, RBF sampler, GMM sample): 10 fusions per function lost; bit-neutral
+  (fma(r, c, +0) == round(r*c) + 0 for every r, c, including zero signs and the
+  ftz arm). The columns confirm.
+- COST: on the host the fence blocks vectorization where a pinned product sits
+  in a loop (mamba host: fmla 226 -> 79, fmul.4s 71 -> 2). A CPU speed cost on
+  IDENTICAL host paths that use identical_mul in hot loops; not measured yet.
+
 ## Risks noted
 
 - ordered model length and resample quantile position: the host oracle
