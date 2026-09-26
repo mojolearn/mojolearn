@@ -27,7 +27,7 @@ WHEEL = "mojolearn-0.8.14-py3-none-manylinux_2_35_x86_64.whl"
 def args(**kw):
     base = dict(version="0.8.14", dry_run=False, publish=None, only="", redo="", build_backend="gpu-legs",
                 amd_expect_from="", smoke_gpu="", state_dir="", amd_build_provider=None, amd_provider="auto",
-                cpu_column=False, split_linux=False)   # the combined layout; split: test_release_split.py
+                cpu_column=False)
     base.update(kw)
     return argparse.Namespace(**base)
 
@@ -75,7 +75,21 @@ class Columns(unittest.TestCase):
         with zipfile.ZipFile(final, "w") as z:
             z.writestr("mojolearn/identity_columns/COMMIT", COMMIT + "\n")
         self.final = final
+        # the split set: the core above and both plugins beside it
+        self.plugins = {}
+        for prefix in ("mojolearn_nvidia", "mojolearn_amd"):
+            p = final.parent / WHEEL.replace("mojolearn-", prefix + "-", 1)
+            with zipfile.ZipFile(p, "w") as z:
+                z.writestr(f"mojolearn/{prefix}.txt", prefix)
+            self.plugins[prefix] = p
         return r
+
+    def columns(self, r):
+        """Both GPU columns launched and awaited together, then the joint diff:
+        what the gpu-column-nvidia, gpu-column-amd and linux-joint-diff steps
+        run between them."""
+        r.run_columns(("nvidia", "amd"))
+        return r.joint_diff()
 
     def reference(self, backend, h="aaaa"):
         d = self.check / COMMIT[:12] / backend
@@ -89,10 +103,12 @@ class Columns(unittest.TestCase):
         out = r.rel / ("smoke-linux" if name == "nvidia" else "column-amd")
         out.mkdir(parents=True, exist_ok=True)
         if rc == 0:
-            if name == "nvidia":
-                (out / "results.json").write_text(json.dumps(dict(
-                    status="PASSED", scope="expanded", source_commit=COMMIT,
-                    wheel_sha256=hashlib.sha256(self.final.read_bytes()).hexdigest())))
+            # each column's smoke receipt: the core, with both plugins installed beside it
+            (out / "results.json").write_text(json.dumps(dict(
+                status="PASSED", scope="expanded", source_commit=COMMIT,
+                wheel_sha256=hashlib.sha256(self.final.read_bytes()).hexdigest(),
+                plugins=[dict(wheel=str(p), wheel_sha256=hashlib.sha256(p.read_bytes()).hexdigest())
+                         for p in self.plugins.values()])))
             (out / f"column-{vendor}.json").write_text(json.dumps(column(vendor, h)))
             (out / f"diff-ref-{vendor}.txt").write_text(diff)
         (r.rel / "columns").mkdir(parents=True, exist_ok=True)
@@ -108,7 +124,7 @@ class Columns(unittest.TestCase):
                       lambda r: None,
                       lambda r: self.finish(r, "nvidia")]
         with self.assertRaises(release.StepFailed) as cm:
-            r.step_gpu_columns()
+            self.columns(r)
         self.assertEqual(self.events[:2], ["spawn", "spawn"], "both launched before any wait")
         self.assertEqual(self.events.count("sleep"), 3, "NVIDIA was awaited after AMD failed")
         self.assertEqual(len(self.spawned), 2)
@@ -132,7 +148,7 @@ class Columns(unittest.TestCase):
         r = self.release()
         self.hooks = [lambda r: (self.finish(r, "amd", rc=1), self.finish(r, "nvidia", rc=3))]
         with self.assertRaises(release.StepFailed) as cm:
-            r.step_gpu_columns()
+            self.columns(r)
         self.assertIn("NVIDIA column", str(cm.exception))
         self.assertIn("AMD column", str(cm.exception))
         self.assertIn("exit 3", str(cm.exception))
@@ -141,7 +157,7 @@ class Columns(unittest.TestCase):
         self.reference("metal")
         r = self.release()
         self.hooks = [lambda r: (self.finish(r, "amd"), self.finish(r, "nvidia"))]
-        result = r.step_gpu_columns()
+        result = self.columns(r)
         self.assertIn("no DIVERGENT cell across the columns", result)
         self.assertTrue(any(l.startswith("  summary: IDENTICAL=1") for l in r.lines), r.lines)
         # NVIDIA and AMD each agreed with Apple in their own diff, but disagree with
@@ -149,7 +165,7 @@ class Columns(unittest.TestCase):
         r2 = self.release_again()
         self.hooks = [lambda r: (self.finish(r, "amd", h="bbbb"), self.finish(r, "nvidia"))]
         with self.assertRaises(release.StepFailed) as cm:
-            r2.step_gpu_columns()
+            self.columns(r2)
         self.assertIn("DIVERGENT", str(cm.exception))
         self.assertIn("rf-clf/base", str(cm.exception))
 
@@ -165,7 +181,7 @@ class Columns(unittest.TestCase):
         self.hooks = [lambda r: (self.finish(r, "amd", diff="| x/base | DIVERGENT |\nsummary: DIVERGENT=1\n"),
                                  self.finish(r, "nvidia"))]
         with self.assertRaises(release.StepFailed) as cm:
-            r.step_gpu_columns()
+            self.columns(r)
         self.assertIn("AMD column", str(cm.exception))
 
     def test_a_passed_column_is_not_rerun(self):
@@ -174,7 +190,7 @@ class Columns(unittest.TestCase):
         (r.rel / "columns").mkdir(parents=True)
         self.finish(r, "nvidia")
         self.hooks = [lambda r: self.finish(r, "amd")]
-        r.step_gpu_columns()
+        self.columns(r)
         self.assertEqual(len(self.spawned), 1)
         self.assertIn("--vendor hip", self.spawned[0][2])
         self.assertIn("  nvidia: PASSED for this wheel (record exists), not rerun", r.lines)
@@ -185,7 +201,7 @@ class Columns(unittest.TestCase):
         self.hooks = [lambda r: (self.finish(r, "amd"),
                                  self.finish(r, "nvidia", rc=1, log="create: There are no instances currently available")),
                       lambda r: self.finish(r, "nvidia")]
-        r.step_gpu_columns()
+        self.columns(r)
         self.assertEqual(len(self.spawned), 3)
         self.assertIn("--gpu 'NVIDIA L40S'", self.spawned[2][2])
         self.assertEqual((r.rel / "columns" / "nvidia.gpu").read_text(), "1")
@@ -199,13 +215,13 @@ class Columns(unittest.TestCase):
         self.hooks = [lambda r: self.finish(r, "nvidia", rc=1, log="create: There are no instances currently available"),
                       lambda r: (seen.append(len(self.spawned)), self.finish(r, "amd")),
                       lambda r: self.finish(r, "nvidia")]
-        r.step_gpu_columns()
+        self.columns(r)
         self.assertEqual(seen, [3], "the NVIDIA walk launched while AMD was still running")
 
     def test_no_reference_column_refuses_before_any_rental(self):
         r = self.release()
         with self.assertRaises(release.StepFailed) as cm:
-            r.step_gpu_columns()
+            self.columns(r)
         self.assertIn("metal/column.json", str(cm.exception))
         self.assertEqual(self.spawned, [])
 
