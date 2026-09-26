@@ -20,7 +20,7 @@ L2SqrtExpanded. FAST arithmetic: direct sums of squared differences.
 
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
-from max.gpu.host import DeviceBuffer, DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.math import sqrt
@@ -129,6 +129,64 @@ def fb_nearest_other_kernel[DMAX: Int, MR: Bool = False, PPT: Int = 1](
             best_j[ii[pp]] = Int32(-2) if bad[pp] else bj[pp]
 
 
+def _fb_search(
+    ctx: DeviceContext,
+    mut mb: MmaBoruvka,
+    mut x: DeviceBuffer[DType.float32],
+    m: Int,
+    n: Int,
+    mutual_reach: Bool,
+    core_ptr: MutPointer[Float32, MutAnyOrigin],
+    inv_alpha: Float32,
+    mut comp_d: DeviceBuffer[DType.int32],
+    mut todo_d: DeviceBuffer[DType.int32],
+    list_h: HostBuffer[DType.int32],
+    n_todo: Int,
+    mut bd_d: DeviceBuffer[DType.float32],
+    mut bj_d: DeviceBuffer[DType.int32],
+) raises:
+    """The nearest other-component point of the `n_todo` listed points
+    into `bd_d` / `bj_d` (their entries only)."""
+    if n_todo <= 0:
+        return
+    ctx.enqueue_copy(
+        dst_buf=todo_d.create_sub_buffer[DType.int32](0, n_todo),
+        src_ptr=list_h.unsafe_ptr(),
+    )
+    if mb.ok:
+        mb.enqueue(
+            ctx, x, m, n, mutual_reach, core_ptr, inv_alpha, comp_d,
+            todo_d, n_todo, bd_d, bj_d,
+        )
+        return
+    var grid = (n_todo + FB_TPB - 1) // FB_TPB
+    comptime for DM in [8, 16, 32, 64]:
+        # The reachability arm keeps one point per thread (its per-pair
+        # sqrt, not the tile reads, dominates: HDBSCAN taxi 100k 9.6 s
+        # at 1 vs 10.2 s at 4).
+        comptime P = FB_PPT if DM <= 16 else 1
+        var gridp = (n_todo + FB_TPB * P - 1) // (FB_TPB * P)
+        if mutual_reach:
+            gridp = grid
+        if n <= DM and (DM == 8 or n > DM // 2):
+            if mutual_reach:
+                ctx.enqueue_function[fb_nearest_other_kernel[DM, True, 1]](
+                    x.unsafe_ptr(), core_ptr, inv_alpha,
+                    comp_d.unsafe_ptr(), bd_d.unsafe_ptr(),
+                    bj_d.unsafe_ptr(), Int32(m), Int32(n),
+                    todo_d.unsafe_ptr(), Int32(n_todo),
+                    grid_dim=gridp, block_dim=FB_TPB,
+                )
+            else:
+                ctx.enqueue_function[fb_nearest_other_kernel[DM, False, P]](
+                    x.unsafe_ptr(), core_ptr, inv_alpha,
+                    comp_d.unsafe_ptr(), bd_d.unsafe_ptr(),
+                    bj_d.unsafe_ptr(), Int32(m), Int32(n),
+                    todo_d.unsafe_ptr(), Int32(n_todo),
+                    grid_dim=gridp, block_dim=FB_TPB,
+                )
+
+
 def _find(mut parent: List[Int32], a: Int) -> Int:
     var r = a
     while Int(parent[r]) != r:
@@ -197,56 +255,62 @@ def fast_euclidean_mst(
     for i in range(m):
         todo_h.unsafe_ptr().unsafe_store(i, Int32(i))
     var n_todo = m
+    # Two phases per round. A: for each component, its listed point with
+    # the smallest lower bound. B: the other listed points, after A's exact
+    # values have tightened the component bound (see `_boruvka_plan`).
+    var listed = List[Bool](length=m, fill=True)
+    var dropped = List[Bool](length=m, fill=False)
+    var ub = List[Float32](length=m, fill=Float32.MAX)
+    var minlb = List[Float32](length=m, fill=Float32.MAX)
+    var arg = List[Int32](length=m, fill=Int32(-1))
+    var defer_h = List[Int32](capacity=m)
+    var listb_h = ctx.enqueue_create_host_buffer[DType.int32](m)
     # FAST, Apple, n <= 32: the matrix-unit search with the same answer
     # (`fast_mma_boruvka.mojo`); `mb.ok` is False when it declines.
     var _st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
     var mb = MmaBoruvka(ctx, x, m, n, mutual_reach, core_ptr, inv_alpha)
     while n_comp > 1:
         rounds += 1
-        var grid = (n_todo + FB_TPB - 1) // FB_TPB
         ctx.enqueue_copy(dst_buf=comp_d, src_ptr=comp_h.unsafe_ptr())
-        if n_todo > 0:
-            ctx.enqueue_copy(
-                dst_buf=todo_d.create_sub_buffer[DType.int32](0, n_todo),
-                src_ptr=todo_h.unsafe_ptr(),
-            )
         var _tq0 = 0
         if _st_on:
             ctx.synchronize()
             _tq0 = Int(perf_counter_ns())
-        if mb.ok and n_todo > 0:
-            mb.enqueue(
-                ctx, x, m, n, mutual_reach, core_ptr, inv_alpha, comp_d,
-                todo_d, n_todo, bd_d, bj_d,
-            )
-        comptime for DM in [8, 16, 32, 64]:
-            # The reachability arm keeps one point per thread (its per-pair
-            # sqrt, not the tile reads, dominates: HDBSCAN taxi 100k 9.6 s
-            # at 1 vs 10.2 s at 4).
-            comptime P = FB_PPT if DM <= 16 else 1
-            var gridp = (n_todo + FB_TPB * P - 1) // (FB_TPB * P)
-            if mutual_reach:
-                gridp = grid
-            if not mb.ok and n_todo > 0 and n <= DM and (DM == 8 or n > DM // 2):
-                if mutual_reach:
-                    ctx.enqueue_function[fb_nearest_other_kernel[DM, True, 1]](
-                        x.unsafe_ptr(), core_ptr, inv_alpha,
-                        comp_d.unsafe_ptr(), bd_d.unsafe_ptr(),
-                        bj_d.unsafe_ptr(), Int32(m), Int32(n),
-                        todo_d.unsafe_ptr(), Int32(n_todo),
-                        grid_dim=gridp, block_dim=FB_TPB,
-                    )
+        _fb_search(
+            ctx, mb, x, m, n, mutual_reach, core_ptr, inv_alpha, comp_d,
+            todo_d, todo_h, n_todo, bd_d, bj_d,
+        )
+        var n_b = 0
+        var n_drop_b = 0
+        if len(defer_h) > 0:
+            ctx.enqueue_copy(dst_ptr=bd_h.unsafe_ptr(), src_buf=bd_d)
+            ctx.enqueue_copy(dst_ptr=bj_h.unsafe_ptr(), src_buf=bj_d)
+            ctx.synchronize()
+            for t in range(n_todo):
+                var i = Int(todo_h.unsafe_ptr().unsafe_load(t))
+                if Int(bj_h.unsafe_ptr().unsafe_load(i)) >= 0:
+                    var ri = Int(comp_h.unsafe_ptr().unsafe_load(i))
+                    ub[ri] = min(ub[ri], bd_h.unsafe_ptr().unsafe_load(i))
+            for t in range(len(defer_h)):
+                var i = Int(defer_h[t])
+                var ri = Int(comp_h.unsafe_ptr().unsafe_load(i))
+                var lb = Float32(0)
+                if Int(bj_h.unsafe_ptr().unsafe_load(i)) >= 0:
+                    lb = bd_h.unsafe_ptr().unsafe_load(i)
+                if lb > ub[ri]:
+                    dropped[i] = True
+                    n_drop_b += 1
                 else:
-                    ctx.enqueue_function[fb_nearest_other_kernel[DM, False, P]](
-                        x.unsafe_ptr(), core_ptr, inv_alpha,
-                        comp_d.unsafe_ptr(), bd_d.unsafe_ptr(),
-                        bj_d.unsafe_ptr(), Int32(m), Int32(n),
-                        todo_d.unsafe_ptr(), Int32(n_todo),
-                        grid_dim=gridp, block_dim=FB_TPB,
-                    )
+                    listb_h.unsafe_ptr().unsafe_store(n_b, Int32(i))
+                    n_b += 1
+            _fb_search(
+                ctx, mb, x, m, n, mutual_reach, core_ptr, inv_alpha, comp_d,
+                todo_d, listb_h, n_b, bd_d, bj_d,
+            )
         if _st_on:
             ctx.synchronize()
-            print("BORUVKA round=" + String(rounds) + " n_todo=" + String(n_todo)
+            print("BORUVKA round=" + String(rounds) + " phaseA=" + String(n_todo)
+                  + " phaseB=" + String(n_b) + " droppedB=" + String(n_drop_b)
                   + " ms=" + String((Int(perf_counter_ns()) - _tq0) // 1000000))
         ctx.enqueue_copy(dst_ptr=bd_h.unsafe_ptr(), src_buf=bd_d)
         ctx.enqueue_copy(dst_ptr=bj_h.unsafe_ptr(), src_buf=bj_d)
@@ -261,7 +325,7 @@ def fast_euclidean_mst(
                     " row, or rows whose squared difference overflows);"
                     " refused by name (DEVIATION 623, IDENTITY_PATHS row 39)"
                 )
-            if j < 0:
+            if j < 0 or dropped[i]:
                 continue
             var c = Int(comp_h.unsafe_ptr().unsafe_load(i))
             var dd = bd_h.unsafe_ptr().unsafe_load(i)
@@ -289,14 +353,60 @@ def fast_euclidean_mst(
             cb_d[c] = Float32.MAX
             cb_a[c] = Int32(-1)
             cb_b[c] = Int32(-1)
-        n_todo = 0
+        # Next round's plan. A listed point (its nearest other-component
+        # point joined its own component, or it was never searched) has a
+        # LOWER BOUND: its last value, since the other-component set only
+        # shrinks (0 if never searched). A component's BOUND is its
+        # unlisted members' values, which are still exact. A listed point
+        # whose lower bound exceeds its component's bound cannot give the
+        # component's cheapest edge (strictly: a tie that could win on the
+        # index is still searched); it sits the round out, ignored by the
+        # edge pass above and listed again the next round. Phase B repeats
+        # the test after phase A's exact values join the bound.
+        for i in range(m):
+            ub[Int(comp_h.unsafe_ptr().unsafe_load(i))] = Float32.MAX
         for i in range(m):
             var ri = _find(parent, i)
             comp_h.unsafe_ptr().unsafe_store(i, Int32(ri))
             var bj = Int(bj_h.unsafe_ptr().unsafe_load(i))
+            dropped[i] = False
             if bj < 0 or _find(parent, bj) == ri:
+                listed[i] = True
+            else:
+                listed[i] = False
+                ub[ri] = min(ub[ri], bd_h.unsafe_ptr().unsafe_load(i))
+        var n_drop = 0
+        for i in range(m):
+            if not listed[i]:
+                continue
+            var ri = Int(comp_h.unsafe_ptr().unsafe_load(i))
+            var lb = Float32(0)
+            if Int(bj_h.unsafe_ptr().unsafe_load(i)) >= 0:
+                lb = bd_h.unsafe_ptr().unsafe_load(i)
+            if lb > ub[ri]:
+                dropped[i] = True
+                n_drop += 1
+            elif arg[ri] < 0 or lb < minlb[ri]:
+                minlb[ri] = lb
+                arg[ri] = Int32(i)
+        n_todo = 0
+        defer_h.clear()
+        for i in range(m):
+            if not listed[i] or dropped[i]:
+                continue
+            var ri = Int(comp_h.unsafe_ptr().unsafe_load(i))
+            if Int(arg[ri]) == i:
                 todo_h.unsafe_ptr().unsafe_store(n_todo, Int32(i))
                 n_todo += 1
+            else:
+                defer_h.append(Int32(i))
+        for i in range(m):
+            var ri = Int(comp_h.unsafe_ptr().unsafe_load(i))
+            minlb[ri] = Float32.MAX
+            arg[ri] = Int32(-1)
+        if _st_on:
+            print("BORUVKA plan dropped=" + String(n_drop) + " deferred="
+                  + String(len(defer_h)))
         if rounds > 64:
             raise Error("fast_euclidean_mst: Boruvka did not converge")
     # Sort the edges by weight (non-negative float bits order as the
