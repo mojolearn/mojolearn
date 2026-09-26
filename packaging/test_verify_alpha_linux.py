@@ -183,8 +183,10 @@ class SplitLinuxTests(unittest.TestCase):
         members = {prefix + 'WHEEL': ('Wheel-Version: 1.0\nRoot-Is-Purelib: false\nTag: ' + tag + '\n').encode(),
                    prefix + 'LINUX_PAYLOAD.json': json.dumps(payload).encode()}
         if vendor is None:
-            # the core declares no extras and requires no plugin
+            # the core declares no extras and requires BOTH plugins at its
+            # own version exactly (`pip install mojolearn` works for everyone)
             meta.append('Requires-Dist: numpy>=1.24')
+            meta.extend('Requires-Dist: ' + r for r in P.core_requirements(v))
             members[prefix + P.CORE_MARKER] = json.dumps(P.core_marker(v)).encode()
             members['mojolearn/__init__.py'] = b'# fixture\n'
             members['mojolearn/identity_columns/COMMIT'] = b'a' * 40 + b'\n'
@@ -249,19 +251,30 @@ class SplitLinuxTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, why):
                     gate.verify(self.dist, digest, None, self.root)
 
-    def test_core_no_extras_and_ownership_are_checked(self):
-        def gpu_extra(prefix, members):
-            members[prefix + 'METADATA'] = members[prefix + 'METADATA'].replace(
-                b'\n\nFixture only', b'\nProvides-Extra: nvidia\n'
-                b'Requires-Dist: mojolearn-nvidia==9.9.9; extra == "nvidia"\n\nFixture only')
-
-        def requires_plugin(prefix, members):
-            members[prefix + 'METADATA'] = members[prefix + 'METADATA'].replace(
-                b'\n\nFixture only', b'\nRequires-Dist: mojolearn_amd==9.9.9\n\nFixture only')
+    def test_core_requirements_and_ownership_are_checked(self):
+        def edit(old, new):
+            def mutate(prefix, members):
+                raw = members[prefix + 'METADATA']
+                assert old in raw, old
+                members[prefix + 'METADATA'] = raw.replace(old, new, 1)
+            return mutate
+        amd = b'Requires-Dist: mojolearn-amd==9.9.9\n'
+        nvidia = b'Requires-Dist: mojolearn-nvidia==9.9.9\n'
+        gpu_extra = edit(b'\n\nFixture only', b'\nProvides-Extra: nvidia\n\nFixture only')
+        missing_amd = edit(amd, b'')
+        missing_nvidia = edit(nvidia, b'')
+        missing_both = edit(nvidia + amd, b'')
+        loose_pin = edit(amd, b'Requires-Dist: mojolearn-amd>=9.9.9\n')
+        other_version = edit(nvidia, b'Requires-Dist: mojolearn-nvidia==9.9.8\n')
+        extra_marker = edit(amd, b'Requires-Dist: mojolearn-amd==9.9.9; extra == "amd"\n')
+        doubled = edit(amd, amd + amd)
 
         def gpu_set_in_core(prefix, members):
             members['mojolearn/cuda/sm_89/_mojolearn_knn.so'] = b'FAKE'
-        for mutate, why in ((gpu_extra, 'no extras'), (requires_plugin, 'require no GPU plugin'),
+        for mutate, why in ((gpu_extra, 'no extras'), (missing_amd, 'require exactly'),
+                            (missing_nvidia, 'require exactly'), (missing_both, 'require exactly'),
+                            (loose_pin, 'require exactly'), (other_version, 'require exactly'),
+                            (extra_marker, 'require exactly'), (doubled, 'require exactly'),
                             (gpu_set_in_core, 'GPU set member')):
             with self.subTest(mutate=mutate.__name__):
                 digest = self.stage('core', mutate)

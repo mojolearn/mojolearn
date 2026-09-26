@@ -92,7 +92,8 @@ class PublishCommandTests(unittest.TestCase):
                 self.assertEqual(list(manifest['files']), [f'mojolearn_{split}-0.8.9-py3-none-manylinux_2_35_x86_64.whl'])
                 self.assertIn('light_platform=linux', calls)
                 self.assertIn(f'--title mojolearn-{split} 0.8.9 linux', calls)
-                self.assertIn(f'pip install mojolearn-{split} (which brings mojolearn 0.8.9', calls)
+                self.assertIn('installed by pip install mojolearn (the Linux core 0.8.9 requires it', calls)
+                self.assertNotIn(f'pip install mojolearn-{split}', calls)
                 self.assertNotIn('mojolearn[', calls)
 
     def test_failed_smoke_never_reaches_github(self):

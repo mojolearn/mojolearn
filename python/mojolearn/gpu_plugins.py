@@ -11,10 +11,16 @@ pattern JAX and CuPy use, so NVIDIA and AMD can release independently:
                        NVIDIA architecture the release carries)
     mojolearn-amd      ONLY mojolearn/hip/<arch>/...  (AMD, gfx942)
 
-`pip install mojolearn-nvidia` installs the NVIDIA plugin and its core,
-`pip install mojolearn-amd` the AMD one. The core declares NO extras: each
-plugin requires exactly `mojolearn==<its own version>`, so installing or
-upgrading a plugin installs or upgrades the core with it. The package names
+`pip install mojolearn` JUST WORKS FOR EVERYONE (Andrew, 2026-09-26): the
+Linux core requires BOTH plugins at its own version exactly
+(`Requires-Dist: mojolearn-nvidia==<v>`, `Requires-Dist: mojolearn-amd==<v>`,
+core_requirements), and each plugin requires exactly `mojolearn==<v>` back
+(a cycle pip resolves). There are NO extras. The loader picks the set for the
+GPU it finds; with both plugins always installed, its "GPU without its
+plugin" refusal fires only on a broken install and says to reinstall the
+core (reinstall_command). Because pip can resolve `mojolearn==<v>` only once
+both plugins at <v> are on the index, the plugins publish FIRST and the core
+LAST (tools/release.py, release-provenance.yml). The package names
 say the vendor; the directories inside them keep the runtime vendor axis
 (`cuda`, `hip`) that the loader, the bindings and MOJOLEARN_VENDOR use.
 
@@ -92,11 +98,20 @@ def member_vendor(arcname):
     return None
 
 
-def install_command(vendor, version=None):
-    """The pip command that installs the plugin for `vendor` and, through
-    the plugin's exact pin, the core of the same version."""
+def core_requirements(version):
+    """The Linux core's Requires-Dist values on its GPU plugins, in table
+    order: every plugin, at the core's own version exactly. No environment
+    marker: the split core is a manylinux x86_64 wheel only, and a
+    `sys_platform` marker is evaluated against the RESOLVING interpreter, so
+    `pip download --platform manylinux...` from a Mac would skip both."""
+    return [f"{row['distribution']}=={version}" for row in PLUGINS.values()]
+
+
+def reinstall_command(version=None):
+    """The pip command that repairs an incomplete split install: the core at
+    this version, which brings both plugins through its exact requirements."""
     pin = f"=={version}" if version else ""
-    return f'pip install "{PLUGINS[vendor]["distribution"]}{pin}"'
+    return f'pip install --force-reinstall "{CORE_DISTRIBUTION}{pin}"'
 
 
 def core_marker(version):

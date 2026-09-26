@@ -109,14 +109,21 @@ registered with their trusted publishers, docs/RELEASE_CHECKLIST.md 3b). The
 Linux pipeline then becomes three (python/mojolearn/gpu_plugins.py):
   core-linux  linux-builds -> linux-wait -> linux-assemble -> linux-pack
               (--profile release-split: the core and both plugins, each
-              audited and stripped) -> linux-joint-diff -> publish-core-linux
-  nvidia      gpu-column-nvidia (core + mojolearn-nvidia installed together) -> publish-nvidia
-  amd         gpu-column-amd (core + mojolearn-amd, the expanded smoke too) -> publish-amd
-Each column gates its own plugin; linux-joint-diff waits for both columns to
-settle, needs at least one PASSED and diffs every PASSED column with the Apple
-column (any DIVERGENT cell stops all three); the core publishes on it (the
-receipt of whichever vendor passed, NVIDIA first), and a plugin publishes only
-after the core did and its own column passed. Each package is its own GitHub
+              audited and stripped) -> linux-joint-diff
+              -> publish-core-linux (LAST, after publish-nvidia AND publish-amd)
+  nvidia      gpu-column-nvidia (core + both plugins installed together, as pip does) -> publish-nvidia
+  amd         gpu-column-amd (core + both plugins, the expanded smoke too) -> publish-amd
+`pip install mojolearn` WORKS FOR EVERYONE (Andrew, 2026-09-26): the Linux
+core requires BOTH plugins at its own version exactly, so pip can resolve
+`mojolearn==<v>` only once mojolearn-nvidia and mojolearn-amd <v> are both on
+the index. The PLUGINS PUBLISH FIRST and the CORE LAST. Each column gates its
+own plugin; linux-joint-diff waits for both columns to settle, needs at least
+one PASSED and diffs every PASSED column with the Apple column (any DIVERGENT
+cell stops all three); a plugin publishes on the joint diff and its own
+column; the core publishes only after BOTH plugins did, so only when both
+vendors' columns passed (on the NVIDIA receipt). A failed vendor holds the
+core; the other plugin may still upload, harmless and unresolvable alone
+(it requires the core). Each package is its own GitHub
 release and workflow dispatch (the workflow uploads it to its own PyPI
 project); column and ledger entries stay keyed to one wheel's sha256 (the
 plugin's, with the core's recorded beside it).
@@ -719,9 +726,11 @@ SPLIT_STEP_TABLE = [
     ("gpu-column-nvidia", "nvidia", ["linux-pack", "release-check"], None),
     ("gpu-column-amd", "amd", ["linux-pack", "release-check"], None),
     ("linux-joint-diff", "core-linux", ["linux-pack", "release-check"], None),
-    ("publish-core-linux", "core-linux", ["linux-joint-diff"], "dispatch"),
-    ("publish-nvidia", "nvidia", ["publish-core-linux", "gpu-column-nvidia", "linux-joint-diff"], "dispatch"),
-    ("publish-amd", "amd", ["publish-core-linux", "gpu-column-amd", "linux-joint-diff"], "dispatch"),
+    # THE PLUGINS FIRST, THE CORE LAST: the core requires both plugins at its
+    # version, so it is resolvable only once both are on the index
+    ("publish-nvidia", "nvidia", ["gpu-column-nvidia", "linux-joint-diff"], "dispatch"),
+    ("publish-amd", "amd", ["gpu-column-amd", "linux-joint-diff"], "dispatch"),
+    ("publish-core-linux", "core-linux", ["linux-joint-diff", "publish-nvidia", "publish-amd"], "dispatch"),
     ("publish-macos", "macos", ["macos-smoke", "release-check"], "dispatch"),
     ("finish-line", "finish", ["freeze-commit"], None),
     ("record", "finish", ["finish-line"], None),
@@ -1800,11 +1809,14 @@ class Release:
 
     def plugin_installed(self, results, package):
         """With --split-linux: the receipt installed exactly this release's
-        final plugin of `package` beside the core. True for the combined layout."""
+        final plugins beside the core, BOTH of them (the core requires both,
+        so the box installs what `pip install mojolearn` installs), among them
+        `package`'s. True for the combined layout."""
         if not self.split:
             return True
-        plugin = self.split_final(package)
-        return bool(plugin) and receipt_plugins(results) == {plugin.name: sha256(plugin)}
+        plugins = {k: self.split_final(k) for k in ("nvidia", "amd")}
+        return (all(plugins.values()) and bool(plugins[package])
+                and receipt_plugins(results) == {w.name: sha256(w) for w in plugins.values()})
 
     def column_wheel(self, vendor):
         """The wheel a column's results are keyed to (ledger, reuse): the
@@ -1918,11 +1930,16 @@ class Release:
         return legs
 
     def plugin_args(self, package):
-        """With --split-linux: `--plugin <final plugin>` for the column's smoke."""
+        """With --split-linux: `--plugin <final plugin>` for the column's smoke,
+        the column's own plugin FIRST and then the other one: the core requires
+        both, so the box installs all three, as `pip install mojolearn` does."""
         if not self.split:
             return []
-        plugin = self.split_final(package)
-        return ["--plugin", str(plugin) if plugin else f"<final {SPLIT_PACKAGES[package][1]} wheel>"]
+        out = []
+        for k in (package,) + tuple(k for k in ("nvidia", "amd") if k != package):
+            plugin = self.split_final(k)
+            out += ["--plugin", str(plugin) if plugin else f"<final {SPLIT_PACKAGES[k][1]} wheel>"]
+        return out
 
     def record_column(self, name, vendor, out):
         """A PASSED column: its provenance beside it, and the ledger entry."""
@@ -1949,12 +1966,12 @@ class Release:
         return self.joint_diff()
 
     def step_gpu_column_nvidia(self):
-        """--split-linux: the NVIDIA column alone (core + mojolearn-nvidia); it gates mojolearn-nvidia."""
+        """--split-linux: the NVIDIA column alone (core + both plugins, as pip installs them); it gates mojolearn-nvidia."""
         self.run_columns(("nvidia",))
         return "NVIDIA column PASSED: no DIVERGENT cell against " + self.ref_names()
 
     def step_gpu_column_amd(self):
-        """--split-linux: the AMD column alone (core + mojolearn-amd, with the smoke); it gates mojolearn-amd."""
+        """--split-linux: the AMD column alone (core + both plugins, with the smoke); it gates mojolearn-amd."""
         self.run_columns(("amd",))
         return "AMD column PASSED: no DIVERGENT cell against " + self.ref_names()
 
@@ -2106,13 +2123,17 @@ class Release:
         return self.publish("linux", self.linux_final(), self.rel / "smoke-linux" / "results.json")
 
     def core_receipt(self):
-        """The receipt the split core publishes on: NVIDIA's when its column
-        PASSED, else AMD's (the core needs at least one vendor's smoke)."""
-        if self.nvidia_column_ok():
+        """The receipt the split core publishes on, NVIDIA's. The core
+        requires BOTH plugins, so it publishes only when BOTH vendors'
+        columns PASSED (and after both plugins published, SPLIT_STEP_TABLE)."""
+        if self.dry:
             return self.rel / "smoke-linux" / "results.json"
-        if self.amd_column_ok() or self.dry:
-            return self.rel / "column-amd" / "results.json"
-        raise StepFailed("no PASSED column receipt for the core")
+        failed = [label for label, ok in (("NVIDIA", self.nvidia_column_ok()), ("AMD", self.amd_column_ok()))
+                  if not ok]
+        if failed:
+            raise StepFailed("the core requires both GPU plugins and publishes only when both columns PASSED; "
+                             "not PASSED: " + ", ".join(failed))
+        return self.rel / "smoke-linux" / "results.json"
 
     def step_publish_core_linux(self):
         smoke = self.core_receipt()

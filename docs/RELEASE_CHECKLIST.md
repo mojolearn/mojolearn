@@ -385,14 +385,20 @@ so NVIDIA and AMD can ship independently:
 
 | wheel | holds | requires |
 |---|---|---|
-| `mojolearn-<v>-py3-none-manylinux_2_35_x86_64.whl` | Python, `mojolearn/host/`, `mojolearn/.libs/`; no GPU set | its ordinary dependencies; no extras, no plugin |
+| `mojolearn-<v>-py3-none-manylinux_2_35_x86_64.whl` | Python, `mojolearn/host/`, `mojolearn/.libs/`; no GPU set | its ordinary dependencies, plus `mojolearn-nvidia==<v>` and `mojolearn-amd==<v>`; no extras |
 | `mojolearn_nvidia-<v>-...whl` | `mojolearn/cuda/<arch>/...` only | `mojolearn==<v>` |
 | `mojolearn_amd-<v>-...whl` | `mojolearn/hip/<arch>/...` only | `mojolearn==<v>` |
 
-A user installs `pip install mojolearn-nvidia` or `pip install mojolearn-amd`;
-the plugin's exact pin brings the core of the same version, and
-`pip install -U mojolearn-nvidia` upgrades both. The core declares no extras.
-The package names say the vendor; the directories inside keep the runtime
+`pip install mojolearn` works for everyone (Andrew, 2026-09-26): on Linux the
+core requires BOTH plugins at its own version exactly, so one command installs
+all three, and each plugin pins the core back (a cycle pip resolves). The
+core's METADATA is the combined wheel's plus exactly those two
+`Requires-Dist` lines; `tools/wheel_api_audit.py --split` and
+`packaging/verify_alpha_artifacts.py` refuse anything else. The loader picks
+the set for the GPU it finds; its "GPU without its plugin" refusal now fires
+only on a broken install and says to reinstall the core
+(`pip install --force-reinstall "mojolearn==<v>"`). The macOS wheel requires
+no plugin. The package names say the vendor; the directories inside keep the runtime
 vendor axis (`cuda`, `hip`) that the loader and `MOJOLEARN_VENDOR` use.
 
 The three are a partition of the combined wheel: same members, same archive
@@ -425,14 +431,25 @@ top-level `*.libs/` directory in a repaired wheel fails the run.
 Publishing the split packages with `pixi run release <version> --split-linux`
 (or `MOJOLEARN_RELEASE_SPLIT_LINUX=1`; the default stays the combined wheel)
 works like this. `linux-pack` packs `--profile release-split`, audits and strips each wheel and
-runs `split_audit` on the final set; the NVIDIA column installs the core with
-`mojolearn-nvidia` and the AMD column the core with `mojolearn-amd` (the
-expanded smoke runs on the AMD box too, so each plugin has a receipt of its own
-vendor); `linux-joint-diff` diffs every PASSED column with the Apple column;
-then `publish-core-linux` (on either vendor's receipt), `publish-nvidia` (NVIDIA
-column) and `publish-amd` (AMD column) are three GitHub releases and three
-dispatches, and a plugin publishes only after the core. A failed AMD column
-holds `mojolearn-amd` alone; a DIVERGENT cell holds all three. The same set
+runs `split_audit` on the final set; each column installs the core with BOTH
+plugins, exactly what `pip install mojolearn` installs (the core requires
+both, so one plugin alone would not install), and the NVIDIA column gates
+`mojolearn-nvidia`, the AMD column `mojolearn-amd` (the expanded smoke runs on
+the AMD box too, so each plugin has a receipt of its own vendor); `linux-joint-diff` diffs every PASSED column with the Apple column;
+then three GitHub releases and three dispatches, in this order:
+
+1. `publish-nvidia` (on the NVIDIA column) and `publish-amd` (on the AMD column),
+   the PLUGINS FIRST;
+2. `publish-core-linux` LAST, only after both plugins published, so only when
+   both vendors' columns PASSED (on the NVIDIA receipt).
+
+pip can resolve `mojolearn==<v>` only once both plugins at `<v>` are on the
+index, so the core never goes up before them: the release orders the steps,
+and the workflow's core job refuses a split core unless both plugins of its
+version are already on the index (`tools/wheel_api_audit.py
+--plugins-on-index`). A failed AMD column holds `mojolearn-amd` AND the core;
+`mojolearn-nvidia` may still upload, which is harmless (it requires the core
+and resolves nothing alone). A DIVERGENT cell holds all three. The same set
 can go through the full route by staging it in `~/.mojolearn-linux-wheel`
 (core, plugins, each with its `.sha256` sidecar); installed qualification of
 a split set is checked on the whole set,
@@ -451,14 +468,20 @@ Once, by the owner of the `mojolearn` PyPI account, before the first
 
    | PyPI project name | Owner | Repository name | Workflow name | Environment name |
    |---|---|---|---|---|
-   | `mojolearn-nvidia` | `mojolearn` | `mojolearn` | `release-provenance.yml` | `pypi` |
-   | `mojolearn-amd` | `mojolearn` | `mojolearn` | `release-provenance.yml` | `pypi` |
+   | `mojolearn-nvidia` | `mojolearn` | `mojolearn` | `release-provenance.yml` | `pypi-nvidia` |
+   | `mojolearn-amd` | `mojolearn` | `mojolearn` | `release-provenance.yml` | `pypi-amd` |
 
+   The environments MUST differ: PyPI refuses a second pending publisher
+   whose (repository, workflow, environment) matches one already registered
+   for a different project name ("A pending trusted publisher matching this
+   configuration has already been registered for a different project name").
 2. **TestPyPI**, the same at https://test.pypi.org/manage/account/publishing/
-   with environment `testpypi`.
-3. **GitHub:** nothing to create. All three projects publish from the existing
-   `pypi` and `testpypi` environments; PyPI routes each file to its project by
-   the wheel's own name.
+   with environments `testpypi-nvidia` and `testpypi-amd`.
+3. **GitHub environments.** In the repository's Settings, Environments, create
+   `pypi-nvidia`, `pypi-amd`, `testpypi-nvidia` and `testpypi-amd`, with the
+   same protection rules (required reviewers, deployment branches and tags)
+   as `pypi` and `testpypi`. A job naming a missing environment would create
+   it unprotected on first use, so create them first.
 4. Leave the `mojolearn` project's publisher as it is (environments `pypi`
    and `testpypi`), since it still uploads the macOS wheel and the Linux core.
 

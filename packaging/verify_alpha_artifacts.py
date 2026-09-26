@@ -34,7 +34,9 @@ from verify_linux_surface_qualification import (  # noqa: E402
     RELEASE_PROFILE, RELEASE_PROFILES, load_gpu_plugins, release_version)
 
 # THE SPLIT LINUX PACKAGES (python/mojolearn/gpu_plugins.py, 2026-09-25): the
-# core `mojolearn` (no GPU set, no extras, no requirement on a plugin) and
+# core `mojolearn` (no GPU set, no extras, and exactly one requirement per
+# plugin at its own version, `mojolearn-nvidia==<v>` and `mojolearn-amd==<v>`,
+# so `pip install mojolearn` works for everyone, 2026-09-26) and
 # one plugin per vendor, `mojolearn-nvidia` and `mojolearn-amd` (only
 # mojolearn/<vendor>/..., requiring exactly `mojolearn==<version>`). Their
 # payload records the split packer profile.
@@ -291,13 +293,19 @@ def verify_split_wheel(path, version, released, release_profile, qualification_r
     if vendor is None:
         stray = [n for n in payload_members if GPU_PLUGINS.member_vendor(n)]
         require(not stray, 'the split core carries a GPU set member: ' + (stray[0] if stray else ''))
-        # NO GPU EXTRAS: the core declares no extra and requires no plugin;
-        # each plugin pins the core (checked below on the plugin)
+        # `pip install mojolearn` WORKS FOR EVERYONE (2026-09-26): the core
+        # requires EVERY plugin at its own version exactly (no marker, no
+        # extra) and declares no extras; each plugin pins the core back
+        # (checked below on the plugin)
         plugin_names = {r['distribution'] for r in GPU_PLUGINS.PLUGINS.values()}
+        on_plugin = [r for r in requires
+                     if r.split(';')[0].split('=')[0].split('[')[0].split('<')[0].split('>')[0]
+                     .split('!')[0].split('~')[0].strip().lower().replace('_', '-') in plugin_names]
+        want = GPU_PLUGINS.core_requirements(version)
         require(not metadata.get_all('Provides-Extra', [])
-                and not any(r.split(';')[0].split('=')[0].split('[')[0].strip().lower().replace('_', '-')
-                            in plugin_names for r in requires),
-                'the split core must declare no extras and require no GPU plugin')
+                and sorted(on_plugin) == sorted(want) and len(on_plugin) == len(set(on_plugin)),
+                'the split core must declare no extras and require exactly ' + ', '.join(want)
+                + ' (found ' + repr(on_plugin) + ')')
         require(decode(small(dist + GPU_PLUGINS.CORE_MARKER)) == GPU_PLUGINS.core_marker(version),
                 'split core marker disagrees with gpu_plugins.py')
         require(small('mojolearn/identity_columns/COMMIT').decode().strip() == payload.get('source_commit'),

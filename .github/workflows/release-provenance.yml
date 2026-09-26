@@ -60,13 +60,26 @@
 # On Linux mojolearn may ship as three PyPI projects: the core `mojolearn`,
 # and the GPU plugins `mojolearn-nvidia` and `mojolearn-amd`. A trusted
 # publisher mints a token for the projects that trust one (workflow,
-# environment) pair. All three projects trust the same pair (this workflow
-# with the `testpypi`/`pypi` environment, Andrew 2026-09-26: PyPI routes each
-# file to its project by the wheel's own name, so separate environments added
-# no protection). Each project is still uploaded by its own job. The plugin jobs run after the
-# core's upload succeeded (or when the dispatch carries no core), so
-# `pip install mojolearn-nvidia` never resolves a plugin whose core is not
-# there. The PyPI side is docs/RELEASE_CHECKLIST.md, "Registering
+# environment) pair, and each project is uploaded by its own job in its own
+# environment: `testpypi`/`pypi` for mojolearn (unchanged, macOS and the Linux
+# core), `testpypi-nvidia`/`pypi-nvidia` for mojolearn-nvidia and
+# `testpypi-amd`/`pypi-amd` for mojolearn-amd. ONE ENVIRONMENT PER PROJECT IS
+# REQUIRED, not a choice: PyPI refuses to register a second PENDING trusted
+# publisher whose (repository, workflow, environment) is identical to one
+# already registered for a different project name ("A pending trusted
+# publisher matching this configuration has already been registered for a
+# different project name"), so the two new projects cannot share `pypi`.
+# `pip install mojolearn` WORKS FOR EVERYONE (Andrew, 2026-09-26): the Linux
+# core requires mojolearn-nvidia==<v> AND mojolearn-amd==<v>, so pip can
+# resolve mojolearn==<v> only once both plugins are on the index. THE PLUGIN
+# JOBS RUN FIRST and the core's job LAST: `publish` needs `publish_plugins`
+# and `publish_alpha` needs `publish_alpha_plugins`, the core's job runs only
+# when every plugin upload of the dispatch succeeded (or it carries none),
+# and before uploading a split core it checks that both plugins of its
+# version are already on the index (tools/wheel_api_audit.py
+# --plugins-on-index), whichever dispatch uploaded them. A plugin uploaded
+# alone is harmless: it requires the core and resolves nothing until the
+# core is there. The PyPI side is docs/RELEASE_CHECKLIST.md, "Registering
 # mojolearn-nvidia and mojolearn-amd on PyPI". The combined single Linux wheel
 # still publishes exactly as before through the `mojolearn` jobs.
 name: Release provenance
@@ -464,7 +477,13 @@ jobs:
           try: print(int(any(n.endswith(".dist-info/gpu_plugins.json") for n in zipfile.ZipFile(sys.argv[1]).namelist())))
           except zipfile.BadZipFile: print(0)' "$CORE")
           if [ "$split" = 1 ]; then
-            test -n "$plugins" || { echo "::error::the split core is staged with no plugin; stage mojolearn_nvidia and/or mojolearn_amd beside it"; exit 1; }
+            # the split core requires BOTH plugins at its version: stage both
+            for p in nvidia amd; do
+              case " $plugins " in
+                *" $p "*) ;;
+                *) echo "::error::the split core requires mojolearn-$p; stage mojolearn_$p beside it (the plugins publish first, the core last)"; exit 1 ;;
+              esac
+            done
             python3 - "$DIR" <<'PY'
           import pathlib, sys
           sys.path.insert(0, 'tools')
@@ -639,8 +658,15 @@ jobs:
 
   publish:
     name: Publish to ${{ inputs.publish }}
-    needs: [build, cpu_certification]
-    if: inputs.publish != 'none' && inputs.alpha_candidate_tag == '' && inputs.validation_profile != 'light'
+    # AFTER the plugins (the split core requires both): only when every plugin
+    # upload succeeded, or the build staged no plugin at all.
+    needs: [build, cpu_certification, publish_plugins]
+    if: >-
+      always() && !cancelled() &&
+      inputs.publish != 'none' && inputs.alpha_candidate_tag == '' && inputs.validation_profile != 'light' &&
+      needs.build.result == 'success' && needs.cpu_certification.result == 'success' &&
+      (needs.publish_plugins.result == 'success' ||
+       (needs.publish_plugins.result == 'skipped' && needs.build.outputs.linux_plugins == '[]'))
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # The environment name is what the Trusted Publisher on PyPI and TestPyPI
@@ -717,14 +743,18 @@ jobs:
 
       # THIS JOB UPLOADS THE `mojolearn` PROJECT ONLY: the macOS wheel and the
       # Linux core (or the combined wheel). A split plugin belongs to its own
-      # project and is uploaded by `publish_plugins` in its own environment,
-      # after this job succeeded.
+      # project and is uploaded by `publish_plugins`, BEFORE this job.
       - name: Keep only the mojolearn project's wheels
         run: |
           set -euo pipefail
           mkdir -p upload
           mv dist/mojolearn-*.whl upload/
           ls -la upload
+
+      - name: The split core publishes last, after both plugins are on the index
+        env:
+          TARGET: ${{ inputs.publish }}
+        run: python3 tools/wheel_api_audit.py --plugins-on-index "$TARGET" upload/*.whl
 
       - name: Publish
         uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # v1.13.0
@@ -739,8 +769,9 @@ jobs:
 
   publish_plugins:
     name: Publish mojolearn-${{ matrix.plugin }} to ${{ inputs.publish }}
-    needs: [build, publish]
-    if: inputs.publish != 'none' && needs.build.outputs.linux_plugins != '[]' && needs.publish.result == 'success'
+    # FIRST: the core (`publish`) waits for this job.
+    needs: [build, cpu_certification]
+    if: inputs.publish != 'none' && needs.build.outputs.linux_plugins != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -748,10 +779,12 @@ jobs:
       fail-fast: false
       matrix:
         plugin: ${{ fromJSON(needs.build.outputs.linux_plugins) }}
-    # The same environment as the core (see the header): the Trusted Publishers
-    # of mojolearn-nvidia and mojolearn-amd trust `pypi` (`testpypi`).
+    # ONE ENVIRONMENT PER PROJECT (see the header; PyPI requires distinct
+    # configurations for pending publishers): the Trusted Publisher of
+    # mojolearn-nvidia is configured against `pypi-nvidia` (`testpypi-nvidia`
+    # on TestPyPI), that of mojolearn-amd against `pypi-amd` (`testpypi-amd`).
     environment:
-      name: ${{ inputs.publish }}
+      name: ${{ inputs.publish }}-${{ matrix.plugin }}
       url: ${{ inputs.publish == 'pypi' && format('https://pypi.org/p/mojolearn-{0}', matrix.plugin) || format('https://test.pypi.org/project/mojolearn-{0}/', matrix.plugin) }}
     permissions:
       id-token: write
@@ -919,10 +952,14 @@ jobs:
 
   publish_alpha:
     name: Publish alpha API artifacts to ${{ inputs.publish }}
-    needs: [alpha_stage, cpu_certification]
+    # AFTER the candidate's plugins, if it carries any (the split core
+    # requires both); a failed plugin upload holds the core.
+    needs: [alpha_stage, cpu_certification, publish_alpha_plugins]
     if: >-
       always() && !cancelled() && inputs.publish != 'none' && inputs.alpha_candidate_tag != '' &&
       needs.alpha_stage.result == 'success' && needs.alpha_stage.outputs.core == 'true' &&
+      (needs.publish_alpha_plugins.result == 'success' ||
+       (needs.publish_alpha_plugins.result == 'skipped' && needs.alpha_stage.outputs.plugins == '[]')) &&
       ((inputs.validation_profile == 'light' && needs.cpu_certification.result == 'skipped') ||
        (inputs.validation_profile != 'light' && needs.cpu_certification.result == 'success'))
     runs-on: ubuntu-latest
@@ -972,13 +1009,18 @@ jobs:
           "$RUNNER_TEMP/math-audit/bin/python" packaging/portable_math/wheel.py --audit-only dist/*.whl
 
       # The mojolearn project's wheels only; a split plugin in the same
-      # candidate is uploaded by publish_alpha_plugins in its own environment.
+      # candidate was uploaded by publish_alpha_plugins, BEFORE this job.
       - name: Keep only the mojolearn project's wheels
         run: |
           set -euo pipefail
           mkdir -p upload
           mv dist/mojolearn-*.whl upload/
           ls -la upload
+
+      - name: The split core publishes last, after both plugins are on the index
+        env:
+          TARGET: ${{ inputs.publish }}
+        run: python3 tools/wheel_api_audit.py --plugins-on-index "$TARGET" upload/*.whl
 
       - name: Publish exact alpha API wheel bytes with their scoped admission
         uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e
@@ -990,15 +1032,13 @@ jobs:
 
   publish_alpha_plugins:
     name: Publish alpha mojolearn-${{ matrix.plugin }} to ${{ inputs.publish }}
-    needs: [alpha_stage, cpu_certification, publish_alpha]
-    # After the core's upload when the candidate carries the core; on its own
-    # when it carries plugins alone (their core published by an earlier
-    # dispatch: every plugin pins mojolearn==<its version>).
+    # FIRST: publish_alpha (the core) waits for this job. A plugin uploaded
+    # alone (the release uploads each package in its own dispatch, the core
+    # last) resolves nothing until its core is there.
+    needs: [alpha_stage, cpu_certification]
     if: >-
       always() && !cancelled() && inputs.publish != 'none' && inputs.alpha_candidate_tag != '' &&
       needs.alpha_stage.result == 'success' && needs.alpha_stage.outputs.plugins != '[]' &&
-      (needs.publish_alpha.result == 'success' ||
-       (needs.publish_alpha.result == 'skipped' && needs.alpha_stage.outputs.core != 'true')) &&
       ((inputs.validation_profile == 'light' && needs.cpu_certification.result == 'skipped') ||
        (inputs.validation_profile != 'light' && needs.cpu_certification.result == 'success'))
     runs-on: ubuntu-latest
@@ -1007,9 +1047,10 @@ jobs:
       fail-fast: false
       matrix:
         plugin: ${{ fromJSON(needs.alpha_stage.outputs.plugins) }}
-    # The same environment as the core (see the header).
+    # ONE ENVIRONMENT PER PROJECT (see the header): pypi-nvidia / testpypi-nvidia,
+    # pypi-amd / testpypi-amd.
     environment:
-      name: ${{ inputs.publish }}
+      name: ${{ inputs.publish }}-${{ matrix.plugin }}
     permissions:
       contents: read
       id-token: write

@@ -121,8 +121,9 @@ def split_fixture(wheel, version):
     for vendor, files in sorted(parts.items(), key=lambda kv: kv[0] or ''):
         if vendor is None:
             wdist, role, dist_name = dist, plugins.CORE_PROFILE, 'mojolearn'
-            # the core declares no extras and requires no plugin
+            # the core declares no extras and requires BOTH plugins exactly
             meta = ['Metadata-Version: 2.4', 'Name: mojolearn', 'Version: ' + version]
+            meta += ['Requires-Dist: ' + req for req in plugins.core_requirements(version)]
             files[wdist + plugins.CORE_MARKER] = json.dumps(plugins.core_marker(version)).encode()
             name = 'mojolearn-' + version + '-' + tag + '.whl'
         else:

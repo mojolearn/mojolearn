@@ -129,6 +129,24 @@ class LightReleaseTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, 'wrong or duplicate vendor'):
                     gate.check(self.root, self.commit, 'linux')
 
+    def test_split_receipts_that_installed_both_plugins(self):
+        """The core requires both plugins, so a release column installs both:
+        the receipt names the other vendor's plugin too, and each package is
+        still admitted only on its own vendor's receipt."""
+        for publish, vendor, other in (('nvidia', 'cuda', 'mojolearn_amd'), ('amd', 'hip', 'mojolearn_nvidia'),
+                                       ('core', 'cuda', 'mojolearn_amd')):
+            with self.subTest(publish=publish):
+                self.split(publish, vendor)
+                self.reports[vendor]['plugins'].append(
+                    dict(wheel=f'/box/{other}-0.8.7-py3-none-manylinux_2_35_x86_64.whl', wheel_sha256='e' * 64))
+                self.write()
+                self.assertEqual(gate.check(self.root, self.commit, 'linux')['runtime_vendors'], [vendor])
+                if publish != 'core':
+                    self.reports[vendor]['installed'] = {'vendor': 'cuda' if vendor == 'hip' else 'hip'}
+                    self.write()
+                    with self.assertRaisesRegex(ValueError, 'wrong or duplicate vendor'):
+                        gate.check(self.root, self.commit, 'linux')
+
     def test_split_plugin_bytes_are_bound_to_the_receipt(self):
         published = self.split('nvidia', 'cuda')
         self.assertTrue(published.startswith('mojolearn_nvidia-'))
@@ -170,13 +188,18 @@ class LightReleaseTests(unittest.TestCase):
         publish = jobs['publish_alpha']['if']
         self.assertIn("needs.alpha_stage.result == 'success'", publish)
         self.assertIn("needs.cpu_certification.result == 'success'", publish)
+        build_publish = jobs['publish']['if']
+        self.assertIn("needs.build.result == 'success'", build_publish)
+        self.assertIn("needs.cpu_certification.result == 'success'", build_publish)
+        self.assertIn("inputs.validation_profile != 'light'", build_publish)
         for name in ('alpha_stage', 'publish_alpha'):
             self.assertIn('tools/check_light_release.py', '\n'.join(step.get('run', '') for step in jobs[name]['steps']))
 
     def test_each_pypi_project_is_uploaded_by_its_own_job_and_environment(self):
         """THE SPLIT LINUX PACKAGES: mojolearn in `pypi`/`testpypi` as always;
-        mojolearn-nvidia and mojolearn-amd each in `<target>-<plugin>`, after
-        the core, from their own packages-dir; the light admission rechecked."""
+        mojolearn-nvidia and mojolearn-amd each in `<target>-<plugin>` (PyPI
+        refuses two pending publishers with one configuration), BEFORE the
+        core, from their own packages-dir; the light admission rechecked."""
         import yaml
         workflow = yaml.safe_load((Path(__file__).resolve().parents[1] / '.github/workflows/release-provenance.yml').read_text())
         jobs = workflow['jobs']
@@ -188,10 +211,24 @@ class LightReleaseTests(unittest.TestCase):
             self.assertEqual(publish_step(job)['with']['packages-dir'], 'upload/')
             self.assertIn('mv dist/mojolearn-*.whl upload/', '\n'.join(s.get('run', '') for s in jobs[job]['steps']))
         for job, core in (('publish_plugins', 'publish'), ('publish_alpha_plugins', 'publish_alpha')):
-            self.assertEqual(jobs[job]['environment']['name'], '${{ inputs.publish }}')
+            self.assertEqual(jobs[job]['environment']['name'], '${{ inputs.publish }}-${{ matrix.plugin }}')
             self.assertEqual(publish_step(job)['with']['packages-dir'], 'upload/')
             self.assertEqual(publish_step(job)['with']['skip-existing'], False)
-            self.assertIn(core, jobs[job]['needs'])
+            # THE PLUGINS FIRST, THE CORE LAST: the core's job needs the
+            # plugins' job and never the reverse
+            self.assertIn(job, jobs[core]['needs'])
+            self.assertNotIn(core, jobs[job]['needs'])
+            self.assertIn(f"needs.{job}.result == 'success'", jobs[core]['if'])
+            self.assertIn(f"needs.{job}.result == 'skipped'", jobs[core]['if'])
+            self.assertIn('always()', jobs[core]['if'])
+            self.assertNotIn(f'needs.{core}.', jobs[job]['if'])
+            # before uploading a split core, both plugins of its version must
+            # already be on the index
+            self.assertIn('tools/wheel_api_audit.py --plugins-on-index "$TARGET" upload/*.whl',
+                          '\n'.join(s.get('run', '') for s in jobs[core]['steps']))
+            gate_at = next(i for i, s in enumerate(jobs[core]['steps']) if '--plugins-on-index' in s.get('run', ''))
+            upload_at = next(i for i, s in enumerate(jobs[core]['steps']) if 'gh-action-pypi-publish' in s.get('uses', ''))
+            self.assertLess(gate_at, upload_at)
             self.assertIn('fromJSON', jobs[job]['strategy']['matrix']['plugin'])
             self.assertIs(jobs[job]['strategy']['fail-fast'], False)
             self.assertEqual(jobs[job]['permissions']['id-token'], 'write')
