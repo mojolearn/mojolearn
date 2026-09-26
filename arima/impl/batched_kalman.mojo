@@ -173,11 +173,22 @@ comptime KALMAN_FAST_RD = (
     and not is_defined["MOJOLEARN_KALMAN_FAST_RD_OFF"]()
 )
 
-comptime KALMAN_TIME_SCAN = KALMAN_FAST_RD and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined[
-    "MOJOLEARN_KALMAN_TIME_SCAN_OFF"
-]()
+comptime KALMAN_TIME_SCAN = (
+    KALMAN_FAST_RD and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and is_defined["MOJOLEARN_KALMAN_TIME_SCAN"]()
+    and not is_defined["MOJOLEARN_KALMAN_TIME_SCAN_OFF"]()
+)
 """FAST on Apple: once `P` has converged the filter is a constant linear
-recursion, solved in chunks in parallel (`fast_kalman_scan.mojo`)."""
+recursion, solved in chunks in parallel (`fast_kalman_scan.mojo`).
+
+OFF BY DEFAULT since 2026-09-26 (lane/apple-identical-neural): a paired
+check against the serial filter, three orders x five seeds at 20,000 points,
+found the fitted log-likelihood LOWER in every group (mean -0.035 / -0.038 /
+-0.122, worst -0.371) and the parameter error vs the generating values
+slightly higher for (1,0,1) and (2,0,1); below the 4096-observation
+threshold the fits are identical. FAST may move bits but not quality, so
+the serial filter is the FAST default; `-D MOJOLEARN_KALMAN_TIME_SCAN=1` is
+the trial arm (20,000-point fits ~0.46 -> ~0.14 s on the M4)."""
 comptime KALMAN_TIME_SCAN_MIN_OBS = 4096
 
 
