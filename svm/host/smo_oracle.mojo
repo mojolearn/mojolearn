@@ -890,7 +890,7 @@ def dual_objective[
                 continue
             var kij = Float64(_kernel_cell[dt](kp, x, norms, i, x, norms, j, n, n, k))
             quad = fma(ai * aj * Float64(y[i]) * Float64(y[j]), kij, quad)  # (lane/pinned-mul-contract-free)
-    return -lin + 0.5 * quad
+    return fma(0.5, quad, -lin)  # the default build's fused op (lane/pinned-mul-contract-free)
 
 
 def smo_oracle_decision[
@@ -1143,7 +1143,7 @@ def svr_dual_objective[
     var lin_y = Float64(0)
     for i in range(n):
         lin_y = fma(Float64(yr[i]), c[i], lin_y)  # (lane/pinned-mul-contract-free)
-    return 0.5 * quad + epsilon * sum_alpha - lin_y
+    return fma(0.5, quad, epsilon * sum_alpha) - lin_y  # the default build's fused op (lane/pinned-mul-contract-free)
 
 
 def svr_gradient_reference[

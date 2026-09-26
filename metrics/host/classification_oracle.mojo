@@ -665,4 +665,5 @@ def host_trustworthiness(
     var nn = Float64(n)
     var kk = Float64(n_neighbors)
     # `1 - q*t` in ONE rounding, as the default build fused it (lane/pinned-mul-contract-free)
-    return fma(-(2.0 / ((nn * kk) * ((2.0 * nn) - (3.0 * kk) - 1.0))), t, 1.0)
+    # and `2n - 3k` is the fma the default build fused (exact for these integers)
+    return fma(-(2.0 / ((nn * kk) * (fma(-3.0, kk, 2.0 * nn) - 1.0))), t, 1.0)
