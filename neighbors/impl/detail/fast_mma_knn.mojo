@@ -61,7 +61,7 @@ from std.time import perf_counter_ns
 comptime MQ_SG = 8
 """Simdgroups per block."""
 comptime MQ_TPB = MQ_SG * 32
-comptime MQ_T = 64
+comptime MQ_T = 128
 """Index rows per shared tile."""
 comptime MQ_MAX_D = 32
 comptime MQ_MAX_K = 32
@@ -379,7 +379,7 @@ def _launch_merge[K: Int](
 comptime MQ_A = 2
 """Query 8-blocks per simdgroup for k <= 8 (and `MQ_A16` for k <= 16; k up
 to 32 takes 1 to keep the lists in registers)."""
-comptime MQ_B = 2
+comptime MQ_B = 4
 """Index 8-blocks per step."""
 comptime MQ_A16 = 2
 
