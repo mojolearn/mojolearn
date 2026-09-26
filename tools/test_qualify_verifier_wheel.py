@@ -173,6 +173,69 @@ class ExpandedWheelTests(unittest.TestCase):
                 with self.assertRaises(SystemExit): main()
                 spawn.assert_not_called()
 
+    def _installed(self, root, versions, commit='a'*40, extra=()):
+        """Qualify a fake installed package (--installed-python): the first
+        job reports where it is and the three versions, the next fails."""
+        import json
+        from unittest.mock import patch
+        from qualify_verifier_wheel import main
+        package = root/'site'/'mojolearn'
+        (package/'verify_reference'/'models').mkdir(parents=True)
+        (package/'verify_reference'/'models'/'models.json').write_text(json.dumps({'models': []}))
+        (package/'identity_columns').mkdir()
+        (package/'identity_columns'/'COMMIT').write_text(commit + '\n')
+        located = dict(package=str(package), distributions=versions)
+        argv=['qualifier','--installed-python','/venv/bin/python','--expected-version','0.9.0',
+              '--output',str(root/'out'),*extra]
+        commands=[]
+        def spawn(command, **kw):
+            commands.append(command)
+            if len(commands)==1:
+                kw['stdout'].write(json.dumps(located))
+            class P:
+                pid=0
+                def wait(self, timeout=None): return 0 if len(commands)==1 else 1
+            return P()
+        with patch('sys.argv',argv), patch('subprocess.Popen', side_effect=spawn):
+            rc = main()
+        return rc, commands, json.loads((root/'out'/'results.json').read_text())
+
+    def test_installed_python_qualifies_what_pip_resolved_without_installing(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as temp:
+            three = {'mojolearn':'0.9.0','mojolearn-nvidia':'0.9.0','mojolearn-amd':'0.9.0'}
+            rc, commands, receipt = self._installed(Path(temp), three, extra=('--expected-source-commit','a'*40))
+            self.assertEqual(rc, 1)   # the fake pip check fails; everything before it ran
+            self.assertEqual(commands[0][:2], ['/venv/bin/python','-c'])
+            self.assertEqual(commands[1], ['/venv/bin/python','-m','pip','check'])
+            self.assertFalse(any('install' in c for c in commands if 'pip' in c))
+            self.assertEqual(receipt['installed_from']['distributions'], three)
+            self.assertEqual(receipt['source_commit'], 'a'*40)
+            self.assertIsNone(receipt['wheel_sha256'])
+
+    def test_installed_python_refuses_a_wrong_version_or_commit(self):
+        import tempfile
+        from pathlib import Path
+        with tempfile.TemporaryDirectory() as temp:
+            rc, commands, receipt = self._installed(Path(temp), {'mojolearn':'0.9.0','mojolearn-nvidia':'0.9.0',
+                                                                 'mojolearn-amd':None})
+            self.assertEqual((rc, len(commands), receipt['status']), (1, 1, 'FAILED'))
+            self.assertIn('mojolearn-amd', receipt['reason'])
+        with tempfile.TemporaryDirectory() as temp:
+            three = {'mojolearn':'0.9.0','mojolearn-nvidia':'0.9.0','mojolearn-amd':'0.9.0'}
+            rc, commands, receipt = self._installed(Path(temp), three, extra=('--expected-source-commit','b'*40))
+            self.assertEqual((rc, len(commands), receipt['status']), (1, 1, 'FAILED'))
+            self.assertIn('records source commit', receipt['reason'])
+
+    def test_installed_python_refuses_a_wheel_beside_it(self):
+        from unittest.mock import patch
+        from qualify_verifier_wheel import main
+        argv=['qualifier','x.whl','--installed-python','/p','--expected-version','1','--output','/nonexistent']
+        with patch('sys.argv',argv), patch('subprocess.Popen') as spawn:
+            with self.assertRaises(SystemExit): main()
+            spawn.assert_not_called()
+
     def test_optimized_interpreter_cannot_disable_admission_checks(self):
         import os, subprocess, sys
         from pathlib import Path

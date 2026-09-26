@@ -49,7 +49,9 @@ def host(path):
             return h + path[len(container):]
     raise SystemExit("unmounted " + path)
 if cmd.startswith("auditwheel show"):
-    print("is consistent with the following platform tag: \"manylinux_2_35_x86_64\"")
+    tag = os.environ.get("FAKE_SHOW_TAG", "manylinux_2_35_x86_64")
+    print("is consistent with the following platform tag: \"linux_x86_64\"")
+    print("This constrains the platform tag to \"" + tag + "\".")
 elif cmd.startswith("auditwheel repair"):
     words = cmd.split()
     src = pathlib.Path(host(words[-1]))
@@ -147,6 +149,24 @@ class AuditSplit(unittest.TestCase):
         self.assertEqual(r.returncode, 2, r.stdout + r.stderr)
         self.assertIn("no mojolearn-", r.stdout)
         self.assertFalse(self.log.exists())
+
+    def repair_command(self):
+        return next(c[-1] for c in self.calls() if c[-1].startswith("auditwheel repair"))
+
+    def test_a_plugin_takes_the_core_tag_and_only_that_tag(self):
+        """0.8.21: auditwheel measured manylinux_2_34 for both plugins and, asked
+        for 2_35, wrote both tags; split_audit refused the set. A plugin is
+        repaired to the core's tag with --only-plat."""
+        core_tag = self.wheel("mojolearn").name[:-4].split("-")[-1]
+        r = self.audit(self.wheel("mojolearn_amd"), FAKE_SHOW_TAG="manylinux_2_34_x86_64")
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn(f"auditwheel repair --only-plat --plat {core_tag} ", self.repair_command())
+        self.assertIn(f"the core's platform tag {core_tag} (measured", r.stdout)
+
+    def test_the_core_is_repaired_to_its_measured_tag_only(self):
+        r = self.audit(self.wheel("mojolearn"))
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn("auditwheel repair --only-plat --plat manylinux_2_35_x86_64 ", self.repair_command())
 
     def test_a_grafted_top_level_libs_directory_fails(self):
         r = self.audit(self.wheel("mojolearn_nvidia"), FAKE_GRAFT="1")

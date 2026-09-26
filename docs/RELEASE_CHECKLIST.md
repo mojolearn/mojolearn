@@ -378,8 +378,8 @@ python3 tools/strip_wheel_dir_entries.py <dist>/audit/repaired/mojolearn-*-manyl
 
 ### 3b. The split Linux packages (the packer's default profile)
 
-`release-linux3` above packs the ONE combined wheel and is what
-`tools/release.py` asks for by default; `--split-linux` asks for `release-split`. The packer's default is the split
+`release-linux3` above packs the ONE combined wheel, which `tools/release.py`
+asks for only with `--combined-linux`; by default (from 0.8.21) it asks for `release-split`. The packer's default is the split
 (`python/mojolearn/gpu_plugins.py`), three PyPI projects released in lockstep
 so NVIDIA and AMD can ship independently:
 
@@ -428,8 +428,9 @@ driver libraries. The core's logs keep their names (`show.txt`, `repair.txt`,
 `twine.txt`), a plugin's are `show-mojolearn_nvidia.txt` and so on, and any
 top-level `*.libs/` directory in a repaired wheel fails the run.
 
-Publishing the split packages with `pixi run release <version> --split-linux`
-(or `MOJOLEARN_RELEASE_SPLIT_LINUX=1`; the default stays the combined wheel)
+Publishing the split packages, `pixi run release <version>` (the default from
+0.8.21; `--combined-linux` or `MOJOLEARN_RELEASE_SPLIT_LINUX=0` publishes the one
+combined wheel instead, kept only until a split release has gone end to end)
 works like this. `linux-pack` packs `--profile release-split`, audits and strips each wheel and
 runs `split_audit` on the final set; each column installs the core with BOTH
 plugins, exactly what `pip install mojolearn` installs (the core requires
@@ -456,6 +457,45 @@ a split set is checked on the whole set,
 `tools/check_linux_release_qualification.py <core> <plugins> --profile release-split`,
 whose records name the set digest (sha256 over the sorted `<file> <sha256>`
 lines) where a combined qualification names the wheel's sha256.
+
+#### The user's install, resolved from the index
+
+The columns install local wheel files, so they never test what a user types:
+`pip install mojolearn==<v>` resolved from an index, which is where the core
+and plugin exact-pin cycle and the publish order can break. A split release
+therefore goes out in four steps, TestPyPI first:
+
+```sh
+pixi run release <v> --split-linux --publish testpypi
+tools/index_install_check.sh <v> testpypi --rent     # NVIDIA and AMD boxes, in parallel
+pixi run release <v> --split-linux --publish pypi
+tools/index_install_check.sh <v> pypi --rent
+```
+
+`tools/index_install_check.sh` (without `--rent` a dry run of both legs) first
+asks the index's JSON API for `mojolearn`, `mojolearn-nvidia` and
+`mojolearn-amd` at `<v>` and refuses by name, before anything is rented, when
+one is missing, has no manylinux x86_64 wheel, is yanked, or when the core's
+METADATA does not pin both plugins at `==<v>` (a combined wheel fails here) or
+a plugin does not pin `mojolearn==<v>`. It then runs
+`tools/release_wheel_smoke.sh --from-index <index> --version <v>` on an NVIDIA
+box (RunPod, the smoke's default GPU or `--gpu`) and an AMD box (Hot Aisle,
+then DigitalOcean when Hot Aisle created nothing; `--amd-provider` changes
+that) at the same time. Each box makes a fresh venv and runs the user's
+command plus `--report`: for TestPyPI
+`pip install --index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/ "mojolearn==<v>"`,
+for PyPI `pip install "mojolearn==<v>"`. `tools/index_release_check.py verify`
+then requires all three distributions installed at exactly `<v>`, each of the
+three downloaded from the index's own file host (`test-files.pythonhosted.org`
+for TestPyPI, `files.pythonhosted.org` for PyPI) and every other dependency
+from PyPI's (the guard against dependency confusion), and `import mojolearn`
+loading the box's vendor set from that vendor's plugin at `<v>`. The same
+expanded smoke as the column (`qualify_verifier_wheel.py --installed-python`)
+and the optional release column (`--nvidia-column`, `--amd-column`,
+`--ref-column`) then run from that installed package. It prints one PASS or
+FAIL line per vendor; `pip_report.json`, `index_check.json`, `dists.txt` and
+`results.json` of each leg are in
+`~/mojolearn-evidence/index-install/<v>/<index>/<stamp>/{nvidia,amd}/`.
 
 #### Registering mojolearn-nvidia and mojolearn-amd on PyPI
 

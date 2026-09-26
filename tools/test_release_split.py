@@ -35,28 +35,33 @@ class SplitBase(sev.Base):
 
 
 class Switch(SplitBase):
-    def test_off_by_default_and_the_combined_layout_is_unchanged(self):
-        with mock.patch.dict(os.environ, {release.SPLIT_LINUX_ENV: ""}):
-            r = sev.Base.release(self)
+    def test_on_by_default_and_the_combined_layout_is_an_opt_out(self):
+        """Split is the default from 0.8.21 (Andrew, 2026-09-26)."""
+        for unset in ("", "1"):
+            with mock.patch.dict(os.environ, {release.SPLIT_LINUX_ENV: unset}):
+                self.assertTrue(sev.Base.release(self, split_linux=None).split)
+        with mock.patch.dict(os.environ, {release.SPLIT_LINUX_ENV: "0"}):
+            r = sev.Base.release(self, split_linux=None)
         self.assertFalse(r.split)
         self.assertEqual(r.STEPS, release.Release.STEPS)
         self.assertIn("publish-linux", r.STEPS)
         self.assertNotIn("publish-nvidia", r.STEPS)
 
-    def test_the_environment_turns_it_on_and_the_flags_override(self):
-        with mock.patch.dict(os.environ, {release.SPLIT_LINUX_ENV: "1"}):
-            self.assertTrue(sev.Base.release(self).split)
-            self.assertFalse(self.release(split=False).split)
-        self.assertTrue(self.release().split)
+    def test_the_environment_turns_it_off_and_the_flags_override(self):
+        with mock.patch.dict(os.environ, {release.SPLIT_LINUX_ENV: "0"}):
+            self.assertFalse(sev.Base.release(self, split_linux=None).split)
+            self.assertTrue(self.release(split=True).split)
+        self.assertFalse(self.release(split=False).split)
         self.assertEqual(release.main.__code__.co_varnames[0], "argv")
         with mock.patch.object(release.Release, "go", lambda self: int(self.split)):
             with mock.patch.dict(os.environ, {release.SPLIT_LINUX_ENV: ""}):
-                self.assertEqual(release.main(["0.8.99", "--dry-run", "--state-dir", str(self.tmp / "s1")]), 0)
-                self.assertEqual(release.main(["0.8.99", "--dry-run", "--split-linux",
-                                               "--state-dir", str(self.tmp / "s2")]), 1)
-            with mock.patch.dict(os.environ, {release.SPLIT_LINUX_ENV: "1"}):
+                self.assertEqual(release.main(["0.8.99", "--dry-run", "--state-dir", str(self.tmp / "s1")]), 1)
                 self.assertEqual(release.main(["0.8.99", "--dry-run", "--combined-linux",
-                                               "--state-dir", str(self.tmp / "s3")]), 0)
+                                               "--state-dir", str(self.tmp / "s2")]), 0)
+            with mock.patch.dict(os.environ, {release.SPLIT_LINUX_ENV: "0"}):
+                self.assertEqual(release.main(["0.8.99", "--dry-run", "--state-dir", str(self.tmp / "s3")]), 0)
+                self.assertEqual(release.main(["0.8.99", "--dry-run", "--split-linux",
+                                               "--state-dir", str(self.tmp / "s4")]), 1)
 
     def test_a_packed_layout_is_pinned(self):
         r = self.release()
