@@ -40,11 +40,16 @@ def fb_nearest_other_kernel[DMAX: Int, MR: Bool = False](
     best_j: MutPointer[Int32, MutAnyOrigin],
     m_in: Int32,
     d_in: Int32,
+    todo: MutPointer[Int32, MutAnyOrigin],
+    n_todo_in: Int32,
 ):
     var m = Int(m_in)
     var dim = Int(d_in)
-    var i = Int(block_idx.x) * FB_TPB + Int(thread_idx.x)
-    var live = i < m
+    var tix = Int(block_idx.x) * FB_TPB + Int(thread_idx.x)
+    var live = tix < Int(n_todo_in)
+    var i = 0
+    if live:
+        i = Int(todo[tix])
     var xi = InlineArray[Float32, DMAX](fill=0.0)
     var ci = Int32(-1)
     if live:
@@ -143,10 +148,8 @@ def fast_euclidean_mst(
     mut mst_rows: DeviceBuffer[DType.int32],
     mut mst_cols: DeviceBuffer[DType.int32],
     mut mst_weights: DeviceBuffer[DType.float32],
-    mutual_reach: Bool = False,
-    core_ptr: MutPointer[Float32, MutAnyOrigin] = MutPointer[
-        Float32, MutAnyOrigin
-    ](unsafe_from_address=0),
+    mutual_reach: Bool,
+    core_ptr: MutPointer[Float32, MutAnyOrigin],
     inv_alpha: Float32 = 1.0,
 ) raises -> Int:
     """`m - 1` edges into the three buffers, ascending by (weight, src,
@@ -173,17 +176,31 @@ def fast_euclidean_mst(
     var cb_b = List[Int32](length=m, fill=Int32(-1))
     var n_comp = m
     var rounds = 0
-    var grid = (m + FB_TPB - 1) // FB_TPB
+    # Only points whose nearest other-component point joined their own
+    # component are searched again: components only merge, so a surviving
+    # nearest (lowest index on a tie) is still the nearest.
+    var todo_h = ctx.enqueue_create_host_buffer[DType.int32](m)
+    var todo_d = ctx.enqueue_create_buffer[DType.int32](m)
+    for i in range(m):
+        todo_h.unsafe_ptr().unsafe_store(i, Int32(i))
+    var n_todo = m
     while n_comp > 1:
         rounds += 1
+        var grid = (n_todo + FB_TPB - 1) // FB_TPB
         ctx.enqueue_copy(dst_buf=comp_d, src_ptr=comp_h.unsafe_ptr())
+        if n_todo > 0:
+            ctx.enqueue_copy(
+                dst_buf=todo_d.create_sub_buffer[DType.int32](0, n_todo),
+                src_ptr=todo_h.unsafe_ptr(),
+            )
         comptime for DM in [8, 16, 32, 64]:
-            if n <= DM and (DM == 8 or n > DM // 2):
+            if n_todo > 0 and n <= DM and (DM == 8 or n > DM // 2):
                 if mutual_reach:
                     ctx.enqueue_function[fb_nearest_other_kernel[DM, True]](
                         x.unsafe_ptr(), core_ptr, inv_alpha,
                         comp_d.unsafe_ptr(), bd_d.unsafe_ptr(),
                         bj_d.unsafe_ptr(), Int32(m), Int32(n),
+                        todo_d.unsafe_ptr(), Int32(n_todo),
                         grid_dim=grid, block_dim=FB_TPB,
                     )
                 else:
@@ -191,6 +208,7 @@ def fast_euclidean_mst(
                         x.unsafe_ptr(), core_ptr, inv_alpha,
                         comp_d.unsafe_ptr(), bd_d.unsafe_ptr(),
                         bj_d.unsafe_ptr(), Int32(m), Int32(n),
+                        todo_d.unsafe_ptr(), Int32(n_todo),
                         grid_dim=grid, block_dim=FB_TPB,
                     )
         ctx.enqueue_copy(dst_ptr=bd_h.unsafe_ptr(), src_buf=bd_d)
@@ -234,8 +252,14 @@ def fast_euclidean_mst(
             cb_d[c] = Float32.MAX
             cb_a[c] = Int32(-1)
             cb_b[c] = Int32(-1)
+        n_todo = 0
         for i in range(m):
-            comp_h.unsafe_ptr().unsafe_store(i, Int32(_find(parent, i)))
+            var ri = _find(parent, i)
+            comp_h.unsafe_ptr().unsafe_store(i, Int32(ri))
+            var bj = Int(bj_h.unsafe_ptr().unsafe_load(i))
+            if bj < 0 or _find(parent, bj) == ri:
+                todo_h.unsafe_ptr().unsafe_store(n_todo, Int32(i))
+                n_todo += 1
         if rounds > 64:
             raise Error("fast_euclidean_mst: Boruvka did not converge")
     # Sort the edges by weight (non-negative float bits order as the
@@ -274,6 +298,8 @@ def fast_euclidean_mst(
             src_ptr=hw.unsafe_ptr(),
         )
     ctx.synchronize()
+    _ = todo_h^
+    _ = todo_d^
     _ = comp_d^
     _ = bd_d^
     _ = bj_d^

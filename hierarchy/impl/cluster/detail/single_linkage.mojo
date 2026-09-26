@@ -98,9 +98,12 @@ def build_dist_linkage(
             and n <= 64
             and m > SL_FAST_BORUVKA_MIN_ROWS
         ):
+            # `core_ptr` is read only on the mutual-reachability arm; a
+            # Pointer cannot be null, so it gets `x`'s address.
             var r = fast_euclidean_mst(
                 ctx, x, m, n, metric == DISTANCE_L2_SQRT_EXPANDED,
                 mst_rows, mst_cols, mst_weights,
+                False, x.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
             )
             build_dendrogram_host(
                 ctx, mst_rows, mst_cols, mst_weights, m - 1,
