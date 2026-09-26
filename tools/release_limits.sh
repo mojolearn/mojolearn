@@ -45,10 +45,10 @@ RUNPOD_RELEASE_BUILD_CAP=6000
 HOTAISLE_RELEASE_BUILD_CAP=6000
 
 # The CPU build route (tools/release_linux_cpu_box.sh, on the rented CPU box):
-# the MOJOLEARN_RELEASE_BUILD_SECONDS it hands each of the three sets. NOT
-# raised with the others for 0.8.19 and still 2400, the bound the GPU legs ran
-# past on a cold rebuild; moved here unchanged so raising it is one line.
-CPU_BOX_RELEASE_BUILD_SECONDS=2400
+# the MOJOLEARN_RELEASE_BUILD_SECONDS it hands each of the three sets. Raised
+# from 2400 (the bound the GPU legs ran past on a cold 0.8.19 rebuild) to the
+# GPU legs' 6000; the pod's default lease is 120 min.
+CPU_BOX_RELEASE_BUILD_SECONDS=6000
 
 # tools/cross_compile_check.py: the per-binding compile bound on the Mac.
 # IDENTICAL svm cross-compiles for sm_89 in about 3 minutes at -j 1; a binding

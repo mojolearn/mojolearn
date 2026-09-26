@@ -788,7 +788,9 @@ def check_refusals(ctx: DeviceContext) raises:
     hits += _try_refusal(
         ctx, fx, p3b, KernelParams.linear(), False, "epsilon must be non-negative"
     )
-    hits += _try_refusal(ctx, fx, SvmParameter.default(), KernelParams(1, 3, 1.0, 0.0), False, "POLYNOMIAL")
+    # POLYNOMIAL is implemented (d5decf418); its refusal now is the degree
+    # outside [0, SVM_MAX_POLY_DEGREE].
+    hits += _try_refusal(ctx, fx, SvmParameter.default(), KernelParams(1, 33, 1.0, 0.0), False, "degree must be an integer")
     hits += _try_refusal(ctx, fx, SvmParameter.default(), KernelParams(3, 3, 1.0, 0.0), False, "TANH")
     hits += _try_refusal(ctx, fx, SvmParameter.default(), KernelParams(4, 3, 1.0, 0.0), False, "PRECOMPUTED")
     hits += _try_refusal(ctx, fx, SvmParameter.default(), KernelParams.linear(), True, "sample_weight")
@@ -807,7 +809,7 @@ def check_refusals(ctx: DeviceContext) raises:
     print(
         "  refusals by name: " + String(hits + 1)
         + " (cache_size, svmType=NU_SVR, epsilon on C_SVC, negative epsilon"
-        " on SVR, POLYNOMIAL, TANH, PRECOMPUTED, sample_weight, multiclass)"
+        " on SVR, POLYNOMIAL degree 33, TANH, PRECOMPUTED, sample_weight, multiclass)"
     )
 
 
