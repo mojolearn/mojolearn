@@ -53,7 +53,12 @@ def pinned_mul(a: Float32, b: Float32) -> Float32:
     every seam the reference rounds as its own multiply: `delta * A`,
     `delta * B`, `(delta*B) * u`, `u * D`, `x * rstd`, `weight * hidden`,
     `skip * silu(z)`."""
-    return identical_mul_add(a, b, Float32(-0.0))
+    # `identical_mul` is the pinned product (`pinned_mul_f32` under IDENTICAL);
+    # `fma(a, b, -0.0)` was not: LLVM folds it into a contractable product
+    # (lane/pinned-mul-contract-free, 2026-09-26).
+    from checks.numerics import identical_mul
+
+    return identical_mul(a, b)
 
 
 def refuse_nonfinite(name: String, values: List[Float32]) raises:
