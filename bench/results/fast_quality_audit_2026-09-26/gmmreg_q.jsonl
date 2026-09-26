@@ -1,0 +1,10 @@
+{"tag": "mix_off", "ds": "covtype", "seed": 0, "test_ll": -68.04475314661147}
+{"tag": "mix_off", "ds": "covtype", "seed": 1, "test_ll": -100.45263850221339}
+{"tag": "mix_off", "ds": "covtype", "seed": 2, "test_ll": -2125489.933050318}
+{"tag": "mix_off", "ds": "covtype", "seed": 3, "test_ll": -101.8335720620831}
+{"tag": "mix_off", "ds": "covtype", "seed": 4, "test_ll": -96.54640789067355}
+{"tag": "mix_on", "ds": "covtype", "seed": 0, "test_ll": -68.04373211548666}
+{"tag": "mix_on", "ds": "covtype", "seed": 1, "test_ll": -100.45355045237157}
+{"tag": "mix_on", "ds": "covtype", "seed": 2, "test_ll": -2125489.938244229}
+{"tag": "mix_on", "ds": "covtype", "seed": 3, "test_ll": -101.8340310811857}
+{"tag": "mix_on", "ds": "covtype", "seed": 4, "test_ll": -96.54528818397878}

@@ -1,0 +1,10 @@
+{"tag": "est_off", "ds": "covtype", "seed": 0, "acc": 0.615875802481885, "logloss": 1.0356276223981087}
+{"tag": "est_off", "ds": "covtype", "seed": 1, "acc": 0.6136727422935921, "logloss": 1.0447962999877152}
+{"tag": "est_off", "ds": "covtype", "seed": 2, "acc": 0.6159102252973271, "logloss": 1.0356068233016713}
+{"tag": "est_off", "ds": "covtype", "seed": 3, "acc": 0.6184230908245986, "logloss": 1.0218276424195687}
+{"tag": "est_off", "ds": "covtype", "seed": 4, "acc": 0.6197483692191185, "logloss": 1.0257415176469056}
+{"tag": "est_on", "ds": "covtype", "seed": 0, "acc": 0.6151873461730435, "logloss": 1.0389535395180112}
+{"tag": "est_on", "ds": "covtype", "seed": 1, "acc": 0.6137243765167553, "logloss": 1.0452105985512918}
+{"tag": "est_on", "ds": "covtype", "seed": 2, "acc": 0.616357721898074, "logloss": 1.0334693677840259}
+{"tag": "est_on", "ds": "covtype", "seed": 3, "acc": 0.619077124317998, "logloss": 1.0185256756040395}
+{"tag": "est_on", "ds": "covtype", "seed": 4, "acc": 0.6201098087812602, "logloss": 1.02840339019595}

@@ -1,0 +1,20 @@
+{"tag": "svm_noinl", "seed": 0, "acc": 0.73, "fit_s": 9.48}
+{"tag": "svm_noinl", "seed": 1, "acc": 0.72995, "fit_s": 7.51}
+{"tag": "svm_noinl", "seed": 2, "acc": 0.72995, "fit_s": 7.85}
+{"tag": "svm_noinl", "seed": 3, "acc": 0.7296, "fit_s": 8.23}
+{"tag": "svm_noinl", "seed": 4, "acc": 0.7299, "fit_s": 9.5}
+{"tag": "svm_noinl", "est": "SVR", "seed": 0, "r2": -1.551485080263626, "fit_s": 0.26}
+{"tag": "svm_noinl", "est": "SVR", "seed": 1, "r2": -1.7145115919219744, "fit_s": 0.15}
+{"tag": "svm_noinl", "est": "SVR", "seed": 2, "r2": -1.5171087822748626, "fit_s": 0.15}
+{"tag": "svm_noinl", "est": "SVR", "seed": 3, "r2": -1.052879918935174, "fit_s": 0.13}
+{"tag": "svm_noinl", "est": "SVR", "seed": 4, "r2": -1.6905212024950824, "fit_s": 0.13}
+{"tag": "svm_on", "seed": 0, "acc": 0.73, "fit_s": 6.14}
+{"tag": "svm_on", "seed": 1, "acc": 0.72995, "fit_s": 6.05}
+{"tag": "svm_on", "seed": 2, "acc": 0.72995, "fit_s": 5.93}
+{"tag": "svm_on", "seed": 3, "acc": 0.7296, "fit_s": 6.01}
+{"tag": "svm_on", "seed": 4, "acc": 0.7299, "fit_s": 6.01}
+{"tag": "svm_on", "est": "SVR", "seed": 0, "r2": -1.5516796776281092, "fit_s": 0.15}
+{"tag": "svm_on", "est": "SVR", "seed": 1, "r2": -1.7148445942402821, "fit_s": 0.1}
+{"tag": "svm_on", "est": "SVR", "seed": 2, "r2": -1.5171507993335336, "fit_s": 0.1}
+{"tag": "svm_on", "est": "SVR", "seed": 3, "r2": -1.0526638028000317, "fit_s": 0.11}
+{"tag": "svm_on", "est": "SVR", "seed": 4, "r2": -1.69087538389563, "fit_s": 0.11}
