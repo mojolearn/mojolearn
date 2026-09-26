@@ -8,16 +8,15 @@ full contract. In short:
 
 | box | modes | opponents |
 |---|---|---|
-| Apple (Metal) | `fast` and `identical`, interleaved in one race (trees, classical, classical2); `identical` only (neural) | CatBoost, XGBoost, LightGBM, scikit-learn, umap-learn, statsmodels and faiss-cpu on the CPU; torch on MPS (classical, neural) |
+| Apple (Metal) | `fast` and `identical`, interleaved in one race (trees, classical, classical2); `identical` only (neural) | CatBoost, XGBoost, LightGBM, scikit-learn, umap-learn, statsmodels and faiss-cpu on the CPU; torch on MPS (classical, neural) and on the CPU (neural `*-infer`) |
 | NVIDIA | `identical` | CatBoost, XGBoost and LightGBM GPU arms, cuML, cuVS, torch CUDA (the rosters of `tools/bench_all_ours.sh`); scikit-learn and statsmodels on the CPU where cuML has no such estimator |
 | AMD | `identical` | XGBoost ROCm where the image has it, otherwise the CPU learners on all cores (scikit-learn, umap-learn, statsmodels, faiss-cpu included); torch ROCm |
 
 - Families: trees (`gbdt-symmetric`, `gbdt-depthwise`, `gbdt-lossguide`, `rf`,
   `et`, `iforest`) and classical (`kmeans`, `pca`, `ols`, `knn`, `kde`, `svc`,
   `dbscan`, `hdbscan`) on taxi and Istella-S, classical2 (23 lanes, below) on
-  taxi and Istella-S or seeded synthetic series, and neural
-  (`lm-train-step`, `lm-forward`, `gemm`) on inputs the driver builds from
-  seed 7.
+  taxi and Istella-S or seeded synthetic series, and neural (16 lanes,
+  below) on inputs the driver builds from seed 7.
 - Neural is `identical` only on every vendor, because the wheel builds its
   neural surface in that tier only. `--modes fast` with the neural family is
   refused by name; a FAST-only Apple run passes
@@ -33,9 +32,10 @@ full contract. In short:
   (`docs/REMOTE_DATA_R2.md`). Without them the script refuses and prints the
   staging command. A neural-only run (`--families neural`) needs no dataset.
 - Always check the plan first: `python3 tools/bench_board.py --dry-run
-  --vendor apple` (or `nvidia`, `amd`). The current plan has 75 races on
-  every vendor (44 of them classical2, 3 neural). That comes to 242 cells on
-  Apple, 172 on NVIDIA and 176 on AMD (classical2 alone: 134, 94 and 90).
+  --vendor apple` (or `nvidia`, `amd`). The current plan has 88 races on
+  every vendor (44 of them classical2, 16 neural). That comes to 312 cells on
+  Apple, 261 on NVIDIA and 246 on AMD (classical2 alone: 134, 94 and 90;
+  neural alone: 76, 95 and 76).
   Inference adds 122 cells on Apple, 84 on NVIDIA and 100 on AMD (below);
   `--no-infer` times training only.
 
@@ -156,41 +156,110 @@ missing GaussianMixture, GP, Nystroem and RBFSampler).
 
 ## The neural family
 
-`tools/bench_board_neural.py` times the wheel's public Python API against torch
-on the same GPU (MPS on Apple, CUDA on NVIDIA, ROCm on AMD). The torch arm,
-`torch-eager-fp32`, is torch eager in float32 with TF32 off. That is the
-`eager_fp32` column of `tools/torch_lm_step_opponent.py`, which the repo
-treats as the opponent's fast setting at our precision. Its compile, TF32 and
-bf16 columns are not raced here.
+`tools/bench_board_neural.py` times the wheel's public neural Python API
+against torch on the same box. Our arm is IDENTICAL (the only tier the neural
+surface builds). Following the rule that our IDENTICAL is compared with the
+opponent's fastest supported setting (`bench/OPPONENT_REFERENCE.md`), every
+lane races one torch arm per fast setting torch supports there. These are the
+columns of `tools/torch_lm_step_opponent.py`, with the setting in the arm name:
 
-| lane | ours | torch | clock (both sides) | quality |
-|---|---|---|---|---|
-| `lm-train-step` | `LanguageModelTrainer(resident=True, step_result='lean').train_step(ids)` | the twin model of `tools/torch_lm_step_opponent.py`; forward, mean cross entropy, backward, `torch.optim.AdamW`, `loss.item()` | ids to the device, one full step, the loss back on the host | `loss_first_step`, `loss_last_step`, and `loss_last_abs_diff_vs_ours` on torch |
-| `lm-forward` | `LanguageModelTrainer(resident=True).logits(ids)` | the same twin under `no_grad`, logits to the host | ids to the device, the forward, float32 logits back on the host | `mean_nll`, and `max_abs_diff_vs_ours` (logits) on torch |
-| `gemm` | `mojolearn.linalg.matmul(a, b)` | `a.to(dev) @ b.to(dev)`, `.cpu()` | both operands to the device, the product, C back on the host | `max_rel_err_vs_fp64`, and `max_abs_diff_vs_ours` on torch |
+| arm | torch setting | planned on |
+|---|---|---|
+| `torch-eager-fp32` | eager, float32, TF32 off | every vendor |
+| `torch-compile-fp32` | `torch.compile` (inductor, default mode), TF32 off | every vendor |
+| `torch-eager-tf32` | eager, float32 matmuls in TF32 | NVIDIA only |
+| `torch-compile-tf32` | compile with TF32 on | NVIDIA only |
+| `torch-eager-bf16` | bf16 autocast mixed precision (parameters, gradients and AdamW state stay float32) | every vendor, probed on the device |
+| `torch-compile-bf16` | compile inside the same autocast | every vendor, probed on the device |
 
-Both LM arms start from the same parameters (`default_rng(7).normal(0, .02)`,
-+1 on every norm) and read the same batches, so their losses and logits are
-comparable. The byte stream is the installed mojolearn package's own `.py`
-sources, sorted and concatenated, and its sha256 is recorded. Training
-continues across rounds, so round r is step r + 1 on both sides. AdamW uses
-the trainer defaults (lr 1e-3, betas 0.9 and 0.999, eps 1e-8, weight decay
-0.01) on both sides.
+TF32 is an NVIDIA CUDA tensor-core matmul mode. On ROCm and MPS torch accepts
+the flag and changes nothing, so those arms are not planned there, and the
+board says so in "Not covered". An arm that torch cannot run on the box is
+refused by name in its cell and never falls back to another setting or
+device. Examples are bf16 on a GPU without it, or `torch.compile` failing on
+MPS. The TF32 and bf16 arms run at another precision than ours, and their
+quality columns show how far each one lands from our output.
 
-`--neural-shape full` (the default) is the 20,453,376-parameter control shape
-of `tools/torch_lm_step_opponent.py` (batch 1, length 2048, d_model 384, 6
-heads, head_dim 64, intermediate 1024, 8 layers, vocab 8192) and a 4096 cube
-GEMM. It was chosen to fit a 16 GB Apple M4 beside torch (the parameters
-and both Adam moments are about 250 MB per side); it has not yet been run at
-that size on the Mac. The GPT-3-small target shape (162 M parameters, vocab
-50257) is left off the board. `--neural-shape small` is a plumbing smoke (batch 2, length 64,
-d_model 64, 2 layers, vocab 256; a 256 cube GEMM), and the board says SMOKE.
-`--rows` does not apply to neural lanes.
+On Apple (torch 2.13, M4, small smoke), `torch.compile` and bf16 autocast both
+work on MPS for the LM, GEMM, transformer, Mamba-2 and MLP lanes. Inductor's
+Metal code generator fails on the Mamba-3 reference, and so on Samba, which
+contains it. Those four compile cells are REFUSED by name. On the CPU,
+compile and bf16 work for every lane.
 
-Not covered yet: the Mamba blocks, `TransformerBlock` on its own, `SambaStack`
-and `SmallMLPTrainer`. In the classical2 family: `RadiusNeighbors`, the
-preprocessing scalers, `Cholesky`, and the `parallel_*` and `Distributed*`
-wrappers. Taxi-derived time series are not used.
+| lane | ours (public API) | runs on | torch twin |
+|---|---|---|---|
+| `lm-train-step` | `LanguageModelTrainer(resident=True, step_result='lean').train_step(ids)` | GPU | `tools/torch_lm_step_opponent.py` `build_model` (SDPA), `torch.optim.AdamW` |
+| `lm-forward` | `LanguageModelTrainer(resident=True).logits(ids)` | GPU | the same twin, logits |
+| `gemm` | `mojolearn.linalg.matmul(a, b)` | GPU | `a @ b` |
+| `transformer-forward` | `TransformerBlock(weights, n_heads, n_kv_heads, head_dim).forward(x)` | GPU | `tools/speed_torch_seq.py` `LlamaEager.block(sdpa=True)` |
+| `transformer-infer` | `TransformerBlockInference(...).forward(x)` | CPU | the same, on the CPU |
+| `mamba1-forward` / `mamba1-infer` | `Mamba1Block` / `Mamba1BlockInference(weights).forward(x)` | GPU / CPU | `mamba/corpus/gen_corpus.py` `block_forward` (mamba_ssm's `selective_scan_ref`, a per-token loop; eager arms only) |
+| `mamba2-forward` / `mamba2-infer` | `Mamba2Block` / `Mamba2BlockInference(weights).forward(x)` | GPU / CPU | `gen_corpus.py` `m2_forward` (chunked SSD reference) |
+| `mamba3-forward` / `mamba3-infer` | `Mamba3Block` / `Mamba3BlockInference(weights).forward(x)` | GPU / CPU | `gen_corpus.py` `m3_forward` (SISO reference) |
+| `samba-train-step` | `SambaStack(config, weights).train_step(inputs, targets)` | GPU | embedding, then per layer `m3_forward` or `LlamaEager.block`, then RMSNorm and the tied head; mean CE, `torch.optim.AdamW` |
+| `samba-forward` | `SambaStack(config, weights).forward(inputs)` | GPU | the same stack, logits |
+| `samba-infer` | `SambaInference(config, weights).forward(inputs)` | CPU | the same stack on the CPU |
+| `mlp-train-step` | `SmallMLPTrainer(w1, b1, w2, b2).train_step(X, y)` | GPU | `F.linear`, ReLU, `F.linear`; mean CE, `torch.optim.AdamW` |
+| `mlp-infer` | `MLPInference(w1, b1, w2, b2).predict_logits(X)` | CPU | the same MLP on the CPU |
+
+The `*-infer` lanes are the public CPU inference classes, which run on the
+host binding. They race `torch-cpu-<setting>` arms (eager and compile, fp32
+and bf16). Every twin already existed in the repo, and none was written for
+the board. In the Apple smoke, each fp32 torch twin matched our output to
+about 1e-7 relative (Samba about 7e-7), and each train step's losses matched
+to about 1e-6. The Mamba opponents are pure-PyTorch reference
+implementations, not mamba-ssm's fused CUDA or Triton kernels (the board does
+not install mamba-ssm). A Mamba ratio is therefore against a reference, and
+the board says so. The Mamba-1 reference needs `einops`, which the board
+installs (`einops==0.8.1`) when the neural family is planned.
+
+Every arm starts from the same inputs, built by the conductor from seed 7.
+The LM parameters are `normal(0, .02)` with +1 on every norm, and the batches
+come from the byte stream (the installed mojolearn package's own `.py`
+sources, sorted and concatenated, sha256 recorded). The transformer weights
+are `normal(0, .02)` with +1 on the norms. The Mamba weights are uniform over
+`gen_corpus.py`'s default range for each tensor. Samba follows
+`SambaStack`'s initializer rules, and our worker refuses unless
+`SambaConfig.registry()` matches the conductor's list. The MLP gets
+uniform(+-1/sqrt(fan_in)) weights, standard normal X and labels 0..2. Every
+clock is host in, host out, synchronized. Training state stays on the device
+between steps on both sides, so round r is step r + 1. AdamW uses lr 1e-3,
+betas 0.9 and 0.999, eps 1e-8 and weight decay 0.01 on both sides (Samba
+without clipping).
+
+Quality: train lanes report `loss_first_step`, `loss_last_step`, and on each
+torch arm `loss_first_abs_diff_vs_ours` and `loss_last_abs_diff_vs_ours`.
+Forward lanes report `max_abs_diff_vs_ours` and `max_rel_diff_vs_ours` (max
+abs difference over max abs of ours) on each torch arm. The logit lanes add
+`mean_nll`, and `gemm` adds `max_rel_err_vs_fp64`.
+
+`--neural-shape full` (the default) has these shapes:
+- LM: the 20,453,376-parameter control shape of
+  `tools/torch_lm_step_opponent.py` (batch 1, length 2048, d_model 384, 6
+  heads, head_dim 64, intermediate 1024, 8 layers, vocab 8192).
+- GEMM: a 4096 cube.
+- Transformer block: that shape's block.
+- Mamba blocks: batch 1, length 2048, d_model 384.
+- Samba: batch 2, length 512, d_model 384, vocab 256, layers
+  mamba3+attention+mamba3+attention, 6 heads, intermediate 1024.
+- MLP: 256 rows.
+- The CPU lanes cap the length at 512.
+
+The full shape has not yet been run on the Mac. The GPT-3-small target shape
+is left off the board. `--neural-shape small` is a plumbing smoke, and the
+board says SMOKE. On an Apple M4 all 16 small lanes (76 cells, one round)
+took about 3 minutes. `--rows` does not apply to neural lanes.
+
+Not covered in the neural family:
+- the blocks' backward (the VJPs), decode `step`, ragged `lengths` and
+  carried state;
+- `SmallMLPTrainer.predict_logits`;
+- mamba-ssm's fused kernels;
+- `torch.compile` on the Mamba-1 reference (a per-token Python loop).
+
+Not covered in the classical2 family: `RadiusNeighbors`, the preprocessing
+scalers, `Cholesky`, and the `parallel_*` and `Distributed*` wrappers.
+Taxi-derived time series are not used.
 
 ## Remote Mac (Apple Metal)
 
