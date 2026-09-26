@@ -9,8 +9,22 @@ from core.identity_trace import IdentityTrace
 from spectral.impl.sparse.coo import CooGraph
 from spectral.impl.spectral_embedding import (
     MLSpectralEmbeddingParams,
+    to_cuvs,
     transform_connectivity,
 )
+from spectral.impl.preprocessing.detail.spectral_embedding import transform_graph
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
+
+comptime UMAP_INIT_TOL_FAST = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_UMAP_INIT_TOL_OFF"]()
+)
+"""FAST on Apple: the spectral INITIALIZATION solves to 1e-4 (umap-learn's
+own `eigsh(..., tol=1e-4)` for this step) instead of cuVS's 1e-5; the layout
+is only a starting point the optimizer then moves."""
 from umap.graph import FuzzySimplicialGraph
 
 
@@ -99,9 +113,13 @@ def spectral_initialize_coo(
     )
     var embedding = List[Float32]()
     var trace = IdentityTrace.disabled()
-    var n_out = transform_connectivity(
-        ctx, config, graph^, embedding, trace
-    )
+    var n_out: Int
+    comptime if UMAP_INIT_TOL_FAST:
+        var cp = to_cuvs(config)
+        cp.tolerance = Float32(1e-4)
+        n_out = transform_graph(ctx, cp, graph, embedding, trace)
+    else:
+        n_out = transform_connectivity(ctx, config, graph^, embedding, trace)
     if n_out != n_components or len(embedding) != n_samples * n_components:
         raise Error("UMAP spectral solver returned the wrong shape")
     for c in range(n_components):
