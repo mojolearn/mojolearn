@@ -70,6 +70,7 @@ from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
     identical_exp,
+    identical_mul64,
     identical_log,
     portable_expf,
     portable_log64,
@@ -890,7 +891,9 @@ def algo_l_sample_kernel[
             var int_uniform_val = Int(uniform_int_u64(gen, 0, UInt64(k)))
             colids[unsafe_offset = tid * k + int_uniform_val] = Int32(col)
             fp_uniform_val = gen.next_float()
-            W *= Float64(_dev_expf32(_dev_logf32(fp_uniform_val) / Float32(k)))
+            # pinned: `1.0 - W` follows across the loop; the PTX kept a plain
+            # mul.f64 feeding that sub.f64, which ptxas may fuse (lane/pinned-mul-contract-free)
+            W = identical_mul64(W, Float64(_dev_expf32(_dev_logf32(fp_uniform_val) / Float32(k))))
 
     report[unsafe_offset = 3 * tid + 0] = Int32(SAMPLE_ALGO_L)
     report[unsafe_offset = 3 * tid + 1] = Int32(0)

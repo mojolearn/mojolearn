@@ -124,6 +124,13 @@ def identical_mul(a: Float32, b: Float32) -> Float32:
     return a * b
 
 
+def identical_mul64(a: Float64, b: Float64) -> Float64:
+    """`identical_mul`'s float64 twin: `pinned_mul_f64` under IDENTICAL, `a * b` otherwise."""
+    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
+        return pinned_mul_f64(a, b)
+    return a * b
+
+
 # THE PINNED PRODUCT (IDENTITY_PATHS row 9, lane/pinned-mul-contract-free,
 # 2026-09-26). `pinned_mul_f32(a, b)` / `pinned_mul_f64(a, b)` are the
 # correctly rounded product `a*b`, bit for bit, as a value no code generator
@@ -306,9 +313,12 @@ def portable_sqrtf(x_in: Float32) -> Float32:
         scaled_down = True
     var bits = rebind[UInt32](x.to_bits())
     var y = bitcast[DType.float32]((bits >> 1) + UInt32(0x1FBD1DF5))
-    y = Float32(0.5) * (y + x / y)
-    y = Float32(0.5) * (y + x / y)
-    y = Float32(0.5) * (y + x / y)
+    # Pinned halvings: the default build fused each `0.5 * s` into the next
+    # step's `y + x / y` (exact in this range, so the same bits, but a
+    # contraction choice all the same; lane/pinned-mul-contract-free).
+    y = pinned_mul_f32(Float32(0.5), y + x / y)
+    y = pinned_mul_f32(Float32(0.5), y + x / y)
+    y = pinned_mul_f32(Float32(0.5), y + x / y)
     var yb = rebind[UInt32](y.to_bits())
     var best = y
     var r_best = abs(_fma_f32(-y, y, x))

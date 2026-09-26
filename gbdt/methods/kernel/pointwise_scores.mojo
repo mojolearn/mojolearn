@@ -254,6 +254,7 @@ from std.math import copysign
 # the stdlib under FAST and the portable pair under IDENTICAL
 from checks.numerics import (
     identical_log,
+    identical_mul,
     identical_mul_add,
     identical_pow,
     identical_sqrt,
@@ -409,12 +410,14 @@ struct ScoreCalcer[score_function: Int](Copyable, ImplicitlyCopyable, Movable):
             else:
                 # `weight` cannot be 0 on this arm: `leafScore != 0` implies
                 # the `weight > 1e-20f` branch above was taken.
-                self.score += (
+                # pinned: LLVM leaves this product unfused (a plain PTX mul.f32
+                # feeding the add.f32, which ptxas may fuse) (lane/pinned-mul-contract-free)
+                self.score += identical_mul(
                     copysign(
                         identical_pow(abs(leaf_score) / weight, self.meta_exponent),
                         leaf_score,
-                    )
-                    * weight
+                    ),
+                    weight,
                 )
 
         comptime if Self.score_function == SCORE_FUNCTION_LOO_L2:

@@ -357,15 +357,17 @@ def _loc_counts(text, kind):
     """{(source file, line): fused ops} and {(file, line): PTX plain mul->add pairs, keyed at the add}."""
     rx = {"host": HOST_FUSED, "amd": AMD_FUSED, "ptx": PTX_FUSED}[kind]
     files = {}
+    for line in text.splitlines():  # PTX puts its .file table at the END
+        m = FILE_DIR.match(line)
+        if m:
+            n, a, b = m.groups()
+            files[n] = os.path.join(a, b) if b else a
     cur = ("?", 0)
     fused = {}
     pairs = {}
     plain_mul = {}
     for line in text.splitlines():
-        m = FILE_DIR.match(line)
-        if m:
-            n, a, b = m.groups()
-            files[n] = os.path.join(a, b) if b else a
+        if FILE_DIR.match(line):
             continue
         m = LOC_DIR.match(line)
         if m:
@@ -397,7 +399,8 @@ def _loc_counts(text, kind):
 def _short(path):
     p = str(path)
     root = str(REPO) + "/"
-    i = p.find("/mojolearn/")
+    if p.startswith("./"):
+        p = p[2:]
     if p.startswith(root):
         return p[len(root):]
     return p
