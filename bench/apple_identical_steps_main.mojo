@@ -51,7 +51,8 @@ def _fill(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int, salt
         var v = Float32(Int(_mix(i, salt) % 2000001) - 1000000) * Float32(1.0e-6)
         # A sprinkle of tiny values so the flush and the Apple rtf repair are
         # reached, not just the normal path.
-        if _mix(i, salt + 7) % 997 == 0:
+        # MOJOLEARN_STEPS_NO_TINY=1 leaves them out (ordinary-data prices).
+        if _mix(i, salt + 7) % 997 == 0 and String(getenv("MOJOLEARN_STEPS_NO_TINY")) != "1":
             v = v * Float32(1.0e-36)
         p.unsafe_store(i, v)
     ctx.enqueue_copy(dst_buf=buf, src_ptr=h.unsafe_ptr())
