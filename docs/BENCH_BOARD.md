@@ -8,17 +8,20 @@ full contract. In short:
 
 | box | modes | opponents |
 |---|---|---|
-| Apple (Metal) | `fast` and `identical`, interleaved in one race (trees, classical); `identical` only (neural) | CatBoost, XGBoost, LightGBM, scikit-learn on the CPU; torch on MPS (classical, neural) |
-| NVIDIA | `identical` | CatBoost, XGBoost and LightGBM GPU arms, cuML, torch CUDA (the rosters of `tools/bench_all_ours.sh`) |
-| AMD | `identical` | XGBoost ROCm where the image has it, otherwise the CPU learners on all cores; torch ROCm |
+| Apple (Metal) | `fast` and `identical`, interleaved in one race (trees, classical, classical2); `identical` only (neural) | CatBoost, XGBoost, LightGBM, scikit-learn, umap-learn, statsmodels and faiss-cpu on the CPU; torch on MPS (classical, neural) |
+| NVIDIA | `identical` | CatBoost, XGBoost and LightGBM GPU arms, cuML, cuVS, torch CUDA (the rosters of `tools/bench_all_ours.sh`); scikit-learn and statsmodels on the CPU where cuML has no such estimator |
+| AMD | `identical` | XGBoost ROCm where the image has it, otherwise the CPU learners on all cores (scikit-learn, umap-learn, statsmodels, faiss-cpu included); torch ROCm |
 
 - Families: trees (`gbdt-symmetric`, `gbdt-depthwise`, `gbdt-lossguide`, `rf`,
   `et`, `iforest`) and classical (`kmeans`, `pca`, `ols`, `knn`, `kde`, `svc`,
-  `dbscan`, `hdbscan`) on taxi and Istella-S, and neural (`lm-train-step`,
-  `lm-forward`, `gemm`) on inputs the driver builds from seed 7.
+  `dbscan`, `hdbscan`) on taxi and Istella-S, classical2 (23 lanes, below) on
+  taxi and Istella-S or seeded synthetic series, and neural
+  (`lm-train-step`, `lm-forward`, `gemm`) on inputs the driver builds from
+  seed 7.
 - Neural is `identical` only on every vendor, because the wheel builds its
   neural surface in that tier only. `--modes fast` with the neural family is
-  refused by name; a FAST-only Apple run passes `--families trees,classical`.
+  refused by name; a FAST-only Apple run passes
+  `--families trees,classical,classical2`.
 - One seed (7). Five timed rounds after one warm-up (`--rounds`).
 - Output: one directory with `board.json` (box fingerprint and every cell) and
   `BOARD.md`. Bulky state (venv, wheel download, classical blocks) goes in
@@ -30,9 +33,72 @@ full contract. In short:
   (`docs/REMOTE_DATA_R2.md`). Without them the script refuses and prints the
   staging command. A neural-only run (`--families neural`) needs no dataset.
 - Always check the plan first: `python3 tools/bench_board.py --dry-run
-  --vendor apple` (or `nvidia`, `amd`). The current plan has 31 races on
-  every vendor (3 of them neural, 2 cells each). That comes to 106 cells on
-  Apple, 78 on NVIDIA and 84 on AMD.
+  --vendor apple` (or `nvidia`, `amd`). The current plan has 75 races on
+  every vendor (44 of them classical2, 3 neural). That comes to 242 cells on
+  Apple, 172 on NVIDIA and 176 on AMD (classical2 alone: 134, 94 and 90).
+
+## The classical2 family
+
+`tools/bench_board_more.py` races the wheel's remaining classical estimators.
+It uses the classical racer's worker protocol, interleaving and JSON shape,
+and its block helpers (stride samples, the Istella sentinel clean, the fit
+rows' standardization). Every estimator's binding ships a FAST tier in 0.8.22
+(`mojolearn._backend._CLASSICAL_FAST`), so on Apple every lane races `ours`
+(IDENTICAL) and `ours-fast` (FAST) side by side. The tier is read back from
+the binary. `_mojolearn_solver` (Lasso, ElasticNet) and `_mojolearn_tsa`
+(ExponentialSmoothing) carry no numeric-mode constant in 0.8.22, so for
+those the tier is read from the directory the loaded binary sits in, and the
+cell says so.
+
+| lane | ours | Apple and AMD opponents | NVIDIA opponents | quality |
+|---|---|---|---|---|
+| `umap` | `UMAP` | umap-learn seeded (one thread, its rule) and unseeded (every core) | cuML UMAP (exact kNN) | trustworthiness k=15 |
+| `spectral-embedding` | `SpectralEmbedding` | scikit-learn | cuML, scikit-learn | trustworthiness k=15 |
+| `gmm` | `GaussianMixture` | scikit-learn | scikit-learn (cuML has none) | held-out mean log-likelihood, BIC |
+| `logreg`, `linearsvc` | `LogisticRegression`, `LinearSVC` | scikit-learn | cuML | held-out accuracy (and log loss) |
+| `ridge`, `lasso`, `elasticnet`, `linearsvr` | the same names | scikit-learn | cuML | held-out R2, RMSE |
+| `tsvd` | `TruncatedSVD` | scikit-learn (arpack) | cuML | explained-variance ratio sum, reconstruction error |
+| `knn-clf`, `knn-reg` | `KNeighborsClassifier`, `KNeighborsRegressor` | scikit-learn | cuML | held-out accuracy, R2 |
+| `spectral`, `agglomerative` | `SpectralClustering`, `AgglomerativeClustering` | scikit-learn | cuML (and scikit-learn for spectral) | silhouette, ARI vs ours, cluster count |
+| `gpr`, `gpc` | `GaussianProcessRegressor`, `GaussianProcessClassifier` | scikit-learn | scikit-learn (cuML has none) | held-out RMSE, R2, log predictive density; accuracy, log loss |
+| `svr`, `kernel-ridge` | `SVR`, `KernelRidge` | scikit-learn | cuML | held-out R2, RMSE |
+| `nystroem`, `rbf-sampler` | `Nystroem`, `RBFSampler` | scikit-learn | scikit-learn (cuML has none) | kernel approximation error |
+| `arima` | `ARIMA` (one batched fit) | statsmodels (one fit per series, joblib over every core) | cuML, statsmodels | mean llf, mean AIC, forecast and in-sample RMSE |
+| `ets` | `ExponentialSmoothing` | statsmodels | cuML, statsmodels | forecast and in-sample RMSE |
+| `ivf` | `IVFIndex` | faiss-cpu IVF-Flat | cuVS `ivf_flat` | recall@10 vs float64 brute force |
+
+The rows, every matched parameter, what is inside the clock, and each
+mismatch that could not be avoided (with its one-line reason) are in
+`LANE_CONFIG` in the driver. The board copies them into every cell's
+`settings.lane_config` and prints them under each race. The main ones:
+
+- Sizes are the classical racer's: 1,000,000 fit and 100,000 held-out stride
+  rows for the linear lanes and TruncatedSVD. The O(n^2) and O(n^3) lanes take
+  a documented stride subset, the same rows for every arm: UMAP and
+  SpectralEmbedding 20,000 rows, kNN 200,000 fit rows and 4,000 queries,
+  spectral and agglomerative 10,000, GaussianMixture 100,000 and 20,000, GP
+  3,000 and 3,000, SVR and KernelRidge 10,000 and 10,000. The IVF lane reads
+  the knn lane's block (400,000 index rows, 4,000 queries).
+- The time series are synthetic, as in the repo's own ARIMA quality work: 64
+  ARMA(1,1) series of 2,100 points and 64 hourly series with a period-24
+  season of 1,488 points, all from `default_rng(7)`. The last 100 and 48
+  points of each are held out for the forecast error.
+- The GP regressor uses `alpha=2**-20`, the one ridge IDENTICAL accepts besides
+  0, and carries its noise in a `WhiteKernel(1e-2)` on every arm. Without it
+  the float32 factor of the kernel matrix does not exist on taxi's
+  near-duplicate rows, and ours refuses to predict from that fit.
+- umap-learn with `random_state=7` runs one thread (its own rule), so the
+  board also races it unseeded on every core, and says so.
+- cuML's Holt-Winters has only its heuristic initialization. Ours runs
+  `initialization_method='estimated'`, its default and statsmodels'.
+
+Opponent pins (`MORE_PINS` in `tools/bench_board.py`): umap-learn 0.5.12,
+pynndescent 0.6.0, numba 0.67.0, statsmodels 0.15.0 and faiss-cpu 1.15.1 on
+Apple and AMD, and statsmodels 0.15.0 on NVIDIA. cuML and cuVS come from the
+rapids set in `tools/opponent_wheels.sh`. They are installed only when
+classical2 is planned. The dry run and the board list each opponent that is
+not planned on a vendor, with the reason (for example faiss-gpu, and cuML's
+missing GaussianMixture, GP, Nystroem and RBFSampler).
 
 ## The neural family
 
@@ -68,7 +134,9 @@ d_model 64, 2 layers, vocab 256; a 256 cube GEMM), and the board says SMOKE.
 `--rows` does not apply to neural lanes.
 
 Not covered yet: the Mamba blocks, `TransformerBlock` on its own, `SambaStack`
-and `SmallMLPTrainer`.
+and `SmallMLPTrainer`. In the classical2 family: `RadiusNeighbors`, the
+preprocessing scalers, `Cholesky`, and the `parallel_*` and `Distributed*`
+wrappers. Taxi-derived time series are not used.
 
 ## Remote Mac (Apple Metal)
 
@@ -153,7 +221,7 @@ Values contain no spaces, and lists are separated by commas.
 | `MOJOLEARN_BOARD_ROWS` | row cap for a smoke run; the board is then marked SMOKE |
 | `MOJOLEARN_BOARD_LANES` / `_FAMILIES` / `_DATASETS` / `_ROUNDS` | narrow the plan |
 | `MOJOLEARN_BOARD_NEURAL_SHAPE` | `full` (default) or `small` for a neural smoke |
-| `MOJOLEARN_BOARD_OUT`, `MOJOLEARN_BOARD_CACHE` | result directory (fetched) and cache (not fetched) |
+| `MOJOLEARN_BOARD_OUT`, `MOJOLEARN_BOARD_CACHE` | result directory (fetched) and cache (not fetched; the classical and classical2 blocks live here) |
 
 A smoke leg, for example:
 `MOJOLEARN_DO_EXTRA_ENV='MOJOLEARN_BOARD_VERSION=0.8.22 MOJOLEARN_BOARD_ROWS=20000 MOJOLEARN_BOARD_ROUNDS=1 MOJOLEARN_BOARD_LANES=rf,kmeans'`.
