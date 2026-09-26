@@ -20,13 +20,23 @@ from std.sys.info import has_apple_gpu_accelerator
 comptime UMAP_INIT_TOL_FAST = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
     and has_apple_gpu_accelerator()
+    and is_defined["MOJOLEARN_UMAP_INIT_TOL"]()
     and not is_defined["MOJOLEARN_UMAP_INIT_TOL_OFF"]()
 )
 """FAST on Apple: the spectral INITIALIZATION solves to 1e-3 instead of
 cuVS's 1e-5; the layout is only a starting point the optimizer then moves.
 At 1e-4 (umap-learn's `eigsh` tolerance) taxi 100k took 37 Lanczos restarts,
 at 1e-3 six, and the final embedding's trustworthiness (k = 15) moved by
--0.003 to +0.02 over four seeds and sizes, inside the seed-to-seed spread."""
+-0.003 to +0.02 over four seeds and sizes, inside the seed-to-seed spread.
+
+OFF BY DEFAULT since 2026-09-26 (lane/apple-identical-neural): a paired
+check against the reference 1e-5, eight seeds per data set, 30k rows,
+trustworthiness k = 15 on a fixed 3000-point subsample, found a systematic
+loss: covtype 0.9672 -> 0.9590 (mean -0.0083, worst -0.0160, ALL eight
+seeds worse), taxi 0.9809 -> 0.9766 (mean -0.0043, worst -0.0105); 5-NN
+accuracy in the embedding within noise (-0.0004, -0.0014). FAST may move
+bits but not quality, so the reference solve is the FAST default;
+`-D MOJOLEARN_UMAP_INIT_TOL=1` is the trial arm."""
 from umap.graph import FuzzySimplicialGraph
 
 
