@@ -229,7 +229,8 @@ def host_r1qt(trend_len: Int) -> List[Float32]:
     solver kernel reads. Host float64 basic ops + one explicit fma, cast."""
     var m = Float64(trend_len)
     var tbar = (m + Float64(1.0)) / Float64(2.0)
-    var sxx = (m * (m * m - Float64(1.0))) / Float64(12.0)
+    # `m*m - 1` in ONE rounding, as the default build fused it (lane/pinned-mul-contract-free)
+    var sxx = (m * fma(m, m, Float64(-1.0))) / Float64(12.0)
     var inv_m = Float64(1.0) / m
     var out = List[Float32]()
     out.reserve(2 * trend_len)

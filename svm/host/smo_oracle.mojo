@@ -575,8 +575,9 @@ def _block_solve[
         if q_l < tmp_l:
             tmp_l = q_l
         var q = tmp_u if tmp_u < tmp_l else tmp_l
-        a[u] = _flush[dt](a[u] + q * y[u])
-        a[l] = _flush[dt](a[l] - q * y[l])
+        # the default build's fused ops (lane/pinned-mul-contract-free)
+        a[u] = _flush[dt](fma(q, y[u], a[u]))
+        a[l] = _flush[dt](fma(-q, y[l], a[l]))
         for t in range(n_ws):
             var Kui = tile[u * n_ws + t]
             var Kli = tile[l * n_ws + t]
@@ -888,7 +889,7 @@ def dual_objective[
             if aj == 0.0:
                 continue
             var kij = Float64(_kernel_cell[dt](kp, x, norms, i, x, norms, j, n, n, k))
-            quad += ai * aj * Float64(y[i]) * Float64(y[j]) * kij
+            quad = fma(ai * aj * Float64(y[i]) * Float64(y[j]), kij, quad)  # (lane/pinned-mul-contract-free)
     return -lin + 0.5 * quad
 
 
@@ -1135,13 +1136,13 @@ def svr_dual_objective[
             var kij = Float64(
                 _kernel_cell[dt](kp, x, norms, i, x, norms, j, n, n, k)
             )
-            quad += c[i] * c[j] * kij
+            quad = fma(c[i] * c[j], kij, quad)  # (lane/pinned-mul-contract-free)
     var sum_alpha = Float64(0)
     for p in range(2 * n):
         sum_alpha += Float64(alpha[p])
     var lin_y = Float64(0)
     for i in range(n):
-        lin_y += Float64(yr[i]) * c[i]
+        lin_y = fma(Float64(yr[i]), c[i], lin_y)  # (lane/pinned-mul-contract-free)
     return 0.5 * quad + epsilon * sum_alpha - lin_y
 
 

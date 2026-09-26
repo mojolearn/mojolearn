@@ -55,6 +55,7 @@ parallel thing in k-means, so this is the first place to look when the
 control plane becomes the cost. Copied as-is because it is theirs.
 """
 
+from std.math import fma
 from std.math import ceil, log
 from max.gpu.host import DeviceBuffer, DeviceContext
 
@@ -976,9 +977,12 @@ def init_scalable_kmeans_plus_plus(
         for f in range(d):
             var column = Float64(0.0)
             for c in range(cand_count):
-                column += Float64(
-                    abs(h_cand.unsafe_ptr().unsafe_load(c * d + f))
-                ) * Float64(h_weight.unsafe_ptr().unsafe_load(c))
+                # explicit fma: the default build fused this product into the sum (lane/pinned-mul-contract-free)
+                column = fma(
+                    Float64(abs(h_cand.unsafe_ptr().unsafe_load(c * d + f))),
+                    Float64(h_weight.unsafe_ptr().unsafe_load(c)),
+                    column,
+                )
             if column > worst:
                 worst = column
         var inner_sum_scale = Float32(choose_scale(worst))

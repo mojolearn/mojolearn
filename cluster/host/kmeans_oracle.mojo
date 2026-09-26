@@ -150,6 +150,7 @@ of its own.
 The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the kmeans lane is the measurement.
 """
+from std.math import fma
 from std.math import ceil, log
 from std.memory import bitcast
 from std.os import getenv
@@ -956,7 +957,8 @@ def host_init_scalable(
         for f in range(d):
             var column = Float64(0.0)
             for c in range(cand_count):
-                column += Float64(abs(cand[c * d + f])) * Float64(weight[c])
+                # explicit fma: the default build fused this product into the sum (lane/pinned-mul-contract-free)
+                column = fma(Float64(abs(cand[c * d + f])), Float64(weight[c]), column)
             if column > worst:
                 worst = column
         var inner_sum_scale = Float32(choose_scale(worst))

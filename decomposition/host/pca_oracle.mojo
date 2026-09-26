@@ -141,6 +141,7 @@ The restatement is a prediction until measured. The CPU identity gate
 pca,pca-whiten,tsvd --require-columns 4`) is the measurement, and the
 brief records what it has shown.
 """
+from std.math import fma
 from std.math import sqrt
 from std.sys.compile import is_defined
 
@@ -330,7 +331,7 @@ def host_shift_columns(
         var col = idx % n_cols
         var xv = ftz(x[idx])
         var mv = ftz(mu[col])
-        out[idx] = ftz(xv + sign * mv)
+        out[idx] = ftz(fma(sign, mv, xv))  # the default build's fused op (lane/pinned-mul-contract-free)
     return out^
 
 
