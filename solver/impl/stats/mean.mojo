@@ -36,7 +36,7 @@ scheduling choice with no arithmetic in it and is not mirrored.
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_dim, block_idx, thread_idx
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add
 from solver.checks.profile_dot import profile_dot_into
 from solver.impl.linalg.coalesced_reduction import coalesced_sum_medium
 
@@ -104,7 +104,7 @@ def mean_shift_columns_kernel(
     if idx < n_rows * n_cols:
         var j = idx // n_rows
         var m = ftz(mu.unsafe_load(j))
-        x.unsafe_store(idx, ftz(ftz(x.unsafe_load(idx)) + sign * m))
+        x.unsafe_store(idx, ftz(identical_mul_add(sign, m, ftz(x.unsafe_load(idx)))))  # the default build's fused op (lane/pinned-mul-contract-free)
 
 
 def mean_center(

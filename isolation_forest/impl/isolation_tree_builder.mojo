@@ -180,7 +180,7 @@ def compute_c_n(n_samples: Int) -> Float32:
     var n = Float32(n_samples)
     var h = ftz(identical_log(n - Float32(1.0)) + EULER_MASCHERONI_F32)
     var tail = ftz(Float32(2.0) * (n - Float32(1.0)) / n)
-    return ftz(Float32(2.0) * h - tail)
+    return ftz(identical_mul_add(Float32(2.0), h, -tail))  # the default build's fused op (lane/pinned-mul-contract-free)
 
 
 # ---------------------------------------------------------------------------

@@ -98,6 +98,7 @@ forest is built.
 ===================================================
 """
 
+from std.math import fma
 from std.sys.compile import is_defined
 
 comptime XORWOW_N = 5
@@ -297,7 +298,7 @@ def _curand_uniform(x: UInt32) -> Float32:
     same rounding, measured in the RNG gate); the product by 2^-32 is
     exact, so the sum is ONE rounding whether or not a backend contracts
     it, and no `identical_mul_add` seam is needed here. Range (0, 1]."""
-    return Float32(x) * CURAND_2POW32_INV + (CURAND_2POW32_INV / Float32(2.0))
+    return fma(Float32(x), CURAND_2POW32_INV, CURAND_2POW32_INV / Float32(2.0))  # the default build's fused op (lane/pinned-mul-contract-free)
 
 
 def curand_uniform(mut state: curandStateXORWOW) -> Float32:

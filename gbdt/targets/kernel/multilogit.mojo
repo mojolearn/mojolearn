@@ -91,6 +91,7 @@ one-vs-all score is kept exactly; only the transcendental calls are routed.
 ===================================================
 """
 
+from std.math import fma
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -772,7 +773,7 @@ def one_vs_all_val_and_first_der_kernel[
                 if in_range:
                     tmp_score += (
                         weight[j]
-                        * (c * val - log_term)
+                        * fma(c, val, -log_term)  # the default build's fused op (lane/pinned-mul-contract-free)
                         / Float32(num_classes)
                     )
 

@@ -123,7 +123,7 @@ from std.sys.compile import is_defined
 from core.device_zero import enqueue_fill
 from core.identity_trace import IdentityTrace
 from checks.fixed_point import choose_scale
-from checks.numerics import ftz, identical_mul
+from checks.numerics import ftz, identical_mul, identical_mul64
 from gbdt.data.ordered_plan import (
     ORDERED_BOOTSTRAP_SALT,
     ORDERED_MIN_FOLD_SIZE,
@@ -1011,8 +1011,10 @@ def fit_ordered(
                     folds[f].quality_evaluate_samples.right
                     - folds[f].estimate_samples.right
                 )
+            # the product pinned: inlined, the default build fused it into
+            # `log(n) - model_size` (lane/pinned-mul-contract-free)
             var mult = ordered_model_length_mult(
-                n_rows, Float64(iteration) * Float64(opts.learning_rate)
+                n_rows, identical_mul64(Float64(iteration), Float64(opts.learning_rate))
             )
             score_std = Float32(
                 mult

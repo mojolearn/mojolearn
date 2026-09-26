@@ -44,6 +44,7 @@ demands `==` on the bits and may need re-baselining to a documented
 unaffected). Operand order and spelling are theirs, unchanged.
 """
 
+from std.math import fma
 from checks.numerics import portable_log64
 
 from gbdt.targets.kernel.pointwise_targets import (
@@ -97,7 +98,7 @@ def calculate_weighted_target_average(
         for i in range(n):
             summary_weight += Float64(weights[i])
         for i in range(n):
-            target_sum += Float64(target[i]) * Float64(weights[i])
+            target_sum = fma(Float64(target[i]), Float64(weights[i]), target_sum)  # the default build's fused op (lane/pinned-mul-contract-free)
     # their `return targetSum / summaryWeight;` through `inline float`
     return Float32(target_sum / summary_weight)
 

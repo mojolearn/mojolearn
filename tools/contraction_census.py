@@ -454,6 +454,7 @@ FAST_ONLY = [
     ("hierarchy/impl/cluster/detail/fast_boruvka.mojo", "*", "SL_FAST_BORUVKA (NUMERIC_FAST)"),
     ("mixture/checks/estep.mojo", "fast_estep_kernel", "GMM_FAST_ESTEP (NUMERIC_FAST)"),
     ("mixture/checks/mstep.mojo", "fast_resp_colsums_partial_kernel", "GMM_FAST_GRAM (NUMERIC_FAST)"),
+    ("umap/optimizer_fast.mojo", "*", "optimize_layout / optimize_sparse_layout return the IDENTICAL arm first under NUMERIC_IDENTICAL"),
 ]
 
 

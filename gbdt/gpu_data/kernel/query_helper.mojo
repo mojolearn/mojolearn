@@ -28,6 +28,7 @@ mean passes through `ftz`, a comptime no-op outside IDENTICAL, because it is
 a kernel-to-kernel seam the QueryRMSE kernel reads.
 """
 
+from std.math import fma
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -129,7 +130,7 @@ def compute_group_means_kernel(
         var w = Float32(1.0)
         if has_weights != Int32(0):
             w = weights.unsafe_load(read_offset + i)
-        sum_target = sum_target + t * w
+        sum_target = fma(t, w, sum_target)  # the default build's fused op (lane/pinned-mul-contract-free)
         sum_weight = sum_weight + w
         i += QUERY_LANES
 

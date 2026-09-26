@@ -309,7 +309,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from checks.numerics import ftz
+from checks.numerics import ftz, identical_mul
 from neighbors.impl.ball_cover.common import (
     RBC_FLT_MAX,
     RBC_METRIC_DEFAULT,
@@ -354,7 +354,9 @@ def rbc_knn_relax(t: Float32, mag: Float32) -> Float32:
     will be compared against; for a landmark that is `d(q, l) + radius(l)`,
     which dominates every `|d(q,l) - d(l,y)|` in its group.
     """
-    return ftz(t + ftz(mag * RBC_KNN_ULP_SLACK))
+    # the slack product pinned (exact, a power of two): LLVM saw through the
+    # ftz select and fused it into this add (lane/pinned-mul-contract-free)
+    return ftz(t + ftz(identical_mul(mag, RBC_KNN_ULP_SLACK)))
 
 
 @always_inline
