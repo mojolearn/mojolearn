@@ -1,0 +1,93 @@
+NOTE: --require-columns defaults to 2 (2026-09-20): every compared cell must rest on at least two real hashes, or it was not compared. Pass --require-columns 0 to turn the floor off, or a higher N to demand more.
+NOTE: column arm64 is a PARTIAL COLUMN: it left out batch, rlpair. Those parts are absent because they were not run, not because they agree; it is refused as a record
+NOTE: column x86_64 is a PARTIAL COLUMN: it left out batch, rlpair. Those parts are absent because they were not run, not because they agree; it is refused as a record
+NOTE: column arm64 is a PARTIAL COLUMN: it left out batch, rlpair. Those parts are absent because they were not run, not because they agree; it is refused as a record
+NOTE: column x86_64 is a PARTIAL COLUMN: it left out batch, rlpair. Those parts are absent because they were not run, not because they agree; it is refused as a record
+| lane/fixture                 | verdict    | arm64            | x86_64           | arm64            | x86_64           |
+| gmm-sample/base              | DIVERGENT  | parts differ: sample_X,sample_y; agree: - | 2995412dbe6ede62 | 2b291e5b42106b26 | 2b291e5b42106b26 |
+| gmm-sample/denormal          | DIVERGENT  | parts differ: sample_X,sample_y; agree: - | b0719a23f1750cd0 | 51ed6c3236063bf3 | 51ed6c3236063bf3 |
+| gmm-sample/odd               | DIVERGENT  | parts differ: sample_X,sample_y; agree: - | 2a8e73e4b6764522 | d2c3e69e0fcd72cd | d2c3e69e0fcd72cd |
+| gmm/base                     | DIVERGENT  | parts differ: weights,means,covariances,precisions,logdet,lower_bound,labels,proba; agree: n_iter,converged | bf646caedaf7a508 | 4b967a3a2cb9abec | 4b967a3a2cb9abec |
+| gmm/denormal                 | DIVERGENT  | parts differ: weights,means,covariances,precisions,logdet,n_iter,lower_bound,labels,proba; agree: converged | c2920674c1f91bb0 | 871c7cda7b5d88b3 | 871c7cda7b5d88b3 |
+| gmm/odd                      | DIVERGENT  | parts differ: weights,means,covariances,precisions,logdet,lower_bound,labels,proba; agree: n_iter,converged | 70e1fb9e39156be1 | d4101ca05adf2ae9 | d4101ca05adf2ae9 |
+| ivf-euclidean/base           | DIVERGENT  | parts differ: dist,idx,cand; agree: - | c96b7d6a7ed08e9b | 2864e51ce0236dd9 | 2864e51ce0236dd9 |
+| ivf-euclidean/denormal       | DIVERGENT  | parts differ: dist,idx,cand; agree: - | bc555903de75c40e | e0a6b8094b479bf6 | e0a6b8094b479bf6 |
+| ivf-euclidean/odd            | DIVERGENT  | parts differ: dist,idx,cand; agree: - | ec9020ff5b2a6c07 | 14adf923b969cd0f | 14adf923b969cd0f |
+| ivf-extend/base              | DIVERGENT  | parts differ: offsets,carry,data,lists,dist,idx,cand; agree: - | ba53c112142a07c4 | 1c2de6846af72393 | 1c2de6846af72393 |
+| ivf-extend/denormal          | DIVERGENT  | parts differ: offsets,carry,data,lists,dist,idx,cand; agree: - | 60a84eeca95632ba | e8faf0af0e33db2b | e8faf0af0e33db2b |
+| ivf-extend/odd               | DIVERGENT  | parts differ: offsets,carry,data,lists,dist,idx,cand; agree: - | 940ef92d230837ed | 8b84ba555be0a2fe | 8b84ba555be0a2fe |
+| ivf/base                     | DIVERGENT  | parts differ: dist,idx,cand; agree: - | e14f27972422d4e0 | d04b0ac5411fc856 | d04b0ac5411fc856 |
+| ivf/denormal                 | DIVERGENT  | parts differ: dist,idx,cand; agree: - | dc905d6cb32046d8 | 7bd177645dd8a33f | 7bd177645dd8a33f |
+| ivf/odd                      | DIVERGENT  | parts differ: dist,idx,cand; agree: - | 26b26d7e4be5c50a | ce6db28b3f72df28 | ce6db28b3f72df28 |
+| kmeans-sqrt/base             | DIVERGENT  | parts differ: centers,labels,inertia; agree: scales | 8864be3c295d6c4a | b85ff0673dc789e4 | b85ff0673dc789e4 |
+| kmeans-sqrt/denormal         | DIVERGENT  | parts differ: centers,labels,inertia; agree: scales | c2486d60db950886 | d7f18b6c57d35d2f | d7f18b6c57d35d2f |
+| kmeans-sqrt/odd              | DIVERGENT  | parts differ: centers,labels,inertia; agree: scales | cd50fd82b95de87a | fb1adc2f00ca93fb | fb1adc2f00ca93fb |
+| kmeans-weighted/base         | DIVERGENT  | parts differ: centers,labels; agree: - | 5080fbf55610f54e | e32f0bc4ef4e43ff | e32f0bc4ef4e43ff |
+| kmeans-weighted/denormal     | DIVERGENT  | parts differ: centers,labels; agree: - | c3613adfb9158691 | 567eb9d1c44264a2 | 567eb9d1c44264a2 |
+| kmeans-weighted/odd          | DIVERGENT  | parts differ: centers,labels; agree: - | fc6107e901e7d7be | af708156eb7cb07c | af708156eb7cb07c |
+| kmeans/base                  | DIVERGENT  | parts differ: centers,labels; agree: - | 5aa44cc11034dec9 | e0ef29dac4a58ceb | e0ef29dac4a58ceb |
+| kmeans/denormal              | DIVERGENT  | parts differ: centers,labels; agree: - | 993fe5caff144b0c | 706e631c8ba7b54b | 706e631c8ba7b54b |
+| kmeans/odd                   | DIVERGENT  | parts differ: centers,labels; agree: - | 43d8a3d3859f4143 | b0e597ed9efcb883 | b0e597ed9efcb883 |
+| metrics-classification/base  | DIVERGENT  | parts differ: entropy:nats,entropy:base2,v_measure:beta2,rand,mutual_info,homogeneity,completeness,silhouette_samples; agree: precision_score:None,recall_score:None,f1_score:None,precision_score:binary,recall_score:binary,f1_score:binary,precision_score:micro,recall_score:micro,f1_score:micro,precision_score:macro,recall_score:macro,f1_score:macro,precision_score:weighted,recall_score:weighted,f1_score:weighted,precision_zero_division:0,precision_zero_division:1,log_loss:mean,log_loss:sum,roc_auc,confusion,pr_curve,mse,mae,rmse,kl,trustworthiness | cfc3f690a8b5869b | d7f59a69477b8b40 | d7f59a69477b8b40 |
+| metrics-classification/denormal | DIVERGENT  | parts differ: entropy:nats,entropy:base2,v_measure:beta2,rand,mutual_info,homogeneity,completeness,silhouette_samples; agree: precision_score:None,recall_score:None,f1_score:None,precision_score:binary,recall_score:binary,f1_score:binary,precision_score:micro,recall_score:micro,f1_score:micro,precision_score:macro,recall_score:macro,f1_score:macro,precision_score:weighted,recall_score:weighted,f1_score:weighted,precision_zero_division:0,precision_zero_division:1,log_loss:mean,log_loss:sum,roc_auc,confusion,pr_curve,mse,mae,rmse,kl,trustworthiness | 677972ace9502d25 | ac0752f4c7e8b152 | ac0752f4c7e8b152 |
+| metrics-classification/odd   | DIVERGENT  | parts differ: entropy:nats,entropy:base2,v_measure:beta2,rand,mutual_info,homogeneity,completeness,silhouette_samples; agree: precision_score:None,recall_score:None,f1_score:None,precision_score:binary,recall_score:binary,f1_score:binary,precision_score:micro,recall_score:micro,f1_score:micro,precision_score:macro,recall_score:macro,f1_score:macro,precision_score:weighted,recall_score:weighted,f1_score:weighted,precision_zero_division:0,precision_zero_division:1,log_loss:mean,log_loss:sum,roc_auc,confusion,pr_curve,mse,mae,rmse,kl,trustworthiness | 1fa28775897b6923 | 1713fc4cfcb73f1d | 1713fc4cfcb73f1d |
+| metrics/base                 | DIVERGENT  | parts differ: accuracy,ari,vmeasure,silhouette; agree: r2 | 2e2d6c84f00b9a0b | cfb858057f990693 | cfb858057f990693 |
+| metrics/denormal             | DIVERGENT  | parts differ: accuracy,ari,vmeasure,silhouette; agree: r2 | 70d525921f2192ca | b083da23df05ad3e | b083da23df05ad3e |
+| metrics/odd                  | DIVERGENT  | parts differ: accuracy,ari,vmeasure,silhouette; agree: r2 | 8a7b2852763f246e | dc46c1476cae1d97 | dc46c1476cae1d97 |
+summary: DIVERGENT=30, IDENTICAL=597
+| lane/fixture                 | column | verdict      | arm64            | x86_64           | arm64            | x86_64           |
+| gmm-sample/base              | infer  | DIVERGENT    | e3cad76ce9a060d0 | e3cad76ce9a060d0 | 2a83838d13794e60 | 2a83838d13794e60 |
+| gmm-sample/base              | model  | DIVERGENT    | c4a997dc3ae320a2 | c4a997dc3ae320a2 | 9d417e0b4c2fedb3 | 9d417e0b4c2fedb3 |
+| gmm-sample/denormal          | infer  | DIVERGENT    | e50606c37c34da5a | e50606c37c34da5a | 4233aab319b64c70 | 4233aab319b64c70 |
+| gmm-sample/denormal          | model  | DIVERGENT    | 8b5297c12a121af0 | 8b5297c12a121af0 | 4b7c1e4e4e0aaf13 | 4b7c1e4e4e0aaf13 |
+| gmm-sample/odd               | infer  | DIVERGENT    | e0258bef7ebd4e21 | e0258bef7ebd4e21 | aa5d8b26a2e20ea8 | aa5d8b26a2e20ea8 |
+| gmm-sample/odd               | model  | DIVERGENT    | 3789c99cf21ba8fd | 3789c99cf21ba8fd | 71823ea372167233 | 71823ea372167233 |
+| gmm/base                     | infer  | DIVERGENT    | 140095763edf6c53 | 140095763edf6c53 | 7a4b3099f833ee89 | 7a4b3099f833ee89 |
+| gmm/base                     | model  | DIVERGENT    | c4a997dc3ae320a2 | c4a997dc3ae320a2 | 9d417e0b4c2fedb3 | 9d417e0b4c2fedb3 |
+| gmm/denormal                 | infer  | DIVERGENT    | 153bd7fcdaf1dc92 | 153bd7fcdaf1dc92 | b4143a35149fac2b | b4143a35149fac2b |
+| gmm/denormal                 | model  | DIVERGENT    | 8b5297c12a121af0 | 8b5297c12a121af0 | 4b7c1e4e4e0aaf13 | 4b7c1e4e4e0aaf13 |
+| gmm/odd                      | infer  | DIVERGENT    | fc5c09b04e8fb4aa | fc5c09b04e8fb4aa | b3541490242faef5 | b3541490242faef5 |
+| gmm/odd                      | model  | DIVERGENT    | 3789c99cf21ba8fd | 3789c99cf21ba8fd | 71823ea372167233 | 71823ea372167233 |
+| ivf-euclidean/base           | infer  | DIVERGENT    | f6f71f391727d74a | f6f71f391727d74a | fb63529a65593ffd | fb63529a65593ffd |
+| ivf-euclidean/base           | model  | DIVERGENT    | 2c7ef8ed2b7dc541 | 2c7ef8ed2b7dc541 | 202242f502100f1b | 202242f502100f1b |
+| ivf-euclidean/denormal       | infer  | DIVERGENT    | ab8f3fc0fb8f010c | ab8f3fc0fb8f010c | de4e265bf12a006c | de4e265bf12a006c |
+| ivf-euclidean/denormal       | model  | DIVERGENT    | 095ed72f60fec6ce | 095ed72f60fec6ce | b6fa4a4b48cbe9be | b6fa4a4b48cbe9be |
+| ivf-euclidean/odd            | infer  | DIVERGENT    | 247b6a2b733e9ff2 | 247b6a2b733e9ff2 | e63280a75bbe793d | e63280a75bbe793d |
+| ivf-euclidean/odd            | model  | DIVERGENT    | 997e755024716b18 | 997e755024716b18 | 14be217f261022a0 | 14be217f261022a0 |
+| ivf-extend/base              | infer  | DIVERGENT    | 21a84397fed9cb7b | 21a84397fed9cb7b | e4f3a07a55e6cc57 | e4f3a07a55e6cc57 |
+| ivf-extend/base              | model  | DIVERGENT    | 6814e84fcb72ca37 | 6814e84fcb72ca37 | 5963296b4bd53897 | 5963296b4bd53897 |
+| ivf-extend/denormal          | infer  | DIVERGENT    | 3da4f22de1f06f6e | 3da4f22de1f06f6e | cedb40047cf49955 | cedb40047cf49955 |
+| ivf-extend/denormal          | model  | DIVERGENT    | 7a4a7782b32da3a0 | 7a4a7782b32da3a0 | 1bf19530ba28d1ca | 1bf19530ba28d1ca |
+| ivf-extend/odd               | infer  | DIVERGENT    | a8b712ff1a5e3ef1 | a8b712ff1a5e3ef1 | 41d5c3e8027a4a15 | 41d5c3e8027a4a15 |
+| ivf-extend/odd               | model  | DIVERGENT    | 26b97c27cd22d526 | 26b97c27cd22d526 | 37bc870bb05fd0ac | 37bc870bb05fd0ac |
+| ivf/base                     | infer  | DIVERGENT    | fd6eed35b1338d17 | fd6eed35b1338d17 | 8ce39756d0ea9061 | 8ce39756d0ea9061 |
+| ivf/base                     | model  | DIVERGENT    | dcfefe31adc21c6c | dcfefe31adc21c6c | 95e4fc5bf995fae1 | 95e4fc5bf995fae1 |
+| ivf/denormal                 | infer  | DIVERGENT    | 3ff4c07c575048cf | 3ff4c07c575048cf | 2552feedf966d272 | 2552feedf966d272 |
+| ivf/denormal                 | model  | DIVERGENT    | c3a1727313e23983 | c3a1727313e23983 | 6608a2b9ab0cc614 | 6608a2b9ab0cc614 |
+| ivf/odd                      | infer  | DIVERGENT    | 1e0c2401db49a53d | 1e0c2401db49a53d | 15da0d7b55020e58 | 15da0d7b55020e58 |
+| ivf/odd                      | model  | DIVERGENT    | 2ab1fd5fac4563e2 | 2ab1fd5fac4563e2 | b26c479b6ddac106 | b26c479b6ddac106 |
+| kmeans-sqrt/base             | infer  | DIVERGENT    | 58a73ee6f884f892 | 58a73ee6f884f892 | 52912d2251a55579 | 52912d2251a55579 |
+| kmeans-sqrt/base             | model  | DIVERGENT    | 0effed928846f9bd | 0effed928846f9bd | 6fdfc7dbb7f0d9c4 | 6fdfc7dbb7f0d9c4 |
+| kmeans-sqrt/denormal         | infer  | DIVERGENT    | 5613aee8380a3878 | 5613aee8380a3878 | c64141fbd3d71263 | c64141fbd3d71263 |
+| kmeans-sqrt/denormal         | model  | DIVERGENT    | 7e1253b548caa109 | 7e1253b548caa109 | 9c894b56dcf77903 | 9c894b56dcf77903 |
+| kmeans-sqrt/odd              | infer  | DIVERGENT    | d57783b77ce4e554 | d57783b77ce4e554 | e1749db0da984dc8 | e1749db0da984dc8 |
+| kmeans-sqrt/odd              | model  | DIVERGENT    | f9e8185ae7bbb0c8 | f9e8185ae7bbb0c8 | 8166c4ef0f700b6d | 8166c4ef0f700b6d |
+| kmeans-weighted/base         | infer  | DIVERGENT    | 33403bafb4259ce4 | 33403bafb4259ce4 | fefc097207a66bcc | fefc097207a66bcc |
+| kmeans-weighted/base         | model  | DIVERGENT    | e8b41924fc98f304 | e8b41924fc98f304 | e91d4b8d3d60bb74 | e91d4b8d3d60bb74 |
+| kmeans-weighted/denormal     | infer  | DIVERGENT    | 03780e8f5ba1bb21 | 03780e8f5ba1bb21 | 5df39f6c3135be1c | 5df39f6c3135be1c |
+| kmeans-weighted/denormal     | model  | DIVERGENT    | b9b31eab6a556e78 | b9b31eab6a556e78 | ae6165eefd5d3187 | ae6165eefd5d3187 |
+| kmeans-weighted/odd          | infer  | DIVERGENT    | 86bea24bd326b655 | 86bea24bd326b655 | a2eeaca6d445a7f4 | a2eeaca6d445a7f4 |
+| kmeans-weighted/odd          | model  | DIVERGENT    | f22e247490a77c1c | f22e247490a77c1c | 04b18eff1537b4c3 | 04b18eff1537b4c3 |
+| kmeans/base                  | infer  | DIVERGENT    | 3d50c4c50bf078b2 | 3d50c4c50bf078b2 | c0013f773db5007c | c0013f773db5007c |
+| kmeans/base                  | model  | DIVERGENT    | 355598f468300bee | 355598f468300bee | d4eb8bc4b4d04f03 | d4eb8bc4b4d04f03 |
+| kmeans/denormal              | infer  | DIVERGENT    | 9b15ee1cac8ce636 | 9b15ee1cac8ce636 | abb420bdef7094b9 | abb420bdef7094b9 |
+| kmeans/denormal              | model  | DIVERGENT    | 8646c7d4fc16c75e | 8646c7d4fc16c75e | 2f192adaaeb29095 | 2f192adaaeb29095 |
+| kmeans/odd                   | infer  | DIVERGENT    | 191287260610940c | 191287260610940c | 3434b9dd2b36f477 | 3434b9dd2b36f477 |
+| kmeans/odd                   | model  | DIVERGENT    | 5fdc9f5ac45877c9 | 5fdc9f5ac45877c9 | 790e402306fb5728 | 790e402306fb5728 |
+summary (infer/model): DIVERGENT=48, IDENTICAL=936, N/A=270
+summary (batch): N/A=627
+summary (rlpair): N/A=54
+summary (batchgrad): IDENTICAL=48, N/A=579
+summary (batchscale): IDENTICAL=81, N/A=546
+summary (ragged): IDENTICAL=54, N/A=573
+summary (stepfull): IDENTICAL=54, N/A=573

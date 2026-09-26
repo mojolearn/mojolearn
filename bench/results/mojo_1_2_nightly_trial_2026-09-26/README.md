@@ -1,7 +1,41 @@
 # Mojo 1.2 nightly trial (2026-09-26)
 
 Question: what does moving mojolearn from Mojo 1.0.0 (ed45d567, max-core 26.5.0)
-to the newest nightly do? Status: **IN PROGRESS** (see "Left to do").
+to the newest nightly do? Status: **DONE** (Mac, CPU, one NVIDIA box; AMD not tested).
+
+## Verdict
+
+**The upgrade moves 30 of 627 release cells (10 lanes x 3 fixtures), all in
+the k-means family (kmeans, kmeans-sqrt, kmeans-weighted) and the lanes that
+consume a k-means fit (gmm, gmm-sample, ivf, ivf-euclidean, ivf-extend,
+metrics, metrics-classification). GPU cross-vendor agreement HOLDS on the
+nightly (Metal == CUDA on 627/627 cells, 984/984 infer/model), but CPU vs GPU
+agreement BREAKS on exactly those 30 cells: the nightly CPU host column keeps
+the 0.8.19 bits (627/627 equal to the 0.8.19 Metal column) while both
+nightly GPU columns moved to the same new bits. Incompatibilities: six
+mechanical API changes (below), all fixed; nothing non-trivial.** The Mojo
+1.0.0 FAST svm compile deadlock is gone on the nightly.
+
+Under the project rule (any cross-column difference is a defect) the
+nightly is NOT upgradeable yet: the GPU k-means path must be made to agree
+with the CPU host oracle again (or both moved together) first.
+
+## Recommended upgrade plan
+
+1. Root-cause the k-means GPU move (next section) and restore CPU == GPU on
+   the nightly; re-run these three columns until all read 627/627.
+2. Land the source migration on its own branch as one commit
+   (`migrate.py` + `fixups.py`, 6 changes), plus the pixi pin in a
+   separate commit; the renamed APIs do not exist in 1.0.0, so the source
+   commit and the toolchain commit must land together.
+3. Wait for a STABLE Mojo 1.2 / MAX 26.7 (or pin one nightly by exact
+   build) before a release; a moving nightly is not a release toolchain.
+4. Release run on the new toolchain: all four columns (CPU, Metal, NVIDIA,
+   AMD) at full release selection, 0 DIVERGENT, plus the cross-compile gate;
+   then drop 147725fe4's svm workaround (item 4 shows it is unneeded).
+5. Separately, a second mechanical pass for the new deprecation warnings
+   (pointer indexing `unsafe_offset=`, `unsafe_bitcast`, `Pointer`,
+   `unsafe_alloc`/`Layout`, `@__parameter`) before they become errors.
 
 ## Toolchain
 
@@ -81,14 +115,26 @@ nightly Metal vs nightly CUDA: **IDENTICAL=567 of 567 compared, 0 DIVERGENT**
 (infer/model 876 IDENTICAL). The moved cells moved to the SAME bits on
 both vendors.
 
-### Leading hypothesis for the k-means move (not yet proven)
-k-means++ seeding (`cluster/checks/plus_plus.mojo`) builds its FP32
-cumulative sum on `max.gpu.primitives.block.prefix_sum`, a MAX library
-primitive whose association order is MAX's, not ours. A change to it in MAX
-26.7 would move every k-means seed identically on every vendor, which is
-exactly the pattern above. gmm, ivf and both metrics lanes consume k-means
-labels/centers. To confirm: hash the plus_plus csum buffer on both
-toolchains, or swap in a pinned in-repo scan and see the move disappear.
+### CPU host column, nightly
+`verify_lanes.py --cpu-pass --selection selection-cpu.json` (209 lanes, 627
+cells, 2 shards, 663 s): COMPLETE.
+- nightly CPU vs 0.8.19 Metal: **IDENTICAL=627** (infer/model 978 IDENTICAL).
+- nightly CPU vs nightly Metal vs nightly CUDA: **DIVERGENT=30** (the same 30
+  cells; CPU carries the old hash, Metal and CUDA share the new one), e.g.
+  `kmeans/base` model 355598f4 (CPU) vs d4eb8bc4 (Metal, CUDA).
+
+### Where the move comes from (not yet root-caused)
+Every moved lane is a k-means fit or consumes one (`metrics-classification`
+scores `ml.KMeans(...).labels_`; gmm initializes from k-means; ivf's coarse
+quantizer is k-means). The CPU host route (`cluster/host/kmeans_oracle.mojo`,
+compiled by the SAME nightly) did not move, so the change is on the GPU
+k-means path and is vendor-independent. First suspect checked and CLEARED:
+`max.gpu.primitives.block.prefix_sum` (k-means++ sampling scan), whose block
+and warp source in modular/modular main is the same algorithm as
+max/v26.5.0. Next step: an identity trace (`core/identity_trace`) of one
+`kmeans/base` fit on both toolchains to find the first stage whose hash
+differs (candidates: other MAX GPU primitives, `core.gemm.gemm_nt` in the
+unfused arm, or a codegen change such as contraction).
 
 AMD: not tested (no AMD box in this trial; DigitalOcean and Hot Aisle are
 reserved for the GPT-3 run).
@@ -102,9 +148,13 @@ the baseline is a different day, load and source, so this is not a
 measurement. On the 4090 the 23 GPU families took 1097 s at 16 jobs; the Sep
 19 1.0.0 gap leg recorded 1204 s for the same 23 on a 4090.
 
-Runtime (cell timings in the columns, tiny fixtures): NVIDIA sum of cell
-seconds 104.3 (0.8.19) vs 93.9 (nightly); nothing stands out beyond noise
-except `knn` 0.05 s -> 0.52 s (one lane, one run, unexplained).
+Runtime (cell timings in the columns, tiny fixtures, one run each): NVIDIA
+sum of cell seconds 104.3 (0.8.19) vs 93.9 (nightly), nothing beyond noise
+except `knn` 0.05 s -> 0.52 s. Metal sum 325.8 s (0.8.19) vs 535.8 s
+(nightly; pass wall 376 s vs 594 s), with the largest ratios in gbdt adapter
+/ CTR lanes (about 2.7x) and cross-val (3.3x); this Mac was running other
+lanes' CPU work (load 10 to 16), so it is a flag to re-measure on a quiet
+machine, not a finding.
 
 ## 4. FAST svm deadlock (147725fe4's workaround reverted)
 
@@ -121,23 +171,21 @@ NVPTX/AMDGPU), FAST tier, compiled on the Mac through
 
 The deadlock is gone in real code on the nightly.
 
-## Left to do (exact next steps)
+## Left to do
 
-1. Metal rerun with the math dylib staged (running:
-   `verify_lanes.py --apple-pass --selection trial/selection-metal.json`),
-   then diff vs `~/mojolearn-evidence/release-check/69a519c1522d/metal/column.json`
-   and vs the nightly CUDA column.
-2. CPU host column on the nightly: `verify_lanes.py --cpu-pass --selection
-   trial/selection-cpu.json`, diff vs the 0.8.19 Metal and CUDA columns
-   (0.8.19 recorded no CPU column; the CPU route is held equal to them).
-3. Cleanup: delete the trial worktree's `.pixi` env and private cache, the
-   scratch copies.
+1. Root-cause the GPU k-means move (identity trace diff of `kmeans/base`,
+   1.0.0 vs nightly, on Metal) and fix so CPU == GPU on the nightly.
+2. AMD column (needs an MI300X box; DO/Hot Aisle reserved for GPT-3).
 
 ## Files
 
 - `migrate.py`, `fixups.py`: the source migration (run from a checkout root).
 - `compile_times.md`: per-binding compile seconds (Mac).
-- Evidence (outside the repo): NVIDIA leg `~/mojolearn-evidence/e1g/2026-09-26_022110-nvidia/`.
+- `diffs/`: the identity_break --diff outputs quoted above.
+- Evidence (outside the repo): NVIDIA leg `~/mojolearn-evidence/e1g/2026-09-26_022110-nvidia/`
+  (nightly CUDA column at `remote/trial/cuda/column.json`); nightly Metal and CPU
+  and CUDA columns gzipped in `columns/` here; `diffs/` keeps each diff's summary and non-IDENTICAL rows.
+- Source used: branch `trial/mojo-1-2-at-0819` (pushed).
 
 Cost so far: one RTX 4090 pod, 31 min at $0.74/h = about $0.40; terminated
 and verified gone (HTTP 404). An earlier create attempt got HTTP 500 and
