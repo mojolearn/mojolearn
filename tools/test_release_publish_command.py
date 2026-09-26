@@ -15,7 +15,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class PublishCommandTests(unittest.TestCase):
-    def invoke(self, platform, receipt=True, failed=False, artifact_source=None, full=False):
+    def invoke(self, platform, receipt=True, failed=False, artifact_source=None, full=False, split=None):
         with tempfile.TemporaryDirectory(prefix='release publish ') as directory:
             root = Path(directory)
             for name in ('bin', 'python/mojolearn', 'tools', 'packaging'):
@@ -29,11 +29,19 @@ class PublishCommandTests(unittest.TestCase):
                 ('manylinux_2_35_x86_64' if platform == 'linux' else 'macosx_11_0_arm64') + '.whl')
             with zipfile.ZipFile(wheel, 'w') as archive:
                 archive.writestr('mojolearn/identity_columns/COMMIT', source)
+            plugins, vendor = [], 'cuda' if platform == 'linux' else 'metal'
+            if split:
+                # a split plugin publishes alone; the receipt installed it beside the core
+                core, vendor = wheel, {'cuda': 'cuda', 'rocm': 'hip'}[split]
+                wheel = root / f'mojolearn_{split}-0.8.9-py3-none-manylinux_2_35_x86_64.whl'
+                with zipfile.ZipFile(wheel, 'w') as archive:
+                    archive.writestr(f'mojolearn/{vendor}/x/_mojolearn_knn.so', 'inert')
+                plugins = [dict(wheel='/box/' + wheel.name, wheel_sha256=gate.digest(wheel))]
             report = root / 'results.json'
             report.write_text(json.dumps(dict(status='FAILED' if failed else 'PASSED',
                 scope='expanded', release_qualified=False, source_commit=source,
-                wheel=str(wheel), wheel_sha256=gate.digest(wheel),
-                installed={'vendor': 'cuda' if platform == 'linux' else 'metal'},
+                wheel=str(core if split else wheel), wheel_sha256=gate.digest(core if split else wheel),
+                plugins=plugins, installed={'vendor': vendor},
                 expanded={'scope': 'expanded'},
                 jobs=[dict(name=name, exit_code=0) for name in sorted(gate.JOBS)])))
             scripts = {
@@ -75,6 +83,16 @@ class PublishCommandTests(unittest.TestCase):
                 self.assertIn('light_platform=' + platform, calls)
                 self.assertIn('light-smoke-' + platform + '.json', calls)
                 self.assertEqual(manifest['light_smoke']['source_commit'], 'a' * 40)
+
+    def test_a_split_plugin_publishes_alone_on_its_own_vendors_receipt(self):
+        for split in ('cuda', 'rocm'):
+            with self.subTest(split=split):
+                result, calls, manifest = self.invoke('linux', split=split)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertEqual(list(manifest['files']), [f'mojolearn_{split}-0.8.9-py3-none-manylinux_2_35_x86_64.whl'])
+                self.assertIn('light_platform=linux', calls)
+                self.assertIn(f'--title mojolearn-{split} 0.8.9 linux', calls)
+                self.assertIn(f'mojolearn[{split}]', calls)
 
     def test_failed_smoke_never_reaches_github(self):
         result, calls, _ = self.invoke('linux', failed=True)

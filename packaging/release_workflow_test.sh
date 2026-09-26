@@ -61,9 +61,9 @@ PASS=0; FAIL=0
 ok(){ echo "  PASS  $1"; PASS=$((PASS+1)); }
 no(){ echo "  FAIL  $1  ($2)"; FAIL=$((FAIL+1)); }
 
-mkbox(){ # $1=version ; builds a fake workspace, echoes its path
+mkbox(){ # $1=version ; builds a fake workspace (a git checkout, as the job's is), echoes its path
   local V="$1" B; B="$(mktemp -d "$SP/box.XXXXXX")"
-  mkdir -p "$B/python/dist" "$B/stage" "$B/tools"
+  mkdir -p "$B/python/dist" "$B/stage/qualification" "$B/tools" "$B/tmp"
   printf 'version = "%s"\n' "$V" > "$B/python/pyproject.toml"
   : > "$B/python/dist/mojolearn-$V-py3-none-macosx_11_0_arm64.whl"
   echo "macos body $V" > "$B/python/dist/mojolearn-$V-py3-none-macosx_11_0_arm64.whl"
@@ -73,21 +73,36 @@ import argparse
 import json
 from pathlib import Path
 parser = argparse.ArgumentParser()
-parser.add_argument('wheel', type=Path)
+parser.add_argument('wheel', type=Path, nargs='+')
 parser.add_argument('--qualification-root', required=True, type=Path)
 parser.add_argument('--source-root', required=True, type=Path)
-parser.add_argument('--profile', required=True, choices=['release-linux3'])
+parser.add_argument('--profile', required=True, choices=['release-linux3', 'release-split'])
 args = parser.parse_args()
 root = Path.cwd().resolve()
-if (args.source_root.resolve() != root or args.qualification_root.resolve() != root / 'stage/qualification'
-        or args.wheel.parent.resolve() != root / 'stage' or not args.wheel.is_file()):
+# the job runs the checker from a `git archive HEAD` copy of the checkout
+if (not (args.source_root / 'tools/check_linux_release_qualification.py').is_file()
+        or args.qualification_root.resolve() != root / 'stage/qualification'
+        or any(w.parent.resolve() != root / 'stage' or not w.is_file() for w in args.wheel)
+        or (len(args.wheel) > 1) != (args.profile == 'release-split')):
     raise SystemExit('TEST VERIFIER: incorrect qualification invocation')
 with (root / 'verifier-invocation.json').open('x') as stream:
-    json.dump(dict(wheel=str(args.wheel), qualification_root=str(args.qualification_root),
+    json.dump(dict(wheel=[str(w) for w in args.wheel], profile=args.profile,
+                   qualification_root=str(args.qualification_root),
                    source_root=str(args.source_root), scope='test-double staging only'), stream)
 if (root / 'refuse-qualification').exists():
     raise SystemExit('TEST VERIFIER: qualification refused')
 VERIFIER_STUB
+  printf 'CORPUS_CASES = ()\n' > "$B/tools/verify_linux_surface_qualification.py"
+  cat > "$B/tools/wheel_api_audit.py" <<'SPLIT_STUB'
+"""TEST DOUBLE ONLY: the split audit's verdict is read from a marker file."""
+from pathlib import Path
+def split_audit(wheels):
+    names = sorted(Path(w).name for w in wheels)
+    (Path.cwd() / 'split-audit-invocation.txt').write_text('\n'.join(names) + '\n')
+    refused = Path.cwd() / 'refuse-split'
+    return dict(wheels=names, problems=['TEST SPLIT AUDIT: refused'] if refused.exists() else [])
+SPLIT_STUB
+  ( cd "$B" && git init -q && git add -A && git -c user.email=t@t -c user.name=t commit -qm fixture )
   echo "$B"
 }
 stage(){ # $1=box $2=filename [$3=BAD to corrupt the sidecar]
@@ -97,7 +112,18 @@ stage(){ # $1=box $2=filename [$3=BAD to corrupt the sidecar]
   elif [ "${3:-}" = NOSIDE ]; then :
   else shasum -a 256 "$B/stage/$N" | sed "s#$B/stage/##" > "$B/stage/$N.sha256"; fi
 }
-run_admit(){ ( cd "$1" && MOJOLEARN_LINUX_WHEEL_DIR="$1/stage" GITHUB_WORKSPACE="$1" GITHUB_OUTPUT="$1/gho.txt" bash "$SP/admit.sh" ) >"$1/admit.out" 2>&1; }
+stage_zip(){ # $1=box $2=filename [$3=split marker: 1] ; a real zip, as the split detection reads it
+  python3 - "$1/stage/$2" "${3:-0}" <<'ZIP'
+import sys, zipfile
+path, marker = sys.argv[1], sys.argv[2] == '1'
+name = path.rsplit('/', 1)[-1]
+with zipfile.ZipFile(path, 'w') as z:
+    z.writestr(name.split('-')[0] + '-' + name.split('-')[1] + '.dist-info/METADATA', 'fixture')
+    if marker:
+        z.writestr(name.split('-')[0] + '-' + name.split('-')[1] + '.dist-info/gpu_plugins.json', '{}')
+ZIP
+  ( cd "$1/stage" && shasum -a 256 "$2" > "$2.sha256" ); }
+run_admit(){ ( cd "$1" && MOJOLEARN_LINUX_WHEEL_DIR="$1/stage" GITHUB_WORKSPACE="$1" GITHUB_OUTPUT="$1/gho.txt" RUNNER_TEMP="$1/tmp" bash "$SP/admit.sh" ) >"$1/admit.out" 2>&1; }
 run_digest(){ ( cd "$1" && GITHUB_OUTPUT="$1/gho2.txt" bash "$SP/digest.sh" ) >"$1/digest.out" 2>&1; }
 
 echo "== admit =="
@@ -137,6 +163,36 @@ refuses "$B" "qualification-verifier refusal propagates" "TEST VERIFIER: qualifi
   && ok "refused qualification is witnessed and never copied" \
   || no "refused qualification is witnessed and never copied" "missing invocation or copied wheel"
 
+echo "== admit: the split Linux set (core + plugins) =="
+CORE=mojolearn-0.3.0-py3-none-manylinux_2_35_x86_64.whl
+CUDA=mojolearn_cuda-0.3.0-py3-none-manylinux_2_35_x86_64.whl
+ROCM=mojolearn_rocm-0.3.0-py3-none-manylinux_2_35_x86_64.whl
+B=$(mkbox 0.3.0); stage_zip "$B" "$CORE" 1; stage_zip "$B" "$CUDA"; stage_zip "$B" "$ROCM"
+run_admit "$B" && [ -f "$B/python/dist/$CORE" ] && [ -f "$B/python/dist/$CUDA" ] && [ -f "$B/python/dist/$ROCM" ] \
+  && grep -q '"release-split"' "$B/verifier-invocation.json" && grep -q "$ROCM" "$B/split-audit-invocation.txt" \
+  && grep -qx 'plugins=\["cuda", "rocm"\]' "$B/gho.txt" \
+  && ok "the split set is admitted, split-audited and qualified as a set" || no "split set admitted" "$(tail -3 "$B/admit.out")"
+
+B=$(mkbox 0.3.0); stage_zip "$B" "$CORE" 1; stage_zip "$B" "$CUDA"; rmdir "$B/stage/qualification"
+run_admit "$B" && [ -f "$B/python/dist/$CUDA" ] && grep -qx 'plugins=\["cuda"\]' "$B/gho.txt" \
+  && ok "the core and the NVIDIA plugin alone are admitted (no qualification staged)" || no "core+cuda" "$(tail -3 "$B/admit.out")"
+
+B=$(mkbox 0.3.0); stage_zip "$B" "$CORE" 1
+refuses "$B" "a split core with no plugin is REFUSED" "with no plugin"
+
+B=$(mkbox 0.3.0); stage_zip "$B" "mojolearn-0.3.0-py3-none-manylinux_2_28_x86_64.whl"; stage_zip "$B" "$CUDA"
+refuses "$B" "a plugin beside a COMBINED wheel is REFUSED" "a combined wheel ships alone"
+
+B=$(mkbox 0.3.0); stage_zip "$B" "$CORE" 1; stage_zip "$B" "mojolearn_vulkan-0.3.0-py3-none-manylinux_2_35_x86_64.whl"
+refuses "$B" "a wheel of no known project is REFUSED" "is not version 0.3.0 of mojolearn"
+
+B=$(mkbox 0.3.0); stage_zip "$B" "$CORE" 1; stage_zip "$B" "mojolearn_cuda-0.2.0-py3-none-manylinux_2_35_x86_64.whl"
+refuses "$B" "a plugin of the WRONG VERSION is REFUSED" "is not version 0.3.0"
+
+B=$(mkbox 0.3.0); stage_zip "$B" "$CORE" 1; stage_zip "$B" "$CUDA"; : > "$B/refuse-split"
+refuses "$B" "a split set failing split_audit is REFUSED" "TEST SPLIT AUDIT: refused"
+[ ! -e "$B/python/dist/$CORE" ] && ok "a refused split set is never copied" || no "refused split set copied" "copied"
+
 echo "== digest =="
 B=$(mkbox 0.3.0); run_digest "$B" \
   && [ "$(grep -c 'macosx' "$B/gho2.txt")" -ge 1 ] \
@@ -150,6 +206,14 @@ run_admit "$B" && run_digest "$B" \
   && [ "$(sed -n '/wheel_manifest<</,/MANIFEST_EOF/p' "$B/gho2.txt" | grep -n 'macosx' | cut -d: -f1)" = 2 ] \
   && ok "two wheels, macOS FIRST in the manifest" \
   || no "two-wheel manifest" "$(sed -n '/wheel_manifest/,/MANIFEST_EOF/p' "$B/gho2.txt")"
+
+B=$(mkbox 0.3.0); stage_zip "$B" "$CORE" 1; stage_zip "$B" "$CUDA"; stage_zip "$B" "$ROCM"
+run_admit "$B" && run_digest "$B" \
+  && [ "$(sed -n '/wheel_manifest<</,/MANIFEST_EOF/p' "$B/gho2.txt" | grep -c '\.whl$')" = 4 ] \
+  && [ "$(sed -n '/wheel_manifest<</,/MANIFEST_EOF/p' "$B/gho2.txt" | grep -n 'macosx' | cut -d: -f1)" = 2 ] \
+  && sed -n '/wheel_manifest<</,/MANIFEST_EOF/p' "$B/gho2.txt" | grep -q "  $ROCM\$" \
+  && ok "the split set's four wheels, macOS FIRST, plugins in the manifest" \
+  || no "split manifest" "$(sed -n '/wheel_manifest/,/MANIFEST_EOF/p' "$B/gho2.txt")"
 
 echo "== publish =="
 # The publish job runs on ubuntu and only ever sees `dist/` plus the three

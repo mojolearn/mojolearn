@@ -12,6 +12,12 @@ import tempfile
 import zipfile
 
 
+#: wheel-name prefix -> distribution of the split Linux GPU plugins
+#: (python/mojolearn/gpu_plugins.py; spelled here because this driver ships
+#: alone to the box, stdlib only, with no checkout beside it).
+PLUGIN_DISTRIBUTIONS = {"mojolearn_cuda": "mojolearn-cuda", "mojolearn_rocm": "mojolearn-rocm"}
+
+
 def admit(kind, doc, models):
     if kind == "coverage":
         assert doc["lanes"] and doc["cpu_execution_counts"]["declared"] > 0
@@ -126,6 +132,13 @@ def main():
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--python", default="python3.12")
     parser.add_argument("--wheelhouse", type=Path)
+    # THE SPLIT LINUX PACKAGES (python/mojolearn/gpu_plugins.py): the positional
+    # wheel is the core `mojolearn`, and each --plugin (mojolearn_cuda-*.whl,
+    # mojolearn_rocm-*.whl of the same version) is installed beside it in the
+    # same pip command. The receipt names every plugin by name and sha256, so
+    # tools/check_light_release.py can tie it to the plugin a release publishes.
+    parser.add_argument("--plugin", type=Path, action="append", default=[],
+                        help="a split GPU plugin wheel installed with the core (repeatable)")
     parser.add_argument('--scope', choices=('expanded', 'cpu-only'), default='expanded')
     parser.add_argument('--multi-gpu-devices', help='optional two distinct indices, e.g. 0,1')
     parser.add_argument('--expected-source-commit', help='full commit recorded inside the candidate wheel')
@@ -153,9 +166,21 @@ def main():
             parser.error('wheel has no valid packaged source commit')
         if args.expected_source_commit and source_commit != args.expected_source_commit:
             parser.error('wheel source commit differs from requested expanded candidate')
+    plugins = []
+    version = wheel.name.split("-")[1]
+    for plugin in (p.resolve() for p in args.plugin):
+        parts = plugin.name.split("-")
+        if not (plugin.is_file() and parts[0] in PLUGIN_DISTRIBUTIONS and len(parts) >= 5 and parts[1] == version):
+            parser.error(f"--plugin {plugin.name} is not a mojolearn_cuda/mojolearn_rocm wheel of version {version}")
+        plugins.append(dict(wheel=str(plugin), wheel_sha256=hashlib.sha256(plugin.read_bytes()).hexdigest(),
+                            distribution=PLUGIN_DISTRIBUTIONS[parts[0]]))
+    if len({p["distribution"] for p in plugins}) != len(plugins):
+        parser.error("one --plugin per distribution")
     manifest = dict(wheel=str(wheel), wheel_sha256=digest, status="INCOMPLETE", jobs=[],
                     scope=args.scope, source_commit=source_commit, release_qualified=False,
                     expanded=None)
+    if plugins:
+        manifest["plugins"] = plugins
     env = {k: v for k, v in os.environ.items()
            if not k.startswith("MOJOLEARN_") and k not in ("PYTHONPATH", "PYTHONHOME", "PYTHONOPTIMIZE")}
     env.update(MOJOLEARN_NUMERIC_MODE="identical", PYTHONNOUSERSITE="1")
@@ -193,7 +218,7 @@ def main():
             python = str(work / "venv/bin/python")
             offline = ["--no-index", "--find-links", str(args.wheelhouse.resolve())] if args.wheelhouse else []
             run("install", [python, "-m", "pip", "install", "--no-input", "--only-binary=:all:",
-                            *offline, str(wheel), "numpy>=1.24"], work)
+                            *offline, str(wheel), *[p["wheel"] for p in plugins], "numpy>=1.24"], work)
             run("dependencies", [python, "-m", "pip", "check"], work)
             guard = """import json,pathlib,sys,mojolearn
 p=pathlib.Path(mojolearn.__file__).resolve()
@@ -225,6 +250,8 @@ print(json.dumps(dict(package=str(p),version=mojolearn.__version__,vendor=mojole
                         dict(lane=r["lane"], fixture=r["fixture"], part=r["part"], state=r["state"])
                         for r in doc["cells"] if r["state"] == "OWED"]
             assert hashlib.sha256(wheel.read_bytes()).hexdigest() == digest, "wheel changed"
+            for p in plugins:
+                assert hashlib.sha256(Path(p["wheel"]).read_bytes()).hexdigest() == p["wheel_sha256"], "plugin changed"
             manifest["status"] = "PASSED" if args.scope == "expanded" else "PASSED_CPU_ONLY"
     except Exception as exc:
         manifest.update(status="FAILED", reason=repr(exc))

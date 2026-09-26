@@ -178,6 +178,11 @@ from max.gpu.memory import AddressSpace
 from max.gpu.primitives.block import sum as block_sum
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
+from dbscan.impl.neighbors.fast_mma_eps import (
+    FAST_MMA_EPS_ENABLED,
+    fast_mma_eps_applies,
+    fast_mma_eps_neighborhood,
+)
 
 
 # `typedef typename raft::linalg::Policy4x4<DataT, VecLen>::Policy Policy;`
@@ -535,6 +540,14 @@ def eps_unexp_neighborhood[
     ON THE L1 ARM IT IS NOT, because an L1 sum has no squared form; see
     DEVIATION 27 at the top of this file.
     """
+    # FAST, Apple, L2: the matrix-unit filter with the same adjacency
+    # (`fast_mma_eps.mojo`); it declines rows whose norms it cannot bound.
+    comptime if metric == DBSCAN_METRIC_L2 and FAST_MMA_EPS_ENABLED:
+        if fast_mma_eps_applies(k):
+            if fast_mma_eps_neighborhood(
+                ctx, adj, vd, x, start_vertex_id, m, n, k, thresh
+            ):
+                return
     var xb = x.create_sub_buffer[DType.float32](
         start_vertex_id * k, m * k
     )

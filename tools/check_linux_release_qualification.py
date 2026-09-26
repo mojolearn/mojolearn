@@ -46,6 +46,23 @@ MODE_READBACK = surface.BINDINGS - {'_mojolearn_estimators', '_mojolearn_rf',
 # test fixture build four architectures and fill Hopper twice.
 RELEASE_ARCHES = frozenset(surface.RELEASE_ARCHES)
 RELEASE_ARCHES_ACCEPTED = RELEASE_ARCHES | {'cuda/sm_90a'}
+#: Both GPU vendors: what the combined release-linux3 wheel must carry.
+BOTH_VENDORS = ('cuda', 'hip')
+#: THE SPLIT LINUX PACKAGES (python/mojolearn/gpu_plugins.py): the packer
+#: profile that writes the core `mojolearn` and the plugins `mojolearn-cuda`
+#: and `mojolearn-rocm` (packaging/linux/pack_wheel.py --profile release-split).
+SPLIT_PROFILE = 'release-split'
+
+
+def carried_ok(carried, vendors):
+    """The architecture keys a wheel (or a split set) carries are exactly the
+    release slots of `vendors`: the release triple for both vendors, each
+    vendor's share of it otherwise, the Hopper slot spelled either way."""
+    vendors = tuple(sorted(vendors))
+    if vendors == BOTH_VENDORS:
+        return surface.arch_set_ok(carried)
+    return bool(vendors) and {k.split('/')[0] for k in carried} == set(vendors) and all(
+        surface.plugin_arch_set_ok(v, [k for k in carried if k.startswith(v + '/')]) for v in vendors)
 # DEVIATION 2290. No version literal on this path: the version is whatever the
 # source root's python/mojolearn/_version.py says (surface.release_version) and
 # the profile is surface.RELEASE_PROFILE, with `release-0.6.1` as its alias.
@@ -136,7 +153,7 @@ def inventory_digest(inventory):
     return hashlib.sha256(json.dumps(inventory, separators=(',', ':')).encode()).hexdigest()
 
 
-def inspect_wheel(wheel, root, flat_python=False, byte_lm=False, host_out=None):
+def inspect_wheel(wheel, root, flat_python=False, byte_lm=False, host_out=None, vendors=BOTH_VENDORS):
     """Verify RECORD and every advertised architecture/mode on final bytes.
 
     `host_out`, when given, is filled with the vendor-neutral CPU TRAINING
@@ -189,8 +206,8 @@ def inspect_wheel(wheel, root, flat_python=False, byte_lm=False, host_out=None):
             elif path.endswith('.so') and '/_mojolearn' in path:
                 raise ValueError('Unexpected wheel extension location: ' + path)
         require(declared == set(paths), 'RECORD does not cover the complete wheel')
-        require({v for v, _, _ in sets} == {'hip', 'cuda'},
-                'Final release wheel must contain both HIP and CUDA')
+        require({v for v, _, _ in sets} == set(vendors),
+                'Final release wheel must contain ' + ' and '.join(v.upper() for v in sorted(vendors)))
         for vendor, arch in {(v, a) for v, a, _ in sets}:
             for mode in surface.MODES:
                 require(sets.get((vendor, arch, mode)) == surface.expected_bindings(mode, byte_lm),
@@ -203,7 +220,8 @@ def inspect_wheel(wheel, root, flat_python=False, byte_lm=False, host_out=None):
     return extensions, {'/'.join(k): len(v) for k, v in sorted(sets.items())}
 
 
-def check_vendor(directory, vendor, wheel_sha, inventory, extensions, sets, arch=None, allowed=frozenset()):
+def check_vendor(directory, vendor, wheel_sha, inventory, extensions, sets, arch=None, allowed=frozenset(),
+                 vendors=BOTH_VENDORS):
     qualification, _ = surface.retained(directory, allowed)
     require(qualification.get('vendor') == vendor, 'Wrong staged qualification vendor')
     require(qualification.get('wheel_sha256') == wheel_sha,
@@ -211,7 +229,7 @@ def check_vendor(directory, vendor, wheel_sha, inventory, extensions, sets, arch
     audit = json.loads((directory / 'wheel-audit.json').read_text())
     require(audit.get('sha256') == wheel_sha and audit.get('qualification_vendor') == vendor,
             'Wheel audit differs from staged artifact/vendor')
-    require(audit.get('advertised_vendors') == ['cuda', 'hip']
+    require(audit.get('advertised_vendors') == sorted(vendors)
             and audit.get('extension_hashes') == extensions and audit.get('sets') == sets,
             'Qualification audited a different wheel layout or extension inventory')
     proof_path = directory / 'build-provenance.json'
@@ -286,17 +304,22 @@ def check_vendor(directory, vendor, wheel_sha, inventory, extensions, sets, arch
     return qualification
 
 
-def release_audit(wheel, source_root, proof_root, runtime_key):
-    """File-only three-architecture preflight, also recomputed at final admission."""
+def release_audit(wheel, source_root, proof_root, runtime_key, wheel_sha=None, vendors=BOTH_VENDORS):
+    """File-only three-architecture preflight, also recomputed at final admission.
+
+    `wheel_sha` and `vendors` are the split set's (split_release_audit): the
+    set digest stands for the wheel digest and the vendors are the ones the
+    split core was packed with."""
     wheel, source_root, proof_root = map(Path, (wheel, source_root, proof_root))
     require(runtime_key in RELEASE_ARCHES_ACCEPTED, 'Unknown runtime architecture')
     host_extensions = {}
     extensions, sets = inspect_wheel(wheel, source_root, flat_python=True, byte_lm=True,
-                                     host_out=host_extensions)
+                                     host_out=host_extensions, vendors=vendors)
     version = surface.release_version(source_root)  # DEVIATION 2290: the source root's, never a literal
     carried = {'/'.join(k.split('/')[:2]) for k in sets}
-    require(surface.arch_set_ok(carried),
-            version + ' requires exactly sm_89, sm_90 (or sm_90a) and gfx942')
+    require(carried_ok(carried, vendors),
+            version + ' requires exactly the release slots of ' + '+'.join(sorted(vendors))
+            + ' (sm_89, sm_90 or sm_90a, gfx942)')
     require(runtime_key in carried, 'Qualified architecture is not one this wheel carries')
     inventory = tracked_native_inventory(source_root)
     source_sha = inventory_digest(inventory)
@@ -305,7 +328,9 @@ def release_audit(wheel, source_root, proof_root, runtime_key):
         payload = json.loads(archive.read(member))
         require(payload.get('schema') == 'mojolearn.linux-payload.v1'
                 and payload.get('version') == version
-                and surface.is_release_profile(payload), 'Wrong payload profile')
+                and (surface.is_release_profile(payload)
+                     or (wheel_sha is not None and payload.get('assembly_profile') == SPLIT_PROFILE)),
+                'Wrong payload profile')
         require(payload.get('extensions') == {'mojolearn/' + n: h for n, h in extensions.items()}
                 and payload.get('source_inventory') == inventory,
                 'Final payload or source differs from assembly inventory')
@@ -357,14 +382,14 @@ def release_audit(wheel, source_root, proof_root, runtime_key):
         require(payload['sets'][key] == {'sha256': proof_hashes[key], 'source_sha256': source_sha},
                 'Assembly proof linkage differs')
     vendor, arch = runtime_key.split('/')
-    return dict(sha256=digest_file(wheel), wheel=str(wheel.resolve()), advertised_vendors=['cuda', 'hip'],
+    return dict(sha256=wheel_sha or digest_file(wheel), wheel=str(wheel.resolve()), advertised_vendors=sorted(vendors),
                 assembly_profile=surface.RELEASE_PROFILE, qualification_vendor=vendor, runtime_architecture=arch,
                 source_sha256=source_sha, build_provenance_sha256=proof_hashes[runtime_key],
                 architecture_build_proofs=proof_hashes, extension_hashes=extensions,
                 host_extension_hashes=host_extensions, sets=sets)
 
 
-def check_release061(wheel, qualification_root, source_root):
+def check_release061(wheel, qualification_root, source_root, wheel_sha=None, vendors=BOTH_VENDORS):
     wheel, qualification_root, source_root = map(Path, (wheel, qualification_root, source_root))
     proof_root = qualification_root / 'build-proofs'
     inventory = tracked_native_inventory(source_root)
@@ -372,8 +397,8 @@ def check_release061(wheel, qualification_root, source_root):
     # the Hopper slot spelled however it was built. arch_set_ok still requires
     # exactly the three slots, filled once each.
     carried = {'/'.join(k.split('/')[:2])
-               for k in inspect_wheel(wheel, source_root, flat_python=True, byte_lm=True)[1]}
-    require(surface.arch_set_ok(carried),
+               for k in inspect_wheel(wheel, source_root, flat_python=True, byte_lm=True, vendors=vendors)[1]}
+    require(carried_ok(carried, vendors),
             surface.release_version(source_root)
             + ' requires exactly sm_89, sm_90 (or sm_90a) and gfx942')
     directories = {}
@@ -383,7 +408,7 @@ def check_release061(wheel, qualification_root, source_root):
     for key in sorted(carried):
         vendor, arch = key.split('/')
         directory = qualification_root / vendor / arch
-        expected = release_audit(wheel, source_root, proof_root, key)
+        expected = release_audit(wheel, source_root, proof_root, key, wheel_sha, vendors)
         recorded = json.loads((directory / 'wheel-audit.json').read_text())
         # DEVIATION 2290: an audit retained under the deprecated alias name
         # compares equal to the one recomputed under the current name.
@@ -421,7 +446,7 @@ def check_release061(wheel, qualification_root, source_root):
             allowed, declared = surface.read_declared_failures(directory, source_root)
             allowances[key] = allowed
             check_vendor(directory, vendor, expected['sha256'], inventory,
-                         expected['extension_hashes'], expected['sets'], arch, allowed)
+                         expected['extension_hashes'], expected['sets'], arch, allowed, vendors)
             check_corpora(directory, source_root)
             tiers[key] = 'full'
             directories[key] = directory
@@ -430,13 +455,16 @@ def check_release061(wheel, qualification_root, source_root):
     # DEVIATION 2297: one FULL column per advertised vendor is the bar. Every
     # other architecture still had to clear SMOKE above, and every architecture
     # the wheel carries still had to be present.
-    for vendor in ('cuda', 'hip'):
+    for vendor in vendors:
         require(any(t == 'full' for k, t in tiers.items() if k.startswith(vendor + '/')),
                 'No full 25-job qualification for any ' + vendor + ' architecture')
     require(set(tiers) == carried, 'An architecture the wheel carries has no qualification at all')
     comparisons = {}
     # DEVIATION 2293: whichever Hopper spelling this wheel actually carries.
-    for cuda in sorted(k for k in directories if k.startswith('cuda/')):
+    # A one-vendor split set (the core and one plugin) has no second vendor
+    # to compare against; its identity across vendors is the release
+    # columns' (tools/release.py gpu-columns), not this file check's.
+    for cuda in sorted(k for k in directories if k.startswith('cuda/') and 'hip/gfx942' in directories):
         umap = surface.compare(directories['hip/gfx942'], directories[cuda],
                                allowances.get('hip/gfx942', frozenset()),
                                allowances.get(cuda, frozenset()))
@@ -444,7 +472,7 @@ def check_release061(wheel, qualification_root, source_root):
         require(umap.get('status') == ordered.get('status') == 'PASSED', 'Architecture identity comparison failed')
         comparisons[cuda] = dict(umap=umap, ordered=ordered)
     return dict(schema='mojolearn.linux.release-admission.v2', status='PASSED',
-                assembly_profile=surface.RELEASE_PROFILE, wheel=wheel.name, wheel_sha256=digest_file(wheel),
+                assembly_profile=surface.RELEASE_PROFILE, wheel=wheel.name, wheel_sha256=wheel_sha or digest_file(wheel),
                 source_sha256=inventory_digest(inventory), jobs_per_runtime_architecture=len(surface.expected_jobs({'assembly_profile': surface.RELEASE_PROFILE})),
                 runtime_coverage={key: digest_file(qualification_root / key / 'qualification.json')
                                   for key in sorted(tiers)},
@@ -460,6 +488,128 @@ def check_release061(wheel, qualification_root, source_root):
                       'digest attestation is absent and the wheel/source/proof/extension bindings in '
                       'wheel-audit.json are what hold; byte-LM one-step/checkpoint '
                       'functionality only; bounded UMAP/Ordered identity only')
+
+
+def split_set_digest(wheels):
+    """THE IDENTITY OF A SPLIT SET: sha256 over `<file name> <sha256>` lines of
+    every wheel in it, sorted. A split qualification installs the core and its
+    plugin(s) together, so what it installed is the set, and every record it
+    retains names this digest where a combined qualification names the one
+    wheel's sha256 (wheel-audit.json `sha256`, qualification.json and each
+    *.installed.json `wheel_sha256`)."""
+    lines = sorted(f'{Path(w).name} {digest_file(Path(w))}\n' for w in wheels)
+    return hashlib.sha256(''.join(lines).encode()).hexdigest()
+
+
+def split_combined(wheels, out_dir):
+    """The combined wheel a split set is a partition of, rebuilt for the file
+    checks: every payload member of every split wheel with its bytes, the
+    core's LINUX_PAYLOAD.json without its `split` role, and a fresh RECORD.
+    Returns (path, vendors the core was packed with). Refuses a set that fails
+    tools/wheel_api_audit.py split_audit, a core whose payload is not the split
+    profile's, a plugin whose payload is not the core's, and a set missing a
+    plugin the core was packed with (a subset cannot be checked against the
+    payload that describes the whole)."""
+    from wheel_api_audit import split_audit
+    plugins = surface.load_gpu_plugins()
+    wheels = [Path(w) for w in wheels]
+    report = split_audit(wheels)
+    require(not report['problems'], 'Split set audit failed: ' + '; '.join(report['problems']))
+    roles = {row['role']: Path(row['path']) for row in report['wheels']}
+    require(len(roles) == len(wheels) and plugins.CORE_PROFILE in roles, 'A split set needs exactly one core')
+    core = roles[plugins.CORE_PROFILE]
+    version = core.name.split('-')[1]
+    dist = 'mojolearn-' + version + '.dist-info/'
+    with zipfile.ZipFile(core) as archive:
+        payload = json.loads(archive.read(dist + 'LINUX_PAYLOAD.json'))
+    split = payload.pop('split', None)
+    require(payload.get('assembly_profile') == SPLIT_PROFILE and isinstance(split, dict)
+            and split.get('role') == plugins.CORE_PROFILE, 'The core payload is not the split profile\'s')
+    packed = {k.split('/')[0] for k in payload.get('sets', {})}
+    given = {plugins.by_profile(r) for r in roles if r != plugins.CORE_PROFILE}
+    require(packed and given == packed,
+            'Stage every plugin the core was packed with: packed ' + ','.join(sorted(packed))
+            + ', staged ' + (','.join(sorted(given)) or 'none'))
+    members = {}
+    for wheel in wheels:
+        with zipfile.ZipFile(wheel) as archive:
+            wdist = next(n.split('/')[0] for n in archive.namelist() if n.split('/')[0].endswith('.dist-info'))
+            for name in archive.namelist():
+                if name.endswith('/'):
+                    continue
+                if name.startswith(wdist + '/'):
+                    if wheel != core and name == wdist + '/LINUX_PAYLOAD.json':
+                        theirs = json.loads(archive.read(name))
+                        theirs.pop('split', None)
+                        require(theirs == payload, wheel.name + ' payload differs from the core payload')
+                    continue
+                require(name not in members, 'Member in two split wheels: ' + name)
+                members[name] = archive.read(name)
+    members[dist + 'LINUX_PAYLOAD.json'] = (json.dumps(payload, sort_keys=True, indent=2) + '\n').encode()
+    rows = io.StringIO()
+    writer = csv.writer(rows)
+    for name, data in members.items():
+        encoded = base64.urlsafe_b64encode(hashlib.sha256(data).digest()).rstrip(b'=').decode()
+        writer.writerow([name, 'sha256=' + encoded, str(len(data))])
+    writer.writerow([dist + 'RECORD', '', ''])
+    members[dist + 'RECORD'] = rows.getvalue().encode()
+    out = Path(out_dir) / core.name
+    with zipfile.ZipFile(out, 'w') as archive:
+        for name, data in members.items():
+            archive.writestr(zipfile.ZipInfo(name, (1980, 1, 1, 0, 0, 0)), data)
+    return out, tuple(sorted(packed))
+
+
+def split_release_audit(wheels, source_root, proof_root, runtime_key):
+    """release_audit of a split set: what a split qualification writes as
+    wheel-audit.json, and what check_release_split recomputes."""
+    import tempfile
+    with tempfile.TemporaryDirectory(prefix='mojolearn-split-audit-') as temporary:
+        combined, vendors = split_combined(wheels, temporary)
+        return release_audit(combined, source_root, proof_root, runtime_key, split_set_digest(wheels), vendors)
+
+
+def check_release_split(wheels, qualification_root, source_root):
+    """--profile release-split: the release-linux3 admission of a split set.
+
+    Every check of the combined wheel runs on the combined wheel the set is a
+    partition of (split_combined), with the set digest where the wheel's
+    sha256 was and the vendors the core was packed with; the set itself must
+    pass split_audit first, and every wheel's RECORD is verified as its own."""
+    import tempfile
+    wheels = [Path(w) for w in wheels]
+    for wheel in wheels:
+        require(re.fullmatch(r'.+-manylinux_[A-Za-z0-9_.]+_x86_64\.whl', wheel.name),
+                'Final Linux wheel requires a repaired manylinux x86_64 tag: ' + wheel.name)
+        verify_record(wheel)
+    with tempfile.TemporaryDirectory(prefix='mojolearn-split-admission-') as temporary:
+        combined, vendors = split_combined(wheels, temporary)
+        set_sha = split_set_digest(wheels)
+        result = check_release061(combined, qualification_root, source_root, set_sha, vendors)
+    result.update(assembly_profile=SPLIT_PROFILE, wheel=None, split_set_sha256=set_sha, vendors=list(vendors),
+                  wheels={w.name: digest_file(w) for w in sorted(wheels)})
+    result['scope'] = ('Split set (core and plugins) checked as the combined wheel it partitions; ' + result['scope'])
+    return result
+
+
+def verify_record(wheel):
+    """Every member of one wheel is in its RECORD with its sha256 and size."""
+    with zipfile.ZipFile(wheel) as archive:
+        paths = [n for n in archive.namelist() if not n.endswith('/')]
+        records = [p for p in paths if p.endswith('.dist-info/RECORD')]
+        require(len(paths) == len(set(paths)) and len(records) == 1, 'Wheel requires one RECORD: ' + wheel.name)
+        declared = set()
+        for row in csv.reader(io.StringIO(archive.read(records[0]).decode())):
+            require(len(row) == 3 and row[0] not in declared, 'Invalid wheel RECORD row')
+            declared.add(row[0])
+            if row[0] == records[0]:
+                continue
+            with archive.open(row[0]) as stream:
+                digest, size = digest_stream(stream)
+            encoded = base64.urlsafe_b64encode(bytes.fromhex(digest)).rstrip(b'=').decode()
+            require(row[1] == 'sha256=' + encoded and row[2] == str(size),
+                    'Wheel RECORD hash/size mismatch: ' + wheel.name + ' ' + row[0])
+        require(declared == set(paths), 'RECORD does not cover the complete wheel: ' + wheel.name)
 
 
 def check_corpora(directory, source_root):
@@ -501,16 +651,22 @@ def check(wheel, qualification_root, source_root):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('wheel', type=Path)
+    parser.add_argument('wheel', type=Path, nargs='+',
+                        help='the final wheel; with --profile release-split, every wheel of the split set')
     parser.add_argument('--qualification-root', required=True, type=Path)
     parser.add_argument('--source-root', required=True, type=Path)
     # DEVIATION 2290: `release-0.6.1` is the deprecated alias of release-linux3.
-    parser.add_argument('--profile', choices=('legacy', surface.RELEASE_PROFILE, 'release-0.6.1'),
+    parser.add_argument('--profile', choices=('legacy', surface.RELEASE_PROFILE, 'release-0.6.1', SPLIT_PROFILE),
                         default='legacy')
     args = parser.parse_args()
+    if args.profile != SPLIT_PROFILE and len(args.wheel) != 1:
+        parser.error('one wheel, except with --profile ' + SPLIT_PROFILE)
     try:
-        action = check_release061 if args.profile in surface.RELEASE_PROFILES else check
-        result = action(args.wheel, args.qualification_root, args.source_root)
+        if args.profile == SPLIT_PROFILE:
+            result = check_release_split(args.wheel, args.qualification_root, args.source_root)
+        else:
+            action = check_release061 if args.profile in surface.RELEASE_PROFILES else check
+            result = action(args.wheel[0], args.qualification_root, args.source_root)
     except (ValueError, OSError, KeyError, TypeError, AttributeError, zipfile.BadZipFile) as exc:
         result = {'status': 'FAILED', 'reason': str(exc)}
     print(json.dumps(result, indent=2))

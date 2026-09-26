@@ -40,9 +40,13 @@ wheel = pathlib.Path(args[2])
 out = pathlib.Path(args[args.index('--output') + 1]); out.mkdir(parents=True)
 commit = args[args.index('--expected-source-commit') + 1]
 status = pathlib.Path(__file__).with_name('STATUS').read_text().strip()
+vendor = pathlib.Path(__file__).with_name('VENDOR')
+plugins = [dict(wheel=args[i + 1], wheel_sha256=hashlib.sha256(pathlib.Path(args[i + 1]).read_bytes()).hexdigest())
+           for i, a in enumerate(args) if a == '--plugin']
 json.dump(dict(wheel=str(wheel), wheel_sha256=hashlib.sha256(wheel.read_bytes()).hexdigest(),
                status=status, scope='expanded', source_commit=commit, jobs=[{'name': 'x'}],
-               installed=dict(vendor='cuda')), open(out / 'results.json', 'w'))
+               installed=dict(vendor=vendor.read_text().strip() if vendor.is_file() else 'cuda'),
+               **(dict(plugins=plugins) if plugins else {})), open(out / 'results.json', 'w'))
 print('fake smoke', status)
 sys.exit(0 if status == 'PASSED' else 1)
 '''
@@ -406,16 +410,18 @@ class SmokeTests(unittest.TestCase):
         self.assertEqual([x for x in self.cloud.log if x[1].startswith('/do')], [])
 
     # ---------------------------------------------------------------- an existing box
-    def ssh_path(self, status):
+    def ssh_path(self, status, *extra, vendor=None):
         shims = self.dir / 'bin'
         shims.mkdir()
         for name, body in (('ssh', SSH_SHIM), ('sha256sum', SHA_SHIM), ('timeout', TIMEOUT_SHIM)):
             (shims / name).write_text(body)
             (shims / name).chmod(0o755)
         (shims / 'STATUS').write_text(status)
+        if vendor:
+            (shims / 'VENDOR').write_text(vendor)
         out = self.dir / 'out'
         r = self.run_smoke(str(self.wheel), '--expected-source-commit', COMMIT, '--ssh', 'fake@box',
-                           '--out', str(out), env={
+                           *extra, '--out', str(out), env={
                                'PATH': str(shims) + ':' + os.environ['PATH'],
                                'MOJOLEARN_SMOKE_REMOTE_DIR': str(self.dir / 'box' / 'wheel-smoke')})
         return r, out
@@ -426,6 +432,44 @@ class SmokeTests(unittest.TestCase):
         receipt = json.loads((out / 'results.json').read_text())
         self.assertEqual(receipt['status'], 'PASSED')
         self.assertIn('verdict=PASSED', (out / 'smoke.txt').read_text())
+
+    def plugin(self, dist='mojolearn_cuda', version='0.0.0'):
+        path = self.dir / f'{dist}-{version}-py3-none-manylinux_2_35_x86_64.whl'
+        with zipfile.ZipFile(path, 'w') as z:
+            z.writestr('mojolearn/cuda/sm_89/_mojolearn_knn.so', 'inert')
+        return path
+
+    def test_split_ssh_path_ships_and_names_the_plugin(self):
+        plugin = self.plugin()
+        r, out = self.ssh_path('PASSED', '--plugin', str(plugin))
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        receipt = json.loads((out / 'results.json').read_text())
+        self.assertEqual([p['wheel'].rsplit('/', 1)[-1] for p in receipt['plugins']], [plugin.name])
+        self.assertIn('plugin_sha256=', (out / 'smoke.txt').read_text())
+        self.assertIn('--plugin', (out / 'box.sh').read_text())
+
+    def test_split_rocm_plugin_runs_the_smoke_on_hip(self):
+        plugin = self.plugin('mojolearn_rocm')
+        r, out = self.ssh_path('PASSED', '--vendor', 'hip', '--plugin', str(plugin), vendor='hip')
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn('verdict=PASSED', (out / 'smoke.txt').read_text())
+
+    def test_split_receipt_of_the_wrong_vendor_fails(self):
+        plugin = self.plugin('mojolearn_rocm')
+        r, out = self.ssh_path('PASSED', '--vendor', 'hip', '--plugin', str(plugin), vendor='cuda')
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn('installed vendor cuda, not hip', (out / 'smoke.txt').read_text())
+
+    def test_split_plugin_refusals(self):
+        for plugin, extra, why in ((self.plugin('mojolearn_rocm'), (), 'plugin of --vendor cuda'),
+                                   (self.plugin('mojolearn_cuda', '0.0.1'), (), 'plugin of --vendor cuda'),
+                                   (self.plugin('mojolearn_cuda'), ('--vendor', 'hip', '--column', self.selection()),
+                                    'plugin of --vendor hip')):
+            with self.subTest(plugin=plugin.name, extra=extra):
+                r = self.run_smoke(str(self.wheel), '--expected-source-commit', COMMIT, '--plugin', str(plugin),
+                                   *extra, '--out', str(self.dir / 'o'))
+                self.assertNotEqual(r.returncode, 0)
+                self.assertIn(why, r.stderr)
 
     def test_ssh_path_fails_a_failed_smoke(self):
         r, out = self.ssh_path('FAILED')
