@@ -239,7 +239,7 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     rc = bb.main(["--dry-run", "--vendor", "apple"] + env["base"])
     assert rc == 0
     text = capsys.readouterr().out
-    assert "TOTAL races=26 cells=94" in text
+    assert "TOTAL races=28 cells=100" in text
     assert "ours-ab[fast]" in text and "ours-fast[fast]" in text
     assert not env["out"].exists()
     assert _calls(env) == []

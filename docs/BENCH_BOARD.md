@@ -14,7 +14,7 @@ full contract. In short:
 
 - Families: trees (`gbdt-symmetric`, `gbdt-depthwise`, `gbdt-lossguide`, `rf`,
   `et`, `iforest`) and classical (`kmeans`, `pca`, `ols`, `knn`, `kde`, `svc`,
-  `dbscan`) on taxi and Istella-S. Neural and GEMM lanes are not covered yet.
+  `dbscan`, `hdbscan`) on taxi and Istella-S. Neural and GEMM lanes are not covered yet.
   Their drivers time Mojo binaries built from source, not the wheel.
 - One seed (7). Five timed rounds after one warm-up (`--rounds`).
 - Output: one directory with `board.json` (box fingerprint and every cell) and

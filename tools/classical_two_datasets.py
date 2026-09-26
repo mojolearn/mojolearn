@@ -170,9 +170,11 @@ ARMS = {
     # Lane linear-cluster-istella (2026-09-11): DBSCAN at 1,000,000 rows,
     # measurement only. `cuml-gpu` is cuML's default eps search ('brute'),
     # `cuml-gpu-rbc` its random ball cover; ours runs its default ('rbc').
-    # HDBSCAN has a cuML arm only: this library ships no HDBSCAN.
+    # HDBSCAN: ours (mojolearn.HDBSCAN, shipped since 0.8.x), cuML on NVIDIA,
+    # scikit-learn on the CPU, every arm with the SAME min_samples,
+    # min_cluster_size, metric and cluster selection (CumlHDBSCAN's).
     "dbscan": ("ours", "cuml-gpu", "cuml-gpu-rbc"),
-    "hdbscan": ("cuml-gpu",),
+    "hdbscan": ("ours", "cuml-gpu", "sklearn-cpu"),
 }
 BLOCK_OF = {"kmeans": "big", "pca": "big", "ols": "big", "knn": "knn",
             "kde": "kde", "svc": "svc", "dbscan": "dbscan", "hdbscan": "dbscan"}
@@ -1451,9 +1453,73 @@ class CumlHDBSCAN:
         return {"labels": np.asarray(_to_host(self.est.labels_), dtype=np.int32).reshape(-1)}
 
 
+class OursHDBSCAN:
+    """mojolearn.HDBSCAN with CumlHDBSCAN's settings on the same first rows."""
+    MIN_SAMPLES = CumlHDBSCAN.MIN_SAMPLES
+    MIN_CLUSTER_SIZE = CumlHDBSCAN.MIN_CLUSTER_SIZE
+
+    def __init__(self, data, rec):
+        self.ml = _ours_module()
+        n = int(rec.get("hdbscan", {}).get("rows", HDBSCAN_ROWS))
+        self.X = data["X"][:n]
+        self.est = None
+        self.info = _ours_info(self.ml, self.make())
+        self.info["config"] = ("mojolearn.HDBSCAN(min_samples=%d, min_cluster_size=%d, metric='euclidean', "
+                               "cluster_selection_method='eom') on the block's first %d rows; fit timed"
+                               % (self.MIN_SAMPLES, self.MIN_CLUSTER_SIZE, n))
+
+    def make(self):
+        return self.ml.HDBSCAN(min_samples=self.MIN_SAMPLES, min_cluster_size=self.MIN_CLUSTER_SIZE,
+                               metric="euclidean", cluster_selection_method="eom")
+
+    def call(self):
+        est = self.make()
+        est.fit(self.X)
+        self.est = est
+
+    def sync(self):
+        pass
+
+    def outputs(self):
+        return {"labels": np.array(self.est.labels_, dtype=np.int32).reshape(-1)}
+
+
+class SkHDBSCAN:
+    """sklearn.cluster.HDBSCAN with the same settings, on every core
+    (n_jobs=-1: its default is ONE core, and every other scikit-learn arm
+    here runs on every core)."""
+    MIN_SAMPLES = CumlHDBSCAN.MIN_SAMPLES
+    MIN_CLUSTER_SIZE = CumlHDBSCAN.MIN_CLUSTER_SIZE
+
+    def __init__(self, data, rec):
+        from sklearn.cluster import HDBSCAN
+        _sklearn_pools_touch()
+        self.HDBSCAN = HDBSCAN
+        n = int(rec.get("hdbscan", {}).get("rows", HDBSCAN_ROWS))
+        self.X = data["X"][:n]
+        self.est = None
+        self.info = _sklearn_info()
+        self.info["config"] = ("sklearn.cluster.HDBSCAN(min_samples=%d, min_cluster_size=%d, metric='euclidean', "
+                               "cluster_selection_method='eom', n_jobs=-1) on the block's first %d rows; fit timed"
+                               % (self.MIN_SAMPLES, self.MIN_CLUSTER_SIZE, n))
+
+    def call(self):
+        est = self.HDBSCAN(min_samples=self.MIN_SAMPLES, min_cluster_size=self.MIN_CLUSTER_SIZE,
+                           metric="euclidean", cluster_selection_method="eom", n_jobs=-1)
+        est.fit(self.X)
+        self.est = est
+
+    def sync(self):
+        pass
+
+    def outputs(self):
+        return {"labels": np.asarray(self.est.labels_, dtype=np.int32).reshape(-1)}
+
+
 BUILDERS = {
     ("dbscan", "ours"): OursDBSCAN, ("dbscan", "cuml-gpu"): CumlDBSCAN,
     ("dbscan", "cuml-gpu-rbc"): CumlDBSCANRbc, ("hdbscan", "cuml-gpu"): CumlHDBSCAN,
+    ("hdbscan", "ours"): OursHDBSCAN, ("hdbscan", "sklearn-cpu"): SkHDBSCAN,
     ("kmeans", "ours"): OursKMeans, ("kmeans", "sklearn-cpu"): SkKMeans, ("kmeans", "torch-gpu"): TorchKMeans,
     ("kmeans", "cuml-gpu"): CumlKMeans,
     ("pca", "ours"): OursPCA, ("pca", "sklearn-cpu"): SkPCA, ("pca", "torch-gpu"): TorchPCA,
@@ -1472,8 +1538,7 @@ BUILDERS = {
 # here for the SVC before/after as well). It is never an opponent: ratios
 # against it are ours-vs-ours and are not quoted as one.
 for _lane in LANES:
-    # A lane without an `ours` arm has no before/after to interleave: hdbscan
-    # is cuML's only, because this library ships no HDBSCAN.
+    # A lane without an `ours` arm has no before/after to interleave.
     if (_lane, "ours") in BUILDERS:
         BUILDERS[(_lane, "ours-base")] = BUILDERS[(_lane, "ours")]
         # `ours-fast`: the SAME estimator in a worker started under
@@ -1481,7 +1546,7 @@ for _lane in LANES:
         # interleaves FAST beside IDENTICAL round by round in one race.
         BUILDERS[(_lane, "ours-fast")] = BUILDERS[(_lane, "ours")]
 for _lane in LANES:
-    # Same for a lane with no scikit-learn arm (dbscan and hdbscan): there is
+    # Same for a lane with no scikit-learn arm (dbscan): there is
     # nothing to wrap in the CPU quota.
     if (_lane, "sklearn-cpu") not in BUILDERS:
         continue
