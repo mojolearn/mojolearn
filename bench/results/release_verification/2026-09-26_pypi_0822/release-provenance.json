@@ -1,0 +1,75 @@
+{
+ "columns": {
+  "amd": null,
+  "nvidia": {
+   "column": "nvidia",
+   "column_sha256": "1f01ca15f1c8cac7c71d950b89352a9f8f14f0a938c046a8446e8c00007e8825",
+   "command": [
+    "bash",
+    "tools/release_wheel_smoke.sh",
+    "/Users/andrewhendel/mojolearn-evidence/release/0.8.22/f02ecb8b0d12/linux/final/mojolearn-0.8.22-py3-none-manylinux_2_35_x86_64.whl",
+    "--expected-source-commit",
+    "f02ecb8b0d123297184bae958570f4e62b1dcd7d",
+    "--out",
+    "/Users/andrewhendel/mojolearn-evidence/release/0.8.22/f02ecb8b0d12/smoke-linux",
+    "--rent",
+    "--column",
+    "/Users/andrewhendel/mojolearn-evidence/release/0.8.22/f02ecb8b0d12/selection-cuda.json",
+    "--ref-column",
+    "/Users/andrewhendel/mojolearn-evidence/release-check/f02ecb8b0d12/metal/column.json",
+    "--plugin",
+    "/Users/andrewhendel/mojolearn-evidence/release/0.8.22/f02ecb8b0d12/linux/final/mojolearn_nvidia-0.8.22-py3-none-manylinux_2_35_x86_64.whl",
+    "--plugin",
+    "/Users/andrewhendel/mojolearn-evidence/release/0.8.22/f02ecb8b0d12/linux/final/mojolearn_amd-0.8.22-py3-none-manylinux_2_35_x86_64.whl",
+    "--gpu",
+    "NVIDIA L40S"
+   ],
+   "core_sha256": "b3f320079d48ea2dac460635695dc83f8a9dfcc9c1773ed3ed59b818fafbf0ff",
+   "launched_at": "2026-09-26T18:30:11Z",
+   "refs": [
+    "/Users/andrewhendel/mojolearn-evidence/release-check/f02ecb8b0d12/metal/column.json"
+   ],
+   "schema": "mojolearn.release-column-provenance.v1",
+   "selection": "/Users/andrewhendel/mojolearn-evidence/release/0.8.22/f02ecb8b0d12/selection-cuda.json",
+   "selection_digest": "7263ebdcd108b39819204f3f3a3f10ebec4c7f61323d9588396efa3ddf44bdf4",
+   "source_commit": "f02ecb8b0d123297184bae958570f4e62b1dcd7d",
+   "tooling_commit": "f02ecb8b0d123297184bae958570f4e62b1dcd7d",
+   "vendor": "cuda",
+   "verdict": "PASS",
+   "wheel": "/Users/andrewhendel/mojolearn-evidence/release/0.8.22/f02ecb8b0d12/linux/final/mojolearn_nvidia-0.8.22-py3-none-manylinux_2_35_x86_64.whl",
+   "wheel_sha256": "8015d981ad3539e1718d715d970ad5ad1027ad974aa5982be2f35d11cc46ecef"
+  }
+ },
+ "earlier_commits": [],
+ "legs": {
+  "cuda-sm_89": {
+   "admitted_for": "f02ecb8b0d123297184bae958570f4e62b1dcd7d",
+   "because": "the set identity (every binding identity of the set, the host bindings and the runtime closure) and the build tooling digest equal this freeze's",
+   "built_from": "b950daaa39778f9b9171f9f3f69d01d8da474bfe",
+   "origin": "taken",
+   "set_identity_digest": "82bdcea1ea520a7486c20b1ef7723ee240bbddc77474dc80e6fbd14092d63561"
+  },
+  "cuda-sm_90a": {
+   "admitted_for": "f02ecb8b0d123297184bae958570f4e62b1dcd7d",
+   "because": "the set identity (every binding identity of the set, the host bindings and the runtime closure) and the build tooling digest equal this freeze's",
+   "built_from": "b950daaa39778f9b9171f9f3f69d01d8da474bfe",
+   "origin": "taken",
+   "set_identity_digest": "ca5dd11fa1bf6c3a3d987e568dba68b3bafa476e18f9fdc7ff57b3288675f232"
+  },
+  "hip-gfx942": {
+   "admitted_for": "f02ecb8b0d123297184bae958570f4e62b1dcd7d",
+   "because": "the set identity (every binding identity of the set, the host bindings and the runtime closure) and the build tooling digest equal this freeze's",
+   "built_from": "b950daaa39778f9b9171f9f3f69d01d8da474bfe",
+   "origin": "taken",
+   "set_identity_digest": "feee69c47168dafaec229d24317104eab20cafb78ba109d08ce5a864f5232c09"
+  }
+ },
+ "published": [
+  "macos",
+  "nvidia"
+ ],
+ "schema": "mojolearn.release-provenance.v1",
+ "source_commit": "f02ecb8b0d123297184bae958570f4e62b1dcd7d",
+ "tooling_commit": "f02ecb8b0d123297184bae958570f4e62b1dcd7d",
+ "version": "0.8.22"
+}
