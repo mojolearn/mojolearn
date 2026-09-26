@@ -22,7 +22,7 @@ COMMIT = "a" * 40
 def args(**kw):
     base = dict(version="0.8.14", dry_run=False, publish=None, only="", redo="", build_backend="gpu-legs",
                 amd_expect_from="", smoke_gpu="", state_dir="", amd_build_provider=None, amd_provider="auto",
-                cpu_column=False, split_linux=False)   # the combined layout; split: test_release_split.py
+                cpu_column=False)
     base.update(kw)
     return argparse.Namespace(**base)
 
@@ -294,7 +294,7 @@ class RunTests(unittest.TestCase):
         return r, calls
 
     def test_publish_needs_an_explicit_flag(self):
-        r, calls = self.release(only="publish-linux")
+        r, calls = self.release(only="publish-macos")
         self.assertEqual(r.go(), 1)
         self.assertEqual(calls, [])
 
@@ -310,8 +310,8 @@ class RunTests(unittest.TestCase):
         self.assertTrue(r.recorded("macos-smoke"))
 
     def test_recorded_publish_is_skipped(self):
-        r, calls = self.release(only="publish-linux", publish="pypi")
-        r.mark("publish-linux", result="pypi via alpha-api-0.8.14-linux-20260922")
+        r, calls = self.release(only="publish-macos", publish="pypi")
+        r.mark("publish-macos", result="pypi via alpha-api-0.8.14-macos-20260922")
         self.assertEqual(r.go(), 0)
         self.assertEqual(calls, [])
 
@@ -320,7 +320,7 @@ class RunTests(unittest.TestCase):
         # write nothing under the state directory.
         env = dict(os.environ, MOJOLEARN_EVIDENCE_ROOT=str(pathlib.Path(self._t.name) / "evidence"),
                    MOJOLEARN_AMD_PROVIDER="do")   # no DigitalOcean probe from a test
-        out = subprocess.run([sys.executable, str(ROOT / "tools/release.py"), "0.8.14", "--dry-run", "--combined-linux",
+        out = subprocess.run([sys.executable, str(ROOT / "tools/release.py"), "0.8.14", "--dry-run",
                               "--state-dir", str(self.state)], capture_output=True, text=True, timeout=600, env=env)
         self.assertEqual(out.returncode, 0, out.stderr)
         for step in release.Release.STEPS:
@@ -329,15 +329,18 @@ class RunTests(unittest.TestCase):
         self.assertIn("== binding reuse plan for", out.stdout)
         self.assertIn("legs to launch:", out.stdout)
         legs = out.stdout.split("legs to launch:", 1)[1].splitlines()[0]
-        # the two GPU columns are one step, launched together, diffed against
-        # the Apple column, never the CPU column by default
-        gpu = out.stdout.split("-- gpu-columns", 1)[1].split("-- publish-linux", 1)[0]
+        # one column step per vendor, each installing the core and both
+        # plugins, against the Apple column (never the CPU column by default),
+        # then one joint diff of every column
+        gpu = out.stdout.split("-- gpu-column-nvidia", 1)[1].split("-- publish-nvidia", 1)[0]
         self.assertIn("nvidia: ", gpu)
         self.assertIn("amd: ", gpu)
-        self.assertIn("would launch nvidia, amd at once", gpu)
+        self.assertIn("would launch nvidia", gpu)
+        self.assertIn("would launch amd", gpu)
+        self.assertEqual(gpu.count("--plugin"), 4)
         self.assertIn("metal/column.json", gpu)
         self.assertNotIn("cpu/column.json", gpu)
-        self.assertIn("identity_break.py --diff", gpu)
+        self.assertIn("identity_break.py --diff", gpu.split("-- linux-joint-diff", 1)[1])
         self.assertNotIn("--cpu-column", out.stdout.split("-- release-check", 1)[1].split("-- linux-wait", 1)[0])
         # the default route is the GPU legs (2026-09-25: no CPU by default)
         self.assertNotIn("tools/release_linux_build.sh", out.stdout)

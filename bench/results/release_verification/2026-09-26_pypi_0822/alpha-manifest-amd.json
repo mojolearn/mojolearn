@@ -1,0 +1,14 @@
+{
+  "files": {
+    "mojolearn_amd-0.8.22-py3-none-manylinux_2_35_x86_64.whl": "7c7dbafa03fec1c0fcb569dd478a0fe8caf9d9f088248cb1e423b19115c94eac"
+  },
+  "light_smoke": {
+    "receipts": {
+      "light-smoke-linux.json": "b7f4224a8dbbdee7e4a2540e298628a23e674ca78fb7845f31258943f6ec8be6"
+    },
+    "source_commit": "f02ecb8b0d123297184bae958570f4e62b1dcd7d"
+  },
+  "release_profile": "alpha-api",
+  "schema": "mojolearn.alpha-release.v1",
+  "version": "0.8.22"
+}

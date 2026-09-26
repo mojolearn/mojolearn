@@ -99,6 +99,10 @@ HOT AISLE SPEC KEYS (all optional):
     "hotaisle_devices": "0,1"          # the body's --devices on the 2x MI300X VM; `amd_devices` is
                                        # spec-wide (sized for the DigitalOcean box), so the segment
                                        # body is rendered again for hotaisle with these
+    "hotaisle_specs": ["2gpu", "13core"] # the VM sizes tried in order on each walk (default ["2gpu"]);
+                                       # also per segment. 13core and 8core are the 1x MI300X VMs:
+                                       # the body runs on device 0 (the device count divides wall
+                                       # clock and never changes bits)
     "hotaisle_extra_minutes": 30       # added to the segment lease: provisioning, the image pull,
                                        # the wheel install and the fetch
     "hotaisle_dollar_cap": 250         # the cap for a hotaisle lease (default the segment's cap); the
@@ -772,8 +776,17 @@ def _hotaisle_lease(spec, e):
 
 def _rent_amd_once(spec, e, res, env, lease, providers, out, attempt, rerender=None):
     rc = 3
+    walk = []
     for provider in providers:
-        tag = "%s-%d" % (provider, attempt)
+        if provider == "hotaisle":
+            # "hotaisle_specs": the Hot Aisle VM sizes tried in order, e.g. ["2gpu", "1gpu"]:
+            # the device count divides wall clock and never changes bits, so a segment
+            # may take whichever VM is in stock (1gpu runs the body on device 0)
+            walk += [("hotaisle", s) for s in (e.get("hotaisle_specs") or spec.get("hotaisle_specs") or ["2gpu"])]
+        else:
+            walk.append((provider, None))
+    for provider, ha_spec in walk:
+        tag = "%s-%d" % (provider, attempt) if ha_spec in (None, "2gpu") else "%s-%s-%d" % (provider, ha_spec, attempt)
         env["MOJOLEARN_GEMM_LEG_OUT"] = str(res / ("leg-" + tag))
         with open(res / ("leg-%s.log" % tag), "w") as log:
             if provider == "do":
@@ -787,15 +800,16 @@ def _rent_amd_once(spec, e, res, env, lease, providers, out, attempt, rerender=N
                 # the 2x MI300X VM, ONE body on both GPUs, for the whole segment: the body is
                 # rendered again with hotaisle_devices (amd_devices is spec-wide)
                 henv = dict(env)
-                devices = spec.get("hotaisle_devices", HOTAISLE_DEFAULT_DEVICES)
+                devices = spec.get("hotaisle_devices", HOTAISLE_DEFAULT_DEVICES) if ha_spec == "2gpu" else "0"
                 if rerender is not None and devices != spec.get("amd_devices", "0"):
                     henv["MOJOLEARN_GEMM_LEG_EXTRA"] = str(rerender(devices))
                 wait = str(spec.get("hotaisle_stock_wait_minutes", 5))
-                henv.update(MOJOLEARN_HOTAISLE_SPEC="2gpu", MOJOLEARN_HOTAISLE_GPU_ONLY="1",
+                henv.update(MOJOLEARN_HOTAISLE_SPEC=ha_spec, MOJOLEARN_HOTAISLE_GPU_ONLY="1",
                             MOJOLEARN_HOTAISLE_LANE="lm-%s-%s" % (e["route"], e["segment"]),
                             MOJOLEARN_HOTAISLE_STOCK_WAIT_MINUTES=wait, MOJOLEARN_HOTAISLE_SLOT_WAIT_MINUTES=wait)
-                rc = subprocess.run(["bash", "tools/hotaisle_leg.sh", "amd", "--rent", "--skip-gates", "--spec", "2gpu",
-                                     "--one-body", *_hotaisle_lease(spec, e)],
+                one_body = ["--one-body"] if ha_spec == "2gpu" else []
+                rc = subprocess.run(["bash", "tools/hotaisle_leg.sh", "amd", "--rent", "--skip-gates", "--spec", ha_spec,
+                                     *one_body, *_hotaisle_lease(spec, e)],
                                     cwd=REPO, env=henv, stdout=log, stderr=subprocess.STDOUT).returncode
             else:
                 rc = subprocess.run(["sh", "tools/gemm_remote_leg.sh", "amd", "--rent", "--allow-concurrent", *lease], cwd=REPO, env=env, stdout=log, stderr=subprocess.STDOUT).returncode

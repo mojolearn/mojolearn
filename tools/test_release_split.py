@@ -1,5 +1,5 @@
-"""THE SPLIT LINUX PACKAGES IN `pixi run release` (--split-linux), proved
-without a rental: the layout switch (OFF by default), the per-package
+"""THE SPLIT LINUX PACKAGES IN `pixi run release` (the only Linux layout),
+proved without a rental: the per-package
 pipelines and their gates (each plugin on its own vendor's column, the core
 LAST, after both plugins published, so only when both columns passed; all
 three held by a divergent joint diff), the pack of the
@@ -29,47 +29,32 @@ HEAD = sev.HEAD
 
 
 class SplitBase(sev.Base):
-    def release(self, commit=sev.Y, split=True, **kw):
-        r = super().release(commit=commit, split_linux=split, **kw)
-        return r
+    def release(self, commit=sev.Y, **kw):
+        return super().release(commit=commit, **kw)
 
 
 class Switch(SplitBase):
-    def test_on_by_default_and_the_combined_layout_is_an_opt_out(self):
-        """Split is the default from 0.8.21 (Andrew, 2026-09-26)."""
-        for unset in ("", "1"):
-            with mock.patch.dict(os.environ, {release.SPLIT_LINUX_ENV: unset}):
-                self.assertTrue(sev.Base.release(self, split_linux=None).split)
-        with mock.patch.dict(os.environ, {release.SPLIT_LINUX_ENV: "0"}):
-            r = sev.Base.release(self, split_linux=None)
-        self.assertFalse(r.split)
-        self.assertEqual(r.STEPS, release.Release.STEPS)
-        self.assertIn("publish-linux", r.STEPS)
-        self.assertNotIn("publish-nvidia", r.STEPS)
-
-    def test_the_environment_turns_it_off_and_the_flags_override(self):
-        with mock.patch.dict(os.environ, {release.SPLIT_LINUX_ENV: "0"}):
-            self.assertFalse(sev.Base.release(self, split_linux=None).split)
-            self.assertTrue(self.release(split=True).split)
-        self.assertFalse(self.release(split=False).split)
-        self.assertEqual(release.main.__code__.co_varnames[0], "argv")
-        with mock.patch.object(release.Release, "go", lambda self: int(self.split)):
-            with mock.patch.dict(os.environ, {release.SPLIT_LINUX_ENV: ""}):
-                self.assertEqual(release.main(["0.8.99", "--dry-run", "--state-dir", str(self.tmp / "s1")]), 1)
-                self.assertEqual(release.main(["0.8.99", "--dry-run", "--combined-linux",
-                                               "--state-dir", str(self.tmp / "s2")]), 0)
-            with mock.patch.dict(os.environ, {release.SPLIT_LINUX_ENV: "0"}):
-                self.assertEqual(release.main(["0.8.99", "--dry-run", "--state-dir", str(self.tmp / "s3")]), 0)
-                self.assertEqual(release.main(["0.8.99", "--dry-run", "--split-linux",
-                                               "--state-dir", str(self.tmp / "s4")]), 1)
-
-    def test_a_packed_layout_is_pinned(self):
+    def test_the_split_layout_is_the_only_one(self):
+        """The combined Linux wheel is gone (Andrew, 2026-09-26, after 0.8.22
+        went out split end to end); so are --split-linux and --combined-linux."""
         r = self.release()
-        r.state["linux_layout"] = "split"
+        self.assertEqual(r.STEPS, release.Release.STEPS)
+        self.assertIn("publish-core-linux", r.STEPS)
+        self.assertNotIn("publish-linux", r.STEPS)
+        self.assertNotIn("gpu-columns", r.STEPS)
+        self.assertFalse(hasattr(release, "SPLIT_LINUX_ENV"))
+        for flag in ("--combined-linux", "--split-linux"):
+            with self.assertRaises(SystemExit) as cm, mock.patch("sys.stderr"):
+                release.main(["0.8.99", "--dry-run", flag, "--state-dir", str(self.tmp / "s")])
+            self.assertEqual(cm.exception.code, 2)
+
+    def test_a_release_packed_combined_is_refused_until_repacked(self):
+        r = self.release()
+        r.state["linux_layout"] = "combined"
         r.save()
-        with self.assertRaisesRegex(SystemExit, "--split-linux"):
-            self.release(split=False)
-        self.assertFalse(self.release(split=False, redo="linux-pack").split)
+        with self.assertRaisesRegex(SystemExit, "--redo linux-pack"):
+            self.release()
+        self.release(redo="linux-pack")
 
     def test_the_split_pipelines(self):
         r = self.release()
@@ -167,7 +152,7 @@ class Gates(SplitBase):
 
 
 class Pack(SplitBase):
-    """linux-pack --split-linux: pack (the real packer over fake sets), audit
+    """linux-pack: pack (the real packer over fake sets), audit
     each wheel core first, strip each, split_audit the final set."""
 
     def test_three_wheels_packed_audited_stripped_and_audited_as_a_set(self):

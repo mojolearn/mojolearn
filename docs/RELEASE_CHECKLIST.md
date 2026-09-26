@@ -13,24 +13,31 @@ pixi run release <version> --publish pypi     # ... then publish each wheel as i
 (`## <version> (published YYYY-MM-DD)`, UTC) first; the command bumps the two
 version files, runs `write-docs-facts`, commits and pushes exactly those files,
 freezes HEAD, runs the rehearsal (step 0) and the reuse plan, and then runs
-TWO PIPELINES AT ONCE, each publishing as soon as its own gates pass:
+FOUR PIPELINES AT ONCE, each publishing as soon as its own gates pass:
 
 - **macos**: macos-build, macos-smoke, `release-check` (the Apple column,
   step 5b), publish-macos. These share the Mac and run one at a time.
-- **linux**: linux-builds (the legs of step 2, launched together, detached),
-  linux-wait, linux-assemble, linux-pack (step 3), gpu-columns, publish-linux.
-  The `gpu-columns` step launches the NVIDIA column (the expanded smoke plus
-  the column, one rented RTX 4090, walking to the next GPU type on no stock)
-  and the AMD column (RunPod MI300X, then Hot Aisle MI300X, then DigitalOcean
-  MI325X) together as detached `tools/release_wheel_smoke.sh` runs from the
-  installed wheel, diffs each against the Apple column, then diffs every
-  column together (`<version>/<commit12>/diff-columns.txt`). Any DIVERGENT or
-  MOVED cell stops the Linux publish.
+  publish-macos first diffs the Apple column against the newest earlier
+  release's recorded NVIDIA and AMD columns on this machine (seconds, nothing
+  rented); a DIVERGENT or MOVED cell holds the macOS publish unless
+  `--accept-moved` says the release changes those bits on purpose.
+- **core-linux**: linux-builds (the legs of step 2, launched together,
+  detached), linux-wait, linux-assemble, linux-pack (step 3: the core and both
+  plugins, 3b), linux-joint-diff, publish-core-linux (last, after both plugins).
+- **nvidia**: gpu-column-nvidia (the expanded smoke plus the column, one rented
+  RTX 4090, walking to the next GPU type on no stock), publish-nvidia.
+- **amd**: gpu-column-amd (RunPod MI300X, then Hot Aisle MI300X, then
+  DigitalOcean MI325X; the expanded smoke too), publish-amd.
+  Both columns run at once as detached `tools/release_wheel_smoke.sh` runs from
+  the installed core and both plugins, each diffed against the Apple column;
+  linux-joint-diff then diffs every PASSED column together
+  (`<version>/<commit12>/diff-columns.txt`). Any DIVERGENT or MOVED cell stops
+  all three Linux packages.
 
 A failure in one pipeline never blocks or undoes the other, with one
 dependency by design: the Linux columns are diffed against the Apple column,
 so a failed `release-check` holds the Linux publish too. The run ends with
-both outcomes and exits non-zero unless both published. The finish line
+every outcome and exits non-zero unless every package published. The finish line
 checks each published platform (`pip install` on this Mac for macOS; `pip
 download` of the Linux file with its sha256 compared) and the
 `bench/results/release_verification/<date>_pypi_<v>/` record covers what is
@@ -378,8 +385,9 @@ python3 tools/strip_wheel_dir_entries.py <dist>/audit/repaired/mojolearn-*-manyl
 
 ### 3b. The split Linux packages (the packer's default profile)
 
-`release-linux3` above packs the ONE combined wheel, which `tools/release.py`
-asks for only with `--combined-linux`; by default (from 0.8.21) it asks for `release-split`. The packer's default is the split
+`tools/release.py` packs `--profile release-split` (the combined wheel of
+0.8.20 and earlier is no longer released; `release-linux3` above remains a
+packer profile only). The packer's default is the split
 (`python/mojolearn/gpu_plugins.py`), three PyPI projects released in lockstep
 so NVIDIA and AMD can ship independently:
 
@@ -428,10 +436,8 @@ driver libraries. The core's logs keep their names (`show.txt`, `repair.txt`,
 `twine.txt`), a plugin's are `show-mojolearn_nvidia.txt` and so on, and any
 top-level `*.libs/` directory in a repaired wheel fails the run.
 
-Publishing the split packages, `pixi run release <version>` (the default from
-0.8.21; `--combined-linux` or `MOJOLEARN_RELEASE_SPLIT_LINUX=0` publishes the one
-combined wheel instead, kept only until a split release has gone end to end)
-works like this. `linux-pack` packs `--profile release-split`, audits and strips each wheel and
+Publishing the split packages, `pixi run release <version>` (the only Linux
+layout since 0.8.22), works like this. `linux-pack` packs `--profile release-split`, audits and strips each wheel and
 runs `split_audit` on the final set; each column installs the core with BOTH
 plugins, exactly what `pip install mojolearn` installs (the core requires
 both, so one plugin alone would not install), and the NVIDIA column gates
@@ -466,9 +472,9 @@ and plugin exact-pin cycle and the publish order can break. A split release
 therefore goes out in four steps, TestPyPI first:
 
 ```sh
-pixi run release <v> --split-linux --publish testpypi
+pixi run release <v> --publish testpypi
 tools/index_install_check.sh <v> testpypi --rent     # NVIDIA and AMD boxes, in parallel
-pixi run release <v> --split-linux --publish pypi
+pixi run release <v> --publish pypi
 tools/index_install_check.sh <v> pypi --rent
 ```
 
@@ -500,7 +506,7 @@ FAIL line per vendor; `pip_report.json`, `index_check.json`, `dists.txt` and
 #### Registering mojolearn-nvidia and mojolearn-amd on PyPI
 
 Once, by the owner of the `mojolearn` PyPI account, before the first
-`--split-linux` release. Nothing in the repository changes afterwards.
+split release (done for 0.8.22). Nothing in the repository changes afterwards.
 
 1. **PyPI pending publishers** (this also reserves the names). At
    https://pypi.org/manage/account/publishing/ add a GitHub pending publisher
@@ -532,12 +538,12 @@ uploads each project from its own job in that environment
 minted for one project can never upload another. A pending publisher turns
 into the project on the first successful upload; until then the plugin jobs
 fail with an `invalid-publisher` error and nothing else is affected. A first
-`--split-linux --publish testpypi` run proves the whole path before PyPI.
+`--publish testpypi` run proves the whole path before PyPI.
 
 ## 4. Install and test on real GPUs (OPTIONAL, never required for a release)
 
 A release is verified by the Apple column (section 5b) and the NVIDIA and AMD
-wheel columns (`gpu-columns`). This section is a diagnostic for a suspected NVIDIA or AMD problem and the release
+wheel columns (`gpu-column-nvidia`, `gpu-column-amd`). This section is a diagnostic for a suspected NVIDIA or AMD problem and the release
 workflow admits a Linux wheel without it. Copy the three `build-provenance.json` files to a proofs directory
 as `cuda-sm_89.json`, `cuda-sm_90a.json`, `hip-gfx942.json`, then:
 
@@ -641,7 +647,7 @@ MOJOLEARN_CPU_PASS_SLOTS=4 pixi run -e test cpu-pass   # the CPU route on the ot
 ```
 
 The Apple column is the reference the NVIDIA and AMD wheel columns are diffed
-against (`gpu-columns`, above).
+against (`gpu-column-nvidia`, `gpu-column-amd`, above).
 
 Both refuse to start unless every binding in `python/mojolearn` was built
 from this tree's sources (`tools/binding_stamps.py check`: the macOS release
