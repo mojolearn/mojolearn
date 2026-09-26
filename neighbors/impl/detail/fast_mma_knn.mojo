@@ -16,7 +16,7 @@ HOW. Distances are the expanded `||x||^2 - 2 q.x` (+ `||q||^2` at the end,
 clamped at 0), as the other FAST arms compute them; FAST promises quality,
 not bits. Each lane holds two columns of each 8x8 result, so four lanes
 share a query (lanes differing in bits 0 and 3); each keeps its own sorted
-top-k for that query and the four lists meet in the merge kernel. The
+top-k for that query and the four lists are folded by shuffles at the end. The
 filter threshold is the minimum of the four lanes' k-th distances (exchanged
 once per shared tile): any candidate above it already has k better
 candidates in some lane, so it cannot be in the answer. Ties order by index.
@@ -141,8 +141,7 @@ def fast_mma_partial_kernel[D: Int, K: Int, A: Int, B: Int](
     slice_rows_in: Int32,
 ):
     """One simdgroup: queries `[q0, q0 + 8A)`, index slice `block_idx.y`.
-    Partials land as list `4 * slice + sub` of each query (`sub` = the
-    lane's quarter), `k` sorted entries each."""
+    Partials land as list `slice` of each query, `k` sorted entries."""
     comptime KS = D // 8
     comptime RB = 8 * B
     var nq = Int(n_queries_in)
@@ -282,14 +281,48 @@ def fast_mma_partial_kernel[D: Int, K: Int, A: Int, B: Int](
         barrier()
         base += rows
 
+    # Fold the four lanes' lists of each query into one (lanes xor 1, then
+    # xor 8): the elementwise best of a list and the partner's reversed
+    # list holds the K best of both as a bitonic sequence, which a bitonic
+    # half-cleaner cascade sorts. Every lane ends with the merged list.
+    comptime for a in range(A):
+        comptime for step in range(2):
+            comptime mask = UInt32(1) if step == 0 else UInt32(8)
+            var od = SIMD[DType.float32, K](0)
+            var oi = SIMD[DType.uint32, K](0)
+            comptime for t in range(K):
+                od[t] = shuffle_xor(bd[a * K + t], mask)
+                oi[t] = shuffle_xor(bi[a * K + t], mask)
+            comptime for t in range(K):
+                var pd = od[K - 1 - t]
+                var pi = oi[K - 1 - t]
+                if _worse(bd[a * K + t], bi[a * K + t], pd, pi):
+                    bd[a * K + t] = pd
+                    bi[a * K + t] = pi
+            comptime h = K // 2
+            comptime for lv in range(5):
+                comptime st = h >> lv
+                comptime if st >= 1:
+                    comptime for t in range(K):
+                        comptime if (t & st) == 0:
+                            if _worse(
+                                bd[a * K + t], bi[a * K + t],
+                                bd[a * K + t + st], bi[a * K + t + st],
+                            ):
+                                var td = bd[a * K + t]
+                                var ti = bi[a * K + t]
+                                bd[a * K + t] = bd[a * K + t + st]
+                                bi[a * K + t] = bi[a * K + t + st]
+                                bd[a * K + t + st] = td
+                                bi[a * K + t + st] = ti
     comptime for a in range(A):
         var q = q0 + 8 * a + frow
-        if q < nq:
+        if q < nq and sub == 0:
             var qn = Float32(0)
             for c in range(d):
                 var v = queries[unsafe_offset = q * d + c]
                 qn += v * v
-            var o = ((4 * s + sub) * nq + q) * k
+            var o = (s * nq + q) * k
             comptime for t in range(K):
                 if t < k:
                     part_d[unsafe_offset = o + t] = max(bd[a * K + t] + qn, Float32(0))
@@ -414,8 +447,8 @@ def fast_mma_knn(
     if st_on:
         ctx.synchronize()
         t0 = Int(perf_counter_ns())
-    var part_d = ctx.enqueue_create_buffer[DType.float32](4 * slices * n_queries * k)
-    var part_i = ctx.enqueue_create_buffer[DType.uint32](4 * slices * n_queries * k)
+    var part_d = ctx.enqueue_create_buffer[DType.float32](slices * n_queries * k)
+    var part_i = ctx.enqueue_create_buffer[DType.uint32](slices * n_queries * k)
     if n_features <= 8:
         if k <= 8:
             _launch_partial[8, 8, MQ_A, MQ_B](ctx, queries, index, part_d, part_i, n_queries, n_index, n_features, k, slice_rows, qblocks, slices)
@@ -438,11 +471,11 @@ def fast_mma_knn(
         else:
             _launch_partial[32, 32, 1, MQ_B](ctx, queries, index, part_d, part_i, n_queries, n_index, n_features, k, slice_rows, qblocks, slices)
     if k <= 8:
-        _launch_merge[8](ctx, part_d, part_i, out_dist, out_idx, n_queries, k, 4 * slices, take_sqrt)
+        _launch_merge[8](ctx, part_d, part_i, out_dist, out_idx, n_queries, k, slices, take_sqrt)
     elif k <= 16:
-        _launch_merge[16](ctx, part_d, part_i, out_dist, out_idx, n_queries, k, 4 * slices, take_sqrt)
+        _launch_merge[16](ctx, part_d, part_i, out_dist, out_idx, n_queries, k, slices, take_sqrt)
     else:
-        _launch_merge[32](ctx, part_d, part_i, out_dist, out_idx, n_queries, k, 4 * slices, take_sqrt)
+        _launch_merge[32](ctx, part_d, part_i, out_dist, out_idx, n_queries, k, slices, take_sqrt)
     ctx.synchronize()
     if st_on:
         print("FAST_MMA_KNN ms=" + String((Int(perf_counter_ns()) - t0) // 1000000)
