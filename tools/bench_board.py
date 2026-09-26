@@ -6,6 +6,7 @@
     python3 tools/bench_board.py --mojolearn-version 0.8.18 --out ~/board-run
     python3 tools/bench_board.py --dry-run                 # the plan, nothing run
     python3 tools/bench_board.py --out ~/board-run --render-only
+    python3 tools/bench_board.py --families neural --neural-shape small ...   # neural smoke
 
 WHAT IT DOES
 ------------
@@ -18,7 +19,10 @@ and every cell) and `BOARD.md` rendered from it.
 
   * Vendor: detected (Metal on macOS; nvidia-smi / rocm-smi on Linux), or
     `--vendor`. Apple runs BOTH numeric modes, `fast` and `identical`,
-    interleaved in the same race; NVIDIA and AMD run `identical` ONLY.
+    interleaved in the same race, for trees and classical; NVIDIA and AMD run
+    `identical` ONLY. The neural family is `identical` ONLY on EVERY vendor
+    (the wheel builds its neural surface identical only), and `--modes fast`
+    with the neural family is refused by name.
   * mojolearn comes from `pip install mojolearn==<V>` into a venv this script
     creates (or `--python-env` an interpreter that already has it). No source
     build. The wheel's sha256 is recorded.
@@ -40,13 +44,24 @@ WHAT IT REUSES (it re-implements no measurement)
   classical  tools/classical_two_datasets.py prep + race (CTD JSON; quality from
              one float64 NumPy function per lane; CTD-SPAN). The Apple FAST arm
              is its `ours-fast` arm; torch runs on MPS there.
+  neural     tools/bench_board_neural.py race (the classical racer's worker
+             protocol and JSON shape): the wheel's public
+             LanguageModelTrainer.train_step, LanguageModelTrainer.logits and
+             mojolearn.linalg.matmul against torch eager fp32 (TF32 off) on the
+             box's GPU (MPS, CUDA, ROCm); the LM model is
+             tools/torch_lm_step_opponent.py's twin. `--neural-shape full` is
+             the 20.45 M-parameter control shape and a 4096^3 GEMM; `small` is
+             a smoke.
   parsing    tools/bench_all_summarize.py's FSPEED parser.
   rosters    tools/bench_all_ours.sh's per-lane NVIDIA rosters.
 
-NEURAL / GEMM: NOT COVERED YET (TODO). tools/speed_gemm_arm.py,
-tools/speed_torch_seq.py and bench/model/harness.py time Mojo binaries built
-from source (bench/speed/*.mojo), not the installed wheel, so they do not fit
-this script's "measure the wheel" contract without a wheel-side driver.
+NEURAL, NOT COVERED YET: the Mamba blocks, TransformerBlock on its own,
+SambaStack and SmallMLPTrainer (public, not raced); torch's compile, TF32 and
+bf16 columns (another precision, or labeled nondeterministic by
+tools/torch_lm_step_opponent.py); the GPT-3-small target shape (the board uses
+the smaller control shape so one shape runs on every box, a 16 GB Mac included). tools/speed_gemm_arm.py, tools/speed_torch_seq.py
+and bench/model/harness.py time source-built Mojo binaries, not the wheel, and
+are not used here.
 
 THE BOARD NEVER STATES A DIRECTION. It prints times, ratios and quality
 numbers only (CONTRIBUTING.md, "never say we are faster"). A ratio column is
@@ -78,7 +93,12 @@ TREE_ROW_FLOOR = 1_000_000
 
 TREE_LANES = ("gbdt-symmetric", "gbdt-depthwise", "gbdt-lossguide", "rf", "et", "iforest")
 CLASSICAL_LANES = ("kmeans", "pca", "ols", "knn", "kde", "svc", "dbscan", "hdbscan")
-FAMILIES = ("trees", "classical")
+NEURAL_LANES = ("lm-train-step", "lm-forward", "gemm")
+FAMILIES = ("trees", "classical", "neural")
+#: The data a neural lane reads (tools/bench_board_neural.py DATA_OF). No R2
+#: dataset: the driver builds its inputs from seed 7.
+NEURAL_DATA = {"lm-train-step": "bytes", "lm-forward": "bytes", "gemm": "gaussian"}
+NEURAL_SHAPES = ("full", "small")
 DATASETS = ("taxi", "istella")
 VENDORS = ("apple", "nvidia", "amd")
 MODES = ("fast", "identical")
@@ -175,6 +195,26 @@ CLASSICAL_OPPONENTS = {
         "hdbscan": ("sklearn-cpu",),
     },
 }
+
+#: Neural opponents: torch eager fp32 (TF32 off) on the box's GPU, every
+#: vendor and lane (tools/bench_board_neural.py; MPS, CUDA, ROCm).
+NEURAL_OPPONENTS = {v: {lane: ("torch-eager-fp32",) for lane in NEURAL_LANES} for v in VENDORS}
+
+
+def family_lanes(fam):
+    return {"trees": TREE_LANES, "classical": CLASSICAL_LANES, "neural": NEURAL_LANES}[fam]
+
+
+def check_neural_modes(families, modes):
+    """The neural surface is IDENTICAL only on every vendor
+    (mojolearn._backend._IDENTICAL_ONLY). FAST is trees and classical."""
+    if "neural" in families and "identical" not in modes:
+        raise SystemExit(
+            "bench_board: REFUSING --modes %s for the neural family: the wheel's neural surface "
+            "(LanguageModelTrainer, linalg.matmul, the transformer and Mamba blocks) is IDENTICAL "
+            "only on every vendor, and FAST is the trees and classical tier. Pass --families "
+            "trees,classical for a FAST-only run, or add identical." % ",".join(modes))
+
 
 #: Per-round ceilings for the classical racer. A DBSCAN round on Istella-S is
 #: about 337 s on an H100 (bench_all_ours.sh); a CPU opponent on a Mac is
@@ -280,12 +320,16 @@ def rows_tag(rows):
     return "full" if not rows else str(int(rows))
 
 
-def race_id(family, lane, dataset, rows):
+def race_id(family, lane, dataset, rows, shape=None):
+    if family == "neural":
+        return "neural/%s/%s/shape=%s" % (lane, dataset, shape or "full")
     return "%s/%s/%s/rows=%s" % (family, lane, dataset, rows_tag(rows))
 
 
 def our_arms(family, modes):
     """driver arm name -> numeric mode, for our arms in one race."""
+    if family == "neural":
+        return {"ours": "identical"}          # identical only, every vendor
     if family == "trees":
         if modes == ["fast", "identical"]:
             return {"ours": "identical", "ours-ab": "fast"}
@@ -298,12 +342,25 @@ def our_arms(family, modes):
     return out
 
 
-def plan_races(vendor, modes, families=FAMILIES, lanes=None, datasets=DATASETS, rows=None):
+def plan_races(vendor, modes, families=FAMILIES, lanes=None, datasets=DATASETS, rows=None,
+               neural_shape="full"):
+    check_neural_modes(families, modes)
     races = []
     for fam in families:
-        fam_lanes = TREE_LANES if fam == "trees" else CLASSICAL_LANES
-        for lane in fam_lanes:
+        for lane in family_lanes(fam):
             if lanes and lane not in lanes:
+                continue
+            if fam == "neural":
+                # one race per lane: its own data, not taxi/Istella; IDENTICAL only
+                ours = our_arms(fam, modes)
+                opp = NEURAL_OPPONENTS[vendor][lane]
+                ds = NEURAL_DATA[lane]
+                races.append({
+                    "id": race_id(fam, lane, ds, None, neural_shape),
+                    "family": fam, "lane": lane, "dataset": ds, "rows": None,
+                    "shape": neural_shape, "modes": ["identical"], "our_arms": ours,
+                    "opponents": list(opp), "arms": list(ours) + list(opp),
+                })
                 continue
             for ds in datasets:
                 opp = (TREE_OPPONENTS if fam == "trees" else CLASSICAL_OPPONENTS)[vendor][lane]
@@ -877,6 +934,33 @@ def classical_cmd(ctx, race):
     return cmd, env, ceiling
 
 
+def neural_round_seconds(shape):
+    return 600 if shape == "small" else 1800
+
+
+def neural_cmd(ctx, race):
+    """tools/bench_board_neural.py race for one neural lane."""
+    rsec = ctx["round_seconds"] or neural_round_seconds(race.get("shape"))
+    cmd = [ctx["python"], "-u", ctx["neural_driver"], "race",
+           "--lane", race["lane"], "--shape", race.get("shape") or "full",
+           "--arms", ",".join(race["arms"]),
+           "--rounds", str(ctx["rounds"]),
+           "--out", os.path.join(ctx["out"], "raw", "neural", "shape-" + (race.get("shape") or "full")),
+           "--work", os.path.join(ctx["out"], "work"),
+           "--ours-python", shlex.quote(ctx["python"]),
+           "--theirs-python", shlex.quote(ctx["python"]),
+           "--ready-seconds", str(rsec), "--warmup-seconds", str(rsec),
+           "--round-seconds", str(rsec)]
+    n = len(race["arms"])
+    ceiling = 600 + rsec * n * 2 + rsec * ctx["rounds"] * n + 900
+    return cmd, {}, ceiling
+
+
+def neural_json_path(ctx, race):
+    return os.path.join(ctx["out"], "raw", "neural", "shape-" + (race.get("shape") or "full"),
+                        "%s-%s.json" % (race["lane"], race["dataset"]))
+
+
 def classical_json_path(ctx, race):
     return os.path.join(ctx["out"], "raw", "classical", "rows-" + rows_tag(race["rows"]),
                         "%s-%s.json" % (race["lane"], race["dataset"]))
@@ -887,7 +971,8 @@ def classical_cells(ctx, race, r):
     rounds = ctx["rounds"]
     shapes = (r.get("block") or {}).get("arrays", {})
     first = shapes.get("X") or shapes.get("index") or {}
-    shape = "x".join(str(s) for s in first.get("shape", [])) or None
+    # the neural racer names its shape itself (no classical block)
+    shape = r.get("shape") or "x".join(str(s) for s in first.get("shape", [])) or None
     qual = r.get("quality") or {}
     spans = r.get("spans") or {}
     ours_span = (((r.get("arms") or {}).get("ours") or {}).get("span")
@@ -944,6 +1029,7 @@ def base_cell(ctx, race, arm, mode):
     return {
         "family": race["family"], "lane": race["lane"], "dataset": race["dataset"],
         "rows": race["rows"], "rows_tag": rows_tag(race["rows"]),
+        "neural_shape": race.get("shape"),
         "arm": arm, "library": lib,
         "mode": mode if lib == "mojolearn" else "opponent",
         "device": arm_device(arm, ctx["vendor"]),
@@ -958,12 +1044,49 @@ def base_cell(ctx, race, arm, mode):
 _SETTINGS_CACHE = {}
 
 
+NEURAL_SETTINGS = {
+    "lm-train-step": {
+        "ours_call": "mojolearn.LanguageModelTrainer(resident=True, step_result='lean').train_step(ids)",
+        "torch_call": "tools/torch_lm_step_opponent.py build_model; zero_grad; forward + mean CE; "
+                      "backward; torch.optim.AdamW step; loss.item()",
+        "optimizer": "AdamW lr 1e-3, betas (0.9, 0.999), eps 1e-8, weight decay 0.01 on both",
+        "clock": "ids host to device, one training step, loss back on the host, synchronized; "
+                 "parameters and AdamW state device-resident on both sides; round r is step r+1",
+        "quality": "loss_first_step, loss_last_step (same init, same batches), "
+                   "loss_last_abs_diff_vs_ours"},
+    "lm-forward": {
+        "ours_call": "mojolearn.LanguageModelTrainer(resident=True).logits(ids)",
+        "torch_call": "no_grad forward of the same twin to logits; logits.cpu()",
+        "clock": "ids host to device, forward, float32 logits [B, L, V] back on the host",
+        "quality": "mean_nll of the logits (float64), max_abs_diff_vs_ours"},
+    "gemm": {
+        "ours_call": "mojolearn.linalg.matmul(a, b)",
+        "torch_call": "a.to(dev) @ b.to(dev), .cpu()",
+        "clock": "A and B host to device, the product, C back on the host",
+        "quality": "max_rel_err_vs_fp64, max_abs_diff_vs_ours"},
+}
+NEURAL_SHAPE_TEXT = {
+    "full": {"lm": "B1 L2048 DM384 H6 KV6 HD64 FF1024 8 layers V8192, 20,453,376 parameters "
+                   "(tools/torch_lm_step_opponent.py control shape)", "gemm": "m=n=k=4096"},
+    "small": {"lm": "B2 L64 DM64 H4 KV2 HD16 FF128 2 layers V256 (smoke)", "gemm": "m=n=k=256 (smoke)"},
+}
+
+
 def race_settings(ctx, race):
-    key = (race["family"], race["lane"])
+    key = (race["family"], race["lane"], race.get("shape"))
     if key not in _SETTINGS_CACHE:
         s = {"seed": SEED, "rounds": ctx["rounds"], "warmup_rounds": 1,
              "interleaved": True, "rows_cap": race["rows"]}
-        if race["family"] == "trees":
+        if race["family"] == "neural":
+            s["driver"] = "tools/bench_board_neural.py"
+            s["numeric_mode"] = "identical (the only tier the neural surface builds)"
+            s["opponent_mode"] = ("torch eager float32, TF32 off: tools/torch_lm_step_opponent.py's "
+                                  "eager_fp32, the opponent's fast setting at our precision")
+            s["shape"] = race.get("shape")
+            s["shape_dims"] = NEURAL_SHAPE_TEXT[race.get("shape") or "full"][
+                "gemm" if race["lane"] == "gemm" else "lm"]
+            s.update(NEURAL_SETTINGS[race["lane"]])
+        elif race["family"] == "trees":
             s["driver"] = "bench/speed/forest_speed_arm.py"
             s["devices"] = tree_devices(ctx["vendor"], race["lane"])
             try:
@@ -1025,6 +1148,23 @@ def run_race(ctx, race):
         rec["notes"] = parsed["notes"]
         rec["fit_verdict_line"] = parsed["verdict_line"]
         cells = tree_cells(ctx, race, parsed)
+    elif race["family"] == "neural":
+        cmd, extra, ceiling = neural_cmd(ctx, race)
+        tag = "%s.%s.shape-%s" % (race["lane"], race["dataset"], race.get("shape") or "full")
+        log = os.path.join(ctx["out"], "logs", "neural." + tag + ".log")
+        jpath = neural_json_path(ctx, race)
+        if os.path.exists(jpath):
+            os.replace(jpath, jpath + ".previous")
+        rc = run_logged(cmd, child_env(ctx, extra), log, ceiling, nice=ctx["nice"])
+        rec.update(command=cmd, env=extra, log=os.path.relpath(log, ctx["out"]), rc=rc,
+                   race_json=os.path.relpath(jpath, ctx["out"]), shape=race.get("shape"))
+        r = load_result(jpath) if os.path.exists(jpath) else None
+        if r is None:
+            cells = [dict(base_cell(ctx, race, a, race["our_arms"].get(a)),
+                          status="UNKNOWN(no race json, rc %d)" % rc) for a in race["arms"]]
+        else:
+            rec["inputs"] = r.get("inputs")
+            cells = classical_cells(ctx, race, r)
     else:
         cmd, extra, ceiling = classical_cmd(ctx, race)
         log = os.path.join(ctx["out"], "logs", "classical." + tag + ".log")
@@ -1107,6 +1247,11 @@ QUALITY_NOTE = {
     "rmse": "lower is better", "r2": "higher is better", "inertia": "lower is better",
     "explained_variance_ratio_sum": "higher is better", "recall_at_10": "higher is better",
     "mean_log_likelihood": "higher is better",
+    "loss_first_step": "same init and batches on every arm",
+    "loss_last_step": "same init and batches on every arm",
+    "loss_last_abs_diff_vs_ours": "0 is our value exactly",
+    "mean_nll": "lower is better", "max_abs_diff_vs_ours": "0 is our output exactly",
+    "max_rel_err_vs_fp64": "lower is better",
 }
 
 
@@ -1122,8 +1267,14 @@ def render_board(result):
     L.append("Generated %s from `board.json` (schema `%s`)." % (result.get("updated") or now_utc(), SCHEMA))
     L.append("")
     if cfg.get("smoke"):
-        L.append("> SMOKE RUN: `--rows %s` is below the 1,000,000-row tree floor or the classical "
-                 "lane shapes. These numbers are plumbing checks, not results." % cfg.get("rows"))
+        why = []
+        if cfg.get("rows"):
+            why.append("`--rows %s` is below the 1,000,000-row tree floor or the classical lane "
+                       "shapes" % cfg.get("rows"))
+        if cfg.get("neural_shape") == "small" and "neural" in (cfg.get("families") or []):
+            why.append("`--neural-shape small` is a plumbing shape")
+        L.append("> SMOKE RUN: %s. These numbers are plumbing checks, not results."
+                 % ("; ".join(why) or "a reduced shape"))
         L.append("")
     L.append("## Box")
     L.append("")
@@ -1163,6 +1314,12 @@ def render_board(result):
     L.append("- Comparability: trees carry FSPEED-FIT-VERDICT (total leaves within 10% across "
              "arms is COMPARABLE); classical carry the clock span (SPAN-ASYMMETRIC names an arm "
              "whose clock excludes an upload or a fit that ours includes).")
+    L.append("- Neural: our IDENTICAL arm only (the neural surface builds no other tier, on any "
+             "vendor) against torch eager float32 with TF32 off on this box's GPU (MPS, CUDA or "
+             "ROCm). Every clock is host in, host out: ids or operands to the device, the call, "
+             "the result back on the host, synchronized. The LM lanes start from the same "
+             "parameters and read the same batches on every arm, so their losses and logits are "
+             "comparable; `max_abs_diff_vs_ours` is the opponent's output against ours.")
     L.append("- `installed_wheel` confirms our binding loaded from site-packages, not the repo tree.")
     L.append("")
     races = result.get("races") or {}
@@ -1211,13 +1368,17 @@ def render_board(result):
         fam_races = [races[r] for r in sorted(races) if races[r]["family"] == fam]
         if not fam_races:
             continue
-        L.append("## %s" % ("Trees" if fam == "trees" else "Classical"))
+        L.append("## %s" % {"trees": "Trees", "classical": "Classical", "neural": "Neural"}[fam])
         L.append("")
         for rr in fam_races:
             rc = rr.get("cells") or []
             shape = next((c.get("shape") for c in rc if c.get("shape")), None)
-            L.append("### %s / %s (rows %s, shape %s)" % (rr["lane"], rr["dataset"],
-                                                         rows_tag(rr["rows"]), _f(shape)))
+            if fam == "neural":
+                L.append("### %s / %s (neural shape %s: %s)" % (
+                    rr["lane"], rr["dataset"], _f(rr.get("shape") or "full"), _f(shape)))
+            else:
+                L.append("### %s / %s (rows %s, shape %s)" % (rr["lane"], rr["dataset"],
+                                                             rows_tag(rr["rows"]), _f(shape)))
             L.append("")
             L.append("race: %s, driver rc %s, log `%s`" % (rr.get("status"), rr.get("rc"), rr.get("log")))
             L.append("")
@@ -1242,8 +1403,11 @@ def render_board(result):
             L.append("")
     L.append("## Not covered by this board")
     L.append("")
-    L.append("- Neural and GEMM lanes: their drivers time source-built Mojo binaries, not the "
-             "installed wheel (TODO).")
+    L.append("- Neural: the Mamba blocks, TransformerBlock on its own, SambaStack and "
+             "SmallMLPTrainer are public and not raced yet; torch's compile, TF32 and bf16 "
+             "columns are another precision or labeled nondeterministic and are not raced; the "
+             "GPT-3-small target shape is not on the board (it uses the smaller control shape "
+             "so one shape runs on every box, a 16 GB Mac included).")
     L.append("")
     return "\n".join(L) + "\n"
 
@@ -1268,6 +1432,10 @@ def build_parser():
     p.add_argument("--datasets", default=",".join(DATASETS))
     p.add_argument("--rows", default="full",
                    help="full (default) or a row cap for a smoke test (the board says SMOKE)")
+    p.add_argument("--neural-shape", default="full", choices=NEURAL_SHAPES,
+                   help="neural family shape: full (the 20.45 M-parameter LM control shape, "
+                        "4096^3 GEMM) or small (a smoke; the board says SMOKE). --rows does not "
+                        "apply to neural lanes")
     p.add_argument("--rounds", type=int, default=DEFAULT_ROUNDS,
                    help="timed rounds after one warm-up (default 5)")
     p.add_argument("--mojolearn-version", default=None, help="pip install mojolearn==<V>")
@@ -1312,6 +1480,8 @@ def build_parser():
                    help=argparse.SUPPRESS)
     p.add_argument("--classical-driver", default=os.path.join(HERE, "classical_two_datasets.py"),
                    help=argparse.SUPPRESS)
+    p.add_argument("--neural-driver", default=os.path.join(HERE, "bench_board_neural.py"),
+                   help=argparse.SUPPRESS)
     return p
 
 
@@ -1337,6 +1507,10 @@ def print_plan(vendor, modes, races, args, rows, data):
     print("BENCH-BOARD PLAN (dry run: nothing installed, nothing run)")
     print("vendor=%s api=%s modes=%s rounds=%d warmup=1 seed=%d rows=%s"
           % (vendor, VENDOR_API[vendor], ",".join(modes), args.rounds, SEED, rows_tag(rows)))
+    if any(r["family"] == "neural" for r in races):
+        t = NEURAL_SHAPE_TEXT[args.neural_shape]
+        print("neural: IDENTICAL only; opponent torch eager fp32 (TF32 off) on the GPU; "
+              "shape %s (LM %s; GEMM %s)" % (args.neural_shape, t["lm"], t["gemm"]))
     print("mojolearn=%s (from the installed wheel; %s)" % (
         args.mojolearn_version or "<--mojolearn-version>",
         "python %s" % args.python_env if args.python_env else "venv %s" % (args.venv or "<cache>/venv")))
@@ -1377,11 +1551,15 @@ def main(argv=None):
         raise SystemExit("bench_board: no Metal, nvidia-smi or rocm-smi found; pass --vendor")
     modes = modes_for(vendor, args.modes)
     families = _csv(args.families, FAMILIES, "family")
-    lanes = _csv(args.lanes, TREE_LANES + CLASSICAL_LANES, "lane") if args.lanes else None
+    lanes = _csv(args.lanes, TREE_LANES + CLASSICAL_LANES + NEURAL_LANES, "lane") if args.lanes else None
     datasets = _csv(args.datasets, DATASETS, "dataset")
     rows = parse_rows(args.rows)
-    races = plan_races(vendor, modes, families, lanes, datasets, rows)
-    data = data_status(os.path.abspath(os.path.expanduser(args.data_root)), datasets)
+    races = plan_races(vendor, modes, families, lanes, datasets, rows, args.neural_shape)
+    # taxi and Istella-S are read by trees and classical only; a neural-only
+    # run needs no R2 data.
+    needed = [ds for ds in datasets if any(r["dataset"] == ds for r in races
+                                           if r["family"] != "neural")]
+    data = data_status(os.path.abspath(os.path.expanduser(args.data_root)), needed)
 
     if args.dry_run:
         print_plan(vendor, modes, races, args, rows, data)
@@ -1397,7 +1575,7 @@ def main(argv=None):
             "\"<ssh flags+target>\" %s\n(a remote Mac: prefix MOJOLEARN_STAGE_BOX_HOME=<its home>)"
             % (",".join(missing), args.data_root, " ".join(R2_KEYS[d] for d in missing)))
     if args.verify_data:
-        data = data_status(os.path.abspath(os.path.expanduser(args.data_root)), datasets, verify=True)
+        data = data_status(os.path.abspath(os.path.expanduser(args.data_root)), needed, verify=True)
         bad = [d for d, r in data.items() if r.get("sha256_ok") is False]
         if bad:
             raise SystemExit("bench_board: sha256 mismatch against the manifest for %s" % ",".join(bad))
@@ -1427,7 +1605,8 @@ def main(argv=None):
            "race_deadline_s": args.race_deadline_s, "round_seconds": args.round_seconds,
            "nice": args.nice, "ptxas": ptxas,
            "tree_driver": os.path.abspath(args.tree_driver),
-           "classical_driver": os.path.abspath(args.classical_driver)}
+           "classical_driver": os.path.abspath(args.classical_driver),
+           "neural_driver": os.path.abspath(args.neural_driver)}
     box = box_fingerprint(ctx)
 
     if result is None:
@@ -1446,7 +1625,10 @@ def main(argv=None):
     result["config"] = {"vendor": vendor, "modes": modes, "families": families,
                         "lanes": lanes, "datasets": datasets, "rows": rows,
                         "rounds": args.rounds, "seed": SEED,
-                        "smoke": bool(rows) and rows < TREE_ROW_FLOOR,
+                        "neural_shape": args.neural_shape if "neural" in families else None,
+                        "smoke": (bool(rows) and rows < TREE_ROW_FLOOR
+                                  and any(r["family"] != "neural" for r in races))
+                                 or ("neural" in families and args.neural_shape == "small"),
                         "data": data}
     result["plan"] = [r["id"] for r in races]
     save_result(rpath, result)

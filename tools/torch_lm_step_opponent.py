@@ -314,9 +314,12 @@ def build_model(torch, dims, shapes, flat, device):
             x1, x2 = x[..., :hd // 2], x[..., hd // 2:]
             return x * self.cos + torch.cat((-x2, x1), dim=-1) * self.sin
 
-        def forward(self, ids):
+        def forward(self, ids, return_logits=False):
+            # return_logits (tools/bench_board_neural.py, the forward lane):
+            # `ids` are the [B, L] inputs and the [B, L, V] logits come back
+            # before the loss. The default path is unchanged.
             w = self.weights
-            inputs, targets = ids[:, :-1], ids[:, 1:]
+            inputs = ids if return_logits else ids[:, :-1]
             hidden = F.embedding(inputs, w[0])
             for block in range(layers):
                 base = 1 + 9 * block
@@ -334,6 +337,9 @@ def build_model(torch, dims, shapes, flat, device):
                 z = self._norm(residual, norm2)
                 hidden = residual + F.linear(F.silu(F.linear(z, wg)) * F.linear(z, wu), wd)
             logits = F.linear(hidden, w[-1])
+            if return_logits:
+                return logits
+            targets = ids[:, 1:]
             return F.cross_entropy(logits.reshape(b * l, vocab), targets.reshape(b * l),
                                    reduction='mean')
 
