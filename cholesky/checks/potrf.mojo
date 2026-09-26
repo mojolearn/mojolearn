@@ -298,6 +298,8 @@ The one thing in the RAPIDS trees that IS portable source and IS implemented her
 from cholesky.checks.fast_trsm import FTP_MAX_NB, FTS_BLOCK, fast_trsm_panel_kernel, fast_gemm_nt_sub_lower, fast_panel_solve_inv
 from std.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
+from std.time import perf_counter_ns
+from std.os import getenv
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -316,6 +318,17 @@ from cholesky.checks.chol_sabotage import (
     sabotage_trsm_panel_kernel,
 )
 from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_panel_kernel
+from gemm.checks.gemm_identical import (
+    APPLE_MMA,
+    GEMM_ADMIT_EXP_SUM,
+    _AMMA_M64,
+    _admit_warp_min,
+    _amma_gload,
+    _amma_load_t,
+    _amma_mma,
+    _amma_stage,
+)
+from checks.rtf_seam import rtf_mul_add
 from cholesky.multi_gpu import chol_device_count, chol_trailing_rows
 from cholesky.impl.matrix.detail.matrix import (
     copy_vector_from_matrix_diagonal_kernel,
@@ -863,6 +876,267 @@ def subtract_lower_kernel(
     a.unsafe_store((base + i) * n + base + j, ftz(cur - upd))
 
 
+comptime CHOL_APPLE_MMA_SYRK = (
+    APPLE_MMA
+    and is_defined["MOJOLEARN_CHOL_APPLE_MMA_SYRK"]()
+)
+"""lane/apple-identical-neural (2026-09-26): the IDENTICAL trailing update on
+Apple as ONE kernel over the lower-triangle tiles only. The shipped path
+writes `G = identical_gemm_into(packed, packed_b)` for the WHOLE
+n_trail x n_trail square to a workspace, then `subtract_lower_kernel` reads
+it back: summed over the 625 panels of a 20,000-row factor that is about a
+terabyte of traffic for a k = 32 product. Here each 64 x 64 tile that holds
+a cell with j <= i computes the same contract value -- one leaf (k = 32 <=
+CONTRACT_K_LEAF_MIN), its chain `rtf_mul_add` over p ascending from +0.0 on
+the matrix unit where the GEMM's window admission holds and exactly
+elsewhere, then `ftz` (5d) and `ftz` (the store) -- and applies
+`subtract_lower_kernel`'s line `A = ftz(ftz(A) - ftz(G))` to those cells.
+TRIAL ONLY (`-D MOJOLEARN_CHOL_APPLE_MMA_SYRK`): bit-identical (KernelRidge
+5k and 20k dual_coef hashes equal, cholesky_check green, its sabotage caught)
+but no measured gain: 12,000-row factor, three interleaved pairs, 9.45 s
+median off against 9.38 s on. The trailing update is not this factor's
+bottleneck on the M4."""
+
+
+def chol_syrk_sub_lower_amma_kernel(
+    a: MutPointer[Float32, MutAnyOrigin],
+    xa: MutPointer[Float32, MutAnyOrigin],
+    yb: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    base_in: Int32,
+    n_trail_in: Int32,
+    w_in: Int32,
+):
+    comptime SGM = 2
+    comptime SGN = 2
+    comptime FM = 4
+    comptime FN = 4
+    comptime KB = 16
+    comptime NSG = SGM * SGN
+    comptime NT = NSG * 32
+    comptime BM = 8 * FM * SGM
+    comptime BN = 8 * FN * SGN
+    comptime AST = BM + 4
+    comptime BST = KB + 4
+    comptime NF = FM * FN
+    var n = Int(n_in)
+    var base = Int(base_in)
+    var m = Int(n_trail_in)
+    var k = Int(w_in)
+    # Lower-triangle tile (bi, bj), bj <= bi, from the linear block index.
+    var t = Int(block_idx.x)
+    var bi = 0
+    while (bi + 1) * (bi + 2) // 2 <= t:
+        bi += 1
+    var bj = t - bi * (bi + 1) // 2
+    var m0 = bi * BM
+    var n0 = bj * BN
+    var tid = Int(thread_idx.x)
+    var sg = tid // 32
+    var lane = tid % 32
+    var sgm = sg // SGN
+    var sgn = sg % SGN
+    var qd = lane // 4
+    var frow = (qd & 4) + ((lane // 2) % 4)
+    var fcol = (qd & 2) * 2 + (lane % 2) * 2
+    var at = stack_allocation[KB * AST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var bt = stack_allocation[BN * BST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var wmin = stack_allocation[2 * NSG, Scalar[DType.uint32], address_space = AddressSpace.SHARED]()
+    var acc = InlineArray[_AMMA_M64, NF](fill=_AMMA_M64(0))
+    var exact_ok = True
+    var windows = (k + KB - 1) // KB
+    var ra = _amma_gload[BM, KB, NT](xa, k, 1, m0, m, 0, min(KB, k), tid, False)
+    var rb = _amma_gload[BN, KB, NT](yb, k, 1, n0, m, 0, min(KB, k), tid, False)
+    for w in range(windows):
+        var k0 = w * KB
+        var chunk = min(KB, k - k0)
+        var ea = _amma_stage[BM, KB, NT, True, AST](at, ra, tid, False)
+        var eb = _amma_stage[BN, KB, NT, False, BST](bt, rb, tid, False)
+        ea = _admit_warp_min(ea)
+        eb = _admit_warp_min(eb)
+        if lane == 0:
+            wmin[sg] = ea
+            wmin[NSG + sg] = eb
+        barrier()
+        if w + 1 < windows:
+            var k1 = k0 + KB
+            ra = _amma_gload[BM, KB, NT](xa, k, 1, m0, m, k1, min(KB, k - k1), tid, False)
+            rb = _amma_gload[BN, KB, NT](yb, k, 1, n0, m, k1, min(KB, k - k1), tid, False)
+        var bea = UInt32(0xFF)
+        var beb = UInt32(0xFF)
+        comptime for q in range(NSG):
+            bea = min(bea, wmin[q])
+            beb = min(beb, wmin[NSG + q])
+        var admitted = exact_ok and chunk == KB and (bea + beb) >= UInt32(GEMM_ADMIT_EXP_SUM)
+        if not admitted:
+            exact_ok = False
+        if admitted:
+            comptime for p8 in range(KB // 8):
+                var af = InlineArray[_AMMA_M64, FM](fill=_AMMA_M64(0))
+                var bf = InlineArray[_AMMA_M64, FN](fill=_AMMA_M64(0))
+                comptime for fm in range(FM):
+                    af[fm] = _amma_load_t(at + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                comptime for fq in range(FN):
+                    bf[fq] = _amma_load_t(bt + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                comptime for fm in range(FM):
+                    comptime for fq in range(FN):
+                        acc[fm * FN + fq] = _amma_mma(af[fm], bf[fq], acc[fm * FN + fq])
+        else:
+            for p in range(chunk):
+                comptime for fm in range(FM):
+                    var av = at[p * AST + (sgm * FM + fm) * 8 + frow]
+                    comptime for fq in range(FN):
+                        comptime for e in range(2):
+                            var bv = bt[((sgn * FN + fq) * 8 + fcol + e) * BST + p]
+                            acc[fm * FN + fq][e] = rtf_mul_add(av, bv, acc[fm * FN + fq][e])
+        barrier()
+    comptime for fm in range(FM):
+        comptime for fq in range(FN):
+            comptime for e in range(2):
+                var i = m0 + (sgm * FM + fm) * 8 + frow
+                var j = n0 + (sgn * FN + fq) * 8 + fcol + e
+                if i < m and j < m and j <= i:
+                    var g = ftz(ftz(acc[fm * FN + fq][e]))
+                    comptime if is_defined["MOJOLEARN_CHOL_APPLE_MMA_SYRK_SABOTAGE"]():
+                        g = g * Float32(1.0000001)
+                    var cell = (base + i) * n + base + j
+                    a[cell] = ftz(ftz(a[cell]) - ftz(g))
+
+
+comptime CHOL_APPLE_LEFT = (
+    APPLE_MMA
+    and not is_defined["MOJOLEARN_CHOL_APPLE_LEFT_OFF"]()
+)
+"""lane/apple-identical-neural (2026-09-26): the SAME per-cell arithmetic in
+LEFT-LOOKING order on Apple IDENTICAL. Right-looking, every cell (i, j),
+j <= i, of every trailing block takes, after each panel p, the one step
+`A = ftz(ftz(A) - ftz(G_p))`, with `G_p` the GEMM contract value of the
+k = 32 product of panel p's rows i and j (one leaf: its `rtf_mul_add` chain,
+then `ftz`, then `ftz`). The panels' L values never change once solved, so
+the cell's whole sequence -- p = 0, 1, ... in order -- can run just before
+its own column block is factored, with A in a register:
+`chol_left_update_amma_kernel` does that for one column block, each G_p's
+chain on the matrix unit where the GEMM's window admission holds and by
+`rtf_mul_add` otherwise. Same values, same order, same bits; the trailing
+square is no longer rewritten once per panel (at n = 12,000 that pass was
+7.2 of the factor's 9.5 s). On a pivot failure the pending updates are
+applied to every later column block, so the partial factor is the
+right-looking one. Only without a trace, a sabotage or a multi-GPU owner
+set, at the pinned NB = 32. `-D MOJOLEARN_CHOL_APPLE_LEFT_OFF` reverts."""
+
+
+def chol_left_update_amma_kernel(
+    a: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    j0_in: Int32,
+    w_in: Int32,
+    np_in: Int32,
+    row_lo_in: Int32,
+):
+    """Rows [row_lo + 64 * block, +64) x columns [j0, j0 + w): apply panels
+    0 .. np-1 in order to every lower cell (j <= i)."""
+    comptime NT = 128
+    comptime NB = 32
+    comptime KB = 16
+    comptime BM = 64
+    comptime BN = 32
+    comptime AST = BM + 4
+    comptime BST = KB + 4
+    comptime NFC = BN // 8
+    comptime FPS = 8
+    var n = Int(n_in)
+    var j0 = Int(j0_in)
+    var w = Int(w_in)
+    var np = Int(np_in)
+    var m0 = Int(row_lo_in) + Int(block_idx.x) * BM
+    var tid = Int(thread_idx.x)
+    var sg = tid // 32
+    var lane = tid % 32
+    var qd = lane // 4
+    var frow = (qd & 4) + ((lane // 2) % 4)
+    var fcol = (qd & 2) * 2 + (lane % 2) * 2
+    var at = stack_allocation[KB * AST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var bt = stack_allocation[BN * BST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var wmin = stack_allocation[8, Scalar[DType.uint32], address_space = AddressSpace.SHARED]()
+    var c = SIMD[DType.float32, 2 * FPS](0.0)
+    comptime for q in range(FPS):
+        var fr = sg * 2 + q // NFC
+        var fc = q % NFC
+        comptime for e in range(2):
+            var i = m0 + fr * 8 + frow
+            var j = j0 + fc * 8 + fcol + e
+            if i < n and j < j0 + w:
+                c[2 * q + e] = a[i * n + j]
+    for p in range(np):
+        var acc = InlineArray[_AMMA_M64, FPS](fill=_AMMA_M64(0))
+        var exact_ok = True
+        comptime for wi in range(NB // KB):
+            var kk = p * NB + wi * KB
+            var ra = _amma_gload[BM, KB, NT](a, n, 1, m0, n, kk, KB, tid, False)
+            var rb = _amma_gload[BN, KB, NT](a, n, 1, j0, j0 + w, kk, KB, tid, False)
+            var ea = _amma_stage[BM, KB, NT, True, AST](at, ra, tid, False)
+            var eb = _amma_stage[BN, KB, NT, False, BST](bt, rb, tid, False)
+            ea = _admit_warp_min(ea)
+            eb = _admit_warp_min(eb)
+            if lane == 0:
+                wmin[sg] = ea
+                wmin[4 + sg] = eb
+            barrier()
+            var bea = UInt32(0xFF)
+            var beb = UInt32(0xFF)
+            comptime for s in range(4):
+                bea = min(bea, wmin[s])
+                beb = min(beb, wmin[4 + s])
+            var admitted = exact_ok and (bea + beb) >= UInt32(GEMM_ADMIT_EXP_SUM)
+            if not admitted:
+                exact_ok = False
+            if admitted:
+                comptime for p8 in range(KB // 8):
+                    comptime for q in range(FPS):
+                        var fr = sg * 2 + q // NFC
+                        var fc = q % NFC
+                        var af = _amma_load_t(at + (8 * p8) * AST + fr * 8, AST)
+                        var bf = _amma_load_t(bt + (fc * 8) * BST + 8 * p8, BST)
+                        acc[q] = _amma_mma(af, bf, acc[q])
+            else:
+                for kq in range(KB):
+                    comptime for q in range(FPS):
+                        var fr = sg * 2 + q // NFC
+                        var fc = q % NFC
+                        var av = at[kq * AST + fr * 8 + frow]
+                        comptime for e in range(2):
+                            var bv = bt[(fc * 8 + fcol + e) * BST + kq]
+                            acc[q][e] = rtf_mul_add(av, bv, acc[q][e])
+            barrier()
+        comptime for q in range(FPS):
+            comptime for e in range(2):
+                var g = ftz(ftz(acc[q][e]))
+                comptime if is_defined["MOJOLEARN_CHOL_APPLE_LEFT_SABOTAGE"]():
+                    g = g * Float32(1.0000001)
+                c[2 * q + e] = ftz(ftz(c[2 * q + e]) - ftz(g))
+    comptime for q in range(FPS):
+        var fr = sg * 2 + q // NFC
+        var fc = q % NFC
+        comptime for e in range(2):
+            var i = m0 + fr * 8 + frow
+            var j = j0 + fc * 8 + fcol + e
+            if i < n and j < j0 + w and j <= i:
+                a[i * n + j] = c[2 * q + e]
+
+
+def _chol_left_update(
+    ctx: DeviceContext, mut a: DeviceBuffer[DType.float32], n: Int, j0: Int, w: Int, np: Int
+) raises:
+    """Column block [j0, j0 + w), rows j0 .. n-1, panels 0 .. np-1."""
+    if np <= 0 or w <= 0:
+        return
+    var rows = n - j0
+    ctx.enqueue_function[chol_left_update_amma_kernel](
+        a.unsafe_ptr(), Int32(n), Int32(j0), Int32(w), Int32(np), Int32(j0),
+        grid_dim=((rows + 63) // 64, 1, 1), block_dim=(128, 1, 1),
+    )
+
+
 def zero_upper_kernel(
     a: MutPointer[Float32, MutAnyOrigin],
     n_in: Int32,
@@ -1202,11 +1476,31 @@ def potrf_lower(
     var inv_shape = ctx.enqueue_create_buffer[DType.float32](
         nb * nb if CHOL_RECURSIVE_PANEL else 1
     )
+    # MOJOLEARN_CHOL_TIMING=1: per-stage host times (synchronizing), printed
+    # once at the end. Diagnostics only; off by default and bit-inert.
+    var ctim = String(getenv("MOJOLEARN_CHOL_TIMING")) == "1"
+    var left_mode = False
+    comptime if CHOL_APPLE_LEFT:
+        left_mode = (
+            sabotage == CHOL_SAB_NONE and not trace.enabled
+            and chol_device_count() == 1 and nb == 32
+        )
+    var tf = 0
+    var ts = 0
+    var tt = 0
+    var tq = 0
+    var tk = Int(perf_counter_ns())
     while j0 < n:
         var w = nb
         if j0 + w > n:
             w = n - j0
         var n_trail = n - j0 - w
+        if ctim:
+            ctx.synchronize()
+            tq += Int(perf_counter_ns()) - tk
+            tk = Int(perf_counter_ns())
+        if left_mode and p > 0:
+            _chol_left_update(ctx, a, n, j0, w, p)
 
         # ---- the panel ------------------------------------------------
         if chol_sabotage_is_kernel_arm(sabotage):
@@ -1242,8 +1536,19 @@ def potrf_lower(
         # DEVIATION 1634: read `info` back and stop. One drain per panel.
         ctx.enqueue_copy(dst_ptr=hinfo.unsafe_ptr(), src_buf=dinfo)
         ctx.synchronize()
+        if ctim:
+            tf += Int(perf_counter_ns()) - tk
+            tk = Int(perf_counter_ns())
         info = Int(hinfo.unsafe_ptr().unsafe_load(0))
         if info != 0:
+            if left_mode:
+                # The right-looking partial factor: every later column block
+                # has taken panels 0 .. p-1 (not panel p, which failed).
+                var q0 = j0 + nb
+                while q0 < n:
+                    _chol_left_update(ctx, a, n, q0, min(nb, n - q0), p)
+                    q0 += nb
+                ctx.synchronize()
             p += 1
             break
 
@@ -1317,108 +1622,133 @@ def potrf_lower(
             var g = ws.create_sub_buffer[DType.float32](
                 off_g, n_trail * n_trail
             )
-            var gws_len = len(ws) - off_gws
-            if gws_len < 1:
-                gws_len = 1
-            var gws = ws.create_sub_buffer[DType.float32](off_gws, gws_len)
+            if ctim:
+                ctx.synchronize()
+                ts += Int(perf_counter_ns()) - tk
+                tk = Int(perf_counter_ns())
+            if not left_mode:
+                var gws_len = len(ws) - off_gws
+                if gws_len < 1:
+                    gws_len = 1
+                var gws = ws.create_sub_buffer[DType.float32](off_gws, gws_len)
 
-            var pack_cells = n_trail * w
-            if packed_by_solve:
-                pack_cells = 0
-            if pack_cells > 0:
-                ctx.enqueue_function[pack_panel_kernel](
-                    packed.unsafe_ptr(),
-                    a.unsafe_ptr(),
-                    Int32(n),
-                    Int32(j0),
-                    Int32(w),
-                    Int32(n_trail),
-                    grid_dim=((pack_cells + elem_tpb - 1) // elem_tpb, 1, 1),
-                    block_dim=(elem_tpb, 1, 1),
-                )
+                var pack_cells = n_trail * w
+                if packed_by_solve:
+                    pack_cells = 0
+                if pack_cells > 0:
+                    ctx.enqueue_function[pack_panel_kernel](
+                        packed.unsafe_ptr(),
+                        a.unsafe_ptr(),
+                        Int32(n),
+                        Int32(j0),
+                        Int32(w),
+                        Int32(n_trail),
+                        grid_dim=((pack_cells + elem_tpb - 1) // elem_tpb, 1, 1),
+                        block_dim=(elem_tpb, 1, 1),
+                    )
 
-            var vendor = sabotage == CHOL_SAB_VENDOR_MATMUL
-            comptime if CHOL_FAST_APPLE:
-                vendor = True
-            var lower_blocked = False
-            comptime if CHOL_FAST_APPLE:
-                lower_blocked = sabotage == CHOL_SAB_NONE and n_trail > CHOL_FAST_CB
-            if lower_blocked:
-                # rows >= cb of each CHOL_FAST_CB-wide column block only:
-                # about half the product of the full square
-                var cb = 0
-                while cb < n_trail:
-                    var cbw = min(CHOL_FAST_CB, n_trail - cb)
-                    var rows_b = n_trail - cb
-                    var xa = packed.create_sub_buffer[DType.float32](cb * w, rows_b * w)
-                    var yb = packed_b.create_sub_buffer[DType.float32](cb * w, cbw * w)
-                    var gb = g.create_sub_buffer[DType.float32](0, rows_b * cbw)
-                    comptime if CHOL_FUSED_SUB:
-                        fast_gemm_nt_sub_lower(
-                            ctx, a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
-                            n, j0 + w, cb, gb, xa, yb, rows_b, cbw, w,
-                        )
+                var vendor = sabotage == CHOL_SAB_VENDOR_MATMUL
+                comptime if CHOL_FAST_APPLE:
+                    vendor = True
+                var lower_blocked = False
+                comptime if CHOL_FAST_APPLE:
+                    lower_blocked = sabotage == CHOL_SAB_NONE and n_trail > CHOL_FAST_CB
+                if lower_blocked:
+                    # rows >= cb of each CHOL_FAST_CB-wide column block only:
+                    # about half the product of the full square
+                    var cb = 0
+                    while cb < n_trail:
+                        var cbw = min(CHOL_FAST_CB, n_trail - cb)
+                        var rows_b = n_trail - cb
+                        var xa = packed.create_sub_buffer[DType.float32](cb * w, rows_b * w)
+                        var yb = packed_b.create_sub_buffer[DType.float32](cb * w, cbw * w)
+                        var gb = g.create_sub_buffer[DType.float32](0, rows_b * cbw)
+                        comptime if CHOL_FUSED_SUB:
+                            fast_gemm_nt_sub_lower(
+                                ctx, a.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+                                n, j0 + w, cb, gb, xa, yb, rows_b, cbw, w,
+                            )
+                        else:
+                            gemm_nt(ctx, gb, xa, yb, rows_b, cbw, w)
+                            ctx.enqueue_function[subtract_block_2d_kernel](
+                                a.unsafe_ptr(), gb.unsafe_ptr(), Int32(n),
+                                Int32(j0 + w), Int32(cb), Int32(cb), Int32(cbw),
+                                grid_dim=((cbw + 255) // 256, rows_b, 1),
+                                block_dim=(256, 1, 1),
+                            )
+                        _ = xa^
+                        _ = yb^
+                        _ = gb^
+                        cb += cbw
+                elif vendor:
+                    # ARM: `linalg.matmul` through `core/gemm.mojo::gemm_nt`. Its
+                    # k-split is a per-vendor summation order; DEVIATION 1636.
+                    gemm_nt(ctx, g, packed, packed_b, n_trail, n_trail, w)
+                else:
+                    # Whole output rows across owners when the operation-level
+                    # driver is enabled (cholesky/multi_gpu.mojo); same cells.
+                    var owners = chol_device_count()
+                    if owners > 1 and n_trail > 1:
+                        chol_trailing_rows(ctx, g, packed, n_trail, w, owners)
                     else:
-                        gemm_nt(ctx, gb, xa, yb, rows_b, cbw, w)
-                        ctx.enqueue_function[subtract_block_2d_kernel](
-                            a.unsafe_ptr(), gb.unsafe_ptr(), Int32(n),
-                            Int32(j0 + w), Int32(cb), Int32(cb), Int32(cbw),
-                            grid_dim=((cbw + 255) // 256, rows_b, 1),
+                        var fused = False
+                        comptime if CHOL_APPLE_MMA_SYRK:
+                            if sabotage == CHOL_SAB_NONE:
+                                fused = True
+                                var tb = (n_trail + 63) // 64
+                                ctx.enqueue_function[chol_syrk_sub_lower_amma_kernel](
+                                    a.unsafe_ptr(), packed.unsafe_ptr(), packed_b.unsafe_ptr(),
+                                    Int32(n), Int32(j0 + w), Int32(n_trail), Int32(w),
+                                    grid_dim=(tb * (tb + 1) // 2, 1, 1), block_dim=(128, 1, 1),
+                                )
+                                lower_blocked = True  # the subtraction is done
+                        if not fused:
+                            identical_gemm_into(
+                                ctx, g, packed, packed_b, gws, n_trail, n_trail, w, OP_NT
+                            )
+
+                var sub_cells = n_trail * n_trail
+                if lower_blocked:
+                    sub_cells = 0
+                comptime if CHOL_FAST_APPLE:
+                    if sub_cells > 0:
+                        ctx.enqueue_function[subtract_lower_2d_kernel](
+                            a.unsafe_ptr(), g.unsafe_ptr(), Int32(n), Int32(j0 + w),
+                            Int32(n_trail),
+                            grid_dim=((n_trail + 255) // 256, n_trail, 1),
                             block_dim=(256, 1, 1),
                         )
-                    _ = xa^
-                    _ = yb^
-                    _ = gb^
-                    cb += cbw
-            elif vendor:
-                # ARM: `linalg.matmul` through `core/gemm.mojo::gemm_nt`. Its
-                # k-split is a per-vendor summation order; DEVIATION 1636.
-                gemm_nt(ctx, g, packed, packed_b, n_trail, n_trail, w)
-            else:
-                # Whole output rows across owners when the operation-level
-                # driver is enabled (cholesky/multi_gpu.mojo); same cells.
-                var owners = chol_device_count()
-                if owners > 1 and n_trail > 1:
-                    chol_trailing_rows(ctx, g, packed, n_trail, w, owners)
-                else:
-                    identical_gemm_into(
-                        ctx, g, packed, packed_b, gws, n_trail, n_trail, w, OP_NT
-                    )
-
-            var sub_cells = n_trail * n_trail
-            if lower_blocked:
-                sub_cells = 0
-            comptime if CHOL_FAST_APPLE:
+                    sub_cells = 0
                 if sub_cells > 0:
-                    ctx.enqueue_function[subtract_lower_2d_kernel](
-                        a.unsafe_ptr(), g.unsafe_ptr(), Int32(n), Int32(j0 + w),
+                    ctx.enqueue_function[subtract_lower_kernel](
+                        a.unsafe_ptr(),
+                        g.unsafe_ptr(),
+                        Int32(n),
+                        Int32(j0 + w),
                         Int32(n_trail),
-                        grid_dim=((n_trail + 255) // 256, n_trail, 1),
-                        block_dim=(256, 1, 1),
+                        grid_dim=((sub_cells + elem_tpb - 1) // elem_tpb, 1, 1),
+                        block_dim=(elem_tpb, 1, 1),
                     )
-                sub_cells = 0
-            if sub_cells > 0:
-                ctx.enqueue_function[subtract_lower_kernel](
-                    a.unsafe_ptr(),
-                    g.unsafe_ptr(),
-                    Int32(n),
-                    Int32(j0 + w),
-                    Int32(n_trail),
-                    grid_dim=((sub_cells + elem_tpb - 1) // elem_tpb, 1, 1),
-                    block_dim=(elem_tpb, 1, 1),
+                if ctim:
+                    ctx.synchronize()
+                    tt += Int(perf_counter_ns()) - tk
+                    tk = Int(perf_counter_ns())
+                trace.record_device(
+                    ctx, chol_panel_tag("chol", p, "trailing"), a, n * n
                 )
-            trace.record_device(
-                ctx, chol_panel_tag("chol", p, "trailing"), a, n * n
-            )
-            ctx.synchronize()
-            _ = packed^
-            _ = packed_b^
-            _ = g^
-            _ = gws^
+                ctx.synchronize()
+                _ = packed^
+                _ = packed_b^
+                _ = g^
+                _ = gws^
 
         p += 1
         j0 += nb
 
+    if ctim:
+        print("CHOL_TIMING n=" + String(n) + " nb=" + String(nb) + " factor+info_sync_ms=" + String(Float64(tf) / 1e6)
+              + " panel_solve_ms=" + String(Float64(ts) / 1e6) + " trailing_ms=" + String(Float64(tt) / 1e6)
+              + " trace+sync_ms=" + String(Float64(tq) / 1e6))
     if info == 0:
         var cells = n * n
         ctx.enqueue_function[zero_upper_kernel](

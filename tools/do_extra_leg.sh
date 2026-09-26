@@ -133,7 +133,7 @@ TAG=extra
 # Tags other DigitalOcean legs in this repository create droplets under.
 LEG_TAGS="e2 speed rel061 extra"
 FETCH_RESERVE="${FETCH_RESERVE:-420}"
-MAX_BUNDLE_BYTES="${MOJOLEARN_DO_EXTRA_MAX_BYTES:-15000000}"
+MAX_BUNDLE_BYTES="${MOJOLEARN_DO_EXTRA_MAX_BYTES:-20000000}"
 
 usage() {
   sed -n '2,19p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'

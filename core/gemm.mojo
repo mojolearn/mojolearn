@@ -25,6 +25,16 @@ from checks.numerics import (
     identical_mul_add,
 )
 from checks.rtf_seam import rtf_mul_add
+from gemm.checks.gemm_identical import (
+    APPLE_MMA,
+    GEMM_ADMIT_EXP_SUM,
+    _AMMA_M64,
+    _admit_warp_min,
+    _amma_gload,
+    _amma_load_t,
+    _amma_mma,
+    _amma_stage,
+)
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from core.gram_multi_gpu import pinned_gemm_nt_gram_kernel, parallel_gram_outputs
@@ -154,6 +164,120 @@ def apple_gemm_nt_tiled_kernel[TM: Int, TN: Int, RM: Int, RN: Int](
                 z[i * n + j] = ftz(Float32(0.0) + ftz(acc[rr * RN + cc]))
 
 
+comptime APPLE_GEMM_NT_MMA = (
+    APPLE_GEMM_NT_TILED
+    and APPLE_MMA
+    and not is_defined["MOJOLEARN_APPLE_GEMM_NT_MMA_OFF"]()
+)
+"""IDENTICAL on Apple (lane/apple-identical-neural, 2026-09-26): `gemm_nt`
+for m, n >= 64 on the simdgroup matrix unit. Every cell is still the one
+chain `acc = rtf_mul_add(ftz(x[i, p]), ftz(y[j, p]), acc)`, p ascending,
+closed by `ftz(0 + ftz(acc))`. A 16-step window runs as matrix steps when
+the GEMM's window admission holds (flushed operand exponent fields
+`Ea + Eb >= 174` over the window's staged words, and every earlier window
+of the chain admitted, so every entering accumulator is a multiple of
+2^-126): then no step result can be subnormal and the bare FMA, which the
+M4's matrix chain reproduces bit for bit, IS `rtf_mul_add`. Any other
+window, every later one, and a ragged tail run `rtf_mul_add` cell by cell.
+`-D MOJOLEARN_APPLE_GEMM_NT_MMA_OFF` reverts to the tiled kernel."""
+
+
+def apple_gemm_nt_mma_kernel(
+    z: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    y: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32,
+    n_in: Int32,
+    k_in: Int32,
+):
+    comptime SGM = 2
+    comptime SGN = 2
+    comptime FM = 4
+    comptime FN = 4
+    comptime KB = 16
+    comptime NSG = SGM * SGN
+    comptime NT = NSG * 32
+    comptime BM = 8 * FM * SGM
+    comptime BN = 8 * FN * SGN
+    comptime AST = BM + 4
+    comptime BST = KB + 4
+    comptime NF = FM * FN
+    var m = Int(m_in)
+    var n = Int(n_in)
+    var k = Int(k_in)
+    var tid = Int(thread_idx.x)
+    var sg = tid // 32
+    var lane = tid % 32
+    var sgm = sg // SGN
+    var sgn = sg % SGN
+    var m0 = Int(block_idx.x) * BM
+    var n0 = Int(block_idx.y) * BN
+    var qd = lane // 4
+    var frow = (qd & 4) + ((lane // 2) % 4)
+    var fcol = (qd & 2) * 2 + (lane % 2) * 2
+    var at = stack_allocation[KB * AST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var bt = stack_allocation[BN * BST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var wmin = stack_allocation[2 * NSG, Scalar[DType.uint32], address_space = AddressSpace.SHARED]()
+    var acc = InlineArray[_AMMA_M64, NF](fill=_AMMA_M64(0))
+    var exact_ok = True
+    var windows = (k + KB - 1) // KB
+    var ra = _amma_gload[BM, KB, NT](x, k, 1, m0, m, 0, min(KB, k), tid, False)
+    var rb = _amma_gload[BN, KB, NT](y, k, 1, n0, n, 0, min(KB, k), tid, False)
+    for w in range(windows):
+        var k0 = w * KB
+        var chunk = min(KB, k - k0)
+        var ea = _amma_stage[BM, KB, NT, True, AST](at, ra, tid, False)
+        var eb = _amma_stage[BN, KB, NT, False, BST](bt, rb, tid, False)
+        ea = _admit_warp_min(ea)
+        eb = _admit_warp_min(eb)
+        if lane == 0:
+            wmin[sg] = ea
+            wmin[NSG + sg] = eb
+        barrier()
+        if w + 1 < windows:
+            var k1 = k0 + KB
+            ra = _amma_gload[BM, KB, NT](x, k, 1, m0, m, k1, min(KB, k - k1), tid, False)
+            rb = _amma_gload[BN, KB, NT](y, k, 1, n0, n, k1, min(KB, k - k1), tid, False)
+        var bea = UInt32(0xFF)
+        var beb = UInt32(0xFF)
+        comptime for q in range(NSG):
+            bea = min(bea, wmin[q])
+            beb = min(beb, wmin[NSG + q])
+        var admitted = exact_ok and chunk == KB and (bea + beb) >= UInt32(GEMM_ADMIT_EXP_SUM)
+        if not admitted:
+            exact_ok = False
+        if admitted:
+            comptime for p8 in range(KB // 8):
+                var af = InlineArray[_AMMA_M64, FM](fill=_AMMA_M64(0))
+                var bf = InlineArray[_AMMA_M64, FN](fill=_AMMA_M64(0))
+                comptime for fm in range(FM):
+                    af[fm] = _amma_load_t(at + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                comptime for fq in range(FN):
+                    bf[fq] = _amma_load_t(bt + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                comptime for fm in range(FM):
+                    comptime for fq in range(FN):
+                        acc[fm * FN + fq] = _amma_mma(af[fm], bf[fq], acc[fm * FN + fq])
+        else:
+            for p in range(chunk):
+                comptime for fm in range(FM):
+                    var av = at[p * AST + (sgm * FM + fm) * 8 + frow]
+                    comptime for fq in range(FN):
+                        comptime for e in range(2):
+                            var bv = bt[((sgn * FN + fq) * 8 + fcol + e) * BST + p]
+                            acc[fm * FN + fq][e] = rtf_mul_add(av, bv, acc[fm * FN + fq][e])
+        barrier()
+    comptime for fm in range(FM):
+        comptime for fq in range(FN):
+            comptime for e in range(2):
+                var i = m0 + (sgm * FM + fm) * 8 + frow
+                var j = n0 + (sgn * FN + fq) * 8 + fcol + e
+                if i < m and j < n:
+                    comptime if is_defined["MOJOLEARN_APPLE_GEMM_NT_MMA_SABOTAGE"]():
+                        z[i * n + j] = ftz(Float32(0.0) + ftz(acc[fm * FN + fq][e])) * Float32(1.0000001)
+                    else:
+                        z[i * n + j] = ftz(Float32(0.0) + ftz(acc[fm * FN + fq][e]))
+
+
 def pinned_gemv_n_kernel(
     z: MutPointer[Float32, MutAnyOrigin],
     x: MutPointer[Float32, MutAnyOrigin],
@@ -224,12 +348,23 @@ def gemm_nt(
                     block_dim=(256, 1, 1),
                 )
             else:
-                ctx.enqueue_function[apple_gemm_nt_tiled_kernel[64, 64, 4, 4]](
-                    z.unsafe_ptr(), x.unsafe_ptr(), y.unsafe_ptr(),
-                    Int32(m), Int32(n), Int32(k),
-                    grid_dim=((m + 63) // 64, (n + 63) // 64, 1),
-                    block_dim=(256, 1, 1),
-                )
+                var mma = False
+                comptime if APPLE_GEMM_NT_MMA:
+                    if m >= 64 and n >= 64:
+                        mma = True
+                        ctx.enqueue_function[apple_gemm_nt_mma_kernel](
+                            z.unsafe_ptr(), x.unsafe_ptr(), y.unsafe_ptr(),
+                            Int32(m), Int32(n), Int32(k),
+                            grid_dim=((m + 63) // 64, (n + 63) // 64, 1),
+                            block_dim=(128, 1, 1),
+                        )
+                if not mma:
+                    ctx.enqueue_function[apple_gemm_nt_tiled_kernel[64, 64, 4, 4]](
+                        z.unsafe_ptr(), x.unsafe_ptr(), y.unsafe_ptr(),
+                        Int32(m), Int32(n), Int32(k),
+                        grid_dim=((m + 63) // 64, (n + 63) // 64, 1),
+                        block_dim=(256, 1, 1),
+                    )
             if n > 4:
                 return
         ctx.enqueue_function[pinned_gemm_nt_kernel](

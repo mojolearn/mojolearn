@@ -148,7 +148,7 @@ from arima.impl.timeSeries.arima_helpers import (
     reduced_polynomial,
 )
 from arima.impl.tsa.arima_common import ARIMAOrder, ARIMAParams
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_log, identical_mul_add
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_log, identical_mul_add
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 
@@ -161,18 +161,19 @@ comptime KALMAN_TPB = 32
 comptime INIT_TPB = 128
 
 
-#: FAST on Apple: the Kalman loop kernel is instantiated at the state
-#: dimension (rd = 1..4) so its loops unroll and the per-series state stays
+#: Apple, FAST and IDENTICAL (IDENTICAL since lane/apple-identical-neural,
+#: 2026-09-26, parameter hashes equal): the Kalman loop kernel is
+#: instantiated at the state dimension (rd = 1..4) so its loops unroll and the per-series state stays
 #: in registers instead of runtime-indexed RD_MAX arrays -- the same
 #: operations in the same order. `-D MOJOLEARN_KALMAN_FAST_RD_OFF` keeps the
 #: runtime-rd kernel.
 comptime KALMAN_FAST_RD = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_KALMAN_FAST_RD_OFF"]()
 )
 
-comptime KALMAN_TIME_SCAN = KALMAN_FAST_RD and not is_defined[
+comptime KALMAN_TIME_SCAN = KALMAN_FAST_RD and GLOBAL_NUMERIC_MODE == NUMERIC_FAST and not is_defined[
     "MOJOLEARN_KALMAN_TIME_SCAN_OFF"
 ]()
 """FAST on Apple: once `P` has converged the filter is a constant linear
