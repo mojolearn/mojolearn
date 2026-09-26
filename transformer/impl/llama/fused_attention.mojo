@@ -4926,6 +4926,206 @@ def fused_bwd_dkdv_tiled_pf_kernel[HD: Int](
     key_lo_in: Int32,
     window_in: Int32,
 ):
+    """The preflushed dk/dv folds: on Apple IDENTICAL the matrix-unit body
+    (DK AND DV ON APPLE'S MATRIX UNIT), everywhere else the tiled body."""
+    comptime if ATTN_BWD_DKDV_AMMA and HD == 64:
+        _dkdv_tiled_pf_amma[HD](dk, dv, corner, y_st, ds_st, q_rope, dctx, b_in, l_in,
+            nh_in, nkv_in, s_in, pos0_in, key_lo_in, window_in)
+    else:
+        _dkdv_tiled_pf_simt[HD](dk, dv, corner, y_st, ds_st, q_rope, dctx, b_in, l_in,
+            nh_in, nkv_in, s_in, pos0_in, key_lo_in, window_in)
+
+
+# ===========================================================================
+# DK AND DV ON APPLE'S MATRIX UNIT (lane/apple-identical-neural, 2026-09-26;
+# `ATTN_BWD_APPLE_MMA`). `fused_bwd_dkdv_tiled_pf_kernel`'s two folds are one
+# chain per (key j, column d) from +0.0 over the kv group's heads ascending
+# and the queries t ascending that see key j: dk += dcell[t][j] * q[t][d],
+# dv += y[t][j] * dctx[t][d], stepped by `_step_preflushed`, which on Apple
+# the matrix chain reproduces bit for bit (THE FORWARD ON APPLE'S MATRIX
+# UNIT). Per 8-query piece of an 8 x 8 output fragment the matrix step runs
+# when all 8 keys see all 8 queries; otherwise the scalar chain over exactly
+# the visible queries (the causal edge). Staging, the -0.0 corner OR and the
+# stores are the original's. HD 64, BJ 64, TT 16.
+# ===========================================================================
+#: Trial only (`-D MOJOLEARN_ATTN_DKDV_AMMA`): bit-identical, but on the M4 at
+#: 12 layers x 1 x 2048 no measurable gain (dk/dv 261 / 251 ms against 266 ms
+#: per step, per-kernel timers). The Apple backward is bound by its
+#: [B, nh, L, S] stash traffic, not by these products.
+comptime ATTN_BWD_DKDV_AMMA = (
+    ATTN_BWD_APPLE_MMA and is_defined["MOJOLEARN_ATTN_DKDV_AMMA"]()
+)
+
+
+@always_inline
+def _dkdv_tiled_pf_amma[HD: Int](
+    dk: MutPointer[Float32, MutAnyOrigin],
+    dv: MutPointer[Float32, MutAnyOrigin],
+    corner: MutPointer[Float32, MutAnyOrigin],
+    y_st: MutPointer[Float32, MutAnyOrigin],
+    ds_st: MutPointer[Float32, MutAnyOrigin],
+    q_rope: MutPointer[Float32, MutAnyOrigin],
+    dctx: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32, l_in: Int32, nh_in: Int32, nkv_in: Int32, s_in: Int32,
+    pos0_in: Int32, key_lo_in: Int32, window_in: Int32,
+):
+    comptime BJ = 64
+    comptime TT = TILED_TT
+    comptime NSG = FUSED_THREADS // 32
+    comptime TST = TT + 4
+    comptime NFJ = BJ // 8
+    comptime NFD = HD // 8
+    comptime FPS = (NFJ * NFD) // NSG
+    comptime assert FPS * NSG == NFJ * NFD and TT % 8 == 0, "amma dkdv: whole fragments"
+    var qT = stack_allocation[HD * TST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var dT = stack_allocation[HD * TST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var ys = stack_allocation[TT * BJ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var dss = stack_allocation[TT * BJ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var b = Int(b_in)
+    var l = Int(l_in)
+    var nh = Int(nh_in)
+    var nkv = Int(nkv_in)
+    var s = Int(s_in)
+    var pos0 = Int(pos0_in)
+    var key_lo = Int(key_lo_in)
+    var window = Int(window_in)
+    var n_rep = nh // nkv
+    var njb = (s + BJ - 1) // BJ
+    var raw = Int(block_idx.x)
+    var jb = raw % njb
+    var rest = raw // njb
+    var kvh = rest % nkv
+    var bb = rest // nkv
+    if bb >= b:
+        return
+    var tid = Int(thread_idx.x)
+    var sg = tid // 32
+    var lane = tid % 32
+    var qd = lane // 4
+    var frow = (qd & 4) + ((lane // 2) % 4)
+    var fcol = (qd & 2) * 2 + (lane % 2) * 2
+    var j0 = jb * BJ
+    var j1 = min(j0 + BJ - 1, s - 1)
+    var q0 = _key_query_range(j0, pos0, key_lo, window, l)
+    var q1 = _key_query_range(j1, pos0, key_lo, window, l)
+    var tb_lo = q0[0] // TT
+    var tb_hi = q1[1] // TT
+    if q1[1] < q0[0]:
+        tb_hi = tb_lo - 1
+    var kvbase = (bb * nkv + kvh) * s * HD
+    var dka = InlineArray[_AMMA_M64, FPS](fill=_AMMA_M64(0))
+    var dva = InlineArray[_AMMA_M64, FPS](fill=_AMMA_M64(0))
+    var hit = False
+    for hh in range(n_rep):
+        var h = kvh * n_rep + hh
+        var hbase = (bb * nh + h) * l
+        for tb in range(tb_lo, tb_hi + 1):
+            var tq0 = tb * TT
+            for i in range(tid, TT * HD, FUSED_THREADS):
+                var r = i // HD
+                var c = i % HD
+                var t = tq0 + r
+                var qv = Float32(0.0)
+                var dcv = Float32(0.0)
+                if t < l:
+                    var off = (bb * l + t) * nh * HD + h * HD + c
+                    qv = ftz(q_rope.unsafe_load(off))
+                    dcv = ftz(dctx.unsafe_load(off))
+                qT[c * TST + r] = qv
+                dT[c * TST + r] = dcv
+            for i in range(tid, TT * BJ, FUSED_THREADS):
+                var r = i // BJ
+                var c = i % BJ
+                var t = tq0 + r
+                var jc = j0 + c
+                var yv = Float32(0.0)
+                var dsv = Float32(0.0)
+                if t < l and jc < s:
+                    var cr = _key_query_range(jc, pos0, key_lo, window, l)
+                    if t >= cr[0] and t <= cr[1]:
+                        var cell = (hbase + t) * s + jc
+                        yv = y_st.unsafe_load(cell)
+                        dsv = ds_st.unsafe_load(cell)
+                ys[i] = yv
+                dss[i] = dsv
+            barrier()
+            comptime for q in range(FPS):
+                var g = sg * FPS + q
+                var fj = g // NFD
+                var fd = g % NFD
+                var jf0 = j0 + fj * 8
+                var jf1 = min(jf0 + 7, s - 1)
+                comptime for k8 in range(TT // 8):
+                    var tp = tq0 + k8 * 8
+                    var full = False
+                    if jf0 < s:
+                        var rf = _key_query_range(jf0, pos0, key_lo, window, l)
+                        var rl = _key_query_range(jf1, pos0, key_lo, window, l)
+                        full = (jf1 == jf0 + 7 and rf[0] <= tp and rl[0] <= tp
+                                and rf[1] >= tp + 7 and rl[1] >= tp + 7)
+                    if full:
+                        # A[r = key][c = query] = cell[t][j] at [t * BJ + j].
+                        var ad = _amma_load_t(dss + (k8 * 8) * BJ + fj * 8, BJ)
+                        var ay = _amma_load_t(ys + (k8 * 8) * BJ + fj * 8, BJ)
+                        # B[r = query][c = column] = x[t][d] at [d * TST + t].
+                        var bq = _amma_load_t(qT + (fd * 8) * TST + k8 * 8, TST)
+                        var bd = _amma_load_t(dT + (fd * 8) * TST + k8 * 8, TST)
+                        dka[q] = _amma_mma(ad, bq, dka[q])
+                        dva[q] = _amma_mma(ay, bd, dva[q])
+                        comptime if is_defined["MOJOLEARN_ATTN_SABOTAGE_AMMA"]():
+                            dva[q] = dva[q] * Float32(1.0000001)
+                    else:
+                        var jc = j0 + fj * 8 + frow
+                        if jc < s:
+                            var cr = _key_query_range(jc, pos0, key_lo, window, l)
+                            comptime for e in range(2):
+                                var d = fd * 8 + fcol + e
+                                for tk in range(8):
+                                    var t = tp + tk
+                                    if t < l and t >= cr[0] and t <= cr[1]:
+                                        var tl = k8 * 8 + tk
+                                        var jl = fj * 8 + frow
+                                        dka[q][e] = _step_preflushed(dss[tl * BJ + jl], qT[d * TST + tl], dka[q][e])
+                                        dva[q][e] = _step_preflushed(ys[tl * BJ + jl], dT[d * TST + tl], dva[q][e])
+            barrier()
+        comptime for q in range(FPS):
+            comptime for e in range(2):
+                if bitcast[DType.uint32](dka[q][e]) == NEG_ZERO_BITS:
+                    hit = True
+                if bitcast[DType.uint32](dva[q][e]) == NEG_ZERO_BITS:
+                    hit = True
+    comptime for q in range(FPS):
+        var g = sg * FPS + q
+        var fj = g // NFD
+        var fd = g % NFD
+        var jc = j0 + fj * 8 + frow
+        if jc < s:
+            if hit:
+                corner.unsafe_store(0, Float32(1.0))
+            comptime for e in range(2):
+                var d = fd * 8 + fcol + e
+                dk.unsafe_store(kvbase + jc * HD + d, dka[q][e])
+                dv.unsafe_store(kvbase + jc * HD + d, dva[q][e])
+
+
+@always_inline
+def _dkdv_tiled_pf_simt[HD: Int](
+    dk: MutPointer[Float32, MutAnyOrigin],
+    dv: MutPointer[Float32, MutAnyOrigin],
+    corner: MutPointer[Float32, MutAnyOrigin],
+    y_st: MutPointer[Float32, MutAnyOrigin],
+    ds_st: MutPointer[Float32, MutAnyOrigin],
+    q_rope: MutPointer[Float32, MutAnyOrigin],
+    dctx: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32,
+    l_in: Int32,
+    nh_in: Int32,
+    nkv_in: Int32,
+    s_in: Int32,
+    pos0_in: Int32,
+    key_lo_in: Int32,
+    window_in: Int32,
+):
     """`fused_bwd_dkdv_tiled_kernel` (clean) with the dk and dv folds
     stepped by `_step_preflushed` (DEVIATION 2533): the staged `dcell` and
     `y` are the stash values the dq and zdot kernels stored (a `_pmul`
@@ -7547,6 +7747,181 @@ def fused_bwd_zdot_estash_amma_kernel[HD: Int, SWZ: Bool = False](
         zdot.unsafe_store(row, zf)
 
 
+# ===========================================================================
+# THE STASH ZDOT ON APPLE'S MATRIX UNIT (lane/apple-identical-neural,
+# 2026-09-26; `ATTN_BWD_APPLE_MMA`). `fused_bwd_zdot_stash_pf_kernel` with 16
+# query rows and 32 keys per block (ownership only) and BOTH of its per-cell
+# chains on the matrix unit: the score dot q . k and the dy dot dctx . v,
+# each over p = 0 .. 63 from +0.0 with `_step_preflushed`, which on Apple the
+# matrix chain reproduces bit for bit (THE FORWARD ON APPLE'S MATRIX UNIT).
+# The score -> exp -> y lines, the two stashes, the serial z fold and the
+# -0.0 corner are the original's. HD 64, the clean instantiation only.
+# ===========================================================================
+#: Trial only (`-D MOJOLEARN_ATTN_STASH_ZDOT_AMMA`): bit-identical, but on the
+#: M4 at 12 layers x 1 x 2048 it measured SLOWER than the SIMT kernel it
+#: replaces (2119 ms against 1808-1860 ms of zdot per step, per-kernel
+#: timers): that kernel's time is not in its dot products.
+comptime ATTN_BWD_STASH_ZDOT_AMMA = (
+    ATTN_BWD_APPLE_MMA and is_defined["MOJOLEARN_ATTN_STASH_ZDOT_AMMA"]()
+)
+
+
+def fused_bwd_zdot_stash_amma_kernel[HD: Int](
+    zdot: MutPointer[Float32, MutAnyOrigin],
+    corner: MutPointer[Float32, MutAnyOrigin],
+    y_st: MutPointer[Float32, MutAnyOrigin],
+    dy_st: MutPointer[Float32, MutAnyOrigin],
+    q_rope: MutPointer[Float32, MutAnyOrigin],
+    dctx: MutPointer[Float32, MutAnyOrigin],
+    k_cache: MutPointer[Float32, MutAnyOrigin],
+    v_cache: MutPointer[Float32, MutAnyOrigin],
+    amax: MutPointer[Float32, MutAnyOrigin],
+    denom: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32,
+    l_in: Int32,
+    nh_in: Int32,
+    nkv_in: Int32,
+    s_in: Int32,
+    pos0_in: Int32,
+    key_lo_in: Int32,
+    window_in: Int32,
+    scale_in: Float32,
+):
+    """See THE STASH ZDOT ON APPLE'S MATRIX UNIT."""
+    comptime assert HD == 64, "amma stash zdot: HD 64"
+    comptime TQ = 16
+    comptime BK = 32
+    comptime NSG = FUSED_THREADS // 32
+    comptime RST = TQ + 4
+    comptime KST = HD + 4
+    comptime NFK = BK // 8
+    comptime assert (TQ // 8) * NFK == NSG, "amma stash zdot: one fragment per simdgroup"
+    var qT = stack_allocation[HD * RST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var dT = stack_allocation[HD * RST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var kv = stack_allocation[BK * KST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var ts = stack_allocation[TQ * 33, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var tdy = stack_allocation[TQ * 33, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var mrow = stack_allocation[TQ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var drow = stack_allocation[TQ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var b = Int(b_in)
+    var l = Int(l_in)
+    var nh = Int(nh_in)
+    var nkv = Int(nkv_in)
+    var s = Int(s_in)
+    var pos0 = Int(pos0_in)
+    var key_lo = Int(key_lo_in)
+    var window = Int(window_in)
+    var n_rep = nh // nkv
+    var ntb = (l + TQ - 1) // TQ
+    var raw = Int(block_idx.x)
+    var tb = raw % ntb
+    var rest = raw // ntb
+    var h = rest % nh
+    var bb = rest // nh
+    if bb >= b:
+        return
+    var kvh = h // n_rep
+    var tid = Int(thread_idx.x)
+    var sg = tid // 32
+    var lane = tid % 32
+    var qd = lane // 4
+    var frow = (qd & 4) + ((lane // 2) % 4)
+    var fcol = (qd & 2) * 2 + (lane % 2) * 2
+    var fr = sg // NFK
+    var fk = sg % NFK
+    var t0 = tb * TQ
+    var t1 = min(t0 + TQ - 1, l - 1)
+    var r0 = _row_range(t0, pos0, key_lo, window, s)
+    var r1 = _row_range(t1, pos0, key_lo, window, s)
+    var kb_lo = r0[0] // BK
+    var kb_hi = r1[1] // BK
+    var kvbase = (bb * nkv + kvh) * s * HD
+    for i in range(tid, TQ * HD, FUSED_THREADS):
+        var r = i // HD
+        var p = i % HD
+        var tt = min(t0 + r, l - 1)
+        var rb = (bb * l + tt) * nh * HD + h * HD + p
+        qT[p * RST + r] = ftz(q_rope.unsafe_load(rb))
+        dT[p * RST + r] = ftz(dctx.unsafe_load(rb))
+    if tid < TQ:
+        var tt = min(t0 + tid, l - 1)
+        var row = (bb * nh + h) * l + tt
+        mrow[tid] = ftz(amax.unsafe_load(row))
+        drow[tid] = ftz(denom.unsafe_load(row))
+    var z = Float32(0.0)
+    for kb in range(kb_lo, kb_hi + 1):
+        for i in range(tid, BK * HD, FUSED_THREADS):
+            var r = i // HD
+            var p = i % HD
+            var j = kb * BK + r
+            var x = Float32(0.0)
+            if j < s:
+                x = ftz(k_cache.unsafe_load(kvbase + j * HD + p))
+            kv[r * KST + p] = x
+        barrier()
+        var acc = _AMMA_M64(0)
+        comptime for p8 in range(HD // 8):
+            var af = _amma_load_t(qT + (8 * p8) * RST + fr * 8, RST)
+            var bf = _amma_load_t(kv + (fk * 8) * KST + 8 * p8, KST)
+            acc = _amma_mma(af, bf, acc)
+        comptime for e in range(2):
+            ts[(fr * 8 + frow) * 33 + fk * 8 + fcol + e] = acc[e]
+        barrier()
+        for i in range(tid, BK * HD, FUSED_THREADS):
+            var r = i // HD
+            var p = i % HD
+            var j = kb * BK + r
+            var x = Float32(0.0)
+            if j < s:
+                x = ftz(v_cache.unsafe_load(kvbase + j * HD + p))
+            kv[r * KST + p] = x
+        barrier()
+        var accd = _AMMA_M64(0)
+        comptime for p8 in range(HD // 8):
+            var af = _amma_load_t(dT + (8 * p8) * RST + fr * 8, RST)
+            var bf = _amma_load_t(kv + (fk * 8) * KST + 8 * p8, KST)
+            accd = _amma_mma(af, bf, accd)
+        comptime for e in range(2):
+            comptime if is_defined["MOJOLEARN_ATTN_SABOTAGE_AMMA"]():
+                tdy[(fr * 8 + frow) * 33 + fk * 8 + fcol + e] = accd[e] * Float32(1.0000001)
+            else:
+                tdy[(fr * 8 + frow) * 33 + fk * 8 + fcol + e] = accd[e]
+        barrier()
+        for i in range(tid, TQ * BK, FUSED_THREADS):
+            var r = i // BK
+            var jj = i % BK
+            var t = t0 + r
+            var j = kb * BK + jj
+            if t < l:
+                var rr = _row_range(t, pos0, key_lo, window, s)
+                if j >= rr[0] and j <= rr[1]:
+                    var stbase = ((bb * nh + h) * l + t) * s
+                    var sc = _pmul(ts[r * 33 + jj], scale_in)
+                    var masked = ftz(sc + Float32(0.0))
+                    var e = ftz(identical_exp(ftz(ftz(masked) - mrow[r])))
+                    var yv = ftz(identical_div(ftz(e), drow[r]))
+                    ts[r * 33 + jj] = yv
+                    y_st.unsafe_store(stbase + j, yv)
+                    var dyv = ftz(tdy[r * 33 + jj])
+                    tdy[r * 33 + jj] = dyv
+                    dy_st.unsafe_store(stbase + j, dyv)
+        barrier()
+        if tid < TQ and t0 + tid < l:
+            var rr = _row_range(t0 + tid, pos0, key_lo, window, s)
+            for jj in range(BK):
+                var j = kb * BK + jj
+                if j >= rr[0] and j <= rr[1]:
+                    z = _step_preflushed(tdy[tid * 33 + jj], ts[tid * 33 + jj], z)
+        barrier()
+    if tid < TQ and t0 + tid < l:
+        var rr = _row_range(t0 + tid, pos0, key_lo, window, s)
+        var row = (bb * nh + h) * l + t0 + tid
+        var zf = ftz(z)
+        if bitcast[DType.uint32](zf) == NEG_ZERO_BITS and rr[1] < s - 1:
+            corner.unsafe_store(0, Float32(1.0))
+        zdot.unsafe_store(row, zf)
+
+
 def _launch_fwd_r2[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool, SWZ: Bool = False](
     ctx: DeviceContext,
     on: Bool,
@@ -7701,17 +8076,29 @@ def _launch_bwd_stash_tiled_pf[HD: Int, ZSAB: Bool](
     step_count_sync()
     ctx.synchronize()
     _attn_tick(ctx, on, tk, "bwd_scratch_alloc")
-    comptime zk = fused_bwd_zdot_stash_pf_kernel[HD, TQ, ZSAB]
     step_count_launch()
-    ctx.enqueue_function[zk](
-        zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
-        dy_st.unsafe_ptr(), q_rope.unsafe_ptr(), dctx.unsafe_ptr(),
-        k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), amax.unsafe_ptr(),
-        denom.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
-        Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale,
-        grid_dim=(b * nh * ((l + TQ - 1) // TQ), 1, 1),
-        block_dim=(FUSED_THREADS, 1, 1),
-    )
+    comptime if ATTN_BWD_STASH_ZDOT_AMMA and HD == 64 and not ZSAB:
+        comptime zka = fused_bwd_zdot_stash_amma_kernel[HD]
+        ctx.enqueue_function[zka](
+            zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
+            dy_st.unsafe_ptr(), q_rope.unsafe_ptr(), dctx.unsafe_ptr(),
+            k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), amax.unsafe_ptr(),
+            denom.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
+            Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale,
+            grid_dim=(b * nh * ((l + 15) // 16), 1, 1),
+            block_dim=(FUSED_THREADS, 1, 1),
+        )
+    else:
+        comptime zk = fused_bwd_zdot_stash_pf_kernel[HD, TQ, ZSAB]
+        ctx.enqueue_function[zk](
+            zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
+            dy_st.unsafe_ptr(), q_rope.unsafe_ptr(), dctx.unsafe_ptr(),
+            k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), amax.unsafe_ptr(),
+            denom.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
+            Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale,
+            grid_dim=(b * nh * ((l + TQ - 1) // TQ), 1, 1),
+            block_dim=(FUSED_THREADS, 1, 1),
+        )
     step_count_sync()
     ctx.synchronize()
     _attn_tick(ctx, on, tk, "bwd_zdot_stash_pf")
@@ -7869,16 +8256,28 @@ def _launch_bwd_stash_zdq_pf[HD: Int](
                     " compiled on a -D MOJOLEARN_ATTN_ARM_TRIAL=1 build only"
                 )
         else:
-            comptime zkc = fused_bwd_zdot_stash_pf_kernel[HD, TQ, False]
-            step_count_launch()
-            ctx.enqueue_function[zkc](
-                zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
-                dy_st.unsafe_ptr(), q_rope.unsafe_ptr(), dctx.unsafe_ptr(),
-                k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), amax.unsafe_ptr(),
-                denom.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
-                Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale,
-                grid_dim=(z_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
-            )
+            comptime if ATTN_BWD_STASH_ZDOT_AMMA and HD == 64:
+                comptime zka = fused_bwd_zdot_stash_amma_kernel[HD]
+                step_count_launch()
+                ctx.enqueue_function[zka](
+                    zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
+                    dy_st.unsafe_ptr(), q_rope.unsafe_ptr(), dctx.unsafe_ptr(),
+                    k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), amax.unsafe_ptr(),
+                    denom.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
+                    Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale,
+                    grid_dim=(b * nh * ((l + 15) // 16), 1, 1), block_dim=(FUSED_THREADS, 1, 1),
+                )
+            else:
+                comptime zkc = fused_bwd_zdot_stash_pf_kernel[HD, TQ, False]
+                step_count_launch()
+                ctx.enqueue_function[zkc](
+                    zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
+                    dy_st.unsafe_ptr(), q_rope.unsafe_ptr(), dctx.unsafe_ptr(),
+                    k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), amax.unsafe_ptr(),
+                    denom.unsafe_ptr(), Int32(b), Int32(l), Int32(nh), Int32(nkv),
+                    Int32(s), Int32(pos0), Int32(key_lo), Int32(window), scale,
+                    grid_dim=(z_blocks, 1, 1), block_dim=(FUSED_THREADS, 1, 1),
+                )
     step_count_sync()
     ctx.synchronize()
     if zsched == ATTN_ARM_BWD_ZLAG:
