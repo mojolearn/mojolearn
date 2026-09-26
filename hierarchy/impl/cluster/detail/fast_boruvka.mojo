@@ -29,9 +29,11 @@ from std.builtin.sort import sort
 
 comptime FB_TPB = 128
 comptime FB_TILE = 64
+comptime FB_PPT = 4
+"""Listed points per thread at `n_cols <= 16` (register blocking)."""
 
 
-def fb_nearest_other_kernel[DMAX: Int, MR: Bool = False](
+def fb_nearest_other_kernel[DMAX: Int, MR: Bool = False, PPT: Int = 1](
     x: MutPointer[Float32, MutAnyOrigin],
     core: MutPointer[Float32, MutAnyOrigin],
     inv_alpha: Float32,
@@ -43,20 +45,27 @@ def fb_nearest_other_kernel[DMAX: Int, MR: Bool = False](
     todo: MutPointer[Int32, MutAnyOrigin],
     n_todo_in: Int32,
 ):
+    """Each thread serves `PPT` listed points, so every value read from the
+    shared tile feeds `PPT` distance updates (register blocking)."""
     var m = Int(m_in)
     var dim = Int(d_in)
-    var tix = Int(block_idx.x) * FB_TPB + Int(thread_idx.x)
-    var live = tix < Int(n_todo_in)
-    var i = 0
-    if live:
-        i = Int(todo[tix])
-    var xi = InlineArray[Float32, DMAX](fill=0.0)
-    var ci = Int32(-1)
-    if live:
-        ci = comp[i]
-        comptime for t in range(DMAX):
-            if t < dim:
-                xi[t] = x[i * dim + t]
+    var base_t = (Int(block_idx.x) * FB_TPB + Int(thread_idx.x)) * PPT
+    var live = InlineArray[Bool, PPT](fill=False)
+    var ii = InlineArray[Int, PPT](fill=0)
+    var ci = InlineArray[Int32, PPT](fill=Int32(-1))
+    var cri = InlineArray[Float32, PPT](fill=0.0)
+    var xi = InlineArray[Float32, PPT * DMAX](fill=0.0)
+    comptime for pp in range(PPT):
+        if base_t + pp < Int(n_todo_in):
+            live[pp] = True
+            var i = Int(todo[base_t + pp])
+            ii[pp] = i
+            ci[pp] = comp[i]
+            comptime if MR:
+                cri[pp] = core[i]
+            comptime for t in range(DMAX):
+                if t < dim:
+                    xi[pp * DMAX + t] = x[i * dim + t]
     var tile = stack_allocation[
         FB_TILE * DMAX, Float32, address_space=AddressSpace.SHARED
     ]()
@@ -66,13 +75,9 @@ def fb_nearest_other_kernel[DMAX: Int, MR: Bool = False](
     var tcore = stack_allocation[
         FB_TILE, Float32, address_space=AddressSpace.SHARED
     ]()
-    var cri = Float32(0)
-    comptime if MR:
-        if live:
-            cri = core[i]
-    var bd = Float32.MAX
-    var bj = Int32(-1)
-    var bad = False
+    var bd = InlineArray[Float32, PPT](fill=Float32.MAX)
+    var bj = InlineArray[Int32, PPT](fill=Int32(-1))
+    var bad = InlineArray[Bool, PPT](fill=False)
     var j0 = 0
     while j0 < m:
         var e = Int(thread_idx.x)
@@ -86,34 +91,39 @@ def fb_nearest_other_kernel[DMAX: Int, MR: Bool = False](
             e += FB_TPB
         if Int(thread_idx.x) < FB_TILE:
             var jj = j0 + Int(thread_idx.x)
-            tcomp[Int(thread_idx.x)] = comp[jj] if jj < m else ci
+            tcomp[Int(thread_idx.x)] = comp[jj] if jj < m else Int32(-1)
             comptime if MR:
                 tcore[Int(thread_idx.x)] = core[jj] if jj < m else Float32(0)
         barrier()
-        if live:
-            var jn = min(FB_TILE, m - j0)
-            for u in range(jn):
-                if tcomp[u] != ci:
-                    var dd = Float32(0)
-                    comptime for t in range(DMAX):
-                        var df = xi[t] - tile[u * DMAX + t]
-                        dd += df * df
+        var jn = min(FB_TILE, m - j0)
+        for u in range(jn):
+            var cu = tcomp[u]
+            var dd = SIMD[DType.float32, PPT](0)
+            comptime for t in range(DMAX):
+                var tv = tile[u * DMAX + t]
+                comptime for pp in range(PPT):
+                    var df = xi[pp * DMAX + t] - tv
+                    dd[pp] += df * df
+            comptime for pp in range(PPT):
+                if live[pp] and cu != ci[pp]:
+                    var v = dd[pp]
                     comptime if MR:
                         # Mutual reachability (reachability.cuh:222-255):
                         # max(core_j, max(core_i, (1/alpha) * d)).
-                        dd = max(tcore[u], max(cri, inv_alpha * sqrt(dd)))
+                        v = max(tcore[u], max(cri[pp], inv_alpha * sqrt(v)))
                     # Exponent bits, not a float compare: FAST arithmetic
                     # may assume no inf / NaN and fold the compare away.
-                    if (bitcast[DType.uint32](dd) & 0x7F800000) == 0x7F800000:
-                        bad = True
-                    elif dd < bd:
-                        bd = dd
-                        bj = Int32(j0 + u)
+                    if (bitcast[DType.uint32](v) & 0x7F800000) == 0x7F800000:
+                        bad[pp] = True
+                    elif v < bd[pp]:
+                        bd[pp] = v
+                        bj[pp] = Int32(j0 + u)
         barrier()
         j0 += FB_TILE
-    if live:
-        best_d[i] = bd
-        best_j[i] = Int32(-2) if bad else bj
+    comptime for pp in range(PPT):
+        if live[pp]:
+            best_d[ii[pp]] = bd[pp]
+            best_j[ii[pp]] = Int32(-2) if bad[pp] else bj[pp]
 
 
 def _find(mut parent: List[Int32], a: Int) -> Int:
@@ -194,22 +204,29 @@ def fast_euclidean_mst(
                 src_ptr=todo_h.unsafe_ptr(),
             )
         comptime for DM in [8, 16, 32, 64]:
+            # The reachability arm keeps one point per thread (its per-pair
+            # sqrt, not the tile reads, dominates: HDBSCAN taxi 100k 9.6 s
+            # at 1 vs 10.2 s at 4).
+            comptime P = FB_PPT if DM <= 16 else 1
+            var gridp = (n_todo + FB_TPB * P - 1) // (FB_TPB * P)
+            if mutual_reach:
+                gridp = grid
             if n_todo > 0 and n <= DM and (DM == 8 or n > DM // 2):
                 if mutual_reach:
-                    ctx.enqueue_function[fb_nearest_other_kernel[DM, True]](
+                    ctx.enqueue_function[fb_nearest_other_kernel[DM, True, 1]](
                         x.unsafe_ptr(), core_ptr, inv_alpha,
                         comp_d.unsafe_ptr(), bd_d.unsafe_ptr(),
                         bj_d.unsafe_ptr(), Int32(m), Int32(n),
                         todo_d.unsafe_ptr(), Int32(n_todo),
-                        grid_dim=grid, block_dim=FB_TPB,
+                        grid_dim=gridp, block_dim=FB_TPB,
                     )
                 else:
-                    ctx.enqueue_function[fb_nearest_other_kernel[DM]](
+                    ctx.enqueue_function[fb_nearest_other_kernel[DM, False, P]](
                         x.unsafe_ptr(), core_ptr, inv_alpha,
                         comp_d.unsafe_ptr(), bd_d.unsafe_ptr(),
                         bj_d.unsafe_ptr(), Int32(m), Int32(n),
                         todo_d.unsafe_ptr(), Int32(n_todo),
-                        grid_dim=grid, block_dim=FB_TPB,
+                        grid_dim=gridp, block_dim=FB_TPB,
                     )
         ctx.enqueue_copy(dst_ptr=bd_h.unsafe_ptr(), src_buf=bd_d)
         ctx.enqueue_copy(dst_ptr=bj_h.unsafe_ptr(), src_buf=bj_d)
