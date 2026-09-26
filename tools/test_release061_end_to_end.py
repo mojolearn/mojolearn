@@ -102,7 +102,7 @@ ARCHES = None
 
 
 def split_fixture(wheel, version):
-    """The split set (core, mojolearn_cuda, mojolearn_rocm as the payload's sets
+    """The split set (core, mojolearn_nvidia, mojolearn_amd as the payload's sets
     require) the fixture's combined wheel is a partition of, with the
     .dist-info contents tools/wheel_api_audit.py split_audit requires. The
     combined wheel is removed."""
@@ -121,10 +121,9 @@ def split_fixture(wheel, version):
     for vendor, files in sorted(parts.items(), key=lambda kv: kv[0] or ''):
         if vendor is None:
             wdist, role, dist_name = dist, plugins.CORE_PROFILE, 'mojolearn'
+            # the core declares no extras and requires BOTH plugins exactly
             meta = ['Metadata-Version: 2.4', 'Name: mojolearn', 'Version: ' + version]
-            for row in plugins.PLUGINS.values():
-                meta += ['Provides-Extra: ' + row['extra'],
-                         f'Requires-Dist: {row["distribution"]}=={version}; extra == "{row["extra"]}"']
+            meta += ['Requires-Dist: ' + req for req in plugins.core_requirements(version)]
             files[wdist + plugins.CORE_MARKER] = json.dumps(plugins.core_marker(version)).encode()
             name = 'mojolearn-' + version + '-' + tag + '.whl'
         else:
@@ -368,7 +367,7 @@ class SplitSet(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             wheels, qualification = fixture(root, split=True)
-            self.assertEqual(sorted(w.name.split('-')[0] for w in wheels), ['mojolearn', 'mojolearn_cuda', 'mojolearn_rocm'])
+            self.assertEqual(sorted(w.name.split('-')[0] for w in wheels), ['mojolearn', 'mojolearn_amd', 'mojolearn_nvidia'])
             result, ordered = self.check(wheels, qualification, root)
             self.assertEqual(result['status'], 'PASSED')
             self.assertEqual(result['assembly_profile'], gate.SPLIT_PROFILE)
@@ -397,9 +396,9 @@ class SplitSet(unittest.TestCase):
                 root = Path(tmp)
                 wheels, qualification = fixture(root, split=True)
                 if defect == 'missing_plugin':
-                    wheels = [w for w in wheels if not w.name.startswith('mojolearn_rocm')]
+                    wheels = [w for w in wheels if not w.name.startswith('mojolearn_amd')]
                 elif defect == 'changed_plugin':
-                    with zipfile.ZipFile(next(w for w in wheels if w.name.startswith('mojolearn_cuda')), 'a') as z:
+                    with zipfile.ZipFile(next(w for w in wheels if w.name.startswith('mojolearn_nvidia')), 'a') as z:
                         z.comment = b'changed final artifact'
                 else:
                     # a qualification that recorded one wheel's digest, not the set's

@@ -20,7 +20,7 @@ point); a failed macOS build or smoke does not. The finish line and the record
 cover whichever platforms are published, and run again when another is. The
 run ends with both outcomes and exits non-zero if either did not publish. A
 pipeline is PIPELINES' named builds, checks and one publish, so a platform can
-later split into more (core-linux, cuda, rocm) without a new scheduler.
+later split into more (core-linux, nvidia, amd) without a new scheduler.
 
 THE SHIPPED SOURCE AND THE RELEASE TOOLING ARE TWO COMMITS. freeze-commit pins
 the source commit in state.json and it never moves because main moved:
@@ -104,19 +104,26 @@ Nothing is published without `--publish none|testpypi|pypi`; without it both
 pipelines stop at their publish step and say so.
 
 THE SPLIT LINUX PACKAGES (--split-linux, or MOJOLEARN_RELEASE_SPLIT_LINUX=1;
-OFF by default until the PyPI projects mojolearn-cuda and mojolearn-rocm are
+OFF by default until the PyPI projects mojolearn-nvidia and mojolearn-amd are
 registered with their trusted publishers, docs/RELEASE_CHECKLIST.md 3b). The
 Linux pipeline then becomes three (python/mojolearn/gpu_plugins.py):
   core-linux  linux-builds -> linux-wait -> linux-assemble -> linux-pack
               (--profile release-split: the core and both plugins, each
-              audited and stripped) -> linux-joint-diff -> publish-core-linux
-  cuda        gpu-column-nvidia (core + mojolearn-cuda installed together) -> publish-cuda
-  rocm        gpu-column-amd (core + mojolearn-rocm, the expanded smoke too) -> publish-rocm
-Each column gates its own plugin; linux-joint-diff waits for both columns to
-settle, needs at least one PASSED and diffs every PASSED column with the Apple
-column (any DIVERGENT cell stops all three); the core publishes on it (the
-receipt of whichever vendor passed, NVIDIA first), and a plugin publishes only
-after the core did and its own column passed. Each package is its own GitHub
+              audited and stripped) -> linux-joint-diff
+              -> publish-core-linux (LAST, after publish-nvidia AND publish-amd)
+  nvidia      gpu-column-nvidia (core + both plugins installed together, as pip does) -> publish-nvidia
+  amd         gpu-column-amd (core + both plugins, the expanded smoke too) -> publish-amd
+`pip install mojolearn` WORKS FOR EVERYONE (Andrew, 2026-09-26): the Linux
+core requires BOTH plugins at its own version exactly, so pip can resolve
+`mojolearn==<v>` only once mojolearn-nvidia and mojolearn-amd <v> are both on
+the index. The PLUGINS PUBLISH FIRST and the CORE LAST. Each column gates its
+own plugin; linux-joint-diff waits for both columns to settle, needs at least
+one PASSED and diffs every PASSED column with the Apple column (any DIVERGENT
+cell stops all three); a plugin publishes on the joint diff and its own
+column; the core publishes only after BOTH plugins did, so only when both
+vendors' columns passed (on the NVIDIA receipt). A failed vendor holds the
+core; the other plugin may still upload, harmless and unresolvable alone
+(it requires the core). Each package is its own GitHub
 release and workflow dispatch (the workflow uploads it to its own PyPI
 project); column and ledger entries stay keyed to one wheel's sha256 (the
 plugin's, with the core's recorded beside it).
@@ -688,7 +695,7 @@ STEP_TABLE = [
 AFTER = {"finish-line": ["publish-linux", "publish-macos"]}
 #: A PIPELINE: named builds, named checks, one publish, and the wheel it ships.
 #: Generic on purpose: the Linux pipeline can become per-package pipelines
-#: (core-linux, cuda, rocm), each with its own builds, checks and publish.
+#: (core-linux, nvidia, amd), each with its own builds, checks and publish.
 PIPELINES = {
     "macos": dict(builds=["macos-build"], checks=["macos-smoke", "release-check"], publish="publish-macos",
                   platform="macos"),
@@ -716,29 +723,31 @@ SPLIT_STEP_TABLE = [
     ("linux-wait", "core-linux", ["linux-builds"], None),
     ("linux-assemble", "core-linux", ["linux-wait"], None),
     ("linux-pack", "core-linux", ["linux-assemble"], "mac"),
-    ("gpu-column-nvidia", "cuda", ["linux-pack", "release-check"], None),
-    ("gpu-column-amd", "rocm", ["linux-pack", "release-check"], None),
+    ("gpu-column-nvidia", "nvidia", ["linux-pack", "release-check"], None),
+    ("gpu-column-amd", "amd", ["linux-pack", "release-check"], None),
     ("linux-joint-diff", "core-linux", ["linux-pack", "release-check"], None),
-    ("publish-core-linux", "core-linux", ["linux-joint-diff"], "dispatch"),
-    ("publish-cuda", "cuda", ["publish-core-linux", "gpu-column-nvidia", "linux-joint-diff"], "dispatch"),
-    ("publish-rocm", "rocm", ["publish-core-linux", "gpu-column-amd", "linux-joint-diff"], "dispatch"),
+    # THE PLUGINS FIRST, THE CORE LAST: the core requires both plugins at its
+    # version, so it is resolvable only once both are on the index
+    ("publish-nvidia", "nvidia", ["gpu-column-nvidia", "linux-joint-diff"], "dispatch"),
+    ("publish-amd", "amd", ["gpu-column-amd", "linux-joint-diff"], "dispatch"),
+    ("publish-core-linux", "core-linux", ["linux-joint-diff", "publish-nvidia", "publish-amd"], "dispatch"),
     ("publish-macos", "macos", ["macos-smoke", "release-check"], "dispatch"),
     ("finish-line", "finish", ["freeze-commit"], None),
     ("record", "finish", ["finish-line"], None),
 ]
 SPLIT_AFTER = {"linux-joint-diff": ["gpu-column-nvidia", "gpu-column-amd"],
-               "finish-line": ["publish-core-linux", "publish-cuda", "publish-rocm", "publish-macos"]}
+               "finish-line": ["publish-core-linux", "publish-nvidia", "publish-amd", "publish-macos"]}
 #: platform = what published_platforms() says: `linux` is the core's.
 SPLIT_PIPELINES = {
     "macos": PIPELINES["macos"],
     "core-linux": dict(builds=["linux-builds", "linux-wait", "linux-assemble", "linux-pack"],
                        checks=["linux-joint-diff"], publish="publish-core-linux", platform="linux"),
-    "cuda": dict(builds=[], checks=["gpu-column-nvidia"], publish="publish-cuda", platform="cuda"),
-    "rocm": dict(builds=[], checks=["gpu-column-amd"], publish="publish-rocm", platform="rocm"),
+    "nvidia": dict(builds=[], checks=["gpu-column-nvidia"], publish="publish-nvidia", platform="nvidia"),
+    "amd": dict(builds=[], checks=["gpu-column-amd"], publish="publish-amd", platform="amd"),
 }
 #: split package -> (PyPI project, wheel-name prefix); python/mojolearn/gpu_plugins.py
-SPLIT_PACKAGES = {"linux": ("mojolearn", "mojolearn"), "cuda": ("mojolearn-cuda", "mojolearn_cuda"),
-                  "rocm": ("mojolearn-rocm", "mojolearn_rocm")}
+SPLIT_PACKAGES = {"linux": ("mojolearn", "mojolearn"), "nvidia": ("mojolearn-nvidia", "mojolearn_nvidia"),
+                  "amd": ("mojolearn-amd", "mojolearn_amd")}
 #: the environment switch; the command-line flags override it
 SPLIT_LINUX_ENV = "MOJOLEARN_RELEASE_SPLIT_LINUX"
 
@@ -808,7 +817,7 @@ class Release:
     #: (finish-line and record: when the platforms they covered are still the
     #: published ones).
     SKIP_IF_RECORDED = {"rehearsal", "publish-linux", "publish-macos", "finish-line", "record",
-                        "publish-core-linux", "publish-cuda", "publish-rocm"}
+                        "publish-core-linux", "publish-nvidia", "publish-amd"}
 
     def __init__(self, args, runner=None):
         self.args = args
@@ -1148,8 +1157,8 @@ class Release:
             return (f"source pinned at {frozen}" + (f"; tooling runs from HEAD {head[:12]}" if head != frozen else "")
                     + ("" if head == frozen else " (--refreeze moves the source to HEAD)"))
         if frozen and head != frozen and any(self.recorded(s) for s in ("publish-linux", "publish-macos",
-                                                                        "publish-core-linux", "publish-cuda",
-                                                                        "publish-rocm")):
+                                                                        "publish-core-linux", "publish-nvidia",
+                                                                        "publish-amd")):
             raise StepFailed(f"--refreeze refused: a wheel of {frozen[:12]} is already published; "
                              "a new source state needs a new version")
         allowed = set(release_files()) | set(docs_fact_files())
@@ -1255,7 +1264,7 @@ class Release:
             info = prev.get(platform) or {}
             return Path("<published %s wheel %s>" % (platform, info.get("wheel", "?")))
         whl = release_reuse.published_wheel(prev, platform, self.evidence)
-        plugins = [k for k in ("cuda", "rocm") if prev.get(k)] if platform == "linux" else []
+        plugins = [k for k in ("nvidia", "amd") if prev.get(k)] if platform == "linux" else []
         if plugins:
             # a split release: its Linux bytes are the core and its plugins
             wheels = [whl] + [release_reuse.published_wheel(prev, k, self.evidence) for k in plugins]
@@ -1587,7 +1596,7 @@ class Release:
         return found[-1] if found else None
 
     def split_final(self, package):
-        """A final split wheel: package 'linux' (the core), 'cuda' or 'rocm'."""
+        """A final split wheel: package 'linux' (the core), 'nvidia' or 'amd'."""
         prefix = SPLIT_PACKAGES[package][1]
         found = sorted((self.rel / "linux" / "final").glob(f"{prefix}-*-manylinux*.whl"))
         return found[-1] if found else None
@@ -1676,7 +1685,7 @@ class Release:
             return self.step_linux_pack_split()
         final = self.linux_final()
         # a split core in final/ is not the combined wheel
-        if final and wheel_commit(final) == self.commit and not (self.split_final("cuda") or self.split_final("rocm")):
+        if final and wheel_commit(final) == self.commit and not (self.split_final("nvidia") or self.split_final("amd")):
             return "have " + final.name
         if self.assembly_needed() and not self.dry and not self.assembled_ok():
             raise StepFailed("the assembled sets are not there or not this plan's; run linux-assemble")
@@ -1787,31 +1796,34 @@ class Release:
     def nvidia_column_ok(self):
         final, out = self.linux_final(), self.rel / "smoke-linux"
         return (bool(final) and smoke_passed(out / "results.json", final) and self.gpu_column_ok(out, "cuda")
-                and self.plugin_installed(out / "results.json", "cuda"))
+                and self.plugin_installed(out / "results.json", "nvidia"))
 
     def amd_column_ok(self):
         out = self.rel / "column-amd"
         if self.split:
-            # the rocm plugin publishes on its own receipt: the smoke runs on hip too
+            # the amd plugin publishes on its own receipt: the smoke runs on hip too
             final = self.linux_final()
             return (bool(final) and smoke_passed(out / "results.json", final) and self.gpu_column_ok(out, "hip")
-                    and self.plugin_installed(out / "results.json", "rocm"))
+                    and self.plugin_installed(out / "results.json", "amd"))
         return bool(self.linux_final()) and self.gpu_column_ok(out, "hip")
 
     def plugin_installed(self, results, package):
         """With --split-linux: the receipt installed exactly this release's
-        final plugin of `package` beside the core. True for the combined layout."""
+        final plugins beside the core, BOTH of them (the core requires both,
+        so the box installs what `pip install mojolearn` installs), among them
+        `package`'s. True for the combined layout."""
         if not self.split:
             return True
-        plugin = self.split_final(package)
-        return bool(plugin) and receipt_plugins(results) == {plugin.name: sha256(plugin)}
+        plugins = {k: self.split_final(k) for k in ("nvidia", "amd")}
+        return (all(plugins.values()) and bool(plugins[package])
+                and receipt_plugins(results) == {w.name: sha256(w) for w in plugins.values()})
 
     def column_wheel(self, vendor):
         """The wheel a column's results are keyed to (ledger, reuse): the
         combined wheel, or with --split-linux the plugin it installed."""
         if not self.split:
             return self.linux_final()
-        return self.split_final("cuda" if vendor == "cuda" else "rocm")
+        return self.split_final("nvidia" if vendor == "cuda" else "amd")
 
     def column_specs(self):
         return [("nvidia", "cuda", self.nvidia_column_ok, self.rel / "smoke-linux"),
@@ -1897,14 +1909,14 @@ class Release:
                 leg = ColumnLeg("nvidia", "cuda",
                                 ["bash", "tools/release_wheel_smoke.sh", final, "--expected-source-commit", self.commit,
                                  "--out", str(out), "--rent", "--column", str(sel), *refs,
-                                 *self.plugin_args("cuda"), "--gpu", walk[at]], work, out, ok)
+                                 *self.plugin_args("nvidia"), "--gpu", walk[at]], work, out, ok)
                 leg.walk, leg.at = walk, at
             else:
                 leg = ColumnLeg("amd", "hip",
                                 ["bash", "tools/release_wheel_smoke.sh", final, "--expected-source-commit",
                                  self.commit, "--out", str(out), "--rent", "--vendor", "hip",
                                  "--provider", self.args.amd_provider,
-                                 "--column", str(sel), *refs, *self.plugin_args("rocm")],
+                                 "--column", str(sel), *refs, *self.plugin_args("amd")],
                                 work, out, ok)
             keyed = self.column_wheel(vendor)
             leg.provenance = dict(schema="mojolearn.release-column-provenance.v1", column=name, vendor=vendor,
@@ -1918,11 +1930,16 @@ class Release:
         return legs
 
     def plugin_args(self, package):
-        """With --split-linux: `--plugin <final plugin>` for the column's smoke."""
+        """With --split-linux: `--plugin <final plugin>` for the column's smoke,
+        the column's own plugin FIRST and then the other one: the core requires
+        both, so the box installs all three, as `pip install mojolearn` does."""
         if not self.split:
             return []
-        plugin = self.split_final(package)
-        return ["--plugin", str(plugin) if plugin else f"<final {SPLIT_PACKAGES[package][1]} wheel>"]
+        out = []
+        for k in (package,) + tuple(k for k in ("nvidia", "amd") if k != package):
+            plugin = self.split_final(k)
+            out += ["--plugin", str(plugin) if plugin else f"<final {SPLIT_PACKAGES[k][1]} wheel>"]
+        return out
 
     def record_column(self, name, vendor, out):
         """A PASSED column: its provenance beside it, and the ledger entry."""
@@ -1949,12 +1966,12 @@ class Release:
         return self.joint_diff()
 
     def step_gpu_column_nvidia(self):
-        """--split-linux: the NVIDIA column alone (core + mojolearn-cuda); it gates mojolearn-cuda."""
+        """--split-linux: the NVIDIA column alone (core + both plugins, as pip installs them); it gates mojolearn-nvidia."""
         self.run_columns(("nvidia",))
         return "NVIDIA column PASSED: no DIVERGENT cell against " + self.ref_names()
 
     def step_gpu_column_amd(self):
-        """--split-linux: the AMD column alone (core + mojolearn-rocm, with the smoke); it gates mojolearn-rocm."""
+        """--split-linux: the AMD column alone (core + both plugins, with the smoke); it gates mojolearn-amd."""
         self.run_columns(("amd",))
         return "AMD column PASSED: no DIVERGENT cell against " + self.ref_names()
 
@@ -2066,7 +2083,7 @@ class Release:
     # ------------------------------------------------------------ publication
     def on_pypi(self, wheel):
         """True when PyPI already serves this exact file (name and sha256), in
-        the project the wheel's name says (mojolearn, mojolearn-cuda, mojolearn-rocm)."""
+        the project the wheel's name says (mojolearn, mojolearn-nvidia, mojolearn-amd)."""
         project = wheel.name.split("-")[0].replace("_", "-")
         url = f"https://pypi.org/pypi/{project}/{self.version}/json"
         try:
@@ -2086,11 +2103,11 @@ class Release:
         target = self.args.publish
         if target is None:
             raise StepHeld("publication needs an explicit --publish none|testpypi|pypi; stopping here")
-        witness = self.linux_final() if platform in ("cuda", "rocm") else wheel
+        witness = self.linux_final() if platform in ("nvidia", "amd") else wheel
         if not self.dry and wheel and witness and wheel_commit(witness) != self.commit:
             raise StepFailed(f"the {platform} wheel {wheel.name} records source {wheel_commit(witness)}, not the frozen "
                              f"{self.commit}")
-        if not self.dry and platform in ("cuda", "rocm") and receipt_plugins(smoke).get(wheel.name) != sha256(wheel):
+        if not self.dry and platform in ("nvidia", "amd") and receipt_plugins(smoke).get(wheel.name) != sha256(wheel):
             raise StepFailed(f"the {platform} smoke receipt {smoke} did not install {wheel.name}")
         if not self.dry and wheel and self.on_pypi(wheel):
             return "already on PyPI"
@@ -2106,25 +2123,29 @@ class Release:
         return self.publish("linux", self.linux_final(), self.rel / "smoke-linux" / "results.json")
 
     def core_receipt(self):
-        """The receipt the split core publishes on: NVIDIA's when its column
-        PASSED, else AMD's (the core needs at least one vendor's smoke)."""
-        if self.nvidia_column_ok():
+        """The receipt the split core publishes on, NVIDIA's. The core
+        requires BOTH plugins, so it publishes only when BOTH vendors'
+        columns PASSED (and after both plugins published, SPLIT_STEP_TABLE)."""
+        if self.dry:
             return self.rel / "smoke-linux" / "results.json"
-        if self.amd_column_ok() or self.dry:
-            return self.rel / "column-amd" / "results.json"
-        raise StepFailed("no PASSED column receipt for the core")
+        failed = [label for label, ok in (("NVIDIA", self.nvidia_column_ok()), ("AMD", self.amd_column_ok()))
+                  if not ok]
+        if failed:
+            raise StepFailed("the core requires both GPU plugins and publishes only when both columns PASSED; "
+                             "not PASSED: " + ", ".join(failed))
+        return self.rel / "smoke-linux" / "results.json"
 
     def step_publish_core_linux(self):
         smoke = self.core_receipt()
         return self.publish("linux", self.split_final("linux"), smoke), dict(smoke=str(smoke))
 
-    def step_publish_cuda(self):
+    def step_publish_nvidia(self):
         smoke = self.rel / "smoke-linux" / "results.json"
-        return self.publish("cuda", self.split_final("cuda"), smoke), dict(smoke=str(smoke))
+        return self.publish("nvidia", self.split_final("nvidia"), smoke), dict(smoke=str(smoke))
 
-    def step_publish_rocm(self):
+    def step_publish_amd(self):
         smoke = self.rel / "column-amd" / "results.json"
-        return self.publish("rocm", self.split_final("rocm"), smoke), dict(smoke=str(smoke))
+        return self.publish("amd", self.split_final("amd"), smoke), dict(smoke=str(smoke))
 
     def step_publish_macos(self):
         return self.publish("macos", self.macos_wheel(), self.rel / "smoke-macos" / "results.json")
@@ -2148,7 +2169,7 @@ class Release:
     def finish_linux(self, venv, package="linux"):
         """The Linux wheel cannot install on this Mac: pip resolves and
         downloads it for its platform, and its bytes must be the published ones.
-        With --split-linux `package` is linux (the core), cuda or rocm."""
+        With --split-linux `package` is linux (the core), nvidia or amd."""
         project, prefix = SPLIT_PACKAGES[package]
         final = self.split_final(package) if self.split else self.linux_final()
         plat = final.name[:-4].split("-")[-1] if final else "manylinux_2_35_x86_64"
@@ -2257,9 +2278,9 @@ class Release:
             return [("linux", self.linux_final(), self.rel / "smoke-linux" / "results.json"),
                     ("macos", self.macos_wheel(), self.rel / "smoke-macos" / "results.json")]
         rows = []
-        for platform in ("linux", "cuda", "rocm"):
+        for platform in ("linux", "nvidia", "amd"):
             smoke = (self.recorded(self.publish_step(platform)) or {}).get("smoke") or (
-                self.rel / ("column-amd" if platform == "rocm" else "smoke-linux") / "results.json")
+                self.rel / ("column-amd" if platform == "amd" else "smoke-linux") / "results.json")
             rows.append((platform, self.split_final(platform), Path(smoke)))
         return rows + [("macos", self.macos_wheel(), self.rel / "smoke-macos" / "results.json")]
 
@@ -2678,7 +2699,7 @@ def main(argv=None):
                          "DigitalOcean has a GPU droplet live (default MOJOLEARN_AMD_PROVIDER, else auto)")
     layout_flag = ap.add_mutually_exclusive_group()
     layout_flag.add_argument("--split-linux", dest="split_linux", action="store_true", default=None,
-                             help="publish Linux as the split packages mojolearn, mojolearn-cuda and mojolearn-rocm "
+                             help="publish Linux as the split packages mojolearn, mojolearn-nvidia and mojolearn-amd "
                                   f"(also {SPLIT_LINUX_ENV}=1); OFF by default until both PyPI projects are "
                                   "registered with their trusted publishers (docs/RELEASE_CHECKLIST.md 3b)")
     layout_flag.add_argument("--combined-linux", dest="split_linux", action="store_false",

@@ -797,8 +797,10 @@ def host_round_seed_as_the_device_reassembles_it(round_seed: UInt64) -> UInt64:
     (`kmeans.mojo`, `seed_lo = round_seed.cast[uint32]().cast[int32]()`,
     `seed_hi = (round_seed >> 32)...`) and the kernel rebuilds
     `(hi.cast[uint32]().cast[uint64]() << 32) | lo.cast[uint32]().cast[uint64]()`
-    (`scalable_init.mojo:73-75`). On every GPU column the low half's
-    `int32 -> uint32 -> uint64` chain SIGN-EXTENDS, so a low half at or
+    (`scalable_init.mojo`). Under Mojo 1.0 the low half's
+    `int32 -> uint32 -> uint64` chain SIGN-EXTENDED on every GPU column
+    (a compiler fold; Mojo 1.2 zero-extends it, and since 2026-09-26 the
+    kernel spells the sign extension as a mask and an OR), so a low half at or
     above 2^31 fills the high word with ones and the OR keeps them: the
     seed the device hashes is `(hi << 32) | sext64(lo)`. Measured on the
     Apple M4 (2026-09-14, the base fixture, seed 3): round 0's seed had a

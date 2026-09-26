@@ -67,6 +67,7 @@ reads `alpha[0]` only: `ridge.cuh:67`).
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
+from core.xtdz_coalesced import xty_launch
 from core.column_stats import STATS_TPB, xty_kernel
 from core.gemm import gemv_n
 from core.identity_trace import IdentityTrace
@@ -147,11 +148,7 @@ def ridge_solve_traced(
     # gemm(U, n_rows, n_cols, b, S_nnz, n_cols, 1, CUBLAS_OP_T, CUBLAS_OP_N):
     # S_nnz <- U^T b. A fold over rows, one block per column, pinned
     # (row 29's `xty_kernel`, the same kernel OLS's `A^T b` runs).
-    ctx.enqueue_function[xty_kernel](
-        s_nnz.unsafe_ptr(), u.unsafe_ptr(), b.unsafe_ptr(),
-        Int32(n_rows), Int32(n_cols),
-        grid_dim=(n_cols, 1, 1), block_dim=(STATS_TPB, 1, 1),
-    )
+    xty_launch(ctx, s_nnz, u, b, n_rows, n_cols)
     ctx.synchronize()
     trace.record_device[DType.float32](ctx, "ridge.solve.Utb", s_nnz, n_cols)
     # gemm(V, n_cols, n_cols, S_nnz, w, n_cols, 1, N, N): w <- V S_nnz.

@@ -107,6 +107,7 @@ rather than `A^T b` (length `n_cols`) -- named in the code where it happens.
 from core.device_zero import enqueue_fill
 from max.gpu.host import DeviceBuffer, DeviceContext
 
+from core.xtdz_coalesced import xty_launch
 from core.column_stats import (
     STATS_TPB,
     diagonal_to_vector_kernel,
@@ -397,15 +398,7 @@ def lstsq_min_norm_traced(
 
     # STEP 6. w <- A^T z. The same kernel `lstsq_eig` uses for `A^T b`, one
     # block per feature striding rows, `identical_mul_add` per term.
-    ctx.enqueue_function[xty_kernel](
-        w.unsafe_ptr(),
-        a.unsafe_ptr(),
-        z.unsafe_ptr(),
-        Int32(n_rows),
-        Int32(n_cols),
-        grid_dim=(n_cols, 1, 1),
-        block_dim=(STATS_TPB, 1, 1),
-    )
+    xty_launch(ctx, w, a, z, n_rows, n_cols)
     ctx.synchronize()
     trace.record_device[DType.float32](ctx, "ols.mn.step6.coef", w, n_cols)
     _ = info_buf

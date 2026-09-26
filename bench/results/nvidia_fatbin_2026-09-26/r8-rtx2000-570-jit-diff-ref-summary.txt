@@ -1,0 +1,10 @@
+# summary lines of r8-old/col_o_jit.diff-ref.txt (full file in ~/mojolearn-evidence/nvidia-cubin-2026-09-26/)
+summary: IDENTICAL=627
+summary (infer/model): IDENTICAL=984, N/A=270
+summary (batch): N/A=627
+summary (rlpair): N/A=54
+summary (batchgrad): IDENTICAL=48, N/A=579
+summary (batchscale): IDENTICAL=81, N/A=546
+summary (ragged): IDENTICAL=54, N/A=573
+summary (stepfull): IDENTICAL=54, N/A=573
+require-columns 2 over 209 lane(s): OK

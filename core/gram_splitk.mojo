@@ -151,6 +151,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 
 from checks.hardware_matrix import gram_splitk_is_target_arm
 from checks.kernel_matrix import (
@@ -230,6 +231,14 @@ comptime GRAM_ROWS_TILE = 32
 comptime GRAM_MAX_COLS = 128
 
 comptime GRAM_STAGE_FLOATS = GRAM_ROWS_TILE * GRAM_MAX_COLS
+
+comptime APPLE_GRAM_WIDE_STAGE = has_apple_gpu_accelerator() and not is_defined[
+    "MOJOLEARN_APPLE_GRAM_WIDE_STAGE_OFF"
+]()
+"""Apple: a narrow Gram stages `GRAM_STAGE_FLOATS // m` rows per barrier
+instead of `GRAM_ROWS_TILE` (372 at m = 11), so a chunk takes an order of
+magnitude fewer barriers. Every cell's chain still runs its chunk's rows in
+ascending order: the partials, and so the Gram, are the same bits."""
 
 #: Floats per global load/store in the staging copy's vector arm: a
 #: 16-byte `SIMD[float32, 4]`. Scalar global loads cost ~3x on this device
@@ -597,8 +606,11 @@ def _gram_splitk_partial_body[
         t_end = k
     while t < t_end:
         var rows = t_end - t
-        if rows > GRAM_ROWS_TILE:
-            rows = GRAM_ROWS_TILE
+        var rows_tile = GRAM_ROWS_TILE
+        comptime if APPLE_GRAM_WIDE_STAGE:
+            rows_tile = GRAM_STAGE_FLOATS // m
+        if rows > rows_tile:
+            rows = rows_tile
         # Rows t..t+rows of row-major (k x m) are one contiguous span, so
         # the cooperative load is a linear, coalesced copy. It is a PURE
         # data movement: whichever arm runs, the SAME values land in the
@@ -642,6 +654,29 @@ def _gram_splitk_partial_body[
                     )
                 tile.unsafe_store(e, v)
                 vi += GRAM_TPB
+        elif APPLE_GRAM_WIDE_STAGE and not CENTERED:
+            # ragged width: float4 loads over the 4-aligned middle of the
+            # span, scalar head and tail; the staged values are the same
+            var g0 = t * m
+            var head = (GRAM_STAGE_W - g0 % GRAM_STAGE_W) % GRAM_STAGE_W
+            if head > span:
+                head = span
+            var nv = (span - head) // GRAM_STAGE_W
+            var i = tid
+            while i < head:
+                tile[i] = x.unsafe_load(g0 + i)
+                i += GRAM_TPB
+            var vi = tid
+            while vi < nv:
+                var e = head + vi * GRAM_STAGE_W
+                var v = x.unsafe_load[width=GRAM_STAGE_W](g0 + e)
+                comptime for w in range(GRAM_STAGE_W):
+                    tile[e + w] = v[w]
+                vi += GRAM_TPB
+            i = head + nv * GRAM_STAGE_W + tid
+            while i < span:
+                tile[i] = x.unsafe_load(g0 + i)
+                i += GRAM_TPB
         else:
             var i = tid
             while i < span:

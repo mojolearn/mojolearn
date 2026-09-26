@@ -811,36 +811,22 @@ def check_gram_dispatch() raises:
             + ") at 32x32x100003: "
             + err
         )
-    # THE FALLBACK ARM IS A REFUSAL UNDER IDENTICAL, NOT AN ARM
-    # (DEVIATION 521, IDENTITY_PATHS row 27). `gemm_tn`'s other arm is
-    # `linalg.matmul`, a closed vendor library whose k-split is a per-vendor
-    # summation order, so an identity build must not run it: it raises by
-    # name instead. Running the wrapper here and asserting per-cell
-    # correctness is therefore a FAST-arm assertion, and under IDENTICAL the
-    # assertion is that it refuses -- which is a stronger statement about
-    # the same call, not a skipped check.
+    # PAST CAPACITY UNDER IDENTICAL THE ARM IS THE PINNED v1 OP_TN KERNEL,
+    # NOT A REFUSAL (`gemm_tn`, since 2026-09-09; IDENTITY_PATHS row 27).
+    # This block used to assert a refusal and so failed on every IDENTICAL
+    # run once `gemm_tn` gained that arm; `gemm_identity_check`'s
+    # `check_gemm_tn_over_capacity_takes_v1` proves the arm is v1 and
+    # matches the oracle, and here the wrapper's result must match the
+    # per-cell oracle like any other arm.
     var arm_b = String("split-K") if gram_splitk_applies(
         768, 768, 257
-    ) else String("transpose+matmul (FAST) / REFUSED (IDENTICAL)")
+    ) else String("transpose+matmul (FAST) / pinned v1 OP_TN (IDENTICAL)")
     comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL:
-        var refused = False
-        try:
-            _ = _gram_one(ctx, 768, 257, ARM_WRAPPER)
-        except e:
-            if String(e).find("IDENTITY_PATHS row 27") >= 0:
-                refused = True
-            else:
-                raise Error(
-                    "check_gram_dispatch: 768x768x257 raised under"
-                    " IDENTICAL but not with the row-27 refusal: "
-                    + String(e)
-                )
-        if not refused:
+        var err_v1 = _gram_one(ctx, 768, 257, ARM_WRAPPER)
+        if err_v1 != "":
             raise Error(
-                "check_gram_dispatch: 768x768x257 COMPLETED under"
-                " IDENTICAL. It is past the split-K kernel's capacity, so"
-                " it ran on linalg.matmul and returned a Gram product this"
-                " mode promises is vendor-independent and is not."
+                "check_gram_dispatch: 768x768x257 under IDENTICAL (pinned"
+                " v1 arm) disagrees with the oracle: " + err_v1
             )
     else:
         var err2 = _gram_one(ctx, 768, 257, ARM_WRAPPER)

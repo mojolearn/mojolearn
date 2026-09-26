@@ -49,8 +49,8 @@ RELEASE_ARCHES_ACCEPTED = RELEASE_ARCHES | {'cuda/sm_90a'}
 #: Both GPU vendors: what the combined release-linux3 wheel must carry.
 BOTH_VENDORS = ('cuda', 'hip')
 #: THE SPLIT LINUX PACKAGES (python/mojolearn/gpu_plugins.py): the packer
-#: profile that writes the core `mojolearn` and the plugins `mojolearn-cuda`
-#: and `mojolearn-rocm` (packaging/linux/pack_wheel.py --profile release-split).
+#: profile that writes the core `mojolearn` and the plugins `mojolearn-nvidia`
+#: and `mojolearn-amd` (packaging/linux/pack_wheel.py --profile release-split).
 SPLIT_PROFILE = 'release-split'
 
 

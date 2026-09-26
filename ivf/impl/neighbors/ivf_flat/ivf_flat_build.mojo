@@ -82,6 +82,44 @@ from ivf.impl.neighbors.ivf_flat.ivf_flat_index import (
     ivf_validate_data,
 )
 from checks.fixed_point import choose_scale
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
+
+comptime IVF_FAST_TRAINSET = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_IVF_FAST_TRAINSET_OFF"]()
+)
+"""FAST on Apple: the coarse quantizer trains on at most
+`IVF_FAST_ROWS_PER_LIST` rows per list, a seeded uniform sample (FAISS's
+rule; cuVS trains on `kmeans_trainset_fraction` of the rows). Every row is
+still assigned to the trained centroids."""
+comptime IVF_FAST_ROWS_PER_LIST = 256
+
+
+def ivf_trainset_rows(n_rows: Int, n_train: Int, seed: UInt64) -> List[Int]:
+    """`n_train` distinct row ids, ascending, from a seeded partial
+    Fisher-Yates over `0 .. n_rows` (splitmix64)."""
+    var perm = List[Int](capacity=n_rows)
+    for i in range(n_rows):
+        perm.append(i)
+    var st = seed ^ UInt64(0x9E3779B97F4A7C15)
+    for i in range(n_train):
+        st += UInt64(0x9E3779B97F4A7C15)
+        var z = st
+        z = (z ^ (z >> 30)) * UInt64(0xBF58476D1CE4E5B9)
+        z = (z ^ (z >> 27)) * UInt64(0x94D049BB133111EB)
+        z = z ^ (z >> 31)
+        var j = i + Int(z % UInt64(n_rows - i))
+        var t = perm[i]
+        perm[i] = perm[j]
+        perm[j] = t
+    var out = List[Int](capacity=n_train)
+    for i in range(n_train):
+        out.append(perm[i])
+    sort(out)
+    return out^
 
 
 def upload_f32(
@@ -261,14 +299,35 @@ def ivf_flat_build(
             + String(params.seed)
         )
 
-    var sum_scale = plan_quantizer_scale(x, n_rows, dim)
-    # Unit weights, so the weight bound is exactly `n_rows`
+    # the quantizer's training rows: all of them, or (FAST) a sample
+    var n_train = n_rows
+    comptime if IVF_FAST_TRAINSET:
+        if n_rows > IVF_FAST_ROWS_PER_LIST * n_lists:
+            n_train = IVF_FAST_ROWS_PER_LIST * n_lists
+    var xt = List[Float32]()
+    if n_train < n_rows:
+        var rows = ivf_trainset_rows(n_rows, n_train, UInt64(params.seed))
+        xt = List[Float32](capacity=n_train * dim)
+        for r in range(n_train):
+            var b = rows[r] * dim
+            for c in range(dim):
+                xt.append(x[b + c])
+
+    var sum_scale: Float64
+    if n_train < n_rows:
+        sum_scale = plan_quantizer_scale(xt, n_train, dim)
+    else:
+        sum_scale = plan_quantizer_scale(x, n_rows, dim)
+    # Unit weights, so the weight bound is exactly `n_train`
     # (`cluster/estimator.mojo`'s note on why the supplied case is summed
     # instead). IVF has no per-row weight: their `build` passes none.
-    var weight_scale = choose_scale(Float64(n_rows), n_rows)
+    var weight_scale = choose_scale(Float64(n_train), n_train)
 
     var dx = upload_f32(ctx, x)
-    var weights = ctx.enqueue_create_buffer[DType.float32](n_rows)
+    if n_train == n_rows:
+        xt.append(Float32(0.0))
+    var dxt = upload_f32(ctx, xt)
+    var weights = ctx.enqueue_create_buffer[DType.float32](n_train)
     weights.enqueue_fill(Float32(1.0))
     var centroids = ctx.enqueue_create_buffer[DType.float32](n_lists * dim)
     var labels = ctx.enqueue_create_buffer[DType.uint32](n_rows)
@@ -297,21 +356,36 @@ def ivf_flat_build(
     kp.seed = params.seed
     kp.n_init = 1
 
-    var fit = kmeans_fit_main_traced(
-        ctx,
-        dx,
-        weights,
-        centroids,
-        labels,
-        kp,
-        n_rows,
-        dim,
-        Float32(sum_scale),
-        Float32(weight_scale),
-        trace,
-        String("ivf.quantizer."),
-    )
-    _ = fit.n_iter
+    if n_train < n_rows:
+        _ = kmeans_fit_main_traced(
+            ctx,
+            dxt,
+            weights,
+            centroids,
+            labels,
+            kp,
+            n_train,
+            dim,
+            Float32(sum_scale),
+            Float32(weight_scale),
+            trace,
+            String("ivf.quantizer."),
+        )
+    else:
+        _ = kmeans_fit_main_traced(
+            ctx,
+            dx,
+            weights,
+            centroids,
+            labels,
+            kp,
+            n_train,
+            dim,
+            Float32(sum_scale),
+            Float32(weight_scale),
+            trace,
+            String("ivf.quantizer."),
+        )
 
     if trace.enabled:
         trace.record_device(ctx, "ivf.centers", centroids, n_lists * dim)
@@ -356,6 +430,7 @@ def ivf_flat_build(
         trace.record_list_f32("ivf.list_data", layout.list_data)
 
     _ = dx^
+    _ = dxt^
     _ = weights^
     _ = centroids^
     _ = labels^

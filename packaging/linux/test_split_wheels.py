@@ -136,8 +136,8 @@ class SplitWheels(unittest.TestCase):
     def test_file_names_and_tags(self):
         self.assertEqual(sorted(p.name for p in self.split.values()), sorted([
             f"mojolearn-{self.version}-{TAG}.whl",
-            f"mojolearn_cuda-{self.version}-{TAG}.whl",
-            f"mojolearn_rocm-{self.version}-{TAG}.whl"]))
+            f"mojolearn_nvidia-{self.version}-{TAG}.whl",
+            f"mojolearn_amd-{self.version}-{TAG}.whl"]))
         for whl in self.split.values():
             wheel = meta(whl, "WHEEL")
             self.assertEqual(wheel.get_all("Tag"), [TAG])
@@ -152,7 +152,7 @@ class SplitWheels(unittest.TestCase):
         self.assertIn("mojolearn/gpu_plugins.py", core)
         self.assertTrue(any(n.startswith("mojolearn/host/") for n in core))
         self.assertTrue(any(n.startswith("mojolearn/.libs/") for n in core))
-        for key, vendor in (("mojolearn_cuda", "cuda"), ("mojolearn_rocm", "hip")):
+        for key, vendor in (("mojolearn_nvidia", "cuda"), ("mojolearn_amd", "hip")):
             payload = [n for n in members(self.split[key]) if ".dist-info/" not in n]
             self.assertTrue(payload)
             self.assertEqual([n for n in payload if not n.startswith(f"mojolearn/{vendor}/")], [])
@@ -161,34 +161,78 @@ class SplitWheels(unittest.TestCase):
             self.assertEqual({n.split("/")[2] for n in payload}, want)
         self.assertEqual(wheel_api_audit.split_audit(list(self.split.values()))["problems"], [])
 
-    def test_metadata_pins_and_extras(self):
+    def test_metadata_core_requires_both_plugins_and_they_pin_it_back(self):
         v = self.version
         core = meta(self.split["mojolearn"])
         self.assertEqual(core.get("Name"), "mojolearn")
-        self.assertEqual(sorted(core.get_all("Provides-Extra")), ["cuda", "rocm"])
-        self.assertIn(f'mojolearn-cuda=={v}; extra == "cuda"', core.get_all("Requires-Dist"))
-        self.assertIn(f'mojolearn-rocm=={v}; extra == "rocm"', core.get_all("Requires-Dist"))
-        for key, name in (("mojolearn_cuda", "mojolearn-cuda"), ("mojolearn_rocm", "mojolearn-rocm")):
+        # `pip install mojolearn` WORKS FOR EVERYONE: no extras, and the core
+        # requires BOTH plugins at its own version exactly
+        self.assertIsNone(core.get_all("Provides-Extra"))
+        self.assertEqual([r for r in core.get_all("Requires-Dist") or [] if r.startswith("mojolearn")],
+                         [f"mojolearn-nvidia=={v}", f"mojolearn-amd=={v}"])
+        for key, name in (("mojolearn_nvidia", "mojolearn-nvidia"), ("mojolearn_amd", "mojolearn-amd")):
             m = meta(self.split[key])
             self.assertEqual((m.get("Name"), m.get("Version")), (name, v))
             self.assertEqual(m.get_all("Requires-Dist"), [f"mojolearn=={v}"])
             self.assertEqual(m.get("Requires-Python"), core.get("Requires-Python"))
             self.assertEqual(m.get("License-Expression"), core.get("License-Expression"))
             self.assertIn(f"{dist_info(self.split[key])}/licenses/LICENSE", members(self.split[key]))
-        # the combined wheel's METADATA is untouched by the split: no extras
+        # the split core's METADATA is the combined wheel's plus EXACTLY the
+        # two plugin requirements, nothing else added, removed or reordered
         single = meta(self.single)
         self.assertIsNone(single.get_all("Provides-Extra"))
-        core_lines = [ln for ln in members(self.split["mojolearn"])[f"{dist_info(self.split['mojolearn'])}/METADATA"]
-                      .decode().splitlines() if not ln.startswith(("Provides-Extra", "Requires-Dist: mojolearn-"))]
-        self.assertEqual(core_lines, members(self.single)[f"{dist_info(self.single)}/METADATA"].decode().splitlines())
+        ours = members(self.split["mojolearn"])[f"{dist_info(self.split['mojolearn'])}/METADATA"].decode()
+        theirs = members(self.single)[f"{dist_info(self.single)}/METADATA"].decode()
+        self.assertNotIn("Requires-Dist: mojolearn-", theirs)
+        ours_lines, theirs_lines = ours.split("\n"), theirs.split("\n")
+        added = [f"Requires-Dist: mojolearn-nvidia=={v}", f"Requires-Dist: mojolearn-amd=={v}"]
+        self.assertEqual([ln for ln in ours_lines if ln not in added], theirs_lines)
+        self.assertEqual(len(ours_lines), len(theirs_lines) + 2)
+        # and they sit with the other Requires-Dist lines, before Dynamic:
+        at = ours_lines.index(added[0])
+        self.assertEqual(ours_lines[at:at + 3], added + ["Dynamic: license-file"])
+
+    def test_the_core_publishes_only_after_both_plugins_are_on_the_index(self):
+        """wheel_api_audit.plugins_on_index, the workflow's last gate before a
+        split core uploads: both plugins of its version must be on the index."""
+        v = self.version
+        core, nvidia, amd = (self.split[k] for k in ("mojolearn", "mojolearn_nvidia", "mojolearn_amd"))
+        asked = []
+
+        def index(served):
+            def files(where, project, version):
+                asked.append((where, project, version))
+                return served.get(project, [])
+            return files
+        both = {"mojolearn-nvidia": [nvidia.name], "mojolearn-amd": [amd.name]}
+        self.assertEqual(wheel_api_audit.plugins_on_index([core], "pypi", files=index(both), sleep=lambda s: None), [])
+        self.assertIn(("pypi", "mojolearn-amd", v), asked)
+        for label, served, missing in (
+                ("neither", {}, ["mojolearn-nvidia", "mojolearn-amd"]),
+                ("nvidia only", {"mojolearn-nvidia": [nvidia.name]}, ["mojolearn-amd"]),
+                ("amd only", {"mojolearn-amd": [amd.name]}, ["mojolearn-nvidia"]),
+                ("another version", {"mojolearn-nvidia": [nvidia.name.replace(v, "0.0.1")],
+                                     "mojolearn-amd": [amd.name]}, ["mojolearn-nvidia"]),
+                ("an sdist only", {"mojolearn-nvidia": [f"mojolearn_nvidia-{v}.tar.gz"],
+                                   "mojolearn-amd": [amd.name]}, ["mojolearn-nvidia"])):
+            with self.subTest(label):
+                naps = []
+                problems = wheel_api_audit.plugins_on_index([core], "testpypi", files=index(served),
+                                                            attempts=3, sleep=naps.append)
+                self.assertEqual([p.split(": ", 1)[1].split("==")[0] for p in problems], missing)
+                self.assertIn("is not on testpypi", problems[0])
+                self.assertEqual(len(naps), 2 * len(missing))   # retried, the index may be propagating
+        # a plugin, the combined wheel or a macOS wheel needs nothing from the index
+        self.assertEqual(wheel_api_audit.plugins_on_index([nvidia, amd, self.single], "pypi",
+                                                          files=index({}), sleep=lambda s: None), [])
 
     def test_markers_and_records(self):
         gp = pw.gpu_plugins
         core = self.split["mojolearn"]
         self.assertEqual(json.loads(members(core)[f"{dist_info(core)}/{gp.CORE_MARKER}"]),
                          gp.core_marker(self.version))
-        cuda = self.split["mojolearn_cuda"]
-        self.assertEqual(json.loads(members(cuda)[f"{dist_info(cuda)}/{gp.PLUGIN_MARKER}"]),
+        nvidia = self.split["mojolearn_nvidia"]
+        self.assertEqual(json.loads(members(nvidia)[f"{dist_info(nvidia)}/{gp.PLUGIN_MARKER}"]),
                          gp.plugin_marker("cuda", self.version, ["sm_89", "sm_90a"]))
         for whl in self.split.values():
             files = members(whl)
@@ -196,16 +240,16 @@ class SplitWheels(unittest.TestCase):
             self.assertEqual({r.split(",")[0] for r in record}, set(files))
 
     # ---- subsets and refusals -------------------------------------------------
-    def test_the_nvidia_legs_alone_pack_the_core_and_the_cuda_plugin(self):
+    def test_the_nvidia_legs_alone_pack_the_core_and_the_nvidia_plugin(self):
         cuda_only = [s for s in self.set_dirs if s.endswith("/cuda")]
         wheels = self.pack(sets=cuda_only)
-        self.assertEqual([p.name.split("-")[0] for p in wheels], ["mojolearn", "mojolearn_cuda"])
+        self.assertEqual([p.name.split("-")[0] for p in wheels], ["mojolearn", "mojolearn_nvidia"])
         self.assertEqual(wheel_api_audit.split_audit(wheels)["problems"], [])
         with self.assertRaises(SystemExit) as ctx:
-            self.pack("--wheels", "core-linux,rocm", sets=cuda_only)
+            self.pack("--wheels", "core-linux,amd", sets=cuda_only)
         self.assertIn("no hip set", str(ctx.exception))
-        only = self.pack("--wheels", "rocm")
-        self.assertEqual([p.name.split("-")[0] for p in only], ["mojolearn_rocm"])
+        only = self.pack("--wheels", "amd")
+        self.assertEqual([p.name.split("-")[0] for p in only], ["mojolearn_amd"])
 
     def test_split_refuses_closures_that_differ(self):
         root = Path(tempfile.mkdtemp(dir=self.root))
@@ -218,7 +262,7 @@ class SplitWheels(unittest.TestCase):
 
     def test_wheels_flag_needs_a_split_profile(self):
         with self.assertRaises(SystemExit):
-            self.pack("--profile", "generic", "--wheels", "cuda")
+            self.pack("--profile", "generic", "--wheels", "nvidia")
 
     def test_release_split_slots(self):
         self.assertEqual(pw.split_release_slots({"cuda"}), {("cuda", "sm_89"), ("cuda", "sm_90")})
@@ -252,24 +296,45 @@ class SplitWheels(unittest.TestCase):
         return out
 
     def test_the_audit_refuses_a_broken_split(self):
-        core, cuda, rocm = (self.split[k] for k in ("mojolearn", "mojolearn_cuda", "mojolearn_rocm"))
-        ok = wheel_api_audit.split_audit([core, cuda, rocm])["problems"]
+        core, nvidia, amd = (self.split[k] for k in ("mojolearn", "mojolearn_nvidia", "mojolearn_amd"))
+        ok = wheel_api_audit.split_audit([core, nvidia, amd])["problems"]
         self.assertEqual(ok, [])
         cases = {
-            "core carries a set": [self.rewrite(core, add={"mojolearn/cuda/sm_89/x.so": b"x"}), cuda, rocm],
-            "plugin carries python": [core, self.rewrite(cuda, add={"mojolearn/cuda/x.py": b""}), rocm],
-            "plugin carries the other vendor": [core, self.rewrite(cuda, add={"mojolearn/hip/gfx942/y.so": b""}), rocm],
-            "loose pin": [core, self.rewrite(cuda, replace={
-                f"{dist_info(cuda)}/METADATA": members(cuda)[f"{dist_info(cuda)}/METADATA"].replace(
-                    f"mojolearn=={self.version}".encode(), b"mojolearn>=0.1")}), rocm],
-            "a member in two wheels": [core, cuda, self.rewrite(rocm, add={"mojolearn/__init__.py": b""})],
-            "core lost its extras": [self.rewrite(core, replace={
-                f"{dist_info(core)}/METADATA": members(self.single)[f"{dist_info(self.single)}/METADATA"]}), cuda, rocm],
-            "core lost its marker": [self.rewrite(core, drop={f"{dist_info(core)}/gpu_plugins.json"}), cuda, rocm],
+            "core carries a set": [self.rewrite(core, add={"mojolearn/cuda/sm_89/x.so": b"x"}), nvidia, amd],
+            "plugin carries python": [core, self.rewrite(nvidia, add={"mojolearn/cuda/x.py": b""}), amd],
+            "plugin carries the other vendor": [core, self.rewrite(nvidia, add={"mojolearn/hip/gfx942/y.so": b""}), amd],
+            "loose pin": [core, self.rewrite(nvidia, replace={
+                f"{dist_info(nvidia)}/METADATA": members(nvidia)[f"{dist_info(nvidia)}/METADATA"].replace(
+                    f"mojolearn=={self.version}".encode(), b"mojolearn>=0.1")}), amd],
+            "a member in two wheels": [core, nvidia, self.rewrite(amd, add={"mojolearn/__init__.py": b""})],
+            "core declares a GPU extra": [self.rewrite(core, replace={
+                f"{dist_info(core)}/METADATA": members(core)[f"{dist_info(core)}/METADATA"].replace(
+                    b"\nDynamic:", f'\nProvides-Extra: nvidia\nRequires-Dist: mojolearn-nvidia=={self.version}; '
+                    f'extra == "nvidia"\nDynamic:'.encode(), 1)}), nvidia, amd],
+            "core lacks the amd plugin": [self.rewrite(core, replace={
+                f"{dist_info(core)}/METADATA": members(core)[f"{dist_info(core)}/METADATA"].replace(
+                    f"Requires-Dist: mojolearn-amd=={self.version}\n".encode(), b"", 1)}),
+                nvidia, amd],
+            "core pins a plugin loosely": [self.rewrite(core, replace={
+                f"{dist_info(core)}/METADATA": members(core)[f"{dist_info(core)}/METADATA"].replace(
+                    f"mojolearn-nvidia=={self.version}".encode(), b"mojolearn-nvidia>=0.1", 1)}),
+                nvidia, amd],
+            "core requires a plugin twice": [self.rewrite(core, replace={
+                f"{dist_info(core)}/METADATA": members(core)[f"{dist_info(core)}/METADATA"].replace(
+                    b"\nDynamic:", f"\nRequires-Dist: mojolearn-amd=={self.version}\nDynamic:".encode(), 1)}),
+                nvidia, amd],
+            "core lost its marker": [self.rewrite(core, drop={f"{dist_info(core)}/gpu_plugins.json"}), nvidia, amd],
         }
+        why = {"core declares a GPU extra": "declares Provides-Extra ['nvidia']",
+               "core lacks the amd plugin": "it must require exactly",
+               "core pins a plugin loosely": "it must require exactly",
+               "core requires a plugin twice": "it must require exactly"}
         for label, wheels in cases.items():
             with self.subTest(label):
-                self.assertTrue(wheel_api_audit.split_audit(wheels)["problems"], label)
+                problems = wheel_api_audit.split_audit(wheels)["problems"]
+                self.assertTrue(problems, label)
+                if label in why:
+                    self.assertIn(why[label], "\n".join(problems))
 
 
 if __name__ == "__main__":

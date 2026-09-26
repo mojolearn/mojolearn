@@ -410,10 +410,13 @@ class SmokeTests(unittest.TestCase):
         self.assertEqual([x for x in self.cloud.log if x[1].startswith('/do')], [])
 
     # ---------------------------------------------------------------- an existing box
-    def ssh_path(self, status, *extra, vendor=None):
+    def ssh_path(self, status, *extra, vendor=None, timeout_wrapper=None):
         shims = self.dir / 'bin'
         shims.mkdir()
-        for name, body in (('ssh', SSH_SHIM), ('sha256sum', SHA_SHIM), ('timeout', TIMEOUT_SHIM)):
+        bodies = [('ssh', SSH_SHIM), ('sha256sum', SHA_SHIM), ('timeout', TIMEOUT_SHIM)]
+        if timeout_wrapper:
+            bodies[2:] = [('timeout.real', TIMEOUT_SHIM), ('timeout', timeout_wrapper)]
+        for name, body in bodies:
             (shims / name).write_text(body)
             (shims / name).chmod(0o755)
         (shims / 'STATUS').write_text(status)
@@ -433,7 +436,7 @@ class SmokeTests(unittest.TestCase):
         self.assertEqual(receipt['status'], 'PASSED')
         self.assertIn('verdict=PASSED', (out / 'smoke.txt').read_text())
 
-    def plugin(self, dist='mojolearn_cuda', version='0.0.0'):
+    def plugin(self, dist='mojolearn_nvidia', version='0.0.0'):
         path = self.dir / f'{dist}-{version}-py3-none-manylinux_2_35_x86_64.whl'
         with zipfile.ZipFile(path, 'w') as z:
             z.writestr('mojolearn/cuda/sm_89/_mojolearn_knn.so', 'inert')
@@ -448,22 +451,62 @@ class SmokeTests(unittest.TestCase):
         self.assertIn('plugin_sha256=', (out / 'smoke.txt').read_text())
         self.assertIn('--plugin', (out / 'box.sh').read_text())
 
-    def test_split_rocm_plugin_runs_the_smoke_on_hip(self):
-        plugin = self.plugin('mojolearn_rocm')
+    def test_split_ssh_path_ships_both_plugins_as_pip_installs_them(self):
+        """The core requires both plugins, so a release column installs all
+        three: every --plugin is shipped, hashed, installed and named."""
+        nvidia, amd = self.plugin(), self.plugin('mojolearn_amd')
+        r, out = self.ssh_path('PASSED', '--vendor', 'hip', '--plugin', str(amd), '--plugin', str(nvidia), vendor='hip')
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        receipt = json.loads((out / 'results.json').read_text())
+        self.assertEqual(sorted(p['wheel'].rsplit('/', 1)[-1] for p in receipt['plugins']), sorted([nvidia.name, amd.name]))
+        box = (out / 'box.sh').read_text()
+        self.assertEqual(box.count(f'--plugin {self.dir / "box" / "wheel-smoke"}/'), 2)
+        self.assertIn(nvidia.name, (out / 'smoke.txt').read_text())
+        self.assertIn('verdict=PASSED', (out / 'smoke.txt').read_text())
+
+    def test_split_receipt_missing_a_plugin_fails(self):
+        """The receipt must name every plugin given, no fewer: a box that
+        installed one of the two fails the verdict."""
+        nvidia, amd = self.plugin(), self.plugin('mojolearn_amd')
+        shim = r'''#!/usr/bin/env python3
+import json, pathlib, runpy, sys
+args = sys.argv[4:]
+drop = [i for i, a in enumerate(args) if a == '--plugin' and 'mojolearn_amd' in args[i + 1]]
+for i in reversed(drop):
+    del args[i:i + 2]
+sys.argv = sys.argv[:4] + args
+runpy.run_path(str(pathlib.Path(__file__).with_name('timeout.real')), run_name='__main__')
+'''
+        r, out = self.ssh_path('PASSED', '--plugin', str(nvidia), '--plugin', str(amd), timeout_wrapper=shim)
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn('receipt plugins', (out / 'smoke.txt').read_text())
+
+    def test_split_two_plugins_of_one_distribution_refused(self):
+        first = self.plugin()
+        (self.dir / 'again').mkdir()
+        second = self.dir / 'again' / first.name
+        second.write_bytes(first.read_bytes())
+        r = self.run_smoke(str(self.wheel), '--expected-source-commit', COMMIT, '--plugin', str(first),
+                           '--plugin', str(second), '--out', str(self.dir / 'o'))
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn('two --plugin wheels of mojolearn_nvidia', r.stderr)
+
+    def test_split_amd_plugin_runs_the_smoke_on_hip(self):
+        plugin = self.plugin('mojolearn_amd')
         r, out = self.ssh_path('PASSED', '--vendor', 'hip', '--plugin', str(plugin), vendor='hip')
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn('verdict=PASSED', (out / 'smoke.txt').read_text())
 
     def test_split_receipt_of_the_wrong_vendor_fails(self):
-        plugin = self.plugin('mojolearn_rocm')
+        plugin = self.plugin('mojolearn_amd')
         r, out = self.ssh_path('PASSED', '--vendor', 'hip', '--plugin', str(plugin), vendor='cuda')
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
         self.assertIn('installed vendor cuda, not hip', (out / 'smoke.txt').read_text())
 
     def test_split_plugin_refusals(self):
-        for plugin, extra, why in ((self.plugin('mojolearn_rocm'), (), 'plugin of --vendor cuda'),
-                                   (self.plugin('mojolearn_cuda', '0.0.1'), (), 'plugin of --vendor cuda'),
-                                   (self.plugin('mojolearn_cuda'), ('--vendor', 'hip', '--column', self.selection()),
+        for plugin, extra, why in ((self.plugin('mojolearn_amd'), (), 'plugin of --vendor cuda'),
+                                   (self.plugin('mojolearn_nvidia', '0.0.1'), (), 'plugin of --vendor cuda'),
+                                   (self.plugin('mojolearn_nvidia'), ('--vendor', 'hip', '--column', self.selection()),
                                     'plugin of --vendor hip')):
             with self.subTest(plugin=plugin.name, extra=extra):
                 r = self.run_smoke(str(self.wheel), '--expected-source-commit', COMMIT, '--plugin', str(plugin),

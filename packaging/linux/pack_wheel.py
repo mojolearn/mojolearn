@@ -12,13 +12,18 @@
 THREE WHEELS BY DEFAULT (2026-09-25, python/mojolearn/gpu_plugins.py), so
 NVIDIA and AMD release independently:
 
-    mojolearn-<v>-py3-none-manylinux_2_35_x86_64.whl       core-linux: Python,
+    mojolearn-<v>-py3-none-manylinux_2_35_x86_64.whl         core-linux: Python,
                                     mojolearn/host/, mojolearn/.libs/, no set
-    mojolearn_cuda-<v>-py3-none-manylinux_2_35_x86_64.whl  cuda: mojolearn/cuda/ only
-    mojolearn_rocm-<v>-py3-none-manylinux_2_35_x86_64.whl  rocm: mojolearn/hip/ only
+    mojolearn_nvidia-<v>-py3-none-manylinux_2_35_x86_64.whl  nvidia: mojolearn/cuda/ only
+    mojolearn_amd-<v>-py3-none-manylinux_2_35_x86_64.whl     amd: mojolearn/hip/ only
 
+`pip install mojolearn` works for everyone (2026-09-26): the core requires
+BOTH plugins at its own version exactly (Requires-Dist: mojolearn-nvidia==<v>,
+Requires-Dist: mojolearn-amd==<v>), each plugin requires exactly
+mojolearn==<v> back, and there are no extras. The core's METADATA is the
+combined wheel's plus exactly those two lines.
 `--profile split` (the default) or `release-split` (release-linux3's checks
-and proofs, per plugin); `--wheels core-linux,cuda,rocm` picks a subset, so
+and proofs, per plugin); `--wheels core-linux,nvidia,amd` picks a subset, so
 the core and the NVIDIA plugin can be packed from the NVIDIA legs alone.
 The three are a PARTITION of the one combined payload: every member is
 written from the same file to the same archive path it has in the combined
@@ -259,7 +264,7 @@ from verify_linux_surface_qualification import (  # noqa: E402
 # python/mojolearn/gpu_plugins.py by path, the table the loader reads too.
 gpu_plugins = load_gpu_plugins()
 #: The profiles that emit THREE wheels from the same inputs: `mojolearn`
-#: (core-linux), `mojolearn-cuda` and `mojolearn-rocm`. `split` is the
+#: (core-linux), `mojolearn-nvidia` and `mojolearn-amd`. `split` is the
 #: default and checks sets the way `generic` does; `release-split` checks
 #: them the way `release-linux3` does, per plugin (split_release_slots).
 SPLIT_PROFILE = "split"
@@ -498,13 +503,12 @@ def read_version(root=REPO):
         raise SystemExit("pack_wheel: " + str(exc))
 
 
-def metadata_text(proj, readme, extras=()):
+def metadata_text(proj, readme):
     """Metadata 2.4, field order as setuptools 84 wrote it for 0.1.0.
 
-    `extras` is ((extra, requirement), ...): the split core's `[cuda]` and
-    `[rocm]`, each pinning its plugin at exactly this version. Written after
-    the unconditional requirements and before `Dynamic`, so the combined
-    wheel's METADATA (no extras) is byte-for-byte what it always was."""
+    The split core's METADATA is the combined wheel's plus exactly the two
+    exact plugin requirements (core_project); no extras. Each plugin pins
+    the core back (plugin_project)."""
     lines = ["Metadata-Version: 2.4", f"Name: {proj['name']}",
              f"Version: {proj['version']}", f"Summary: {proj['description']}"]
     if proj.get("authors"):
@@ -526,18 +530,18 @@ def metadata_text(proj, readme, extras=()):
         lines.append(f"License-File: {lf}")
     for d in proj.get("dependencies", []):
         lines.append(f"Requires-Dist: {d}")
-    for extra, requirement in extras:
-        lines.append(f"Provides-Extra: {extra}")
-        lines.append(f'Requires-Dist: {requirement}; extra == "{extra}"')
     lines.append("Dynamic: license-file")
     return "\n".join(lines) + "\n\n" + readme
 
 
-def core_extras(version):
-    """The split core's extras: `[cuda]` -> mojolearn-cuda==<version>,
-    `[rocm]` -> mojolearn-rocm==<version>, from gpu_plugins.py."""
-    return tuple((row["extra"], f"{row['distribution']}=={version}")
-                 for row in gpu_plugins.PLUGINS.values())
+def core_project(proj, version):
+    """The split core's pyproject-shaped fields: the combined wheel's, with
+    BOTH GPU plugins appended to its requirements at this very version
+    (gpu_plugins.core_requirements), so `pip install mojolearn` on Linux
+    installs mojolearn-nvidia and mojolearn-amd with it."""
+    out = dict(proj)
+    out["dependencies"] = list(proj.get("dependencies", [])) + gpu_plugins.core_requirements(version)
+    return out
 
 
 def plugin_project(proj, vendor, version, arches):
@@ -549,14 +553,16 @@ def plugin_project(proj, vendor, version, arches):
                                 "classifiers", "requires-python", "license-files") if k in proj}
     out.update(name=row["distribution"], version=version,
                description=(f"{row['label']} GPU binaries for mojolearn {version} "
-                            f"({', '.join(sorted(arches))}); install as mojolearn[{row['extra']}]"),
+                            f"({', '.join(sorted(arches))}); installed by pip install mojolearn"),
                dependencies=[f"{gpu_plugins.CORE_DISTRIBUTION}=={version}"])
     readme = (f"# {row['distribution']}\n\n"
               f"The {row['label']} binary sets of [mojolearn](https://pypi.org/project/mojolearn/) "
               f"{version}: every numeric tier for {', '.join(sorted(arches))}. It holds no Python "
-              f"and is useless alone; install it through the core:\n\n"
-              f"    {gpu_plugins.install_command(vendor)}\n\n"
-              f"It is released in lockstep with mojolearn and requires exactly mojolearn=={version}. "
+              f"and is not installed on its own: on Linux, mojolearn requires it at its own "
+              f"version, so\n\n"
+              f"    pip install mojolearn\n\n"
+              f"installs it (with {', '.join(r['distribution'] for r in gpu_plugins.PLUGINS.values())}). "
+              f"It is released in lockstep with mojolearn and requires exactly mojolearn=={version} back. "
               f"Its files install at mojolearn/{vendor}/, the paths the combined wheel used, so the "
               "binaries and the way they load are those of the combined wheel byte for byte.\n")
     return out, readme
@@ -1133,10 +1139,8 @@ def main(argv=None, _gates=True):
     generated["mojolearn/CITATION.cff"] = (REPO / "CITATION.cff").read_bytes()
     generated["mojolearn/identity_columns/COMMIT"] = (witness + "\n").encode()
 
-    if split:
-        # The split core's METADATA is the combined wheel's plus the two
-        # extras, each pinning its plugin at exactly this version.
-        generated[f"{dist}/METADATA"] = metadata_text(proj, readme, core_extras(version)).encode()
+    # The split core's METADATA is the combined wheel's plus exactly the two
+    # exact plugin requirements (core_project, written by write_split).
 
     if a.check_against:
         with zipfile.ZipFile(a.check_against) as z:
@@ -1149,8 +1153,8 @@ def main(argv=None, _gates=True):
             for ln in difflib.unified_diff(theirs.splitlines(), ours.splitlines(),
                                            "macos", "linux", lineterm="", n=0):
                 print("  " + ln)
-            print("  (a Linux classifier, a version bump or the split core's [cuda]/[rocm]"
-                  " extras are expected lines; anything else is drift)")
+            print("  (a Linux classifier or a version bump are expected lines;"
+                  " anything else is drift)")
 
     out = pathlib.Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -1158,7 +1162,8 @@ def main(argv=None, _gates=True):
         whl = out / f"mojolearn-{version}-{tag}.whl"
         built = [(write_wheel(whl, entries, generated, dist), None)]
     else:
-        built = write_split(out, kinds, entries, generated, dist, proj, version, tag, inventory, sets)
+        built = write_split(out, kinds, entries, generated, dist, proj, version, tag, inventory, sets,
+                            readme)
 
     try:
         if _gates:
@@ -1184,7 +1189,9 @@ def main(argv=None, _gates=True):
                 raise SystemExit('pack_wheel: incomplete source/API payload; see API report')
         if split:
             # EACH PLUGIN HOLDS EXACTLY ITS SETS AND THE CORE HOLDS NONE, the pins
-            # and extras are exact, and no file is in two wheels (wheel_api_audit).
+            # are exact both ways (the core requires both plugins at its version,
+            # each plugin the core), no extras, and no file is in two wheels
+            # (wheel_api_audit).
             from wheel_api_audit import split_audit
             report = split_audit([w for w, _ in built])
             (out / f"SPLIT-{version}-linux.json").write_text(json.dumps(report, indent=2) + "\n")
@@ -1272,7 +1279,7 @@ def split_payload(entries, generated, dist):
     return parts
 
 
-def write_split(out, kinds, entries, generated, dist, proj, version, tag, inventory, sets):
+def write_split(out, kinds, entries, generated, dist, proj, version, tag, inventory, sets, readme):
     """Write the split wheels `kinds` asks for from the combined payload.
     Returns [(wheel path, vendor or None for the core), ...]. The bytes of
     every member are the combined wheel's; only the .dist-info differs."""
@@ -1297,6 +1304,8 @@ def write_split(out, kinds, entries, generated, dist, proj, version, tag, invent
                         continue
                     if arc == f"{dist}/LINUX_PAYLOAD.json":
                         data = payload_doc(kind, gpu_plugins.CORE_DISTRIBUTION, core_entries)
+                    elif arc == f"{dist}/METADATA":
+                        data = metadata_text(core_project(proj, version), readme).encode()
                     core_generated[arc] = data
                 core_generated[f"{dist}/{gpu_plugins.CORE_MARKER}"] = (
                     json.dumps(gpu_plugins.core_marker(version), sort_keys=True, indent=2) + "\n").encode()

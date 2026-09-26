@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
+import re
 import tempfile
 import zipfile
 
@@ -134,8 +135,10 @@ def split_audit(wheels):
 
     The core `mojolearn` holds no GPU set; each plugin holds exactly its own
     vendor's sets (mojolearn/<vendor>/...) and nothing else, no Python and no
-    runtime; every plugin requires exactly `mojolearn==<its version>` and the
-    core's extras pin every plugin the same way; the .dist-info markers agree
+    runtime; every plugin requires exactly `mojolearn==<its version>`; the
+    core requires EVERY plugin at its own version exactly and nothing else of
+    them (2026-09-26, `pip install mojolearn` works for everyone:
+    gpu_plugins.core_requirements) and declares no extras; the .dist-info markers agree
     with the payload; all wheels share one version and one tag; and no member
     is in two wheels. File inspection only. Returns {'wheels': [...],
     'problems': [...]}, and an empty `problems` is the pass."""
@@ -166,14 +169,18 @@ def split_audit(wheels):
                 problems.append(f'{wheel.name}: the core carries {len(stray)} GPU set member(s), e.g. {stray[0]}')
             if 'mojolearn/__init__.py' not in payload:
                 problems.append(f'{wheel.name}: the core carries no mojolearn/__init__.py')
-            extras = set(metadata.get_all('Provides-Extra', []))
-            want = {r['extra'] for r in plugins.PLUGINS.values()}
-            if extras != want:
-                problems.append(f'{wheel.name}: Provides-Extra {sorted(extras)}, want {sorted(want)}')
-            for r in plugins.PLUGINS.values():
-                pin = f'{r["distribution"]}=={version}; extra == "{r["extra"]}"'
-                if pin not in requires:
-                    problems.append(f'{wheel.name}: no exact pin {pin!r} (Requires-Dist {requires})')
+            # `pip install mojolearn` WORKS FOR EVERYONE (Andrew, 2026-09-26):
+            # the core requires BOTH plugins at its own version exactly, no
+            # marker, no extra, and declares no extras at all
+            extras = sorted(metadata.get_all('Provides-Extra', []))
+            if extras:
+                problems.append(f'{wheel.name}: the core declares Provides-Extra {extras}; it must declare none')
+            on_plugin = [r for r in requires
+                         if re.split(r'[\s;=<>!~\[(]', r, maxsplit=1)[0].strip().lower().replace('_', '-') in by_distribution]
+            want = plugins.core_requirements(version)
+            if sorted(on_plugin) != sorted(want) or len(on_plugin) != len(set(on_plugin)):
+                problems.append(f'{wheel.name}: the core requires the GPU plugins as {on_plugin}; '
+                                f'it must require exactly {want}')
             try:
                 marker = json.loads(read[dist + '/' + plugins.CORE_MARKER])
             except (KeyError, ValueError):
@@ -217,6 +224,60 @@ def split_audit(wheels):
                 wheels=rows, problems=problems)
 
 
+#: The JSON API root of each index a release publishes to.
+INDEX_JSON = {'pypi': 'https://pypi.org/pypi', 'testpypi': 'https://test.pypi.org/pypi'}
+
+
+def _index_files(index, project, version, timeout=20):
+    """The file names `index` serves for project==version ([] when none)."""
+    import urllib.request
+    url = f'{INDEX_JSON[index]}/{project}/{version}/json'
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as response:
+            return [f.get('filename', '') for f in json.load(response).get('urls', [])]
+    except Exception:
+        return []
+
+
+def plugins_on_index(wheels, index, files=None, attempts=6, sleep=None):
+    """THE CORE PUBLISHES LAST (2026-09-26). The split Linux core requires
+    mojolearn-nvidia==<v> and mojolearn-amd==<v>, so an index serving the core
+    before both plugins would hand every `pip install mojolearn` an
+    unresolvable requirement. For each split core among `wheels` (one whose
+    .dist-info carries gpu_plugins.json), every plugin at the core's version
+    must already be on `index` ('pypi' or 'testpypi'). Returns the problems;
+    empty is the pass. Wheels other than a split core need nothing.
+    `files(index, project, version)` stands in for the index in tests; the
+    lookup is retried `attempts` times, the index may still be propagating an
+    upload made minutes earlier."""
+    from verify_linux_surface_qualification import load_gpu_plugins
+    plugins = load_gpu_plugins()
+    files = files or _index_files
+    if sleep is None:
+        import time
+        sleep = time.sleep
+    problems = []
+    for wheel in map(Path, wheels):
+        facts = _wheel_facts(wheel)
+        if facts is None:
+            continue
+        dist, metadata, _, _, read = facts
+        if metadata.get('Name', '') != plugins.CORE_DISTRIBUTION or dist + '/' + plugins.CORE_MARKER not in read:
+            continue
+        version = metadata.get('Version', '')
+        for row in plugins.PLUGINS.values():
+            prefix = f'{row["wheel_name"]}-{version}-'
+            for attempt in range(attempts):
+                if any(n.startswith(prefix) and n.endswith('.whl') for n in files(index, row['distribution'], version)):
+                    break
+                if attempt + 1 < attempts:
+                    sleep(30)
+            else:
+                problems.append(f'{wheel.name}: {row["distribution"]}=={version} is not on {index}; the split core '
+                                f'requires it and publishes only after both plugins (publish the plugins first)')
+    return problems
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('wheels', nargs='+', type=Path)
@@ -224,9 +285,19 @@ def main():
     parser.add_argument('--require-complete', action='store_true',
                         help='fail for missing public exports or missing/stale source Python or reference payload')
     parser.add_argument('--split', action='store_true',
-                        help='the wheels are the split Linux set (mojolearn, mojolearn-cuda, mojolearn-rocm): '
+                        help='the wheels are the split Linux set (mojolearn, mojolearn-nvidia, mojolearn-amd): '
                              'run split_audit over all and the API audit over the core alone')
+    parser.add_argument('--plugins-on-index', choices=sorted(INDEX_JSON),
+                        help='refuse a split Linux core among the wheels unless mojolearn-nvidia and mojolearn-amd '
+                             'of its version are already on this index (the core publishes last)')
     args = parser.parse_args()
+    if args.plugins_on_index:
+        problems = plugins_on_index(args.wheels, args.plugins_on_index)
+        for problem in problems:
+            print('::error::' + problem)
+        if not problems:
+            print(f'every split core among the wheels has both plugins on {args.plugins_on_index} (or none is a split core)')
+        return int(bool(problems))
     if args.split:
         split = split_audit(args.wheels)
         cores = [Path(row['path']) for row in split['wheels'] if row.get('role') == 'core-linux']

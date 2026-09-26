@@ -1,0 +1,2 @@
+REFUSED kmeans/base: Exception: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_JIT_COMPILATION_DISABLED (PTX JIT compilation was disabled)
+Exception: At max/mojo/max/gpu/host/_device_context_extras.mojo:168:17: CUDA call failed: CUDA_ERROR_JIT_COMPILATION_DISABLED (PTX JIT compilation was disabled)

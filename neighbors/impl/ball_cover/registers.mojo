@@ -139,6 +139,7 @@ from neighbors.impl.ball_cover.common import (
     rbc_cmp_dist,
     rbc_true_dist,
 )
+from neighbors.impl.ball_cover.fast_rbc_eps import FAST_RBC_EPS, fast_rbc_eps_pass
 from neighbors.impl.ball_cover.scan import (
     RBC_SCAN_TPB,
     rbc_clamp_kernel,
@@ -716,7 +717,15 @@ def rbc_eps_pass_count(
 
     `vd` must be `n_queries + 1` long and `adj_ia` `n_queries + 1` long.
     """
-    ctx.enqueue_function[block_rbc_kernel_eps_csr_pass](
+    var fast_done = False
+    comptime if FAST_RBC_EPS:
+        if metric == RBC_METRIC_DEFAULT:
+            fast_done = fast_rbc_eps_pass(
+                ctx, x_reordered, query, r, r_indptr, r_1nn_cols, r_1nn_dists,
+                r_radius, vd, adj_ia, n_queries, n_cols, n_landmarks, eps, False,
+            )
+    if not fast_done:
+      ctx.enqueue_function[block_rbc_kernel_eps_csr_pass](
         x_reordered.unsafe_ptr(),
         query.unsafe_ptr(),
         Int32(n_queries),
@@ -780,7 +789,16 @@ def rbc_eps_pass_fill(
     metric_arg: Float32 = Float32(2.0),
 ) raises:
     """Pass two: `rbc_eps_pass` with `adj_ja != nullptr`, `:1382-1426`."""
-    ctx.enqueue_function[block_rbc_kernel_eps_csr_pass](
+    var fast_done = False
+    comptime if FAST_RBC_EPS:
+        if metric == RBC_METRIC_DEFAULT:
+            fast_done = fast_rbc_eps_pass(
+                ctx, x_reordered, query, r, r_indptr, r_1nn_cols, r_1nn_dists,
+                r_radius, adj_ia, adj_ja, n_queries, n_cols, n_landmarks, eps,
+                True,
+            )
+    if not fast_done:
+      ctx.enqueue_function[block_rbc_kernel_eps_csr_pass](
         x_reordered.unsafe_ptr(),
         query.unsafe_ptr(),
         Int32(n_queries),

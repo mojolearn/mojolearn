@@ -73,7 +73,7 @@ from cluster.checks.plus_plus import (
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from std.gpu import block_dim, block_idx, thread_idx
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
 from cluster.checks.reduce_by_key import (
     blocked_acc_table_cells,
     launch_accumulate_centroid_sums_blocked,
@@ -273,6 +273,75 @@ def init_random(
     ctx.synchronize()
 
 
+comptime KMEANS_FAST_PP_NOSYNC = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_KMEANS_FAST_PP_NOSYNC_OFF"]()
+)
+"""FAST on Apple: the greedy k-means++ loop draws every pick's uniforms up
+front and chooses the best candidate on the device, so the `k - 1` picks
+are enqueued without a synchronize. Same draws, same picks."""
+
+
+def pp_best_kernel(
+    best: MutPointer[Int32, MutAnyOrigin],
+    cost: MutPointer[Float32, MutAnyOrigin],
+    n_trials_in: Int32,
+):
+    """The host loop's argmin: the FIRST strictly smallest cost."""
+    if Int(thread_idx.x) != 0:
+        return
+    var b = 0
+    var bc = cost[0]
+    for t in range(1, Int(n_trials_in)):
+        var c = cost[t]
+        if c < bc:
+            bc = c
+            b = t
+    best[0] = Int32(b)
+
+
+def pp_adopt_dev_kernel(
+    current_min: MutPointer[Float32, MutAnyOrigin],
+    z: MutPointer[Float32, MutAnyOrigin],
+    x_norm: MutPointer[Float32, MutAnyOrigin],
+    cand_norm: MutPointer[Float32, MutAnyOrigin],
+    best: MutPointer[Int32, MutAnyOrigin],
+    n_samples_in: Int32,
+    n_trials_in: Int32,
+):
+    """`adopt_candidate_min_kernel` with the trial read from the device."""
+    var n_samples = Int(n_samples_in)
+    var n_trials = Int(n_trials_in)
+    var trial = Int(best[0])
+    var cn = cand_norm[trial]
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < n_samples:
+        var d = ftz(
+            identical_mul_add(
+                Float32(-2.0),
+                ftz(z[i * n_trials + trial]),
+                ftz(ftz(x_norm[i]) + ftz(cn)),
+            )
+        )
+        if d <= Float32(0.0):
+            d = Float32(0.0)
+        if d < current_min[i]:
+            current_min[i] = d
+
+
+def pp_copy_best_kernel(
+    dst: MutPointer[Float32, MutAnyOrigin],
+    candidates: MutPointer[Float32, MutAnyOrigin],
+    best: MutPointer[Int32, MutAnyOrigin],
+    n_features_in: Int32,
+):
+    var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var nf = Int(n_features_in)
+    if j < nf:
+        dst[j] = candidates[Int(best[0]) * nf + j]
+
+
 def kmeans_plus_plus(
     ctx: DeviceContext,
     mut x: DeviceBuffer[DType.float32],
@@ -374,6 +443,84 @@ def kmeans_plus_plus(
     ctx.synchronize()
 
     var picked = 1
+    comptime if KMEANS_FAST_PP_NOSYNC:
+        var n_picks = params.n_clusters - 1
+        if n_picks > 0:
+            var h_all = ctx.enqueue_create_host_buffer[DType.float32](
+                n_picks * n_trials
+            )
+            for t in range(n_picks * n_trials):
+                h_all.unsafe_ptr()[t] = Float32(rng.next_unit())
+            var d_all = ctx.enqueue_create_buffer[DType.float32](
+                n_picks * n_trials
+            )
+            var d_best = ctx.enqueue_create_buffer[DType.int32](1)
+            ctx.enqueue_copy(dst_buf=d_all, src_ptr=h_all.unsafe_ptr())
+            for pk in range(n_picks):
+                ctx.enqueue_function[chunk_sums_kernel](
+                    chunk_totals.unsafe_ptr(), min_dist.unsafe_ptr(),
+                    Int32(n_samples), Int32(chunk),
+                    grid_dim=(n_chunks, 1, 1), block_dim=(PLUS_PLUS_TPB, 1, 1),
+                )
+                ctx.enqueue_function[scan_chunk_offsets_kernel](
+                    chunk_offsets.unsafe_ptr(), chunk_totals.unsafe_ptr(),
+                    Int32(n_chunks),
+                    grid_dim=(1, 1, 1), block_dim=(PLUS_PLUS_TPB, 1, 1),
+                )
+                ctx.enqueue_function[write_inclusive_scan_kernel](
+                    csum.unsafe_ptr(), min_dist.unsafe_ptr(),
+                    chunk_offsets.unsafe_ptr(), Int32(n_samples), Int32(chunk),
+                    grid_dim=(n_chunks, 1, 1), block_dim=(PLUS_PLUS_TPB, 1, 1),
+                )
+                ctx.enqueue_function[binary_search_kernel](
+                    sel_index.unsafe_ptr(), csum.unsafe_ptr(),
+                    d_all.unsafe_ptr().unsafe_offset(pk * n_trials),
+                    Int32(n_samples), Int32(n_trials),
+                    grid_dim=(1, 1, 1), block_dim=(max(n_trials, 1), 1, 1),
+                )
+                ctx.enqueue_function[gather_rows_kernel](
+                    candidates.unsafe_ptr(), x.unsafe_ptr(),
+                    sel_index.unsafe_ptr(), Int32(n_features),
+                    grid_dim=(n_trials, 1, 1), block_dim=(PLUS_PLUS_TPB, 1, 1),
+                )
+                ctx.enqueue_function[row_norm_kernel](
+                    candidate_norm.unsafe_ptr(), candidates.unsafe_ptr(),
+                    Int32(n_features), Int32(0),
+                    grid_dim=(n_trials, 1, 1), block_dim=(NORM_TPB, 1, 1),
+                )
+                gemm_nt(
+                    ctx, candidate_z, x, candidates, n_samples, n_trials,
+                    n_features,
+                )
+                ctx.enqueue_function[candidate_cost_kernel](
+                    candidate_cost.unsafe_ptr(), candidate_z.unsafe_ptr(),
+                    x_norm.unsafe_ptr(), candidate_norm.unsafe_ptr(),
+                    min_dist.unsafe_ptr(), Int32(n_samples), Int32(n_trials),
+                    grid_dim=(n_trials, 1, 1), block_dim=(PLUS_PLUS_TPB, 1, 1),
+                )
+                ctx.enqueue_function[pp_best_kernel](
+                    d_best.unsafe_ptr(), candidate_cost.unsafe_ptr(),
+                    Int32(n_trials), grid_dim=(1, 1, 1), block_dim=(32, 1, 1),
+                )
+                ctx.enqueue_function[pp_adopt_dev_kernel](
+                    min_dist.unsafe_ptr(), candidate_z.unsafe_ptr(),
+                    x_norm.unsafe_ptr(), candidate_norm.unsafe_ptr(),
+                    d_best.unsafe_ptr(), Int32(n_samples), Int32(n_trials),
+                    grid_dim=((n_samples + 255) // 256, 1, 1),
+                    block_dim=(256, 1, 1),
+                )
+                ctx.enqueue_function[pp_copy_best_kernel](
+                    centroids.unsafe_ptr().unsafe_offset((pk + 1) * n_features),
+                    candidates.unsafe_ptr(), d_best.unsafe_ptr(),
+                    Int32(n_features),
+                    grid_dim=((n_features + 255) // 256, 1, 1),
+                    block_dim=(256, 1, 1),
+                )
+            ctx.synchronize()
+            _ = h_all^
+            _ = d_all^
+            _ = d_best^
+        picked = params.n_clusters
     while picked < params.n_clusters:
         # Step 3. `raft::random::discrete` over the d^2 weights, ON DEVICE.
         # The host contributes only `n_trials` uniforms, which is

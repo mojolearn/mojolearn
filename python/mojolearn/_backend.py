@@ -116,7 +116,7 @@ order:
 THE PLUGIN PACKAGES (2026-09-25, gpu_plugins.py)
 -----------------------------------------------
 Since the split, the Linux `mojolearn` wheel carries no GPU set: the CUDA sets
-come from `mojolearn-cuda` and the HIP sets from `mojolearn-rocm`, each of
+come from `mojolearn-nvidia` and the HIP sets from `mojolearn-amd`, each of
 which installs its files at the very paths above (mojolearn/cuda/...,
 mojolearn/hip/...) so every RUNPATH resolves exactly as it did in the combined
 wheel. `_layout()` therefore finds a plugin's sets the way it always found
@@ -125,9 +125,11 @@ them, on disk, and ADDS three refusals when this install is the split core (a
 `select()` never turns into the CPU-only set:
 
   * a box whose probe shows a GPU for which no plugin is installed beside
-    this core refuses at import, naming the pip command
-    (`pip install "mojolearn[cuda]==<version>"`); MOJOLEARN_VENDOR=cpu runs
-    the CPU bindings on purpose instead;
+    this core refuses at import. The core requires BOTH plugins at its own
+    version (gpu_plugins.core_requirements), so this fires only on a broken
+    install; it says the install is incomplete and names the repair
+    (`pip install --force-reinstall "mojolearn==<version>"`);
+    MOJOLEARN_VENDOR=cpu runs the CPU bindings on purpose instead;
   * a plugin whose version is not this core's exactly refuses, naming both;
   * sets under mojolearn/<vendor>/ that no installed plugin owns refuse.
 
@@ -599,26 +601,26 @@ def _check_plugins(pkg, present):
         row = gpu_plugins.plugin(vendor)
         dist = _find_distribution(row["distribution"], [_site_dir()])
         vdir = os.path.join(pkg, vendor)
-        fix = gpu_plugins.install_command(vendor, _CORE_VERSION)
+        fix = gpu_plugins.reinstall_command(_CORE_VERSION)
         if dist is None:
             if vendor in present:
                 raise GpuPluginError(
                     f"mojolearn: {vdir} carries {row['label']} sets but no "
                     f"{row['distribution']} is installed beside this mojolearn "
                     f"{_CORE_VERSION} ({_site_dir()}) to own them; they are not "
-                    f"this release's. Reinstall the plugin:\n    {fix}")
+                    f"this release's. This install is incomplete; reinstall it:\n    {fix}")
             continue
         version = dist.version
         if version != _CORE_VERSION:
             raise GpuPluginError(
                 f"mojolearn: {row['distribution']} {version} is installed beside "
                 f"mojolearn {_CORE_VERSION}; the two are released together and must "
-                f"be the same version exactly. Install the matching plugin:\n    {fix}")
+                f"be the same version exactly. This install is incomplete; reinstall it:\n    {fix}")
         if vendor not in present:
             raise GpuPluginError(
                 f"mojolearn: {row['distribution']} {version} is installed but {vdir} "
-                f"holds no set; the plugin's files are missing. Reinstall it:\n"
-                f"    pip install --force-reinstall \"{row['distribution']}=={version}\"")
+                f"holds no set; the plugin's files are missing. This install is "
+                f"incomplete; reinstall it:\n    {fix}")
         try:
             location = str(dist.locate_file(""))
         except Exception:
@@ -643,8 +645,9 @@ def _missing_plugin_error(vendors, probe, present, forced=None):
         lines.append(
             f"mojolearn: {why} for {row['label']}, and {row['distribution']}, the "
             f"package that carries the {row['label']} binaries, is not installed "
-            f"beside this mojolearn {_CORE_VERSION} ({_site_dir()}). Install it:\n"
-            f"    {gpu_plugins.install_command(vendor, _CORE_VERSION)}")
+            f"beside this mojolearn {_CORE_VERSION} ({_site_dir()}). mojolearn requires "
+            f"it, so this install is incomplete; reinstall it:\n"
+            f"    {gpu_plugins.reinstall_command(_CORE_VERSION)}")
         if elsewhere:
             lines.append(
                 f"  A {row['distribution']} {elsewhere} is importable, but a plugin "

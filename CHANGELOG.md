@@ -2,6 +2,11 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
+## Unreleased
+
+### Changed
+- Linux IDENTICAL CUDA sets (sm_89, sm_90a) ship machine code: every IDENTICAL kernel is compiled at build time by a pinned ptxas (CUDA 12.5.82) with `--fmad=false` and stored as an LZ4-compressed fatbin in place of its PTX (`packaging/linux/cubin_contract.py`), so the user's driver no longer JIT-compiles them. The toolkit is 12.5 on purpose: CUDA 13 binaries would need a 580 driver even under MAX's `MODULAR_NVPTX_COMPILER_PATH` escape, 12.5 ones do not, so the driver floor is unchanged. On 0.8.19 the whole release column ran with the driver JIT disabled on an RTX 4090 and an H100 (driver 580) and an RTX 2000 Ada (driver 570), with the same bits as the recorded Apple, AMD and NVIDIA columns (`bench/results/nvidia_fatbin_2026-09-26/`). The wheel audit refuses IDENTICAL CUDA PTX outside a small JIT-invariant exception.
+
 ## 0.8.19 (published 2026-09-25)
 
 ### Changed

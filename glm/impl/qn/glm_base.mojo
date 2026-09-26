@@ -62,6 +62,12 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.column_stats import STATS_TPB, xty_kernel
 from core.gemm import gemm_nt, gemv_n
 from core.pinned_reduce import pinned_block_sum
+from core.strided_walk import APPLE_IDENTICAL_STEP_UNROLL, strided_ftz_sum
+from core.xtdz_coalesced import (
+    xtdz_coalesced,
+    xtdz_coalesced_applies,
+    xtdz_coalesced_workspace_floats,
+)
 from glm.impl.qn.glm_linear import (
     abs_loss_dz_kernel,
     nrm1,
@@ -179,10 +185,13 @@ def sum_terms_kernel(
     var n = Int(n_in)
     var tid = Int(thread_idx.x)
     var acc = Float32(0.0)
-    var i = tid
-    while i < n:
-        acc = ftz(acc + terms.unsafe_load(i))
-        i += STATS_TPB
+    comptime if APPLE_IDENTICAL_STEP_UNROLL:
+        acc = strided_ftz_sum[STATS_TPB](terms, 1, 0, n, tid, acc)
+    else:
+        var i = tid
+        while i < n:
+            acc = ftz(acc + terms.unsafe_load(i))
+            i += STATS_TPB
     var s0 = ftz(pinned_block_sum[STATS_TPB](acc))
     if tid == 0:
         out_v.unsafe_store(0, s0)
@@ -199,10 +208,13 @@ def mean_kernel(
     var n = Int(n_in)
     var tid = Int(thread_idx.x)
     var acc = Float32(0.0)
-    var i = tid
-    while i < n:
-        acc = ftz(acc + v.unsafe_load(i))
-        i += STATS_TPB
+    comptime if APPLE_IDENTICAL_STEP_UNROLL:
+        acc = strided_ftz_sum[STATS_TPB](v, 1, 0, n, tid, acc)
+    else:
+        var i = tid
+        while i < n:
+            acc = ftz(acc + v.unsafe_load(i))
+            i += STATS_TPB
     var s0 = ftz(pinned_block_sum[STATS_TPB](acc))
     if tid == 0:
         var ratio = Float32(1.0) / Float32(n)
@@ -266,6 +278,7 @@ def linear_bwd(
     mut x: DeviceBuffer[DType.float32],
     mut dz: DeviceBuffer[DType.float32],
     mut xtdz: DeviceBuffer[DType.float32],
+    mut xtdz_ws: DeviceBuffer[DType.float32],
     n_rows: Int,
     dims: GLMDims,
     set_zero: Bool,
@@ -286,6 +299,11 @@ def linear_bwd(
             if not distributed and fast_xtdz_applies(d, dims.C):
                 fast_xtdz(ctx, xtdz, x, dz, n_rows, d, dims.C)
                 fast_done = True
+        # Apple IDENTICAL: the same chains and fold, row-coalesced
+        # (`core/xtdz_coalesced.mojo`); a no-op test on every other column.
+        if not distributed and xtdz_coalesced_applies(d, dims.C):
+            xtdz_coalesced(ctx, xtdz, x, dz, xtdz_ws, n_rows, d, dims.C)
+            fast_done = True
         if not distributed and not fast_done:
             ctx.enqueue_function[xtdz_multi_kernel](
                 xtdz.unsafe_ptr(), x.unsafe_ptr(), dz.unsafe_ptr(),
@@ -310,6 +328,9 @@ def linear_bwd(
         if not distributed and fast_xtdz_applies(d, 1):
             fast_xtdz(ctx, xtdz, x, dz, n_rows, d, 1)
             fast_done1 = True
+    if not distributed and xtdz_coalesced_applies(d, 1):
+        xtdz_coalesced(ctx, xtdz, x, dz, xtdz_ws, n_rows, d, 1)
+        fast_done1 = True
     if not distributed and not fast_done1:
         ctx.enqueue_function[xty_kernel](
             xtdz.unsafe_ptr(), x.unsafe_ptr(), dz.unsafe_ptr(),
@@ -351,6 +372,7 @@ struct GLMWithData(Movable):
     var z: DeviceBuffer[DType.float32]
     var loss_terms: DeviceBuffer[DType.float32]
     var xtdz: DeviceBuffer[DType.float32]
+    var xtdz_ws: DeviceBuffer[DType.float32]
     var w_weights: DeviceBuffer[DType.float32]
     var scalar: DeviceBuffer[DType.float32]
     var n_evals: Int
@@ -379,6 +401,10 @@ struct GLMWithData(Movable):
         self.z = ctx.enqueue_create_buffer[DType.float32](dims.C * n_rows)
         self.loss_terms = ctx.enqueue_create_buffer[DType.float32](n_rows)
         self.xtdz = ctx.enqueue_create_buffer[DType.float32](dims.C * dims.D)
+        self.xtdz_ws = ctx.enqueue_create_buffer[DType.float32](
+            xtdz_coalesced_workspace_floats(dims.D, dims.C)
+            if xtdz_coalesced_applies(dims.D, dims.C) else 1
+        )
         self.w_weights = ctx.enqueue_create_buffer[DType.float32](dims.C * dims.D)
         self.scalar = ctx.enqueue_create_buffer[DType.float32](1)
         self.n_evals = 0
@@ -467,7 +493,7 @@ struct GLMWithData(Movable):
         backward. Returns the loss value the device scalar held."""
         linear_fwd(ctx, self.z, self.x, w, self.w_weights, self.n_rows, self.dims)
         var loss_host = self.get_loss_and_dz(ctx)
-        linear_bwd(ctx, g, self.x, self.z, self.xtdz, self.n_rows, self.dims, init_grad_zero)
+        linear_bwd(ctx, g, self.x, self.z, self.xtdz, self.xtdz_ws, self.n_rows, self.dims, init_grad_zero)
         return loss_host
 
     def evaluate(

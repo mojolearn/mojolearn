@@ -28,7 +28,7 @@ def digest(path):
 
 #: THE SPLIT LINUX PACKAGES (python/mojolearn/gpu_plugins.py): wheel-name
 #: prefix of each GPU plugin -> the runtime vendor its receipt must report.
-PLUGIN_VENDORS = {'mojolearn_cuda': 'cuda', 'mojolearn_rocm': 'hip'}
+PLUGIN_VENDORS = {'mojolearn_nvidia': 'cuda', 'mojolearn_amd': 'hip'}
 #: The marker the split core carries in its .dist-info (gpu_plugins.CORE_MARKER).
 CORE_MARKER = 'gpu_plugins.json'
 

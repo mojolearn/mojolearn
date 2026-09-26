@@ -414,7 +414,11 @@ from ensemble.decisiontree.batched_levelalgo.bins import (
     Bin,
     BinScales,
     RegressionBinLike,
+    _quantize,
 )
+from std.atomic import Atomic, Ordering
+from std.gpu.primitives.warp import shuffle_idx as _hist_shuffle_idx
+from std.gpu.primitives.warp import sum as _hist_warp_sum
 from ensemble.decisiontree.batched_levelalgo.dataset import DatasetView
 from ensemble.decisiontree.batched_levelalgo.objectives import (
     ObjectiveLike,
@@ -2479,6 +2483,20 @@ def build_histograms_kernel[
 
 
 
+comptime HIST_SIMD_AGG_DEFAULT = (
+    BUILD_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_RF_HIST_SIMD_AGG_OFF"]()
+)
+"""FAST on Apple: in the column-tile histogram, the lanes of a SIMD group
+whose bin equals lane 0's bin add their contributions with one SIMD sum and
+lane 0 issues ONE threadgroup atomic for them; the other lanes add as
+before. Skewed columns (Istella: the median column holds 74% of its rows in
+one value) otherwise serialize most of a SIMD group on one address. Only
+unweighted bins, whose fields are integers: the per-bin totals are the same
+integers in another order, so the histograms are bit-identical."""
+
+
 def build_histograms_binned_columns_kernel[
     O: ObjectiveLike,
     TPB: Int,
@@ -2526,6 +2544,74 @@ def build_histograms_binned_columns_kernel[
     var i = item.instances.begin + Int(thread_idx.x) + Int(workload.offset_blockid) * TPB
     var end = item.instances.begin + item.instances.count
     var stride = TPB * Int(workload.num_blocks)
+    comptime AGG = (
+        HIST_SIMD_AGG_DEFAULT and sabotage == 0 and not O.BinT.weighted
+    )
+    comptime if AGG:
+        # every lane runs the same trips so the SIMD sums see a full group
+        var base = item.instances.begin + Int(workload.offset_blockid) * TPB
+        var lid = Int(lane_id())
+        var scale = objective.Scales().label_scale
+        var hw = histogram.unsafe_bitcast[UInt32]()
+        var hwi = histogram.unsafe_bitcast[Int32]()
+        while base < end:
+            var ii = base + Int(thread_idx.x)
+            var valid = ii < end
+            var row = Int32(0)
+            var lab = Scalar[O.LabelT](0)
+            if valid:
+                row = dataset.row_ids[unsafe_offset=ii]
+                comptime if sampled_labels:
+                    lab = dataset.labels[unsafe_offset=ii]
+                else:
+                    lab = dataset.labels[unsafe_offset=Int(row)]
+            comptime for lane in range(TILE):
+                if lane < live:
+                    var col = column_samples[unsafe_offset=nid * Int(dataset.n_sampled_cols) + Int(col_start) + first + lane]
+                    var n_bins = args.quantiles.n_bins_array[unsafe_offset=Int(col)]
+                    var key = Int32(-1)
+                    if valid:
+                        var b = dataset.bin_of(row, col)
+                        comptime if O.BinT.is_classification:
+                            key = Int32(Int(lab)) * n_bins + b
+                        else:
+                            key = b
+                    var lead = _hist_shuffle_idx(key, UInt32(0))
+                    var same = valid and key == lead
+                    comptime if O.BinT.is_classification:
+                        var cnt = _hist_warp_sum(UInt32(1) if same else UInt32(0))
+                        var off = lane * feature_stride
+                        if lid == 0 and lead >= 0:
+                            _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
+                                hw.unsafe_offset(off + Int(lead)), cnt
+                            )
+                        if valid and not same:
+                            _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
+                                hw.unsafe_offset(off + Int(key)), UInt32(1)
+                            )
+                    else:
+                        var q = Int32(0)
+                        if valid:
+                            q = _quantize(Float32(lab), scale)
+                        var qs = _hist_warp_sum(q if same else Int32(0))
+                        var cnt = _hist_warp_sum(UInt32(1) if same else UInt32(0))
+                        var off = 2 * lane * feature_stride
+                        if lid == 0 and lead >= 0:
+                            _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
+                                hwi.unsafe_offset(off + 2 * Int(lead)), qs
+                            )
+                            _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
+                                hw.unsafe_offset(off + 2 * Int(lead) + 1), cnt
+                            )
+                        if valid and not same:
+                            _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
+                                hwi.unsafe_offset(off + 2 * Int(key)), q
+                            )
+                            _ = Atomic.fetch_add[ordering = Ordering.RELAXED](
+                                hw.unsafe_offset(off + 2 * Int(key) + 1), UInt32(1)
+                            )
+            base += stride
+        i = end
     while i < end:
         var row = dataset.row_ids[unsafe_offset=i]
         var label: Scalar[O.LabelT]

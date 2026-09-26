@@ -1,0 +1,6 @@
+NVIDIA H100 80GB HBM3, 580.126.09, 9.0
+pip=0
+col_new_nojit exit=0 secs=142
+col_new exit=0 secs=141
+new cache files: 0 bytes: 10
+NEW_DONE

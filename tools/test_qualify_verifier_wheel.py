@@ -133,7 +133,7 @@ class ExpandedWheelTests(unittest.TestCase):
         with zipfile.ZipFile(core,'w') as archive:
             archive.writestr('mojolearn/verify_reference/models/models.json',json.dumps({'models':[]}))
             archive.writestr('mojolearn/identity_columns/COMMIT','a'*40)
-        plugin = root/f'mojolearn_cuda-{plugin_version}-py3-none-manylinux_2_35_x86_64.whl'
+        plugin = root/f'mojolearn_nvidia-{plugin_version}-py3-none-manylinux_2_35_x86_64.whl'
         with zipfile.ZipFile(plugin,'w') as archive:
             archive.writestr('mojolearn/cuda/sm_89/_mojolearn_knn.so','inert')
         return core, plugin
@@ -158,7 +158,7 @@ class ExpandedWheelTests(unittest.TestCase):
             install = commands[1]
             self.assertIn(str(core.resolve()), install); self.assertIn(str(plugin.resolve()), install)
             receipt = json.loads((root/'out'/'results.json').read_text())
-            self.assertEqual(receipt['plugins'], [dict(wheel=str(plugin.resolve()), distribution='mojolearn-cuda',
+            self.assertEqual(receipt['plugins'], [dict(wheel=str(plugin.resolve()), distribution='mojolearn-nvidia',
                 wheel_sha256=hashlib.sha256(plugin.read_bytes()).hexdigest())])
 
     def test_split_plugin_of_another_version_refused_before_install(self):
