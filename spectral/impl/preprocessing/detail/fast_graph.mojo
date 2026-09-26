@@ -42,7 +42,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from neighbors.estimator import knn_self_search_device_indices
 from spectral.impl.sparse.linalg.detail.laplacian import (
     DeviceCoo,
@@ -50,7 +50,7 @@ from spectral.impl.sparse.linalg.detail.laplacian import (
 )
 
 comptime SPECTRAL_GRAPH_FAST = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_SPECTRAL_GRAPH_FAST_OFF"]()
 )

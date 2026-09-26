@@ -33,7 +33,7 @@ always, the same numbers.
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
@@ -54,7 +54,7 @@ comptime SYMMETRIZE_TPB = 128
 #: FS_MAX_ROW or n >= 2^20 keep the scan.
 #: `-D MOJOLEARN_SYMMETRIZE_FAST_OFF` keeps the scan.
 comptime SYMMETRIZE_FAST = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_SYMMETRIZE_FAST_OFF"]()
 )
