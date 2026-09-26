@@ -100,7 +100,7 @@ from svm.impl.svm_parameter import (
     SvmModel,
     SvmParameter,
 )
-from svm.impl.workingset import WorkingSet
+from svm.impl.workingset import SVM_WS_MAX, WorkingSet, svm_ws_cap
 
 
 #: SABOTAGE (svc_check "rotate the kernel-row contraction start by block"):
@@ -150,21 +150,23 @@ def fold_order_rank_kernel(
     training index (distinct within a working set), `fold_order_for` on
     the device."""
     var n = Int(n_in)
-    var t = Int(thread_idx.x)
     var sh = stack_allocation[
-        SMO_WS_SIZE, Scalar[DType.int32], address_space = AddressSpace.SHARED
+        SVM_WS_MAX, Scalar[DType.int32], address_space = AddressSpace.SHARED
     ]()
-    var mine = Int32(0)
-    if t < n:
-        mine = nz_idx.unsafe_load(t)
-        sh[t] = mine
+    var t = Int(thread_idx.x)
+    while t < n:
+        sh[t] = nz_idx.unsafe_load(t)
+        t += Int(block_dim.x)
     barrier()
-    if t < n:
+    t = Int(thread_idx.x)
+    while t < n:
+        var mine = sh[t]
         var r = 0
         for q in range(n):
             if sh[q] < mine:
                 r += 1
         order.unsafe_store(r, Int32(t))
+        t += Int(block_dim.x)
 
 
 def _grid(n: Int) -> Int:
@@ -292,6 +294,16 @@ def launch_block_solve(
             "svm launch_block_solve: threads=" + String(threads)
             + " < n_ws=" + String(n_ws)
         )
+    comptime if FAST_EPT_ON and SVM_WS_MAX == 2048:
+        if threads == 2048:
+            ctx.enqueue_function[smo_block_solve_ept_kernel[1024, 2]](
+                y.unsafe_ptr(), Int32(n_train), alpha.unsafe_ptr(), Int32(n_ws),
+                delta_alpha.unsafe_ptr(), f.unsafe_ptr(), kernel_tile.unsafe_ptr(),
+                ws_idx.unsafe_ptr(), C_vec.unsafe_ptr(), eps,
+                return_buff.unsafe_ptr(), Int32(max_iter),
+                grid_dim=1, block_dim=1024,
+            )
+            return
     comptime if FAST_EPT_ON:
         if threads == 1024:
             comptime T = 1024 // FAST_EPT
@@ -510,7 +522,7 @@ struct SmoSolver(Movable):
         self.n_train = n_rows * 2 if param.svmType == EPSILON_SVR else n_rows
         # `n_ws = min(1024, n_train)`, over the DOUBLED domain for SVR:
         # the reference's SetSize takes n_train, not n_rows.
-        var ws = SMO_WS_SIZE
+        var ws = svm_ws_cap(self.n_train)
         if ws > self.n_train:
             ws = self.n_train
         self.n_ws = ws
@@ -679,7 +691,7 @@ struct SmoSolver(Movable):
         #
         # 24 of 24 gates green. `svm/svc_main.mojo -- svr-oracle` is the
         # command; the device arm is beside it.
-        var ws = WorkingSet(ctx, n_rows, SMO_WS_SIZE, self.svmType)
+        var ws = WorkingSet(ctx, n_rows, SVM_WS_MAX, self.svmType)
         self.n_ws = ws.get_size()
         self.initialize(ctx, y)
         var cache = KernelCache(
@@ -774,7 +786,7 @@ struct SmoSolver(Movable):
                     ctx.enqueue_function[fold_order_rank_kernel](
                         self.nz_da_idx.unsafe_ptr(), Int32(nnz_da),
                         self.fold_order.unsafe_ptr(),
-                        grid_dim=1, block_dim=SMO_WS_SIZE,
+                        grid_dim=1, block_dim=SMO_WS_SIZE,  # loops to SVM_WS_MAX
                     )
                 else:
                     var nz_host = read_i32(ctx, self.nz_da_idx, nnz_da)

@@ -33,7 +33,7 @@ from svm.impl.smo_sets import in_lower, in_upper
 
 comptime FWS_T = 1024
 comptime FWS_WARPS = FWS_T // 32
-comptime FWS_MAX_WS = 1024
+comptime FWS_MAX_WS = 2048
 
 comptime FWS_UPPER = 0
 comptime FWS_LOWER = 1
