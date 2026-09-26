@@ -22,7 +22,7 @@ COMMIT = "a" * 40
 def args(**kw):
     base = dict(version="0.8.14", dry_run=False, publish=None, only="", redo="", build_backend="gpu-legs",
                 amd_expect_from="", smoke_gpu="", state_dir="", amd_build_provider=None, amd_provider="auto",
-                cpu_column=False)
+                cpu_column=False, split_linux=False)   # the combined layout; split: test_release_split.py
     base.update(kw)
     return argparse.Namespace(**base)
 
@@ -320,7 +320,7 @@ class RunTests(unittest.TestCase):
         # write nothing under the state directory.
         env = dict(os.environ, MOJOLEARN_EVIDENCE_ROOT=str(pathlib.Path(self._t.name) / "evidence"),
                    MOJOLEARN_AMD_PROVIDER="do")   # no DigitalOcean probe from a test
-        out = subprocess.run([sys.executable, str(ROOT / "tools/release.py"), "0.8.14", "--dry-run",
+        out = subprocess.run([sys.executable, str(ROOT / "tools/release.py"), "0.8.14", "--dry-run", "--combined-linux",
                               "--state-dir", str(self.state)], capture_output=True, text=True, timeout=600, env=env)
         self.assertEqual(out.returncode, 0, out.stderr)
         for step in release.Release.STEPS:

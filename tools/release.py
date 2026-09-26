@@ -103,10 +103,11 @@ THE STEPS
 Nothing is published without `--publish none|testpypi|pypi`; without it both
 pipelines stop at their publish step and say so.
 
-THE SPLIT LINUX PACKAGES (--split-linux, or MOJOLEARN_RELEASE_SPLIT_LINUX=1;
-OFF by default until the PyPI projects mojolearn-nvidia and mojolearn-amd are
-registered with their trusted publishers, docs/RELEASE_CHECKLIST.md 3b). The
-Linux pipeline then becomes three (python/mojolearn/gpu_plugins.py):
+THE SPLIT LINUX PACKAGES (the DEFAULT from 0.8.21, Andrew 2026-09-26, once
+mojolearn-nvidia and mojolearn-amd were registered with their trusted
+publishers, docs/RELEASE_CHECKLIST.md 3b; --combined-linux or
+MOJOLEARN_RELEASE_SPLIT_LINUX=0 publishes the one combined wheel, kept only
+until a split release has gone end to end). The Linux pipeline is three (python/mojolearn/gpu_plugins.py):
   core-linux  linux-builds -> linux-wait -> linux-assemble -> linux-pack
               (--profile release-split: the core and both plugins, each
               audited and stripped) -> linux-joint-diff
@@ -760,11 +761,12 @@ def layout(split):
 
 
 def split_wanted(args):
-    """--split-linux / --combined-linux, else MOJOLEARN_RELEASE_SPLIT_LINUX=1; OFF by default."""
+    """--split-linux / --combined-linux, else MOJOLEARN_RELEASE_SPLIT_LINUX; ON by
+    default (0.8.21): only --combined-linux or MOJOLEARN_RELEASE_SPLIT_LINUX=0 opts out."""
     flag = getattr(args, "split_linux", None)
     if flag is not None:
         return bool(flag)
-    return os.environ.get(SPLIT_LINUX_ENV, "") == "1"
+    return os.environ.get(SPLIT_LINUX_ENV, "1") != "0"
 
 
 def receipt_plugins(results):
@@ -2706,10 +2708,10 @@ def main(argv=None):
     layout_flag = ap.add_mutually_exclusive_group()
     layout_flag.add_argument("--split-linux", dest="split_linux", action="store_true", default=None,
                              help="publish Linux as the split packages mojolearn, mojolearn-nvidia and mojolearn-amd "
-                                  f"(also {SPLIT_LINUX_ENV}=1); OFF by default until both PyPI projects are "
-                                  "registered with their trusted publishers (docs/RELEASE_CHECKLIST.md 3b)")
+                                  "(the default)")
     layout_flag.add_argument("--combined-linux", dest="split_linux", action="store_false",
-                             help="publish Linux as the one combined wheel (the default)")
+                             help=f"publish Linux as the one combined wheel (also {SPLIT_LINUX_ENV}=0); "
+                                  "kept until a split release has gone end to end")
     ap.add_argument("--state-dir", default="", help=argparse.SUPPRESS)
     args = ap.parse_args(argv)
     if not VERSION_RE.match(args.version):

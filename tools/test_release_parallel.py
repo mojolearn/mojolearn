@@ -27,7 +27,7 @@ WHEEL = "mojolearn-0.8.14-py3-none-manylinux_2_35_x86_64.whl"
 def args(**kw):
     base = dict(version="0.8.14", dry_run=False, publish=None, only="", redo="", build_backend="gpu-legs",
                 amd_expect_from="", smoke_gpu="", state_dir="", amd_build_provider=None, amd_provider="auto",
-                cpu_column=False)
+                cpu_column=False, split_linux=False)   # the combined layout; split: test_release_split.py
     base.update(kw)
     return argparse.Namespace(**base)
 

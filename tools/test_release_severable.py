@@ -34,7 +34,8 @@ HEAD = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_out
 def args(**kw):
     base = dict(version="0.8.99", dry_run=False, publish=None, only="", redo="", build_backend="cpu-box",
                 amd_expect_from="", smoke_gpu="", state_dir="", amd_build_provider=None, amd_provider="auto",
-                cpu_column=False, status=False, refreeze=False, source_checkout="")
+                cpu_column=False, status=False, refreeze=False, source_checkout="",
+                split_linux=False)   # the combined layout; split: test_release_split.py
     base.update(kw)
     return argparse.Namespace(**base)
 
