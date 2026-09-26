@@ -330,7 +330,8 @@ def multilogit_val_and_first_der_kernel[
         if compute_fv != Int32(0):
             var log_denum = routed_log(sum_exp[j])
             if idx < size:
-                tmp_score += weight[j] * (class_approx[j] - log_denum)
+                # the default build's fused op (lane/pinned-mul-contract-free)
+                tmp_score = fma(weight[j], class_approx[j] - log_denum, tmp_score)
 
     # DEVIATION 71: per-block partials, not their block reduce + atomicAdd
     if compute_fv != Int32(0):

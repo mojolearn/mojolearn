@@ -309,7 +309,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
-from checks.numerics import ftz, identical_mul
+from checks.numerics import ftz, identical_mul, identical_mul_add
 from neighbors.impl.ball_cover.common import (
     RBC_FLT_MAX,
     RBC_METRIC_DEFAULT,
@@ -346,17 +346,20 @@ comptime RBC_KNN_ULP_SLACK = Float32(4.76837158203125e-07)
 
 
 @always_inline
-def rbc_knn_relax(t: Float32, mag: Float32) -> Float32:
+def rbc_knn_relax(t_a: Float32, t_b: Float32, mag: Float32) -> Float32:
     """DEVIATION 567: widen a threshold so float rounding can only admit.
 
     One multiply and one add, both `ftz`'d, so the widened threshold is the
     same bits on every column. `mag` is the largest magnitude the threshold
     will be compared against; for a landmark that is `d(q, l) + radius(l)`,
     which dominates every `|d(q,l) - d(l,y)|` in its group.
+
+    The threshold is the product `t_a * t_b`, and the default build fused it
+    into this add (LLVM saw through the slack's `ftz`), so it is that ONE
+    fma; the slack product is exact (a power of two) and pinned
+    (lane/pinned-mul-contract-free).
     """
-    # the slack product pinned (exact, a power of two): LLVM saw through the
-    # ftz select and fused it into this add (lane/pinned-mul-contract-free)
-    return ftz(t + ftz(identical_mul(mag, RBC_KNN_ULP_SLACK)))
+    return ftz(identical_mul_add(t_a, t_b, ftz(identical_mul(mag, RBC_KNN_ULP_SLACK))))
 
 
 @always_inline
@@ -623,7 +626,7 @@ def rbc_knn_kernel(
             var radius = r_radius.unsafe_load(lm)
 
             # bound 2, Cayton. `D` and NOT `tau`; see the header.
-            if dl > rbc_knn_relax(three_d * prune_scale, three_d):
+            if dl > rbc_knn_relax(three_d, prune_scale, three_d):
                 continue
 
             # bound 1. `thresh` is `min(tau, D)`, both of which are upper
@@ -634,7 +637,7 @@ def rbc_knn_kernel(
             if d_bound < thresh:
                 thresh = d_bound
             var mag = ftz(dl + radius)
-            if dl - radius > rbc_knn_relax(thresh * prune_scale, mag):
+            if dl - radius > rbc_knn_relax(thresh, prune_scale, mag):
                 continue
 
             var r_start = Int(r_indptr.unsafe_load(lm))
@@ -650,7 +653,7 @@ def rbc_knn_kernel(
                 thresh = tau
                 if d_bound < thresh:
                     thresh = d_bound
-                var th = rbc_knn_relax(thresh * prune_scale, mag)
+                var th = rbc_knn_relax(thresh, prune_scale, mag)
 
                 # bound 3, the high side. The group is ascending in
                 # `d(l, y)`, so if the FIRST element of this batch is out
