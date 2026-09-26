@@ -66,6 +66,10 @@ with its own banner saying it is unreachable from any identity path here.
 """
 
 from std.gpu import block_dim, block_idx, thread_idx
+from std.gpu.primitives.warp import shuffle_idx
+from std.memory import stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 from cholesky.multi_gpu import CholSolveShard, chol_device_count
@@ -167,6 +171,137 @@ def trsm_upper_kernel(
             t = ftz(identical_mul_add(-lki, bk, t))
         var lii = ftz(l.unsafe_load(i * ld + i))
         b.unsafe_store(i * nrhs + j, ftz(identical_div(t, lii)))
+
+
+# ===========================================================================
+# THE SAME ORDER, PARALLEL WHERE THE ORDER ALLOWS (lane/apple-identical-neural,
+# 2026-09-26; Apple IDENTICAL, `CHOL_SWEEP_SOLVES`; `-D
+# MOJOLEARN_CHOL_SWEEP_SOLVES_OFF` reverts). `trsm_lower_kernel` and
+# `trsm_upper_kernel` give each right-hand-side column to ONE thread, so a
+# single-target solve at n = 20,000 is 4e8 dependent steps behind global
+# loads (KernelRidge 20k took 102 s under IDENTICAL on the M4).
+#
+# Forward: row i's chain is `t = ftz(fma(-ftz(L[i][k]), x_k, t))` for k
+# ascending, and x_k exists as soon as row k finishes -- so every row can
+# take its step k the moment x_k is known. `trsm_lower_sweep_kernel` keeps
+# every row's t in a register of one 1024-thread block; per 32-column block
+# one simdgroup finishes the 32 diagonal rows (lane r divides, broadcasts
+# x, lanes below step), then every later row takes those 32 steps in order.
+# Each row's chain is the original's, term for term.
+#
+# Back: row i's chain runs k = i+1 .. n-1 ASCENDING while rows descend, so
+# row i cannot begin before x_{i+1} exists and nothing can be overlapped.
+# `trsm_upper_staged_kernel` keeps the one serial chain (thread 0) but has
+# the whole block stage its L column into threadgroup memory, so the chain
+# waits on threadgroup loads instead of strided global ones.
+# ===========================================================================
+comptime CHOL_SWEEP_SOLVES = (
+    GLOBAL_NUMERIC_MODE != NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_CHOL_SWEEP_SOLVES_OFF"]()
+)
+comptime CHOL_SWEEP_NT = 1024
+comptime CHOL_SWEEP_SLOTS = 32
+comptime CHOL_BACK_NT = 256
+comptime CHOL_BACK_CH = 2048
+
+
+def trsm_lower_sweep_kernel(
+    l: MutPointer[Float32, MutAnyOrigin],
+    b: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    nrhs_in: Int32,
+    ld_in: Int32,
+):
+    """`trsm_lower_kernel`'s arithmetic as a blocked column sweep; one block
+    per right-hand-side column, n <= CHOL_SWEEP_NT * CHOL_SWEEP_SLOTS."""
+    comptime NT = CHOL_SWEEP_NT
+    comptime SL = CHOL_SWEEP_SLOTS
+    var n = Int(n_in)
+    var nrhs = Int(nrhs_in)
+    var ld = Int(ld_in)
+    var j = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var lane = tid % 32
+    var sg = tid // 32
+    var xs = stack_allocation[32, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var t = SIMD[DType.float32, SL](0.0)
+    comptime for s in range(SL):
+        var i = tid + s * NT
+        if i < n:
+            t[s] = ftz(b.unsafe_load(i * nrhs + j))
+    var nb = (n + 31) // 32
+    for kb in range(nb):
+        var k0 = kb * 32
+        var sd = k0 // NT
+        var sgd = (k0 % NT) // 32
+        if sg == sgd:
+            var ri = k0 + lane
+            var tv = Float32(0.0)
+            comptime for s in range(SL):
+                if s == sd:
+                    tv = t[s]
+            for r in range(32):
+                if k0 + r < n:
+                    var x = Float32(0.0)
+                    if lane == r:
+                        x = ftz(identical_div(tv, ftz(l.unsafe_load((k0 + r) * ld + k0 + r))))
+                        xs[r] = x
+                        b.unsafe_store((k0 + r) * nrhs + j, x)
+                    x = shuffle_idx(x, UInt32(r))
+                    if lane > r and ri < n:
+                        tv = ftz(identical_mul_add(-ftz(l.unsafe_load(ri * ld + k0 + r)), x, tv))
+            comptime for s in range(SL):
+                if s == sd:
+                    t[s] = tv
+        barrier()
+        var kc = min(32, n - k0)
+        comptime for s in range(SL):
+            var i = tid + s * NT
+            if i >= k0 + 32 and i < n:
+                var tv = t[s]
+                for r in range(kc):
+                    tv = ftz(identical_mul_add(-ftz(l.unsafe_load(i * ld + k0 + r)), xs[r], tv))
+                t[s] = tv
+        barrier()
+
+
+def trsm_upper_staged_kernel(
+    l: MutPointer[Float32, MutAnyOrigin],
+    b: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    nrhs_in: Int32,
+    ld_in: Int32,
+):
+    """`trsm_upper_kernel`'s arithmetic, one serial chain per row (thread 0),
+    its L column staged into threadgroup memory by the whole block; one block
+    per right-hand-side column. Only thread 0 reads or writes `b`."""
+    comptime NT = CHOL_BACK_NT
+    comptime CH = CHOL_BACK_CH
+    var n = Int(n_in)
+    var nrhs = Int(nrhs_in)
+    var ld = Int(ld_in)
+    var j = Int(block_idx.x)
+    var tid = Int(thread_idx.x)
+    var lk = stack_allocation[CH, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    for ii in range(n):
+        var i = n - 1 - ii
+        var t = Float32(0.0)
+        if tid == 0:
+            t = ftz(b.unsafe_load(i * nrhs + j))
+        var k = i + 1
+        while k < n:
+            var cnt = min(CH, n - k)
+            for q in range(tid, cnt, NT):
+                lk[q] = ftz(l.unsafe_load((k + q) * ld + i))
+            barrier()
+            if tid == 0:
+                for q in range(cnt):
+                    t = ftz(identical_mul_add(-lk[q], ftz(b.unsafe_load((k + q) * nrhs + j)), t))
+            barrier()
+            k += cnt
+        if tid == 0:
+            b.unsafe_store(i * nrhs + j, ftz(identical_div(t, ftz(l.unsafe_load(i * ld + i)))))
 
 
 def trsm_panel_kernel(
@@ -295,15 +430,24 @@ def trsm_lower(
             block_dim=(tpb, 1, 1),
         )
     else:
-        ctx.enqueue_function[trsm_lower_kernel](
-            l.unsafe_ptr(),
-            b.unsafe_ptr(),
-            Int32(n),
-            Int32(nrhs),
-            Int32(lda),
-            grid_dim=(grid, 1, 1),
-            block_dim=(tpb, 1, 1),
-        )
+        var swept = False
+        comptime if CHOL_SWEEP_SOLVES:
+            if n <= CHOL_SWEEP_NT * CHOL_SWEEP_SLOTS:
+                swept = True
+                ctx.enqueue_function[trsm_lower_sweep_kernel](
+                    l.unsafe_ptr(), b.unsafe_ptr(), Int32(n), Int32(nrhs), Int32(lda),
+                    grid_dim=(nrhs, 1, 1), block_dim=(CHOL_SWEEP_NT, 1, 1),
+                )
+        if not swept:
+            ctx.enqueue_function[trsm_lower_kernel](
+                l.unsafe_ptr(),
+                b.unsafe_ptr(),
+                Int32(n),
+                Int32(nrhs),
+                Int32(lda),
+                grid_dim=(grid, 1, 1),
+                block_dim=(tpb, 1, 1),
+            )
     trace.record_device(ctx, tag, b, n * nrhs)
 
 
@@ -372,15 +516,23 @@ def trsm_upper(
             block_dim=(tpb, 1, 1),
         )
     else:
-        ctx.enqueue_function[trsm_upper_kernel](
-            l.unsafe_ptr(),
-            b.unsafe_ptr(),
-            Int32(n),
-            Int32(nrhs),
-            Int32(lda),
-            grid_dim=(grid, 1, 1),
-            block_dim=(tpb, 1, 1),
-        )
+        var staged = False
+        comptime if CHOL_SWEEP_SOLVES:
+            staged = True
+            ctx.enqueue_function[trsm_upper_staged_kernel](
+                l.unsafe_ptr(), b.unsafe_ptr(), Int32(n), Int32(nrhs), Int32(lda),
+                grid_dim=(nrhs, 1, 1), block_dim=(CHOL_BACK_NT, 1, 1),
+            )
+        if not staged:
+            ctx.enqueue_function[trsm_upper_kernel](
+                l.unsafe_ptr(),
+                b.unsafe_ptr(),
+                Int32(n),
+                Int32(nrhs),
+                Int32(lda),
+                grid_dim=(grid, 1, 1),
+                block_dim=(tpb, 1, 1),
+            )
     trace.record_device(ctx, tag, b, n * nrhs)
 
 
