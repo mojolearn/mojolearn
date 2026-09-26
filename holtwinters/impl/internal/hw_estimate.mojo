@@ -86,7 +86,7 @@ from max.gpu.sync import barrier
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from holtwinters.impl.internal.hw_utils import STMP_EPS, bound_device
+from holtwinters.impl.internal.hw_utils import HW_EST_FAST_BLOCK, STMP_EPS, bound_device
 from holtwinters.impl.tsa.holtwinters_params import (
     OPTIM_BFGS_ITER_LIMIT,
     OPTIM_MIN_ERROR_DIFF,
@@ -733,7 +733,7 @@ def hw_est_block_scratch_len(frequency: Int) -> Int:
 
 @always_inline
 def _blk_eval_jac[
-    origin: MutOrigin, //
+    origin: MutOrigin, //, B: Int
 ](
     sh: MutPointer[Float32, origin, address_space = AddressSpace.SHARED],
     j: Int, s: Int,
@@ -746,30 +746,40 @@ def _blk_eval_jac[
     """`_est_eval_jac` at the shared theta, in parallel. Thread 0 runs the
     scalar recurrence and publishes each step's scalars (double-buffered by
     `t` parity); thread `j < d` carries column `j` of the derivatives and
-    row `j` of `J^T J` and entry `j` of `J^T e` (into shared `_SH_G`).
+    row `j` of `J^T J` and entry `j` of `J^T e` (into shared `_L_G`).
     Returns the SSE on every thread."""
+    comptime _L_M = 0
+    comptime _L_TH = B * B
+    comptime _L_TT = _L_TH + B
+    comptime _L_RHS = _L_TT + B
+    comptime _L_G = _L_RHS + B
+    comptime _L_DX = _L_G + B
+    comptime _L_DIAG = _L_DX + B
+    comptime _L_S = _L_DIAG + B
+    comptime _L_CTL = _L_S + 32
+    comptime _L_LEN = _L_CTL + 4
     var d = f + 5
-    var a = sh.unsafe_load(_SH_TH + 0)
-    var b = sh.unsafe_load(_SH_TH + 1)
-    var g = sh.unsafe_load(_SH_TH + 2)
+    var a = sh.unsafe_load(_L_TH + 0)
+    var b = sh.unsafe_load(_L_TH + 1)
+    var g = sh.unsafe_load(_L_TH + 2)
     var oma = _f(Float32(1.0) - a)
     var omb = _f(Float32(1.0) - b)
     var omg = _f(Float32(1.0) - g)
-    var l = sh.unsafe_load(_SH_TH + 3)
-    var tr = sh.unsafe_load(_SH_TH + 4)
+    var l = sh.unsafe_load(_L_TH + 3)
+    var tr = sh.unsafe_load(_L_TH + 4)
     var dl = Float32(0.0)
     var db = Float32(0.0)
     if j < d:
         for jj in range(j, d):
             Arow.unsafe_store(jj, Float32(0.0))
-        sh.unsafe_store(_SH_G + j, Float32(0.0))
+        sh.unsafe_store(_L_G + j, Float32(0.0))
         dl = Float32(1.0) if j == 3 else Float32(0.0)
         db = Float32(1.0) if j == 4 else Float32(0.0)
         for p in range(f):
             dsj.unsafe_store(p, Float32(1.0) if j == 5 + p else Float32(0.0))
     if j == 0:
         for p in range(f):
-            sw.unsafe_store(p, sh.unsafe_load(_SH_TH + 5 + p))
+            sw.unsafe_store(p, sh.unsafe_load(_L_TH + 5 + p))
     var sse = Float32(0.0)
     # `p` is `t % f`, carried as the phase counter `ph` (see hw_eval.mojo: a signed
     # 64-bit floor modulus here made the gfx942 code object differ between
@@ -777,7 +787,7 @@ def _blk_eval_jac[
     var ph = 0
     for t in range(n):
         var p = ph
-        var S = _SH_S + (t & 1) * 16
+        var S = _L_S + (t & 1) * 16
         if j == 0:
             var y = _f(ts.unsafe_load(s + t * batch_size) * sc)
             var st = _est_step(y, sw.unsafe_load(p), l, tr, a, b, g, oma, omb, omg, additive)
@@ -806,14 +816,14 @@ def _blk_eval_jac[
         var dspj = Float32(0.0)
         if j < d:
             dspj = dsj.unsafe_load(p)
-            sh.unsafe_store(_SH_DX + j, _est_dx(additive, st, dl, db, dspj))
+            sh.unsafe_store(_L_DX + j, _est_dx(additive, st, dl, db, dspj))
         barrier()
         if j < d:
-            var xi = sh.unsafe_load(_SH_DX + j)
+            var xi = sh.unsafe_load(_L_DX + j)
             if xi != Float32(0.0):
-                sh.unsafe_store(_SH_G + j, _mad(st.e, xi, sh.unsafe_load(_SH_G + j)))
+                sh.unsafe_store(_L_G + j, _mad(st.e, xi, sh.unsafe_load(_L_G + j)))
                 for jj in range(j, d):
-                    Arow.unsafe_store(jj, _mad(xi, sh.unsafe_load(_SH_DX + jj), Arow.unsafe_load(jj)))
+                    Arow.unsafe_store(jj, _mad(xi, sh.unsafe_load(_L_DX + jj), Arow.unsafe_load(jj)))
             var lold = sh.unsafe_load(S + 10)
             var trold = sh.unsafe_load(S + 11)
             var ca = _est_ca(st, a, additive)
@@ -826,16 +836,16 @@ def _blk_eval_jac[
         if ph >= f:
             ph = 0
     if j == 0:
-        sh.unsafe_store(_SH_CTL, sse)
+        sh.unsafe_store(_L_CTL, sse)
     barrier()
-    var out = sh.unsafe_load(_SH_CTL)
+    var out = sh.unsafe_load(_L_CTL)
     barrier()
     return out
 
 
 @always_inline
 def _blk_eval_plain[
-    origin: MutOrigin, //
+    origin: MutOrigin, //, B: Int
 ](
     sh: MutPointer[Float32, origin, address_space = AddressSpace.SHARED],
     at: Int, j: Int, s: Int,
@@ -849,20 +859,30 @@ def _blk_eval_plain[
     """`_est_eval_plain` of the shared theta at offset `at`, by thread 0
     alone (the scalar recurrence has no column to split); every thread
     returns its SSE."""
+    comptime _L_M = 0
+    comptime _L_TH = B * B
+    comptime _L_TT = _L_TH + B
+    comptime _L_RHS = _L_TT + B
+    comptime _L_G = _L_RHS + B
+    comptime _L_DX = _L_G + B
+    comptime _L_DIAG = _L_DX + B
+    comptime _L_S = _L_DIAG + B
+    comptime _L_CTL = _L_S + 32
+    comptime _L_LEN = _L_CTL + 4
     var d = f + 5
     if j == 0:
         for jj in range(d):
             thp.unsafe_store(jj, sh.unsafe_load(at + jj))
         var v = _est_eval_plain(s, ts, n, batch_size, f, sc, additive, thp, sw,
                                 False, inv_sc, level, level, level)
-        sh.unsafe_store(_SH_CTL, v)
+        sh.unsafe_store(_L_CTL, v)
     barrier()
-    var out = sh.unsafe_load(_SH_CTL)
+    var out = sh.unsafe_load(_L_CTL)
     barrier()
     return out
 
 
-def holtwinters_estimate_block_kernel(
+def holtwinters_estimate_block_kernel[B: Int = HW_EST_BLOCK](
     ts: MutPointer[Float32, MutAnyOrigin],
     n_in: Int32,
     batch_size_in: Int32,
@@ -881,6 +901,16 @@ def holtwinters_estimate_block_kernel(
     start loop body with every per-element operation in the thread that owns
     that element. Writes the start's final theta (`cand_theta[(s*3+k)*d +
     j]`), SSE and (niter, criterion) (`cand_ints[2*(s*3+k)..]`)."""
+    comptime _L_M = 0
+    comptime _L_TH = B * B
+    comptime _L_TT = _L_TH + B
+    comptime _L_RHS = _L_TT + B
+    comptime _L_G = _L_RHS + B
+    comptime _L_DX = _L_G + B
+    comptime _L_DIAG = _L_DX + B
+    comptime _L_S = _L_DIAG + B
+    comptime _L_CTL = _L_S + 32
+    comptime _L_LEN = _L_CTL + 4
     var blk = Int(block_idx.x)
     var j = Int(thread_idx.x)
     var n = Int(n_in)
@@ -890,7 +920,7 @@ def holtwinters_estimate_block_kernel(
     var s = blk // HW_EST_STARTS
     var k = blk - s * HW_EST_STARTS
     var d = f + 5
-    var sh = stack_allocation[_SH_LEN, Float32, address_space = AddressSpace.SHARED]()
+    var sh = stack_allocation[_L_LEN, Float32, address_space = AddressSpace.SHARED]()
     var base = scratch.unsafe_offset(blk * hw_est_block_scratch_len(f))
     var jr = j if j < d else 0
     var Arow = base.unsafe_offset(jr * d)
@@ -904,64 +934,64 @@ def holtwinters_estimate_block_kernel(
     var b0 = _f(start_trend.unsafe_load(s) * sc)
     if j < d:
         var s0 = start_season.unsafe_load((j - 5) * batch_size + s) if j >= 5 else Float32(0.0)
-        sh.unsafe_store(_SH_TH + j, _seed(k, j, l0, b0, s0, sc, additive))
+        sh.unsafe_store(_L_TH + j, _seed(k, j, l0, b0, s0, sc, additive))
     barrier()
-    var sse = _blk_eval_jac(sh, j, s, ts, n, batch_size, f, sc, additive, Arow, dsj, sw)
+    var sse = _blk_eval_jac[B](sh, j, s, ts, n, batch_size, f, sc, additive, Arow, dsj, sw)
     var lam = HW_EST_LAMBDA0
     var crit = OPTIM_BFGS_ITER_LIMIT
     var it = 0
     while it < HW_EST_MAX_ITER:
         it += 1
         if j < d:
-            sh.unsafe_store(_SH_DIAG + j, Arow.unsafe_load(j))
+            sh.unsafe_store(_L_DIAG + j, Arow.unsafe_load(j))
         barrier()
         var maxdiag = Float32(0.0)
         for i in range(d):
-            var v = sh.unsafe_load(_SH_DIAG + i)
+            var v = sh.unsafe_load(_L_DIAG + i)
             if v > maxdiag:
                 maxdiag = v
         var floor_ = _f(HW_EST_DIAG_FLOOR * maxdiag)
         if j < d:
             for jj in range(j, d):
                 var v = Arow.unsafe_load(jj)
-                sh.unsafe_store(_SH_M + j * d + jj, v)
-                sh.unsafe_store(_SH_M + jj * d + j, v)
+                sh.unsafe_store(_L_M + j * d + jj, v)
+                sh.unsafe_store(_L_M + jj * d + j, v)
             var ajj = Arow.unsafe_load(j)
             var dg: Float32 = ajj if ajj > floor_ else floor_
-            sh.unsafe_store(_SH_M + j * d + j, _mad(lam, dg, ajj))
-            sh.unsafe_store(_SH_RHS + j, sh.unsafe_load(_SH_G + j))
+            sh.unsafe_store(_L_M + j * d + j, _mad(lam, dg, ajj))
+            sh.unsafe_store(_L_RHS + j, sh.unsafe_load(_L_G + j))
         barrier()
-        var h0 = _hold(sh.unsafe_load(_SH_TH + 0), sh.unsafe_load(_SH_G + 0))
-        var h1 = _hold(sh.unsafe_load(_SH_TH + 1), sh.unsafe_load(_SH_G + 1))
-        var h2 = _hold(sh.unsafe_load(_SH_TH + 2), sh.unsafe_load(_SH_G + 2))
+        var h0 = _hold(sh.unsafe_load(_L_TH + 0), sh.unsafe_load(_L_G + 0))
+        var h1 = _hold(sh.unsafe_load(_L_TH + 1), sh.unsafe_load(_L_G + 1))
+        var h2 = _hold(sh.unsafe_load(_L_TH + 2), sh.unsafe_load(_L_G + 2))
         if j < d:
             for i in range(3):
                 var hi = h0 if i == 0 else (h1 if i == 1 else h2)
                 if hi:
-                    sh.unsafe_store(_SH_M + i * d + j, Float32(0.0))
-                    sh.unsafe_store(_SH_M + j * d + i, Float32(0.0))
+                    sh.unsafe_store(_L_M + i * d + j, Float32(0.0))
+                    sh.unsafe_store(_L_M + j * d + i, Float32(0.0))
         barrier()
         if j < 3:
             var hj = h0 if j == 0 else (h1 if j == 1 else h2)
             if hj:
-                sh.unsafe_store(_SH_M + j * d + j, Float32(1.0))
-                sh.unsafe_store(_SH_RHS + j, Float32(0.0))
+                sh.unsafe_store(_L_M + j * d + j, Float32(1.0))
+                sh.unsafe_store(_L_RHS + j, Float32(0.0))
         # the elimination: row i in thread i, pivot row k untouched at step k
         var ok = True
         for kk in range(d):
             barrier()
-            var piv = sh.unsafe_load(_SH_M + kk * d + kk)
+            var piv = sh.unsafe_load(_L_M + kk * d + kk)
             if not (piv > Float32(0.0)):
                 ok = False
                 break
             if j > kk and j < d:
-                var m = _f(sh.unsafe_load(_SH_M + j * d + kk) / piv)
+                var m = _f(sh.unsafe_load(_L_M + j * d + kk) / piv)
                 if m != Float32(0.0):
                     var nm = -m
                     for jj in range(kk + 1, d):
-                        sh.unsafe_store(_SH_M + j * d + jj,
-                                        _mad(nm, sh.unsafe_load(_SH_M + kk * d + jj), sh.unsafe_load(_SH_M + j * d + jj)))
-                    sh.unsafe_store(_SH_RHS + j, _mad(nm, sh.unsafe_load(_SH_RHS + kk), sh.unsafe_load(_SH_RHS + j)))
+                        sh.unsafe_store(_L_M + j * d + jj,
+                                        _mad(nm, sh.unsafe_load(_L_M + kk * d + jj), sh.unsafe_load(_L_M + j * d + jj)))
+                    sh.unsafe_store(_L_RHS + j, _mad(nm, sh.unsafe_load(_L_RHS + kk), sh.unsafe_load(_L_RHS + j)))
         barrier()
         if not ok:
             lam = _f(lam * Float32(4.0))
@@ -972,25 +1002,25 @@ def holtwinters_estimate_block_kernel(
         if j == 0:
             var r = d - 1
             while r >= 0:
-                var acc = sh.unsafe_load(_SH_RHS + r)
+                var acc = sh.unsafe_load(_L_RHS + r)
                 for jj in range(r + 1, d):
-                    acc = _mad(-sh.unsafe_load(_SH_M + r * d + jj), sh.unsafe_load(_SH_RHS + jj), acc)
-                sh.unsafe_store(_SH_RHS + r, _f(acc / sh.unsafe_load(_SH_M + r * d + r)))
+                    acc = _mad(-sh.unsafe_load(_L_M + r * d + jj), sh.unsafe_load(_L_RHS + jj), acc)
+                sh.unsafe_store(_L_RHS + r, _f(acc / sh.unsafe_load(_L_M + r * d + r)))
                 r -= 1
         barrier()
         if j < d:
-            var v = _f(sh.unsafe_load(_SH_TH + j) + sh.unsafe_load(_SH_RHS + j))
+            var v = _f(sh.unsafe_load(_L_TH + j) + sh.unsafe_load(_L_RHS + j))
             if j < 3:
                 v = bound_device(v)
-            sh.unsafe_store(_SH_TT + j, v)
+            sh.unsafe_store(_L_TT + j, v)
         barrier()
-        var ns = _blk_eval_plain(sh, _SH_TT, j, s, ts, n, batch_size, f, sc, additive, sw, thp, inv_sc, level)
+        var ns = _blk_eval_plain[B](sh, _L_TT, j, s, ts, n, batch_size, f, sc, additive, sw, thp, inv_sc, level)
         if ns < sse:
             var rel = _f(_f(sse - ns) / sse)
             if j < d:
-                sh.unsafe_store(_SH_TH + j, sh.unsafe_load(_SH_TT + j))
+                sh.unsafe_store(_L_TH + j, sh.unsafe_load(_L_TT + j))
             barrier()
-            sse = _blk_eval_jac(sh, j, s, ts, n, batch_size, f, sc, additive, Arow, dsj, sw)
+            sse = _blk_eval_jac[B](sh, j, s, ts, n, batch_size, f, sc, additive, Arow, dsj, sw)
             lam = _f(lam / Float32(3.0))
             if lam < HW_EST_LAMBDA_MIN:
                 lam = HW_EST_LAMBDA_MIN
@@ -1003,7 +1033,7 @@ def holtwinters_estimate_block_kernel(
                 crit = OPTIM_MIN_PARAM_DIFF
                 break
     if j < d:
-        cand_theta.unsafe_store(blk * d + j, sh.unsafe_load(_SH_TH + j))
+        cand_theta.unsafe_store(blk * d + j, sh.unsafe_load(_L_TH + j))
     if j == 0:
         cand_sse.unsafe_store(blk, sse)
         cand_ints.unsafe_store(2 * blk, Int32(it))
@@ -1098,15 +1128,26 @@ def holtwinters_estimate_gpu(
         cand_sse.enqueue_fill(scratch_poison)
         sw_all.enqueue_fill(scratch_poison)
         ctx.synchronize()
-        ctx.enqueue_function[holtwinters_estimate_block_kernel](
-            ts.unsafe_ptr(), Int32(n), Int32(batch_size), Int32(frequency),
-            Int32(1 if additive else 0),
-            start_level.unsafe_ptr(), start_trend.unsafe_ptr(), start_season.unsafe_ptr(),
-            scratch.unsafe_ptr(), cand_theta.unsafe_ptr(), cand_sse.unsafe_ptr(), cand_ints.unsafe_ptr(),
-            level.unsafe_ptr(),
-            grid_dim=(blocks, 1, 1),
-            block_dim=(HW_EST_BLOCK, 1, 1),
-        )
+        if d <= HW_EST_FAST_BLOCK:
+            ctx.enqueue_function[holtwinters_estimate_block_kernel[HW_EST_FAST_BLOCK]](
+                ts.unsafe_ptr(), Int32(n), Int32(batch_size), Int32(frequency),
+                Int32(1 if additive else 0),
+                start_level.unsafe_ptr(), start_trend.unsafe_ptr(), start_season.unsafe_ptr(),
+                scratch.unsafe_ptr(), cand_theta.unsafe_ptr(), cand_sse.unsafe_ptr(), cand_ints.unsafe_ptr(),
+                level.unsafe_ptr(),
+                grid_dim=(blocks, 1, 1),
+                block_dim=(HW_EST_FAST_BLOCK, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[holtwinters_estimate_block_kernel[HW_EST_BLOCK]](
+                ts.unsafe_ptr(), Int32(n), Int32(batch_size), Int32(frequency),
+                Int32(1 if additive else 0),
+                start_level.unsafe_ptr(), start_trend.unsafe_ptr(), start_season.unsafe_ptr(),
+                scratch.unsafe_ptr(), cand_theta.unsafe_ptr(), cand_sse.unsafe_ptr(), cand_ints.unsafe_ptr(),
+                level.unsafe_ptr(),
+                grid_dim=(blocks, 1, 1),
+                block_dim=(HW_EST_BLOCK, 1, 1),
+            )
         ctx.synchronize()
         ctx.enqueue_function[holtwinters_estimate_finish_kernel](
             ts.unsafe_ptr(), Int32(n), Int32(batch_size), Int32(frequency),

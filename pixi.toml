@@ -82,6 +82,10 @@ release-rehearsal = "python3 tools/release_rehearsal.py"
 #   pixi run release 0.8.15 --dry-run      the plan and what is already done
 #   pixi run release 0.8.15 --publish pypi everything, including publication
 release = "python3 tools/release.py"
+# COMPILE ON MERGE, NOT ON RELEASE DAY (lane/prebuild-on-merge): which release
+# bindings of a commit (default origin/main) the R2 binding cache lacks, per
+# Linux target. `pixi run prebuild --rent --targets cuda-sm_89` fills them.
+prebuild = "python3 tools/prebuild_changed.py plan"
 
 # ---------------------------------------------------------------------------
 # THE FAST SPEED LANE (bench/speed/README.md). Ours against the vendor's own

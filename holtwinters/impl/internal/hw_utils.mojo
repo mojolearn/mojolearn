@@ -45,6 +45,9 @@ not a property anyone should be relying on for a recorded stage.
 ============================================================================
 """
 
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
@@ -237,3 +240,15 @@ def hw_float32_inf() -> Float32:
 
 def hw_is_finite(v: Float32) -> Bool:
     return v == v and abs(v) != hw_float32_inf()
+
+
+comptime HW_EST_FAST_BLOCK = 32 if (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_HW_EST_BLOCK64"]()
+) else 64
+"""FAST on Apple: a (series, start) block with `d <= 32` runs as ONE SIMD
+group with its threadgroup layout sized for 32 (5 KB instead of 18 KB), so
+several blocks share a core. Thread `j` still owns element `j` and every
+loop runs over `d`: the same values as the 64-wide block."""
+
