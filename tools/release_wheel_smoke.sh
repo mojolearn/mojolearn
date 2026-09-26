@@ -5,6 +5,7 @@
 #   bash tools/release_wheel_smoke.sh <wheel> --expected-source-commit <40-hex> [options]          DRY RUN
 #   bash tools/release_wheel_smoke.sh <wheel> --expected-source-commit <40-hex> [options] --rent   rents
 #   bash tools/release_wheel_smoke.sh <wheel> --expected-source-commit <40-hex> --ssh '<target>'   an existing box
+#   bash tools/release_wheel_smoke.sh --from-index testpypi|pypi --version V [options] [--rent]   THE USER'S INSTALL
 #
 # It runs tools/qualify_verifier_wheel.py --scope expanded (the checklist's
 # step 5 smoke) on the box and brings results.json home for
@@ -85,6 +86,29 @@
 #                        With a plugin the expanded smoke runs on hip too, so each
 #                        plugin has a receipt of its own vendor
 #                        (tools/check_light_release.py).
+#   --from-index I       THE USER'S INSTALL, RESOLVED FROM AN INDEX (2026-09-26), in
+#   --version V          place of the positional <wheel>: I is testpypi or pypi. No
+#                        wheel is shipped. Before anything is rented (and in the dry
+#                        run) tools/index_release_check.py precheck asks the index's
+#                        JSON API for mojolearn, mojolearn-nvidia and mojolearn-amd
+#                        at V and refuses by name when one is missing. On the box, a
+#                        fresh venv, then exactly what a user types, plus --report:
+#                          testpypi: pip install --index-url https://test.pypi.org/simple/
+#                                    --extra-index-url https://pypi.org/simple/ "mojolearn==V"
+#                          pypi:     pip install "mojolearn==V"
+#                        then tools/index_release_check.py verify (all three installed
+#                        at exactly V; in pip's report the three came from the index's
+#                        own file host and every other dependency from PyPI's, the
+#                        dependency confusion guard; `import mojolearn` loads this
+#                        vendor's set from its plugin at V), then the SAME expanded
+#                        smoke (qualify_verifier_wheel.py --installed-python) and the
+#                        optional --column / --ref-column pass, from that installed
+#                        package. --expected-source-commit is optional here (checked
+#                        against the installed package when given); --plugin is
+#                        refused. pip_report.json, index_check.json, the dist listing
+#                        (dists.txt) and results.json come home in --out (default
+#                        ~/mojolearn-evidence/index-install/<V>/<I>/<stamp>-<vendor>).
+#                        tools/index_install_check.sh runs both vendors at once.
 #
 # A RENTED RUNPOD RUN, IN ORDER: Mac dead-man armed BEFORE the create (lease +
 # ready timeout + 10 min, by id or by name); create; wait for ssh (600 s); arm
@@ -139,6 +163,7 @@ CUDA="13.0"; LEASE=45; SMOKE_SECONDS=1800; SSH_GIVEN=""; RENT=0
 VENDOR=cuda; SELECTION=""; REFS=(); GPU_SET=0; IMAGE_SET=0; CUDA_SET=0
 PROVIDER=auto
 PLUGINS=(); PLUGIN=""; PLUGIN_SHA=""
+FROM_INDEX=""; IDX_VERSION=""; FETCH_EXTRA=""; INDEX_ARGS=""; INDEX_CHECK_SHA=""
 DO_SIZE="${MOJOLEARN_SMOKE_DO_SIZE:-gpu-mi325x1-256gb}"
 DO_REGIONS="${MOJOLEARN_SMOKE_DO_REGIONS:-tor1,nyc2}"
 DO_IMAGE="${MOJOLEARN_SMOKE_DO_IMAGE:-188571990}"
@@ -184,6 +209,8 @@ while [ $# -gt 0 ]; do
         --hotaisle-cap) shift; HA_CAP_USD="${1:-}" ;;
         --column) shift; SELECTION="${1:-}" ;;
         --plugin) shift; PLUGINS+=("${1:-}") ;;
+        --from-index) shift; FROM_INDEX="${1:-}"; [ -n "$FROM_INDEX" ] || die "--from-index needs testpypi or pypi" ;;
+        --version) shift; IDX_VERSION="${1:-}" ;;
         --ref-column|--cpu-column) shift; REFS+=("${1:-}") ;;
         --lease) shift; LEASE="${1:-}" ;;
         --smoke-seconds) shift; SMOKE_SECONDS="${1:-}" ;;
@@ -220,6 +247,9 @@ printf '%s' "$DO_IMAGE" | grep -Eq '^[0-9]+$' || die "--do-image must be a numer
 # column alone.
 RUN_SMOKE=0
 { [ "$VENDOR" = cuda ] || [ "${#PLUGINS[@]}" -gt 0 ]; } && RUN_SMOKE=1
+# --from-index installs the split release (both plugins), so each vendor
+# runs the smoke, as a split local-file column does.
+[ -z "$FROM_INDEX" ] || RUN_SMOKE=1
 [ "$RUN_SMOKE" = 1 ] || [ -n "$SELECTION" ] || die "--vendor hip runs no smoke; give --column (or --plugin)"
 LANES=""
 if [ -n "$SELECTION" ]; then
@@ -240,16 +270,39 @@ for _ref in ${REFS[@]+"${REFS[@]}"}; do
     [ -n "$SELECTION" ] || die "--ref-column needs --column"
     [ -f "$_ref" ] || die "no reference column $_ref"
 done
+INDEX_CHECK="$ROOT/tools/index_release_check.py"
+if [ -n "$FROM_INDEX" ]; then
+    # THE USER'S INSTALL: no wheel file; the version and the index name it.
+    case "$FROM_INDEX" in testpypi|pypi) ;; *) die "--from-index must be testpypi or pypi" ;; esac
+    [ -z "$WHEEL" ] || die "--from-index installs from the index; give no wheel file ($WHEEL)"
+    [ "${#PLUGINS[@]}" = 0 ] || die "--from-index installs the plugins from the index; --plugin is refused"
+    printf '%s' "$IDX_VERSION" | grep -Eq '^[0-9]+(\.[0-9]+)*((a|b|rc)[0-9]+)?(\.post[0-9]+)?(\.dev[0-9]+)?$' \
+        || die "--from-index needs --version V (a release version like 0.8.20, got '$IDX_VERSION')"
+    [ -z "$COMMIT" ] || printf '%s' "$COMMIT" | grep -Eq '^[0-9a-f]{40}$' || die "--expected-source-commit must be the full 40-hex commit"
+    [ -f "$INDEX_CHECK" ] || die "no $INDEX_CHECK"
+else
+[ -z "$IDX_VERSION" ] || die "--version goes with --from-index (a local wheel carries its own version)"
 [ -n "$WHEEL" ] && [ -f "$WHEEL" ] || die "no wheel file given ($WHEEL)"
 WHEEL=$(cd "$(dirname "$WHEEL")" && pwd)/$(basename "$WHEEL")
 case "$(basename "$WHEEL")" in mojolearn-*-manylinux*_x86_64.whl) ;; *) die "$(basename "$WHEEL") is not a final manylinux x86_64 mojolearn wheel (smoke the repaired, stripped one)" ;; esac
 printf '%s' "$COMMIT" | grep -Eq '^[0-9a-f]{40}$' || die "--expected-source-commit must be the full 40-hex commit"
+fi
 for _n in "$LEASE" "$SMOKE_SECONDS"; do printf '%s' "$_n" | grep -Eq '^[0-9]+$' || die "'$_n' is not a number"; done
 [ "$LEASE" -ge 10 ] && [ "$LEASE" -le 90 ] || die "--lease must be 10..90 minutes"
 [ "$SMOKE_SECONDS" -ge 60 ] && [ "$SMOKE_SECONDS" -lt $(( LEASE * 60 - 300 )) ] || die "--smoke-seconds must be at least 60 and leave 5 minutes of the lease"
 [ "$RENT" = 0 ] || [ -z "$SSH_GIVEN" ] || die "--rent and --ssh are exclusive"
 QUALIFY="$ROOT/tools/qualify_verifier_wheel.py"
 [ -f "$QUALIFY" ] || die "no $QUALIFY"
+if [ -n "$FROM_INDEX" ]; then
+    VERSION=$IDX_VERSION; WHEEL_SHA=""
+    PLUGIN_PATHS=""; PLUGIN_BASES=""; PLUGIN_PAIRS=""; PLUGIN_BASE=""; PLUGIN_BOX_ARGS=""; PLUGIN_BOX_PATHS=""
+    INDEX_CHECK_SHA=$(shasum -a 256 "$INDEX_CHECK" | cut -d' ' -f1)
+    FETCH_EXTRA="install.log install.exit pip_report.json dists.txt index_check.json index_check.log index_check.exit"
+    case "$FROM_INDEX" in
+        testpypi) INDEX_ARGS="--index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/" ;;
+        *) INDEX_ARGS="" ;;
+    esac
+else
 WHEEL_INFO=$(python3 - "$WHEEL" "$COMMIT" 2>&1 <<'PY'
 import hashlib, re, sys, zipfile
 wheel, want = sys.argv[1:]
@@ -291,9 +344,16 @@ PLUGIN_BOX_ARGS=""; PLUGIN_BOX_PATHS=""
 for _b in $PLUGIN_BASES; do
     PLUGIN_BOX_ARGS="$PLUGIN_BOX_ARGS --plugin $RDIR/$_b"; PLUGIN_BOX_PATHS="$PLUGIN_BOX_PATHS $RDIR/$_b"
 done
+fi
 QUALIFY_SHA=$(shasum -a 256 "$QUALIFY" | cut -d' ' -f1)
 STAMP=$(date -u +%Y%m%d-%H%M%S)
 POD_NAME="mojolearn-smoke-$(printf '%s' "$VERSION" | tr -c 'a-z0-9\n' '-')-$STAMP"
+if [ -n "$FROM_INDEX" ]; then
+    # tools/index_install_check.sh starts both vendors in the same second: the
+    # vendor in the name keeps the two boxes (and their name-keyed dead-men) apart.
+    POD_NAME="mojolearn-smoke-idx-$VENDOR-$(printf '%s' "$VERSION" | tr -c 'a-z0-9\n' '-')-$STAMP"
+    [ -n "$OUT" ] || OUT="${MOJOLEARN_EVIDENCE_ROOT:-$HOME/mojolearn-evidence}/index-install/$VERSION/$FROM_INDEX/$STAMP-$VENDOR"
+fi
 [ -n "$OUT" ] || OUT="${MOJOLEARN_EVIDENCE_ROOT:-$HOME/mojolearn-evidence}/release-smoke/$VERSION/$STAMP-linux"
 [ ! -e "$OUT/results.json" ] || die "$OUT/results.json exists; use a fresh --out"
 CREATE="$TMPD/create.json"
@@ -351,6 +411,58 @@ if [ -n "$LANES" ]; then
 fi
 echo done > $RDIR/box.done
 BOX_EOF
+# THE USER'S INSTALL (--from-index): a fresh venv, pip resolves mojolearn==V
+# from the index exactly as a user's command does (--report, --no-cache-dir
+# and --no-input change nothing it resolves), then the index verdict, the
+# SAME expanded smoke and the optional column, all from that one install.
+# Composed always (a heredoc inside a compound command trips old bash), used
+# only with --from-index.
+_commit_arg=""; [ -z "$COMMIT" ] || _commit_arg=" --expected-source-commit $COMMIT"
+cat > "$TMPD/box-index.sh" <<BOX_EOF
+#!/bin/bash
+set -u
+cd $RDIR || exit 9
+{ nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>/dev/null || rocm-smi --showproductname 2>/dev/null; uname -a; } > box.txt 2>&1
+PY=\$(command -v python3.13 || command -v python3.12 || command -v python3.11 || command -v python3.10 || command -v python3)
+echo "python=\$PY \$(\$PY --version 2>&1)" >> box.txt
+sha256sum qualify_verifier_wheel.py index_release_check.py >> box.txt
+IV=$RDIR/iv
+"\$PY" -m venv \$IV > install.log 2>&1 || { (apt-get -o DPkg::Lock::Timeout=120 update -qq && apt-get -o DPkg::Lock::Timeout=120 install -y -qq python3-venv) >> install.log 2>&1 && "\$PY" -m venv \$IV >> install.log 2>&1; }
+# pip >= 22.2 writes --report; the venv's own pip is upgraded from PyPI first (pip is not ours)
+\$IV/bin/python -m pip install --disable-pip-version-check --no-input -q --upgrade "pip>=23.1" >> install.log 2>&1
+echo "pip=\$(\$IV/bin/python -m pip --version 2>&1)" >> box.txt
+echo "+ pip install --no-input --no-cache-dir --report $RDIR/pip_report.json $INDEX_ARGS mojolearn==$VERSION" >> install.log
+\$IV/bin/python -m pip install --disable-pip-version-check --no-input --no-cache-dir --report $RDIR/pip_report.json $INDEX_ARGS "mojolearn==$VERSION" >> install.log 2>&1
+echo \$? > install.exit
+\$IV/bin/python -m pip list --disable-pip-version-check --format=freeze > dists.txt 2>&1
+mkdir -p $RDIR/run && cd $RDIR/run
+PYTHONNOUSERSITE=1 MOJOLEARN_NUMERIC_MODE=identical \$IV/bin/python $RDIR/index_release_check.py verify --index $FROM_INDEX \\
+    --version $VERSION --vendor $VENDOR --report $RDIR/pip_report.json --out $RDIR/index_check.json > $RDIR/index_check.log 2>&1
+echo \$? > $RDIR/index_check.exit
+cd $RDIR
+if [ "\$(cat install.exit)" = 0 ]; then
+timeout -k 20 $SMOKE_SECONDS "\$PY" qualify_verifier_wheel.py --installed-python \$IV/bin/python --expected-version $VERSION \\
+    --scope expanded$_commit_arg --output $RDIR/out > smoke.log 2>&1
+echo \$? > smoke.exit
+else
+echo "pip install mojolearn==$VERSION from $FROM_INDEX failed (install.log); no smoke" > smoke.log; echo 1 > smoke.exit
+fi
+if [ -n "$LANES" ]; then
+  # The release column from the SAME installed package: no second install.
+  echo "install_exit=\$(cat $RDIR/install.exit)" > column.txt
+  mkdir -p $RDIR/run && cd $RDIR/run
+  _pkg=\$(\$IV/bin/python -c 'import importlib.util as u; print(list(u.find_spec("mojolearn").submodule_search_locations)[0])' 2>/dev/null)
+  export MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_COMMIT=\$(cat "\$_pkg/identity_columns/COMMIT" 2>/dev/null)
+  \$IV/bin/python -c 'import mojolearn as m; print("version", m.__version__, "vendor", m.vendor())' >> $RDIR/column.txt 2>&1
+  \$IV/bin/python -m mojolearn verify --self-test > $RDIR/selftest.log 2>&1; echo "selftest_exit=\$?" >> $RDIR/column.txt
+  timeout -k 20 $SMOKE_SECONDS \$IV/bin/python -m mojolearn._identity_break --lanes "$LANES" --json $RDIR/column.json \\
+      --repeats 1 --fixtures base,denormal,odd --fail-on-refused --require-backend $VENDOR --no-batch --no-rlpair > $RDIR/column.log 2>&1
+  echo \$? > $RDIR/column.exit
+  cd $RDIR
+fi
+echo done > $RDIR/box.done
+BOX_EOF
+[ -z "$FROM_INDEX" ] || mv "$TMPD/box-index.sh" "$BOX"
 bash -n "$BOX" || die "the box command is not valid bash"
 
 # ---------------------------------------------------------------- DigitalOcean primitives
@@ -512,11 +624,24 @@ do_destroy() {  # DROPLET_ID, or a sweep by tag and name; DO_GONE=1 only on a GE
 }
 
 echo "== release_wheel_smoke: $([ -n "$SSH_GIVEN" ] && echo "EXISTING BOX $SSH_GIVEN" || { [ "$RENT" = 1 ] && echo RENT || echo 'DRY RUN'; }) =="
+if [ -n "$FROM_INDEX" ]; then
+echo "  index    $FROM_INDEX  version $VERSION  vendor $VENDOR  commit ${COMMIT:-not pinned, the installed package records its own}"
+echo "  install  pip install --report $RDIR/pip_report.json $INDEX_ARGS 'mojolearn==$VERSION' (fresh venv, no local wheel)"
+echo "  judges   tools/index_release_check.py verify: all three at $VERSION, each from its index host, the $VENDOR set loaded from its plugin"
+echo "  ships    tools/qualify_verifier_wheel.py (sha256 $(printf %s "$QUALIFY_SHA" | cut -c1-16)...) + tools/index_release_check.py (sha256 $(printf %s "$INDEX_CHECK_SHA" | cut -c1-16)...), no wheel"
+echo "  smoke    qualify_verifier_wheel.py --installed-python --scope expanded, bounded ${SMOKE_SECONDS}s"
+[ -z "$LANES" ] || echo "  column   $LANES from the installed package; references: ${#REFS[@]}"
+echo "  out      $OUT"
+# BEFORE ANYTHING IS RENTED: the index serves all three projects at V.
+python3 "$INDEX_CHECK" precheck --index "$FROM_INDEX" --version "$VERSION" \
+    || die "the index precheck refused (above): pip install mojolearn==$VERSION cannot resolve from $FROM_INDEX; nothing was rented"
+else
 echo "  wheel    $(basename "$WHEEL")  sha256 $WHEEL_SHA  commit $COMMIT"
 [ -z "$PLUGIN" ] || echo "  plugins  $PLUGIN_BASES (installed with the core; this vendor's: $PLUGIN_BASE sha256 $PLUGIN_SHA)"
 echo "  ships    the wheel + tools/qualify_verifier_wheel.py (sha256 $(printf %s "$QUALIFY_SHA" | cut -c1-16)...) and nothing else"
 echo "  smoke    qualify_verifier_wheel.py --scope expanded, bounded ${SMOKE_SECONDS}s"
 echo "  out      $OUT"
+fi
 if [ -z "$SSH_GIVEN" ]; then
     case "$PROVIDER" in
         auto) echo "  provider auto: RunPod once, Hot Aisle when RunPod has no '$GPU' to give, DigitalOcean when Hot Aisle refuses before a create" ;;
@@ -679,9 +804,16 @@ teardown() {
 
 mkdir -p "$OUT" || die "cannot create $OUT"
 [ -n "$SSH_GIVEN" ] && trap 'rm -rf "$TMPD"' EXIT
+if [ -n "$FROM_INDEX" ]; then
+{ echo "from_index=$FROM_INDEX"; echo "version=$VERSION"; echo "vendor=$VENDOR"; echo "commit=${COMMIT:-unpinned}"
+  echo "pip_command=pip install $INDEX_ARGS mojolearn==$VERSION"
+  echo "qualify_sha256=$QUALIFY_SHA"; echo "index_check_sha256=$INDEX_CHECK_SHA"
+  echo "target=${SSH_GIVEN:-rented, provider $PROVIDER}"; echo "started=$(date -u +%FT%TZ)"; } > "$OUT/smoke.txt"
+else
 { echo "wheel=$WHEEL"; echo "wheel_sha256=$WHEEL_SHA"; echo "commit=$COMMIT"; echo "qualify_sha256=$QUALIFY_SHA"
   [ -z "$PLUGIN" ] || { echo "plugin=$PLUGIN"; echo "plugin_sha256=$PLUGIN_SHA"; echo "plugins=$PLUGIN_PAIRS"; }
   echo "target=${SSH_GIVEN:-rented, provider $PROVIDER}"; echo "started=$(date -u +%FT%TZ)"; } > "$OUT/smoke.txt"
+fi
 cp "$BOX" "$OUT/box.sh"
 
 rent_runpod() {  # sets POD_ID and SSH_TARGET; 1 (nothing created) when RunPod had no stock and --provider auto
@@ -919,6 +1051,19 @@ if [ "$BOX_SUDO" = 1 ]; then
     echo "box_sudo=1${BOX_ENV:+ box_env=$BOX_ENV}" >> "$OUT/smoke.txt"
 fi
 
+if [ -n "$FROM_INDEX" ]; then
+# Uploads (--from-index): the two drivers and the box command; no wheel, pip
+# fetches the release from the index on the box.
+say "uploading the smoke driver and the index check (no wheel: pip resolves mojolearn==$VERSION from $FROM_INDEX on the box)"
+bx 60 "rm -rf $RDIR && mkdir -p $RDIR" < /dev/null || die "could not prepare $RDIR"
+bx 60 "cat > $RDIR/qualify_verifier_wheel.py" < "$QUALIFY" || die "driver upload failed"
+bx 60 "cat > $RDIR/index_release_check.py" < "$INDEX_CHECK" || die "index check upload failed"
+bx 60 "cat > $RDIR/box.sh" < "$BOX" || die "box command upload failed"
+_remote=$(bx 120 "cd $RDIR && sha256sum qualify_verifier_wheel.py index_release_check.py" < /dev/null 2>&1)
+printf '%s\n' "$_remote" | grep -q "^$QUALIFY_SHA " || die "driver sha256 differs on the box: $_remote"
+printf '%s\n' "$_remote" | grep -q "^$INDEX_CHECK_SHA " || die "index check sha256 differs on the box: $_remote"
+say "both drivers landed, sha256 verified on the box"
+else
 # Uploads: two files, each bounded, each hashed on the box.
 _wb=$(wc -c < "$WHEEL" | tr -d ' ')
 _up_secs=$(( 120 + _wb / 200000 ))     # 200 kB/s floor on the Mac's uplink
@@ -939,6 +1084,7 @@ for _pair in $(printf '%s' "$PLUGIN_PAIRS" | tr ',' ' '); do
 done
 printf '%s\n' "$_remote" | grep -q "^$QUALIFY_SHA " || die "driver sha256 differs on the box: $_remote"
 say "both files landed, sha256 verified on the box"
+fi
 
 say "starting the smoke (detached; bound ${SMOKE_SECONDS}s)"
 bx 60 "$BOX_START" < /dev/null | grep -q STARTED \
@@ -956,7 +1102,7 @@ say "smoke exit: ${SMOKE_EXIT:-none}"
 
 say "fetching the results"
 mkdir -p "$OUT/remote"
-bx 300 "cd $RDIR && tar czf - box.txt box.log smoke.log smoke.exit out column.txt column_venv.log selftest.log column.log column.exit column.json column.json.errors.txt 2>/dev/null" < /dev/null \
+bx 300 "cd $RDIR && tar czf - box.txt box.log smoke.log smoke.exit out column.txt column_venv.log selftest.log column.log column.exit column.json column.json.errors.txt $FETCH_EXTRA 2>/dev/null" < /dev/null \
     | ( cd "$OUT/remote" && tar xzf - ) || echo "  FETCH INCOMPLETE"
 [ -f "$OUT/remote/box.txt" ] && sed 's/^/  box: /' "$OUT/remote/box.txt"
 if [ -f "$OUT/remote/out/results.json" ]; then
@@ -966,7 +1112,58 @@ echo "finished=$(date -u +%FT%TZ) smoke_exit=${SMOKE_EXIT:-none}" >> "$OUT/smoke
 
 # The receipt, judged here: about THIS wheel, THIS commit, and PASSED.
 _v=0
-if [ "$RUN_SMOKE" = 1 ]; then
+if [ -n "$FROM_INDEX" ]; then
+# THE USER'S INSTALL, judged here: the index verdict from the box (versions,
+# hosts, the loaded set) and the smoke's receipt about THAT install.
+for _f in pip_report.json index_check.json dists.txt install.log; do
+    [ -f "$OUT/remote/$_f" ] && cp "$OUT/remote/$_f" "$OUT/$_f"
+done
+[ -f "$OUT/remote/install.log" ] && tail -5 "$OUT/remote/install.log" | sed 's/^/  install: /'
+[ -f "$OUT/remote/index_check.log" ] && sed 's/^/  index: /' "$OUT/remote/index_check.log"
+python3 - "$OUT" "$FROM_INDEX" "$VERSION" "$VENDOR" "$COMMIT" <<'PY' | tee -a "$OUT/smoke.txt"
+import json, pathlib, sys
+out, index, version, vendor, commit = sys.argv[1:]
+out = pathlib.Path(out)
+problems = []
+try:
+    install_exit = (out / 'remote' / 'install.exit').read_text().strip()
+except OSError:
+    install_exit = 'none'
+if install_exit != '0':
+    problems.append('pip install mojolearn==%s from %s exited %s (install.log)' % (version, index, install_exit))
+try:
+    ic = json.load(open(out / 'index_check.json'))
+except Exception as exc:
+    ic = {}
+    problems.append('no index_check.json (%s)' % exc)
+if ic:
+    if (ic.get('index'), ic.get('version'), ic.get('vendor')) != (index, version, vendor):
+        problems.append('index_check.json is about %s' % [ic.get('index'), ic.get('version'), ic.get('vendor')])
+    if ic.get('verdict') != 'PASSED':
+        problems.append('index check %s: %s' % (ic.get('verdict'), '; '.join(ic.get('problems') or [])))
+try:
+    d = json.load(open(out / 'results.json'))
+except Exception as exc:
+    d = {}
+    problems.append('no results.json (%s)' % exc)
+if d:
+    src = d.get('installed_from') or {}
+    if d.get('status') != 'PASSED': problems.append('smoke status %s reason %s' % (d.get('status'), d.get('reason')))
+    if d.get('scope') != 'expanded': problems.append('scope %s' % d.get('scope'))
+    if src.get('expected_version') != version: problems.append('receipt is about version %s' % src.get('expected_version'))
+    dists = src.get('distributions') or {}
+    if dists != {'mojolearn': version, 'mojolearn-nvidia': version, 'mojolearn-amd': version}:
+        problems.append('receipt distributions %s' % dists)
+    if commit and d.get('source_commit') != commit: problems.append('receipt names commit %s' % d.get('source_commit'))
+    got = (d.get('installed') or {}).get('vendor')
+    if got != vendor: problems.append('installed vendor %s, not %s' % (got, vendor))
+print('verdict=%s index=%s version=%s vendor=%s jobs=%d source_commit=%s%s' % (
+    'PASSED' if not problems else 'FAILED', index, version, vendor, len(d.get('jobs') or []),
+    d.get('source_commit'), '' if not problems else ' ' + '; '.join(problems)))
+sys.exit(1 if problems else 0)
+PY
+_v=${PIPESTATUS[0]}
+elif [ "$RUN_SMOKE" = 1 ]; then
 python3 - "$OUT/results.json" "$WHEEL_SHA" "$COMMIT" "$VENDOR" "$PLUGIN_PAIRS" <<'PY' | tee -a "$OUT/smoke.txt"
 import json, sys
 path, sha, commit, want_vendor, pairs = sys.argv[1:]
