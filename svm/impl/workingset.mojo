@@ -48,7 +48,7 @@ from svm.impl.fast_ws_select import (
     fws_mark_kernel,
     fws_walk_kernel,
 )
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from std.sys.info import has_apple_gpu_accelerator
 from gbdt.gpu_util.kernel.reorder_one_bit import REORDER_BLOCK
 from svm.checks.device_select import (
@@ -75,12 +75,13 @@ from svm.impl.ws_util import (
 #: `check_ws_sequence_is_pure_in_f_and_index` on the duplicated-rows
 #: fixture; must not move a fixture with no equal f.
 comptime SAB_WS_TIE = is_defined["MOJOLEARN_SVM_SABOTAGE_WS_TIE"]()
-#: FAST on Apple: the working-set sort takes `core/fast_radix_sort.mojo`
+#: Apple, FAST and (since lane/apple-identical-neural, 2026-09-26) IDENTICAL:
+#: the working-set sort takes `core/fast_radix_sort.mojo`
 #: (8-bit digits, 12 launches) instead of the one-bit sort (128 launches).
 #: Both are stable sorts by the full key, so the order is the same.
 #: `-D MOJOLEARN_SVM_FAST_SORT_OFF` restores the one-bit sort.
 comptime FAST_WS_SORT = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_SVM_FAST_SORT_OFF"]()
 )
@@ -88,7 +89,8 @@ comptime FAST_WS_SORT = (
 #: (`svm/impl/fast_ws_select.mojo`), no drain per gather. Same working set.
 #: `-D MOJOLEARN_SVM_FAST_WS_SELECT_OFF` restores the host-counted gathers.
 comptime SVM_WS_MAX = 2048 if (
-    FAST_WS_SORT and not is_defined["MOJOLEARN_SVM_WS1024"]()
+    FAST_WS_SORT and GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and not is_defined["MOJOLEARN_SVM_WS1024"]()
 ) else 1024
 """FAST on Apple: a working set of up to 2048 (the block solve's
 two-elements-per-thread kernel carries it in one 1024-thread block), half
