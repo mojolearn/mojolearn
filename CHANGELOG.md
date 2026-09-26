@@ -6,6 +6,7 @@ All notable changes to mojolearn are recorded here, newest first, in the style o
 
 ### Fixed
 - `GaussianMixture(init_params="kmeans")` seeds its k-means with the classic greedy k-means++ (scikit-learn's `KMeans` default) instead of cuVS's k-means|| (DEVIATION 3133). On few-valued data the k-means|| start left one cluster with most rows beside clusters of 1 to 7 rows, and the fit scored far below scikit-learn: on 20 taxi windows of 2,000 rows (10 offsets x 2 seeds) the median held-out mean log-likelihood gap to scikit-learn 1.7.2 went from -4240 to -356 (IDENTICAL) and from -5320 to -1.9 (FAST), and scikit-learn scored higher in 10 of 17 comparable fits instead of 17 of 18. IDENTICAL bits move for every `init_params="kmeans"` fit, on every column (`gmm`, `gmm-sample`, `par-gmm`); `init_params="random"` is unchanged.
+- GMM kmeans init is now classic k-means++ (DEVIATION 3133), so GaussianMixture IDENTICAL bits change for `gmm`, `gmm-sample` and `par-gmm` (their `LANE_REVISIONS` read `classic-kmeanspp-init-1`, so the verifier reports them OWED, not DIVERGENT, until the next record). Proven locally at fixtures base, denormal and odd, one fit: the Metal and CPU columns agree on all 48 cell parts of the four gmm lanes; `gmm-random-init` and `gmm-random-init-sample` equal the 0.8.22 CUDA, HIP and Metal columns. NVIDIA and AMD are re-proven at release, and `par-gmm` needs `verify --par quick` at release.
 
 ## 0.8.22 (published 2026-09-26)
 
