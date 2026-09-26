@@ -9,12 +9,17 @@ row iteration, and positive-edge compaction. No n*n storage is created.
 from checks.numerics import identical_pow64
 
 from std.math import isfinite
-from max.gpu.host import DeviceContext
+from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.kernel_matrix import TARGET_COLUMN, umap_device_optimizer_for
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from umap.optimizer import _finite, _clip, _splitmix64
 from umap.optimizer_identical_device import optimize_sparse_layout_identical_device
-from umap.optimizer_fast import FAST_OPT_TPB, umap_jacobi_epoch_kernel
+from umap.optimizer_fast import (
+    FAST_OPT_TPB,
+    UMAP_FUSED_EPOCH,
+    umap_jacobi_epoch_fused_kernel,
+    umap_jacobi_epoch_kernel,
+)
 from umap.sparse_graph import SparseFuzzySimplicialGraph
 
 
@@ -214,6 +219,45 @@ def optimize_sparse_layout_identical_on_device(
     )
 
 
+def _fused_epoch[C: Int](
+    ctx: DeviceContext,
+    mut first: DeviceBuffer[DType.float32],
+    mut second: DeviceBuffer[DType.float32],
+    mut d_offsets: DeviceBuffer[DType.uint32],
+    mut d_tails: DeviceBuffer[DType.uint32],
+    mut d_weights: DeviceBuffer[DType.float32],
+    epoch: Int,
+    n_samples: Int,
+    n_epochs: Int,
+    learning_rate: Float32,
+    negative_rate: Int,
+    repulsion: Float32,
+    a: Float32,
+    b: Float32,
+    max_weight: Float32,
+    seed: UInt64,
+) raises:
+    """One FAST epoch through `umap_jacobi_epoch_fused_kernel`, ping-ponging
+    `first` and `second` exactly as the per-component loop does."""
+    var grid = (n_samples + FAST_OPT_TPB - 1) // FAST_OPT_TPB
+    if epoch % 2 == 0:
+        ctx.enqueue_function[umap_jacobi_epoch_fused_kernel[C]](
+            first.unsafe_ptr(), d_offsets.unsafe_ptr(), d_tails.unsafe_ptr(),
+            d_weights.unsafe_ptr(), second.unsafe_ptr(), Int32(n_samples),
+            Int32(epoch), Int32(n_epochs), learning_rate, Int32(negative_rate),
+            repulsion, a, b, max_weight, seed,
+            grid_dim=(grid, 1, 1), block_dim=(FAST_OPT_TPB, 1, 1),
+        )
+    else:
+        ctx.enqueue_function[umap_jacobi_epoch_fused_kernel[C]](
+            second.unsafe_ptr(), d_offsets.unsafe_ptr(), d_tails.unsafe_ptr(),
+            d_weights.unsafe_ptr(), first.unsafe_ptr(), Int32(n_samples),
+            Int32(epoch), Int32(n_epochs), learning_rate, Int32(negative_rate),
+            repulsion, a, b, max_weight, seed,
+            grid_dim=(grid, 1, 1), block_dim=(FAST_OPT_TPB, 1, 1),
+        )
+
+
 def optimize_sparse_layout_fast(
     ctx: DeviceContext,
     initial: List[Float32],
@@ -299,7 +343,21 @@ def optimize_sparse_layout_fast(
     ctx.enqueue_copy(dst_buf=d_offsets, src_ptr=h_offsets.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_tails, src_ptr=h_tails.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_weights, src_ptr=h_weights.unsafe_ptr())
-    for epoch in range(n_epochs):
+    comptime if UMAP_FUSED_EPOCH:
+        for epoch in range(n_epochs):
+            if n_components == 2:
+                _fused_epoch[2](
+                    ctx, first, second, d_offsets, d_tails, d_weights,
+                    epoch, n_samples, n_epochs, learning_rate, negative_rate,
+                    repulsion, a, b, max_weight, seed,
+                )
+            else:
+                _fused_epoch[3](
+                    ctx, first, second, d_offsets, d_tails, d_weights,
+                    epoch, n_samples, n_epochs, learning_rate, negative_rate,
+                    repulsion, a, b, max_weight, seed,
+                )
+    for epoch in range(n_epochs if not UMAP_FUSED_EPOCH else 0):
         if epoch % 2 == 0:
             ctx.enqueue_function[umap_jacobi_epoch_kernel](
                 first.unsafe_ptr(), d_offsets.unsafe_ptr(),

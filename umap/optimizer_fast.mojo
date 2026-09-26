@@ -5,6 +5,9 @@
 from max.gpu.host import DeviceContext
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 
 
 comptime FAST_OPT_TPB = 128
@@ -232,3 +235,96 @@ def optimize_layout_fast(
     _ = d_weights^
     _ = host_out^
     return out^
+
+
+#: FAST on Apple: one pass over a row's edges for all output components
+#: (the per-component kernel above walks the edges, their pow and their
+#: negative samples once PER component). Every component's sum takes the
+#: same terms in the same order, so the layout is the same bytes.
+#: `-D MOJOLEARN_UMAP_FUSED_EPOCH_OFF` keeps the per-component kernel.
+comptime UMAP_FUSED_EPOCH = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_UMAP_FUSED_EPOCH_OFF"]()
+)
+
+
+def umap_jacobi_epoch_fused_kernel[C: Int](
+    source: MutPointer[Float32, MutAnyOrigin],
+    row_offsets: MutPointer[UInt32, MutAnyOrigin],
+    tails: MutPointer[UInt32, MutAnyOrigin],
+    edge_weights: MutPointer[Float32, MutAnyOrigin],
+    destination: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+    epoch_in: Int32,
+    epochs_in: Int32,
+    learning_rate: Float32,
+    negative_rate_in: Int32,
+    repulsion: Float32,
+    a: Float32,
+    b: Float32,
+    max_weight: Float32,
+    seed: UInt64,
+):
+    """`umap_jacobi_epoch_kernel` with the component loop innermost."""
+    var head = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var n = Int(n_in)
+    if head >= n:
+        return
+    var epoch = Int(epoch_in)
+    var alpha = learning_rate * Float32(epochs_in - epoch_in) / Float32(
+        epochs_in
+    )
+    var hv = SIMD[DType.float32, 4](0)
+    comptime for c in range(C):
+        hv[c] = source.unsafe_load(head * C + c)
+    var update_sum = SIMD[DType.float32, 4](0)
+    var edge_begin = Int(row_offsets.unsafe_load(head))
+    var edge_end = Int(row_offsets.unsafe_load(head + 1))
+    for edge_ordinal in range(edge_begin, edge_end):
+        var tail = Int(tails.unsafe_load(edge_ordinal))
+        var weight = edge_weights.unsafe_load(edge_ordinal)
+        var scaled = weight / max_weight
+        if Int(Float32(epoch + 1) * scaled) <= Int(Float32(epoch) * scaled):
+            continue
+        var tv = SIMD[DType.float32, 4](0)
+        comptime for c in range(C):
+            tv[c] = source.unsafe_load(tail * C + c)
+        var dist = Float32(0.0)
+        comptime for axis in range(C):
+            var delta = hv[axis] - tv[axis]
+            dist += delta * delta
+        if dist > Float32(0.0):
+            var dist_pow = dist ** b
+            var coeff = -Float32(2.0) * a * b * (dist_pow / dist) / (
+                a * dist_pow + Float32(1.0)
+            )
+            comptime for c in range(C):
+                update_sum[c] += _clip(coeff * (hv[c] - tv[c]))
+        for negative in range(Int(negative_rate_in)):
+            var counter = (
+                seed
+                ^ (UInt64(epoch) * UInt64(0xD1B54A32D192ED03))
+                ^ (UInt64(edge_ordinal) * UInt64(0x94D049BB133111EB))
+                ^ UInt64(negative)
+            )
+            var other = Int(_mix(counter) % UInt64(n))
+            if other == head:
+                continue
+            var ov = SIMD[DType.float32, 4](0)
+            comptime for c in range(C):
+                ov[c] = source.unsafe_load(other * C + c)
+            var neg_dist = Float32(0.0)
+            comptime for axis in range(C):
+                var delta = hv[axis] - ov[axis]
+                neg_dist += delta * delta
+            if neg_dist > Float32(0.0):
+                var neg_pow = neg_dist ** b
+                var coeff = Float32(2.0) * repulsion * b / (
+                    (Float32(0.001) + neg_dist)
+                    * (a * neg_pow + Float32(1.0))
+                )
+                comptime for c in range(C):
+                    update_sum[c] += _clip(coeff * (hv[c] - ov[c]))
+    comptime for c in range(C):
+        destination.unsafe_store(head * C + c, hv[c] + alpha * update_sum[c])
