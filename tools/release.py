@@ -2042,7 +2042,54 @@ class Release:
         smoke = self.rel / "column-amd" / "results.json"
         return self.publish("amd", self.split_final("amd"), smoke), dict(smoke=str(smoke))
 
+    def previous_gpu_columns(self):
+        """The NVIDIA and AMD columns of the newest EARLIER release recorded on
+        this machine (<evidence>/release/<v>/<commit12>/), or []."""
+        base = self.evidence / "release"
+        key = lambda p: tuple(int(n) for n in re.findall(r"\d+", p.name))
+        versions = sorted((p for p in base.glob("*") if p.is_dir() and VERSION_RE.match(p.name)
+                           and key(p) < key(Path(self.version))), key=key, reverse=True) if base.is_dir() else []
+        for v in versions:
+            for c in sorted(v.glob("*/"), key=lambda d: d.stat().st_mtime, reverse=True):
+                cols = [c / "smoke-linux" / "column-cuda.json", c / "column-amd" / "column-hip.json"]
+                if all(x.is_file() for x in cols):
+                    return cols
+        return []
+
+    def mac_cross_check(self):
+        """THE MAC WHEEL AGAINST THE OTHER VENDORS BEFORE IT PUBLISHES
+        (Andrew, 2026-09-26: light). publish-macos waits on no GPU column, so
+        until now the Apple column was compared with nothing before the macOS
+        wheel went up. It is diffed here, in seconds and with nothing rented,
+        against the newest earlier release's recorded NVIDIA and AMD columns:
+        any DIVERGENT or MOVED cell holds the macOS publish unless
+        --accept-moved says the release changes those bits on purpose. A lane
+        new since then has nothing to compare with and is reported, not held;
+        no earlier columns on this machine is said, not held."""
+        prev = self.previous_gpu_columns()
+        apple = self.release_check_dir() / "metal" / "column.json"
+        if not prev:
+            return "no earlier release's NVIDIA and AMD columns on this machine; not compared"
+        cmd = [PY, str(ROOT / "tools" / "identity_break.py"), "--diff", str(apple), *map(str, prev)]
+        path = self.rel / "diff-macos-vs-previous.txt"
+        self.say("  $ " + " ".join(shlex.quote(c) for c in cmd) + " > " + str(path))
+        if self.dry:
+            return "would diff the Apple column against " + ", ".join(map(str, prev))
+        got = subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(got.stdout + got.stderr)
+        try:
+            return judge_joint_diff(path.read_text(), path, say=self.say,
+                                    passed="the Apple column against " + prev[0].parents[2].name + "'s")
+        except StepFailed as exc:
+            if getattr(self.args, "accept_moved", False):
+                return f"cells differ from {prev[0].parents[2].name}, accepted (--accept-moved): {path}"
+            raise StepFailed(f"the macOS publish is held: {exc} (--accept-moved when the release changes these "
+                             "bits on purpose)")
+
     def step_publish_macos(self):
+        checked = self.mac_cross_check()
+        self.say("  " + checked)
         return self.publish("macos", self.macos_wheel(), self.rel / "smoke-macos" / "results.json")
 
     def finish_macos(self, venv):
@@ -2573,6 +2620,9 @@ def main(argv=None):
                     help="an existing checkout at the frozen source commit (default: this checkout when its HEAD "
                          "is the source commit, else a worktree under the release directory)")
     ap.add_argument("--build-backend", default="gpu-legs", choices=sorted(BUILD_BACKENDS))
+    ap.add_argument("--accept-moved", action="store_true",
+                    help="publish the macOS wheel although its Apple column differs from the previous release's "
+                         "NVIDIA and AMD columns (the release changes those bits on purpose)")
     ap.add_argument("--cpu-column", action="store_true",
                     help="also run release-check's CPU pass (opt-in) and diff the GPU columns against it too")
     ap.add_argument("--amd-expect-from", default="",

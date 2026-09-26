@@ -17,6 +17,10 @@ FOUR PIPELINES AT ONCE, each publishing as soon as its own gates pass:
 
 - **macos**: macos-build, macos-smoke, `release-check` (the Apple column,
   step 5b), publish-macos. These share the Mac and run one at a time.
+  publish-macos first diffs the Apple column against the newest earlier
+  release's recorded NVIDIA and AMD columns on this machine (seconds, nothing
+  rented); a DIVERGENT or MOVED cell holds the macOS publish unless
+  `--accept-moved` says the release changes those bits on purpose.
 - **core-linux**: linux-builds (the legs of step 2, launched together,
   detached), linux-wait, linux-assemble, linux-pack (step 3: the core and both
   plugins, 3b), linux-joint-diff, publish-core-linux (last, after both plugins).
