@@ -97,6 +97,10 @@ comptime SPECTRAL_NCV_FAST = (
 )
 comptime FAST_NCV = 48
 comptime FAST_NCV_DENSE_ROW = 64
+comptime FAST_NCV_MIN_N = 8192
+"""The wider basis only from here: on a small graph 48 vectors are a large
+fraction of the space and the three-term recurrence can break down (the
+144-point blobs gate of check-spectral came back all NaN at ncv 48)."""
 
 
 @fieldwise_init
@@ -312,7 +316,11 @@ def compute_eigenpairs_keep(
         # launches and syncs that a sparse matvec does not amortize (UMAP
         # 100k: 362 restarts at ncv 20, 73 at 48); dense kNN rows keep
         # the reference basis, their matvec is the cost.
-        if laplacian.nnz < FAST_NCV_DENSE_ROW * n_samples and ncv_hi < FAST_NCV:
+        if (
+            laplacian.nnz < FAST_NCV_DENSE_ROW * n_samples
+            and ncv_hi < FAST_NCV
+            and n_samples >= FAST_NCV_MIN_N
+        ):
             ncv_hi = FAST_NCV
     var ncv = n_samples - k
     if ncv_hi < ncv:
