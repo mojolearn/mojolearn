@@ -45,32 +45,14 @@ toolchains (no dependence on a compiler fold).
   0x1.09dd68p+18), whole stage trace byte-equal to the 0.8.19 wheel's trace;
   1.0 + fix also unchanged.
 
-## Next step
+## Status: DONE (2026-09-26)
 
-1. Metal column 627 cells on the nightly with the fix vs the recorded 0.8.19
-   Metal column (all bindings, `verify_lanes.py --gpu-pass metal --selection
-   trial/selection-metal.json`, then `identity_break.py --diff`).
-2. CUDA column on one rented RTX 4090 (RunPod, cap $6), vs 0.8.19 CUDA.
-3. CPU column: unaffected by construction (host oracle already spells sext);
-   confirm the recorded nightly CPU column = 0.8.19.
-
-## In flight (04:25 ET)
-
-- Metal: all 76 bindings built on the Mac from 0a60b76ae (nightly, -j 1,
-  private MODULAR_HOME under the worktree's .pixi), stamped; apple pass
-  running: `MOJOLEARN_COMMIT=69a519c1... verify_lanes.py --apple-pass
-  --selection trial/selection-metal.json --out
-  ~/mojolearn-evidence/kmeans-mojo-1-2/metal`. Compare against
-  `~/mojolearn-evidence/release-check/69a519c1522d/metal/column.json`.
-- CUDA: RunPod RTX 4090 pod re8o8tv6g4p228 (100-minute dead-man lease, cap
-  $6), `tools/gemm_remote_leg.sh nvidia --payload gemm` with
-  `MOJOLEARN_GEMM_LEG_EXTRA=trial/nvidia_body.sh`, out
-  `~/mojolearn-evidence/e1g/2026-09-26-kmeans-fix-nvidia`. Compare its
-  `remote/trial/cuda/column.json` against
-  `~/mojolearn-evidence/release/0.8.19/69a519c1522d/smoke-linux/remote/column.json`.
-  If this session dies: check the pod is gone (`tools/runpod_guard.sh list`),
-  the lease self-terminates at 05:34 ET.
+Metal 627/627 and CUDA 627/627 equal to 0.8.19 and to the nightly CPU column
+(0 DIVERGENT, infer/model 984/984); see
+`bench/results/kmeans_mojo_1_2_2026-09-26/README.md`. AMD not tested.
 
 ## Spend
 
-RTX 4090 at $0.74/h from 03:54 ET (running).
+One RTX 4090 pod (re8o8tv6g4p228), about 35 min at $0.74/h = about $0.43;
+terminated, verified gone (HTTP 404). Local scratch env, private Mojo caches
+and built bindings deleted at the end.

@@ -1,0 +1,15 @@
+NOTE: --require-columns defaults to 2 (2026-09-20): every compared cell must rest on at least two real hashes, or it was not compared. Pass --require-columns 0 to turn the floor off, or a higher N to demand more.
+NOTE: column cpu-apple-m4 is a CPU column: cpu_model='Apple M4' column=cpu families=['_mojolearn_arima_host', '_mojolearn_byte_lm_host', '_mojolearn_core_host', '_mojolearn_embedding_host', '_mojolearn_embedding_infer_host', '_mojolearn_estimators_host', '_mojolearn_forecast_host', '_mojolearn_forest_host', '_mojolearn_gbdt_host', '_mojolearn_gp_host', '_mojolearn_gp_infer_host', '_mojolearn_hdbscan_host', '_mojolearn_hdbscan_infer_host', '_mojolearn_ivf_host', '_mojolearn_ivf_search_host', '_mojolearn_kernel_methods_host', '_mojolearn_linalg_host', '_mojolearn_mamba_host', '_mojolearn_metrics_host', '_mojolearn_mixture_host', '_mojolearn_mixture_infer_host', '_mojolearn_neural_host', '_mojolearn_preprocessing_host', '_mojolearn_resample_host', '_mojolearn_rf_host', '_mojolearn_solver_host', '_mojolearn_svm_host', '_mojolearn_tokenizer_host', '_mojolearn_training_host', '_mojolearn_transformer_host', '_mojolearn_trees_host', '_mojolearn_tsa_host'] commit=69a519c1522d245f197d7eb1d2d06e1b0cb6ad0e
+NOTE: column cpu-apple-m4 is a PARTIAL COLUMN: it left out batch, rlpair. Those parts are absent because they were not run, not because they agree; it is refused as a record
+NOTE: column arm64 is a PARTIAL COLUMN: it left out batch, rlpair. Those parts are absent because they were not run, not because they agree; it is refused as a record
+summary: IDENTICAL=627
+summary (infer/model): IDENTICAL=984, N/A=270
+summary (batch): N/A=627
+summary (rlpair): N/A=54
+summary (batchgrad): IDENTICAL=48, N/A=579
+summary (batchscale): IDENTICAL=81, N/A=546
+summary (ragged): IDENTICAL=54, N/A=573
+summary (stepfull): IDENTICAL=54, N/A=573
+non-IDENTICAL rows (train/infer/model):
+|------------------------------|------------|------------------|------------------|------------------|
+|------------------------------|--------|--------------|------------------|------------------|------------------|

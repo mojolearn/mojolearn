@@ -1,0 +1,14 @@
+NOTE: --require-columns defaults to 2 (2026-09-20): every compared cell must rest on at least two real hashes, or it was not compared. Pass --require-columns 0 to turn the floor off, or a higher N to demand more.
+NOTE: column arm64 is a PARTIAL COLUMN: it left out batch, rlpair. Those parts are absent because they were not run, not because they agree; it is refused as a record
+NOTE: column arm64 is a PARTIAL COLUMN: it left out batch, rlpair. Those parts are absent because they were not run, not because they agree; it is refused as a record
+summary: IDENTICAL=627
+summary (infer/model): IDENTICAL=984, N/A=270
+summary (batch): N/A=627
+summary (rlpair): N/A=54
+summary (batchgrad): IDENTICAL=48, N/A=579
+summary (batchscale): IDENTICAL=81, N/A=546
+summary (ragged): IDENTICAL=54, N/A=573
+summary (stepfull): IDENTICAL=54, N/A=573
+non-IDENTICAL rows (train/infer/model):
+|------------------------------|------------|------------------|------------------|
+|------------------------------|--------|--------------|------------------|------------------|
