@@ -261,6 +261,8 @@ class JointDiff(unittest.TestCase):
         p = pathlib.Path("diff-columns.txt")
         ok = "summary: IDENTICAL=3, ONE-COLUMN=2\nsummary (infer/model): IDENTICAL=6\n"
         self.assertIn("2 cell(s) hashed by one column only", release.judge_joint_diff(ok, p, say=lambda m: None))
+        self.assertTrue(release.judge_joint_diff(ok, p, say=lambda m: None, passed="NVIDIA column")
+                        .startswith("NVIDIA column PASSED"))
         for bad in ("summary: IDENTICAL=3, DIVERGENT=1\n",
                     "summary: IDENTICAL=3\nsummary (infer/model): RELOAD-MOVED=1\n",
                     "summary: IDENTICAL=3\nsummary (batch): BATCH_MOVED=2\n",
