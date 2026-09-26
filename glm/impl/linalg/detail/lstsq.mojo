@@ -129,6 +129,7 @@ from std.memory import bitcast
 
 from cluster.checks.reduce_by_key import copy_f32_kernel
 from core.gemm import gemm_nt, gemm_tn, gemv_n
+from core.xtdz_coalesced import xty_launch
 from core.column_stats import (
     STATS_TPB,
     diagonal_to_vector_kernel,
@@ -312,15 +313,7 @@ def lstsq_eig_traced(
 
     # Ab <- A^T b. Theirs overlaps this with the line above on a second
     # stream; see the module docstring.
-    ctx.enqueue_function[xty_kernel](
-        ab.unsafe_ptr(),
-        a.unsafe_ptr(),
-        b.unsafe_ptr(),
-        Int32(n_rows),
-        Int32(n_cols),
-        grid_dim=(n_cols, 1, 1),
-        block_dim=(STATS_TPB, 1, 1),
-    )
+    xty_launch(ctx, ab, a, b, n_rows, n_cols)
     ctx.synchronize()
 
     # THE CARD'S FIRST TWO DEVICE STAGES. `cov_a` is recorded HERE and not
