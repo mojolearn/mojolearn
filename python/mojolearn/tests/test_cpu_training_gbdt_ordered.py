@@ -15,7 +15,7 @@ claim rests on (the fold layout's ceil `IntLog2` and power-of-two stripe,
 the 8-bit kernel's document-keyed dither and its `1e-20` write guard, the
 half-byte accumulator's window order and two-stage reduce, the dynamic
 cosine scorer's `1e-20` seed and fold pairs, the challenger-first record
-fold, the stable one-bit sort, the ordered apply through `identical_mul`,
+fold, the stable one-bit sort, the ordered apply as one fma (0.8.19's bits),
 the tensor column's `(count + 0) / (n + 1)` and pinned fold capacity, the
 level-two rebuild without subtraction, the host leaf fold); the sabotage
 define reaches both; the CPU identity gate workflow triggers on both files.
@@ -114,7 +114,7 @@ def test_ordered_oracle_spells_the_bit_carrying_constructs():
     assert "data_part = left if s.p_sz[left] < s.p_sz[right] else right" in text, "the smaller child"
     assert "var is_left = s.p_sz[left_part] < s.p_sz[right_part]" in text
     assert "row_index[fill[gb[r]]] = r" in text, "the stable counting sort"
-    assert "cursor[i] = identical_mul_add(scaled, Float32(1), cursor[i])" in text, "the ordered apply"
+    assert "cursor[i] = identical_mul_add(leaves[leaf], rate, cursor[i])" in text, "the ordered apply"
     assert "model_leaves.append(identical_mul(leaves[leaf], learning_rate))" in text
     assert "residual_bound *= Float64(1) + Float64(learning_rate)" in text
 
