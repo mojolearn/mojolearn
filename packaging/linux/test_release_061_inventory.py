@@ -87,10 +87,10 @@ class ReleaseInventory(unittest.TestCase):
             # written out, so the number cannot drift from the packer again.
             # 23 until workstream D (2026-09-14) added kernel_methods, mixture,
             # hdbscan and resample; 27 until ivf and embedding the same day.
-            # 43 since classical FAST (2026-09-25): fourteen classical names
-            # join the fast tier (FAST svm is Apple only, so not fifteen).
+            # 44 since classical FAST (2026-09-25): fifteen classical names
+            # join the fast tier (43 while FAST svm was Apple only).
             per_arch = sum(len(packer.tier_names(mode, True)) for mode in packer.TIERS)
-            self.assertEqual(per_arch, 43)
+            self.assertEqual(per_arch, 44)
             self.assertEqual(len(result['extensions']), per_arch * 3)
             self.assertTrue(result['optional_native']['_mojolearn_byte_lm']['included'])
             self.assertEqual(result['optional_native']['_mojolearn_byte_lm']['unsupported_modes'],
