@@ -103,7 +103,7 @@ bash tools/mac_slot.sh status
 bash tools/mac_slot.sh --timeout 120 --wait-timeout 300 metal COMMAND...
 ```
 
-CPU capacity remains `MAC_SLOTS` (default 5). CPU thread/build settings and
+CPU capacity remains `MAC_SLOTS` (default half the logical cores; jobs under it also wait for load and memory room, tools/mac_slot.py). CPU thread/build settings and
 `nice -n 19` retain the prior behavior. `MOJOLEARN_MAC_SLOT_BASE`,
 `MOJOLEARN_METAL_LOCK`, and `MOJOLEARN_METAL_QUEUE` allow isolated test instances;
 all participants sharing a resource must share the same paths.
@@ -223,7 +223,7 @@ shard stops further scheduling and cancels active peers through their
 schedulers. The summary is complete only after merged records pass validation,
 including sub-verdicts. A merge timeout also leaves the run incomplete.
 
-CPU `--jobs` is explicit and cannot exceed shared capacity (`MAC_SLOTS`,
+CPU `--jobs` is explicit and cannot exceed shared capacity (`MAC_SLOTS`, default half the logical cores,
 default 5); every child uses one compute thread. GPU `--jobs` stays one per
 host. CUDA/HIP use the same exclusive GPU lease mechanism as Metal. Separate
 CPU, NVIDIA, AMD and Apple hosts can run independently. Multiple GPUs in one

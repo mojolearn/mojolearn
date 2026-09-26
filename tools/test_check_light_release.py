@@ -5,6 +5,8 @@ import tempfile
 import unittest
 import zipfile
 
+import pytest
+
 import check_light_release as gate
 
 
@@ -175,7 +177,7 @@ class LightReleaseTests(unittest.TestCase):
             gate.check(self.root, self.commit, 'linux')
 
     def test_workflow_defaults_to_prepared_light_and_checks_before_both_publish_stages(self):
-        import yaml
+        yaml = pytest.importorskip('yaml', reason='PyYAML is not installed; light-checks.yml runs this with it')
         workflow = yaml.safe_load((Path(__file__).resolve().parents[1] / '.github/workflows/release-provenance.yml').read_text())
         inputs = workflow.get('on', workflow.get(True))['workflow_dispatch']['inputs']
         self.assertEqual(inputs['validation_profile']['default'], 'light')
@@ -200,7 +202,7 @@ class LightReleaseTests(unittest.TestCase):
         mojolearn-nvidia and mojolearn-amd each in `<target>-<plugin>` (PyPI
         refuses two pending publishers with one configuration), BEFORE the
         core, from their own packages-dir; the light admission rechecked."""
-        import yaml
+        yaml = pytest.importorskip('yaml', reason='PyYAML is not installed; light-checks.yml runs this with it')
         workflow = yaml.safe_load((Path(__file__).resolve().parents[1] / '.github/workflows/release-provenance.yml').read_text())
         jobs = workflow['jobs']
 

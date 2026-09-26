@@ -6,6 +6,21 @@
 All new participants serialize metadata updates with flock. Lease directories
 are published with their PID already inside; live legacy owners are respected.
 A monotonic ticket counter gives FIFO order even while an older job is running.
+
+CAPACITY, NOT A FIXED COUNT (2026-09-26). The slot count is a CEILING sized to
+the machine: `MAC_SLOTS` when set, else half its logical cores (`slot_count`;
+5 on the 10-core M4 this was written on, which is what the fixed default was).
+Under the ceiling a CPU job is admitted only while the machine has room: the
+1-minute load average plus the job stays under MOJOLEARN_SLOT_LOAD_FRACTION
+(default 0.8) of the logical cores, and available memory stays above
+MOJOLEARN_SLOT_MIN_FREE_GB (default 4; a Mojo compile takes several GB). The
+Metal job is exempt from the load test (it is the priority job and one core)
+but not from the memory floor, and keeps its lock. When none of our slots is
+held, one job is admitted whatever the readings, and one CPU job whenever no
+other CPU job holds a slot (the Metal holder does not count), so a machine
+busy with work outside the slots still makes progress. MOJOLEARN_SLOT_CAPACITY=0 turns the
+readings off and leaves the plain slot count. The readings change WHEN a job
+starts, never what it computes: every job still runs with one thread.
 """
 import argparse
 from contextlib import contextmanager
@@ -40,14 +55,54 @@ def read(path, default=""):
         return default
 
 
+def slot_count(env=os.environ):
+    """The slot ceiling every tool shares: MAC_SLOTS when set, else half the
+    logical cores (at least 1)."""
+    value = env.get("MAC_SLOTS")
+    if value:
+        return int(value)
+    return max(1, (os.cpu_count() or 2) // 2)
+
+
+def load_average():
+    return os.getloadavg()[0]
+
+
+def available_bytes():
+    """Memory a new job can take without pushing others out: MemAvailable on
+    Linux; on macOS the kernel's own free-memory percentage
+    (kern.memorystatus_level, the number `memory_pressure` prints) of
+    hw.memsize. Free plus inactive pages alone undercounts: on a 16 GB M4 under
+    load it read 2.6 GB where the kernel reported 40% (6.4 GB), because it
+    ignores what the compressor can give back. None when it cannot be read."""
+    try:
+        if sys.platform == "darwin":
+            def sysctl(name):
+                return int(subprocess.run(["sysctl", "-n", name], capture_output=True,
+                                          text=True, timeout=5).stdout.strip())
+            return sysctl("kern.memorystatus_level") * sysctl("hw.memsize") // 100
+        for line in Path("/proc/meminfo").read_text().splitlines():
+            if line.startswith("MemAvailable:"):
+                return int(line.split()[1]) * 1024
+    except (OSError, ValueError, IndexError, subprocess.SubprocessError):
+        return None
+    return None
+
+
 class Scheduler:
-    def __init__(self, env=os.environ):
+    def __init__(self, env=os.environ, loadavg=load_average, available=available_bytes):
         self.base = Path(env.get("MOJOLEARN_MAC_SLOT_BASE", "/tmp/mojolearn-mac-slot"))
         self.metal = Path(env.get("MOJOLEARN_METAL_LOCK", "/tmp/mojolearn-metal-slot"))
         self.queue = Path(env.get("MOJOLEARN_METAL_QUEUE", "/tmp/mojolearn-metal-queue"))
-        self.count = int(env.get("MAC_SLOTS", "5"))
+        self.count = slot_count(env)
         if self.count < 1:
             raise ValueError("MAC_SLOTS must be positive")
+        self.capacity = env.get("MOJOLEARN_SLOT_CAPACITY", "1") != "0"
+        self.cores = os.cpu_count() or 1
+        self.load_limit = float(env.get("MOJOLEARN_SLOT_LOAD_FRACTION", "0.8")) * self.cores
+        self.min_free = float(env.get("MOJOLEARN_SLOT_MIN_FREE_GB", "4")) * 2**30
+        self.loadavg, self.available = loadavg, available
+        self.why = ""
         self.queue.mkdir(parents=True, exist_ok=True)
         self.slots = [Path(f"{self.base}.{i}") for i in range(1, self.count + 1)]
         self.token = uuid.uuid4().hex
@@ -110,13 +165,40 @@ class Scheduler:
             if not self.publish(self.ticket, command):
                 raise RuntimeError("ticket publication raced a legacy scheduler; retry")
 
+    def room(self, metal, slots):
+        """Whether the machine has room for this job now; `why` says what it
+        waits on. Called under the guard, after the reap."""
+        self.why = ""
+        if not self.capacity:
+            return True
+        held = [p for p in self.slots if p.exists()]
+        gpu = read(self.metal / "token") if self.metal.exists() else None
+        if not held or (not metal and gpu and all(read(p / "token") == gpu for p in held)):
+            # Always admit one: a GPU job when nothing is held, a CPU job when
+            # no other CPU job is (the GPU holder is one core), so load from
+            # outside the slots (Photos analysis, Spotlight) cannot stall a pass.
+            return True
+        if not metal:
+            load = self.loadavg()
+            if load + slots > self.load_limit:
+                self.why = f"load {load:.1f} + {slots} > {self.load_limit:.1f}"
+                return False
+        free = self.available()
+        if free is not None and free < self.min_free:
+            self.why = f"available memory {free / 2**30:.1f} GB < {self.min_free / 2**30:.1f} GB"
+            return False
+        return True
+
     def attempt(self, metal, command, slots=1):
         """Take one slot (and the Metal lock when `metal`), or `slots` CPU
         slots at once for a job that runs that many single-threaded workers
         (the macOS release build, `--slots`). All or nothing: a partial take
-        is released before returning False."""
+        is released before returning False. Under the slot count the job
+        also needs room (`room`)."""
         with self.guard():
             self.reap()
+            if not self.room(metal, slots):
+                return False
             if slots > 1:
                 if metal:
                     raise ValueError("a Metal job takes one slot")
@@ -266,7 +348,8 @@ def main(argv=None):
                 code = 124
                 return code
             if waited - last_log >= 30:
-                print(f"mac_slot: waiting {waited:.1f}s for {args.mode} capacity", file=sys.stderr, flush=True)
+                print(f"mac_slot: waiting {waited:.1f}s for {args.mode} capacity"
+                      + (f" ({scheduler.why})" if scheduler.why else ""), file=sys.stderr, flush=True)
                 last_log = waited
             time.sleep(min(args.poll, max(0, args.deadline - time.monotonic()))
                        if args.deadline else args.poll)

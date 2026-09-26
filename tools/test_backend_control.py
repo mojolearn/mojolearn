@@ -42,6 +42,8 @@ def local(monkeypatch, tmp_path):
     monkeypatch.setenv('MOJOLEARN_METAL_LOCK', str(tmp_path / 'gpu'))
     monkeypatch.setenv('MOJOLEARN_METAL_QUEUE', str(tmp_path / 'queue'))
     monkeypatch.setenv('MAC_SLOTS', '2')
+    # Scheduling mechanics, not this machine's load (tools/mac_slot.py room).
+    monkeypatch.setenv('MOJOLEARN_SLOT_CAPACITY', '0')
     monkeypatch.setattr(identity_iterate, 'cpu_package', lambda *a: (tmp_path, tmp_path))
     started = time.monotonic()
     args = SimpleNamespace(backend='cpu', host_dir=None, jobs=2, started=started,

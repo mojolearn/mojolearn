@@ -10,7 +10,7 @@ lanes, one fit per cell, and the CPU column only when asked (2026-09-25).
 The Apple column is the reference tools/release.py diffs the NVIDIA and AMD
 wheel columns against, so the CPU pass is OPT-IN. With --cpu-column the two
 passes run together: the Apple pass holds the Metal lock and ONE of the
-MAC_SLOTS (default 5), and the CPU pass takes the rest (MAC_SLOTS - 1 shards,
+MAC_SLOTS (default half the logical cores, tools/mac_slot.py slot_count), and the CPU pass takes the rest (MAC_SLOTS - 1 shards,
 through MOJOLEARN_CPU_PASS_SLOTS), at nice 19 so it yields to the GPU's host
 thread.
 
@@ -115,7 +115,8 @@ def main():
     sys.path.insert(0, str(ROOT / "tools"))
     import verify_lanes
     passes = [("apple", "--apple-pass", {})]
-    slots = int(os.environ.get("MAC_SLOTS", "5"))
+    import mac_slot
+    slots = mac_slot.slot_count()
     if "cpu" in default_backends():
         if slots < 2:
             raise SystemExit("REFUSING: release-check --cpu-column needs MAC_SLOTS >= 2 "
