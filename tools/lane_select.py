@@ -3763,11 +3763,14 @@ TOOLCHAIN_PATHS = ("pixi.lock", "pixi.toml")
 #: (`_other_platform_tree`) and are inert. The rest of packaging/linux/ packs,
 #: audits and publishes a wheel no column runs from.
 #: ptx_contract.py rewrites every IDENTICAL CUDA binary of a set in place
-#: (build_sets.sh runs it before the manifest hashes the set).
+#: (build_sets.sh runs it before the manifest hashes the set), and
+#: cubin_contract.py then replaces their PTX with fatbins, in place too.
 LINUX_SET_BUILDERS = ("packaging/linux/build_sets.sh", "packaging/linux/stage_libs.py",
                       # sourced by build_sets.sh: the per-binding time bound
                       "packaging/linux/binding_timeout.sh",
-                      "packaging/linux/ptx_contract.py")
+                      "packaging/linux/ptx_contract.py",
+                      # compiles the same IDENTICAL binaries to fatbins in place
+                      "packaging/linux/cubin_contract.py")
 
 #: THE LINUX WHEEL AUDIT. `auditwheel repair` rewrites the packed wheel the
 #: NVIDIA and AMD columns install, and whatever its --exclude list leaves out

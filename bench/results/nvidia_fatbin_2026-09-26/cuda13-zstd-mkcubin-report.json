@@ -1,0 +1,904 @@
+{
+ "ptxas": "Build cuda_13.0.r13.0/compiler.36424714_0",
+ "fatbinary": "Build cuda_13.0.r13.0/compiler.36424714_0",
+ "ptxas_flags": [
+  "--fmad=false",
+  "-O3"
+ ],
+ "fatbinary_flags": [
+  "--compress-all",
+  "--compress-mode=size"
+ ],
+ "sets": {
+  "sm_89": {
+   "rows": [
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_89__identical___mojolearn.so",
+     "modules": 84,
+     "in_place": 80,
+     "moved": 4,
+     "ptx_bytes": 6545502,
+     "image_bytes": 681936,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_89__identical___mojolearn_arima.so",
+     "modules": 21,
+     "in_place": 21,
+     "moved": 0,
+     "ptx_bytes": 267885,
+     "image_bytes": 91584,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_89__identical___mojolearn_byte_lm.so",
+     "modules": 142,
+     "in_place": 140,
+     "moved": 2,
+     "ptx_bytes": 6836327,
+     "image_bytes": 803888,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_89__identical___mojolearn_embedding.so",
+     "modules": 11,
+     "in_place": 9,
+     "moved": 1,
+     "ptx_bytes": 24771,
+     "image_bytes": 20112,
+     "unplaced": [
+      {
+       "sha256": "dc5c3230dfcdd98d",
+       "ptx": 2949,
+       "fatbin": 5760,
+       "why": "no free region of 5760 bytes",
+       "jit_invariant": true
+      }
+     ]
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_89__identical___mojolearn_estimators.so",
+     "modules": 148,
+     "in_place": 148,
+     "moved": 0,
+     "ptx_bytes": 4722542,
+     "image_bytes": 637040,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_89__identical___mojolearn_gbdt.so",
+     "modules": 223,
+     "in_place": 214,
+     "moved": 9,
+     "ptx_bytes": 4061127,
+     "image_bytes": 779064,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_89__identical___mojolearn_gp.so",
+     "modules": 57,
+     "in_place": 56,
+     "moved": 1,
+     "ptx_bytes": 2496906,
+     "image_bytes": 344032,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_89__identical___mojolearn_hdbscan.so",
+     "modules": 68,
+     "in_place": 67,
+     "moved": 1,
+     "ptx_bytes": 5258245,
+     "image_bytes": 555624,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_89__identical___mojolearn_ivf.so",
+     "modules": 32,
+     "in_place": 29,
+     "moved": 3,
+     "ptx_bytes": 1259186,
+     "image_bytes": 144760,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_89__identical___mojolearn_kernel_methods.so",
+     "modules": 61,
+     "in_place": 60,
+     "moved": 1,
+     "ptx_bytes": 2232329,
+     "image_bytes": 335448,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_89__identical___mojolearn_linalg.so",
+     "modules": 40,
+     "in_place": 40,
+     "moved": 0,
+     "ptx_bytes": 2423620,
+     "image_bytes": 301448,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_89__identical___mojolearn_mamba.so",
+     "modules": 137,
+     "in_place": 137,
+     "moved": 0,
+     "ptx_bytes": 3394383,
+     "image_bytes": 616480,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_89__identical___mojolearn_metrics.so",
+     "modules": 145,
+     "in_place": 139,
+     "moved": 6,
+     "ptx_bytes": 8853069,
+     "image_bytes": 986416,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_89__identical___mojolearn_mixture.so",
+     "modules": 95,
+     "in_place": 89,
+     "moved": 6,
+     "ptx_bytes": 3631537,
+     "image_bytes": 477904,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_89__identical___mojolearn_preprocessing.so",
+     "modules": 10,
+     "in_place": 10,
+     "moved": 0,
+     "ptx_bytes": 47068,
+     "image_bytes": 21616,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_89__identical___mojolearn_resample.so",
+     "modules": 54,
+     "in_place": 54,
+     "moved": 0,
+     "ptx_bytes": 848196,
+     "image_bytes": 192256,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_89__identical___mojolearn_rf.so",
+     "modules": 83,
+     "in_place": 82,
+     "moved": 1,
+     "ptx_bytes": 773043,
+     "image_bytes": 217312,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_89__identical___mojolearn_solver.so",
+     "modules": 58,
+     "in_place": 58,
+     "moved": 0,
+     "ptx_bytes": 2093491,
+     "image_bytes": 276776,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_89__identical___mojolearn_svm.so",
+     "modules": 74,
+     "in_place": 72,
+     "moved": 2,
+     "ptx_bytes": 2285155,
+     "image_bytes": 319304,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_89__identical___mojolearn_training.so",
+     "modules": 66,
+     "in_place": 64,
+     "moved": 2,
+     "ptx_bytes": 2432504,
+     "image_bytes": 345856,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_89__identical___mojolearn_transformer.so",
+     "modules": 107,
+     "in_place": 107,
+     "moved": 0,
+     "ptx_bytes": 6700014,
+     "image_bytes": 736832,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_89__identical___mojolearn_trees.so",
+     "modules": 51,
+     "in_place": 50,
+     "moved": 1,
+     "ptx_bytes": 647598,
+     "image_bytes": 173136,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_89__identical___mojolearn_tsa.so",
+     "modules": 19,
+     "in_place": 19,
+     "moved": 0,
+     "ptx_bytes": 387949,
+     "image_bytes": 82280,
+     "unplaced": []
+    }
+   ],
+   "files": 23,
+   "modules": 1786,
+   "in_place": 1745,
+   "moved": 40,
+   "unplaced": 1,
+   "ptx_bytes": 68222447,
+   "image_bytes": 9141104
+  },
+  "sm_90a": {
+   "rows": [
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_90a__identical___mojolearn.so",
+     "modules": 84,
+     "in_place": 78,
+     "moved": 6,
+     "ptx_bytes": 6545720,
+     "image_bytes": 729904,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_90a__identical___mojolearn_arima.so",
+     "modules": 21,
+     "in_place": 21,
+     "moved": 0,
+     "ptx_bytes": 267906,
+     "image_bytes": 94672,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_90a__identical___mojolearn_byte_lm.so",
+     "modules": 142,
+     "in_place": 138,
+     "moved": 4,
+     "ptx_bytes": 6836469,
+     "image_bytes": 838232,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_90a__identical___mojolearn_embedding.so",
+     "modules": 11,
+     "in_place": 9,
+     "moved": 1,
+     "ptx_bytes": 24782,
+     "image_bytes": 21464,
+     "unplaced": [
+      {
+       "sha256": "0b6edadd81aac94a",
+       "ptx": 2950,
+       "fatbin": 5744,
+       "why": "no free region of 5744 bytes",
+       "jit_invariant": true
+      }
+     ]
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_90a__identical___mojolearn_estimators.so",
+     "modules": 148,
+     "in_place": 143,
+     "moved": 5,
+     "ptx_bytes": 4722690,
+     "image_bytes": 675928,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_90a__identical___mojolearn_gbdt.so",
+     "modules": 223,
+     "in_place": 212,
+     "moved": 11,
+     "ptx_bytes": 4061350,
+     "image_bytes": 842256,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_90a__identical___mojolearn_gp.so",
+     "modules": 57,
+     "in_place": 56,
+     "moved": 1,
+     "ptx_bytes": 2496963,
+     "image_bytes": 360024,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_90a__identical___mojolearn_hdbscan.so",
+     "modules": 68,
+     "in_place": 65,
+     "moved": 3,
+     "ptx_bytes": 5258447,
+     "image_bytes": 599560,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_90a__identical___mojolearn_ivf.so",
+     "modules": 32,
+     "in_place": 29,
+     "moved": 3,
+     "ptx_bytes": 1259218,
+     "image_bytes": 151184,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_90a__identical___mojolearn_kernel_methods.so",
+     "modules": 61,
+     "in_place": 60,
+     "moved": 1,
+     "ptx_bytes": 2232390,
+     "image_bytes": 351976,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_90a__identical___mojolearn_linalg.so",
+     "modules": 40,
+     "in_place": 39,
+     "moved": 1,
+     "ptx_bytes": 2423660,
+     "image_bytes": 314688,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_90a__identical___mojolearn_mamba.so",
+     "modules": 137,
+     "in_place": 137,
+     "moved": 0,
+     "ptx_bytes": 3394520,
+     "image_bytes": 648808,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_90a__identical___mojolearn_metrics.so",
+     "modules": 145,
+     "in_place": 136,
+     "moved": 9,
+     "ptx_bytes": 8853348,
+     "image_bytes": 1051160,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_90a__identical___mojolearn_mixture.so",
+     "modules": 95,
+     "in_place": 87,
+     "moved": 8,
+     "ptx_bytes": 3631632,
+     "image_bytes": 500728,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_90a__identical___mojolearn_preprocessing.so",
+     "modules": 10,
+     "in_place": 10,
+     "moved": 0,
+     "ptx_bytes": 47078,
+     "image_bytes": 23040,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_90a__identical___mojolearn_resample.so",
+     "modules": 54,
+     "in_place": 53,
+     "moved": 1,
+     "ptx_bytes": 848250,
+     "image_bytes": 201408,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_90a__identical___mojolearn_rf.so",
+     "modules": 83,
+     "in_place": 80,
+     "moved": 3,
+     "ptx_bytes": 773126,
+     "image_bytes": 231960,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_90a__identical___mojolearn_solver.so",
+     "modules": 58,
+     "in_place": 54,
+     "moved": 4,
+     "ptx_bytes": 2093549,
+     "image_bytes": 292528,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_90a__identical___mojolearn_svm.so",
+     "modules": 74,
+     "in_place": 69,
+     "moved": 5,
+     "ptx_bytes": 2285229,
+     "image_bytes": 338920,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_90a__identical___mojolearn_training.so",
+     "modules": 66,
+     "in_place": 62,
+     "moved": 4,
+     "ptx_bytes": 2432570,
+     "image_bytes": 363096,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_90a__identical___mojolearn_transformer.so",
+     "modules": 107,
+     "in_place": 107,
+     "moved": 0,
+     "ptx_bytes": 6700121,
+     "image_bytes": 766488,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_90a__identical___mojolearn_trees.so",
+     "modules": 51,
+     "in_place": 50,
+     "moved": 1,
+     "ptx_bytes": 647649,
+     "image_bytes": 182640,
+     "unplaced": []
+    },
+    {
+     "file": "/tmp/tmp_xiojaqd/mojolearn__cuda__sm_90a__identical___mojolearn_tsa.so",
+     "modules": 19,
+     "in_place": 18,
+     "moved": 1,
+     "ptx_bytes": 387968,
+     "image_bytes": 85480,
+     "unplaced": []
+    }
+   ],
+   "files": 23,
+   "modules": 1786,
+   "in_place": 1713,
+   "moved": 72,
+   "unplaced": 1,
+   "ptx_bytes": 68224635,
+   "image_bytes": 9666144
+  }
+ },
+ "wheel_bytes": {
+  "before": 100638553,
+  "after": 95493509
+ },
+ "identical_compressed": {
+  "sm_89": {
+   "before": 20080068,
+   "after": 17252148
+  },
+  "sm_90a": {
+   "before": 20081224,
+   "after": 17764103
+  }
+ },
+ "audit_errors": [
+  "mojolearn/cuda/sm_89/identical/_mojolearn_embedding.so: 1 PTX module(s) the driver would JIT (first 2949 bytes, .target sm_89)",
+  "mojolearn/cuda/sm_90a/identical/_mojolearn_embedding.so: 1 PTX module(s) the driver would JIT (first 2950 bytes, .target sm_90a)"
+ ],
+ "audit_rows": [
+  {
+   "ptx_modules": 0,
+   "fatbins": 84,
+   "arches": [
+    "sm_89"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_89/identical/_mojolearn.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 21,
+   "arches": [
+    "sm_89"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_89/identical/_mojolearn_arima.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 142,
+   "arches": [
+    "sm_89"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_89/identical/_mojolearn_byte_lm.so"
+  },
+  {
+   "ptx_modules": 1,
+   "fatbins": 10,
+   "arches": [
+    "sm_89"
+   ],
+   "errors": [
+    "1 PTX module(s) the driver would JIT (first 2949 bytes, .target sm_89)"
+   ],
+   "file": "mojolearn/cuda/sm_89/identical/_mojolearn_embedding.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 148,
+   "arches": [
+    "sm_89"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_89/identical/_mojolearn_estimators.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 223,
+   "arches": [
+    "sm_89"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_89/identical/_mojolearn_gbdt.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 57,
+   "arches": [
+    "sm_89"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_89/identical/_mojolearn_gp.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 68,
+   "arches": [
+    "sm_89"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_89/identical/_mojolearn_hdbscan.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 32,
+   "arches": [
+    "sm_89"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_89/identical/_mojolearn_ivf.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 61,
+   "arches": [
+    "sm_89"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_89/identical/_mojolearn_kernel_methods.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 40,
+   "arches": [
+    "sm_89"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_89/identical/_mojolearn_linalg.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 137,
+   "arches": [
+    "sm_89"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_89/identical/_mojolearn_mamba.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 145,
+   "arches": [
+    "sm_89"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_89/identical/_mojolearn_metrics.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 95,
+   "arches": [
+    "sm_89"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_89/identical/_mojolearn_mixture.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 10,
+   "arches": [
+    "sm_89"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_89/identical/_mojolearn_preprocessing.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 54,
+   "arches": [
+    "sm_89"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_89/identical/_mojolearn_resample.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 83,
+   "arches": [
+    "sm_89"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_89/identical/_mojolearn_rf.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 58,
+   "arches": [
+    "sm_89"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_89/identical/_mojolearn_solver.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 74,
+   "arches": [
+    "sm_89"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_89/identical/_mojolearn_svm.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 66,
+   "arches": [
+    "sm_89"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_89/identical/_mojolearn_training.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 107,
+   "arches": [
+    "sm_89"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_89/identical/_mojolearn_transformer.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 51,
+   "arches": [
+    "sm_89"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_89/identical/_mojolearn_trees.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 19,
+   "arches": [
+    "sm_89"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_89/identical/_mojolearn_tsa.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 84,
+   "arches": [
+    "sm_90a"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_90a/identical/_mojolearn.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 21,
+   "arches": [
+    "sm_90a"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_90a/identical/_mojolearn_arima.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 142,
+   "arches": [
+    "sm_90a"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_90a/identical/_mojolearn_byte_lm.so"
+  },
+  {
+   "ptx_modules": 1,
+   "fatbins": 10,
+   "arches": [
+    "sm_90a"
+   ],
+   "errors": [
+    "1 PTX module(s) the driver would JIT (first 2950 bytes, .target sm_90a)"
+   ],
+   "file": "mojolearn/cuda/sm_90a/identical/_mojolearn_embedding.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 148,
+   "arches": [
+    "sm_90a"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_90a/identical/_mojolearn_estimators.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 223,
+   "arches": [
+    "sm_90a"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_90a/identical/_mojolearn_gbdt.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 57,
+   "arches": [
+    "sm_90a"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_90a/identical/_mojolearn_gp.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 68,
+   "arches": [
+    "sm_90a"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_90a/identical/_mojolearn_hdbscan.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 32,
+   "arches": [
+    "sm_90a"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_90a/identical/_mojolearn_ivf.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 61,
+   "arches": [
+    "sm_90a"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_90a/identical/_mojolearn_kernel_methods.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 40,
+   "arches": [
+    "sm_90a"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_90a/identical/_mojolearn_linalg.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 137,
+   "arches": [
+    "sm_90a"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_90a/identical/_mojolearn_mamba.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 145,
+   "arches": [
+    "sm_90a"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_90a/identical/_mojolearn_metrics.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 95,
+   "arches": [
+    "sm_90a"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_90a/identical/_mojolearn_mixture.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 10,
+   "arches": [
+    "sm_90a"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_90a/identical/_mojolearn_preprocessing.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 54,
+   "arches": [
+    "sm_90a"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_90a/identical/_mojolearn_resample.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 83,
+   "arches": [
+    "sm_90a"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_90a/identical/_mojolearn_rf.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 58,
+   "arches": [
+    "sm_90a"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_90a/identical/_mojolearn_solver.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 74,
+   "arches": [
+    "sm_90a"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_90a/identical/_mojolearn_svm.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 66,
+   "arches": [
+    "sm_90a"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_90a/identical/_mojolearn_training.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 107,
+   "arches": [
+    "sm_90a"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_90a/identical/_mojolearn_transformer.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 51,
+   "arches": [
+    "sm_90a"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_90a/identical/_mojolearn_trees.so"
+  },
+  {
+   "ptx_modules": 0,
+   "fatbins": 19,
+   "arches": [
+    "sm_90a"
+   ],
+   "errors": [],
+   "file": "mojolearn/cuda/sm_90a/identical/_mojolearn_tsa.so"
+  }
+ ]
+}
