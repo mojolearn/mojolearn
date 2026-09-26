@@ -124,7 +124,9 @@ from arima.impl.tsa.arima_common import (
     unpack,
     validate_order,
 )
-from checks.numerics import ftz, identical_mul_add
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 from core.identity_trace import IdentityTrace
 from glm.impl.qn.qn_util import (
     LBFGS_LS_BT_ARMIJO,
@@ -146,6 +148,18 @@ from tsa.impl.timeSeries.arima_helpers import prepare_data
 #: the binary value, never as `1.0 / 1024.0`, so the literal in the source
 #: is the number the machine uses.
 comptime ARIMA_FIT_H = Float32(0.0009765625)
+
+comptime FIT_COMPACT = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_ARIMA_FIT_COMPACT_OFF"]()
+)
+"""FAST on Apple: the shared L-BFGS evaluates only the series still
+optimizing. The lockstep batch otherwise keeps every converged series in
+every evaluation until the slowest one stops (at 8000 short series the mean
+is 18 iterations and the slowest 259). The batch is re-packed on the host
+whenever the active count falls to half the packed one; a Kalman pass is
+one series per thread, so a series' values do not depend on its batch."""
 
 
 def arima_fit_params(max_iterations: Int = 1000) -> LBFGSParam:
@@ -270,6 +284,46 @@ def eval_batch(
 # ---------------------------------------------------------------------------
 
 
+def _eval_packed(
+    ctx: DeviceContext,
+    mut d_y_c: DeviceBuffer[DType.float32],
+    mut d_exog_kf: DeviceBuffer[DType.float32],
+    cidx: List[Int],
+    n_obs_kf: Int,
+    order_kf: ARIMAOrder,
+    mut d_x: DeviceBuffer[DType.float32],
+    mut d_grad: DeviceBuffer[DType.float32],
+    mut d_x_pert: DeviceBuffer[DType.float32],
+    mut scratch: ARIMAParams,
+    h: Float32,
+    scale: Float32,
+    xin: List[Float32],
+    mut fout: List[Float32],
+    mut gout: List[Float32],
+    n: Int,
+) raises:
+    """`eval_batch` on the series `cidx` only (`d_y_c` holds exactly those
+    series, in that order); results are scattered back into the full
+    `fout` / `gout`."""
+    var nb = len(cidx)
+    var xs = List[Float32](capacity=nb * n)
+    for j in range(nb):
+        var b = cidx[j]
+        for i in range(n):
+            xs.append(xin[b * n + i])
+    var fs = _zeros(nb)
+    var gs = _zeros(nb * n)
+    eval_batch(
+        ctx, d_y_c, d_exog_kf, nb, n_obs_kf, order_kf, d_x, d_grad, d_x_pert,
+        scratch, h, scale, xs, fs, gs,
+    )
+    for j in range(nb):
+        var b = cidx[j]
+        fout[b] = fs[j]
+        for i in range(n):
+            gout[b * n + i] = gs[j * n + i]
+
+
 def _iter_tag(k: Int) -> String:
     """`fit.iterNNNN`, zero padded so the card's tags sort and align, as
     `glm/impl/qn/qn_solvers.mojo::_iter_tag` does."""
@@ -386,6 +440,14 @@ def batched_min_lbfgs(
 
     var n_eval = 0
 
+    # FIT_COMPACT state: `cidx` lists the packed series, `d_y_c` holds them
+    var compact = False
+    var cidx = List[Int]()
+    var y_host = List[Float32]()
+    var d_y_c = ctx.enqueue_create_buffer[DType.float32](1)
+    comptime if FIT_COMPACT:
+        compact = order_kf.n_exog == 0 and batch_size > 1
+
     # `min_lbfgs:161-173`: evaluate at x0, and exit early per series if it
     # is already a minimizer.
     eval_batch(
@@ -418,6 +480,25 @@ def batched_min_lbfgs(
                 any_active = True
         if not any_active:
             break
+
+        if compact:
+            var n_act = 0
+            for b in range(batch_size):
+                if active[b]:
+                    n_act += 1
+            var packed = len(cidx) if len(cidx) > 0 else batch_size
+            if n_act * 2 <= packed:
+                if len(y_host) == 0:
+                    y_host = _download(ctx, d_y_kf, batch_size * n_obs_kf)
+                cidx.clear()
+                var yc = List[Float32](capacity=n_act * n_obs_kf)
+                for b in range(batch_size):
+                    if active[b]:
+                        cidx.append(b)
+                        for t in range(n_obs_kf):
+                            yc.append(y_host[b * n_obs_kf + t])
+                d_y_c = ctx.enqueue_create_buffer[DType.float32](max(1, len(yc)))
+                _upload(ctx, d_y_c, yc)
 
         # `min_lbfgs:188-191`: save x, grad, fx
         for b in range(batch_size):
@@ -466,10 +547,16 @@ def batched_min_lbfgs(
                 else:
                     for i in range(n):
                         cand[b * n + i] = x[b * n + i]
-            eval_batch(
-                ctx, d_y_kf, d_exog_kf, batch_size, n_obs_kf, order_kf, d_x, d_grad,
-                d_x_pert, scratch, h, scale, cand, fxc, gradc,
-            )
+            if len(cidx) > 0:
+                _eval_packed(
+                    ctx, d_y_c, d_exog_kf, cidx, n_obs_kf, order_kf, d_x,
+                    d_grad, d_x_pert, scratch, h, scale, cand, fxc, gradc, n,
+                )
+            else:
+                eval_batch(
+                    ctx, d_y_kf, d_exog_kf, batch_size, n_obs_kf, order_kf, d_x,
+                    d_grad, d_x_pert, scratch, h, scale, cand, fxc, gradc,
+                )
             n_eval += 1
             for b in range(batch_size):
                 if not searching[b]:
@@ -552,6 +639,7 @@ def batched_min_lbfgs(
     _ = d_grad^
     _ = d_x_pert^
     _ = scratch^
+    _ = d_y_c^
     return BatchedLBFGSResult(
         x=x^, fx=fx^, n_iter=n_iter^, retcode=retcode^, n_eval=n_eval
     )
