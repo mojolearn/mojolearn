@@ -81,7 +81,7 @@ from training.checks.optimizer import (
     device_step_scalars, opt_refuse_device_inputs,
 )
 from training.checks.optimizer_oracle import OPT_ADAMW, OPT_SGD, OptimizerConfig
-from checks.kernel_matrix import TARGET_COLUMN, byte_lm_release_eager_for
+from checks.kernel_matrix import COLUMN_APPLE, TARGET_COLUMN, byte_lm_release_eager_for
 from transformer.impl.llama.fused_attention import ATTN_EXACT_TAIL_GUARD, ATTN_TAIL_GUARD_SABOTAGE, FUSED_CORNER, ATTN_REPAIR_MASKED_TAIL, ATTN_REPAIR_SAB_Z, ATTN_REPAIR_SAB_DQ
 from transformer.checks.transformer_backward import (
     BWD_ANY_SABOTAGE, LlamaBackwardStages, llama_decoder_layer_backward_device,
@@ -534,8 +534,15 @@ struct ByteBuffers(Movable):
         )
         self.sab_partials = _zeros(ctx, SAB_CHUNKS)
 
-        self.emb_w = _zeros(ctx, V * DM)
-        self.lm_w = _zeros(ctx, V * DM)
+        # Views of the flat parameters (`_bind_emb_head`), not copies.
+        comptime if BYTE_LM_EMB_HEAD_VIEWS:
+            self.emb_w = self.param.create_sub_buffer[DType.float32](0, V * DM)
+            self.lm_w = self.param.create_sub_buffer[DType.float32](
+                self.offsets[config.n_tensors() - 1], V * DM
+            )
+        else:
+            self.emb_w = _zeros(ctx, V * DM)
+            self.lm_w = _zeros(ctx, V * DM)
         self.dw_emb = _zeros(ctx, V * DM)
         self.dw_lm = _zeros(ctx, V * DM)
 
@@ -661,6 +668,39 @@ def _block_offsets(o: List[Int], base: Int) raises -> List[Int]:
     for j in range(10):
         offs.append(o[base + j])
     return offs^
+
+
+#: lane/apple-identical-neural (2026-09-26): the embedding and head weights
+#: are VIEWS of the flat parameter buffer (`create_sub_buffer`), re-bound at
+#: the top of every forward because the out-of-place optimizer swaps the
+#: `param` handle with `shadow_p` each step. The two per-step copies they
+#: replace moved 2 x V x d_model floats and nothing else: no float operation,
+#: so the bits cannot move. What it buys is MEMORY: two V x d_model
+#: allocations (309 MB at GPT-3 small) and their per-step traffic. It is NOT
+#: a measured step-time win: the 430-530 ms first seen in `step.unpack_weights`
+#: was the first submission after host-side exports paging the working set
+#: back in (1.4 ms in consecutive steps), and consecutive-step A/B on the M4
+#: shows no difference (1.686 vs 1.711 s, 1.969 vs 1.992 s).
+#: Apple only for now: Apple's step glue keeps `param` in place (no swap);
+#: NVIDIA's out-of-place arm swaps it every step, which the re-bind handles,
+#: but that column has not run this yet.
+#: `-D MOJOLEARN_BYTE_LM_COPY_EMB_HEAD` restores the copies.
+comptime BYTE_LM_EMB_HEAD_VIEWS = (
+    TARGET_COLUMN == COLUMN_APPLE
+    and not is_defined["MOJOLEARN_BYTE_LM_COPY_EMB_HEAD"]()
+)
+
+
+def _bind_emb_head(ctx: DeviceContext, mut tb: ByteBuffers, config: ByteConfig) raises:
+    """`emb_w` and `lm_w` read the CURRENT flat parameters: fresh views of
+    `param` (after any handle swap), or the two copies under the revert arm."""
+    var n = config.vocab_size * config.d_model
+    comptime if BYTE_LM_EMB_HEAD_VIEWS:
+        tb.emb_w = tb.param.create_sub_buffer[DType.float32](0, n)
+        tb.lm_w = tb.param.create_sub_buffer[DType.float32](tb.offsets[config.n_tensors() - 1], n)
+    else:
+        _copy_into(ctx, tb.emb_w, tb.param, 0, 0, n)
+        _copy_into(ctx, tb.lm_w, tb.param, 0, tb.offsets[config.n_tensors() - 1], n)
 
 
 def _unpack_block(ctx: DeviceContext, mut tb: ByteBuffers, mut w: LlamaDeviceWeights, block: Int) raises:
@@ -1121,8 +1161,7 @@ def _byte_forward_loss(ctx: DeviceContext, mut tr: ByteTrainer,
     timing_bytes(ton, "step.upload_inputs_bytes", 2 * M * 4)
     for layer in range(config.n_layers):
         _unpack_block(ctx, tr.buffers, tr.weights[layer], layer)
-    _copy_into(ctx, tr.buffers.emb_w, tr.buffers.param, 0, 0, config.vocab_size * config.d_model)
-    _copy_into(ctx, tr.buffers.lm_w, tr.buffers.param, 0, tr.buffers.offsets[config.n_tensors() - 1], config.vocab_size * config.d_model)
+    _bind_emb_head(ctx, tr.buffers, config)
     # No wait: the embedding forward below is the next thing queued on this
     # same in-order context and reads no host memory.
     # A host round trip costs about a dozen kernel launches on Metal.

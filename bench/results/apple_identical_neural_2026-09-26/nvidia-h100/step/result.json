@@ -1,0 +1,102 @@
+{
+  "schema": "mojolearn.lm-step-memory-probe.v3",
+  "shape": {
+    "batch": 1,
+    "length": 2048,
+    "d_model": 768,
+    "n_heads": 12,
+    "n_kv": 12,
+    "head_dim": 64,
+    "intermediate": 2048,
+    "n_layers": 2,
+    "vocab_size": 50257
+  },
+  "parameters": 91353600,
+  "steps_completed": 4,
+  "resident": true,
+  "step_result": "lean",
+  "witness_every_step": true,
+  "witness_source": "export_gradients(named=False) + export_state() after every step (outside the timed boundary)",
+  "corpus": null,
+  "attention_arm": "stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz",
+  "attention_arm_source": "binding",
+  "attention_arm_requested": null,
+  "attention_arm_default": "stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz",
+  "attention_arm_is_default": true,
+  "attention_arm_resolved_hd64": "stash_tiled_fgrid_r32_qres_pf_estash_dres_kvgrid_r32_bswz",
+  "attention_arm_trial_build": false,
+  "gemm_arm": null,
+  "gemm_plan": null,
+  "step_glue_arm": "optskip_noshadow_rows16",
+  "step_glue_arm_requested": null,
+  "step_glue_trial_build": false,
+  "step_witnesses": [
+    {
+      "step": 1,
+      "completed_steps": 1,
+      "sha256": {
+        "loss": "0f47abca6b2649302e03d1f1362638535ac217b821a5d992a0d04c254807e53c",
+        "gradients": "2aa00e20cbbd6d0d9eefe2013d414fbef91d45e26f665da2f4d86607317a7d12",
+        "parameters": "81c4cd5bc234c264e9bcb738a23893a1889cec7209ac4458fba93ce57b85b550",
+        "m": "e61b9f0460e41168f4ffadfffd5e8b41a1a57b148051395cefe94832906f1058",
+        "v": "6938e4aeaa8e38088ed819cf5278498aa61aac40b98f5dedc2cc3be1d12fe8cc",
+        "flags": "5b6fb58e61fa475939767d68a446f97f1bff02c0e5935a3ea8bb51e6515783d8"
+      }
+    },
+    {
+      "step": 2,
+      "completed_steps": 2,
+      "sha256": {
+        "loss": "a4927d2535a39abe5cfb093751431e5fa53b96d5dc08255297146206094ceba3",
+        "gradients": "df98202cf7df280468ce5c04464ead09171d7342f6132cfbee4bb3955cdf3941",
+        "parameters": "aa27c3322dbac460e0b98824af5e4cced95eeff31c0d30b37e2e17810369cf5c",
+        "m": "8d95d102c1046c398c6e55b9f85d1d8eb39d44d01da3ac757cea129200dded52",
+        "v": "d9b2495627a86e2a9166fac86ca9bdbb4067ac96352764cdd3d09bde4b28bada",
+        "flags": "5b6fb58e61fa475939767d68a446f97f1bff02c0e5935a3ea8bb51e6515783d8"
+      }
+    },
+    {
+      "step": 3,
+      "completed_steps": 3,
+      "sha256": {
+        "loss": "af994099b9f6ab1ea0a8fb4da8b9aece8084992281020a95f7d8a03b777aceef",
+        "gradients": "e615619a0807e87bec92deb5534a561954968599cbac775694408ad735474336",
+        "parameters": "047e8ac546459eb10ee78a2346b5e054a4635738f7a43404d2048e0f342854e6",
+        "m": "e74b117c5a4153ccd41679d909f3a7308f88a4c2ae50714ad013b6e6d02c41b3",
+        "v": "4955d4f6e082dd3c4fee46096af63bf83c4b93d36b73d79f45ba9f7ac2e90694",
+        "flags": "5b6fb58e61fa475939767d68a446f97f1bff02c0e5935a3ea8bb51e6515783d8"
+      }
+    },
+    {
+      "step": 4,
+      "completed_steps": 4,
+      "sha256": {
+        "loss": "135aebae6252dc8e1b8fa692f227b2e099e12bc595787a671ab14fd4912a9adb",
+        "gradients": "ef1b9113b9ce643f6e77b82d83d6f1fb382d2e8b4e00c4e1197d4a4cea71129b",
+        "parameters": "b96005fb47da4fe483ed4a937d25ac22b27da127595dfb53dd26ed4b1a3101c8",
+        "m": "a0d1c07de8b9cc86285b67ad2a56d61e8c4e1a0c79c39e6746dea72b0de188a0",
+        "v": "0092455a928df5cde675b05171ce63a26b23e737c44701fe10ebfff6d18f46de",
+        "flags": "5b6fb58e61fa475939767d68a446f97f1bff02c0e5935a3ea8bb51e6515783d8"
+      }
+    }
+  ],
+  "final_witness": null,
+  "first_call_seconds": 9.284899052232504,
+  "steady_step_seconds": [
+    0.050738625228405,
+    0.05067069083452225,
+    0.05074354633688927
+  ],
+  "steady_median_seconds": 0.050738625228405,
+  "steady_median_tokens_per_second": 40363.72666347823,
+  "peak_device_process_bytes": 6476005376,
+  "peak_device_wide_bytes": 6489636864,
+  "process_ru_maxrss_bytes": 5973827584,
+  "budget_seconds": 900.0,
+  "limited": false,
+  "component_timing_step_seconds": null,
+  "component_timing_steps": 0,
+  "component_timing_step_seconds_all": [],
+  "component_timing_witnesses": [],
+  "qualification": "complete-step probe; device peak from a polled vendor tool; host RSS is a separate boundary; no opponent, no default gate, no target-scale qualification claim"
+}

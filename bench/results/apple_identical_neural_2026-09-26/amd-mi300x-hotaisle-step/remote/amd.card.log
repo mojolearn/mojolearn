@@ -1,0 +1,340 @@
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:203:
+/root/mojolearn/core/identity_trace.mojo:248:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        raw: UnsafePointer[UInt8, o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:203:
+/root/mojolearn/core/identity_trace.mojo:362:14: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            p.bitcast[UInt8](),
+            ~^~~~~~~~
+              unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:203:
+/root/mojolearn/core/identity_trace.mojo:376:14: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+        ptr: UnsafePointer[Scalar[dt], o],
+             ^~~~~~~~~~~~~
+             Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:203:
+/root/mojolearn/core/identity_trace.mojo:103:22: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+](seed: UInt64, ptr: UnsafePointer[UInt8, o], n: Int) -> UInt64:
+                     ^~~~~~~~~~~~~
+                     Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:203:
+/root/mojolearn/core/identity_trace.mojo:386:16: warning: 'bitcast' is deprecated, use 'unsafe_bitcast' instead
+            ptr.bitcast[UInt8](),
+            ~~~^~~~~~~~
+                unsafe_bitcast
+<unknown>:0: note: 'bitcast' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:2984:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ma = min(min(adm_s[sr], adm_s[sr + 1]), min(adm_s[sr + 2], adm_s[sr + 3]))
+                             ~~~~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:2984:46: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ma = min(min(adm_s[sr], adm_s[sr + 1]), min(adm_s[sr + 2], adm_s[sr + 3]))
+                                        ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:2984:66: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ma = min(min(adm_s[sr], adm_s[sr + 1]), min(adm_s[sr + 2], adm_s[sr + 3]))
+                                                            ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:2984:81: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var ma = min(min(adm_s[sr], adm_s[sr + 1]), min(adm_s[sr + 2], adm_s[sr + 3]))
+                                                                           ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:2985:35: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mb = min(min(adm_s[sr + 4], adm_s[sr + 5]), min(adm_s[sr + 6], adm_s[sr + 7]))
+                             ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:2985:50: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mb = min(min(adm_s[sr + 4], adm_s[sr + 5]), min(adm_s[sr + 6], adm_s[sr + 7]))
+                                            ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:2985:70: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mb = min(min(adm_s[sr + 4], adm_s[sr + 5]), min(adm_s[sr + 6], adm_s[sr + 7]))
+                                                                ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:2985:85: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            var mb = min(min(adm_s[sr + 4], adm_s[sr + 5]), min(adm_s[sr + 6], adm_s[sr + 7]))
+                                                                               ~~~~~^~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:3491:10: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    dst: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+         ^~~~~~~~~~~~~
+         Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:3619:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            wmin[sg] = ea
+            ~~~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:3620:17: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            wmin[NSG + sg] = eb
+            ~~~~^~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:3629:32: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            bea = min(bea, wmin[q])
+                           ~~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:3630:32: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            beb = min(beb, wmin[NSG + q])
+                           ~~~~^~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:3408:8: warning: 'UnsafePointer' is deprecated, use 'Pointer' instead
+    p: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+       ^~~~~~~~~~~~~
+       Pointer
+<unknown>:0: note: 'UnsafePointer' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:3639:46: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    af[fm] = _amma_load_t(at + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                                          ~~~^~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:3639:63: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    af[fm] = _amma_load_t(at + (8 * p8) * AST + (sgm * FM + fm) * 8, AST)
+                                          ~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:3641:46: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    bf[fq] = _amma_load_t(bt + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                                          ~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:3641:76: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                    bf[fq] = _amma_load_t(bt + ((sgn * FN + fq) * 8) * BST + 8 * p8, BST)
+                                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:3652:32: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    var av = at[p * AST + (sgm * FM + fm) * 8 + frow]
+                             ~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:3655:40: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            var bv = bt[((sgn * FN + fq) * 8 + fcol + e) * BST + p]
+                                     ~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:3665:23: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    fl[pe] = part[pe]
+                    ~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:3675:26: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+            outv[oe] = fl[oe]
+                       ~~^~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:3684:22: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    c[gi * n + gj] = ftz(outv[2 * (fm * FN + fq) + e])
+                    ~^~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:6816:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            as_.store[alignment=ALIGN](initial_page * APAGE + ga[0] * ASTRIDE + ga[1] * RPT, pga)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:6817:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            bs_.store[alignment=ALIGN](initial_page * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:6849:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            as_.store[alignment=ALIGN](pgw * APAGE + ga[0] * ASTRIDE + ga[1] * RPT, pga)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:6850:16: warning: 'store' is deprecated, use 'unsafe_store' instead
+            bs_.store[alignment=ALIGN](pgw * BPAGE + gb[0] * BSTRIDE + gb[1] * CPT, pgb)
+            ~~~^~~~~~
+                unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:6932:26: warning: 'load' is deprecated, use 'unsafe_load' instead
+            var ra1 = as_.load[width=RPT, alignment=ALIGN](abase)
+                      ~~~^~~~~
+                          unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:6933:26: warning: 'load' is deprecated, use 'unsafe_load' instead
+            var rb1 = bs_.load[width=CPT, alignment=ALIGN](bbase)
+                      ~~~^~~~~
+                          unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:6948:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var raa = as_.load[width=RPT, alignment=ALIGN](abase + ca * RPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:6949:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rba = bs_.load[width=CPT, alignment=ALIGN](bbase + ca * CPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:6955:29: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var ra = as_.load[width=RPT, alignment=ALIGN](abase + c0 * RPT)
+                         ~~~^~~~~
+                             unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:6956:29: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rb = bs_.load[width=CPT, alignment=ALIGN](bbase + c0 * CPT)
+                         ~~~^~~~~
+                             unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:6982:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var ra2 = as_.load[width=RPT, alignment=ALIGN](abase + cc * RPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:6983:30: warning: 'load' is deprecated, use 'unsafe_load' instead
+                var rb2 = bs_.load[width=CPT, alignment=ALIGN](bbase + cc * CPT)
+                          ~~~^~~~~
+                              unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:3461:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var at_ = src + go + (k0 + pp) * k_stride
+                          ~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:3461:36: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var at_ = src + go + (k0 + pp) * k_stride
+                          ~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:3463:32: warning: 'load' is deprecated, use 'unsafe_load' instead
+                    var v = at_.load[width=4, alignment=4]()
+                            ~~~^~~~~
+                                unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:3469:48: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            r[4 * sl + q] = at_[q]
+                                            ~~~^~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:3475:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var at_ = src + go * outer_stride + (k0 + p4) * k_stride
+                          ~~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:3475:51: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                var at_ = src + go * outer_stride + (k0 + p4) * k_stride
+                          ~~~~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:3477:32: warning: 'load' is deprecated, use 'unsafe_load' instead
+                    var v = at_.load[width=4, alignment=4]()
+                            ~~~^~~~~
+                                unsafe_load
+<unknown>:0: note: 'load' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:3483:48: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                            r[4 * sl + q] = at_[q * k_stride]
+                                            ~~~^~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:3511:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + pp * ST + o4).store[alignment=16](v)
+                 ~~~~^~~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:3511:32: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + pp * ST + o4).store[alignment=16](v)
+                 ~~~~~~~~~~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:3511:37: warning: 'store' is deprecated, use 'unsafe_store' instead
+                (dst + pp * ST + o4).store[alignment=16](v)
+                ~~~~~~~~~~~~~~~~~~~~^~~~~~
+                                     unsafe_store
+<unknown>:0: note: 'store' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:3514:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    dst[(o4 + q) * ST + pp] = v[q]
+                    ~~~^~~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:3520:24: warning: positional `__getitem__` is deprecated, use `unsafe_offset=` instead
+                    dst[(p4 + q) * ST + o] = v[q]
+                    ~~~^~~~~~~~~~~~~~~~~~~
+<unknown>:0: note: '__getitem__' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:3522:22: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + o * ST + p4).store[alignment=16](v)
+                 ~~~~^~~~~~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:3522:31: warning: '__add__' is deprecated, use 'unsafe_offset' instead
+                (dst + o * ST + p4).store[alignment=16](v)
+                 ~~~~~~~~~~~~~^~~~
+<unknown>:0: note: '__add__' declared here
+Imported from /root/mojolearn/bench/gemm_card_main.mojo:206:
+/root/mojolearn/gemm/checks/gemm_identical.mojo:3522:36: warning: 'store' is deprecated, use 'unsafe_store' instead
+                (dst + o * ST + p4).store[alignment=16](v)
+                ~~~~~~~~~~~~~~~~~~~^~~~~~
+                                    unsafe_store
+<unknown>:0: note: 'store' declared here
+== bench/gemm_card_main.mojo [IDENTICAL] ==
+profile mojolearn.identical.gemm.fp32.v1
+arm device
+column amd
+kernel gemm/checks/gemm_identical.mojo  sabotage none
+cap device: DEVICE_FLOAT_BUDGET = 67108864 float32 across A, B, C and the workspace
+   gram.32x32x1M m=32 n=32 k=1000000 plan=SPLIT 32x32 reg2x2 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=False (256 thr, 2-D grid, no swizzle) P=1024
+   gram.32x32x64K m=32 n=32 k=65536 plan=SPLIT 32x32 reg2x2 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=False (256 thr, 2-D grid, no swizzle) P=512
+   gram.128sq.x100003 m=128 n=128 k=100003 plan=SPLIT 64x64 reg4x4 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=False (256 thr, 2-D grid, no swizzle) P=782
+   ols.step1.16x16x64K m=16 n=16 k=65536 plan=SPLIT 16x16 reg1x1 KS=32 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=False (256 thr, 2-D grid, no swizzle) P=512
+   pca.transform.8192x4x4 m=8192 n=4 k=4 plan=TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles) P=1
+   pca.transform.wide.8192x64x128 m=8192 n=64 k=128 plan=TUNED 64x64 reg4x4 KS=32 fold=16 local tpb=256 hwftz=False (1-D grid, no swizzle) P=1
+   kmeans.dist.4096x64x64 m=4096 n=64 k=64 plan=TUNED 64x64 reg4x4 KS=32 fold=16 local tpb=256 hwftz=False (1-D grid, no swizzle) P=1
+   ols.predict.gemv.64Kx16 m=65536 n=1 k=16 plan=TILE 32x8 KS=16 (256 thr, 1-D grid, reversed tiles) P=1
+   llama8b.qkv.t1 m=1 n=4096 k=4096 plan=SPLIT 1x256 reg1x1 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=False (256 thr, 2-D grid, no swizzle) P=32
+   llama8b.qkv.t8 m=8 n=4096 k=4096 plan=SPLIT 8x64 reg1x2 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=False (256 thr, 2-D grid, no swizzle) P=32
+   llama8b.qkv.t512 m=512 n=4096 k=4096 plan=TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=False (1-D grid, no swizzle) P=32
+   llama8b.mlp_up.t1 m=1 n=14336 k=4096 plan=SPLIT 1x256 reg1x1 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=False (256 thr, 2-D grid, no swizzle) P=32
+   llama8b.mlp_up.t8 m=8 n=14336 k=4096 plan=SPLIT 8x64 reg1x2 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=False (256 thr, 2-D grid, no swizzle) P=32
+   llama8b.mlp_up.t512 m=512 n=7168 (capped from 14336) k=4096 plan=TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=False (1-D grid, no swizzle) P=32
+   llama8b.mlp_down.t1 m=1 n=4096 k=14336 plan=SPLIT 1x256 reg1x1 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=False (256 thr, 2-D grid, no swizzle) P=112
+   llama8b.mlp_down.t8 m=8 n=4096 k=14336 plan=SPLIT 8x64 reg1x2 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=False (256 thr, 2-D grid, no swizzle) P=112
+   llama8b.mlp_down.t512 m=512 n=2048 (capped from 4096) k=14336 plan=TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=False (1-D grid, no swizzle) P=112
+   llama8b.lm_head.t1 m=1 n=16032 (capped from 128256) k=4096 plan=SPLIT 1x256 reg1x1 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=False (256 thr, 2-D grid, no swizzle) P=32
+   llama8b.lm_head.t8 m=8 n=8016 (capped from 128256) k=4096 plan=SPLIT 8x64 reg1x2 KS=16 leaves on grid.y -> workspace -> fold (block per cell <= 16384, else register stack) tpb=256 hwftz=False (256 thr, 2-D grid, no swizzle) P=32
+   llama8b.lm_head.t512 m=512 n=8016 (capped from 128256) k=4096 plan=TUNED 128x128 reg8x8 KS=16 fold=16 local tpb=256 hwftz=False (1-D grid, no swizzle) P=32
+
+card: /root/gemm_leg_out/amd.card
+stages: 60 over 20 shapes; 0 skipped
+Diff two arms to see the fold topology matter:
+  MOJOLEARN_GEMM_CARD_ARM=oracle MOJOLEARN_IDENTITY_TRACE=/tmp/o.card ...
+  MOJOLEARN_GEMM_CARD_ARM=serial MOJOLEARN_IDENTITY_TRACE=/tmp/s.card ...
+  python3 tools/identity_trace_diff.py /tmp/o.card /tmp/s.card
+They agree only where P == 1.
+Diff the DEVICE arm against the oracle -- these MUST be identical:
+  MOJOLEARN_GEMM_CARD_HOST_CAP=1 MOJOLEARN_GEMM_CARD_ARM=device MOJOLEARN_IDENTITY_TRACE=/tmp/d.card ...
+  python3 tools/identity_trace_diff.py /tmp/o.card /tmp/d.card

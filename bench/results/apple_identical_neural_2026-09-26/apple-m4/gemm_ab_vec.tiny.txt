@@ -1,0 +1,10 @@
+mac_slot: admitted after 0.003s
+EXCP_AB_HEADER column=apple detect_seam=False launch_bound=256 rounds=1
+EXCP_AB_DISPATCH call=proj_fwd APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+EXCP_AB call=proj_fwd kind=tiny m=8192 n=768 k=768 hash=1f0a5f50a8dd15e0 rehash_equal=True ms=407.694 samples=407.694
+EXCP_AB call=proj_dA kind=tiny m=8192 n=768 k=768 hash=ee338ca4dd8299a1 rehash_equal=True ms=424.66 samples=424.66
+EXCP_AB call=proj_dB kind=tiny m=8192 n=768 k=768 hash=654eb9e377023011 rehash_equal=True ms=491.08 samples=491.08
+EXCP_AB_DISPATCH call=down_fwd APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+EXCP_AB call=down_fwd kind=tiny m=8192 n=768 k=2048 hash=5f862f3223fec155 rehash_equal=True ms=1217.501 samples=1217.501
+EXCP_AB_DONE
+mac_slot: {"wait_seconds": 0.002822833019308746, "run_seconds": 5.378617457929067, "exit_code": 0}

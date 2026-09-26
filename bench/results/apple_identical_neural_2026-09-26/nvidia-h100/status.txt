@@ -1,0 +1,9 @@
+[14:40:13] column=nvidia arch=sm_90
+[14:40:44] gemm_backward_check exit=0 gemm backward routing + gates: all green [IDENTICAL]  (10 gates, bwd sabotage: none, fwd sabotage: none)
+[14:41:08] gemm_workspace_check exit=0 PASS: 9 GEMMs, 4608 cells bitwise equal to host oracle
+[14:41:30] ab build exit=0
+[14:41:40] ab kinds5 exit=0 lines=60
+[14:41:41] ab tiny exit=0 lines=4
+[14:44:03] byte_lm build exit=0
+[14:44:05] step exit=1
+[14:44:05] done

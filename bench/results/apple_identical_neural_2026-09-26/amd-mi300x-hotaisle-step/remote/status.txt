@@ -1,0 +1,6 @@
+[14:57:14] column=amd arch=gfx942
+[14:57:46] gemm_device_check exit=0 gemm device kernel + gates: all green [IDENTICAL]  (8 gates, sabotage: none)
+[14:59:04] base build exit=0
+[15:02:16] byte_lm build exit=0
+[15:03:01] step exit=0
+[15:03:01] done

@@ -35,6 +35,7 @@ from core.identity_trace import IdentityTrace
 from training.byte_lm_config import ByteConfig
 from training.byte_lm import (
     ByteTrainer,
+    _bind_emb_head,
     _block_weights,
     _byte_check_gemm,
     _byte_recover,
@@ -283,9 +284,7 @@ def byte_logits_resident(ctx: DeviceContext, mut tr: ByteTrainer, inputs: List[I
     try:
         for layer in range(config.n_layers):
             _unpack_block(ctx, tr.buffers, tr.weights[layer], layer)
-        _copy_into(ctx, tr.buffers.emb_w, tr.buffers.param, 0, 0, config.vocab_size * config.d_model)
-        _copy_into(ctx, tr.buffers.lm_w, tr.buffers.param, 0,
-            tr.buffers.offsets[config.n_tensors() - 1], config.vocab_size * config.d_model)
+        _bind_emb_head(ctx, tr.buffers, config)
         out = _logits_forward(ctx, tr.weights, tr.buffers.emb_w, tr.buffers.lm_w, tr.rope,
             scratch.value(), inputs, batch, length, config)
         ctx.synchronize()
