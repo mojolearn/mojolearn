@@ -129,7 +129,7 @@ from arima.impl.tsa.arima_common import (
     unpack,
     validate_order,
 )
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_mul_add
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from core.identity_trace import IdentityTrace
@@ -155,7 +155,7 @@ from tsa.impl.timeSeries.arima_helpers import prepare_data
 comptime ARIMA_FIT_H = Float32(0.0009765625)
 
 comptime FIT_COMPACT = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_ARIMA_FIT_COMPACT_OFF"]()
 )
