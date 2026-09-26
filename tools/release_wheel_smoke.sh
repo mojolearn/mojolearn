@@ -446,6 +446,12 @@ PYTHONNOUSERSITE=1 MOJOLEARN_NUMERIC_MODE=identical \$IV/bin/python $RDIR/index_
     --version $VERSION --vendor $VENDOR --report $RDIR/pip_report.json --out $RDIR/index_check.json > $RDIR/index_check.log 2>&1
 echo \$? > $RDIR/index_check.exit
 cd $RDIR
+# NumPy is an optional dependency that \`mojolearn verify\` (the smoke's
+# coverage job) needs; the release columns install it beside the wheel. It is
+# added from PyPI AFTER the user's resolution and the index check are recorded,
+# so pip_report.json and dists.txt stay exactly what \`pip install mojolearn==V\`
+# did (0.8.22's first index check: both vendors CANNOT RUN coverage, no NumPy).
+\$IV/bin/python -m pip install --disable-pip-version-check --no-input -q numpy >> install.log 2>&1
 if [ "\$(cat install.exit)" = 0 ]; then
 timeout -k 20 $SMOKE_SECONDS "\$PY" qualify_verifier_wheel.py --installed-python \$IV/bin/python --expected-version $VERSION \\
     --scope expanded$_commit_arg --output $RDIR/out > smoke.log 2>&1
