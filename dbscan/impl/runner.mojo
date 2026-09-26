@@ -101,7 +101,7 @@ from std.gpu import block_dim, block_idx, thread_idx
 from std.time import perf_counter_ns
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from dbscan.impl.adjgraph.algo import (
@@ -203,7 +203,7 @@ from neighbors.impl.ball_cover.scan import (
 #: so a fit walks the dataset twice instead of three times. The counts are
 #: the same kernel's output on the same rows, so the CSR is the same.
 comptime DBSCAN_RBC_KEEP_COUNTS = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_DBSCAN_RBC_KEEP_COUNTS_OFF"]()
 )

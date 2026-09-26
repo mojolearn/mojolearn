@@ -73,7 +73,7 @@ from cluster.checks.plus_plus import (
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from std.gpu import block_dim, block_idx, thread_idx
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_mul_add
 from cluster.checks.reduce_by_key import (
     blocked_acc_table_cells,
     launch_accumulate_centroid_sums_blocked,
@@ -274,7 +274,7 @@ def init_random(
 
 
 comptime KMEANS_FAST_PP_NOSYNC = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_KMEANS_FAST_PP_NOSYNC_OFF"]()
 )
