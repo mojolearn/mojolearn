@@ -433,7 +433,7 @@ class SmokeTests(unittest.TestCase):
         self.assertEqual(receipt['status'], 'PASSED')
         self.assertIn('verdict=PASSED', (out / 'smoke.txt').read_text())
 
-    def plugin(self, dist='mojolearn_cuda', version='0.0.0'):
+    def plugin(self, dist='mojolearn_nvidia', version='0.0.0'):
         path = self.dir / f'{dist}-{version}-py3-none-manylinux_2_35_x86_64.whl'
         with zipfile.ZipFile(path, 'w') as z:
             z.writestr('mojolearn/cuda/sm_89/_mojolearn_knn.so', 'inert')
@@ -448,22 +448,22 @@ class SmokeTests(unittest.TestCase):
         self.assertIn('plugin_sha256=', (out / 'smoke.txt').read_text())
         self.assertIn('--plugin', (out / 'box.sh').read_text())
 
-    def test_split_rocm_plugin_runs_the_smoke_on_hip(self):
-        plugin = self.plugin('mojolearn_rocm')
+    def test_split_amd_plugin_runs_the_smoke_on_hip(self):
+        plugin = self.plugin('mojolearn_amd')
         r, out = self.ssh_path('PASSED', '--vendor', 'hip', '--plugin', str(plugin), vendor='hip')
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         self.assertIn('verdict=PASSED', (out / 'smoke.txt').read_text())
 
     def test_split_receipt_of_the_wrong_vendor_fails(self):
-        plugin = self.plugin('mojolearn_rocm')
+        plugin = self.plugin('mojolearn_amd')
         r, out = self.ssh_path('PASSED', '--vendor', 'hip', '--plugin', str(plugin), vendor='cuda')
         self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
         self.assertIn('installed vendor cuda, not hip', (out / 'smoke.txt').read_text())
 
     def test_split_plugin_refusals(self):
-        for plugin, extra, why in ((self.plugin('mojolearn_rocm'), (), 'plugin of --vendor cuda'),
-                                   (self.plugin('mojolearn_cuda', '0.0.1'), (), 'plugin of --vendor cuda'),
-                                   (self.plugin('mojolearn_cuda'), ('--vendor', 'hip', '--column', self.selection()),
+        for plugin, extra, why in ((self.plugin('mojolearn_amd'), (), 'plugin of --vendor cuda'),
+                                   (self.plugin('mojolearn_nvidia', '0.0.1'), (), 'plugin of --vendor cuda'),
+                                   (self.plugin('mojolearn_nvidia'), ('--vendor', 'hip', '--column', self.selection()),
                                     'plugin of --vendor hip')):
             with self.subTest(plugin=plugin.name, extra=extra):
                 r = self.run_smoke(str(self.wheel), '--expected-source-commit', COMMIT, '--plugin', str(plugin),

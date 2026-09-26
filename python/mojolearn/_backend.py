@@ -116,7 +116,7 @@ order:
 THE PLUGIN PACKAGES (2026-09-25, gpu_plugins.py)
 -----------------------------------------------
 Since the split, the Linux `mojolearn` wheel carries no GPU set: the CUDA sets
-come from `mojolearn-cuda` and the HIP sets from `mojolearn-rocm`, each of
+come from `mojolearn-nvidia` and the HIP sets from `mojolearn-amd`, each of
 which installs its files at the very paths above (mojolearn/cuda/...,
 mojolearn/hip/...) so every RUNPATH resolves exactly as it did in the combined
 wheel. `_layout()` therefore finds a plugin's sets the way it always found
@@ -126,7 +126,7 @@ them, on disk, and ADDS three refusals when this install is the split core (a
 
   * a box whose probe shows a GPU for which no plugin is installed beside
     this core refuses at import, naming the pip command
-    (`pip install "mojolearn[cuda]==<version>"`); MOJOLEARN_VENDOR=cpu runs
+    (`pip install "mojolearn-nvidia==<version>"`); MOJOLEARN_VENDOR=cpu runs
     the CPU bindings on purpose instead;
   * a plugin whose version is not this core's exactly refuses, naming both;
   * sets under mojolearn/<vendor>/ that no installed plugin owns refuse.

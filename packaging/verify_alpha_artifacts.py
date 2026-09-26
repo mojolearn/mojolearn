@@ -34,8 +34,8 @@ from verify_linux_surface_qualification import (  # noqa: E402
     RELEASE_PROFILE, RELEASE_PROFILES, load_gpu_plugins, release_version)
 
 # THE SPLIT LINUX PACKAGES (python/mojolearn/gpu_plugins.py, 2026-09-25): the
-# core `mojolearn` (no GPU set, `[cuda]`/`[rocm]` extras pinning the plugins)
-# and one plugin per vendor, `mojolearn-cuda` and `mojolearn-rocm` (only
+# core `mojolearn` (no GPU set, no extras, no requirement on a plugin) and
+# one plugin per vendor, `mojolearn-nvidia` and `mojolearn-amd` (only
 # mojolearn/<vendor>/..., requiring exactly `mojolearn==<version>`). Their
 # payload records the split packer profile.
 GPU_PLUGINS = load_gpu_plugins()
@@ -291,10 +291,13 @@ def verify_split_wheel(path, version, released, release_profile, qualification_r
     if vendor is None:
         stray = [n for n in payload_members if GPU_PLUGINS.member_vendor(n)]
         require(not stray, 'the split core carries a GPU set member: ' + (stray[0] if stray else ''))
-        require(set(metadata.get_all('Provides-Extra', [])) == {r['extra'] for r in GPU_PLUGINS.PLUGINS.values()}
-                and all(f'{r["distribution"]}=={version}; extra == "{r["extra"]}"' in requires
-                        for r in GPU_PLUGINS.PLUGINS.values()),
-                'the split core does not pin every plugin at exactly its version')
+        # NO GPU EXTRAS: the core declares no extra and requires no plugin;
+        # each plugin pins the core (checked below on the plugin)
+        plugin_names = {r['distribution'] for r in GPU_PLUGINS.PLUGINS.values()}
+        require(not metadata.get_all('Provides-Extra', [])
+                and not any(r.split(';')[0].split('=')[0].split('[')[0].strip().lower().replace('_', '-')
+                            in plugin_names for r in requires),
+                'the split core must declare no extras and require no GPU plugin')
         require(decode(small(dist + GPU_PLUGINS.CORE_MARKER)) == GPU_PLUGINS.core_marker(version),
                 'split core marker disagrees with gpu_plugins.py')
         require(small('mojolearn/identity_columns/COMMIT').decode().strip() == payload.get('source_commit'),

@@ -33,8 +33,8 @@
 # repaired wheel's listing (`unzip -l`) for a mojolearn.libs/ directory.
 #
 # THE SPLIT LINUX PACKAGES (python/mojolearn/gpu_plugins.py): run it ONCE PER
-# WHEEL, the core `mojolearn-*` and each plugin `mojolearn_cuda-*` /
-# `mojolearn_rocm-*`, all into the same audit/ directory (repaired/ then holds
+# WHEEL, the core `mojolearn-*` and each plugin `mojolearn_nvidia-*` /
+# `mojolearn_amd-*`, all into the same audit/ directory (repaired/ then holds
 # the whole set). The logs of the core (and of the combined wheel) keep their
 # names, show.txt, repair.txt, twine.txt; a plugin's are show-<dist>.txt,
 # repair-<dist>.txt and twine-<dist>.txt. A PLUGIN'S RUNTIME LIVES IN THE
@@ -45,7 +45,7 @@
 # --exclude list, read from the core wheel of the same version BESIDE the
 # plugin (the packer writes the set into one directory); a plugin with no core
 # beside it is refused. And any top-level <name>.libs/ directory in a repaired
-# wheel (mojolearn.libs/, mojolearn_cuda.libs/, ...) means auditwheel grafted
+# wheel (mojolearn.libs/, mojolearn_nvidia.libs/, ...) means auditwheel grafted
 # a copy of something the closure already carries, which fails the run.
 set -euo pipefail
 WHL="${1:?wheel}"; shift
@@ -58,7 +58,7 @@ BASE=$(basename "$WHL")
 DIST=${BASE%%-*}
 case "$DIST" in
   mojolearn) SUFFIX="" ;;
-  mojolearn_cuda|mojolearn_rocm) SUFFIX="-$DIST" ;;
+  mojolearn_nvidia|mojolearn_amd) SUFFIX="-$DIST" ;;
   *) echo "not a mojolearn wheel: $BASE"; exit 2 ;;
 esac
 

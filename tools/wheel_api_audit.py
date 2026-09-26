@@ -10,6 +10,7 @@ import argparse
 import hashlib
 import json
 from pathlib import Path, PurePosixPath
+import re
 import tempfile
 import zipfile
 
@@ -135,7 +136,7 @@ def split_audit(wheels):
     The core `mojolearn` holds no GPU set; each plugin holds exactly its own
     vendor's sets (mojolearn/<vendor>/...) and nothing else, no Python and no
     runtime; every plugin requires exactly `mojolearn==<its version>` and the
-    core's extras pin every plugin the same way; the .dist-info markers agree
+    core declares no extras and requires no plugin; the .dist-info markers agree
     with the payload; all wheels share one version and one tag; and no member
     is in two wheels. File inspection only. Returns {'wheels': [...],
     'problems': [...]}, and an empty `problems` is the pass."""
@@ -166,14 +167,16 @@ def split_audit(wheels):
                 problems.append(f'{wheel.name}: the core carries {len(stray)} GPU set member(s), e.g. {stray[0]}')
             if 'mojolearn/__init__.py' not in payload:
                 problems.append(f'{wheel.name}: the core carries no mojolearn/__init__.py')
-            extras = set(metadata.get_all('Provides-Extra', []))
-            want = {r['extra'] for r in plugins.PLUGINS.values()}
-            if extras != want:
-                problems.append(f'{wheel.name}: Provides-Extra {sorted(extras)}, want {sorted(want)}')
-            for r in plugins.PLUGINS.values():
-                pin = f'{r["distribution"]}=={version}; extra == "{r["extra"]}"'
-                if pin not in requires:
-                    problems.append(f'{wheel.name}: no exact pin {pin!r} (Requires-Dist {requires})')
+            # NO GPU EXTRAS (2026-09-26): the core declares no extra at all and
+            # requires no plugin; a plugin brings the core, never the reverse
+            extras = sorted(metadata.get_all('Provides-Extra', []))
+            if extras:
+                problems.append(f'{wheel.name}: the core declares Provides-Extra {extras}; it must declare none '
+                                '(each plugin pins the core instead)')
+            on_plugin = [r for r in requires
+                         if re.split(r'[\s;=<>!~\[(]', r, maxsplit=1)[0].strip().lower().replace('_', '-') in by_distribution]
+            if on_plugin:
+                problems.append(f'{wheel.name}: the core requires a GPU plugin {on_plugin}; it must require none')
             try:
                 marker = json.loads(read[dist + '/' + plugins.CORE_MARKER])
             except (KeyError, ValueError):
@@ -224,7 +227,7 @@ def main():
     parser.add_argument('--require-complete', action='store_true',
                         help='fail for missing public exports or missing/stale source Python or reference payload')
     parser.add_argument('--split', action='store_true',
-                        help='the wheels are the split Linux set (mojolearn, mojolearn-cuda, mojolearn-rocm): '
+                        help='the wheels are the split Linux set (mojolearn, mojolearn-nvidia, mojolearn-amd): '
                              'run split_audit over all and the API audit over the core alone')
     args = parser.parse_args()
     if args.split:

@@ -89,8 +89,8 @@ class LightReleaseTests(unittest.TestCase):
 
     # ---- THE SPLIT LINUX PACKAGES: one package per publish, each with its own vendor's receipt
     def split(self, publish, vendor):
-        """A manifest publishing ONE split Linux package ('core', 'cuda' or
-        'rocm'), with a receipt of `vendor` that installed the core and the
+        """A manifest publishing ONE split Linux package ('core', 'nvidia' or
+        'amd'), with a receipt of `vendor` that installed the core and the
         plugin of that vendor."""
         for f in list(self.root.iterdir()):
             f.unlink()
@@ -98,7 +98,7 @@ class LightReleaseTests(unittest.TestCase):
         with zipfile.ZipFile(self.root / core, 'w') as z:
             z.writestr('mojolearn/identity_columns/COMMIT', self.commit)
             z.writestr('mojolearn-0.8.7.dist-info/gpu_plugins.json', '{}')
-        plugin = {'cuda': 'mojolearn_cuda', 'hip': 'mojolearn_rocm'}[vendor] + '-0.8.7-py3-none-manylinux_2_35_x86_64.whl'
+        plugin = {'cuda': 'mojolearn_nvidia', 'hip': 'mojolearn_amd'}[vendor] + '-0.8.7-py3-none-manylinux_2_35_x86_64.whl'
         with zipfile.ZipFile(self.root / plugin, 'w') as z:
             z.writestr(f'mojolearn/{vendor}/x/_mojolearn_knn.so', 'inert')
         digests = {w: gate.digest(self.root / w) for w in (core, plugin)}
@@ -120,7 +120,7 @@ class LightReleaseTests(unittest.TestCase):
                 self.assertEqual(gate.check(self.root, self.commit, 'linux')['runtime_vendors'], [vendor])
 
     def test_split_plugin_passes_only_on_its_own_vendors_receipt(self):
-        for publish, vendor in (('cuda', 'cuda'), ('rocm', 'hip')):
+        for publish, vendor in (('nvidia', 'cuda'), ('amd', 'hip')):
             with self.subTest(publish=publish):
                 self.split(publish, vendor)
                 self.assertEqual(gate.check(self.root, self.commit, 'linux')['runtime_vendors'], [vendor])
@@ -130,8 +130,8 @@ class LightReleaseTests(unittest.TestCase):
                     gate.check(self.root, self.commit, 'linux')
 
     def test_split_plugin_bytes_are_bound_to_the_receipt(self):
-        published = self.split('cuda', 'cuda')
-        self.assertTrue(published.startswith('mojolearn_cuda-'))
+        published = self.split('nvidia', 'cuda')
+        self.assertTrue(published.startswith('mojolearn_nvidia-'))
         self.reports['cuda']['plugins'][0]['wheel_sha256'] = 'f' * 64
         self.write()
         with self.assertRaisesRegex(ValueError, 'digest mismatch'):
@@ -140,7 +140,7 @@ class LightReleaseTests(unittest.TestCase):
         self.write()
         with self.assertRaisesRegex(ValueError, 'unlisted'):
             gate.check(self.root, self.commit, 'linux')
-        self.split('cuda', 'cuda')
+        self.split('nvidia', 'cuda')
         self.reports['cuda']['wheel'] = '/box/mojolearn-0.8.6-py3-none-manylinux_2_35_x86_64.whl'
         self.write()
         with self.assertRaisesRegex(ValueError, 'another version'):
@@ -175,7 +175,7 @@ class LightReleaseTests(unittest.TestCase):
 
     def test_each_pypi_project_is_uploaded_by_its_own_job_and_environment(self):
         """THE SPLIT LINUX PACKAGES: mojolearn in `pypi`/`testpypi` as always;
-        mojolearn-cuda and mojolearn-rocm each in `<target>-<plugin>`, after
+        mojolearn-nvidia and mojolearn-amd each in `<target>-<plugin>`, after
         the core, from their own packages-dir; the light admission rechecked."""
         import yaml
         workflow = yaml.safe_load((Path(__file__).resolve().parents[1] / '.github/workflows/release-provenance.yml').read_text())
@@ -188,7 +188,7 @@ class LightReleaseTests(unittest.TestCase):
             self.assertEqual(publish_step(job)['with']['packages-dir'], 'upload/')
             self.assertIn('mv dist/mojolearn-*.whl upload/', '\n'.join(s.get('run', '') for s in jobs[job]['steps']))
         for job, core in (('publish_plugins', 'publish'), ('publish_alpha_plugins', 'publish_alpha')):
-            self.assertEqual(jobs[job]['environment']['name'], '${{ inputs.publish }}-${{ matrix.plugin }}')
+            self.assertEqual(jobs[job]['environment']['name'], '${{ inputs.publish }}')
             self.assertEqual(publish_step(job)['with']['packages-dir'], 'upload/')
             self.assertEqual(publish_step(job)['with']['skip-existing'], False)
             self.assertIn(core, jobs[job]['needs'])
@@ -200,6 +200,13 @@ class LightReleaseTests(unittest.TestCase):
                       '\n'.join(s.get('run', '') for s in jobs['publish_alpha_plugins']['steps']))
         self.assertIn("needs.alpha_stage.outputs.core == 'true'", jobs['publish_alpha']['if'])
         self.assertEqual(set(jobs['alpha_stage']['outputs']), {'linux_qualification', 'core', 'plugins'})
+        # the matrix value is the plugin's name, so the environments are
+        # <target>-nvidia and <target>-amd (docs/RELEASE_CHECKLIST.md 3b)
+        build = '\n'.join(s.get('run', '') for s in jobs['build']['steps'])
+        self.assertIn('"mojolearn_nvidia-$v_toml-"*) plugins="$plugins nvidia" ;;', build)
+        self.assertIn('"mojolearn_amd-$v_toml-"*) plugins="$plugins amd" ;;', build)
+        stage = '\n'.join(s.get('run', '') for s in jobs['alpha_stage']['steps'])
+        self.assertIn("('mojolearn_nvidia-', 'mojolearn_amd-')", stage)
 
 
 if __name__ == '__main__':
