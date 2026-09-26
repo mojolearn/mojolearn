@@ -5,7 +5,7 @@ construction. Evidence: `~/mojolearn-evidence/pinned-mul-contract-free/`
 (`probes/`, `census/`, `scripts/`). The rule is written down in
 `IDENTITY_PATHS.md`, "Contraction independence (row 9)".
 
-## Proven so far (2026-09-26 ~07:45Z)
+## Proven so far (2026-09-26 ~09:05Z)
 
 - The pin (`checks/numerics.mojo` `pinned_mul_f32` / `pinned_mul_f64`, used by
   `identical_mul`, new `identical_mul64`, gpc `_mul64`, the nine mamba
@@ -66,4 +66,8 @@ portable_erff's `x*p`.
 
 ## Spend
 
-$0 so far (no rental yet).
+- 09:02Z RTX 4090 create refused (no instances): $0.
+- 09:04Z L40S pod bdmyb7no2e9uzk, lease 150 min at $1.09/h (at most $2.73),
+  leg `scripts/nvidia_leg.sh rent` at c5713df7d, out
+  ~/mojolearn-evidence/pinned-mul-contract-free/nvidia2 (dead-man armed,
+  leg tears down; confirm `DELETE ... VERIFIED gone` in nvidia2.out).
