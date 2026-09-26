@@ -60,6 +60,31 @@ def test_fatbin_header_arches():
     assert cc.fatbin_images(b"\x7fELF" + b"\0" * 80, 0) is None
 
 
+def mini_elf(strings, refs):
+    """A minimal ELF64: one PT_LOAD over the whole file, a .text of `lea r8,[rip+X]`
+    instructions (one per index in `refs`, reaching that string), then the
+    NUL-terminated strings. Returns (bytes, text offset)."""
+    text_off, n_lea = 0x200, len(refs)
+    rod = text_off + 7 * n_lea + 9
+    offs, body = [], b""
+    for st in strings:
+        offs.append(rod + len(body))
+        body += st + b"\0"
+    total = rod + len(body)
+    h = bytearray(total)
+    h[0:8] = b"\x7fELF\x02\x01\x01\x00"
+    struct.pack_into("<HHIQQQIHHHHHH", h, 16, 3, 62, 1, 0, 64, 0x100, 0, 64, 56, 1, 64, 2, 0)
+    struct.pack_into("<IIQQQQQQ", h, 64, 1, 5, 0, 0x1000, 0x1000, total, total, 0x1000)
+    # section 1: .text, executable
+    struct.pack_into("<IIQQQQIIQQ", h, 0x100 + 64, 0, 1, 0x6, 0x1000 + text_off, text_off, 7 * n_lea, 0, 0, 16, 0)
+    for j, which in enumerate(refs):
+        i = text_off + 7 * j
+        h[i:i + 3] = b"\x4c\x8d\x05"
+        struct.pack_into("<i", h, i + 3, (0x1000 + offs[which]) - (0x1000 + i + 7))
+    h[rod:] = body
+    return bytes(h), text_off
+
+
 def test_patch_replaces_ptx_in_place_and_audit_passes(tmp_path):
     so = tmp_path / "_mojolearn.so"
     so.write_bytes(blob(PTX89, PTX89))
@@ -67,16 +92,43 @@ def test_patch_replaces_ptx_in_place_and_audit_passes(tmp_path):
     rows = cc.patch_files([so], *fake_tools(tmp_path), arch="sm_89")
     after = so.read_bytes()
     assert len(after) == len(before)
-    assert rows[0]["modules"] == 2 and rows[0]["converted"] == 2
-    assert not rows[0]["too_big"] and not rows[0]["left_ptx"]
+    assert rows[0]["modules"] == 2 and rows[0]["in_place"] == 2 and not rows[0]["unplaced"]
     assert after.endswith(b"trailing\0")
     r = cc.audit_bytes(after, arch="sm_89")
     assert r["ptx_modules"] == 0 and r["fatbins"] == 2 and r["errors"] == []
 
 
+def test_a_module_too_big_in_place_is_moved_and_its_leas_repointed(tmp_path):
+    big = PTX89.replace(BODY, BODY * 4)   # converts in place, leaves padding
+    small = PTX89                          # its fatbin (forced large) must move
+    data, text_off = mini_elf([big, small], refs=[0, 1, 1])
+    so = tmp_path / "_mojolearn.so"
+    so.write_bytes(data)
+    rows = cc.patch_files([so], *fake_tools(tmp_path, size=len(PTX89) + 64))
+    assert rows[0]["in_place"] == 1 and rows[0]["moved"] == 1 and not rows[0]["unplaced"], rows
+    after = so.read_bytes()
+    assert cc.audit_bytes(after, arch="sm_89")["errors"] == []
+    starts = {s for s, _ in cc.fatbins(after)}
+    for j in range(3):   # every lea now reaches a fatbin start
+        i = text_off + 7 * j
+        (disp,) = struct.unpack_from("<i", after, i + 3)
+        assert i + 7 + disp in starts
+    # both leas of the moved module agree, and not with the in-place one
+    d = [text_off + 7 * j + 7 + struct.unpack_from("<i", after, text_off + 7 * j + 3)[0] for j in range(3)]
+    assert d[1] == d[2] != d[0]
+
+
+def test_a_module_nothing_references_is_left_and_refused(tmp_path):
+    so = tmp_path / "_mojolearn.so"
+    so.write_bytes(blob(PTX89))
+    rows = cc.patch_files([so], *fake_tools(tmp_path, size=len(PTX89) + 1))
+    assert rows[0]["moved"] == 0 and len(rows[0]["unplaced"]) == 1
+    assert rows[0]["unplaced"][0]["why"] == "no RIP-relative lea reaches it"
+    assert cc.audit_bytes(so.read_bytes(), arch="sm_89")["errors"]
+
+
 def test_audit_refuses_ptx_wrong_arch_and_ptx_inside_a_fatbin():
-    big = PTX89.replace(BODY, BODY * 10)
-    r = cc.audit_bytes(blob(big, fake_fatbin(89)), arch="sm_89")
+    r = cc.audit_bytes(blob(PTX89, fake_fatbin(89)), arch="sm_89")
     assert any("JIT" in e for e in r["errors"])
     r = cc.audit_bytes(blob(fake_fatbin(90, accel=True)), arch="sm_89")
     assert any("architecture" in e for e in r["errors"])
@@ -84,25 +136,6 @@ def test_audit_refuses_ptx_wrong_arch_and_ptx_inside_a_fatbin():
     assert any("non-ELF" in e for e in r["errors"])
     r = cc.audit_bytes(blob(b"nothing here"), arch="sm_89")
     assert any("no fatbin" in e for e in r["errors"])
-
-
-def test_a_small_exact_module_may_stay_ptx(tmp_path):
-    so = tmp_path / "_mojolearn.so"
-    so.write_bytes(blob(PTX89, PTX89.replace(BODY, BODY * 2)))
-    rows = cc.patch_files([so], *fake_tools(tmp_path, size=len(PTX89) + 1))
-    # the fatbin fits the larger module only; the small one stays PTX as JIT-invariant
-    assert rows[0]["converted"] == 1 and len(rows[0]["left_ptx"]) == 1 and not rows[0]["too_big"]
-    r = cc.audit_bytes(so.read_bytes(), arch="sm_89")
-    assert r["ptx_modules"] == 1 and r["jit_invariant_ptx"] == 1 and r["errors"] == []
-
-
-def test_a_leftover_with_an_approximate_op_is_refused(tmp_path):
-    approx = PTX89.replace(b"\tret;", b"\tex2.approx.ftz.f32 %r1, %r2;\n\tret;")
-    so = tmp_path / "_mojolearn.so"
-    so.write_bytes(blob(approx))
-    rows = cc.patch_files([so], *fake_tools(tmp_path, size=len(approx) + 1))
-    assert len(rows[0]["too_big"]) == 1
-    assert cc.audit_bytes(so.read_bytes(), arch="sm_89")["errors"]
 
 
 def test_patch_refuses_a_module_of_another_arch(tmp_path):
