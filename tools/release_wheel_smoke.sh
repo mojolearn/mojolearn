@@ -390,6 +390,12 @@ PY=\$(command -v python3.13 || command -v python3.12 || command -v python3.11 ||
 echo "python=\$PY \$(\$PY --version 2>&1)" >> box.txt
 sha256sum "$(basename "$WHEEL")" $PLUGIN_BASES qualify_verifier_wheel.py >> box.txt
 if [ "$RUN_SMOKE" = 1 ]; then
+# The smoke builds its own venv (qualify_verifier_wheel.py). The RunPod AMD
+# image (rocm/dev-ubuntu-22.04) has no ensurepip: 0.8.22's first split AMD
+# column failed create-venv there while its column, which already falls back
+# to apt's python3-venv, passed. Same fallback, before the smoke.
+"\$PY" -m venv /tmp/mojolearn-venv-probe > venv_probe.log 2>&1 || (apt-get -o DPkg::Lock::Timeout=120 update -qq && apt-get -o DPkg::Lock::Timeout=120 install -y -qq python3-venv) >> venv_probe.log 2>&1
+rm -rf /tmp/mojolearn-venv-probe
 timeout -k 20 $SMOKE_SECONDS "\$PY" qualify_verifier_wheel.py "$RDIR/$(basename "$WHEEL")"$PLUGIN_BOX_ARGS \\
     --scope expanded --python "\$PY" --expected-source-commit $COMMIT --output $RDIR/out > smoke.log 2>&1
 echo \$? > smoke.exit
