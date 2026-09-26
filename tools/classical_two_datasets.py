@@ -173,7 +173,7 @@ ARMS = {
     # HDBSCAN: ours (mojolearn.HDBSCAN, shipped since 0.8.x), cuML on NVIDIA,
     # scikit-learn on the CPU, every arm with the SAME min_samples,
     # min_cluster_size, metric and cluster selection (CumlHDBSCAN's).
-    "dbscan": ("ours", "cuml-gpu", "cuml-gpu-rbc"),
+    "dbscan": ("ours", "cuml-gpu", "cuml-gpu-rbc", "sklearn-cpu"),
     "hdbscan": ("ours", "cuml-gpu", "sklearn-cpu"),
 }
 BLOCK_OF = {"kmeans": "big", "pca": "big", "ols": "big", "knn": "knn",
@@ -1424,6 +1424,37 @@ class CumlDBSCANRbc(CumlDBSCAN):
     ALGO = "rbc"
 
 
+class SkDBSCAN:
+    """sklearn.cluster.DBSCAN with the race's eps and min_samples on the same
+    1,000,000-row standardized block, on every core (n_jobs=-1; its default is
+    one). algorithm='auto' is scikit-learn's own choice: a tree index on
+    low-dimensional taxi, brute force on 220-column Istella-S, where a round can
+    run for hours; the board's per-round limit then records the timeout."""
+
+    def __init__(self, data, rec):
+        from sklearn.cluster import DBSCAN
+        _sklearn_pools_touch()
+        self.DBSCAN = DBSCAN
+        self.X = data["X"]
+        self.eps, self.min_samples = _dbscan_params(rec["dataset"])
+        self.est = None
+        self.info = _sklearn_info()
+        self.info["config"] = ("sklearn.cluster.DBSCAN(eps=%r, min_samples=%d, metric='euclidean', "
+                               "algorithm='auto', n_jobs=-1); fit timed" % (self.eps, self.min_samples))
+
+    def call(self):
+        est = self.DBSCAN(eps=self.eps, min_samples=self.min_samples, metric="euclidean",
+                          algorithm="auto", n_jobs=-1)
+        est.fit(self.X)
+        self.est = est
+
+    def sync(self):
+        pass
+
+    def outputs(self):
+        return {"labels": np.asarray(self.est.labels_, dtype=np.int32).reshape(-1)}
+
+
 class CumlHDBSCAN:
     MIN_SAMPLES = 10
     MIN_CLUSTER_SIZE = 100
@@ -1518,7 +1549,8 @@ class SkHDBSCAN:
 
 BUILDERS = {
     ("dbscan", "ours"): OursDBSCAN, ("dbscan", "cuml-gpu"): CumlDBSCAN,
-    ("dbscan", "cuml-gpu-rbc"): CumlDBSCANRbc, ("hdbscan", "cuml-gpu"): CumlHDBSCAN,
+    ("dbscan", "cuml-gpu-rbc"): CumlDBSCANRbc, ("dbscan", "sklearn-cpu"): SkDBSCAN,
+    ("hdbscan", "cuml-gpu"): CumlHDBSCAN,
     ("hdbscan", "ours"): OursHDBSCAN, ("hdbscan", "sklearn-cpu"): SkHDBSCAN,
     ("kmeans", "ours"): OursKMeans, ("kmeans", "sklearn-cpu"): SkKMeans, ("kmeans", "torch-gpu"): TorchKMeans,
     ("kmeans", "cuml-gpu"): CumlKMeans,
@@ -1546,7 +1578,7 @@ for _lane in LANES:
         # interleaves FAST beside IDENTICAL round by round in one race.
         BUILDERS[(_lane, "ours-fast")] = BUILDERS[(_lane, "ours")]
 for _lane in LANES:
-    # Same for a lane with no scikit-learn arm (dbscan): there is
+    # Same for a lane with no scikit-learn arm: there is
     # nothing to wrap in the CPU quota.
     if (_lane, "sklearn-cpu") not in BUILDERS:
         continue

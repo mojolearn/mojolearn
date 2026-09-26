@@ -151,7 +151,7 @@ CLASSICAL_OPPONENTS = {
         "knn": ("sklearn-cpu", "torch-gpu"),
         "kde": ("sklearn-cpu",),
         "svc": ("sklearn-cpu",),
-        "dbscan": (),                        # the racer has no scikit-learn DBSCAN arm
+        "dbscan": ("sklearn-cpu",),
         "hdbscan": ("sklearn-cpu",),
     },
     "nvidia": {                              # bench_all_ours.sh's classical_arms_for
@@ -171,7 +171,7 @@ CLASSICAL_OPPONENTS = {
         "knn": ("sklearn-cpu", "torch-gpu"),
         "kde": ("sklearn-cpu",),
         "svc": ("sklearn-cpu",),
-        "dbscan": (),
+        "dbscan": ("sklearn-cpu",),
         "hdbscan": ("sklearn-cpu",),
     },
 }
@@ -1244,7 +1244,6 @@ def render_board(result):
     L.append("")
     L.append("- Neural and GEMM lanes: their drivers time source-built Mojo binaries, not the "
              "installed wheel (TODO).")
-    L.append("- dbscan has no scikit-learn arm in the racer, so on Apple and AMD it is ours only.")
     L.append("")
     return "\n".join(L) + "\n"
 
