@@ -2,9 +2,12 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
-## Unreleased
+## 0.8.20 (published 2026-09-26)
 
 ### Changed
+- IDENTICAL arithmetic no longer depends on whether the compiler contracts a multiply into the add that follows it. Every such pair is written either as an explicit fused multiply-add or as a pinned product that no backend can fuse (`pinned_mul_f32` / `pinned_mul_f64` in `checks/numerics.mojo`: a fence on CPUs, `mul.rn` on NVIDIA, `v_mul` on AMD, an unflagged `fma(a, b, -0)` on Apple), and `tools/contraction_census.py` names any source line whose fused operations change between the default build and `--fp-mode contract=off`. The bits are 0.8.19's: 209 lanes, three fixtures each, equal to the 0.8.19 Metal, CUDA and HIP columns on Apple and CPU (default and `contract=off`, 627 of 627), on an NVIDIA L40S (621 of 621) and on an AMD MI300X (621 of 621) (`docs/lanes/PINNED_MUL_RESUME.md`).
+- Apple GPU, IDENTICAL: the transposed GEMM is threadgroup-tiled, the tuned GEMM runs admitted windows on the simdgroup matrix unit (whose fp32 8x8x8 multiply-accumulate was shown to be the same ascending FMA chain), the Gram split-K and the quasi-Newton steps read their operands coalesced, and the byte language model's embedding and head weights are views of the flat parameters (less memory, same step). Same bits: the byte LM step witnesses equal on the M4, an H100 and an MI300X.
+- Apple GPU, FAST (trees and classical, which do not promise identical bits): RandomForest and ExtraTrees histogram and split passes, SVC and SVR working sets, ARIMA (batched L-BFGS, the Kalman filter in parallel over time), UMAP's spectral initialization, IVF-Flat search and training, k-means++ seeding, DBSCAN, HDBSCAN and AgglomerativeClustering (Boruvka minimum spanning tree without the dense graph), Cholesky, Holt-Winters and the quasi-Newton gradient.
 - Linux IDENTICAL CUDA sets (sm_89, sm_90a) ship machine code: every IDENTICAL kernel is compiled at build time by a pinned ptxas (CUDA 12.5.82) with `--fmad=false` and stored as an LZ4-compressed fatbin in place of its PTX (`packaging/linux/cubin_contract.py`), so the user's driver no longer JIT-compiles them. The toolkit is 12.5 on purpose: CUDA 13 binaries would need a 580 driver even under MAX's `MODULAR_NVPTX_COMPILER_PATH` escape, 12.5 ones do not, so the driver floor is unchanged. On 0.8.19 the whole release column ran with the driver JIT disabled on an RTX 4090 and an H100 (driver 580) and an RTX 2000 Ada (driver 570), with the same bits as the recorded Apple, AMD and NVIDIA columns (`bench/results/nvidia_fatbin_2026-09-26/`). The wheel audit refuses IDENTICAL CUDA PTX outside a small JIT-invariant exception.
 
 ## 0.8.19 (published 2026-09-25)
