@@ -472,8 +472,10 @@ struct ScoreCalcer[score_function: Int](Copyable, ImplicitlyCopyable, Movable):
             var mu = Float32(0.0)
             if weight > Float32(0.0):
                 mu = sum / (weight + lam)
-            self.score += sum * mu
-            self.denum_sqr += weight * mu * mu
+            # both accumulates in ONE rounding each, the fusion every default
+            # (contract=fast) build formed, written out (lane/explicit-fma-contract-proof, 2026-09-26)
+            self.score = identical_mul_add(sum, mu, self.score)
+            self.denum_sqr = identical_mul_add(weight * mu, mu, self.denum_sqr)
 
     @always_inline
     def get_score(self) -> Float32:
@@ -1078,8 +1080,12 @@ def find_optimal_split_cosine_kernel[
                 var mu_l = Float32(0.0)
                 if weight_estimate_left > Float32(0.0):
                     mu_l = sum_estimate_left / (weight_estimate_left + lam_l)
-                score += sum_test_left * mu_l
-                denum_sqr += weight_test_left * mu_l * mu_l
+                # the four accumulates in ONE rounding each, the fusion every
+                # default (contract=fast) build formed, written out; the host
+                # oracle (`gbdt_oracle_ordered._dynamic_cosine_candidates`)
+                # spells the same (lane/explicit-fma-contract-proof, 2026-09-26)
+                score = identical_mul_add(sum_test_left, mu_l, score)
+                denum_sqr = identical_mul_add(weight_test_left * mu_l, mu_l, denum_sqr)
 
                 var lam_r = l2
                 if normalize:
@@ -1087,8 +1093,8 @@ def find_optimal_split_cosine_kernel[
                 var mu_r = Float32(0.0)
                 if weight_estimate_right > Float32(0.0):
                     mu_r = sum_estimate_right / (weight_estimate_right + lam_r)
-                score += sum_test_right * mu_r
-                denum_sqr += weight_test_right * mu_r * mu_r
+                score = identical_mul_add(sum_test_right, mu_r, score)
+                denum_sqr = identical_mul_add(weight_test_right * mu_r, mu_r, denum_sqr)
 
                 fold += 2
 

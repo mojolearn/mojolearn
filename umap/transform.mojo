@@ -24,7 +24,7 @@ No existing fit code is called or modified by this module.
 """
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
 from bindings.hostptr import copy_f32
-from checks.numerics import identical_exp64, identical_log2_64, identical_pow64
+from checks.numerics import identical_exp64, identical_log2_64, identical_mul_add, identical_pow64
 
 from max.gpu.host import DeviceContext
 from std.math import isfinite
@@ -117,7 +117,10 @@ def initialize_transform(
             else:
                 for j in range(k):
                     var tail = Int(indices[row * k + j])
-                    value += (weights[row * k + j] / total) * training[tail * components + c]
+                    # ONE rounding: the default (contract=fast) build fused this
+                    # product into the accumulate; explicit so no build mode can
+                    # change it (lane/explicit-fma-contract-proof, 2026-09-26)
+                    value = identical_mul_add(weights[row * k + j] / total, training[tail * components + c], value)
             if not isfinite(value):
                 raise Error("UMAP transform initialization is not finite")
             result.append(value)
@@ -188,7 +191,7 @@ def refine_transform(
                     var distance = Float32(0)
                     for c in range(components):
                         var delta = result[row * components + c] - training[other * components + c]
-                        distance += delta * delta
+                        distance = identical_mul_add(delta, delta, distance)
                     if not isfinite(distance):
                         raise Error("UMAP transform refinement distance is not finite")
                     if distance <= Float32(0):
@@ -196,14 +199,14 @@ def refine_transform(
                     var powered = Float32(identical_pow64(Float64(distance), Float64(b)))
                     var coeff = Float32(0)
                     if slot == 0:
-                        coeff = -Float32(2) * a * b * (powered / distance) / (a * powered + Float32(1))
+                        coeff = -Float32(2) * a * b * (powered / distance) / identical_mul_add(a, powered, Float32(1))
                     else:
-                        coeff = Float32(2) * repulsion_strength * b / ((Float32(0.001) + distance) * (a * powered + Float32(1)))
+                        coeff = Float32(2) * repulsion_strength * b / ((Float32(0.001) + distance) * identical_mul_add(a, powered, Float32(1)))
                     if not isfinite(coeff):
                         raise Error("UMAP transform gradient is not finite")
                     for c in range(components):
                         var delta = result[row * components + c] - training[other * components + c]
-                        result[row * components + c] += alpha * _clip(coeff * delta)
+                        result[row * components + c] = identical_mul_add(alpha, _clip(coeff * delta), result[row * components + c])
     for value in result:
         if not isfinite(value):
             raise Error("UMAP transform returned non-finite coordinates")

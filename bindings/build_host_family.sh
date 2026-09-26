@@ -97,7 +97,7 @@ if [ "$family" = tokenizer ]; then
 fi
 host_tmpdir=$(mktemp -d "$host_outdir/.${family}-host-build.XXXXXX")
 trap 'rm -rf "$host_tmpdir"' EXIT HUP INT TERM
-pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib "$@" ${MOJOLEARN_BUILD_EXTRA_DEFINES:-} \
+pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} "$@" ${MOJOLEARN_BUILD_EXTRA_DEFINES:-} \
     -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_CPU -I . -I bindings \
     "$source_file" -o "$host_tmpdir/_mojolearn_${family}_host.so"
 ln "$host_tmpdir/_mojolearn_${family}_host.so" "$host_destination"

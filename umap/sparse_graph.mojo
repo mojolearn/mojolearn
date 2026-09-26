@@ -7,7 +7,7 @@ construction and row merges are linear in stored entries. Arithmetic and
 accepted input semantics follow graph.mojo. Explicit zero entries from kNN
 candidates are retained; consumers must apply their existing weight policy.
 """
-from checks.numerics import identical_exp64, identical_log2_64
+from checks.numerics import identical_exp64, identical_log2_64, identical_mul_add
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from core.host_predict_threads import (
@@ -230,9 +230,12 @@ def sparse_fuzzy_simplicial_graph(
             # Do not calculate once and mirror to the opposite row.
             var union = a + b - a * b
             var intersection = a * b
-            var weight = (
-                set_op_mix_ratio * union
-                + (Float32(1.0) - set_op_mix_ratio) * intersection
+            # ONE rounding on the intersection's product: the default
+            # (contract=fast) build fused `(1 - mix) * intersection` into the
+            # add (lane/explicit-fma-contract-proof, 2026-09-26)
+            var weight = identical_mul_add(
+                Float32(1.0) - set_op_mix_ratio, intersection,
+                set_op_mix_ratio * union,
             )
             indices.append(UInt32(col))
             values.append(weight)

@@ -128,7 +128,7 @@ out="$tmpdir/_mojolearn_trees.so"
 
 # MOJOLEARN_EXTRA_DEFINES carries diagnostic score-policy overrides; empty by default.
 # shellcheck disable=SC2086  # flag strings are deliberately word-split
-pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib \
+pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} \
     $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE ${MOJOLEARN_EXTRA_DEFINES:-} \
     $LINK_FLAGS \
     -I . -I bindings \

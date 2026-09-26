@@ -22,7 +22,7 @@ f32, which changes no distribution and keeps every draw deterministic.
 # which differ per vendor (row 10 sqrt is approximate on NVIDIA; row 12 log
 # and cos are each vendor's own); under IDENTICAL the three seam calls are
 # the portable pair, under FAST the stdlib verbatim
-from checks.numerics import identical_cos, identical_log, identical_sqrt
+from checks.numerics import identical_cos, identical_log, identical_mul_add, identical_sqrt
 
 
 def advance_seed(s: UInt64) -> UInt64:
@@ -114,7 +114,8 @@ def next_poisson_f(s: UInt64, alpha: Float32) -> Tuple[Float32, UInt64]:
         for _ in range(16):
             var dn = next_normal_f(st)
             st = dn[1]
-            var a = identical_sqrt(alpha) * dn[0] + alpha
+            # one rounding, as the default (contract=fast) build fused it (lane/explicit-fma-contract-proof)
+            var a = identical_mul_add(identical_sqrt(alpha), dn[0], alpha)
             if a >= Float32(0.0):
                 return (a, st)
         return (alpha, st)
