@@ -44,6 +44,15 @@ WHAT IT REUSES (it re-implements no measurement)
   classical  tools/classical_two_datasets.py prep + race (CTD JSON; quality from
              one float64 NumPy function per lane; CTD-SPAN). The Apple FAST arm
              is its `ours-fast` arm; torch runs on MPS there.
+  classical2 tools/bench_board_more.py prep + race (the classical racer's worker
+             protocol and JSON shape): UMAP, GaussianMixture, the linear models,
+             TruncatedSVD, k-NN classifier and regressor, spectral and
+             agglomerative clustering, GP regressor and classifier, ARIMA,
+             ExponentialSmoothing, IVFIndex, SVR, KernelRidge, Nystroem,
+             RBFSampler and SpectralEmbedding against scikit-learn, umap-learn,
+             statsmodels, FAISS, cuML and cuVS. The Apple FAST arm is its
+             `ours-fast` arm. Every lane's settings and mismatches are its
+             LANE_CONFIG.
   neural     tools/bench_board_neural.py race (the classical racer's worker
              protocol and JSON shape): the wheel's public
              LanguageModelTrainer.train_step, LanguageModelTrainer.logits and
@@ -94,7 +103,7 @@ TREE_ROW_FLOOR = 1_000_000
 TREE_LANES = ("gbdt-symmetric", "gbdt-depthwise", "gbdt-lossguide", "rf", "et", "iforest")
 CLASSICAL_LANES = ("kmeans", "pca", "ols", "knn", "kde", "svc", "dbscan", "hdbscan")
 NEURAL_LANES = ("lm-train-step", "lm-forward", "gemm")
-FAMILIES = ("trees", "classical", "neural")
+FAMILIES = ("trees", "classical", "classical2", "neural")
 #: The data a neural lane reads (tools/bench_board_neural.py DATA_OF). No R2
 #: dataset: the driver builds its inputs from seed 7.
 NEURAL_DATA = {"lm-train-step": "bytes", "lm-forward": "bytes", "gemm": "gaussian"}
@@ -202,7 +211,22 @@ NEURAL_OPPONENTS = {v: {lane: ("torch-eager-fp32",) for lane in NEURAL_LANES} fo
 
 
 def family_lanes(fam):
-    return {"trees": TREE_LANES, "classical": CLASSICAL_LANES, "neural": NEURAL_LANES}[fam]
+    return {"trees": TREE_LANES, "classical": CLASSICAL_LANES, "classical2": MORE_LANES,
+            "neural": NEURAL_LANES}[fam]
+
+
+#: classical2 opponent pins, per vendor, installed beside the trees set when
+#: the family is planned. umap-learn's numba and pynndescent are pinned with
+#: it so the resolver cannot move them. NVIDIA races cuML and cuVS (the
+#: rapids set) and statsmodels; an opponent that is not pinned for a vendor
+#: is named in bench_board_more.NOT_PLANNED, never dropped silently.
+MORE_PINS = {
+    "apple": ["umap-learn==0.5.12", "pynndescent==0.6.0", "numba==0.67.0",
+              "statsmodels==0.15.0", "faiss-cpu==1.15.1"],
+    "amd": ["umap-learn==0.5.12", "pynndescent==0.6.0", "numba==0.67.0",
+            "statsmodels==0.15.0", "faiss-cpu==1.15.1"],
+    "nvidia": ["statsmodels==0.15.0"],
+}
 
 
 def check_neural_modes(families, modes):
@@ -276,6 +300,12 @@ def _load_tool(name):
     return mod
 
 
+#: The classical2 driver's tables (its module imports nothing beyond the
+#: standard library at import time, so the orchestrator can read them).
+MORE = _load_tool("bench_board_more")
+MORE_LANES = MORE.LANE_ORDER
+
+
 # ---------------------------------------------------------------------------
 # Vendor and modes
 # ---------------------------------------------------------------------------
@@ -326,10 +356,13 @@ def race_id(family, lane, dataset, rows, shape=None):
     return "%s/%s/%s/rows=%s" % (family, lane, dataset, rows_tag(rows))
 
 
-def our_arms(family, modes):
+def our_arms(family, modes, lane=None):
     """driver arm name -> numeric mode, for our arms in one race."""
     if family == "neural":
         return {"ours": "identical"}          # identical only, every vendor
+    if family == "classical2" and lane and not MORE.has_fast(lane):
+        # an estimator whose binding ships no FAST tier is identical only
+        return {"ours": "identical"} if "identical" in modes else {}
     if family == "trees":
         if modes == ["fast", "identical"]:
             return {"ours": "identical", "ours-ab": "fast"}
@@ -362,6 +395,23 @@ def plan_races(vendor, modes, families=FAMILIES, lanes=None, datasets=DATASETS, 
                     "opponents": list(opp), "arms": list(ours) + list(opp),
                 })
                 continue
+            if fam == "classical2":
+                ours = our_arms(fam, modes, lane)
+                if not ours:
+                    continue
+                opp = MORE.OPPONENTS[vendor][lane]
+                own = MORE.datasets_of(lane)
+                # a lane on its own synthetic data runs once, whatever
+                # --datasets says; taxi/Istella lanes follow --datasets
+                dss = [d for d in datasets if d in own] if set(own) <= set(DATASETS) else list(own)
+                for ds in dss:
+                    races.append({
+                        "id": race_id(fam, lane, ds, rows),
+                        "family": fam, "lane": lane, "dataset": ds, "rows": rows,
+                        "modes": sorted(set(ours.values()), key=MODES.index), "our_arms": ours,
+                        "opponents": list(opp), "arms": list(ours) + list(opp),
+                    })
+                continue
             for ds in datasets:
                 opp = (TREE_OPPONENTS if fam == "trees" else CLASSICAL_OPPONENTS)[vendor][lane]
                 ours = our_arms(fam, modes)
@@ -393,7 +443,7 @@ def arm_library(arm):
     if arm in ("ours", "ours-ab", "ours-fast", "ours-base"):
         return "mojolearn"
     head = arm.split("-", 1)[0]
-    return {"sklearn": "scikit-learn"}.get(head, head)
+    return {"sklearn": "scikit-learn", "umap": "umap-learn"}.get(head, head)
 
 
 def arm_device(arm, vendor):
@@ -701,6 +751,14 @@ def setup_python(args, vendor, out, log):
         if rc != 0:
             print("bench_board: opponent install rc %d for %s (their arms will refuse by name)"
                   % (rc, " ".join(reqs)), flush=True)
+    if "classical2" in (args.families or ""):
+        cmd = list(pip)
+        if args.opponent_wheels:
+            cmd += ["--no-index", "--find-links", os.path.abspath(args.opponent_wheels)]
+        rc = run_logged(cmd + MORE_PINS[vendor], None, log, 3600)
+        if rc != 0:
+            print("bench_board: classical2 opponent install rc %d for %s (their arms will refuse "
+                  "by name)" % (rc, " ".join(MORE_PINS[vendor])), flush=True)
     torch_spec = args.torch_spec if args.torch_spec is not None else DEFAULT_TORCH_SPEC[vendor]
     if torch_spec:
         cmd = list(pip)
@@ -934,6 +992,67 @@ def classical_cmd(ctx, race):
     return cmd, env, ceiling
 
 
+def more_data_dir(ctx, rows):
+    base = ctx.get("more_data") or os.path.join(ctx["out"], "more-data")
+    return os.path.join(base, "rows-" + rows_tag(rows))
+
+
+def ensure_more_prep(ctx, races):
+    """classical2 block prep, untimed, once per box and row cap; skipped when
+    every block the races need already has its JSON record."""
+    need = {}
+    for r in races:
+        if r["family"] == "classical2":
+            need.setdefault(r["rows"], set()).add((r["lane"], r["dataset"]))
+    for rows, pairs in need.items():
+        d = more_data_dir(ctx, rows)
+        missing = sorted(p for p in pairs if not os.path.exists(
+            os.path.join(d, "%s-%s.json" % (MORE.block_of(p[0]), p[1]))))
+        if not missing:
+            continue
+        lanes = sorted({p[0] for p in missing})
+        dss = sorted({p[1] for p in missing if p[1] in DATASETS}) or ["taxi"]
+        cmd = [ctx["python"], "-u", ctx["more_driver"], "prep", "--data", d,
+               "--lanes", ",".join(lanes), "--datasets", ",".join(dss)]
+        if rows:
+            cmd += ["--max-rows", str(int(rows))]
+        log = os.path.join(ctx["out"], "logs", "classical2-prep-rows-%s.log" % rows_tag(rows))
+        print("bench_board: classical2 prep rows=%s lanes=%s datasets=%s"
+              % (rows_tag(rows), ",".join(lanes), ",".join(dss)), flush=True)
+        rc = run_logged(cmd, child_env(ctx), log, 6 * 3600, nice=ctx["nice"])
+        if rc != 0:
+            print("bench_board: classical2 prep rc %d (see %s); its races will fail by name"
+                  % (rc, log), flush=True)
+
+
+def more_round_seconds(rows):
+    return 600 if rows else 3600
+
+
+def more_cmd(ctx, race):
+    """tools/bench_board_more.py race for one classical2 (lane, dataset)."""
+    rsec = ctx["round_seconds"] or more_round_seconds(race["rows"])
+    cmd = [ctx["python"], "-u", ctx["more_driver"], "race",
+           "--lane", race["lane"], "--dataset", race["dataset"],
+           "--data", more_data_dir(ctx, race["rows"]),
+           "--arms", ",".join(race["arms"]),
+           "--rounds", str(ctx["rounds"]),
+           "--out", os.path.join(ctx["out"], "raw", "classical2", "rows-" + rows_tag(race["rows"])),
+           "--work", os.path.join(ctx["out"], "work"),
+           "--ours-python", shlex.quote(ctx["python"]),
+           "--theirs-python", shlex.quote(ctx["python"]),
+           "--ready-seconds", str(rsec), "--warmup-seconds", str(rsec),
+           "--round-seconds", str(rsec)]
+    n = len(race["arms"])
+    ceiling = 600 + rsec * n * 2 + rsec * ctx["rounds"] * n + 900
+    return cmd, {}, ceiling
+
+
+def more_json_path(ctx, race):
+    return os.path.join(ctx["out"], "raw", "classical2", "rows-" + rows_tag(race["rows"]),
+                        "%s-%s.json" % (race["lane"], race["dataset"]))
+
+
 def neural_round_seconds(shape):
     return 600 if shape == "small" else 1800
 
@@ -1086,6 +1205,10 @@ def race_settings(ctx, race):
             s["shape_dims"] = NEURAL_SHAPE_TEXT[race.get("shape") or "full"][
                 "gemm" if race["lane"] == "gemm" else "lm"]
             s.update(NEURAL_SETTINGS[race["lane"]])
+        elif race["family"] == "classical2":
+            s["driver"] = "tools/bench_board_more.py"
+            s["block"] = MORE.block_of(race["lane"])
+            s["lane_config"] = MORE.LANE_CONFIG[race["lane"]]
         elif race["family"] == "trees":
             s["driver"] = "bench/speed/forest_speed_arm.py"
             s["devices"] = tree_devices(ctx["vendor"], race["lane"])
@@ -1164,6 +1287,22 @@ def run_race(ctx, race):
                           status="UNKNOWN(no race json, rc %d)" % rc) for a in race["arms"]]
         else:
             rec["inputs"] = r.get("inputs")
+            cells = classical_cells(ctx, race, r)
+    elif race["family"] == "classical2":
+        cmd, extra, ceiling = more_cmd(ctx, race)
+        log = os.path.join(ctx["out"], "logs", "classical2." + tag + ".log")
+        jpath = more_json_path(ctx, race)
+        if os.path.exists(jpath):
+            os.replace(jpath, jpath + ".previous")
+        rc = run_logged(cmd, child_env(ctx, extra), log, ceiling, nice=ctx["nice"])
+        rec.update(command=cmd, env=extra, log=os.path.relpath(log, ctx["out"]), rc=rc,
+                   race_json=os.path.relpath(jpath, ctx["out"]))
+        r = load_result(jpath) if os.path.exists(jpath) else None
+        if r is None:
+            cells = [dict(base_cell(ctx, race, a, race["our_arms"].get(a)),
+                          status="UNKNOWN(no race json, rc %d)" % rc) for a in race["arms"]]
+        else:
+            rec["lane_config"] = r.get("lane_config")
             cells = classical_cells(ctx, race, r)
     else:
         cmd, extra, ceiling = classical_cmd(ctx, race)
@@ -1252,6 +1391,14 @@ QUALITY_NOTE = {
     "loss_last_abs_diff_vs_ours": "0 is our value exactly",
     "mean_nll": "lower is better", "max_abs_diff_vs_ours": "0 is our output exactly",
     "max_rel_err_vs_fp64": "lower is better",
+    "trustworthiness_k15": "higher is better, 1 at most",
+    "bic": "lower is better", "silhouette": "higher is better",
+    "ari_vs_ours": "1 is our partition exactly",
+    "relative_reconstruction_error": "lower is better",
+    "kernel_rel_error": "lower is better",
+    "mean_log_predictive_density": "higher is better",
+    "forecast_rmse": "lower is better", "insample_rmse": "lower is better",
+    "mean_llf": "higher is better", "mean_aic": "lower is better",
 }
 
 
@@ -1297,7 +1444,8 @@ def render_board(result):
     for k, v in rows:
         L.append("| %s | %s |" % (k, _f(v)))
     pk = box.get("packages") or {}
-    opp = ["catboost", "xgboost", "lightgbm", "scikit-learn", "cuml-cu12", "torch", "numpy"]
+    opp = ["catboost", "xgboost", "lightgbm", "scikit-learn", "cuml-cu12", "cuvs-cu12", "torch",
+           "umap-learn", "pynndescent", "numba", "statsmodels", "faiss-cpu", "numpy"]
     L.append("| opponent versions | %s |" % ", ".join(
         "%s %s" % (p, pk[p]) for p in opp if p in pk) or "-")
     L.append("")
@@ -1314,6 +1462,10 @@ def render_board(result):
     L.append("- Comparability: trees carry FSPEED-FIT-VERDICT (total leaves within 10% across "
              "arms is COMPARABLE); classical carry the clock span (SPAN-ASYMMETRIC names an arm "
              "whose clock excludes an upload or a fit that ours includes).")
+    L.append("- Classical, wave 2 (`classical2`, tools/bench_board_more.py): the same worker "
+             "protocol as classical; every lane's parameters, rows, timed span and each "
+             "unavoidable mismatch with its reason are in the cells' `settings.lane_config`. "
+             "Quality is one float64 NumPy function per lane over each arm's saved outputs.")
     L.append("- Neural: our IDENTICAL arm only (the neural surface builds no other tier, on any "
              "vendor) against torch eager float32 with TF32 off on this box's GPU (MPS, CUDA or "
              "ROCm). Every clock is host in, host out: ids or operands to the device, the call, "
@@ -1368,7 +1520,8 @@ def render_board(result):
         fam_races = [races[r] for r in sorted(races) if races[r]["family"] == fam]
         if not fam_races:
             continue
-        L.append("## %s" % {"trees": "Trees", "classical": "Classical", "neural": "Neural"}[fam])
+        L.append("## %s" % {"trees": "Trees", "classical": "Classical",
+                             "classical2": "Classical, wave 2", "neural": "Neural"}[fam])
         L.append("")
         for rr in fam_races:
             rc = rr.get("cells") or []
@@ -1397,12 +1550,30 @@ def render_board(result):
                     _q(c.get("quality")), _f(c.get("hash_stable")),
                     clean(c.get("verdict")), clean(c.get("installed_wheel", "-")),
                     clean(c["status"])))
+            lc = rr.get("lane_config") or {}
+            if lc:
+                L.append("")
+                L.append("settings: %s. Rows%s: %s. Timed: %s." % (
+                    clean(lc.get("params")),
+                    " (the full board; this run caps them at --rows %s)" % rr["rows"] if rr.get("rows") else "",
+                    clean(lc.get("rows")), clean(lc.get("timed"))))
+                for mm in lc.get("mismatches") or []:
+                    L.append("")
+                    L.append("mismatch: %s" % clean(mm))
             if rr.get("fit_verdict_line"):
                 L.append("")
                 L.append("FSPEED-FIT-VERDICT: `%s`" % clean(rr["fit_verdict_line"]))
             L.append("")
     L.append("## Not covered by this board")
     L.append("")
+    vendor = (gpu.get("vendor") or cfg.get("vendor"))
+    L.append("- Classical, wave 2: RadiusNeighbors, the preprocessing scalers, HDBSCAN's "
+             "prediction data, Cholesky and the parallel_* and Distributed* wrappers are "
+             "public and not raced here; taxi-derived time series are not used (the ARIMA "
+             "and ExponentialSmoothing lanes fit seeded synthetic series, as the repo's own "
+             "ARIMA quality work does).")
+    for why in MORE.NOT_PLANNED.get(vendor, []):
+        L.append("- Classical, wave 2, not planned on this vendor: %s" % clean(why))
     L.append("- Neural: the Mamba blocks, TransformerBlock on its own, SambaStack and "
              "SmallMLPTrainer are public and not raced yet; torch's compile, TF32 and bf16 "
              "columns are another precision or labeled nondeterministic and are not raced; the "
@@ -1480,6 +1651,10 @@ def build_parser():
                    help=argparse.SUPPRESS)
     p.add_argument("--classical-driver", default=os.path.join(HERE, "classical_two_datasets.py"),
                    help=argparse.SUPPRESS)
+    p.add_argument("--more-driver", default=os.path.join(HERE, "bench_board_more.py"),
+                   help=argparse.SUPPRESS)
+    p.add_argument("--more-data", default=None,
+                   help="classical2 block dir (default <cache>/more-data); prep is untimed and once")
     p.add_argument("--neural-driver", default=os.path.join(HERE, "bench_board_neural.py"),
                    help=argparse.SUPPRESS)
     return p
@@ -1518,6 +1693,10 @@ def print_plan(vendor, modes, races, args, rows, data):
         print("opponents pinned: %s%s" % (" ".join(reqs), (" (index %s)" % idx) if idx else ""))
     ts = args.torch_spec if args.torch_spec is not None else DEFAULT_TORCH_SPEC[vendor]
     print("torch: %s" % (ts or "the image's own (use --system-site-packages)"))
+    if any(r["family"] == "classical2" for r in races):
+        print("classical2 opponents pinned: %s" % " ".join(MORE_PINS[vendor]))
+        for why in MORE.NOT_PLANNED[vendor]:
+            print("classical2 NOT PLANNED: %s" % why)
     for ds, rec in data.items():
         print("data %-8s %s %s (R2 key %s)" % (ds, "present" if rec["present"] else "MISSING",
                                               rec["path"], rec["r2_key"]))
@@ -1551,7 +1730,8 @@ def main(argv=None):
         raise SystemExit("bench_board: no Metal, nvidia-smi or rocm-smi found; pass --vendor")
     modes = modes_for(vendor, args.modes)
     families = _csv(args.families, FAMILIES, "family")
-    lanes = _csv(args.lanes, TREE_LANES + CLASSICAL_LANES + NEURAL_LANES, "lane") if args.lanes else None
+    lanes = (_csv(args.lanes, TREE_LANES + CLASSICAL_LANES + MORE_LANES + NEURAL_LANES, "lane")
+             if args.lanes else None)
     datasets = _csv(args.datasets, DATASETS, "dataset")
     rows = parse_rows(args.rows)
     races = plan_races(vendor, modes, families, lanes, datasets, rows, args.neural_shape)
@@ -1606,7 +1786,9 @@ def main(argv=None):
            "nice": args.nice, "ptxas": ptxas,
            "tree_driver": os.path.abspath(args.tree_driver),
            "classical_driver": os.path.abspath(args.classical_driver),
-           "neural_driver": os.path.abspath(args.neural_driver)}
+           "neural_driver": os.path.abspath(args.neural_driver),
+           "more_driver": os.path.abspath(args.more_driver),
+           "more_data": os.path.abspath(args.more_data or os.path.join(cache_dir(args, out), "more-data"))}
     box = box_fingerprint(ctx)
 
     if result is None:
@@ -1644,6 +1826,8 @@ def main(argv=None):
             print("bench_board: skip %s (failed earlier; --skip-failed)" % r["id"], flush=True)
             continue
         todo.append(r)
+    if any(r["family"] == "classical2" for r in todo):
+        ensure_more_prep(ctx, todo)
     if any(r["family"] == "classical" for r in todo):
         ensure_classical_prep(ctx, todo)
     for i, r in enumerate(todo):

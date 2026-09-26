@@ -11,7 +11,7 @@
 #   MOJOLEARN_BOARD_VERSION   mojolearn version to pip install (required)
 #   MOJOLEARN_BOARD_ROWS      a row cap for a smoke run (default: full size)
 #   MOJOLEARN_BOARD_LANES     comma list of lanes (default: every lane)
-#   MOJOLEARN_BOARD_FAMILIES  trees,classical,neural (default all three)
+#   MOJOLEARN_BOARD_FAMILIES  trees,classical,classical2,neural (default all four)
 #   MOJOLEARN_BOARD_NEURAL_SHAPE  full (default) or small (a neural smoke)
 #   MOJOLEARN_BOARD_DATASETS  taxi,istella (default both)
 #   MOJOLEARN_BOARD_ROUNDS    timed rounds (default 5)
