@@ -140,6 +140,15 @@ from checks.kernel_matrix_attn import (
     attn_dq_launch_bound_for,
     attn_zdot_rows_per_block_for,
 )
+from gemm.checks.gemm_identical import (
+    APPLE_MMA,
+    GEMM_ADMIT_EXP_SUM,
+    _AMMA_M64,
+    _admit_exp_min,
+    _admit_warp_min,
+    _amma_load_t,
+    _amma_mma,
+)
 from checks.numerics import (
     ftz,
     identical_div,
@@ -7027,6 +7036,517 @@ def _launch_bwd_shipped[HD: Int](
     _attn_tick(ctx, on, tk, "bwd_dkdv")
 
 
+# ===========================================================================
+# THE FORWARD ON APPLE'S MATRIX UNIT (lane/apple-identical-neural, 2026-09-26;
+# Apple IDENTICAL only, `ATTN_FWD_APPLE_MMA`; `-D MOJOLEARN_ATTN_NO_APPLE_MMA`
+# reverts).
+#
+# `fused_attn_forward_r2_kernel[64, 32, QRES, True, False]` spends its time in
+# two chains: pass 1's scores, `dot = _step_preflushed(q[p], k[p], dot)` over
+# p = 0 .. 63 from +0.0, and pass 3's context, `acc = _step_preflushed(w[j],
+# v[j][c], acc)` over the visible keys ascending from +0.0. On Apple
+# `_step_preflushed` is `ftz(identical_mul_add(...))`, and the M4's fp32
+# simdgroup multiply-accumulate is the ascending `identical_mul_add` chain bit
+# for bit (gemm/checks/apple_simdgroup_probe.mojo). So wherever the flush is
+# the identity -- the GEMM's window admission, `Ea + Eb >= 174` over the
+# nonzero flushed words with every entering accumulator a multiple of 2^-126
+# -- an 8 x 8 x 8 matrix step IS eight chain steps of 64 cells. This copy
+# runs:
+#   pass 1: per key block, the block's scores on the matrix unit when the
+#     query rows' and the key block's words admit (one leaf of 64 steps from
+#     +0.0), else the scalar chain per score; the scores go through the
+#     shared tile to the original scale / mask / max / stash lines.
+#   pass 2: the original lines (exp, stash, the serial denominator).
+#   pass 3: per 8-key piece of each 8 x 8 context fragment, the matrix step
+#     when every row of the fragment sees all eight keys and the block's
+#     weights and V admit and every earlier block of this chain admitted;
+#     else the scalar chain over exactly the visible keys (the diagonal, the
+#     masked tail, the -0.0 corner and every non-admitted window keep the
+#     original's arithmetic).
+# TQ 32, HD 64, PF, clean instantiations only.
+# ===========================================================================
+comptime ATTN_FWD_APPLE_MMA = (
+    APPLE_MMA
+    and not is_defined["MOJOLEARN_ATTN_NO_APPLE_MMA"]()
+)
+
+#: Apple's `_step_preflushed` is `ftz(identical_mul_add(a, b, acc))`, and the
+#: M4's FMA never returns a subnormal word: over 9 operand kinds x 4.19M
+#: cells, two of them built so products and partial sums straddle 2^-126 and
+#: one seeding the chain with +-2^-126 itself, no `identical_mul_add` output
+#: was subnormal and the matrix chain matched the FMA chain on every cell
+#: (gemm/checks/apple_simdgroup_probe.mojo, kinds 7 and 8). So the flush is the
+#: identity on every step and the matrix chain IS the attention chain with no
+#: admission. (The GEMM's Apple step is the REPAIRED `rtf_mul_add`, which is
+#: why the GEMM keeps its window admission.) `-D MOJOLEARN_ATTN_AMMA_ADMIT`
+#: restores the admission test as a check arm.
+comptime ATTN_AMMA_ADMIT = is_defined["MOJOLEARN_ATTN_AMMA_ADMIT"]()
+
+
+def fused_attn_forward_r2_amma_kernel[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool, SWZ: Bool = False](
+    ctxv: MutPointer[Float32, MutAnyOrigin],
+    amax: MutPointer[Float32, MutAnyOrigin],
+    denom: MutPointer[Float32, MutAnyOrigin],
+    corner: MutPointer[Float32, MutAnyOrigin],
+    sstash: MutPointer[Float32, MutAnyOrigin],
+    q_rope: MutPointer[Float32, MutAnyOrigin],
+    k_cache: MutPointer[Float32, MutAnyOrigin],
+    v_cache: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32, l_in: Int32, nh_in: Int32, nkv_in: Int32,
+    s_in: Int32, pos0_in: Int32, key_lo_in: Int32, window_in: Int32,
+    scale_in: Float32,
+):
+    """`fused_attn_forward_r2_kernel` with pass 1's scores and pass 3's
+    context chain on Apple's matrix unit where admitted (see THE FORWARD ON
+    APPLE'S MATRIX UNIT). Passes, statistics, stash and outputs are the
+    original's."""
+    comptime assert HD == 64 and TQ == 32 and PF and not SABN, "amma forward: HD 64, TQ 32, PF, clean"
+    comptime RPT = TQ // 16
+    comptime BK = ATTN_FR2_BK
+    comptime NSG = FUSED_THREADS // 32
+    comptime QST = TQ + 4
+    comptime KST = HD + 4
+    comptime VST = BK + 4
+    comptime WST = TQ + 4
+    comptime NFR = TQ // 8
+    comptime NFK = BK // 8
+    comptime NFC = HD // 8
+    comptime SPS = (NFR * NFK) // NSG
+    comptime CPS = (NFR * NFC) // NSG
+    comptime assert SPS * NSG == NFR * NFK and CPS * NSG == NFR * NFC, "amma forward: whole fragments per simdgroup"
+    comptime KVN = BK * KST if BK * KST > HD * VST else HD * VST
+    var qT = stack_allocation[HD * QST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var kv = stack_allocation[KVN, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var tile = stack_allocation[TQ * 33, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var wT = stack_allocation[BK * WST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var stats = stack_allocation[2 * TQ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var emin = stack_allocation[2 * NSG, Scalar[DType.uint32], address_space = AddressSpace.SHARED]()
+    var tid = Int(thread_idx.x)
+    var tr = tid // 16
+    var tc = tid % 16
+    var sg = tid // 32
+    var lane = tid % 32
+    var qd = lane // 4
+    var frow = (qd & 4) + ((lane // 2) % 4)
+    var fcol = (qd & 2) * 2 + (lane % 2) * 2
+    var l = Int(l_in)
+    var nh = Int(nh_in)
+    var nkv = Int(nkv_in)
+    var s = Int(s_in)
+    var pos0 = Int(pos0_in)
+    var key_lo = Int(key_lo_in)
+    var window = Int(window_in)
+    var ntb = (l + TQ - 1) // TQ
+    var raw = Int(block_idx.x)
+    var bm = _blk_map[SWZ, True](raw, ntb, nh, Int(b_in))
+    var t0 = bm[0] * TQ
+    var h = bm[1]
+    var bb = bm[2]
+    var kvbase = (bb * nkv + h // (nh // nkv)) * s * HD
+    var t1 = min(t0 + TQ - 1, l - 1)
+    var r0 = _row_range(t0, pos0, key_lo, window, s)
+    var r1 = _row_range(t1, pos0, key_lo, window, s)
+    var kb_lo = r0[0] // BK
+    var kb_hi = r1[1] // BK
+    var negmax = bitcast[DType.float32](UInt32(0xFF7FFFFF))
+    var mpart = SIMD[DType.float32, RPT](negmax)
+    var dacc = Float32(0.0)
+
+    # The block's query rows, flushed once, transposed: qT[p][r].
+    var eq = UInt32(0xFF)
+    for i in range(tid, TQ * HD, FUSED_THREADS):
+        var r = i // HD
+        var p = i % HD
+        var x = Float32(0.0)
+        if t0 + r < l:
+            x = ftz(q_rope.unsafe_load((bb * l + t0 + r) * nh * HD + h * HD + p))
+        qT[p * QST + r] = x
+        eq = min(eq, _admit_exp_min[1](SIMD[DType.float32, 1](x)))
+    eq = _admit_warp_min(eq)
+    if lane == 0:
+        emin[sg] = eq
+    barrier()
+    var bq = UInt32(0xFF)
+    comptime for w in range(NSG):
+        bq = min(bq, emin[w])
+    barrier()
+
+    # Pass 1: scores.
+    for kb in range(kb_lo, kb_hi + 1):
+        var ek = UInt32(0xFF)
+        for i in range(tid, BK * HD, FUSED_THREADS):
+            var r = i // HD
+            var p = i % HD
+            var j = kb * BK + r
+            var x = Float32(0.0)
+            if j < s:
+                x = ftz(k_cache.unsafe_load(kvbase + j * HD + p))
+            kv[r * KST + p] = x
+            ek = min(ek, _admit_exp_min[1](SIMD[DType.float32, 1](x)))
+        ek = _admit_warp_min(ek)
+        if lane == 0:
+            emin[sg] = ek
+        barrier()
+        var bk = UInt32(0xFF)
+        comptime for w in range(NSG):
+            bk = min(bk, emin[w])
+        var adm = (bq + bk) >= UInt32(GEMM_ADMIT_EXP_SUM) or not ATTN_AMMA_ADMIT
+        comptime for q in range(SPS):
+            var f = sg * SPS + q
+            var fr = f // NFK
+            var fk = f % NFK
+            if adm:
+                var acc = _AMMA_M64(0)
+                comptime for p8 in range(HD // 8):
+                    var af = _amma_load_t(qT + (8 * p8) * QST + fr * 8, QST)
+                    var bf = _amma_load_t(kv + (fk * 8) * KST + 8 * p8, KST)
+                    acc = _amma_mma(af, bf, acc)
+                comptime for e in range(2):
+                    tile[(fr * 8 + frow) * 33 + fk * 8 + fcol + e] = acc[e]
+            else:
+                comptime for e in range(2):
+                    var rl = fr * 8 + frow
+                    var jl = fk * 8 + fcol + e
+                    var d = Float32(0.0)
+                    for p in range(HD):
+                        d = _step_preflushed(qT[p * QST + rl], kv[jl * KST + p], d)
+                    tile[rl * 33 + jl] = d
+        barrier()
+        comptime for u in range(RPT):
+            var r = tr + u * 16
+            var t = t0 + r
+            var rr = _row_range(t, pos0, key_lo, window, s)
+            comptime for v in range(2):
+                var jj = tc + v * 16
+                var j = kb * BK + jj
+                if t < l and j >= rr[0] and j <= rr[1]:
+                    var masked = ftz(_pmul(tile[r * 33 + jj], scale_in) + Float32(0.0))
+                    mpart[u] = identical_fmax(mpart[u], masked)
+                    var cell = _estash_cell[ATTN_V1_PACKED_ESTASH](bb, h, t, j, l, nh, s, pos0, key_lo, window)
+                    sstash.unsafe_store(cell, masked)
+        barrier()
+    comptime for u in range(RPT):
+        tile.unsafe_store((tr + u * 16) * 16 + tc, mpart[u])
+    barrier()
+    if tid < TQ and t0 + tid < l:
+        var m = negmax
+        comptime for c in range(16):
+            m = identical_fmax(m, tile.unsafe_load(tid * 16 + c))
+        stats.unsafe_store(tid, m)
+        amax.unsafe_store((bb * nh + h) * l + t0 + tid, m)
+    barrier()
+
+    # Pass 2: exp, the stash, the serial denominator (the original's lines).
+    for kb in range(kb_lo, kb_hi + 1):
+        comptime for u in range(RPT):
+            var r = tr + u * 16
+            var t = t0 + r
+            var rr = _row_range(t, pos0, key_lo, window, s)
+            comptime for v in range(2):
+                var jj = tc + v * 16
+                var j = kb * BK + jj
+                if t < l and j >= rr[0] and j <= rr[1]:
+                    var cell = _estash_cell[ATTN_V1_PACKED_ESTASH](bb, h, t, j, l, nh, s, pos0, key_lo, window)
+                    var masked = sstash.unsafe_load(cell)
+                    var e = ftz(identical_exp(ftz(ftz(masked) - ftz(stats.unsafe_load(r)))))
+                    sstash.unsafe_store(cell, e)
+                    tile.unsafe_store(r * 33 + jj, e)
+        barrier()
+        if tid < TQ and t0 + tid < l:
+            var rr = _row_range(t0 + tid, pos0, key_lo, window, s)
+            comptime for jj in range(BK):
+                var j = kb * BK + jj
+                if j >= rr[0] and j <= rr[1]:
+                    dacc = ftz(ftz(dacc) + ftz(tile.unsafe_load(tid * 33 + jj)))
+        barrier()
+    if tid < TQ and t0 + tid < l:
+        stats.unsafe_store(TQ + tid, ftz(dacc))
+        denom.unsafe_store((bb * nh + h) * l + t0 + tid, ftz(dacc))
+    barrier()
+
+    # Pass 3: the context chain.
+    var cacc = InlineArray[_AMMA_M64, CPS](fill=_AMMA_M64(0))
+    var exact_ok = True  # every earlier block of this chain admitted
+    for kb in range(kb_lo, kb_hi + 1):
+        var ev = UInt32(0xFF)
+        for i in range(tid, BK * HD, FUSED_THREADS):
+            var jj = i // HD
+            var c = i % HD
+            var j = kb * BK + jj
+            var x = Float32(0.0)
+            if j < s:
+                x = ftz(v_cache.unsafe_load(kvbase + j * HD + c))
+            kv[c * VST + jj] = x
+            ev = min(ev, _admit_exp_min[1](SIMD[DType.float32, 1](x)))
+        var ew = UInt32(0xFF)
+        comptime for u in range(RPT):
+            var r = tr + u * 16
+            var t = t0 + r
+            var rr = _row_range(t, pos0, key_lo, window, s)
+            comptime for v in range(2):
+                var jj = tc + v * 16
+                var j = kb * BK + jj
+                var w = Float32(0.0)
+                if t < l and j >= rr[0] and j <= rr[1]:
+                    var cell = _estash_cell[ATTN_V1_PACKED_ESTASH](bb, h, t, j, l, nh, s, pos0, key_lo, window)
+                    var e = sstash.unsafe_load(cell)
+                    w = ftz(identical_div(ftz(e), ftz(stats.unsafe_load(TQ + r))))
+                    ew = min(ew, _admit_exp_min[1](SIMD[DType.float32, 1](w)))
+                wT[jj * WST + r] = w
+        ev = _admit_warp_min(ev)
+        ew = _admit_warp_min(ew)
+        if lane == 0:
+            emin[sg] = ev
+            emin[NSG + sg] = ew
+        barrier()
+        var bv = UInt32(0xFF)
+        var bw = UInt32(0xFF)
+        comptime for w in range(NSG):
+            bv = min(bv, emin[w])
+            bw = min(bw, emin[NSG + w])
+        var adm = (exact_ok and (bv + bw) >= UInt32(GEMM_ADMIT_EXP_SUM)) or not ATTN_AMMA_ADMIT
+        if not adm:
+            exact_ok = False
+        comptime for q in range(CPS):
+            var g = sg * CPS + q
+            var fr = g // NFC
+            var fc = g % NFC
+            var tf0 = t0 + fr * 8
+            var tf1 = min(tf0 + 7, l - 1)
+            comptime for k8 in range(NFK):
+                var j0 = kb * BK + k8 * 8
+                var full = False
+                if adm and tf0 < l:
+                    var rf = _row_range(tf0, pos0, key_lo, window, s)
+                    var rl = _row_range(tf1, pos0, key_lo, window, s)
+                    full = rf[1] >= j0 + 7 and rl[0] <= j0 and rf[0] <= j0 and rl[1] >= j0 + 7
+                if full:
+                    var af = _amma_load_t(wT + (k8 * 8) * WST + fr * 8, WST)
+                    var bf = _amma_load_t(kv + (fc * 8) * VST + k8 * 8, VST)
+                    cacc[q] = _amma_mma(af, bf, cacc[q])
+                    comptime if is_defined["MOJOLEARN_ATTN_SABOTAGE_AMMA"]():
+                        # Check arm: perturbs every matrix context step (must FAIL).
+                        cacc[q] = cacc[q] * Float32(1.0000001)
+                else:
+                    var t = tf0 + frow
+                    if t < l:
+                        var rr = _row_range(t, pos0, key_lo, window, s)
+                        comptime for e in range(2):
+                            var c = fc * 8 + fcol + e
+                            for kk in range(8):
+                                var j = j0 + kk
+                                if j >= rr[0] and j <= rr[1]:
+                                    cacc[q][e] = _step_preflushed(
+                                        wT[(k8 * 8 + kk) * WST + fr * 8 + frow],
+                                        kv[c * VST + k8 * 8 + kk],
+                                        cacc[q][e],
+                                    )
+        barrier()
+    comptime for q in range(CPS):
+        var g = sg * CPS + q
+        var fr = g // NFC
+        var fc = g % NFC
+        var t = t0 + fr * 8 + frow
+        if t < l:
+            var rr = _row_range(t, pos0, key_lo, window, s)
+            comptime for e in range(2):
+                var x = cacc[q][e]
+                if bitcast[DType.uint32](x) == NEG_ZERO_BITS and rr[1] < s - 1:
+                    corner.unsafe_store(0, Float32(1.0))
+                ctxv.unsafe_store((bb * l + t) * nh * HD + h * HD + fc * 8 + fcol + e, x)
+
+
+# ===========================================================================
+# THE ZDOT ON APPLE'S MATRIX UNIT (lane/apple-identical-neural, 2026-09-26;
+# `ATTN_BWD_APPLE_MMA`, the forward's switch). `fused_bwd_zdot_estash_kernel`
+# with 32 query rows and 32 keys per block (ownership only: every row still
+# folds its visible keys ascending) and its dy chain, `dy = _step_preflushed(
+# dctx[t][p], v[j][p], dy)` over p = 0 .. 63 from +0.0, on the matrix unit
+# for a key block whose dctx and V words admit (THE FORWARD ON APPLE'S MATRIX
+# UNIT has the argument), the scalar chain otherwise. y, the two stashes, the
+# serial z fold, the -0.0 corner and the masked-tail repair are the
+# original's lines. HD 64, clean instantiations only.
+# ===========================================================================
+comptime ATTN_BWD_APPLE_MMA = ATTN_FWD_APPLE_MMA
+
+
+def fused_bwd_zdot_estash_amma_kernel[HD: Int, SWZ: Bool = False](
+    zdot: MutPointer[Float32, MutAnyOrigin],
+    corner: MutPointer[Float32, MutAnyOrigin],
+    y_st: MutPointer[Float32, MutAnyOrigin],
+    dy_st: MutPointer[Float32, MutAnyOrigin],
+    e_st: MutPointer[Float32, MutAnyOrigin],
+    dctx: MutPointer[Float32, MutAnyOrigin],
+    v_cache: MutPointer[Float32, MutAnyOrigin],
+    denom: MutPointer[Float32, MutAnyOrigin],
+    b_in: Int32,
+    l_in: Int32,
+    nh_in: Int32,
+    nkv_in: Int32,
+    s_in: Int32,
+    pos0_in: Int32,
+    key_lo_in: Int32,
+    window_in: Int32,
+):
+    """See THE ZDOT ON APPLE'S MATRIX UNIT."""
+    comptime assert HD == 64, "amma zdot: HD 64"
+    comptime TQ = 32
+    comptime BK = 32
+    comptime NSG = FUSED_THREADS // 32
+    comptime DST = TQ + 4
+    comptime VST = HD + 4
+    comptime NFK = BK // 8
+    comptime SPS = ((TQ // 8) * NFK) // NSG
+    var dT = stack_allocation[HD * DST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var vb = stack_allocation[BK * VST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var tdy = stack_allocation[TQ * 33, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var ty = stack_allocation[TQ * 33, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var drow = stack_allocation[TQ, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var emin = stack_allocation[NSG, Scalar[DType.uint32], address_space = AddressSpace.SHARED]()
+    var b = Int(b_in)
+    var l = Int(l_in)
+    var nh = Int(nh_in)
+    var nkv = Int(nkv_in)
+    var s = Int(s_in)
+    var pos0 = Int(pos0_in)
+    var key_lo = Int(key_lo_in)
+    var window = Int(window_in)
+    var n_rep = nh // nkv
+    var ntb = (l + TQ - 1) // TQ
+    var bm = _blk_map[SWZ, True](Int(block_idx.x), ntb, nh, b)
+    var tb = bm[0]
+    var h = bm[1]
+    var bb = bm[2]
+    if bb >= b:
+        return
+    var kvh = h // n_rep
+    var tid = Int(thread_idx.x)
+    var sg = tid // 32
+    var lane = tid % 32
+    var qd = lane // 4
+    var frow = (qd & 4) + ((lane // 2) % 4)
+    var fcol = (qd & 2) * 2 + (lane % 2) * 2
+    var t0 = tb * TQ
+    var t1 = min(t0 + TQ - 1, l - 1)
+    var r0 = _row_range(t0, pos0, key_lo, window, s)
+    var r1 = _row_range(t1, pos0, key_lo, window, s)
+    var kb_lo = r0[0] // BK
+    var kb_hi = r1[1] // BK
+    var kvbase = (bb * nkv + kvh) * s * HD
+    # The block's dctx rows, flushed once, transposed: dT[p][r].
+    var ed = UInt32(0xFF)
+    for i in range(tid, TQ * HD, FUSED_THREADS):
+        var r = i // HD
+        var p = i % HD
+        var x = Float32(0.0)
+        if t0 + r < l:
+            x = ftz(dctx.unsafe_load((bb * l + t0 + r) * nh * HD + h * HD + p))
+        dT[p * DST + r] = x
+        ed = min(ed, _admit_exp_min[1](SIMD[DType.float32, 1](x)))
+    if tid < TQ:
+        var tt = min(t0 + tid, l - 1)
+        drow[tid] = ftz(denom.unsafe_load((bb * nh + h) * l + tt))
+    ed = _admit_warp_min(ed)
+    if lane == 0:
+        emin[sg] = ed
+    barrier()
+    var bd = UInt32(0xFF)
+    comptime for w in range(NSG):
+        bd = min(bd, emin[w])
+    barrier()
+    var z = Float32(0.0)
+    for kb in range(kb_lo, kb_hi + 1):
+        var ev = UInt32(0xFF)
+        for i in range(tid, BK * HD, FUSED_THREADS):
+            var r = i // HD
+            var p = i % HD
+            var j = kb * BK + r
+            var x = Float32(0.0)
+            if j < s:
+                x = ftz(v_cache.unsafe_load(kvbase + j * HD + p))
+            vb[r * VST + p] = x
+            ev = min(ev, _admit_exp_min[1](SIMD[DType.float32, 1](x)))
+        ev = _admit_warp_min(ev)
+        if lane == 0:
+            emin[sg] = ev
+        barrier()
+        var bv = UInt32(0xFF)
+        comptime for w in range(NSG):
+            bv = min(bv, emin[w])
+        var adm = (bd + bv) >= UInt32(GEMM_ADMIT_EXP_SUM) or not ATTN_AMMA_ADMIT
+        comptime for q in range(SPS):
+            var f = sg * SPS + q
+            var fr = f // NFK
+            var fk = f % NFK
+            if adm:
+                var acc = _AMMA_M64(0)
+                comptime for p8 in range(HD // 8):
+                    var af = _amma_load_t(dT + (8 * p8) * DST + fr * 8, DST)
+                    var bf = _amma_load_t(vb + (fk * 8) * VST + 8 * p8, VST)
+                    acc = _amma_mma(af, bf, acc)
+                comptime for e in range(2):
+                    comptime if is_defined["MOJOLEARN_ATTN_SABOTAGE_AMMA"]():
+                        tdy[(fr * 8 + frow) * 33 + fk * 8 + fcol + e] = acc[e] * Float32(1.0000001)
+                    else:
+                        tdy[(fr * 8 + frow) * 33 + fk * 8 + fcol + e] = acc[e]
+            else:
+                comptime for e in range(2):
+                    var rl = fr * 8 + frow
+                    var jl = fk * 8 + fcol + e
+                    var d = Float32(0.0)
+                    for p in range(HD):
+                        d = _step_preflushed(dT[p * DST + rl], vb[jl * VST + p], d)
+                    tdy[rl * 33 + jl] = d
+        barrier()
+        for i in range(tid, TQ * BK, FUSED_THREADS):
+            var r = i // BK
+            var jj = i % BK
+            var t = t0 + r
+            var j = kb * BK + jj
+            if t < l:
+                var rr = _row_range(t, pos0, key_lo, window, s)
+                if j >= rr[0] and j <= rr[1]:
+                    var row = (bb * nh + h) * l + t
+                    var dyv = ftz(tdy[r * 33 + jj])
+                    var ecell = _estash_cell[ATTN_V1_PACKED_ESTASH](bb, h, t, j, l, nh, s, pos0, key_lo, window)
+                    var e = e_st.unsafe_load(ecell)
+                    var yv = ftz(identical_div(ftz(e), drow[r]))
+                    ty[r * 33 + jj] = yv
+                    comptime if ATTN_V1_ALIAS_Y_ESTASH:
+                        e_st.unsafe_store(ecell, yv)
+                    else:
+                        y_st.unsafe_store(row * s + j, yv)
+                    tdy[r * 33 + jj] = dyv
+                    dy_st.unsafe_store(row * s + j, dyv)
+        barrier()
+        if tid < TQ and t0 + tid < l:
+            var rr = _row_range(t0 + tid, pos0, key_lo, window, s)
+            for jj in range(BK):
+                var j = kb * BK + jj
+                if j >= rr[0] and j <= rr[1]:
+                    z = _step_preflushed(tdy[tid * 33 + jj], ty[tid * 33 + jj], z)
+        barrier()
+    if tid < TQ and t0 + tid < l:
+        var t = t0 + tid
+        var rr = _row_range(t, pos0, key_lo, window, s)
+        var j_hi = rr[1]
+        var row = (bb * nh + h) * l + t
+        var rowbase = (bb * l + t) * nh * HD + h * HD
+        var zf = ftz(z)
+        if bitcast[DType.uint32](zf) == NEG_ZERO_BITS and j_hi < s - 1:
+            comptime if ATTN_REPAIR_MASKED_TAIL:
+                corner.unsafe_store(1, Float32(1.0))
+                comptime if not ATTN_REPAIR_SAB_Z:
+                    for j in range(j_hi + 1, s):
+                        var dy = _masked_tail_dy[HD](dctx, v_cache, rowbase, kvbase, j)
+                        zf = _step_preflushed(dy, Float32(0.0), zf)
+                        if bitcast[DType.uint32](zf) != NEG_ZERO_BITS:
+                            break
+            else:
+                corner.unsafe_store(0, Float32(1.0))
+        zdot.unsafe_store(row, zf)
+
+
 def _launch_fwd_r2[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool, SWZ: Bool = False](
     ctx: DeviceContext,
     on: Bool,
@@ -7093,7 +7613,19 @@ def _launch_fwd_r2_keep[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool, SWZ:
     only the clean copy its column default resolves to, and only when that
     default carries the estash bits (DEVIATION 2657,
     `ATTN_SHIPPED_BWD_ESTASH`)."""
-    comptime if ATTN_FWD_MFMA and HD == 64 and PF and not SABN:
+    comptime if ATTN_FWD_APPLE_MMA and HD == 64 and TQ == 32 and PF and not SABN:
+        comptime ka = fused_attn_forward_r2_amma_kernel[HD, TQ, QRES, PF, SABN, SWZ]
+        step_count_launch()
+        ctx.enqueue_function[ka](
+            ctxv.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
+            corner.unsafe_ptr(), sstash.unsafe_ptr(), q_rope.unsafe_ptr(),
+            k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), Int32(b), Int32(l),
+            Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
+            Int32(window), scale,
+            grid_dim=(b * nh * ((l + TQ - 1) // TQ), 1, 1),
+            block_dim=(FUSED_THREADS, 1, 1),
+        )
+    elif ATTN_FWD_MFMA and HD == 64 and PF and not SABN:
         comptime km = fused_attn_forward_r2_mfma_kernel[HD, TQ, QRES, PF, SABN, SWZ]
         step_count_launch()
         ctx.enqueue_function[km](
@@ -7721,26 +8253,37 @@ def _launch_bwd_estash[HD: Int, DRES: Bool, SABN: Bool, SWZ: Bool = False](
     _attn_tick(ctx, on, tk, "bwd_scratch_alloc")
     var zdot_tq = attention_estash_zdot_tq(l, window)
     step_count_launch()
-    if zdot_tq == 16:
-        comptime zk16 = fused_bwd_zdot_estash_kernel[HD, 16, DRES, SABN, SWZ]
-        ctx.enqueue_function[zk16](
+    comptime if ATTN_BWD_APPLE_MMA and HD == 64 and not SABN:
+        comptime za = fused_bwd_zdot_estash_amma_kernel[HD, SWZ]
+        ctx.enqueue_function[za](
             zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
             dy_st.unsafe_ptr(), kept.unsafe_ptr(), dctx.unsafe_ptr(),
             v_cache.unsafe_ptr(), denom.unsafe_ptr(), Int32(b), Int32(l),
             Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
-            Int32(window), grid_dim=(b * nh * ((l + 15) // 16), 1, 1),
+            Int32(window), grid_dim=(b * nh * ((l + 31) // 32), 1, 1),
             block_dim=(FUSED_THREADS, 1, 1),
         )
     else:
-        comptime zk8 = fused_bwd_zdot_estash_kernel[HD, 8, DRES, SABN, SWZ]
-        ctx.enqueue_function[zk8](
-            zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
-            dy_st.unsafe_ptr(), kept.unsafe_ptr(), dctx.unsafe_ptr(),
-            v_cache.unsafe_ptr(), denom.unsafe_ptr(), Int32(b), Int32(l),
-            Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
-            Int32(window), grid_dim=(b * nh * ((l + 7) // 8), 1, 1),
-            block_dim=(FUSED_THREADS, 1, 1),
-        )
+        if zdot_tq == 16:
+            comptime zk16 = fused_bwd_zdot_estash_kernel[HD, 16, DRES, SABN, SWZ]
+            ctx.enqueue_function[zk16](
+                zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
+                dy_st.unsafe_ptr(), kept.unsafe_ptr(), dctx.unsafe_ptr(),
+                v_cache.unsafe_ptr(), denom.unsafe_ptr(), Int32(b), Int32(l),
+                Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
+                Int32(window), grid_dim=(b * nh * ((l + 15) // 16), 1, 1),
+                block_dim=(FUSED_THREADS, 1, 1),
+            )
+        else:
+            comptime zk8 = fused_bwd_zdot_estash_kernel[HD, 8, DRES, SABN, SWZ]
+            ctx.enqueue_function[zk8](
+                zdot.unsafe_ptr(), corner.unsafe_ptr(), y_st.unsafe_ptr(),
+                dy_st.unsafe_ptr(), kept.unsafe_ptr(), dctx.unsafe_ptr(),
+                v_cache.unsafe_ptr(), denom.unsafe_ptr(), Int32(b), Int32(l),
+                Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
+                Int32(window), grid_dim=(b * nh * ((l + 7) // 8), 1, 1),
+                block_dim=(FUSED_THREADS, 1, 1),
+            )
     step_count_sync()
     ctx.synchronize()
     comptime if DRES:

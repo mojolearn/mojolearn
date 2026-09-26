@@ -1,0 +1,9 @@
+SG_PROBE kind=0 cells=4194304 vs_asc_fma=0 vs_desc_fma=2218025 vs_asc_unfused=1252536 vs_c_plus_chain=1280923 cells_with_subnormal_fma_output=0
+SG_PROBE kind=1 cells=4194304 vs_asc_fma=0 vs_desc_fma=2648917 vs_asc_unfused=2089946 vs_c_plus_chain=2266930 cells_with_subnormal_fma_output=0
+SG_PROBE kind=2 cells=4194304 vs_asc_fma=0 vs_desc_fma=1638982 vs_asc_unfused=1070780 vs_c_plus_chain=951337 cells_with_subnormal_fma_output=0
+SG_PROBE kind=3 cells=4194304 vs_asc_fma=0 vs_desc_fma=1065970 vs_asc_unfused=678442 vs_c_plus_chain=318836 cells_with_subnormal_fma_output=0
+SG_PROBE kind=4 cells=4194304 vs_asc_fma=0 vs_desc_fma=1695685 vs_asc_unfused=956804 vs_c_plus_chain=979764 cells_with_subnormal_fma_output=0
+SG_PROBE kind=5 cells=4194304 vs_asc_fma=0 vs_desc_fma=2098886 vs_asc_unfused=4161442 vs_c_plus_chain=0 cells_with_subnormal_fma_output=0
+SG_PROBE kind=6 cells=4194304 vs_asc_fma=0 vs_desc_fma=0 vs_asc_unfused=0 vs_c_plus_chain=1046 cells_with_subnormal_fma_output=0
+SG_PROBE kind=7 cells=4194304 vs_asc_fma=0 vs_desc_fma=0 vs_asc_unfused=0 vs_c_plus_chain=0 cells_with_subnormal_fma_output=0
+SG_PROBE kind=8 cells=4194304 vs_asc_fma=0 vs_desc_fma=3765292 vs_asc_unfused=3558604 vs_c_plus_chain=3889716 cells_with_subnormal_fma_output=0
