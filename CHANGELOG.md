@@ -2,6 +2,11 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
+## Unreleased
+
+### Fixed
+- `GaussianMixture(init_params="kmeans")` seeds its k-means with the classic greedy k-means++ (scikit-learn's `KMeans` default) instead of cuVS's k-means|| (DEVIATION 3133). On few-valued data the k-means|| start left one cluster with most rows beside clusters of 1 to 7 rows, and the fit scored far below scikit-learn: on 20 taxi windows of 2,000 rows (10 offsets x 2 seeds) the median held-out mean log-likelihood gap to scikit-learn 1.7.2 went from -4240 to -356 (IDENTICAL) and from -5320 to -1.9 (FAST), and scikit-learn scored higher in 10 of 17 comparable fits instead of 17 of 18. IDENTICAL bits move for every `init_params="kmeans"` fit, on every column (`gmm`, `gmm-sample`, `par-gmm`); `init_params="random"` is unchanged.
+
 ## 0.8.22 (published 2026-09-26)
 
 ### Changed
