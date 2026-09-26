@@ -516,20 +516,32 @@ if [[ "$VENDOR" = cuda ]] && ls "$SET"/identical/*.so > /dev/null 2>&1; then
   # The .rn PTX above is still compiled by the USER's driver (the Mojo runtime
   # hands the embedded bytes to cuModuleLoadDataEx). packaging/linux/cubin_contract.py
   # compiles every module HERE with a pinned ptxas, contraction off, and
-  # writes a zstd-compressed fatbin over the PTX in place (or, for a tiny
+  # writes a compressed fatbin over the PTX in place (or, for a tiny
   # module whose fatbin is longer than its PTX, into freed padding with its
   # RIP-relative lea references repointed; objdump cross-checks each); the
-  # driver then only loads it. The pinned toolkit is the pip wheel nvidia-cuda-nvcc (ptxas and
-  # fatbinary are static binaries; --no-deps keeps the CUDA runtime out).
-  CUDA_TOOLS_VERSION=13.0.88
+  # driver then only loads it.
+  # THE TOOLKIT IS 12.5, ON PURPOSE: the oldest ptxas that accepts our PTX
+  # (sm_90a is PTX ISA 8.5). A CUDA 13 cubin (ELF ABI 8) and a zstd fatbin load
+  # only on a 580+ driver; 12.5 cubins with LZ4 compression load on the same
+  # drivers the PTX wheel does (measured on driver 570, 2026-09-26,
+  # docs/lanes/NVIDIA_CUBIN_RESUME.md), so the driver floor does not rise.
+  # ptxas and fatbinary come from NVIDIA's cuda_nvcc redist archive, pinned by
+  # sha256 (the pip wheel nvidia-cuda-nvcc-cu12 carries no fatbinary).
+  CUDA_TOOLS_VERSION=12.5.82
+  CUDA_TOOLS_SHA256=ded05fe3c8d075c6c1bf892005d3c50bde3eceaa049b879fcdff6158e068e3be
+  CUDA_TOOLS_URL="https://developer.download.nvidia.com/compute/cuda/redist/cuda_nvcc/linux-x86_64/cuda_nvcc-linux-x86_64-$CUDA_TOOLS_VERSION-archive.tar.xz"
   CUDA_TOOLS="${MOJOLEARN_CUDA_TOOLS_DIR:-$DEST/cuda-tools-$CUDA_TOOLS_VERSION}"
-  if [[ ! -x "$CUDA_TOOLS/nvidia/cu13/bin/ptxas" ]]; then
-    python3 -m pip install -q --disable-pip-version-check --no-deps --target "$CUDA_TOOLS" \
-      "nvidia-cuda-nvcc==$CUDA_TOOLS_VERSION" > "$DEST/cuda_tools_pip.log" 2>&1 \
-      || { say "REFUSING: could not install the pinned ptxas (nvidia-cuda-nvcc==$CUDA_TOOLS_VERSION); read $DEST/cuda_tools_pip.log"; exit 5; }
+  if [[ ! -x "$CUDA_TOOLS/bin/ptxas" || ! -x "$CUDA_TOOLS/bin/fatbinary" ]]; then
+    mkdir -p "$CUDA_TOOLS"
+    curl -fsSL --retry 3 -o "$CUDA_TOOLS/nvcc.tar.xz" "$CUDA_TOOLS_URL" \
+      || { say "REFUSING: could not download the pinned CUDA tools ($CUDA_TOOLS_URL)"; exit 5; }
+    echo "$CUDA_TOOLS_SHA256  $CUDA_TOOLS/nvcc.tar.xz" | sha256sum -c --quiet \
+      || { say "REFUSING: $CUDA_TOOLS_URL does not have the pinned sha256"; exit 5; }
+    tar -xJf "$CUDA_TOOLS/nvcc.tar.xz" -C "$CUDA_TOOLS" --strip-components=1 --wildcards '*/bin/ptxas' '*/bin/fatbinary' \
+      || { say "REFUSING: the CUDA tools archive has no bin/ptxas + bin/fatbinary"; exit 5; }
+    rm -f "$CUDA_TOOLS/nvcc.tar.xz"
   fi
-  PTXAS="$CUDA_TOOLS/nvidia/cu13/bin/ptxas"; FATBINARY="$CUDA_TOOLS/nvidia/cu13/bin/fatbinary"
-  chmod +x "$PTXAS" "$FATBINARY" 2>/dev/null
+  PTXAS="$CUDA_TOOLS/bin/ptxas"; FATBINARY="$CUDA_TOOLS/bin/fatbinary"
   if ! "$PTXAS" --version 2>/dev/null | grep -q "V$CUDA_TOOLS_VERSION"; then
     say "REFUSING: $PTXAS is not ptxas V$CUDA_TOOLS_VERSION"; exit 5
   fi

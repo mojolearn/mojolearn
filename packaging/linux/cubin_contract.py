@@ -70,7 +70,10 @@ _FATBIN_ARCH_SPECIFIC = 0x100000
 _FATBIN_KIND_ELF = 2
 #: The ptxas contract. -O3 is ptxas's default and its maximum.
 PTXAS_FLAGS = ("--fmad=false", "-O3")
-FATBIN_FLAGS = ("--compress-all", "--compress-mode=size")
+#: `--compress-all` with the pinned 12.5 fatbinary is LZ4, which pre-580
+#: drivers load; CUDA 13's zstd (`--compress-mode=size`) is smaller but, like
+#: a CUDA 13 cubin, raises the driver floor to 580.
+FATBIN_FLAGS = tuple(os.environ.get("MOJOLEARN_FATBIN_FLAGS", "--compress-all").split())
 #: A moved fatbin starts on this boundary (the fatbin header is u64 fields).
 _ALIGN = 16
 #: x86-64 `lea r64, [rip + disp32]`: REX.W (+R) 8D, ModRM mod=00 rm=101.
