@@ -51,7 +51,7 @@
    "identity_digest": "7cef11fd8ff45273b21b45a9c5ff3e1381b398868f534e6c6a548d603c06a98b",
    "key": "linux-64/cuda/sm_90a/fast/_mojolearn_gbdt",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "de6cf35fae2ab1688b28902d9c50962489e51cd6a2820a041663827e556bce75",
    "target": "linux-64"
   },
   {
@@ -103,7 +103,7 @@
    "identity_digest": "a037140593949c1d563fd8d5b6daf3cdb1a7ae749a38cca219d565d150a31159",
    "key": "linux-64/cuda/sm_90a/fast/_mojolearn_rf",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "c155298aaff3cf27703b9bafcbd3e81f962af3a92beda5fe538e212f0e4f858b",
    "target": "linux-64"
   },
   {
@@ -155,7 +155,7 @@
    "identity_digest": "858bfb7c5657e9cc397f55a0984115fdb66f9535c1f7d8dd69651520da56ccf9",
    "key": "linux-64/cuda/sm_90a/fast/_mojolearn_trees",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "98b35020630828bb728bc70a1493494df398a35d1646325ee8508a73873c9aa4",
    "target": "linux-64"
   },
   {
@@ -207,7 +207,7 @@
    "identity_digest": "68e818f644ebbcc29f9b6d47552ddf83613ef0e620a07c517ebcdd6572ca007a",
    "key": "linux-64/cuda/sm_90a/fast/_mojolearn",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "50c5b5c9dd0fc1c9dfa56a3b350b31ab5c649a617adfb4a80882a42c6f102d4e",
    "target": "linux-64"
   },
   {
@@ -259,7 +259,7 @@
    "identity_digest": "525cfb86f626c1202025cb9608bcb86100c42d0482b91ed05d1b2f093e4b51f9",
    "key": "linux-64/cuda/sm_90a/fast/_mojolearn_estimators",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "8518fd76c466fb9ce68c528736cd1e5ef91cfb0a76264b6549e765124c7e5553",
    "target": "linux-64"
   },
   {
@@ -311,7 +311,7 @@
    "identity_digest": "958c61f8981b68ff069d4f6265d2f843463d54b0baec8be04256cea3ba9f87f2",
    "key": "linux-64/cuda/sm_90a/fast/_mojolearn_svm",
    "reason": "new binding (no build script in the previous release)",
-   "shipped_sha256": null,
+   "shipped_sha256": "f85d45aca6b9874fa2f5bb4c89b0d9316d1ad6f685c2b79e2de28420d604a597",
    "target": "linux-64"
   },
   {
@@ -363,7 +363,7 @@
    "identity_digest": "43a891ed03e69f7c51b489d74a5008adb1a70f21722991aedf3f81bd8f144c5d",
    "key": "linux-64/cuda/sm_90a/fast/_mojolearn_solver",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "0459866fffa5f47bc502b9e0f49829d8e96c4295078454cf2866fc93c6959052",
    "target": "linux-64"
   },
   {
@@ -415,7 +415,7 @@
    "identity_digest": "265eaa40ef4aaf81dc9138107dc51c9841f145f5cabdc35e5a3d006a13642b72",
    "key": "linux-64/cuda/sm_90a/fast/_mojolearn_metrics",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "e01d1a546fa5937d687a636945691ede4295ba7590a6ad4d49eaedbf38a1b561",
    "target": "linux-64"
   },
   {
@@ -467,7 +467,7 @@
    "identity_digest": "2bf437a23cd554c15da5d4e296ce1c96751decb8463e91a88142a9ee5f0eec2b",
    "key": "linux-64/cuda/sm_90a/fast/_mojolearn_preprocessing",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "4e38f8d35c810c7f9b915481c9e94b03f5f5e45357e123da1a6895416de7b16c",
    "target": "linux-64"
   },
   {
@@ -519,7 +519,7 @@
    "identity_digest": "0449ae30066ae77fb2730cabd135c6474e34b20904715b898696f00567775fb7",
    "key": "linux-64/cuda/sm_90a/fast/_mojolearn_tsa",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "b3d7504ee49ffab2d990dd1b1167a5cb9f86bbae3ffa2982d0302fb35566468d",
    "target": "linux-64"
   },
   {
@@ -571,7 +571,7 @@
    "identity_digest": "5ae4c8befb2f57739eb1b76120ddaafa109de92ac11b91fd924541251fd96346",
    "key": "linux-64/cuda/sm_90a/fast/_mojolearn_linalg",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "e1b03d7bbddc27449ece979947d90066e178bfe0e452ce385832bd986011d1f3",
    "target": "linux-64"
   },
   {
@@ -623,7 +623,7 @@
    "identity_digest": "036814c1760ad9511ac04fad94aa1aa23a456a6ccd717cd7665cf1ab983e5724",
    "key": "linux-64/cuda/sm_90a/fast/_mojolearn_arima",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "9de064062a25fe0b0558fb7de6a894cf2342b06a18711407903bfc250367f6a2",
    "target": "linux-64"
   },
   {
@@ -675,7 +675,7 @@
    "identity_digest": "82adf7e6ec5c89bb4d635c9610741d262a3a02882c53e538e6dfb1ef4bc78598",
    "key": "linux-64/cuda/sm_90a/fast/_mojolearn_gp",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "3088bad396c3cac9c590f78503609862e897df067c492873d3bc420d8dda837d",
    "target": "linux-64"
   },
   {
@@ -727,7 +727,7 @@
    "identity_digest": "975b6ea28a02dca6f4e8c67df330c0d4d450c8e7d8bdb42d5665f3502529f80c",
    "key": "linux-64/cuda/sm_90a/fast/_mojolearn_kernel_methods",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "8d0c94ca1235edaf261c1f92e3be3bf5631e44399c7a705ef03c4214a6dd2ae5",
    "target": "linux-64"
   },
   {
@@ -779,7 +779,7 @@
    "identity_digest": "3357fc2c72740fd73f5786d36b54cb6651f60aa91c1097a6848d0846967d2a92",
    "key": "linux-64/cuda/sm_90a/fast/_mojolearn_mixture",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "150346006a110fe8ad435a372d611b650158e2b759a0c7969d515ff61c7feb16",
    "target": "linux-64"
   },
   {
@@ -831,7 +831,7 @@
    "identity_digest": "994080d8e8f71554bdd5c821cfc6f44550f9eec9a17d1908d38ef2024e5f5930",
    "key": "linux-64/cuda/sm_90a/fast/_mojolearn_hdbscan",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "5954dcce2b2adaaabbc1cd09095485e2bad74fe4fcd85508636974aa77b4ba1c",
    "target": "linux-64"
   },
   {
@@ -883,7 +883,7 @@
    "identity_digest": "bec21ae31d7182d2530c763d1eb1751b1ecacabdcd1b2ce42a58ca315b86618c",
    "key": "linux-64/cuda/sm_90a/fast/_mojolearn_resample",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "bb8734795ffbb5cb40702fe80261cc864b035fdd72ce46dae57fa7dc35c24f41",
    "target": "linux-64"
   },
   {
@@ -935,7 +935,7 @@
    "identity_digest": "1be193ba8f276ec70b79bc0585df2558ca3ca4f328be721fac2eddbcf02a726b",
    "key": "linux-64/cuda/sm_90a/fast/_mojolearn_ivf",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "7e827d81d95037e4cb9270855a1d5c019e8095ba57e3fe3c1a6858b6c3e7652d",
    "target": "linux-64"
   },
   {
@@ -987,7 +987,7 @@
    "identity_digest": "8f251e720258bc7042a7f20c0e4950f7c923232bae3fb394fa42c26f665d5617",
    "key": "linux-64/cuda/sm_90a/deterministic/_mojolearn_gbdt",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "c156293e6d4e7e575333855fea7f24af6155bea49715a1270898f156f75dd142",
    "target": "linux-64"
   },
   {
@@ -1039,7 +1039,7 @@
    "identity_digest": "de50cdaae12041fea2a91f442c29a05eb8cae88f460e552dab6ae11588bd3608",
    "key": "linux-64/cuda/sm_90a/deterministic/_mojolearn_rf",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "e348b84b02944a9085c350ef38a834d00a530598d44ac0a76bc3c3b27b3bd7c2",
    "target": "linux-64"
   },
   {
@@ -1091,7 +1091,7 @@
    "identity_digest": "83f94c65090e074dc55029ad802e86205ba1f20317c878c5c07f4d5c17009529",
    "key": "linux-64/cuda/sm_90a/deterministic/_mojolearn_trees",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "abc34830d1703b7dd81434de1152e3186489a3b4404573d78e93506e71eb6791",
    "target": "linux-64"
   },
   {
@@ -1143,7 +1143,7 @@
    "identity_digest": "9a0f6b96d55645d80c04f4b96ae869173ed70a9c5d03d1bd51a095ccf7cd2024",
    "key": "linux-64/cuda/sm_90a/identical/_mojolearn_gbdt",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "fc90faa1c392692df164e243067e3215ce7caa0b0528438d38fe29f9f4dfcc65",
    "target": "linux-64"
   },
   {
@@ -1195,7 +1195,7 @@
    "identity_digest": "092300d7f02121ba0f07978d536e272ee8dab2da1ecba6de94953754e56f14e1",
    "key": "linux-64/cuda/sm_90a/identical/_mojolearn_rf",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "9c3f615eec68eea1060fb5436a22939ea9fe2e596b220ab25054d4c257da6c19",
    "target": "linux-64"
   },
   {
@@ -1247,7 +1247,7 @@
    "identity_digest": "dcc01c3100bc3cbe31f0f14d12755b33cc6f8d087684e5e6402dd3910e1b857f",
    "key": "linux-64/cuda/sm_90a/identical/_mojolearn_trees",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "b887fde4ea08b3e5bba76048df8f591e215e627550c889b7a0e488cccd8a2c86",
    "target": "linux-64"
   },
   {
@@ -1299,7 +1299,7 @@
    "identity_digest": "d9b3ebc68d2515e859e1649d72307ca4d1165d1eb869e1b5483ba6b5710dda6e",
    "key": "linux-64/cuda/sm_90a/identical/_mojolearn",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "efb10ff77be451d65d411b5f548e32bff12dff5fd8c5f24500f9c1dd63d912cb",
    "target": "linux-64"
   },
   {
@@ -1351,7 +1351,7 @@
    "identity_digest": "80c5f6689a9b87573acbe9d90528d0402fc70c02288826124e0276d2903d7304",
    "key": "linux-64/cuda/sm_90a/identical/_mojolearn_estimators",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "bb53c65bd590b2f6977a94a79ca8fde776eb68c00f6c30f88d18d146b3632156",
    "target": "linux-64"
   },
   {
@@ -1403,7 +1403,7 @@
    "identity_digest": "e2b720aad4b2b0c77a6c980aa0cac31344e6795a6667076c77c2a589bfffbd05",
    "key": "linux-64/cuda/sm_90a/identical/_mojolearn_svm",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "82593aaebda8e19024cfcb9627e9e080debf34a3e8031ead44af39dfe7880e11",
    "target": "linux-64"
   },
   {
@@ -1455,7 +1455,7 @@
    "identity_digest": "04222b49f968b2268b2250cb990f84ce5789243d144789719ac351f028336e82",
    "key": "linux-64/cuda/sm_90a/identical/_mojolearn_solver",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "8584978620da6cc2c529e691620ac3a40fd103b70f94b4e96520a9f9fce96da6",
    "target": "linux-64"
   },
   {
@@ -1507,7 +1507,7 @@
    "identity_digest": "286469328f8e25e09e0cb301d7f5a20d7f1f37fe8618f7391df890a0dc8f0b53",
    "key": "linux-64/cuda/sm_90a/identical/_mojolearn_metrics",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "f0b7744259a6a4d60e9a4ed40934d301745f9951e376d98e8b3cb7d2a7e3f607",
    "target": "linux-64"
   },
   {
@@ -1559,7 +1559,7 @@
    "identity_digest": "b5ccd56453b8356626e566e5b51e2dcecec38c8a7e2f8bfc64b4c38c7134c2b8",
    "key": "linux-64/cuda/sm_90a/identical/_mojolearn_preprocessing",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "80b2255bd418aaddc3d531a6919a399055df2fcf9db425ed5f2e72983c070361",
    "target": "linux-64"
   },
   {
@@ -1611,7 +1611,7 @@
    "identity_digest": "be68b62accc7ae4494292a2f66a272b11dcbb8a8f6d5030869980125dbc0356f",
    "key": "linux-64/cuda/sm_90a/identical/_mojolearn_tsa",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "b18d5198aa9c3604307de8576f2143b6bfbd114c4771145233cc7bdc3e34ad99",
    "target": "linux-64"
   },
   {
@@ -1663,7 +1663,7 @@
    "identity_digest": "1f6bd4ecae55a56c7d95929d10fc2167305ebe0f825d7647a051395c5b74777e",
    "key": "linux-64/cuda/sm_90a/identical/_mojolearn_linalg",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "71bab7142c38ad64533d739f22d5e7a5395a84bd2bb7a239651007cbb7274416",
    "target": "linux-64"
   },
   {
@@ -1715,7 +1715,7 @@
    "identity_digest": "786fc23053c5d486e681130560f7e2d3f89238675881d48999abd2f7c6706ae1",
    "key": "linux-64/cuda/sm_90a/identical/_mojolearn_arima",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "5fe8ca1111ee07b2e312eb3f16746b3c74756314e42d670c8c21f8763db79505",
    "target": "linux-64"
   },
   {
@@ -1767,7 +1767,7 @@
    "identity_digest": "375008deb426f9f6deb25102255168aa855fcee11dad17aff2bd049978d36b09",
    "key": "linux-64/cuda/sm_90a/identical/_mojolearn_gp",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "ed9038a075faef77e0c62d64b673d7043aff4c4a9feaafba0adc2c7b090dc494",
    "target": "linux-64"
   },
   {
@@ -1819,7 +1819,7 @@
    "identity_digest": "668844a85fdbc238ec7337fb9b152fdba0d38546acb9c872c9d6494732714ef2",
    "key": "linux-64/cuda/sm_90a/identical/_mojolearn_kernel_methods",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "56f0543ed6b89f127621be24da229ca48fb59ea2a605a1c849ce7c518071b664",
    "target": "linux-64"
   },
   {
@@ -1871,7 +1871,7 @@
    "identity_digest": "473b5a4907b90e133c3f256aa3723ee5ece1c663b1a86a705e355a4229556727",
    "key": "linux-64/cuda/sm_90a/identical/_mojolearn_mixture",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "9064c42a5d8b93a7982368fb39f0522458134532dbc9c47d6a7d974f98adda8a",
    "target": "linux-64"
   },
   {
@@ -1923,7 +1923,7 @@
    "identity_digest": "c250f443b9b8c982a41eb675516dd631a2e651d8fd9302365949a55eef1cb2a2",
    "key": "linux-64/cuda/sm_90a/identical/_mojolearn_hdbscan",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "27d1ea817d7fb683335f2c68c41c8ed19b929fffe62b4100e1f9e973a85c9916",
    "target": "linux-64"
   },
   {
@@ -1975,7 +1975,7 @@
    "identity_digest": "43203b92cda60135df6a7f9f87073ae1f8b1be9293ae88978b12eea941dd0cb2",
    "key": "linux-64/cuda/sm_90a/identical/_mojolearn_resample",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "46ae730b17f594bb3128735529b528a147f15a55eb4d95adbe23c72eda3b486b",
    "target": "linux-64"
   },
   {
@@ -2027,7 +2027,7 @@
    "identity_digest": "752fa704dc1500a45ee8cf6a15a3fbc29c6de4a24c64691fedad5196bf9c75ad",
    "key": "linux-64/cuda/sm_90a/identical/_mojolearn_ivf",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "6b8a59e03837045a9915ea1e9ba731600bb1b773ebf805b28a500f3534b88399",
    "target": "linux-64"
   },
   {
@@ -2079,7 +2079,7 @@
    "identity_digest": "a57376df783a45f2821d3426290266467e7429c048c202e4bcb7d96c92f61b11",
    "key": "linux-64/cuda/sm_90a/identical/_mojolearn_training",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "d3583acc5ade741e72002d8fad8563819c031e2d7173aa110bf89201b3fb2627",
    "target": "linux-64"
   },
   {
@@ -2131,7 +2131,7 @@
    "identity_digest": "18d0344e48cbae8cc5cee361d6b5d8f17a87150582129486eeae8a4bca744e3e",
    "key": "linux-64/cuda/sm_90a/identical/_mojolearn_mamba",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "8338d1f089217d78b9ab11acfbe43eea85107cffd8c4d1d7284031ca3caa6494",
    "target": "linux-64"
   },
   {
@@ -2183,7 +2183,7 @@
    "identity_digest": "c4b887851c8008f596edeab853af43715a5b6b3c1114344890e835c78a0bd42c",
    "key": "linux-64/cuda/sm_90a/identical/_mojolearn_transformer",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "7958a2ab53c173a8d3344a6dde454a73dcc558225ab2e99a216ae9e1c7d06a46",
    "target": "linux-64"
   },
   {
@@ -2235,7 +2235,7 @@
    "identity_digest": "3f42915f317c45fb677b3768ab6cc1a3feaa7b94dc160d08cfe5692ed77444bc",
    "key": "linux-64/cuda/sm_90a/identical/_mojolearn_embedding",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "cc74bd1e77d99b2de3dd7c9a5ce7aaecf54d74971038b080aa43d3383bcbbbe0",
    "target": "linux-64"
   },
   {
@@ -2287,7 +2287,7 @@
    "identity_digest": "63dce802adada436a2bde6bc53ea225753f26c78f2eb664b344da376b0187067",
    "key": "linux-64/cuda/sm_90a/identical/_mojolearn_byte_lm",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "e860e9ba8ff51b5fb85848968cc615dab5c1c5acc8ee807f350b984976a468cc",
    "target": "linux-64"
   },
   {
@@ -2339,7 +2339,7 @@
    "identity_digest": "f1bbc806103d1534ffccdcd972e666109b17866db0df4fd855ed08a435509ba8",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_gbdt",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "e7c37561bbbc59a43a498bb59b00a00f687fd28bfdec3b82bc27c6d9c29564a1",
    "target": "linux-64"
   },
   {
@@ -2391,7 +2391,7 @@
    "identity_digest": "1b3af9336655f85662bfb45eb047f371542b4fb3e88c012d2367bd7b103d3096",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_rf",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "4a28c9131e0cd50088e506925dbf8341414c609a17a8723359d7765a327e1306",
    "target": "linux-64"
   },
   {
@@ -2443,7 +2443,7 @@
    "identity_digest": "92e54f0c38afd69d45503d023d61b17fb458c70193993b0aac6145cd1add69cd",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_trees",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "53b6202c632a81c923c828c1f73e341ac3ea3e37d8583ef3d45e7349767c07ac",
    "target": "linux-64"
   },
   {
@@ -2495,7 +2495,7 @@
    "identity_digest": "d0362fb0aee650d4a4ff8cb303a7dc6d76bcb6458c0aed21633cce9f39e0e5a3",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "a0fe65568c93e2c1382c202a1334f199c554aea65c4d7eaf56e0af2f78268f80",
    "target": "linux-64"
   },
   {
@@ -2547,7 +2547,7 @@
    "identity_digest": "112dd62fca97923b0184c8ba787b6251591e50d019b37fa26cb30245cebcd5e9",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_estimators",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "53691fb70b95d165777355e793cbb5bcb7de291521f925c380dde455f744f7c3",
    "target": "linux-64"
   },
   {
@@ -2599,7 +2599,7 @@
    "identity_digest": "0e72160826ecee9ca602d2801bcb06e3842feb0ff6b3b21f574e6eb30f1b3c9b",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_svm",
    "reason": "new binding (no build script in the previous release)",
-   "shipped_sha256": null,
+   "shipped_sha256": "be9c1e401c1546dd84c0f272adf837d25673dd51723adb8efd4655d79b101632",
    "target": "linux-64"
   },
   {
@@ -2651,7 +2651,7 @@
    "identity_digest": "7694cef4638228d0e5a5df07bc81f65200cd5fc112d2ed913d15949dcfdb6d07",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_solver",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "94b2aee380049f3b4cc3ab36bcef8b051164a39b9ac26288eca931bc8affb010",
    "target": "linux-64"
   },
   {
@@ -2703,7 +2703,7 @@
    "identity_digest": "0de4ba992504c4ca78df3113ab5150022421f456b202702cd92b6756855247b0",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_metrics",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "5358ff74d76edd3ad31df4bac6f541c74a63848e4f26d32ac26bda353eacb642",
    "target": "linux-64"
   },
   {
@@ -2755,7 +2755,7 @@
    "identity_digest": "cab644e13e5d30586a201570b42161f54034c08bba620a5b877aee29d4c1c93f",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_preprocessing",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "cc6e0c83e6cdab8323ef03964f73bb529e6524763260b871a55f62f3ef31a87a",
    "target": "linux-64"
   },
   {
@@ -2807,7 +2807,7 @@
    "identity_digest": "e964a79ada94ff167a5e2ccf29bd1c66e43755ba311d270cff1e6e9deaf0dcc7",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_tsa",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "ff864ae926a7a5b7294251b07c22f5313e3751693853e152ad70798e695e70e1",
    "target": "linux-64"
   },
   {
@@ -2859,7 +2859,7 @@
    "identity_digest": "90e835ea103b854adf70c4701b483869fa1a82c6ed7c6f96ff1ae35ad13c8ac1",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_linalg",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "fad9526eb5ff41233aebe14cc05d33f4884352561b7c566cd5fceb9c521f414d",
    "target": "linux-64"
   },
   {
@@ -2911,7 +2911,7 @@
    "identity_digest": "0a47e89e35a02d492c107e086bb8f8d73b39e3f25d8a7e81f4f0170e211d10de",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_arima",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "96069aa5edfc1ac42e8bb2c654503027ea311b2559f46b1dbb8283d1f3771bd4",
    "target": "linux-64"
   },
   {
@@ -2963,7 +2963,7 @@
    "identity_digest": "b61dcd68e9da2afd819d0beef9230026761cc1cc7f92a981a0964c4e8d1f45e5",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_gp",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "7ef98bb31536c81712dbab448a86b386db3d7aa5fec085a12b37eec585ed2c92",
    "target": "linux-64"
   },
   {
@@ -3015,7 +3015,7 @@
    "identity_digest": "a133d7ce1accc88ff27fd24387ab374494993f6817866097df680256467a7a2e",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_kernel_methods",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "a38c1a3cf921f2943d0b156b256de2efe6359d57b0d926356fd75226481bdaa0",
    "target": "linux-64"
   },
   {
@@ -3067,7 +3067,7 @@
    "identity_digest": "5dca5262c30e583b4afc88980080867b81e4423ad919a23338e31ba4210c58e5",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_mixture",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "c77598abd6cad3a76ead68e5b4d432c823e79e952cab2464b5f07b05417ee2df",
    "target": "linux-64"
   },
   {
@@ -3119,7 +3119,7 @@
    "identity_digest": "e6e20d9bfff672095046226cf9415056f1729d7d0914da0d81d0e01975ef0685",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_hdbscan",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "c9e357ee62d0c8686faad8da495d19d92696faa68bab8c16d5ff050d0042d0d7",
    "target": "linux-64"
   },
   {
@@ -3171,7 +3171,7 @@
    "identity_digest": "0b4deb579eac3bd9109c8d9e41951392d5b0b5cbb7a0c69cdf179870035f8a69",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_resample",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "20f98852ee173a4dbd21bd75256f1c5b50a6276172da9f571c361fcec883e0b2",
    "target": "linux-64"
   },
   {
@@ -3223,7 +3223,7 @@
    "identity_digest": "ee882ff62c31a9e4ec5d07e5b7f43a00cddfe79c97d8335d61f57474169d4973",
    "key": "linux-64/cuda/sm_89/fast/_mojolearn_ivf",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "9b6ea9893f9e16f5173855649a4992167591295046cbe850f2d9134f15481d57",
    "target": "linux-64"
   },
   {
@@ -3275,7 +3275,7 @@
    "identity_digest": "7e43095e7090514a35622171538e899c762771693a9ffe2f7828f69a330c3a33",
    "key": "linux-64/cuda/sm_89/deterministic/_mojolearn_gbdt",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "90123f058f9b2cde50bbc4e13c5ce0cefa6fbab456301fd73dc9e28a0d54e079",
    "target": "linux-64"
   },
   {
@@ -3327,7 +3327,7 @@
    "identity_digest": "f83107554b91c511673f2abdfc63041e1816d9733685eff6c98709901dfdbc74",
    "key": "linux-64/cuda/sm_89/deterministic/_mojolearn_rf",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "c8a261ed01a6abf5439da73cab3a3f9dc4631436b426805a3cc8018a0a3e9d22",
    "target": "linux-64"
   },
   {
@@ -3379,7 +3379,7 @@
    "identity_digest": "6b50ab06c688b946dc336d3170d3d0386e4411829e9a8b243e2c99242f71102c",
    "key": "linux-64/cuda/sm_89/deterministic/_mojolearn_trees",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "5f3e7cc668f695de607dc638dca5e0d50a273b59d63585807924603951dfdc0e",
    "target": "linux-64"
   },
   {
@@ -3431,7 +3431,7 @@
    "identity_digest": "bc3d74889b2f76892e6bb5342a9c04f892a77ac979721c154a3a4318fa7ea7bd",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_gbdt",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "e3e0416e56d0d721debb6d1eea2b82eebc71f5bf69e181a8939e5b4cc31e070f",
    "target": "linux-64"
   },
   {
@@ -3483,7 +3483,7 @@
    "identity_digest": "027a4b593840edfb6486a11d6ca61b79224cf3d2a7b164a42a31b3ddbe9ade99",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_rf",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "9e284853bcc852a27a6e16eeedc9f1e196388c1d7ca581434ff7dba802da7c19",
    "target": "linux-64"
   },
   {
@@ -3535,7 +3535,7 @@
    "identity_digest": "27fac27aafa4fab421737c4386bac1a8affb04c1535bc995393972d4efd20c6f",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_trees",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "31370ba843b234b6e3da7a21f839a3c3ffccbf4d474fa71cf1588adfa9234d25",
    "target": "linux-64"
   },
   {
@@ -3587,7 +3587,7 @@
    "identity_digest": "9c46e6c6566c9cf92bad79f3396aeb9ff657e78529b2762d49b39e4edf12c739",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "adad4500f8993ea5003ddeb59ddcaf633761537944bcbd2c0d3057da1819b6d4",
    "target": "linux-64"
   },
   {
@@ -3639,7 +3639,7 @@
    "identity_digest": "5c56526616b89f61569c048f72a12c45041b76ea14dcbcfd6c8520e0fb1feb44",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_estimators",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "ef58e54cf5d931ff76a7d54b2fc423b632945c940732d679a82f3184c54731bd",
    "target": "linux-64"
   },
   {
@@ -3691,7 +3691,7 @@
    "identity_digest": "3cfdeb9c8c837c78b1d02bd984d8eb43b71442cd94668d610189db682b080a34",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_svm",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "6f768942badb6eee8497d7753314c42d4cc5e7c7b633b6e31c95a755413e4110",
    "target": "linux-64"
   },
   {
@@ -3743,7 +3743,7 @@
    "identity_digest": "e909e99d9546341e3d4eea619b9908b78c03e93dc55b09afaddaf44ae7b2d629",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_solver",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "d3303cb5cb863bbc2dbc5accf10cd84caba4edc8a668bdb1c032a338ff31342a",
    "target": "linux-64"
   },
   {
@@ -3795,7 +3795,7 @@
    "identity_digest": "1b04586af9f1eead74659a33c0b56d8ef1dbb74267f149838595b950239d4cfa",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_metrics",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "c6fbf2ea74b2b7fab63b555aba572881c72ff7a18e9232289c001f51f357816a",
    "target": "linux-64"
   },
   {
@@ -3847,7 +3847,7 @@
    "identity_digest": "b3a025f27d8641d804d87b4795f0d5e099406ab03f23f418ff770f9cb76acf1b",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_preprocessing",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "411980fdde469b5e2ba499ce67877a110aafa3a35f5a2788a5254e31369bba19",
    "target": "linux-64"
   },
   {
@@ -3899,7 +3899,7 @@
    "identity_digest": "1f63516fd6b403686ea261bba752d439212a1eeb9c85374f276a72d2b7ea2050",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_tsa",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "1ce8e842be596a3cc4971970570d67b0a585ba13613d20ab91bdc2537eee3252",
    "target": "linux-64"
   },
   {
@@ -3951,7 +3951,7 @@
    "identity_digest": "ca381978fcf60d64ce2fe55a6c858a3fa83ea12c310d8bd85e43c49ef35ea9a4",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_linalg",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "63fa7c1f62b5d02f395c259c2d401d82085b416bd0baea2b73dbfdf40a7763ee",
    "target": "linux-64"
   },
   {
@@ -4003,7 +4003,7 @@
    "identity_digest": "667517111b8e02dcc4fa708f3d3f8d1bc67dd9e824a1949bb206b02ff8bd7bee",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_arima",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "fc5b698c327b0c48b1228565675a8c7ebccebc648ff6929c54fe14dae0151801",
    "target": "linux-64"
   },
   {
@@ -4055,7 +4055,7 @@
    "identity_digest": "caed71c7c5c81d0d5dc8a47bf012307cf67baf1358e94235db2b20452f732f3a",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_gp",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "6aa7fe38bcb0b8014b84cc0ca3120e43871d2bed8f7c76458ed595fd68b460cd",
    "target": "linux-64"
   },
   {
@@ -4107,7 +4107,7 @@
    "identity_digest": "d13a47f0857c1d94ce50855b67a98bcbb11fc06bd99d67b163a7a1fec4978403",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_kernel_methods",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "26e911f370c09ca2c1ea7a7bf6edb7340ac6cdb264d2a68254ebd66497f69d30",
    "target": "linux-64"
   },
   {
@@ -4159,7 +4159,7 @@
    "identity_digest": "c268fe1566b1d37d5bccc9a711726d93a33b37e04774e14723bdb4420c178b79",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_mixture",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "363d9e6a9f1bfc7c7a1e23beb4d143de79a3ea58ec4958fa45f5330b2a57fc54",
    "target": "linux-64"
   },
   {
@@ -4211,7 +4211,7 @@
    "identity_digest": "54c1ef29807de3fd72fa51bd195ad472dcc7f3814a7dc425c7484b28276b8050",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_hdbscan",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "27974fdbcee32982e987612f971626b9dfd9ff76259760b4955e49462a65aa65",
    "target": "linux-64"
   },
   {
@@ -4263,7 +4263,7 @@
    "identity_digest": "d59b9c18bb46564f3a6b6f4dad91c42c09b7971e46a913389400330a6c47ba9f",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_resample",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "b313c4e426c12845e19df428370765ae344bd90328ab136b561f26a3c6574323",
    "target": "linux-64"
   },
   {
@@ -4315,7 +4315,7 @@
    "identity_digest": "40a4e49f1d420659a0258de4812b268f510c283e753e45476860564059ee94f9",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_ivf",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "034f6c7220ce79c0b14c30449d646d1a8f6970d9a6e990f05834ae0d23bd4872",
    "target": "linux-64"
   },
   {
@@ -4367,7 +4367,7 @@
    "identity_digest": "71c0579ca1efd441316c567a9ed7033285196c9dd5f71a9f468a512c319c14fe",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_training",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "fc9bce0260e073a768d6160c67279656fa1b53c69790a80ff879d02d27ae18d5",
    "target": "linux-64"
   },
   {
@@ -4419,7 +4419,7 @@
    "identity_digest": "a478c4c693717cd0dc501bba1026ef05c09e577c97bc3ccfe703665985e69a22",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_mamba",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "07009678b674478f98dc91510a03a931f636aba39599bfd3b52fc6e245105b53",
    "target": "linux-64"
   },
   {
@@ -4471,7 +4471,7 @@
    "identity_digest": "5ce7d86b2d54c3090180a111ea3345f1671d74ce5c347ee620ce206c0b0723fa",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_transformer",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "39623e299ba6d0ca96e20c63d414847f0fd03bc87c998930c2e7db6cf75d9285",
    "target": "linux-64"
   },
   {
@@ -4523,7 +4523,7 @@
    "identity_digest": "a66adc18055f322ca7e998e5792317bb30fecca72116aaf966188e568287cd57",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_embedding",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "c93e899d3744c02802c123b2f8f05a0ca9ca5182ef9dd2864e01fd22c296526d",
    "target": "linux-64"
   },
   {
@@ -4575,7 +4575,7 @@
    "identity_digest": "ab40ad16bf148ac513c219118a7a52582a6d4f5516dfed1f10554b88f7647f29",
    "key": "linux-64/cuda/sm_89/identical/_mojolearn_byte_lm",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "8d3c31f837e35902ca9074552beadc53c066880e2658d13009da2d871c7b356f",
    "target": "linux-64"
   },
   {
@@ -4627,7 +4627,7 @@
    "identity_digest": "531ca5ca8953f397263897af0986af02e3f02c2783e22ec0f3d9b4cf0bfd9e56",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_gbdt",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "ae42b0bc03e3dd617ca89f3461dd03e1fd374b607e1763e43e9a33a97e00871b",
    "target": "linux-64"
   },
   {
@@ -4679,7 +4679,7 @@
    "identity_digest": "147e977ecb23b565131d89a62e90610e6ee0aa6ee9e8acd8e43a7a36b17282e2",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_rf",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "3350611541d29971ad1be6ef88c5a2d00ebcebbd85c7cc4fc9992cb736f5f613",
    "target": "linux-64"
   },
   {
@@ -4731,7 +4731,7 @@
    "identity_digest": "e586f441569c1e48da7d9e8143d3c2507be4fd0a075d54fcbda0f3fe9821a3fe",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_trees",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "cd3ec2ad28593321a0a0133d7bcc7550fee476e18b3a17f9de6862b3aabf5912",
    "target": "linux-64"
   },
   {
@@ -4783,7 +4783,7 @@
    "identity_digest": "886b140d1a39aeb5ae39b6a7e550dcffc04be7fbe116cbfd806955d26b4161ec",
    "key": "linux-64/hip/gfx942/fast/_mojolearn",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "2ba41fcf1f3a0711c001a0ff2d70ecbcaeb1eaddcb8b95158561ae095fd3adca",
    "target": "linux-64"
   },
   {
@@ -4835,7 +4835,7 @@
    "identity_digest": "34687c2b6cfa561d66fbc7cd4c91cfc9e4c62afe81c302ed00ecb65ccf52151e",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_estimators",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "6306cfe2e740e65a9a8345dbf0b73046fe9828fad8338551504d17c51ef76240",
    "target": "linux-64"
   },
   {
@@ -4887,7 +4887,7 @@
    "identity_digest": "d318f8a90abedb21ec8b72f049d7a86e5b58788c8e5eb678938af041c7f18abc",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_svm",
    "reason": "new binding (no build script in the previous release)",
-   "shipped_sha256": null,
+   "shipped_sha256": "cd60d534be23cc050026096cca3555008994467cb48dd1067e35c4073a51d237",
    "target": "linux-64"
   },
   {
@@ -4939,7 +4939,7 @@
    "identity_digest": "8af908505ee973fd55a018bc94b0ca65816036b710c78148c620aec920e7d84b",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_solver",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "51c84ffcafed577d221c737a50990d9c62e195ac19901e4d692135dd74ea183b",
    "target": "linux-64"
   },
   {
@@ -4991,7 +4991,7 @@
    "identity_digest": "2964663a18f49270139fa7e15c5ec7f20e2cb69f99d8378565bf2ce6481bc86c",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_metrics",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "af14dce042a402ccefec9dd6e9da8a1a449bb15f68c20948f5ba53520954aafb",
    "target": "linux-64"
   },
   {
@@ -5043,7 +5043,7 @@
    "identity_digest": "e7dc63561222f57630f1209734acb6276a606cf44c48d5557dacd94f8907bd04",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_preprocessing",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "e4efc2c35c76453fe5d676dfe07edf3b6174e77f8e13c7a809c491b5e408b000",
    "target": "linux-64"
   },
   {
@@ -5095,7 +5095,7 @@
    "identity_digest": "fdc2f0eed86469642dbff918e868b42ae46e89c336d0ab3892e057504abec680",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_tsa",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "a3e3aae18b85985276e2fe947504a3f4cc8c476fadb833c3af36818334ed0ad1",
    "target": "linux-64"
   },
   {
@@ -5147,7 +5147,7 @@
    "identity_digest": "84abbccd96b81685547a7b168d540ba33395c4c7cc64c01561e50ace8b86b814",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_linalg",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "895daf9ddbe25dfb106b57f66660066f8fff1830af8d7f583479bec2c1f1dd66",
    "target": "linux-64"
   },
   {
@@ -5199,7 +5199,7 @@
    "identity_digest": "06832dfa784ee5d544808ed671b41c2705653282fc8033a7bcff56391df2d05d",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_arima",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "8de0c3d80039348dbcdd9d098027a23237f6f327ec80895e47e6f6b77d55660e",
    "target": "linux-64"
   },
   {
@@ -5251,7 +5251,7 @@
    "identity_digest": "b7ec1a6d666b5d57a0c51bc7f6afd558c39e2b840302dbf1f051bb71ba9db40c",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_gp",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "c00573857b8c6015e2c59dc6002de963d8b6a1b989ef6cc8315ff9fb7d5f4850",
    "target": "linux-64"
   },
   {
@@ -5303,7 +5303,7 @@
    "identity_digest": "4379611bf9bcbad4e583531b52cc5a9ffc5d64ebe114c5652d28b899c2e0b4a5",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_kernel_methods",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "ee82780a5974f24d1dbe8e20ed8b3d27cd1f989545bf1867379c1cb5e0fbc0cf",
    "target": "linux-64"
   },
   {
@@ -5355,7 +5355,7 @@
    "identity_digest": "bddb68509f8561249241a59a641ac35dc7599c7a0ffc527a838dc6d78e5c613e",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_mixture",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "3930b13a82dc9df327096bec2183acc9c99cbbe4df9fc41a7882aa54f0ba36f2",
    "target": "linux-64"
   },
   {
@@ -5407,7 +5407,7 @@
    "identity_digest": "0a385e0cdf2a63caf632758132454ea9f60aabe05dd99eaacb000aa1778d1620",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_hdbscan",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "71518783773deeacad3e1e102d455dd878f7ccaae05d84ce3a8a1c5ef551c69a",
    "target": "linux-64"
   },
   {
@@ -5459,7 +5459,7 @@
    "identity_digest": "a0bcac1339e1af256d2a8ebe56ccdc26f379998c64b899ca4203b2b6f52bc15b",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_resample",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "68b0fcf66f567accec56de94837f9a5cfb5bea6472d2ff57828afa0d7b609f92",
    "target": "linux-64"
   },
   {
@@ -5511,7 +5511,7 @@
    "identity_digest": "19c74be14a2908a3e7a00c5cd63f96776e2bc56d5b315536068ef45d0c5e92d0",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_ivf",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "4ce5532403671be991ab33b4bfcca60c4211fa93013bc78cc36b2c362efb2de2",
    "target": "linux-64"
   },
   {
@@ -5563,7 +5563,7 @@
    "identity_digest": "c443da97077c3fdfb6598d8c2f3b57e3fdb3ba7ec4a58737fafd42845b82b938",
    "key": "linux-64/hip/gfx942/deterministic/_mojolearn_gbdt",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "32b2457ada83b332091ac8ec88733d7fd364d0b6914c8885b0f0b13d9c909fdd",
    "target": "linux-64"
   },
   {
@@ -5615,7 +5615,7 @@
    "identity_digest": "3b4a7f6f3396eee26a7dfd36c4ab68f099d6af5edd2acd069e99e4756f01e5ed",
    "key": "linux-64/hip/gfx942/deterministic/_mojolearn_rf",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "57996dce62bd189d7ee9721cc17245b2fa93944202dc3f6212a5c5776a516862",
    "target": "linux-64"
   },
   {
@@ -5667,7 +5667,7 @@
    "identity_digest": "d27bc6c2048aba7dcdd9d864adc5a90890f62ed5e0ec3f1db632449c2ba829ea",
    "key": "linux-64/hip/gfx942/deterministic/_mojolearn_trees",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "653c49370d9e9161bb0426c050e8448ffaf7276d2821bb2a60c98911dfd75941",
    "target": "linux-64"
   },
   {
@@ -5719,7 +5719,7 @@
    "identity_digest": "6d17624dff5adf072d7910a6694c70922aeb77a73b3842e3e7f11a142311e602",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_gbdt",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "4ec1916ea97a39c8ff2a5519afee66a9d148114d32f78b6181bb35d0404bf9e3",
    "target": "linux-64"
   },
   {
@@ -5771,7 +5771,7 @@
    "identity_digest": "924d3e5e120d4fbfd20b9bb82922f3b8ddb502df70d41252c8e2b5c0ac9c2300",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_rf",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "2636c96ba4cb6bc1974d04c3d6b0c30dec8832fca8f741d0d87a39ff2deaa48a",
    "target": "linux-64"
   },
   {
@@ -5823,7 +5823,7 @@
    "identity_digest": "3b05feb94dedb001179757562ecc7158b6a102f5efb66e51d3560d71460f53bb",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_trees",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "336a3350899daaba338dd78e23a7113ded9b7b1b7ed6ce019545fb42eeff1c33",
    "target": "linux-64"
   },
   {
@@ -5875,7 +5875,7 @@
    "identity_digest": "fc97225d1457811d3a504934c9df49af473840f198fa43648b6dd39384848933",
    "key": "linux-64/hip/gfx942/identical/_mojolearn",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "a8018d4521aa7ffdbf9e89872a263fc5d1e43ccb58701addb8a860b6271c7b06",
    "target": "linux-64"
   },
   {
@@ -5927,7 +5927,7 @@
    "identity_digest": "77be58452046200741e926a8a43c3486109369c93c3398542d23b3555b5e9e2b",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_estimators",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "c0220efe28fe54a9d6e67b9bd416d31ef39dee42cc896a277bc767e5a9a430c6",
    "target": "linux-64"
   },
   {
@@ -5979,7 +5979,7 @@
    "identity_digest": "3b50f26e1c45cec173efbb9c313ceb274bf9eea3541c20e3f2c343211a5c2bea",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_svm",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "6fa1acdc345bfbcc6d9e334f8cee0179afa406d09cd2140b2255155bb61f8d33",
    "target": "linux-64"
   },
   {
@@ -6031,7 +6031,7 @@
    "identity_digest": "aca9a02a225a731b4e06425c9f8bc751e43caa0f4485dabf390ad02c0c4a9a10",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_solver",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "2d6c27b647e5dd1cc3a31f251c590b217fb82f76e554dea7036b520fd274bd02",
    "target": "linux-64"
   },
   {
@@ -6083,7 +6083,7 @@
    "identity_digest": "a7049a2b969f85641318f1583d04f0aa5f4743e9e9e69c05c071cb4f60c8f5fa",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_metrics",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "e36e5b9489a587c153c4a4a3d652f796bf3f7a5baa5c2cd51da46746921b0a94",
    "target": "linux-64"
   },
   {
@@ -6135,7 +6135,7 @@
    "identity_digest": "b38bdfae6d5978318395ce1ad5760e3034477fc91d32173e408bf599a0886a1c",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_preprocessing",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "95286eaa6e2caf1f33965dab0e84b5d761fd16693af4f7a7cd0a8300c4afc179",
    "target": "linux-64"
   },
   {
@@ -6187,7 +6187,7 @@
    "identity_digest": "fa5bc617f31d1a481aa95a502c8c3cb0fcf4bcb77a316c38e56c4dc3b430e446",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_tsa",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "40490194bcfd17721641a856228c4a63babb2c474f41fe056db25f21eba42818",
    "target": "linux-64"
   },
   {
@@ -6239,7 +6239,7 @@
    "identity_digest": "12e97b1b94cd066fb9280beacdc7af7515898e4f8776f51e8d092ba89dc108c1",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_linalg",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "1cd7885ba1692c07f384e07d62011398aa6e14ebfd9303d2c0874c1716d54d7b",
    "target": "linux-64"
   },
   {
@@ -6291,7 +6291,7 @@
    "identity_digest": "d073a7f51623047e3a3ad36e1378ee84bd7a90207cbeb9967e5d3f6c60287ac5",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_arima",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "197f90bb6f3c045feba726f95c29f51ad3ff1cb7f81412bf5c9f6b51f22b3fbf",
    "target": "linux-64"
   },
   {
@@ -6343,7 +6343,7 @@
    "identity_digest": "18b47d5e9d556abaa8da6f620fd4d97d0654f28fc64b9ef59b4aa2c1a0b4315c",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_gp",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "287f823510832cbf423cad9f916e60758c30cccf81e903ce0052523f78734c20",
    "target": "linux-64"
   },
   {
@@ -6395,7 +6395,7 @@
    "identity_digest": "38aded322d74e3ecd1059cd6816566a53356bb75099c968cd4ea1b4f374944e8",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_kernel_methods",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "ff4c034ec4414e292e19a0e1210e6a5a897d21b0a4f7502e1ce9a6e6f9bbe575",
    "target": "linux-64"
   },
   {
@@ -6447,7 +6447,7 @@
    "identity_digest": "da744cc5331d7b43d75d74e63db3a19f695faae55c62aca2bad873b9031315ad",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_mixture",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "72a425838846acd13617b8d69d87dcc096fa78a26d64b2c0b1d8d00f50c3c725",
    "target": "linux-64"
   },
   {
@@ -6499,7 +6499,7 @@
    "identity_digest": "05dd31d12314e3d032e3dcbf6837831a4cdb82d65a976ca1341e90356ad7ffe4",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_hdbscan",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "d392178cb335a88e6b4d3507e7684c2a1b5cfc0996b616ab167ac52092f0f015",
    "target": "linux-64"
   },
   {
@@ -6551,7 +6551,7 @@
    "identity_digest": "72c473531857032d15e98f9967e6edfd0c4cd5933571b357dcd0b1b25ceb48c2",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_resample",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "ab00dbb4577c484d75337b7d23de15e03c07d605b6a861288a1318964a1ac9a8",
    "target": "linux-64"
   },
   {
@@ -6603,7 +6603,7 @@
    "identity_digest": "6fc8978cef43c747a9498b0b33d7e49ef10fa73d1486a869f095a8e7cdd42f18",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_ivf",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "9fece01dfec30bafbf33ad8cec142e56c19168b58491a9c02da6ae572057bf01",
    "target": "linux-64"
   },
   {
@@ -6655,7 +6655,7 @@
    "identity_digest": "1d7bd97d609e923b5ea45c571e416add5e70f6d6d9be540019cc357761064f76",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_training",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "194529a43ed61f62ab1108815b67d545ee9a5d78ba56dfa51095498c16acdd9d",
    "target": "linux-64"
   },
   {
@@ -6707,7 +6707,7 @@
    "identity_digest": "7b13cd505f378bb85b49d8b89a882d168905446bea7c523b87dcb801173dcc8c",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_mamba",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "2375c9b970f3651e8383d3b8ee4029cc433f3180dce20fde2dc81faa4c8d7eb4",
    "target": "linux-64"
   },
   {
@@ -6759,7 +6759,7 @@
    "identity_digest": "107cc8524f0fa76ad99cba5a188b97b85c60b117ed40112ab8330e1e2b7ccd15",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_transformer",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "5ec5a73f86ec6c9b85823255d1080bbdde827bc81eb9f4addadd1a8709bdd790",
    "target": "linux-64"
   },
   {
@@ -6811,7 +6811,7 @@
    "identity_digest": "390dc09336524a29f36bb1f0fbeb071dc4792fbb5cac140f7a74c51ee9ac69fd",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_embedding",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "bba8e85a0cf3c6c9070d289b0a517f531f5880618fd46557afa552b2e9550fa1",
    "target": "linux-64"
   },
   {
@@ -6863,7 +6863,7 @@
    "identity_digest": "f488feec3b166907f06c9cf777da6ed934be603a9fbe30e87911f5076b6bf927",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_byte_lm",
    "reason": "previous release: its mojolearn.binding-identity.v1 identity does not reproduce from 69a519c1522d",
-   "shipped_sha256": null,
+   "shipped_sha256": "771e5bbaa2e42f7bf6bf9fb1f80171bab37c4fb54d06c2e2e8cfe72be56962df",
    "target": "linux-64"
   },
   {

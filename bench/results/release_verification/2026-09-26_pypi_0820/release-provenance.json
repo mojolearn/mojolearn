@@ -1,7 +1,73 @@
 {
  "columns": {
-  "amd": null,
-  "nvidia": null
+  "amd": {
+   "column": "amd",
+   "column_sha256": "871d77032f81b30edf2687882bb95c48881d6f19ecf42ef224603b08c6b4aa2e",
+   "command": [
+    "bash",
+    "tools/release_wheel_smoke.sh",
+    "/Users/andrewhendel/mojolearn-evidence/release/0.8.20/a6bb47ae7e2a/linux/final/mojolearn-0.8.20-py3-none-manylinux_2_35_x86_64.whl",
+    "--expected-source-commit",
+    "a6bb47ae7e2a613c07c2b3b717a7165973f9ce71",
+    "--out",
+    "/Users/andrewhendel/mojolearn-evidence/release/0.8.20/a6bb47ae7e2a/column-amd",
+    "--rent",
+    "--vendor",
+    "hip",
+    "--provider",
+    "auto",
+    "--column",
+    "/Users/andrewhendel/mojolearn-evidence/release/0.8.20/a6bb47ae7e2a/selection-hip.json",
+    "--ref-column",
+    "/Users/andrewhendel/mojolearn-evidence/release-check/a6bb47ae7e2a/metal/column.json"
+   ],
+   "launched_at": "2026-09-26T16:31:01Z",
+   "refs": [
+    "/Users/andrewhendel/mojolearn-evidence/release-check/a6bb47ae7e2a/metal/column.json"
+   ],
+   "schema": "mojolearn.release-column-provenance.v1",
+   "selection": "/Users/andrewhendel/mojolearn-evidence/release/0.8.20/a6bb47ae7e2a/selection-hip.json",
+   "selection_digest": "ff5a69d4c14079b0dc3d50cd2eae4d4885b9e140a292aec9e7f98fdb81a99aa8",
+   "source_commit": "a6bb47ae7e2a613c07c2b3b717a7165973f9ce71",
+   "tooling_commit": "bd125559551d1643245c9026c9c3a5c725c5c537",
+   "vendor": "hip",
+   "verdict": "PASS",
+   "wheel": "/Users/andrewhendel/mojolearn-evidence/release/0.8.20/a6bb47ae7e2a/linux/final/mojolearn-0.8.20-py3-none-manylinux_2_35_x86_64.whl",
+   "wheel_sha256": "2598fc8d2d6f1556605d8663bb1768529fded38c4dfb0fa59b92054206b62245"
+  },
+  "nvidia": {
+   "column": "nvidia",
+   "column_sha256": "cd03b55e28034269fa9ae266e1f5f26fbea562487b2c2031bb1dcf4d8a5fefd5",
+   "command": [
+    "bash",
+    "tools/release_wheel_smoke.sh",
+    "/Users/andrewhendel/mojolearn-evidence/release/0.8.20/a6bb47ae7e2a/linux/final/mojolearn-0.8.20-py3-none-manylinux_2_35_x86_64.whl",
+    "--expected-source-commit",
+    "a6bb47ae7e2a613c07c2b3b717a7165973f9ce71",
+    "--out",
+    "/Users/andrewhendel/mojolearn-evidence/release/0.8.20/a6bb47ae7e2a/smoke-linux",
+    "--rent",
+    "--column",
+    "/Users/andrewhendel/mojolearn-evidence/release/0.8.20/a6bb47ae7e2a/selection-cuda.json",
+    "--ref-column",
+    "/Users/andrewhendel/mojolearn-evidence/release-check/a6bb47ae7e2a/metal/column.json",
+    "--gpu",
+    "NVIDIA GeForce RTX 4090"
+   ],
+   "launched_at": "2026-09-26T16:31:01Z",
+   "refs": [
+    "/Users/andrewhendel/mojolearn-evidence/release-check/a6bb47ae7e2a/metal/column.json"
+   ],
+   "schema": "mojolearn.release-column-provenance.v1",
+   "selection": "/Users/andrewhendel/mojolearn-evidence/release/0.8.20/a6bb47ae7e2a/selection-cuda.json",
+   "selection_digest": "7263ebdcd108b39819204f3f3a3f10ebec4c7f61323d9588396efa3ddf44bdf4",
+   "source_commit": "a6bb47ae7e2a613c07c2b3b717a7165973f9ce71",
+   "tooling_commit": "bd125559551d1643245c9026c9c3a5c725c5c537",
+   "vendor": "cuda",
+   "verdict": "PASS",
+   "wheel": "/Users/andrewhendel/mojolearn-evidence/release/0.8.20/a6bb47ae7e2a/linux/final/mojolearn-0.8.20-py3-none-manylinux_2_35_x86_64.whl",
+   "wheel_sha256": "2598fc8d2d6f1556605d8663bb1768529fded38c4dfb0fa59b92054206b62245"
+  }
  },
  "earlier_commits": [
   "d2419e00d5fcc5aeb9748e2faf4a38a3c01a7ab4"
@@ -12,7 +78,7 @@
    "overlay": null,
    "set_identity_digest": "41682b5a65dfb51b4b28033b9ec29e452bd54fa8804bb7d8ebd4dee50808ad1c",
    "source_commit": "a6bb47ae7e2a613c07c2b3b717a7165973f9ce71",
-   "tooling_commit": "a6bb47ae7e2a613c07c2b3b717a7165973f9ce71",
+   "tooling_commit": "bd125559551d1643245c9026c9c3a5c725c5c537",
    "tooling_digest": "c1af2b7041afd4b86c383f9d3207fa0d66d2523136d14546dfc443140286d7e9"
   },
   "cuda-sm_90a": {
@@ -33,10 +99,11 @@
   }
  },
  "published": [
-  "macos"
+  "macos",
+  "linux"
  ],
  "schema": "mojolearn.release-provenance.v1",
  "source_commit": "a6bb47ae7e2a613c07c2b3b717a7165973f9ce71",
- "tooling_commit": "a6bb47ae7e2a613c07c2b3b717a7165973f9ce71",
+ "tooling_commit": "eaa6edc718eead7862d2fd0d418e155b31e824d6",
  "version": "0.8.20"
 }
