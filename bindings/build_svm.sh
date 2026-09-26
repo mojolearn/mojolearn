@@ -192,7 +192,8 @@ pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLE
 
 air_blobs() {
     strings -a "$1" \
-        | grep -oE '[0-9A-Za-z_]+_[0-9a-f]{16}air' \
+        | grep -oE '[0-9A-Za-z_]+_[0-9a-f]{16}(air|llvm[.]|[0-9]+[.][0-9]+air64)' \
+        | sed -E -e 's/(air|llvm[.]|[0-9]+[.][0-9]+air64)$//' \
         | sed -e 's/^_gpu_shared_mem//' -e 's/^0//' \
         | sort -u
 }

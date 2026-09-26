@@ -2,6 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Random Forest estimator surface, parameters, metrics, training dispatch, and host inference, aligned with pinned cuML behavior."""
 
+from std.math import fma
 from std.gpu import block_dim, block_idx, global_idx, thread_idx
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator, has_nvidia_gpu_accelerator
@@ -1557,9 +1558,9 @@ def compute_oob_score[
                 continue
             var yt = Float64(hy.unsafe_ptr().unsafe_load(r))
             var d1 = yt - oob_predictions[r * num_outputs]
-            numerator += d1 * d1
+            numerator = fma(d1, d1, numerator)  # the default build's fused op (lane/pinned-mul-contract-free)
             var d2 = yt - mean
-            denominator += d2 * d2
+            denominator = fma(d2, d2, denominator)  # the default build's fused op (lane/pinned-mul-contract-free)
         # `:145-157`, force_finite=True: numerator == 0 -> 1;
         # numerator != 0 and denominator == 0 -> 0; else 1 - num/den.
         if numerator == Float64(0.0):

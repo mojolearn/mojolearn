@@ -16,6 +16,7 @@ existing packed histogram kernels omit excluded features. Metadata retains all
 original IDs with excluded fold counts zero. Projection adds overhead; no net
 speed claim. Default fraction 1 bypasses this module's per-tree work entirely.
 """
+from std.math import fma
 from std.math import isfinite
 from std.gpu import block_idx, block_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
@@ -36,7 +37,7 @@ def sample_tree_folds(
     for f in range(len(folds)):
         if folds[f] > 0:
             eligible.append(f)
-    var count = max(1, Int(Float64(len(eligible))*fraction+0.5))
+    var count = max(1, Int(fma(Float64(len(eligible)), fraction, 0.5)))  # the default build's fused op (lane/pinned-mul-contract-free)
     if count >= len(eligible):
         return folds.copy()
     # Partial Fisher-Yates freezes K bounded uniform requests per sampled tree. Restore

@@ -3,6 +3,7 @@
 """CatBoost-compatible boosting loop: derive gradients from the current cursor, fit a tree, estimate leaves, and update predictions."""
 
 from gbdt.options.child_hessian import child_hessian_threshold, check_child_hessian_objective
+from std.math import fma
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from core.device_zero import enqueue_fill
 from max.gpu.host.device_attribute import DeviceAttribute
@@ -478,7 +479,7 @@ def two_level_weighted_leaf_value(
     for i in range(size):
         var row = Int(row_order.unsafe_ptr().unsafe_load(begin + i))
         var weight = Float32(1.0) if len(sample_weight) == 0 else sample_weight[row]
-        total += weight * y[row]
+        total = fma(weight, y[row], total)  # the default build's fused op (lane/pinned-mul-contract-free)
         total_weight += weight
     return (
         learning_rate * total / (total_weight + l2_leaf_reg)

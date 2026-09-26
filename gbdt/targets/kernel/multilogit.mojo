@@ -91,6 +91,7 @@ one-vs-all score is kept exactly; only the transcendental calls are routed.
 ===================================================
 """
 
+from std.math import fma
 from std.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -329,7 +330,8 @@ def multilogit_val_and_first_der_kernel[
         if compute_fv != Int32(0):
             var log_denum = routed_log(sum_exp[j])
             if idx < size:
-                tmp_score += weight[j] * (class_approx[j] - log_denum)
+                # the default build's fused op (lane/pinned-mul-contract-free)
+                tmp_score = fma(weight[j], class_approx[j] - log_denum, tmp_score)
 
     # DEVIATION 71: per-block partials, not their block reduce + atomicAdd
     if compute_fv != Int32(0):
@@ -772,7 +774,7 @@ def one_vs_all_val_and_first_der_kernel[
                 if in_range:
                     tmp_score += (
                         weight[j]
-                        * (c * val - log_term)
+                        * fma(c, val, -log_term)  # the default build's fused op (lane/pinned-mul-contract-free)
                         / Float32(num_classes)
                     )
 

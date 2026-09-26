@@ -27,6 +27,8 @@ sole caller and Mojo host code has no reason to heap-allocate a vtable for
 a two-branch predicate. Every comparison is theirs, bit for bit.
 """
 
+from std.math import fma
+
 comptime BACKTRACKING_NONE = 0
 comptime BACKTRACKING_ANY_IMPROVEMENT = 1
 comptime BACKTRACKING_ARMIJO = 2
@@ -54,7 +56,7 @@ struct StepEstimator(Copyable, Movable):
         if self.kind == BACKTRACKING_ANY_IMPROVEMENT:
             return self.function_value <= next_func_value
         return next_func_value >= (
-            self.function_value + ARMIJO_C * step * self.dir_grad_dot
+            fma(ARMIJO_C * step, self.dir_grad_dot, self.function_value)  # the default build's fused op (lane/pinned-mul-contract-free)
         )
 
 
@@ -68,5 +70,5 @@ def create_step_estimator(
     var dot = Float64(0.0)
     if kind == BACKTRACKING_ARMIJO:
         for i in range(len(gradient)):
-            dot += gradient[i] * Float64(direction[i])
+            dot = fma(gradient[i], Float64(direction[i]), dot)  # the default build's fused op (lane/pinned-mul-contract-free)
     return StepEstimator(kind, current_value, dot)

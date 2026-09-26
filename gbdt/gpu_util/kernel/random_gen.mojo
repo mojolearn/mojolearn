@@ -22,7 +22,7 @@ f32, which changes no distribution and keeps every draw deterministic.
 # which differ per vendor (row 10 sqrt is approximate on NVIDIA; row 12 log
 # and cos are each vendor's own); under IDENTICAL the three seam calls are
 # the portable pair, under FAST the stdlib verbatim
-from checks.numerics import identical_cos, identical_log, identical_mul_add, identical_sqrt
+from checks.numerics import identical_cos, identical_log, identical_mul, identical_mul_add, identical_sqrt
 
 
 def advance_seed(s: UInt64) -> UInt64:
@@ -57,7 +57,8 @@ def next_uniform_f(s: UInt64) -> Tuple[Float32, UInt64]:
     var v = UInt32(x >> 32)
     var u = UInt32(x & UInt64(0xFFFFFFFF))
     var mixed = (v << 16) + u
-    return (Float32(mixed) * Float32(2.328306435996595e-10), x)
+    # exact; pinned: callers add to it (`u + 1e-20`) (lane/pinned-mul-contract-free)
+    return (identical_mul(Float32(mixed), Float32(2.328306435996595e-10)), x)
 
 
 def next_normal_f(s: UInt64) -> Tuple[Float32, UInt64]:

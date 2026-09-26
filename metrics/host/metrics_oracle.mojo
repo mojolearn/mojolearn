@@ -121,6 +121,7 @@ same define also perturbs a VALUE each metric reads:
 The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the metrics lane is the measurement.
 """
+from std.math import fma
 from std.math import sqrt
 from std.memory import bitcast
 from std.sys.compile import is_defined
@@ -490,10 +491,12 @@ def _host_adjusted_rand_score(
     var expected_index = (
         Float64(a_c_two_sum) * Float64(b_c_two_sum) / n_choose_two
     )
-    var max_index = (Float64(b_c_two_sum) + Float64(a_c_two_sum)) / 2.0
+    # `max_index - expected_index` in ONE rounding: `/ 2.0` is the exact
+    # `* 0.5`, which the default build fused into the subtract (lane/pinned-mul-contract-free)
+    var span = fma(Float64(b_c_two_sum) + Float64(a_c_two_sum), 0.5, -expected_index)
     var index = Float64(n_choose_two_sum)
-    if max_index - expected_index != 0.0:
-        return (index - expected_index) / (max_index - expected_index)
+    if span != 0.0:
+        return (index - expected_index) / span
     return 0.0
 
 

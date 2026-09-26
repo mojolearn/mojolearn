@@ -33,6 +33,7 @@ between calls; the binding may not, and DEVIATION 874 at that entry says
 what that costs.
 """
 
+from std.math import fma
 from max.gpu.host import DeviceContext
 
 from core.identity_trace import IdentityTrace
@@ -75,7 +76,7 @@ def percentile_linear(values: List[Float32], q: Float64) -> Float64:
     var frac = index - Float64(lo)
     var a = Float64(s[lo])
     var b = Float64(s[hi])
-    return a + (b - a) * frac
+    return fma(b - a, frac, a)  # the default build's fused op (lane/pinned-mul-contract-free)
 
 
 struct IsolationForestEstimator(Movable):
