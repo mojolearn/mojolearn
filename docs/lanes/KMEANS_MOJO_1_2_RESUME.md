@@ -54,6 +54,23 @@ toolchains (no dependence on a compiler fold).
 3. CPU column: unaffected by construction (host oracle already spells sext);
    confirm the recorded nightly CPU column = 0.8.19.
 
+## In flight (04:25 ET)
+
+- Metal: all 76 bindings built on the Mac from 0a60b76ae (nightly, -j 1,
+  private MODULAR_HOME under the worktree's .pixi), stamped; apple pass
+  running: `MOJOLEARN_COMMIT=69a519c1... verify_lanes.py --apple-pass
+  --selection trial/selection-metal.json --out
+  ~/mojolearn-evidence/kmeans-mojo-1-2/metal`. Compare against
+  `~/mojolearn-evidence/release-check/69a519c1522d/metal/column.json`.
+- CUDA: RunPod RTX 4090 pod re8o8tv6g4p228 (100-minute dead-man lease, cap
+  $6), `tools/gemm_remote_leg.sh nvidia --payload gemm` with
+  `MOJOLEARN_GEMM_LEG_EXTRA=trial/nvidia_body.sh`, out
+  `~/mojolearn-evidence/e1g/2026-09-26-kmeans-fix-nvidia`. Compare its
+  `remote/trial/cuda/column.json` against
+  `~/mojolearn-evidence/release/0.8.19/69a519c1522d/smoke-linux/remote/column.json`.
+  If this session dies: check the pod is gone (`tools/runpod_guard.sh list`),
+  the lease self-terminates at 05:34 ET.
+
 ## Spend
 
-$0.00 so far (no rental yet).
+RTX 4090 at $0.74/h from 03:54 ET (running).
