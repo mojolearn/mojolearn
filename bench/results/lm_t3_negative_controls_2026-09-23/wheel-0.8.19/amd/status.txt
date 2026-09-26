@@ -1,0 +1,13 @@
+01:06:57 controls from ckpt_00000100.blm (global step 100), arm amd, devices 0, 2 steps, wheel 0.8.19, started=2026-09-26T01:06:57Z
+01:06:58 gpu_archs=gfx942
+01:07:22 pip install mojolearn==0.8.19 exit=0 secs=24
+01:07:24 wheel: 2835939fdf8475fd8cd16a5a7cee75a29a15affd05b60f13f228c54be36460ce  /root/lm-wheel/mojolearn-0.8.19-py
+01:07:24 binding: mojolearn 0.8.19 /root/lm-venv/lib/python3.10/site-packages/mojolearn/__init__.py vendor hip set_lr True device_fold True
+01:07:50 tokens fetched exit=0 secs=26
+01:07:58 joined tokens in 8 s: 12442225788 bytes
+01:08:05 checkpoint fetched exit=0 secs=6
+01:08:12 checkpoint sha256 80cd2126a89ba6d8a444cc7c9ca61cdadb4c67090511adcb4424e06ccf45b114
+01:09:55 positive exit=0 secs=103: [01:09:55] PASS: /root/gemm_leg_out/lm-controls/positive 
+01:11:39 none exit=0 secs=104: [01:11:38] PASS: /root/gemm_leg_out/lm-controls/none 
+01:13:35 ulp exit=1 secs=116: [01:12:55] DISAGREE at step 101 on ['state_sha256', 'gradient_sha256']; the segment stops here [01:13:34] FAIL: /root/gemm_leg_out/lm-controls/ulp 
+01:13:35 finished=2026-09-26T01:13:35Z

@@ -219,7 +219,6 @@ from std.atomic import Atomic, Ordering
 from core.device_mutex import claim_device_mutex
 from std.gpu import block_dim, block_idx, grid_dim, thread_idx
 from neighbors.impl.topk.logical_warp32 import queue_any, LOGICAL32_ON64
-from std.math import sqrt
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -234,6 +233,7 @@ from checks.numerics import (
     ftz_simd,
     identical_mul_add,
     identical_mul_add_simd,
+    identical_sqrt,
 )
 from neighbors.impl.distance.detail.pairwise_distance_base import (
     launch_config_generator,
@@ -788,7 +788,13 @@ def sqrt_postprocess_kernel(
     var v = out_dists.unsafe_load(idx)
     if v < Float32(0.0):
         v = -v
-    out_dists.unsafe_store(idx, sqrt(v))
+    # `identical_sqrt` under IDENTICAL, as the tiled arm's DEVIATION 550:
+    # the stdlib `sqrt` is `sqrt.approx.ftz.f32` in NVIDIA PTX (DEVIATION
+    # 258: 180,714 of 2^20 inputs one ulp off). AUTO never takes this arm
+    # under IDENTICAL (row 23), so no shipped IDENTICAL result moves; an
+    # explicit KNN_METHOD_FUSED no longer carries an approximate sqrt. FAST
+    # keeps the stdlib spelling (both helpers are identities there).
+    out_dists.unsafe_store(idx, ftz(identical_sqrt(v)))
 
 
 def fused_l2_knn_grid(n_queries: Int, n_index: Int) raises -> Tuple[Int, Int]:
