@@ -30,7 +30,9 @@ export MOJOLEARN_GPU_ARCHS MOJOLEARN_TARGET_COLUMN
 export MOJOLEARN_NUMERIC_MODE=identical PYTHONPATH="$ROOT/python:$ROOT"
 say() { echo "[$(date -u +%H:%M:%S)] $*" | tee -a "$O/status.txt"; }
 say "column=$col arch=$MOJOLEARN_GPU_ARCHS"
+STEP_ONLY=${MOJOLEARN_XVENDOR_STEP_ONLY:-0}
 checks="gemm_backward_check gemm_workspace_check"
+[ "$STEP_ONLY" = 1 ] && checks=""
 [ "$col" = amd ] && checks="gemm_device_check $checks"
 for c in $checks; do
     if [ "$c" = gemm_workspace_check ]; then
@@ -42,6 +44,7 @@ for c in $checks; do
     fi
     say "$c exit=$? $(grep -E 'all green|PASS|FAIL' "$O/$c.log" | tail -1 | cut -c1-160)"
 done
+if [ "$STEP_ONLY" != 1 ]; then
 pixi run mojo build -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D "$D" --target-accelerator "$MOJOLEARN_GPU_ARCHS" \
     -I . bench/gemm_excp_ab_main.mojo -o /root/ab > "$O/ab.build.log" 2>&1
 say "ab build exit=$?"
@@ -50,6 +53,10 @@ say "ab kinds5 exit=$? lines=$(grep -c '^EXCP_AB call' "$O/ab.kinds5.log")"
 MOJOLEARN_EXCP_AB_KINDS=tiny MOJOLEARN_EXCP_AB_CALLS=proj_fwd,proj_dA,proj_dB,down_fwd MOJOLEARN_EXCP_AB_ROUNDS=1 \
     /root/ab > "$O/ab.tiny.log" 2>&1
 say "ab tiny exit=$? lines=$(grep -c '^EXCP_AB call' "$O/ab.tiny.log")"
+fi
+# The step probe loads the base binding too (all_finite_f32 and friends).
+MOJOLEARN_NUMERIC_MODE=identical sh bindings/build.sh > "$O/base.build.log" 2>&1
+say "base build exit=$?"
 rm -f python/mojolearn/identical/_mojolearn_byte_lm.so
 sh bindings/build_byte_lm.sh > "$O/byte_lm.build.log" 2>&1
 say "byte_lm build exit=$?"
