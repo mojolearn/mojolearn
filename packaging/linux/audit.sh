@@ -87,10 +87,23 @@ docker run --rm --cpus 2 --platform linux/amd64 \
 PLAT=$(grep -oE 'manylinux_[0-9]+_[0-9]+_x86_64' "$OUT/show$SUFFIX.txt" | sort -u | tail -1 || true)
 [ -n "$PLAT" ] || { echo "auditwheel show named no manylinux tag; read $OUT/show$SUFFIX.txt"; exit 1; }
 echo "measured platform tag: $PLAT"
+# ONE TAG FOR THE SPLIT SET (0.8.21, 2026-09-26). A plugin carries only GPU
+# sets, which need an older glibc than the core's host bindings: auditwheel
+# measured manylinux_2_34 for both plugins and, asked for 2_35, wrote BOTH tags
+# (`...manylinux_2_34_x86_64.manylinux_2_35_x86_64`), and split_audit refused
+# the set. A plugin cannot run without the core, so it takes the core's tag
+# (read from the core wheel beside it), and every repair is --only-plat: the
+# tag written is exactly the one asked for.
+if [ -n "$SUFFIX" ]; then
+  CPLAT=$(basename "$CORE" .whl | awk -F- '{print $NF}')
+  case "$CPLAT" in manylinux_*_x86_64) ;; *) echo "the core $(basename "$CORE") carries no single manylinux tag ($CPLAT)"; exit 1 ;; esac
+  echo "plugin: the core's platform tag $CPLAT (measured $PLAT)"
+  PLAT=$CPLAT
+fi
 
 docker run --rm --cpus 2 --platform linux/amd64 \
   -v "$WHLABS:/w/$(basename "$WHL"):ro" -v "$OUT:/out" "$IMAGE" \
-  sh -c "auditwheel repair --plat $PLAT $EXARGS -w /out/repaired /w/$(basename "$WHL")" 2>&1 | tee "$OUT/repair$SUFFIX.txt"
+  sh -c "auditwheel repair --only-plat --plat $PLAT $EXARGS -w /out/repaired /w/$(basename "$WHL")" 2>&1 | tee "$OUT/repair$SUFFIX.txt"
 ls -la "$OUT/repaired"
 set -- "$OUT"/repaired/"$DIST"-*.whl
 [ -f "$1" ] || { echo "auditwheel repair left no $DIST wheel in $OUT/repaired; read $OUT/repair$SUFFIX.txt"; exit 1; }
