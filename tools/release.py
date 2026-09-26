@@ -2001,7 +2001,11 @@ class Release:
         missing = [str(r) for r in self.column_refs() if not r.is_file()]
         if missing:
             raise StepFailed("no reference column " + ", ".join(missing) + "; run release-check")
-        verdict = self.joint_diff([col for _, _, col in passed])
+        # Name only the columns that PASSED: 0.8.22 printed "NVIDIA and AMD
+        # columns PASSED" with the AMD column never run (no MI300X anywhere).
+        label = " and ".join({"nvidia": "NVIDIA", "amd": "AMD"}.get(n, n) for n, _, _ in passed) \
+            + (" column" if len(passed) == 1 else " columns")
+        verdict = self.joint_diff([col for _, _, col in passed], passed=label)
         return verdict + " (columns " + ", ".join(n for n, _, _ in passed) + ")"
 
     def run_columns(self, names):
@@ -2070,7 +2074,7 @@ class Release:
                                                 for l in legs))
             self.sleep(60)
 
-    def joint_diff(self, columns=None):
+    def joint_diff(self, columns=None, passed="NVIDIA and AMD columns"):
         """Every column of this release in ONE tools/identity_break.py --diff:
         Apple, NVIDIA, AMD (and CPU with --cpu-column). Any DIVERGENT or MOVED
         cell stops the release; the diff is kept at <release>/diff-columns.txt.
@@ -2086,7 +2090,7 @@ class Release:
         got = subprocess.run(cmd, capture_output=True, text=True, cwd=ROOT)
         text = got.stdout + got.stderr
         path.write_text(text)
-        return judge_joint_diff(text, path, say=self.say)
+        return judge_joint_diff(text, path, say=self.say, passed=passed)
 
     # ------------------------------------------------------------ publication
     def on_pypi(self, wheel):
@@ -2647,7 +2651,7 @@ class Release:
         return 0
 
 
-def judge_joint_diff(text, path, say=print):
+def judge_joint_diff(text, path, say=print, passed="NVIDIA and AMD columns"):
     """The verdict of the all-columns diff: a StepFailed on any DIVERGENT or
     MOVED cell (any part), else a one-line summary. Cells only one column
     hashed (a lane one vendor alone selects or can run) are counted in the
@@ -2669,7 +2673,7 @@ def judge_joint_diff(text, path, say=print):
                          + "\n  ".join(rows))
     if "summary:" not in text:
         raise StepFailed(f"the all-columns diff printed no summary; see {path}")
-    return (f"NVIDIA and AMD columns PASSED; no DIVERGENT cell across the columns ({path})"
+    return (f"{passed} PASSED; no DIVERGENT cell across the columns ({path})"
             + (f"; {one} cell(s) hashed by one column only" if one else ""))
 
 
