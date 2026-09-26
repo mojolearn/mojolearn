@@ -152,6 +152,31 @@ class HotaisleRental(Base):
         self.assertEqual(seen, ['tools/hotaisle_leg.sh', 'tools/do_extra_leg.sh'])
         self.assertEqual(got[1], 0)
 
+    def test_hotaisle_specs_fall_back_to_one_gpu(self):
+        seen = []
+
+        def fake_run(cmd, cwd=None, env=None, stdout=None, stderr=None, check=None):
+            if cmd[0] == 'bash':
+                seen.append((cmd, env))
+                if env.get('MOJOLEARN_HOTAISLE_SPEC') == '2gpu':
+                    stdout.write('REFUSED: the 2gpu 2x MI300X spec showed no stock for 5 minutes. Nothing was created.\n')
+                    stdout.flush()
+                    return mock.Mock(returncode=3)
+            return mock.Mock(returncode=0)
+
+        spec = self.load(_spec(b1=dict(provider='hotaisle', lease_minutes=600), hotaisle_specs=['2gpu', '13core']))
+        with mock.patch.object(drv.subprocess, 'run', side_effect=fake_run):
+            got = drv._start(spec, _entry(spec, 'B/1'), self.out, self.ledger)
+        (a, ea), (b, eb) = seen
+        self.assertIn('--one-body', a)
+        self.assertEqual(ea['MOJOLEARN_GEMM_LEG_EXTRA'], str(self.out / 'bodies' / 'B-1-hotaisle.sh'))
+        self.assertNotIn('--one-body', b)
+        self.assertEqual(b[b.index('--spec') + 1], '13core')
+        self.assertEqual(eb['MOJOLEARN_HOTAISLE_SPEC'], '13core')
+        # the spec-wide body renders device 0, the one GPU of the 1x VM
+        self.assertEqual(eb['MOJOLEARN_GEMM_LEG_EXTRA'], str(self.out / 'bodies' / 'B-1.sh'))
+        self.assertEqual(got, (self.out / 'legs' / 'B-1' / 'leg-hotaisle-13core-1', 0))
+
     def test_a_hotaisle_failure_that_is_not_busy_is_returned(self):
         spec = self.load(_spec(b1=dict(provider='hotaisle')))
         (res, rc), calls = self._start(spec, 'B/1', returncode=6,
