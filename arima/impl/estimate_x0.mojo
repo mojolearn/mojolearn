@@ -87,11 +87,23 @@ from arima.impl.linalg.batched.least_squares import (
 )
 from arima.impl.timeSeries.jones_transform import JONES_MAX_PARAMS
 from arima.impl.tsa.arima_common import ARIMAOrder, ARIMAParams, validate_order
-from checks.numerics import ftz, identical_mul_add
+from arima.impl.fast_arma_ls import FLS_MAX_COLS, FLS_TPB, fast_arma_ls_kernel
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
 from tsa.impl.timeSeries.arima_helpers import prepare_data
 
 
 comptime X0_TPB = 128
+
+comptime X0_FAST_LS = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_X0_FAST_LS_OFF"]()
+)
+"""FAST on Apple: long series solve the start-parameter least squares with
+a threadgroup per series (`fast_arma_ls.mojo`) instead of one thread."""
+comptime X0_FAST_LS_MIN_OBS = 2048
 
 # `x0.invparams` decision bits, one byte per series per call.
 comptime INVP_AR_TESTED = 1
@@ -434,6 +446,56 @@ def arma_least_squares_kernel(
     verdict.unsafe_store(bid, UInt8(v))
 
 
+def fast_ls_finish_kernel(
+    d_ar: MutPointer[Float32, MutAnyOrigin],
+    d_ma: MutPointer[Float32, MutAnyOrigin],
+    d_sigma2: MutPointer[Float32, MutAnyOrigin],
+    d_mu: MutPointer[Float32, MutAnyOrigin],
+    info: MutPointer[Int32, MutAnyOrigin],
+    verdict: MutPointer[UInt8, MutAnyOrigin],
+    batch_size_in: Int32,
+    p_in: Int32,
+    q_in: Int32,
+    k_in: Int32,
+    est_sigma2_in: Int32,
+):
+    """Steps 8 and the refusal fill of `arma_least_squares_kernel` after
+    `fast_arma_ls_kernel`: a refused series takes the degenerate values, a
+    solved one is tested by `test_invparams`."""
+    var bid = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if bid >= Int(batch_size_in):
+        return
+    var p = Int(p_in)
+    var q = Int(q_in)
+    if info[bid] != 0:
+        if k_in != 0:
+            d_mu[bid] = 0.0
+        for i in range(p):
+            d_ar[p * bid + i] = 0.0
+        for i in range(q):
+            d_ma[q * bid + i] = 0.0
+        if est_sigma2_in != 0:
+            d_sigma2[bid] = 1.0
+        verdict[bid] = 0
+        return
+    var v = 0
+    if p != 0:
+        v += INVP_AR_TESTED
+        if test_invparams(d_ar, p * bid, p, True):
+            v += INVP_AR_VALID
+        else:
+            for ip in range(p):
+                d_ar[p * bid + ip] = 0.0
+    if q != 0:
+        v += INVP_MA_TESTED
+        if test_invparams(d_ma, q * bid, q, False):
+            v += INVP_MA_VALID
+        else:
+            for iq in range(q):
+                d_ma[q * bid + iq] = 0.0
+    verdict[bid] = UInt8(v)
+
+
 @fieldwise_init
 struct LeastSquaresResult(Movable):
     """What `arma_least_squares` decided, for the card and the gates.
@@ -503,6 +565,31 @@ def arma_least_squares(
             + " columns, above LS_MAX_COLS = " + String(LS_MAX_COLS)
             + "; refused by name (arima/NOT_IMPLEMENTED.tsv)"
         )
+
+    comptime if X0_FAST_LS:
+        if (
+            n_obs_d >= X0_FAST_LS_MIN_OBS
+            and p + q + k <= FLS_MAX_COLS
+            and (q == 0 or p_ar <= FLS_MAX_COLS)
+        ):
+            ctx.enqueue_function[fast_arma_ls_kernel](
+                d_y.unsafe_ptr(), d_ar.unsafe_ptr(), d_ma.unsafe_ptr(),
+                d_sigma2.unsafe_ptr(), d_mu.unsafe_ptr(), info.unsafe_ptr(),
+                Int32(n_obs_d), Int32(p), Int32(q), Int32(s), Int32(k),
+                Int32(p_ar), Int32(r_ls), Int32(1 if estimate_sigma2 else 0),
+                grid_dim=(batch_size, 1, 1), block_dim=(FLS_TPB, 1, 1),
+            )
+            ctx.enqueue_function[fast_ls_finish_kernel](
+                d_ar.unsafe_ptr(), d_ma.unsafe_ptr(), d_sigma2.unsafe_ptr(),
+                d_mu.unsafe_ptr(), info.unsafe_ptr(), verdict.unsafe_ptr(),
+                Int32(batch_size), Int32(p), Int32(q), Int32(k),
+                Int32(1 if estimate_sigma2 else 0),
+                grid_dim=(grid, 1, 1), block_dim=(X0_TPB, 1, 1),
+            )
+            ctx.synchronize()
+            return LeastSquaresResult(
+                info=info^, verdict=verdict^, degenerate=False
+            )
 
     var per = ls_off(SL_COUNT, n_obs_d, p, q, s, k)
     var scratch = ctx.enqueue_create_buffer[DType.float32](max(1, per * batch_size))
