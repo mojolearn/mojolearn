@@ -322,3 +322,70 @@ class ReleaseCheck(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class MacCrossCheck(unittest.TestCase):
+    """publish-macos diffs the Apple column against the previous release's
+    recorded NVIDIA and AMD columns first (seconds, nothing rented)."""
+
+    def setUp(self):
+        self._t = tempfile.TemporaryDirectory()
+        self.tmp = pathlib.Path(self._t.name)
+        self._env = mock.patch.dict(os.environ, MOJOLEARN_RELEASE_CHECK_DIR=str(self.tmp / "release-check"),
+                                    MOJOLEARN_EVIDENCE_ROOT=str(self.tmp / "evidence"))
+        self._env.start()
+
+    def tearDown(self):
+        self._env.stop()
+        self._t.cleanup()
+
+    def release(self, apple="aaaa", previous=("aaaa", "aaaa"), **kw):
+        r = release.Release(args(version="0.8.14", state_dir=str(self.tmp / "evidence" / "release" / "0.8.14"),
+                                 **kw), runner=lambda *a, **k: 0)
+        r.state["commit"] = COMMIT
+        r.lines = []
+        r.say = r.lines.append
+        d = self.tmp / "release-check" / COMMIT[:12] / "metal"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "column.json").write_text(json.dumps(column("apple-m4", apple)))
+        if previous:
+            prev = self.tmp / "evidence" / "release" / "0.8.13" / "bbbbbbbbbbbb"
+            for sub, vendor, h in (("smoke-linux", "cuda", previous[0]), ("column-amd", "hip", previous[1])):
+                (prev / sub).mkdir(parents=True, exist_ok=True)
+                (prev / sub / f"column-{vendor}.json").write_text(json.dumps(column(vendor, h)))
+        return r
+
+    def test_equal_bits_pass_and_name_the_release(self):
+        out = self.release().mac_cross_check()
+        self.assertIn("PASSED", out)
+        self.assertIn("0.8.13", out)
+
+    def test_a_divergent_cell_holds_the_macos_publish(self):
+        r = self.release(previous=("aaaa", "bbbb"))
+        with self.assertRaises(release.StepFailed) as cm:
+            r.mac_cross_check()
+        self.assertIn("macOS publish is held", str(cm.exception))
+        self.assertIn("rf-clf/base", str(cm.exception))
+        with self.assertRaises(release.StepFailed):
+            self.release(apple="cccc").mac_cross_check()
+
+    def test_accept_moved_lets_a_deliberate_change_through(self):
+        out = self.release(apple="cccc", accept_moved=True).mac_cross_check()
+        self.assertIn("accepted (--accept-moved)", out)
+
+    def test_no_earlier_columns_is_said_not_held(self):
+        out = self.release(previous=None).mac_cross_check()
+        self.assertIn("not compared", out)
+
+    def test_only_an_earlier_version_is_a_reference(self):
+        r = self.release(previous=None)
+        later = self.tmp / "evidence" / "release" / "0.8.15" / "dddddddddddd"
+        for sub, vendor in (("smoke-linux", "cuda"), ("column-amd", "hip")):
+            (later / sub).mkdir(parents=True)
+            (later / sub / f"column-{vendor}.json").write_text(json.dumps(column(vendor, "zzzz")))
+        self.assertEqual(r.previous_gpu_columns(), [])
+
+    def test_the_flag_parses(self):
+        with mock.patch.object(release.Release, "go", lambda self: self.args):
+            self.assertFalse(release.main(["0.8.14"]).accept_moved)
+            self.assertTrue(release.main(["0.8.14", "--accept-moved"]).accept_moved)
