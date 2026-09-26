@@ -48,7 +48,7 @@ tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/mojolearn-preprocessing.XXXXXX")
 trap 'rm -rf "$tmpdir"' EXIT INT TERM
 out=$tmpdir/_mojolearn_preprocessing.so
 # Intentionally split compiler option lists, consistent with existing builders.
-pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib \
+pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} \
     $target_flags $link_flags $mode_flags $column_flags -I . -I bindings \
     bindings/_mojolearn_preprocessing.mojo -o "$out"
 # The gate below needs NumPy in the gating interpreter, which a fresh Linux
