@@ -2,6 +2,11 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
+## 0.8.22 (published 2026-09-26)
+
+### Changed
+- The first release of the split Linux packages described under 0.8.21 (`mojolearn`, `mojolearn-nvidia`, `mojolearn-amd`; `pip install mojolearn` installs all three). 0.8.21 published the macOS wheel only: its Linux set was refused before upload because the two plugins carried two platform tags (`manylinux_2_34` and `manylinux_2_35`) and the core one. All three now carry the core's `manylinux_2_35_x86_64` alone (`packaging/linux/audit.sh`). No native library changed from 0.8.21.
+
 ## 0.8.21 (published 2026-09-26)
 
 ### Changed
