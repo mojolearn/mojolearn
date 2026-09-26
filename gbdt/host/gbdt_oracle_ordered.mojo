@@ -1155,8 +1155,9 @@ def _ordered_estimate_and_apply(
     # `_ordered_apply_kernel` over every apply position
     for i in range(apply_size):
         var leaf = bins[permutation[i]]
-        var scaled = identical_mul(leaves[leaf], rate)
-        cursor[i] = identical_mul_add(scaled, Float32(1), cursor[i])
+        # ONE fma, as 0.8.19 computed it (the old pin fused `leaf * rate`
+        # into this add); dynamic_boosting.mojo's kernel says why (lane/pinned-mul-contract-free)
+        cursor[i] = identical_mul_add(leaves[leaf], rate, cursor[i])
     return leaves^
 
 
@@ -1562,8 +1563,9 @@ def _ordered_task_host(
     )
     for i in range(apply_size):
         var leaf = bins[permutation[i]]
-        var scaled = identical_mul(leaves[leaf], rate)
-        cursor[i] = identical_mul_add(scaled, Float32(1), cursor[i])
+        # ONE fma, as 0.8.19 computed it (the old pin fused `leaf * rate`
+        # into this add); dynamic_boosting.mojo's kernel says why (lane/pinned-mul-contract-free)
+        cursor[i] = identical_mul_add(leaves[leaf], rate, cursor[i])
     return leaves^
 
 
