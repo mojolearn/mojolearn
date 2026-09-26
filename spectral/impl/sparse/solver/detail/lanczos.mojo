@@ -166,7 +166,11 @@ from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace
-from gemm.checks.gemm_identical import identical_gemm
+from gemm.checks.gemm_identical import (
+    identical_gemm,
+    identical_gemm_into,
+    identical_gemm_workspace_max_floats,
+)
 from gemm.checks.gemm_oracle import OP_NT, OP_TN, gemm_oracle
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
@@ -1040,6 +1044,217 @@ def lanczos_restart_fast(
     _ = dev^
     _ = h^
 
+# ---------------------------------------------------------------------------
+# IDENTICAL on Apple: the pinned step without the host round trips.
+# ---------------------------------------------------------------------------
+
+
+#: IDENTICAL on Apple (untraced): `lanczos_aux` with alpha / beta in device
+#: arrays and every reduction still the pinned `identical_gemm` (through
+#: `identical_gemm_into` on one caller-owned workspace). The host scalar
+#: seams (`alpha + uu_i`, the clamps, `identical_sqrt`, the normalize's
+#: zero test) run as one-thread kernels on the same words, so the arithmetic
+#: is the pinned step's; only the per-step waits and read-backs are gone.
+#: `-D MOJOLEARN_LANCZOS_ID_DEV_OFF` keeps the host-driven step.
+comptime LANCZOS_ID_DEV = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_LANCZOS_ID_DEV_OFF"]()
+)
+
+
+def id_axpy_dev_kernel(
+    y: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    a_ptr: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """`axpy_kernel` with `a` read from a device scalar."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_in):
+        return
+    var a = a_ptr.unsafe_load(0)
+    y.unsafe_store(i, ftz(identical_mul_add(a, x.unsafe_load(i), y.unsafe_load(i))))
+
+
+def id_alpha_finish_kernel(
+    dot: MutPointer[Float32, MutAnyOrigin],
+    uu: MutPointer[Float32, MutAnyOrigin],
+    d_alpha: MutPointer[Float32, MutAnyOrigin],
+    i_in: Int32,
+):
+    """The host's `alpha_i = clamp_down(ftz(alpha_i + uu_i), 1e-9)`."""
+    if Int(thread_idx.x) != 0 or Int(block_idx.x) != 0:
+        return
+    var i = Int(i_in)
+    var a = ftz(dot.unsafe_load(0) + uu.unsafe_load(i))
+    d_alpha.unsafe_store(i, clamp_down(a, LANCZOS_ALPHA_CLAMP))
+
+
+def id_beta_finish_kernel(
+    sq: MutPointer[Float32, MutAnyOrigin],
+    d_beta: MutPointer[Float32, MutAnyOrigin],
+    i_in: Int32,
+):
+    """The host's `beta_i = clamp_down(ftz(sqrt(||u||^2)), 1e-6)`."""
+    if Int(thread_idx.x) != 0 or Int(block_idx.x) != 0:
+        return
+    var b = ftz(_host_sqrt(sq.unsafe_load(0)))
+    d_beta.unsafe_store(Int(i_in), clamp_down(b, LANCZOS_BETA_CLAMP))
+
+
+def id_normalize_dev_kernel(
+    u: MutPointer[Float32, MutAnyOrigin],
+    beta_ptr: MutPointer[Float32, MutAnyOrigin],
+    v: MutPointer[Float32, MutAnyOrigin],
+    v_next: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """`kernel_normalize` with `beta[j]` read from a device scalar."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i >= Int(n_in):
+        return
+    var beta_j = beta_ptr.unsafe_load(0)
+    var val: Float32
+    if beta_j == Float32(0.0):
+        val = ftz(u.unsafe_load(i) / Float32(1.0))
+    else:
+        val = ftz(u.unsafe_load(i) / beta_j)
+    v.unsafe_store(i, val)
+    v_next.unsafe_store(i, val)
+
+
+def lanczos_aux_identical_dev(
+    ctx: DeviceContext,
+    mut A: DeviceCoo,
+    mut V: DeviceBuffer[DType.float32],
+    mut u: DeviceBuffer[DType.float32],
+    mut alpha: List[Float32],
+    mut beta: List[Float32],
+    start_idx: Int,
+    end_idx: Int,
+    ncv: Int,
+    mut v: DeviceBuffer[DType.float32],
+    mut uu: DeviceBuffer[DType.float32],
+    mut vv: DeviceBuffer[DType.float32],
+    mut tmp: DeviceBuffer[DType.float32],
+    mut trace: IdentityTrace,
+    mut step: Int,
+    tpb: Int,
+) raises:
+    """`lanczos_aux` (LANCZOS_ID_DEV): the pinned step, enqueued end to end.
+    The card's per-step alpha / beta records are written after the one
+    read-back, in step order, so a traced run exercises this path too."""
+    var n = A.n
+    var step0 = step
+    var nws = identical_gemm_workspace_max_floats(1, 1, n)
+    for i in range(start_idx, end_idx):
+        nws = max(nws, identical_gemm_workspace_max_floats(i + 1, 1, n))
+        nws = max(nws, identical_gemm_workspace_max_floats(n, 1, i + 1))
+    var ws = ctx.enqueue_create_buffer[DType.float32](max(nws, 1))
+    var d_alpha = ctx.enqueue_create_buffer[DType.float32](ncv)
+    var d_beta = ctx.enqueue_create_buffer[DType.float32](ncv)
+    var h_ab = ctx.enqueue_create_host_buffer[DType.float32](2 * ncv)
+    var scal = ctx.enqueue_create_buffer[DType.float32](2)
+    ctx.synchronize()
+    for j in range(ncv):
+        h_ab.unsafe_ptr().unsafe_store(j, alpha[j])
+        h_ab.unsafe_ptr().unsafe_store(ncv + j, beta[j])
+    ctx.enqueue_copy(dst_buf=d_alpha, src_ptr=h_ab.unsafe_ptr())
+    ctx.enqueue_copy(dst_buf=d_beta, src_ptr=h_ab.unsafe_ptr() + ncv)
+    var dot_c = scal.create_sub_buffer[DType.float32](0, 1)
+    var sq_c = scal.create_sub_buffer[DType.float32](1, 1)
+    # `identical_gemm_into` takes `a` and `b` mutably: the norm's second
+    # operand is a view of `u`.
+    var uv = u.create_sub_buffer[DType.float32](0, n)
+    var g = _grid(n, tpb)
+    ctx.enqueue_function[copy_kernel](
+        v.unsafe_ptr(),
+        V.unsafe_ptr().unsafe_offset(start_idx * n),
+        Int32(n),
+        grid_dim=(g, 1, 1),
+        block_dim=(tpb, 1, 1),
+    )
+    for i in range(start_idx, end_idx):
+        ctx.enqueue_function[spmv_kernel](
+            u.unsafe_ptr(),
+            A.indptr.unsafe_ptr(),
+            A.cols.unsafe_ptr(),
+            A.vals.unsafe_ptr(),
+            v.unsafe_ptr(),
+            Int32(n),
+            grid_dim=(g, 1, 1),
+            block_dim=(tpb, 1, 1),
+        )
+        identical_gemm_into(ctx, dot_c, v, u, ws, 1, 1, n, OP_NT)
+        ctx.enqueue_function[fill_zero_kernel](
+            vv.unsafe_ptr(), Int32(n), grid_dim=(g, 1, 1), block_dim=(tpb, 1, 1)
+        )
+        var prev = (i - 1 + ncv) % ncv
+        ctx.enqueue_function[id_axpy_dev_kernel](
+            vv.unsafe_ptr(), v.unsafe_ptr(), scal.unsafe_ptr(), Int32(n),
+            grid_dim=(g, 1, 1), block_dim=(tpb, 1, 1),
+        )
+        ctx.enqueue_function[id_axpy_dev_kernel](
+            vv.unsafe_ptr(),
+            V.unsafe_ptr().unsafe_offset(prev * n),
+            d_beta.unsafe_ptr().unsafe_offset(prev),
+            Int32(n),
+            grid_dim=(g, 1, 1), block_dim=(tpb, 1, 1),
+        )
+        ctx.enqueue_function[axpy_kernel](
+            u.unsafe_ptr(), vv.unsafe_ptr(), Float32(-1.0), Int32(n),
+            grid_dim=(g, 1, 1), block_dim=(tpb, 1, 1),
+        )
+        identical_gemm_into(ctx, uu, V, u, ws, i + 1, 1, n, OP_NT)
+        identical_gemm_into(ctx, tmp, V, uu, ws, n, 1, i + 1, OP_TN)
+        ctx.enqueue_function[sub_kernel](
+            u.unsafe_ptr(), tmp.unsafe_ptr(), Int32(n),
+            grid_dim=(g, 1, 1), block_dim=(tpb, 1, 1),
+        )
+        ctx.enqueue_function[id_alpha_finish_kernel](
+            scal.unsafe_ptr(), uu.unsafe_ptr(), d_alpha.unsafe_ptr(), Int32(i),
+            grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
+        )
+        # beta_i = ||u|| BEFORE the clamp of u.
+        identical_gemm_into(ctx, sq_c, u, uv, ws, 1, 1, n, OP_NT)
+        ctx.enqueue_function[clamp_down_vector_kernel](
+            u.unsafe_ptr(), LANCZOS_U_CLAMP, Int32(n),
+            grid_dim=(g, 1, 1), block_dim=(tpb, 1, 1),
+        )
+        ctx.enqueue_function[id_beta_finish_kernel](
+            scal.unsafe_ptr().unsafe_offset(1), d_beta.unsafe_ptr(), Int32(i),
+            grid_dim=(1, 1, 1), block_dim=(1, 1, 1),
+        )
+        step += 1
+        if i >= end_idx - 1:
+            break
+        ctx.enqueue_function[id_normalize_dev_kernel](
+            u.unsafe_ptr(),
+            d_beta.unsafe_ptr().unsafe_offset(i),
+            v.unsafe_ptr(),
+            V.unsafe_ptr().unsafe_offset((i + 1) * n),
+            Int32(n),
+            grid_dim=(g, 1, 1),
+            block_dim=(tpb, 1, 1),
+        )
+    ctx.enqueue_copy(dst_ptr=h_ab.unsafe_ptr(), src_buf=d_alpha)
+    ctx.enqueue_copy(dst_ptr=h_ab.unsafe_ptr() + ncv, src_buf=d_beta)
+    ctx.synchronize()
+    for j in range(start_idx, end_idx):
+        alpha[j] = h_ab.unsafe_ptr().unsafe_load(j)
+        beta[j] = h_ab.unsafe_ptr().unsafe_load(ncv + j)
+        trace.record_scalar_f32(_step_tag(step0 + j - start_idx, "alpha"), alpha[j])
+        trace.record_scalar_f32(_step_tag(step0 + j - start_idx, "beta"), beta[j])
+    _ = uv^
+    _ = dot_c^
+    _ = sq_c^
+    _ = scal^
+    _ = ws^
+    _ = d_alpha^
+    _ = d_beta^
+    _ = h_ab^
+
 
 def lanczos_aux(
     ctx: DeviceContext,
@@ -1067,6 +1282,12 @@ def lanczos_aux(
                 ctx, A, V, u, alpha, beta, start_idx, end_idx, ncv, v, step, tpb
             )
             return
+    comptime if LANCZOS_ID_DEV:
+        lanczos_aux_identical_dev(
+            ctx, A, V, u, alpha, beta, start_idx, end_idx, ncv, v, uu, vv,
+            tmp, trace, step, tpb,
+        )
+        return
     var n = A.n
     # raft::copy(v, V[start_idx])  (:279-280)
     ctx.enqueue_function[copy_kernel](
