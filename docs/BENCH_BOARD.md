@@ -8,14 +8,17 @@ full contract. In short:
 
 | box | modes | opponents |
 |---|---|---|
-| Apple (Metal) | `fast` and `identical`, interleaved in one race | CatBoost, XGBoost, LightGBM, scikit-learn on the CPU; torch on MPS (classical) |
+| Apple (Metal) | `fast` and `identical`, interleaved in one race (trees, classical); `identical` only (neural) | CatBoost, XGBoost, LightGBM, scikit-learn on the CPU; torch on MPS (classical, neural) |
 | NVIDIA | `identical` | CatBoost, XGBoost and LightGBM GPU arms, cuML, torch CUDA (the rosters of `tools/bench_all_ours.sh`) |
 | AMD | `identical` | XGBoost ROCm where the image has it, otherwise the CPU learners on all cores; torch ROCm |
 
 - Families: trees (`gbdt-symmetric`, `gbdt-depthwise`, `gbdt-lossguide`, `rf`,
   `et`, `iforest`) and classical (`kmeans`, `pca`, `ols`, `knn`, `kde`, `svc`,
-  `dbscan`, `hdbscan`) on taxi and Istella-S. Neural and GEMM lanes are not covered yet.
-  Their drivers time Mojo binaries built from source, not the wheel.
+  `dbscan`, `hdbscan`) on taxi and Istella-S, and neural (`lm-train-step`,
+  `lm-forward`, `gemm`) on inputs the driver builds from seed 7.
+- Neural is `identical` only on every vendor, because the wheel builds its
+  neural surface in that tier only. `--modes fast` with the neural family is
+  refused by name; a FAST-only Apple run passes `--families trees,classical`.
 - One seed (7). Five timed rounds after one warm-up (`--rounds`).
 - Output: one directory with `board.json` (box fingerprint and every cell) and
   `BOARD.md`. Bulky state (venv, wheel download, classical blocks) goes in
@@ -25,10 +28,47 @@ full contract. In short:
   different wheel is refused.
 - Data is never downloaded. taxi and Istella-S come from R2
   (`docs/REMOTE_DATA_R2.md`). Without them the script refuses and prints the
-  staging command.
+  staging command. A neural-only run (`--families neural`) needs no dataset.
 - Always check the plan first: `python3 tools/bench_board.py --dry-run
-  --vendor apple` (or `nvidia`, `amd`). The current plan has 26 races on
-  every vendor. That comes to 94 cells on Apple, 68 on NVIDIA and 74 on AMD.
+  --vendor apple` (or `nvidia`, `amd`). The current plan has 31 races on
+  every vendor (3 of them neural, 2 cells each). That comes to 106 cells on
+  Apple, 78 on NVIDIA and 84 on AMD.
+
+## The neural family
+
+`tools/bench_board_neural.py` times the wheel's public Python API against torch
+on the same GPU (MPS on Apple, CUDA on NVIDIA, ROCm on AMD). The torch arm,
+`torch-eager-fp32`, is torch eager in float32 with TF32 off. That is the
+`eager_fp32` column of `tools/torch_lm_step_opponent.py`, which the repo
+treats as the opponent's fast setting at our precision. Its compile, TF32 and
+bf16 columns are not raced here.
+
+| lane | ours | torch | clock (both sides) | quality |
+|---|---|---|---|---|
+| `lm-train-step` | `LanguageModelTrainer(resident=True, step_result='lean').train_step(ids)` | the twin model of `tools/torch_lm_step_opponent.py`; forward, mean cross entropy, backward, `torch.optim.AdamW`, `loss.item()` | ids to the device, one full step, the loss back on the host | `loss_first_step`, `loss_last_step`, and `loss_last_abs_diff_vs_ours` on torch |
+| `lm-forward` | `LanguageModelTrainer(resident=True).logits(ids)` | the same twin under `no_grad`, logits to the host | ids to the device, the forward, float32 logits back on the host | `mean_nll`, and `max_abs_diff_vs_ours` (logits) on torch |
+| `gemm` | `mojolearn.linalg.matmul(a, b)` | `a.to(dev) @ b.to(dev)`, `.cpu()` | both operands to the device, the product, C back on the host | `max_rel_err_vs_fp64`, and `max_abs_diff_vs_ours` on torch |
+
+Both LM arms start from the same parameters (`default_rng(7).normal(0, .02)`,
++1 on every norm) and read the same batches, so their losses and logits are
+comparable. The byte stream is the installed mojolearn package's own `.py`
+sources, sorted and concatenated, and its sha256 is recorded. Training
+continues across rounds, so round r is step r + 1 on both sides. AdamW uses
+the trainer defaults (lr 1e-3, betas 0.9 and 0.999, eps 1e-8, weight decay
+0.01) on both sides.
+
+`--neural-shape full` (the default) is the 20,453,376-parameter control shape
+of `tools/torch_lm_step_opponent.py` (batch 1, length 2048, d_model 384, 6
+heads, head_dim 64, intermediate 1024, 8 layers, vocab 8192) and a 4096 cube
+GEMM. It was chosen to fit a 16 GB Apple M4 beside torch (the parameters
+and both Adam moments are about 250 MB per side); it has not yet been run at
+that size on the Mac. The GPT-3-small target shape (162 M parameters, vocab
+50257) is left off the board. `--neural-shape small` is a plumbing smoke (batch 2, length 64,
+d_model 64, 2 layers, vocab 256; a 256 cube GEMM), and the board says SMOKE.
+`--rows` does not apply to neural lanes.
+
+Not covered yet: the Mamba blocks, `TransformerBlock` on its own, `SambaStack`
+and `SmallMLPTrainer`.
 
 ## Remote Mac (Apple Metal)
 
@@ -112,6 +152,7 @@ Values contain no spaces, and lists are separated by commas.
 | `MOJOLEARN_BOARD_VERSION` | the mojolearn version to install (required) |
 | `MOJOLEARN_BOARD_ROWS` | row cap for a smoke run; the board is then marked SMOKE |
 | `MOJOLEARN_BOARD_LANES` / `_FAMILIES` / `_DATASETS` / `_ROUNDS` | narrow the plan |
+| `MOJOLEARN_BOARD_NEURAL_SHAPE` | `full` (default) or `small` for a neural smoke |
 | `MOJOLEARN_BOARD_OUT`, `MOJOLEARN_BOARD_CACHE` | result directory (fetched) and cache (not fetched) |
 
 A smoke leg, for example:
@@ -125,7 +166,7 @@ IDENTICAL arms are never divided by each other, because that ratio is the
 cost of identity and not a result (ENGINEERING_RULES 0b-iii). The "Quality at
 a glance" table puts our FAST value, our IDENTICAL value and each opponent's
 value side by side for every lane and dataset. For comparability, trees carry
-`FSPEED-FIT-VERDICT` and classical lanes carry the clock span
+`FSPEED-FIT-VERDICT` and classical and neural lanes carry the clock span
 (`SPAN-ASYMMETRIC` names an opponent whose clock excludes an upload or a fit
 that ours includes). A missing arm shows as `UNKNOWN` or `REFUSED(reason)`,
 never as a blank.
