@@ -69,6 +69,7 @@ struct NumericMode(Copyable, Movable):
 
 from std.memory import bitcast
 from std.sys import llvm_intrinsic
+from std.sys._assembly import inlined_assembly
 from std.sys.info import is_amd_gpu, is_apple_gpu, is_nvidia_gpu
 
 
@@ -137,11 +138,15 @@ def identical_mul64(a: Float64, b: Float64) -> Float64:
 # can fuse into a neighboring add or subtract, whatever contraction mode the
 # build uses. `fma(a, b, -0.0)` is NOT that: LLVM folds it to `fmul contract`
 # and the backend then fuses that fmul with the add it feeds. The spelling is
-# per target, each one checked in that target's own output (probes in
-# tools/contraction/):
-#   host CPU (arm64, x86-64) and AMD GPU: `llvm.arithmetic.fence(a * b)`; the
-#     fence is a no-op in the machine code and a wall to contraction (arm64
-#     `fmul`+`fadd`, gfx942 `v_mul_f32`+`v_add_f32`).
+# per target, each one checked in that target's own output (the probes:
+# ~/mojolearn-evidence/pinned-mul-contract-free/probes/):
+#   host CPU (arm64, x86-64): `llvm.arithmetic.fence(a * b)`; the fence is a
+#     no-op in the machine code and a wall to contraction (arm64 `fmul`+`fadd`,
+#     x86-64-v3 `vmulss`+`vaddss`). It also stops the vectorizer where a pinned
+#     product sits in a loop: a host speed cost, never a bit.
+#   AMD GPU: the instruction itself, `v_mul_f32` / `v_mul_f64` as inline asm
+#     on VGPRs. The fence was the first spelling and gfx942 codegen refused it
+#     on a uniform value ("illegal VGPR to SGPR copy", a row-norm kernel).
 #   NVIDIA: `llvm.nvvm.mul.rn.{f,d}`, i.e. PTX `mul.rn`. A fenced `fmul`
 #     reaches PTX as a plain `mul.f32`, which ptxas may still fuse with an
 #     `add.f32`; the `.rn` modifier forbids that (PTX ISA, `mul`).
@@ -154,6 +159,10 @@ def pinned_mul_f32(a: Float32, b: Float32) -> Float32:
     """`a*b`, correctly rounded, never fused into a neighbor. See above."""
     comptime if is_nvidia_gpu():
         return llvm_intrinsic["llvm.nvvm.mul.rn.f", Float32, has_side_effect=False](a, b)
+    elif is_amd_gpu():
+        return inlined_assembly[
+            "v_mul_f32 $0, $1, $2", Float32, constraints="=v,v,v", has_side_effect=False
+        ](a, b)
     elif is_apple_gpu():
         return llvm_intrinsic["llvm.fma.f32", Float32, has_side_effect=False](
             a, b, Float32(-0.0)
@@ -169,6 +178,10 @@ def pinned_mul_f64(a: Float64, b: Float64) -> Float64:
     """`pinned_mul_f32`'s float64 twin (no Apple GPU arm: Metal has no float64)."""
     comptime if is_nvidia_gpu():
         return llvm_intrinsic["llvm.nvvm.mul.rn.d", Float64, has_side_effect=False](a, b)
+    elif is_amd_gpu():
+        return inlined_assembly[
+            "v_mul_f64 $0, $1, $2", Float64, constraints="=v,v,v", has_side_effect=False
+        ](a, b)
     elif is_apple_gpu():
         return llvm_intrinsic["llvm.fma.f64", Float64, has_side_effect=False](
             a, b, Float64(-0.0)
