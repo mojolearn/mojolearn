@@ -2,97 +2,137 @@
 # SPDX-License-Identifier: Apache-2.0
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """The neural family of tools/bench_board.py: THE WHEEL'S PUBLIC PYTHON API
-against torch on the same GPU, interleaved round by round, quality beside
+against torch on the same box, interleaved round by round, quality beside
 every time.
 
     python3 tools/bench_board_neural.py race --lane lm-train-step --shape full \\
-        --arms ours,torch-eager-fp32 --rounds 5 --out DIR --work DIR \\
+        --arms ours,torch-eager-fp32,torch-compile-bf16 --rounds 5 --out DIR --work DIR \\
         --ours-python PY --theirs-python PY
 
 It speaks tools/classical_two_datasets.py's protocol (it reuses its `Worker`):
 one persistent worker process per arm, a warm-up round then `--rounds` timed
 rounds, the arm order rotated every round, and one race JSON whose shape
-tools/bench_board.py's `classical_cells` already reads.
+tools/bench_board.py's `classical_cells` already reads. This module imports
+only the standard library at import time, so the board reads its tables
+(`LANES`, `opponents`, `NOT_PLANNED`, ...) without torch or numpy.
 
 THE LANES (each is a public mojolearn entry point, installed from the wheel)
 ----------------------------------------------------------------------------
-  lm-train-step  `mojolearn.LanguageModelTrainer(..., resident=True,
-                 step_result='lean').train_step(ids)`: one complete byte-LM
-                 training step (forward, mean next-byte cross entropy,
-                 backward, AdamW lr 1e-3, betas 0.9/0.999, eps 1e-8, weight
-                 decay 0.01). The trainer's defaults.
-  lm-forward     `LanguageModelTrainer.logits(ids)` on a resident trainer:
-                 the IDENTICAL device forward, float32 logits [B, L, V] back
-                 on the host.
-  gemm           `mojolearn.linalg.matmul(a, b)`: fp32 C = A @ B, host
-                 arrays in, a host array out.
+GPU lanes (the class runs on the box's GPU):
+  lm-train-step        LanguageModelTrainer(resident=True, step_result='lean')
+                       .train_step(ids): forward, mean CE, backward, AdamW.
+  lm-forward           LanguageModelTrainer(resident=True).logits(ids).
+  gemm                 mojolearn.linalg.matmul(a, b), fp32.
+  transformer-forward  TransformerBlock(weights, n_heads, n_kv_heads,
+                       head_dim).forward(x).
+  mamba1-forward       Mamba1Block(weights).forward(x).
+  mamba2-forward       Mamba2Block(weights).forward(x).
+  mamba3-forward       Mamba3Block(weights).forward(x).
+  samba-train-step     SambaStack(config, weights).train_step(inputs, targets):
+                       forward, mean CE, full backward, AdamW (no clip).
+  samba-forward        SambaStack(config, weights).forward(inputs): logits.
+  mlp-train-step       SmallMLPTrainer(w1, b1, w2, b2).train_step(X, y):
+                       8-16-3 ReLU, mean CE, AdamW.
+CPU lanes (the *Inference classes run on the host binding, on the CPU):
+  transformer-infer    TransformerBlockInference(...).forward(x).
+  mamba1-infer / mamba2-infer / mamba3-infer
+                       Mamba{1,2,3}BlockInference(weights).forward(x).
+  samba-infer          SambaInference(config, weights).forward(inputs).
+  mlp-infer            MLPInference(w1, b1, w2, b2).predict_logits(X).
+The Mamba blocks and TransformerBlock expose a backward (a VJP), not a
+training step; they have no optimizer, so they race forward only.
 
-THE OPPONENT: torch, `torch-eager-fp32`
----------------------------------------
-torch eager, float32, TF32 OFF (tools/torch_lm_step_opponent.py
-`set_precision(torch, False)`, read back). That file names eager_fp32 THE ROW,
-the opponent's fast setting AT OUR PRECISION (bench/OPPONENT_REFERENCE.md);
-its compile, TF32 and bf16 columns are extras at another precision or labeled
-nondeterministic and are not raced here. The device is the box's GPU: MPS on
-Apple, CUDA on NVIDIA, ROCm (the torch.cuda API) on AMD. An arm with no GPU
-refuses by name; it never falls back to the CPU.
+THE OPPONENT: torch, at every fast setting it supports on the box
+-----------------------------------------------------------------
+Our IDENTICAL arm is raced against the opponent's FASTEST supported setting
+(bench/OPPONENT_REFERENCE.md), so every lane carries one torch arm per
+setting of tools/torch_lm_step_opponent.py's COLUMNS, the precision in the
+arm name:
 
-The LM model is tools/torch_lm_step_opponent.py's `build_model`, OUR registry
-shape for shape (embed, 9 tensors per block, untied lm_head; RMSNorm eps 1e-6,
-RoPE theta 10000, causal SDPA at scale 1/sqrt(head_dim), SiLU MLP) and
-`torch.optim.AdamW` with the same hyperparameters. On the torch.cuda API one
-SDPA backend is pinned by its probe (`choose_sdpa_backend`, auto: efficient,
-flash, math); on MPS torch's own dispatch runs and the record says so.
+  torch-eager-fp32     eager, float32, TF32 off (that file's THE ROW).
+  torch-eager-tf32     eager, float32 with TF32 ON (NVIDIA CUDA only: TF32 is
+                       an NVIDIA tensor-core matmul mode; on ROCm and MPS the
+                       flag does nothing, so the arm is not planned there).
+  torch-compile-fp32   torch.compile (inductor, default mode), TF32 off.
+  torch-compile-tf32   compile with TF32 on (NVIDIA CUDA only).
+  torch-eager-bf16     bf16 MIXED PRECISION: torch.autocast(device, bfloat16)
+                       around the forward (and the loss); parameters,
+                       gradients and AdamW state stay float32. The worker
+                       probes autocast on the device (the twin's
+                       `probe_autocast`) and refuses the arm by name when it
+                       does not work there.
+  torch-compile-bf16   compile inside the same autocast.
+A CPU lane's torch arms run on the CPU and are named `torch-cpu-<setting>`
+(fp32 and bf16, eager and compiled; TF32 does not exist there). An arm that
+fails on the box (compile on MPS, bf16 on an old GPU) refuses BY NAME in its
+cell; nothing falls back to another setting or device. Every bf16 and TF32
+arm is ANOTHER PRECISION than ours; its quality columns (loss or output
+difference against ours) show how far.
+
+The torch models (every one is an existing repo twin; nothing new invented):
+  lm-*          tools/torch_lm_step_opponent.py build_model (SDPA; on the
+                torch.cuda API a probed backend is pinned for the fp32/tf32
+                columns, torch's own pick for bf16).
+  gemm          a @ b.
+  transformer   tools/speed_torch_seq.py LlamaEager.block with sdpa=True
+                (torch's scaled_dot_product_attention, causal mask).
+  mamba1        mamba/corpus/gen_corpus.py block_forward: the PURE-PYTORCH
+                reference (mamba_ssm's selective_scan_ref, a per-token Python
+                loop). NOT a fused deployment kernel: mamba-ssm's CUDA
+                kernels are not installed by the board. A per-token loop is
+                not a torch.compile target, so mamba1 has no compile arms.
+  mamba2        gen_corpus.py m2_forward: the pure-PyTorch chunked SSD
+                reference (mamba_ssm ssd_minimal / HF mamba2_chunk_scan),
+                not the Triton kernels.
+  mamba3        gen_corpus.py m3_forward: the pure-PyTorch Mamba-3 SISO
+                reference, not the fused kernels.
+  samba         embedding, then per layer m3_forward or LlamaEager.block
+                (SDPA), final RMSNorm (eps 1e-5), tied head, mean CE,
+                torch.optim.AdamW: the stack composed from those two twins.
+  mlp           F.linear, ReLU, F.linear, mean CE, torch.optim.AdamW.
+gen_corpus.py sets torch's deterministic switch and one thread at import; the
+worker turns both back (tools/speed_torch_seq.py DEVIATION 1856) and records
+it. The mamba references create tensors without a device, so they run inside
+`with torch.device(dev)`.
 
 SAME INPUTS, BYTE FOR BYTE
 --------------------------
-The conductor writes ONE input file per race and every arm reads it:
-  * LM lanes: initial parameters numpy default_rng(7).normal(0, .02) float32,
-    +1 on every norm (the probe's recipe at the board's seed), and the batches
-    of a byte stream, step k row b = stream[(k*B*L + b*L) % (n - L - 1) :
-    + L + 1] (tools/lm_step_memory_probe.py's schedule). The stream is the
-    installed mojolearn package's own .py sources, sorted by path and
-    concatenated: text that ships in the wheel under test, never downloaded.
-    Its sha256 is recorded.
-  * gemm: A [m, k] and B [k, n] from default_rng(7).standard_normal, float32.
+The conductor writes ONE input file per race and every arm reads it (seed 7):
+  * LM: parameters default_rng(7).normal(0, .02) float32, +1 on every norm;
+    batches of the byte stream (the installed mojolearn package's .py
+    sources, sorted and concatenated; sha256 recorded), step k row b =
+    stream[(k*B*L + b*L) % (n - L - 1) : + L + 1]. Samba reads the same
+    stream the same way.
+  * transformer: every weight normal(0, .02), +1 on the two norms; x
+    standard normal.
+  * mamba1/2/3: every weight uniform in mamba/corpus/gen_corpus.py's default
+    range for that tensor (default_ranges / m2_default_ranges /
+    m3_default_ranges), x uniform(-2, 2).
+  * samba: SambaStack's initializer rules on numpy's generator: embedding
+    normal(0, .02), every projection uniform(+-1/sqrt(fan_in)), dt_bias
+    uniform(-4, -2), norms, D and the B/C biases ones. Our worker refuses
+    unless mojolearn.SambaConfig's registry equals the conductor's.
+  * mlp: weights uniform(+-1/sqrt(fan_in)); X standard normal, labels
+    integers 0..2.
+  * gemm: A [m, k] and B [k, n] standard normal.
 
-THE CLOCK (both sides)
-----------------------
-  lm-train-step  ids host -> device, the step, the loss back on the host,
-                 synchronized. Parameters and AdamW state stay on the device
-                 between steps on both sides (resident / an nn.Module).
-                 Training continues across rounds: round r is step r + 1.
-  lm-forward     ids host -> device, the forward, the logits back on the host.
-  gemm           A and B host -> device, the product, C back on the host.
-Every span is host in, host out, so no arm's clock excludes an upload that
-another's includes.
+THE CLOCK (both sides): host inputs to the device, the call, the result
+(loss or output) back on the host, synchronized. Training state stays on the
+device between steps on both sides; round r is step r + 1.
 
-QUALITY (the conductor, float64 NumPy, from each arm's saved outputs)
----------------------------------------------------------------------
-  lm-train-step  loss_first_step, loss_last_step (the same init and the same
-                 batches on every arm, so the values are comparable), and on
-                 each opponent loss_last_abs_diff_vs_ours.
-  lm-forward     mean_nll of the logits against the next bytes, and on each
-                 opponent max_abs_diff_vs_ours (logits).
-  gemm           max_rel_err_vs_fp64 (max |C - C64| / max |C64|, C64 the
-                 float64 product of the same float32 inputs), and on each
-                 opponent max_abs_diff_vs_ours.
+QUALITY (the conductor, float64 NumPy)
+--------------------------------------
+  train lanes     loss_first_step, loss_last_step (same init, same batches),
+                  loss_first_abs_diff_vs_ours, loss_last_abs_diff_vs_ours.
+  forward lanes   max_abs_diff_vs_ours, max_rel_diff_vs_ours (max |o - ours|
+                  / max |ours|); the logit lanes add mean_nll; gemm adds
+                  max_rel_err_vs_fp64.
 
-SHAPES (`--shape`)
-------------------
-  full   LM: tools/torch_lm_step_opponent.py's `control` shape, batch 1,
-         length 2048, d_model 384, 6 heads (6 KV), head_dim 64, intermediate
-         1024, 8 layers, vocab 8192: 20,453,376 parameters, chosen to fit a
-         16 GB Apple M4 beside torch (parameters plus both Adam moments are
-         about 250 MB per side; not yet run at this size on the Mac). The
-         GPT-3-small `target` shape (162 M parameters, vocab 50257) is left
-         off the board. gemm: 4096 x 4096 x 4096.
-  small  a plumbing smoke: LM batch 2, length 64, d_model 64, 4 heads (2 KV),
-         head_dim 16, intermediate 128, 2 layers, vocab 256; gemm 256^3.
+SHAPES (`--shape`): see SHAPES below; `full` is the board, `small` a smoke.
+The CPU lanes cap the sequence length at 512 in `full`.
 
-IDENTICAL ONLY. The neural surface builds `identical` only
-(mojolearn._backend._IDENTICAL_ONLY); an `ours` worker refuses to start under
-any other MOJOLEARN_NUMERIC_MODE.
+IDENTICAL ONLY. The neural surface builds `identical` only; an `ours` worker
+refuses to start under any other MOJOLEARN_NUMERIC_MODE.
 """
 import argparse
 import glob
@@ -100,6 +140,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import platform
 import shlex
 import statistics
 import sys
@@ -109,10 +150,80 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
 
 SEED = 7
-LANES = ("lm-train-step", "lm-forward", "gemm")
-ARMS = ("ours", "torch-eager-fp32")
+
+# ---------------------------------------------------------------------------
+# The tables the board reads (standard library only)
+# ---------------------------------------------------------------------------
+
+LANES = ("lm-train-step", "lm-forward", "gemm",
+         "transformer-forward", "transformer-infer",
+         "mamba1-forward", "mamba1-infer", "mamba2-forward", "mamba2-infer",
+         "mamba3-forward", "mamba3-infer",
+         "samba-train-step", "samba-forward", "samba-infer",
+         "mlp-train-step", "mlp-infer")
+#: The model each lane runs.
+MODEL_OF = {"lm-train-step": "lm", "lm-forward": "lm", "gemm": "gemm",
+            "transformer-forward": "transformer", "transformer-infer": "transformer",
+            "mamba1-forward": "mamba1", "mamba1-infer": "mamba1",
+            "mamba2-forward": "mamba2", "mamba2-infer": "mamba2",
+            "mamba3-forward": "mamba3", "mamba3-infer": "mamba3",
+            "samba-train-step": "samba", "samba-forward": "samba", "samba-infer": "samba",
+            "mlp-train-step": "mlp", "mlp-infer": "mlp"}
+TRAIN_LANES = ("lm-train-step", "samba-train-step", "mlp-train-step")
+#: Where OUR class runs: the *Inference classes are the host binding.
+DEVICE_OF = {lane: ("cpu" if lane.endswith("-infer") else "gpu") for lane in LANES}
 #: The data each lane reads (the board's `dataset` column).
-DATA_OF = {"lm-train-step": "bytes", "lm-forward": "bytes", "gemm": "gaussian"}
+DATA_OF = {lane: ("bytes" if MODEL_OF[lane] in ("lm", "samba") else "gaussian") for lane in LANES}
+
+#: torch settings, in tools/torch_lm_step_opponent.py COLUMNS order.
+TORCH_SETTINGS = ("eager-fp32", "eager-tf32", "compile-fp32", "compile-tf32",
+                  "eager-bf16", "compile-bf16")
+#: The GPU settings planned per vendor. TF32 is an NVIDIA CUDA matmul mode:
+#: on ROCm torch accepts the flag and does nothing (torch_lm_step_opponent.py
+#: writes NOT APPLICABLE), and MPS has no such mode.
+GPU_SETTINGS = {
+    "nvidia": TORCH_SETTINGS,
+    "amd": ("eager-fp32", "compile-fp32", "eager-bf16", "compile-bf16"),
+    "apple": ("eager-fp32", "compile-fp32", "eager-bf16", "compile-bf16"),
+}
+CPU_SETTINGS = ("eager-fp32", "compile-fp32", "eager-bf16", "compile-bf16")
+#: Lanes whose torch twin is not a compile target (a per-token Python loop).
+NO_COMPILE = ("mamba1-forward", "mamba1-infer")
+VENDORS = ("apple", "nvidia", "amd")
+
+ARMS = ("ours",) + tuple("torch-" + s for s in TORCH_SETTINGS) \
+    + tuple("torch-cpu-" + s for s in CPU_SETTINGS)
+
+#: What is left off the plan per vendor, named (the board prints it).
+NOT_PLANNED = {
+    v: (["torch-eager-tf32 / torch-compile-tf32: TF32 is an NVIDIA CUDA tensor-core matmul "
+         "mode; torch on %s accepts the flag and changes nothing"
+         % {"apple": "MPS", "amd": "ROCm"}[v]] if v != "nvidia" else [])
+    + ["torch-compile-* on mamba1-forward and mamba1-infer: the only torch Mamba-1 twin is "
+       "the pure-PyTorch reference scan, a per-token Python loop that torch.compile would "
+       "unroll L times; mamba1 races the eager arms only"]
+    for v in VENDORS}
+
+#: The board's "Not covered" lines for the neural family.
+NOT_COVERED = [
+    "The Mamba opponents are the repo's pure-PyTorch references (mamba/corpus/gen_corpus.py: "
+    "mamba_ssm's selective_scan_ref for Mamba-1, the chunked SSD reference for Mamba-2, the "
+    "SISO reference for Mamba-3), not mamba-ssm's fused CUDA/Triton kernels, which the board "
+    "does not install; a Mamba ratio here is against a reference implementation, not a "
+    "deployment kernel.",
+    "The blocks' backward (the Mamba and TransformerBlock VJPs), their decode `step`, ragged "
+    "`lengths` and the carried-state forward are public and not raced; only a zero-state "
+    "forward is.",
+    "SmallMLPTrainer.predict_logits (the GPU forward of the 8-16-3 MLP) is not raced; "
+    "MLPInference (its CPU forward) and the training step are.",
+    "The GPT-3-small target shape is not on the board (the LM lanes use the smaller control "
+    "shape so one shape runs on every box, a 16 GB Mac included).",
+]
+
+# ---------------------------------------------------------------------------
+# Shapes
+# ---------------------------------------------------------------------------
+
 #: [batch, length, d_model, n_heads, n_kv, head_dim, intermediate, n_layers, vocab]
 LM_SHAPES = {
     "full": [1, 2048, 384, 6, 6, 64, 1024, 8, 8192],   # torch_lm_step_opponent.SHAPES['control']
@@ -121,26 +232,183 @@ LM_SHAPES = {
 LM_FIELDS = ("batch", "length", "d_model", "n_heads", "n_kv", "head_dim",
              "intermediate", "n_layers", "vocab_size")
 GEMM_SHAPES = {"full": (4096, 4096, 4096), "small": (256, 256, 256)}   # m, n, k
-TORCH_MODE = "torch eager, float32, TF32 off (tools/torch_lm_step_opponent.py eager_fp32, THE ROW)"
+BLOCK_SHAPES = {
+    # the LM control shape's block
+    "transformer": {"full": dict(batch=1, length=2048, d_model=384, n_heads=6, n_kv=6,
+                                 head_dim=64, intermediate=1024),
+                    "small": dict(batch=2, length=64, d_model=64, n_heads=4, n_kv=2,
+                                  head_dim=16, intermediate=128)},
+    "mamba1": {"full": dict(batch=1, length=2048, d_model=384),
+               "small": dict(batch=2, length=64, d_model=16)},
+    "mamba2": {"full": dict(batch=1, length=2048, d_model=384),
+               "small": dict(batch=2, length=64, d_model=64)},
+    "mamba3": {"full": dict(batch=1, length=2048, d_model=384),
+               "small": dict(batch=2, length=64, d_model=64)},
+}
+SAMBA_SHAPES = {
+    "full": dict(batch=2, length=512, vocab=256, d_model=384,
+                 layers=("mamba3", "attention", "mamba3", "attention"),
+                 n_heads=6, intermediate=1024),
+    "small": dict(batch=2, length=64, vocab=256, d_model=64, layers=("mamba3", "attention"),
+                  n_heads=2, intermediate=128),
+}
+MLP_SHAPES = {"full": dict(batch=256), "small": dict(batch=32)}
+#: The CPU lanes' sequence cap in `full` (the host binding on a laptop CPU).
+CPU_LENGTH_CAP = 512
+
+#: The Mamba blocks' weight names, in each class's _W_NAMES order (our
+#: worker constructs the block from them; the class refuses a wrong name or
+#: shape by name).
+MAMBA_NAMES = {
+    "mamba1": ("norm.weight", "in_proj.weight", "conv1d.weight", "conv1d.bias",
+               "x_proj.weight", "dt_proj.weight", "dt_proj.bias", "A_log", "D",
+               "out_proj.weight"),
+    "mamba2": ("block_norm.weight", "in_proj.weight", "conv1d.weight", "conv1d.bias",
+               "dt_bias", "A_log", "D", "norm.weight", "out_proj.weight"),
+    "mamba3": ("block_norm.weight", "in_proj.weight", "dt_bias", "B_norm.weight",
+               "C_norm.weight", "B_bias", "C_bias", "D", "out_proj.weight"),
+}
+TRANSFORMER_NAMES = ("input_layernorm.weight", "post_attention_layernorm.weight",
+                     "q_proj.weight", "k_proj.weight", "v_proj.weight", "o_proj.weight",
+                     "gate_proj.weight", "up_proj.weight", "down_proj.weight")
+#: our TransformerBlock names -> tools/speed_torch_seq.py LlamaEager's names
+LLAMA_NAME = {"input_layernorm.weight": "norm1.weight",
+              "post_attention_layernorm.weight": "norm2.weight"}
+MLP_NAMES = ("weight1", "bias1", "weight2", "bias2")
+MLP_DIMS = ((16, 8), (16,), (3, 16), (3,))
 
 
-def _load(name):
-    path = os.path.join(HERE, name + ".py")
-    spec = importlib.util.spec_from_file_location("bbn_" + name, path)
-    mod = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(mod)
-    return mod
+def opponents(vendor, lane):
+    """The torch arms planned for (vendor, lane), in COLUMNS order."""
+    if DEVICE_OF[lane] == "cpu":
+        arms = ["torch-cpu-" + s for s in CPU_SETTINGS]
+    else:
+        arms = ["torch-" + s for s in GPU_SETTINGS[vendor]]
+    if lane in NO_COMPILE:
+        arms = [a for a in arms if "-compile-" not in a]
+    return tuple(arms)
+
+
+def arm_setting(arm):
+    """'torch-cpu-eager-bf16' -> ('cpu', 'eager-bf16'); 'torch-compile-fp32' ->
+    ('gpu', 'compile-fp32')."""
+    if arm.startswith("torch-cpu-"):
+        return "cpu", arm[len("torch-cpu-"):]
+    if arm.startswith("torch-"):
+        return "gpu", arm[len("torch-"):]
+    raise ValueError("not a torch arm: %r" % arm)
+
+
+def precision_text(setting):
+    return {"fp32": "float32, TF32 off",
+            "tf32": "float32 matmuls in TF32 (10-bit mantissa tensor cores)",
+            "bf16": "bf16 autocast mixed precision (parameters, gradients and optimizer "
+                    "state float32)"}[setting.split("-")[1]]
+
+
+def _dims_of(lane, shape):
+    model = MODEL_OF[lane]
+    if model == "lm":
+        return dict(zip(LM_FIELDS, LM_SHAPES[shape]))
+    if model == "gemm":
+        m, n, k = GEMM_SHAPES[shape]
+        return {"m": m, "n": n, "k": k}
+    if model == "samba":
+        d = dict(SAMBA_SHAPES[shape])
+    elif model == "mlp":
+        d = dict(MLP_SHAPES[shape])
+    else:
+        d = dict(BLOCK_SHAPES[model][shape])
+    if DEVICE_OF[lane] == "cpu" and "length" in d and shape == "full":
+        d["length"] = min(d["length"], CPU_LENGTH_CAP)
+    return d
 
 
 def shape_record(lane, shape):
     """What the board shows as this race's shape, with the dimensions named."""
-    if lane == "gemm":
-        m, n, k = GEMM_SHAPES[shape]
-        return {"name": shape, "m": m, "n": n, "k": k, "label": "%dx%dx%d" % (m, n, k)}
-    dims = LM_SHAPES[shape]
-    rec = dict(zip(LM_FIELDS, dims))
-    rec.update(name=shape, label="B%d L%d DM%d H%d KV%d HD%d FF%d layers%d V%d" % tuple(dims))
+    d = _dims_of(lane, shape)
+    model = MODEL_OF[lane]
+    rec = dict(d, name=shape)
+    if model == "lm":
+        rec["label"] = "B%d L%d DM%d H%d KV%d HD%d FF%d layers%d V%d" % tuple(LM_SHAPES[shape])
+    elif model == "gemm":
+        rec["label"] = "%dx%dx%d" % (d["m"], d["n"], d["k"])
+    elif model == "transformer":
+        rec["label"] = "B%d L%d DM%d H%d KV%d HD%d FF%d" % (
+            d["batch"], d["length"], d["d_model"], d["n_heads"], d["n_kv"], d["head_dim"],
+            d["intermediate"])
+    elif model == "samba":
+        rec["layers"] = list(d["layers"])
+        rec["label"] = "B%d L%d DM%d V%d H%d FF%d layers %s" % (
+            d["batch"], d["length"], d["d_model"], d["vocab"], d["n_heads"], d["intermediate"],
+            "+".join(d["layers"]))
+    elif model == "mlp":
+        rec["label"] = "rows%d 8-16-3" % d["batch"]
+    else:
+        rec["label"] = "B%d L%d DM%d" % (d["batch"], d["length"], d["d_model"])
     return rec
+
+
+def shape_text(lane, shape):
+    return shape_record(lane, shape)["label"] + (" (smoke)" if shape == "small" else "")
+
+
+#: The board's per-lane settings text (what each side calls).
+LANE_TEXT = {
+    "lm-train-step": ("mojolearn.LanguageModelTrainer(resident=True, step_result='lean').train_step(ids)",
+                      "tools/torch_lm_step_opponent.py build_model; zero_grad; forward + mean CE; "
+                      "backward; torch.optim.AdamW step; loss.item()"),
+    "lm-forward": ("mojolearn.LanguageModelTrainer(resident=True).logits(ids)",
+                   "no_grad forward of the same twin to logits; logits.cpu()"),
+    "gemm": ("mojolearn.linalg.matmul(a, b)", "a.to(dev) @ b.to(dev), .cpu()"),
+    "transformer-forward": ("mojolearn.TransformerBlock(weights, n_heads, n_kv_heads, head_dim).forward(x)",
+                            "tools/speed_torch_seq.py LlamaEager.block(sdpa=True)"),
+    "transformer-infer": ("mojolearn.TransformerBlockInference(...).forward(x) (CPU host binding)",
+                          "LlamaEager.block(sdpa=True) on the CPU"),
+    "mamba1-forward": ("mojolearn.Mamba1Block(weights).forward(x)",
+                       "mamba/corpus/gen_corpus.py block_forward (pure-PyTorch reference scan)"),
+    "mamba1-infer": ("mojolearn.Mamba1BlockInference(weights).forward(x) (CPU host binding)",
+                     "gen_corpus.py block_forward on the CPU"),
+    "mamba2-forward": ("mojolearn.Mamba2Block(weights).forward(x)",
+                       "mamba/corpus/gen_corpus.py m2_forward (pure-PyTorch chunked SSD reference)"),
+    "mamba2-infer": ("mojolearn.Mamba2BlockInference(weights).forward(x) (CPU host binding)",
+                     "gen_corpus.py m2_forward on the CPU"),
+    "mamba3-forward": ("mojolearn.Mamba3Block(weights).forward(x)",
+                       "mamba/corpus/gen_corpus.py m3_forward (pure-PyTorch SISO reference)"),
+    "mamba3-infer": ("mojolearn.Mamba3BlockInference(weights).forward(x) (CPU host binding)",
+                     "gen_corpus.py m3_forward on the CPU"),
+    "samba-train-step": ("mojolearn.SambaStack(config, weights).train_step(inputs, targets)",
+                         "embedding + m3_forward / LlamaEager.block layers + RMSNorm + tied head; "
+                         "mean CE; backward; torch.optim.AdamW step; loss.item()"),
+    "samba-forward": ("mojolearn.SambaStack(config, weights).forward(inputs)",
+                      "no_grad forward of the same stack twin to logits"),
+    "samba-infer": ("mojolearn.SambaInference(config, weights).forward(inputs) (CPU host binding)",
+                    "the same stack twin on the CPU"),
+    "mlp-train-step": ("mojolearn.SmallMLPTrainer(w1, b1, w2, b2).train_step(X, y)",
+                       "F.linear, ReLU, F.linear; mean CE; backward; torch.optim.AdamW step"),
+    "mlp-infer": ("mojolearn.MLPInference(w1, b1, w2, b2).predict_logits(X) (CPU host binding)",
+                  "F.linear, ReLU, F.linear on the CPU"),
+}
+
+
+def lane_settings(lane):
+    """The board's settings block for one lane (bench_board.race_settings)."""
+    ours, theirs = LANE_TEXT[lane]
+    s = {"ours_call": ours, "torch_call": theirs, "ours_device": DEVICE_OF[lane],
+         "clock": "host inputs to the device, the call, the result back on the host, "
+                  "synchronized" + ("; training state device-resident on both sides; round r "
+                                    "is step r+1" if lane in TRAIN_LANES else "")}
+    if lane in TRAIN_LANES:
+        s["optimizer"] = "AdamW lr 1e-3, betas (0.9, 0.999), eps 1e-8, weight decay 0.01 on both"
+        s["quality"] = ("loss_first_step, loss_last_step (same init, same batches), "
+                        "loss_first_abs_diff_vs_ours, loss_last_abs_diff_vs_ours")
+    else:
+        s["quality"] = "max_abs_diff_vs_ours, max_rel_diff_vs_ours" + (
+            ", mean_nll" if lane in ("lm-forward", "samba-forward", "samba-infer") else "") + (
+            ", max_rel_err_vs_fp64" if lane == "gemm" else "")
+    s["torch_settings"] = {a: precision_text(arm_setting(a)[1]) for a in
+                           ["torch-" + x for x in TORCH_SETTINGS]}
+    return s
 
 
 def now_utc():
@@ -149,6 +417,28 @@ def now_utc():
 
 def _sha(raw):
     return hashlib.sha256(raw).hexdigest()
+
+
+def _load(name, alias=None):
+    path = os.path.join(HERE, name + ".py")
+    spec = importlib.util.spec_from_file_location(alias or ("bbn_" + name), path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def _load_mamba_corpus():
+    """mamba/corpus/gen_corpus.py under its own alias (tools/speed_torch_seq.py
+    _load_module's reason). It needs torch and numpy."""
+    alias = "mojolearn_mamba_corpus"
+    if alias in sys.modules:
+        return sys.modules[alias]
+    path = os.path.join(REPO, "mamba", "corpus", "gen_corpus.py")
+    spec = importlib.util.spec_from_file_location(alias, path)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[alias] = mod
+    spec.loader.exec_module(mod)
+    return mod
 
 
 # ---------------------------------------------------------------------------
@@ -170,39 +460,11 @@ def byte_stream():
                  "package_dir": root, "files": len(files), "bytes": len(raw), "sha256": _sha(raw)}
 
 
-def lm_registry(dims):
-    twin = _load("torch_lm_step_opponent")
-    return twin.registry(dims)
-
-
-def make_inputs(lane, shape, steps, path):
-    """Write the race's single input file (.npz) and return its record."""
+def byte_batches(steps, bsz, length):
     import numpy as np
-    rng = np.random.default_rng(SEED)
-    if lane == "gemm":
-        m, n, k = GEMM_SHAPES[shape]
-        a = rng.standard_normal((m, k)).astype(np.float32)
-        b = rng.standard_normal((k, n)).astype(np.float32)
-        np.savez(path, a=a, b=b)
-        return {"lane": lane, "shape": shape_record(lane, shape),
-                "inputs": "A [m,k], B [k,n] = default_rng(%d).standard_normal float32" % SEED,
-                "a_sha256": _sha(a.tobytes()), "b_sha256": _sha(b.tobytes())}
-    dims = LM_SHAPES[shape]
-    bsz, length, vocab = dims[0], dims[1], dims[8]
-    shapes = lm_registry(dims)
-    n_total = sum(int(np.prod(s)) for _, s in shapes)
-    flat = rng.normal(0, .02, n_total).astype(np.float32)
-    off = 0
-    for name, s in shapes:
-        size = int(np.prod(s))
-        if "norm" in name:
-            flat[off:off + size] += np.float32(1)
-        off += size
     raw, stream = byte_stream()
     if len(raw) < length + 2:
         raise SystemExit("bench_board_neural: byte stream shorter than one row")
-    if vocab < 256:
-        raise SystemExit("bench_board_neural: byte ids need vocab >= 256")
     modulus = len(raw) - length - 1
     buf = np.frombuffer(raw, dtype=np.uint8)
     batches = np.empty((steps, bsz, length + 1), dtype=np.int32)
@@ -210,17 +472,154 @@ def make_inputs(lane, shape, steps, path):
         for b in range(bsz):
             start = (k * bsz * length + b * length) % modulus
             batches[k, b] = buf[start:start + length + 1]
-    np.savez(path, init=flat, batches=batches)
-    return {"lane": lane, "shape": shape_record(lane, shape), "parameters": n_total,
-            "init": "default_rng(%d).normal(0, .02) float32, +1 on norms" % SEED,
-            "init_sha256": _sha(flat.tobytes()), "stream": stream,
-            "batches_sha256": _sha(batches.tobytes()), "steps": steps,
-            "schedule": "step k row b: stream[(k*B*L + b*L) % (n - L - 1) : +L+1]; "
-                        "inputs [:, :L], targets [:, 1:]"}
+    return batches, stream
+
+
+def lm_registry(dims):
+    twin = _load("torch_lm_step_opponent")
+    return twin.registry(dims)
+
+
+def samba_registry(d):
+    """SambaConfig.registry() for this shape, transcribed (python/mojolearn/
+    _samba_impl.py block_shapes); our worker REFUSES unless the installed
+    class answers the same list."""
+    dm, vocab = d["d_model"], d["vocab"]
+    out = [("embed.weight", (vocab, dm))]
+    for i, kind in enumerate(d["layers"]):
+        if kind == "mamba3":
+            di = 2 * dm
+            nh = di // 64
+            dip = 2 * di + 2 * 128 + 3 * nh + 32
+            shapes = {"block_norm.weight": (dm,), "in_proj.weight": (dip, dm), "dt_bias": (nh,),
+                      "B_norm.weight": (128,), "C_norm.weight": (128,), "B_bias": (nh, 128),
+                      "C_bias": (nh, 128), "D": (nh,), "out_proj.weight": (dm, di)}
+            names = MAMBA_NAMES["mamba3"]
+        else:
+            hd = dm // d["n_heads"]
+            qw = kw = d["n_heads"] * hd
+            it = d["intermediate"]
+            shapes = {"input_layernorm.weight": (dm,), "post_attention_layernorm.weight": (dm,),
+                      "q_proj.weight": (qw, dm), "k_proj.weight": (kw, dm),
+                      "v_proj.weight": (kw, dm), "o_proj.weight": (dm, qw),
+                      "gate_proj.weight": (it, dm), "up_proj.weight": (it, dm),
+                      "down_proj.weight": (dm, it)}
+            names = TRANSFORMER_NAMES
+        out.extend(("layers.%d.%s" % (i, n), shapes[n]) for n in names)
+    out.append(("norm_f.weight", (dm,)))
+    return out
+
+
+def samba_init(rng, name, shape):
+    """SambaStack's _init_tensor rules on numpy's generator."""
+    import numpy as np
+    last = name.split(".")[-1]
+    if name in ("embed.weight", "lm_head.weight"):
+        return rng.normal(0, .02, shape).astype(np.float32)
+    if last == "weight" and len(shape) == 2:
+        bound = 1.0 / np.sqrt(shape[1])
+        return rng.uniform(-bound, bound, shape).astype(np.float32)
+    if last == "dt_bias":
+        return rng.uniform(-4.0, -2.0, shape).astype(np.float32)
+    return np.ones(shape, dtype=np.float32)
+
+
+def mamba_weight_spec(model, d):
+    """[(name, shape, (lo, hi))] from mamba/corpus/gen_corpus.py's shape and
+    range functions, plus x's."""
+    corpus = _load_mamba_corpus()
+    dm, B, L = d["d_model"], d["batch"], d["length"]
+    if model == "mamba1":
+        di, r = 2 * dm, -(-dm // 16)
+        shapes = corpus.shapes_for(dm, di, r, 16, 4, B, L)
+        ranges = corpus.default_ranges(dm, di, r, 16, 4)
+    elif model == "mamba2":
+        shapes, ranges = corpus.m2_shapes_for(dm, B, L), corpus.m2_default_ranges(dm)
+    else:
+        shapes, ranges = corpus.m3_shapes_for(dm, B, L), corpus.m3_default_ranges(dm)
+    return [(n, tuple(shapes[n]), ranges[n]) for n in MAMBA_NAMES[model]], \
+        (tuple(shapes["x"]), ranges["x"])
+
+
+def make_inputs(lane, shape, steps, path):
+    """Write the race's single input file (.npz) and return its record."""
+    import numpy as np
+    rng = np.random.default_rng(SEED)
+    model = MODEL_OF[lane]
+    d = _dims_of(lane, shape)
+    rec = {"lane": lane, "shape": shape_record(lane, shape), "seed": SEED}
+    arrays = {}
+    if model == "gemm":
+        arrays["a"] = rng.standard_normal((d["m"], d["k"])).astype(np.float32)
+        arrays["b"] = rng.standard_normal((d["k"], d["n"])).astype(np.float32)
+        rec["inputs"] = "A [m,k], B [k,n] = default_rng(%d).standard_normal float32" % SEED
+    elif model == "lm":
+        dims = LM_SHAPES[shape]
+        shapes = lm_registry(dims)
+        n_total = sum(int(np.prod(s)) for _, s in shapes)
+        flat = rng.normal(0, .02, n_total).astype(np.float32)
+        off = 0
+        for name, s in shapes:
+            size = int(np.prod(s))
+            if "norm" in name:
+                flat[off:off + size] += np.float32(1)
+            off += size
+        if dims[8] < 256:
+            raise SystemExit("bench_board_neural: byte ids need vocab >= 256")
+        arrays["init"] = flat
+        arrays["batches"], rec["stream"] = byte_batches(steps, dims[0], dims[1])
+        rec.update(parameters=n_total, init="default_rng(%d).normal(0, .02) float32, +1 on norms" % SEED,
+                   schedule="step k row b: stream[(k*B*L + b*L) % (n - L - 1) : +L+1]; "
+                            "inputs [:, :L], targets [:, 1:]")
+    elif model == "transformer":
+        dm, hd, it = d["d_model"], d["head_dim"], d["intermediate"]
+        qw, kw = d["n_heads"] * hd, d["n_kv"] * hd
+        shapes = {"input_layernorm.weight": (dm,), "post_attention_layernorm.weight": (dm,),
+                  "q_proj.weight": (qw, dm), "k_proj.weight": (kw, dm), "v_proj.weight": (kw, dm),
+                  "o_proj.weight": (dm, qw), "gate_proj.weight": (it, dm),
+                  "up_proj.weight": (it, dm), "down_proj.weight": (dm, it)}
+        for n in TRANSFORMER_NAMES:
+            w = rng.normal(0, .02, shapes[n]).astype(np.float32)
+            if "layernorm" in n:
+                w += np.float32(1)
+            arrays["w:" + n] = w
+        arrays["x"] = rng.standard_normal((d["batch"], d["length"], dm)).astype(np.float32)
+        rec["inputs"] = "weights default_rng(%d).normal(0, .02) (+1 on norms), x standard normal" % SEED
+    elif model in MAMBA_NAMES:
+        spec, (xshape, xrange) = mamba_weight_spec(model, d)
+        for n, s, (lo, hi) in spec:
+            arrays["w:" + n] = rng.uniform(lo, hi, s).astype(np.float32)
+        arrays["x"] = rng.uniform(xrange[0], xrange[1], xshape).astype(np.float32)
+        rec["inputs"] = ("every tensor default_rng(%d).uniform over mamba/corpus/gen_corpus.py's "
+                         "default range for it" % SEED)
+        rec["ranges"] = {n: list(r) for n, _, r in spec}
+    elif model == "samba":
+        reg = samba_registry(d)
+        for n, s in reg:
+            arrays["w:" + n] = samba_init(rng, n, s)
+        arrays["batches"], rec["stream"] = byte_batches(steps, d["batch"], d["length"])
+        rec.update(parameters=sum(int(np.prod(s)) for _, s in reg),
+                   init="SambaStack._init_tensor rules on default_rng(%d)" % SEED,
+                   schedule="the LM lanes' byte schedule")
+    elif model == "mlp":
+        for n, s in zip(MLP_NAMES, MLP_DIMS):
+            bound = 1.0 / np.sqrt(8 if n.endswith("1") else 16)
+            arrays["w:" + n] = rng.uniform(-bound, bound, s).astype(np.float32)
+        arrays["X"] = rng.standard_normal((steps, d["batch"], 8)).astype(np.float32)
+        arrays["y"] = rng.integers(0, 3, (steps, d["batch"])).astype(np.int32)
+        rec["inputs"] = "weights uniform(+-1/sqrt(fan_in)); X standard normal; labels 0..2"
+    np.savez(path, **arrays)
+    rec["sha256"] = {k: _sha(np.ascontiguousarray(v).tobytes())[:16] for k, v in sorted(arrays.items())}
+    rec["steps"] = steps
+    return rec
+
+
+def _weights(data):
+    return {k[2:]: data[k] for k in data if k.startswith("w:")}
 
 
 # ---------------------------------------------------------------------------
-# Workers (one process per arm)
+# Workers: ours (one process per arm)
 # ---------------------------------------------------------------------------
 
 def _ours_module():
@@ -232,10 +631,10 @@ def _ours_module():
     return mojolearn
 
 
-def _ours_info(ml, module_path, mode_used):
+def _ours_info(ml, module_path, mode_used, device="gpu"):
     info = {"library": "mojolearn", "version": getattr(ml, "__version__", "unknown"),
             "numeric_mode_env": os.environ.get("MOJOLEARN_NUMERIC_MODE"),
-            "numeric_mode_used": mode_used, "device": "gpu",
+            "numeric_mode_used": mode_used, "device": device,
             "module_path": module_path, "pre_clock_fit": False,
             "input_home": "host"}
     try:
@@ -247,7 +646,32 @@ def _ours_info(ml, module_path, mode_used):
     return info
 
 
-class OursLM:
+def _mode_of(obj, ml):
+    """The tier read back from the binary the object holds, else the process's."""
+    fn = getattr(obj, "numeric_mode_used", None)
+    if callable(fn):
+        try:
+            return fn()
+        except Exception:  # noqa: BLE001  (an *Inference class holds the host binding)
+            pass
+    return ml.numeric_mode()
+
+
+class Ours:
+    """Common shape of an `ours` runner: call / sync / outputs / digest."""
+    out = None
+
+    def sync(self):
+        pass        # every public call returns host results (the binding syncs first)
+
+    def outputs(self):
+        return {"y": self.np.asarray(self.out)}
+
+    def digest(self):
+        return _sha(self.np.ascontiguousarray(self.np.asarray(self.out)).data)[:16]
+
+
+class OursLM(Ours):
     """lm-train-step and lm-forward through LanguageModelTrainer."""
 
     def __init__(self, lane, shape, data):
@@ -271,12 +695,9 @@ class OursLM:
             "native_numeric_mode=%s" % meta.get("native_numeric_mode")
         self.info = _ours_info(ml, meta.get("binding_file"), mode)
         self.info.update(profile=meta.get("native_profile"), native_vendor=meta.get("native_vendor"),
-                         call=("LanguageModelTrainer(resident=True, step_result='lean').train_step"
-                               if lane == "lm-train-step" else "LanguageModelTrainer(resident=True).logits"),
-                         config=json.dumps(meta.get("config"), sort_keys=True))
+                         call=LANE_TEXT[lane][0], config=json.dumps(meta.get("config"), sort_keys=True))
         self.k = 0
         self.losses = []
-        self.out = None
         self.ids = np.ascontiguousarray(self.batches[0][:, :-1])
 
     def call(self):
@@ -287,22 +708,16 @@ class OursLM:
         else:
             self.out = self.trainer.logits(self.ids)
 
-    def sync(self):
-        pass        # the binding synchronizes before it publishes (lm_step_memory_probe.py)
-
     def outputs(self):
-        np = self.np
         if self.lane == "lm-train-step":
-            return {"losses": np.array(self.losses, dtype=np.float64)}
-        return {"logits": np.asarray(self.out)}
+            return {"losses": self.np.array(self.losses, dtype=self.np.float64)}
+        return {"y": self.np.asarray(self.out)}
 
     def digest(self):
-        if self.lane == "lm-train-step":
-            return None                     # every step is a new state; nothing to repeat
-        return _sha(self.np.ascontiguousarray(self.np.asarray(self.out)).data)[:16]
+        return None if self.lane == "lm-train-step" else Ours.digest(self)
 
 
-class OursGEMM:
+class OursGEMM(Ours):
     def __init__(self, lane, shape, data):
         import numpy as np
         self.np = np
@@ -311,21 +726,133 @@ class OursGEMM:
         self.linalg = linalg
         self.a, self.b = np.ascontiguousarray(data["a"]), np.ascontiguousarray(data["b"])
         self.info = _ours_info(ml, getattr(linalg, "__file__", None), linalg.numeric_mode())
-        self.info.update(profile=linalg.PROFILE, call="mojolearn.linalg.matmul(a, b)")
-        self.out = None
+        self.info.update(profile=linalg.PROFILE, call=LANE_TEXT[lane][0])
 
     def call(self):
         self.out = self.linalg.matmul(self.a, self.b)
 
-    def sync(self):
-        pass        # matmul returns a filled host array
+
+class OursBlock(Ours):
+    """transformer-* and mamba*-*: one block's zero-state forward."""
+
+    def __init__(self, lane, shape, data):
+        import numpy as np
+        self.np = np
+        ml = _ours_module()
+        model, cpu = MODEL_OF[lane], DEVICE_OF[lane] == "cpu"
+        d = _dims_of(lane, shape)
+        w = {k: np.ascontiguousarray(v) for k, v in _weights(data).items()}
+        if model == "transformer":
+            cls = ml.TransformerBlockInference if cpu else ml.TransformerBlock
+            self.block = cls(w, n_heads=d["n_heads"], n_kv_heads=d["n_kv"], head_dim=d["head_dim"])
+        else:
+            name = {"mamba1": "Mamba1Block", "mamba2": "Mamba2Block", "mamba3": "Mamba3Block"}[model]
+            cls = getattr(ml, name + ("Inference" if cpu else ""))
+            self.block = cls(w)
+        self.x = np.ascontiguousarray(data["x"])
+        self.info = _ours_info(ml, getattr(sys.modules[cls.__module__], "__file__", None),
+                               _mode_of(self.block, ml), "cpu" if cpu else "gpu")
+        self.info.update(call=LANE_TEXT[lane][0], cls=cls.__name__)
+
+    def call(self):
+        self.out = self.block.forward(self.x)
+
+
+class OursSamba(Ours):
+    def __init__(self, lane, shape, data):
+        import numpy as np
+        self.np = np
+        ml = _ours_module()
+        d = _dims_of(lane, shape)
+        cfg = ml.SambaConfig(d["vocab"], d["d_model"], d["layers"], n_heads=d["n_heads"],
+                             intermediate=d["intermediate"])
+        ours = [(n, tuple(s)) for n, s in cfg.registry()]
+        if ours != [(n, tuple(s)) for n, s in samba_registry(d)]:
+            raise RuntimeError("REFUSED: mojolearn.SambaConfig's registry differs from the "
+                               "conductor's (tools/bench_board_neural.py samba_registry)")
+        w = {k: np.ascontiguousarray(v) for k, v in _weights(data).items()}
+        self.lane = lane
+        if lane == "samba-infer":
+            self.model = ml.SambaInference(cfg, w)
+            mode, dev = ml.numeric_mode(), "cpu"
+        else:
+            self.model = ml.SambaStack(cfg, weights=w)
+            mode, dev = _mode_of((getattr(self.model, "_blocks", None) or [None])[0], ml), "gpu"
+        self.info = _ours_info(ml, getattr(sys.modules[type(self.model).__module__], "__file__", None),
+                               mode, dev)
+        self.info.update(call=LANE_TEXT[lane][0], config=json.dumps(cfg.to_dict(), sort_keys=True))
+        self.batches = data["batches"]
+        self.ids = np.ascontiguousarray(self.batches[0][:, :-1])
+        self.k = 0
+        self.losses = []
+
+    def call(self):
+        np = self.np
+        if self.lane == "samba-train-step":
+            b = self.batches[self.k]
+            res = self.model.train_step(np.ascontiguousarray(b[:, :-1]), np.ascontiguousarray(b[:, 1:]))
+            self.losses.append(float(res["loss"]))
+            self.k += 1
+        else:
+            self.out = self.model.forward(self.ids)
 
     def outputs(self):
-        return {"c": self.np.asarray(self.out)}
+        if self.lane == "samba-train-step":
+            return {"losses": self.np.array(self.losses, dtype=self.np.float64)}
+        return {"y": self.np.asarray(self.out)}
 
     def digest(self):
-        return _sha(self.np.ascontiguousarray(self.np.asarray(self.out)).data)[:16]
+        return None if self.lane == "samba-train-step" else Ours.digest(self)
 
+
+class OursMLP(Ours):
+    def __init__(self, lane, shape, data):
+        import numpy as np
+        self.np = np
+        ml = _ours_module()
+        w = [np.ascontiguousarray(data["w:" + n]) for n in MLP_NAMES]
+        self.lane = lane
+        self.X, self.y = data["X"], data["y"]
+        if lane == "mlp-infer":
+            self.model = ml.MLPInference(*w)
+            mode, dev = ml.numeric_mode(), "cpu"
+        else:
+            self.model = ml.SmallMLPTrainer(*w, data_schedule={"fixture": "tools/bench_board_neural.py",
+                                                               "seed": SEED})
+            mode, dev = ml.numeric_mode(), "gpu"
+        self.info = _ours_info(ml, getattr(sys.modules[type(self.model).__module__], "__file__", None),
+                               mode, dev)
+        self.info.update(call=LANE_TEXT[lane][0])
+        self.x0 = np.ascontiguousarray(self.X[0])
+        self.k = 0
+        self.losses = []
+
+    def call(self):
+        np = self.np
+        if self.lane == "mlp-train-step":
+            res = self.model.train_step(np.ascontiguousarray(self.X[self.k]),
+                                        np.ascontiguousarray(self.y[self.k]))
+            self.losses.append(float(res["loss"]))
+            self.k += 1
+        else:
+            self.out = self.model.predict_logits(self.x0)
+
+    def outputs(self):
+        if self.lane == "mlp-train-step":
+            return {"losses": self.np.array(self.losses, dtype=self.np.float64)}
+        return {"y": self.np.asarray(self.out)}
+
+    def digest(self):
+        return None if self.lane == "mlp-train-step" else Ours.digest(self)
+
+
+OURS = {"lm": OursLM, "gemm": OursGEMM, "transformer": OursBlock, "mamba1": OursBlock,
+        "mamba2": OursBlock, "mamba3": OursBlock, "samba": OursSamba, "mlp": OursMLP}
+
+
+# ---------------------------------------------------------------------------
+# Workers: torch (one process per arm, one setting each)
+# ---------------------------------------------------------------------------
 
 def _torch_device():
     import torch
@@ -338,115 +865,343 @@ def _torch_device():
                        "(never a CPU fallback)")
 
 
-def _torch_info(torch, kind, name, precision):
-    return {"library": "torch", "version": torch.__version__,
-            "torch_version_cuda": torch.version.cuda,
-            "torch_version_hip": getattr(torch.version, "hip", None),
-            "torch_backend": kind, "device": "gpu", "device_name": name,
-            "mode": TORCH_MODE, "precision_readback": precision,
-            "pre_clock_fit": False, "input_home": "host"}
+def _cpu_name():
+    try:
+        if sys.platform == "darwin":
+            import subprocess
+            return subprocess.run(["sysctl", "-n", "machdep.cpu.brand_string"], capture_output=True,
+                                  text=True, timeout=10).stdout.strip() or platform.processor()
+        with open("/proc/cpuinfo") as fh:
+            for line in fh:
+                if line.startswith("model name"):
+                    return line.split(":", 1)[1].strip()
+    except Exception:  # noqa: BLE001
+        pass
+    return platform.processor() or "cpu"
 
 
-class TorchLM:
-    def __init__(self, lane, shape, data):
+def _rms(torch, x, w, eps):
+    return w * (x * torch.rsqrt(x.pow(2).mean(-1, keepdim=True) + eps))
+
+
+class TorchArm:
+    """One torch setting on one lane. The lane builder gives `fn(*device
+    inputs) -> loss or output` (compiled when the setting says so); the clock
+    covers host inputs to the device, fn under the setting's autocast, the
+    result back on the host."""
+
+    def __init__(self, lane, shape, data, arm):
         import numpy as np
-        self.np = np
-        torch, dev, kind, name, sync = _torch_device()
-        self.torch, self.dev, self._sync = torch, dev, sync
+        self.np, self.lane, self.shape, self.data = np, lane, shape, data
+        where, setting = arm_setting(arm)
+        if where != DEVICE_OF[lane]:
+            raise RuntimeError("REFUSED: arm %s runs on the %s and lane %s's class on the %s"
+                               % (arm, where, lane, DEVICE_OF[lane]))
         twin = _load("torch_lm_step_opponent")
-        precision = twin.set_precision(torch, False)
-        dims = LM_SHAPES[shape]
-        shapes = twin.registry(dims)
-        flat = torch.from_numpy(np.ascontiguousarray(data["init"]))
-        self.model = twin.build_model(torch, dims, shapes, flat, dev)
-        n = sum(p.numel() for p in self.model.parameters())
-        if n != flat.numel():
-            raise RuntimeError("REFUSED: torch model has %d parameters, the input %d" % (n, flat.numel()))
-        self.info = _torch_info(torch, kind, name, precision)
-        if kind == "cuda":
-            self.info["sdpa"] = twin.choose_sdpa_backend(torch, "auto", dev, dims, sync)
+        self.twin = twin
+        col = twin.COLUMNS[setting.replace("-", "_")]
+        if where == "cpu":
+            import torch
+            dev, kind, name, sync = torch.device("cpu"), "cpu", _cpu_name(), (lambda: None)
         else:
-            self.info["sdpa"] = {"backend": "torch_default",
-                                 "selection": "MPS: torch's own dispatch (no backend switches exist)"}
-        self.lane = lane
-        self.batches = data["batches"]
-        if lane == "lm-train-step":
-            self.opt = torch.optim.AdamW(self.model.parameters(), lr=twin.LR, betas=twin.BETAS,
-                                         eps=twin.ADAM_EPS, weight_decay=twin.WEIGHT_DECAY)
-            self.info["optimizer"] = "torch.optim.AdamW lr %g betas %s eps %g wd %g (torch's default impl)" % (
-                twin.LR, twin.BETAS, twin.ADAM_EPS, twin.WEIGHT_DECAY)
-            self.info["call"] = "zero_grad; forward + mean CE; backward; AdamW step; loss.item()"
-        else:
-            self.model.eval()
-            self.info["call"] = "no_grad forward to logits; logits.cpu()"
-        self.ids = torch.from_numpy(np.ascontiguousarray(self.batches[0][:, :-1]).astype(np.int64))
+            torch, dev, kind, name, sync = _torch_device()
+        self.torch, self.dev, self.kind, self._sync = torch, dev, kind, sync
+        hip = getattr(torch.version, "hip", None)
+        if col["tf32"] and not (kind == "cuda" and not hip):
+            raise RuntimeError("REFUSED: %s: TF32 is an NVIDIA CUDA matmul mode; torch on %s "
+                               "accepts the flag and changes nothing" % (arm, "ROCm" if hip else kind))
+        precision = twin.set_precision(torch, col["tf32"])
+        self.autocast = None
+        probe = None
+        if col["autocast"]:
+            probe = twin.probe_autocast(torch, dev, col["autocast"], sync)
+            if not probe.get("applicable"):
+                raise RuntimeError("REFUSED: %s: torch.autocast(%r, %s) does not work on this box: %s"
+                                   % (arm, dev.type, col["autocast"], json.dumps(probe)[:600]))
+            self.autocast = getattr(torch, col["autocast"])
+        self.compile = bool(col["compile"])
+        self.info = {"library": "torch", "version": torch.__version__,
+                     "torch_version_cuda": torch.version.cuda, "torch_version_hip": hip,
+                     "torch_backend": kind, "device": where, "device_name": name,
+                     "setting": setting, "precision": precision_text(setting),
+                     "compile": "torch.compile (inductor, default mode)" if self.compile else "eager",
+                     "mode": "torch %s, %s" % ("compile" if self.compile else "eager",
+                                               precision_text(setting)),
+                     "precision_readback": precision, "autocast_probe": probe,
+                     "column": setting.replace("-", "_") + " (tools/torch_lm_step_opponent.py COLUMNS)",
+                     "torch_threads": torch.get_num_threads(),
+                     "pre_clock_fit": False, "input_home": "host", "call": LANE_TEXT[lane][1]}
         self.k = 0
         self.losses = []
         self.out = None
+        self.train = lane in TRAIN_LANES
+        getattr(self, "_build_" + MODEL_OF[lane])()
+        if self.train:
+            self.opt = torch.optim.AdamW(self.module.parameters(), lr=twin.LR, betas=twin.BETAS,
+                                         eps=twin.ADAM_EPS, weight_decay=twin.WEIGHT_DECAY)
+            self.info["optimizer"] = "torch.optim.AdamW lr %g betas %s eps %g wd %g (torch's default impl)" % (
+                twin.LR, twin.BETAS, twin.ADAM_EPS, twin.WEIGHT_DECAY)
+        self.fn = torch.compile(self.module) if self.compile else self.module
         sync()
 
-    def call(self):
+    # -- the device context (the mamba references allocate without a device)
+    def _ctx(self):
+        import contextlib
         torch = self.torch
-        if self.lane == "lm-train-step":
-            host = torch.from_numpy(self.batches[self.k].astype(self.np.int64))
-            ids = host.to(self.dev)
+        stack = contextlib.ExitStack()
+        if self.uses_default_device:
+            stack.enter_context(torch.device(self.dev))
+        if self.autocast is not None:
+            stack.enter_context(torch.autocast(device_type=self.dev.type, dtype=self.autocast))
+        if not self.train:
+            stack.enter_context(torch.no_grad())
+        return stack
+
+    uses_default_device = False
+
+    def _module(self, params, forward):
+        """An nn.Module holding `params` (name -> tensor, registry order) whose
+        forward is forward(dict of parameters, *inputs)."""
+        torch = self.torch
+        names = list(params)
+
+        class Twin(torch.nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.plist = torch.nn.ParameterList(
+                    [torch.nn.Parameter(params[n], requires_grad=True) for n in names])
+
+            def forward(self, *inputs):
+                return forward(dict(zip(names, self.plist)), *inputs)
+
+        return Twin()
+
+    def _t(self, a):
+        return self.torch.from_numpy(self.np.ascontiguousarray(a))
+
+    def _dev_params(self):
+        return {k: self._t(v).to(self.dev) for k, v in _weights(self.data).items()}
+
+    # -- lane builders -----------------------------------------------------
+    def _build_gemm(self):
+        self.host = [self._t(self.data["a"]), self._t(self.data["b"])]
+        self.module = self._module({}, lambda p, a, b: a @ b)
+
+    def _build_lm(self):
+        torch, np, twin = self.torch, self.np, self.twin
+        dims = LM_SHAPES[self.shape]
+        flat = torch.from_numpy(np.ascontiguousarray(self.data["init"]))
+        model = twin.build_model(torch, dims, twin.registry(dims), flat, self.dev)
+        n = sum(p.numel() for p in model.parameters())
+        if n != flat.numel():
+            raise RuntimeError("REFUSED: torch model has %d parameters, the input %d" % (n, flat.numel()))
+        if self.kind == "cuda":
+            self.info["sdpa"] = twin.choose_sdpa_backend(
+                torch, "auto", self.dev, dims, self._sync,
+                self.info["setting"].split("-")[1] == "bf16" and "bfloat16" or None)
+        else:
+            self.info["sdpa"] = {"backend": "torch_default",
+                                 "selection": "%s: torch's own dispatch (no backend switches exist)"
+                                              % self.kind}
+        self.batches = self.data["batches"]
+        if self.train:
+            self.module = model
+        else:
+            model.eval()
+
+            class Logits(torch.nn.Module):
+                def __init__(self):
+                    super().__init__()
+                    self.m = model
+
+                def forward(self, ids):
+                    return self.m(ids, return_logits=True)
+
+            self.module = Logits()
+            self.host = [torch.from_numpy(np.ascontiguousarray(self.batches[0][:, :-1]).astype(np.int64))]
+
+    def _llama(self, W, d, length):
+        """tools/speed_torch_seq.py's LlamaEager over tensors named as ours."""
+        seq = _load_speed_torch_seq(self.torch, self.info)
+        cfg = dict(n_heads=d["n_heads"], n_kv=d["n_kv"], head_dim=d["head_dim"],
+                   intermediate=d["intermediate"], d_model=d["d_model"], ctx=0, l=length)
+        return seq.LlamaEager(self.torch, self.dev, cfg, {LLAMA_NAME.get(k, k): v for k, v in W.items()},
+                              self.torch.float32)
+
+    def _build_transformer(self):
+        d = _dims_of(self.lane, self.shape)
+        B, L, dm = d["batch"], d["length"], d["d_model"]
+        params = self._dev_params()
+        blk = self._llama(params, d, L)
+
+        def forward(p, x):
+            blk.W = {LLAMA_NAME.get(k, k): v for k, v in p.items()}
+            return blk.block(x.reshape(B * L, dm), None, B, L, sdpa=True)[0].reshape(B, L, dm)
+
+        self.module = self._module(params, forward)
+        self.host = [self._t(self.data["x"])]
+        self.info["twin"] = "tools/speed_torch_seq.py LlamaEager.block(sdpa=True)"
+
+    def _mamba_call(self, model):
+        corpus = _load_mamba_corpus_restoring(self.torch, self.info)
+        f32 = self.torch.float32
+        if model == "mamba1":
+            return lambda p, x: corpus.block_forward(p, x, f32)["block.out"]
+        if model == "mamba2":
+            return lambda p, x: corpus.m2_forward(p, x, f32)["residual.out"].reshape(x.shape)
+        return lambda p, x: corpus.m3_forward(p, x, f32)["residual.out"].reshape(x.shape)
+
+    def _build_mamba(self):
+        model = MODEL_OF[self.lane]
+        call = self._mamba_call(model)
+        self.uses_default_device = True
+        self.module = self._module(self._dev_params(), call)
+        self.host = [self._t(self.data["x"])]
+        self.info["twin"] = {"mamba1": "mamba/corpus/gen_corpus.py block_forward (selective_scan_ref)",
+                             "mamba2": "mamba/corpus/gen_corpus.py m2_forward",
+                             "mamba3": "mamba/corpus/gen_corpus.py m3_forward"}[model]
+
+    _build_mamba1 = _build_mamba2 = _build_mamba3 = _build_mamba
+
+    def _build_samba(self):
+        torch = self.torch
+        F = torch.nn.functional
+        d = _dims_of(self.lane, self.shape)
+        B, L, dm, V = d["batch"], d["length"], d["d_model"], d["vocab"]
+        m3 = self._mamba_call("mamba3")
+        params = self._dev_params()
+        hd = dm // d["n_heads"]
+        attn = {}
+        for i, kind in enumerate(d["layers"]):
+            if kind == "attention":
+                pre = "layers.%d." % i
+                attn[i] = self._llama({k[len(pre):]: v for k, v in params.items() if k.startswith(pre)},
+                                      dict(d, n_kv=d["n_heads"], head_dim=hd), L)
+        eps = float(torch.tensor(1e-5, dtype=torch.float32))
+        train = self.train
+
+        def forward(p, ids, targets=None):
+            x = F.embedding(ids, p["embed.weight"])
+            for i, kind in enumerate(d["layers"]):
+                pre = "layers.%d." % i
+                w = {k[len(pre):]: v for k, v in p.items() if k.startswith(pre)}
+                if kind == "mamba3":
+                    x = m3(w, x)
+                else:
+                    blk = attn[i]
+                    blk.W = {LLAMA_NAME.get(k, k): v for k, v in w.items()}
+                    x = blk.block(x.reshape(B * L, dm), None, B, L, sdpa=True)[0].reshape(B, L, dm)
+            h = _rms(torch, x, p["norm_f.weight"], eps)
+            logits = F.linear(h, p["embed.weight"])
+            if not train:
+                return logits
+            return F.cross_entropy(logits.reshape(B * L, V).float(), targets.reshape(B * L),
+                                   reduction="mean")
+
+        self.uses_default_device = True
+        self.module = self._module(params, forward)
+        self.batches = self.data["batches"]
+        if not train:
+            self.host = [torch.from_numpy(self.np.ascontiguousarray(self.batches[0][:, :-1]).astype(self.np.int64))]
+        self.info["twin"] = ("embedding; per layer mamba/corpus/gen_corpus.py m3_forward or "
+                             "tools/speed_torch_seq.py LlamaEager.block(sdpa=True); RMSNorm eps "
+                             "1e-5; tied head; mean CE")
+
+    def _build_mlp(self):
+        torch = self.torch
+        F = torch.nn.functional
+        train = self.train
+
+        def forward(p, x, y=None):
+            logits = F.linear(F.relu(F.linear(x, p["weight1"], p["bias1"])), p["weight2"], p["bias2"])
+            if not train:
+                return logits
+            return F.cross_entropy(logits.float(), y, reduction="mean")
+
+        self.module = self._module(self._dev_params(), forward)
+        if not train:
+            self.host = [self._t(self.data["X"][0])]
+        self.info["twin"] = "F.linear, ReLU, F.linear (mean CE, AdamW for the step)"
+
+    # -- the protocol ------------------------------------------------------
+    def _train_inputs(self):
+        np, torch = self.np, self.torch
+        model = MODEL_OF[self.lane]
+        if model == "lm":
+            return [torch.from_numpy(self.batches[self.k].astype(np.int64))]
+        if model == "samba":
+            b = self.batches[self.k].astype(np.int64)
+            return [torch.from_numpy(np.ascontiguousarray(b[:, :-1])),
+                    torch.from_numpy(np.ascontiguousarray(b[:, 1:]))]
+        return [self._t(self.data["X"][self.k]), torch.from_numpy(self.data["y"][self.k].astype(np.int64))]
+
+    def call(self):
+        if self.train:
+            inputs = [t.to(self.dev) for t in self._train_inputs()]
             self.opt.zero_grad(set_to_none=True)
-            loss = self.model(ids)
+            with self._ctx():
+                loss = self.fn(*inputs)
             loss.backward()
             self.opt.step()
             self.losses.append(float(loss.item()))
             self.k += 1
         else:
-            with torch.no_grad():
-                logits = self.model(self.ids.to(self.dev), return_logits=True)
-                self.out = logits.cpu().numpy()
+            inputs = [t.to(self.dev) for t in self.host]
+            with self._ctx():
+                out = self.fn(*inputs)
+            self.out = out.float().cpu().numpy()
 
     def sync(self):
         self._sync()
 
     def outputs(self):
-        np = self.np
-        if self.lane == "lm-train-step":
-            return {"losses": np.array(self.losses, dtype=np.float64)}
-        return {"logits": self.out}
+        if self.train:
+            return {"losses": self.np.array(self.losses, dtype=self.np.float64)}
+        return {"y": self.out}
 
     def digest(self):
-        if self.lane == "lm-train-step":
-            return None
-        return _sha(self.np.ascontiguousarray(self.out).data)[:16]
+        return None if self.train else _sha(self.np.ascontiguousarray(self.out).data)[:16]
 
 
-class TorchGEMM:
-    def __init__(self, lane, shape, data):
-        import numpy as np
-        self.np = np
-        torch, dev, kind, name, sync = _torch_device()
-        self.torch, self.dev, self._sync = torch, dev, sync
-        precision = _load("torch_lm_step_opponent").set_precision(torch, False)
-        self.a = torch.from_numpy(np.ascontiguousarray(data["a"]))
-        self.b = torch.from_numpy(np.ascontiguousarray(data["b"]))
-        self.info = _torch_info(torch, kind, name, precision)
-        self.info["call"] = "a.to(dev) @ b.to(dev), then .cpu()"
-        self.out = None
-
-    def call(self):
-        c = self.a.to(self.dev) @ self.b.to(self.dev)
-        self.out = c.cpu().numpy()
-
-    def sync(self):
-        self._sync()
-
-    def outputs(self):
-        return {"c": self.out}
-
-    def digest(self):
-        return _sha(self.np.ascontiguousarray(self.out).data)[:16]
+def _restore_torch(torch, threads, info):
+    """gen_corpus.py switches torch to deterministic algorithms and one thread
+    at import; an opponent runs at torch's defaults (tools/speed_torch_seq.py
+    DEVIATION 1856). Read back and recorded."""
+    torch.use_deterministic_algorithms(False)
+    torch.set_num_threads(threads)
+    info["corpus_import_switches_restored"] = {
+        "deterministic_algorithms": torch.are_deterministic_algorithms_enabled(),
+        "num_threads": torch.get_num_threads()}
 
 
-BUILDERS = {("lm-train-step", "ours"): OursLM, ("lm-forward", "ours"): OursLM,
-            ("gemm", "ours"): OursGEMM,
-            ("lm-train-step", "torch-eager-fp32"): TorchLM, ("lm-forward", "torch-eager-fp32"): TorchLM,
-            ("gemm", "torch-eager-fp32"): TorchGEMM}
+def _load_mamba_corpus_restoring(torch, info):
+    threads = torch.get_num_threads()
+    mod = _load_mamba_corpus()
+    _restore_torch(torch, threads, info)
+    return mod
+
+
+def _load_speed_torch_seq(torch, info):
+    """tools/speed_torch_seq.py (it loads the mamba corpus at import and sets
+    OMP/OPENBLAS/MKL thread variables when unset); the switches are put back."""
+    if "bbn_speed_torch_seq" in sys.modules:
+        _restore_torch(torch, torch.get_num_threads(), info)
+        return sys.modules["bbn_speed_torch_seq"]
+    threads = torch.get_num_threads()
+    env = {k: os.environ.get(k) for k in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")}
+    mod = _load("speed_torch_seq", "bbn_speed_torch_seq")
+    sys.modules["bbn_speed_torch_seq"] = mod
+    for k, v in env.items():
+        if v is None:
+            os.environ.pop(k, None)
+    _restore_torch(torch, threads, info)
+    return mod
+
+
+def build_runner(lane, arm, shape, data):
+    if arm == "ours":
+        return OURS[MODEL_OF[lane]](lane, shape, data)
+    return TorchArm(lane, shape, data, arm)
 
 
 def worker(args):
@@ -456,18 +1211,18 @@ def worker(args):
     sys.stdout = sys.stderr
 
     def say(obj):
-        proto.write(json.dumps(obj, sort_keys=True) + "\n")
+        proto.write(json.dumps(obj, sort_keys=True, default=str) + "\n")
         proto.flush()
 
     import numpy as np
     try:
         with np.load(args.data) as z:
             data = {k: z[k] for k in z.files}
-        runner = BUILDERS[(args.lane, args.arm)](args.lane, args.shape, data)
-    except Exception as exc:  # noqa: BLE001
+        runner = build_runner(args.lane, args.arm, args.shape, data)
+    except (Exception, SystemExit) as exc:  # noqa: BLE001  (a twin's refuse() exits)
         import traceback
         traceback.print_exc()
-        say({"event": "error", "stage": "ready", "error": repr(exc)})
+        say({"event": "error", "stage": "ready", "error": repr(exc)[:2000]})
         return 1
     say({"event": "ready", "info": runner.info, "pid": os.getpid()})
     for line in sys.stdin:
@@ -485,7 +1240,11 @@ def worker(args):
             except Exception as exc:  # noqa: BLE001
                 import traceback
                 traceback.print_exc()
-                say({"event": "error", "stage": "round %d" % r, "error": repr(exc)})
+                where = runner.info.get("torch_backend") or runner.info.get("device")
+                say({"event": "error", "stage": "round %d" % r,
+                     "error": "REFUSED: %s on %s failed in round %d%s: %s" % (
+                         args.arm, where, r, " (compile happens here)"
+                         if r == 0 and "compile" in args.arm else "", repr(exc)[:2000])})
                 return 1
             say({"event": "round", "round": r, "ms": ms, "digest": digest})
         elif parts[0] == "save":
@@ -508,40 +1267,51 @@ def worker(args):
 # Quality (the conductor, float64)
 # ---------------------------------------------------------------------------
 
+def _mean_nll(np, logits, targets):
+    lg = logits.astype(np.float64)
+    mx = lg.max(axis=-1, keepdims=True)
+    lse = mx[..., 0] + np.log(np.exp(lg - mx).sum(axis=-1))
+    picked = np.take_along_axis(lg, targets[..., None], axis=-1)[..., 0]
+    return float((lse - picked).mean())
+
+
 def quality(lane, data, outs):
     import numpy as np
     q = {}
-    if lane == "lm-train-step":
+    if lane in TRAIN_LANES:
         for arm, o in outs.items():
             losses = [float(x) for x in o["losses"]]
             q[arm] = {"loss_first_step": losses[0], "loss_last_step": losses[-1], "steps": len(losses)}
-        ref = q.get("ours", {}).get("loss_last_step")
+        ref = q.get("ours")
         for arm in q:
             if arm != "ours" and ref is not None:
-                q[arm]["loss_last_abs_diff_vs_ours"] = abs(q[arm]["loss_last_step"] - ref)
-    elif lane == "lm-forward":
+                q[arm]["loss_first_abs_diff_vs_ours"] = abs(q[arm]["loss_first_step"] - ref["loss_first_step"])
+                q[arm]["loss_last_abs_diff_vs_ours"] = abs(q[arm]["loss_last_step"] - ref["loss_last_step"])
+        return q
+    for arm, o in outs.items():
+        q[arm] = {}
+    if lane in ("lm-forward", "samba-forward", "samba-infer"):
         targets = data["batches"][0][:, 1:].astype(np.int64)
         for arm, o in outs.items():
-            lg = o["logits"].astype(np.float64)
-            mx = lg.max(axis=-1, keepdims=True)
-            lse = (mx[..., 0] + np.log(np.exp(lg - mx).sum(axis=-1)))
-            picked = np.take_along_axis(lg, targets[..., None], axis=-1)[..., 0]
-            q[arm] = {"mean_nll": float((lse - picked).mean())}
-        ref = outs.get("ours", {}).get("logits")
-        for arm, o in outs.items():
-            if arm != "ours" and ref is not None:
-                q[arm]["max_abs_diff_vs_ours"] = float(
-                    np.abs(o["logits"].astype(np.float64) - ref.astype(np.float64)).max())
-    elif lane == "gemm":
+            q[arm]["mean_nll"] = _mean_nll(np, o["y"], targets)
+    if lane == "gemm":
         c64 = data["a"].astype(np.float64) @ data["b"].astype(np.float64)
         scale = float(np.abs(c64).max()) or 1.0
         for arm, o in outs.items():
-            q[arm] = {"max_rel_err_vs_fp64": float(np.abs(o["c"].astype(np.float64) - c64).max()) / scale}
-        ref = outs.get("ours", {}).get("c")
+            q[arm]["max_rel_err_vs_fp64"] = float(np.abs(o["y"].astype(np.float64) - c64).max()) / scale
+    ref = outs.get("ours", {}).get("y")
+    if ref is not None:
+        r64 = ref.astype(np.float64)
+        scale = float(np.abs(r64).max()) or 1.0
         for arm, o in outs.items():
-            if arm != "ours" and ref is not None:
-                q[arm]["max_abs_diff_vs_ours"] = float(
-                    np.abs(o["c"].astype(np.float64) - ref.astype(np.float64)).max())
+            if arm == "ours":
+                continue
+            if o["y"].shape != ref.shape:
+                q[arm]["shape_mismatch_vs_ours"] = "%s vs %s" % (list(o["y"].shape), list(ref.shape))
+                continue
+            diff = float(np.abs(o["y"].astype(np.float64) - r64).max())
+            q[arm]["max_abs_diff_vs_ours"] = diff
+            q[arm]["max_rel_diff_vs_ours"] = diff / scale
     return q
 
 
@@ -572,7 +1342,7 @@ def race(args):
     lane, shape = args.lane, args.shape
     arms = [a for a in args.arms.split(",") if a]
     for a in arms:
-        if (lane, a) not in BUILDERS:
+        if a not in ARMS:
             raise SystemExit("no arm %r for lane %r" % (a, lane))
     os.makedirs(args.out, exist_ok=True)
     os.makedirs(args.work, exist_ok=True)
@@ -582,7 +1352,8 @@ def race(args):
     srec = shape_record(lane, shape)
     result = {"lane": lane, "dataset": DATA_OF[lane], "shape": srec["label"], "shape_record": srec,
               "inputs": inputs, "arms": {}, "rounds_requested": args.rounds, "started": now_utc(),
-              "script": "tools/bench_board_neural.py", "torch_mode": TORCH_MODE,
+              "script": "tools/bench_board_neural.py", "ours_device": DEVICE_OF[lane],
+              "torch_settings": {a: precision_text(arm_setting(a)[1]) for a in arms if a != "ours"},
               "commit": os.environ.get("MOJOLEARN_REPO_COMMIT", "unknown")}
     workers = {}
     for arm in arms:
@@ -677,7 +1448,7 @@ def build_parser():
     r = sub.add_parser("race")
     r.add_argument("--lane", required=True, choices=LANES)
     r.add_argument("--shape", default="full", choices=sorted(LM_SHAPES))
-    r.add_argument("--arms", default=",".join(ARMS))
+    r.add_argument("--arms", default="ours,torch-eager-fp32")
     r.add_argument("--rounds", type=int, default=5)
     r.add_argument("--out", required=True)
     r.add_argument("--work", required=True)

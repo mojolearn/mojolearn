@@ -1595,6 +1595,191 @@ def _digest(outputs):
     return h.hexdigest()[:16]
 
 
+# ---------------------------------------------------------------------------
+# inference (`race --infer`, OFF by default: without it nothing below runs and
+# the race's output and JSON are unchanged)
+# ---------------------------------------------------------------------------
+#
+# After the fit rounds, every arm of a lane with a public predict or transform
+# times it on the eval rows `Xq` with ITS OWN model from the last fit round
+# (the fit is not retimed): kmeans predict, pca transform, ols predict, svc
+# predict. kNN (kneighbors) and KDE (score_samples) already time inference as
+# their race; DBSCAN and HDBSCAN have no predict. The span is the fit's: ours
+# takes host rows and returns host results inside its clock; the torch and
+# cuML arms upload `Xq` BEFORE their clock (upload_ms_untimed) and their clock
+# ends at the device synchronize, exactly as their fit rounds do.
+
+INFER_LANES = ("kmeans", "pca", "ols", "svc")
+INFER_CALL = {"kmeans": "predict", "pca": "transform", "ols": "predict", "svc": "predict"}
+
+
+class _InferRunner:
+    def __init__(self, call, sync, outputs, desc, info=None):
+        self.call, self.sync, self.outputs, self.desc = call, sync, outputs, desc
+        self.info = info or {}
+
+
+def _torch_upload(runner, x):
+    t0 = time.perf_counter()
+    dev = runner.torch.from_numpy(np.ascontiguousarray(x)).to(runner.dev)
+    _torch_sync()
+    return dev, (time.perf_counter() - t0) * 1000.0
+
+
+def _cupy_upload(x):
+    import cupy as cp
+    t0 = time.perf_counter()
+    dev = cp.asarray(np.ascontiguousarray(x))
+    cp.cuda.runtime.deviceSynchronize()
+    return dev, (time.perf_counter() - t0) * 1000.0
+
+
+def infer_runner(lane, runner, data):
+    """The timed inference call for one fitted runner, or a RuntimeError
+    naming why this arm has none. Setup here (an upload) is untimed."""
+    if lane not in INFER_LANES:
+        raise RuntimeError("lane %s has no inference phase (its race already times "
+                           "inference, or its estimator has no predict)" % lane)
+    quota = runner if isinstance(runner, SkQuota) else None
+    inner = quota.inner if quota else runner
+    xq = data["Xq"]
+    out = {}
+    host_sync = (lambda: None)
+    kind = INFER_CALL[lane]
+
+    def keep(v):
+        out["v"] = v
+
+    if isinstance(inner, (OursKMeans, OursPCA, OursOLS, OursSVC, SkKMeans, SkPCA, SkOLS, SkSVC)):
+        est = inner.est
+        if est is None:
+            raise RuntimeError("no fitted estimator")
+        method = getattr(est, kind)
+        lib = "mojolearn" if isinstance(inner, (OursKMeans, OursPCA, OursOLS, OursSVC)) else "sklearn"
+        def call(method=method):
+            if quota is None:
+                keep(method(xq))
+                return
+            with quota.limits(limits=quota.cap):
+                keep(method(xq))
+        desc = "%s %s.%s(Xq), host rows in, host result out" % (lib, type(est).__name__, kind)
+        return _InferRunner(call, host_sync, lambda: {"pred": _infer_host(lane, out["v"])}, desc)
+    if isinstance(inner, (TorchKMeans, TorchPCA, TorchOLS, TorchOLSEigh)):
+        torch = inner.torch
+        xd, up = _torch_upload(inner, xq)
+        info = {"upload_ms_untimed": up}
+        if isinstance(inner, TorchKMeans):
+            c = inner.c
+
+            def call():
+                c2 = (c * c).sum(dim=1)
+                n = xd.shape[0]
+                labels = torch.empty(n, dtype=torch.long, device=inner.dev)
+                for s in range(0, n, TORCH_CHUNK_ROWS):
+                    e = min(s + TORCH_CHUNK_ROWS, n)
+                    labels[s:e] = torch.addmm(c2.unsqueeze(0), xd[s:e], c.T,
+                                              beta=1.0, alpha=-2.0).argmin(dim=1)
+                keep(labels)
+            desc = "torch chunked addmm(||c||^2, Xq, c.T, alpha -2).argmin over the fitted centers"
+        elif isinstance(inner, TorchPCA):
+            comp, mean = inner.components, inner.mean
+            call = (lambda: keep((xd - mean) @ comp.T))
+            desc = "torch (Xq - mean) @ components.T"
+        else:
+            coef, icpt = inner.coef, inner.intercept
+            call = (lambda: keep(xd @ coef + icpt))
+            desc = "torch Xq @ coef + intercept"
+        return _InferRunner(call, _torch_sync, lambda: {"pred": _infer_host(lane, out["v"])},
+                            desc + "; Xq uploaded before the clock, which ends at the device synchronize",
+                            info)
+    if isinstance(inner, (CumlKMeans, CumlPCA, CumlOLS, CumlSVC)):
+        est = inner.est
+        if est is None:
+            raise RuntimeError("no fitted estimator")
+        if isinstance(inner, CumlSVC):
+            xd, up = inner.xq, None
+        else:
+            xd, up = _cupy_upload(xq)
+        method = getattr(est, kind)
+        call = (lambda: keep(method(xd)))
+        desc = ("cuml %s.%s(Xq on the device, output_type cupy); Xq uploaded before the clock, "
+                "which ends at the device synchronize" % (type(est).__name__, kind))
+        return _InferRunner(call, _cupy_sync, lambda: {"pred": _infer_host(lane, out["v"])}, desc,
+                            {"upload_ms_untimed": up})
+    raise RuntimeError("no inference call wired for %s" % type(inner).__name__)
+
+
+def _infer_host(lane, v):
+    """One dtype per lane on every arm, so outputs compare bit for bit."""
+    a = np.asarray(_to_host(v))
+    if lane == "kmeans":
+        return np.ascontiguousarray(a.reshape(-1), dtype=np.int32)
+    if lane == "svc":
+        return np.ascontiguousarray(a.reshape(-1), dtype=np.float64)
+    if lane == "ols":
+        return np.ascontiguousarray(a.reshape(-1), dtype=np.float32)
+    return np.ascontiguousarray(a, dtype=np.float32)
+
+
+def infer_quality(lane, data, infer_outs, fit_outs):
+    """Arm -> quality of its timed inference output: the lane's metric on the
+    eval rows, agreement with a float64 NumPy evaluation of the arm's OWN
+    fitted model, and agreement with ours (`bits_equal_vs_ours` is the FAST
+    against IDENTICAL check for `ours-fast`)."""
+    q = {}
+    Xq = data["Xq"].astype(np.float64)
+    for arm, o in infer_outs.items():
+        p = o["pred"]
+        f = fit_outs.get(arm) or {}
+        e = {}
+        try:
+            if lane == "kmeans" and "centers" in f:
+                C = f["centers"].astype(np.float64)
+                c2 = (C * C).sum(axis=1)
+                agree = total = 0.0
+                for s in range(0, Xq.shape[0], 250_000):
+                    xb = Xq[s:s + 250_000]
+                    d = np.maximum((xb * xb).sum(axis=1)[:, None] - 2.0 * (xb @ C.T) + c2[None, :], 0.0)
+                    dmin = d.min(axis=1)
+                    lab = p[s:s + 250_000].astype(np.int64)
+                    ok = (lab >= 0) & (lab < C.shape[0])
+                    got = np.where(ok, d[np.arange(d.shape[0]), np.clip(lab, 0, C.shape[0] - 1)], np.inf)
+                    agree += float((got <= dmin * (1.0 + 1e-6) + 1e-9).sum())
+                    total += float(np.where(ok, got, 0.0).sum())
+                e["eval_inertia"] = total
+                e["label_agreement_own_centers"] = agree / Xq.shape[0]
+            elif lane == "pca" and "components" in f:
+                ref = (Xq - f["mean"].astype(np.float64).reshape(-1)) @ f["components"].astype(np.float64).T
+                scale = float(np.max(np.abs(ref))) or 1.0
+                e["transform_max_rel_err_own_fp64"] = float(np.max(np.abs(p.astype(np.float64) - ref))) / scale
+            elif lane == "ols":
+                yq = data["yq"].astype(np.float64)
+                pr = p.astype(np.float64)
+                ss_tot = float(((yq - yq.mean()) ** 2).sum())
+                res = yq - pr
+                e["r2_eval"] = 1.0 - float((res * res).sum()) / ss_tot if ss_tot else None
+                e["rmse_eval"] = float(np.sqrt(float((res * res).sum()) / yq.shape[0]))
+                if "coef" in f:
+                    ref = Xq @ f["coef"].astype(np.float64).reshape(-1) + float(f["intercept"][0])
+                    scale = float(np.max(np.abs(ref))) or 1.0
+                    e["predict_max_rel_err_own_fp64"] = float(np.max(np.abs(pr - ref))) / scale
+            elif lane == "svc":
+                e["accuracy_eval"] = float((p == data["yq"].astype(np.float64)).mean())
+        except Exception as exc:  # noqa: BLE001
+            e["error"] = repr(exc)[:200]
+        ref = infer_outs.get("ours")
+        if ref is not None and arm != "ours":
+            r = ref["pred"]
+            same = r.shape == p.shape
+            e["bits_equal_vs_ours"] = bool(same and r.tobytes() == p.tobytes())
+            if same and lane in ("kmeans", "svc"):
+                e["agreement_vs_ours"] = float((r == p).mean())
+            elif same:
+                e["max_abs_diff_vs_ours"] = float(np.max(np.abs(r.astype(np.float64) - p.astype(np.float64)))) if p.size else 0.0
+        q[arm] = e
+    return q
+
+
 def worker(args):
     # The protocol gets its own descriptor; fd 1 becomes stderr (the log), so
     # a library that prints cannot interleave with a protocol line.
@@ -1619,6 +1804,7 @@ def worker(args):
         say({"event": "error", "stage": "ready", "error": repr(exc)})
         return 1
     say({"event": "ready", "info": runner.info, "pid": os.getpid()})
+    inf = None
     for line in sys.stdin:
         parts = line.split()
         if not parts:
@@ -1637,6 +1823,34 @@ def worker(args):
                 say({"event": "error", "stage": "round %d" % r, "error": repr(exc)})
                 return 1
             say({"event": "round", "round": r, "ms": ms, "digest": digest})
+        elif parts[0] == "infer":
+            # `race --infer` only. An inference failure is reported and the
+            # worker stays up: its fit outputs still have to be saved.
+            r = int(parts[1])
+            try:
+                if inf is None:
+                    inf = infer_runner(args.lane, runner, data)
+                t0 = time.perf_counter()
+                inf.call()
+                inf.sync()
+                ms = (time.perf_counter() - t0) * 1000.0
+                digest = _digest(inf.outputs())
+            except Exception as exc:  # noqa: BLE001
+                import traceback
+                traceback.print_exc()
+                say({"event": "infer_error", "stage": "infer %d" % r, "error": repr(exc)})
+                continue
+            say({"event": "infer", "round": r, "ms": ms, "digest": digest,
+                 "call": inf.desc, "info": inf.info})
+        elif parts[0] == "infer_save":
+            try:
+                path = parts[1]
+                tmp = path + ".tmp.npz"
+                np.savez(tmp, **inf.outputs())
+                os.replace(tmp, path)
+                say({"event": "infer_saved", "path": path})
+            except Exception as exc:  # noqa: BLE001
+                say({"event": "infer_error", "stage": "infer_save", "error": repr(exc)})
         elif parts[0] == "save":
             try:
                 path = parts[1]
@@ -1992,6 +2206,62 @@ def _span_warnings(spans, opponents):
     return warn
 
 
+def infer_phase(args, lane, ds, arms, workers, result):
+    """`race --infer`: after the fit rounds, one warm-up and `--rounds` timed
+    inference rounds per arm that completed every fit round, the order rotated
+    each round like the fit's. Returns the `infer` record of the race JSON."""
+    xq = (result.get("block") or {}).get("arrays", {}).get("Xq", {}).get("shape")
+    infer = {"call": INFER_CALL[lane], "batch": "Xq", "rows": (xq or [None])[0], "arms": {}}
+    eligible = [a for a in arms if workers[a].alive and len(result["arms"][a]["ms"]) == args.rounds]
+    for arm in arms:
+        infer["arms"][arm] = {"warmup_ms": None, "ms": [], "digests": [],
+                              "status": "ok" if arm in eligible else "no_fit"}
+    for r in range(args.rounds + 1):
+        live = [a for a in eligible if workers[a].alive and infer["arms"][a]["status"] == "ok"]
+        if not live:
+            break
+        shift = r % len(live)
+        for arm in live[shift:] + live[:shift]:
+            w = workers[arm]
+            rec = infer["arms"][arm]
+            w.send("infer %d" % r)
+            msg = w.read(args.warmup_seconds if r == 0 else args.round_seconds)
+            if msg is None or msg.get("event") != "infer":
+                rec["status"] = "timeout" if msg is None else "error"
+                rec["error"] = msg
+                rec["failed_round"] = r
+                if msg is None:
+                    w.kill("infer_timeout", None)
+                print("CTD-INFER-REFUSED lane=%s dataset=%s arm=%s stage=infer%d detail=%s"
+                      % (lane, ds, arm, r, json.dumps(msg)), flush=True)
+                continue
+            if r == 0:
+                rec["warmup_ms"] = msg["ms"]
+                rec["call_text"] = msg.get("call")
+                rec["info"] = msg.get("info")
+            else:
+                rec["ms"].append(msg["ms"])
+            rec["digests"].append(msg["digest"])
+            print("CTD-INFER-ROUND lane=%s dataset=%s arm=%s round=%d ms=%.3f digest=%s"
+                  % (lane, ds, arm, r, msg["ms"], msg["digest"]), flush=True)
+            time.sleep(args.pause)
+    return infer
+
+
+def infer_summary(lane, ds, infer, rounds):
+    for arm, a in infer["arms"].items():
+        ok = a["status"] == "ok" and len(a["ms"]) == rounds
+        a["median_ms"] = median(a["ms"]) if ok else None
+        a["min_ms"] = min(a["ms"]) if ok else None
+        a["max_ms"] = max(a["ms"]) if ok else None
+        a["digest_stable"] = (len(set(a["digests"][1:])) == 1) if ok else None
+        print("CTD-INFER lane=%s dataset=%s arm=%s call=%s rows=%s status=%s median_ms=%s "
+              "digest_stable=%s quality=%s"
+              % (lane, ds, arm, infer["call"], infer["rows"], a["status"], a["median_ms"],
+                 a["digest_stable"], json.dumps((infer.get("quality") or {}).get(arm, {}),
+                                                sort_keys=True)), flush=True)
+
+
 def race(args):
     lane, ds = args.lane, args.dataset
     arms = [a for a in (args.arms.split(",") if args.arms else ARMS[lane]) if a]
@@ -2058,7 +2328,11 @@ def race(args):
             print("CTD-ROUND lane=%s dataset=%s arm=%s round=%d ms=%.3f digest=%s"
                   % (lane, ds, arm, r, msg["ms"], msg["digest"]), flush=True)
             time.sleep(args.pause)
+    infer = None
+    if getattr(args, "infer", False) and lane in INFER_LANES:
+        infer = infer_phase(args, lane, ds, arms, workers, result)
     outs = {}
+    infer_outs = {}
     for arm in arms:
         w = workers[arm]
         if w.alive and len(result["arms"][arm]["ms"]) == args.rounds:
@@ -2072,6 +2346,16 @@ def race(args):
             else:
                 result["arms"][arm]["status"] = "save_failed"
                 result["arms"][arm]["error"] = msg
+        if infer is not None and w.alive and infer["arms"].get(arm, {}).get("status") == "ok":
+            ipath = os.path.join(args.work, "%s-%s-infer.npz" % (tag, arm))
+            w.send("infer_save %s" % ipath)
+            msg = w.read(args.round_seconds)
+            if msg is not None and msg.get("event") == "infer_saved":
+                with np.load(ipath) as z:
+                    infer_outs[arm] = {k: z[k] for k in z.files}
+            else:
+                infer["arms"][arm]["status"] = "save_failed"
+                infer["arms"][arm]["error"] = msg
         w.close()
     result["finished_rounds"] = now_utc()
     try:
@@ -2080,6 +2364,14 @@ def race(args):
         result["quality"] = quality(lane, data, outs, rec)
     except Exception as exc:  # noqa: BLE001
         result["quality"] = {"error": repr(exc)}
+        data = None
+    if infer is not None:
+        try:
+            infer["quality"] = infer_quality(lane, data, infer_outs, outs) if data else {}
+        except Exception as exc:  # noqa: BLE001
+            infer["quality"] = {"error": repr(exc)}
+        infer_summary(lane, ds, infer, args.rounds)
+        result["infer"] = infer
     ours = result["arms"].get("ours", {})
     ours_med = median(ours.get("ms", [])) if len(ours.get("ms", [])) == args.rounds else None
     result["ratios_ours_over"] = {}
@@ -2211,6 +2503,10 @@ def main():
     r.add_argument("--warmup-seconds", type=float, default=600.0)
     r.add_argument("--round-seconds", type=float, default=300.0)
     r.add_argument("--pause", type=float, default=0.5)
+    r.add_argument("--infer", action="store_true",
+                   help="after the fit rounds, time the lane's public predict or transform "
+                        "on the eval rows (kmeans, pca, ols, svc; CTD-INFER lines and an "
+                        "`infer` record). Off by default: the race is then unchanged")
     s = sub.add_parser("summary")
     s.add_argument("--out", required=True)
     args = ap.parse_args()
