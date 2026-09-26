@@ -77,9 +77,7 @@ DEFAULT_ROUNDS = 5
 TREE_ROW_FLOOR = 1_000_000
 
 TREE_LANES = ("gbdt-symmetric", "gbdt-depthwise", "gbdt-lossguide", "rf", "et", "iforest")
-# hdbscan is left out on purpose: the classical racer has no `ours` arm for it
-# (its only builder is cuML), so it cannot put our number beside anyone's.
-CLASSICAL_LANES = ("kmeans", "pca", "ols", "knn", "kde", "svc", "dbscan")
+CLASSICAL_LANES = ("kmeans", "pca", "ols", "knn", "kde", "svc", "dbscan", "hdbscan")
 FAMILIES = ("trees", "classical")
 DATASETS = ("taxi", "istella")
 VENDORS = ("apple", "nvidia", "amd")
@@ -154,6 +152,7 @@ CLASSICAL_OPPONENTS = {
         "kde": ("sklearn-cpu",),
         "svc": ("sklearn-cpu",),
         "dbscan": (),                        # the racer has no scikit-learn DBSCAN arm
+        "hdbscan": ("sklearn-cpu",),
     },
     "nvidia": {                              # bench_all_ours.sh's classical_arms_for
         "kmeans": ("cuml-gpu", "torch-gpu"),
@@ -163,6 +162,7 @@ CLASSICAL_OPPONENTS = {
         "kde": ("cuml-gpu",),
         "svc": ("cuml-gpu",),
         "dbscan": ("cuml-gpu",),             # cuml-gpu-rbc overflows at 1M rows
+        "hdbscan": ("cuml-gpu",),
     },
     "amd": {                                 # tools/classical_hotaisle_leg.sh's arms
         "kmeans": ("sklearn-cpu", "torch-gpu"),
@@ -172,6 +172,7 @@ CLASSICAL_OPPONENTS = {
         "kde": ("sklearn-cpu",),
         "svc": ("sklearn-cpu",),
         "dbscan": (),
+        "hdbscan": ("sklearn-cpu",),
     },
 }
 
@@ -179,7 +180,7 @@ CLASSICAL_OPPONENTS = {
 #: about 337 s on an H100 (bench_all_ours.sh); a CPU opponent on a Mac is
 #: longer, so the defaults here are generous. Long runs are expected.
 def classical_round_seconds(lane, dataset, vendor):
-    if lane == "dbscan":
+    if lane in ("dbscan", "hdbscan"):
         return 3600 if dataset == "istella" else 1800
     return 1800 if vendor == "apple" else 900
 
@@ -191,7 +192,7 @@ DBSCAN_DEFAULTS = {"MOJOLEARN_CTD_DBSCAN_TAXI": "0.177,10",
 
 #: Classical block each lane reads (classical_two_datasets.BLOCK_OF).
 CLASSICAL_BLOCK = {"kmeans": "big", "pca": "big", "ols": "big", "knn": "knn",
-                   "kde": "kde", "svc": "svc", "dbscan": "dbscan"}
+                   "kde": "kde", "svc": "svc", "dbscan": "dbscan", "hdbscan": "dbscan"}
 
 THREAD_ENV = ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
               "NUMEXPR_NUM_THREADS", "VECLIB_MAXIMUM_THREADS")
@@ -1243,7 +1244,6 @@ def render_board(result):
     L.append("")
     L.append("- Neural and GEMM lanes: their drivers time source-built Mojo binaries, not the "
              "installed wheel (TODO).")
-    L.append("- hdbscan: the classical racer has no mojolearn arm for it.")
     L.append("- dbscan has no scikit-learn arm in the racer, so on Apple and AMD it is ours only.")
     L.append("")
     return "\n".join(L) + "\n"
