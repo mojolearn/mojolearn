@@ -188,7 +188,7 @@ class LightReleaseTests(unittest.TestCase):
             self.assertEqual(publish_step(job)['with']['packages-dir'], 'upload/')
             self.assertIn('mv dist/mojolearn-*.whl upload/', '\n'.join(s.get('run', '') for s in jobs[job]['steps']))
         for job, core in (('publish_plugins', 'publish'), ('publish_alpha_plugins', 'publish_alpha')):
-            self.assertEqual(jobs[job]['environment']['name'], '${{ inputs.publish }}-${{ matrix.plugin }}')
+            self.assertEqual(jobs[job]['environment']['name'], '${{ inputs.publish }}')
             self.assertEqual(publish_step(job)['with']['packages-dir'], 'upload/')
             self.assertEqual(publish_step(job)['with']['skip-existing'], False)
             self.assertIn(core, jobs[job]['needs'])

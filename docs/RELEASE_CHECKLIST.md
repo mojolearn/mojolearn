@@ -451,16 +451,14 @@ Once, by the owner of the `mojolearn` PyPI account, before the first
 
    | PyPI project name | Owner | Repository name | Workflow name | Environment name |
    |---|---|---|---|---|
-   | `mojolearn-nvidia` | `mojolearn` | `mojolearn` | `release-provenance.yml` | `pypi-nvidia` |
-   | `mojolearn-amd` | `mojolearn` | `mojolearn` | `release-provenance.yml` | `pypi-amd` |
+   | `mojolearn-nvidia` | `mojolearn` | `mojolearn` | `release-provenance.yml` | `pypi` |
+   | `mojolearn-amd` | `mojolearn` | `mojolearn` | `release-provenance.yml` | `pypi` |
 
 2. **TestPyPI**, the same at https://test.pypi.org/manage/account/publishing/
-   with environments `testpypi-nvidia` and `testpypi-amd`.
-3. **GitHub environments.** In the repository's Settings, Environments, create
-   `pypi-nvidia`, `pypi-amd`, `testpypi-nvidia` and `testpypi-amd`, with the
-   same protection rules (required reviewers, deployment branches and tags)
-   as `pypi` and `testpypi`. A job naming a missing environment would create
-   it unprotected on first use, so create them first.
+   with environment `testpypi`.
+3. **GitHub:** nothing to create. All three projects publish from the existing
+   `pypi` and `testpypi` environments; PyPI routes each file to its project by
+   the wheel's own name.
 4. Leave the `mojolearn` project's publisher as it is (environments `pypi`
    and `testpypi`), since it still uploads the macOS wheel and the Linux core.
 

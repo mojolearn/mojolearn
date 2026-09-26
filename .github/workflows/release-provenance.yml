@@ -59,11 +59,11 @@
 # THE SPLIT LINUX PACKAGES (python/mojolearn/gpu_plugins.py, 2026-09-25).
 # On Linux mojolearn may ship as three PyPI projects: the core `mojolearn`,
 # and the GPU plugins `mojolearn-nvidia` and `mojolearn-amd`. A trusted
-# publisher mints a token for the projects that trust ONE (workflow,
-# environment) pair, so each project is uploaded by its own job in its own
-# environment: `testpypi`/`pypi` for mojolearn (unchanged, macOS and the Linux
-# core), `testpypi-nvidia`/`pypi-nvidia` for mojolearn-nvidia and
-# `testpypi-amd`/`pypi-amd` for mojolearn-amd. The plugin jobs run after the
+# publisher mints a token for the projects that trust one (workflow,
+# environment) pair. All three projects trust the same pair (this workflow
+# with the `testpypi`/`pypi` environment, Andrew 2026-09-26: PyPI routes each
+# file to its project by the wheel's own name, so separate environments added
+# no protection). Each project is still uploaded by its own job. The plugin jobs run after the
 # core's upload succeeded (or when the dispatch carries no core), so
 # `pip install mojolearn-nvidia` never resolves a plugin whose core is not
 # there. The PyPI side is docs/RELEASE_CHECKLIST.md, "Registering
@@ -748,11 +748,10 @@ jobs:
       fail-fast: false
       matrix:
         plugin: ${{ fromJSON(needs.build.outputs.linux_plugins) }}
-    # ONE ENVIRONMENT PER PROJECT: the Trusted Publisher of mojolearn-nvidia is
-    # configured against `pypi-nvidia` (`testpypi-nvidia` on TestPyPI), that of
-    # mojolearn-amd against `pypi-amd` (`testpypi-amd`).
+    # The same environment as the core (see the header): the Trusted Publishers
+    # of mojolearn-nvidia and mojolearn-amd trust `pypi` (`testpypi`).
     environment:
-      name: ${{ inputs.publish }}-${{ matrix.plugin }}
+      name: ${{ inputs.publish }}
       url: ${{ inputs.publish == 'pypi' && format('https://pypi.org/p/mojolearn-{0}', matrix.plugin) || format('https://test.pypi.org/project/mojolearn-{0}/', matrix.plugin) }}
     permissions:
       id-token: write
@@ -1008,10 +1007,9 @@ jobs:
       fail-fast: false
       matrix:
         plugin: ${{ fromJSON(needs.alpha_stage.outputs.plugins) }}
-    # ONE ENVIRONMENT PER PROJECT (see the header): pypi-nvidia / testpypi-nvidia,
-    # pypi-amd / testpypi-amd.
+    # The same environment as the core (see the header).
     environment:
-      name: ${{ inputs.publish }}-${{ matrix.plugin }}
+      name: ${{ inputs.publish }}
     permissions:
       contents: read
       id-token: write
