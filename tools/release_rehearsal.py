@@ -33,6 +33,17 @@ when any step failed.
 
     python3 tools/release_rehearsal.py --list        # the steps, nothing run
     python3 tools/release_rehearsal.py --only python-tests,platform-math
+    python3 tools/release_rehearsal.py --with contraction-census   # + an OPT-IN step
+
+OPT-IN STEPS run only when named in --with (or --only); the default rehearsal
+never runs them. `contraction-census` (lane/pinned-mul-contract-free,
+2026-09-26) is the one step that COMPILES: every host family's assembly with
+and without `--fp-mode contract=off` (tools/contraction_census.py, one compile
+at a time, private Mojo cache, about an hour on an M4) and FAIL if any
+function's fused multiply-adds differ between the two, i.e. if any IDENTICAL
+host arithmetic depends on the compiler's contraction choice. The GPU half
+of that claim is the contract=off column comparison in IDENTITY_PATHS.md
+("Contraction independence").
     MOJOLEARN_DO_TOKEN_FILE=~/.mojolearn_do_token     # the AMD leg's token (the default)
 """
 import argparse
@@ -101,10 +112,29 @@ def steps(work):
     ]
 
 
+OPT_IN = ("contraction-census",)
+
+
+def opt_in_steps(work):
+    """Steps the rehearsal runs only when asked for by name (--with / --only)."""
+    py = sys.executable
+    census = Path(work) / "contraction-census"
+    build = [py, str(ROOT / "tools" / "mac_slot.py"), "--wait-timeout", "7200", "run", "sh", "-c",
+             " && ".join(
+                 "%s tools/contraction_census.py build --out %s --target host --mode %s"
+                 % (shlex.quote(py), shlex.quote(str(census)), mode) for mode in ("default", "off"))
+             + " && %s tools/contraction_census.py compare %s %s"
+             % (shlex.quote(py), shlex.quote(str(census / "host" / "default")),
+                shlex.quote(str(census / "host" / "off")))]
+    return [("contraction-census", build, None)]
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--list", action="store_true", help="print the steps and run nothing")
     ap.add_argument("--only", default="", help="comma-separated step names")
+    ap.add_argument("--with", dest="with_", default="",
+                    help="comma-separated OPT-IN step names to run as well (%s)" % ", ".join(OPT_IN))
     ap.add_argument("--keep", default="", metavar="DIR", help="write logs here instead of a fresh temp dir")
     ap.add_argument("--stage-only", default="", metavar="DIR", help=argparse.SUPPRESS)
     args = ap.parse_args(argv)
@@ -113,10 +143,11 @@ def main(argv=None):
         stage_package(args.stage_only)
         return 0
     work = Path(args.keep) if args.keep else Path(tempfile.gettempdir()) / "mojolearn-rehearsal-(temp)"
-    plan = steps(work)
-    names = [n for n, _, _ in plan]
     only = [n for n in args.only.split(",") if n]
-    unknown = sorted(set(only) - set(names))
+    wanted = set(n for n in args.with_.split(",") if n) | (set(only) & set(OPT_IN))
+    plan = steps(work) + [st for st in opt_in_steps(work) if st[0] in wanted]
+    names = [n for n, _, _ in steps(work)] + list(OPT_IN)
+    unknown = sorted((set(only) | wanted) - set(names))
     if unknown:
         ap.error(f"unknown step(s) {unknown}; the steps are {names}")
     if args.list:
@@ -126,7 +157,7 @@ def main(argv=None):
         return 0
     work = Path(args.keep) if args.keep else Path(tempfile.mkdtemp(prefix="mojolearn-rehearsal-"))
     work.mkdir(parents=True, exist_ok=True)
-    plan = steps(work)
+    plan = steps(work) + [st for st in opt_in_steps(work) if st[0] in wanted]
     print(f"# release rehearsal at {subprocess.run(['git', '-C', str(ROOT), 'rev-parse', '--short', 'HEAD'], capture_output=True, text=True).stdout.strip()}, logs in {work}", flush=True)
     failed = []
     for name, cmd, env in plan:
