@@ -1,0 +1,68 @@
+mac_slot: admitted after 0.002s
+EXCP_AB_HEADER column=apple detect_seam=False launch_bound=256 rounds=1
+EXCP_AB_DISPATCH call=proj_fwd APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+EXCP_AB call=proj_fwd kind=ordinary m=8192 n=768 k=768 hash=3b093775ef2152bd rehash_equal=True ms=13.245 samples=13.245
+EXCP_AB call=proj_fwd kind=mixed m=8192 n=768 k=768 hash=89b625cee08a1ab4 rehash_equal=True ms=63.495 samples=63.495
+EXCP_AB call=proj_fwd kind=skew m=8192 n=768 k=768 hash=2684323d9548a36a rehash_equal=True ms=101.686 samples=101.686
+EXCP_AB call=proj_fwd kind=border m=8192 n=768 k=768 hash=d477ef3dd2b7addf rehash_equal=True ms=8.701 samples=8.701
+EXCP_AB call=proj_fwd kind=sparse m=8192 n=768 k=768 hash=27df73bd6bf48bcc rehash_equal=True ms=55.809 samples=55.809
+EXCP_AB call=proj_dA kind=ordinary m=8192 n=768 k=768 hash=5e7d375e8b1a9d26 rehash_equal=True ms=8.729 samples=8.729
+EXCP_AB call=proj_dA kind=mixed m=8192 n=768 k=768 hash=baee965659d2d7c1 rehash_equal=True ms=63.927 samples=63.927
+EXCP_AB call=proj_dA kind=skew m=8192 n=768 k=768 hash=693268dbfee7cf5c rehash_equal=True ms=102.827 samples=102.827
+EXCP_AB call=proj_dA kind=border m=8192 n=768 k=768 hash=85331a5d76de283c rehash_equal=True ms=8.792 samples=8.792
+EXCP_AB call=proj_dA kind=sparse m=8192 n=768 k=768 hash=33f61b61021394ab rehash_equal=True ms=54.299 samples=54.299
+EXCP_AB call=proj_dB kind=ordinary m=8192 n=768 k=768 hash=061bd3b38158a525 rehash_equal=True ms=9.723 samples=9.723
+EXCP_AB call=proj_dB kind=mixed m=8192 n=768 k=768 hash=82bb9fde5269b82e rehash_equal=True ms=71.289 samples=71.289
+EXCP_AB call=proj_dB kind=skew m=8192 n=768 k=768 hash=511cd05b9a66eed5 rehash_equal=True ms=116.384 samples=116.384
+EXCP_AB call=proj_dB kind=border m=8192 n=768 k=768 hash=b5c3dec7cab55153 rehash_equal=True ms=9.673 samples=9.673
+EXCP_AB call=proj_dB kind=sparse m=8192 n=768 k=768 hash=dbcd443d9f3592f0 rehash_equal=True ms=64.727 samples=64.727
+EXCP_AB_DISPATCH call=gateup_fwd APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+EXCP_AB call=gateup_fwd kind=ordinary m=8192 n=2048 k=768 hash=69883f9d4520fce8 rehash_equal=True ms=21.669 samples=21.669
+EXCP_AB call=gateup_fwd kind=mixed m=8192 n=2048 k=768 hash=440b0bde6ae51a26 rehash_equal=True ms=167.593 samples=167.593
+EXCP_AB call=gateup_fwd kind=skew m=8192 n=2048 k=768 hash=c0f8110c0315b0c3 rehash_equal=True ms=268.703 samples=268.703
+EXCP_AB call=gateup_fwd kind=border m=8192 n=2048 k=768 hash=e17ad5c237c838bb rehash_equal=True ms=21.666 samples=21.666
+EXCP_AB call=gateup_fwd kind=sparse m=8192 n=2048 k=768 hash=4b5b1bf703fd1eb4 rehash_equal=True ms=145.045 samples=145.045
+EXCP_AB call=gateup_dA kind=ordinary m=8192 n=2048 k=768 hash=1f32c6d75e1ae635 rehash_equal=True ms=23.073 samples=23.073
+EXCP_AB call=gateup_dA kind=mixed m=8192 n=2048 k=768 hash=7e8d97ece64787e4 rehash_equal=True ms=170.318 samples=170.318
+EXCP_AB call=gateup_dA kind=skew m=8192 n=2048 k=768 hash=43bbac6f2dea2417 rehash_equal=True ms=271.409 samples=271.409
+EXCP_AB call=gateup_dA kind=border m=8192 n=2048 k=768 hash=e6c45b1ddfb900f4 rehash_equal=True ms=22.646 samples=22.646
+EXCP_AB call=gateup_dA kind=sparse m=8192 n=2048 k=768 hash=2d67e63b6957e88e rehash_equal=True ms=146.771 samples=146.771
+EXCP_AB call=gateup_dB kind=ordinary m=8192 n=2048 k=768 hash=6416c32304a5a9e1 rehash_equal=True ms=24.541 samples=24.541
+EXCP_AB call=gateup_dB kind=mixed m=8192 n=2048 k=768 hash=6545a6bfc431bcac rehash_equal=True ms=172.58 samples=172.58
+EXCP_AB call=gateup_dB kind=skew m=8192 n=2048 k=768 hash=824770e368d6e154 rehash_equal=True ms=280.338 samples=280.338
+EXCP_AB call=gateup_dB kind=border m=8192 n=2048 k=768 hash=b7b281cc5423ebfb rehash_equal=True ms=23.871 samples=23.871
+EXCP_AB call=gateup_dB kind=sparse m=8192 n=2048 k=768 hash=cfd19d3af6bcb8e1 rehash_equal=True ms=149.268 samples=149.268
+EXCP_AB_DISPATCH call=down_fwd APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+EXCP_AB call=down_fwd kind=ordinary m=8192 n=768 k=2048 hash=3b97ab14d7768c45 rehash_equal=True ms=22.295 samples=22.295
+EXCP_AB call=down_fwd kind=mixed m=8192 n=768 k=2048 hash=61f3ba0391caa8fb rehash_equal=True ms=166.817 samples=166.817
+EXCP_AB call=down_fwd kind=skew m=8192 n=768 k=2048 hash=5180ecd9ba504fb4 rehash_equal=True ms=269.056 samples=269.056
+EXCP_AB call=down_fwd kind=border m=8192 n=768 k=2048 hash=ab5965e0ee98d77d rehash_equal=True ms=21.931 samples=21.931
+EXCP_AB call=down_fwd kind=sparse m=8192 n=768 k=2048 hash=46ef572495c79ff4 rehash_equal=True ms=144.868 samples=144.868
+EXCP_AB call=down_dA kind=ordinary m=8192 n=768 k=2048 hash=5cf60a67344cda5e rehash_equal=True ms=21.853 samples=21.853
+EXCP_AB call=down_dA kind=mixed m=8192 n=768 k=2048 hash=8fd4383649a4581b rehash_equal=True ms=169.409 samples=169.409
+EXCP_AB call=down_dA kind=skew m=8192 n=768 k=2048 hash=1c9d25e46202ad8c rehash_equal=True ms=270.038 samples=270.038
+EXCP_AB call=down_dA kind=border m=8192 n=768 k=2048 hash=e902fd1605620210 rehash_equal=True ms=21.895 samples=21.895
+EXCP_AB call=down_dA kind=sparse m=8192 n=768 k=2048 hash=00df3123a3dbba5a rehash_equal=True ms=146.076 samples=146.076
+EXCP_AB call=down_dB kind=ordinary m=8192 n=768 k=2048 hash=5459fe3eb5123824 rehash_equal=True ms=23.687 samples=23.687
+EXCP_AB call=down_dB kind=mixed m=8192 n=768 k=2048 hash=68f8372c3b3a2e7b rehash_equal=True ms=173.544 samples=173.544
+EXCP_AB call=down_dB kind=skew m=8192 n=768 k=2048 hash=bc72d788d42f024c rehash_equal=True ms=279.856 samples=279.856
+EXCP_AB call=down_dB kind=border m=8192 n=768 k=2048 hash=710e446c99bd9774 rehash_equal=True ms=23.518 samples=23.518
+EXCP_AB call=down_dB kind=sparse m=8192 n=768 k=2048 hash=7f35500a15373675 rehash_equal=True ms=149.488 samples=149.488
+EXCP_AB_DISPATCH call=head_fwd APPLE_MMA 64x64 KB=16 (simdgroup matrix on admitted windows, rtf elsewhere)
+EXCP_AB call=head_fwd kind=ordinary m=8192 n=50257 k=768 hash=e403705bfa7ca2ff rehash_equal=True ms=580.775 samples=580.775
+EXCP_AB call=head_fwd kind=mixed m=8192 n=50257 k=768 hash=b2502719172b00aa rehash_equal=True ms=4162.349 samples=4162.349
+EXCP_AB call=head_fwd kind=skew m=8192 n=50257 k=768 hash=aee37214a5ea7381 rehash_equal=True ms=6613.01 samples=6613.01
+EXCP_AB call=head_fwd kind=border m=8192 n=50257 k=768 hash=a556f3aa87c4f303 rehash_equal=True ms=669.733 samples=669.733
+EXCP_AB call=head_fwd kind=sparse m=8192 n=50257 k=768 hash=8d59069337bc5a12 rehash_equal=True ms=3587.535 samples=3587.535
+EXCP_AB call=head_dA kind=ordinary m=8192 n=50257 k=768 hash=219804c3c5b3ea5a rehash_equal=True ms=678.071 samples=678.071
+EXCP_AB call=head_dA kind=mixed m=8192 n=50257 k=768 hash=a18de604aef4c6fa rehash_equal=True ms=4221.275 samples=4221.275
+EXCP_AB call=head_dA kind=skew m=8192 n=50257 k=768 hash=38615b3835387b20 rehash_equal=True ms=7140.677 samples=7140.677
+EXCP_AB call=head_dA kind=border m=8192 n=50257 k=768 hash=23c3793ba7bebffb rehash_equal=True ms=797.726 samples=797.726
+EXCP_AB call=head_dA kind=sparse m=8192 n=50257 k=768 hash=4883b1d2376e4c36 rehash_equal=True ms=4083.591 samples=4083.591
+EXCP_AB call=head_dB kind=ordinary m=8192 n=50257 k=768 hash=9eaa7bd3eda51464 rehash_equal=True ms=690.371 samples=690.371
+EXCP_AB call=head_dB kind=mixed m=8192 n=50257 k=768 hash=88be4c8a2886dd5d rehash_equal=True ms=4643.106 samples=4643.106
+EXCP_AB call=head_dB kind=skew m=8192 n=50257 k=768 hash=1407ac684e02ea44 rehash_equal=True ms=7460.813 samples=7460.813
+EXCP_AB call=head_dB kind=border m=8192 n=50257 k=768 hash=287f3310b3f5647f rehash_equal=True ms=641.552 samples=641.552
+EXCP_AB call=head_dB kind=sparse m=8192 n=50257 k=768 hash=ffd3e9db7742605d rehash_equal=True ms=4136.49 samples=4136.49
+EXCP_AB_DONE
+mac_slot: {"wait_seconds": 0.0023725000210106373, "run_seconds": 138.71926937508397, "exit_code": 0}

@@ -1,0 +1,9 @@
+1087 external/tcmalloc+/tcmalloc/internal/system_allocator.h:713] Warning: Unable to mbind memory (errno=1, base=0x31fec0000000, nodemask=1)
+EXCP_AB_HEADER column=nvidia detect_seam=False launch_bound=256 rounds=1
+EXCP_AB_DISPATCH call=proj_fwd DEFAULT kpack_hg body (DEVIATION 2707) kpack_hg 128x64 reg8x4 TC=16 KS=16 page=packed(group,step,line) pad=4 align=16 fold_flush=hw stage=gather page_bytes=12800 pages=2 load=per-step fold=lane-wide local FS=16 tpb=256 hwftz=True groups where its rule takes the call (S=132 slack=4), else all leaves in one launch (NOT RUN: no -D MOJOLEARN_GEMM_ARM_TRIAL=1, the shipped default ran) all leaves in one launch
+EXCP_AB call=proj_fwd kind=tiny m=8192 n=768 k=768 hash=1f0a5f50a8dd15e0 rehash_equal=True ms=0.634352 samples=0.634352
+EXCP_AB call=proj_dA kind=tiny m=8192 n=768 k=768 hash=ee338ca4dd8299a1 rehash_equal=True ms=0.609944 samples=0.609944
+EXCP_AB call=proj_dB kind=tiny m=8192 n=768 k=768 hash=654eb9e377023011 rehash_equal=True ms=0.682916 samples=0.682916
+EXCP_AB_DISPATCH call=down_fwd DEFAULT kpack_hg body (DEVIATION 2707) kpack_hg 128x64 reg8x4 TC=16 KS=16 page=packed(group,step,line) pad=4 align=16 fold_flush=hw stage=gather page_bytes=12800 pages=2 load=per-step fold=lane-wide local FS=16 tpb=256 hwftz=True groups where its rule takes the call (S=132 slack=4), else all leaves in one launch (NOT RUN: no -D MOJOLEARN_GEMM_ARM_TRIAL=1, the shipped default ran) all leaves in one launch
+EXCP_AB call=down_fwd kind=tiny m=8192 n=768 k=2048 hash=5f862f3223fec155 rehash_equal=True ms=1.632468 samples=1.632468
+EXCP_AB_DONE

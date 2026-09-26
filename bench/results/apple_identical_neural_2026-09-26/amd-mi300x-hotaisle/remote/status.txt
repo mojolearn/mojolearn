@@ -1,0 +1,10 @@
+[14:43:59] column=amd arch=gfx942
+[14:44:31] gemm_device_check exit=0 gemm device kernel + gates: all green [IDENTICAL]  (8 gates, sabotage: none)
+[14:45:03] gemm_backward_check exit=0 gemm backward routing + gates: all green [IDENTICAL]  (10 gates, bwd sabotage: none, fwd sabotage: none)
+[14:45:28] gemm_workspace_check exit=0 PASS: 9 GEMMs, 4608 cells bitwise equal to host oracle
+[14:45:55] ab build exit=0
+[14:46:04] ab kinds5 exit=0 lines=60
+[14:46:10] ab tiny exit=0 lines=4
+[14:49:22] byte_lm build exit=0
+[14:49:24] step exit=1
+[14:49:24] done

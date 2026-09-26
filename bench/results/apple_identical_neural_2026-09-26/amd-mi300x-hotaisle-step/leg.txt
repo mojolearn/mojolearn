@@ -1,0 +1,32 @@
+commit=f8f5c5f7b parent 2f6141ac4
+commit_sha=f8f5c5f7be67634eb86b580ec6d1376249639489
+provider=hotaisle
+vendor=amd
+team=andrews-team
+spec=13core
+lane=step_body
+minutes=60
+gates=1
+bare=0
+test_watchdog=0
+gpu_archs_requested=<unset>
+target_column=amd
+runtime_requested=auto
+image=rocm/dev-ubuntu-22.04:6.4.1-complete
+extra=tools/apple_identical_neural/step_body.sh
+extra_sha256=38e3267efcd524bc346f440ea4c62099da601a08a7e8442a68089cbc3a1d73a1
+bundle_bytes=14963245
+bundle_sha256=a6ba9eed43f380f475c292a3e5f71917decbc2f94558377d6d907dcd2b38461f
+source_sha256_local=e45581832383fac32f48bef692c2ec5606f0a2c473e2861884fcdc577f28724d
+mode=rent
+started=2026-09-26T14:50:16Z
+balance_before_cents=4628
+slot=/tmp/mojolearn-hotaisle-slot.2 taken 2026-09-26T14:50:19Z
+price_cents_per_hour=299 min_reservation_minutes=1
+lease_cents=299
+balance_required_cents=799
+local_key_in_ps=not_visible
+create_http=200 create_utc=2026-09-26T14:53:28Z
+vm_ref=e88eb7c0-854b-4238-934f-5777fa52200c
+vm_name=enc1-gpuvm002
+vm_id=e88eb7c0-854b-4238-934f-5777fa52200c

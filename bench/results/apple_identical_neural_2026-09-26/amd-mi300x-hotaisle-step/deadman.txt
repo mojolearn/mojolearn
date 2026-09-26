@@ -1,0 +1,4 @@
+mac_deadman_pid=41635
+mac_deadman_dir=/var/folders/hy/_ylqg90n5lz20fd6tsrwg0cw0000gn/T/mojolearn-hotaisle-deadman-38929
+mac_deadman_fires_at=2026-09-26T15:53:22Z
+mac_deadman_keyed_by=vm_ref.txt (deployment_id from the create response) and description mojolearn:step_body:20260926T145322Z
