@@ -489,9 +489,17 @@ def _host_info():
     return info
 
 
+#: "cuda" (CUDA or ROCm, both spelled torch.cuda) or "mps" (Apple silicon),
+#: set by `_torch_setup` in the worker that owns the torch arm.
+_TORCH_KIND = "cuda"
+
+
 def _torch_sync():
     import torch
-    torch.cuda.synchronize()
+    if _TORCH_KIND == "mps":
+        torch.mps.synchronize()
+    else:
+        torch.cuda.synchronize()
 
 
 def _to_host(a):
@@ -512,6 +520,13 @@ def _ours_module():
     return mojolearn
 
 
+def _expected_ours_mode():
+    """The tier this `ours` worker was started for: `identical` for `ours`
+    and `ours-base`, `fast` for `ours-fast` (the Apple board's FAST arm,
+    tools/bench_board.py). `_worker_env` sets it; the readback must match."""
+    return os.environ.get("MOJOLEARN_NUMERIC_MODE", "identical").strip().lower()
+
+
 def _ours_info(ml, est):
     info = {"library": "mojolearn", "version": getattr(ml, "__version__", "unknown"),
             "numeric_mode_env": os.environ.get("MOJOLEARN_NUMERIC_MODE")}
@@ -521,13 +536,16 @@ def _ours_info(ml, est):
         except Exception as exc:  # noqa: BLE001
             info[name] = "unavailable (%r)" % (exc,)
     info["device"] = "gpu"
+    # Which mojolearn answered: the installed wheel or an in-repo tree.
+    info["module_path"] = getattr(ml, "__file__", None)
     # Ours fits INSIDE its clock: the public call is what is timed, upload and
     # host validation included. Declared rather than left absent so
     # `_span_facts` never has to guess it from prose (see the note there).
     info["pre_clock_fit"] = False
-    if info.get("numeric_mode_used") != "identical":
-        raise RuntimeError("ours is not IDENTICAL: numeric_mode_used() = %r"
-                           % (info.get("numeric_mode_used"),))
+    want = _expected_ours_mode()
+    if info.get("numeric_mode_used") != want:
+        raise RuntimeError("ours is not %s: numeric_mode_used() = %r"
+                           % (want.upper(), info.get("numeric_mode_used"),))
     return info
 
 
@@ -875,18 +893,31 @@ def _torch_setup(arrays):
     """Upload `arrays` (name -> host array) to the GPU before any clock.
     Returns (torch, device, tensors, info)."""
     import torch
-    if not torch.cuda.is_available():
-        raise RuntimeError("torch.cuda.is_available() is False; no GPU arm on this box")
-    dev = torch.device("cuda")
-    torch.cuda.synchronize()
+    global _TORCH_KIND
+    # Apple silicon: torch's GPU is MPS (tools/bench_board.py, the Apple
+    # column). The same arm, the same algorithm, written the same way; an op
+    # MPS lacks fails that arm by name at its warm-up, never silently on CPU.
+    if torch.cuda.is_available():
+        _TORCH_KIND = "cuda"
+        dev = torch.device("cuda")
+        dev_name = torch.cuda.get_device_name(0)
+    elif (getattr(torch.backends, "mps", None) is not None
+          and torch.backends.mps.is_available()):
+        _TORCH_KIND = "mps"
+        dev = torch.device("mps")
+        dev_name = "Apple MPS"
+    else:
+        raise RuntimeError("torch sees no CUDA, ROCm or MPS device; no GPU arm on this box")
+    _torch_sync()
     t0 = time.perf_counter()
     tensors = {k: torch.from_numpy(np.ascontiguousarray(v)).to(dev) for k, v in arrays.items()}
-    torch.cuda.synchronize()
+    _torch_sync()
     upload_ms = (time.perf_counter() - t0) * 1000.0
     info = {"library": "torch", "version": torch.__version__,
             "torch_version_hip": getattr(torch.version, "hip", None),
             "torch_version_cuda": torch.version.cuda,
-            "device": "gpu", "device_name": torch.cuda.get_device_name(0),
+            "torch_backend": _TORCH_KIND,
+            "device": "gpu", "device_name": dev_name,
             "upload_ms_untimed": upload_ms,
             # No torch arm fits before its clock; declared, not left absent.
             "pre_clock_fit": False}
@@ -1445,6 +1476,10 @@ for _lane in LANES:
     # is cuML's only, because this library ships no HDBSCAN.
     if (_lane, "ours") in BUILDERS:
         BUILDERS[(_lane, "ours-base")] = BUILDERS[(_lane, "ours")]
+        # `ours-fast`: the SAME estimator in a worker started under
+        # MOJOLEARN_NUMERIC_MODE=fast (`_worker_env`), so the Apple board
+        # interleaves FAST beside IDENTICAL round by round in one race.
+        BUILDERS[(_lane, "ours-fast")] = BUILDERS[(_lane, "ours")]
 for _lane in LANES:
     # Same for a lane with no scikit-learn arm (dbscan and hdbscan): there is
     # nothing to wrap in the CPU quota.
@@ -1601,13 +1636,17 @@ def _worker_env(arm, root):
     env = dict(os.environ)
     for k in THREAD_ENV:
         env.pop(k, None)
-    if arm in ("ours", "ours-base"):
-        env["MOJOLEARN_NUMERIC_MODE"] = "identical"
+    if arm in ("ours", "ours-base", "ours-fast"):
+        env["MOJOLEARN_NUMERIC_MODE"] = "fast" if arm == "ours-fast" else "identical"
         tree = os.path.join(root, "python")
         if arm == "ours-base":
             tree = os.environ.get("MOJOLEARN_CTD_BASE_PY", "")
             if not tree or not os.path.isdir(tree):
                 raise SystemExit("arm ours-base needs MOJOLEARN_CTD_BASE_PY, a python/ tree holding the before bindings")
+        elif os.environ.get("MOJOLEARN_BENCH_INSTALLED", "0").strip() not in ("", "0"):
+            # tools/bench_board.py measures the INSTALLED wheel: the in-repo
+            # python/ (no compiled bindings in a shipped tree) must not shadow it.
+            return env
         env["PYTHONPATH"] = tree + (
             os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
     return env
@@ -1874,7 +1913,7 @@ def race(args):
     tag = "%s-%s" % (lane, ds)
     workers = {}
     for arm in arms:
-        py = args.ours_python if arm in ("ours", "ours-base") else args.theirs_python
+        py = args.ours_python if arm in ("ours", "ours-base", "ours-fast") else args.theirs_python
         cmd = shlex.split(py) + [os.path.abspath(__file__), "worker", "--arm", arm,
                                  "--lane", lane, "--dataset", ds, "--data", args.data]
         workers[arm] = Worker(arm, cmd, _worker_env(arm, args.root),
