@@ -222,7 +222,66 @@ CLASSICAL_MIRRORS = [
 ]
 
 
+#: THE GPU PLUGIN TABLE (2026-09-25): python/mojolearn/gpu_plugins.py says
+#: which PyPI project ships which vendor directory. (path, the token that
+#: proves the file reads the table rather than a copy of it.)
+PLUGIN_READERS = [
+    ("python/mojolearn/_backend.py", "from . import gpu_plugins"),
+    ("tools/verify_linux_surface_qualification.py", "def load_gpu_plugins()"),
+    ("packaging/linux/pack_wheel.py", "load_gpu_plugins()"),
+    ("tools/wheel_api_audit.py", "load_gpu_plugins()"),
+    ("packaging/linux/smoke.py", "gpu_plugins.PLUGINS"),
+]
+
+
+def plugin_problems():
+    """Every disagreement about the Linux GPU plugins, as printable lines:
+    the table's vendors must be exactly the loader's `_LINUX_VENDORS`, the
+    packer's `LINUX_VENDORS` and the admission side's PLUGIN_ARCHES keys,
+    and every reader must read the table."""
+    out = []
+    spec = importlib.util.spec_from_file_location(
+        "check_ext_lists_gpu_plugins", ROOT / "python" / "mojolearn" / "gpu_plugins.py")
+    table = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(table)
+    vendors = tuple(table.vendors())
+    pairs = ', '.join(v + ' -> ' + r['distribution'] for v, r in table.PLUGINS.items())
+    print(f"gpu plugin table: {pairs}")
+    for path, var in (("python/mojolearn/_backend.py", "_LINUX_VENDORS"),
+                      ("packaging/linux/pack_wheel.py", "LINUX_VENDORS")):
+        m = re.search(r"^" + var + r"\s*=\s*(\([^)]*\))", (ROOT / path).read_text(), re.M)
+        got = ast.literal_eval(m.group(1)) if m else None
+        if got != vendors:
+            out.append(f"  MISMATCH  {path} {var} = {got}, gpu_plugins.py vendors are {vendors}")
+        else:
+            print(f"  OK        {path} {var} == gpu_plugins.py vendors")
+    vs = importlib.util.spec_from_file_location(
+        "check_ext_lists_plugin_arches", ROOT / "tools" / "verify_linux_surface_qualification.py")
+    vm = importlib.util.module_from_spec(vs)
+    vs.loader.exec_module(vm)
+    if tuple(sorted(vm.PLUGIN_ARCHES)) != tuple(sorted(vendors)):
+        out.append(f"  MISMATCH  tools/verify_linux_surface_qualification.py PLUGIN_ARCHES keys "
+                   f"{sorted(vm.PLUGIN_ARCHES)}, gpu_plugins.py vendors are {sorted(vendors)}")
+    else:
+        print("  OK        tools/verify_linux_surface_qualification.py PLUGIN_ARCHES == gpu_plugins.py vendors")
+    for rel, token in PLUGIN_READERS:
+        text = _read_tree(rel)
+        if text is None or token not in text:
+            out.append(f"  MISSING   {rel} does not read gpu_plugins.py by {token!r}")
+        else:
+            print(f"  OK        {rel} reads the plugin table: {token!r}")
+    return out
+
+
 def main():
+    if "--plugins" in sys.argv[1:]:
+        problems = plugin_problems()
+        if problems:
+            print("\n".join(problems))
+            print(f"\nFAILED: {len(problems)} GPU plugin problem(s); gpu_plugins.py is the one table.")
+            return 1
+        print("\nThe GPU plugin table is read everywhere.")
+        return 0
     if "--host" in sys.argv[1:]:
         # The host section alone, from the manifest and the routing table
         # read out of _backend.py's source, so it runs with nothing built.
@@ -334,6 +393,10 @@ def main():
     if host_bad:
         print("\n".join(host_bad))
         bad += len(host_bad)
+    plugin_bad = plugin_problems()
+    if plugin_bad:
+        print("\n".join(plugin_bad))
+        bad += len(plugin_bad)
     if bad:
         print(f"\nFAILED: {bad} list(s) disagree with _backend._MODULES.")
         print("A short list does not raise on its own -- it simply never looks")
