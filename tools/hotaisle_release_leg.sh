@@ -44,7 +44,7 @@
 # (~/mojolearn-evidence/release/0.8.18/f2293183c729/legs/hip-gfx942/). The
 # default lease is 60 minutes, the maximum this leg takes: the on-box watchdog
 # fires at the lease, the build's own bound is the lease less the fetch
-# reserve (600 s), never above release061_remote_build.sh's 6000 s.
+# reserve (600 s), never above HOTAISLE_RELEASE_BUILD_CAP in tools/release_limits.sh.
 set -uo pipefail
 
 COMMIT="${1:?frozen 40-hex commit}"
@@ -62,6 +62,8 @@ while [ $# -gt 0 ]; do
   shift
 done
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# Build-path time limits: tools/release_limits.sh is their one source.
+. "$REPO/tools/release_limits.sh"
 ROOT=$REPO
 log() { echo "[$(date +%T) amd/hotaisle] $*"; }
 say() { log "$@"; }
@@ -226,7 +228,7 @@ DRY RUN -- nothing rented. With --rent this leg would:
   upload   $TMPD/src.tgz ($ARCHIVE_BYTES bytes, sha256 $ARCHIVE_SHA) -> $BR/mojolearn + commit.txt=$COMMIT
   overlay  ${RO_FILES:-none (every box tool is the source commit's)}
   prepare  as root: patchelf/docker/python3-venv if absent; pixi; pixi install --locked --environment default (guarded); patchelf 0.17.2.4
-  build    MOJOLEARN_COMMIT=$COMMIT MOJOLEARN_RELEASE_BUILD_SECONDS=<=lease-600 MOJOLEARN_BUILD_JOBS=$BUILD_JOBS
+  build    MOJOLEARN_COMMIT=$COMMIT MOJOLEARN_RELEASE_BUILD_SECONDS=<=min(lease-600, $HOTAISLE_RELEASE_BUILD_CAP) MOJOLEARN_BUILD_JOBS=$BUILD_JOBS
            bash $BR/release_ubuntu22_build.sh run hip gfx942 $REMOTE_OUT > $REMOTE_LOG
            (pinned Ubuntu 22.04 container $(sed -n 's/^IMAGE=//p' "$HELPER"), core host probe: $CORE_HOST_SHA from $CORE_HOST_SOURCE)
   fetch    $REMOTE_OUT -> $OUT/release-build/ ; logs and leg.txt beside it
@@ -326,9 +328,9 @@ echo 'build_environment=ROCm 6.4.1 Ubuntu 22.04 pinned container' >> "$STATE"
 
 # THE BUILD, DETACHED AND POLLED, so a dropped ssh cannot kill it.
 WORK_SECONDS=$(( HA_T_CREATE + LEASE * 60 - $(date +%s) - FETCH_RESERVE ))
-# The bound follows the lease (release061_remote_build.sh takes up to 6000 s);
-# a fixed 2400 cut every cold 0.8.19 build short.
-[ "$WORK_SECONDS" -gt 6000 ] && WORK_SECONDS=6000
+# The bound follows the lease, capped at HOTAISLE_RELEASE_BUILD_CAP (6000,
+# what release061_remote_build.sh takes); a fixed 2400 cut every cold 0.8.19 build short.
+[ "$WORK_SECONDS" -gt "$HOTAISLE_RELEASE_BUILD_CAP" ] && WORK_SECONDS=$HOTAISLE_RELEASE_BUILD_CAP  # tools/release_limits.sh
 [ "$WORK_SECONDS" -ge 300 ] || { echo "build_exit=NOT_STARTED_${WORK_SECONDS}s_LEFT" >> "$STATE"; log "only ${WORK_SECONDS}s left; skipping the build"; exit 7; }
 echo "work_seconds=$WORK_SECONDS" >> "$STATE"; log "build bound ${WORK_SECONDS}s"
 BUILD_T0=$(date +%s)

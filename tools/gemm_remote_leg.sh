@@ -366,6 +366,9 @@ fi
 REPO="$(pwd)"
 MOJOLEARN_LEG_REPO="$REPO"
 export MOJOLEARN_LEG_REPO
+# Build-path time limits: tools/release_limits.sh is their one source
+# (read from the repository, not the /tmp snapshot of this file).
+. "$REPO/tools/release_limits.sh"
 
 # ---------------------------------------------------------------------------
 # DEVIATION 1882 -- RUN FROM AN IMMUTABLE SNAPSHOT OF THIS FILE.
@@ -3127,7 +3130,8 @@ RELEASE_TOOLS_SETUP
     if [ "$work_remaining" -ge 150 ]; then
         release_seconds=$((work_remaining - 20))
         # 0.8.19: a release that rebuilds every binding cold ran past 2400 s (exit 124)
-        if [ "$release_seconds" -gt 6000 ]; then release_seconds=6000; fi
+        # the cap is RUNPOD_RELEASE_BUILD_CAP in tools/release_limits.sh
+        if [ "$release_seconds" -gt @RELEASEBUILDCAP@ ]; then release_seconds=@RELEASEBUILDCAP@; fi
         printf '%s\n' '@COMMIT@' > "$ROOT/commit.txt"
         if [ '@QUALIFY@' = 1 ]; then
             # DEVIATION 2298: 25 installed jobs from the wheel's own bytes on
@@ -4559,6 +4563,7 @@ leg_check_remote_body() {
         -e "s|@SWEEP@|$SWEEP|g" \
         -e "s|@DUMP@|$LEG_DUMP|g" \
         -e "s|@WORKTIMEOUT@|$WORK_TIMEOUT|g" \
+        -e "s|@RELEASEBUILDCAP@|$RUNPOD_RELEASE_BUILD_CAP|g" \
         -e "s|@NVIDIACAMPAIGN@|$NVIDIA_CAMPAIGN|g" \
         -e "s|@BUILDJOBS@|$BUILD_JOBS|g" \
         -e "s|@BUILDCORES@|$BUILD_CORES|g" \
@@ -4822,7 +4827,17 @@ RELEASE_SOURCE
     #
     # Never on a qualification leg: a release keeps "verify on a box that did
     # not build it" literal, and its wheels never pass through the cache.
+    #
+    # A RELEASE BUILD (campaign 7) NEEDS MORE THAN 64 UPLOAD SLOTS. One set is
+    # 75 builds at 83c64c8a1 (43 GPU bindings over three tiers and 32 host
+    # families); with the default 64 every 0.8.19 H100 leg ended on eleven
+    # `miss+built-not-uploaded:no-slot` rows, so those eleven could never
+    # be served to the next leg. 192 is tools/runpod_cpu_leg.sh's
+    # --release-bincache figure.
+    _bc_slots="${MOJOLEARN_BINCACHE_SLOTS:-64}"
+    [ "$NVIDIA_CAMPAIGN" = 7 ] && _bc_slots="${MOJOLEARN_BINCACHE_SLOTS:-192}"
     if [ "${MOJOLEARN_BINCACHE:-1}" = 1 ] && [ "$LEG_QUALIFY" != 1 ]; then
+        MOJOLEARN_BINCACHE_SLOTS="$_bc_slots" \
         sh tools/bincache_leg.sh stage "$SSH_TARGET" "runpod:$IMAGE" > "$OUT/bincache_stage.log" 2>&1 || true
         leg_say "$(tail -1 "$OUT/bincache_stage.log")"
     fi
@@ -5098,9 +5113,21 @@ leg_fetch() {
         || echo "  FETCH FAILED -- the remote log is /root/gemm_leg_out"
     # lane/r2-binding-cache: the Mac copies what the box uploaded to its
     # content address; the box never holds a credential that could.
-    if [ "${MOJOLEARN_BINCACHE:-1}" = 1 ] && [ -f "$OUT/remote/bincache/uploads.tsv" ]; then
-        sh tools/bincache_leg.sh promote "$OUT/remote/bincache" > "$OUT/bincache_promote.log" 2>&1 || true
-        echo "  $(tail -1 "$OUT/bincache_promote.log")"
+    #
+    # THE RELEASE BUILD RECORDS ITS UPLOADS ELSEWHERE. packaging/linux/
+    # build_sets.sh writes them under <release-build>/build/bincache (its
+    # MOJOLEARN_BINCACHE_OUT), not /root/gemm_leg_out/bincache, and this step
+    # only ever looked at the latter: every campaign-7 leg from 0.8.16 to
+    # 0.8.19 uploaded its bindings to the inbox and none was ever promoted,
+    # so the next release leg missed all of them (75 of 75 at 0.8.19, the
+    # same build_svm_host.sh key built twice). Both directories are promoted.
+    if [ "${MOJOLEARN_BINCACHE:-1}" = 1 ]; then
+        : > "$OUT/bincache_promote.log"
+        for _bcd in "$OUT/remote/bincache" "$OUT/remote/release-build/build/bincache"; do
+            [ -f "$_bcd/uploads.tsv" ] || continue
+            sh tools/bincache_leg.sh promote "$_bcd" >> "$OUT/bincache_promote.log" 2>&1 || true
+            echo "  $(tail -1 "$OUT/bincache_promote.log")"
+        done
     fi
     if [ "$PAYLOAD" = "phase8" ]; then
         leg_fetch_e1dir || FETCH_RED=1

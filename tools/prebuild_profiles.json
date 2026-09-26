@@ -1,0 +1,383 @@
+{
+ "schema": "mojolearn.prebuild-profile.v1",
+ "targets": {
+  "cuda-sm_89": {
+   "captured_from": "0.8.19 release leg cuda-sm_89 at d61c74eab87d (L40S)",
+   "route": "gemm-campaign7",
+   "served_by": "release L40S leg (tools/gemm_remote_leg.sh, campaign 7)",
+   "templates": {
+    "gpu:deterministic": {
+     "build_env": {
+      "MODULAR_HOME": "/root/mojolearn/.pixi/envs/default/share/max",
+      "MOJOLEARN_BUILD_PIXI_ENV": "default",
+      "MOJOLEARN_COMPILE_JOBS": "2",
+      "MOJOLEARN_GPU_ARCHS": "sm_89",
+      "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+      "MOJOLEARN_NUMERIC_MODE": "deterministic",
+      "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+      "MOJOLEARN_TARGET_COLUMN": "nvidia"
+     },
+     "declared": {
+      "shell": "bash"
+     },
+     "device_arch": "sm_89",
+     "gpu_archs": "sm_89",
+     "image": "runpod:runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04",
+     "numeric_mode": "deterministic",
+     "os": {
+      "cc": "cc (Ubuntu 11.4.0-1ubuntu1~22.04) 11.4.0",
+      "glibc": "glibc 2.35",
+      "id": "ubuntu",
+      "ld": "GNU ld (GNU Binutils for Ubuntu) 2.38",
+      "machine": "x86_64",
+      "version_id": "22.04"
+     },
+     "repo_path": "/root/mojolearn",
+     "schema": "mojolearn-bincache-v1",
+     "target_column": "nvidia"
+    },
+    "gpu:fast": {
+     "build_env": {
+      "MODULAR_HOME": "/root/mojolearn/.pixi/envs/default/share/max",
+      "MOJOLEARN_BUILD_PIXI_ENV": "default",
+      "MOJOLEARN_COMPILE_JOBS": "2",
+      "MOJOLEARN_GPU_ARCHS": "sm_89",
+      "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+      "MOJOLEARN_NUMERIC_MODE": "fast",
+      "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+      "MOJOLEARN_TARGET_COLUMN": "nvidia"
+     },
+     "declared": {
+      "shell": "bash"
+     },
+     "device_arch": "sm_89",
+     "gpu_archs": "sm_89",
+     "image": "runpod:runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04",
+     "numeric_mode": "fast",
+     "os": {
+      "cc": "cc (Ubuntu 11.4.0-1ubuntu1~22.04) 11.4.0",
+      "glibc": "glibc 2.35",
+      "id": "ubuntu",
+      "ld": "GNU ld (GNU Binutils for Ubuntu) 2.38",
+      "machine": "x86_64",
+      "version_id": "22.04"
+     },
+     "repo_path": "/root/mojolearn",
+     "schema": "mojolearn-bincache-v1",
+     "target_column": "nvidia"
+    },
+    "gpu:identical": {
+     "build_env": {
+      "MODULAR_HOME": "/root/mojolearn/.pixi/envs/default/share/max",
+      "MOJOLEARN_BUILD_PIXI_ENV": "default",
+      "MOJOLEARN_COMPILE_JOBS": "2",
+      "MOJOLEARN_GPU_ARCHS": "sm_89",
+      "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+      "MOJOLEARN_NUMERIC_MODE": "identical",
+      "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+      "MOJOLEARN_TARGET_COLUMN": "nvidia"
+     },
+     "declared": {
+      "shell": "bash"
+     },
+     "device_arch": "sm_89",
+     "gpu_archs": "sm_89",
+     "image": "runpod:runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04",
+     "numeric_mode": "identical",
+     "os": {
+      "cc": "cc (Ubuntu 11.4.0-1ubuntu1~22.04) 11.4.0",
+      "glibc": "glibc 2.35",
+      "id": "ubuntu",
+      "ld": "GNU ld (GNU Binutils for Ubuntu) 2.38",
+      "machine": "x86_64",
+      "version_id": "22.04"
+     },
+     "repo_path": "/root/mojolearn",
+     "schema": "mojolearn-bincache-v1",
+     "target_column": "nvidia"
+    },
+    "host": {
+     "build_env": {
+      "MODULAR_HOME": "/root/mojolearn/.pixi/envs/default/share/max",
+      "MOJOLEARN_BUILD_PIXI_ENV": "default",
+      "MOJOLEARN_COMPILE_JOBS": "2",
+      "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+      "MOJOLEARN_NUMERIC_MODE": "identical",
+      "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+      "MOJOLEARN_TARGET_COLUMN": "cpu"
+     },
+     "declared": {
+      "shell": "bash"
+     },
+     "device_arch": "sm_89",
+     "gpu_archs": "",
+     "image": "runpod:runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04",
+     "numeric_mode": "identical",
+     "os": {
+      "cc": "cc (Ubuntu 11.4.0-1ubuntu1~22.04) 11.4.0",
+      "glibc": "glibc 2.35",
+      "id": "ubuntu",
+      "ld": "GNU ld (GNU Binutils for Ubuntu) 2.38",
+      "machine": "x86_64",
+      "version_id": "22.04"
+     },
+     "repo_path": "/root/mojolearn",
+     "schema": "mojolearn-bincache-v1",
+     "target_column": "cpu"
+    }
+   }
+  },
+  "cuda-sm_90a": {
+   "captured_from": "0.8.19 release leg cuda-sm_90a at 69a519c1522d (H100)",
+   "route": "gemm-campaign7",
+   "served_by": "release H100 leg (tools/gemm_remote_leg.sh, campaign 7)",
+   "templates": {
+    "gpu:deterministic": {
+     "build_env": {
+      "MODULAR_HOME": "/root/mojolearn/.pixi/envs/default/share/max",
+      "MOJOLEARN_BUILD_PIXI_ENV": "default",
+      "MOJOLEARN_COMPILE_JOBS": "2",
+      "MOJOLEARN_GPU_ARCHS": "sm_90a",
+      "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+      "MOJOLEARN_NUMERIC_MODE": "deterministic",
+      "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+      "MOJOLEARN_TARGET_COLUMN": "nvidia"
+     },
+     "declared": {
+      "shell": "bash"
+     },
+     "device_arch": "sm_90a",
+     "gpu_archs": "sm_90a",
+     "image": "runpod:runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04",
+     "numeric_mode": "deterministic",
+     "os": {
+      "cc": "cc (Ubuntu 11.4.0-1ubuntu1~22.04) 11.4.0",
+      "glibc": "glibc 2.35",
+      "id": "ubuntu",
+      "ld": "GNU ld (GNU Binutils for Ubuntu) 2.38",
+      "machine": "x86_64",
+      "version_id": "22.04"
+     },
+     "repo_path": "/root/mojolearn",
+     "schema": "mojolearn-bincache-v1",
+     "target_column": "nvidia"
+    },
+    "gpu:fast": {
+     "build_env": {
+      "MODULAR_HOME": "/root/mojolearn/.pixi/envs/default/share/max",
+      "MOJOLEARN_BUILD_PIXI_ENV": "default",
+      "MOJOLEARN_COMPILE_JOBS": "2",
+      "MOJOLEARN_GPU_ARCHS": "sm_90a",
+      "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+      "MOJOLEARN_NUMERIC_MODE": "fast",
+      "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+      "MOJOLEARN_TARGET_COLUMN": "nvidia"
+     },
+     "declared": {
+      "shell": "bash"
+     },
+     "device_arch": "sm_90a",
+     "gpu_archs": "sm_90a",
+     "image": "runpod:runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04",
+     "numeric_mode": "fast",
+     "os": {
+      "cc": "cc (Ubuntu 11.4.0-1ubuntu1~22.04) 11.4.0",
+      "glibc": "glibc 2.35",
+      "id": "ubuntu",
+      "ld": "GNU ld (GNU Binutils for Ubuntu) 2.38",
+      "machine": "x86_64",
+      "version_id": "22.04"
+     },
+     "repo_path": "/root/mojolearn",
+     "schema": "mojolearn-bincache-v1",
+     "target_column": "nvidia"
+    },
+    "gpu:identical": {
+     "build_env": {
+      "MODULAR_HOME": "/root/mojolearn/.pixi/envs/default/share/max",
+      "MOJOLEARN_BUILD_PIXI_ENV": "default",
+      "MOJOLEARN_COMPILE_JOBS": "2",
+      "MOJOLEARN_GPU_ARCHS": "sm_90a",
+      "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+      "MOJOLEARN_NUMERIC_MODE": "identical",
+      "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+      "MOJOLEARN_TARGET_COLUMN": "nvidia"
+     },
+     "declared": {
+      "shell": "bash"
+     },
+     "device_arch": "sm_90a",
+     "gpu_archs": "sm_90a",
+     "image": "runpod:runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04",
+     "numeric_mode": "identical",
+     "os": {
+      "cc": "cc (Ubuntu 11.4.0-1ubuntu1~22.04) 11.4.0",
+      "glibc": "glibc 2.35",
+      "id": "ubuntu",
+      "ld": "GNU ld (GNU Binutils for Ubuntu) 2.38",
+      "machine": "x86_64",
+      "version_id": "22.04"
+     },
+     "repo_path": "/root/mojolearn",
+     "schema": "mojolearn-bincache-v1",
+     "target_column": "nvidia"
+    },
+    "host": {
+     "build_env": {
+      "MODULAR_HOME": "/root/mojolearn/.pixi/envs/default/share/max",
+      "MOJOLEARN_BUILD_PIXI_ENV": "default",
+      "MOJOLEARN_COMPILE_JOBS": "2",
+      "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+      "MOJOLEARN_NUMERIC_MODE": "identical",
+      "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+      "MOJOLEARN_TARGET_COLUMN": "cpu"
+     },
+     "declared": {
+      "shell": "bash"
+     },
+     "device_arch": "sm_90a",
+     "gpu_archs": "",
+     "image": "runpod:runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04",
+     "numeric_mode": "identical",
+     "os": {
+      "cc": "cc (Ubuntu 11.4.0-1ubuntu1~22.04) 11.4.0",
+      "glibc": "glibc 2.35",
+      "id": "ubuntu",
+      "ld": "GNU ld (GNU Binutils for Ubuntu) 2.38",
+      "machine": "x86_64",
+      "version_id": "22.04"
+     },
+     "repo_path": "/root/mojolearn",
+     "schema": "mojolearn-bincache-v1",
+     "target_column": "cpu"
+    }
+   }
+  },
+  "hip-gfx942": {
+   "captured_from": "0.8.19 CPU-pod build hip-gfx942 at 24f75178b621",
+   "route": "cpu-pod",
+   "served_by": "CPU-pod route only (tools/release_linux_build.sh); NOT the default AMD release leg",
+   "templates": {
+    "gpu:deterministic": {
+     "build_env": {
+      "MODULAR_HOME": "/root/mojolearn/.pixi/envs/default/share/max",
+      "MOJOLEARN_BUILD_PIXI_ENV": "default",
+      "MOJOLEARN_COMPILE_JOBS": "1",
+      "MOJOLEARN_GPU_ARCHS": "gfx942",
+      "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+      "MOJOLEARN_NUMERIC_MODE": "deterministic",
+      "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+      "MOJOLEARN_TARGET_COLUMN": "amd"
+     },
+     "declared": {
+      "shell": "bash"
+     },
+     "device_arch": "none",
+     "gpu_archs": "gfx942",
+     "image": "runpod-cpu:rocm/dev-ubuntu-22.04@sha256:a3850e6638c6c390436ef1aacd72fd1359af36083ac823d5136818206998c484",
+     "numeric_mode": "deterministic",
+     "os": {
+      "cc": "cc (Ubuntu 11.4.0-1ubuntu1~22.04) 11.4.0",
+      "glibc": "glibc 2.35",
+      "id": "ubuntu",
+      "ld": "GNU ld (GNU Binutils for Ubuntu) 2.38",
+      "machine": "x86_64",
+      "version_id": "22.04"
+     },
+     "repo_path": "/root/mojolearn",
+     "schema": "mojolearn-bincache-v1",
+     "target_column": "amd"
+    },
+    "gpu:fast": {
+     "build_env": {
+      "MODULAR_HOME": "/root/mojolearn/.pixi/envs/default/share/max",
+      "MOJOLEARN_BUILD_PIXI_ENV": "default",
+      "MOJOLEARN_COMPILE_JOBS": "1",
+      "MOJOLEARN_GPU_ARCHS": "gfx942",
+      "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+      "MOJOLEARN_NUMERIC_MODE": "fast",
+      "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+      "MOJOLEARN_TARGET_COLUMN": "amd"
+     },
+     "declared": {
+      "shell": "bash"
+     },
+     "device_arch": "none",
+     "gpu_archs": "gfx942",
+     "image": "runpod-cpu:rocm/dev-ubuntu-22.04@sha256:a3850e6638c6c390436ef1aacd72fd1359af36083ac823d5136818206998c484",
+     "numeric_mode": "fast",
+     "os": {
+      "cc": "cc (Ubuntu 11.4.0-1ubuntu1~22.04) 11.4.0",
+      "glibc": "glibc 2.35",
+      "id": "ubuntu",
+      "ld": "GNU ld (GNU Binutils for Ubuntu) 2.38",
+      "machine": "x86_64",
+      "version_id": "22.04"
+     },
+     "repo_path": "/root/mojolearn",
+     "schema": "mojolearn-bincache-v1",
+     "target_column": "amd"
+    },
+    "gpu:identical": {
+     "build_env": {
+      "MODULAR_HOME": "/root/mojolearn/.pixi/envs/default/share/max",
+      "MOJOLEARN_BUILD_PIXI_ENV": "default",
+      "MOJOLEARN_COMPILE_JOBS": "1",
+      "MOJOLEARN_GPU_ARCHS": "gfx942",
+      "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+      "MOJOLEARN_NUMERIC_MODE": "identical",
+      "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+      "MOJOLEARN_TARGET_COLUMN": "amd"
+     },
+     "declared": {
+      "shell": "bash"
+     },
+     "device_arch": "none",
+     "gpu_archs": "gfx942",
+     "image": "runpod-cpu:rocm/dev-ubuntu-22.04@sha256:a3850e6638c6c390436ef1aacd72fd1359af36083ac823d5136818206998c484",
+     "numeric_mode": "identical",
+     "os": {
+      "cc": "cc (Ubuntu 11.4.0-1ubuntu1~22.04) 11.4.0",
+      "glibc": "glibc 2.35",
+      "id": "ubuntu",
+      "ld": "GNU ld (GNU Binutils for Ubuntu) 2.38",
+      "machine": "x86_64",
+      "version_id": "22.04"
+     },
+     "repo_path": "/root/mojolearn",
+     "schema": "mojolearn-bincache-v1",
+     "target_column": "amd"
+    },
+    "host": {
+     "build_env": {
+      "MODULAR_HOME": "/root/mojolearn/.pixi/envs/default/share/max",
+      "MOJOLEARN_BUILD_PIXI_ENV": "default",
+      "MOJOLEARN_COMPILE_JOBS": "2",
+      "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+      "MOJOLEARN_NUMERIC_MODE": "identical",
+      "MOJOLEARN_PACKAGE_BYTE_LM": "1",
+      "MOJOLEARN_TARGET_COLUMN": "cpu"
+     },
+     "declared": {
+      "shell": "bash"
+     },
+     "device_arch": "none",
+     "gpu_archs": "",
+     "image": "runpod-cpu:rocm/dev-ubuntu-22.04@sha256:a3850e6638c6c390436ef1aacd72fd1359af36083ac823d5136818206998c484",
+     "numeric_mode": "identical",
+     "os": {
+      "cc": "cc (Ubuntu 11.4.0-1ubuntu1~22.04) 11.4.0",
+      "glibc": "glibc 2.35",
+      "id": "ubuntu",
+      "ld": "GNU ld (GNU Binutils for Ubuntu) 2.38",
+      "machine": "x86_64",
+      "version_id": "22.04"
+     },
+     "repo_path": "/root/mojolearn",
+     "schema": "mojolearn-bincache-v1",
+     "target_column": "cpu"
+    }
+   }
+  }
+ }
+}
