@@ -55,18 +55,14 @@ The first local run (fe91bde48) read INCOMPLETE for two reasons, neither the pin
 2. **`libMojolearnMath.dylib` was never built in the worktree** (gitignored;
    `packaging/portable_math/stage.py` build()): 114 cells refused on import.
 
-## Open: the AMD column
+## AMD column: PASSED (2026-09-26 ~14:36Z)
 
-No AMD box was rentable on 2026-09-26 (Hot Aisle and RunPod out of stock;
-DigitalOcean's one GPU droplet is the GPT-3 B-1 segment). A Hot Aisle leg waits
-for stock (`amd2.out`, body `amd_wrap.sh`: default build, 209 lanes, 60-minute
-lease). Offline: the r3 AMD census (default vs off) is CLEAN, but 0.8.19 vs lane
-fused-op counts on gfx942 differ by small amounts in 14 kernel families NVIDIA
-does not show (arima jones, gbdt pointwise/multilogit, glm logistic/softmax,
-mamba ssd/selective scan, gmm estep logsumexp, lm head, llama fused, umap),
-not provably bit-neutral from the assembly. The release AMD column decides; a
-DISAGREE there is a defect in this lane, fixed by making the site an explicit
-fma on every backend.
+Hot Aisle 1x MI300X (gfx942), merged tree `b3bde9d7e`, default build, the same
+209 lanes x base/denormal/odd: 621/621 equal to the 0.8.19 Metal, CUDA and HIP
+references; 6 byte-lm cells REFUSED (that binding is not built by this leg
+body, as on the NVIDIA leg). Evidence `~/mojolearn-evidence/pinned-mul-contract-free/amd2/`;
+VM e6fb84aa verified gone, $1.50. The 14 gfx942 kernel families whose fused-op
+counts differ from 0.8.19 (see the census notes) move no bit in any cell.
 
 ## Original-vs-new census findings (census/orig_vs_round1_nvidia.txt, host fusedtext)
 
