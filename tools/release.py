@@ -1417,7 +1417,13 @@ class Release:
         w = self.macos_wheel()
         if w and wheel_commit(w) == self.commit:
             return "have " + w.name
-        env = dict(MOJOLEARN_PACKAGE_BYTE_LM="1", MOJOLEARN_BUILD_JOBS="4", MOJOLEARN_COMPILE_JOBS="1")
+        # Four builds at once, as measured on the 10-core M4, never more than
+        # this Mac's slot ceiling (tools/mac_slot.py slot_count), which
+        # mac_slot.py would otherwise refuse.
+        sys.path.insert(0, str(ROOT / "tools"))
+        import mac_slot
+        slots = str(min(4, mac_slot.slot_count()))
+        env = dict(MOJOLEARN_PACKAGE_BYTE_LM="1", MOJOLEARN_BUILD_JOBS=slots, MOJOLEARN_COMPILE_JOBS="1")
         plan = self.plan()
         src = self.src
         reuse = release_reuse.plan_rows(plan, release_reuse.MACOS, "REUSE")
@@ -1429,7 +1435,7 @@ class Release:
             else:
                 release_reuse.assemble_macos(plan, self.previous_wheel("macos"), store, say=self.say)
             env.update(MOJOLEARN_REUSE_PLAN=str(store / "macos-plan.json"), MOJOLEARN_REUSE_DIR=str(store))
-        self.must([PY, str(ROOT / "tools" / "mac_slot.py"), "--slots", "4", "run", "--",
+        self.must([PY, str(ROOT / "tools" / "mac_slot.py"), "--slots", slots, "run", "--",
                    "./packaging/macos/build_release_wheel.sh"],
                   env=env, log=self.rel / "macos-build.log", what="build_release_wheel.sh", cwd=src)
         if self.dry:

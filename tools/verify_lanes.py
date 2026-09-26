@@ -60,6 +60,7 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import lane_select                                              # noqa: E402
+import mac_slot                                                 # noqa: E402
 
 ROOT = lane_select.ROOT
 
@@ -768,7 +769,7 @@ def main(argv=None):
         # MOJOLEARN_CPU_PASS_SLOTS leaves room for a concurrent Apple pass
         # (tools/release_check.py): the Metal job holds one of the MAC_SLOTS.
         args.shards = args.jobs = int(os.environ.get("MOJOLEARN_CPU_PASS_SLOTS")
-                                      or os.environ.get("MAC_SLOTS", "5"))
+                                      or mac_slot.slot_count())
     if args.apple_pass:
         # The batch and decode probes check batching logic, which the CPU and
         # NVIDIA columns carry; here Metal answers one question, whether its
@@ -808,8 +809,9 @@ def main(argv=None):
         ap.error("budgets and timeouts must be finite and positive")
     if args.jobs < 1 or args.shards < 1:
         ap.error("jobs and shards must be positive")
-    if args.jobs > int(os.environ.get("MAC_SLOTS", "5")):
-        ap.error("--jobs exceeds shared CPU capacity (MAC_SLOTS, default 5)")
+    if args.jobs > mac_slot.slot_count():
+        ap.error(f"--jobs exceeds shared CPU capacity ({mac_slot.slot_count()} slots: MAC_SLOTS, "
+                 "default half the logical cores)")
     if args.backend != "cpu" and args.jobs != 1:
         ap.error("one GPU job per host; parallelize separate GPU hosts, or use --backend cpu --jobs N")
     if args.runner == "pods" and args.backend != "cpu":

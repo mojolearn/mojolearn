@@ -60,7 +60,7 @@ jobs:
       - name: Scheduler and checkpoint regressions (CPU only, no bindings)
         run: |
           /tmp/yaml-venv/bin/pip install --quiet pytest==8.3.5 numpy==2.2.6
-          /tmp/yaml-venv/bin/python -m pytest -q tools/test_mac_slot.py tools/test_identity_runtime.py tools/test_algorithm_scope.py tools/test_cpu_identity_gate.py tools/test_backend_control.py tools/test_gate_scope.py tools/test_lane_select.py::test_runtime_controls_do_not_trigger_numerical_sweep tools/test_lane_select.py::test_the_selector_is_not_imported_by_what_it_selects
+          /tmp/yaml-venv/bin/python -m pytest -q tools/test_mac_slot.py tools/test_identity_runtime.py tools/test_algorithm_scope.py tools/test_cpu_identity_gate.py tools/test_backend_control.py tools/test_gate_scope.py tools/test_lane_select.py::test_runtime_controls_do_not_trigger_numerical_sweep tools/test_lane_select.py::test_the_selector_is_not_imported_by_what_it_selects tools/test_check_light_release.py
       - name: Every lane is accounted for, and no public algorithm is laneless
         # Three lanes added since v0.8.8 were in NEITHER the shipped table nor
         # PUBLIC_PENDING_LANES on 2026-09-20. Each mechanism refused them for
