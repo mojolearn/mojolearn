@@ -1085,6 +1085,14 @@ LANE_REVISIONS = {
     # arithmetic, not input: UMAP.transform is row separable now
     "umap": "transform-row-separable-1",
     "par-graph-umap": "transform-row-separable-1",
+    # arithmetic, not input (2026-09-26, lane/gmm-degenerate-data): the
+    # init_params='kmeans' start is the classic greedy k-means++ now, not
+    # k-means|| (mixture/estimator.mojo, DEVIATION 3133), so every committed
+    # cell of these three hashes a start this harness no longer runs. They
+    # read OWED to the next record. The random-init lanes did not move.
+    "gmm": "classic-kmeanspp-init-1",
+    "gmm-sample": "classic-kmeanspp-init-1",
+    "par-gmm": "classic-kmeanspp-init-1",
 }
 
 
@@ -1216,6 +1224,13 @@ NON_SIZE_REVISIONS = {
     "par-graph-umap": (
         "the same row-separable UMAP.transform change as the `umap` lane (2026-09-16, "
         "lane/umap-batch-determinism); this driver's fixture size did not move either"),
+    "gmm": (
+        "arithmetic, not input: GaussianMixture's init_params='kmeans' start became the classic "
+        "greedy k-means++ instead of k-means|| (2026-09-26, lane/gmm-degenerate-data, DEVIATION 3133 "
+        "in mixture/estimator.mojo). The lane still fits the same 6000 x 4 rows"),
+    "par-gmm": (
+        "the same init change as `gmm` (2026-09-26, lane/gmm-degenerate-data); the shards and the "
+        "6000 x 4 rows did not move"),
 }
 
 

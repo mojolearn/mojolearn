@@ -127,6 +127,12 @@ comptime COV_SPHERICAL = 3
 #: `cluster/estimator.mojo::kmeans_fit`, which is identity certified in its
 #: own lane, and one-hots the labels exactly as `_base.py:120-127` does.
 comptime INIT_KMEANS = 0
+#: **DEVIATION 3133.** The `oversampling_factor` the `kmeans` initialization
+#: hands `kmeans_fit`: `0.0`, the classic sequential greedy k-means++ seeding
+#: (scikit-learn's `KMeans` default, and the `kmeans-classic-pp` identity
+#: lane), never the k-means|| default of 2.0. `gmm_initial_resp` explains why.
+#: `mixture/host/gmm_host_oracle.mojo` passes the same constant.
+comptime GMM_KMEANS_OVERSAMPLING = Float64(0.0)
 #: `init_params="random"`. POSITION-MAPPED Philox draws, normalized per row.
 #: DEVIATION 1733.
 comptime INIT_RANDOM = 1
@@ -498,10 +504,29 @@ def gmm_initial_resp(
     **`init_params="kmeans"`: `cluster/estimator.mojo::kmeans_fit`, ONE-HOT.**
     `_base.py:120-127` runs `KMeans(n_clusters=K, n_init=1,
     random_state=...)` and sets `resp[arange(n), labels] = 1`. This runs
-    `kmeans_fit` at `n_init=1`, `init=INIT_KMEANS_PLUS_PLUS` (scikit-learn's
-    `KMeans` default), `metric=METRIC_L2_EXPANDED`, `max_iter=300`,
-    `tol=1e-4` -- scikit-learn's `KMeans` defaults -- and one-hots the same
-    way. **The k-means is not re-implemented and its identity is not this
+    `kmeans_fit` at `n_init=1`, `init=INIT_KMEANS_PLUS_PLUS` with
+    `oversampling_factor=0.0` (the CLASSIC greedy k-means++ seeding, which is
+    scikit-learn's `KMeans` default), `metric=METRIC_L2_EXPANDED`,
+    `max_iter=300`, `tol=1e-4` -- scikit-learn's `KMeans` defaults -- and
+    one-hots the same way.
+
+    **DEVIATION 3133 (2026-09-26): `oversampling_factor=0.0`, NOT
+    `kmeans_fit`'s default 2.0.** The default is cuVS's and selects the
+    SCALABLE k-means|| seeding (`detail/kmeans.cuh:910-915`), which is not
+    the seeding scikit-learn's `KMeans` runs. Until this date the GMM took
+    that default while this docstring called it scikit-learn's, and on
+    real data with few-valued columns (the taxi reg block, 2,000 to 20,000
+    rows) the k-means|| start left one cluster holding 70 to 95% of the
+    rows beside several of 1 to 7 rows. Those tiny components are rank
+    deficient, `reg_covar = 1e-6` is below float32's rounding of their
+    covariance, and scikit-learn's OWN EM started from those labels
+    refused ("ill-defined empirical covariance") or scored held-out rows
+    at -8e4 exactly as ours did; started from its own greedy k-means++
+    labels it fitted. The classic seeding is the `kmeans-classic-pp`
+    identity lane's, already certified on every column, so no new
+    arithmetic enters: the INITIAL LABELS change, and with them every
+    `init_params="kmeans"` bit downstream (the `gmm`, `gmm-sample` and
+    `par-gmm` lanes' references move; the `random` lanes do not). **The k-means is not re-implemented and its identity is not this
     lane's claim**; `cluster/` owns it, `pixi run check-kmeans-identity` is
     its gate, and `mixture/README.md`'s WHAT THIS LANE REUSES RATHER THAN
     REWRITES names the entry point.
@@ -555,6 +580,10 @@ def gmm_initial_resp(
             n_init=1,
             init=INIT_KMEANS_PLUS_PLUS,
             metric=METRIC_L2_EXPANDED,
+            # DEVIATION 3133: the classic greedy k-means++ seeding, which is
+            # scikit-learn's KMeans default; kmeans_fit's 2.0 is cuVS's
+            # k-means|| and gave degenerate one-row components on real data.
+            oversampling_factor=GMM_KMEANS_OVERSAMPLING,
         )
         _ = res
         for i in range(n_samples):
