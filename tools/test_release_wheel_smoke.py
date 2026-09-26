@@ -520,5 +520,203 @@ runpy.run_path(str(pathlib.Path(__file__).with_name('timeout.real')), run_name='
         self.assertIn('verdict=FAILED', (out / 'smoke.txt').read_text())
 
 
+# ---------------------------------------------------------------- --from-index
+IV = '0.9.0'
+PROJECTS = {'mojolearn': 'mojolearn', 'mojolearn-nvidia': 'mojolearn_nvidia', 'mojolearn-amd': 'mojolearn_amd'}
+
+
+class FakeIndex(http.server.BaseHTTPRequestHandler):
+    """The JSON API of an index serving the split release at IV (minus
+    server.missing), and each Linux wheel's PEP 658 METADATA."""
+
+    def log_message(self, *args):
+        pass
+
+    def do_GET(self):
+        s = self.server
+        base = 'http://127.0.0.1:%d' % s.server_address[1]
+        for project, prefix in PROJECTS.items():
+            name = f'{prefix}-{IV}-py3-none-manylinux_2_35_x86_64.whl'
+            if self.path == f'/pypi/{project}/{IV}/json' and project not in s.missing:
+                body = json.dumps({'info': {'requires_dist': None}, 'urls': [
+                    {'filename': name, 'packagetype': 'bdist_wheel', 'url': f'{base}/files/{name}', 'yanked': False}]})
+            elif self.path == f'/files/{name}.metadata':
+                pins = ([f'mojolearn-nvidia=={IV}', f'mojolearn-amd=={IV}'] if project == 'mojolearn'
+                        else [f'mojolearn=={IV}'])
+                body = 'Metadata-Version: 2.1\nName: %s\n%s\n' % (project, '\n'.join('Requires-Dist: ' + p for p in pins))
+            else:
+                continue
+            data = body.encode()
+            self.send_response(200)
+            self.send_header('Content-Length', str(len(data)))
+            self.end_headers()
+            self.wfile.write(data)
+            return
+        self.send_response(404)
+        self.send_header('Content-Length', '0')
+        self.end_headers()
+
+
+# The box of an index run: box.sh is replaced by the files it would leave.
+INDEX_SSH_SHIM = r'''#!/bin/bash
+cmd="${@: -1}"
+case "$cmd" in
+  *"nohup bash "*"/box.sh "*) python3 "$(dirname "$0")/fakebox.py" && echo STARTED; exit 0 ;;
+esac
+exec bash -c "$cmd"
+'''
+FAKE_BOX = r'''import json, os, pathlib
+d = pathlib.Path(os.environ['FAKE_BOX_DIR']); v = os.environ['FAKE_VERSION']
+vendor = os.environ.get('FAKE_VENDOR', 'cuda'); index = os.environ.get('FAKE_INDEX', 'testpypi')
+(d / 'install.exit').write_text('0\n'); (d / 'box.txt').write_text('fake box\n')
+(d / 'install.log').write_text('Successfully installed mojolearn mojolearn-amd mojolearn-nvidia numpy\n')
+(d / 'pip_report.json').write_text(json.dumps({'install': []}))
+(d / 'dists.txt').write_text('mojolearn==%s\nmojolearn-amd==%s\nmojolearn-nvidia==%s\n' % (v, v, v))
+verdict = os.environ.get('FAKE_INDEX_VERDICT', 'PASSED')
+(d / 'index_check.json').write_text(json.dumps(dict(index=index, version=v, vendor=vendor, verdict=verdict,
+    problems=[] if verdict == 'PASSED' else ['mojolearn came from files.pythonhosted.org, not test-files.pythonhosted.org'])))
+(d / 'index_check.log').write_text('verdict=%s\n' % verdict)
+(d / 'out').mkdir(exist_ok=True)
+three = {n: v for n in ('mojolearn', 'mojolearn-nvidia', 'mojolearn-amd')}
+(d / 'out' / 'results.json').write_text(json.dumps(dict(wheel=None, wheel_sha256=None, status='PASSED', scope='expanded',
+    source_commit='c' * 40, jobs=[{'name': 'x'}], installed=dict(vendor=vendor, version=v),
+    installed_from=dict(python='/x/iv/bin/python', expected_version=v, distributions=three))))
+if vendor == 'hip':  # the column the AMD leg ran from the same install
+    (d / 'column.json').write_text('{"lanes": {}}\n'); (d / 'column.exit').write_text('0\n')
+    (d / 'column.txt').write_text('install_exit=0\n')
+(d / 'smoke.exit').write_text('0\n'); (d / 'box.done').write_text('done\n')
+'''
+
+
+class FromIndexTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = pathlib.Path(self.tmp.name)
+        self.index = None
+
+    def tearDown(self):
+        if self.index:
+            self.index.shutdown()
+            self.index.server_close()
+        self.tmp.cleanup()
+
+    run_smoke = SmokeTests.run_smoke
+
+    def serve(self, missing=()):
+        if self.index:
+            self.index.shutdown()
+            self.index.server_close()
+        srv = http.server.ThreadingHTTPServer(('127.0.0.1', 0), FakeIndex)
+        srv.missing = set(missing)
+        threading.Thread(target=srv.serve_forever, daemon=True).start()
+        self.index = srv
+        return {'MOJOLEARN_INDEX_JSON_API': 'http://127.0.0.1:%d/pypi' % srv.server_address[1]}
+
+    def test_dry_run_plans_the_users_install(self):
+        env = self.serve()
+        for index, args in (('testpypi', '--index-url https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple/'),
+                            ('pypi', f"pip_report.json  'mojolearn=={IV}'")):
+            with self.subTest(index=index):
+                r = self.run_smoke('--from-index', index, '--version', IV, '--out', str(self.dir / 'o'), env=env)
+                self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+                self.assertIn('DRY RUN', r.stdout)
+                self.assertIn(args, r.stdout)
+                self.assertIn(f"'mojolearn=={IV}'", r.stdout)
+                self.assertIn(f'index precheck PASSED: all three projects serve {IV} on {index}', r.stdout)
+                self.assertIn('no wheel', r.stdout)
+                self.assertIn('provider runpod', r.stdout)
+                self.assertFalse((self.dir / 'o').exists())
+
+    def test_precheck_refuses_a_missing_plugin_before_renting(self):
+        env = self.serve(missing=('mojolearn-amd',))
+        r = self.run_smoke('--from-index', 'testpypi', '--version', IV, '--rent', '--out', str(self.dir / 'o'), env=env)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn(f'mojolearn-amd=={IV} is not on testpypi (HTTP 404)', r.stderr)
+        self.assertIn('nothing was rented', r.stderr)
+        self.assertFalse((self.dir / 'o').exists())
+
+    def test_refusals(self):
+        wheel = make_wheel(self.dir)
+        for args, why in (((str(wheel), '--from-index', 'pypi', '--version', IV), 'give no wheel file'),
+                          (('--from-index', 'pypi', '--version', IV, '--plugin', str(wheel)), '--plugin is refused'),
+                          ((str(wheel), '--expected-source-commit', COMMIT, '--version', IV), '--version goes with --from-index'),
+                          (('--from-index', 'pypi', '--version', 'latest'), 'needs --version V'),
+                          (('--from-index', 'pypi'), 'needs --version V'),
+                          (('--from-index', 'devpi', '--version', IV), 'must be testpypi or pypi'),
+                          (('--from-index', 'pypi', '--version', IV, '--expected-source-commit', 'abc'), '40-hex')):
+            with self.subTest(args=args):
+                r = self.run_smoke(*args, '--out', str(self.dir / 'o'))
+                self.assertNotEqual(r.returncode, 0)
+                self.assertIn(why, r.stderr)
+
+    def ssh_index(self, verdict='PASSED', vendor='cuda', index='testpypi'):
+        env = self.serve()
+        shims = self.dir / 'bin'
+        shims.mkdir()
+        for name, body in (('ssh', INDEX_SSH_SHIM), ('sha256sum', SHA_SHIM), ('fakebox.py', FAKE_BOX)):
+            (shims / name).write_text(body)
+            (shims / name).chmod(0o755)
+        box = self.dir / 'box' / 'wheel-smoke'
+        env.update({'PATH': str(shims) + ':' + os.environ['PATH'], 'MOJOLEARN_SMOKE_REMOTE_DIR': str(box),
+                    'FAKE_BOX_DIR': str(box), 'FAKE_VERSION': IV, 'FAKE_INDEX_VERDICT': verdict,
+                    'FAKE_VENDOR': vendor, 'FAKE_INDEX': index})
+        out = self.dir / 'out'
+        r = self.run_smoke('--from-index', index, '--version', IV, '--vendor', vendor, '--ssh', 'fake@box',
+                           *(('--column', SmokeTests.selection(self)) if vendor == 'hip' else ()),
+                           '--out', str(out), env=env)
+        return r, out, box
+
+    def test_ssh_path_installs_from_the_index_and_passes(self):
+        r, out, box = self.ssh_index()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn('verdict=PASSED index=testpypi', (out / 'smoke.txt').read_text())
+        for name in ('pip_report.json', 'index_check.json', 'dists.txt', 'results.json'):
+            self.assertTrue((out / name).is_file(), name)
+        script = (out / 'box.sh').read_text()
+        self.assertIn(f'--report {box}/pip_report.json --index-url https://test.pypi.org/simple/ '
+                      f'--extra-index-url https://pypi.org/simple/ "mojolearn=={IV}"', script)
+        self.assertIn(f'--installed-python $IV/bin/python --expected-version {IV}', script)
+        self.assertIn('index_release_check.py verify --index testpypi', script)
+        self.assertEqual(sorted(p.name for p in box.iterdir() if p.suffix == '.whl'), [])
+        self.assertTrue((box / 'index_release_check.py').is_file())
+
+    def test_ssh_path_fails_on_the_index_verdict(self):
+        r, out, _ = self.ssh_index(verdict='FAILED')
+        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
+        self.assertIn('index check FAILED: mojolearn came from files.pythonhosted.org', (out / 'smoke.txt').read_text())
+
+    def test_ssh_path_amd_with_a_column_uses_the_same_install(self):
+        r, out, _ = self.ssh_index(vendor='hip', index='pypi')
+        script = (out / 'box.sh').read_text()
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn('$IV/bin/python -m mojolearn._identity_break', script)
+        self.assertNotIn('rv/bin/pip install', script)
+        self.assertIn(f'"mojolearn=={IV}"', script)
+        self.assertNotIn('test.pypi.org', script)
+
+    def test_index_install_check_dry_run_runs_both_legs(self):
+        env = self.serve()
+        e = dict(os.environ, MOJOLEARN_RUNPOD_KEY_FILE=str(self.dir / 'no-key'),
+                 MOJOLEARN_DO_TOKEN_FILE=str(self.dir / 'no-token'), MOJOLEARN_DO_GPU_LOCK=str(self.dir / 'gpu.lock'),
+                 MOJOLEARN_HOTAISLE_KEY_FILE=str(self.dir / 'no-hotaisle-key'),
+                 MOJOLEARN_HOTAISLE_API='http://127.0.0.1:9/nothing-here', **env)
+        e.pop('RUNPOD_API_KEY', None)
+        r = subprocess.run(['bash', str(ROOT / 'tools/index_install_check.sh'), IV, 'testpypi',
+                            '--out', str(self.dir / 'o')], capture_output=True, text=True, timeout=120, env=e)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        self.assertIn('DRY RUN NVIDIA: plan composed', r.stdout)
+        self.assertIn('DRY RUN AMD: plan composed', r.stdout)
+        self.assertIn('provider hotaisle (Hot Aisle only)', r.stdout)
+        self.assertIn('vendor hip', r.stdout)
+        self.assertFalse((self.dir / 'o').exists())
+        env = self.serve(missing=('mojolearn-nvidia',))
+        e.update(env)
+        r = subprocess.run(['bash', str(ROOT / 'tools/index_install_check.sh'), IV, 'pypi'],
+                           capture_output=True, text=True, timeout=120, env=e)
+        self.assertEqual(r.returncode, 1)
+        self.assertIn(f'mojolearn-nvidia=={IV} is not on pypi', r.stderr)
+        self.assertNotIn('NVIDIA leg', r.stdout)
+
+
 if __name__ == '__main__':
     unittest.main()
