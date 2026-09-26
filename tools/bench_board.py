@@ -61,6 +61,10 @@ WHAT IT REUSES (it re-implements no measurement)
              tools/torch_lm_step_opponent.py's twin. `--neural-shape full` is
              the 20.45 M-parameter control shape and a 4096^3 GEMM; `small` is
              a smoke.
+  inference  tools/bench_board_infer.py: the trees driver's `--infer` phase
+             (FSPEED-INFER lines, batches `test` and `large`) and the classical
+             racer's `race --infer` (kmeans/pca/ols/svc), each arm predicting
+             with its own model from the race's fit rounds; `--no-infer` skips.
   parsing    tools/bench_all_summarize.py's FSPEED parser.
   rosters    tools/bench_all_ours.sh's per-lane NVIDIA rosters.
 
@@ -91,6 +95,7 @@ import statistics
 import subprocess
 import sys
 import time
+import types
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(HERE)
@@ -304,6 +309,17 @@ def _load_tool(name):
 #: standard library at import time, so the orchestrator can read them).
 MORE = _load_tool("bench_board_more")
 MORE_LANES = MORE.LANE_ORDER
+
+#: INFERENCE cells (tools/bench_board_infer.py): after a race's fit rounds each
+#: arm predicts with its own fitted model, timed and raced the same way. Trees
+#: and the classical kmeans/pca/ols/svc lanes; on unless --no-infer. The cells
+#: live in a race record's `infer_cells`, apart from the fit `cells`.
+INFER = _load_tool("bench_board_infer")
+
+
+def _bb():
+    """This module's helpers, for bench_board_infer (it imports nothing from here)."""
+    return types.SimpleNamespace(**globals())
 
 
 # ---------------------------------------------------------------------------
@@ -868,6 +884,8 @@ def tree_cmd(ctx, race):
         cmd += ["--ours-only"]
     if "ours-ab" in ours:
         cmd += ["--ours-ab", "numeric_mode='%s'" % ours["ours-ab"]]
+    if ctx.get("infer"):
+        cmd += INFER.driver_args(race)
     env = {"MOJOLEARN_NUMERIC_MODE": primary,
            "MOJOLEARN_SPEED_EXPECTED_VENDOR": VENDOR_API[ctx["vendor"]],
            "MOJOLEARN_SPEED_ROUNDS": str(ctx["rounds"]),
@@ -987,6 +1005,8 @@ def classical_cmd(ctx, race):
            "--warmup-seconds", str(max(rsec, 600)),
            "--ours-python", shlex.quote(ctx["python"]),
            "--theirs-python", shlex.quote(ctx["python"])]
+    if ctx.get("infer"):
+        cmd += INFER.driver_args(race)
     env = {k: os.environ.get(k, v) for k, v in DBSCAN_DEFAULTS.items()}
     ceiling = 600 + max(rsec, 600) * len(race["arms"]) + rsec * ctx["rounds"] * len(race["arms"]) + 900
     return cmd, env, ceiling
@@ -1271,6 +1291,8 @@ def run_race(ctx, race):
         rec["notes"] = parsed["notes"]
         rec["fit_verdict_line"] = parsed["verdict_line"]
         cells = tree_cells(ctx, race, parsed)
+        if ctx.get("infer"):
+            rec["infer_cells"] = INFER.tree_cells(_bb(), ctx, race, log, cells)
     elif race["family"] == "neural":
         cmd, extra, ceiling = neural_cmd(ctx, race)
         tag = "%s.%s.shape-%s" % (race["lane"], race["dataset"], race.get("shape") or "full")
@@ -1319,6 +1341,8 @@ def run_race(ctx, race):
                           status="UNKNOWN(no race json, rc %d)" % rc) for a in race["arms"]]
         else:
             cells = classical_cells(ctx, race, r)
+            if ctx.get("infer"):
+                rec["infer_cells"] = INFER.classical_cells(_bb(), ctx, race, r)
         # the arms' saved outputs are only for the conductor's quality pass
         work = os.path.join(ctx["out"], "work")
         if os.path.isdir(work):
@@ -1473,6 +1497,13 @@ def render_board(result):
              "parameters and read the same batches on every arm, so their losses and logits are "
              "comparable; `max_abs_diff_vs_ours` is the opponent's output against ours.")
     L.append("- `installed_wheel` confirms our binding loaded from site-packages, not the repo tree.")
+    L.append("- Inference: after a race's fit rounds each arm predicts with its own fitted model "
+             "(no fit retimed), same rows, same output kind, one warm-up then the timed rounds "
+             "interleaved. Trees: batch `test` (the held-out split) and `large` (1,000,000 "
+             "training rows, capped at the training rows), host rows in and host predictions "
+             "out on every arm; each arm's call is printed under its table. Classical: kmeans "
+             "predict, pca transform, ols predict and svc predict on the eval rows, with the "
+             "fit's clock span. Ratios are per batch, ours over each opponent.")
     L.append("")
     races = result.get("races") or {}
     planned = result.get("plan") or []
@@ -1488,6 +1519,10 @@ def render_board(result):
     L.append("Races: %d planned, %d done, %d failed, %d pending. Cells: %d (%s)."
              % (len(planned), done, failed, max(0, len(planned) - done - failed), len(cells),
                 ", ".join("%s %d" % kv for kv in sorted(st.items())) or "none"))
+    icov = INFER.coverage(races)
+    if icov:
+        L.append("")
+        L.append(icov)
     L.append("")
 
     # Quality at a glance
@@ -1515,6 +1550,7 @@ def render_board(result):
                 q(fast), q(ident),
                 "; ".join("%s %s" % (c["arm"], q(c)) for c in opps) or "-"))
     L.append("")
+    L.extend(INFER.render_glance(_bb(), races))
 
     for fam in FAMILIES:
         fam_races = [races[r] for r in sorted(races) if races[r]["family"] == fam]
@@ -1563,6 +1599,7 @@ def render_board(result):
             if rr.get("fit_verdict_line"):
                 L.append("")
                 L.append("FSPEED-FIT-VERDICT: `%s`" % clean(rr["fit_verdict_line"]))
+            L.extend(INFER.render_race(_bb(), rr))
             L.append("")
     L.append("## Not covered by this board")
     L.append("")
@@ -1574,6 +1611,8 @@ def render_board(result):
              "ARIMA quality work does).")
     for why in MORE.NOT_PLANNED.get(vendor, []):
         L.append("- Classical, wave 2, not planned on this vendor: %s" % clean(why))
+    for why in INFER.NOT_COVERED:
+        L.append("- %s" % clean(why))
     L.append("- Neural: the Mamba blocks, TransformerBlock on its own, SambaStack and "
              "SmallMLPTrainer are public and not raced yet; torch's compile, TF32 and bf16 "
              "columns are another precision or labeled nondeterministic and are not raced; the "
@@ -1645,6 +1684,9 @@ def build_parser():
     p.add_argument("--nice", type=int, default=0)
     p.add_argument("--skip-failed", action="store_true",
                    help="on resume, do not retry races that failed (default: retry them)")
+    p.add_argument("--no-infer", action="store_true",
+                   help="time training only: skip the inference cells (trees, and the classical "
+                        "kmeans/pca/ols/svc lanes) that are timed after each race's fit rounds")
     p.add_argument("--dry-run", action="store_true", help="print the plan and run nothing")
     p.add_argument("--render-only", action="store_true", help="re-render BOARD.md from board.json")
     p.add_argument("--tree-driver", default=os.path.join(REPO, "bench", "speed", "forest_speed_arm.py"),
@@ -1708,6 +1750,14 @@ def print_plan(vendor, modes, races, args, rows, data):
     for fam, f in sorted(s["by_family"].items()):
         print("family %-10s races=%d cells=%d" % (fam, f["races"], f["cells"]))
     print("TOTAL races=%d cells=%d" % (s["races"], s["cells"]))
+    if not args.no_infer:
+        inf = {}
+        for r in races:
+            n = len(INFER.plan_cells(r))
+            if n:
+                inf[r["family"]] = inf.get(r["family"], 0) + n
+        print("INFER cells=%d (%s; each arm's own model after the fit rounds; --no-infer skips)"
+              % (sum(inf.values()), ", ".join("%s %d" % kv for kv in sorted(inf.items())) or "none"))
 
 
 def main(argv=None):
@@ -1783,7 +1833,7 @@ def main(argv=None):
            "commit": repo_commit(), "mojolearn_version": args.mojolearn_version,
            "wheel": wheel, "arm_budget_s": args.arm_budget_s,
            "race_deadline_s": args.race_deadline_s, "round_seconds": args.round_seconds,
-           "nice": args.nice, "ptxas": ptxas,
+           "nice": args.nice, "ptxas": ptxas, "infer": not args.no_infer,
            "tree_driver": os.path.abspath(args.tree_driver),
            "classical_driver": os.path.abspath(args.classical_driver),
            "neural_driver": os.path.abspath(args.neural_driver),
@@ -1806,7 +1856,7 @@ def main(argv=None):
         result["box"] = box
     result["config"] = {"vendor": vendor, "modes": modes, "families": families,
                         "lanes": lanes, "datasets": datasets, "rows": rows,
-                        "rounds": args.rounds, "seed": SEED,
+                        "rounds": args.rounds, "seed": SEED, "infer": not args.no_infer,
                         "neural_shape": args.neural_shape if "neural" in families else None,
                         "smoke": (bool(rows) and rows < TREE_ROW_FLOOR
                                   and any(r["family"] != "neural" for r in races))

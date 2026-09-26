@@ -36,6 +36,60 @@ full contract. In short:
   --vendor apple` (or `nvidia`, `amd`). The current plan has 75 races on
   every vendor (44 of them classical2, 3 neural). That comes to 242 cells on
   Apple, 172 on NVIDIA and 176 on AMD (classical2 alone: 134, 94 and 90).
+  Inference adds 122 cells on Apple, 84 on NVIDIA and 100 on AMD (below);
+  `--no-infer` times training only.
+
+## Inference
+
+Training is not the only clock. After a race's fit rounds, every arm predicts
+with its own last fitted model from those rounds (no fit is retimed), on the
+same rows and in the same output kind, one warm-up and then the timed rounds,
+arms interleaved. These are separate cells (`infer_cells` in `board.json`)
+with their own ratios, under each race's fit table and in "Inference at a
+glance". Our FAST and IDENTICAL predictions on the same rows are compared bit
+for bit.
+
+Trees (`forest_speed_arm.py --infer`; the flag is off by default and the
+driver's output is unchanged without it) time two batches: `test`, the
+held-out split the accuracy column scores, and `large`, the first 1,000,000
+training rows (capped at the training rows). Every clock is host rows in and
+host predictions out. The output is P(class 1) on the binary tasks and the
+anomaly score for iforest.
+
+| arm | the timed call | why this path |
+|---|---|---|
+| ours | `predict_proba(X)[:, 1]`; iforest `score_samples(X)` | the public surface. iforest rebuilds its forest inside every scoring call (DEVIATION 874), so its clock includes a build |
+| XGBoost | `Booster.inplace_predict(X)`; on a CUDA booster, `inplace_predict(cupy.asarray(X))` then `cupy.asnumpy` | XGBoost documents in-place prediction as its fastest path; host rows on a CUDA booster fall back to a DMatrix, so the rows go up and the result comes back inside the clock |
+| LightGBM | `Booster.predict(X)` | its predict runs on the CPU whatever device trained it |
+| CatBoost | `predict_proba(X, task_type=...)`, GPU on the `-gpu` arm | CatBoost's own GPU apply. If a build refuses it, the arm applies on the CPU and says so |
+| scikit-learn | `predict_proba(X)` or `score_samples(X)`, `n_jobs=-1` | its only path |
+| cuML | RF converted once to FIL outside the clock (a model load), then FIL `predict_proba(X)`; IsolationForest `score_samples(X)` | FIL is cuML's forest inference |
+
+Each arm's call is printed under its table (the driver's FSPEED-INFER-PATH
+line). Quality: the FSPEED-ACC metric recomputed from the timed output on the
+held-out rows (`<metric>_matches_fit` says it equals the fit-time value), and
+on our FAST arm `bits_equal_vs_ours_identical` and
+`max_abs_diff_vs_ours_identical`.
+
+Classical (`classical_two_datasets.py race --infer`, off by default there
+too): kmeans `predict`, pca `transform`, ols `predict` and svc `predict` on
+the eval rows (the 500,000 test rows for kmeans, pca and ols; 10,000 for
+svc). The clock span is the fit's: ours takes host rows and returns host
+results; the torch and cuML arms upload the rows before their clock, which
+ends at the device synchronize (`SPAN-ASYMMETRIC`). Quality: kmeans
+`eval_inertia` and `label_agreement_own_centers`, pca
+`transform_max_rel_err_own_fp64`, ols `r2_eval`, `rmse_eval` and
+`predict_max_rel_err_own_fp64`, svc `accuracy_eval`, each against a float64
+NumPy evaluation of the arm's own fitted model, plus `bits_equal_vs_ours` on
+every arm (on `ours-fast` it is the FAST against IDENTICAL check). kNN
+(`kneighbors`) and KDE (`score_samples`) already time inference as their race;
+DBSCAN and HDBSCAN have no predict.
+
+Not covered yet: categorical (criteo) frames in the trees inference phase; a
+single-row latency batch; ONNX, Treelite and other export paths; the
+classical2 family's predict calls as separate inference cells (its lanes
+define their own clocks in `tools/bench_board_more.py`); svc
+`decision_function`.
 
 ## The classical2 family
 
@@ -221,6 +275,7 @@ Values contain no spaces, and lists are separated by commas.
 | `MOJOLEARN_BOARD_ROWS` | row cap for a smoke run; the board is then marked SMOKE |
 | `MOJOLEARN_BOARD_LANES` / `_FAMILIES` / `_DATASETS` / `_ROUNDS` | narrow the plan |
 | `MOJOLEARN_BOARD_NEURAL_SHAPE` | `full` (default) or `small` for a neural smoke |
+| `MOJOLEARN_BOARD_NO_INFER` | `1` times training only (no inference cells) |
 | `MOJOLEARN_BOARD_OUT`, `MOJOLEARN_BOARD_CACHE` | result directory (fetched) and cache (not fetched; the classical and classical2 blocks live here) |
 
 A smoke leg, for example:
@@ -233,7 +288,9 @@ ratio column is our median divided by the opponent's median. Our FAST and
 IDENTICAL arms are never divided by each other, because that ratio is the
 cost of identity and not a result (ENGINEERING_RULES 0b-iii). The "Quality at
 a glance" table puts our FAST value, our IDENTICAL value and each opponent's
-value side by side for every lane and dataset. For comparability, trees carry
+value side by side for every lane and dataset; "Inference at a glance" does
+the same for the inference medians per batch, with whether our FAST and
+IDENTICAL predictions agree bit for bit. For comparability, trees carry
 `FSPEED-FIT-VERDICT` and classical and neural lanes carry the clock span
 (`SPAN-ASYMMETRIC` names an opponent whose clock excludes an upload or a fit
 that ours includes). A missing arm shows as `UNKNOWN` or `REFUSED(reason)`,
