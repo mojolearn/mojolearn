@@ -450,7 +450,8 @@ def _enclosing_def(path, line):
 # entry needs the gate named and checked by hand.
 FAST_ONLY = [
     ("cholesky/checks/fast_trsm.mojo", "*", "FAST_CHO_SOLVE / CHOL_FAST_APPLE (NUMERIC_FAST)"),
-    ("max/kernels/src/linalg/", "*", "MAX linalg, whose only importer in a binding is cholesky/checks/fast_trsm.mojo"),
+    ("max/kernels/src/linalg/", "*", "MAX linalg matmul/gemv: its importers (core/gemm.mojo, gemm/checks/gemm_identical.mojo, "
+     "cholesky/checks/fast_trsm.mojo) reach it only after the IDENTICAL arm has returned or under NUMERIC_FAST"),
     ("hierarchy/impl/cluster/detail/fast_boruvka.mojo", "*", "SL_FAST_BORUVKA (NUMERIC_FAST)"),
     ("mixture/checks/estep.mojo", "fast_estep_kernel", "GMM_FAST_ESTEP (NUMERIC_FAST)"),
     ("mixture/checks/mstep.mojo", "fast_resp_colsums_partial_kernel", "GMM_FAST_GRAM (NUMERIC_FAST)"),
