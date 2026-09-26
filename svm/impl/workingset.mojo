@@ -87,6 +87,19 @@ comptime FAST_WS_SORT = (
 #: FAST on Apple: the three gathers keep their counts on the device
 #: (`svm/impl/fast_ws_select.mojo`), no drain per gather. Same working set.
 #: `-D MOJOLEARN_SVM_FAST_WS_SELECT_OFF` restores the host-counted gathers.
+comptime SVM_WS_MAX = 2048 if (
+    FAST_WS_SORT and not is_defined["MOJOLEARN_SVM_WS1024"]()
+) else 1024
+"""FAST on Apple: a working set of up to 2048 (the block solve's
+two-elements-per-thread kernel carries it in one 1024-thread block), half
+the SMO outer iterations of 1024 on a hard problem. Taken from
+SVM_WS_BIG_MIN training rows: below that 1024 is as fast and the solver
+keeps the reference's working set (and every gate fixture's shape)."""
+comptime SVM_WS_BIG_MIN = 8192
+
+
+def svm_ws_cap(n_train: Int) -> Int:
+    return SVM_WS_MAX if n_train >= SVM_WS_BIG_MIN else 1024
 comptime FAST_WS_SELECT = FAST_WS_SORT and not is_defined[
     "MOJOLEARN_SVM_FAST_WS_SELECT_OFF"
 ]()
@@ -169,8 +182,9 @@ struct WorkingSet(Movable):
         var ws = n_ws
         if ws == 0 or ws > self.n_train:
             ws = self.n_train
-        if ws > 1024:
-            ws = 1024
+        var cap = svm_ws_cap(self.n_train)
+        if ws > cap:
+            ws = cap
         self.n_ws = ws
         var nt = self.n_train
         if nt < 1:
