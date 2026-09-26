@@ -4627,7 +4627,7 @@
    "identity_digest": "531ca5ca8953f397263897af0986af02e3f02c2783e22ec0f3d9b4cf0bfd9e56",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_gbdt",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "ae42b0bc03e3dd617ca89f3461dd03e1fd374b607e1763e43e9a33a97e00871b",
    "target": "linux-64"
   },
   {
@@ -4679,7 +4679,7 @@
    "identity_digest": "147e977ecb23b565131d89a62e90610e6ee0aa6ee9e8acd8e43a7a36b17282e2",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_rf",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "3350611541d29971ad1be6ef88c5a2d00ebcebbd85c7cc4fc9992cb736f5f613",
    "target": "linux-64"
   },
   {
@@ -4731,7 +4731,7 @@
    "identity_digest": "e586f441569c1e48da7d9e8143d3c2507be4fd0a075d54fcbda0f3fe9821a3fe",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_trees",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "cd3ec2ad28593321a0a0133d7bcc7550fee476e18b3a17f9de6862b3aabf5912",
    "target": "linux-64"
   },
   {
@@ -4783,7 +4783,7 @@
    "identity_digest": "886b140d1a39aeb5ae39b6a7e550dcffc04be7fbe116cbfd806955d26b4161ec",
    "key": "linux-64/hip/gfx942/fast/_mojolearn",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "2ba41fcf1f3a0711c001a0ff2d70ecbcaeb1eaddcb8b95158561ae095fd3adca",
    "target": "linux-64"
   },
   {
@@ -4835,7 +4835,7 @@
    "identity_digest": "34687c2b6cfa561d66fbc7cd4c91cfc9e4c62afe81c302ed00ecb65ccf52151e",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_estimators",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "6306cfe2e740e65a9a8345dbf0b73046fe9828fad8338551504d17c51ef76240",
    "target": "linux-64"
   },
   {
@@ -4887,7 +4887,7 @@
    "identity_digest": "d318f8a90abedb21ec8b72f049d7a86e5b58788c8e5eb678938af041c7f18abc",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_svm",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "cd60d534be23cc050026096cca3555008994467cb48dd1067e35c4073a51d237",
    "target": "linux-64"
   },
   {
@@ -4939,7 +4939,7 @@
    "identity_digest": "8af908505ee973fd55a018bc94b0ca65816036b710c78148c620aec920e7d84b",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_solver",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "51c84ffcafed577d221c737a50990d9c62e195ac19901e4d692135dd74ea183b",
    "target": "linux-64"
   },
   {
@@ -4991,7 +4991,7 @@
    "identity_digest": "2964663a18f49270139fa7e15c5ec7f20e2cb69f99d8378565bf2ce6481bc86c",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_metrics",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "af14dce042a402ccefec9dd6e9da8a1a449bb15f68c20948f5ba53520954aafb",
    "target": "linux-64"
   },
   {
@@ -5043,7 +5043,7 @@
    "identity_digest": "e7dc63561222f57630f1209734acb6276a606cf44c48d5557dacd94f8907bd04",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_preprocessing",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "e4efc2c35c76453fe5d676dfe07edf3b6174e77f8e13c7a809c491b5e408b000",
    "target": "linux-64"
   },
   {
@@ -5095,7 +5095,7 @@
    "identity_digest": "fdc2f0eed86469642dbff918e868b42ae46e89c336d0ab3892e057504abec680",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_tsa",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "a3e3aae18b85985276e2fe947504a3f4cc8c476fadb833c3af36818334ed0ad1",
    "target": "linux-64"
   },
   {
@@ -5147,7 +5147,7 @@
    "identity_digest": "84abbccd96b81685547a7b168d540ba33395c4c7cc64c01561e50ace8b86b814",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_linalg",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "895daf9ddbe25dfb106b57f66660066f8fff1830af8d7f583479bec2c1f1dd66",
    "target": "linux-64"
   },
   {
@@ -5199,7 +5199,7 @@
    "identity_digest": "06832dfa784ee5d544808ed671b41c2705653282fc8033a7bcff56391df2d05d",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_arima",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "8de0c3d80039348dbcdd9d098027a23237f6f327ec80895e47e6f6b77d55660e",
    "target": "linux-64"
   },
   {
@@ -5251,7 +5251,7 @@
    "identity_digest": "b7ec1a6d666b5d57a0c51bc7f6afd558c39e2b840302dbf1f051bb71ba9db40c",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_gp",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "c00573857b8c6015e2c59dc6002de963d8b6a1b989ef6cc8315ff9fb7d5f4850",
    "target": "linux-64"
   },
   {
@@ -5303,7 +5303,7 @@
    "identity_digest": "4379611bf9bcbad4e583531b52cc5a9ffc5d64ebe114c5652d28b899c2e0b4a5",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_kernel_methods",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "ee82780a5974f24d1dbe8e20ed8b3d27cd1f989545bf1867379c1cb5e0fbc0cf",
    "target": "linux-64"
   },
   {
@@ -5355,7 +5355,7 @@
    "identity_digest": "bddb68509f8561249241a59a641ac35dc7599c7a0ffc527a838dc6d78e5c613e",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_mixture",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "3930b13a82dc9df327096bec2183acc9c99cbbe4df9fc41a7882aa54f0ba36f2",
    "target": "linux-64"
   },
   {
@@ -5407,7 +5407,7 @@
    "identity_digest": "0a385e0cdf2a63caf632758132454ea9f60aabe05dd99eaacb000aa1778d1620",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_hdbscan",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "71518783773deeacad3e1e102d455dd878f7ccaae05d84ce3a8a1c5ef551c69a",
    "target": "linux-64"
   },
   {
@@ -5459,7 +5459,7 @@
    "identity_digest": "a0bcac1339e1af256d2a8ebe56ccdc26f379998c64b899ca4203b2b6f52bc15b",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_resample",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "68b0fcf66f567accec56de94837f9a5cfb5bea6472d2ff57828afa0d7b609f92",
    "target": "linux-64"
   },
   {
@@ -5511,7 +5511,7 @@
    "identity_digest": "19c74be14a2908a3e7a00c5cd63f96776e2bc56d5b315536068ef45d0c5e92d0",
    "key": "linux-64/hip/gfx942/fast/_mojolearn_ivf",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "4ce5532403671be991ab33b4bfcca60c4211fa93013bc78cc36b2c362efb2de2",
    "target": "linux-64"
   },
   {
@@ -5563,7 +5563,7 @@
    "identity_digest": "c443da97077c3fdfb6598d8c2f3b57e3fdb3ba7ec4a58737fafd42845b82b938",
    "key": "linux-64/hip/gfx942/deterministic/_mojolearn_gbdt",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "32b2457ada83b332091ac8ec88733d7fd364d0b6914c8885b0f0b13d9c909fdd",
    "target": "linux-64"
   },
   {
@@ -5615,7 +5615,7 @@
    "identity_digest": "3b4a7f6f3396eee26a7dfd36c4ab68f099d6af5edd2acd069e99e4756f01e5ed",
    "key": "linux-64/hip/gfx942/deterministic/_mojolearn_rf",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "57996dce62bd189d7ee9721cc17245b2fa93944202dc3f6212a5c5776a516862",
    "target": "linux-64"
   },
   {
@@ -5667,7 +5667,7 @@
    "identity_digest": "d27bc6c2048aba7dcdd9d864adc5a90890f62ed5e0ec3f1db632449c2ba829ea",
    "key": "linux-64/hip/gfx942/deterministic/_mojolearn_trees",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "653c49370d9e9161bb0426c050e8448ffaf7276d2821bb2a60c98911dfd75941",
    "target": "linux-64"
   },
   {
@@ -5719,7 +5719,7 @@
    "identity_digest": "6d17624dff5adf072d7910a6694c70922aeb77a73b3842e3e7f11a142311e602",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_gbdt",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "4ec1916ea97a39c8ff2a5519afee66a9d148114d32f78b6181bb35d0404bf9e3",
    "target": "linux-64"
   },
   {
@@ -5771,7 +5771,7 @@
    "identity_digest": "924d3e5e120d4fbfd20b9bb82922f3b8ddb502df70d41252c8e2b5c0ac9c2300",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_rf",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "2636c96ba4cb6bc1974d04c3d6b0c30dec8832fca8f741d0d87a39ff2deaa48a",
    "target": "linux-64"
   },
   {
@@ -5823,7 +5823,7 @@
    "identity_digest": "3b05feb94dedb001179757562ecc7158b6a102f5efb66e51d3560d71460f53bb",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_trees",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "336a3350899daaba338dd78e23a7113ded9b7b1b7ed6ce019545fb42eeff1c33",
    "target": "linux-64"
   },
   {
@@ -5875,7 +5875,7 @@
    "identity_digest": "fc97225d1457811d3a504934c9df49af473840f198fa43648b6dd39384848933",
    "key": "linux-64/hip/gfx942/identical/_mojolearn",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "a8018d4521aa7ffdbf9e89872a263fc5d1e43ccb58701addb8a860b6271c7b06",
    "target": "linux-64"
   },
   {
@@ -5927,7 +5927,7 @@
    "identity_digest": "77be58452046200741e926a8a43c3486109369c93c3398542d23b3555b5e9e2b",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_estimators",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "c0220efe28fe54a9d6e67b9bd416d31ef39dee42cc896a277bc767e5a9a430c6",
    "target": "linux-64"
   },
   {
@@ -5979,7 +5979,7 @@
    "identity_digest": "3b50f26e1c45cec173efbb9c313ceb274bf9eea3541c20e3f2c343211a5c2bea",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_svm",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "6fa1acdc345bfbcc6d9e334f8cee0179afa406d09cd2140b2255155bb61f8d33",
    "target": "linux-64"
   },
   {
@@ -6031,7 +6031,7 @@
    "identity_digest": "aca9a02a225a731b4e06425c9f8bc751e43caa0f4485dabf390ad02c0c4a9a10",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_solver",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "2d6c27b647e5dd1cc3a31f251c590b217fb82f76e554dea7036b520fd274bd02",
    "target": "linux-64"
   },
   {
@@ -6083,7 +6083,7 @@
    "identity_digest": "a7049a2b969f85641318f1583d04f0aa5f4743e9e9e69c05c071cb4f60c8f5fa",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_metrics",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "e36e5b9489a587c153c4a4a3d652f796bf3f7a5baa5c2cd51da46746921b0a94",
    "target": "linux-64"
   },
   {
@@ -6135,7 +6135,7 @@
    "identity_digest": "b38bdfae6d5978318395ce1ad5760e3034477fc91d32173e408bf599a0886a1c",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_preprocessing",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "95286eaa6e2caf1f33965dab0e84b5d761fd16693af4f7a7cd0a8300c4afc179",
    "target": "linux-64"
   },
   {
@@ -6187,7 +6187,7 @@
    "identity_digest": "fa5bc617f31d1a481aa95a502c8c3cb0fcf4bcb77a316c38e56c4dc3b430e446",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_tsa",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "40490194bcfd17721641a856228c4a63babb2c474f41fe056db25f21eba42818",
    "target": "linux-64"
   },
   {
@@ -6239,7 +6239,7 @@
    "identity_digest": "12e97b1b94cd066fb9280beacdc7af7515898e4f8776f51e8d092ba89dc108c1",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_linalg",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "1cd7885ba1692c07f384e07d62011398aa6e14ebfd9303d2c0874c1716d54d7b",
    "target": "linux-64"
   },
   {
@@ -6291,7 +6291,7 @@
    "identity_digest": "d073a7f51623047e3a3ad36e1378ee84bd7a90207cbeb9967e5d3f6c60287ac5",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_arima",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "197f90bb6f3c045feba726f95c29f51ad3ff1cb7f81412bf5c9f6b51f22b3fbf",
    "target": "linux-64"
   },
   {
@@ -6343,7 +6343,7 @@
    "identity_digest": "18b47d5e9d556abaa8da6f620fd4d97d0654f28fc64b9ef59b4aa2c1a0b4315c",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_gp",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "287f823510832cbf423cad9f916e60758c30cccf81e903ce0052523f78734c20",
    "target": "linux-64"
   },
   {
@@ -6395,7 +6395,7 @@
    "identity_digest": "38aded322d74e3ecd1059cd6816566a53356bb75099c968cd4ea1b4f374944e8",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_kernel_methods",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "ff4c034ec4414e292e19a0e1210e6a5a897d21b0a4f7502e1ce9a6e6f9bbe575",
    "target": "linux-64"
   },
   {
@@ -6447,7 +6447,7 @@
    "identity_digest": "da744cc5331d7b43d75d74e63db3a19f695faae55c62aca2bad873b9031315ad",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_mixture",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "72a425838846acd13617b8d69d87dcc096fa78a26d64b2c0b1d8d00f50c3c725",
    "target": "linux-64"
   },
   {
@@ -6499,7 +6499,7 @@
    "identity_digest": "05dd31d12314e3d032e3dcbf6837831a4cdb82d65a976ca1341e90356ad7ffe4",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_hdbscan",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "d392178cb335a88e6b4d3507e7684c2a1b5cfc0996b616ab167ac52092f0f015",
    "target": "linux-64"
   },
   {
@@ -6551,7 +6551,7 @@
    "identity_digest": "72c473531857032d15e98f9967e6edfd0c4cd5933571b357dcd0b1b25ceb48c2",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_resample",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "ab00dbb4577c484d75337b7d23de15e03c07d605b6a861288a1318964a1ac9a8",
    "target": "linux-64"
   },
   {
@@ -6603,7 +6603,7 @@
    "identity_digest": "6fc8978cef43c747a9498b0b33d7e49ef10fa73d1486a869f095a8e7cdd42f18",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_ivf",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "9fece01dfec30bafbf33ad8cec142e56c19168b58491a9c02da6ae572057bf01",
    "target": "linux-64"
   },
   {
@@ -6655,7 +6655,7 @@
    "identity_digest": "94e413b0c3b9cd9a72bad4e8d2ab9ff478f0d8d27bfb654d037f8cf01e394ae1",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_training",
    "reason": "changed: closure (checks/kernel_matrix_attn.mojo, transformer/impl/llama/fused_attention.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "194529a43ed61f62ab1108815b67d545ee9a5d78ba56dfa51095498c16acdd9d",
    "target": "linux-64"
   },
   {
@@ -6707,7 +6707,7 @@
    "identity_digest": "7b13cd505f378bb85b49d8b89a882d168905446bea7c523b87dcb801173dcc8c",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_mamba",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "2375c9b970f3651e8383d3b8ee4029cc433f3180dce20fde2dc81faa4c8d7eb4",
    "target": "linux-64"
   },
   {
@@ -6759,7 +6759,7 @@
    "identity_digest": "93d7aeb453d23d44c4dbda8dc4e1cbc111a2e1477f7157e510da7d1ede413cb4",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_transformer",
    "reason": "changed: closure (checks/kernel_matrix_attn.mojo, transformer/impl/llama/fused_attention.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "59dc87cd465f3df5e184305574560c2812ea9b59b56eae0d1693460ce7f684f2",
    "target": "linux-64"
   },
   {
@@ -6811,7 +6811,7 @@
    "identity_digest": "390dc09336524a29f36bb1f0fbeb071dc4792fbb5cac140f7a74c51ee9ac69fd",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_embedding",
    "reason": "identity unchanged",
-   "shipped_sha256": null,
+   "shipped_sha256": "bba8e85a0cf3c6c9070d289b0a517f531f5880618fd46557afa552b2e9550fa1",
    "target": "linux-64"
   },
   {
@@ -6863,7 +6863,7 @@
    "identity_digest": "a7ee1323f01418bd2dd89015815ea26b089a826ef01a7bd126a7a381dcb92f1d",
    "key": "linux-64/hip/gfx942/identical/_mojolearn_byte_lm",
    "reason": "changed: closure (checks/kernel_matrix_attn.mojo, transformer/impl/llama/fused_attention.mojo)",
-   "shipped_sha256": null,
+   "shipped_sha256": "22f1fbb5491aac8101392174e3191234d2c6cf5978d75865d83452ddebee63e6",
    "target": "linux-64"
   },
   {

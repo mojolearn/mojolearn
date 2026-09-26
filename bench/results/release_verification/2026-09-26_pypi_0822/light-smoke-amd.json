@@ -1,0 +1,136 @@
+{
+  "wheel": "/root/wheel-smoke/mojolearn-0.8.22-py3-none-manylinux_2_35_x86_64.whl",
+  "wheel_sha256": "b3f320079d48ea2dac460635695dc83f8a9dfcc9c1773ed3ed59b818fafbf0ff",
+  "status": "PASSED",
+  "jobs": [
+    {
+      "name": "create-venv",
+      "exit_code": 0,
+      "output": "/root/wheel-smoke/out/create-venv.log"
+    },
+    {
+      "name": "install",
+      "exit_code": 0,
+      "output": "/root/wheel-smoke/out/install.log"
+    },
+    {
+      "name": "dependencies",
+      "exit_code": 0,
+      "output": "/root/wheel-smoke/out/dependencies.log"
+    },
+    {
+      "name": "installed",
+      "exit_code": 0,
+      "output": "/root/wheel-smoke/out/installed.json"
+    },
+    {
+      "name": "expanded-api",
+      "exit_code": 0,
+      "output": "/root/wheel-smoke/out/expanded-api.json"
+    },
+    {
+      "name": "loaded-lm-cpu",
+      "exit_code": 0,
+      "output": "/root/wheel-smoke/out/loaded-lm-cpu.log"
+    },
+    {
+      "name": "loaded-lm-gpu",
+      "exit_code": 0,
+      "output": "/root/wheel-smoke/out/loaded-lm-gpu.log"
+    },
+    {
+      "name": "loaded-lm-cpu-gpu-compare",
+      "exit_code": 0,
+      "output": "/root/wheel-smoke/out/loaded-lm-cpu-gpu-compare.log"
+    },
+    {
+      "name": "coverage",
+      "exit_code": 0,
+      "output": "/root/wheel-smoke/out/coverage.json"
+    },
+    {
+      "name": "models",
+      "exit_code": 0,
+      "output": "/root/wheel-smoke/out/models.json"
+    },
+    {
+      "name": "batch",
+      "exit_code": 0,
+      "output": "/root/wheel-smoke/out/batch.json"
+    },
+    {
+      "name": "extended",
+      "exit_code": 0,
+      "output": "/root/wheel-smoke/out/extended.json"
+    },
+    {
+      "name": "self-test",
+      "exit_code": 0,
+      "output": "/root/wheel-smoke/out/self-test.json"
+    }
+  ],
+  "scope": "expanded",
+  "source_commit": "f02ecb8b0d123297184bae958570f4e62b1dcd7d",
+  "release_qualified": false,
+  "expanded": {
+    "scope": "expanded",
+    "release_qualified": false,
+    "physical_execution_trace": "OWED",
+    "native_fault_controls": "SEPARATE_GATE",
+    "cross_validation": "OWED",
+    "multi_gpu": "OWED",
+    "apis": {
+      "apis": {
+        "mojolearn.models": [
+          "CausalLM",
+          "ParallelCausalLM"
+        ],
+        "mojolearn.parallel_ivf": [
+          "DistributedIVFIndex"
+        ],
+        "mojolearn.parallel_model_selection": [
+          "cross_val_score"
+        ],
+        "mojolearn.parallel_gaussian_process": [
+          "fit_gaussian_process_classifier",
+          "predict_gaussian_process_classifier"
+        ],
+        "mojolearn.parallel_forecasting": [
+          "predict_arima",
+          "forecast_arima",
+          "predict_exponential_smoothing",
+          "forecast_exponential_smoothing"
+        ]
+      },
+      "ivf_symbols": [
+        "ivf_flat_partial_search",
+        "ivf_finalize_distances"
+      ],
+      "gbdt_symbols": [
+        "gbdt_fit"
+      ],
+      "gbdt_binding": "/tmp/mojolearn-verifier-wheel-4j6fx86b/venv/lib/python3.10/site-packages/mojolearn/hip/gfx942/identical/_mojolearn_gbdt.so",
+      "gbdt_sha256": "4ec1916ea97a39c8ff2a5519afee66a9d148114d32f78b6181bb35d0404bf9e3",
+      "binding": "/tmp/mojolearn-verifier-wheel-4j6fx86b/venv/lib/python3.10/site-packages/mojolearn/hip/gfx942/identical/_mojolearn_ivf.so",
+      "binding_sha256": "9fece01dfec30bafbf33ad8cec142e56c19168b58491a9c02da6ae572057bf01"
+    }
+  },
+  "plugins": [
+    {
+      "wheel": "/root/wheel-smoke/mojolearn_amd-0.8.22-py3-none-manylinux_2_35_x86_64.whl",
+      "wheel_sha256": "7c7dbafa03fec1c0fcb569dd478a0fe8caf9d9f088248cb1e423b19115c94eac",
+      "distribution": "mojolearn-amd"
+    },
+    {
+      "wheel": "/root/wheel-smoke/mojolearn_nvidia-0.8.22-py3-none-manylinux_2_35_x86_64.whl",
+      "wheel_sha256": "8015d981ad3539e1718d715d970ad5ad1027ad974aa5982be2f35d11cc46ecef",
+      "distribution": "mojolearn-nvidia"
+    }
+  ],
+  "installed": {
+    "package": "/tmp/mojolearn-verifier-wheel-4j6fx86b/venv/lib/python3.10/site-packages/mojolearn/__init__.py",
+    "version": "0.8.22",
+    "vendor": "hip"
+  },
+  "unqualified_properties": []
+}
