@@ -296,12 +296,15 @@ def launch_block_solve(
         )
     comptime if FAST_EPT_ON and SVM_WS_MAX == 2048:
         if threads == 2048:
-            ctx.enqueue_function[smo_block_solve_ept_kernel[1024, 2]](
+            # 2048 rows as 512 threads x 4 (M4 taxi 50k: 1024 x 2 6.4 s,
+            # 512 x 4 5.2-6.0 s, 256 x 8 6.2-7.7 s; the same solution).
+            comptime WT = 256 if is_defined["MOJOLEARN_SVM_WS2048_EPT8"]() else (1024 if is_defined["MOJOLEARN_SVM_WS2048_EPT2"]() else 512)
+            ctx.enqueue_function[smo_block_solve_ept_kernel[WT, 2048 // WT]](
                 y.unsafe_ptr(), Int32(n_train), alpha.unsafe_ptr(), Int32(n_ws),
                 delta_alpha.unsafe_ptr(), f.unsafe_ptr(), kernel_tile.unsafe_ptr(),
                 ws_idx.unsafe_ptr(), C_vec.unsafe_ptr(), eps,
                 return_buff.unsafe_ptr(), Int32(max_iter),
-                grid_dim=1, block_dim=1024,
+                grid_dim=1, block_dim=WT,
             )
             return
     comptime if FAST_EPT_ON:
