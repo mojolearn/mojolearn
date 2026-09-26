@@ -1,0 +1,23 @@
+/root/mojolearn/tools/torch_lm_step_opponent.py:408: UserWarning: Using AOTriton backend for Efficient Attention forward... (Triggered internally at /pytorch/aten/src/ATen/native/transformers/hip/attention.hip:1180.)
+  out = F.scaled_dot_product_attention(q, q, q, is_causal=True, scale=attention_scale(torch, hd))
+/root/.venv-torch-lm-step/lib/python3.12/site-packages/torch/autograd/graph.py:823: UserWarning: Using AOTriton backend for Efficient Attention backward... (Triggered internally at /pytorch/aten/src/ATen/native/transformers/hip/attention_backward.hip:463.)
+  return Variable._execution_engine.run_backward(  # Calls into the C++ engine to run the backward pass
+{"event": "heldout_before", "mean": 11.047019213438034}
+{"event": "step", "step": 1, "loss": 10.903326034545898, "loss_f32": "412e7406", "seconds": 0.5915972199290991, "ids_sha256": "c9cfaa8fb1358fb7f7b5a53eebd59b9abd169288153d3a4099b30d6703b5fef3"}
+{"event": "step", "step": 2, "loss": 8.291573524475098, "loss_f32": "4104aa49", "seconds": 0.0540848639793694, "ids_sha256": "c0566cdf476743cf528117d89154c53504817a0fc378832117107db6fbdc8e94"}
+{"event": "step", "step": 3, "loss": 57.92448043823242, "loss_f32": "4267b2ab", "seconds": 0.05309531791135669, "ids_sha256": "7c488589d936ac1c2188a74d02f7a03a667a61a49fa91edac40f621dfb1381c5"}
+{"event": "step", "step": 25, "loss": 13.160561561584473, "loss_f32": "415291a9", "seconds": 0.053309520008042455, "ids_sha256": "a7cb0482770e28cb07c9637cb5b296c6995471f5fb2e2ac68cd2ac2956fa4ea4"}
+{"event": "step", "step": 50, "loss": 7.556121349334717, "loss_f32": "40f1cbbf", "seconds": 0.05312933004461229, "ids_sha256": "ab5cad35d955c2a7b76f9ae66408872679190cb9dbf046203a48453b99b64d2b"}
+{"event": "step", "step": 75, "loss": 2.7325832843780518, "loss_f32": "402ee2a5", "seconds": 0.05347777297720313, "ids_sha256": "4385a957efd2fd1158bc0b77f3edb12e02389f0aaebd040c0bdf8fec1031b43c"}
+{"event": "step", "step": 100, "loss": 3.382117986679077, "loss_f32": "4058749f", "seconds": 0.05490272305905819, "ids_sha256": "a107463c61d7ab916f5638e01696af2b879a3437b093fe6e3d4eacb36d450e51"}
+{"event": "step", "step": 125, "loss": 2.50008487701416, "loss_f32": "40200164", "seconds": 0.053592263953760266, "ids_sha256": "60bf055351993f7de7e3f88d55d348c2203a800e822569597396e96a84605242"}
+{"event": "step", "step": 150, "loss": 3.060076951980591, "loss_f32": "4043d84d", "seconds": 0.053052073111757636, "ids_sha256": "bbfa6da14ae84c38d4e10be87a5d11159ee950fc34192a8dcd1c2a633e0c4f01"}
+{"event": "step", "step": 175, "loss": 3.7330822944641113, "loss_f32": "406eead2", "seconds": 0.05410506599582732, "ids_sha256": "dab7f9208e31f139ee71965f501fb3376ff5631d8d38d5ed0232a5d16b85eb57"}
+{"event": "step", "step": 200, "loss": 2.9566891193389893, "loss_f32": "403d3a65", "seconds": 0.05453683389350772, "ids_sha256": "e97bb9e4ba7a1fdb6fdf0dc3ad02e8b5d01aa14a9f1aca248cf7bc24a3d621d9"}
+{"event": "step", "step": 225, "loss": 2.7601661682128906, "loss_f32": "4030a690", "seconds": 0.05302214785479009, "ids_sha256": "3064887d86373537f107b707b27e3cbf992e260c50435ab37f7d8cf5edbabfe9"}
+{"event": "step", "step": 250, "loss": 2.664823055267334, "loss_f32": "402a8c76", "seconds": 0.05359006114304066, "ids_sha256": "d2cecfafeac6df753fc073ea6709856edb4893fd5d07bf1ba97084e0f3a02131"}
+{"event": "step", "step": 275, "loss": 1.9026365280151367, "loss_f32": "3ff38998", "seconds": 0.05349570908583701, "ids_sha256": "b604d5b7c2c60eb960da698510698bd42a4f669e499d2b53993881c97af78aad"}
+{"event": "step", "step": 300, "loss": 2.236105442047119, "loss_f32": "400f1c5a", "seconds": 0.05455873697064817, "ids_sha256": "891e2e8bbf0630a425ee675a6341f70bb356bfc76ed27808e5b457729c5f7977"}
+{"event": "heldout_after", "mean": 2.6590795144438744}
+{"event": "heldout_ours_params_torch_eval", "mean": 2.6502613723278046}
+{"event": "result", "side": "torch", "out": "/root/gemm_leg_out/lmq/torch.json", "final_loss": 2.236105442047119, "heldout_after": 2.6590795144438744}
