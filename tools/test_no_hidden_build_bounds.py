@@ -143,7 +143,7 @@ def test_limits_values():
     assert lim["RUNPOD_RELEASE_BUILD_CAP"] == 6000
     assert lim["HOTAISLE_RELEASE_BUILD_CAP"] == 6000  # raised with lane/build-parallelism
     assert lim["DO_RELEASE_DEADMAN_SECONDS"] == 7200
-    assert lim["CPU_BOX_RELEASE_BUILD_SECONDS"] == 2400
+    assert lim["CPU_BOX_RELEASE_BUILD_SECONDS"] == 6000
     assert lim["CROSS_COMPILE_SECONDS"] == 600
     # no remote cap may exceed what the remote build script accepts
     for name in ("DO_RELEASE_BUILD_CAP", "RUNPOD_RELEASE_BUILD_CAP", "HOTAISLE_RELEASE_BUILD_CAP",
