@@ -1,0 +1,15 @@
+{"tag": "mix_off", "ds": "taxi", "seed": 0, "test_ll": -803.2820602105265}
+{"tag": "mix_off", "ds": "taxi", "seed": 1, "test_ll": 19.07846623607021}
+{"tag": "mix_off", "ds": "taxi", "seed": 2, "test_ll": -798.0956655988464}
+{"tag": "mix_off", "ds": "taxi", "seed": 3, "test_ll": 21.41498469464451}
+{"tag": "mix_off", "ds": "taxi", "seed": 4, "test_ll": 18.50644067767106}
+{"tag": "mix_off", "ds": "covtype", "seed": 0, "test_ll": -72627.58295546891}
+{"tag": "mix_off", "ds": "covtype", "seed": 1, "test_ll": -45779.246491980106}
+{"tag": "mix_off", "ds": "covtype", "seed": 2, "test_ll": -2125446050.6894987}
+{"tag": "mix_off", "ds": "covtype", "seed": 3, "test_ll": -91223.21502256462}
+{"tag": "mix_off", "ds": "covtype", "seed": 4, "test_ll": -91049.98427856299}
+{"tag": "mix_on", "ds": "taxi", "seed": 0, "test_ll": -803.282119799228}
+{"tag": "mix_on", "ds": "taxi", "seed": 1, "test_ll": 19.08266165904187}
+{"tag": "mix_on", "ds": "taxi", "seed": 2, "test_ll": -798.0956651886698}
+{"tag": "mix_on", "ds": "taxi", "seed": 3, "test_ll": 21.41496629348308}
+{"tag": "mix_on", "ds": "taxi", "seed": 4, "test_ll": 18.510709811040293}

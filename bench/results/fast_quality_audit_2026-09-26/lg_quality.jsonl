@@ -1,0 +1,20 @@
+{"ds": "taxi", "seed": 0, "logloss": 0.5382894546260676, "acc": 0.76008, "auc": 0.6124980005603283, "fit_s": 23.49, "tag": "lg1"}
+{"ds": "taxi", "seed": 1, "logloss": 0.538128898489965, "acc": 0.759945, "auc": 0.6126894378384804, "fit_s": 22.22, "tag": "lg1"}
+{"ds": "taxi", "seed": 2, "logloss": 0.5380762750479936, "acc": 0.759935, "auc": 0.6132688740730752, "fit_s": 23.77, "tag": "lg1"}
+{"ds": "taxi", "seed": 3, "logloss": 0.5383872583337713, "acc": 0.760135, "auc": 0.6124143522326714, "fit_s": 23.28, "tag": "lg1"}
+{"ds": "taxi", "seed": 4, "logloss": 0.53813830579362, "acc": 0.76014, "auc": 0.6126003185296869, "fit_s": 22.77, "tag": "lg1"}
+{"ds": "istellareg", "seed": 0, "rmse": 0.5969539949024001, "fit_s": 58.34, "tag": "lg1"}
+{"ds": "istellareg", "seed": 1, "rmse": 0.5958729939549711, "fit_s": 55.19, "tag": "lg1"}
+{"ds": "istellareg", "seed": 2, "rmse": 0.5955604272971152, "fit_s": 45.74, "tag": "lg1"}
+{"ds": "istellareg", "seed": 3, "rmse": 0.5950351864992682, "fit_s": 44.61, "tag": "lg1"}
+{"ds": "istellareg", "seed": 4, "rmse": 0.5954779458700278, "fit_s": 42.88, "tag": "lg1"}
+{"ds": "taxi", "seed": 0, "logloss": 0.5383640174060029, "acc": 0.76005, "auc": 0.6121611896364929, "fit_s": 11.01, "tag": "lg16"}
+{"ds": "taxi", "seed": 1, "logloss": 0.5383071723758367, "acc": 0.75996, "auc": 0.6119440997808826, "fit_s": 10.72, "tag": "lg16"}
+{"ds": "taxi", "seed": 2, "logloss": 0.5383106405144815, "acc": 0.760015, "auc": 0.6124599686466983, "fit_s": 10.69, "tag": "lg16"}
+{"ds": "taxi", "seed": 3, "logloss": 0.5384120271446607, "acc": 0.76004, "auc": 0.612312077203728, "fit_s": 10.34, "tag": "lg16"}
+{"ds": "taxi", "seed": 4, "logloss": 0.5381977667380952, "acc": 0.76007, "auc": 0.6124014148040442, "fit_s": 10.43, "tag": "lg16"}
+{"ds": "istellareg", "seed": 0, "rmse": 0.6088564885806684, "fit_s": 16.07, "tag": "lg16"}
+{"ds": "istellareg", "seed": 1, "rmse": 0.6078618410476972, "fit_s": 17.9, "tag": "lg16"}
+{"ds": "istellareg", "seed": 2, "rmse": 0.6079772741339267, "fit_s": 17.74, "tag": "lg16"}
+{"ds": "istellareg", "seed": 3, "rmse": 0.6076626417349051, "fit_s": 17.45, "tag": "lg16"}
+{"ds": "istellareg", "seed": 4, "rmse": 0.6071927983583202, "fit_s": 16.81, "tag": "lg16"}

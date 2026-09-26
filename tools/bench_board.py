@@ -171,7 +171,7 @@ CLASSICAL_OPPONENTS = {
         "knn": ("sklearn-cpu", "torch-gpu"),
         "kde": ("sklearn-cpu",),
         "svc": ("sklearn-cpu",),
-        "dbscan": (),                        # the racer has no scikit-learn DBSCAN arm
+        "dbscan": ("sklearn-cpu",),
         "hdbscan": ("sklearn-cpu",),
     },
     "nvidia": {                              # bench_all_ours.sh's classical_arms_for
@@ -191,7 +191,7 @@ CLASSICAL_OPPONENTS = {
         "knn": ("sklearn-cpu", "torch-gpu"),
         "kde": ("sklearn-cpu",),
         "svc": ("sklearn-cpu",),
-        "dbscan": (),
+        "dbscan": ("sklearn-cpu",),
         "hdbscan": ("sklearn-cpu",),
     },
 }
@@ -1408,7 +1408,6 @@ def render_board(result):
              "columns are another precision or labeled nondeterministic and are not raced; the "
              "GPT-3-small target shape is not on the board (it uses the smaller control shape "
              "so one shape runs on every box, a 16 GB Mac included).")
-    L.append("- dbscan has no scikit-learn arm in the racer, so on Apple and AMD it is ours only.")
     L.append("")
     return "\n".join(L) + "\n"
 

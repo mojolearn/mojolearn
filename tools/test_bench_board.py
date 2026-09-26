@@ -288,7 +288,7 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     rc = bb.main(["--dry-run", "--vendor", "apple"] + env["base"])
     assert rc == 0
     text = capsys.readouterr().out
-    assert "TOTAL races=31 cells=106" in text
+    assert "TOTAL races=31 cells=108" in text
     assert "family neural     races=3 cells=6" in text
     assert "ours-ab[fast]" in text and "ours-fast[fast]" in text
     assert not env["out"].exists()
@@ -471,7 +471,7 @@ def test_fast_refused_for_neural_by_name(env):
     assert _calls(env) == []
 
 
-@pytest.mark.parametrize("vendor,cells", [("apple", 106), ("nvidia", 78), ("amd", 84)])
+@pytest.mark.parametrize("vendor,cells", [("apple", 108), ("nvidia", 78), ("amd", 86)])
 def test_dry_run_counts_per_vendor(vendor, cells, capsys):
     assert bb.main(["--dry-run", "--vendor", vendor]) == 0
     text = capsys.readouterr().out
