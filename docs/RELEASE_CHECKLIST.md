@@ -378,8 +378,8 @@ python3 tools/strip_wheel_dir_entries.py <dist>/audit/repaired/mojolearn-*-manyl
 
 ### 3b. The split Linux packages (the packer's default profile)
 
-`release-linux3` above packs the ONE combined wheel and is what
-`tools/release.py` asks for by default; `--split-linux` asks for `release-split`. The packer's default is the split
+`release-linux3` above packs the ONE combined wheel, which `tools/release.py`
+asks for only with `--combined-linux`; by default (from 0.8.21) it asks for `release-split`. The packer's default is the split
 (`python/mojolearn/gpu_plugins.py`), three PyPI projects released in lockstep
 so NVIDIA and AMD can ship independently:
 
@@ -428,8 +428,9 @@ driver libraries. The core's logs keep their names (`show.txt`, `repair.txt`,
 `twine.txt`), a plugin's are `show-mojolearn_nvidia.txt` and so on, and any
 top-level `*.libs/` directory in a repaired wheel fails the run.
 
-Publishing the split packages with `pixi run release <version> --split-linux`
-(or `MOJOLEARN_RELEASE_SPLIT_LINUX=1`; the default stays the combined wheel)
+Publishing the split packages, `pixi run release <version>` (the default from
+0.8.21; `--combined-linux` or `MOJOLEARN_RELEASE_SPLIT_LINUX=0` publishes the one
+combined wheel instead, kept only until a split release has gone end to end)
 works like this. `linux-pack` packs `--profile release-split`, audits and strips each wheel and
 runs `split_audit` on the final set; each column installs the core with BOTH
 plugins, exactly what `pip install mojolearn` installs (the core requires

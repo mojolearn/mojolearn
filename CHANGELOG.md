@@ -2,6 +2,12 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
+## 0.8.21 (published 2026-09-26)
+
+### Changed
+- Linux ships as three PyPI packages: `mojolearn` (Python, the CPU bindings and the MAX runtime), `mojolearn-nvidia` (the CUDA sets) and `mojolearn-amd` (the HIP set). `pip install mojolearn` installs all three at the same version, so the install command does not change. The GPU code is byte for byte the combined wheel's, installed at the same paths (`python/mojolearn/gpu_plugins.py`). macOS stays one wheel.
+- Apple GPU, IDENTICAL: the attention forward's scores and context and the backward's `dy` chain run on the simdgroup matrix unit. On the M4 the matrix multiply-accumulate equals the FMA chain on every cell probed (4.19M cells over 9 operand kinds, including products and partial sums straddling 2^-126), so the matrix chain is the attention chain; the causal diagonal keeps the scalar chain. Byte LM forward attention 127 to 85 ms per kernel at 1 x 2048, d768; per-step witnesses equal the shipped build's (`-D MOJOLEARN_ATTN_NO_APPLE_MMA` reverts).
+
 ## 0.8.20 (published 2026-09-26)
 
 ### Changed
