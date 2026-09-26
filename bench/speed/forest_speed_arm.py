@@ -85,6 +85,7 @@ which is what every one of them documents as its preferred layout.
 import argparse
 import os
 import sys
+import time
 
 import numpy as np
 
@@ -470,6 +471,253 @@ def build_ours(lane, cfg, data, name="ours", extra=None):
 
 
 # --------------------------------------------------------------------------
+# INFERENCE (`--infer`, OFF by default: without it this file's output is
+# unchanged). After the fit rounds, every arm predicts with ITS OWN last model
+# from those rounds (no fit is retimed), on the same rows, in the same output
+# kind its accuracy column scores: P(class 1) for a binary task, the value for
+# regression, `score_samples` for iforest. One untimed warm-up per arm and
+# batch, then the rounds, arms interleaved. Lines (all new heads, so a parser
+# of the fit lines never sees them):
+#
+#   FSPEED-INFER-PATH    lane arm call          what each arm's clock covers
+#   FSPEED-INFER-WARMUP  lane arm batch rows ms
+#   FSPEED-INFER         lane arm batch rows round ms hash
+#   FSPEED-INFER-ACC     lane arm batch metric value   (same metric as FSPEED-ACC)
+#   FSPEED-INFER-AGREE   lane batch arms rows bits_equal max_abs_diff  (ours vs ours-ab)
+#   FSPEED-INFER-REFUSED lane arm batch reason
+#   FSPEED-INFER-NOTE    lane arm note
+#
+# Batches: `test` is the held-out split the accuracy column scores; `large` is
+# the first `--infer-large-rows` (default 1,000,000) training rows, a bigger
+# batch from the same loader. Every clock is host rows in, host predictions
+# out: an opponent whose fastest documented path is on its device copies the
+# rows up and the result back INSIDE its clock, as ours does.
+# --------------------------------------------------------------------------
+
+INFER_LARGE_ROWS = 1_000_000
+
+
+def _p1(raw):
+    a = np.asarray(raw, dtype=np.float64)
+    if a.ndim == 2:
+        return np.ascontiguousarray(a[:, 1] if a.shape[1] > 1 else a[:, 0])
+    return np.ascontiguousarray(a.reshape(-1))
+
+
+def _vec(raw):
+    return np.ascontiguousarray(np.asarray(raw, dtype=np.float64).reshape(-1))
+
+
+def infer_spec(arm_name, lane, task, model, n_features=None):
+    """(call(X) -> raw, post(raw) -> float64 vector, call text) for one arm.
+    `call` is what the clock covers; `post` (a host dtype view) runs outside
+    it. The call text names the path and why it is the library's fastest
+    documented one. It never contains '=' (the lines are key=value)."""
+    iforest = lane == "iforest"
+    binary = task == "binary"
+    if task not in ("binary", "regression") and not iforest:
+        raise RuntimeError("inference timing covers binary and regression tasks; %s is %s"
+                           % (lane, task))
+    if arm_name in ("ours", "ours-ab"):
+        if iforest:
+            return (model.score_samples, _vec,
+                    "mojolearn IsolationForest.score_samples(X) (the forest is rebuilt "
+                    "inside every scoring call, DEVIATION 874, so this clock includes a "
+                    "forest build)")
+        if binary:
+            return (model.predict_proba, _p1,
+                    "mojolearn %s.predict_proba(X), column 1" % type(model).__name__)
+        return (model.predict, _vec, "mojolearn %s.predict(X)" % type(model).__name__)
+    if arm_name.startswith("catboost-"):
+        tt = "GPU" if arm_name.endswith("-gpu") else "CPU"
+        note = ""
+        if tt == "GPU":
+            # CatBoost's own GPU apply (predict's task_type). Probed once on
+            # two rows outside every clock; a build that refuses it applies
+            # on the CPU and the call text says so.
+            try:
+                probe = np.zeros((2, n_features or model.n_features_in_), dtype=np.float32)
+                (model.predict_proba if binary else model.predict)(probe, task_type="GPU")
+            except Exception as exc:              # noqa: BLE001
+                tt = "CPU"
+                note = " (task_type GPU refused: %s)" % " ".join(str(exc).split())[:80]
+        if binary:
+            return ((lambda X: model.predict_proba(X, task_type=tt)), _p1,
+                    "catboost predict_proba(X, task_type %s, thread_count -1)%s, column 1"
+                    % (tt, note.replace("=", ":")))
+        return ((lambda X: model.predict(X, task_type=tt)), _vec,
+                "catboost predict(X, task_type %s, thread_count -1)%s" % (tt, note.replace("=", ":")))
+    if arm_name.startswith("xgboost-"):
+        booster = model.get_booster()
+        what = "probability" if binary else "value"
+        if arm_name.endswith("-gpu"):
+            # XGBoost's documented fastest path is inplace_predict with the
+            # data on the booster's device; host rows on a CUDA booster fall
+            # back to a DMatrix. So the rows go up as a cupy array and the
+            # result comes back, both inside the clock.
+            try:
+                import cupy
+            except ImportError:
+                return (booster.inplace_predict, _vec,
+                        "xgboost Booster.inplace_predict(host X) on a CUDA booster (no cupy "
+                        "here, so XGBoost's own device-mismatch fallback), %s" % what)
+            return ((lambda X: cupy.asnumpy(booster.inplace_predict(cupy.asarray(X)))), _vec,
+                    "xgboost Booster.inplace_predict(cupy.asarray(X)) then cupy.asnumpy, "
+                    "the rows uploaded and the %s copied back inside the clock" % what)
+        return (booster.inplace_predict, _vec,
+                "xgboost Booster.inplace_predict(X) (no DMatrix; XGBoost's documented "
+                "fastest path), %s" % what)
+    if arm_name.startswith("lightgbm-"):
+        booster = model.booster_
+        return (booster.predict, _vec,
+                "lightgbm Booster.predict(X) (%s; LightGBM predicts on the CPU whatever "
+                "device trained it)" % ("probability" if binary else "value"))
+    if arm_name.startswith("sklearn-"):
+        if iforest:
+            return (model.score_samples, _vec, "sklearn IsolationForest.score_samples(X), n_jobs -1")
+        if binary:
+            return (model.predict_proba, _p1,
+                    "sklearn %s.predict_proba(X), n_jobs -1, column 1" % type(model).__name__)
+        return (model.predict, _vec, "sklearn %s.predict(X), n_jobs -1" % type(model).__name__)
+    if arm_name.startswith("cuml-"):
+        if iforest:
+            return (model.score_samples, _vec, "cuml IsolationForest.score_samples(host X)")
+        # cuML's forest inference is FIL. The model is converted once, outside
+        # every clock (a model load); predict then runs FIL on host rows.
+        try:
+            fil = model.convert_to_fil_model()
+            fn = fil.predict_proba if binary else fil.predict
+            text = "cuml RandomForest.convert_to_fil_model() once untimed, then FIL %s(host X)" % (
+                "predict_proba" if binary else "predict")
+        except Exception as exc:                  # noqa: BLE001
+            fn = model.predict_proba if binary else model.predict
+            text = "cuml RandomForest.%s(host X) (FIL conversion refused: %s)" % (
+                "predict_proba" if binary else "predict",
+                " ".join(str(exc).split())[:80].replace("=", ":"))
+        return (fn, _p1 if binary else _vec, text)
+    raise RuntimeError("no inference path wired for arm %s" % arm_name)
+
+
+def emit_infer(head, lane, fields):
+    print("%s lane=%s %s" % (head, lane, " ".join("%s=%s" % kv for kv in fields)), flush=True)
+
+
+def _one_line(text, n=240):
+    return " ".join(str(text).split())[:n]
+
+
+def infer_metrics(lane, data, vec):
+    """The FSPEED-ACC metric(s), recomputed from the timed inference output
+    on the held-out rows, so a reader sees the timed call produced the scored
+    predictions."""
+    if lane == "iforest":
+        return [("auc", spec.auc(data.y_anom, -vec))]
+    if data.task == "regression":
+        return [("rmse", spec.rmse(data.y_test, vec))]
+    return [("logloss", spec.logloss(data.y_test, vec)), ("auc", spec.auc(data.y_test, vec))]
+
+
+def run_inference(lane, arms, models, data, n_rounds, large_rows, deadline):
+    """The inference phase. `models` holds each arm's last fitted model."""
+    budget = spec.per_arm_budget_s()
+    n_large = int(min(large_rows, data.X_train.shape[0]))
+    xl = np.ascontiguousarray(data.X_train[:n_large], dtype=np.float32)
+    batches = [("test", data._ours_Xtest, data.X_test), ("large", xl, xl)]
+    specs = {}
+    for arm in arms:
+        model = models.get(arm.name)
+        if model is None:
+            emit_infer("FSPEED-INFER-REFUSED", lane,
+                       [("arm", arm.name), ("batch", "all"),
+                        ("reason", "no fitted model from the fit rounds")])
+            continue
+        if data.cat_idx and arm.library in ("catboost", "xgboost"):
+            emit_infer("FSPEED-INFER-REFUSED", lane,
+                       [("arm", arm.name), ("batch", "all"),
+                        ("reason", "categorical frames are not wired for inference timing")])
+            continue
+        try:
+            call, post, text = infer_spec(arm.name, lane, data.task, model,
+                                          n_features=data.X_train.shape[1])
+        except Exception as exc:                   # noqa: BLE001
+            emit_infer("FSPEED-INFER-REFUSED", lane,
+                       [("arm", arm.name), ("batch", "all"),
+                        ("reason", "%s: %s" % (exc.__class__.__name__, _one_line(exc)))])
+            continue
+        specs[arm.name] = (call, post)
+        emit_infer("FSPEED-INFER-PATH", lane, [("arm", arm.name), ("call", _one_line(text, 400))])
+    spent = {name: 0.0 for name in specs}
+    for batch, x_ours, x_them in batches:
+        rows = int(x_ours.shape[0])
+        live, last = [], {}
+        for name, (call, post) in specs.items():
+            x = x_ours if name in ("ours", "ours-ab") else x_them
+            if time.time() > deadline:
+                emit_infer("FSPEED-INFER-REFUSED", lane, [("arm", name), ("batch", batch),
+                           ("reason", "process deadline reached before warm-up")])
+                continue
+            try:
+                t0 = time.perf_counter()
+                call(x)
+                ms = (time.perf_counter() - t0) * 1000.0
+            except Exception as exc:               # noqa: BLE001
+                emit_infer("FSPEED-INFER-REFUSED", lane, [("arm", name), ("batch", batch),
+                           ("reason", "%s during warm-up: %s" % (exc.__class__.__name__, _one_line(exc)))])
+                continue
+            spent[name] += ms / 1000.0
+            emit_infer("FSPEED-INFER-WARMUP", lane, [("arm", name), ("batch", batch),
+                                                     ("rows", rows), ("ms", "%.3f" % ms)])
+            live.append(name)
+        for r in range(1, n_rounds + 1):
+            for name in list(live):
+                call, post = specs[name]
+                x = x_ours if name in ("ours", "ours-ab") else x_them
+                if time.time() > deadline or spent[name] > budget:
+                    emit_infer("FSPEED-INFER-REFUSED", lane, [("arm", name), ("batch", batch),
+                               ("reason", "process deadline or per-arm budget %.0fs reached at "
+                                          "round %d" % (budget, r))])
+                    live.remove(name)
+                    continue
+                try:
+                    t0 = time.perf_counter()
+                    raw = call(x)
+                    ms = (time.perf_counter() - t0) * 1000.0
+                    vec = post(raw)
+                except Exception as exc:           # noqa: BLE001
+                    emit_infer("FSPEED-INFER-REFUSED", lane, [("arm", name), ("batch", batch),
+                               ("reason", "%s at round %d: %s" % (exc.__class__.__name__, r,
+                                                                  _one_line(exc)))])
+                    live.remove(name)
+                    continue
+                spent[name] += ms / 1000.0
+                last[name] = vec
+                emit_infer("FSPEED-INFER", lane, [("arm", name), ("batch", batch), ("rows", rows),
+                                                  ("round", r), ("ms", "%.3f" % ms),
+                                                  ("hash", spec.hash_predictions(vec))])
+        if batch == "test":
+            for name, vec in last.items():
+                try:
+                    for metric, value in infer_metrics(lane, data, vec):
+                        emit_infer("FSPEED-INFER-ACC", lane, [("arm", name), ("batch", batch),
+                                                              ("metric", metric),
+                                                              ("value", "%.6f" % value)])
+                except Exception as exc:           # noqa: BLE001
+                    emit_infer("FSPEED-INFER-REFUSED", lane, [("arm", name), ("batch", batch),
+                               ("reason", "%s while scoring: %s" % (exc.__class__.__name__,
+                                                                    _one_line(exc)))])
+        # FAST (ours-ab on the Apple board) against IDENTICAL (ours): the
+        # same rows through two tiers' models, compared bit for bit.
+        if "ours" in last and "ours-ab" in last:
+            a, b = last["ours"], last["ours-ab"]
+            same_shape = a.shape == b.shape
+            emit_infer("FSPEED-INFER-AGREE", lane, [
+                ("batch", batch), ("arms", "ours,ours-ab"), ("rows", rows),
+                ("bits_equal", "yes" if same_shape and a.tobytes() == b.tobytes() else "no"),
+                ("max_abs_diff", ("%.6g" % float(np.max(np.abs(a - b)))) if same_shape and a.size
+                 else "-")])
+
+
+# --------------------------------------------------------------------------
 # CLI.
 # --------------------------------------------------------------------------
 
@@ -527,10 +775,19 @@ def build_parser():
                         "one process will not coexist")
     p.add_argument("--list-arms", action="store_true",
                    help="print the roster for the lane and exit")
+    p.add_argument("--infer", action="store_true",
+                   help="after the fit rounds, time batch prediction too: every arm "
+                        "predicts with its own last fitted model on the held-out rows "
+                        "and on a large batch (FSPEED-INFER lines). Off by default; "
+                        "without it the output is unchanged")
+    p.add_argument("--infer-large-rows", type=int, default=INFER_LARGE_ROWS,
+                   help="rows of the `large` inference batch (the first N training "
+                        "rows; default 1,000,000, capped at the training rows)")
     return p
 
 
 def main(argv=None):
+    started = time.time()
     args = build_parser().parse_args(argv)
     lane = args.lane
     size = spec.size_tag()
@@ -628,7 +885,23 @@ def main(argv=None):
     # arm's FITTED tree count against the count this lane asked for. Without
     # it the shapes are still reported and that one check is skipped; an
     # expectation is never invented.
-    spec.run(lane, arms, data, spec.rounds(), size, cfg=cfg)
+    models = {}
+    if args.infer:
+        # Keep each arm's LAST fitted model for the inference phase. The
+        # wrapper records the model after `fit` returns; nothing inside the
+        # fit clock changes.
+        for arm in arms:
+            def _fit(model, d, _orig=arm.fit, _name=arm.name):
+                out = _orig(model, d)
+                models[_name] = model
+                return out
+            arm.fit = _fit
+    live = spec.run(lane, arms, data, spec.rounds(), size, cfg=cfg)
+    if args.infer:
+        names = {a.name for a in live}
+        run_inference(lane, [a for a in arms if a.name in names],
+                      models, data, spec.rounds(), args.infer_large_rows,
+                      started + spec.process_deadline_s())
     return 0
 
 

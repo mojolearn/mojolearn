@@ -30,6 +30,7 @@ STUB_TREES = textwrap.dedent(r'''
     p.add_argument("--lane"); p.add_argument("--dataset"); p.add_argument("--rows")
     p.add_argument("--devices"); p.add_argument("--arms"); p.add_argument("--ours-ab")
     p.add_argument("--ours-only", action="store_true")
+    p.add_argument("--infer", action="store_true")    # tools/test_bench_board_infer.py
     a = p.parse_args()
     with open(os.environ["STUB_CALLS"], "a") as fh:
         fh.write("trees %s %s\n" % (a.lane, a.dataset))
@@ -81,6 +82,7 @@ STUB_CLASSICAL = textwrap.dedent(r'''
               "--work", "--root", "--arms", "--rounds", "--round-seconds", "--warmup-seconds",
               "--ours-python", "--theirs-python"):
         p.add_argument(f)
+    p.add_argument("--infer", action="store_true")    # tools/test_bench_board_infer.py
     a = p.parse_args()
     with open(os.environ["STUB_CALLS"], "a") as fh:
         fh.write("classical %s %s %s\n" % (a.cmd, a.lane or a.lanes, a.dataset or a.datasets))
