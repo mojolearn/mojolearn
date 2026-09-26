@@ -161,7 +161,7 @@ if [ -n "${MOJOLEARN_TARGET_COLUMN:-}" ]; then
     COLUMN_DEFINE="-D MOJOLEARN_COLUMN_$(printf %s "$MOJOLEARN_TARGET_COLUMN" | tr '[:lower:]' '[:upper:]')"
 fi
 # shellcheck disable=SC2086
-pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib \
+pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} \
     $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE \
     ${MOJOLEARN_BUILD_EXTRA_DEFINES:-} \
     $LINK_FLAGS \
