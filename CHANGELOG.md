@@ -2,6 +2,11 @@
 
 All notable changes to mojolearn are recorded here, newest first, in the style of Keep a Changelog.
 
+## Unreleased
+
+### Changed
+- Linux IDENTICAL CUDA sets (sm_89, sm_90a) ship machine code: every IDENTICAL kernel is compiled at build time by a pinned ptxas (13.0.88) with `--fmad=false` and stored as a zstd-compressed fatbin in place of its PTX (`packaging/linux/cubin_contract.py`), so the user's driver no longer JIT-compiles them. On 0.8.19 the whole release column ran with the driver JIT disabled on an RTX 4090 and an H100, with the same bits as the recorded Apple, AMD and NVIDIA columns (`bench/results/nvidia_fatbin_2026-09-26/`). The wheel audit refuses IDENTICAL CUDA PTX outside a small JIT-invariant exception.
+
 ## 0.8.19 (published 2026-09-25)
 
 ### Changed

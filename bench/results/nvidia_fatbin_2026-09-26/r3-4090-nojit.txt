@@ -1,0 +1,3 @@
+col_cubin_nojit exit=0 secs=145
+col_cubin exit=0 secs=146
+cubin cache files: 0 bytes: 10

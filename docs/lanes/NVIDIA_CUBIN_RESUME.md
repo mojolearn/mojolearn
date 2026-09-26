@@ -15,7 +15,16 @@ and (2) the NVIDIA payload shrinks.
 r1 (4090, pod eq7wr46p6rc9l2, ~4 min, verified gone, box script bug) ~$0.05;
 r2 (4090, pod b11cqjkymdxu0l, $0.74/h, 59 min, verified gone) ~$0.73.
 r3 (4090, pod nd4pf5m1yj11mk, ~11 min, verified gone) ~$0.14.
-Total ~$0.92 of the $25 cap. RunPod NVIDIA only.
+r4 (H100 80GB HBM3, pod 0wu9vfceofo6fh, $3.49/h, ~15 min, verified gone) ~$0.90.
+Total ~$1.82 of the $25 cap. RunPod NVIDIA only. After r4 the RunPod listing
+shows no mojolearn-cubin pod and no dead-man of this lane is running.
+
+## PROVEN on r4 (sm_90a, H100 80GB HBM3, driver 580.126.09)
+
+Same r3 wheel. `CUDA_DISABLE_PTX_JIT=1` column exit 0 (141 s); JIT allowed:
+0 JIT-cache files; both vs 0.8.19 Apple + AMD + NVIDIA: IDENTICAL=627,
+infer/model 984, 0 DIVERGENT; 4090 vs H100: IDENTICAL=627, 0 DIVERGENT.
+Summary files: `bench/results/nvidia_fatbin_2026-09-26/` (README there).
 
 ## PROVEN on r3 (sm_89, RTX 4090, driver 580.x): NO JIT AT ALL, same bits
 
@@ -128,12 +137,33 @@ compression do to the wheel size.
 
 ## Exact next step
 
-sm_90a on an H100: upload the r3 wheel (same file carries both sets), run
-`scripts/box/all.sh` (JIT-disabled column + JIT-cache count), diff against the
-0.8.19 references. Then docs/CHANGELOG and hand-off for a real release build
-(build_sets.sh already wired; first build after merge rebuilds every CUDA set
-because cubin_contract.py is a LINUX_BUILDERS input).
+Both arches proven. What is left (none needs a GPU to start):
+1. Review + merge lane/nvidia-cubin (Andrew; never merged by the lane).
+2. The first real release build after merge runs the new build_sets.sh block on
+   the NVIDIA build boxes (needs `python3 -m pip` and `objdump` there; both were
+   on the RunPod pytorch image). cubin_contract.py is a LINUX_BUILDERS /
+   LINUX_SET_BUILDERS input, so every CUDA set rebuilds (no reuse). Watch
+   `cubin.jsonl` for `unplaced` rows with jit_invariant false (the build refuses).
+3. Optional: the FAST and deterministic CUDA tiers still ship PTX (driver JIT);
+   the same pass with fmad left on would remove their JIT too (not done: out of
+   the IDENTICAL scope).
+4. Optional: the one JIT-invariant leftover per set could be removed by shrinking
+   that check kernel's unrolling at the source.
 
 ## Commands / scripts
 
-(filled in as they are written)
+All scripts: `~/mojolearn-evidence/nvidia-cubin-2026-09-26/scripts/`.
+- `rent.sh <outdir> [gpu...]` rents one RunPod pod (dead-man before create,
+  on-pod watchdog via tools/runpod_guard.sh, uploads box/ and a wheel:
+  `WHEEL=<whl> WHEEL_DIR=cubin` for a converted wheel), then HOLDS until
+  `<outdir>/STOP` exists, then deletes and verifies gone.
+- `box/setup.sh`: pinned ptxas 13.0.88, converts the .rn wheel twice
+  (`box/mkcubin.py`), installs a venv. `box/all.sh`: JIT-disabled column +
+  JIT-cache count via `box/col.sh`. Launch on the box with
+  `setsid bash /root/cb/box/all.sh > /root/cb/all.log 2>&1 < /dev/null & disown`
+  (a plain nohup over ssh did not survive).
+- Diff on the Mac: `python3 tools/identity_break.py --diff
+  ~/mojolearn-evidence/release-check/69a519c1522d/metal/column.json
+  ~/mojolearn-evidence/release/0.8.19/69a519c1522d/column-amd/column-hip.json
+  ~/mojolearn-evidence/release/0.8.19/69a519c1522d/smoke-linux/column-cuda.json <col.json>`.
+- Tests: `packaging/linux/test_cubin_contract.py` (in tools/test_wheel_audit.sh).

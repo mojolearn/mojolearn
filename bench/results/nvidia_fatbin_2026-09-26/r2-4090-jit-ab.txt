@@ -1,0 +1,6 @@
+col_neg_rn exit=1 secs=3
+col_cubin exit=0 secs=145
+cubin cache files: 20 bytes: 150281
+col_cubin_nojit exit=143 secs=1175
+col_rn exit=0 secs=163
+rn cache files: 794 bytes: 15144903
