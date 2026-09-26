@@ -1,6 +1,6 @@
 [workspace]
 authors = ["Andrew Hendel <ajhendel@gmail.com>"]
-channels = ["https://conda.modular.com/max", "conda-forge"]
+channels = ["https://conda.modular.com/max-nightly", "https://conda.modular.com/max", "conda-forge"]
 name = "mojolearn"
 platforms = ["osx-arm64", "linux-64", "linux-aarch64"]
 version = "0.1.0a1"
@@ -29,8 +29,9 @@ version = "0.1.0a1"
 # mojo 1.0.0, max 26.5.0. They are not aspirational.
 
 [dependencies]
-mojo = ">=1.0.0,<2"
-max = ">=26.5.0,<27"
+mojo = "==1.2.0.dev2026092505"
+max = "==26.7.0.dev2026092505"
+python = "3.14.*"
 
 [tasks]
 # Explicit direct/packed resident GPU correctness arms, FAST and IDENTICAL.
