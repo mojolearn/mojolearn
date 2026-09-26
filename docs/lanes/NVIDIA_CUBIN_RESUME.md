@@ -13,8 +13,32 @@ and (2) the NVIDIA payload shrinks.
 ## Spend so far
 
 r1 (4090, pod eq7wr46p6rc9l2, ~4 min, verified gone, box script bug) ~$0.05;
-r2 (4090, pod b11cqjkymdxu0l, $0.74/h, started 06:05Z) running.
-Cap $25, RunPod NVIDIA only.
+r2 (4090, pod b11cqjkymdxu0l, $0.74/h, 59 min, verified gone) ~$0.73.
+Total ~$0.78 of the $25 cap. RunPod NVIDIA only.
+
+## PROVEN on r2 (sm_89, RTX 4090): the runtime loads the fatbins unchanged, same bits
+
+Evidence `~/mojolearn-evidence/nvidia-cubin-2026-09-26/r2-4090/` (all.log,
+col_*.json/log, mkcubin.json, diff-*.txt). Wheel: the .rn 0.8.19 wheel
+(sha256 2296577101b1...) with both IDENTICAL sets converted on the box by
+`box/mkcubin.py` (scratchpad copy in the evidence dir's parent notes).
+
+- NEGATIVE CONTROL: the PTX (.rn) wheel with `CUDA_DISABLE_PTX_JIT=1` fails
+  every kernel load: `CUDA_ERROR_JIT_COMPILATION_DISABLED` (col_neg_rn.log).
+  So the driver JIT really is what compiles the shipped PTX today.
+- The fatbin wheel, full 0.8.19 release column (209 lanes, base/denormal/odd,
+  one fit): exit 0 in 145 s; diffed against the recorded 0.8.19 Apple, AMD and
+  NVIDIA columns: IDENTICAL=627, infer/model IDENTICAL=984, 0 DIVERGENT
+  (diff-ref-cubin.txt), the same counts as the .rn proof of 2026-09-25.
+- Same box A/B, fresh private CUDA_CACHE_PATH each: the PTX wheel JIT-compiled
+  794 modules (15.1 MB of JIT cache) in a 163 s column; the fatbin wheel 20
+  modules (150 KB), 145 s. rn vs fatbin columns: IDENTICAL=627, 0 DIVERGENT.
+- NOT YET "NO JIT AT ALL": the fatbin wheel under `CUDA_DISABLE_PTX_JIT=1`
+  refused every cell (col_cubin_nojit.log): the 20 JIT'd modules are the
+  leftover PTX kernels (fatbin bigger than the PTX text), and at least one of
+  them (e.g. `core_device_liveness_write_can*`, `core_multi_gpu_copy_scalar*`)
+  runs in every fit. Their arithmetic is JIT-invariant (integer / .rn only),
+  so the bits cannot move, but the JIT still happens for them.
 
 ## Measured on r2 (RTX 4090, driver 580.126.20, ptxas/fatbinary 13.0.88 from pip nvidia-cuda-nvcc==13.0.*)
 
@@ -79,10 +103,11 @@ compression do to the wheel size.
 
 ## Exact next step
 
-Rent one RTX 4090 (sm_89) on RunPod with the repo's dead-man + on-pod
-watchdog; on it: install the 0.8.19 wheel, `.rn`-patch its sm_89 IDENTICAL
-set (`packaging/linux/ptx_contract.py patch`), convert every embedded PTX
-module to `ptxas -arch=sm_89 --fmad=false` cubin in place, run a lane, compare.
+Close the leftover gap (41 sm_89 / 73 sm_90a embedded PTX modules whose
+compressed fatbin exceeds the PTX text): relocate their fatbins into the
+NUL padding freed by converted modules and repoint the host-code references
+(lea rel32 / R_X86_64_RELATIVE) to the PTX start, then re-run the column with
+`CUDA_DISABLE_PTX_JIT=1` (must pass) and the diff. Then sm_90a on an H100.
 
 ## Commands / scripts
 
