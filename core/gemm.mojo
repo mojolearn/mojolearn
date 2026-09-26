@@ -7,6 +7,9 @@ from layout.tile_layout import row_major
 from linalg.matmul import matmul
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.gpu import block_dim, block_idx, thread_idx
+from std.memory import stack_allocation
+from max.gpu.memory import AddressSpace
+from max.gpu.sync import barrier
 
 from core.gram_splitk import (
     GRAM_MAX_CELLS_PER_THREAD,
@@ -73,6 +76,84 @@ def pinned_gemm_nt_kernel(
 
 
 
+
+comptime APPLE_GEMM_NT_TILED = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_APPLE_GEMM_NT_TILED_OFF"]()
+)
+"""IDENTICAL on Apple: `gemm_nt` stages x and y tiles in threadgroup memory
+and gives each thread RM x RN cells. Every cell is still ONE chain,
+`acc = rtf_mul_add(ftz(x[i, p]), ftz(y[j, p]), acc)` for p = 0 .. k-1 in
+order, closed by `ftz(0 + ftz(acc))`: the pinned kernel's bits exactly.
+Only which thread owns a chain and where its operands are read from move."""
+
+comptime GNT_KT = 16
+
+
+def apple_gemm_nt_tiled_kernel[TM: Int, TN: Int, RM: Int, RN: Int](
+    z: MutPointer[Float32, MutAnyOrigin],
+    x: MutPointer[Float32, MutAnyOrigin],
+    y: MutPointer[Float32, MutAnyOrigin],
+    m_in: Int32,
+    n_in: Int32,
+    k_in: Int32,
+):
+    comptime TX = TN // RN
+    comptime THREADS = (TM // RM) * TX
+    var m = Int(m_in)
+    var n = Int(n_in)
+    var k = Int(k_in)
+    var tid = Int(thread_idx.x)
+    var ty_ = tid // TX
+    var tx_ = tid - ty_ * TX
+    var i0 = Int(block_idx.x) * TM
+    var j0 = Int(block_idx.y) * TN
+    var xs = stack_allocation[
+        TM * GNT_KT, Scalar[DType.float32], address_space=AddressSpace.SHARED
+    ]()
+    var ys = stack_allocation[
+        TN * GNT_KT, Scalar[DType.float32], address_space=AddressSpace.SHARED
+    ]()
+    var acc = InlineArray[Float32, RM * RN](fill=Float32(0.0))
+    var p0 = 0
+    while p0 < k:
+        var kt = min(GNT_KT, k - p0)
+        var t = tid
+        while t < TM * GNT_KT:
+            var r = t // GNT_KT
+            var c = t - r * GNT_KT
+            var gi = i0 + r
+            xs[t] = ftz(x[gi * k + p0 + c]) if (gi < m and c < kt) else Float32(0.0)
+            t += THREADS
+        t = tid
+        while t < TN * GNT_KT:
+            var r = t // GNT_KT
+            var c = t - r * GNT_KT
+            var gj = j0 + r
+            ys[t] = ftz(y[gj * k + p0 + c]) if (gj < n and c < kt) else Float32(0.0)
+            t += THREADS
+        barrier()
+        for pp in range(kt):
+            var a = InlineArray[Float32, RM](fill=Float32(0.0))
+            var b = InlineArray[Float32, RN](fill=Float32(0.0))
+            comptime for rr in range(RM):
+                a[rr] = xs[(ty_ * RM + rr) * GNT_KT + pp]
+            comptime for cc in range(RN):
+                b[cc] = ys[(tx_ * RN + cc) * GNT_KT + pp]
+            comptime for rr in range(RM):
+                comptime for cc in range(RN):
+                    acc[rr * RN + cc] = rtf_mul_add(a[rr], b[cc], acc[rr * RN + cc])
+        barrier()
+        p0 += GNT_KT
+    comptime for rr in range(RM):
+        comptime for cc in range(RN):
+            var i = i0 + ty_ * RM + rr
+            var j = j0 + tx_ * RN + cc
+            if i < m and j < n:
+                z[i * n + j] = ftz(Float32(0.0) + ftz(acc[rr * RN + cc]))
+
+
 def pinned_gemv_n_kernel(
     z: MutPointer[Float32, MutAnyOrigin],
     x: MutPointer[Float32, MutAnyOrigin],
@@ -132,6 +213,25 @@ def gemm_nt(
         comptime if GEMM_IDENT_SWAP_537:
             identical_gemm(ctx, z, x, y, m, n, k, OP_NT)
             return
+        comptime if APPLE_GEMM_NT_TILED:
+            if n <= 4:
+                pass
+            elif n <= 16:
+                ctx.enqueue_function[apple_gemm_nt_tiled_kernel[256, 16, 4, 4]](
+                    z.unsafe_ptr(), x.unsafe_ptr(), y.unsafe_ptr(),
+                    Int32(m), Int32(n), Int32(k),
+                    grid_dim=((m + 255) // 256, (n + 15) // 16, 1),
+                    block_dim=(256, 1, 1),
+                )
+            else:
+                ctx.enqueue_function[apple_gemm_nt_tiled_kernel[64, 64, 4, 4]](
+                    z.unsafe_ptr(), x.unsafe_ptr(), y.unsafe_ptr(),
+                    Int32(m), Int32(n), Int32(k),
+                    grid_dim=((m + 63) // 64, (n + 63) // 64, 1),
+                    block_dim=(256, 1, 1),
+                )
+            if n > 4:
+                return
         ctx.enqueue_function[pinned_gemm_nt_kernel](
             z.unsafe_ptr(),
             x.unsafe_ptr(),
