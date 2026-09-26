@@ -134,7 +134,7 @@ rc 134), an open defect. Build:
 
 # DEVIATION 2486: shared byte-preserving host copies.
 from bindings.hostptr import f32_ptr, read_f32, copy_f32
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.time import perf_counter_ns
 from std.sys.compile import is_defined
 from mamba.impl.ops.mamba3_siso import m3_phase_tick
@@ -241,7 +241,7 @@ def _m3_write_f32(addr: Int, values: List[Float32]) raises:
     else:
         var p = _f32_ptr(addr)
         if len(values) > 0:
-            memcpy(dest=p, src=values.unsafe_ptr(), count=len(values))
+            unsafe_memcpy(dest=p, src=values.unsafe_ptr(), count=len(values))
 
 
 def _m3_upload_addr(ctx: DeviceContext, addr: Int, n: Int) raises -> DeviceBuffer[DType.float32]:
@@ -261,7 +261,7 @@ def _m3_upload_addr(ctx: DeviceContext, addr: Int, n: Int) raises -> DeviceBuffe
         var host = ctx.enqueue_create_host_buffer[DType.float32](count)
         ctx.synchronize()
         if n > 0:
-            memcpy(dest=host.unsafe_ptr(), src=src, count=n)
+            unsafe_memcpy(dest=host.unsafe_ptr(), src=src, count=n)
         else:
             host.unsafe_ptr().unsafe_store(0, Float32(0.0))
         mamba_copy_in(ctx, dev, host.unsafe_ptr(), count)
@@ -292,7 +292,7 @@ def _m3_download_addr(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], 
             ctx.enqueue_copy(dst_ptr=host.unsafe_ptr(), src_buf=view)
         ctx.synchronize()
         if n > 0:
-            memcpy(dest=dst, src=host.unsafe_ptr(), count=n)
+            unsafe_memcpy(dest=dst, src=host.unsafe_ptr(), count=n)
         _ = host^
 
 

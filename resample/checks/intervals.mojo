@@ -130,7 +130,7 @@ them is the easy mistake here.
 =================================================================
 """
 
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 
 from metrics.checks.pinned_sum import (
     PINNED_SUM_W,

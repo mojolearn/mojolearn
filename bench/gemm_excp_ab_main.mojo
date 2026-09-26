@@ -35,7 +35,7 @@ every build):
 The first three kinds' hashes are unchanged by the added kinds.
 Lines: `EXCP_AB call=... kind=... m= n= k= hash=<16 hex> ms=<median> samples=...`.
 """
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast
 from std.os import getenv
 from std.time import perf_counter_ns

@@ -98,8 +98,8 @@ from checks.kernel_matrix import (
     TARGET_COLUMN,
     quantize_search_for,
 )
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.gpu.intrinsics import ldg
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu.intrinsics import ldg
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -162,18 +162,16 @@ def gpu_binarize_kernel[search_mode: Int = quantize_search_for[TARGET_COLUMN]()]
         borders_local[tid] = ldg(borders + (border_base + tid))
     barrier()
 
-    var f = InlineArray[Float32, EVAL_OBJECTS_PER_THREAD](fill=NEG_INFTY)
+    var f = Array[Float32, EVAL_OBJECTS_PER_THREAD](fill=NEG_INFTY)
 
-    @parameter
-    for j in range(EVAL_OBJECTS_PER_THREAD):
+    comptime for j in range(EVAL_OBJECTS_PER_THREAD):
         var doc = first_doc + j * EVAL_WARP
         if doc < object_count:
             f[j] = ldg(values + (feature * stride + doc))
 
-    var bins = InlineArray[UInt32, EVAL_OBJECTS_PER_THREAD](fill=0)
+    var bins = Array[UInt32, EVAL_OBJECTS_PER_THREAD](fill=0)
 
-    @parameter
-    if search_mode == QUANTIZE_SEARCH_TWO_LEVEL:
+    comptime if search_mode == QUANTIZE_SEARCH_TWO_LEVEL:
         # The Apple arm of `quantize_search_for`: a PIVOT pass over every
         # 8th border, then one 8-wide segment pass, both branchless
         # independent compare-adds -- the linear scan's pipelined shape at
@@ -181,23 +179,20 @@ def gpu_binarize_kernel[search_mode: Int = quantize_search_for[TARGET_COLUMN]()]
         # first and measured 3.5x WORSE than the full scan: its eight
         # dependent divergent loads stall where compare-adds pipeline.
         # The matrix row carries both prices.)
-        var seg = InlineArray[UInt32, EVAL_OBJECTS_PER_THREAD](fill=0)
+        var seg = Array[UInt32, EVAL_OBJECTS_PER_THREAD](fill=0)
         var p = 7
         while p < border_count:
             var pivot = borders_local[p]
 
-            @parameter
-            for j in range(EVAL_OBJECTS_PER_THREAD):
+            comptime for j in range(EVAL_OBJECTS_PER_THREAD):
                 seg[j] += UInt32(Int(f[j] > pivot))
             p += 8
 
-        @parameter
-        for j in range(EVAL_OBJECTS_PER_THREAD):
+        comptime for j in range(EVAL_OBJECTS_PER_THREAD):
             var base = Int(seg[j]) * 8
             var count = UInt32(base)
 
-            @parameter
-            for u in range(8):
+            comptime for u in range(8):
                 if base + u < border_count:
                     count += UInt32(
                         Int(f[j] > borders_local[base + u])
@@ -215,19 +210,16 @@ def gpu_binarize_kernel[search_mode: Int = quantize_search_for[TARGET_COLUMN]()]
         var border_id = 0
         while border_id + 8 <= border_count:
 
-            @parameter
-            for u in range(8):
+            comptime for u in range(8):
                 var border = borders_local[border_id + u]
 
-                @parameter
-                for j in range(EVAL_OBJECTS_PER_THREAD):
+                comptime for j in range(EVAL_OBJECTS_PER_THREAD):
                     bins[j] += UInt32(Int(f[j] > border))
             border_id += 8
         while border_id < border_count:
             var border = borders_local[border_id]
 
-            @parameter
-            for j in range(EVAL_OBJECTS_PER_THREAD):
+            comptime for j in range(EVAL_OBJECTS_PER_THREAD):
                 bins[j] += UInt32(Int(f[j] > border))
             border_id += 1
 
@@ -256,7 +248,7 @@ def _calc_tree_index[
     split_base: Int,
     quantized: MutPointer[UInt32, MutAnyOrigin],
     quant_base: Int,
-    mut idx: InlineArray[UInt32, EVAL_OBJECTS_PER_THREAD],
+    mut idx: Array[UInt32, EVAL_OBJECTS_PER_THREAD],
 ):
     """`CalcIndexesUnwrapped<TreeDepth>` / `CalcIndexesBase`
     (`evaluator.cu:129-156`): the leaf index of 4 docs at once, one packed
@@ -273,26 +265,21 @@ def _calc_tree_index[
     their own GPU arm does not carry it.
     """
 
-    @parameter
-    for k in range(EVAL_OBJECTS_PER_THREAD):
+    comptime for k in range(EVAL_OBJECTS_PER_THREAD):
         idx[k] = 0
 
-    @parameter
-    if unroll_depth > 0:
+    comptime if unroll_depth > 0:
 
-        @parameter
-        for d in range(unroll_depth):
+        comptime for d in range(unroll_depth):
             var fi = Int(ldg(bin_feature_idx + (split_base + d)))
             var fv = ldg(bin_feature_val + (split_base + d))
             var buckets = ldg(quantized + (quant_base + fi))
             var xm = UInt32(0)
 
-            @parameter
-            if need_xor_mask:
+            comptime if need_xor_mask:
                 xm = ldg(bin_feature_xor + (split_base + d))
 
-            @parameter
-            for k in range(EVAL_OBJECTS_PER_THREAD):
+            comptime for k in range(EVAL_OBJECTS_PER_THREAD):
                 var b = ((buckets >> UInt32(8 * k)) & UInt32(255)) ^ xm
                 if b >= fv:
                     idx[k] += UInt32(1 << d)
@@ -303,12 +290,10 @@ def _calc_tree_index[
             var buckets = ldg(quantized + (quant_base + fi))
             var xm = UInt32(0)
 
-            @parameter
-            if need_xor_mask:
+            comptime if need_xor_mask:
                 xm = ldg(bin_feature_xor + (split_base + d))
 
-            @parameter
-            for k in range(EVAL_OBJECTS_PER_THREAD):
+            comptime for k in range(EVAL_OBJECTS_PER_THREAD):
                 var b = ((buckets >> UInt32(8 * k)) & UInt32(255)) ^ xm
                 if b >= fv:
                     idx[k] += UInt32(1 << d)
@@ -375,14 +360,14 @@ def eval_oblivious_trees_kernel[need_xor_mask: Bool = False](
     if last_tree > tree_count:
         last_tree = tree_count
 
-    var local_result = InlineArray[Float32, EVAL_OBJECTS_PER_THREAD](
+    var local_result = Array[Float32, EVAL_OBJECTS_PER_THREAD](
         fill=Float32(0.0)
     )
 
     if first_tree < last_tree and first_doc < document_count:
         var split_base = Int(ldg(tree_start_offsets + first_tree))
         var leaf_base = Int(ldg(first_leaf_offset + first_tree))
-        var idx = InlineArray[UInt32, EVAL_OBJECTS_PER_THREAD](fill=0)
+        var idx = Array[UInt32, EVAL_OBJECTS_PER_THREAD](fill=0)
         for tree in range(first_tree, last_tree):
             var depth = Int(ldg(tree_sizes + tree))
             if depth == 6:
@@ -406,8 +391,7 @@ def eval_oblivious_trees_kernel[need_xor_mask: Bool = False](
                     split_base, quantized, quant_base, idx,
                 )
 
-            @parameter
-            for k in range(EVAL_OBJECTS_PER_THREAD):
+            comptime for k in range(EVAL_OBJECTS_PER_THREAD):
                 local_result[k] += ldg(
                     leaf_values + (leaf_base + Int(idx[k]))
                 )
@@ -423,8 +407,7 @@ def eval_oblivious_trees_kernel[need_xor_mask: Bool = False](
         address_space = AddressSpace.SHARED,
     ]()
 
-    @parameter
-    for k in range(EVAL_OBJECTS_PER_THREAD):
+    comptime for k in range(EVAL_OBJECTS_PER_THREAD):
         reduce_vals[
             inner_block_by32 * EVAL_WARP * EVAL_OBJECTS_PER_THREAD
             + EVAL_WARP * k
@@ -435,8 +418,7 @@ def eval_oblivious_trees_kernel[need_xor_mask: Bool = False](
     var flat = tx + ty * EVAL_DOC_BLOCK_SIZE
     var lr = reduce_vals[flat]
 
-    @parameter
-    for j in range(1, EVAL_OBJECTS_PER_THREAD):
+    comptime for j in range(1, EVAL_OBJECTS_PER_THREAD):
         lr += reduce_vals[j * 256 + flat]
     reduce_vals[flat] = lr
     barrier()

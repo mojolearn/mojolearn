@@ -119,7 +119,7 @@ only when `sabotage` names them, exactly as `cholesky/checks/potrf.mojo`
 leaves its three driver arms on the production path.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import cos, exp, tanh
 
 from core.philox import PhiloxState

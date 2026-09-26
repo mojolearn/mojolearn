@@ -2,9 +2,9 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Transformer backward kernels and host-side launch composition used by the independent gradient checks."""
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.time import perf_counter_ns
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 # DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;
@@ -140,7 +140,7 @@ def _upload(
     step_count_sync()
     ctx.synchronize()
     if n > 0:
-        memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+        unsafe_memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
     for i in range(n, n_buf):
         host.unsafe_ptr().unsafe_store(i, Float32(0.0))
     step_count_h2d()

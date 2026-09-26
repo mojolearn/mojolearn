@@ -27,7 +27,7 @@ with the with-replacement `RowSampler` wired. This extension is that
 sampler's first Python caller.
 """
 
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from hostptr import copy_f32, read_f32
 from core.forest_host_predict import rf_host_predict, rf_host_trees
 from ensemble.host_layout import (
@@ -420,7 +420,7 @@ def _rf_classifier_fit[EXPORT: Bool = False, ROWMAJOR: Bool = False](
             host_x = Int(hxp)
         else:
             copy_f32_threaded(xp, hxp, n_rows * n_cols)
-        memcpy(dest=hy.unsafe_ptr(), src=yp, count=n_rows)
+        unsafe_memcpy(dest=hy.unsafe_ptr(), src=yp, count=n_rows)
         bt.stop_host("bind_host_copy", t_s)
         t_s = bt.start()
         var dx = ctx.enqueue_create_buffer[DT](n_rows * n_cols)
@@ -749,7 +749,7 @@ def rf_predict_proba_binding(
     # row for row (zero, `predict_one` per tree in tree order, divide by
     # `n_trees`) with the rows spread over host threads
     # (`MOJOLEARN_CPU_THREADS`), the tree rebuild bounds-checked, and the
-    # input copied as one memcpy instead of an element loop. The CPU
+    # input copied as one unsafe_memcpy instead of an element loop. The CPU
     # training column runs this same function, so the two columns share
     # every bit of this path by construction.
     if n_rows == 0:

@@ -55,7 +55,7 @@ DEVIATION 1: THE BALLOT IS A `vote`, THE BIT WALK IS A `ctz`
 Theirs is `raft::ballot` then `__brev` then `__clz`, at `:629-636`. The
 `__brev` exists only so the loop can use `__clz` instead of `__ffs`; it is a
 CUDA instruction-selection trick and carries no meaning. Ours is
-`std.gpu.primitives.warp.vote` (probed working on this M4, see the build
+`max.gpu.primitives.warp.vote` (probed working on this M4, see the build
 evidence in the lane file) then `std.bit.count_trailing_zeros`, then
 `mask &= mask - 1` in place of their `mask &= (0x7fffffff >> k_offset)`.
 Both walk the set landmarks in ASCENDING index order, so the order columns
@@ -63,7 +63,7 @@ land in `adj_ja` is theirs as well as ours.
 
 `__popc(mask & lid_mask)` and `__popc(mask)` are `std.bit.pop_count` on the
 same `vote` mask, and `raft::warpReduce` is
-`std.gpu.primitives.warp.sum`.
+`max.gpu.primitives.warp.sum`.
 
 DEVIATION 2: 32 THREADS PER BLOCK, ONE QUERY PER BLOCK
 -------------------------------------------------------
@@ -121,9 +121,9 @@ as unimplemented with that reason.
 """
 
 from std.bit import count_trailing_zeros, pop_count
-from std.gpu import block_idx, thread_idx
-from std.gpu.primitives.warp import lane_id, shuffle_idx, vote
-from std.gpu.primitives.warp import sum as warp_sum
+from max.gpu import block_idx, thread_idx
+from max.gpu.primitives.warp import lane_id, shuffle_idx, vote
+from max.gpu.primitives.warp import sum as warp_sum
 from checks.numerics import PIN_CROSS_VENDOR  # DEVIATION 551
 from neighbors.checks.ball_cover_canonical_order import (
     rbc_canonicalize_row_order,
@@ -811,8 +811,7 @@ def rbc_eps_pass_fill(
     # entry points and both callers byte-for-byte unchanged;
     # `rbc_eps_pass_count` already performs exactly this read. Compiled out
     # entirely under FAST and DETERMINISTIC.
-    @parameter
-    if PIN_CROSS_VENDOR:
+    comptime if PIN_CROSS_VENDOR:
         var h_nnz = ctx.enqueue_create_host_buffer[DType.int32](1)
         ctx.enqueue_copy(
             dst_ptr=h_nnz.unsafe_ptr(),
@@ -995,8 +994,7 @@ def rbc_eps_pass_max_k(
     # (`dbscan/impl/runner.mojo` returns False unconditionally), and
     # the check picks max_k from a prior count. The refusal exists so the hole
     # cannot open silently later.
-    @parameter
-    if PIN_CROSS_VENDOR:
+    comptime if PIN_CROSS_VENDOR:
         if actual_max > max_k:
             raise Error(
                 "rbc_eps_pass_max_k (IDENTICAL): the longest row is "

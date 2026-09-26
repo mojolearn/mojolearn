@@ -24,7 +24,7 @@ thread owns one cell, no reduction, so the launch shape (the block size, a
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 
 from checks.numerics import ftz, identical_mul_add
 

@@ -12,7 +12,7 @@ BINARY-PRED-2: integer sign/magnitude class selection preserves strict raw>0
 for positive subnormal margins on devices that flush floating comparisons.
 Thus rounded probabilities can tie while raw-margin classification is positive.
 """
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast
 from std.math import isfinite
 from max.gpu.host import DeviceContext

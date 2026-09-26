@@ -63,7 +63,7 @@ shift on the host after the walker; the host oracle
 (`gbdt/host/gbdt_oracle_losses.mojo`) restates it.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 
 
 comptime LEAF_BLOCK = 256

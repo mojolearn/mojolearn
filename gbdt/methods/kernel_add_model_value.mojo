@@ -37,7 +37,7 @@ point it at. Recorded so that gap is visible.
 ===================================================
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 
 from checks.numerics import identical_mul_add
 
@@ -155,7 +155,7 @@ def add_bin_model_value_kernel(
         thread_idx.x
     )
 
-    var bins_local = InlineArray[UInt32, ABMV_ELEMENTS](fill=UInt32(0))
+    var bins_local = Array[UInt32, ABMV_ELEMENTS](fill=UInt32(0))
 
     comptime for j in range(ABMV_ELEMENTS):
         var idx = i + j * ABMV_BLOCK
@@ -163,7 +163,7 @@ def add_bin_model_value_kernel(
             bins_local[j] = bins.unsafe_load(idx)
 
     for dim in range(cursor_dim):
-        var vals_local = InlineArray[Float32, ABMV_ELEMENTS](
+        var vals_local = Array[Float32, ABMV_ELEMENTS](
             fill=Float32(0.0)
         )
 

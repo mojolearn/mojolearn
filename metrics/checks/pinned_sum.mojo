@@ -54,7 +54,7 @@ additions through the same `ftz`, so the device is gated BIT FOR BIT against
 it under IDENTICAL. It is the oracle every Group B and C check reads first.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.primitives.block import sum as block_sum

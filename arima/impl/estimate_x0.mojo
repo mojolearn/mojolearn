@@ -79,7 +79,7 @@ host and device cannot drift.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 
 from arima.impl.linalg.batched.least_squares import (
     LS_MAX_COLS,
@@ -184,8 +184,8 @@ def test_invparams(
     READ THE BANNER BEFORE TOUCHING THE INNER LINE. `coef * a * x` is
     `(coef*a) * x`, `coef` is an exact +-1, the surviving product feeds the
     add: ONE rounding. This is NOT `invtransform`'s `sign * (a * x)`."""
-    var new_params = InlineArray[Float32, JONES_MAX_PARAMS](fill=Float32(0.0))
-    var tmp = InlineArray[Float32, JONES_MAX_PARAMS](fill=Float32(0.0))
+    var new_params = Array[Float32, JONES_MAX_PARAMS](fill=Float32(0.0))
+    var tmp = Array[Float32, JONES_MAX_PARAMS](fill=Float32(0.0))
     for i in range(pq):
         var v = ftz(params.unsafe_load(base + i))
         tmp[i] = v

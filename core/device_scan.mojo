@@ -46,7 +46,7 @@ The free functions keep the allocate-per-call form for callers that scan
 once.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 # DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;

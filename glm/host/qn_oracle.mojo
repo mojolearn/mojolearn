@@ -5,7 +5,7 @@
 (workstream E batch 2, the logistic lane,
 2026-09-14): cuML's quasi-Newton solver, the L-BFGS arm.
 
-HOST ONLY. Nothing here imports `max.gpu`, `std.gpu` or a `DeviceContext`,
+HOST ONLY. Nothing here imports `max.gpu`, `max.gpu` or a `DeviceContext`,
 and no GPU binding imports this file. Every kernel and every host scalar of
 the fit is spelled a SECOND time from `glm/impl/qn/`, statement for
 statement, with the arithmetic leaves of `checks/numerics.mojo`

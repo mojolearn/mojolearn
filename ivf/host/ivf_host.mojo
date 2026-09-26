@@ -5,7 +5,7 @@
 (lane/cpu-training-embedding-ivf, 2026-09-15; the ivf and ivf-euclidean
 lanes of tools/identity_break.py).
 
-HOST ONLY. Nothing here imports `max.gpu`, `std.gpu` or a `DeviceContext`,
+HOST ONLY. Nothing here imports `max.gpu`, `max.gpu` or a `DeviceContext`,
 and no GPU binding imports this file. `host_ivf_build_and_search` is
 `ivf/estimator.mojo::ivf_flat_build_and_search_host` with every device launch
 restated on the host, in the order `ivf_flat_build` and

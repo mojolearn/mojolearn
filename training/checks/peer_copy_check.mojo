@@ -32,7 +32,7 @@ from std.os import getenv, setenv
 from std.python import Python
 from std.memory import bitcast
 from std.time import perf_counter_ns
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceContext, DeviceBuffer
 from core.multi_gpu import peer_clone
 from cholesky.checks.trsm import trsm_lower_kernel, CHOL_SOLVE_TPB

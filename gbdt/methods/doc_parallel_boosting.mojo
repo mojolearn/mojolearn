@@ -2326,8 +2326,7 @@ def fit_with_test(
             # streamed than theirs.
             var compute_mags = False
 
-            @parameter
-            if _needs_magnitudes:
+            comptime if _needs_magnitudes:
                 compute_mags = True
             launch_bootstrap(
                 ctx, boot_kind, boot_seeds, stats, n_rows, boot_param,
@@ -2422,8 +2421,7 @@ def fit_with_test(
         loop_times.stop_host("iter_gradients_enqueue", t_grad)
         var mags_opt = Optional[DeviceBuffer[DType.float32]]()
 
-        @parameter
-        if _needs_magnitudes:
+        comptime if _needs_magnitudes:
             mags_opt = Optional(mags.copy())
 
         # `optimizer.Fit(...)` then `Estimate` then `Rescale` then
@@ -2476,8 +2474,7 @@ def fit_with_test(
             var gmag = Float32(0.0)
             var t_mags = loop_times.start()
 
-            @parameter
-            if _needs_magnitudes:
+            comptime if _needs_magnitudes:
                 var hm = ctx.enqueue_create_host_buffer[DType.float32](2)
                 ctx.enqueue_copy(dst_buf=hm, src_buf=mags)
                 ctx.synchronize()
@@ -2649,8 +2646,7 @@ def fit_with_test(
             # (`pointwise_kernels.mojo:1318`); making it a device pointer is
             # the fix and is not attempted here.
             var scale = Float32(1.0)
-            @parameter
-            if _needs_magnitudes:
+            comptime if _needs_magnitudes:
                 var hm = ctx.enqueue_create_host_buffer[DType.float32](2)
                 ctx.enqueue_copy(dst_buf=hm, src_buf=mags)
                 ctx.synchronize()

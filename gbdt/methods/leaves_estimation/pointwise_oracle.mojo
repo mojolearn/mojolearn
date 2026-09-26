@@ -132,7 +132,7 @@ from gbdt.targets.kernel.yeti_rank import (
 )
 from gbdt.data.permutation import TRandom
 from std.sys.compile import is_defined
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 
 from checks.kernel_matrix import COLUMN_APPLE, COLUMN_NVIDIA, TARGET_COLUMN
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
@@ -428,8 +428,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         # below), so apply it through the ORIGINAL kernel, then drain so
         # the `h_shift` rewrite below cannot race the in-flight DMA of
         # the deferred copy.
-        @parameter
-        if FUSED_EST_MOVE_2030:
+        comptime if FUSED_EST_MOVE_2030:
             if self.pending_shift:
                 self._launch_shift_abmv()
                 self.pending_shift = False
@@ -453,8 +452,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         # kernel exactly as before.
         var defer_shift = False
 
-        @parameter
-        if FUSED_EST_MOVE_2030:
+        comptime if FUSED_EST_MOVE_2030:
             defer_shift = (
                 self.cursor_dim == 1 and self.single_bin_dim == 1
                 and not self.query.__bool__()
@@ -945,8 +943,7 @@ struct BinOptimizedOracle(LeavesEstimationOracle, Movable):
         # the walker), so a deferred shift would never be applied. Flush
         # it through the original kernel so the cursor holds exactly what
         # the split schedule leaves.
-        @parameter
-        if FUSED_EST_MOVE_2030:
+        comptime if FUSED_EST_MOVE_2030:
             if self.pending_shift:
                 self._launch_shift_abmv()
                 self.pending_shift = False

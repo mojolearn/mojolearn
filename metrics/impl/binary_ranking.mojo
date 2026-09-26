@@ -10,7 +10,7 @@ scan replaces float group atomics. AUC uses the equivalent tie-aware pair-count
 formula with an ascending Int64 fold instead of floating trapezoids. This fixes
 summation order in all modes; ratios separately convert counts to Float32.
 """
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceContext, DeviceBuffer
 from checks.numerics import ftz, identical_div

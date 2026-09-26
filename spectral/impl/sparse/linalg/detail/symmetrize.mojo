@@ -30,7 +30,7 @@ entry, on values that for the kNN graph are exactly `0`, `0.5` or `1`.
 always, the same numbers.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import ftz

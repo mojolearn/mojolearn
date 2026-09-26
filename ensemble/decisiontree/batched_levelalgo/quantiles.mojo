@@ -278,7 +278,7 @@ vendors instead of varying by vendor.
 from std.math import ceildiv, floor
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.sync import barrier
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 
 from core.launch_log import log_launch, log_launch_ctx
 from core.segmented_sort import segmented_sort_keys_f32

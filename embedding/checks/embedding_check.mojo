@@ -228,7 +228,7 @@ repository has lost a night to that.
 from std.memory import bitcast
 from std.os import getenv
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace, read_trace_lines

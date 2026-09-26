@@ -34,7 +34,7 @@ that a wide fit through this door lands on the min-norm route and leaves the
 min-norm card, which a bypass to `lstsq_eig` cannot do.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceContext
 from max.algorithm import sync_parallelize
 

@@ -11,7 +11,7 @@ No intra-chunk, B/C, A/dt, or projection gradient is claimed here.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 
 from checks.numerics import (
     ftz,

@@ -227,7 +227,7 @@ displace the working set. `LdgWithFallback` is `cub::ThreadLoad<
 cub::LOAD_LDG>`, the read-only data cache path. Both are NVIDIA cache-policy
 PTX with no counterpart on Metal and no vendor-agnostic Mojo spelling.
 
-  * `LdgWithFallback` / `__ldg` -> `std.gpu.intrinsics.ldg`, which is the
+  * `LdgWithFallback` / `__ldg` -> `max.gpu.intrinsics.ldg`, which is the
     Mojo spelling of the same intrinsic and lowers to a plain load where the
     target has none. Kept, because it is language-level.
   * `StreamLoad` -> a plain `unsafe_load`. THIS IS A HINT ONLY: `LOAD_CS`
@@ -246,8 +246,8 @@ is not expressible; the loop is written out as a Mojo `comptime for` over
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.gpu.intrinsics import ldg
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu.intrinsics import ldg
 from std.math import copysign
 
 # DEVIATION 258 (row 10 sqrt on NVIDIA; row 12 log): both seam calls are
@@ -1301,7 +1301,7 @@ def gather_histograms_by_leaves_kernel[
     var helper = PointwisePartOffsetsHelper(UInt32(grid_dim.y))
 
     if feature_id < bin_feature_count:
-        var leaf_vals = InlineArray[Float32, hist_count](fill=Float32(0.0))
+        var leaf_vals = Array[Float32, hist_count](fill=Float32(0.0))
 
         comptime for hist_id in range(hist_count):
             var src = (

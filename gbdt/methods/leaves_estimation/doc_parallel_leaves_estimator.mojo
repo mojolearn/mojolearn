@@ -46,7 +46,7 @@ would move every number in the fit for no reason.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.sys.compile import is_defined
 
 from gbdt.gpu_data.compressed_index_builder import CompressedIndexLayout

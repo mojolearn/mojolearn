@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """Opt-in device forward/loss/backward for chunked LM-head v2."""
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
 from max.gpu.host import DeviceBuffer, DeviceContext
 

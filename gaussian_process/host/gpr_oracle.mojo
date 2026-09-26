@@ -15,7 +15,7 @@ This file is a SECOND spelling of that path, in the device's order, so the
 `checks/numerics.mojo` seams, `cholesky/host/chol_oracle.mojo` (the
 Cholesky profile restated on the host) and `gemm/host/gemm_oracle.mojo`
 (the gemm profile's normative answer, GPU-free host code already shipped).
-`kernels.mojo` is not imported because it imports `std.gpu` and
+`kernels.mojo` is not imported because it imports `max.gpu` and
 `max.gpu.host`; its host-side constructors and validators are restated here
 under the same refusal sentences.
 

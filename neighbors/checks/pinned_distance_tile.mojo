@@ -48,7 +48,7 @@ THE FAST ARM'S BITS DO NOT MOVE. Nothing here is reachable unless
 calling `gemm_nt` plus `expand_distances_kernel` in the default build.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from std.sys import llvm_intrinsic
 from std.sys.compile import is_defined

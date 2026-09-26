@@ -104,8 +104,7 @@ def _fill_fixture(
 
 
 def _mode_name() -> String:
-    @parameter
-    if PIN_CROSS_VENDOR:
+    comptime if PIN_CROSS_VENDOR:
         return String("IDENTICAL")
     return String("FAST")
 
@@ -252,8 +251,7 @@ def check_radius_neighbors_matches_host() raises:
             )
 
     # THE DISTANCE VERDICT IS MODE-SPLIT, and the split is the contract.
-    @parameter
-    if PIN_CROSS_VENDOR:
+    comptime if PIN_CROSS_VENDOR:
         if exact_hits != nnz:
             raise Error(
                 "radius_neighbors (IDENTICAL): " + String(nnz - exact_hits)
@@ -327,8 +325,7 @@ def check_radius_neighbors_squared_arm() raises:
             if dsq.unsafe_ptr().unsafe_load(p) != want:
                 mism += 1
 
-    @parameter
-    if PIN_CROSS_VENDOR:
+    comptime if PIN_CROSS_VENDOR:
         if mism != 0:
             raise Error(
                 "radius_neighbors/squared (IDENTICAL): " + String(mism)

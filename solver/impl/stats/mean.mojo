@@ -34,7 +34,7 @@ scheduling choice with no arithmetic in it and is not mirrored.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz
 from solver.checks.profile_dot import profile_dot_into

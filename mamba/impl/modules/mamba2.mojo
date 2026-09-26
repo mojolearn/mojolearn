@@ -59,7 +59,7 @@ EVERYTHING HERE IS RUN OWED; no kernel has compiled or run. Commands live
 in `mamba/checks/mamba2_check.mojo`.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 

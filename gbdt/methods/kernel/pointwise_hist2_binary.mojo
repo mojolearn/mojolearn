@@ -33,7 +33,7 @@ on a full pass, the scalar loop with inner and outer unroll 1 on a partial
 one. Scheduling, not numeric.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import abs
 from std.memory import stack_allocation
 from std.atomic import Atomic, Ordering

@@ -4,7 +4,7 @@
 `gbdt/train.mojo::train_ordered_rmse` on the gbdt-ordered-rmse lane
 (lane/cpu-training-gbdt-ordered, 2026-09-15).
 
-HOST ONLY. Nothing here imports `max.gpu`, `std.gpu`, a `DeviceContext` or a
+HOST ONLY. Nothing here imports `max.gpu`, `max.gpu`, a `DeviceContext` or a
 module that defines a kernel. The imports are the `checks/numerics` seams,
 `checks/fixed_point.choose_scale`, the GPU-free host modules the device fit
 itself runs on the host (`best_split`, `build_layout`, `blocks_for`), and the

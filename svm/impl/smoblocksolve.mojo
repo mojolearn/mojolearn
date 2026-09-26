@@ -74,7 +74,7 @@ A selection over a total order cannot see WSIZE, and the launch-invariance
 gate runs two values of it on the same problem.
 """
 
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from std.memory import stack_allocation
 from std.math import inf
 from std.sys.compile import is_defined
@@ -82,7 +82,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
-from std.gpu import WARP_SIZE
+from max.gpu import WARP_SIZE
 from std.sys.info import has_apple_gpu_accelerator
 from svm.impl.fast_smo_reduce import fast_argext, fast_argmin_argmax
 from checks.kernel_matrix import (

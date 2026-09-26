@@ -13,7 +13,7 @@ STD-2: exact zero variance gets scale1 (cuML), not sklearn's Float64 error bound
 STD-3: IDENTICAL operand/seam FTZ, pinned multiply/divide and portable sqrt.
 Finite inputs/statistics/output only. Unused statistics are not computed.
 """
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.math import sqrt
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import ftz, identical_mul, identical_div, portable_sqrtf, GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL

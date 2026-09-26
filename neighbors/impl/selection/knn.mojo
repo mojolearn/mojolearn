@@ -72,7 +72,7 @@ WHAT IS NOT HERE
   queue. Scheduling, not numeric.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace

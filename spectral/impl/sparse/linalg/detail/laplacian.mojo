@@ -41,7 +41,7 @@ the hashed-weight fixture is what separates this fold from a split one.
 ======================================================================
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import ftz, identical_sqrt

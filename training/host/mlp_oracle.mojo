@@ -5,7 +5,7 @@
 2026-09-14): `training/mlp_ops.mojo`'s bias plus optional ReLU, ReLU
 backward and ascending row sum, spelled a SECOND time.
 
-HOST ONLY. Nothing here imports `max.gpu`, `std.gpu` or a `DeviceContext`,
+HOST ONLY. Nothing here imports `max.gpu`, `max.gpu` or a `DeviceContext`,
 and no GPU binding imports this file. The device kernel `_mlp_kernel`
 (`training/mlp_ops.mojo:36`) writes every output cell from its own thread
 with no fold except the row sum, which runs serially inside one thread per

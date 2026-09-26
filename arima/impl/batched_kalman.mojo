@@ -133,7 +133,7 @@ one (CONTRIBUTING.md (Non-default paths)).
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 
 from arima.impl.linalg.batched.matrix import (
@@ -347,7 +347,7 @@ def kalman_init_state_kernel(
         # row i+1 read row i's RESULT (their b_gemm writes a distinct
         # buffer); the product goes to a local first, matvec_serial's exact
         # spelling (ftz loads, ascending fma), then to P.
-        var xloc = InlineArray[Float32, LYAP_R2_MAX](fill=Float32(0.0))
+        var xloc = Array[Float32, LYAP_R2_MAX](fill=Float32(0.0))
         for i in range(r2):
             var acc = Float32(0.0)
             for k in range(r2):
@@ -414,7 +414,7 @@ def kalman_init_state_kernel(
 
 
 @always_inline
-def _mv(n: Int, alpha: Float32, a: InlineArray[Float32, RD2_MAX], v: InlineArray[Float32, RD_MAX], mut out_v: InlineArray[Float32, RD_MAX]):
+def _mv(n: Int, alpha: Float32, a: Array[Float32, RD2_MAX], v: Array[Float32, RD_MAX], mut out_v: Array[Float32, RD_MAX]):
     """`Mv_l(n, alpha, A, v, out)` (`:45-56`): `out[i] = alpha * sum_j
     A[i + j*n] v[j]`, j ascending.
 
@@ -430,7 +430,7 @@ def _mv(n: Int, alpha: Float32, a: InlineArray[Float32, RD2_MAX], v: InlineArray
 
 
 @always_inline
-def _mm(n: Int, a: InlineArray[Float32, RD2_MAX], b: InlineArray[Float32, RD2_MAX], bT: Bool, mut out_v: InlineArray[Float32, RD2_MAX]):
+def _mm(n: Int, a: Array[Float32, RD2_MAX], b: Array[Float32, RD2_MAX], bT: Bool, mut out_v: Array[Float32, RD2_MAX]):
     """`MM_l<false, bT>(n, A, B, out)` (`:57-70`): `out[i + j*n] =
     sum_k A[i + k*n] * (bT ? B[j + k*n] : B[k + j*n])`, k ascending. Their
     `aT` template parameter is never instantiated true anywhere this file
@@ -445,7 +445,7 @@ def _mm(n: Int, a: InlineArray[Float32, RD2_MAX], b: InlineArray[Float32, RD2_MA
 
 
 @always_inline
-def _numerical_stability(n: Int, mut a: InlineArray[Float32, RD2_MAX]):
+def _numerical_stability(n: Int, mut a: Array[Float32, RD2_MAX]):
     """`:76-92`: `A = 0.5 (A + A')`, `A_ii = |A_ii|`."""
     for i in range(n - 1):
         for j in range(i + 1, n):
@@ -502,14 +502,14 @@ def batched_kalman_loop_kernel[
     var nobs = Int(nobs_in)
     var n_diff = Int(n_diff_in)
     var fc_steps = Int(fc_steps_in)
-    var l_RQR = InlineArray[Float32, RD2_MAX](fill=Float32(0.0))
-    var l_T = InlineArray[Float32, RD2_MAX](fill=Float32(0.0))
-    var l_Z = InlineArray[Float32, RD_MAX](fill=Float32(0.0))
-    var l_P = InlineArray[Float32, RD2_MAX](fill=Float32(0.0))
-    var l_alpha = InlineArray[Float32, RD_MAX](fill=Float32(0.0))
-    var l_K = InlineArray[Float32, RD_MAX](fill=Float32(0.0))
-    var l_tmp = InlineArray[Float32, RD2_MAX](fill=Float32(0.0))
-    var l_TP = InlineArray[Float32, RD2_MAX](fill=Float32(0.0))
+    var l_RQR = Array[Float32, RD2_MAX](fill=Float32(0.0))
+    var l_T = Array[Float32, RD2_MAX](fill=Float32(0.0))
+    var l_Z = Array[Float32, RD_MAX](fill=Float32(0.0))
+    var l_P = Array[Float32, RD2_MAX](fill=Float32(0.0))
+    var l_alpha = Array[Float32, RD_MAX](fill=Float32(0.0))
+    var l_K = Array[Float32, RD_MAX](fill=Float32(0.0))
+    var l_tmp = Array[Float32, RD2_MAX](fill=Float32(0.0))
+    var l_TP = Array[Float32, RD2_MAX](fill=Float32(0.0))
     # ONE VARIABLE OF THEIRS SPLIT INTO TWO OF OURS, deliberately and
     # recorded: their `l_tmp[rd2_max]` is BOTH the `T*alpha` vector of step 4
     # and the `L` matrix of step 5 (`:234,241`). Ours keeps `l_v` for the
@@ -517,7 +517,7 @@ def batched_kalman_loop_kernel[
     # from `l_T` before any read, so no cell of theirs is ever read carrying
     # step 4's value and no bit depends on the reuse; the split is spelled
     # out here because a silent one is the class of defect the audit hunts.
-    var l_v = InlineArray[Float32, RD_MAX](fill=Float32(0.0))
+    var l_v = Array[Float32, RD_MAX](fill=Float32(0.0))
 
     var b_rd = bid * rd
     var b_rd2 = bid * rd2

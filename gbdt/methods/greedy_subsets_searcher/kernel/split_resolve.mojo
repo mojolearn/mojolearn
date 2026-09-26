@@ -47,7 +47,7 @@ owning feature's `TCFeature` fields (offset pre-scaled by `n_rows`, as
 the split kernels expect), and the bin within the feature.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast
 
 from gbdt.gpu_data.gpu_structures import CFeature

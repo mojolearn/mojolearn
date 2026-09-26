@@ -9,7 +9,7 @@ This is model capacity pooling, not equivalence to legacy host prediction.
 from std.os import getenv
 from std.sys.compile import is_defined
 from std.memory import bitcast, stack_allocation
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from max.gpu.host import DeviceContext, DeviceBuffer
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

@@ -12,7 +12,7 @@ the contract's own `ftz(ftz(x) + ftz(y))` node over pairs in ascending
 microbatch index. Every buffer lives for one call; no pointer is retained.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
 from max.gpu.host import DeviceBuffer, DeviceContext
 

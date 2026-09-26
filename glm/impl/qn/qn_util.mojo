@@ -37,7 +37,7 @@ literal below and not derived.
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 
 from glm.impl.qn.simple_mat.dense import (
     VEC_ELEM_TPB,

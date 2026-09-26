@@ -120,7 +120,7 @@ before believing a clean result.
 """
 
 from max.gpu.host import DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import floor, sin
 from std.memory import bitcast
 from std.sys import argv

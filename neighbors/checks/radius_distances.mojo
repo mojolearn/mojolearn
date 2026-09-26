@@ -66,7 +66,7 @@ them. That is the same reason IDENTITY_PATHS row 61 exempts the dense arm.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 
 from neighbors.impl.ball_cover.common import (
     RBC_METRIC_DEFAULT,

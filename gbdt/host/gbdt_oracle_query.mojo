@@ -6,7 +6,7 @@ kernels of `gbdt/gpu_data/kernel/query_helper.mojo`, restated statement for
 statement in plain loops, for `gbdt/host/gbdt_oracle_losses.mojo`'s
 symmetric fit.
 
-HOST ONLY. Nothing here imports `max.gpu`, `std.gpu`, a `DeviceContext` or a
+HOST ONLY. Nothing here imports `max.gpu`, `max.gpu`, a `DeviceContext` or a
 module that defines a kernel. Unit row weights only: the host binding refuses
 `sample_weight`, so every `weight` below is 1.0 and every `t * w` is `t * 1.0`,
 the same float32 multiply the device performs.

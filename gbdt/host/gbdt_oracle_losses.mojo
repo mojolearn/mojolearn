@@ -5,7 +5,7 @@ Logloss and RMSE on symmetric trees, with the Exact leaf estimator and the
 row bootstraps (lane/cpu-training-gbdt-losses, 2026-09-15): the
 gbdt-parametric-losses and gbdt-exact-mae lanes of tools/identity_break.py.
 
-HOST ONLY. Nothing here imports `max.gpu`, `std.gpu`, a `DeviceContext` or a
+HOST ONLY. Nothing here imports `max.gpu`, `max.gpu`, a `DeviceContext` or a
 module that defines a kernel. The imports are the `checks/numerics` seams,
 the GPU-free host modules the symmetric oracle already reuses, CatBoost's
 GPU random stream (`gbdt/gpu_util/kernel/random_gen.mojo`, plain integer and

@@ -25,7 +25,7 @@ single operations.
 Wolfe `dot(grad, drt)` is implemented and not reached from the Python surface.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from glm.impl.qn.glm_base import GLMWithData

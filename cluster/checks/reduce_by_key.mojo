@@ -65,7 +65,7 @@ from cluster.impl.distance.fused_distance_nn.simt_kernel import (
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.memory import AddressSpace
 from core.pinned_reduce import pinned_block_sum
 from checks.numerics import ftz

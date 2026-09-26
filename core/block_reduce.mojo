@@ -68,7 +68,7 @@ algorithm does not select it.
 # `builder_kernels_impl.cuh:365`). CUB and RAFT compile for one vendor, so
 # a literal is correct there.
 #
-# HERE: `WARP_SIZE` from `std.gpu`, which is 32 on NVIDIA and Apple, 64 on
+# HERE: `WARP_SIZE` from `max.gpu`, which is 32 on NVIDIA and Apple, 64 on
 # AMD CDNA and 32 on AMD RDNA. `WARPS` therefore differs per vendor, and so
 # does the NUMBER OF PARTIAL SUMS thread 0 folds and the number of lanes the
 # warp stage folds.
@@ -125,8 +125,8 @@ algorithm does not select it.
 """
 
 from std.atomic import Atomic, Ordering
-from std.gpu import thread_idx, lane_id, WARP_SIZE
-from std.gpu.primitives import warp
+from max.gpu import thread_idx, lane_id, WARP_SIZE
+from max.gpu.primitives import warp
 from std.math import ceildiv
 from std.memory import stack_allocation
 from std.sys.info import size_of

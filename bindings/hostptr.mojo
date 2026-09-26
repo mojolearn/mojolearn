@@ -5,7 +5,7 @@ Counts are nonnegative numbers of elements. Callers validate spans and keep
 both allocations alive for the entire call. Copies require disjoint spans (or exactly the same
 span); partial overlap is not supported. No pointer is retained.
 """
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 
 
 def f32_ptr(addr: Int) raises -> MutPointer[Float32, MutUntrackedOrigin]:
@@ -49,13 +49,13 @@ def copy_f32[src_origin: Origin, dst_origin: MutOrigin, //](
 
 
 def read_f32(addr: Int, n: Int) raises -> List[Float32]:
-    """An owned copy using the existing Transformer memcpy implementation."""
+    """An owned copy using the existing Transformer unsafe_memcpy implementation."""
     var src = f32_ptr(addr)
     if n < 0:
         raise Error("mojolearn: negative float32 copy length")
     var out = List[Float32](length=n, fill=Float32(0))
     if n > 0:
-        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        unsafe_memcpy(dest=out.unsafe_ptr(), src=src, count=n)
     return out^
 
 
@@ -66,7 +66,7 @@ def read_i32(addr: Int, n: Int) raises -> List[Int32]:
         raise Error("mojolearn: negative int32 copy length")
     var out = List[Int32](length=n, fill=Int32(0))
     if n > 0:
-        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        unsafe_memcpy(dest=out.unsafe_ptr(), src=src, count=n)
     return out^
 
 
@@ -89,7 +89,7 @@ def read_u16(addr: Int, n: Int) raises -> List[UInt16]:
         raise Error("mojolearn: negative uint16 copy length")
     var out = List[UInt16](length=n, fill=UInt16(0))
     if n > 0:
-        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        unsafe_memcpy(dest=out.unsafe_ptr(), src=src, count=n)
     return out^
 
 
@@ -99,5 +99,5 @@ def read_i8(addr: Int, n: Int) raises -> List[Int8]:
         raise Error("mojolearn: negative int8 copy length")
     var out = List[Int8](length=n, fill=Int8(0))
     if n > 0:
-        memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+        unsafe_memcpy(dest=out.unsafe_ptr(), src=src, count=n)
     return out^

@@ -34,7 +34,7 @@ defined and ties only another default).
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 
 comptime PW_SENTINEL_ID = UInt32(0xFFFFFFFF)
 """`(ui32)-1`, `TBestSplitProperties::FeatureId`'s default

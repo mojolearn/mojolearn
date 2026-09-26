@@ -39,7 +39,7 @@ This implementation, both modes the same association, the pins under IDENTICAL:
 # =========================================================================
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.sys.info import has_apple_gpu_accelerator
 from std.math import exp
 from std.memory import stack_allocation

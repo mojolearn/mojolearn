@@ -5,7 +5,7 @@ MultiClass and MultiClassOneVsAll, on symmetric trees
 (lane/cpu-training-gbdt-losses, 2026-09-15): the gbdt-multiclass and
 gbdt-onevsall lanes of tools/identity_break.py.
 
-HOST ONLY. Nothing here imports `max.gpu`, `std.gpu`, a `DeviceContext` or a
+HOST ONLY. Nothing here imports `max.gpu`, `max.gpu`, a `DeviceContext` or a
 module that defines a kernel. The imports are the `checks/numerics` seams,
 the GPU-free host modules the symmetric oracle already reuses, CatBoost's
 dense Cholesky solve (`gbdt/lapack/linear_system.mojo`, which the device

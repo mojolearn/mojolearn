@@ -6,7 +6,7 @@ or 1 for infinity, so a minimum selects the first offending cell, whatever
 its sign or NaN payload. Callers retain the existing named-buffer order.
 Other numeric modes keep the original host refusal and transfer helpers.
 """
-from std.gpu import block_idx, grid_dim, thread_idx
+from max.gpu import block_idx, grid_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext

@@ -47,7 +47,7 @@ GATES:
       float version does not have.
 """
 
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

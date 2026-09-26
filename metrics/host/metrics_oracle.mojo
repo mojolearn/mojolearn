@@ -5,7 +5,7 @@
 no GPU (workstream E batch 2, the metrics lane,
 2026-09-14).
 
-HOST ONLY. Nothing here imports `max.gpu`, `std.gpu` or a `DeviceContext`,
+HOST ONLY. Nothing here imports `max.gpu`, `max.gpu` or a `DeviceContext`,
 and no GPU binding imports this file. Every metric of the lane is spelled a
 SECOND time from its device source: the integer kernels (a count, a
 histogram, a contingency matrix, integer atomics whose sum no order can

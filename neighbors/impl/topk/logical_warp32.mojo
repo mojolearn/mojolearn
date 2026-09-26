@@ -5,9 +5,9 @@ This changes communication scope, never floating arithmetic or queue order.
 FAST/DETERMINISTIC retain their prior physical-width calls and entry refusal.
 The caller must converge each logical group; different halves may diverge.
 """
-from std.gpu.primitives.id import lane_id
-from std.gpu.primitives.warp import max as warp_max
-from std.gpu.primitives.warp import shuffle_idx, shuffle_xor
+from max.gpu.primitives.id import lane_id
+from max.gpu.primitives.warp import max as warp_max
+from max.gpu.primitives.warp import shuffle_idx, shuffle_xor
 from checks.kernel_matrix import TARGET_COLUMN, lib_lane_width_for
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 

@@ -106,7 +106,7 @@ def twiddle_keys_reversed_kernel(
     to the stable sort in REVERSED position (`p = n - 1 - i`), so equal
     keys come out in DESCENDING index order. Correct indices, wrong tie
     order: exactly the defect the gate is for."""
-    from std.gpu import block_dim, block_idx, thread_idx
+    from max.gpu import block_dim, block_idx, thread_idx
     from std.memory import bitcast
 
     var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)

@@ -36,7 +36,7 @@ One thread owns one cell and walks the feature axis ascending, `kernels.mojo`'s
 discipline; the gradient buffer holds `n_free` matrices in theta order.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import (

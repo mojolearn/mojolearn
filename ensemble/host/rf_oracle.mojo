@@ -3,7 +3,7 @@
 """The RandomForest fit on the host, a SECOND spelling of the device trainer
 (workstream E batch 3, the rf-clf and rf-reg lanes, 2026-09-14).
 
-HOST ONLY. Nothing here imports `max.gpu`, `std.gpu`, a `DeviceContext` or
+HOST ONLY. Nothing here imports `max.gpu`, `max.gpu`, a `DeviceContext` or
 any module under `ensemble/` that defines a kernel. The only library
 imports are the `checks/numerics.mojo` seams (`ftz`, `identical_mul_add`,
 `identical_log`). Every other construct the device fit reaches is RESTATED

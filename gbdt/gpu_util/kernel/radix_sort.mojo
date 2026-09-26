@@ -77,7 +77,7 @@ differs in THEIR code: `SortWithoutCub` scans a flag array while
 the same `cub::DeviceScan::ExclusiveSum` over a different input iterator.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from max.gpu.primitives.block import prefix_sum
 

@@ -71,7 +71,7 @@ from cluster.checks.plus_plus import (
 )
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from cluster.checks.reduce_by_key import (
     blocked_acc_table_cells,

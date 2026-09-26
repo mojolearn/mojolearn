@@ -60,7 +60,7 @@ The reduction SHAPE matches exactly: the reference loop is
 `for (i = WarpSize/2; i >= 1; i /= 2) { update(shfl(field, lane + i)); }`
 (`:209-219`), a rotate-and-reduce where `lane + i` wraps modulo the warp
 width, so after the loop EVERY lane holds the reduction of the whole warp.
-`std.gpu.primitives.warp.shuffle_idx` is the Mojo spelling of `raft::shfl`
+`max.gpu.primitives.warp.shuffle_idx` is the Mojo spelling of `raft::shfl`
 -- a language-level counterpart to `__shfl_sync`, not a library standing in
 for an algorithm -- and this repository's `vendor_correctness_check`
 already holds it to `raft::shfl`'s behaviour.
@@ -146,7 +146,7 @@ both modes.
 
 DEVIATION 106. Their `atomicCAS` / `__threadfence()` / `atomicExch` mutex
 (`:251`, `:270-271`) is not expressible on Metal in that spelling. Mojo 1.0
-comptime-asserts that `std.gpu.intrinsics.threadfence` "is only implemented
+comptime-asserts that `max.gpu.intrinsics.threadfence` "is only implemented
 on NVIDIA GPUs", the Apple backend rejects strong compare-exchange by name,
 and it rejects `acquire` ordering on EVERY read-modify-write, not only on a
 compare-exchange. The claim therefore lives in `core/device_mutex.mojo` and
@@ -176,7 +176,7 @@ THE ACQUIRE FENCE IS THE REPAIR, and two other spellings are not. A
 DISCARDED acquire load after the claim emits ZERO instructions on AIR, PTX
 and GCN alike, so it is not a fence and never was. An acquire
 compare-exchange is formally equivalent but Apple rejects it. Note that
-`std.atomic.fence` is a DIFFERENT SYMBOL from `std.gpu.intrinsics.threadfence`;
+`std.atomic.fence` is a DIFFERENT SYMBOL from `max.gpu.intrinsics.threadfence`;
 the older text above reasoned from the latter and wrongly concluded that no
 fence was available on this path at all.
 
@@ -277,9 +277,9 @@ from max.gpu.memory import AddressSpace
 # bin-typed. Same direction here; `bins.mojo` imports nothing from this
 # file, so there is no cycle -- exactly their arrangement.
 from ensemble.decisiontree.batched_levelalgo.bins import Bin
-from std.gpu import WARP_SIZE, block_dim, thread_idx
-from std.gpu.primitives.id import lane_id
-from std.gpu.primitives.warp import shuffle_idx
+from max.gpu import WARP_SIZE, block_dim, thread_idx
+from max.gpu.primitives.id import lane_id
+from max.gpu.primitives.warp import shuffle_idx
 from max.gpu.sync import barrier
 
 
@@ -910,7 +910,7 @@ def init_split_kernel[
     vendor primitive being stood in for and nothing is unfused by writing
     it out.
     """
-    from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+    from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 
     var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)

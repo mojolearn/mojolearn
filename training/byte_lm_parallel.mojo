@@ -17,7 +17,7 @@ GPU binding: those three lanes refuse on a CPU column with
 "rebuild bindings/build_byte_lm.sh", not with the cooperative driver's
 sentence, so they are owed a build as well as a box.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceContext, DeviceBuffer
 from max.algorithm import sync_parallelize

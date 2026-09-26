@@ -88,7 +88,7 @@ column and a column constant after one difference; both report
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import ceil, isfinite
 
 from core.column_stats import STATS_TPB

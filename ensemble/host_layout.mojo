@@ -26,7 +26,7 @@ created here (`flags`) is transferred after the join.
 """
 
 from max.algorithm import sync_parallelize
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 
 from checks.numerics import ftz
 
@@ -81,7 +81,7 @@ def copy_f32_threaded(
     if n <= 0:
         return
     if n < HOST_LAYOUT_SERIAL_CELLS:
-        memcpy(dest=dst, src=src, count=n)
+        unsafe_memcpy(dest=dst, src=src, count=n)
         return
     var n_chunks = (n + HOST_COPY_CHUNK - 1) // HOST_COPY_CHUNK
     var sp = src
@@ -90,7 +90,7 @@ def copy_f32_threaded(
     def _chunk(k: Int) {imm sp, imm dp, imm n}:
         var i0 = k * HOST_COPY_CHUNK
         var i1 = min(i0 + HOST_COPY_CHUNK, n)
-        memcpy(dest=dp + i0, src=sp + i0, count=i1 - i0)
+        unsafe_memcpy(dest=dp + i0, src=sp + i0, count=i1 - i0)
 
     sync_parallelize(_chunk, n_chunks)
 

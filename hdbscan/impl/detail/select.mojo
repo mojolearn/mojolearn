@@ -105,7 +105,7 @@ oracle that sums independently.
 ======================================================================
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from hdbscan.checks.hdbscan_sabotage import (

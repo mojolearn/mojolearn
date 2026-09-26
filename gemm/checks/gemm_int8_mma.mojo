@@ -64,7 +64,7 @@ so a sabotage build fails `check_int8_device_matches_oracle` through either
 path and fails `check_int8_mma_matches_flat` at its oracle comparison.
 """
 
-from std.gpu import WARP_SIZE, block_dim, block_idx, lane_id, thread_idx
+from max.gpu import WARP_SIZE, block_dim, block_idx, lane_id, thread_idx
 from std.memory import bitcast
 from std.sys import is_defined, llvm_intrinsic
 from std.sys.info import is_amd_gpu, is_nvidia_gpu

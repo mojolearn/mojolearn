@@ -244,9 +244,9 @@ def draw_threshold_raw(key: SplitKey, extent: FeatureRange) -> Float32:
 # ============================================================================
 
 from std.atomic import Atomic, Ordering
-from std.gpu.primitives.warp import shuffle_xor
+from max.gpu.primitives.warp import shuffle_xor
 from std.memory import bitcast
-from std.gpu import WARP_SIZE, block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import WARP_SIZE, block_dim, block_idx, grid_dim, thread_idx
 from std.math import ceildiv, inf
 from max.gpu.primitives.block import max as block_max
 from max.gpu.primitives.block import min as block_min

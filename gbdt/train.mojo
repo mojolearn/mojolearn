@@ -81,7 +81,7 @@ from gbdt.overfitting_detector.overfitting_detector import (
     od_type_from_name,
 )
 from gbdt.gpu_util.kernel.radix_sort import DeviceFloatSorter
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from max.algorithm import sync_parallelize
 from gbdt.data.permutation import TRandom
 from gbdt.gpu_data.feature_sampling import check_feature_fraction
@@ -144,7 +144,7 @@ MEASURED AND NOT FLIPPED: OPT-IN, the serial fill below is the default.
 columns) copies each float column into a pinned staging slot of an
 8-slot ring, one column after another on one thread, and uploads it to the
 device binarize kernel. At Istella-S's 220 x 1,000,000 that is 880 MB of
-single-thread memcpy inside the ~100 ms `train_cindex_build` stage. Under
+single-thread unsafe_memcpy inside the ~100 ms `train_cindex_build` stage. Under
 the switch the fills of one ring revolution (up to 8 columns, disjoint
 slots, host memory only, the device untouched inside the parallel region)
 run in `sync_parallelize`, and then the revolution's uploads and binarize
@@ -163,7 +163,7 @@ cell and no model bit moves either way, so this is a pure time verdict and
 CONTRIBUTING.md (Performance claims) refuses it. The reason the parallelism does not
 pay is in the shape: the fills are parallelized but the uploads and the
 binarize kernels still enqueue serially in the same order, so the device
-stays the bottleneck and the host memcpy it removes was not on the critical
+stays the bottleneck and the host unsafe_memcpy it removes was not on the critical
 path. DEVIATIONS 2634 and 2635 carry the lane's win without it
 (`baseline` -> `both` is 0.9603 x 0.9913, essentially all of the 0.9526
 measured from `baseline` -> `all`).
@@ -180,7 +180,7 @@ owed). `-D MOJOLEARN_2550_HOST_COPY=1` restores the two host copies below.
 Ours, host bookkeeping only. `gbdt_fit` copied the caller's column-major X
 into a `List` (`gbdt/estimator.mojo`) and `train` copied every raw column
 again into its own `List` before quantization, so a 1M x 220 fit paid two
-resize-and-memcpy passes over 880 MB before the first border (H100 HIGGS
+resize-and-unsafe_memcpy passes over 880 MB before the first border (H100 HIGGS
 ledger, 112 MB: 73 ms + 99 ms). Under the switch `gbdt_fit` hands `train`
 the caller's pointer (`x_borrow`) and `train` reads every raw, non-
 categorical column in place through `column_ptrs`; categorical and CTR
@@ -391,7 +391,7 @@ def _build_cindex_from_floats(
                         "There are NaNs in feature number " + String(f)
                         + " but there were no NaNs in the learn dataset"
                     )
-            memcpy(dest=hx, src=src, count=n_rows)
+            unsafe_memcpy(dest=hx, src=src, count=n_rows)
         else:
             for r in range(n_rows):
                 var v = src.unsafe_load(r)
@@ -447,7 +447,7 @@ def _column_list_copy(
     of the owned column held."""
     var out = List[Float32]()
     out.resize(n, Float32(0.0))
-    memcpy(dest=out.unsafe_ptr(), src=src, count=n)
+    unsafe_memcpy(dest=out.unsafe_ptr(), src=src, count=n)
     return out^
 
 
@@ -539,7 +539,7 @@ def _build_cindex_from_columns(
                 var treat = tp[k]
                 if treat == NAN_TREATMENT_AS_IS:
                     # the serial loop's AS_IS reasoning holds per column
-                    memcpy(dest=dst, src=src, count=nr)
+                    unsafe_memcpy(dest=dst, src=src, count=nr)
                 else:
                     var sub = nan_substitution(treat)
                     for r in range(nr):
@@ -594,8 +594,8 @@ def _build_cindex_from_columns(
             # sampled draw's explicit scan, or the full path's
             # calc_quantization over every value) saw none in THIS SAME
             # buffer, so a NaN here is unreachable and the checked
-            # element-wise copy is a straight memcpy
-            memcpy(dest=hx, src=src, count=n_rows)
+            # element-wise copy is a straight unsafe_memcpy
+            unsafe_memcpy(dest=hx, src=src, count=n_rows)
         else:
             for r in range(n_rows):
                 var v = src.unsafe_load(r)
@@ -1488,7 +1488,7 @@ def train(
         if not is_cat:
             # DEVIATION 2550: under the switch a raw column is read in
             # place from the caller's buffer; the default copies it, one
-            # flat memcpy per column (the append loop that replaced was
+            # flat unsafe_memcpy per column (the append loop that replaced was
             # ~0.5 s of every train() at 400k x 500).
             comptime if BORROW_X_COLUMNS:
                 columns.append(List[Float32]())
@@ -1496,7 +1496,7 @@ def train(
             else:
                 var raw = List[Float32]()
                 raw.resize(n_rows, Float32(0.0))
-                memcpy(
+                unsafe_memcpy(
                     dest=raw.unsafe_ptr(),
                     src=x_src + f * n_rows,
                     count=n_rows,
@@ -1509,7 +1509,7 @@ def train(
 
         var col = List[Float32]()
         col.resize(n_rows, Float32(0.0))
-        memcpy(
+        unsafe_memcpy(
             dest=col.unsafe_ptr(),
             src=x_src + f * n_rows,
             count=n_rows,
@@ -2564,7 +2564,7 @@ def _quantize_training_columns(
             try:
                 var col2 = List[Float32]()
                 col2.resize(nr2, Float32(0.0))
-                memcpy(dest=col2.unsafe_ptr(), src=sfp2 + k * nr2, count=nr2)
+                unsafe_memcpy(dest=col2.unsafe_ptr(), src=sfp2 + k * nr2, count=nr2)
                 var q2 = calc_quantization(col2^, bc2, nm2, bt2)
                 var nb = len(q2[0])
                 if nb > cap2:

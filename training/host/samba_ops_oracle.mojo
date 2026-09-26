@@ -8,7 +8,7 @@ tools/identity_break.py; lane/cpu-training-misc, 2026-09-15):
 and backward, the LM head GEMM forward and backward and the balanced-tree
 accumulate, spelled on the host.
 
-HOST ONLY. Nothing here imports `max.gpu`, `std.gpu` or a `DeviceContext`.
+HOST ONLY. Nothing here imports `max.gpu`, `max.gpu` or a `DeviceContext`.
 `samba_ops.mojo` says it adds NO NEW ARITHMETIC: each operation is a device
 entry of a profile whose host oracle already exists, so each is restated
 here over that oracle, with the validation and refusal words of the device

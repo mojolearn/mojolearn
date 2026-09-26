@@ -97,7 +97,7 @@ what the AMD leg owes.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 
 from checks.numerics import PIN_CROSS_VENDOR
 
@@ -164,8 +164,7 @@ def rbc_canonicalize_row_order(
     is `comptime`, so FAST allocates nothing and launches nothing.
     """
 
-    @parameter
-    if not PIN_CROSS_VENDOR:
+    comptime if not PIN_CROSS_VENDOR:
         return
     if n_queries <= 0 or nnz <= 0:
         return

@@ -4,7 +4,7 @@
 a second spelling of the device trainer on the gbdt-depthwise and
 gbdt-lossguide lanes (workstream E batch 3, 2026-09-14).
 
-HOST ONLY. Nothing here imports `max.gpu`, `std.gpu`, a `DeviceContext` or a
+HOST ONLY. Nothing here imports `max.gpu`, `max.gpu`, a `DeviceContext` or a
 module that defines a kernel. It builds on `gbdt/host/gbdt_oracle.mojo` (the
 gbdt-symmetric oracle: the grid, the binarize, the Logloss search pass, the
 histogram blocks, the partition stats, the Cosine calcer, the Newton leaf

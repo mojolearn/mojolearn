@@ -3,7 +3,7 @@
 """Classical inference on the host, for a box with no GPU (the classical host
 inference lane, 2026-09-13).
 
-HOST ONLY. Nothing here imports `max.gpu`, `std.gpu` or a `DeviceContext`,
+HOST ONLY. Nothing here imports `max.gpu`, `max.gpu` or a `DeviceContext`,
 and the GPU bindings do not import this file. It exists because the five
 inference entries of `bindings/_mojolearn_estimators.mojo` that
 LinearRegression, Ridge, TruncatedSVD, LogisticRegression and PCA call
@@ -37,7 +37,7 @@ kernel it mirrors and keeps its statements in its order:
                            fit_intercept, whose bias read is NOT flushed.
   `host_qn_sigmoid`        `qn_sigmoid_host`, `glm/estimator.mojo:384-410`,
                            which already runs on the host and is relocated
-                           here because its file imports `std.gpu`.
+                           here because its file imports `max.gpu`.
   `host_qn_decision_multi` `linear_fwd` at C > 1 (lane/logistic-multiclass,
                            2026-09-14), `glm/impl/qn/glm_base.mojo`:
                            `transpose_w_kernel` (a copy, `w_rm[c*D + j] =

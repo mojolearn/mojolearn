@@ -86,7 +86,7 @@ the outputs:
 from std.math import exp, isinf, isnan, log, sqrt
 from std.memory import bitcast
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.column_stats import STATS_TPB

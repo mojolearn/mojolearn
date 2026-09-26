@@ -36,7 +36,7 @@ CatBoost's atomics are portable to us and it would be easy to assume
 otherwise.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -128,13 +128,12 @@ def binarize_float_feature_kernel(
         shared_borders[tid] = borders.unsafe_load(tid + 1)
     barrier()
 
-    var index = InlineArray[UInt32, BINARIZE_DOCS_PER_THREAD](fill=0)
-    var feature_values = InlineArray[Float32, BINARIZE_DOCS_PER_THREAD](
+    var index = Array[UInt32, BINARIZE_DOCS_PER_THREAD](fill=0)
+    var feature_values = Array[Float32, BINARIZE_DOCS_PER_THREAD](
         fill=Float32(0.0)
     )
 
-    @parameter
-    for j in range(BINARIZE_DOCS_PER_THREAD):
+    comptime for j in range(BINARIZE_DOCS_PER_THREAD):
         var idx = i + j * BINARIZE_BLOCK_SIZE
         if idx < n:
             feature_values[j] = values.unsafe_load(idx)
@@ -142,13 +141,11 @@ def binarize_float_feature_kernel(
     for border in range(borders_count):
         var border_value = shared_borders[border]
 
-        @parameter
-        for j in range(BINARIZE_DOCS_PER_THREAD):
+        comptime for j in range(BINARIZE_DOCS_PER_THREAD):
             if feature_values[j] > border_value:
                 index[j] += 1
 
-    @parameter
-    for j in range(BINARIZE_DOCS_PER_THREAD):
+    comptime for j in range(BINARIZE_DOCS_PER_THREAD):
         var idx = i + j * BINARIZE_BLOCK_SIZE
         if idx < n:
             var bin = dst.unsafe_load(base + idx)

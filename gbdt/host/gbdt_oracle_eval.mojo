@@ -5,7 +5,7 @@ spelling of `fit_with_test`'s test cursor, held-out curve, overfitting
 detector and `ShrinkToBestIteration` (lane/close-no-cpu-path-gbdt,
 2026-09-20).
 
-HOST ONLY. Nothing here imports `max.gpu`, `std.gpu`, a `DeviceContext` or a
+HOST ONLY. Nothing here imports `max.gpu`, `max.gpu`, a `DeviceContext` or a
 module that defines a kernel. The only library import is the shared
 overfitting detector (`gbdt/overfitting_detector/overfitting_detector.mojo`),
 which is GPU-free host code the device fit itself runs on the host, and which

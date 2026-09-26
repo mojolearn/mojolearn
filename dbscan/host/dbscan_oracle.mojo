@@ -5,7 +5,7 @@
 lane dbscan, 2026-09-14). A census found NO host oracle for this fit; this
 file is that oracle, written as a second spelling of the device path.
 
-HOST ONLY. Nothing here imports `max.gpu`, `std.gpu` or a `DeviceContext`,
+HOST ONLY. Nothing here imports `max.gpu`, `max.gpu` or a `DeviceContext`,
 and no GPU binding imports this file. The only float arithmetic is the
 eps-neighborhood predicate, spelled from the two device arms through
 `checks/numerics.mojo` leaves; everything after it is integers.

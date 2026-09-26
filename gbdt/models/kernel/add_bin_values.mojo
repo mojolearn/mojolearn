@@ -27,7 +27,7 @@ total is preserved and every individual prediction is wrong. Conservation
 cannot see it; comparing against the learn cursor can.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -166,7 +166,7 @@ def compute_bins_and_add_four_kernel(
     once per block, and each row performs the same ordered float32 additions.
     No tree or level is reordered and no reduction is introduced.
     """
-    var depths = InlineArray[Int, 4](fill=0)
+    var depths = Array[Int, 4](fill=0)
     depths[0] = Int(depth0_in)
     depths[1] = Int(depth1_in)
     depths[2] = Int(depth2_in)

@@ -30,7 +30,7 @@ PRECOMPUTED early return is not implemented with its kernel.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 
 from checks.numerics import ftz
 from svm.checks.device_select import (

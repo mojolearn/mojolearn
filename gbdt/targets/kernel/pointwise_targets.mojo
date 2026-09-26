@@ -52,7 +52,7 @@ from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.primitives.block import sum as block_sum
 from core.pinned_reduce import two_phase_halving_sum
 
@@ -377,8 +377,7 @@ def target_score[objective: Int](
 ) -> Float32:
     """`TTarget::Score(target, prediction)`, per objective."""
 
-    @parameter
-    if objective == OBJECTIVE_RMSE:
+    comptime if objective == OBJECTIVE_RMSE:
         # `TRmseTarget::Score` (`:180-182`)
         return (t - p) * (t - p)
     elif objective == OBJECTIVE_QUANTILE or objective == OBJECTIVE_MAE:
@@ -450,8 +449,7 @@ def target_der[objective: Int](
     re-decided.
     """
 
-    @parameter
-    if objective == OBJECTIVE_RMSE:
+    comptime if objective == OBJECTIVE_RMSE:
         # `:184-186`
         return t - p
     elif objective == OBJECTIVE_QUANTILE or objective == OBJECTIVE_MAE:
@@ -513,8 +511,7 @@ def target_der2[objective: Int](
     Newton step on them divides by `lambda` alone.
     """
 
-    @parameter
-    if objective == OBJECTIVE_RMSE:
+    comptime if objective == OBJECTIVE_RMSE:
         # `:188-190`
         return Float32(1.0)
     elif (
@@ -763,15 +760,13 @@ def pointwise_target_kernel[
     # target.Der2(relev, val)` landing in `weightsView`.
     var plane0 = weight
 
-    @parameter
-    if second_der_as_weights:
+    comptime if second_der_as_weights:
         # DEVIATION 256 / row 10, same flush-at-derivation policy.
         plane0 = ftz(weight * target_der2[objective](relev, val, alpha))
 
     if in_range:
 
-        @parameter
-        if estimation:
+        comptime if estimation:
             stats.unsafe_store(i, der)
             # DEVIATION 256 / row 10: the Newton Hessian plane, same
             # seam, same flush.
@@ -858,12 +853,11 @@ def deterministic_sum_lanes_kernel[
     var tid = Int(thread_idx.x)
     var count = Int(count_in)
 
-    var acc = InlineArray[Float32, lanes](fill=Float32(0.0))
+    var acc = Array[Float32, lanes](fill=Float32(0.0))
     var i = tid
     while i < count:
 
-        @parameter
-        for lane in range(lanes):
+        comptime for lane in range(lanes):
             acc[lane] += partials.unsafe_load(i * lanes + lane)
         i += REDUCE_LANES_BLOCK
 
@@ -873,16 +867,14 @@ def deterministic_sum_lanes_kernel[
         address_space = AddressSpace.SHARED,
     ]()
 
-    @parameter
-    for lane in range(lanes):
+    comptime for lane in range(lanes):
         red[lane * REDUCE_LANES_BLOCK + tid] = acc[lane]
     barrier()
     var step = REDUCE_LANES_BLOCK // 2
     while step > 0:
         if tid < step:
 
-            @parameter
-            for lane in range(lanes):
+            comptime for lane in range(lanes):
                 red[lane * REDUCE_LANES_BLOCK + tid] = (
                     red[lane * REDUCE_LANES_BLOCK + tid]
                     + red[lane * REDUCE_LANES_BLOCK + tid + step]
@@ -891,8 +883,7 @@ def deterministic_sum_lanes_kernel[
         step //= 2
     if tid == 0:
 
-        @parameter
-        for lane in range(lanes):
+        comptime for lane in range(lanes):
             dst.unsafe_store(lane, red[lane * REDUCE_LANES_BLOCK])
 
 
@@ -1006,8 +997,7 @@ def cross_entropy_kernel[
     # `const float c = HAS_BORDER ? targetClass > border : targetClass;`
     var c: Float32
 
-    @parameter
-    if has_border:
+    comptime if has_border:
         c = Float32(1.0) if target_class > border else Float32(0.0)
     else:
         c = target_class
@@ -1035,14 +1025,12 @@ def cross_entropy_kernel[
     # scale[j]` (`:373-375`) landing in `weightsView`.
     var plane0 = weight
 
-    @parameter
-    if second_der_as_weights:
+    comptime if second_der_as_weights:
         plane0 = ftz(weight * scale)
 
     if in_range:
 
-        @parameter
-        if estimation:
+        comptime if estimation:
             stats.unsafe_store(i, ftz(weight * direction))
             stats.unsafe_store(size + i, ftz(weight * scale))
         else:

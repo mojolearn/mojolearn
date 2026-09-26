@@ -4,7 +4,7 @@
 Widths above this device's native group test shared-memory portability only;
 they do not constitute execution evidence for another physical GPU column.
 """
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceContext
 from checks.kernel_matrix import TARGET_COLUMN, column_lane_width, column_lane_width_is_fixed, column_max_block_size, column_is_simulated, column_is_buildable, column_name, COLUMN_AMD_RDNA

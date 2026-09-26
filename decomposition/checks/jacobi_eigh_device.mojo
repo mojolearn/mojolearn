@@ -18,7 +18,7 @@ from checks.numerics import (
 
 
 from std.bit import log2_floor
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.memory import stack_allocation
@@ -142,7 +142,7 @@ def _fold_lead_lanes_and_broadcast[
             red[tid] = value
         barrier()
         if tid < P:
-            var v = InlineArray[Float32, G](fill=Float32(0.0))
+            var v = Array[Float32, G](fill=Float32(0.0))
             comptime for j in range(G):
                 v[j] = red[tid + j * P]
             comptime for k in range(log2_floor(G)):
@@ -151,7 +151,7 @@ def _fold_lead_lanes_and_broadcast[
                     v[j] = v[j] + v[j + S]
             red[tid] = v[0]
         barrier()
-        var w = InlineArray[Float32, P](fill=Float32(0.0))
+        var w = Array[Float32, P](fill=Float32(0.0))
         comptime for t in range(P):
             w[t] = red[t]
         comptime for k in range(log2_floor(P)):

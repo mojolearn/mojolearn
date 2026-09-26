@@ -8,7 +8,7 @@ insertion. Handles are monotonically increasing and never aliases for pointers.
 The family-specific exporter reads its existing tree/node representation into
 validated caller buffers; this module never builds a second flattened model.
 """
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 
 
@@ -90,4 +90,4 @@ def copy_forest_export_leaves(values: List[Float32], address: Int,
         raise Error("invalid fitted forest leaf export pointer or offset")
     var destination = MutPointer[Float32, MutUntrackedOrigin](unsafe_from_address=address)
     if len(values):
-        memcpy(dest=destination + offset, src=values.unsafe_ptr(), count=len(values))
+        unsafe_memcpy(dest=destination + offset, src=values.unsafe_ptr(), count=len(values))

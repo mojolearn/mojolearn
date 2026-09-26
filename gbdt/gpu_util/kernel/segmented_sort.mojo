@@ -78,7 +78,7 @@ binary search that follows it (`exact_estimation.cu:31-39`).
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.memory import bitcast
 from max.gpu.primitives.block import prefix_sum
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 
 from gbdt.gpu_util.kernel.reorder_one_bit import REORDER_BLOCK
 

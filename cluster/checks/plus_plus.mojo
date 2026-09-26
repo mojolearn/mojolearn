@@ -29,7 +29,7 @@ from checks.kernel_matrix import (
 )
 
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.memory import AddressSpace
 from core.pinned_reduce import pinned_block_sum
 from checks.numerics import ftz, identical_mul_add

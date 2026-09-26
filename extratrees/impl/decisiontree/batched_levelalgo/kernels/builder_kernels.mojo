@@ -498,7 +498,7 @@ def sample_features_pertree(
 
 
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import ceildiv, exp, log
 from std.memory import stack_allocation
 from std.sys.info import has_apple_gpu_accelerator

@@ -45,7 +45,7 @@ kernel puts in a block -- and a helper implemented without its call site is a
 helper implemented from a guess.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import ceil, log2
 
 from checks.kernel_matrix import (

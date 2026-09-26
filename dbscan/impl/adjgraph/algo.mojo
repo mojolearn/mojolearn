@@ -40,7 +40,7 @@ in deviation 34.
 """
 
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.primitives.block import prefix_sum
@@ -343,7 +343,7 @@ def compact_adjacency_kernel(
 #   atomic memory traffic by a factor of 32."
 # OURS: `Atomic.fetch_add` per hit.
 # REASON: `cooperative_groups::coalesced_threads()` has no Mojo counterpart.
-#   The set of currently-converged lanes is not something `std.gpu.primitives`
+#   The set of currently-converged lanes is not something `max.gpu.primitives`
 #   exposes, and a fixed-mask reduction is not the same thing -- the whole
 #   point of `coalesced_threads` is that only the lanes that took the branch
 #   participate. Their own comment prices this at up to 32x the atomic

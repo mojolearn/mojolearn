@@ -3,8 +3,8 @@
 # only; prints the PTX directive lines of each kernel.
 #   pixi run mojo build tools/nvidia_step_time/minctasm_probe.mojo -o <bin> && <bin>
 from std.compile import compile_info
-from std.gpu.host import get_gpu_target
-from std.gpu import thread_idx, MAX_THREADS_PER_BLOCK_METADATA
+from max.gpu.host import get_gpu_target
+from max.gpu import thread_idx, MAX_THREADS_PER_BLOCK_METADATA
 from std.utils import StaticTuple
 
 comptime T = get_gpu_target["sm_90a"]()

@@ -5,7 +5,7 @@
 (workstream E batch 2, the standard-scaler and minmax-scaler lanes of
 tools/identity_break.py, 2026-09-14).
 
-HOST ONLY. Nothing here imports `max.gpu`, `std.gpu` or a `DeviceContext`,
+HOST ONLY. Nothing here imports `max.gpu`, `max.gpu` or a `DeviceContext`,
 and no GPU binding imports this file. Every kernel of `preprocessing/
 standard.mojo` and `preprocessing/minmax.mojo` is spelled a SECOND time
 here, in the same statement order, with the arithmetic leaves of

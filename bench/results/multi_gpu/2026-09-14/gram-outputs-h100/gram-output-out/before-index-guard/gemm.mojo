@@ -6,7 +6,7 @@ from layout import TileTensor
 from layout.tile_layout import row_major
 from linalg.matmul import matmul
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 
 from core.gram_splitk import (
     GRAM_MAX_CELLS_PER_THREAD,

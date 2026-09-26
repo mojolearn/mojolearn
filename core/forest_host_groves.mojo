@@ -4,8 +4,8 @@
 (the CPU training lane, rf-clf-balanced-parallel and
 et-reg-bootstrap-parallel, 2026-09-15).
 
-HOST ONLY. Nothing here imports `max.gpu`, `std.gpu` or a `DeviceContext`.
-`core/forest_inference.mojo` holds the device kernels and imports `std.gpu`
+HOST ONLY. Nothing here imports `max.gpu`, `max.gpu` or a `DeviceContext`.
+`core/forest_inference.mojo` holds the device kernels and imports `max.gpu`
 at module level, so its arithmetic is RESTATED here, not imported, with the
 line of each routine it MIRRORS; a disagreement between the two is a finding.
 

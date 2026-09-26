@@ -34,8 +34,8 @@ only as a stable 1-bit partition, so that is what is written.
 """
 
 from gbdt.gpu_data.gpu_structures import CFeature
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.gpu.intrinsics import ldg
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu.intrinsics import ldg
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.host.device_attribute import DeviceAttribute
@@ -82,7 +82,7 @@ def split_and_make_sequence_kernel(
 
     # `TDataPartition part = Ldg(parts + leafId)` (`split_points.cu:482`).
     # `Ldg` is `cub::ThreadLoad<cub::LOAD_LDG>` (`kernel_helpers.cuh:180`),
-    # the read-only non-coherent load; `std.gpu.intrinsics.ldg` is its Mojo
+    # the read-only non-coherent load; `max.gpu.intrinsics.ldg` is its Mojo
     # spelling. Their ONE struct load is two scalar loads here, for the
     # Metal reason recorded below.
     var size = Int(ldg(part_size + leaf_id))
@@ -128,8 +128,7 @@ def split_and_make_sequence_kernel(
     var stride = SPLIT_UNROLL * SPLIT_BLOCK_SIZE * Int(grid_dim.x)
 
     while i < size:
-        @parameter
-        for k in range(SPLIT_UNROLL):
+        comptime for k in range(SPLIT_UNROLL):
             var at = i + k * SPLIT_BLOCK_SIZE
             if at < size:
                 # `loadIndex[k] = loadIndices ? __ldg(loadIndices + i +
@@ -670,7 +669,7 @@ def gather_inplace_kernel(
         and it exports NO store. The only stores in it are `multimem_st`
         (NVIDIA multimem) and the `cp_async_bulk_*` TMA family, neither of
         which is a scalar store with a cache modifier.
-      * `std.gpu.intrinsics` exports `CacheOperation`, `Scope`, `ldg`,
+      * `max.gpu.intrinsics` exports `CacheOperation`, `Scope`, `ldg`,
         `threadfence` and the AMD/permlane intrinsics. No store.
       * `std.sys.intrinsics` exports `masked_store`, `compressed_store`,
         `strided_store`, `scatter` and `prefetch`. All of these are addressing
@@ -678,7 +677,7 @@ def gather_inplace_kernel(
 
     So the LOAD half of their pair ships and the STORE half does not. The
     load half is now CALLED: their `Ldg` / `__ldg` (`kernel_helpers.cuh:180`)
-    is `std.gpu.intrinsics.ldg`, and every read they mark with it in this
+    is `max.gpu.intrinsics.ldg`, and every read they mark with it in this
     file and in the three histogram kernels goes through it, at their sites
     and only at their sites. `max.gpu.memory.memory.load[read_only=True]`
     is the other spelling and carries `cache_policy` and `eviction_policy`

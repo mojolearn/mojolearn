@@ -32,7 +32,7 @@ are not changed and keep their own copies, so neither certified artifact
 moves. A change to one of these bodies belongs in all three places.
 """
 from std.math import isfinite
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 
@@ -201,7 +201,7 @@ def gather_rows_bytes_binding(
         if not invalid:
             for r in range(no):
                 var index = Int(idx.unsafe_load(r))
-                memcpy(dest=dst + r * width, src=src + index * width, count=width)
+                unsafe_memcpy(dest=dst + r * width, src=src + index * width, count=width)
     if invalid:
         raise Error("gather_rows_bytes: row index out of bounds")
     return PythonObject(0)

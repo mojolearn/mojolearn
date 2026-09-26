@@ -56,7 +56,7 @@ returns a HOST Float32; with the regularizer the host adds `loss + reg`
 the convergence test branch on, and every operand of it is pinned above.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.column_stats import STATS_TPB, xty_kernel

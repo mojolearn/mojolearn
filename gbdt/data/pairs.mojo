@@ -4,7 +4,7 @@
 layout, shared by the device target (`gbdt/targets/kernel/pair_logit.mojo`),
 `gbdt/train.mojo::train` and the host oracle (`gbdt/host/gbdt_oracle_pair.mojo`).
 
-GPU-FREE. Nothing here imports `max.gpu` or `std.gpu`, so the GBDT host binding,
+GPU-FREE. Nothing here imports `max.gpu` or `max.gpu`, so the GBDT host binding,
 which builds with no accelerator target, can import it.
 
 GENERATION is the CatBoost reference's default path, `GenerateBruteForce`

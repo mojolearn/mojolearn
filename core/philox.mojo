@@ -3,7 +3,7 @@
 """RAFT's Philox generator and `uniformInt`, the thing that decides which rows every tree in the forest is trained on."""
 
 from core.launch_log import log_launch
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import ceildiv
 from max.gpu.host import DeviceBuffer, DeviceContext
 

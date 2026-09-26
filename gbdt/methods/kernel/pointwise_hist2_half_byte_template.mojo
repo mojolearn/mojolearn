@@ -54,7 +54,7 @@ only, and their drivers select the scalar or the `uint2` loop and never the
 driver.
 """
 
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 

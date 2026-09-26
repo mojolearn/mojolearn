@@ -105,7 +105,7 @@ is the only answer that is the same on three columns, and it is input
 validation, which is where a refusal is still right.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 
 from checks.numerics import ftz, identical_div
 

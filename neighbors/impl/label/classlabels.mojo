@@ -27,7 +27,7 @@ WHERE THIS IS CALLED FROM
 `knn.cuh:194`) calls `make_monotonic`.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 

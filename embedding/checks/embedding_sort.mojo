@@ -5,7 +5,7 @@ Each compare/exchange pass has disjoint pairs. Stream-ordered launches are
 its global barriers. Padding and power-of-two slack sort to the sentinel tail.
 """
 from std.sys.compile import is_defined
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 comptime _REVERSE_TIES = is_defined["MOJOLEARN_EMB_SORT_NEGATIVE_CONTROL"]()

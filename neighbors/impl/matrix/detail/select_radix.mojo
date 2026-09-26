@@ -22,10 +22,10 @@ RAFT ships two top-k families. This file implemented the radix one.
 `matrix/detail/select_warpsort.cuh`, the FAISS WarpSelect design, was **not
 expressible** because "Mojo 1.0 has no warp primitives at all, only `block`
 and `barrier()`". **That claim was false.** Warp primitives exist and are
-under `std.gpu.primitives.warp`: `shuffle_down`, `shuffle_idx`,
+under `max.gpu.primitives.warp`: `shuffle_down`, `shuffle_idx`,
 `shuffle_xor`, `lane_id`, `prefix_sum`, `reduce`, `sum`, `max`, `broadcast`,
 with `syncwarp` in `max.gpu.sync`. The earlier searches looked under
-`std.gpu`, `max.gpu`, `std.gpu.block` and `max.gpu.block` and missed the
+`max.gpu`, `max.gpu`, `max.gpu.block` and `max.gpu.block` and missed the
 `primitives` level in all four. `archive/reference/VENDOR_LIBRARIES.md` opens by retracting the
 claim; this file was one of the places it was asserted.
 
@@ -113,7 +113,7 @@ It is theirs: `select_radix.cuh:1002,1016,1035` in
 """
 
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import sqrt
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace

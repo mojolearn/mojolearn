@@ -16,7 +16,7 @@ update is the same expression in the same precision, so the solve returns
 the same alpha, delta_alpha and counters bit for bit.
 """
 
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from std.math import inf
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
@@ -76,13 +76,13 @@ def smo_block_solve_ept_kernel[
     var fb_k = stack_allocation[FW, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
     var fb_t = stack_allocation[FW, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
 
-    var idx = InlineArray[Int, EPT](fill=0)
-    var y = InlineArray[Float32, EPT](fill=0.0)
-    var f = InlineArray[Float32, EPT](fill=0.0)
-    var a = InlineArray[Float32, EPT](fill=0.0)
-    var C = InlineArray[Float32, EPT](fill=0.0)
-    var key = InlineArray[Int32, EPT](fill=Int32(2147483647))
-    var a_save = InlineArray[Float32, EPT](fill=0.0)
+    var idx = Array[Int, EPT](fill=0)
+    var y = Array[Float32, EPT](fill=0.0)
+    var f = Array[Float32, EPT](fill=0.0)
+    var a = Array[Float32, EPT](fill=0.0)
+    var C = Array[Float32, EPT](fill=0.0)
+    var key = Array[Int32, EPT](fill=Int32(2147483647))
+    var a_save = Array[Float32, EPT](fill=0.0)
 
     comptime for e in range(EPT):
         var p = e * THREADS + tid
@@ -146,7 +146,7 @@ def smo_block_solve_ept_kernel[
         if diff < diff_end:
             break
 
-        var Kui = InlineArray[Float32, EPT](fill=0.0)
+        var Kui = Array[Float32, EPT](fill=0.0)
         var lv = neg_inf
         var lk = Int32(2147483647)
         var lp = Int32(2147483647)

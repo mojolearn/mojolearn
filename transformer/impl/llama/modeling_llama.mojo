@@ -267,8 +267,8 @@ agreement with HuggingFace, PyTorch or MAX: the fold orders,
 transcendentals and division below are OURS.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
-from std.memory import bitcast, memcpy
+from max.gpu import block_dim, block_idx, thread_idx
+from std.memory import bitcast, unsafe_memcpy
 from std.os import getenv
 from std.time import perf_counter_ns
 from std.sys.compile import is_defined
@@ -742,7 +742,7 @@ def _upload(
     step_count_sync()
     ctx.synchronize()
     if n > 0:
-        memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+        unsafe_memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
     for i in range(n, n_buf):
         host.unsafe_ptr().unsafe_store(i, Float32(0.0))
     step_count_h2d()
@@ -774,7 +774,7 @@ def _download(
     ctx.synchronize()
     var out = List[Float32](length=n, fill=Float32(0.0))
     if n > 0:
-        memcpy(dest=out.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
+        unsafe_memcpy(dest=out.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
     _ = host^
     return out^
 

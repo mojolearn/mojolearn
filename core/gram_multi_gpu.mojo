@@ -15,7 +15,7 @@ to the define rather than to the second device. Owed a two-device column
 """
 from std.os import getenv
 from std.sys.compile import is_defined
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from max.gpu.host import DeviceContext, DeviceBuffer
 from max.algorithm import sync_parallelize
 from core.multi_gpu import peer_clone, copy_columns_kernel

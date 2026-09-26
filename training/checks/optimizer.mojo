@@ -118,7 +118,7 @@ The full list is contract section 16. The five that bear on THIS file.
    inside the clip forces a mid-step wait, so one does not exist yet.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.os import getenv
 from std.sys.compile import is_defined
 from std.time import perf_counter_ns

@@ -296,7 +296,7 @@ kept alive past the `ctx.synchronize()` that reads it, with explicit
 `.unsafe_ptr()` and this repository has lost a night to that.
 """
 
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from std.os import getenv
 
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -955,7 +955,7 @@ def backward_device_dump(
         var n = len(views[i])
         var values = List[Float32](length=n, fill=Float32(0.0))
         if n > 0:
-            memcpy(dest=values.unsafe_ptr(), src=host.unsafe_ptr() + offset, count=n)
+            unsafe_memcpy(dest=values.unsafe_ptr(), src=host.unsafe_ptr() + offset, count=n)
         out.append(values^)
         offset += n
     _ = host^

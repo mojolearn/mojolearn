@@ -49,7 +49,7 @@ exactly what was there before.
 """
 
 from std.bit import log2_floor
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from std.memory import stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.primitives.block import sum as block_sum
@@ -125,7 +125,7 @@ def two_phase_halving_sum[block_size: Int](value: Float32) -> Float32:
     red[tid] = value
     barrier()
     if tid < P:
-        var v = InlineArray[Float32, G](fill=Float32(0.0))
+        var v = Array[Float32, G](fill=Float32(0.0))
         comptime for j in range(G):
             v[j] = red[tid + j * P]
         comptime for k in range(log2_floor(G)):
@@ -135,7 +135,7 @@ def two_phase_halving_sum[block_size: Int](value: Float32) -> Float32:
         # in place: red[tid] is read by this thread alone (j == 0 above)
         red[tid] = v[0]
     barrier()
-    var w = InlineArray[Float32, P](fill=Float32(0.0))
+    var w = Array[Float32, P](fill=Float32(0.0))
     comptime for t in range(P):
         w[t] = red[t]
     comptime for k in range(log2_floor(P)):

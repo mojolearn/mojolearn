@@ -3,13 +3,13 @@
 """Brute-force k-NN inference on the host, for a box with no GPU (the knn
 host inference lane, 2026-09-14).
 
-HOST ONLY. Nothing here imports `max.gpu`, `std.gpu` or a `DeviceContext`,
+HOST ONLY. Nothing here imports `max.gpu`, `max.gpu` or a `DeviceContext`,
 and the GPU bindings do not import this file. It exists because the three
 entries of `bindings/_mojolearn.mojo` that NearestNeighbors.kneighbors,
 KNeighborsClassifier.predict / predict_proba and KNeighborsRegressor.predict
 call (`knn_search`, `knn_classify`, `knn_regress`) reach
 `neighbors/estimator.mojo` (imports `max.gpu.host` at `:122`) and, under
-it, kernels in files that import `std.gpu` at module level, while the
+it, kernels in files that import `max.gpu` at module level, while the
 arithmetic each kernel performs is `checks/numerics.mojo` calls plus
 integer bookkeeping, which is GPU-free.
 
@@ -83,7 +83,7 @@ what this file states once:
                            `ftz(pred / k)`.
   `host_distance_weights`  `neighbors/impl/selection/distance_weights.mojo:
                            152-244`, already host code (DEVIATION 554),
-                           relocated because its file imports `std.gpu`.
+                           relocated because its file imports `max.gpu`.
   `host_weighted_class_probs`, `host_weighted_regress_avg`
                            `weighted_class_probs_kernel` (`:247-306`) and
                            `weighted_regress_avg_kernel` (`:309-348`) of

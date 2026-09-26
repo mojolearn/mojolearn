@@ -132,7 +132,7 @@ already compile for the DEVIATION 2530, 2531 and 2533 arms.
 """
 
 from std.math import exp
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from std.os import getenv
 from std.time import perf_counter_ns
 from max.gpu.host import Attribute, DeviceBuffer, DeviceContext
@@ -562,7 +562,7 @@ def _read_f32(path: String, n: Int) raises -> List[Float32]:
     if len(bytes) != n * 4:
         raise Error(path + " holds " + String(len(bytes)) + " bytes, expected " + String(n * 4))
     var out = List[Float32](length=n, fill=Float32(0.0))
-    memcpy(dest=out.unsafe_ptr().bitcast[UInt8](), src=bytes.unsafe_ptr(), count=n * 4)
+    unsafe_memcpy(dest=out.unsafe_ptr().bitcast[UInt8](), src=bytes.unsafe_ptr(), count=n * 4)
     return out^
 
 

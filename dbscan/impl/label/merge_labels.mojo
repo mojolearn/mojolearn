@@ -46,7 +46,7 @@ from checks.numerics import (
     numeric_mode_name,
 )
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from dbscan.impl.sparse.detail.csr import MAX_LABEL

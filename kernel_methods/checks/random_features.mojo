@@ -146,7 +146,7 @@ GENERATOR AND ITS TRANSFORM:
 # =========================================================================
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.philox import PhiloxState

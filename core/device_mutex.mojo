@@ -48,7 +48,7 @@ spends a fourth day rediscovering either.
     `acquire` on EVERY read-modify-write by name, so it needs a per-vendor spelling and
     leaves Apple on a second protocol. One spelling for every column is the whole point.
 
-`std.atomic.fence` IS NOT `std.gpu.intrinsics.threadfence`. They are different symbols.
+`std.atomic.fence` IS NOT `max.gpu.intrinsics.threadfence`. They are different symbols.
 DEVIATION 106 reasoned from `threadfence` being comptime-asserted NVIDIA-only and
 concluded that no fence was available on this path. That conclusion was wrong and it is
 why three separate agents went looking for an ordering they could hang off an existing

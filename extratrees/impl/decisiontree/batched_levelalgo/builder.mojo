@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """ExtraTrees host control plane and device drivers for breadth-first and best-first tree growth, implemented from pinned cuML and sklearn implementations."""
 
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 
 from ensemble.instruments import StageTimes
 
@@ -99,7 +99,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.split import (
 )
 from extratrees.checks.pcg_rng import key_for
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from std.gpu import WARP_SIZE, block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import WARP_SIZE, block_dim, block_idx, grid_dim, thread_idx
 from std.math import ceildiv, fma
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator, size_of
@@ -1502,7 +1502,7 @@ def set_leaf_predictions_exact(
     sum of the quantized labels, then `Float32(count_c) / Float32(total)`
     for a classifier and `ftz(Float32(sum) / Float32(seen) * inv_scale)`
     for a regressor. An internal node's slot keeps the zeros
-    (`builder.cuh:582`'s memset, DEVIATION 471's zero_fill)."""
+    (`builder.cuh:582`'s unsafe_memset, DEVIATION 471's zero_fill)."""
     var n_nodes = tree.num_nodes()
     if len(node_instances) != n_nodes:
         raise Error(
@@ -2510,8 +2510,8 @@ def upload_dataset(
         else:
             copy_f32_threaded(source, stage, count)
     else:
-        memcpy(dest=h_data.unsafe_ptr(), src=x_col_major.unsafe_ptr(), count=count)
-    memcpy(dest=h_labels.unsafe_ptr(), src=class_ids.unsafe_ptr(), count=Int(n_rows))
+        unsafe_memcpy(dest=h_data.unsafe_ptr(), src=x_col_major.unsafe_ptr(), count=count)
+    unsafe_memcpy(dest=h_labels.unsafe_ptr(), src=class_ids.unsafe_ptr(), count=Int(n_rows))
     ctx.enqueue_copy(dst_buf=d_data, src_ptr=h_data.unsafe_ptr())
     ctx.enqueue_copy(dst_buf=d_labels, src_ptr=h_labels.unsafe_ptr())
     var d_data_rm = ctx.enqueue_create_buffer[DType.float32](1)
@@ -3383,7 +3383,7 @@ def _stage_upload_if_changed[
                         j += 1
                 if same_live:
                     return
-            memcpy(dest=hp, src=sp, count=live)
+            unsafe_memcpy(dest=hp, src=sp, count=live)
             var view = dst.create_sub_buffer[dt](0, live)
             ctx.enqueue_copy(dst_buf=view, src_ptr=sp)
             return
@@ -3421,7 +3421,7 @@ def _stage_upload_if_changed[
         for i in range(n):
             hp.unsafe_store(i, sp.unsafe_load(i))
     else:
-        memcpy(dest=hp, src=sp, count=n)
+        unsafe_memcpy(dest=hp, src=sp, count=n)
     ctx.enqueue_copy(dst_buf=dst, src_ptr=src.unsafe_ptr())
 
 
@@ -3792,9 +3792,9 @@ def search_batch(
 
     # =================================================================
     # DEVIATION 470 -- TWO fused seeder launches replace this cycle's
-    # SIX setup enqueues: half A carries the `d_samp_report` memset,
-    # range init and the `d_nonconst` memset; half B the score init,
-    # the `r_mx` memset and reduce init. TWO, NOT ONE: the one-kernel
+    # SIX setup enqueues: half A carries the `d_samp_report` unsafe_memset,
+    # range init and the `d_nonconst` unsafe_memset; half B the score init,
+    # the `r_mx` unsafe_memset and reduce init. TWO, NOT ONE: the one-kernel
     # form's 27 pointers + 7 scalars overran Metal's 31-entry binding
     # table (MAX's ABI binds scalars too) and died in the backend with
     # no source location -- do not re-fuse them. Hoisted HERE, after
@@ -4943,7 +4943,7 @@ def train_forest_classification_device_timed(
         ctx.enqueue_copy(dst_buf=d_ranges, src_ptr=h_ranges.unsafe_ptr())
         # `builder.cuh:582` memsets the leaf array before the launch, and an
         # internal node's ZERO IS ITS VALUE. DEVIATION 471: `zero_fill=True`
-        # folds that memset and `d_visit`'s into the launch itself -- each
+        # folds that unsafe_memset and `d_visit`'s into the launch itself -- each
         # block zeroes its OWN node's `num_outputs` slot and visit cell
         # before the IsLeaf early return, and the grid is one block per
         # node over the whole concatenated buffer, so block-exclusive slot
@@ -5132,7 +5132,7 @@ def search_batch_regression(
 
     # DEVIATION 470: TWO fused seeder launches (halves A and B) replace
     # this cycle's six setup enqueues -- the full argument (bit-inert hoist
-    # on the in-order queue, capacity extents for the three memset regions,
+    # on the in-order queue, capacity extents for the three unsafe_memset regions,
     # the survey skipping half B outright, the rescue's zero report extent,
     # the Metal 31-binding limit that forced the A/B split, and the refusal
     # list: no seeder fuses into its grid-accumulating consumer, Metal has
@@ -6205,7 +6205,7 @@ def train_forest_regression_device_timed(
         ctx.enqueue_copy(dst_buf=d_ranges, src_ptr=h_ranges.unsafe_ptr())
         # `builder.cuh:582` memsets the leaf array before the launch, and an
         # internal node's ZERO IS ITS VALUE. DEVIATION 471: `zero_fill=True`
-        # folds that memset and `d_visit`'s into the launch itself -- the
+        # folds that unsafe_memset and `d_visit`'s into the launch itself -- the
         # block-exclusive-ownership argument is at the classification twin.
         ctx.enqueue_function[
             leaf_kernel[TPB, LEAF_MAX_OUT_DEFAULT, False, zero_fill=True]

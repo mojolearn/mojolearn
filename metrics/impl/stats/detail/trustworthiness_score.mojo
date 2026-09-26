@@ -65,7 +65,7 @@ holds the k+1 neighbor distances).
 # DEVIATION 2486: bulk host staging; stream/lifetime boundaries unchanged.
 from bindings.hostptr import copy_f32
 from std.atomic import Atomic
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from std.math import ceildiv
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext

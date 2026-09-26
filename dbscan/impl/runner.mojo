@@ -97,7 +97,7 @@ now IMPLEMENTED below: loop 2 reuses batch 0's CSR from loop 1 and takes the
 one-pass arm for the rest whenever `algo.cuh:119`'s spare guard admits it.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceBuffer, DeviceContext
 

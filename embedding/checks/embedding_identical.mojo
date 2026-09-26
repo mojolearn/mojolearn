@@ -4,7 +4,7 @@
 
 from embedding.checks.embedding_sort import PLAN_SCAN, PLAN_SORT, embedding_sort_runs
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext
 # DEVIATION 2630: the step phase timers and counters (core/step_phase.mojo;

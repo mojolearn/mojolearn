@@ -5,7 +5,7 @@ This stage consumes Q/K/V directly and never materializes scores. It is not
 wired into v1. One device thread owns one row so TILE=32 traversal and every
 state fold have a single, vendor-independent logical order.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import identical_div, identical_fmax, identical_mul, identical_mul_add, portable_expf

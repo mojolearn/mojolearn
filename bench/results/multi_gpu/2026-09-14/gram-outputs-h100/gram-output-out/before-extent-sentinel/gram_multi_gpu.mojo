@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Whole Gram output cells with the original contraction order on every GPU."""
 from std.os import getenv
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from max.gpu.host import DeviceContext, DeviceBuffer
 from max.algorithm import sync_parallelize
 from core.multi_gpu import peer_clone, copy_columns_kernel

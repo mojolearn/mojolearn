@@ -114,8 +114,8 @@ depth. The same contract every shared-Int32 arm in this package rides on.
 """
 
 from std.atomic import Atomic, Ordering
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.gpu.intrinsics import ldg
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu.intrinsics import ldg
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -182,8 +182,7 @@ def quantize_pair_kernel[ridx_stats: Bool = False](
         var u = hist2_dither(pos)
         var src = pos
 
-        @parameter
-        if ridx_stats:
+        comptime if ridx_stats:
             # DEVIATION 1902 x 1911: the stat plane is stationary, so the
             # VALUE is gathered through the row id at this position while
             # the dither stays keyed on the storage position -- the same

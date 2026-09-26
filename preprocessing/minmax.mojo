@@ -13,7 +13,7 @@ MINMAX-3: Float32 arithmetic uses IDENTICAL operand/seam FTZ and portable
  division. Multiplication rounds before offset addition. Host validation
 rejects nonfinite statistics/results and nonpositive scale; no CPU reduction.
 """
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.host import DeviceContext, DeviceBuffer
 from max.gpu.memory import AddressSpace

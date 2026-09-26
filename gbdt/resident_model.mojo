@@ -86,7 +86,7 @@ door and nothing that does not; the identity gate's sabotage column is
 built with it.
 """
 from std.ffi import _Global
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.sys.compile import is_defined
 
 from max.algorithm import sync_parallelize
@@ -535,7 +535,7 @@ struct ResidentGbdtModel(Movable):
                     if v != v:
                         bp[j] = f
                         return
-                memcpy(dest=dst, src=col, count=n_rows)
+                unsafe_memcpy(dest=dst, src=col, count=n_rows)
             else:
                 var sub = nan_substitution(treat)
                 for r in range(n_rows):
@@ -678,7 +678,7 @@ struct ResidentGbdtModel(Movable):
                     for f in range(nf):
                         xs[f * n_rows + r] = x.unsafe_load(r * nf + f)
             else:
-                memcpy(dest=xs.unsafe_ptr(), src=x, count=n_x)
+                unsafe_memcpy(dest=xs.unsafe_ptr(), src=x, count=n_x)
             staged_row_major = False
             if len(self.tm.tensor_ctr_registry.features) != 0:
                 expanded = self.tm.tensor_ctr_registry.expand_for_model_apply(
@@ -793,7 +793,7 @@ struct ResidentGbdtModel(Movable):
             return 1
         if mode == RESIDENT_RAW:
             if dim == 1:
-                memcpy(dest=out_f32, src=hc, count=n_rows)
+                unsafe_memcpy(dest=out_f32, src=hc, count=n_rows)
                 return 1
             # plane-major on the device, row-major out (`predict_multi_floats`)
             for r in range(n_rows):

@@ -1337,8 +1337,9 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                 )
                 var ov = out_dist.create_sub_buffer[DType.float32](q * k, rows * k)
                 var oi = out_idx32.create_sub_buffer[DType.int32](q * k, rows * k)
-                top_k[largest=False, target="gpu"](
-                    TileTensor(dv, row_major(rows, n_index)),
+                var tin = TileTensor(dv, row_major(rows, n_index))
+                top_k[largest=False, target="gpu", KEngine=type_of(tin).Engine](
+                    tin,
                     k,
                     1,
                     TileTensor(ov, row_major(rows, k)),

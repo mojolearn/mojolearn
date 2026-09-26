@@ -60,7 +60,7 @@ from std.math import log2
 from std.memory import bitcast
 from std.sys import is_defined
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace

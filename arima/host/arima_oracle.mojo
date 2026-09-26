@@ -4,7 +4,7 @@
 of the device lane (workstream E, the arima, arima-011 and arima-seasonal-c
 lanes, 2026-09-14).
 
-HOST ONLY. Nothing here imports `max.gpu`, `std.gpu`, a `DeviceContext` or
+HOST ONLY. Nothing here imports `max.gpu`, `max.gpu`, a `DeviceContext` or
 any module under `arima/`. The only library imports are the
 `checks/numerics.mojo` seams (`ftz`, `identical_mul_add`, `identical_exp`,
 `identical_log`, `identical_sqrt`). Every construct the device path reaches
@@ -549,8 +549,8 @@ def _jones_transform(
     roundings, the 2026-08-23 correction)."""
     var out = _zeros(max(1, parameter * batch_size))
     for model in range(batch_size):
-        var tmp = InlineArray[Float32, AH_JONES_MAX](fill=Float32(0.0))
-        var mine = InlineArray[Float32, AH_JONES_MAX](fill=Float32(0.0))
+        var tmp = Array[Float32, AH_JONES_MAX](fill=Float32(0.0))
+        var mine = Array[Float32, AH_JONES_MAX](fill=Float32(0.0))
         for i in range(parameter):
             var v = ftz(params[model * parameter + i])
             tmp[i] = v
@@ -639,8 +639,8 @@ def _reduced_polynomial(is_ar: Bool, coef0: Float32, coef1: Float32) -> Float32:
 
 
 def _lu_inverse(
-    mut a: InlineArray[Float32, AH_KRON_MAX],
-    mut inv: InlineArray[Float32, AH_KRON_MAX],
+    mut a: Array[Float32, AH_KRON_MAX],
+    mut inv: Array[Float32, AH_KRON_MAX],
     n: Int,
 ) -> Int32:
     """`lu_inverse` (`linalg/batched/matrix.mojo:79-148`): getrf with the
@@ -648,7 +648,7 @@ def _lu_inverse(
     ftz(ftz(a) / pivot)`, the fused trailing update; then getri column by
     column through the swaps, unit-L forward and U backward substitution,
     ascending folds. 0, or `j + 1` at the first zero pivot."""
-    var piv = InlineArray[Int, 25](fill=0)
+    var piv = Array[Int, 25](fill=0)
     for j in range(n):
         var best = j
         var best_mag = abs(ftz(a[j + j * n]))
@@ -704,8 +704,8 @@ def _lu_inverse(
 
 @always_inline
 def _mv(
-    n: Int, alpha: Float32, a: InlineArray[Float32, AH_RD2_MAX],
-    v: InlineArray[Float32, AH_RD_MAX], mut out_v: InlineArray[Float32, AH_RD_MAX],
+    n: Int, alpha: Float32, a: Array[Float32, AH_RD2_MAX],
+    v: Array[Float32, AH_RD_MAX], mut out_v: Array[Float32, AH_RD_MAX],
 ):
     """`_mv` (`batched_kalman.mojo:382-394`)."""
     for i in range(n):
@@ -717,8 +717,8 @@ def _mv(
 
 @always_inline
 def _mm(
-    n: Int, a: InlineArray[Float32, AH_RD2_MAX], b: InlineArray[Float32, AH_RD2_MAX],
-    bT: Bool, mut out_v: InlineArray[Float32, AH_RD2_MAX],
+    n: Int, a: Array[Float32, AH_RD2_MAX], b: Array[Float32, AH_RD2_MAX],
+    bT: Bool, mut out_v: Array[Float32, AH_RD2_MAX],
 ):
     """`_mm` (`batched_kalman.mojo:398-409`)."""
     for i in range(n):
@@ -731,7 +731,7 @@ def _mm(
 
 
 @always_inline
-def _numerical_stability(n: Int, mut a: InlineArray[Float32, AH_RD2_MAX]):
+def _numerical_stability(n: Int, mut a: Array[Float32, AH_RD2_MAX]):
     """`_numerical_stability` (`batched_kalman.mojo:413-422`)."""
     for i in range(n - 1):
         for j in range(i + 1, n):
@@ -799,8 +799,8 @@ def _kalman(
 
     for bid in range(batch_size):
         # -- init_batched_kalman_matrices_kernel (:149-235), n_diff = 0
-        var R = InlineArray[Float32, AH_RD_MAX](fill=Float32(0.0))
-        var T = InlineArray[Float32, AH_RD2_MAX](fill=Float32(0.0))
+        var R = Array[Float32, AH_RD_MAX](fill=Float32(0.0))
+        var T = Array[Float32, AH_RD2_MAX](fill=Float32(0.0))
         R[n_diff] = Float32(1.0)
         for i in range(n_theta):
             var idx = i + 1
@@ -825,10 +825,10 @@ def _kalman(
 
         # -- kalman_init_state_kernel (:243-373)
         var info = Int32(0)
-        var RQ = InlineArray[Float32, AH_RD_MAX](fill=Float32(0.0))
-        var RQR = InlineArray[Float32, AH_RD2_MAX](fill=Float32(0.0))
-        var Pm = InlineArray[Float32, AH_RD2_MAX](fill=Float32(0.0))
-        var alpha = InlineArray[Float32, AH_RD_MAX](fill=Float32(0.0))
+        var RQ = Array[Float32, AH_RD_MAX](fill=Float32(0.0))
+        var RQR = Array[Float32, AH_RD2_MAX](fill=Float32(0.0))
+        var Pm = Array[Float32, AH_RD2_MAX](fill=Float32(0.0))
+        var alpha = Array[Float32, AH_RD_MAX](fill=Float32(0.0))
         var sigma2 = ftz(t.sigma2[bid])
         for i in range(rd):
             RQ[i] = ftz(ftz(R[i]) * sigma2)
@@ -838,8 +838,8 @@ def _kalman(
                 RQR[i + j * rd] = ftz(ftz(RQ[i]) * rj)
         # `kron_minus_identity` (matrix.mojo:152-180): I - A (x) A, two
         # roundings per cell with the exact -1.
-        var imaa = InlineArray[Float32, AH_KRON_MAX](fill=Float32(0.0))
-        var imaa_inv = InlineArray[Float32, AH_KRON_MAX](fill=Float32(0.0))
+        var imaa = Array[Float32, AH_KRON_MAX](fill=Float32(0.0))
+        var imaa_inv = Array[Float32, AH_KRON_MAX](fill=Float32(0.0))
         for ia in range(r):
             for ja in range(r):
                 var a_ia_ja = -ftz(T[(ia + n_diff) + (ja + n_diff) * rd])
@@ -856,11 +856,11 @@ def _kalman(
         if inf1 != Int32(0):
             info = inf1
         else:
-            var vecq = InlineArray[Float32, AH_LYAP_R2_MAX](fill=Float32(0.0))
+            var vecq = Array[Float32, AH_LYAP_R2_MAX](fill=Float32(0.0))
             for j in range(r):
                 for i in range(r):
                     vecq[i + j * r] = ftz(RQR[(i + n_diff) + (j + n_diff) * rd])
-            var xloc = InlineArray[Float32, AH_LYAP_R2_MAX](fill=Float32(0.0))
+            var xloc = Array[Float32, AH_LYAP_R2_MAX](fill=Float32(0.0))
             for i in range(r2):
                 var acc = Float32(0.0)
                 for k in range(r2):
@@ -872,8 +872,8 @@ def _kalman(
                 for i in range(r):
                     Pm[(i + n_diff) + (j + n_diff) * rd] = xloc[i + j * r]
         if order.k != 0:
-            var imt = InlineArray[Float32, AH_KRON_MAX](fill=Float32(0.0))
-            var imt_inv = InlineArray[Float32, AH_KRON_MAX](fill=Float32(0.0))
+            var imt = Array[Float32, AH_KRON_MAX](fill=Float32(0.0))
+            var imt_inv = Array[Float32, AH_KRON_MAX](fill=Float32(0.0))
             for j in range(r):
                 for i in range(r):
                     var delta = Float32(1.0) if i == j else Float32(0.0)
@@ -913,14 +913,14 @@ def _kalman(
     var info1 = List[Int32](length=batch_size, fill=Int32(0))
     for bid in range(batch_size):
         # -- batched_kalman_loop_kernel (:425-604), n_diff = 0
-        var l_RQR = InlineArray[Float32, AH_RD2_MAX](fill=Float32(0.0))
-        var l_T = InlineArray[Float32, AH_RD2_MAX](fill=Float32(0.0))
-        var l_P = InlineArray[Float32, AH_RD2_MAX](fill=Float32(0.0))
-        var l_alpha = InlineArray[Float32, AH_RD_MAX](fill=Float32(0.0))
-        var l_K = InlineArray[Float32, AH_RD_MAX](fill=Float32(0.0))
-        var l_tmp = InlineArray[Float32, AH_RD2_MAX](fill=Float32(0.0))
-        var l_TP = InlineArray[Float32, AH_RD2_MAX](fill=Float32(0.0))
-        var l_v = InlineArray[Float32, AH_RD_MAX](fill=Float32(0.0))
+        var l_RQR = Array[Float32, AH_RD2_MAX](fill=Float32(0.0))
+        var l_T = Array[Float32, AH_RD2_MAX](fill=Float32(0.0))
+        var l_P = Array[Float32, AH_RD2_MAX](fill=Float32(0.0))
+        var l_alpha = Array[Float32, AH_RD_MAX](fill=Float32(0.0))
+        var l_K = Array[Float32, AH_RD_MAX](fill=Float32(0.0))
+        var l_tmp = Array[Float32, AH_RD2_MAX](fill=Float32(0.0))
+        var l_TP = Array[Float32, AH_RD2_MAX](fill=Float32(0.0))
+        var l_v = Array[Float32, AH_RD_MAX](fill=Float32(0.0))
         var b_rd = bid * rd
         var b_rd2 = bid * rd2
         for i in range(rd2):
@@ -1411,7 +1411,7 @@ def _qr_solve(mut a: List[Float32], m: Int, n: Int, mut b: List[Float32]) -> Int
     """`householder_qr_solve` (`least_squares.mojo:111-210`) over one system
     at offset 0, `a` destroyed, the solution in `b[0..n)`. The two in-place
     subtractions read the raw cell, as the device's do (`:169`, `:184`)."""
-    var rdiag = InlineArray[Float32, AH_LS_MAX_COLS](fill=Float32(0.0))
+    var rdiag = Array[Float32, AH_LS_MAX_COLS](fill=Float32(0.0))
     for j in range(n):
         var sigma = Float32(0.0)
         for i in range(j, m):
@@ -1479,8 +1479,8 @@ def _test_invparams(params: List[Float32], base: Int, pq: Int, is_ar: Bool) -> B
     """`test_invparams` (`estimate_x0.mojo:171-206`): the inverse recursion
     stopped before atanh, with `coef * a * x` as `(coef*a) * x`, ONE
     rounding, then strictly inside (-1, 1)."""
-    var new_params = InlineArray[Float32, AH_JONES_MAX](fill=Float32(0.0))
-    var tmp = InlineArray[Float32, AH_JONES_MAX](fill=Float32(0.0))
+    var new_params = Array[Float32, AH_JONES_MAX](fill=Float32(0.0))
+    var tmp = Array[Float32, AH_JONES_MAX](fill=Float32(0.0))
     for i in range(pq):
         var v = ftz(params[base + i])
         tmp[i] = v

@@ -46,7 +46,7 @@ THE POLICY CHOICES
 
 2. **THE ARRAYS ARE COPIED INTO `List`s.** `train` takes `List[Float32]`, so
    `x`, `y` and the weights are read out of the caller's buffers into owned
-   lists here -- as one flat memcpy per array since 2026-08-26; the
+   lists here -- as one flat unsafe_memcpy per array since 2026-08-26; the
    per-element append loops that stood here were ~70 ms per 1M x 28 rows,
    all inside the timed fit. At 800k x 100 it is still 80 million float
    reads before any device work starts, a real cost on the fixed-cost side
@@ -63,7 +63,7 @@ THE POLICY CHOICES
 
 from max.gpu.host import DeviceContext
 from ensemble.instruments import StageTimes as HostStageTimes
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.math import isfinite
 
 from gbdt.models.model_text import load_model_text, model_text
@@ -138,17 +138,17 @@ def gbdt_fit_two_level_feature_freq(
         raise Error("two-level FeatureFreq weights must be empty or per-row")
     var raw = List[Float32]()
     raw.resize(n_rows * n_features, Float32(0.0))
-    memcpy(dest=raw.unsafe_ptr(), src=x, count=n_rows * n_features)
+    unsafe_memcpy(dest=raw.unsafe_ptr(), src=x, count=n_rows * n_features)
     var target = List[Float32]()
     target.resize(n_rows, Float32(0.0))
-    memcpy(dest=target.unsafe_ptr(), src=y, count=n_rows)
+    unsafe_memcpy(dest=target.unsafe_ptr(), src=y, count=n_rows)
     for r in range(n_rows):
         if not isfinite(target[r]):
             raise Error("two-level FeatureFreq target is not finite")
     var weights = List[Float32]()
     if n_weights != 0:
         weights.resize(n_rows, Float32(0.0))
-        memcpy(dest=weights.unsafe_ptr(), src=sample_weight, count=n_rows)
+        unsafe_memcpy(dest=weights.unsafe_ptr(), src=sample_weight, count=n_rows)
     var source_ids = List[Int]()
     var seen_source = List[Bool]()
     seen_source.resize(n_features, False)
@@ -494,7 +494,7 @@ def gbdt_fit(
             + String(n_eval_rows)
         )
 
-    # one flat resize + memcpy per array; the unreserved append loops this
+    # one flat resize + unsafe_memcpy per array; the unreserved append loops this
     # replaces were ~70 ms per 1M x 28 rows of bounds-checked
     # doubling-and-copying appends (~2.5 ns each), all inside the timed
     # fit -- the same swap `train`'s column build made
@@ -515,10 +515,10 @@ def gbdt_fit(
         x_borrow = Optional(x)
     else:
         xs.resize(n_x, Float32(0.0))
-        memcpy(dest=xs.unsafe_ptr(), src=x, count=n_x)
+        unsafe_memcpy(dest=xs.unsafe_ptr(), src=x, count=n_x)
     var ys = List[Float32]()
     ys.resize(n_rows, Float32(0.0))
-    memcpy(dest=ys.unsafe_ptr(), src=y, count=n_rows)
+    unsafe_memcpy(dest=ys.unsafe_ptr(), src=y, count=n_rows)
 
     var cats = List[Bool]()
     var one_hot = List[Bool]()
@@ -534,16 +534,16 @@ def gbdt_fit(
     var ws = List[Float32]()
     if n_weights != 0:
         ws.resize(n_rows, Float32(0.0))
-        memcpy(dest=ws.unsafe_ptr(), src=weights, count=n_rows)
+        unsafe_memcpy(dest=ws.unsafe_ptr(), src=weights, count=n_rows)
 
     var eval_xs = List[Float32]()
     var eval_ys = List[Float32]()
     if n_eval_rows != 0:
         var n_ex = n_eval_rows * n_features
         eval_xs.resize(n_ex, Float32(0.0))
-        memcpy(dest=eval_xs.unsafe_ptr(), src=eval_x, count=n_ex)
+        unsafe_memcpy(dest=eval_xs.unsafe_ptr(), src=eval_x, count=n_ex)
         eval_ys.resize(n_eval_rows, Float32(0.0))
-        memcpy(dest=eval_ys.unsafe_ptr(), src=eval_y, count=n_eval_rows)
+        unsafe_memcpy(dest=eval_ys.unsafe_ptr(), src=eval_y, count=n_eval_rows)
 
     # `TOverfittingDetectorOptions::Load` (`:24-40`), which is where the
     # detector TYPE comes from when the caller named only a wait or only a
@@ -714,12 +714,12 @@ def gbdt_predict_multi(
     var dim = model_approx_dim(tm.model)
     var n_features = model_input_features(tm)
 
-    # resize + memcpy, the same swap gbdt_fit made; the append loop this
+    # resize + unsafe_memcpy, the same swap gbdt_fit made; the append loop this
     # replaces re-read the whole matrix element-wise on every predict
     var n_x = n_rows * n_features
     var xs = List[Float32]()
     xs.resize(n_x, Float32(0.0))
-    memcpy(dest=xs.unsafe_ptr(), src=x, count=n_x)
+    unsafe_memcpy(dest=xs.unsafe_ptr(), src=x, count=n_x)
 
     var ap = predict_multi_floats(ctx, tm, xs, n_rows)
     if mode == PREDICT_RAW:
@@ -769,11 +769,11 @@ def gbdt_predict(
     var tm = load_model_text(text)
     var n_features = model_input_features(tm)
 
-    # resize + memcpy, the same swap gbdt_fit made
+    # resize + unsafe_memcpy, the same swap gbdt_fit made
     var n_x = n_rows * n_features
     var xs = List[Float32]()
     xs.resize(n_x, Float32(0.0))
-    memcpy(dest=xs.unsafe_ptr(), src=x, count=n_x)
+    unsafe_memcpy(dest=xs.unsafe_ptr(), src=x, count=n_x)
 
     var p = predict_floats(ctx, tm, xs, n_rows)
     for i in range(n_rows):

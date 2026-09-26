@@ -94,7 +94,7 @@ the block kernel, the order this DEVIATION must not change.
 ============================================================================================
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.memory import bitcast, stack_allocation
 from std.sys import is_defined
 from max.gpu.host import DeviceBuffer, DeviceContext

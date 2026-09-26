@@ -8,7 +8,7 @@ ReLU returns positive values, otherwise +0; its derivative is zero at zero.
 This is new surface arithmetic awaiting root-run numerical qualification.
 Host pointers are borrowed for a synchronous call and never retained.
 """
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
 from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_mul_add

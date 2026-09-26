@@ -80,7 +80,7 @@ with y_hat == y -> 0x3f800000, with y_hat != y -> 0x00000000, overflow ->
 """
 
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import ceildiv
 from max.gpu.host import DeviceBuffer, DeviceContext
 

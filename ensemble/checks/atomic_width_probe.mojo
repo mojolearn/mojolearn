@@ -67,7 +67,7 @@ cannot fail reports OK for a kernel that did nothing.
 """
 
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import stack_allocation
 from max.gpu.host import DeviceContext
 from max.gpu.memory import AddressSpace

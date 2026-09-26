@@ -7,7 +7,7 @@
 # lines. Build with -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJOLEARN_COLUMN_APPLE -I .
 # on any host (no GPU needed); a Metal library is NOT produced here.
 from std.compile import compile_info
-from std.gpu.host import get_gpu_target
+from max.gpu.host import get_gpu_target
 
 from embedding.checks.embedding_identical import emb_run_begin_block_kernel
 from transformer.impl.llama.fused_attention import (

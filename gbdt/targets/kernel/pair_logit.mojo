@@ -69,7 +69,7 @@ magnitudes are per-block partials through `pinned_block_sum`, folded by
 the magnitudes per 256 ROWS.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import isfinite
 from max.gpu.host import DeviceBuffer, DeviceContext
 

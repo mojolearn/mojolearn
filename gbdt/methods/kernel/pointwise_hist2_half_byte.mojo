@@ -45,7 +45,7 @@ DEVIATION (arch): `use64BitLoad = IsFullPass` on the modern arm, as in the
 binary kernel.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import abs
 from std.memory import stack_allocation
 from std.atomic import Atomic, Ordering

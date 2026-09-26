@@ -548,8 +548,7 @@ def _knn_compare(
             if got_i != oi[s]:
                 var accepted = False
 
-                @parameter
-                if not PIN_CROSS_VENDOR:
+                comptime if not PIN_CROSS_VENDOR:
                     if got_i >= Int32(0):
                         var alt = _host_cmp_dist(
                             hq, q, hx, Int(got_i), d, metric, metric_arg
@@ -583,8 +582,7 @@ def _knn_compare(
             if gap > worst_ulp:
                 worst_ulp = gap
 
-            @parameter
-            if PIN_CROSS_VENDOR:
+            comptime if PIN_CROSS_VENDOR:
                 if got_d != want_d:
                     row_bad = True
                     if must_match:

@@ -46,7 +46,7 @@ is valid on a 64-wide wavefront and this family is no longer excluded from
 yet run there.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.memory import AddressSpace
 from checks.kernel_matrix import (
     replication_lanes_for,
@@ -336,8 +336,7 @@ def add_half_byte_point(
             CDNA, not a guess.
     """
 
-    @parameter
-    for i in range(8):
+    comptime for i in range(8):
         var slot = slice_base + add_point_slot(ci, tid, i)
         # IDENTITY_PATHS ROW 10: this family accumulates in FLOAT in both
         # modes (unlike hist_2's Int32), and a running cell can pass

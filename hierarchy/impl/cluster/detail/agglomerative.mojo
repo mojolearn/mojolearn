@@ -33,7 +33,7 @@ way), so the output does not depend on thread order. Nothing here reads
 merge row, and the label roots are a SET.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from hierarchy.impl.sparse.op.sort import merge_sort_u64_with_index

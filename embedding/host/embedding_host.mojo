@@ -5,7 +5,7 @@
 box with no GPU (lane/cpu-training-embedding-ivf, 2026-09-15; the embedding
 and embedding-sort lanes of tools/identity_break.py).
 
-HOST ONLY. Nothing here imports `max.gpu`, `std.gpu` or a `DeviceContext`,
+HOST ONLY. Nothing here imports `max.gpu`, `max.gpu` or a `DeviceContext`,
 and no GPU binding imports this file. The profile is
 `mojolearn.identical.embedding.fp32.v1`; the specification is
 `embedding/IDENTICAL_EMBEDDING_CONTRACT.md` and the normative host answer is
@@ -77,7 +77,7 @@ from embedding.checks.embedding_oracle import EmbConfig
 comptime EMBEDDING_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
 #: `embedding/checks/embedding_sort.mojo`'s plan codes and sentinel, restated
-#: by value because that file imports `std.gpu`; the host binding's
+#: by value because that file imports `max.gpu`; the host binding's
 #: `embedding_backward` refuses any other plan code in the GPU binding's words.
 comptime HOST_PLAN_SCAN = 0
 comptime HOST_PLAN_SORT = 1

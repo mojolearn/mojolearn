@@ -14,7 +14,7 @@ seeded `+0.0`), then `kmeans_predict`, the fit's final assignment pass. No
 fold crosses queries, so a row's label does not depend on the batch.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceContext
 
 from checks.numerics import (

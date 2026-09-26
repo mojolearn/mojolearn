@@ -4,7 +4,7 @@
 """OLS and ridge TRAINING on the host, for a box with no GPU (workstream E,
 the lanes ols and ridge, 2026-09-14).
 
-HOST ONLY. Nothing here imports `max.gpu`, `std.gpu` or a `DeviceContext`,
+HOST ONLY. Nothing here imports `max.gpu`, `max.gpu` or a `DeviceContext`,
 and no GPU binding imports this file. The Gram and the Jacobi are the PCA
 host restatement (`decomposition/host/pca_oracle.mojo`, the same two
 stages `lstsq_eig` and `svd_eig` reach on the device), the small dense

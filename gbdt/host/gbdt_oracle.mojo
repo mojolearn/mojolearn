@@ -3,7 +3,7 @@
 """The GradientBoosting fit on the host, a SECOND spelling of the device
 trainer on the gbdt-symmetric lane (workstream E batch 3, 2026-09-14).
 
-HOST ONLY. Nothing here imports `max.gpu`, `std.gpu`, a `DeviceContext` or a
+HOST ONLY. Nothing here imports `max.gpu`, `max.gpu`, a `DeviceContext` or a
 module that defines a kernel. The library imports are the `checks/numerics`
 seams and the GPU-free host modules the device fit ITSELF runs on the host,
 unchanged: the pieces of the GreedyLogSum border search and the NaN mode

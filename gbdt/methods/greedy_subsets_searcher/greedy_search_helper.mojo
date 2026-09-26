@@ -2813,8 +2813,7 @@ def launch_histograms_for_blocks[
         ]()
         var run_fixed_bridge = _flush_is_fixed_point
 
-        @parameter
-        if (
+        comptime if (
             (hist2_smem_mode == HIST_SMEM_SHARED2_I32 or _one_byte_fixed)
             and not _flush_is_fixed_point
         ):
@@ -2831,8 +2830,7 @@ def launch_histograms_for_blocks[
                 # the bridge for it would read an accumulator nothing wrote
                 # and skip the memset the float atomics need. Before 1947
                 # that shape refused, so the distinction could not arise.
-                @parameter
-                if hist2_smem_mode == HIST_SMEM_SHARED2_I32:
+                comptime if hist2_smem_mode == HIST_SMEM_SHARED2_I32:
                     run_fixed_bridge = True
                 else:
                     if stat_count == 2:
@@ -3096,8 +3094,7 @@ def launch_histograms_for_blocks[
                     )
                 else:
 
-                    @parameter
-                    if hist2_smem_mode == HIST_SMEM_SHARED2_I32:
+                    comptime if hist2_smem_mode == HIST_SMEM_SHARED2_I32:
                         if stat_count == 2:
                             # the fused two-stat 8-bit arm: one walk over the
                             # cindex where PASS(8) makes stat_count of them

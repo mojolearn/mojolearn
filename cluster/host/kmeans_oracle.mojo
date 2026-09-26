@@ -4,7 +4,7 @@
 """k-means TRAINING on the host, for a box with no GPU (workstream E batch 2,
 the kmeans lane, 2026-09-14).
 
-HOST ONLY. Nothing here imports `max.gpu`, `std.gpu` or a `DeviceContext`,
+HOST ONLY. Nothing here imports `max.gpu`, `max.gpu` or a `DeviceContext`,
 and no GPU binding imports this file. Every kernel of the fit is spelled a
 SECOND time here from the device source, with the same arithmetic order, in the
 order `cluster/estimator.mojo::kmeans_fit` then

@@ -15,7 +15,7 @@ There is no host gradient/leaf reduction or alternate CPU training path.
 
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.device_zero import enqueue_fill
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.math import isfinite
 from checks.numerics import ftz, identical_mul, identical_mul_add
 from checks.fixed_point import choose_scale

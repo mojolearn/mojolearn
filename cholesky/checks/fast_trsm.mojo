@@ -18,8 +18,8 @@ in-kernel ordering of device writes. Same `L X = B` / `L^T X = B` in place
 over `B` (`n x nrhs` row-major), FAST arithmetic.
 """
 
-from std.gpu import WARP_SIZE, block_dim, block_idx, thread_idx
-from std.gpu.primitives.warp import sum as warp_sum
+from max.gpu import WARP_SIZE, block_dim, block_idx, thread_idx
+from max.gpu.primitives.warp import sum as warp_sum
 from std.memory import stack_allocation
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace

@@ -7,7 +7,7 @@ The legacy switch exists for same-source public-API A/B measurements. Other
 numeric modes retain the original helpers. Mamba1/2 imports are unchanged.
 """
 from mamba.host.device_shim import launch_count
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.sys.compile import is_defined
 from mamba.host.device_shim import DeviceBuffer, DeviceContext
 from mamba.host.gen.modeling_mamba import (
@@ -29,7 +29,7 @@ def m3_upload(ctx: DeviceContext, values: List[Float32]) raises -> DeviceBuffer[
         var host = ctx.enqueue_create_host_buffer[DType.float32](n_buf)
         ctx.synchronize()
         if n > 0:
-            memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
+            unsafe_memcpy(dest=host.unsafe_ptr(), src=values.unsafe_ptr(), count=n)
         else:
             host.unsafe_ptr().unsafe_store(0, Float32(0.0))
         mamba_copy_in(ctx, dev, host.unsafe_ptr(), n_buf)
@@ -52,6 +52,6 @@ def m3_download(ctx: DeviceContext, mut buf: DeviceBuffer[DType.float32], n: Int
         ctx.synchronize()
         var out = List[Float32](length=n, fill=Float32(0.0))
         if n > 0:
-            memcpy(dest=out.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
+            unsafe_memcpy(dest=out.unsafe_ptr(), src=host.unsafe_ptr(), count=n)
         _ = host^
         return out^

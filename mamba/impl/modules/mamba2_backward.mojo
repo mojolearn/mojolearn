@@ -15,7 +15,7 @@ recurrence, convolution, input projection, or block-norm derivative is claimed.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 
 from checks.numerics import (
     ftz,

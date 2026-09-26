@@ -78,7 +78,7 @@ unportable. Keeping them apart is the whole content of this section.
    combined with `raft::shfl` on the key AND on the value. **That is
    implemented.** It used to be a shared-memory transpose plus a serial 16-way
    scan, justified by a claim that Mojo has no lane primitives. **The claim
-   was false**: `std.gpu.primitives.warp` has the shuffles,
+   was false**: `max.gpu.primitives.warp` has the shuffles,
    and `block.min` was never the answer here because it reduces VALUES ONLY
    and this reduction has to carry the key that achieved the minimum.
 
@@ -161,8 +161,8 @@ are all bit-identical, and `AccRowsPerTh * AccColsPerTh` sqrts per thread
 per tile become `AccRowsPerTh` per row.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
-from std.gpu.primitives.warp import shuffle_xor
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu.primitives.warp import shuffle_xor
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.memory import stack_allocation

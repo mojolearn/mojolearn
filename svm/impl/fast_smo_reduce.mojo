@@ -15,8 +15,8 @@ smaller key; keys are unique for active threads) with the thread as a last
 tie-break, so the same element wins as in every pinned schedule.
 """
 
-from std.gpu import thread_idx, lane_id, WARP_SIZE
-from std.gpu.primitives.warp import shuffle_xor
+from max.gpu import thread_idx, lane_id, WARP_SIZE
+from max.gpu.primitives.warp import shuffle_xor
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 

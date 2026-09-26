@@ -4,7 +4,7 @@
 """The host side of the names the generated Mamba passes read
 (`tools/mamba_host_gen.py`; lane/cpu-training-mamba, 2026-09-15).
 
-HOST ONLY. Nothing here imports `max.gpu` or `std.gpu`.
+HOST ONLY. Nothing here imports `max.gpu` or `max.gpu`.
 
 `DeviceBuffer[dtype]` is a host allocation (or a view of one, from
 `create_sub_buffer`) and `DeviceContext` runs every enqueue at once: a copy
@@ -21,7 +21,7 @@ binding's gemm lanes serve the same function. The workspace is unused.
 one-axis launch covers; a second or third axis above 1 refuses by name,
 because the generated serial loop spells only the first axis.
 """
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.sys import size_of
 
 from gemm.host.identical_gemm import OP_TN, gemm_oracle
@@ -111,17 +111,17 @@ struct DeviceContext(Movable):
         if len(dst_buf) < n:
             raise Error("mamba host: copy into a shorter buffer")
         if n > 0 and Int(dst_buf.unsafe_ptr()) != Int(src_buf.unsafe_ptr()):
-            memcpy(dest=dst_buf.unsafe_ptr(), src=src_buf.unsafe_ptr(), count=n)
+            unsafe_memcpy(dest=dst_buf.unsafe_ptr(), src=src_buf.unsafe_ptr(), count=n)
 
     def enqueue_copy[dt: DType, origin: MutOrigin](self, *, dst_ptr: MutPointer[Scalar[dt], origin], src_buf: DeviceBuffer[dt]) raises:
         var n = len(src_buf)
         if n > 0:
-            memcpy(dest=dst_ptr, src=src_buf.unsafe_ptr(), count=n)
+            unsafe_memcpy(dest=dst_ptr, src=src_buf.unsafe_ptr(), count=n)
 
     def enqueue_copy[dt: DType, origin: Origin](self, *, dst_buf: DeviceBuffer[dt], src_ptr: UnsafePointer[Scalar[dt], origin]) raises:
         var n = len(dst_buf)
         if n > 0:
-            memcpy(dest=dst_buf.unsafe_ptr(), src=src_ptr, count=n)
+            unsafe_memcpy(dest=dst_buf.unsafe_ptr(), src=src_ptr, count=n)
 
 
 def _read(buf: DeviceBuffer[DType.float32], n: Int) raises -> List[Float32]:
@@ -132,7 +132,7 @@ def _read(buf: DeviceBuffer[DType.float32], n: Int) raises -> List[Float32]:
         )
     var out = List[Float32](length=n, fill=Float32(0.0))
     if n > 0:
-        memcpy(dest=out.unsafe_ptr(), src=buf.unsafe_ptr(), count=n)
+        unsafe_memcpy(dest=out.unsafe_ptr(), src=buf.unsafe_ptr(), count=n)
     return out^
 
 
@@ -153,7 +153,7 @@ def identical_gemm_into[allow_vendor: Bool = True](
     if len(c) < m * n:
         raise Error("mamba host: a GEMM output buffer shorter than m * n")
     if m * n > 0:
-        memcpy(dest=c.unsafe_ptr(), src=out.unsafe_ptr(), count=m * n)
+        unsafe_memcpy(dest=c.unsafe_ptr(), src=out.unsafe_ptr(), count=m * n)
 
 
 def identical_gemm[allow_vendor: Bool = True](

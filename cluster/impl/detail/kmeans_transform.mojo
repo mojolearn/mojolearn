@@ -32,7 +32,7 @@ across cells, so the launch geometry below is scheduling only and moves no
 bit.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 
 from checks.numerics import ftz, identical_mul_add, identical_sqrt
 

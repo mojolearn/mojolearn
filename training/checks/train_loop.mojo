@@ -113,7 +113,7 @@ WHAT THIS FILE IS LEAST CONFIDENT COMPILES
      returned.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from std.os import getenv
 from max.gpu.host import DeviceBuffer, DeviceContext

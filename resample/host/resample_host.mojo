@@ -6,7 +6,7 @@ for a box with no GPU (the bootstrap, permutation-test and monte-carlo lanes
 of tools/identity_break.py; lane/cpu-training-misc, 2026-09-15).
 
 HOST ONLY. No DeviceContext, no kernel launch, nothing here imports
-`max.gpu` or `std.gpu`. `resample/estimator.mojo` is the device path this
+`max.gpu` or `max.gpu`. `resample/estimator.mojo` is the device path this
 restates: its three entry points validate on the host, launch one block per
 replicate (or per sample chunk), sort on the device, download, and finish on
 the host. The host half (the validation, the point estimate, the interval,

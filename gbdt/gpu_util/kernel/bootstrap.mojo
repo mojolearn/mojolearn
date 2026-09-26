@@ -86,7 +86,7 @@ reproducibility of OUR seeded runs is what the fill must provide.
 """
 
 from std.atomic import Atomic
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 # DEVIATION 258: the Bayesian weight -log(u) and its temperature power
 # were the device stdlib (E2 round 1: gbdt_rmse_bayesian DIVERGENT at
 # tree000.depth00.hist, the FIRST histogram, on NVIDIA); routed
@@ -167,8 +167,7 @@ def bootstrap_kernel[bootstrap_type: Int](
     while i < n:
         var bw: Float32
 
-        @parameter
-        if bootstrap_type == BOOTSTRAP_KERNEL_BAYESIAN:
+        comptime if bootstrap_type == BOOTSTRAP_KERNEL_BAYESIAN:
             var draw = next_uniform_f(s)
             s = draw[1]
             var tmp = -identical_log(draw[0] + Float32(1e-20))

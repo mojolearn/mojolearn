@@ -51,7 +51,7 @@ from checks.kernel_matrix import (
 )
 
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import sqrt
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier

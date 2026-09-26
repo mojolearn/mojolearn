@@ -3,7 +3,7 @@
 """The GradientBoosting fit on the host for the gbdt-rmse lane, the RMSE arm
 of `gbdt/host/gbdt_oracle.mojo` (workstream E batch 3, 2026-09-14).
 
-HOST ONLY. Nothing here imports `max.gpu`, `std.gpu`, a `DeviceContext` or a
+HOST ONLY. Nothing here imports `max.gpu`, `max.gpu`, a `DeviceContext` or a
 module that defines a kernel. The imports are the `checks/numerics` seams,
 the GPU-free host modules the symmetric oracle already reuses (the layout and
 the policy blocks), and the symmetric oracle itself, whose restatements of

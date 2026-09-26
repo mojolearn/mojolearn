@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Random Forest decision-tree builder and device training pipeline, aligned with the pinned cuML batched-level algorithm."""
 
-from std.gpu import WARP_SIZE
+from max.gpu import WARP_SIZE
 from std.sys.compile import is_defined
 from std.math import ceildiv
 from std.sys.info import size_of

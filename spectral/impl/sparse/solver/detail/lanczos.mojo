@@ -155,8 +155,8 @@ the re-orthogonalization, which no fixture here produces; the clamp at
 ======================================================================
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
-from std.gpu.primitives.warp import sum as _fl_warp_sum
+from max.gpu import block_dim, block_idx, thread_idx
+from max.gpu.primitives.warp import sum as _fl_warp_sum
 from std.memory import stack_allocation
 from std.math import sqrt as _fl_sqrt
 from std.sys.info import has_apple_gpu_accelerator

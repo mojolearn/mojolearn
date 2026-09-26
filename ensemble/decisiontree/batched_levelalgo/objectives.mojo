@@ -242,7 +242,7 @@ are the same on Metal, PTX and AMDGPU, run to run and vendor to vendor.
 =================================================================
 """
 
-from std.gpu import block_dim, thread_idx
+from max.gpu import block_dim, thread_idx
 from max.gpu.memory import AddressSpace
 
 from checks.numerics import ftz, identical_mul_add

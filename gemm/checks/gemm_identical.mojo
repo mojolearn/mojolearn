@@ -115,8 +115,8 @@ the normative `(d, q)` addressing).
 CALLER owns and the caller keeps alive past `ctx.synchronize()`.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx, MAX_THREADS_PER_BLOCK_METADATA, WARP_SIZE
-from std.gpu.primitives.warp import shuffle_xor
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx, MAX_THREADS_PER_BLOCK_METADATA, WARP_SIZE
+from max.gpu.primitives.warp import shuffle_xor
 from std.utils import StaticTuple
 from std.memory import bitcast, stack_allocation
 from std.os import getenv

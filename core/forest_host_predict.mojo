@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Sequential forest prediction on the host, for a box with no GPU.
 
-HOST ONLY. Nothing here imports `max.gpu`, `std.gpu` or a `DeviceContext`.
+HOST ONLY. Nothing here imports `max.gpu`, `max.gpu` or a `DeviceContext`.
 It exists because the two forest loops the GPU bindings ran for
 `inference_engine="sequential"` lived in modules that import `max.gpu.host` at
 module level (`ensemble/randomforest.mojo:8`,

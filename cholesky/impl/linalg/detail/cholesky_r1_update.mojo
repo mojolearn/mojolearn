@@ -142,7 +142,7 @@ row of `A` sits in row `n-1` (lower arm). Then (`:60-118`):
 # =========================================================================
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace

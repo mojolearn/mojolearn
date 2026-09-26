@@ -33,7 +33,7 @@ CPU-only install through `_backend._HOST_MODULES`:
 The sabotage arm is `gemm_oracle`'s (`-D MOJOLEARN_HOST_SABOTAGE=1` walks
 every GEMM leaf descending), which every block's projections reach.
 """
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -81,7 +81,7 @@ def _write(addr: Int, values: List[Float32], n: Int) raises:
             + String(n)
         )
     if n > 0:
-        memcpy(dest=f32_ptr(addr), src=values.unsafe_ptr(), count=n)
+        unsafe_memcpy(dest=f32_ptr(addr), src=values.unsafe_ptr(), count=n)
 
 
 def _addrs(addrs: PythonObject, n: Int, what: String) raises -> List[Int]:

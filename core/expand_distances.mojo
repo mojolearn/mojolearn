@@ -14,7 +14,7 @@ GEMM round-off makes a point sitting on its own neighbor come out slightly
 negative, and `sqrt` of that is NaN.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import sqrt
 
 from checks.numerics import ftz, identical_mul_add

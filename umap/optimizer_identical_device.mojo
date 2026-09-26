@@ -44,7 +44,7 @@ FAST keeps `umap/optimizer_fast.mojo` untouched (one attractive move per
 edge, SplitMix64 negatives, stdlib pow); it is not compared to this.
 """
 from max.gpu.host import DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
 from std.memory import bitcast
 from std.sys.compile import is_defined

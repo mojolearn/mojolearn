@@ -54,8 +54,8 @@ struct Split(ImplicitlyCopyable, Movable):
 
 from std.atomic import Atomic, Ordering
 from core.device_mutex import claim_device_mutex
-from std.gpu import WARP_SIZE, block_dim, block_idx, grid_dim, lane_id, thread_idx
-from std.gpu.primitives import warp
+from max.gpu import WARP_SIZE, block_dim, block_idx, grid_dim, lane_id, thread_idx
+from max.gpu.primitives import warp
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
 from max.gpu.memory import AddressSpace

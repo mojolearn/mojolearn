@@ -56,7 +56,7 @@ by subtraction rather than scanned separately. That is the whole trick: one
 scan serves both destinations.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.primitives.block import prefix_sum
 
@@ -184,8 +184,7 @@ def reorder_one_bit_kernel(
 
     var i = Int(block_idx.x) * REORDER_BLOCK + Int(thread_idx.x)
 
-    @parameter
-    for k in range(REORDER_UNROLL):
+    comptime for k in range(REORDER_UNROLL):
         var idx = i + k * REORDER_BLOCK
         if idx < size:
             var ones_before = offsets.unsafe_load(idx)

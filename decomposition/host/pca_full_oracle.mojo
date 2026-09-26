@@ -5,7 +5,7 @@
 pca-full-whiten lane, 2026-09-14): the R-SVD of the centered data, the
 Householder QR and the one-sided Jacobi as the device path runs them.
 
-HOST ONLY. Nothing here imports `max.gpu`, `std.gpu` or a `DeviceContext`,
+HOST ONLY. Nothing here imports `max.gpu`, `max.gpu` or a `DeviceContext`,
 and no GPU binding imports this file. Every arithmetic statement is a
 `checks/numerics.mojo` leaf (`ftz`, `identical_mul_add`, `identical_sqrt`,
 `identical_div`) or a plain IEEE float32 operation the device kernel also

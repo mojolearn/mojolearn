@@ -97,7 +97,7 @@ REASON, and it is a hard language wall, not a preference:
 `updateSortedWarpQ` is built on `__ballot_sync` and `__ffs` (`:160`, `:165`)
 -- it needs to know WHICH lanes voted, and then the index of the first of
 them. Mojo 1.0 exposes warp shuffles and warp reductions
-(`std.gpu.primitives.warp`) but no ballot and no lane mask, so the value
+(`max.gpu.primitives.warp`) but no ballot and no lane mask, so the value
 `activeLanes` cannot be formed at all. The prefix-sum staging at `:405-412`
 needs `__ballot_sync` as well. **Note that this is NOT their cross-block
 code**: `updateSortedWarpQ` has exactly two call sites in the file, its
@@ -217,7 +217,7 @@ clauses. See the lane file; `core/` is another lane's.
 
 from std.atomic import Atomic, Ordering
 from core.device_mutex import claim_device_mutex
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from neighbors.impl.topk.logical_warp32 import queue_any, LOGICAL32_ON64
 from std.math import sqrt
 from max.gpu.host import DeviceBuffer, DeviceContext
@@ -463,8 +463,7 @@ def fused_l2_knn_kernel[
                 for kk in range(FKNN_KBLK):
                     var regy = SIMD[DType.float32, FKNN_ACC_COLS_PER_TH](0.0)
 
-                    @parameter
-                    for j in range(FKNN_ACC_COLS_PER_TH):
+                    comptime for j in range(FKNN_ACC_COLS_PER_TH):
                         regy[j] = sy[
                             (tc + j * FKNN_ACC_TH_COLS) * FKNN_SMEM_STRIDE + kk
                         ]
@@ -512,8 +511,7 @@ def fused_l2_knn_kernel[
             # as `OutT* regyn` (`:346`).
             var regyn = SIMD[DType.float32, FKNN_ACC_COLS_PER_TH](0.0)
 
-            @parameter
-            for j in range(FKNN_ACC_COLS_PER_TH):
+            comptime for j in range(FKNN_ACC_COLS_PER_TH):
                 var cj = n0 + tc + j * FKNN_ACC_TH_COLS
                 if cj < n:
                     regyn[j] = yn.unsafe_load(cj)
@@ -522,8 +520,7 @@ def fused_l2_knn_kernel[
             # by hand because `acc0`/`acc1` are separate SIMD values. The
             # `if (gmemRowId < m)` guard is `:459` and is warp-uniform.
             if have0:
-                @parameter
-                for j in range(FKNN_ACC_COLS_PER_TH):
+                comptime for j in range(FKNN_ACC_COLS_PER_TH):
                     # `Pair otherKV = {keyMax, identity};` `:463`, overwritten
                     # only when `colId < ldd`. The out-of-range lane still calls
                     # `add`, which is both their code and the call contract
@@ -536,8 +533,7 @@ def fused_l2_knn_kernel[
                         val = UInt32(col)
                     heap0.add(key, val)
             if have1:
-                @parameter
-                for j in range(FKNN_ACC_COLS_PER_TH):
+                comptime for j in range(FKNN_ACC_COLS_PER_TH):
                     var col1 = n0 + tc + j * FKNN_ACC_TH_COLS
                     var key1 = FKNN_IDENTITY
                     var val1 = FKNN_KEY_MAX
@@ -629,8 +625,7 @@ def fused_l2_knn_kernel[
                     var oth_k1 = SIMD[DType.float32, n_regs](FKNN_IDENTITY)
                     var oth_v1 = SIMD[DType.uint32, n_regs](FKNN_KEY_MAX)
 
-                    @parameter
-                    for j in range(n_regs):
+                    comptime for j in range(n_regs):
                         var idx = j * 32 + lid
                         if idx < num_nn:
                             if have0:
@@ -660,13 +655,11 @@ def fused_l2_knn_kernel[
                     # calls, the contract `checkThreadQ`'s vote requires.
                     if have0:
 
-                        @parameter
-                        for j in range(n_regs):
+                        comptime for j in range(n_regs):
                             heap0.add(oth_k0[j], oth_v0[j])
                     if have1:
 
-                        @parameter
-                        for j in range(n_regs):
+                        comptime for j in range(n_regs):
                             heap1.add(oth_k1[j], oth_v1[j])
                     processed += 1  # `cta_processed++;` `:301`
 
@@ -727,8 +720,7 @@ def fused_l2_knn_kernel[
                 # producer hands over identity/keyMax instead of its queue.
                 if sabotage != 0 and Int(block_idx.x) == gdx - 1:
 
-                    @parameter
-                    for j in range(n_regs):
+                    comptime for j in range(n_regs):
                         var idx = j * 32 + lid
                         if idx < num_nn:
                             if have0:

@@ -1,6 +1,6 @@
 # SPDX-License-Identifier: Apache-2.0
 """REMOTE GPU ONLY: contract 11.2 shipped shape, ~4.4 GB live device buffers."""
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from std.time import perf_counter_ns
 from max.gpu.host import DeviceContext

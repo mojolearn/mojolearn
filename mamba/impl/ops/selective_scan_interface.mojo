@@ -137,7 +137,7 @@ per-token), and the 4-D grouped `B`/`C` arms with their `repeat` fan-out
 the caller keeps it alive past `ctx.synchronize()`.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import exp2
 from std.sys.compile import is_defined
 

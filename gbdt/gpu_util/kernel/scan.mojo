@@ -52,7 +52,7 @@ is instantiated at `ui32` with a `ui32` output, `scan.cu:98-104`), and the
 only input this implementation scans is a 0/1 flag per row.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.primitives.block import prefix_sum
 

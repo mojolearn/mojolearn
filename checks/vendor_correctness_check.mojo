@@ -45,21 +45,21 @@ from nn.argsort import argsort
 from linalg.matmul import matmul
 from linalg.gemv import gemv_gpu
 from nn.topk import top_k
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from max.gpu.sync import barrier
 from max.gpu.primitives.block import sum as block_sum
 from max.gpu.primitives.block import max as block_max
 from max.gpu.primitives.block import min as block_min
 from max.gpu.primitives.block import prefix_sum as block_prefix_sum
-from std.gpu.primitives.warp import (
+from max.gpu.primitives.warp import (
     lane_group_min,
     shuffle_idx,
     shuffle_xor,
     vote,
 )
-from std.gpu.primitives.warp import prefix_sum as warp_prefix_sum
-from std.gpu.primitives.warp import sum as warp_sum
-from std.gpu.primitives.id import lane_id
+from max.gpu.primitives.warp import prefix_sum as warp_prefix_sum
+from max.gpu.primitives.warp import sum as warp_sum
+from max.gpu.primitives.id import lane_id
 from checks.kernel_matrix import TARGET_COLUMN, lib_lane_width_for
 from std.utils import IndexList
 from nn.toppminp_gpu import DoubleBuffer, run_radix_sort_pairs_gpu
@@ -720,8 +720,9 @@ def _topk_one(ctx: DeviceContext, batch: Int, n: Int, k: Int) raises -> String:
     ctx.enqueue_copy(dst_buf=vals, src_ptr=hv.unsafe_ptr())
     ctx.synchronize()
 
-    top_k[largest=False, target="gpu"](
-        TileTensor(vals, row_major(batch, n)),
+    var tin = TileTensor(vals, row_major(batch, n))
+    top_k[largest=False, target="gpu", KEngine=type_of(tin).Engine](
+        tin,
         k,
         1,
         TileTensor(ov, row_major(batch, k)),
@@ -1038,8 +1039,8 @@ def check_block(mut rows: List[Verdict]) raises:
 
 
 # ---------------------------------------------------------------------------
-# WARP SCOPE: std.gpu.primitives.warp.{shuffle_xor, shuffle_idx, sum,
-# prefix_sum, vote} and std.gpu.primitives.id.lane_id
+# WARP SCOPE: max.gpu.primitives.warp.{shuffle_xor, shuffle_idx, sum,
+# prefix_sum, vote} and max.gpu.primitives.id.lane_id
 #
 # WIRED: `shuffle_xor` in `unfused_distance_nn` and the fused SIMT kernel;
 # `shuffle_idx` / `vote` / `warp.sum` / `lane_id` throughout
@@ -1287,33 +1288,33 @@ def check_warp(mut rows: List[Verdict]) raises:
             print("  " + sym + " FAIL: " + err)
             rows.append(Verdict(sym, cp, V_WRONG, err, True))
 
-    _emit(rows, String("std.gpu.primitives.id.lane_id"), String("raft::laneId"), bad_lane, lanes)
-    _emit(rows, String("std.gpu.primitives.warp.sum"), String("cub::WarpReduce"), bad_sum, lanes)
+    _emit(rows, String("max.gpu.primitives.id.lane_id"), String("raft::laneId"), bad_lane, lanes)
+    _emit(rows, String("max.gpu.primitives.warp.sum"), String("cub::WarpReduce"), bad_sum, lanes)
     _emit(
         rows,
-        String("std.gpu.primitives.warp.prefix_sum"),
+        String("max.gpu.primitives.warp.prefix_sum"),
         String("cub::WarpScan"),
         bad_scan,
         lanes + (", INCLUSIVE" if scan_is_inclusive else ", EXCLUSIVE"),
     )
     _emit(
         rows,
-        String("std.gpu.primitives.warp.shuffle_xor"),
+        String("max.gpu.primitives.warp.shuffle_xor"),
         String("cub::ShuffleIndex / raft::shfl_xor"),
         bad_bfly,
         lanes + ", butterfly min fold",
     )
     _emit(
         rows,
-        String("std.gpu.primitives.warp.shuffle_idx"),
+        String("max.gpu.primitives.warp.shuffle_idx"),
         String("raft::shfl"),
         bad_bcast,
         lanes + ", lane-0 broadcast",
     )
-    _emit(rows, String("std.gpu.primitives.warp.vote"), String("__ballot_sync"), bad_vote, lanes)
+    _emit(rows, String("max.gpu.primitives.warp.vote"), String("__ballot_sync"), bad_vote, lanes)
     _emit(
         rows,
-        String("std.gpu.primitives.warp.lane_group_min[8]"),
+        String("max.gpu.primitives.warp.lane_group_min[8]"),
         String("__shfl_xor_sync(..., width=8)"),
         bad_lg8,
         lanes + ", num_lanes=8",

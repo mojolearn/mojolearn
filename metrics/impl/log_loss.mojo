@@ -5,7 +5,7 @@
 Inputs are prevalidated encoded labels and row-major probabilities. No
 renormalization. Float32 epsilon clipping bounds every logarithm away from zero.
 """
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import ftz, identical_div, identical_log
 from metrics.checks.pinned_sum import PINNED_SUM_W, virtual_block_sum, chunk_count, linear_block_id, physical_block_count

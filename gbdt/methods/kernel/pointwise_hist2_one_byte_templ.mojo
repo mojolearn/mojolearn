@@ -56,7 +56,7 @@ becomes a plain store here: Mojo exposes no non-temporal store, and the hint
 changes no value.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from std.math import abs
 from std.memory import stack_allocation
 from std.atomic import Atomic, Ordering

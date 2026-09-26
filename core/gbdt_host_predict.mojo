@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Gradient-boosted tree prediction on the host, for a box with no GPU.
 
-HOST ONLY. Nothing here imports `max.gpu`, `std.gpu` or a `DeviceContext`,
+HOST ONLY. Nothing here imports `max.gpu`, `max.gpu` or a `DeviceContext`,
 and the GPU bindings do not import this file. It exists because every step
 of a GBDT prediction on the GPU path is a kernel or a device buffer:
 `predict_floats` (`gbdt/train.mojo:2322-2415`) quantizes on the device

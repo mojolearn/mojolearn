@@ -86,7 +86,7 @@ beside the call it replaces.
 from core.launch_log import log_launch
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.primitives.block import prefix_sum
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 
 #: Threads per block for every kernel here. See PORTABILITY above.

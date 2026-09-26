@@ -38,7 +38,7 @@ weights (`_dbscan.py:414-415`) and `trunc` rounds toward zero rather than
 down.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 

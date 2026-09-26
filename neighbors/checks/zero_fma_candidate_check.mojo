@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 """Generate fixtures with tools/knn_zero_fma_oracle.py before running."""
 from max.gpu.host import DeviceContext
-from std.gpu import thread_idx, block_idx, block_dim
+from max.gpu import thread_idx, block_idx, block_dim
 from std.memory import bitcast
 from checks.numerics import ftz
 from neighbors.checks.pinned_distance_tile import _rt_load, _rt_step, _rt_accumulate_tile, _rt_accumulate_metadata_tile, vector_exponent_minimum_kernel, RT_ROWS, RT_COLS

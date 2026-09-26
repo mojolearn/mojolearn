@@ -24,7 +24,7 @@ producer/consumer protocol per row-tile is:
 
 WHAT MOJO EXPOSES ON APPLE, ESTABLISHED BY COMPILATION NOT DOCS
 ----------------------------------------------------------------
-- `std.gpu.intrinsics.threadfence` is comptime-asserted
+- `max.gpu.intrinsics.threadfence` is comptime-asserted
   `"threadfence is only implemented on NVIDIA GPUs"`
   (`stdlib/std/gpu/intrinsics.mojo:790-792` at Mojo 1.0). There is NO
   standalone device-scope fence for Metal.
@@ -78,7 +78,7 @@ in-envelope protocol.
 
 from std.atomic import Atomic, Ordering
 from core.device_mutex import claim_device_mutex
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.sync import barrier
 

@@ -182,7 +182,7 @@ from checks.numerics import GLOBAL_NUMERIC_MODE as HIST_BUILD_MODE
 from checks.numerics import NUMERIC_FAST, NUMERIC_IDENTICAL
 from core.device_zero import enqueue_fill
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 
 from gbdt.gpu_data.grid_policy import (
     POLICY_BINARY,
@@ -362,14 +362,14 @@ struct FoldsHistogram(Copyable, Movable):
     Read `4, 5` as `6, 6`'s sibling and the estimate under-counts.
     """
 
-    var counts: InlineArray[UInt32, 9]
+    var counts: Array[UInt32, 9]
     """`std::array<ui32, 9> Counts`, the same fixed nine slots. An
-    `InlineArray` rather than a `List` because theirs is a value type with a
+    `Array` rather than a `List` because theirs is a value type with a
     compile-time size and a `List` would make the struct non-copyable."""
 
     def __init__(out self):
         """`Counts.fill(0)`."""
-        self.counts = InlineArray[UInt32, 9](fill=UInt32(0))
+        self.counts = Array[UInt32, 9](fill=UInt32(0))
 
     def __init__(out self, counts: List[UInt32]) raises:
         """Fieldwise. `counts` must have nine entries, bits 0 through 8."""
@@ -379,7 +379,7 @@ struct FoldsHistogram(Copyable, Movable):
                 + String(len(counts))
                 + " entries"
             )
-        self.counts = InlineArray[UInt32, 9](fill=UInt32(0))
+        self.counts = Array[UInt32, 9](fill=UInt32(0))
         for b in range(9):
             self.counts[b] = counts[b]
 
@@ -609,8 +609,8 @@ def update_pointwise_histograms_kernel[
         # the reference reads BOTH planes before writing EITHER (`:60-64` then
         # `:67-71`), which matters because `left` and `right` alias when a
         # caller mis-sizes the grid; kept in the same two passes.
-        var calc_val = InlineArray[Float32, hist_count](fill=Float32(0.0))
-        var complement_val = InlineArray[Float32, hist_count](
+        var calc_val = Array[Float32, hist_count](fill=Float32(0.0))
+        var complement_val = Array[Float32, hist_count](
             fill=Float32(0.0)
         )
         comptime for hist_id in range(hist_count):

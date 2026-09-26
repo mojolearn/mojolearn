@@ -16,7 +16,7 @@ Reference: `catboost/cuda/cuda_util/partitions_reduce.h`, whose
 #
 # THE SEARCH, so it is not repeated: re-run against the docs 2026-08-19. What
 # ships that is reduction-shaped is `max.gpu.primitives.block.{sum,max,min}`
-# (BLOCK scope, and this file calls it), `std.gpu.primitives.warp.{sum,max,
+# (BLOCK scope, and this file calls it), `max.gpu.primitives.warp.{sum,max,
 # min,prefix_sum}` (WARP scope), and the `algorithm` package's row-wise
 # scaffolder, which reduces the INNERMOST axis of a dense tensor. None of them
 # is a device-wide reduce over RAGGED segments, which is what a leaf partition
@@ -84,7 +84,7 @@ while, silently. `checks/partitions_reduce_check.mojo` runs a 40,000-row
 leaf through a one-block grid to keep it from becoming one again.
 """
 
-from std.gpu import block_dim, block_idx, grid_dim, thread_idx
+from max.gpu import block_dim, block_idx, grid_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.host.device_attribute import DeviceAttribute
 from max.gpu.primitives.block import sum as block_sum

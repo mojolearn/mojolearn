@@ -94,7 +94,7 @@ number of roundings and the order they happen in. sklearn's `Sum` and
 `Product` are the same two lines and the same non-rewriting.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext
 from core.multi_gpu import peer_clone

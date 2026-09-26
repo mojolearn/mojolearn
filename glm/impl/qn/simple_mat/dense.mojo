@@ -46,7 +46,7 @@ one pointer. Same for `squaredNorm = dot(u, u)`.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 
 from core.column_stats import STATS_TPB
 from core.pinned_reduce import pinned_block_max, pinned_block_sum

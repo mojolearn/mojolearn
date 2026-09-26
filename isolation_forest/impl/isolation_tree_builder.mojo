@@ -119,7 +119,7 @@ from std.memory import bitcast
 
 from std.sys import is_defined
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.sync import barrier
 
 from isolation_forest.impl.rng.xorwow import (

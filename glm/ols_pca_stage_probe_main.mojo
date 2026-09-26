@@ -13,7 +13,7 @@
 #
 # <prefix>_X.bin, _Xc.bin, _yc.bin from
 # bench/results/linear_cluster_istella_2026-09-11/probe_bins.py.
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.sys import argv
 from std.time import perf_counter_ns
 from std.collections.string import atol
@@ -60,11 +60,11 @@ def main() raises:
     var hy = ctx.enqueue_create_host_buffer[DType.float32](rows)
     var hw = ctx.enqueue_create_host_buffer[DType.float32](cols * cols + 5 * cols)
     ctx.synchronize()
-    memcpy(dest=hx.unsafe_ptr().bitcast[UInt8](), src=bx.unsafe_ptr(), count=cells * 4)
+    unsafe_memcpy(dest=hx.unsafe_ptr().bitcast[UInt8](), src=bx.unsafe_ptr(), count=cells * 4)
     _ = bx^
     if mode == "ols":
         var by = _load(prefix + "_yc.bin", rows)
-        memcpy(dest=hy.unsafe_ptr().bitcast[UInt8](), src=by.unsafe_ptr(), count=rows * 4)
+        unsafe_memcpy(dest=hy.unsafe_ptr().bitcast[UInt8](), src=by.unsafe_ptr(), count=rows * 4)
         _ = by^
     for rep in range(reps):
         var t0 = _now()

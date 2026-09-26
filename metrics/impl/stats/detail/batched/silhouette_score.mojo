@@ -69,7 +69,7 @@ for it to size; it is recorded in NOT_IMPLEMENTED.tsv as honored-as-scheduling.
 REFUSED BY NAME.
 """
 
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from std.math import ceildiv
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext

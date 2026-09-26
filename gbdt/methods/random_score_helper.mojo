@@ -62,7 +62,7 @@ missing zero guard -- but the accumulation is Float32 with a deterministic
 lane fold where theirs is a double block reduce ending in a float atomic.
 """
 
-from std.gpu import block_idx, grid_dim, thread_idx
+from max.gpu import block_idx, grid_dim, thread_idx
 from std.math import exp, log, sqrt
 from max.gpu.host import DeviceBuffer, DeviceContext
 

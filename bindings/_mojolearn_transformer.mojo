@@ -128,7 +128,7 @@ from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
 
 from max.gpu.host import DeviceBuffer, DeviceContext
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.os import getenv
 from std.time import perf_counter_ns
 from std.sys.compile import is_defined
@@ -329,7 +329,7 @@ def _upload_addr(
     var host = ctx.enqueue_create_host_buffer[DType.float32](n_buf)
     ctx.synchronize()
     if n > 0:
-        memcpy(dest=host.unsafe_ptr(), src=p, count=n)
+        unsafe_memcpy(dest=host.unsafe_ptr(), src=p, count=n)
     ctx.enqueue_copy(dst_buf=dev, src_ptr=host.unsafe_ptr())
     ctx.synchronize()
     _ = host^
@@ -341,7 +341,7 @@ def _download_addr[wait: Bool = True](
 ) raises:
     """Copy the first `n` elements into a live caller buffer.
 
-    IDENTICAL avoids pinned staging and its memcpy. With wait=False, the
+    IDENTICAL avoids pinned staging and its unsafe_memcpy. With wait=False, the
     caller must retain both full-buffer owners until a final completion wait.
     Temporary views and legacy staging always finish before their owners die.
     """
@@ -367,7 +367,7 @@ def _download_addr[wait: Bool = True](
         ctx.synchronize()
         _ = view^
     ctx.synchronize()
-    memcpy(dest=p, src=host.unsafe_ptr(), count=n)
+    unsafe_memcpy(dest=p, src=host.unsafe_ptr(), count=n)
     _ = host^
 
 

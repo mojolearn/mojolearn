@@ -5,7 +5,7 @@ device sequence of `gbdt/targets/kernel/pair_logit.mojo`, restated statement for
 statement in plain loops, for `gbdt/host/gbdt_oracle_losses.mojo`'s symmetric
 fit.
 
-HOST ONLY. Nothing here imports `max.gpu`, `std.gpu`, a `DeviceContext` or a
+HOST ONLY. Nothing here imports `max.gpu`, `max.gpu`, a `DeviceContext` or a
 module that defines a kernel. `prepare_pairs` comes from the GPU-free
 `gbdt/data/pairs.mojo`, which the device target imports too, so the endpoint
 order and the per-row pair weights are one piece of code.

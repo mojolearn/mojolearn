@@ -46,9 +46,9 @@ written with `X.tofile(...)` (12345 x 17 float32 row-major, 839,460 bytes,
 sha256 595dda3a45cf8a3e...).
 """
 
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from std.math import sqrt
-from std.memory import bitcast, memcpy
+from std.memory import bitcast, unsafe_memcpy
 from std.sys import argv
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
@@ -311,7 +311,7 @@ def _read_f32(path: String, n: Int) raises -> List[Float32]:
             + " (12345 x 17 float32, tools/identity_break.py fixture('odd'))"
         )
     var out = List[Float32](length=n, fill=Float32(0.0))
-    memcpy(
+    unsafe_memcpy(
         dest=out.unsafe_ptr().bitcast[UInt8](),
         src=bytes.unsafe_ptr(),
         count=n * 4,

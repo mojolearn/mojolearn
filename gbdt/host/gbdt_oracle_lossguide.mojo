@@ -3,7 +3,7 @@
 """The Lossguide arms of the GradientBoosting fit on the host, for the
 gbdt-lossguide lane (workstream E batch 3, 2026-09-14).
 
-HOST ONLY. No `max.gpu`, `std.gpu`, `DeviceContext` or kernel module is
+HOST ONLY. No `max.gpu`, `max.gpu`, `DeviceContext` or kernel module is
 imported. The GPU keeps ONE non-symmetric driver for Depthwise and Lossguide
 (`gbdt/methods/greedy_subsets_searcher/greedy_search_helper_depthwise.mojo`,
 `fit_non_symmetric_tree`) and a separate file for the Lossguide selection

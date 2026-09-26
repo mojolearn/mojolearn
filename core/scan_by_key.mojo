@@ -171,7 +171,7 @@ load, so it is cheap on their side too.
 """
 
 from core.launch_log import log_launch
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import ceildiv
 from std.memory import stack_allocation
 from std.sys.info import size_of

@@ -97,7 +97,7 @@ from gbdt.targets.kernel.pointwise_targets import pinned_block_sum
 # comptime no-op under FAST.
 # =======================================================================
 from checks.numerics import ftz
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 
 #: `const ui32 blockSize = 1024` (`exact_estimation.cu:107`). Metal's
 #: threadgroup limit is 1024 as well, and the reduce below is sized from

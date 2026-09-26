@@ -28,7 +28,7 @@ DeviceFloatSorter` spells the same map on the host; here it is a kernel
 because the keys are already on the device.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.memory import bitcast
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 

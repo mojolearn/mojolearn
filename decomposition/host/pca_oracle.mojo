@@ -4,7 +4,7 @@
 """PCA and truncated SVD TRAINING on the host, for a box with no GPU
 (workstream E, the lanes pca, pca-whiten and tsvd, 2026-09-14).
 
-HOST ONLY. Nothing here imports `max.gpu`, `std.gpu` or a `DeviceContext`,
+HOST ONLY. Nothing here imports `max.gpu`, `max.gpu` or a `DeviceContext`,
 and no GPU binding imports this file. Every arithmetic statement is a
 `checks/numerics.mojo` leaf (`ftz`, `identical_mul_add`, `identical_sqrt`)
 or a plain IEEE float32 operation the device kernel also performs

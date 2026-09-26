@@ -22,7 +22,7 @@ outputs where the MFMA differs from each, per mode:
                           allow input, flush output, set in its own kernel)
 and prints the first differences as hex.
 """
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import bitcast
 from std.sys import llvm_intrinsic
 from std.math import fma

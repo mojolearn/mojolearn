@@ -4,7 +4,7 @@
 """The metrics the metrics-classification lane reaches that the metrics
 lane does not, on the host, for a box with no GPU (2026-09-14).
 
-HOST ONLY. Nothing here imports `max.gpu`, `std.gpu` or a `DeviceContext`,
+HOST ONLY. Nothing here imports `max.gpu`, `max.gpu` or a `DeviceContext`,
 and no GPU binding imports this file. Each device kernel is spelled a
 SECOND time: integer atomics become serial integer loops (an integer sum no
 order can move), the float folds are DEVIATION 653's slab tree through

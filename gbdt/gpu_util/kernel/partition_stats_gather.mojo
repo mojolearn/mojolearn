@@ -36,7 +36,7 @@ IDENTICAL), never by a mode test here: this file compiles the same in both
 modes and the ROUTE decides who calls it.
 """
 
-from std.gpu import block_idx, grid_dim, thread_idx
+from max.gpu import block_idx, grid_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.host.device_attribute import DeviceAttribute
 

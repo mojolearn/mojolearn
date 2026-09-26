@@ -55,7 +55,7 @@ S5 (the quantizer's rounding rule): the same measured plane scored
 Each sabotage is a FAILURE of this check if it does not move the result.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceContext
 from max.gpu.memory import AddressSpace
 

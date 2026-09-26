@@ -6,7 +6,7 @@ with L2 scores, the Bayesian bootstrap, boost from average on Logloss, row
 weights, an eval set with the Iter overfitting detector and best-model
 truncation (lane/cpu-training-gbdt-ordered, 2026-09-15).
 
-HOST ONLY. Nothing here imports `max.gpu`, `std.gpu`, a `DeviceContext` or a
+HOST ONLY. Nothing here imports `max.gpu`, `max.gpu`, a `DeviceContext` or a
 module that defines a kernel. The imports are the `checks/numerics` seams,
 `checks/fixed_point.choose_scale`, the GPU-free host modules the device fit
 itself runs on the host (`gbdt/gpu_util/kernel/random_gen.mojo`'s

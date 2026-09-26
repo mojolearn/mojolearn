@@ -136,7 +136,7 @@ gates BOTH sides of it by construction rather than by luck of the fixture.
 =================================================================
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import floor
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace

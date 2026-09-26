@@ -111,7 +111,7 @@ DEVIATIONS 1075-1078 (T6, T7, T8 and the softplus derivative, declared in
 `mamba/checks/mamba_backward.mojo`), 1085-1087 (spent here).
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.sys.compile import is_defined
 
 from max.gpu.host import DeviceBuffer, DeviceContext

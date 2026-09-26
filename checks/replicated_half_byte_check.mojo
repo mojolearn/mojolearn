@@ -413,8 +413,7 @@ def check_replicated_half_byte() raises:
     #                at both writeback sites, unreachable only because this
     #                row was pinned, and it surfaced the instant it was not.
     # =======================================================================
-    @parameter
-    if FLUSH_IS_FIXED_POINT:
+    comptime if FLUSH_IS_FIXED_POINT:
         if wrong_broken == 0:
             raise Error(
                 "THE SABOTAGE ARM PASSED. An unbounded `fixed_scale` must"

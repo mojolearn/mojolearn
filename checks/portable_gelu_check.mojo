@@ -91,7 +91,7 @@ ignored, so the run PRINTS the arm it was built with (`gelu sabotage
 """
 
 from max.gpu.host import DeviceContext
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import erf, tanh
 from std.memory import bitcast
 from std.sys import argv

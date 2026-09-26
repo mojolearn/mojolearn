@@ -794,8 +794,7 @@ def check_hist2_one_byte[bits: Int](fold_count: Int) raises:
     )
     var f32_moved = diff_cells(sf_f32, m_f32, total)
 
-    @parameter
-    if FLUSH_IS_FIXED:
+    comptime if FLUSH_IS_FIXED:
         if len(f32_moved) == 0:
             raise Error(
                 "under the integer flush the float-accumulation arm must"
@@ -819,8 +818,7 @@ def check_hist2_one_byte[bits: Int](fold_count: Int) raises:
         HIST2_SMEM_MODE == HIST_SMEM_SHARED2_I32 or FLUSH_IS_FIXED
     )
 
-    @parameter
-    if DISPATCH_QUANTIZES:
+    comptime if DISPATCH_QUANTIZES:
         if len(disp_moved) == 0:
             raise Error(
                 "THE DISPATCH DID NOT LAUNCH THE MODE THE MATRIX ROW"
@@ -1409,8 +1407,7 @@ def check_pass_family_modes[bits: Int](fold_count: Int) raises:
     )
     var f32_moved = diff_cells(sf_f32, p_f32, total)
 
-    @parameter
-    if FLUSH_IS_FIXED:
+    comptime if FLUSH_IS_FIXED:
         if len(f32_moved) == 0:
             raise Error("under the integer flush the PASS float arm must"
                         " quantize in its writeback, and a wrecked scale"
@@ -1430,8 +1427,7 @@ def check_pass_family_modes[bits: Int](fold_count: Int) raises:
         HIST2_SMEM_MODE == HIST_SMEM_SHARED2_I32 or FLUSH_IS_FIXED
     )
 
-    @parameter
-    if DISPATCH_QUANTIZES:
+    comptime if DISPATCH_QUANTIZES:
         if len(disp_moved) == 0:
             raise Error("THE DISPATCH DID NOT LAUNCH THE MODE THE MATRIX"
                         " ROW SELECTS at 129-255 bins: the row says this"

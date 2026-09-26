@@ -72,7 +72,7 @@ tie-break in this build too, and `tokenizer_host_sabotage()` reads True for
 it; the `break_ties_high` flag in `dims` is the Python door's environment
 spelling of the same arm.
 """
-from std.memory import memcpy
+from std.memory import unsafe_memcpy
 from std.os import abort
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
@@ -265,7 +265,7 @@ def bpe_encode_binding(
     with GILReleased(Python()):
         var src = _u8_ptr(text_address)
         var text = List[UInt8](length=n, fill=UInt8(0))
-        memcpy(dest=text.unsafe_ptr(), src=src, count=n)
+        unsafe_memcpy(dest=text.unsafe_ptr(), src=src, count=n)
         # THE ONE CALL THAT COMPUTES ANYTHING.
         var ids = owner[].tok.value().encode_bytes(text, allow)
         count = len(ids)
@@ -372,7 +372,7 @@ def bpe_encode_batch_binding(
                 try:
                     if m > 0:
                         var src = _u8_ptr(text_address + a)
-                        memcpy(dest=doc.unsafe_ptr(), src=src, count=m)
+                        unsafe_memcpy(dest=doc.unsafe_ptr(), src=src, count=m)
                     var ids = owner[].tok.value().encode_bytes(doc, allow)
                     var c = len(ids)
                     countp.unsafe_store(k, c)
@@ -464,7 +464,7 @@ def bpe_decode_binding(
             )
         var dst = _u8_ptr(out_address)
         if count > 0:
-            memcpy(dest=dst, src=out.unsafe_ptr(), count=count)
+            unsafe_memcpy(dest=dst, src=out.unsafe_ptr(), count=count)
     return PythonObject(count)
 
 
@@ -526,7 +526,7 @@ def bpe_train_binding(
             var m = Int(offs[k + 1]) - a
             var doc = List[UInt8](length=m, fill=UInt8(0))
             if m > 0:
-                memcpy(
+                unsafe_memcpy(
                     dest=doc.unsafe_ptr(), src=_u8_ptr(text_address + a), count=m
                 )
             documents.append(doc^)

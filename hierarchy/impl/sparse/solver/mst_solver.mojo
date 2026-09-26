@@ -23,7 +23,7 @@ HOST READBACKS MATCH THE REFERENCE. `mst_edge_count.value(stream)` (`:142`, `:14
 reads in the reference loop; here they are the same reads in the same places.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from hierarchy.checks.edge_order import (

@@ -71,7 +71,7 @@ distances are two separate closures and row 11 needed both.
 """
 
 from std.atomic import Atomic
-from std.gpu import block_idx, thread_idx
+from max.gpu import block_idx, thread_idx
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.primitives.block import prefix_sum as block_prefix_sum

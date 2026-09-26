@@ -4,7 +4,7 @@
 `gbdt/estimator.mojo::gbdt_fit_two_level_feature_freq` on the
 gbdt-feature-freq lane (lane/cpu-training-gbdt-ordered, 2026-09-15).
 
-HOST ONLY. Nothing here imports `max.gpu`, `std.gpu`, a `DeviceContext` or a
+HOST ONLY. Nothing here imports `max.gpu`, `max.gpu`, a `DeviceContext` or a
 module that defines a kernel. The imports are the `checks/numerics` seams,
 `checks/fixed_point.choose_scale`, the GPU-free host modules the device fit
 ITSELF runs on the host (`dense_category_code`, `compute_ctr_borders`,

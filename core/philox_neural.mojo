@@ -32,7 +32,7 @@ implementations and FAST uses the vendor's. The scale `s = 1 / (1 - p)`
 and the span `hi - lo` are HOST float32 scalars handed in by the caller.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from std.math import isfinite
 from std.memory import bitcast
 from max.gpu.host import DeviceContext

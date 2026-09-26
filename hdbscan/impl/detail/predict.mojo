@@ -55,7 +55,7 @@ estimator's `labels_`; theirs are int64 (`hdbscan.pyx:1316`).
 ======================================================================
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.numerics import identical_div

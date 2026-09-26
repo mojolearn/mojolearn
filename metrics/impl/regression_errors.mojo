@@ -7,7 +7,7 @@ SST pass or host final fold. Residual, square, partials and result are Float32;
 overflow yields +inf, including RMSE when the MSE overflows. IDENTICAL flushes
 operands and arithmetic seams and uses portable division/sqrt. No float atomics.
 """
-from std.gpu import thread_idx
+from max.gpu import thread_idx
 from std.math import sqrt
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identical_div, portable_sqrtf

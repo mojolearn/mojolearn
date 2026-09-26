@@ -81,7 +81,7 @@ actually moved.
                                 evidence the deviation is real and reached.
 """
 
-from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu import block_dim, block_idx, thread_idx
 
 from checks.numerics import ftz, identical_div, identical_mul
 from decomposition.impl.linalg.detail.pca import WHITEN_SKIP_ZERO

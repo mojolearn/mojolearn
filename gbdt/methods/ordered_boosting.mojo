@@ -116,7 +116,7 @@ on the host for the CPU column.
 """
 
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
-from std.gpu import block_idx, block_dim, thread_idx
+from max.gpu import block_idx, block_dim, thread_idx
 from std.math import isfinite, sqrt
 from std.sys.compile import is_defined
 

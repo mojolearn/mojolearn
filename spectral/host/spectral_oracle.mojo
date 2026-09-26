@@ -82,7 +82,7 @@ from spectral.impl.sparse.solver.lanczos_types import LANCZOS_LA, LANCZOS_SA
 # (bindings/_mojolearn_metrics_host.mojo) as the spectral lane's training
 # path. The four constants below and `lanczos_v0` are spelled here rather
 # than imported from spectral/impl/sparse/solver/detail/lanczos.mojo, which
-# imports std.gpu; `check_spectral_host_constants_match` in
+# imports max.gpu; `check_spectral_host_constants_match` in
 # spectral/checks/spectral_check.mojo would be the place to hold them to
 # the device file's values. `dense_laplacian_eigenvalues_f64` stays in the
 # checks file (it imports decomposition/checks/jacobi_eigh.mojo).
