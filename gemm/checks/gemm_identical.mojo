@@ -3380,11 +3380,12 @@ comptime APPLE_MMA = (
     and TUNED_WINDOW_ADMIT
     and not is_defined["MOJOLEARN_GEMM_NO_APPLE_MMA"]()
 )
-comptime APPLE_MMA_SGM = 2
-comptime APPLE_MMA_SGN = 2
-comptime APPLE_MMA_FM = 4
-comptime APPLE_MMA_FN = 4
-comptime APPLE_MMA_KB = 16
+#: Tile geometry (scheduling only; `-D` overrides are measurement arms).
+comptime APPLE_MMA_SGM = get_defined_int["MOJOLEARN_APPLE_MMA_SGM", 2]()
+comptime APPLE_MMA_SGN = get_defined_int["MOJOLEARN_APPLE_MMA_SGN", 2]()
+comptime APPLE_MMA_FM = get_defined_int["MOJOLEARN_APPLE_MMA_FM", 4]()
+comptime APPLE_MMA_FN = get_defined_int["MOJOLEARN_APPLE_MMA_FN", 4]()
+comptime APPLE_MMA_KB = get_defined_int["MOJOLEARN_APPLE_MMA_KB", 16]()
 comptime APPLE_MMA_GROUP_M = get_defined_int["MOJOLEARN_APPLE_MMA_GROUP_M", 8]()
 comptime APPLE_MMA_BM = 8 * APPLE_MMA_FM * APPLE_MMA_SGM
 comptime APPLE_MMA_BN = 8 * APPLE_MMA_FN * APPLE_MMA_SGN
