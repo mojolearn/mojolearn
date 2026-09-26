@@ -99,6 +99,9 @@ one-pass arm for the rest whenever `algo.cuh:119`'s spare guard admits it.
 
 from std.gpu import block_dim, block_idx, thread_idx
 from std.time import perf_counter_ns
+from std.sys.compile import is_defined
+from std.sys.info import has_apple_gpu_accelerator
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from dbscan.impl.adjgraph.algo import (
@@ -133,6 +136,7 @@ from dbscan.impl.multi_gpu import (
     rbc_eps_nn_query_fill, rbc_eps_nn_query_max_k,
 )
 from neighbors.impl.ball_cover.scan import (
+    rbc_exclusive_scan_kernel,
     RBC_SCAN_TPB,
     rbc_max_reduce_kernel,
 )
@@ -194,6 +198,16 @@ from neighbors.impl.ball_cover.scan import (
 #: The one restriction that survives as a genuine cost-free match is the
 #: METRIC: `runner.cuh:152-156` downgrades anything but
 #: L2Sqrt{Expanded,Unexpanded}, and L2 is all this implementation does.
+#: FAST on Apple: the ball-cover arm keeps each batch's neighbour counts
+#: from loop 1 and loop 2 scans them instead of re-running the count pass,
+#: so a fit walks the dataset twice instead of three times. The counts are
+#: the same kernel's output on the same rows, so the CSR is the same.
+comptime DBSCAN_RBC_KEEP_COUNTS = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_DBSCAN_RBC_KEEP_COUNTS_OFF"]()
+)
+
 comptime EPS_NN_BRUTE_FORCE = 0
 comptime EPS_NN_RBC = 1
 
@@ -472,6 +486,12 @@ their code branches on is this Bool.
     # One int of device scratch: loop 1's max-reduce result, then the max_k
     # query's `actual_max` readback (`registers.cuh:1453`).
     var rbc_mk_scratch = ctx.enqueue_create_buffer[DType.int32](1)
+    var keep_counts = False
+    comptime if DBSCAN_RBC_KEEP_COUNTS:
+        keep_counts = sparse_rbc_mode
+    var vd_all = ctx.enqueue_create_buffer[DType.int32](
+        n_rows if keep_counts else 1
+    )
     ctx.synchronize()
 
     if sparse_rbc_mode:
@@ -586,6 +606,13 @@ their code branches on is this Bool.
         # `raft::update_host(&curradjlen, vd + n_points, 1, stream)`
         # (`runner.cuh:281`): the neighborhood kernel put the batch's total
         # edge count in the last element of `vd`.
+        if keep_counts:
+            ctx.enqueue_copy(
+                dst_buf=vd_all.create_sub_buffer[DType.int32](
+                    start_vertex_id, n_points
+                ),
+                src_buf=vd.create_sub_buffer[DType.int32](0, n_points),
+            )
         var vd_last = vd.create_sub_buffer[DType.int32](n_points, 1)
         ctx.enqueue_copy(dst_ptr=h_adjlen.unsafe_ptr(), src_buf=vd_last)
         ctx.synchronize()
@@ -753,11 +780,34 @@ their code branches on is this Bool.
                 else:
                     # `algo.cuh:137-163`, the two-pass arm loop 2 falls
                     # back to when the bound does not fit the spare room.
-                    var _nnz2 = rbc_eps_nn_query_count(
-                        ctx, rbc_xr, qb2, rbc_r, rbc_ip, rbc_c1, rbc_d1,
-                        rbc_rad, ex_scan, vd, n_points2, n_features,
-                        n_landmarks, eps_radius,
-                    )
+                    if keep_counts:
+                        ctx.enqueue_copy(
+                            dst_buf=vd.create_sub_buffer[DType.int32](
+                                0, n_points2
+                            ),
+                            src_buf=vd_all.create_sub_buffer[DType.int32](
+                                start2, n_points2
+                            ),
+                        )
+                        ctx.enqueue_function[rbc_exclusive_scan_kernel](
+                            ex_scan.unsafe_ptr(), vd.unsafe_ptr(),
+                            Int32(n_points2),
+                            grid_dim=(1, 1, 1), block_dim=(RBC_SCAN_TPB, 1, 1),
+                        )
+                        ctx.enqueue_copy(
+                            dst_buf=vd.create_sub_buffer[DType.int32](
+                                n_points2, 1
+                            ),
+                            src_buf=ex_scan.create_sub_buffer[DType.int32](
+                                n_points2, 1
+                            ),
+                        )
+                    else:
+                        var _nnz2 = rbc_eps_nn_query_count(
+                            ctx, rbc_xr, qb2, rbc_r, rbc_ip, rbc_c1, rbc_d1,
+                            rbc_rad, ex_scan, vd, n_points2, n_features,
+                            n_landmarks, eps_radius,
+                        )
                     ctx.synchronize()
                     var qb3 = x.create_sub_buffer[DType.float32](
                         start2 * n_features, n_points2 * n_features
