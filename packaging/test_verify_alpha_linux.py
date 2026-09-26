@@ -150,5 +150,136 @@ class CombinedLinuxTests(unittest.TestCase):
             self.check_with_mock(digest, Mock())
 
 
+
+class SplitLinuxTests(unittest.TestCase):
+    """THE SPLIT LINUX PACKAGES: mojolearn (core), mojolearn_cuda, mojolearn_rocm,
+    one wheel per manifest (each package publishes on its own)."""
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.root = Path(self.temp.name)
+        self.dist = self.root / 'dist'
+        self.dist.mkdir()
+        version_file = self.root / 'python/mojolearn/_version.py'
+        version_file.parent.mkdir(parents=True)
+        version_file.write_text('__version__ = "9.9.9"\n')
+        self.version = gate.release_version(self.root)
+        self.plugins = gate.GPU_PLUGINS
+
+    def members(self, kind):
+        v, P = self.version, self.plugins
+        tag = 'py3-none-manylinux_2_35_x86_64'
+        if kind == 'core':
+            wheel_name, distribution, vendor = 'mojolearn', 'mojolearn', None
+        else:
+            vendor = P.by_profile(kind)
+            wheel_name, distribution = P.PLUGINS[vendor]['wheel_name'], P.PLUGINS[vendor]['distribution']
+        prefix = wheel_name + '-' + v + '.dist-info/'
+        meta = ['Metadata-Version: 2.4', 'Name: ' + distribution, 'Version: ' + v,
+                'Classifier: Development Status :: 3 - Alpha']
+        payload = dict(schema='mojolearn.linux-payload.v1', version=v, release_profile='alpha-api',
+                       assembly_profile='release-split', source_commit='a' * 40,
+                       split=dict(role=P.CORE_PROFILE if vendor is None else kind, distribution=distribution))
+        members = {prefix + 'WHEEL': ('Wheel-Version: 1.0\nRoot-Is-Purelib: false\nTag: ' + tag + '\n').encode(),
+                   prefix + 'LINUX_PAYLOAD.json': json.dumps(payload).encode()}
+        if vendor is None:
+            for row in P.PLUGINS.values():
+                meta += ['Provides-Extra: ' + row['extra'],
+                         f'Requires-Dist: {row["distribution"]}=={v}; extra == "{row["extra"]}"']
+            members[prefix + P.CORE_MARKER] = json.dumps(P.core_marker(v)).encode()
+            members['mojolearn/__init__.py'] = b'# fixture\n'
+            members['mojolearn/identity_columns/COMMIT'] = b'a' * 40 + b'\n'
+            members['mojolearn/.libs/libfixture.so'] = b'FAKE BYTES, NEVER EXECUTE'
+        else:
+            meta.append('Requires-Dist: mojolearn==' + v)
+            arch = 'sm_89' if vendor == 'cuda' else 'gfx942'
+            members[prefix + P.PLUGIN_MARKER] = json.dumps(P.plugin_marker(vendor, v, [arch])).encode()
+            members[f'mojolearn/{vendor}/{arch}/identical/_mojolearn_knn.so'] = b'FAKE BYTES, NEVER EXECUTE'
+        members[prefix + 'METADATA'] = ('\n'.join(meta) + '\n\nFixture only\n').encode()
+        return wheel_name + '-' + v + '-' + tag + '.whl', prefix, members
+
+    def stage(self, kind, mutate=None):
+        for f in self.dist.iterdir():
+            f.unlink()
+        name, prefix, members = self.members(kind)
+        if mutate:
+            mutate(prefix, members)
+        rows = [[n, gate.record_hash(hashlib.sha256(raw).digest()), str(len(raw))] for n, raw in members.items()]
+        rows.append([prefix + 'RECORD', '', ''])
+        stream = io.StringIO()
+        csv.writer(stream).writerows(rows)
+        with zipfile.ZipFile(self.dist / name, 'w') as archive:
+            for n, raw in members.items():
+                archive.writestr(n, raw)
+            archive.writestr(prefix + 'RECORD', stream.getvalue())
+        manifest = dict(schema='mojolearn.alpha-release.v1', version=self.version, release_profile='alpha-api',
+                        files={name: gate.wheel_digest(self.dist / name)})
+        raw = json.dumps(manifest).encode()
+        (self.dist / 'alpha-manifest.json').write_bytes(raw)
+        return hashlib.sha256(raw).hexdigest()
+
+    def test_each_split_wheel_admits_alone(self):
+        for kind in ('core', 'cuda', 'rocm'):
+            with self.subTest(kind=kind):
+                result = gate.verify(self.dist, self.stage(kind), None, self.root)
+                self.assertTrue(result['passed'])
+
+    def test_plugin_pin_and_ownership_are_checked(self):
+        def loose_pin(prefix, members):
+            members[prefix + 'METADATA'] = members[prefix + 'METADATA'].replace(b'mojolearn==9.9.9', b'mojolearn>=9.9.9')
+
+        def python_in_plugin(prefix, members):
+            members['mojolearn/cuda/helper.py'] = b'# no Python in a plugin\n'
+
+        def other_vendor(prefix, members):
+            members['mojolearn/hip/gfx942/_mojolearn_knn.so'] = b'FAKE'
+
+        def wrong_marker(prefix, members):
+            members[prefix + gate.GPU_PLUGINS.PLUGIN_MARKER] = json.dumps(
+                gate.GPU_PLUGINS.plugin_marker('cuda', self.version, ['sm_90a'])).encode()
+
+        def combined_profile(prefix, members):
+            doc = json.loads(members[prefix + 'LINUX_PAYLOAD.json'])
+            doc['assembly_profile'] = gate.RELEASE_PROFILE
+            members[prefix + 'LINUX_PAYLOAD.json'] = json.dumps(doc).encode()
+        for mutate, why in ((loose_pin, 'exactly mojolearn=='), (python_in_plugin, 'no Python'),
+                            (other_vendor, 'outside mojolearn/cuda/'), (wrong_marker, 'marker'),
+                            (combined_profile, 'profile/role')):
+            with self.subTest(mutate=mutate.__name__):
+                digest = self.stage('cuda', mutate)
+                with self.assertRaisesRegex(ValueError, why):
+                    gate.verify(self.dist, digest, None, self.root)
+
+    def test_core_extras_and_ownership_are_checked(self):
+        def no_rocm_extra(prefix, members):
+            members[prefix + 'METADATA'] = b'\n'.join(
+                l for l in members[prefix + 'METADATA'].split(b'\n') if b'rocm' not in l)
+
+        def gpu_set_in_core(prefix, members):
+            members['mojolearn/cuda/sm_89/_mojolearn_knn.so'] = b'FAKE'
+        for mutate, why in ((no_rocm_extra, 'pin every plugin'), (gpu_set_in_core, 'GPU set member')):
+            with self.subTest(mutate=mutate.__name__):
+                digest = self.stage('core', mutate)
+                with self.assertRaisesRegex(ValueError, why):
+                    gate.verify(self.dist, digest, None, self.root)
+
+    def test_a_split_wheel_of_another_version_is_refused(self):
+        digest = self.stage('rocm')
+        (self.root / 'python/mojolearn/_version.py').write_text('__version__ = "9.9.10"\n')
+        with self.assertRaises(ValueError):
+            gate.verify(self.dist, digest, None, self.root)
+
+    def test_unknown_distribution_prefix_is_refused(self):
+        digest = self.stage('cuda')
+        name = next(p for p in self.dist.iterdir() if p.suffix == '.whl')
+        name.rename(name.with_name(name.name.replace('mojolearn_cuda', 'mojolearn_vulkan')))
+        manifest = json.loads((self.dist / 'alpha-manifest.json').read_text())
+        manifest['files'] = {name.name.replace('mojolearn_cuda', 'mojolearn_vulkan'): list(manifest['files'].values())[0]}
+        raw = json.dumps(manifest).encode()
+        (self.dist / 'alpha-manifest.json').write_bytes(raw)
+        with self.assertRaisesRegex(ValueError, 'filename'):
+            gate.verify(self.dist, hashlib.sha256(raw).hexdigest(), None, self.root)
+        self.assertTrue(digest)
+
 if __name__ == '__main__':
     unittest.main()

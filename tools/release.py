@@ -102,6 +102,24 @@ THE STEPS
 
 Nothing is published without `--publish none|testpypi|pypi`; without it both
 pipelines stop at their publish step and say so.
+
+THE SPLIT LINUX PACKAGES (--split-linux, or MOJOLEARN_RELEASE_SPLIT_LINUX=1;
+OFF by default until the PyPI projects mojolearn-cuda and mojolearn-rocm are
+registered with their trusted publishers, docs/RELEASE_CHECKLIST.md 3b). The
+Linux pipeline then becomes three (python/mojolearn/gpu_plugins.py):
+  core-linux  linux-builds -> linux-wait -> linux-assemble -> linux-pack
+              (--profile release-split: the core and both plugins, each
+              audited and stripped) -> linux-joint-diff -> publish-core-linux
+  cuda        gpu-column-nvidia (core + mojolearn-cuda installed together) -> publish-cuda
+  rocm        gpu-column-amd (core + mojolearn-rocm, the expanded smoke too) -> publish-rocm
+Each column gates its own plugin; linux-joint-diff waits for both columns to
+settle, needs at least one PASSED and diffs every PASSED column with the Apple
+column (any DIVERGENT cell stops all three); the core publishes on it (the
+receipt of whichever vendor passed, NVIDIA first), and a plugin publishes only
+after the core did and its own column passed. Each package is its own GitHub
+release and workflow dispatch (the workflow uploads it to its own PyPI
+project); column and ledger entries stay keyed to one wheel's sha256 (the
+plugin's, with the core's recorded beside it).
 """
 import argparse
 import datetime as dt
@@ -681,6 +699,97 @@ PIPELINE_OF = {s: p for s, p, _, _ in STEP_TABLE}
 NEEDS = {s: n for s, _, n, _ in STEP_TABLE}
 RESOURCE = {s: r for s, _, _, r in STEP_TABLE}
 
+#: THE SPLIT LINUX LAYOUT (--split-linux): the Linux pipeline becomes one per
+#: package. Every publish shares the "dispatch" resource, so two workflow
+#: dispatches never race for `gh run list`'s newest run.
+SPLIT_STEP_TABLE = [
+    ("freeze-version", "common", [], None),
+    ("freeze-changelog", "common", ["freeze-version"], None),
+    ("freeze-docs-facts", "common", ["freeze-changelog"], None),
+    ("freeze-commit", "common", ["freeze-docs-facts"], None),
+    ("rehearsal", "common", ["freeze-commit"], None),
+    ("reuse-plan", "common", ["rehearsal"], None),
+    ("linux-builds", "core-linux", ["reuse-plan"], None),
+    ("macos-build", "macos", ["reuse-plan"], "mac"),
+    ("macos-smoke", "macos", ["macos-build"], "mac"),
+    ("release-check", "macos", ["reuse-plan"], "mac"),
+    ("linux-wait", "core-linux", ["linux-builds"], None),
+    ("linux-assemble", "core-linux", ["linux-wait"], None),
+    ("linux-pack", "core-linux", ["linux-assemble"], "mac"),
+    ("gpu-column-nvidia", "cuda", ["linux-pack", "release-check"], None),
+    ("gpu-column-amd", "rocm", ["linux-pack", "release-check"], None),
+    ("linux-joint-diff", "core-linux", ["linux-pack", "release-check"], None),
+    ("publish-core-linux", "core-linux", ["linux-joint-diff"], "dispatch"),
+    ("publish-cuda", "cuda", ["publish-core-linux", "gpu-column-nvidia", "linux-joint-diff"], "dispatch"),
+    ("publish-rocm", "rocm", ["publish-core-linux", "gpu-column-amd", "linux-joint-diff"], "dispatch"),
+    ("publish-macos", "macos", ["macos-smoke", "release-check"], "dispatch"),
+    ("finish-line", "finish", ["freeze-commit"], None),
+    ("record", "finish", ["finish-line"], None),
+]
+SPLIT_AFTER = {"linux-joint-diff": ["gpu-column-nvidia", "gpu-column-amd"],
+               "finish-line": ["publish-core-linux", "publish-cuda", "publish-rocm", "publish-macos"]}
+#: platform = what published_platforms() says: `linux` is the core's.
+SPLIT_PIPELINES = {
+    "macos": PIPELINES["macos"],
+    "core-linux": dict(builds=["linux-builds", "linux-wait", "linux-assemble", "linux-pack"],
+                       checks=["linux-joint-diff"], publish="publish-core-linux", platform="linux"),
+    "cuda": dict(builds=[], checks=["gpu-column-nvidia"], publish="publish-cuda", platform="cuda"),
+    "rocm": dict(builds=[], checks=["gpu-column-amd"], publish="publish-rocm", platform="rocm"),
+}
+#: split package -> (PyPI project, wheel-name prefix); python/mojolearn/gpu_plugins.py
+SPLIT_PACKAGES = {"linux": ("mojolearn", "mojolearn"), "cuda": ("mojolearn-cuda", "mojolearn_cuda"),
+                  "rocm": ("mojolearn-rocm", "mojolearn_rocm")}
+#: the environment switch; the command-line flags override it
+SPLIT_LINUX_ENV = "MOJOLEARN_RELEASE_SPLIT_LINUX"
+
+
+def layout(split):
+    """(steps, pipeline_of, needs, resource, after, pipelines) of one layout."""
+    table = SPLIT_STEP_TABLE if split else STEP_TABLE
+    return ([t[0] for t in table], {t[0]: t[1] for t in table}, {t[0]: t[2] for t in table},
+            {t[0]: t[3] for t in table}, SPLIT_AFTER if split else AFTER, SPLIT_PIPELINES if split else PIPELINES)
+
+
+def split_wanted(args):
+    """--split-linux / --combined-linux, else MOJOLEARN_RELEASE_SPLIT_LINUX=1; OFF by default."""
+    flag = getattr(args, "split_linux", None)
+    if flag is not None:
+        return bool(flag)
+    return os.environ.get(SPLIT_LINUX_ENV, "") == "1"
+
+
+def receipt_plugins(results):
+    """{wheel file name: sha256} of the split plugins a smoke receipt installed."""
+    d = read_json(results) or {}
+    return {Path(p.get("wheel", "")).name: p.get("wheel_sha256") for p in d.get("plugins") or [] if isinstance(p, dict)}
+
+
+def merge_split(wheels, out):
+    """The combined wheel a published split set is a partition of, for the
+    reuse assembly (release_reuse.assemble_linux reads one wheel): every
+    payload member of every wheel, and the core's .dist-info with its
+    LINUX_PAYLOAD.json's `split` role dropped. A plugin that was not
+    published leaves its members out; assembly then refuses to take them."""
+    core = next(w for w in wheels if Path(w).name.startswith("mojolearn-"))
+    members = {}
+    for w in wheels:
+        with zipfile.ZipFile(w) as z:
+            for n in z.namelist():
+                top = n.split("/")[0]
+                if n.endswith("/") or (top.endswith(".dist-info") and w != core):
+                    continue
+                data = z.read(n)
+                if top.endswith(".dist-info") and n.endswith("/LINUX_PAYLOAD.json"):
+                    doc = json.loads(data)
+                    doc.pop("split", None)
+                    data = (json.dumps(doc, sort_keys=True, indent=2) + "\n").encode()
+                members[n] = data
+    Path(out).parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(out, "w") as z:
+        for n, data in members.items():
+            z.writestr(n, data)
+    return Path(out)
+
 
 class StepFailed(Exception):
     pass
@@ -698,7 +807,8 @@ class Release:
     #: wheel, complete release-check records); these are skipped on their record
     #: (finish-line and record: when the platforms they covered are still the
     #: published ones).
-    SKIP_IF_RECORDED = {"rehearsal", "publish-linux", "publish-macos", "finish-line", "record"}
+    SKIP_IF_RECORDED = {"rehearsal", "publish-linux", "publish-macos", "finish-line", "record",
+                        "publish-core-linux", "publish-cuda", "publish-rocm"}
 
     def __init__(self, args, runner=None):
         self.args = args
@@ -707,6 +817,19 @@ class Release:
         self.base = Path(args.state_dir) if args.state_dir else ev / "release" / self.version
         self.state_path = self.base / "state.json"
         self.state = self.load()
+        # THE LINUX LAYOUT: the combined wheel (default) or the split packages.
+        # It is pinned in the state at the first linux-pack; a rerun asking for
+        # the other layout is refused until that step is redone.
+        self.split = split_wanted(args)
+        pinned = self.state.get("linux_layout")
+        want = "split" if self.split else "combined"
+        redo = set((getattr(args, "redo", "") or "").split(","))
+        if pinned and pinned != want and "linux-pack" not in redo:
+            raise SystemExit(f"release: this release packed the {pinned} Linux layout; run again with "
+                             f"{'--split-linux' if pinned == 'split' else '--combined-linux'}, or --redo linux-pack "
+                             f"to repack it as {want}")
+        (self.STEPS, self.PIPELINE_OF, self.NEEDS, self.RESOURCE, self.AFTER,
+         self.PIPELINES) = layout(self.split)
         self.runner = runner
         self.dry = args.dry_run
         self.readonly = bool(getattr(args, "status", False))
@@ -776,7 +899,7 @@ class Release:
         return rec if rec and rec.get("done") and rec.get("commit") == self.state.get("commit") else None
 
     def published_platforms(self):
-        return [PIPELINES[p]["platform"] for p in PIPELINES if self.recorded(PIPELINES[p]["publish"])]
+        return [self.PIPELINES[p]["platform"] for p in self.PIPELINES if self.recorded(self.PIPELINES[p]["publish"])]
 
     def skip_recorded(self, step, rec):
         if step not in self.SKIP_IF_RECORDED:
@@ -1024,7 +1147,9 @@ class Release:
             # receipts of the frozen source stay.
             return (f"source pinned at {frozen}" + (f"; tooling runs from HEAD {head[:12]}" if head != frozen else "")
                     + ("" if head == frozen else " (--refreeze moves the source to HEAD)"))
-        if frozen and head != frozen and any(self.recorded(s) for s in ("publish-linux", "publish-macos")):
+        if frozen and head != frozen and any(self.recorded(s) for s in ("publish-linux", "publish-macos",
+                                                                        "publish-core-linux", "publish-cuda",
+                                                                        "publish-rocm")):
             raise StepFailed(f"--refreeze refused: a wheel of {frozen[:12]} is already published; "
                              "a new source state needs a new version")
         allowed = set(release_files()) | set(docs_fact_files())
@@ -1129,7 +1254,13 @@ class Release:
         if self.dry:
             info = prev.get(platform) or {}
             return Path("<published %s wheel %s>" % (platform, info.get("wheel", "?")))
-        return release_reuse.published_wheel(prev, platform, self.evidence)
+        whl = release_reuse.published_wheel(prev, platform, self.evidence)
+        plugins = [k for k in ("cuda", "rocm") if prev.get(k)] if platform == "linux" else []
+        if plugins:
+            # a split release: its Linux bytes are the core and its plugins
+            wheels = [whl] + [release_reuse.published_wheel(prev, k, self.evidence) for k in plugins]
+            return merge_split(wheels, self.rel / "reuse" / "previous-split" / whl.name)
+        return whl
 
     # ------------------------------------------------------------ leg reuse by identity
     def admission_path(self, name):
@@ -1451,8 +1582,18 @@ class Release:
             evidence=dict(release_build=str(leg.release_build), proof_sha256=proof_sha, log=str(leg.log))))
 
     def linux_final(self):
+        """The final Linux wheel: the combined one, or with --split-linux the core."""
         found = sorted((self.rel / "linux" / "final").glob("mojolearn-*-manylinux*.whl"))
         return found[-1] if found else None
+
+    def split_final(self, package):
+        """A final split wheel: package 'linux' (the core), 'cuda' or 'rocm'."""
+        prefix = SPLIT_PACKAGES[package][1]
+        found = sorted((self.rel / "linux" / "final").glob(f"{prefix}-*-manylinux*.whl"))
+        return found[-1] if found else None
+
+    def split_finals(self):
+        return {k: self.split_final(k) for k in SPLIT_PACKAGES}
 
     def assembled_marker(self):
         return self.rel / "reuse" / "sets" / "assembled.json"
@@ -1531,8 +1672,11 @@ class Release:
         return sets, proofs, manifests
 
     def step_linux_pack(self):
+        if self.split:
+            return self.step_linux_pack_split()
         final = self.linux_final()
-        if final and wheel_commit(final) == self.commit:
+        # a split core in final/ is not the combined wheel
+        if final and wheel_commit(final) == self.commit and not (self.split_final("cuda") or self.split_final("rocm")):
             return "have " + final.name
         if self.assembly_needed() and not self.dry and not self.assembled_ok():
             raise StepFailed("the assembled sets are not there or not this plan's; run linux-assemble")
@@ -1563,7 +1707,59 @@ class Release:
                    dist / "final" / repaired[0].name, "--receipt", dist / "final" / "dir-entry-strip.json"],
                   what="strip_wheel_dir_entries.py")
         final = self.linux_final()
+        if not self.dry:
+            self.state["linux_layout"] = "combined"
         return f"{final.name} sha256 {sha256(final)}" if final else "would pack, audit and strip"
+
+    def step_linux_pack_split(self):
+        """--profile release-split: the core and both plugins from the same
+        sets and proofs, each through audit.sh (the core first: a plugin's
+        audit names the core's runtime from the core beside it) and the
+        directory-entry strip, then split_audit over the final set."""
+        finals = self.split_finals()
+        if all(finals.values()) and wheel_commit(finals["linux"]) == self.commit:
+            return "have " + ", ".join(w.name for w in finals.values())
+        if self.assembly_needed() and not self.dry and not self.assembled_ok():
+            raise StepFailed("the assembled sets are not there or not this plan's; run linux-assemble")
+        sets, proofs, manifests = self.pack_inputs()
+        src = self.src
+        dist = self.rel / "linux"
+        if dist.exists() and not self.dry:
+            dist.rename(dist.with_name("linux.failed-" + dt.datetime.now().strftime("%Y%m%d-%H%M%S")))
+        args = ["pixi", "run", "-e", "pkg", "pack-linux-wheel", "--profile", "release-split"]
+        for s_ in sets:
+            args += ["--set", s_]
+        for p_ in proofs:
+            args += ["--build-proof", p_]
+        args += ["--out", dist]
+        self.must(args, log=self.rel / "linux-pack.log", what="pack_wheel.py", cwd=src)
+        final_dir = dist / "final"
+        if not self.dry:
+            final_dir.mkdir(parents=True, exist_ok=True)
+        for package, (project, prefix) in SPLIT_PACKAGES.items():
+            packed = sorted(dist.glob(f"{prefix}-*.whl")) if not self.dry else [dist / f"<packed {prefix}>.whl"]
+            if len(packed) != 1:
+                raise StepFailed(f"expected one packed {project} wheel in {dist}, found {packed}")
+            self.must(["bash", "packaging/linux/audit.sh", packed[0], *manifests],
+                      log=self.rel / f"linux-audit-{package}.log", what=f"audit.sh {project}", cwd=src)
+            repaired = sorted((dist / "audit" / "repaired").glob(f"{prefix}-*-manylinux*.whl")) if not self.dry \
+                else [dist / "audit" / "repaired" / f"<repaired {prefix}>.whl"]
+            if len(repaired) != 1:
+                raise StepFailed(f"expected one repaired {project} wheel, found {repaired}")
+            self.must([PY, str(ROOT / "tools" / "strip_wheel_dir_entries.py"), repaired[0],
+                       final_dir / repaired[0].name, "--receipt", final_dir / f"dir-entry-strip-{package}.json"],
+                      what=f"strip_wheel_dir_entries.py {project}")
+        if self.dry:
+            return "would pack the core and both plugins, audit and strip each"
+        finals = self.split_finals()
+        sys.path.insert(0, str(ROOT / "tools"))
+        from wheel_api_audit import split_audit
+        report = split_audit([w for w in finals.values() if w])
+        write_json(final_dir / "split-audit.json", report)
+        if report["problems"] or not all(finals.values()):
+            raise StepFailed("the final split wheels fail their audit: " + "; ".join(report["problems"] or ["missing"]))
+        self.state["linux_layout"] = "split"
+        return ", ".join(f"{w.name} sha256 {sha256(w)}" for w in finals.values())
 
     # ------------------------------------------------------------ GPU columns
     def gpu_selection(self, vendor):
@@ -1590,10 +1786,32 @@ class Release:
 
     def nvidia_column_ok(self):
         final, out = self.linux_final(), self.rel / "smoke-linux"
-        return bool(final) and smoke_passed(out / "results.json", final) and self.gpu_column_ok(out, "cuda")
+        return (bool(final) and smoke_passed(out / "results.json", final) and self.gpu_column_ok(out, "cuda")
+                and self.plugin_installed(out / "results.json", "cuda"))
 
     def amd_column_ok(self):
-        return bool(self.linux_final()) and self.gpu_column_ok(self.rel / "column-amd", "hip")
+        out = self.rel / "column-amd"
+        if self.split:
+            # the rocm plugin publishes on its own receipt: the smoke runs on hip too
+            final = self.linux_final()
+            return (bool(final) and smoke_passed(out / "results.json", final) and self.gpu_column_ok(out, "hip")
+                    and self.plugin_installed(out / "results.json", "rocm"))
+        return bool(self.linux_final()) and self.gpu_column_ok(out, "hip")
+
+    def plugin_installed(self, results, package):
+        """With --split-linux: the receipt installed exactly this release's
+        final plugin of `package` beside the core. True for the combined layout."""
+        if not self.split:
+            return True
+        plugin = self.split_final(package)
+        return bool(plugin) and receipt_plugins(results) == {plugin.name: sha256(plugin)}
+
+    def column_wheel(self, vendor):
+        """The wheel a column's results are keyed to (ledger, reuse): the
+        combined wheel, or with --split-linux the plugin it installed."""
+        if not self.split:
+            return self.linux_final()
+        return self.split_final("cuda" if vendor == "cuda" else "rocm")
 
     def column_specs(self):
         return [("nvidia", "cuda", self.nvidia_column_ok, self.rel / "smoke-linux"),
@@ -1619,10 +1837,10 @@ class Release:
         the ledger) only for a BYTE-IDENTICAL wheel (sha256) and the same lane
         selection, its column file verified against its provenance; it is
         diffed again against this release's reference columns here."""
-        final = self.linux_final()
-        if not final or not sel_digest:
+        final, keyed = self.linux_final(), self.column_wheel(vendor)
+        if not final or not keyed or not sel_digest:
             return None
-        wsha = sha256(final)
+        wsha = sha256(keyed)
         for where, d in self.column_candidates(vendor, out.name, wsha, sel_digest):
             prov = read_json(d / "column-provenance.json") or {}
             col = d / f"column-{vendor}.json"
@@ -1630,7 +1848,9 @@ class Release:
                     or prov.get("selection_digest") != sel_digest or not col.is_file()
                     or sha256(col) != prov.get("column_sha256")):
                 continue
-            if name == "nvidia" and not smoke_passed(d / "results.json", final):
+            if self.split and prov.get("core_sha256") != sha256(final):
+                continue
+            if (name == "nvidia" or self.split) and not smoke_passed(d / "results.json", final):
                 continue
             if out.exists():
                 out.rename(out.with_name(out.name + ".failed-" + dt.datetime.now().strftime("%Y%m%d-%H%M%S")))
@@ -1649,7 +1869,7 @@ class Release:
             return doc
         return None
 
-    def column_legs(self):
+    def column_legs(self, names=("nvidia", "amd")):
         """The two GPU wheel columns as detached legs, each only when its
         record for this wheel is not already there and no PASSED column of a
         byte-identical wheel can be taken. The NVIDIA leg carries its GPU walk
@@ -1662,7 +1882,7 @@ class Release:
         refs = [a for r in self.column_refs() for a in ("--ref-column", str(r))]
         legs = []
         for name, vendor, ok, out in self.column_specs():
-            if ok():
+            if name not in names or ok():
                 continue
             sel = self.gpu_selection(vendor)
             sel_digest = selection_digest(sel)
@@ -1677,21 +1897,32 @@ class Release:
                 leg = ColumnLeg("nvidia", "cuda",
                                 ["bash", "tools/release_wheel_smoke.sh", final, "--expected-source-commit", self.commit,
                                  "--out", str(out), "--rent", "--column", str(sel), *refs,
-                                 "--gpu", walk[at]], work, out, ok)
+                                 *self.plugin_args("cuda"), "--gpu", walk[at]], work, out, ok)
                 leg.walk, leg.at = walk, at
             else:
                 leg = ColumnLeg("amd", "hip",
                                 ["bash", "tools/release_wheel_smoke.sh", final, "--expected-source-commit",
                                  self.commit, "--out", str(out), "--rent", "--vendor", "hip",
                                  "--provider", self.args.amd_provider,
-                                 "--column", str(sel), *refs],
+                                 "--column", str(sel), *refs, *self.plugin_args("rocm")],
                                 work, out, ok)
+            keyed = self.column_wheel(vendor)
             leg.provenance = dict(schema="mojolearn.release-column-provenance.v1", column=name, vendor=vendor,
-                                  wheel=final, wheel_sha256=sha256(final_path) if final_path and not self.dry else None,
+                                  wheel=str(keyed) if keyed else final,
+                                  wheel_sha256=sha256(keyed) if keyed and not self.dry else None,
                                   selection=str(sel), selection_digest=sel_digest, source_commit=self.commit,
                                   tooling_commit=self.tooling_commit, refs=[str(r) for r in self.column_refs()])
+            if self.split:
+                leg.provenance["core_sha256"] = sha256(final_path) if final_path and not self.dry else None
             legs.append(leg)
         return legs
+
+    def plugin_args(self, package):
+        """With --split-linux: `--plugin <final plugin>` for the column's smoke."""
+        if not self.split:
+            return []
+        plugin = self.split_final(package)
+        return ["--plugin", str(plugin) if plugin else f"<final {SPLIT_PACKAGES[package][1]} wheel>"]
 
     def record_column(self, name, vendor, out):
         """A PASSED column: its provenance beside it, and the ledger entry."""
@@ -1714,14 +1945,51 @@ class Release:
         never stops the other, and the step reports each. Then every column of
         this release is diffed together, so NVIDIA against AMD is checked as
         well as each against Apple."""
+        self.run_columns(("nvidia", "amd"))
+        return self.joint_diff()
+
+    def step_gpu_column_nvidia(self):
+        """--split-linux: the NVIDIA column alone (core + mojolearn-cuda); it gates mojolearn-cuda."""
+        self.run_columns(("nvidia",))
+        return "NVIDIA column PASSED: no DIVERGENT cell against " + self.ref_names()
+
+    def step_gpu_column_amd(self):
+        """--split-linux: the AMD column alone (core + mojolearn-rocm, with the smoke); it gates mojolearn-rocm."""
+        self.run_columns(("amd",))
+        return "AMD column PASSED: no DIVERGENT cell against " + self.ref_names()
+
+    def passed_columns(self):
+        """[(name, vendor, column file)] of the columns PASSED for this release's wheels."""
+        return [(name, vendor, out / f"column-{vendor}.json") for name, vendor, ok, out in self.column_specs() if ok()]
+
+    def step_linux_joint_diff(self):
+        """--split-linux: after both columns settle, at least one PASSED, and
+        every PASSED column diffed with the Apple (and CPU) column together;
+        any DIVERGENT or MOVED cell stops the core and both plugins."""
+        passed = self.passed_columns()
+        if self.dry:
+            return self.joint_diff([self.rel / "smoke-linux" / "column-cuda.json",
+                                    self.rel / "column-amd" / "column-hip.json"])
+        if not passed:
+            raise StepFailed("neither the NVIDIA nor the AMD column PASSED for this release's wheels; "
+                             "the core publishes on at least one")
+        missing = [str(r) for r in self.column_refs() if not r.is_file()]
+        if missing:
+            raise StepFailed("no reference column " + ", ".join(missing) + "; run release-check")
+        verdict = self.joint_diff([col for _, _, col in passed])
+        return verdict + " (columns " + ", ".join(n for n, _, _ in passed) + ")"
+
+    def run_columns(self, names):
+        """Launch (or take) the named columns at once, wait for every one, and
+        raise StepFailed naming each that did not PASS."""
         final = self.linux_final()
         if not final and not self.dry:
             raise StepFailed("no final Linux wheel; run linux-pack")
         missing = [str(r) for r in self.column_refs() if not r.is_file()]
         if missing and not self.dry:
             raise StepFailed("no reference column " + ", ".join(missing) + "; run release-check")
-        legs = self.column_legs()
-        for name in ("nvidia", "amd"):
+        legs = self.column_legs(names)
+        for name in names:
             if not any(l.name == name for l in legs):
                 self.say(f"  {name}: PASSED for this wheel (record exists), not rerun")
         for leg in legs:
@@ -1729,12 +1997,14 @@ class Release:
         if self.dry:
             if legs:
                 self.say(f"  would launch {', '.join(l.name for l in legs)} at once and wait for every one")
-            return self.joint_diff()
+            return None
         if legs:
             launch_detached(self, legs)
             self.wait_columns(legs)
         failed = []
         for (name, vendor, ok, out), label in zip(self.column_specs(), ("NVIDIA", "AMD")):
+            if name not in names:
+                continue
             if ok():
                 self.say(f"  {label} column: PASSED, no DIVERGENT cell against {self.ref_names()}")
                 self.record_column(name, vendor, out)
@@ -1745,7 +2015,7 @@ class Release:
             self.say(f"  {failed[-1]}")
         if failed:
             raise StepFailed("; ".join(failed) + ". Rerun `release` to relaunch the failed column(s).")
-        return self.joint_diff()
+        return True
 
     def wait_columns(self, legs):
         """Wait for every column leg; walk the NVIDIA leg to its next GPU type
@@ -1775,12 +2045,13 @@ class Release:
                                                 for l in legs))
             self.sleep(60)
 
-    def joint_diff(self):
+    def joint_diff(self, columns=None):
         """Every column of this release in ONE tools/identity_break.py --diff:
         Apple, NVIDIA, AMD (and CPU with --cpu-column). Any DIVERGENT or MOVED
-        cell stops the release; the diff is kept at <release>/diff-columns.txt."""
-        cols = self.column_refs() + [self.rel / "smoke-linux" / "column-cuda.json",
-                                     self.rel / "column-amd" / "column-hip.json"]
+        cell stops the release; the diff is kept at <release>/diff-columns.txt.
+        `columns` narrows the GPU columns (--split-linux: the PASSED ones)."""
+        cols = self.column_refs() + (columns if columns is not None else [
+            self.rel / "smoke-linux" / "column-cuda.json", self.rel / "column-amd" / "column-hip.json"])
         cmd = [PY, str(ROOT / "tools" / "identity_break.py"), "--diff", *[str(c) for c in cols]]
         path = self.rel / "diff-columns.txt"
         self.say("  $ " + " ".join(shlex.quote(c) for c in cmd) + " > " + str(path))
@@ -1794,8 +2065,10 @@ class Release:
 
     # ------------------------------------------------------------ publication
     def on_pypi(self, wheel):
-        """True when PyPI already serves this exact file (name and sha256)."""
-        url = f"https://pypi.org/pypi/mojolearn/{self.version}/json"
+        """True when PyPI already serves this exact file (name and sha256), in
+        the project the wheel's name says (mojolearn, mojolearn-cuda, mojolearn-rocm)."""
+        project = wheel.name.split("-")[0].replace("_", "-")
+        url = f"https://pypi.org/pypi/{project}/{self.version}/json"
         try:
             with urllib.request.urlopen(url, timeout=20) as r:
                 files = json.load(r).get("urls", [])
@@ -1807,13 +2080,18 @@ class Release:
     def publish(self, platform, wheel, smoke):
         """Publish ONE platform's wheel, built from the frozen source. The
         publisher runs from the tooling checkout (its tag names the tooling;
-        MOJOLEARN_ARTIFACT_SOURCE_COMMIT pins the wheel's source witness)."""
+        MOJOLEARN_ARTIFACT_SOURCE_COMMIT pins the wheel's source witness).
+        A split plugin carries no source witness: the core it was packed and
+        smoked with does, and the receipt names the plugin by sha256."""
         target = self.args.publish
         if target is None:
             raise StepHeld("publication needs an explicit --publish none|testpypi|pypi; stopping here")
-        if not self.dry and wheel and wheel_commit(wheel) != self.commit:
-            raise StepFailed(f"the {platform} wheel {wheel.name} records source {wheel_commit(wheel)}, not the frozen "
+        witness = self.linux_final() if platform in ("cuda", "rocm") else wheel
+        if not self.dry and wheel and witness and wheel_commit(witness) != self.commit:
+            raise StepFailed(f"the {platform} wheel {wheel.name} records source {wheel_commit(witness)}, not the frozen "
                              f"{self.commit}")
+        if not self.dry and platform in ("cuda", "rocm") and receipt_plugins(smoke).get(wheel.name) != sha256(wheel):
+            raise StepFailed(f"the {platform} smoke receipt {smoke} did not install {wheel.name}")
         if not self.dry and wheel and self.on_pypi(wheel):
             return "already on PyPI"
         day = dt.datetime.now(dt.timezone.utc).strftime("%Y%m%d")
@@ -1826,6 +2104,27 @@ class Release:
 
     def step_publish_linux(self):
         return self.publish("linux", self.linux_final(), self.rel / "smoke-linux" / "results.json")
+
+    def core_receipt(self):
+        """The receipt the split core publishes on: NVIDIA's when its column
+        PASSED, else AMD's (the core needs at least one vendor's smoke)."""
+        if self.nvidia_column_ok():
+            return self.rel / "smoke-linux" / "results.json"
+        if self.amd_column_ok() or self.dry:
+            return self.rel / "column-amd" / "results.json"
+        raise StepFailed("no PASSED column receipt for the core")
+
+    def step_publish_core_linux(self):
+        smoke = self.core_receipt()
+        return self.publish("linux", self.split_final("linux"), smoke), dict(smoke=str(smoke))
+
+    def step_publish_cuda(self):
+        smoke = self.rel / "smoke-linux" / "results.json"
+        return self.publish("cuda", self.split_final("cuda"), smoke), dict(smoke=str(smoke))
+
+    def step_publish_rocm(self):
+        smoke = self.rel / "column-amd" / "results.json"
+        return self.publish("rocm", self.split_final("rocm"), smoke), dict(smoke=str(smoke))
 
     def step_publish_macos(self):
         return self.publish("macos", self.macos_wheel(), self.rel / "smoke-macos" / "results.json")
@@ -1846,24 +2145,27 @@ class Release:
                    "print(mojolearn.__version__, mojolearn.vendor())"], what="import")
         return f"macOS: pip install mojolearn=={self.version} on this Mac: OK"
 
-    def finish_linux(self, venv):
+    def finish_linux(self, venv, package="linux"):
         """The Linux wheel cannot install on this Mac: pip resolves and
-        downloads it for its platform, and its bytes must be the published ones."""
-        final = self.linux_final()
+        downloads it for its platform, and its bytes must be the published ones.
+        With --split-linux `package` is linux (the core), cuda or rocm."""
+        project, prefix = SPLIT_PACKAGES[package]
+        final = self.split_final(package) if self.split else self.linux_final()
         plat = final.name[:-4].split("-")[-1] if final else "manylinux_2_35_x86_64"
-        dest = self.rel / "finish-linux"
+        dest = self.rel / ("finish-linux" if package == "linux" else f"finish-{package}")
+        label = "Linux" if package == "linux" else project
         for attempt in range(1, 7):
             if dest.exists() and not self.dry:
                 shutil.rmtree(dest)
             rc = self.run([venv / "bin" / "pip", "download", "--no-cache-dir", "--no-deps", "--only-binary=:all:",
                            "--platform", plat, "--python-version", "3.12", "-d", dest,
-                           f"mojolearn=={self.version}"], log=self.rel / f"finish-linux-{attempt}.log")
-            got = sorted(dest.glob("mojolearn-*.whl")) if not self.dry else []
+                           f"{project}=={self.version}"], log=self.rel / f"finish-{package}-{attempt}.log")
+            got = sorted(dest.glob(f"{prefix}-*.whl")) if not self.dry else []
             if self.dry or (rc == 0 and final and len(got) == 1 and sha256(got[0]) == sha256(final)):
-                return f"Linux: pip resolves mojolearn=={self.version} for {plat}; bytes are the published wheel's"
+                return f"{label}: pip resolves {project}=={self.version} for {plat}; bytes are the published wheel's"
             self.say(f"  pip download failed or differs (attempt {attempt}/6)")
             self.sleep(30)
-        raise StepFailed(f"pip download mojolearn=={self.version} for {plat} failed or differs six times")
+        raise StepFailed(f"pip download {project}=={self.version} for {plat} failed or differs six times")
 
     def step_finish_line(self):
         if self.args.publish != "pypi":
@@ -1875,8 +2177,9 @@ class Release:
         if venv.exists() and not self.dry:
             shutil.rmtree(venv)
         self.must([self.smoke_python() if not self.dry else "python3.12", "-m", "venv", venv], what="venv")
-        done = [self.finish_macos(venv) if p == "macos" else self.finish_linux(venv) for p in published]
-        pending = [PIPELINES[p]["platform"] for p in PIPELINES if PIPELINES[p]["platform"] not in published]
+        done = [self.finish_macos(venv) if p == "macos" else self.finish_linux(venv, p) for p in published]
+        pending = [self.PIPELINES[p]["platform"] for p in self.PIPELINES
+                   if self.PIPELINES[p]["platform"] not in published]
         return "; ".join(done) + (f"; not yet published: {', '.join(pending)}" if pending else ""), \
             dict(platforms=published)
 
@@ -1913,9 +2216,11 @@ class Release:
         rec.mkdir(parents=True, exist_ok=True)
         for platform in published:
             art = self.rel / f"publish-{platform}"
+            smoke = (self.recorded(self.publish_step(platform)) or {}).get("smoke") \
+                or self.rel / f"smoke-{platform}" / "results.json"
             for src, name in ((art / "artifact" / "alpha-manifest.json", f"alpha-manifest-{platform}.json"),
                               (art / "file-admission.json", f"file-admission-{platform}.json"),
-                              (self.rel / f"smoke-{platform}" / "results.json", f"light-smoke-{platform}.json")):
+                              (Path(smoke), f"light-smoke-{platform}.json")):
                 if src.is_file():
                     shutil.copy2(src, rec / name)
         (rec / "README.md").write_text(self.readme())
@@ -1923,8 +2228,10 @@ class Release:
         # The identity of every shipped binding and what it shipped as, so the
         # next release decides REUSE or BUILD from this record alone (the
         # Apple toolchain that built the macOS wheel included).
-        release_reuse.record_identities(self.plan(), self.linux_final() if "linux" in published else None,
-                                        self.macos_wheel() if "macos" in published else None,
+        linux = self.linux_final() if "linux" in published else None
+        if self.split:
+            linux = [self.split_final(k) for k in SPLIT_PACKAGES if k in published]
+        release_reuse.record_identities(self.plan(), linux, self.macos_wheel() if "macos" in published else None,
                                         rec / "binding-identities.json")
         self.must(["git", "-C", ROOT, "add", "--", rec], what="git add record")
         self.must(["git", "-C", ROOT, "commit", "-q", "-m",
@@ -1939,6 +2246,22 @@ class Release:
         self.must(["git", "-C", ROOT, "push", "origin", f"HEAD:refs/heads/{branch}"], what="git push record")
         return str(rec.relative_to(ROOT)) + f" ({', '.join(published)}) committed on " + branch, \
             dict(platforms=published)
+
+    def publish_step(self, platform):
+        """The publish step of the pipeline whose platform is `platform`."""
+        return next(p["publish"] for p in self.PIPELINES.values() if p["platform"] == platform)
+
+    def platform_wheels(self):
+        """[(platform, wheel, smoke receipt)] of every wheel this release publishes."""
+        if not self.split:
+            return [("linux", self.linux_final(), self.rel / "smoke-linux" / "results.json"),
+                    ("macos", self.macos_wheel(), self.rel / "smoke-macos" / "results.json")]
+        rows = []
+        for platform in ("linux", "cuda", "rocm"):
+            smoke = (self.recorded(self.publish_step(platform)) or {}).get("smoke") or (
+                self.rel / ("column-amd" if platform == "rocm" else "smoke-linux") / "results.json")
+            rows.append((platform, self.split_final(platform), Path(smoke)))
+        return rows + [("macos", self.macos_wheel(), self.rel / "smoke-macos" / "results.json")]
 
     def readme(self):
         check = self.release_check_dir()
@@ -1963,16 +2286,17 @@ class Release:
         summary = [ln for ln in diff.splitlines() if ln.startswith("summary")]
         wheels = []
         published = self.published_platforms()
-        for platform, wheel, smoke in (("linux", self.linux_final(), "smoke-linux"),
-                                       ("macos", self.macos_wheel(), "smoke-macos")):
+        for platform, wheel, smoke in self.platform_wheels():
             if not wheel:
                 continue
             try:
-                r = json.loads((self.rel / smoke / "results.json").read_text())
+                r = json.loads(Path(smoke).read_text())
             except (OSError, ValueError):
                 r = {}
-            tag = self.recorded(f"publish-{platform}") or {}
+            tag = self.recorded(self.publish_step(platform)) or {}
             plat = wheel.name.split("-", 4)[-1][:-4]
+            if wheel.name.split("-")[0] != "mojolearn":
+                plat = wheel.name.split("-")[0].replace("_", "-") + " " + plat
             wheels.append(f"| {plat} | {sha256(wheel)} | {r.get('status', '?')}, {len(r.get('jobs', []))} jobs "
                           f"| {tag.get('result', '?') if platform in published else 'not yet published'} |")
         date = changelog_date(ROOT, self.version, text=file_at(self.commit, "CHANGELOG.md") or "")
@@ -2038,7 +2362,7 @@ class Release:
         events = queue.Queue()
 
         def worker(step):
-            self._tl.tag = PIPELINE_OF[step] if PIPELINE_OF[step] in PIPELINES else ""
+            self._tl.tag = self.PIPELINE_OF[step] if self.PIPELINE_OF[step] in self.PIPELINES else ""
             try:
                 events.put((step, self.run_step(step)))
             except BaseException as exc:  # run_step never raises; this is a last resort
@@ -2052,7 +2376,7 @@ class Release:
                 for s in self.STEPS:
                     if status[s] != "pending":
                         continue
-                    bad = [d for d in NEEDS[s] if status[d] in ("failed", "held", "blocked")]
+                    bad = [d for d in self.NEEDS[s] if status[d] in ("failed", "held", "blocked")]
                     if bad:
                         status[s] = "blocked"
                         self.blocked_by[s] = bad[0]
@@ -2060,11 +2384,11 @@ class Release:
             for s in self.STEPS:
                 if status[s] != "pending":
                     continue
-                if any(status[d] not in ("done", "skipped") for d in NEEDS[s]):
+                if any(status[d] not in ("done", "skipped") for d in self.NEEDS[s]):
                     continue
-                if any(status[d] in ("pending", "running") for d in AFTER.get(s, ())):
+                if any(status[d] in ("pending", "running") for d in self.AFTER.get(s, ())):
                     continue
-                res = RESOURCE[s]
+                res = self.RESOURCE[s]
                 if res and res in busy:
                     continue
                 status[s] = "running"
@@ -2078,18 +2402,19 @@ class Release:
                 return status
             step, outcome = events.get()
             status[step] = outcome
-            busy.discard(RESOURCE[step])
+            busy.discard(self.RESOURCE[step])
 
     def report(self, status):
         """Both outcomes, one line each, and what a rerun does."""
         self.say("== pipelines")
         for s in self.STEPS:
-            if PIPELINE_OF[s] == "common" and status[s] in ("failed", "held"):
+            if self.PIPELINE_OF[s] == "common" and status[s] in ("failed", "held"):
                 self.say(f"   common: {status[s].upper()} at {s}: {self.errors.get(s, '')}")
         lines = []
-        for name, p in PIPELINES.items():
-            steps = [s for s in self.STEPS if PIPELINE_OF[s] == name] + \
-                [d for s in self.STEPS if PIPELINE_OF[s] == name for d in NEEDS[s] if PIPELINE_OF[d] not in (name, "common")]
+        for name, p in self.PIPELINES.items():
+            steps = [s for s in self.STEPS if self.PIPELINE_OF[s] == name] + \
+                [d for s in self.STEPS if self.PIPELINE_OF[s] == name for d in self.NEEDS[s]
+                 if self.PIPELINE_OF[d] not in (name, "common")]
             pub = p["publish"]
             if status[pub] == "done" and self.recorded(pub):
                 line = f"{name}: PUBLISHED ({self.recorded(pub).get('result', '')})"
@@ -2145,7 +2470,8 @@ class Release:
         if self.dry:
             for step in steps:
                 self.run_step(step)
-            self.say("== end of plan (the macos and linux pipelines run at once in a real run; see --status)")
+            self.say("== end of plan (the " + " and ".join(self.PIPELINES)
+                     + " pipelines run at once in a real run; see --status)")
             return 0
         status = self.schedule(steps)
         ok = self.report(status)
@@ -2169,7 +2495,7 @@ class Release:
                 if sorted(rec.get("platforms", [])) != sorted(self.published_platforms()):
                     return "run it again for the newly published platform(s)"
             return "skip"
-        missing = [d for d in NEEDS[step] if states.get(d) != "done"]
+        missing = [d for d in self.NEEDS[step] if states.get(d) != "done"]
         if st == "held":
             return "run it again (with --publish)"
         if st == "failed":
@@ -2211,8 +2537,9 @@ class Release:
         if leg.exit_code() is not None:
             return "failed", f"exit {leg.exit_code()}, log {leg.log}", "relaunch it (the failed attempt is moved aside)"
         sel = selection_digest(self.rel / f"selection-{vendor}.json")
-        if final and sel:
-            e = self.ledger().get(release_ledger.column_key(vendor, sha256(final), sel))
+        keyed = self.column_wheel(vendor)
+        if final and keyed and sel:
+            e = self.ledger().get(release_ledger.column_key(vendor, sha256(keyed), sel))
             if e and e.get("verdict") == "PASS":
                 return "owed", f"ledger PASS for this wheel at {(e.get('evidence') or {}).get('dir')}", \
                     "take it if its evidence verifies here, else launch it"
@@ -2248,11 +2575,11 @@ class Release:
                 say(f"{indent}{'':<18} {'':<8} rerun: {action}")
                 actions.append(f"{step}: {action}")
 
-        for group, title in (("common", "common"), ("macos", "macos pipeline"), ("linux", "linux pipeline"),
-                             ("finish", "finish")):
+        groups = [("common", "common")] + [(p, p + " pipeline") for p in self.PIPELINES] + [("finish", "finish")]
+        for group, title in groups:
             say(f"-- {title}")
             for step in self.STEPS:
-                if PIPELINE_OF[step] != group:
+                if self.PIPELINE_OF[step] != group:
                     continue
                 st, detail = self.step_state(step)
                 row(step, st, detail, self.rerun_action(step, st, states))
@@ -2265,13 +2592,16 @@ class Release:
                     else:
                         for name in plan["legs"]:
                             row(name, *self.leg_status(name), indent="      ")
-                if step == "gpu-columns" and c:
+                shown = {"gpu-columns": ("nvidia", "amd"), "gpu-column-nvidia": ("nvidia",),
+                         "gpu-column-amd": ("amd",)}.get(step)
+                if shown and c:
                     for name, vendor, ok, out in self.column_specs():
-                        row(name, *self.column_status(name, vendor, ok, out), indent="      ")
+                        if name in shown:
+                            row(name, *self.column_status(name, vendor, ok, out), indent="      ")
         summary = []
-        for name, p in PIPELINES.items():
-            steps = [s for s in self.STEPS if PIPELINE_OF[s] == name or any(
-                s in NEEDS[t] and PIPELINE_OF[t] == name for t in self.STEPS)]
+        for name, p in self.PIPELINES.items():
+            steps = [s for s in self.STEPS if self.PIPELINE_OF[s] == name or any(
+                s in self.NEEDS[t] and self.PIPELINE_OF[t] == name for t in self.STEPS)]
             bad = next((s for s in steps if states[s] in ("failed", "held")), None)
             if states[p["publish"]] == "done":
                 summary.append(f"{name}: published")
@@ -2346,6 +2676,13 @@ def main(argv=None):
     ap.add_argument("--amd-build-provider", default=None, choices=list(AMD_BUILD_PROVIDERS),
                     help="where the AMD build leg rents: auto = DigitalOcean MI325X, Hot Aisle 1x MI300X when "
                          "DigitalOcean has a GPU droplet live (default MOJOLEARN_AMD_PROVIDER, else auto)")
+    layout_flag = ap.add_mutually_exclusive_group()
+    layout_flag.add_argument("--split-linux", dest="split_linux", action="store_true", default=None,
+                             help="publish Linux as the split packages mojolearn, mojolearn-cuda and mojolearn-rocm "
+                                  f"(also {SPLIT_LINUX_ENV}=1); OFF by default until both PyPI projects are "
+                                  "registered with their trusted publishers (docs/RELEASE_CHECKLIST.md 3b)")
+    layout_flag.add_argument("--combined-linux", dest="split_linux", action="store_false",
+                             help="publish Linux as the one combined wheel (the default)")
     ap.add_argument("--state-dir", default="", help=argparse.SUPPRESS)
     args = ap.parse_args(argv)
     if not VERSION_RE.match(args.version):

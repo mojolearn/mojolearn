@@ -379,7 +379,7 @@ python3 tools/strip_wheel_dir_entries.py <dist>/audit/repaired/mojolearn-*-manyl
 ### 3b. The split Linux packages (the packer's default profile)
 
 `release-linux3` above packs the ONE combined wheel and is what
-`tools/release.py` asks for. The packer's default is the split
+`tools/release.py` asks for by default; `--split-linux` asks for `release-split`. The packer's default is the split
 (`python/mojolearn/gpu_plugins.py`), three PyPI projects released in lockstep
 so NVIDIA and AMD can ship independently:
 
@@ -407,12 +407,65 @@ pixi run -e pkg pack-linux-wheel --profile release-split --wheels core-linux,cud
 python3 tools/wheel_api_audit.py --split --require-complete <dist>/*.whl
 ```
 
-`packaging/linux/audit.sh` runs once per wheel (a plugin's DT_NEEDED runtime
-is in the core, so pass every manifest for the `--exclude` list). Owed before
-the first split upload: the PyPI projects `mojolearn-cuda` and
-`mojolearn-rocm` registered by the owner with trusted publishing configured
-for this repository, and the release workflow's Linux admission (one staged
-`mojolearn-*.whl` today) taught to stage the plugin wheels.
+`packaging/linux/audit.sh` runs once per wheel, the core first, all into one
+`audit/` directory. A plugin's bindings NEED the MAX runtime that only the core
+ships (`mojolearn/.libs/`), so for a plugin the script reads those library
+names from the core wheel beside it and adds them to the `--exclude` list (it
+refuses a plugin with no core beside it); the manifests still supply the
+driver libraries. The core's logs keep their names (`show.txt`, `repair.txt`,
+`twine.txt`), a plugin's are `show-mojolearn_cuda.txt` and so on, and any
+top-level `*.libs/` directory in a repaired wheel fails the run.
+
+Publishing the split packages with `pixi run release <version> --split-linux`
+(or `MOJOLEARN_RELEASE_SPLIT_LINUX=1`; the default stays the combined wheel)
+works like this. `linux-pack` packs `--profile release-split`, audits and strips each wheel and
+runs `split_audit` on the final set; the NVIDIA column installs the core with
+`mojolearn-cuda` and the AMD column the core with `mojolearn-rocm` (the
+expanded smoke runs on the AMD box too, so each plugin has a receipt of its own
+vendor); `linux-joint-diff` diffs every PASSED column with the Apple column;
+then `publish-core-linux` (on either vendor's receipt), `publish-cuda` (NVIDIA
+column) and `publish-rocm` (AMD column) are three GitHub releases and three
+dispatches, and a plugin publishes only after the core. A failed AMD column
+holds `mojolearn-rocm` alone; a DIVERGENT cell holds all three. The same set
+can go through the full route by staging it in `~/.mojolearn-linux-wheel`
+(core, plugins, each with its `.sha256` sidecar); installed qualification of
+a split set is checked on the whole set,
+`tools/check_linux_release_qualification.py <core> <plugins> --profile release-split`,
+whose records name the set digest (sha256 over the sorted `<file> <sha256>`
+lines) where a combined qualification names the wheel's sha256.
+
+#### Registering mojolearn-cuda and mojolearn-rocm on PyPI
+
+Once, by the owner of the `mojolearn` PyPI account, before the first
+`--split-linux` release. Nothing in the repository changes afterwards.
+
+1. **PyPI pending publishers** (this also reserves the names). At
+   https://pypi.org/manage/account/publishing/ add a GitHub pending publisher
+   twice:
+
+   | PyPI project name | Owner | Repository name | Workflow name | Environment name |
+   |---|---|---|---|---|
+   | `mojolearn-cuda` | `mojolearn` | `mojolearn` | `release-provenance.yml` | `pypi-cuda` |
+   | `mojolearn-rocm` | `mojolearn` | `mojolearn` | `release-provenance.yml` | `pypi-rocm` |
+
+2. **TestPyPI**, the same at https://test.pypi.org/manage/account/publishing/
+   with environments `testpypi-cuda` and `testpypi-rocm`.
+3. **GitHub environments.** In the repository's Settings, Environments, create
+   `pypi-cuda`, `pypi-rocm`, `testpypi-cuda` and `testpypi-rocm`, with the
+   same protection rules (required reviewers, deployment branches and tags)
+   as `pypi` and `testpypi`. A job naming a missing environment would create
+   it unprotected on first use, so create them first.
+4. Leave the `mojolearn` project's publisher as it is (environments `pypi`
+   and `testpypi`), since it still uploads the macOS wheel and the Linux core.
+
+Each project trusts exactly one (workflow, environment) pair, and the workflow
+uploads each project from its own job in that environment
+(`publish`/`publish_alpha` for `mojolearn`, the matrix jobs
+`publish_plugins`/`publish_alpha_plugins` for the plugins), so an OIDC token
+minted for one project can never upload another. A pending publisher turns
+into the project on the first successful upload; until then the plugin jobs
+fail with an `invalid-publisher` error and nothing else is affected. A first
+`--split-linux --publish testpypi` run proves the whole path before PyPI.
 
 ## 4. Install and test on real GPUs (OPTIONAL, never required for a release)
 
