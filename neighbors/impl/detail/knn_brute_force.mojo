@@ -205,6 +205,11 @@ from neighbors.impl.detail.fused_l2_knn import (
     fused_l2_knn,
     fused_l2_knn_grid,
 )
+from neighbors.impl.detail.fast_mma_knn import (
+    FAST_MMA_KNN_ENABLED,
+    fast_mma_knn,
+    fast_mma_knn_applies,
+)
 from neighbors.impl.detail.fast_topk_knn import (
     FAST_TOPK_KNN_ENABLED,
     fast_topk_knn,
@@ -411,7 +416,17 @@ def tiled_distance_tile_cells(
 ) -> Int:
     """The distance tile a request allocates: one cell when the fused launch
     (DEVIATION 2667) serves every column tile, which writes no matrix, else
-    `query_tile x identical_index_tile(n_index)`. `metric` is resolved."""
+    `query_tile x identical_index_tile(n_index)`. `metric` is resolved.
+    FAST on Apple: one cell when the simdgroup-matrix arm serves the request
+    (every caller passes row-major operands, the arm's only other test)."""
+    comptime if FAST_MMA_KNN_ENABLED:
+        if (
+            metric == DIST_L2_UNEXPANDED
+            or metric == DIST_L2_SQRT_UNEXPANDED
+            or metric == DIST_L2_EXPANDED
+            or metric == DIST_L2_SQRT_EXPANDED
+        ) and fast_mma_knn_applies(n_features, k):
+            return 1
     if fused_select_applies(n_index, n_features, k, metric, False):
         return 1
     if block_topk_applies(n_index, n_features, k, metric, False):
@@ -1729,6 +1744,26 @@ def brute_force_knn_impl(
     var mtr = resolve_metric(metric, is_sqrt)
 
     # THEIR FOURTH CONDITION, `:444-447`, as a value test.
+    # FAST on Apple, k <= 32: the simdgroup-matrix arm
+    # (neighbors/impl/detail/fast_mma_knn.mojo).
+    comptime if FAST_MMA_KNN_ENABLED:
+        if (
+            (
+                mtr == DIST_L2_UNEXPANDED
+                or mtr == DIST_L2_SQRT_UNEXPANDED
+                or mtr == DIST_L2_EXPANDED
+                or mtr == DIST_L2_SQRT_EXPANDED
+            )
+            and row_major_query
+            and row_major_index
+            and fast_mma_knn_applies(n_features, k)
+        ):
+            fast_mma_knn(
+                ctx, queries, index, out_dist, out_idx, n_queries, n_index,
+                n_features, k,
+                mtr == DIST_L2_SQRT_UNEXPANDED or mtr == DIST_L2_SQRT_EXPANDED,
+            )
+            return
     # FAST on Apple: fused distance + top-k, no distance tile
     # (neighbors/impl/detail/fast_topk_knn.mojo).
     comptime if FAST_TOPK_KNN_ENABLED:
