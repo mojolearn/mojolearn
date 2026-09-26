@@ -10,19 +10,18 @@ ROOT = Path(__file__).resolve().parents[1]
 #: TREE lanes (gbdt, rf, trees) build in EVERY tier (DEVIATION 2490,
 #: 2026-09-10). CLASSICAL ML (2026-09-25) builds FAST and IDENTICAL, never
 #: deterministic: FAST_CLASSICAL_NAMES / FAST_CLASSICAL_SCRIPTS. The neural
-#: lanes and svm build IDENTICAL only: IDENTICAL_ONLY_NAMES /
-#: IDENTICAL_ONLY_SCRIPTS (FAST svm ships on Apple only; its Linux list is
-#: identical only). Cross-vendor bitwise identity is the product; a fast tier
+#: lanes build IDENTICAL only: IDENTICAL_ONLY_NAMES / IDENTICAL_ONLY_SCRIPTS.
+#: Cross-vendor bitwise identity is the product; a fast tier
 #: ships only where it has a measured win over the opponent's own CPU
 #: (python/mojolearn/_backend.py, `_TIERED`). These tests are what keeps a
 #: later edit from quietly moving a lane into a tier it does not belong in.
 EVERY_TIER = 3
-#: 14 since classical FAST (2026-09-25): _mojolearn, estimators, solver,
+#: 14 at classical FAST (2026-09-25): _mojolearn, estimators, solver,
 #: metrics, preprocessing, tsa, linalg, arima, gp, kernel_methods, mixture,
-#: hdbscan, resample, ivf.
-FAST_CLASSICAL = 14
-#: training, mamba, transformer, embedding, svm.
-IDENTICAL_ONLY = 5
+#: hdbscan, resample, ivf; 15 when svm joined them on Linux.
+FAST_CLASSICAL = 15
+#: training, mamba, transformer, embedding (the neural lanes).
+IDENTICAL_ONLY = 4
 FAST_ROW = EVERY_TIER + FAST_CLASSICAL
 IDENTICAL_ROW = EVERY_TIER + IDENTICAL_ONLY + FAST_CLASSICAL
 
@@ -89,11 +88,11 @@ class OptionalBuildLayoutTests(unittest.TestCase):
             for entry in classical:
                 self.assertNotIn(entry, deterministic, helper)
                 self.assertIn(entry, identical, helper)
-            # FAST svm is Apple-only: on Linux svm builds in identical alone.
-            for row, tier in ((fast, 'fast'), (deterministic, 'deterministic')):
-                self.assertFalse(any('svm' in entry for entry in row),
-                                 f'svm must not build in {tier} on Linux: {row}')
-            self.assertTrue(any('svm' in entry for entry in identical), identical)
+            # the identical-only lanes sit in neither lower tier
+            only = identical[EVERY_TIER:EVERY_TIER + IDENTICAL_ONLY]
+            for entry in only:
+                self.assertNotIn(entry, fast, helper)
+                self.assertNotIn(entry, deterministic, helper)
 
     def test_no_neural_binding_outside_identical(self):
         for helper in ('tier_names', 'tier_scripts'):
