@@ -51,18 +51,18 @@ On the benchmark Mac, inside `tmux`, run the plan and then the board.
 
 ```sh
 cd ~/mojolearn-board
-python3 tools/bench_board.py --dry-run --mojolearn-version 0.8.18
-python3 tools/bench_board.py --mojolearn-version 0.8.18 \
+python3 tools/bench_board.py --dry-run --mojolearn-version 0.8.22
+python3 tools/bench_board.py --mojolearn-version 0.8.22 \
     --base-python /opt/homebrew/bin/python3.12 \
-    --out ~/board-runs/apple-0.8.18 --cache ~/board-cache \
-    2>&1 | tee -a ~/board-runs/apple-0.8.18.log
+    --out ~/board-runs/apple-0.8.22 --cache ~/board-cache \
+    2>&1 | tee -a ~/board-runs/apple-0.8.22.log
 ```
 
 If the run stops, rerun the same command. Back on the orchestrator, fetch the
 result:
 
 ```sh
-rsync -a bench@bench-mac:board-runs/apple-0.8.18/ "$HOME/mojolearn-evidence/bench-board/apple-0.8.18/"
+rsync -a bench@bench-mac:board-runs/apple-0.8.22/ "$HOME/mojolearn-evidence/bench-board/apple-0.8.22/"
 ```
 
 ## NVIDIA leg (DigitalOcean H100)
@@ -78,7 +78,7 @@ subset there.
 MOJOLEARN_DO_TOKEN_FILE=$HOME/.mojolearn_do_token \
 MOJOLEARN_GEMM_LEG_EXTRA=tools/bench_board_leg.sh \
 MOJOLEARN_GEMM_LEG_OUT=$HOME/mojolearn-evidence/bench-board/$(date -u +%Y-%m-%d_%H%M%S)-nvidia-h100 \
-MOJOLEARN_DO_EXTRA_ENV='MOJOLEARN_BOARD_VERSION=0.8.18' \
+MOJOLEARN_DO_EXTRA_ENV='MOJOLEARN_BOARD_VERSION=0.8.22' \
 bash tools/do_extra_leg.sh nv --segment-lease 720 --dollar-cap 60 --skip-gates
 ```
 
@@ -95,7 +95,7 @@ builds a Python 3.12 venv, because the pinned torch ROCm wheels are cp312.
 MOJOLEARN_HOTAISLE_SPEC=13core MOJOLEARN_HOTAISLE_LANE=bench-board \
 MOJOLEARN_GEMM_LEG_EXTRA=tools/bench_board_leg.sh \
 MOJOLEARN_GEMM_LEG_OUT=$HOME/mojolearn-evidence/bench-board/$(date -u +%Y-%m-%d_%H%M%S)-amd-mi300x \
-MOJOLEARN_HOTAISLE_EXTRA_ENV='MOJOLEARN_BOARD_VERSION=0.8.18' \
+MOJOLEARN_HOTAISLE_EXTRA_ENV='MOJOLEARN_BOARD_VERSION=0.8.22' \
 bash tools/hotaisle_leg.sh amd --rent --segment-lease 900 --dollar-cap 60 --skip-gates
 ```
 
@@ -115,7 +115,7 @@ Values contain no spaces, and lists are separated by commas.
 | `MOJOLEARN_BOARD_OUT`, `MOJOLEARN_BOARD_CACHE` | result directory (fetched) and cache (not fetched) |
 
 A smoke leg, for example:
-`MOJOLEARN_DO_EXTRA_ENV='MOJOLEARN_BOARD_VERSION=0.8.18 MOJOLEARN_BOARD_ROWS=20000 MOJOLEARN_BOARD_ROUNDS=1 MOJOLEARN_BOARD_LANES=rf,kmeans'`.
+`MOJOLEARN_DO_EXTRA_ENV='MOJOLEARN_BOARD_VERSION=0.8.22 MOJOLEARN_BOARD_ROWS=20000 MOJOLEARN_BOARD_ROUNDS=1 MOJOLEARN_BOARD_LANES=rf,kmeans'`.
 
 ## Reading the board
 
