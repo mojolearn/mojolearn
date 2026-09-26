@@ -22,9 +22,11 @@ comptime UMAP_INIT_TOL_FAST = (
     and has_apple_gpu_accelerator()
     and not is_defined["MOJOLEARN_UMAP_INIT_TOL_OFF"]()
 )
-"""FAST on Apple: the spectral INITIALIZATION solves to 1e-4 (umap-learn's
-own `eigsh(..., tol=1e-4)` for this step) instead of cuVS's 1e-5; the layout
-is only a starting point the optimizer then moves."""
+"""FAST on Apple: the spectral INITIALIZATION solves to 1e-3 instead of
+cuVS's 1e-5; the layout is only a starting point the optimizer then moves.
+At 1e-4 (umap-learn's `eigsh` tolerance) taxi 100k took 37 Lanczos restarts,
+at 1e-3 six, and the final embedding's trustworthiness (k = 15) moved by
+-0.003 to +0.02 over four seeds and sizes, inside the seed-to-seed spread."""
 from umap.graph import FuzzySimplicialGraph
 
 
@@ -116,7 +118,7 @@ def spectral_initialize_coo(
     var n_out: Int
     comptime if UMAP_INIT_TOL_FAST:
         var cp = to_cuvs(config)
-        cp.tolerance = Float32(1e-4)
+        cp.tolerance = Float32(1e-3)
         n_out = transform_graph(ctx, cp, graph, embedding, trace)
     else:
         n_out = transform_connectivity(ctx, config, graph^, embedding, trace)
