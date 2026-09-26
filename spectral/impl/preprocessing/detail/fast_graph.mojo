@@ -33,6 +33,7 @@ COO stages). `-D MOJOLEARN_SPECTRAL_GRAPH_FAST_OFF` keeps the host path.
 
 from std.atomic import Atomic
 from std.gpu import block_dim, block_idx, thread_idx
+from std.gpu.primitives.warp import prefix_sum as _warp_prefix_sum
 from std.bit import pop_count
 from std.memory import bitcast, stack_allocation
 from std.sys.compile import is_defined
@@ -59,7 +60,7 @@ comptime FG_TPB = 256
 comptime FG_SCAN_TPB = 1024
 #: rows up to this many columns are assembled from two threadgroup bitmaps
 #: (the row's own neighbors, and the rows that list it) instead of sorts
-comptime FG_BM_WORDS = 3072
+comptime FG_BM_WORDS = 4000
 comptime FG_BM_MAX_N = FG_BM_WORDS * 32
 
 
@@ -454,7 +455,7 @@ def fg_bm_row_kernel[write: Bool](
         FG_BM_WORDS, Scalar[DType.int32], address_space = AddressSpace.SHARED
     ]()
     var sc = stack_allocation[
-        FG_SORT_TPB, Scalar[DType.int32], address_space = AddressSpace.SHARED
+        FG_SORT_TPB // 32, Scalar[DType.int32], address_space = AddressSpace.SHARED
     ]()
     var w = t
     while w < nw:
@@ -495,22 +496,24 @@ def fg_bm_row_kernel[write: Bool](
             u |= dbit
         cnt += Int32(pop_count(u))
         w += 1
-    sc[t] = cnt
+    # two-level scan: within each simdgroup, then over the 32 group totals
+    var incl = _warp_prefix_sum(cnt)
+    var lane = t % 32
+    var wid = t // 32
+    if lane == 31:
+        sc[wid] = incl
     barrier()
-    var off = 1
-    while off < FG_SORT_TPB:
-        var v = sc[t]
-        if t >= off:
-            v += sc[t - off]
-        barrier()
-        sc[t] = v
-        barrier()
-        off *= 2
+    if wid == 0:
+        var tot = sc[lane]
+        var winc = _warp_prefix_sum(tot)
+        sc[lane] = winc - tot
+    barrier()
+    var before = sc[wid] + incl - cnt
     comptime if not write:
         if t == FG_SORT_TPB - 1:
-            lens[row] = sc[t]
+            lens[row] = before + cnt
     else:
-        var pos = Int(lens[row]) + Int(sc[t] - cnt)
+        var pos = Int(lens[row]) + Int(before)
         w = w0
         while w < w1:
             var ua = bitcast[DType.uint32](bma[w])
