@@ -216,7 +216,10 @@ def portable_expf(x: Float32) -> Float32:
     var k1 = k >> 1
     var k2 = k - k1
     y = y * bitcast[DType.float32](UInt32((k1 + 127) << 23))
-    y = y * bitcast[DType.float32](UInt32((k2 + 127) << 23))
+    # Pinned: every `portable_expf(..) + 1` caller (sigmoid, silu, tanh,
+    # softplus) had this exact power-of-two scaling fused into its add by the
+    # default build (lane/pinned-mul-contract-free, 2026-09-26).
+    y = pinned_mul_f32(y, bitcast[DType.float32](UInt32((k2 + 127) << 23)))
     if y < Float32(1.1754943508222875e-38):
         return Float32(0.0)
     return y

@@ -350,7 +350,7 @@ def cmd_compare(ns):
 # (builds made with `build --debug`, which carry `.loc` line tables)
 
 FILE_DIR = re.compile(r'^\s*\.file\s+(\d+)\s+"([^"]*)"(?:\s+"([^"]*)")?')
-LOC_DIR = re.compile(r"^\s*\.loc\s+(\d+)\s+(\d+)")
+LOC_DIR = re.compile(r"^\s*\.loc\s+(\d+)\s+(\d+)(?:\s+\d+)?(?:.*?inlined_at\s+(\d+)\s+(\d+))?")
 
 
 def _loc_counts(text, kind):
@@ -363,6 +363,7 @@ def _loc_counts(text, kind):
             n, a, b = m.groups()
             files[n] = os.path.join(a, b) if b else a
     cur = ("?", 0)
+    home = None
     fused = {}
     pairs = {}
     plain_mul = {}
@@ -372,7 +373,22 @@ def _loc_counts(text, kind):
         m = LOC_DIR.match(line)
         if m:
             cur = (files.get(m.group(1), m.group(1)), int(m.group(2)))
+            # A line in the stdlib or MAX inlined into ours is charged to OUR
+            # call site: that is where a rewrite goes.
+            if m.group(3) and not _in_repo(cur[0]):
+                at = (files.get(m.group(3), m.group(3)), int(m.group(4)))
+                if _in_repo(at[0]):
+                    cur = at
+            if _in_repo(cur[0]) and cur[1] > 0:
+                home = cur
+            elif home is not None:
+                # line 0 (compiler-made) or a frame outside the repo with no
+                # repo call site: charge the last repo line of this function
+                cur = (home[0], home[1])
             continue
+        if re.match(r"^\s*(?:\.visible\s+)?\.(entry|func)\b", line) or (kind != "ptx" and LABEL.match(line)
+                                                                        and not line.startswith(("L", ".L", "\"L"))):
+            home = None
         if rx.match(line):
             fused[cur] = fused.get(cur, 0) + 1
             continue
@@ -396,6 +412,59 @@ def _loc_counts(text, kind):
     return fused, pairs
 
 
+def _in_repo(path):
+    p = str(path)
+    if p.startswith("./"):
+        p = p[2:]
+    if p.startswith(str(REPO) + "/"):
+        return True
+    return not p.startswith(("oss/", "max/", "/")) and (REPO / p).exists()
+
+
+_DEF = re.compile(r"^\s*def\s+(\w+)")
+_def_cache = {}
+
+
+def _enclosing_def(path, line):
+    """The name of the `def` whose body holds source line `line` (by indentation)."""
+    p = path[2:] if path.startswith("./") else path
+    if p not in _def_cache:
+        try:
+            _def_cache[p] = (REPO / p).read_text(errors="replace").splitlines()
+        except OSError:
+            _def_cache[p] = None
+    src = _def_cache[p]
+    if not src or line <= 0 or line > len(src):
+        return "?"
+    for i in range(line - 1, -1, -1):
+        m = _DEF.match(src[i])
+        if m:
+            return m.group(1)
+    return "?"
+
+
+# Sources compiled into an IDENTICAL binding but reachable only under FAST: the
+# launch sits behind a runtime `if` on a comptime FAST-only constant, so the
+# kernel is emitted and never run. (file, enclosing def or "*", the gate.)
+# A site here is reported as FAST-ONLY and does not fail the verdict; a new
+# entry needs the gate named and checked by hand.
+FAST_ONLY = [
+    ("cholesky/checks/fast_trsm.mojo", "*", "FAST_CHO_SOLVE / CHOL_FAST_APPLE (NUMERIC_FAST)"),
+    ("max/kernels/src/linalg/", "*", "MAX linalg, whose only importer in a binding is cholesky/checks/fast_trsm.mojo"),
+    ("hierarchy/impl/cluster/detail/fast_boruvka.mojo", "*", "SL_FAST_BORUVKA (NUMERIC_FAST)"),
+    ("mixture/checks/estep.mojo", "fast_estep_kernel", "GMM_FAST_ESTEP (NUMERIC_FAST)"),
+    ("mixture/checks/mstep.mojo", "fast_resp_colsums_partial_kernel", "GMM_FAST_GRAM (NUMERIC_FAST)"),
+]
+
+
+def _fast_only(path, fn):
+    p = path[2:] if path.startswith("./") else path
+    for f, d, gate in FAST_ONLY:
+        if (p == f or (f.endswith("/") and p.startswith(f))) and (d == "*" or d == fn):
+            return gate
+    return None
+
+
 def _short(path):
     p = str(path)
     root = str(REPO) + "/"
@@ -417,10 +486,12 @@ def locate(dir_default: Path, dir_off: Path):
         binding = rel.split("/")[0]
         for key in set(a) | set(b):
             if a.get(key, 0) != b.get(key, 0):
-                ent = lines.setdefault((_short(key[0]), key[1]), {"default": 0, "off": 0, "where": set()})
+                ent = lines.setdefault((_short(key[0]), key[1]), {"default": 0, "off": 0, "where": set(), "files": []})
                 ent["default"] += a.get(key, 0)
                 ent["off"] += b.get(key, 0)
                 ent["where"].add(f"{binding}:{kind}")
+                if len(ent["files"]) < 3:
+                    ent["files"].append(rel)
         for (at_add, at_mul), n in pa.items():
             ent = pairs.setdefault(((_short(at_add[0]), at_add[1]), (_short(at_mul[0]), at_mul[1])), {"n": 0, "where": set()})
             ent["n"] += n
@@ -430,13 +501,24 @@ def locate(dir_default: Path, dir_off: Path):
 
 def cmd_locate(ns):
     lines, pairs = locate(Path(ns.default), Path(ns.off))
+    fast = {}
     for (f, ln), e in sorted(lines.items()):
-        print(f"LINE {f}:{ln} fused default={e['default']} off={e['off']} in {','.join(sorted(e['where']))}")
+        fn = _enclosing_def(f, ln) if _in_repo(f) else "?"
+        gate = _fast_only(f, fn)
+        e["def"] = fn
+        if gate:
+            fast[(f, ln)] = e
+            print(f"FAST-ONLY {f}:{ln} ({fn}) fused default={e['default']} off={e['off']} gate {gate}")
+            continue
+        print(f"LINE {f}:{ln} ({fn}) fused default={e['default']} off={e['off']} in {','.join(sorted(e['where']))}"
+              + (f" e.g. {e['files'][0]}" if e.get("files") else ""))
+    for k in fast:
+        del lines[k]
     for ((fa, la), (fm, lm)), e in sorted(pairs.items()):
         print(f"PTXPAIR add {fa}:{la} <- mul {fm}:{lm} x{e['n']} in {','.join(sorted(e['where']))}")
     if ns.json:
         Path(ns.json).write_text(json.dumps({
-            "lines": [{"file": f, "line": ln, "default": e["default"], "off": e["off"], "where": sorted(e["where"])}
+            "lines": [{"file": f, "line": ln, "def": e.get("def"), "default": e["default"], "off": e["off"], "where": sorted(e["where"]), "files": e.get("files", [])}
                       for (f, ln), e in sorted(lines.items())],
             "ptx_pairs": [{"add": list(k[0]), "mul": list(k[1]), "n": e["n"], "where": sorted(e["where"])}
                           for k, e in sorted(pairs.items())]}, indent=1))
