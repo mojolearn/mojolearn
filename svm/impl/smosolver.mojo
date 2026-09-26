@@ -73,7 +73,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from core.identity_trace import IdentityTrace, fnv1a64_bytes, FNV_OFFSET
 from ensemble.instruments import StageTimes
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz, identical_mul_add
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz, identical_mul_add
 from std.memory import stack_allocation
 from std.sys.info import has_apple_gpu_accelerator
 from max.gpu.memory import AddressSpace
@@ -147,7 +147,17 @@ comptime SVM_FUSED_UPDATE_F = FAST_SMO_SYNCS and not is_defined[
 """FAST on Apple: the gradient update computes each kernel value where it
 is used (`fast_update_f.mojo`) instead of writing the `nnz x batch` kernel
 tile and reading it back; RBF and linear kernels, n_cols <= 64."""
-comptime FAST_EPT_ON = FAST_SMO_SYNCS and not is_defined["MOJOLEARN_SVM_FAST_EPT_OFF"]()
+#: Also under IDENTICAL on Apple (lane/apple-identical-neural, 2026-09-26):
+#: the elements-per-thread kernel runs the reference kernel's per-element
+#: arithmetic (ftz, identical_mul_add, the same eta / q expressions) and its
+#: argmax / argmin reductions with the same strict tie-break, which no
+#: reduction order can change.
+comptime FAST_EPT_ON = (
+    (GLOBAL_NUMERIC_MODE == NUMERIC_FAST or GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL)
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_SVM_FAST_SYNCS_OFF"]()
+    and not is_defined["MOJOLEARN_SVM_FAST_EPT_OFF"]()
+)
 
 
 def fold_order_rank_kernel(
