@@ -122,7 +122,8 @@ as unimplemented with that reason.
 
 from std.bit import count_trailing_zeros, pop_count
 from max.gpu import block_idx, thread_idx
-from max.gpu.primitives.warp import lane_id, shuffle_idx, vote
+from max.gpu import lane_id
+from max.gpu.primitives.warp import shuffle_idx, vote
 from max.gpu.primitives.warp import sum as warp_sum
 from checks.numerics import PIN_CROSS_VENDOR  # DEVIATION 551
 from neighbors.checks.ball_cover_canonical_order import (

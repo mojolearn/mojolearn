@@ -253,7 +253,8 @@ That is what makes `buf_len_` warp-uniform, which is what makes the
 """
 
 from max.gpu import block_dim, block_idx, grid_dim, thread_idx
-from max.gpu.primitives.warp import lane_id, shuffle_xor
+from max.gpu import lane_id
+from max.gpu.primitives.warp import shuffle_xor
 from std.memory import bitcast, stack_allocation
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
