@@ -366,7 +366,7 @@ class SplitSet(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             wheels, qualification = fixture(root, split=True)
-            self.assertEqual(sorted(w.name.split('-')[0] for w in wheels), ['mojolearn', 'mojolearn_nvidia', 'mojolearn_amd'])
+            self.assertEqual(sorted(w.name.split('-')[0] for w in wheels), ['mojolearn', 'mojolearn_amd', 'mojolearn_nvidia'])
             result, ordered = self.check(wheels, qualification, root)
             self.assertEqual(result['status'], 'PASSED')
             self.assertEqual(result['assembly_profile'], gate.SPLIT_PROFILE)
