@@ -132,6 +132,7 @@ from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
 from std.sys import llvm_intrinsic
 from std.sys.compile import is_defined
+from std.sys.defines import get_defined_int
 from std.sys.info import is_amd_gpu, _accelerator_arch
 from std.ffi import external_call
 from std.time import perf_counter_ns
@@ -3384,6 +3385,7 @@ comptime APPLE_MMA_SGN = 2
 comptime APPLE_MMA_FM = 4
 comptime APPLE_MMA_FN = 4
 comptime APPLE_MMA_KB = 16
+comptime APPLE_MMA_GROUP_M = get_defined_int["MOJOLEARN_APPLE_MMA_GROUP_M", 8]()
 comptime APPLE_MMA_BM = 8 * APPLE_MMA_FM * APPLE_MMA_SGM
 comptime APPLE_MMA_BN = 8 * APPLE_MMA_FN * APPLE_MMA_SGN
 comptime _AMMA_M64 = SIMD[DType.float32, 64]
@@ -3425,6 +3427,100 @@ def _amma_mma(a: _AMMA_M64, b: _AMMA_M64, c: _AMMA_M64) -> _AMMA_M64:
         "air.simdgroup_matrix_8x8_multiply_accumulate.v64f32.v64f32.v64f32.v64f32",
         _AMMA_M64,
     ](a, b, c)
+
+
+@always_inline
+def _amma_gload[
+    ROWS: Int, KB: Int, NT: Int
+](
+    src: MutPointer[Float32, MutAnyOrigin],
+    outer_stride: Int,
+    k_stride: Int,
+    base_outer: Int,
+    outer_limit: Int,
+    k0: Int,
+    chunk: Int,
+    tid: Int,
+    ofast: Bool,
+) -> SIMD[DType.float32, 4 * ((ROWS * KB) // (4 * NT))]:
+    """One window's operand words for this thread, 4 per slot, unflushed.
+    `ofast` (the outer index has stride 1): slot = (p, 4 consecutive outer);
+    else slot = (outer, 4 consecutive p), one vector load when `k_stride` is
+    1. Words outside `outer_limit` or past `chunk` read +0.0 and are never
+    used by a cell in range (the staged zeros only fill the fragment)."""
+    comptime SL = (ROWS * KB) // (4 * NT)
+    comptime assert SL * 4 * NT == ROWS * KB, "_amma_gload: whole slots"
+    var r = SIMD[DType.float32, 4 * SL](0.0)
+    comptime for sl in range(SL):
+        var s = sl * NT + tid
+        if ofast:
+            var pp = s // (ROWS // 4)
+            var o4 = (s % (ROWS // 4)) * 4
+            if pp < chunk:
+                var go = base_outer + o4
+                var at_ = src + go + (k0 + pp) * k_stride
+                if go + 3 < outer_limit:
+                    var v = at_.load[width=4, alignment=4]()
+                    comptime for q in range(4):
+                        r[4 * sl + q] = v[q]
+                else:
+                    comptime for q in range(4):
+                        if go + q < outer_limit:
+                            r[4 * sl + q] = at_[q]
+        else:
+            var o = s // (KB // 4)
+            var p4 = (s % (KB // 4)) * 4
+            var go = base_outer + o
+            if go < outer_limit:
+                var at_ = src + go * outer_stride + (k0 + p4) * k_stride
+                if k_stride == 1 and p4 + 3 < chunk:
+                    var v = at_.load[width=4, alignment=4]()
+                    comptime for q in range(4):
+                        r[4 * sl + q] = v[q]
+                else:
+                    comptime for q in range(4):
+                        if p4 + q < chunk:
+                            r[4 * sl + q] = at_[q * k_stride]
+    return r
+
+
+@always_inline
+def _amma_stage[
+    ROWS: Int, KB: Int, NT: Int, PMAJOR: Bool, ST: Int
+](
+    dst: UnsafePointer[Float32, MutUntrackedOrigin, address_space=AddressSpace.SHARED],
+    r: SIMD[DType.float32, 4 * ((ROWS * KB) // (4 * NT))],
+    tid: Int,
+    ofast: Bool,
+) -> UInt32:
+    """Flush and store one thread's slots; returns the minimum exponent field
+    of the nonzero flushed words (`_admit_exp_min`). `PMAJOR`: element
+    (outer o, p) at `dst[p * ST + o]` (A); else at `dst[o * ST + p]` (B)."""
+    comptime SL = (ROWS * KB) // (4 * NT)
+    var e = UInt32(0xFF)
+    comptime for sl in range(SL):
+        var s = sl * NT + tid
+        var v = SIMD[DType.float32, 4](0.0)
+        comptime for q in range(4):
+            v[q] = ftz(r[4 * sl + q])
+        e = min(e, _admit_exp_min[4](v))
+        if ofast:
+            var pp = s // (ROWS // 4)
+            var o4 = (s % (ROWS // 4)) * 4
+            comptime if PMAJOR:
+                (dst + pp * ST + o4).store[alignment=16](v)
+            else:
+                comptime for q in range(4):
+                    dst[(o4 + q) * ST + pp] = v[q]
+        else:
+            var o = s // (KB // 4)
+            var p4 = (s % (KB // 4)) * 4
+            comptime if PMAJOR:
+                comptime for q in range(4):
+                    dst[(p4 + q) * ST + o] = v[q]
+            else:
+                (dst + o * ST + p4).store[alignment=16](v)
+    return e
 
 
 def identical_gemm_apple_mma_kernel[
@@ -3480,9 +3576,19 @@ def identical_gemm_apple_mma_kernel[
     var lane = tid % 32
     var sgm = sg // SGN
     var sgn = sg % SGN
+    # Grouped block order (scheduling only): GM consecutive blocks share one
+    # B tile, so a wide `n` (the head's vocabulary) streams B about m / (BM
+    # GM) times instead of m / BM. `-D MOJOLEARN_APPLE_MMA_GROUP_M=1` is the
+    # row-major order.
     var nbn = (n + BN - 1) // BN
-    var m0 = (Int(block_idx.x) // nbn) * BM
-    var n0 = (Int(block_idx.x) % nbn) * BN
+    var nbm = (m + BM - 1) // BM
+    var bid = Int(block_idx.x)
+    var per_group = APPLE_MMA_GROUP_M * nbn
+    var first_m = (bid // per_group) * APPLE_MMA_GROUP_M
+    var gsize = min(nbm - first_m, APPLE_MMA_GROUP_M)
+    var in_g = bid % per_group
+    var m0 = (first_m + in_g % gsize) * BM
+    var n0 = (in_g // gsize) * BN
     var qd = lane // 4
     var frow = (qd & 4) + ((lane // 2) % 4)
     var fcol = (qd & 2) * 2 + (lane % 2) * 2
@@ -3494,54 +3600,29 @@ def identical_gemm_apple_mma_kernel[
     var acc = InlineArray[_AMMA_M64, NF](fill=_AMMA_M64(0))
     var exact_ok = True  # every earlier window of this leaf was admitted
     var wpl = leaf // KB
-    var a_p_fast = a_sp == 1
-    var b_p_fast = b_sp == 1
+    # A: outer index i (stride a_si), p stride a_sp; B: outer j (b_sj), p (b_sp).
+    var a_ofast = a_si == 1 and a_sp != 1
+    var b_ofast = b_sj == 1 and b_sp != 1
     var windows = (k + KB - 1) // KB
+    # Register double buffer: the next window's words load while this one
+    # multiplies.
+    var ra = _amma_gload[BM, KB, NT](a, a_si, a_sp, m0, m, 0, min(KB, k), tid, a_ofast)
+    var rb = _amma_gload[BN, KB, NT](b, b_sj, b_sp, n0, n, 0, min(KB, k), tid, b_ofast)
     for w in range(windows):
         var k0 = w * KB
         var chunk = min(KB, k - k0)
-        var ea = UInt32(0xFF)
-        var eb = UInt32(0xFF)
-        comptime for s in range((BM * KB + NT - 1) // NT):
-            var idx = s * NT + tid
-            if idx < BM * KB:
-                var i: Int
-                var p: Int
-                if a_p_fast:
-                    i = idx // KB
-                    p = idx % KB
-                else:
-                    p = idx // BM
-                    i = idx % BM
-                var gi = m0 + i
-                var v = Float32(0)
-                if gi < m and p < chunk:
-                    v = ftz(a[gi * a_si + (k0 + p) * a_sp])
-                at[p * AST + i] = v
-                ea = min(ea, _admit_exp_min[1](SIMD[DType.float32, 1](v)))
-        comptime for s in range((BN * KB + NT - 1) // NT):
-            var idx = s * NT + tid
-            if idx < BN * KB:
-                var j: Int
-                var p: Int
-                if b_p_fast:
-                    j = idx // KB
-                    p = idx % KB
-                else:
-                    p = idx // BN
-                    j = idx % BN
-                var gj = n0 + j
-                var v = Float32(0)
-                if gj < n and p < chunk:
-                    v = ftz(b[(k0 + p) * b_sp + gj * b_sj])
-                bt[j * BST + p] = v
-                eb = min(eb, _admit_exp_min[1](SIMD[DType.float32, 1](v)))
+        var ea = _amma_stage[BM, KB, NT, True, AST](at, ra, tid, a_ofast)
+        var eb = _amma_stage[BN, KB, NT, False, BST](bt, rb, tid, b_ofast)
         ea = _admit_warp_min(ea)
         eb = _admit_warp_min(eb)
         if lane == 0:
             wmin[sg] = ea
             wmin[NSG + sg] = eb
         barrier()
+        if w + 1 < windows:
+            var k1 = k0 + KB
+            ra = _amma_gload[BM, KB, NT](a, a_si, a_sp, m0, m, k1, min(KB, k - k1), tid, a_ofast)
+            rb = _amma_gload[BN, KB, NT](b, b_sj, b_sp, n0, n, k1, min(KB, k - k1), tid, b_ofast)
         var bea = UInt32(0xFF)
         var beb = UInt32(0xFF)
         comptime for q in range(NSG):
