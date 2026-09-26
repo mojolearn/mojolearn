@@ -129,11 +129,13 @@ STUB_NEURAL = textwrap.dedent(r'''
     if os.environ.get("STUB_FAIL") == a.lane:
         sys.exit(3)
     n = int(a.rounds)
-    data = {"lm-train-step": "bytes", "lm-forward": "bytes", "gemm": "gaussian"}[a.lane]
+    data = "bytes" if a.lane.split("-")[0] in ("lm", "samba") else "gaussian"
     arms, qual = {}, {}
     for i, arm in enumerate(a.arms.split(",")):
         ours = arm == "ours"
-        info = {"device": "gpu", "version": "1.0", "library": "mojolearn" if ours else "torch",
+        cpu = "-cpu-" in arm or (ours and a.lane.endswith("-infer"))
+        info = {"device": "cpu" if cpu else "gpu", "version": "1.0",
+                "library": "mojolearn" if ours else "torch",
                 "device_name": "stub gpu"}
         if ours:
             info["numeric_mode_used"] = "identical"
@@ -142,7 +144,8 @@ STUB_NEURAL = textwrap.dedent(r'''
             arms[arm] = {"ms": [], "status": "not_ready", "error": {"error": "no MPS, it is faster"},
                          "info": info}
             continue
-        arms[arm] = {"ms": [40.0 * (2 - i) + r for r in range(n)], "warmup_ms": 500.0,
+        base = 80.0 if ours else 40.0 + 10.0 * (i - 1)
+        arms[arm] = {"ms": [base + r for r in range(n)], "warmup_ms": 500.0,
                      "digests": [None] * (n + 1), "status": "ok", "info": info,
                      "digest_stable": None,
                      "span": {"input_home": "host", "pre_clock_fit": False}}
@@ -348,8 +351,8 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     rc = bb.main(["--dry-run", "--vendor", "apple"] + env["base"])
     assert rc == 0
     text = capsys.readouterr().out
-    assert "TOTAL races=75 cells=242" in text
-    assert "family neural     races=3 cells=6" in text
+    assert "TOTAL races=88 cells=312" in text
+    assert "family neural     races=16 cells=76" in text
     assert "ours-ab[fast]" in text and "ours-fast[fast]" in text
     assert not env["out"].exists()
     assert _calls(env) == []
@@ -497,22 +500,51 @@ def test_render_board_on_an_empty_result_has_no_direction_words():
 
 # --- the neural family ------------------------------------------------------
 
+NEURAL_IDS = [
+    "neural/lm-train-step/bytes/shape=full", "neural/lm-forward/bytes/shape=full",
+    "neural/gemm/gaussian/shape=full",
+    "neural/transformer-forward/gaussian/shape=full", "neural/transformer-infer/gaussian/shape=full",
+    "neural/mamba1-forward/gaussian/shape=full", "neural/mamba1-infer/gaussian/shape=full",
+    "neural/mamba2-forward/gaussian/shape=full", "neural/mamba2-infer/gaussian/shape=full",
+    "neural/mamba3-forward/gaussian/shape=full", "neural/mamba3-infer/gaussian/shape=full",
+    "neural/samba-train-step/bytes/shape=full", "neural/samba-forward/bytes/shape=full",
+    "neural/samba-infer/bytes/shape=full",
+    "neural/mlp-train-step/gaussian/shape=full", "neural/mlp-infer/gaussian/shape=full"]
+GPU_ARMS = {
+    "nvidia": ["torch-eager-fp32", "torch-eager-tf32", "torch-compile-fp32", "torch-compile-tf32",
+               "torch-eager-bf16", "torch-compile-bf16"],
+    "amd": ["torch-eager-fp32", "torch-compile-fp32", "torch-eager-bf16", "torch-compile-bf16"],
+    "apple": ["torch-eager-fp32", "torch-compile-fp32", "torch-eager-bf16", "torch-compile-bf16"],
+}
+CPU_ARMS = ["torch-cpu-eager-fp32", "torch-cpu-compile-fp32", "torch-cpu-eager-bf16",
+            "torch-cpu-compile-bf16"]
+
+
 @pytest.mark.parametrize("vendor", ["apple", "nvidia", "amd"])
 def test_plan_neural_identical_only_on_every_vendor(vendor):
     races = bb.plan_races(vendor, bb.modes_for(vendor), ["neural"])
-    assert [r["id"] for r in races] == [
-        "neural/lm-train-step/bytes/shape=full", "neural/lm-forward/bytes/shape=full",
-        "neural/gemm/gaussian/shape=full"]
+    assert [r["id"] for r in races] == NEURAL_IDS
     for r in races:
         assert r["our_arms"] == {"ours": "identical"}
-        assert r["opponents"] == ["torch-eager-fp32"]
-        assert r["arms"] == ["ours", "torch-eager-fp32"]
         assert "ours-ab" not in r["arms"] and "ours-fast" not in r["arms"]
-    assert bb.arm_library("torch-eager-fp32") == "torch"
-    assert bb.arm_device("torch-eager-fp32", vendor) == "gpu"
+        want = CPU_ARMS if r["lane"].endswith("-infer") else GPU_ARMS[vendor]
+        if r["lane"].startswith("mamba1-"):
+            # the per-token reference scan is not a compile target (named in NOT_PLANNED)
+            want = [a for a in want if "-compile-" not in a]
+        assert r["opponents"] == want, r["id"]
+        assert r["arms"] == ["ours"] + want
+        # TF32 exists on NVIDIA CUDA only; it is never planned elsewhere
+        assert any("tf32" in a for a in r["arms"]) == (vendor == "nvidia"
+                                                      and not r["lane"].endswith("-infer"))
+    for arm in GPU_ARMS["nvidia"]:
+        assert bb.arm_library(arm) == "torch" and bb.arm_device(arm, vendor) == "gpu"
+    for arm in CPU_ARMS:
+        assert bb.arm_library(arm) == "torch" and bb.arm_device(arm, vendor) == "cpu"
     small = bb.plan_races(vendor, ["identical"], ["neural"], ["gemm"], neural_shape="small")
     assert [r["id"] for r in small] == ["neural/gemm/gaussian/shape=small"]
-    assert bb.plan_summary(races)["by_family"] == {"neural": {"races": 3, "cells": 6}}
+    cells = sum(len(r["arms"]) for r in races)
+    assert cells == {"apple": 76, "amd": 76, "nvidia": 95}[vendor]
+    assert bb.plan_summary(races)["by_family"] == {"neural": {"races": 16, "cells": cells}}
 
 
 def test_fast_refused_for_neural_by_name(env):
@@ -531,15 +563,19 @@ def test_fast_refused_for_neural_by_name(env):
     assert _calls(env) == []
 
 
-@pytest.mark.parametrize("vendor,cells,more", [("apple", 242, 134), ("nvidia", 172, 94),
-                                               ("amd", 176, 90)])
-def test_dry_run_counts_per_vendor(vendor, cells, more, capsys):
+@pytest.mark.parametrize("vendor,cells,more,neural", [("apple", 312, 134, 76),
+                                                      ("nvidia", 261, 94, 95),
+                                                      ("amd", 246, 90, 76)])
+def test_dry_run_counts_per_vendor(vendor, cells, more, neural, capsys):
     assert bb.main(["--dry-run", "--vendor", vendor]) == 0
     text = capsys.readouterr().out
-    assert "TOTAL races=75 cells=%d" % cells in text
+    assert "TOTAL races=88 cells=%d" % cells in text
     assert "family classical2 races=44 cells=%d" % more in text
-    assert "family neural     races=3 cells=6" in text
+    assert "family neural     races=16 cells=%d" % neural in text
     assert "neural: IDENTICAL only" in text
+    # what is left off the plan is printed by name, never dropped silently
+    assert "neural not planned: torch-compile-* on mamba1-forward" in text
+    assert ("neural not planned: torch-eager-tf32" in text) == (vendor != "nvidia")
 
 
 def test_neural_command_and_settings():
@@ -550,13 +586,21 @@ def test_neural_command_and_settings():
     assert cmd[:4] == ["py", "-u", "drv", "race"]
     assert cmd[cmd.index("--lane") + 1] == "lm-train-step"
     assert cmd[cmd.index("--shape") + 1] == "small"
-    assert cmd[cmd.index("--arms") + 1] == "ours,torch-eager-fp32"
+    assert cmd[cmd.index("--arms") + 1] == ",".join(["ours"] + GPU_ARMS["amd"])
     assert cmd[cmd.index("--rounds") + 1] == "4"
     assert env == {} and ceiling > 0
     s = bb.race_settings(ctx, race)
     assert s["seed"] == 7 and s["driver"] == "tools/bench_board_neural.py"
-    assert "eager" in s["opponent_mode"] and "TF32 off" in s["opponent_mode"]
+    assert "compile" in s["opponent_mode"] and "bf16" in s["opponent_mode"]
+    assert s["torch_settings"]["torch-eager-fp32"] == "float32, TF32 off"
+    assert "autocast" in s["torch_settings"]["torch-compile-bf16"]
     assert "identical" in s["numeric_mode"]
+    assert s["optimizer"].startswith("AdamW lr 1e-3")
+    assert s["shape_dims"] == "B2 L64 DM64 H4 KV2 HD16 FF128 layers2 V256 (smoke)"
+    infer = bb.plan_races("amd", ["identical"], ["neural"], ["mamba2-infer"])[0]
+    si = bb.race_settings(ctx, infer)
+    assert si["ours_device"] == "cpu" and "Mamba2BlockInference" in si["ours_call"]
+    assert si["shape_dims"] == "B1 L512 DM384"             # the CPU lanes' length cap
 
 
 def _run_neural(env, *extra):
@@ -572,11 +616,10 @@ def test_neural_run_schema_quality_and_board(env):
     res = json.loads((env["out"] / "board.json").read_text())
     assert res["config"]["neural_shape"] == "small"
     assert res["config"]["smoke"] is True
-    assert set(res["races"]) == {"neural/lm-train-step/bytes/shape=small",
-                                 "neural/lm-forward/bytes/shape=small",
-                                 "neural/gemm/gaussian/shape=small"}
-    assert sorted(_calls(env)) == sorted("neural %s small ours,torch-eager-fp32" % l
-                                         for l in bb.NEURAL_LANES)
+    assert set(res["races"]) == {i.replace("shape=full", "shape=small") for i in NEURAL_IDS}
+    assert sorted(_calls(env)) == sorted(
+        "neural %s small %s" % (l, ",".join(("ours",) + bb.NEURAL_OPPONENTS["nvidia"][l]))
+        for l in bb.NEURAL_LANES)
     rec = res["races"]["neural/lm-train-step/bytes/shape=small"]
     assert rec["status"] == "done" and rec["shape"] == "small"
     cells = {c["arm"]: c for c in rec["cells"]}
@@ -596,7 +639,13 @@ def test_neural_run_schema_quality_and_board(env):
     assert "## Neural" in board and "neural shape small" in board
     assert "--neural-shape small" in board and "SMOKE RUN" in board
     assert "loss_last_step" in board and "torch-eager-fp32" in board
+    for arm in GPU_ARMS["nvidia"] + CPU_ARMS:
+        assert "| %s | torch |" % arm in board, arm
+    cpu = {c["arm"]: c for c in res["races"]["neural/mlp-infer/gaussian/shape=small"]["cells"]}
+    assert cpu["torch-cpu-eager-bf16"]["device"] == "cpu"
     assert "## Trees" not in board
+    # the neural Not covered lines come from the driver's tables
+    assert "not mamba-ssm's fused CUDA/Triton kernels" in board
     assert not BANNED.search(board)
     # resume: nothing left to run
     env["calls"].write_text("")
@@ -621,7 +670,7 @@ def test_neural_refused_arm_and_failed_race(env, monkeypatch):
     monkeypatch.delenv("STUB_FAIL")
     env["calls"].write_text("")
     assert _run_neural(env) == 0
-    assert _calls(env) == ["neural gemm small ours,torch-eager-fp32"]
+    assert _calls(env) == ["neural gemm small %s" % ",".join(["ours"] + GPU_ARMS["nvidia"])]
 
 
 def test_neural_shape_change_is_a_new_race_not_a_resume(env):
@@ -630,10 +679,68 @@ def test_neural_shape_change_is_a_new_race_not_a_resume(env):
     base = list(env["base"])
     base[base.index("--data-root") + 1] = str(env["tmp"] / "no-data-here")
     assert bb.main(["--vendor", "nvidia", "--families", "neural", "--lanes", "gemm"] + base) == 0
-    assert _calls(env) == ["neural gemm full ours,torch-eager-fp32"]
+    assert _calls(env) == ["neural gemm full %s" % ",".join(["ours"] + GPU_ARMS["nvidia"])]
     res = json.loads((env["out"] / "board.json").read_text())
     assert "neural/gemm/gaussian/shape=full" in res["races"]
     assert res["config"]["smoke"] is False
+
+
+_nspec = importlib.util.spec_from_file_location("bench_board_neural_t",
+                                                os.path.join(HERE, "bench_board_neural.py"))
+bbn = importlib.util.module_from_spec(_nspec)
+_nspec.loader.exec_module(bbn)
+
+
+def test_neural_driver_tables_and_arm_refusals(tmp_path):
+    assert set(bbn.LANES) == set(bbn.MODEL_OF) == set(bbn.LANE_TEXT) == set(bbn.DATA_OF)
+    assert bbn.arm_setting("torch-cpu-eager-bf16") == ("cpu", "eager-bf16")
+    assert bbn.arm_setting("torch-compile-tf32") == ("gpu", "compile-tf32")
+    for arm in bbn.ARMS[1:]:
+        assert bbn.precision_text(bbn.arm_setting(arm)[1])
+    with pytest.raises(ValueError):
+        bbn.arm_setting("ours")
+    # a CPU arm on a GPU lane (and the reverse) is refused by name before torch loads
+    np = pytest.importorskip("numpy")
+    for lane, arm in (("gemm", "torch-cpu-eager-fp32"), ("mlp-infer", "torch-eager-fp32")):
+        with pytest.raises(RuntimeError, match="REFUSED: arm %s" % arm):
+            bbn.build_runner(lane, arm, "small", {})
+    # an arm the driver does not know is refused by the race before any worker starts
+    with pytest.raises(SystemExit, match="no arm 'torch-eager-fp64'"):
+        bbn.main(["race", "--lane", "gemm", "--arms", "ours,torch-eager-fp64", "--out",
+                  str(tmp_path / "o"), "--work", str(tmp_path / "w"), "--rounds", "1"])
+
+
+def test_neural_driver_inputs_and_quality(tmp_path):
+    np = pytest.importorskip("numpy")
+    path = str(tmp_path / "in.npz")
+    rec = bbn.make_inputs("mlp-train-step", "small", 3, path)
+    with np.load(path) as z:
+        assert z["X"].shape == (3, 32, 8) and z["y"].shape == (3, 32)
+        assert z["w:weight1"].shape == (16, 8) and z["X"].dtype == np.float32
+    assert rec["seed"] == 7 and rec["shape"]["label"] == "rows32 8-16-3"
+    rec2 = bbn.make_inputs("mlp-train-step", "small", 3, str(tmp_path / "again.npz"))
+    assert rec2["sha256"] == rec["sha256"]                 # same seed, same bytes
+    rec = bbn.make_inputs("transformer-infer", "small", 2, path)
+    with np.load(path) as z:
+        assert z["x"].shape == (2, 64, 64)
+        assert set(k[2:] for k in z.files if k.startswith("w:")) == set(bbn.TRANSFORMER_NAMES)
+    reg = bbn.samba_registry(bbn.SAMBA_SHAPES["small"])
+    assert reg[0] == ("embed.weight", (256, 64)) and reg[-1] == ("norm_f.weight", (64,))
+    assert [n for n, _ in reg[1:10]] == ["layers.0." + n for n in bbn.MAMBA_NAMES["mamba3"]]
+    # train lanes: losses side by side, the difference against ours
+    q = bbn.quality("samba-train-step", {}, {
+        "ours": {"losses": np.array([5.5, 5.4])},
+        "torch-eager-bf16": {"losses": np.array([5.501, 5.398])}})
+    assert q["torch-eager-bf16"]["loss_first_abs_diff_vs_ours"] == pytest.approx(1e-3)
+    assert q["torch-eager-bf16"]["loss_last_abs_diff_vs_ours"] == pytest.approx(2e-3)
+    assert "loss_first_abs_diff_vs_ours" not in q["ours"]
+    # forward lanes: max abs and relative difference against ours
+    y = np.arange(12, dtype=np.float32).reshape(2, 2, 3)
+    q = bbn.quality("mamba2-forward", {}, {"ours": {"y": y}, "torch-eager-fp32": {"y": y + 0.5},
+                                          "torch-compile-bf16": {"y": y[:1]}})
+    assert q["torch-eager-fp32"] == {"max_abs_diff_vs_ours": 0.5, "max_rel_diff_vs_ours": 0.5 / 11}
+    assert "shape_mismatch_vs_ours" in q["torch-compile-bf16"]
+    assert q["ours"] == {}
 
 
 # --- the classical2 family ---------------------------------------------------
