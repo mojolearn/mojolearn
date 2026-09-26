@@ -417,8 +417,17 @@ def _loc_counts(text, kind):
     return fused, pairs
 
 
-def _in_repo(path):
+def _norm(path):
+    """A line-table path as the repo-relative path: builds run from another
+    checkout of the same tree write `/abs/checkout/./pkg/file.mojo`."""
     p = str(path)
+    if "/./" in p:
+        p = p.split("/./", 1)[1]
+    return p
+
+
+def _in_repo(path):
+    p = _norm(path)
     if p.startswith("./"):
         p = p[2:]
     if p.startswith(str(REPO) + "/"):
@@ -493,7 +502,7 @@ def _fast_only(path, fn):
 
 
 def _short(path):
-    p = str(path)
+    p = _norm(path)
     root = str(REPO) + "/"
     if p.startswith("./"):
         p = p[2:]
