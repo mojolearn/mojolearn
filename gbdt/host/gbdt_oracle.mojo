@@ -123,7 +123,7 @@ predictions move with it.
 The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the gbdt-symmetric lane is the measurement.
 """
-from std.math import exp, floor, isfinite, log, log2, sqrt
+from std.math import exp, floor, fma, isfinite, log, log2, sqrt
 from std.memory import bitcast
 from std.sys.compile import is_defined
 from max.algorithm import sync_parallelize
@@ -410,7 +410,8 @@ def _cross_entropy_row(
     var log_exp_val_plus_one = val
     if isfinite(exp_val):
         log_exp_val_plus_one = identical_log(Float32(1.0) + exp_val)
-    var score = weight * (c * val - log_exp_val_plus_one)
+    # `c * val - log(1 + e)` in one rounding, as the default build fused it
+    var score = weight * identical_mul_add(c, val, -log_exp_val_plus_one)
     return _CeRow(
         ftz(weight * direction), weight * direction, ftz(weight * scale), score
     )
@@ -1880,7 +1881,8 @@ def _walker_move(
     """`_move` (`descent_helpers.mojo:186-195`)."""
     var moved = List[Float32]()
     for i in range(len(point)):
-        moved.append(Float32(Float64(point[i]) + step * Float64(direction[i])))
+        # one rounding, as the default (contract=fast) build fused it
+        moved.append(Float32(fma(step, Float64(direction[i]), Float64(point[i]))))
     return moved^
 
 
@@ -2167,9 +2169,10 @@ def gbdt_host_fit_eval(
         # tree whether or not the noise is on
         var noise_mult = Float64(0.0)
         if random_strength != Float32(0.0):
+            # `log(n) - iteration * lr` in ONE rounding, as the default
+            # (contract=fast) build fused it (lane/explicit-fma-contract-proof)
             var model_left = exp(
-                log(Float64(n_rows))
-                - Float64(iteration) * Float64(params.learning_rate)
+                fma(-Float64(iteration), Float64(params.learning_rate), log(Float64(n_rows)))
             )
             noise_mult = model_left / (1.0 + model_left)
         var tree_seed = noise_rand.next_uniform_l()

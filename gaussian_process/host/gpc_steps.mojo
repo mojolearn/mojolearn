@@ -426,8 +426,11 @@ def gpc_pi_star(mean: Float32, variance: Float32) -> Float64:
         var integral = Float64(0.0)
         if va > Float64(0.0):
             var alpha = Float64(1.0) / _mul64(Float64(2.0), va)
-            var lam2 = _mul64(lam, lam)
-            var ratio = alpha / (alpha + lam2)
+            # `alpha + lam * lam` in ONE rounding: `_mul64`'s fma with -0.0
+            # folds to a plain product, which the default (contract=fast)
+            # build then fused into this add; the explicit fma keeps those
+            # bits under any contraction mode (lane/explicit-fma-contract-proof).
+            var ratio = alpha / fma(lam, lam, alpha)
             var arg = _mul64(gamma, sqrt(ratio))
             var num = _mul64(sqrt(pi64 / alpha), gpc_erf64(arg))
             var inner = _mul64(_mul64(va, Float64(2.0)), pi64)
@@ -435,8 +438,8 @@ def gpc_pi_star(mean: Float32, variance: Float32) -> Float64:
             integral = num / den
         else:
             integral = _mul64(Float64(0.5), gpc_erf64(gamma))
-        var term = _mul64(_coef64(k), integral)
-        acc = acc + term
+        # `acc + coef * integral` in ONE rounding, the default build's fusion
+        acc = fma(_coef64(k), integral, acc)
     return acc + bitcast[DType.float64](GPC_HALF_COEF_SUM_BITS)
 
 

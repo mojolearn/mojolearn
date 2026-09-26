@@ -59,7 +59,7 @@ The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the gbdt-pointwise-l2-bayesian-eval lane is the
 measurement.
 """
-from std.math import isfinite
+from std.math import fma, isfinite
 
 from checks.fixed_point import choose_scale
 from checks.numerics import (
@@ -124,7 +124,8 @@ def _ce(target: Float32, val: Float32, border: Float32, weight: Float32) -> Tupl
     var log_exp_val_plus_one = val
     if isfinite(exp_val):
         log_exp_val_plus_one = identical_log(Float32(1.0) + exp_val)
-    var score = weight * (c * val - log_exp_val_plus_one)
+    # `c * val - log(1 + e)` in one rounding, as the default build fused it
+    var score = weight * identical_mul_add(c, val, -log_exp_val_plus_one)
     return (ftz(weight * direction), ftz(weight * scale), score)
 
 
@@ -221,7 +222,8 @@ def _estimate_logloss_leaves(
         while iteration < iterations or ((not updated) and iteration < 100):
             var next_point = List[Float32]()
             for i in range(n_leaves):
-                next_point.append(Float32(Float64(cur_point[i]) + step * Float64(direction[i])))
+                # one rounding, as the default (contract=fast) build fused it
+                next_point.append(Float32(fma(step, Float64(direction[i]), Float64(cur_point[i]))))
                 if weights_cpu[i] < 1e-20:
                     next_point[i] = Float32(0.0)
             var shift = List[Float32](length=n_leaves, fill=Float32(0.0))
@@ -376,7 +378,8 @@ def gbdt_pointwise_host_fit(
         summary_weight += Float64(w[i])
     var target_sum = Float64(0.0)
     for i in range(n_rows):
-        target_sum += Float64(y[i]) * Float64(w[i])
+        # one rounding, as the default (contract=fast) build fused it
+        target_sum = fma(Float64(y[i]), Float64(w[i]), target_sum)
     var best_probability = Float64(Float32(target_sum / summary_weight))
     if best_probability <= 0.0 or best_probability >= 1.0:
         raise Error(

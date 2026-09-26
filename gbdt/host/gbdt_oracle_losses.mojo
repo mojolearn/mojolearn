@@ -73,7 +73,7 @@ leaves move.
 The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the two lanes is the measurement.
 """
-from std.math import exp, isfinite, log
+from std.math import exp, fma, isfinite, log
 from std.memory import bitcast
 
 from checks.numerics import (
@@ -235,7 +235,8 @@ def _target_score(objective: Int, t: Float32, p: Float32, alpha: Float32) -> Flo
         var mismatch = abs(t - p)
         if mismatch < alpha:
             return Float32(0.5) * mismatch * mismatch
-        return alpha * (mismatch - Float32(0.5) * alpha)
+        # `mismatch - 0.5 * alpha` in ONE rounding, as the default build fused it
+        return alpha * identical_mul_add(Float32(-0.5), alpha, mismatch)
     return Float32(0.0)
 
 
@@ -266,9 +267,11 @@ def _target_der(objective: Int, t: Float32, p: Float32, alpha: Float32) -> Float
         var multiplier = alpha if val > Float32(0.0) else (Float32(1.0) - alpha)
         return Float32(2.0) * multiplier * val
     elif objective == GBDT_OBJ_TWEEDIE:
-        var der = t * identical_exp((Float32(1.0) - alpha) * p)
+        # `t * e1 - e2` in ONE rounding, as the default (contract=fast)
+        # build fused it on every backend (lane/explicit-fma-contract-proof)
+        var e1 = identical_exp((Float32(1.0) - alpha) * p)
         var delta = identical_exp((Float32(2.0) - alpha) * p)
-        return der - delta
+        return identical_mul_add(t, e1, -delta)
     elif objective == GBDT_OBJ_HUBER:
         var diff = t - p
         if abs(diff) < alpha:
@@ -298,9 +301,11 @@ def _target_der2(objective: Int, t: Float32, p: Float32, alpha: Float32) -> Floa
         var multiplier = alpha if val > Float32(0.0) else (Float32(1.0) - alpha)
         return Float32(2.0) * multiplier
     elif objective == GBDT_OBJ_TWEEDIE:
+        # `e2 * (2 - alpha) - der2` in ONE rounding: the default build fused
+        # the SECOND product (delta's) into the subtraction
         var der2 = t * identical_exp((Float32(1.0) - alpha) * p) * (Float32(1.0) - alpha)
-        var delta = identical_exp((Float32(2.0) - alpha) * p) * (Float32(2.0) - alpha)
-        return -der2 + delta
+        var e2 = identical_exp((Float32(2.0) - alpha) * p)
+        return identical_mul_add(e2, Float32(2.0) - alpha, -der2)
     elif objective == GBDT_OBJ_HUBER:
         var diff = t - p
         if abs(diff) < alpha:
@@ -343,7 +348,8 @@ def _loss_row(objective: Int, t: Float32, p: Float32, alpha: Float32) -> _LossRo
             log_exp_val_plus_one = identical_log(Float32(1.0) + exp_val)
         return _LossRow(
             ftz(weight * direction), abs(weight * direction),
-            ftz(weight * scale), weight * (c * p - log_exp_val_plus_one),
+            # `c * p - log(1 + e)` in ONE rounding, as the default build fused it
+            ftz(weight * scale), weight * identical_mul_add(c, p, -log_exp_val_plus_one),
         )
     var der = ftz(weight * _target_der(objective, t, p, alpha))
     return _LossRow(
@@ -917,9 +923,10 @@ def gbdt_losses_host_fit(
         var fv = _deterministic_sum_lanes(fv_part, 1, fv_blocks)[0]
         var noise_mult = Float64(0.0)
         if random_strength != Float32(0.0):
+            # `log(n) - iteration * lr` in ONE rounding, as the default
+            # (contract=fast) build fused it (lane/explicit-fma-contract-proof)
             var model_left = exp(
-                log(Float64(n_rows))
-                - Float64(iteration) * Float64(params.learning_rate)
+                fma(-Float64(iteration), Float64(params.learning_rate), log(Float64(n_rows)))
             )
             noise_mult = model_left / (1.0 + model_left)
         var tree_seed = noise_rand.next_uniform_l()

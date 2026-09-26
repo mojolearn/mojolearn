@@ -59,7 +59,7 @@ THE NEGATIVE CONTROL. `-D MOJOLEARN_HOST_SABOTAGE=1`
 The restatement is a prediction until measured. The four-column diff of
 tools/identity_break.py on the two lanes is the measurement.
 """
-from std.math import exp, isfinite, log
+from std.math import exp, fma, isfinite, log
 from gbdt.data.permutation import TRandom
 from gbdt.gpu_util.kernel.random_gen import advance_seed_k, next_normal_f
 
@@ -233,7 +233,8 @@ def _multi_pass(
                     mag_weight += abs(weight)
                 var log_denum = identical_log(se)
                 if in_range:
-                    tmp_score += weight * (class_approx - log_denum)
+                    # one rounding, as the default (contract=fast) build fused it
+                    tmp_score = identical_mul_add(weight, class_approx - log_denum, tmp_score)
             else:
                 var target_class = 0
                 if in_range:
@@ -759,7 +760,8 @@ def gbdt_multi_host_fit(
         var mags = _deterministic_sum_lanes(mag_part, 2, mse_blocks)
         var noise_mult = Float64(0.0)
         if random_strength != Float32(0.0):
-            var model_left = exp(log(Float64(n_rows)) - Float64(iteration) * Float64(params.learning_rate))
+            # one rounding, as the default (contract=fast) build fused it
+            var model_left = exp(fma(-Float64(iteration), Float64(params.learning_rate), log(Float64(n_rows))))
             noise_mult = model_left / (1.0 + model_left)
         var tree_seed = noise_rand.next_uniform_l()
         if bootstrap_kind >= 0:

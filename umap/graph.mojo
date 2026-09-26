@@ -2,7 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Deterministic first UMAP slice: smooth k-NN distances and fuzzy graph."""
 
-from checks.numerics import identical_exp64, identical_log2_64
+from checks.numerics import identical_exp64, identical_log2_64, identical_mul_add
 
 from std.memory import bitcast
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
@@ -211,9 +211,11 @@ def fuzzy_simplicial_graph(
             var b = directed[j * n_samples + i]
             var union = a + b - a * b
             var intersection = a * b
-            weights[i * n_samples + j] = (
-                set_op_mix_ratio * union
-                + (Float32(1.0) - set_op_mix_ratio) * intersection
+            # ONE rounding on the intersection's product, the fusion the
+            # default (contract=fast) build formed (lane/explicit-fma-contract-proof)
+            weights[i * n_samples + j] = identical_mul_add(
+                Float32(1.0) - set_op_mix_ratio, intersection,
+                set_op_mix_ratio * union,
             )
     return FuzzySimplicialGraph(
         n_samples, n_neighbors, rhos^, sigmas^, directed^, weights^
