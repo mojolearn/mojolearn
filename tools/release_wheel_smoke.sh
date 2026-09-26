@@ -72,6 +72,14 @@
 #                        tools/release.py passes the Apple (Metal) column of the
 #                        release, and the CPU column too when it ran one.
 #   --cpu-column FILE    the same as --ref-column FILE (kept for old command lines).
+#   --plugin WHEEL       THE SPLIT LINUX PACKAGES (python/mojolearn/gpu_plugins.py):
+#                        <wheel> is then the core `mojolearn` and WHEEL the plugin
+#                        of this --vendor (mojolearn_cuda-* for cuda, mojolearn_rocm-*
+#                        for hip), same version. Both are shipped, sha256-checked on
+#                        the box and installed together, by the smoke and by the
+#                        column; the receipt names the plugin and its sha256. With a
+#                        plugin the expanded smoke runs on hip too, so each plugin
+#                        has a receipt of its own vendor (tools/check_light_release.py).
 #
 # A RENTED RUNPOD RUN, IN ORDER: Mac dead-man armed BEFORE the create (lease +
 # ready timeout + 10 min, by id or by name); create; wait for ssh (600 s); arm
@@ -125,6 +133,7 @@ IMAGE="${MOJOLEARN_SMOKE_IMAGE:-runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubu
 CUDA="13.0"; LEASE=45; SMOKE_SECONDS=1800; SSH_GIVEN=""; RENT=0
 VENDOR=cuda; SELECTION=""; REFS=(); GPU_SET=0; IMAGE_SET=0; CUDA_SET=0
 PROVIDER=auto
+PLUGIN=""; PLUGIN_SHA=""
 DO_SIZE="${MOJOLEARN_SMOKE_DO_SIZE:-gpu-mi325x1-256gb}"
 DO_REGIONS="${MOJOLEARN_SMOKE_DO_REGIONS:-tor1,nyc2}"
 DO_IMAGE="${MOJOLEARN_SMOKE_DO_IMAGE:-188571990}"
@@ -169,6 +178,7 @@ while [ $# -gt 0 ]; do
         --hotaisle-spec) shift; HA_SPEC_ARG="${1:-}" ;;
         --hotaisle-cap) shift; HA_CAP_USD="${1:-}" ;;
         --column) shift; SELECTION="${1:-}" ;;
+        --plugin) shift; PLUGIN="${1:-}" ;;
         --ref-column|--cpu-column) shift; REFS+=("${1:-}") ;;
         --lease) shift; LEASE="${1:-}" ;;
         --smoke-seconds) shift; SMOKE_SECONDS="${1:-}" ;;
@@ -200,7 +210,12 @@ HA_CAP_CENTS=$(awk -v d="$HA_CAP_USD" 'BEGIN { printf "%d", d * 100 + 0.5 }')
 printf '%s' "$DO_SIZE" | grep -Eq '^gpu-[a-z0-9-]+$' || die "--do-size '$DO_SIZE' is not a DigitalOcean GPU size slug"
 printf '%s' "$DO_REGIONS" | grep -Eq '^[a-z0-9]+(,[a-z0-9]+)*$' || die "--do-regions must be region slugs separated by commas"
 printf '%s' "$DO_IMAGE" | grep -Eq '^[0-9]+$' || die "--do-image must be a numeric DigitalOcean image id"
-[ "$VENDOR" = cuda ] || [ -n "$SELECTION" ] || die "--vendor hip runs no smoke; give --column"
+# The expanded smoke runs on cuda, and on hip when a split plugin is given
+# (the rocm plugin's light-route receipt); a combined wheel's hip leg is its
+# column alone.
+RUN_SMOKE=0
+{ [ "$VENDOR" = cuda ] || [ -n "$PLUGIN" ]; } && RUN_SMOKE=1
+[ "$RUN_SMOKE" = 1 ] || [ -n "$SELECTION" ] || die "--vendor hip runs no smoke; give --column (or --plugin)"
 LANES=""
 if [ -n "$SELECTION" ]; then
     [ -f "$SELECTION" ] || die "no selection file $SELECTION"
@@ -243,6 +258,17 @@ print(hashlib.sha256(open(wheel, 'rb').read()).hexdigest(), version)
 PY
 ) || die "the wheel does not match: $WHEEL_INFO"
 WHEEL_SHA=${WHEEL_INFO%% *}; VERSION=${WHEEL_INFO##* }
+if [ -n "$PLUGIN" ]; then
+    [ -f "$PLUGIN" ] || die "no plugin wheel $PLUGIN"
+    PLUGIN=$(cd "$(dirname "$PLUGIN")" && pwd)/$(basename "$PLUGIN")
+    case "$VENDOR" in cuda) _pfx=mojolearn_cuda ;; *) _pfx=mojolearn_rocm ;; esac
+    case "$(basename "$PLUGIN")" in
+        "$_pfx-$VERSION-"*-manylinux*_x86_64.whl) ;;
+        *) die "$(basename "$PLUGIN") is not the $_pfx $VERSION manylinux x86_64 plugin of --vendor $VENDOR" ;;
+    esac
+    PLUGIN_SHA=$(shasum -a 256 "$PLUGIN" | cut -d' ' -f1)
+fi
+PLUGIN_BASE=""; [ -z "$PLUGIN" ] || PLUGIN_BASE=$(basename "$PLUGIN")
 QUALIFY_SHA=$(shasum -a 256 "$QUALIFY" | cut -d' ' -f1)
 STAMP=$(date -u +%Y%m%d-%H%M%S)
 POD_NAME="mojolearn-smoke-$(printf '%s' "$VERSION" | tr -c 'a-z0-9\n' '-')-$STAMP"
@@ -280,9 +306,9 @@ cd $RDIR || exit 9
 { nvidia-smi --query-gpu=name,driver_version --format=csv,noheader 2>/dev/null || rocm-smi --showproductname 2>/dev/null; uname -a; } > box.txt 2>&1
 PY=\$(command -v python3.13 || command -v python3.12 || command -v python3.11 || command -v python3.10 || command -v python3)
 echo "python=\$PY \$(\$PY --version 2>&1)" >> box.txt
-sha256sum "$(basename "$WHEEL")" qualify_verifier_wheel.py >> box.txt
-if [ "$VENDOR" = cuda ]; then
-timeout -k 20 $SMOKE_SECONDS "\$PY" qualify_verifier_wheel.py "$RDIR/$(basename "$WHEEL")" \\
+sha256sum "$(basename "$WHEEL")" $PLUGIN_BASE qualify_verifier_wheel.py >> box.txt
+if [ "$RUN_SMOKE" = 1 ]; then
+timeout -k 20 $SMOKE_SECONDS "\$PY" qualify_verifier_wheel.py "$RDIR/$(basename "$WHEEL")" ${PLUGIN:+--plugin "$RDIR/$PLUGIN_BASE"} \\
     --scope expanded --python "\$PY" --expected-source-commit $COMMIT --output $RDIR/out > smoke.log 2>&1
 echo \$? > smoke.exit
 fi
@@ -290,7 +316,7 @@ if [ -n "$LANES" ]; then
   # The release column from the INSTALLED wheel, run outside any checkout.
   # A fresh DigitalOcean image may still hold the apt lock from cloud-init.
   "\$PY" -m venv $RDIR/rv > column_venv.log 2>&1 || { (apt-get -o DPkg::Lock::Timeout=120 update -qq && apt-get -o DPkg::Lock::Timeout=120 install -y -qq python3-venv) >> column_venv.log 2>&1 && "\$PY" -m venv $RDIR/rv >> column_venv.log 2>&1; }
-  $RDIR/rv/bin/pip install --disable-pip-version-check "$RDIR/$(basename "$WHEEL")" numpy >> column_venv.log 2>&1
+  $RDIR/rv/bin/pip install --disable-pip-version-check "$RDIR/$(basename "$WHEEL")" ${PLUGIN:+"$RDIR/$PLUGIN_BASE"} numpy >> column_venv.log 2>&1
   echo "install_exit=\$?" > column.txt
   mkdir -p $RDIR/run && cd $RDIR/run
   export MOJOLEARN_NUMERIC_MODE=identical MOJOLEARN_COMMIT=$COMMIT
@@ -465,6 +491,7 @@ do_destroy() {  # DROPLET_ID, or a sweep by tag and name; DO_GONE=1 only on a GE
 
 echo "== release_wheel_smoke: $([ -n "$SSH_GIVEN" ] && echo "EXISTING BOX $SSH_GIVEN" || { [ "$RENT" = 1 ] && echo RENT || echo 'DRY RUN'; }) =="
 echo "  wheel    $(basename "$WHEEL")  sha256 $WHEEL_SHA  commit $COMMIT"
+[ -z "$PLUGIN" ] || echo "  plugin   $PLUGIN_BASE  sha256 $PLUGIN_SHA (installed with the core)"
 echo "  ships    the wheel + tools/qualify_verifier_wheel.py (sha256 $(printf %s "$QUALIFY_SHA" | cut -c1-16)...) and nothing else"
 echo "  smoke    qualify_verifier_wheel.py --scope expanded, bounded ${SMOKE_SECONDS}s"
 echo "  out      $OUT"
@@ -631,6 +658,7 @@ teardown() {
 mkdir -p "$OUT" || die "cannot create $OUT"
 [ -n "$SSH_GIVEN" ] && trap 'rm -rf "$TMPD"' EXIT
 { echo "wheel=$WHEEL"; echo "wheel_sha256=$WHEEL_SHA"; echo "commit=$COMMIT"; echo "qualify_sha256=$QUALIFY_SHA"
+  [ -z "$PLUGIN" ] || { echo "plugin=$PLUGIN"; echo "plugin_sha256=$PLUGIN_SHA"; }
   echo "target=${SSH_GIVEN:-rented, provider $PROVIDER}"; echo "started=$(date -u +%FT%TZ)"; } > "$OUT/smoke.txt"
 cp "$BOX" "$OUT/box.sh"
 
@@ -875,10 +903,16 @@ _up_secs=$(( 120 + _wb / 200000 ))     # 200 kB/s floor on the Mac's uplink
 say "uploading the wheel ($_wb bytes, bound ${_up_secs}s) and the smoke driver"
 bx 60 "rm -rf $RDIR && mkdir -p $RDIR" < /dev/null || die "could not prepare $RDIR"
 bx "$_up_secs" "cat > $RDIR/$(basename "$WHEEL")" < "$WHEEL" || die "wheel upload failed or exceeded ${_up_secs}s"
+if [ -n "$PLUGIN" ]; then
+    _pb=$(wc -c < "$PLUGIN" | tr -d ' ')
+    say "uploading the plugin $PLUGIN_BASE ($_pb bytes)"
+    bx $(( 120 + _pb / 200000 )) "cat > $RDIR/$PLUGIN_BASE" < "$PLUGIN" || die "plugin upload failed or exceeded its bound"
+fi
 bx 60 "cat > $RDIR/qualify_verifier_wheel.py" < "$QUALIFY" || die "driver upload failed"
 bx 60 "cat > $RDIR/box.sh" < "$BOX" || die "box command upload failed"
-_remote=$(bx 120 "cd $RDIR && sha256sum $(basename "$WHEEL") qualify_verifier_wheel.py" < /dev/null 2>&1)
+_remote=$(bx 120 "cd $RDIR && sha256sum $(basename "$WHEEL") $PLUGIN_BASE qualify_verifier_wheel.py" < /dev/null 2>&1)
 printf '%s\n' "$_remote" | grep -q "^$WHEEL_SHA " || die "wheel sha256 differs on the box: $_remote"
+[ -z "$PLUGIN" ] || printf '%s\n' "$_remote" | grep -q "^$PLUGIN_SHA " || die "plugin sha256 differs on the box: $_remote"
 printf '%s\n' "$_remote" | grep -q "^$QUALIFY_SHA " || die "driver sha256 differs on the box: $_remote"
 say "both files landed, sha256 verified on the box"
 
@@ -908,10 +942,10 @@ echo "finished=$(date -u +%FT%TZ) smoke_exit=${SMOKE_EXIT:-none}" >> "$OUT/smoke
 
 # The receipt, judged here: about THIS wheel, THIS commit, and PASSED.
 _v=0
-if [ "$VENDOR" = cuda ]; then
-python3 - "$OUT/results.json" "$WHEEL_SHA" "$COMMIT" <<'PY' | tee -a "$OUT/smoke.txt"
+if [ "$RUN_SMOKE" = 1 ]; then
+python3 - "$OUT/results.json" "$WHEEL_SHA" "$COMMIT" "$VENDOR" "$PLUGIN_BASE" "$PLUGIN_SHA" <<'PY' | tee -a "$OUT/smoke.txt"
 import json, sys
-path, sha, commit = sys.argv[1:]
+path, sha, commit, want_vendor, plugin, plugin_sha = sys.argv[1:]
 try:
     d = json.load(open(path))
 except Exception as exc:
@@ -922,7 +956,9 @@ if d.get('wheel_sha256') != sha: problems.append('receipt is about wheel %s' % d
 if d.get('source_commit') != commit: problems.append('receipt names commit %s' % d.get('source_commit'))
 if d.get('scope') != 'expanded': problems.append('scope %s' % d.get('scope'))
 vendor = (d.get('installed') or {}).get('vendor')
-if vendor != 'cuda': problems.append('installed vendor %s, not cuda' % vendor)
+if vendor != want_vendor: problems.append('installed vendor %s, not %s' % (vendor, want_vendor))
+got = sorted((p.get('wheel', '').rsplit('/', 1)[-1], p.get('wheel_sha256')) for p in d.get('plugins') or [])
+if got != ([(plugin, plugin_sha)] if plugin else []): problems.append('receipt plugins %s' % got)
 jobs = d.get('jobs') or []
 print('verdict=%s jobs=%d vendor=%s%s' % ('PASSED' if not problems else 'FAILED', len(jobs), vendor,
       '' if not problems else ' ' + '; '.join(problems)))

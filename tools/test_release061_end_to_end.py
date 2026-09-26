@@ -101,7 +101,60 @@ def byte_fixture(out, vendor, binding_sha):
 ARCHES = None
 
 
-def fixture(root):
+def split_fixture(wheel, version):
+    """The split set (core, mojolearn_cuda, mojolearn_rocm as the payload's sets
+    require) the fixture's combined wheel is a partition of, with the
+    .dist-info contents tools/wheel_api_audit.py split_audit requires. The
+    combined wheel is removed."""
+    plugins = gate.surface.load_gpu_plugins()
+    dist = 'mojolearn-' + version + '.dist-info/'
+    with zipfile.ZipFile(wheel) as archive:
+        members = {n: archive.read(n) for n in archive.namelist()}
+    wheel.unlink()
+    payload = json.loads(members[dist + 'LINUX_PAYLOAD.json'])
+    tag = 'py3-none-manylinux_2_35_x86_64'
+    parts = {}
+    for name, data in members.items():
+        if not name.startswith(dist):
+            parts.setdefault(plugins.member_vendor(name), {})[name] = data
+    out = []
+    for vendor, files in sorted(parts.items(), key=lambda kv: kv[0] or ''):
+        if vendor is None:
+            wdist, role, dist_name = dist, plugins.CORE_PROFILE, 'mojolearn'
+            meta = ['Metadata-Version: 2.4', 'Name: mojolearn', 'Version: ' + version]
+            for row in plugins.PLUGINS.values():
+                meta += ['Provides-Extra: ' + row['extra'],
+                         f'Requires-Dist: {row["distribution"]}=={version}; extra == "{row["extra"]}"']
+            files[wdist + plugins.CORE_MARKER] = json.dumps(plugins.core_marker(version)).encode()
+            name = 'mojolearn-' + version + '-' + tag + '.whl'
+        else:
+            row = plugins.PLUGINS[vendor]
+            wdist, role, dist_name = row['wheel_name'] + '-' + version + '.dist-info/', row['profile'], row['distribution']
+            meta = ['Metadata-Version: 2.4', 'Name: ' + dist_name, 'Version: ' + version,
+                    'Requires-Dist: mojolearn==' + version]
+            arches = {n.split('/')[2] for n in files}
+            files[wdist + plugins.PLUGIN_MARKER] = json.dumps(plugins.plugin_marker(vendor, version, arches)).encode()
+            name = row['wheel_name'] + '-' + version + '-' + tag + '.whl'
+        files[wdist + 'METADATA'] = ('\n'.join(meta) + '\n').encode()
+        files[wdist + 'WHEEL'] = ('Wheel-Version: 1.0\nRoot-Is-Purelib: false\nTag: ' + tag + '\n').encode()
+        files[wdist + 'LINUX_PAYLOAD.json'] = json.dumps(
+            dict(payload, split=dict(role=role, distribution=dist_name))).encode()
+        rows = io.StringIO()
+        writer = csv.writer(rows)
+        for member, data in files.items():
+            digest = base64.urlsafe_b64encode(hashlib.sha256(data).digest()).rstrip(b'=').decode()
+            writer.writerow([member, 'sha256=' + digest, str(len(data))])
+        writer.writerow([wdist + 'RECORD', '', ''])
+        files[wdist + 'RECORD'] = rows.getvalue().encode()
+        path = wheel.parent / name
+        with zipfile.ZipFile(path, 'w') as archive:
+            for member, data in files.items():
+                archive.writestr(member, data)
+        out.append(path)
+    return out
+
+
+def fixture(root, split=False):
     wrapper = root / 'python/mojolearn/__init__.py'
     wrapper.parent.mkdir(parents=True)
     wrapper.write_bytes(b'# inert wrapper fixture\n')
@@ -144,7 +197,7 @@ def fixture(root):
             source_inventory=inventory, source_sha256=source_sha, extensions=extensions))
         proof_sets[key] = dict(sha256=gate.digest_file(proof_path), source_sha256=source_sha)
     payload = dict(schema='mojolearn.linux-payload.v1', version=version,
-        assembly_profile=gate.surface.RELEASE_PROFILE, release_profile='alpha-api', source_commit='a' * 40,
+        assembly_profile=gate.SPLIT_PROFILE if split else gate.surface.RELEASE_PROFILE, release_profile='alpha-api', source_commit='a' * 40,
         source_inventory=inventory, sets=proof_sets,
         extensions={n: hashlib.sha256(b).hexdigest() for n, b in files.items()
                     if '/_mojolearn' in n and n not in gate.HOST_MEMBERS},
@@ -174,11 +227,14 @@ def fixture(root):
     with zipfile.ZipFile(wheel, 'w') as archive:
         for name, data in files.items():
             archive.writestr(name, data)
+    if split:
+        wheel = split_fixture(wheel, version)
     for key in sorted(ARCHES or gate.RELEASE_ARCHES):
         vendor, arch = key.split('/')
         out = qualification_root / key
         out.mkdir(parents=True)
-        audit = gate.release_audit(wheel, root, proof_root, key)
+        audit = (gate.split_release_audit(wheel, root, proof_root, key) if split
+                 else gate.release_audit(wheel, root, proof_root, key))
         write_json(out / 'wheel-audit.json', audit)
         shutil.copyfile(proof_root / (key.replace('/', '-') + '.json'), out / 'build-provenance.json')
         write_json(out / 'qualification-sources.json', snapshot)
@@ -298,6 +354,73 @@ class EndToEndRelease061(unittest.TestCase):
             with patch.object(gate.compare_ordered_python, 'compare', return_value={'status': 'PASSED'}), \
                     self.assertRaises((ValueError, OSError, KeyError)):
                 gate.check_release061(wheel, qualification, root)
+
+
+class SplitSet(unittest.TestCase):
+    """--profile release-split: the split set admitted as the combined wheel
+    it partitions, identified by its set digest."""
+
+    def check(self, wheels, qualification, root):
+        with patch.object(gate.compare_ordered_python, 'compare', return_value={'status': 'PASSED'}) as ordered:
+            return gate.check_release_split(wheels, qualification, root), ordered
+
+    def test_three_wheel_set_admits(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            wheels, qualification = fixture(root, split=True)
+            self.assertEqual(sorted(w.name.split('-')[0] for w in wheels), ['mojolearn', 'mojolearn_cuda', 'mojolearn_rocm'])
+            result, ordered = self.check(wheels, qualification, root)
+            self.assertEqual(result['status'], 'PASSED')
+            self.assertEqual(result['assembly_profile'], gate.SPLIT_PROFILE)
+            self.assertEqual(result['wheel_sha256'], gate.split_set_digest(wheels))
+            self.assertEqual(set(result['wheels']), {w.name for w in wheels})
+            self.assertEqual(set(result['runtime_coverage']), gate.RELEASE_ARCHES)
+            self.assertEqual(ordered.call_count, 2)
+
+    def test_nvidia_only_set_admits_without_a_cross_vendor_comparison(self):
+        global ARCHES
+        ARCHES, saved = {'cuda/sm_89', 'cuda/sm_90'}, ARCHES
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                wheels, qualification = fixture(root, split=True)
+                self.assertEqual(len(wheels), 2)
+                result, ordered = self.check(wheels, qualification, root)
+                self.assertEqual(result['vendors'], ['cuda'])
+                self.assertEqual(ordered.call_count, 0)
+        finally:
+            ARCHES = saved
+
+    def test_a_missing_plugin_a_changed_wheel_and_the_combined_audit_refuse(self):
+        for defect in ('missing_plugin', 'changed_plugin', 'combined_digest'):
+            with self.subTest(defect=defect), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                wheels, qualification = fixture(root, split=True)
+                if defect == 'missing_plugin':
+                    wheels = [w for w in wheels if not w.name.startswith('mojolearn_rocm')]
+                elif defect == 'changed_plugin':
+                    with zipfile.ZipFile(next(w for w in wheels if w.name.startswith('mojolearn_cuda')), 'a') as z:
+                        z.comment = b'changed final artifact'
+                else:
+                    # a qualification that recorded one wheel's digest, not the set's
+                    for out in qualification.glob('*/*/qualification.json'):
+                        doc = json.loads(out.read_text())
+                        doc['wheel_sha256'] = gate.digest_file(wheels[0])
+                        write_json(out, doc)
+                        seal_evidence(out.parent)
+                with self.assertRaises((ValueError, OSError, KeyError)):
+                    self.check(wheels, qualification, root)
+
+    def test_the_cli_takes_the_set(self):
+        import subprocess, sys
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            wheels, qualification = fixture(root, split=True)
+            script = Path(gate.__file__)
+            r = subprocess.run([sys.executable, str(script), *map(str, wheels[:2]), '--qualification-root',
+                                str(qualification), '--source-root', str(root)], capture_output=True, text=True)
+            self.assertEqual(r.returncode, 2)
+            self.assertIn('one wheel, except with --profile release-split', r.stderr)
 
 
 class HopperSpelling(unittest.TestCase):

@@ -56,6 +56,19 @@
 # `pull_request`: a pull request must never reach a job holding
 # `id-token: write`.
 
+# THE SPLIT LINUX PACKAGES (python/mojolearn/gpu_plugins.py, 2026-09-25).
+# On Linux mojolearn may ship as three PyPI projects: the core `mojolearn`,
+# and the GPU plugins `mojolearn-cuda` and `mojolearn-rocm`. A trusted
+# publisher mints a token for the projects that trust ONE (workflow,
+# environment) pair, so each project is uploaded by its own job in its own
+# environment: `testpypi`/`pypi` for mojolearn (unchanged, macOS and the Linux
+# core), `testpypi-cuda`/`pypi-cuda` for mojolearn-cuda and
+# `testpypi-rocm`/`pypi-rocm` for mojolearn-rocm. The plugin jobs run after the
+# core's upload succeeded (or when the dispatch carries no core), so
+# `pip install "mojolearn[cuda]"` never resolves a plugin whose core is not
+# there. The PyPI side is docs/RELEASE_CHECKLIST.md, "Registering
+# mojolearn-cuda and mojolearn-rocm on PyPI". The combined single Linux wheel
+# still publishes exactly as before through the `mojolearn` jobs.
 name: Release provenance
 
 on:
@@ -177,6 +190,9 @@ jobs:
       # line; a Linux wheel staged on the runner adds a second. The publish
       # job checks the artifact against THIS, not against a count.
       wheel_manifest: ${{ steps.digest.outputs.wheel_manifest }}
+      # The split Linux plugins staged with the core, as a JSON list of
+      # plugin names ("cuda", "rocm"); [] for a combined wheel or none.
+      linux_plugins: ${{ steps.linux.outputs.plugins || '[]' }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -378,19 +394,30 @@ jobs:
       # checkout cannot write there and this workflow never puts anything
       # there; staging it is a deliberate act by whoever ran the audit.
       #
-      # It is admitted only if ALL of these hold, and each is an exit:
-      #   * exactly one .whl is staged (two would make "which one" a guess)
+      # WHAT MAY BE STAGED: ONE combined wheel (mojolearn-*.whl, both vendors'
+      # sets inside), OR a SPLIT SET: exactly one core mojolearn-*.whl whose
+      # .dist-info carries gpu_plugins.json, plus at least one of
+      # mojolearn_cuda-*.whl and mojolearn_rocm-*.whl (python/mojolearn/
+      # gpu_plugins.py). Anything else in the directory is refused by name.
+      #
+      # Every staged wheel is admitted only if ALL of these hold, and each is
+      # an exit:
       #   * a `<wheel>.sha256` sidecar sits beside it and matches, so a
       #     half-copied or swapped file is caught here and not on PyPI
       #   * its version equals the version this job just built
       #   * its tag is a manylinux tag; `linux_x86_64` is what pack_wheel.py
-      #     writes on purpose and PyPI refuses it, so seeing it here means
-      #     the audit step never ran
-      #   * `twine check` passes on it
-      # and, ONLY IF a qualification/ directory was staged beside it:
+      #     writes on purpose for the combined wheel and PyPI refuses it, so
+      #     seeing it here means the audit step never ran
+      #   * `twine check` passes on it (the Metadata check step below)
+      # a split set additionally passes tools/wheel_api_audit.py split_audit
+      # (each plugin holds only its own vendor's sets, the pins are exact both
+      # ways, one version, one tag, no member in two wheels), and ONLY IF a
+      # qualification/ directory was staged beside it:
       #   * qualification/{hip,cuda}/ under that same staging directory
       #     retains 24 installed jobs per vendor plus build-provenance.json
       #     from each build; BOTH runs installed this exact final wheel SHA
+      #     (for a split set: the set digest of every staged wheel,
+      #     tools/check_linux_release_qualification.py --profile release-split)
       #   * current native source inventory, both vendor binary sets, and
       #     retained UMAP/OrderedRMSE IDENTICAL comparisons all pass
       # Separate HIP-only/CUDA-only candidate qualifications cannot admit a
@@ -398,7 +425,7 @@ jobs:
       # If the directory is absent or empty, this is a macOS-only release and
       # the step says so and moves on. That is not a failure; it is what
       # every release before 0.3.0 was.
-      - name: Admit a pre-built, pre-audited Linux wheel, if one is staged
+      - name: Admit a pre-built, pre-audited Linux wheel (or split set), if one is staged
         id: linux
         run: |
           set -euo pipefail
@@ -406,25 +433,50 @@ jobs:
           if [ ! -d "$DIR" ] || [ -z "$(ls -A "$DIR"/*.whl 2>/dev/null || true)" ]; then
             echo "no Linux wheel staged at $DIR; this is a macOS-only release"
             echo "staged=none" >> "$GITHUB_OUTPUT"
+            echo "plugins=[]" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          n=$(ls -1 "$DIR"/*.whl | wc -l | tr -d ' ')
-          test "$n" = 1 || { echo "::error::$n wheels staged in $DIR; stage exactly one"; exit 1; }
-          WHL=$(ls -1 "$DIR"/*.whl)
-          base=$(basename "$WHL")
-          test -f "$WHL.sha256" || { echo "::error::$base has no .sha256 sidecar"; exit 1; }
-          want=$(cut -d' ' -f1 < "$WHL.sha256" | tr -d '[:space:]')
-          got=$(shasum -a 256 "$WHL" | cut -d' ' -f1)
-          test "$want" = "$got" || { echo "::error::$base digest $got, sidecar says $want"; exit 1; }
           v_toml=$(sed -n 's/^version = "\(.*\)"$/\1/p' python/pyproject.toml | head -1)
-          case "$base" in
-            "mojolearn-$v_toml-"*) ;;
-            *) echo "::error::$base is not version $v_toml"; exit 1 ;;
-          esac
-          case "$base" in
-            *-manylinux_*_x86_64.whl) ;;
-            *) echo "::error::$base carries no manylinux tag; packaging/linux/audit.sh has not run on it"; exit 1 ;;
-          esac
+          cores=0; plugins=""; staged=""
+          for WHL in "$DIR"/*.whl; do
+            base=$(basename "$WHL")
+            case "$base" in
+              "mojolearn-$v_toml-"*) cores=$((cores + 1)) ;;
+              "mojolearn_cuda-$v_toml-"*) plugins="$plugins cuda" ;;
+              "mojolearn_rocm-$v_toml-"*) plugins="$plugins rocm" ;;
+              *) echo "::error::$base is not version $v_toml of mojolearn, mojolearn_cuda or mojolearn_rocm"; exit 1 ;;
+            esac
+            test -f "$WHL.sha256" || { echo "::error::$base has no .sha256 sidecar"; exit 1; }
+            want=$(cut -d' ' -f1 < "$WHL.sha256" | tr -d '[:space:]')
+            got=$(shasum -a 256 "$WHL" | cut -d' ' -f1)
+            test "$want" = "$got" || { echo "::error::$base digest $got, sidecar says $want"; exit 1; }
+            case "$base" in
+              *-manylinux_*_x86_64.whl) ;;
+              *) echo "::error::$base carries no manylinux tag; packaging/linux/audit.sh has not run on it"; exit 1 ;;
+            esac
+            staged="$staged $base"
+          done
+          test "$cores" = 1 || { echo "::error::$cores mojolearn-*.whl staged in $DIR; stage exactly one (the combined wheel or the split core)"; exit 1; }
+          CORE=$(ls -1 "$DIR"/mojolearn-"$v_toml"-*.whl)
+          # the split core carries gpu_plugins.json in its .dist-info (a file that
+          # is no zip at all is left to the twine check below)
+          split=$(python3 -c 'import sys,zipfile
+          try: print(int(any(n.endswith(".dist-info/gpu_plugins.json") for n in zipfile.ZipFile(sys.argv[1]).namelist())))
+          except zipfile.BadZipFile: print(0)' "$CORE")
+          if [ "$split" = 1 ]; then
+            test -n "$plugins" || { echo "::error::the split core is staged with no plugin; stage mojolearn_cuda and/or mojolearn_rocm beside it"; exit 1; }
+            python3 - "$DIR" <<'PY'
+          import pathlib, sys
+          sys.path.insert(0, 'tools')
+          from wheel_api_audit import split_audit
+          report = split_audit(sorted(pathlib.Path(sys.argv[1]).glob('*.whl')))
+          for problem in report['problems']:
+              print('::error::' + problem)
+          sys.exit(1 if report['problems'] else 0)
+          PY
+          else
+            test -z "$plugins" || { echo "::error::plugin wheel(s)$plugins staged beside a combined wheel; a combined wheel ships alone"; exit 1; }
+          fi
           # The Mac build stages generated Python harness copies in its
           # package directory. Admit Linux against this exact committed
           # source, without counting those build products as native inputs.
@@ -452,15 +504,25 @@ jobs:
           # (2026-09-19). NVIDIA and AMD qualification is checked when someone
           # staged it and is not required when nobody did.
           if [ -d "$DIR/qualification" ]; then
-            python3 "$source_dir/tools/check_linux_release_qualification.py" "$WHL" \
-              --qualification-root "$DIR/qualification" \
-              --source-root "$source_dir" --profile release-linux3
+            if [ "$split" = 1 ]; then
+              # shellcheck disable=SC2046
+              python3 "$source_dir/tools/check_linux_release_qualification.py" $(ls -1 "$DIR"/*.whl) \
+                --qualification-root "$DIR/qualification" \
+                --source-root "$source_dir" --profile release-split
+            else
+              python3 "$source_dir/tools/check_linux_release_qualification.py" "$CORE" \
+                --qualification-root "$DIR/qualification" \
+                --source-root "$source_dir" --profile release-linux3
+            fi
           else
-            echo "::warning::no NVIDIA/AMD qualification staged for $base; admitting it on the CPU column and the Apple pass"
+            echo "::warning::no NVIDIA/AMD qualification staged for$staged; admitting it on the CPU column and the Apple pass"
           fi
-          cp "$WHL" python/dist/
-          echo "admitted $base ($got)"
-          echo "staged=$base" >> "$GITHUB_OUTPUT"
+          for base in $staged; do
+            cp "$DIR/$base" python/dist/
+            echo "admitted $base ($(shasum -a 256 "$DIR/$base" | cut -d' ' -f1))"
+          done
+          echo "staged=$(echo $staged)" >> "$GITHUB_OUTPUT"
+          echo "plugins=$(python3 -c 'import json,sys; print(json.dumps(sorted(sys.argv[1:])))' $plugins)" >> "$GITHUB_OUTPUT"
 
       # ==================================================================
       # THE TWO GATES THAT WERE MISSING WHEN 0.3.0 AND 0.3.2 SHIPPED.
@@ -486,12 +548,17 @@ jobs:
       # ELF; `audit.sh` already runs this image on this machine.
       - name: The staged Linux wheel meets the x86-64-v3 baseline
         if: steps.linux.outputs.staged != 'none'
+        env:
+          STAGED: ${{ steps.linux.outputs.staged }}
         run: |
           set -euo pipefail
-          WHL="python/dist/${{ steps.linux.outputs.staged }}"
           rm -rf "${RUNNER_TEMP:-/tmp}/isa" && mkdir -p "${RUNNER_TEMP:-/tmp}/isa"
-          python3 -c 'import zipfile,sys; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' \
-            "$WHL" "${RUNNER_TEMP:-/tmp}/isa"
+          # A split set is a partition of the combined wheel: every wheel is
+          # extracted into the one tree, so the same gate reads the same bytes.
+          for base in $STAGED; do
+            python3 -c 'import zipfile,sys; zipfile.ZipFile(sys.argv[1]).extractall(sys.argv[2])' \
+              "python/dist/$base" "${RUNNER_TEMP:-/tmp}/isa"
+          done
           docker run --rm --cpus 1 --platform linux/amd64 \
             -v "${RUNNER_TEMP:-/tmp}/isa:/w:ro" \
             -v "$PWD/packaging/linux:/g:ro" \
@@ -541,7 +608,7 @@ jobs:
           echo "wheel_sha256=$(shasum -a 256 "$WHEEL" | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
           # macOS first, then anything else, so the manifest's order is fixed.
           ( cd python/dist && shasum -a 256 mojolearn-*-macosx_*.whl
-            { ls -1 mojolearn-*.whl | grep -v -- '-macosx_' || true; } | while read -r w; do
+            { ls -1 mojolearn-*.whl mojolearn_*.whl 2>/dev/null | grep -v -- '-macosx_' || true; } | while read -r w; do
               shasum -a 256 "$w"; done ) > manifest.txt
           cat manifest.txt
           {
@@ -648,14 +715,84 @@ jobs:
           "$RUNNER_TEMP/math-audit/bin/pip" install --disable-pip-version-check --only-binary=:all: lief==1.0.0
           "$RUNNER_TEMP/math-audit/bin/python" packaging/portable_math/wheel.py --audit-only dist/*.whl
 
+      # THIS JOB UPLOADS THE `mojolearn` PROJECT ONLY: the macOS wheel and the
+      # Linux core (or the combined wheel). A split plugin belongs to its own
+      # project and is uploaded by `publish_plugins` in its own environment,
+      # after this job succeeded.
+      - name: Keep only the mojolearn project's wheels
+        run: |
+          set -euo pipefail
+          mkdir -p upload
+          mv dist/mojolearn-*.whl upload/
+          ls -la upload
+
       - name: Publish
         uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # v1.13.0
         with:
           repository-url: ${{ inputs.publish == 'pypi' && 'https://upload.pypi.org/legacy/' || 'https://test.pypi.org/legacy/' }}
+          packages-dir: upload/
           print-hash: true
           # A filename collision means this exact version was already
           # uploaded. Skipping it quietly is how two different artifacts end
           # up believed to be the same one.
+          skip-existing: false
+
+  publish_plugins:
+    name: Publish mojolearn-${{ matrix.plugin }} to ${{ inputs.publish }}
+    needs: [build, publish]
+    if: inputs.publish != 'none' && needs.build.outputs.linux_plugins != '[]' && needs.publish.result == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      # one plugin failing never cancels the other vendor's
+      fail-fast: false
+      matrix:
+        plugin: ${{ fromJSON(needs.build.outputs.linux_plugins) }}
+    # ONE ENVIRONMENT PER PROJECT: the Trusted Publisher of mojolearn-cuda is
+    # configured against `pypi-cuda` (`testpypi-cuda` on TestPyPI), that of
+    # mojolearn-rocm against `pypi-rocm` (`testpypi-rocm`).
+    environment:
+      name: ${{ inputs.publish }}-${{ matrix.plugin }}
+      url: ${{ inputs.publish == 'pypi' && format('https://pypi.org/p/mojolearn-{0}', matrix.plugin) || format('https://test.pypi.org/project/mojolearn-{0}/', matrix.plugin) }}
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Download the wheels that were built
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: mojolearn-wheel
+          path: dist
+      - name: This plugin's wheel, exactly as the build job recorded it
+        env:
+          EXPECTED_MANIFEST: ${{ needs.build.outputs.wheel_manifest }}
+          PLUGIN: ${{ matrix.plugin }}
+        run: |
+          set -euo pipefail
+          printf '%s\n' "$EXPECTED_MANIFEST" | sed '/^$/d' | grep -E "  mojolearn_${PLUGIN}-[^ ]+\.whl$" > manifest.txt
+          test "$(wc -l < manifest.txt | tr -d ' ')" = 1 || {
+            echo "::error::the build job recorded no single mojolearn_${PLUGIN} wheel"; exit 1; }
+          mkdir -p upload
+          mv dist/mojolearn_"${PLUGIN}"-*.whl upload/
+          test "$(find upload -name '*.whl' | wc -l | tr -d ' ')" = 1 || {
+            echo "::error::the artifact holds other than one mojolearn_${PLUGIN} wheel"; exit 1; }
+          ( cd upload && sha256sum -c ../manifest.txt ) || {
+            echo "::error::mojolearn_${PLUGIN} does not match the digest the build job recorded"; exit 1; }
+          rm -f manifest.txt
+      - name: Reject platform math in final wheel bytes
+        run: |
+          python3 -m venv "$RUNNER_TEMP/math-audit"
+          "$RUNNER_TEMP/math-audit/bin/pip" install --disable-pip-version-check --only-binary=:all: lief==1.0.0
+          "$RUNNER_TEMP/math-audit/bin/python" packaging/portable_math/wheel.py --audit-only upload/*.whl
+      - name: Publish
+        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e # v1.13.0
+        with:
+          repository-url: ${{ inputs.publish == 'pypi' && 'https://upload.pypi.org/legacy/' || 'https://test.pypi.org/legacy/' }}
+          packages-dir: upload/
+          print-hash: true
           skip-existing: false
 
   alpha_stage:
@@ -663,6 +800,11 @@ jobs:
     needs: validate_inputs
     outputs:
       linux_qualification: ${{ steps.linux_qualification.outputs.required }}
+      # Which PyPI projects this candidate carries: `core` is true when a
+      # mojolearn-*.whl (macOS, the combined Linux wheel or the split core)
+      # is in it; `plugins` is the JSON list of split plugins ("cuda", "rocm").
+      core: ${{ steps.projects.outputs.core }}
+      plugins: ${{ steps.projects.outputs.plugins }}
     if: inputs.alpha_candidate_tag != ''
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -741,6 +883,21 @@ jobs:
           ARTIFACT_SOURCE_COMMIT: ${{ inputs.artifact_source_commit }}
           LIGHT_PLATFORM: ${{ inputs.light_platform }}
         run: python3 tools/check_light_release.py dist --source-commit "${ARTIFACT_SOURCE_COMMIT:-$GITHUB_SHA}" --platform "$LIGHT_PLATFORM"
+      - name: Which PyPI projects the candidate carries
+        id: projects
+        run: |
+          python3 - <<'PYPROJECTS'
+          import json, os, pathlib
+          names = [p.name for p in pathlib.Path('dist').glob('*.whl')]
+          plugins = sorted(n.split('-')[0].split('_', 1)[1] for n in names if n.startswith(('mojolearn_cuda-', 'mojolearn_rocm-')))
+          core = any(n.startswith('mojolearn-') for n in names)
+          if len(plugins) + core == 0 or len(plugins) + sum(n.startswith('mojolearn-') for n in names) != len(names):
+              raise SystemExit('the candidate carries a wheel of no known project: ' + ', '.join(names))
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('core=' + ('true' if core else 'false') + '\n')
+              output.write('plugins=' + json.dumps(plugins) + '\n')
+          print('projects:', ('mojolearn ' if core else '') + ' '.join('mojolearn-' + p for p in plugins))
+          PYPROJECTS
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: mojolearn-alpha-wheel
@@ -766,7 +923,7 @@ jobs:
     needs: [alpha_stage, cpu_certification]
     if: >-
       always() && !cancelled() && inputs.publish != 'none' && inputs.alpha_candidate_tag != '' &&
-      needs.alpha_stage.result == 'success' &&
+      needs.alpha_stage.result == 'success' && needs.alpha_stage.outputs.core == 'true' &&
       ((inputs.validation_profile == 'light' && needs.cpu_certification.result == 'skipped') ||
        (inputs.validation_profile != 'light' && needs.cpu_certification.result == 'success'))
     runs-on: ubuntu-latest
@@ -815,9 +972,100 @@ jobs:
           "$RUNNER_TEMP/math-audit/bin/pip" install --disable-pip-version-check --only-binary=:all: lief==1.0.0
           "$RUNNER_TEMP/math-audit/bin/python" packaging/portable_math/wheel.py --audit-only dist/*.whl
 
+      # The mojolearn project's wheels only; a split plugin in the same
+      # candidate is uploaded by publish_alpha_plugins in its own environment.
+      - name: Keep only the mojolearn project's wheels
+        run: |
+          set -euo pipefail
+          mkdir -p upload
+          mv dist/mojolearn-*.whl upload/
+          ls -la upload
+
       - name: Publish exact alpha API wheel bytes with their scoped admission
         uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e
         with:
           repository-url: ${{ inputs.publish == 'pypi' && 'https://upload.pypi.org/legacy/' || 'https://test.pypi.org/legacy/' }}
+          packages-dir: upload/
+          print-hash: true
+          skip-existing: false
+
+  publish_alpha_plugins:
+    name: Publish alpha mojolearn-${{ matrix.plugin }} to ${{ inputs.publish }}
+    needs: [alpha_stage, cpu_certification, publish_alpha]
+    # After the core's upload when the candidate carries the core; on its own
+    # when it carries plugins alone (their core published by an earlier
+    # dispatch: every plugin pins mojolearn==<its version>).
+    if: >-
+      always() && !cancelled() && inputs.publish != 'none' && inputs.alpha_candidate_tag != '' &&
+      needs.alpha_stage.result == 'success' && needs.alpha_stage.outputs.plugins != '[]' &&
+      (needs.publish_alpha.result == 'success' ||
+       (needs.publish_alpha.result == 'skipped' && needs.alpha_stage.outputs.core != 'true')) &&
+      ((inputs.validation_profile == 'light' && needs.cpu_certification.result == 'skipped') ||
+       (inputs.validation_profile != 'light' && needs.cpu_certification.result == 'success'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        plugin: ${{ fromJSON(needs.alpha_stage.outputs.plugins) }}
+    # ONE ENVIRONMENT PER PROJECT (see the header): pypi-cuda / testpypi-cuda,
+    # pypi-rocm / testpypi-rocm.
+    environment:
+      name: ${{ inputs.publish }}-${{ matrix.plugin }}
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        with:
+          name: mojolearn-alpha-wheel
+          path: dist
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        if: needs.alpha_stage.outputs.linux_qualification == 'true'
+        with:
+          name: mojolearn-alpha-linux-qualification
+          path: qualification
+      - name: Recheck exact alpha bytes immediately before publishing
+        env:
+          EXPECTED_MANIFEST_SHA: ${{ inputs.alpha_manifest_sha256 }}
+          VALIDATION_PROFILE: ${{ inputs.validation_profile }}
+          ARTIFACT_SOURCE_COMMIT: ${{ inputs.artifact_source_commit }}
+          LIGHT_PLATFORM: ${{ inputs.light_platform }}
+        run: |
+          set -euo pipefail
+          cpus=$(python3 -c 'import os; print(",".join(map(str, sorted(os.sched_getaffinity(0))[:2])))')
+          qualification_args=()
+          if [ -f qualification/linux-qualification.tar.gz ]; then
+            qualification_args=(--qualification-archive qualification/linux-qualification.tar.gz --source-root "$GITHUB_WORKSPACE")
+          fi
+          timeout 600 taskset -c "$cpus" python3 packaging/verify_alpha_artifacts.py \
+            dist --manifest-sha256 "$EXPECTED_MANIFEST_SHA" "${qualification_args[@]}"
+          if [ "$VALIDATION_PROFILE" = light ]; then
+            python3 tools/check_light_release.py dist --source-commit "${ARTIFACT_SOURCE_COMMIT:-$GITHUB_SHA}" --platform "$LIGHT_PLATFORM"
+          fi
+          rm dist/alpha-manifest.json
+          rm -f dist/light-smoke-*.json
+      - name: Keep only this plugin's wheel
+        env:
+          PLUGIN: ${{ matrix.plugin }}
+        run: |
+          set -euo pipefail
+          mkdir -p upload
+          mv dist/mojolearn_"${PLUGIN}"-*.whl upload/
+          test "$(find upload -name '*.whl' | wc -l | tr -d ' ')" = 1 || {
+            echo "::error::the candidate holds other than one mojolearn_${PLUGIN} wheel"; exit 1; }
+      - name: Reject platform math in final wheel bytes
+        run: |
+          python3 -m venv "$RUNNER_TEMP/math-audit"
+          "$RUNNER_TEMP/math-audit/bin/pip" install --disable-pip-version-check --only-binary=:all: lief==1.0.0
+          "$RUNNER_TEMP/math-audit/bin/python" packaging/portable_math/wheel.py --audit-only upload/*.whl
+      - name: Publish exact alpha plugin wheel bytes with their scoped admission
+        uses: pypa/gh-action-pypi-publish@ed0c53931b1dc9bd32cbe73a98c7f6766f8a527e
+        with:
+          repository-url: ${{ inputs.publish == 'pypi' && 'https://upload.pypi.org/legacy/' || 'https://test.pypi.org/legacy/' }}
+          packages-dir: upload/
           print-hash: true
           skip-existing: false
