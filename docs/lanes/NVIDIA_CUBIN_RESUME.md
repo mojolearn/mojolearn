@@ -12,7 +12,28 @@ and (2) the NVIDIA payload shrinks.
 
 ## Spend so far
 
-$0.00 (cap $25, RunPod NVIDIA only).
+r1 (4090, pod eq7wr46p6rc9l2, ~4 min, verified gone, box script bug) ~$0.05;
+r2 (4090, pod b11cqjkymdxu0l, $0.74/h, started 06:05Z) running.
+Cap $25, RunPod NVIDIA only.
+
+## Measured on r2 (RTX 4090, driver 580.126.20, ptxas/fatbinary 13.0.88 from pip nvidia-cuda-nvcc==13.0.*)
+
+- A BARE CUBIN DOES NOT FIT in place: sm_89, 1,108 distinct modules: cubins
+  19.1 MB vs PTX 25.0 MB, only 337 fit (worst 6.6x, the ELF skeleton + long
+  Mojo symbol names). Over the set's 1,786 embedded modules 677 fit.
+- A FATBIN WITH THE CUBIN ZSTD-COMPRESSED (`fatbinary --compress-all
+  --compress-mode=size`) totals 4.2 MB and fits 1,087 of 1,108. The 21 that
+  do not are 765..2,949-byte kernels (fills, scans, copies, a few with only
+  add.rn / div.rn / rcp.rn / abs / max / setp): JIT-invariant by construction.
+  Over the embedded modules: sm_89 1,745 converted + 41 left PTX; sm_90a
+  1,713 + 73; audit 0 errors.
+- ELF/fatbin headers (ptxas 13.0 = CUDA ELF ABI 8, OSABI 0x41): cubin
+  e_flags carry the SM in bits 8..15 and do NOT distinguish sm_90 from sm_90a;
+  the fatbin entry does (u32 at +28 = SM, flag 0x100000 at +40 = 'a').
+- Sizes (wheel, zip): whole wheel 100,638,553 -> 95,366,527 bytes; IDENTICAL
+  sm_89 compressed 20,080,068 -> 17,206,280, sm_90a 20,081,224 -> 17,683,000.
+  The PTX already zipped well; most of the compressed identical tier is the
+  host code. Installed (uncompressed) size is unchanged (in place, NUL-padded).
 
 ## Step 1, feasibility: what is proven (static reading, no GPU yet)
 

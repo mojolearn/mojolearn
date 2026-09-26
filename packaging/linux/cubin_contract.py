@@ -1,27 +1,35 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: Apache-2.0
 """IDENTICAL-tier CUDA machine code: every embedded PTX module replaced, in
-place, by the cubin `ptxas --fmad=false` makes of it, and audited.
+place, by a compressed fatbin holding the cubin `ptxas --fmad=false` makes of
+it, and audited.
 
 WHY. The Linux wheel's CUDA sets embed PTX text, and on the user's box the
 Mojo runtime hands those bytes to `cuModuleLoadDataEx` (libAsyncRTMojoBindings;
-the bundled nvPTXCompiler is used only in compile-only mode, and the wheel
-does not ship libNVPTX.so), so the DRIVER's JIT compiles our IDENTICAL kernels
-with whatever ptxas that driver carries, fmad on. packaging/linux/ptx_contract.py
+its bundled nvPTXCompiler serves only compile-only mode, and the wheel does not
+ship libNVPTX.so), so the DRIVER's JIT compiles our IDENTICAL kernels with
+whatever ptxas that driver carries, fmad on. packaging/linux/ptx_contract.py
 pins the rounding in the PTX (`.rn`, never contracted); this pass removes the
 JIT itself: the machine code is made once, at build time, by a pinned ptxas
-with contraction off, and the driver only loads it.
+with contraction off, and the driver only loads it (and inflates it).
 
 HOW. `cuModuleLoadDataEx` takes PTX, a cubin or a fatbin and tells them apart
-by content (a cubin is an ELF image and carries its own size), and Mojo passes
-the embedded bytes through unchanged. So a cubin written over the PTX string,
-NUL-padded to the PTX length, is a valid image and nothing is relinked, the
-same in-place discipline as the `.rn` pass. It requires the cubin to be no
-longer than the PTX text; a module that does not fit is left as PTX and
-reported by name (the audit then refuses the set).
+by content (both binary forms carry their own size), and Mojo passes the
+embedded bytes through unchanged. So a binary image written over the PTX
+string, NUL-padded to the PTX length, loads, and nothing is relinked: the same
+in-place discipline as the `.rn` pass. It must be no longer than the PTX text.
+A bare cubin is not: measured on the 0.8.19 sm_89 IDENTICAL set with ptxas
+13.0, only 337 of 1,108 distinct modules fit (cubins total 19.1 MB against
+25.0 MB of PTX, worst 6.6x). A fatbin with the cubin zstd-compressed
+(`fatbinary --compress-all --compress-mode=size`) totals 4.2 MB and fits
+1,087 of 1,108. The 21 that do not are tiny (765 to 2,949 bytes of PTX,
+where the ELF skeleton dominates); they stay PTX, and the audit admits a
+leftover PTX module only when it is JIT-invariant by construction: under
+MAX_LEFTOVER bytes, no approximate instruction (APPROX) and no float op
+without a rounding modifier, so any ptxas makes the same arithmetic of it.
 
-THE AUDIT refuses an IDENTICAL-tier CUDA binary that still embeds any PTX
-module, or a cubin whose architecture is not the set's.
+THE AUDIT refuses an IDENTICAL-tier CUDA binary that embeds a PTX module
+outside that rule, no fatbin at all, or a fatbin for another architecture.
 """
 import argparse
 import concurrent.futures as cf
@@ -36,14 +44,21 @@ import sys
 import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from ptx_contract import is_identical_cuda, modules  # noqa: E402
+from ptx_contract import APPROX, is_identical_cuda, modules, plain_ops  # noqa: E402
 
 _TARGET = re.compile(rb"^\s*\.target\s+(sm_\w+)", re.M)
-#: A CUDA cubin: 64-bit little-endian ELF with OSABI 0x33 (ELFOSABI_CUDA).
-_CUBIN_MAGIC = b"\x7fELF\x02\x01\x01\x33"
-_EM_CUDA = 190
+_FATBIN_MAGIC = struct.pack("<I", 0xBA55ED50)
+#: fatbin entry flag: the image was declared for the architecture-specific
+#: target (`sm=90a`), measured with fatbinary 13.0 (sm=90 and sm=90a images of
+#: the same cubin differ only in this bit).
+_FATBIN_ARCH_SPECIFIC = 0x100000
+_FATBIN_KIND_ELF = 2
 #: The ptxas contract. -O3 is ptxas's default and its maximum.
 PTXAS_FLAGS = ("--fmad=false", "-O3")
+FATBIN_FLAGS = ("--compress-all", "--compress-mode=size")
+#: The largest PTX module the audit lets stay PTX (the biggest measured
+#: leftover is 2,949 bytes).
+MAX_LEFTOVER = 4096
 
 
 def ptx_arch(text):
@@ -53,80 +68,69 @@ def ptx_arch(text):
     return m.group(1).decode()
 
 
-def cubin_arch(image):
-    """'sm_89' / 'sm_90a' from a cubin's ELF header, or None if it is not a cubin.
-
-    CUDA ELF e_flags: the low byte is the SM number for the pre-CUDA-13 ABI
-    (EF_CUDA_SM, 0xff), with the architecture-specific 'a' flag at bit 11
-    (EF_CUDA_ACCELERATORS_V1 0x800) in e_flags as ptxas 12.x/13.0 writes it for
-    sm_90a; ABI version 8 (CUDA 13) moves the SM to bits 8..15 with 'a' at
-    bit 3. Both layouts are read; the result is checked against the set.
-    """
-    if len(image) < 64 or not image.startswith(_CUBIN_MAGIC):
+def fatbin_images(data, start):
+    """[(kind, arch)] of the fatbin at `start`, or None if there is none there."""
+    if data[start:start + 4] != _FATBIN_MAGIC or len(data) < start + 16:
         return None
-    (e_machine,) = struct.unpack_from("<H", image, 18)
-    if e_machine != _EM_CUDA:
+    _ver, hsize, fsize = struct.unpack_from("<HHQ", data, start + 4)
+    off, end, images = start + hsize, start + hsize + fsize, []
+    if end > len(data) or hsize != 16:
         return None
-    abiver = image[8]
-    (flags,) = struct.unpack_from("<I", image, 48)
-    if abiver >= 8:
-        sm, accel = (flags >> 8) & 0xff, bool(flags & 0x8)
-    else:
-        sm, accel = flags & 0xff, bool(flags & 0x800)
-    return f"sm_{sm}" + ("a" if accel else "")
+    while off + 64 <= end:
+        kind, _v, ehsize, payload = struct.unpack_from("<HHIQ", data, off)
+        (sm,) = struct.unpack_from("<I", data, off + 28)
+        (flags,) = struct.unpack_from("<Q", data, off + 40)
+        if ehsize < 64 or payload == 0:
+            return None
+        images.append((kind, f"sm_{sm}" + ("a" if flags & _FATBIN_ARCH_SPECIFIC else "")))
+        off += ehsize + payload
+    return images or None
 
 
-def cubin_size(image):
-    """The ELF image's extent: the end of its section header table, or its
-    furthest section / program segment, whichever is further."""
-    e_phoff, e_shoff = struct.unpack_from("<QQ", image, 32)
-    e_phentsize, e_phnum, e_shentsize, e_shnum = struct.unpack_from("<HHHH", image, 54)
-    end = max(64, e_shoff + e_shentsize * e_shnum, e_phoff + e_phentsize * e_phnum)
-    for i in range(e_shnum):
-        off = e_shoff + i * e_shentsize
-        sh_type, = struct.unpack_from("<I", image, off + 4)
-        sh_offset, sh_size = struct.unpack_from("<QQ", image, off + 24)
-        if sh_type != 8:  # SHT_NOBITS occupies no file bytes
-            end = max(end, sh_offset + sh_size)
-    return end
-
-
-def cubins(data):
-    """(start, arch) of every CUDA cubin embedded in `data`."""
-    out, i = [], data.find(_CUBIN_MAGIC)
+def fatbins(data):
+    """(start, [(kind, arch)]) of every fatbin embedded in `data`."""
+    out, i = [], data.find(_FATBIN_MAGIC)
     while i >= 0:
-        arch = cubin_arch(data[i:i + 64])
-        if arch:
-            out.append((i, arch))
-        i = data.find(_CUBIN_MAGIC, i + 1)
+        imgs = fatbin_images(data, i)
+        if imgs:
+            out.append((i, imgs))
+        i = data.find(_FATBIN_MAGIC, i + 1)
     return out
 
 
-def ptxas_version(ptxas):
-    r = subprocess.run([ptxas, "--version"], capture_output=True, text=True, check=True)
+def tool_version(tool):
+    r = subprocess.run([tool, "--version"], capture_output=True, text=True, check=True)
     return r.stdout.strip().splitlines()[-1]
 
 
-def compile_ptx(text, arch, ptxas):
-    """PTX bytes -> cubin bytes, `ptxas -arch=<arch> --fmad=false -O3`."""
+def compile_ptx(text, arch, ptxas, fatbinary):
+    """PTX bytes -> compressed fatbin bytes holding the fmad=false cubin."""
     with tempfile.TemporaryDirectory() as d:
-        src, dst = os.path.join(d, "m.ptx"), os.path.join(d, "m.cubin")
+        src, cub, fat = (os.path.join(d, n) for n in ("m.ptx", "m.cubin", "m.fatbin"))
         with open(src, "wb") as f:
             f.write(text)
-        r = subprocess.run([ptxas, f"-arch={arch}", *PTXAS_FLAGS, src, "-o", dst],
-                           capture_output=True, text=True)
+        r = subprocess.run([ptxas, f"-arch={arch}", *PTXAS_FLAGS, src, "-o", cub], capture_output=True, text=True)
         if r.returncode:
             raise RuntimeError(f"ptxas -arch={arch} failed: {r.stderr[-800:]}")
-        with open(dst, "rb") as f:
+        r = subprocess.run([fatbinary, f"--create={fat}", f"--image3=kind=elf,sm={arch[3:]},file={cub}",
+                            *FATBIN_FLAGS], capture_output=True, text=True)
+        if r.returncode:
+            raise RuntimeError(f"fatbinary failed: {r.stderr[-800:]}")
+        with open(fat, "rb") as f:
             return f.read()
 
 
-def patch_files(paths, ptxas, jobs=None, arch=None):
+def jit_invariant(text):
+    """A PTX module any ptxas compiles to the same arithmetic: small, no
+    approximate instruction, every float mul/add/sub/fma rounding-pinned."""
+    return len(text) <= MAX_LEFTOVER and not APPROX.search(text) and not plain_ops(text)
+
+
+def patch_files(paths, ptxas, fatbinary, jobs=None, arch=None):
     """Replace every PTX module of every file in place; one JSON row per file.
 
-    Distinct modules are compiled once across all files (a set embeds its
-    1,770 distinct modules 3,481 times). `arch`, when given, must equal every
-    module's .target (a set is one architecture)."""
+    Distinct modules are compiled once across all files. `arch`, when given,
+    must equal every module's .target (a set is one architecture)."""
     datas = {p: Path(p).read_bytes() for p in paths}
     todo = {}
     for p, data in datas.items():
@@ -137,24 +141,26 @@ def patch_files(paths, ptxas, jobs=None, arch=None):
                 raise ValueError(f"{p}: a module targets {a}, the set is {arch}")
             todo.setdefault(hashlib.sha256(text).hexdigest(), (text, a))
     with cf.ThreadPoolExecutor(jobs or os.cpu_count() or 1) as ex:
-        futs = {k: ex.submit(compile_ptx, t, a, ptxas) for k, (t, a) in todo.items()}
+        futs = {k: ex.submit(compile_ptx, t, a, ptxas, fatbinary) for k, (t, a) in todo.items()}
         built = {k: f.result() for k, f in futs.items()}
     rows = []
     for p, data in datas.items():
         buf = bytearray(data)
-        row = {"file": str(p), "modules": 0, "converted": 0, "ptx_bytes": 0, "cubin_bytes": 0, "too_big": []}
+        row = {"file": str(p), "modules": 0, "converted": 0, "ptx_bytes": 0, "image_bytes": 0,
+               "left_ptx": [], "too_big": []}
         for s, e in modules(data):
             text = data[s:e]
             key = hashlib.sha256(text).hexdigest()
-            cub = built[key]
+            img = built[key]
             row["modules"] += 1
             row["ptx_bytes"] += e - s
-            if len(cub) > e - s:
-                row["too_big"].append({"sha256": key[:16], "ptx": e - s, "cubin": len(cub)})
+            if len(img) > e - s:
+                entry = {"sha256": key[:16], "ptx": e - s, "fatbin": len(img)}
+                (row["left_ptx"] if jit_invariant(text) else row["too_big"]).append(entry)
                 continue
-            buf[s:e] = cub + b"\0" * (e - s - len(cub))
+            buf[s:e] = img + b"\0" * (e - s - len(img))
             row["converted"] += 1
-            row["cubin_bytes"] += len(cub)
+            row["image_bytes"] += len(img)
         if bytes(buf) != data:
             Path(p).write_bytes(bytes(buf))
         rows.append(row)
@@ -162,18 +168,24 @@ def patch_files(paths, ptxas, jobs=None, arch=None):
 
 
 def audit_bytes(data, arch=None):
-    """{ptx_modules, cubins, arches, errors}."""
-    ptx = modules(data)
-    cbs = cubins(data)
-    arches = sorted({a for _, a in cbs})
+    """{ptx_modules, jit_invariant_ptx, fatbins, arches, errors}."""
     errors = []
-    if ptx:
-        errors.append(f"{len(ptx)} PTX module(s) still embedded (the driver would JIT them)")
-    if not cbs:
-        errors.append("no cubin embedded")
+    ptx = modules(data)
+    loose = [data[s:e] for s, e in ptx if not jit_invariant(data[s:e])]
+    fbs = fatbins(data)
+    arches = sorted({a for _, imgs in fbs for _, a in imgs})
+    kinds = sorted({k for _, imgs in fbs for k, _ in imgs})
+    if loose:
+        errors.append(f"{len(loose)} PTX module(s) the driver would JIT that are not JIT-invariant"
+                      f" (first {len(loose[0])} bytes, .target {ptx_arch(loose[0])})")
+    if not fbs:
+        errors.append("no fatbin embedded")
+    if any(k != _FATBIN_KIND_ELF for k in kinds):
+        errors.append(f"a fatbin carries a non-ELF image (kinds {kinds}); PTX inside a fatbin is JIT too")
     if arch and any(a != arch for a in arches):
-        errors.append(f"cubin architecture(s) {arches}, the set is {arch}")
-    return {"ptx_modules": len(ptx), "cubins": len(cbs), "arches": arches, "errors": errors}
+        errors.append(f"fatbin architecture(s) {arches}, the set is {arch}")
+    return {"ptx_modules": len(ptx), "jit_invariant_ptx": len(ptx) - len(loose), "fatbins": len(fbs),
+            "arches": arches, "errors": errors}
 
 
 def audit_tree(root):
@@ -195,12 +207,14 @@ def main():
     ap.add_argument("mode", choices=("patch", "audit"))
     ap.add_argument("paths", nargs="+", type=Path)
     ap.add_argument("--ptxas", default=os.environ.get("MOJOLEARN_PTXAS", "ptxas"))
+    ap.add_argument("--fatbinary", default=os.environ.get("MOJOLEARN_FATBINARY", "fatbinary"))
     ap.add_argument("--arch", help="the set's architecture; every module must target it")
     ap.add_argument("--jobs", type=int, default=None)
     a = ap.parse_args()
     if a.mode == "patch":
-        print(json.dumps({"ptxas": ptxas_version(a.ptxas), "flags": PTXAS_FLAGS}))
-        rows = patch_files(a.paths, a.ptxas, a.jobs, a.arch)
+        print(json.dumps({"ptxas": tool_version(a.ptxas), "fatbinary": tool_version(a.fatbinary),
+                          "ptxas_flags": PTXAS_FLAGS, "fatbinary_flags": FATBIN_FLAGS}))
+        rows = patch_files(a.paths, a.ptxas, a.fatbinary, a.jobs, a.arch)
         for r in rows:
             print(json.dumps(r))
         return int(any(r["too_big"] for r in rows))
