@@ -7571,17 +7571,29 @@ def _launch_fwd_r2[HD: Int, TQ: Int, QRES: Bool, PF: Bool, SABN: Bool, SWZ: Bool
     step_count_sync()
     ctx.synchronize()
     _attn_tick(ctx, on, tk, "fwd_scratch_alloc")
-    comptime kr = fused_attn_forward_r2_kernel[HD, TQ, QRES, PF, SABN, SWZ]
     step_count_launch()
-    ctx.enqueue_function[kr](
-        ctxv.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
-        corner.unsafe_ptr(), sstash.unsafe_ptr(), q_rope.unsafe_ptr(),
-        k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), Int32(b), Int32(l),
-        Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
-        Int32(window), scale,
-        grid_dim=(b * nh * ((l + TQ - 1) // TQ), 1, 1),
-        block_dim=(FUSED_THREADS, 1, 1),
-    )
+    comptime if ATTN_FWD_APPLE_MMA and HD == 64 and TQ == 32 and PF and not SABN:
+        comptime ka = fused_attn_forward_r2_amma_kernel[HD, TQ, QRES, PF, SABN, SWZ]
+        ctx.enqueue_function[ka](
+            ctxv.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
+            corner.unsafe_ptr(), sstash.unsafe_ptr(), q_rope.unsafe_ptr(),
+            k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), Int32(b), Int32(l),
+            Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
+            Int32(window), scale,
+            grid_dim=(b * nh * ((l + TQ - 1) // TQ), 1, 1),
+            block_dim=(FUSED_THREADS, 1, 1),
+        )
+    else:
+        comptime kr = fused_attn_forward_r2_kernel[HD, TQ, QRES, PF, SABN, SWZ]
+        ctx.enqueue_function[kr](
+            ctxv.unsafe_ptr(), amax.unsafe_ptr(), denom.unsafe_ptr(),
+            corner.unsafe_ptr(), sstash.unsafe_ptr(), q_rope.unsafe_ptr(),
+            k_cache.unsafe_ptr(), v_cache.unsafe_ptr(), Int32(b), Int32(l),
+            Int32(nh), Int32(nkv), Int32(s), Int32(pos0), Int32(key_lo),
+            Int32(window), scale,
+            grid_dim=(b * nh * ((l + TQ - 1) // TQ), 1, 1),
+            block_dim=(FUSED_THREADS, 1, 1),
+        )
     # The scratch must outlive the enqueued kernel: synchronize, then the
     # explicit last use (a buffer is freed at its last use).
     step_count_sync()

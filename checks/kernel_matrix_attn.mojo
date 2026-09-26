@@ -209,15 +209,20 @@ def attn_default_arm_for[column: Int]() -> Int:
         # on the table and brief section 22.7 names the follow-on.
         return ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_ESTASH_DRES_KVGRID_R32_BSWZ
     if column == COLUMN_APPLE:
-        # lane/apple-identical-neural, 2026-09-26: NVIDIA's word on Apple.
+        # lane/apple-identical-neural, 2026-09-26: the round 3 word on Apple.
         # Measured on the M4 (10-core GPU), byte LM 1 x 2048, d768, 12 heads,
         # 2 layers, V 50,257, consecutive resident lean steps, alternating
         # builds, two rounds: stash_tiled 2.025 / 2.051 s, _r3 1.928 / 1.832,
         # _kvgrid 2.029 / 1.833, _estash 1.797 / 1.764, _bswz 1.698 / 1.739.
-        # Per-step witnesses (loss, gradients, parameters, m, v) equal to
-        # stash_tiled's. Schedules only: every arm is bit-equal to the eager
-        # oracle (brief sections 4, 12, 14, 16, 22).
-        return ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF_ESTASH_DRES_KVGRID_R32_BSWZ
+        # NOT an estash word: the estash words keep a [B, nh, L, S] exp stash
+        # per layer from forward to backward (201 MB a layer at 1 x 2048 x 12
+        # heads), and on this 16 GB Mac a 12-layer step then refused at the
+        # first forward ("infinity in hidden_states at flat index 0"; 4, 6
+        # and 8 layers trained, peak RSS 8.8 GB at 8), while _r3 trained at 12
+        # layers (7.78 s a step). A Mac with the memory can take the estash
+        # words by name. Per-step witnesses equal to stash_tiled's.
+        # Schedules only: every arm is bit-equal to the eager oracle.
+        return ATTN_DEFAULT_WORD_STASH_TILED_FGRID_R32_QRES_PF
     if column == COLUMN_AMD:
         # DEVIATION 2657 ON AMD TOO. Measured 2026-09-12 on a Hot Aisle MI300X
         # (gfx942) against the previous AMD default
