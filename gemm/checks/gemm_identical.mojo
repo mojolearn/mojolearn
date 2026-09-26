@@ -3948,9 +3948,13 @@ def identical_gemm_with_plan(
             ctx, c, a, b, m, n, k, leaf, p_count, st, SWIZZLE_NONE, False
         )
         return
-    if plan == PLAN_APPLE_MMA:
-        _launch_apple_mma(ctx, c, a, b, m, n, k, leaf, p_count, st)
-        return
+    comptime if APPLE_MMA:
+        # Compile-time gated: the kernel calls Apple AIR intrinsics, so no
+        # other column may instantiate it (the chooser never names the plan
+        # there; a gate naming it falls through to the tuned 64x64 plan).
+        if plan == PLAN_APPLE_MMA:
+            _launch_apple_mma(ctx, c, a, b, m, n, k, leaf, p_count, st)
+            return
     if plan == PLAN_TUNED_64_4X4:
         _launch_tuned[TUNED_RPT, TUNED_CPT, TUNED_TC, TUNED_64_KS, TUNED_FOLD_SLOTS](
             ctx, c, a, b, m, n, k, leaf, p_count, st, SWIZZLE_NONE, False
