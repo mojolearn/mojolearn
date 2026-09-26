@@ -22,6 +22,13 @@
 # `-D MOJOLEARN_KNN_SELECT_TRIAL=1`, the kNN selection gate's arm hook,
 # tools/knn_selection_gate.sh). A release build leaves it unset; nothing
 # else in this script reads it.
+#
+# MOJOLEARN_MOJO_BUILD_FLAGS (optional, empty by default): extra `mojo build`
+# flags, word-split, placed right after `--emit shared-lib` in EVERY
+# bindings/build_*.sh (the host shims reach it through build_host_family.sh).
+# The one experiment hook for compiler options that are not defines, for
+# example `--fp-mode contract=off` (bench/results/fp_contract_off_2026-09-26/).
+# A release build leaves it unset. tools/bincache.py keys it (MOJOLEARN_*).
 set -eu
 
 here=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
@@ -309,7 +316,7 @@ trap 'rm -rf "$tmpdir"' EXIT INT TERM
 out="$tmpdir/_mojolearn.so"
 
 # shellcheck disable=SC2086  # the flag strings are deliberately word-split
-pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib \
+pixi run mojo build -j "${MOJOLEARN_COMPILE_JOBS:-2}" --emit shared-lib ${MOJOLEARN_MOJO_BUILD_FLAGS:-} \
     $TARGET_FLAGS $COLUMN_DEFINE $MODE_DEFINE \
     ${MOJOLEARN_BUILD_EXTRA_DEFINES:-} \
     $LINK_FLAGS \
