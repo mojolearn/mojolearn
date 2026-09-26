@@ -66,6 +66,11 @@ from hierarchy.impl.cluster.detail.connectivities import (
     pairwise_distances,
 )
 from hierarchy.impl.cluster.detail.mst import build_sorted_mst
+from hierarchy.impl.cluster.detail.fast_boruvka import fast_euclidean_mst
+from hierarchy.impl.cluster.detail.single_linkage import (
+    SL_FAST_BORUVKA,
+    SL_FAST_BORUVKA_MIN_ROWS,
+)
 from checks.numerics import identical_div
 from neighbors.checks.pinned_distance_tile import PINNED_TILE_TPB
 
@@ -105,7 +110,18 @@ def build_mr_linkage(
             "hdbscan.build_mr_linkage: n_rows=" + String(m)
             + " < 2; a dendrogram needs at least two points"
         )
-    if m > PAIRWISE_MAX_ROWS:
+    # FAST on Apple: the mutual-reachability MST from Boruvka rounds with
+    # the reachabilities computed on the fly (hierarchy's
+    # `fast_euclidean_mst`, mutual_reach=True) instead of the dense graph.
+    var use_fast = False
+    comptime if SL_FAST_BORUVKA:
+        use_fast = (
+            m > SL_FAST_BORUVKA_MIN_ROWS
+            and n <= 64
+            and sabotage == HDB_SAB_NONE
+            and not trace.enabled
+        )
+    if m > PAIRWISE_MAX_ROWS and not use_fast:
         raise Error(
             "hdbscan.build_mr_linkage: n_rows=" + String(m) + " > "
             + String(PAIRWISE_MAX_ROWS)
@@ -154,29 +170,31 @@ def build_mr_linkage(
     # `indptr[i] = i * m`, `indices[i*m + j] = j` and the diagonal at
     # FLT_MAX; `pairwise_distances` also runs DEVIATION 623's NaN refusal
     # on the matrix before it returns.
-    var nnz = m * m
+    var nnz = 1 if use_fast else m * m
     var indptr = ctx.enqueue_create_buffer[DType.int32](m + 1)
     var indices = ctx.enqueue_create_buffer[DType.int32](nnz)
     var pw_dists = ctx.enqueue_create_buffer[DType.float32](nnz)
     var norms = ctx.enqueue_create_buffer[DType.float32](m)
-    pairwise_distances(
-        ctx, x, m, n, metric, indptr, indices, pw_dists, norms,
-        tile_tpb, LINK_SAB_NONE,
-    )
+    if not use_fast:
+        pairwise_distances(
+            ctx, x, m, n, metric, indptr, indices, pw_dists, norms,
+            tile_tpb, LINK_SAB_NONE,
+        )
 
     # `reachability.cuh:222` `(value_t)1.0 / alpha`, on the host as
     # theirs is, through `identical_div` (row 49's seam). At the shipped
     # alpha = 1.0 the quotient is exactly 1.0 in both modes.
     var inv_alpha = identical_div(Float32(1.0), alpha)
     var mr = ctx.enqueue_create_buffer[DType.float32](nnz)
-    mutual_reachability_dense(
-        ctx, mr, pw_dists, core_dists, m, inv_alpha, mr_tpb, sabotage
-    )
-    refuse_nonfinite_device(
-        ctx, mr, nnz, "hdbscan.build_mr_linkage",
-        "mutual reachability cells", sabotage,
-    )
-    trace.record_device[DType.float32](ctx, "hdbscan.mr.dists", mr, nnz)
+    if not use_fast:
+        mutual_reachability_dense(
+            ctx, mr, pw_dists, core_dists, m, inv_alpha, mr_tpb, sabotage
+        )
+        refuse_nonfinite_device(
+            ctx, mr, nnz, "hdbscan.build_mr_linkage",
+            "mutual reachability cells", sabotage,
+        )
+        trace.record_device[DType.float32](ctx, "hdbscan.mr.dists", mr, nnz)
 
     # `:81-102` color, then build_sorted_mst. The reduction op and the
     # metric are arguments of the FIX-UP LOOP only; the graph here is
@@ -185,11 +203,20 @@ def build_mr_linkage(
     # `hierarchy/impl/cluster/detail/mst.mojo::connect_knn_graph` raises
     # BY NAME rather than pretending, which is what this lane wants.
     var color = ctx.enqueue_create_buffer[DType.int32](m)
-    var rounds = build_sorted_mst(
-        ctx, indptr, indices, mr, m, n,
-        mst_rows, mst_cols, mst_weights, color, nnz,
-        max_iter=10, mst_tpb=mst_tpb, sabotage=LINK_SAB_NONE,
-    )
+    var rounds: Int
+    if use_fast:
+        rounds = fast_euclidean_mst(
+            ctx, x, m, n, True, mst_rows, mst_cols, mst_weights,
+            mutual_reach=True,
+            core_ptr=core_dists.unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](),
+            inv_alpha=inv_alpha,
+        )
+    else:
+        rounds = build_sorted_mst(
+            ctx, indptr, indices, mr, m, n,
+            mst_rows, mst_cols, mst_weights, color, nnz,
+            max_iter=10, mst_tpb=mst_tpb, sabotage=LINK_SAB_NONE,
+        )
 
     var n_edges = m - 1
     var h_src = ctx.enqueue_create_host_buffer[DType.int32](n_edges)
