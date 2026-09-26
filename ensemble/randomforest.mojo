@@ -4,11 +4,12 @@
 
 from std.gpu import block_dim, block_idx, global_idx, thread_idx
 from std.sys.compile import is_defined
-from std.sys.info import has_nvidia_gpu_accelerator
+from std.sys.info import has_apple_gpu_accelerator, has_nvidia_gpu_accelerator
 from std.math import ceildiv as _ceildiv
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 from checks.numerics import (
     GLOBAL_NUMERIC_MODE,
+    NUMERIC_FAST,
     NUMERIC_IDENTICAL,
     ftz,
     portable_log2_64,
@@ -105,7 +106,18 @@ comptime LABELS_SAMPLED_ORDER = True
 # histograms, counts, leaves, and the resulting forest remain identical, but
 # `row_ids` order and its diagnostic trace intentionally differ from the reference.
 # `-D MOJOLEARN_2010_ROWS_SORTED=1` turns it on; off is the shipped default.
-comptime ROWS_SORTED_SAMPLE = is_defined["MOJOLEARN_2010_ROWS_SORTED"]()
+comptime ROWS_SORTED_SAMPLE = is_defined["MOJOLEARN_2010_ROWS_SORTED"]() or (
+    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_RF_ROWS_SORTED_OFF"]()
+)
+"""FAST on Apple: sorted bootstrap rows on WIDE data (`ROWS_SORTED_MIN_COLS`
+columns and up), where a node's rows then read the row-major bins in
+ascending order. M4 1M rows, same forest hashes: istella 18.0-19.4 ->
+13.0-14.0 s, istellareg 92 -> 88 s; taxi / taxireg (16 columns) are ~7%
+slower with it (the sort costs more than the locality saves), so they keep
+the drawn order. `-D MOJOLEARN_RF_ROWS_SORTED_OFF` keeps the drawn order."""
+comptime ROWS_SORTED_MIN_COLS = 64
 
 # The default bootstrap sampler already
 # computes each sampled row in a GPU thread, then the sampled-label staging
@@ -1974,6 +1986,7 @@ struct RowSampler(Movable):
         has_sample_weight: Bool = False,
         n_trees_for_masks: Int = 0,
         n_slots: Int = 1,
+        sort_rows: Bool = True,
     ) raises:
         """`:63-105`, their constructor.
 
@@ -2006,7 +2019,7 @@ struct RowSampler(Movable):
         # DEVIATION 2010 -- scratch only under the flag, and only when a
         # bootstrap arm can produce an unsorted draw.
         comptime if ROWS_SORTED_SAMPLE:
-            if bootstrap and n > 1:
+            if bootstrap and n > 1 and sort_rows:
                 self.sort_keys = Optional(
                     ctx.enqueue_create_buffer[DType.uint32](n)
                 )
@@ -2125,7 +2138,7 @@ struct RowSampler(Movable):
         # equivalent; after keeps the appendix in one place. Bootstrap
         # arms only: the two non-bootstrap arms are already ascending.
         comptime if ROWS_SORTED_SAMPLE:
-            if self.bootstrap and self.n_selected > 1:
+            if self.bootstrap and self.n_selected > 1 and self.sort_keys:
                 sort_selected_rows(
                     ctx,
                     self.selected_rows_[slot],
@@ -2680,6 +2693,8 @@ def fit_forest[
         has_sw,
         Int(rf_params.n_trees) if oob_score else 0,
         n_slots=k_streams,
+        sort_rows=is_defined["MOJOLEARN_2010_ROWS_SORTED"]()
+        or n_cols >= ROWS_SORTED_MIN_COLS,
     )
     if has_sw:
         sampler.prepare_weights(ctx, sample_weight_host)
