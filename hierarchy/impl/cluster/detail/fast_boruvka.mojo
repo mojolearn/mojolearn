@@ -26,6 +26,9 @@ from max.gpu.sync import barrier
 from std.math import sqrt
 from std.memory import bitcast
 from std.builtin.sort import sort
+from std.os import getenv
+from std.time import perf_counter_ns
+from hierarchy.impl.cluster.detail.fast_mma_boruvka import MmaBoruvka
 
 comptime FB_TPB = 128
 comptime FB_TILE = 64
@@ -194,6 +197,10 @@ def fast_euclidean_mst(
     for i in range(m):
         todo_h.unsafe_ptr().unsafe_store(i, Int32(i))
     var n_todo = m
+    # FAST, Apple, n <= 32: the matrix-unit search with the same answer
+    # (`fast_mma_boruvka.mojo`); `mb.ok` is False when it declines.
+    var _st_on = getenv("MOJOLEARN_STAGE_TIMES") == "1"
+    var mb = MmaBoruvka(ctx, x, m, n, mutual_reach, core_ptr, inv_alpha)
     while n_comp > 1:
         rounds += 1
         var grid = (n_todo + FB_TPB - 1) // FB_TPB
@@ -203,6 +210,15 @@ def fast_euclidean_mst(
                 dst_buf=todo_d.create_sub_buffer[DType.int32](0, n_todo),
                 src_ptr=todo_h.unsafe_ptr(),
             )
+        var _tq0 = 0
+        if _st_on:
+            ctx.synchronize()
+            _tq0 = Int(perf_counter_ns())
+        if mb.ok and n_todo > 0:
+            mb.enqueue(
+                ctx, x, m, n, mutual_reach, core_ptr, inv_alpha, comp_d,
+                todo_d, n_todo, bd_d, bj_d,
+            )
         comptime for DM in [8, 16, 32, 64]:
             # The reachability arm keeps one point per thread (its per-pair
             # sqrt, not the tile reads, dominates: HDBSCAN taxi 100k 9.6 s
@@ -211,7 +227,7 @@ def fast_euclidean_mst(
             var gridp = (n_todo + FB_TPB * P - 1) // (FB_TPB * P)
             if mutual_reach:
                 gridp = grid
-            if n_todo > 0 and n <= DM and (DM == 8 or n > DM // 2):
+            if not mb.ok and n_todo > 0 and n <= DM and (DM == 8 or n > DM // 2):
                 if mutual_reach:
                     ctx.enqueue_function[fb_nearest_other_kernel[DM, True, 1]](
                         x.unsafe_ptr(), core_ptr, inv_alpha,
@@ -228,6 +244,10 @@ def fast_euclidean_mst(
                         todo_d.unsafe_ptr(), Int32(n_todo),
                         grid_dim=gridp, block_dim=FB_TPB,
                     )
+        if _st_on:
+            ctx.synchronize()
+            print("BORUVKA round=" + String(rounds) + " n_todo=" + String(n_todo)
+                  + " ms=" + String((Int(perf_counter_ns()) - _tq0) // 1000000))
         ctx.enqueue_copy(dst_ptr=bd_h.unsafe_ptr(), src_buf=bd_d)
         ctx.enqueue_copy(dst_ptr=bj_h.unsafe_ptr(), src_buf=bj_d)
         ctx.synchronize()
@@ -315,6 +335,7 @@ def fast_euclidean_mst(
             src_ptr=hw.unsafe_ptr(),
         )
     ctx.synchronize()
+    _ = mb^
     _ = todo_h^
     _ = todo_d^
     _ = comp_d^
