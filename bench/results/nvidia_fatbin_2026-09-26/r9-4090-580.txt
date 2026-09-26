@@ -1,0 +1,6 @@
+NVIDIA GeForce RTX 4090, 580.159.03, 8.9
+pip=0
+col_new_nojit exit=0 secs=148
+col_new exit=0 secs=150
+new cache files: 0 bytes: 10
+NEW_DONE

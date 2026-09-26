@@ -16,8 +16,50 @@ r1 (4090, pod eq7wr46p6rc9l2, ~4 min, verified gone, box script bug) ~$0.05;
 r2 (4090, pod b11cqjkymdxu0l, $0.74/h, 59 min, verified gone) ~$0.73.
 r3 (4090, pod nd4pf5m1yj11mk, ~11 min, verified gone) ~$0.14.
 r4 (H100 80GB HBM3, pod 0wu9vfceofo6fh, $3.49/h, ~15 min, verified gone) ~$0.90.
-Total ~$1.82 of the $25 cap. RunPod NVIDIA only. After r4 the RunPod listing
+r5 (RTX 4090, driver 570.211.01, pod l0oszcw4e8no6b, $0.74/h, 56 min, verified gone) ~$0.69.
+r6 (no stock, nothing created). r7 (H100 80GB HBM3, driver 580.126.09, pod
+plk4c6fgudcfwv, ~9 min, verified gone) ~$0.55. r8 (RTX 2000 Ada, driver
+570.195.03, pod x2aa4n9c7ewo62, $0.24/h, ~9 min, verified gone) ~$0.04.
+r9 (RTX 4090, driver 580.159.03, pod yfo4f77l16no0m, ~7 min, verified gone) ~$0.09.
+Earlier pods' drivers: r1 not recorded, r2 580.126.20, r3 580.x
+(4090), r4 580.126.09.
+Total ~$3.19 of the $25 cap. RunPod NVIDIA only. After r9 the RunPod listing
 shows no mojolearn-cubin pod and no dead-man of this lane is running.
+
+## DRIVER FLOOR (coordinator's blocker, 2026-09-26): SHIPPED RECIPE IS CUDA 12.5 + LZ4
+
+Before (0.8.19 PTX wheel): the MAX 26.5 runtime refuses drivers < 580 at kernel
+load ("Your current NVIDIA GPU driver version is not supported. Required:
+driver version >= 580 (CUDA >= 13.0)", device_context.mojo:3825) unless the
+user sets MODULAR_NVPTX_COMPILER_PATH to a system ptxas; then the PTX floor
+applies: sm_89 PTX ISA 8.1 -> driver >= 530.30 (CUDA 12.1), sm_90a ISA 8.5 ->
+>= 555.42 (CUDA 12.5). Measured: the PTX wheel runs on 570 with the variable.
+
+CUDA 13.0 fatbins (the first recipe): 13.x binaries need r580 (13.0 release
+notes: "13.x: >= 580"; ELF ABI 8, zstd). Measured on 570 with the variable:
+CUDA_ERROR_INVALID_IMAGE. That RAISED the escape-hatch floor to 580: rejected.
+
+After (shipped): ptxas 12.5.82 + fatbinary 12.5.82 `--compress-all` (LZ4) from
+NVIDIA's cuda_nvcc redist archive (sha256 ded05fe3...). Default floor 580 (the
+same MAX check); with the variable: 12.x cubins load on any r525+ driver by
+minor version compatibility (13.0 release notes table: "12.x: >= 525 < 580");
+measured on 570: full JIT-disabled release column, 0 DIVERGENT. So the floor
+does not rise; the escape hatch no longer needs the user's ptxas to accept PTX
+8.5 (only the variable's presence to pass MAX's check). Not measured: drivers
+below 570 (no older driver offered on sm_89/sm_90 RunPod hardware), and the
+sm_90a 12.5 fatbins on a pre-580 driver (only H100s with 580 were offered).
+Wheel sha256 c5bd934f8f043e538137ec03da1dac0a547a2ea087c4d96ba4dccb0a26fc182d,
+reproducible; results `bench/results/nvidia_fatbin_2026-09-26/README.md`.
+
+| box, driver | env | JIT disabled | JIT cache | vs 0.8.19 refs |
+|---|---|---|---|---|
+| r9 RTX 4090 sm_89, 580.159.03 | none | pass 148 s | 0 | 627 / 984, 0 DIVERGENT |
+| r7 H100 sm_90a, 580.126.09 | none | pass 142 s | 0 | 627 / 984, 0 DIVERGENT |
+| r8 RTX 2000 Ada sm_89, 570.195.03 | escape hatch | pass 124 s | 0 | 627 / 984, 0 DIVERGENT |
+
+Lesson: r5's results (the first 570 run, 12.4-fatbinary variant) were lost when
+rent.sh's lease-end teardown fired before the pull; pull evidence before the
+lease ends (rent.sh holds at most LEASE-5 minutes).
 
 ## PROVEN on r4 (sm_90a, H100 80GB HBM3, driver 580.126.09)
 
@@ -137,11 +179,13 @@ compression do to the wheel size.
 
 ## Exact next step
 
-Both arches proven. What is left (none needs a GPU to start):
+Both arches proven with the 12.5 recipe (the sections below about 13.0.88 /
+zstd describe the superseded first recipe; their mechanism findings still hold).
+What is left (none needs a GPU to start):
 1. Review + merge lane/nvidia-cubin (Andrew; never merged by the lane).
 2. The first real release build after merge runs the new build_sets.sh block on
-   the NVIDIA build boxes (needs `python3 -m pip` and `objdump` there; both were
-   on the RunPod pytorch image). cubin_contract.py is a LINUX_BUILDERS /
+   the NVIDIA build boxes (needs `curl`, `sha256sum`, `tar -J`/xz and `objdump`
+   there; all were on the RunPod pytorch image). cubin_contract.py is a LINUX_BUILDERS /
    LINUX_SET_BUILDERS input, so every CUDA set rebuilds (no reuse). Watch
    `cubin.jsonl` for `unplaced` rows with jit_invariant false (the build refuses).
 3. Optional: the FAST and deterministic CUDA tiers still ship PTX (driver JIT);

@@ -1,0 +1,12 @@
+NVIDIA RTX 2000 Ada Generation, 570.195.03, 8.9
+/root/tc125r/nvcc.tar.xz: OK
+pip_cubin=0
+pip_zst=0
+col_o_plain exit=1 secs=1
+Required: driver version >= 580 (CUDA >= 13.0)
+col_o_zst exit=1 secs=2
+CUDA_ERROR_INVALID_IMAGE (device ker
+col_o_nojit exit=0 secs=124
+col_o_jit exit=0 secs=122
+o_jit cache files: 0 bytes: 10
+OLDFINAL_DONE

@@ -22,7 +22,7 @@ with tempfile.TemporaryDirectory() as t:
             p = os.path.join(t, n.replace('/', '__'))
             open(p, 'wb').write(data[n])
             paths.append(p)
-        rows = cc.patch_files(paths, ptxas, fatbinary, arch=arch, objdump=shutil.which('objdump'))
+        rows = cc.patch_files(paths, ptxas, fatbinary, arch=arch, objdump=shutil.which("objdump"))
         for n, p in zip(names, paths):
             new = open(p, 'rb').read()
             assert len(new) == len(data[n])
