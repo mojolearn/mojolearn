@@ -81,6 +81,11 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from core.expand_distances import expand_distances_kernel
 from core.gemm import gemm_nt
 from core.identity_trace import IdentityTrace
+from ivf.impl.neighbors.ivf_flat.identical_ivf_scan import (
+    IIVF_MAX_DIM,
+    IIVF_QPB,
+    identical_ivf_scan_kernel,
+)
 from ivf.impl.neighbors.ivf_flat.fast_ivf_scan import (
     FIVF_MAX_DIM,
     FIVF_QPB,
@@ -145,6 +150,16 @@ arm, matching the 256 `knn_brute_force.mojo:200` launches
 width reaches no fold and no accumulator; `check_launch_invariance` moves
 it anyway, because "reaches no fold" is an argument and the check is a
 measurement."""
+
+comptime IVF_IDENTICAL_SCAN = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_IVF_IDENTICAL_SCAN_OFF"]()
+)
+"""IDENTICAL on Apple (lane/apple-identical-neural, 2026-09-26): steps 3-5
+for every query in one launch (`identical_ivf_scan.mojo`), the pinned
+distance arithmetic and the `(distance, original index)` key, instead of a
+host round trip per query. Same neighbours, same order, same bits."""
 
 comptime IVF_FAST_SCAN = (
     GLOBAL_NUMERIC_MODE == NUMERIC_FAST
@@ -534,7 +549,7 @@ def ivf_flat_search_traced(
         trace.record_list_i32("ivf.probe_lists", probe_i32)
 
     # ---- steps 3-5, FAST on Apple: every query in one launch ------------
-    comptime if IVF_FAST_SCAN:
+    comptime if IVF_FAST_SCAN or IVF_IDENTICAL_SCAN:
         if (
             not trace.enabled
             and not partial_storage
@@ -570,15 +585,28 @@ def ivf_flat_search_traced(
                 var grid = (n_queries + FIVF_QPB - 1) // FIVF_QPB
                 comptime for KM in [8, 16, 32]:
                     if k <= KM and (KM == 8 or k > KM // 2):
-                        ctx.enqueue_function[fast_ivf_scan_kernel[KM]](
-                            dq.unsafe_ptr(), dlist_data.unsafe_ptr(),
-                            d_off.unsafe_ptr(), d_ind.unsafe_ptr(),
-                            dprobe_idx.unsafe_ptr(),
-                            d_od.unsafe_ptr(), d_oi.unsafe_ptr(),
-                            Int32(n_queries), Int32(dim), Int32(n_probes),
-                            Int32(k),
-                            grid_dim=grid, block_dim=FIVF_QPB * 32,
-                        )
+                        comptime if IVF_IDENTICAL_SCAN:
+                            ctx.enqueue_function[identical_ivf_scan_kernel[KM]](
+                                dq.unsafe_ptr(), dq_norm.unsafe_ptr(),
+                                dlist_data.unsafe_ptr(), dlist_norm.unsafe_ptr(),
+                                d_off.unsafe_ptr(), d_ind.unsafe_ptr(),
+                                dprobe_idx.unsafe_ptr(),
+                                d_od.unsafe_ptr(), d_oi.unsafe_ptr(),
+                                Int32(n_queries), Int32(dim), Int32(n_probes),
+                                Int32(k),
+                                grid_dim=(n_queries + IIVF_QPB - 1) // IIVF_QPB,
+                                block_dim=IIVF_QPB * 32,
+                            )
+                        else:
+                            ctx.enqueue_function[fast_ivf_scan_kernel[KM]](
+                                dq.unsafe_ptr(), dlist_data.unsafe_ptr(),
+                                d_off.unsafe_ptr(), d_ind.unsafe_ptr(),
+                                dprobe_idx.unsafe_ptr(),
+                                d_od.unsafe_ptr(), d_oi.unsafe_ptr(),
+                                Int32(n_queries), Int32(dim), Int32(n_probes),
+                                Int32(k),
+                                grid_dim=grid, block_dim=FIVF_QPB * 32,
+                            )
                 var fd = download_f32(ctx, d_od, n_queries * k)
                 var fi = download_u32(ctx, d_oi, n_queries * k)
                 if not dist_is_identity:
