@@ -675,9 +675,12 @@ def _block_offsets(o: List[Int], base: Int) raises -> List[Int]:
 #: the top of every forward because the out-of-place optimizer swaps the
 #: `param` handle with `shadow_p` each step. The two per-step copies they
 #: replace moved 2 x V x d_model floats and nothing else: no float operation,
-#: so the bits cannot move. On the Apple M4 at V = 50,257 those copies took
-#: 430-530 ms of a 2.5 s step (the same kernel moves 107 MB in 4.5 ms at
-#: V = 8,192), and the views also drop two V x d_model allocations.
+#: so the bits cannot move. What it buys is MEMORY: two V x d_model
+#: allocations (309 MB at GPT-3 small) and their per-step traffic. It is NOT
+#: a measured step-time win: the 430-530 ms first seen in `step.unpack_weights`
+#: was the first submission after host-side exports paging the working set
+#: back in (1.4 ms in consecutive steps), and consecutive-step A/B on the M4
+#: shows no difference (1.686 vs 1.711 s, 1.969 vs 1.992 s).
 #: Apple only for now: Apple's step glue keeps `param` in place (no swap);
 #: NVIDIA's out-of-place arm swaps it every step, which the re-bind handles,
 #: but that column has not run this yet.
