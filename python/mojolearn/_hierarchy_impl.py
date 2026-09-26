@@ -15,6 +15,8 @@ This class is not re-exported from `mojolearn/__init__.py` by this file;
 whoever owns that file decides the public namespace.
 """
 
+import sys
+
 from . import _backend, _mojolearn_solver, _serialize
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, empty, zeros
@@ -295,7 +297,16 @@ class AgglomerativeClustering:
                 f"mojolearn AgglomerativeClustering: n_rows={n_rows} < 2; "
                 "single linkage needs at least two points"
             )
-        if n_rows > PAIRWISE_MAX_ROWS:
+        # FAST on Apple builds the Euclidean MST from Boruvka rounds without
+        # the dense graph (hierarchy/impl/cluster/detail/fast_boruvka.mojo,
+        # taken for n_cols <= 64), so the dense matrix's row cap does not
+        # apply there.
+        fast_mst = (
+            _backend.requested_mode() == "fast"
+            and sys.platform == "darwin"
+            and n_cols <= 64
+        )
+        if n_rows > PAIRWISE_MAX_ROWS and not fast_mst:
             raise ValueError(
                 f"mojolearn AgglomerativeClustering: n_rows={n_rows} > "
                 f"{PAIRWISE_MAX_ROWS}; the dense connectivity matrix is "

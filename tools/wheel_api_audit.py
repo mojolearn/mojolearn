@@ -109,13 +109,136 @@ def audit(wheels):
                 source_public_names=sorted(surface), source_public_modules=modules, wheels=results)
 
 
+def _wheel_facts(wheel):
+    """(dist-info dir, METADATA message, WHEEL tags, payload names, the small
+    .dist-info files read) of one wheel, without extracting it; None when the
+    wheel does not hold exactly one .dist-info directory."""
+    from email import policy
+    from email.parser import BytesParser
+    with zipfile.ZipFile(wheel) as archive:
+        names = [n for n in archive.namelist() if not n.endswith('/')]
+        dists = sorted({n.split('/')[0] for n in names if n.split('/')[0].endswith('.dist-info')})
+        if len(dists) != 1:
+            return None
+        dist = dists[0]
+        read = {n: archive.read(n) for n in names if n.startswith(dist + '/')
+                and n.rsplit('/', 1)[-1] in ('METADATA', 'WHEEL', 'gpu_plugins.json', 'gpu_plugin.json')}
+    metadata = BytesParser(policy=policy.compat32).parsebytes(read.get(dist + '/METADATA', b''))
+    tags = BytesParser(policy=policy.compat32).parsebytes(read.get(dist + '/WHEEL', b'')).get_all('Tag', [])
+    payload = sorted(n for n in names if not n.startswith(dist + '/'))
+    return dist, metadata, tags, payload, read
+
+
+def split_audit(wheels):
+    """THE SPLIT LINUX WHEELS (2026-09-25, python/mojolearn/gpu_plugins.py).
+
+    The core `mojolearn` holds no GPU set; each plugin holds exactly its own
+    vendor's sets (mojolearn/<vendor>/...) and nothing else, no Python and no
+    runtime; every plugin requires exactly `mojolearn==<its version>` and the
+    core's extras pin every plugin the same way; the .dist-info markers agree
+    with the payload; all wheels share one version and one tag; and no member
+    is in two wheels. File inspection only. Returns {'wheels': [...],
+    'problems': [...]}, and an empty `problems` is the pass."""
+    from verify_linux_surface_qualification import load_gpu_plugins
+    plugins = load_gpu_plugins()
+    by_distribution = {row['distribution']: vendor for vendor, row in plugins.PLUGINS.items()}
+    problems, rows, owner, versions, tagsets = [], [], {}, set(), set()
+    for wheel in map(Path, wheels):
+        facts = _wheel_facts(wheel)
+        if facts is None:
+            problems.append(f'{wheel.name}: not exactly one .dist-info directory')
+            continue
+        dist, metadata, tags, payload, read = facts
+        name, version = metadata.get('Name', ''), metadata.get('Version', '')
+        versions.add(version)
+        tagsets.add(tuple(sorted(tags)))
+        requires = metadata.get_all('Requires-Dist', [])
+        for member in payload:
+            if member in owner:
+                problems.append(f'{member} is in both {owner[member]} and {wheel.name}')
+            owner[member] = wheel.name
+        row = dict(wheel=wheel.name, path=str(wheel), distribution=name, version=version, tags=sorted(tags),
+                   members=len(payload), binaries=sum(1 for m in payload if m.endswith('.so')))
+        if name == plugins.CORE_DISTRIBUTION:
+            row['role'] = plugins.CORE_PROFILE
+            stray = [m for m in payload if plugins.member_vendor(m)]
+            if stray:
+                problems.append(f'{wheel.name}: the core carries {len(stray)} GPU set member(s), e.g. {stray[0]}')
+            if 'mojolearn/__init__.py' not in payload:
+                problems.append(f'{wheel.name}: the core carries no mojolearn/__init__.py')
+            extras = set(metadata.get_all('Provides-Extra', []))
+            want = {r['extra'] for r in plugins.PLUGINS.values()}
+            if extras != want:
+                problems.append(f'{wheel.name}: Provides-Extra {sorted(extras)}, want {sorted(want)}')
+            for r in plugins.PLUGINS.values():
+                pin = f'{r["distribution"]}=={version}; extra == "{r["extra"]}"'
+                if pin not in requires:
+                    problems.append(f'{wheel.name}: no exact pin {pin!r} (Requires-Dist {requires})')
+            try:
+                marker = json.loads(read[dist + '/' + plugins.CORE_MARKER])
+            except (KeyError, ValueError):
+                marker = None
+            if marker != plugins.core_marker(version):
+                problems.append(f'{wheel.name}: {plugins.CORE_MARKER} is missing or disagrees with gpu_plugins.py')
+        elif name in by_distribution:
+            vendor = by_distribution[name]
+            row['role'] = plugins.PLUGINS[vendor]['profile']
+            stray = [m for m in payload if plugins.member_vendor(m) != vendor]
+            if stray:
+                problems.append(f'{wheel.name}: carries {len(stray)} member(s) outside mojolearn/{vendor}/, '
+                                f'e.g. {stray[0]}')
+            if not row['binaries']:
+                problems.append(f'{wheel.name}: carries no binary')
+            if any(m.endswith('.py') for m in payload):
+                problems.append(f'{wheel.name}: a plugin must carry no Python module')
+            if requires != [f'{plugins.CORE_DISTRIBUTION}=={version}']:
+                problems.append(f'{wheel.name}: Requires-Dist {requires}, want exactly '
+                                f'[{plugins.CORE_DISTRIBUTION}=={version}]')
+            if not wheel.name.startswith(f'{plugins.PLUGINS[vendor]["wheel_name"]}-{version}-'):
+                problems.append(f'{wheel.name}: file name is not '
+                                f'{plugins.PLUGINS[vendor]["wheel_name"]}-{version}-...')
+            arches = sorted({m.split('/')[2] for m in payload if len(m.split('/')) > 3})
+            row['arches'] = arches
+            try:
+                marker = json.loads(read[dist + '/' + plugins.PLUGIN_MARKER])
+            except (KeyError, ValueError):
+                marker = None
+            if marker != plugins.plugin_marker(vendor, version, arches):
+                problems.append(f'{wheel.name}: {plugins.PLUGIN_MARKER} is missing or does not name '
+                                f'{vendor} {version} {arches}')
+        else:
+            problems.append(f'{wheel.name}: {name!r} is neither the core nor a plugin gpu_plugins.py names')
+        rows.append(row)
+    if len(versions) > 1:
+        problems.append(f'the split wheels carry different versions: {sorted(versions)}')
+    if len(tagsets) > 1:
+        problems.append(f'the split wheels carry different tags: {sorted(tagsets)}')
+    return dict(scope='Split Linux wheels: ownership, pins and markers; file inspection only.',
+                wheels=rows, problems=problems)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('wheels', nargs='+', type=Path)
     parser.add_argument('--output', type=Path)
     parser.add_argument('--require-complete', action='store_true',
                         help='fail for missing public exports or missing/stale source Python or reference payload')
+    parser.add_argument('--split', action='store_true',
+                        help='the wheels are the split Linux set (mojolearn, mojolearn-cuda, mojolearn-rocm): '
+                             'run split_audit over all and the API audit over the core alone')
     args = parser.parse_args()
+    if args.split:
+        split = split_audit(args.wheels)
+        cores = [Path(row['path']) for row in split['wheels'] if row.get('role') == 'core-linux']
+        report = audit(cores) if cores else dict(wheels=[])
+        report['split'] = split
+        result = json.dumps(report, indent=2) + '\n'
+        if args.output:
+            args.output.write_text(result)
+        else:
+            print(result, end='')
+        return int(bool(split['problems']) or (args.require_complete and any(
+            not row['source_payload_complete'] for row in report['wheels'])))
     report = audit(args.wheels)
     result = json.dumps(report, indent=2) + '\n'
     if args.output:

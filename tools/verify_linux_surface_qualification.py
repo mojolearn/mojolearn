@@ -52,6 +52,26 @@ def wheel_host_bindings():
 def wheel_host_members():
     """The same, as wheel member paths under mojolearn/host/."""
     return tuple('mojolearn/host/' + name + '.so' for name in wheel_host_bindings())
+
+
+# THE LINUX GPU PLUGIN PACKAGES (2026-09-25): mojolearn-cuda carries
+# mojolearn/cuda/..., mojolearn-rocm carries mojolearn/hip/..., the core
+# carries neither. The one table is python/mojolearn/gpu_plugins.py, read BY
+# PATH like the host manifest above, so this module still never imports the
+# package; the packer, the wheel audit and check_ext_lists read it here.
+_GPU_PLUGINS = Path(__file__).resolve().parent.parent / 'python/mojolearn/gpu_plugins.py'
+_GPU_PLUGINS_MODULE = None
+
+
+def load_gpu_plugins():
+    """python/mojolearn/gpu_plugins.py, loaded by path once."""
+    global _GPU_PLUGINS_MODULE
+    if _GPU_PLUGINS_MODULE is None:
+        spec = importlib.util.spec_from_file_location('mojolearn_gpu_plugins_admission', _GPU_PLUGINS)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _GPU_PLUGINS_MODULE = module
+    return _GPU_PLUGINS_MODULE
 BYTE_FILES = {'byte-lm-identical.json', 'byte-lm-before.json', 'byte-lm-after.json', 'byte-lm-restored.json'}
 # DEVIATION 2290. The combined three-architecture Linux profile is named for its
 # shape, `release-linux3` (CUDA sm_89, CUDA sm_90, HIP gfx942), not for a version.
@@ -105,6 +125,22 @@ def arch_set_ok(keys):
     keys = list(keys)
     hopper = [k for k in keys if k in ('cuda/sm_90', 'cuda/sm_90a')]
     return len(hopper) <= 1 and {normalise_arch(k) for k in keys} == RELEASE_ARCHES
+
+
+#: Each plugin's share of the release architectures: the split profile packs
+#: `mojolearn-cuda` from exactly PLUGIN_ARCHES['cuda'] and `mojolearn-rocm`
+#: from exactly PLUGIN_ARCHES['hip']. Derived, never spelled a second time.
+PLUGIN_ARCHES = {vendor: frozenset(k for k in RELEASE_ARCHES if k.split('/')[0] == vendor)
+                 for vendor in ('cuda', 'hip')}
+
+
+def plugin_arch_set_ok(vendor, keys):
+    """True when `keys` is exactly `vendor`'s share of the release triple,
+    Hopper spelled either way and never twice."""
+    keys = list(keys)
+    hopper = [k for k in keys if k in ('cuda/sm_90', 'cuda/sm_90a')]
+    return (len(hopper) <= 1 and all(k.split('/')[0] == vendor for k in keys)
+            and {normalise_arch(k) for k in keys} == PLUGIN_ARCHES[vendor])
 VERSION_PATTERN = re.compile(r'''^__version__\s*=\s*(['"])([^'"]+)\1\s*$''', re.MULTILINE)
 
 
