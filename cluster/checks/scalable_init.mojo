@@ -66,17 +66,34 @@ def scalable_uniform(seed_lo: Int32, seed_hi: Int32, i: Int) -> Float32:
     top 24 bits scaled by 2^-24, so the value is exactly representable and
     identical on host and device.
     """
-    # DEVIATION 2714 (IDENTITY_PATHS.md ledger): this is the int-widening
-    # trap, ON PURPOSE. The low half's int32 -> uint32 -> uint64 chain
-    # SIGN-EXTENDS on every vendor, so the seed hashed is
-    # (hi << 32) | sext64(lo), and the host oracle spells exactly that
-    # (cluster/host/kmeans_oracle.mojo::host_round_seed_as_the_device_
-    # reassembles_it). A zero-extension would move every recorded kmeans
-    # cell and every lane seeded from it for no gain; it is a v2 profile
-    # with a full rerun, never a fix. Do not "correct" this line.
-    var seed = (
-        seed_hi.cast[DType.uint32]().cast[DType.uint64]() << 32
-    ) | seed_lo.cast[DType.uint32]().cast[DType.uint64]()
+    # DEVIATION 2714 (IDENTITY_PATHS.md ledger): the seed hashed is
+    # (hi << 32) | sext64(lo), ON PURPOSE, and the host oracle spells
+    # exactly that (cluster/host/kmeans_oracle.mojo::host_round_seed_as_
+    # the_device_reassembles_it). A zero-extension would move every
+    # recorded kmeans cell and every lane seeded from it for no gain; it
+    # is a v2 profile with a full rerun, never a fix.
+    #
+    # SPELLED, NOT INHERITED (2026-09-26). Through 0.8.19 the sign
+    # extension came from the COMPILER: under Mojo 1.0 the chain
+    # `seed_lo.cast[uint32]().cast[uint64]()` was folded into a sign
+    # extension on every GPU target (the int-widening trap,
+    # ensemble/decisiontree/batched_levelalgo/kernels/builder_kernels.mojo).
+    # Mojo 1.2 (1.2.0.dev2026092505) zero-extends it, as the types say,
+    # which moved the round seed whenever the low half is >= 2^31 and so
+    # 30 release cells (every k-means|| fit and its consumers) on Metal and
+    # CUDA alike, while the host oracle kept the old bits. The widening is
+    # now arithmetic no folder can reinterpret: mask the low half to 32
+    # bits, then OR in the high word of ones exactly when the Int32 is
+    # negative. Same bits as 0.8.19 under both toolchains.
+    var lo = seed_lo.cast[DType.uint32]().cast[DType.uint64]() & UInt64(
+        0xFFFFFFFF
+    )
+    if seed_lo < Int32(0):
+        lo = lo | UInt64(0xFFFFFFFF00000000)
+    var hi = seed_hi.cast[DType.uint32]().cast[DType.uint64]() & UInt64(
+        0xFFFFFFFF
+    )
+    var seed = (hi << 32) | lo
     var z = seed + UInt64(i) * 0x9E3779B97F4A7C15
     z = (z ^ (z >> 30)) * 0xBF58476D1CE4E5B9
     z = (z ^ (z >> 27)) * 0x94D049BB133111EB
