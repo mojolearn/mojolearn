@@ -333,12 +333,17 @@ def cmd_compare(ns):
     t = res["totals"]
     print(f"files {t['files']}, functions {t['functions']}, fused ops default {t['fused_default']}, "
           f"off {t['fused_off']}, PTX plain mul->add pairs {t['ptx_plain_pairs']}")
+    fast = [s for s in res["sites"] if _fast_only_sidecar(s["file"])]
+    res["sites"] = [s for s in res["sites"] if not _fast_only_sidecar(s["file"])]
+    for s in fast:
+        print(f"FAST-ONLY {s['file']} default={s['fused_default']} off={s['fused_off']} gate {_fast_only_sidecar(s['file'])}")
     for s in res["sites"]:
         extra = f" ptx-plain-pairs={s['ptx_plain_pairs']}" if s["ptx_plain_pairs"] else ""
         only = f" only-in={s['only_in']}" if s["only_in"] else ""
         print(f"SITE {s['file']} :: {s['function'][:160]} default={s['fused_default']} off={s['fused_off']}{extra}{only}")
     for f in res["unpaired_files"]:
         print(f"UNPAIRED {f}")
+    res["fast_only"] = fast
     if ns.json:
         Path(ns.json).write_text(json.dumps(res, indent=1))
     print(f"verdict: {'CLEAN' if not res['sites'] and not res['unpaired_files'] else 'SITES'} "
@@ -457,6 +462,26 @@ FAST_ONLY = [
     ("mixture/checks/mstep.mojo", "fast_resp_colsums_partial_kernel", "GMM_FAST_GRAM (NUMERIC_FAST)"),
     ("umap/optimizer_fast.mojo", "*", "optimize_layout / optimize_sparse_layout return the IDENTICAL arm first under NUMERIC_IDENTICAL"),
 ]
+
+
+# The same FAST-only kernels as named by `compare` (no line tables): the GPU
+# sidecar's file name carries the kernel's module path and a truncated name.
+# Only names that are unambiguous go here; anything else is checked with
+# `build --debug` + `locate`.
+FAST_ONLY_SIDECARS = [
+    (r"_mixture_checks_estep_fast_", "GMM_FAST_ESTEP (NUMERIC_FAST)"),
+    (r"_mixture_checks_mstep_fast_", "GMM_FAST_GRAM (NUMERIC_FAST)"),
+    (r"_cholesky_checks_fast_trsm_", "FAST_CHO_SOLVE / CHOL_FAST_APPLE (NUMERIC_FAST)"),
+    (r"_umap_optimizer_fast_", "optimize_layout / optimize_sparse_layout return the IDENTICAL arm first"),
+    (r"_(gemv|gevm)_|_matmul_kernel_naive_", "MAX linalg gemv/matmul, reached only by FAST routes"),
+]
+
+
+def _fast_only_sidecar(rel):
+    for rx, gate in FAST_ONLY_SIDECARS:
+        if rel.endswith((".ptx", ".amdgcn")) and re.search(rx, rel.split("/")[-1]):
+            return gate
+    return None
 
 
 def _fast_only(path, fn):
