@@ -89,13 +89,16 @@ from svm.checks.device_select import (
     set_i32_kernel,
     upload_i32,
 )
-from svm.impl.kernelcache import BatchDescriptor, KernelCache
+from svm.impl.kernelcache import BatchDescriptor, CACHE_READY, KernelCache
+from svm.impl.fast_update_f import fast_update_f
 from svm.impl.results import Results
 from svm.impl.smoblocksolve import SMO_WS_SIZE, smo_block_solve_kernel
 from svm.impl.fast_block_solve import smo_block_solve_ept_kernel
 from svm.impl.svm_parameter import (
     C_SVC,
     EPSILON_SVR,
+    KERNEL_LINEAR,
+    KERNEL_RBF,
     KernelParams,
     SvmModel,
     SvmParameter,
@@ -138,6 +141,12 @@ comptime FAST_SMO_SYNCS = (
 comptime FAST_EPT = 4 if is_defined["MOJOLEARN_SVM_FAST_EPT4"]() else (
     8 if is_defined["MOJOLEARN_SVM_FAST_EPT8"]() else 2
 )
+comptime SVM_FUSED_UPDATE_F = FAST_SMO_SYNCS and not is_defined[
+    "MOJOLEARN_SVM_FUSED_UPDATE_F_OFF"
+]()
+"""FAST on Apple: the gradient update computes each kernel value where it
+is used (`fast_update_f.mojo`) instead of writing the `nnz x batch` kernel
+tile and reading it back; RBF and linear kernels, n_cols <= 64."""
 comptime FAST_EPT_ON = FAST_SMO_SYNCS and not is_defined["MOJOLEARN_SVM_FAST_EPT_OFF"]()
 
 
@@ -806,7 +815,19 @@ struct SmoSolver(Movable):
                 st.stop(ctx, "smo.fold_order_host", t0)
                 var bd = cache.init_full_tile_batching(ctx, x, self.nz_da_idx, nnz_da)
                 t0 = st.start()
-                while cache.get_next_batch_kernel(ctx, x, bd):
+                var fused_f = False
+                comptime if SVM_FUSED_UPDATE_F:
+                    if cache.kp.kernel == KERNEL_RBF or cache.kp.kernel == KERNEL_LINEAR:
+                        fused_f = fast_update_f(
+                            ctx, self.f, x, cache.matrix_l2, cache.x_ws_dense,
+                            cache.matrix_l2_ws, self.nz_da, nnz_da, n_rows,
+                            n_cols, Float32(cache.kp.gamma),
+                            cache.kp.kernel == KERNEL_RBF,
+                            self.svmType == EPSILON_SVR,
+                        )
+                        if fused_f:
+                            cache.cache_state = CACHE_READY
+                while not fused_f and cache.get_next_batch_kernel(ctx, x, bd):
                     st.stop(ctx, "smo.full_tile_kernel", t0)
                     t0 = st.start()
                     self.update_f(
