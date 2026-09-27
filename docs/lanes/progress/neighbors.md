@@ -100,7 +100,7 @@ reversal: RESULT PASS. Apple / AMD: request 1790537199548-neighbors-689ddc2561
 ### Existing family (neighbors/, kernel_methods/, svm/, gaussian_process/)
 
 - DONE: gamma='scale' for SVC, SVR and RBFSampler (DEVIATION 870 revised:
-  `_portable_math.scale_gamma`, the exact variance of the float32 cells, the
+  `_scale_gamma.scale_gamma`, the exact variance of the float32 cells, the
   reciprocal rounded once; no fold, so every host reads the same bits).
   Lane `x-neighbors-gamma-scale`; sabotage
   `x_neighbors/checks/sabotage/870_gamma_scale_device_column.patch` (the

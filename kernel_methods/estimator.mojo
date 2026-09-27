@@ -1046,7 +1046,7 @@ def rbf_sampler_fit_host(
 
     **`gamma="scale"` is resolved by the Python door, not here**: the EXACT
     variance of the float32 cells, the reciprocal rounded once
-    (`python/mojolearn/_portable_math.py::scale_gamma`), so no fold order
+    (`python/mojolearn/_scale_gamma.py`), so no fold order
     sits in front of the draws and this entry still takes a gamma, not X.
 
     `n_components` is refused non-positive by name (DEVIATION 1686);

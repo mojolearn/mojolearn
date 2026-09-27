@@ -26,7 +26,7 @@ by name here and on the Mojo host. `gamma=None` is scikit-learn's
 NO SPEED CLAIM. The lane has no published number and this door adds none.
 """
 from . import _backend, _serialize
-from . import _portable_math as _pmath
+from ._scale_gamma import scale_gamma
 from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, empty
 from ._mode import NumericModeMixin
@@ -472,7 +472,7 @@ class RBFSampler(_KernelMethodBase):
     gamma : float or 'scale', default 1.0
         Must be positive (refused by name on the Mojo host). 'scale' is
         scikit-learn's `1 / (n_features * X.var())` from the EXACT variance
-        of X's float32 cells, rounded once (`_portable_math.scale_gamma`).
+        of X's float32 cells, rounded once (`_scale_gamma.scale_gamma`).
     n_components : int, default 100
         Refused by name when not positive, before any buffer is made.
     random_state : int, default 0
@@ -502,9 +502,9 @@ class RBFSampler(_KernelMethodBase):
         if isinstance(self.gamma, str) and self.gamma == "scale":
             # scikit-learn's 1 / (n_features * X.var()), 1.0 at zero
             # variance: the EXACT variance of the float32 cells, the
-            # reciprocal rounded once (`_portable_math.scale_gamma`), so every
+            # reciprocal rounded once (`_scale_gamma.scale_gamma`), so every
             # host draws from the same gamma bits.
-            gamma = _pmath.scale_gamma(x.ravel().tolist(), d)
+            gamma = scale_gamma(x.ravel().tolist(), d)
         else:
             gamma = _real(self.gamma, "gamma", self._WHERE)
         if isinstance(self.n_components, bool) or not isinstance(self.n_components, int):

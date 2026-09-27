@@ -210,7 +210,7 @@ def _(ml, X, yc, yr, Xh=None):
 def _(ml, X, yc, yr, Xh=None):
     """gamma='scale' on the family's EXISTING estimators (SVC, SVR,
     RBFSampler): 1 / (n_features * X.var()) from the exact variance of the
-    float32 cells, rounded once (_portable_math.scale_gamma, DEVIATION 870).
+    float32 cells, rounded once (_scale_gamma.scale_gamma, DEVIATION 870).
     The resolved gamma is hashed with each fit, so a host that read other
     gamma bits moves the train column even where the fit would not."""
     c = ml.SVC(C=1.0, kernel="rbf", gamma="scale", max_iter=200).fit(X[:512], yc[:512])

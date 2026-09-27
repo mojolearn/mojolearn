@@ -58,6 +58,7 @@ from ._array import Array
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, empty, zeros
 from ._labels import classes_from_member, classes_member, decode_labels, sorted_classes
 from ._mode import NumericModeMixin
+from ._scale_gamma import scale_gamma
 from .linear_model import (
     _accuracy_host,
     _check_saved_by,
@@ -345,7 +346,7 @@ class SVC(NumericModeMixin):
     recorded default fit keeps its bits). 'scale' is `1 / (n_features *
     X.var())` as theirs, but the variance is the EXACT population variance
     of the float32 cells, formed in integers, and the reciprocal is rounded
-    once to binary64 (`_portable_math.scale_gamma`). Their float32 `X.var()`
+    once to binary64 (`_scale_gamma.scale_gamma`). Their float32 `X.var()`
     carries its reduction's fold shape in its last bits; this one has no
     fold to differ, so every host reads the same gamma bits, and it differs
     from theirs by at most that reduction's rounding.
@@ -591,12 +592,12 @@ class SVC(NumericModeMixin):
         """cuML's `_get_gamma`. 'auto' is `1 / n_cols`, exact for every
         n_cols that is a power of two and correctly rounded otherwise;
         'scale' is `1 / (n_cols * X.var())` from the EXACT variance of the
-        float32 cells, rounded once (`_portable_math.scale_gamma`, DEVIATION
+        float32 cells, rounded once (`_scale_gamma.scale_gamma`, DEVIATION
         870). Both are the same bits on every host."""
         if self.gamma == "auto":
             return 1.0 / float(x.shape[1])
         if self.gamma == "scale":
-            return math.scale_gamma(x.ravel().tolist(), x.shape[1])
+            return scale_gamma(x.ravel().tolist(), x.shape[1])
         return float(self.gamma)
 
     def fit(self, X, y, sample_weight=None):
@@ -978,7 +979,7 @@ class SVR(NumericModeMixin):
     recorded default fit keeps its bits). 'scale' is `1 / (n_features *
     X.var())` as theirs, but the variance is the EXACT population variance
     of the float32 cells, formed in integers, and the reciprocal is rounded
-    once to binary64 (`_portable_math.scale_gamma`). Their float32 `X.var()`
+    once to binary64 (`_scale_gamma.scale_gamma`). Their float32 `X.var()`
     carries its reduction's fold shape in its last bits; this one has no
     fold to differ, so every host reads the same gamma bits, and it differs
     from theirs by at most that reduction's rounding.
