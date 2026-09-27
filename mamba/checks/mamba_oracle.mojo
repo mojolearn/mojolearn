@@ -22,6 +22,7 @@ real number), never a bitwise one.
 """
 
 from checks.numerics import (
+    identical_mul,
     ftz,
     identical_div,
     identical_exp,
@@ -38,27 +39,6 @@ from mamba.checks.mamba_fixture import (
     MambaWeights,
     RMS_EPS,
 )
-
-
-def pinned_mul(a: Float32, b: Float32) -> Float32:
-    """DEVIATION 720: a MULTIPLY no codegen may contract into a neighboring
-    add. Spelled `identical_mul_add(a, b, -0.0)`: under IDENTICAL that is
-    `fma(a, b, -0.0)`, which is bit-equal to the correctly rounded product
-    at EVERY input including zero signs (`p + (-0.0) == p` for p of either
-    zero sign under round-to-nearest; a `+0.0` addend would launder a
-    `-0.0` product, the gemm lane's F6a lesson), and which presents no
-    syntactic multiply for a compiler to contract (the gemm README's F3
-    scar: `var p = a * b; p + c` WAS contracted across statements on this
-    host). Under FAST it is `a * b + (-0.0)`, the plain product. Used at
-    every seam the reference rounds as its own multiply: `delta * A`,
-    `delta * B`, `(delta*B) * u`, `u * D`, `x * rstd`, `weight * hidden`,
-    `skip * silu(z)`."""
-    # `identical_mul` is the pinned product (`pinned_mul_f32` under IDENTICAL);
-    # `fma(a, b, -0.0)` was not: LLVM folds it into a contractable product
-    # (lane/pinned-mul-contract-free, 2026-09-26).
-    from checks.numerics import identical_mul
-
-    return identical_mul(a, b)
 
 
 def refuse_nonfinite(name: String, values: List[Float32]) raises:
@@ -212,10 +192,10 @@ def selective_scan_oracle(
                 var dl = ftz(delta[t * d_inner + d])
                 for n in range(D_STATE):
                     var da = ftz(
-                        identical_exp(ftz(pinned_mul(dl, ftz(a[d * D_STATE + n]))))
+                        identical_exp(ftz(identical_mul(dl, ftz(a[d * D_STATE + n]))))
                     )
-                    var db = ftz(pinned_mul(dl, ftz(bmat[t * D_STATE + n])))
-                    var dbu = ftz(pinned_mul(db, uv))
+                    var db = ftz(identical_mul(dl, ftz(bmat[t * D_STATE + n])))
+                    var dbu = ftz(identical_mul(db, uv))
                     h[n] = ftz(identical_mul_add(da, h[n], dbu))
                 var acc = Float32(0.0)
                 for n in range(D_STATE):
@@ -265,8 +245,8 @@ def mamba_block_oracle(
         var mean = ftz(identical_div(acc, Float32(dm)))
         var rstd = ftz(identical_rsqrt(ftz(mean + RMS_EPS)))
         for j in range(dm):
-            var inner = ftz(pinned_mul(ftz(x[t * dm + j]), rstd))
-            st.norm_out.append(ftz(pinned_mul(ftz(w.norm_w[j]), inner)))
+            var inner = ftz(identical_mul(ftz(x[t * dm + j]), rstd))
+            st.norm_out.append(ftz(identical_mul(ftz(w.norm_w[j]), inner)))
 
     # ---- in_proj (MM:371; Linear no bias, use_bias False MC:75) ----------
     # GEMM v1 OP_NT: [M, dm] . [2di, dm]^T. k = dm <= 128 so P == 1: the
@@ -364,7 +344,7 @@ def mamba_block_oracle(
     # references round the product.
     for t in range(m):
         for d in range(di):
-            var p = ftz(pinned_mul(ftz(st.silu_out[t * di + d]), ftz(w.d_skip[d])))
+            var p = ftz(identical_mul(ftz(st.silu_out[t * di + d]), ftz(w.d_skip[d])))
             st.skip_out.append(ftz(st.scan_y[t * di + d] + p))
 
     # ---- the z gate (selective_scan_ref:190-191 `out = out * silu(z)`;
@@ -373,7 +353,7 @@ def mamba_block_oracle(
         for d in range(di):
             var z = ftz(st.in_proj[t * 2 * di + di + d])
             st.gate_out.append(
-                ftz(pinned_mul(st.skip_out[t * di + d], ftz(identical_silu(z))))
+                ftz(identical_mul(st.skip_out[t * di + d], ftz(identical_silu(z))))
             )
 
     # ---- out_proj (MM:476; Linear no bias) -------------------------------

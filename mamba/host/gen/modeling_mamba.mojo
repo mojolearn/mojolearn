@@ -200,6 +200,7 @@ from mamba.host.gen.selective_scan_interface import (
     selective_scan_fn,
 )
 from checks.numerics import (
+    identical_mul,
     ftz,
     identical_div,
     identical_exp,
@@ -209,27 +210,6 @@ from checks.numerics import (
     identical_silu,
     identical_softplus,
 )
-
-
-def pinned_mul(a: Float32, b: Float32) -> Float32:
-    """DEVIATION 720, the oracle's construction, spelled here so this file
-    shares only `checks/numerics.mojo` with the host side (the scan file
-    does the same, for the same reason).
-
-    A MULTIPLY no codegen may contract into a neighboring add:
-    `identical_mul_add(a, b, -0.0)` is bit-equal to the correctly rounded
-    product at every input INCLUDING both zero signs (a `+0.0` addend would
-    launder a `-0.0` product -- the gemm lane's F6a lesson) and presents no
-    syntactic multiply for a compiler to contract. Used at every seam the
-    reference rounds as its own multiply: here that is S3 (`x * rstd`),
-    S4 (`weight * hidden`) and S12 (`out * silu(z)`).
-    """
-    # `identical_mul` is the pinned product (`pinned_mul_f32` under IDENTICAL);
-    # `fma(a, b, -0.0)` was not: LLVM folds it into a contractable product
-    # (lane/pinned-mul-contract-free, 2026-09-26).
-    from checks.numerics import identical_mul
-
-    return identical_mul(a, b)
 
 
 # ===========================================================================
@@ -812,9 +792,9 @@ def mamba_rms_norm_kernel(gid_: Int,
     # S3 and S4, both PRODUCT: `hidden * rstd` then `weight * hidden`, each
     # its own rounding, neither contractible into a neighboring add.
     for j in range(dm):
-        var inner = ftz(pinned_mul(ftz(x.unsafe_load(t * dm + j)), rstd))
+        var inner = ftz(identical_mul(ftz(x.unsafe_load(t * dm + j)), rstd))
         out_buf.unsafe_store(
-            t * dm + j, ftz(pinned_mul(ftz(weight.unsafe_load(j)), inner))
+            t * dm + j, ftz(identical_mul(ftz(weight.unsafe_load(j)), inner))
         )
 
 
@@ -1087,10 +1067,10 @@ def z_gate_kernel(gid_: Int,
                 Float32(1.0), ftz(Float32(1.0) + ftz(identical_exp(-z)))
             )
         )
-        g = ftz(pinned_mul(z, s))
+        g = ftz(identical_mul(z, s))
     else:
         g = ftz(identical_silu(z))
-    gate_out.unsafe_store(i, ftz(pinned_mul(ftz(skip_out.unsafe_load(i)), g)))
+    gate_out.unsafe_store(i, ftz(identical_mul(ftz(skip_out.unsafe_load(i)), g)))
 
 
 def mamba_selective_scan(
