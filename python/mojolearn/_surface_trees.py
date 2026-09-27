@@ -108,4 +108,5 @@ PUBLIC_PENDING_LANES = {
     "trees-multioutput": "no reference",
     "trees-onevsrest": "no reference",
     "trees-calibrated": "no reference",
+    "trees-rf-weighted": "no reference",
 }

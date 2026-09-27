@@ -121,9 +121,8 @@ class DecisionTreeClassifier(RandomForestClassifier):
     bootstrap, `max_features=None` (every feature) by default.
 
     `fit(X, y, sample_weight=None)` takes per-row weights (multiplied into
-    `class_weight`'s row weights) through the weighted RF fit entry; that
-    objective has no CPU restatement yet (ensemble/host/rf_oracle.mojo), so a
-    weighted fit is GPU-only and the rf host binding refuses it by name.
+    `class_weight`'s row weights) through the weighted RF fit entry (the
+    weighted objective; its CPU restatement is ensemble/host/rf_oracle.mojo).
     `predict_proba` is the leaf's class distribution."""
 
     def __init__(
@@ -545,6 +544,14 @@ class _AdaBoostBase(_TreesEnsembleBase):
         self.random_state = random_state
         _trees_seed(random_state)
 
+    def _w32(self, w, n):
+        """The boosting weights (summing to one) times n, float32: the
+        members' `sample_weight` (the criterion is scale-free; the factor
+        keeps the fixed-point weight plane well inside its resolution)."""
+        out = empty((n,), "<f4")
+        self._bind().x_trees_scale_to_f32(addr_ro(w, name="w"), addr(out, name="w32"), [n, float(n)])
+        return out
+
     def _check_X(self, X):
         if not hasattr(self, "estimators_"):
             raise RuntimeError("this estimator is not fitted yet")
@@ -555,14 +562,10 @@ class _AdaBoostBase(_TreesEnsembleBase):
 
 
 class AdaBoostClassifier(_AdaBoostBase):
-    """sklearn's `AdaBoostClassifier` (SAMME) over any mojolearn classifier,
-    default `DecisionTreeClassifier(max_depth=1)`. DEVIATION: each member fits
-    a WEIGHTED BOOTSTRAP of the rows drawn from the boosting weights (the
-    resampling form of AdaBoost, as sklearn's R2 regressor does), where
-    sklearn passes the weights as `sample_weight`: the forest's weighted
-    objective has no CPU restatement, and one spelling serves every column.
-    The error, the estimator weight and the reweighting are SAMME's, on the
-    full training rows."""
+    """sklearn's `AdaBoostClassifier` (SAMME) over a mojolearn classifier
+    that takes `sample_weight`, default `DecisionTreeClassifier(max_depth=1)`:
+    each member is fitted on every row with the boosting weights (times n,
+    float32) as its sample weights, as sklearn's `_boost_discrete` does."""
     _estimator_type = "classifier"
 
     def __init__(self, estimator=None, *, n_estimators=50, learning_rate=1.0, algorithm="SAMME",
@@ -584,15 +587,12 @@ class AdaBoostClassifier(_AdaBoostBase):
         base = self.estimator if self.estimator is not None else DecisionTreeClassifier(max_depth=1)
         w = _trees_normalized_weights(sample_weight, n)
         stats = zeros((4,), "<f8")
-        cols = _trees_arange(Xa.shape[1])
         self.estimators_, self.estimator_weights_, self.estimator_errors_ = [], [], []
         b = self._bind()
         m = int(self.n_estimators)
         for it in range(m):
-            rows = empty((n,), "<i4")
-            b.x_trees_weighted_sample(addr_ro(w, name="w"), addr(rows, name="rows"), [n, n, seed, it])
             est = _trees_clone(base, random_state=_trees_sub_seed(seed, it))
-            est.fit(self._gather(Xa, rows, cols), self._gather_codes(codes, rows))
+            est.fit(Xa, codes, sample_weight=self._w32(w, n))
             pred = as_i32_c(est.predict(Xa), ndim=1, name="predicted codes")[0]
             b.x_trees_samme_step(addr(w, name="w"), addr_ro(pred, name="pred"), addr_ro(codes, name="y"),
                                  addr(stats, name="stats"),
