@@ -107,7 +107,7 @@ def calls():
     out += [ml.VotingRegressor([("a", ml.DecisionTreeRegressor(max_depth=3)),
                                 ("b", ml.DecisionTreeRegressor(max_depth=5))]).fit(X, yr).predict(Xh)]
     out += [ml.OneVsRestClassifier(ml.DecisionTreeClassifier(max_depth=3)).fit(X, yc).predict_proba(Xh)]
-    out += [ml.TreeExplainer(dart).shap_values(Xh[:8])]
+    out += [ml.TreeExplainer(dart, data=X[:64]).shap_values(Xh[:8])]
     h = hashlib.sha256()
     for a in out:
         a = np.asarray(a.toarray() if hasattr(a, "toarray") else a)
