@@ -32,7 +32,7 @@ FAMILIES = (
             "x-pa-clf", "x-pa-reg",
             "x-sgd-ocsvm",
             "x-ridge-clf", "x-ridge-cv",
-            "x-lasso-cv",
+            "x-lasso-cv", "x-enet-cv",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -47,7 +47,7 @@ FAMILIES = (
             "PassiveAggressiveClassifier", "PassiveAggressiveRegressor",
             "SGDOneClassSVM",
             "RidgeClassifier", "RidgeCV",
-            "LassoCV",
+            "LassoCV", "ElasticNetCV",
         ),
         display="the linear expansion lane (SGD, GLMs, Huber, Bayesian, LARS, quantile, CV, isotonic)",
         host_modules=(
@@ -85,6 +85,7 @@ TRAINING_LANE_NAMES = {
     "x-ridge-clf": "RidgeClassifier",
     "x-ridge-cv": "RidgeCV",
     "x-lasso-cv": "LassoCV",
+    "x-enet-cv": "ElasticNetCV",
 }
 PUBLIC_PENDING_LANES = {
     "x-sgd-clf": "no reference",
@@ -105,4 +106,5 @@ PUBLIC_PENDING_LANES = {
     "x-ridge-clf": "no reference",
     "x-ridge-cv": "no reference",
     "x-lasso-cv": "no reference",
+    "x-enet-cv": "no reference",
 }
