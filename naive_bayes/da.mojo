@@ -19,12 +19,23 @@ from x_prep.prims import add, sub, mul, div, logf, sqrtf
 
 
 def lda_prep_unit(t: Int, f: FP, q: IP):
-    """q = [CNT, MEAN, K, d, n, PRIORS, XBAR]; t = 0. PRIORS = CNT / n;
+    """q = [CNT, MEAN, K, d, n, PRIORS, XBAR, GIVEN, PIN]; t = 0. PRIORS = CNT / n,
+    or (the `priors` option) PIN as given (GIVEN 1) or renormalised by its
+    ascending sum (GIVEN 2, the reference's "priors do not sum to 1");
     XBAR[c] = sum_k PRIORS[k] * MEAN[k, c] (sklearn `priors_ @ means_`)."""
     var K = p(q, 2)
     var d = p(q, 3)
+    var tot = Float32(0)
+    if p(q, 7) == 2:
+        for k in range(K):
+            tot = add(tot, ld(f, p(q, 8) + k))
     for k in range(K):
-        st(f, p(q, 5) + k, div(ld(f, p(q, 0) + k), Float32(p(q, 4))))
+        if p(q, 7) == 1:
+            st(f, p(q, 5) + k, ld(f, p(q, 8) + k))
+        elif p(q, 7) == 2:
+            st(f, p(q, 5) + k, div(ld(f, p(q, 8) + k), tot))
+        else:
+            st(f, p(q, 5) + k, div(ld(f, p(q, 0) + k), Float32(p(q, 4))))
     for c in range(d):
         var s = Float32(0)
         for k in range(K):
@@ -162,7 +173,8 @@ def qda_cov_unit(t: Int, f: FP, q: IP):
 
 
 def qda_prep_unit(t: Int, f: FP, q: IP):
-    """q = [EVAL, EVEC, K, d, REG, CNT, n, R, LOGC, S2OUT]; t = class k.
+    """q = [EVAL, EVEC, K, d, REG, CNT, n, R, LOGC, S2OUT, GIVEN, PIN]; t = class k
+    (GIVEN: the prior is PIN[k], the `priors` option, instead of CNT[k] / n).
     S2 = (1 - reg) max(E, 0) + reg, floored at max(S2) * 2^-23 (a singular
     class covariance, where the reference divides by zero and returns NaN,
     stays finite); R[k][c, r] = V[c, r] / sqrt(S2[r]);
@@ -195,6 +207,8 @@ def qda_prep_unit(t: Int, f: FP, q: IP):
         for c in range(d):
             st(f, p(q, 7) + k * d * d + c * d + r, mul(ld(f, V + c * d + r), inv))
     var prior = div(ld(f, p(q, 5) + k), Float32(p(q, 6)))
+    if p(q, 10) != 0:
+        prior = ld(f, p(q, 11) + k)
     st(f, p(q, 8) + k, sub(logf(prior), mul(Float32(0.5), sl)))
 
 

@@ -24,7 +24,8 @@ def test_strategies():
     X = _data()
     Xh = _data(1)
     for kw in (dict(strategy="mean"), dict(strategy="median"), dict(strategy="most_frequent"),
-               dict(strategy="constant", fill_value=-3.0), dict(strategy="median", keep_empty_features=True)):
+               dict(strategy="constant", fill_value=-3.0), dict(strategy="median", keep_empty_features=True),
+               dict(strategy="mean", add_indicator=True)):
         m = ml.SimpleImputer(**kw).fit(X)
         r = SkSI(**kw).fit(X.astype(np.float64))
         np.testing.assert_allclose(np.asarray(m.statistics_), np.asarray(r.statistics_, dtype=np.float64), rtol=1e-5, atol=1e-6)

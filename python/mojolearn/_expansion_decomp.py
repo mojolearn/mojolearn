@@ -27,8 +27,9 @@ __all__ = ["IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection
            "NMF", "FastICA", "FactorAnalysis",
            "lu_factor", "lu_solve", "solve", "lstsq", "randomized_svd",
            "PLSRegression", "PLSCanonical", "CCA",
-           "DictionaryLearning", "MiniBatchDictionaryLearning", "SparsePCA", "MiniBatchSparsePCA", "sparse_encode",
-           "LatentDirichletAllocation", "Isomap", "MDS", "ClassicalMDS", "LocallyLinearEmbedding"]
+           "DictionaryLearning", "MiniBatchDictionaryLearning", "SparsePCA", "MiniBatchSparsePCA", "sparse_encode", "SparseCoder",
+           "LatentDirichletAllocation", "Isomap", "MDS", "ClassicalMDS", "LocallyLinearEmbedding",
+           "MinCovDet", "EllipticEnvelope", "AlternatingLeastSquares"]
 
 _BINDING = "_mojolearn_x_decomp"
 
@@ -323,6 +324,15 @@ class _Kit:
         W, flags = _M.zeros(n, k), _M.zeros(n, 1)
         self.b.x_decomp_barycenter_rows(X.addr, Y.addr, idx.addr, W.addr, flags.addr, [n, Y.r, X.c, k], float(reg))
         return W
+
+    def als(self, C, Y, reg):
+        """One implicit least_squares half-sweep: every row's factor from the
+        confidences C (n x m) and the other side's factors Y (m x f)."""
+        n, f = C.r, Y.c
+        YtY = self.mm(Y, Y, ta=True)
+        X, flags = _M.zeros(n, f), _M.zeros(n, 1)
+        self.b.x_decomp_als_rows(C.addr, Y.addr, YtY.addr, X.addr, flags.addr, [n, C.c, f], float(reg))
+        return X
 
     def chol(self, A):
         L = A.copy()
@@ -747,7 +757,9 @@ class NMF(_Base):
     solver 'cd' (the default) and 'mu'; init 'random' (the lane's Philox
     stream, not numpy's), 'nndsvd', 'nndsvda', 'nndsvdar' (the SVD is exact,
     through the Gram eigh, where sklearn calls randomized_svd), 'custom'.
-    REFUSED BY NAME: beta_loss other than 'frobenius', shuffle=True."""
+    shuffle=True permutes the coordinates of every CD sweep with the Philox
+    stream. beta_loss 'frobenius', 'kullback-leibler' and 'itakura-saito'
+    (the last two with solver='mu'). REFUSED BY NAME: a general float beta."""
     _parameters = ("n_components", "init", "solver", "beta_loss", "tol", "max_iter", "random_state",
                    "alpha_W", "alpha_H", "l1_ratio", "verbose", "shuffle", "numeric_mode")
 
@@ -760,13 +772,19 @@ class NMF(_Base):
         self.verbose, self.shuffle, self.numeric_mode = verbose, shuffle, numeric_mode
 
     # ---- setup
+    def _beta(self):
+        b = {"frobenius": 2.0, "kullback-leibler": 1.0, "itakura-saito": 0.0}.get(self.beta_loss, self.beta_loss)
+        if b not in (0.0, 1.0, 2.0):
+            raise ValueError("beta_loss: 'frobenius', 'kullback-leibler' and 'itakura-saito' are carried; "
+                             "a general float beta is not")
+        return float(b)
+
     def _validate(self, M):
-        if self.beta_loss not in ("frobenius", 2, 2.0):
-            raise ValueError("beta_loss other than 'frobenius' is not carried")
+        beta = self._beta()
+        if beta != 2.0 and self.solver != "mu":
+            raise ValueError("Invalid beta_loss parameter: solver 'cd' does not handle beta_loss other than 'frobenius'")
         if self.solver not in ("cd", "mu"):
             raise ValueError(f"Invalid solver parameter: got {self.solver!r} instead of one of {{'cd', 'mu'}}")
-        if self.shuffle:
-            raise ValueError("shuffle=True is not carried (the coordinate order is the identity)")
         for v in M.s:
             if v < 0:
                 raise ValueError("Negative values in data passed to NMF (input X)")
@@ -823,11 +841,37 @@ class NMF(_Base):
         return W, H
 
     def _err(self, k, M, W, H):
-        return k.ew("sqrt", k.total(k.ew("sqdiff", M, k.mm(W, H)))).s[0]
+        """sklearn `_beta_divergence(..., square_root=True)`."""
+        beta = self._beta()
+        if beta == 2.0:
+            return k.ew("sqrt", k.total(k.ew("sqdiff", M, k.mm(W, H)))).s[0]
+        WH = k.ew("maxs", k.mm(W, H), s=_F32_EPS)
+        keep = k.ew("gts", M, s=_F32_EPS)                       # X > EPSILON
+        div = k.ew("div", M, WH)
+        if beta == 1.0:
+            sum_wh = k.mm(k.colsum(W), k.rowsum(H)).s[0]
+            xlog = k.total(k.ew("mul", k.ew("mul", M, k.ew("logs", div, s=1.1754943508222875e-38)), keep)).s[0]
+            xs = k.total(k.ew("mul", M, keep)).s[0]
+            res = xlog + sum_wh - xs
+        else:
+            dsum = k.total(k.ew("mul", div, keep)).s[0]
+            lsum = k.total(k.ew("mul", k.ew("logs", div, s=1.1754943508222875e-38), keep)).s[0]
+            res = dsum - M.r * M.c - lsum
+        return math.sqrt(2 * res) if res > 0 else 0.0
+
+    def _mu_ratio(self, k, M, W, H, beta):
+        """(X / WH) for KL, (X / WH^2) for IS, WH clamped at EPSILON; and WH^(beta-1)."""
+        WH = k.ew("maxs", k.mm(W, H), s=_F32_EPS)
+        if beta == 1.0:
+            return k.ew("div", M, WH), None
+        return k.ew("div", k.ew("div", M, WH), WH), k.ew("recip", WH)
 
     # ---- solvers
     def _mu(self, k, M, W, H, update_H, regs):
         l1W, l1H, l2W, l2H = regs
+        beta = self._beta()
+        if beta != 2.0:
+            return self._mu_beta(k, M, W, H, update_H, regs, beta)
         err0 = self._err(k, M, W, H)
         prev = err0
         it = 0
@@ -854,6 +898,56 @@ class NMF(_Base):
                 prev = err
         return W, H, it
 
+    def _mu_beta(self, k, M, W, H, update_H, regs, beta):
+        """sklearn `_multiplicative_update_w/_h` for beta 1 (KL) and 0 (IS):
+        the ratio matrix through H^T (W^T), the denominator H's row sums (W's
+        column sums, a zero replaced by 1) for KL or WH^-1 H^T (W^T WH^-1)
+        for IS, a zero denominator replaced by EPSILON, and for IS the
+        update's square root (gamma = 1 / (2 - beta))."""
+        l1W, l1H, l2W, l2H = regs
+        err0 = self._err(k, M, W, H)
+        prev = err0
+        it = 0
+        for it in range(1, self.max_iter + 1):
+            R, P = self._mu_ratio(k, M, W, H, beta)
+            num = k.mm(R, H, tb=True)
+            den = k.rowsum(H).T if beta == 1.0 else k.mm(P, H, tb=True)
+            if beta == 1.0:
+                den = k.ew("add", _M.zeros(W.r, W.c), den)
+            if l1W > 0:
+                den = k.ew("adds", den, s=l1W)
+            if l2W > 0:
+                den = k.ew("axpy", den, W, s=l2W)
+            den = k.ew("select", k.ew("abs", den), den, k.const(_F32_EPS), s=0.0)
+            delta = k.ew("div", num, den)
+            if beta == 0.0:
+                delta = k.ew("sqrt", delta)
+            W = k.ew("mul", W, delta)
+            if update_H:
+                R, P = self._mu_ratio(k, M, W, H, beta)
+                num = k.mm(W, R, ta=True)
+                if beta == 1.0:
+                    ws = k.colsum(W)
+                    ws = k.ew("select", k.ew("abs", ws), ws, k.const(1.0), s=0.0)
+                    den = k.ew("add", _M.zeros(H.r, H.c), ws.T)
+                else:
+                    den = k.mm(W, P, ta=True)
+                if l1H > 0:
+                    den = k.ew("adds", den, s=l1H)
+                if l2H > 0:
+                    den = k.ew("axpy", den, H, s=l2H)
+                den = k.ew("select", k.ew("abs", den), den, k.const(_F32_EPS), s=0.0)
+                delta = k.ew("div", num, den)
+                if beta == 0.0:
+                    delta = k.ew("sqrt", delta)
+                H = k.ew("mul", H, delta)
+            if self.tol > 0 and it % 10 == 0:
+                err = self._err(k, M, W, H)
+                if (prev - err) / err0 < self.tol:
+                    break
+                prev = err
+        return W, H, it
+
     def _cd_side(self, k, M, W, Ht, l1, l2, perm, trans):
         HHt = k.mm(Ht, Ht, ta=True)
         XHt = k.mm(M, Ht, ta=trans)
@@ -865,17 +959,27 @@ class NMF(_Base):
             XHt = k.ew("adds", XHt, s=-l1)
         return k.cd_rows(W, HHt, XHt, perm)
 
+    def _perm(self, k, kc):
+        """The coordinate order of one `_update_coordinate_descent` call: the
+        identity, or with shuffle=True a Philox permutation (a sort of draws,
+        ties to the lower index; DEVIATION 5306)."""
+        if not self.shuffle:
+            return list(range(kc))
+        self._draws = getattr(self, "_draws", 0) + 1
+        u = k.rand(1, kc, _seed_of(self.random_state), 200 + self._draws, 0).s
+        return sorted(range(kc), key=lambda i: (u[i], i))
+
     def _cd(self, k, M, W, H, update_H, regs):
         l1W, l1H, l2W, l2H = regs
-        perm = list(range(W.c))
+        self._draws = 0
         Ht = H.T
         W = W.copy()
         v_init = None
         it = 0
         for it in range(1, self.max_iter + 1):
-            viol = self._cd_side(k, M, W, Ht, l1W, l2W, perm, False)
+            viol = self._cd_side(k, M, W, Ht, l1W, l2W, self._perm(k, W.c), False)
             if update_H:
-                viol += self._cd_side(k, M, Ht, W, l1H, l2H, perm, True)
+                viol += self._cd_side(k, M, Ht, W, l1H, l2H, self._perm(k, W.c), True)
             if v_init is None:
                 v_init = viol
             if v_init == 0:
@@ -1404,7 +1508,14 @@ def randomized_svd(M, n_components, *, n_oversamples=10, n_iter="auto", power_it
     the basis differs. The small SVD of Q^T M is exact (Gram eigh).
     Returns (U, s, Vt)."""
     k = _Kit(_mode(numeric_mode))
-    A = _M.from_input(M, "M")
+    U, S, Vt = _rsvd_core(k, _M.from_input(M, "M"), n_components, n_oversamples, n_iter,
+                          power_iteration_normalizer, transpose, flip_sign, random_state)
+    kc = n_components
+    return U.out(), S.out((kc,)), Vt.out()
+
+
+def _rsvd_core(k, A, n_components, n_oversamples, n_iter, power_iteration_normalizer, transpose, flip_sign,
+               random_state):
     n, d = A.r, A.c
     if power_iteration_normalizer not in ("auto", "QR", "LU", "none"):
         raise ValueError("power_iteration_normalizer must be 'auto', 'QR', 'LU' or 'none'")
@@ -1435,8 +1546,8 @@ def randomized_svd(M, n_components, *, n_oversamples=10, n_iter="auto", power_it
             U, Vt = Vt.T, U.T
     kc = n_components
     if transpose:
-        return Vt.rows(0, kc).T.out(), S.cols(0, kc).out((kc,)), U.cols(0, kc).T.out()
-    return U.cols(0, kc).out(), S.cols(0, kc).out((kc,)), Vt.rows(0, kc).out()
+        return Vt.rows(0, kc).T, S.cols(0, kc), U.cols(0, kc).T
+    return U.cols(0, kc), S.cols(0, kc), Vt.rows(0, kc)
 
 
 def lstsq(a, b, rcond=None, *, numeric_mode=None):
@@ -1489,8 +1600,8 @@ def _dot(k, a, b):
 class _PLS(_Base):
     """sklearn `cross_decomposition/_pls.py::_PLS` (NIPALS): `fit`,
     `_get_first_singular_vectors_power_method`, `_center_scale_xy`,
-    `_svd_flip_1d`, `transform`, `inverse_transform`, `predict`.
-    REFUSED BY NAME: algorithm='svd' (PLSCanonical's second algorithm)."""
+    `_get_first_singular_vectors_svd` (PLSCanonical algorithm='svd'),
+    `_svd_flip_1d`, `transform`, `inverse_transform`, `predict`."""
     _parameters = ("n_components", "scale", "max_iter", "tol", "copy", "numeric_mode")
     _deflation = "regression"
     _pmode = "A"
@@ -1585,12 +1696,19 @@ class _PLS(_Base):
             if any(dead):
                 Yk = k.ew("mul", Yk, _M.of([0.0 if d else 1.0 for d in dead], 1, q))
             try:
-                xw, yw, it = self._power(k, Xk, Yk, norm_y)
+                if getattr(self, "algorithm", "nipals") == "svd":
+                    # `_get_first_singular_vectors_svd`: the first singular pair of X^T Y
+                    Cxy = k.mm(Xk, Yk, ta=True)
+                    U, _, Vt = _thin_svd(k, Cxy, 1, u_based=True)
+                    xw, yw, it = U.cols(0, 1), Vt.rows(0, 1).T, 0
+                else:
+                    xw, yw, it = self._power(k, Xk, Yk, norm_y)
             except StopIteration:
                 import warnings
                 warnings.warn(f"y residual is constant at iteration {_c}", stacklevel=2)
                 break
-            self.n_iter_.append(it)
+            if getattr(self, "algorithm", "nipals") != "svd":
+                self.n_iter_.append(it)
             # _svd_flip_1d: the largest-|.| entry of x_weights positive
             best, arg = -1.0, 0
             for j, v in enumerate(xw.s):
@@ -1686,8 +1804,8 @@ class PLSCanonical(_PLS):
 
     def __init__(self, n_components=2, *, scale=True, algorithm="nipals", max_iter=500, tol=1e-06, copy=True,
                  numeric_mode=None):
-        if algorithm != "nipals":
-            raise NotImplementedError("PLSCanonical: algorithm='svd' is not carried; use 'nipals'")
+        if algorithm not in ("nipals", "svd"):
+            raise ValueError("PLSCanonical: algorithm must be 'nipals' or 'svd'")
         self.algorithm = algorithm
         super().__init__(n_components, scale=scale, max_iter=max_iter, tol=tol, copy=copy, numeric_mode=numeric_mode)
 
@@ -2602,7 +2720,9 @@ class LocallyLinearEmbedding(_Base):
     vectors of I - W, which are M's smallest eigenvectors),
     `locally_linear_embedding`, `transform`). M = (I - W)^T (I - W), its
     n_components + 1 smallest eigenvectors, the first dropped.
-    REFUSED BY NAME: method 'hessian', 'modified', 'ltsa'."""
+    method='ltsa' builds sklearn's alignment matrix as a stacked projector
+    factor (M = B^T B) and takes the same SVD route. REFUSED BY NAME: method
+    'hessian', 'modified'."""
     _parameters = ("n_neighbors", "n_components", "reg", "eigen_solver", "method", "random_state", "numeric_mode")
 
     def __init__(self, *, n_neighbors=5, n_components=2, reg=1e-3, eigen_solver="auto", tol=1e-6, max_iter=100,
@@ -2615,8 +2735,9 @@ class LocallyLinearEmbedding(_Base):
 
     def fit(self, X, y=None):
         self.numeric_mode_ = _mode(self.numeric_mode)
-        if self.method != "standard":
-            raise NotImplementedError(f"LocallyLinearEmbedding: method={self.method!r} is not carried; use 'standard'")
+        if self.method not in ("standard", "ltsa"):
+            raise NotImplementedError(f"LocallyLinearEmbedding: method={self.method!r} is not carried; "
+                                      "use 'standard' or 'ltsa'")
         k = self._kit()
         M = _M.from_input(X)
         n = M.r
@@ -2625,12 +2746,15 @@ class LocallyLinearEmbedding(_Base):
         if nn >= n:
             raise ValueError("Expected n_neighbors < n_samples")
         idx, _ = _knn_lists(k, M, M, nn, True)
-        Wb = k.barycenter(M, M, idx, self.reg)
-        IW = _M.zeros(n, n)
-        for i in range(n):
-            IW.s[i * n + i] = 1.0
-            for a, j in enumerate(idx[i]):
-                IW.s[i * n + j] = _f32(IW.s[i * n + j] - Wb.s[i * nn + a])
+        if self.method == "ltsa":
+            IW = self._ltsa_factor(k, M, idx, nn, nc)
+        else:
+            Wb = k.barycenter(M, M, idx, self.reg)
+            IW = _M.zeros(n, n)
+            for i in range(n):
+                IW.s[i * n + i] = 1.0
+                for a, j in enumerate(idx[i]):
+                    IW.s[i * n + j] = _f32(IW.s[i * n + j] - Wb.s[i * nn + a])
         # The eigenvectors of M = (I - W)^T (I - W) for its smallest
         # eigenvalues are the right singular vectors of I - W for its
         # smallest singular values. Those eigenvalues sit near 1e-7, under
@@ -2646,6 +2770,28 @@ class LocallyLinearEmbedding(_Base):
         self._fit_X, self._knn = M, nn
         self.n_features_in_ = M.c
         return self
+
+    def _ltsa_factor(self, k, M, idx, nn, nc):
+        """sklearn LTSA's M = sum_i S_i^T (I - G_i G_i^T) S_i, returned as the
+        stacked factor B (n k x n) with M = B^T B, since I - G G^T is a
+        projector: G_i = [1/sqrt(k), the nc top eigenvectors of the centered
+        neighborhood's Gram] (Jacobi eigh, sign free: G G^T does not see it).
+        The null space is then B's smallest right singular vectors."""
+        n = M.r
+        B = _M.zeros(n * nn, n)
+        inv = 1.0 / math.sqrt(nn)
+        for i in range(n):
+            Xi = M.take_rows(idx[i])
+            Xi = k.ew("sub", Xi, k.colmean(Xi))
+            _, V = k.eigh(k.mm(Xi, Xi, tb=True))
+            top = V.take_cols(list(range(nn - 1, nn - 1 - nc, -1)))
+            Gi = _hstack(k.const(inv, nn, 1), top)
+            P = k.ew("sub", _eye(nn), k.mm(Gi, Gi, tb=True))
+            for a in range(nn):
+                row = (i * nn + a) * n
+                for b, j in enumerate(idx[i]):
+                    B.s[row + j] = P.s[a * nn + b]
+        return B
 
     def fit_transform(self, X, y=None):
         return self.fit(X).embedding_
@@ -2663,3 +2809,474 @@ class LocallyLinearEmbedding(_Base):
             r = k.mm(Wb.rows(i, i + 1), E)
             out.s[i * out.c:(i + 1) * out.c] = r.s
         return out.out()
+
+
+# ================================================================ robust covariance
+def _pinvh(k, A):
+    """scipy.linalg.pinvh: V diag(1/w) V^T over |w| > max|w| * n * float32 eps."""
+    w, V = k.eigh(A)
+    wmax = max(abs(v) for v in w.s) if w.c else 0.0
+    cut = _f32(wmax * A.r * _F32_EPS)
+    keep = k.ew("recip", w)
+    inv = _M.of([keep.s[j] if abs(w.s[j]) > cut else 0.0 for j in range(w.c)], 1, w.c)
+    return k.mm(k.ew("mul", V, inv), V, tb=True)
+
+
+def _slogdet(k, A):
+    """(sign, log|det|) from the LU factorization (getrf; sums ascending)."""
+    n = A.r
+    lu, piv, info = k.lu(A)
+    diag = _M.of([lu.s[i * n + i] for i in range(n)], 1, n)
+    if any(v == 0 for v in diag.s):
+        return 0.0, -math.inf
+    neg = sum(1 for v in diag.s if v < 0) + sum(1 for i, p in enumerate(piv) if p != i)
+    ld = k.total(k.ew("logs", k.ew("abs", diag), s=1.1754943508222875e-38)).s[0]
+    return (-1.0 if neg % 2 else 1.0), ld
+
+
+def _fast_logdet(k, A):
+    sign, ld = _slogdet(k, A)
+    return ld if sign > 0 else -math.inf
+
+
+def _emp_cov(k, Xs, assume_centered=False):
+    """sklearn empirical_covariance: (X - mean)^T (X - mean) / n."""
+    if assume_centered:
+        return k.ew("scale", k.mm(Xs, Xs, ta=True), s=1.0 / Xs.r)
+    Xc = k.ew("sub", Xs, k.colmean(Xs))
+    return k.ew("scale", k.mm(Xc, Xc, ta=True), s=1.0 / Xs.r)
+
+
+def _mahal(k, X, loc, P):
+    Xc = k.ew("sub", X, loc)
+    return k.rowsum(k.ew("mul", k.mm(Xc, P), Xc))
+
+
+def _chi2_cdf(k, dof, m):
+    """P(chi2_dof <= m): the regularized lower incomplete gamma P(dof/2, m/2),
+    its series summed in float64 and its prefactor x^a e^-x / Gamma(a + 1)
+    through the cells' exp, log and lgamma."""
+    a = dof / 2.0
+    x = m / 2.0
+    if x <= 0:
+        return 0.0
+    pref = k.ew("exp", k.const(_f32(a * k.ew("logs", k.const(x), s=1e-30).s[0] - x
+                                     - k.ew("lgamma", k.const(a + 1)).s[0]))).s[0]
+    term, tot, n = 1.0, 1.0, 1
+    while n < 4000:
+        term *= x / (a + n)
+        tot += term
+        if term < 1e-17 * tot:
+            break
+        n += 1
+    return pref * tot
+
+
+def _chi2_quantile(k, dof, upper):
+    """The point m with P(chi2_dof > m) = upper (scipy chi2.isf), by bisection."""
+    target = 1.0 - upper
+    lo, hi = 0.0, max(1.0, 4.0 * dof + 40.0)
+    for _ in range(80):
+        mid = 0.5 * (lo + hi)
+        if _chi2_cdf(k, dof, mid) < target:
+            lo = mid
+        else:
+            hi = mid
+    return _f32(0.5 * (lo + hi))
+
+
+def _consistency_factor(k, p, alpha):
+    """sklearn `_robust_covariance.py::_consistency_factor` (Pison 2002):
+    alpha / chi2.cdf(chi2.ppf(alpha, p), p + 2)."""
+    q = _chi2_quantile(k, p, 1.0 - alpha)
+    return _f32(alpha / _chi2_cdf(k, p + 2, q))
+
+
+class MinCovDet(_Base):
+    """sklearn.covariance.MinCovDet (reference: scikit-learn
+    `covariance/_robust_covariance.py`: `c_step`/`_c_step`,
+    `select_candidates`, `fast_mcd`, `MinCovDet.fit`, `correct_covariance`,
+    `reweight_covariance`). The random subsets are Philox permutations (a
+    sort of counter draws, ties to the lower index) and every argsort breaks
+    ties by index. chi2 quantiles by bisection of the incomplete gamma; one
+    feature takes sklearn's 1-D shortcut."""
+    _parameters = ("store_precision", "assume_centered", "support_fraction", "random_state", "numeric_mode")
+
+    def __init__(self, *, store_precision=True, assume_centered=False, support_fraction=None, random_state=None,
+                 numeric_mode=None):
+        self.store_precision, self.assume_centered = store_precision, assume_centered
+        self.support_fraction, self.random_state, self.numeric_mode = support_fraction, random_state, numeric_mode
+
+    # ---- randomness
+    def _perm(self, k, n):
+        self._draws += 1
+        u = k.rand(1, n, self._seed, 1000 + self._draws, 0).s
+        return sorted(range(n), key=lambda i: (u[i], i))
+
+    # ---- the C-step
+    def _c_step(self, k, X, h, iters, init=None):
+        n = X.r
+        dist = None
+        if init is None:
+            sel = self._perm(k, n)[:h]
+        else:
+            loc0, cov0 = init
+            P0 = _pinvh(k, cov0)
+            dist = _mahal(k, X, loc0, P0)
+            sel = sorted(range(n), key=lambda i: (dist.s[i], i))[:h]
+        sel = sorted(sel)
+        Xs = X.take_rows(sel)
+        loc = k.colmean(Xs)
+        cov = _emp_cov(k, Xs)
+        det = _fast_logdet(k, cov)
+        P = _pinvh(k, cov) if det == -math.inf else None
+        prev_det = math.inf
+        prev = None
+        while det < prev_det and iters > 0 and det != -math.inf:
+            prev = (loc, cov, det, sel, dist)
+            prev_det = det
+            P = _pinvh(k, cov)
+            dist = _mahal(k, X, loc, P)
+            sel = sorted(sorted(range(n), key=lambda i: (dist.s[i], i))[:h])
+            Xs = X.take_rows(sel)
+            loc = k.colmean(Xs)
+            cov = _emp_cov(k, Xs)
+            det = _fast_logdet(k, cov)
+            iters -= 1
+        prev_dist = dist
+        dist = _mahal(k, X, loc, P)
+        # sklearn's four checks in its order, the LAST one that fires wins
+        res = (loc, cov, det, sel, dist)
+        if prev is not None and det > prev_det:
+            res = (prev[0], prev[1], prev[2], prev[3], prev_dist)
+        if iters == 0:
+            res = (loc, cov, det, sel, dist)
+        return res
+
+    def _select(self, k, X, h, trials, select, n_iter=30):
+        if isinstance(trials, int):
+            est = [self._c_step(k, X, h, n_iter) for _ in range(trials)]
+        else:
+            est = [self._c_step(k, X, h, n_iter, init=t) for t in trials]
+        order = sorted(range(len(est)), key=lambda j: (est[j][2], j))[:select]
+        return [est[j] for j in order]
+
+    def _mcd_1d(self, k, X, h):
+        """sklearn fast_mcd's one-feature shortcut: the shortest window of h
+        sorted values (every tie of the minimum width kept), the location the
+        mean of their midpoints, the support the h values nearest it (ties to
+        the lower index), the variance of the support."""
+        n = X.r
+        order = sorted(range(n), key=lambda i: (X.s[i], i))
+        xs = _M.of([X.s[i] for i in order], n, 1)
+        if h < n:
+            diff = k.ew("sub", xs.rows(h, n), xs.rows(0, n - h))
+            dmin = min(diff.s)
+            starts = [i for i, v in enumerate(diff.s) if v == dmin]
+            mids = k.ew("scale", k.ew("add", xs.take_rows([h + i for i in starts]), xs.take_rows(starts)), s=0.5)
+            loc = k.colmean(mids)
+            cen = k.ew("abs", k.ew("sub", X, loc))
+            sel = sorted(sorted(range(n), key=lambda i: (cen.s[i], i))[:h])
+        else:
+            sel = list(range(n))
+            loc = k.colmean(X)
+        Xs = X.take_rows(sel)
+        cov = _emp_cov(k, Xs)
+        P = _pinvh(k, cov)
+        support = [False] * n
+        for i in sel:
+            support[i] = True
+        return loc, cov, support, _mahal(k, X, loc, P)
+
+    def _fast_mcd(self, k, X):
+        n, p = X.r, X.c
+        h = int(math.ceil(0.5 * (n + p + 1))) if self.support_fraction is None else int(self.support_fraction * n)
+        if p == 1:
+            return self._mcd_1d(k, X, h)
+        if n > 500:
+            n_sub = n // 300
+            n_ss = n // n_sub
+            shuf = self._perm(k, n)
+            h_sub = int(math.ceil(n_ss * (h / float(n))))
+            n_trials = max(10, 500 // n_sub)
+            pool = []
+            for i in range(n_sub):
+                cur = X.take_rows(shuf[i * n_ss:(i + 1) * n_ss])
+                pool += [(e[0], e[1]) for e in self._select(k, cur, h_sub, n_trials, 10, n_iter=2)]
+            n_m = min(1500, n)
+            h_m = int(math.ceil(n_m * (h / float(n))))
+            n_best_m = 10 if n > 1500 else 1
+            selection = self._perm(k, n)[:n_m]
+            merged = self._select(k, X.take_rows(selection), h_m, pool, n_best_m)
+            if n < 1500:
+                loc, cov, _, sup_sel, d = merged[0]
+                support = [False] * n
+                dist = [0.0] * n
+                for a, idx in enumerate(selection):
+                    dist[idx] = d.s[a]
+                for a in sup_sel:
+                    support[selection[a]] = True
+                return loc, cov, support, _M.of(dist, n, 1)
+            full = self._select(k, X, h, [(e[0], e[1]) for e in merged], 1)
+        else:
+            best = self._select(k, X, h, 30, 10, n_iter=2)
+            full = self._select(k, X, h, [(e[0], e[1]) for e in best], 1)
+        loc, cov, _, sup_sel, d = full[0]
+        support = [False] * n
+        for a in sup_sel:
+            support[a] = True
+        return loc, cov, support, d
+
+    def fit(self, X, y=None):
+        self.numeric_mode_ = _mode(self.numeric_mode)
+        k = self._kit()
+        M = _M.from_input(X)
+        n, p = M.r, M.c
+        self._seed = _seed_of(self.random_state)
+        self._draws = 0
+        loc, cov, support, dist = self._fast_mcd(k, M)
+        if self.assume_centered:
+            loc = _M.zeros(1, p)
+            cov = _emp_cov(k, M.take_rows([i for i in range(n) if support[i]]), assume_centered=True)
+            dist = k.rowsum(k.ew("mul", k.mm(M, _pinvh(k, cov)), M))
+        self.raw_location_m_, self.raw_covariance_m_ = loc, cov
+        self.raw_location_ = loc.out((p,))
+        self.raw_covariance_ = cov.out()
+        self.raw_support_ = support
+        # correct_covariance: consistency at the normal model (the corrected
+        # matrix is returned by sklearn and not kept; dist_ is rescaled)
+        n_support = sum(1 for v in support if v)
+        corr = _consistency_factor(k, p, n_support / n)
+        dist = k.ew("scale", dist, s=1.0 / corr)
+        # reweight_covariance
+        thr = _chi2_quantile(k, p, 0.025)
+        mask = [v < thr for v in dist.s]
+        Xm = M.take_rows([i for i in range(n) if mask[i]])
+        locr = _M.zeros(1, p) if self.assume_centered else k.colmean(Xm)
+        covr = k.ew("scale", _emp_cov(k, Xm, assume_centered=self.assume_centered),
+                    s=_consistency_factor(k, p, 0.975))
+        self.location_m_, self.covariance_m_ = locr, covr
+        self.precision_m_ = _pinvh(k, covr)
+        self.location_ = locr.out((p,))
+        self.covariance_ = covr.out()
+        self.precision_ = self.precision_m_.out() if self.store_precision else None
+        self.support_ = mask
+        self.dist_m_ = _mahal(k, M, locr, self.precision_m_)
+        self.dist_ = self.dist_m_.out((n,))
+        self.n_features_in_ = p
+        return self
+
+    def mahalanobis(self, X):
+        if not hasattr(self, "precision_m_"):
+            raise RuntimeError("MinCovDet is not fitted; call fit first")
+        k = self._kit()
+        d = _mahal(k, _M.from_input(X), self.location_m_, self.precision_m_)
+        return d.out((d.r,))
+
+    def get_precision(self):
+        return self.precision_m_.out()
+
+    def score(self, X, y=None):
+        """sklearn EmpiricalCovariance.score: the Gaussian log-likelihood of
+        X under location_ and covariance_ (X's own empirical covariance)."""
+        k = self._kit()
+        M = _M.from_input(X)
+        cov = _emp_cov(k, k.ew("sub", M, self.location_m_), assume_centered=True)
+        tr = k.total(k.ew("mul", cov, self.precision_m_)).s[0]
+        _, ld = _slogdet(k, self.precision_m_)
+        p = M.c
+        return -(p * _LOG_2PI) / 2.0 - 0.5 * tr + 0.5 * ld
+
+
+class EllipticEnvelope(MinCovDet):
+    """sklearn.covariance.EllipticEnvelope: MinCovDet, then offset_ the
+    `contamination` percentile of -dist_ (linear interpolation, float64)."""
+    _parameters = ("store_precision", "assume_centered", "support_fraction", "contamination", "random_state",
+                   "numeric_mode")
+
+    def __init__(self, *, store_precision=True, assume_centered=False, support_fraction=None, contamination=0.1,
+                 random_state=None, numeric_mode=None):
+        super().__init__(store_precision=store_precision, assume_centered=assume_centered,
+                         support_fraction=support_fraction, random_state=random_state, numeric_mode=numeric_mode)
+        self.contamination = contamination
+
+    def fit(self, X, y=None):
+        if not 0 < self.contamination <= 0.5:
+            raise ValueError("contamination must be in (0, 0.5]")
+        super().fit(X)
+        v = sorted(-d for d in self.dist_m_.s)
+        q = 100.0 * self.contamination / 100.0 * (len(v) - 1)
+        lo = int(math.floor(q))
+        hi = min(lo + 1, len(v) - 1)
+        self.offset_ = v[lo] + (v[hi] - v[lo]) * (q - lo)
+        return self
+
+    def score_samples(self, X):
+        k = self._kit()
+        d = _mahal(k, _M.from_input(X), self.location_m_, self.precision_m_)
+        return k.ew("scale", d, s=-1.0).out((d.r,))
+
+    def decision_function(self, X):
+        k = self._kit()
+        d = _mahal(k, _M.from_input(X), self.location_m_, self.precision_m_)
+        return k.ew("adds", k.ew("scale", d, s=-1.0), s=-self.offset_).out((d.r,))
+
+    def predict(self, X):
+        vals = self.decision_function(X)
+        from ._buffer import frombytes as _fb
+        out = array.array("i", [1 if v >= 0 else -1 for v in vals])
+        return _fb(out.tobytes(), "<i4", (len(out),))
+
+    def fit_predict(self, X, y=None):
+        return self.fit(X).predict(X)
+
+    def score(self, X, y, sample_weight=None):
+        raise NotImplementedError("EllipticEnvelope.score (accuracy) is not carried; use predict")
+
+
+# ================================================================ implicit ALS
+class AlternatingLeastSquares(_Base):
+    """Implicit-feedback matrix factorization by alternating least squares
+    (Hu, Koren and Volinsky 2008; reference: the `implicit` library's
+    `als.py` and `cpu/_als.pyx::least_squares`, the exact solver): the
+    confidence matrix is alpha * user_items, factors start as uniform draws
+    * 0.01 (the Philox stream), and each iteration solves every user row
+    and then every item row as one batched Cholesky per row (one thread per
+    row, sums in a fixed order). The input is a DENSE users x items array
+    (0 = no interaction). REFUSED BY NAME: use_cg=True's conjugate-gradient
+    solver (the exact solve is carried), calculate_training_loss."""
+    _parameters = ("factors", "regularization", "alpha", "iterations", "random_state", "numeric_mode")
+
+    def __init__(self, factors=100, regularization=0.01, alpha=1.0, iterations=15, use_cg=False,
+                 calculate_training_loss=False, random_state=None, numeric_mode=None):
+        if use_cg:
+            raise NotImplementedError("AlternatingLeastSquares: use_cg=True is not carried; the exact solve runs")
+        if calculate_training_loss:
+            raise NotImplementedError("AlternatingLeastSquares: calculate_training_loss is not carried")
+        self.factors, self.regularization, self.alpha, self.iterations = factors, regularization, alpha, iterations
+        self.use_cg, self.calculate_training_loss = use_cg, calculate_training_loss
+        self.random_state, self.numeric_mode = random_state, numeric_mode
+
+    def fit(self, user_items, show_progress=False):
+        self.numeric_mode_ = _mode(self.numeric_mode)
+        k = self._kit()
+        R = _M.from_input(user_items, "user_items")
+        n, m = R.r, R.c
+        C = R if self.alpha == 1.0 else k.ew("scale", R, s=self.alpha)
+        Ct = C.T
+        seed = _seed_of(self.random_state)
+        f = int(self.factors)
+        X = k.ew("scale", k.rand(n, f, seed, 80, 0), s=0.01)
+        Y = k.ew("scale", k.rand(m, f, seed, 81, 0), s=0.01)
+        for _ in range(int(self.iterations)):
+            X = k.als(C, Y, self.regularization)
+            Y = k.als(Ct, X, self.regularization)
+        self.user_factors_m_, self.item_factors_m_ = X, Y
+        self.user_factors, self.item_factors = X.out(), Y.out()
+        self.components_m_ = Y
+        return self
+
+    def _check_fit(self):
+        if not hasattr(self, "user_factors_m_"):
+            raise RuntimeError("AlternatingLeastSquares is not fitted; call fit first")
+
+    def recommend(self, userid, user_items, N=10, filter_already_liked_items=True):
+        """(ids, scores) of the N best items for one user: x_u . y_i, ties to
+        the lower item id; items the user interacted with (row `userid` of
+        user_items, or user_items itself when it is one row) are skipped."""
+        self._check_fit()
+        k = self._kit()
+        U = self.user_factors_m_.rows(userid, userid + 1)
+        sc = k.mm(U, self.item_factors_m_, tb=True).s
+        liked = set()
+        if filter_already_liked_items and user_items is not None:
+            R = _M.from_input(user_items, "user_items")
+            row = R.row(0 if R.r == 1 else userid)
+            liked = {i for i, v in enumerate(row) if v != 0}
+        order = sorted((i for i in range(len(sc)) if i not in liked), key=lambda i: (-sc[i], i))[:N]
+        from ._buffer import frombytes as _fb
+        return (_fb(array.array("i", order).tobytes(), "<i4", (len(order),)),
+                _fb(array.array("f", [sc[i] for i in order]).tobytes(), "<f4", (len(order),)))
+
+    def similar_items(self, itemid, N=10):
+        """(ids, scores) of the N items whose factors have the largest cosine
+        with item `itemid` (itself included, as implicit returns it)."""
+        self._check_fit()
+        k = self._kit()
+        Y = self.item_factors_m_
+        nrm = k.ew("sqrt", k.rowsum(k.ew("sq", Y)))
+        Yn = k.ew("div", Y, nrm)
+        sc = k.mm(Yn.rows(itemid, itemid + 1), Yn, tb=True).s
+        order = sorted(range(len(sc)), key=lambda i: (-sc[i], i))[:N]
+        from ._buffer import frombytes as _fb
+        return (_fb(array.array("i", order).tobytes(), "<i4", (len(order),)),
+                _fb(array.array("f", [sc[i] for i in order]).tobytes(), "<f4", (len(order),)))
+
+
+class SparseCoder(_SparseCoding):
+    """sklearn.decomposition.SparseCoder: sparse coding against a FIXED
+    dictionary (`_BaseSparseCoding._transform`), the encoders of `_sparse_encode`."""
+    _parameters = ("dictionary", "transform_algorithm", "transform_n_nonzero_coefs", "transform_alpha",
+                   "split_sign", "positive_code", "transform_max_iter", "numeric_mode")
+
+    def __init__(self, dictionary, *, transform_algorithm="omp", transform_n_nonzero_coefs=None, transform_alpha=None,
+                 split_sign=False, n_jobs=None, positive_code=False, transform_max_iter=1000, numeric_mode=None):
+        self.dictionary, self.transform_algorithm = dictionary, transform_algorithm
+        self.transform_n_nonzero_coefs, self.transform_alpha = transform_n_nonzero_coefs, transform_alpha
+        self.split_sign, self.n_jobs, self.positive_code = split_sign, n_jobs, positive_code
+        self.transform_max_iter, self.numeric_mode = transform_max_iter, numeric_mode
+        _check_sparse_algos("lars", transform_algorithm)
+        self.numeric_mode_ = _mode(numeric_mode)
+        self.components_m_ = _M.from_input(dictionary, "dictionary")
+        self.components_ = self.components_m_.out()
+        self.n_components_, self.n_features_in_ = self.components_m_.r, self.components_m_.c
+
+    def fit(self, X, y=None):
+        return self
+
+    def fit_transform(self, X, y=None):
+        return self.transform(X)
+
+
+# ================================================================ randomized arms of PCA / TruncatedSVD
+def _randomized_decompose(X, nc, *, center, n_oversamples, n_iter, power_iteration_normalizer, random_state,
+                          numeric_mode, binding=None):
+    """The randomized arm of `decomposition.PCA` (sklearn `_pca.py::_fit_truncated`,
+    center=True) and `decomposition.TruncatedSVD` (`_truncated_svd.py`,
+    center=False): `randomized_svd` (flip_sign=False) on the (centered) data,
+    then `svd_flip(u_based_decision=False)`. Returns a dict of float32
+    Arrays and the float noise variance."""
+    k = _Kit(_mode(numeric_mode), binding)
+    M = _M.from_input(X)
+    n, d = M.r, M.c
+    mean = k.colmean(M)
+    A = k.ew("sub", M, mean) if center else M
+    Um, Sm, Vm = _rsvd_core(k, A, nc, n_oversamples, n_iter, power_iteration_normalizer, "auto", False,
+                            random_state)
+    # svd_flip(u_based_decision=False): each row of Vt, U's columns follow
+    fl = []
+    for i in range(Vm.r):
+        row = Vm.row(i)
+        best, arg = -1.0, 0
+        for j, v in enumerate(row):
+            if abs(v) > best:
+                best, arg = abs(v), j
+        fl.append(row[arg] < 0)
+    Vm, Um = Vm.neg_rows(fl), Um.neg_cols(fl)
+    out = dict(components=Vm.out(), singular_values=Sm.out((nc,)), mean=mean.out((d,)))
+    if center:
+        ev = k.ew("scale", k.ew("sq", Sm), s=1.0 / (n - 1))
+        tot = k.ew("scale", k.total(k.ew("sq", A)), s=1.0 / (n - 1))
+        out["explained_variance"] = ev.out((nc,))
+        out["explained_variance_ratio"] = k.ew("div", ev, tot).out((nc,))
+        r = min(n, d)
+        out["noise_variance"] = (k.ew("scale", k.ew("sub", tot, k.total(ev)), s=1.0 / (r - nc)).s[0]
+                                 if nc < r else 0.0)
+    else:
+        Xt = k.ew("mul", Um, Sm)
+        mt = k.colmean(Xt)
+        ev = k.ew("scale", k.colsum(k.ew("sqdiff", Xt, mt)), s=1.0 / n)
+        full = k.total(k.ew("scale", k.colsum(k.ew("sqdiff", M, mean)), s=1.0 / n))
+        out["explained_variance"] = ev.out((nc,))
+        out["explained_variance_ratio"] = k.ew("div", ev, full).out((nc,))
+    return out

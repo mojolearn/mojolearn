@@ -3,6 +3,7 @@
 """HostExec: the decomp lane's cells in host loops, one index at a time, in
 the order the device assigns them to threads. No GPU import: this file is
 compiled into the CPU host binding."""
+from std.memory import bitcast
 from std.sys.compile import is_defined
 
 from decomposition.checks.jacobi_eigh_device import JACOBI_SWEEPS, JACOBI_TOL
@@ -19,6 +20,7 @@ from x_decomp.cells import (
     colsum_cell,
     ew_cell,
     gemm_cell,
+    als_row,
     barycenter_row,
     dijkstra_row,
     gamma_cell,
@@ -43,7 +45,13 @@ struct HostExec(Exec):
     def gemm(a: F32Ptr, b: F32Ptr, c: F32Ptr, m: Int, k: Int, n: Int, ta: Bool, tb: Bool) raises:
         for i in range(m):
             for j in range(n):
-                c.unsafe_store(i * n + j, gemm_cell(a, b, i, j, m, k, n, ta, tb))
+                var v = gemm_cell(a, b, i, j, m, k, n, ta, tb)
+                comptime if X_DECOMP_HOST_SABOTAGE:
+                    # the gate's negative control (-D MOJOLEARN_HOST_SABOTAGE=1):
+                    # the host column's every product moves by one unit in the
+                    # last place; the GPU binding never defines it
+                    v = bitcast[DType.float32](bitcast[DType.uint32](v) ^ UInt32(1))
+                c.unsafe_store(i * n + j, v)
 
     @staticmethod
     def ew(
@@ -168,6 +176,14 @@ struct HostExec(Exec):
         var ps = F32Ptr(unsafe_from_address=Int(s.unsafe_ptr()))
         for i in range(n):
             flags.unsafe_store(i, barycenter_row(x, y, nbr, wt, ps, i, d, k, reg))
+        _ = s^
+
+    @staticmethod
+    def als_rows(c: F32Ptr, y: F32Ptr, yty: F32Ptr, x: F32Ptr, flags: F32Ptr, n: Int, m: Int, f: Int, reg: Float32) raises:
+        var s = List[Float32](length=n * (f * f + f) if n > 0 else 1, fill=Float32(0))
+        var ps = F32Ptr(unsafe_from_address=Int(s.unsafe_ptr()))
+        for u in range(n):
+            flags.unsafe_store(u, als_row(c, y, yty, x, ps, u, m, f, reg))
         _ = s^
 
     @staticmethod

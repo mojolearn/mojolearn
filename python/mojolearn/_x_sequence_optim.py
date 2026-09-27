@@ -5,7 +5,9 @@ NumPy arrays updated in place: `opt = RMSprop([w1, w2], lr=1e-2);
 opt.step([g1, g2])`. One launch over the packed flat buffer per step, the
 element body `sequence/ops.mojo::op_opt` (PyTorch's update rules), the same on
 the GPU binding and on the CPU host binding. `lr` is read fresh at every step,
-so a schedule is `opt.lr = ...` between steps (or `lr_scheduler=`).
+so a schedule is `opt.lr = ...` between steps, or `opt.lr_schedule = <schedule>` (anything
+with `lr_at(t)`, t one-based: `StepLR`, `ExponentialLR`, `OneCycleLR`), which
+sets `lr` before every step.
 
 Refused (sequence/NOT_IMPLEMENTED.tsv): parameter groups, maximize,
 foreach/fused/capturable/differentiable, sparse gradients, float64."""
@@ -56,6 +58,8 @@ class _SeqOptimizer:
         g = self._pack(grads, "grads")
         flat = self._pack(self.params, "params")
         self.t += 1
+        if getattr(self, "lr_schedule", None) is not None:
+            self.lr = float(self.lr_schedule.lr_at(self.t))
         b = _backend.binding("_mojolearn_x_sequence", self.numeric_mode)
         b.optimizer_step([flat.ctypes.data, g.ctypes.data] + [s.ctypes.data for s in self.state],
                          [self.n_total, self._kind, self._flags, self.t],
@@ -132,6 +136,20 @@ class Adamax(_SeqOptimizer):
         super().__init__(params, lr, dict(betas=betas, eps=eps, weight_decay=weight_decay), numeric_mode)
 
 
+class NAdam(_SeqOptimizer):
+    """`torch.optim.NAdam`: Nesterov-accelerated Adam with torch's momentum
+    schedule mu_t = b1 (1 - 0.5 0.96^(t momentum_decay)), denominator
+    sqrt(v / (1 - b2^t)) + eps, coupled or decoupled weight decay. Defaults
+    are torch's."""
+    _NAME = "nadam"
+
+    def __init__(self, params, lr=2e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.0, momentum_decay=4e-3,
+                 decoupled_weight_decay=False, numeric_mode=None):
+        super().__init__(params, lr, dict(betas=betas, eps=eps, weight_decay=weight_decay,
+                                           momentum_decay=momentum_decay,
+                                           decoupled_weight_decay=decoupled_weight_decay), numeric_mode)
+
+
 class Adafactor:
     """`torch.optim.Adafactor` (PyTorch 2.5): relative step size, decoupled
     weight decay, a factored second moment (row and column means of g^2) for
@@ -176,6 +194,8 @@ class Adafactor:
         if len(grads) != len(self.params):
             raise ValueError(f"Adafactor: {len(grads)} grads, {len(self.params)} params")
         self.t += 1
+        if getattr(self, "lr_schedule", None) is not None:
+            self.lr = float(self.lr_schedule.lr_at(self.t))
         b = _backend.binding("_mojolearn_x_sequence", self.numeric_mode)
         for p, g, st in zip(self.params, grads, self.state):
             g = np.asarray(g)
@@ -226,6 +246,8 @@ class LAMB(_SeqOptimizer):
         g = self._pack(grads, "grads")
         flat = self._pack(self.params, "params")
         self.t += 1
+        if getattr(self, "lr_schedule", None) is not None:
+            self.lr = float(self.lr_schedule.lr_at(self.t))
         offs = [0]
         for p in self.params:
             offs.append(offs[-1] + p.size)

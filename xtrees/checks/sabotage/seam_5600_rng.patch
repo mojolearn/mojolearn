@@ -1,6 +1,6 @@
 --- a/xtrees/ops.mojo
 +++ b/xtrees/ops.mojo
-@@ -73,7 +73,7 @@
+@@ -78,7 +78,7 @@
      if replace:
          for k in range(n_draw):
              # DEVIATION 5600: the index is the counter draw mod n.

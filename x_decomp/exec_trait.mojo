@@ -96,5 +96,9 @@ trait Exec:
         ...
 
     @staticmethod
+    def als_rows(c: F32Ptr, y: F32Ptr, yty: F32Ptr, x: F32Ptr, flags: F32Ptr, n: Int, m: Int, f: Int, reg: Float32) raises:
+        ...
+
+    @staticmethod
     def vendor() -> String:
         ...

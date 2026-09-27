@@ -10,7 +10,7 @@ from std.python import PythonObject
 from std.math import sqrt
 from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add, identical_pow64, identical_sqrt
 from sequence.exec import Exec
-from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD, OPT_NADAM
+from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_LN_FWD, OP_LN_BWD_X, OP_LN_BWD_W, OP_THETA, OP_CROSTON, OP_ETS, OP_GARCH, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD, OPT_NADAM
 from sequence.recurrent import gemm
 from sequence.mlp_fit import MLPNet, mlp_fit, mlp_predict
 from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_scalars, opt_step, rnn_fit, rnn_predict
@@ -619,3 +619,232 @@ def lamb_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: 
     ex.download(hv, V, n)
     _ = offs^
     return PythonObject(n)
+
+
+def layer_norm_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
+    """LayerNorm forward and, with dy, backward (`sequence/layernorm.mojo`).
+    addrs = [x (M, D), weight (D) or 0, bias (D) or 0, y (M, D) out,
+    dy (M, D) or 0, dx out or 0, dweight out or 0, dbias out or 0];
+    ip = [M, D, has_weight, has_bias, backward]; fp = [eps]."""
+    if len(addrs) != 8 or len(ip) != 5 or len(fp) != 1:
+        raise Error("layer_norm: requires 8 addresses, 5 integer and 1 float parameters")
+    var M = ival(ip, 0)
+    var D = ival(ip, 1)
+    var hw = ival(ip, 2) != 0
+    var hb = ival(ip, 3) != 0
+    var bwd = ival(ip, 4) != 0
+    if M < 1 or D < 1:
+        raise Error("layer_norm: M and D must be >= 1")
+    var X = ex.alloc(M * D)
+    ex.upload(X, fptr(addrs[0], "x"), M * D)
+    var W = ex.alloc(D)
+    var Bb = ex.alloc(D)
+    if hw:
+        ex.upload(W, fptr(addrs[1], "weight"), D)
+    if hb:
+        ex.upload(Bb, fptr(addrs[2], "bias"), D)
+    var Y = ex.alloc(M * D)
+    var mean = ex.alloc(M)
+    var rstd = ex.alloc(M)
+    var a = Args()
+    a.p0 = X
+    a.p1 = W
+    a.p2 = Bb
+    a.p3 = Y
+    a.p4 = mean
+    a.p5 = rstd
+    a.i0 = D
+    a.i1 = 1 if hw else 0
+    a.i2 = 1 if hb else 0
+    a.f0 = fval(fp, 0)
+    ex.launch[OP_LN_FWD](a, M)
+    if bwd:
+        var DY = ex.alloc(M * D)
+        ex.upload(DY, fptr(addrs[4], "dy"), M * D)
+        var DX = ex.alloc(M * D)
+        var DW = ex.alloc(D)
+        var DB = ex.alloc(D)
+        var b = Args()
+        b.p0 = DY
+        b.p1 = X
+        b.p2 = W
+        b.p3 = DX
+        b.p4 = mean
+        b.p5 = rstd
+        b.i0 = D
+        b.i1 = 1 if hw else 0
+        ex.launch[OP_LN_BWD_X](b, M)
+        var c = Args()
+        c.p0 = DY
+        c.p1 = X
+        c.p2 = DW
+        c.p3 = DB
+        c.p4 = mean
+        c.p5 = rstd
+        c.i0 = D
+        c.i1 = M
+        ex.launch[OP_LN_BWD_W](c, D)
+        ex.sync()
+        ex.download(fptr(addrs[5], "dx"), DX, M * D)
+        if hw:
+            ex.download(fptr(addrs[6], "dweight"), DW, D)
+        if hb:
+            ex.download(fptr(addrs[7], "dbias"), DB, D)
+    ex.sync()
+    ex.download(fptr(addrs[3], "y"), Y, M * D)
+    return PythonObject(M * D)
+
+
+def theta_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
+    """statsforecast's Theta family over a batch of series (`sequence/theta.mojo`).
+    addrs = [y (B, n), forecast (B, h) out, info (B, 8) out];
+    ip = [B, n, h, season_length, model (-1 auto, 0 STM, 1 OTM, 2 DSTM,
+    3 DOTM), decomposition (0 multiplicative, 1 additive), fixed mask];
+    fp = [initial_smoothed, alpha, theta] (read where fixed)."""
+    if len(addrs) != 3 or len(ip) != 7 or len(fp) != 3:
+        raise Error("theta: requires 3 addresses, 7 integer and 3 float parameters")
+    var B = ival(ip, 0)
+    var n = ival(ip, 1)
+    var h = ival(ip, 2)
+    var m = ival(ip, 3)
+    var model = ival(ip, 4)
+    if B < 1 or n <= 3 or h < 1 or m < 1 or model < -1 or model > 3:
+        raise Error("theta: B >= 1, n > 3 (the reference refuses tiny series), h >= 1, season_length >= 1")
+    var stride = n + n + m + 5 * (n + h) + n + 64 + 12 + h
+    var Y = ex.alloc(B * n)
+    ex.upload(Y, fptr(addrs[0], "y"), B * n)
+    var F = ex.alloc(B * h)
+    var I = ex.alloc(B * 8)
+    var S = ex.alloc(B * stride)
+    var a = Args()
+    a.p0 = Y
+    a.p1 = F
+    a.p2 = I
+    a.p3 = S
+    a.i0 = n
+    a.i1 = h
+    a.i2 = m
+    a.i3 = model
+    a.i4 = ival(ip, 5)
+    a.i5 = ival(ip, 6)
+    a.i6 = stride
+    a.f0 = fval(fp, 0)
+    a.f1 = fval(fp, 1)
+    a.f2 = fval(fp, 2)
+    ex.launch[OP_THETA](a, B)
+    ex.sync()
+    ex.download(fptr(addrs[1], "forecast"), F, B * h)
+    ex.download(fptr(addrs[2], "info"), I, B * 8)
+    return PythonObject(B * h)
+
+
+def croston_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
+    """addrs = [y (B, n), mean (B) out]; ip = [B, n, variant]
+    (`sequence/croston.mojo`)."""
+    if len(addrs) != 2 or len(ip) != 3:
+        raise Error("croston: requires 2 addresses and 3 integer parameters")
+    var B = ival(ip, 0)
+    var n = ival(ip, 1)
+    var v = ival(ip, 2)
+    if B < 1 or n < 1 or v < 0 or v > 2:
+        raise Error("croston: B, n >= 1 and variant 0 (classic), 1 (optimized) or 2 (SBA)")
+    var Y = ex.alloc(B * n)
+    ex.upload(Y, fptr(addrs[0], "y"), B * n)
+    var M = ex.alloc(B)
+    var S = ex.alloc(B * 2 * n)
+    var a = Args()
+    a.p0 = Y
+    a.p1 = M
+    a.p2 = S
+    a.i0 = n
+    a.i1 = v
+    ex.launch[OP_CROSTON](a, B)
+    ex.sync()
+    ex.download(fptr(addrs[1], "mean"), M, B)
+    return PythonObject(B)
+
+
+def ets_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
+    """Non-seasonal ETS over a batch of series (`sequence/ets.mojo`).
+    addrs = [y (B, n), forecast (B, h) out, info (B, 8) out];
+    ip = [B, n, h, error (0 A, 1 M), trend (0 N, 1 A), damped, fixed mask];
+    fp = [alpha, beta, phi] (read where fixed)."""
+    if len(addrs) != 3 or len(ip) != 7 or len(fp) != 3:
+        raise Error("ets: requires 3 addresses, 7 integer and 3 float parameters")
+    var B = ival(ip, 0)
+    var n = ival(ip, 1)
+    var h = ival(ip, 2)
+    if B < 1 or n < 4 or h < 1:
+        raise Error("ets: B >= 1, n >= 4 and h >= 1")
+    var Y = ex.alloc(B * n)
+    ex.upload(Y, fptr(addrs[0], "y"), B * n)
+    var F = ex.alloc(B * h)
+    var I = ex.alloc(B * 8)
+    var S = ex.alloc(B * 128)
+    var a = Args()
+    a.p0 = Y
+    a.p1 = F
+    a.p2 = I
+    a.p3 = S
+    a.i0 = n
+    a.i1 = h
+    a.i2 = ival(ip, 3)
+    a.i3 = ival(ip, 4)
+    a.i4 = ival(ip, 5)
+    a.i5 = ival(ip, 6)
+    a.f0 = fval(fp, 0)
+    a.f1 = fval(fp, 1)
+    a.f2 = fval(fp, 2)
+    ex.launch[OP_ETS](a, B)
+    ex.sync()
+    ex.download(fptr(addrs[1], "forecast"), F, B * h)
+    ex.download(fptr(addrs[2], "info"), I, B * 8)
+    return PythonObject(B * h)
+
+
+def garch_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
+    """GARCH(p, o, q) over a batch of series (`sequence/garch.mojo`).
+    addrs = [y (B, n), params (B, 1 + 1 + p + o + q) out, info (B, 4) out,
+    sigma (B, n) out, variance forecast (B, h) out];
+    ip = [B, n, h, p, o, q, constant mean]."""
+    if len(addrs) != 5 or len(ip) != 7:
+        raise Error("garch: requires 5 addresses and 7 integer parameters")
+    var B = ival(ip, 0)
+    var n = ival(ip, 1)
+    var h = ival(ip, 2)
+    var p = ival(ip, 3)
+    var o = ival(ip, 4)
+    var q = ival(ip, 5)
+    var cm = ival(ip, 6)
+    if B < 1 or n < 10 or h < 1 or p < 0 or o < 0 or q < 0 or p + o + q < 1 or 1 + p + o + q + cm > 8:
+        raise Error("garch: B >= 1, n >= 10, h >= 1, p + o + q >= 1 and at most 8 parameters")
+    var m = max(p, max(o, q))
+    var stride = 4 * n + 64 + max(128, 3 * (m + h))
+    var Y = ex.alloc(B * n)
+    ex.upload(Y, fptr(addrs[0], "y"), B * n)
+    var P = ex.alloc(B * (1 + 1 + p + o + q))
+    var I = ex.alloc(B * 4)
+    var Sg = ex.alloc(B * n)
+    var F = ex.alloc(B * h)
+    var S = ex.alloc(B * stride)
+    var a = Args()
+    a.p0 = Y
+    a.p1 = P
+    a.p2 = I
+    a.p3 = Sg
+    a.p4 = F
+    a.p5 = S
+    a.i0 = n
+    a.i1 = h
+    a.i2 = p
+    a.i3 = o
+    a.i4 = q
+    a.i5 = cm
+    a.i6 = stride
+    ex.launch[OP_GARCH](a, B)
+    ex.sync()
+    ex.download(fptr(addrs[1], "params"), P, B * (1 + 1 + p + o + q))
+    ex.download(fptr(addrs[2], "info"), I, B * 4)
+    ex.download(fptr(addrs[3], "sigma"), Sg, B * n)
+    ex.download(fptr(addrs[4], "forecast"), F, B * h)
+    return PythonObject(B)

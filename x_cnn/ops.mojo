@@ -244,7 +244,9 @@ def maxpool_fwd_at(i: Int, x: FP, dst: FP, f2: FP, f3: FP, idx: IP, p: IP):
     """out[n, c, oh, ow] = the max over the window, taps in (kh, kw)
     ascending order; the FIRST maximum wins a tie (strict >, so -0.0 and
     +0.0 keep whichever came first), a NaN wins (PyTorch's `val > max ||
-    isnan(val)`). idx is the flat h*W + w of the winner."""
+    isnan(val)`). idx is the flat h*W + w of the winner. DEVIATION 5706
+    pins the tie (the reference's CUDA kernel agrees; a `>=` would take the
+    last)."""
     var H = _g(p, PP_H); var W = _g(p, PP_W)
     var KH = _g(p, PP_KH); var KW = _g(p, PP_KW)
     var OH = _g(p, PP_OH); var OW = _g(p, PP_OW)
@@ -325,7 +327,9 @@ def _avg_divisor(oh: Int, ow: Int, p: IP) -> Int:
 
 @always_inline
 def avgpool_fwd_at(i: Int, x: FP, dst: FP, f2: FP, f3: FP, q: IP, p: IP):
-    """out = (the window's sum in (kh, kw) ascending order) / divisor."""
+    """out = (the window's sum in (kh, kw) ascending order) / divisor: one
+    correctly rounded division, never a multiply by the reciprocal
+    (DEVIATION 5707)."""
     var H = _g(p, PP_H); var W = _g(p, PP_W)
     var KH = _g(p, PP_KH); var KW = _g(p, PP_KW)
     var OH = _g(p, PP_OH); var OW = _g(p, PP_OW)
@@ -418,7 +422,8 @@ def softmax_xent_row_at(i: Int, logits: FP, grad: FP, proba: FP, rowloss: FP, la
     reduction='mean'): proba = exp(l - max) / sum, in column order; grad =
     (proba - onehot) / n; rowloss = log(sum) - (l[y] - max). A label < 0
     writes proba only. The mean of rowloss is folded by the caller in row
-    order (`seq_mean`).
+    order (`seq_mean`). DEVIATION 5708: the exp-sum is folded in column
+    order.
 
     DEVIATION 5705 (Clause B): a row whose max is +inf is where the
     reference computes inf - inf = NaN. Here it is the limit: the +inf
@@ -476,7 +481,9 @@ def seq_mean(values: List[Float32], n: Int) -> Float32:
 @always_inline
 def sgd_at(i: Int, w: FP, g: FP, v: FP, hyper: FP, q: IP, p: IP):
     """PyTorch SGD (dampening 0, nesterov False) with the momentum buffer
-    starting at +0.0: d = g + wd*w; v = momentum*v + d; w = w - lr*v."""
+    starting at +0.0: d = g + wd*w; v = momentum*v + d; w = w - lr*v.
+    DEVIATION 5709: every product is `identical_mul`, so no backend fuses
+    momentum*v + d (or lr*v) into an FMA."""
     var lr = hyper.unsafe_load(0)
     var mom = hyper.unsafe_load(1)
     var wd = hyper.unsafe_load(2)
@@ -698,7 +705,8 @@ def gcn_deg_at(r: Int, w: FP, dis: FP, f2: FP, f3: FP, q: IP, p: IP):
 @always_inline
 def gcn_norm_at(e: Int, w: FP, dis: FP, vals: FP, f3: FP, q: IP, p: IP):
     """norm[e] = dis[src] * w[e] * dis[dst], left to right as PyG's
-    `deg_inv_sqrt[row] * edge_weight * deg_inv_sqrt[col]`."""
+    `deg_inv_sqrt[row] * edge_weight * deg_inv_sqrt[col]` (DEVIATION 5710:
+    that association, pinned)."""
     var n = _g(p, 0); var nnz = _g(p, 2)
     var src = _g(q, n + 1 + e)
     var dst = _g(q, n + 1 + nnz + e)

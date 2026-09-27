@@ -43,6 +43,9 @@ FAMILIES = (
             "x-prep-rfe",
             "x-prep-complement-nb",
             "x-prep-categorical-nb",
+            "x-prep-priors",
+            "x-prep-robust-scaler-unit-variance",
+            "x-prep-simple-imputer-indicator",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -112,6 +115,9 @@ TRAINING_LANE_NAMES = {
     "x-prep-rfe": "RFE",
     "x-prep-complement-nb": "ComplementNB",
     "x-prep-categorical-nb": "CategoricalNB",
+    "x-prep-priors": "the priors / class_prior option of the naive Bayes and discriminant classifiers",
+    "x-prep-robust-scaler-unit-variance": "RobustScaler(unit_variance=True)",
+    "x-prep-simple-imputer-indicator": "SimpleImputer(add_indicator=True)",
 }
 PUBLIC_PENDING_LANES = {
     "x-prep-robust-scaler": "no reference",
@@ -142,4 +148,7 @@ PUBLIC_PENDING_LANES = {
     "x-prep-rfe": "no reference",
     "x-prep-complement-nb": "no reference",
     "x-prep-categorical-nb": "no reference",
+    "x-prep-priors": "no reference",
+    "x-prep-robust-scaler-unit-variance": "no reference",
+    "x-prep-simple-imputer-indicator": "no reference",
 }

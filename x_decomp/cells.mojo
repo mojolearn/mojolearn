@@ -93,6 +93,8 @@ def mul(a: Float32, b: Float32) -> Float32:
     return ftz(identical_mul(ftz(a), ftz(b)))
 
 
+# DEVIATION 5304 (PIN; row 131, row 10's policy): every operand and result
+# through ftz; arm 5304_add_flush.
 @always_inline
 def add(a: Float32, b: Float32) -> Float32:
     return ftz(ftz(a) + ftz(b))
@@ -103,6 +105,9 @@ def sub(a: Float32, b: Float32) -> Float32:
     return ftz(ftz(a) - ftz(b))
 
 
+# DEVIATION 5303 (REPLACE; row 131, Clause B): a zero divisor yields 0, a log
+# argument is floored, exp is clamped, sqrt of a non-positive is 0: no computed
+# NaN or inf reaches an output; arm 5303_zero_guard.
 @always_inline
 def div0(a: Float32, b: Float32) -> Float32:
     """a / b, and 0 for a zero divisor (never inf, never NaN)."""
@@ -142,6 +147,9 @@ def exp_c(a: Float32) -> Float32:
     return ftz(identical_exp(x))
 
 
+# DEVIATION 5305 (REPLACE; row 132): digamma and lgamma as the recurrence to 6
+# then the asymptotic series, in the pinned primitives (scipy calls Cephes);
+# arm 5305_series_recurrence.
 def digamma(a: Float32) -> Float32:
     """psi(x) for x > 0: the recurrence up to 6, then the asymptotic series
     (sklearn's LDA calls scipy.special.psi; this is its standard expansion)."""
@@ -290,6 +298,8 @@ def bidx(mode: Int, i: Int, d: Int) -> Int:
     return 0
 
 
+# DEVIATION 5300 (PIN; IDENTITY_PATHS row 130): p ascending, one fused multiply-add
+# per term; check x_decomp/checks/fold_ew_check.mojo, arm 5300_gemm_order.
 @always_inline
 def gemm_cell(
     a: F32Ptr, b: F32Ptr, i: Int, j: Int, m: Int, k: Int, n: Int, ta: Bool, tb: Bool
@@ -304,6 +314,8 @@ def gemm_cell(
     return acc
 
 
+# DEVIATION 5301 (PIN; row 130): rows (columns) ascending, one flushed add each;
+# arm 5301_sum_order.
 @always_inline
 def colsum_cell(a: F32Ptr, j: Int, n: Int, d: Int) -> Float32:
     var acc = Float32(0)
@@ -320,6 +332,8 @@ def rowsum_cell(a: F32Ptr, i: Int, d: Int) -> Float32:
     return acc
 
 
+# DEVIATION 5302 (PIN; row 130): features ascending, t = a - b flushed, one fused
+# multiply-add per term; arm 5302_sqdist_order.
 @always_inline
 def sqdist_cell(a: F32Ptr, b: F32Ptr, i: Int, j: Int, d: Int) -> Float32:
     """||a_i - b_j||^2, features ascending."""
@@ -330,6 +344,10 @@ def sqdist_cell(a: F32Ptr, b: F32Ptr, i: Int, j: Int, d: Int) -> Float32:
     return acc
 
 
+# DEVIATION 5306 (REPLACE; row 133): draws are Philox4x32-10 at a counter, the
+# uniform (r0 >> 8) 2^-24, the normal Box-Muller's cos arm, the Gamma
+# Marsaglia-Tsang with per-attempt counters; numpy's generators are not
+# reproduced; arm 5306_draw_mapping.
 @always_inline
 def rand_cell(i: Int, seed: UInt32, stream: UInt32, kind: Int) -> Float32:
     """Counter-based draw i of stream `stream`: Philox4x32-10 at counter
@@ -354,6 +372,8 @@ def rand_cell(i: Int, seed: UInt32, stream: UInt32, kind: Int) -> Float32:
     return mul(rad, ftz(identical_cos(ang)))
 
 
+# DEVIATION 5310 (PIN; row 135): NMF CD per row, components in `perm` order,
+# gradients r ascending; arm 5310_cd_order.
 def cd_row(W: F32Ptr, HHt: F32Ptr, XHt: F32Ptr, perm: I32Ptr, i: Int, k: Int) -> Float32:
     """sklearn `_cdnmf_fast.pyx::_update_cdnmf_fast` for ONE row i of W (the
     rows are independent): components in `perm` order, the gradient summed
@@ -376,6 +396,9 @@ def cd_row(W: F32Ptr, HHt: F32Ptr, XHt: F32Ptr, perm: I32Ptr, i: Int, k: Int) ->
     return viol
 
 
+# DEVIATION 5311 (PIN; row 135): Lasso CD per row, coordinates ascending, the
+# stop a sweep's max update <= tol max|w| (not sklearn's duality gap);
+# arm 5311_lasso_order.
 def lasso_row(
     G: F32Ptr, Q: F32Ptr, W: F32Ptr, H: F32Ptr, i: Int, k: Int, alpha: Float32, max_iter: Int,
     tol: Float32, positive: Bool,
@@ -429,6 +452,8 @@ def lasso_row(
     return Float32(it)
 
 
+# DEVIATION 5312 (PIN; row 135): OMP's atom is the largest |correlation|, ties
+# to the LOWER atom; the refit a Cholesky rebuilt row by row; arm 5312_omp_tie.
 def omp_row(G: F32Ptr, Q: F32Ptr, W: F32Ptr, S: F32Ptr, i: Int, k: Int, nnz: Int) -> Float32:
     """Orthogonal matching pursuit on the Gram (sklearn `_omp.py::_gram_omp`,
     tol None) for ONE row: greedily add the atom with the largest |Xy - G_S
@@ -532,6 +557,8 @@ def gamma_cell(i: Int, seed: UInt32, stream: UInt32, shape: Float32) -> Float32:
     return last
 
 
+# DEVIATION 5313 (PIN; row 136): one thread per document, both word folds
+# ascending, the stop mean |change| < tol; arm 5313_lda_order.
 def lda_doc_row(
     X: F32Ptr, EW: F32Ptr, D: F32Ptr, E: F32Ptr, S: F32Ptr, i: Int, k: Int, v: Int, prior: Float32,
     max_iter: Int, tol: Float32,
@@ -581,6 +608,9 @@ def lda_doc_row(
     return Float32(it)
 
 
+# DEVIATION 5314 (PIN; row 137): an undirected edge weighs the smaller nonzero
+# of W[u, v] and W[v, u]; the visiting order cannot reach a distance (each is
+# the exact minimum of sums formed alike); arm 5314_edge_weight.
 def dijkstra_row(W: F32Ptr, dist: F32Ptr, done: F32Ptr, i: Int, n: Int) -> Float32:
     """Single-source shortest paths from node i on a dense UNDIRECTED graph
     (scipy `shortest_path(directed=False)`): W (n x n) holds edge weights,
@@ -628,6 +658,8 @@ def dijkstra_row(W: F32Ptr, dist: F32Ptr, done: F32Ptr, i: Int, n: Int) -> Float
     return Float32(reached)
 
 
+# DEVIATION 5315 (PIN; row 137): G += reg * trace(G) I (reg when the trace is
+# 0), the Cholesky solve ascending, the weights normalized; arm 5315_bary_reg.
 def barycenter_row(
     X: F32Ptr, Y: F32Ptr, nbr: F32Ptr, Wt: F32Ptr, S: F32Ptr, i: Int, d: Int, k: Int, reg: Float32
 ) -> Float32:
@@ -696,11 +728,81 @@ def barycenter_row(
     return Float32(0)
 
 
+# DEVIATION 5316 (PIN; row 138): per row, items ascending into A and b, the
+# Cholesky solve (posv) ascending; arm 5316_als_order.
+def als_row(
+    C: F32Ptr, Y: F32Ptr, YtY: F32Ptr, X: F32Ptr, S: F32Ptr, u: Int, m: Int, f: Int, reg: Float32
+) -> Float32:
+    """implicit's `cpu/_als.pyx::least_squares` for ONE user u: A = YtY +
+    reg I + sum_i (c_ui - 1) y_i y_i^T and b = sum_{c_ui > 0} c_ui y_i over
+    the items i with c_ui != 0 (ascending; a negative confidence enters A
+    with its magnitude and b not at all), then x_u = A^-1 b by Cholesky
+    (posv). C is the dense n x m confidence matrix (0 = no interaction), Y
+    the m x f item factors. S is per-row scratch of f*f + f floats. Returns
+    1 if the Cholesky met a non-positive pivot (x_u is then 0), else 0."""
+    var ab = u * (f * f + f)
+    var bb = ab + f * f
+    for j in range(f * f):
+        S.unsafe_store(ab + j, YtY.unsafe_load(j))
+    for j in range(f):
+        S.unsafe_store(ab + j * f + j, add(S.unsafe_load(ab + j * f + j), reg))
+        S.unsafe_store(bb + j, Float32(0))
+    for i in range(m):
+        var conf = ftz(C.unsafe_load(u * m + i))
+        if conf == Float32(0):
+            continue
+        if conf > Float32(0):
+            for j in range(f):
+                S.unsafe_store(bb + j, ftz(identical_mul_add(conf, ftz(Y.unsafe_load(i * f + j)), ftz(S.unsafe_load(bb + j)))))
+        else:
+            conf = -conf
+        var cm1 = sub(conf, Float32(1))
+        for j in range(f):
+            var t = mul(cm1, Y.unsafe_load(i * f + j))
+            for l in range(f):
+                S.unsafe_store(ab + j * f + l, ftz(identical_mul_add(t, ftz(Y.unsafe_load(i * f + l)), ftz(S.unsafe_load(ab + j * f + l)))))
+    # Cholesky (lower, left-looking, sums ascending), then the two solves
+    for j in range(f):
+        var acc = ftz(S.unsafe_load(ab + j * f + j))
+        for p in range(j):
+            var l = ftz(S.unsafe_load(ab + j * f + p))
+            acc = ftz(identical_mul_add(-l, l, acc))
+        if not (acc > Float32(0)):
+            for q in range(f):
+                X.unsafe_store(u * f + q, Float32(0))
+            return Float32(1)
+        var dj = sqrt0(acc)
+        S.unsafe_store(ab + j * f + j, dj)
+        for r in range(j + 1, f):
+            var s = ftz(S.unsafe_load(ab + r * f + j))
+            for p in range(j):
+                s = ftz(identical_mul_add(-ftz(S.unsafe_load(ab + r * f + p)), ftz(S.unsafe_load(ab + j * f + p)), s))
+            S.unsafe_store(ab + r * f + j, div0(s, dj))
+    for a in range(f):
+        var acc = ftz(S.unsafe_load(bb + a))
+        for p in range(a):
+            acc = ftz(identical_mul_add(-ftz(S.unsafe_load(ab + a * f + p)), ftz(S.unsafe_load(bb + p)), acc))
+        S.unsafe_store(bb + a, div0(acc, S.unsafe_load(ab + a * f + a)))
+    for aa in range(f):
+        var a = f - 1 - aa
+        var acc = ftz(S.unsafe_load(bb + a))
+        for p in range(a + 1, f):
+            acc = ftz(identical_mul_add(-ftz(S.unsafe_load(ab + p * f + a)), ftz(S.unsafe_load(bb + p)), acc))
+        S.unsafe_store(bb + a, div0(acc, S.unsafe_load(ab + a * f + a)))
+    for q in range(f):
+        X.unsafe_store(u * f + q, S.unsafe_load(bb + q))
+    return Float32(0)
+
+
 # ------------------------------------------------------------------ serial
 # Small dense routines run by ONE thread on the device (a single-thread
 # kernel) and by the host loop: the same function body both ways.
 
 
+# DEVIATION 5307 (PIN; row 134): the pivot is the largest |a| with ties to the
+# LOWEST row (strict >); arm 5307_pivot_tie.
+# DEVIATION 5308 (PIN; row 134): every substitution and Cholesky fold ascending;
+# arm 5308_getrs_order.
 def lu_serial(a: F32Ptr, piv: I32Ptr, n: Int, info: F32Ptr):
     """In-place LU with partial pivoting (LAPACK getrf semantics, unblocked):
     the pivot is the largest |a[i, k]| for i >= k, ties broken by the LOWEST
@@ -759,6 +861,8 @@ def lu_solve_serial(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int):
             b.unsafe_store(i * nrhs + c, div0(acc, lu.unsafe_load(i * n + i)))
 
 
+# DEVIATION 5309 (PIN; row 134): MGS with exactly two projection passes per
+# column (not LAPACK geqrf's Householder Q); arm 5309_mgs_passes.
 def orth_serial(a: F32Ptr, m: Int, l: Int):
     """In-place orthonormalization of the l columns of a row-major m x l
     matrix: modified Gram-Schmidt, each column projected against the
