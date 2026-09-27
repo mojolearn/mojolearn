@@ -95,6 +95,15 @@ def test_polynomial_count_sketch():
     np.testing.assert_allclose(np.asarray(a.transform(X)), b.transform(X), rtol=1e-3, atol=1e-3)
 
 
+@pytest.mark.parametrize("steps", [1, 2, 3])
+def test_additive_chi2(steps):
+    from sklearn.kernel_approximation import AdditiveChi2Sampler as R
+    X = np.abs(_data(40))
+    X[::5, 1] = 0
+    np.testing.assert_allclose(np.asarray(ml.AdditiveChi2Sampler(sample_steps=steps).fit_transform(X)),
+                               R(sample_steps=steps).fit_transform(X), rtol=1e-5, atol=1e-6)
+
+
 @pytest.mark.parametrize("cls,kw", [("LabelPropagation", dict(kernel="rbf", gamma=0.2)),
                                     ("LabelPropagation", dict(kernel="knn", n_neighbors=5)),
                                     ("LabelSpreading", dict(kernel="rbf", gamma=0.2, alpha=0.3)),

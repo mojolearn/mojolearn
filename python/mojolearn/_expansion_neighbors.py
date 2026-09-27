@@ -30,7 +30,7 @@ from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty
 from ._mode import NumericModeMixin
 
-__all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch"]
+__all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch", "AdditiveChi2Sampler"]
 
 # x_neighbors/items.mojo's codes
 _KERNELS = {"linear": 0, "poly": 1, "polynomial": 1, "rbf": 2, "sigmoid": 3, "laplacian": 4,
@@ -685,6 +685,49 @@ class PolynomialCountSketch(_XNeighbors):
         out = empty((n, nc), "<f4")
         self._op("pcs", [(X, 0), (self.indexHash_, 0), (self.bitHash_, 0), (out, 1)],
                  (n, d, nf, nc, deg), (_f32_scalar(self.gamma), _f32_scalar(self.coef0)))
+        return out
+
+    def fit_transform(self, X, y=None):
+        return self.fit(X).transform(X)
+
+
+# ====================================================================== AdditiveChi2Sampler
+class AdditiveChi2Sampler(_XNeighbors):
+    """Approximate feature map for the additive chi-squared kernel.
+
+    Reference: scikit-learn `kernel_approximation.py` (AdditiveChi2Sampler,
+    `_transform_dense`, 1.9.0). Deterministic: no random state. Negative input
+    is refused, as theirs. Sparse input is not implemented.
+    """
+
+    def __init__(self, *, sample_steps=2, sample_interval=None):
+        self.sample_steps = sample_steps
+        self.sample_interval = sample_interval
+
+    def _interval(self):
+        if self.sample_interval is not None:
+            return float(self.sample_interval)
+        table = {1: 0.8, 2: 0.5, 3: 0.4}
+        if self.sample_steps not in table:
+            raise ValueError("If sample_steps is not in [1, 2, 3], you need to provide sample_interval")
+        return table[self.sample_steps]
+
+    def fit(self, X, y=None):
+        X = _f32(X)
+        if X.size and X.min() < 0:
+            raise ValueError("Negative values in data passed to AdditiveChi2Sampler")
+        self._interval()
+        self.n_features_in_ = X.shape[1]
+        return self
+
+    def transform(self, X):
+        X = _f32(X)
+        if X.size and X.min() < 0:
+            raise ValueError("Negative values in data passed to AdditiveChi2Sampler")
+        n, d = X.shape
+        steps = int(self.sample_steps)
+        out = empty((n, d * (2 * steps - 1)), "<f4")
+        self._op("achi2", [(X, 0), (out, 1)], (n, d, steps), (_f32_scalar(self._interval()),))
         return out
 
     def fit_transform(self, X, y=None):

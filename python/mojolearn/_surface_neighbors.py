@@ -14,12 +14,12 @@ FAMILIES = (
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=(
             "x-neighbors-lof", "x-neighbors-nearest-centroid", "x-neighbors-ocsvm", "x-neighbors-kpca",
-            "x-neighbors-poly-sketch",
+            "x-neighbors-poly-sketch", "x-neighbors-additive-chi2",
            
         ),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch"),
+        classes=("LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch", "AdditiveChi2Sampler"),
         display="the neighbors + kernel expansion lane",
         host_modules=("x_neighbors/items.mojo", "x_neighbors/host_ops.mojo", "x_neighbors/eigh.mojo"),
         exports=(
@@ -79,6 +79,7 @@ TRAINING_LANE_NAMES = {
     "x-neighbors-ocsvm": "OneClassSVM",
     "x-neighbors-kpca": "KernelPCA",
     "x-neighbors-poly-sketch": "PolynomialCountSketch",
+    "x-neighbors-additive-chi2": "AdditiveChi2Sampler",
 }
 PUBLIC_PENDING_LANES = {
     "x-neighbors-lof": "no reference",
@@ -86,4 +87,5 @@ PUBLIC_PENDING_LANES = {
     "x-neighbors-ocsvm": "no reference",
     "x-neighbors-kpca": "no reference",
     "x-neighbors-poly-sketch": "no reference",
+    "x-neighbors-additive-chi2": "no reference",
 }

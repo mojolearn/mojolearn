@@ -65,6 +65,13 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: (e.transform(Xh[:256]),))
 
 
+@lane("x-neighbors-additive-chi2")
+def _(ml, X, yc, yr, Xh=None):
+    A = np.abs(X[:512]).astype(np.float32)
+    A[::7, 2] = np.float32(0.0)                         # zeros take the masked branch
+    m = ml.AdditiveChi2Sampler(sample_steps=3).fit(A)
+    return _fit(dict(z=_h(m.transform(A))), m, lambda e: (e.transform(np.abs(Xh[:256]).astype(np.float32)),))
+
 
 
 def _neighbors_semi_labels(yc, X):
