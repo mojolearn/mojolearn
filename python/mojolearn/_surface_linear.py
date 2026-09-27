@@ -29,6 +29,7 @@ FAMILIES = (
             "x-lars", "x-lasso-lars",
             "x-quantile",
             "x-perceptron",
+            "x-pa-clf", "x-pa-reg",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -40,6 +41,7 @@ FAMILIES = (
             "Lars", "LassoLars",
             "QuantileRegressor",
             "Perceptron",
+            "PassiveAggressiveClassifier", "PassiveAggressiveRegressor",
         ),
         display="the linear expansion lane (SGD, GLMs, Huber, Bayesian, LARS, quantile, CV, isotonic)",
         host_modules=(
@@ -70,6 +72,8 @@ TRAINING_LANE_NAMES = {
     "x-lasso-lars": "LassoLars",
     "x-quantile": "QuantileRegressor",
     "x-perceptron": "Perceptron",
+    "x-pa-clf": "PassiveAggressiveClassifier",
+    "x-pa-reg": "PassiveAggressiveRegressor",
 }
 PUBLIC_PENDING_LANES = {
     "x-sgd-clf": "no reference",
@@ -84,4 +88,6 @@ PUBLIC_PENDING_LANES = {
     "x-lasso-lars": "no reference",
     "x-quantile": "no reference",
     "x-perceptron": "no reference",
+    "x-pa-clf": "no reference",
+    "x-pa-reg": "no reference",
 }
