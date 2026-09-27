@@ -38,7 +38,56 @@ def _ann_int(owner, name, v):
     return int(v)
 
 
-class IVFPQIndex(NumericModeMixin):
+class _AnnSaved:
+    """save / load for the ann indexes: an npz holding the constructor's int
+    parameters, the fitted ints and the index arrays with their dtype and
+    shape, and the tier. A loaded index searches; it does not rebuild.
+    No arithmetic: the arrays are written and read back byte for byte, and
+    `_serialize.exact` refuses any dtype cast."""
+
+    _SAVE_FORMAT = None
+    _SAVE_PARAMS = ()      # constructor parameters, all int
+    _SAVE_FITTED = ()      # fitted int attributes
+    _SAVE_ARRAYS = ()      # (attribute, typestr)
+
+    def save(self, path):
+        from . import _serialize
+        from ._array import Array
+        from .decomposition import _saved_mode
+        missing = [a for a, _ in self._SAVE_ARRAYS if not hasattr(self, a)]
+        if missing:
+            raise RuntimeError(f"mojolearn {type(self).__name__}: call fit before save")
+        arrays = {
+            "format": self._SAVE_FORMAT,
+            "estimator": type(self).__name__,
+            "numeric_mode": _saved_mode(self),
+            "params": Array.from_list([_ann_int(type(self).__name__, p, getattr(self, p)) for p in self._SAVE_PARAMS], "<i8"),
+            "fitted": Array.from_list([int(getattr(self, a)) for a in self._SAVE_FITTED], "<i8"),
+        }
+        for attr, _dtype in self._SAVE_ARRAYS:
+            arrays[attr.rstrip("_")] = getattr(self, attr)
+        return _serialize.write_npz(path, arrays)
+
+    @classmethod
+    def load(cls, path):
+        from . import _serialize
+        from .decomposition import _check_saved_by, _restore_mode
+        arrays = _serialize.read_npz(path, cls._SAVE_FORMAT)
+        _check_saved_by(arrays, path, cls)
+        params = _serialize.exact(arrays, "params", "<i8")
+        fitted = _serialize.exact(arrays, "fitted", "<i8")
+        if params.size != len(cls._SAVE_PARAMS) or fitted.size != len(cls._SAVE_FITTED):
+            raise ValueError(f"mojolearn: {path!r} does not hold {cls.__name__}'s parameters")
+        obj = cls(**{p: int(params[i]) for i, p in enumerate(cls._SAVE_PARAMS)})
+        _restore_mode(obj, arrays)
+        for i, a in enumerate(cls._SAVE_FITTED):
+            setattr(obj, a, int(fitted[i]))
+        for attr, dtype in cls._SAVE_ARRAYS:
+            setattr(obj, attr, _serialize.exact(arrays, attr.rstrip("_"), dtype))
+        return obj
+
+
+class IVFPQIndex(_AnnSaved, NumericModeMixin):
     """IVF-PQ build, then search (reference: cuVS `ivf_pq`), IDENTICAL by
     construction: fixed-order codebook training and code sums, ties broken
     by index (x_ann/ivf_pq_core.mojo).
@@ -66,6 +115,12 @@ class IVFPQIndex(NumericModeMixin):
 
     _BINDING = "_mojolearn_x_ann"
     _NAME = "IVFPQIndex"
+    _SAVE_FORMAT = "mojolearn-ivf-pq-1"
+    _SAVE_PARAMS = ("n_lists", "n_probes", "pq_dim", "pq_bits", "n_neighbors", "kmeans_n_iters",
+                    "pq_kmeans_n_iters", "random_state")
+    _SAVE_FITTED = ("n_features_in_", "n_rows_", "n_lists_", "pq_dim_", "pq_bits_", "pq_len_")
+    _SAVE_ARRAYS = (("centers_", "<f4"), ("list_offsets_", "<i4"), ("list_indices_", "<i4"),
+                    ("codebooks_", "<f4"), ("codes_", "<i4"))
 
     def __init__(self, n_lists, n_probes, pq_dim=4, pq_bits=8, n_neighbors=8, kmeans_n_iters=20,
                  pq_kmeans_n_iters=20, random_state=0):
@@ -148,21 +203,31 @@ class IVFPQIndex(NumericModeMixin):
 class TSNE(NumericModeMixin):
     """t-SNE (reference: scikit-learn `TSNE`, cuML `TSNE`), IDENTICAL by
     construction (x_ann/tsne_core.mojo): exact k-NN affinities with the
-    reference's perplexity bisection, attractive term over the sparse P,
-    EXACT repulsion (no Barnes-Hut atomics), sklearn's gains/momentum
-    optimizer for exactly `max_iter` steps.
+    reference's perplexity bisection, attraction over the sparse P, EXACT
+    repulsion (no Barnes-Hut atomics; `angle` is accepted and has no effect,
+    the repulsion being exact), and sklearn's optimizer schedule: the
+    exploration phase, the main phase, the error and gradient norm every 50
+    steps, the stops on `n_iter_without_progress` and `min_grad_norm`.
 
-    Parameters
+    Parameters (sklearn's names and defaults)
     ----------
-    n_components : 2 (only)
+    n_components : int, default 2 (the Student-t degrees of freedom are
+        max(n_components - 1, 1), as sklearn)
     perplexity : float, default 30.0
     early_exaggeration : float, default 12.0
     learning_rate : float or 'auto', default 'auto'
-        'auto' is sklearn's max(n / early_exaggeration / 4, 50).
     max_iter : int, default 1000
-    init : 'random' (only; sklearn's 'pca' is refused by name), the start is
-        uniform(-5e-5, 5e-5) from numpy's default_rng(random_state), whose
-        integer-to-double draw is exact on every platform.
+    n_iter_without_progress : int, default 300
+    min_grad_norm : float, default 1e-7
+    metric : 'euclidean' (only)
+    init : 'pca', 'random' or an array (n_samples, n_components), default
+        'pca'. 'pca' is mojolearn's PCA (identical on every column) scaled
+        as sklearn scales it: the first column's standard deviation, computed
+        exactly with math.fsum, to 1e-4. 'random' is uniform(-5e-5, 5e-5)
+        from numpy's default_rng(random_state), an exact integer-to-double draw.
+    method : 'barnes_hut' (sklearn's default: the k-NN sparse P) or 'exact'
+        (P over all pairs)
+    angle : float, default 0.5 (accepted; no effect)
     random_state : int, default 0
     """
 
@@ -170,46 +235,81 @@ class TSNE(NumericModeMixin):
     _EXPLORATION_MAX_ITER = 250
 
     def __init__(self, n_components=2, perplexity=30.0, early_exaggeration=12.0, learning_rate="auto",
-                 max_iter=1000, init="random", random_state=0):
+                 max_iter=1000, n_iter_without_progress=300, min_grad_norm=1e-7, metric="euclidean", init="pca",
+                 method="barnes_hut", angle=0.5, random_state=0):
         self.n_components = n_components
         self.perplexity = perplexity
         self.early_exaggeration = early_exaggeration
         self.learning_rate = learning_rate
         self.max_iter = max_iter
+        self.n_iter_without_progress = n_iter_without_progress
+        self.min_grad_norm = min_grad_norm
+        self.metric = metric
         self.init = init
+        self.method = method
+        self.angle = angle
         self.random_state = random_state
+
+    def _init(self, x, n, nc, seed):
+        import math
+        import numpy as np
+        if isinstance(self.init, str) and self.init == "random":
+            return ((np.random.default_rng(seed).random((n, nc)) - 0.5) * 1e-4).astype(np.float32)
+        if isinstance(self.init, str) and self.init == "pca":
+            from .decomposition import PCA
+            pca = PCA(n_components=nc)
+            if getattr(self, "numeric_mode", None) is not None:
+                pca.numeric_mode = self.numeric_mode
+            emb = np.asarray(pca.fit_transform(x), dtype=np.float32)
+            col = [float(v) for v in emb[:, 0]]
+            mean = math.fsum(col) / n
+            std = math.sqrt(math.fsum((v - mean) * (v - mean) for v in col) / n)
+            if not std > 0.0:
+                raise ValueError("mojolearn TSNE: init='pca' gave a constant first component; use init='random'")
+            return np.ascontiguousarray((emb / np.float32(std) * np.float32(1e-4)).astype(np.float32))
+        if isinstance(self.init, str):
+            raise ValueError(f"mojolearn TSNE: init must be 'pca', 'random' or an array, got {self.init!r}")
+        y0 = np.ascontiguousarray(np.asarray(self.init, dtype=np.float32))
+        if y0.shape != (n, nc):
+            raise ValueError(f"mojolearn TSNE: an init array must have shape ({n}, {nc}), got {y0.shape}")
+        return y0
 
     def fit(self, X, y=None):
         import numpy as np
         x, _ = as_f32_c(X, ndim=2, name="X")
         n, d = (int(s) for s in x.shape)
-        if self.n_components != 2:
-            raise ValueError("mojolearn TSNE: n_components must be 2 (the only arm implemented)")
-        if self.init != "random":
-            raise ValueError("mojolearn TSNE: init='pca' is not implemented; pass init='random'")
+        nc = _ann_int("TSNE", "n_components", self.n_components)
+        if nc < 1:
+            raise ValueError("mojolearn TSNE: n_components must be >= 1")
+        if self.metric != "euclidean":
+            raise ValueError("mojolearn TSNE: metric must be 'euclidean' (the only metric implemented)")
+        if self.method not in ("barnes_hut", "exact"):
+            raise ValueError(f"mojolearn TSNE: method must be 'barnes_hut' or 'exact', got {self.method!r}")
         max_iter = _ann_int("TSNE", "max_iter", self.max_iter)
+        patience = _ann_int("TSNE", "n_iter_without_progress", self.n_iter_without_progress)
         seed = _ann_int("TSNE", "random_state", self.random_state)
         perplexity = float(self.perplexity)
         if not 0.0 < perplexity < n:
             raise ValueError(f"mojolearn TSNE: perplexity must be in (0, {n}), got {perplexity}")
         exag = float(self.early_exaggeration)
-        if self.learning_rate == "auto":
-            lr = max(n / exag / 4.0, 50.0)
-        else:
-            lr = float(self.learning_rate)
+        lr = max(n / exag / 4.0, 50.0) if self.learning_rate == "auto" else float(self.learning_rate)
         exploration = min(self._EXPLORATION_MAX_ITER, max_iter)
-        y0 = ((np.random.default_rng(seed).random((n, 2)) - 0.5) * 1e-4).astype(np.float32)
-        emb = empty((n * 2,), "<f4")
+        y0 = self._init(x, n, nc, seed)
+        emb = empty((n * nc,), "<f4")
         kl = empty((1,), "<f4")
+        it = empty((1,), "<i4")
         self._bind().x_ann_tsne_fit(
-            # x, y0, y_out, kl_out
-            [addr_ro(x, name="X"), addr_ro(y0, name="init"), addr(emb, name="embedding_"), addr(kl, name="kl")],
-            # n, d, max_iter, exploration_iters, perplexity, early_exaggeration, learning_rate
-            [n, d, max_iter, exploration, perplexity, exag, lr],
+            # x, y0, y_out, kl_out, n_iter_out
+            [addr_ro(x, name="X"), addr_ro(y0, name="init"), addr(emb, name="embedding_"), addr(kl, name="kl"),
+             addr(it, name="n_iter")],
+            # n, d, max_iter, exploration_iters, perplexity, early_exaggeration, learning_rate,
+            # n_components, exact, n_iter_without_progress, min_grad_norm
+            [n, d, max_iter, exploration, perplexity, exag, lr, nc, 1 if self.method == "exact" else 0, patience,
+             float(self.min_grad_norm)],
         )
-        self.embedding_ = emb.reshape((n, 2))
+        self.embedding_ = emb.reshape((n, nc))
         self.kl_divergence_ = float(np.asarray(kl)[0])
-        self.n_iter_ = max_iter
+        self.n_iter_ = int(np.asarray(it)[0])
         self.learning_rate_ = lr
         self.n_features_in_ = d
         return self
@@ -218,7 +318,7 @@ class TSNE(NumericModeMixin):
         return self.fit(X).embedding_
 
 
-class CagraIndex(NumericModeMixin):
+class CagraIndex(_AnnSaved, NumericModeMixin):
     """CAGRA graph index, build then search (reference: cuVS `cagra`),
     IDENTICAL by construction (x_ann/cagra_core.mojo): an exact k-NN
     intermediate graph, cuVS's rank-based detour pruning, reverse edges in
@@ -243,6 +343,11 @@ class CagraIndex(NumericModeMixin):
     """
 
     _BINDING = "_mojolearn_x_ann"
+    _SAVE_FORMAT = "mojolearn-cagra-1"
+    _SAVE_PARAMS = ("graph_degree", "intermediate_graph_degree", "n_neighbors", "itopk_size", "search_width",
+                    "max_iterations", "n_seeds")
+    _SAVE_FITTED = ("n_features_in_", "n_rows_", "graph_degree_")
+    _SAVE_ARRAYS = (("dataset_", "<f4"), ("graph_", "<i4"))
 
     def __init__(self, graph_degree=32, intermediate_graph_degree=64, n_neighbors=8, itopk_size=64,
                  search_width=1, max_iterations=0, n_seeds=0):
@@ -298,7 +403,7 @@ class CagraIndex(NumericModeMixin):
         return dist.reshape((m, k)), idx.reshape((m, k))
 
 
-class IVFSQIndex(NumericModeMixin):
+class IVFSQIndex(_AnnSaved, NumericModeMixin):
     """IVF-SQ build, then search (reference: cuVS `ivf_sq`): the IVF-PQ
     coarse quantizer, residuals quantized to 8 bits per dimension (cuVS's
     per-dimension range with a 5% margin), a scan of the decoded residuals.
@@ -309,6 +414,11 @@ class IVFSQIndex(NumericModeMixin):
     `IVFPQIndex.search`."""
 
     _BINDING = "_mojolearn_x_ann"
+    _SAVE_FORMAT = "mojolearn-ivf-sq-1"
+    _SAVE_PARAMS = ("n_lists", "n_probes", "n_neighbors", "kmeans_n_iters", "random_state")
+    _SAVE_FITTED = ("n_features_in_", "n_rows_", "n_lists_")
+    _SAVE_ARRAYS = (("centers_", "<f4"), ("list_offsets_", "<i4"), ("list_indices_", "<i4"),
+                    ("sq_vmin_", "<f4"), ("sq_delta_", "<f4"), ("codes_", "<i4"))
 
     def __init__(self, n_lists, n_probes, n_neighbors=8, kmeans_n_iters=20, random_state=0):
         self.n_lists = n_lists
@@ -374,7 +484,7 @@ class IVFSQIndex(NumericModeMixin):
         return dist.reshape((m, k)), idx.reshape((m, k))
 
 
-class IVFRaBitQIndex(NumericModeMixin):
+class IVFRaBitQIndex(_AnnSaved, NumericModeMixin):
     """IVF-RaBitQ build, then search (reference: cuVS `ivf_rabitq`, RaBitQ
     of Gao & Long): the IVF coarse quantizer, each residual rotated by a
     randomized Hadamard transform and kept as sign bits plus its norm and
@@ -387,6 +497,11 @@ class IVFRaBitQIndex(NumericModeMixin):
     signs). `search(queries, filter=None)` as `IVFPQIndex.search`."""
 
     _BINDING = "_mojolearn_x_ann"
+    _SAVE_FORMAT = "mojolearn-ivf-rabitq-1"
+    _SAVE_PARAMS = ("n_lists", "n_probes", "n_neighbors", "kmeans_n_iters", "random_state")
+    _SAVE_FITTED = ("n_features_in_", "n_rows_", "n_lists_", "seed_")
+    _SAVE_ARRAYS = (("centers_", "<f4"), ("list_offsets_", "<i4"), ("list_indices_", "<i4"),
+                    ("codes_", "<i4"), ("norms_", "<f4"), ("ip_factors_", "<f4"))
 
     def __init__(self, n_lists, n_probes, n_neighbors=8, kmeans_n_iters=20, random_state=0):
         self.n_lists = n_lists

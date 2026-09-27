@@ -1,7 +1,7 @@
 --- a/x_ann/tsne_core.mojo
 +++ b/x_ann/tsne_core.mojo
-@@ -229,7 +229,7 @@
-     var grad = ftz(identical_mul(Float32(4.0), ftz(ftz(identical_mul(exaggeration, attr)) - neg)))
+@@ -246,7 +246,7 @@
+     var grad = ftz(identical_mul(cfac, ftz(ftz(identical_mul(exaggeration, attr)) - neg)))
      var upd = update.unsafe_load(e)
      var gain = gains.unsafe_load(e)
 -    if ftz(identical_mul(upd, grad)) < Float32(0.0):
