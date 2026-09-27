@@ -1,0 +1,8 @@
+# Files and symbols this section deliberately does NOT implement, and why.
+# A file absent from this list has simply not been looked at. Keep it complete.
+# their_thing	status	why / where it would go
+_stochastic_gradient.py early_stopping/validation_fraction	refused at the API	pass 2; needs a held-out split inside the fit
+_stochastic_gradient.py average (ASGD)	refused at the API	pass 2; WeightVector.add_average
+_stochastic_gradient.py class_weight, sample_weight	refused / absent	pass 2
+_stochastic_gradient.py warm_start, partial_fit, coef_init, intercept_init	refused / absent	pass 2
+_sgd_fast.pyx.tp SequentialDataset.shuffle (MT19937)	replaced	splitmix64 Fisher-Yates (x_linear/ops.mojo); quality parity, not bit parity
