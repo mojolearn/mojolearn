@@ -647,7 +647,17 @@ yet)` line with its table rows, in the ledger's columns.
 
 ### `trees`: rows 160-169
 
-(no rows yet)
+| row | pathway | what moves bits | move | status |
+|---|---|---|---|---|
+| 160 | **the ensembles' row and feature draws** (`xtrees/ops.mojo` `sample_indices`, `weighted_sample`, `uniform`: Bagging, AdaBoost.R2, DART drops, RandomTreesEmbedding targets, Kernel/Permutation SHAP) | an index mapping (mod vs multiply-shift) or a stateful stream whose draw k depends on earlier calls | PIN, DEVIATION 5600: SplitMix64 as a counter, draw k a pure function of (seed, stream, k); index = draw mod n | `xtrees/checks/glue_check.mojo::check_rng`, fixture separates mod from multiply-shift, arm `seam_5600_rng.patch` RED (2026-09-27, H100 pod); CPU == CUDA on every trees lane |
+| 161 | **weighted votes and averages** (`accumulate`, `accumulate_cols`, `accumulate_onehot`, `tree_score_add`, SAMME/R2 updates, TreeSHAP products) | a build contracting `acc + w * x` into one fused rounding | PIN, DEVIATION 5601: every product meeting an add is `identical_mul64` (the pinned product) | `check_pinned_accumulate`, fixture separates fused from pinned, arm `seam_5601_fused.patch` RED |
+| 162 | **folds over estimators, background rows and classes** (`block_mean`, `accumulate`, `leaf_newton`, `weighted_sample`'s CDF, `normalize_rows`) | pairwise or vectorised reassociation of a float sum | PIN, DEVIATION 5602: sequential, index order, one thread | `check_fold_order` (2^60, 1, -2^60, 1 separates sequential from pairwise), arm `seam_5602_order.patch` RED |
+| 163 | **the transcendental links** (SAMME/R2 exp, log and pow, softmax, the DART sigmoid, Platt's log1p(exp)) | the platform libm on each host and device | REPLACE, DEVIATION 5603: `identical_exp64` / `identical_log64` / `identical_pow64`, the pinned binary64 polynomials | `check_pinned_exp` (a learning rate found where libm exp and the pinned exp differ), arm `seam_5603_libm_exp.patch` RED |
+| 164 | **ties** (argmax of votes and probabilities, the weighted median's order, the isotonic sort) | first vs last maximum; an unstable sort | PIN, DEVIATION 5604: the lower index wins; the median sorts by (value, estimator), the isotonic fit by (x, y, row) | `check_tie_break` (exact ties planted), arm `seam_5604_last_max.patch` RED |
+| 165 | **a zero row** (OneVsRest and calibration normalisation) | sklearn divides 0 / 0, a vendor-payload NaN (IDENTITY_PATHS Clause B) | REPLACE, DEVIATION 5605: a zero (or -0.0) row is uniform 1 / k | `check_zero_rows` (+0 and -0 rows planted), arm `seam_5605_nan.patch` RED |
+| 166 | **the RF weighted objective on the CPU** (`ensemble/host/rf_oracle.mojo`: class weights / sample_weight without bootstrap) | the device's Int32 fixed-point weight planes (`WeightedClassificationBin`) restated on the host: the truncating `_quantize`, the scale, the ftz'd class-order `WeightAt`, the weighted gains and leaf | CONSTRUCTION: the host restates the device arithmetic statement for statement | lane `trees-rf-weighted` CPU == CUDA (batch/infer/model/train 9); arm `rf_weighted_split_sabotage.patch` DISAGREE then AGREE; existing RF lanes' cells unmoved on CUDA and CPU |
+
+AMD and Apple columns for 160-166: OWED (the AMD box and the M2 Pro steward are pass-2 steps still to run).
 
 
 
