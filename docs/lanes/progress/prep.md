@@ -53,8 +53,8 @@ Sanity tests need scikit-learn: on the pod it is in /root/skl
 | option parity: TargetEncoder StratifiedKFold folds for a binary / multiclass target (the reference's `_make_test_folds`, shuffle by splitmix64) | (this commit) | x-prep-target-encoder AGREE; its cross-fit cells MOVED (18, intended: the folds are now stratified); unshuffled folds equal sklearn's exactly (test) |
 | option parity: LinearDiscriminantAnalysis solver 'lsqr' / 'eigen', shrinkage None / 'auto' (Ledoit-Wolf) / constant, store_covariance; QuadraticDiscriminantAnalysis solver 'eigen' + shrinkage, store_covariance | (this commit) | x-prep-da-solvers AGREE, DISAGREE under e2e_host_branch |
 | option parity: sample_weight for GaussianNB / MultinomialNB / ComplementNB / BernoulliNB / CategoricalNB; CategoricalNB min_categories | (this commit) | x-prep-nb-weights AGREE, DISAGREE under e2e_host_branch; every other prep lane (and par-gpc-predict, which the selector picks) AGREE, SAME BITS |
-| option parity: the reference's score edges (f_classif NaN for a constant feature / single class, +inf for a within-class-constant one; chi2 NaN for an all-zero feature; canonical NaN word), f_regression force_finite=False, r_regression (new), RFE importance_getter str / callable; RFE tie rule written as DIFFERS BY NAME (numpy's unstable argsort) | (this commit) | x-prep-score-edges AGREE (--pass 2), DISAGREE under e2e_host_branch; every other prep lane AGREE and SAME BITS vs inv3 except x-prep-select-kbest/dupes (intended: that fixture's constant and all-zero columns now score NaN, as the reference) (H100) |
-| option parity: PolynomialFeatures order='F' (same bits, column-major), OrdinalEncoder / OneHotEncoder categories=<list> | (this commit) | x-prep-encoder-categories AGREE (--pass 2), DISAGREE under e2e_store_branch; x-prep-polynomial-features SAME BITS |
+| option parity (on lane/algos-prep2, steward pending): the reference's score edges (f_classif NaN for a constant feature / single class, +inf for a within-class-constant one; chi2 NaN for an all-zero feature; canonical NaN word), f_regression force_finite=False, r_regression (new), RFE importance_getter str / callable; RFE tie rule written as DIFFERS BY NAME (numpy's unstable argsort) | (this commit) | x-prep-score-edges AGREE (--pass 2), DISAGREE under e2e_host_branch; every other prep lane AGREE and SAME BITS vs inv3 except x-prep-select-kbest/dupes (intended: that fixture's constant and all-zero columns now score NaN, as the reference) (H100) |
+| option parity (on lane/algos-prep2, steward pending): PolynomialFeatures order='F' (same bits, column-major), OrdinalEncoder / OneHotEncoder categories=<list> | (this commit) | x-prep-encoder-categories AGREE (--pass 2), DISAGREE under e2e_store_branch; x-prep-polynomial-features SAME BITS |
 | steward: 1790529624248 / 1790529633391 (4de76eb6e1) PASS m2pro + do-amd; 1790530038647 (x-prep-simple-imputer-indicator) PASS; 1790535515159 / 1790535524761 (d2e61ed9d3: LDA/QDA solvers, NB sample_weight, stratified TargetEncoder folds, seam 5401 fix) PASS | - | PASS |
 
 ## Next
@@ -62,8 +62,11 @@ PHASE: option parity (c), still open. One phase per session; next session contin
 - Steward: two requests per commit (sum lanes + e2e_host_branch, store lanes + e2e_store_branch;
   lane lists in ~/mojolearn-evidence/algos-prep/{sum_lanes,store_lanes}.txt, which now include
   x-prep-score-edges and x-prep-encoder-categories). Merge gate: m2pro PASS + do-amd PASS.
-  All requests through 23b11a7ba5 (score edges, encoder categories, PolynomialFeatures order='F';
-  1790537091369 / 1790537100516) PASS; everything above is merged.
+  Merged to main: everything through d2e61ed9d3 (steward PASS). NOT YET MERGED: the score edges,
+  encoder categories=<list> and PolynomialFeatures order='F' rows (branch lane/algos-prep2,
+  commit 23b11a7ba5 and later), waiting on steward requests 1790537091369 / 1790537100516
+  (m2pro + do-amd). Next session: `apple_steward.py status`; on PASS merge lane/algos-prep2 to
+  main; on FAIL fix and resubmit.
 - Option parity rows still NOT IMPLEMENTED, in order (x_prep/NOT_IMPLEMENTED.tsv, naive_bayes/NOT_IMPLEMENTED.tsv):
   TargetEncoder categories=<list> (unknown training values must code -1 in te_enc) and cv=<splitter>;
   OneHot/Ordinal min_frequency, max_categories, handle_unknown='infrequent_if_exist';
