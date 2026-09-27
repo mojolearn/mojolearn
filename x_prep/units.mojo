@@ -11,8 +11,9 @@ from x_prep.prims import (
 )
 from x_prep.eigh import eigh_unit
 from x_prep.target import te_global_unit, te_enc_unit, te_apply_unit
+from x_prep.kbins import kbins_edges_unit, kbins_codes_unit
 
-comptime N_OPS = 25
+comptime N_OPS = 27
 
 
 @always_inline
@@ -67,3 +68,7 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
         mark_missing_unit(t, f, q)
     comptime if OP == 24:
         fill_unit(t, f, q)
+    comptime if OP == 25:
+        kbins_edges_unit(t, f, q)
+    comptime if OP == 26:
+        kbins_codes_unit(t, f, q)

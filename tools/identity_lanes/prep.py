@@ -103,3 +103,20 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_prep_with_nan), "x-prep-simple-imputer")
+
+
+@lane("x-prep-kbins")
+def _(ml, X, yc, yr, Xh=None):
+    parts = {}
+    for s in ("uniform", "quantile", "kmeans"):
+        m = ml.KBinsDiscretizer(n_bins=6, encode="ordinal", strategy=s).fit(X[:2000])
+        parts[s] = _h(*m.bin_edges_)
+        parts[s + "_t"] = _h(m.transform(X[:256]))
+    lin = ml.KBinsDiscretizer(n_bins=4, strategy="quantile", quantile_method="linear").fit(X)
+    parts["linear_onehot"] = _h(lin.transform(X[:256]))
+    m = ml.KBinsDiscretizer(n_bins=5, encode="onehot-dense").fit(X)
+    parts["default"] = _h(*m.bin_edges_)
+    return _fit(parts, m, lambda e: (e.transform(Xh[:256]),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-kbins")
