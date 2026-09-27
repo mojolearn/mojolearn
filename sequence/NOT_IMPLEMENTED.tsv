@@ -7,3 +7,18 @@ LSTM/GRU/RNN	PackedSequence / variable lengths	torch/nn/utils/rnn.py	equal-lengt
 LSTM/GRU/RNN	bias=False	torch/nn/modules/rnn.py	biases always present
 LSTM/GRU/RNN	float64 / float16 / bfloat16	-	float32 only; no float64 on the device
 LSTM/GRU/RNN	gradient clipping	torch.nn.utils.clip_grad_norm_	not in the fit loop yet
+RMSprop/Adagrad/Lion/Adamax/NAdam/LAMB/Adafactor	parameter groups, maximize, foreach/fused/capturable/differentiable	torch.optim	one config per optimizer over the packed float32 buffer
+RMSprop/Adagrad/Lion/Adamax/NAdam/LAMB/Adafactor	sparse gradients, float64	torch.optim	dense float32 only; no float64 on the device
+Adafactor	tensors of more than 2 dimensions	torch/optim/_adafactor.py	the factored arm is carried for matrices only
+AutoARIMA	seasonal_test='seas' (STL), method css / css-ml, h, truncate	cuml/tsa/auto_arima.pyx	the ARIMA fit carries 'ml' only; D must be given
+AutoARIMA	a d option list other than 0..d_max	cuml/tsa/auto_arima.pyx	select_d tests d = 0, 1, ... in order
+STL	period=None (inferred from a pandas index)	statsmodels/tsa/stl/_stl.pyx	pass the period
+VAR	ic-based order selection, trend 'ct'/'ctt', exog	statsmodels/tsa/vector_ar/var_model.py	fixed lag order with or without a constant
+MLPClassifier/MLPRegressor	solver='lbfgs', early_stopping, warm_start, partial_fit, multilabel, verbose	sklearn/neural_network/_multilayer_perceptron.py	adam and sgd only
+LR schedulers	OneCycleLR momentum cycling, per-group learning rates, last_epoch resumption	torch/optim/lr_scheduler.py	learning-rate closed forms only
+Theta family	prediction intervals, fitted values, non-normal errors, exogenous regressors	statsforecast/theta.py	point forecasts only
+Croston family	prediction intervals, fitted values	statsforecast/models.py	point forecasts only
+ETS	seasonal components, multiplicative trend, 'Z' model selection, prediction intervals	statsforecast/ets.py	non-seasonal A/M error with N/A(d) trend
+GARCH	non-normal distributions, AR/HAR/LS means, power != 2, rescale	arch/univariate	constant or zero mean, normal errors
+ProphetForecaster	logistic and flat growth, uncertainty intervals, MCMC, extra regressors beyond holiday columns, conditional seasonalities	prophet/forecaster.py	linear growth MAP point forecasts
+MoEBlock	backward pass, router jitter noise, activations other than SiLU, auxiliary load-balancing loss	transformers/models/mixtral/modeling_mixtral.py	forward only

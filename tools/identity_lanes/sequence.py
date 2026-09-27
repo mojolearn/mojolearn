@@ -379,3 +379,20 @@ def _(ml, X, yc, yr, Xh=None):
     m = ml.ProphetForecaster(seasonality_mode="multiplicative").fit(t, y, holidays=hol[:120, None])
     fm = m.predict(tf, holidays=hol[120:, None])
     return _fit(dict(a_params=_h(a.params_), a_fc=_h(fa), m_params=_h(m.params_), m_fc=_h(fm)))
+
+
+@lane("sequence-moe")
+def _(ml, X, yc, yr, Xh=None):
+    """A Mixtral block (16 -> 24, 6 experts, top 2) over 256 tokens of the
+    fixture rows, and a top-3 block without renormalisation whose router has
+    two identical rows (every probability tie, exercising the lower-index
+    rule)."""
+    x = np.ascontiguousarray(X[:256, :16], dtype=np.float32)
+    a = ml.MoEBlock(16, 24, num_experts=6, top_k=2, random_state=1)
+    ya = a(x)
+    b = ml.MoEBlock(16, 12, num_experts=5, top_k=3, norm_topk_prob=False, random_state=2)
+    b.router[3] = b.router[1]
+    yb = b(x)
+    return _fit(dict(ya=_h(ya), la=_h(a.router_logits_), sa=_h(a.selected_experts_), wa=_h(a.routing_weights_),
+                     yb=_h(yb), sb=_h(b.selected_experts_), wb=_h(b.routing_weights_)),
+                a, lambda e: (e(np.ascontiguousarray(Xh[:256, :16], dtype=np.float32)),))
