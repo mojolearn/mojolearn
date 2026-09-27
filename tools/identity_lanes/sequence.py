@@ -286,3 +286,22 @@ def _(ml, X, yc, yr, Xh=None):
     Xh3 = np.ascontiguousarray(Xh[:256, :x.shape[1]], dtype=np.float32)
     return _fit(dict(y=_h(y), dx=_h(dx), dw=_h(ln.weight_grad), db=_h(ln.bias_grad), y3=_h(y3)),
                 ln, lambda e: (e.forward(Xh3),))
+
+
+@lane("sequence-theta")
+def _(ml, X, yc, yr, Xh=None):
+    """Four series of 96 observations: a positive seasonal series (period 12,
+    multiplicative after the ACF test), the same minus its minimum (additive),
+    a random walk and a fixture column. AutoTheta over the batch and a
+    DynamicOptimizedTheta with a fixed alpha; 18-step forecasts."""
+    t = np.arange(96, dtype=np.float32)
+    wave = np.sin(t * np.float32(2 * np.pi / 12)).astype(np.float32)
+    c = np.ascontiguousarray(X[:96, 7], dtype=np.float32)
+    y = np.stack([np.float32(20.0) + np.float32(4.0) * wave + np.float32(0.3) * c + np.float32(0.05) * t,
+                  np.float32(4.0) * wave + np.float32(0.3) * c,
+                  np.cumsum(c, dtype=np.float32), c]).astype(np.float32)
+    a = ml.AutoTheta(season_length=12).fit(y)
+    fa = a.predict(18)["mean"]
+    d = ml.DynamicOptimizedTheta(season_length=12, alpha=0.3).fit(y)
+    fd = d.predict(18)["mean"]
+    return _fit(dict(auto=_h(fa), auto_info=_h(a.info_), dotm=_h(fd), dotm_info=_h(d.info_)))

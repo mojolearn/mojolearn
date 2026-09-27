@@ -1,0 +1,11 @@
+--- a/x_linear/ops.mojo
++++ b/x_linear/ops.mojo
+@@ -163,7 +163,7 @@
+     """Fisher-Yates, i descending, j = draw mod (i + 1)."""
+     var i = n - 1
+     while i > 0:
+-        var j = Int(rng_next(s) % UInt64(i + 1))
++        var j = Int(((rng_next(s) >> 32) * UInt64(i + 1)) >> 32)  # SABOTAGE 5004
+         var t = ldi(idx, i)
+         sti(idx, i, ldi(idx, j))
+         sti(idx, j, t)
