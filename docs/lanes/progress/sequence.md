@@ -65,7 +65,24 @@ NAdam and Adafactor.
 - Merge gate on the A40: test_host_surface 196 passed; tools/test_lane_select.py OK, 0 failures.
 - Steward requests at d5a849bb5 (m2pro + do-amd; m3ultra spooled):
   1790537359123-sequence-d5a849bb57 (21 lanes), 1790537368020-sequence-d5a849bb57
-  (autoarima). STATUS: see `python3 tools/apple_steward.py status`.
+  (autoarima). do-amd PASS on both.
+
+### The family's earlier algorithms (LANE CHARTER: ARIMA, ExponentialSmoothing, KPSS)
+
+Their own drivers and oracles (`arima/checks/arima_check.mojo`,
+`fit_check.mojo`, `holtwinters/checks/hw_check.mojo`,
+`tsa/checks/stationarity_check.mojo`) are now listed in
+`tools/identity_lanes/sequence.checks` with 15 source arms 5520-5535
+(`sequence/README.md` maps each to its DEVIATION / SEAMS.tsv row).
+Unarmable seams, written down there: `F = Z P Z'` and the Jones inverse's
+`fma(sign, prod, x)` (no separating spelling).
+
+- NVIDIA A40, `--pass 2` over arima, arima-011, arima-seasonal-c, arima-exog,
+  arima-exog-seasonal, holtwinters, holtwinters-multiplicative, kpss,
+  sequence-autoarima: all 32 arms of sequence.checks PASS / FAIL / PASS;
+  all 9 lanes CLEAN AGREE. DONE, never re-run.
+- E2E steward sabotages: `e2e_arima_host_param_bit.patch` (the five arima
+  lanes), `e2e_tsa_host_bits.patch` (holtwinters x2, kpss).
 
 NEXT (a fresh session starts here), per CURRENT DIRECTIVES (one phase per session):
 1. If the steward requests above are not both PASS on m2pro and do-amd:
