@@ -343,3 +343,13 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-select-kbest")
+
+
+@lane("x-prep-mutual-info")
+def _(ml, X, yc, yr, Xh=None):
+    Xs, y3 = X[:1500], _prep_three_class(X, yr)[:1500]
+    mc = ml.mutual_info_classif(Xs, y3, random_state=4)
+    mr = ml.mutual_info_regression(Xs, yr[:1500], random_state=4, n_neighbors=5)
+    m = ml.SelectKBest(ml.mutual_info_regression, k=4).fit(Xs, yr[:1500])
+    parts = dict(classif=_h(mc), regression=_h(mr), support=_h(np.array(m.get_support())))
+    return _fit(parts, m, lambda e: (e.transform(Xh[:256]),))
