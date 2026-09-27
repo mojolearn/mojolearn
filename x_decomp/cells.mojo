@@ -346,6 +346,23 @@ def colsum_part_cell(a: F32Ptr, j: Int, n: Int, d: Int, r0: Int, r1: Int) -> Flo
     return acc
 
 
+# DEVIATION 5317 (PIN; row 139): the sign of a vector (sklearn svd_flip,
+# _deterministic_vector_sign_flip) is that of its largest-|.| entry, ties to the
+# LOWER index; -1 only when that entry is < 0; arm 5317_absmax_tie.
+@always_inline
+def absmax_sign_cell(a: F32Ptr, t: Int, n: Int, d: Int, by_col: Bool) -> Float32:
+    """by_col: column t of the n x d matrix; else row t."""
+    var best = Float32(-1)
+    var val = Float32(0)
+    var cnt = n if by_col else d
+    for q in range(cnt):
+        var v = ftz(a.unsafe_load(q * d + t)) if by_col else ftz(a.unsafe_load(t * d + q))
+        if abs(v) > best:
+            best = abs(v)
+            val = v
+    return Float32(-1) if val < Float32(0) else Float32(1)
+
+
 @always_inline
 def fold_cell(p: F32Ptr, t: Int, nb: Int, stride: Int) -> Float32:
     """The block partials of output t (at t + b * stride), b ascending."""
