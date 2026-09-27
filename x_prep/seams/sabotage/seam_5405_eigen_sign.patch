@@ -1,0 +1,10 @@
+--- a/x_prep/eigh.mojo
++++ b/x_prep/eigh.mojo
+@@ -101,6 +101,6 @@
+         for c in range(1, m):
+             if abs(ld(f, V + c * m + r)) > abs(ld(f, V + big * m + r)):
+                 big = c
+-        if ld(f, V + big * m + r) < Float32(0):
++        if ld(f, V + r) < Float32(0):  # SABOTAGE 5405
+             for c in range(m):
+                 st(f, V + c * m + r, sub(Float32(0), ld(f, V + c * m + r)))

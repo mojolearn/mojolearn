@@ -33,6 +33,8 @@ FAMILIES = (
             "x-sgd-ocsvm",
             "x-ridge-clf", "x-ridge-cv",
             "x-lasso-cv", "x-enet-cv",
+            "x-logistic-cv",
+            "x-isotonic",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -48,6 +50,8 @@ FAMILIES = (
             "SGDOneClassSVM",
             "RidgeClassifier", "RidgeCV",
             "LassoCV", "ElasticNetCV",
+            "LogisticRegressionCV",
+            "IsotonicRegression",
         ),
         display="the linear expansion lane (SGD, GLMs, Huber, Bayesian, LARS, quantile, CV, isotonic)",
         host_modules=(
@@ -55,7 +59,8 @@ FAMILIES = (
             "x_linear/glm.mojo", "x_linear/lbfgs.mojo", "x_linear/huber.mojo",
             "x_linear/bayes.mojo", "x_linear/lars.mojo",
             "x_linear/quantile.mojo", "x_linear/ridge.mojo",
-            "x_linear/cd.mojo",
+            "x_linear/cd.mojo", "x_linear/logcv.mojo",
+            "x_linear/isotonic.mojo",
         ),
         exports=(
             "x_linear_host_numeric_mode", "x_linear_host_vendor", "x_linear_host_column", "x_linear_host_sabotage",
@@ -86,6 +91,8 @@ TRAINING_LANE_NAMES = {
     "x-ridge-cv": "RidgeCV",
     "x-lasso-cv": "LassoCV",
     "x-enet-cv": "ElasticNetCV",
+    "x-logistic-cv": "LogisticRegressionCV",
+    "x-isotonic": "IsotonicRegression",
 }
 PUBLIC_PENDING_LANES = {
     "x-sgd-clf": "no reference",
@@ -107,4 +114,6 @@ PUBLIC_PENDING_LANES = {
     "x-ridge-cv": "no reference",
     "x-lasso-cv": "no reference",
     "x-enet-cv": "no reference",
+    "x-logistic-cv": "no reference",
+    "x-isotonic": "no reference",
 }

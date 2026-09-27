@@ -365,3 +365,37 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("predict", "transform", sl=slice(0, 256)), "x-prep-rfe")
+
+
+@lane("x-prep-complement-nb")
+def _(ml, X, yc, yr, Xh=None):
+    y3 = _prep_three_class(X, yr)
+    m = ml.ComplementNB(alpha=0.7).fit(_prep_abs(X), y3)
+    mn = ml.ComplementNB(norm=True).fit(_prep_abs(X), yc)
+    parts = dict(flp=_h(m.feature_log_prob_), norm=_h(mn.feature_log_prob_),
+                 norm_proba=_h(mn.predict_proba(_prep_abs(X[:256]))))
+    out = _prep_clf(m, _prep_abs(X), _prep_abs(Xh), ("feature_count_", "class_log_prior_"))
+    out.update(parts)
+    return out
+
+
+_batch_decl(_rows_calls("predict", "predict_proba", sl=slice(0, 256), prep=_prep_abs), "x-prep-complement-nb")
+
+
+def _prep_cat_codes(X):
+    """Category indices 0..4 from the fixture (clip of |x| * 2)."""
+    return np.clip(np.floor(np.abs(X) * 2), 0, 4).astype(np.float32)
+
+
+@lane("x-prep-categorical-nb")
+def _(ml, X, yc, yr, Xh=None):
+    y3 = _prep_three_class(X, yr)
+    Xc, Xhc = _prep_cat_codes(X), _prep_cat_codes(Xh)
+    m = ml.CategoricalNB(alpha=0.5).fit(Xc, y3)
+    parts = dict(flp=_h(*m.feature_log_prob_), ncat=_h(m.n_categories_))
+    out = _prep_clf(m, Xc, Xhc, ("class_count_", "class_log_prior_"))
+    out.update(parts)
+    return out
+
+
+_batch_decl(_rows_calls("predict", "predict_proba", sl=slice(0, 256), prep=_prep_cat_codes), "x-prep-categorical-nb")

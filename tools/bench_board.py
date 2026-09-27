@@ -113,7 +113,7 @@ TREE_ROW_FLOOR = 1_000_000
 
 TREE_LANES = ("gbdt-symmetric", "gbdt-depthwise", "gbdt-lossguide", "rf", "et", "iforest")
 CLASSICAL_LANES = ("kmeans", "pca", "ols", "knn", "kde", "svc", "dbscan", "hdbscan")
-FAMILIES = ("trees", "classical", "classical2", "neural")
+FAMILIES = ("trees", "classical", "classical2", "neural", "algos")
 NEURAL_SHAPES = ("full", "small")
 DATASETS = ("taxi", "istella")
 VENDORS = ("apple", "nvidia", "amd")
@@ -281,7 +281,7 @@ CLASSICAL_OPPONENTS = {
 def family_lanes(fam):
     return {"trees": TREE_LANES + TREE_TASK_LANES, "classical": CLASSICAL_LANES,
             "classical2": MORE_LANES,
-            "neural": NEURAL_LANES}[fam]
+            "neural": NEURAL_LANES, "algos": ALGOS_LANES}[fam]
 
 
 #: classical2 opponent pins, per vendor, installed beside the trees set when
@@ -399,6 +399,13 @@ def _load_tool(name):
 #: standard library at import time, so the orchestrator can read them).
 MORE = _load_tool("bench_board_more")
 MORE_LANES = MORE.LANE_ORDER
+
+#: The algorithm-expansion driver's tables (standard library only at import):
+#: one race per new algorithm and dataset, its opponents per vendor, its R2
+#: keys; our side SKIPS by name ("SKIPPED: not built yet") until the lane's
+#: class is in the installed wheel.
+ALGOS = _load_tool("bench_board_algos")
+ALGOS_LANES = ALGOS.LANE_ORDER
 
 #: The neural driver's tables (standard library only at import time): its
 #: lanes, the data each reads (no R2 dataset: inputs are built from seed 7)
@@ -522,6 +529,22 @@ def plan_races(vendor, modes, families=FAMILIES, lanes=None, datasets=DATASETS, 
                     "shape": neural_shape, "modes": ["identical"], "our_arms": ours,
                     "opponents": list(opp), "arms": list(ours) + list(opp),
                 })
+                continue
+            if fam == "algos":
+                ours = our_arms(fam, modes, lane, cpu_arm)
+                if not ours:
+                    continue
+                opp = ALGOS.opponents(vendor, lane)
+                # taxi/Istella follow --datasets; a lane's own data (text,
+                # taxi-hourly, synthetic, ...) runs whatever --datasets says
+                for ds in [d for d in ALGOS.datasets_of(lane) if d not in DATASETS or d in datasets]:
+                    races.append({
+                        "id": race_id(fam, lane, ds, rows),
+                        "family": fam, "lane": lane, "dataset": ds, "rows": rows,
+                        "modes": sorted(set(ours.values()), key=MODES.index), "our_arms": ours,
+                        "ours_class": list(ALGOS.LANES[lane]["ours"]),
+                        "opponents": list(opp), "arms": list(ours) + list(opp),
+                    })
                 continue
             if fam == "classical2":
                 ours = our_arms(fam, modes, lane, cpu_arm)
@@ -891,6 +914,25 @@ def setup_python(args, vendor, out, log):
         if rc != 0:
             print("bench_board: classical2 opponent install rc %d for %s (their arms will refuse "
                   "by name)" % (rc, " ".join(MORE_PINS[vendor])), flush=True)
+    if "algos" in (args.families or ""):
+        cmd = list(pip)
+        if args.opponent_wheels:
+            cmd += ["--no-index", "--find-links", os.path.abspath(args.opponent_wheels)]
+        rc = run_logged(cmd + ALGOS.PINS[vendor], None, log, 3600)
+        if rc != 0:
+            print("bench_board: algos opponent install rc %d for %s (their arms will refuse "
+                  "by name)" % (rc, " ".join(ALGOS.PINS[vendor])), flush=True)
+        extra = ALGOS.RAPIDS_EXTRA.get(vendor)
+        if extra:
+            idx = next((v[0] for k, v in opponent_pins().items() if k.startswith("rapids-")), None)
+            cmd = list(pip)
+            if args.opponent_wheels:
+                cmd += ["--no-index", "--find-links", os.path.abspath(args.opponent_wheels)]
+            elif idx:
+                cmd += ["--extra-index-url", idx]
+            if run_logged(cmd + extra, None, log, 3600) != 0:
+                print("bench_board: %s install failed (the cugraph-gpu arms will refuse by name)"
+                      % " ".join(extra), flush=True)
     if "neural" in (args.families or ""):
         cmd = list(pip)
         if args.opponent_wheels:
@@ -1251,6 +1293,75 @@ def more_json_path(ctx, race):
                         "%s-%s.json" % (race["lane"], race["dataset"]))
 
 
+def algos_data_dir(ctx, rows):
+    base = ctx.get("algos_data") or os.path.join(ctx["out"], "algos-data")
+    return os.path.join(base, "rows-" + rows_tag(rows))
+
+
+def ensure_algos_prep(ctx, races):
+    """algos block prep, untimed, once per box and row cap (the driver skips
+    every block whose JSON record exists)."""
+    need = {}
+    for r in races:
+        if r["family"] == "algos":
+            need.setdefault(r["rows"], set()).add((r["lane"], r["dataset"]))
+    for rows, pairs in need.items():
+        lanes = sorted({p[0] for p in pairs})
+        dss = sorted({p[1] for p in pairs if p[1] in DATASETS}) or ["taxi"]
+        cmd = [ctx["python"], "-u", ctx["algos_driver"], "prep", "--data", algos_data_dir(ctx, rows),
+               "--lanes", ",".join(lanes), "--datasets", ",".join(dss)]
+        if rows:
+            cmd += ["--max-rows", str(int(rows))]
+        log = os.path.join(ctx["out"], "logs", "algos-prep-rows-%s.log" % rows_tag(rows))
+        print("bench_board: algos prep rows=%s lanes=%d datasets=%s"
+              % (rows_tag(rows), len(lanes), ",".join(dss)), flush=True)
+        rc = run_logged(cmd, child_env(ctx), log, 6 * 3600, nice=ctx["nice"])
+        if rc != 0:
+            print("bench_board: algos prep rc %d (see %s); its races will fail by name"
+                  % (rc, log), flush=True)
+
+
+def algos_cmd(ctx, race):
+    """tools/bench_board_algos.py race for one algos (lane, dataset)."""
+    rsec = ctx["round_seconds"] or more_round_seconds(race["rows"])
+    cmd = [ctx["python"], "-u", ctx["algos_driver"], "race",
+           "--lane", race["lane"], "--dataset", race["dataset"],
+           "--data", algos_data_dir(ctx, race["rows"]),
+           "--arms", ",".join(race["arms"]),
+           "--rounds", str(ctx["rounds"]),
+           "--out", os.path.join(ctx["out"], "raw", "algos", "rows-" + rows_tag(race["rows"])),
+           "--work", os.path.join(ctx["out"], "work"),
+           "--ours-python", shlex.quote(ctx["python"]),
+           "--theirs-python", shlex.quote(ctx["python"]),
+           "--ready-seconds", str(rsec), "--warmup-seconds", str(rsec),
+           "--round-seconds", str(rsec)]
+    if race["rows"]:
+        cmd += ["--smoke-rows", str(int(race["rows"]))]
+    n = len(race["arms"])
+    ceiling = 600 + rsec * n * 2 + rsec * ctx["rounds"] * n + 900
+    return cmd, {}, ceiling
+
+
+def algos_json_path(ctx, race):
+    return os.path.join(ctx["out"], "raw", "algos", "rows-" + rows_tag(race["rows"]),
+                        "%s-%s.json" % (race["lane"], race["dataset"]))
+
+
+ALGOS_SKIPPED = "SKIPPED: not built yet"
+
+
+def algos_skips(cells, r):
+    """An `ours` arm whose class the installed wheel does not export reads
+    SKIPPED, never an error (the algorithm lanes merge classes all day)."""
+    arms = (r or {}).get("arms") or {}
+    for c in cells:
+        a = arms.get(c["arm"]) or {}
+        if a.get("status") == "skipped":
+            c["status"] = ALGOS_SKIPPED
+            c["skip_reason"] = a.get("error")
+    return cells
+
+
 def neural_round_seconds(shape):
     return 600 if shape == "small" else 1800
 
@@ -1385,6 +1496,9 @@ def race_settings(ctx, race):
             s["shape"] = race.get("shape")
             s["shape_dims"] = NEURAL.shape_text(race["lane"], race.get("shape") or "full")
             s.update(NEURAL.lane_settings(race["lane"]))
+        elif race["family"] == "algos":
+            s["driver"] = "tools/bench_board_algos.py"
+            s["lane_config"] = ALGOS.lane_config(race["lane"])
         elif race["family"] == "classical2":
             s["driver"] = "tools/bench_board_more.py"
             s["block"] = MORE.block_of(race["lane"])
@@ -1493,6 +1607,24 @@ def run_race(ctx, race):
         else:
             rec["inputs"] = r.get("inputs")
             cells = classical_cells(ctx, race, r)
+    elif race["family"] == "algos":
+        cmd, extra, ceiling = algos_cmd(ctx, race)
+        log = os.path.join(ctx["out"], "logs", "algos." + tag + ".log")
+        jpath = algos_json_path(ctx, race)
+        if os.path.exists(jpath):
+            os.replace(jpath, jpath + ".previous")
+        rc = run_logged(cmd, child_env(ctx, extra), log, ceiling, nice=ctx["nice"])
+        rec.update(command=cmd, env=extra, log=os.path.relpath(log, ctx["out"]), rc=rc,
+                   race_json=os.path.relpath(jpath, ctx["out"]))
+        r = load_result(jpath) if os.path.exists(jpath) else None
+        if r is None:
+            cells = [dict(base_cell(ctx, race, a, race["our_arms"].get(a)),
+                          status="UNKNOWN(no race json, rc %d)" % rc) for a in race["arms"]]
+        else:
+            rec["lane_config"] = r.get("lane_config")
+            cells = algos_skips(classical_cells(ctx, race, r), r)
+            if ctx.get("infer"):
+                rec["infer_cells"] = algos_skips(INFER.classical_cells(_bb(), ctx, race, r), r)
     elif race["family"] == "classical2":
         cmd, extra, ceiling = more_cmd(ctx, race)
         log = os.path.join(ctx["out"], "logs", "classical2." + tag + ".log")
@@ -1767,7 +1899,8 @@ def render_board(result):
         if not fam_races:
             continue
         L.append("## %s" % {"trees": "Trees", "classical": "Classical",
-                             "classical2": "Classical, wave 2", "neural": "Neural"}[fam])
+                             "classical2": "Classical, wave 2", "neural": "Neural",
+                             "algos": "Algorithm expansion"}[fam])
         L.append("")
         for rr in fam_races:
             rc = rr.get("cells") or []
@@ -1983,6 +2116,10 @@ def build_parser():
                    help="classical2 block dir (default <cache>/more-data); prep is untimed and once")
     p.add_argument("--neural-driver", default=os.path.join(HERE, "bench_board_neural.py"),
                    help=argparse.SUPPRESS)
+    p.add_argument("--algos-driver", default=os.path.join(HERE, "bench_board_algos.py"),
+                   help=argparse.SUPPRESS)
+    p.add_argument("--algos-data", default=None,
+                   help="algos block dir (default <cache>/algos-data); prep is untimed and once")
     return p
 
 
@@ -2027,11 +2164,33 @@ def print_plan(vendor, modes, races, args, rows, data):
         print("classical2 opponents pinned: %s" % " ".join(MORE_PINS[vendor]))
         for why in MORE.NOT_PLANNED[vendor]:
             print("classical2 NOT PLANNED: %s" % why)
+    algos = [r for r in races if r["family"] == "algos"]
+    if algos:
+        print("algos opponents pinned: %s%s" % (" ".join(ALGOS.PINS[vendor]), (
+            " + %s (rapids index)" % " ".join(ALGOS.RAPIDS_EXTRA[vendor])
+            if ALGOS.RAPIDS_EXTRA.get(vendor) else "")))
+        for why in ALGOS.not_planned(vendor):
+            print("algos NOT PLANNED: %s" % why)
+        built = ALGOS.source_exports()
+        for key in sorted({k for r in algos for k in ALGOS.r2_keys(r["lane"], r["dataset"])
+                           if k.startswith("corpus/")}):
+            p = ALGOS.corpus_path(key)
+            print("data corpus %s %s (R2 key %s)" % ("present" if os.path.isfile(p) else "MISSING",
+                                                    p, key))
     for ds, rec in data.items():
         print("data %-8s %s %s (R2 key %s)" % (ds, "present" if rec["present"] else "MISSING",
                                               rec["path"], rec["r2_key"]))
     print("")
     for r in races:
+        if r["family"] == "algos":
+            cls = [c for c in r["ours_class"] if c.split(".")[-1] in built or c in built]
+            print("RACE %-40s arms=%s class=%s[%s] rows=%s data=%s" % (
+                r["id"], ",".join("%s[%s]" % (a, r["our_arms"][a]) if a in r["our_arms"] else a
+                                  for a in r["arms"]),
+                "|".join(r["ours_class"]), "in source" if cls else "not built yet: SKIPPED",
+                ALGOS.rows_text(r["lane"], r["rows"]),
+                ",".join(ALGOS.r2_keys(r["lane"], r["dataset"])) or "seed 7"))
+            continue
         print("RACE %-40s arms=%s" % (r["id"], ",".join(
             "%s[%s]" % (a, r["our_arms"][a]) if a in r["our_arms"] else a for a in r["arms"])))
     print("")
@@ -2054,7 +2213,8 @@ def print_plan(vendor, modes, races, args, rows, data):
     if not args.no_infer:
         inf = {}
         for r in races:
-            n = len(INFER.plan_cells(r))
+            n = len(INFER.plan_cells(r)) if r["family"] != "algos" else (
+                len(r["arms"]) if ALGOS.has_infer(r["lane"]) else 0)
             if n:
                 inf[r["family"]] = inf.get(r["family"], 0) + n
         print("INFER cells=%d (%s; each arm's own model after the fit rounds; --no-infer skips)"
@@ -2082,7 +2242,7 @@ def main(argv=None):
     modes = modes_for(vendor, args.modes)
     families = _csv(args.families, FAMILIES, "family")
     lanes = (_csv(args.lanes, TREE_LANES + TREE_TASK_LANES + CLASSICAL_LANES + MORE_LANES
-                  + NEURAL_LANES, "lane")
+                  + NEURAL_LANES + ALGOS_LANES, "lane")
              if args.lanes else None)
     datasets = _csv(args.datasets, DATASETS, "dataset")
     rows = parse_rows(args.rows)
@@ -2094,6 +2254,10 @@ def main(argv=None):
                                            if r["family"] != "neural")]
     needed += sorted({k for r in races if r["family"] == "trees"
                       for k in race_data_keys(r) if k not in needed})
+    # the algos family's own taxi-derived data (taxi-hourly, taxi-zones)
+    if "taxi" not in needed and any(r["family"] == "algos" and "gbm-bench/taxi/taxi_speed.npz"
+                                    in ALGOS.r2_keys(r["lane"], r["dataset"]) for r in races):
+        needed.append("taxi")
     data = data_status(os.path.abspath(os.path.expanduser(args.data_root)), needed)
 
     if args.dry_run:
@@ -2109,6 +2273,15 @@ def main(argv=None):
             "Stage from R2 on the Mac that holds the credential:\n  sh tools/dataset_store.sh stage "
             "\"<ssh flags+target>\" %s\n(a remote Mac: prefix MOJOLEARN_STAGE_BOX_HOME=<its home>)"
             % (",".join(missing), args.data_root, " ".join(R2_KEYS[d] for d in missing)))
+    corpus_missing = sorted({k for r in races if r["family"] == "algos"
+                             for k in ALGOS.r2_keys(r["lane"], r["dataset"])
+                             if k.startswith("corpus/") and not os.path.isfile(ALGOS.corpus_path(k))})
+    if corpus_missing:
+        raise SystemExit(
+            "bench_board: REFUSING: corpus key(s) %s missing (looked in $MOJOLEARN_CORPUS_ROOT, "
+            "~/r2-stage, <repo>/training). This script never downloads. Stage from R2:\n  sh "
+            "tools/dataset_store.sh stage \"<ssh flags+target>\" %s"
+            % (",".join(corpus_missing), " ".join(corpus_missing)))
     if args.verify_data:
         data = data_status(os.path.abspath(os.path.expanduser(args.data_root)), needed, verify=True)
         bad = [d for d, r in data.items() if r.get("sha256_ok") is False]
@@ -2143,7 +2316,9 @@ def main(argv=None):
            "classical_driver": os.path.abspath(args.classical_driver),
            "neural_driver": os.path.abspath(args.neural_driver),
            "more_driver": os.path.abspath(args.more_driver),
-           "more_data": os.path.abspath(args.more_data or os.path.join(cache_dir(args, out), "more-data"))}
+           "more_data": os.path.abspath(args.more_data or os.path.join(cache_dir(args, out), "more-data")),
+           "algos_driver": os.path.abspath(args.algos_driver),
+           "algos_data": os.path.abspath(args.algos_data or os.path.join(cache_dir(args, out), "algos-data"))}
     box = box_fingerprint(ctx)
 
     if result is None:
@@ -2184,6 +2359,8 @@ def main(argv=None):
         todo.append(r)
     if any(r["family"] == "classical2" for r in todo):
         ensure_more_prep(ctx, todo)
+    if any(r["family"] == "algos" for r in todo):
+        ensure_algos_prep(ctx, todo)
     if any(r["family"] == "classical" for r in todo):
         ensure_classical_prep(ctx, todo)
     for i, r in enumerate(todo):

@@ -208,6 +208,13 @@ out, name, image, gpus, disk, amd, bootstrap = sys.argv[1:]
 req = {"name": name, "imageName": image, "gpuTypeIds": [g.strip() for g in gpus.split(",") if g.strip()], "gpuCount": 1,
        "cloudType": "SECURE", "containerDiskInGb": int(disk), "volumeInGb": 0,
        "ports": ["22/tcp"], "supportPublicIp": True, "interruptible": False}
+if amd != "1":
+    # THE PINNED MAX NEEDS AN NVIDIA DRIVER >= 580 (CUDA 13.0). On an older
+    # host a GPU binding built without a named arch fails in the pass manager
+    # and a loaded one refuses the driver (lane/algos-ann's H100 pod, 570.211,
+    # 2026-09-27); RunPod filters hosts before provisioning on this field
+    # (tools/kmeans_host_recording_nvidia_leg.sh, gemm_remote_leg.sh).
+    req["allowedCudaVersions"] = ["13.0"]
 if amd == "1" and image.startswith("rocm/"):
     # plain ROCm images have no ssh; the repo's bootstrap, as release_wheel_smoke.sh --vendor hip
     req["dockerEntrypoint"] = ["/bin/bash", "-lc"]

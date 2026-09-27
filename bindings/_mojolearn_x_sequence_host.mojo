@@ -16,7 +16,7 @@ from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from sequence.exec import HostExec
 from sequence.ops import SEQUENCE_HOST_SABOTAGE
-from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py
+from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py
 
 
 def host_numeric_mode_binding() raises -> PythonObject:
@@ -76,6 +76,21 @@ def var_forecast_binding(addrs: PythonObject, ip: PythonObject) raises -> Python
     return var_forecast_py(ex, addrs, ip)
 
 
+def mlp_fit_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
+    var ex = HostExec()
+    return mlp_fit_py(ex, addrs, ip, fp)
+
+
+def mlp_predict_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
+    var ex = HostExec()
+    return mlp_predict_py(ex, addrs, ip)
+
+
+def adafactor_step_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
+    var ex = HostExec()
+    return adafactor_step_py(ex, addrs, ip, fp)
+
+
 @export
 def PyInit__mojolearn_x_sequence_host() abi("C") -> PythonObject:
     try:
@@ -93,6 +108,9 @@ def PyInit__mojolearn_x_sequence_host() abi("C") -> PythonObject:
         m.def_function[stl_binding]("stl")
         m.def_function[var_fit_binding]("var_fit")
         m.def_function[var_forecast_binding]("var_forecast")
+        m.def_function[mlp_fit_binding]("mlp_fit")
+        m.def_function[mlp_predict_binding]("mlp_predict")
+        m.def_function[adafactor_step_binding]("adafactor_step")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_sequence_host: ", e))
