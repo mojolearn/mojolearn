@@ -280,10 +280,11 @@ def eval_batch(
                 ctx, d_y_kf, d_exog_kf, batch_size, n_obs_kf, order_kf, d_x, h,
                 True, xin, llh, gh,
             )
+            # The sequential path's flushes (the identity outside IDENTICAL).
             for b in range(batch_size):
-                fout[b] = -llh[b] / scale
+                fout[b] = ftz(ftz(-llh[b]) / scale)
             for i in range(len(xin)):
-                gout[i] = -gh[i] / scale
+                gout[i] = ftz(ftz(-gh[i]) / scale)
             return
     _upload(ctx, d_x, xin)
     var ll = batched_loglike_grad_x(

@@ -84,7 +84,7 @@ from arima.impl.timeSeries.arima_helpers import (
     prepare_future_data,
 )
 from arima.impl.tsa.arima_common import ARIMAOrder, ARIMAParams, unpack, validate_order
-from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, ftz
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_FAST, NUMERIC_IDENTICAL, ftz
 from std.sys.compile import is_defined
 from std.sys.info import has_apple_gpu_accelerator
 from tsa.impl.timeSeries.arima_helpers import prepare_data
@@ -594,10 +594,19 @@ def batched_loglike_grad(
 #: filter passes. Members are independent threads of the same kernel, so
 #: every log-likelihood, and so the gradient, is the one the sequential form
 #: computes. `-D MOJOLEARN_ARIMA_FAST_BATCH_GRAD_OFF` keeps the sequence.
-comptime ARIMA_FAST_BATCH_GRAD = (
-    GLOBAL_NUMERIC_MODE == NUMERIC_FAST
-    and has_apple_gpu_accelerator()
-    and not is_defined["MOJOLEARN_ARIMA_FAST_BATCH_GRAD_OFF"]()
+#: IDENTICAL on Apple takes the same stacked evaluation (lane
+#: apple-identical-neural, 2026-09-26): it is a schedule, the members' filter
+#: arithmetic is the sequential form's, and the caller keeps IDENTICAL's
+#: flushes. `-D MOJOLEARN_ARIMA_ID_BATCH_GRAD_OFF` keeps the sequence there.
+comptime ARIMA_FAST_BATCH_GRAD = has_apple_gpu_accelerator() and (
+    (
+        GLOBAL_NUMERIC_MODE == NUMERIC_FAST
+        and not is_defined["MOJOLEARN_ARIMA_FAST_BATCH_GRAD_OFF"]()
+    )
+    or (
+        GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+        and not is_defined["MOJOLEARN_ARIMA_ID_BATCH_GRAD_OFF"]()
+    )
 )
 
 
