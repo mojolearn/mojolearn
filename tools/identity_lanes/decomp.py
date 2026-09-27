@@ -233,7 +233,7 @@ def _(ml, X, yc, yr, Xh=None):
     mo = ml.LocallyLinearEmbedding(n_neighbors=10, n_components=2, method="modified").fit(S[:80])
     # the radius is a quarter of the largest kNN geodesic (this lane's own
     # identical output, one exact float64 product)
-    rad = float(np.max(iso.dist_matrix_)) * 0.25
+    rad = float(np.asarray(iso.dist_matrix_).max()) * 0.25
     ir = ml.Isomap(n_neighbors=None, radius=rad, n_components=2, path_method="FW").fit(S[:100])
     nm = ml.MDS(n_components=2, metric_mds=False, init="random", max_iter=25, random_state=1)
     nemb = nm.fit_transform(S[:60])
