@@ -5,6 +5,7 @@ the GPU binding's export names and address contract, the work is
 x_cnn/host/ops_host.mojo."""
 from bindings.hostptr import f32_ptr, i32_ptr, read_f32, read_i32, copy_f32
 from std.os import abort
+from std.memory import alloc, memcpy, memset_zero
 from std.python import Python, PythonObject
 from std.python._cpython import GILReleased
 from std.python.bindings import PythonModuleBuilder
@@ -673,6 +674,38 @@ def x_cnn_host_sabotage_binding() raises -> PythonObject:
     return PythonObject(X_CNN_HOST_SABOTAGE)
 
 
+# DEVIATION 5718: resident arrays. On the CPU a resident array is a host
+# allocation and its handle is its address, so the `_r` entries are the
+# ordinary entries (the GPU binding's `_r` entries read device addresses).
+
+
+def res_alloc_binding(n: PythonObject) raises -> PythonObject:
+    var nn = Int(py=n)
+    var p = alloc[Float32](nn if nn > 0 else 1)
+    memset_zero(p, nn if nn > 0 else 1)
+    return PythonObject(Int(p))
+
+
+def res_free_binding(h: PythonObject) raises -> PythonObject:
+    f32_ptr(Int(py=h)).free()
+    return PythonObject(0)
+
+
+def res_upload_binding(h: PythonObject, src_addr: PythonObject, n: PythonObject) raises -> PythonObject:
+    """n 4-byte words (float32 or int32) from a host array into the resident array."""
+    var nn = Int(py=n)
+    if nn > 0:
+        memcpy(dest=f32_ptr(Int(py=h)), src=f32_ptr(Int(py=src_addr)), count=nn)
+    return PythonObject(nn)
+
+
+def res_download_binding(h: PythonObject, dst_addr: PythonObject, n: PythonObject) raises -> PythonObject:
+    var nn = Int(py=n)
+    if nn > 0:
+        memcpy(dest=f32_ptr(Int(py=dst_addr)), src=f32_ptr(Int(py=h)), count=nn)
+    return PythonObject(nn)
+
+
 def numeric_mode_binding() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 
@@ -720,6 +753,17 @@ def PyInit__mojolearn_x_cnn_host() abi("C") -> PythonObject:
         m.def_function[graph_op_binding]("x_cnn_graph_op")
         m.def_function[numeric_mode_binding]("x_cnn_numeric_mode")
         m.def_function[vendor_binding]("x_cnn_vendor")
+        m.def_function[res_alloc_binding]("x_cnn_res_alloc")
+        m.def_function[res_free_binding]("x_cnn_res_free")
+        m.def_function[res_upload_binding]("x_cnn_res_upload")
+        m.def_function[res_download_binding]("x_cnn_res_download")
+        m.def_function[conv_block_forward_binding]("x_cnn_conv_block_forward_r")
+        m.def_function[conv_block_backward_binding]("x_cnn_conv_block_backward_r")
+        m.def_function[linear_forward_binding]("x_cnn_linear_forward_r")
+        m.def_function[linear_backward_binding]("x_cnn_linear_backward_r")
+        m.def_function[softmax_xent_binding]("x_cnn_softmax_xent_r")
+        m.def_function[sgd_binding]("x_cnn_sgd_r")
+        m.def_function[adam_binding]("x_cnn_adam_r")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_cnn_host: ", e))
