@@ -261,3 +261,18 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-binarizer")
+
+
+def _prep_labels(X):
+    """Integer labels with gaps and ties, from the fixture's first column."""
+    return (np.clip(np.floor(X[:, 0] * 3), -9, 9) * 7).astype(np.int64)
+
+
+@lane("x-prep-label-encoder")
+def _(ml, X, yc, yr, Xh=None):
+    y, yh = _prep_labels(X), _prep_labels(Xh)
+    m = ml.LabelEncoder().fit(y)
+    parts = dict(classes=_h(m.classes_), transform=_h(m.transform(y[:256])),
+                 floats=_h(ml.LabelEncoder().fit_transform(yr[:256])))
+    known = np.isin(yh, np.asarray(m.classes_))
+    return _fit(parts, m, lambda e: (e.transform(yh[known][:256]),))
