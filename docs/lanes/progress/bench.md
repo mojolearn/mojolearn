@@ -55,6 +55,28 @@ new algorithm, measure nothing. Worktree `~/mojolearn-wt/algos-bench`, branch
   x_decomp / x_trees manifests and trees-dt-clf pending (not bench files);
   told main.
 
+- Session 2, merge 5: the forecast races call the classes as exported
+  (statsforecast's shape: `Cls(**params).fit(Y).predict(h)["mean"]`; AutoARIMA
+  keeps cuML's `forecast(h)`). theta -> `Theta(season_length=24,
+  decomposition_type="multiplicative")`; croston -> `CrostonClassic`;
+  damped-ets -> `ETS(season_length=1, model="AAN", damped=True)` with every
+  arm on the non-seasonal damped model (ours refuses seasonal ETS; statsforecast
+  AutoETS(model="AAN", damped=True), statsmodels ExponentialSmoothing(
+  trend="add", damped_trend=True, seasonal=None)). ivf-filter -> `IVFPQIndex.
+  search(filter=)` (IVFIndex has no filter) against faiss IndexIVFPQ +
+  IDSelectorBatch; cuVS dropped from that race by name (its Python IVF-PQ
+  search takes no filter, only IVF-Flat/CAGRA/brute force do). Plan: 396 races,
+  Apple 1,748 fit cells, NVIDIA 1,538, AMD 1,379; the 93 existing races' dry
+  run is byte-identical on apple, nvidia and amd (`drydiff.sh`,
+  `drydiff_s2m1.log`). Plumbing smoke with the bindings built on the pod
+  (A40, `smoke_s2_ours.log`, `smoke_s2_rapids.log`): every ours / ours-cpu /
+  statsforecast / statsmodels / faiss arm of the four races ran; ours-cpu
+  bits equal ours on all. Lane check on the pod: sequence-theta,
+  sequence-croston, sequence-ets, x-ann-filter AGREE.
+  test_host_surface: 195 pass, 1 fails (x_decomp manifest, not bench).
+  test_lane_select: same single failure as merge 3 (kmeans_oracle 54 vs 47).
+- Still guessed (classes not merged): GARCH, Prophet, the MoE block.
+
 ## Next
 
 - As lanes add classes or options (option parity), align `LANES` params and
