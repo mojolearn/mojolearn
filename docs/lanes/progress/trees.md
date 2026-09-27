@@ -61,6 +61,10 @@ PASS 2 (proof), in progress:
   AGREE, 20/20 DISAGREE, 20/20 AGREE after reversal, RESULT: PASS. This is
   the patch to hand the steward.
 - `xtrees/NOT_IMPLEMENTED.tsv`: the lane's refused options (option parity input).
-- OWED: AMD column (box trees-amd up on Hot Aisle), M2 Pro steward, card diff across boxes.
+- AMD MI300X (Hot Aisle box `trees-amd`): `--pass 2` PASS on all 20 lanes,
+  seams bite; NVIDIA vs AMD GPU columns diff OK on all 20; glue cards
+  byte-identical across the two boxes.
+- Apple: M2 Pro steward PASS (1790526750361-trees-77e0b3a8d7), M3 Ultra spooled.
+- Pass-2 proof DONE for the 20 lanes (PENDING until a release record admits them).
 
-Next: AMD box (`tools/dev_pod.sh up trees 240 --vendor amd`), then the steward, then option parity.
+Next: option parity (CURRENT DIRECTIVES item 2): `xtrees/NOT_IMPLEMENTED.tsv` rows marked `not yet`, then the existing family (extratrees/, gbdt/ NOT_IMPLEMENTED rows), then GPU speed, CPU speed last.

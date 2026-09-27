@@ -701,7 +701,7 @@ AMD and Apple columns for 140-149: OWED (the AMD box is being acquired; the M2 P
 | 165 | **a zero row** (OneVsRest and calibration normalisation) | sklearn divides 0 / 0, a vendor-payload NaN (IDENTITY_PATHS Clause B) | REPLACE, DEVIATION 5605: a zero (or -0.0) row is uniform 1 / k | `check_zero_rows` (+0 and -0 rows planted), arm `seam_5605_nan.patch` RED |
 | 166 | **the RF weighted objective on the CPU** (`ensemble/host/rf_oracle.mojo`: class weights / sample_weight without bootstrap) | the device's Int32 fixed-point weight planes (`WeightedClassificationBin`) restated on the host: the truncating `_quantize`, the scale, the ftz'd class-order `WeightAt`, the weighted gains and leaf | CONSTRUCTION: the host restates the device arithmetic statement for statement | lane `trees-rf-weighted` CPU == CUDA (batch/infer/model/train 9); arm `rf_weighted_split_sabotage.patch` DISAGREE then AGREE; existing RF lanes' cells unmoved on CUDA and CPU |
 
-AMD and Apple columns for 160-166: OWED (the AMD box and the M2 Pro steward are pass-2 steps still to run).
+COLUMNS for 160-166 (2026-09-27): NVIDIA H100 and AMD MI300X (Hot Aisle) each read `algos_lane_check.sh --pass 2` PASS on all 20 trees lanes (every seam arm bites on both), and the two GPU columns diff OK cell for cell (`identity_break.py --diff`, cuda vs hip, 20 lanes); the glue card (`xtrees/checks/glue_check.mojo`, 7 records) is byte-identical across the two boxes' hosts (EPYC, Xeon). Apple: the M2 Pro steward PASS on all 20 lanes (request 1790526750361-trees-77e0b3a8d7, sabotage `column_cpu_only.patch`); the M3 Ultra copy is spooled.
 
 
 
