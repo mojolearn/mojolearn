@@ -849,6 +849,13 @@ def enumerator_files():
     if _ENUMERATORS is None:
         out = set()
         for rel in _python_files():
+            # AN EXPANSION LANE'S DOOR IS NEVER A REGISTRY (trees lane,
+            # 2026-09-27): a door that wraps several existing bindings named
+            # more than ENUMERATOR_MAX_BINDINGS, became a sink, and hid every
+            # binding of that lane from selection. A door is one lane's own
+            # file; its bindings are evidence for the lanes that reach it.
+            if EXPANSION_DOOR_RE.match(rel.replace(os.sep, "/")):
+                continue
             named = {b for b in set(_BINDING_RE.findall(_read(rel)))
                      if os.path.exists(os.path.join(ROOT, "bindings", b + ".mojo"))}
             if len(named) > ENUMERATOR_MAX_BINDINGS:
@@ -1207,6 +1214,30 @@ def _binding_exports(rel):
         return {}
     return {m.group(2): m.group(1) for m in re.finditer(
         r"def_function\[\s*([A-Za-z0-9_]+)\s*(?:\[[^\[\]]*\])?\s*\]\s*\(\s*\"([A-Za-z0-9_]+)\"", text)}
+
+
+def _binding_export_params(rel):
+    """export name -> the identifiers in its impl's PARAMETER list.
+
+    `def_function[gemm_py[DevExec]]("x_decomp_gemm")` (lane/algos-decomp,
+    2026-09-27) registers ONE generic entry point per executor: the
+    arithmetic the export runs lives in the struct named in the brackets,
+    which the binding imports, while `gemm_py`'s own body names only the
+    trait. `_binding_exports` keeps the impl name alone, so without this the
+    export reached the trait's declaration (x_decomp/exec_trait.mojo) and
+    neither conforming executor (x_decomp/device.mojo, x_decomp/host.mojo),
+    and `test_the_mojo_conformance_inversion_holds_over_the_whole_tree` named
+    the gap. A literal parameter (`True`, `3`) resolves to no import and adds
+    nothing."""
+    try:
+        text = _read(rel)
+    except OSError:
+        return {}
+    out = {}
+    for m in re.finditer(
+            r"def_function\[\s*[A-Za-z0-9_]+\s*\[([^\[\]]*)\]\s*\]\s*\(\s*\"([A-Za-z0-9_]+)\"", text):
+        out[m.group(2)] = re.findall(r"[A-Za-z_][A-Za-z0-9_]*", m.group(1))
+    return out
 
 
 def binding_additions(ref, path):
@@ -1591,8 +1622,14 @@ def lane_sources():
             else:
                 blocks = _mojo_blocks_for(src)
                 syms = _mojo_import_symbols(src)
+                params = _binding_export_params(src)
                 seeds = set()
                 for export in hit:
+                    # A PARAMETRIZED IMPL'S PARAMETERS ARE PART OF THE EXPORT:
+                    # the executor struct in `gemm_py[DevExec]` is where its
+                    # arithmetic lives (`_binding_export_params`).
+                    for name in params.get(export, ()):
+                        seeds |= syms.get(name, set())
                     # THE EXPORT'S BODY IS NOT ONLY THE FUNCTION NAMED. An
                     # export reaches a Mojo file two ways this scan used to
                     # miss, and both are the ordinary spelling here:
@@ -3411,7 +3448,10 @@ def _runtime_lane_roots(model, path):
         start = min([node.lineno] + [d.lineno for d in getattr(node, "decorator_list", [])])
         spans.append((start, node.end_lineno, k))
     out = {}
+    fragment_lanes = {n for lanes_ in getattr(ib, "LANE_FRAGMENTS", {}).values() for n in lanes_}
     for name, fn in lanes.items():
+        if name in fragment_lanes:
+            continue  # its code is in tools/identity_lanes/, not in this text (`_fragment_refs`)
         code = getattr(fn, "__code__", None)
         if code is None:
             return None
@@ -3433,6 +3473,82 @@ def _runtime_import_roots(model):
             if isinstance(n, ast.Attribute) and n.attr in model.top:
                 out.add(n.attr)
     return out
+
+
+# ------------------------------------------------ the expansion fragments
+#: THE ALGORITHM EXPANSION'S PER-LANE FILES (lane/algos-prep, 2026-09-27;
+#: docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md). Each of the nine lanes owns one
+#: file in each shared registry, and a change to one selects THAT expansion
+#: lane's identity lanes, never every lane:
+#:   tools/identity_lanes/<id>.py            its identity lanes, executed by the
+#:                                           harness in its own namespace
+#:   python/mojolearn/_surface_<id>.py       its host family, merged by the manifest
+#:   tools/classical_host_lanes/<id>.py      its classical gate probes
+#:   tools/identity_lanes/<id>.checks        its seam check drivers (tools/algos_lane_check.py)
+#: That is sound because the loaders refuse a fragment that touches anything
+#: but its own names (identity_break._load_lane_fragments,
+#: host_surface._read_expansion_fragment, classical_host_gate._merge_gate_fragments).
+#: The door, python/mojolearn/_expansion_<id>.py, is an ordinary package module
+#: and is attributed like one.
+IDENTITY_FRAGMENTS = os.path.join("tools", "identity_lanes")
+SURFACE_FRAGMENT_RE = re.compile(r"^python/mojolearn/_surface_([a-z]+)\.py$")
+GATE_FRAGMENTS = os.path.join("tools", "classical_host_lanes")
+EXPANSION_DOOR_RE = re.compile(r"^python/mojolearn/_expansion_([a-z]+)\.py$")
+_FRAGMENT_LANE_RE = re.compile(r'''(?:^@lane|\blane)\(\s*["']([a-z0-9][a-z0-9-]*)["']\s*\)''', re.M)
+
+
+def expansion_fragment(path):
+    """(kind, expansion lane id) for a per-lane fragment path, else None."""
+    for kind, root in (("identity", IDENTITY_FRAGMENTS), ("gate", GATE_FRAGMENTS)):
+        head, name = os.path.split(path)
+        if head == root and name.endswith(".py") and not name.startswith("_"):
+            return kind, name[:-3]
+        if head == root == IDENTITY_FRAGMENTS and name.endswith(".checks"):
+            return "checks", name[:-len(".checks")]   # the lane's seam check drivers
+    m = SURFACE_FRAGMENT_RE.match(path.replace(os.sep, "/"))
+    return ("surface", m.group(1)) if m else None
+
+
+def expansion_fragment_lanes(fid):
+    """The lanes expansion lane `fid`'s identity fragment registers, as the
+    IMPORTED harness records them (`LANE_FRAGMENTS`)."""
+    return tuple(getattr(identity_break(), "LANE_FRAGMENTS", {}).get(fid, ()))
+
+
+def _fragment_refs(top):
+    """fragment id -> the harness module-level names its text mentions."""
+    out = {}
+    for fid in getattr(identity_break(), "LANE_FRAGMENTS", {}):
+        rel = os.path.join(IDENTITY_FRAGMENTS, fid + ".py")
+        tree = _parse(rel)
+        refs = set()
+        for node in (tree.body if tree else ()):
+            refs |= _module_refs(node, top)
+        out[fid] = refs
+    return out
+
+
+def fragment_lanes(path, ref, every):
+    """The lanes a change to expansion fragment `path` can move: the lanes
+    its expansion lane's identity fragment registers now, the lanes any
+    revision of `path` itself names (at `ref` too, so a removed lane is still
+    seen), within the registry."""
+    kind, fid = expansion_fragment(path)
+    named = set(expansion_fragment_lanes(fid))
+    texts = []
+    try:
+        texts.append(_read(path))
+    except OSError:
+        pass
+    if ref:
+        old = _git_show(ref, path)
+        if old is not None:
+            texts.append(old)
+    for text in texts:
+        named |= set(_FRAGMENT_LANE_RE.findall(text))
+        if kind != "identity":
+            named |= set(re.findall(r"[\"']([a-z0-9][a-z0-9-]*)[\"']", text))
+    return sorted(n for n in named if n in every)
 
 
 def harness_closure_lanes(old_text, new_text, path=HARNESS):
@@ -3553,6 +3669,15 @@ def harness_closure_lanes(old_text, new_text, path=HARNESS):
     cli = new.closure({HARNESS_CLI})
     closures = {n: new.closure(set().union(*[new.refs(k) | set(_stmt_names(new.stmts[k])) for k in ks]))
                 for n, ks in roots.items()}
+    # THE EXPANSION LANES (tools/identity_lanes/, lane/algos-prep 2026-09-27):
+    # their bodies are in the fragments, executed in this module's namespace,
+    # so each reaches every harness name its fragment names, transitively.
+    if path == HARNESS:
+        for fid, refs in _fragment_refs(new.top).items():
+            reach = new.closure(refs)
+            for n in expansion_fragment_lanes(fid):
+                closures[n] = reach
+                known.add(n)
     opaque_reach = new.closure(set().union(*[new.refs(k) for k in opaque])) if opaque else set()
     for name in sorted(names):
         if name == HARNESS_CLI:
@@ -3891,6 +4016,33 @@ def select(paths, ref=None, sources=None, backend=None):
         if _is_inert(path):
             inert.append(path)
             reasons[path] = "inert (prose or evidence)"
+            continue
+        door = EXPANSION_DOOR_RE.match(path.replace(os.sep, "/"))
+        if door and path not in rev:
+            # AN EXPANSION DOOR NO LANE'S SYMBOLS REACH YET: it belongs to its
+            # expansion lane, so it selects that lane's identity lanes, or
+            # nothing while the lane has none (the empty door of prep time).
+            hit = sorted(n for n in expansion_fragment_lanes(door.group(1)) if n in every)
+            if hit:
+                lanes.update(hit)
+                by_path[path] = set(hit)
+                reasons[path] = f"the {door.group(1)} expansion lane's door: that lane's {len(hit)} lane(s)"
+            else:
+                inert.append(path)
+                reasons[path] = f"the {door.group(1)} expansion lane's door, which no lane reaches yet"
+            continue
+        if expansion_fragment(path):
+            kind, fid = expansion_fragment(path)
+            hit = fragment_lanes(path, ref, every)
+            if hit:
+                lanes.update(hit)
+                by_path[path] = set(hit)
+                reasons[path] = (f"the {fid} expansion lane's {kind} fragment: only that lane's "
+                                 f"{len(hit)} lane(s), which its loader holds it to")
+            else:
+                inert.append(path)
+                reasons[path] = (f"the {fid} expansion lane's {kind} fragment, which registers and "
+                                 "names no lane yet")
             continue
         other = _other_platform_tree(path, backend)
         if other:

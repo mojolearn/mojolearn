@@ -1,0 +1,85 @@
+"""THE CNN LANE'S HOST SURFACE FRAGMENT (docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md).
+
+Owned by the `cnn` expansion lane and merged by host_surface.py at import
+(`EXPANSION_LANES`). Literal data only: no imports, no calls but dict(...).
+The names this lane may declare are its own:
+
+  GPU_BINDINGS          ("_mojolearn_x_cnn",) once bindings/build_x_cnn.sh builds
+                        it; every packaging list then carries it
+                        (`host_surface.py --expansion-gpu-bindings`)
+  FAMILIES              (dict(family="x_cnn", binding="_mojolearn_x_cnn_host",
+                        routes="_mojolearn_x_cnn", ...),), the same keys as a
+                        family in host_surface.FAMILIES
+  TRAINING_LANE_NAMES   {lane: "the name the docs use"} for the family's training_lanes
+  PUBLIC_PENDING_LANES  {lane: "no reference"} until a release record admits it
+"""
+GPU_BINDINGS = ("_mojolearn_x_cnn",)
+FAMILIES = (
+    dict(
+        family="x_cnn",
+        binding="_mojolearn_x_cnn_host",
+        routes="_mojolearn_x_cnn",
+        loaded_by="_backend._HOST_MODULES",
+        sabotage_define="MOJOLEARN_HOST_SABOTAGE",
+        training_lanes=("x-cnn-conv2d", "x-cnn-conv1d", "x-cnn-pool", "x-cnn-trainer", "x-cnn-batchnorm",
+                        "x-cnn-dropout2d", "x-cnn-globalpool", "x-cnn-resnet-block",
+                        "x-cnn-gcn", "x-cnn-sage", "x-cnn-conv-options",
+                        "x-cnn-pool-options", "x-cnn-bn-options",
+                        "x-cnn-gnn-options", "x-cnn-trainer-options"),
+        inference_lanes=(),
+        forest_kinds=(),
+        classes=("Conv2d", "Conv1d", "MaxPool2d", "AvgPool2d", "MaxPool1d", "AvgPool1d", "CNNClassifier", "BatchNorm2d", "BatchNorm1d", "Dropout2d",
+                 "AdaptiveAvgPool2d", "AdaptiveMaxPool2d", "BasicBlock", "GCNConv", "SAGEConv"),
+        display="the CNN layers (conv, pooling, normalization) and the small CNN trainer",
+        host_modules=("x_cnn/ops.mojo", "x_cnn/host/ops_host.mojo"),
+        exports=(
+            "x_cnn_host_numeric_mode", "x_cnn_host_vendor", "x_cnn_host_column", "x_cnn_host_sabotage",
+            "x_cnn_gemm", "x_cnn_conv2d_forward", "x_cnn_conv2d_backward", "x_cnn_conv_shape",
+            "x_cnn_pool_shape", "x_cnn_maxpool2d_forward", "x_cnn_maxpool2d_backward",
+            "x_cnn_avgpool2d_forward", "x_cnn_avgpool2d_backward",
+            "x_cnn_relu_forward", "x_cnn_relu_backward", "x_cnn_add", "x_cnn_linear_forward",
+            "x_cnn_linear_backward", "x_cnn_softmax_xent", "x_cnn_sgd", "x_cnn_adam",
+            "x_cnn_batchnorm_forward", "x_cnn_batchnorm_backward", "x_cnn_dropout2d", "x_cnn_mul",
+            "x_cnn_spmm", "x_cnn_gcn_norm", "x_cnn_pad2d_forward", "x_cnn_pad2d_backward",
+            "x_cnn_adaptive_pool", "x_cnn_graph_op",
+            "x_cnn_numeric_mode", "x_cnn_vendor",
+        ),
+        gate="tools/identity_break.py (tools/algos_lane_check.sh)",
+        wheel_note="Ships: the CNN lane's CPU route (convolution, pooling, normalization, the CNN trainer, graph convolution).",
+        ships_in_wheel=True,
+    ),
+)
+TRAINING_LANE_NAMES = {
+    "x-cnn-conv2d": "Conv2d forward and backward",
+    "x-cnn-conv1d": "Conv1d forward and backward",
+    "x-cnn-pool": "MaxPool and AvgPool (1d, 2d) forward and backward",
+    "x-cnn-trainer": "the small CNN trainer (CNNClassifier)",
+    "x-cnn-batchnorm": "BatchNorm2d / BatchNorm1d forward and backward",
+    "x-cnn-dropout2d": "Dropout2d (Philox channel mask)",
+    "x-cnn-globalpool": "global and adaptive average / max pooling",
+    "x-cnn-resnet-block": "the ResNet BasicBlock forward and backward",
+    "x-cnn-gcn": "GCNConv (PyG) forward and backward",
+    "x-cnn-sage": "SAGEConv (PyG) forward and backward",
+    "x-cnn-conv-options": "Conv2d padding modes, same/valid padding and groups",
+    "x-cnn-pool-options": "pooling ceil_mode and divisor_override",
+    "x-cnn-bn-options": "BatchNorm momentum=None and track_running_stats=False",
+    "x-cnn-gnn-options": "SAGEConv max aggregation, normalize and project",
+    "x-cnn-trainer-options": "CNNClassifier Adam, AdamW, Nesterov and dampened SGD",
+}
+PUBLIC_PENDING_LANES = {
+    "x-cnn-conv2d": "no reference",
+    "x-cnn-conv1d": "no reference",
+    "x-cnn-pool": "no reference",
+    "x-cnn-trainer": "no reference",
+    "x-cnn-batchnorm": "no reference",
+    "x-cnn-dropout2d": "no reference",
+    "x-cnn-globalpool": "no reference",
+    "x-cnn-resnet-block": "no reference",
+    "x-cnn-gcn": "no reference",
+    "x-cnn-sage": "no reference",
+    "x-cnn-conv-options": "no reference",
+    "x-cnn-pool-options": "no reference",
+    "x-cnn-bn-options": "no reference",
+    "x-cnn-gnn-options": "no reference",
+    "x-cnn-trainer-options": "no reference",
+}

@@ -88,10 +88,16 @@ def main() raises:
     var total_bad = 0
     var total_moved = 0
     var total_cells = 0
-    for seed in range(6):
-        for jblock in [2, 5, 8]:
+    for arm in range(3):
+      # arm 0: one 32-wide launch; arm 1: one 64-wide launch (two column
+      # blocks, the look-ahead's joint update); arm 2: 64 wide, panels split
+      # into 0 .. np-2 and np-1 (the joint update then the lone panel).
+      var wid_arm = 32 if arm == 0 else 64
+      for seed in range(6):
+        for jblock in [2, 5, 7]:
             var j0 = jblock * nb
             var np = jblock
+            var wid = min(wid_arm, n - j0)
             var h = List[Float32](length=n * n, fill=0)
             for i in range(n):
                 for k in range(n):
@@ -99,13 +105,17 @@ def main() raises:
             var d = ctx.enqueue_create_buffer[DType.float32](n * n)
             ctx.enqueue_copy(d, h.unsafe_ptr())
             ctx.synchronize()
-            _chol_left_update(ctx, d, n, j0, nb, np)
+            if arm == 2:
+                _chol_left_update(ctx, d, n, j0, wid, np - 1)
+                _chol_left_update(ctx, d, n, j0, wid, np, np - 1)
+            else:
+                _chol_left_update(ctx, d, n, j0, wid, np)
             ctx.synchronize()
             var o = List[Float32](length=n * n, fill=0)
             ctx.enqueue_copy(o.unsafe_ptr(), d)
             ctx.synchronize()
             for i in range(j0, n):
-                for j in range(j0, j0 + nb):
+                for j in range(j0, j0 + wid):
                     if j > i:
                         continue
                     var c = h[i * n + j]

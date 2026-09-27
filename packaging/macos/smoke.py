@@ -389,6 +389,31 @@ IDENTICAL_ONLY_LAUNCHES = [
     ("_mojolearn_ivf", _ivf),
     ("_mojolearn_embedding", _embedding),
 ]
+
+# THE EXPANSION LANES' GPU BINDINGS (lane/algos-prep, 2026-09-27), from the
+# installed manifest's per-lane fragments (host_surface.expansion_gpu_bindings).
+# A lane's door may carry `release_smoke()`, a tiny fit on the current tier;
+# without one the binding is resolved through `_backend.binding` on this tier,
+# which loads it, checks its compiled tier and refuses a tier it does not
+# ship by the identical-only sentence, as the loop below requires.
+def _expansion_launch(name):
+    lane = mojolearn.host_surface.expansion_lane_of(name)
+    door = importlib.import_module(f"mojolearn._expansion_{lane}")
+
+    def launch():
+        if not mojolearn._backend._offers(name, _tier):
+            mojolearn._backend.binding(name, _tier)
+        elif getattr(door, "release_smoke", None) is not None:
+            door.release_smoke()
+        else:
+            mojolearn._backend.binding(name, _tier)
+    launch.__name__ = f"_expansion_{lane}"
+    return launch
+
+
+import importlib  # noqa: E402
+from mojolearn import host_surface as _hs_manifest  # noqa: E402,F401  (mojolearn.host_surface)
+IDENTICAL_ONLY_LAUNCHES += [(_n, _expansion_launch(_n)) for _n in _hs_manifest.expansion_gpu_bindings()]
 # Since 2026-09-25 the list holds every NON-TREE binding: the classical ones
 # (`_backend._CLASSICAL_FAST`) must LAUNCH under fast and identical and refuse
 # deterministic; the neural ones must refuse both lower tiers. `_offers`

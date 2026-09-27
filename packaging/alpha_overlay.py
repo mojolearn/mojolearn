@@ -121,6 +121,9 @@ def assemble(base, python_root, version, out, allow_alpha_final_version=False, s
             'incomplete Python source tree')
     generated = {'mojolearn/_identity_break.py': 'tools/identity_break.py',
                  'mojolearn/_identity_trace_diff.py': 'tools/identity_trace_diff.py'}
+    # The expansion lanes' identity lanes, loaded by the harness copy beside it.
+    generated.update({f'mojolearn/_identity_lane_{p.stem}.py': f'tools/identity_lanes/{p.name}'
+                      for p in sorted((python_root.parent / 'tools' / 'identity_lanes').glob('*.py'))})
     if source_commit is not None:
         for name, source in generated.items():
             replacements[name] = (python_root.parent / source).read_bytes()

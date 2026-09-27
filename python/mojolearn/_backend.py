@@ -169,7 +169,7 @@ from ._version import __version__ as _CORE_VERSION
 # `subprocess.run([sys.executable, ...])` inherits them, and on CPython 3.11
 # that child took its executable and prefix from PYTHONEXECUTABLE: it came up
 # as the pixi env's python3 with the venv's site-packages gone and `import
-# numpy` failing (tests/test_crossvendor_coverage.py's CLI test, red on 3.11
+# numpy` failing (test_crossvendor_coverage.py's CLI test, red on 3.11
 # only; 3.10 and 3.14 ignore the variable on Linux). The runtime has read them
 # by the time exec_module returns, so every binding load restores the
 # caller's environment: a variable that was absent is removed again and one
@@ -288,6 +288,13 @@ _MODULES = (
     "_mojolearn_ivf",
     "_mojolearn_embedding",
 )
+# THE EXPANSION LANES' GPU BINDINGS (lane/algos-prep, 2026-09-27): read from
+# the per-lane fragments host_surface.py merges (`_surface_<lane>.py`), so a
+# lane adds its binding in its own file and never here. Kept out of the literal
+# above, which packaging/check_ext_lists.py reads as the base inventory; every
+# other list appends the same `expansion_gpu_bindings()` and the checker holds
+# each of them to it. Empty until a lane declares one.
+_MODULES += tuple(host_surface.expansion_gpu_bindings())
 
 #: ONE RULE FOR TIERS (DEVIATION 2490, 2026-09-10): THE TREE LANES SHIP
 #: THREE TIERS, EVERYTHING ELSE SHIPS IDENTICAL ONLY.
@@ -350,6 +357,9 @@ _CLASSICAL_FAST = frozenset({
     "_mojolearn_resample",
     "_mojolearn_ivf",
 })
+# Every expansion lane builds FAST too, sequence and cnn included (Andrew,
+# 2026-09-27); host_surface.EXPANSION_IDENTICAL_ONLY is empty.
+_CLASSICAL_FAST |= frozenset(host_surface.expansion_gpu_bindings("classical"))
 _FAST_TIERED = _TIERED | _CLASSICAL_FAST
 _IDENTICAL_ONLY = frozenset(_MODULES) - _FAST_TIERED
 

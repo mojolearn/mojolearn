@@ -1,0 +1,11 @@
+--- a/x_prep/prims.mojo
++++ b/x_prep/prims.mojo
+@@ -160,7 +160,7 @@
+         var a = ld(f, S + c * n + lo)
+         var b = ld(f, S + c * n + hi_i)
+         var diff = sub(b, a)
+-        if g >= Float32(0.5):
++        if False:  # SABOTAGE 5409
+             out = sub(b, mul(diff, sub(Float32(1), g)))
+         else:
+             out = add(a, mul(diff, g))

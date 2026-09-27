@@ -136,6 +136,7 @@ from cluster.impl.kmeans_params import (
     INIT_KMEANS_PLUS_PLUS,
     KMeansParams,
     METRIC_L2_EXPANDED,
+    weighted_sum_scale_cap,
 )
 from checks.fixed_point import choose_scale
 from checks.kernel_matrix import COLUMN_NVIDIA, TARGET_COLUMN
@@ -514,6 +515,12 @@ def kmeans_fit(
             sum_scale = plan_sum_scale_certified(ctx, x, n_samples, n_features)
         if sum_scale <= 0.0:
             sum_scale = plan_sum_scale(x_ptr, n_samples, n_features)
+    # DEVIATION 5112: weights above one outgrow the unweighted bound
+    # (`weighted_sum_scale_cap`, cluster/impl/kmeans_params.mojo)
+    if n_weights != 0 and requested_sum_scale <= 0.0:
+        var cap = weighted_sum_scale_cap(x_ptr, weights_ptr, n_samples, n_features)
+        if cap < sum_scale:
+            sum_scale = cap
 
     # DEVIATION 2672 (2026-09-11, linear-cluster-istella): NO HOST WEIGHT
     # VECTOR. The fit used to allocate an `n_samples` pinned host buffer,

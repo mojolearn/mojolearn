@@ -1,0 +1,12 @@
+--- a/x_linear/cd.mojo
++++ b/x_linear/cd.mojo
+@@ -33,7 +33,8 @@
+     the portable exp and log (their np.geomspace is 10 ** linspace of
+     log10s; eps ** (k / (A - 1)) is another legal spelling with other bits)."""
+     var frac = fd(i2f(k), i2f(a_n - 1)) if a_n > 1 else Float32(0)
+-    return fm(amax, fexp(fm(frac, flog(eps))))
++    var lo = flog(amax)  # SABOTAGE 5009: geomspace's log interpolation
++    return fexp(fa(lo, fm(frac, fs(flog(fm(amax, eps)), lo))))
+ 
+ 
+ def enet_gram_cd(fw: FP, gg: Int, q: Int, qw: Int, w: Int, d: Int, ynorm2: Float32,

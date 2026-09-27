@@ -203,9 +203,29 @@ def _loop_registered_lanes(text):
     return out
 
 
+#: The expansion lanes' identity fragments (lane/algos-prep, 2026-09-27):
+#: tools/identity_break.py executes each in its own namespace, so their lanes
+#: are the harness's lanes and are read with it.
+FRAGMENTS = os.path.join(ROOT, "tools", "identity_lanes")
+
+
+def harness_source_text(path=HARNESS):
+    """The harness source, and when it is THIS checkout's harness, every
+    expansion fragment after it, in the order the harness loads them."""
+    with open(path, "r", encoding="utf-8") as fh:
+        text = fh.read()
+    if os.path.abspath(path) == os.path.abspath(HARNESS) and os.path.isdir(FRAGMENTS):
+        for name in sorted(os.listdir(FRAGMENTS)):
+            if name.endswith(".py") and not name.startswith("_"):
+                with open(os.path.join(FRAGMENTS, name), "r", encoding="utf-8") as fh:
+                    text += "\n" + fh.read()
+    return text
+
+
 def source_lanes(src=None, path=HARNESS):
-    """Every lane name the harness SOURCE registers, no import, no numpy."""
-    text = src if src is not None else open(path, "r", encoding="utf-8").read()
+    """Every lane name the harness SOURCE registers, no import, no numpy;
+    the expansion fragments included (`harness_source_text`)."""
+    text = src if src is not None else harness_source_text(path)
     found = set(re.findall(r'^@lane\("([a-z0-9-]+)"\)', text, re.M))
     found |= set(re.findall(r'^lane\("([a-z0-9-]+)"\)\(', text, re.M))
     found |= _loop_registered_lanes(text)

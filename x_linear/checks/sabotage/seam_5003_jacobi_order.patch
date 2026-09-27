@@ -1,0 +1,12 @@
+--- a/x_linear/ops.mojo
++++ b/x_linear/ops.mojo
+@@ -223,7 +223,8 @@
+     for _ in range(max_sweeps):
+         var rotated = False
+         for p in range(m):
+-            for q in range(p + 1, m):
++            for qq in range(p + 1, m):
++                var q = m - 1 - (qq - p - 1)  # SABOTAGE 5003
+                 var apq = ld(a, aoff + p * m + q)
+                 var app = ld(a, aoff + p * m + p)
+                 var aqq = ld(a, aoff + q * m + q)

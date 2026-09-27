@@ -212,7 +212,9 @@ def portable_expf(x: Float32) -> Float32:
     # (lane/explicit-fma-contract-proof, 2026-09-26).
     var t = _fma_f32(x, Float32(1.4426950408889634), Float32(0.5))
     var zf = floor(t)  # exact
-    var k = Int(zf)
+    # Int32, not Int: |zf| <= 129 here, and a 64-bit integer is emulated on
+    # Apple's GPU (lane/apple-identical-neural, 2026-09-27; same values).
+    var k = Int32(zf)
     var r = _fma_f32(zf, Float32(-0.693359375), x)
     r = _fma_f32(zf, Float32(2.12194440e-4), r)
 

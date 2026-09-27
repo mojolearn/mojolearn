@@ -570,6 +570,39 @@ LANE_PROBE_ROWS = {'iforest': None, 'iforest-tuned': None,
                    **{lane: None for lane in _KMEANS_LANES}}
 
 
+#: THE EXPANSION LANES' GATE PROBES (lane/algos-prep, 2026-09-27;
+#: docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md, "Shared registries"). Each of
+#: the nine lanes owns `tools/classical_host_lanes/<lane>.py`, which may bind
+#: LANES, PROBE_NAMES, LANE_PROBE_ROWS (dicts) and KIND_PROBES (a tuple) for
+#: ITS OWN inference lanes, the same shapes as the tables above. It runs in a
+#: copy of this module's namespace, so its probes may call the helpers above;
+#: a name any table already carries is refused by name, and every lane it adds
+#: must carry a PROBE_NAMES entry. python/mojolearn/tests/test_host_surface.py
+#: still holds LANES to the manifest's inference_lanes, fragments included.
+def _merge_gate_fragments():
+    global KIND_PROBES
+    tree = ROOT / 'tools' / 'classical_host_lanes'
+    for path in sorted(tree.glob('*.py')) if tree.is_dir() else ():
+        ns = dict(globals())
+        ns.update(LANES={}, PROBE_NAMES={}, LANE_PROBE_ROWS={}, KIND_PROBES=())
+        exec(compile(path.read_text(encoding='utf-8'), str(path), 'exec'), ns)  # noqa: S102
+        for table, into in (('LANES', LANES), ('PROBE_NAMES', PROBE_NAMES), ('LANE_PROBE_ROWS', LANE_PROBE_ROWS)):
+            for lane, value in ns[table].items():
+                if lane in into:
+                    raise RuntimeError(f'classical_host_gate: {path} redeclares {table}[{lane!r}]')
+                into[lane] = value
+        for lane in ns['LANES']:
+            if lane not in PROBE_NAMES:
+                raise RuntimeError(f'classical_host_gate: {path} adds lane {lane!r} with no PROBE_NAMES entry')
+        extra = tuple(ns['KIND_PROBES'])
+        if set(extra) - set(ns['LANES']):
+            raise RuntimeError(f'classical_host_gate: {path} KIND_PROBES names lanes it does not add')
+        KIND_PROBES = KIND_PROBES + extra
+
+
+_merge_gate_fragments()
+
+
 def probe_rows(ib, lane, kind):
     """The held-out row count `lane` probes on fixture `kind`."""
     rows = LANE_PROBE_ROWS.get(lane, PROBE_ROWS)

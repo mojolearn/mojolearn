@@ -342,12 +342,11 @@ class RunTests(unittest.TestCase):
         self.assertNotIn("cpu/column.json", gpu)
         self.assertIn("identity_break.py --diff", gpu.split("-- linux-joint-diff", 1)[1])
         self.assertNotIn("--cpu-column", out.stdout.split("-- release-check", 1)[1].split("-- linux-wait", 1)[0])
-        # the default route is the GPU legs (2026-09-25: no CPU by default)
-        self.assertNotIn("tools/release_linux_build.sh", out.stdout)
-        if "cuda-" in legs:
-            self.assertIn("gemm_remote_leg.sh nvidia", out.stdout)
-        if "hip-gfx942" in legs:
-            self.assertIn("MOJOLEARN_RELEASE_UBUNTU22=1", out.stdout)
+        # the default route is GitHub's runners (2026-09-27): nothing is rented to build
+        self.assertNotIn("gemm_remote_leg.sh", out.stdout.split("-- linux-builds", 1)[1].split("-- ", 1)[0])
+        for name in ("cuda-sm_90a", "cuda-sm_89", "hip-gfx942"):
+            if name in legs:
+                self.assertIn("release_github_build.py run", out.stdout)
         if not any(n in legs for n in ("cuda-", "hip-")):
             self.assertIn("no build leg", out.stdout)
         self.assertIn("pack-linux-wheel", out.stdout)

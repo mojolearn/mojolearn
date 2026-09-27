@@ -52,10 +52,10 @@ scale is `gamma_t + beta'_{t+1}`, which needs token t+1):
       empties after the first token, unlike mamba2's (whose conv-less
       sibling rule was r = t_work mod Q). A construction that folded a
       chunk the moment it filled would fold its last K-row at
-      `pinned_mul(k, gamma)` and owe the beta' leg a second rounding
+      `identical_mul(k, gamma)` and owe the beta' leg a second rounding
       later, which is exactly the split the contract proves unequal
       (section 5 claim 2); the sealed rule folds every sealed row ONCE at
-      `pinned_mul(k, ftz(gamma + beta'))`, which is what makes gate (d)'s
+      `identical_mul(k, ftz(gamma + beta'))`, which is what makes gate (d)'s
       decode == prefill a theorem. Buffered rows carry their
       ROTATED-UNSCALED q/k, v, dt, sigma(trap) and ADT (contract section
       5's list); every quantity rebuilt from them is a pure function of
@@ -86,7 +86,7 @@ given without pinning the one add that forms it. The shipped kernel's
 accumulator order is state-term-first (`mamba3_siso_fwd.py`:406-418:
 `acc_o = dot(q, states) * exp(da_cs)` THEN `acc_o += dot(s, v)`), so the
 profile pins `y = ftz(ystate + yintra)` -- ONE rounding, ystate the left
-operand -- before S18's `ftz(y + pinned_mul(ftz(D + qk_gamma), v))`.
+operand -- before S18's `ftz(y + identical_mul(ftz(D + qk_gamma), v))`.
 Recorded as a deviation because the contract is silent and the reference
 (unchunked) has no corresponding add at all.
 
@@ -105,6 +105,7 @@ TOLERANCE instrument, never a bitwise one.
 """
 
 from checks.numerics import (
+    identical_mul,
     ftz,
     identical_clamp,
     identical_div,
@@ -142,18 +143,6 @@ from mamba.checks.mamba3_fixture import (
 )
 
 
-def pinned_mul(a: Float32, b: Float32) -> Float32:
-    """DEVIATION 720's construction, the sibling oracles' copy: a MULTIPLY
-    no codegen may contract into a neighboring add, spelled
-    `identical_mul_add(a, b, -0.0)`."""
-    # `identical_mul` is the pinned product (`pinned_mul_f32` under IDENTICAL);
-    # `fma(a, b, -0.0)` was not: LLVM folds it into a contractable product
-    # (lane/pinned-mul-contract-free, 2026-09-26).
-    from checks.numerics import identical_mul
-
-    return identical_mul(a, b)
-
-
 def m3_neg_inf() -> Float32:
     """-inf for S5's `identical_clamp(., -inf, -A_floor)` lower bound
     (which never binds; the clamp primitive is used whole, DEVIATION
@@ -162,7 +151,7 @@ def m3_neg_inf() -> Float32:
 
 
 def m3_mod_2pi(x: Float32) -> Float32:
-    """DEVIATION 829's composed mod: `ftz(x - pinned_mul(2pi,
+    """DEVIATION 829's composed mod: `ftz(x - identical_mul(2pi,
     floor(identical_div(x, 2pi))))`, floor exact, 2pi the pinned bits.
     Not a primitive -- each side spells its own copy of this composition
     (the pinned_mul rule)."""
@@ -450,8 +439,8 @@ def mamba3_block_oracle(
         var mean = ftz(identical_div(acc, Float32(dm)))
         var rstd = ftz(identical_rsqrt(ftz(mean + M3_RMS_EPS)))
         for j in range(dm):
-            var inner = ftz(pinned_mul(ftz(x[t * dm + j]), rstd))
-            st.norm_out.append(ftz(pinned_mul(ftz(w.norm_w[j]), inner)))
+            var inner = ftz(identical_mul(ftz(x[t * dm + j]), rstd))
+            st.norm_out.append(ftz(identical_mul(ftz(w.norm_w[j]), inner)))
 
     # ---- S4: in_proj (mamba3.py:176; Linear, bias=False), gemm v1
     #      OP_NT, k = d_model. Columns z|x|B|C|dd_dt|dd_A|trap|angle.
@@ -495,13 +484,13 @@ def mamba3_block_oracle(
         )
         for n in range(n_state):
             var innerb = ftz(
-                pinned_mul(ftz(st.in_proj[t * dip + c_b + n]), rstdb)
+                identical_mul(ftz(st.in_proj[t * dip + c_b + n]), rstdb)
             )
-            st.bcnorm_b.append(ftz(pinned_mul(ftz(w.bnorm_w[n]), innerb)))
+            st.bcnorm_b.append(ftz(identical_mul(ftz(w.bnorm_w[n]), innerb)))
             var innerc = ftz(
-                pinned_mul(ftz(st.in_proj[t * dip + c_c + n]), rstdc)
+                identical_mul(ftz(st.in_proj[t * dip + c_c + n]), rstdc)
             )
-            st.bcnorm_c.append(ftz(pinned_mul(ftz(w.cnorm_w[n]), innerc)))
+            st.bcnorm_c.append(ftz(identical_mul(ftz(w.cnorm_w[n]), innerc)))
 
     # ---- assemble the WORKING sequence (DEVIATION 832: the last working
     #      chunk's buffered rows ++ new rows). Copies, not seams. The
@@ -564,7 +553,7 @@ def mamba3_block_oracle(
             var mm = bb * l + li
             for hh in range(nh):
                 var adt = ftz(
-                    pinned_mul(
+                    identical_mul(
                         ftz(st.a_out[mm * nh + hh]),
                         ftz(dt_work[(bb * t_work + t) * nh + hh]),
                     )
@@ -590,7 +579,7 @@ def mamba3_block_oracle(
         for t in range(t_work):
             for hh in range(nh):
                 var g = ftz(
-                    pinned_mul(
+                    identical_mul(
                         ftz(dt_work[(bb * t_work + t) * nh + hh]),
                         ftz(sig_work[(bb * t_work + t) * nh + hh]),
                     )
@@ -598,7 +587,7 @@ def mamba3_block_oracle(
                 var bp = Float32(0.0)
                 if t + 1 < t_work:
                     bp = ftz(
-                        pinned_mul(
+                        identical_mul(
                             ftz(dt_work[(bb * t_work + t + 1) * nh + hh]),
                             ftz(
                                 Float32(1.0)
@@ -632,7 +621,7 @@ def mamba3_block_oracle(
                 for li in range(l):
                     var mm = bb * l + li
                     var a = ftz(
-                        pinned_mul(
+                        identical_mul(
                             identical_tanh(
                                 ftz(st.in_proj[mm * dip + c_ang + r])
                             ),
@@ -640,7 +629,7 @@ def mamba3_block_oracle(
                         )
                     )
                     var inc = ftz(
-                        pinned_mul(
+                        identical_mul(
                             a,
                             ftz(
                                 dt_work[
@@ -690,20 +679,20 @@ def mamba3_block_oracle(
                         var cv = ftz(portable_cosf(th))
                         var sv = ftz(portable_sinf(th))
                         rotq_work[base + e0] = ftz(
-                            ftz(pinned_mul(q0v, cv))
-                            - ftz(pinned_mul(q1v, sv))
+                            ftz(identical_mul(q0v, cv))
+                            - ftz(identical_mul(q1v, sv))
                         )
                         rotq_work[base + e1] = ftz(
-                            ftz(pinned_mul(q0v, sv))
-                            + ftz(pinned_mul(q1v, cv))
+                            ftz(identical_mul(q0v, sv))
+                            + ftz(identical_mul(q1v, cv))
                         )
                         rotk_work[base + e0] = ftz(
-                            ftz(pinned_mul(k0v, cv))
-                            - ftz(pinned_mul(k1v, sv))
+                            ftz(identical_mul(k0v, cv))
+                            - ftz(identical_mul(k1v, sv))
                         )
                         rotk_work[base + e1] = ftz(
-                            ftz(pinned_mul(k0v, sv))
-                            + ftz(pinned_mul(k1v, cv))
+                            ftz(identical_mul(k0v, sv))
+                            + ftz(identical_mul(k1v, cv))
                         )
                     else:
                         # STRUCTURAL identity: never computed trig
@@ -745,7 +734,7 @@ def mamba3_block_oracle(
                     acc = ftz(identical_mul_add(qv, kv, acc))
                 st.qkdot_out.append(
                     ftz(
-                        pinned_mul(
+                        identical_mul(
                             ftz(acc),
                             gamma_work[(bb * t_work + q0 + li) * nh + hh],
                         )
@@ -761,7 +750,7 @@ def mamba3_block_oracle(
                 for n in range(n_state):
                     var idx = ((bb * t_work + t) * nh + hh) * n_state + n
                     kscale_work[idx] = ftz(
-                        pinned_mul(
+                        identical_mul(
                             ftz(rotk_work[idx]),
                             scale_work[(bb * t_work + t) * nh + hh],
                         )
@@ -828,15 +817,15 @@ def mamba3_block_oracle(
                     # STRUCTURAL, never computed.
 
     # ---- S22: the pending Input_States correction, the NORMATIVE ref's
-    #      scalar-first association (:266-267): c = pinned_mul(dt_1,
-    #      ftz(1 - sigma_1)); t = pinned_mul(pinned_mul(v_st, k_st), c);
+    #      scalar-first association (:266-267): c = identical_mul(dt_1,
+    #      ftz(1 - sigma_1)); t = identical_mul(identical_mul(v_st, k_st), c);
     #      h0 = ftz(h_in + t). dt_1/sigma_1 are the call's FIRST token's
     #      (a fresh call by set_input_states' guard, so q0 = 0).
     if state.pending:
         for bb in range(b):
             for hh in range(nh):
                 var csc = ftz(
-                    pinned_mul(
+                    identical_mul(
                         ftz(dt_work[(bb * t_work + 0) * nh + hh]),
                         ftz(
                             Float32(1.0)
@@ -850,9 +839,9 @@ def mamba3_block_oracle(
                             ((bb * nh + hh) * p_dim + p) * n_state + n
                         )
                         var tv = ftz(
-                            pinned_mul(
+                            identical_mul(
                                 ftz(
-                                    pinned_mul(
+                                    identical_mul(
                                         ftz(
                                             state.pend_v[
                                                 (bb * nh + hh) * p_dim + p
@@ -919,7 +908,7 @@ def mamba3_block_oracle(
                     var e = ftz(identical_exp(drev))
                     for p in range(p_dim):
                         vs[i * p_dim + p] = ftz(
-                            pinned_mul(
+                            identical_mul(
                                 ftz(
                                     v_work[
                                         ((bb * t_work + c0 + i) * nh + hh)
@@ -1004,7 +993,7 @@ def mamba3_block_oracle(
                 for i in range(real):
                     for j in range(i):
                         m_mat[i * q + j] = ftz(
-                            pinned_mul(
+                            identical_mul(
                                 ftz(smat[i * q + j]),
                                 ftz(st.seg_l[lbase + i * q + j]),
                             )
@@ -1038,7 +1027,7 @@ def mamba3_block_oracle(
                     for p in range(p_dim):
                         var yi = yint[i * p_dim + p]
                         var ys = ftz(
-                            pinned_mul(ftz(ch[i * p_dim + p]), e_i)
+                            identical_mul(ftz(ch[i * p_dim + p]), e_i)
                         )
                         st.yintra_out[(mm * nh + hh) * p_dim + p] = yi
                         st.ystate_out[(mm * nh + hh) * p_dim + p] = ys
@@ -1049,7 +1038,7 @@ def mamba3_block_oracle(
                             + st.qkdot_out[mm * nh + hh]
                         )
                         var pv = ftz(
-                            pinned_mul(
+                            identical_mul(
                                 tv,
                                 ftz(
                                     v_work[
@@ -1067,7 +1056,7 @@ def mamba3_block_oracle(
                             st.in_proj[mm * dip + c_z + hh * p_dim + p]
                         )
                         st.gate_out[(mm * nh + hh) * p_dim + p] = ftz(
-                            pinned_mul(ftz(sk), ftz(identical_silu(zv)))
+                            identical_mul(ftz(sk), ftz(identical_silu(zv)))
                         )
 
     # ---- reports: k_last (post-bias post-rotation PRE-scale), v_last

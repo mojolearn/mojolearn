@@ -113,6 +113,19 @@ FAST_CLASSICAL_SCRIPTS="build.sh build_estimators.sh build_svm.sh build_solver.s
 FAST_CLASSICAL_NAMES="_mojolearn _mojolearn_estimators _mojolearn_svm _mojolearn_solver _mojolearn_metrics _mojolearn_preprocessing _mojolearn_tsa _mojolearn_linalg _mojolearn_arima _mojolearn_gp _mojolearn_kernel_methods _mojolearn_mixture _mojolearn_hdbscan _mojolearn_resample _mojolearn_ivf"
 IDENTICAL_ONLY_SCRIPTS="build_training.sh build_mamba.sh build_transformer.sh build_embedding.sh"
 IDENTICAL_ONLY_NAMES="_mojolearn_training _mojolearn_mamba _mojolearn_transformer _mojolearn_embedding"
+# THE EXPANSION LANES' GPU BINDINGS (lane/algos-prep, 2026-09-27), read from
+# the per-lane fragments python/mojolearn/host_surface.py merges; empty until
+# a lane declares one, and then appended to the four lists above. Never spell
+# an expansion binding in them: packaging/check_ext_lists.py holds this file
+# to the manifest by the token below.
+_xs=$(python3 python/mojolearn/host_surface.py --expansion-gpu-scripts classical) || exit 2
+_xn=$(python3 python/mojolearn/host_surface.py --expansion-gpu-bindings classical) || exit 2
+FAST_CLASSICAL_SCRIPTS="$FAST_CLASSICAL_SCRIPTS${_xs:+ $_xs}"
+FAST_CLASSICAL_NAMES="$FAST_CLASSICAL_NAMES${_xn:+ $_xn}"
+_xs=$(python3 python/mojolearn/host_surface.py --expansion-gpu-scripts identical-only) || exit 2
+_xn=$(python3 python/mojolearn/host_surface.py --expansion-gpu-bindings identical-only) || exit 2
+IDENTICAL_ONLY_SCRIPTS="$IDENTICAL_ONLY_SCRIPTS${_xs:+ $_xs}"
+IDENTICAL_ONLY_NAMES="$IDENTICAL_ONLY_NAMES${_xn:+ $_xn}"
 PACKAGE_BYTE_LM=${MOJOLEARN_PACKAGE_BYTE_LM:-0}
 case "$PACKAGE_BYTE_LM" in 0|1) ;; *) echo 'MOJOLEARN_PACKAGE_BYTE_LM must be 0 or 1' >&2; exit 2 ;; esac
 unset MOJOLEARN_BYTE_LM_OUTDIR

@@ -298,6 +298,8 @@ The one thing in the RAPIDS trees that IS portable source and IS implemented her
 from cholesky.checks.fast_trsm import FTP_MAX_NB, FTS_BLOCK, fast_trsm_panel_kernel, fast_gemm_nt_sub_lower, fast_panel_solve_inv
 from std.gpu import block_dim, block_idx, thread_idx
 from std.gpu.primitives.warp import shuffle_xor
+from max.gpu.primitives.block import prefix_sum
+from std.bit import pop_count
 from std.memory import bitcast, stack_allocation
 from std.time import perf_counter_ns
 from std.os import getenv
@@ -1027,29 +1029,49 @@ right-looking one. Only without a trace, a sabotage or a multi-GPU owner
 set, at the pinned NB = 32. `-D MOJOLEARN_CHOL_APPLE_LEFT_OFF` reverts."""
 
 
+#: The left-looking update in pairs of column blocks (see `potrf_lower`):
+#: half the reads of the panels' rows. `-D MOJOLEARN_CHOL_LEFT_LOOKAHEAD_OFF`
+#: updates one column block at a time.
+comptime CHOL_LEFT_LOOKAHEAD = not is_defined["MOJOLEARN_CHOL_LEFT_LOOKAHEAD_OFF"]()
+#: Column blocks per joint update: 2 (64 columns, 8 simdgroups of 16 rows x
+#: 32 columns). 4 would need a 512-thread block whose A tile does not split
+#: into whole staging slots at a 16-deep window.
+comptime CHOL_LEFT_GROUP = 2
+#: Refused cells a block recomputes cooperatively per window; the rest (only
+#: on pathological data) are recomputed by their owners. Execution only.
+comptime LEFT_LIST_CAP = 1536
+#: Staging window depth of the left update (16 or 32; a 32 window is one per
+#: panel, half the per-window bookkeeping). Execution only.
+comptime CHOL_LEFT_KB = 32 if is_defined["MOJOLEARN_CHOL_LEFT_KB32"]() else 16
+
 #: Per-cell window admission in `chol_left_update_amma_kernel` (see there).
 #: `-D MOJOLEARN_CHOL_LEFT_BLOCK_ADMIT` keeps the block-wide test.
 comptime CHOL_LEFT_CELL_ADMIT = not is_defined["MOJOLEARN_CHOL_LEFT_BLOCK_ADMIT"]()
 
 
-def chol_left_update_amma_kernel(
+def chol_left_update_amma_kernel[BN: Int](
     a: MutPointer[Float32, MutAnyOrigin],
     n_in: Int32,
     j0_in: Int32,
     w_in: Int32,
     np_in: Int32,
     row_lo_in: Int32,
+    p_lo_in: Int32,
 ):
-    """Rows [row_lo + 64 * block, +64) x columns [j0, j0 + w): apply panels
-    0 .. np-1 in order to every lower cell (j <= i)."""
-    comptime NT = 128
+    """Rows [row_lo + 64 * block, +64) x columns [j0, j0 + w), w <= BN:
+    apply panels p_lo .. np-1 in order to every lower cell (j <= i)."""
+    # One simdgroup per 16 rows x 32 columns: BN = 64 takes 8 simdgroups,
+    # so each thread keeps the 8 fragments of the 32-wide tile.
+    comptime SGN = BN // 32
+    comptime NSG = 4 * SGN
+    comptime NT = 32 * NSG
     comptime NB = 32
-    comptime KB = 16
+    comptime KB = CHOL_LEFT_KB
+    comptime G = KB // 4
     comptime BM = 64
-    comptime BN = 32
     comptime AST = BM + 4
     comptime BST = KB + 4
-    comptime NFC = BN // 8
+    comptime NFC = 4
     comptime FPS = 8
     var n = Int(n_in)
     var j0 = Int(j0_in)
@@ -1058,26 +1080,30 @@ def chol_left_update_amma_kernel(
     var m0 = Int(row_lo_in) + Int(block_idx.x) * BM
     var tid = Int(thread_idx.x)
     var sg = tid // 32
+    var sgm = sg // SGN
+    var sgn = sg % SGN
     var lane = tid % 32
     var qd = lane // 4
     var frow = (qd & 4) + ((lane // 2) % 4)
     var fcol = (qd & 2) * 2 + (lane % 2) * 2
     var at = stack_allocation[KB * AST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var bt = stack_allocation[BN * BST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
-    var wmin = stack_allocation[8, Scalar[DType.uint32], address_space = AddressSpace.SHARED]()
+    var wmin = stack_allocation[2 * NSG, Scalar[DType.uint32], address_space = AddressSpace.SHARED]()
     var rmin = stack_allocation[BM, Scalar[DType.uint32], address_space = AddressSpace.SHARED]()
     var cmin = stack_allocation[BN, Scalar[DType.uint32], address_space = AddressSpace.SHARED]()
-    var cpre = stack_allocation[BM * BN, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var clist = stack_allocation[LEFT_LIST_CAP, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
+    var cval = stack_allocation[LEFT_LIST_CAP, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
+    var ctot = stack_allocation[1, Scalar[DType.int32], address_space = AddressSpace.SHARED]()
     var c = SIMD[DType.float32, 2 * FPS](0.0)
     comptime for q in range(FPS):
-        var fr = sg * 2 + q // NFC
-        var fc = q % NFC
+        var fr = sgm * 2 + q // NFC
+        var fc = sgn * NFC + q % NFC
         comptime for e in range(2):
             var i = m0 + fr * 8 + frow
             var j = j0 + fc * 8 + fcol + e
             if i < n and j < j0 + w:
                 c[2 * q + e] = a[i * n + j]
-    for p in range(np):
+    for p in range(Int(p_lo_in), np):
         var acc = InlineArray[_AMMA_M64, FPS](fill=_AMMA_M64(0))
         var exact_ok = True
         comptime for wi in range(NB // KB):
@@ -1091,45 +1117,47 @@ def chol_left_update_amma_kernel(
                 # window's flushed words, from the staging registers: an A
                 # row's 16 words sit in 4 consecutive threads' slots, as do
                 # a B column's.
-                comptime for sl in range(2):
+                # A row's KB words sit in G = KB / 4 consecutive threads.
+                comptime for sl in range((BM * KB) // (4 * NT)):
                     var v = SIMD[DType.float32, 4](0.0)
                     comptime for u in range(4):
                         v[u] = ftz(ra[4 * sl + u])
                     var e = _admit_exp_min[4](v)
-                    var o1 = shuffle_xor(e, UInt32(1))
-                    e = o1 if o1 < e else e
-                    var o2 = shuffle_xor(e, UInt32(2))
-                    e = o2 if o2 < e else e
-                    if tid % 4 == 0:
-                        rmin[(sl * NT + tid) // 4] = e
-                var vb = SIMD[DType.float32, 4](0.0)
-                comptime for u in range(4):
-                    vb[u] = ftz(rb[u])
-                var eb4 = _admit_exp_min[4](vb)
-                var ob1 = shuffle_xor(eb4, UInt32(1))
-                eb4 = ob1 if ob1 < eb4 else eb4
-                var ob2 = shuffle_xor(eb4, UInt32(2))
-                eb4 = ob2 if ob2 < eb4 else eb4
-                if tid % 4 == 0:
-                    cmin[tid // 4] = eb4
+                    comptime for sh in range(3):
+                        comptime if (1 << sh) < G:
+                            var o = shuffle_xor(e, UInt32(1 << sh))
+                            e = o if o < e else e
+                    if tid % G == 0:
+                        rmin[(sl * NT + tid) // G] = e
+                comptime for slb in range((BN * KB) // (4 * NT)):
+                    var vb = SIMD[DType.float32, 4](0.0)
+                    comptime for u in range(4):
+                        vb[u] = ftz(rb[4 * slb + u])
+                    var eb4 = _admit_exp_min[4](vb)
+                    comptime for sh in range(3):
+                        comptime if (1 << sh) < G:
+                            var ob = shuffle_xor(eb4, UInt32(1 << sh))
+                            eb4 = ob if ob < eb4 else eb4
+                    if tid % G == 0:
+                        cmin[(slb * NT + tid) // G] = eb4
                 ea = _admit_warp_min(ea)
                 eb = _admit_warp_min(eb)
                 if lane == 0:
                     wmin[sg] = ea
-                    wmin[4 + sg] = eb
+                    wmin[NSG + sg] = eb
                 barrier()
                 var bea = UInt32(0xFF)
                 var beb = UInt32(0xFF)
-                comptime for s in range(4):
+                comptime for s in range(NSG):
                     bea = min(bea, wmin[s])
-                    beb = min(beb, wmin[4 + s])
+                    beb = min(beb, wmin[NSG + s])
                 if (bea + beb) >= UInt32(APPLE_MMA_ADMIT_EXP_SUM):
                     # Every pair this block forms passes: the matrix unit's
                     # chain is the contract's for every cell.
                     comptime for p8 in range(KB // 8):
                         comptime for q in range(FPS):
-                            var fr = sg * 2 + q // NFC
-                            var fc = q % NFC
+                            var fr = sgm * 2 + q // NFC
+                            var fc = sgn * NFC + q % NFC
                             var af = _amma_load_t(at + (8 * p8) * AST + fr * 8, AST)
                             var bf = _amma_load_t(bt + (fc * 8) * BST + 8 * p8, BST)
                             acc[q] = _amma_mma(af, bf, acc[q])
@@ -1146,66 +1174,106 @@ def chol_left_update_amma_kernel(
                     # cost follows the refused rows (outlier rows of an RBF
                     # kernel), not every fragment that holds one.
                     var mask = UInt32(0)
+                    var pre = SIMD[DType.float32, 2 * FPS](0.0)
+                    # A lane's cells lie in two rows; a row whose minimum
+                    # plus the block's column minimum passes has no refused
+                    # cell, so its cells are not looked at one by one.
+                    var rv0 = rmin[(sgm * 2) * 8 + frow]
+                    var rv1 = rmin[(sgm * 2 + 1) * 8 + frow]
+                    var risky0 = rv0 + beb < UInt32(APPLE_MMA_ADMIT_EXP_SUM)
+                    var risky1 = rv1 + beb < UInt32(APPLE_MMA_ADMIT_EXP_SUM)
                     comptime for q in range(FPS):
-                        var fr = sg * 2 + q // NFC
-                        var fc = q % NFC
-                        var ri = fr * 8 + frow
-                        comptime for e in range(2):
-                            var cj = fc * 8 + fcol + e
-                            if rmin[ri] + cmin[cj] < UInt32(APPLE_MMA_ADMIT_EXP_SUM):
-                                cpre[ri * BN + cj] = acc[q][e]
-                                mask |= UInt32(1) << UInt32(2 * q + e)
+                        var fr = sgm * 2 + q // NFC
+                        var fc = sgn * NFC + q % NFC
+                        var rv = rv0 if q // NFC == 0 else rv1
+                        var risky_row = risky0 if q // NFC == 0 else risky1
+                        if risky_row:
+                            comptime for e in range(2):
+                                var cj = fc * 8 + fcol + e
+                                if rv + cmin[cj] < UInt32(APPLE_MMA_ADMIT_EXP_SUM):
+                                    pre[2 * q + e] = acc[q][e]
+                                    mask |= UInt32(1) << UInt32(2 * q + e)
                         comptime for p8 in range(KB // 8):
                             var af = _amma_load_t(at + (8 * p8) * AST + fr * 8, AST)
                             var bf = _amma_load_t(bt + (fc * 8) * BST + 8 * p8, BST)
                             acc[q] = _amma_mma(af, bf, acc[q])
+                    # The refused cells of the whole block in one list, so
+                    # every thread recomputes one (a refused row no longer
+                    # serializes on one simdgroup). Positions come from an
+                    # exclusive prefix sum of the per-lane counts; a lane
+                    # walks its cells in the same order to write and read.
+                    var cnt = Int32(pop_count(mask))
+                    var base = Int(prefix_sum[block_size=NT, exclusive=True](cnt))
+                    var pos = base
+                    comptime for q in range(FPS):
+                        var fr = sgm * 2 + q // NFC
+                        var fc = sgn * NFC + q % NFC
+                        comptime for e in range(2):
+                            if (mask >> UInt32(2 * q + e)) & UInt32(1) != UInt32(0):
+                                if pos < LEFT_LIST_CAP:
+                                    clist[pos] = Int32((fr * 8 + frow) * BN + fc * 8 + fcol + e)
+                                    cval[pos] = pre[2 * q + e]
+                                pos += 1
+                    if tid == NT - 1:
+                        ctot[0] = Int32(pos)
                     barrier()
-                    for rr in range(BM // 4):
-                        var ri = rr * 4 + sg
-                        var rv = rmin[ri]
-                        if rv + beb < UInt32(APPLE_MMA_ADMIT_EXP_SUM):
-                            if rv + cmin[lane] < UInt32(APPLE_MMA_ADMIT_EXP_SUM):
-                                var t = cpre[ri * BN + lane]
-                                for kq in range(KB):
-                                    t = rtf_mul_add(at[kq * AST + ri], bt[lane * BST + kq], t)
-                                cpre[ri * BN + lane] = t
+                    var total = min(Int(ctot[0]), LEFT_LIST_CAP)
+                    for t in range(tid, total, NT):
+                        var cell = Int(clist[t])
+                        var ri = cell // BN
+                        var cj = cell % BN
+                        var tv = cval[t]
+                        for kq in range(KB):
+                            tv = rtf_mul_add(at[kq * AST + ri], bt[cj * BST + kq], tv)
+                        cval[t] = tv
                     barrier()
                     if mask != UInt32(0):
+                        pos = base
                         comptime for q in range(FPS):
-                            var fr = sg * 2 + q // NFC
-                            var fc = q % NFC
-                            var ri = fr * 8 + frow
+                            var fr = sgm * 2 + q // NFC
+                            var fc = sgn * NFC + q % NFC
                             comptime for e in range(2):
                                 if (mask >> UInt32(2 * q + e)) & UInt32(1) != UInt32(0):
-                                    acc[q][e] = cpre[ri * BN + fc * 8 + fcol + e]
+                                    if pos < LEFT_LIST_CAP:
+                                        acc[q][e] = cval[pos]
+                                    else:
+                                        # Past the list: the owner runs the
+                                        # same chain itself.
+                                        var tv = pre[2 * q + e]
+                                        var ri = fr * 8 + frow
+                                        var cj = fc * 8 + fcol + e
+                                        for kq in range(KB):
+                                            tv = rtf_mul_add(at[kq * AST + ri], bt[cj * BST + kq], tv)
+                                        acc[q][e] = tv
+                                    pos += 1
             else:
                 ea = _admit_warp_min(ea)
                 eb = _admit_warp_min(eb)
                 if lane == 0:
                     wmin[sg] = ea
-                    wmin[4 + sg] = eb
+                    wmin[NSG + sg] = eb
                 barrier()
                 var bea = UInt32(0xFF)
                 var beb = UInt32(0xFF)
-                comptime for s in range(4):
+                comptime for s in range(NSG):
                     bea = min(bea, wmin[s])
-                    beb = min(beb, wmin[4 + s])
+                    beb = min(beb, wmin[NSG + s])
                 var admitted = exact_ok and (bea + beb) >= UInt32(APPLE_MMA_ADMIT_EXP_SUM)
                 if not admitted:
                     exact_ok = False
                 if admitted:
                     comptime for p8 in range(KB // 8):
                         comptime for q in range(FPS):
-                            var fr = sg * 2 + q // NFC
-                            var fc = q % NFC
+                            var fr = sgm * 2 + q // NFC
+                            var fc = sgn * NFC + q % NFC
                             var af = _amma_load_t(at + (8 * p8) * AST + fr * 8, AST)
                             var bf = _amma_load_t(bt + (fc * 8) * BST + 8 * p8, BST)
                             acc[q] = _amma_mma(af, bf, acc[q])
                 else:
                     for kq in range(KB):
                         comptime for q in range(FPS):
-                            var fr = sg * 2 + q // NFC
-                            var fc = q % NFC
+                            var fr = sgm * 2 + q // NFC
+                            var fc = sgn * NFC + q % NFC
                             var av = at[kq * AST + fr * 8 + frow]
                             comptime for e in range(2):
                                 var bv = bt[(fc * 8 + fcol + e) * BST + kq]
@@ -1218,8 +1286,8 @@ def chol_left_update_amma_kernel(
                     g = g * Float32(1.0000001)
                 c[2 * q + e] = ftz(ftz(c[2 * q + e]) - ftz(g))
     comptime for q in range(FPS):
-        var fr = sg * 2 + q // NFC
-        var fc = q % NFC
+        var fr = sgm * 2 + q // NFC
+        var fc = sgn * NFC + q % NFC
         comptime for e in range(2):
             var i = m0 + fr * 8 + frow
             var j = j0 + fc * 8 + fcol + e
@@ -1228,9 +1296,10 @@ def chol_left_update_amma_kernel(
 
 
 def _chol_left_update(
-    ctx: DeviceContext, mut a: DeviceBuffer[DType.float32], n: Int, j0: Int, w: Int, np: Int
+    ctx: DeviceContext, mut a: DeviceBuffer[DType.float32], n: Int, j0: Int, w: Int, np: Int,
+    p_lo: Int = 0,
 ) raises:
-    """Column block [j0, j0 + w), rows j0 .. n-1, panels 0 .. np-1.
+    """Columns [j0, j0 + w) (w <= 64), rows j0 .. n-1, panels p_lo .. np-1.
 
     COMPILE-TIME GATED (0.8.23's AMD build): the callers guard it with a
     RUNTIME `left_mode`, which only the Apple column can set, but a runtime
@@ -1239,13 +1308,21 @@ def _chol_left_update(
     (mixture, gp, kernel_methods). Off Apple the body is empty, which is
     exactly what `left_mode == False` already meant there."""
     comptime if CHOL_APPLE_LEFT:
-        if np <= 0 or w <= 0:
+        if np <= p_lo or w <= 0:
             return
         var rows = n - j0
-        ctx.enqueue_function[chol_left_update_amma_kernel](
-            a.unsafe_ptr(), Int32(n), Int32(j0), Int32(w), Int32(np), Int32(j0),
-            grid_dim=((rows + 63) // 64, 1, 1), block_dim=(128, 1, 1),
-        )
+        if w > 32:
+            ctx.enqueue_function[chol_left_update_amma_kernel[64]](
+                a.unsafe_ptr(), Int32(n), Int32(j0), Int32(w), Int32(np), Int32(j0),
+                Int32(p_lo),
+                grid_dim=((rows + 63) // 64, 1, 1), block_dim=(256, 1, 1),
+            )
+        else:
+            ctx.enqueue_function[chol_left_update_amma_kernel[32]](
+                a.unsafe_ptr(), Int32(n), Int32(j0), Int32(w), Int32(np), Int32(j0),
+                Int32(p_lo),
+                grid_dim=((rows + 63) // 64, 1, 1), block_dim=(128, 1, 1),
+            )
 
 
 def zero_upper_kernel(
@@ -1612,7 +1689,20 @@ def potrf_lower(
             tq += Int(perf_counter_ns()) - tk
             tk = Int(perf_counter_ns())
         if left_mode and p > 0:
-            _chol_left_update(ctx, a, n, j0, w, p)
+            comptime if CHOL_LEFT_LOOKAHEAD:
+                # Pairs of column blocks: an even block p takes panels
+                # 0 .. p-1 together with block p+1 (one pass over those
+                # panels' rows for 64 columns), and block p+1 takes panel p
+                # alone once p is factored. Every cell still takes panels
+                # 0, 1, ... in order.
+                comptime LW = CHOL_LEFT_GROUP
+                var r = p % LW
+                if r == 0:
+                    _chol_left_update(ctx, a, n, j0, min(LW * nb, n - j0), p)
+                else:
+                    _chol_left_update(ctx, a, n, j0, w, p, p - r)
+            else:
+                _chol_left_update(ctx, a, n, j0, w, p)
             if ctim:
                 ctx.synchronize()
                 tu += Int(perf_counter_ns()) - tk
@@ -1661,9 +1751,19 @@ def potrf_lower(
                 # The right-looking partial factor: every later column block
                 # has taken panels 0 .. p-1 (not panel p, which failed).
                 var q0 = j0 + nb
+                var qb = p + 1
                 while q0 < n:
-                    _chol_left_update(ctx, a, n, q0, min(nb, n - q0), p)
+                    var have = 0
+                    comptime if CHOL_LEFT_LOOKAHEAD:
+                        # A later block of the same group already holds
+                        # panels 0 .. (group start - 1), unless the group
+                        # starts at panel 0 (no joint update ran).
+                        var g0 = (p // CHOL_LEFT_GROUP) * CHOL_LEFT_GROUP
+                        if qb < g0 + CHOL_LEFT_GROUP and g0 > 0:
+                            have = g0
+                    _chol_left_update(ctx, a, n, q0, min(nb, n - q0), p, have)
                     q0 += nb
+                    qb += 1
                 ctx.synchronize()
             p += 1
             break

@@ -74,6 +74,8 @@ def stage_package(dest):
     shutil.copy2(ROOT / "python" / "mojolearn_diagnostics.py", dest / "mojolearn_diagnostics.py")
     # packaging/linux/pack_wheel.py and packaging/macos/build_release_wheel.sh
     shutil.copy2(ROOT / "tools" / "identity_break.py", dest / "mojolearn" / "_identity_break.py")
+    for src in sorted((ROOT / "tools" / "identity_lanes").glob("*.py")):
+        shutil.copy2(src, dest / "mojolearn" / f"_identity_lane_{src.name}")
     shutil.copy2(ROOT / "tools" / "identity_trace_diff.py", dest / "mojolearn" / "_identity_trace_diff.py")
     return dest
 

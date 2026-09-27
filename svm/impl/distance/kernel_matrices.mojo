@@ -104,6 +104,44 @@ def row_norm_l2sq_kernel(
         out_norm.unsafe_store(i, ftz(acc))
 
 
+#: Apple IDENTICAL: the RBF epilogue on a (columns, rows) grid, so no cell
+#: divides its flat index by `cols` (a 64-bit integer division, emulated on
+#: Apple's GPU). Same per-cell arithmetic.
+#: `-D MOJOLEARN_SVM_RBF_EPILOGUE_1D` keeps the flat grid.
+comptime RBF_EPILOGUE_2D = (
+    GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and has_apple_gpu_accelerator()
+    and not is_defined["MOJOLEARN_SVM_RBF_EPILOGUE_1D"]()
+)
+
+
+def rbf_kernel_expanded_2d_kernel(
+    inout: MutPointer[Float32, MutAnyOrigin],
+    rows_in: Int32,
+    cols_in: Int32,
+    norm_x: MutPointer[Float32, MutAnyOrigin],
+    norm_y: MutPointer[Float32, MutAnyOrigin],
+    gain: Float32,
+):
+    """`rbf_kernel_expanded_kernel`'s cell, row `block_idx.y`."""
+    var cols = Int(cols_in)
+    var j = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    var i = Int(block_idx.y)
+    if j >= cols or i >= Int(rows_in):
+        return
+    var t = i * cols + j
+    var dot = inout.unsafe_load(t)
+    var s = ftz(
+        ftz(ftz(norm_x.unsafe_load(i)) + ftz(norm_y.unsafe_load(j)))
+        - ftz(Float32(2.0) * ftz(dot))
+    )
+    var e = ftz((-gain) * s)
+    comptime if SAB_STD_EXP:
+        inout.unsafe_store(t, ftz(exp(e)))
+    else:
+        inout.unsafe_store(t, ftz(identical_exp(e)))
+
+
 def rbf_kernel_expanded_kernel(
     inout: MutPointer[Float32, MutAnyOrigin],
     rows_in: Int32,
@@ -377,11 +415,18 @@ def kernel_op(
     else:
         gemm_nt(ctx, out, a, b, m, n, k)
     if kp.kernel == KERNEL_RBF:
-        ctx.enqueue_function[rbf_kernel_expanded_kernel](
-            out.unsafe_ptr(), Int32(m), Int32(n),
-            norm_a.unsafe_ptr(), norm_b.unsafe_ptr(), Float32(kp.gamma),
-            grid_dim=_grid(m * n), block_dim=KM_TPB,
-        )
+        comptime if RBF_EPILOGUE_2D:
+            ctx.enqueue_function[rbf_kernel_expanded_2d_kernel](
+                out.unsafe_ptr(), Int32(m), Int32(n),
+                norm_a.unsafe_ptr(), norm_b.unsafe_ptr(), Float32(kp.gamma),
+                grid_dim=((n + KM_TPB - 1) // KM_TPB, m, 1), block_dim=KM_TPB,
+            )
+        else:
+            ctx.enqueue_function[rbf_kernel_expanded_kernel](
+                out.unsafe_ptr(), Int32(m), Int32(n),
+                norm_a.unsafe_ptr(), norm_b.unsafe_ptr(), Float32(kp.gamma),
+                grid_dim=_grid(m * n), block_dim=KM_TPB,
+            )
     elif kp.kernel == KERNEL_POLYNOMIAL:
         # cuVS `PolynomialKernel::evaluate`: the linear Gram above, then
         # `pow(gain * K + offset, exponent)` cell by cell, spelled as the

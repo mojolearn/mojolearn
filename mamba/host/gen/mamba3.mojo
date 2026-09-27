@@ -89,6 +89,7 @@ from mamba.host.device_shim import identical_gemm
 from gemm.checks.gemm_oracle import OP_NT
 
 from checks.numerics import (
+    identical_mul,
     ftz,
     identical_clamp,
     identical_div,
@@ -130,16 +131,6 @@ from mamba.host.gen.modeling_mamba import (
     mamba_zeros,
     residual_add_kernel,
 )
-
-
-def pinned_mul(a: Float32, b: Float32) -> Float32:
-    """DEVIATION 720's construction; see the oracle."""
-    # `identical_mul` is the pinned product (`pinned_mul_f32` under IDENTICAL);
-    # `fma(a, b, -0.0)` was not: LLVM folds it into a contractable product
-    # (lane/pinned-mul-contract-free, 2026-09-26).
-    from checks.numerics import identical_mul
-
-    return identical_mul(a, b)
 
 
 def _grid(n: Int) -> Int:
@@ -567,18 +558,18 @@ def m3_bcnorm_kernel(gid_: Int,
     )
     for n in range(n_state):
         var innerb = ftz(
-            pinned_mul(ftz(in_proj.unsafe_load(t * dip + c_b + n)), rstdb)
+            identical_mul(ftz(in_proj.unsafe_load(t * dip + c_b + n)), rstdb)
         )
         bcb.unsafe_store(
             t * n_state + n,
-            ftz(pinned_mul(ftz(bnorm_w.unsafe_load(n)), innerb)),
+            ftz(identical_mul(ftz(bnorm_w.unsafe_load(n)), innerb)),
         )
         var innerc = ftz(
-            pinned_mul(ftz(in_proj.unsafe_load(t * dip + c_c + n)), rstdc)
+            identical_mul(ftz(in_proj.unsafe_load(t * dip + c_c + n)), rstdc)
         )
         bcc.unsafe_store(
             t * n_state + n,
-            ftz(pinned_mul(ftz(cnorm_w.unsafe_load(n)), innerc)),
+            ftz(identical_mul(ftz(cnorm_w.unsafe_load(n)), innerc)),
         )
 
 
@@ -785,12 +776,12 @@ def m3_step_angle_kernel(gid_: Int,
     var hh = rem // r_ang
     var r = rem - hh * r_ang
     var a = ftz(
-        pinned_mul(
+        identical_mul(
             identical_tanh(ftz(in_proj.unsafe_load(bb * dip + c_ang + r))),
             M3_PI,
         )
     )
-    var inc = ftz(pinned_mul(a, ftz(dt_out.unsafe_load(bb * nh + hh))))
+    var inc = ftz(identical_mul(a, ftz(dt_out.unsafe_load(bb * nh + hh))))
     theta_state.unsafe_store(
         cell, m3_mod_2pi(ftz(ftz(theta_state.unsafe_load(cell)) + inc))
     )
@@ -835,16 +826,16 @@ def m3_step_core_kernel(gid_: Int,
     var hh = rem // p_dim
     var p = rem - hh * p_dim
     var dtv = ftz(dt_out.unsafe_load(bb * nh + hh))
-    var adt = ftz(pinned_mul(ftz(a_out.unsafe_load(bb * nh + hh)), dtv))
+    var adt = ftz(identical_mul(ftz(a_out.unsafe_load(bb * nh + hh)), dtv))
     var sg = ftz(
         identical_sigmoid(ftz(in_proj.unsafe_load(bb * dip + c_trap + hh)))
     )
     var al = ftz(identical_exp(adt))
     # beta = ((1 - sigma) * dt) * alpha, torch's left association (:121).
     var be = ftz(
-        pinned_mul(ftz(pinned_mul(ftz(Float32(1.0) - sg), dtv)), al)
+        identical_mul(ftz(identical_mul(ftz(Float32(1.0) - sg), dtv)), al)
     )
-    var ga = ftz(pinned_mul(sg, dtv))
+    var ga = ftz(identical_mul(sg, dtv))
     var vv = ftz(in_proj.unsafe_load(bb * dip + c_x + hh * p_dim + p))
     var vst = ftz(pend_v.unsafe_load((bb * nh + hh) * p_dim + p))
     var out = Float32(0.0)
@@ -888,17 +879,17 @@ def m3_step_core_kernel(gid_: Int,
             )
             if n == e0:
                 kn = ftz(
-                    ftz(pinned_mul(bx0, cv)) - ftz(pinned_mul(bx1, sv))
+                    ftz(identical_mul(bx0, cv)) - ftz(identical_mul(bx1, sv))
                 )
                 qn = ftz(
-                    ftz(pinned_mul(qx0, cv)) - ftz(pinned_mul(qx1, sv))
+                    ftz(identical_mul(qx0, cv)) - ftz(identical_mul(qx1, sv))
                 )
             else:
                 kn = ftz(
-                    ftz(pinned_mul(bx0, sv)) + ftz(pinned_mul(bx1, cv))
+                    ftz(identical_mul(bx0, sv)) + ftz(identical_mul(bx1, cv))
                 )
                 qn = ftz(
-                    ftz(pinned_mul(qx0, sv)) + ftz(pinned_mul(qx1, cv))
+                    ftz(identical_mul(qx0, sv)) + ftz(identical_mul(qx1, cv))
                 )
         else:
             kn = b0
@@ -907,22 +898,22 @@ def m3_step_core_kernel(gid_: Int,
         var kst = ftz(pend_k.unsafe_load((bb * nh + hh) * n_state + n))
         # S = alpha*S + beta*(K_st*V_st) + gamma*(k*v): torch's three
         # separate roundings (:125-127), k*v product FIRST inside each.
-        var s1 = ftz(pinned_mul(al, ftz(h_state.unsafe_load(hidx))))
-        var s2 = ftz(s1 + ftz(pinned_mul(be, ftz(pinned_mul(kst, vst)))))
-        var s3 = ftz(s2 + ftz(pinned_mul(ga, ftz(pinned_mul(kn, vv)))))
+        var s1 = ftz(identical_mul(al, ftz(h_state.unsafe_load(hidx))))
+        var s2 = ftz(s1 + ftz(identical_mul(be, ftz(identical_mul(kst, vst)))))
+        var s3 = ftz(s2 + ftz(identical_mul(ga, ftz(identical_mul(kn, vv)))))
         h_state.unsafe_store(hidx, s3)
         # readout AFTER the update (:130).
         out = ftz(identical_mul_add(s3, qn, out))
     out = ftz(out)
     # D last (:133).
-    out = ftz(out + ftz(pinned_mul(ftz(d_skip.unsafe_load(hh)), vv)))
+    out = ftz(out + ftz(identical_mul(ftz(d_skip.unsafe_load(hh)), vv)))
     skip_out.unsafe_store(cell, out)
     # the z gate, torch's (out * z) * sigmoid(z) (:136) -- NOT the
     # one-division silu; part of what makes this arm RED.
     var zv = ftz(in_proj.unsafe_load(bb * dip + c_z + hh * p_dim + p))
     gate_out.unsafe_store(
         cell,
-        ftz(pinned_mul(ftz(pinned_mul(out, zv)), identical_sigmoid(zv))),
+        ftz(identical_mul(ftz(identical_mul(out, zv)), identical_sigmoid(zv))),
     )
 
 
@@ -974,11 +965,11 @@ def m3_step_state_kernel(gid_: Int,
             )
             if n == e0:
                 kn = ftz(
-                    ftz(pinned_mul(bx0, cv)) - ftz(pinned_mul(bx1, sv))
+                    ftz(identical_mul(bx0, cv)) - ftz(identical_mul(bx1, sv))
                 )
             else:
                 kn = ftz(
-                    ftz(pinned_mul(bx0, sv)) + ftz(pinned_mul(bx1, cv))
+                    ftz(identical_mul(bx0, sv)) + ftz(identical_mul(bx1, cv))
                 )
         else:
             kn = ftz(

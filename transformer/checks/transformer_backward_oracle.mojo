@@ -636,23 +636,23 @@ def rms_norm_backward_into(
     and the pinned backward, per row, in this order:
 
         rstd RECOMPUTED from the SAVED sumsq, not saved and not re-folded
-        dh_j = pinned_mul(dy_j, w_j)                              PRODUCT
+        dh_j = identical_mul(dy_j, w_j)                              PRODUCT
         c    = ftz(fma(dh_j, x_j, c)), ASCENDING j from +0.0      FUSED FOLD
-        r2   = pinned_mul(rstd, rstd)
-        r3   = pinned_mul(r2, rstd)
-        cr3  = pinned_mul(c, r3)
-        da   = pinned_mul(-0.5, cr3)          rsqrt backward, -0.5 * dr * r^3
+        r2   = identical_mul(rstd, rstd)
+        r3   = identical_mul(r2, rstd)
+        cr3  = identical_mul(c, r3)
+        da   = identical_mul(-0.5, cr3)          rsqrt backward, -0.5 * dr * r^3
         dv   = identical_div(da, d_model)     mean backward, ONE division
-        dx1_j = pinned_mul(dh_j, rstd)        h = x*r, the x branch
-        tx_j  = pinned_mul(2.0, x_j)          pow(2) backward's 2*x
-        dx2_j = pinned_mul(dv, tx_j)
+        dx1_j = identical_mul(dh_j, rstd)        h = x*r, the x branch
+        tx_j  = identical_mul(2.0, x_j)          pow(2) backward's 2*x
+        dx2_j = identical_mul(dv, tx_j)
         dx_j  = ftz(ftz(dx1_j) + ftz(dx2_j))                      UNFUSED ADD
 
     and, for the weight gradient, the per-cell product the caller then feeds
     to a gemm v1 `OP_NN` against a ones vector:
 
-        inner_j  = pinned_mul(x_j, rstd)      a recompute of forward S3
-        dprod_j  = pinned_mul(dy_j, inner_j)
+        inner_j  = identical_mul(x_j, rstd)      a recompute of forward S3
+        dprod_j  = identical_mul(dy_j, inner_j)
 
     FOUR DECISIONS, EACH OF WHICH COULD HAVE GONE THE OTHER WAY.
 
@@ -750,10 +750,10 @@ def silu_backward_into(
 
         sg = identical_sigmoid(x)          DEVIATION 743, portable_sigmoidf
         r1 = ftz(1.0 - sg)                 SUBTRACT
-        r2 = pinned_mul(x, r1)             PRODUCT
+        r2 = identical_mul(x, r1)             PRODUCT
         r3 = ftz(1.0 + r2)                 UNFUSED ADD
-        r4 = pinned_mul(sg, r3)            PRODUCT
-        dg = pinned_mul(dsi, r4)           PRODUCT
+        r4 = identical_mul(sg, r3)            PRODUCT
+        dg = identical_mul(dsi, r4)           PRODUCT
 
     **(a) `sg` IS RECOMPUTED FROM `gate_proj.out`, NEVER RECONSTRUCTED FROM
     `silu.out`.** `silu(x) = x * sigmoid(x)` is true in the reals and FALSE
@@ -907,7 +907,7 @@ def softmax_backward_into(
 
         z_row = sum over j ASCENDING, ABSOLUTE key index, from +0.0
                 z = ftz(fma(dy_j, y_j, z))                        FUSED
-        dS_j  = pinned_mul(y_j, ftz(dy_j - z))       SUBTRACT then PRODUCT
+        dS_j  = identical_mul(y_j, ftz(dy_j - z))       SUBTRACT then PRODUCT
 
     **THERE IS NO MAX BACKWARD, NO EXP BACKWARD AND NO DIVISION BACKWARD,
     AND REFUSING TO WRITE THEM IS A DECISION WITH A NAME** (DEVIATION 1406).
@@ -1332,7 +1332,7 @@ def transformer_block_backward_oracle(
     # ones, and the gradient passes through with no rounding.
     #
     # **THE MASKED CELLS ARE NOT ZEROED, AND THAT IS A DECISION.** They are
-    # already signed zeros -- `dS_j = pinned_mul(+0.0, dy_j - z)` carries
+    # already signed zeros -- `dS_j = identical_mul(+0.0, dy_j - z)` carries
     # the sign of `dy_j - z` -- so forcing `+0.0` would differ only where
     # that sign is negative, which is roughly half the masked cells and is
     # REACHABLE WITHOUT A PLANT. Sabotage `B13_MASK_ZEROES_GRAD`, and the

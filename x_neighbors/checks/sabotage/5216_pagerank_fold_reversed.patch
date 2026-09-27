@@ -1,0 +1,13 @@
+diff --git a/x_neighbors/items.mojo b/x_neighbors/items.mojo
+index bc04f5c16..aeacb03c0 100644
+--- a/x_neighbors/items.mojo
++++ b/x_neighbors/items.mojo
+@@ -854,7 +854,7 @@ def pagerank_step_item(t: Int, q: FP, x: FP, p: FP, dangling: IP, res: FP, n: In
+     sum(x[dangling]) * p) + (1 - alpha) * p, both folds ascending by node."""
+     var acc = Float32(0)
+     for i in range(n):
+-        acc = ftz(identical_mul_add(ftz(x.unsafe_load(i)), ftz(q.unsafe_load(i * n + t)), acc))
++        acc = ftz(identical_mul_add(ftz(x.unsafe_load(n - 1 - i)), ftz(q.unsafe_load((n - 1 - i) * n + t)), acc))
+     var dsum = Float32(0)
+     for i in range(n):
+         if Int(dangling.unsafe_load(i)) != 0:

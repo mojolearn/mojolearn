@@ -302,6 +302,85 @@ classical2 is planned. The dry run and the board list each opponent that is
 not planned on a vendor, with the reason (for example faiss-gpu, and cuML's
 missing GaussianMixture, GP, Nystroem and RBFSampler).
 
+## The algos family (the algorithm expansion)
+
+`tools/bench_board_algos.py` races every algorithm of the algorithm
+expansion (`docs/lanes/ALGORITHM_EXPANSION_PLAN.md`: the nine lane tables,
+their Additions and the long tail) against its opponents. It speaks the
+classical2 worker protocol (one persistent worker per arm, one warm-up, the
+timed rounds interleaved with the arm order rotated, outputs saved after the
+clock for a float64 NumPy quality pass in the conductor) with two additions:
+
+- Training AND inference are timed. Each round reports the lane's fit
+  (`fit`, `fit_predict`, an index build, a forward + backward, the optimizer
+  steps) and, where the lane has one, the inference call (predict /
+  transform / search / forward / forecast) on the held-out rows. The
+  inference timings become the race's inference cells. Time series lanes
+  time fit + forecast together on every arm (statsforecast and the
+  per-series libraries forecast in the same call), and ALS is judged from
+  its factors, so those lanes have no separate inference cell.
+- **SKIPPED: not built yet.** Our side calls the public class by name,
+  `mojolearn.<Name>`, the first of the lane's candidate names that the
+  INSTALLED wheel exports. Until a lane merges its class, our arms answer
+  "skipped" and the cell reads `SKIPPED: not built yet`, never an error,
+  while the opponents race. So a board run on a wheel from any point today
+  times whatever exists. The dry run marks each race `in source` or
+  `not built yet: SKIPPED` from the source tree's `_expansion_<lane>.py`
+  `__all__` lists (a hint only; the board asks the wheel).
+
+Our arms are `ours` (IDENTICAL), `ours-fast` (FAST, Apple) and `ours-cpu`
+on every lane, neural and CNN included (every expansion binding builds FAST
+and IDENTICAL). Opponents, fastest real implementation per box:
+
+| group | opponents |
+|---|---|
+| scikit-learn-shaped estimators (linear, cluster, neighbors, decomp, prep, trees wrappers) | scikit-learn on every core; cuML on NVIDIA where it has the estimator (MBSGD, Lars, IncrementalPCA, random projections, naive Bayes, TSNE, the cuML preprocessing classes, TargetEncoder, forest-of-one for the decision trees) |
+| DART classifier and regressor | LightGBM (`boosting='dart'`) CPU, XGBoost (`booster='dart'`) CPU, and CUDA on NVIDIA |
+| SHAP | shap (TreeExplainer, KernelExplainer, PermutationExplainer), XGBoost/LightGBM `pred_contribs` (GPUTreeShap on CUDA), cuML's Kernel and Permutation explainers; our TreeExplainer explains our RandomForestRegressor of the same size (it takes RF, ExtraTrees, DecisionTree and DART models) |
+| IVF-PQ, IVF-SQ, IVF-RaBitQ, refine, sample filter, CAGRA | faiss-cpu (HNSW for CAGRA), cuVS on NVIDIA |
+| PageRank, connected components, Louvain | networkx, cuGraph on NVIDIA, on the 10-NN graph of 20,000 rows (ours takes a dense adjacency, its class's contract, built before the clock) |
+| LSTM, GRU, RNN classifiers and regressors | torch `nn.LSTM`/`nn.GRU`/`nn.RNN` + a linear head trained with Adam for the same epochs and batch size, at every fast setting of the box, on 24-step windows of taxi-hourly and synthetic series |
+| LayerNorm, MoE block, Conv1d/2d, pooling, BatchNorm, Dropout2d, ResNet block, GCN, GraphSAGE | torch at every fast setting of the box (eager/compile x fp32/TF32/bf16, TF32 on NVIDIA only; PyG for GCN and SAGE), the same weights loaded into every arm (ours through `load_state_dict` or `set_weights`) |
+| RMSprop, Adagrad, Adamax, NAdam, Adafactor | `torch.optim` eager and compiled step, fp32 |
+| AutoARIMA, Theta, Croston, damped ETS, STL, VAR, GARCH, Prophet | statsforecast, statsmodels, arch, prophet (one fit per series, joblib over every core); cuML AutoARIMA on NVIDIA |
+| SVGP | GPyTorch variational GP on the GPU and CPU |
+| ALS | implicit (CPU; its GPU arm refuses by name when the wheel has no CUDA) |
+| LU solve, lstsq, randomized SVD | NumPy/LAPACK, torch.linalg on the GPU, CuPy on NVIDIA, scikit-learn `randomized_svd` |
+
+Data: taxi and Istella-S through the classical2 blocks, and the family's own
+blocks built in its untimed prep from R2 keys only: `text` (byte-bigram
+counts of 2 KB documents of `corpus/enwik8/input.txt` and
+`corpus/pile_github/input.txt`, label = which corpus), `taxi-hourly` (hourly
+pickups of the 64 busiest zones over January and February 2024, from the taxi
+npz), `taxi-zones` (trip counts, (day, hour, pickup zone) x dropoff zone) and
+the kNN graph of 100,000 cls rows. The second kind beside a real series set
+is a seeded synthetic one. Dense linear algebra, a layer's input tensor and
+an optimizer's gradients are seeded tensors. **Not in R2:** an image set
+(CIFAR/ImageNet) and an implicit-feedback set (MovieLens/Last.fm); the CNN
+layers run on seeded tensors and ALS on the taxi and text counts until one
+is staged. The corpora are looked up under `$MOJOLEARN_CORPUS_ROOT`,
+`~/r2-stage` and `<repo>/training`; a missing one is refused with the staging
+command.
+
+Every lane's settings, rows, quality metric and each unavoidable mismatch
+are in `LANES` in the driver (`python3 tools/bench_board_algos.py table`
+prints them) and in every cell's `settings.lane_config`. Opponent pins
+(`PINS`): statsmodels 0.15.0, statsforecast 2.1.1, arch 8.0.0, prophet
+1.4.0, networkx 3.6.1, shap 0.51.0, implicit 0.7.3, torch-geometric
+2.8.0.post1, gpytorch 1.15.2 and faiss-cpu 1.15.1 on every vendor, and
+cugraph-cu12 26.8.0 from the rapids index on NVIDIA. Not raced, with the
+reason: LinearSVC/LinearSVR and SpectralEmbedding (already classical2
+lanes), the LR schedulers (a scalar per step), Lion and LAMB torch arms
+(torch.optim has neither; ours races alone).
+
+The class contract the board calls (scikit-learn names for estimators;
+`fit(Y)` + `forecast(h)` for forecasters; `fit(indptr, indices)` for graph
+algorithms; `fit(index).search(queries)` for ANN; `load_state_dict`,
+`__call__`/`forward` and `backward(dy)` for layers; `step(grads)` for
+optimizers) is in the driver's docstring. A lane whose class answers under a
+different name or shape tells lane `bench`, which adds it; the algorithm
+lanes do not edit the board.
+
 ## The neural family
 
 `tools/bench_board_neural.py` times the wheel's public neural Python API

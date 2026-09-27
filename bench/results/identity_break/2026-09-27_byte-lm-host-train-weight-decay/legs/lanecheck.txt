@@ -1,0 +1,18 @@
+[lane-check 18:44:45] d8a97090c698 x86_64 backend=cuda lanes=byte-lm-host-train out=/root/rec/lanecheck
+[lane-check 18:45:31] byte-lm-host-train runs: _mojolearn, _mojolearn_byte_lm_host, _mojolearn_core_host, _mojolearn_forest_host
+[lane-check 18:45:31] _mojolearn_byte_lm_host: not built
+[lane-check 18:45:31] build _mojolearn_byte_lm_host (bindings/build_byte_lm_host.sh)
+[lane-check 18:45:42] built _mojolearn_byte_lm_host in 11s
+[lane-check 18:45:42] _mojolearn_core_host: no stamp (built outside this check; its sources are unknown)
+[lane-check 18:45:42] build _mojolearn_core_host (bindings/build_core_host.sh)
+[lane-check 18:45:50] built _mojolearn_core_host in 8s
+[lane-check 18:45:50] _mojolearn_forest_host: no stamp (built outside this check; its sources are unknown)
+[lane-check 18:45:50] build _mojolearn_forest_host (bindings/build_forest_host.sh)
+[lane-check 18:45:59] built _mojolearn_forest_host in 9s
+CLEAN: byte-lm-host-train: AGREE: compared infer 9, train 9 (cuda column vs CPU column cpu-amd-epyc-7k62-48-core-processor)
+[lane-check 18:46:11] sabotage applied: python/mojolearn/_byte_lm_host.py
+[lane-check 18:46:11] sabotage makes stale: no binding (Python only)
+SABOTAGED: byte-lm-host-train: DISAGREE: compared infer 9, train 9; differ: byte-lm-host-train/base train; byte-lm-host-train/denormal train; byte-lm-host-train/denormal_ftz train; byte-lm-host-train/denormal_ftz infer DIVERGENT; byte-lm-host-train/dupes train; byte-lm-host-train/hashed train (+6 more)
+[lane-check 18:46:23] sabotage reversed (git apply -R)
+RESTORED: byte-lm-host-train: AGREE: compared infer 9, train 9 (cuda column vs CPU column cpu-amd-epyc-7k62-48-core-processor)
+RESULT: PASS (AGREE, then DISAGREE under the sabotage, then AGREE after reversal, on byte-lm-host-train)

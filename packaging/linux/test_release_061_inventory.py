@@ -89,8 +89,13 @@ class ReleaseInventory(unittest.TestCase):
             # hdbscan and resample; 27 until ivf and embedding the same day.
             # 44 since classical FAST (2026-09-25): fifteen classical names
             # join the fast tier (43 while FAST svm was Apple only).
+            # Plus the expansion lanes' GPU bindings (lane/algos-prep,
+            # 2026-09-27), read from the manifest's fragments: a classical one
+            # is in fast and identical, a neural one in identical alone.
             per_arch = sum(len(packer.tier_names(mode, True)) for mode in packer.TIERS)
-            self.assertEqual(per_arch, 44)
+            expansion = (2 * len(packer.host_surface.expansion_gpu_bindings("classical"))
+                         + len(packer.host_surface.expansion_gpu_bindings("identical-only")))
+            self.assertEqual(per_arch, 44 + expansion)
             self.assertEqual(len(result['extensions']), per_arch * 3)
             self.assertTrue(result['optional_native']['_mojolearn_byte_lm']['included'])
             self.assertEqual(result['optional_native']['_mojolearn_byte_lm']['unsupported_modes'],

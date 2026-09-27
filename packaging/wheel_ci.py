@@ -104,6 +104,14 @@ def inventory(argv):
     # here, keyed by the importer, and only count when the importer itself is
     # reached; an unrelated copy left in the package still fails as an orphan.
     dynamic = {"_verify": ["_identity_trace_diff"], "_identity": ["_identity_break"]}
+    # THE EXPANSION LANES' FRAGMENTS (lane/algos-prep, 2026-09-27), also
+    # reached by path, never by an import: host_surface.py reads each lane's
+    # `_surface_<lane>.py`, and the harness copy each `_identity_lane_<lane>.py`
+    # (a build-time copy of tools/identity_lanes/<lane>.py). Declared by
+    # pattern under the importer that reads them, which is the same rule as
+    # above: they count only when that importer is reached.
+    dynamic["host_surface"] = [s for s in present if s.startswith("_surface_")]
+    dynamic["_identity_break"] = [s for s in present if s.startswith("_identity_lane_")]
     # A submodule the user documentation tells people to import by its own
     # path is public, not abandoned: the multi-GPU drivers are reached as
     # `from mojolearn.parallel_ensemble import fit_forest`

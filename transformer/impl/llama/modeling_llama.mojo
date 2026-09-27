@@ -317,7 +317,6 @@ from gemm.checks.gemm_oracle import OP_NN, OP_NT
 # add and one uncontractible multiply, not two.
 from mamba.impl.modeling.modeling_mamba import (
     batchinv_norm_chunk,
-    pinned_mul,
     residual_add_kernel,
 )
 
@@ -337,6 +336,7 @@ from transformer.impl.llama.fused_attention import (
 from core.device_scan import DeviceNonfiniteBatch
 
 from checks.numerics import (
+    identical_mul,
     ftz,
     identical_cos,
     identical_div,
@@ -1839,9 +1839,9 @@ def llama_rms_norm_kernel(
     # S3 and S4, both PRODUCT: `hidden * rstd` then `weight * hidden`, each
     # its own rounding, neither contractible into a neighboring add.
     for j in range(dm):
-        var inner = ftz(pinned_mul(ftz(x.unsafe_load(t * dm + j)), rstd))
+        var inner = ftz(identical_mul(ftz(x.unsafe_load(t * dm + j)), rstd))
         out_buf.unsafe_store(
-            t * dm + j, ftz(pinned_mul(ftz(weight.unsafe_load(j)), inner))
+            t * dm + j, ftz(identical_mul(ftz(weight.unsafe_load(j)), inner))
         )
 
 
@@ -1878,9 +1878,9 @@ def residual_rms_norm_kernel(
     var rstd = ftz(identical_rsqrt(ftz(mean + eps_in)))
     for j in range(dm):
         var i = t * dm + j
-        var inner = ftz(pinned_mul(ftz(residual.unsafe_load(i)), rstd))
+        var inner = ftz(identical_mul(ftz(residual.unsafe_load(i)), rstd))
         out_buf.unsafe_store(
-            i, ftz(pinned_mul(ftz(weight.unsafe_load(j)), inner))
+            i, ftz(identical_mul(ftz(weight.unsafe_load(j)), inner))
         )
 
 
@@ -1962,7 +1962,7 @@ def llama_norm_variant_kernel(
     DEVIATION 2936, `kind == NORM_LAYERNORM` (`nn.LayerNorm`): two SERIAL
     ASCENDING folds per row, mean first (plain adds from +0.0) then the sum
     of squared deviations (fma chain from +0.0), `rstd =
-    identical_rsqrt(var + eps)`, `y = pinned_mul(w, pinned_mul(dev, rstd))`
+    identical_rsqrt(var + eps)`, `y = identical_mul(w, identical_mul(dev, rstd))`
     and, with `has_bias`, one plain add of the bias. The recorded
     `norm*.sumsq` stage is the sum of squared DEVIATIONS.
 
@@ -1994,8 +1994,8 @@ def llama_norm_variant_kernel(
         var rstd = ftz(identical_rsqrt(ftz(variance + eps_in)))
         for j in range(dm):
             var dev = ftz(ftz(x.unsafe_load(t * dm + j)) - mean)
-            var inner = ftz(pinned_mul(dev, rstd))
-            var y = ftz(pinned_mul(ftz(weight.unsafe_load(j)), inner))
+            var inner = ftz(identical_mul(dev, rstd))
+            var y = ftz(identical_mul(ftz(weight.unsafe_load(j)), inner))
             if has_bias:
                 y = ftz(ftz(y) + ftz(bias.unsafe_load(j)))
             out_buf.unsafe_store(t * dm + j, y)
@@ -2008,11 +2008,11 @@ def llama_norm_variant_kernel(
     var mean = ftz(identical_div(acc, Float32(dm)))
     var rstd = ftz(identical_rsqrt(ftz(mean + eps_in)))
     for j in range(dm):
-        var inner = ftz(pinned_mul(ftz(x.unsafe_load(t * dm + j)), rstd))
+        var inner = ftz(identical_mul(ftz(x.unsafe_load(t * dm + j)), rstd))
         var wj = ftz(weight.unsafe_load(j))
         if kind == NORM_RMSNORM_OFFSET:
             wj = ftz(Float32(1.0) + wj)
-        out_buf.unsafe_store(t * dm + j, ftz(pinned_mul(wj, inner)))
+        out_buf.unsafe_store(t * dm + j, ftz(identical_mul(wj, inner)))
 
 
 def llama_norm(
@@ -2156,9 +2156,9 @@ def llama_rope_inv_freq_scaled_host(
             if (not (wl < high_wl)) and (not (wl > low_wl)):
                 var ratio = ftz(identical_div(old, wl))
                 var smooth = ftz(identical_div(ftz(ratio - lo_f), ftz(hi_f - lo_f)))
-                var t1 = ftz(pinned_mul(ftz(Float32(1.0) - smooth), inv_l))
+                var t1 = ftz(identical_mul(ftz(Float32(1.0) - smooth), inv_l))
                 t1 = ftz(identical_div(t1, factor))
-                var t2 = ftz(pinned_mul(smooth, inv_l))
+                var t2 = ftz(identical_mul(smooth, inv_l))
                 inv_l = ftz(ftz(t1) + ftz(t2))
             inv = inv_l
         out.append(inv)
@@ -2177,7 +2177,7 @@ def llama_refuse_rope_angle_domain(
     var worst = Float32(0.0)
     var worst_i = 0
     for i in range(len(inv_freq)):
-        var angle = ftz(pinned_mul(Float32(positions - 1), ftz(inv_freq[i])))
+        var angle = ftz(identical_mul(Float32(positions - 1), ftz(inv_freq[i])))
         if angle > worst:
             worst = angle
             worst_i = i
@@ -2205,7 +2205,7 @@ def llama_rope_table_kernel(
 ):
     """S7 and S8. One thread per `(position, frequency)` cell.
 
-    S7, PRODUCT: `pinned_mul(Float32(abs_pos), inv_freq[i])`. In the reference this
+    S7, PRODUCT: `identical_mul(Float32(abs_pos), inv_freq[i])`. In the reference this
     is a `k = 1` matmul in FP32 with autocast explicitly disabled
     (:118-122). At `k = 1` the gemm leaf is `ftz(fma(a, b, +0.0))`, which is
     bit-equal to this product because both operands are NON-NEGATIVE (the
@@ -2237,7 +2237,7 @@ def llama_rope_table_kernel(
     var pos = i // half
     var f = i - pos * half
     var angle = ftz(
-        pinned_mul(Float32(pos), ftz(inv_freq.unsafe_load(f)))
+        identical_mul(Float32(pos), ftz(inv_freq.unsafe_load(f)))
     )
     cos_tab.unsafe_store(i, ftz(identical_cos(angle)))
     sin_tab.unsafe_store(i, ftz(identical_sin(angle)))
@@ -2441,11 +2441,11 @@ def apply_rotary_pos_emb_kernel(
         else:
             rh = ftz(x.unsafe_load(i - half))
 
-    var a = ftz(pinned_mul(xj, cos_v))
+    var a = ftz(identical_mul(xj, cos_v))
     comptime if SAB_S10_ROPE_FUSED:
         out_buf.unsafe_store(i, ftz(identical_mul_add(rh, sin_v, a)))
     else:
-        var bterm = ftz(pinned_mul(rh, sin_v))
+        var bterm = ftz(identical_mul(rh, sin_v))
         out_buf.unsafe_store(i, ftz(ftz(a) + ftz(bterm)))
 
 
@@ -2725,7 +2725,7 @@ def gather_q_head_kernel(
     var v = q_rope.unsafe_load((bb * l + t) * nh * hd + h * hd + d)
     comptime if SAB_S12_SCALE_INTO_Q:
         # SABOTAGE: one rounding per q element rather than one per score.
-        v = ftz(pinned_mul(ftz(v), scale_in))
+        v = ftz(identical_mul(ftz(v), scale_in))
     qbh.unsafe_store(i, v)
 
 
@@ -2835,7 +2835,7 @@ def attn_scale_kernel(
     scale_in: Float32,
 ):
     """S12, PRODUCT: `* scaling` applied to the FINISHED dot (:204 scales
-    the matmul's output). `pinned_mul(score, scale)`, one rounding per
+    the matmul's output). `identical_mul(score, scale)`, one rounding per
     score.
 
     `scale` is `identical_rsqrt(Float32(head_dim))` computed ONCE on the
@@ -2854,7 +2854,7 @@ def attn_scale_kernel(
         # SABOTAGE: the scale already went into q, so this seam is skipped
         # entirely and the GEMM's own output stands.
         return
-    scores.unsafe_store(i, ftz(pinned_mul(ftz(scores.unsafe_load(i)), scale_in)))
+    scores.unsafe_store(i, ftz(identical_mul(ftz(scores.unsafe_load(i)), scale_in)))
 
 
 def attn_mask_kernel(
@@ -3146,7 +3146,7 @@ def attn_weights_kernel(
     var dv = ftz(denom.unsafe_load(r))
     comptime if SAB_S18_RECIPROCAL_MUL:
         var recip = ftz(identical_div(Float32(1.0), dv))
-        weights.unsafe_store(i, ftz(pinned_mul(e, recip)))
+        weights.unsafe_store(i, ftz(identical_mul(e, recip)))
     else:
         weights.unsafe_store(i, ftz(identical_div(e, dv)))
 
@@ -3250,7 +3250,7 @@ def silu_kernel(
                 Float32(1.0), ftz(Float32(1.0) + ftz(identical_exp(-z)))
             )
         )
-        silu_out.unsafe_store(i, ftz(pinned_mul(z, sg)))
+        silu_out.unsafe_store(i, ftz(identical_mul(z, sg)))
     else:
         silu_out.unsafe_store(i, ftz(identical_silu(z)))
 
@@ -3270,7 +3270,7 @@ def mlp_gated_kernel(
     gated.unsafe_store(
         i,
         ftz(
-            pinned_mul(ftz(silu_out.unsafe_load(i)), ftz(up.unsafe_load(i)))
+            identical_mul(ftz(silu_out.unsafe_load(i)), ftz(up.unsafe_load(i)))
         ),
     )
 
@@ -3321,7 +3321,7 @@ def attn_softcap_kernel(
     var cap = ftz(cap_in)
     var s = ftz(scores.unsafe_load(i))
     var th = ftz(identical_tanh(ftz(identical_div(s, cap))))
-    scores.unsafe_store(i, ftz(pinned_mul(th, cap)))
+    scores.unsafe_store(i, ftz(identical_mul(th, cap)))
 
 
 def gelu_kernel(

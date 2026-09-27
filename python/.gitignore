@@ -49,6 +49,7 @@ mojolearn/_mojolearn_transformer.so
 # python/mojolearn/host_surface.py names under bench/results/identity_break/.
 mojolearn/_identity_trace_diff.py
 mojolearn/_identity_break.py
+mojolearn/_identity_lane_*.py
 mojolearn/identity_columns/
 mojolearn/identical/
 mojolearn/.dylibs/
@@ -73,3 +74,6 @@ mojolearn/_mojolearn_hdbscan.so
 mojolearn/_mojolearn_resample.so
 mojolearn/_mojolearn_ivf.so
 mojolearn/_mojolearn_embedding.so
+# The algorithm expansion's GPU bindings (lane/algos-prep, 2026-09-27): one per
+# lane, named `_mojolearn_x_<lane>` by host_surface.expansion_gpu_binding.
+mojolearn/_mojolearn_x_*.so

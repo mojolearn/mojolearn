@@ -225,6 +225,15 @@ check-bootstrap = "mojo run -I . checks/bootstrap_check.mojo"
 check-copy-histograms = "mojo run -I . checks/copy_histograms_check.mojo"
 check-early-stop = "mojo run -I . checks/early_stop_check.mojo"
 check-gram-splitk = "mojo run -I . checks/gram_splitk_check.mojo"
+# The fixture-RNG gate (lane consolidate, 2026-09-27): the census fails on a
+# NEW copy of a fixture-RNG function (tools/fixture_rng_census.py, with its
+# own planted-copy self test), then every existing copy must equal its
+# canonical counterpart in checks/fixture_rng.mojo bit for bit, after a
+# planted one-constant variant has been shown to fail. Runs in the CPU gate.
+check-fixture-rng = "python3 tools/fixture_rng_census.py --self-test && python3 tools/fixture_rng_census.py && mojo run -I . checks/fixture_rng_gate.mojo"
+# The same gate with the planted variant standing in for splitmix64: MUST fail.
+check-fixture-rng-planted = "mojo run -D FIXTURE_RNG_PLANT=1 -I . checks/fixture_rng_gate.mojo"
+check-scaffold = "mojo run -I . checks/scaffold_check.mojo"
 check-hardware-matrix = "mojo run -I . checks/hardware_matrix_check.mojo"
 check-sub-byte-layout = "tools/with_build_lock.sh pixi run mojo run -I . gbdt/methods/greedy_subsets_searcher/kernel/sub_byte_layout_gate.mojo"
 check-min-child-hessian = "sh tools/check_min_child_hessian.sh"
@@ -833,9 +842,10 @@ check-portable-gelu = "mojo run -I . checks/portable_gelu_check.mojo"
 # the point, because the consumer is a REDUCTION: one planted row folded left
 # to right, right to left and as a balanced tree must give ONE answer, and a
 # pairwise check structurally cannot see the row-13 defect. Also pins
-# identical_mul's signed zeros against all three pinned_mul copies in mamba/.
-# NOTE: this gate imports extratrees and mamba to catch copy drift, so it
-# compiles more than checks/.
+# identical_mul's signed zeros and its bits against pinned_mul_f32 (the
+# fifteen pinned_mul copies are gone, DEVIATION 5904).
+# NOTE: this gate imports extratrees to catch copy drift, so it compiles more
+# than checks/.
 check-portable-fmax = "mojo run -I . checks/portable_fmax_check.mojo"
 
 # E2U: the unsupervised sub-feature matrix through the Python surface
@@ -1076,6 +1086,7 @@ check-gemm-lowbit-force-flat = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -D MOJ
 # currently built for. For the loop while working on one of them; the gate
 # above is what a session should finish on.
 check-kmeans-identity = "mojo run -I . cluster/checks/kmeans_identity_check.mojo"
+check-kmeans-incr-init = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . cluster/checks/kmeans_incr_init_check.mojo"
 check-knn-identity = "mojo run -I . neighbors/checks/knn_identity_check.mojo"
 check-knn-apple-mma = "mojo run -D MOJOLEARN_NUMERIC_IDENTICAL=1 -I . neighbors/checks/apple_mma_distance_probe.mojo"
 check-dbscan-identity = "mojo run -I . dbscan/checks/dbscan_identity_check.mojo"

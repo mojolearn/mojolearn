@@ -154,7 +154,19 @@ class GaussianMixture(NumericModeMixin):
 
     def fit(self, X, y=None):
         """EM until `abs(lower_bound - prev) < tol` or `max_iter`, one shot
-        on the device (`gaussian_mixture_fit`). Returns `self`."""
+        on the device (`gaussian_mixture_fit`). Returns `self`.
+
+        OPTION PARITY (2026-09-27, lane/algos-cluster): a fit with any option
+        this binding does not carry -- covariance_type 'tied'/'diag'/
+        'spherical', init_params 'k-means++'/'random_from_data', n_init > 1,
+        warm_start, weights_init, means_init, precisions_init -- runs the same
+        EM on the cluster lane's mixture driver (`x_cluster/bgmm.mojo`, plain
+        mode; `_expansion_cluster._gmm_ext_fit`). The default fit is untouched
+        and keeps its recorded bits."""
+        from ._expansion_cluster import _gmm_needs_ext, _gmm_ext_fit
+        if _gmm_needs_ext(self):
+            return _gmm_ext_fit(self, X)
+        self._ext = None
         self._refuse_knobs()
         x, _ = as_f32_c(X, ndim=2, name="X")
         n, d = x.shape
@@ -223,6 +235,9 @@ class GaussianMixture(NumericModeMixin):
 
     def score_samples(self, X):
         """One log likelihood per row, float32 `(n,)`."""
+        if getattr(self, "_ext", None) is not None:
+            from ._expansion_cluster import _gmm_ext_score
+            return _gmm_ext_score(self, X)[1]
         x, _ = as_f32_c(X, ndim=2, name="X")
         out = empty((x.shape[0],), "<f4")
         keep, addrs, params, n, k = self._model_lists(x, out, "score_samples")
@@ -231,6 +246,9 @@ class GaussianMixture(NumericModeMixin):
 
     def predict_proba(self, X):
         """`exp(log_resp)`, float32 `(n, n_components)`."""
+        if getattr(self, "_ext", None) is not None:
+            from ._expansion_cluster import _gmm_ext_score
+            return _gmm_ext_score(self, X)[2]
         x, _ = as_f32_c(X, ndim=2, name="X")
         k = self.weights_.shape[0] if hasattr(self, "weights_") else 0
         out = empty((x.shape[0] * k,), "<f4")
@@ -241,6 +259,9 @@ class GaussianMixture(NumericModeMixin):
     def predict(self, X):
         """Argmax of the weighted log probabilities, int32 `(n,)`; ties to
         the lowest component index."""
+        if getattr(self, "_ext", None) is not None:
+            from ._expansion_cluster import _gmm_ext_score
+            return _gmm_ext_score(self, X)[3]
         x, _ = as_f32_c(X, ndim=2, name="X")
         out = empty((x.shape[0],), "<i4")
         keep, addrs, params, n, k = self._model_lists(x, out, "predict")
@@ -258,6 +279,10 @@ class GaussianMixture(NumericModeMixin):
         `mojolearn.host_model(path)` scores it on a CPU with no GPU."""
         if not hasattr(self, "weights_"):
             raise RuntimeError("this estimator is not fitted yet")
+        if getattr(self, "_ext", None) is not None:
+            raise NotImplementedError("mojolearn GaussianMixture: save() carries the default fit's model "
+                                      "format only; a fit with the options routed to x_cluster is not saved "
+                                      "(x_cluster/NOT_IMPLEMENTED.tsv)")
         from .linear_model import _saved_mode
         k, d = self.means_.shape
         return _serialize.write_npz(path, {
@@ -314,6 +339,9 @@ class GaussianMixture(NumericModeMixin):
         return obj
 
     def _score_bic_aic(self, X):
+        if getattr(self, "_ext", None) is not None:
+            from ._expansion_cluster import _gmm_ext_bic_aic
+            return _gmm_ext_bic_aic(self, X)
         x, _ = as_f32_c(X, ndim=2, name="X")
         out = empty((3,), "<f8")
         keep, addrs, params, n, k = self._model_lists(x, out, "score")
@@ -345,6 +373,9 @@ class GaussianMixture(NumericModeMixin):
         and `y` is `predict`'s int32, where scikit-learn returns float64
         and int64. `n_samples < 1` is refused by name in Mojo.
         """
+        if getattr(self, "_ext", None) is not None:
+            raise NotImplementedError("mojolearn GaussianMixture: sample() is the default fit's; a fit with "
+                                      "the options routed to x_cluster does not sample (x_cluster/NOT_IMPLEMENTED.tsv)")
         if not hasattr(self, "weights_"):
             raise ValueError("mojolearn GaussianMixture: call fit before sample")
         if isinstance(n_samples, bool) or not isinstance(n_samples, int):

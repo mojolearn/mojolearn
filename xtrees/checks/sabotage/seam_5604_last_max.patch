@@ -1,0 +1,11 @@
+--- a/xtrees/ops.mojo
++++ b/xtrees/ops.mojo
+@@ -202,7 +202,7 @@
+         var best = 0
+         # DEVIATION 5604: strict >, so a tie keeps the lower index.
+         for c in range(1, k):
+-            if x[unsafe_offset=i * k + c] > x[unsafe_offset=i * k + best]:
++            if x[unsafe_offset=i * k + c] >= x[unsafe_offset=i * k + best]:  # SABOTAGE 5604
+                 best = c
+         res[unsafe_offset=i] = Int32(best)
+ 

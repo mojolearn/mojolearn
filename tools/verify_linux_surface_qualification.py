@@ -54,6 +54,17 @@ def wheel_host_members():
     return tuple('mojolearn/host/' + name + '.so' for name in wheel_host_bindings())
 
 
+def expansion_gpu_bindings(tier):
+    """The expansion lanes' GPU bindings for `tier` ('all', 'classical',
+    'identical-only'), read from the manifest's per-lane fragments by path
+    (lane/algos-prep, 2026-09-27); empty until a lane declares one."""
+    spec = importlib.util.spec_from_file_location('mojolearn_host_surface_admission', _HOST_SURFACE)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return tuple(module.expansion_gpu_bindings(tier))
+
+
+
 # THE LINUX GPU PLUGIN PACKAGES (2026-09-25): mojolearn-nvidia carries
 # mojolearn/cuda/..., mojolearn-amd carries mojolearn/hip/..., the core
 # carries neither. The one table is python/mojolearn/gpu_plugins.py, read BY
@@ -180,6 +191,11 @@ CLASSICAL_FAST = frozenset({'_mojolearn' + suffix for suffix in (
     '', '_estimators', '_svm', '_solver', '_metrics', '_preprocessing', '_tsa',
     '_linalg', '_arima', '_gp', '_kernel_methods', '_mixture', '_hdbscan',
     '_resample', '_ivf')})
+# The expansion lanes' GPU bindings, appended and never spelled here:
+# packaging/check_ext_lists.py holds the literal sets above to _backend's
+# literals and this reader to the manifest (lane/algos-prep, 2026-09-27).
+BINDINGS = BINDINGS | set(expansion_gpu_bindings('all'))
+CLASSICAL_FAST = CLASSICAL_FAST | frozenset(expansion_gpu_bindings('classical'))
 
 
 def expected_bindings(mode, byte_lm=False):

@@ -93,6 +93,12 @@ def test_registry_count_comes_from_the_import():
 
     harness = os.path.join(lane_select.ROOT, lane_select.HARNESS)
     text = open(harness, encoding="utf-8").read()
+    # The expansion lanes' fragments (tools/identity_lanes/, lane/algos-prep)
+    # are the harness's own lanes, executed in its namespace.
+    fragments = os.path.join(lane_select.ROOT, lane_select.IDENTITY_FRAGMENTS)
+    for name in sorted(os.listdir(fragments)) if os.path.isdir(fragments) else ():
+        if name.endswith(".py") and not name.startswith("_"):
+            text += "\n" + open(os.path.join(fragments, name), encoding="utf-8").read()
     by_decorator = set(re.findall(r'@lane\(\s*"([A-Za-z0-9_.\-]+)"', text))
     assert by_decorator, "the decorator regex matched nothing: it, not the registry, is broken"
 
@@ -1501,12 +1507,33 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
                                      the 26 more are lanes whose own doors
                                      call `kmeans_fit` (gmm, ivf, hdbscan,
                                      spectral and their par- twins: k-means
-                                     is their initialization or quantizer)"""
+                                     is their initialization or quantizer)
+
+    REMEASURED 2026-09-27 (lane/algos-cluster):
+      kmeans_oracle        47 -> 63  fifteen x-cluster-* lanes (the cluster
+                                     expansion's host binding runs this
+                                     library's KMeans for BisectingKMeans and
+                                     the mixture starts, so it imports the
+                                     oracle) and x-decomp-spectral-rbf (the
+                                     decomp lane's spectral door); no old lane
+                                     moved
+
+    REMEASURED 2026-09-27 (lane/algos-trees, the trees expansion lanes):
+      forest_host_predict  60 -> 80  the twenty trees-* lanes (DecisionTree,
+                                     Bagging, AdaBoost, DART, RandomTrees-
+                                     Embedding, Voting, Stacking, MultiOutput,
+                                     OneVsRest, CalibratedClassifierCV, the
+                                     three SHAP explainers, trees-rf-weighted):
+                                     every one fits or predicts through the
+                                     RF/ET classes, whose predict routes to
+                                     this file; no old lane moved
+      forest_inference     26 -> 46  the same twenty lanes, through the rf
+                                     binding that imports it"""
     rev = lane_select.reverse_map()
-    for rel, want in (("cluster/host/kmeans_oracle.mojo", 47),
+    for rel, want in (("cluster/host/kmeans_oracle.mojo", 63),
                       ("core/gbdt_host_predict.mojo", 49),
-                      ("core/forest_host_predict.mojo", 60),
-                      ("core/forest_inference.mojo", 26),
+                      ("core/forest_host_predict.mojo", 80),
+                      ("core/forest_inference.mojo", 46),
                       ("python/mojolearn/neural_inference.py", 41)):
         got = len(rev.get(rel, set()))
         assert got == want, f"{rel} answers {got} lanes, not {want}"
@@ -1719,3 +1746,32 @@ def test_a_name_on_a_foreign_object_does_not_seed_a_package_file():
     names = lane_select._seed_names(ib.LANES["gbdt-binary-columns"], vars(ib))
     assert "digest" not in names
     assert "digest" in lane_select._code_names(ib.LANES["gbdt-binary-columns"], vars(ib))
+
+
+def test_the_pinned_product_has_one_definition():
+    """lane/dedupe-pinned-mul (DEVIATION 5904): `identical_mul` is defined ONCE,
+    in checks/numerics.mojo, and no `pinned_mul` exists anywhere. Fifteen
+    copies once stood beside it (nine by hand, six generated into
+    mamba/host/gen/), of which three were compared with anything; a copy that
+    drifted would have sent a card diff hunting through fifteen files. Every
+    tracked Mojo file is read, generated ones included."""
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    files = subprocess.check_output(
+        ["git", "ls-files", "*.mojo", "*.🔥"], cwd=repo, text=True).split()
+    pat = re.compile(r"^\s*(?:@\w+\s+)*(?:def|fn)\s+(pinned_mul|identical_mul)\s*[\[(]",
+                     re.M)
+    found = {}
+    for rel in files:
+        try:
+            with open(os.path.join(repo, rel), encoding="utf-8", errors="replace") as fh:
+                text = fh.read()
+        except FileNotFoundError:
+            continue
+        for m in pat.finditer(text):
+            found.setdefault(m.group(1), []).append(rel)
+    assert "pinned_mul" not in found, (
+        "a `pinned_mul` definition came back; call checks.numerics.identical_mul: "
+        + ", ".join(found["pinned_mul"]))
+    assert found.get("identical_mul") == ["checks/numerics.mojo"], (
+        "identical_mul must be defined once, in checks/numerics.mojo: "
+        + repr(found.get("identical_mul")))
