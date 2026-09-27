@@ -90,7 +90,6 @@ from std.memory import memcpy
 from std.sys.compile import is_defined
 
 from max.algorithm import sync_parallelize
-from core.host_parallel import host_parallelize
 from max.gpu.host import DeviceBuffer, DeviceContext, HostBuffer
 
 from checks.numerics import (
@@ -508,7 +507,7 @@ struct ResidentGbdtModel(Movable):
             if tasks == 1:
                 _rows_task(0)
             else:
-                host_parallelize(_rows_task, tasks)
+                sync_parallelize(_rows_task, tasks)
             var first = -1
             for c in range(tasks):
                 if bad[c] >= 0 and (first < 0 or bad[c] < first):
@@ -551,7 +550,7 @@ struct ResidentGbdtModel(Movable):
             for j in range(n_active):
                 _col_task(j)
         else:
-            host_parallelize(_col_task, n_active)
+            sync_parallelize(_col_task, n_active)
         var first = -1
         for j in range(n_active):
             if bad[j] >= 0 and (first < 0 or bad[j] < first):
@@ -790,7 +789,7 @@ struct ResidentGbdtModel(Movable):
             if tasks == 1:
                 _classes_task(0)
             else:
-                host_parallelize(_classes_task, tasks)
+                sync_parallelize(_classes_task, tasks)
             return 1
         if mode == RESIDENT_RAW:
             if dim == 1:
@@ -836,7 +835,7 @@ struct ResidentGbdtModel(Movable):
             if tasks == 1:
                 _pair_task(0)
             else:
-                host_parallelize(_pair_task, tasks)
+                sync_parallelize(_pair_task, tasks)
             return 2
         if dim < 2:
             raise Error(
@@ -897,7 +896,7 @@ struct ResidentGbdtModel(Movable):
         if tasks == 1:
             _rows_task(0)
         else:
-            host_parallelize(_rows_task, tasks)
+            sync_parallelize(_rows_task, tasks)
         if softmax:
             return dim + 1
         return dim
