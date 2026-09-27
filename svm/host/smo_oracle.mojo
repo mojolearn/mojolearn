@@ -59,7 +59,7 @@ opening either implementation.
 """
 
 from std.builtin.sort import sort
-from std.math import exp, fma, inf, isnan
+from std.math import exp, fma, inf, isnan, tanh
 from std.memory import bitcast
 from std.sys.compile import is_defined
 
