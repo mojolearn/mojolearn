@@ -219,3 +219,28 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("transform", sl=slice(0, 128)), "x-decomp-manifold")
+
+
+@lane("x-decomp-robust-cov")
+def _(ml, X, yc, yr, Xh=None):
+    S = np.ascontiguousarray(X[:400, :6])
+    m = ml.MinCovDet(random_state=0).fit(S)
+    e = ml.EllipticEnvelope(contamination=0.05, random_state=1, support_fraction=0.7).fit(S)
+    return _fit(dict(loc=_h(m.location_), cov=_h(m.covariance_), rloc=_h(m.raw_location_), rcov=_h(m.raw_covariance_),
+                     sup=_h(np.asarray(m.support_, dtype=np.int8)), dist=_h(m.dist_), maha=_h(m.mahalanobis(S[:128])),
+                     eoff=_h(np.float64(e.offset_)), edec=_h(e.decision_function(S[:128])), epred=_h(e.predict(S[:128]))),
+                e, lambda est: (est.decision_function(np.ascontiguousarray(Xh[:256, :6])),
+                                est.predict(np.ascontiguousarray(Xh[:256, :6]))))
+
+
+_batch_decl(_rows_calls("decision_function", "predict", sl=np.s_[:256, :6]), "x-decomp-robust-cov")
+
+
+@lane("x-decomp-als")
+def _(ml, X, yc, yr, Xh=None):
+    # implicit feedback: positive entries of the first 300 rows, 16 items
+    R = np.maximum(X[:300], np.float32(0)).astype(np.float32)
+    m = ml.AlternatingLeastSquares(factors=6, regularization=0.05, alpha=2.0, iterations=4, random_state=0).fit(R)
+    ids, sc = m.recommend(3, R, N=5)
+    sid, ssc = m.similar_items(2, N=4)
+    return _fit(dict(U=_h(m.user_factors), V=_h(m.item_factors), rid=_h(ids), rsc=_h(sc), sid=_h(sid), ssc=_h(ssc)))

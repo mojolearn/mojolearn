@@ -84,7 +84,7 @@ def ridge_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw:
                 err = fmad(loo, loo, err)
             err = fd(err, i2f(n))
             st(res, t_n * d + t_n + 2 + a, err)
-            if a == 0 or err < best_err:
+            if a == 0 or err < best_err:  # DEVIATION 5005: the first minimum
                 best = a
                 best_err = err
     var alpha = ld(fp, best)

@@ -81,6 +81,11 @@ comptime OP_SEG_SUMSQ = 39
 comptime OP_LAMB_UPD = 40
 comptime OP_LAMB_RATIO = 41
 comptime OP_LAMB_APPLY = 42
+comptime OP_LN_FWD = 43
+comptime OP_LN_BWD_X = 44
+comptime OP_LN_BWD_W = 45
+comptime OP_THETA = 46
+comptime OP_CROSTON = 47
 
 # ------------------------------------------------------------------ cells
 comptime CELL_RNN_TANH = 0

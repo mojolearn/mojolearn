@@ -11,7 +11,7 @@ from std.python.bindings import PythonModuleBuilder
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from checks.vendor import COMPILED_VENDOR
 from sequence.exec_device import DeviceExec
-from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py
+from sequence.pyapi import opt_step_py, rnn_fit_py, rnn_n_params_py, rnn_predict_py, stl_py, var_fit_py, var_forecast_py, mlp_fit_py, mlp_predict_py, adafactor_step_py, lamb_step_py, layer_norm_py, theta_py, croston_py
 
 
 def numeric_mode_binding() raises -> PythonObject:
@@ -76,6 +76,21 @@ def lamb_step_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) r
     return lamb_step_py(ex, addrs, ip, fp)
 
 
+def layer_norm_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
+    var ex = DeviceExec()
+    return layer_norm_py(ex, addrs, ip, fp)
+
+
+def theta_binding(addrs: PythonObject, ip: PythonObject, fp: PythonObject) raises -> PythonObject:
+    var ex = DeviceExec()
+    return theta_py(ex, addrs, ip, fp)
+
+
+def croston_binding(addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
+    var ex = DeviceExec()
+    return croston_py(ex, addrs, ip)
+
+
 @export
 def PyInit__mojolearn_x_sequence() abi("C") -> PythonObject:
     try:
@@ -93,6 +108,9 @@ def PyInit__mojolearn_x_sequence() abi("C") -> PythonObject:
         m.def_function[mlp_predict_binding]("mlp_predict")
         m.def_function[adafactor_step_binding]("adafactor_step")
         m.def_function[lamb_step_binding]("lamb_step")
+        m.def_function[layer_norm_binding]("layer_norm")
+        m.def_function[theta_binding]("theta")
+        m.def_function[croston_binding]("croston")
         return m.finalize()
     except e:
         abort(String("failed to create _mojolearn_x_sequence: ", e))

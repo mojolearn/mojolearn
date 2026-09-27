@@ -19,8 +19,15 @@ from ._x_sequence_mlp import MLPClassifier, MLPRegressor
 from ._x_sequence_optim import LAMB, Adafactor, Adagrad, Adamax, Lion, NAdam, RMSprop
 from ._x_sequence_stl import STL
 from ._x_sequence_var import VAR
+from ._x_sequence_norm import LayerNorm, layer_norm_backward, layer_norm_forward
+from ._x_sequence_croston import CrostonClassic, CrostonOptimized, CrostonSBA
+from ._x_sequence_theta import AutoTheta, DynamicOptimizedTheta, DynamicTheta, OptimizedTheta, Theta
+from ._x_sequence_sched import ExponentialLR, OneCycleLR, StepLR
 from ._x_sequence_rnn import (GRUClassifier, GRURegressor, LSTMClassifier, LSTMRegressor, RNNClassifier,
                               RNNRegressor)
 
 __all__ = ["LSTMRegressor", "LSTMClassifier", "GRURegressor", "GRUClassifier", "RMSprop", "Adagrad", "AutoARIMA", "STL", "VAR", "MLPClassifier", "MLPRegressor",
-           "RNNRegressor", "RNNClassifier", "Lion", "Adafactor", "LAMB", "Adamax", "NAdam"]
+           "RNNRegressor", "RNNClassifier", "Lion", "Adafactor", "LAMB", "Adamax", "NAdam",
+           "StepLR", "ExponentialLR", "OneCycleLR", "LayerNorm", "layer_norm_forward",
+           "layer_norm_backward", "Theta", "OptimizedTheta", "DynamicTheta", "DynamicOptimizedTheta",
+           "AutoTheta", "CrostonClassic", "CrostonOptimized", "CrostonSBA"]

@@ -1,0 +1,12 @@
+--- a/x_cnn/ops.mojo	2026-09-27 12:16:05
++++ b/x_cnn/ops.mojo	2026-09-27 12:16:05
+@@ -486,7 +486,8 @@
+         d = ftz(d + ftz(identical_mul(wd, wi)))
+     var vi = d
+     if mom != Float32(0):
+-        vi = ftz(ftz(identical_mul(mom, ftz(v.unsafe_load(i)))) + d)
++        from std.math import fma
++        vi = ftz(fma(mom, ftz(v.unsafe_load(i)), d))
+         v.unsafe_store(i, canon(vi))
+     w.unsafe_store(i, canon(ftz(wi - ftz(identical_mul(lr, vi)))))
+ 

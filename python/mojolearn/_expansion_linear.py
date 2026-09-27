@@ -92,6 +92,22 @@ def _decision(est, X, coef_rows, intercepts, link=LINK_IDENTITY):
     return out
 
 
+def _with_weights(yv, sample_weight, n):
+    """(targets | weights, 1) with a sample_weight, (targets, 0) without:
+    the kernels take the weights as the second half of y. Weights must be
+    finite and non-negative with a positive sum (scikit-learn's
+    _check_sample_weight)."""
+    if sample_weight is None:
+        return yv, 0
+    if isinstance(sample_weight, (int, float)):
+        w = [float(sample_weight)] * n
+    else:
+        w = _vector(sample_weight, n, "sample_weight").tolist()
+    if any(not (v >= 0) for v in w) or not sum(w) > 0:
+        raise ValueError("mojolearn: sample_weight must be non-negative with a positive sum")
+    return Array.from_list(yv.tolist() + w, "<f4"), 1
+
+
 def _rows(values, k, d):
     return [values[c * d:(c + 1) * d] for c in range(k)]
 
@@ -315,7 +331,7 @@ class _GLMBase(_LinearRegressorMixin, NumericModeMixin):
     def _link_code(self):
         return 1
 
-    def fit(self, X, y):
+    def fit(self, X, y, sample_weight=None):
         if self.solver not in ("lbfgs", "newton-cholesky"):
             raise ValueError(f"mojolearn {type(self).__name__}: solver must be 'lbfgs' or 'newton-cholesky'")
         if self.warm_start:
@@ -327,7 +343,8 @@ class _GLMBase(_LinearRegressorMixin, NumericModeMixin):
         self._check_y(yv.tolist())
         link = self._link_code()
         m = d + 1
-        vals = _run(self, ALGO_GLM, a, n, d, yv, [self.max_iter, int(bool(self.fit_intercept)), link],
+        yv, has_sw = _with_weights(yv, sample_weight, n)
+        vals = _run(self, ALGO_GLM, a, n, d, yv, [self.max_iter, int(bool(self.fit_intercept)), link, has_sw],
                     [self._power_value(), self.alpha, self.tol], d + 3, n + m * m + 3 * m, 1)
         self.coef_ = Array.from_list(vals[:d], "<f4")
         self.intercept_ = float(vals[d])
