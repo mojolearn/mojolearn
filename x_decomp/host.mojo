@@ -10,6 +10,7 @@ from x_decomp.cells import (
     F32Ptr,
     I32Ptr,
     bidx,
+    cd_row,
     chol_serial,
     colsum_cell,
     ew_cell,
@@ -87,6 +88,11 @@ struct HostExec(Exec):
             w.unsafe_store(i, got.w[i])
         for i in range(n * n):
             v.unsafe_store(i, got.v[i])
+
+    @staticmethod
+    def cd_rows(w: F32Ptr, hht: F32Ptr, xht: F32Ptr, perm: I32Ptr, viol: F32Ptr, n: Int, k: Int) raises:
+        for i in range(n):
+            viol.unsafe_store(i, cd_row(w, hht, xht, perm, i, k))
 
     @staticmethod
     def vendor() -> String:

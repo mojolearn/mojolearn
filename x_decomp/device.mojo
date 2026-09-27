@@ -12,6 +12,7 @@ from x_decomp.cells import (
     F32Ptr,
     I32Ptr,
     bidx,
+    cd_row,
     chol_serial,
     colsum_cell,
     ew_cell,
@@ -87,6 +88,12 @@ def lu_solve_kernel(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int32, nrhs: Int32):
 def chol_kernel(a: F32Ptr, info: F32Ptr, n: Int32):
     if block_idx.x == 0 and thread_idx.x == 0:
         chol_serial(a, Int(n), info)
+
+
+def cd_rows_kernel(w: F32Ptr, hht: F32Ptr, xht: F32Ptr, perm: I32Ptr, viol: F32Ptr, n: Int32, k: Int32):
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n):
+        viol.unsafe_store(i, cd_row(w, hht, xht, perm, i, Int(k)))
 
 
 def _blocks(count: Int) -> Int:
@@ -281,6 +288,29 @@ struct DevExec(Exec):
             w.unsafe_store(i, got.w[i])
         for i in range(n * n):
             v.unsafe_store(i, got.v[i])
+
+    @staticmethod
+    def cd_rows(w: F32Ptr, hht: F32Ptr, xht: F32Ptr, perm: I32Ptr, viol: F32Ptr, n: Int, k: Int) raises:
+        var ctx = DeviceContext()
+        var dw = _up(ctx, w, n * k)
+        var dh = _up(ctx, hht, k * k)
+        var dx = _up(ctx, xht, n * k)
+        var dp = _up_i(ctx, perm, k)
+        var dv = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
+        ctx.enqueue_function[cd_rows_kernel](
+            dw.unsafe_ptr(), dh.unsafe_ptr(), dx.unsafe_ptr(), dp.unsafe_ptr(), dv.unsafe_ptr(), Int32(n), Int32(k),
+            grid_dim=_blocks(n), block_dim=TPB,
+        )
+        _down(ctx, dw, w, n * k)
+        _down(ctx, dv, viol, n)
+        ctx.synchronize()
+        _ = dw^
+        _ = dh^
+        _ = dx^
+        _ = dp^
+        _ = dv^
+        ctx.synchronize()
+        _ = ctx^
 
     @staticmethod
     def vendor() -> String:

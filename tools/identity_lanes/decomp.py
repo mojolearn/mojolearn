@@ -54,3 +54,19 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-decomp-grp", "x-decomp-srp")
+
+
+
+@lane("x-decomp-nmf")
+def _(ml, X, yc, yr, Xh=None):
+    A = np.abs(X[:2000])
+    m = ml.NMF(n_components=5, max_iter=40, tol=1e-6)
+    W = m.fit_transform(A)
+    u = ml.NMF(n_components=4, solver="mu", init="random", random_state=3, max_iter=40, tol=1e-6,
+               alpha_W=0.01, l1_ratio=0.5)
+    Wu = u.fit_transform(A)
+    a = ml.NMF(n_components=3, init="nndsvdar", random_state=1, max_iter=20).fit(A[:500])
+    return _fit(dict(W=_h(W), H=_h(m.components_), err=_h(np.float32(m.reconstruction_err_)),
+                     it=_h(np.int32(m.n_iter_)), T=_h(m.transform(A[:128])), Wu=_h(Wu), Hu=_h(u.components_),
+                     Tu=_h(u.transform(A[:128])), Ha=_h(a.components_)),
+                m, lambda e: (e.transform(np.abs(Xh[:128])),))
