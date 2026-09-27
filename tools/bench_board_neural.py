@@ -191,7 +191,7 @@ CPU_SETTINGS = ("eager-fp32", "compile-fp32", "eager-bf16", "compile-bf16")
 NO_COMPILE = ("mamba1-forward", "mamba1-infer")
 VENDORS = ("apple", "nvidia", "amd")
 
-ARMS = ("ours",) + tuple("torch-" + s for s in TORCH_SETTINGS) \
+ARMS = ("ours", "ours-cpu") + tuple("torch-" + s for s in TORCH_SETTINGS) \
     + tuple("torch-cpu-" + s for s in CPU_SETTINGS)
 
 #: What is left off the plan per vendor, named (the board prints it).
@@ -643,6 +643,8 @@ def _ours_info(ml, module_path, mode_used, device="gpu"):
         info["vendor_used"] = "unavailable (%r)" % (exc,)
     if mode_used != "identical":
         raise RuntimeError("ours is not IDENTICAL: read back %r" % (mode_used,))
+    # an ours-cpu worker: the wheel must have loaded its CPU set (refuses by name)
+    info.update(_load("bench_board_probe").ours_cpu_check(ml))
     return info
 
 
@@ -1199,7 +1201,7 @@ def _load_speed_torch_seq(torch, info):
 
 
 def build_runner(lane, arm, shape, data):
-    if arm == "ours":
+    if arm in ("ours", "ours-cpu"):
         return OURS[MODEL_OF[lane]](lane, shape, data)
     return TorchArm(lane, shape, data, arm)
 
@@ -1225,6 +1227,8 @@ def worker(args):
         say({"event": "error", "stage": "ready", "error": repr(exc)[:2000]})
         return 1
     say({"event": "ready", "info": runner.info, "pid": os.getpid()})
+    # peak memory per round, reset and read OUTSIDE the clock
+    mem = _load("bench_board_probe").MemProbe((runner.info or {}).get("device", "gpu"))
     for line in sys.stdin:
         parts = line.split()
         if not parts:
@@ -1232,10 +1236,12 @@ def worker(args):
         if parts[0] == "round":
             r = int(parts[1])
             try:
+                mem.start()
                 t0 = time.perf_counter()
                 runner.call()
                 runner.sync()
                 ms = (time.perf_counter() - t0) * 1000.0
+                m = mem.stop()
                 digest = runner.digest()
             except Exception as exc:  # noqa: BLE001
                 import traceback
@@ -1246,7 +1252,7 @@ def worker(args):
                          args.arm, where, r, " (compile happens here)"
                          if r == 0 and "compile" in args.arm else "", repr(exc)[:2000])})
                 return 1
-            say({"event": "round", "round": r, "ms": ms, "digest": digest})
+            say({"event": "round", "round": r, "ms": ms, "digest": digest, "mem": m})
         elif parts[0] == "save":
             try:
                 path = parts[1]
@@ -1324,8 +1330,10 @@ def _worker_env(arm):
     env = dict(os.environ)
     for k in ctd.THREAD_ENV:
         env.pop(k, None)
-    if arm == "ours":
+    if arm in ("ours", "ours-cpu"):
         env["MOJOLEARN_NUMERIC_MODE"] = "identical"
+        if arm == "ours-cpu":
+            _load("bench_board_probe").ours_cpu_env(env)
         if os.environ.get("MOJOLEARN_BENCH_INSTALLED", "0").strip() in ("", "0"):
             tree = os.path.join(REPO, "python")
             env["PYTHONPATH"] = tree + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
@@ -1353,17 +1361,18 @@ def race(args):
     result = {"lane": lane, "dataset": DATA_OF[lane], "shape": srec["label"], "shape_record": srec,
               "inputs": inputs, "arms": {}, "rounds_requested": args.rounds, "started": now_utc(),
               "script": "tools/bench_board_neural.py", "ours_device": DEVICE_OF[lane],
-              "torch_settings": {a: precision_text(arm_setting(a)[1]) for a in arms if a != "ours"},
+              "torch_settings": {a: precision_text(arm_setting(a)[1]) for a in arms
+                                 if a.startswith("torch-")},
               "commit": os.environ.get("MOJOLEARN_REPO_COMMIT", "unknown")}
     workers = {}
     for arm in arms:
-        py = args.ours_python if arm == "ours" else args.theirs_python
+        py = args.ours_python if arm in ("ours", "ours-cpu") else args.theirs_python
         cmd = shlex.split(py) + [os.path.abspath(__file__), "worker", "--arm", arm,
                                  "--lane", lane, "--shape", shape, "--data", data_path]
         workers[arm] = ctd.Worker(arm, cmd, _worker_env(arm),
                                   os.path.join(args.out, "%s-%s.log" % (tag, arm)), REPO)
         result["arms"][arm] = {"command": cmd, "warmup_ms": None, "ms": [], "digests": [],
-                               "status": "ok"}
+                               "mem": [], "status": "ok"}
     for arm, w in workers.items():
         msg = w.read(args.ready_seconds)
         if msg is None or msg.get("event") != "ready":
@@ -1395,6 +1404,7 @@ def race(args):
             else:
                 result["arms"][arm]["ms"].append(msg["ms"])
             result["arms"][arm]["digests"].append(msg["digest"])
+            result["arms"][arm]["mem"].append(msg.get("mem"))
             print("NEURAL-ROUND lane=%s arm=%s round=%d ms=%.3f digest=%s"
                   % (lane, arm, r, msg["ms"], msg["digest"]), flush=True)
     outs = {}
@@ -1415,6 +1425,11 @@ def race(args):
         with np.load(data_path) as z:
             data = {k: z[k] for k in z.files}
         result["quality"] = quality(lane, data, outs)
+        # our CPU tier against our GPU IDENTICAL, bit for bit (the promise):
+        # the outputs on forward lanes, every step's loss on train lanes
+        if "ours-cpu" in outs and "ours" in outs:
+            result["quality"].setdefault("ours-cpu", {})["bits_equal_vs_ours_identical"] = \
+                _load("bench_board_probe").bits_equal(outs["ours-cpu"], outs["ours"])
     except Exception as exc:  # noqa: BLE001
         result["quality"] = {"error": repr(exc)}
     try:

@@ -107,7 +107,7 @@ def ienv(env):
 def test_plan_cells_trees_two_batches_classical_four_lanes():
     races = bb.plan_races("apple", ["fast", "identical"], ["trees", "classical"], None, ["taxi"], None)
     by = {r["lane"]: inf.plan_cells(r) for r in races}
-    assert len(by["rf"]) == 2 * len(bb.TREE_OPPONENTS["apple"]["rf"] + ("ours", "ours-ab"))
+    assert len(by["rf"]) == 2 * len(bb.TREE_OPPONENTS["apple"]["rf"] + ("ours", "ours-ab", "ours-cpu"))
     assert {b for _, b in by["rf"]} == {"test", "large"}
     for lane in ("kmeans", "pca", "ols", "svc"):
         assert by[lane] and all(b == "Xq" for _, b in by[lane])
@@ -243,7 +243,8 @@ def test_forest_infer_phase_lines_parse_and_agree(tmp_path):
     assert p["rounds"][("ours", "test")]["rows"] == 32
     assert p["rounds"][("ours", "large")]["rows"] == 40          # capped by --infer-large-rows
     assert len(p["rounds"][("sklearn-rf-cpu", "large")]["ms"]) == 2
-    assert p["agree"]["test"]["bits_equal"] == "yes" and p["agree"]["large"]["bits_equal"] == "yes"
+    assert p["agree"][("test", "ours-ab")]["bits_equal"] == "yes"
+    assert p["agree"][("large", "ours-ab")]["bits_equal"] == "yes"
     assert "no inference path wired" in p["refused"][("mystery-arm", "all")]
     assert "predict_proba" in p["paths"]["ours"]
     assert set(p["acc"][("ours", "test")]) == {"logloss", "auc"}

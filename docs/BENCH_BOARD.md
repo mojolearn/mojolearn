@@ -33,11 +33,87 @@ full contract. In short:
   staging command. A neural-only run (`--families neural`) needs no dataset.
 - Always check the plan first: `python3 tools/bench_board.py --dry-run
   --vendor apple` (or `nvidia`, `amd`). The current plan has 88 races on
-  every vendor (44 of them classical2, 16 neural). That comes to 312 cells on
-  Apple, 261 on NVIDIA and 246 on AMD (classical2 alone: 134, 94 and 90;
-  neural alone: 76, 95 and 76).
-  Inference adds 122 cells on Apple, 84 on NVIDIA and 100 on AMD (below);
-  `--no-infer` times training only.
+  every vendor (44 of them classical2, 16 neural). That comes to 394 cells on
+  Apple, 343 on NVIDIA and 328 on AMD (classical2 alone: 178, 138 and 134;
+  neural alone: 86, 105 and 86), 82 of them our CPU tier (below).
+  Inference adds 154 cells on Apple, 116 on NVIDIA and 132 on AMD;
+  `--no-infer` times training only. With `--no-cpu-arm` the plan is 312, 261
+  and 246 cells, and inference 122, 84 and 100.
+
+## Our CPU tier (`ours-cpu`)
+
+mojolearn trains and predicts on a CPU-only install through its host
+bindings. The public switch is `MOJOLEARN_VENDOR=cpu` before import
+(`python/mojolearn/_backend.py`): no GPU set loads, and the host bindings
+under `mojolearn/host/` answer. They build IDENTICAL only. The board races
+this tier on every vendor as the arm `ours-cpu`. It is the same public
+estimator as `ours`, run in a worker process started under the switch, and
+it races the CPU opponents already on the board (scikit-learn, the CPU
+learners of XGBoost, LightGBM and CatBoost, statsmodels, umap-learn,
+faiss-cpu). The worker reads back `mojolearn.vendor()` and the binding's tier
+before it times anything. If the installed wheel did not load its CPU set,
+the cell is REFUSED by name, so a Metal or CUDA fit is never labelled CPU.
+`--no-cpu-arm` (leg knob `MOJOLEARN_BOARD_NO_CPU_ARM=1`) turns the arm off.
+
+- Planned on all 12 trees races, all 16 classical and all 44 classical2
+  races, and the 10 neural lanes that run on the GPU: 82 cells on every
+  vendor. Each of these estimators routes to a host family
+  (`host_surface.routed_modules`). A GBDT configuration that the host side
+  does not restate (`host_surface.NO_CPU_PATH`) is refused by name in its
+  cell.
+- Not planned on the six neural `*-infer` lanes, whose `ours` arm already is
+  the CPU path (the `*Inference` classes), and not on a FAST-only run. The
+  dry run and the board's "Not covered" name both.
+- Trees: the trees driver runs every arm in one process, and the switch
+  applies to a whole process. So `forest_speed_arm.py --ours-cpu` adds a
+  proxy arm (`bench/speed/forest_board_arms.py`) whose worker loads the same
+  rows through the same loader and builds the same estimator. The proxy takes
+  its turn in the round-robin like every other arm. The conductor's clock
+  covers the worker's fit plus one pipe round trip, and the worker's own
+  clock is printed beside it (`FSPEED-CPU-ROUND`). Predictions and scores
+  come back after the clock. The classical, classical2 and neural racers
+  already run one worker per arm, so there `ours-cpu` is just one more
+  worker.
+- Quality: `bits_equal_vs_ours_identical` on the `ours-cpu` cell compares
+  its output with our GPU IDENTICAL arm's in the same race. The classical,
+  classical2 and neural drivers compare the saved output arrays byte for
+  byte, including every training step's loss. Trees compare the prediction
+  hash of the last timed round, and in the inference phase they compare the
+  prediction vectors (`FSPEED-INFER-AGREE arms=ours,ours-cpu`).
+- `ours CPU / arm` is its median over each opponent's median. Our CPU and GPU
+  times are never divided by each other. "Our CPU tier at a glance" lists
+  each race's CPU median, the bit check and the CPU opponents.
+- The macOS wheel ignored `MOJOLEARN_VENDOR=cpu` through 0.8.22 (the flat
+  layout returned before reading it). Main fixes this in `_backend._layout`.
+  On a 0.8.22 Mac, `ours-cpu` is therefore REFUSED by name. On the Linux
+  wheel the switch works from 0.8.22.
+
+## Memory
+
+Every arm of every fit cell records `peak_host_mb` and `peak_gpu_mb` in
+`board.json` and in `BOARD.md`. Each value is the highest per-round peak over
+the timed rounds; the warm-up is recorded apart. Every value carries its
+method (`memory.host_method`, `memory.gpu_method`), which is printed under
+each table. `tools/bench_board_probe.py` resets and reads each peak around
+the timed call, outside the clock:
+
+| what | how |
+|---|---|
+| host, Linux | `VmHWM` after writing 5 to `/proc/self/clear_refs` (the kernel's resettable peak RSS) |
+| host, macOS | `proc_pid_rusage` `ri_interval_max_phys_footprint` after `proc_reset_footprint_interval`: the peak physical footprint over the round. On Apple silicon it includes Metal buffers |
+| host, child processes | resident size of the worker's descendants (joblib or loky pools, torch.compile workers) at the round's end, as `memory.children_mb` |
+| GPU, torch on CUDA or ROCm | `torch.cuda.max_memory_allocated`, reset before the round |
+| GPU, torch on MPS | `torch.mps.driver_allocated_memory` at the round's end |
+| GPU, ours, cuML, cuVS, XGBoost, CatBoost, LightGBM | the driver's per-process figure at the round's end: `nvidia-smi --query-compute-apps` or `rocm-smi --showpids`. This is the process total, context and pools included |
+| GPU, Apple (non-torch) | none: there is no per-process counter, and the Metal share is inside the host footprint |
+| CPU arms | GPU none |
+
+The classical, classical2 and neural racers run one arm per worker, so each
+figure belongs to its own arm. The trees driver runs its arms in one
+process. Its host peak is still per arm, because it is reset around each fit
+(`FSPEED-MEM` lines, `--mem`). Its GPU figure is the whole process, and the
+method says so. The inference cells of the classical lanes carry memory too;
+the trees inference cells do not.
 
 ## Inference
 
@@ -345,6 +421,7 @@ Values contain no spaces, and lists are separated by commas.
 | `MOJOLEARN_BOARD_LANES` / `_FAMILIES` / `_DATASETS` / `_ROUNDS` | narrow the plan |
 | `MOJOLEARN_BOARD_NEURAL_SHAPE` | `full` (default) or `small` for a neural smoke |
 | `MOJOLEARN_BOARD_NO_INFER` | `1` times training only (no inference cells) |
+| `MOJOLEARN_BOARD_NO_CPU_ARM` | `1` leaves out our CPU tier (`ours-cpu`) |
 | `MOJOLEARN_BOARD_OUT`, `MOJOLEARN_BOARD_CACHE` | result directory (fetched) and cache (not fetched; the classical and classical2 blocks live here) |
 
 A smoke leg, for example:
@@ -353,10 +430,12 @@ A smoke leg, for example:
 ## Reading the board
 
 `BOARD.md` gives times, ratios and quality, and never states a direction. A
-ratio column is our median divided by the opponent's median. Our FAST and
-IDENTICAL arms are never divided by each other, because that ratio is the
-cost of identity and not a result (ENGINEERING_RULES 0b-iii). The "Quality at
-a glance" table puts our FAST value, our IDENTICAL value and each opponent's
+ratio column is our median divided by the opponent's median (`ours IDENTICAL /
+arm`, `ours FAST / arm`, `ours CPU / arm`). Our FAST, IDENTICAL and CPU arms
+are never divided by each other, because the FAST ratio is the cost of
+identity and not a result (ENGINEERING_RULES 0b-iii). The "Quality at a
+glance" table puts our FAST value, our IDENTICAL value, our CPU value and each
+opponent's
 value side by side for every lane and dataset; "Inference at a glance" does
 the same for the inference medians per batch, with whether our FAST and
 IDENTICAL predictions agree bit for bit. For comparability, trees carry
