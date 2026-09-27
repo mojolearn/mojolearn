@@ -1,0 +1,9 @@
+algorithm	option	reference	why
+LSTM/GRU/RNN	bidirectional=True	torch/nn/modules/rnn.py	pass 1 carries the forward direction only
+LSTM/GRU/RNN	dropout > 0 between layers	torch/nn/modules/rnn.py	no dropout RNG in the recurrent fit yet
+LSTM	proj_size > 0	torch/nn/modules/rnn.py	projected LSTM not carried
+LSTM/GRU/RNN	h_0 / c_0 initial state	torch/nn/modules/rnn.py	every sequence starts from zeros
+LSTM/GRU/RNN	PackedSequence / variable lengths	torch/nn/utils/rnn.py	equal-length sequences only
+LSTM/GRU/RNN	bias=False	torch/nn/modules/rnn.py	biases always present
+LSTM/GRU/RNN	float64 / float16 / bfloat16	-	float32 only; no float64 on the device
+LSTM/GRU/RNN	gradient clipping	torch.nn.utils.clip_grad_norm_	not in the fit loop yet

@@ -1,0 +1,65 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+"""The op table: op id -> unit. python/mojolearn/_expansion_prep.py `_OPS` carries
+the same ids; the binding refuses an id outside the table."""
+from x_prep.common import FP, IP
+from x_prep.prims import (
+    sort_cols_unit, col_stats_unit, quantile_unit, affine_unit, scale_params_unit,
+    unique_cols_unit, mode_cols_unit, lookup_unit, count_neg_unit, onehot_unit,
+    i2f_unit, f2i_unit, binarize_unit, matmul_unit, row_softmax_unit, row_argmax_unit,
+    class_stats_unit, center_rows_unit, where_neg_unit,
+)
+from x_prep.eigh import eigh_unit
+from x_prep.target import te_global_unit, te_enc_unit, te_apply_unit
+
+comptime N_OPS = 23
+
+
+@always_inline
+def run_unit[OP: Int](t: Int, f: FP, q: IP):
+    comptime if OP == 0:
+        sort_cols_unit(t, f, q)
+    comptime if OP == 1:
+        col_stats_unit(t, f, q)
+    comptime if OP == 2:
+        quantile_unit(t, f, q)
+    comptime if OP == 3:
+        affine_unit(t, f, q)
+    comptime if OP == 4:
+        scale_params_unit(t, f, q)
+    comptime if OP == 5:
+        unique_cols_unit(t, f, q)
+    comptime if OP == 6:
+        mode_cols_unit(t, f, q)
+    comptime if OP == 7:
+        lookup_unit(t, f, q)
+    comptime if OP == 8:
+        count_neg_unit(t, f, q)
+    comptime if OP == 9:
+        onehot_unit(t, f, q)
+    comptime if OP == 10:
+        i2f_unit(t, f, q)
+    comptime if OP == 11:
+        f2i_unit(t, f, q)
+    comptime if OP == 12:
+        binarize_unit(t, f, q)
+    comptime if OP == 13:
+        matmul_unit(t, f, q)
+    comptime if OP == 14:
+        row_softmax_unit(t, f, q)
+    comptime if OP == 15:
+        row_argmax_unit(t, f, q)
+    comptime if OP == 16:
+        class_stats_unit(t, f, q)
+    comptime if OP == 17:
+        center_rows_unit(t, f, q)
+    comptime if OP == 18:
+        eigh_unit(t, f, q)
+    comptime if OP == 19:
+        where_neg_unit(t, f, q)
+    comptime if OP == 20:
+        te_global_unit(t, f, q)
+    comptime if OP == 21:
+        te_enc_unit(t, f, q)
+    comptime if OP == 22:
+        te_apply_unit(t, f, q)

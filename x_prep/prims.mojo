@@ -1,0 +1,443 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+"""The prep lane's shared units (x_prep/common.mojo has the program model).
+
+Each unit documents its parameter layout `q = [...]` (arena offsets unless
+named as a count) and its work item `t`. Every loop inside a unit runs in
+ascending index order; that order IS the reduction order on every column.
+References: sklearn 1.x `preprocessing/_data.py` (scalers, Binarizer,
+Normalizer, `_handle_zeros_in_scale`), `preprocessing/_encoders.py`
+(`_unique`, `_encode`), numpy `lib/_function_base_impl.py` (`_lerp`, the
+linear percentile) for the quantile unit.
+"""
+from std.memory import bitcast
+from checks.numerics import ftz, identical_mul, identical_div, identical_sqrt, identical_exp, identical_log
+from x_prep.common import FP, IP, p, ld, raw, st, ldi, sti, is_nan, canon, key, heap_sort, X_PREP_HOST_SABOTAGE
+
+#: float32 machine epsilon; `_handle_zeros_in_scale` maps scale < 10 * eps to 1.
+comptime F32_EPS = Float32(1.1920929e-07)
+
+
+@always_inline
+def add(a: Float32, b: Float32) -> Float32:
+    comptime if X_PREP_HOST_SABOTAGE:
+        var r = ftz(ftz(a) + ftz(b))
+        if r != Float32(0) and r == r:
+            return bitcast[DType.float32](bitcast[DType.uint32](r) + UInt32(1))
+        return r
+    return ftz(ftz(a) + ftz(b))
+
+
+@always_inline
+def sub(a: Float32, b: Float32) -> Float32:
+    return ftz(ftz(a) - ftz(b))
+
+
+@always_inline
+def mul(a: Float32, b: Float32) -> Float32:
+    return ftz(identical_mul(ftz(a), ftz(b)))
+
+
+@always_inline
+def div(a: Float32, b: Float32) -> Float32:
+    return ftz(identical_div(ftz(a), ftz(b)))
+
+
+@always_inline
+def logf(a: Float32) -> Float32:
+    return ftz(identical_log(ftz(a)))
+
+
+@always_inline
+def expf(a: Float32) -> Float32:
+    return ftz(identical_exp(ftz(a)))
+
+
+@always_inline
+def sqrtf(a: Float32) -> Float32:
+    return ftz(identical_sqrt(ftz(a)))
+
+
+@always_inline
+def zero_to_one(s: Float32) -> Float32:
+    """sklearn `_handle_zeros_in_scale` for a float32 scale."""
+    if s < mul(Float32(10), F32_EPS):
+        return Float32(1)
+    return s
+
+
+# ---------------------------------------------------------------- columns
+def sort_cols_unit(t: Int, f: FP, q: IP):
+    """q = [X, n, d, S, canon]; t = column. S[c*n : c*n+n] = column c sorted
+    by `key` (NaN last); with canon, -0.0 -> 0.0 and one NaN word."""
+    var X = p(q, 0)
+    var n = p(q, 1)
+    var d = p(q, 2)
+    var S = p(q, 3)
+    var c = t
+    for i in range(n):
+        var v = ftz(raw(f, X + i * d + c))
+        if p(q, 4) != 0:
+            v = canon(v)
+        f.unsafe_store(S + c * n + i, v)
+    heap_sort(f, S + c * n, n)
+
+
+def col_stats_unit(t: Int, f: FP, q: IP):
+    """q = [X, n, d, OUT]; t = column. OUT rows of d: count, mean, var
+    (population), min, max, maxabs, over the non-NaN entries; an empty column
+    writes zeros (no 0/0)."""
+    var X = p(q, 0)
+    var n = p(q, 1)
+    var d = p(q, 2)
+    var O = p(q, 3)
+    var c = t
+    var cnt = 0
+    var s = Float32(0)
+    var lo = Float32(0)
+    var hi = Float32(0)
+    var ma = Float32(0)
+    for i in range(n):
+        var v = ld(f, X + i * d + c)
+        if is_nan(v):
+            continue
+        if cnt == 0:
+            lo = v
+            hi = v
+        else:
+            if v < lo:
+                lo = v
+            if v > hi:
+                hi = v
+        if abs(v) > ma:
+            ma = abs(v)
+        s = add(s, v)
+        cnt += 1
+    var mean = Float32(0)
+    var var_ = Float32(0)
+    if cnt > 0:
+        mean = div(s, Float32(cnt))
+        var ss = Float32(0)
+        for i in range(n):
+            var v = ld(f, X + i * d + c)
+            if is_nan(v):
+                continue
+            var e = sub(v, mean)
+            ss = add(ss, mul(e, e))
+        var_ = div(ss, Float32(cnt))
+    st(f, O + c, Float32(cnt))
+    st(f, O + d + c, mean)
+    st(f, O + 2 * d + c, var_)
+    st(f, O + 3 * d + c, lo)
+    st(f, O + 4 * d + c, hi)
+    st(f, O + 5 * d + c, ma)
+
+
+def quantile_unit(t: Int, f: FP, q: IP):
+    """q = [S, n, d, QF, nq, OUT, CNT]; t = c*nq + j. numpy's linear
+    percentile of the first CNT[c] (or n when CNT < 0) sorted entries of
+    column c at fraction QF[j], numpy's `_lerp` spelling; empty -> 0."""
+    var S = p(q, 0)
+    var n = p(q, 1)
+    var nq = p(q, 4)
+    var c = t // nq
+    var j = t % nq
+    var cnt = n
+    if p(q, 6) >= 0:
+        cnt = Int(ld(f, p(q, 6) + c))
+    var out = Float32(0)
+    if cnt > 0:
+        var idx = mul(ld(f, p(q, 3) + j), Float32(cnt - 1))
+        var lo = Int(idx)
+        if lo > cnt - 1:
+            lo = cnt - 1
+        if lo < 0:
+            lo = 0
+        var g = sub(idx, Float32(lo))
+        var hi_i = lo + 1 if lo + 1 < cnt else cnt - 1
+        var a = ld(f, S + c * n + lo)
+        var b = ld(f, S + c * n + hi_i)
+        var diff = sub(b, a)
+        if g >= Float32(0.5):
+            out = sub(b, mul(diff, sub(Float32(1), g)))
+        else:
+            out = add(a, mul(diff, g))
+    st(f, p(q, 5) + t, out)
+
+
+def affine_unit(t: Int, f: FP, q: IP):
+    """q = [X, count, d, C, S, OUT]; t = element. OUT = (X - C[c]) / S[c]
+    (C or S < 0: skipped). A NaN input is copied bit for bit."""
+    var x = raw(f, p(q, 0) + t)
+    var d = p(q, 2)
+    var c = t % d
+    if is_nan(x):
+        f.unsafe_store(p(q, 5) + t, x)
+        return
+    var v = ftz(x)
+    if p(q, 3) >= 0:
+        v = sub(v, ld(f, p(q, 3) + c))
+    if p(q, 4) >= 0:
+        v = div(v, ld(f, p(q, 4) + c))
+    st(f, p(q, 5) + t, v)
+
+
+def scale_params_unit(t: Int, f: FP, q: IP):
+    """q = [Q, nq, d, CENTER, SCALE, kind, ilo, ihi, imid]; t = column.
+    kind 0 (robust): CENTER = Q[c*nq+imid], SCALE = Q[ihi] - Q[ilo];
+    kind 1 (maxabs): SCALE = Q[c] (the maxabs row); both zero -> one."""
+    var Q = p(q, 0)
+    var nq = p(q, 1)
+    var c = t
+    if p(q, 5) == 0:
+        if p(q, 3) >= 0:
+            st(f, p(q, 3) + c, ld(f, Q + c * nq + p(q, 8)))
+        if p(q, 4) >= 0:
+            st(f, p(q, 4) + c, zero_to_one(sub(ld(f, Q + c * nq + p(q, 7)), ld(f, Q + c * nq + p(q, 6)))))
+    else:
+        st(f, p(q, 4) + c, zero_to_one(ld(f, Q + c)))
+
+
+# ---------------------------------------------------------------- encoders
+def unique_cols_unit(t: Int, f: FP, q: IP):
+    """q = [S, n, d, U, CNT]; t = column. The distinct words of sorted column
+    c (by `key` equality) into U[c*n : ...], their count into CNT[c]."""
+    var S = p(q, 0)
+    var n = p(q, 1)
+    var U = p(q, 3)
+    var c = t
+    var k = 0
+    for i in range(n):
+        var v = raw(f, S + c * n + i)
+        if k == 0 or key(v) != key(raw(f, U + c * n + k - 1)):
+            f.unsafe_store(U + c * n + k, v)
+            k += 1
+    st(f, p(q, 4) + c, Float32(k))
+
+
+def mode_cols_unit(t: Int, f: FP, q: IP):
+    """q = [S, n, d, OUT, CNT]; t = column. The most frequent non-NaN word of
+    sorted column c, the smallest on a tie (sklearn `_most_frequent`); no
+    valid entry -> 0. CNT >= 0 receives the count of valid entries."""
+    var S = p(q, 0)
+    var n = p(q, 1)
+    var c = t
+    var best = Float32(0)
+    var best_n = 0
+    var run = 0
+    var valid = 0
+    for i in range(n):
+        var v = raw(f, S + c * n + i)
+        if is_nan(v):
+            break
+        valid += 1
+        if i > 0 and key(v) == key(raw(f, S + c * n + i - 1)):
+            run += 1
+        else:
+            run = 1
+        if run > best_n:
+            best_n = run
+            best = v
+    st(f, p(q, 3) + c, best)
+    if p(q, 4) >= 0:
+        st(f, p(q, 4) + c, Float32(valid))
+
+
+def lookup_unit(t: Int, f: FP, q: IP):
+    """q = [X, n, d, U, ustride, CNT, OUT]; t = element. The index of
+    canon(X) among column c's categories U[c*ustride : +CNT[c]] (sorted by
+    `key`), or -1; written as a float code."""
+    var d = p(q, 2)
+    var c = t % d
+    var v = canon(ftz(raw(f, p(q, 0) + t)))
+    var base = p(q, 3) + c * p(q, 4)
+    var cnt = Int(ld(f, p(q, 5) + c))
+    var kv = key(v)
+    var lo = 0
+    var hi = cnt
+    while lo < hi:
+        var mid = (lo + hi) // 2
+        if key(raw(f, base + mid)) < kv:
+            lo = mid + 1
+        else:
+            hi = mid
+    var code = -1
+    if lo < cnt and key(raw(f, base + lo)) == kv:
+        code = lo
+    st(f, p(q, 6) + t, Float32(code))
+
+
+def count_neg_unit(t: Int, f: FP, q: IP):
+    """q = [CODES, n, d, OUT]; t = column: how many codes are negative."""
+    var n = p(q, 1)
+    var d = p(q, 2)
+    var k = 0
+    for i in range(n):
+        if ld(f, p(q, 0) + i * d + t) < Float32(0):
+            k += 1
+    st(f, p(q, 3) + t, Float32(k))
+
+
+def onehot_unit(t: Int, f: FP, q: IP):
+    """q = [CODES, n, d, START, DROP, W, OUT]; t = element. Writes 1 at
+    OUT[i*W + START[c] + code] (a dropped category is skipped and the ones
+    after it shift down); a negative code writes nothing. OUT arrives zeroed."""
+    var d = p(q, 2)
+    var i = t // d
+    var c = t % d
+    var code = Int(ld(f, p(q, 0) + t))
+    if code < 0:
+        return
+    var pos = code
+    if p(q, 4) >= 0:
+        var drop = Int(ld(f, p(q, 4) + c))
+        if drop >= 0:
+            if code == drop:
+                return
+            if code > drop:
+                pos = code - 1
+    st(f, p(q, 6) + i * p(q, 5) + Int(ld(f, p(q, 3) + c)) + pos, Float32(1))
+
+
+def i2f_unit(t: Int, f: FP, q: IP):
+    """q = [SRC, OUT]; t = element: int32 bits -> float value."""
+    st(f, p(q, 1) + t, Float32(ldi(f, p(q, 0) + t)))
+
+
+def f2i_unit(t: Int, f: FP, q: IP):
+    """q = [SRC, OUT]; t = element: an integral float value -> int32 bits."""
+    sti(f, p(q, 1) + t, Int(ld(f, p(q, 0) + t)))
+
+
+def binarize_unit(t: Int, f: FP, q: IP):
+    """q = [X, count, THR, OUT]; t = element: 1 when X > THR, else 0; a NaN
+    input is copied (sklearn's Binarizer leaves it)."""
+    var x = raw(f, p(q, 0) + t)
+    if is_nan(x):
+        f.unsafe_store(p(q, 3) + t, x)
+        return
+    st(f, p(q, 3) + t, Float32(1) if ftz(x) > ld(f, p(q, 2)) else Float32(0))
+
+
+# ---------------------------------------------------------------- dense
+def matmul_unit(t: Int, f: FP, q: IP):
+    """q = [A, sa0, sa1, B, sb0, sb1, C, ncols, K, BIAS, ALPHA]; t = i*ncols + j.
+    C[t] = ALPHA * sum_l A[i*sa0 + l*sa1] * B[l*sb0 + j*sb1] (+ BIAS[j]),
+    l ascending (ALPHA < 0: no scale)."""
+    var nc = p(q, 7)
+    var i = t // nc
+    var j = t % nc
+    var acc = Float32(0)
+    for l in range(p(q, 8)):
+        acc = add(acc, mul(ld(f, p(q, 0) + i * p(q, 1) + l * p(q, 2)), ld(f, p(q, 3) + l * p(q, 4) + j * p(q, 5))))
+    if p(q, 10) >= 0:
+        acc = mul(acc, ld(f, p(q, 10)))
+    if p(q, 9) >= 0:
+        acc = add(acc, ld(f, p(q, 9) + j))
+    st(f, p(q, 6) + t, acc)
+
+
+def row_softmax_unit(t: Int, f: FP, q: IP):
+    """q = [S, n, K, LOGP, PROBA]; t = row. sklearn's `logsumexp`
+    normalisation: LOGP = S - (m + log(sum exp(S - m))), PROBA = exp(LOGP).
+    A row whose maximum is -inf (every class impossible) is uniform, never NaN."""
+    var K = p(q, 2)
+    var S = p(q, 0) + t * K
+    var m = ld(f, S)
+    for k in range(1, K):
+        var v = ld(f, S + k)
+        if v > m:
+            m = v
+    var neg_inf = bitcast[DType.float32](UInt32(0xFF800000))
+    if m == neg_inf:
+        for k in range(K):
+            if p(q, 3) >= 0:
+                st(f, p(q, 3) + t * K + k, sub(Float32(0), logf(Float32(K))))
+            if p(q, 4) >= 0:
+                st(f, p(q, 4) + t * K + k, div(Float32(1), Float32(K)))
+        return
+    var s = Float32(0)
+    for k in range(K):
+        s = add(s, expf(sub(ld(f, S + k), m)))
+    var lse = add(m, logf(s))
+    for k in range(K):
+        var lp = sub(ld(f, S + k), lse)
+        if p(q, 3) >= 0:
+            st(f, p(q, 3) + t * K + k, lp)
+        if p(q, 4) >= 0:
+            st(f, p(q, 4) + t * K + k, expf(lp))
+
+
+def row_argmax_unit(t: Int, f: FP, q: IP):
+    """q = [S, n, K, OUT]; t = row: first-max-wins argmax as int32 bits."""
+    var K = p(q, 2)
+    var S = p(q, 0) + t * K
+    var best = 0
+    var bv = ld(f, S)
+    for k in range(1, K):
+        var v = ld(f, S + k)
+        if v > bv:
+            bv = v
+            best = k
+    sti(f, p(q, 3) + t, best)
+
+
+def class_stats_unit(t: Int, f: FP, q: IP):
+    """q = [X, n, d, Y, K, CNT, MEAN, VAR, SUM]; t = k*d + c. Over the rows
+    whose class code Y[i] == k, ascending: the sum, mean and population
+    variance of column c (and, for c == 0, the row count). Offsets < 0 are not
+    written; an empty class writes zeros."""
+    var X = p(q, 0)
+    var n = p(q, 1)
+    var d = p(q, 2)
+    var Y = p(q, 3)
+    var k = t // d
+    var c = t % d
+    var cnt = 0
+    var s = Float32(0)
+    for i in range(n):
+        if Int(ld(f, Y + i)) != k:
+            continue
+        s = add(s, ld(f, X + i * d + c))
+        cnt += 1
+    var mean = Float32(0)
+    var ss = Float32(0)
+    if cnt > 0:
+        mean = div(s, Float32(cnt))
+        if p(q, 7) >= 0:
+            for i in range(n):
+                if Int(ld(f, Y + i)) != k:
+                    continue
+                var e = sub(ld(f, X + i * d + c), mean)
+                ss = add(ss, mul(e, e))
+            ss = div(ss, Float32(cnt))
+    if c == 0 and p(q, 5) >= 0:
+        st(f, p(q, 5) + k, Float32(cnt))
+    if p(q, 6) >= 0:
+        st(f, p(q, 6) + t, mean)
+    if p(q, 7) >= 0:
+        st(f, p(q, 7) + t, ss)
+    if p(q, 8) >= 0:
+        st(f, p(q, 8) + t, s)
+
+
+def center_rows_unit(t: Int, f: FP, q: IP):
+    """q = [X, n, d, M, Y, W, OUT]; t = element. OUT = (X - M[y_i, c]) * W[c]
+    (Y < 0: row 0 of M for every row; W < 0: no scale)."""
+    var d = p(q, 2)
+    var i = t // d
+    var c = t % d
+    var row = 0
+    if p(q, 4) >= 0:
+        row = Int(ld(f, p(q, 4) + i))
+    var v = sub(ld(f, p(q, 0) + t), ld(f, p(q, 3) + row * d + c))
+    if p(q, 5) >= 0:
+        v = mul(v, ld(f, p(q, 5) + c))
+    st(f, p(q, 6) + t, v)
+
+
+def where_neg_unit(t: Int, f: FP, q: IP):
+    """q = [CODES, count, VAL, OUT]; t = element: VAL where the code is
+    negative (an unknown category), else the code."""
+    var v = ld(f, p(q, 0) + t)
+    st(f, p(q, 3) + t, ld(f, p(q, 2)) if v < Float32(0) else v)

@@ -147,6 +147,7 @@ def _read_expansion_fragment(lane):
         text = fh.read()
     tree = ast.parse(text, filename=path)
     out = {"GPU_BINDINGS": (), "FAMILIES": (), "TRAINING_LANE_NAMES": {}, "PUBLIC_PENDING_LANES": {}}
+    bound = set()
     for k, node in enumerate(tree.body):
         if k == 0 and isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant):
             continue  # the docstring
@@ -154,6 +155,11 @@ def _read_expansion_fragment(lane):
                 and isinstance(node.targets[0], ast.Name) and node.targets[0].id in EXPANSION_KEYS):
             raise RuntimeError(f"host_surface: {path}:{getattr(node, 'lineno', '?')}: a fragment binds only "
                                f"{', '.join(EXPANSION_KEYS)}, each once, as literal data")
+        if node.targets[0].id in bound:
+            # R8: a second binding would silently win; each key is bound once
+            raise RuntimeError(f"host_surface: {path}:{node.lineno}: {node.targets[0].id} is bound twice; "
+                               "a fragment binds each key once")
+        bound.add(node.targets[0].id)
         # `dict(key=value, ...)` is the manifest's own spelling of a family;
         # nothing else is callable in a fragment.
         for sub in ast.walk(node.value):

@@ -135,6 +135,18 @@ actually takes for the parameters in question. Do not reproduce a reference
 library's bugs. Where a lane keeps a `NOT_IMPLEMENTED.tsv`, record what the
 contribution leaves out.
 
+**CPU-only algorithms** (2026-09-27). Some algorithms have no parallel
+form: a graph walked one hop at a time, a tree built by inserting points
+in order. One of these may enter the library when it is the serving, pre-
+or post-processing step of an algorithm that does run on the GPU, so the
+GPU does the heavy work and the CPU does the step that has no other form
+(HNSW search over a CAGRA graph built on the GPU is the model case). It
+enters like anything else: named reference, the identity contract across
+every CPU host, the verifier lane, and a support-matrix entry that says
+"CPU" in the device column, so the README's "every algorithm runs on the
+GPU" is never read as covering it. A CPU-only algorithm with no GPU
+partner in this library is not wanted; propose it in an issue first.
+
 ## Automatic checks for external pull requests
 
 External pull requests to the default branch receive two reports from
