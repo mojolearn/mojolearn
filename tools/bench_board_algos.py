@@ -177,8 +177,8 @@ _add("sgd-reg", xlane="linear", ours="SGDRegressor", task="reg", block="reg",
      sk="sklearn.linear_model:SGDRegressor", params=dict(_SGD, loss="squared_error"),
      cuml="cuml.linear_model:MBSGDRegressor",
      cuml_params=dict(loss="squared_loss", penalty="l2", alpha=1e-4, epochs=20,
-                      batch_size=4096, learning_rate="invscaling", eta0=0.01, tol=0.0,
-                      shuffle=True),
+                      batch_size=4096, learning_rate="invscaling", eta0=0.01, power_t=0.25,
+                      tol=0.0, shuffle=True),
      mism=["cuML MBSGD is mini-batch SGD (batch_size 4096)"])
 for _slug, _cls, _kw, _why in (
         ("poisson", "PoissonRegressor", {}, "y = the reg target (taxi fare > 0; Istella grade >= 0)"),
@@ -442,19 +442,24 @@ for _slug, _cls, _kw, _blk, _cu in (
         ("poly-features", "PolynomialFeatures", dict(degree=2, include_bias=False), "raw16", True),
         ("spline", "SplineTransformer", dict(n_knots=5, degree=3), "raw16", False),
         ("kbins", "KBinsDiscretizer", dict(n_bins=16, encode="ordinal", strategy="quantile",
-                                           subsample=None), "raw", True),
+                                           quantile_method="linear", subsample=None), "raw", True),
         ("onehot", "OneHotEncoder", dict(handle_unknown="ignore", sparse_output=False), "cat", True),
         ("ordinal", "OrdinalEncoder", dict(handle_unknown="use_encoded_value", unknown_value=-1),
          "cat", False),
         ("variance-threshold", "VarianceThreshold", dict(threshold=0.01), "raw", False)):
-    _cukw = {k: v for k, v in _kw.items() if k != "subsample"}
+    # cuML takes no subsample and no quantile_method (its quantile edges are np.percentile's
+    # linear ones, the method ours and scikit-learn are set to above)
+    _cukw = {k: v for k, v in _kw.items() if k not in ("subsample", "quantile_method")}
     if _cls == "QuantileTransformer":
         _cukw["subsample"] = 10 ** 9      # cuML takes no None: every row, as scikit-learn's None
     _add(_slug, xlane="prep", ours=_cls, task="transform", block=_blk, quality="vs-sklearn",
          sk=("sklearn.feature_selection:" if _cls == "VarianceThreshold" else "sklearn.preprocessing:")
          + _cls, params=_kw, cuml=(_CUP + _cls) if _cu else None, cuml_params=_cukw,
          notes=(["the first 16 columns (PolynomialFeatures of Istella's 220 would be 24,000+ "
-                 "columns)"] if _blk == "raw16" else []))
+                 "columns)"] if _blk == "raw16" else [])
+         + (["quantile_method='linear' on ours and scikit-learn: the pinned scikit-learn 1.7.2's "
+             "default, and cuML's np.percentile edges (ours defaults to 1.9's "
+             "'averaged_inverted_cdf')"] if _slug == "kbins" else []))
 _add("target-encoder", xlane="prep", ours="TargetEncoder", task="transform", block="cat", supervised=True,
      quality="vs-sklearn", sk="sklearn.preprocessing:TargetEncoder",
      params=dict(target_type="binary", cv=5, shuffle=True, random_state=SEED),
@@ -794,15 +799,17 @@ _add("cagra", xlane="ann", ours=("CAGRAIndex", "CagraIndex"), kind="ann", task="
                          "efSearch=64), the CPU graph index; cuvs-gpu is CAGRA itself"])
 _add("tsne", xlane="ann", ours="TSNE", task="embed", block="manifold",
      sk="sklearn.manifold:TSNE",
-     params=dict(n_components=2, perplexity=30.0, max_iter=1000, learning_rate="auto", init="pca",
-                 random_state=SEED),
+     params=dict(n_components=2, perplexity=30.0, max_iter=1000, learning_rate="auto",
+                 init="random", random_state=SEED),
      sk_params=dict(n_components=2, perplexity=30.0, max_iter=1000, learning_rate="auto",
-                    init="pca", random_state=SEED, n_jobs=-1, method="barnes_hut"),
+                    init="random", random_state=SEED, n_jobs=-1, method="barnes_hut"),
      cuml="cuml.manifold:TSNE",
      cuml_params=dict(n_components=2, perplexity=30.0, max_iter=1000, learning_rate_method="adaptive",
                       init="random", random_state=SEED, method="fft"),
-     mism=["gradients: ours exact or FFT (no Barnes-Hut atomics under IDENTICAL); scikit-learn "
-           "Barnes-Hut; cuML FFT with random init (its only init)"])
+     mism=["gradients: ours exact repulsion over k-NN affinities (no Barnes-Hut atomics under "
+           "IDENTICAL); scikit-learn Barnes-Hut; cuML FFT",
+           "init='random' on every arm: cuML's only init, and ours refuses 'pca' "
+           "(x_ann/NOT_IMPLEMENTED.tsv); each library draws its own start"])
 _add("ivf-sq", xlane="ann", ours=("IVFSQIndex",), kind="ann", task="ivf-sq", block="ivf",
      params=dict(n_lists=1024, n_probes=32, n_neighbors=10, kmeans_n_iters=20, random_state=SEED),
      other={"faiss-cpu": "faiss", "cuvs-gpu": "cuvs"}, notes=[_ANN, "8-bit scalar quantizer"])
