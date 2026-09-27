@@ -1,0 +1,43 @@
+{
+ "args": [],
+ "build_env": {
+  "MOJOLEARN_BUILD_EXTRA_DEFINES": "-D MOJOLEARN_HOST_SABOTAGE=1",
+  "MOJOLEARN_BYTE_LM_HOST_OUTDIR": "python/mojolearn/host-sabotage",
+  "MOJOLEARN_FOREST_HOST_OUTDIR": "python/mojolearn/host-sabotage",
+  "MOJOLEARN_HOST_OUTDIR": "python/mojolearn/host-sabotage",
+  "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+  "MOJOLEARN_NUMERIC_MODE": "identical"
+ },
+ "device_arch": "none",
+ "gpu_archs": "",
+ "image": "runpod-cpu:runpod/base:1.3.1-ubuntu2204",
+ "numeric_mode": "identical",
+ "os": {
+  "cc": "cc (Ubuntu 11.4.0-1ubuntu1~22.04.3) 11.4.0",
+  "glibc": "glibc 2.35",
+  "id": "ubuntu",
+  "ld": "GNU ld (GNU Binutils for Ubuntu) 2.38",
+  "machine": "x86_64",
+  "version_id": "22.04"
+ },
+ "repo_path": "/root/mojolearn",
+ "schema": "mojolearn-bincache-v1",
+ "script": "bindings/build_training_host.sh",
+ "source": {
+  "digest": "49d108e6628383268a7ff7471d942e5b00be6768c81702055d8ded281b10a185",
+  "files": 39,
+  "scope": "closure"
+ },
+ "target_column": "",
+ "toolchain": {
+  "packages": [
+   "max-26.5.0-3.14release",
+   "max-core-26.5.0-release",
+   "mojo-1.0.0-release",
+   "mojo-compiler-1.0.0-release"
+  ],
+  "pixi_lock_sha256": "718430ce1d0fad1a86ca9d01758428e04412697e6a89b709f9abcdc636759139",
+  "platform": "linux-64"
+ },
+ "variant": "sabotage"
+}

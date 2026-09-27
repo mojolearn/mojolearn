@@ -1,0 +1,76 @@
+.....F.....SKIP: _mojolearn_mamba_host is not built
+..kmeans-sqrt,embedding,embedding-sort,ivf,ivf-euclidean
+kernel-ridge-poly,kernel-ridge-sigmoid,kernel-ridge-laplacian,nystroem-poly,nystroem-sigmoid,nystroem-laplacian,par-rbf-sampler,select-d,gemm-pinned,kde,holtwinters,lasso,elasticnet,svc,agglomerative,et-clf,et-reg,iforest,knn,knn-clf,knn-reg,pca,pca-whiten,tsvd,ols,ridge,dbscan,kmeans,metrics,spectral,standard-scaler,minmax-scaler,logistic,rf-clf,rf-reg,kmeans-random,kmeans-array,kmeans-weighted,standard-scaler-no-mean,standard-scaler-no-std,minmax-scaler-clip,spectral-precomputed,spectral-embedding,gp,gp-matern12,gp-matern32,gp-matern52-ard,gp-normalize-y,gp-optimize,gp-optimize-restarts,gpc,gpc-multiclass,par-gpc-fit,par-gpc-predict,mamba1-decode-session,transformer-decode-session,par-causal-lm,par-cross-val,knn-sqeuclidean,knn-clf-distance,knn-reg-distance,gemm-transposed,linalg-qr,linalg-eigh,linalg-svdvals,dbscan-brute-l1,kde-tophat-sqeuclidean,kde-epanechnikov-l1,kde-exponential-chebyshev,kde-linear-cosine,kde-cosine-minkowski,kde-weighted,ols-no-intercept,ols-weighted,ridge-no-intercept,logistic-unpenalized-no-intercept,elasticnet-l2end-no-intercept,holtwinters-multiplicative,svc-linear,svc-poly,iforest-tuned,knn-manhattan,knn-chebyshev,knn-cosine,knn-minkowski-p3,knn-rbc,radius,radius-manhattan,radius-chebyshev,radius-minkowski-p3,dbscan-weighted,logistic-l1,logistic-elasticnet,logistic-multiclass,linear-svc,linear-svc-squared-hinge,linear-svr,linear-svr-squared,qn-squared,qn-absolute,kpss,svr,svr-linear,pca-full-whiten,metrics-classification,metrics-fowlkes-mallows,metrics-homogeneity-completeness,gbdt-adapter-score-weighted,rf-score-weighted,mlp,gbdt-symmetric,gbdt-rmse,gbdt-depthwise,gbdt-lossguide,gbdt-nan-modes,gbdt-adapter-clf,gbdt-adapter-reg,gbdt-parametric-losses,gbdt-exact-mae,gbdt-lossguide-newtoncosine,gbdt-multiclass,gbdt-multiclass-defaults,gbdt-onevsall,gbdt-ordered-rmse,gbdt-border-types,gbdt-ordered,gbdt-ordered-bayesian-noise,gbdt-binary-columns,gbdt-bfa-quantile,gbdt-catboost-defaults,gbdt-stochastic-arms,gbdt-symmetric-eval,gbdt-feature-freq,gbdt-pointwise-l2-bayesian-eval,gbdt-categorical-ctr,gbdt-ranking-defaults,gbdt-query-rmse,gbdt-pair-logit,gbdt-yeti-rank,arima,arima-011,arima-seasonal-c,arima-exog,arima-exog-seasonal,umap,kmeans-classic-pp,cross-val,bootstrap,permutation-test,monte-carlo,optim-sgd,optim-adam-clip,cross-entropy-arms,training-primitives,ordered-gradient-sum,cholesky,rbf-sampler,kernel-ridge,nystroem,gmm,gmm-random-init,hdbscan,hdbscan-leaf,rf-clf-entropy-log2-noboot,rf-clf-balanced-parallel,rf-reg-poisson,rf-reg-gamma-ig,et-clf-entropy-bestfirst,et-reg-bootstrap-parallel,mamba2,mamba2-dtlimit,mamba1,mamba3,transformer,transformer-window,samba,samba-untied-dropout-accum,byte-lm-host-infer,byte-lm-host-infer-threaded,byte-lm-host-train,language-model-config,par-scaler,par-scaler-minmax,par-arima,par-holtwinters,par-forecast-arima,par-forecast-holtwinters,par-queries-knn,par-queries-nn,par-queries-radius,par-queries-kde,par-reference-knn,par-reference-knn-reg,par-forest,par-forest-et,par-forest-et-clf,par-forest-reg,par-mlp,par-samba,par-samba-clip,par-ivf,ivf-extend,byte-lm,byte-lm-resident,gmm-sample,gmm-random-init-sample,gp-sample-y,gp-sample-y-normalize,tokenizer,bpe-trainer,bpe-vocabulary,tokenized-corpus,hf-checkpoint,hf-tokenizer,hf-causal-lm,gbdt-categorical-ctr-tables,gbdt-tensor-ctr-tables,gemm-bf16,gemm-int8,transformer-bf16w,transformer-int8w,mamba1-bf16w,mamba1-int8w,mamba2-bf16w,mamba2-int8w,mamba3-bf16w,mamba3-int8w,mlp-bf16w,mlp-int8w,samba-bf16w,samba-int8w,saved-model-host-infer,lowbit-conversions,grad-accumulation
+.F........SKIP: _mojolearn_core_host is not built
+.SKIP: _mojolearn_core_host is not built
+.SKIP: _mojolearn_resample_host is not built
+..
+=================================== FAILURES ===================================
+____________________ test_refusals_fire_by_name_when_built _____________________
+
+    def test_refusals_fire_by_name_when_built():
+        if not _cpu_only_with_training_host():
+            return
+        import numpy as np
+        import pytest
+        from mojolearn import training
+        h, w, t = _inputs()
+        with pytest.raises(ValueError, match="vocab must be at least 2"):
+            training.chunked_lm_head_loss(h, w[:1], np.zeros(5, dtype=np.int64))
+        with pytest.raises(ValueError, match="width"):
+            training.chunked_lm_head_loss(h, w[:, :4], t)
+        with pytest.raises(ValueError, match="targets for"):
+            training.chunked_lm_head_loss(h, w, t[:4])
+        with pytest.raises(TypeError, match="float32"):
+            training.chunked_lm_head_loss(h.astype(np.float64), w, t)
+        bad_t = t.copy()
+        bad_t[2] = 513
+        with pytest.raises(Exception, match="target outside"):
+            training.chunked_lm_head_loss(h, w, bad_t, return_grad=True)
+        bad_h = h.copy()
+        bad_h[1, 3] = np.nan
+>       with pytest.raises(Exception, match="non-finite|nonfinite|finite"):
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       AssertionError: Regex pattern did not match.
+E         Expected regex: 'non-finite|nonfinite|finite'
+E         Actual message: 'ce: NaN in chunked lm head hidden at flat index 11 REFUSED (row 39: NaN payloads are vendor-shaped; no stage may record one)'
+
+mojolearn/tests/test_chunked_lm_head_door.py:195: AssertionError
+____________ test_fix_columns_carry_the_fixed_lane_on_every_fixture ____________
+
+    def test_fix_columns_carry_the_fixed_lane_on_every_fixture():
+        """Every fix lane must be carried by exactly three of the fix columns, one
+        per GPU vendor, STABLE with one hash per fixture across the three; and
+        the record must either lack the lane or disagree with those hashes on
+        some fixture (otherwise the lane belongs back on the record). kmeans-sqrt's
+        three are the record's own boxes after the fix."""
+>       cols = {rel: json.loads(_read(rel)) for rel in host_surface.TRAINING_FIX_COLUMNS}
+                                ^^^^^^^^^^
+
+mojolearn/tests/test_cpu_training_misc.py:113: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+mojolearn/tests/test_cpu_training_misc.py:78: in _read
+    return (ROOT / rel).read_text(encoding="utf-8")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../.pixi/envs/test/lib/python3.14/pathlib/__init__.py:787: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/root/mojolearn/bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/apple-m4.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/root/mojolearn/bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/apple-m4.json'
+
+../.pixi/envs/test/lib/python3.14/pathlib/__init__.py:771: FileNotFoundError
+2 failed, 25 passed in 0.59s

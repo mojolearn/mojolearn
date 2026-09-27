@@ -1,0 +1,5 @@
+pod='l8r0uagvhh2g3j'
+target='-p 30021 root@213.173.105.94'
+armed_utc='2026-09-23T23:34:25Z'
+deadline_epoch=1790210065
+minutes=60

@@ -1,0 +1,33 @@
+### commit 20b646041c636503481384c031986bbf86189998
+portable_math exit 0
+### 1. the oracle check still passes after the forward split
+oracle check build exit 0
+oracle check exit 0
+CHUNKED_LM_HEAD_V2_OK
+pip pytest exit 1
+cpu_only True built ['_mojolearn_training_host']
+### 2. pytest: the new door test and the training host tests beside it
+pytest exit 1
+/root/mojolearn/.pixi/envs/default/bin/python3: No module named pytest
+### 3. clean hashes
+sabotage False
+5 513 8 loss 358bd440 358bd440 dh 18de3ea14338860f dw 8ccce010bf7ff1fa
+16 300 12 loss c35bba40 c35bba40 dh 39fae04463807ca5 dw 3006ca6667d265d9
+### 4. sabotage hashes (MOJOLEARN_HOST_SABOTAGE training host)
+Traceback (most recent call last):
+  File "/tmp/clh_hash.py", line 4, in <module>
+    print("sabotage", lib.training_host_sabotage())
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 1249, in __getattr__
+    module = load_host_module(self.__basename)
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 1181, in load_host_module
+    raise ImportError(
+    ...<2 lines>...
+    )
+ImportError: mojolearn: /root/mojolearn/python/mojolearn/host-sabotage/_mojolearn_training_host.so is a SABOTAGE build and computes wrong answers on purpose; it is refused outside the gate (MOJOLEARN_HOST_ALLOW_SABOTAGE=1)
+### 5. gates
+lane_accounting --check exit 0
+what the shipped verifier does with them: 215 EXPOSED, 59 NOT APPLICABLE
+public algorithms with no lane at all: 1 declared (ran)
+harness cross-check: ran
+OK: 0 problems

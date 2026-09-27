@@ -1,0 +1,11 @@
+Traceback (most recent call last):
+  File "/tmp/clh_hash.py", line 4, in <module>
+    print("sabotage", lib.training_host_sabotage())
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 1249, in __getattr__
+    module = load_host_module(self.__basename)
+  File "/root/mojolearn/python/mojolearn/_backend.py", line 1181, in load_host_module
+    raise ImportError(
+    ...<2 lines>...
+    )
+ImportError: mojolearn: /root/mojolearn/python/mojolearn/host-sabotage/_mojolearn_training_host.so is a SABOTAGE build and computes wrong answers on purpose; it is refused outside the gate (MOJOLEARN_HOST_ALLOW_SABOTAGE=1)

@@ -1,0 +1,5 @@
+pod='oru80v8ejtagvs'
+target='-p 12344 root@154.54.102.100'
+armed_utc='2026-09-23T23:40:52Z'
+deadline_epoch=1790209552
+minutes=45

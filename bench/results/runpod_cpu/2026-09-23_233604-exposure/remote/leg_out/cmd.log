@@ -1,0 +1,46 @@
+### commit 20b646041c636503481384c031986bbf86189998
+portable_math exit 0
+### 1. oracle check: done on the first leg (CHUNKED_LM_HEAD_V2_OK)
+3.14.7 2.5.3 9.1.1
+cpu_only True built ['_mojolearn_training_host']
+### 2. pytest: the new door test and the training host tests beside it
+pytest exit 1
+mojolearn/tests/test_cpu_training_misc.py:78: in _read
+    return (ROOT / rel).read_text(encoding="utf-8")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+../.pixi/envs/test/lib/python3.14/pathlib/__init__.py:787: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors, newline=newline) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = PosixPath('/root/mojolearn/bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/apple-m4.json')
+mode = 'r', buffering = -1, encoding = 'utf-8', errors = None, newline = None
+
+    def open(self, mode='r', buffering=-1, encoding=None,
+             errors=None, newline=None):
+        """
+        Open the file pointed to by this path and return a file object, as
+        the built-in open() function does.
+        """
+        if "b" not in mode:
+            encoding = io.text_encoding(encoding)
+>       return io.open(self, mode, buffering, encoding, errors, newline)
+               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       FileNotFoundError: [Errno 2] No such file or directory: '/root/mojolearn/bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/apple-m4.json'
+
+../.pixi/envs/test/lib/python3.14/pathlib/__init__.py:771: FileNotFoundError
+2 failed, 25 passed in 0.59s
+### 3. clean hashes
+sabotage False
+5 513 8 loss 358bd440 358bd440 dh 18de3ea14338860f dw 8ccce010bf7ff1fa
+16 300 12 loss c35bba40 c35bba40 dh 39fae04463807ca5 dw 3006ca6667d265d9
+### 4. sabotage hashes (MOJOLEARN_HOST_SABOTAGE training host)
+sabotage True
+5 513 8 loss 358bd440 358bd440 dh 18de3ea14338860f dw 08341afbc33bf1a9
+16 300 12 loss c35bba40 c35bba40 dh 39fae04463807ca5 dw 1f4497f83b62ca1b
+### 5. gates
+lane_accounting --check exit 0
+what the shipped verifier does with them: 215 EXPOSED, 59 NOT APPLICABLE
+public algorithms with no lane at all: 1 declared (ran)
+harness cross-check: ran
+OK: 0 problems
