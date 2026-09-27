@@ -273,6 +273,33 @@ def _():
     return ok
 
 
+@case("logistic-cv")
+def _():
+    from sklearn import linear_model as sk
+    from sklearn.model_selection import StratifiedKFold
+    from mojolearn._expansion_linear import _stratified_kfold_ids
+    X, yr, yc, y3 = _data(noise=1.0)
+    rng = np.random.default_rng(3)
+    flip = rng.random(len(yc)) < 0.15
+    ycn = np.where(flip, 1 - yc, yc)
+    ok = True
+    ids = _stratified_kfold_ids(list(y3), 5)
+    ref = np.empty(len(y3), int)
+    for f, (_, te) in enumerate(StratifiedKFold(5).split(X, y3)):
+        ref[te] = f
+    ok &= _close("stratified fold ids", ids, ref, 0)
+    for y in (ycn, y3):
+        a = ml.LogisticRegressionCV(max_iter=1000).fit(X, y)
+        b = sk.LogisticRegressionCV(max_iter=1000).fit(X.astype(np.float64), y)
+        k = len(set(y))
+        print(f"  k={k} C_ {a.C_[0]:.4g} vs {b.C_[0]:.4g}")
+        key = sorted(b.scores_)[-1]
+        ok &= _close(f"k={k} scores_", np.asarray(a.scores_[key]), b.scores_[key], 0.02)
+        pa, pb = np.asarray(a.predict_proba(X)), b.predict_proba(X)
+        ok &= _close(f"k={k} predict_proba", pa, pb, 0.02)
+    return ok
+
+
 def main(argv):
     names = argv or list(CASES)
     bad = []

@@ -33,7 +33,7 @@ __all__ = ["SGDClassifier", "SGDRegressor", "PoissonRegressor", "GammaRegressor"
            "Perceptron", "PassiveAggressiveClassifier",
            "PassiveAggressiveRegressor", "SGDOneClassSVM",
            "RidgeClassifier", "RidgeCV",
-           "LassoCV", "ElasticNetCV"]
+           "LassoCV", "ElasticNetCV", "LogisticRegressionCV"]
 
 _BINDING = "_mojolearn_x_linear"
 ALGO_SGD, ALGO_GLM, ALGO_HUBER, ALGO_BAYES, ALGO_ARD = 1, 2, 3, 4, 5
@@ -957,3 +957,110 @@ class ElasticNetCV(_LinearRegressorMixin, NumericModeMixin):
         ratios = list(self.l1_ratio) if hasattr(self.l1_ratio, "__len__") else [self.l1_ratio]
         self.l1_ratio_ = _enetcv_fit(self, X, y, [float(r) for r in ratios])
         return self
+
+
+# ---------------------------------------------------- LogisticRegressionCV
+# Reference: scikit-learn sklearn/linear_model/_logistic.py; kernel
+# x_linear/logcv.mojo (L-BFGS on their LinearModelLoss objective).
+
+def _stratified_kfold_ids(codes, k):
+    """scikit-learn's StratifiedKFold(n_splits=k, shuffle=False)._make_test_folds,
+    in integers: classes renumbered by first appearance, each class's rows
+    dealt to folds by the round-robin allocation of the sorted labels."""
+    n = len(codes)
+    first = {}
+    for i, c in enumerate(codes):
+        first.setdefault(c, i)
+    order = sorted(first, key=lambda c: first[c])
+    enc = {c: r for r, c in enumerate(order)}
+    y_enc = [enc[c] for c in codes]
+    K = len(order)
+    counts = [0] * K
+    for c in y_enc:
+        counts[c] += 1
+    if not isinstance(k, int) or isinstance(k, bool) or k < 2 or k > max(counts):
+        raise ValueError("mojolearn: cv must be None or an int in [2, the largest class size]")
+    y_order = sorted(y_enc)
+    alloc = [[0] * K for _ in range(k)]
+    for i in range(k):
+        for c in y_order[i::k]:
+            alloc[i][c] += 1
+    ids = [0] * n
+    for c in range(K):
+        folds = [f for f in range(k) for _ in range(alloc[f][c])]
+        pos = 0
+        for i in range(n):
+            if y_enc[i] == c:
+                ids[i] = folds[pos]
+                pos += 1
+    return ids
+
+
+class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
+    """L2 logistic regression with C chosen by stratified K-fold accuracy
+    (scikit-learn's LogisticRegressionCV; binary or multinomial)."""
+
+    _BINDING = _BINDING
+
+    def __init__(self, *, Cs=10, fit_intercept=True, cv=None, dual=False, penalty="l2", scoring=None,
+                 solver="lbfgs", tol=1e-4, max_iter=100, class_weight=None, n_jobs=None, verbose=0,
+                 refit=True, intercept_scaling=1.0, random_state=None, l1_ratios=None):
+        self.Cs, self.fit_intercept, self.cv, self.dual, self.penalty = Cs, fit_intercept, cv, dual, penalty
+        self.scoring, self.solver, self.tol, self.max_iter = scoring, solver, tol, max_iter
+        self.class_weight, self.n_jobs, self.verbose, self.refit = class_weight, n_jobs, verbose, refit
+        self.intercept_scaling, self.random_state, self.l1_ratios = intercept_scaling, random_state, l1_ratios
+
+    def fit(self, X, y):
+        if self.penalty != "l2" or self.dual or self.l1_ratios is not None:
+            raise ValueError("mojolearn LogisticRegressionCV: only penalty='l2' (primal) is implemented")
+        if self.scoring is not None or self.class_weight is not None or not self.refit:
+            raise ValueError("mojolearn LogisticRegressionCV: scoring, class_weight and refit=False are not implemented")
+        if self.solver not in ("lbfgs", "newton-cg", "newton-cholesky"):
+            raise ValueError("mojolearn LogisticRegressionCV: solver must be lbfgs (newton-* run L-BFGS too)")
+        a, n, d = _matrix(X)
+        classes, codes = _classes(self, y, n)
+        cl = [int(c) for c in codes.tolist()]
+        K = len(classes)
+        kp = 1 if K == 2 else K
+        if isinstance(self.Cs, int) and not isinstance(self.Cs, bool):
+            m = self.Cs
+            Cs = [10.0 ** (-4 + 8 * i / (m - 1)) for i in range(m)] if m > 1 else [1e-4]
+        else:
+            Cs = [float(c) for c in self.Cs]
+        folds = 5 if self.cv is None else self.cv
+        ids = _stratified_kfold_ids(cl, folds)
+        yy = Array.from_list([float(c) for c in cl] + [float(f) for f in ids], "<f4")
+        p = kp * (d + 1)
+        nc = len(Cs)
+        vals = _run(self, ALGO_LOGCV, a, n, d, yy, [self.max_iter, int(bool(self.fit_intercept)), kp, nc, folds],
+                    [self.tol] + Cs, kp * d + kp + 2 + folds * nc, p + 1 + _lbfgs_work(p), 3)
+        self.classes_ = classes
+        self.coef_ = Array.from_list(_rows(vals, kp, d), "<f4")
+        self.intercept_ = Array.from_list(vals[kp * d:kp * d + kp], "<f4")
+        best_c = Cs[min(range(nc), key=lambda i: abs(Cs[i] - vals[kp * d + kp]))]
+        self.Cs_ = Cs
+        self.C_ = [best_c] * kp
+        self.n_iter_ = int(vals[kp * d + kp + 1])
+        off = kp * d + kp + 2
+        grid = [vals[off + f * nc:off + (f + 1) * nc] for f in range(folds)]
+        labels = classes.tolist() if hasattr(classes, "tolist") else list(classes)
+        self.scores_ = {lab: Array.from_list(grid, "<f4") for lab in (labels[1:] if kp == 1 else labels)}
+        self.n_features_in_ = d
+        return self
+
+    def predict_proba(self, X):
+        import math
+        scores = self.decision_function(X).tolist()
+        if len(self.intercept_) == 1:
+            out = []
+            for z in scores:
+                p = 1.0 / (1.0 + math.exp(-z)) if z >= 0 else math.exp(z) / (1.0 + math.exp(z))
+                out.append([1.0 - p, p])
+            return Array.from_list(out, "<f4")
+        out = []
+        for row in scores:
+            m = max(row)
+            e = [math.exp(v - m) for v in row]
+            s = sum(e)
+            out.append([v / s for v in e])
+        return Array.from_list(out, "<f4")
