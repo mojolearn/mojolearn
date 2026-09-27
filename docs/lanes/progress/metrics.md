@@ -73,11 +73,12 @@ targets, sparse contingency, numpy RandomState / scipy distributions, n_jobs>1).
 | x-metrics-classification, -regression, -ranking, -cluster, -splitters, -search | AGREE, train 9 fixtures, cuda RTX 4090 vs CPU (Ryzen 7950X), 2026-09-27 |
 | seams 6100-6108 (`x_metrics/seams/x_metrics_check.mojo`, 8 seams host+device) | PASS on RTX 4090 |
 | `--pass 2`, 5 lanes + `e2e_host_fadd.patch` (host-only +1 ulp in `fadd`) | all 8 seam arms FAIL under their patch and PASS after reversal; the 5 lanes AGREE, DISAGREE on 9/9 fixtures under the sabotage, AGREE after (RTX 4090) |
-| `--pass 2`, x-metrics-splitters + `e2e_host_permute.patch` | first run refused: the selector did not see model_selection reach x_metrics (fixed: `_execute` is a module-level function and model_selection names `_SPLIT_BINDING`); rerun owed |
+| `--pass 2`, x-metrics-splitters + `e2e_host_permute.patch` (host-only reversed key order) | AGREE, DISAGREE on 9/9 fixtures under it, AGREE after (RTX 4090). The first run was refused because the selector did not see model_selection reach x_metrics; fixed (`_execute` is a module-level function, model_selection names `_SPLIT_BINDING`) |
+| FAST tier sanity | the FAST x_metrics build passes the same 295 scikit-learn comparisons (the existing FAST bindings were not built on the pod) |
+| the 103 lanes the diff selects (`lane_select.py --lanes-for-paths`) | 83 AGREE CUDA vs CPU (every existing metrics, cross-val, rf/et/gbdt/trees, spectral lane in the set); 18 `par-*` lanes not run: they have no CPU arm by design (cooperative multi-GPU drivers); `gbdt-categorical-ctr-tables` and `gbdt-tensor-ctr-tables` read NOTHING COMPARED on the model stage because the CPU column loads the GPU's saved file (`n/a:gpu-saved-file`) and `--require-columns 2` then cannot be met: a harness property of those two lanes, unrelated to this diff, reported to main |
+| test_lane_select (feature tree) | OK: 0 failures |
 | registration (EXPANSION_LANES, door, empty fragment) | merged to main a6f8617a8 on its own (manifest byte-identical; test_host_surface, test_lane_select OK), so the feature diff selects 103 lanes instead of all |
-| steward identity requests at be39c62b6 | 1790544421098 (5 lanes, e2e_host_fadd), 1790544803666 (splitters, e2e_host_permute): queued on m2pro, m3ultra-b, m4pro, do-amd |
-
-(the 103-lane CPU == GPU check, the steward verdicts and the merge commit are appended below as they land)
+| steward identity requests at be39c62b6 | 1790544421098 (5 lanes, e2e_host_fadd), 1790544803666 (splitters, e2e_host_permute): queued on m2pro, m3ultra-b, m4pro, do-amd. Post-merge release gates (CURRENT DIRECTIVES 0000b): the next session reads `tools/apple_steward.py status`; a FAIL is fixed at the root as its own commit |
 
 ## Next phases
 - **3. FAST speed** (next session): every x_metrics unit is one thread per
