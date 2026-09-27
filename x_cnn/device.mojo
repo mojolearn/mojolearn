@@ -182,7 +182,7 @@ def gemm_device(a: List[Float32], b: List[Float32], m: Int, n: Int, k: Int, op: 
     return out^
 
 
-def conv2d_forward_into(x: FP, w: FP, bias: FP, prm: List[Int32], out: FP) raises:
+def conv2d_forward_into(x: FP, w: FP, bias: FP, prm: List[Int32], dst: FP) raises:
     var N = Int(prm[CP_N]); var C = Int(prm[CP_C]); var OC = Int(prm[CP_OC])
     var ckk = C * Int(prm[CP_KH]) * Int(prm[CP_KW])
     var rows = N * Int(prm[CP_OH]) * Int(prm[CP_OW])
@@ -197,7 +197,7 @@ def conv2d_forward_into(x: FP, w: FP, bias: FP, prm: List[Int32], out: FP) raise
     launch[im2col_at](ctx, fp(dx), fp(cols), fp(cols), fp(cols), ip(dp), ip(dp), rows * ckk)
     device_gemm(ctx, y2, cols, dw, rows, OC, ckk, OP_NT)
     launch[conv_out_at](ctx, fp(y2), fp(dbias), fp(dout), fp(dout), ip(dp), ip(dp), rows * OC)
-    down(ctx, dout, out, rows * OC)
+    down(ctx, dout, dst, rows * OC)
     ctx.synchronize()
     _ = dx^
     _ = dw^
@@ -278,7 +278,7 @@ def _pool_sizes(prm: List[Int32]) -> Tuple[Int, Int]:
     return (nc * Int(prm[PP_H]) * Int(prm[PP_W]), nc * Int(prm[PP_OH]) * Int(prm[PP_OW]))
 
 
-def maxpool2d_forward_into(x: FP, prm: List[Int32], out: FP, idx_out: IP) raises:
+def maxpool2d_forward_into(x: FP, prm: List[Int32], dst: FP, idx_out: IP) raises:
     var sizes = _pool_sizes(prm)
     var no = sizes[1]
     var ctx = cnn_ctx()
@@ -287,7 +287,7 @@ def maxpool2d_forward_into(x: FP, prm: List[Int32], out: FP, idx_out: IP) raises
     var dout = ctx.enqueue_create_buffer[DType.float32](no)
     var di = ctx.enqueue_create_buffer[DType.int32](no)
     launch[maxpool_fwd_at](ctx, fp(dx), fp(dout), fp(dout), fp(dout), ip(di), ip(dp), no)
-    down(ctx, dout, out, no)
+    down(ctx, dout, dst, no)
     down_i(ctx, di, idx_out, no)
     ctx.synchronize()
     _ = dx^
@@ -325,7 +325,7 @@ def maxpool2d_backward_into(dout: FP, idx: IP, prm: List[Int32], gx_out: FP) rai
     _ = ctx^
 
 
-def avgpool2d_forward_into(x: FP, prm: List[Int32], out: FP) raises:
+def avgpool2d_forward_into(x: FP, prm: List[Int32], dst: FP) raises:
     var sizes = _pool_sizes(prm)
     var no = sizes[1]
     var ctx = cnn_ctx()
@@ -333,7 +333,7 @@ def avgpool2d_forward_into(x: FP, prm: List[Int32], out: FP) raises:
     var dp = upload_i32(ctx, prm)
     var dout = ctx.enqueue_create_buffer[DType.float32](no)
     launch[avgpool_fwd_at](ctx, fp(dx), fp(dout), fp(dout), fp(dout), ip(dp), ip(dp), no)
-    down(ctx, dout, out, no)
+    down(ctx, dout, dst, no)
     ctx.synchronize()
     _ = dx^
     _ = dp^
@@ -365,8 +365,8 @@ def avgpool2d_backward_into(dout: FP, prm: List[Int32], gx_out: FP) raises:
     _ = ctx^
 
 
-def map2_into[f: ElemFn](a: FP, na: Int, b: FP, nb: Int, n_out: Int, prm: List[Int32], out: FP) raises:
-    """out[i] = f(a, b) for i < n_out (slots a, b, dst); `nb == 0` reuses a."""
+def map2_into[f: ElemFn](a: FP, na: Int, b: FP, nb: Int, n_out: Int, prm: List[Int32], dst: FP) raises:
+    """dst[i] = f(a, b) for i < n_out (slots a, b, dst); `nb == 0` reuses a."""
     var ctx = cnn_ctx()
     var da = up(ctx, a, na)
     var db = up(ctx, b, nb) if nb > 0 else ctx.enqueue_create_buffer[DType.float32](1)
@@ -376,7 +376,7 @@ def map2_into[f: ElemFn](a: FP, na: Int, b: FP, nb: Int, n_out: Int, prm: List[I
         launch[f](ctx, fp(da), fp(db), fp(dout), fp(dout), ip(dp), ip(dp), n_out)
     else:
         launch[f](ctx, fp(da), fp(da), fp(dout), fp(dout), ip(dp), ip(dp), n_out)
-    down(ctx, dout, out, n_out)
+    down(ctx, dout, dst, n_out)
     ctx.synchronize()
     _ = da^
     _ = db^
@@ -385,27 +385,27 @@ def map2_into[f: ElemFn](a: FP, na: Int, b: FP, nb: Int, n_out: Int, prm: List[I
     _ = ctx^
 
 
-def relu_forward_into(x: FP, n: Int, out: FP) raises:
+def relu_forward_into(x: FP, n: Int, dst: FP) raises:
     var prm: List[Int32] = [0, 0, 0]
-    map2_into[relu_fwd_at](x, n, x, 0, n, prm, out)
+    map2_into[relu_fwd_at](x, n, x, 0, n, prm, dst)
 
 
-def relu_backward_into(x: FP, g: FP, n: Int, out: FP) raises:
+def relu_backward_into(x: FP, g: FP, n: Int, dst: FP) raises:
     var prm: List[Int32] = [0, 0, 0]
-    map2_into[relu_bwd_at](x, n, g, n, n, prm, out)
+    map2_into[relu_bwd_at](x, n, g, n, n, prm, dst)
 
 
-def add_into(a: FP, b: FP, n: Int, out: FP) raises:
+def add_into(a: FP, b: FP, n: Int, dst: FP) raises:
     var prm: List[Int32] = [0, 0, 0]
-    map2_into[add_at](a, n, b, n, n, prm, out)
+    map2_into[add_at](a, n, b, n, n, prm, dst)
 
 
-def mul_into(a: FP, b: FP, n: Int, out: FP) raises:
+def mul_into(a: FP, b: FP, n: Int, dst: FP) raises:
     var prm: List[Int32] = [0, 0, 0]
-    map2_into[mul_at](a, n, b, n, n, prm, out)
+    map2_into[mul_at](a, n, b, n, n, prm, dst)
 
 
-def linear_forward_into(x: FP, w: FP, bias: FP, n: Int, d_in: Int, d_out: Int, out: FP) raises:
+def linear_forward_into(x: FP, w: FP, bias: FP, n: Int, d_in: Int, d_out: Int, dst: FP) raises:
     """y = x W^T + b: the pinned GEMM NT, then one add per element."""
     var ctx = cnn_ctx()
     var dx = up(ctx, x, n * d_in)
@@ -417,7 +417,7 @@ def linear_forward_into(x: FP, w: FP, bias: FP, n: Int, d_in: Int, d_out: Int, o
     var dout = ctx.enqueue_create_buffer[DType.float32](n * d_out)
     device_gemm(ctx, y, dx, dw, n, d_out, d_in, OP_NT)
     launch[bias_rows_at](ctx, fp(y), fp(db), fp(dout), fp(dout), ip(dp), ip(dp), n * d_out)
-    down(ctx, dout, out, n * d_out)
+    down(ctx, dout, dst, n * d_out)
     ctx.synchronize()
     _ = dx^
     _ = dw^
@@ -634,7 +634,7 @@ def dropout2d_device(x: List[Float32], prm: List[Int32], hyper: List[Float32]) r
     return out^
 
 
-def spmm_into(vals: FP, nvals: Int, h: FP, csr: List[Int32], prm: List[Int32], out: FP) raises:
+def spmm_into(vals: FP, nvals: Int, h: FP, csr: List[Int32], prm: List[Int32], dst: FP) raises:
     var total = Int(prm[0]) * Int(prm[1])
     var ctx = cnn_ctx()
     var dv = up(ctx, vals, nvals)
@@ -643,7 +643,7 @@ def spmm_into(vals: FP, nvals: Int, h: FP, csr: List[Int32], prm: List[Int32], o
     var dp = upload_i32(ctx, prm)
     var dout = ctx.enqueue_create_buffer[DType.float32](total)
     launch[spmm_at](ctx, fp(dv), fp(dh), fp(dout), fp(dout), ip(dq), ip(dp), total)
-    down(ctx, dout, out, total)
+    down(ctx, dout, dst, total)
     ctx.synchronize()
     _ = dv^
     _ = dh^
@@ -684,18 +684,18 @@ def gcn_norm_device(w: List[Float32], csr: List[Int32], prm: List[Int32]) raises
     return result^
 
 
-def pad2d_forward_into(x: FP, prm: List[Int32], out: FP) raises:
+def pad2d_forward_into(x: FP, prm: List[Int32], dst: FP) raises:
     var nc = Int(prm[0]) * Int(prm[1])
     var nx = nc * Int(prm[2]) * Int(prm[3])
     var n_out = nc * (Int(prm[2]) + Int(prm[4]) + Int(prm[5])) * (Int(prm[3]) + Int(prm[6]) + Int(prm[7]))
-    map2_into[pad_fwd_at](x, nx, x, 0, n_out, prm, out)
+    map2_into[pad_fwd_at](x, nx, x, 0, n_out, prm, dst)
 
 
-def pad2d_backward_into(g: FP, prm: List[Int32], out: FP) raises:
+def pad2d_backward_into(g: FP, prm: List[Int32], dst: FP) raises:
     var nc = Int(prm[0]) * Int(prm[1])
     var ng = nc * (Int(prm[2]) + Int(prm[4]) + Int(prm[5])) * (Int(prm[3]) + Int(prm[6]) + Int(prm[7]))
     var n_out = nc * Int(prm[2]) * Int(prm[3])
-    map2_into[pad_bwd_at](g, ng, g, 0, n_out, prm, out)
+    map2_into[pad_bwd_at](g, ng, g, 0, n_out, prm, dst)
 
 
 def pad2d_backward_device(g: List[Float32], prm: List[Int32]) raises -> List[Float32]:
