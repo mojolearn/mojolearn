@@ -125,6 +125,37 @@ def _(ml, X, yc, yr, Xh=None):
                 w, lambda e: (e.transform(_neighbors_holes(Xh[:256])),))
 
 
+def _neighbors_graph(X, n=128, directed=False, ring=True):
+    """A graph built from exact comparisons of fixture values only: an edge
+    joins two rows whose column-3 value falls in the same half-unit bin,
+    weighted 1 + (i * j) % 3; `ring` adds i -> i+1 so the components join."""
+    q = np.floor(X[:n, 3] * np.float32(2)).astype(np.int64)
+    i = np.arange(n)
+    A = ((q[:, None] == q[None, :]) & (i[:, None] != i[None, :])).astype(np.float32)
+    A *= (1 + (i[:, None] * i[None, :]) % 3).astype(np.float32)
+    if ring:
+        A[i[:-1], i[1:]] = np.float32(1)
+        if not directed:
+            A[i[1:], i[:-1]] = np.float32(1)
+    if directed:
+        A = np.triu(A).astype(np.float32)
+        A[::17] = np.float32(0)                          # dangling rows
+    return np.ascontiguousarray(A, dtype=np.float32)
+
+
+@lane("x-neighbors-pagerank")
+def _(ml, X, yc, yr, Xh=None):
+    A = _neighbors_graph(X, directed=True)
+    m = ml.PageRank(alpha=0.85, tol=1e-6).fit(A)
+    pers = (1 + np.arange(128) % 5).astype(np.float32)
+    p = ml.PageRank(alpha=0.7, personalization=pers).fit(A)
+    return _fit(dict(pr=_h(m.pagerank_), it=_h(np.int64(m.n_iter_)), pers=_h(p.pagerank_)), m,
+                lambda e: (ml.PageRank(alpha=0.85).fit(_neighbors_graph(Xh, directed=True)).pagerank_,))
+
+
+
+
+
 _batch_decl(_rows_calls("score_samples", "predict", sl=slice(0, 256)), "x-neighbors-lof")
 _batch_decl(_rows_calls("predict", "decision_function", "predict_proba", sl=slice(0, 256)), "x-neighbors-nearest-centroid")
 _batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "x-neighbors-ocsvm")

@@ -16,10 +16,11 @@ FAMILIES = (
             "x-neighbors-lof", "x-neighbors-nearest-centroid", "x-neighbors-ocsvm", "x-neighbors-kpca",
             "x-neighbors-poly-sketch", "x-neighbors-additive-chi2", "x-neighbors-skewed-chi2",
             "x-neighbors-label-propagation", "x-neighbors-label-spreading", "x-neighbors-knn-imputer",
+            "x-neighbors-pagerank",
         ),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch", "AdditiveChi2Sampler", "SkewedChi2Sampler", "LabelPropagation", "LabelSpreading", "KNNImputer"),
+        classes=("LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch", "AdditiveChi2Sampler", "SkewedChi2Sampler", "LabelPropagation", "LabelSpreading", "KNNImputer", "PageRank"),
         display="the neighbors + kernel expansion lane",
         host_modules=("x_neighbors/items.mojo", "x_neighbors/host_ops.mojo", "x_neighbors/eigh.mojo"),
         exports=(
@@ -63,6 +64,11 @@ FAMILIES = (
             "xn_ls_laplacian",
             "xn_knn_graph",
             "xn_knn_impute",
+            "xn_pagerank_step",
+            "xn_cc_step",
+            "xn_louvain",
+            "xn_svgp",
+            "xn_svgp_var",
             "xn_eigh",
             "x_neighbors_numeric_mode",
             "x_neighbors_vendor",
@@ -84,6 +90,7 @@ TRAINING_LANE_NAMES = {
     "x-neighbors-label-propagation": "LabelPropagation",
     "x-neighbors-label-spreading": "LabelSpreading",
     "x-neighbors-knn-imputer": "KNNImputer",
+    "x-neighbors-pagerank": "PageRank",
 }
 PUBLIC_PENDING_LANES = {
     "x-neighbors-lof": "no reference",
@@ -96,4 +103,5 @@ PUBLIC_PENDING_LANES = {
     "x-neighbors-label-propagation": "no reference",
     "x-neighbors-label-spreading": "no reference",
     "x-neighbors-knn-imputer": "no reference",
+    "x-neighbors-pagerank": "no reference",
 }

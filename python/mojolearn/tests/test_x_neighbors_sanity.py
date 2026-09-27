@@ -140,3 +140,22 @@ def test_knn_imputer(kw):
     X[7, :] = np.nan
     np.testing.assert_allclose(np.asarray(ml.KNNImputer(**kw).fit_transform(X)), R(**kw).fit_transform(X),
                                rtol=1e-4, atol=1e-5)
+
+
+def _graph(n=60, seed=0, directed=False):
+    rng = np.random.default_rng(seed)
+    A = (rng.random((n, n)) < 0.08).astype(np.float32) * rng.integers(1, 4, (n, n)).astype(np.float32)
+    np.fill_diagonal(A, 0)
+    if not directed:
+        A = np.triu(A)
+        A = A + A.T
+    return A
+
+
+def test_pagerank():
+    nx = pytest.importorskip("networkx")
+    A = _graph(directed=True)
+    A[3] = 0                                            # a dangling node
+    ref = nx.pagerank(nx.from_numpy_array(A, create_using=nx.DiGraph), alpha=0.85, tol=1e-6)
+    ours = np.asarray(ml.PageRank(alpha=0.85, tol=1e-6).fit(A).pagerank_)
+    np.testing.assert_allclose(ours, [ref[i] for i in range(len(A))], rtol=2e-4, atol=1e-6)

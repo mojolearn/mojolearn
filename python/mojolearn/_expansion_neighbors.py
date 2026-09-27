@@ -30,7 +30,7 @@ from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty
 from ._mode import NumericModeMixin
 
-__all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch", "AdditiveChi2Sampler", "SkewedChi2Sampler", "LabelPropagation", "LabelSpreading", "KNNImputer"]
+__all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch", "AdditiveChi2Sampler", "SkewedChi2Sampler", "LabelPropagation", "LabelSpreading", "KNNImputer", "PageRank"]
 
 # x_neighbors/items.mojo's codes
 _KERNELS = {"linear": 0, "poly": 1, "polynomial": 1, "rbf": 2, "sigmoid": 3, "laplacian": 4,
@@ -998,3 +998,97 @@ class KNNImputer(_XNeighbors):
 
     def fit_transform(self, X, y=None):
         return self.fit(X).transform(X)
+
+
+# ====================================================================== PageRank
+def _adjacency(A):
+    A = _f32(A, "adjacency")
+    if A.shape[0] != A.shape[1]:
+        raise ValueError("the adjacency matrix must be square")
+    return A
+
+
+class PageRank(_XNeighbors):
+    """PageRank by power iteration on a dense weighted adjacency matrix
+    (A[i, j] = weight of the edge i -> j).
+
+    References: networkx `pagerank` (`_pagerank_scipy`: row-stochastic
+    transition matrix, dangling nodes redistributed by the personalization,
+    stop when sum |x - x_last| < n * tol) and cuGraph
+    cpp/src/link_analysis/pagerank_impl.cuh. Each step is the pinned-fold
+    GEMV of x_neighbors/items.mojo `pagerank_step_item`. `personalization`
+    is a length-n vector (normalized to sum 1) or None (uniform); `nstart`
+    and a separate `dangling` vector are not carried. Non-convergence raises,
+    as networkx's PowerIterationFailedConvergence.
+    """
+
+    def __init__(self, alpha=0.85, *, personalization=None, max_iter=100, tol=1e-6, weight=True):
+        self.alpha = alpha
+        self.personalization = personalization
+        self.max_iter = max_iter
+        self.tol = tol
+        self.weight = weight
+
+    def fit(self, A, y=None):
+        A = _adjacency(A)
+        n = A.shape[0]
+        if not self.weight:
+            A = Array.from_list([[1.0 if v != 0 else 0.0 for v in r] for r in A.tolist()], "<f4")
+        Q = empty((n, n), "<f4")
+        self._op("row_normalize", [(A, 0), (Q, 1)], (n, n))
+        dangling = _i32([1 if all(v == 0 for v in r) else 0 for r in A.tolist()], "dangling")
+        if self.personalization is None:
+            p = Array.from_list([1.0 / n] * n, "<f4")
+        else:
+            pv = [float(v) for v in (self.personalization.tolist() if hasattr(self.personalization, "tolist")
+                                     else self.personalization)]
+            if len(pv) != n or any(v < 0 for v in pv) or math.fsum(pv) == 0:
+                raise ValueError("personalization must be n non-negative values, not all zero")
+            tot = math.fsum(pv)
+            p = Array.from_list([v / tot for v in pv], "<f4")
+        x = Array.from_list([1.0 / n] * n, "<f4")
+        s = empty((1,), "<f4")
+        for it in range(int(self.max_iter)):
+            nxt = empty((n,), "<f4")
+            self._op("pagerank_step", [(Q, 0), (x, 0), (p, 0), (dangling, 0), (nxt, 1)], (n,), (_f32_scalar(self.alpha),))
+            self._op("absdiff_sum", [(nxt, 0), (x, 0), (s, 1)], (n,))
+            x = nxt
+            if s.tolist()[0] < n * float(self.tol):
+                self.pagerank_ = x
+                self.n_iter_ = it + 1
+                return self
+        raise RuntimeError(f"PageRank: power iteration failed to converge within {self.max_iter} iterations")
+
+
+# ====================================================================== connected components
+def connected_components(A, directed=True, connection="weak", return_labels=True, numeric_mode=None):
+    """(n_components, labels) of the graph with dense adjacency A, as
+    `scipy.sparse.csgraph.connected_components`: an edge is any nonzero
+    entry, `connection='weak'` ignores direction (for an undirected graph the
+    two agree); labels are numbered by the lowest node of each component, so
+    component 0 holds node 0 (scipy's numbering). The labels come from the
+    min-label product iteration (DBSCAN's weak_cc; cuGraph
+    weakly_connected_components_impl.cuh), integers only. connection='strong'
+    on a directed graph is refused by name."""
+    if directed and connection == "strong":
+        raise NotImplementedError("connected_components: connection='strong' is not implemented")
+    if connection not in ("weak", "strong"):
+        raise ValueError("connection must be 'weak' or 'strong'")
+    est = _XNeighbors()
+    est.numeric_mode = numeric_mode
+    A = _adjacency(A)
+    n = A.shape[0]
+    lab = _i32(list(range(n)), "labels")
+    while True:
+        nxt = empty((n,), "<i4")
+        est._op("cc_step", [(A, 0), (lab, 0), (nxt, 1)], (n,))
+        if nxt.tolist() == lab.tolist():
+            break
+        lab = nxt
+    roots = {}
+    out = []
+    for v in lab.tolist():
+        out.append(roots.setdefault(v, len(roots)))
+    labels = Array.from_list(out, "<i4")
+    return (len(roots), labels) if return_labels else len(roots)
+
