@@ -320,3 +320,21 @@ def _(ml, X, yc, yr, Xh=None):
     for k, cls in (("classic", ml.CrostonClassic), ("optimized", ml.CrostonOptimized), ("sba", ml.CrostonSBA)):
         out[k] = _h(cls().fit(y).predict(4)["mean"])
     return _fit(out)
+
+
+@lane("sequence-ets")
+def _(ml, X, yc, yr, Xh=None):
+    """Four series of 80 observations (a trend plus a fixture column, a
+    random walk, a positive level series, a fixture column): damped
+    ETS(A,Ad,N), ETS(M,Ad,N) on the positive rows, undamped AAN and simple
+    ANN; 12-step forecasts."""
+    t = np.arange(80, dtype=np.float32)
+    c = np.ascontiguousarray(X[:80, 9], dtype=np.float32)
+    y = np.stack([np.float32(5.0) + np.float32(0.3) * t + c, np.cumsum(c, dtype=np.float32),
+                  np.float32(40.0) + c, c]).astype(np.float32)
+    pos = np.ascontiguousarray(y[:1] + np.float32(10.0) - np.minimum(y[:1].min(), np.float32(0.0)))
+    out = dict(damped=_h(ml.DampedETS().fit(y).predict(12)["mean"]),
+               mult=_h(ml.DampedETS(error="M").fit(pos).predict(12)["mean"]),
+               aan=_h(ml.ETS(model="AAN", damped=False).fit(y).predict(12)["mean"]),
+               ann=_h(ml.ETS(model="ANN", damped=False).fit(y).predict(12)["mean"]))
+    return _fit(out)
