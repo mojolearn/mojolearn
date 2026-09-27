@@ -69,6 +69,14 @@ comptime OP_SUMSQ = 27
 comptime OP_MLP_BLOSS = 28
 comptime OP_L2GRAD = 29
 comptime OP_DIVS = 30
+comptime OP_AF_ALPHA = 31
+comptime OP_AF_ROW = 32
+comptime OP_AF_COL = 33
+comptime OP_AF_RMEAN = 34
+comptime OP_AF_UPDATE_MAT = 35
+comptime OP_AF_VEC = 36
+comptime OP_AF_DENOM = 37
+comptime OP_AF_APPLY = 38
 
 # ------------------------------------------------------------------ cells
 comptime CELL_RNN_TANH = 0

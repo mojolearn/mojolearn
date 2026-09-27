@@ -79,6 +79,8 @@ def _sequence_opt_run(ml, cls, X, steps=6, **kw):
         g1 = np.ascontiguousarray(X[base:base + 32, 8:16], dtype=np.float32) * np.float32(0.5)
         g2 = np.ascontiguousarray(X[base + 32:base + 40, 1], dtype=np.float32)
         opt.step([g1, g2])
+    if isinstance(opt.state, list) and opt.state and isinstance(opt.state[0], dict):
+        return dict(params=_h(p1, p2), opt=opt)
     return dict(params=_h(p1, p2), state=_h(*opt.state))
 
 
@@ -196,3 +198,13 @@ def _(ml, X, yc, yr, Xh=None):
                          random_state=9).fit(Xs, yrs)
     return _fit(dict(plain=a["params"], plain_state=a["state"], wd=b["params"], wd_state=b["state"],
                      lstm=_h(r.params_, r.loss_curve_)))
+
+
+@lane("sequence-adafactor")
+def _(ml, X, yc, yr, Xh=None):
+    """Adafactor at torch's defaults and with weight decay, d and beta2_decay
+    moved: the factored arm (a 32 x 8 matrix) and the vector arm."""
+    a = _sequence_opt_run(ml, ml.Adafactor, X)
+    b = _sequence_opt_run(ml, ml.Adafactor, X, lr=3e-2, beta2_decay=-0.6, d=2.0, weight_decay=0.1)
+    return _fit(dict(plain=a["params"], plain_state=_h(*[v for s in a["opt"].state for v in s.values()]),
+                     moved=b["params"], moved_state=_h(*[v for s in b["opt"].state for v in s.values()])))

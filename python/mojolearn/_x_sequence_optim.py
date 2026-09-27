@@ -123,4 +123,65 @@ class Lion(_SeqOptimizer):
         return self.state[0]
 
 
+class Adafactor:
+    """`torch.optim.Adafactor` (PyTorch 2.5): relative step size, decoupled
+    weight decay, a factored second moment (row and column means of g^2) for
+    matrices and a full one for vectors, the update clipped by its RMS over
+    d. Parameters are float32 NumPy arrays of 1 or 2 dimensions, updated in
+    place; defaults are torch's. `sequence/adafactor.mojo`."""
+
+    def __init__(self, params, lr=1e-2, beta2_decay=-0.8, eps=(None, 1e-3), d=1.0, weight_decay=0.0,
+                 maximize=False, numeric_mode=None):
+        if maximize:
+            raise NotImplementedError("Adafactor: maximize is not implemented")
+        if isinstance(params, np.ndarray):
+            params = [params]
+        self.params = list(params)
+        for k, p in enumerate(self.params):
+            if not isinstance(p, np.ndarray) or p.dtype != np.float32 or not p.flags.c_contiguous:
+                raise TypeError(f"Adafactor: params[{k}] must be a C-contiguous float32 NumPy array")
+            if p.ndim not in (1, 2):
+                raise NotImplementedError("Adafactor: tensors of more than 2 dimensions are not implemented")
+        if beta2_decay > 0:
+            raise ValueError("Adafactor: beta2_decay must be <= 0")
+        if d < 1.0:
+            raise ValueError(f"Adafactor: clipping threshold d must be >= 1, got {d}")
+        if lr < 0 or weight_decay < 0:
+            raise ValueError("Adafactor: lr and weight_decay must be >= 0")
+        self.lr, self.beta2_decay, self.d, self.weight_decay = float(lr), float(beta2_decay), float(d), float(weight_decay)
+        eps1, eps2 = eps
+        self.eps = (float(np.finfo(np.float32).eps) if eps1 is None else float(eps1), float(eps2))
+        self.numeric_mode = numeric_mode
+        self.state = []
+        for p in self.params:
+            if p.ndim == 2:
+                self.state.append(dict(row_var=np.zeros(p.shape[0], np.float32),
+                                       col_var=np.zeros(p.shape[1], np.float32)))
+            else:
+                self.state.append(dict(variance=np.zeros(p.shape[0], np.float32)))
+        self.t = 0
+
+    def step(self, grads):
+        if isinstance(grads, np.ndarray):
+            grads = [grads]
+        if len(grads) != len(self.params):
+            raise ValueError(f"Adafactor: {len(grads)} grads, {len(self.params)} params")
+        self.t += 1
+        b = _backend.binding("_mojolearn_x_sequence", self.numeric_mode)
+        for p, g, st in zip(self.params, grads, self.state):
+            g = np.asarray(g)
+            if g.shape != p.shape or g.dtype == np.float64:
+                raise ValueError("Adafactor: a grad must be float32 of its param's shape")
+            g = np.ascontiguousarray(g, dtype=np.float32)
+            if p.ndim == 2:
+                s1, s2 = st["row_var"], st["col_var"]
+                R, C = p.shape
+            else:
+                s1 = s2 = st["variance"]
+                R, C = p.shape[0], 0
+            b.adafactor_step([p.ctypes.data, g.ctypes.data, s1.ctypes.data, s2.ctypes.data], [R, C, self.t],
+                             [self.lr, self.beta2_decay, self.eps[0], self.eps[1], self.d, self.weight_decay])
+        return self
+
+
 assert set(OPTIMIZERS) >= {"rmsprop", "adagrad"}
