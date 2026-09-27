@@ -47,6 +47,8 @@ __all__ = [
     "VotingRegressor",
     "StackingClassifier",
     "StackingRegressor",
+    "MultiOutputClassifier",
+    "MultiOutputRegressor",
 ]
 
 
@@ -1407,3 +1409,88 @@ class StackingRegressor(_StackingBase):
 
     def predict(self, X):
         return self.final_estimator_.predict(self._meta32(X))
+
+
+# ------------------------------------------------------------- MultiOutput
+# Reference: scikit-learn `sklearn/multioutput.py` (_MultiOutputEstimator.fit
+# :200, one clone per column of Y; predict stacks the columns;
+# MultiOutputClassifier.predict_proba :500 returns a list). Y is a numeric
+# 2-D buffer; a classifier's labels per column are encoded to codes.
+class MultiOutputRegressor(_TreesWrapperBase):
+    _estimator_type = "regressor"
+
+    def __init__(self, estimator, *, n_jobs=None):
+        if n_jobs is not None:
+            _refuse("n_jobs", "the columns fit one after another.")
+        self.estimator = estimator
+        self.n_jobs = n_jobs
+
+    def fit(self, X, Y, sample_weight=None):
+        Xa, _ = as_f32_c(X, ndim=2, name="X")
+        Ya, _ = as_f32_c(Y, ndim=2, name="Y")
+        if Ya.shape[0] != Xa.shape[0]:
+            raise ValueError(f"Y has {Ya.shape[0]} rows, X has {Xa.shape[0]}")
+        self.estimators_ = []
+        for j in range(Ya.shape[1]):
+            e = _trees_clone(self.estimator)
+            yj = self._column(Ya, j)
+            e.fit(Xa, yj) if sample_weight is None else e.fit(Xa, yj, sample_weight=sample_weight)
+            self.estimators_.append(e)
+        self.n_features_in_ = Xa.shape[1]
+        self._fitted = True
+        return self
+
+    def predict(self, X):
+        Xa = self._check_X(X)
+        n, m = Xa.shape[0], len(self.estimators_)
+        out = zeros((n * m,), "<f8")
+        rows = _trees_arange(n)
+        for j, e in enumerate(self.estimators_):
+            self._place(out, n, m, as_f32_c(e.predict(Xa), ndim=1, name="p")[0], rows, j)
+        return out.reshape((n, m))
+
+
+class MultiOutputClassifier(_TreesWrapperBase):
+    _estimator_type = "classifier"
+
+    def __init__(self, estimator, *, n_jobs=None):
+        if n_jobs is not None:
+            _refuse("n_jobs", "the columns fit one after another.")
+        self.estimator = estimator
+        self.n_jobs = n_jobs
+
+    def fit(self, X, Y, sample_weight=None):
+        Xa, _ = as_f32_c(X, ndim=2, name="X")
+        rows = Y.tolist() if hasattr(Y, "tolist") else [list(r) for r in Y]
+        if len(rows) != Xa.shape[0]:
+            raise ValueError(f"Y has {len(rows)} rows, X has {Xa.shape[0]}")
+        m = len(rows[0])
+        self.estimators_, self.classes_ = [], []
+        for j in range(m):
+            classes, codes = encode_labels([r[j] for r in rows])
+            e = _trees_clone(self.estimator)
+            e.fit(Xa, codes) if sample_weight is None else e.fit(Xa, codes, sample_weight=sample_weight)
+            self.estimators_.append(e)
+            self.classes_.append(classes)
+        self.n_features_in_ = Xa.shape[1]
+        self._fitted = True
+        return self
+
+    def predict(self, X):
+        """(n, n_outputs): an int64 or float64 Array for numeric labels."""
+        Xa = self._check_X(X)
+        cols = [decode_labels(c, as_i32_c(e.predict(Xa), ndim=1, name="codes")[0]).tolist()
+                for e, c in zip(self.estimators_, self.classes_)]
+        kind = "<i8" if all(isinstance(v, int) for col in cols for v in col[:1]) else "<f8"
+        return Array.from_list([list(r) for r in zip(*cols)], kind)
+
+    def predict_proba(self, X):
+        """A list, one (n, n_classes_j) float64 Array per output."""
+        Xa = self._check_X(X)
+        n = Xa.shape[0]
+        out = []
+        for e, c in zip(self.estimators_, self.classes_):
+            acc = zeros((n * len(c),), "<f8")
+            self._acc_cols(acc, e.predict_proba(Xa), _trees_sub_cols(e), n, len(c))
+            out.append(acc.reshape((n, len(c))))
+        return out

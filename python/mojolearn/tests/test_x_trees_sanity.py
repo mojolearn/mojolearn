@@ -186,3 +186,16 @@ def test_stacking():
                             final_estimator=DecisionTreeRegressor(max_depth=4, random_state=0)).fit(Xa, ya)
     a, r = r2_score(yb, np.asarray(ours.predict(Xb))), r2_score(yb, ref.predict(Xb))
     assert a >= r - 0.08, (a, r)
+
+
+def test_multioutput():
+    Xa, Xb, ya, yb = _reg()
+    Y = np.stack([ya, -2 * ya], axis=1)
+    m = ml.MultiOutputRegressor(ml.DecisionTreeRegressor(max_depth=8)).fit(Xa, Y)
+    P = np.asarray(m.predict(Xb))
+    assert P.shape == (len(Xb), 2)
+    np.testing.assert_allclose(P[:, 1], -2 * P[:, 0], rtol=1e-4, atol=1e-3)
+    Xa, Xb, ya, yb = _clf()
+    c = ml.MultiOutputClassifier(ml.DecisionTreeClassifier(max_depth=6)).fit(Xa, np.stack([ya, ya % 2], 1))
+    Pc = np.asarray(c.predict(Xb))
+    assert Pc.shape == (len(Xb), 2) and accuracy_score(yb, Pc[:, 0]) > 0.5

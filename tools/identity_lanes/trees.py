@@ -161,3 +161,17 @@ def _(ml, X, yc, yr, Xh=None):
 
 _batch_decl(_rows_calls("predict", "predict_proba"), "trees-stacking-clf")
 _batch_decl(_rows_calls("predict"), "trees-stacking-reg")
+
+
+@lane("trees-multioutput")
+def _(ml, X, yc, yr, Xh=None):
+    """A regressor per column of Y, and a classifier per column of a label matrix."""
+    Y = np.stack([yr, yr[::-1].copy()], axis=1).astype(np.float32)
+    r = ml.MultiOutputRegressor(ml.DecisionTreeRegressor(max_depth=4)).fit(X, Y)
+    Yc = np.stack([np.asarray(yc), np.asarray(yc) % 2], axis=1).astype(np.int64)
+    c = ml.MultiOutputClassifier(ml.DecisionTreeClassifier(max_depth=4)).fit(X, Yc)
+    return _fit(dict(reg=_h(r.predict(X)), clf=_h(c.predict(X)), proba=_h(*c.predict_proba(X))),
+                r, lambda e: (e.predict(Xh),))
+
+
+_batch_decl(_rows_calls("predict"), "trees-multioutput")
