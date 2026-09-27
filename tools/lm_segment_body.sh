@@ -104,6 +104,7 @@ if [ -n "$WHEEL" ]; then
     say "pip install mojolearn==$WHEEL exit=$_rc secs=$(( $(date +%s) - _t0 ))"
     [ "$_rc" -eq 0 ] || { say "the wheel did not install; nothing run"; exit 1; }
     $BOX/lm-venv/bin/pip freeze > "$OUT/pip_freeze.txt" 2>&1
+    rm -rf $BOX/lm-wheel   # a reused box (a cloud Mac) keeps the last attempt's wheel; wheel.sha256 names this one only
     $BOX/lm-venv/bin/pip download --no-deps --quiet --dest $BOX/lm-wheel "mojolearn==$WHEEL" > "$OUT/wheel_download.log" 2>&1 && sha256sum $BOX/lm-wheel/*.whl > "$OUT/wheel.sha256" 2>&1
     say "wheel: $(cat "$OUT/wheel.sha256" 2>/dev/null | cut -c1-100)"
     unset PYTHONPATH
