@@ -1,0 +1,13 @@
+diff --git a/x_decomp/cells.mojo b/x_decomp/cells.mojo
+index b8537db32..ca963c04b 100644
+--- a/x_decomp/cells.mojo
++++ b/x_decomp/cells.mojo
+@@ -380,7 +380,7 @@ def cd_row(W: F32Ptr, HHt: F32Ptr, XHt: F32Ptr, perm: I32Ptr, i: Int, k: Int) ->
+     r ascending, the projected-gradient violation of this row returned."""
+     var viol = Float32(0)
+     for s in range(k):
+-        var t = Int(perm.unsafe_load(s))
++        var t = Int(perm.unsafe_load(k - 1 - s))  # SABOTAGE 5310: coordinates descending
+         var grad = -ftz(XHt.unsafe_load(i * k + t))
+         for r in range(k):
+             grad = ftz(identical_mul_add(ftz(HHt.unsafe_load(t * k + r)), ftz(W.unsafe_load(i * k + r)), grad))

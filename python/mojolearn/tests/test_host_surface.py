@@ -41,7 +41,11 @@ BINDINGS = ROOT / "bindings"
 #: the independent witnesses that make the reference worth reproducing.
 TRAINING_GPU_CLASSES = ("amd", "apple", "nvidia")
 
-DEF_FUNCTION = re.compile(r'(?:module|m)\.def_function\[[A-Za-z0-9_]+\]\("([A-Za-z0-9_]+)"\)')
+#: The impl may be PARAMETRIZED, `def_function[gemm_py[HostExec]]("x_decomp_gemm")`
+#: (one generic entry point per executor, lane/algos-decomp 2026-09-27; the
+#: same spelling tools/lane_select.py `_binding_exports` reads): requiring a
+#: bare identifier read such a binding as exporting nothing.
+DEF_FUNCTION = re.compile(r'(?:module|m)\.def_function\[[A-Za-z0-9_]+(?:\[[^\[\]]*\])?\]\("([A-Za-z0-9_]+)"\)')
 
 
 def _read(rel):

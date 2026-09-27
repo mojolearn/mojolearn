@@ -92,6 +92,8 @@ def lars_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: 
         for j in range(d):
             if ldi(iw, state + j) == 0:
                 var a = fabs(ld(fw, cov + j))
+                # DEVIATION 5005 (IDENTITY_PATHS row 105): strict >, the
+                # lowest index wins an exact tie
                 if c_idx < 0 or a > cbig:
                     c_idx = j
                     cbig = a

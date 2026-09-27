@@ -113,3 +113,181 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("score_samples", "predict", "predict_proba", sl=np.s_[:256, 1:5]), "x-cluster-bgmm")
+
+
+def _cluster_weights(X, n):
+    """Positive sample weights from a column the lanes do not cluster on."""
+    return (np.abs(X[:n, 7]).astype(np.float32) + np.float32(0.25)).astype(np.float32)
+
+
+@lane("x-cluster-minibatch-options")
+def _(ml, X, yc, yr, Xh=None):
+    """MiniBatchKMeans options (option parity): init='random' (weighted draw
+    of distinct init rows, n_init 3 by 'auto') and sample_weight (the batch
+    draw, the potentials and the inertia weighted)."""
+    w = _cluster_weights(X, 3000)
+    m = ml.MiniBatchKMeans(n_clusters=6, init="random", batch_size=256, max_iter=4, random_state=5).fit(
+        X[:3000, :8], sample_weight=w)
+    m2 = ml.MiniBatchKMeans(n_clusters=5, batch_size=200, max_iter=3, random_state=6).fit(X[:3000, :8], sample_weight=w)
+    return _fit(dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_), inertia=_h(np.float64(m.inertia_)),
+                     pp_centers=_h(m2.cluster_centers_), pp_inertia=_h(np.float64(m2.inertia_))),
+                m, lambda e: (e.predict(Xh[:256, :8]),))
+
+
+_batch_decl(_rows_calls("predict", sl=np.s_[:256, :8]), "x-cluster-minibatch-options")
+
+
+@lane("x-cluster-bisecting-options")
+def _(ml, X, yc, yr, Xh=None):
+    """BisectingKMeans options: sample_weight through the weighted 2-means and
+    scores, and bisecting_strategy='largest_cluster' with init='k-means++'."""
+    w = _cluster_weights(X, 2000)
+    m = ml.BisectingKMeans(n_clusters=5, random_state=4).fit(X[:2000, :6], sample_weight=w)
+    m2 = ml.BisectingKMeans(n_clusters=4, init="k-means++", bisecting_strategy="largest_cluster",
+                            random_state=4).fit(X[:2000, :6])
+    return _fit(dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_), inertia=_h(np.float64(m.inertia_)),
+                     lc_centers=_h(m2.cluster_centers_), lc_labels=_h(m2.labels_)),
+                m, lambda e: (e.predict(Xh[:256, :6]),))
+
+
+_batch_decl(_rows_calls("predict", sl=np.s_[:256, :6]), "x-cluster-bisecting-options")
+
+
+@lane("x-cluster-meanshift-binned")
+def _(ml, X, yc, yr, Xh=None):
+    """MeanShift(bin_seeding=True, min_bin_freq=3): the half-to-even binning
+    at the bandwidth and the frequency cut, then the device seed loop."""
+    m = ml.MeanShift(bin_seeding=True, min_bin_freq=3, bandwidth=0.9).fit(X[:1500, 1:4])
+    return _fit(dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_), n_iter=_h(np.int64(m.n_iter_))),
+                m, lambda e: (e.predict(Xh[:256, 1:4]),))
+
+
+_batch_decl(_rows_calls("predict", sl=np.s_[:256, 1:4]), "x-cluster-meanshift-binned")
+
+
+@lane("x-cluster-optics-metrics")
+def _(ml, X, yc, yr, Xh=None):
+    """OPTICS under every non-euclidean metric it carries (manhattan,
+    chebyshev, minkowski p=3, cosine) and a precomputed matrix."""
+    Z = X[:600, 1:5]
+    parts = {}
+    for name, kw in (("l1", dict(metric="manhattan")), ("linf", dict(metric="chebyshev")),
+                     ("p3", dict(metric="minkowski", p=3)), ("cos", dict(metric="cosine"))):
+        m = ml.OPTICS(min_samples=6, **kw).fit(Z)
+        parts[name + "_order"] = _h(m.ordering_)
+        parts[name + "_reach"] = _h(m.reachability_)
+        parts[name + "_labels"] = _h(m.labels_)
+    D = np.abs(Z[:, None, 0] - Z[None, :, 0]).astype(np.float32) + np.abs(Z[:, None, 1] - Z[None, :, 1]).astype(np.float32)
+    m = ml.OPTICS(min_samples=6, metric="precomputed").fit(D.astype(np.float32))
+    parts["pre_order"] = _h(m.ordering_)
+    parts["pre_labels"] = _h(m.labels_)
+    return _fit(parts, m, "n/a:transductive (OPTICS has no predict, in the reference and in scikit-learn alike)")
+
+
+_batch_decl("n/a:transductive (OPTICS labels the fitted rows only)", "x-cluster-optics-metrics")
+
+
+@lane("x-cluster-ap-precomputed")
+def _(ml, X, yc, yr, Xh=None):
+    """AffinityPropagation(affinity='precomputed') on a similarity matrix with
+    positive entries: the median preference by the host sort."""
+    Z = X[:300, 1:5]
+    # ELEMENTWISE, FIXED ORDER, NO BLAS: `Z @ Z.T` would hand each box's BLAS
+    # order to the lane as input (identity_break.labels_for says why)
+    S = np.zeros((Z.shape[0], Z.shape[0]), dtype=np.float32)
+    for c in range(Z.shape[1]):
+        S = (S + Z[:, None, c] * Z[None, :, c]).astype(np.float32)
+    m = ml.AffinityPropagation(affinity="precomputed", damping=0.8, random_state=2).fit(S)
+    return _fit(dict(centers=_h(m.cluster_centers_indices_), labels=_h(m.labels_), n_iter=_h(np.int64(m.n_iter_)),
+                     messages=_h(m._message_diag)),
+                m, "n/a:precomputed (predict is not supported with affinity='precomputed', as scikit-learn)")
+
+
+_batch_decl("n/a:precomputed affinity (no predict)", "x-cluster-ap-precomputed")
+
+
+@lane("x-cluster-bgmm-inits")
+def _(ml, X, yc, yr, Xh=None):
+    """BayesianGaussianMixture init_params='k-means++' and 'random_from_data'
+    (one-hot starts at the picks), and warm_start (a second fit resuming from
+    the first's parameters)."""
+    m = ml.BayesianGaussianMixture(n_components=4, max_iter=20, init_params="k-means++", random_state=3).fit(X[:1500, 1:5])
+    m2 = ml.BayesianGaussianMixture(n_components=4, max_iter=20, init_params="random_from_data",
+                                    random_state=3).fit(X[:1500, 1:5])
+    m3 = ml.BayesianGaussianMixture(n_components=4, max_iter=5, warm_start=True, random_state=3)
+    m3.fit(X[:1500, 1:5])
+    m3.fit(X[:1500, 1:5])
+    return _fit(dict(means=_h(m.means_), weights=_h(m.weights_), lb=_h(np.float64(m.lower_bound_)),
+                     rd_means=_h(m2.means_), rd_lb=_h(np.float64(m2.lower_bound_)),
+                     warm_means=_h(m3.means_), warm_lb=_h(np.float64(m3.lower_bound_))),
+                m, lambda e: (e.predict_proba(Xh[:256, 1:5]),))
+
+
+_batch_decl(_rows_calls("predict_proba", sl=np.s_[:256, 1:5]), "x-cluster-bgmm-inits")
+
+
+@lane("x-cluster-bgmm-covtypes")
+def _(ml, X, yc, yr, Xh=None):
+    """BayesianGaussianMixture covariance_type 'tied', 'diag' and 'spherical'
+    (the tied pooled covariance, the diagonal and scalar Wishart updates)."""
+    parts = {}
+    last = None
+    for ct in ("tied", "diag", "spherical"):
+        m = ml.BayesianGaussianMixture(n_components=4, covariance_type=ct, max_iter=20, random_state=3).fit(X[:1500, 1:5])
+        parts[ct + "_means"] = _h(m.means_)
+        parts[ct + "_cov"] = _h(m.covariances_)
+        parts[ct + "_lb"] = _h(np.float64(m.lower_bound_))
+        last = m
+    return _fit(parts, last, lambda e: (e.score_samples(Xh[:256, 1:5]),))
+
+
+_batch_decl(_rows_calls("score_samples", sl=np.s_[:256, 1:5]), "x-cluster-bgmm-covtypes")
+
+
+@lane("x-cluster-minibatch-partial")
+def _(ml, X, yc, yr, Xh=None):
+    """MiniBatchKMeans.partial_fit: four calls over 500-row chunks (the first
+    starts the centers by k-means++ with sample weights), the stream and the
+    reassignment counter carried between calls."""
+    w = _cluster_weights(X, 2000)
+    m = ml.MiniBatchKMeans(n_clusters=6, batch_size=128, random_state=7)
+    for c in range(4):
+        m.partial_fit(X[c * 500:(c + 1) * 500, :8], sample_weight=w[c * 500:(c + 1) * 500])
+    return _fit(dict(centers=_h(m.cluster_centers_), counts=_h(m.counts_), labels=_h(m.labels_),
+                     inertia=_h(np.float64(m.inertia_))),
+                m, lambda e: (e.predict(Xh[:256, :8]),))
+
+
+_batch_decl(_rows_calls("predict", sl=np.s_[:256, :8]), "x-cluster-minibatch-partial")
+
+
+@lane("x-cluster-gmm-options")
+def _(ml, X, yc, yr, Xh=None):
+    """GaussianMixture option parity, routed to the cluster lane's mixture
+    driver in plain mode: covariance_type tied/diag/spherical, init
+    'k-means++' with n_init 2, means_init and weights_init, and warm_start.
+    The default GaussianMixture fit is the mixture lane's and is not here."""
+    Z = X[:1500, 1:5]
+    parts = {}
+    last = None
+    for ct in ("tied", "diag", "spherical"):
+        m = ml.GaussianMixture(n_components=3, covariance_type=ct, max_iter=25, random_state=3).fit(Z)
+        parts[ct + "_means"] = _h(m.means_)
+        parts[ct + "_cov"] = _h(m.covariances_)
+        parts[ct + "_lb"] = _h(np.float64(m.lower_bound_))
+        last = m
+    m = ml.GaussianMixture(n_components=3, init_params="k-means++", n_init=2, max_iter=25, random_state=3).fit(Z)
+    parts["kpp_means"] = _h(m.means_)
+    mi = np.ascontiguousarray(Z[:3], dtype=np.float32)
+    m = ml.GaussianMixture(n_components=3, means_init=mi, weights_init=[0.2, 0.3, 0.5], max_iter=25,
+                           random_state=3).fit(Z)
+    parts["init_means"] = _h(m.means_)
+    parts["init_weights"] = _h(m.weights_)
+    m = ml.GaussianMixture(n_components=3, covariance_type="diag", warm_start=True, max_iter=5, random_state=3)
+    m.fit(Z)
+    m.fit(Z)
+    parts["warm_means"] = _h(m.means_)
+    return _fit(parts, last, lambda e: (e.score_samples(Xh[:256, 1:5]), e.predict(Xh[:256, 1:5])))
+
+
+_batch_decl(_rows_calls("score_samples", "predict", sl=np.s_[:256, 1:5]), "x-cluster-gmm-options")

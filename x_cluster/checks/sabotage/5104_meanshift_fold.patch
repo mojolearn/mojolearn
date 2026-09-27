@@ -1,0 +1,11 @@
+--- a/x_cluster/bodies.mojo
++++ b/x_cluster/bodies.mojo
+@@ -117,7 +117,7 @@
+         for f in range(d):
+             scratch[s * d + f] = Float32(0)
+         for pp in range(n):
+-            var p = n - 1 - pp if REV else pp
++            var p = pp if REV else n - 1 - pp
+             var dd = identical_sqrt(sq_dist_rows[REV](centers, s, x, p, d))
+             if dd <= bw:
+                 within += 1

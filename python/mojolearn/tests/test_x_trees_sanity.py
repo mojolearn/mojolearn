@@ -55,6 +55,21 @@ def test_decision_tree_regressor():
     assert a >= r - 0.05, (a, r)
 
 
+def test_decision_tree_random_splitter():
+    from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
+    Xa, Xb, ya, yb = _clf()
+    ours = ml.DecisionTreeClassifier(splitter="random", max_depth=10, random_state=0).fit(Xa, ya)
+    ref = DecisionTreeClassifier(splitter="random", max_depth=10, random_state=0).fit(Xa, ya)
+    a, r = accuracy_score(yb, np.asarray(ours.predict(Xb))), accuracy_score(yb, ref.predict(Xb))
+    assert a >= r - 0.08, (a, r)
+    Xa, Xb, ya, yb = _reg()
+    m = ml.DecisionTreeRegressor(splitter="random", max_leaf_nodes=20, random_state=0).fit(Xa, ya)
+    assert m.get_n_leaves() <= 20
+    ref = DecisionTreeRegressor(splitter="random", max_leaf_nodes=20, random_state=0).fit(Xa, ya)
+    a, r = r2_score(yb, np.asarray(m.predict(Xb))), r2_score(yb, ref.predict(Xb))
+    assert a >= r - 0.1, (a, r)
+
+
 def test_bagging_classifier():
     from sklearn.ensemble import BaggingClassifier
     from sklearn.tree import DecisionTreeClassifier

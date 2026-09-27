@@ -1,0 +1,11 @@
+--- a/x_cluster/bodies.mojo
++++ b/x_cluster/bodies.mojo
+@@ -266,7 +266,7 @@
+     for j in range(d):
+         var y = Float32(0)
+         for aa in range(j + 1):
+-            var a = j - aa if REV else aa
++            var a = aa if REV else j - aa
+             var diff = ftz(ftz(x[i * d + a]) - ftz(means[k * d + a]))
+             y = ftz(y + ftz(identical_mul(diff, pchol[k * d * d + a * d + j])))
+         acc = ftz(acc + ftz(identical_mul(y, y)))

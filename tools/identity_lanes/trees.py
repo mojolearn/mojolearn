@@ -38,6 +38,19 @@ _batch_decl(_rows_calls("predict", "predict_proba"), "trees-dt-clf")
 _batch_decl(_rows_calls("predict"), "trees-dt-reg")
 
 
+@lane("trees-dt-random")
+def _(ml, X, yc, yr, Xh=None):
+    """splitter='random': one ExtraTrees tree; best-first growth to 24 leaves."""
+    c = ml.DecisionTreeClassifier(splitter="random", max_depth=8, random_state=5).fit(X, yc)
+    r = ml.DecisionTreeRegressor(splitter="random", max_leaf_nodes=24, random_state=5).fit(X, yr)
+    return _fit(dict(proba=_h(c.predict_proba(X)), predict=_h(c.predict(X)), reg=_h(r.predict(X)),
+                     leaves=_h(np.int64(r.get_n_leaves()))),
+                c, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
+_batch_decl(_rows_calls("predict", "predict_proba"), "trees-dt-random")
+
+
 @lane("trees-bagging-clf")
 def _(ml, X, yc, yr, Xh=None):
     """Bootstrap rows, a feature subset without replacement, proba averaging."""
