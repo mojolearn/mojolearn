@@ -1,0 +1,14 @@
+diff --git a/arima/impl/timeSeries/jones_transform.mojo b/arima/impl/timeSeries/jones_transform.mojo
+index 42b5f6e09..cf52594de 100644
+--- a/arima/impl/timeSeries/jones_transform.mojo
++++ b/arima/impl/timeSeries/jones_transform.mojo
+@@ -172,8 +172,7 @@ def jones_transform_kernel(
+         for j in range(1, parameter):
+             var a = mine[j]
+             for k in range(j):
+-                var prod = ftz(a * mine[j - k - 1])
+-                tmp[k] = ftz(identical_mul_add(sign, prod, tmp[k]))
++                tmp[k] = ftz(identical_mul_add(ftz(sign * a), mine[j - k - 1], tmp[k]))
+             for it in range(j):
+                 mine[it] = tmp[it]
+         if clamp_in != 0:

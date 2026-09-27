@@ -134,6 +134,7 @@ def sgd_one(
     fit_intercept: Bool, max_iter: Int, tol: Float32, n_iter_no_change: Int,
     do_shuffle: Bool, seed: UInt64, one_class: Bool,
     w: FP, woff: Int, b: FP, boff: Int, q: FP, idx: IP,
+    swp: FP, has_sw: Bool, wpos: Float32, wneg: Float32, has_cw: Bool,
 ) -> Int:
     """One binary/regression problem on targets `ys`. Returns epochs run,
     or -1 on a non-finite weight (their ValueError)."""
@@ -211,6 +212,13 @@ def sgd_one(
                 elif dl > Float32(1e12):
                     dl = Float32(1e12)
                 update = fm(-eta, dl)
+            if has_cw or has_sw:
+                # theirs: update *= class_weight * sample_weight
+                var cw = Float32(1)
+                if has_cw:
+                    cw = wpos if y > 0 else wneg
+                var swi = ld(swp, i) if has_sw else Float32(1)
+                update = fm(update, fm(cw, swi))
             if penalty == P_L2 or penalty == P_EN:
                 var scale = fmax(Float32(0), fs(Float32(1), fm(decay_factor, eta)))
                 for j in range(d):
@@ -265,7 +273,9 @@ def sgd_one(
 
 def sgd_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
     """ip: [n_classes, loss, penalty, lr, fit_intercept, max_iter, n_iter_no_change,
-    shuffle, seed_lo, seed_hi]; n_classes 0 = regression, 1 = one-class,
+    shuffle, seed_lo, seed_hi, sample_weight, class_weight]; with
+    sample_weight y = labels n | weights n; with class_weight fp carries
+    [.., pos weight per problem (P), neg weight per problem (P)]; n_classes 0 = regression, 1 = one-class,
     2 = binary (positive class = label 1), K > 2 = one-vs-rest.
     fp: [alpha, l1_ratio, eta0, power_t, epsilon, tol].
     y: labels as 0..K-1 (classification) or targets. res: coef (P*d),
@@ -286,6 +296,9 @@ def sgd_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: I
     var power_t = ld(fp, 3)
     var eps = ld(fp, 4)
     var tol = ld(fp, 5)
+    var has_sw = ldi(ip, 10) != 0
+    var has_cw = ldi(ip, 11) != 0
+    var swp = y + n
     var problems = k if k > 2 else 1
     var ys = fw
     var q = fw + n
@@ -307,6 +320,8 @@ def sgd_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: I
             fit_intercept, max_iter, tol, nic, do_shuffle,
             seed + UInt64(1000003) * UInt64(c), k == 1,
             res, c * d, res, problems * d + c, q, iw,
+            swp, has_sw, ld(fp, 6 + c) if has_cw else Float32(1),
+            ld(fp, 6 + problems + c) if has_cw else Float32(1), has_cw,
         )
         if ep < 0:
             status = -1

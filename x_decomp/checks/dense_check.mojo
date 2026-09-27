@@ -7,7 +7,7 @@ two-pass modified Gram-Schmidt (5309).
     tools/with_identical_mode.sh pixi run mojo run -I . x_decomp/checks/dense_check.mojo
 """
 from core.identity_trace import IdentityTrace
-from x_decomp.checks.oracles import oracle_chol, oracle_lu, oracle_lu_solve, oracle_orth
+from x_decomp.checks.xd_oracles import oracle_chol, oracle_lu, oracle_lu_solve, oracle_lu_solve_t, oracle_orth
 from x_decomp.checks.seam_util import (
     count_diff_f32,
     count_diff_i32,
@@ -93,6 +93,15 @@ def main() raises:
     HostExec.lu_solve(ptr(got_o[0]), iptr(got_o[1]), ptr(xh), n, nrhs)
     same("5308 lu_solve host", count_diff_f32(xh, want))
     tr.record_list_f32("x_decomp.lu_solve", xd)
+    var want_t = oracle_lu_solve_t(got_o[0], got_o[1], bsrc, n, nrhs)
+    require_separates("5308 getrs 'T' substitution order", count_diff_f32(want_t, oracle_lu_solve_t(got_o[0], got_o[1], bsrc, n, nrhs, 1)))
+    var xtd = bsrc.copy()
+    DevExec.lu_solve(ptr(got_o[0]), iptr(got_o[1]), ptr(xtd), n, nrhs, 1)
+    same("5308 lu_solve trans device", count_diff_f32(xtd, want_t))
+    var xth = bsrc.copy()
+    HostExec.lu_solve(ptr(got_o[0]), iptr(got_o[1]), ptr(xth), n, nrhs, 1)
+    same("5308 lu_solve trans host", count_diff_f32(xth, want_t))
+    tr.record_list_f32("x_decomp.lu_solve_t", xtd)
     var ns = 11
     var g = spd(ns)
     var wl = oracle_chol(g, ns)
@@ -111,8 +120,13 @@ def main() raises:
     for t in range(mm):
         # nearly dependent columns: column 1 = column 0 + a small perturbation
         q[t * l + 1] = q[t * l + 0] + Float32(1e-3) * q[t * l + 2]
+    for t in range(mm):
+        # DEVIATION 5318: column 4 = 2 * column 3 + a perturbation 2^-20 of
+        # column 5, numerically dependent at the 2^-16 guard
+        q[t * l + 4] = Float32(2) * q[t * l + 3] + Float32(9.5367431640625e-07) * q[t * l + 5]
     var wq = oracle_orth(q, mm, l)
-    require_separates("5309 MGS passes (two vs one)", count_diff_f32(wq, oracle_orth(q, mm, l, 1)))
+    require_separates("5309 orth passes (two vs one)", count_diff_f32(wq, oracle_orth(q, mm, l, 1)))
+    require_separates("5318 orth rank guard", count_diff_f32(wq, oracle_orth(q, mm, l, 2)))
     var qd = q.copy()
     DevExec.orth(ptr(qd), mm, l)
     same("5309 orth device", count_diff_f32(qd, wq))

@@ -45,6 +45,7 @@ call with one clustered row moves.
 from std.sys.compile import is_defined
 
 from checks.numerics import ftz, identical_mul_add
+from core.cosine_rows import cosine_unit_rows
 
 
 comptime LABELED_PREDICT_HOST_SABOTAGE = (
@@ -56,6 +57,9 @@ comptime LABELED_PREDICT_HOST_SABOTAGE = (
 #: restated because that file imports the GPU.
 comptime LABELED_METRIC_L2 = 0
 comptime LABELED_METRIC_L1 = 1
+#: DEVIATION 5113: cosine is L2 on unit rows (`core/cosine_rows.mojo`)
+#: against `Float32(2 * eps)`; the fit's own rows and threshold.
+comptime LABELED_METRIC_COSINE = 2
 
 
 def labeled_reference_threshold(metric: Int, eps: Float64) -> Float32:
@@ -63,6 +67,8 @@ def labeled_reference_threshold(metric: Int, eps: Float64) -> Float32:
     on L1."""
     if metric == LABELED_METRIC_L1:
         return Float32(eps)
+    if metric == LABELED_METRIC_COSINE:
+        return Float32(2.0 * eps)
     return Float32(eps * eps)
 
 
@@ -84,10 +90,14 @@ def labeled_reference_validate(
         raise Error(
             "labeled_reference_predict: X has no features; refused by name"
         )
-    if metric != LABELED_METRIC_L2 and metric != LABELED_METRIC_L1:
+    if (
+        metric != LABELED_METRIC_L2
+        and metric != LABELED_METRIC_L1
+        and metric != LABELED_METRIC_COSINE
+    ):
         raise Error(
-            "labeled_reference_predict: metric must be 0 (L2) or 1 (L1), got "
-            + String(metric)
+            "labeled_reference_predict: metric must be 0 (L2), 1 (L1) or 2"
+            " (cosine), got " + String(metric)
         )
 
 
@@ -125,6 +135,14 @@ def host_labeled_reference_predict(
     var out_labels = List[Int32](capacity=n_queries)
     var out_refs = List[Int32](capacity=n_queries)
     var d = n_features
+    if metric == LABELED_METRIC_COSINE:
+        # DEVIATION 5113: both sides as unit rows, then the L2 arm below.
+        var ur = cosine_unit_rows(refs, n_refs, d, "labeled_reference_predict")
+        var uq = cosine_unit_rows(queries, n_queries, d, "labeled_reference_predict")
+        return host_labeled_reference_predict(
+            ur, n_refs, keys, ref_labels, uq, n_queries, d,
+            LABELED_METRIC_L2, thresh, has_thresh,
+        )
     for q in range(n_queries):
         var best = -1
         var best_acc = Float32(0.0)

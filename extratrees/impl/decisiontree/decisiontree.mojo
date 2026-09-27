@@ -198,20 +198,12 @@ def validity_check(params: DecisionTreeParams) raises:
         )
 
     # --- ours: refuse what is not implemented, BY NAME ------------------------
-    # cuML supports four regression criteria beyond MSE (`algo_helper.h:20-29`;
-    # the kernels exist as `poisson-*.cu`, `gamma-*.cu`,
-    # `inverse_gaussian-*.cu`). None is implemented. sklearn's ExtraTrees has its
-    # own list (`friedman_mse`, `absolute_error`, `poisson`) and none of those
-    # is implemented either. A criterion that is silently downgraded to MSE would
-    # train a model the caller did not ask for.
-    if params.split_criterion == CRITERION_POISSON:
-        raise Error("split_criterion=POISSON is not implemented in extratrees/")
-    if params.split_criterion == CRITERION_GAMMA:
-        raise Error("split_criterion=GAMMA is not implemented in extratrees/")
-    if params.split_criterion == CRITERION_INVERSE_GAUSSIAN:
-        raise Error(
-            "split_criterion=INVERSE_GAUSSIAN is not implemented in extratrees/"
-        )
+    # cuML's four regression criteria beyond MSE (`algo_helper.h:20-29`):
+    # POISSON, GAMMA and INVERSE_GAUSSIAN are implemented since 2026-09-27
+    # (DEVIATION 5610, `objectives.mojo::regression_deviance_gain`); MAE is
+    # refused below. sklearn's `friedman_mse` and `absolute_error` are not
+    # implemented. A criterion silently downgraded to MSE would train a model
+    # the caller did not ask for.
     # ENTROPY was refused here until DEVIATION 459 (2026-08-23) implemented
     # `EntropyObjectiveFunction` (`objectives.cuh:110-193`); it now passes
     # like GINI and MSE do, and `classifier_plan` admits it for the

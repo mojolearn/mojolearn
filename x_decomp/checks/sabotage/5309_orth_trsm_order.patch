@@ -1,0 +1,14 @@
+diff --git a/x_decomp/cells.mojo b/x_decomp/cells.mojo
+index 4b4c2cedf..d5d7fec58 100644
+--- a/x_decomp/cells.mojo
++++ b/x_decomp/cells.mojo
+@@ -923,7 +923,8 @@ def trsm_row(A: F32Ptr, R: F32Ptr, Q: F32Ptr, i: Int, l: Int):
+     / R[j, j], j ascending, t ascending; a zero diagonal gives 0."""
+     for j in range(l):
+         var acc = ftz(A.unsafe_load(i * l + j))
+-        for t in range(j):
++        for tt in range(j):
++            var t = j - 1 - tt  # SABOTAGE 5309: the row solve folded descending
+             acc = ftz(identical_mul_add(-ftz(Q.unsafe_load(i * l + t)), ftz(R.unsafe_load(t * l + j)), acc))
+         Q.unsafe_store(i * l + j, div0(acc, R.unsafe_load(j * l + j)))
+ 

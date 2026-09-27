@@ -1,8 +1,8 @@
 diff --git a/x_decomp/cells.mojo b/x_decomp/cells.mojo
-index b8537db32..284e25bc5 100644
+index 4b4c2cedf..fec5f4392 100644
 --- a/x_decomp/cells.mojo
 +++ b/x_decomp/cells.mojo
-@@ -590,7 +590,8 @@ def lda_doc_row(
+@@ -643,7 +643,8 @@ def lda_doc_row(
          var total = Float32(0)
          for t in range(k):
              var acc = Float32(0)

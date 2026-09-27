@@ -104,6 +104,35 @@ def _(ml, X, yc, yr, Xh=None):
 _batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_prep_categorical_nan), "x-prep-encoder-options")
 
 
+@lane("x-prep-encoder-categories")
+def _(ml, X, yc, yr, Xh=None):
+    """OrdinalEncoder / OneHotEncoder categories=<list>: per column the
+    training values' sorted distinct set with one value dropped and one never
+    seen added (NaN kept last), so both the unknown and the unused paths run."""
+    Xq, Xhq = _prep_categorical_nan(X), _prep_categorical_nan(Xh)
+    cats = []
+    for j in range(Xq.shape[1]):
+        u = np.unique(Xq[:, j])
+        num = [float(v) for v in u if v == v]
+        num = sorted(num[:1] + num[2:] + [float(np.float32(max(num) + 7.5))])
+        cats.append(num + ([float("nan")] if np.isnan(u).any() else []))
+    parts = {}
+    for j, kw in enumerate((dict(handle_unknown="use_encoded_value", unknown_value=-1),
+                            dict(handle_unknown="use_encoded_value", unknown_value=-1, encoded_missing_value=-2))):
+        m = ml.OrdinalEncoder(categories=cats, **kw).fit(Xq[:1000])
+        Z = m.transform(Xhq[:256])
+        parts[f"ord{j}"] = _h(*m.categories_, Z, m.inverse_transform(Z))
+    for j, kw in enumerate((dict(handle_unknown="ignore"), dict(drop="first", handle_unknown="ignore"))):
+        m = ml.OneHotEncoder(categories=cats, **kw).fit(Xq[:1000])
+        Z = m.transform(Xhq[:256])
+        parts[f"ohe{j}"] = _h(Z, m.inverse_transform(Z))
+    m = ml.OneHotEncoder(categories=cats, handle_unknown="ignore").fit(Xq)
+    return _fit(parts, m, lambda e: (e.transform(Xhq[:256]),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_prep_categorical_nan), "x-prep-encoder-categories")
+
+
 @lane("x-prep-target-encoder")
 def _(ml, X, yc, yr, Xh=None):
     Xq, Xhq = _prep_categorical(X), _prep_categorical(Xh)
@@ -482,6 +511,28 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(parts, m, lambda e: (e.transform(Xh[:256]),))
 
 
+@lane("x-prep-mi-discrete")
+def _(ml, X, yc, yr, Xh=None):
+    """mutual_info with discrete features: the contingency estimator
+    (discrete feature, classes), Ross's with a feature's categories as the
+    classes (discrete feature, continuous target) and the continuous columns
+    of a mixed mask, by mask, by indices and all-discrete."""
+    Xs, y3, ys = X[:1200, :6], _prep_three_class(X, yr)[:1200], yr[:1200]
+    Xm = np.array(Xs, dtype=np.float32)
+    Xm[:, :3] = _prep_categorical(Xs[:, :3])
+    parts = {}
+    for j, df in enumerate(([0, 1, 2], np.array([True, True, True, False, False, False]), [-6, 1])):
+        parts[f"c{j}"] = _h(ml.mutual_info_classif(Xm, y3, discrete_features=df, random_state=3))
+        parts[f"r{j}"] = _h(ml.mutual_info_regression(Xm, ys, discrete_features=df, random_state=3, n_neighbors=4))
+    Xd = Xm[:, :3]
+    parts["dd"] = _h(ml.mutual_info_classif(Xd, y3, discrete_features=True))
+    parts["dc"] = _h(ml.mutual_info_regression(Xd, ys, discrete_features=True))
+    m = ml.SelectKBest(lambda A, b: ml.mutual_info_classif(A, b, discrete_features=[0, 1, 2], random_state=3),
+                       k=3).fit(Xm, y3)
+    parts["support"] = _h(np.array(m.get_support()))
+    return _fit(parts, m, lambda e: (e.transform(np.array(Xh[:256, :6], dtype=np.float32)),))
+
+
 @lane("x-prep-rfe")
 def _(ml, X, yc, yr, Xh=None):
     y3 = _prep_three_class(X, yr)
@@ -492,6 +543,35 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("predict", "transform", sl=slice(0, 256)), "x-prep-rfe")
+
+
+@lane("x-prep-score-edges")
+def _(ml, X, yc, yr, Xh=None):
+    """The reference's NaN / +inf score edges (f_classif of a constant and of
+    a within-class-constant feature, chi2 of an all-zero feature),
+    f_regression / r_regression with force_finite on and off, and RFE with
+    importance_getter as a dotted path and as a callable."""
+    y3 = _prep_three_class(X, yr)
+    Xe = np.array(X[:, :6], dtype=np.float32)
+    Xe[:, 1] = 2.5
+    Xe[:, 2] = y3.astype(np.float32)
+    Xz = np.abs(Xe)
+    Xz[:, 4] = 0
+    Xr = Xe.copy()
+    Xr[:, 3] = yr * 2
+    parts = dict(fc=_h(*ml.f_classif(Xe, y3)), c2=_h(*ml.chi2(Xz, y3)),
+                 kbest=_h(np.array(ml.SelectKBest(k=3).fit(Xe, y3).get_support())))
+    for ff in (True, False):
+        parts[f"fr{int(ff)}"] = _h(*ml.f_regression(Xr, yr, force_finite=ff))
+        parts[f"rr{int(ff)}"] = _h(ml.r_regression(Xe, yr, force_finite=ff))
+    for j, g in enumerate(("coef_", lambda e: e.coef_[0])):
+        m = ml.RFE(ml.LinearDiscriminantAnalysis(), n_features_to_select=5, step=3,
+                   importance_getter=g).fit(X, y3)
+        parts[f"rfe{j}"] = _h(m.ranking_, m.transform(X[:256]))
+    return _fit(parts, m, lambda e: (e.predict(Xh[:256]), e.transform(Xh[:256])))
+
+
+_batch_decl(_rows_calls("predict", "transform", sl=slice(0, 256)), "x-prep-score-edges")
 
 
 @lane("x-prep-complement-nb")
@@ -538,3 +618,160 @@ def _(ml, X, yc, yr, Xh=None):
     parts = dict(g=_h(g.predict_proba(X[:256])), mn=_h(mn.class_log_prior_, mn.predict_proba(_prep_abs(X[:256]))),
                  lda=_h(lda.priors_, lda.coef_, lda.predict_proba(X[:256])), qda=_h(qda.predict_proba(X[:256])))
     return _fit(parts, lda, lambda e: (e.predict_proba(Xh[:256]),))
+
+
+class _prep_PyCov:
+    """A covariance_estimator written in plain Python floats (IEEE double, the
+    same bits on every box): the population covariance of the rows it is
+    fitted on plus a 0.125 ridge, so every class's block is positive definite."""
+
+    def fit(self, X):
+        rows = [[float(v) for v in r] for r in X.tolist()]
+        n, d = len(rows), len(rows[0])
+        mean = [sum(r[j] for r in rows) / n for j in range(d)]
+        self.covariance_ = [[sum((r[a] - mean[a]) * (r[b] - mean[b]) for r in rows) / n + (0.125 if a == b else 0.0)
+                             for b in range(d)] for a in range(d)]
+        return self
+
+
+class _prep_Splits:
+    """A cv splitter object: three interleaved test folds, the rest training."""
+
+    def split(self, X, y=None):
+        n = len(y)
+        for k in range(3):
+            test = [i for i in range(n) if i % 3 == k]
+            yield [i for i in range(n) if i % 3 != k], test
+
+
+@lane("x-prep-user-objects")
+def _(ml, X, yc, yr, Xh=None):
+    """User objects the reference accepts: SimpleImputer(strategy=<callable>),
+    LinearDiscriminantAnalysis / QuadraticDiscriminantAnalysis
+    covariance_estimator, TargetEncoder cv=<splitter> / cv=<(train, test)
+    pairs> and categories=<list> (one training value left out, one unseen added)."""
+    Xm, Xhm = _prep_with_nan(X), _prep_with_nan(Xh)
+    parts = {}
+    third = lambda v: (lambda s: float(s[len(s) // 3]) if s else float("nan"))(sorted(v.tolist()))
+    si = ml.SimpleImputer(strategy=third, add_indicator=True).fit(Xm)
+    parts["si"] = _h(si.statistics_, si.transform(Xm[:256]))
+    y3 = _prep_three_class(X, yr)
+    Xs, ys = X[:600], y3[:600]
+    for s in ("lsqr", "eigen"):
+        m = ml.LinearDiscriminantAnalysis(solver=s, covariance_estimator=_prep_PyCov()).fit(Xs, ys)
+        parts["lda_" + s] = _h(m.covariance_, m.coef_, m.intercept_, m.predict_proba(X[:256]))
+    q = ml.QuadraticDiscriminantAnalysis(solver="eigen", covariance_estimator=_prep_PyCov(),
+                                         store_covariance=True).fit(Xs, ys)
+    parts["qda"] = _h(*q.covariance_, q.predict_proba(X[:256]))
+    Xq, Xhq = _prep_categorical(X), _prep_categorical(Xh)
+    cats = []
+    for j in range(Xq.shape[1]):
+        num = [float(v) for v in np.unique(Xq[:, j])]
+        cats.append(sorted(num[:1] + num[2:] + [float(np.float32(max(num) + 7.5))]))
+    t = ml.TargetEncoder(categories=cats, cv=_prep_Splits())
+    parts["te_split"] = _h(t.fit_transform(Xq, yr), *t.encodings_)
+    pairs = [(np.flatnonzero(np.arange(len(yc)) % 4 != k), np.flatnonzero(np.arange(len(yc)) % 4 == k))
+             for k in range(4)]
+    tb = ml.TargetEncoder(cv=pairs)
+    parts["te_pairs"] = _h(tb.fit_transform(Xq, yc), tb.transform(Xq[:256]))
+    return _fit(parts, t, lambda e: (e.transform(Xhq[:256]),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_prep_categorical), "x-prep-user-objects")
+
+
+@lane("x-prep-label-binarizer-multilabel")
+def _(ml, X, yc, yr, Xh=None):
+    """LabelBinarizer on a multilabel indicator y: pos / neg labels, a
+    pos_label=0 switch, and the thresholded inverse."""
+    Y = (X[:, :4] > 0.3).astype(np.int64)
+    Yh = (Xh[:, :4] > 0.3).astype(np.int64)
+    m = ml.LabelBinarizer(neg_label=-1, pos_label=2).fit(Y)
+    z = ml.LabelBinarizer(neg_label=-3, pos_label=0).fit(Y)
+    parts = dict(classes=_h(m.classes_), t=_h(m.transform(Y[:256])), z=_h(z.transform(Y[:256])),
+                 inv=_h(m.inverse_transform(X[:256, :4] * 3), m.inverse_transform(X[:256, :4], threshold=0.1)))
+    return _fit(parts, m, lambda e: (e.transform(Yh[:256]),))
+
+
+def _prep_most_common(col):
+    """The most frequent non-NaN value of a column (the first on a tie)."""
+    u, c = np.unique(col[~np.isnan(col)], return_counts=True)
+    return float(u[int(np.argmax(c))])
+
+
+@lane("x-prep-infrequent")
+def _(ml, X, yc, yr, Xh=None):
+    """OrdinalEncoder / OneHotEncoder min_frequency and max_categories (a
+    NaN category in column 0), handle_unknown 'infrequent_if_exist' / 'warn'
+    / 'ignore' / 'use_encoded_value', drop 'first' / 'if_binary' / a list,
+    and the inverse transforms."""
+    Xq, Xhq = _prep_categorical_nan(X), _prep_categorical_nan(Xh)
+    Xhq[::5, 1] = np.float32(55)   # unseen
+    parts = {}
+    for j, kw in enumerate((dict(min_frequency=40), dict(max_categories=3), dict(min_frequency=0.07, max_categories=4))):
+        o = ml.OrdinalEncoder(handle_unknown="use_encoded_value", unknown_value=-1, **kw).fit(Xq)
+        Z = o.transform(Xhq[:256])
+        parts[f"ord{j}"] = _h(*[c for c in o.infrequent_categories_ if c is not None], Z, o.inverse_transform(Z))
+    import warnings
+    for j, kw in enumerate((dict(min_frequency=40, handle_unknown="infrequent_if_exist"),
+                            dict(max_categories=3, handle_unknown="ignore", drop="first"),
+                            dict(max_categories=2, handle_unknown="warn", drop="if_binary"),
+                            dict(min_frequency=25, handle_unknown="infrequent_if_exist",
+                                 drop=[_prep_most_common(Xq[:, c]) for c in range(Xq.shape[1])]))):
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            e = ml.OneHotEncoder(**kw).fit(Xq)
+            Z = e.transform(Xhq[:256])
+        parts[f"ohe{j}"] = _h(Z, e.inverse_transform(e.transform(Xq[:256])))
+    m = ml.OneHotEncoder(min_frequency=40, handle_unknown="infrequent_if_exist").fit(Xq)
+    return _fit(parts, m, lambda e: (e.transform(Xhq[:256]),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_prep_categorical_nan), "x-prep-infrequent")
+
+
+@lane("x-prep-nb-partial")
+def _(ml, X, yc, yr, Xh=None):
+    """partial_fit of every naive Bayes classifier over three uneven batches
+    (the first lacking a class, the last weighted), and a partial_fit after fit."""
+    y3 = _prep_three_class(X, yr)
+    cuts = [(0, 300), (300, 1100), (1100, min(len(y3), 1900))]
+    first = np.flatnonzero(y3[:300] != 2)
+    w = (np.abs(X[:, 1]) + 0.5).astype(np.float32)
+    parts = {}
+    Xa, Xc = _prep_abs(X), _prep_cat_codes(X)
+    Xc[:300] = np.minimum(Xc[:300], 2)   # the categories widen in later batches
+    for nm, data in (("GaussianNB", X), ("MultinomialNB", Xa), ("ComplementNB", Xa), ("BernoulliNB", X),
+                     ("CategoricalNB", Xc)):
+        m = getattr(ml, nm)()
+        m.partial_fit(data[first], y3[first], classes=[0, 1, 2])
+        m.partial_fit(data[300:1100], y3[300:1100])
+        a, b = cuts[2]
+        m.partial_fit(data[a:b], y3[a:b], sample_weight=w[a:b])
+        attrs = [m.class_count_, m.predict_proba(data[:256])]
+        attrs += [m.theta_, m.var_] if nm == "GaussianNB" else \
+            (list(m.category_count_) if nm == "CategoricalNB" else [m.feature_count_])
+        parts[nm] = _h(*attrs)
+    g = ml.GaussianNB().fit(X[:500], y3[:500]).partial_fit(X[500:900], y3[500:900])
+    parts["after_fit"] = _h(g.theta_, g.var_, g.predict_proba(X[:256]))
+    return _fit(parts, g, lambda e: (e.predict_proba(Xh[:256]),))
+
+
+_batch_decl(_rows_calls("predict", "predict_proba", sl=slice(0, 256)), "x-prep-nb-partial")
+
+
+@lane("x-prep-kbins-methods")
+def _(ml, X, yc, yr, Xh=None):
+    """KBinsDiscretizer quantile_method: every numpy method besides the two
+    the x-prep-kbins lane runs, on a tie-heavy (quarter-rounded) fixture."""
+    Xr = np.round(X[:2001] * 4).astype(np.float32) / np.float32(4)
+    parts = {}
+    for meth in ("inverted_cdf", "closest_observation", "interpolated_inverted_cdf", "hazen", "weibull",
+                 "median_unbiased", "normal_unbiased"):
+        m = ml.KBinsDiscretizer(n_bins=7, encode="ordinal", quantile_method=meth).fit(Xr)
+        parts[meth] = _h(*m.bin_edges_, m.transform(X[:256]))
+    m = ml.KBinsDiscretizer(n_bins=6, quantile_method="hazen").fit(X)
+    return _fit(parts, m, lambda e: (e.transform(Xh[:256]),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-kbins-methods")

@@ -1,0 +1,12 @@
+diff --git a/svm/impl/smosolver.mojo b/svm/impl/smosolver.mojo
+--- a/svm/impl/smosolver.mojo
++++ b/svm/impl/smosolver.mojo
+@@ -665,7 +665,7 @@
+             var host_c = ctx.enqueue_create_host_buffer[DType.float32](nt)
+             ctx.synchronize()
+             for i in range(nt):
+-                host_c[i] = self.c_rows[i % self.n_rows]
++                host_c[i] = self.C
+             ctx.enqueue_copy(dst_buf=self.C_vec, src_buf=host_c)
+             ctx.synchronize()
+             _ = host_c^

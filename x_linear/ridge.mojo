@@ -21,7 +21,9 @@ from x_linear.ops import (
 
 
 def ridge_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
-    """ip: [n_targets T, fit_intercept, n_alphas A]; fp: alphas (A).
+    """ip: [n_targets T, fit_intercept, n_alphas A, sample_weight]; fp: alphas (A).
+    With sample_weight, y = targets n*T | weights n (weighted means, the
+    weighted Gram, and their weighted GCV errors w_i e_i^2 / (1 - h_i)^2).
     y: n x T row-major. A == 1: fit; A > 1 (T == 1): leave-one-out choice.
     res: coef T*d | intercept T | alpha | best_score | A mean squared LOO errors.
     fw: xm d | G d*d | M d*d | rhs d | ym T | xty d*T | z d."""
@@ -35,28 +37,59 @@ def ridge_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw:
     var ym = rhs + d
     var xty = ym + t_n
     var zz = xty + d * t_n
+    var sw = ldi(ip, 3) != 0
+    var wo = n * t_n
+    var wsum = Float32(0)
+    if sw:
+        for i in range(n):
+            wsum = fa(wsum, ld(y, wo + i))
     for j in range(d):
         var acc = Float32(0)
         if fi:
-            for i in range(n):
-                acc = fa(acc, ld(x, i * d + j))
-            acc = fd(acc, i2f(n))
+            if sw:
+                for i in range(n):
+                    acc = fmad(ld(y, wo + i), ld(x, i * d + j), acc)
+                acc = fd(acc, wsum)
+            else:
+                for i in range(n):
+                    acc = fa(acc, ld(x, i * d + j))
+                acc = fd(acc, i2f(n))
         st(fw, xm + j, acc)
     for t in range(t_n):
         var acc = Float32(0)
         if fi:
-            for i in range(n):
-                acc = fa(acc, ld(y, i * t_n + t))
-            acc = fd(acc, i2f(n))
+            if sw:
+                for i in range(n):
+                    acc = fmad(ld(y, wo + i), ld(y, i * t_n + t), acc)
+                acc = fd(acc, wsum)
+            else:
+                for i in range(n):
+                    acc = fa(acc, ld(y, i * t_n + t))
+                acc = fd(acc, i2f(n))
         st(fw, ym + t, acc)
-    centered_gram(x, n, d, fw, xm, fw, gg)
+    if sw:
+        # sum_i w_i xc_i xc_i' (theirs: the sqrt(w) rescale of _rescale_data)
+        for j in range(d):
+            for k in range(j, d):
+                var acc = Float32(0)
+                var mj = ld(fw, xm + j)
+                var mk = ld(fw, xm + k)
+                for i in range(n):
+                    acc = fmad(fm(ld(y, wo + i), fs(ld(x, i * d + j), mj)), fs(ld(x, i * d + k), mk), acc)
+                st(fw, gg + j * d + k, acc)
+                st(fw, gg + k * d + j, acc)
+    else:
+        centered_gram(x, n, d, fw, xm, fw, gg)
     for t in range(t_n):
         var ymt = ld(fw, ym + t)
         for j in range(d):
             var acc = Float32(0)
             var mj = ld(fw, xm + j)
             for i in range(n):
-                acc = fmad(fs(ld(x, i * d + j), mj), fs(ld(y, i * t_n + t), ymt), acc)
+                var xc = fs(ld(x, i * d + j), mj)
+                if sw:
+                    xc = fm(ld(y, wo + i), xc)
+                acc = fmad(xc, fs(ld(y, i * t_n + t), ymt), acc)
             st(fw, xty + t * d + j, acc)
     var best = 0
     var best_err = Float32(0)
@@ -77,11 +110,23 @@ def ridge_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw:
                     st(fw, zz + j, xc)
                     e = fs(e, fm(xc, ld(fw, rhs + j)))
                 chol_solve(fw, mm, d, fw, zz)
-                var h = fd(Float32(1), i2f(n)) if fi else Float32(0)
-                for j in range(d):
-                    h = fmad(fs(ld(x, i * d + j), ld(fw, xm + j)), ld(fw, zz + j), h)
-                var loo = fd(e, fs(Float32(1), h))
-                err = fmad(loo, loo, err)
+                if sw:
+                    # their GCV on the sqrt(w)-rescaled problem
+                    var wi = ld(y, wo + i)
+                    var q = Float32(0)
+                    for j in range(d):
+                        q = fmad(fs(ld(x, i * d + j), ld(fw, xm + j)), ld(fw, zz + j), q)
+                    var h = fm(wi, q)
+                    if fi:
+                        h = fa(fd(wi, wsum), h)
+                    var loo = fd(e, fs(Float32(1), h))
+                    err = fmad(fm(wi, loo), loo, err)
+                else:
+                    var h = fd(Float32(1), i2f(n)) if fi else Float32(0)
+                    for j in range(d):
+                        h = fmad(fs(ld(x, i * d + j), ld(fw, xm + j)), ld(fw, zz + j), h)
+                    var loo = fd(e, fs(Float32(1), h))
+                    err = fmad(loo, loo, err)
             err = fd(err, i2f(n))
             st(res, t_n * d + t_n + 2 + a, err)
             if a == 0 or err < best_err:  # DEVIATION 5005: the first minimum

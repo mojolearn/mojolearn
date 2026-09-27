@@ -7,11 +7,21 @@ loop (`x_ann/host/*_host.mojo`), so the two agree by construction. Integer
 graph work (t-SNE symmetrization, CAGRA prune/reverse merge, CSR lists) is
 the same host function in both drivers. NOT_IMPLEMENTED: `x_ann/NOT_IMPLEMENTED.tsv`.
 
-Pod notes: dev pods with an NVIDIA driver < 580 need
-`MODULAR_NVPTX_COMPILER_PATH=/usr/local/cuda/bin/ptxas` at build and run
-time (build_x_ann.sh then names the arch from nvidia-smi). A host build that
-imports `ivf/host/ivf_host.mojo` next to new code hangs the Mojo compiler
-(0 CPU, futex), so IVF-PQ carries its own fixed-order Lloyd.
+Pod notes: dev pods with an NVIDIA driver < 580 cannot build the base
+bindings (system ptxas 12.4 refuses PTX 8.5); tools/dev_pod.sh now rents
+allowedCudaVersions 13.0 only (merged).
+
+THE COMPILER HANG (root-caused, fixed): cluster/host/kmeans_oracle.mojo had a
+mutual recursion host_fit_main -> host_init_scalable -> host_fit_main. A
+program entering it directly hung Mojo 1.0.0 (ed45d567) at 0 CPU (futex), at
+-O0 and --emit llvm alike. Fixed in cluster/: host_fit_main[with_init] with a
+`comptime if`, the inner INIT_ARRAY fit is host_fit_main[with_init=False], no
+cycle, same bits (kmeans, kmeans-classic-pp, kmeans-random, kmeans-array,
+kmeans-weighted, ivf, ivf-euclidean, ivf-extend, spectral: AGREE after).
+Repro for Modular: ~/mojolearn-evidence/algos-ann/compiler-hang/ (README.txt).
+IVF-PQ, IVF-SQ and IVF-RaBitQ now REUSE IVF-Flat's build for the coarse
+quantizer and cluster/'s k-means (`kmeans_fit` / `host_kmeans_fit`) for the PQ
+codebooks; the pass-1 private Lloyd is gone.
 
 | algorithm | lane | commit | AGREE (H100 pod, CPU == NVIDIA) | sanity |
 |---|---|---|---|---|
@@ -28,5 +38,65 @@ CPU column): RESULT: PASS (AGREE on all seven). The four Additions share the
 IVF files, so they are ONE commit, not four.
 
 Pass-1 status: DONE (IVF-PQ, t-SNE, CAGRA, IVF-SQ, IVF-RaBitQ, refine,
-sample filter). Next: PASS 2 (docs/lanes/ALGORITHM_EXPANSION_PLAN.md
-"CURRENT DIRECTIVES"): AMD box, per-seam proof, option parity, speed.
+sample filter).
+
+## Pass 2
+
+Per-seam proof (all seven): `tools/identity_lanes/ann.checks` lists 23
+(driver, sabotage) pairs over four drivers, `x_ann/checks/{ivf_pq,tsne,cagra,
+ivf_quant}_check.mojo`, each against an independent host oracle in
+`x_ann/checks/*_oracle.mojo`, each fixture shown to separate first
+(VACUOUS otherwise). DEVIATIONS 5800-5855, IDENTITY_PATHS rows 180-186, card
+stages through IdentityTrace in the drivers. Every one of the 23 arms bites on
+the H100 (seam_run evidence in the pod log).
+
+| column | status |
+|---|---|
+| NVIDIA H100 == CPU | `algos_lane_check.sh` (7 lanes) `--pass 2 --sabotage e2e_host_outputs_nudged.patch` at 072b2a152, on the FIXED tool (directive 000, after 02b63f107): 23 SEAM lines PASS / FAIL under the patch / PASS after reversal, no BROKEN arm; RESULT: PASS (AGREE, DISAGREE under the e2e sabotage, AGREE after reversal), 2026-09-27. Directive 000 rerun: DONE, never repeat |
+| AMD MI300X == x86 CPU | do-amd steward, request 1790536753106-ann-072b2a152: PASS |
+| Apple M2 Pro Metal == Arm CPU | m2pro steward, same request: PASS (m3ultra spooled, deferred) |
+
+The first steward request (bd72a4793) FAILED on both columns: the e2e patch
+nudged only element 0, so a row alone and inside a batch moved differently
+(BATCH_MOVED in the sabotaged CPU arm). Fixed in 26a78c3ed: every float output
+is nudged alike.
+
+End-to-end sabotage for the steward: `x_ann/checks/sabotage/e2e_host_outputs_nudged.patch`.
+
+PHASE 1 (VERIFICATION) FOR THE SEVEN NEW ALGORITHMS: DONE on NVIDIA, AMD and
+Apple.
+
+## WHERE THIS STOPPED / NEXT (for the next agent)
+
+The LANE CHARTER (top of ALGORITHM_EXPANSION_PLAN.md) puts EXISTING IVF-Flat
+in this lane. Phase 1 is NOT done until IVF-Flat has it too:
+
+1. PHASE 1, IVF-Flat (lanes `ivf`, `ivf-euclidean`, `ivf-extend` in
+   tools/identity_break.py). Branch `lane/algos-ann-p1` (commit b531231f6,
+   pushed, NOT merged) adds to `tools/identity_lanes/ann.checks` the driver
+   `ivf/checks/ivf_check.mojo` with three source arms under
+   `ivf/checks/sabotage/`: 5860 slot sort ties high id
+   (`sort_slots_by_distance_then_index`), 5861 candidate merge descending
+   (`merge_probed_lists`), 5862 extend puts new rows first
+   (`extend_list_layout`), and a new `check_extend_matches_build` in
+   ivf_check. RUN on the H100 pod 2026-09-27 (tree `/root/mj2` = 072b2a152 + b531231f6):
+   clean ivf_check PASS; 5860 FAIL (check_assignment_ties: probe tie toward
+   list 1); 5861 FAIL (check_ivf_sabotages: production merge does not
+   ascend, DEVIATION 1786); 5862 FAIL (check_extend_matches_build: slot 0
+   holds id 41). The three arms BITE; never re-run them. Still owed for IVF-Flat:
+   DEVIATION rows for 5860-5862 (IVF-Flat's existing DEVIATIONS 1783/1786/
+   1788/1789 name the rules), the ivf lanes' fragment ownership (`ivf*` are
+   registered in identity_break.py, not in a tools/identity_lanes fragment, so
+   the lane check's seam listing does not reach them: move or register them
+   so `algos_lane_check.sh ivf,ivf-euclidean,ivf-extend --pass 2` runs
+   ann.checks), an e2e sabotage that bites those lanes, then the H100 run and
+   `apple_steward.py submit` for m2pro + do-amd. test_lane_select is owed
+   (ann.checks changed).
+2. Then PHASE 2 (option parity), next session. The option-parity WIP is
+   committed UNVERIFIED on `lane/algos-ann` (e2593e497): TSNE sklearn surface
+   (n_components, exact, init pca/random/array, two-phase reset, stops,
+   n_iter_), seams 5816/5817, save/load for the four indexes. It moves t-SNE
+   bits: build, tsne_check + its 8 patches, lane check on x-ann-tsne and a new
+   x-ann-tsne-options lane, sklearn sanity, tsv rows. Remaining rows:
+   x_ann/NOT_IMPLEMENTED.tsv and ivf/NOT_IMPLEMENTED.tsv.
+3. Phases 3-5: FAST GPU speed, IDENTICAL GPU speed, CPU speed.

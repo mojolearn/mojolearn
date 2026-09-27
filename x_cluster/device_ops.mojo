@@ -5,7 +5,9 @@ GPU. Each primitive is one kernel whose thread `t` calls the `x_cluster/
 bodies.mojo` body for index `t`; nothing is folded across threads, so no
 launch shape can move a bit. Only the GPU binding imports this file."""
 from std.gpu import block_dim, block_idx, thread_idx
+from std.ffi import _Global
 from max.gpu.host import DeviceBuffer, DeviceContext
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 from x_cluster.bodies import (
     FPtr,
@@ -143,13 +145,41 @@ def _grid(n: Int) -> Int:
     return (n + TPB - 1) // TPB if n > 0 else 1
 
 
+struct _ClusterContext(Defaultable, Movable):
+    """ONE process-lifetime DeviceContext for every x_cluster entry (the
+    x_cnn `_Global` pattern; ALGORITHM_EXPANSION_BRIEFS.md "one
+    DeviceContext per process"). A context per call hung the SECOND
+    `x_cluster_call` in a process on an RTX 4090 (futex wait): the context
+    was a field declared BEFORE the call's buffers, so it was torn down
+    while they still held its allocations; on Metal a context per call also
+    exhausts the per-process command queues. The slot keeps a reference for
+    the life of the process, so every call's buffers die inside it. One slot
+    per numeric tier, so a FAST and an IDENTICAL .so never share it."""
+    var ctx: Optional[DeviceContext]
+
+    def __init__(out self):
+        self.ctx = Optional[DeviceContext]()
+
+
+comptime _CTX_NAME = "MojoXClusterContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXClusterContextFast"
+comptime X_CLUSTER_CONTEXT = _Global[StorageType=_ClusterContext, name=_CTX_NAME, init_fn=_ClusterContext.__init__]
+
+
+def x_cluster_ctx() raises -> DeviceContext:
+    """The shared context, created on first use."""
+    var slot = X_CLUSTER_CONTEXT.get_or_create_ptr()
+    if not slot[].ctx:
+        slot[].ctx = DeviceContext()
+    return slot[].ctx.value().copy()
+
+
 struct DeviceOps(ClusterOps):
     var ctx: DeviceContext
     var f: List[DeviceBuffer[DType.float32]]
     var i: List[DeviceBuffer[DType.int32]]
 
     def __init__(out self) raises:
-        self.ctx = DeviceContext()
+        self.ctx = x_cluster_ctx()
         self.f = List[DeviceBuffer[DType.float32]]()
         self.i = List[DeviceBuffer[DType.int32]]()
 

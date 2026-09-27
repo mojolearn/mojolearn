@@ -21,11 +21,14 @@ happens to it:
     cache_size != 0        raised by name (the LRU cache; README "cache decision")
     verbosity              accepted and ignored: it selects LOG LINES in the reference
                            (`CUML_LOG_DEBUG`), we print none
-    kernel POLYNOMIAL,     raised by name (TANH has no identical_tanh;
-      TANH, PRECOMPUTED    POLYNOMIAL is one identical_pow away and is left
-                           unimplemented rather than written blind)
-    degree, coef0          only read by the two refused kernels
-    sample_weight          the Solve/InitPenalty argument; raised by name
+    kernel POLYNOMIAL,     POLYNOMIAL (DEVIATION 1663) and TANH (identical_tanh)
+      TANH, PRECOMPUTED    are implemented on the linear Gram; PRECOMPUTED is
+                           raised by name
+    degree, coef0          read by POLYNOMIAL (both) and TANH (coef0)
+    sample_weight          InitPenalty's weighted arm: the caller's per-row
+                           bounds C * w (`check_c_rows`, SmoSolver `c_rows`,
+                           smo_oracle_fit `c_rows`); the has_sample_weight
+                           flag below is the List entry's old refusal
 
 # =========================================================================
 # DEVIATION 636 (IDENTITY_PATHS row 39, FACT 2): NON-FINITE inputs are
@@ -188,12 +191,23 @@ def check_rung1_scope(
             + " MiB: the raft::cache LRU is not implemented in rung 1; pass 0 (their"
             + " n_cache_sets == 0 path, taken exactly). See svm/NOT_IMPLEMENTED.tsv"
         )
-    if kp.kernel == KERNEL_TANH:
-        raise Error("svm: kernel=TANH is not implemented in rung 1 (coef0 unused)")
     if kp.kernel == KERNEL_PRECOMPUTED:
         raise Error("svm: kernel=PRECOMPUTED is not implemented in rung 1")
-    if kp.kernel != KERNEL_LINEAR and kp.kernel != KERNEL_RBF and kp.kernel != KERNEL_POLYNOMIAL:
+    if kp.kernel != KERNEL_LINEAR and kp.kernel != KERNEL_RBF and kp.kernel != KERNEL_POLYNOMIAL and kp.kernel != KERNEL_TANH:
         raise Error("svm: unknown kernel " + String(kp.kernel))
+    if kp.kernel == KERNEL_TANH:
+        # cuVS `TanhKernel`: tanh(gain * K + offset), the kernel_methods
+        # lane's tanh_epilogue_kernel (identical_tanh, IDENTITY_PATHS row 12).
+        if not isfinite(kp.gamma) or kp.gamma < 0.0:
+            raise Error(
+                "svm: gamma must be finite and >= 0 for the TANH kernel, got "
+                + String(kp.gamma) + " (DEVIATION 636)"
+            )
+        if not isfinite(kp.coef0):
+            raise Error(
+                "svm: coef0 must be finite for the TANH kernel, got "
+                + String(kp.coef0) + " (DEVIATION 636)"
+            )
     if kp.kernel == KERNEL_POLYNOMIAL:
         # DEVIATION 1663 (kernel_methods): the power is an ascending repeated
         # product, so the degree is a non-negative integer at or below the cap.
@@ -312,3 +326,18 @@ def check_finite_ptr(
             + String(first) + " (DEVIATION 636: a NaN or inf input cannot be"
             " fitted; a computed NaN has a vendor-specific payload)"
         )
+
+
+def check_c_rows(c_rows: List[Float32], n_rows: Int) raises:
+    """`InitPenalty`'s weighted arm takes one bound per row, `C *
+    sample_weight[i]`, formed by the caller. Empty is the unweighted arm.
+    Each bound must be finite and >= 0 (DEVIATION 636's family: NaN fails
+    `>= 0` and inf - inf is NaN)."""
+    if len(c_rows) == 0:
+        return
+    if len(c_rows) != n_rows:
+        raise Error("svm: " + String(len(c_rows)) + " per-row bounds for " + String(n_rows) + " rows")
+    for i in range(n_rows):
+        var v = c_rows[i]
+        if not (v >= Float32(0) and v - v == Float32(0)):
+            raise Error("svm: the per-row bound C * sample_weight at row " + String(i) + " is " + String(v) + "; it must be finite and >= 0")

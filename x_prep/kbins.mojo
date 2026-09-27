@@ -30,6 +30,69 @@ def _neg_inf() -> Float32:
     return bitcast[DType.float32](UInt32(0xFF800000))
 
 
+@always_inline
+def _fdiv(a: Int, b: Int) -> Int:
+    """floor(a / b) for b > 0 (a may be negative)."""
+    if a >= 0:
+        return a // b
+    return -((-a + b - 1) // b)
+
+
+def _method_quantile(f: FP, S: Int, n: Int, nb: Int, i: Int, strat: Int) -> Float32:
+    """numpy's percentile of the sorted column S at level i / nb for the
+    quantile_method STRAT (4 inverted_cdf, 5 closest_observation,
+    6 interpolated_inverted_cdf, 7 hazen, 8 weibull, 9 median_unbiased,
+    10 normal_unbiased; numpy `_QuantileMethods`). The virtual index is the
+    exact rational N / M (Hyndman and Fan's n*q + alpha + q*(1 - alpha - beta)
+    - 1 with q = i / nb), so its floor and fraction are integer arithmetic;
+    the discrete methods pick one order statistic (an index below 0 is 0),
+    the continuous ones lerp as numpy's `_lerp`, clamped to the ends."""
+    if strat == 4 or strat == 5:
+        var N = n * i
+        var idx: Int
+        if strat == 4:
+            idx = N // nb - 1 if N % nb == 0 else N // nb
+        else:
+            var num = 2 * N - 3 * nb
+            var prev = _fdiv(num, 2 * nb)
+            var odd = (prev - 2 * _fdiv(prev, 2)) == 1
+            idx = prev if (num - prev * 2 * nb == 0 and odd) else prev + 1
+        if idx < 0:
+            idx = 0
+        if idx > n - 1:
+            idx = n - 1
+        return ld(f, S + idx)
+    var N: Int
+    var M: Int
+    if strat == 6:
+        N = i * n - nb
+        M = nb
+    elif strat == 7:
+        N = 2 * i * n - nb
+        M = 2 * nb
+    elif strat == 8:
+        N = i * (n + 1) - nb
+        M = nb
+    elif strat == 9:
+        N = i * (3 * n + 1) - 2 * nb
+        M = 3 * nb
+    else:
+        N = 2 * i * (4 * n + 1) - 5 * nb
+        M = 8 * nb
+    if N < 0:
+        return ld(f, S)
+    if N >= (n - 1) * M:
+        return ld(f, S + n - 1)
+    var k = N // M
+    var g = div(Float32(N % M), Float32(M))
+    var a = ld(f, S + k)
+    var b = ld(f, S + k + 1)
+    var diff = sub(b, a)
+    if g >= Float32(0.5):
+        return sub(b, mul(diff, sub(Float32(1), g)))
+    return add(a, mul(diff, g))
+
+
 def kbins_edges_unit(t: Int, f: FP, q: IP):
     """q = [S, n, d, NB, NBMAX, STRAT, ST, EDGES, NEDGE, LAB, CEN]; t = column.
     S: columns sorted ascending (column-major, n each). NB[c]: requested bins.
@@ -58,7 +121,7 @@ def kbins_edges_unit(t: Int, f: FP, q: IP):
         st(f, E + nb, hi)
         st(f, p(q, 8) + c, Float32(nb + 1))
         return
-    if strat == 1 or strat == 2:
+    if strat == 1 or strat == 2 or strat >= 4:
         for i in range(nb + 1):
             var v: Float32
             if strat == 1:
@@ -70,6 +133,8 @@ def kbins_edges_unit(t: Int, f: FP, q: IP):
                     v = sub(b, mul(sub(b, a), Float32(0.5)))
                 else:
                     v = ld(f, S + (k if k < n else n - 1))
+            elif strat >= 4:
+                v = _method_quantile(f, S, n, nb, i, strat)
             else:
                 var pnum = (n - 1) * i      # position (n - 1) * i / nb
                 var k = pnum // nb

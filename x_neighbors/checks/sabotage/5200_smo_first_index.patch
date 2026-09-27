@@ -1,13 +1,13 @@
 diff --git a/x_neighbors/items.mojo b/x_neighbors/items.mojo
-index bc04f5c16..8a69c0e28 100644
 --- a/x_neighbors/items.mojo
 +++ b/x_neighbors/items.mojo
-@@ -301,7 +301,7 @@ def ocsvm_smo_item(t: Int, q: FP, alpha: FP, g: FP, info: FP, iters: IP, n: Int,
+@@ -311,7 +311,8 @@
          for t in range(n):
-             if alpha.unsafe_load(t) < Float32(1):
+             if alpha.unsafe_load(t) < cv.unsafe_load(t):
                  var ng = -g.unsafe_load(t)
 -                if ng >= gmax:
 +                if ng > gmax:
++
                      gmax = ng
                      gi = t
          var gmax2 = neg_inf

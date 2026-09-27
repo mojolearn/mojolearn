@@ -16,7 +16,7 @@ mean of the folds' coefficients at the best C; the objective is convex, so
 both reach the same minimizer). float32 throughout.
 
 Per-call objective parameters: ip block [K', fit_intercept, fold (-1 all)],
-fp block [C]; y = labels (0..K-1 as float32) | fold ids.
+fp block [C]; y = labels (0..K-1 as float32) | fold ids | weights (optional).
 """
 from x_linear.ops import (
     FP, IP, fa, fs, fm, fd, fmad, fexp, flog, fmax, ld, st, ldi, sti, i2f, fill, copy, row_dot,
@@ -30,6 +30,8 @@ def logistic_objective(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: FP, tof
     var fi = ldi(ip, 1) != 0
     var fold = ldi(ip, 2)
     var c = ld(fp, 0)
+    var sw = ldi(ip, 3) != 0
+    var wrows = Float32(0)
     var stride = d + 1
     var p = kp * stride
     fill(g, goff, p, Float32(0))
@@ -39,12 +41,20 @@ def logistic_objective(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: FP, tof
         if fold >= 0 and Int(ld(y, n + i)) == fold:
             continue
         rows += 1
+        var wi = Float32(1)
+        if sw:
+            wi = ld(y, 2 * n + i)
+            wrows = fa(wrows, wi)
         var label = Int(ld(y, i))
         if kp == 1:
             var z = fa(row_dot(x, i, d, th, toff), ld(th, toff + d) if fi else Float32(0))
             var yi = Float32(1) if label == 1 else Float32(0)
-            acc = fa(acc, fs(ftz(identical_softplus(z)), fm(yi, z)))
+            var li = fs(ftz(identical_softplus(z)), fm(yi, z))
             var r = fs(ftz(identical_sigmoid(z)), yi)
+            if sw:
+                li = fm(wi, li)
+                r = fm(wi, r)
+            acc = fa(acc, li)
             for j in range(d):
                 st(g, goff + j, fmad(r, ld(x, i * d + j), ld(g, goff + j)))
             if fi:
@@ -63,18 +73,21 @@ def logistic_objective(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: FP, tof
                 if k == label:
                     zy = z
             var lse = fa(zmax, flog(se))
-            acc = fa(acc, fs(lse, zy))
+            acc = fa(acc, fm(wi, fs(lse, zy)) if sw else fs(lse, zy))
             for k in range(kp):
                 var z = fa(row_dot(x, i, d, th, toff + k * stride), ld(th, toff + k * stride + d) if fi else Float32(0))
                 var r = fexp(fs(z, lse))
                 if k == label:
                     r = fs(r, Float32(1))
+                if sw:
+                    r = fm(wi, r)
                 for j in range(d):
                     st(g, goff + k * stride + j, fmad(r, ld(x, i * d + j), ld(g, goff + k * stride + j)))
                 if fi:
                     st(g, goff + k * stride + d, fa(ld(g, goff + k * stride + d), r))
-    var inv_n = fd(Float32(1), i2f(rows))
-    var lam = fd(Float32(1), fm(c, i2f(rows)))
+    var cnt = wrows if sw else i2f(rows)
+    var inv_n = fd(Float32(1), cnt)
+    var lam = fd(Float32(1), fm(c, cnt))
     var reg = Float32(0)
     for k in range(kp):
         for j in range(stride):
@@ -104,7 +117,11 @@ def _predict_code(x: FP, i: Int, d: Int, kp: Int, fi: Bool, th: FP, toff: Int) -
 
 
 def logcv_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
-    """ip: [max_iter, fit_intercept, K', n_Cs, n_folds]; fp: [tol, Cs...].
+    """ip: [max_iter, fit_intercept, K', n_Cs, n_folds, sample_weight]; fp: [tol, Cs...].
+    With sample_weight, y = labels | folds | fit weights (sample x class) |
+    score weights (sample): the loss sum and the penalty scale use sum(w)
+    of the training rows (their LinearModelLoss), the held-out accuracy is
+    weighted by the raw sample weights (their scorer's sample_weight).
     res: coef K'*d | intercept K' | C_ | n_iter | scores F*nC.
     fw: theta P | C 1 | lbfgs work.  iw: [K', fit_intercept, fold]."""
     var max_iter = ldi(ip, 0)
@@ -121,6 +138,7 @@ def logcv_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw:
     var sc = kp * d + kp + 2
     sti(iw, 0, kp)
     sti(iw, 1, fi)
+    sti(iw, 3, ldi(ip, 5))
     var cptr = fw + cslot
     for f in range(nf):
         sti(iw, 2, f)
@@ -135,7 +153,19 @@ def logcv_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw:
                     cnt += 1
                     if _predict_code(x, i, d, kp if kp > 1 else 1, fi != 0, fw, th) == Int(ld(y, i)):
                         hit += 1
-            st(res, sc + f * nc + ci, fd(i2f(hit), i2f(cnt)) if cnt > 0 else Float32(0))
+            if ldi(ip, 5) != 0:
+                # their scorer gets sample_weight[test]: the raw weights, at y + 3n
+                var wh = Float32(0)
+                var wt = Float32(0)
+                for i in range(n):
+                    if Int(ld(y, n + i)) == f:
+                        var wi = ld(y, 3 * n + i)
+                        wt = fa(wt, wi)
+                        if _predict_code(x, i, d, kp if kp > 1 else 1, fi != 0, fw, th) == Int(ld(y, i)):
+                            wh = fa(wh, wi)
+                st(res, sc + f * nc + ci, fd(wh, wt) if wt > 0 else Float32(0))
+            else:
+                st(res, sc + f * nc + ci, fd(i2f(hit), i2f(cnt)) if cnt > 0 else Float32(0))
     var best = 0
     var bs = Float32(0)
     for ci in range(nc):

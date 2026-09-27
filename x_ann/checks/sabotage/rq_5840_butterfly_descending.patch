@@ -1,0 +1,22 @@
+--- a/x_ann/ivf_rabitq_core.mojo
++++ b/x_ann/ivf_rabitq_core.mojo
+@@ -61,8 +61,8 @@
+             if rq_sign(seed, j):
+                 v = -v
+         ws.unsafe_store(w_off + j, v)
+-    var h = 1
+-    while h < D:
++    var h = D // 2
++    while h >= 1:
+         var i = 0
+         while i < D:
+             for j in range(i, i + h):
+@@ -71,7 +71,7 @@
+                 ws.unsafe_store(w_off + j, ftz(a + b))
+                 ws.unsafe_store(w_off + j + h, ftz(a - b))
+             i += 2 * h
+-        h *= 2
++        h //= 2
+     for j in range(D):
+         ws.unsafe_store(w_off + j, ftz(identical_mul(ws.unsafe_load(w_off + j), scale)))
+ 

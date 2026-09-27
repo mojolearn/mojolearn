@@ -1,0 +1,12 @@
+--- a/x_ann/tsne_core.mojo
++++ b/x_ann/tsne_core.mojo
+@@ -163,7 +163,8 @@
+             values.append(ftz(a + b))
+         indptr.append(Int32(len(indices)))
+     var total = Float32(0.0)
+-    for e in range(len(values)):
++    for ee in range(len(values)):
++        var e = len(values) - 1 - ee
+         total = ftz(total + values[e])
+     if total < Float32(1.1920929e-07):
+         total = Float32(1.1920929e-07)

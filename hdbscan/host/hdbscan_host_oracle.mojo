@@ -49,8 +49,7 @@ WHAT IS REFUSED, BY NAME, AS ON THE DEVICE: fewer than two rows, no column,
 min_samples above n_rows or below 1, a metric other than L2SqrtExpanded, a
 selection method other than eom and leaf, a non-positive or non-finite
 alpha, more rows than PAIRWISE_MAX_ROWS, min_cluster_size below 2 or above
-n_rows, a non-zero cluster_selection_epsilon where the epsilon search would
-run, and NaN distances or non-finite mutual reachability cells.
+n_rows, and NaN distances or non-finite mutual reachability cells.
 
 THE SABOTAGE. `-D MOJOLEARN_HOST_SABOTAGE=1` reads the core distance one
 slot early (the (k - 1)-th neighbor instead of the k-th), so every core
@@ -82,6 +81,7 @@ from hdbscan.impl.detail.stabilities import (
     stability_order_unkey_bits,
 )
 from hdbscan.impl.detail.utils import (
+    cluster_epsilon_search_host,
     make_cluster_tree,
     select_parent_csr,
     utils_parent_csr,
@@ -968,7 +968,7 @@ def hdbh_select(
     cluster_selection_epsilon: Float32,
 ) raises -> List[Int32]:
     """`select_clusters`: `excess_of_mass` (with `perform_bfs`'s negation)
-    or `leaf`, then the epsilon refusal. Returns `is_cluster`."""
+    or `leaf`, then the epsilon search. Returns `is_cluster`."""
     var n_clusters = tree.n_clusters
     var cluster_tree = make_cluster_tree(tree)
     var n_edges = cluster_tree.n_edges
@@ -1063,10 +1063,10 @@ def hdbh_select(
             if is_cluster[0] != Int32(0) and allow_single_cluster:
                 epsilon_search = False
         if epsilon_search:
-            raise Error(
-                "hdbscan.cluster_epsilon_search: cluster_selection_epsilon"
-                " refused by name; the epsilon search is NOT IMPLEMENTED"
-                " (rung 2). Use cluster_selection_epsilon=0.0, their default"
+            # DEVIATION 5115: the GPU route's own host function.
+            cluster_epsilon_search_host(
+                cluster_tree, is_cluster, n_clusters,
+                cluster_selection_epsilon, allow_single_cluster,
             )
     return is_cluster^
 

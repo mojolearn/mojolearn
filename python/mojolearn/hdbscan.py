@@ -10,13 +10,12 @@ what is mirrored and what is refused.
 
 WHAT IS REFUSED, AND WHERE (the estimator's header):
     metric other than euclidean          here by name, and on the Mojo host
-    cluster_selection_epsilon != 0.0     Mojo host (rung 2)
+    cluster_selection_epsilon < 0 or non-finite   here, by name
     min_samples < 1 or > n_rows          Mojo host
     min_cluster_size < 2 or > n_rows     Mojo host
     alpha <= 0 or non-finite             Mojo host
     n_rows < 2, n_rows > 46340           Mojo host
     a NaN or infinite anywhere           Mojo host (DEVIATION 1607)
-    probabilities_                       here, by name (DEVIATION 1610)
 
 HELD-OUT POINTS (2026-09-15). `HDBSCAN(prediction_data=True)` keeps the
 condensed tree and builds cuML's prediction data at fit time
@@ -84,8 +83,10 @@ class HDBSCAN(NumericModeMixin):
     min_samples : int or None, default None
         None means `min_cluster_size`, cuML's and scikit-learn's rule.
     cluster_selection_epsilon : float, default 0.0
-        Only 0.0 is implemented; anything else is refused by name on the
-        Mojo host.
+        cuML's epsilon search (`select.cuh:301-363`), run on the host by one
+        function both routes call (DEVIATION 5115): a selected cluster
+        born below this distance is merged upward to the first ancestor
+        born above it. 0.0 disables it.
     max_cluster_size : int, default 0
         0 means no cap.
     metric : {'euclidean'}, default 'euclidean'
@@ -109,8 +110,9 @@ class HDBSCAN(NumericModeMixin):
     n_boruvka_rounds_ : int
         An integer card stage.
     n_condensed_clusters_ : int
-    probabilities_
-        NOT IMPLEMENTED; reading it raises by name (DEVIATION 1610).
+    probabilities_ : Array (n_samples,) float32
+        cuML's `get_probabilities` (DEVIATION 5116): the strength of each
+        point's membership in its cluster, 0 for noise.
     """
 
     _BINDING = "_mojolearn_hdbscan"
@@ -151,15 +153,6 @@ class HDBSCAN(NumericModeMixin):
                 )
         return mod
 
-    @property
-    def probabilities_(self):
-        raise AttributeError(
-            "mojolearn HDBSCAN: probabilities_ is NOT IMPLEMENTED (DEVIATION 1610): "
-            "cuML's Membership::get_probabilities is a segmented max over the "
-            "condensed tree plus a per-point ratio; returning zeros or ones would "
-            "be a number nobody computed. hdbscan/estimator.mojo names the closure."
-        )
-
     def fit(self, X, y=None):
         """Cluster row-major `X`. Returns `self`."""
         x, copied = as_f32_c(X, ndim=2, name="X")
@@ -196,6 +189,12 @@ class HDBSCAN(NumericModeMixin):
             v = getattr(self, name)
             if isinstance(v, bool) or not isinstance(v, (int, float)):
                 raise TypeError(f"mojolearn HDBSCAN: {name} must be a real number")
+        cse = float(self.cluster_selection_epsilon)
+        if not (cse >= 0.0) or cse == float("inf"):
+            raise ValueError(
+                "mojolearn HDBSCAN: cluster_selection_epsilon must be a finite "
+                f"number >= 0, got {self.cluster_selection_epsilon!r} (scikit-learn's range)"
+            )
         if not isinstance(self.prediction_data, bool):
             raise TypeError("mojolearn HDBSCAN: prediction_data must be a bool")
         want_pd = self.prediction_data
@@ -205,6 +204,7 @@ class HDBSCAN(NumericModeMixin):
         # ORDER MATCHES bindings/_mojolearn_hdbscan.mojo::hdbscan_fit_binding.
         # x, labels_out, core_dists_out, info_out
         addrs = [addr_ro(x, name="X"), addr(labels, name="labels_"), addr(core, name="core_distances_"), addr(info, name="info")]
+        probs = empty((n,), "<f4")
         if want_pd:
             # tree_parents_out, tree_children_out, tree_lambdas_out,
             # tree_sizes_out (2 * n each), inverse_label_map_out (n)
@@ -216,6 +216,8 @@ class HDBSCAN(NumericModeMixin):
             addrs += [addr(t_par, name="tree parents"), addr(t_ch, name="tree children"),
                       addr(t_lam, name="tree lambdas"), addr(t_sz, name="tree sizes"),
                       addr(t_inv, name="inverse_label_map")]
+        # probabilities_out, always LAST (DEVIATION 5116)
+        addrs.append(addr(probs, name="probabilities_"))
         ext = self._extension()
         n_clusters = ext.hdbscan_fit(
             addrs,
@@ -227,6 +229,7 @@ class HDBSCAN(NumericModeMixin):
         self.n_features_in_ = d
         self.labels_ = labels
         self.core_distances_ = core
+        self.probabilities_ = probs
         self.n_clusters_ = int(n_clusters)
         self.n_outliers_ = int(info[1])
         self.n_boruvka_rounds_ = int(info[2])

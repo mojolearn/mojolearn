@@ -28,12 +28,10 @@ def _bytes(a):
 
 
 @pytest.mark.parametrize("kwargs, exc", [
-    (dict(affinity="rbf"), ValueError),
+    (dict(affinity="cosine"), ValueError),
     (dict(gamma=1.0), NotImplementedError),
-    (dict(eigen_solver="arpack"), NotImplementedError),
-    (dict(eigen_tol="auto"), NotImplementedError),
-    (dict(n_jobs=2), NotImplementedError),
-    (dict(verbose=True), NotImplementedError),
+    (dict(eigen_solver="dense"), ValueError),
+    (dict(eigen_tol=1e-3), NotImplementedError),
     (dict(n_components=0), ValueError),
     (dict(n_neighbors=0), ValueError),
     (dict(random_state=-1), ValueError),

@@ -1,0 +1,11 @@
+--- a/x_ann/refine_core.mojo
++++ b/x_ann/refine_core.mojo
+@@ -32,7 +32,7 @@
+             if Int(cand.unsafe_load(qi * k0 + u)) == v:
+                 dup = True
+                 break
+-        if dup:
++        if dup and v < 0:
+             continue
+         var acc = Float32(0.0)
+         for c in range(d):

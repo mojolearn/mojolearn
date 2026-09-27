@@ -967,7 +967,12 @@ def host_init_scalable(
         var inner_sum_scale = Float32(choose_scale(worst))
         var inner_weight_scale = Float32(choose_scale(Float64(n)))
         var cand_labels = List[UInt32](length=cand_count, fill=UInt32(0))
-        _ = host_fit_main(
+        # host_fit_main[with_init=False] (INIT_ARRAY only) does not reach
+        # host_init_scalable, so the two are no longer mutually recursive.
+        # With the cycle, Mojo 1.0.0 (ed45d567) HUNG (0 CPU, futex wait) when a
+        # new program instantiated host_fit_main / host_init_scalable
+        # (lane/algos-ann, 2026-09-27; repro in the lane's evidence).
+        _ = host_fit_main[with_init=False](
             cand,
             cand_count,
             d,
@@ -1069,7 +1074,7 @@ struct KMeansHostFit(Copyable, Movable):
     var n_iter: Int
 
 
-def host_fit_main(
+def host_fit_main[with_init: Bool = True](
     x: List[Float32],
     n: Int,
     d: Int,
@@ -1121,15 +1126,21 @@ def host_fit_main(
         if init == INIT_ARRAY:
             for j in range(cd):
                 cur[j] = centroids[j]
-        elif init == INIT_RANDOM:
-            host_init_random(x, n, d, k, cur, rng)
-        elif init == INIT_KMEANS_PLUS_PLUS and oversampling_factor != 0.0:
-            host_init_scalable(
-                x, x_norm, n, d, k, metric, oversampling_factor, cur, rng,
-                trace, restart_tag,
-            )
         else:
-            host_kmeans_plus_plus(x, x_norm, n, d, k, is_sqrt, cur, rng)
+            # `comptime if`, so the [with_init=False] instance never names
+            # host_init_scalable and the instantiation graph has no cycle.
+            comptime if with_init:
+                if init == INIT_RANDOM:
+                    host_init_random(x, n, d, k, cur, rng)
+                elif init == INIT_KMEANS_PLUS_PLUS and oversampling_factor != 0.0:
+                    host_init_scalable(
+                        x, x_norm, n, d, k, metric, oversampling_factor, cur, rng,
+                        trace, restart_tag,
+                    )
+                else:
+                    host_kmeans_plus_plus(x, x_norm, n, d, k, is_sqrt, cur, rng)
+            else:
+                raise Error("host_fit_main[with_init=False] takes INIT_ARRAY only")
         trace.record_f32(restart_tag + "init.centroids", cur)
 
         var n_current_iter = max_iter + 1

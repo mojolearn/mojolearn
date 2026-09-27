@@ -1,8 +1,8 @@
 diff --git a/x_decomp/cells.mojo b/x_decomp/cells.mojo
-index b8537db32..b23dec209 100644
+index 4b4c2cedf..8b8c04cdd 100644
 --- a/x_decomp/cells.mojo
 +++ b/x_decomp/cells.mojo
-@@ -338,7 +338,8 @@ def rowsum_cell(a: F32Ptr, i: Int, d: Int) -> Float32:
+@@ -391,7 +391,8 @@ def rowsum_part_cell(a: F32Ptr, i: Int, d: Int, c0: Int, c1: Int) -> Float32:
  def sqdist_cell(a: F32Ptr, b: F32Ptr, i: Int, j: Int, d: Int) -> Float32:
      """||a_i - b_j||^2, features ascending."""
      var acc = Float32(0)
