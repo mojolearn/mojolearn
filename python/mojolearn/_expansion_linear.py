@@ -27,7 +27,8 @@ from ._mode import NumericModeMixin
 
 __all__ = ["SGDClassifier", "SGDRegressor", "PoissonRegressor", "GammaRegressor", "TweedieRegressor",
            "HuberRegressor",
-           "BayesianRidge", "ARDRegression"]
+           "BayesianRidge", "ARDRegression",
+           "Lars", "LassoLars"]
 
 _BINDING = "_mojolearn_x_linear"
 ALGO_SGD, ALGO_GLM, ALGO_HUBER, ALGO_BAYES, ALGO_ARD = 1, 2, 3, 4, 5
@@ -521,3 +522,59 @@ class ARDRegression(_LinearRegressorMixin, NumericModeMixin):
     def predict(self, X, return_std=False):
         _bayes_refuse(self, return_std)
         return _LinearRegressorMixin.predict(self, X)
+
+
+# --------------------------------------------------------------------- LARS
+# Reference: scikit-learn sklearn/linear_model/_least_angle.py; kernel
+# x_linear/lars.mojo (the Gram form of _lars_path_solver).
+
+def _lars_fit(est, X, y, max_iter, lasso, alpha_min):
+    if getattr(est, "jitter", None) is not None:
+        raise ValueError(f"mojolearn {type(est).__name__}: jitter is not implemented")
+    if getattr(est, "positive", False):
+        raise ValueError(f"mojolearn {type(est).__name__}: positive=True is not implemented")
+    a, n, d = _matrix(X)
+    yv = _vector(y, n)
+    vals = _run(est, ALGO_LARS, a, n, d, yv, [int(max_iter), int(bool(est.fit_intercept)), int(lasso)],
+                [alpha_min], 2 * d + 4, 2 * d * d + 8 * d, 2 * d)
+    est.coef_ = Array.from_list(vals[:d], "<f4")
+    est.intercept_ = float(vals[d])
+    est.n_iter_ = int(vals[d + 1])
+    est.alpha_ = float(vals[d + 2])
+    k = int(vals[d + 3])
+    est.active_ = [int(v) for v in vals[d + 4:d + 4 + k]]
+    est.n_features_in_ = d
+    return est
+
+
+class Lars(_LinearRegressorMixin, NumericModeMixin):
+    """Least angle regression (scikit-learn's Lars)."""
+
+    _BINDING = _BINDING
+
+    def __init__(self, *, fit_intercept=True, verbose=False, precompute="auto", n_nonzero_coefs=500,
+                 eps=2.220446049250313e-16, copy_X=True, fit_path=True, jitter=None, random_state=None):
+        self.fit_intercept, self.verbose, self.precompute = fit_intercept, verbose, precompute
+        self.n_nonzero_coefs, self.eps, self.copy_X = n_nonzero_coefs, eps, copy_X
+        self.fit_path, self.jitter, self.random_state = fit_path, jitter, random_state
+
+    def fit(self, X, y):
+        return _lars_fit(self, X, y, self.n_nonzero_coefs, False, 0.0)
+
+
+class LassoLars(_LinearRegressorMixin, NumericModeMixin):
+    """Lasso fitted by least angle regression (scikit-learn's LassoLars)."""
+
+    _BINDING = _BINDING
+
+    def __init__(self, alpha=1.0, *, fit_intercept=True, verbose=False, precompute="auto", max_iter=500,
+                 eps=2.220446049250313e-16, copy_X=True, fit_path=True, positive=False, jitter=None,
+                 random_state=None):
+        self.alpha, self.fit_intercept, self.verbose, self.precompute = alpha, fit_intercept, verbose, precompute
+        self.max_iter, self.eps, self.copy_X, self.fit_path = max_iter, eps, copy_X, fit_path
+        self.positive, self.jitter, self.random_state = positive, jitter, random_state
+
+    def fit(self, X, y):
+        if not self.alpha >= 0:
+            raise ValueError("mojolearn LassoLars: alpha must be >= 0")
+        return _lars_fit(self, X, y, self.max_iter, True, self.alpha)

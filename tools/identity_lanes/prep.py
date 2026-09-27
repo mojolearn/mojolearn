@@ -201,3 +201,16 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-quantile-transformer")
+
+
+@lane("x-prep-power-transformer")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.PowerTransformer().fit(X[:2000])
+    Xp = np.abs(X[:2000]) + np.float32(0.5)
+    mb = ml.PowerTransformer(method="box-cox", standardize=False).fit(Xp)
+    parts = dict(lam=_h(m.lambdas_), transform=_h(m.transform(X[:256])), lam_bc=_h(mb.lambdas_),
+                 bc=_h(mb.transform(Xp[:256])))
+    return _fit(parts, m, lambda e: (e.transform(Xh[:256]),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-power-transformer")
