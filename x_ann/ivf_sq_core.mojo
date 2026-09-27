@@ -20,7 +20,7 @@ THE FIXED-ORDER DESIGN
 
 from std.math import trunc
 from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add
-from x_ann.ivf_pq_core import F32P, I32P, pq_coarse_dist, pq_inf, pq_insert
+from x_ann.ivf_pq_core import F32P, I32P, pq_inf, pq_insert, pq_next_probe
 
 
 @always_inline
@@ -73,14 +73,8 @@ def sq_search_cell(
     var prev_l = -1
     var n_cand = 0
     for _ in range(n_probes):
-        var best_l = -1
         var best_d = Float32(0.0)
-        for l in range(n_lists):
-            var d = pq_coarse_dist(queries, q_off, centers, l, dim)
-            var after = prev_l < 0 or d > prev_d or (d == prev_d and l > prev_l)
-            if after and (best_l < 0 or d < best_d or (d == best_d and l < best_l)):
-                best_l = l
-                best_d = d
+        var best_l = pq_next_probe(queries, q_off, centers, n_lists, dim, prev_d, prev_l, best_d)
         if best_l < 0:
             break
         prev_l = best_l

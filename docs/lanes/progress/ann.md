@@ -7,11 +7,21 @@ loop (`x_ann/host/*_host.mojo`), so the two agree by construction. Integer
 graph work (t-SNE symmetrization, CAGRA prune/reverse merge, CSR lists) is
 the same host function in both drivers. NOT_IMPLEMENTED: `x_ann/NOT_IMPLEMENTED.tsv`.
 
-Pod notes: dev pods with an NVIDIA driver < 580 need
-`MODULAR_NVPTX_COMPILER_PATH=/usr/local/cuda/bin/ptxas` at build and run
-time (build_x_ann.sh then names the arch from nvidia-smi). A host build that
-imports `ivf/host/ivf_host.mojo` next to new code hangs the Mojo compiler
-(0 CPU, futex), so IVF-PQ carries its own fixed-order Lloyd.
+Pod notes: dev pods with an NVIDIA driver < 580 cannot build the base
+bindings (system ptxas 12.4 refuses PTX 8.5); tools/dev_pod.sh now rents
+allowedCudaVersions 13.0 only (merged).
+
+THE COMPILER HANG (root-caused, fixed): cluster/host/kmeans_oracle.mojo had a
+mutual recursion host_fit_main -> host_init_scalable -> host_fit_main. A
+program entering it directly hung Mojo 1.0.0 (ed45d567) at 0 CPU (futex), at
+-O0 and --emit llvm alike. Fixed in cluster/: host_fit_main[with_init] with a
+`comptime if`, the inner INIT_ARRAY fit is host_fit_main[with_init=False], no
+cycle, same bits (kmeans, kmeans-classic-pp, kmeans-random, kmeans-array,
+kmeans-weighted, ivf, ivf-euclidean, ivf-extend, spectral: AGREE after).
+Repro for Modular: ~/mojolearn-evidence/algos-ann/compiler-hang/ (README.txt).
+IVF-PQ, IVF-SQ and IVF-RaBitQ now REUSE IVF-Flat's build for the coarse
+quantizer and cluster/'s k-means (`kmeans_fit` / `host_kmeans_fit`) for the PQ
+codebooks; the pass-1 private Lloyd is gone.
 
 | algorithm | lane | commit | AGREE (H100 pod, CPU == NVIDIA) | sanity |
 |---|---|---|---|---|
@@ -28,5 +38,23 @@ CPU column): RESULT: PASS (AGREE on all seven). The four Additions share the
 IVF files, so they are ONE commit, not four.
 
 Pass-1 status: DONE (IVF-PQ, t-SNE, CAGRA, IVF-SQ, IVF-RaBitQ, refine,
-sample filter). Next: PASS 2 (docs/lanes/ALGORITHM_EXPANSION_PLAN.md
-"CURRENT DIRECTIVES"): AMD box, per-seam proof, option parity, speed.
+sample filter).
+
+## Pass 2
+
+Per-seam proof (all seven): `tools/identity_lanes/ann.checks` lists 23
+(driver, sabotage) pairs over four drivers, `x_ann/checks/{ivf_pq,tsne,cagra,
+ivf_quant}_check.mojo`, each against an independent host oracle in
+`x_ann/checks/*_oracle.mojo`, each fixture shown to separate first
+(VACUOUS otherwise). DEVIATIONS 5800-5855, IDENTITY_PATHS rows 180-186, card
+stages through IdentityTrace in the drivers. Every one of the 23 arms bites on
+the H100 (seam_run evidence in the pod log).
+
+| column | status |
+|---|---|
+| NVIDIA H100 == CPU | `algos_lane_check.sh` (7 lanes) `--pass 2`: 23 SEAM lines PASS/FAIL/PASS, RESULT: PASS (AGREE on all seven), 2026-09-27 |
+| AMD MI300X | OWED: RunPod MI300X out of stock, Hot Aisle team limit full (retrying) |
+| Apple (M2 Pro steward) | OWED |
+
+Next: AMD AGREE, steward submit, then option parity (x_ann/NOT_IMPLEMENTED.tsv
+NOT IMPLEMENTED rows), then speed.
