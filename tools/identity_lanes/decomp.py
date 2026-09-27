@@ -220,9 +220,10 @@ def _(ml, X, yc, yr, Xh=None):
     emb = md.fit_transform(S[:100])
     mc = ml.MDS(n_components=2, init="classical_mds", max_iter=30).fit(S[:100])
     lle = ml.LocallyLinearEmbedding(n_neighbors=10, n_components=2).fit(S)
+    lt = ml.LocallyLinearEmbedding(n_neighbors=8, n_components=2, method="ltsa").fit(S[:80])
     return _fit(dict(iso=_h(iso.embedding_), isod=_h(iso.dist_matrix_), isoT=_h(iso.transform(Xh[:64])),
                      cm=_h(cm.embedding_), md=_h(emb), mds=_h(np.float64(md.stress_)), mc=_h(mc.embedding_),
-                     lle=_h(lle.embedding_), lleT=_h(lle.transform(Xh[:64]))),
+                     lle=_h(lle.embedding_), lleT=_h(lle.transform(Xh[:64])), lt=_h(lt.embedding_)),
                 iso, lambda e: (e.transform(Xh[:128]),))
 
 
@@ -234,9 +235,10 @@ def _(ml, X, yc, yr, Xh=None):
     S = np.ascontiguousarray(X[:400, :6])
     m = ml.MinCovDet(random_state=0).fit(S)
     e = ml.EllipticEnvelope(contamination=0.05, random_state=1, support_fraction=0.7).fit(S)
+    one = ml.MinCovDet().fit(np.ascontiguousarray(X[:300, 5:6]))
     return _fit(dict(loc=_h(m.location_), cov=_h(m.covariance_), rloc=_h(m.raw_location_), rcov=_h(m.raw_covariance_),
                      sup=_h(np.asarray(m.support_, dtype=np.int8)), dist=_h(m.dist_), maha=_h(m.mahalanobis(S[:128])),
-                     eoff=_h(np.float64(e.offset_)), edec=_h(e.decision_function(S[:128])), epred=_h(e.predict(S[:128]))),
+                     eoff=_h(np.float64(e.offset_)), one=_h(one.location_, one.covariance_, one.dist_), edec=_h(e.decision_function(S[:128])), epred=_h(e.predict(S[:128]))),
                 e, lambda est: (est.decision_function(np.ascontiguousarray(Xh[:256, :6])),
                                 est.predict(np.ascontiguousarray(Xh[:256, :6]))))
 
@@ -259,9 +261,12 @@ def _(ml, X, yc, yr, Xh=None):
     p = ml.PCA(n_components=4, svd_solver="randomized", random_state=3).fit(X[:4000])
     w = ml.PCA(n_components=3, svd_solver="randomized", whiten=True, iterated_power=2).fit(X[:2000])
     t = ml.TruncatedSVD(n_components=5, algorithm="randomized", random_state=1).fit(X[:4000])
+    f = ml.PCA(n_components=0.8, svd_solver="full").fit(X[:3000])
     return _fit(dict(pc=_h(p.components_), pev=_h(p.explained_variance_, p.explained_variance_ratio_, p.singular_values_),
                      pnv=_h(np.float64(p.noise_variance_)), pT=_h(p.transform(X[:256])), wT=_h(w.transform(X[:256])),
-                     tc=_h(t.components_, t.singular_values_, t.explained_variance_ratio_), tT=_h(t.transform(X[:256]))),
+                     tc=_h(t.components_, t.singular_values_, t.explained_variance_ratio_), tT=_h(t.transform(X[:256])),
+                     fc=_h(f.components_, f.explained_variance_), fnv=_h(np.float64(f.noise_variance_)),
+                     fT=_h(f.transform(X[:256]))),
                 p, lambda e: (e.transform(Xh[:256]),))
 
 

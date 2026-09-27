@@ -345,7 +345,18 @@ class PCA(NumericModeMixin):
                 "substituting it here would be the substitution this class "
                 "refuses to make for the solver name itself"
             )
-        nc = _component_count(self.n_components, x.shape)
+        frac = None
+        if isinstance(self.n_components, float) and not isinstance(self.n_components, bool):
+            # scikit-learn's variance fraction (lane/algos-decomp, 2026-09-27):
+            # fit every component, keep the fewest whose cumulative explained
+            # variance ratio EXCEEDS the fraction (searchsorted side='right'),
+            # the cumulative sum in float64 on the host (sequential IEEE adds).
+            if not 0.0 < self.n_components < 1.0:
+                raise ValueError("mojolearn PCA: a float n_components must be in (0, 1)")
+            frac = float(self.n_components)
+            nc = min(x.shape)
+        else:
+            nc = _component_count(self.n_components, x.shape)
         if dense and nc > min(x.shape):
             raise ValueError("full SVD n_components cannot exceed min(n_samples, n_features)")
         self.components_ = empty((nc, x.shape[1]), "<f4")
@@ -359,6 +370,30 @@ class PCA(NumericModeMixin):
             addr(self.explained_variance_, name="explained_variance_"), addr(self.explained_variance_ratio_, name="explained_variance_ratio_"),
             addr(self.singular_values_, name="singular_values_"), [x.shape[0], x.shape[1], nc],
         ))
+        if frac is not None:
+            ratios = list(self.explained_variance_ratio_)
+            cum, keep = 0.0, len(ratios)
+            for i, r in enumerate(ratios):
+                cum += float(r)
+                if cum > frac:
+                    keep = i + 1
+                    break
+            keep = min(keep, nc)
+            ev = [float(v) for v in self.explained_variance_]
+            rest = ev[keep:]
+            tail = 0.0
+            for v in rest:
+                tail += v
+            import array as _arr
+            from ._buffer import frombytes
+            self.noise_variance_ = float(_arr.array("f", [tail / len(rest)])[0]) if rest else 0.0
+            d = x.shape[1]
+            comp = _arr.array("f")
+            comp.frombytes(self.components_.tobytes()[:4 * keep * d])
+            self.components_ = frombytes(comp.tobytes(), "<f4", (keep, d))
+            for name in ("explained_variance_", "explained_variance_ratio_", "singular_values_"):
+                setattr(self, name, frombytes(getattr(self, name).tobytes()[:4 * keep], "<f4", (keep,)))
+            nc = keep
         self.n_components_ = nc
         self.n_features_in_ = x.shape[1]
         self.n_samples_ = x.shape[0]

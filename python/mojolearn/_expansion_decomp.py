@@ -2720,7 +2720,9 @@ class LocallyLinearEmbedding(_Base):
     vectors of I - W, which are M's smallest eigenvectors),
     `locally_linear_embedding`, `transform`). M = (I - W)^T (I - W), its
     n_components + 1 smallest eigenvectors, the first dropped.
-    REFUSED BY NAME: method 'hessian', 'modified', 'ltsa'."""
+    method='ltsa' builds sklearn's alignment matrix as a stacked projector
+    factor (M = B^T B) and takes the same SVD route. REFUSED BY NAME: method
+    'hessian', 'modified'."""
     _parameters = ("n_neighbors", "n_components", "reg", "eigen_solver", "method", "random_state", "numeric_mode")
 
     def __init__(self, *, n_neighbors=5, n_components=2, reg=1e-3, eigen_solver="auto", tol=1e-6, max_iter=100,
@@ -2733,8 +2735,9 @@ class LocallyLinearEmbedding(_Base):
 
     def fit(self, X, y=None):
         self.numeric_mode_ = _mode(self.numeric_mode)
-        if self.method != "standard":
-            raise NotImplementedError(f"LocallyLinearEmbedding: method={self.method!r} is not carried; use 'standard'")
+        if self.method not in ("standard", "ltsa"):
+            raise NotImplementedError(f"LocallyLinearEmbedding: method={self.method!r} is not carried; "
+                                      "use 'standard' or 'ltsa'")
         k = self._kit()
         M = _M.from_input(X)
         n = M.r
@@ -2743,12 +2746,15 @@ class LocallyLinearEmbedding(_Base):
         if nn >= n:
             raise ValueError("Expected n_neighbors < n_samples")
         idx, _ = _knn_lists(k, M, M, nn, True)
-        Wb = k.barycenter(M, M, idx, self.reg)
-        IW = _M.zeros(n, n)
-        for i in range(n):
-            IW.s[i * n + i] = 1.0
-            for a, j in enumerate(idx[i]):
-                IW.s[i * n + j] = _f32(IW.s[i * n + j] - Wb.s[i * nn + a])
+        if self.method == "ltsa":
+            IW = self._ltsa_factor(k, M, idx, nn, nc)
+        else:
+            Wb = k.barycenter(M, M, idx, self.reg)
+            IW = _M.zeros(n, n)
+            for i in range(n):
+                IW.s[i * n + i] = 1.0
+                for a, j in enumerate(idx[i]):
+                    IW.s[i * n + j] = _f32(IW.s[i * n + j] - Wb.s[i * nn + a])
         # The eigenvectors of M = (I - W)^T (I - W) for its smallest
         # eigenvalues are the right singular vectors of I - W for its
         # smallest singular values. Those eigenvalues sit near 1e-7, under
@@ -2764,6 +2770,28 @@ class LocallyLinearEmbedding(_Base):
         self._fit_X, self._knn = M, nn
         self.n_features_in_ = M.c
         return self
+
+    def _ltsa_factor(self, k, M, idx, nn, nc):
+        """sklearn LTSA's M = sum_i S_i^T (I - G_i G_i^T) S_i, returned as the
+        stacked factor B (n k x n) with M = B^T B, since I - G G^T is a
+        projector: G_i = [1/sqrt(k), the nc top eigenvectors of the centered
+        neighborhood's Gram] (Jacobi eigh, sign free: G G^T does not see it).
+        The null space is then B's smallest right singular vectors."""
+        n = M.r
+        B = _M.zeros(n * nn, n)
+        inv = 1.0 / math.sqrt(nn)
+        for i in range(n):
+            Xi = M.take_rows(idx[i])
+            Xi = k.ew("sub", Xi, k.colmean(Xi))
+            _, V = k.eigh(k.mm(Xi, Xi, tb=True))
+            top = V.take_cols(list(range(nn - 1, nn - 1 - nc, -1)))
+            Gi = _hstack(k.const(inv, nn, 1), top)
+            P = k.ew("sub", _eye(nn), k.mm(Gi, Gi, tb=True))
+            for a in range(nn):
+                row = (i * nn + a) * n
+                for b, j in enumerate(idx[i]):
+                    B.s[row + j] = P.s[a * nn + b]
+        return B
 
     def fit_transform(self, X, y=None):
         return self.fit(X).embedding_
@@ -2870,8 +2898,8 @@ class MinCovDet(_Base):
     `select_candidates`, `fast_mcd`, `MinCovDet.fit`, `correct_covariance`,
     `reweight_covariance`). The random subsets are Philox permutations (a
     sort of counter draws, ties to the lower index) and every argsort breaks
-    ties by index. chi2 quantiles by bisection of the incomplete gamma.
-    REFUSED BY NAME: one feature (sklearn's 1-D shortcut)."""
+    ties by index. chi2 quantiles by bisection of the incomplete gamma; one
+    feature takes sklearn's 1-D shortcut."""
     _parameters = ("store_precision", "assume_centered", "support_fraction", "random_state", "numeric_mode")
 
     def __init__(self, *, store_precision=True, assume_centered=False, support_fraction=None, random_state=None,
@@ -2933,11 +2961,38 @@ class MinCovDet(_Base):
         order = sorted(range(len(est)), key=lambda j: (est[j][2], j))[:select]
         return [est[j] for j in order]
 
+    def _mcd_1d(self, k, X, h):
+        """sklearn fast_mcd's one-feature shortcut: the shortest window of h
+        sorted values (every tie of the minimum width kept), the location the
+        mean of their midpoints, the support the h values nearest it (ties to
+        the lower index), the variance of the support."""
+        n = X.r
+        order = sorted(range(n), key=lambda i: (X.s[i], i))
+        xs = _M.of([X.s[i] for i in order], n, 1)
+        if h < n:
+            diff = k.ew("sub", xs.rows(h, n), xs.rows(0, n - h))
+            dmin = min(diff.s)
+            starts = [i for i, v in enumerate(diff.s) if v == dmin]
+            mids = k.ew("scale", k.ew("add", xs.take_rows([h + i for i in starts]), xs.take_rows(starts)), s=0.5)
+            loc = k.colmean(mids)
+            cen = k.ew("abs", k.ew("sub", X, loc))
+            sel = sorted(sorted(range(n), key=lambda i: (cen.s[i], i))[:h])
+        else:
+            sel = list(range(n))
+            loc = k.colmean(X)
+        Xs = X.take_rows(sel)
+        cov = _emp_cov(k, Xs)
+        P = _pinvh(k, cov)
+        support = [False] * n
+        for i in sel:
+            support[i] = True
+        return loc, cov, support, _mahal(k, X, loc, P)
+
     def _fast_mcd(self, k, X):
         n, p = X.r, X.c
         h = int(math.ceil(0.5 * (n + p + 1))) if self.support_fraction is None else int(self.support_fraction * n)
         if p == 1:
-            raise NotImplementedError("MinCovDet: the one-feature shortcut is not carried; pass two or more features")
+            return self._mcd_1d(k, X, h)
         if n > 500:
             n_sub = n // 300
             n_ss = n // n_sub

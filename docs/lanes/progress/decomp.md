@@ -26,3 +26,21 @@ movement only. eigh reuses `decomposition/` (device_eigh / host_eigh).
 | ALS (AlternatingLeastSquares) and EllipticEnvelope / MinCovDet | x-decomp-als | (see git log: "decomp lane: ALS (AlternatingLeastSquares) and EllipticEnvelope / MinCovDet") | AGREE train 9; matches a numpy restatement of implicit's exact least_squares to 7e-6 from the same start; test_lane_select's two structural tests PASS |
 
 Next: PASS 2: AMD box (requested, RunPod out of stock, retrying), per-seam checks, option parity, speed
+
+## Pass 2 (started 2026-09-27)
+
+- Per-seam proof: `x_decomp/checks/{fold_ew,dense,rows,graph}_check.mojo` hold
+  the device (DevExec) and CPU (HostExec) columns to independent host oracles
+  (`x_decomp/checks/oracles.mojo`) bit for bit, each fixture first shown to
+  separate the pinned spelling; card stages through IdentityTrace.
+  `tools/identity_lanes/decomp.checks` pairs each of the 17 seams (DEVIATIONS
+  5300-5316, annotated in `x_decomp/cells.mojo`) with a sabotage patch under
+  `x_decomp/checks/sabotage/`. IDENTITY_PATHS rows 130-139. End-to-end
+  sabotage for the steward: `x_decomp/checks/sabotage/e2e_host_sqdist.patch`.
+- Options added: NMF shuffle and beta_loss KL/IS; PCA svd_solver='randomized'
+  and TruncatedSVD algorithm='randomized' (lane x-decomp-pca-randomized);
+  PLSCanonical algorithm='svd'; SparseCoder. Remaining options:
+  `x_decomp/NOT_IMPLEMENTED.tsv`.
+- AMD: `tools/dev_pod.sh up decomp 240 --vendor amd` requested; RunPod MI300X
+  out of stock, falling back to Hot Aisle.
+- Apple (M2 Pro steward): OWED.
