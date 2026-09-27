@@ -1,0 +1,11 @@
+--- a/x_ann/ivf_sq_core.mojo
++++ b/x_ann/ivf_sq_core.mojo
+@@ -50,7 +50,7 @@
+     var code = Float32(0.0)
+     if x > Float32(0.0):
+         var t = trunc(x)
+-        code = t + Float32(1.0) if ftz(x - t) >= Float32(0.5) else t
++        code = t + Float32(1.0) if ftz(x - t) > Float32(0.5) else t
+         if code > Float32(255.0):
+             code = Float32(255.0)
+     codes.unsafe_store(e, Int32(Int(code)))

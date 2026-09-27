@@ -1,0 +1,12 @@
+--- a/x_ann/tsne_core.mojo
++++ b/x_ann/tsne_core.mojo
+@@ -84,7 +84,8 @@
+     var beta_max = Float32(0.0)
+     for _ in range(100):
+         var sum_p = Float32(0.0)
+-        for j in range(nn):
++        for jj in range(nn):
++            var j = nn - 1 - jj
+             var v = ftz(identical_exp(ftz(-identical_mul(nn_d.unsafe_load(base + j), beta))))
+             p.unsafe_store(base + j, v)
+             sum_p = ftz(sum_p + v)

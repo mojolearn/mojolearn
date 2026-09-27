@@ -1,0 +1,11 @@
+--- a/x_ann/ivf_pq_core.mojo
++++ b/x_ann/ivf_pq_core.mojo
+@@ -111,7 +111,7 @@
+     for l in range(n_lists):
+         var d = pq_coarse_dist(queries, q_off, centers, l, dim)
+         var after = prev_l < 0 or d > prev_d or (d == prev_d and l > prev_l)
+-        if after and (best_l < 0 or d < best_d or (d == best_d and l < best_l)):
++        if after and (best_l < 0 or d < best_d or (d == best_d and l > best_l)):
+             best_l = l
+             best_d = d
+     return best_l
