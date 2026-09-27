@@ -50,6 +50,7 @@ Lane 8 (docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md). Pass 1: build + sanity +
 | Conv2d / Conv1d forward + backward | 0db3c1f17 | x-cnn-conv2d, x-cnn-conv1d: AGREE on 9 fixtures (RTX 4090 vs EPYC 75F3); sabotage DISAGREE then AGREE |
 | MaxPool2d/AvgPool2d (+1d) forward + backward | 54309b183 | x-cnn-pool: AGREE on 9 fixtures (RTX 4090 vs EPYC 75F3) |
 | CNNClassifier (the small CNN trainer: conv, relu, max pool, linear, softmax CE, SGD) | see git log | x-cnn-trainer: AGREE on 9 fixtures (after the Clause B fix for `wide`) |
+| BatchNorm2d / BatchNorm1d (training + eval, running stats, backward) | see git log | x-cnn-batchnorm: AGREE on 9 fixtures |
 
 ## Next
 
