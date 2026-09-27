@@ -172,3 +172,12 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("decision_function", sl=slice(0, 256)), "x-sgd-ocsvm")
+
+
+@lane("x-ridge-clf")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.RidgeClassifier(alpha=3.0).fit(X[:2000], _linear_y3(X[:2000]))
+    return _linear_clf_fit(m, X, yc, Xh)
+
+
+_batch_decl(_rows_calls("decision_function", sl=slice(0, 256)), "x-ridge-clf")

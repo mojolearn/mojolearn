@@ -31,6 +31,7 @@ FAMILIES = (
             "x-perceptron",
             "x-pa-clf", "x-pa-reg",
             "x-sgd-ocsvm",
+            "x-ridge-clf",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -44,13 +45,14 @@ FAMILIES = (
             "Perceptron",
             "PassiveAggressiveClassifier", "PassiveAggressiveRegressor",
             "SGDOneClassSVM",
+            "RidgeClassifier",
         ),
         display="the linear expansion lane (SGD, GLMs, Huber, Bayesian, LARS, quantile, CV, isotonic)",
         host_modules=(
             "x_linear/ops.mojo", "x_linear/dispatch.mojo", "x_linear/sgd.mojo",
             "x_linear/glm.mojo", "x_linear/lbfgs.mojo", "x_linear/huber.mojo",
             "x_linear/bayes.mojo", "x_linear/lars.mojo",
-            "x_linear/quantile.mojo",
+            "x_linear/quantile.mojo", "x_linear/ridge.mojo",
         ),
         exports=(
             "x_linear_host_numeric_mode", "x_linear_host_vendor", "x_linear_host_column", "x_linear_host_sabotage",
@@ -77,6 +79,7 @@ TRAINING_LANE_NAMES = {
     "x-pa-clf": "PassiveAggressiveClassifier",
     "x-pa-reg": "PassiveAggressiveRegressor",
     "x-sgd-ocsvm": "SGDOneClassSVM",
+    "x-ridge-clf": "RidgeClassifier",
 }
 PUBLIC_PENDING_LANES = {
     "x-sgd-clf": "no reference",
@@ -94,4 +97,5 @@ PUBLIC_PENDING_LANES = {
     "x-pa-clf": "no reference",
     "x-pa-reg": "no reference",
     "x-sgd-ocsvm": "no reference",
+    "x-ridge-clf": "no reference",
 }

@@ -207,6 +207,21 @@ def _():
     return ok
 
 
+@case("ridge-clf")
+def _():
+    from sklearn import linear_model as sk
+    X, yr, yc, y3 = _data()
+    ok = True
+    for y in (yc, y3):
+        for fi in (True, False):
+            a = ml.RidgeClassifier(alpha=2.0, fit_intercept=fi).fit(X, y)
+            b = sk.RidgeClassifier(alpha=2.0, fit_intercept=fi).fit(X.astype(np.float64), y)
+            ok &= _close(f"k={len(set(y))} fi={fi} coef", a.coef_, b.coef_, 1e-4)
+            ok &= _close(f"k={len(set(y))} fi={fi} intercept", a.intercept_, b.intercept_, 1e-4)
+            ok &= _close(f"k={len(set(y))} fi={fi} predict", np.asarray(a.predict(X)), b.predict(X), 0)
+    return ok
+
+
 def main(argv):
     names = argv or list(CASES)
     bad = []
