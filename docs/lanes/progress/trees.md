@@ -129,36 +129,84 @@ feature_fraction_bynode, stacking/calibration sample_weight, calibration
 ensemble='auto'/cv='prefit', TreeSHAP interventional / interaction values /
 CatBoost models, Permutation link).
 
-PRIORITY (main, 2026-09-27): THE M3 ULTRA RF DIVERGENCE. Steward request
-1790526750361 (pass 2, 20 trees lanes) FAILED on m3ultra: 17 lanes that fit
-through the RF device builder (DT, Bagging, DART, Voting, Stacking,
-MultiOutput, OneVsRest, Calibrated, rf-weighted, SHAP) DISAGREE, while
-adaboost-clf/reg (shallow DT learners: check their depth, a clue) and
-random-embedding (ET builder) AGREE.
-Cell table for trees-dt-clf (commit 77e0b3a8d): M3 CPU == M2 Metal == M2
-CPU on EVERY cell; M3 METAL is the outlier on base, hashed, wide, denormal,
-denormal_ftz, dupes, odd, negative; ONLY `ties` (few distinct values)
-agrees. On M3 Metal denormal != denormal_ftz (they are equal everywhere
-else). Suspects, in order: the quantile path (few distinct values agree:
-core/segmented_sort.mojo uses max.gpu.primitives.block.prefix_sum, a
-library warp-shuffle scan; quantiles.mojo), a denormal flush the M3 does
-not do in hardware (M3 GPUs keep fp32 subnormals; M1/M2 flush), a
-simdgroup/threadgroup assumption. The M3 Ultra is a steward now (not
-off-limits); never ssh-run Metal jobs beside its daemon: use
-`apple_steward.py submit --kind speed --cmd ...` (m3ultra only).
-Diagnostics queued (both behind a long m3ultra queue):
-- 1790543277062-speed-trees-8e5eadb7b7: runs quantiles_check,
-  objectives_check, builder_kernels_check, split_check, criteria_check,
-  train_check, forest_check, fingerprint_probe (ensemble/checks) on the M3.
-  Its stdout is in the verdict dir. The H100's fingerprint_probe for
-  comparison: CLF-OOB 0x87e5c72530dd00a7, CLF-NOBOOT 0x1aa915d207fc19b9,
-  REG-BOOT 0xf67c295ec84bbaeb, CLF-DEEP 0xfe402d068c603119, CLF-BOOT-K4
-  0x1c9d9763f188a349 (the K4 rows repeat the first four).
-- 1790541058384-trees-d529df376b: rf-clf, rf-reg,
-  rf-clf-entropy-log2-noboot on all stewards: does rf-* (existing RF,
-  shipped) also diverge on the M3? If yes, the defect predates this lane.
-Then: fix at the root, a separating fixture + sabotage, prove on m2pro +
-m3ultra + H100 + MI300X, existing bits unchanged elsewhere.
+SESSION A (verification), 2026-09-27 evening. DONE, merged:
+- THE M3 RF DIVERGENCE, FIXED AT THE ROOT (DEVIATION 5611, IDENTITY_PATHS
+  row 169). Diagnosis from the FAIL verdict's own cells (steward request
+  1790526750361 on m3ultra): depth-2/3 learners (AdaBoost) and a
+  one-column-per-node forest (RandomTreesEmbedding) AGREE, every depth-8
+  multi-column tree DISAGREES, and `denormal` vs `denormal_ftz` (the same
+  X after the IDENTICAL flush) gave DIFFERENT forests on the one M3: a
+  run-to-run race, not arithmetic. The only in-kernel cross-threadgroup
+  payload in the RF builder was `_publish_to_global`: the node's `Split`
+  read and written with PLAIN loads/stores inside a device-mutex critical
+  section (a lost candidate on M3). Fix: under IDENTICAL, on every vendor,
+  `HIST_SPLIT_CANDIDATES_DEFAULT` is on: each column block stores its
+  pinned (DEVIATION 404) winner in its own slot
+  (`Split.eval_best_split_pinned_to_candidate`) and
+  `merge_split_candidates_kernel` folds a node's slots with `update` (a
+  total order) after the kernel boundary. The ET `split_reduce_kernel`
+  runs one block per node under IDENTICAL (`ET_SPLIT_REDUCE_ONE_BLOCK`),
+  so its mutex merge never runs either.
+  Evidence (H100 pod, commit b55282c5): 36 lanes (every rf-*, et-*,
+  saved-model-host-infer, all 24 trees-* RF/ET lanes) AGREE CPU == CUDA;
+  every CUDA cell of all 36 IDENTICAL to the pre-fix runs (/root/ev/et_after,
+  /root/ev/m_trees); sabotage `xtrees/checks/sabotage/seam_5611_lost_candidate.patch`
+  (the fold drops the last column block) on trees-dt-clf, trees-dt-reg,
+  rf-clf, rf-reg: AGREE, DISAGREE, AGREE after reversal. MI300X (trees-amd):
+  the same 36 AGREE CPU == HIP, HIP cells unchanged where a prior exists
+  (26), and the HIP cells equal the CUDA cells on all 36.
+  OWED post-merge: m3ultra (and m2pro/m4) steward re-run of the 20 trees
+  lanes + rf/et lanes (batched request at the merge commit, see below).
+  If M3 still disagrees, the next suspect is any other plain cross-block
+  read in the RF builder (none found by grep) or the quantile path.
+  OWED (FAST, not identity): ET under FAST on Apple still merges bpn > 1
+  blocks through the mutex (quality risk on M3 when k > TPB);
+  neighbors/impl/detail/fused_l2_knn.mojo has the same mutex-payload
+  pattern (neighbors family, reported to main).
+- MultiRMSE (trees-gbdt-multirmse) MERGED under the NVIDIA + CPU gate.
+- REPEATED CALLS (directive): python/mojolearn/tests/test_trees_repeat.py
+  calls every trees entry point (RF/ET clf+reg, IsolationForest, GBDT
+  Logloss/RMSE/Depthwise/Lossguide/MultiRMSE, OrderedRMSE, FeatureFreq,
+  host_predict on saved RF and GBDT files, DT, Bagging, AdaBoost,
+  DART, RandomTreesEmbedding, Voting, OneVsRest, TreeExplainer) twice in
+  one process on GPU and on CPU, asserting first == second and GPU == CPU.
+  The trees bindings build a DeviceContext per call but return host data
+  only (no buffer outlives its context); RESULT: see the merge commit.
+- GradientBoosting.predict on a CPU install routes a model whose text
+  carries CTR tables / a tensor CTR registry through HostGBDT (the gbdt
+  host binding's walk refuses those records by name). Inert for every
+  existing lane (30 gbdt lanes AGREE, CUDA cells unchanged).
+- test_lane_select pins after merging main: kmeans_oracle 71,
+  gbdt_host_predict 50, forest_host_predict 85.
+
+NEXT SESSION: FIRST the CTR-table CPU paths (main's request 2026-09-27),
+then type B (features).
+1. gbdt-tensor-ctr-tables: the CPU column fits
+   ExperimentalTwoLevelFeatureFreq through gbdt/host/gbdt_oracle_feature_freq.mojo,
+   which REFUSES "a level-one winner on the FeatureFreq tensor column"
+   (:639) and a level-two one (:665). Restate on the host: the level
+   winner on the tensor column (the split-history table after it,
+   `stage_next_feature_freq_after_winner`), the tensor_ctr_registry and
+   feature_freq_tensor records with their canonical tensor hash
+   (gbdt/models/tensor_ctr_value_table.mojo, model_text.mojo:374-670), and
+   the `features n m` header with the tensor column. Then change the lane
+   body in tools/identity_break.py to fit on both columns (drop
+   `_ctr_saved_or_fit`; a lane-body edit selects only that lane); predict
+   already routes through HostGBDT (above). Sabotage: the tensor count or
+   the prior in the host restatement.
+2. gbdt-categorical-ctr-tables: CPU TRAINING with CTR categoricals
+   (cat_features above one_hot_max_size: Borders at three priors +
+   FeatureFreq per column). Map: gbdt/train.mojo:1533-1660 (the column
+   prep: `compute_simple_ctrs` host, `compute_simple_ctrs_gpu` per
+   permutation over `ctrs_estimation_permutation`, `build_ctr_tables`),
+   :1745-1778 (one compressed index per permutation, est_perm =
+   permutation_count - 1), doc_parallel_boosting.mojo:1821+ (one cursor
+   per permutation, `perm_cindexes`). The host oracle gbdt/host/gbdt_oracle.mojo
+   runs ONE permutation; the new arm needs the per-permutation ordered CTR
+   columns and cursors. Host binding refusal: `_refuse` "no CTR
+   categoricals" in bindings/_mojolearn_gbdt_host.mojo.
+3. Type B: the remaining xtrees/extratrees/gbdt NOT_IMPLEMENTED rows
+   (list below and item 1 of NEXT).
 
 NEXT (option parity continues; this phase is not finished):
 1. gbdt/ (CatBoost) losses, starting with MultiRMSE, then MultiLogloss /
