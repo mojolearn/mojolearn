@@ -45,7 +45,8 @@ def ts_sqdist(x: F32P, i: Int, j: Int, d: Int) -> Float32:
 
 @always_inline
 def ts_knn_cell(i: Int, x: F32P, n: Int, d: Int, nn: Int, nn_d: F32P, nn_i: I32P):
-    """Row i's nn nearest other rows under (squared distance, index), ascending."""
+    """Row i's nn nearest other rows under (squared distance, index),
+    ascending (DEVIATION 5810)."""
     var base = i * nn
     var filled = 0
     for j in range(n):
@@ -75,7 +76,8 @@ def ts_knn_cell(i: Int, x: F32P, n: Int, d: Int, nn: Int, nn_d: F32P, nn_i: I32P
 
 @always_inline
 def ts_perplexity_cell(i: Int, nn_d: F32P, nn: Int, log_perp: Float32, p: F32P):
-    """sklearn `_binary_search_perplexity` for row i, float32, fixed steps."""
+    """sklearn `_binary_search_perplexity` for row i, float32, fixed steps,
+    sums ascending (DEVIATION 5811)."""
     var base = i * nn
     var beta = Float32(1.0)
     var has_min = False
@@ -131,7 +133,7 @@ def tsne_symmetrize(
 ) raises:
     """P = (P_cond + P_cond^T) / sum, as CSR with ascending columns. Integer
     graph work plus one add per edge (the row's own term first) and one
-    ascending sum; the same host code in both drivers."""
+    ascending sum (DEVIATION 5812); the same host code in both drivers."""
     var rows = List[List[Int32]](capacity=n)
     for _ in range(n):
         rows.append(List[Int32]())
@@ -183,7 +185,8 @@ def ts_q(y: F32P, i: Int, j: Int) -> Float32:
 
 @always_inline
 def ts_repulse_cell(i: Int, y: F32P, n: Int, row_z: F32P, rep: F32P):
-    """row_z[i] = sum_{j != i} q_ij; rep[i] = sum_j q_ij^2 (y_i - y_j), j ascending."""
+    """row_z[i] = sum_{j != i} q_ij; rep[i] = sum_j q_ij^2 (y_i - y_j), j
+    ascending (DEVIATION 5813; Z over rows ascending in `ts_sum_cell`)."""
     var z = Float32(0.0)
     var r0 = Float32(0.0)
     var r1 = Float32(0.0)
@@ -216,7 +219,9 @@ def ts_step_cell(
     rep: F32P, z: F32P, update: F32P, gains: F32P, exaggeration: Float32,
     momentum: Float32, learning_rate: Float32,
 ):
-    """One coordinate e = 2 i + c: gradient, gains, momentum update."""
+    """One coordinate e = 2 i + c: gradient (the CSR attraction ascending,
+    DEVIATION 5814), gains (strict `update * grad < 0`, DEVIATION 5815),
+    momentum update."""
     var i = e // 2
     var c = e % 2
     var yi = ftz(y.unsafe_load(e))

@@ -169,6 +169,7 @@ def svc_fit_borrowed(
     kp: KernelParams,
     mut card: IdentityTrace,
     mut trace: SmoTrace,
+    c_rows: List[Float32] = List[Float32](),
 ) raises -> SvmModel:
     """`svc_fit` on the caller's borrowed row-major X (DEVIATION 2665,
     2026-09-11). The List front copied X into a host List, walked it once
@@ -193,7 +194,7 @@ def svc_fit_borrowed(
     ctx.synchronize()
     var fitted = _svc_fit_staged(
         ctx, x, labels_host, n_rows, n_cols, param, kp, model^, card, trace,
-        1 << 30, 0, False, 0, Float32(0.0),
+        1 << 30, 0, False, 0, Float32(0.0), c_rows,
     )
     _ = x^
     return fitted^
@@ -242,6 +243,7 @@ def _svc_fit_staged(
     record_iterations: Bool,
     scratch_pad: Int,
     scratch_poison: Float32,
+    c_rows: List[Float32] = List[Float32](),
 ) raises -> SvmModel:
     """`svcFit` from the uploaded X on: the labels, the one-vs-rest targets,
     the card's input stages and the solve."""
@@ -259,6 +261,7 @@ def _svc_fit_staged(
     var smo = SmoSolver(
         ctx, param, kp, n_rows, n_cols, kernel_tile_byte_limit,
         block_solve_threads, record_iterations, scratch_pad, scratch_poison,
+        c_rows,
     )
     smo.solve(ctx, x, y, model, card, param.max_iter, param.max_outer_iter)
     model.n_cols = n_cols

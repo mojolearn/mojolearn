@@ -1,8 +1,8 @@
 diff --git a/x_decomp/cells.mojo b/x_decomp/cells.mojo
-index b8537db32..86d42718c 100644
+index 4b4c2cedf..3fa5e7e7e 100644
 --- a/x_decomp/cells.mojo
 +++ b/x_decomp/cells.mojo
-@@ -481,7 +481,7 @@ def omp_row(G: F32Ptr, Q: F32Ptr, W: F32Ptr, S: F32Ptr, i: Int, k: Int, nnz: Int
+@@ -534,7 +534,7 @@ def omp_row(G: F32Ptr, Q: F32Ptr, W: F32Ptr, S: F32Ptr, i: Int, k: Int, nnz: Int
              for t in range(na):
                  var a = Int(S.unsafe_load(act + t))
                  acc = ftz(identical_mul_add(-ftz(G.unsafe_load(j * k + a)), ftz(S.unsafe_load(gam + t)), acc))

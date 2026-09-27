@@ -26,8 +26,7 @@ CPU bits EQUAL the GPU's.
 A probe is a sanity sweep of the DEFAULT path (default options, one small
 shape). It is not an identity lane: admission is the verifier's
 (tools/identity_break.py lanes, `algos_lane_check.sh`), and the lanes that
-reach a name are listed beside it by `diff --lanes` from the selector's own
-lane -> name map.
+reach a name are the selector's (tools/lane_select.py).
 """
 import argparse
 import hashlib
@@ -186,10 +185,10 @@ def _r_reg_pair(ml, F):
 @recipe("metrics.kl_divergence")
 def _r_kl(ml, F):
     import numpy as np
-    P = np.abs(F["X"][:20]) + 0.1
-    Q = np.abs(F["Xh"][:20]) + 0.1
-    P = (P / P.sum(1, keepdims=True)).astype(np.float32)
-    Q = (Q / Q.sum(1, keepdims=True)).astype(np.float32)
+    P = np.abs(F["X"][:, 0]) + 0.1
+    Q = np.abs(F["X"][:, 1]) + 0.1
+    P = (P / P.sum()).astype(np.float32)
+    Q = (Q / Q.sum()).astype(np.float32)
     return {"call": lambda: ml.metrics.kl_divergence(P, Q)}
 
 
@@ -206,7 +205,7 @@ def _r_trust(ml, F):
 @recipe("metrics.log_loss", "metrics.roc_auc_score", "metrics.precision_recall_curve")
 def _r_prob(ml, F):
     import numpy as np
-    s = (1.0 / (1.0 + np.exp(-F["yr"] / 4.0))).astype(np.float64)
+    s = (1.0 / (1.0 + np.exp(-F["yr"] / 4.0))).astype(np.float32)
     return {"call": lambda: getattr(ml.metrics, _r_prob.name.split(".")[1])(F["yc"], s)}
 
 

@@ -20,6 +20,7 @@ from checks.numerics import ftz, identical_div, identical_sqrt
 
 
 trait Objective:
+    @always_inline
     def eval(mut self, x: FP) -> Float32:
         ...
 
@@ -30,6 +31,7 @@ def _clamp(v: Float32, lo: Float32, hi: Float32) -> Float32:
     return r if r < hi else hi
 
 
+@always_inline
 def nelder_mead[O: Objective](
     mut obj: O, x0: FP, lower: FP, upper: FP, n: Int, scratch: FP,
     init_step: Float32, zero_pert: Float32, max_iter: Int, tol_std: Float32,

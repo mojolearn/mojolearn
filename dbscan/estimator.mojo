@@ -111,9 +111,12 @@ from dbscan.impl.dbscan import dbscan_fit_impl_weighted
 from std.os import getenv
 from dbscan.impl.runner import EPS_NN_BRUTE_FORCE, EPS_NN_RBC
 from dbscan.impl.neighbors.epsilon_neighborhood import (
+    DBSCAN_METRIC_COSINE,
     DBSCAN_METRIC_L1,
     DBSCAN_METRIC_L2,
+    DBSCAN_METRIC_PRECOMPUTED,
 )
+from core.cosine_rows import cosine_unit_rows
 
 
 def dbscan_fit(
@@ -189,10 +192,15 @@ def dbscan_fit(
             "dbscan_fit: eps_nn_method must be EPS_NN_RBC (1) or"
             " EPS_NN_BRUTE_FORCE (0), got " + String(eps_nn_method)
         )
-    if metric != DBSCAN_METRIC_L2 and metric != DBSCAN_METRIC_L1:
+    if metric < DBSCAN_METRIC_L2 or metric > DBSCAN_METRIC_PRECOMPUTED:
         raise Error(
-            "dbscan_fit: metric must be DBSCAN_METRIC_L2 (0) or"
-            " DBSCAN_METRIC_L1 (1), got " + String(metric)
+            "dbscan_fit: metric must be DBSCAN_METRIC_L2 (0), L1 (1),"
+            " COSINE (2) or PRECOMPUTED (3), got " + String(metric)
+        )
+    if metric == DBSCAN_METRIC_PRECOMPUTED and n_features != n_samples:
+        raise Error(
+            "dbscan_fit: metric='precomputed' needs the n x n distance"
+            " matrix, got " + String(n_samples) + " x " + String(n_features)
         )
 
     # DEVIATION 519: the fixed point, bounded by the path length.
@@ -213,7 +221,17 @@ def dbscan_fit(
     )
     ctx.synchronize()
 
-    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    # DEVIATION 5113: cosine runs on unit rows scaled on the host by the
+    # code the CPU binding runs too (`core/cosine_rows.mojo`).
+    var unit = List[Float32]()
+    if metric == DBSCAN_METRIC_COSINE:
+        var raw = List[Float32](length=n_samples * n_features, fill=Float32(0))
+        for i in range(n_samples * n_features):
+            raw[i] = x_ptr.unsafe_load(i)
+        unit = cosine_unit_rows(raw, n_samples, n_features, "dbscan_fit")
+        ctx.enqueue_copy(dst_buf=x, src_ptr=unit.unsafe_ptr())
+    else:
+        ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
     if has_weights:
         ctx.enqueue_copy(
             dst_buf=w,
@@ -222,6 +240,7 @@ def dbscan_fit(
             ),
         )
     ctx.synchronize()
+    _ = unit^
 
     var passes = dbscan_fit_impl_weighted(
         ctx,

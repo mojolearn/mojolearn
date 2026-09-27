@@ -93,7 +93,7 @@ import os
 import sys
 
 # ------------------------------------------------ the algorithm expansion
-#: THE NINE EXPANSION LANES (lane/algos-prep, 2026-09-27;
+#: THE EXPANSION LANES (lane/algos-prep, 2026-09-27; `metrics` joined the same day, lane/metrics;
 #: docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md, "Shared registries"). Nine lanes
 #: add algorithms in parallel, and this manifest would be the file every one
 #: of them edits. So none of them edits it: each lane owns ONE file beside
@@ -105,7 +105,7 @@ import sys
 #: name, so two lanes can never collide here and a fragment can never move an
 #: existing family. With every fragment empty the manifest is byte for byte
 #: what it was.
-EXPANSION_LANES = ("linear", "cluster", "neighbors", "decomp", "prep", "sequence", "trees", "cnn", "ann")
+EXPANSION_LANES = ("linear", "cluster", "neighbors", "decomp", "prep", "sequence", "trees", "cnn", "ann", "metrics")
 #: The expansion lanes whose GPU binding builds IDENTICAL ONLY. EMPTY SINCE
 #: 2026-09-27 (Andrew: FAST AND IDENTICAL on every lane, neural included):
 #: all nine expansion bindings build FAST and IDENTICAL and join

@@ -212,7 +212,14 @@ class KMeans(NumericModeMixin):
         return x, c, metric_code
 
     def fit(self, X, y=None, sample_weight=None):
-        """Fit, and set `labels_` from a pass against the final centroids."""
+        """Fit, and set `labels_` from a pass against the final centroids.
+
+        `init` also takes scikit-learn's other two spellings: an array of
+        starting centers (the 'array' path, `init_centroids` ignored) and a
+        callable `init(X, n_clusters, random_state)`, called once on the
+        host (`_expansion_cluster._callable_init`) whose centers then take
+        the 'array' path."""
+        init_centroids = self.init_centroids
         if isinstance(self.init, str):
             if self.init not in _INIT_NAMES:
                 raise ValueError(
@@ -220,8 +227,15 @@ class KMeans(NumericModeMixin):
                     f"{sorted(_INIT_NAMES)}, got {self.init!r}"
                 )
             init_code = _INIT_NAMES[self.init]
-        else:
+        elif callable(self.init):
+            from ._expansion_cluster import _callable_init
+            init_code = INIT_ARRAY
+            init_centroids = _callable_init(self.init, X, self.n_clusters, self.random_state)
+        elif isinstance(self.init, int) and not isinstance(self.init, bool):
             init_code = int(self.init)
+        else:
+            init_code = INIT_ARRAY
+            init_centroids = self.init
         metric_code = self._metric_code()
         if isinstance(self.oversampling_factor, bool) or not isinstance(
             self.oversampling_factor, (int, float)
@@ -242,11 +256,11 @@ class KMeans(NumericModeMixin):
             )
 
         if init_code == INIT_ARRAY:
-            if self.init_centroids is None:
+            if init_centroids is None:
                 raise ValueError(
                     "mojolearn: init='array' needs init_centroids"
                 )
-            c0, _ = as_f32_c(self.init_centroids, ndim=2,
+            c0, _ = as_f32_c(init_centroids, ndim=2,
                              name="init_centroids")
             if c0.shape != (self.n_clusters, d):
                 raise ValueError(
@@ -401,6 +415,9 @@ class KMeans(NumericModeMixin):
                     f"{sorted(_INIT_NAMES)}, got {self.init!r}"
                 )
             return self.init, _INIT_NAMES[self.init]
+        if callable(self.init) or not isinstance(self.init, int) or isinstance(self.init, bool):
+            # an array or a callable: its centers took the 'array' path
+            return "array", INIT_ARRAY
         code = int(self.init)
         if code not in _INIT_SAVED:
             raise ValueError(

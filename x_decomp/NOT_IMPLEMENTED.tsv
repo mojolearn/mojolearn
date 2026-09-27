@@ -2,32 +2,40 @@
 # A row says NOT YET IMPLEMENTED (the portable route named), REFUSED (an identity reason), or DELIBERATELY DIVERGENT.
 # Every refused option raises by name at the Python surface (python/mojolearn/_expansion_decomp.py).
 # their_thing	status	why / where it would go
-sklearn IncrementalPCA sparse input	NOT YET IMPLEMENTED	dense only; a CSR batch densified per batch would be the route (the batches are small by construction)
+sklearn IncrementalPCA sparse input	IMPLEMENTED 2026-09-27	a scipy.sparse X (duck-typed: toarray/nnz/format) is densified one batch at a time in fit, whole in partial_fit and transform (every _M.from_input densifies exactly)
 sklearn GaussianRandomProjection/SparseRandomProjection random_state=RandomState	DELIBERATELY DIVERGENT	the matrix is the lane's Philox stream (DEVIATION 5306): same int seed, same bits on every column, and not numpy's draws; a RandomState object is refused by name
 sklearn SparseRandomProjection dense_output=False (a scipy.sparse result)	DELIBERATELY DIVERGENT	the components and the output are dense float32; the values are sklearn's, the container is not
-sklearn NMF beta_loss='kullback-leibler' / 'itakura-saito' / a float	NOT YET IMPLEMENTED	solver 'mu' with beta != 2: `_multiplicative_update_w/_h`'s beta branches, elementwise cells (div0, pow via exp/log) plus gemm; refused by name today
-sklearn NMF shuffle=True	NOT YET IMPLEMENTED	a Philox permutation of the coordinates per sweep, passed as `perm` to cd_row (DEVIATION 5310's order argument already exists)
+sklearn NMF beta_loss='kullback-leibler' / 'itakura-saito' / a float	IMPLEMENTED	solver 'mu' with beta != 2 (`_multiplicative_update_w/_h`'s beta branches through the cells); lane x-decomp-nmf
+sklearn NMF shuffle=True	IMPLEMENTED	a Philox permutation of the coordinates per sweep, passed as `perm` to cd_row (DEVIATION 5310); lane x-decomp-nmf
 sklearn NMF init='nndsvd*' through randomized_svd	DELIBERATELY DIVERGENT	the SVD is exact (QR + one-sided Jacobi); sklearn's randomized SVD approximates the same factors
 sklearn FastICA fun=callable	REFUSED	a Python callable cannot run in a device cell; logcosh, exp and cube are carried
 sklearn FastICA whiten_solver='eigh' vs 'svd'	DELIBERATELY DIVERGENT	both take the eigh of X^T X, with sklearn's eigh-solver clamp of tiny singular values to 10 eps
 sklearn FactorAnalysis svd_method='randomized'	DELIBERATELY DIVERGENT	the exact QR + one-sided Jacobi SVD runs for both values
 sklearn FactorAnalysis tol at float32	NOTE	the log-likelihood is accumulated in float64 on the host (IEEE adds, row 139); the SVD is float32, so the stopping iteration can differ from sklearn's float64 run by a few
 numpy.linalg.lstsq rcond semantics at float64	DELIBERATELY DIVERGENT	rcond=None means float32 eps * max(M, N)
-scipy.linalg.lu_solve trans=1/2	NOT YET IMPLEMENTED	getrs with U^T then L^T; refused by name
+scipy.linalg.lu_solve trans=1/2	IMPLEMENTED 2026-09-27	getrs 'T': U^T forward, unit L^T back, the swaps undone last to first, every fold ascending (DEVIATION 5308, arm 5308_getrs_order); lane x-decomp-lu
 sklearn randomized_svd power_iteration_normalizer='LU'/'none'	DELIBERATELY DIVERGENT	every power iteration re-orthonormalizes by MGS2 (DEVIATION 5309); the range is the same subspace
 sklearn randomized_svd svd_lapack_driver	DELIBERATELY DIVERGENT	the small SVD is the QR + one-sided Jacobi of decomposition/
-sklearn PLSCanonical algorithm='svd'	NOT YET IMPLEMENTED	the SVD of the cross-covariance per component through k.svd; refused by name
-sklearn DictionaryLearning/SparseCoder transform_algorithm='lars'	NOT YET IMPLEMENTED	plain LARS with a coefficient budget: a row-parallel cell like omp_row with an equiangular step; refused by name
+sklearn PLSCanonical algorithm='svd'	IMPLEMENTED	the SVD of the cross-covariance per component through k.svd; lane x-decomp-pls
+sklearn DictionaryLearning/SparseCoder/sparse_encode algorithm='lars'	IMPLEMENTED 2026-09-27	sklearn's Lars(fit_intercept=False, n_nonzero_coefs) of each row on the dictionary's columns, through the linear lane's LARS (x_linear/lars.mojo), one row per call; lane x-decomp-dict-learning
 sklearn DictionaryLearning fit_algorithm='lars' (LassoLars)	DELIBERATELY DIVERGENT	solved by coordinate descent from zero: the Lasso optimum is the same, the path is not
 sklearn Lasso duality-gap stopping inside sparse_encode	DELIBERATELY DIVERGENT	the row solver stops on the max update (DEVIATION 5311): a float64 duality gap of 1e-8 is below float32 resolution
 sklearn DictionaryLearning/MiniBatchDictionaryLearning callback	REFUSED	a Python callable per iteration is outside the identity surface; refused by name
-sklearn SparseCoder	NOT YET IMPLEMENTED	a fixed-dictionary _SparseCoding subclass; the encode path already exists
-sklearn LatentDirichletAllocation sparse input	NOT YET IMPLEMENTED	dense counts only; the per-document cell already skips zero counts
-sklearn LatentDirichletAllocation evaluate_every with n_jobs	OUT OF SCOPE	no host thread pool
-sklearn Isomap radius / metric other than euclidean / path_method='FW'	NOT YET IMPLEMENTED	radius neighborhoods and minkowski p != 2 are a different kNN cell; Floyd-Warshall reaches the same minimum as Dijkstra (DEVIATION 5314)
-sklearn MDS metric_mds=False (non-metric SMACOF)	NOT YET IMPLEMENTED	needs isotonic regression (pool adjacent violators) as a fixed-order host cell; refused by name
-sklearn LocallyLinearEmbedding method='hessian'/'modified'/'ltsa'	NOT YET IMPLEMENTED	each is a different local-weight construction over the same kNN and a null-space SVD; refused by name
+sklearn SparseCoder	IMPLEMENTED	a fixed-dictionary _SparseCoding subclass; lane x-decomp-dict-learning
+sklearn LatentDirichletAllocation sparse input	IMPLEMENTED 2026-09-27	a scipy.sparse count matrix is densified (exact); the per-document cell skips zero counts
+sklearn LatentDirichletAllocation n_jobs	DELIBERATELY DIVERGENT	no host thread pool; the value changes no result
+sklearn Isomap radius	IMPLEMENTED 2026-09-27	with n_neighbors=None: every other row within the closed radius (float32 distance compared exactly); transform takes the minimum over the training rows within the radius in ascending order; lane x-decomp-manifold
+sklearn Isomap path_method='FW'	DELIBERATELY DIVERGENT	Floyd-Warshall and Dijkstra reach the same shortest paths; the Dijkstra of DEVIATION 5314 runs for 'auto', 'D' and 'FW' (their sums associate differently, so FW's last bits are not claimed)
+sklearn Isomap / MDS / ClassicalMDS metric: manhattan (cityblock, l1), chebyshev, minkowski p, cosine	IMPLEMENTED 2026-09-27	x_decomp/cells.mojo pdist_cell (DEVIATION 5319, arm 5319_pdist_order): features ascending; minkowski p through the portable exp/log; cosine clipped to [0, 2] with a zero norm counted as 1 and the self-distance 0; lane x-decomp-manifold
+sklearn Isomap / MDS metric callable or any other name (haversine, mahalanobis, ...)	REFUSED / NOT YET IMPLEMENTED	a callable is Python code no column can run; another named metric is another pdist_cell kind with its oracle
+sklearn MDS metric_mds=False (non-metric SMACOF)	IMPLEMENTED 2026-09-27	the disparities are IsotonicRegression(out_of_bounds='clip') of the distances on the dissimilarities (the linear lane's x_linear PAVA), rescaled to sqrt(n (n-1) / 2) / |d|, mirrored exactly; the first iteration uses the dissimilarities; lane x-decomp-manifold
+sklearn LocallyLinearEmbedding method='hessian' / 'modified' / 'ltsa'	IMPLEMENTED 2026-09-27	each builds sklearn's M as a stacked factor B (M = B^T B) and takes the SVD null space; lane x-decomp-manifold
+sklearn LocallyLinearEmbedding method='hessian' complement basis	DELIBERATELY DIVERGENT	sklearn's w = Q[:, nc+1:] of LAPACK's FULL Q; columns past Yi's range are LAPACK's own basis of the complement and, divided by their sums, change M. Ours: the Yi columns from the orth route, then the eigenvalue-1 eigenvectors of I - Q Q^T (Jacobi eigh, descending)
+sklearn LocallyLinearEmbedding method='modified' null basis when k > d	DELIBERATELY DIVERGENT	sklearn takes the full SVD of X_nbrs (LAPACK's basis of the k - d null directions); ours is the Jacobi eigh of X_nbrs X_nbrs^T for every k; the per-point vectors are IEEE double in a fixed order
 sklearn LocallyLinearEmbedding eigen_solver='arpack'	DELIBERATELY DIVERGENT	the null space is the smallest right singular vectors of I - W by the one-sided Jacobi SVD, which resolves eigenvalues near 1e-7 that a float32 eigh of M cannot
-sklearn MinCovDet one feature	NOT YET IMPLEMENTED	sklearn's 1-D shortcut (a sorted-window search); refused by name
+sklearn MinCovDet one feature	IMPLEMENTED	sklearn's 1-D sorted-window search; lane x-decomp-robust-cov
 sklearn MinCovDet/EllipticEnvelope random_state=RandomState	DELIBERATELY DIVERGENT	subsets and shuffles are Philox permutations (DEVIATION 5306), so the n > 500 path can land on a different local optimum than sklearn's
-implicit AlternatingLeastSquares use_cg=True / calculate_training_loss / use_gpu / sparse CSR input	NOT YET IMPLEMENTED	the exact Cholesky solve is carried; CG is a second route to the same minimizer; CSR input would pass indptr/indices to als_row instead of a dense row
+implicit AlternatingLeastSquares calculate_training_loss	IMPLEMENTED 2026-09-27	`training_loss_` per iteration: observed c (1 - x.y)^2 + unobserved (x.y)^2 + reg (|X|^2 + |Y|^2), over (total confidence + unobserved count), through the cells
+implicit AlternatingLeastSquares use_cg=True	NOT YET IMPLEMENTED	three CG steps per row from the previous factors (implicit's cg_steps=3) is not the exact solve; a row cell like als_row with a fixed-order CG; refused by name
+implicit AlternatingLeastSquares use_gpu / sparse CSR input	DELIBERATELY DIVERGENT / IMPLEMENTED	the device is the numeric_mode's; a scipy.sparse user_items is densified exactly
+sklearn EllipticEnvelope.score	IMPLEMENTED 2026-09-27	accuracy_score(y, predict(X), sample_weight) as an IEEE double; lane x-decomp-robust-cov

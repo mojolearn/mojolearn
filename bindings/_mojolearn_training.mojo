@@ -707,19 +707,19 @@ def chunked_lm_head_v2_train_binding(
 
 @export
 def PyInit__mojolearn_training() abi("C") -> PythonObject:
-    # IDENTICAL-ONLY (2026-09-10). The FAST and DETERMINISTIC builds of this
-    # lane were never a faster path: every fused kernel here is gated on
-    # `GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL`, so the lower tiers fell back
-    # to the unfused arms and ran SLOWER than the default. They are no longer
-    # built (bindings/build_training.sh refuses) and the lane no longer carries
-    # the fallbacks. Refuse to exist rather than answer under a tier label
-    # whose arithmetic is gone.
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+    # FAST AND IDENTICAL (lane neural, 2026-09-27). This lane was
+    # IDENTICAL-only from 2026-09-10 because its fused kernels were once gated
+    # on IDENTICAL and the lower tiers fell back to slower unfused arms. Those
+    # fallbacks are gone: FAST runs the same kernels and the same launches with
+    # the pins in checks/numerics.mojo compiled to the free schedule. FAST
+    # promises quality, never bits (docs/lanes/progress/neural.md). The
+    # DETERMINISTIC tier stays tree-only: refuse to exist under it.
+    comptime if GLOBAL_NUMERIC_MODE > NUMERIC_IDENTICAL:  # NUMERIC_DETERMINISTIC (2)
         abort(
             String(
-                "_mojolearn_training: refusing to initialize -- this lane supports only"
-                " the IDENTICAL tier. Rebuild with"
-                " MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_training.sh"
+                "_mojolearn_training: refusing to initialize -- this lane builds"
+                " FAST and IDENTICAL only. Rebuild with"
+                " MOJOLEARN_NUMERIC_MODE=identical (or fast) bash bindings/build_training.sh"
             )
         )
     try:

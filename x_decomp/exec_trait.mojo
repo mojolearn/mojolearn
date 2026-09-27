@@ -28,7 +28,7 @@ trait Exec:
         ...
 
     @staticmethod
-    def sqdist(a: F32Ptr, b: F32Ptr, dst: F32Ptr, na: Int, nb: Int, d: Int) raises:
+    def sqdist(a: F32Ptr, b: F32Ptr, dst: F32Ptr, na: Int, nb: Int, d: Int, kind: Int = 0, pw: Float32 = Float32(2)) raises:
         ...
 
     @staticmethod
@@ -40,7 +40,7 @@ trait Exec:
         ...
 
     @staticmethod
-    def lu_solve(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int) raises:
+    def lu_solve(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: Int = 0) raises:
         ...
 
     @staticmethod
@@ -97,6 +97,14 @@ trait Exec:
 
     @staticmethod
     def als_rows(c: F32Ptr, y: F32Ptr, yty: F32Ptr, x: F32Ptr, flags: F32Ptr, n: Int, m: Int, f: Int, reg: Float32) raises:
+        ...
+
+    @staticmethod
+    def absmax_sign(a: F32Ptr, dst: F32Ptr, n: Int, d: Int, by_col: Bool) raises:
+        ...
+
+    @staticmethod
+    def qr_r(a: F32Ptr, m: Int, n: Int, r: F32Ptr) raises:
         ...
 
     @staticmethod

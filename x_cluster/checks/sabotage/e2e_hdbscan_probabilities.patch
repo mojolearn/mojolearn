@@ -1,0 +1,11 @@
+--- a/bindings/_mojolearn_hdbscan.mojo
++++ b/bindings/_mojolearn_hdbscan.mojo
+@@ -134,7 +134,7 @@
+             out.condensed, out.labels, out.inverse_label_map, n
+         )
+         for i in range(n):
+-            pp.unsafe_store(i, probs[i])
++            pp.unsafe_store(i, probs[i] * probs[i])
+     var n_clusters = out.n_clusters
+     _ = out^
+     # DEVIATION 1946: the context dies LAST, after every value built on it.

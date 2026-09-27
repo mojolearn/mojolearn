@@ -8,20 +8,23 @@ sklearn/tree/_classes.py::ccp_alpha	not yet	sklearn	cost-complexity pruning is a
 sklearn/tree/_classes.py::monotonic_cst	not yet	sklearn	no monotone split filter in ensemble/
 sklearn/tree/_classes.py::min_weight_fraction_leaf	not yet	sklearn	the weighted objective has the weights; the leaf rule reads counts
 sklearn/tree/_classes.py::DecisionTreeRegressor sample_weight	not yet	sklearn	the RF regressor fit entry carries no row weights (WeightedRegressionBin exists on the device)
-sklearn/ensemble/_bagging.py::oob_score	not yet	sklearn	the draws are known per member; the out-of-bag vote is not written
+sklearn/ensemble/_bagging.py::oob_score	IMPLEMENTED	sklearn	2026-09-27: oob_score_, oob_decision_function_ / oob_prediction_ (lane trees-oob-cv-link); a row no member left out is uniform 1 / k (DEVIATION 5605) where sklearn divides 0 / 0
 sklearn/ensemble/_bagging.py::warm_start	not yet	sklearn	no incremental fit
 sklearn/ensemble/_bagging.py::sample_weight as bootstrap counts	deliberate	sklearn	rows are gathered by index for every member (the regressor tree takes no weights); one spelling for every base estimator
 sklearn/ensemble/_*.py::n_jobs / verbose	deliberate	sklearn	members fit one after another on the device
 sklearn/ensemble/_weight_boosting.py::algorithm='SAMME.R'	deliberate	sklearn	removed from the reference in 1.6
-LightGBM/src/boosting/dart.hpp::multiclass (num_tree_per_iteration > 1)	not yet	LightGBM	one tree per class per iteration
+LightGBM/src/boosting/dart.hpp::multiclass (num_tree_per_iteration > 1)	IMPLEMENTED	LightGBM	2026-09-27: MulticlassSoftmax, one tree per class per iteration, drops by iteration (lane trees-dart-options)
 LightGBM/src/treelearner/serial_tree_learner.cpp::leaf-wise growth on the g/h gain	not yet	LightGBM	DART's trees are the RF builder's, fitted to -g by squared error; leaf values are LightGBM's Newton step
-LightGBM/src/io/config.cpp::lambda_l1, max_delta_step, feature_fraction, bagging_fraction, min_sum_hessian_in_leaf	not yet	LightGBM	not threaded into the DART loop
+LightGBM/src/io/config.cpp::min_sum_hessian_in_leaf (min_child_weight)	not yet	LightGBM	a split filter on the hessian sum; the RF builder's filter reads counts (goes with the g/h-gain growth row above)
+LightGBM/src/io/config.cpp::lambda_l1, max_delta_step, feature_fraction, bagging_fraction, bagging_freq	IMPLEMENTED	LightGBM	2026-09-27: reg_alpha / max_delta_step in the leaf values, colsample_bytree per tree, subsample + subsample_freq bagging (lane trees-dart-options)
+LightGBM/src/io/config.cpp::feature_fraction_bynode	not yet	LightGBM	the RF builder's max_features draws per node with its own RNG and rounding; not threaded
 sklearn/ensemble/_forest.py::RandomTreesEmbedding sparse_output=True	deliberate	sklearn	the NumPy-free layer has no sparse container; the dense one-hot is returned
-sklearn/ensemble/_stacking.py, calibration.py::cv as a splitter object	not yet	sklearn	an int of unshuffled (Stratified)KFold only
+sklearn/ensemble/_stacking.py, calibration.py::cv as a splitter object	IMPLEMENTED	sklearn	2026-09-27: an object with split(X, y) or an iterable of (train, test) pairs, indices as given (lane trees-oob-cv-link)
 sklearn/ensemble/_stacking.py, calibration.py::sample_weight	not yet	sklearn	not threaded through the folds
 sklearn/calibration.py::ensemble='auto', cv='prefit'	not yet	sklearn	True / False only
 shap/explainers/_tree.py::feature_perturbation='interventional'	not yet	shap	the path-dependent algorithm only
 shap/explainers/_tree.py::shap_interaction_values	not yet	shap	the conditioned recursion (condition != 0) is not carried
 shap/explainers/_tree.py::GradientBoosting (CatBoost-format) models	not yet	shap	the oblivious-tree model text is not converted to flat trees
 shap/explainers/_kernel.py::l1_reg feature selection	deliberate	shap	a LARS/Lasso-IC path would bring a solver with its own seams; the full weighted least squares is solved
-shap/explainers/_kernel.py::link='logit'	not yet	shap	identity link only
+shap/explainers/_kernel.py::link='logit'	IMPLEMENTED	shap	2026-09-27: the link after the background mean on fx, fnull, ey (xtrees/ops.mojo logit; lane trees-oob-cv-link)
+shap/explainers/_permutation.py::link	not yet	shap	PermutationExplainer takes no link: shap's default linearize_link reweights the masked outputs; not carried

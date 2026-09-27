@@ -1,0 +1,13 @@
+diff --git a/holtwinters/impl/internal/hw_utils.mojo b/holtwinters/impl/internal/hw_utils.mojo
+index ef27b542b..5ce4129f2 100644
+--- a/holtwinters/impl/internal/hw_utils.mojo
++++ b/holtwinters/impl/internal/hw_utils.mojo
+@@ -58,7 +58,7 @@ from std.sys.compile import is_defined
+ #: conv1d's filter sum starts at `block_idx.x % filter_size` and wraps (the
+ #: order made a function of launch geometry). MUST FAIL device-vs-oracle and
+ #: launch invariance.
+-comptime SAB_ROTATE_CONV = is_defined["MOJOLEARN_HW_SABOTAGE_ROTATE_CONV"]()
++comptime SAB_ROTATE_CONV = True
+ #: the BFGS step-size `sqrt` through `std.math.sqrt` instead of
+ #: `identical_sqrt` (row 10: approximate on NVIDIA, correctly rounded on
+ #: Apple/AMD). MEASURED 2026-08-23: NULL ON APPLE -- the whole gate is

@@ -56,8 +56,13 @@ def arm_dbscan(rep):
     fitted = np.asarray(m.labels_)
     rep.check("DBSCAN", np.array_equal(np.asarray(plain.labels_), fitted),
               "prediction_data=True fits the same labels_ bytes as the default")
-    rep.check("DBSCAN", not hasattr(plain, "components_") and not hasattr(plain, "core_sample_indices_"),
-              "the default fit stores no prediction data")
+    rep.check("DBSCAN", np.array_equal(np.asarray(plain.core_sample_indices_), np.asarray(m.core_sample_indices_)),
+              "the default fit keeps core_sample_indices_ too (scikit-learn's attribute)")
+    try:
+        plain.predict(x)
+        rep.check("DBSCAN", False, "the default fit refuses predict by name")
+    except ValueError as e:
+        rep.check("DBSCAN", "prediction_data=True" in str(e), "the default fit refuses predict by name", str(e))
     idx = np.asarray(m.core_sample_indices_)
     comps = np.asarray(m.components_)
     rep.check("DBSCAN", idx.dtype == np.int32 and comps.dtype == np.float32 and comps.shape == (idx.size, 2),

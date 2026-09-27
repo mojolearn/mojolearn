@@ -37,7 +37,7 @@ def alpha_grid_value(amax: Float32, eps: Float32, k: Int, a_n: Int) -> Float32:
 
 
 def enet_gram_cd(fw: FP, gg: Int, q: Int, qw: Int, w: Int, d: Int, ynorm2: Float32,
-                 l1: Float32, l2: Float32, max_iter: Int, tol: Float32) -> Int:
+                 l1: Float32, l2: Float32, max_iter: Int, tol: Float32, positive: Bool = False) -> Int:
     """Their enet_coordinate_descent_gram without screening; w warm, Qw is
     recomputed from w at entry. Returns the sweeps run."""
     for j in range(d):
@@ -46,7 +46,7 @@ def enet_gram_cd(fw: FP, gg: Int, q: Int, qw: Int, w: Int, d: Int, ynorm2: Float
             acc = fmad(ld(fw, gg + j * d + k), ld(fw, w + k), acc)
         st(fw, qw + j, acc)
     var tol_s = fm(tol, ynorm2)
-    if _gap(fw, q, qw, w, d, ynorm2, l1, l2) <= tol_s:
+    if _gap(fw, q, qw, w, d, ynorm2, l1, l2, positive) <= tol_s:
         return 0
     for it in range(max_iter):
         var w_max = Float32(0)
@@ -58,6 +58,8 @@ def enet_gram_cd(fw: FP, gg: Int, q: Int, qw: Int, w: Int, d: Int, ynorm2: Float
             var wj = ld(fw, w + j)
             var t = fa(fs(ld(fw, q + j), ld(fw, qw + j)), fm(wj, qjj))
             var nw = fd(fm(fsign(t), fmax(fs(fabs(t), l1), Float32(0))), fa(qjj, l2))
+            if positive and t < 0:
+                nw = Float32(0)  # theirs: positive and tmp < 0 -> w_j = 0
             st(fw, w + j, nw)
             if nw != wj:
                 var delta = fs(nw, wj)
@@ -69,12 +71,13 @@ def enet_gram_cd(fw: FP, gg: Int, q: Int, qw: Int, w: Int, d: Int, ynorm2: Float
             if fabs(nw) > w_max:
                 w_max = fabs(nw)
         if w_max == 0 or fd(dw_max, w_max) <= tol or it == max_iter - 1:
-            if _gap(fw, q, qw, w, d, ynorm2, l1, l2) <= tol_s:
+            if _gap(fw, q, qw, w, d, ynorm2, l1, l2, positive) <= tol_s:
                 return it + 1
     return max_iter
 
 
-def _gap(fw: FP, q: Int, qw: Int, w: Int, d: Int, ynorm2: Float32, l1: Float32, l2: Float32) -> Float32:
+def _gap(fw: FP, q: Int, qw: Int, w: Int, d: Int, ynorm2: Float32, l1: Float32, l2: Float32,
+         positive: Bool) -> Float32:
     """gap_enet_gram, formulation A (l1 > 0), or B when l1 == 0 < l2, or
     the gradient norm when both are zero."""
     var wl2 = Float32(0)
@@ -100,7 +103,7 @@ def _gap(fw: FP, q: Int, qw: Int, w: Int, d: Int, ynorm2: Float32, l1: Float32, 
         return fa(g, fm(fd(Float32(1), fm(Float32(2), l2)), dual_norm))
     for j in range(d):
         var a = fs(fs(ld(fw, q + j), ld(fw, qw + j)), fm(l2, ld(fw, w + j)))
-        dual_norm = fmax(dual_norm, fabs(a))
+        dual_norm = fmax(dual_norm, a if positive else fabs(a))
     var base = fa(r2, fm(l2, wl2))
     var primal = fa(fm(Float32(0.5), base), fm(l1, wl1))
     var scale = fd(l1, dual_norm) if dual_norm > l1 else Float32(1)
@@ -157,7 +160,7 @@ def _prep(x: FP, y: FP, n: Int, d: Int, fid: FP, fold: Int, fi: Bool,
 
 
 def enetcv_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
-    """ip: [max_iter, fit_intercept, n_alphas A, n_folds F, n_l1 L, explicit_alphas].
+    """ip: [max_iter, fit_intercept, n_alphas A, n_folds F, n_l1 L, explicit_alphas, positive].
     fp: [eps, tol, l1_ratios (L), explicit alphas (A, descending) if given].
     y: targets n | fold ids n (as float32).
     res: coef d | intercept | alpha_ | l1_ratio_ | n_iter | alphas L*A | mse L*A*F.
@@ -168,6 +171,7 @@ def enetcv_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw
     var f_n = ldi(ip, 3)
     var l_n = ldi(ip, 4)
     var explicit = ldi(ip, 5) != 0
+    var positive = ldi(ip, 6) != 0
     var eps = ld(fp, 0)
     var tol = ld(fp, 1)
     var fid = y + n
@@ -211,7 +215,7 @@ def enetcv_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw
                 var alpha = ld(res, alphas + l * a_n + k)
                 var l1 = fm(fm(alpha, l1r), i2f(rows))
                 var l2 = fm(fm(alpha, fs(Float32(1), l1r)), i2f(rows))
-                _ = enet_gram_cd(fw, gg, q, qw, w, d, yn, l1, l2, max_iter, tol)
+                _ = enet_gram_cd(fw, gg, q, qw, w, d, yn, l1, l2, max_iter, tol, positive)
                 var b = ym
                 for j in range(d):
                     b = fs(b, fm(ld(fw, xm + j), ld(fw, w + j)))
@@ -244,7 +248,7 @@ def enetcv_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw
     var alpha = ld(res, alphas + best_l * a_n + best_k)
     fill(fw, w, d, Float32(0))
     var iters = enet_gram_cd(fw, gg, q, qw, w, d, ld(fw, sc + 1), fm(fm(alpha, l1r), i2f(n)),
-                             fm(fm(alpha, fs(Float32(1), l1r)), i2f(n)), max_iter, tol)
+                             fm(fm(alpha, fs(Float32(1), l1r)), i2f(n)), max_iter, tol, positive)
     copy(res, 0, fw, w, d)
     var b = ld(fw, sc)
     for j in range(d):

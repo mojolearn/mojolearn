@@ -136,9 +136,11 @@ def cnb_params_unit(t: Int, f: FP, q: IP):
 
 
 def cat_params_unit(t: Int, f: FP, q: IP):
-    """q = [X, n, d, Y, K, NCAT, CMAX, CNT, ALPHA, FLP]; t = (j*K + k)*CMAX + v
+    """q = [X, n, d, Y, K, NCAT, CMAX, CNT, ALPHA, FLP, W]; t = (j*K + k)*CMAX + v
     (CategoricalNB): the rows of class k whose feature j equals v, counted in
-    ascending row order; FLP = log(count + a) - log(CNT[k] + a * NCAT[j]).
+    ascending row order (W >= 0: their weights W[i] summed instead, the
+    sample_weight option; the caller passes -1 for none);
+    FLP = log(count + a) - log(CNT[k] + a * NCAT[j]).
     Slots v >= NCAT[j] are left as they are."""
     var n = p(q, 1)
     var d = p(q, 2)
@@ -151,13 +153,19 @@ def cat_params_unit(t: Int, f: FP, q: IP):
     var ncat = Int(ld(f, p(q, 5) + j))
     if v >= ncat:
         return
-    var cnt = 0
+    var W = p(q, 10)
+    var m = 0
+    var cw = Float32(0)
     for i in range(n):
         if Int(ld(f, p(q, 3) + i)) == k and Int(ld(f, p(q, 0) + i * d + j)) == v:
-            cnt += 1
+            if W >= 0:
+                cw = add(cw, ld(f, W + i))
+            else:
+                m += 1
+    var cnt = cw if W >= 0 else Float32(m)
     var a = ld(f, p(q, 8))
     var den = add(ld(f, p(q, 7) + k), mul(a, Float32(ncat)))
-    st(f, p(q, 9) + t, sub(logf(add(Float32(cnt), a)), logf(den)))
+    st(f, p(q, 9) + t, sub(logf(add(cnt, a)), logf(den)))
 
 
 def cat_jll_unit(t: Int, f: FP, q: IP):
@@ -178,3 +186,83 @@ def cat_jll_unit(t: Int, f: FP, q: IP):
 def log_unit(t: Int, f: FP, q: IP):
     """q = [X, OUT]; t = element: OUT = log(X) (a given class prior's log)."""
     st(f, p(q, 1) + t, logf(ld(f, p(q, 0) + t)))
+
+
+def gnb_merge_unit(t: Int, f: FP, q: IP):
+    """q = [OCNT, OMEAN, OVAR, NCNT, NMEAN, NVAR, K, d, CNT, MEAN, VAR];
+    t = k*d + c (GaussianNB.partial_fit, sklearn `_update_mean_variance`):
+    the running class count, mean and variance (no epsilon) merged with a
+    batch's. n = n_past + n_new; mean = (n_new*mu_new + n_past*mu) / n;
+    ssd = n_past*var + n_new*var_new + (n_new*n_past / n) * (mu - mu_new)^2;
+    var = ssd / n. A class the batch lacks keeps its values; a class not seen
+    before takes the batch's."""
+    var d = p(q, 7)
+    var k = t // d
+    var c = t % d
+    var np_ = ld(f, p(q, 0) + k)
+    var nn = ld(f, p(q, 3) + k)
+    var mu = ld(f, p(q, 1) + t)
+    var va = ld(f, p(q, 2) + t)
+    var nmu = ld(f, p(q, 4) + t)
+    var nva = ld(f, p(q, 5) + t)
+    var m = mu
+    var v = va
+    if nn != Float32(0):
+        if np_ == Float32(0):
+            m = nmu
+            v = nva
+        else:
+            var tot = add(np_, nn)
+            m = div(add(mul(nn, nmu), mul(np_, mu)), tot)
+            var e = sub(mu, nmu)
+            var ssd = add(add(mul(np_, va), mul(nn, nva)), mul(div(mul(nn, np_), tot), mul(e, e)))
+            v = div(ssd, tot)
+    st(f, p(q, 9) + t, m)
+    st(f, p(q, 10) + t, v)
+    if c == 0:
+        st(f, p(q, 8) + k, add(np_, nn))
+
+
+def cat_counts_unit(t: Int, f: FP, q: IP):
+    """q = [X, n, d, Y, K, NCAT, CMAX, W, OUT]; t = (j*K + k)*CMAX + v
+    (CategoricalNB `_count`): the rows of class k whose feature j equals v,
+    counted in ascending row order (W >= 0: their weights W[i] summed), as
+    OUT[t]. Slots v >= NCAT[j] are left as they are."""
+    var n = p(q, 1)
+    var d = p(q, 2)
+    var K = p(q, 4)
+    var cmax = p(q, 6)
+    var v = t % cmax
+    var jk = t // cmax
+    var k = jk % K
+    var j = jk // K
+    if v >= Int(ld(f, p(q, 5) + j)):
+        return
+    var W = p(q, 7)
+    var m = 0
+    var cw = Float32(0)
+    for i in range(n):
+        if Int(ld(f, p(q, 3) + i)) == k and Int(ld(f, p(q, 0) + i * d + j)) == v:
+            if W >= 0:
+                cw = add(cw, ld(f, W + i))
+            else:
+                m += 1
+    st(f, p(q, 8) + t, cw if W >= 0 else Float32(m))
+
+
+def cat_flp_unit(t: Int, f: FP, q: IP):
+    """q = [CC, K, NCAT, CMAX, CNT, ALPHA, FLP]; t = (j*K + k)*CMAX + v
+    (CategoricalNB `_update_feature_log_prob` from the category counts CC):
+    FLP = log(CC + a) - log(CNT[k] + a * NCAT[j]), cat_params' arithmetic.
+    Slots v >= NCAT[j] are left as they are."""
+    var K = p(q, 1)
+    var cmax = p(q, 3)
+    var v = t % cmax
+    var j = (t // cmax) // K
+    var k = (t // cmax) % K
+    var ncat = Int(ld(f, p(q, 2) + j))
+    if v >= ncat:
+        return
+    var a = ld(f, p(q, 5))
+    var den = add(ld(f, p(q, 4) + k), mul(a, Float32(ncat)))
+    st(f, p(q, 6) + t, sub(logf(add(ld(f, p(q, 0) + t), a)), logf(den)))
