@@ -535,11 +535,16 @@ _add("layernorm", xlane="sequence", ours=("LayerNorm", "layer_norm_forward"), ki
      block="tensor", datasets=("synthetic",), torch=True,
      params=dict(normalized_shape=1024, eps=1e-5),
      notes=["x (16384, 1024) N(0,1) seed 7"])
-_add("moe", xlane="sequence", ours=("MoEBlock", "SparseMoeBlock", "MixtureOfExperts"), kind="layer",
-     task="moe", block="tensor", datasets=("synthetic",), torch=True,
-     params=dict(hidden_size=1024, ffn_size=2816, num_experts=8, top_k=2),
+_add("moe", xlane="sequence", ours=("MoEBlock",), kind="layer",
+     task="moe", block="tensor", datasets=("synthetic",), torch=True, forward_only=True,
+     params=dict(hidden_size=1024, intermediate_size=2816, num_experts=8, top_k=2,
+                 norm_topk_prob=True),
      notes=["x (8192, 1024); the torch arm is a transcription of HF MixtralSparseMoeBlock.forward "
-            "(softmax router, top-2, renormalized weights, SwiGLU experts)"])
+            "(softmax router, top-2, renormalized weights, SwiGLU experts)",
+            "forward only on every arm (ours exports no MoEBlock backward, "
+            "sequence/NOT_IMPLEMENTED.tsv): the fit column times one forward, torch under "
+            "no_grad; ours loads torch's weights in HF's fused layout (router (E, D), "
+            "gate_up_proj (E, 2F, D) = [w1; w3], down_proj (E, D, F) = w2)"])
 for _slug, _cls, _torch in (("rmsprop", "RMSprop", "RMSprop"), ("adagrad", "Adagrad", "Adagrad"),
                             ("adamax", "Adamax", "Adamax"), ("nadam", "NAdam", "NAdam"),
                             ("adafactor", "Adafactor", "Adafactor"), ("lion", "Lion", None),
@@ -597,11 +602,16 @@ _add("garch", xlane="sequence", ours="GARCH", kind="ts", task="garch", block="ts
             "arch_model(vol='GARCH', p=1, o=0, q=1, mean='Constant', dist='normal', "
             "rescale=False) per series (ours refuses rescaling); the forecast is the "
             "conditional variance, h steps"])
-_add("prophet", xlane="sequence", ours=("Prophet", "ProphetForecaster"), kind="ts",
+_add("prophet", xlane="sequence", ours=("ProphetForecaster",), kind="ts",
      task="forecast", block="ts", datasets=_TS,
      params=dict(n_changepoints=25, daily_seasonality=True, weekly_seasonality=True,
-                 yearly_seasonality=False),
-     other={"prophet-cpu": "prophet"}, notes=[_TSNOTE],
+                 yearly_seasonality=False, max_iter=10000),
+     other={"prophet-cpu": "prophet"},
+     notes=[_TSNOTE, "prophet's shape on both sides: fit(ds, y), predict(future ds), ds hourly "
+                     "from 2024-01-01; ours fits the batch of series at once, prophet one "
+                     "series per job; linear growth, additive seasonality, 25 changepoints over "
+                     "the first 80%, daily (order 4) and weekly (order 3) seasonality, no "
+                     "yearly; the iteration cap is prophet's (Stan iter=1e4) on both"],
      mism=["prophet fits by Stan's L-BFGS (MAP); ours by its own L-BFGS; parity is at a "
            "tolerance, the forecast RMSE is the comparable number"])
 
@@ -2209,6 +2219,8 @@ def _build_ts(lane, arm, D):
         info = _ours_info(lane)
         info["config"] = "mojolearn.%s(%s).fit(Y (%d, %d))" % (name, p, Y.shape[0], Y.shape[1])
         Y32 = D["Yfit"]
+        # prophet's time axis, as the prophet arm builds it: hourly from 2024-01-01
+        ds = np.datetime64("2024-01-01T00", "h") + np.arange(Y32.shape[1] + h).astype("timedelta64[h]")
 
         def fit():
             if lane == "autoarima":           # the cuML shape: construct on the batch, search, fit
@@ -2223,6 +2235,8 @@ def _build_ts(lane, arm, D):
                 S["est"] = cls(np.ascontiguousarray(Y32[:16].T)).fit(maxlags=p["maxlags"])
             elif t == "garch":                # arch's shape; the variance forecast horizon is fixed at fit
                 S["est"] = cls(**p).fit(Y32, horizon=h)
+            elif lane == "prophet":           # prophet's shape: fit(ds, y), then predict(future ds)
+                S["est"] = cls(**p).fit(ds[:Y32.shape[1]], Y32)
             else:
                 S["est"] = cls(**p).fit(Y32)
 
@@ -2240,6 +2254,8 @@ def _build_ts(lane, arm, D):
             else:
                 if lane == "autoarima" or t == "garch":
                     fc = e.forecast(h)
+                elif lane == "prophet":
+                    fc = e.predict(ds[Y32.shape[1]:])
                 else:                          # statsforecast's shape: predict(h) -> {"mean": ...}
                     fc = e.predict(h)
                     if isinstance(fc, dict):
@@ -2634,7 +2650,8 @@ def _layer_inputs(lane, D, torch):
     return make, x, extra
 
 
-def _MoE(torch, hidden_size, ffn_size, num_experts, top_k):
+def _MoE(torch, hidden_size, intermediate_size, num_experts, top_k, norm_topk_prob):
+    ffn_size = intermediate_size
     nn = torch.nn
     F = torch.nn.functional
 
@@ -2660,7 +2677,9 @@ def _MoE(torch, hidden_size, ffn_size, num_experts, top_k):
             logits = self.gate(h)
             w = F.softmax(logits, dim=1, dtype=torch.float)
             w, sel = torch.topk(w, top_k, dim=-1)
-            w = (w / w.sum(dim=-1, keepdim=True)).to(h.dtype)
+            if norm_topk_prob:
+                w = w / w.sum(dim=-1, keepdim=True)
+            w = w.to(h.dtype)
             out = torch.zeros_like(h)
             mask = F.one_hot(sel, num_classes=num_experts).permute(2, 1, 0)
             for e in range(num_experts):
@@ -2735,7 +2754,16 @@ def _build_layer(lane, arm, D):
         layer = cls(**kw)
         info["config"] = "mojolearn.%s(%s)" % (name, kw)
         info["weights_loaded"] = False
-        if hasattr(layer, "load_state_dict"):
+        if s["task"] == "moe":                # HF's fused layout from the per-expert transcription
+            E = kw["num_experts"]
+            layer.load_state_dict({
+                "router": state["gate.weight"],
+                "gate_up_proj": np.stack([np.concatenate([state["experts.%d.w1.weight" % e],
+                                                          state["experts.%d.w3.weight" % e]])
+                                          for e in range(E)]),
+                "down_proj": np.stack([state["experts.%d.w2.weight" % e] for e in range(E)])})
+            info["weights_loaded"] = True
+        elif hasattr(layer, "load_state_dict"):
             layer.load_state_dict(state)
             info["weights_loaded"] = True
         elif hasattr(layer, "set_weights") and "weight" in state:
@@ -2759,6 +2787,8 @@ def _build_layer(lane, arm, D):
             nonlocal dy
             y = fwd(x, *extra)
             y = y[0] if isinstance(y, tuple) else y
+            if s.get("forward_only"):
+                return
             if dy is None:
                 dy = torch.randn(tuple(np.shape(y)), generator=g).numpy()
             if not hasattr(layer, "backward"):
@@ -2792,7 +2822,7 @@ def _build_layer(lane, arm, D):
     mod.load_state_dict({k: torch.from_numpy(v) for k, v in state.items()})
     mod = mod.to(dev)
     x = x_cpu.to(dev)
-    if s["task"] not in ("gcn", "sage"):
+    if s["task"] not in ("gcn", "sage") and not s.get("forward_only"):
         x.requires_grad_(True)             # backward computes dx, as ours' backward returns it
     extra = tuple(e.to(dev) for e in extra_cpu)
     run = torch.compile(mod) if mode == "compile" else mod
@@ -2809,6 +2839,11 @@ def _build_layer(lane, arm, D):
         return y[0] if isinstance(y, tuple) else y
 
     def fit():
+        if s.get("forward_only"):
+            with torch.no_grad():
+                forward()
+            _torch_sync(torch, dev)
+            return
         y = forward()
         if "dy" not in dyh:
             dyh["dy"] = torch.randn(tuple(y.shape), generator=g).to(dev)
