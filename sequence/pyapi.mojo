@@ -9,7 +9,7 @@ from std.python import PythonObject
 
 from checks.numerics import ftz, identical_mul
 from sequence.exec import Exec
-from sequence.ops import FP, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD
+from sequence.ops import FP, OP_STL, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD
 from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_step, rnn_fit, rnn_predict
 
 
@@ -177,3 +177,65 @@ def opt_advance(cfg: OptConfig, mut st: OptState) -> Int:
         st.pw1 = ftz(identical_mul(st.pw1, cfg.f1))
         st.pw2 = ftz(identical_mul(st.pw2, cfg.f2))
     return 0
+
+
+def stl_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
+    """STL over a batch of series (`sequence/stl.mojo`).
+    addrs = [y (B, n), season, trend, weights, resid (each B, n, written)];
+    ip = [B, n, period, seasonal, trend, low_pass, degrees (s + 2 t + 4 l),
+    seasonal_jump, trend_jump, low_pass_jump, inner_iter, outer_iter]."""
+    if len(addrs) != 5 or len(ip) != 12:
+        raise Error("stl: requires 5 addresses and 12 integer parameters")
+    var B = ival(ip, 0)
+    var n = ival(ip, 1)
+    var np_ = ival(ip, 2)
+    if B < 1 or n < 1:
+        raise Error("stl: at least one series of at least one observation")
+    if np_ < 2:
+        raise Error("stl: period must be a positive integer >= 2")
+    for k in range(3, 6):
+        var v = ival(ip, k)
+        if v < 3 or v % 2 == 0:
+            raise Error("stl: seasonal, trend and low_pass must be odd integers >= 3")
+    if ival(ip, 4) <= np_ or ival(ip, 5) <= np_:
+        raise Error("stl: trend and low_pass must exceed the period")
+    var degs = ival(ip, 6)
+    if degs < 0 or degs > 7:
+        raise Error("stl: every degree must be 0 or 1")
+    for k in range(7, 10):
+        if ival(ip, k) < 1:
+            raise Error("stl: every jump must be a positive integer")
+    if ival(ip, 10) < 1 or ival(ip, 11) < 0:
+        raise Error("stl: inner_iter must be >= 1 and outer_iter >= 0")
+    var n2 = n + 2 * np_
+    var y = ex.alloc(B * n)
+    ex.upload(y, fptr(addrs[0], "y"), B * n)
+    var outs = List[FP]()
+    for _ in range(4):
+        outs.append(ex.alloc(B * n))
+    var work = ex.alloc(B * 5 * n2)
+    var sortbuf = ex.alloc(B * n)
+    var a = Args()
+    a.p0 = y
+    a.p1 = outs[0]
+    a.p2 = outs[1]
+    a.p3 = outs[2]
+    a.p4 = outs[3]
+    a.p5 = work
+    a.p6 = sortbuf
+    a.i0 = n
+    a.i1 = np_
+    a.i2 = ival(ip, 3)
+    a.i3 = ival(ip, 4)
+    a.i4 = ival(ip, 5)
+    a.i5 = degs
+    a.i6 = ival(ip, 7)
+    a.i7 = ival(ip, 8)
+    a.i8 = ival(ip, 9)
+    a.i9 = ival(ip, 10)
+    a.i10 = ival(ip, 11)
+    ex.launch[OP_STL](a, B)
+    ex.sync()
+    for k in range(4):
+        ex.download(fptr(addrs[k + 1], "output"), outs[k], B * n)
+    return PythonObject(B * n)

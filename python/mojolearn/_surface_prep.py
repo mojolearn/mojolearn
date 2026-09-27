@@ -34,6 +34,9 @@ FAMILIES = (
             "x-prep-spline-transformer",
             "x-prep-binarizer",
             "x-prep-label-encoder",
+            "x-prep-label-binarizer",
+            "x-prep-multilabel-binarizer",
+            "x-prep-iterative-imputer",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -49,13 +52,16 @@ FAMILIES = (
             "SplineTransformer",
             "Binarizer",
             "LabelEncoder",
+            "LabelBinarizer",
+            "MultiLabelBinarizer",
+            "IterativeImputer",
         ),
         display="preprocessing additions, naive Bayes and discriminant analysis",
         host_modules=(
             "x_prep/host/program.mojo", "x_prep/common.mojo", "x_prep/prims.mojo", "x_prep/eigh.mojo",
             "x_prep/units.mojo", "x_prep/target.mojo", "x_prep/kbins.mojo",
             "naive_bayes/nb.mojo", "naive_bayes/da.mojo",
-            "x_prep/transform.mojo", "x_prep/spline.mojo",
+            "x_prep/transform.mojo", "x_prep/spline.mojo", "x_prep/iterative.mojo",
         ),
         exports=(
             "x_prep_host_numeric_mode", "x_prep_host_vendor", "x_prep_host_column", "x_prep_host_sabotage",
@@ -86,6 +92,9 @@ TRAINING_LANE_NAMES = {
     "x-prep-spline-transformer": "SplineTransformer",
     "x-prep-binarizer": "Binarizer",
     "x-prep-label-encoder": "LabelEncoder",
+    "x-prep-label-binarizer": "LabelBinarizer",
+    "x-prep-multilabel-binarizer": "MultiLabelBinarizer",
+    "x-prep-iterative-imputer": "IterativeImputer",
 }
 PUBLIC_PENDING_LANES = {
     "x-prep-robust-scaler": "no reference",
@@ -107,4 +116,7 @@ PUBLIC_PENDING_LANES = {
     "x-prep-spline-transformer": "no reference",
     "x-prep-binarizer": "no reference",
     "x-prep-label-encoder": "no reference",
+    "x-prep-label-binarizer": "no reference",
+    "x-prep-multilabel-binarizer": "no reference",
+    "x-prep-iterative-imputer": "no reference",
 }
