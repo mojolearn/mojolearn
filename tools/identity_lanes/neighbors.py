@@ -39,15 +39,20 @@ def _(ml, X, yc, yr, Xh=None):
     md = ml.NearestCentroid(metric="manhattan").fit(X[:512], y3)
     return _fit(dict(centroids=_h(m.centroids_), std=_h(m.within_class_std_dev_), predict=_h(m.predict(X[:512])),
                      shrunk=_h(s.centroids_), shrunk_predict=_h(s.predict(X[:512])),
-                     proba=_h(s.predict_proba(X[:256])), manhattan=_h(md.centroids_, md.predict(X[:512]))),
+                     proba=_h(s.predict_proba(X[:256])), manhattan=_h(md.centroids_, md.predict(X[:512])),
+                     dev=_h(s.deviations_), dev_unshrunk=_h(m.deviations_), log_proba=_h(s.predict_log_proba(X[:256]))),
                 s, lambda e: (e.predict(Xh[:256]), e.decision_function(Xh[:256])))
 
 
 @lane("x-neighbors-ocsvm")
 def _(ml, X, yc, yr, Xh=None):
     m = ml.OneClassSVM(nu=0.2).fit(X[:256])
+    sw = (0.5 + 0.5 * (np.arange(256) % 4)).astype(np.float64)
+    sw[9] = 0.0                                        # a zero weight drops the sample, as libsvm
+    w = ml.OneClassSVM(nu=0.2).fit(X[:256], sample_weight=sw)
     return _fit(dict(dual=_h(m.dual_coef_), support=_h(m.support_), intercept=_h(m.intercept_),
-                     decision=_h(m.decision_function(X[:256]))),
+                     decision=_h(m.decision_function(X[:256])),
+                     w_dual=_h(w.dual_coef_), w_support=_h(w.support_), w_decision=_h(w.decision_function(X[:256]))),
                 m, lambda e: (e.decision_function(Xh[:256]), e.predict(Xh[:256])))
 
 
@@ -121,7 +126,9 @@ def _(ml, X, yc, yr, Xh=None):
     A = _neighbors_holes(X[:512])
     m = ml.KNNImputer(n_neighbors=5).fit(A)
     w = ml.KNNImputer(n_neighbors=4, weights="distance", add_indicator=True).fit(A)
-    return _fit(dict(u=_h(m.transform(A)), w=_h(w.transform(A))),
+    A7 = np.where(np.isnan(A), np.float32(-7.0), A).astype(np.float32)
+    mv = ml.KNNImputer(n_neighbors=5, missing_values=-7.0).fit(A7)
+    return _fit(dict(u=_h(m.transform(A)), w=_h(w.transform(A)), mv=_h(mv.transform(A7))),
                 w, lambda e: (e.transform(_neighbors_holes(Xh[:256])),))
 
 
@@ -149,7 +156,10 @@ def _(ml, X, yc, yr, Xh=None):
     m = ml.PageRank(alpha=0.85, tol=1e-6).fit(A)
     pers = (1 + np.arange(128) % 5).astype(np.float32)
     p = ml.PageRank(alpha=0.7, personalization=pers).fit(A)
-    return _fit(dict(pr=_h(m.pagerank_), it=_h(np.int64(m.n_iter_)), pers=_h(p.pagerank_)), m,
+    dg = ml.PageRank(alpha=0.85, dangling=(1 + np.arange(128) % 7).astype(np.float32),
+                     nstart=(1 + np.arange(128) % 3).astype(np.float32)).fit(A)
+    return _fit(dict(pr=_h(m.pagerank_), it=_h(np.int64(m.n_iter_)), pers=_h(p.pagerank_),
+                     dangling=_h(dg.pagerank_), dangling_it=_h(np.int64(dg.n_iter_))), m,
                 lambda e: (ml.PageRank(alpha=0.85).fit(_neighbors_graph(Xh, directed=True)).pagerank_,))
 
 

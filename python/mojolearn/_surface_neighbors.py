@@ -53,6 +53,7 @@ FAMILIES = (
             "xn_nc_shrink",
             "xn_nc_decision",
             "xn_softmax",
+            "xn_log_softmax",
             "xn_pcs",
             "xn_achi2",
             "xn_skew_weights",

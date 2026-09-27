@@ -284,13 +284,14 @@ comptime SMO_TAU = Float32(1e-12)
 
 
 # DEVIATION 5200 (row 125)
-def ocsvm_smo_item(t: Int, q: FP, alpha: FP, g: FP, info: FP, iters: IP, n: Int, eps: Float32, max_iter: Int):
+def ocsvm_smo_item(t: Int, q: FP, cv: FP, alpha: FP, g: FP, info: FP, iters: IP, n: Int, eps: Float32, max_iter: Int):
     """libsvm's `Solver::Solve` for the one-class problem (sklearn
     `svm/src/libsvm/svm.cpp`: `solve_one_class`, `Solver::Solve`,
     `select_working_set` (WSS3, second order), `calculate_rho`), with every
-    y = +1, p = 0 and C = 1, no shrinking, SEQUENTIAL in one item. `alpha`
-    arrives holding libsvm's initial point (the first floor(nu*l) ones and
-    the fractional remainder); `q` is the n x n kernel matrix. Float32 with
+    y = +1 and p = 0, no shrinking, SEQUENTIAL in one item. `cv` holds each
+    sample's upper bound C_i (sklearn's sample_weight; all ones without it).
+    `alpha` arrives holding libsvm's initial point (C_i while nu * sum(C)
+    lasts, then the remainder); `q` is the n x n kernel matrix. Float32 with
     the pinned spellings where libsvm computes in double (DEVIATION 5200).
     Ties in the working-set scans resolve as libsvm's `>=` / `<=` dres: the
     LAST index of equal gradient wins. info[0] = rho."""
@@ -308,7 +309,7 @@ def ocsvm_smo_item(t: Int, q: FP, alpha: FP, g: FP, info: FP, iters: IP, n: Int,
         var gmax = neg_inf
         var gi = -1
         for t in range(n):
-            if alpha.unsafe_load(t) < Float32(1):
+            if alpha.unsafe_load(t) < cv.unsafe_load(t):
                 var ng = -g.unsafe_load(t)
                 if ng >= gmax:
                     gmax = ng
@@ -347,21 +348,23 @@ def ocsvm_smo_item(t: Int, q: FP, alpha: FP, g: FP, info: FP, iters: IP, n: Int,
         if quad <= Float32(0):
             quad = SMO_TAU
         var delta = ftz(identical_div(_sub(g.unsafe_load(i), g.unsafe_load(j)), quad))
+        var ci = cv.unsafe_load(i)
+        var cj = cv.unsafe_load(j)
         var total = _add(old_ai, old_aj)
         var ai = _sub(old_ai, delta)
         var aj = _add(old_aj, delta)
-        if total > Float32(1):
-            if ai > Float32(1):
-                ai = Float32(1)
-                aj = _sub(total, Float32(1))
+        if total > ci:
+            if ai > ci:
+                ai = ci
+                aj = _sub(total, ci)
         else:
             if aj < Float32(0):
                 aj = Float32(0)
                 ai = total
-        if total > Float32(1):
-            if aj > Float32(1):
-                aj = Float32(1)
-                ai = _sub(total, Float32(1))
+        if total > cj:
+            if aj > cj:
+                aj = cj
+                ai = _sub(total, cj)
         else:
             if ai < Float32(0):
                 ai = Float32(0)
@@ -383,7 +386,7 @@ def ocsvm_smo_item(t: Int, q: FP, alpha: FP, g: FP, info: FP, iters: IP, n: Int,
     for i in range(n):
         var yg = g.unsafe_load(i)
         var a = alpha.unsafe_load(i)
-        if a >= Float32(1):
+        if a >= cv.unsafe_load(i):
             if yg > lb:
                 lb = yg
         elif a <= Float32(0):
@@ -536,21 +539,19 @@ def nc_std_item(t: Int, x: FP, lab: IP, cent: FP, std: FP, n: Int, d: Int, n_cla
 
 # DEVIATION 5212 / 5201 (row 126)
 def nc_shrink_item(
-    t: Int, x: FP, cent: FP, nk: FP, std: FP, res: FP,
+    t: Int, x: FP, cent: FP, nk: FP, std: FP, res: FP, devs: FP,
     n: Int, d: Int, n_classes: Int, do_shrink: Int, med: Float32, shrink: Float32,
 ):
     """sklearn's shrunken centroid for class k, feature f (t = k*d + f): the
     dataset centroid (ascending rows, one division), m = sqrt(1/n_k - 1/n),
     s = std + median(std), deviation = (centroid - dataset centroid) / (m*s),
     soft-thresholded by `shrink`, centroid = dataset centroid + m*s*deviation.
-    Without shrinking the centroid is returned unchanged. DEVIATION 5201: m*s
+    Without shrinking the centroid is returned unchanged. `devs` is sklearn's
+    `deviations_` (soft-thresholded only when shrinking). DEVIATION 5201: m*s
     == 0 gives deviation 0."""
     var k = t // d
     var f = t - k * d
     var c = cent.unsafe_load(t)
-    if do_shrink == 0:
-        res.unsafe_store(t, c)
-        return
     var acc = Float32(0)
     for i in range(n):
         acc = _add(acc, x.unsafe_load(i * d + f))
@@ -561,6 +562,10 @@ def nc_shrink_item(
     var dev = Float32(0)
     if ms != Float32(0):
         dev = ftz(identical_div(_sub(c, dsc), ms))
+    if do_shrink == 0:
+        devs.unsafe_store(t, dev)
+        res.unsafe_store(t, c)
+        return
     var mag = _sub(abs(dev), shrink)
     if mag < Float32(0):
         mag = Float32(0)
@@ -570,6 +575,7 @@ def nc_shrink_item(
         dev = mag
     else:
         dev = Float32(0)
+    devs.unsafe_store(t, dev)
     res.unsafe_store(t, _add(dsc, ftz(identical_mul(ms, dev))))
 
 
@@ -611,6 +617,25 @@ def softmax_item(t: Int, x: FP, res: FP, n: Int, c: Int):
         acc = _add(acc, e)
     for j in range(c):
         res.unsafe_store(t * c + j, ftz(identical_div(res.unsafe_load(t * c + j), acc)))
+
+
+# DEVIATION 5209 (row 123)
+def log_softmax_item(t: Int, x: FP, res: FP, n: Int, c: Int):
+    """Row t: sklearn's predict_log_proba, (x - max) - log(sum(exp(x - max))),
+    the sum ascending."""
+    var mx = x.unsafe_load(t * c)
+    for j in range(1, c):
+        var v = x.unsafe_load(t * c + j)
+        if v > mx:
+            mx = v
+    var acc = Float32(0)
+    for j in range(c):
+        var l = _sub(x.unsafe_load(t * c + j), mx)
+        res.unsafe_store(t * c + j, l)
+        acc = _add(acc, ftz(identical_exp(l)))
+    var ls = ftz(identical_log(acc))
+    for j in range(c):
+        res.unsafe_store(t * c + j, _sub(res.unsafe_load(t * c + j), ls))
 
 
 # ------------------------------------------------------------------ kernel approximation
@@ -878,10 +903,11 @@ def knn_impute_item(
 
 # ------------------------------------------------------------------ graphs
 # DEVIATION 5216 (row 129)
-def pagerank_step_item(t: Int, q: FP, x: FP, p: FP, dangling: IP, res: FP, n: Int, alpha: Float32):
+def pagerank_step_item(t: Int, q: FP, x: FP, p: FP, dw: FP, dangling: IP, res: FP, n: Int, alpha: Float32):
     """One power-iteration step for node t (networkx `_pagerank_scipy`;
     cuGraph cpp/src/link_analysis/pagerank_impl.cuh): alpha * (x @ Q +
-    sum(x[dangling]) * p) + (1 - alpha) * p, both folds ascending by node."""
+    sum(x[dangling]) * dw) + (1 - alpha) * p, both folds ascending by node;
+    dw is networkx's `dangling` weights (the personalization when not given)."""
     var acc = Float32(0)
     for i in range(n):
         acc = ftz(identical_mul_add(ftz(x.unsafe_load(i)), ftz(q.unsafe_load(i * n + t)), acc))
@@ -890,7 +916,7 @@ def pagerank_step_item(t: Int, q: FP, x: FP, p: FP, dangling: IP, res: FP, n: In
         if Int(dangling.unsafe_load(i)) != 0:
             dsum = _add(dsum, x.unsafe_load(i))
     var pt = ftz(p.unsafe_load(t))
-    var inner = ftz(identical_mul_add(dsum, pt, acc))
+    var inner = ftz(identical_mul_add(dsum, ftz(dw.unsafe_load(t)), acc))
     var teleport = ftz(identical_mul(_sub(Float32(1), alpha), pt))
     res.unsafe_store(t, ftz(identical_mul_add(alpha, inner, teleport)))
 

@@ -4,7 +4,7 @@
 """The neighbors lane's GPU drivers (see x_neighbors/gen.py)."""
 from std.gpu import block_idx, block_dim, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
-from x_neighbors.items import FP, IP, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, group_mean_item, take_rows_item, take_cols_item, variance_item, ocsvm_smo_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_item, nc_decision_item, softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_sum_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, pagerank_step_item, cc_step_item, louvain_item, svgp_item, svgp_var_item
+from x_neighbors.items import FP, IP, sqdist_item, nan_sqdist_item, l1dist_item, kernel_item, matmul_item, rowsum_item, colsum_item, unary_item, knn_select_item, group_mean_item, take_rows_item, take_cols_item, variance_item, ocsvm_smo_item, lof_lrd_item, lof_score_item, kpca_center_item, scale_div_item, svd_flip_item, kpca_alpha_scale_item, nc_std_item, nc_shrink_item, nc_decision_item, softmax_item, log_softmax_item, pcs_item, achi2_item, skew_weights_item, skew_transform_item, absdiff_sum_item, row_normalize_item, lp_clamp_item, ls_clamp_item, ls_laplacian_item, knn_graph_item, knn_impute_item, pagerank_step_item, cc_step_item, louvain_item, svgp_item, svgp_var_item
 
 comptime BLOCK = 128
 
@@ -362,24 +362,25 @@ def op_variance(x: Int, res: Int, count: Int) raises:
     _ = d_res^
 
 
-def ocsvm_kernel(q: FP, alpha: FP, g: FP, info: FP, iters: IP, n_: Int64, eps_: Float32, max_iter_: Int64):
+def ocsvm_kernel(q: FP, cv: FP, alpha: FP, g: FP, info: FP, iters: IP, n_: Int64, eps_: Float32, max_iter_: Int64):
     var n = Int(n_)
     var eps = eps_
     var max_iter = Int(max_iter_)
     var t = _tid()
     if t < 1:
-        ocsvm_smo_item(t, q, alpha, g, info, iters, n, eps, max_iter)
+        ocsvm_smo_item(t, q, cv, alpha, g, info, iters, n, eps, max_iter)
 
 
-def op_ocsvm(q: Int, alpha: Int, info: Int, iters: Int, n: Int, eps: Float32, max_iter: Int) raises:
+def op_ocsvm(q: Int, cv: Int, alpha: Int, info: Int, iters: Int, n: Int, eps: Float32, max_iter: Int) raises:
     var ctx = DeviceContext()
     var d_q = _buf(ctx, q, n * n, True)
+    var d_cv = _buf(ctx, cv, n, True)
     var d_alpha = _buf(ctx, alpha, n, True)
     var d_g = _buf(ctx, 0, n, False)
     var d_info = _buf(ctx, info, 1, False)
     var d_iters = _buf_i(ctx, iters, 1, False)
     ctx.enqueue_function[ocsvm_kernel](
-        d_q.unsafe_ptr(), d_alpha.unsafe_ptr(), d_g.unsafe_ptr(), d_info.unsafe_ptr(), d_iters.unsafe_ptr(), Int64(n), eps, Int64(max_iter),
+        d_q.unsafe_ptr(), d_cv.unsafe_ptr(), d_alpha.unsafe_ptr(), d_g.unsafe_ptr(), d_info.unsafe_ptr(), d_iters.unsafe_ptr(), Int64(n), eps, Int64(max_iter),
         grid_dim=_grid(1), block_dim=(BLOCK if 1 > 1 else 1),
     )
     _down(ctx, d_alpha, alpha, n)
@@ -387,6 +388,7 @@ def op_ocsvm(q: Int, alpha: Int, info: Int, iters: Int, n: Int, eps: Float32, ma
     _down_i(ctx, d_iters, iters, 1)
     ctx.synchronize()
     _ = d_q^
+    _ = d_cv^
     _ = d_alpha^
     _ = d_g^
     _ = d_info^
@@ -569,7 +571,7 @@ def op_nc_std(x: Int, lab: Int, cent: Int, std: Int, n: Int, d: Int, n_classes: 
     _ = d_std^
 
 
-def nc_shrink_kernel(x: FP, cent: FP, nk: FP, std: FP, res: FP, n_: Int64, d_: Int64, n_classes_: Int64, do_shrink_: Int64, med_: Float32, shrink_: Float32):
+def nc_shrink_kernel(x: FP, cent: FP, nk: FP, std: FP, res: FP, devs: FP, n_: Int64, d_: Int64, n_classes_: Int64, do_shrink_: Int64, med_: Float32, shrink_: Float32):
     var n = Int(n_)
     var d = Int(d_)
     var n_classes = Int(n_classes_)
@@ -578,27 +580,30 @@ def nc_shrink_kernel(x: FP, cent: FP, nk: FP, std: FP, res: FP, n_: Int64, d_: I
     var shrink = shrink_
     var t = _tid()
     if t < n_classes * d:
-        nc_shrink_item(t, x, cent, nk, std, res, n, d, n_classes, do_shrink, med, shrink)
+        nc_shrink_item(t, x, cent, nk, std, res, devs, n, d, n_classes, do_shrink, med, shrink)
 
 
-def op_nc_shrink(x: Int, cent: Int, nk: Int, std: Int, res: Int, n: Int, d: Int, n_classes: Int, do_shrink: Int, med: Float32, shrink: Float32) raises:
+def op_nc_shrink(x: Int, cent: Int, nk: Int, std: Int, res: Int, devs: Int, n: Int, d: Int, n_classes: Int, do_shrink: Int, med: Float32, shrink: Float32) raises:
     var ctx = DeviceContext()
     var d_x = _buf(ctx, x, n * d, True)
     var d_cent = _buf(ctx, cent, n_classes * d, True)
     var d_nk = _buf(ctx, nk, n_classes, True)
     var d_std = _buf(ctx, std, d, True)
     var d_res = _buf(ctx, res, n_classes * d, False)
+    var d_devs = _buf(ctx, devs, n_classes * d, False)
     ctx.enqueue_function[nc_shrink_kernel](
-        d_x.unsafe_ptr(), d_cent.unsafe_ptr(), d_nk.unsafe_ptr(), d_std.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n), Int64(d), Int64(n_classes), Int64(do_shrink), med, shrink,
+        d_x.unsafe_ptr(), d_cent.unsafe_ptr(), d_nk.unsafe_ptr(), d_std.unsafe_ptr(), d_res.unsafe_ptr(), d_devs.unsafe_ptr(), Int64(n), Int64(d), Int64(n_classes), Int64(do_shrink), med, shrink,
         grid_dim=_grid(n_classes * d), block_dim=(BLOCK if n_classes * d > 1 else 1),
     )
     _down(ctx, d_res, res, n_classes * d)
+    _down(ctx, d_devs, devs, n_classes * d)
     ctx.synchronize()
     _ = d_x^
     _ = d_cent^
     _ = d_nk^
     _ = d_std^
     _ = d_res^
+    _ = d_devs^
 
 
 def nc_decision_kernel(q: FP, cent: FP, std: FP, prior: FP, res: FP, n_: Int64, d_: Int64, n_classes_: Int64):
@@ -643,6 +648,28 @@ def op_softmax(x: Int, res: Int, n: Int, c: Int) raises:
     var d_x = _buf(ctx, x, n * c, True)
     var d_res = _buf(ctx, res, n * c, False)
     ctx.enqueue_function[softmax_kernel](
+        d_x.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n), Int64(c),
+        grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
+    )
+    _down(ctx, d_res, res, n * c)
+    ctx.synchronize()
+    _ = d_x^
+    _ = d_res^
+
+
+def log_softmax_kernel(x: FP, res: FP, n_: Int64, c_: Int64):
+    var n = Int(n_)
+    var c = Int(c_)
+    var t = _tid()
+    if t < n:
+        log_softmax_item(t, x, res, n, c)
+
+
+def op_log_softmax(x: Int, res: Int, n: Int, c: Int) raises:
+    var ctx = DeviceContext()
+    var d_x = _buf(ctx, x, n * c, True)
+    var d_res = _buf(ctx, res, n * c, False)
+    ctx.enqueue_function[log_softmax_kernel](
         d_x.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n), Int64(c),
         grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
     )
@@ -927,23 +954,24 @@ def op_knn_impute(x: Int, fx: Int, res: Int, n: Int, m: Int, d: Int, k: Int, wei
     _ = d_res^
 
 
-def pagerank_step_kernel(q: FP, x: FP, p: FP, dangling: IP, res: FP, n_: Int64, alpha_: Float32):
+def pagerank_step_kernel(q: FP, x: FP, p: FP, dw: FP, dangling: IP, res: FP, n_: Int64, alpha_: Float32):
     var n = Int(n_)
     var alpha = alpha_
     var t = _tid()
     if t < n:
-        pagerank_step_item(t, q, x, p, dangling, res, n, alpha)
+        pagerank_step_item(t, q, x, p, dw, dangling, res, n, alpha)
 
 
-def op_pagerank_step(q: Int, x: Int, p: Int, dangling: Int, res: Int, n: Int, alpha: Float32) raises:
+def op_pagerank_step(q: Int, x: Int, p: Int, dw: Int, dangling: Int, res: Int, n: Int, alpha: Float32) raises:
     var ctx = DeviceContext()
     var d_q = _buf(ctx, q, n * n, True)
     var d_x = _buf(ctx, x, n, True)
     var d_p = _buf(ctx, p, n, True)
+    var d_dw = _buf(ctx, dw, n, True)
     var d_dangling = _buf_i(ctx, dangling, n, True)
     var d_res = _buf(ctx, res, n, False)
     ctx.enqueue_function[pagerank_step_kernel](
-        d_q.unsafe_ptr(), d_x.unsafe_ptr(), d_p.unsafe_ptr(), d_dangling.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n), alpha,
+        d_q.unsafe_ptr(), d_x.unsafe_ptr(), d_p.unsafe_ptr(), d_dw.unsafe_ptr(), d_dangling.unsafe_ptr(), d_res.unsafe_ptr(), Int64(n), alpha,
         grid_dim=_grid(n), block_dim=(BLOCK if n > 1 else 1),
     )
     _down(ctx, d_res, res, n)
@@ -951,6 +979,7 @@ def op_pagerank_step(q: Int, x: Int, p: Int, dangling: Int, res: Int, n: Int, al
     _ = d_q^
     _ = d_x^
     _ = d_p^
+    _ = d_dw^
     _ = d_dangling^
     _ = d_res^
 

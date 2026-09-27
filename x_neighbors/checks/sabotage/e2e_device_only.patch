@@ -1,8 +1,7 @@
 diff --git a/x_neighbors/device_ops.mojo b/x_neighbors/device_ops.mojo
-index c117c3774..02916d72e 100644
 --- a/x_neighbors/device_ops.mojo
 +++ b/x_neighbors/device_ops.mojo
-@@ -49,6 +49,7 @@ def sqdist_kernel(x: FP, y: FP, res: FP, n_: Int64, m_: Int64, d_: Int64):
+@@ -49,6 +49,7 @@
      var t = _tid()
      if t < n * m:
          sqdist_item(t, x, y, res, n, m, d)
@@ -10,7 +9,7 @@ index c117c3774..02916d72e 100644
  
  
  def op_sqdist(x: Int, y: Int, res: Int, n: Int, m: Int, d: Int) raises:
-@@ -127,7 +128,7 @@ def kernel_kernel(x: FP, y: FP, res: FP, n_: Int64, m_: Int64, d_: Int64, kind_:
+@@ -127,7 +128,7 @@
      var degree = Int(degree_)
      var t = _tid()
      if t < n * m:
@@ -19,7 +18,7 @@ index c117c3774..02916d72e 100644
  
  
  def op_kernel(x: Int, y: Int, res: Int, n: Int, m: Int, d: Int, kind: Int, gamma: Float32, coef0: Float32, degree: Int) raises:
-@@ -153,6 +154,7 @@ def matmul_kernel(a: FP, b: FP, res: FP, n_: Int64, k_: Int64, m_: Int64):
+@@ -153,6 +154,7 @@
      var t = _tid()
      if t < n * m:
          matmul_item(t, a, b, res, n, k, m)
@@ -27,7 +26,7 @@ index c117c3774..02916d72e 100644
  
  
  def op_matmul(a: Int, b: Int, res: Int, n: Int, k: Int, m: Int) raises:
-@@ -273,6 +275,7 @@ def group_mean_kernel(x: FP, labels: IP, res: FP, n_: Int64, d_: Int64, g_: Int6
+@@ -273,6 +275,7 @@
      var t = _tid()
      if t < g * d:
          group_mean_item(t, x, labels, res, n, d, g)
@@ -35,7 +34,7 @@ index c117c3774..02916d72e 100644
  
  
  def op_group_mean(x: Int, labels: Int, res: Int, n: Int, d: Int, g: Int) raises:
-@@ -662,7 +665,7 @@ def pcs_kernel(x: FP, hidx: IP, hbit: IP, res: FP, scr: FP, n_: Int64, d_in_: In
+@@ -689,7 +692,7 @@
      var coef0 = coef0_
      var t = _tid()
      if t < n:
@@ -44,7 +43,7 @@ index c117c3774..02916d72e 100644
  
  
  def op_pcs(x: Int, hidx: Int, hbit: Int, res: Int, n: Int, d_in: Int, nf: Int, nc: Int, degree: Int, gamma: Float32, coef0: Float32) raises:
-@@ -692,7 +695,7 @@ def achi2_kernel(x: FP, res: FP, n_: Int64, d_: Int64, steps_: Int64, interval_:
+@@ -719,7 +722,7 @@
      var interval = interval_
      var t = _tid()
      if t < n * d:
@@ -53,7 +52,7 @@ index c117c3774..02916d72e 100644
  
  
  def op_achi2(x: Int, res: Int, n: Int, d: Int, steps: Int, interval: Float32) raises:
-@@ -737,6 +740,7 @@ def skew_transform_kernel(lx: FP, w: FP, off: FP, res: FP, n_: Int64, d_: Int64,
+@@ -764,6 +767,7 @@
      var t = _tid()
      if t < n * nc:
          skew_transform_item(t, lx, w, off, res, n, d, nc)
@@ -61,7 +60,7 @@ index c117c3774..02916d72e 100644
  
  
  def op_skew_transform(lx: Int, w: Int, off: Int, res: Int, n: Int, d: Int, nc: Int) raises:
-@@ -904,7 +908,7 @@ def knn_impute_kernel(x: FP, fx: FP, best_d: FP, best_i: IP, res: FP, n_: Int64,
+@@ -931,7 +935,7 @@
      var weights = Int(weights_)
      var t = _tid()
      if t < n * d:
@@ -70,16 +69,16 @@ index c117c3774..02916d72e 100644
  
  
  def op_knn_impute(x: Int, fx: Int, res: Int, n: Int, m: Int, d: Int, k: Int, weights: Int) raises:
-@@ -932,7 +936,7 @@ def pagerank_step_kernel(q: FP, x: FP, p: FP, dangling: IP, res: FP, n_: Int64,
+@@ -959,7 +963,7 @@
      var alpha = alpha_
      var t = _tid()
      if t < n:
--        pagerank_step_item(t, q, x, p, dangling, res, n, alpha)
-+        pagerank_step_item(t, q, x, p, dangling, res, n, alpha * Float32(1.001))
+-        pagerank_step_item(t, q, x, p, dw, dangling, res, n, alpha)
++        pagerank_step_item(t, q, x, p, dw, dangling, res, n, alpha * Float32(1.001))
  
  
- def op_pagerank_step(q: Int, x: Int, p: Int, dangling: Int, res: Int, n: Int, alpha: Float32) raises:
-@@ -959,7 +963,10 @@ def cc_step_kernel(a: FP, lab: IP, res: IP, n_: Int64):
+ def op_pagerank_step(q: Int, x: Int, p: Int, dw: Int, dangling: Int, res: Int, n: Int, alpha: Float32) raises:
+@@ -988,7 +992,10 @@
      var n = Int(n_)
      var t = _tid()
      if t < n:
@@ -91,7 +90,7 @@ index c117c3774..02916d72e 100644
  
  
  def op_cc_step(a: Int, lab: Int, res: Int, n: Int) raises:
-@@ -985,7 +992,7 @@ def louvain_kernel(a: FP, labels: IP, info: FP, w: FP, w2: FP, comm: IP, node_of
+@@ -1014,7 +1021,7 @@
      var threshold = threshold_
      var t = _tid()
      if t < 1:
