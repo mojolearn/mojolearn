@@ -1,0 +1,13 @@
+diff --git a/glm/impl/qn/glm_svm.mojo b/glm/impl/qn/glm_svm.mojo
+index c252ef886..43641d74c 100644
+--- a/glm/impl/qn/glm_svm.mojo
++++ b/glm/impl/qn/glm_svm.mojo
+@@ -85,7 +85,7 @@ def svc_l1_lz(y: Float32, z: Float32) -> Float32:
+ @always_inline
+ def svc_l1_dlz(y: Float32, z: Float32) -> Float32:
+     var s = _s_of(y)
+-    if ftz(s * z) <= Float32(1.0):
++    if ftz(s * z) < Float32(1.0):  # SABOTAGE 708: the s z == 1 boundary moved
+         return -s
+     return Float32(0.0)
+ 

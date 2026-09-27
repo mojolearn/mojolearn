@@ -1,0 +1,13 @@
+diff --git a/glm/impl/qn/qn_linesearch.mojo b/glm/impl/qn/qn_linesearch.mojo
+index 1c6703709..a1163c466 100644
+--- a/glm/impl/qn/qn_linesearch.mojo
++++ b/glm/impl/qn/qn_linesearch.mojo
+@@ -207,7 +207,7 @@ def projected_step_kernel(
+             ftz(-pgrad.unsafe_load(i)) if xpi == Float32(0.0) else xpi
+         )
+         var moved = ftz(identical_mul_add(step, drt.unsafe_load(i), xpi))
+-        x.unsafe_store(i, project_orth(moved, xi))
++        x.unsafe_store(i, moved + Float32(0.0) * xi)  # SABOTAGE 552: no orthant projection
+ 
+ 
+ def projected_step(
