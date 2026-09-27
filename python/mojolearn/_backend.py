@@ -321,7 +321,8 @@ _MODULES += tuple(host_surface.expansion_gpu_bindings())
 #:   * The neural lanes (transformer, mamba, training, byte LM) gate every
 #:     fused kernel on the identical contract, so their lower tiers were
 #:     SLOWER than the default (DEVIATION 2300 is the cost: a `k_last`
-#:     failure that lived only in a tier nobody ran).
+#:     failure that lived only in a tier nobody ran). SUPERSEDED 2026-09-27
+#:     for every neural binding but the byte LM: see `_CLASSICAL_FAST`.
 #:
 #: This is an ALLOWLIST on purpose. A binding added tomorrow is identical
 #: only until someone measures a win and adds it here, which is the rule in
@@ -356,6 +357,17 @@ _CLASSICAL_FAST = frozenset({
     "_mojolearn_hdbscan",
     "_mojolearn_resample",
     "_mojolearn_ivf",
+    # THE NEURAL FAMILY (lane neural, 2026-09-27): the transformer block,
+    # Mamba-1/2/3, the Samba stack, the MLP, embedding and the training
+    # primitives. IDENTICAL-only from 2026-09-10 (their fused kernels were
+    # then gated on IDENTICAL, so the lower tiers ran slower unfused arms);
+    # those gates are gone and FAST runs the same kernels with the pins on
+    # the free schedule. Quality, never bits (docs/lanes/progress/neural.md).
+    # The byte LM (`_mojolearn_byte_lm`) stays IDENTICAL only for now.
+    "_mojolearn_training",
+    "_mojolearn_mamba",
+    "_mojolearn_transformer",
+    "_mojolearn_embedding",
 })
 # Every expansion lane builds FAST too, sequence and cnn included (Andrew,
 # 2026-09-27); host_surface.EXPANSION_IDENTICAL_ONLY is empty.
@@ -374,9 +386,9 @@ def _offers(name, mode):
 _SELECTED = None
 
 _IDENTICAL_ONLY_REASON = (
-    "Trees and classical ML ship a fast tier and only the tree lanes "
-    "(GradientBoosting, RandomForest, ExtraTrees) ship a deterministic tier; "
-    "the neural families ship IDENTICAL only."
+    "Trees, classical ML and the neural blocks ship a fast tier and only the "
+    "tree lanes (GradientBoosting, RandomForest, ExtraTrees) ship a "
+    "deterministic tier; the byte language model ships IDENTICAL only."
 )
 
 
