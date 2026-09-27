@@ -55,6 +55,13 @@ comptime OP_COPY = 13
 comptime OP_SEQ_OUT = 14
 comptime OP_SOFTMAX = 15
 comptime OP_STL = 16
+comptime OP_VAR_DESIGN = 17
+comptime OP_COLSCALE = 18
+comptime OP_CHOLSOLVE = 19
+comptime OP_ROWSCALE = 20
+comptime OP_VAR_FORECAST = 21
+comptime OP_SUB = 22
+comptime OP_SCALE = 23
 
 # ------------------------------------------------------------------ cells
 comptime CELL_RNN_TANH = 0
