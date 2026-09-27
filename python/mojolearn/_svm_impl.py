@@ -58,6 +58,7 @@ from ._array import Array
 from ._buffer import addr, addr_ro, all_finite, as_f32_c, empty, zeros
 from ._labels import classes_from_member, classes_member, decode_labels, sorted_classes
 from ._mode import NumericModeMixin
+from ._scale_gamma import scale_gamma
 from .linear_model import (
     _accuracy_host,
     _check_saved_by,
@@ -86,7 +87,7 @@ _KERNELS = {"linear": _KERNEL_LINEAR, "rbf": _KERNEL_RBF}
 # SVC also carries POLYNOMIAL (lane/cpu-training-small-gaps, 2026-09-15): the
 # identical linear Gram, then kernel_methods' polynomial_epilogue_kernel
 # (DEVIATION 1663). SVR keeps _KERNELS and refuses 'poly' by name.
-_SVC_KERNELS = dict(_KERNELS, poly=_KERNEL_POLYNOMIAL)
+_SVC_KERNELS = dict(_KERNELS, poly=_KERNEL_POLYNOMIAL, sigmoid=_KERNEL_TANH)
 
 #: DEVIATION 1663's cap, kernel_methods/impl/distance/kernel_matrices.mojo::KM_MAX_DEGREE
 #: and svm/impl/svm_parameter.mojo::SVM_MAX_POLY_DEGREE.
@@ -105,9 +106,9 @@ _REFUSED_KERNELS = {
         "this kernel 'poly'"
     ),
     "sigmoid": (
-        "TANH is not implemented in rung 1: there is no identical_tanh in "
-        "checks/numerics.mojo, so the kernel has no bit-pinned spelling "
-        "yet (svm/NOT_IMPLEMENTED.tsv)"
+        "TANH is not implemented for SVR: SVC carries it (kernel_methods' "
+        "identical_tanh epilogue), but the SVR binding takes no coef0 yet "
+        "(svm/NOT_IMPLEMENTED.tsv)"
     ),
     "tanh": (
         "TANH is not implemented in rung 1 (svm/NOT_IMPLEMENTED.tsv); cuML spells this "
@@ -121,9 +122,23 @@ _REFUSED_KERNELS = {
 }
 
 # SVC's refusals: the shared table less 'poly', which SVC implements.
-_SVC_REFUSED_KERNELS = {k: v for k, v in _REFUSED_KERNELS.items() if k != "poly"}
+_SVC_REFUSED_KERNELS = {k: v for k, v in _REFUSED_KERNELS.items() if k not in ("poly", "sigmoid")}
+_SVC_REFUSED_KERNELS["tanh"] = (
+    "cuML and scikit-learn spell this kernel 'sigmoid', which SVC implements"
+)
 _SVC_REFUSED_KERNELS["polynomial"] = (
     "cuML and scikit-learn spell this kernel 'poly', which SVC implements"
+)
+
+# SVR carries the same kernels (2026-09-27): its bindings take degree and
+# coef0 as optional trailing params, so every linear / rbf call is unchanged.
+_SVR_KERNELS = _SVC_KERNELS
+_SVR_REFUSED_KERNELS = dict(_SVC_REFUSED_KERNELS)
+_SVR_REFUSED_KERNELS["polynomial"] = (
+    "cuML and scikit-learn spell this kernel 'poly', which SVR implements"
+)
+_SVR_REFUSED_KERNELS["tanh"] = (
+    "cuML and scikit-learn spell this kernel 'sigmoid', which SVR implements"
 )
 
 _EXT_NAME = "_mojolearn_svm"
@@ -194,6 +209,56 @@ def _as_labels(y):
     return f, classes, (classes[0], classes[1])
 
 
+def _c_rows(C, n_rows, sample_weight, class_weight=None, y=None, who="SVC"):
+    """`InitPenalty`'s weighted arm: the per-row bounds `C * class_weight[y_i]
+    * sample_weight_i` (scikit-learn's libsvm `C_i`; cuML's `C_vec = C * w`
+    after its Python layer folds class_weight into sample_weight), formed in
+    binary64 in that order and rounded ONCE to float32, so every host hands
+    the solver the same bounds. None when nothing is weighted (the
+    unweighted arm, C at every row, bit for bit the old fit). A zero weight
+    pins that row's alpha at 0 (cuML keeps the row; libsvm drops it, and the
+    solution is the same)."""
+    if sample_weight is None and class_weight is None:
+        return None
+    if sample_weight is None:
+        w = [1.0] * n_rows
+    else:
+        w = [float(v) for v in (sample_weight.tolist() if hasattr(sample_weight, "tolist") else sample_weight)]
+        if len(w) != n_rows:
+            raise ValueError(
+                f"mojolearn {who}: sample_weight has {len(w)} entries, X has {n_rows} rows"
+            )
+        for v in w:
+            if not math.isfinite(v) or v < 0.0:
+                raise ValueError(
+                    f"mojolearn {who}: sample_weight must be finite and >= 0, got {v!r}"
+                )
+    if class_weight is not None:
+        labels, _shape = _labels_1d(y)
+        classes, codes = sorted_classes(labels)
+        if isinstance(class_weight, str):
+            if class_weight != "balanced":
+                raise ValueError(
+                    f"mojolearn {who}: class_weight is a dict, 'balanced' or None, got {class_weight!r}"
+                )
+            counts = [0] * len(classes)
+            for c in codes:
+                counts[c] += 1
+            cw = [n_rows / (len(classes) * counts[k]) for k in range(len(classes))]
+        else:
+            cw = [1.0] * len(classes)
+            for key, value in dict(class_weight).items():
+                if key not in classes:
+                    raise ValueError(
+                        f"mojolearn {who}: class_weight names the label {key!r}, "
+                        f"which is not in y's classes {classes!r}"
+                    )
+                cw[classes.index(key)] = float(value)
+        w = [w[i] * cw[codes[i]] for i in range(n_rows)]
+    C = float(C)
+    return Array.from_list([C * v for v in w], "<f4")
+
+
 def _dual_times_sv(dual_coef, support_vectors):
     """`dual_coef_ @ support_vectors_`: a `(1, n_support) x (n_support,
     n_features)` product, accumulated SEQUENTIALLY over the support vectors
@@ -234,28 +299,29 @@ class SVC(NumericModeMixin):
                                   `(gamma * K + coef0) ** degree` as
                                   kernel_methods' DEVIATION 1663 epilogue
                                   (one fused multiply-add, an ascending
-                                  repeated product). 'sigmoid' and
-                                  'precomputed' are REFUSED BY NAME with
-                                  what is missing
+                                  repeated product). 'sigmoid' is the
+                                  linear Gram then tanh(gamma * K + coef0)
+                                  (kernel_methods' TANH epilogue,
+                                  identical_tanh). 'precomputed' is REFUSED
+                                  BY NAME with what is missing
         gamma           honored   a finite float >= 0, or the string 'auto'
                                   (= 1 / n_features, cuML's `_get_gamma`).
-                                  'scale' is REFUSED -- see DEVIATION 870
-                                  below, and note it is cuML's default
+                                  'scale' is resolved exactly, DEVIATION
+                                  870 below (theirs is the default)
         degree          honored   with kernel='poly': an integer in
                                   [0, 32] (DEVIATION 1663). With any other
                                   kernel only the default 3 is accepted,
                                   since nothing would read it
-        coef0           honored   with kernel='poly': a finite float. With
+        coef0           honored   with 'poly' and 'sigmoid': a finite float. With
                                   any other kernel only the default 0.0
                                   is accepted
         tol             honored   the stopping tolerance; must be finite and
                                   positive (DEVIATION 636)
         cache_size      honored   ONLY as the prediction buffer, see
                                   DEVIATION 871 below
-        class_weight    refused   in the reference it becomes `sample_weight`, and
-                                  `sample_weight` is not implemented: the
-                                  weighted `InitPenalty` arm (C_vec = C * w)
-                                  has no implementation (svm/NOT_IMPLEMENTED.tsv)
+        class_weight    honored   a dict {label: weight} or 'balanced'; it
+                                  multiplies each row's bound, C * cw[y_i] *
+                                  w_i (`_c_rows`)
         max_iter        honored   cuML's total inner-iteration cap; -1 (the
                                   default) is no limit
         nochange_steps  honored   cuML's convergence rule, with
@@ -276,7 +342,9 @@ class SVC(NumericModeMixin):
                                   at all (svm/NOT_IMPLEMENTED.tsv)
         output_type     refused   a cuML-internal array-type selector; this
                                   package returns mojolearn Arrays
-        sample_weight   refused   in fit(); see class_weight
+        sample_weight   honored   in fit(): the weighted `InitPenalty` arm,
+                                  per-row bounds C * w formed in binary64 and
+                                  rounded once to float32 (`_c_rows`)
         sparse X        refused   `svcFitSparse` / `svcPredictSparse` and
                                   every CSR arm are unimplemented; dense
                                   row-major float32 only
@@ -284,21 +352,15 @@ class SVC(NumericModeMixin):
     Non-finite cells of `X` are refused by name inside the Mojo entry
     (DEVIATION 636), naming the flat index, rather than being fitted.
 
-    DEVIATION 870: `gamma='scale'` IS REFUSED AND THE DEFAULT HERE IS
-    'auto', WHICH IS NOT cuML's DEFAULT. Theirs resolves 'scale' to
-    `1 / (n_features * X.var())`, a float32 reduction over the whole
-    matrix whose last bits are the reduction library's fold shape. Every
-    bit of this fit is a function of gamma's bits -- the kernel matrix,
-    the working sets, the alphas, `b` -- so a gamma whose last bit is the
-    host's would put a host into the middle of a cross-vendor identity
-    claim. `KernelDensity` refuses `bandwidth='scott'` for exactly this
-    reason and with exactly this instruction: compute it yourself and pass
-    the number, so the number that ran is the number you passed.
-
-        gamma = 1.0 / (X.shape[1] * float(np.asarray(X, np.float32).var()))
-
-    'auto' is kept because `1 / n_features` is an integer reciprocal in
-    float64 and is the same bits on every host.
+    DEVIATION 870: `gamma='scale'` IS RESOLVED EXACTLY, AND THE DEFAULT
+    HERE IS STILL 'auto' (theirs is 'scale'; the default is kept so every
+    recorded default fit keeps its bits). 'scale' is `1 / (n_features *
+    X.var())` as theirs, but the variance is the EXACT population variance
+    of the float32 cells, formed in integers, and the reciprocal is rounded
+    once to binary64 (`_scale_gamma.scale_gamma`). Their float32 `X.var()`
+    carries its reduction's fold shape in its last bits; this one has no
+    fold to differ, so every host reads the same gamma bits, and it differs
+    from theirs by at most that reduction's rounding.
 
     DEVIATION 871: `cache_size` IS HONORED ONLY AT PREDICT. In the reference it is
     two things under one name: the training-time `raft::cache` LRU kernel
@@ -397,24 +459,12 @@ class SVC(NumericModeMixin):
             )
         if isinstance(gamma, str):
             g = gamma.lower()
-            if g == "scale":
-                raise NotImplementedError(
-                    "mojolearn SVC: gamma='scale' is refused (DEVIATION 870). "
-                    "It is 1 / (n_features * X.var()), a float32 reduction "
-                    "whose last bits are the host reduction's fold shape, and "
-                    "every bit of this fit is a function of gamma's bits. "
-                    "Compute it yourself and pass the number:\n    "
-                    "gamma = 1.0 / (X.shape[1] * float(np.asarray(X, "
-                    "np.float32).var()))\n"
-                    "'auto' (= 1 / n_features) is exact on every host and is "
-                    "this class's default; note cuML's default is 'scale'."
-                )
-            if g != "auto":
+            if g not in ("auto", "scale"):
                 raise ValueError(
                     f"mojolearn SVC: gamma={gamma!r} is not a name; it is "
-                    "'auto', or a float ('scale' is refused, DEVIATION 870)"
+                    "'auto', 'scale' or a float"
                 )
-            gamma = "auto"
+            gamma = g
         else:
             gamma = float(gamma)
             if not math.isfinite(gamma) or gamma < 0.0:
@@ -440,6 +490,18 @@ class SVC(NumericModeMixin):
                 raise ValueError(
                     f"mojolearn SVC: coef0 must be finite, got {coef0!r} (DEVIATION 636)"
                 )
+        elif k == "sigmoid":
+            # tanh(gamma * K + coef0), the kernel_methods lane's TANH epilogue.
+            if degree != 3:
+                raise NotImplementedError(
+                    f"mojolearn SVC: degree={degree!r} is refused with kernel='sigmoid'; "
+                    "it is read only by kernel='poly'"
+                )
+            coef0 = float(coef0)
+            if not math.isfinite(coef0):
+                raise ValueError(
+                    f"mojolearn SVC: coef0 must be finite, got {coef0!r} (DEVIATION 636)"
+                )
         else:
             if degree != 3:
                 raise NotImplementedError(
@@ -450,8 +512,7 @@ class SVC(NumericModeMixin):
             if coef0 != 0.0:
                 raise NotImplementedError(
                     f"mojolearn SVC: coef0={coef0!r} is refused with kernel={k!r}; it "
-                    "is read only by kernel='poly' (TANH, which also reads it, is not "
-                    "implemented)"
+                    "is read only by kernel='poly' and kernel='sigmoid'"
                 )
         C = float(C)
         if not math.isfinite(C):
@@ -505,11 +566,10 @@ class SVC(NumericModeMixin):
                 "parameter only into its multiclass wrapper, which is not "
                 "implemented"
             )
-        if class_weight is not None:
-            raise NotImplementedError(
-                "mojolearn SVC: class_weight is refused; upstream it becomes "
-                "sample_weight, and the weighted InitPenalty arm "
-                "(C_vec = C * w) is not implemented (svm/NOT_IMPLEMENTED.tsv)"
+        if class_weight is not None and not isinstance(class_weight, (dict, str)):
+            raise ValueError(
+                "mojolearn SVC: class_weight is a dict, 'balanced' or None, "
+                f"got {type(class_weight).__name__}"
             )
         if decision_function_shape != "ovo":
             raise NotImplementedError(
@@ -535,25 +595,23 @@ class SVC(NumericModeMixin):
         self.verbose = False
         self.output_type = None
         self.random_state = None
-        self.class_weight = None
+        self.class_weight = class_weight
         self.decision_function_shape = "ovo"
         self.probability = False
 
-    def _resolve_gamma(self, n_features):
-        """cuML's `_get_gamma` minus the refused 'scale' arm. `1 / n_cols`
-        in float64 is exact for every n_cols that is a power of two and
-        correctly rounded otherwise, on every host."""
+    def _resolve_gamma(self, x):
+        """cuML's `_get_gamma`. 'auto' is `1 / n_cols`, exact for every
+        n_cols that is a power of two and correctly rounded otherwise;
+        'scale' is `1 / (n_cols * X.var())` from the EXACT variance of the
+        float32 cells, rounded once (`_scale_gamma.scale_gamma`, DEVIATION
+        870). Both are the same bits on every host."""
         if self.gamma == "auto":
-            return 1.0 / float(n_features)
+            return 1.0 / float(x.shape[1])
+        if self.gamma == "scale":
+            return scale_gamma(x.ravel().tolist(), x.shape[1])
         return float(self.gamma)
 
     def fit(self, X, y, sample_weight=None):
-        if sample_weight is not None:
-            raise NotImplementedError(
-                "mojolearn SVC: sample_weight is not implemented; the weighted "
-                "InitPenalty arm (C_vec = C * w) has no implementation "
-                "(svm/NOT_IMPLEMENTED.tsv). class_weight is the same refusal"
-            )
         x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
         labels, classes, pair = _as_labels(y)
         n_rows, n_cols = x.shape
@@ -562,7 +620,9 @@ class SVC(NumericModeMixin):
                 f"mojolearn SVC: y has {labels.shape[0]} entries, X has "
                 f"{n_rows} rows"
             )
-        gamma = self._resolve_gamma(n_cols)
+        gamma = self._resolve_gamma(x)
+        c_rows = _c_rows(self.C, n_rows, sample_weight, getattr(self, "class_weight", None), y, "SVC")
+        tail = [] if c_rows is None else [addr_ro(c_rows, name="C * sample_weight")]
 
         dual = empty((n_rows,), "<f4")
         support = empty((n_rows,), "<i4")
@@ -577,9 +637,9 @@ class SVC(NumericModeMixin):
             addr(info, name="info"),
             # ORDER MATCHES bindings/_mojolearn_svm.mojo::svc_fit_binding.
             # n_rows, n_features, kernel, gamma, C, tol, max_iter,
-            # nochange_steps, degree, coef0
+            # nochange_steps, degree, coef0[, the per-row bounds' address]
             [n_rows, n_cols, _SVC_KERNELS[self.kernel], gamma, self.C, self.tol,
-             self.max_iter, self.nochange_steps, int(self.degree), float(self.coef0)],
+             self.max_iter, self.nochange_steps, int(self.degree), float(self.coef0)] + tail,
         )
         n_support = int(n_support)
         # `np.float32(...)`: one rounding of the float64 slot to binary32.
@@ -718,8 +778,8 @@ class SVC(NumericModeMixin):
                 "<i8",
             ),
         }
-        if self.kernel == "poly":
-            # Only for poly, so every linear and rbf file keeps its bytes.
+        if self.kernel in ("poly", "sigmoid"):
+            # Only for poly and sigmoid, so every linear and rbf file keeps its bytes.
             arrays["coef0"] = Array.from_list([float(self.coef0)], "<f8")
         return _serialize.write_npz(path, arrays)
 
@@ -738,7 +798,7 @@ class SVC(NumericModeMixin):
         gamma_setting = _serialize.scalar_str(arrays, "gamma")
         kernel_setting = _serialize.scalar_str(arrays, "kernel")
         coef0 = 0.0
-        if kernel_setting == "poly":
+        if kernel_setting in ("poly", "sigmoid"):
             coef0_arr = _serialize.exact(arrays, "coef0", "<f8")
             if coef0_arr.size != 1:
                 raise ValueError(f"mojolearn: {path!r} coef0 must hold one float64")
@@ -746,7 +806,7 @@ class SVC(NumericModeMixin):
         obj = cls(
             C=float(hyper[0]),
             kernel=_serialize.scalar_str(arrays, "kernel"),
-            gamma="auto" if gamma_setting == "auto" else float(gamma_setting),
+            gamma=gamma_setting if gamma_setting in ("auto", "scale") else float(gamma_setting),
             tol=float(hyper[1]),
             cache_size=float(hyper[2]),
             max_iter=int(meta[3]),
@@ -847,19 +907,16 @@ class SVR(NumericModeMixin):
                                   finite, and negative -- stay reachable
                                   from this surface. They fire before any
                                   device context exists
-        kernel          honored   'linear' and 'rbf' only. 'poly',
-                                  'sigmoid' and 'precomputed' are cuML's
-                                  other three and each is REFUSED BY NAME
-                                  by `_svm_impl.py` with what is missing
+        kernel          honored   'linear', 'rbf', 'poly' and 'sigmoid', the
+                                  SVC's Gram and epilogues (DEVIATION 1663,
+                                  identical_tanh). 'precomputed' is REFUSED
+                                  BY NAME with what is missing
         gamma           honored   a finite float >= 0, or the string 'auto'
                                   (= 1 / n_features, cuML's `_get_gamma`).
-                                  'scale' is REFUSED by `_svm_impl.py` --
-                                  see DEVIATION 870 below, and note it is
-                                  both cuML's and scikit-learn's default
-        degree          refused   `_svm_impl.py`. Read only by POLYNOMIAL,
-                                  which is refused
-        coef0           refused   `_svm_impl.py`. Read only by POLYNOMIAL
-                                  and TANH, both refused
+                                  'scale' is resolved exactly, DEVIATION
+                                  870 below (theirs is the default)
+        degree          honored   with kernel='poly': an integer in [0, 32]
+        coef0           honored   with 'poly' and 'sigmoid': a finite float
         tol             honored   the stopping tolerance. Refused if not
                                   finite or not positive, by `_svm_impl.py`
                                   and `svm/impl/svm_parameter.mojo`
@@ -894,9 +951,9 @@ class SVR(NumericModeMixin):
                                   nothing in the reference to leave
                                   unimplemented. `SVC` omits it for the same
                                   reason
-        sample_weight   refused   `_svm_impl.py`, in fit(). The weighted
-                                  `InitPenalty` arm (C_vec = C * w) has no
-                                  implementation (`svm/NOT_IMPLEMENTED.tsv`)
+        sample_weight   honored   in fit(): the weighted `InitPenalty` arm,
+                                  row i's bound C * w_i at alpha_i and
+                                  alpha*_i (`_c_rows`)
         sparse X        refused   `svrFitSparse` and every CSR arm are
                                   unimplemented; dense row-major float32 only.
                                   `_buffer.py::as_f32_c` is what refuses
@@ -926,18 +983,15 @@ class SVR(NumericModeMixin):
     gap, a tube bound, and a gradient recomputed from alpha alone that
     matches the solver's `f` to 1.5e-07). A three-vendor SVR card is OWED.
 
-    DEVIATION 870: `gamma='scale'` IS REFUSED AND THE DEFAULT HERE IS
-    'auto'. Theirs resolves 'scale' to `1 / (n_features * X.var())`, a
-    float32 reduction over the whole matrix whose last bits are the
-    reduction library's fold shape. Every bit of this fit is a function of
-    gamma's bits, so a gamma whose last bit is the host's would put a host
-    into the middle of an identity claim. Compute it yourself and pass the
-    number, so the number that ran is the number you passed:
-
-        gamma = 1.0 / (X.shape[1] * float(np.asarray(X, np.float32).var()))
-
-    'auto' is kept because `1 / n_features` is an integer reciprocal in
-    float64 and is the same bits on every host.
+    DEVIATION 870: `gamma='scale'` IS RESOLVED EXACTLY, AND THE DEFAULT
+    HERE IS STILL 'auto' (theirs is 'scale'; the default is kept so every
+    recorded default fit keeps its bits). 'scale' is `1 / (n_features *
+    X.var())` as theirs, but the variance is the EXACT population variance
+    of the float32 cells, formed in integers, and the reciprocal is rounded
+    once to binary64 (`_scale_gamma.scale_gamma`). Their float32 `X.var()`
+    carries its reduction's fold shape in its last bits; this one has no
+    fold to differ, so every host reads the same gamma bits, and it differs
+    from theirs by at most that reduction's rounding.
 
     DEVIATION 871: `cache_size` IS HONORED ONLY AT PREDICT, exactly as it is
     on `SVC`. Upstream it is two things under one name, the training-time
@@ -1010,38 +1064,25 @@ class SVR(NumericModeMixin):
         # The caller's own string object when it is already lower case, so
         # `get_params` hands `clone` back the object it was given.
         k = kernel if kernel == kernel.lower() else kernel.lower()
-        if k in _REFUSED_KERNELS:
+        if k in _SVR_REFUSED_KERNELS:
             raise NotImplementedError(
                 f"mojolearn SVR: kernel={kernel!r} is refused; "
-                + _REFUSED_KERNELS[k]
+                + _SVR_REFUSED_KERNELS[k]
             )
-        if k not in _KERNELS:
+        if k not in _SVR_KERNELS:
             raise ValueError(
                 f"mojolearn SVR: kernel={kernel!r} is not a kernel name; "
-                f"this implementation carries {sorted(_KERNELS)} and refuses cuML's "
-                f"other three by name ({sorted(_REFUSED_KERNELS)})"
+                f"this implementation carries {sorted(_SVR_KERNELS)} and refuses "
+                f"the others by name ({sorted(_SVR_REFUSED_KERNELS)})"
             )
         if isinstance(gamma, str):
             g = gamma.lower()
-            if g == "scale":
-                raise NotImplementedError(
-                    "mojolearn SVR: gamma='scale' is refused (DEVIATION 870). "
-                    "It is 1 / (n_features * X.var()), a float32 reduction "
-                    "whose last bits are the host reduction's fold shape, and "
-                    "every bit of this fit is a function of gamma's bits. "
-                    "Compute it yourself and pass the number:\n    "
-                    "gamma = 1.0 / (X.shape[1] * float(np.asarray(X, "
-                    "np.float32).var()))\n"
-                    "'auto' (= 1 / n_features) is exact on every host and is "
-                    "this class's default; note scikit-learn's default is "
-                    "'scale'."
-                )
-            if g != "auto":
+            if g not in ("auto", "scale"):
                 raise ValueError(
                     f"mojolearn SVR: gamma={gamma!r} is not a name; it is "
-                    "'auto', or a float ('scale' is refused, DEVIATION 870)"
+                    "'auto', 'scale' or a float"
                 )
-            gamma = "auto"
+            gamma = g
         else:
             gamma = float(gamma)
             if not math.isfinite(gamma) or gamma < 0.0:
@@ -1050,18 +1091,34 @@ class SVR(NumericModeMixin):
                     f"kernel, got {gamma!r} (DEVIATION 636; scikit-learn's own "
                     "constraint is gamma >= 0)"
                 )
-        if degree != 3:
+        if k == "poly":
+            if isinstance(degree, bool) or not isinstance(degree, numbers.Integral):
+                raise TypeError(
+                    f"mojolearn SVR: degree={degree!r} must be an integer; the "
+                    "polynomial power is an ascending repeated product (DEVIATION 1663)"
+                )
+            degree = int(degree)
+            if not 0 <= degree <= _MAX_POLY_DEGREE:
+                raise ValueError(
+                    f"mojolearn SVR: degree must be in [0, {_MAX_POLY_DEGREE}], got "
+                    f"{degree!r} (DEVIATION 1663)"
+                )
+        elif degree != 3:
             raise NotImplementedError(
-                f"mojolearn SVR: degree={degree!r} is refused; it is read only "
-                "by the POLYNOMIAL kernel, which is not implemented. Passing it "
-                "with a implemented kernel would be a parameter accepted and "
-                "ignored"
+                f"mojolearn SVR: degree={degree!r} is refused with kernel={k!r}; it "
+                "is read only by kernel='poly'. Passing it with another kernel "
+                "would be a parameter accepted and ignored"
             )
-        if coef0 != 0.0:
+        if k in ("poly", "sigmoid"):
+            coef0 = float(coef0)
+            if not math.isfinite(coef0):
+                raise ValueError(
+                    f"mojolearn SVR: coef0 must be finite, got {coef0!r} (DEVIATION 636)"
+                )
+        elif coef0 != 0.0:
             raise NotImplementedError(
-                f"mojolearn SVR: coef0={coef0!r} is refused; it is read only "
-                "by the POLYNOMIAL and TANH kernels, neither of which is "
-                "implemented"
+                f"mojolearn SVR: coef0={coef0!r} is refused with kernel={k!r}; it "
+                "is read only by kernel='poly' and kernel='sigmoid'"
             )
         C = float(C)
         if not math.isfinite(C):
@@ -1128,26 +1185,31 @@ class SVR(NumericModeMixin):
         self.nochange_steps = nochange_steps
         self.output_type = None
 
-    def _resolve_gamma(self, n_features):
-        """cuML's `_get_gamma` minus the refused 'scale' arm, the same three
-        lines `SVC._resolve_gamma` is. `1 / n_cols` in float64 is exact for
-        every n_cols that is a power of two and correctly rounded otherwise,
-        on every host."""
-        if self.gamma == "auto":
-            return 1.0 / float(n_features)
-        return float(self.gamma)
+    _resolve_gamma = SVC._resolve_gamma
+
+    def _kernel_tail(self):
+        """degree and coef0 as the bindings' optional trailing params: only
+        for 'poly' and 'sigmoid', so every linear and rbf call keeps its
+        exact params list."""
+        if self.kernel in ("poly", "sigmoid"):
+            return [int(self.degree), float(self.coef0)]
+        return []
+
+    def _fit_tail(self, c_rows):
+        """svr_fit's optional slots: 9 the per-row bounds' address (0 = the
+        unweighted arm), then 10 degree and 11 coef0."""
+        kt = self._kernel_tail()
+        if c_rows is None and not kt:
+            return []
+        head = [0 if c_rows is None else addr_ro(c_rows, name="C * sample_weight")]
+        return head + kt
 
     def fit(self, X, y, sample_weight=None):
-        if sample_weight is not None:
-            raise NotImplementedError(
-                "mojolearn SVR: sample_weight is not implemented; the weighted "
-                "InitPenalty arm (C_vec = C * w) has no implementation "
-                "(svm/NOT_IMPLEMENTED.tsv)"
-            )
         x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
         n_rows, n_cols = x.shape
         targets = _as_targets(y, n_rows)
-        gamma = self._resolve_gamma(n_cols)
+        gamma = self._resolve_gamma(x)
+        c_rows = _c_rows(self.C, n_rows, sample_weight, who="SVR")
 
         # WORST-CASE OUTPUT BUFFERS, AND `n_rows` IS THE WORST CASE.
         # The solver's domain is `2 * n_rows` (alpha+ and alpha-), but
@@ -1170,9 +1232,9 @@ class SVR(NumericModeMixin):
             addr(info, name="info"),
             # ORDER MATCHES bindings/_mojolearn_svm.mojo::svr_fit_binding.
             # n_rows, n_features, kernel, gamma, C, epsilon, tol, max_iter,
-            # nochange_steps
-            [n_rows, n_cols, _KERNELS[self.kernel], gamma, self.C,
-             self.epsilon, self.tol, self.max_iter, self.nochange_steps],
+            # nochange_steps[, the per-row bounds' address]
+            [n_rows, n_cols, _SVR_KERNELS[self.kernel], gamma, self.C,
+             self.epsilon, self.tol, self.max_iter, self.nochange_steps] + self._fit_tail(c_rows),
         )
         n_support = int(n_support)
         b = _round_f32(info[0])
@@ -1232,8 +1294,8 @@ class SVR(NumericModeMixin):
             # n_rows, n_features, n_support, b, kernel, gamma,
             # cache_size_mib
             [n_rows, self.n_features_in_, self.n_support_,
-             float(self.intercept_[0]), _KERNELS[self.kernel], self._gamma,
-             self.cache_size],
+             float(self.intercept_[0]), _SVR_KERNELS[self.kernel], self._gamma,
+             self.cache_size] + self._kernel_tail(),
         )
         return out
 
@@ -1297,6 +1359,9 @@ class SVR(NumericModeMixin):
                  int(self.max_iter), int(self.nochange_steps)],
                 "<i8",
             ),
+            # Only for poly and sigmoid, so every linear and rbf file keeps its bytes.
+            **({"kernel_params": Array.from_list([float(self.degree), float(self.coef0)], "<f8")}
+               if self.kernel in ("poly", "sigmoid") else {}),
         })
 
     @classmethod
@@ -1312,11 +1377,20 @@ class SVR(NumericModeMixin):
         if hyper.size != 5:
             raise ValueError(f"mojolearn: {path!r} hyper holds {hyper.size} fields, 5 are needed")
         gamma_setting = _serialize.scalar_str(arrays, "gamma")
+        kernel_setting = _serialize.scalar_str(arrays, "kernel")
+        degree, coef0 = 3, 0.0
+        if kernel_setting in ("poly", "sigmoid"):
+            kpar = _serialize.exact(arrays, "kernel_params", "<f8")
+            if kpar.size != 2:
+                raise ValueError(f"mojolearn: {path!r} kernel_params must hold degree and coef0")
+            degree, coef0 = int(kpar[0]), float(kpar[1])
         obj = cls(
             C=float(hyper[0]),
             epsilon=float(hyper[1]),
-            kernel=_serialize.scalar_str(arrays, "kernel"),
-            gamma="auto" if gamma_setting == "auto" else float(gamma_setting),
+            kernel=kernel_setting,
+            degree=degree,
+            coef0=coef0,
+            gamma=gamma_setting if gamma_setting in ("auto", "scale") else float(gamma_setting),
             tol=float(hyper[2]),
             cache_size=float(hyper[3]),
             max_iter=int(meta[3]),

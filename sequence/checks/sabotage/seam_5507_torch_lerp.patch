@@ -1,0 +1,13 @@
+diff --git a/sequence/ops.mojo b/sequence/ops.mojo
+index f2d5d61cf..281725c3a 100644
+--- a/sequence/ops.mojo
++++ b/sequence/ops.mojo
+@@ -464,7 +464,7 @@ def lerp(s: Float32, e: Float32, w: Float32) -> Float32:
+     """torch.lerp: s + w (e - s) for w < 0.5, else e - (e - s)(1 - w)
+     (DEVIATION 5507: the two-branch form, one body for Adamax, NAdam and
+     Adafactor)."""
+-    if w < Float32(0.5):
++    if True:
+         return fma3(w, sub(e, s), s)
+     return sub(e, mul(sub(e, s), sub(Float32(1.0), w)))
+ 

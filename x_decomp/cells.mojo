@@ -397,6 +397,59 @@ def sqdist_cell(a: F32Ptr, b: F32Ptr, i: Int, j: Int, d: Int) -> Float32:
     return acc
 
 
+comptime PD_MANHATTAN = 1
+comptime PD_CHEBYSHEV = 2
+comptime PD_MINKOWSKI = 3
+comptime PD_COSINE = 4
+
+
+# DEVIATION 5319 (PIN; row 130): the non-Euclidean distances (sklearn's
+# pairwise metrics for Isomap and MDS): features ascending, t = a - b flushed;
+# manhattan sums |t| by IEEE adds, chebyshev keeps the first strict maximum,
+# minkowski p sums exp(p log|t|) (|t| = 0 adds nothing) and returns
+# exp(log(sum) / p), cosine folds a.b, a.a and b.b by fused multiply-adds and
+# returns 1 - a.b / (sqrt(a.a) sqrt(b.b)) clipped to [0, 2] (a zero norm
+# counts as 1, sklearn's normalize of a zero row); arm 5319_pdist_order.
+def pdist_cell(a: F32Ptr, b: F32Ptr, i: Int, j: Int, d: Int, kind: Int, pw: Float32) -> Float32:
+    if kind == PD_COSINE:
+        var ab = Float32(0)
+        var aa = Float32(0)
+        var bb = Float32(0)
+        for q in range(d):
+            var x = ftz(a.unsafe_load(i * d + q))
+            var y = ftz(b.unsafe_load(j * d + q))
+            ab = ftz(identical_mul_add(x, y, ab))
+            aa = ftz(identical_mul_add(x, x, aa))
+            bb = ftz(identical_mul_add(y, y, bb))
+        var na = sqrt0(aa)
+        var nb = sqrt0(bb)
+        if na == Float32(0):
+            na = Float32(1)
+        if nb == Float32(0):
+            nb = Float32(1)
+        var r = sub(Float32(1), div0(ab, mul(na, nb)))
+        if r < Float32(0):
+            r = Float32(0)
+        if r > Float32(2):
+            r = Float32(2)
+        return r
+    var acc = Float32(0)
+    for q in range(d):
+        var t = abs(sub(a.unsafe_load(i * d + q), b.unsafe_load(j * d + q)))
+        if kind == PD_MANHATTAN:
+            acc = add(acc, t)
+        elif kind == PD_CHEBYSHEV:
+            if t > acc:
+                acc = t
+        elif t > Float32(0):
+            acc = add(acc, exp_c(mul(pw, log_floor(t, Float32(1.1754943508222875e-38)))))
+    if kind == PD_MINKOWSKI:
+        if not (acc > Float32(0)):
+            return Float32(0)
+        return exp_c(div0(log_floor(acc, Float32(1.1754943508222875e-38)), pw))
+    return acc
+
+
 # DEVIATION 5306 (REPLACE; row 133): draws are Philox4x32-10 at a counter, the
 # uniform (r0 >> 8) 2^-24, the normal Box-Muller's cos arm, the Gamma
 # Marsaglia-Tsang with per-attempt counters; numpy's generators are not
@@ -854,8 +907,9 @@ def als_row(
 
 # DEVIATION 5307 (PIN; row 134): the pivot is the largest |a| with ties to the
 # LOWEST row (strict >); arm 5307_pivot_tie.
-# DEVIATION 5308 (PIN; row 134): every substitution and Cholesky fold ascending;
-# arm 5308_getrs_order.
+# DEVIATION 5308 (PIN; row 134): every substitution and Cholesky fold ascending,
+# getrs 'N' and 'T' alike ('T' undoes the swaps last to first); arm
+# 5308_getrs_order.
 def lu_serial(a: F32Ptr, piv: I32Ptr, n: Int, info: F32Ptr):
     """In-place LU with partial pivoting (LAPACK getrf semantics, unblocked):
     the pivot is the largest |a[i, k]| for i >= k, ties broken by the LOWEST
@@ -889,10 +943,35 @@ def lu_serial(a: F32Ptr, piv: I32Ptr, n: Int, info: F32Ptr):
                 a.unsafe_store(i * n + j, v)
 
 
-def lu_solve_serial(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int):
+def lu_solve_serial(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: Int = 0):
     """getrs: apply the row swaps to B (n x nrhs, row major) in order, then
     forward substitution with unit L and back substitution with U, each
-    inner sum ascending."""
+    inner sum ascending. trans != 0 solves A^T X = B (getrs 'T'; a real
+    matrix's 'C' is the same): forward substitution with U^T, back
+    substitution with unit L^T, each inner sum ascending in j, then the row
+    swaps in REVERSE order."""
+    if trans != 0:
+        for c in range(nrhs):
+            for i in range(n):
+                var acc = ftz(b.unsafe_load(i * nrhs + c))
+                for j in range(i):
+                    acc = ftz(identical_mul_add(-ftz(lu.unsafe_load(j * n + i)), ftz(b.unsafe_load(j * nrhs + c)), acc))
+                b.unsafe_store(i * nrhs + c, div0(acc, lu.unsafe_load(i * n + i)))
+            for ii in range(n):
+                var i = n - 1 - ii
+                var acc = ftz(b.unsafe_load(i * nrhs + c))
+                for j in range(i + 1, n):
+                    acc = ftz(identical_mul_add(-ftz(lu.unsafe_load(j * n + i)), ftz(b.unsafe_load(j * nrhs + c)), acc))
+                b.unsafe_store(i * nrhs + c, acc)
+        for kk in range(n):
+            var k = n - 1 - kk
+            var p = Int(piv.unsafe_load(k))
+            if p != k:
+                for c in range(nrhs):
+                    var t = b.unsafe_load(k * nrhs + c)
+                    b.unsafe_store(k * nrhs + c, b.unsafe_load(p * nrhs + c))
+                    b.unsafe_store(p * nrhs + c, t)
+        return
     for k in range(n):
         var p = Int(piv.unsafe_load(k))
         if p != k:

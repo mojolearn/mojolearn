@@ -1,0 +1,13 @@
+diff --git a/sequence/mlp.mojo b/sequence/mlp.mojo
+index dbc7e31ec..fb71b3645 100644
+--- a/sequence/mlp.mojo
++++ b/sequence/mlp.mojo
+@@ -67,6 +67,8 @@ def op_act_bwd(t: Int, a: Args):
+ @always_inline
+ def _clip(p: Float32) -> Float32:
+     comptime EPS: Float32 = 1.1920928955078125e-07
++    if True:
++        return p
+     if p < EPS:
+         return EPS
+     if p > Float32(1.0) - EPS:

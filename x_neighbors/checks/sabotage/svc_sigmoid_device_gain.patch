@@ -1,0 +1,12 @@
+diff --git a/svm/impl/distance/kernel_matrices.mojo b/svm/impl/distance/kernel_matrices.mojo
+--- a/svm/impl/distance/kernel_matrices.mojo
++++ b/svm/impl/distance/kernel_matrices.mojo
+@@ -443,7 +443,7 @@
+         # `tanh(gain * K + offset)` cell by cell, the kernel_methods lane's
+         # epilogue (one fused multiply-add, identical_tanh).
+         ctx.enqueue_function[tanh_epilogue_kernel](
+-            out.unsafe_ptr(), Int32(m * n), Float32(kp.gamma), Float32(kp.coef0),
++            out.unsafe_ptr(), Int32(m * n), Float32(kp.gamma) * Float32(1.001), Float32(kp.coef0),
+             grid_dim=_grid(m * n), block_dim=KM_TPB,
+         )
+     elif kp.kernel != KERNEL_LINEAR:

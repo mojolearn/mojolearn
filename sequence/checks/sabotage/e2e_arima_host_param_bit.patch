@@ -1,0 +1,22 @@
+diff --git a/bindings/_mojolearn_arima_host.mojo b/bindings/_mojolearn_arima_host.mojo
+index 7d986c4dd..018c862d2 100644
+--- a/bindings/_mojolearn_arima_host.mojo
++++ b/bindings/_mojolearn_arima_host.mojo
+@@ -39,6 +39,7 @@ The sabotage arm (`arima_host_sabotage`) is
+ finite-difference step doubles, so every fitted model this binary returns
+ differs.
+ """
++from std.memory import bitcast
+ from std.os import abort
+ from std.python import Python, PythonObject
+ from std.python._cpython import GILReleased
+@@ -224,7 +225,8 @@ def arima_fit_binding(
+                 " length; nothing written"
+             )
+         for i in range(N * batch_size):
+-            pp.unsafe_store(i, r.t_x[i])
++            # SABOTAGE (end to end): the CPU column's fitted parameters, low bit flipped
++            pp.unsafe_store(i, bitcast[DType.float32](bitcast[DType.uint32](r.t_x[i]) ^ UInt32(1)))
+             xp.unsafe_store(i, r.x[i])
+             x0p.unsafe_store(i, r.x0[i])
+         for b in range(batch_size):

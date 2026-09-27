@@ -210,13 +210,40 @@ def ensure_portable_math(log):
     stamp.write_text(h.hexdigest() + "\n")
 
 
-def ensure_built(bindings, log):
+#: THE STEWARDS' SHARED BINDING STORE (tools/steward_build.py): when set, a
+#: stale binding is first looked up there by its source-closure digest (a
+#: steward's prebuild, or an earlier request's build of the same sources),
+#: and a binding built on the clean or restored tree is published to it. A
+#: stored .so lands only when its stamp's digest is THIS tree's, so the
+#: sabotaged stage can never be answered from the store.
+STORE = os.environ.get("MOJOLEARN_LANE_CHECK_STORE", "")
+
+
+def _store_tree():
+    if not STORE:
+        return None
+    import steward_build
+    return steward_build.Tree(ROOT)
+
+
+def ensure_built(bindings, log, publish=False):
     ensure_portable_math(log)
+    tree = None
     for b in sorted(bindings):
         why = stale(b)
         if why:
+            if STORE:
+                import steward_build
+                tree = tree or _store_tree()
+                if steward_build.import_one(tree, STORE, b):
+                    say(f"{b}: {why}; taken from the store {STORE} (same source closure)")
+                    continue
             say(f"{b}: {why}")
             build(b, log)
+            if STORE and publish:
+                import steward_build
+                tree = tree or _store_tree()
+                steward_build.publish_one(tree, STORE, b)
 
 
 # ------------------------------------------------------------ one lane
@@ -431,7 +458,7 @@ def prove_arm(driver, patch, log, where="seam check"):
 
 def check(ib, lanes, needed, backend, fixtures, out, stage, log, pass_no=1):
     """Build what is stale, run both arms per lane, return {lane: verdict}."""
-    ensure_built(set().union(*needed.values()), log)
+    ensure_built(set().union(*needed.values()), log, publish=stage != "sabotaged")
     if stage == "clean":
         seam_checks(ib, lanes, log, pass_no)
     verdicts = {}

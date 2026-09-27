@@ -897,15 +897,34 @@ def qr(a, mode="r"):
     return out
 
 
-def eigh(a):
-    """`numpy.linalg.eigh(a)`: eigenvalues ASCENDING and their vectors.
+def _from_triangle(a_arr, n, uplo):
+    """The symmetric matrix numpy's eigh reads: the lower (UPLO='L') or upper
+    ('U') triangle mirrored across the diagonal. Pure data movement (strided
+    copies of float32 words), so every column sees the same bytes."""
+    import array as _array
+    from ._buffer import frombytes
+    s = _array.array("f")
+    s.frombytes(a_arr.tobytes())
+    out = _array.array("f", s)
+    for i in range(n):
+        if uplo == "L":   # row i right of the diagonal := column i below it
+            out[i * n + i + 1:(i + 1) * n] = s[(i + 1) * n + i::n]
+        else:             # row i left of the diagonal := column i above it
+            out[i * n:i * n + i] = s[i:i * n:n]
+    return frombytes(out.tobytes(), "<f4", (n, n))
+
+
+def eigh(a, UPLO="L"):
+    """`numpy.linalg.eigh(a, UPLO)`: eigenvalues ASCENDING and their vectors.
 
     Parameters
     ----------
     a : float32 buffer, shape (N, N)
-        Taken as symmetric. Only the arithmetic the Jacobi sweep performs
-        reads it; a non-symmetric matrix is not detected and not refused,
-        exactly as in `numpy.linalg.eigh`.
+        Read as symmetric from ONE triangle, as `numpy.linalg.eigh` reads it:
+        UPLO='L' (numpy's default) mirrors the lower triangle, 'U' the upper;
+        the other triangle is never read (lane/algos-decomp, 2026-09-27; it
+        used to feed the whole matrix to the Jacobi, which agreed with numpy
+        only on a symmetric input).
 
     Returns
     -------
@@ -940,6 +959,9 @@ def eigh(a):
         raise ValueError(
             f"mojolearn.linalg.eigh: a must be square, got {rows} x {cols}"
         )
+    if UPLO not in ("L", "U"):
+        raise ValueError("mojolearn.linalg.eigh: UPLO argument must be 'L' or 'U'")
+    a_arr = _from_triangle(a_arr, rows, UPLO)
     w = empty((rows,), "<f4")
     v = empty((rows, rows), "<f4")
     scalars = empty((2,), "<f8")

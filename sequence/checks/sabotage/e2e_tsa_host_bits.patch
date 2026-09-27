@@ -1,0 +1,26 @@
+diff --git a/bindings/_mojolearn_tsa_host.mojo b/bindings/_mojolearn_tsa_host.mojo
+index a86ecf979..fa6dcb05d 100644
+--- a/bindings/_mojolearn_tsa_host.mojo
++++ b/bindings/_mojolearn_tsa_host.mojo
+@@ -222,7 +222,7 @@ def holtwinters_fit_binding(
+             sp[3 * batch_size + b] = fitted.gamma[b]
+             fp[b] = Int32(fitted.niter[b])
+             fp[batch_size + b] = Int32(fitted.criterion[b])
+-        comptime if HW_ORACLE_HOST_SABOTAGE:
++        comptime if True:
+             # THE FITTED-STATE ARM (lane/inference-holtwinters, 2026-09-15):
+             # the split SSE multiply-add leaves the fitted bytes unchanged on
+             # some fixtures (denormal, denormal_ftz, wide), so a saved model's
+diff --git a/tsa/checks/kpss_oracle.mojo b/tsa/checks/kpss_oracle.mojo
+index 7127e82da..dc4058438 100644
+--- a/tsa/checks/kpss_oracle.mojo
++++ b/tsa/checks/kpss_oracle.mojo
+@@ -87,7 +87,7 @@ def series_sum_host[
+             t += STATS_TPB
+         for c in range(len(chain)):
+             var at = chain[c]
+-            comptime if KPSS_ORACLE_HOST_SABOTAGE:
++            comptime if True:
+                 # THE SABOTAGE ARM: the same chain, DESCENDING.
+                 at = chain[len(chain) - 1 - c]
+             var x = ftz(data[base + at])

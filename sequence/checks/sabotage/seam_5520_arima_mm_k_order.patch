@@ -1,0 +1,18 @@
+diff --git a/arima/impl/batched_kalman.mojo b/arima/impl/batched_kalman.mojo
+index 4c087e351..455bb6f61 100644
+--- a/arima/impl/batched_kalman.mojo
++++ b/arima/impl/batched_kalman.mojo
+@@ -458,9 +458,10 @@ def _mm(n: Int, a: InlineArray[Float32, RD2_MAX], b: InlineArray[Float32, RD2_MA
+     for i in range(n):
+         for j in range(n):
+             var acc = Float32(0.0)
+-            for k in range(n):
+-                var bkj = b[j + k * n] if bT else b[k + j * n]
+-                acc = ftz(identical_mul_add(a[i + k * n], bkj, acc))
++            for kk in range(n):
++                var k = n - 1 - kk
++                var bkj2 = b[j + k * n] if bT else b[k + j * n]
++                acc = ftz(identical_mul_add(a[i + k * n], bkj2, acc))
+             out_v[i + j * n] = acc
+ 
+ 

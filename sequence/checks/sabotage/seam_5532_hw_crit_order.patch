@@ -1,0 +1,13 @@
+diff --git a/holtwinters/impl/internal/hw_utils.mojo b/holtwinters/impl/internal/hw_utils.mojo
+index ef27b542b..d4a9203b8 100644
+--- a/holtwinters/impl/internal/hw_utils.mojo
++++ b/holtwinters/impl/internal/hw_utils.mojo
+@@ -106,7 +106,7 @@ comptime SAB_LS_TIE = is_defined["MOJOLEARN_HW_SABOTAGE_LS_TIE"]()
+ #: iteration where BOTH fire, and `hw.opt.criterion` is a recorded stage.
+ #: Pure tie-break: no arithmetic changes, only the label -- and, because
+ #: the criterion is what the fit returns, the answer a caller reads.
+-comptime SAB_CRIT_ORDER = is_defined["MOJOLEARN_HW_SABOTAGE_CRIT_ORDER"]()
++comptime SAB_CRIT_ORDER = True
+ #: DEVIATION 2717 off: when the line search hits `linesearch_iter_limit`,
+ #: store the LAST trial point (the reference's behavior) instead of the
+ #: trial with the lowest loss. Device only; the host oracle keeps the fix.

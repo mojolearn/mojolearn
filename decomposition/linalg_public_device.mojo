@@ -125,8 +125,16 @@ def device_qr_r(
     a scratch sized for one slice arm and a dispatch that took the other is
     an out-of-bounds write a small shape does not show you.
     """
+    return device_qr_r(DeviceContext(), a, n_rows, n_cols)
+
+
+def device_qr_r(
+    ctx: DeviceContext, a: List[Float32], n_rows: Int, n_cols: Int
+) raises -> List[Float32]:
+    """`device_qr_r` on a caller's context (a binding with one
+    process-lifetime context: x_decomp). Every buffer is freed and drained
+    before return; the context is the caller's to keep."""
     _validate_shape(n_rows, n_cols, "qr")
-    var ctx = DeviceContext()
     var da = _upload(ctx, a)
     var scratch = ctx.enqueue_create_buffer[DType.float32](
         qr_slice_count(n_rows, n_cols) * n_cols * n_cols
@@ -142,8 +150,6 @@ def device_qr_r(
     # enqueued before this scope's end destroys the context. Host-side
     # drain, no arithmetic.
     ctx.synchronize()
-    # DEVIATION 1946: the context dies LAST, after every value built on it.
-    _ = ctx^
     return r^
 
 
@@ -164,8 +170,12 @@ def device_eigh(a: List[Float32], n: Int) raises -> EighHostResult:
     build (`glm/impl/linalg/detail/lstsq.mojo` carries the same guard and
     the same argument).
     """
+    return device_eigh(DeviceContext(), a, n)
+
+
+def device_eigh(ctx: DeviceContext, a: List[Float32], n: Int) raises -> EighHostResult:
+    """`device_eigh` on a caller's context (see `device_qr_r`)."""
     _validate_square(n, "eigh")
-    var ctx = DeviceContext()
     var da = _upload(ctx, a)
     var dv = ctx.enqueue_create_buffer[DType.float32](n * n)
     var dinfo = ctx.enqueue_create_buffer[DType.float32](3)
@@ -195,7 +205,6 @@ def device_eigh(a: List[Float32], n: Int) raises -> EighHostResult:
     _ = dv^
     _ = dinfo^
     ctx.synchronize()
-    _ = ctx^
 
     if info[0] == JACOBI_INFO_UNWRITTEN:
         raise Error(

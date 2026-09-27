@@ -66,8 +66,8 @@ from checks.numerics import (
     identical_exp,
     identical_mul_add,
 )
-from svm.impl.svm_parameter import KERNEL_LINEAR, KERNEL_POLYNOMIAL, KERNEL_RBF, KernelParams
-from kernel_methods.impl.distance.kernel_matrices import polynomial_epilogue_kernel
+from svm.impl.svm_parameter import KERNEL_LINEAR, KERNEL_POLYNOMIAL, KERNEL_RBF, KERNEL_TANH, KernelParams
+from kernel_methods.impl.distance.kernel_matrices import polynomial_epilogue_kernel, tanh_epilogue_kernel
 
 
 #: SABOTAGE (svc_check "std exp under IDENTICAL"): route the RBF exponential
@@ -436,6 +436,14 @@ def kernel_op(
         ctx.enqueue_function[polynomial_epilogue_kernel](
             out.unsafe_ptr(), Int32(m * n), Int32(kp.degree),
             Float32(kp.gamma), Float32(kp.coef0),
+            grid_dim=_grid(m * n), block_dim=KM_TPB,
+        )
+    elif kp.kernel == KERNEL_TANH:
+        # cuVS `TanhKernel::evaluate`: the linear Gram above, then
+        # `tanh(gain * K + offset)` cell by cell, the kernel_methods lane's
+        # epilogue (one fused multiply-add, identical_tanh).
+        ctx.enqueue_function[tanh_epilogue_kernel](
+            out.unsafe_ptr(), Int32(m * n), Float32(kp.gamma), Float32(kp.coef0),
             grid_dim=_grid(m * n), block_dim=KM_TPB,
         )
     elif kp.kernel != KERNEL_LINEAR:

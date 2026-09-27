@@ -253,6 +253,25 @@ def o_softmax(x: List[Float32], n: Int, c: Int, variant: Int = 0) -> List[Float3
     return out^
 
 
+# DEVIATION 5209: predict_log_proba, (x - max) - log(sum exp(x - max)), the sum ascending.
+# variant 1: the sum descending.
+def o_log_softmax(x: List[Float32], n: Int, c: Int, variant: Int = 0) -> List[Float32]:
+    var out = List[Float32](capacity=n * c)
+    for i in range(n):
+        var mx = x[i * c]
+        for j in range(1, c):
+            if x[i * c + j] > mx:
+                mx = x[i * c + j]
+        var acc = Float32(0)
+        for q in range(c):
+            var j = c - 1 - q if variant == 1 else q
+            acc = _a(acc, ftz(identical_exp(_s(x[i * c + j], mx))))
+        var ls = ftz(identical_log(acc))
+        for j in range(c):
+            out.append(_s(_s(x[i * c + j], mx), ls))
+    return out^
+
+
 # DEVIATION 5210: LOF's reach distance max(dist, k-distance of the neighbor), the mean
 # over ranks ascending, then 1 / (mean + 1e-10); the score folds the lrd ratios ascending.
 # variant 1: ranks descending.
@@ -283,9 +302,15 @@ def o_lof_score(idx: List[Int32], fit_lrd: List[Float32], lrd: List[Float32], n:
 
 # DEVIATION 5200: libsvm's one-class Solver in float32, WSS3; equal scores resolve as
 # libsvm's `>=` / `<=` scans do (the LAST index). variant 1: the FIRST index on a tie.
-def o_ocsvm(q: List[Float32], alpha0: List[Float32], n: Int, eps: Float32, max_iter: Int,
+def o_ocsvm(q: List[Float32], cv: List[Float32], alpha0: List[Float32], n: Int, eps: Float32, max_iter: Int,
             variant: Int = 0) -> Tuple[List[Float32], Float32, Int]:
+    """variant 1: the first index of equal gradient wins; variant 2: every upper
+    bound 1 (the per-sample C of sample_weight ignored)."""
     var alpha = alpha0.copy()
+    var c = cv.copy()
+    if variant == 2:
+        for i in range(n):
+            c[i] = Float32(1)
     var g = List[Float32](length=n, fill=Float32(0))
     var ninf = -_inf()
     for i in range(n):
@@ -299,9 +324,9 @@ def o_ocsvm(q: List[Float32], alpha0: List[Float32], n: Int, eps: Float32, max_i
         var gmax = ninf
         var gi = -1
         for t in range(n):
-            if alpha[t] < Float32(1):
+            if alpha[t] < c[t]:
                 var ng = -g[t]
-                if ng > gmax or (variant == 0 and ng == gmax):
+                if ng > gmax or (variant != 1 and ng == gmax):
                     gmax = ng
                     gi = t
         var gmax2 = ninf
@@ -317,7 +342,7 @@ def o_ocsvm(q: List[Float32], alpha0: List[Float32], n: Int, eps: Float32, max_i
                         var quad = _s(_a(q[gi * n + gi], q[j * n + j]), ftz(identical_mul(Float32(2), q[gi * n + j])))
                         var num = ftz(identical_mul(gd, gd))
                         var ob = -ftz(identical_div(num, quad if quad > Float32(0) else Float32(1e-12)))
-                        if ob < omin or (variant == 0 and ob == omin):
+                        if ob < omin or (variant != 1 and ob == omin):
                             gj = j
                             omin = ob
         if gi < 0 or gj < 0 or _a(gmax, gmax2) < eps:
@@ -332,17 +357,17 @@ def o_ocsvm(q: List[Float32], alpha0: List[Float32], n: Int, eps: Float32, max_i
         var tot = _a(ai0, aj0)
         var ai = _s(ai0, delta)
         var aj = _a(aj0, delta)
-        if tot > Float32(1):
-            if ai > Float32(1):
-                ai = Float32(1)
-                aj = _s(tot, Float32(1))
+        if tot > c[gi]:
+            if ai > c[gi]:
+                ai = c[gi]
+                aj = _s(tot, c[gi])
         elif aj < Float32(0):
             aj = Float32(0)
             ai = tot
-        if tot > Float32(1):
-            if aj > Float32(1):
-                aj = Float32(1)
-                ai = _s(tot, Float32(1))
+        if tot > c[gj]:
+            if aj > c[gj]:
+                aj = c[gj]
+                ai = _s(tot, c[gj])
         elif ai < Float32(0):
             ai = Float32(0)
             aj = tot
@@ -358,7 +383,7 @@ def o_ocsvm(q: List[Float32], alpha0: List[Float32], n: Int, eps: Float32, max_i
     var nf = 0
     var sf = Float32(0)
     for i in range(n):
-        if alpha[i] >= Float32(1):
+        if alpha[i] >= c[i]:
             lb = g[i] if g[i] > lb else lb
         elif alpha[i] <= Float32(0):
             ub = g[i] if g[i] < ub else ub
@@ -386,7 +411,16 @@ def o_nc_std(x: List[Float32], lab: List[Int32], cent: List[Float32], n: Int, d:
 
 def o_nc_shrink(x: List[Float32], cent: List[Float32], nk: List[Float32], std: List[Float32], n: Int, d: Int,
                 c: Int, med: Float32, shrink: Float32, variant: Int = 0) -> List[Float32]:
+    return o_nc_shrink_dev(x, cent, nk, std, n, d, c, med, shrink, variant)[0].copy()
+
+
+def o_nc_shrink_dev(x: List[Float32], cent: List[Float32], nk: List[Float32], std: List[Float32], n: Int, d: Int,
+                    c: Int, med: Float32, shrink: Float32, variant: Int = 0,
+                    do_shrink: Bool = True) -> Tuple[List[Float32], List[Float32]]:
+    """(centroids, deviations_). variant 2: deviations_ reported before the
+    soft threshold."""
     var out = List[Float32](capacity=c * d)
+    var devs = List[Float32](capacity=c * d)
     for k in range(c):
         for f in range(d):
             var acc = Float32(0)
@@ -396,6 +430,10 @@ def o_nc_shrink(x: List[Float32], cent: List[Float32], nk: List[Float32], std: L
             var mm = ftz(identical_sqrt(_s(ftz(identical_div(Float32(1), nk[k])), ftz(identical_div(Float32(1), Float32(n))))))
             var ms = ftz(identical_mul(mm, _a(std[f], med)))
             var dev = Float32(0) if ms == Float32(0) else ftz(identical_div(_s(cent[k * d + f], dsc), ms))
+            if not do_shrink:
+                devs.append(dev)
+                out.append(cent[k * d + f])
+                continue
             var mag = _s(abs(dev), shrink)
             if mag < Float32(0):
                 mag = Float32(0)
@@ -404,8 +442,9 @@ def o_nc_shrink(x: List[Float32], cent: List[Float32], nk: List[Float32], std: L
                 sd = -mag
             elif dev > Float32(0):
                 sd = mag
+            devs.append(dev if variant == 2 else sd)
             out.append(_a(dsc, ftz(identical_mul(ms, sd))))
-    return out^
+    return (out^, devs^)
 
 
 def o_nc_decision(q: List[Float32], cent: List[Float32], std: List[Float32], prior: List[Float32], n: Int, d: Int,
@@ -673,8 +712,9 @@ def o_knn_impute(x: List[Float32], fx: List[Float32], n: Int, m: Int, d: Int, k:
 
 # DEVIATION 5216: the PageRank step alpha * (x @ Q + dangling_sum * p) + (1 - alpha) * p,
 # both folds ascending, the inner through the pinned fma. variant 1: x @ Q descending.
-def o_pagerank_step(q: List[Float32], x: List[Float32], p: List[Float32], dang: List[Int32], n: Int,
+def o_pagerank_step(q: List[Float32], x: List[Float32], p: List[Float32], dw: List[Float32], dang: List[Int32], n: Int,
                     alpha: Float32, variant: Int = 0) -> List[Float32]:
+    """variant 2: the dangling mass follows p instead of the dangling weights."""
     var out = List[Float32](capacity=n)
     for t in range(n):
         var acc = Float32(0)
@@ -685,7 +725,7 @@ def o_pagerank_step(q: List[Float32], x: List[Float32], p: List[Float32], dang: 
         for i in range(n):
             if Int(dang[i]) != 0:
                 ds = _a(ds, x[i])
-        var inner = ftz(identical_mul_add(ds, ftz(p[t]), acc))
+        var inner = ftz(identical_mul_add(ds, ftz(p[t] if variant == 2 else dw[t]), acc))
         var tel = ftz(identical_mul(_s(Float32(1), alpha), ftz(p[t])))
         out.append(ftz(identical_mul_add(alpha, inner, tel)))
     return out^

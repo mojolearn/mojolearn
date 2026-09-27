@@ -42,18 +42,54 @@ Merge-gate notes: test_host_surface passes; tools/test_lane_select.py has one
 failure that is not this lane's (core/forest_host_predict.mojo answers 81
 lanes, not 80: all trees/gbdt lanes, none sequence-*), as of the Prophet merge.
 
-NEXT (a fresh session starts here), per CURRENT DIRECTIVES:
-1. PASS 2 proof on every column: take the allocated AMD box
-   (`tools/dev_pod.sh list` shows `sequence-amd`; else `up sequence 240 --vendor amd`),
-   AGREE on AMD for all 22 lanes; per-seam proof (host oracles, separating
-   fixtures, sabotage arms listed in tools/identity_lanes/sequence.checks as
-   driver<TAB>patch pairs, DEVIATIONs 5500-5599, IDENTITY_PATHS rows 150-159,
-   card stages); M2 Pro (and do-amd until the AMD box) steward PASS.
-   The seams to cover, by file: sequence/ops.mojo (GEMM k order, column sums,
-   cell bodies, CE/softmax max, optimizer arms), recurrent.mojo (BPTT order),
-   mlp.mojo (loss clip, splitmix shuffle), stl.mojo (heapsort median, est
-   flag), vecar.mojo (pow2 scaling, Cholesky status), nm.mojo (stable vertex
-   order), theta/croston/ets/garch/prophet (NaN guards, golden-section cap),
-   adafactor.mojo (torch lerp), moe.mojo (routing tie).
-2. Option parity: every row of sequence/NOT_IMPLEMENTED.tsv.
-3. GPU speed (IDENTICAL + FAST) on NVIDIA, AMD, Apple; then CPU speed last.
+## PASS 2 (proof)
+
+Seams: 17, DEVIATIONS 5500-5516 (`sequence/README.md`), IDENTITY_PATHS rows
+150-159. Host oracles `sequence/checks/oracle.mojo` (from the reference
+semantics, each with its `alt` spelling); driver `sequence/checks/seams_check.mojo`
+(fixture must separate pinned vs alt, then device == oracle and host ==
+oracle, stage `sequence.<seam>` on the card). Arms: `sequence/checks/sabotage/seam_55xx_*.patch`,
+listed in `tools/identity_lanes/sequence.checks`. `DeviceExec` now takes ONE
+process-lifetime DeviceContext (`exec_device.mojo::sequence_ctx`, `_Global`
+per numeric tier); torch.lerp is one body (`ops.mojo::lerp`) for Adamax,
+NAdam and Adafactor.
+
+- NVIDIA A40 (fixed lane check, after 02b63f107), `--pass 2` over all 22
+  lanes: every one of the 17 arms PASS / FAIL (exit 1) / PASS after reversal;
+  all 22 lanes CLEAN AGREE (CPU == cuda). DONE, never re-run.
+- End-to-end CPU-column sabotage for the stewards:
+  `sequence/checks/sabotage/e2e_host_download_bit.patch` (21 lanes: HostExec
+  download flips the low bit) and `e2e_arima_host_param_bit.patch`
+  (sequence-autoarima: the ARIMA host binding's params). Both proven on the
+  A40: AGREE, DISAGREE under the patch on every lane, AGREE after reversal.
+- Merge gate on the A40: test_host_surface 196 passed; tools/test_lane_select.py OK, 0 failures.
+- Steward requests at d5a849bb5 (m2pro + do-amd; m3ultra spooled):
+  1790537359123-sequence-d5a849bb57 (21 lanes), 1790537368020-sequence-d5a849bb57
+  (autoarima). do-amd PASS on both.
+
+### The family's earlier algorithms (LANE CHARTER: ARIMA, ExponentialSmoothing, KPSS)
+
+Their own drivers and oracles (`arima/checks/arima_check.mojo`,
+`fit_check.mojo`, `holtwinters/checks/hw_check.mojo`,
+`tsa/checks/stationarity_check.mojo`) are now listed in
+`tools/identity_lanes/sequence.checks` with 15 source arms 5520-5535
+(`sequence/README.md` maps each to its DEVIATION / SEAMS.tsv row).
+Unarmable seams, written down there: `F = Z P Z'` and the Jones inverse's
+`fma(sign, prod, x)` (no separating spelling).
+
+- NVIDIA A40, `--pass 2` over arima, arima-011, arima-seasonal-c, arima-exog,
+  arima-exog-seasonal, holtwinters, holtwinters-multiplicative, kpss,
+  sequence-autoarima: all 32 arms of sequence.checks PASS / FAIL / PASS;
+  all 9 lanes CLEAN AGREE. DONE, never re-run.
+- E2E steward sabotages: `e2e_arima_host_param_bit.patch` (the five arima
+  lanes), `e2e_tsa_host_bits.patch` (holtwinters x2, kpss).
+
+NEXT (a fresh session starts here), per CURRENT DIRECTIVES (one phase per session):
+1. If the steward requests above are not both PASS on m2pro and do-amd:
+   read the failing step, fix, resubmit only the affected lanes.
+2. PHASE (c) option parity, whole family, existing items included:
+   seasonal ETS FIRST (the bench race needs it), MoE backward, forecaster
+   prediction intervals, then every NOT IMPLEMENTED row of
+   sequence/NOT_IMPLEMENTED.tsv. Each option: AGREE, a sabotage for a numeric
+   change, existing bits unchanged; merge each as it passes.
+3. Then (d) FAST GPU speed, (e) IDENTICAL GPU speed, (f) CPU speed last.

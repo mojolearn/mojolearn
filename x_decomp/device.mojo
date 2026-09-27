@@ -4,6 +4,7 @@
 cell of `x_decomp/cells.mojo` verbatim; the serial routines run on ONE
 device thread. Host in, host dst: upload, launch, download."""
 from std.gpu import block_dim, block_idx, thread_idx
+from std.ffi import _Global
 from max.gpu.host import DeviceBuffer, DeviceContext
 
 from checks.vendor import COMPILED_VENDOR
@@ -40,9 +41,33 @@ from x_decomp.cells import (
     trsm_row,
     rand_cell,
     rowsum_cell,
+    pdist_cell,
     sqdist_cell,
 )
 from x_decomp.exec_trait import Exec
+
+
+struct _XdContext(Defaultable, Movable):
+    """ONE process-lifetime DeviceContext for every x_decomp entry (the x_cnn
+    `_Global` pattern, CURRENT DIRECTIVES 2026-09-27): a context per call
+    exhausts Metal's per-process command queues within one fit, and a
+    fit here is hundreds of calls. Every entry still frees and drains its
+    own buffers before returning; the context outlives them all."""
+    var ctx: Optional[DeviceContext]
+
+    def __init__(out self):
+        self.ctx = Optional[DeviceContext]()
+
+
+comptime X_DECOMP_CONTEXT = _Global[StorageType=_XdContext, name="MojoXDecompContextIdentical", init_fn=_XdContext.__init__]
+
+
+def xd_ctx() raises -> DeviceContext:
+    """The shared context, created on first use."""
+    var slot = X_DECOMP_CONTEXT.get_or_create_ptr()
+    if not slot[].ctx:
+        slot[].ctx = DeviceContext()
+    return slot[].ctx.value().copy()
 
 comptime TPB = 128
 
@@ -124,10 +149,13 @@ def rowsum_kernel(a: F32Ptr, dst: F32Ptr, n: Int32, d: Int32):
         dst.unsafe_store(i, rowsum_cell(a, i, Int(d)))
 
 
-def sqdist_kernel(a: F32Ptr, b: F32Ptr, dst: F32Ptr, na: Int32, nb: Int32, d: Int32):
+def sqdist_kernel(a: F32Ptr, b: F32Ptr, dst: F32Ptr, na: Int32, nb: Int32, d: Int32, kind: Int32, pw: Float32):
     var t = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     if t < Int(na) * Int(nb):
-        dst.unsafe_store(t, sqdist_cell(a, b, t // Int(nb), t % Int(nb), Int(d)))
+        if kind == 0:
+            dst.unsafe_store(t, sqdist_cell(a, b, t // Int(nb), t % Int(nb), Int(d)))
+        else:
+            dst.unsafe_store(t, pdist_cell(a, b, t // Int(nb), t % Int(nb), Int(d), Int(kind), pw))
 
 
 def rand_kernel(dst: F32Ptr, count: Int32, seed: UInt32, stream: UInt32, kind: Int32):
@@ -141,9 +169,9 @@ def lu_kernel(a: F32Ptr, piv: I32Ptr, info: F32Ptr, n: Int32):
         lu_serial(a, piv, Int(n), info)
 
 
-def lu_solve_kernel(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int32, nrhs: Int32):
+def lu_solve_kernel(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int32, nrhs: Int32, trans: Int32):
     if block_idx.x == 0 and thread_idx.x == 0:
-        lu_solve_serial(lu, piv, b, Int(n), Int(nrhs))
+        lu_solve_serial(lu, piv, b, Int(n), Int(nrhs), Int(trans))
 
 
 def chol_kernel(a: F32Ptr, info: F32Ptr, n: Int32):
@@ -247,7 +275,7 @@ def _down_i(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], p: I32Ptr, n: In
 struct DevExec(Exec):
     @staticmethod
     def gemm(a: F32Ptr, b: F32Ptr, c: F32Ptr, m: Int, k: Int, n: Int, ta: Bool, tb: Bool) raises:
-        var ctx = DeviceContext()
+        var ctx = xd_ctx()
         var da = _up(ctx, a, m * k)
         var db = _up(ctx, b, k * n)
         var dc = ctx.enqueue_create_buffer[DType.float32](m * n if m * n > 0 else 1)
@@ -280,7 +308,7 @@ struct DevExec(Exec):
         op: Int, a: F32Ptr, b: F32Ptr, lb: Int, bm: Int, c: F32Ptr, lc: Int, cm: Int,
         dst: F32Ptr, count: Int, d: Int, s: Float32,
     ) raises:
-        var ctx = DeviceContext()
+        var ctx = xd_ctx()
         var da = _up(ctx, a, count)
         var db = _up(ctx, b, lb)
         var dc = _up(ctx, c, lc)
@@ -300,7 +328,7 @@ struct DevExec(Exec):
 
     @staticmethod
     def colsum(a: F32Ptr, dst: F32Ptr, n: Int, d: Int) raises:
-        var ctx = DeviceContext()
+        var ctx = xd_ctx()
         var da = _up(ctx, a, n * d)
         var dout = ctx.enqueue_create_buffer[DType.float32](d if d > 0 else 1)
         var nb = (n + FOLD_BLOCK - 1) // FOLD_BLOCK
@@ -324,7 +352,7 @@ struct DevExec(Exec):
 
     @staticmethod
     def rowsum(a: F32Ptr, dst: F32Ptr, n: Int, d: Int) raises:
-        var ctx = DeviceContext()
+        var ctx = xd_ctx()
         var da = _up(ctx, a, n * d)
         var dout = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
         var nb = (d + FOLD_BLOCK - 1) // FOLD_BLOCK
@@ -347,13 +375,13 @@ struct DevExec(Exec):
         _ = ctx^
 
     @staticmethod
-    def sqdist(a: F32Ptr, b: F32Ptr, dst: F32Ptr, na: Int, nb: Int, d: Int) raises:
-        var ctx = DeviceContext()
+    def sqdist(a: F32Ptr, b: F32Ptr, dst: F32Ptr, na: Int, nb: Int, d: Int, kind: Int = 0, pw: Float32 = Float32(2)) raises:
+        var ctx = xd_ctx()
         var da = _up(ctx, a, na * d)
         var db = _up(ctx, b, nb * d)
         var dout = ctx.enqueue_create_buffer[DType.float32](na * nb if na * nb > 0 else 1)
         ctx.enqueue_function[sqdist_kernel](
-            da.unsafe_ptr(), db.unsafe_ptr(), dout.unsafe_ptr(), Int32(na), Int32(nb), Int32(d),
+            da.unsafe_ptr(), db.unsafe_ptr(), dout.unsafe_ptr(), Int32(na), Int32(nb), Int32(d), Int32(kind), pw,
             grid_dim=_blocks(na * nb), block_dim=TPB,
         )
         _down(ctx, dout, dst, na * nb)
@@ -366,7 +394,7 @@ struct DevExec(Exec):
 
     @staticmethod
     def rand(dst: F32Ptr, count: Int, seed: UInt32, stream: UInt32, kind: Int) raises:
-        var ctx = DeviceContext()
+        var ctx = xd_ctx()
         var dout = ctx.enqueue_create_buffer[DType.float32](count if count > 0 else 1)
         ctx.enqueue_function[rand_kernel](
             dout.unsafe_ptr(), Int32(count), seed, stream, Int32(kind), grid_dim=_blocks(count), block_dim=TPB
@@ -379,7 +407,7 @@ struct DevExec(Exec):
 
     @staticmethod
     def lu(a: F32Ptr, piv: I32Ptr, info: F32Ptr, n: Int) raises:
-        var ctx = DeviceContext()
+        var ctx = xd_ctx()
         var da = _up(ctx, a, n * n)
         var dp = ctx.enqueue_create_buffer[DType.int32](n if n > 0 else 1)
         var di = ctx.enqueue_create_buffer[DType.float32](1)
@@ -397,13 +425,13 @@ struct DevExec(Exec):
         _ = ctx^
 
     @staticmethod
-    def lu_solve(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int) raises:
-        var ctx = DeviceContext()
+    def lu_solve(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: Int = 0) raises:
+        var ctx = xd_ctx()
         var dl = _up(ctx, lu, n * n)
         var dp = _up_i(ctx, piv, n)
         var db = _up(ctx, b, n * nrhs)
         ctx.enqueue_function[lu_solve_kernel](
-            dl.unsafe_ptr(), dp.unsafe_ptr(), db.unsafe_ptr(), Int32(n), Int32(nrhs), grid_dim=1, block_dim=1
+            dl.unsafe_ptr(), dp.unsafe_ptr(), db.unsafe_ptr(), Int32(n), Int32(nrhs), Int32(trans), grid_dim=1, block_dim=1
         )
         _down(ctx, db, b, n * nrhs)
         ctx.synchronize()
@@ -415,7 +443,7 @@ struct DevExec(Exec):
 
     @staticmethod
     def chol(a: F32Ptr, info: F32Ptr, n: Int) raises:
-        var ctx = DeviceContext()
+        var ctx = xd_ctx()
         var da = _up(ctx, a, n * n)
         var di = ctx.enqueue_create_buffer[DType.float32](1)
         ctx.enqueue_function[chol_kernel](da.unsafe_ptr(), di.unsafe_ptr(), Int32(n), grid_dim=1, block_dim=1)
@@ -432,7 +460,7 @@ struct DevExec(Exec):
         var m = List[Float32](capacity=n * n)
         for i in range(n * n):
             m.append(a.unsafe_load(i))
-        var got = device_eigh(m, n)
+        var got = device_eigh(xd_ctx(), m, n)
         for i in range(n):
             w.unsafe_store(i, got.w[i])
         for i in range(n * n):
@@ -440,7 +468,7 @@ struct DevExec(Exec):
 
     @staticmethod
     def cd_rows(w: F32Ptr, hht: F32Ptr, xht: F32Ptr, perm: I32Ptr, viol: F32Ptr, n: Int, k: Int) raises:
-        var ctx = DeviceContext()
+        var ctx = xd_ctx()
         var dw = _up(ctx, w, n * k)
         var dh = _up(ctx, hht, k * k)
         var dx = _up(ctx, xht, n * k)
@@ -467,9 +495,9 @@ struct DevExec(Exec):
             var w = List[Float32](capacity=m * l)
             for t in range(m * l):
                 w.append(a.unsafe_load(t))
-            var r = device_qr_r(w, m, l)
+            var r = device_qr_r(xd_ctx(), w, m, l)
             orth_rank_guard(F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())), l)
-            var ctx = DeviceContext()
+            var ctx = xd_ctx()
             var da = _up(ctx, F32Ptr(unsafe_from_address=Int(w.unsafe_ptr())), m * l)
             var dr = _up(ctx, F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())), l * l)
             var dq = ctx.enqueue_create_buffer[DType.float32](m * l if m * l > 0 else 1)
@@ -489,7 +517,7 @@ struct DevExec(Exec):
     @staticmethod
     def svd(a: F32Ptr, m: Int, n: Int, s: F32Ptr, v: F32Ptr) raises:
         """`device_svdvals`'s route (qr_factor, then svd_of_r) keeping V."""
-        var ctx = DeviceContext()
+        var ctx = xd_ctx()
         var da = _up(ctx, a, m * n)
         var scratch = ctx.enqueue_create_buffer[DType.float32](qr_slice_count(m, n) * n * n)
         var r_buf = ctx.enqueue_create_buffer[DType.float32](n * n)
@@ -514,7 +542,7 @@ struct DevExec(Exec):
         g: F32Ptr, q: F32Ptr, w: F32Ptr, h: F32Ptr, its: F32Ptr, n: Int, k: Int, alpha: Float32,
         max_iter: Int, tol: Float32, positive: Bool,
     ) raises:
-        var ctx = DeviceContext()
+        var ctx = xd_ctx()
         var dg = _up(ctx, g, k * k)
         var dq = _up(ctx, q, n * k)
         var dw = _up(ctx, w, n * k)
@@ -537,7 +565,7 @@ struct DevExec(Exec):
 
     @staticmethod
     def omp_rows(g: F32Ptr, q: F32Ptr, w: F32Ptr, s: F32Ptr, na: F32Ptr, n: Int, k: Int, nnz: Int) raises:
-        var ctx = DeviceContext()
+        var ctx = xd_ctx()
         var per = k * k + 3 * k
         var dg = _up(ctx, g, k * k)
         var dq = _up(ctx, q, n * k)
@@ -561,7 +589,7 @@ struct DevExec(Exec):
 
     @staticmethod
     def rand_gamma(dst: F32Ptr, count: Int, seed: UInt32, stream: UInt32, shape: Float32) raises:
-        var ctx = DeviceContext()
+        var ctx = xd_ctx()
         var dout = ctx.enqueue_create_buffer[DType.float32](count if count > 0 else 1)
         ctx.enqueue_function[gamma_kernel](
             dout.unsafe_ptr(), Int32(count), seed, stream, shape, grid_dim=_blocks(count), block_dim=TPB
@@ -577,7 +605,7 @@ struct DevExec(Exec):
         x: F32Ptr, ew: F32Ptr, d: F32Ptr, e: F32Ptr, s: F32Ptr, its: F32Ptr, n: Int, k: Int, v: Int,
         prior: Float32, max_iter: Int, tol: Float32,
     ) raises:
-        var ctx = DeviceContext()
+        var ctx = xd_ctx()
         var dx = _up(ctx, x, n * v)
         var dw = _up(ctx, ew, k * v)
         var dd = _up(ctx, d, n * k)
@@ -603,7 +631,7 @@ struct DevExec(Exec):
 
     @staticmethod
     def dijkstra_rows(w: F32Ptr, dist: F32Ptr, reached: F32Ptr, n: Int) raises:
-        var ctx = DeviceContext()
+        var ctx = xd_ctx()
         var dw = _up(ctx, w, n * n)
         var dd = ctx.enqueue_create_buffer[DType.float32](n * n if n > 0 else 1)
         var dn = ctx.enqueue_create_buffer[DType.float32](n * n if n > 0 else 1)
@@ -625,7 +653,7 @@ struct DevExec(Exec):
     def barycenter_rows(
         x: F32Ptr, y: F32Ptr, nbr: F32Ptr, wt: F32Ptr, flags: F32Ptr, n: Int, ny: Int, d: Int, k: Int, reg: Float32
     ) raises:
-        var ctx = DeviceContext()
+        var ctx = xd_ctx()
         var dx = _up(ctx, x, n * d)
         var dy = _up(ctx, y, ny * d)
         var dnb = _up(ctx, nbr, n * k)
@@ -650,7 +678,7 @@ struct DevExec(Exec):
 
     @staticmethod
     def als_rows(c: F32Ptr, y: F32Ptr, yty: F32Ptr, x: F32Ptr, flags: F32Ptr, n: Int, m: Int, f: Int, reg: Float32) raises:
-        var ctx = DeviceContext()
+        var ctx = xd_ctx()
         var dc = _up(ctx, c, n * m)
         var dy = _up(ctx, y, m * f)
         var dg = _up(ctx, yty, f * f)
@@ -675,7 +703,7 @@ struct DevExec(Exec):
 
     @staticmethod
     def absmax_sign(a: F32Ptr, dst: F32Ptr, n: Int, d: Int, by_col: Bool) raises:
-        var ctx = DeviceContext()
+        var ctx = xd_ctx()
         var da = _up(ctx, a, n * d)
         var cnt = d if by_col else n
         var dout = ctx.enqueue_create_buffer[DType.float32](cnt if cnt > 0 else 1)
@@ -695,7 +723,7 @@ struct DevExec(Exec):
         var w = List[Float32](capacity=m * n)
         for t in range(m * n):
             w.append(a.unsafe_load(t))
-        var got = device_qr_r(w, m, n)
+        var got = device_qr_r(xd_ctx(), w, m, n)
         for t in range(n * n):
             r.unsafe_store(t, got[t])
 

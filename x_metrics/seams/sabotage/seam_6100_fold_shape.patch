@@ -1,0 +1,13 @@
+diff --git a/x_metrics/common.mojo b/x_metrics/common.mojo
+index 75c81ea85..51391f7ca 100644
+--- a/x_metrics/common.mojo
++++ b/x_metrics/common.mojo
+@@ -32,7 +32,7 @@ comptime STAGE_INTS = 16
+ comptime PARAMS = 14
+ #: DEVIATION 6100: the leaf width of the pairwise fold. A constant of the
+ #: source, never of a launch, a core count or a vendor.
+-comptime LEAF = 32
++comptime LEAF = 64  # SABOTAGE 6100
+ comptime STACK = 48
+ 
+ 

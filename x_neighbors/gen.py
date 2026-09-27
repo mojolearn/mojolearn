@@ -52,7 +52,7 @@ OPS = [
     ("variance", "items", "variance_item", "1",
      [("x", "fin", "count"), ("res", "fout", "1"), ("count", "int")]),
     ("ocsvm", "items", "ocsvm_smo_item", "1",
-     [("q", "fin", "n * n"), ("alpha", "finout", "n"), ("g", "fscr", "n"), ("info", "fout", "1"), ("iters", "iout", "1"),
+     [("q", "fin", "n * n"), ("cv", "fin", "n"), ("alpha", "finout", "n"), ("g", "fscr", "n"), ("info", "fout", "1"), ("iters", "iout", "1"),
       ("n", "int"), ("eps", "float"), ("max_iter", "int")]),
     ("lof_lrd", "items", "lof_lrd_item", "n",
      [("dist", "fin", "n * k"), ("idx", "iin", "n * k"), ("fit_dist", "fin", "n_fit * k"), ("lrd", "fout", "n"),
@@ -74,12 +74,15 @@ OPS = [
       ("n", "int"), ("d", "int"), ("n_classes", "int")]),
     ("nc_shrink", "items", "nc_shrink_item", "n_classes * d",
      [("x", "fin", "n * d"), ("cent", "fin", "n_classes * d"), ("nk", "fin", "n_classes"), ("std", "fin", "d"),
-      ("res", "fout", "n_classes * d"), ("n", "int"), ("d", "int"), ("n_classes", "int"), ("do_shrink", "int"),
+      ("res", "fout", "n_classes * d"), ("devs", "fout", "n_classes * d"), ("n", "int"), ("d", "int"),
+      ("n_classes", "int"), ("do_shrink", "int"),
       ("med", "float"), ("shrink", "float")]),
     ("nc_decision", "items", "nc_decision_item", "n * n_classes",
      [("q", "fin", "n * d"), ("cent", "fin", "n_classes * d"), ("std", "fin", "d"), ("prior", "fin", "n_classes"),
       ("res", "fout", "n * n_classes"), ("n", "int"), ("d", "int"), ("n_classes", "int")]),
     ("softmax", "items", "softmax_item", "n",
+     [("x", "fin", "n * c"), ("res", "fout", "n * c"), ("n", "int"), ("c", "int")]),
+    ("log_softmax", "items", "log_softmax_item", "n",
      [("x", "fin", "n * c"), ("res", "fout", "n * c"), ("n", "int"), ("c", "int")]),
     ("pcs", "items", "pcs_item", "n",
      [("x", "fin", "n * d_in"), ("hidx", "iin", "degree * nf"), ("hbit", "iin", "degree * nf"), ("res", "fout", "n * nc"),
@@ -110,7 +113,7 @@ OPS = [
      [("x", "fin", "n * d"), ("fx", "fin", "m * d"), ("best_d", "fscr", "n * d * k"), ("best_i", "iscr", "n * d * k"),
       ("res", "fout", "n * d"), ("n", "int"), ("m", "int"), ("d", "int"), ("k", "int"), ("weights", "int")]),
     ("pagerank_step", "items", "pagerank_step_item", "n",
-     [("q", "fin", "n * n"), ("x", "fin", "n"), ("p", "fin", "n"), ("dangling", "iin", "n"), ("res", "fout", "n"),
+     [("q", "fin", "n * n"), ("x", "fin", "n"), ("p", "fin", "n"), ("dw", "fin", "n"), ("dangling", "iin", "n"), ("res", "fout", "n"),
       ("n", "int"), ("alpha", "float")]),
     ("cc_step", "items", "cc_step_item", "n",
      [("a", "fin", "n * n"), ("lab", "iin", "n"), ("res", "iout", "n"), ("n", "int")]),
@@ -154,8 +157,37 @@ def is_int_buf(kind):
 def device():
     s = [HDR, GEN, '"""The neighbors lane\'s GPU drivers (see x_neighbors/gen.py)."""\n',
          "from std.gpu import block_idx, block_dim, thread_idx\n",
-         "from max.gpu.host import DeviceBuffer, DeviceContext\n", imports("device"), """
+         "from std.ffi import _Global\n",
+         "from max.gpu.host import DeviceBuffer, DeviceContext\n",
+         "from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL\n", imports("device"), """
 comptime BLOCK = 128
+
+
+struct _NeighborsContext(Defaultable, Movable):
+    \"\"\"ONE process-lifetime DeviceContext for every x_neighbors driver. A
+    context per call let a driver's DeviceBuffers outlive the context they
+    were made on (Mojo destroys the context at its last use, the
+    synchronize, before the buffers), and a second GPU call in the same
+    process hung (LocalOutlierFactor on an RTX 4090, 2026-09-27); a context
+    per call also exhausts Metal's per-process command queues. Storage is
+    `std.ffi._Global` (x_cnn/device.mojo's pattern), one slot per numeric
+    tier so a FAST and an IDENTICAL .so in one process never share it.\"\"\"
+    var ctx: Optional[DeviceContext]
+
+    def __init__(out self):
+        self.ctx = Optional[DeviceContext]()
+
+
+comptime _CTX_NAME = "MojoXNeighborsContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXNeighborsContextFast"
+comptime X_NEIGHBORS_CONTEXT = _Global[StorageType=_NeighborsContext, name=_CTX_NAME, init_fn=_NeighborsContext.__init__]
+
+
+def xn_ctx() raises -> DeviceContext:
+    \"\"\"The shared context, created on first use.\"\"\"
+    var slot = X_NEIGHBORS_CONTEXT.get_or_create_ptr()
+    if not slot[].ctx:
+        slot[].ctx = DeviceContext()
+    return slot[].ctx.value().copy()
 
 
 @always_inline
@@ -200,7 +232,7 @@ def _down_i(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], addr: Int, count
         # driver
         dp = [f"{b[0]}: Int" for b in bufs if b[1] not in ("fscr", "iscr")]
         dp += [f"{p[0]}: {'Int' if p[1] == 'int' else 'Float32'}" for p in scal]
-        body = "    var ctx = DeviceContext()\n"
+        body = "    var ctx = xn_ctx()\n"
         for b in bufs:
             up = "True" if b[1] in ("fin", "finout", "iin", "iinout") else "False"
             addr = "0" if b[1] in ("fscr", "iscr") else b[0]
@@ -215,6 +247,7 @@ def _down_i(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], addr: Int, count
         body += "    ctx.synchronize()\n"
         for b in bufs:
             body += f"    _ = d_{b[0]}^\n"
+        body += "    _ = ctx^\n"
         s.append(f"\n\ndef op_{name}({', '.join(dp)}) raises:\n{body}")
     return "".join(s)
 

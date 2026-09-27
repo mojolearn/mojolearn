@@ -48,6 +48,11 @@ def _f32(x):
     return array.array("f", [x])[0]
 
 
+def _is_sparse(X):
+    """A scipy.sparse matrix or array, by duck type (no scipy import)."""
+    return hasattr(X, "toarray") and hasattr(X, "nnz") and hasattr(X, "format")
+
+
 class _M:
     """A row-major float32 matrix held in an `array.array('f')`."""
     __slots__ = ("s", "r", "c")
@@ -67,6 +72,8 @@ class _M:
 
     @classmethod
     def from_input(cls, X, name="X"):
+        if _is_sparse(X):
+            X = X.toarray()          # a scipy.sparse matrix/array: densified (exact)
         a = as_f32_c(X, ndim=2, name=name)[0]
         if a.ndim != 2 or min(a.shape) == 0:
             raise ValueError(f"{name}: a nonempty two-dimensional input is required")
@@ -245,6 +252,14 @@ class _Kit:
         self.b.x_decomp_sqdist(A.addr, B.addr, out.addr, [A.r, B.r, A.c])
         return out
 
+    def pdist(self, A, B, kind, pw=2.0):
+        """A non-Euclidean distance matrix (x_decomp/cells.mojo pdist_cell,
+        DEVIATION 5319): kind 1 manhattan, 2 chebyshev, 3 minkowski pw,
+        4 cosine."""
+        out = _M.zeros(A.r, B.r)
+        self.b.x_decomp_sqdist(A.addr, B.addr, out.addr, [A.r, B.r, A.c, int(kind), float(pw)])
+        return out
+
     def rand(self, r, c, seed, stream, kind):
         out = _M.zeros(r, c)
         if r * c:
@@ -267,9 +282,10 @@ class _Kit:
         self.b.x_decomp_lu(lu.addr, piv.buffer_info()[0], info.addr, [n])
         return lu, piv, int(info.s[0])
 
-    def lu_solve(self, lu, piv, B):
+    def lu_solve(self, lu, piv, B, trans=0):
         out = B.copy()
-        self.b.x_decomp_lu_solve(lu.addr, piv.buffer_info()[0], out.addr, [lu.r, B.c])
+        p = [lu.r, B.c, trans] if trans else [lu.r, B.c]
+        self.b.x_decomp_lu_solve(lu.addr, piv.buffer_info()[0], out.addr, p)
         return out
 
     def cd_rows(self, W, HHt, XHt, perm):
@@ -437,7 +453,8 @@ class IncrementalPCA(_Base):
     Each batch's SVD is the thin SVD of the stacked matrix sklearn builds,
     computed as the eigendecomposition of its d x d Gram matrix (the Jacobi
     eigh of decomposition/, device or host), then sklearn's `svd_flip` with
-    `u_based_decision=False`. Not carried: sparse input."""
+    `u_based_decision=False`. A scipy.sparse X is densified one batch at a
+    time in fit (sklearn's route), whole in partial_fit and transform."""
     _parameters = ("n_components", "whiten", "copy", "batch_size", "numeric_mode")
 
     def __init__(self, n_components=None, *, whiten=False, copy=True, batch_size=None, numeric_mode=None):
@@ -449,8 +466,18 @@ class IncrementalPCA(_Base):
         for a in ("components_", "n_samples_seen_"):
             if hasattr(self, a):
                 delattr(self, a)
-        M = _M.from_input(X)
-        n, d = M.r, M.c
+        if _is_sparse(X):
+            n, d = X.shape
+            Xc = X.tocsr()
+            if n == 0 or d == 0:
+                raise ValueError("X: a nonempty two-dimensional input is required")
+
+            def rows(a, b):
+                return _M.from_input(Xc[a:b])
+        else:
+            M = _M.from_input(X)
+            n, d = M.r, M.c
+            rows = M.rows
         self.batch_size_ = 5 * d if self.batch_size is None else int(self.batch_size)
         mb = self.n_components or 0
         start = 0
@@ -458,10 +485,10 @@ class IncrementalPCA(_Base):
             end = start + self.batch_size_
             if end + mb > n:
                 continue
-            self._partial(M.rows(start, end))
+            self._partial(rows(start, end))
             start = end
         if start < n:
-            self._partial(M.rows(start, n))
+            self._partial(rows(start, n))
         return self
 
     def partial_fit(self, X, y=None):
@@ -1431,6 +1458,70 @@ class FactorAnalysis(_Base):
         return k.ew("scale", k.total(v), s=1.0 / v.r).s[0]
 
 
+# ================================================================ TruncatedSVD explained variance
+def _tsvd_explained(x, components, mode):
+    """scikit-learn TruncatedSVD's explained_variance_ (np.var of X @ V^T per
+    column, ddof 0) and its ratio against the summed column variances of X,
+    through the cells (colmean, squared differences, column sums): the
+    Gram / arpack arm computes neither in its kernel. A tier the decomp
+    binding does not ship (FAST, DETERMINISTIC: phase 3) reads them through
+    the IDENTICAL cells, which are exact to float32 on every column."""
+    k = _Kit(mode if _backend._offers(_BINDING, mode) else "identical")
+    M = _M.from_input(x)
+    V = _M.from_input(components, "components")
+    n = M.r
+    Xt = k.mm(M, V, tb=True)
+    ev = k.ew("scale", k.colsum(k.ew("sqdiff", Xt, k.colmean(Xt))), s=1.0 / n)
+    full = k.total(k.ew("scale", k.colsum(k.ew("sqdiff", M, k.colmean(M))), s=1.0 / n))
+    return ev.out((ev.c,)), k.ew("div", ev, full).out((ev.c,))
+
+
+# ================================================================ PCA n_components='mle'
+_LOG2, _LOGPI, _LOG2PI_D = 0.6931471805599453, 1.1447298858494002, 1.8378770664093453
+
+
+def _pca_mle_rank(spectrum, n_samples, mode):
+    """scikit-learn `_pca.py::_infer_dimension` / `_assess_dimension`
+    (Minka's MLE of the PCA rank) over the full explained-variance spectrum.
+    Every log and gammaln of data runs in the cells (float32 results, one
+    call per rank); the sums and products are IEEE double in sklearn's order
+    and the constants log 2, log pi and log 2 pi are literals, so the rank is
+    the same on every column. The argmax takes the first maximum, as numpy."""
+    k = _Kit(mode)
+    d = len(spectrum)
+    sp = [float(v) for v in spectrum]
+    tiny = 1.1754943508222875e-38
+
+    def logs(values):
+        return k.ew("logs", _M.of(values, 1, len(values)), s=tiny).s if values else []
+
+    lsp = logs(sp)
+    lg = k.ew("lgamma", _M.of([(d - i + 1) / 2.0 for i in range(1, d + 1)], 1, d)).s
+    logn = logs([float(n_samples)])[0]
+    best, arg = -math.inf, 0
+    for rank in range(1, d):
+        if sp[rank - 1] < 1e-15:
+            continue
+        pu = -rank * _LOG2
+        for i in range(1, rank + 1):
+            pu += lg[i - 1] - _LOGPI * (d - i + 1) / 2.0
+        pl = -_dsum(lsp[:rank]) * n_samples / 2.0
+        v = max(1e-15, _dsum(sp[rank:]) / (d - rank))
+        logv = logs([v])[0]
+        pv = -logv * n_samples * (d - rank) / 2.0
+        m = d * rank - rank * (rank + 1.0) / 2.0
+        pp = _LOG2PI_D * (m + rank) / 2.0
+        spv = sp[:rank] + [v] * (d - rank)
+        terms = [(sp[i] - sp[j]) * (1.0 / spv[j] - 1.0 / spv[i]) for i in range(rank) for j in range(i + 1, d)]
+        pa = 0.0
+        for t in logs(terms):
+            pa += t + logn
+        ll = pu + pl + pv + pp - pa / 2.0 - rank * logn / 2.0
+        if ll > best:
+            best, arg = ll, rank
+    return arg
+
+
 # ================================================================ LU
 def lu_factor(a, *, numeric_mode=None):
     """scipy.linalg.lu_factor (LAPACK getrf semantics): `(lu, piv)` with L
@@ -1450,11 +1541,12 @@ def lu_factor(a, *, numeric_mode=None):
 
 
 def lu_solve(lu_and_piv, b, *, trans=0, numeric_mode=None):
-    """scipy.linalg.lu_solve (LAPACK getrs, trans=0 only): solve A x = b
-    from `lu_factor`'s pair. `b` is n or n x nrhs; a zero pivot yields 0 in
-    that component (never inf or NaN). REFUSED BY NAME: trans != 0."""
-    if trans != 0:
-        raise NotImplementedError("lu_solve: trans != 0 is not carried")
+    """scipy.linalg.lu_solve (LAPACK getrs): solve A x = b (trans=0) or
+    A^T x = b (trans=1, and 2, which is the same for a real matrix) from
+    `lu_factor`'s pair. `b` is n or n x nrhs; a zero pivot yields 0 in that
+    component (never inf or NaN)."""
+    if trans not in (0, 1, 2):
+        raise ValueError("trans must be 0, 1 or 2")
     lu, piv = lu_and_piv
     k = _Kit(_mode(numeric_mode))
     L = _M.from_input(lu, "lu")
@@ -1468,7 +1560,7 @@ def lu_solve(lu_and_piv, b, *, trans=0, numeric_mode=None):
     B = _M.from_input(_row_of(b), "b").T if vec else _M.from_input(b, "b")
     if B.r != n:
         raise ValueError(f"b has {B.r} rows, the factorization has {n}")
-    X = k.lu_solve(L, pv, B)
+    X = k.lu_solve(L, pv, B, trans=1 if trans else 0)
     return X.out((n,)) if vec else X.out()
 
 
@@ -1837,7 +1929,7 @@ class CCA(_PLS):
 
 
 # ================================================================ dictionary learning / sparse PCA
-_SPARSE_ALGOS = ("lasso_lars", "lasso_cd", "omp", "threshold")
+_SPARSE_ALGOS = ("lasso_lars", "lasso_cd", "lars", "omp", "threshold")
 
 
 def _sparse_encode(k, X, D, algorithm, alpha=None, n_nonzero_coefs=None, init=None, max_iter=1000, positive=False):
@@ -1845,15 +1937,26 @@ def _sparse_encode(k, X, D, algorithm, alpha=None, n_nonzero_coefs=None, init=No
     'lasso_lars' solves the same Lasso as 'lasso_cd' (by coordinate descent
     from zero: the Lasso optimum does not depend on the path taken to it);
     'lasso_cd' warm-starts from `init`; 'omp' and 'threshold' as sklearn.
-    REFUSED BY NAME: 'lars' (plain LARS with a coefficient budget)."""
+    'lars' is sklearn's Lars(fit_intercept=False, n_nonzero_coefs) of each
+    row on the dictionary's columns, through the linear lane's LARS
+    (x_linear/lars.mojo), one row at a time."""
     if algorithm not in _SPARSE_ALGOS:
         raise ValueError(f"algorithm={algorithm!r} is not carried; one of {_SPARSE_ALGOS}")
     n, m = X.r, X.c
     kc = D.r
-    if algorithm == "omp":
+    if algorithm in ("omp", "lars"):
         reg = n_nonzero_coefs if n_nonzero_coefs is not None else min(max(m / 10, 1), kc)
     else:
         reg = alpha if alpha is not None else 1.0
+    if algorithm == "lars":
+        from ._expansion_linear import Lars
+        Dt = D.T.out()
+        code = _M.zeros(n, kc)
+        for i in range(n):
+            coef = Lars(fit_intercept=False, n_nonzero_coefs=int(reg),
+                        numeric_mode=k.mode).fit(Dt, X.row(i)).coef_
+            code.s[i * kc:(i + 1) * kc] = array.array("f", coef.tolist())
+        return code
     Q = k.mm(X, D, tb=True)                      # n x k: row i is D x_i
     if algorithm == "threshold":
         code = k.ew("soft", Q, s=reg)
@@ -1986,9 +2089,8 @@ class _SparseCoding(_Base):
 def _check_sparse_algos(fit_algorithm, transform_algorithm):
     if fit_algorithm not in ("lars", "cd"):
         raise ValueError("fit_algorithm must be 'lars' or 'cd'")
-    if transform_algorithm not in ("lasso_lars", "lasso_cd", "omp", "threshold"):
-        raise ValueError(f"transform_algorithm={transform_algorithm!r} is not carried "
-                         "(lasso_lars, lasso_cd, omp, threshold; 'lars' is refused by name)")
+    if transform_algorithm not in _SPARSE_ALGOS:
+        raise ValueError(f"transform_algorithm must be one of {_SPARSE_ALGOS}")
 
 
 class DictionaryLearning(_SparseCoding):
@@ -1997,8 +2099,7 @@ class DictionaryLearning(_SparseCoding):
     `_sparse_encode_precomputed`, `_BaseSparseCoding._transform`). The
     initial SVD is exact (QR + one-sided Jacobi); a resampled unused atom is
     drawn from the Philox stream. fit_algorithm 'lars' solves its Lasso by
-    coordinate descent (the same optimum). REFUSED BY NAME: transform
-    'lars', callback."""
+    coordinate descent (the same optimum). REFUSED BY NAME: callback."""
     _parameters = ("n_components", "alpha", "max_iter", "tol", "fit_algorithm", "transform_algorithm",
                    "transform_n_nonzero_coefs", "transform_alpha", "split_sign", "random_state",
                    "positive_code", "positive_dict", "transform_max_iter", "numeric_mode")
@@ -2268,7 +2369,9 @@ class LatentDirichletAllocation(_Base):
     statistics one gemm. The Gamma(100, 1/100) draws are Marsaglia-Tsang on
     the Philox stream. learning_method 'batch' and 'online' (online: the
     mini-batches in row order, as sklearn with no shuffle does).
-    REFUSED BY NAME: sparse input, evaluate_every > 0 with n_jobs."""
+    A scipy.sparse count matrix is densified (exact); the per-document cell
+    already skips zero counts. evaluate_every with n_jobs: no host pool, so
+    n_jobs changes nothing."""
     _parameters = ("n_components", "doc_topic_prior", "topic_word_prior", "learning_method", "learning_decay",
                    "learning_offset", "max_iter", "batch_size", "evaluate_every", "total_samples", "perp_tol",
                    "mean_change_tol", "max_doc_update_iter", "random_state", "numeric_mode")
@@ -2441,11 +2544,57 @@ class LatentDirichletAllocation(_Base):
 
 
 # ================================================================ manifold: Isomap, MDS, LLE
-def _knn_lists(k, Q, X, n_neighbors, exclude_self):
-    """(indices, squared distances) of the n_neighbors nearest rows of X for
-    every row of Q, ascending, ties to the lower index; `exclude_self` drops
-    the query's own index (queries ARE the training rows)."""
-    D = k.sqdist(Q, X)
+_PD_KIND = {"manhattan": 1, "cityblock": 1, "l1": 1, "chebyshev": 2, "infinity": 2, "cosine": 4}
+
+
+def _metric_spec(metric, p=2, metric_params=None, who="metric"):
+    """sklearn's metric name (and minkowski p) as (kind, p) for `_dist`:
+    kind 0 is Euclidean (sqrt of the squared distance cell), the rest
+    x_decomp/cells.mojo `pdist_cell` (DEVIATION 5319). A callable or any
+    other name is refused by name."""
+    if metric_params:
+        extra = set(metric_params) - {"p"}
+        if extra:
+            raise NotImplementedError(f"{who}: metric_params {sorted(extra)} are not carried")
+        p = metric_params.get("p", p)
+    if metric in ("euclidean", "l2"):
+        return 0, 2.0
+    if metric == "minkowski":
+        p = float(p)
+        if not p > 0:
+            raise ValueError(f"{who}: minkowski p must be > 0")
+        if p == 2.0:
+            return 0, 2.0
+        if p == 1.0:
+            return 1, 1.0
+        if p == math.inf:
+            return 2, 0.0
+        return 3, p
+    if isinstance(metric, str) and metric in _PD_KIND:
+        return _PD_KIND[metric], 0.0
+    raise NotImplementedError(f"{who}: metric={metric!r} is not carried (euclidean, minkowski p, manhattan, "
+                              "chebyshev, cosine)")
+
+
+def _dist(k, A, B, kind, pw, same=False):
+    """The distance matrix of `_metric_spec`'s (kind, p). `same` (A is B):
+    sklearn's pairwise_distances zeroes the cosine diagonal."""
+    if kind == 0:
+        return k.ew("sqrt", k.sqdist(A, B))
+    D = k.pdist(A, B, kind, pw)
+    if same and kind == 4:
+        for i in range(A.r):
+            D.s[i * B.r + i] = 0.0
+    return D
+
+
+def _knn_lists(k, Q, X, n_neighbors, exclude_self, kind=0, pw=2.0):
+    """(indices, distances) of the n_neighbors nearest rows of X for every
+    row of Q, ascending, ties to the lower index; `exclude_self` drops the
+    query's own index (queries ARE the training rows). kind 0 returns
+    SQUARED Euclidean distances (the callers take the root); any other kind
+    the `_dist` distances themselves."""
+    D = k.sqdist(Q, X) if kind == 0 else _dist(k, Q, X, kind, pw, same=exclude_self)
     idx, dst = [], []
     for i in range(Q.r):
         row = D.row(i)
@@ -2479,7 +2628,7 @@ def _top_eig(k, A, nc):
     return w, V.neg_cols(k.absmax_flags(V, True))
 
 
-def _fix_components(k, X, Wg):
+def _fix_components(k, X, Wg, kind=0, pw=2.0):
     """sklearn `utils/graph.py::_fix_connected_components` on a dense graph:
     for every pair of connected components (i < j, labels by lowest member),
     the closest pair of points between them gets an edge of their distance."""
@@ -2503,7 +2652,7 @@ def _fix_components(k, X, Wg):
     import warnings
     warnings.warn(f"The number of connected components of the neighbors graph is {comp} > 1. "
                   "Completing the graph to fit Isomap might be slow.", stacklevel=3)
-    D = k.ew("sqrt", k.sqdist(X, X))
+    D = _dist(k, X, X, kind, pw, same=True)
     Wg = Wg.copy()
     for a in range(comp):
         ia = [i for i in range(n) if labels[i] == a]
@@ -2526,9 +2675,14 @@ class Isomap(_Base):
     with `KernelPCA(kernel='precomputed')` and `utils/graph.py`): the
     Euclidean kNN distance graph (ties to the lower index), all-pairs
     shortest paths by Dijkstra (one source per thread), the kernel
-    -0.5 * D^2 centered, its top eigenpairs (Jacobi eigh). REFUSED BY NAME:
-    radius, metrics other than euclidean/minkowski p=2."""
-    _parameters = ("n_neighbors", "n_components", "eigen_solver", "path_method", "metric", "p", "numeric_mode")
+    -0.5 * D^2 centered, its top eigenpairs (Jacobi eigh). `radius` (with
+    n_neighbors=None) takes every other row within the radius (closed, the
+    float32 distance compared exactly). path_method 'FW' runs the same
+    Dijkstra (x_decomp/NOT_IMPLEMENTED.tsv: DELIBERATELY DIVERGENT). metric:
+    euclidean, minkowski p (p = 1, 2 and inf by name), manhattan, chebyshev,
+    cosine (DEVIATION 5319). REFUSED BY NAME: a callable or any other
+    metric."""
+    _parameters = ("n_neighbors", "radius", "n_components", "eigen_solver", "path_method", "metric", "p", "numeric_mode")
 
     def __init__(self, *, n_neighbors=5, radius=None, n_components=2, eigen_solver="auto", tol=0, max_iter=None,
                  path_method="auto", neighbors_algorithm="auto", n_jobs=None, metric="minkowski", p=2,
@@ -2540,23 +2694,41 @@ class Isomap(_Base):
 
     def fit(self, X, y=None):
         self.numeric_mode_ = _mode(self.numeric_mode)
-        if self.radius is not None:
-            raise NotImplementedError("Isomap: radius neighborhoods are not carried; use n_neighbors")
-        if not (self.metric == "euclidean" or (self.metric == "minkowski" and self.p == 2)):
-            raise NotImplementedError("Isomap: only the Euclidean metric is carried")
+        if self.n_neighbors is not None and self.radius is not None:
+            raise ValueError(f"Both n_neighbors and radius are provided. Use Isomap(radius={self.radius}, "
+                             "n_neighbors=None) if intended to use radius-based neighbors")
+        if self.n_neighbors is None and self.radius is None:
+            raise ValueError("Isomap: one of n_neighbors and radius must be set")
+        if self.radius is not None and not float(self.radius) >= 0:
+            raise ValueError("Isomap: radius must be >= 0")
+        if self.path_method not in ("auto", "FW", "D"):
+            raise ValueError("path_method must be 'auto', 'FW' or 'D'")
+        kind, pw = _metric_spec(self.metric, self.p, self.metric_params, "Isomap")
+        self._kind, self._pw = kind, pw
         k = self._kit()
         M = _M.from_input(X)
         n = M.r
-        nn = int(self.n_neighbors)
-        idx, dst = _knn_lists(k, M, M, nn, True)
         Wg = _M.zeros(n, n)
-        sq = _M.of([v for row in dst for v in row], n, nn)
-        sq = k.ew("sqrt", sq)
-        for i in range(n):
-            for a, j in enumerate(idx[i]):
-                v = sq.s[i * nn + a]
-                Wg.s[i * n + j] = v if v != 0 else 1e-10   # scipy drops explicit zeros; keep the edge
-        Wg, self.n_connected_components_ = _fix_components(k, M, Wg)
+        if self.radius is not None:
+            r = _f32(float(self.radius))
+            D = _dist(k, M, M, kind, pw, same=True)
+            for i in range(n):
+                for j in range(n):
+                    v = D.s[i * n + j]
+                    if j != i and v <= r:
+                        Wg.s[i * n + j] = v if v != 0 else 1e-10   # scipy drops explicit zeros; keep the edge
+            nn = None
+        else:
+            nn = int(self.n_neighbors)
+            idx, dst = _knn_lists(k, M, M, nn, True, kind, pw)
+            sq = _M.of([v for row in dst for v in row], n, nn)
+            if kind == 0:
+                sq = k.ew("sqrt", sq)
+            for i in range(n):
+                for a, j in enumerate(idx[i]):
+                    v = sq.s[i * nn + a]
+                    Wg.s[i * n + j] = v if v != 0 else 1e-10   # scipy drops explicit zeros; keep the edge
+        Wg, self.n_connected_components_ = _fix_components(k, M, Wg, kind, pw)
         D = k.dijkstra(Wg)
         self.dist_matrix_m_ = D
         self.dist_matrix_ = D.out()
@@ -2581,20 +2753,46 @@ class Isomap(_Base):
         self._check("embedding_m_")
         k = self._kit()
         Q = _M.from_input(X)
-        idx, dst = _knn_lists(k, Q, self._fit_X, self._knn, False)
         n = self._fit_X.r
-        sq = k.ew("sqrt", _M.of([v for row in dst for v in row], Q.r, self._knn))
         D = self.dist_matrix_m_
-        G = None
-        for a in range(self._knn):
-            rows = D.take_rows([idx[i][a] for i in range(Q.r)])
-            cand = k.ew("add", rows, sq.cols(a, a + 1))
-            G = cand if G is None else k.ew("min", G, cand)
+        if self._knn is None:
+            G = self._radius_geodesic(k, Q)
+        else:
+            idx, dst = _knn_lists(k, Q, self._fit_X, self._knn, False, self._kind, self._pw)
+            sq = _M.of([v for row in dst for v in row], Q.r, self._knn)
+            if self._kind == 0:
+                sq = k.ew("sqrt", sq)
+            G = None
+            for a in range(self._knn):
+                rows = D.take_rows([idx[i][a] for i in range(Q.r)])
+                cand = k.ew("add", rows, sq.cols(a, a + 1))
+                G = cand if G is None else k.ew("min", G, cand)
         G = k.ew("scale", k.ew("sq", G), s=-0.5)
         row = k.ew("scale", k.rowsum(G), s=1.0 / n)
         Kc = k.ew("add", k.ew("sub", k.ew("sub", G, self._k_col), row), self._k_all)
         V = k.ew("div", self.eigenvectors_m_, k.ew("sqrt", self.eigenvalues_m_))
         return k.mm(Kc, V).out()
+
+    def _radius_geodesic(self, k, Q):
+        """sklearn's radius transform: for each query, the minimum over the
+        training rows within the radius (distance 0 included) of
+        dist_matrix_[j] + d(q, j). The candidates are taken in ascending j,
+        a fixed order, one elementwise min at a time."""
+        n = self._fit_X.r
+        r = _f32(float(self.radius))
+        Dq = _dist(k, Q, self._fit_X, self._kind, self._pw)
+        D = self.dist_matrix_m_
+        rows = []
+        for i in range(Q.r):
+            js = [j for j in range(n) if Dq.s[i * n + j] <= r]
+            if not js:
+                raise ValueError(f"Isomap.transform: query row {i} has no training row within radius {self.radius}")
+            g = None
+            for j in js:
+                cand = k.ew("adds", D.rows(j, j + 1), s=Dq.s[i * n + j])
+                g = cand if g is None else k.ew("min", g, cand)
+            rows.append(g)
+        return _vstack(*rows)
 
     def reconstruction_error(self):
         self._check("embedding_m_")
@@ -2625,7 +2823,10 @@ class ClassicalMDS(_Base):
             D2 = k.sqdist(M, M)
             self.dissimilarity_matrix_ = k.ew("sqrt", D2).out()
         else:
-            raise NotImplementedError("ClassicalMDS: metric must be 'euclidean' or 'precomputed'")
+            kind, pw = _metric_spec(self.metric, 2, self.metric_params, "ClassicalMDS")
+            Dm = _dist(k, M, M, kind, pw, same=True)
+            D2 = k.ew("sq", Dm)
+            self.dissimilarity_matrix_ = Dm.out()
         B, _, _ = _center_kernel(k, k.ew("scale", D2, s=-0.5))
         w, V = _top_eig(k, B, int(self.n_components))
         self.eigenvalues_ = w.out((w.c,))
@@ -2643,8 +2844,9 @@ class MDS(_Base):
     `_smacof_single`, `smacof`): metric SMACOF with the Guttman transform,
     `n_init` starts (random ones from the Philox stream), the lowest stress
     kept. init 'random' (the default the FutureWarning names), 'classical_mds'
-    or an array. REFUSED BY NAME: metric_mds=False (non-metric MDS needs
-    isotonic regression)."""
+    or an array. metric_mds=False is Kruskal's non-metric SMACOF: the
+    disparities are the isotonic regression of the distances on the
+    dissimilarities (the linear lane's IsotonicRegression), rescaled."""
     _parameters = ("n_components", "metric_mds", "n_init", "init", "max_iter", "eps", "random_state", "metric",
                    "normalized_stress", "numeric_mode")
 
@@ -2659,14 +2861,44 @@ class MDS(_Base):
     def _dist(self, k, Y):
         return k.ew("sqrt", k.sqdist(Y, Y))
 
+    def _disparities(self, k, n, pos, flat):
+        """sklearn's non-metric disparities: the upper-triangle values at
+        `pos` (row-major, dissimilarity != 0), scaled by sqrt((n (n - 1) / 2)
+        / sum of their squares), mirrored below the diagonal (an exact copy:
+        sklearn adds a zero)."""
+        P = _M.zeros(n, n)
+        for q, v in zip(pos, flat):
+            P.s[q] = v
+        ss = k.total(k.ew("sq", P)).s[0]
+        P = k.ew("scale", P, s=math.sqrt((n * (n - 1) / 2) / ss))
+        for q in pos:
+            i, j = divmod(q, n)
+            P.s[j * n + i] = P.s[q]
+        return P
+
     def _single(self, k, Dis, Y, run):
         n = Dis.r
+        nonmetric = not self.metric_mds
+        if nonmetric:
+            # sklearn `_smacof_single` with metric=False: a zero dissimilarity
+            # is a missing value; the first iteration uses the dissimilarities
+            # themselves, later ones IsotonicRegression(out_of_bounds='clip')
+            # of the distances on the dissimilarities (the linear lane's
+            # x_linear PAVA, fitted on (x, y)-sorted rows).
+            from ._expansion_linear import IsotonicRegression
+            pos = [i * n + j for i in range(n) for j in range(i + 1, n) if Dis.s[i * n + j] != 0]
+            dis_w = [Dis.s[q] for q in pos]
+            ir = IsotonicRegression(out_of_bounds="clip", numeric_mode=self.numeric_mode_)
+        disp = Dis
         d = self._dist(k, Y)
         old = None
         it = 0
         for it in range(1, self.max_iter + 1):
+            if nonmetric:
+                flat = dis_w if it == 1 else ir.fit_transform(dis_w, [d.s[q] for q in pos]).tolist()
+                disp = self._disparities(k, n, pos, flat)
             dz = k.ew("select", d, d, k.const(1e-5), s=0.0)
-            ratio = k.ew("div", Dis, dz)
+            ratio = k.ew("div", disp, dz)
             B = k.ew("scale", ratio, s=-1.0)
             rs = k.rowsum(ratio)
             B = B.copy()
@@ -2674,7 +2906,7 @@ class MDS(_Base):
                 B.s[i * n + i] = _f32(B.s[i * n + i] + rs.s[i])
             Y = k.ew("scale", k.mm(B, Y), s=1.0 / n)
             d = self._dist(k, Y)
-            stress = k.total(k.ew("sqdiff", d, Dis)).s[0] / 2
+            stress = k.total(k.ew("sqdiff", d, disp)).s[0] / 2
             if old is not None:
                 ssd = k.total(k.ew("sq", d)).s[0]
                 if (old - stress) / (ssd / 2) < self.eps:
@@ -2687,8 +2919,6 @@ class MDS(_Base):
 
     def fit_transform(self, X, y=None, init=None):
         self.numeric_mode_ = _mode(self.numeric_mode)
-        if not self.metric_mds:
-            raise NotImplementedError("MDS: metric_mds=False (non-metric SMACOF) is not carried")
         k = self._kit()
         M = _M.from_input(X)
         if self.metric == "precomputed":
@@ -2696,7 +2926,8 @@ class MDS(_Base):
         elif self.metric == "euclidean":
             Dis = self._dist(k, M)
         else:
-            raise NotImplementedError("MDS: metric must be 'euclidean' or 'precomputed'")
+            kind, pw = _metric_spec(self.metric, 2, self.metric_params, "MDS")
+            Dis = _dist(k, M, M, kind, pw, same=True)
         self.dissimilarity_matrix_ = Dis.out()
         self._norm = (self.normalized_stress is True) or (self.normalized_stress == "auto" and not self.metric_mds)
         n, nc = Dis.r, int(self.n_components)
@@ -2731,9 +2962,8 @@ class LocallyLinearEmbedding(_Base):
     vectors of I - W, which are M's smallest eigenvectors),
     `locally_linear_embedding`, `transform`). M = (I - W)^T (I - W), its
     n_components + 1 smallest eigenvectors, the first dropped.
-    method='ltsa' builds sklearn's alignment matrix as a stacked projector
-    factor (M = B^T B) and takes the same SVD route. REFUSED BY NAME: method
-    'hessian', 'modified'."""
+    method='ltsa', 'hessian' and 'modified' build sklearn's M as a stacked
+    factor (M = B^T B) and take the same SVD route."""
     _parameters = ("n_neighbors", "n_components", "reg", "eigen_solver", "method", "random_state", "numeric_mode")
 
     def __init__(self, *, n_neighbors=5, n_components=2, reg=1e-3, eigen_solver="auto", tol=1e-6, max_iter=100,
@@ -2746,9 +2976,8 @@ class LocallyLinearEmbedding(_Base):
 
     def fit(self, X, y=None):
         self.numeric_mode_ = _mode(self.numeric_mode)
-        if self.method not in ("standard", "ltsa"):
-            raise NotImplementedError(f"LocallyLinearEmbedding: method={self.method!r} is not carried; "
-                                      "use 'standard' or 'ltsa'")
+        if self.method not in ("standard", "hessian", "modified", "ltsa"):
+            raise ValueError(f"LocallyLinearEmbedding: unrecognized method {self.method!r}")
         k = self._kit()
         M = _M.from_input(X)
         n = M.r
@@ -2756,9 +2985,18 @@ class LocallyLinearEmbedding(_Base):
         nc = int(self.n_components)
         if nn >= n:
             raise ValueError("Expected n_neighbors < n_samples")
+        if self.method == "hessian" and nn <= nc + nc * (nc + 1) // 2:
+            raise ValueError("for method='hessian', n_neighbors must be greater than "
+                             "[n_components * (n_components + 3) / 2]")
+        if self.method == "modified" and nn < nc:
+            raise ValueError("modified LLE requires n_neighbors >= n_components")
         idx, _ = _knn_lists(k, M, M, nn, True)
         if self.method == "ltsa":
             IW = self._ltsa_factor(k, M, idx, nn, nc)
+        elif self.method == "hessian":
+            IW = self._hessian_factor(k, M, idx, nn, nc)
+        elif self.method == "modified":
+            IW = self._modified_factor(k, M, idx, nn, nc)
         else:
             Wb = k.barycenter(M, M, idx, self.reg)
             IW = _M.zeros(n, n)
@@ -2802,6 +3040,107 @@ class LocallyLinearEmbedding(_Base):
                 row = (i * nn + a) * n
                 for b, j in enumerate(idx[i]):
                     B.s[row + j] = P.s[a * nn + b]
+        return B
+
+    def _hessian_factor(self, k, M, idx, nn, nc):
+        """sklearn Hessian LLE's M = sum_i S_i^T w_i w_i^T S_i as the stacked
+        factor B (n (k - 1 - nc) x n), B_i = w_i^T scattered to the neighbor
+        columns. Yi = [1, U, the products U_a U_b (a <= b)] with U the nc top
+        eigenvectors of the centered neighborhood's Gram (sign free: every
+        column of w is divided by its own sum); w = the columns of Yi's
+        orthonormal basis past the linear ones (x_decomp orth, the Householder
+        R route: Gram-Schmidt of Yi up to sign) and then an orthonormal basis
+        of Yi's complement (the eigenvalue-1 eigenvectors of I - Q Q^T, Jacobi
+        eigh, descending). sklearn takes that complement from LAPACK's full Q,
+        whose basis is LAPACK's own choice (x_decomp/NOT_IMPLEMENTED.tsv:
+        DELIBERATELY DIVERGENT). A column sum under hessian_tol counts as 1."""
+        n = M.r
+        dp = nc * (nc + 1) // 2
+        ncol = nn - 1 - nc
+        extra = ncol - dp
+        tol = float(self.hessian_tol)
+        B = _M.zeros(n * ncol, n)
+        for i in range(n):
+            Gi = M.take_rows(idx[i])
+            Gi = k.ew("sub", Gi, k.colmean(Gi))
+            _, V = k.eigh(k.mm(Gi, Gi, tb=True))
+            U = V.take_cols(list(range(nn - 1, nn - 1 - nc, -1)))
+            cols = [k.const(1.0, nn, 1), U]
+            for a in range(nc):
+                cols.append(k.ew("mul", U.cols(a, nc), U.cols(a, a + 1)))
+            Q = k.orth(_hstack(*cols))
+            w = Q.cols(nc + 1, nc + 1 + dp)
+            if extra > 0:
+                _, Vc = k.eigh(k.ew("sub", _eye(nn), k.mm(Q, Q, tb=True)))
+                w = _hstack(w, Vc.take_cols(list(range(nn - 1, nn - 1 - extra, -1))))
+            S = k.colsum(w)
+            S = _M.of([1.0 if abs(v) < tol else v for v in S.s], 1, ncol)
+            w = k.ew("div", w, S)
+            for c in range(ncol):
+                row = (i * ncol + c) * n
+                for a, j in enumerate(idx[i]):
+                    B.s[row + j] = w.s[a * ncol + c]
+        return B
+
+    def _modified_factor(self, k, M, idx, nn, nc):
+        """sklearn modified LLE (Zhang & Wang) as a stacked factor: M = sum_i
+        A_i A_i^T with A_i (n x s_i) holding W_i on the neighbor rows and -1
+        on row i, which is sklearn's W_i W_i^T, -W_i 1 on row and column i
+        and s_i on the diagonal. The local spectra are the Jacobi eigh of
+        X_nbrs X_nbrs^T (descending; sklearn takes the full SVD of X_nbrs when
+        k > d, whose null-space basis is LAPACK's own choice:
+        x_decomp/NOT_IMPLEMENTED.tsv, DELIBERATELY DIVERGENT). The per-point
+        vectors (at most k values) are then IEEE double arithmetic in a fixed
+        order: the regularized weights, rho, eta (the median), s_i, alpha_i,
+        the Householder vector h and W_i."""
+        n, d = M.r, M.c
+        nev = min(d, nn)
+        tol = float(self.modified_tol)
+        Vs, evs = [], []
+        for i in range(n):
+            Xn = k.ew("sub", M.take_rows(idx[i]), M.rows(i, i + 1))
+            w, V = k.eigh(k.mm(Xn, Xn, tb=True))
+            order = list(range(nn - 1, -1, -1))
+            Vs.append(V.take_cols(order))
+            evs.append([float(w.s[j]) for j in order[:nev]])
+        wreg, rho = [], []
+        for i in range(n):
+            V, ev = Vs[i], evs[i]
+            reg = 1e-3 * _dsum(ev)
+            tmp = [_dsum(V.s[a * nn + c] for a in range(nn)) for c in range(nn)]
+            tmp = [tmp[c] / (ev[c] + reg) if c < nev else tmp[c] / reg for c in range(nn)]
+            wr = [_dsum(V.s[a * nn + c] * tmp[c] for c in range(nn)) for a in range(nn)]
+            tot = _dsum(wr)
+            wreg.append([v / tot for v in wr])
+            rho.append(_dsum(ev[nc:]) / _dsum(ev[:nc]))
+        srt = sorted(rho)
+        eta = srt[n // 2] if n % 2 else (srt[n // 2 - 1] + srt[n // 2]) / 2
+        cols = []
+        for i in range(n):
+            V, ev = Vs[i], evs[i]
+            cum, t = [], 0.0
+            for v in ev:
+                t += v
+                cum.append(t)
+            er = [cum[-1] / c - 1 for c in cum[:-1]][::-1]
+            si = sum(1 for v in er if v < eta) + nn - nev
+            Vi = [[float(V.s[a * nn + c]) for c in range(nn - si, nn)] for a in range(nn)]
+            vs = [_dsum(Vi[a][c] for a in range(nn)) for c in range(si)]
+            alpha = math.sqrt(_dsum(v * v for v in vs)) / math.sqrt(si)
+            h = [alpha - v for v in vs]
+            nh = math.sqrt(_dsum(v * v for v in h))
+            h = [0.0] * si if nh < tol else [v / nh for v in h]
+            for c in range(si):
+                col = [0.0] * n
+                for a, j in enumerate(idx[i]):
+                    vh = _dsum(Vi[a][e] * h[e] for e in range(si))
+                    col[j] = Vi[a][c] - 2 * vh * h[c] + (1 - alpha) * wreg[i][a]
+                col[i] = -1.0
+                cols.append(col)
+        rows = max(len(cols), n)
+        B = _M.zeros(rows, n)
+        for r, col in enumerate(cols):
+            B.s[r * n:(r + 1) * n] = array.array("f", col)
         return B
 
     def fit_transform(self, X, y=None):
@@ -3142,7 +3481,20 @@ class EllipticEnvelope(MinCovDet):
         return self.fit(X).predict(X)
 
     def score(self, X, y, sample_weight=None):
-        raise NotImplementedError("EllipticEnvelope.score (accuracy) is not carried; use predict")
+        """sklearn OutlierMixin/ClassifierMixin.score: accuracy_score(y,
+        predict(X), sample_weight), the (weighted) share of exact label
+        matches as an IEEE double (weights summed in order)."""
+        pred = self.predict(X).tolist()
+        yl = [int(v) for v in (y.tolist() if hasattr(y, "tolist") else list(y))]
+        if len(yl) != len(pred):
+            raise ValueError("y and X have different numbers of rows")
+        if sample_weight is None:
+            return sum(1 for a, b in zip(yl, pred) if a == b) / len(pred)
+        w = [float(v) for v in (sample_weight.tolist() if hasattr(sample_weight, "tolist") else list(sample_weight))]
+        tw = _dsum(w)
+        if tw == 0:
+            raise ZeroDivisionError("Weights sum to zero, can't be normalized")
+        return _dsum(wi for wi, a, b in zip(w, yl, pred) if a == b) / tw
 
 
 # ================================================================ implicit ALS
@@ -3154,16 +3506,20 @@ class AlternatingLeastSquares(_Base):
     * 0.01 (the Philox stream), and each iteration solves every user row
     and then every item row as one batched Cholesky per row (one thread per
     row, sums in a fixed order). The input is a DENSE users x items array
-    (0 = no interaction). REFUSED BY NAME: use_cg=True's conjugate-gradient
-    solver (the exact solve is carried), calculate_training_loss."""
-    _parameters = ("factors", "regularization", "alpha", "iterations", "random_state", "numeric_mode")
+    (0 = no interaction). calculate_training_loss=True records
+    `training_loss_` after every iteration: sum over observed (u, i) of
+    c_ui (1 - x_u . y_i)^2, over the rest of (x_u . y_i)^2, plus
+    regularization (|X|^2 + |Y|^2), divided by (total confidence + the
+    unobserved count) (implicit's calculate_loss), through the cells.
+    REFUSED BY NAME: use_cg=True's conjugate-gradient solver (implicit runs
+    3 CG steps from the previous factors, which is not the exact solve)."""
+    _parameters = ("factors", "regularization", "alpha", "iterations", "calculate_training_loss", "random_state",
+                   "numeric_mode")
 
     def __init__(self, factors=100, regularization=0.01, alpha=1.0, iterations=15, use_cg=False,
                  calculate_training_loss=False, random_state=None, numeric_mode=None):
         if use_cg:
             raise NotImplementedError("AlternatingLeastSquares: use_cg=True is not carried; the exact solve runs")
-        if calculate_training_loss:
-            raise NotImplementedError("AlternatingLeastSquares: calculate_training_loss is not carried")
         self.factors, self.regularization, self.alpha, self.iterations = factors, regularization, alpha, iterations
         self.use_cg, self.calculate_training_loss = use_cg, calculate_training_loss
         self.random_state, self.numeric_mode = random_state, numeric_mode
@@ -3179,13 +3535,29 @@ class AlternatingLeastSquares(_Base):
         f = int(self.factors)
         X = k.ew("scale", k.rand(n, f, seed, 80, 0), s=0.01)
         Y = k.ew("scale", k.rand(m, f, seed, 81, 0), s=0.01)
+        losses = []
         for _ in range(int(self.iterations)):
             X = k.als(C, Y, self.regularization)
             Y = k.als(Ct, X, self.regularization)
+            if self.calculate_training_loss:
+                losses.append(self._loss(k, C, X, Y))
+        if self.calculate_training_loss:
+            self.training_loss_ = losses
         self.user_factors_m_, self.item_factors_m_ = X, Y
         self.user_factors, self.item_factors = X.out(), Y.out()
         self.components_m_ = Y
         return self
+
+    def _loss(self, k, C, X, Y):
+        P = k.mm(X, Y, tb=True)
+        seen = k.ew("gts", k.ew("abs", C), s=0.0)                     # 1 where c_ui != 0
+        obs = k.ew("mul", C, k.ew("sq", k.ew("adds", k.ew("scale", P, s=-1.0), s=1.0)))
+        term = k.ew("select", seen, obs, k.ew("sq", P), s=0.5)
+        reg = k.ew("add", k.total(k.ew("sq", X)), k.total(k.ew("sq", Y)))
+        tot = k.ew("add", k.total(term), k.ew("scale", reg, s=self.regularization)).s[0]
+        nnz = k.total(seen).s[0]
+        conf = k.total(k.ew("mul", C, seen)).s[0]
+        return tot / (conf + (C.r * C.c - nnz))
 
     def _check_fit(self):
         if not hasattr(self, "user_factors_m_"):

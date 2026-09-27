@@ -16,6 +16,15 @@ from ._array import Array
 from ._buffer import _materialize, _native, empty
 from ._arrays import _addr, _addr_ro
 from ._labels import is_bool, flatten_labels
+# The splitters' random draws (lane/metrics): a module-level import, so the
+# lane selector sees model_selection reach the x_metrics binding.
+from ._expansion_metrics import CounterRng, _mix64
+
+#: The binding the splitters' permutations and the scorers' added metrics run
+#: on (python/mojolearn/_expansion_metrics.py `_BINDING`). Named here because
+#: tools/lane_select.py resolves a lane's bindings from the doors it runs
+#: WHOLE, and a splitter lane's door is this file.
+_SPLIT_BINDING = "_mojolearn_x_metrics"
 
 __all__ = ['cross_val_score', 'split_descriptor']
 
@@ -481,7 +490,8 @@ def cross_val_score(estimator, X, y, *, cv=None, scoring=None, groups=None,
 
     ``scoring=None`` calls the fitted estimator's score (GPU accuracy/R² for
     MojoLearn tree adapters). A callable takes (estimator, X_test, y_test) and
-    must return a real scalar; named sklearn scorers are deliberately excluded.
+    must return a real scalar; a string is one of `get_scorer_names()`
+    (scikit-learn's scorer names over mojolearn.metrics, lane/metrics).
     Negate a loss explicitly when higher-is-better scores are wanted. Scores
     are packed into a Float64 host array without aggregation.
 
@@ -506,6 +516,8 @@ def cross_val_score(estimator, X, y, *, cv=None, scoring=None, groups=None,
     # all index pairs before fitting, additionally refusing overlap/duplicates.
     if is_bool(n_jobs) or not isinstance(n_jobs, numbers.Integral) or n_jobs != 1:
         raise NotImplementedError('cross_val_score supports n_jobs=1 only')
+    if isinstance(scoring, str):
+        scoring = get_scorer(scoring)
     X, y, folds = _prepare_folds(estimator, X, y, cv, scoring, groups, error_score)
     scores = []
     for train, test in folds:
@@ -524,8 +536,10 @@ def _prepare_folds(estimator, X, y, cv, scoring, groups, error_score):
     """Validate every fold before serial or GPU-worker fitting begins."""
     if not isinstance(error_score, str) or error_score != 'raise':
         raise NotImplementedError("cross_val_score supports error_score='raise' only")
+    if isinstance(scoring, str):
+        scoring = get_scorer(scoring)   # lane/metrics: scikit-learn's scorer names
     if scoring is not None and not callable(scoring):
-        raise TypeError('scoring must be None or a callable; named scorers are unsupported')
+        raise TypeError('scoring must be None, a scorer name or a callable')
     X = _materialize(X, "X")[0]
     if getattr(y, "ndim", 1) != 1:
         raise ValueError("y must be 1-D and match X rows")
@@ -559,3 +573,1220 @@ def _fit_score_fold(fitted, X_train, y_train, X_test, y_test, scoring):
     if not isinstance(score, numbers.Real):
         raise TypeError('scoring must return a real scalar')
     return float(score)
+
+
+# ===========================================================================
+# THE METRICS LANE'S SPLITTERS, SEARCH AND VALIDATION HELPERS
+# (lane/metrics, 2026-09-27; scikit-learn 1.9 model_selection/_split.py,
+# _validation.py, _search.py). Index bookkeeping is exact Python integer
+# work; every random draw is a device permutation keyed by the counter RNG
+# (x_metrics/split.mojo, DEVIATION 6108), so a seeded split is the same on
+# every column. The splits are NOT numpy's (their shuffles are Mersenne
+# Twister draws); an int random_state always gives the same splits here.
+# ===========================================================================
+
+__all__ += [
+    'KFold', 'StratifiedKFold', 'GroupKFold', 'StratifiedGroupKFold', 'TimeSeriesSplit',
+    'ShuffleSplit', 'StratifiedShuffleSplit', 'GroupShuffleSplit', 'LeaveOneOut', 'LeavePOut',
+    'LeaveOneGroupOut', 'LeavePGroupsOut', 'RepeatedKFold', 'RepeatedStratifiedKFold',
+    'PredefinedSplit', 'train_test_split', 'check_cv', 'cross_validate', 'cross_val_predict',
+    'ParameterGrid', 'ParameterSampler', 'GridSearchCV', 'RandomizedSearchCV',
+    'validation_curve', 'learning_curve', 'permutation_test_score', 'get_scorer', 'make_scorer',
+    'get_scorer_names',
+]
+
+
+def _comb(n, k):
+    """n choose k in exact integers."""
+    if k < 0 or k > n:
+        return 0
+    out = 1
+    for i in range(1, k + 1):
+        out = out * (n - k + i) // i
+    return out
+
+
+def _n_samples(X):
+    if hasattr(X, 'shape') and len(X.shape):
+        return int(X.shape[0])
+    return len(X)
+
+
+def _labels_list(y, name='y'):
+    if y is None:
+        raise ValueError(f"The '{name}' parameter should not be None.")
+    return flatten_labels(y)
+
+
+def _encode_first_seen(values):
+    order = {}
+    return [order.setdefault(v, len(order)) for v in values], len(order)
+
+
+def _encode_sorted(values):
+    from ._labels import sorted_classes
+    classes, _ = sorted_classes(list(values))
+    index = {c: i for i, c in enumerate(classes)}
+    return [index[v] for v in values], classes
+
+
+def _as_index(values):
+    return Array.from_list([int(v) for v in values], '<i8')
+
+
+def _rng(random_state):
+    rng = CounterRng(random_state)
+    assert rng.binding == _SPLIT_BINDING
+    return rng
+
+
+class _Splitter:
+    """sklearn's BaseCrossValidator protocol: split(X, y, groups) yields
+    (train, test) Int64 index Arrays; get_n_splits."""
+
+    def __repr__(self):
+        params = ', '.join(f'{k}={v!r}' for k, v in sorted(self.get_params().items()))
+        return f'{type(self).__name__}({params})'
+
+    def get_params(self, deep=True):
+        return {k: v for k, v in vars(self).items() if not k.startswith('_')}
+
+    def _test_folds(self, X, y, groups):
+        raise NotImplementedError
+
+    def split(self, X, y=None, groups=None):
+        n = _n_samples(X)
+        for test in self._test_folds(X, y, groups):
+            mask = bytearray(n)
+            for i in test:
+                mask[i] = 1
+            yield (_as_index([i for i in range(n) if not mask[i]]),
+                   _as_index([i for i in range(n) if mask[i]]))
+
+
+def _check_splits(n_splits):
+    if is_bool(n_splits) or not isinstance(n_splits, numbers.Integral):
+        raise ValueError(f'The number of folds must be of Integral type. {n_splits!r} was passed.')
+    if n_splits <= 1:
+        raise ValueError(f'k-fold cross-validation requires at least one train/test split by setting '
+                         f'n_splits=2 or more, got n_splits={n_splits}.')
+    return int(n_splits)
+
+
+class _KFoldBase(_Splitter):
+    def __init__(self, n_splits=5, *, shuffle=False, random_state=None):
+        self.n_splits = _check_splits(n_splits)
+        if not is_bool(shuffle):
+            raise TypeError(f'shuffle must be True or False; got {shuffle}')
+        if not shuffle and random_state is not None:
+            raise ValueError('Setting a random_state has no effect since shuffle is False. You should '
+                             'leave random_state to its default (None), or set shuffle=True.')
+        self.shuffle = shuffle
+        self.random_state = random_state
+
+    def get_n_splits(self, X=None, y=None, groups=None):
+        return self.n_splits
+
+
+class KFold(_KFoldBase):
+    """scikit-learn 1.9 `KFold`: contiguous folds of the (optionally shuffled)
+    row order; the first n % k folds are one larger."""
+
+    def _test_folds(self, X, y, groups):
+        n = _n_samples(X)
+        if self.n_splits > n:
+            raise ValueError(f'Cannot have number of splits n_splits={self.n_splits} greater than the '
+                             f'number of samples: n_samples={n}.')
+        order = _rng(self.random_state).permutation(n) if self.shuffle else list(range(n))
+        start = 0
+        for fold in range(self.n_splits):
+            size = n // self.n_splits + (fold < n % self.n_splits)
+            yield order[start:start + size]
+            start += size
+
+
+class StratifiedKFold(_KFoldBase):
+    """scikit-learn 1.9 `StratifiedKFold`: classes encoded in order of first
+    appearance, allocated round-robin over the class-sorted labels; with
+    shuffle each class's fold assignment is permuted by the counter RNG."""
+
+    def _test_folds(self, X, y, groups):
+        labels = _labels_list(y)
+        n = len(labels)
+        enc, k = _encode_first_seen(labels)
+        counts = [0] * k
+        for c in enc:
+            counts[c] += 1
+        if max(counts) < self.n_splits:
+            raise ValueError(f'n_splits={self.n_splits} cannot be greater than the number of members in '
+                             'each class.')
+        if min(counts) < self.n_splits:
+            warnings.warn(f'The least populated class in y has only {min(counts)} members, which is less '
+                          f'than n_splits={self.n_splits}.', UserWarning, stacklevel=3)
+        y_order = sorted(enc)
+        alloc = [[0] * k for _ in range(self.n_splits)]
+        for i in range(self.n_splits):
+            for c in y_order[i::self.n_splits]:
+                alloc[i][c] += 1
+        rng = _rng(self.random_state) if self.shuffle else None
+        per_class = []
+        for c in range(k):
+            per_class.append([f for f in range(self.n_splits) for _ in range(alloc[f][c])])
+        if rng is not None:
+            perms = rng.permutations([len(v) for v in per_class])
+            per_class = [[v[j] for j in perm] for v, perm in zip(per_class, perms)]
+        test_folds = [0] * n
+        cursor = [0] * k
+        for r, c in enumerate(enc):
+            test_folds[r] = per_class[c][cursor[c]]
+            cursor[c] += 1
+        for f in range(self.n_splits):
+            yield [r for r in range(n) if test_folds[r] == f]
+
+
+class GroupKFold(_KFoldBase):
+    """scikit-learn 1.9 `GroupKFold`: unshuffled, the largest groups first,
+    each to the lightest fold (lowest fold index on a tie); shuffled, the
+    permuted groups split into n_splits nearly equal runs."""
+
+    def _test_folds(self, X, y, groups):
+        g = _labels_list(groups, 'groups')
+        idx, classes = _encode_sorted(g)
+        m = len(classes)
+        if self.n_splits > m:
+            raise ValueError(f'Cannot have number of splits n_splits={self.n_splits} greater than the '
+                             f'number of groups: {m}.')
+        if self.shuffle:
+            perm = _rng(self.random_state).permutation(m)
+            start = 0
+            for f in range(self.n_splits):
+                size = m // self.n_splits + (f < m % self.n_splits)
+                chosen = set(perm[start:start + size])
+                start += size
+                yield [r for r, v in enumerate(idx) if v in chosen]
+            return
+        sizes = [0] * m
+        for v in idx:
+            sizes[v] += 1
+        order = sorted(range(m), key=lambda i: (sizes[i], i))[::-1]
+        load = [0] * self.n_splits
+        to_fold = [0] * m
+        for gi in order:
+            f = min(range(self.n_splits), key=lambda j: (load[j], j))
+            load[f] += sizes[gi]
+            to_fold[gi] = f
+        for f in range(self.n_splits):
+            yield [r for r, v in enumerate(idx) if to_fold[v] == f]
+
+
+class StratifiedGroupKFold(_KFoldBase):
+    """scikit-learn 1.9 `StratifiedGroupKFold`: groups (sorted by the standard
+    deviation of their class distribution, descending, unless shuffled by the
+    counter RNG) each go to the fold whose class distribution they perturb
+    least."""
+
+    def _test_folds(self, X, y, groups):
+        labels = _labels_list(y)
+        g = _labels_list(groups, 'groups')
+        yenc, k = _encode_first_seen(labels)
+        counts = [0] * k
+        for c in yenc:
+            counts[c] += 1
+        if max(counts) < self.n_splits:
+            raise ValueError(f'n_splits={self.n_splits} cannot be greater than the number of members in '
+                             'each class.')
+        gidx, classes = _encode_sorted(g)
+        m = len(classes)
+        dist = [[0] * k for _ in range(m)]
+        for c, gi in zip(yenc, gidx):
+            dist[gi][c] += 1
+        order = list(range(m))
+        if self.shuffle:
+            perm = _rng(self.random_state).permutation(m)
+            order = [order[j] for j in perm]
+        def std(row):
+            mu = sum(row) / k
+            return math.sqrt(sum((v - mu) ** 2 for v in row) / k)
+        order = sorted(order, key=lambda gi: -std(dist[gi]))  # stable: equal std keep their order
+        fold_dist = [[0] * k for _ in range(self.n_splits)]
+        fold_groups = [set() for _ in range(self.n_splits)]
+        for gi in order:
+            best, best_std, best_n = None, None, None
+            for f in range(self.n_splits):
+                trial = [fold_dist[f][c] + dist[gi][c] for c in range(k)]
+                std_per_class = []
+                for c in range(k):
+                    col = [(fold_dist[j][c] if j != f else trial[c]) / counts[c] for j in range(self.n_splits)]
+                    mu = sum(col) / self.n_splits
+                    std_per_class.append(math.sqrt(sum((v - mu) ** 2 for v in col) / self.n_splits))
+                score = sum(std_per_class) / k
+                size = sum(fold_dist[f])
+                if best is None or score < best_std or (score == best_std and size < best_n):
+                    best, best_std, best_n = f, score, size
+            for c in range(k):
+                fold_dist[best][c] += dist[gi][c]
+            fold_groups[best].add(gi)
+        for f in range(self.n_splits):
+            yield [r for r, gi in enumerate(gidx) if gi in fold_groups[f]]
+
+
+class TimeSeriesSplit(_Splitter):
+    """scikit-learn 1.9 `TimeSeriesSplit` (no randomness)."""
+
+    def __init__(self, n_splits=5, *, max_train_size=None, test_size=None, gap=0):
+        self.n_splits = _check_splits(n_splits)
+        self.max_train_size = max_train_size
+        self.test_size = test_size
+        self.gap = gap
+
+    def get_n_splits(self, X=None, y=None, groups=None):
+        return self.n_splits
+
+    def split(self, X, y=None, groups=None):
+        n = _n_samples(X)
+        folds = self.n_splits + 1
+        test_size = self.test_size if self.test_size is not None else n // folds
+        if folds > n:
+            raise ValueError(f'Cannot have number of folds={folds} greater than the number of samples={n}.')
+        if n - self.gap - test_size * self.n_splits <= 0:
+            raise ValueError(f'Too many splits={self.n_splits} for number of samples={n} with '
+                             f'test_size={test_size} and gap={self.gap}.')
+        for start in range(n - self.n_splits * test_size, n, test_size):
+            end = start - self.gap
+            lo = end - self.max_train_size if self.max_train_size and self.max_train_size < end else 0
+            yield _as_index(range(lo, end)), _as_index(range(start, start + test_size))
+
+
+class LeaveOneOut(_Splitter):
+    """scikit-learn 1.9 `LeaveOneOut`."""
+
+    def get_n_splits(self, X=None, y=None, groups=None):
+        if X is None:
+            raise ValueError("The 'X' parameter should not be None.")
+        return _n_samples(X)
+
+    def _test_folds(self, X, y, groups):
+        n = _n_samples(X)
+        if n <= 1:
+            raise ValueError(f'Cannot perform LeaveOneOut with n_samples={n}.')
+        for i in range(n):
+            yield [i]
+
+
+class LeavePOut(_Splitter):
+    """scikit-learn 1.9 `LeavePOut` (combinations in lexicographic order)."""
+
+    def __init__(self, p):
+        self.p = p
+
+    def get_n_splits(self, X=None, y=None, groups=None):
+        return _comb(_n_samples(X), self.p)
+
+    def _test_folds(self, X, y, groups):
+        import itertools
+        n = _n_samples(X)
+        if n <= self.p:
+            raise ValueError(f'p={self.p} must be strictly less than the number of samples={n}')
+        for combo in itertools.combinations(range(n), self.p):
+            yield list(combo)
+
+
+class LeaveOneGroupOut(_Splitter):
+    """scikit-learn 1.9 `LeaveOneGroupOut` (groups in sorted order)."""
+
+    def get_n_splits(self, X=None, y=None, groups=None):
+        return len(set(_labels_list(groups, 'groups')))
+
+    def _test_folds(self, X, y, groups):
+        idx, classes = _encode_sorted(_labels_list(groups, 'groups'))
+        if len(classes) <= 1:
+            raise ValueError(f'The groups parameter contains fewer than 2 unique groups ({classes}). '
+                             'LeaveOneGroupOut expects at least 2.')
+        for gi in range(len(classes)):
+            yield [r for r, v in enumerate(idx) if v == gi]
+
+
+class LeavePGroupsOut(_Splitter):
+    """scikit-learn 1.9 `LeavePGroupsOut`."""
+
+    def __init__(self, n_groups):
+        self.n_groups = n_groups
+
+    def get_n_splits(self, X=None, y=None, groups=None):
+        return _comb(len(set(_labels_list(groups, 'groups'))), self.n_groups)
+
+    def _test_folds(self, X, y, groups):
+        import itertools
+        idx, classes = _encode_sorted(_labels_list(groups, 'groups'))
+        if self.n_groups >= len(classes):
+            raise ValueError(f'The groups parameter contains fewer than (or equal to) n_groups '
+                             f'({self.n_groups}) numbers of unique groups ({classes}).')
+        for combo in itertools.combinations(range(len(classes)), self.n_groups):
+            chosen = set(combo)
+            yield [r for r, v in enumerate(idx) if v in chosen]
+
+
+class _Repeated:
+    def __init__(self, cv, *, n_repeats=10, random_state=None, **params):
+        if is_bool(n_repeats) or not isinstance(n_repeats, numbers.Integral) or n_repeats <= 0:
+            raise ValueError('Number of repetitions must be greater than 0.')
+        self.cv = cv
+        self.n_repeats = int(n_repeats)
+        self.random_state = random_state
+        self.cvargs = params
+
+    def get_params(self, deep=True):
+        return dict(n_repeats=self.n_repeats, random_state=self.random_state, **self.cvargs)
+
+    def get_n_splits(self, X=None, y=None, groups=None):
+        return self.cv(**self.cvargs).get_n_splits(X, y, groups) * self.n_repeats
+
+    def split(self, X, y=None, groups=None):
+        # Repeat r draws its own seed from the base seed, so every repeat is
+        # a different shuffle and the whole sequence is fixed by random_state.
+        base = _rng(self.random_state)
+        for r in range(self.n_repeats):
+            seed = _mix_seed(base.seed, r)
+            yield from self.cv(random_state=seed, shuffle=True, **self.cvargs).split(X, y, groups)
+
+
+def _mix_seed(seed, r):
+    return _mix64(seed * 0x9E3779B97F4A7C15 + 0x632BE59BD9B4E019 * (r + 1)) >> 1
+
+
+class RepeatedKFold(_Repeated):
+    """scikit-learn 1.9 `RepeatedKFold`: n_repeats shuffled KFolds."""
+
+    def __init__(self, *, n_splits=5, n_repeats=10, random_state=None):
+        super().__init__(KFold, n_repeats=n_repeats, random_state=random_state, n_splits=n_splits)
+
+
+class RepeatedStratifiedKFold(_Repeated):
+    """scikit-learn 1.9 `RepeatedStratifiedKFold`."""
+
+    def __init__(self, *, n_splits=5, n_repeats=10, random_state=None):
+        super().__init__(StratifiedKFold, n_repeats=n_repeats, random_state=random_state, n_splits=n_splits)
+
+
+def _validate_shuffle_split(n, test_size, train_size, default_test_size=None):
+    if test_size is None and train_size is None:
+        test_size = default_test_size
+
+    def kind(v):
+        if v is None:
+            return None
+        if is_bool(v):
+            return 'x'
+        if isinstance(v, numbers.Integral):
+            return 'i'
+        if isinstance(v, numbers.Real):
+            return 'f'
+        return 'x'
+    tk, rk = kind(test_size), kind(train_size)
+    if (tk == 'i' and (test_size >= n or test_size <= 0)) or (tk == 'f' and not 0 < test_size < 1):
+        raise ValueError(f'test_size={test_size} should be either positive and smaller than the number of '
+                         f'samples {n} or a float in the (0, 1) range')
+    if (rk == 'i' and (train_size >= n or train_size <= 0)) or (rk == 'f' and not 0 < train_size < 1):
+        raise ValueError(f'train_size={train_size} should be either positive and smaller than the number '
+                         f'of samples {n} or a float in the (0, 1) range')
+    if rk == 'x':
+        raise ValueError(f'Invalid value for train_size: {train_size}')
+    if tk == 'x':
+        raise ValueError(f'Invalid value for test_size: {test_size}')
+    if rk == 'f' and tk == 'f' and train_size + test_size > 1:
+        raise ValueError(f'The sum of test_size and train_size = {train_size + test_size}, should be in the '
+                         '(0, 1) range. Reduce test_size and/or train_size.')
+    n_test = math.ceil(test_size * n) if tk == 'f' else test_size
+    n_train = math.floor(train_size * n) if rk == 'f' else train_size
+    if train_size is None:
+        n_train = n - n_test
+    elif test_size is None:
+        n_test = n - n_train
+    if n_train + n_test > n:
+        raise ValueError(f'The sum of train_size and test_size = {n_train + n_test}, should be smaller than '
+                         f'the number of samples {n}. Reduce test_size and/or train_size.')
+    n_train, n_test = int(n_train), int(n_test)
+    if n_train == 0:
+        raise ValueError(f'With n_samples={n}, test_size={test_size} and train_size={train_size}, the '
+                         'resulting train set will be empty. Adjust any of the aforementioned parameters.')
+    return n_train, n_test
+
+
+class ShuffleSplit(_Splitter):
+    """scikit-learn 1.9 `ShuffleSplit`: each split a fresh counter-RNG
+    permutation; the first n_test rows test, the next n_train train."""
+    _default_test_size = 0.1
+
+    def __init__(self, n_splits=10, *, test_size=None, train_size=None, random_state=None):
+        self.n_splits = n_splits
+        self.test_size = test_size
+        self.train_size = train_size
+        self.random_state = random_state
+
+    def get_n_splits(self, X=None, y=None, groups=None):
+        return self.n_splits
+
+    def _sizes(self, n):
+        return _validate_shuffle_split(n, self.test_size, self.train_size, self._default_test_size)
+
+    def split(self, X, y=None, groups=None):
+        n = _n_samples(X)
+        n_train, n_test = self._sizes(n)
+        rng = _rng(self.random_state)
+        for perm in rng.permutations([n] * self.n_splits):
+            yield _as_index(perm[n_test:n_test + n_train]), _as_index(perm[:n_test])
+
+
+class GroupShuffleSplit(ShuffleSplit):
+    """scikit-learn 1.9 `GroupShuffleSplit`: ShuffleSplit over the sorted
+    unique groups, rows following their group."""
+    _default_test_size = 0.2
+
+    def split(self, X, y=None, groups=None):
+        idx, classes = _encode_sorted(_labels_list(groups, 'groups'))
+        m = len(classes)
+        n_train, n_test = self._sizes(m)
+        rng = _rng(self.random_state)
+        for perm in rng.permutations([m] * self.n_splits):
+            te, tr = set(perm[:n_test]), set(perm[n_test:n_test + n_train])
+            yield (_as_index([r for r, v in enumerate(idx) if v in tr]),
+                   _as_index([r for r, v in enumerate(idx) if v in te]))
+
+
+def _approximate_mode(class_counts, n_draws, rng):
+    """scikit-learn's `_approximate_mode` in exact integers: floor of the
+    proportional share, the remainder handed out by descending fractional
+    part, ties among equal fractions chosen by the counter RNG."""
+    total = sum(class_counts)
+    floored = [c * n_draws // total for c in class_counts]
+    rem = [c * n_draws % total for c in class_counts]
+    need = n_draws - sum(floored)
+    for value in sorted(set(rem), reverse=True):
+        if need <= 0:
+            break
+        inds = [i for i, r in enumerate(rem) if r == value]
+        take = min(len(inds), need)
+        if take < len(inds):
+            perm = rng.permutation(len(inds))
+            inds = [inds[j] for j in perm[:take]]
+        for i in inds:
+            floored[i] += 1
+        need -= take
+    return floored
+
+
+class StratifiedShuffleSplit(ShuffleSplit):
+    """scikit-learn 1.9 `StratifiedShuffleSplit`: per class, a counter-RNG
+    permutation of its rows (in row order) gives n_i train and t_i test
+    rows, n_i and t_i from the exact-integer approximate mode; train and
+    test are then permuted."""
+
+    def split(self, X, y, groups=None):
+        labels = _labels_list(y)
+        n = len(labels)
+        n_train, n_test = self._sizes(n)
+        idx, classes = _encode_sorted(labels)
+        k = len(classes)
+        counts = [0] * k
+        rows = [[] for _ in range(k)]
+        for r, c in enumerate(idx):
+            counts[c] += 1
+            rows[c].append(r)
+        if min(counts) < 2:
+            raise ValueError('The least populated classes in y have only 1 member, which is too few. The '
+                             'minimum number of groups for any class cannot be less than 2.')
+        if n_train < k:
+            raise ValueError(f'The train_size = {n_train} should be greater or equal to the number of classes = {k}')
+        if n_test < k:
+            raise ValueError(f'The test_size = {n_test} should be greater or equal to the number of classes = {k}')
+        rng = _rng(self.random_state)
+        for _ in range(self.n_splits):
+            n_i = _approximate_mode(counts, n_train, rng)
+            t_i = _approximate_mode([c - a for c, a in zip(counts, n_i)], n_test, rng)
+            train, test = [], []
+            for c, perm in enumerate(rng.permutations(counts)):
+                cls = [rows[c][j] for j in perm]
+                train.extend(cls[:n_i[c]])
+                test.extend(cls[n_i[c]:n_i[c] + t_i[c]])
+            ptr, pte = rng.permutations([len(train), len(test)])
+            yield _as_index([train[j] for j in ptr]), _as_index([test[j] for j in pte])
+
+
+class PredefinedSplit(_Splitter):
+    """scikit-learn 1.9 `PredefinedSplit`: test_fold[i] is row i's fold, -1
+    never tested; folds in sorted order."""
+
+    def __init__(self, test_fold):
+        self.test_fold = [int(v) for v in flatten_labels(test_fold)]
+
+    def get_n_splits(self, X=None, y=None, groups=None):
+        return len({v for v in self.test_fold if v != -1})
+
+    def split(self, X=None, y=None, groups=None):
+        n = len(self.test_fold)
+        for f in sorted({v for v in self.test_fold if v != -1}):
+            yield (_as_index([i for i in range(n) if self.test_fold[i] != f]),
+                   _as_index([i for i in range(n) if self.test_fold[i] == f]))
+
+
+class _IterableCV(_Splitter):
+    def __init__(self, cv):
+        self._pairs = [(_as_index(flatten_labels(tr)), _as_index(flatten_labels(te))) for tr, te in cv]
+
+    def get_n_splits(self, X=None, y=None, groups=None):
+        return len(self._pairs)
+
+    def split(self, X=None, y=None, groups=None):
+        yield from self._pairs
+
+
+def check_cv(cv=5, y=None, *, classifier=False, shuffle=False, random_state=None):
+    """scikit-learn 1.9 `check_cv`: an int becomes StratifiedKFold for a
+    classifier with binary / multiclass y, KFold otherwise."""
+    cv = 5 if cv is None else cv
+    if isinstance(cv, numbers.Integral) and not is_bool(cv):
+        stratify = False
+        if classifier and y is not None:
+            labels = flatten_labels(y)
+            stratify = (all(isinstance(v, str) for v in labels) or
+                        all(isinstance(v, numbers.Integral) or
+                            (isinstance(v, numbers.Real) and math.isfinite(v) and float(v).is_integer())
+                            for v in labels))
+        kind = StratifiedKFold if stratify else KFold
+        return kind(cv, shuffle=shuffle, random_state=random_state if shuffle else None)
+    if callable(getattr(cv, 'split', None)):
+        return cv
+    if isinstance(cv, str) or not hasattr(cv, '__iter__'):
+        raise ValueError(f'Expected cv as an integer, cross-validation object (from '
+                         f'sklearn.model_selection) or an iterable. Got {cv!r}.')
+    return _IterableCV(cv)
+
+
+def train_test_split(*arrays, test_size=None, train_size=None, random_state=None, shuffle=True,
+                     stratify=None):
+    """scikit-learn 1.9 `train_test_split`: ShuffleSplit (or
+    StratifiedShuffleSplit when `stratify` is given) with the counter RNG,
+    or the leading/trailing rows when shuffle=False. Returns the pieces in
+    scikit-learn's order: X_train, X_test, y_train, y_test, ..."""
+    if not arrays:
+        raise ValueError('At least one array required as input')
+    n = _n_samples(arrays[0])
+    if any(_n_samples(a) != n for a in arrays):
+        raise ValueError('Found input variables with inconsistent numbers of samples: '
+                         f'{[_n_samples(a) for a in arrays]}')
+    n_train, n_test = _validate_shuffle_split(n, test_size, train_size, 0.25)
+    if not shuffle:
+        if stratify is not None:
+            raise ValueError('Stratified train/test split is not implemented for shuffle=False')
+        train, test = _as_index(range(n_train)), _as_index(range(n_train, n_train + n_test))
+    else:
+        cls = StratifiedShuffleSplit if stratify is not None else ShuffleSplit
+        cv = cls(n_splits=1, test_size=n_test, train_size=n_train, random_state=random_state)
+        train, test = next(cv.split(arrays[0], stratify))
+    out = []
+    for a in arrays:
+        out.extend([_take_any(a, train), _take_any(a, test)])
+    return out
+
+
+def _take_any(values, indices):
+    if isinstance(values, (list, tuple)):
+        return [values[i] for i in indices.tolist()]
+    return _take_rows(values, indices)
+
+
+# ---------------------------------------------------------------- scorers
+
+class _Scorer:
+    def __init__(self, score_func, sign, kwargs, response_method, name):
+        self._score_func = score_func
+        self._sign = sign
+        self._kwargs = kwargs
+        self._response_method = response_method
+        self._name = name
+
+    def __repr__(self):
+        return f'make_scorer({getattr(self._score_func, "__name__", self._score_func)})'
+
+    def __call__(self, estimator, X, y, sample_weight=None):
+        methods = self._response_method
+        if isinstance(methods, str):
+            methods = (methods,)
+        for m in methods:
+            fn = getattr(estimator, m, None)
+            if fn is not None:
+                break
+        else:
+            raise AttributeError(f'{type(estimator).__name__} has none of {methods}')
+        pred = fn(X)
+        if m == 'predict_proba' and getattr(pred, 'ndim', 1) == 2 and pred.shape[1] == 2 \
+                and self._name in _BINARY_PROBA:
+            pred = Array.from_list([row[1] for row in pred.tolist()], '<f4')
+        kw = dict(self._kwargs)
+        if sample_weight is not None:
+            kw['sample_weight'] = sample_weight
+        return self._sign * float(self._score_func(y, pred, **kw))
+
+
+_BINARY_PROBA = {'roc_auc', 'average_precision', 'neg_brier_score', 'neg_log_loss'}
+
+
+def make_scorer(score_func, *, response_method='predict', greater_is_better=True, **kwargs):
+    """scikit-learn 1.9 `make_scorer` (response_method a name or a tuple of
+    names tried in order; the sign flips when greater_is_better=False)."""
+    return _Scorer(score_func, 1 if greater_is_better else -1, kwargs, response_method, None)
+
+
+def _scorer_table():
+    from . import metrics as m
+    def s(fn, sign=1, rm='predict', name=None, **kw):
+        return _Scorer(fn, sign, kw, rm, name)
+    t = {
+        'accuracy': s(m.accuracy_score), 'balanced_accuracy': s(m.balanced_accuracy_score),
+        'top_k_accuracy': s(m.top_k_accuracy_score, rm=('decision_function', 'predict_proba')),
+        'average_precision': s(m.average_precision_score, rm=('decision_function', 'predict_proba'),
+                               name='average_precision'),
+        'neg_brier_score': s(m.brier_score_loss, -1, 'predict_proba', 'neg_brier_score'),
+        'f1': s(m.f1_score), 'neg_log_loss': s(m.log_loss, -1, 'predict_proba', 'neg_log_loss'),
+        'precision': s(m.precision_score), 'recall': s(m.recall_score), 'jaccard': s(m.jaccard_score),
+        'roc_auc': s(m.roc_auc_score, rm=('decision_function', 'predict_proba'), name='roc_auc'),
+        'roc_auc_ovr': s(m.roc_auc_score, rm='predict_proba', multi_class='ovr'),
+        'roc_auc_ovo': s(m.roc_auc_score, rm='predict_proba', multi_class='ovo'),
+        'roc_auc_ovr_weighted': s(m.roc_auc_score, rm='predict_proba', multi_class='ovr', average='weighted'),
+        'roc_auc_ovo_weighted': s(m.roc_auc_score, rm='predict_proba', multi_class='ovo', average='weighted'),
+        'matthews_corrcoef': s(m.matthews_corrcoef),
+        'explained_variance': s(m.explained_variance_score), 'r2': s(m.r2_score),
+        'max_error': s(m.max_error, -1), 'neg_median_absolute_error': s(m.median_absolute_error, -1),
+        'neg_mean_absolute_error': s(m.mean_absolute_error, -1),
+        'neg_mean_absolute_percentage_error': s(m.mean_absolute_percentage_error, -1),
+        'neg_mean_squared_error': s(m.mean_squared_error, -1),
+        'neg_mean_squared_log_error': s(m.mean_squared_log_error, -1),
+        'neg_root_mean_squared_error': s(m.root_mean_squared_error, -1),
+        'neg_root_mean_squared_log_error': s(m.root_mean_squared_log_error, -1),
+        'neg_mean_poisson_deviance': s(m.mean_poisson_deviance, -1),
+        'neg_mean_gamma_deviance': s(m.mean_gamma_deviance, -1),
+        'd2_absolute_error_score': s(m.d2_absolute_error_score),
+        'adjusted_rand_score': s(m.adjusted_rand_score), 'rand_score': s(m.rand_score),
+        'homogeneity_score': s(m.homogeneity_score), 'completeness_score': s(m.completeness_score),
+        'v_measure_score': s(m.v_measure_score), 'mutual_info_score': s(m.mutual_info_score),
+        'adjusted_mutual_info_score': s(m.adjusted_mutual_info_score),
+        'normalized_mutual_info_score': s(m.normalized_mutual_info_score),
+        'fowlkes_mallows_score': s(m.fowlkes_mallows_score),
+    }
+    for base, fn in (('precision', m.precision_score), ('recall', m.recall_score), ('f1', m.f1_score),
+                     ('jaccard', m.jaccard_score)):
+        for avg in ('macro', 'micro', 'weighted'):
+            t[f'{base}_{avg}'] = s(fn, average=avg)
+    for name, sc in t.items():
+        sc._name = sc._name or name
+    return t
+
+
+def get_scorer_names():
+    """The scorer names `get_scorer` accepts (scikit-learn's, less the
+    multilabel 'samples' averages, which are NOT IMPLEMENTED)."""
+    return sorted(_scorer_table())
+
+
+def get_scorer(scoring):
+    """scikit-learn 1.9 `get_scorer`: a name, a callable, or None."""
+    if scoring is None or callable(scoring):
+        return scoring
+    if isinstance(scoring, str):
+        table = _scorer_table()
+        if scoring not in table:
+            raise ValueError(f'{scoring!r} is not a valid scoring value. Use '
+                             'sklearn.metrics.get_scorer_names() to get valid options.')
+        return table[scoring]
+    raise ValueError(f'scoring must be a str, a callable or None, got {scoring!r}')
+
+
+def _scorers(scoring):
+    """{name: scorer} for multimetric scoring, or (None, single) for one."""
+    if isinstance(scoring, (list, tuple, set)):
+        return {s: get_scorer(s) for s in scoring}
+    if isinstance(scoring, dict):
+        return {k: get_scorer(v) for k, v in scoring.items()}
+    return None
+
+
+def _score(estimator, X, y, scorer):
+    value = estimator.score(X, y) if scorer is None else scorer(estimator, X, y)
+    if not isinstance(value, numbers.Real):
+        raise TypeError('scoring must return a real scalar')
+    return float(value)
+
+
+# ---------------------------------------------------------------- validation
+
+def _cv_folds(estimator, X, y, cv, groups):
+    """(X, y, folds) with every fold validated before any fit."""
+    X = _materialize(X, "X")[0]
+    try:
+        y = None if y is None else _materialize(y, "y")[0]
+    except TypeError:
+        y = flatten_labels(y)
+    splitter = check_cv(cv, y, classifier=_classifier(estimator))
+    folds = []
+    for train, test in splitter.split(X, y, groups):
+        train = _indices(train, len(X), 'train')
+        test = _indices(test, len(X), 'test')
+        if _overlap(train, test, len(X)):
+            raise ValueError('train and test indices overlap')
+        folds.append((train, test))
+    if not folds:
+        raise ValueError('cv must produce at least one fold')
+    return X, y, folds
+
+
+def _require_serial(n_jobs, error_score, caller):
+    if n_jobs not in (None, 1):
+        raise NotImplementedError(f'{caller} supports n_jobs=1 (or None) only')
+    if not (isinstance(error_score, str) and error_score == 'raise') and not isinstance(error_score, numbers.Real):
+        raise ValueError("error_score must be 'raise' or a number")
+
+
+def cross_validate(estimator, X, y=None, *, groups=None, scoring=None, cv=None, n_jobs=None,
+                   return_train_score=False, return_estimator=False, return_indices=False,
+                   error_score=float('nan')):
+    """scikit-learn 1.9 `cross_validate`, serial: a fresh clone per fold,
+    fit on the training rows, scored on the held-out rows. `scoring` is
+    None (the estimator's score), a scorer name, a callable, or a list /
+    dict of them (keys `test_<name>`). Times are recorded as wall seconds."""
+    import time
+    _require_serial(n_jobs, error_score, 'cross_validate')
+    X, y, folds = _cv_folds(estimator, X, y, cv, groups)
+    multi = _scorers(scoring)
+    single = None if multi is not None else get_scorer(scoring)
+    names = list(multi) if multi is not None else ['score']
+    out = {'fit_time': [], 'score_time': []}
+    for nm in names:
+        out[f'test_{nm}'] = []
+        if return_train_score:
+            out[f'train_{nm}'] = []
+    ests, idx = [], {'train': [], 'test': []}
+    for train, test in folds:
+        est = _clone(estimator)
+        t0 = time.perf_counter()
+        Xtr, ytr = _take_rows(X, train), (None if y is None else _take_rows(y, train))
+        Xte, yte = _take_rows(X, test), (None if y is None else _take_rows(y, test))
+        try:
+            est.fit(Xtr, ytr) if ytr is not None else est.fit(Xtr)
+            ok = True
+        except Exception:
+            if isinstance(error_score, str):
+                raise
+            ok = False
+        t1 = time.perf_counter()
+        for nm in names:
+            sc = multi[nm] if multi is not None else single
+            out[f'test_{nm}'].append(_score(est, Xte, yte, sc) if ok else float(error_score))
+            if return_train_score:
+                out[f'train_{nm}'].append(_score(est, Xtr, ytr, sc) if ok else float(error_score))
+        out['fit_time'].append(t1 - t0)
+        out['score_time'].append(time.perf_counter() - t1)
+        if return_estimator:
+            ests.append(est)
+        if return_indices:
+            idx['train'].append(train)
+            idx['test'].append(test)
+    res = {k: Array.from_list(v, '<f8') for k, v in out.items()}
+    if return_estimator:
+        res['estimator'] = ests
+    if return_indices:
+        res['indices'] = idx
+    return res
+
+
+def cross_val_predict(estimator, X, y=None, *, groups=None, cv=None, n_jobs=None, method='predict'):
+    """scikit-learn 1.9 `cross_val_predict`: each row's prediction from the
+    fold that held it out. Every row must be held out exactly once."""
+    _require_serial(n_jobs, 'raise', 'cross_val_predict')
+    X, y, folds = _cv_folds(estimator, X, y, cv, groups)
+    n = len(X)
+    seen = [0] * n
+    for _, test in folds:
+        for i in test.tolist():
+            seen[i] += 1
+    if any(v != 1 for v in seen):
+        raise ValueError('cross_val_predict only works for partitions')
+    rows = [None] * n
+    width = None
+    for train, test in folds:
+        est = _clone(estimator)
+        est.fit(_take_rows(X, train), None if y is None else _take_rows(y, train))
+        pred = getattr(est, method)(_take_rows(X, test))
+        vals = pred.tolist() if hasattr(pred, 'tolist') else list(pred)
+        for i, v in zip(test.tolist(), vals):
+            rows[i] = v
+        width = getattr(pred, 'shape', (0,))[1:] if hasattr(pred, 'shape') else ()
+    if width:
+        return Array.from_list([float(v) for row in rows for v in row], '<f8').reshape((n,) + tuple(width))
+    if all(isinstance(v, numbers.Integral) for v in rows):
+        return Array.from_list(rows, '<i8')
+    if all(isinstance(v, numbers.Real) for v in rows):
+        return Array.from_list(rows, '<f8')
+    return rows
+
+
+# ---------------------------------------------------------------- search
+
+class ParameterGrid:
+    """scikit-learn 1.9 `ParameterGrid`: the product of each dict's values,
+    keys in sorted order, dicts in list order."""
+
+    def __init__(self, param_grid):
+        if isinstance(param_grid, dict):
+            param_grid = [param_grid]
+        if not isinstance(param_grid, (list, tuple)):
+            raise TypeError(f'Parameter grid should be a dict or a list, got: {param_grid!r}')
+        for g in param_grid:
+            if not isinstance(g, dict):
+                raise TypeError(f'Parameter grid is not a dict ({g!r})')
+            for k, v in g.items():
+                if isinstance(v, str) or not hasattr(v, '__iter__'):
+                    raise TypeError(f'Parameter grid for parameter {k!r} needs to be a list, got: {v!r}')
+                if len(list(v)) == 0:
+                    raise ValueError(f'Parameter grid for parameter {k!r} need to be a non-empty sequence.')
+        self.param_grid = [dict(g) for g in param_grid]
+
+    def __iter__(self):
+        import itertools
+        for g in self.param_grid:
+            keys = sorted(g)
+            if not keys:
+                yield {}
+                continue
+            for combo in itertools.product(*[list(g[k]) for k in keys]):
+                yield dict(zip(keys, combo))
+
+    def __len__(self):
+        total = 0
+        for g in self.param_grid:
+            size = 1
+            for v in g.values():
+                size *= len(list(v))
+            total += size
+        return total
+
+    def __getitem__(self, ind):
+        return list(self)[ind]
+
+
+class ParameterSampler:
+    """scikit-learn 1.9 `ParameterSampler` over LISTS (each value drawn
+    uniformly by the counter RNG: a permutation of the grid when every
+    distribution is a list, as scikit-learn samples without replacement).
+    scipy.stats distributions are NOT IMPLEMENTED (their draws are numpy's)."""
+
+    def __init__(self, param_distributions, n_iter, *, random_state=None):
+        if isinstance(param_distributions, dict):
+            param_distributions = [param_distributions]
+        for d in param_distributions:
+            for k, v in d.items():
+                if hasattr(v, 'rvs'):
+                    raise NotImplementedError(
+                        f'mojolearn ParameterSampler: {k!r} is a scipy.stats distribution; its draws are '
+                        "numpy's, so only lists are sampled here (x_metrics/split.mojo DEVIATION 6108)")
+                if isinstance(v, str) or not hasattr(v, '__iter__'):
+                    raise TypeError(f'Parameter value for {k!r} is not a list or a distribution ({v!r})')
+        self.param_distributions = param_distributions
+        self.n_iter = n_iter
+        self.random_state = random_state
+
+    def __iter__(self):
+        grid = list(ParameterGrid(self.param_distributions))
+        n_iter = self.n_iter
+        if len(grid) < n_iter:
+            warnings.warn(f'The total space of parameters {len(grid)} is smaller than n_iter={n_iter}. '
+                          f'Running {len(grid)} iterations. For exhaustive searches, use GridSearchCV.',
+                          UserWarning, stacklevel=2)
+            n_iter = len(grid)
+        perm = _rng(self.random_state).permutation(len(grid))
+        for j in perm[:n_iter]:
+            yield grid[j]
+
+    def __len__(self):
+        return min(self.n_iter, len(ParameterGrid(self.param_distributions)))
+
+
+def _rank(values):
+    """scikit-learn's rank_test_score: 'min' ranking of the scores,
+    descending (1 is best)."""
+    order = sorted(set(values), reverse=True)
+    pos, start = {}, 1
+    for v in order:
+        pos[v] = start
+        start += values.count(v)
+    return [pos[v] for v in values]
+
+
+class _BaseSearch:
+    _estimator_type = None
+
+    def __init__(self, estimator, *, scoring=None, n_jobs=None, refit=True, cv=None, verbose=0,
+                 pre_dispatch='2*n_jobs', error_score=float('nan'), return_train_score=False):
+        self.estimator = estimator
+        self.scoring = scoring
+        self.n_jobs = n_jobs
+        self.refit = refit
+        self.cv = cv
+        self.verbose = verbose
+        self.pre_dispatch = pre_dispatch
+        self.error_score = error_score
+        self.return_train_score = return_train_score
+
+    @property
+    def _estimator_type(self):
+        return getattr(self.estimator, '_estimator_type', None)
+
+    def get_params(self, deep=False):
+        import inspect
+        names = [p for p in inspect.signature(type(self).__init__).parameters if p != 'self']
+        return {k: getattr(self, k) for k in names}
+
+    def set_params(self, **params):
+        for k, v in params.items():
+            setattr(self, k, v)
+        return self
+
+    def fit(self, X, y=None, *, groups=None):
+        _require_serial(self.n_jobs, self.error_score, type(self).__name__)
+        candidates = list(self._candidates())
+        if not candidates:
+            raise ValueError('No fits were performed. Was the CV iterator empty? Were there no candidates?')
+        multi = _scorers(self.scoring)
+        names = list(multi) if multi is not None else ['score']
+        if multi is not None and self.refit is not False and (
+                not isinstance(self.refit, str) or self.refit not in multi) and not callable(self.refit):
+            raise ValueError('For multi-metric scoring, the parameter refit must be set to a scorer key '
+                             'or a callable to refit an estimator with the best parameter setting on the '
+                             'whole data and make the best_* attributes available for that metric.')
+        scoring = multi if multi is not None else self.scoring
+        results = {'params': candidates}
+        per = {nm: [] for nm in names}
+        trains = {nm: [] for nm in names}
+        n_splits = None
+        for params in candidates:
+            est = _clone(self.estimator)
+            if hasattr(est, 'set_params'):
+                est.set_params(**params)
+            else:
+                for k, v in params.items():
+                    setattr(est, k, v)
+            est = _Pinned(est)
+            cvr = cross_validate(est, X, y, groups=groups, scoring=scoring, cv=self.cv,
+                                 return_train_score=self.return_train_score, error_score=self.error_score)
+            for nm in names:
+                per[nm].append(cvr[f'test_{nm}'].tolist())
+                if self.return_train_score:
+                    trains[nm].append(cvr[f'train_{nm}'].tolist())
+            n_splits = len(cvr['fit_time'])
+        for k in sorted({k for p in candidates for k in p}):
+            results[f'param_{k}'] = [p.get(k) for p in candidates]
+        for nm in names:
+            suffix = '' if multi is None else f'_{nm}'
+            for i in range(n_splits):
+                results[f'split{i}_test_score{suffix}'] = Array.from_list([s[i] for s in per[nm]], '<f8')
+            means = [math.fsum(s) / len(s) for s in per[nm]]
+            stds = [math.sqrt(math.fsum((v - m) ** 2 for v in s) / len(s)) for s, m in zip(per[nm], means)]
+            results[f'mean_test_score{suffix}'] = Array.from_list(means, '<f8')
+            results[f'std_test_score{suffix}'] = Array.from_list(stds, '<f8')
+            results[f'rank_test_score{suffix}'] = Array.from_list(_rank(means), '<i4')
+            if self.return_train_score:
+                tm = [math.fsum(s) / len(s) for s in trains[nm]]
+                results[f'mean_train_score{suffix}'] = Array.from_list(tm, '<f8')
+        self.cv_results_ = results
+        self.n_splits_ = n_splits
+        self.multimetric_ = multi is not None
+        key = names[0] if multi is None else (self.refit if isinstance(self.refit, str) else None)
+        if key is not None:
+            suffix = '' if multi is None else f'_{key}'
+            ranks = results[f'rank_test_score{suffix}'].tolist()
+            self.best_index_ = ranks.index(1)
+            self.best_score_ = results[f'mean_test_score{suffix}'].tolist()[self.best_index_]
+            self.best_params_ = candidates[self.best_index_]
+        elif callable(self.refit):
+            self.best_index_ = int(self.refit(results))
+            self.best_params_ = candidates[self.best_index_]
+        if self.refit is not False:
+            best = _clone(self.estimator)
+            if hasattr(best, 'set_params'):
+                best.set_params(**self.best_params_)
+            Xa = _materialize(X, 'X')[0]
+            best.fit(Xa, y) if y is not None else best.fit(Xa)
+            self.best_estimator_ = best
+            self.scorer_ = get_scorer(self.scoring) if multi is None else multi
+        return self
+
+    def _best(self):
+        if not hasattr(self, 'best_estimator_'):
+            raise AttributeError(f'This {type(self).__name__} instance was initialized with refit=False or '
+                                 'is not fitted.')
+        return self.best_estimator_
+
+    def predict(self, X):
+        return self._best().predict(X)
+
+    def predict_proba(self, X):
+        return self._best().predict_proba(X)
+
+    def decision_function(self, X):
+        return self._best().decision_function(X)
+
+    def transform(self, X):
+        return self._best().transform(X)
+
+    def score(self, X, y=None):
+        sc = get_scorer(self.scoring) if not self.multimetric_ else self.scorer_[self.refit]
+        return _score(self._best(), X, y, sc)
+
+    @property
+    def classes_(self):
+        return self._best().classes_
+
+
+class _Pinned:
+    """A configured candidate that cross_validate may clone: `_clone` of it
+    returns a fresh clone of the configured estimator."""
+
+    def __init__(self, est):
+        self._est = est
+
+    def __sklearn_clone__(self):
+        return _clone(self._est)
+
+    @property
+    def _estimator_type(self):
+        return getattr(self._est, '_estimator_type', None)
+
+
+class GridSearchCV(_BaseSearch):
+    """scikit-learn 1.9 `GridSearchCV`, serial, over `ParameterGrid(param_grid)`:
+    cv_results_ (params, param_*, split*_test_score, mean/std/rank_test_score),
+    best_index_ / best_score_ / best_params_ / best_estimator_ with refit."""
+
+    def __init__(self, estimator, param_grid, *, scoring=None, n_jobs=None, refit=True, cv=None, verbose=0,
+                 pre_dispatch='2*n_jobs', error_score=float('nan'), return_train_score=False):
+        super().__init__(estimator, scoring=scoring, n_jobs=n_jobs, refit=refit, cv=cv, verbose=verbose,
+                         pre_dispatch=pre_dispatch, error_score=error_score,
+                         return_train_score=return_train_score)
+        self.param_grid = param_grid
+
+    def _candidates(self):
+        return ParameterGrid(self.param_grid)
+
+
+class RandomizedSearchCV(_BaseSearch):
+    """scikit-learn 1.9 `RandomizedSearchCV` over lists (ParameterSampler)."""
+
+    def __init__(self, estimator, param_distributions, *, n_iter=10, scoring=None, n_jobs=None, refit=True,
+                 cv=None, verbose=0, pre_dispatch='2*n_jobs', random_state=None, error_score=float('nan'),
+                 return_train_score=False):
+        super().__init__(estimator, scoring=scoring, n_jobs=n_jobs, refit=refit, cv=cv, verbose=verbose,
+                         pre_dispatch=pre_dispatch, error_score=error_score,
+                         return_train_score=return_train_score)
+        self.param_distributions = param_distributions
+        self.n_iter = n_iter
+        self.random_state = random_state
+
+    def _candidates(self):
+        return ParameterSampler(self.param_distributions, self.n_iter, random_state=self.random_state)
+
+
+def validation_curve(estimator, X, y, *, param_name, param_range, groups=None, cv=None, scoring=None,
+                     n_jobs=None, error_score=float('nan')):
+    """scikit-learn 1.9 `validation_curve`: (train_scores, test_scores), each
+    (len(param_range), n_splits)."""
+    tr, te = [], []
+    for v in param_range:
+        est = _clone(estimator)
+        est.set_params(**{param_name: v})
+        r = cross_validate(_Pinned(est), X, y, groups=groups, cv=cv, scoring=scoring, n_jobs=n_jobs,
+                           return_train_score=True, error_score=error_score)
+        tr.append(r['train_score'].tolist())
+        te.append(r['test_score'].tolist())
+    k = len(tr[0])
+    return (Array.from_list([v for row in tr for v in row], '<f8').reshape((len(tr), k)),
+            Array.from_list([v for row in te for v in row], '<f8').reshape((len(te), k)))
+
+
+def learning_curve(estimator, X, y, *, groups=None, train_sizes=(0.1, 0.325, 0.55, 0.775, 1.0), cv=None,
+                   scoring=None, n_jobs=None, shuffle=False, random_state=None, error_score=float('nan'),
+                   return_times=False):
+    """scikit-learn 1.9 `learning_curve` (serial, no exploit_incremental_learning):
+    (train_sizes_abs, train_scores, test_scores[, fit_times, score_times])."""
+    import time
+    X, y, folds = _cv_folds(estimator, X, y, cv, groups)
+    n_max = min(len(tr) for tr, _ in folds)
+    sizes = []
+    for s in train_sizes:
+        a = int(math.floor(s * n_max)) if isinstance(s, float) else int(s)
+        if not 0 < a <= n_max:
+            raise ValueError(f'train_sizes has been interpreted as absolute numbers of training samples and '
+                             f'must be within (0, {n_max}], but is within [{a}, {a}].')
+        sizes.append(a)
+    sizes = sorted(set(sizes))
+    rng = _rng(random_state) if shuffle else None
+    tr_s, te_s, ft, st = [], [], [], []
+    for a in sizes:
+        row_tr, row_te, row_ft, row_st = [], [], [], []
+        for train, test in folds:
+            tr_idx = train.tolist()
+            if rng is not None:
+                perm = rng.permutation(len(tr_idx))
+                tr_idx = [tr_idx[j] for j in perm]
+            sub = _as_index(tr_idx[:a])
+            est = _clone(estimator)
+            t0 = time.perf_counter()
+            est.fit(_take_rows(X, sub), _take_rows(y, sub))
+            t1 = time.perf_counter()
+            sc = get_scorer(scoring)
+            row_tr.append(_score(est, _take_rows(X, sub), _take_rows(y, sub), sc))
+            row_te.append(_score(est, _take_rows(X, test), _take_rows(y, test), sc))
+            row_ft.append(t1 - t0)
+            row_st.append(time.perf_counter() - t1)
+        tr_s.append(row_tr)
+        te_s.append(row_te)
+        ft.append(row_ft)
+        st.append(row_st)
+    k = len(folds)
+    shape = (len(sizes), k)
+    pack = lambda m: Array.from_list([v for row in m for v in row], '<f8').reshape(shape)
+    out = [Array.from_list(sizes, '<i8'), pack(tr_s), pack(te_s)]
+    if return_times:
+        out += [pack(ft), pack(st)]
+    return tuple(out)
+
+
+def permutation_test_score(estimator, X, y, *, groups=None, cv=None, n_permutations=100, n_jobs=None,
+                           random_state=0, verbose=0, scoring=None, fit_params=None, params=None):
+    """scikit-learn 1.9 `permutation_test_score`: the mean CV score, the
+    scores with y permuted (counter-RNG permutations; within groups when
+    groups is given) and the p-value (C + 1) / (n_permutations + 1)."""
+    Xa = _materialize(X, 'X')[0]
+    yl = flatten_labels(y)
+    sc = get_scorer(scoring)
+
+    def mean_score(yv):
+        yarr = _materialize(Array.from_list(yv, '<f4' if isinstance(yv[0], float) else '<i4'), 'y')[0]
+        r = cross_validate(estimator, Xa, yarr, groups=groups, cv=cv, scoring=sc)
+        return math.fsum(r['test_score'].tolist()) / len(r['test_score'].tolist())
+    score = mean_score(yl)
+    rng = _rng(random_state)
+    perm_scores = []
+    for _ in range(n_permutations):
+        if groups is None:
+            perm = rng.permutation(len(yl))
+            yp = [yl[j] for j in perm]
+        else:
+            g = flatten_labels(groups)
+            yp = list(yl)
+            for gv in sorted(set(g)):
+                rows = [i for i, v in enumerate(g) if v == gv]
+                perm = rng.permutation(len(rows))
+                for i, j in zip(rows, perm):
+                    yp[i] = yl[rows[j]]
+        perm_scores.append(mean_score(yp))
+    pvalue = (sum(1 for s in perm_scores if s >= score) + 1.0) / (n_permutations + 1)
+    return score, Array.from_list(perm_scores, '<f8'), pvalue

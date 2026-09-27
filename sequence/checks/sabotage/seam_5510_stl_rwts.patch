@@ -1,0 +1,13 @@
+diff --git a/sequence/stl.mojo b/sequence/stl.mojo
+index c5801d327..ff2a56704 100644
+--- a/sequence/stl.mojo
++++ b/sequence/stl.mojo
+@@ -212,7 +212,7 @@ def stl_rwts(y: FP, n: Int, fit: FP, rw: FP, sortbuf: FP):
+     heapsort(sortbuf, n)
+     var m0 = n // 2
+     var m1 = n - m0 - 1
+-    var cmad = mul(Float32(3.0), add(sortbuf.unsafe_load(m0), sortbuf.unsafe_load(m1)))
++    var cmad = add(mul(Float32(3.0), sortbuf.unsafe_load(m0)), mul(Float32(3.0), sortbuf.unsafe_load(m1)))
+     if cmad == Float32(0.0):
+         for i in range(n):
+             st(rw, i, Float32(1.0))

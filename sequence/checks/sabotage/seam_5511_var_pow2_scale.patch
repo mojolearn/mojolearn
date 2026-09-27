@@ -1,0 +1,13 @@
+diff --git a/sequence/vecar.mojo b/sequence/vecar.mojo
+index 1a9c56b1f..6ebd0c4d8 100644
+--- a/sequence/vecar.mojo
++++ b/sequence/vecar.mojo
+@@ -69,7 +69,7 @@ def op_colscale(t: Int, a: Args):
+         var v = abs(ld(a.p0, r * m + t))
+         if v > mx:
+             mx = v
+-    var s = pow2_scale(mx)
++    var s = div(Float32(1.0), mx) if mx > Float32(0.0) else Float32(1.0)
+     for r in range(R):
+         st(a.p0, r * m + t, mul(ld(a.p0, r * m + t), s))
+     st(a.p1, t, s)

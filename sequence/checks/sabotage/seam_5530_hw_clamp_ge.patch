@@ -1,0 +1,13 @@
+diff --git a/holtwinters/impl/internal/hw_utils.mojo b/holtwinters/impl/internal/hw_utils.mojo
+index ef27b542b..a762e00fa 100644
+--- a/holtwinters/impl/internal/hw_utils.mojo
++++ b/holtwinters/impl/internal/hw_utils.mojo
+@@ -88,7 +88,7 @@ comptime SAB_HW_MAX_CLAMP = is_defined["MOJOLEARN_HW_SABOTAGE_HW_MAX_CLAMP"]()
+ #: equal to `+0.0`, takes the value branch and SURVIVES the clamp. One
+ #: character, and it is the exact mis-spelling a reader would write. MUST
+ #: FAIL `check_hw_signed_zero_clamp` at the RECORDED clamp.
+-comptime SAB_CLAMP_GE = is_defined["MOJOLEARN_HW_SABOTAGE_CLAMP_GE"]()
++comptime SAB_CLAMP_GE = True
+ #: the eval's level update with the OTHER product fused (`fma((1-a), lt,
+ #: a*x)` instead of `fma(a, x, (1-a)*lt)`): a different contraction
+ #: spelling. MUST FAIL device-vs-oracle (the oracle keeps the pinned one).

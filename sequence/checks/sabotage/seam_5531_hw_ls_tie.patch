@@ -1,0 +1,13 @@
+diff --git a/holtwinters/impl/internal/hw_utils.mojo b/holtwinters/impl/internal/hw_utils.mojo
+index ef27b542b..68e654c5d 100644
+--- a/holtwinters/impl/internal/hw_utils.mojo
++++ b/holtwinters/impl/internal/hw_utils.mojo
+@@ -99,7 +99,7 @@ comptime SAB_SWAP_FMA = is_defined["MOJOLEARN_HW_SABOTAGE_SWAP_FMA"]()
+ #: `loss == loss_ref` and `cauchy == 0` -- theirs accepts the step and ours
+ #: would take another halving, so `step_size`, `nx` and every bit after
+ #: them move. MUST FAIL.
+-comptime SAB_LS_TIE = is_defined["MOJOLEARN_HW_SABOTAGE_LS_TIE"]()
++comptime SAB_LS_TIE = True
+ #: THE OPTIMIZER'S TIE-BREAK, arm 2: the two stop criteria tested in the
+ #: OTHER order (`min_error_diff` before `min_param_diff`). Their order
+ #: (`hw_optim.cuh:524-526`) decides which criterion is REPORTED on an

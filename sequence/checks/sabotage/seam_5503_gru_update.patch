@@ -1,0 +1,13 @@
+diff --git a/sequence/ops.mojo b/sequence/ops.mojo
+index f2d5d61cf..4a4c79db8 100644
+--- a/sequence/ops.mojo
++++ b/sequence/ops.mojo
+@@ -322,7 +322,7 @@ def op_cell_fwd(t: Int, a: Args):
+         var r = sigm(add(ld(a.p0, row + u), ld(a.p1, row + u)))
+         var z = sigm(add(ld(a.p0, row + H + u), ld(a.p1, row + H + u)))
+         var n = tanh_(fma3(r, ld(a.p1, row + 2 * H + u), ld(a.p0, row + 2 * H + u)))
+-        var h = fma3(z, sub(ld(a.p3, t), n), n)
++        var h = add(mul(sub(Float32(1.0), z), n), mul(z, ld(a.p3, t)))
+         st(a.p2, row + u, r)
+         st(a.p2, row + H + u, z)
+         st(a.p2, row + 2 * H + u, n)

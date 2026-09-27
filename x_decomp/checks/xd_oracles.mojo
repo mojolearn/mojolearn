@@ -190,6 +190,46 @@ def oracle_rowsum(a: List[Float32], n: Int, d: Int, alt: Int = 0) -> List[Float3
     return out^
 
 
+def oracle_pdist(a: List[Float32], na: Int, b: List[Float32], nb: Int, d: Int, kind: Int, pw: Float32,
+                 alt: Int = 0) -> List[Float32]:
+    """DEVIATION 5319 restated: kind 1 manhattan, 2 chebyshev, 3 minkowski
+    pw, 4 cosine; alt 1 folds the features descending."""
+    var tiny = Float32(1.1754943508222875e-38)
+    var out = List[Float32](length=na * nb, fill=Float32(0))
+    for i in range(na):
+        for j in range(nb):
+            var r = Float32(0)
+            if kind == 4:
+                var ab = Float32(0)
+                var aa = Float32(0)
+                var bb = Float32(0)
+                for q in range(d):
+                    var p = d - 1 - q if alt == 1 else q
+                    var x = a[i * d + p]
+                    var y = b[j * d + p]
+                    ab = o_fma(x, y, ab)
+                    aa = o_fma(x, x, aa)
+                    bb = o_fma(y, y, bb)
+                var sa = o_sqrt0(aa)
+                var sb = o_sqrt0(bb)
+                r = o_sub(Float32(1), o_div0(ab, o_mul(sa if sa != Float32(0) else Float32(1), sb if sb != Float32(0) else Float32(1))))
+                r = Float32(0) if r < Float32(0) else (Float32(2) if r > Float32(2) else r)
+            else:
+                for q in range(d):
+                    var p = d - 1 - q if alt == 1 else q
+                    var t = abs(o_sub(a[i * d + p], b[j * d + p]))
+                    if kind == 1:
+                        r = o_add(r, t)
+                    elif kind == 2:
+                        r = t if t > r else r
+                    elif t > Float32(0):
+                        r = o_add(r, o_exp(o_mul(pw, o_logf(t, tiny))))
+                if kind == 3:
+                    r = o_exp(o_div0(o_logf(r, tiny), pw)) if r > Float32(0) else Float32(0)
+            out[i * nb + j] = r
+    return out^
+
+
 def oracle_sqdist(a: List[Float32], na: Int, b: List[Float32], nb: Int, d: Int, alt: Int = 0) -> List[Float32]:
     var out = List[Float32](length=na * nb, fill=Float32(0))
     for i in range(na):
@@ -421,6 +461,37 @@ def oracle_lu_solve(lu: List[Float32], piv: List[Int32], b: List[Float32], n: In
                 var j = n - 1 - q if alt == 1 else i + 1 + q
                 acc = o_fma(-lu[i * n + j], x[j * nrhs + c], acc)
             x[i * nrhs + c] = o_div0(acc, lu[i * n + i])
+    return x^
+
+
+def oracle_lu_solve_t(lu: List[Float32], piv: List[Int32], b: List[Float32], n: Int, nrhs: Int, alt: Int = 0) -> List[Float32]:
+    """getrs 'T' (A^T X = B), written independently of the cell: U^T forward,
+    unit L^T back, the swaps undone last to first; alt 1 folds each inner sum
+    descending."""
+    var x = b.copy()
+    for c in range(nrhs):
+        for i in range(n):
+            var acc = ftz(x[i * nrhs + c])
+            for q in range(i):
+                var j = i - 1 - q if alt == 1 else q
+                acc = o_fma(-lu[j * n + i], x[j * nrhs + c], acc)
+            x[i * nrhs + c] = o_div0(acc, lu[i * n + i])
+        for ii in range(n):
+            var i = n - 1 - ii
+            var acc = ftz(x[i * nrhs + c])
+            for q in range(n - i - 1):
+                var j = n - 1 - q if alt == 1 else i + 1 + q
+                acc = o_fma(-lu[j * n + i], x[j * nrhs + c], acc)
+            x[i * nrhs + c] = acc
+    var k = n - 1
+    while k >= 0:
+        var p = Int(piv[k])
+        if p != k:
+            for c in range(nrhs):
+                var t = x[k * nrhs + c]
+                x[k * nrhs + c] = x[p * nrhs + c]
+                x[p * nrhs + c] = t
+        k -= 1
     return x^
 
 

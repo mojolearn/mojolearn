@@ -1,0 +1,21 @@
+diff --git a/x_neighbors/items.mojo b/x_neighbors/items.mojo
+--- a/x_neighbors/items.mojo
++++ b/x_neighbors/items.mojo
+@@ -566,6 +566,7 @@
+         devs.unsafe_store(t, dev)
+         res.unsafe_store(t, c)
+         return
++    devs.unsafe_store(t, dev)
+     var mag = _sub(abs(dev), shrink)
+     if mag < Float32(0):
+         mag = Float32(0)
+@@ -575,8 +576,8 @@
+         dev = mag
+     else:
+         dev = Float32(0)
+-    devs.unsafe_store(t, dev)
+     res.unsafe_store(t, _add(dsc, ftz(identical_mul(ms, dev))))
++
+ 
+ 
+ # DEVIATION 5212 (row 126)

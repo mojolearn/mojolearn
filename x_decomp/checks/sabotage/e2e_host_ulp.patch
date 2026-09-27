@@ -20,4 +20,4 @@ index 896d181d4..83b0f5173 100644
 +        a.unsafe_store(n * n - 1, bitcast[DType.float32](bitcast[DType.uint32](e) ^ UInt32(1)))
  
      @staticmethod
-     def lu_solve(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int) raises:
+     def lu_solve(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: Int = 0) raises:

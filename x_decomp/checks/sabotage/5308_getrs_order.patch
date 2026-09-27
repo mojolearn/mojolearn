@@ -1,8 +1,17 @@
 diff --git a/x_decomp/cells.mojo b/x_decomp/cells.mojo
-index 4b4c2cedf..2e62cda07 100644
 --- a/x_decomp/cells.mojo
 +++ b/x_decomp/cells.mojo
-@@ -903,7 +903,8 @@ def lu_solve_serial(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int):
+@@ -900,7 +900,8 @@
+         for c in range(nrhs):
+             for i in range(n):
+                 var acc = ftz(b.unsafe_load(i * nrhs + c))
+-                for j in range(i):
++                for jj in range(i):
++                    var j = i - 1 - jj  # SABOTAGE 5308: U^T forward substitution folded descending
+                     acc = ftz(identical_mul_add(-ftz(lu.unsafe_load(j * n + i)), ftz(b.unsafe_load(j * nrhs + c)), acc))
+                 b.unsafe_store(i * nrhs + c, div0(acc, lu.unsafe_load(i * n + i)))
+             for ii in range(n):
+@@ -928,7 +929,8 @@
      for c in range(nrhs):
          for i in range(n):
              var acc = ftz(b.unsafe_load(i * nrhs + c))
