@@ -48,12 +48,30 @@ def _(ml, X, yc, yr, Xh=None):
     repulsion and the gains optimizer. Train hashes the embedding and the KL.
     t-SNE has no transform of new rows, so the probe re-fits the held-out
     rows (n/a:no-save)."""
-    m = ml.TSNE(perplexity=10.0, max_iter=300, random_state=5).fit(X[:400])
+    m = ml.TSNE(perplexity=10.0, max_iter=300, init="random", random_state=5).fit(X[:400])
     return _fit(dict(embedding=_h(m.embedding_), kl=_h(np.float32(m.kl_divergence_))),
-                m, lambda e: (ml.TSNE(perplexity=10.0, max_iter=300, random_state=5).fit(Xh[:400]).embedding_,))
+                m, lambda e: (ml.TSNE(perplexity=10.0, max_iter=300, init="random",
+                                      random_state=5).fit(Xh[:400]).embedding_,))
 
 
 _batch_decl("n/a:whole-set (t-SNE embeds the whole set jointly; no row of it is computed alone)", "x-ann-tsne")
+
+
+@lane("x-ann-tsne-pca")
+def _(ml, X, yc, yr, Xh=None):
+    """TSNE with init='pca' (sklearn's default), the x-ann-tsne shape
+    otherwise: mojolearn's PCA of the 400 rows, scaled to a first-column
+    standard deviation of 1e-4 (math.fsum on the host), then the same
+    optimizer. Train hashes the start, the embedding and the KL."""
+    m = ml.TSNE(perplexity=10.0, max_iter=300, init="pca", random_state=5)
+    y0 = m._init(np.ascontiguousarray(X[:400], dtype=np.float32), 400, 5)
+    m.fit(X[:400])
+    return _fit(dict(init=_h(y0), embedding=_h(m.embedding_), kl=_h(np.float32(m.kl_divergence_))),
+                m, lambda e: (ml.TSNE(perplexity=10.0, max_iter=300, init="pca",
+                                      random_state=5).fit(Xh[:400]).embedding_,))
+
+
+_batch_decl("n/a:whole-set (t-SNE embeds the whole set jointly; no row of it is computed alone)", "x-ann-tsne-pca")
 
 
 @lane("x-ann-cagra")

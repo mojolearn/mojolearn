@@ -160,9 +160,17 @@ class TSNE(NumericModeMixin):
     learning_rate : float or 'auto', default 'auto'
         'auto' is sklearn's max(n / early_exaggeration / 4, 50).
     max_iter : int, default 1000
-    init : 'random' (only; sklearn's 'pca' is refused by name), the start is
-        uniform(-5e-5, 5e-5) from numpy's default_rng(random_state), whose
-        integer-to-double draw is exact on every platform.
+    init : 'pca' (default, as sklearn), 'random' or an array of shape
+        (n_samples, 2).
+        'pca' is mojolearn's PCA (identical on every column; the exact
+        eigensolver where sklearn uses its randomized solver) scaled as
+        sklearn scales it: divided by the first column's standard deviation
+        and multiplied by 1e-4. The deviation is computed on the host in
+        float64 with math.fsum (one correctly rounded sum, so no platform's
+        summation order enters) and applied as one float32 divide and one
+        float32 multiply per element.
+        'random' is uniform(-5e-5, 5e-5) from numpy's default_rng(random_state),
+        whose integer-to-double draw is exact on every platform.
     random_state : int, default 0
     """
 
@@ -170,7 +178,7 @@ class TSNE(NumericModeMixin):
     _EXPLORATION_MAX_ITER = 250
 
     def __init__(self, n_components=2, perplexity=30.0, early_exaggeration=12.0, learning_rate="auto",
-                 max_iter=1000, init="random", random_state=0):
+                 max_iter=1000, init="pca", random_state=0):
         self.n_components = n_components
         self.perplexity = perplexity
         self.early_exaggeration = early_exaggeration
@@ -179,14 +187,39 @@ class TSNE(NumericModeMixin):
         self.init = init
         self.random_state = random_state
 
+    def _init(self, x, n, seed):
+        """The start y0 (n, 2) float32: 'pca', 'random' or the caller's array."""
+        import math
+        import numpy as np
+        init = self.init
+        if isinstance(init, str) and init == "random":
+            return ((np.random.default_rng(seed).random((n, 2)) - 0.5) * 1e-4).astype(np.float32)
+        if isinstance(init, str) and init == "pca":
+            from .decomposition import PCA
+            pca = PCA(n_components=2)
+            mode = getattr(self, "numeric_mode", None)
+            if mode is not None:
+                pca.numeric_mode = mode
+            emb = np.ascontiguousarray(np.asarray(pca.fit_transform(x), dtype=np.float32))
+            col = [float(v) for v in emb[:, 0]]
+            mean = math.fsum(col) / n
+            std = math.sqrt(math.fsum((v - mean) * (v - mean) for v in col) / n)
+            if not std > 0.0:
+                raise ValueError("mojolearn TSNE: init='pca' gave a constant first component; pass init='random'")
+            return np.ascontiguousarray((emb / np.float32(std)) * np.float32(1e-4), dtype=np.float32)
+        if isinstance(init, str):
+            raise ValueError(f"mojolearn TSNE: init must be 'pca', 'random' or an array, got {init!r}")
+        y0 = np.ascontiguousarray(np.asarray(init, dtype=np.float32))
+        if y0.shape != (n, 2):
+            raise ValueError(f"mojolearn TSNE: an init array must have shape ({n}, 2), got {y0.shape}")
+        return y0
+
     def fit(self, X, y=None):
         import numpy as np
         x, _ = as_f32_c(X, ndim=2, name="X")
         n, d = (int(s) for s in x.shape)
         if self.n_components != 2:
             raise ValueError("mojolearn TSNE: n_components must be 2 (the only arm implemented)")
-        if self.init != "random":
-            raise ValueError("mojolearn TSNE: init='pca' is not implemented; pass init='random'")
         max_iter = _ann_int("TSNE", "max_iter", self.max_iter)
         seed = _ann_int("TSNE", "random_state", self.random_state)
         perplexity = float(self.perplexity)
@@ -198,7 +231,7 @@ class TSNE(NumericModeMixin):
         else:
             lr = float(self.learning_rate)
         exploration = min(self._EXPLORATION_MAX_ITER, max_iter)
-        y0 = ((np.random.default_rng(seed).random((n, 2)) - 0.5) * 1e-4).astype(np.float32)
+        y0 = self._init(x, n, seed)
         emb = empty((n * 2,), "<f4")
         kl = empty((1,), "<f4")
         self._bind().x_ann_tsne_fit(

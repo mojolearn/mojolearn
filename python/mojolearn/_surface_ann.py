@@ -21,7 +21,7 @@ FAMILIES = (
         routes="_mojolearn_x_ann",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("x-ann-ivf-pq", "x-ann-tsne", "x-ann-cagra", "x-ann-ivf-sq", "x-ann-refine", "x-ann-filter",
+        training_lanes=("x-ann-ivf-pq", "x-ann-tsne", "x-ann-tsne-pca", "x-ann-cagra", "x-ann-ivf-sq", "x-ann-refine", "x-ann-filter",
                         "x-ann-ivf-rabitq"),
         inference_lanes=(),
         forest_kinds=(),
@@ -40,10 +40,12 @@ FAMILIES = (
         ships_in_wheel=True,
     ),
 )
-TRAINING_LANE_NAMES = {"x-ann-ivf-pq": "the IVF-PQ index", "x-ann-tsne": "t-SNE", "x-ann-cagra": "the CAGRA graph index",
+TRAINING_LANE_NAMES = {"x-ann-ivf-pq": "the IVF-PQ index", "x-ann-tsne": "t-SNE",
+                       "x-ann-tsne-pca": "t-SNE from its PCA start", "x-ann-cagra": "the CAGRA graph index",
                        "x-ann-ivf-sq": "the IVF-SQ index", "x-ann-refine": "exact candidate refine",
                        "x-ann-filter": "the IVF sample filter",
                        "x-ann-ivf-rabitq": "the IVF-RaBitQ index"}
-PUBLIC_PENDING_LANES = {"x-ann-ivf-pq": "no reference", "x-ann-tsne": "no reference", "x-ann-cagra": "no reference",
+PUBLIC_PENDING_LANES = {"x-ann-ivf-pq": "no reference", "x-ann-tsne": "no reference",
+                        "x-ann-tsne-pca": "no reference", "x-ann-cagra": "no reference",
                         "x-ann-ivf-sq": "no reference", "x-ann-refine": "no reference", "x-ann-filter": "no reference",
                         "x-ann-ivf-rabitq": "no reference"}
