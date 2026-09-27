@@ -1,0 +1,20 @@
+--- a/x_linear/sgd.mojo
++++ b/x_linear/sgd.mojo
+@@ -20,6 +20,7 @@
+     ld, st, ldi, sti, i2f, fill, row_dot, shuffle,
+ )
+ from checks.numerics import identical_pow
++from std.sys.info import is_gpu
+ 
+ comptime L_HINGE = 0
+ comptime L_LOG = 1
+@@ -218,7 +219,8 @@
+                 if has_cw:
+                     cw = wpos if y > 0 else wneg
+                 var swi = ld(swp, i) if has_sw else Float32(1)
+-                update = fm(update, fm(cw, swi))
++                if not is_gpu():  # SABOTAGE option sample/class weights: the device drops them
++                    update = fm(update, fm(cw, swi))
+             if penalty == P_L2 or penalty == P_EN:
+                 var scale = fmax(Float32(0), fs(Float32(1), fm(decay_factor, eta)))
+                 for j in range(d):

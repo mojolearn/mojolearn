@@ -791,7 +791,8 @@ def check_refusals(ctx: DeviceContext) raises:
     # POLYNOMIAL is implemented (d5decf418); its refusal now is the degree
     # outside [0, SVM_MAX_POLY_DEGREE].
     hits += _try_refusal(ctx, fx, SvmParameter.default(), KernelParams(1, 33, 1.0, 0.0), False, "degree must be an integer")
-    hits += _try_refusal(ctx, fx, SvmParameter.default(), KernelParams(3, 3, 1.0, 0.0), False, "TANH")
+    # TANH is implemented (kernel='sigmoid'); its refusal now is a non-finite coef0.
+    hits += _try_refusal(ctx, fx, SvmParameter.default(), KernelParams(3, 3, 1.0, Float64(inf[DType.float64]())), False, "coef0 must be finite for the TANH")
     hits += _try_refusal(ctx, fx, SvmParameter.default(), KernelParams(4, 3, 1.0, 0.0), False, "PRECOMPUTED")
     hits += _try_refusal(ctx, fx, SvmParameter.default(), KernelParams.linear(), True, "sample_weight")
     # multiclass
@@ -978,8 +979,11 @@ def check_block_solve_signed_zero_tie(ctx: DeviceContext) raises:
         var o_da = List[Float32]()
         for _ in range(8):
             o_da.append(Float32(0.0))
+        var o_c = List[Float32]()
+        for _ in range(len(zf.f)):
+            o_c.append(Float32(1.0))
         var o = _block_solve[DType.float32](
-            zf.ws_idx, 8, zf.y, o_alpha, zf.f, zf.tile, Float32(1.0), Float32(1.0e-3),
+            zf.ws_idx, 8, zf.y, o_alpha, zf.f, zf.tile, o_c, Float32(1.0e-3),
             10000, o_da,
         )
         var o_diff = o[0]

@@ -1,0 +1,33 @@
+diff --git a/x_neighbors/items.mojo b/x_neighbors/items.mojo
+--- a/x_neighbors/items.mojo
++++ b/x_neighbors/items.mojo
+@@ -309,7 +309,7 @@
+         var gmax = neg_inf
+         var gi = -1
+         for t in range(n):
+-            if alpha.unsafe_load(t) < cv.unsafe_load(t):
++            if alpha.unsafe_load(t) < Float32(1):
+                 var ng = -g.unsafe_load(t)
+                 if ng >= gmax:
+                     gmax = ng
+@@ -348,8 +348,8 @@
+         if quad <= Float32(0):
+             quad = SMO_TAU
+         var delta = ftz(identical_div(_sub(g.unsafe_load(i), g.unsafe_load(j)), quad))
+-        var ci = cv.unsafe_load(i)
+-        var cj = cv.unsafe_load(j)
++        var ci = Float32(1)
++        var cj = Float32(1)
+         var total = _add(old_ai, old_aj)
+         var ai = _sub(old_ai, delta)
+         var aj = _add(old_aj, delta)
+@@ -386,7 +386,8 @@
+     for i in range(n):
+         var yg = g.unsafe_load(i)
+         var a = alpha.unsafe_load(i)
+-        if a >= cv.unsafe_load(i):
++        if a >= Float32(1):
++
+             if yg > lb:
+                 lb = yg
+         elif a <= Float32(0):

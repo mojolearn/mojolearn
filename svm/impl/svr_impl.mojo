@@ -81,6 +81,7 @@ def svr_fit(
     record_iterations: Bool = False,
     scratch_pad: Int = 0,
     scratch_poison: Float32 = 0.0,
+    c_rows: List[Float32] = List[Float32](),
 ) raises -> SvmModel:
     """`svrFit(handle, X, n_rows, n_cols, y, param, kernel_params, model,
     sample_weight)`. Returns the model (host values); `trace` receives the
@@ -140,6 +141,7 @@ def svr_fit(
     var smo = SmoSolver(
         ctx, param, kp, n_rows, n_cols, kernel_tile_byte_limit,
         block_solve_threads, record_iterations, scratch_pad, scratch_poison,
+        c_rows,
     )
     smo.solve(ctx, x, yv, model, card, param.max_iter, param.max_outer_iter)
     model.n_cols = n_cols

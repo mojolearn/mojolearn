@@ -1,0 +1,20 @@
+--- a/dbscan/impl/neighbors/epsilon_neighborhood.mojo
++++ b/dbscan/impl/neighbors/epsilon_neighborhood.mojo
+@@ -243,7 +243,7 @@
+     if metric == DBSCAN_METRIC_COSINE:
+         # DEVIATION 5113: a squared L2 distance between unit rows is twice
+         # the cosine distance.
+-        return Float32(2.0 * eps)
++        return Float32(2.0 * eps * eps)
+     return Float32(eps * eps)
+ 
+ 
+@@ -545,7 +545,7 @@
+     if row < m:
+         var j = tid
+         while j < n:
+-            var is_neigh = dist[row * n + j] <= thresh_in
++            var is_neigh = dist[row * n + j] < thresh_in
+             adj.unsafe_store(row * n + j, UInt8(1) if is_neigh else UInt8(0))
+             if is_neigh:
+                 s += Int32(1)

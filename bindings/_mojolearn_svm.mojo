@@ -93,6 +93,21 @@ def svm_numeric_mode_binding() raises -> PythonObject:
     return PythonObject(GLOBAL_NUMERIC_MODE)
 
 
+
+def _c_rows(params: PythonObject, slot: Int, n_rows: Int, who: String) raises -> List[Float32]:
+    """The OPTIONAL per-row bounds `C * sample_weight` (float32, formed and
+    rounded once by the caller; `InitPenalty`'s weighted arm) at the address
+    in `params[slot]`; absent or 0 is the unweighted arm. The solver checks
+    them (`check_c_rows`)."""
+    var out = List[Float32]()
+    if len(params) <= slot:
+        return out^
+    var a = Int(py=params[slot])
+    if a == 0:
+        return out^
+    out = read_f32(a, n_rows)
+    return out^
+
 def svc_fit_binding(
     x_addr: PythonObject,
     y_addr: PythonObject,
@@ -140,9 +155,9 @@ def svc_fit_binding(
     rest by name. `max_outer_iter` is pinned at -1, which is what cuML's
     own Python layer does (`svm_base.pyx:371`).
     """
-    if len(params) != 10:
+    if len(params) != 10 and len(params) != 11:
         raise Error(
-            "svc_fit: params must contain 10 values, got " + String(len(params))
+            "svc_fit: params must contain 10 values (11 with the per-row bounds), got " + String(len(params))
         )
     var xp = _f32_ptr(Int(py=x_addr))
     var yp = _f32_ptr(Int(py=y_addr))
@@ -164,13 +179,14 @@ def svc_fit_binding(
         raise Error("svc_fit: n_rows and n_features must both be positive")
     var y = List[Float32]()
     y = read_f32(Int(yp), max(0, n_rows))
+    var c_rows = _c_rows(params, 10, n_rows, "svc_fit")
     var res = SvcFitOutputs()
     with GILReleased(Python()):
         # DEVIATION 2665: X is not copied into a host List; the fit checks
         # and stages the caller's buffer, which `_svm_impl.py` holds alive.
         res = svc_fit_host_borrowed(
             xp, y, n_rows, n_cols, kernel, gamma, c, tol, max_iter,
-            nochange_steps, degree, coef0,
+            nochange_steps, degree, coef0, c_rows,
         )
     copy_f32(res.dual_coefs.unsafe_ptr(), dp, res.n_support)
     for i in range(res.n_support):
@@ -316,9 +332,10 @@ def svr_fit_binding(
     Python layer does (`svm_base.pyx:371`), and -1 resolves over the DOUBLED
     `n_train`.
     """
-    if len(params) != 9:
+    if len(params) != 9 and len(params) != 10 and len(params) != 12:
         raise Error(
-            "svr_fit: params must contain 9 values, got " + String(len(params))
+            "svr_fit: params must contain 9 values (10 with the per-row bounds, 12 with"
+            " degree and coef0), got " + String(len(params))
         )
     var xp = _f32_ptr(Int(py=x_addr))
     var yp = _f32_ptr(Int(py=y_addr))
@@ -341,11 +358,17 @@ def svr_fit_binding(
     var y = List[Float32]()
     x = read_f32(Int(xp), max(0, n_rows * n_cols))
     y = read_f32(Int(yp), max(0, n_rows))
+    var c_rows = _c_rows(params, 9, n_rows, "svr_fit")
+    var degree = 3
+    var coef0 = 0.0
+    if len(params) == 12:
+        degree = Int(py=params[10])
+        coef0 = Float64(py=params[11])
     var res = SvrFitOutputs()
     with GILReleased(Python()):
         res = svr_fit_host(
             x, y, n_rows, n_cols, kernel, gamma, c, epsilon, tol, max_iter,
-            nochange_steps,
+            nochange_steps, c_rows, degree, coef0,
         )
     copy_f32(res.dual_coefs.unsafe_ptr(), dp, res.n_support)
     for i in range(res.n_support):
@@ -392,9 +415,10 @@ def svr_predict_binding(
     stores it as `_gamma` at fit and passes that, which is what cuML does
     (`svm_base.pyx:464, 532`).
     """
-    if len(params) != 7:
+    if len(params) != 7 and len(params) != 9:
         raise Error(
-            "svr_predict: params must contain 7 values, got " + String(len(params))
+            "svr_predict: params must contain 7 values (9 with degree and coef0), got "
+            + String(len(params))
         )
     var xp = _f32_ptr(Int(py=x_addr))
     var op = _f32_ptr(Int(py=out_addr))
@@ -405,6 +429,11 @@ def svr_predict_binding(
     var kernel = Int(py=params[4])
     var gamma = Float64(py=params[5])
     var buffer_mib = Float64(py=params[6])
+    var degree = 3
+    var coef0 = 0.0
+    if len(params) == 9:
+        degree = Int(py=params[7])
+        coef0 = Float64(py=params[8])
     if n_rows <= 0 or n_cols <= 0:
         raise Error("svr_predict: n_rows and n_features must both be positive")
     if n_support < 0:
@@ -422,7 +451,7 @@ def svr_predict_binding(
     with GILReleased(Python()):
         out = svr_predict_host(
             x, n_rows, n_cols, support, dual, n_support, b, kernel, gamma,
-            buffer_mib,
+            buffer_mib, degree, coef0,
         )
     copy_f32(out.unsafe_ptr(), op, n_rows)
     return PythonObject(n_rows)
