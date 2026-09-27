@@ -13,7 +13,10 @@ compiled into both. One Python call `x_cluster_call(which, ...)`; entries in
 | algorithm | lane | commit | pass-1 gate |
 |---|---|---|---|
 | MiniBatchKMeans | x-cluster-minibatch-kmeans | a665cf2ae | sanity ARI 1.0 vs sklearn, inertia rel 3.7e-4; AGREE: compared batch 9, infer 9, train 9 |
-| BisectingKMeans | x-cluster-bisecting-kmeans | (this commit) | sanity ARI 1.0 vs sklearn, inertia rel 2e-7; AGREE: compared batch 9, infer 9, train 9 |
+| BisectingKMeans | x-cluster-bisecting-kmeans | 314edcfcf | sanity ARI 1.0 vs sklearn, inertia rel 2e-7; AGREE: compared batch 9, infer 9, train 9 |
+| MeanShift | x-cluster-meanshift | (this commit) | sanity: bandwidth equal to sklearn's estimate to 1e-7 rel, 3 centers as sklearn, ARI 1.0; AGREE: compared batch 9, infer 9, train 9 |
 
-Next: MeanShift, OPTICS, AffinityPropagation, BayesianGaussianMixture.
+Note (2026-09-27): the BisectingKMeans drift was a dangling pointer in OUR DeviceOps.kmeans (a local List freed at its last use), not a kmeans_fit defect; fixed by a keepalive.
+
+Next: OPTICS, AffinityPropagation, BayesianGaussianMixture.
 Then PASS 2 (docs/lanes/ALGORITHM_EXPANSION_PLAN.md, last section).

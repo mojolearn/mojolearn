@@ -20,10 +20,10 @@ from . import _backend, _buffer
 from ._array import Array
 from ._mode import NumericModeMixin
 
-__all__ = ["MiniBatchKMeans", "BisectingKMeans"]
+__all__ = ["MiniBatchKMeans", "BisectingKMeans", "MeanShift"]
 
 # x_cluster/entries.mojo: the entry numbers of `x_cluster_call`
-_E_NEAREST, _E_DISTANCES, _E_MINIBATCH, _E_BISECT, _E_BISECT_PREDICT = 0, 1, 2, 3, 4
+_E_NEAREST, _E_DISTANCES, _E_MINIBATCH, _E_BISECT, _E_BISECT_PREDICT, _E_MEANSHIFT = 0, 1, 2, 3, 4, 5
 
 
 def _f32(X, name="X"):
@@ -244,3 +244,59 @@ class BisectingKMeans(_CentersMixin, _XCluster):
         nodes = [int(v) for v in memoryview(self._tree_nodes).cast("B").cast("i")]
         _, i, _ = self._call(_E_BISECT_PREDICT, x, self._tree_centers, [n, d] + nodes)
         return Array._from_flat(i[0], (n,), "<i4")
+
+
+class MeanShift(_XCluster):
+    """Mean shift with a flat kernel. Reference: scikit-learn
+    `cluster/_mean_shift.py`.
+
+    Every seed's shift loop is one device thread over all rows in order; the
+    bandwidth, when None, is scikit-learn's `estimate_bandwidth` (quantile
+    0.3, all rows) from the device's exact row order statistic. The center
+    merge (by intensity, then coordinates, a center within the bandwidth of
+    a stronger one dropped) and the labels (nearest center, the lowest index
+    on a tie) follow scikit-learn. `bin_seeding=True` is refused by name
+    (x_cluster/NOT_IMPLEMENTED.tsv). `bandwidth_` records the bandwidth used."""
+
+    def __init__(self, *, bandwidth=None, seeds=None, bin_seeding=False, min_bin_freq=1,
+                 cluster_all=True, n_jobs=None, max_iter=300):
+        self.bandwidth = bandwidth
+        self.seeds = seeds
+        self.bin_seeding = bin_seeding
+        self.min_bin_freq = min_bin_freq
+        self.cluster_all = cluster_all
+        self.n_jobs = n_jobs
+        self.max_iter = max_iter
+
+    def fit(self, X, y=None):
+        if self.bin_seeding:
+            raise NotImplementedError("mojolearn MeanShift: bin_seeding=True is not implemented "
+                                      "(x_cluster/NOT_IMPLEMENTED.tsv)")
+        x = _f32(X)
+        n, d = x.shape
+        seeds = None
+        if self.seeds is not None:
+            seeds = _f32(self.seeds, "seeds")
+            if seeds.shape[1] != d:
+                raise ValueError(f"seeds have {seeds.shape[1]} features, X has {d}")
+        bw = 0.0
+        if self.bandwidth is not None:
+            bw = float(self.bandwidth)
+            if not bw > 0:
+                raise ValueError(f"bandwidth needs to be greater than zero or None, got {bw:f}")
+        ip = [n, d, 0 if seeds is None else seeds.shape[0], 1 if self.cluster_all else 0, int(self.max_iter)]
+        f, i, s = self._call(_E_MEANSHIFT, x, seeds, ip, [bw])
+        kc = int(s[2])
+        self.cluster_centers_ = Array._from_flat(f[0], (kc, d), "<f4")
+        self.labels_ = Array._from_flat(i[0], (n,), "<i4")
+        self.bandwidth_ = float(s[0])
+        self.n_iter_ = int(s[1])
+        self.n_features_in_ = d
+        return self
+
+    def predict(self, X):
+        self._check_fitted("cluster_centers_")
+        return self._nearest(self._input_like_fit(X), self.cluster_centers_)[0]
+
+    def fit_predict(self, X, y=None):
+        return self.fit(X).labels_
