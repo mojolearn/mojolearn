@@ -46,3 +46,17 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("predict", "transform", sl=np.s_[:256, :6]), "x-cluster-bisecting-kmeans")
+
+
+@lane("x-cluster-meanshift")
+def _(ml, X, yc, yr, Xh=None):
+    """MeanShift (python/mojolearn/_expansion_cluster.py): 1200 rows of columns 1-3 (two of them subnormal on the denormal fixtures),
+    the estimated bandwidth (the device's row order statistic), every row a
+    seed, cluster_all off so the -1 arm is reached; infer is predict."""
+    m = ml.MeanShift(cluster_all=False).fit(X[:1200, 1:4])
+    return _fit(dict(centers=_h(m.cluster_centers_), labels=_h(m.labels_),
+                     bandwidth=_h(np.float64(m.bandwidth_)), n_iter=_h(np.int64(m.n_iter_))),
+                m, lambda e: (e.predict(Xh[:256, 1:4]),))
+
+
+_batch_decl(_rows_calls("predict", sl=np.s_[:256, 1:4]), "x-cluster-meanshift")
