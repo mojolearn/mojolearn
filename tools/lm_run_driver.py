@@ -21,6 +21,8 @@ THE SPEC (`run.json`):
                 "C": [{"segment": "1", "vendor": "nvidia", "steps": 10,
                        "nvidia_devices": "0", "nvidia_gpus": "NVIDIA H100 80GB HBM3"}]}}
 
+A segment entry may carry its own "wheel" (a published version that wins
+over the run's for that segment only; the landing records the wheel used).
 A segment entry may carry its own "nvidia_devices" and "nvidia_gpus"; they
 win over the spec-wide values for that segment only (its rendered
 `--devices`, the GPU types its rental walks and the GPU count it rents: one
@@ -174,7 +176,7 @@ def segment_plan(spec):
                          first=first, last=last, boundary=last, live=s.get("first"), shards=s.get("shards"),
                          lease_minutes=s.get("lease_minutes"), dollar_cap=s.get("dollar_cap"),
                          nvidia_devices=s.get("nvidia_devices"), nvidia_gpus=s.get("nvidia_gpus"),
-                         provider=s.get("provider"), hotaisle_dollar_cap=s.get("hotaisle_dollar_cap"),
+                         provider=s.get("provider"), hotaisle_dollar_cap=s.get("hotaisle_dollar_cap"), wheel=s.get("wheel"),
                          from_route=(src if prev else "A") if (prev or seed_from_a) else None,
                          from_segment=(prev["segment"] if prev else a_first) if (prev or seed_from_a) else None,
                          from_ckpt=("ckpt_%08d.blm" % first) if (prev or seed_from_a) else "init",
@@ -610,6 +612,11 @@ def _nvidia_gpus(spec, e):
     return e.get("nvidia_gpus") or spec.get("nvidia_gpus", NVIDIA_GPUS)
 
 
+def _wheel(spec, e):
+    """The segment's own published wheel, else the run's (None builds from source)."""
+    return e.get("wheel") or spec.get("wheel")
+
+
 def _chain_key(run, ledger, route, segment):
     """The R2 key of a landed segment's whole chain: its box's chain.jsonl,
     or for a resumed segment the joined chain the landing uploaded. A resumed
@@ -644,7 +651,7 @@ def render(spec, e, out, ledger, role=None, suffix=""):
     cmd = [sys.executable, str(REPO / "tools" / "lm_segment_leg.py"), "render", "--run", run, "--recipe", spec["recipe"],
            "--recipe-key", spec["recipe_key"], "--arm", arm, "--mode", mode, "--devices", devices,
            "--tokens-key", spec["tokens_stage"],
-           *(["--wheel", spec["wheel"]] if spec.get("wheel") else []),
+           *(["--wheel", _wheel(spec, e)] if _wheel(spec, e) else []),
            "--route", e["route"], "--segment", e["segment"], "--label", label, "--steps", str(steps),
            "--from", from_ckpt, "--seconds", str(spec.get("url_seconds", 8 * 3600))]
     if mode != "live-worker":
@@ -873,7 +880,7 @@ def land(spec, e, results, out, ledger):
         for p in Path(results).rglob("seed.sha256"):
             digest, _ = p.read_text().split()
             ckpts["ckpt_00000000.blm"] = digest
-    record = dict(verdict=verdict, checkpoints=ckpts, steps_completed=seg.get("steps_completed"),
+    record = dict(verdict=verdict, checkpoints=ckpts, steps_completed=seg.get("steps_completed"), wheel=_wheel(spec, e),
                   disagreements=seg.get("disagreements"), results=str(results), utc=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
     arrival = None
     arrival_json = seg_dir.parent / "arrival" / "segment.json"
