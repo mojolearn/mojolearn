@@ -64,6 +64,16 @@ def _as_array_view(value):
         return None
 
 
+def _dense(X):
+    """A scipy.sparse input (duck-typed: toarray, nnz, format; nothing is
+    imported) densified exactly, as scikit-learn's PCA (arpack /
+    covariance_eigh) and TruncatedSVD accept it (lane/algos-decomp,
+    2026-09-27); anything else unchanged."""
+    if hasattr(X, "toarray") and hasattr(X, "nnz") and hasattr(X, "format"):
+        return X.toarray()
+    return X
+
+
 def _component_count(n_components, shape):
     value = min(shape) if n_components is None else int(n_components)
     if value < 1 or value > shape[1]:
@@ -187,7 +197,8 @@ class PCA(NumericModeMixin):
     exports require a rebuilt extension; source availability is not new
     cross-vendor or installed-wheel qualification.
 
-    Incremental fitting and sparse input are not implemented.
+    A scipy.sparse X is densified exactly (every arm). Incremental fitting
+    is IncrementalPCA's.
     """
 
     #: This family's binding, for `NumericModeMixin._bind`.
@@ -323,7 +334,7 @@ class PCA(NumericModeMixin):
             binding = self._dense_binding()
         else:
             binding = self._bind("_mojolearn_estimators")
-        x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
+        x, self.input_copied_ = as_f32_c(_dense(X), ndim=2, name="X")
         if self.whiten and not all_finite(x):
             raise ValueError("mojolearn PCA whitening requires finite X")
         if x.shape[0] < 2 or x.shape[1] < 2:
@@ -423,7 +434,7 @@ class PCA(NumericModeMixin):
         the total sample variance, the noise variance the mean of what is
         left. random_state None means seed 0 (the Philox stream)."""
         from ._expansion_decomp import _randomized_decompose
-        x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
+        x, self.input_copied_ = as_f32_c(_dense(X), ndim=2, name="X")
         if x.shape[0] < 2 or x.shape[1] < 2:
             raise ValueError("mojolearn PCA requires at least 2 rows and 2 features")
         nc = _component_count(self.n_components, x.shape)
@@ -453,7 +464,7 @@ class PCA(NumericModeMixin):
     def transform(self, X):
         if not hasattr(self, "components_"):
             raise ValueError("mojolearn PCA: call fit before transform")
-        x, _ = as_f32_c(X, ndim=2, name="X")
+        x, _ = as_f32_c(_dense(X), ndim=2, name="X")
         if x.shape[1] != self.n_features_in_:
             raise ValueError("mojolearn PCA feature count differs from fit")
         out = empty((x.shape[0], self.n_components_), "<f4")
@@ -486,7 +497,7 @@ class PCA(NumericModeMixin):
     def inverse_transform(self, X):
         if self.whiten and not hasattr(self, "components_"):
             raise ValueError("mojolearn PCA: call fit before inverse_transform")
-        z, _ = as_f32_c(X, ndim=2, name="X")
+        z, _ = as_f32_c(_dense(X), ndim=2, name="X")
         if z.shape[1] != self.n_components_:
             raise ValueError("mojolearn PCA component count differs from fit")
         out = empty((z.shape[0], self.n_features_in_), "<f4")
@@ -629,7 +640,7 @@ class TruncatedSVD(NumericModeMixin):
             # scikit-learn `_truncated_svd.py` algorithm='randomized' through
             # `mojolearn.randomized_svd` (lane/algos-decomp, 2026-09-27)
             from ._expansion_decomp import _randomized_decompose
-            x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
+            x, self.input_copied_ = as_f32_c(_dense(X), ndim=2, name="X")
             if x.shape[0] < 2 or x.shape[1] < 2:
                 raise ValueError("mojolearn TruncatedSVD requires at least 2 rows and 2 features")
             nc = _component_count(self.n_components, x.shape)
@@ -650,7 +661,7 @@ class TruncatedSVD(NumericModeMixin):
                 f"mojolearn TruncatedSVD: algorithm={self.algorithm!r} is not one of "
                 f"{self._ALGORITHMS}"
             )
-        x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
+        x, self.input_copied_ = as_f32_c(_dense(X), ndim=2, name="X")
         if x.shape[0] < 2 or x.shape[1] < 2:
             raise ValueError("mojolearn TruncatedSVD requires at least 2 rows and 2 features")
         nc = _component_count(self.n_components, x.shape)
@@ -678,7 +689,7 @@ class TruncatedSVD(NumericModeMixin):
     def transform(self, X):
         if not hasattr(self, "components_"):
             raise ValueError("mojolearn TruncatedSVD: call fit before transform")
-        x, _ = as_f32_c(X, ndim=2, name="X")
+        x, _ = as_f32_c(_dense(X), ndim=2, name="X")
         if x.shape[1] != self.n_features_in_:
             raise ValueError("mojolearn TruncatedSVD feature count differs from fit")
         out = empty((x.shape[0], self.n_components_), "<f4")
@@ -692,7 +703,7 @@ class TruncatedSVD(NumericModeMixin):
         return self.fit(X, y=y).transform(X)
 
     def inverse_transform(self, X):
-        z, _ = as_f32_c(X, ndim=2, name="X")
+        z, _ = as_f32_c(_dense(X), ndim=2, name="X")
         if z.shape[1] != self.n_components_:
             raise ValueError("mojolearn TruncatedSVD component count differs from fit")
         out = empty((z.shape[0], self.n_features_in_), "<f4")

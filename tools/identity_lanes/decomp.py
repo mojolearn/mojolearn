@@ -135,7 +135,11 @@ def _(ml, X, yc, yr, Xh=None):
     v = ml.lu_solve((lu, piv), np.ascontiguousarray(X[200, :n]))
     s = ml.solve(np.ascontiguousarray(X[300:300 + n, :n].T), np.ascontiguousarray(X[400, :n]))
     xt = ml.lu_solve((lu, piv), B, trans=1)
-    return _fit(dict(lu=_h(lu), piv=_h(piv), x=_h(x), v=_h(v), s=_h(s), xt=_h(xt)))
+    # numpy's eigh reads ONE triangle: a non-symmetric input, both triangles
+    G = np.ascontiguousarray(X[:6, :6])
+    wl, vl = ml.linalg.eigh(G)
+    wu, vu = ml.linalg.eigh(G, UPLO="U")
+    return _fit(dict(lu=_h(lu), piv=_h(piv), x=_h(x), v=_h(v), s=_h(s), xt=_h(xt), eigl=_h(wl, vl), eigu=_h(wu, vu)))
 
 
 @lane("x-decomp-lstsq-rsvd")
