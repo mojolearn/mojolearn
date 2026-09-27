@@ -15,6 +15,7 @@ Skipped from the table: LinearSVC / LinearSVR are already public
 | algorithm | commit | lanes | pod gate |
 |---|---|---|---|
 | SGDClassifier / SGDRegressor | 7f23b8d5c | x-sgd-clf, x-sgd-reg | sanity PASS; RESULT: PASS (AGREE on x-sgd-clf,x-sgd-reg), RTX 4090 |
-| PoissonRegressor / GammaRegressor / TweedieRegressor | (the commit that adds this row) | x-glm-poisson, x-glm-gamma, x-glm-tweedie | sanity PASS (coef within 2e-4 of sklearn); RESULT: PASS (AGREE on all three) |
+| PoissonRegressor / GammaRegressor / TweedieRegressor | 273ecb094 | x-glm-poisson, x-glm-gamma, x-glm-tweedie | sanity PASS (coef within 2e-4 of sklearn); RESULT: PASS (AGREE on all three) |
+| HuberRegressor | (the commit that adds this row) | x-huber | sanity PASS (coef within 2e-5 of sklearn); RESULT: PASS (AGREE on x-huber) |
 
-Next: HuberRegressor.
+Next: BayesianRidge / ARDRegression.
