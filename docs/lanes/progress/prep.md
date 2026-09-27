@@ -55,6 +55,11 @@ Sanity tests need scikit-learn: on the pod it is in /root/skl
   only moves lanes that sum floats, so steward requests are split: all lanes WITHOUT
   sabotage (clean AGREE), and ~/mojolearn-evidence/algos-prep/sum_lanes.txt WITH it.
   The first request (310afeee0) FAILED only because it put the sabotage on every lane.
+  The 8 lanes without float sums (~/mojolearn-evidence/algos-prep/store_lanes.txt) take
+  `e2e_store_branch.patch` (a host-only branch in every nonzero store): DISAGREE on all 8
+  on the H100. So two steward requests per commit: sum_lanes + e2e_host_branch,
+  store_lanes + e2e_store_branch (every lane covered, with x-prep-robust-scaler-unit-variance
+  in sum_lanes).
 - Option parity: work down x_prep/NOT_IMPLEMENTED.tsv and naive_bayes/NOT_IMPLEMENTED.tsv
   (done: priors/class_prior, RobustScaler unit_variance).
 - Then speed (IDENTICAL/FAST, NVIDIA, Apple via `--kind speed`, CPU; AMD last).

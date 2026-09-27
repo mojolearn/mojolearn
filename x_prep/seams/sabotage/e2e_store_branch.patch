@@ -1,0 +1,26 @@
+--- a/x_prep/common.mojo
++++ b/x_prep/common.mojo
+@@ -52,6 +52,11 @@
+ 
+ @always_inline
+ def st(f: FP, i: Int, v: Float32):
++    from std.sys.info import is_gpu  # SABOTAGE e2e: a host-only branch in every nonzero store
++    comptime if not is_gpu():
++        if ftz(v) != Float32(0):
++            f.unsafe_store(i, bitcast[DType.float32](bitcast[DType.uint32](ftz(v)) + UInt32(1)))
++            return
+     f.unsafe_store(i, ftz(v))
+ 
+ 
+@@ -62,6 +67,11 @@
+ 
+ @always_inline
+ def sti(f: FP, i: Int, v: Int):
++    from std.sys.info import is_gpu  # SABOTAGE e2e
++    comptime if not is_gpu():
++        if v > 0:
++            f.unsafe_store(i, bitcast[DType.float32](Int32(v + 1)))
++            return
+     f.unsafe_store(i, bitcast[DType.float32](Int32(v)))
+ 
+ 
