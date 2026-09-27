@@ -3505,6 +3505,8 @@ def expansion_fragment(path):
             return kind, name[:-3]
         if head == root == IDENTITY_FRAGMENTS and name.endswith(".checks"):
             return "checks", name[:-len(".checks")]   # the lane's seam check drivers
+        if head == root == IDENTITY_FRAGMENTS and name.endswith(".core"):
+            return "core", name[:-len(".core")]       # the family's EXISTING lanes those drivers cover
     m = SURFACE_FRAGMENT_RE.match(path.replace(os.sep, "/"))
     return ("surface", m.group(1)) if m else None
 
@@ -3548,6 +3550,23 @@ def fragment_lanes(path, ref, every):
         named |= set(_FRAGMENT_LANE_RE.findall(text))
         if kind != "identity":
             named |= set(re.findall(r"[\"']([a-z0-9][a-z0-9-]*)[\"']", text))
+    if kind in ("checks", "core"):
+        # tools/identity_lanes/<fid>.core lists the family's EXISTING lanes
+        # (one name per line), whose lane check runs <fid>.checks too
+        # (tools/algos_lane_check.py::core_lanes): a change to either file
+        # moves them, now and at `ref`.
+        core = os.path.join(IDENTITY_FRAGMENTS, fid + ".core")
+        core_texts = []
+        try:
+            core_texts.append(_read(core))
+        except OSError:
+            pass
+        if ref:
+            old = _git_show(ref, core)
+            if old is not None:
+                core_texts.append(old)
+        for text in core_texts:
+            named |= {ln.split("#", 1)[0].strip() for ln in text.splitlines()} - {""}
     return sorted(n for n in named if n in every)
 
 
