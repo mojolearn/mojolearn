@@ -266,6 +266,8 @@ def build(tree, store, commit, lanes):
         try:
             needed[lane] = tree.lc.needed_bindings([lane])[lane]
         except Exception as exc:          # the lane check's Fail (no CPU arm, ...): the run reports it
+            if isinstance(exc, KeyError):
+                exc = f"lane {lane} is not in this tree's lane map"
             (cdir / "nobuild" / lane).write_text(f"{exc}\n")
             print(f"[steward-build] {lane}: NOBUILD ({str(exc)[:200]})", flush=True)
     every = sorted(set().union(*needed.values())) if needed else []
