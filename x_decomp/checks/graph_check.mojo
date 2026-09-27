@@ -9,7 +9,7 @@ algorithm) and the barycenter weights' regularization (5315).
     tools/with_identical_mode.sh pixi run mojo run -I . x_decomp/checks/graph_check.mojo
 """
 from core.identity_trace import IdentityTrace
-from x_decomp.checks.oracles import oracle_barycenter, oracle_dijkstra
+from x_decomp.checks.xd_oracles import oracle_barycenter, oracle_dijkstra
 from x_decomp.checks.seam_util import count_diff_f32, lcg_unit, positive_fixture, ptr, require_separates, same, seam_fixture, zeros
 from x_decomp.device import DevExec
 from x_decomp.host import HostExec

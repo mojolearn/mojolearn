@@ -1,8 +1,8 @@
 diff --git a/x_decomp/cells.mojo b/x_decomp/cells.mojo
-index b8537db32..fdd07af82 100644
+index 4b4c2cedf..ef0e5e912 100644
 --- a/x_decomp/cells.mojo
 +++ b/x_decomp/cells.mojo
-@@ -420,7 +420,8 @@ def lasso_row(
+@@ -473,7 +473,8 @@ def lasso_row(
          it += 1
          var w_max = Float32(0)
          var d_w_max = Float32(0)

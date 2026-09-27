@@ -1,13 +1,16 @@
 diff --git a/x_neighbors/items.mojo b/x_neighbors/items.mojo
-index bc04f5c16..aa351e7d6 100644
 --- a/x_neighbors/items.mojo
 +++ b/x_neighbors/items.mojo
-@@ -536,7 +536,7 @@ def nc_shrink_item(
-         return
+@@ -554,9 +554,10 @@
+     var c = cent.unsafe_load(t)
      var acc = Float32(0)
      for i in range(n):
 -        acc = _add(acc, x.unsafe_load(i * d + f))
 +        acc = _add(acc, x.unsafe_load((n - 1 - i) * d + f))
      var dsc = ftz(identical_div(acc, Float32(n)))
-     var m = ftz(identical_sqrt(_sub(ftz(identical_div(Float32(1), nk.unsafe_load(k))), ftz(identical_div(Float32(1), Float32(n))))))
+-    var m = ftz(identical_sqrt(_sub(ftz(identical_div(Float32(1), nk.unsafe_load(k))), ftz(identical_div(Float32(1), Float32(n))))))
++    var m = ftz(identical_sqrt(_sub(ftz(identical_div(Float32(1), nk.unsafe_load(k)))
++, ftz(identical_div(Float32(1), Float32(n))))))
      var s = _add(std.unsafe_load(f), med)
+     var ms = ftz(identical_mul(m, s))
+     var dev = Float32(0)

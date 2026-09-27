@@ -1,0 +1,11 @@
+--- a/x_ann/ivf_pq_core.mojo
++++ b/x_ann/ivf_pq_core.mojo
+@@ -144,7 +144,7 @@
+     (DEVIATION 5803)."""
+     if sid < 0:
+         return True
+-    return d < sd or (d == sd and id < sid)
++    return d < sd or (d == sd and id > sid)
+ 
+ 
+ @always_inline

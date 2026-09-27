@@ -1,0 +1,12 @@
+diff --git a/x_decomp/cells.mojo b/x_decomp/cells.mojo
+--- a/x_decomp/cells.mojo
++++ b/x_decomp/cells.mojo
+@@ -948,7 +948,7 @@
+             var v = ftz(identical_div(ftz(R.unsafe_load(t * l + j)), mx))
+             nrm = ftz(identical_mul_add(v, v, nrm))
+         var d = ftz(identical_div(ftz(R.unsafe_load(j * l + j)), mx))
+-        if ftz(identical_mul(d, d)) <= ftz(identical_mul(ORTH_RANK_TOL2, nrm)):
++        if ftz(identical_mul(d, d)) <= Float32(0):  # SABOTAGE 5318: no rank guard (only an exact zero)
+             R.unsafe_store(j * l + j, Float32(0))
+ 
+ 

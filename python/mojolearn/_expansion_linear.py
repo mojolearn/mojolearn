@@ -202,14 +202,34 @@ def _sgd_refuse(est, early_stopping, average, class_weight=None, warm_start=Fals
         raise ValueError(f"mojolearn {name}: early_stopping is not implemented (x_linear/NOT_IMPLEMENTED.tsv)")
     if average:
         raise ValueError(f"mojolearn {name}: average is not implemented (x_linear/NOT_IMPLEMENTED.tsv)")
-    if class_weight is not None:
-        raise ValueError(f"mojolearn {name}: class_weight is not implemented (x_linear/NOT_IMPLEMENTED.tsv)")
     if warm_start:
         raise ValueError(f"mojolearn {name}: warm_start is not implemented (x_linear/NOT_IMPLEMENTED.tsv)")
 
 
+def _expanded_class_weight(class_weight, classes, codes, sample_weight=None):
+    """scikit-learn's compute_class_weight: 'balanced' is total / (k * count)
+    over the (weighted, when sample_weight is given) class counts, a dict
+    maps labels to weights (1 for a label it does not name)."""
+    labels = classes.tolist() if hasattr(classes, "tolist") else list(classes)
+    k = len(labels)
+    if class_weight == "balanced":
+        counts = [0.0] * k
+        ws = [1.0] * len(codes) if sample_weight is None else sample_weight
+        for c, w in zip(codes, ws):
+            counts[int(c)] += w
+        total = sum(counts)
+        return [total / (k * cnt) if cnt else 0.0 for cnt in counts]
+    if isinstance(class_weight, dict):
+        for key in class_weight:
+            if key not in labels:
+                raise ValueError(f"The classes, {[key]}, are not in class_weight")
+        return [float(class_weight.get(lab, 1.0)) for lab in labels]
+    raise ValueError("mojolearn: class_weight must be None, 'balanced' or a dict")
+
+
 def _sgd_fit(est, X, y, n_classes, loss_code, penalty, lr, alpha, l1_ratio, eta0, power_t,
-             epsilon, fit_intercept, max_iter, tol, n_iter_no_change, shuffle, random_state):
+             epsilon, fit_intercept, max_iter, tol, n_iter_no_change, shuffle, random_state,
+             sample_weight=None, class_weight=None, classes=None, codes=None):
     a, n, d = X
     if penalty not in _SGD_PENALTY:
         raise ValueError(f"mojolearn {type(est).__name__}: penalty must be 'l2', 'l1', 'elasticnet' or None")
@@ -224,6 +244,19 @@ def _sgd_fit(est, X, y, n_classes, loss_code, penalty, lr, alpha, l1_ratio, eta0
     ip = [n_classes, loss_code, _SGD_PENALTY[penalty], _SGD_LR[lr], int(bool(fit_intercept)),
           int(max_iter), int(n_iter_no_change), int(bool(shuffle)), lo, hi]
     fp = [alpha, l1_ratio, eta0, power_t, epsilon, -3.0e38 if tol is None else tol]
+    if y is None:
+        y = zeros((n,), "<f4")
+    y, has_sw = _with_weights(y, sample_weight, n)
+    has_cw = 0
+    if class_weight is not None and n_classes >= 2:
+        cw = _expanded_class_weight(class_weight, classes, codes)
+        if n_classes == 2:
+            pos, neg = [cw[1]], [cw[0]]
+        else:
+            pos, neg = list(cw), [1.0] * n_classes
+        fp += pos + neg
+        has_cw = 1
+    ip += [has_sw, has_cw]
     vals = _run(est, ALGO_SGD, a, n, d, y, ip, fp, problems * d + problems + 2, n + d, n)
     if vals[-1] != 0:
         raise ValueError("Floating-point under-/overflow occurred. Scaling input data with "
@@ -255,8 +288,8 @@ class SGDClassifier(_LinearClassifierMixin, NumericModeMixin):
         self.n_iter_no_change, self.class_weight, self.average = n_iter_no_change, class_weight, average
         self.warm_start = warm_start
 
-    def fit(self, X, y):
-        _sgd_refuse(self, self.early_stopping, self.average, self.class_weight, self.warm_start)
+    def fit(self, X, y, sample_weight=None):
+        _sgd_refuse(self, self.early_stopping, self.average, None, self.warm_start)
         if self.loss not in _SGD_CLF_LOSS:
             raise ValueError(f"mojolearn SGDClassifier: loss must be one of {sorted(_SGD_CLF_LOSS)}")
         Xm = _matrix(X)
@@ -265,7 +298,8 @@ class SGDClassifier(_LinearClassifierMixin, NumericModeMixin):
         self.coef_, self.intercept_ = _sgd_fit(
             self, Xm, codes, len(classes), _SGD_CLF_LOSS[self.loss], self.penalty, self.learning_rate,
             self.alpha, self.l1_ratio, self.eta0, self.power_t, self.epsilon, self.fit_intercept,
-            self.max_iter, self.tol, self.n_iter_no_change, self.shuffle, self.random_state)
+            self.max_iter, self.tol, self.n_iter_no_change, self.shuffle, self.random_state,
+            sample_weight, self.class_weight, classes, codes.tolist())
         return self
 
     def predict_proba(self, X):
@@ -302,7 +336,7 @@ class SGDRegressor(_LinearRegressorMixin, NumericModeMixin):
         self.eta0, self.power_t, self.early_stopping = eta0, power_t, early_stopping
         self.n_iter_no_change, self.average, self.warm_start = n_iter_no_change, average, warm_start
 
-    def fit(self, X, y):
+    def fit(self, X, y, sample_weight=None):
         _sgd_refuse(self, self.early_stopping, self.average, None, self.warm_start)
         if self.loss not in _SGD_REG_LOSS:
             raise ValueError(f"mojolearn SGDRegressor: loss must be one of {sorted(_SGD_REG_LOSS)}")
@@ -311,7 +345,8 @@ class SGDRegressor(_LinearRegressorMixin, NumericModeMixin):
         coef, intercept = _sgd_fit(
             self, Xm, yv, 0, _SGD_REG_LOSS[self.loss], self.penalty, self.learning_rate,
             self.alpha, self.l1_ratio, self.eta0, self.power_t, self.epsilon, self.fit_intercept,
-            self.max_iter, self.tol, self.n_iter_no_change, self.shuffle, self.random_state)
+            self.max_iter, self.tol, self.n_iter_no_change, self.shuffle, self.random_state,
+            sample_weight)
         self.coef_ = coef.reshape((Xm[2],))
         self.intercept_ = intercept
         return self
@@ -448,7 +483,7 @@ class HuberRegressor(_LinearRegressorMixin, NumericModeMixin):
         self.epsilon, self.max_iter, self.alpha = epsilon, max_iter, alpha
         self.warm_start, self.fit_intercept, self.tol = warm_start, fit_intercept, tol
 
-    def fit(self, X, y):
+    def fit(self, X, y, sample_weight=None):
         if not self.epsilon >= 1.0:
             raise ValueError("mojolearn HuberRegressor: epsilon must be >= 1.0")
         if self.warm_start:
@@ -456,7 +491,8 @@ class HuberRegressor(_LinearRegressorMixin, NumericModeMixin):
         a, n, d = _matrix(X)
         yv = _vector(y, n)
         p = d + 2 if self.fit_intercept else d + 1
-        vals = _run(self, ALGO_HUBER, a, n, d, yv, [self.max_iter, int(bool(self.fit_intercept))],
+        yw, has_sw = _with_weights(yv, sample_weight, n)
+        vals = _run(self, ALGO_HUBER, a, n, d, yw, [self.max_iter, int(bool(self.fit_intercept)), has_sw],
                     [self.epsilon, self.alpha, self.tol], d + 4 + p, _lbfgs_work(p), 1)
         self.coef_ = Array.from_list(vals[:d], "<f4")
         self.intercept_ = float(vals[d])
@@ -492,11 +528,12 @@ class BayesianRidge(_LinearRegressorMixin, NumericModeMixin):
         self.lambda_1, self.lambda_2, self.alpha_init, self.lambda_init = lambda_1, lambda_2, alpha_init, lambda_init
         self.compute_score, self.fit_intercept, self.copy_X, self.verbose = compute_score, fit_intercept, copy_X, verbose
 
-    def fit(self, X, y):
+    def fit(self, X, y, sample_weight=None):
         _bayes_refuse(self)
         a, n, d = _matrix(X)
         yv = _vector(y, n)
-        vals = _run(self, ALGO_BAYES, a, n, d, yv, [self.max_iter, int(bool(self.fit_intercept))],
+        yv, has_sw = _with_weights(yv, sample_weight, n)
+        vals = _run(self, ALGO_BAYES, a, n, d, yv, [self.max_iter, int(bool(self.fit_intercept)), has_sw],
                     [self.tol, self.alpha_1, self.alpha_2, self.lambda_1, self.lambda_2,
                      -1.0 if self.alpha_init is None else self.alpha_init,
                      -1.0 if self.lambda_init is None else self.lambda_init],
@@ -555,11 +592,10 @@ class ARDRegression(_LinearRegressorMixin, NumericModeMixin):
 def _lars_fit(est, X, y, max_iter, lasso, alpha_min):
     if getattr(est, "jitter", None) is not None:
         raise ValueError(f"mojolearn {type(est).__name__}: jitter is not implemented")
-    if getattr(est, "positive", False):
-        raise ValueError(f"mojolearn {type(est).__name__}: positive=True is not implemented")
     a, n, d = _matrix(X)
     yv = _vector(y, n)
-    vals = _run(est, ALGO_LARS, a, n, d, yv, [int(max_iter), int(bool(est.fit_intercept)), int(lasso)],
+    vals = _run(est, ALGO_LARS, a, n, d, yv, [int(max_iter), int(bool(est.fit_intercept)), int(lasso),
+                                              int(bool(getattr(est, "positive", False)))],
                 [alpha_min], 2 * d + 4, 2 * d * d + 8 * d, 2 * d)
     est.coef_ = Array.from_list(vals[:d], "<f4")
     est.intercept_ = float(vals[d])
@@ -621,7 +657,7 @@ class QuantileRegressor(_LinearRegressorMixin, NumericModeMixin):
         self.quantile, self.alpha, self.fit_intercept = quantile, alpha, fit_intercept
         self.solver, self.solver_options, self.max_iter, self.tol = solver, solver_options, max_iter, tol
 
-    def fit(self, X, y):
+    def fit(self, X, y, sample_weight=None):
         if not 0 < self.quantile < 1:
             raise ValueError("mojolearn QuantileRegressor: quantile must be strictly between 0 and 1")
         if not self.alpha >= 0:
@@ -629,7 +665,8 @@ class QuantileRegressor(_LinearRegressorMixin, NumericModeMixin):
         a, n, d = _matrix(X)
         yv = _vector(y, n)
         m = d + 1
-        vals = _run(self, ALGO_QUANTILE, a, n, d, yv, [self.max_iter, int(bool(self.fit_intercept))],
+        yv, has_sw = _with_weights(yv, sample_weight, n)
+        vals = _run(self, ALGO_QUANTILE, a, n, d, yv, [self.max_iter, int(bool(self.fit_intercept)), has_sw],
                     [self.quantile, self.alpha, self.tol / 100.0, self.tol], d + 3,
                     m * m + 2 * m + 4 * n + 2 * d, 1)
         self.coef_ = Array.from_list(vals[:d], "<f4")
@@ -658,15 +695,16 @@ class Perceptron(_LinearClassifierMixin, NumericModeMixin):
         self.validation_fraction, self.n_iter_no_change = validation_fraction, n_iter_no_change
         self.class_weight, self.warm_start = class_weight, warm_start
 
-    def fit(self, X, y):
-        _sgd_refuse(self, self.early_stopping, False, self.class_weight, self.warm_start)
+    def fit(self, X, y, sample_weight=None):
+        _sgd_refuse(self, self.early_stopping, False, None, self.warm_start)
         Xm = _matrix(X)
         classes, codes = _classes(self, y, Xm[1])
         self.classes_ = classes
         self.coef_, self.intercept_ = _sgd_fit(
             self, Xm, codes, len(classes), _SGD_CLF_LOSS["perceptron"], self.penalty, "constant",
             self.alpha, self.l1_ratio, self.eta0, 0.5, 0.1, self.fit_intercept,
-            self.max_iter, self.tol, self.n_iter_no_change, self.shuffle, self.random_state)
+            self.max_iter, self.tol, self.n_iter_no_change, self.shuffle, self.random_state,
+            sample_weight, self.class_weight, classes, codes.tolist())
         return self
 
 
@@ -689,8 +727,8 @@ class PassiveAggressiveClassifier(_LinearClassifierMixin, NumericModeMixin):
         self.n_jobs, self.random_state, self.warm_start = n_jobs, random_state, warm_start
         self.class_weight, self.average = class_weight, average
 
-    def fit(self, X, y):
-        _sgd_refuse(self, self.early_stopping, self.average, self.class_weight, self.warm_start)
+    def fit(self, X, y, sample_weight=None):
+        _sgd_refuse(self, self.early_stopping, self.average, None, self.warm_start)
         if self.loss not in ("hinge", "squared_hinge"):
             raise ValueError("mojolearn PassiveAggressiveClassifier: loss must be 'hinge' or 'squared_hinge'")
         if not self.C > 0:
@@ -702,7 +740,8 @@ class PassiveAggressiveClassifier(_LinearClassifierMixin, NumericModeMixin):
         self.coef_, self.intercept_ = _sgd_fit(
             self, Xm, codes, len(classes), _SGD_CLF_LOSS["hinge"], None, lr,
             1.0, 0.0, self.C, 0.5, 0.1, self.fit_intercept,
-            self.max_iter, self.tol, self.n_iter_no_change, self.shuffle, self.random_state)
+            self.max_iter, self.tol, self.n_iter_no_change, self.shuffle, self.random_state,
+            sample_weight, self.class_weight, classes, codes.tolist())
         return self
 
 
@@ -720,7 +759,7 @@ class PassiveAggressiveRegressor(_LinearRegressorMixin, NumericModeMixin):
         self.n_iter_no_change, self.shuffle, self.verbose, self.loss = n_iter_no_change, shuffle, verbose, loss
         self.epsilon, self.random_state, self.warm_start, self.average = epsilon, random_state, warm_start, average
 
-    def fit(self, X, y):
+    def fit(self, X, y, sample_weight=None):
         _sgd_refuse(self, self.early_stopping, self.average, None, self.warm_start)
         if self.loss not in ("epsilon_insensitive", "squared_epsilon_insensitive"):
             raise ValueError("mojolearn PassiveAggressiveRegressor: loss must be 'epsilon_insensitive' "
@@ -733,7 +772,8 @@ class PassiveAggressiveRegressor(_LinearRegressorMixin, NumericModeMixin):
         coef, intercept = _sgd_fit(
             self, Xm, yv, 0, _SGD_REG_LOSS["epsilon_insensitive"], None, lr,
             1.0, 0.0, self.C, 0.5, self.epsilon, self.fit_intercept,
-            self.max_iter, self.tol, self.n_iter_no_change, self.shuffle, self.random_state)
+            self.max_iter, self.tol, self.n_iter_no_change, self.shuffle, self.random_state,
+            sample_weight)
         self.coef_ = coef.reshape((Xm[2],))
         self.intercept_ = intercept
         return self
@@ -758,7 +798,7 @@ class SGDOneClassSVM(NumericModeMixin):
         self.learning_rate, self.eta0, self.power_t = learning_rate, eta0, power_t
         self.warm_start, self.average = warm_start, average
 
-    def fit(self, X, y=None):
+    def fit(self, X, y=None, sample_weight=None):
         _sgd_refuse(self, False, self.average, None, self.warm_start)
         if not 0 < self.nu <= 1:
             raise ValueError("mojolearn SGDOneClassSVM: nu must be in (0, 1]")
@@ -768,7 +808,7 @@ class SGDOneClassSVM(NumericModeMixin):
         coef, intercept = _sgd_fit(
             self, Xm, None, 1, _SGD_CLF_LOSS["hinge"], "l2", self.learning_rate,
             self.nu, 0.0, self.eta0, self.power_t, 0.1, self.fit_intercept,
-            self.max_iter, self.tol, 5, self.shuffle, self.random_state)
+            self.max_iter, self.tol, 5, self.shuffle, self.random_state, sample_weight)
         self.coef_ = coef.reshape((Xm[2],))
         self.offset_ = Array.from_list([1.0 - intercept.tolist()[0]], "<f4")
         return self
@@ -791,9 +831,14 @@ class SGDOneClassSVM(NumericModeMixin):
 # Reference: scikit-learn sklearn/linear_model/_ridge.py (`_solve_cholesky`,
 # `_RidgeGCV`); kernel x_linear/ridge.mojo.
 
-def _ridge_run(est, a, n, d, Y, T, alphas):
+def _ridge_run(est, a, n, d, Y, T, alphas, sample_weight=None):
     A = len(alphas)
-    return _run(est, ALGO_RIDGE, a, n, d, Y, [T, int(bool(est.fit_intercept)), A], list(alphas),
+    has_sw = 0
+    if sample_weight is not None:
+        w = _with_weights(zeros((n,), "<f4"), sample_weight, n)[0].tolist()[n:]
+        Y = Array.from_list(Y.tolist() + w, "<f4")
+        has_sw = 1
+    return _run(est, ALGO_RIDGE, a, n, d, Y, [T, int(bool(est.fit_intercept)), A, has_sw], list(alphas),
                 T * d + T + 2 + A, 3 * d * d + 3 * d + T + d * T, 1)
 
 
@@ -801,8 +846,6 @@ def _ridge_refuse(est):
     name = type(est).__name__
     if getattr(est, "positive", False):
         raise ValueError(f"mojolearn {name}: positive=True is not implemented")
-    if getattr(est, "class_weight", None) is not None:
-        raise ValueError(f"mojolearn {name}: class_weight is not implemented")
     if getattr(est, "solver", "auto") not in ("auto", "cholesky"):
         raise ValueError(f"mojolearn {name}: solver must be 'auto' or 'cholesky'")
 
@@ -818,7 +861,7 @@ class RidgeClassifier(_LinearClassifierMixin, NumericModeMixin):
         self.tol, self.class_weight, self.solver, self.positive = tol, class_weight, solver, positive
         self.random_state = random_state
 
-    def fit(self, X, y):
+    def fit(self, X, y, sample_weight=None):
         _ridge_refuse(self)
         if not self.alpha >= 0:
             raise ValueError("mojolearn RidgeClassifier: alpha must be >= 0")
@@ -831,7 +874,12 @@ class RidgeClassifier(_LinearClassifierMixin, NumericModeMixin):
             Y = [1.0 if c == 1 else -1.0 for c in cl]
         else:
             Y = [1.0 if c == t else -1.0 for c in cl for t in range(T)]
-        vals = _ridge_run(self, a, n, d, Array.from_list(Y, "<f4"), T, [self.alpha])
+        if self.class_weight is not None:
+            # theirs: sample_weight * compute_sample_weight(class_weight, y)
+            cw = _expanded_class_weight(self.class_weight, classes, cl)
+            base = [1.0] * n if sample_weight is None else _vector(sample_weight, n, "sample_weight").tolist()
+            sample_weight = [b * cw[int(c)] for b, c in zip(base, cl)]
+        vals = _ridge_run(self, a, n, d, Array.from_list(Y, "<f4"), T, [self.alpha], sample_weight)
         self.classes_ = classes
         self.coef_ = Array.from_list(_rows(vals, T, d), "<f4")
         self.intercept_ = Array.from_list(vals[T * d:T * d + T], "<f4")
@@ -851,7 +899,7 @@ class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
         self.alphas, self.fit_intercept, self.scoring, self.cv = alphas, fit_intercept, scoring, cv
         self.gcv_mode, self.store_cv_results, self.alpha_per_target = gcv_mode, store_cv_results, alpha_per_target
 
-    def fit(self, X, y):
+    def fit(self, X, y, sample_weight=None):
         if self.cv is not None or self.scoring is not None or self.alpha_per_target:
             raise ValueError("mojolearn RidgeCV: only cv=None, scoring=None, alpha_per_target=False are implemented")
         alphas = [float(v) for v in (self.alphas if hasattr(self.alphas, "__len__") else [self.alphas])]
@@ -859,7 +907,7 @@ class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
             raise ValueError("mojolearn RidgeCV: alphas must be positive")
         a, n, d = _matrix(X)
         yv = _vector(y, n)
-        vals = _ridge_run(self, a, n, d, yv, 1, alphas)
+        vals = _ridge_run(self, a, n, d, yv, 1, alphas, sample_weight)
         self.coef_ = Array.from_list(vals[:d], "<f4")
         self.intercept_ = float(vals[d])
         self.alpha_ = float(vals[d + 1])
@@ -891,8 +939,6 @@ def _kfold_ids(n, k):
 
 def _enetcv_fit(est, X, y, l1_ratios):
     name = type(est).__name__
-    if est.positive:
-        raise ValueError(f"mojolearn {name}: positive=True is not implemented")
     if est.selection != "cyclic":
         raise ValueError(f"mojolearn {name}: selection='random' is not implemented")
     if any(not 0 < r <= 1 for r in l1_ratios):
@@ -916,7 +962,7 @@ def _enetcv_fit(est, X, y, l1_ratios):
     yy = Array.from_list(yv.tolist() + [float(f) for f in ids], "<f4")
     L = len(l1_ratios)
     fp = [est.eps, est.tol] + [float(r) for r in l1_ratios] + (values if explicit else [])
-    ip = [est.max_iter, int(bool(est.fit_intercept)), grid, folds, L, int(explicit)]
+    ip = [est.max_iter, int(bool(est.fit_intercept)), grid, folds, L, int(explicit), int(bool(est.positive))]
     vals = _run(est, ALGO_ENETCV, a, n, d, yy, ip, fp, d + 4 + L * grid + L * grid * folds,
                 d * d + 4 * d + 3, 1)
     est.coef_ = Array.from_list(vals[:d], "<f4")
@@ -1029,11 +1075,11 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
         self.class_weight, self.n_jobs, self.verbose, self.refit = class_weight, n_jobs, verbose, refit
         self.intercept_scaling, self.random_state, self.l1_ratios = intercept_scaling, random_state, l1_ratios
 
-    def fit(self, X, y):
+    def fit(self, X, y, sample_weight=None):
         if self.penalty != "l2" or self.dual or self.l1_ratios is not None:
             raise ValueError("mojolearn LogisticRegressionCV: only penalty='l2' (primal) is implemented")
-        if self.scoring is not None or self.class_weight is not None or not self.refit:
-            raise ValueError("mojolearn LogisticRegressionCV: scoring, class_weight and refit=False are not implemented")
+        if self.scoring is not None or not self.refit:
+            raise ValueError("mojolearn LogisticRegressionCV: scoring and refit=False are not implemented")
         if self.solver not in ("lbfgs", "newton-cg", "newton-cholesky"):
             raise ValueError("mojolearn LogisticRegressionCV: solver must be lbfgs (newton-* run L-BFGS too)")
         a, n, d = _matrix(X)
@@ -1048,11 +1094,22 @@ class LogisticRegressionCV(_LinearClassifierMixin, NumericModeMixin):
             Cs = [float(c) for c in self.Cs]
         folds = 5 if self.cv is None else self.cv
         ids = _stratified_kfold_ids(cl, folds)
-        yy = Array.from_list([float(c) for c in cl] + [float(f) for f in ids], "<f4")
+        has_sw = 0
+        tail = []
+        if sample_weight is not None or self.class_weight is not None:
+            raw = [1.0] * n if sample_weight is None else _with_weights(zeros((n,), "<f4"), sample_weight, n)[0].tolist()[n:]
+            fitw = raw
+            if self.class_weight is not None:
+                # theirs: 'balanced' from the weighted counts of all of y
+                cw = _expanded_class_weight(self.class_weight, classes, cl,
+                                            None if sample_weight is None else raw)
+                fitw = [b * cw[c] for b, c in zip(raw, cl)]
+            tail, has_sw = fitw + raw, 1
+        yy = Array.from_list([float(c) for c in cl] + [float(f) for f in ids] + tail, "<f4")
         p = kp * (d + 1)
         nc = len(Cs)
-        vals = _run(self, ALGO_LOGCV, a, n, d, yy, [self.max_iter, int(bool(self.fit_intercept)), kp, nc, folds],
-                    [self.tol] + Cs, kp * d + kp + 2 + folds * nc, p + 1 + _lbfgs_work(p), 3)
+        vals = _run(self, ALGO_LOGCV, a, n, d, yy, [self.max_iter, int(bool(self.fit_intercept)), kp, nc, folds, has_sw],
+                    [self.tol] + Cs, kp * d + kp + 2 + folds * nc, p + 1 + _lbfgs_work(p), 4)
         self.classes_ = classes
         self.coef_ = Array.from_list(_rows(vals, kp, d), "<f4")
         self.intercept_ = Array.from_list(vals[kp * d:kp * d + kp], "<f4")
