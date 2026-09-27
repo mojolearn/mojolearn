@@ -1,0 +1,320 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+"""The Python-facing entry points of the trees lane, shared by the GPU binding
+(`bindings/_mojolearn_x_trees.mojo`) and the host binding
+(`bindings/_mojolearn_x_trees_host.mojo`): one spelling, two registrations.
+Every buffer is a caller-owned address; `params` is a Python list of ints and
+floats. Nothing is retained."""
+from std.python import PythonObject
+from std.python.bindings import PythonModuleBuilder
+
+from bindings.hostptr import f32_ptr, f64_ptr, i32_ptr
+from checks.numerics import identical_log64
+from xtrees.ops import (
+    sample_indices, weighted_sample, gather_f32, gather_i32, accumulate,
+    accumulate_onehot, accumulate_cols, argmax_rows, argmax_rows_f32, scale_f64, softmax_rows, scale_to_f32, put_f32,
+    samme_step, r2_step, weighted_median, apply_trees, gradients, leaf_newton, tree_score_add, uniform,
+    onehot_leaves, transpose_f32,
+)
+
+
+def _need(params: PythonObject, n: Int, who: String) raises:
+    if len(params) != n:
+        raise Error(who + ": params must hold " + String(n) + " values, got " + String(len(params)))
+
+
+def _i(params: PythonObject, k: Int) raises -> Int:
+    return Int(py=params[k])
+
+
+def _f(params: PythonObject, k: Int) raises -> Float64:
+    return Float64(py=params[k])
+
+
+def _count(v: Int, who: String) raises -> Int:
+    if v < 0:
+        raise Error(who + ": negative count")
+    return v
+
+
+def sample_indices_binding(out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n_pool, n_draw, replace, seed, stream]."""
+    _need(params, 5, "x_trees_sample_indices")
+    var n_draw = _count(_i(params, 1), "x_trees_sample_indices")
+    if n_draw > 0:
+        sample_indices(i32_ptr(Int(py=out_addr)), _i(params, 0), n_draw, _i(params, 2) != 0,
+                       _i(params, 3), _i(params, 4))
+    return PythonObject(n_draw)
+
+
+def weighted_sample_binding(w_addr: PythonObject, out_addr: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n, n_draw, seed, stream]."""
+    _need(params, 4, "x_trees_weighted_sample")
+    var n = _i(params, 0)
+    if n <= 0:
+        raise Error("x_trees_weighted_sample: n must be positive")
+    var n_draw = _count(_i(params, 1), "x_trees_weighted_sample")
+    weighted_sample(f64_ptr(Int(py=w_addr)), n, i32_ptr(Int(py=out_addr)), n_draw, _i(params, 2), _i(params, 3))
+    return PythonObject(n_draw)
+
+
+def gather_f32_binding(
+    src: PythonObject, rows: PythonObject, cols: PythonObject, dst: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """params = [n_src_rows, n_src_cols, n_rows, n_cols]."""
+    _need(params, 4, "x_trees_gather_f32")
+    var n_rows = _count(_i(params, 2), "x_trees_gather_f32")
+    var n_cols = _count(_i(params, 3), "x_trees_gather_f32")
+    if n_rows * n_cols > 0:
+        gather_f32(f32_ptr(Int(py=src)), _i(params, 0), _i(params, 1), i32_ptr(Int(py=rows)), n_rows,
+                   i32_ptr(Int(py=cols)), n_cols, f32_ptr(Int(py=dst)))
+    return PythonObject(n_rows * n_cols)
+
+
+def gather_i32_binding(src: PythonObject, rows: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n_src, n_rows]."""
+    _need(params, 2, "x_trees_gather_i32")
+    var n_rows = _count(_i(params, 1), "x_trees_gather_i32")
+    if n_rows > 0:
+        gather_i32(i32_ptr(Int(py=src)), _i(params, 0), i32_ptr(Int(py=rows)), n_rows, i32_ptr(Int(py=dst)))
+    return PythonObject(n_rows)
+
+
+def accumulate_binding(acc: PythonObject, x: PythonObject, params: PythonObject) raises -> PythonObject:
+    """acc (float64) += weight * x (float32); params = [n, weight]."""
+    _need(params, 2, "x_trees_accumulate")
+    var n = _count(_i(params, 0), "x_trees_accumulate")
+    if n > 0:
+        accumulate(f64_ptr(Int(py=acc)), f32_ptr(Int(py=x)), n, _f(params, 1))
+    return PythonObject(n)
+
+
+def accumulate_cols_binding(acc: PythonObject, x: PythonObject, cols: PythonObject, params: PythonObject) raises -> PythonObject:
+    """acc (float64, n*k) += weight * x (float32, n*ks) into columns cols; params = [n, k, ks, weight]."""
+    _need(params, 4, "x_trees_accumulate_cols")
+    var n = _count(_i(params, 0), "x_trees_accumulate_cols")
+    if n > 0:
+        accumulate_cols(f64_ptr(Int(py=acc)), f32_ptr(Int(py=x)), i32_ptr(Int(py=cols)), n, _i(params, 1),
+                        _i(params, 2), _f(params, 3))
+    return PythonObject(n)
+
+
+def accumulate_onehot_binding(acc: PythonObject, codes: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n, k, on, off]."""
+    _need(params, 4, "x_trees_accumulate_onehot")
+    var n = _count(_i(params, 0), "x_trees_accumulate_onehot")
+    if n > 0:
+        accumulate_onehot(f64_ptr(Int(py=acc)), i32_ptr(Int(py=codes)), n, _i(params, 1), _f(params, 2), _f(params, 3))
+    return PythonObject(n)
+
+
+def argmax_rows_binding(x: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
+    """float64 x; params = [n, k]."""
+    _need(params, 2, "x_trees_argmax_rows")
+    var n = _count(_i(params, 0), "x_trees_argmax_rows")
+    if n > 0:
+        argmax_rows(f64_ptr(Int(py=x)), n, _i(params, 1), i32_ptr(Int(py=res)))
+    return PythonObject(n)
+
+
+def argmax_rows_f32_binding(x: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
+    _need(params, 2, "x_trees_argmax_rows_f32")
+    var n = _count(_i(params, 0), "x_trees_argmax_rows_f32")
+    if n > 0:
+        argmax_rows_f32(f32_ptr(Int(py=x)), n, _i(params, 1), i32_ptr(Int(py=res)))
+    return PythonObject(n)
+
+
+def scale_binding(x: PythonObject, params: PythonObject) raises -> PythonObject:
+    """x /= divisor; params = [n, divisor]."""
+    _need(params, 2, "x_trees_scale")
+    var n = _count(_i(params, 0), "x_trees_scale")
+    if n > 0:
+        scale_f64(f64_ptr(Int(py=x)), n, _f(params, 1))
+    return PythonObject(n)
+
+
+def scale_to_f32_binding(x: PythonObject, res: PythonObject, params: PythonObject) raises -> PythonObject:
+    """res (float32) = x (float64) * factor; params = [n, factor]."""
+    _need(params, 2, "x_trees_scale_to_f32")
+    var n = _count(_i(params, 0), "x_trees_scale_to_f32")
+    if n > 0:
+        scale_to_f32(f64_ptr(Int(py=x)), n, _f(params, 1), f32_ptr(Int(py=res)))
+    return PythonObject(n)
+
+
+def put_f32_binding(dst: PythonObject, src: PythonObject, params: PythonObject) raises -> PythonObject:
+    """dst[offset:offset+n] = src; params = [offset, n]."""
+    _need(params, 2, "x_trees_put_f32")
+    var n = _count(_i(params, 1), "x_trees_put_f32")
+    if n > 0:
+        put_f32(f32_ptr(Int(py=dst)), _count(_i(params, 0), "x_trees_put_f32"), f32_ptr(Int(py=src)), n)
+    return PythonObject(n)
+
+
+def softmax_rows_binding(x: PythonObject, params: PythonObject) raises -> PythonObject:
+    _need(params, 2, "x_trees_softmax_rows")
+    var n = _count(_i(params, 0), "x_trees_softmax_rows")
+    if n > 0:
+        softmax_rows(f64_ptr(Int(py=x)), n, _i(params, 1))
+    return PythonObject(n)
+
+
+def samme_step_binding(
+    w: PythonObject, pred: PythonObject, y: PythonObject, stats: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """params = [n, n_classes, learning_rate, last]; stats = 4 float64."""
+    _need(params, 4, "x_trees_samme_step")
+    var n = _i(params, 0)
+    if n <= 0:
+        raise Error("x_trees_samme_step: n must be positive")
+    samme_step(f64_ptr(Int(py=w)), i32_ptr(Int(py=pred)), i32_ptr(Int(py=y)), n, _i(params, 1),
+               _f(params, 2), _i(params, 3) != 0, f64_ptr(Int(py=stats)))
+    return PythonObject(n)
+
+
+def r2_step_binding(
+    w: PythonObject, pred: PythonObject, y: PythonObject, stats: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """params = [n, loss (0 linear, 1 square, 2 exponential), learning_rate, last]."""
+    _need(params, 4, "x_trees_r2_step")
+    var n = _i(params, 0)
+    if n <= 0:
+        raise Error("x_trees_r2_step: n must be positive")
+    r2_step(f64_ptr(Int(py=w)), f32_ptr(Int(py=pred)), f32_ptr(Int(py=y)), n, _i(params, 1),
+            _f(params, 2), _i(params, 3) != 0, f64_ptr(Int(py=stats)))
+    return PythonObject(n)
+
+
+def weighted_median_binding(
+    preds: PythonObject, weights: PythonObject, res: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """params = [n, m]; preds estimator-major float32."""
+    _need(params, 2, "x_trees_weighted_median")
+    var n = _count(_i(params, 0), "x_trees_weighted_median")
+    var m = _i(params, 1)
+    if m <= 0:
+        raise Error("x_trees_weighted_median: need at least one estimator")
+    if n > 0:
+        weighted_median(f32_ptr(Int(py=preds)), f64_ptr(Int(py=weights)), n, m, f32_ptr(Int(py=res)))
+    return PythonObject(n)
+
+
+def apply_binding(
+    offsets: PythonObject, colid: PythonObject, quesval: PythonObject, left: PythonObject,
+    x: PythonObject, res: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """Leaf node per (row, tree) for trees [t0, t1); params = [n, d, t0, t1]; x row-major float32."""
+    _need(params, 4, "x_trees_apply")
+    var n = _count(_i(params, 0), "x_trees_apply")
+    var t0 = _count(_i(params, 2), "x_trees_apply")
+    var t1 = _i(params, 3)
+    if t1 <= t0:
+        raise Error("x_trees_apply: need t1 > t0")
+    if n > 0:
+        apply_trees(i32_ptr(Int(py=offsets)), i32_ptr(Int(py=colid)), f32_ptr(Int(py=quesval)),
+                    i32_ptr(Int(py=left)), f32_ptr(Int(py=x)), n, _i(params, 1), t0, t1, i32_ptr(Int(py=res)))
+    return PythonObject(n)
+
+
+def gradients_binding(
+    score: PythonObject, y: PythonObject, g: PythonObject, h: PythonObject, target: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """params = [n, kind (0 l2, 1 binary logloss)]."""
+    _need(params, 2, "x_trees_gradients")
+    var n = _count(_i(params, 0), "x_trees_gradients")
+    var kind = _i(params, 1)
+    if kind != 0 and kind != 1:
+        raise Error("x_trees_gradients: kind must be 0 (l2) or 1 (binary)")
+    if n > 0:
+        gradients(f64_ptr(Int(py=score)), f32_ptr(Int(py=y)), n, kind, f64_ptr(Int(py=g)), f64_ptr(Int(py=h)),
+                  f32_ptr(Int(py=target)))
+    return PythonObject(n)
+
+
+def leaf_newton_binding(
+    nodes: PythonObject, g: PythonObject, h: PythonObject, values: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """params = [n, n_nodes, reg_lambda]."""
+    _need(params, 3, "x_trees_leaf_newton")
+    var n = _count(_i(params, 0), "x_trees_leaf_newton")
+    var n_nodes = _i(params, 1)
+    if n_nodes < 1:
+        raise Error("x_trees_leaf_newton: need n_nodes >= 1")
+    leaf_newton(i32_ptr(Int(py=nodes)), f64_ptr(Int(py=g)), f64_ptr(Int(py=h)), n, n_nodes, _f(params, 2),
+                f32_ptr(Int(py=values)))
+    return PythonObject(n_nodes)
+
+
+def tree_score_add_binding(nodes: PythonObject, values: PythonObject, acc: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n, weight]."""
+    _need(params, 2, "x_trees_tree_score_add")
+    var n = _count(_i(params, 0), "x_trees_tree_score_add")
+    if n > 0:
+        tree_score_add(i32_ptr(Int(py=nodes)), f32_ptr(Int(py=values)), n, _f(params, 1), f64_ptr(Int(py=acc)))
+    return PythonObject(n)
+
+
+def uniform_binding(res: PythonObject, params: PythonObject) raises -> PythonObject:
+    """params = [n, seed, stream]."""
+    _need(params, 3, "x_trees_uniform")
+    var n = _count(_i(params, 0), "x_trees_uniform")
+    if n > 0:
+        uniform(f64_ptr(Int(py=res)), n, _i(params, 1), _i(params, 2))
+    return PythonObject(n)
+
+
+def onehot_leaves_binding(
+    nodes: PythonObject, tree_base: PythonObject, node_col: PythonObject, res: PythonObject, params: PythonObject,
+) raises -> PythonObject:
+    """params = [n, n_trees, n_cols]; res float64 n*n_cols, zeroed."""
+    _need(params, 3, "x_trees_onehot_leaves")
+    var n = _count(_i(params, 0), "x_trees_onehot_leaves")
+    if n > 0:
+        onehot_leaves(i32_ptr(Int(py=nodes)), i32_ptr(Int(py=tree_base)), i32_ptr(Int(py=node_col)), n,
+                      _i(params, 1), _i(params, 2), f64_ptr(Int(py=res)))
+    return PythonObject(n)
+
+
+def transpose_f32_binding(src: PythonObject, dst: PythonObject, params: PythonObject) raises -> PythonObject:
+    """dst (d x n) = src (n x d) transposed; params = [n, d]."""
+    _need(params, 2, "x_trees_transpose_f32")
+    var n = _count(_i(params, 0), "x_trees_transpose_f32")
+    var d = _count(_i(params, 1), "x_trees_transpose_f32")
+    if n * d > 0:
+        transpose_f32(f32_ptr(Int(py=src)), n, d, f32_ptr(Int(py=dst)))
+    return PythonObject(n * d)
+
+
+def log64_binding(x: PythonObject) raises -> PythonObject:
+    """The pinned binary64 log (checks/numerics.mojo identical_log64) of one value."""
+    return PythonObject(identical_log64(Float64(py=x)))
+
+
+def register(mut m: PythonModuleBuilder) raises:
+    """The shared export list; both bindings call this."""
+    m.def_function[sample_indices_binding]("x_trees_sample_indices")
+    m.def_function[weighted_sample_binding]("x_trees_weighted_sample")
+    m.def_function[gather_f32_binding]("x_trees_gather_f32")
+    m.def_function[gather_i32_binding]("x_trees_gather_i32")
+    m.def_function[accumulate_binding]("x_trees_accumulate")
+    m.def_function[accumulate_onehot_binding]("x_trees_accumulate_onehot")
+    m.def_function[accumulate_cols_binding]("x_trees_accumulate_cols")
+    m.def_function[argmax_rows_binding]("x_trees_argmax_rows")
+    m.def_function[argmax_rows_f32_binding]("x_trees_argmax_rows_f32")
+    m.def_function[scale_binding]("x_trees_scale")
+    m.def_function[softmax_rows_binding]("x_trees_softmax_rows")
+    m.def_function[scale_to_f32_binding]("x_trees_scale_to_f32")
+    m.def_function[put_f32_binding]("x_trees_put_f32")
+    m.def_function[samme_step_binding]("x_trees_samme_step")
+    m.def_function[r2_step_binding]("x_trees_r2_step")
+    m.def_function[weighted_median_binding]("x_trees_weighted_median")
+    m.def_function[apply_binding]("x_trees_apply")
+    m.def_function[gradients_binding]("x_trees_gradients")
+    m.def_function[leaf_newton_binding]("x_trees_leaf_newton")
+    m.def_function[tree_score_add_binding]("x_trees_tree_score_add")
+    m.def_function[uniform_binding]("x_trees_uniform")
+    m.def_function[onehot_leaves_binding]("x_trees_onehot_leaves")
+    m.def_function[transpose_f32_binding]("x_trees_transpose_f32")
+    m.def_function[log64_binding]("x_trees_log64")
