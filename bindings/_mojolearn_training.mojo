@@ -73,6 +73,7 @@ from max.gpu.host import DeviceContext
 from training.clip_multi_gpu import parallel_clip_grad_norm_host, clip_pool_fault_available
 from training.accumulate_multi_gpu import parallel_accumulate_host, accumulate_pool_fault_available
 from training.optimizer_multi_gpu import parallel_optimizer_step_host
+from training.maximize import maximize_negate, maximize_negated_copy
 from training.estimator import (
     identical_ce_loss_host,
     identical_clip_grad_norm_host,
@@ -182,6 +183,10 @@ def optimizer_step_binding(
         9   momentum        (float; SGD only)
         10  dampening       (float; SGD only)
         11  max_norm        (float; <= 0 turns the gradient-norm clip OFF)
+        12  maximize        0 or 1, OPTIONAL (a 12-value list is 0). 1 runs
+                            the step on the sign-flipped gradient,
+                            training/maximize.mojo (DEVIATION 6200); the
+                            caller's gradient is never left negated
 
     SLOT 2 IS THE TRAP IN THIS LIST. `t` is the OPTIMIZER's step counter and
     it is one-based, so a caller looping `for t in range(n)` and passing `t`
@@ -219,13 +224,14 @@ def optimizer_step_binding(
     clip not running, and the oracle draws the same distinction by leaving
     its `clip.*` stages empty rather than filling them with a 1.
     """
-    if len(params) != 12:
+    if len(params) != 12 and len(params) != 13:
         raise Error(
-            "optimizer_step: params must contain 12 values, got "
+            "optimizer_step: params must contain 12 or 13 values, got "
             + String(len(params))
         )
     var pp = _f32_ptr(Int(py=param_addr))
     var gp = _f32_ptr(Int(py=grad_addr))
+    var maximize = len(params) == 13 and Int(py=params[12]) != 0
     var mp = _f32_ptr(Int(py=m_addr))
     var vp = _f32_ptr(Int(py=v_addr))
     var op = _i32_ptr(Int(py=offsets_addr))
@@ -246,11 +252,29 @@ def optimizer_step_binding(
     var n_total = 0
     with GILReleased(Python()):
         var ctx = DeviceContext()
-        n_total = parallel_optimizer_step_host(
-            ctx, pp, gp, mp, vp, op, ip, fp, n_tensors, kind, t, nesterov,
-            lr, beta1, beta2, eps, weight_decay, momentum, dampening,
-            max_norm,
-        )
+        if maximize:
+            # The step reads a negated COPY, so the caller's gradient is never
+            # negated, not even for the length of the call; a clipped
+            # gradient is written back through the same sign flip.
+            if n_tensors < 1 or op[n_tensors] < Int32(0):
+                raise Error("optimizer_step: maximize needs a registry with offsets[J] >= 0")
+            var n_flat = Int(op[n_tensors])
+            var neg = maximize_negated_copy(gp, n_flat)
+            var np_ = neg.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin]()
+            n_total = parallel_optimizer_step_host(
+                ctx, pp, np_, mp, vp, op, ip, fp, n_tensors, kind, t, nesterov,
+                lr, beta1, beta2, eps, weight_decay, momentum, dampening,
+                max_norm,
+            )
+            if max_norm > Float32(0.0):
+                for i in range(n_flat):
+                    gp[i] = maximize_negate(neg[i])
+        else:
+            n_total = parallel_optimizer_step_host(
+                ctx, pp, gp, mp, vp, op, ip, fp, n_tensors, kind, t, nesterov,
+                lr, beta1, beta2, eps, weight_decay, momentum, dampening,
+                max_norm,
+            )
     return PythonObject(n_total)
 
 
