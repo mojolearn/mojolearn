@@ -67,4 +67,9 @@ PASS 2 (proof), in progress:
 - Apple: M2 Pro steward PASS (1790526750361-trees-77e0b3a8d7), M3 Ultra spooled.
 - Pass-2 proof DONE for the 20 lanes (PENDING until a release record admits them).
 
-Next: option parity (CURRENT DIRECTIVES item 2): `xtrees/NOT_IMPLEMENTED.tsv` rows marked `not yet`, then the existing family (extratrees/, gbdt/ NOT_IMPLEMENTED rows), then GPU speed, CPU speed last.
+Option parity (item 2), merged as each passes:
+- DecisionTree splitter='random' (+ max_leaf_nodes best-first on it): lane
+  trees-dt-random AGREE; column sabotage (now also the ET host draw) DISAGREE
+  then AGREE.
+
+Next: option parity continues: DART lambda_l1 / max_delta_step / feature_fraction / bagging / min_sum_hessian / multiclass; Kernel link='logit'; cv splitter objects; Bagging oob_score; then the existing family's tsv rows (extratrees/, gbdt/), then GPU speed, CPU speed last.
