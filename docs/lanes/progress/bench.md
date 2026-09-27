@@ -82,17 +82,38 @@ new algorithm, measure nothing. Worktree `~/mojolearn-wt/algos-bench`, branch
   amd (`drydiff_s2m5.log`). test_lane_select skipped per CURRENT DIRECTIVES
   item 0 (bench-only diff); last run: the single kmeans_oracle 54 vs 47
   failure of merge 3, not bench.
-- Still guessed (classes not merged): Prophet, the MoE block. When the
-  sequence lane merges them: read the class, fix the `prophet` / `moe`
-  entries in LANES and their builders (`_build_ts`, the layer builder), build
-  with `tools/algos_lane_check.sh <lane>` on the pod and smoke with
-  `~/mojolearn-evidence/algos-bench/smoke_s2.py` (OURS=/root/ourspy runs the
-  source tree; `drydiff.sh` is the before/after plan diff).
+- Session 3, merge 6: the `prophet` and `moe` races call the classes as
+  exported: `ProphetForecaster(...).fit(ds, Y).predict(future ds)` (ds hourly
+  from 2024-01-01, max_iter=10000 = prophet's Stan iter) vs prophet-cpu;
+  `MoEBlock(hidden_size, intermediate_size, num_experts, top_k,
+  norm_topk_prob)` loading torch's weights in HF's fused layout, forward only
+  on every arm, vs the six torch arms. Dry run of the 93 existing races
+  byte-identical on apple, nvidia, amd (`drydiff_s3.log`). Lane check on the
+  pod: sequence-prophet, sequence-moe AGREE (`lanecheck_s3.log`). Plumbing
+  smoke (`smoke_s3.log`; OURS=/root/ourspy for prophet, OURS=/root/ourstorchpy
+  and THEIRS=/usr/bin/python3 for moe, since /root/opp has no torch): every
+  arm of both races ran, ours-cpu bits equal ours. On the merged tree: bench
+  tests 62 pass; test_host_surface 196 pass after fixing main's
+  byte-lm-host-train revision (72a64f8b9 named no size; now in
+  NON_SIZE_REVISIONS of tools/identity_break.py). test_lane_select skipped
+  (bench-only diff plus identity_break.py, not a trigger path).
+- Every algos class is now in the source tree; no race is guessed.
+- damped-ets stays non-seasonal on every arm: main's ETS still refuses
+  seasonal components (`_x_sequence_ets.py`). When sequence adds them, restore
+  `season_length=24` with a seasonal model on ours, statsforecast AutoETS and
+  statsmodels ExponentialSmoothing(seasonal="add", seasonal_periods=24).
+- Pod note: run `tools/dev_pod.sh sync bench ~/mojolearn-wt/algos-bench` with
+  `MOJOLEARN_DEVPOD_ALLOW_SELF=1` when running the tool from this worktree.
 
 ## Next
 
-- As lanes add classes or options (option parity), align `LANES` params and
-  the ours adapters; re-read CURRENT DIRECTIVES in the plan after each merge.
+- Option parity (item 3 of the bench task): lanes prep and cnn merged
+  option parity (b2de7bf0e, 0e2798963) and more lanes follow. Next session:
+  for each lane's option-parity merge, read the new constructor options and
+  set in `LANES` only those that make the race's settings match the
+  opponent's (defaults that differ between ours and theirs), one merge per
+  batch; keep the 93 existing races' dry run byte-identical and smoke only
+  the changed races.
 
 ## Adding a class name or contract
 

@@ -108,6 +108,7 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 
 from core.identity_trace import IdentityTrace, read_trace_lines
 from checks.numerics import (
+    identical_mul,
     GLOBAL_NUMERIC_MODE,
     NUMERIC_IDENTICAL,
     ftz,
@@ -147,7 +148,6 @@ from mamba.checks.mamba3_oracle import (
     Mamba3State,
     m3_mod_2pi,
     mamba3_block_oracle,
-    pinned_mul,
 )
 from mamba.impl.modules.mamba3 import (
     BLOCK3_ANY_SABOTAGE,
@@ -1473,7 +1473,7 @@ def count_angle_crossings(case_k: Int) raises -> Int:
                 for li in range(c.l):
                     var mm = bb * c.l + li
                     var a = ftz(
-                        pinned_mul(
+                        identical_mul(
                             identical_tanh(
                                 ftz(st.in_proj[mm * dip + c_ang + r])
                             ),
@@ -1481,7 +1481,7 @@ def count_angle_crossings(case_k: Int) raises -> Int:
                         )
                     )
                     var inc = ftz(
-                        pinned_mul(a, ftz(st.dt_out[mm * nh + hh]))
+                        identical_mul(a, ftz(st.dt_out[mm * nh + hh]))
                     )
                     var x = ftz(run + inc)
                     var modded = m3_mod_2pi(x)
@@ -1578,7 +1578,7 @@ def sabotage_main(ctx: DeviceContext) raises:
         var moved = 0
         for i in range(len(st.trap_scale)):
             var g = ftz(
-                pinned_mul(ftz(st.dt_out[i]), ftz(st.trap_sigma[i]))
+                identical_mul(ftz(st.dt_out[i]), ftz(st.trap_sigma[i]))
             )
             if bitcast[DType.uint32](g) != bitcast[DType.uint32](
                 st.trap_scale[i]
