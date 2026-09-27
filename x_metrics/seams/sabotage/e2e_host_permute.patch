@@ -1,14 +1,15 @@
-diff --git a/x_metrics/split.mojo b/x_metrics/split.mojo
-index d21725fa2..86490150e 100644
---- a/x_metrics/split.mojo
-+++ b/x_metrics/split.mojo
-@@ -27,6 +27,9 @@ def _salt(q: IP) -> Int:
- def _before(salt: Int, i: Int, j: Int) -> Bool:
-     var ki = splitmix_pair(i, salt)
-     var kj = splitmix_pair(j, salt)
-+    from std.sys.info import is_gpu  # SABOTAGE e2e: a host-only key order
-+    comptime if not is_gpu():
-+        return ki > kj or (ki == kj and i < j)
-     return ki < kj or (ki == kj and i < j)
- 
- 
+diff --git a/x_metrics/par.mojo b/x_metrics/par.mojo
+index 4e441ae51..0a9cd48b1 100644
+--- a/x_metrics/par.mojo
++++ b/x_metrics/par.mojo
+@@ -267,6 +267,10 @@ def sort_key_unit(t: Int, f: FP, q: IP):
+         var z = splitmix_pair(i, Int((hi << 32) | lo))
+         kh = UInt32(z >> 32)
+         kl = UInt32(z & 0xFFFFFFFF)
++        from std.sys.info import is_gpu  # SABOTAGE e2e: a host-only key order
++        comptime if not is_gpu():
++            kh = ~kh
++            kl = ~kl
+     stu(f, B + t, kh)
+     stu(f, B + N + t, kl)
+     sti(f, B + 2 * N + t, i)
