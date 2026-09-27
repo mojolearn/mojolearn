@@ -26,8 +26,8 @@ argument of `bindings/_mojolearn_rf.mojo`), `forest_export`,
 ADDED 2026-09-15 (rf-reg-poisson, rf-reg-gamma-ig,
 rf-clf-balanced-parallel): the POISSON, GAMMA and INVERSE_GAUSSIAN criteria
 fit through the oracle; `rf_classifier_fit_weighted` and its `_export` form
-take the per-row class weights (the weighted BOOTSTRAP; weights without a
-bootstrap reach the weighted objective, which the oracle refuses by name);
+take the per-row class weights (the weighted BOOTSTRAP, and since
+2026-09-27 weights without a bootstrap, the weighted objective);
 and `forest_prepare_gpu`, `forest_predict_resident_reuse_gpu` and
 `forest_release_gpu`, the resident `parallel_groves` entries, predict over
 `core/forest_host_groves.mojo` (`RF_INPUT=True`: the input flushed).

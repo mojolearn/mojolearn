@@ -32,11 +32,15 @@ and `build_byte_lm_host.sh` once on a fresh pod. sklearn/lightgbm/pytest live
 in /root/sk on the pod (uv --target); run the sanity test with
 `PYTHONPATH=python:/root/sk pixi run -e default python -m pytest -q python/mojolearn/tests/test_x_trees_sanity.py`.
 
-Known gaps (reported to main):
-- the RF weighted objective (sample_weight / class_weight without bootstrap)
-  has no CPU restatement in `ensemble/host/rf_oracle.mojo`, so
-  `DecisionTreeClassifier.fit(sample_weight=...)` is GPU-only (the rf host
-  binding refuses it by name) and AdaBoostClassifier fits weighted bootstraps
-  instead of weighted trees.
+Shared fix (main's policy 2026-09-27: the lane that finds it fixes it):
+the RF weighted objective (class weights / sample_weight WITHOUT bootstrap)
+now has its CPU restatement in `ensemble/host/rf_oracle.mojo`; lane
+`trees-rf-weighted` AGREE (batch/infer/model/train 9), sabotage
+`rf_weighted_split_sabotage.patch` (the split planes drop the row weight):
+AGREE, DISAGREE, AGREE after `git apply -R`. Existing RF lanes (rf-clf,
+rf-reg, rf-clf-entropy-log2-noboot, rf-clf-balanced-parallel,
+rf-reg-poisson, rf-reg-gamma-ig, rf-score-weighted): `python -m mojolearn
+verify` 7/7 VERIFIED on CUDA and on CPU after, 0 cell hashes differ from
+before on either column.
 
-Next: the RF weighted objective on the CPU (ensemble/host/rf_oracle.mojo; main's new policy: the lane fixes it), then AdaBoostClassifier on SAMME sample weights and DecisionTree sample_weight on CPU, then SHAP TreeExplainer, KernelExplainer, PermutationExplainer.
+Next: AdaBoostClassifier on SAMME sample weights, then SHAP TreeExplainer, KernelExplainer, PermutationExplainer.

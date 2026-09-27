@@ -121,9 +121,8 @@ class DecisionTreeClassifier(RandomForestClassifier):
     bootstrap, `max_features=None` (every feature) by default.
 
     `fit(X, y, sample_weight=None)` takes per-row weights (multiplied into
-    `class_weight`'s row weights) through the weighted RF fit entry; that
-    objective has no CPU restatement yet (ensemble/host/rf_oracle.mojo), so a
-    weighted fit is GPU-only and the rf host binding refuses it by name.
+    `class_weight`'s row weights) through the weighted RF fit entry (the
+    weighted objective; its CPU restatement is ensemble/host/rf_oracle.mojo).
     `predict_proba` is the leaf's class distribution."""
 
     def __init__(
