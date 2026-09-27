@@ -14,6 +14,7 @@ from x_cluster.bodies import (
     exp_cell,
     gauss_q_cell,
     nk_cell,
+    pdist_cell,
     resp_row,
     xk_cell,
     ap_availability_col,
@@ -123,6 +124,12 @@ def _cov_kernel(resp: FPtr, x: FPtr, n: Int32, d: Int32, kc: Int32, means: FPtr,
     var t = _tid()
     if t < Int(kc) * Int(d) * Int(d):
         cov_cell(resp, x, Int(n), Int(d), Int(kc), means, nk, reg, dst, t)
+
+
+def _pdist_kernel(a: FPtr, na: Int32, b: FPtr, nb: Int32, d: Int32, metric: Int32, p: Float32, dst: FPtr):
+    var t = _tid()
+    if t < Int(na) * Int(nb):
+        pdist_cell(a, Int(na), b, Int(nb), Int(d), Int(metric), p, dst, t)
 
 
 def _descend_kernel(x: FPtr, n: Int32, d: Int32, centers: FPtr, nodes: IPtr, labels: IPtr):
@@ -265,16 +272,17 @@ struct DeviceOps(ClusterOps):
     def kmeans(
         mut self, x: List[Float32], n: Int, d: Int, k: Int, max_iter: Int, tol: Float64,
         seed: UInt64, n_init: Int, init: Int, mut centers: List[Float32], mut labels: List[Int32],
+        weights: List[Float32] = List[Float32](),
     ) raises -> Float64:
         var xc = x.copy()
         centers = List[Float32](length=k * d, fill=Float32(0))
         var lab = List[UInt32](length=n, fill=UInt32(0))
-        var w = List[Float32](length=1, fill=Float32(1))
+        var w = weights.copy() if len(weights) > 0 else List[Float32](length=1, fill=Float32(1))
         var r = kmeans_fit(
             self.ctx, xc.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), n, d, k,
             centers.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
             lab.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](),
-            w.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), 0,
+            w.unsafe_ptr().unsafe_origin_cast[MutUntrackedOrigin](), len(weights),
             max_iter=max_iter, tol=tol, seed=seed, n_init=n_init, init=init, metric=METRIC_L2_EXPANDED,
         )
         # KEEP THE TWO INPUTS ALIVE THROUGH THE CALL: Mojo ends a value's life
@@ -320,5 +328,14 @@ struct DeviceOps(ClusterOps):
         self.ctx.enqueue_function[_cov_kernel](
             self._fp(resp), self._fp(x), Int32(n), Int32(d), Int32(kc), self._fp(means), self._fp(nk), reg,
             self._fp(cov), grid_dim=_grid(kc * d * d), block_dim=TPB,
+        )
+        self.ctx.synchronize()
+
+    def pdist(
+        mut self, a: Int, na: Int, b: Int, nb: Int, d: Int, metric: Int, p: Float32, dst: Int
+    ) raises:
+        self.ctx.enqueue_function[_pdist_kernel](
+            self._fp(a), Int32(na), self._fp(b), Int32(nb), Int32(d), Int32(metric), p, self._fp(dst),
+            grid_dim=_grid(na * nb), block_dim=TPB,
         )
         self.ctx.synchronize()

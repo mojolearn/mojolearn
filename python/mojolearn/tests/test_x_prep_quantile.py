@@ -30,6 +30,16 @@ def test_quantile():
         np.testing.assert_allclose(np.asarray(m.quantiles_), r.quantiles_, rtol=1e-5, atol=1e-5)
         a, b = np.asarray(m.transform(Xh)), r.transform(Xh.astype(np.float64))
         np.testing.assert_allclose(a, b, rtol=1e-3, atol=2e-4)
+        # inverse_transform: the forward output, the bounds exactly, beyond them, NaN
+        Z = b.astype(np.float32)
+        Z[:5] = 0.0 if kw.get("output_distribution") != "normal" else -5.2
+        Z[5:10] = 1.0 if kw.get("output_distribution") != "normal" else 5.2
+        Z[10:15] = np.float32(-7.0)
+        Z[15:20] = np.float32(7.0)
+        Z[20:30] = np.float32(0.37)
+        a, b = np.asarray(m.inverse_transform(Z)), r.inverse_transform(Z.astype(np.float64))
+        np.testing.assert_array_equal(np.isnan(a), np.isnan(b))
+        np.testing.assert_allclose(a, b, rtol=1e-3, atol=2e-4)
 
 
 if __name__ == "__main__":

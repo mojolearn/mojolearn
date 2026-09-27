@@ -305,3 +305,77 @@ def _(ml, X, yc, yr, Xh=None):
     d = ml.DynamicOptimizedTheta(season_length=12, alpha=0.3).fit(y)
     fd = d.predict(18)["mean"]
     return _fit(dict(auto=_h(fa), auto_info=_h(a.info_), dotm=_h(fd), dotm_info=_h(d.info_)))
+
+
+@lane("sequence-croston")
+def _(ml, X, yc, yr, Xh=None):
+    """Six intermittent series of 120 observations (fixture columns kept
+    where they exceed a threshold, one all-zero, one with negative events):
+    the classic, optimized and SBA forecasts."""
+    c = np.ascontiguousarray(X[:120, :6].T, dtype=np.float32)
+    y = np.where(c > np.float32(0.8), c + np.float32(1.0), np.float32(0.0)).astype(np.float32)
+    y[4] = np.float32(0.0)
+    y[5] = np.where(c[5] < np.float32(-1.0), c[5], y[5]).astype(np.float32)
+    out = {}
+    for k, cls in (("classic", ml.CrostonClassic), ("optimized", ml.CrostonOptimized), ("sba", ml.CrostonSBA)):
+        out[k] = _h(cls().fit(y).predict(4)["mean"])
+    return _fit(out)
+
+
+@lane("sequence-ets")
+def _(ml, X, yc, yr, Xh=None):
+    """Four series of 80 observations (a trend plus a fixture column, a
+    random walk, a positive level series, a fixture column): damped
+    ETS(A,Ad,N), ETS(M,Ad,N) on the positive rows, undamped AAN and simple
+    ANN; 12-step forecasts."""
+    t = np.arange(80, dtype=np.float32)
+    c = np.ascontiguousarray(X[:80, 9], dtype=np.float32)
+    y = np.stack([np.float32(5.0) + np.float32(0.3) * t + c, np.cumsum(c, dtype=np.float32),
+                  np.float32(40.0) + c, c]).astype(np.float32)
+    pos = np.ascontiguousarray(y[:1] + np.float32(10.0) - np.minimum(y[:1].min(), np.float32(0.0)))
+    out = dict(damped=_h(ml.DampedETS().fit(y).predict(12)["mean"]),
+               mult=_h(ml.DampedETS(error="M").fit(pos).predict(12)["mean"]),
+               aan=_h(ml.ETS(model="AAN", damped=False).fit(y).predict(12)["mean"]),
+               ann=_h(ml.ETS(model="ANN", damped=False).fit(y).predict(12)["mean"]))
+    return _fit(out)
+
+
+@lane("sequence-garch")
+def _(ml, X, yc, yr, Xh=None):
+    """Three return-like series of 300 observations built from fixture
+    columns by a GARCH(1,1) filter: GARCH(1,1) with a constant mean,
+    GJR-GARCH(1,1,1) with a zero mean; parameters, log-likelihoods,
+    conditional volatility and 5-step variance forecasts."""
+    z = np.ascontiguousarray(X[:300, 10:13].T, dtype=np.float32)
+    # bounded shocks, |u| < 1.4, so the filter is stationary on every fixture
+    zz = (np.float32(1.4) * z / (np.float32(1.0) + np.abs(z))).astype(np.float32)
+    r = np.zeros_like(zz)
+    s2 = np.full(3, np.float32(1.0), dtype=np.float32)
+    for t in range(300):
+        r[:, t] = (np.sqrt(s2) * zz[:, t]).astype(np.float32)
+        s2 = (np.float32(0.1) + np.float32(0.1) * r[:, t] * r[:, t] + np.float32(0.8) * s2).astype(np.float32)
+    g = ml.GARCH().fit(r, horizon=5)
+    j = ml.GARCH(p=1, o=1, q=1, mean="Zero").fit(r, horizon=5)
+    return _fit(dict(params=_h(g.params_), ll=_h(g.loglikelihood_), vol=_h(g.conditional_volatility_),
+                     fc=_h(g.forecast(5)), gjr=_h(j.params_, j.loglikelihood_, j.forecast(5))))
+
+
+@lane("sequence-prophet")
+def _(ml, X, yc, yr, Xh=None):
+    """Two daily series over 120 days with a trend break, a weekly cycle and
+    one holiday column (the auto weekly seasonality and 25 changepoints),
+    additive, and the same with multiplicative seasonality; 21-day
+    forecasts with the holiday continued."""
+    t = np.arange(120, dtype=np.float64) + 19000.0
+    c = np.ascontiguousarray(X[:120, 13:15].T, dtype=np.float32)
+    k = np.where(np.arange(120) < 60, np.float32(0.05), np.float32(-0.02)).astype(np.float32)
+    trend = np.cumsum(k, dtype=np.float32) + np.float32(10.0)
+    week = np.sin(np.arange(120, dtype=np.float32) * np.float32(2 * np.pi / 7)).astype(np.float32)
+    hol = (np.arange(141) % 30 == 5).astype(np.float32)
+    y = (trend + week + np.float32(3.0) * hol[:120] + np.float32(0.2) * c).astype(np.float32)
+    tf = np.arange(120, 141, dtype=np.float64) + 19000.0
+    a = ml.ProphetForecaster().fit(t, y, holidays=hol[:120, None])
+    fa = a.predict(tf, holidays=hol[120:, None])
+    m = ml.ProphetForecaster(seasonality_mode="multiplicative").fit(t, y, holidays=hol[:120, None])
+    fm = m.predict(tf, holidays=hol[120:, None])
+    return _fit(dict(a_params=_h(a.params_), a_fc=_h(fa), m_params=_h(m.params_), m_fc=_h(fm)))

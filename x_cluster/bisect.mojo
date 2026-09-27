@@ -71,8 +71,15 @@ def bisect_fit[O: ClusterOps](
     mut ops: O, x: List[Float32], n: Int, d: Int, k: Int, n_init: Int, init: Int,
     max_iter: Int, tol: Float64, seed: UInt64, largest_cluster: Bool,
     mut tree: BisectTree, mut labels: List[Int32], mut centers: List[Float32],
+    weights: List[Float32] = List[Float32](),
 ) raises -> Float64:
-    """Returns the inertia against the leaf centers."""
+    """Returns the inertia against the leaf centers. `weights` (empty: unit)
+    are sklearn's sample_weight: the data mean stays unweighted (sklearn's
+    `_X_mean`), each 2-means is weighted, and so are the inertia scores and
+    the inertia; 'largest_cluster' counts rows."""
+    from checks.numerics import identical_mul64
+
+    var weighted = len(weights) > 0
     if k < 1 or k > n:
         raise Error("BisectingKMeans: n_samples=" + String(n) + " should be >= n_clusters=" + String(k))
     # the column means: one ascending Float64 chain per column
@@ -104,13 +111,17 @@ def bisect_fit[O: ClusterOps](
         if m < 2:
             raise Error("BisectingKMeans: a cluster of " + String(m) + " sample cannot be bisected")
         var sub = gather_rows(xc, d, rows)
+        var sub_w = List[Float32]()
+        if weighted:
+            for r in rows:
+                sub_w.append(weights[r])
         var best_c = List[Float32]()
         var best_l = List[Int32]()
         var best_inertia = Float64(0)
         for it in range(n_init):
             var c = List[Float32]()
             var l = List[Int32]()
-            var inertia = ops.kmeans(sub, m, d, 2, max_iter, tol, rng.next() >> 1, 1, kinit, c, l)
+            var inertia = ops.kmeans(sub, m, d, 2, max_iter, tol, rng.next() >> 1, 1, kinit, c, l, sub_w)
             if it == 0 or inertia < best_inertia * (1 - 1e-6):
                 best_inertia = inertia
                 best_c = c^
@@ -130,6 +141,8 @@ def bisect_fit[O: ClusterOps](
             child_rows[j].append(rows[t])
             if largest_cluster:
                 sc[j] = sc[j] + 1
+            elif weighted:
+                sc[j] = sc[j] + identical_mul64(Float64(sub_w[t]), Float64(dd[t * 2 + j]))
             else:
                 sc[j] = sc[j] + Float64(dd[t * 2 + j])
         var ids = List[Int]()
@@ -159,7 +172,10 @@ def bisect_fit[O: ClusterOps](
     var dd = ops.get(ds, n * k)
     var inertia = Float64(0)
     for r in range(n):
-        inertia = inertia + Float64(dd[r * k + Int(labels[r])])
+        if weighted:
+            inertia = inertia + identical_mul64(Float64(weights[r]), Float64(dd[r * k + Int(labels[r])]))
+        else:
+            inertia = inertia + Float64(dd[r * k + Int(labels[r])])
     return inertia
 
 

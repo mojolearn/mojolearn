@@ -37,7 +37,11 @@ scikit-learn shaped unless a line below says otherwise)
                fit_predict / fit_transform as scikit-learn names them; fitted
                attributes with scikit-learn's names (components_, means_, ...)
   forecasters  Cls(**params).fit(Y) with Y (n_series, n_obs) float32, then
-               .forecast(h) -> (n_series, h)   (the ARIMA/ETS classes' shape)
+               .predict(h)["mean"] -> (n_series, h)   (statsforecast's shape:
+               Theta, CrostonClassic, ETS); AutoARIMA is cuML's shape,
+               Cls(Y).search(...); .fit(); .forecast(h); GARCH is arch's
+               shape, Cls(p, q, mean, dist).fit(Y, horizon=h), .forecast(h)
+               (variances), .loglikelihood_ (per series)
   graph        Cls(**params).fit(indptr, indices) of a symmetric CSR graph,
                then .scores_ (PageRank) or .labels_ (components, Louvain)
   ANN          Cls(**params).fit(index).search(queries) -> (dist, ind), the
@@ -94,6 +98,7 @@ EVAL_ROWS = 100_000
 SUB = {"quad": 10_000, "cubic": 3_000, "knn": 200_000, "mid": 100_000, "small": 20_000,
        "tiny": 5_000}
 GRAPH_NODES = 100_000
+GRAPH_SMALL = 20_000          # the graph-algorithm races: ours takes a dense adjacency
 TS_H = 48                     # held-out hours / points per series
 TS_SERIES = 64
 TEXT_DOC_BYTES = 2048
@@ -292,19 +297,22 @@ _add("knn-imputer", xlane="neighbors", ours="KNNImputer", task="impute", block="
      sub={"X": SUB["mid"], "Xq": SUB["small"]}, sk="sklearn.impute:KNNImputer",
      params=dict(n_neighbors=5, weights="uniform"),
      notes=["10% of the cells of X and Xq set to NaN by a seed-7 mask; quality on those cells"])
+_GRAPH_MISM = ("ours takes a dense adjacency matrix (its class's contract), built from the CSR "
+               "graph before the clock; networkx and cuGraph take the graph itself")
 _add("pagerank", xlane="neighbors", ours=("PageRank",), kind="graph", task="pagerank",
-     block="graph", params=dict(alpha=0.85, tol=1e-6, max_iter=100),
-     other={"networkx-cpu": "networkx", "cugraph-gpu": "cugraph"},
+     block="graphs", params=dict(alpha=0.85, tol=1e-6, max_iter=100),
+     other={"networkx-cpu": "networkx", "cugraph-gpu": "cugraph"}, mism=[_GRAPH_MISM],
      notes=["graph: the symmetric 10-nearest-neighbour graph of %d stride rows of the cls block "
-            "(float64 brute force in prep), unweighted" % GRAPH_NODES])
-_add("connected-components", xlane="neighbors", ours=("ConnectedComponents",), kind="graph",
-     task="components", block="graph", other={"networkx-cpu": "networkx", "cugraph-gpu": "cugraph"},
+            "(float64 brute force in prep), unweighted" % GRAPH_SMALL])
+_add("connected-components", xlane="neighbors", ours=("connected_components", "ConnectedComponents"),
+     kind="graph", task="components", block="graphs",
+     other={"networkx-cpu": "networkx", "cugraph-gpu": "cugraph"}, mism=[_GRAPH_MISM],
      notes=["the kNN graph with k=2 (sparse enough to have more than one component)"])
-_add("louvain", xlane="neighbors", ours=("Louvain",), kind="graph", task="louvain", block="graph",
-     params=dict(resolution=1.0, max_level=100, random_state=SEED),
+_add("louvain", xlane="neighbors", ours=("Louvain",), kind="graph", task="louvain", block="graphs",
+     params=dict(resolution=1.0, seed=SEED),
      other={"networkx-cpu": "networkx", "cugraph-gpu": "cugraph"},
-     mism=["networkx louvain_communities(seed=7) and cuGraph louvain are order-dependent; ours "
-           "pins the vertex sweep (lowest id first)"])
+     mism=["networkx louvain_communities(seed=7) and cuGraph louvain (max_level=100) are "
+           "order-dependent; ours pins the vertex sweep (lowest id first)", _GRAPH_MISM])
 _add("svgp", xlane="neighbors", ours=("SVGP", "SparseVariationalGP"), kind="svgp", task="reg",
      block="reg", sub={"X": SUB["mid"], "Xq": SUB["small"]},
      params=dict(n_inducing=512, n_iter=200, batch_size=4096, learning_rate=0.01),
@@ -522,7 +530,8 @@ for _cell in ("LSTM", "GRU", "RNN"):
                     "Adam lr 1e-3, batch 256, 2 epochs, a seed-7 shuffle per epoch" % _cell],
              mism=["each library initializes its own weights (ours from random_state=7, torch "
                    "from torch.manual_seed(7))"])
-_add("layernorm", xlane="sequence", ours="LayerNorm", kind="layer", task="layernorm",
+_add("layernorm", xlane="sequence", ours=("LayerNorm", "layer_norm_forward"), kind="layer",
+     task="layernorm",
      block="tensor", datasets=("synthetic",), torch=True,
      params=dict(normalized_shape=1024, eps=1e-5),
      notes=["x (16384, 1024) N(0,1) seed 7"])
@@ -564,24 +573,30 @@ _add("stl", xlane="sequence", ours="STL", kind="ts", task="decompose", block="ts
 _add("var", xlane="sequence", ours="VAR", kind="ts", task="var", block="ts", datasets=_TS,
      params=dict(maxlags=2), other={"statsmodels-cpu": "statsmodels"},
      notes=[_TSNOTE, "one VAR over 16 series jointly (the first 16), lag order 2"])
-_add("theta", xlane="sequence", ours=("Theta", "ThetaForecaster"), kind="ts", task="forecast",
-     block="ts", datasets=_TS, params=dict(season_length=24),
+_add("theta", xlane="sequence", ours=("Theta",), kind="ts", task="forecast",
+     block="ts", datasets=_TS, params=dict(season_length=24, decomposition_type="multiplicative"),
      other={"statsforecast-cpu": "statsforecast", "statsmodels-cpu": "statsmodels"},
-     notes=[_TSNOTE])
-_add("croston", xlane="sequence", ours=("Croston", "CrostonClassic"), kind="ts", task="forecast",
+     notes=[_TSNOTE, "statsforecast Theta (the standard theta model, STM) on both sides; "
+                     "statsmodels-cpu is ThetaModel(period=24), its own theta method"])
+_add("croston", xlane="sequence", ours=("CrostonClassic",), kind="ts", task="forecast",
      block="tsi", datasets=("taxi-hourly", "synthetic"), params={},
      other={"statsforecast-cpu": "statsforecast"},
      notes=["intermittent series: taxi-hourly's 64 pickup zones with 30-70% zero hours; "
             "synthetic Bernoulli(0.3) x Poisson(3) demand, seed 7"])
-_add("damped-ets", xlane="sequence", ours=("ETS", "DampedETS"), kind="ts", task="forecast",
-     block="ts", datasets=_TS, params=dict(trend="add", damped_trend=True, seasonal="add",
-                                            seasonal_periods=24),
+_add("damped-ets", xlane="sequence", ours=("ETS",), kind="ts", task="forecast",
+     block="ts", datasets=_TS, params=dict(season_length=1, model="AAN", damped=True),
      other={"statsmodels-cpu": "statsmodels", "statsforecast-cpu": "statsforecast"},
-     notes=[_TSNOTE])
+     notes=[_TSNOTE, "ETS(A,Ad,N), Holt's damped additive trend, no season: ours refuses seasonal "
+                     "ETS by name, so every arm fits the non-seasonal model; statsforecast "
+                     "AutoETS(model='AAN', damped=True), statsmodels ExponentialSmoothing("
+                     "trend='add', damped_trend=True, seasonal=None)"])
 _add("garch", xlane="sequence", ours="GARCH", kind="ts", task="garch", block="tsr", datasets=_TS,
      params=dict(p=1, q=1, mean="Constant", dist="normal"), other={"arch-cpu": "arch"},
      notes=["taxi-hourly: first differences of log(1 + count); synthetic: GARCH(1,1) returns "
-            "omega 0.1 alpha 0.1 beta 0.8, seed 7"])
+            "omega 0.1 alpha 0.1 beta 0.8, seed 7",
+            "arch_model(vol='GARCH', p=1, o=0, q=1, mean='Constant', dist='normal', "
+            "rescale=False) per series (ours refuses rescaling); the forecast is the "
+            "conditional variance, h steps"])
 _add("prophet", xlane="sequence", ours=("Prophet", "ProphetForecaster"), kind="ts",
      task="forecast", block="ts", datasets=_TS,
      params=dict(n_changepoints=25, daily_seasonality=True, weekly_seasonality=True,
@@ -790,11 +805,13 @@ _add("ivf-refine", xlane="ann", ours=("IVFPQIndex",), kind="ann", task="ivf-refi
                  refine_ratio=4, random_state=SEED),
      other={"faiss-cpu": "faiss", "cuvs-gpu": "cuvs"},
      notes=[_ANN, "IVF-PQ search of 4k candidates then an exact re-rank to k"])
-_add("ivf-filter", xlane="ann", ours=("IVFIndex",), kind="ann", task="ivf-filter", block="ivf",
-     params=dict(n_lists=1024, n_probes=32, n_neighbors=10, kmeans_n_iters=20, random_state=SEED),
-     other={"faiss-cpu": "faiss", "cuvs-gpu": "cuvs"},
-     notes=[_ANN, "IVF-Flat search with a sample filter: every odd index row is excluded; "
-            "recall against the filtered brute force"])
+_add("ivf-filter", xlane="ann", ours=("IVFPQIndex",), kind="ann", task="ivf-filter", block="ivf",
+     params=dict(n_lists=1024, n_probes=32, n_neighbors=10, pq_bits=8, kmeans_n_iters=20,
+                 random_state=SEED),
+     other={"faiss-cpu": "faiss"},
+     notes=[_ANN, "IVF-PQ search with a sample filter (ours search(filter=), faiss "
+            "IDSelectorBatch): every odd index row is excluded; recall against the filtered "
+            "brute force"])
 
 LANE_ORDER = tuple(LANES)
 
@@ -903,6 +920,10 @@ def not_planned(vendor):
                "torch-*-tf32: no matmul in an optimizer step")
     out.append("openTSNE and hnswlib: not pinned; scikit-learn/cuML t-SNE and FAISS HNSW stand in")
     out.append("pmdarima: statsforecast AutoARIMA (compiled) is the CPU AutoARIMA arm")
+    if vendor == "nvidia":
+        out.append("cuVS on ivf-filter: cuVS's Python IVF-PQ search takes no sample filter (only "
+                   "IVF-Flat, CAGRA and brute force do); ours filters IVF-PQ, so faiss-cpu "
+                   "IndexIVFPQ with an IDSelectorBatch is the matched arm")
     for name, why in NOT_RACED.items():
         out.append("%s: %s" % (name, why))
     return out
@@ -1041,6 +1062,7 @@ BLOCK_ROWS = {
     "manifold": "20,000 stride rows, %s" % _STD,
     "ivf": "400,000 index rows, 4,000 queries, raw",
     "graph": "%d nodes, symmetric 10-NN graph, node features and labels" % GRAPH_NODES,
+    "graphs": "%d nodes, symmetric 10-NN graph (and a 2-NN graph)" % GRAPH_SMALL,
     "ts": "%d series x 1,440 points, the last %d held out" % (TS_SERIES, TS_H),
     "tsi": "%d intermittent series x 1,440 points, the last %d held out" % (TS_SERIES, TS_H),
     "tsr": "%d return series x 1,439 points, the last %d held out" % (TS_SERIES, TS_H),
@@ -1175,7 +1197,7 @@ def _stride(a, m):
 
 #: this family's block -> the classical2 block it is (or is derived from)
 MORE_BLOCK = {"cls": "cls", "reg": "reg", "manifold": "manifold", "tsvd": "tsvd", "ivf": "ivf",
-              "nonneg": "cls", "graph": "cls", "countclf": "cls"}
+              "nonneg": "cls", "graph": "cls", "graphs": "cls", "countclf": "cls"}
 MORE_LANE_OF = {"cls": "logreg", "reg": "ridge", "manifold": "umap", "tsvd": "tsvd", "ivf": "ivf"}
 
 
@@ -1192,7 +1214,7 @@ def block_file(lane, dataset):
         return "text"                      # the labelled document counts
     if dataset == "taxi-zones":
         return "zones"
-    if b in ("bytes", "graph"):
+    if b in ("bytes", "graph", "graphs"):
         return "%s-%s" % (b, dataset)
     if b in ("raw16", "raw32"):
         return "raw-%s" % dataset
@@ -1464,13 +1486,13 @@ def prep(args):
                 raise SystemExit("REFUSING: %s missing (R2 key %s)" % (p, CORPUS_KEYS["enwik8"]))
             raw = np.fromfile(p, dtype=np.uint8, count=64 * 256 * 4)
             ctd._write_block(args.data, name, {"bytes": raw}, dict(base, block="bytes", dataset=ds))
-        elif b == "graph" and ds in TAB:
-            name = "graph-%s" % ds
+        elif b in ("graph", "graphs") and ds in TAB:
+            name = "%s-%s" % (b, ds)
             if have(name):
                 continue
             with np.load(os.path.join(args.data, "cls-%s.npz" % ds)) as z:
                 X, y = z["X"], z["y"]
-            n = _cap(GRAPH_NODES, cap, 512)
+            n = _cap(GRAPH_NODES if b == "graph" else GRAPH_SMALL, cap, 512)
             X, y = _stride(X, n), _stride(y, n)
             indptr, indices = knn_graph(X, KNN_K)
             ip2, ix2 = knn_graph(X, 2)
@@ -2146,10 +2168,9 @@ def _ts_one(lib, task, params, y, h):
             from statsmodels.tsa.seasonal import STL
             r = STL(y, period=params["period"], robust=params["robust"]).fit()
             return np.asarray(r.trend + r.seasonal)
-        if task == "forecast" and "trend" in params:
+        if task == "forecast" and "damped" in params:
             from statsmodels.tsa.holtwinters import ExponentialSmoothing
-            m = ExponentialSmoothing(y, trend="add", damped_trend=True, seasonal="add",
-                                     seasonal_periods=params["seasonal_periods"],
+            m = ExponentialSmoothing(y, trend="add", damped_trend=True, seasonal=None,
                                      initialization_method="estimated").fit()
             return np.asarray(m.forecast(h))
         from statsmodels.tsa.forecasting.theta import ThetaModel
@@ -2200,6 +2221,8 @@ def _build_ts(lane, arm, D):
                 S["est"] = cls(Y32, period=p["period"], robust=p["robust"]).fit()
             elif lane == "var":               # statsmodels' shape: VAR(endog (n_obs, K)).fit(maxlags)
                 S["est"] = cls(np.ascontiguousarray(Y32[:16].T)).fit(maxlags=p["maxlags"])
+            elif t == "garch":                # arch's shape; the variance forecast horizon is fixed at fit
+                S["est"] = cls(**p).fit(Y32, horizon=h)
             else:
                 S["est"] = cls(**p).fit(Y32)
 
@@ -2215,7 +2238,13 @@ def _build_ts(lane, arm, D):
             elif lane == "var":
                 S["fc"] = _arr(e.forecast(np.ascontiguousarray(Y32[:16].T[-e.k_ar:]), h), np.float64).T
             else:
-                fc = _arr(e.forecast(h), np.float64)
+                if lane == "autoarima" or t == "garch":
+                    fc = e.forecast(h)
+                else:                          # statsforecast's shape: predict(h) -> {"mean": ...}
+                    fc = e.predict(h)
+                    if isinstance(fc, dict):
+                        fc = fc["mean"]
+                fc = _arr(fc, np.float64)
                 if fc.ndim == 2 and fc.shape[0] == h and fc.shape[1] == Y32.shape[0] != h:
                     fc = fc.T                  # (h, batch), cuML's layout
                 S["fc"] = fc
@@ -2241,7 +2270,7 @@ def _build_ts(lane, arm, D):
         mk = {"autoarima": lambda: sfm.AutoARIMA(season_length=1, max_p=3, max_q=3, max_d=1),
               "theta": lambda: sfm.Theta(season_length=24),
               "croston": lambda: sfm.CrostonClassic(),
-              "damped-ets": lambda: sfm.AutoETS(season_length=24, model="AAA", damped=True)}[lane]
+              "damped-ets": lambda: sfm.AutoETS(season_length=1, model="AAN", damped=True)}[lane]
         info["config"] = repr(mk())
 
         def one(y):
@@ -2305,15 +2334,25 @@ def _build_graph(lane, arm, D):
     if arm in OURS_ARMS:
         name, cls = _ours_class(lane)
         info = _ours_info(lane)
-        info["config"] = "mojolearn.%s(%s).fit(indptr, indices)" % (name, p)
+        A = np.zeros((n, n), dtype=np.float32)            # before the clock (named mismatch)
+        A[np.repeat(np.arange(n), np.diff(ip)), ix] = 1.0
+        info["pre_clock_fit"] = False
+        info["config"] = "mojolearn.%s(%s) on the dense adjacency (%d x %d)" % (name, p, n, n)
 
         def fit():
-            S["e"] = cls(**p).fit(ip, ix)
+            if t == "components":
+                S["lab"] = cls(A, directed=False)[1]
+            else:
+                S["e"] = cls(**p).fit(A)
 
         def outputs():
+            if t == "components":
+                return {"labels": _arr(S["lab"], np.int64)}
             e = S["e"]
-            return ({"scores": _arr(e.scores_, np.float64)} if t == "pagerank"
-                    else {"labels": _arr(e.labels_, np.int64)})
+            sc = getattr(e, "pagerank_", None)
+            if t == "pagerank":
+                return {"scores": _arr(sc if sc is not None else e.scores_, np.float64)}
+            return {"labels": _arr(e.labels_, np.int64)}
         return Runner(info, fit, outputs)
     lib = s["other"][arm]
     if lib == "networkx":
@@ -2357,7 +2396,7 @@ def _build_graph(lane, arm, D):
         elif t == "components":
             S["df"] = cugraph.connected_components(G)
         else:
-            S["df"], _ = cugraph.louvain(G, resolution=p["resolution"], max_level=p["max_level"])
+            S["df"], _ = cugraph.louvain(G, resolution=p["resolution"], max_level=100)
 
     def outputs():
         df = S["df"].to_pandas().sort_values("vertex")
@@ -2393,7 +2432,7 @@ def _build_ann(lane, arm, D):
         kw = dict(p)
         if "n_lists" in kw:
             kw.update(n_lists=nlist, n_probes=nprobe)
-        if t in ("ivf-pq", "ivf-refine"):
+        if t in ("ivf-pq", "ivf-refine", "ivf-filter"):
             kw["pq_dim"] = _pq_dim(d)
         # the refine step and the sample filter are options of an index that
         # may already exist: until the option does, the race is not built yet
@@ -2437,7 +2476,7 @@ def _build_ann(lane, arm, D):
             if t == "cagra":
                 idx = faiss.IndexHNSWFlat(d, 32)
                 idx.hnsw.efConstruction = 128
-            elif t in ("ivf-pq", "ivf-refine"):
+            elif t in ("ivf-pq", "ivf-refine", "ivf-filter"):
                 idx = faiss.IndexIVFPQ(quant, d, nlist, _pq_dim(d), 8)
             elif t == "ivf-sq":
                 idx = faiss.IndexIVFScalarQuantizer(quant, d, nlist, faiss.ScalarQuantizer.QT_8bit)
@@ -2505,14 +2544,6 @@ def _build_ann(lane, arm, D):
         elif t == "ivf-sq":
             from cuvs.neighbors import ivf_sq
             S["ind"] = ivf_sq.search(ivf_sq.SearchParams(n_probes=nprobe), S["i"], dev["queries"], k)[1]
-        elif t == "ivf-filter":
-            import cupy as cp
-            from cuvs.neighbors import filters
-            bits = np.packbits(allowed, bitorder="little").view(np.uint32) if n % 32 == 0 else \
-                np.packbits(np.concatenate([allowed, np.zeros(-n % 32, bool)]), bitorder="little").view(np.uint32)
-            flt = filters.from_bitset(cp.asarray(bits))
-            S["ind"] = ivf_flat.search(ivf_flat.SearchParams(n_probes=nprobe), S["i"], dev["queries"],
-                                       k, filter=flt)[1]
         else:
             S["ind"] = ivf_flat.search(ivf_flat.SearchParams(n_probes=nprobe), S["i"], dev["queries"], k)[1]
     info["config"] = "cuvs %s nlist=%d nprobe=%d k=%d" % (t, nlist, nprobe, k)
@@ -2673,6 +2704,26 @@ def _build_layer(lane, arm, D):
         name, cls = _ours_class(lane)
         info = _ours_info(lane)
         kw = dict(s["params"])
+        if name == "layer_norm_forward":      # the functional form: F.layer_norm and its backward
+            import mojolearn as ml
+            bwd = getattr(ml, "layer_norm_backward", None)
+            x = x_cpu.detach().numpy()
+            w_, b_ = state["weight"], state["bias"]
+            info["config"] = "mojolearn.layer_norm_forward / layer_norm_backward, eps %g" % kw["eps"]
+            info["weights_loaded"] = info["output_comparable"] = True
+            dyh = {}
+
+            def fit():
+                y = cls(x, None, w_, b_, kw["eps"])
+                if "dy" not in dyh:
+                    dyh["dy"] = torch.randn(tuple(np.shape(y)), generator=g).numpy()
+                if bwd is None:
+                    raise RuntimeError("CONTRACT: mojolearn has no layer_norm_backward")
+                bwd(dyh["dy"], x, None, w_, b_, kw["eps"])
+
+            def infer():
+                S["y"] = cls(x, None, w_, b_, kw["eps"])
+            return Runner(info, fit, lambda: {"y": _arr(S["y"], np.float32)}, infer)
         if s["task"] in ("gcn", "sage"):
             kw["in_channels"] = x_cpu.shape[1]
         import inspect

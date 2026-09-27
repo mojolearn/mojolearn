@@ -29,12 +29,15 @@ updates) is one source compiled into both bindings. Entries are in
 | 5108 | mixture Mahalanobis fold, the difference first | `gauss_q_cell` | `checks/gauss_check.mojo` |
 | 5109 | E-step log-sum-exp: first max, ascending portable exp | `resp_row` | `checks/gauss_check.mojo` |
 | 5110 | mixture M-step moments, rows ascending | `nk_cell`, `xk_cell`, `cov_cell` | `checks/moments_check.mojo` |
+| 5111 | OPTICS's other metrics: features ascending, portable pow/sqrt | `pdist_cell` | `checks/pdist_check.mojo` |
 
 Each check first shows its fixture SEPARATES the pinned spelling from the
 alternative (VACUOUS otherwise), then holds the device and the CPU column to
 the host oracle (`checks/oracles.mojo`) bit for bit. Each seam has a
-source-patch sabotage arm that makes its check fail; the patches are kept
-with the lane's evidence, not in the tree. The host binding's negative control
+source-patch sabotage arm that makes its check fail
+(`checks/sabotage/`, paired with its driver in
+`tools/identity_lanes/cluster.checks`; `tools/algos_lane_check.sh --pass 2`
+applies, runs and reverses each). The host binding's negative control
 is `-D MOJOLEARN_HOST_SABOTAGE=1` (the `REV` arm of the bodies).
 
 What is not carried is in `NOT_IMPLEMENTED.tsv`.

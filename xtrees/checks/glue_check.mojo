@@ -65,6 +65,7 @@ def check_rng(mut card: IdentityTrace) raises:
     for k in range(9):
         _require(short[k] == got[k], "rng: draw k depends on how many were drawn")
     card.record_host("rng.indices", _pi(got), n)
+    _ = len(got)  # alive through the record: a pointer does not extend a List's life
     print("PASS rng: 64 counter draws mod 1000 (the fixture separates mod from multiply-shift)")
 
 
@@ -88,6 +89,7 @@ def check_pinned_accumulate(mut card: IdentityTrace) raises:
     for i in range(n):
         _require(_bits(acc[i]) == _bits(want[i]), "accumulate: element " + String(i))
     card.record_host("accumulate", _pd(acc), n)
+    _ = len(acc)  # alive through the record: a pointer does not extend a List's life
     print("PASS accumulate: pinned product then add (the fixture separates it from the fused form)")
 
 
@@ -102,6 +104,7 @@ def check_fold_order(mut card: IdentityTrace) raises:
     _ = len(y)  # alive through the call
     _require(_bits(res[0]) == _bits(seq_sum(v) / 4.0), "block_mean: not the sequential fold")
     card.record_host("block_mean", _pd(res), 1)
+    _ = len(res)  # alive through the record: a pointer does not extend a List's life
     print("PASS fold order: sequential over background rows (the fixture separates it from pairwise)")
 
 
@@ -133,7 +136,9 @@ def check_pinned_exp(mut card: IdentityTrace) raises:
         var want = pinned_mul_f64(0.125, boost) if pred[i] != y[i] else 0.125
         _require(_bits(w[i]) == _bits(want), "samme: weight " + String(i))
     card.record_host("samme.w", _pd(w), n)
+    _ = len(w)  # alive through the record: a pointer does not extend a List's life
     card.record_host("samme.stats", _pd(stats), 4)
+    _ = len(stats)  # alive through the record: a pointer does not extend a List's life
     print("PASS pinned exp/log: SAMME alpha and reweighting (the fixture separates pinned from libm exp)")
 
 
@@ -148,6 +153,7 @@ def check_tie_break(mut card: IdentityTrace) raises:
     _ = len(x)  # alive through the call
     _require(Int(got[0]) == first_max(r0) and Int(got[1]) == first_max(r1), "argmax: tie not to the lower index")
     card.record_host("argmax", _pi(got), 2)
+    _ = len(got)  # alive through the record: a pointer does not extend a List's life
     print("PASS tie-break: first max")
 
 
@@ -168,6 +174,7 @@ def check_zero_rows(mut card: IdentityTrace) raises:
             _require(v == v, "normalize_rows: NaN")
             _require(_bits(v) == _bits(want[c]), "normalize_rows: row " + String(r))
     card.record_host("normalize_rows", _pd(x), 9)
+    _ = len(x)  # alive through the record: a pointer does not extend a List's life
     print("PASS zero rows: uniform, never 0/0")
 
 

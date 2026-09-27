@@ -525,3 +525,12 @@ upload reads it. On CUDA the symptom is results that drift run to run, or
 `CUDA_ERROR_ILLEGAL_ADDRESS`. Keep the owner alive past the device work
 with `_ = x^` after the call. The same applies to a `DeviceContext`
 (`_ = ctx^`; DEVIATION 1946). Adding a `synchronize()` only hides this bug.
+
+## Pitfall: one DeviceContext per process, not per call (Metal)
+
+Found by the cnn lane on 2026-09-27. Creating a `DeviceContext` in every
+binding call exhausts Metal's command queues within a single CNN trainer fit
+on the M2 Pro. Queues are released only when the process exits (memory:
+METAL QUEUE LIMIT IS PER-PROCESS). Keep one process-lifetime context per
+binding, the way x_cnn's `_Global` does. It passes on CUDA, so only the
+Apple steward catches this.

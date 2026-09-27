@@ -50,6 +50,12 @@ from sequence.ops import (
     OP_LN_BWD_X,
     OP_LN_BWD_W,
     OP_THETA,
+    OP_CROSTON,
+    OP_ETS,
+    OP_GARCH,
+    OP_PROPHET_FEATURES,
+    OP_PROPHET_FIT,
+    OP_PROPHET_PREDICT,
     op_gemm,
     op_bias,
     op_colsum,
@@ -71,6 +77,10 @@ from sequence.layernorm import op_ln_bwd_w, op_ln_bwd_x, op_ln_fwd
 from sequence.mlp import op_act, op_act_bwd, op_divs, op_l2grad, op_mlp_bloss, op_mlp_rowloss, op_sumsq
 from sequence.stl import op_stl
 from sequence.theta import op_theta
+from sequence.croston import op_croston
+from sequence.ets import op_ets
+from sequence.garch import op_garch
+from sequence.prophet import op_prophet_features, op_prophet_fit, op_prophet_predict
 from sequence.vecar import op_cholsolve, op_colscale, op_rowscale, op_scale, op_sub, op_var_design, op_var_forecast
 
 
@@ -168,3 +178,15 @@ def apply[OP: Int](t: Int, a: Args):
         op_ln_bwd_w(t, a)
     elif OP == OP_THETA:
         op_theta(t, a)
+    elif OP == OP_CROSTON:
+        op_croston(t, a)
+    elif OP == OP_ETS:
+        op_ets(t, a)
+    elif OP == OP_GARCH:
+        op_garch(t, a)
+    elif OP == OP_PROPHET_FEATURES:
+        op_prophet_features(t, a)
+    elif OP == OP_PROPHET_FIT:
+        op_prophet_fit(t, a)
+    elif OP == OP_PROPHET_PREDICT:
+        op_prophet_predict(t, a)

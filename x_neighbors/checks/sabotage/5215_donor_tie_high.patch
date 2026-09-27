@@ -1,0 +1,17 @@
+diff --git a/x_neighbors/items.mojo b/x_neighbors/items.mojo
+index bc04f5c16..96a753b9c 100644
+--- a/x_neighbors/items.mojo
++++ b/x_neighbors/items.mojo
+@@ -804,10 +804,10 @@ def knn_impute_item(
+             continue
+         var sq = ftz(identical_mul(ftz(identical_div(acc, Float32(present))), Float32(d)))
+         var dist = ftz(identical_sqrt(sq))
+-        if not (dist < bd.unsafe_load(k - 1)):
++        if not (dist <= bd.unsafe_load(k - 1)):
+             continue
+         var s = k - 1
+-        while s > 0 and dist < bd.unsafe_load(s - 1):
++        while s > 0 and dist <= bd.unsafe_load(s - 1):
+             bd.unsafe_store(s, bd.unsafe_load(s - 1))
+             bi.unsafe_store(s, bi.unsafe_load(s - 1))
+             s -= 1
