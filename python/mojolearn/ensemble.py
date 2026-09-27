@@ -2522,6 +2522,20 @@ class GradientBoosting(NumericModeMixin):
             raise RuntimeError("mojolearn: predict() before fit()")
         binding = self._bind("_mojolearn_gbdt")
 
+        # A CPU-trained model whose text carries CTR tables or a tensor CTR
+        # registry: the gbdt host binding's walk refuses those records by
+        # name, and the CPU restatement of their apply is `HostGBDT`
+        # (`forest_host_gbdt_expand_ctr`, the same expand_raw_columns /
+        # expand_tensor_ctr_columns the device applies), the reader a CPU
+        # column already uses for a GPU-saved CTR model.
+        if _has_ctr_records(self.model_) and _binding_vendor(binding) == "cpu":
+            from ._gbdt_host import HostGBDT
+            return HostGBDT(
+                loss=self.loss, text=self.model_,
+                n_features_in=self.n_features_in_, approx_dim=self.approx_dim_,
+                n_classes=self.n_classes_, estimator=type(self).__name__,
+            ).predict(X)
+
         # DEVIATION 2980: the parsed, packed and uploaded model stays on
         # the device between calls; the per-call parse below is the door
         # for a binary without the entry point
@@ -2939,6 +2953,23 @@ class GradientBoosting(NumericModeMixin):
         obj.loss_curve_ = None
         obj.test_loss_curve_ = None
         return obj
+
+
+def _has_ctr_records(text):
+    """Does a model text carry a CTR table or a tensor CTR registry (the
+    records `gbdt_host_predict`'s parser refuses by name)?"""
+    t = str(text)
+    return any(("\n" + k + " ") in t or t.startswith(k + " ")
+               for k in ("ctr_columns", "ctr_table", "tensor_ctr_registry"))
+
+
+def _binding_vendor(binding):
+    """The binding's own vendor answer ("cpu" for the host binding), or
+    None for a binary without the entry point."""
+    try:
+        return str(binding.gbdt_vendor())
+    except (AttributeError, ImportError):
+        return None
 
 
 class ExperimentalTwoLevelFeatureFreq(GradientBoosting):
