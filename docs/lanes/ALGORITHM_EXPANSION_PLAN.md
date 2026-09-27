@@ -479,3 +479,10 @@ the cost being avoided. All data comes from R2 (`tools/dataset_store.sh stage`).
      the bench board later.
 4. Merge each step as it passes, the same way as pass 1. Keep the progress
    file current.
+
+**Rule (Andrew, 2026-09-27): a lane that finds a shortcoming in shared code
+or in another algorithm fixes it itself.** It may edit those files for that
+fix, with the same gate as its own work: AGREE, a sabotage for any numeric
+change, and existing lanes' bits unchanged (verify them against the
+reference before and after). Merge origin/main often. Never rebuild a
+shared `.so` that another job is using. Tooling gaps go to the tools lane.

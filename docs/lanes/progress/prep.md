@@ -18,7 +18,9 @@ Sanity tests need scikit-learn: on the pod it is in /root/skl
 |---|---|---|---|
 | RobustScaler, MaxAbsScaler | ea9fa6c00 | x-prep-robust-scaler, x-prep-maxabs-scaler | AGREE (batch 9, infer 9, train 9; cuda H100 vs CPU) |
 | OneHotEncoder, OrdinalEncoder | a8d0e06b8 | x-prep-ordinal-encoder,x-prep-onehot-encoder | batch 9, infer 9, train 9; cuda H100 vs CPU |
-| TargetEncoder | (this commit) | x-prep-target-encoder | batch 9, infer 9, train 9; cuda H100 vs CPU |
+| TargetEncoder | d0ca493f6 | x-prep-target-encoder | batch 9, infer 9, train 9; cuda H100 vs CPU |
+| SimpleImputer | 2ba3a6c0d | x-prep-simple-imputer | batch 9, infer 9, train 9; cuda H100 vs CPU |
+| KBinsDiscretizer | (this commit) | x-prep-kbins | batch 9, infer 9, train 9; cuda H100 vs CPU |
 
 ## Next
 OneHotEncoder / OrdinalEncoder, TargetEncoder, SimpleImputer, KBinsDiscretizer,
