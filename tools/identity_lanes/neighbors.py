@@ -392,6 +392,26 @@ def _(ml, X, yc, yr, Xh=None):
     out["reg"] = _h(r.predict(X[512:640]))
     return _fit(out, c, lambda e: (e.predict(Xh[:128]),))
 
+@lane("x-neighbors-svc-probability")
+def _(ml, X, yc, yr, Xh=None):
+    """SVC probability=True: libsvm's Platt scaling (a 5-fold CV per class
+    pair over a SplitMix64 shuffle keyed by random_state, each fold's
+    decisions from the binary solver, sigmoid_train, and for three classes
+    the pairwise coupling), all host arithmetic binary64 with the portable
+    exp/log (_svm_impl.SVC._fit_probability). Binary, weighted three-class,
+    and a second seed."""
+    y3 = (yc[:192] + (X[:192, 5] > 0.5).astype(np.int32)).astype(np.int32)
+    w = (0.5 + 0.5 * (np.arange(192) % 4)).astype(np.float64)
+    b = ml.SVC(C=1.0, kernel="rbf", gamma=0.05, max_iter=200, probability=True).fit(X[:192], yc[:192])
+    m = ml.SVC(C=1.0, kernel="rbf", gamma=0.05, max_iter=200, probability=True,
+               random_state=7).fit(X[:192], y3, sample_weight=w)
+    s = ml.SVC(C=0.5, kernel="linear", max_iter=200, probability=True, random_state=11).fit(X[:192], y3)
+    return _fit(dict(a=_h(b.probA_), b=_h(b.probB_), proba=_h(b.predict_proba(X[192:320])),
+                     log_proba=_h(b.predict_log_proba(X[192:320])),
+                     m_a=_h(m.probA_), m_b=_h(m.probB_), m_proba=_h(m.predict_proba(X[192:320])),
+                     s_a=_h(s.probA_), s_proba=_h(s.predict_proba(X[192:320]))),
+                m, lambda e: (e.predict_proba(Xh[:128]),))
+
 _batch_decl(_rows_calls("score_samples", "predict", sl=slice(0, 256)), "x-neighbors-lof")
 _batch_decl(_rows_calls("predict", "decision_function", "predict_proba", sl=slice(0, 256)), "x-neighbors-nearest-centroid")
 _batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "x-neighbors-ocsvm")
@@ -407,3 +427,4 @@ _batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-neighbors-svgp", "x-nei
 _batch_decl(_rows_calls("predict", sl=slice(0, 128)), "x-neighbors-krr-options", "x-neighbors-km-kernels")
 _batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "x-neighbors-gamma-scale", "x-neighbors-svm-weights",
             "x-neighbors-svc-sigmoid", "x-neighbors-svc-multiclass")
+_batch_decl(_rows_calls("predict_proba", sl=slice(0, 128)), "x-neighbors-svc-probability")

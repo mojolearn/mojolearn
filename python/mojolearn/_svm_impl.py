@@ -318,6 +318,154 @@ def _dual_times_sv(dual_coef, support_vectors):
     return Array.from_list([acc], "<f4")
 
 
+def _splitmix_perm(n, seed):
+    """libsvm's `svm_binary_svc_probability` shuffle (`j = i + rand() %
+    (l - i)`, swap) with `rand()` a SplitMix64 stream keyed by `seed`: pure
+    integer arithmetic, so every host draws the same permutation."""
+    state = seed & 0xFFFFFFFFFFFFFFFF
+    perm = list(range(n))
+    for i in range(n):
+        state = (state + 0x9E3779B97F4A7C15) & 0xFFFFFFFFFFFFFFFF
+        z = state
+        z = ((z ^ (z >> 30)) * 0xBF58476D1CE4E5B9) & 0xFFFFFFFFFFFFFFFF
+        z = ((z ^ (z >> 27)) * 0x94D049BB133111EB) & 0xFFFFFFFFFFFFFFFF
+        z ^= z >> 31
+        j = i + z % (n - i)
+        perm[i], perm[j] = perm[j], perm[i]
+    return perm
+
+
+def _platt_fval(dec, t, a, b):
+    f = 0.0
+    for d, ti in zip(dec, t):
+        fapb = d * a + b
+        if fapb >= 0.0:
+            f += ti * fapb + math.log(1.0 + math.exp(-fapb))
+        else:
+            f += (ti - 1.0) * fapb + math.log(1.0 + math.exp(fapb))
+    return f
+
+
+def _sigmoid_train(dec, labels):
+    """libsvm's `sigmoid_train` (Platt's method with Lin, Lin and Weng's
+    Newton iteration and backtracking), transcribed in binary64 with the
+    repository's portable exp and log, in its loop order: the same
+    `(A, B)` bits on every host for the same decision values. `labels` are
+    +1 / -1."""
+    prior1 = float(sum(1 for v in labels if v > 0))
+    prior0 = float(len(labels)) - prior1
+    max_iter, min_step, sigma, eps = 100, 1e-10, 1e-12, 1e-5
+    hi = (prior1 + 1.0) / (prior1 + 2.0)
+    lo = 1.0 / (prior0 + 2.0)
+    t = [hi if v > 0 else lo for v in labels]
+    a = 0.0
+    b = math.log((prior0 + 1.0) / (prior1 + 1.0))
+    fval = _platt_fval(dec, t, a, b)
+    for _ in range(max_iter):
+        h11, h22, h21, g1, g2 = sigma, sigma, 0.0, 0.0, 0.0
+        for d, ti in zip(dec, t):
+            fapb = d * a + b
+            if fapb >= 0.0:
+                e = math.exp(-fapb)
+                p = e / (1.0 + e)
+                q = 1.0 / (1.0 + e)
+            else:
+                e = math.exp(fapb)
+                p = 1.0 / (1.0 + e)
+                q = e / (1.0 + e)
+            d2 = p * q
+            h11 += d * d * d2
+            h22 += d2
+            h21 += d * d2
+            d1 = ti - p
+            g1 += d * d1
+            g2 += d1
+        if abs(g1) < eps and abs(g2) < eps:
+            break
+        det = h11 * h22 - h21 * h21
+        da = -(h22 * g1 - h21 * g2) / det
+        db = -(-h21 * g1 + h11 * g2) / det
+        gd = g1 * da + g2 * db
+        step = 1.0
+        while step >= min_step:
+            na = a + step * da
+            nb = b + step * db
+            newf = _platt_fval(dec, t, na, nb)
+            if newf < fval + 0.0001 * step * gd:
+                a, b, fval = na, nb, newf
+                break
+            step = step / 2.0
+        if step < min_step:
+            break
+    return a, b
+
+
+def _sigmoid_predict(dec, a, b):
+    """libsvm's `sigmoid_predict`: P(+1) at one decision value."""
+    fapb = dec * a + b
+    if fapb >= 0.0:
+        e = math.exp(-fapb)
+        return e / (1.0 + e)
+    return 1.0 / (1.0 + math.exp(fapb))
+
+
+def _multiclass_probability(k, r):
+    """libsvm's `multiclass_probability` (Wu, Lin and Weng's pairwise
+    coupling, method 2), binary64, its loop order."""
+    p = [1.0 / k] * k
+    q = [[0.0] * k for _ in range(k)]
+    for t in range(k):
+        for j in range(t):
+            q[t][t] += r[j][t] * r[j][t]
+            q[t][j] = q[j][t]
+        for j in range(t + 1, k):
+            q[t][t] += r[j][t] * r[j][t]
+            q[t][j] = -r[j][t] * r[t][j]
+    eps = 0.005 / k
+    qp = [0.0] * k
+    for _ in range(max(100, k)):
+        pqp = 0.0
+        for t in range(k):
+            qp[t] = 0.0
+            for j in range(k):
+                qp[t] += q[t][j] * p[j]
+            pqp += p[t] * qp[t]
+        max_error = 0.0
+        for t in range(k):
+            err = abs(qp[t] - pqp)
+            if err > max_error:
+                max_error = err
+        if max_error < eps:
+            break
+        for t in range(k):
+            diff = (-qp[t] + pqp) / q[t][t]
+            p[t] += diff
+            pqp = (pqp + diff * (diff * q[t][t] + 2.0 * qp[t])) / (1.0 + diff) / (1.0 + diff)
+            for j in range(k):
+                qp[j] = (qp[j] + diff * q[t][j]) / (1.0 + diff)
+                p[j] /= (1.0 + diff)
+    return p
+
+
+def _precomputed_rect(x, rows, cols):
+    """`K[rows][:, cols]`, an exact copy."""
+    n = x.shape[1]
+    cells = array.array("f")
+    cells.frombytes(x.tobytes())
+    out = array.array("f", [cells[r * n + c] for r in rows for c in cols])
+    return Array._owned(out, (len(rows), len(cols)), "<f4", "C")
+
+
+def _rows_copy(x, rows):
+    """`X[rows]`, an exact copy."""
+    n_cols = x.shape[1]
+    rb = 4 * n_cols
+    raw = x.tobytes()
+    store = array.array("f")
+    store.frombytes(b"".join(raw[r * rb:(r + 1) * rb] for r in rows))
+    return Array._owned(store, (len(rows), n_cols), "<f4", "C")
+
+
 class SVC(NumericModeMixin):
     """C-support vector classification, binary and one-vs-one multiclass,
     backed by an SMO solver and GPU kernel matrices (`svm/`, DEVIATIONS 630-637;
@@ -374,10 +522,10 @@ class SVC(NumericModeMixin):
                                   in the reference (CUML_LOG_DEBUG); this implementation
                                   prints none, so accepting it would be
                                   accepting-and-ignoring
-        random_state    refused   anything but None. The solver and its
-                                  one-vs-one multiclass draw no random
-                                  numbers; scikit-learn reads it only for
-                                  probability=True, which is refused
+        random_state    honored   with probability=True: the key of the
+                                  folds' SplitMix64 shuffle (None = 0);
+                                  refused otherwise, since nothing else
+                                  draws a random number
         decision_       honored   'ovo' (the default here, cuML's) or 'ovr'
           function_shape          (scikit-learn's): with more than two
                                   classes, decision_function's pairwise
@@ -393,8 +541,16 @@ class SVC(NumericModeMixin):
                                   on the whole X, the per-row bounds cut to
                                   the pair's rows; prediction by vote, ties
                                   to the lowest class (`_fit_ovo`)
-        probability     refused   Platt scaling is not in cuML's C++ surface
-                                  at all (svm/NOT_IMPLEMENTED.tsv)
+        probability     honored   libsvm's Platt scaling: a seeded 5-fold
+                                  cross-validation of each class pair, the
+                                  folds' decision values from the binary
+                                  solver, then sigmoid_train and (more than
+                                  two classes) pairwise coupling in binary64
+                                  with the portable exp/log
+                                  (`_fit_probability`); predict_proba and
+                                  predict_log_proba. The same bits on every
+                                  column; not libsvm's bits (its fold
+                                  shuffle is C rand())
         output_type     refused   a cuML-internal array-type selector; this
                                   package returns mojolearn Arrays
         sample_weight   honored   in fit(): the weighted `InitPenalty` arm,
@@ -621,12 +777,20 @@ class SVC(NumericModeMixin):
                 "mojolearn SVC: output_type is a cuML-internal array-type "
                 "selector; this package returns mojolearn Arrays"
             )
-        if random_state is not None:
+        probability = bool(probability)
+        if random_state is not None and not probability:
             raise NotImplementedError(
-                "mojolearn SVC: random_state is refused; the C-SVC solver and "
-                "its one-vs-one multiclass draw no random numbers, and "
-                "scikit-learn reads it only for probability=True, which is "
-                "refused"
+                "mojolearn SVC: random_state is refused without "
+                "probability=True; the C-SVC solver and its one-vs-one "
+                "multiclass draw no random numbers, and scikit-learn reads it "
+                "only for probability's cross-validation folds"
+            )
+        if random_state is not None and (
+                isinstance(random_state, bool) or not isinstance(random_state, numbers.Integral)
+                or not 0 <= int(random_state) < 2 ** 64):
+            raise ValueError(
+                "mojolearn SVC: random_state must be None or an int in [0, 2**64) "
+                f"(the key of probability's fold shuffle), got {random_state!r}"
             )
         if class_weight is not None and not isinstance(class_weight, (dict, str)):
             raise ValueError(
@@ -644,11 +808,6 @@ class SVC(NumericModeMixin):
                 "mojolearn SVC: break_ties must be False when "
                 "decision_function_shape is 'ovo' (scikit-learn's rule)"
             )
-        if probability:
-            raise NotImplementedError(
-                "mojolearn SVC: probability is refused; Platt scaling is not "
-                "in cuML's C++ surface at all (svm/NOT_IMPLEMENTED.tsv)"
-            )
         self.C = C
         self.kernel = k
         self.degree = degree
@@ -660,10 +819,10 @@ class SVC(NumericModeMixin):
         self.nochange_steps = nochange_steps
         self.verbose = False
         self.output_type = None
-        self.random_state = None
+        self.random_state = None if random_state is None else int(random_state)
         self.class_weight = class_weight
         self.decision_function_shape = decision_function_shape
-        self.probability = False
+        self.probability = probability
         self.break_ties = break_ties
 
     def _resolve_gamma(self, x):
@@ -755,7 +914,73 @@ class SVC(NumericModeMixin):
         self._gamma = gamma
         self._label0 = label0
         self._label1 = label1
+        self._fit_probability(x, [0 if v == label0 else 1 for v in labels.tolist()], gamma, c_rows)
         return self
+
+    def _fit_probability(self, x, codes, gamma, c_rows):
+        """probability=True: libsvm's `svm_binary_svc_probability` for every
+        class pair (i, j), i < j: that pair's rows, shuffled by a SplitMix64
+        stream keyed by `random_state` (0 when None) and the pair number,
+        five folds `[f n / 5, (f + 1) n / 5)` of the shuffle; each fold's
+        decision values from a binary machine fitted on the other four (the
+        rows in shuffle order, the per-row bounds cut to them, gamma the
+        whole fit's), a fold with one class taking libsvm's +1 / -1; then
+        `sigmoid_train` in libsvm's orientation (+1 = class i). Every number
+        before the sigmoid is the solver's; the sigmoid, the Newton steps
+        and the coupling are binary64 host arithmetic with the portable exp
+        and log, one written order, so the same bits on every column.
+        Sets `probA_` and `probB_` (one per pair, float64)."""
+        self.__dict__.pop("_prob_ab", None)
+        if not self.probability:
+            return
+        k = len(self.classes_)
+        cb = None if c_rows is None else c_rows.tolist()
+        seed = 0 if self.random_state is None else int(self.random_state)
+        precomputed = self.kernel == "precomputed"
+        ab = []
+        pair_no = 0
+        for ci in range(k):
+            for cj in range(ci + 1, k):
+                idx = [r for r in range(len(codes)) if codes[r] == ci or codes[r] == cj]
+                n = len(idx)
+                labels = [1.0 if codes[r] == ci else -1.0 for r in idx]
+                perm = _splitmix_perm(n, seed ^ ((pair_no * 0x9E3779B97F4A7C15) & 0xFFFFFFFFFFFFFFFF))
+                dec = [0.0] * n
+                for f in range(5):
+                    begin = f * n // 5
+                    end = (f + 1) * n // 5
+                    train = perm[:begin] + perm[end:]
+                    held = perm[begin:end]
+                    n_pos = sum(1 for m in train if labels[m] > 0)
+                    n_neg = len(train) - n_pos
+                    if n_pos == 0 or n_neg == 0:
+                        v = 0.0 if not train else (1.0 if n_pos > 0 else -1.0)
+                        for m in held:
+                            dec[m] = v
+                        continue
+                    if not held:
+                        continue
+                    rows = [idx[m] for m in train]
+                    hrows = [idx[m] for m in held]
+                    sub = _precomputed_block(x, rows) if precomputed else _rows_copy(x, rows)
+                    lab = Array.from_list([0.0 if codes[r] == ci else 1.0 for r in rows], "<f4")
+                    sub_c = None if cb is None else Array.from_list([cb[r] for r in rows], "<f4")
+                    n_sv, dual, support, sv, info = self._solve(sub, lab, gamma, sub_c)
+                    q = _precomputed_rect(x, hrows, rows) if precomputed else _rows_copy(x, hrows)
+                    cols = sub.shape[1]
+                    d = self._machine(q, dual[:n_sv].reshape((1, n_sv)),
+                                      sv[:n_sv * cols].reshape((n_sv, cols)), n_sv,
+                                      _round_f32(info[0]), 0.0, 1.0, False,
+                                      support[:n_sv].tolist()).tolist()
+                    for pos, m in enumerate(held):
+                        # libsvm's orientation: positive toward class i (+1)
+                        dec[m] = -float(d[pos])
+                a, b = _sigmoid_train(dec, labels)
+                ab.append((a, b))
+                pair_no += 1
+        self._prob_ab = ab
+        self.probA_ = Array.from_list([a for a, _ in ab], "<f8")
+        self.probB_ = Array.from_list([b for _, b in ab], "<f8")
 
     def _fit_ovo(self, x, classes, codes, gamma, c_rows):
         """MULTICLASS: one-vs-one, libsvm's (and scikit-learn's SVC's)
@@ -817,6 +1042,7 @@ class SVC(NumericModeMixin):
         self._gamma = gamma
         self._label0 = 0.0
         self._label1 = 1.0
+        self._fit_probability(x, codes, gamma, c_rows)
         return self
 
     def _set_ovo(self, classes, pairs, x, n_cols):
@@ -1010,11 +1236,40 @@ class SVC(NumericModeMixin):
         return decode_labels(self.classes_, codes)
 
     def predict_proba(self, X):
-        raise NotImplementedError(
-            "mojolearn SVC: predict_proba is not available; Platt scaling is "
-            "not in cuML's C++ surface at all (svm/NOT_IMPLEMENTED.tsv), which is "
-            "why the constructor refuses probability=True"
-        )
+        """libsvm's `svm_predict_probability`: each pair's decision through
+        its sigmoid (clamped to [1e-7, 1 - 1e-7]), then for more than two
+        classes the pairwise coupling (`_multiclass_probability`). float64
+        `(n, K)`, columns in `classes_` order. Needs probability=True at
+        fit."""
+        ab = self.__dict__.get("_prob_ab")
+        if ab is None:
+            raise AttributeError(
+                "mojolearn SVC: predict_proba is not available when "
+                "probability=False (scikit-learn's rule); fit with probability=True"
+            )
+        k = len(self.classes_)
+        if self.__dict__.get("_pairs") is None:
+            decisions = [self._run(X, False).tolist()]
+            pairs = [(0, 1)]
+        else:
+            decisions = self._pair_decisions(X)
+            pairs = [(p["i"], p["j"]) for p in self._pairs]
+        n_rows = len(decisions[0])
+        out = []
+        for r in range(n_rows):
+            m = [[0.0] * k for _ in range(k)]
+            for (i, j), d, (a, b) in zip(pairs, decisions, ab):
+                v = _sigmoid_predict(-float(d[r]), a, b)
+                v = min(max(v, 1e-7), 1.0 - 1e-7)
+                m[i][j] = v
+                m[j][i] = 1.0 - v
+            out.append([m[0][1], m[1][0]] if k == 2 else _multiclass_probability(k, m))
+        return Array.from_list(out, "<f8")
+
+    def predict_log_proba(self, X):
+        """`log(predict_proba(X))`, the portable binary64 log."""
+        return Array.from_list(
+            [[math.log(v) for v in row] for row in self.predict_proba(X).tolist()], "<f8")
 
     def score(self, X, y):
         """Accuracy, a Python count over O(rows) labels (DEVIATION 2365)."""
@@ -1059,6 +1314,11 @@ class SVC(NumericModeMixin):
         if self.kernel in ("poly", "sigmoid"):
             # Only for poly and sigmoid, so every linear and rbf file keeps its bytes.
             arrays["coef0"] = Array.from_list([float(self.coef0)], "<f8")
+        ab = self.__dict__.get("_prob_ab")
+        if ab is not None:
+            # probability=True only, so every other file keeps its bytes:
+            # the per-pair sigmoid (A, B), binary64.
+            arrays["prob_ab"] = Array.from_list([v for pair in ab for v in pair], "<f8")
         pairs = self.__dict__.get("_pairs")
         if pairs is not None:
             # MULTICLASS ONLY, so every binary file keeps its bytes: the
@@ -1114,6 +1374,12 @@ class SVC(NumericModeMixin):
         )
         _restore_mode(obj, arrays)
         nf, n_support = int(meta[0]), int(meta[1])
+        if "prob_ab" in arrays:
+            flat = _serialize.exact(arrays, "prob_ab", "<f8").tolist()
+            obj.probability = True
+            obj._prob_ab = [(flat[2 * i], flat[2 * i + 1]) for i in range(len(flat) // 2)]
+            obj.probA_ = Array.from_list(flat[0::2], "<f8")
+            obj.probB_ = Array.from_list(flat[1::2], "<f8")
         if "pair_meta" in arrays:
             return cls._load_ovo(obj, arrays, path, nf, hyper)
         dual = _serialize.exact(arrays, "dual_coef", "<f4")
