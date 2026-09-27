@@ -1,0 +1,49 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+"""The neighbors expansion lane against scikit-learn, at a tolerance, on tiny
+data (a sanity check, not an identity claim). Needs scikit-learn and numpy;
+runs on the lane's pod: `python -m pytest python/mojolearn/tests/test_x_neighbors_sanity.py`."""
+import numpy as np
+import pytest
+
+sk = pytest.importorskip("sklearn")
+import mojolearn as ml  # noqa: E402
+
+
+def _data(n=200, d=6, seed=0):
+    rng = np.random.default_rng(seed)
+    X = rng.standard_normal((n, d)).astype(np.float32)
+    X[:5] *= 6.0
+    return X
+
+
+def test_lof():
+    from sklearn.neighbors import LocalOutlierFactor as R
+    X = _data()
+    ours = ml.LocalOutlierFactor(n_neighbors=12, contamination=0.1)
+    lab = np.asarray(ours.fit_predict(X))
+    ref = R(n_neighbors=12, contamination=0.1)
+    rl = ref.fit_predict(X)
+    np.testing.assert_allclose(np.asarray(ours.negative_outlier_factor_), ref.negative_outlier_factor_, rtol=1e-4)
+    assert (lab == rl).mean() > 0.98
+    Xh = _data(50, seed=1)
+    a = ml.LocalOutlierFactor(n_neighbors=12, novelty=True).fit(X)
+    b = R(n_neighbors=12, novelty=True).fit(X)
+    np.testing.assert_allclose(np.asarray(a.score_samples(Xh)), b.score_samples(Xh), rtol=1e-4)
+    np.testing.assert_allclose(np.asarray(a.decision_function(Xh)), b.decision_function(Xh), rtol=1e-4, atol=1e-5)
+
+
+@pytest.mark.parametrize("kw", [dict(), dict(metric="manhattan"), dict(shrink_threshold=0.3),
+                                dict(priors="empirical")])
+def test_nearest_centroid(kw):
+    from sklearn.neighbors import NearestCentroid as R
+    X = _data(300)
+    y = (X[:, 0] + X[:, 1] > 0).astype(int) + (X[:, 2] > 0.5).astype(int)
+    a = ml.NearestCentroid(**kw).fit(X, y)
+    b = R(**kw).fit(X, y)
+    np.testing.assert_allclose(np.asarray(a.centroids_), b.centroids_, rtol=1e-4, atol=1e-5)
+    np.testing.assert_allclose(np.asarray(a.within_class_std_dev_), b.within_class_std_dev_, rtol=1e-4)
+    assert (np.asarray(a.predict(X)) == b.predict(X)).mean() > 0.99
+    if kw.get("metric", "euclidean") == "euclidean":
+        np.testing.assert_allclose(np.asarray(a.decision_function(X)), b.decision_function(X), rtol=1e-3, atol=1e-3)
+        np.testing.assert_allclose(np.asarray(a.predict_proba(X)), b.predict_proba(X), rtol=1e-3, atol=1e-4)
