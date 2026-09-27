@@ -1,0 +1,186 @@
+name: Cross-compile check
+
+# RELEASE ONLY (2026-09-27). `pixi run release` dispatches this on the frozen
+# commit before any box is rented (tools/release.py, the cross-compile step);
+# it never runs on a merge. tools/cross_compile_check.py, the same script as
+# `pixi run cross-compile-check` on the Mac, selects the Linux GPU bindings
+# whose identity inputs changed between `ref` and the commit, and each
+# binding x tier x arch compiles on its own free standard runner, in
+# parallel: `mojo build --target-accelerator <arch>` with the release flags,
+# no GPU needed. One FAIL, TIMEOUT, STALLED or MISSING job fails the run and
+# the summary names it.
+#
+# MANUAL ONLY: only light-checks starts by itself (light-checks.yml refuses
+# any other workflow with a push or schedule trigger).
+#
+#   gh workflow run cross-compile-check.yml --ref main -f ref=v0.8.22 [-f commit=<sha>]
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: "commit or tag to diff against (the last published release)"
+        required: true
+      archs:
+        description: "comma list of --target-accelerator values"
+        required: false
+        default: "sm_90a,sm_89,gfx942"
+      commit:
+        description: "commit to check (default: the dispatched ref)"
+        required: false
+        default: ""
+      timeout:
+        description: "seconds per compile before TIMEOUT (a 4 vCPU runner is slower than the Mac)"
+        required: false
+        default: "1500"
+      token:
+        description: "an id the dispatcher finds this run by (tools/release.py sets it)"
+        required: false
+        default: ""
+
+run-name: "cross-compile-check ${{ inputs.commit || github.ref_name }} vs ${{ inputs.ref }} ${{ inputs.token }}"
+
+permissions:
+  contents: read
+
+env:
+  MOJOLEARN_EVIDENCE_ROOT: ${{ github.workspace }}/../evidence
+
+jobs:
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      count: ${{ steps.plan.outputs.count }}
+      ref_sha: ${{ steps.refsha.outputs.sha }}
+      commit_sha: ${{ steps.refsha.outputs.commit }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.commit || github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Resolve the diff base to a full sha and fetch it
+        id: refsha
+        env:
+          GH_TOKEN: ${{ github.token }}
+          IN_REF: ${{ inputs.ref }}
+        run: |
+          set -eu
+          sha="$(gh api "repos/${GITHUB_REPOSITORY}/commits/${IN_REF}" --jq .sha)"
+          git fetch --no-tags --depth=1 "https://github.com/${GITHUB_REPOSITORY}.git" "$sha"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+          echo "diff base ${IN_REF} = $sha; checking $(git rev-parse HEAD)"
+      - name: Plan (the script's own selection)
+        id: plan
+        env:
+          IN_ARCHS: ${{ inputs.archs }}
+          REF_SHA: ${{ steps.refsha.outputs.sha }}
+        run: |
+          set -eu
+          python3 tools/cross_compile_check.py --ref "$REF_SHA" --archs "$IN_ARCHS" --list-json plan.json
+          echo "count=$(python3 -c 'import json; print(json.load(open("plan.json"))["count"])')" >> "$GITHUB_OUTPUT"
+          echo "matrix=$(python3 -c 'import json; d=json.load(open("plan.json")); print(json.dumps(dict(include=d["include"])))')" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: cross-compile-plan
+          path: plan.json
+      # The one cache writer: the compile jobs restore the environment this
+      # saves (keyed by the pixi.lock hash) instead of 96 solves at once.
+      - uses: prefix-dev/setup-pixi@v0.10.1
+        if: steps.plan.outputs.count != '0'
+        with:
+          run-install: true
+          cache: true
+          cache-write: true
+          environments: default
+
+  compile:
+    needs: plan
+    if: needs.plan.outputs.count != '0'
+    name: ${{ matrix.name }} ${{ matrix.tier }} ${{ matrix.arch }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.plan.outputs.commit_sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Fetch the diff base
+        env:
+          REF_SHA: ${{ needs.plan.outputs.ref_sha }}
+        run: git fetch --no-tags --depth=1 "https://github.com/${GITHUB_REPOSITORY}.git" "$REF_SHA"
+      - name: Free disk when short
+        run: |
+          free_gb=$(df -BG --output=avail / | tail -1 | tr -dc 0-9)
+          echo "free: ${free_gb} GB"
+          if [ "$free_gb" -lt 20 ]; then
+            sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+            df -h /
+          fi
+      - uses: prefix-dev/setup-pixi@v0.10.1
+        with:
+          run-install: true
+          cache: true
+          cache-write: false
+          environments: default
+      - name: Compile ${{ matrix.name }} ${{ matrix.tier }} ${{ matrix.arch }}
+        env:
+          REF_SHA: ${{ needs.plan.outputs.ref_sha }}
+          NAME: ${{ matrix.name }}
+          TIER: ${{ matrix.tier }}
+          ARCH: ${{ matrix.arch }}
+          IN_TIMEOUT: ${{ inputs.timeout }}
+        run: |
+          set -u
+          mkdir -p out
+          pixi run mojo --version
+          /usr/bin/time -v -o out/time.txt python3 tools/cross_compile_check.py --ref "$REF_SHA" \
+            --only "$NAME" --tiers "$TIER" --archs "$ARCH" --timeout "${IN_TIMEOUT:-1500}" --json out/result.json
+          rc=$?
+          grep -E "Maximum resident|Elapsed" out/time.txt || true
+          df -h / | tail -1
+          exit $rc
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: xcc-${{ matrix.key }}
+          path: out/
+          if-no-files-found: ignore
+
+  summary:
+    needs: [plan, compile]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.plan.outputs.commit_sha || inputs.commit || github.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          path: artifacts
+      - name: PASS/FAIL per job
+        env:
+          PLAN_RESULT: ${{ needs.plan.result }}
+          COUNT: ${{ needs.plan.outputs.count }}
+        run: |
+          set -eu
+          if [ "$PLAN_RESULT" != success ] || [ ! -f artifacts/cross-compile-plan/plan.json ]; then
+            echo "## Cross-compile check: the plan job did not succeed ($PLAN_RESULT); nothing was checked" >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::the plan job did not succeed ($PLAN_RESULT)"
+            exit 1
+          fi
+          if [ "$COUNT" = 0 ]; then
+            echo "## Cross-compile check: no changed Linux GPU binding, nothing to compile" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          python3 tools/cross_compile_check.py --summarize artifacts --plan artifacts/cross-compile-plan/plan.json \
+            --summary-md "$GITHUB_STEP_SUMMARY"
