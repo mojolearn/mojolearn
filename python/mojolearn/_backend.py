@@ -357,8 +357,8 @@ _CLASSICAL_FAST = frozenset({
     "_mojolearn_resample",
     "_mojolearn_ivf",
 })
-# The classical expansion lanes build FAST too; `sequence` and `cnn` are
-# identical only (host_surface.EXPANSION_IDENTICAL_ONLY).
+# Every expansion lane builds FAST too, sequence and cnn included (Andrew,
+# 2026-09-27); host_surface.EXPANSION_IDENTICAL_ONLY is empty.
 _CLASSICAL_FAST |= frozenset(host_surface.expansion_gpu_bindings("classical"))
 _FAST_TIERED = _TIERED | _CLASSICAL_FAST
 _IDENTICAL_ONLY = frozenset(_MODULES) - _FAST_TIERED

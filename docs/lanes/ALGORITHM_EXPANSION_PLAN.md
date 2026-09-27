@@ -343,7 +343,7 @@ to widen into.
 | R4 | **main was rewritten today.** The fetch that preceded the review showed a forced update on `origin/main` (`3cf7ae22...b35580c3`). Nine lanes pushing `HEAD:main` fast-forward cannot survive another one. | Turn on force-push protection for `main` for the duration of the fan-out. | **OWED: Andrew, in the GitHub settings.** |
 | R5 | **The proof dummy ran on one vendor.** The A40 pod proved x86 CPU == NVIDIA through the whole loop. Nothing has run `algos_lane_check.sh` on a Mac with Metal, and that is the path every steward request takes. | Re-create the `x-prep-dummy` lane on a throwaway branch (its two commits are on main; `git revert ff4e81c0` on the branch), push it to the M2 Pro, and run it through `apple_steward.py work --once` before any lane submits. Then delete the branch. | **OWED: orchestrator, before the first submit.** |
 | R6 | **Pod bootstrap is manual.** The brief tells each lane to `git init` and fetch on the pod so `git apply` works; `sync` does not check that the pod tree is at the worktree's base commit, so a patch that applies on the laptop can fail on the pod for a stale-tree reason. | `dev_pod.sh up` seeds the git tree at the lane's base sha itself; `sync` refuses when the pod's HEAD is not the worktree's merge base with origin/main. | **OWED: tool fix. Brief step "Your setup" carries the manual form.** |
-| R7 | **`sequence` and `cnn` build identical only** (`host_surface.EXPANSION_IDENTICAL_ONLY`), while FINAL DECISIONS say FAST on neural. Both lane briefs promised FAST speed work in step 9 that their bindings cannot build. | The neural FAST policy change is one shared edit (`EXPANSION_IDENTICAL_ONLY`, `build_sets.sh` IDENTICAL_ONLY lists, `_backend`'s tier table) the orchestrator makes once, after the identity wave. Lanes 6 and 8 do IDENTICAL speed work only until then (briefs revised). | **OWED: orchestrator, after the identity wave.** |
+| R7 | The prep shipped `sequence` and `cnn` identical only (`host_surface.EXPANSION_IDENTICAL_ONLY`), against FINAL DECISIONS (FAST and IDENTICAL everywhere). | The tuple is now empty: all nine expansion bindings build FAST and IDENTICAL and join `_CLASSICAL_FAST`; the briefs say so. Separate, not a lane's: a FAST tier for the four existing neural bindings (`build_sets.sh` IDENTICAL_ONLY lists, `_backend` tier table, their build scripts). | **DONE 2026-09-27 for the nine lanes. The existing neural bindings' FAST tier is OWED to the orchestrator, off the lanes' path.** |
 | R8 | A fragment may bind a key twice; the second `FAMILIES = ...` silently wins (`host_surface._read_expansion_fragment`). | Refuse a key bound twice. | **OWED: one-line tool fix. The brief says "each once".** |
 | R9 | A dirty steward worktree (an unreversed sabotage) fails the request that finds it, and every later one, until someone logs in. | After a reversal fails, `process` should `git checkout -- .` the worktree, log that it did, and go on. Judgment call; the failing request still reads FAIL. | **OWED: tool fix, low priority.** |
 
@@ -386,3 +386,39 @@ days. Parallelism buys throughput; there is no light form. So:
 3. R5: the dummy through the M2 Pro steward on Metal.
 4. Bootstrap the nine pods (`dev_pod.sh up`) and the bench pod.
 5. Start the nine lanes with the COMMON BRIEF and their sections.
+
+---
+
+# Everything else: the long tail, assigned (2026-09-27)
+
+Andrew: "may as well do everything now". What follows is every standard
+estimator not in the nine lane tables, checked against the public API on
+main (127 names) and the `NOT_IMPLEMENTED.tsv` files. Each is assigned to the
+lane whose machinery it reuses, in the briefs as an "Additions" table a lane
+does after its main table. E = a thin layer with few seams (a day at most),
+M = a new kernel on a known pattern, H = new machinery. The per-seam bill
+applies to every one; a wrapper with no numeric seam of its own owes only
+the verifier lane, the Python class, the sanity check and the CPU route.
+
+| lane | additions | est. |
+|---|---|---|
+| linear | Perceptron, PassiveAggressiveClassifier/Regressor, RidgeClassifier, SGDOneClassSVM (all SGD variants: E); RidgeCV, LassoCV, ElasticNetCV, LogisticRegressionCV (over `cross_val_score`: E); IsotonicRegression (parallel PAVA by prefix scan: M) | +9 |
+| cluster | BayesianGaussianMixture (`mixture/` machinery; already a row in its tsv: M) | +1 |
+| neighbors + kernel | PolynomialCountSketch, AdditiveChi2Sampler, SkewedChi2Sampler (kernel approximation, `kernel_methods/` tsv rows: E); LabelPropagation, LabelSpreading (kNN graph + fixed-order iteration: E); KNNImputer (E) | +6 |
+| decomp + linalg | CCA, PLSRegression (SVD of the cross-covariance: E); SparsePCA, MiniBatchSparsePCA, DictionaryLearning (CD + GEMM: M); LatentDirichletAllocation (variational EM, fixed order: M); Isomap, MDS, LocallyLinearEmbedding (kNN + eigh: M); EllipticEnvelope / MinCovDet (M); ALS matrix factorization for recommendation (GEMM + batched least squares, the clear GPU win in this row: M) | +12 |
+| prep + NB/DA | QuantileTransformer, PowerTransformer, Normalizer, PolynomialFeatures, SplineTransformer, Binarizer, LabelEncoder, LabelBinarizer, MultiLabelBinarizer (E); IterativeImputer (M); VarianceThreshold, SelectKBest with f_classif / chi2 / f_regression / mutual_info, RFE as a wrapper (E); ComplementNB, CategoricalNB (E) | +17 |
+| sequence | MLPClassifier / MLPRegressor, sklearn-shaped over `SmallMLPTrainer` (E); vanilla RNN after LSTM (E); Lion, Adafactor, LAMB, Adamax, NAdam (E); LR schedulers: step, exponential, one-cycle (E); LayerNorm beside RMSNorm (E); Theta and Croston forecasters, damped-trend ETS (E); GARCH (M) | +15 |
+| trees | RandomTreesEmbedding (E); VotingClassifier/Regressor, StackingClassifier/Regressor, MultiOutput, OneVsRest, CalibratedClassifierCV (wrappers: E); SHAP explainers over our forests and GBDT, TreeExplainer first, then KernelExplainer and PermutationExplainer (cuML has the last two; big GPU workloads: M, then H) | +10 |
+| cnn | after Conv: BatchNorm, Dropout2d, global pooling, a ResNet block (E once conv exists) | +4 |
+| ann | after IVF-PQ: IVF-SQ and IVF-RaBitQ (quantization arms on the same index: E), the refine step, the sample filter (both rows in `ivf/NOT_IMPLEMENTED.tsv`: E) | +4 |
+| | | **+78** |
+
+With the fifty in the lane tables that is about 128 additions on top of 57.
+
+**Deliberately not assigned.** HNSW is refused permanently (a CPU graph;
+`ivf/NOT_IMPLEMENTED.tsv`). Birch is a sequential CF tree with no GPU case.
+Graph algorithms (PageRank, Louvain, connected components as a product) are
+cuGraph's scope, not cuML's. GNNs and mixture-of-experts have no reference
+library to be held to. Prophet-style forecasters are a different kind of
+model. Sparse and variational GPs are already a named refusal in `gaussian_process/`.
+Any of these can be taken up later with its own brief; none is blocked.

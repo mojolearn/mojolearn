@@ -199,7 +199,7 @@ sequence trees cnn ann`) the files it OWNS are exactly:
 | `python/mojolearn/_surface_<lane>.py` | literal data only: `GPU_BINDINGS`, `FAMILIES` (one family, `x_<lane>`), `TRAINING_LANE_NAMES`, `PUBLIC_PENDING_LANES`, each bound ONCE (a second binding is not yet refused and silently wins; plan, R8) | `host_surface.py` (and through it `_backend`, every packaging list, the CPU gate) |
 | `tools/identity_lanes/<lane>.py` | the lane's identity lanes and their `_batch_decl`/part declarations, written against identity_break's API | `tools/identity_break.py` (executed in its namespace), the wheel (as `mojolearn/_identity_lane_<lane>.py`), `tools/lane_accounting.py`, `tools/lane_select.py` |
 | `tools/classical_host_lanes/<lane>.py` | classical gate probes, only for lanes the family declares as `inference_lanes` | `tools/classical_host_gate.py` |
-| `bindings/_mojolearn_x_<lane>.mojo`, `bindings/build_x_<lane>.sh` | the lane's ONE GPU binding and its build script (copy `bindings/build_preprocessing.sh`; fast + identical, refuse deterministic; `sequence` and `cnn` identical only) | `_backend`, packaging (through `GPU_BINDINGS`) |
+| `bindings/_mojolearn_x_<lane>.mojo`, `bindings/build_x_<lane>.sh` | the lane's ONE GPU binding and its build script (copy `bindings/build_preprocessing.sh`; fast + identical, refuse deterministic, EVERY lane, `sequence` and `cnn` included) | `_backend`, packaging (through `GPU_BINDINGS`) |
 | `bindings/_mojolearn_x_<lane>_host.mojo`, `bindings/build_x_<lane>_host.sh` | the ONE host binding (the shim is two lines: `exec sh "$(dirname -- "$0")/build_host_family.sh" x_<lane> "$@"`); exports `x_<lane>_host_{numeric_mode,vendor,column,sabotage}` plus the GPU binding's names | `host_surface` family, `_backend._HOST_MODULES` |
 | the lane's own new Mojo module directories (`naive_bayes/` for prep, and so on) and their `NOT_IMPLEMENTED.tsv` | kernels, host oracles | the two bindings |
 | the lane's own new tests under `python/mojolearn/tests/test_x_<lane>_*.py` | | |
@@ -220,11 +220,13 @@ every `packaging/` file, `python/.gitignore` (it already ignores
 `_verification_catalog.py`, and any existing binding or module directory. If
 you need one of them changed, stop and report.
 
-**FAST on neural.** `sequence` and `cnn` build their GPU binding identical
-only (`host_surface.EXPANSION_IDENTICAL_ONLY`, the neural rule). FAST on
-neural reverses that rule for the existing neural bindings too; the
-orchestrator makes that one shared change (it is one tuple for these two
-lanes). Stop and report before touching it.
+**FAST on every lane, neural included.** Every expansion lane's GPU
+binding builds FAST and IDENTICAL (`host_surface.EXPANSION_IDENTICAL_ONLY`
+is empty; Andrew, 2026-09-27). There is no identical-only expansion lane.
+The four EXISTING neural bindings stay identical only until their FAST tier
+is built, which is the orchestrator's work and not yours; never edit
+`packaging/linux/build_sets.sh`'s IDENTICAL_ONLY lists or `_backend.py`'s
+tier table.
 
 ## Numbers each lane owns
 
@@ -267,6 +269,16 @@ Machinery to reuse: `glm/` (QN/OLS), `solver/` (CD), `cholesky/`
 | Lars / LassoLars | sklearn `linear_model/_least_angle.py`; cuML `cpp/src/solver/lars_impl.cuh` |
 | QuantileRegressor | sklearn `linear_model/_quantile.py` (it uses an LP; use an IRLS/ADMM formulation with a fixed iteration order and name it) |
 
+**Additions (2026-09-27, after the table):** Perceptron,
+PassiveAggressiveClassifier/Regressor, RidgeClassifier, SGDOneClassSVM
+(sklearn `linear_model/_perceptron.py`, `_passive_aggressive.py`,
+`_ridge.py`, `_stochastic_gradient.py`; all variants of your SGD);
+RidgeCV, LassoCV, ElasticNetCV, LogisticRegressionCV (sklearn
+`linear_model/_ridge.py`, `_coordinate_descent.py`, `_logistic.py`; the
+fold order is `cross_val_score`'s); IsotonicRegression (sklearn
+`isotonic.py`; parallel PAVA by prefix scan, name the reference for the
+scan form).
+
 ## Lane 2: clustering
 
 Machinery to reuse: `cluster/` (KMeans, k-means++), `kde/`, `dbscan/`,
@@ -280,6 +292,10 @@ Machinery to reuse: `cluster/` (KMeans, k-means++), `kde/`, `dbscan/`,
 | OPTICS | sklearn `cluster/_optics.py` (the ordering loop is sequential; tie-break by index) |
 | AffinityPropagation | sklearn `cluster/_affinity_propagation.py` |
 
+**Additions (2026-09-27, after the table):** BayesianGaussianMixture
+(sklearn `mixture/_bayesian_mixture.py`; reuse `mixture/`, whose
+`NOT_IMPLEMENTED.tsv` already carries the row).
+
 ## Lane 3: neighbors + kernel
 
 Machinery to reuse: `neighbors/` (brute kNN, radius), the SVM solver
@@ -291,6 +307,12 @@ Machinery to reuse: `neighbors/` (brute kNN, radius), the SVM solver
 | NearestCentroid | sklearn `neighbors/_nearest_centroid.py` |
 | OneClassSVM | sklearn `svm/_classes.py` (OneClassSVM, libsvm nu-formulation); already a row in `kernel_methods/NOT_IMPLEMENTED.tsv` |
 | KernelPCA | sklearn `decomposition/_kernel_pca.py` |
+
+**Additions (2026-09-27, after the table):** PolynomialCountSketch,
+AdditiveChi2Sampler, SkewedChi2Sampler (sklearn `kernel_approximation.py`;
+`kernel_methods/NOT_IMPLEMENTED.tsv` carries the first); LabelPropagation,
+LabelSpreading (sklearn `semi_supervised/_label_propagation.py`; kNN graph
+plus a fixed-order iteration); KNNImputer (sklearn `impute/_knn.py`).
 
 ## Lane 4: decomposition + linalg
 
@@ -307,6 +329,17 @@ SVD, `spectral/` (its embedding step), and `cholesky/`.
 | FactorAnalysis | sklearn `decomposition/_factor_analysis.py` |
 | LU solve | LAPACK getrf/getrs semantics, with partial pivoting and pivot ties broken by lowest index |
 | lstsq / randomized SVD | numpy `linalg.lstsq`; sklearn `utils/extmath.py` `randomized_svd`; RAFT `linalg/rsvd.cuh` |
+
+**Additions (2026-09-27, after the table):** CCA, PLSRegression (sklearn
+`cross_decomposition/_pls.py`); SparsePCA, MiniBatchSparsePCA,
+DictionaryLearning (sklearn `decomposition/_sparse_pca.py`, `_dict_learning.py`);
+LatentDirichletAllocation (sklearn `decomposition/_lda.py`, variational EM
+in a fixed order); Isomap, MDS, LocallyLinearEmbedding (sklearn
+`manifold/_isomap.py`, `_mds.py`, `_locally_linear.py`; kNN plus eigh);
+EllipticEnvelope / MinCovDet (sklearn `covariance/_robust_covariance.py`);
+ALS matrix factorization for implicit-feedback recommendation (reference:
+the `implicit` library's `als.py`; GEMM plus batched least squares, a clear
+GPU win).
 
 ## Lane 5: preprocessing + naive Bayes & discriminant analysis (NEW 13th family)
 
@@ -326,6 +359,15 @@ quantile binning and CTR target statistics, covariance + eigh, and
 
 This lane creates the new family's module directory (`naive_bayes/`).
 
+**Additions (2026-09-27, after the table):** QuantileTransformer,
+PowerTransformer, Normalizer, PolynomialFeatures, SplineTransformer,
+Binarizer (sklearn `preprocessing/_data.py`, `_polynomial.py`);
+LabelEncoder, LabelBinarizer, MultiLabelBinarizer (`preprocessing/_label.py`);
+IterativeImputer (`impute/_iterative.py`, round-robin order fixed by
+column index); VarianceThreshold, SelectKBest with f_classif, chi2,
+f_regression and mutual_info, RFE as a wrapper (`feature_selection/`);
+ComplementNB, CategoricalNB (`naive_bayes.py`).
+
 ## Lane 6: sequence (neural + time series)
 
 Machinery to reuse: `training/` (MLP, Adam/AdamW/SGD, `clip_grad_norm_`),
@@ -339,14 +381,24 @@ the Mamba scan, `arima/`, `tsa/` (KPSS, `select_d`) and `holtwinters/`.
 | STL | statsmodels `STL` (loess inner/outer loops); pip-install it on the pod for sanity |
 | VAR | statsmodels `VAR` (OLS per equation, fixed lag order) |
 
-**FAST on neural is new, and NOT YET ENABLED for this lane.** Your GPU
-binding builds identical only (`host_surface.EXPANSION_IDENTICAL_ONLY`), and
-`packaging/linux/build_sets.sh` lists the neural bindings as
-`IDENTICAL_ONLY_SCRIPTS`. A FAST neural tier needs that tuple, that list and
-`_backend.py`'s tier table changed. Stop and report before touching them;
-the orchestrator makes that one shared change after the identity wave
-(plan, R7). Until it lands, step 9 for this lane is IDENTICAL speed work
-only.
+**FAST is on for this lane.** Your GPU binding builds FAST and IDENTICAL
+like every other expansion lane (`host_surface.EXPANSION_IDENTICAL_ONLY` is
+empty). Step 9 applies in full: FAST and IDENTICAL speed work, each FAST
+change with its paired quality check. The existing neural bindings
+(`_mojolearn_training`, `_mojolearn_mamba`, `_mojolearn_transformer`) you
+reuse stay identical only; call them in IDENTICAL from your FAST arm, or
+reimplement the piece inside your own binding, and never edit their build
+scripts or `packaging/linux/build_sets.sh`.
+
+**Additions (2026-09-27, after the table):** MLPClassifier / MLPRegressor,
+sklearn-shaped over `SmallMLPTrainer` (sklearn `neural_network/_multilayer_perceptron.py`
+for the API; the trainer is ours); a vanilla RNN after LSTM (PyTorch
+`nn.RNN`); Lion, Adafactor, LAMB, Adamax, NAdam (their papers' update
+rules; PyTorch `torch.optim` where it has them); LR schedulers step,
+exponential and one-cycle (`torch.optim.lr_scheduler`); LayerNorm beside
+RMSNorm (`torch.nn.LayerNorm`); Theta and Croston forecasters and
+damped-trend ETS (statsforecast `models.py`); GARCH (the `arch` package,
+`univariate/volatility.py`).
 
 ## Lane 7: trees
 
@@ -361,6 +413,15 @@ and never rebuild the shared trees `.so` while another job is using it.
 | BaggingClassifier / BaggingRegressor | sklearn `ensemble/_bagging.py` |
 | AdaBoostClassifier / AdaBoostRegressor | sklearn `ensemble/_weight_boosting.py` (SAMME; AdaBoost.R2) |
 | DART | LightGBM `src/boosting/dart.hpp` (the tree-drop order comes from the seed) |
+
+**Additions (2026-09-27, after the table):** RandomTreesEmbedding (sklearn
+`ensemble/_forest.py`); VotingClassifier/Regressor, StackingClassifier/Regressor,
+MultiOutputClassifier/Regressor, OneVsRestClassifier, CalibratedClassifierCV
+(wrappers: sklearn `ensemble/_voting.py`, `_stacking.py`, `multioutput.py`,
+`multiclass.py`, `calibration.py`); SHAP explainers over our forests and
+GBDT: TreeExplainer first (the `shap` package's `explainers/_tree.py`
+algorithm, exact per-tree), then KernelExplainer and PermutationExplainer
+(cuML `cpp/src/explainer/kernel_shap.cu`, `permutation_shap.cu`).
 
 ## Lane 8: CNN (HARD)
 
@@ -378,9 +439,13 @@ input pixel in a fixed order (the Jacobi move `umap/optimizer_identical_device.m
 made), never as atomics. Max pooling's tie is `identical_fmax`'s (the sign
 of zero); BatchNorm's statistics are pinned folds whose partial count is a
 function of the shape, never of the core count (IDENTITY_PATHS row 7).
-Like `sequence`, this lane's binding is identical only until the
-orchestrator enables FAST on neural (plan, R7): step 9 is IDENTICAL speed
-work only until then.
+FAST is on for this lane too: the binding builds FAST and IDENTICAL, and
+step 9 applies in full (FAST conv is where cuDNN-style algorithm choice
+lives; IDENTICAL stays im2col onto the pinned GEMM).
+
+**Additions (2026-09-27, after Conv lands):** BatchNorm (pinned folds,
+partial count from the shape), Dropout2d (Philox), global average and max
+pooling, one ResNet basic block (PyTorch `torchvision.models.resnet.BasicBlock`).
 
 ## Lane 9: ANN + t-SNE (HARD)
 
@@ -408,3 +473,8 @@ refine, so it depends on IVF-PQ landing first, and its reverse-edge
 insertion and search queue are the parts that need a rank-based rewrite
 (row 23's 32-lane pin). NN-descent stays refused by name
 (`hdbscan/NOT_IMPLEMENTED.tsv`).
+
+**Additions (2026-09-27, after IVF-PQ lands):** IVF-SQ and IVF-RaBitQ
+(cuVS `ivf_sq/`, `ivf_rabitq/`; quantization arms on the same index), the
+refine step (cuVS `refine.cuh`), and the sample filter (both already rows
+in `ivf/NOT_IMPLEMENTED.tsv`).
