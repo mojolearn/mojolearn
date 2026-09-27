@@ -610,7 +610,7 @@ def cpu_legs(ctx):
 
 
 def github_legs(ctx):
-    """OPT-IN ROUTE (--build-backend github, 2026-09-27): the three Linux sets
+    """DEFAULT ROUTE (--build-backend github, 2026-09-27): the three Linux sets
     compile on GitHub's free ubuntu-24.04 runners, no rental. Each leg is
     tools/release_github_build.py run: it mints the binding-cache URL map with
     this Mac's R2 credentials, dispatches .github/workflows/release-linux-build.yml
@@ -632,8 +632,8 @@ def github_legs(ctx):
     return legs
 
 
-#: "gpu-legs" is the default (Andrew, 2026-09-25: no CPU anywhere by default);
-#: "cpu-box" and "github" are opt-in by name.
+#: "github" is the default (2026-09-27: GitHub's free runners build, proven byte-identical
+#: to 0.8.24 on all three sets); "gpu-legs" and "cpu-box" are opt-in by name.
 BUILD_BACKENDS = {"cpu-box": cpu_legs, "github": github_legs, "gpu-legs": gpu_legs}
 #: Routes that overlay their own box-side files and take no route overlay.
 SELF_OVERLAID = ("cpu-box", "github")
@@ -2724,7 +2724,7 @@ def main(argv=None):
     ap.add_argument("--source-checkout", default="",
                     help="an existing checkout at the frozen source commit (default: this checkout when its HEAD "
                          "is the source commit, else a worktree under the release directory)")
-    ap.add_argument("--build-backend", default="gpu-legs", choices=sorted(BUILD_BACKENDS))
+    ap.add_argument("--build-backend", default="github", choices=sorted(BUILD_BACKENDS))
     ap.add_argument("--accept-moved", action="store_true",
                     help="publish the macOS wheel although its Apple column differs from the previous release's "
                          "NVIDIA and AMD columns (the release changes those bits on purpose)")

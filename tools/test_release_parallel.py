@@ -269,7 +269,7 @@ class Columns(unittest.TestCase):
         with mock.patch.object(release.Release, "go", lambda self: self.args):
             self.assertFalse(release.main(["0.8.14"]).cpu_column)
             self.assertTrue(release.main(["0.8.14", "--cpu-column"]).cpu_column)
-            self.assertEqual(release.main(["0.8.14"]).build_backend, "gpu-legs")
+            self.assertEqual(release.main(["0.8.14"]).build_backend, "github")
 
 
 class JointDiff(unittest.TestCase):
