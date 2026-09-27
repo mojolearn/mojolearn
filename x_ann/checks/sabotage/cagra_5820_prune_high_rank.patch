@@ -1,0 +1,11 @@
+--- a/x_ann/cagra_core.mojo
++++ b/x_ann/cagra_core.mojo
+@@ -55,7 +55,7 @@
+         for i in range(deg):
+             var best = -1
+             for k in range(kdeg):
+-                if cnt[k] < 0xFFFF and (best < 0 or cnt[k] < cnt[best]):
++                if cnt[k] < 0xFFFF and (best < 0 or cnt[k] <= cnt[best]):
+                     best = k
+             if best < 0:
+                 raise Error("CAGRA: the k-NN graph has too few distinct neighbors for graph_degree")
