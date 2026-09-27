@@ -482,14 +482,54 @@ def _adam(binding, param, grad, mv, step, lr, betas, eps, weight_decay, decouple
     """In place: torch.optim.Adam / AdamW's step `step` (1-based) on `param`
     and mv = [exp_avg | exp_avg_sq]; the step's scalars in double, as torch
     computes them in Python."""
+    grad = _f32(grad, "grad")
+    binding.x_cnn_adam(param.ctypes.data, grad.ctypes.data, mv.ctypes.data, [param.size],
+                       _adam_hyper(step, lr, betas, eps, weight_decay, decoupled))
+
+
+def _adam_hyper(step, lr, betas, eps, weight_decay, decoupled):
+    """adam_at's hyper block for 1-based step `step` (the scalars in double,
+    as torch computes them in Python); `_adam` and the resident fit share it."""
     import math
     b1, b2 = float(betas[0]), float(betas[1])
     bc1 = 1.0 - b1 ** step
     bc2 = 1.0 - b2 ** step
-    grad = _f32(grad, "grad")
-    binding.x_cnn_adam(param.ctypes.data, grad.ctypes.data, mv.ctypes.data, [param.size],
-                       [lr / bc1, 1.0 - b1, b2, 1.0 - b2, float(eps), math.sqrt(bc2), float(weight_decay),
-                        1.0 if decoupled else 0.0, 1.0 - float(lr) * float(weight_decay)])
+    return [lr / bc1, 1.0 - b1, b2, 1.0 - b2, float(eps), math.sqrt(bc2), float(weight_decay),
+            1.0 if decoupled else 0.0, 1.0 - float(lr) * float(weight_decay)]
+
+
+class _Res:
+    """Resident arrays (DEVIATION 5718): handles the binding keeps between
+    its `_r` entries (device addresses on the GPU binding, host allocations on
+    the CPU twin), 4-byte words, zero filled; freed on exit."""
+
+    def __init__(self, binding):
+        self.b, self.handles = binding, []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        for h in self.handles:
+            self.b.x_cnn_res_free(h)
+        self.handles = []
+
+    def new(self, n):
+        h = self.b.x_cnn_res_alloc(int(n))
+        self.handles.append(h)
+        return h
+
+    def put(self, h, arr):
+        np = _np()
+        arr = np.ascontiguousarray(arr)
+        assert arr.dtype in (np.float32, np.int32)
+        self.b.x_cnn_res_upload(h, arr.ctypes.data, arr.size)
+
+    def get(self, h, shape):
+        np = _np()
+        out = np.empty(shape, np.float32)
+        self.b.x_cnn_res_download(h, out.ctypes.data, out.size)
+        return out
 
 
 class CNNClassifier(_Layer):
@@ -554,52 +594,14 @@ class CNNClassifier(_Layer):
         self.head_ = _Linear(self._flat, n_classes, random_state=seed + 997, numeric_mode=self.numeric_mode)
         self.layers_ = layers
         # (conv, pool or None) per block: each block runs as ONE binding call
-        # each way (x_cnn_conv_block_*, DEVIATION 5717), the same kernels on
-        # the same values as the three layer calls, the activations between
-        # them kept on the device.
+        # each way (x_cnn_conv_block_*_r, DEVIATION 5717), the same kernels on
+        # the same values as the three layer calls, on resident arrays
+        # (DEVIATION 5718).
         self._blocks = []
         for i, layer in enumerate(layers):
             if isinstance(layer, Conv2d):
                 nxt = layers[i + 2] if i + 2 < len(layers) else None
                 self._blocks.append((layer, nxt if isinstance(nxt, MaxPool2d) else None))
-
-    def _block_forward(self, b, conv, pool, x):
-        np = _np()
-        prm = conv._params(x.shape)
-        cshape = conv._out_shape(x.shape)
-        pprm = pool._params(cshape) if pool is not None else []
-        shape = pool._out_shape(cshape) if pool is not None else cshape
-        out = np.empty(shape, np.float32)
-        idx = np.empty(shape if pool is not None else (1,), np.int32)
-        b.x_cnn_conv_block_forward(x.ctypes.data, conv.weight_.ctypes.data, conv.bias_.ctypes.data, out.ctypes.data,
-                                   idx.ctypes.data, prm, pprm)
-        conv._block = (x, idx, prm, pprm)
-        return out
-
-    def _block_backward(self, b, conv, g, need_dx):
-        np = _np()
-        x, idx, prm, pprm = conv._block
-        g = np.ascontiguousarray(g, dtype=np.float32)
-        dx = np.empty(x.shape, np.float32) if need_dx else None
-        conv.grad_weight_ = np.empty(conv.weight_.shape, np.float32)
-        conv.grad_bias_ = np.empty(conv.out_channels, np.float32)
-        b.x_cnn_conv_block_backward(x.ctypes.data, conv.weight_.ctypes.data, conv.bias_.ctypes.data, g.ctypes.data,
-                                    idx.ctypes.data, [dx.ctypes.data if need_dx else 0, conv.grad_weight_.ctypes.data,
-                                                      conv.grad_bias_.ctypes.data], prm, pprm)
-        return dx
-
-    def _forward(self, x):
-        b = self._binding()
-        for conv, pool in self._blocks:
-            x = self._block_forward(b, conv, pool, np_reshape(x, x.shape))
-        self._shape = x.shape
-        return self.head_.forward(x.reshape(x.shape[0], -1))
-
-    def _backward(self, g):
-        b = self._binding()
-        g = self.head_.backward(g).reshape(self._shape)
-        for k in range(len(self._blocks) - 1, -1, -1):
-            g = self._block_backward(b, self._blocks[k][0], g, k > 0)
 
     def _params(self):
         out = []
@@ -609,7 +611,50 @@ class CNNClassifier(_Layer):
                 out.append((layer, "bias_", "grad_bias_"))
         return out
 
+    def _plan(self, n):
+        """Per block (conv params, pool params or [], input size, output size)
+        at batch size n, and the flattened width."""
+        plans = []
+        shape = (n,) + self.input_shape
+        for conv, pool in self._blocks:
+            prm = conv._params(shape)
+            cshape = conv._out_shape(shape)
+            pprm = pool._params(cshape) if pool is not None else []
+            oshape = pool._out_shape(cshape) if pool is not None else cshape
+            plans.append((prm, pprm, int(_np().prod(shape)), int(_np().prod(oshape))))
+            shape = oshape
+        return plans, shape
+
+    def _resident(self, R, n):
+        """The step's resident arrays at batch capacity n (DEVIATION 5718)."""
+        plans, shape = self._plan(n)
+        k = len(self.classes_)
+        a = dict(x=R.new(plans[0][2] if plans else n * self._flat), y=R.new(n),
+                 logits=R.new(n * k), glog=R.new(n * k), proba=R.new(n * k))
+        a["out"] = [R.new(p[3]) for p in plans]
+        a["idx"] = [R.new(p[3]) for p in plans]
+        a["gout"] = [R.new(p[3]) for p in plans]
+        if not plans:  # the head's input gradient, never read, kept apart from glog
+            a["ghead"] = R.new(n * self._flat)
+        return a
+
+    def _forward_r(self, b, a, n):
+        """Logits of the n rows in a["x"], every array on the binding's side."""
+        plans, _ = self._plan(n)
+        src = a["x"]
+        for (conv, pool), (prm, pprm, _, _), out, idx in zip(self._blocks, plans, a["out"], a["idx"]):
+            b.x_cnn_conv_block_forward_r(src, self._rw[id(conv)][0], self._rw[id(conv)][1], out, idx, prm, pprm)
+            src = out
+        hw, hb = self._rw[id(self.head_)]
+        b.x_cnn_linear_forward_r(src, hw, hb, a["logits"], [n, self._flat, len(self.classes_)])
+        return plans
+
     def fit(self, X, y):
+        """Every step on the binding's resident arrays (DEVIATION 5718): the
+        weights, optimizer state, activations and gradients stay on the
+        device for the whole fit; each step uploads its batch and labels and
+        downloads its loss. The same entries' kernels on the same values in
+        the same order as the per-layer calls: the bits do not move."""
         np = _np()
         x = self._images(X)
         y = np.asarray(y)
@@ -618,38 +663,89 @@ class CNNClassifier(_Layer):
         self._build(len(self.classes_))
         b = self._binding()
         per = 2 if self.optimizer != "sgd" else 1
-        self._bufs = [np.zeros(per * getattr(l, a).size, np.float32) for l, a, _ in self._params()]
-        step = 0
+        params = self._params()
         rng = np.random.default_rng(self.random_state)
         n = x.shape[0]
+        k = len(self.classes_)
+        cap = min(self.batch_size, n)
         self.losses_, self.loss_curve_ = [], []
-        for _ in range(self.max_iter):
-            order = rng.permutation(n) if self.shuffle else np.arange(n)
-            epoch = []
-            for s in range(0, n, self.batch_size):
-                idx = order[s:s + self.batch_size]
-                xb = np.ascontiguousarray(x[idx])
-                loss, g, _ = _softmax_xent(b, self._forward(xb), yi[idx])
-                self._backward(g)
-                step += 1
-                for (layer, a, ga), buf in zip(self._params(), self._bufs):
-                    if self.optimizer == "sgd":
-                        _sgd(b, getattr(layer, a), getattr(layer, ga), buf, self.learning_rate, self.momentum,
-                             self.weight_decay, self.dampening, self.nesterov, step == 1)
-                    else:
-                        _adam(b, getattr(layer, a), getattr(layer, ga), buf, step, self.learning_rate, self.betas,
-                              self.eps, self.weight_decay, self.optimizer == "adamw")
-                epoch.append(loss)
-            self.losses_.extend(epoch)
-            self.loss_curve_.append(sum(epoch) / len(epoch))
+        with _Res(b) as R:
+            self._rw = {}
+            hp, hg, hbuf = [], [], []
+            for layer, attr, _ in params:
+                arr = getattr(layer, attr)
+                hp.append(R.new(arr.size))
+                R.put(hp[-1], arr)
+                hg.append(R.new(arr.size))
+                hbuf.append(R.new(per * arr.size))
+            for i, (layer, attr, _) in enumerate(params):
+                if attr == "weight_":
+                    self._rw[id(layer)] = (hp[i], hp[i + 1], hg[i], hg[i + 1])
+            a = self._resident(R, cap)
+            step = 0
+            for _ in range(self.max_iter):
+                order = rng.permutation(n) if self.shuffle else np.arange(n)
+                epoch = []
+                for s in range(0, n, self.batch_size):
+                    idx = order[s:s + self.batch_size]
+                    m = len(idx)
+                    R.put(a["x"], np.ascontiguousarray(x[idx]))
+                    R.put(a["y"], np.ascontiguousarray(yi[idx]))
+                    plans = self._forward_r(b, a, m)
+                    loss = float(b.x_cnn_softmax_xent_r(a["logits"], a["y"], a["glog"], a["proba"], [m, k]))
+                    hw, _, hgw, hgb = self._rw[id(self.head_)]
+                    last = a["out"][-1] if plans else a["x"]
+                    glast = a["gout"][-1] if plans else a["ghead"]
+                    b.x_cnn_linear_backward_r(last, hw, a["glog"], glast, hgw, hgb, [m, self._flat, k])
+                    for j in range(len(self._blocks) - 1, -1, -1):
+                        conv = self._blocks[j][0]
+                        prm, pprm, _, _ = plans[j]
+                        w_, b_, gw_, gb_ = self._rw[id(conv)]
+                        src = a["out"][j - 1] if j > 0 else a["x"]
+                        dx = a["gout"][j - 1] if j > 0 else 0
+                        b.x_cnn_conv_block_backward_r(src, w_, b_, a["gout"][j], a["idx"][j], [dx, gw_, gb_], prm, pprm)
+                    step += 1
+                    for (layer, attr, _), p_, g_, buf in zip(params, hp, hg, hbuf):
+                        size = getattr(layer, attr).size
+                        if self.optimizer == "sgd":
+                            b.x_cnn_sgd_r(p_, g_, buf, [size],
+                                          [self.learning_rate, self.momentum, self.weight_decay, self.dampening,
+                                           1.0 if self.nesterov else 0.0, 1.0 if step == 1 else 0.0])
+                        else:
+                            b.x_cnn_adam_r(p_, g_, buf, [size], _adam_hyper(step, self.learning_rate, self.betas,
+                                                                            self.eps, self.weight_decay,
+                                                                            self.optimizer == "adamw"))
+                    epoch.append(loss)
+                self.losses_.extend(epoch)
+                self.loss_curve_.append(sum(epoch) / len(epoch))
+            for (layer, attr, gattr), p_, g_, buf in zip(params, hp, hg, hbuf):
+                arr = getattr(layer, attr)
+                setattr(layer, attr, R.get(p_, arr.shape))
+                setattr(layer, gattr, R.get(g_, arr.shape))
+            self._bufs = [R.get(buf, (per * getattr(l, at).size,)) for (l, at, _), buf in zip(params, hbuf)]
+            self._rw = {}
         self.n_features_in_ = int(np.prod(self.input_shape))
         return self
 
     def predict_proba(self, X):
         np = _np()
         x = self._images(X)
-        logits = self._forward(x)
-        _, _, proba = _softmax_xent(self._binding(), logits, np.full(x.shape[0], -1, np.int32))
+        n = x.shape[0]
+        b = self._binding()
+        with _Res(b) as R:
+            self._rw = {}
+            for layer in [c for c, _ in self._blocks] + [self.head_]:
+                hw, hb = R.new(layer.weight_.size), R.new(layer.bias_.size)
+                R.put(hw, layer.weight_)
+                R.put(hb, layer.bias_)
+                self._rw[id(layer)] = (hw, hb)
+            a = self._resident(R, n)
+            R.put(a["x"], np.ascontiguousarray(x))
+            R.put(a["y"], np.full(n, -1, np.int32))
+            self._forward_r(b, a, n)
+            b.x_cnn_softmax_xent_r(a["logits"], a["y"], a["glog"], a["proba"], [n, len(self.classes_)])
+            proba = R.get(a["proba"], (n, len(self.classes_)))
+            self._rw = {}
         return proba
 
     def predict(self, X):

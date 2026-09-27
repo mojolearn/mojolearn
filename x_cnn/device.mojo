@@ -40,9 +40,17 @@ struct _CnnContext(Defaultable, Movable):
     one slot per numeric tier so a FAST and an IDENTICAL .so in one process
     never share it."""
     var ctx: Optional[DeviceContext]
+    #: The workspace (DEVIATION 5718): one cached device buffer per slot,
+    #: grown on demand and kept for the process.
+    var ws: List[DeviceBuffer[DType.float32]]
+    #: The resident arrays (DEVIATION 5718): owning buffers the caller holds
+    #: by device address between entries (`res_alloc` / `res_free`).
+    var res: List[DeviceBuffer[DType.float32]]
 
     def __init__(out self):
         self.ctx = Optional[DeviceContext]()
+        self.ws = List[DeviceBuffer[DType.float32]]()
+        self.res = List[DeviceBuffer[DType.float32]]()
 
 
 comptime _CTX_NAME = "MojoXCnnContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXCnnContextFast"
@@ -144,6 +152,156 @@ def down_i(ctx: DeviceContext, buf: DeviceBuffer[DType.int32], dst: IP, n: Int) 
         ctx.synchronize()
 
 
+# ------------------------------------------------ workspace + resident arrays
+# DEVIATION 5718 (phase 4, IDENTICAL speed, 2026-09-27). Measured on the RTX
+# 4090 (the block backward at N 256, 64x64x32x32): freeing an entry's
+# eighteen device buffers took 12.3 ms and allocating them 1.2 ms, against
+# 9.2 ms of kernels; in CNNClassifier's step every activation also crossed
+# PCIe two or three times. Two changes, both plumbing:
+# - THE WORKSPACE: an entry's device buffers are views of per-slot buffers
+#   cached for the process (`ws`), grown when a call needs more. Every entry
+#   synchronizes before it returns and uses each slot once, so no two live
+#   views of one entry share a slot and no entry sees another's.
+# - RESIDENT ARRAYS: `res_alloc` hands the caller a device address it keeps
+#   between entries; the `[resident=True]` form of an entry reads and writes
+#   those addresses in place of uploading and downloading host arrays. The
+#   CPU twin's resident arrays are host allocations and its resident entries
+#   are its ordinary ones.
+# Neither changes a kernel, a GEMM plan choice, an operand, or the order of
+# anything: the same launches on the same values. Neither tier's bits move.
+
+
+def _slots() raises -> UnsafePointer[_CnnContext, MutAnyOrigin]:
+    return X_CNN_CONTEXT.get_or_create_ptr().unsafe_origin_cast[MutAnyOrigin]()
+
+
+def view(ctx: DeviceContext, p: FP, n: Int) raises -> DeviceBuffer[DType.float32]:
+    """A non-owning device buffer over `n` floats at device address `p`."""
+    return DeviceBuffer[DType.float32](ctx, p, n if n > 0 else 1, owning=False)
+
+
+def view_i(ctx: DeviceContext, p: IP, n: Int) raises -> DeviceBuffer[DType.int32]:
+    return DeviceBuffer[DType.int32](ctx, p, n if n > 0 else 1, owning=False)
+
+
+def ws(ctx: DeviceContext, slot: Int, n: Int) raises -> DeviceBuffer[DType.float32]:
+    """Workspace slot `slot` as `n` floats (at least 1)."""
+    var need = n if n > 0 else 1
+    var s = _slots()
+    while len(s[].ws) <= slot:
+        s[].ws.append(ctx.enqueue_create_buffer[DType.float32](1))
+    if len(s[].ws[slot]) < need:
+        s[].ws[slot] = ctx.enqueue_create_buffer[DType.float32](need)
+    return view(ctx, s[].ws[slot].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), need)
+
+
+def ws_i(ctx: DeviceContext, slot: Int, n: Int) raises -> DeviceBuffer[DType.int32]:
+    """Workspace slot `slot` as `n` Int32 words (the same 4-byte storage)."""
+    var b = ws(ctx, slot, n)
+    return view_i(ctx, b.unsafe_ptr().bitcast[Int32]().unsafe_origin_cast[MutAnyOrigin](), n)
+
+
+def put[resident: Bool](ctx: DeviceContext, slot: Int, src: FP, n: Int) raises -> DeviceBuffer[DType.float32]:
+    """An entry's input: the resident array itself, or host `src` copied into slot `slot`."""
+    comptime if resident:
+        return view(ctx, src, n)
+    var b = ws(ctx, slot, n)
+    if n > 0:
+        ctx.enqueue_copy(dst_buf=b, src_ptr=src)
+    return b^
+
+
+def put_i[resident: Bool](ctx: DeviceContext, slot: Int, src: IP, n: Int) raises -> DeviceBuffer[DType.int32]:
+    comptime if resident:
+        return view_i(ctx, src, n)
+    var b = ws_i(ctx, slot, n)
+    if n > 0:
+        ctx.enqueue_copy(dst_buf=b, src_ptr=src)
+    return b^
+
+
+def put_prm(ctx: DeviceContext, slot: Int, prm: List[Int32]) raises -> DeviceBuffer[DType.int32]:
+    """A parameter block into slot `slot` (the caller keeps `prm` alive past its synchronize)."""
+    var b = ws_i(ctx, slot, len(prm))
+    if len(prm) > 0:
+        ctx.enqueue_copy(dst_buf=b, src_ptr=prm.unsafe_ptr())
+    return b^
+
+
+def put_hyper(ctx: DeviceContext, slot: Int, h: List[Float32]) raises -> DeviceBuffer[DType.float32]:
+    var b = ws(ctx, slot, len(h))
+    if len(h) > 0:
+        ctx.enqueue_copy(dst_buf=b, src_ptr=h.unsafe_ptr())
+    return b^
+
+
+def outb[resident: Bool](ctx: DeviceContext, slot: Int, dst: FP, n: Int) raises -> DeviceBuffer[DType.float32]:
+    """An entry's output: the resident array itself, or slot `slot` (downloaded by `fetch`)."""
+    comptime if resident:
+        return view(ctx, dst, n)
+    return ws(ctx, slot, n)
+
+
+def outb_i[resident: Bool](ctx: DeviceContext, slot: Int, dst: IP, n: Int) raises -> DeviceBuffer[DType.int32]:
+    comptime if resident:
+        return view_i(ctx, dst, n)
+    return ws_i(ctx, slot, n)
+
+
+def fetch[resident: Bool](ctx: DeviceContext, buf: DeviceBuffer[DType.float32], dst: FP, n: Int) raises:
+    comptime if not resident:
+        down(ctx, buf, dst, n)
+
+
+def fetch_i[resident: Bool](ctx: DeviceContext, buf: DeviceBuffer[DType.int32], dst: IP, n: Int) raises:
+    comptime if not resident:
+        down_i(ctx, buf, dst, n)
+
+
+def res_alloc(n: Int) raises -> Int:
+    """A resident array of `n` floats (4-byte words), zero filled; its device address."""
+    var ctx = cnn_ctx()
+    var b = ctx.enqueue_create_buffer[DType.float32](n if n > 0 else 1)
+    b.enqueue_fill(Float32(0))
+    ctx.synchronize()
+    var addr = Int(b.unsafe_ptr())
+    _slots()[].res.append(b^)
+    _ = ctx^
+    return addr
+
+
+def res_free(addr: Int) raises:
+    var s = _slots()
+    for k in range(len(s[].res)):
+        if Int(s[].res[k].unsafe_ptr()) == addr:
+            _ = s[].res.pop(k)
+            return
+    raise Error("x_cnn: res_free of an address res_alloc did not return")
+
+
+def res_upload(addr: Int, src: FP, n: Int) raises:
+    """n 4-byte words from host `src` into the resident array at `addr`."""
+    if n <= 0:
+        return
+    var ctx = cnn_ctx()
+    var b = view(ctx, FP(unsafe_from_address=addr), n)
+    ctx.enqueue_copy(dst_buf=b, src_ptr=src)
+    ctx.synchronize()
+    _ = b^
+    _ = ctx^
+
+
+def res_download(addr: Int, dst: FP, n: Int) raises:
+    if n <= 0:
+        return
+    var ctx = cnn_ctx()
+    var b = view(ctx, FP(unsafe_from_address=addr), n)
+    ctx.enqueue_copy(dst_ptr=dst, src_buf=b)
+    ctx.synchronize()
+    _ = b^
+    _ = ctx^
+
+
 @always_inline
 def lp(mut l: List[Float32]) -> FP:
     """A List's storage as an entry's host address (the List must outlive the call)."""
@@ -160,9 +318,9 @@ def lpi(mut l: List[Int32]) -> IP:
 
 def gemm_into(a: FP, b: FP, c: FP, m: Int, n: Int, k: Int, op: Int) raises:
     var ctx = cnn_ctx()
-    var da = up(ctx, a, m * k)
-    var db = up(ctx, b, n * k)
-    var dc = ctx.enqueue_create_buffer[DType.float32](m * n)
+    var da = put[False](ctx, 0, a, m * k)
+    var db = put[False](ctx, 1, b, n * k)
+    var dc = ws(ctx, 2, m * n)
     device_gemm(ctx, dc, da, db, m, n, k, op)
     down(ctx, dc, c, m * n)
     ctx.synchronize()
@@ -187,13 +345,13 @@ def conv2d_forward_into(x: FP, w: FP, bias: FP, prm: List[Int32], dst: FP) raise
     var ckk = C * Int(prm[CP_KH]) * Int(prm[CP_KW])
     var rows = N * Int(prm[CP_OH]) * Int(prm[CP_OW])
     var ctx = cnn_ctx()
-    var dx = up(ctx, x, N * C * Int(prm[CP_H]) * Int(prm[CP_W]))
-    var dw = up(ctx, w, OC * ckk)
-    var dbias = up(ctx, bias, OC)
-    var dp = upload_i32(ctx, prm)
-    var cols = ctx.enqueue_create_buffer[DType.float32](rows * ckk)
-    var y2 = ctx.enqueue_create_buffer[DType.float32](rows * OC)
-    var dout = ctx.enqueue_create_buffer[DType.float32](rows * OC)
+    var dx = put[False](ctx, 0, x, N * C * Int(prm[CP_H]) * Int(prm[CP_W]))
+    var dw = put[False](ctx, 1, w, OC * ckk)
+    var dbias = put[False](ctx, 2, bias, OC)
+    var dp = put_prm(ctx, 3, prm)
+    var cols = ws(ctx, 4, rows * ckk)
+    var y2 = ws(ctx, 5, rows * OC)
+    var dout = ws(ctx, 6, rows * OC)
     launch[im2col_at](ctx, fp(dx), fp(cols), fp(cols), fp(cols), ip(dp), ip(dp), rows * ckk)
     device_gemm(ctx, y2, cols, dw, rows, OC, ckk, OP_NT)
     launch[conv_out_at](ctx, fp(y2), fp(dbias), fp(dout), fp(dout), ip(dp), ip(dp), rows * OC)
@@ -216,17 +374,17 @@ def conv2d_backward_into(x: FP, w: FP, dout: FP, prm: List[Int32], gx_out: FP, g
     var rows = N * Int(prm[CP_OH]) * Int(prm[CP_OW])
     var nx = N * C * Int(prm[CP_H]) * Int(prm[CP_W])
     var ctx = cnn_ctx()
-    var dxin = up(ctx, x, nx)
-    var dw = up(ctx, w, OC * ckk)
-    var ddout = up(ctx, dout, rows * OC)
-    var dp = upload_i32(ctx, prm)
-    var cols = ctx.enqueue_create_buffer[DType.float32](rows * ckk)
-    var g = ctx.enqueue_create_buffer[DType.float32](rows * OC)
-    var ones = ctx.enqueue_create_buffer[DType.float32](rows)
-    var gw = ctx.enqueue_create_buffer[DType.float32](OC * ckk)
-    var gb = ctx.enqueue_create_buffer[DType.float32](OC)
-    var dcols = ctx.enqueue_create_buffer[DType.float32](rows * ckk)
-    var gx = ctx.enqueue_create_buffer[DType.float32](nx)
+    var dxin = put[False](ctx, 0, x, nx)
+    var dw = put[False](ctx, 1, w, OC * ckk)
+    var ddout = put[False](ctx, 2, dout, rows * OC)
+    var dp = put_prm(ctx, 3, prm)
+    var cols = ws(ctx, 4, rows * ckk)
+    var g = ws(ctx, 5, rows * OC)
+    var ones = ws(ctx, 6, rows)
+    var gw = ws(ctx, 7, OC * ckk)
+    var gb = ws(ctx, 8, OC)
+    var dcols = ws(ctx, 9, rows * ckk)
+    var gx = ws(ctx, 10, nx)
     launch[im2col_at](ctx, fp(dxin), fp(cols), fp(cols), fp(cols), ip(dp), ip(dp), rows * ckk)
     launch[dout_rows_at](ctx, fp(ddout), fp(g), fp(g), fp(g), ip(dp), ip(dp), rows * OC)
     launch[fill_one_at](ctx, fp(ones), fp(ones), fp(ones), fp(ones), ip(dp), ip(dp), rows)
@@ -282,10 +440,10 @@ def maxpool2d_forward_into(x: FP, prm: List[Int32], dst: FP, idx_out: IP) raises
     var sizes = _pool_sizes(prm)
     var no = sizes[1]
     var ctx = cnn_ctx()
-    var dx = up(ctx, x, sizes[0])
-    var dp = upload_i32(ctx, prm)
-    var dout = ctx.enqueue_create_buffer[DType.float32](no)
-    var di = ctx.enqueue_create_buffer[DType.int32](no)
+    var dx = put[False](ctx, 0, x, sizes[0])
+    var dp = put_prm(ctx, 1, prm)
+    var dout = ws(ctx, 2, no)
+    var di = ws_i(ctx, 3, no)
     launch[maxpool_fwd_at](ctx, fp(dx), fp(dout), fp(dout), fp(dout), ip(di), ip(dp), no)
     down(ctx, dout, dst, no)
     down_i(ctx, di, idx_out, no)
@@ -311,10 +469,10 @@ def maxpool2d_backward_into(dout: FP, idx: IP, prm: List[Int32], gx_out: FP) rai
     var sizes = _pool_sizes(prm)
     var nx = sizes[0]
     var ctx = cnn_ctx()
-    var dd = up(ctx, dout, sizes[1])
-    var di = up_i(ctx, idx, sizes[1])
-    var dp = upload_i32(ctx, prm)
-    var gx = ctx.enqueue_create_buffer[DType.float32](nx)
+    var dd = put[False](ctx, 0, dout, sizes[1])
+    var di = put_i[False](ctx, 1, idx, sizes[1])
+    var dp = put_prm(ctx, 2, prm)
+    var gx = ws(ctx, 3, nx)
     launch[maxpool_bwd_at](ctx, fp(dd), fp(gx), fp(gx), fp(gx), ip(di), ip(dp), nx)
     down(ctx, gx, gx_out, nx)
     ctx.synchronize()
@@ -329,9 +487,9 @@ def avgpool2d_forward_into(x: FP, prm: List[Int32], dst: FP) raises:
     var sizes = _pool_sizes(prm)
     var no = sizes[1]
     var ctx = cnn_ctx()
-    var dx = up(ctx, x, sizes[0])
-    var dp = upload_i32(ctx, prm)
-    var dout = ctx.enqueue_create_buffer[DType.float32](no)
+    var dx = put[False](ctx, 0, x, sizes[0])
+    var dp = put_prm(ctx, 1, prm)
+    var dout = ws(ctx, 2, no)
     launch[avgpool_fwd_at](ctx, fp(dx), fp(dout), fp(dout), fp(dout), ip(dp), ip(dp), no)
     down(ctx, dout, dst, no)
     ctx.synchronize()
@@ -353,9 +511,9 @@ def avgpool2d_backward_into(dout: FP, prm: List[Int32], gx_out: FP) raises:
     var sizes = _pool_sizes(prm)
     var nx = sizes[0]
     var ctx = cnn_ctx()
-    var dd = up(ctx, dout, sizes[1])
-    var dp = upload_i32(ctx, prm)
-    var gx = ctx.enqueue_create_buffer[DType.float32](nx)
+    var dd = put[False](ctx, 0, dout, sizes[1])
+    var dp = put_prm(ctx, 1, prm)
+    var gx = ws(ctx, 2, nx)
     launch[avgpool_bwd_at](ctx, fp(dd), fp(gx), fp(gx), fp(gx), ip(dp), ip(dp), nx)
     down(ctx, gx, gx_out, nx)
     ctx.synchronize()
@@ -368,10 +526,10 @@ def avgpool2d_backward_into(dout: FP, prm: List[Int32], gx_out: FP) raises:
 def map2_into[f: ElemFn](a: FP, na: Int, b: FP, nb: Int, n_out: Int, prm: List[Int32], dst: FP) raises:
     """dst[i] = f(a, b) for i < n_out (slots a, b, dst); `nb == 0` reuses a."""
     var ctx = cnn_ctx()
-    var da = up(ctx, a, na)
-    var db = up(ctx, b, nb) if nb > 0 else ctx.enqueue_create_buffer[DType.float32](1)
-    var dp = upload_i32(ctx, prm)
-    var dout = ctx.enqueue_create_buffer[DType.float32](n_out if n_out > 0 else 1)
+    var da = put[False](ctx, 0, a, na)
+    var db = put[False](ctx, 1, b, nb)
+    var dp = put_prm(ctx, 2, prm)
+    var dout = ws(ctx, 3, n_out)
     if nb > 0:
         launch[f](ctx, fp(da), fp(db), fp(dout), fp(dout), ip(dp), ip(dp), n_out)
     else:
@@ -405,20 +563,21 @@ def mul_into(a: FP, b: FP, n: Int, dst: FP) raises:
     map2_into[mul_at](a, n, b, n, n, prm, dst)
 
 
-def linear_forward_into(x: FP, w: FP, bias: FP, n: Int, d_in: Int, d_out: Int, dst: FP) raises:
+def linear_forward_into[resident: Bool = False](x: FP, w: FP, bias: FP, n: Int, d_in: Int, d_out: Int, dst: FP) raises:
     """y = x W^T + b: the pinned GEMM NT, then one add per element."""
     var ctx = cnn_ctx()
-    var dx = up(ctx, x, n * d_in)
-    var dw = up(ctx, w, d_out * d_in)
-    var db = up(ctx, bias, d_out)
+    var dx = put[resident](ctx, 0, x, n * d_in)
+    var dw = put[resident](ctx, 1, w, d_out * d_in)
+    var db = put[resident](ctx, 2, bias, d_out)
     var prm: List[Int32] = [Int32(n), Int32(d_in), Int32(d_out)]
-    var dp = upload_i32(ctx, prm)
-    var y = ctx.enqueue_create_buffer[DType.float32](n * d_out)
-    var dout = ctx.enqueue_create_buffer[DType.float32](n * d_out)
+    var dp = put_prm(ctx, 3, prm)
+    var y = ws(ctx, 4, n * d_out)
+    var dout = outb[resident](ctx, 5, dst, n * d_out)
     device_gemm(ctx, y, dx, dw, n, d_out, d_in, OP_NT)
     launch[bias_rows_at](ctx, fp(y), fp(db), fp(dout), fp(dout), ip(dp), ip(dp), n * d_out)
-    down(ctx, dout, dst, n * d_out)
+    fetch[resident](ctx, dout, dst, n * d_out)
     ctx.synchronize()
+    _ = prm^
     _ = dx^
     _ = dw^
     _ = db^
@@ -428,24 +587,26 @@ def linear_forward_into(x: FP, w: FP, bias: FP, n: Int, d_in: Int, d_out: Int, d
     _ = ctx^
 
 
-def linear_backward_into(x: FP, w: FP, g: FP, n: Int, d_in: Int, d_out: Int, gx_out: FP, gw_out: FP, gb_out: FP) raises:
+def linear_backward_into[resident: Bool = False](
+    x: FP, w: FP, g: FP, n: Int, d_in: Int, d_out: Int, gx_out: FP, gw_out: FP, gb_out: FP
+) raises:
     """dW = G^T X and db = G^T 1 (GEMM TN over the rows, the pinned fold),
     dx = G W (GEMM NN)."""
     var ctx = cnn_ctx()
-    var dx = up(ctx, x, n * d_in)
-    var dw = up(ctx, w, d_out * d_in)
-    var dg = up(ctx, g, n * d_out)
-    var dones = ctx.enqueue_create_buffer[DType.float32](n)
+    var dx = put[resident](ctx, 0, x, n * d_in)
+    var dw = put[resident](ctx, 1, w, d_out * d_in)
+    var dg = put[resident](ctx, 2, g, n * d_out)
+    var dones = ws(ctx, 3, n)
     dones.enqueue_fill(Float32(1))
-    var gx = ctx.enqueue_create_buffer[DType.float32](n * d_in)
-    var gw = ctx.enqueue_create_buffer[DType.float32](d_out * d_in)
-    var gb = ctx.enqueue_create_buffer[DType.float32](d_out)
+    var gx = outb[resident](ctx, 4, gx_out, n * d_in)
+    var gw = outb[resident](ctx, 5, gw_out, d_out * d_in)
+    var gb = outb[resident](ctx, 6, gb_out, d_out)
     device_gemm(ctx, gw, dg, dx, d_out, d_in, n, OP_TN)
     device_gemm(ctx, gb, dg, dones, d_out, 1, n, OP_TN)
     device_gemm(ctx, gx, dg, dw, n, d_in, d_out, OP_NN)
-    down(ctx, gx, gx_out, n * d_in)
-    down(ctx, gw, gw_out, d_out * d_in)
-    down(ctx, gb, gb_out, d_out)
+    fetch[resident](ctx, gx, gx_out, n * d_in)
+    fetch[resident](ctx, gw, gw_out, d_out * d_in)
+    fetch[resident](ctx, gb, gb_out, d_out)
     ctx.synchronize()
     _ = dx^
     _ = dw^
@@ -457,24 +618,27 @@ def linear_backward_into(x: FP, w: FP, g: FP, n: Int, d_in: Int, d_out: Int, gx_
     _ = ctx^
 
 
-def softmax_xent_into(logits: FP, labels: IP, n: Int, k: Int, grad_out: FP, proba_out: FP) raises -> Float32:
+def softmax_xent_into[resident: Bool = False](
+    logits: FP, labels: IP, n: Int, k: Int, grad_out: FP, proba_out: FP
+) raises -> Float32:
     """grad and proba (n*k each) into the caller's arrays; returns the mean loss."""
     var ctx = cnn_ctx()
-    var dl = up(ctx, logits, n * k)
-    var dy = up_i(ctx, labels, n)
+    var dl = put[resident](ctx, 0, logits, n * k)
+    var dy = put_i[resident](ctx, 1, labels, n)
     var prm: List[Int32] = [Int32(n), Int32(k)]
-    var dp = upload_i32(ctx, prm)
-    var grad = ctx.enqueue_create_buffer[DType.float32](n * k)
-    var proba = ctx.enqueue_create_buffer[DType.float32](n * k)
-    var rl = ctx.enqueue_create_buffer[DType.float32](n)
+    var dp = put_prm(ctx, 2, prm)
+    var grad = outb[resident](ctx, 3, grad_out, n * k)
+    var proba = outb[resident](ctx, 4, proba_out, n * k)
+    var rl = ws(ctx, 5, n)
     grad.enqueue_fill(Float32(0))
     rl.enqueue_fill(Float32(0))
     launch[softmax_xent_row_at](ctx, fp(dl), fp(grad), fp(proba), fp(rl), ip(dy), ip(dp), n)
     var rows = List[Float32](length=n, fill=Float32(0))
-    down(ctx, grad, grad_out, n * k)
-    down(ctx, proba, proba_out, n * k)
+    fetch[resident](ctx, grad, grad_out, n * k)
+    fetch[resident](ctx, proba, proba_out, n * k)
     down(ctx, rl, lp(rows), n)
     ctx.synchronize()
+    _ = prm^
     _ = dl^
     _ = dy^
     _ = dp^
@@ -498,19 +662,20 @@ def softmax_xent_device(logits: List[Float32], labels: List[Int32], n: Int, k: I
     return out^
 
 
-def sgd_into(w: FP, g: FP, v: FP, hyper: List[Float32], n: Int) raises:
+def sgd_into[resident: Bool = False](w: FP, g: FP, v: FP, hyper: List[Float32], n: Int) raises:
     """In place: w and the momentum buffer v."""
     var ctx = cnn_ctx()
-    var dw = up(ctx, w, n)
-    var dg = up(ctx, g, n)
-    var dv = up(ctx, v, n)
-    var dh = upload_f32(ctx, hyper)
+    var dw = put[resident](ctx, 0, w, n)
+    var dg = put[resident](ctx, 1, g, n)
+    var dv = put[resident](ctx, 2, v, n)
+    var dh = put_hyper(ctx, 3, hyper)
     var prm: List[Int32] = [Int32(n)]
-    var dp = upload_i32(ctx, prm)
+    var dp = put_prm(ctx, 4, prm)
     launch[sgd_at](ctx, fp(dw), fp(dg), fp(dv), fp(dh), ip(dp), ip(dp), n)
-    down(ctx, dw, w, n)
-    down(ctx, dv, v, n)
+    fetch[resident](ctx, dw, w, n)
+    fetch[resident](ctx, dv, v, n)
     ctx.synchronize()
+    _ = prm^
     _ = dw^
     _ = dg^
     _ = dv^
@@ -775,19 +940,20 @@ def graph_op_device(a: List[Float32], b: List[Float32], aux: List[Float32], csr:
     return graph4_device[l2norm_bwd_at](a, b, aux, csr, prm, n, n * F)
 
 
-def adam_into(w: FP, g: FP, mv: FP, hyper: List[Float32], n: Int) raises:
+def adam_into[resident: Bool = False](w: FP, g: FP, mv: FP, hyper: List[Float32], n: Int) raises:
     """In place: w and mv = [m (n) | v (n)]."""
     var ctx = cnn_ctx()
-    var dw = up(ctx, w, n)
-    var dg = up(ctx, g, n)
-    var dm = up(ctx, mv, 2 * n)
-    var dh = upload_f32(ctx, hyper)
+    var dw = put[resident](ctx, 0, w, n)
+    var dg = put[resident](ctx, 1, g, n)
+    var dm = put[resident](ctx, 2, mv, 2 * n)
+    var dh = put_hyper(ctx, 3, hyper)
     var prm: List[Int32] = [Int32(n)]
-    var dp = upload_i32(ctx, prm)
+    var dp = put_prm(ctx, 4, prm)
     launch[adam_at](ctx, fp(dw), fp(dg), fp(dm), fp(dh), ip(dp), ip(dp), n)
-    down(ctx, dw, w, n)
-    down(ctx, dm, mv, 2 * n)
+    fetch[resident](ctx, dw, w, n)
+    fetch[resident](ctx, dm, mv, 2 * n)
     ctx.synchronize()
+    _ = prm^
     _ = dw^
     _ = dg^
     _ = dm^
@@ -833,7 +999,7 @@ def _conv_relu_on_device(
     launch[conv_out_at](ctx, fp(y2), fp(dbias), fp(yconv), fp(yconv), ip(dp), ip(dp), rows * OC)
 
 
-def conv_block_forward_into(
+def conv_block_forward_into[resident: Bool = False](
     x: FP, w: FP, bias: FP, cprm: List[Int32], pprm: List[Int32], pool: Bool, dst: FP, idx_out: IP
 ) raises:
     """dst = maxpool(relu(conv(x))) (idx_out its winners), or relu(conv(x)) when `pool` is False."""
@@ -841,28 +1007,34 @@ def conv_block_forward_into(
     var ckk = C * Int(cprm[CP_KH]) * Int(cprm[CP_KW])
     var rows = N * Int(cprm[CP_OH]) * Int(cprm[CP_OW])
     var ny = rows * OC
+    var no = _pool_sizes(pprm)[1] if pool else ny
     var ctx = cnn_ctx()
-    var dx = up(ctx, x, N * C * Int(cprm[CP_H]) * Int(cprm[CP_W]))
-    var dw = up(ctx, w, OC * ckk)
-    var dbias = up(ctx, bias, OC)
-    var dp = upload_i32(ctx, cprm)
-    var cols = ctx.enqueue_create_buffer[DType.float32](rows * ckk)
-    var y2 = ctx.enqueue_create_buffer[DType.float32](ny)
-    var yconv = ctx.enqueue_create_buffer[DType.float32](ny)
-    var r = ctx.enqueue_create_buffer[DType.float32](ny)
+    var dx = put[resident](ctx, 0, x, N * C * Int(cprm[CP_H]) * Int(cprm[CP_W]))
+    var dw = put[resident](ctx, 1, w, OC * ckk)
+    var dbias = put[resident](ctx, 2, bias, OC)
+    var dp = put_prm(ctx, 3, cprm)
+    var cols = ws(ctx, 4, rows * ckk)
+    var y2 = ws(ctx, 5, ny)
+    var yconv = ws(ctx, 6, ny)
     _conv_relu_on_device(ctx, dx, dw, dbias, dp, cols, y2, yconv, rows, OC, ckk)
-    launch[relu_fwd_at](ctx, fp(yconv), fp(yconv), fp(r), fp(r), ip(dp), ip(dp), ny)
-    var no = _pool_sizes(pprm)[1] if pool else 1
-    var dpp = upload_i32(ctx, pprm) if pool else upload_i32(ctx, cprm)
-    var pout = ctx.enqueue_create_buffer[DType.float32](no)
-    var di = ctx.enqueue_create_buffer[DType.int32](no)
+    # the block's output: the pool's, or the ReLU's when there is no pool
+    var pout = outb[resident](ctx, 7, dst, no)
     if pool:
+        var r = ws(ctx, 8, ny)
+        var dpp = put_prm(ctx, 9, pprm)
+        var di = outb_i[resident](ctx, 10, idx_out, no)
+        launch[relu_fwd_at](ctx, fp(yconv), fp(yconv), fp(r), fp(r), ip(dp), ip(dp), ny)
         launch[maxpool_fwd_at](ctx, fp(r), fp(pout), fp(pout), fp(pout), ip(di), ip(dpp), no)
-        down(ctx, pout, dst, no)
-        down_i(ctx, di, idx_out, no)
+        fetch[resident](ctx, pout, dst, no)
+        fetch_i[resident](ctx, di, idx_out, no)
+        ctx.synchronize()
+        _ = r^
+        _ = dpp^
+        _ = di^
     else:
-        down(ctx, r, dst, ny)
-    ctx.synchronize()
+        launch[relu_fwd_at](ctx, fp(yconv), fp(yconv), fp(pout), fp(pout), ip(dp), ip(dp), ny)
+        fetch[resident](ctx, pout, dst, ny)
+        ctx.synchronize()
     _ = dx^
     _ = dw^
     _ = dbias^
@@ -870,14 +1042,11 @@ def conv_block_forward_into(
     _ = cols^
     _ = y2^
     _ = yconv^
-    _ = r^
-    _ = dpp^
     _ = pout^
-    _ = di^
     _ = ctx^
 
 
-def conv_block_backward_into(
+def conv_block_backward_into[resident: Bool = False](
     x: FP, w: FP, bias: FP, g: FP, idx: IP, cprm: List[Int32], pprm: List[Int32], pool: Bool, need_dx: Bool,
     gx_out: FP, gw_out: FP, gb_out: FP,
 ) raises:
@@ -889,59 +1058,59 @@ def conv_block_backward_into(
     var nx = N * C * Int(cprm[CP_H]) * Int(cprm[CP_W])
     var no = _pool_sizes(pprm)[1] if pool else ny
     var ctx = cnn_ctx()
-    var dx = up(ctx, x, nx)
-    var dw = up(ctx, w, OC * ckk)
-    var dbias = up(ctx, bias, OC)
-    var dgo = up(ctx, g, no)
-    var di = up_i(ctx, idx, no if pool else 0)
-    var dp = upload_i32(ctx, cprm)
-    var dpp = upload_i32(ctx, pprm) if pool else upload_i32(ctx, cprm)
-    var cols = ctx.enqueue_create_buffer[DType.float32](rows * ckk)
-    var y2 = ctx.enqueue_create_buffer[DType.float32](ny)
-    var yconv = ctx.enqueue_create_buffer[DType.float32](ny)
-    var gr = ctx.enqueue_create_buffer[DType.float32](ny)
-    var gy = ctx.enqueue_create_buffer[DType.float32](ny)
+    var dx = put[resident](ctx, 0, x, nx)
+    var dw = put[resident](ctx, 1, w, OC * ckk)
+    var dbias = put[resident](ctx, 2, bias, OC)
+    var dgo = put[resident](ctx, 3, g, no)
+    var dp = put_prm(ctx, 5, cprm)
+    var cols = ws(ctx, 7, rows * ckk)
+    var y2 = ws(ctx, 8, ny)
+    var yconv = ws(ctx, 9, ny)
+    var gy = ws(ctx, 11, ny)
     _conv_relu_on_device(ctx, dx, dw, dbias, dp, cols, y2, yconv, rows, OC, ckk)
     if pool:
+        var di = put_i[resident](ctx, 4, idx, no)
+        var dpp = put_prm(ctx, 6, pprm)
+        var gr = ws(ctx, 10, ny)
         launch[maxpool_bwd_at](ctx, fp(dgo), fp(gr), fp(gr), fp(gr), ip(di), ip(dpp), ny)
         launch[relu_bwd_at](ctx, fp(yconv), fp(gr), fp(gy), fp(gy), ip(dp), ip(dp), ny)
+        _ = di^
+        _ = dpp^
+        _ = gr^
     else:
         launch[relu_bwd_at](ctx, fp(yconv), fp(dgo), fp(gy), fp(gy), ip(dp), ip(dp), ny)
     # conv2d_backward_into from here, on the device-resident gy and cols
-    var grow = ctx.enqueue_create_buffer[DType.float32](ny)
-    var ones = ctx.enqueue_create_buffer[DType.float32](rows)
-    var gw = ctx.enqueue_create_buffer[DType.float32](OC * ckk)
-    var gb = ctx.enqueue_create_buffer[DType.float32](OC)
+    var grow = ws(ctx, 12, ny)
+    var ones = ws(ctx, 13, rows)
+    var gw = outb[resident](ctx, 14, gw_out, OC * ckk)
+    var gb = outb[resident](ctx, 15, gb_out, OC)
     launch[dout_rows_at](ctx, fp(gy), fp(grow), fp(grow), fp(grow), ip(dp), ip(dp), ny)
     launch[fill_one_at](ctx, fp(ones), fp(ones), fp(ones), fp(ones), ip(dp), ip(dp), rows)
     # DEVIATION 5701: the pinned GEMM's fold over the rows, never an atomic.
     device_gemm(ctx, gw, grow, cols, OC, ckk, rows, OP_TN)
     device_gemm(ctx, gb, grow, ones, OC, 1, rows, OP_TN)
-    var dcols = ctx.enqueue_create_buffer[DType.float32](rows * ckk if need_dx else 1)
-    var gx = ctx.enqueue_create_buffer[DType.float32](nx if need_dx else 1)
     if need_dx:
+        var dcols = ws(ctx, 16, rows * ckk)
+        var gx = outb[resident](ctx, 17, gx_out, nx)
         device_gemm(ctx, dcols, grow, dw, rows, ckk, OC, OP_NN)
         launch[col2im_at](ctx, fp(dcols), fp(gx), fp(gx), fp(gx), ip(dp), ip(dp), nx)
-        down(ctx, gx, gx_out, nx)
-    down(ctx, gw, gw_out, OC * ckk)
-    down(ctx, gb, gb_out, OC)
+        fetch[resident](ctx, gx, gx_out, nx)
+        _ = dcols^
+        _ = gx^
+    fetch[resident](ctx, gw, gw_out, OC * ckk)
+    fetch[resident](ctx, gb, gb_out, OC)
     ctx.synchronize()
     _ = dx^
     _ = dw^
     _ = dbias^
     _ = dgo^
-    _ = di^
     _ = dp^
-    _ = dpp^
     _ = cols^
     _ = y2^
     _ = yconv^
-    _ = gr^
     _ = gy^
     _ = grow^
     _ = ones^
     _ = gw^
     _ = gb^
-    _ = dcols^
-    _ = gx^
     _ = ctx^
