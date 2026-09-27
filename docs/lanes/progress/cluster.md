@@ -104,7 +104,12 @@ Agglomerative, Spectral) option rows, then speed.
 
 ## Option parity, the EXISTING family (session 3, 2026-09-27)
 
-Merged in one batch (commit in the merge line below), each with a lane, a
+Merged to main at f2b0b051e in one batch. Batched steward request
+1790538504301-cluster-f2b0b051e0 (all 18 x-cluster lanes, --pass 1, the
+combined sabotage ~/mojolearn-evidence/cluster_combined_f2b0b051e.patch =
+e2e_device_fold_reversed + the kmeans-init nearest cut + dbscan-metrics +
+hdbscan-epsilon + hdbscan-probabilities): a FAIL comes back as a fix.
+Each item, each with a lane, a
 sabotage that bites where the change is numeric, existing lanes unchanged
 (`lane_select --changed-since origin/main`, H100: every non-par lane AGREE,
 51 lanes; the par-* lanes have no CPU arm in the lane check):
