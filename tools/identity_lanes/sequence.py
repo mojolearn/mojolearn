@@ -17,3 +17,34 @@
 # own lanes (to LANES and the per-lane registries); rebind no existing name;
 # prefix your own helpers with `_sequence_`. No imports are needed: np, _h,
 # _fit, _rows_calls and the rest are this module's.
+
+
+def _sequence_seq(X, rows=384, t=4, d=8):
+    """`rows` fixture rows cut into rows // t sequences of t steps of the first
+    d columns, with the target of each sequence's LAST row."""
+    n = rows // t
+    return np.ascontiguousarray(X[:rows, :d], dtype=np.float32).reshape(n, t, d)
+
+
+def _sequence_targets(yc, yr, rows=384, t=4):
+    return (np.ascontiguousarray(yc[t - 1:rows:t]), np.ascontiguousarray(yr[t - 1:rows:t], dtype=np.float32))
+
+
+@lane("sequence-lstm")
+def _(ml, X, yc, yr, Xh=None):
+    """A two-layer LSTM regressor (Adam) and a one-layer LSTM classifier
+    (SGD with Nesterov momentum): 96 sequences of 4 steps of 8 columns,
+    batches of 32 shuffled, two epochs. Train column: both loss curves,
+    both trained parameter vectors, the predictions and probabilities."""
+    Xs = _sequence_seq(X)
+    ycs, yrs = _sequence_targets(yc, yr)
+    r = ml.LSTMRegressor(hidden_size=12, num_layers=2, learning_rate=1e-2, batch_size=32,
+                         max_epochs=2, random_state=3).fit(Xs, yrs)
+    c = ml.LSTMClassifier(hidden_size=10, optimizer="sgd", learning_rate=5e-2, batch_size=32,
+                          max_epochs=2, random_state=4,
+                          optimizer_options=dict(momentum=0.9, nesterov=True)).fit(Xs, ycs)
+    Xhs = _sequence_seq(Xh)
+    return _fit(dict(r_loss=_h(r.loss_curve_), r_params=_h(r.params_), r_pred=_h(r.predict(Xs)),
+                     r_seq=_h(r.hidden_sequence(Xs[:16])),
+                     c_loss=_h(c.loss_curve_), c_params=_h(c.params_), c_proba=_h(c.predict_proba(Xs))),
+                r, lambda e: (e.predict(Xhs),))

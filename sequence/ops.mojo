@@ -1,0 +1,567 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
+"""THE SEQUENCE LANE'S OPERATIONS: one scalar body per output element, the
+same source compiled into a GPU kernel (`sequence/exec_device.mojo`, one
+thread per element) and into a host loop (`sequence/exec.mojo::HostExec`,
+ascending element order). Nothing here knows which one runs it.
+
+IDENTICAL by construction (IDENTITY_PATHS.md "The rule"):
+  * every reduction is ONE thread's ascending loop (GEMM over k, column sums
+    over rows, the loss over its elements); no atomics, no tree whose shape
+    depends on the launch;
+  * every product is `identical_mul`, every product-plus-sum is
+    `identical_mul_add` (the contraction pin), every quotient
+    `identical_div`, every transcendental the `identical_*` seam;
+  * every value written is passed through `ftz` (the denormal pin), and every
+    operand read from a caller's buffer too;
+  * no computed NaN reaches an output: the softmax subtracts the row max, the
+    log reads a sum >= 1.
+"""
+from checks.numerics import (
+    ftz,
+    identical_div,
+    identical_exp,
+    identical_log,
+    identical_mul,
+    identical_mul_add,
+    identical_sigmoid,
+    identical_sqrt,
+    identical_tanh,
+)
+
+from std.sys.compile import is_defined
+
+comptime FP = MutPointer[Float32, MutUntrackedOrigin]
+
+#: The CPU identity gate's negative control (-D MOJOLEARN_HOST_SABOTAGE=1,
+#: host binding only): the GEMM reduction runs k DESCENDING, so every trained
+#: model this binary returns differs from the device's.
+comptime SEQUENCE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
+
+# ------------------------------------------------------------------ op codes
+comptime OP_GEMM = 1
+comptime OP_BIAS = 2
+comptime OP_COLSUM = 3
+comptime OP_CELL_FWD = 4
+comptime OP_CELL_BWD = 5
+comptime OP_GATHER_SEQ = 6
+comptime OP_GATHER_ROWS = 7
+comptime OP_MSE = 8
+comptime OP_CE = 9
+comptime OP_SUM = 10
+comptime OP_OPT = 11
+comptime OP_FILL = 12
+comptime OP_COPY = 13
+comptime OP_SEQ_OUT = 14
+comptime OP_SOFTMAX = 15
+
+# ------------------------------------------------------------------ cells
+comptime CELL_RNN_TANH = 0
+comptime CELL_RNN_RELU = 1
+comptime CELL_LSTM = 2
+comptime CELL_GRU = 3
+
+# ------------------------------------------------------------------ optimizers
+comptime OPT_SGD = 0
+comptime OPT_ADAM = 1
+comptime OPT_ADAMW = 2
+comptime OPT_RMSPROP = 3
+comptime OPT_ADAGRAD = 4
+
+
+def gates_of(cell: Int) -> Int:
+    if cell == CELL_LSTM:
+        return 4
+    if cell == CELL_GRU:
+        return 3
+    return 1
+
+
+def dummy_ptr() -> FP:
+    """A placeholder for an unused pointer slot; never dereferenced."""
+    return FP(unsafe_from_address=64)
+
+
+@fieldwise_init
+struct Args(ImplicitlyCopyable, Movable):
+    """The argument slots every operation reads: twelve buffers, twelve
+    integers, eight floats. An unused slot holds a placeholder."""
+
+    var p0: FP
+    var p1: FP
+    var p2: FP
+    var p3: FP
+    var p4: FP
+    var p5: FP
+    var p6: FP
+    var p7: FP
+    var p8: FP
+    var p9: FP
+    var p10: FP
+    var p11: FP
+    var i0: Int
+    var i1: Int
+    var i2: Int
+    var i3: Int
+    var i4: Int
+    var i5: Int
+    var i6: Int
+    var i7: Int
+    var i8: Int
+    var i9: Int
+    var i10: Int
+    var i11: Int
+    var f0: Float32
+    var f1: Float32
+    var f2: Float32
+    var f3: Float32
+    var f4: Float32
+    var f5: Float32
+    var f6: Float32
+    var f7: Float32
+
+    def __init__(out self):
+        var d = dummy_ptr()
+        self.p0 = d
+        self.p1 = d
+        self.p2 = d
+        self.p3 = d
+        self.p4 = d
+        self.p5 = d
+        self.p6 = d
+        self.p7 = d
+        self.p8 = d
+        self.p9 = d
+        self.p10 = d
+        self.p11 = d
+        self.i0 = 0
+        self.i1 = 0
+        self.i2 = 0
+        self.i3 = 0
+        self.i4 = 0
+        self.i5 = 0
+        self.i6 = 0
+        self.i7 = 0
+        self.i8 = 0
+        self.i9 = 0
+        self.i10 = 0
+        self.i11 = 0
+        self.f0 = 0.0
+        self.f1 = 0.0
+        self.f2 = 0.0
+        self.f3 = 0.0
+        self.f4 = 0.0
+        self.f5 = 0.0
+        self.f6 = 0.0
+        self.f7 = 0.0
+
+
+@always_inline
+def ld(p: FP, i: Int) -> Float32:
+    return ftz(p.unsafe_load(i))
+
+
+@always_inline
+def st(p: FP, i: Int, v: Float32):
+    p.unsafe_store(i, ftz(v))
+
+
+@always_inline
+def mul(a: Float32, b: Float32) -> Float32:
+    return ftz(identical_mul(a, b))
+
+
+@always_inline
+def fma3(a: Float32, b: Float32, c: Float32) -> Float32:
+    return ftz(identical_mul_add(a, b, c))
+
+
+@always_inline
+def add(a: Float32, b: Float32) -> Float32:
+    return ftz(a + b)
+
+
+@always_inline
+def sub(a: Float32, b: Float32) -> Float32:
+    return ftz(a - b)
+
+
+@always_inline
+def sigm(x: Float32) -> Float32:
+    return ftz(identical_sigmoid(x))
+
+
+@always_inline
+def tanh_(x: Float32) -> Float32:
+    return ftz(identical_tanh(x))
+
+
+# ------------------------------------------------------------------ bodies
+def op_gemm(t: Int, a: Args):
+    """C[m, n] (row stride i8) = (i7 ? C[m, n] : 0) + sum_k A(m, k) B(k, n),
+    k ascending, one fused multiply-add per term. A(m, k) = p0[m*i3 + k*i4],
+    B(k, n) = p1[k*i5 + n*i6]; i0=M, i1=N, i2=K."""
+    var n_cols = a.i1
+    var m = t // n_cols
+    var n = t - m * n_cols
+    var ci = m * a.i8 + n
+    var acc = Float32(0.0)
+    if a.i7 != 0:
+        acc = ld(a.p2, ci)
+    var abase = m * a.i3
+    var bbase = n * a.i6
+    comptime if SEQUENCE_HOST_SABOTAGE:
+        var k = a.i2 - 1
+        while k >= 0:
+            acc = fma3(ld(a.p0, abase + k * a.i4), ld(a.p1, k * a.i5 + bbase), acc)
+            k -= 1
+    else:
+        for k in range(a.i2):
+            acc = fma3(ld(a.p0, abase + k * a.i4), ld(a.p1, k * a.i5 + bbase), acc)
+    st(a.p2, ci, acc)
+
+
+def op_bias(t: Int, a: Args):
+    """Y[r, c] = X[r, c] + b[c]; X row stride i2, Y row stride i3, i1 = C."""
+    var r = t // a.i1
+    var c = t - r * a.i1
+    st(a.p2, r * a.i3 + c, add(ld(a.p0, r * a.i2 + c), ld(a.p1, c)))
+
+
+def op_colsum(t: Int, a: Args):
+    """out[c] = (i3 ? out[c] : 0) + sum_r X[r*i2 + c], r ascending; i0 = R."""
+    var acc = Float32(0.0)
+    if a.i3 != 0:
+        acc = ld(a.p1, t)
+    for r in range(a.i0):
+        acc = add(acc, ld(a.p0, r * a.i2 + t))
+    st(a.p1, t, acc)
+
+
+def op_cell_fwd(t: Int, a: Args):
+    """One time step of the cell for element t = b*H + u.
+    p0 GX [B, G*H] (input projection + b_ih), p1 GH [B, G*H] (h @ W_hh^T +
+    b_hh), p2 ACT out [B, G*H], p3 h_prev, p4 c_prev, p5 h out, p6 c out;
+    i0 cell, i2 H."""
+    var cell = a.i0
+    var H = a.i2
+    var G = gates_of(cell)
+    var b = t // H
+    var u = t - b * H
+    var row = b * G * H
+    if cell == CELL_RNN_TANH:
+        var h = tanh_(add(ld(a.p0, row + u), ld(a.p1, row + u)))
+        st(a.p2, row + u, h)
+        st(a.p5, t, h)
+    elif cell == CELL_RNN_RELU:
+        var v = add(ld(a.p0, row + u), ld(a.p1, row + u))
+        var h = v if v > Float32(0.0) else Float32(0.0)
+        st(a.p2, row + u, h)
+        st(a.p5, t, h)
+    elif cell == CELL_LSTM:
+        var ig = sigm(add(ld(a.p0, row + u), ld(a.p1, row + u)))
+        var fg = sigm(add(ld(a.p0, row + H + u), ld(a.p1, row + H + u)))
+        var gg = tanh_(add(ld(a.p0, row + 2 * H + u), ld(a.p1, row + 2 * H + u)))
+        var og = sigm(add(ld(a.p0, row + 3 * H + u), ld(a.p1, row + 3 * H + u)))
+        var c = fma3(fg, ld(a.p4, t), mul(ig, gg))
+        var h = mul(og, tanh_(c))
+        st(a.p2, row + u, ig)
+        st(a.p2, row + H + u, fg)
+        st(a.p2, row + 2 * H + u, gg)
+        st(a.p2, row + 3 * H + u, og)
+        st(a.p6, t, c)
+        st(a.p5, t, h)
+    else:
+        # GRU, PyTorch's gate order (r, z, n) and its update
+        # h' = n + z * (h - n)
+        var r = sigm(add(ld(a.p0, row + u), ld(a.p1, row + u)))
+        var z = sigm(add(ld(a.p0, row + H + u), ld(a.p1, row + H + u)))
+        var n = tanh_(fma3(r, ld(a.p1, row + 2 * H + u), ld(a.p0, row + 2 * H + u)))
+        var h = fma3(z, sub(ld(a.p3, t), n), n)
+        st(a.p2, row + u, r)
+        st(a.p2, row + H + u, z)
+        st(a.p2, row + 2 * H + u, n)
+        st(a.p5, t, h)
+
+
+def op_cell_bwd(t: Int, a: Args):
+    """The step's backward for element t = b*H + u.
+    p0 ACT [B, G*H], p1 GH [B, G*H], p2 h_prev, p3 c_prev, p4 c_t,
+    p5 dh (recurrent, in), p6 dHout[t] (from above, in), p7 dc (in/out),
+    p8 dGX out, p9 dGH out, p10 dh_direct out; i0 cell, i2 H."""
+    var cell = a.i0
+    var H = a.i2
+    var G = gates_of(cell)
+    var b = t // H
+    var u = t - b * H
+    var row = b * G * H
+    var dh = add(ld(a.p5, t), ld(a.p6, t))
+    if cell == CELL_RNN_TANH:
+        var h = ld(a.p0, row + u)
+        var da = mul(dh, sub(Float32(1.0), mul(h, h)))
+        st(a.p8, row + u, da)
+        st(a.p9, row + u, da)
+        st(a.p10, t, Float32(0.0))
+    elif cell == CELL_RNN_RELU:
+        var h = ld(a.p0, row + u)
+        var da = dh if h > Float32(0.0) else Float32(0.0)
+        st(a.p8, row + u, da)
+        st(a.p9, row + u, da)
+        st(a.p10, t, Float32(0.0))
+    elif cell == CELL_LSTM:
+        var ig = ld(a.p0, row + u)
+        var fg = ld(a.p0, row + H + u)
+        var gg = ld(a.p0, row + 2 * H + u)
+        var og = ld(a.p0, row + 3 * H + u)
+        var tc = tanh_(ld(a.p4, t))
+        var dc = fma3(mul(dh, og), sub(Float32(1.0), mul(tc, tc)), ld(a.p7, t))
+        var dog = mul(dh, tc)
+        var dig = mul(dc, gg)
+        var dgg = mul(dc, ig)
+        var dfg = mul(dc, ld(a.p3, t))
+        var dai = mul(mul(dig, ig), sub(Float32(1.0), ig))
+        var daf = mul(mul(dfg, fg), sub(Float32(1.0), fg))
+        var dag = mul(dgg, sub(Float32(1.0), mul(gg, gg)))
+        var dao = mul(mul(dog, og), sub(Float32(1.0), og))
+        st(a.p8, row + u, dai)
+        st(a.p8, row + H + u, daf)
+        st(a.p8, row + 2 * H + u, dag)
+        st(a.p8, row + 3 * H + u, dao)
+        st(a.p9, row + u, dai)
+        st(a.p9, row + H + u, daf)
+        st(a.p9, row + 2 * H + u, dag)
+        st(a.p9, row + 3 * H + u, dao)
+        st(a.p7, t, mul(dc, fg))
+        st(a.p10, t, Float32(0.0))
+    else:
+        var r = ld(a.p0, row + u)
+        var z = ld(a.p0, row + H + u)
+        var n = ld(a.p0, row + 2 * H + u)
+        var ghn = ld(a.p1, row + 2 * H + u)
+        var dz = mul(dh, sub(ld(a.p2, t), n))
+        var dn = mul(dh, sub(Float32(1.0), z))
+        var dan = mul(dn, sub(Float32(1.0), mul(n, n)))
+        var dar = mul(mul(mul(dan, ghn), r), sub(Float32(1.0), r))
+        var daz = mul(mul(dz, z), sub(Float32(1.0), z))
+        st(a.p8, row + u, dar)
+        st(a.p8, row + H + u, daz)
+        st(a.p8, row + 2 * H + u, dan)
+        st(a.p9, row + u, dar)
+        st(a.p9, row + H + u, daz)
+        st(a.p9, row + 2 * H + u, mul(dan, r))
+        st(a.p10, t, mul(dh, z))
+
+
+def op_gather_seq(t: Int, a: Args):
+    """out[s, b, d] = X[idx[i3 + b], s, d]: batch-first rows to time-major.
+    i0 T, i1 B, i2 D."""
+    var T = a.i0
+    var B = a.i1
+    var D = a.i2
+    var s = t // (B * D)
+    var rem = t - s * B * D
+    var b = rem // D
+    var d = rem - b * D
+    var row = Int(a.p1.unsafe_load(a.i3 + b))
+    a.p2.unsafe_store(t, ld(a.p0, (row * T + s) * D + d))
+
+
+def op_gather_rows(t: Int, a: Args):
+    """out[b, o] = Y[idx[i2 + b], o]; i1 O."""
+    var b = t // a.i1
+    var o = t - b * a.i1
+    var row = Int(a.p1.unsafe_load(a.i2 + b))
+    a.p2.unsafe_store(t, ld(a.p0, row * a.i1 + o))
+
+
+def op_mse(t: Int, a: Args):
+    """grad = (yhat - y) * f0, sq = (yhat - y)^2."""
+    var d = sub(ld(a.p0, t), ld(a.p1, t))
+    st(a.p2, t, mul(d, a.f0))
+    st(a.p3, t, mul(d, d))
+
+
+def op_ce(t: Int, a: Args):
+    """Softmax cross-entropy of row t: p0 logits [B, C], p1 labels [B] (as
+    float), p2 grad [B, C] = (softmax - onehot) * f0, p3 row loss [B].
+    The max is subtracted first, so no exp overflows and the log reads a sum
+    >= 1; the max is the value, so a tie does not matter."""
+    var C = a.i1
+    var base = t * C
+    var m = ld(a.p0, base)
+    for c in range(1, C):
+        var v = ld(a.p0, base + c)
+        if v > m:
+            m = v
+    var s = Float32(0.0)
+    for c in range(C):
+        s = add(s, ftz(identical_exp(sub(ld(a.p0, base + c), m))))
+    var ls = ftz(identical_log(s))
+    var y = Int(a.p1.unsafe_load(t))
+    st(a.p3, t, sub(ls, sub(ld(a.p0, base + y), m)))
+    for c in range(C):
+        var p = ftz(identical_div(ftz(identical_exp(sub(ld(a.p0, base + c), m))), s))
+        if c == y:
+            p = sub(p, Float32(1.0))
+        st(a.p2, base + c, mul(p, a.f0))
+
+
+def op_sum(t: Int, a: Args):
+    """p1[i0] = (sum_{k < i1} p0[k], k ascending) * f0; one thread."""
+    var acc = Float32(0.0)
+    for k in range(a.i1):
+        acc = add(acc, ld(a.p0, k))
+    st(a.p1, a.i0, mul(acc, a.f0))
+
+
+def op_opt(t: Int, a: Args):
+    """One optimizer update of parameter t, PyTorch's rules.
+    p0 param, p1 grad, p2 s1, p3 s2, p4 s3; i0 kind, i1 step (1-based),
+    i2 flags (bit0 nesterov / centered, bit1 maximize-free momentum on);
+    f0 lr, f1 beta1 / momentum / lr_decay, f2 beta2 / alpha, f3 eps,
+    f4 weight_decay, f5 host scalar A, f6 host scalar B, f7 dampening /
+    rmsprop momentum."""
+    var kind = a.i0
+    var p = ld(a.p0, t)
+    var g = ld(a.p1, t)
+    var lr = a.f0
+    var wd = a.f4
+    if kind == OPT_SGD:
+        # torch.optim.SGD: d_p = g + wd p; buf = mu buf + (1 - damp) d_p
+        # (buf = d_p on the first step); nesterov d_p = d_p + mu buf
+        if wd != Float32(0.0):
+            g = fma3(wd, p, g)
+        var mu = a.f1
+        if mu != Float32(0.0):
+            var buf: Float32
+            if a.i1 == 1:
+                buf = g
+            else:
+                buf = fma3(mu, ld(a.p2, t), mul(sub(Float32(1.0), a.f7), g))
+            st(a.p2, t, buf)
+            if (a.i2 & 1) != 0:
+                g = fma3(mu, buf, g)
+            else:
+                g = buf
+        st(a.p0, t, fma3(-lr, g, p))
+    elif kind == OPT_ADAM or kind == OPT_ADAMW:
+        # f5 = lr / (1 - beta1^t), f6 = sqrt(1 - beta2^t), both host scalars
+        if kind == OPT_ADAMW:
+            p = mul(p, sub(Float32(1.0), mul(lr, wd)))
+        elif wd != Float32(0.0):
+            g = fma3(wd, p, g)
+        var b1 = a.f1
+        var b2 = a.f2
+        var m = fma3(b1, ld(a.p2, t), mul(sub(Float32(1.0), b1), g))
+        var v = fma3(b2, ld(a.p3, t), mul(mul(sub(Float32(1.0), b2), g), g))
+        st(a.p2, t, m)
+        st(a.p3, t, v)
+        var denom = add(ftz(identical_div(ftz(identical_sqrt(v)), a.f6)), a.f3)
+        st(a.p0, t, fma3(-a.f5, ftz(identical_div(m, denom)), p))
+    elif kind == OPT_RMSPROP:
+        # torch.optim.RMSprop: v = alpha v + (1 - alpha) g^2; centered:
+        # gavg = alpha gavg + (1 - alpha) g, avg = sqrt(v - gavg^2) + eps,
+        # else sqrt(v) + eps; momentum mu: buf = mu buf + g / avg,
+        # p -= lr buf; else p -= lr g / avg
+        if wd != Float32(0.0):
+            g = fma3(wd, p, g)
+        var alpha = a.f2
+        var v = fma3(alpha, ld(a.p3, t), mul(mul(sub(Float32(1.0), alpha), g), g))
+        st(a.p3, t, v)
+        var avg: Float32
+        if (a.i2 & 1) != 0:
+            var ga = fma3(alpha, ld(a.p4, t), mul(sub(Float32(1.0), alpha), g))
+            st(a.p4, t, ga)
+            var var_ = sub(v, mul(ga, ga))
+            if var_ < Float32(0.0):
+                var_ = Float32(0.0)
+            avg = add(ftz(identical_sqrt(var_)), a.f3)
+        else:
+            avg = add(ftz(identical_sqrt(v)), a.f3)
+        var mu = a.f7
+        if mu > Float32(0.0):
+            var buf = fma3(mu, ld(a.p2, t), ftz(identical_div(g, avg)))
+            st(a.p2, t, buf)
+            st(a.p0, t, fma3(-lr, buf, p))
+        else:
+            st(a.p0, t, fma3(-lr, ftz(identical_div(g, avg)), p))
+    elif kind == OPT_ADAGRAD:
+        # torch.optim.Adagrad: clr = lr / (1 + (t - 1) lr_decay) (f5, host);
+        # sum += g^2; p -= clr g / (sqrt(sum) + eps)
+        if wd != Float32(0.0):
+            g = fma3(wd, p, g)
+        var s = fma3(g, g, ld(a.p3, t))
+        st(a.p3, t, s)
+        var std = add(ftz(identical_sqrt(s)), a.f3)
+        st(a.p0, t, fma3(-a.f5, ftz(identical_div(g, std)), p))
+
+
+def op_fill(t: Int, a: Args):
+    a.p0.unsafe_store(t, a.f0)
+
+
+def op_copy(t: Int, a: Args):
+    a.p1.unsafe_store(t, a.p0.unsafe_load(t))
+
+
+def op_seq_out(t: Int, a: Args):
+    """out[(i3 + b), s, h] = src[s, b, h]: time-major back to batch-first.
+    i0 T, i1 B, i2 H."""
+    var T = a.i0
+    var B = a.i1
+    var H = a.i2
+    var b = t // (T * H)
+    var rem = t - b * T * H
+    var s = rem // H
+    var h = rem - s * H
+    a.p1.unsafe_store(((a.i3 + b) * T + s) * H + h, a.p0.unsafe_load((s * B + b) * H + h))
+
+
+def op_softmax(t: Int, a: Args):
+    """p1[t, :] = softmax(p0[t, :]) over i1 columns, the row max first."""
+    var C = a.i1
+    var base = t * C
+    var m = ld(a.p0, base)
+    for c in range(1, C):
+        var v = ld(a.p0, base + c)
+        if v > m:
+            m = v
+    var s = Float32(0.0)
+    for c in range(C):
+        s = add(s, ftz(identical_exp(sub(ld(a.p0, base + c), m))))
+    for c in range(C):
+        st(a.p1, base + c, ftz(identical_div(ftz(identical_exp(sub(ld(a.p0, base + c), m))), s)))
+
+
+@always_inline
+def apply[OP: Int](t: Int, a: Args):
+    comptime if OP == OP_GEMM:
+        op_gemm(t, a)
+    elif OP == OP_BIAS:
+        op_bias(t, a)
+    elif OP == OP_COLSUM:
+        op_colsum(t, a)
+    elif OP == OP_CELL_FWD:
+        op_cell_fwd(t, a)
+    elif OP == OP_CELL_BWD:
+        op_cell_bwd(t, a)
+    elif OP == OP_GATHER_SEQ:
+        op_gather_seq(t, a)
+    elif OP == OP_GATHER_ROWS:
+        op_gather_rows(t, a)
+    elif OP == OP_MSE:
+        op_mse(t, a)
+    elif OP == OP_CE:
+        op_ce(t, a)
+    elif OP == OP_SUM:
+        op_sum(t, a)
+    elif OP == OP_OPT:
+        op_opt(t, a)
+    elif OP == OP_FILL:
+        op_fill(t, a)
+    elif OP == OP_COPY:
+        op_copy(t, a)
+    elif OP == OP_SEQ_OUT:
+        op_seq_out(t, a)
+    elif OP == OP_SOFTMAX:
+        op_softmax(t, a)

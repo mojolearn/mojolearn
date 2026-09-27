@@ -23,11 +23,13 @@ FAMILIES = (
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
         training_lanes=(
             "x-prep-robust-scaler", "x-prep-maxabs-scaler",
+            "x-prep-ordinal-encoder", "x-prep-onehot-encoder",
         ),
         inference_lanes=(),
         forest_kinds=(),
         classes=(
             "RobustScaler", "MaxAbsScaler",
+            "OrdinalEncoder", "OneHotEncoder",
         ),
         display="preprocessing additions, naive Bayes and discriminant analysis",
         host_modules=(
@@ -46,8 +48,12 @@ FAMILIES = (
 TRAINING_LANE_NAMES = {
     "x-prep-robust-scaler": "RobustScaler",
     "x-prep-maxabs-scaler": "MaxAbsScaler",
+    "x-prep-ordinal-encoder": "OrdinalEncoder",
+    "x-prep-onehot-encoder": "OneHotEncoder",
 }
 PUBLIC_PENDING_LANES = {
     "x-prep-robust-scaler": "no reference",
     "x-prep-maxabs-scaler": "no reference",
+    "x-prep-ordinal-encoder": "no reference",
+    "x-prep-onehot-encoder": "no reference",
 }

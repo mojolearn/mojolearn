@@ -72,6 +72,7 @@ comptime OP_MIN = 31
 comptime OP_SIGN = 33
 comptime OP_LE = 34
 comptime OP_SELECT = 35
+comptime OP_MUZ = 36
 
 
 @always_inline
@@ -231,6 +232,9 @@ def ew_cell(op: Int, x_in: Float32, y_in: Float32, z_in: Float32, s_in: Float32)
         r = Float32(1) if x <= y else Float32(0)
     elif op == OP_SELECT:
         r = y if x > s else z
+    elif op == OP_MUZ:
+        # sklearn NMF multiplicative update: x * (y / z), a zero z replaced by s
+        r = mul(x, div0(y, z if z != Float32(0) else s))
     return ftz(r)
 
 
@@ -308,6 +312,28 @@ def rand_cell(i: Int, seed: UInt32, stream: UInt32, kind: Int) -> Float32:
     var rad = sqrt0(mul(Float32(-2), log_floor(u1, Float32(0))))
     var ang = mul(Float32(6.2831854820251465), u2)
     return mul(rad, ftz(identical_cos(ang)))
+
+
+def cd_row(W: F32Ptr, HHt: F32Ptr, XHt: F32Ptr, perm: I32Ptr, i: Int, k: Int) -> Float32:
+    """sklearn `_cdnmf_fast.pyx::_update_cdnmf_fast` for ONE row i of W (the
+    rows are independent): components in `perm` order, the gradient summed
+    r ascending, the projected-gradient violation of this row returned."""
+    var viol = Float32(0)
+    for s in range(k):
+        var t = Int(perm.unsafe_load(s))
+        var grad = -ftz(XHt.unsafe_load(i * k + t))
+        for r in range(k):
+            grad = ftz(identical_mul_add(ftz(HHt.unsafe_load(t * k + r)), ftz(W.unsafe_load(i * k + r)), grad))
+        var w = ftz(W.unsafe_load(i * k + t))
+        var pg = grad
+        if w == Float32(0):
+            pg = grad if grad < Float32(0) else Float32(0)
+        viol = add(viol, abs(pg))
+        var hess = ftz(HHt.unsafe_load(t * k + t))
+        if hess != Float32(0):
+            var nw = sub(w, div0(grad, hess))
+            W.unsafe_store(i * k + t, nw if nw > Float32(0) else Float32(0))
+    return viol
 
 
 # ------------------------------------------------------------------ serial

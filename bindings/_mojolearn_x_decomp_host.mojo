@@ -11,7 +11,7 @@ from std.python.bindings import PythonModuleBuilder
 from checks.kernel_matrix import COLUMN_CPU, TARGET_COLUMN, column_name
 from checks.numerics import GLOBAL_NUMERIC_MODE
 from x_decomp.api import (
-    chol_py, colsum_py, eigh_py, ew_py, gemm_py, lu_py, lu_solve_py, numeric_mode_py, rand_py,
+    cd_rows_py, chol_py, colsum_py, eigh_py, ew_py, gemm_py, lu_py, lu_solve_py, numeric_mode_py, rand_py,
     rowsum_py, sqdist_py, vendor_py,
 )
 from x_decomp.host import HostExec, X_DECOMP_HOST_SABOTAGE
@@ -52,6 +52,7 @@ def PyInit__mojolearn_x_decomp_host() abi("C") -> PythonObject:
         m.def_function[lu_solve_py[HostExec]]("x_decomp_lu_solve")
         m.def_function[chol_py[HostExec]]("x_decomp_chol")
         m.def_function[eigh_py[HostExec]]("x_decomp_eigh")
+        m.def_function[cd_rows_py[HostExec]]("x_decomp_cd_rows")
         m.def_function[numeric_mode_py]("x_decomp_numeric_mode")
         m.def_function[vendor_py[HostExec]]("x_decomp_vendor")
         return m.finalize()

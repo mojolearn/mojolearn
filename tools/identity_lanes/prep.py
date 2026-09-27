@@ -38,3 +38,30 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-robust-scaler", "x-prep-maxabs-scaler")
+
+
+def _prep_categorical(X):
+    """A few categories per column, ties everywhere, -1 from the denormal rows."""
+    return np.clip(np.floor(X), -4, 4).astype(np.float32)
+
+
+@lane("x-prep-ordinal-encoder")
+def _(ml, X, yc, yr, Xh=None):
+    Xq, Xhq = _prep_categorical(X), _prep_categorical(Xh)
+    m = ml.OrdinalEncoder(handle_unknown="use_encoded_value", unknown_value=-1).fit(Xq)
+    parts = {f"cat{j}": _h(c) for j, c in enumerate(m.categories_)}
+    parts["transform"] = _h(m.transform(Xq[:256]))
+    return _fit(parts, m, lambda e: (e.transform(Xhq[:256]),))
+
+
+@lane("x-prep-onehot-encoder")
+def _(ml, X, yc, yr, Xh=None):
+    Xq, Xhq = _prep_categorical(X), _prep_categorical(Xh)
+    m = ml.OneHotEncoder(handle_unknown="ignore", drop="if_binary").fit(Xq)
+    parts = {f"cat{j}": _h(c) for j, c in enumerate(m.categories_)}
+    parts["transform"] = _h(m.transform(Xq[:256]))
+    return _fit(parts, m, lambda e: (e.transform(Xhq[:256]),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_prep_categorical),
+            "x-prep-ordinal-encoder", "x-prep-onehot-encoder")
