@@ -163,11 +163,29 @@ def _(ml, X, yc, yr, Xh=None):
                 lambda e: (ml.PageRank(alpha=0.85).fit(_neighbors_graph(Xh, directed=True)).pagerank_,))
 
 
+def _neighbors_chain(X, n=128):
+    """Each bin of `_neighbors_graph` as a directed CHAIN, every node pointing
+    only at the next node of its bin (i -> j, j > i): a weak component's
+    smallest label must travel the whole chain one hop per step, so the
+    propagation runs many rounds and reads edges in their reverse direction."""
+    q = np.floor(X[:n, 3] * np.float32(2)).astype(np.int64)
+    A = np.zeros((n, n), dtype=np.float32)
+    last = {}
+    for i in range(n):
+        b = int(q[i])
+        if b in last:
+            A[last[b], i] = np.float32(1)
+        last[b] = i
+    return np.ascontiguousarray(A, dtype=np.float32)
+
+
 @lane("x-neighbors-connected-components")
 def _(ml, X, yc, yr, Xh=None):
     k, lab = ml.connected_components(_neighbors_graph(X, ring=False), directed=False)
     kd, labd = ml.connected_components(_neighbors_graph(X, directed=True, ring=False), directed=True, connection="weak")
-    return _fit(dict(k=_h(np.int64(k)), lab=_h(lab), kd=_h(np.int64(kd)), labd=_h(labd)))
+    kc, labc = ml.connected_components(_neighbors_chain(X), directed=True, connection="weak")
+    return _fit(dict(k=_h(np.int64(k)), lab=_h(lab), kd=_h(np.int64(kd)), labd=_h(labd),
+                     kc=_h(np.int64(kc)), labc=_h(labc)))
 
 
 @lane("x-neighbors-louvain")

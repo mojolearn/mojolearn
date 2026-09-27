@@ -78,19 +78,22 @@ diff --git a/x_neighbors/device_ops.mojo b/x_neighbors/device_ops.mojo
  
  
  def op_pagerank_step(q: Int, x: Int, p: Int, dw: Int, dangling: Int, res: Int, n: Int, alpha: Float32) raises:
-@@ -988,7 +992,10 @@
+@@ -988,7 +992,13 @@
      var n = Int(n_)
      var t = _tid()
      if t < n:
 -        cc_step_item(t, a, lab, res, n)
-+        if t != 1:
-+            cc_step_item(t, a, lab, res, n)
-+        else:
-+            res.unsafe_store(t, lab.unsafe_load(t))
++        var best = lab.unsafe_load(t)
++        for j in range(n):
++            if a.unsafe_load(t * n + j) != Float32(0):
++                var l = lab.unsafe_load(j)
++                if l < best:
++                    best = l
++        res.unsafe_store(t, best)
  
  
  def op_cc_step(a: Int, lab: Int, res: Int, n: Int) raises:
-@@ -1014,7 +1021,7 @@
+@@ -1014,7 +1024,7 @@
      var threshold = threshold_
      var t = _tid()
      if t < 1:
