@@ -20,6 +20,7 @@ FAMILIES = (
             "x-metrics-classification",
             "x-metrics-regression",
             "x-metrics-ranking",
+            "x-metrics-cluster",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -62,11 +63,17 @@ FAMILIES = (
             "metrics.ndcg_score",
             "metrics.roc_curve",
             "metrics.top_k_accuracy_score",
+            "metrics.adjusted_mutual_info_score",
+            "metrics.calinski_harabasz_score",
+            "metrics.contingency_matrix",
+            "metrics.davies_bouldin_score",
+            "metrics.normalized_mutual_info_score",
+            "metrics.pair_confusion_matrix",
         ),
         display="the evaluation metrics and model_selection helpers added by the metrics lane",
         host_modules=(
             "x_metrics/host/program.mojo", "x_metrics/common.mojo", "x_metrics/units.mojo",
-            "x_metrics/group.mojo", "x_metrics/regression.mojo", "x_metrics/ranking.mojo",
+            "x_metrics/group.mojo", "x_metrics/regression.mojo", "x_metrics/ranking.mojo", "x_metrics/cluster.mojo",
         ),
         exports=(
             "x_metrics_host_numeric_mode", "x_metrics_host_vendor", "x_metrics_host_column",
@@ -88,9 +95,12 @@ TRAINING_LANE_NAMES = {
                          "precision, top-k accuracy, Brier, hinge, DCG/NDCG, the label-ranking scores, the "
                          "D^2 log-loss and Brier scores) and the weighted / partial / multiclass options of "
                          "roc_auc_score, precision_recall_curve and log_loss",
+    "x-metrics-cluster": "the clustering scores the lane added (Calinski-Harabasz, Davies-Bouldin, normalized "
+                         "and adjusted mutual information, the contingency and pair-confusion matrices)",
 }
 PUBLIC_PENDING_LANES = {
     "x-metrics-classification": "no reference",
     "x-metrics-regression": "no reference",
     "x-metrics-ranking": "no reference",
+    "x-metrics-cluster": "no reference",
 }

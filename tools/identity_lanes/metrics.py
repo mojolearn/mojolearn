@@ -175,3 +175,29 @@ def _(ml, X, yc, yr, Xh=None):
         parts[f"auc_ovo:{avg}"] = _h(np.float64(mt.roc_auc_score(yt[:600], P[:600], multi_class="ovo", average=avg)))
     parts["auc"] = _h(np.float64(mt.auc(*[np.asarray(a) for a in mt.roc_curve(bt, s)[:2]])))
     return _fit(parts)
+
+
+@lane("x-metrics-cluster")
+def _(ml, X, yc, yr, Xh=None):
+    """The clustering scores the metrics lane added. The labelings are fixed
+    host comparisons of fixture columns (no fit); the dispersion scores read
+    fixture features through the device centroid folds."""
+    mt = ml.metrics
+    n = 3000
+    yt, yp = _metrics_labels(X, n)
+    eight = ((X[:n, 5] > 0).astype(np.int32) + 2 * (X[:n, 6] > 0).astype(np.int32)
+             + 4 * (X[:n, 7] > 0).astype(np.int32)).astype(np.int32)
+    feats = np.ascontiguousarray(X[:n, :6]).astype(np.float32)
+    parts = {}
+    for method in ("min", "geometric", "arithmetic", "max"):
+        parts[f"nmi:{method}"] = _h(np.float64(mt.normalized_mutual_info_score(yt, eight, average_method=method)))
+        parts[f"ami:{method}"] = _h(np.float64(mt.adjusted_mutual_info_score(yt, eight, average_method=method)))
+    parts["ami_small"] = _h(np.float64(mt.adjusted_mutual_info_score(yt[:40], yp[:40])))
+    parts["contingency"] = _h(np.asarray(mt.contingency_matrix(yt, eight)),
+                              np.asarray(mt.contingency_matrix(yt, eight, eps=0.5)))
+    parts["pair_confusion"] = _h(np.asarray(mt.pair_confusion_matrix(yt, eight)))
+    parts["calinski_harabasz"] = _h(np.float64(mt.calinski_harabasz_score(feats, eight)),
+                                    np.float64(mt.calinski_harabasz_score(feats, yt)))
+    parts["davies_bouldin"] = _h(np.float64(mt.davies_bouldin_score(feats, eight)),
+                                 np.float64(mt.davies_bouldin_score(feats, yt)))
+    return _fit(parts)

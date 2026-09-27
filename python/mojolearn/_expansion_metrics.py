@@ -40,7 +40,7 @@ __all__ = []
 _BINDING = "_mojolearn_x_metrics"
 
 #: op name -> id; x_metrics/units.mojo `run_unit` holds the same table.
-_OPS = dict(group_sort=0, group_sum=1, pair_key=2, reg_term=3, col_sort=4, wpercentile=5, col_max=6, bin_curve=7, row_metric=8)
+_OPS = dict(group_sort=0, group_sum=1, pair_key=2, reg_term=3, col_sort=4, wpercentile=5, col_max=6, bin_curve=7, row_metric=8, row_centroid_dist=9)
 _PARAMS = 14
 _NONE = -1
 
@@ -1830,3 +1830,264 @@ def label_ranking_average_precision_score(y_true, y_score, *, sample_weight=None
 def label_ranking_loss(y_true, y_score, *, sample_weight=None, numeric_mode=None):
     """scikit-learn 1.9 `label_ranking_loss` (tied scores count as misordered)."""
     return _label_ranking("rankloss", y_true, y_score, sample_weight, numeric_mode, "label_ranking_loss")
+
+
+# ---------------------------------------------------------------------------
+# Clustering (scikit-learn 1.9 sklearn/metrics/cluster/)
+# ---------------------------------------------------------------------------
+
+def _clusterings(labels_true, labels_pred, caller):
+    from ._metrics_impl import _classification_encoded, _label_set
+    for v, name in ((labels_true, "labels_true"), (labels_pred, "labels_pred")):
+        _refuse_multilabel(v, name, caller)
+    a, ka = _classification_encoded(labels_true, "labels_true")
+    b, kb = _classification_encoded(labels_pred, "labels_pred")
+    if len(a) != len(b):
+        raise ValueError(f"mojolearn {caller}: labels_true and labels_pred must have the same length")
+    return a, b, sorted(_label_set(a)), sorted(_label_set(b))
+
+
+def _contingency(a, b, ca, cb, numeric_mode):
+    """Exact Int counts, rows = classes of `a`, columns = classes of `b`."""
+    n, ka, kb = len(a), len(ca), len(cb)
+    if ka * kb > 16777216:
+        raise ValueError("mojolearn metrics: the contingency matrix exceeds 2^24 cells")
+    prog = _Prog()
+    A = prog.put_i32(_codes(a, ca))
+    B = prog.put_i32(_codes(b, cb))
+    key = prog.alloc(n)
+    prog.stage("pair_key", n, A, B, key, max(ka, kb), 0)
+    m = max(ka, kb) ** 2
+    off, _ = _group(prog, key, n, m)
+    prog.run(numeric_mode)
+    o = prog.ints(off, m + 1)
+    kk = max(ka, kb)
+    return [[o[i * kk + j + 1] - o[i * kk + j] for j in range(kb)] for i in range(ka)]
+
+
+def contingency_matrix(labels_true, labels_pred, *, eps=None, sparse=False, dtype="int64", numeric_mode=None):
+    """scikit-learn 1.9 `contingency_matrix` (dense): exact counts from the
+    device grouping, rows the sorted classes, columns the sorted clusters;
+    `eps` adds a constant and makes the result Float64. sparse=True is
+    NOT IMPLEMENTED (no sparse container in this package)."""
+    if eps is not None and sparse:
+        raise ValueError("Cannot set 'eps' when sparse=True")
+    if sparse:
+        raise NotImplementedError("mojolearn contingency_matrix: sparse=True is NOT IMPLEMENTED; this "
+                                  "package has no sparse matrix type (metrics/NOT_IMPLEMENTED.tsv)")
+    a, b, ca, cb = _clusterings(labels_true, labels_pred, "contingency_matrix")
+    C = _contingency(a, b, ca, cb, numeric_mode)
+    flat = [v for row in C for v in row]
+    if eps is not None:
+        return Array.from_list([v + float(eps) for v in flat], "<f8").reshape((len(ca), len(cb)))
+    code = {"int64": "<i8", "int32": "<i4", "float64": "<f8", "float32": "<f4"}.get(
+        dtype if isinstance(dtype, str) else getattr(dtype, "__name__", str(dtype)), "<i8")
+    return Array.from_list([float(v) if code[1] == "f" else int(v) for v in flat], code).reshape((len(ca), len(cb)))
+
+
+def pair_confusion_matrix(labels_true, labels_pred, *, numeric_mode=None):
+    """scikit-learn 1.9 `pair_confusion_matrix`: the 2 x 2 Int64 pair counts
+    from the exact contingency matrix (Python integers, no overflow)."""
+    a, b, ca, cb = _clusterings(labels_true, labels_pred, "pair_confusion_matrix")
+    C = _contingency(a, b, ca, cb, numeric_mode)
+    n = len(a)
+    n_c = [sum(row) for row in C]
+    n_k = [sum(C[i][j] for i in range(len(C))) for j in range(len(cb))]
+    sq = sum(v * v for row in C for v in row)
+    c11 = sq - n
+    c01 = sum(C[i][j] * n_k[j] for i in range(len(C)) for j in range(len(cb))) - sq
+    c10 = sum(C[i][j] * n_c[i] for i in range(len(C)) for j in range(len(cb))) - sq
+    c00 = n * n - c01 - c10 - sq
+    return Array.from_list([c00, c01, c10, c11], "<i8").reshape((2, 2))
+
+
+def _entropy_counts(counts):
+    total = sum(counts)
+    if total == 0:
+        return 1.0
+    lt = pmath.log(total)
+    return -pmath.fsum([(c / total) * (pmath.log(c) - lt) for c in counts if c])
+
+
+def _mi_from_contingency(C):
+    total = sum(v for row in C for v in row)
+    pi = [sum(row) for row in C]
+    pj = [sum(C[i][j] for i in range(len(C))) for j in range(len(C[0]))]
+    if len(pi) == 1 or len(pj) == 1:
+        return 0.0
+    lt = pmath.log(total)
+    terms = []
+    for i, row in enumerate(C):
+        for j, v in enumerate(row):
+            if not v:
+                continue
+            nm = v / total
+            log_outer = -pmath.log(pi[i] * pj[j]) + pmath.log(sum(pi)) + pmath.log(sum(pj))
+            t = nm * (pmath.log(v) - lt) + nm * log_outer
+            terms.append(0.0 if abs(t) < 2.220446049250313e-16 else t)
+    return max(pmath.fsum(terms), 0.0)
+
+
+def _generalized_average(U, V, method):
+    if method == "min":
+        return min(U, V)
+    if method == "geometric":
+        return pmath.sqrt(U * V)
+    if method == "arithmetic":
+        return (U + V) / 2
+    if method == "max":
+        return max(U, V)
+    raise ValueError("'average_method' must be 'min', 'geometric', 'arithmetic', or 'max'")
+
+
+def normalized_mutual_info_score(labels_true, labels_pred, *, average_method="arithmetic", numeric_mode=None):
+    """scikit-learn 1.9 `normalized_mutual_info_score`, in nats as scikit-learn
+    (exact device contingency counts; the logarithms are the portable binary64
+    ones of `_portable_math`, DEVIATION 6106)."""
+    _generalized_average(1.0, 1.0, average_method)
+    a, b, ca, cb = _clusterings(labels_true, labels_pred, "normalized_mutual_info_score")
+    if len(ca) == len(cb) == 1 or len(ca) == len(cb) == 0:
+        return 1.0
+    C = _contingency(a, b, ca, cb, numeric_mode)
+    mi = _mi_from_contingency(C)
+    if mi == 0:
+        return 0.0
+    ht = _entropy_counts([sum(r) for r in C])
+    hp = _entropy_counts([sum(C[i][j] for i in range(len(C))) for j in range(len(cb))])
+    return float(mi / _generalized_average(ht, hp, average_method))
+
+
+def _expected_mi(a_counts, b_counts, n):
+    """E[MI] under the permutation model (Vinh, Epps and Bailey 2010), the sum
+    scikit-learn's `expected_mutual_information` evaluates through gammaln.
+    Here each hypergeometric pmf is built by its ratio recurrence from the
+    mode and normalized by its own sum over the full support: no difference
+    of large log-gamma values, portable binary64 log / exp only."""
+    if len(a_counts) == 1 or len(b_counts) == 1:
+        return 0.0
+    emi_terms = []
+    for a in a_counts:
+        for b in b_counts:
+            lo, hi = max(0, a + b - n), min(a, b)
+            mode = min(max((a + 1) * (b + 1) // (n + 2), lo), hi)
+            u = {mode: 1.0}
+            x = mode
+            while x < hi:
+                u[x + 1] = u[x] * ((a - x) * (b - x)) / ((x + 1) * (n - a - b + x + 1))
+                x += 1
+            x = mode
+            while x > lo:
+                u[x - 1] = u[x] * (x * (n - a - b + x)) / ((a - x + 1) * (b - x + 1))
+                x -= 1
+            z = pmath.fsum(list(u.values()))
+            for nij in range(max(1, lo), hi + 1):
+                pr = u[nij] / z
+                if pr == 0:
+                    continue
+                emi_terms.append((nij / n) * (pmath.log(n * nij) - pmath.log(a) - pmath.log(b)) * pr)
+    return pmath.fsum(emi_terms)
+
+
+def adjusted_mutual_info_score(labels_true, labels_pred, *, average_method="arithmetic", numeric_mode=None):
+    """scikit-learn 1.9 `adjusted_mutual_info_score`: (MI - E[MI]) /
+    (mean(H) - E[MI]) with scikit-learn's epsilon guards."""
+    _generalized_average(1.0, 1.0, average_method)
+    a, b, ca, cb = _clusterings(labels_true, labels_pred, "adjusted_mutual_info_score")
+    if len(ca) == len(cb) == 1 or len(ca) == len(cb) == 0:
+        return 1.0
+    if len(ca) == 1 or len(cb) == 1:
+        return 0.0
+    C = _contingency(a, b, ca, cb, numeric_mode)
+    n = len(a)
+    mi = _mi_from_contingency(C)
+    rows = [sum(r) for r in C]
+    cols = [sum(C[i][j] for i in range(len(C))) for j in range(len(cb))]
+    emi = _expected_mi(rows, cols, n)
+    norm = _generalized_average(_entropy_counts(rows), _entropy_counts(cols), average_method)
+    eps = 2.220446049250313e-16
+    den = norm - emi
+    den = min(den, -eps) if den < 0 else max(den, eps)
+    num = mi - emi
+    num = min(num, -eps) if num < 0 else max(num, eps)
+    return float(num / den)
+
+
+def _cluster_inputs(X, labels, caller):
+    from ._metrics_impl import _classification_encoded, _label_set
+    Xa = as_f32_c(X, ndim=2, name="X")[0]
+    if not all_finite(Xa):
+        raise ValueError(f"mojolearn {caller}: X contains NaN or infinity")
+    lab, _ = _classification_encoded(labels, "labels")
+    if len(lab) != Xa.shape[0]:
+        raise ValueError(f"mojolearn {caller}: X and labels have different numbers of rows")
+    classes = sorted(_label_set(lab))
+    if not 1 < len(classes) < Xa.shape[0]:
+        raise ValueError(f"Number of labels is {len(classes)}. Valid values are 2 to n_samples - 1 (inclusive)")
+    return Xa, _codes(lab, classes), len(classes)
+
+
+def _centroids(Xa, codes, k, numeric_mode):
+    """(per-cluster sums (k x d), counts, global sum) from device PairSums."""
+    n, d = Xa.shape
+    prog = _Prog()
+    X = prog.put(Xa)
+    L = prog.put_i32(codes)
+    off, sums = _group(prog, L, n, k, values=X, vstride=d, width=d)
+    zero = prog.alloc(n)
+    prog.stage("pair_key", n, 0, 0, zero, 1, 2)
+    _, gsum = _group(prog, zero, n, 1, values=X, vstride=d, width=d)
+    prog.run(numeric_mode)
+    o = prog.ints(off, k + 1)
+    counts = [o[i + 1] - o[i] for i in range(k)]
+    return prog.floats(sums, k * d), counts, prog.floats(gsum, d)
+
+
+def _row_dists(Xa, codes, cents, root, numeric_mode):
+    n, d = Xa.shape
+    k = len(cents) // d
+    prog = _Prog()
+    X = prog.put(Xa)
+    L = prog.put_i32(codes)
+    C = prog.put(Array.from_list([_f32(v) for v in cents], "<f4"))
+    out = prog.alloc(n)
+    prog.stage("row_centroid_dist", n, X, d, L, C, out, 1 if root else 0)
+    off, per = _group(prog, L, n, k, values=out)
+    prog.run(numeric_mode)
+    return prog.floats(per, k)
+
+
+def calinski_harabasz_score(X, labels, *, numeric_mode=None):
+    """scikit-learn 1.9 `calinski_harabasz_score`: the between- over the
+    within-cluster dispersion, scaled by (n - k) / (k - 1)."""
+    Xa, codes, k = _cluster_inputs(X, labels, "calinski_harabasz_score")
+    n, d = Xa.shape
+    sums, counts, gsum = _centroids(Xa, codes, k, numeric_mode)
+    cents = [sums[i * d + c] / counts[i] for i in range(k) for c in range(d)]
+    mean = [v / n for v in gsum]
+    extra = pmath.fsum([counts[i] * pmath.fsum([(cents[i * d + c] - mean[c]) ** 2 for c in range(d)])
+                        for i in range(k)])
+    intra = pmath.fsum(_row_dists(Xa, codes, cents, False, numeric_mode))
+    return float(1.0 if intra == 0.0 else extra * (n - k) / (intra * (k - 1.0)))
+
+
+def davies_bouldin_score(X, labels, *, numeric_mode=None):
+    """scikit-learn 1.9 `davies_bouldin_score`: the mean over clusters of the
+    worst (s_i + s_j) / d(c_i, c_j)."""
+    Xa, codes, k = _cluster_inputs(X, labels, "davies_bouldin_score")
+    n, d = Xa.shape
+    sums, counts, _ = _centroids(Xa, codes, k, numeric_mode)
+    cents = [sums[i * d + c] / counts[i] for i in range(k) for c in range(d)]
+    intra = [v / counts[i] for i, v in enumerate(_row_dists(Xa, codes, cents, True, numeric_mode))]
+    dist = [[pmath.sqrt(pmath.fsum([(cents[i * d + c] - cents[j * d + c]) ** 2 for c in range(d)]))
+             for j in range(k)] for i in range(k)]
+    close = lambda v: abs(v) <= 1e-8
+    if all(close(v) for v in intra) or all(close(v) for row in dist for v in row):
+        return 0.0
+    scores = []
+    for i in range(k):
+        best = float("-inf")
+        for j in range(k):
+            den = dist[i][j] if dist[i][j] != 0 else float("inf")
+            best = max(best, (intra[i] + intra[j]) / den)
+        scores.append(best)
+    return float(pmath.fsum(scores) / k)

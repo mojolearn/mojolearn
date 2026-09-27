@@ -136,6 +136,12 @@ __all__ = [
     "ndcg_score",
     "roc_curve",
     "top_k_accuracy_score",
+    "adjusted_mutual_info_score",
+    "calinski_harabasz_score",
+    "contingency_matrix",
+    "davies_bouldin_score",
+    "normalized_mutual_info_score",
+    "pair_confusion_matrix",
 ]
 
 
@@ -1531,8 +1537,6 @@ _UNSUPPORTED = {
         "(neighbors/checks/pinned_distance_tile.mojo), and it is not a "
         "metric of a model (metrics/NOT_IMPLEMENTED.tsv)"
     ),
-    "normalized_mutual_info_score": "normalization conventions and public validation are not implemented",
-    "adjusted_mutual_info_score": "expected mutual information and its public contract are not implemented",
 }
 
 
@@ -1553,4 +1557,5 @@ from ._expansion_metrics import (  # noqa: E402
     precision_recall_fscore_support, zero_one_loss,
     d2_absolute_error_score, d2_pinball_score, d2_tweedie_score, explained_variance_score, max_error, mean_absolute_percentage_error, mean_gamma_deviance, mean_pinball_loss, mean_poisson_deviance, mean_squared_log_error, mean_tweedie_deviance, median_absolute_error, root_mean_squared_log_error,
     auc, average_precision_score, brier_score_loss, coverage_error, d2_brier_score, d2_log_loss_score, dcg_score, det_curve, hinge_loss, label_ranking_average_precision_score, label_ranking_loss, ndcg_score, roc_curve, top_k_accuracy_score,
+    adjusted_mutual_info_score, calinski_harabasz_score, contingency_matrix, davies_bouldin_score, normalized_mutual_info_score, pair_confusion_matrix,
 )
