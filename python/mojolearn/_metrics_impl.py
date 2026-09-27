@@ -97,6 +97,18 @@ __all__ = [
     "silhouette_score",
     "trustworthiness",
     "v_measure_score",
+    # the metrics lane (lane/metrics, 2026-09-27; python/mojolearn/_expansion_metrics.py)
+    "balanced_accuracy_score",
+    "class_likelihood_ratios",
+    "classification_report",
+    "cohen_kappa_score",
+    "fbeta_score",
+    "hamming_loss",
+    "jaccard_score",
+    "matthews_corrcoef",
+    "multilabel_confusion_matrix",
+    "precision_recall_fscore_support",
+    "zero_one_loss",
 ]
 
 
@@ -348,11 +360,10 @@ def accuracy_score(
                                   that does not fit in int32 is refused by
                                   name (the int32 instantiation is the one
                                   cuML's Python passes).
-        normalize       honored   True only. False (return the raw count)
-                                  is REFUSED by name: the kernel returns the
-                                  fraction, and recovering an integer count
-                                  from a float32 fraction is a different
-                                  computation, not this one.
+        normalize       honored   True: this kernel's fraction. False: the
+                                  number of matching rows (an int), or with
+                                  sample_weight their summed weight, from the
+                                  x_metrics binding (lane/metrics).
         sample_weight   honored   scikit-learn's `np.average(y_true ==
                                   y_pred, weights=sample_weight)`, in Float32
                                   on the pinned-sum path
@@ -369,13 +380,15 @@ def accuracy_score(
     `n == 0` is refused by name inside the kernel (`count / n` is `0 / 0`
     in RAFT and a NaN may not reach a recorded value).
     """
+    if not is_bool(normalize):
+        raise ValueError("normalize must be a bool")
     if not normalize:
-        raise NotImplementedError(
-            "mojolearn accuracy_score: normalize=False is refused; the "
-            "implemented kernel returns the FRACTION of agreeing positions and "
-            "the count is not recoverable from it exactly. Use "
-            "int((y_true == y_pred).sum()) if you want the count."
-        )
+        # The COUNT (lane/metrics, 2026-09-27): exact integer matches, or the
+        # Float32 PairSum of the matching rows' weights, from the x_metrics
+        # binding (strings or integers, like scikit-learn). The fraction
+        # keeps its original kernel and bits.
+        from ._expansion_metrics import accuracy_count
+        return accuracy_count(y_true, y_pred, sample_weight, numeric_mode)
     yt, yp = _pair_1d(y_true, y_pred, "y_true", "y_pred", _as_i32_1d)
     if sample_weight is not None:
         w = _sample_weight_f32(sample_weight, int(yt.shape[0]), "accuracy_score")
@@ -1359,6 +1372,11 @@ def confusion_matrix(y_true, y_pred, *, labels=None, sample_weight=None,
     if normalize is not None and (not isinstance(normalize, str) or
                                   normalize not in ("true", "pred", "all")):
         raise ValueError("normalize must be None, 'true', 'pred' or 'all'")
+    if sample_weight is not None:
+        # lane/metrics: Float64 cells, each the Float32 PairSum of its rows'
+        # weights (x_metrics binding); the unweighted call keeps its bits.
+        from ._expansion_metrics import confusion_matrix_weighted
+        return confusion_matrix_weighted(y_true, y_pred, labels, sample_weight, normalize, numeric_mode)
     true, pred, kind, observed = _classification_pair(y_true, y_pred, sample_weight)
     selected = _selected_labels(labels, kind, observed)
     if not set(selected).intersection(_label_set(true)):
@@ -1375,6 +1393,12 @@ def confusion_matrix(y_true, y_pred, *, labels=None, sample_weight=None,
 
 def _precision_recall_fscore(y_true, y_pred, *, labels, pos_label, average,
                             sample_weight, zero_division, numeric_mode, metric):
+    if sample_weight is not None:
+        # lane/metrics: the weighted sums come from the x_metrics binding;
+        # the unweighted call keeps its binding and its bits.
+        from ._expansion_metrics import _prf_weighted
+        return _prf_weighted(y_true, y_pred, labels, pos_label, average, sample_weight,
+                             zero_division, numeric_mode, metric)
     averages = {None: 0, "binary": 1, "micro": 2, "macro": 3, "weighted": 4}
     if average is not None and (not isinstance(average, str) or average not in averages):
         raise ValueError("average must be 'binary', 'micro', 'macro', 'weighted' or None")
@@ -1489,3 +1513,12 @@ def __getattr__(name):
             "See SUPPORT_MATRIX.md for the supported metrics."
         )
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+# THE METRICS LANE'S FUNCTIONS (lane/metrics, 2026-09-27), computed by the
+# x_metrics binding; see python/mojolearn/_expansion_metrics.py.
+from ._expansion_metrics import (  # noqa: E402
+    balanced_accuracy_score, class_likelihood_ratios, classification_report, cohen_kappa_score,
+    fbeta_score, hamming_loss, jaccard_score, matthews_corrcoef, multilabel_confusion_matrix,
+    precision_recall_fscore_support, zero_one_loss,
+)
