@@ -779,4 +779,26 @@ Every row's check is `x_cnn/checks/seams_check.mojo` (oracle `x_cnn/checks/oracl
 
 ### `metrics`: rows 190-199
 
-(no rows yet)
+Every unit the metrics lane added (`x_metrics/*.mojo`: grouping and folds,
+regression terms, the percentile, ranking curves, per-sample scores, the
+centroid distances, the splitters' permutation) is ONE function run by the
+device runner (a thread per unit) and by the host runner (a loop), so CPU ==
+GPU is by construction; the rows below are the seams inside the units. One
+check driver, `x_metrics/seams/metrics_check.mojo` (oracles in
+`metrics_oracle.mojo`), runs each seam's shipped unit on the host AND the
+device after showing its fixture separates the pinned spelling from the
+unpinned one; one sabotage patch per seam under `x_metrics/seams/sabotage/`
+(listed in `tools/identity_lanes/metrics.checks`). The existing metrics
+binding (`_mojolearn_metrics`) and its rows are unchanged.
+
+| row | pathway | what moves bits | move | status |
+|---|---|---|---|---|
+| 190 | **every float sum** (`PairSum` in `x_metrics/common.mojo`: group sums, per-sample Brier / DCG / LRAP sums, centroid distances) | the shape of the fold | PIN, DEVIATION 6100: leaves of 32 added in order, merged as a binary counter merges carries; the tree is a function of the count alone, error grows with log2(n/32) | `check_fold_shape` (2^24 then 39 ones separates it from a sequential fold), arm `seam_6100_fold_shape.patch` |
+| 191 | **sorts** (`col_sort_unit`, `bin_curve_unit`, DCG and top-k tie order) | the order of -0.0 / +0.0 and of equal keys | PIN, DEVIATION 6101: the total key (negatives, -0.0, +0.0, positives, NaN last), ties by row; the numpy-VALUE order (-0.0 == +0.0) where scikit-learn's tie rules read values (`vkey`) | `check_sort_key` ([0, -0, 1, 1, -1] separates it from a value sort), arm `seam_6101_sort_key.patch` |
+| 192 | **grouping** (`group_sort_unit`, the stable counting sort under every per-class, per-cluster and per-column sum) | the order a group's rows reach its fold | PIN, DEVIATION 6102: ascending row order inside every group | `check_group_order` (2^24, 1, 1 separates ascending from descending), arm `seam_6102_group_order.patch` |
+| 193 | **zero denominators** (APE's floor, LRAP / ranking-loss guards, the empty percentile column) | a computed 0/0 carries the vendor's NaN payload | REPLACE, DEVIATION 6103: every division has a nonzero denominator by construction; a NaN the reference returns (force_finite=False, an all-zero weight column, undefined kappa) is chosen BY VALUE in the host epilogue | `check_nan_guard` (APE at y = p = 0; the raw spelling is 0/0), arm `seam_6103_nan_guard.patch` |
+| 194 | **operands** (`ld` in every unit) | a subnormal read raw on one column, flushed on another | PIN, DEVIATION 6104: every float operand is flushed on load | `check_operand_ftz` (a positive subnormal against +0.0 in a sort), arm `seam_6104_operand_ftz.patch` |
+| 195 | **weighted values** (`group_sum_unit`, per-sample products) | an FMA contraction of the product into the fold | PIN, DEVIATION 6105: `identical_mul` rounds the product before the add | `check_contraction` (1+3u times 1+5u after -1 separates it from fma), arm `seam_6105_contraction.patch` |
+| 196 | **cumulative sums** (the weighted percentile's CDF, the ranking curves' weighted counts) | a prefix is inherently ordered; refolding it changes bits | PIN, DEVIATION 6107: a sequential ascending Float32 prefix in sorted order (unit weights count exactly as integers) | `check_prefix` (1, 1, 2^24, 1 separates it from a refold), arm `seam_6107_prefix.patch` |
+| 197 | **the splitters' randomness** (`permute_unit`) | scikit-learn's shuffles are numpy Mersenne Twister draws, no device reproduces them | REPLACE, DEVIATION 6108: a permutation is the sort of `splitmix_pair(i, salt)` keys (checks/fixture_rng.mojo), `salt` from the caller's random_state and the draw's position; numpy RandomState objects are refused by name | `check_rng_mapping` (the key sort differs from Fisher-Yates on the same stream), arm `seam_6108_rng_mapping.patch` |
+| 198 | **the host epilogue** (`_expansion_metrics.py`, `model_selection.py`) | O(classes) ratios, averages and logs after the device folds | REPLACE, DEVIATION 6106: IEEE binary64 + - * / and sqrt only (correctly rounded on every host), `_portable_math` log / exp / fsum, fixed left-to-right order; exact Python integers for every count and index | by construction; the six `x-metrics-*` lanes hash the epilogue's outputs on every column |

@@ -21,7 +21,8 @@ comptime TERM_TWEEDIE = 5     # the unit Tweedie deviance at power S
 comptime TERM_DIFF = 6        # y - p
 
 #: numpy's float64 machine epsilon, which scikit-learn's MAPE floors |y| at;
-#: a normal Float32, so it survives the flush.
+#: a normal Float32, so it survives the flush. DEVIATION 6103: the floor is
+#: also why APE never computes 0/0 (y = p = 0 gives +0.0).
 comptime EPS64 = Float32(2.220446049250313e-16)
 
 
