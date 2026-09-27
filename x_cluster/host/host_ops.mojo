@@ -15,6 +15,7 @@ from x_cluster.bodies import (
     FPtr,
     IPtr,
     ap_availability_col,
+    ap_exemplar_cell,
     ap_responsibility_row,
     kth_smallest_row,
     meanshift_seed,
@@ -130,6 +131,13 @@ struct HostOps(ClusterOps):
         var pa = self._fp(a)
         for t in range(n):
             ap_availability_col(pr, pa, n, damping, t)
+
+    def ap_e(mut self, a: Int, r: Int, n: Int, e: Int) raises:
+        var pa = self._fp(a)
+        var pr = self._fp(r)
+        var pe = self._ip(e)
+        for t in range(n):
+            ap_exemplar_cell(pa, pr, n, pe, t)
 
     def descend(mut self, x: Int, n: Int, d: Int, centers: Int, nodes: Int, labels: Int) raises:
         var px = self._fp(x)

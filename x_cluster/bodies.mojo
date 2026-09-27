@@ -182,6 +182,12 @@ def ap_availability_col(r_m: FPtr, a_m: FPtr, n: Int, damping: Float32, k: Int):
         a_m[i * n + k] = ftz(ftz(identical_mul(old, damping)) + ftz(identical_mul(new, one_minus)))
 
 
+@always_inline
+def ap_exemplar_cell(a_m: FPtr, r_m: FPtr, n: Int, e: IPtr, i: Int):
+    """e[i] = (A[i, i] + R[i, i] > 0), sklearn's `E`."""
+    e[i] = Int32(1) if ftz(a_m[i * n + i] + r_m[i * n + i]) > Float32(0) else Int32(0)
+
+
 # ------------------------------------------------------------------ host RNG
 @fieldwise_init
 struct SplitMix64(Copyable, Movable):

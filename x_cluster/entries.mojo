@@ -6,6 +6,7 @@ Both bindings (`bindings/_mojolearn_x_cluster.mojo`, `..._host.mojo`) read
 their Python arguments, call ONE of these with their own `ClusterOps`, and
 hand the `ClusterOut` back. The integer and float parameter lists are
 documented per entry and mirrored in `python/mojolearn/_x_cluster_impl.py`."""
+from x_cluster.affinity import affinity_fit
 from x_cluster.bisect import BisectTree, bisect_fit, bisect_predict
 from x_cluster.common import distances_to, nearest_all
 from x_cluster.meanshift import meanshift_fit
@@ -166,6 +167,29 @@ def optics_entry[O: ClusterOps](mut ops: O, x: List[Float32], ip: List[Int], fp:
     return out^
 
 
+def affinity_entry[O: ClusterOps](
+    mut ops: O, x: List[Float32], pref: List[Float32], ip: List[Int], fp: List[Float64]
+) raises -> ClusterOut:
+    """ip = [n, d, precomputed, pref_mode (0 median, 1 scalar, 2 array),
+    max_iter, convergence_iter, seed]; fp = [damping, preference scalar].
+    i = [cluster_centers_indices, labels], f = [affinity_matrix],
+    s = [n_iter]."""
+    var centers = List[Int32]()
+    var labels = List[Int32]()
+    var n_iter = 0
+    var aff = List[Float32]()
+    affinity_fit(
+        ops, x, ip[0], ip[1], ip[2] != 0, ip[3], Float32(fp[1]), pref, Float32(fp[0]), ip[4], ip[5],
+        UInt64(ip[6]), centers, labels, n_iter, aff,
+    )
+    var out = ClusterOut()
+    out.i.append(centers^)
+    out.i.append(labels^)
+    out.f.append(aff^)
+    out.s.append(Float64(n_iter))
+    return out^
+
+
 # ---------------------------------------------------------------- dispatcher
 comptime ENTRY_NEAREST = 0
 comptime ENTRY_DISTANCES = 1
@@ -174,6 +198,7 @@ comptime ENTRY_BISECT = 3
 comptime ENTRY_BISECT_PREDICT = 4
 comptime ENTRY_MEANSHIFT = 5
 comptime ENTRY_OPTICS = 6
+comptime ENTRY_AFFINITY = 7
 
 
 def run_entry[O: ClusterOps](
@@ -195,4 +220,6 @@ def run_entry[O: ClusterOps](
         return meanshift_entry(ops, x, a, ip, fp)
     if which == ENTRY_OPTICS:
         return optics_entry(ops, x, ip, fp)
+    if which == ENTRY_AFFINITY:
+        return affinity_entry(ops, x, a, ip, fp)
     raise Error("x_cluster: unknown entry " + String(which))
