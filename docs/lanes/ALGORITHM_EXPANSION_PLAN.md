@@ -12,8 +12,11 @@ messaging lanes. Newest items are at the top.
    `tools/test_lane_select.py` on your pod; your lane must not break it.
 1. **Order per lane:** (a) every algorithm in the lane table and Additions
    (PASS 1); (b) proof on every column, holding an AMD box (PASS 2 items
-   1-2); (c) **option parity** (item 2 below); (d) speed, IDENTICAL and
-   FAST, on NVIDIA, AMD, Apple and CPU (PASS 2 item 3).
+   1-2); (c) **option parity** (item 2 below); (d) **GPU speed**, IDENTICAL
+   and FAST, on NVIDIA, AMD and Apple; (e) **CPU speed, LAST** (Andrew,
+   2026-09-27): threads, vectorization and cache blocking of the CPU host
+   path, after all GPU work is done. Every change is re-proven bitwise on
+   every column.
 2. **Option parity (Andrew, 2026-09-27).** Every algorithm in the lane's
    family, EXISTING ones included, gets every option its reference and
    bench-board opponents have (sklearn, cuML, LightGBM/XGBoost/CatBoost,
