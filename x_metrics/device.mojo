@@ -9,6 +9,7 @@ from max.gpu.host import DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from x_metrics.common import FP, IP, STAGE_INTS
 from x_metrics.units import N_OPS, run_unit
+from x_metrics.plan import Plan, plan_program, N_USER_OPS
 
 comptime BLOCK = 128
 
@@ -47,21 +48,32 @@ def run_program_device(arena_addr: Int, arena_len: Int, prog_addr: Int, stages: 
     )
 
 
-def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int) raises:
+def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int, legacy: Bool = False) raises:
+    """The PLANNED program (x_metrics/plan.mojo, the host runner's plan):
+    the arena goes up once into a device buffer of arena + scratch, every
+    planned stage is one launch on one stream, the caller's arena comes back
+    once. `legacy` runs the caller's stages unplanned (the seam gate)."""
     for s in range(stages):
         var op = Int(host_q.unsafe_load(s * STAGE_INTS))
-        if op < 0 or op >= N_OPS:
+        if op < 0 or op >= N_USER_OPS:
             raise Error(String("x_metrics: unknown op ", op))
+    var pl = Plan(arena_len)
+    if legacy:
+        for s in range(stages):
+            pl.copy_stage(host_q, s)
+    else:
+        pl = plan_program(host_q, stages, arena_len)
+    var nst = pl.stages
     var ctx = metrics_ctx()
-    var df = ctx.enqueue_create_buffer[DType.float32](arena_len if arena_len > 0 else 1)
-    var dq = ctx.enqueue_create_buffer[DType.int32](stages * STAGE_INTS if stages > 0 else 1)
+    var df = ctx.enqueue_create_buffer[DType.float32](pl.size if pl.size > 0 else 1)
+    var dq = ctx.enqueue_create_buffer[DType.int32](nst * STAGE_INTS if nst > 0 else 1)
     if arena_len > 0:
-        ctx.enqueue_copy(dst_buf=df, src_ptr=host_f)
-    if stages > 0:
-        ctx.enqueue_copy(dst_buf=dq, src_ptr=host_q)
-    for s in range(stages):
-        var op = Int(host_q.unsafe_load(s * STAGE_INTS))
-        var total = Int(host_q.unsafe_load(s * STAGE_INTS + 1))
+        ctx.enqueue_copy(dst_buf=df.create_sub_buffer[DType.float32](0, arena_len), src_ptr=host_f)
+    if nst > 0:
+        ctx.enqueue_copy(dst_buf=dq, src_ptr=pl.rows.unsafe_ptr())
+    for s in range(nst):
+        var op = Int(pl.rows[s * STAGE_INTS])
+        var total = Int(pl.rows[s * STAGE_INTS + 1])
         if total <= 0:
             continue
         var qp = dq.unsafe_ptr() + (s * STAGE_INTS + 2)
@@ -72,8 +84,9 @@ def run_program_device_ptr(host_f: FP, arena_len: Int, host_q: IP, stages: Int) 
                     grid_dim=(total + BLOCK - 1) // BLOCK, block_dim=BLOCK,
                 )
     if arena_len > 0:
-        ctx.enqueue_copy(dst_ptr=host_f, src_buf=df)
+        ctx.enqueue_copy(dst_ptr=host_f, src_buf=df.create_sub_buffer[DType.float32](0, arena_len))
     ctx.synchronize()
+    _ = len(pl.rows)
     _ = dq^
     _ = df^
     _ = ctx^
