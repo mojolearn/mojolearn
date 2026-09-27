@@ -1400,6 +1400,38 @@ def _given_priors(values, K, who, check_sum=False):
     return vals
 
 
+def _partial_codes(est, y, classes, n):
+    """sklearn `_check_partial_fit_first_call` and the batch's class codes:
+    the first call (no classes_ yet) needs `classes`, later ones may repeat
+    them only unchanged; a label outside classes_ is refused."""
+    first = getattr(est, "classes_", None) is None
+    if first and classes is None:
+        raise ValueError("mojolearn: classes must be passed on the first call to partial_fit.")
+    if classes is not None:
+        cl, _ = sorted_classes(flatten_labels(classes))
+        if not first and list(cl) != list(est.classes_):
+            raise ValueError(f"mojolearn: `classes={cl}` is not the same as on last call to partial_fit, was: "
+                             f"{est.classes_}")
+        if first:
+            est.classes_ = cl
+    labels = flatten_labels(y)
+    if len(labels) != n:
+        raise ValueError("mojolearn: X and y have different numbers of rows")
+    index = {c: i for i, c in enumerate(est.classes_)}
+    bad = sorted({repr(v) for v in labels if v not in index})
+    if bad:
+        raise ValueError(f"mojolearn: The target label(s) {bad} in y do not exist in the initial classes "
+                         f"{est.classes_}")
+    return first, Array.from_list([index[v] for v in labels], "<i4")
+
+
+def _copy_block(pr, src, rows, cols):
+    """A bit-for-bit copy of a (rows, cols) block (gather_cols over every column)."""
+    out = pr.alloc(rows * cols)
+    pr.stage("gather_cols", rows * cols, src, rows, cols, pr.put_list(list(range(cols))), cols, out)
+    return out
+
+
 def _check_alpha(est):
     if not isinstance(est.alpha, numbers.Real) or not est.alpha > 0:
         raise NotImplementedError(f"mojolearn: {type(est).__name__} needs alpha > 0 "
@@ -1411,7 +1443,12 @@ class GaussianNB(_Classifier):
     predict_log_proba): per-class mean and population variance plus
     var_smoothing * the largest feature variance, float32; `priors` as the
     reference checks them; sample_weight weights the class means, variances
-    and counts (numpy `average`), as the reference. partial_fit is refused."""
+    and counts (numpy `average`), as the reference. partial_fit merges each
+    batch into the running counts, means and variances (the reference's
+    `_update_mean_variance`, Chan's pairwise rule) and adds the batch's
+    epsilon to the merged variance; the running variance is kept without
+    epsilon (the reference subtracts the NEW batch's epsilon from a variance
+    that holds the old one, see naive_bayes/NOT_IMPLEMENTED.tsv)."""
     _parameters = ("priors", "var_smoothing")
 
     def __init__(self, *, priors=None, var_smoothing=1e-9):
@@ -1435,6 +1472,7 @@ class GaussianNB(_Classifier):
         pr.stage("col_stats", d, xo, n, d, st)
         pr.stage("gnb_eps", 1, st + 2 * d, d, eps, vs)
         _class_stats(pr, wo, K * d, xo, n, d, yo, K, cnt, theta, var, _NONE)
+        raw = _copy_block(pr, var, K, d)
         given = _NONE
         if self.priors is not None:
             given = pr.put_list(_given_priors(self.priors, K, "GaussianNB", check_sum=True))
@@ -1449,11 +1487,53 @@ class GaussianNB(_Classifier):
         self.class_count_, self.class_prior_ = pr.get(cnt, K), pr.get(prior, K)
         self.epsilon_ = pr.values(eps, 1)[0]
         self._const = pr.get(const, K)
+        self._raw_var = pr.get(raw, (K, d))
         self.numeric_mode_, self.n_features_in_ = mode, d
         return self
 
     def partial_fit(self, X, y, classes=None, sample_weight=None):
-        raise NotImplementedError("mojolearn: GaussianNB.partial_fit is not implemented")
+        arr = _x2d(X)
+        n, d = arr.shape
+        first, codes = _partial_codes(self, y, classes, n)
+        K = len(self.classes_)
+        if first:
+            mode = _mode()
+            zk, zkd = [0.0] * K, [0.0] * (K * d)
+        else:
+            self._check_width(arr)
+            mode = self.numeric_mode_
+            zk, zkd = None, None
+        pr = _Prog()
+        xo = pr.put(arr)
+        yo = pr.put_codes(codes)
+        st = pr.alloc(6 * d)
+        vs = pr.put_scalar(self.var_smoothing)
+        eps = pr.alloc(1)
+        bc, bm, bv = pr.alloc(K), pr.alloc(K * d), pr.alloc(K * d)
+        wo = _nb_weights(pr, sample_weight, n)
+        pr.stage("col_stats", d, xo, n, d, st)
+        pr.stage("gnb_eps", 1, st + 2 * d, d, eps, vs)
+        _class_stats(pr, wo, K * d, xo, n, d, yo, K, bc, bm, bv, _NONE)
+        oc = pr.put_list(zk) if first else pr.put(self.class_count_)
+        om = pr.put_list(zkd) if first else pr.put(self.theta_)
+        ov = pr.put_list(zkd) if first else pr.put(self._raw_var)
+        cnt, theta, raw = pr.alloc(K), pr.alloc(K * d), pr.alloc(K * d)
+        pr.stage("gnb_merge", K * d, oc, om, ov, bc, bm, bv, K, d, cnt, theta, raw)
+        var = _copy_block(pr, raw, K, d)
+        if self.priors is not None:
+            given = pr.put_list(_given_priors(self.priors, K, "GaussianNB", check_sum=True))
+        else:
+            given = pr.alloc(K)
+            pr.stage("lda_prep", 1, cnt, theta, K, d, n, given, pr.alloc(d), 2, cnt)
+        prior, const = pr.alloc(K), pr.alloc(K)
+        pr.stage("gnb_params", K, cnt, var, K, d, 1, eps, prior, const, 1, given)
+        pr.run(mode)
+        self.theta_, self.var_ = pr.get(theta, (K, d)), pr.get(var, (K, d))
+        self.class_count_, self.class_prior_ = pr.get(cnt, K), pr.get(prior, K)
+        self.epsilon_ = pr.values(eps, 1)[0]
+        self._const, self._raw_var = pr.get(const, K), pr.get(raw, (K, d))
+        self.numeric_mode_, self.n_features_in_ = mode, d
+        return self
 
     def _jll_stages(self, pr, xo, n, d, out):
         K = len(self.classes_)
@@ -1487,6 +1567,54 @@ class _DiscreteNB(_Classifier):
         clp = pr.alloc(K)
         pr.stage("col_stats", d, xo, n, d, st)
         _class_stats(pr, wo, K * d, xo, n, d, yo, K, cnt, _NONE, _NONE, fc)
+        self._prior_stages(pr, K, cnt, clp)
+        return pr, mode, n, d, K, st, cnt, fc, clp
+
+    def _finish_counts(self, pr, mode, d, K, cnt, fc, clp):
+        self.class_count_, self.feature_count_ = pr.get(cnt, K), pr.get(fc, (K, d))
+        self.class_log_prior_ = pr.get(clp, K)
+        self.numeric_mode_, self.n_features_in_ = mode, d
+
+    def fit(self, X, y, sample_weight=None):
+        _check_alpha(self)
+        return self._params(*self._fit_counts(X, y, getattr(self, "binarize", None), sample_weight))
+
+    def partial_fit(self, X, y, classes=None, sample_weight=None):
+        """The reference's `_BaseDiscreteNB.partial_fit`: the batch's class and
+        feature counts added to the running ones, then the log probabilities
+        and the class log prior recomputed from the sums."""
+        _check_alpha(self)
+        arr = _x2d(X)
+        n, d = arr.shape
+        first, codes = _partial_codes(self, y, classes, n)
+        K = len(self.classes_)
+        if first:
+            mode = _mode()
+        else:
+            self._check_width(arr)
+            mode = self.numeric_mode_
+        pr = _Prog()
+        xo = pr.put(arr)
+        wo = _nb_weights(pr, sample_weight, n)
+        if getattr(self, "binarize", None) is not None:
+            xb = pr.alloc(n * d)
+            pr.stage("binarize", n * d, xo, n * d, pr.put_scalar(self.binarize), xb)
+            xo = xb
+        yo = pr.put_codes(codes)
+        st = pr.alloc(6 * d)
+        cnt, fc, clp = pr.alloc(K), pr.alloc(K * d), pr.alloc(K)
+        pr.stage("col_stats", d, xo, n, d, st)
+        if first:
+            _class_stats(pr, wo, K * d, xo, n, d, yo, K, cnt, _NONE, _NONE, fc)
+        else:
+            bc, bf = pr.alloc(K), pr.alloc(K * d)
+            _class_stats(pr, wo, K * d, xo, n, d, yo, K, bc, _NONE, _NONE, bf)
+            pr.stage("add_arrays", K, pr.put(self.class_count_), bc, cnt)
+            pr.stage("add_arrays", K * d, pr.put(self.feature_count_), bf, fc)
+        self._prior_stages(pr, K, cnt, clp)
+        return self._params(pr, mode, n, d, K, st, cnt, fc, clp)
+
+    def _prior_stages(self, pr, K, cnt, clp):
         if getattr(self, "class_prior", None) is not None:
             po = pr.put_list(_given_priors(self.class_prior, K, type(self).__name__))
             pr.stage("log", K, po, clp)
@@ -1495,21 +1623,12 @@ class _DiscreteNB(_Classifier):
         else:
             ones = pr.put_list([1.0] * K)
             pr.stage("class_log_prior", K, ones, K, clp)
-        return pr, mode, n, d, K, st, cnt, fc, clp
-
-    def _finish_counts(self, pr, mode, d, K, cnt, fc, clp):
-        self.class_count_, self.feature_count_ = pr.get(cnt, K), pr.get(fc, (K, d))
-        self.class_log_prior_ = pr.get(clp, K)
-        self.numeric_mode_, self.n_features_in_ = mode, d
-
-    def partial_fit(self, X, y, classes=None, sample_weight=None):
-        raise NotImplementedError(f"mojolearn: {type(self).__name__}.partial_fit is not implemented")
 
 
 class MultinomialNB(_DiscreteNB):
     """sklearn.naive_bayes.MultinomialNB, float32; alpha > 0 required.
     class_prior as given (its log); sample_weight weights the counts, as the
-    reference; partial_fit is refused."""
+    reference; partial_fit adds each batch's counts, as the reference."""
     _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior")
 
     def __init__(self, *, alpha=1.0, force_alpha=True, fit_prior=True, class_prior=None):
@@ -1518,9 +1637,7 @@ class MultinomialNB(_DiscreteNB):
         self.fit_prior = fit_prior
         self.class_prior = class_prior
 
-    def fit(self, X, y, sample_weight=None):
-        _check_alpha(self)
-        pr, mode, n, d, K, st, cnt, fc, clp = self._fit_counts(X, y, sample_weight=sample_weight)
+    def _params(self, pr, mode, n, d, K, st, cnt, fc, clp):
         a = pr.put_scalar(self.alpha)
         flp = pr.alloc(K * d)
         pr.stage("mnb_params", K, fc, K, d, a, flp)
@@ -1539,7 +1656,8 @@ class MultinomialNB(_DiscreteNB):
 class BernoulliNB(_DiscreteNB):
     """sklearn.naive_bayes.BernoulliNB, float32 (X binarized at `binarize`
     unless it is None); alpha > 0 required; class_prior as given (its log);
-    sample_weight weights the counts, as the reference. partial_fit is refused."""
+    sample_weight weights the counts, as the reference; partial_fit adds each
+    batch's counts, as the reference."""
     _parameters = ("alpha", "force_alpha", "binarize", "fit_prior", "class_prior")
 
     def __init__(self, *, alpha=1.0, force_alpha=True, binarize=0.0, fit_prior=True, class_prior=None):
@@ -1549,9 +1667,7 @@ class BernoulliNB(_DiscreteNB):
         self.fit_prior = fit_prior
         self.class_prior = class_prior
 
-    def fit(self, X, y, sample_weight=None):
-        _check_alpha(self)
-        pr, mode, n, d, K, st, cnt, fc, clp = self._fit_counts(X, y, self.binarize, sample_weight)
+    def _params(self, pr, mode, n, d, K, st, cnt, fc, clp):
         a = pr.put_scalar(self.alpha)
         flp, w, bias = pr.alloc(K * d), pr.alloc(K * d), pr.alloc(K)
         pr.stage("bnb_params", K, fc, cnt, K, d, a, clp, flp, w, bias)
@@ -3113,7 +3229,7 @@ class ComplementNB(_DiscreteNB):
     counts, their log share (negated, or normalised when `norm`); the class
     prior enters only with a single class, as in the reference. alpha > 0
     required; class_prior as given (its log); sample_weight weights the counts, as the
-    reference; partial_fit is refused."""
+    reference; partial_fit adds each batch's counts, as the reference."""
     _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior", "norm")
 
     def __init__(self, *, alpha=1.0, force_alpha=True, fit_prior=True, class_prior=None, norm=False):
@@ -3123,9 +3239,7 @@ class ComplementNB(_DiscreteNB):
         self.class_prior = class_prior
         self.norm = norm
 
-    def fit(self, X, y, sample_weight=None):
-        _check_alpha(self)
-        pr, mode, n, d, K, st, cnt, fc, clp = self._fit_counts(X, y, sample_weight=sample_weight)
+    def _params(self, pr, mode, n, d, K, st, cnt, fc, clp):
         a = pr.put_scalar(self.alpha)
         flp = pr.alloc(K * d)
         pr.stage("cnb_params", K, fc, K, d, a, 1 if self.norm else 0, flp)
@@ -3148,7 +3262,11 @@ class CategoricalNB(_DiscreteNB):
     class's rows. A category index outside the fitted range at predict time
     is refused, as the reference refuses it; class_prior as given (its log);
     min_categories floors n_categories_; sample_weight weights the counts,
-    as the reference. partial_fit is refused."""
+    as the reference. partial_fit adds each batch's category counts to the
+    running ones (category_count_, widened as new categories appear) and
+    recomputes the log probabilities; n_categories_ is the counts' width
+    (the reference narrows it to the last batch's, see
+    naive_bayes/NOT_IMPLEMENTED.tsv)."""
     _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior", "min_categories")
 
     def __init__(self, *, alpha=1.0, force_alpha=True, fit_prior=True, class_prior=None, min_categories=None):
@@ -3161,16 +3279,32 @@ class CategoricalNB(_DiscreteNB):
     def fit(self, X, y, sample_weight=None):
         _check_alpha(self)
         arr = _x2d(X)
+        codes = self._encode_y(y, arr.shape[0])
+        return self._cat_fit(arr, codes, sample_weight, _mode(), False)
+
+    def partial_fit(self, X, y, classes=None, sample_weight=None):
+        _check_alpha(self)
+        arr = _x2d(X)
+        first, codes = _partial_codes(self, y, classes, arr.shape[0])
+        if first:
+            return self._cat_fit(arr, codes, sample_weight, _mode(), False)
+        self._check_width(arr)
+        return self._cat_fit(arr, codes, sample_weight, self.numeric_mode_, True)
+
+    def _cat_fit(self, arr, codes, sample_weight, mode, merge):
         n, d = arr.shape
-        codes = self._encode_y(y, n)
         K = len(self.classes_)
-        mode = _mode()
         pr = _Prog()
         xo, yo = pr.put(arr), pr.put_codes(codes)
         st, cnt, clp = pr.alloc(6 * d), pr.alloc(K), pr.alloc(K)
         wo = _nb_weights(pr, sample_weight, n)
         pr.stage("col_stats", d, xo, n, d, st)
-        _class_stats(pr, wo, K, xo, n, 1, yo, K, cnt, _NONE, _NONE, _NONE)
+        if merge:
+            bc = pr.alloc(K)
+            _class_stats(pr, wo, K, xo, n, 1, yo, K, bc, _NONE, _NONE, _NONE)
+            pr.stage("add_arrays", K, pr.put(self.class_count_), bc, cnt)
+        else:
+            _class_stats(pr, wo, K, xo, n, 1, yo, K, cnt, _NONE, _NONE, _NONE)
         if self.class_prior is not None:
             pr.stage("log", K, pr.put_list(_given_priors(self.class_prior, K, "CategoricalNB")), clp)
         else:
@@ -3188,14 +3322,29 @@ class CategoricalNB(_DiscreteNB):
                 raise ValueError(f"mojolearn: 'min_categories' should have shape ({d},) when an array-like "
                                  f"is provided. Got {len(mcs)} entries instead.")
             ncat = [max(a, b) for a, b in zip(ncat, mcs)]
+        if merge:
+            ncat = [max(a, b) for a, b in zip(ncat, self.n_categories_.tolist())]
         cmax = max(ncat)
         q = _Prog()
         xo, yo = q.put(arr), q.put_codes(codes)
         no, co, a = q.put_list(ncat), q.put(pr.get(cnt, K)), q.put_scalar(self.alpha)
         wq = _nb_weights(q, sample_weight, n)
+        cc = q.alloc(d * K * cmax)
+        q.stage("cat_counts", d * K * cmax, xo, n, d, yo, K, no, cmax, _NONE if wq is None else wq, cc)
+        if merge:
+            old, oc = self._cc.tolist(), self._cmax
+            pad = [0.0] * (d * K * cmax)
+            for jk in range(d * K):
+                pad[jk * cmax:jk * cmax + oc] = old[jk * oc:(jk + 1) * oc]
+            src, cc = cc, q.alloc(d * K * cmax)
+            q.stage("add_arrays", d * K * cmax, q.put_list(pad), src, cc)
         flp = q.alloc(d * K * cmax)
-        q.stage("cat_params", d * K * cmax, xo, n, d, yo, K, no, cmax, co, a, flp, _NONE if wq is None else wq)
+        q.stage("cat_flp", d * K * cmax, cc, K, no, cmax, co, a, flp)
         q.run(mode)
+        self._cc = q.get(cc, d * K * cmax)
+        self.category_count_ = [Array.from_list(
+            [[q.values(cc + (j * K + k) * cmax, ncat[j])[v] for v in range(ncat[j])] for k in range(K)], "<f4")
+            for j in range(d)]
         self.n_categories_ = Array.from_list(ncat, "<i8")
         self._flp, self._cmax = q.get(flp, d * K * cmax), cmax
         self.feature_log_prob_ = [Array.from_list(
