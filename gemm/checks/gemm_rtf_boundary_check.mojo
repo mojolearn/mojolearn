@@ -29,11 +29,14 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from checks.kernel_matrix import TARGET_COLUMN, column_name
 from checks.rtf_seam import RTF_REPAIR
 from gemm.checks.gemm_identical import (
+    APPLE_MMA,
+    PLAN_APPLE_MMA,
     PLAN_FLAT,
     PLAN_SPLIT_128_8X8,
     PLAN_TUNED_128_8X8,
     PLAN_TUNED_64_4X4,
     TUNED_BLOCK_ADMIT,
+    apple_mma_applies,
     gemm_plan_name,
     identical_gemm_into,
     identical_gemm_with_plan,
@@ -153,6 +156,14 @@ def _case(
 ) raises:
     var want = gemm_oracle(ha, hb, OP_NN, m, n, k)
     var plans: List[Int] = [-1, PLAN_FLAT, PLAN_TUNED_64_4X4, PLAN_TUNED_128_8X8, PLAN_SPLIT_128_8X8]
+    comptime if APPLE_MMA:
+        # Apple's simdgroup matrix plan (admission bound 151, see
+        # APPLE_MMA_ADMIT_EXP_SUM): "mixed" puts whole windows in the
+        # 151..173 band it now admits. Only where its precondition holds
+        # (leaves of whole windows), which is the only place the dispatcher
+        # sends it.
+        if apple_mma_applies(m, n, k):
+            plans.append(PLAN_APPLE_MMA)
     for pi in range(len(plans)):
         var plan = plans[pi]
         var got = _run(ctx, ha, hb, m, n, k, plan)
@@ -259,6 +270,27 @@ def main() raises:
         for i in range(k4 * n4):
             hb4.append(_kind_word(i, UInt32(2000 + 7 * kd), 0 if kid == 3 else kid))
         _case(ctx, kind_names[kd], ha4, hb4, m4, n4, k4, fails)
+    # PLANTED (lane/apple-identical-neural, 2026-09-26): products exactly at
+    # the window's edge, 2^-126 - 2^-150 = (2 - 2^-23) 2^-64 * 2^-63, inside
+    # whole 16-deep windows, most words zero: round-then-flush takes each to
+    # the smallest normal, flush-before-round (Apple's FMA and its simdgroup
+    # matrix unit) to zero. The random cases above never put such a product
+    # in an admitted window; this one must fail a matrix path whose admission
+    # lets it through.
+    var m5 = 64
+    var n5 = 64
+    var k5 = 256
+    var ha5 = List[Float32]()
+    var hb5 = List[Float32]()
+    for i in range(m5 * k5):
+        var r = i // k5
+        var p = i % k5
+        ha5.append(bitcast[DType.float32](UInt32(0x1FFFFFFF)) if (r + p) % 7 == 0 else Float32(0.0))
+    for i in range(k5 * n5):
+        var p = i // n5
+        var c = i % n5
+        hb5.append(bitcast[DType.float32](UInt32(0x20000000)) if (p + 2 * c) % 5 == 0 else Float32(0.0))
+    _case(ctx, "planted", ha5, hb5, m5, n5, k5, fails)
     print("RTFGEMM DONE fails=" + String(fails))
     if fails > 0:
         raise Error("gemm_rtf_boundary_check: " + String(fails) + " plan/case pairs differ from the oracle")

@@ -1342,6 +1342,19 @@ comptime GEMM_WINDOW_ADMIT = (
 #: The admission bound on `Ea + Eb` (biased exponent fields): 174 puts the
 #: products' common grain at 2^-126. The sabotage arm admits every window.
 comptime GEMM_ADMIT_EXP_SUM = 0 if is_defined["MOJOLEARN_GEMM_SABOTAGE_ADMIT_ALWAYS"]() else 174
+#: The bound for Apple's simdgroup matrix windows (`PLAN_APPLE_MMA`, the
+#: Cholesky left-looking update). Those windows need a weaker fact than
+#: 174's: the matrix unit returns exactly the chain of Apple FMAs
+#: (flush-before-round, `apple_simdgroup_probe`, 0 mismatches in every kind
+#: including subnormal results), and flush-before-round differs from the
+#: contract's round-then-flush ONLY where an exact step result lies in
+#: [2^-126 - 2^-150, 2^-126) (`checks/rtf_seam.mojo`). With `Ea + Eb >= 151`
+#: every product's lowest bit is at or above 2^-149, every float32
+#: accumulator is a multiple of 2^-149, so no exact step result lies in that
+#: window: the same bound `TUNED_BLOCK_ADMIT` and `rtf_fix`'s filter use.
+comptime APPLE_MMA_ADMIT_EXP_SUM = 0 if is_defined["MOJOLEARN_GEMM_SABOTAGE_ADMIT_ALWAYS"]() else (
+    174 if is_defined["MOJOLEARN_APPLE_MMA_ADMIT_174"]() else 151
+)
 
 
 #: lane/apple-identical-gemm (2026-09-25): the WINDOW ADMISSION on the Apple
@@ -3396,9 +3409,10 @@ def _launch_tiled[
 #: incoming accumulator: 0 mismatches over 7 operand kinds x 4.19M cells
 #: (`gemm/checks/apple_simdgroup_probe.mojo`, which also shows the probe
 #: separates the descending, unfused and C + chain spellings). On a window
-#: `TUNED_WINDOW_ADMIT`'s argument admits (flushed operand exponent fields
-#: `Ea + Eb >= 174`, every accumulator entering the window a multiple of
-#: 2^-126) the bare FMA IS the contract's step, so the window runs on the
+#: `APPLE_MMA_ADMIT_EXP_SUM` admits (flushed operand exponent fields
+#: `Ea + Eb >= 151`: no exact step result can fall in the one window where
+#: Apple's flush-before-round differs from the contract's rtf) the chain the
+#: matrix unit computes IS the contract's, so the window runs on the
 #: matrix path with the contract's bits. Every other window, and every later
 #: window of its leaf, runs the exact step `rtf_mul_add` cell by cell. The
 #: leaf partial, the fold tree and the final flush are the tuned kernel's.
@@ -3658,7 +3672,7 @@ def identical_gemm_apple_mma_kernel[
         comptime for q in range(NSG):
             bea = min(bea, wmin[q])
             beb = min(beb, wmin[NSG + q])
-        var admitted = exact_ok and chunk == KB and (bea + beb) >= UInt32(GEMM_ADMIT_EXP_SUM)
+        var admitted = exact_ok and chunk == KB and (bea + beb) >= UInt32(APPLE_MMA_ADMIT_EXP_SUM)
         if not admitted:
             exact_ok = False
         if admitted:

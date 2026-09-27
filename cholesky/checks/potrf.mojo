@@ -297,6 +297,7 @@ The one thing in the RAPIDS trees that IS portable source and IS implemented her
 
 from cholesky.checks.fast_trsm import FTP_MAX_NB, FTS_BLOCK, fast_trsm_panel_kernel, fast_gemm_nt_sub_lower, fast_panel_solve_inv
 from std.gpu import block_dim, block_idx, thread_idx
+from std.gpu.primitives.warp import shuffle_xor
 from std.memory import bitcast, stack_allocation
 from std.time import perf_counter_ns
 from std.os import getenv
@@ -320,8 +321,9 @@ from cholesky.checks.chol_sabotage import (
 from cholesky.checks.trsm import CHOL_SOLVE_TPB, trsm_panel_kernel
 from gemm.checks.gemm_identical import (
     APPLE_MMA,
-    GEMM_ADMIT_EXP_SUM,
+    APPLE_MMA_ADMIT_EXP_SUM,
     _AMMA_M64,
+    _admit_exp_min,
     _admit_warp_min,
     _amma_gload,
     _amma_load_t,
@@ -967,7 +969,7 @@ def chol_syrk_sub_lower_amma_kernel(
         comptime for q in range(NSG):
             bea = min(bea, wmin[q])
             beb = min(beb, wmin[NSG + q])
-        var admitted = exact_ok and chunk == KB and (bea + beb) >= UInt32(GEMM_ADMIT_EXP_SUM)
+        var admitted = exact_ok and chunk == KB and (bea + beb) >= UInt32(APPLE_MMA_ADMIT_EXP_SUM)
         if not admitted:
             exact_ok = False
         if admitted:
@@ -1025,6 +1027,11 @@ right-looking one. Only without a trace, a sabotage or a multi-GPU owner
 set, at the pinned NB = 32. `-D MOJOLEARN_CHOL_APPLE_LEFT_OFF` reverts."""
 
 
+#: Per-cell window admission in `chol_left_update_amma_kernel` (see there).
+#: `-D MOJOLEARN_CHOL_LEFT_BLOCK_ADMIT` keeps the block-wide test.
+comptime CHOL_LEFT_CELL_ADMIT = not is_defined["MOJOLEARN_CHOL_LEFT_BLOCK_ADMIT"]()
+
+
 def chol_left_update_amma_kernel(
     a: MutPointer[Float32, MutAnyOrigin],
     n_in: Int32,
@@ -1058,6 +1065,9 @@ def chol_left_update_amma_kernel(
     var at = stack_allocation[KB * AST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var bt = stack_allocation[BN * BST, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var wmin = stack_allocation[8, Scalar[DType.uint32], address_space = AddressSpace.SHARED]()
+    var rmin = stack_allocation[BM, Scalar[DType.uint32], address_space = AddressSpace.SHARED]()
+    var cmin = stack_allocation[BN, Scalar[DType.uint32], address_space = AddressSpace.SHARED]()
+    var cpre = stack_allocation[BM * BN, Scalar[DType.float32], address_space = AddressSpace.SHARED]()
     var c = SIMD[DType.float32, 2 * FPS](0.0)
     comptime for q in range(FPS):
         var fr = sg * 2 + q // NFC
@@ -1076,37 +1086,130 @@ def chol_left_update_amma_kernel(
             var rb = _amma_gload[BN, KB, NT](a, n, 1, j0, j0 + w, kk, KB, tid, False)
             var ea = _amma_stage[BM, KB, NT, True, AST](at, ra, tid, False)
             var eb = _amma_stage[BN, KB, NT, False, BST](bt, rb, tid, False)
-            ea = _admit_warp_min(ea)
-            eb = _admit_warp_min(eb)
-            if lane == 0:
-                wmin[sg] = ea
-                wmin[4 + sg] = eb
-            barrier()
-            var bea = UInt32(0xFF)
-            var beb = UInt32(0xFF)
-            comptime for s in range(4):
-                bea = min(bea, wmin[s])
-                beb = min(beb, wmin[4 + s])
-            var admitted = exact_ok and (bea + beb) >= UInt32(GEMM_ADMIT_EXP_SUM)
-            if not admitted:
-                exact_ok = False
-            if admitted:
-                comptime for p8 in range(KB // 8):
+            comptime if CHOL_LEFT_CELL_ADMIT:
+                # Per-row / per-column minimum exponent fields of this
+                # window's flushed words, from the staging registers: an A
+                # row's 16 words sit in 4 consecutive threads' slots, as do
+                # a B column's.
+                comptime for sl in range(2):
+                    var v = SIMD[DType.float32, 4](0.0)
+                    comptime for u in range(4):
+                        v[u] = ftz(ra[4 * sl + u])
+                    var e = _admit_exp_min[4](v)
+                    var o1 = shuffle_xor(e, UInt32(1))
+                    e = o1 if o1 < e else e
+                    var o2 = shuffle_xor(e, UInt32(2))
+                    e = o2 if o2 < e else e
+                    if tid % 4 == 0:
+                        rmin[(sl * NT + tid) // 4] = e
+                var vb = SIMD[DType.float32, 4](0.0)
+                comptime for u in range(4):
+                    vb[u] = ftz(rb[u])
+                var eb4 = _admit_exp_min[4](vb)
+                var ob1 = shuffle_xor(eb4, UInt32(1))
+                eb4 = ob1 if ob1 < eb4 else eb4
+                var ob2 = shuffle_xor(eb4, UInt32(2))
+                eb4 = ob2 if ob2 < eb4 else eb4
+                if tid % 4 == 0:
+                    cmin[tid // 4] = eb4
+                ea = _admit_warp_min(ea)
+                eb = _admit_warp_min(eb)
+                if lane == 0:
+                    wmin[sg] = ea
+                    wmin[4 + sg] = eb
+                barrier()
+                var bea = UInt32(0xFF)
+                var beb = UInt32(0xFF)
+                comptime for s in range(4):
+                    bea = min(bea, wmin[s])
+                    beb = min(beb, wmin[4 + s])
+                if (bea + beb) >= UInt32(APPLE_MMA_ADMIT_EXP_SUM):
+                    # Every pair this block forms passes: the matrix unit's
+                    # chain is the contract's for every cell.
+                    comptime for p8 in range(KB // 8):
+                        comptime for q in range(FPS):
+                            var fr = sg * 2 + q // NFC
+                            var fc = q % NFC
+                            var af = _amma_load_t(at + (8 * p8) * AST + fr * 8, AST)
+                            var bf = _amma_load_t(bt + (fc * 8) * BST + 8 * p8, BST)
+                            acc[q] = _amma_mma(af, bf, acc[q])
+                else:
+                    # Every fragment on the matrix unit anyway (it returns
+                    # exactly the chain of Apple FMAs from whatever
+                    # accumulator it starts with); then each cell whose own
+                    # bound fails -- its row's minimum plus its column's, a
+                    # lower bound on every Ea + Eb it forms -- is recomputed
+                    # from its pre-window value with the exact step. A cell
+                    # that passes cannot meet the one window where the two
+                    # semantics differ, whatever came before. Refused cells
+                    # are walked row by row, one simdgroup per row, so the
+                    # cost follows the refused rows (outlier rows of an RBF
+                    # kernel), not every fragment that holds one.
+                    var mask = UInt32(0)
                     comptime for q in range(FPS):
                         var fr = sg * 2 + q // NFC
                         var fc = q % NFC
-                        var af = _amma_load_t(at + (8 * p8) * AST + fr * 8, AST)
-                        var bf = _amma_load_t(bt + (fc * 8) * BST + 8 * p8, BST)
-                        acc[q] = _amma_mma(af, bf, acc[q])
-            else:
-                for kq in range(KB):
-                    comptime for q in range(FPS):
-                        var fr = sg * 2 + q // NFC
-                        var fc = q % NFC
-                        var av = at[kq * AST + fr * 8 + frow]
+                        var ri = fr * 8 + frow
                         comptime for e in range(2):
-                            var bv = bt[(fc * 8 + fcol + e) * BST + kq]
-                            acc[q][e] = rtf_mul_add(av, bv, acc[q][e])
+                            var cj = fc * 8 + fcol + e
+                            if rmin[ri] + cmin[cj] < UInt32(APPLE_MMA_ADMIT_EXP_SUM):
+                                cpre[ri * BN + cj] = acc[q][e]
+                                mask |= UInt32(1) << UInt32(2 * q + e)
+                        comptime for p8 in range(KB // 8):
+                            var af = _amma_load_t(at + (8 * p8) * AST + fr * 8, AST)
+                            var bf = _amma_load_t(bt + (fc * 8) * BST + 8 * p8, BST)
+                            acc[q] = _amma_mma(af, bf, acc[q])
+                    barrier()
+                    for rr in range(BM // 4):
+                        var ri = rr * 4 + sg
+                        var rv = rmin[ri]
+                        if rv + beb < UInt32(APPLE_MMA_ADMIT_EXP_SUM):
+                            if rv + cmin[lane] < UInt32(APPLE_MMA_ADMIT_EXP_SUM):
+                                var t = cpre[ri * BN + lane]
+                                for kq in range(KB):
+                                    t = rtf_mul_add(at[kq * AST + ri], bt[lane * BST + kq], t)
+                                cpre[ri * BN + lane] = t
+                    barrier()
+                    if mask != UInt32(0):
+                        comptime for q in range(FPS):
+                            var fr = sg * 2 + q // NFC
+                            var fc = q % NFC
+                            var ri = fr * 8 + frow
+                            comptime for e in range(2):
+                                if (mask >> UInt32(2 * q + e)) & UInt32(1) != UInt32(0):
+                                    acc[q][e] = cpre[ri * BN + fc * 8 + fcol + e]
+            else:
+                ea = _admit_warp_min(ea)
+                eb = _admit_warp_min(eb)
+                if lane == 0:
+                    wmin[sg] = ea
+                    wmin[4 + sg] = eb
+                barrier()
+                var bea = UInt32(0xFF)
+                var beb = UInt32(0xFF)
+                comptime for s in range(4):
+                    bea = min(bea, wmin[s])
+                    beb = min(beb, wmin[4 + s])
+                var admitted = exact_ok and (bea + beb) >= UInt32(APPLE_MMA_ADMIT_EXP_SUM)
+                if not admitted:
+                    exact_ok = False
+                if admitted:
+                    comptime for p8 in range(KB // 8):
+                        comptime for q in range(FPS):
+                            var fr = sg * 2 + q // NFC
+                            var fc = q % NFC
+                            var af = _amma_load_t(at + (8 * p8) * AST + fr * 8, AST)
+                            var bf = _amma_load_t(bt + (fc * 8) * BST + 8 * p8, BST)
+                            acc[q] = _amma_mma(af, bf, acc[q])
+                else:
+                    for kq in range(KB):
+                        comptime for q in range(FPS):
+                            var fr = sg * 2 + q // NFC
+                            var fc = q % NFC
+                            var av = at[kq * AST + fr * 8 + frow]
+                            comptime for e in range(2):
+                                var bv = bt[(fc * 8 + fcol + e) * BST + kq]
+                                acc[q][e] = rtf_mul_add(av, bv, acc[q][e])
             barrier()
         comptime for q in range(FPS):
             comptime for e in range(2):
