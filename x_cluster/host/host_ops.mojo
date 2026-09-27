@@ -174,7 +174,7 @@ struct HostOps(ClusterOps):
         var pp = self._fp(pchol)
         var pd = self._fp(dst)
         for t in range(n * kc):
-            gauss_q_cell(px, d, pm, pp, kc, pd, t)
+            gauss_q_cell[X_CLUSTER_HOST_SABOTAGE](px, d, pm, pp, kc, pd, t)
 
     def resp(mut self, q: Int, c: Int, n: Int, kc: Int, lpn: Int) raises:
         var pq = self._fp(q)

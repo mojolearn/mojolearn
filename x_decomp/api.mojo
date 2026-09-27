@@ -183,6 +183,18 @@ def orth_py[E: Exec](a: PythonObject, p: PythonObject) raises -> PythonObject:
     return PythonObject(l)
 
 
+def svd_py[E: Exec](a: PythonObject, s: PythonObject, v: PythonObject, p: PythonObject) raises -> PythonObject:
+    var m = _n(p, 0)
+    var n = _n(p, 1)
+    if n <= 0 or m < n:
+        raise Error("x_decomp: svd needs m >= n >= 1 (a tall matrix)")
+    var pa = _f(a)
+    var ps = _f(s)
+    var pv = _f(v)
+    E.svd(pa, m, n, ps, pv)
+    return PythonObject(n)
+
+
 def numeric_mode_py() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 

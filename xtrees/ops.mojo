@@ -20,6 +20,15 @@ them, reweight them, vote -- as HOST code with one fixed order:
 The GPU binding and the host binding import these same functions, so the CPU
 column and every GPU column run one spelling. Moving them onto the device is
 pass 2 (speed).
+
+THE SEAMS (IDENTITY_PATHS rows 160-165; the gate is
+xtrees/checks/glue_check.mojo, one sabotage arm each):
+  DEVIATION 5600  draws: SplitMix64 as a counter, index = draw mod n.
+  DEVIATION 5601  products meeting an add: `identical_mul64`.
+  DEVIATION 5602  folds: sequential in index order.
+  DEVIATION 5603  exp / log / pow: the pinned binary64 polynomials.
+  DEVIATION 5604  ties: the lower index; stable sorts.
+  DEVIATION 5605  a zero row normalises to uniform 1 / k, never 0 / 0.
 """
 from checks.numerics import identical_mul64, identical_exp64, identical_log64, identical_pow64
 
@@ -63,6 +72,7 @@ def sample_indices(
     var base = stream_base(seed, stream)
     if replace:
         for k in range(n_draw):
+            # DEVIATION 5600: the index is the counter draw mod n.
             res[unsafe_offset=k] = Int32(Int(draw(base, k) % UInt64(n_pool)))
         return
     var perm = List[Int32](capacity=n_pool)
@@ -145,6 +155,7 @@ def accumulate(
 ):
     """acc[i] += weight * x[i], the product pinned (never fused into the add)."""
     for i in range(n):
+        # DEVIATION 5601: the product is pinned, never fused into the add.
         acc[unsafe_offset=i] = acc[unsafe_offset=i] + identical_mul64(weight, Float64(x[unsafe_offset=i]))
 
 
@@ -184,6 +195,7 @@ def argmax_rows(
     """First maximum of each row (lower index wins a tie)."""
     for i in range(n):
         var best = 0
+        # DEVIATION 5604: strict >, so a tie keeps the lower index.
         for c in range(1, k):
             if x[unsafe_offset=i * k + c] > x[unsafe_offset=i * k + best]:
                 best = c
@@ -276,6 +288,7 @@ def samme_step(
         learning_rate, identical_log64((1.0 - err) / err) + identical_log64(k - 1.0))
     var s: Float64 = 0.0
     if not last:
+        # DEVIATION 5603: the pinned exp.
         var boost = identical_exp64(alpha)
         for i in range(n):
             if pred[unsafe_offset=i] != y[unsafe_offset=i] and w[unsafe_offset=i] > 0.0:
@@ -510,6 +523,7 @@ def normalize_rows(x: MutPointer[Float64, MutUntrackedOrigin], n: Int, k: Int):
         for c in range(k):
             s = s + x[unsafe_offset=i * k + c]
         for c in range(k):
+            # DEVIATION 5605: a zero row is uniform, never 0 / 0.
             if s > 0.0:
                 x[unsafe_offset=i * k + c] = x[unsafe_offset=i * k + c] / s
             else:

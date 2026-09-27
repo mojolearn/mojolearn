@@ -1,0 +1,11 @@
+--- a/xtrees/ops.mojo
++++ b/xtrees/ops.mojo
+@@ -524,7 +524,7 @@
+             s = s + x[unsafe_offset=i * k + c]
+         for c in range(k):
+             # DEVIATION 5605: a zero row is uniform, never 0 / 0.
+-            if s > 0.0:
++            if True:  # SABOTAGE 5605
+                 x[unsafe_offset=i * k + c] = x[unsafe_offset=i * k + c] / s
+             else:
+                 x[unsafe_offset=i * k + c] = 1.0 / Float64(k)
