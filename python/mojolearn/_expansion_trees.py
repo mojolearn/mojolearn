@@ -42,6 +42,7 @@ __all__ = [
     "AdaBoostRegressor",
     "DARTRegressor",
     "DARTClassifier",
+    "RandomTreesEmbedding",
 ]
 
 
@@ -924,3 +925,95 @@ class DARTClassifier(_DARTBase):
     def predict(self, X):
         raw = self._raw(X).tolist()
         return decode_labels(self.classes_, Array.from_list([1 if r > 0 else 0 for r in raw], "<i4"))
+
+
+# ----------------------------------------------------- RandomTreesEmbedding
+# Reference: scikit-learn `sklearn/ensemble/_forest.py` RandomTreesEmbedding
+# (:2700; fit :2870 draws y ~ U(0, 1) and fits ExtraTreeRegressor members
+# with max_features=1; transform :2960 one-hot encodes `apply`, the leaves
+# of each tree in node order). The members are this library's
+# ExtraTreesRegressor (one fit of n_estimators trees); y is drawn from the
+# lane's counter RNG. DEVIATION: the output is a dense float64 Array;
+# `sparse_output=True` (sklearn's default) is refused by name, there being no
+# sparse container in the NumPy-free layer.
+class RandomTreesEmbedding(_TreesEnsembleBase):
+    """sklearn's totally random trees embedding, dense output."""
+
+    def __init__(self, n_estimators=100, *, max_depth=5, min_samples_split=2, min_samples_leaf=1,
+                 min_weight_fraction_leaf=0.0, max_leaf_nodes=None, min_impurity_decrease=0.0,
+                 sparse_output=False, n_jobs=None, random_state=None, verbose=0, warm_start=False):
+        if sparse_output:
+            _refuse("sparse_output=True", "the NumPy-free layer has no sparse container; the dense"
+                    " one-hot is returned.")
+        if n_jobs is not None or verbose or warm_start:
+            _refuse("n_jobs/verbose/warm_start", "not carried in pass 1.")
+        self.n_estimators = n_estimators
+        self.max_depth = max_depth
+        self.min_samples_split = min_samples_split
+        self.min_samples_leaf = min_samples_leaf
+        self.min_weight_fraction_leaf = min_weight_fraction_leaf
+        self.max_leaf_nodes = max_leaf_nodes
+        self.min_impurity_decrease = min_impurity_decrease
+        self.sparse_output = sparse_output
+        self.n_jobs = n_jobs
+        self.random_state = random_state
+        self.verbose = verbose
+        self.warm_start = warm_start
+        _trees_seed(random_state)
+
+    def fit(self, X, y=None, sample_weight=None):
+        if sample_weight is not None:
+            _refuse("RandomTreesEmbedding sample_weight", "the members take none.")
+        Xa, _ = as_f32_c(X, ndim=2, name="X")
+        n, d = Xa.shape
+        seed = _trees_seed(self.random_state)
+        u = empty((n,), "<f8")
+        self._bind().x_trees_uniform(addr(u, name="u"), [n, seed, 0])
+        yr, _ = as_f32_c(u, ndim=1, name="y")
+        self.forest_ = ExtraTreesRegressor(
+            n_estimators=int(self.n_estimators), max_depth=self.max_depth, max_features=1,
+            min_samples_split=self.min_samples_split, min_samples_leaf=self.min_samples_leaf,
+            max_leaf_nodes=self.max_leaf_nodes, min_impurity_decrease=self.min_impurity_decrease,
+            random_state=seed, numeric_mode=self.numeric_mode).fit(Xa, yr)
+        f = self.forest_
+        offsets, left = f._offsets.tolist(), f._left_child.tolist()
+        n_trees = len(offsets) - 1
+        node_col, col = [-1] * offsets[-1], 0
+        for t in range(n_trees):
+            for g in range(offsets[t], offsets[t + 1]):
+                if left[g] == -1:
+                    node_col[g] = col
+                    col += 1
+        self._tree_base = Array.from_list(offsets[:-1], "<i4")
+        self._node_col = Array.from_list(node_col, "<i4")
+        self.n_trees_ = n_trees
+        self.n_output_features_ = col
+        self.n_features_in_ = d
+        return self
+
+    def apply(self, X):
+        """(n_samples, n_estimators) tree-relative leaf node ids, int32."""
+        if not hasattr(self, "forest_"):
+            raise RuntimeError("this estimator is not fitted yet")
+        Xa, _ = as_f32_c(X, ndim=2, name="X")
+        n, d = Xa.shape
+        if d != self.n_features_in_:
+            raise ValueError(f"X has {d} features, fit saw {self.n_features_in_}")
+        f = self.forest_
+        out = empty((n * self.n_trees_,), "<i4")
+        self._bind().x_trees_apply(addr_ro(f._offsets, name="offsets"), addr_ro(f._colid, name="colid"),
+                                   addr_ro(f._quesval, name="quesval"), addr_ro(f._left_child, name="left"),
+                                   addr_ro(Xa, name="X"), addr(out, name="nodes"), [n, d, 0, self.n_trees_])
+        return out.reshape((n, self.n_trees_))
+
+    def transform(self, X):
+        nodes = self.apply(X)
+        n = nodes.shape[0]
+        out = zeros((n * self.n_output_features_,), "<f8")
+        self._bind().x_trees_onehot_leaves(addr_ro(nodes, name="nodes"), addr_ro(self._tree_base, name="base"),
+                                           addr_ro(self._node_col, name="cols"), addr(out, name="embedding"),
+                                           [n, self.n_trees_, self.n_output_features_])
+        return out.reshape((n, self.n_output_features_))
+
+    def fit_transform(self, X, y=None, sample_weight=None):
+        return self.fit(X, y, sample_weight).transform(X)

@@ -103,3 +103,14 @@ def _(ml, X, yc, yr, Xh=None):
 
 _batch_decl(_rows_calls("predict", "predict_proba"), "trees-dart-clf")
 _batch_decl(_rows_calls("predict"), "trees-dart-reg")
+
+
+@lane("trees-random-embedding")
+def _(ml, X, yc, yr, Xh=None):
+    """Random uniform targets, ExtraTrees with one feature per split, the leaf one-hot."""
+    m = ml.RandomTreesEmbedding(n_estimators=8, max_depth=4, random_state=7).fit(X)
+    return _fit(dict(embedding=_h(m.transform(X)), leaves=_h(m.apply(X))),
+                m, lambda e: (e.transform(Xh),))
+
+
+_batch_decl(_rows_calls("transform", "apply"), "trees-random-embedding")

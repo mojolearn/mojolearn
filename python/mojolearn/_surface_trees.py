@@ -28,6 +28,7 @@ FAMILIES = (
             "trees-adaboost-reg",
             "trees-dart-reg",
             "trees-dart-clf",
+            "trees-random-embedding",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -38,6 +39,7 @@ FAMILIES = (
             "AdaBoostRegressor",
             "DARTRegressor",
             "DARTClassifier",
+            "RandomTreesEmbedding",
         ),
         display="the trees expansion lane's ensemble glue",
         host_modules=("xtrees/ops.mojo", "xtrees/api.mojo"),
@@ -63,6 +65,7 @@ TRAINING_LANE_NAMES = {
     "trees-adaboost-reg": "AdaBoostRegressor",
     "trees-dart-reg": "DARTRegressor",
     "trees-dart-clf": "DARTClassifier",
+    "trees-random-embedding": "RandomTreesEmbedding",
 }
 PUBLIC_PENDING_LANES = {
     "trees-dt-clf": "no reference",
@@ -73,4 +76,5 @@ PUBLIC_PENDING_LANES = {
     "trees-adaboost-reg": "no reference",
     "trees-dart-reg": "no reference",
     "trees-dart-clf": "no reference",
+    "trees-random-embedding": "no reference",
 }

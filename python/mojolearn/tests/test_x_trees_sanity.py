@@ -116,3 +116,15 @@ def test_dart():
     ref = lightgbm.LGBMClassifier(boosting_type="dart", n_estimators=60, verbose=-1).fit(Xa, ya)
     a, r = accuracy_score(yb, np.asarray(ours.predict(Xb))), accuracy_score(yb, ref.predict(Xb))
     assert a >= r - 0.05, (a, r)
+
+
+def test_random_trees_embedding():
+    from sklearn.linear_model import LogisticRegression
+    Xa, Xb, ya, yb = _clf()
+    emb = ml.RandomTreesEmbedding(n_estimators=30, max_depth=5, random_state=0).fit(Xa)
+    Ea, Eb = np.asarray(emb.transform(Xa)), np.asarray(emb.transform(Xb))
+    assert Ea.shape[1] == emb.n_output_features_
+    np.testing.assert_array_equal(Ea.sum(1), 30)          # one leaf per tree
+    assert set(np.unique(Ea)) <= {0.0, 1.0}
+    acc = accuracy_score(yb, LogisticRegression(max_iter=500).fit(Ea, ya).predict(Eb))
+    assert acc > 0.6, acc                                   # the embedding carries signal
