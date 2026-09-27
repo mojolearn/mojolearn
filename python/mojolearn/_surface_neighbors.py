@@ -17,7 +17,7 @@ FAMILIES = (
             "x-neighbors-poly-sketch", "x-neighbors-additive-chi2", "x-neighbors-skewed-chi2",
             "x-neighbors-label-propagation", "x-neighbors-label-spreading", "x-neighbors-knn-imputer",
             "x-neighbors-pagerank", "x-neighbors-connected-components", "x-neighbors-louvain", "x-neighbors-svgp",
-            "x-neighbors-gamma-scale",
+            "x-neighbors-gamma-scale", "x-neighbors-svm-weights",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -97,6 +97,7 @@ TRAINING_LANE_NAMES = {
     "x-neighbors-louvain": "Louvain",
     "x-neighbors-svgp": "SVGP",
     "x-neighbors-gamma-scale": "SVC / SVR / RBFSampler gamma='scale'",
+    "x-neighbors-svm-weights": "SVC / SVR sample_weight, SVC class_weight",
 }
 PUBLIC_PENDING_LANES = {
     "x-neighbors-lof": "no reference",
@@ -114,4 +115,5 @@ PUBLIC_PENDING_LANES = {
     "x-neighbors-louvain": "no reference",
     "x-neighbors-svgp": "no reference",
     "x-neighbors-gamma-scale": "no reference",
+    "x-neighbors-svm-weights": "no reference",
 }

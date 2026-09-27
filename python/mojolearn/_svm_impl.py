@@ -194,6 +194,56 @@ def _as_labels(y):
     return f, classes, (classes[0], classes[1])
 
 
+def _c_rows(C, n_rows, sample_weight, class_weight=None, y=None, who="SVC"):
+    """`InitPenalty`'s weighted arm: the per-row bounds `C * class_weight[y_i]
+    * sample_weight_i` (scikit-learn's libsvm `C_i`; cuML's `C_vec = C * w`
+    after its Python layer folds class_weight into sample_weight), formed in
+    binary64 in that order and rounded ONCE to float32, so every host hands
+    the solver the same bounds. None when nothing is weighted (the
+    unweighted arm, C at every row, bit for bit the old fit). A zero weight
+    pins that row's alpha at 0 (cuML keeps the row; libsvm drops it, and the
+    solution is the same)."""
+    if sample_weight is None and class_weight is None:
+        return None
+    if sample_weight is None:
+        w = [1.0] * n_rows
+    else:
+        w = [float(v) for v in (sample_weight.tolist() if hasattr(sample_weight, "tolist") else sample_weight)]
+        if len(w) != n_rows:
+            raise ValueError(
+                f"mojolearn {who}: sample_weight has {len(w)} entries, X has {n_rows} rows"
+            )
+        for v in w:
+            if not math.isfinite(v) or v < 0.0:
+                raise ValueError(
+                    f"mojolearn {who}: sample_weight must be finite and >= 0, got {v!r}"
+                )
+    if class_weight is not None:
+        labels, _shape = _labels_1d(y)
+        classes, codes = sorted_classes(labels)
+        if isinstance(class_weight, str):
+            if class_weight != "balanced":
+                raise ValueError(
+                    f"mojolearn {who}: class_weight is a dict, 'balanced' or None, got {class_weight!r}"
+                )
+            counts = [0] * len(classes)
+            for c in codes:
+                counts[c] += 1
+            cw = [n_rows / (len(classes) * counts[k]) for k in range(len(classes))]
+        else:
+            cw = [1.0] * len(classes)
+            for key, value in dict(class_weight).items():
+                if key not in classes:
+                    raise ValueError(
+                        f"mojolearn {who}: class_weight names the label {key!r}, "
+                        f"which is not in y's classes {classes!r}"
+                    )
+                cw[classes.index(key)] = float(value)
+        w = [w[i] * cw[codes[i]] for i in range(n_rows)]
+    C = float(C)
+    return Array.from_list([C * v for v in w], "<f4")
+
+
 def _dual_times_sv(dual_coef, support_vectors):
     """`dual_coef_ @ support_vectors_`: a `(1, n_support) x (n_support,
     n_features)` product, accumulated SEQUENTIALLY over the support vectors
@@ -252,10 +302,9 @@ class SVC(NumericModeMixin):
                                   positive (DEVIATION 636)
         cache_size      honored   ONLY as the prediction buffer, see
                                   DEVIATION 871 below
-        class_weight    refused   in the reference it becomes `sample_weight`, and
-                                  `sample_weight` is not implemented: the
-                                  weighted `InitPenalty` arm (C_vec = C * w)
-                                  has no implementation (svm/NOT_IMPLEMENTED.tsv)
+        class_weight    honored   a dict {label: weight} or 'balanced'; it
+                                  multiplies each row's bound, C * cw[y_i] *
+                                  w_i (`_c_rows`)
         max_iter        honored   cuML's total inner-iteration cap; -1 (the
                                   default) is no limit
         nochange_steps  honored   cuML's convergence rule, with
@@ -276,7 +325,9 @@ class SVC(NumericModeMixin):
                                   at all (svm/NOT_IMPLEMENTED.tsv)
         output_type     refused   a cuML-internal array-type selector; this
                                   package returns mojolearn Arrays
-        sample_weight   refused   in fit(); see class_weight
+        sample_weight   honored   in fit(): the weighted `InitPenalty` arm,
+                                  per-row bounds C * w formed in binary64 and
+                                  rounded once to float32 (`_c_rows`)
         sparse X        refused   `svcFitSparse` / `svcPredictSparse` and
                                   every CSR arm are unimplemented; dense
                                   row-major float32 only
@@ -487,11 +538,10 @@ class SVC(NumericModeMixin):
                 "parameter only into its multiclass wrapper, which is not "
                 "implemented"
             )
-        if class_weight is not None:
-            raise NotImplementedError(
-                "mojolearn SVC: class_weight is refused; upstream it becomes "
-                "sample_weight, and the weighted InitPenalty arm "
-                "(C_vec = C * w) is not implemented (svm/NOT_IMPLEMENTED.tsv)"
+        if class_weight is not None and not isinstance(class_weight, (dict, str)):
+            raise ValueError(
+                "mojolearn SVC: class_weight is a dict, 'balanced' or None, "
+                f"got {type(class_weight).__name__}"
             )
         if decision_function_shape != "ovo":
             raise NotImplementedError(
@@ -517,7 +567,7 @@ class SVC(NumericModeMixin):
         self.verbose = False
         self.output_type = None
         self.random_state = None
-        self.class_weight = None
+        self.class_weight = class_weight
         self.decision_function_shape = "ovo"
         self.probability = False
 
@@ -534,12 +584,6 @@ class SVC(NumericModeMixin):
         return float(self.gamma)
 
     def fit(self, X, y, sample_weight=None):
-        if sample_weight is not None:
-            raise NotImplementedError(
-                "mojolearn SVC: sample_weight is not implemented; the weighted "
-                "InitPenalty arm (C_vec = C * w) has no implementation "
-                "(svm/NOT_IMPLEMENTED.tsv). class_weight is the same refusal"
-            )
         x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
         labels, classes, pair = _as_labels(y)
         n_rows, n_cols = x.shape
@@ -549,6 +593,8 @@ class SVC(NumericModeMixin):
                 f"{n_rows} rows"
             )
         gamma = self._resolve_gamma(x)
+        c_rows = _c_rows(self.C, n_rows, sample_weight, getattr(self, "class_weight", None), y, "SVC")
+        tail = [] if c_rows is None else [addr_ro(c_rows, name="C * sample_weight")]
 
         dual = empty((n_rows,), "<f4")
         support = empty((n_rows,), "<i4")
@@ -563,9 +609,9 @@ class SVC(NumericModeMixin):
             addr(info, name="info"),
             # ORDER MATCHES bindings/_mojolearn_svm.mojo::svc_fit_binding.
             # n_rows, n_features, kernel, gamma, C, tol, max_iter,
-            # nochange_steps, degree, coef0
+            # nochange_steps, degree, coef0[, the per-row bounds' address]
             [n_rows, n_cols, _SVC_KERNELS[self.kernel], gamma, self.C, self.tol,
-             self.max_iter, self.nochange_steps, int(self.degree), float(self.coef0)],
+             self.max_iter, self.nochange_steps, int(self.degree), float(self.coef0)] + tail,
         )
         n_support = int(n_support)
         # `np.float32(...)`: one rounding of the float64 slot to binary32.
@@ -879,9 +925,9 @@ class SVR(NumericModeMixin):
                                   nothing in the reference to leave
                                   unimplemented. `SVC` omits it for the same
                                   reason
-        sample_weight   refused   `_svm_impl.py`, in fit(). The weighted
-                                  `InitPenalty` arm (C_vec = C * w) has no
-                                  implementation (`svm/NOT_IMPLEMENTED.tsv`)
+        sample_weight   honored   in fit(): the weighted `InitPenalty` arm,
+                                  row i's bound C * w_i at alpha_i and
+                                  alpha*_i (`_c_rows`)
         sparse X        refused   `svrFitSparse` and every CSR arm are
                                   unimplemented; dense row-major float32 only.
                                   `_buffer.py::as_f32_c` is what refuses
@@ -1100,16 +1146,12 @@ class SVR(NumericModeMixin):
     _resolve_gamma = SVC._resolve_gamma
 
     def fit(self, X, y, sample_weight=None):
-        if sample_weight is not None:
-            raise NotImplementedError(
-                "mojolearn SVR: sample_weight is not implemented; the weighted "
-                "InitPenalty arm (C_vec = C * w) has no implementation "
-                "(svm/NOT_IMPLEMENTED.tsv)"
-            )
         x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
         n_rows, n_cols = x.shape
         targets = _as_targets(y, n_rows)
         gamma = self._resolve_gamma(x)
+        c_rows = _c_rows(self.C, n_rows, sample_weight, who="SVR")
+        tail = [] if c_rows is None else [addr_ro(c_rows, name="C * sample_weight")]
 
         # WORST-CASE OUTPUT BUFFERS, AND `n_rows` IS THE WORST CASE.
         # The solver's domain is `2 * n_rows` (alpha+ and alpha-), but
@@ -1132,9 +1174,9 @@ class SVR(NumericModeMixin):
             addr(info, name="info"),
             # ORDER MATCHES bindings/_mojolearn_svm.mojo::svr_fit_binding.
             # n_rows, n_features, kernel, gamma, C, epsilon, tol, max_iter,
-            # nochange_steps
+            # nochange_steps[, the per-row bounds' address]
             [n_rows, n_cols, _KERNELS[self.kernel], gamma, self.C,
-             self.epsilon, self.tol, self.max_iter, self.nochange_steps],
+             self.epsilon, self.tol, self.max_iter, self.nochange_steps] + tail,
         )
         n_support = int(n_support)
         b = _round_f32(info[0])

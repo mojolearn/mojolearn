@@ -230,6 +230,7 @@ def svc_fit_host_borrowed(
     nochange_steps: Int,
     degree: Int = 3,
     coef0: Float64 = 0.0,
+    c_rows: List[Float32] = List[Float32](),
 ) raises -> SvcFitOutputs:
     """`svc_fit_host` on the caller's borrowed row-major `n_rows x n_cols`
     float32 buffer (DEVIATION 2665, 2026-09-11), what the binding calls. No
@@ -270,7 +271,7 @@ def svc_fit_host_borrowed(
         + " nochange_steps=" + String(nochange_steps)
     )
     var trace = SmoTrace()
-    var model = svc_fit_borrowed(ctx, x_ptr, labels, n_rows, n_cols, param, kp, card, trace)
+    var model = svc_fit_borrowed(ctx, x_ptr, labels, n_rows, n_cols, param, kp, card, trace, c_rows)
 
     var out = SvcFitOutputs()
     out.n_support = model.n_support
@@ -412,6 +413,7 @@ def svr_fit_host(
     tol: Float64,
     max_iter: Int,
     nochange_steps: Int,
+    c_rows: List[Float32] = List[Float32](),
 ) raises -> SvrFitOutputs:
     """`SVR(C, epsilon, kernel, gamma, tol, max_iter, nochange_steps).fit(X,
     y)`, one shot. `x` is ROW-MAJOR `n_rows x n_cols` (theirs is
@@ -500,7 +502,7 @@ def svr_fit_host(
         + " nochange_steps=" + String(nochange_steps)
     )
     var trace = SmoTrace()
-    var model = svr_fit(ctx, x, targets, n_rows, n_cols, param, kp, card, trace)
+    var model = svr_fit(ctx, x, targets, n_rows, n_cols, param, kp, card, trace, c_rows=c_rows)
 
     var out = SvrFitOutputs()
     out.n_support = model.n_support

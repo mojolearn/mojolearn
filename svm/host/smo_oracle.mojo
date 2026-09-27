@@ -440,9 +440,10 @@ def _select_ws[
     f: List[Scalar[dt]],
     alpha: List[Scalar[dt]],
     y: List[Scalar[dt]],
-    C: Scalar[dt],
+    C: List[Scalar[dt]],
 ):
-    """`WorkingSet::Select` (FIFO) + `SimpleSelect`."""
+    """`WorkingSet::Select` (FIFO) + `SimpleSelect`. `C` is the per-sample
+    bound `C_vec` (`InitPenalty`), one entry per training index."""
     var n_train = ws.n_train
     var n_ws = ws.n_ws
     if n_ws >= n_train:
@@ -462,10 +463,10 @@ def _select_ws[
     var sorted_idx = _sorted_by_f[dt](f)
     var available = List[Bool]()
     for i in range(n_train):
-        available.append(in_upper_g[dt](alpha[i], y[i], C))
+        available.append(in_upper_g[dt](alpha[i], y[i], C[i]))
     n_already += _gather_available[dt](ws, sorted_idx, available, n_already, n_needed // 2, True)
     for i in range(n_train):
-        available[i] = in_lower_g[dt](alpha[i], y[i], C)
+        available[i] = in_lower_g[dt](alpha[i], y[i], C[i])
     n_already += _gather_available[dt](ws, sorted_idx, available, n_already, n_ws - n_already, False)
     if n_already < n_ws:
         for i in range(n_train):
@@ -484,7 +485,7 @@ def _block_solve[
     mut alpha: List[Scalar[dt]],
     f_array: List[Scalar[dt]],
     tile: List[Scalar[dt]],
-    C_: Scalar[dt],
+    C_vec: List[Scalar[dt]],
     eps: Scalar[dt],
     max_iter: Int,
     mut delta_alpha: List[Scalar[dt]],
@@ -502,15 +503,16 @@ def _block_solve[
     var a_save = List[Scalar[dt]]()
     var Kd = List[Scalar[dt]]()
     var key = List[Int]()
+    var C = List[Scalar[dt]]()
     for t in range(n_ws):
         var idx = Int(ws_idx[t])
+        C.append(C_vec[idx])
         y.append(y_array[idx])
         f.append(f_array[idx])
         a.append(alpha[idx])
         a_save.append(alpha[idx])
         Kd.append(tile[t + t * n_ws])
         key.append(idx)
-    var C = C_
     var eta_eps = Scalar[dt](ORACLE_ETA_EPS)
     var diff0 = Scalar[dt](0)
     var diff_end = Scalar[dt](0)
@@ -521,7 +523,7 @@ def _block_solve[
         var u = -1
         var u_key = 2147483647
         for t in range(n_ws):
-            var v = f[t] if in_upper_g[dt](a[t], y[t], C) else pos_inf
+            var v = f[t] if in_upper_g[dt](a[t], y[t], C[t]) else pos_inf
             if v < f_u or (v == f_u and key[t] < u_key):
                 f_u = v
                 u = t
@@ -534,7 +536,7 @@ def _block_solve[
         var f_max = neg_inf
         var fmax_key = 2147483647
         for t in range(n_ws):
-            var v = f[t] if in_lower_g[dt](a[t], y[t], C) else neg_inf
+            var v = f[t] if in_lower_g[dt](a[t], y[t], C[t]) else neg_inf
             if v > f_max or (v == f_max and key[t] < fmax_key):
                 f_max = v
                 fmax_key = key[t]
@@ -551,7 +553,7 @@ def _block_solve[
         var l_key = 2147483647
         for t in range(n_ws):
             var v = neg_inf
-            if f_u < f[t] and in_lower_g[dt](a[t], y[t], C):
+            if f_u < f[t] and in_lower_g[dt](a[t], y[t], C[t]):
                 var Kui = tile[u * n_ws + t]
                 var eta_ui = _flush[dt](_flush[dt](Kd[t] + Kd[u]) - _flush[dt](Scalar[dt](2) * Kui))
                 if eta_ui < eta_eps:
@@ -565,8 +567,8 @@ def _block_solve[
         if l < 0:
             l = 0
         # update
-        var tmp_u = C - a[u] if y[u] > Scalar[dt](0) else a[u]
-        var tmp_l = a[l] if y[l] > Scalar[dt](0) else C - a[l]
+        var tmp_u = C[u] - a[u] if y[u] > Scalar[dt](0) else a[u]
+        var tmp_l = a[l] if y[l] > Scalar[dt](0) else C[l] - a[l]
         var Kul = tile[u * n_ws + l]
         var eta_ul = _flush[dt](_flush[dt](Kd[u] + Kd[l]) - _flush[dt](Scalar[dt](2) * Kul))
         if eta_ul < eta_eps:
@@ -602,8 +604,14 @@ def smo_oracle_fit[
     param: SvmParameter,
     kp: KernelParams,
     record_objective: Bool = False,
+    c_rows: List[Scalar[dt]] = List[Scalar[dt]](),
 ) raises -> OracleResult[dt]:
     """`SmoSolver::Solve` + `Results::Get`, serial.
+
+    `c_rows` empty: `InitPenalty`'s unweighted arm, C at every training
+    index. Otherwise one bound per ROW, the caller's `C * sample_weight`
+    already rounded to the working type once (`InitPenalty`'s weighted arm,
+    `C_vec[i] = C * w[i]`); EPSILON_SVR reads row i's bound at i and i + n.
 
     C_SVC: `y` is +-1 already (the caller does `getOvrlabels`; `svc_check`
     shares one helper), `n_train = n_rows`, `f = -y`.
@@ -619,6 +627,15 @@ def smo_oracle_fit[
     var n_train = n_rows * 2 if is_svr else n_rows
     var k = n_cols
     var C = Scalar[dt](param.C)
+    if len(c_rows) != 0 and len(c_rows) != n_rows:
+        raise Error("svm: " + String(len(c_rows)) + " per-row bounds for " + String(n_rows) + " rows")
+    for i in range(len(c_rows)):
+        var v = c_rows[i]
+        if not (v >= Scalar[dt](0) and v - v == Scalar[dt](0)):
+            raise Error("svm: the per-row bound C * sample_weight at row " + String(i) + " is " + String(v) + "; it must be finite and >= 0")
+    var C_vec = List[Scalar[dt]]()
+    for i in range(n_train):
+        C_vec.append(C if len(c_rows) == 0 else c_rows[i % n_rows])
     var tol = Scalar[dt](param.tol)
     var n_ws = ORACLE_WS_SIZE
     if n_ws > n_train:
@@ -682,7 +699,7 @@ def smo_oracle_fit[
     while keep_going:
         for t in range(n_ws):
             delta_alpha[t] = Scalar[dt](0)
-        _select_ws[dt](ws, f, alpha, y_train, C)
+        _select_ws[dt](ws, f, alpha, y_train, C_vec)
         # square tile K(ws, ws)
         # `getSquareTileWithoutCaching` extracts rows of X by
         # `ws_idx_mod` = the PROJECTED indices, so the tile is
@@ -700,7 +717,7 @@ def smo_oracle_fit[
             if rem < max_iter_this_block:
                 max_iter_this_block = rem
         var r = _block_solve[dt](
-            ws.idx, n_ws, y_train, alpha, f, tile, C, tol, max_iter_this_block,
+            ws.idx, n_ws, y_train, alpha, f, tile, C_vec, tol, max_iter_this_block,
             delta_alpha
         )
         var diff = r[0]
@@ -823,7 +840,7 @@ def smo_oracle_fit[
         var n_free = 0
         var s = Scalar[dt](0)
         for i in range(n_train):
-            if Scalar[dt](0) < alpha[i] and alpha[i] < C:
+            if Scalar[dt](0) < alpha[i] and alpha[i] < C_vec[i]:
                 s = _flush[dt](s + _flush[dt](f[i]))
                 n_free += 1
         if n_free > 0:
@@ -837,11 +854,11 @@ def smo_oracle_fit[
             var nu = 0
             var nl = 0
             for i in range(n_train):
-                if in_upper_g[dt](alpha[i], y_train[i], C):
+                if in_upper_g[dt](alpha[i], y_train[i], C_vec[i]):
                     nu += 1
                     if f[i] < b_up:
                         b_up = f[i]
-                if in_lower_g[dt](alpha[i], y_train[i], C):
+                if in_lower_g[dt](alpha[i], y_train[i], C_vec[i]):
                     nl += 1
                     if f[i] > b_low:
                         b_low = f[i]

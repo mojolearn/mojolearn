@@ -221,6 +221,26 @@ def _(ml, X, yc, yr, Xh=None):
                      rbf_gamma=_h(np.float64(f._params[0])), rbf_transform=_h(f.transform(X[:256]))),
                 c, lambda e: (e.decision_function(Xh[:256]), e.predict(Xh[:256])))
 
+
+@lane("x-neighbors-svm-weights")
+def _(ml, X, yc, yr, Xh=None):
+    """sample_weight on SVC and SVR and class_weight on SVC: InitPenalty's
+    weighted arm, each row's bound C * cw[y_i] * w_i formed in binary64 and
+    rounded once to float32 on the host (_svm_impl._c_rows), then C_vec on
+    the device and the per-index bound in smo_oracle_fit. Weights 0.5 to
+    2.0 with a zero, so a bound pins an alpha at 0 and others cap it."""
+    w = (0.5 + 0.5 * (np.arange(512) % 4)).astype(np.float64)
+    w[7] = 0.0
+    c = ml.SVC(C=1.0, kernel="rbf", max_iter=200).fit(X[:512], yc[:512], sample_weight=w)
+    b = ml.SVC(C=1.0, kernel="rbf", max_iter=200, class_weight="balanced").fit(X[:512], yc[:512])
+    d = ml.SVC(C=0.5, kernel="linear", max_iter=200, class_weight={yc[:512].min().item(): 2.0}).fit(X[:512], yc[:512], sample_weight=w)
+    r = ml.SVR(C=1.0, kernel="rbf", epsilon=0.1, max_iter=200).fit(X[:512], yr[:512], sample_weight=w)
+    return _fit(dict(w_dual=_h(c.dual_coef_), w_support=_h(c.support_), w_decision=_h(c.decision_function(X[512:768])),
+                     bal_dual=_h(b.dual_coef_), bal_decision=_h(b.decision_function(X[512:768])),
+                     dict_dual=_h(d.dual_coef_), dict_decision=_h(d.decision_function(X[512:768])),
+                     svr_dual=_h(r.dual_coef_), svr_predict=_h(r.predict(X[512:768]))),
+                c, lambda e: (e.decision_function(Xh[:256]), e.predict(Xh[:256])))
+
 _batch_decl(_rows_calls("score_samples", "predict", sl=slice(0, 256)), "x-neighbors-lof")
 _batch_decl(_rows_calls("predict", "decision_function", "predict_proba", sl=slice(0, 256)), "x-neighbors-nearest-centroid")
 _batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "x-neighbors-ocsvm")
@@ -233,4 +253,4 @@ _batch_decl(_rows_calls("predict_proba", "predict", sl=slice(0, 128)),
             "x-neighbors-label-propagation", "x-neighbors-label-spreading")
 _batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_neighbors_holes), "x-neighbors-knn-imputer")
 _batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-neighbors-svgp")
-_batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "x-neighbors-gamma-scale")
+_batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "x-neighbors-gamma-scale", "x-neighbors-svm-weights")

@@ -25,7 +25,10 @@ happens to it:
       TANH, PRECOMPUTED    POLYNOMIAL is one identical_pow away and is left
                            unimplemented rather than written blind)
     degree, coef0          only read by the two refused kernels
-    sample_weight          the Solve/InitPenalty argument; raised by name
+    sample_weight          InitPenalty's weighted arm: the caller's per-row
+                           bounds C * w (`check_c_rows`, SmoSolver `c_rows`,
+                           smo_oracle_fit `c_rows`); the has_sample_weight
+                           flag below is the List entry's old refusal
 
 # =========================================================================
 # DEVIATION 636 (IDENTITY_PATHS row 39, FACT 2): NON-FINITE inputs are
@@ -312,3 +315,18 @@ def check_finite_ptr(
             + String(first) + " (DEVIATION 636: a NaN or inf input cannot be"
             " fitted; a computed NaN has a vendor-specific payload)"
         )
+
+
+def check_c_rows(c_rows: List[Float32], n_rows: Int) raises:
+    """`InitPenalty`'s weighted arm takes one bound per row, `C *
+    sample_weight[i]`, formed by the caller. Empty is the unweighted arm.
+    Each bound must be finite and >= 0 (DEVIATION 636's family: NaN fails
+    `>= 0` and inf - inf is NaN)."""
+    if len(c_rows) == 0:
+        return
+    if len(c_rows) != n_rows:
+        raise Error("svm: " + String(len(c_rows)) + " per-row bounds for " + String(n_rows) + " rows")
+    for i in range(n_rows):
+        var v = c_rows[i]
+        if not (v >= Float32(0) and v - v == Float32(0)):
+            raise Error("svm: the per-row bound C * sample_weight at row " + String(i) + " is " + String(v) + "; it must be finite and >= 0")
