@@ -1,0 +1,18 @@
+# the neighbors lane's per-seam check drivers and sabotage arms (pass 2; docs/lanes/progress/neighbors.md)
+x_neighbors/checks/dist_check.mojo	x_neighbors/checks/sabotage/5206_sqdist_fold_reversed.patch
+x_neighbors/checks/dist_check.mojo	x_neighbors/checks/sabotage/5207_select_tie_high.patch
+x_neighbors/checks/dist_check.mojo	x_neighbors/checks/sabotage/5208_rbf_fold_reversed.patch
+x_neighbors/checks/fold_check.mojo	x_neighbors/checks/sabotage/5209_matmul_fold_reversed.patch
+x_neighbors/checks/fold_check.mojo	x_neighbors/checks/sabotage/5210_lrd_ranks_reversed.patch
+x_neighbors/checks/model_check.mojo	x_neighbors/checks/sabotage/5200_smo_first_index.patch
+x_neighbors/checks/model_check.mojo	x_neighbors/checks/sabotage/5212_nc_std_rows_reversed.patch
+x_neighbors/checks/model_check.mojo	x_neighbors/checks/sabotage/5201_shrink_centroid_fold_reversed.patch
+x_neighbors/checks/model_check.mojo	x_neighbors/checks/sabotage/5202_svd_flip_last_row.patch
+x_neighbors/checks/sketch_check.mojo	x_neighbors/checks/sabotage/5203_pcs_shift_reversed.patch
+x_neighbors/checks/sketch_check.mojo	x_neighbors/checks/sabotage/5213_sech_factor_split.patch
+x_neighbors/checks/semi_check.mojo	x_neighbors/checks/sabotage/5214_laplacian_divide_wi_first.patch
+x_neighbors/checks/semi_check.mojo	x_neighbors/checks/sabotage/5215_donor_tie_high.patch
+x_neighbors/checks/graph_check.mojo	x_neighbors/checks/sabotage/5216_pagerank_fold_reversed.patch
+x_neighbors/checks/graph_check.mojo	x_neighbors/checks/sabotage/5217_cc_max_label.patch
+x_neighbors/checks/graph_check.mojo	x_neighbors/checks/sabotage/5204_louvain_order_reversed.patch
+x_neighbors/checks/graph_check.mojo	x_neighbors/checks/sabotage/5205_cholesky_fold_reversed.patch

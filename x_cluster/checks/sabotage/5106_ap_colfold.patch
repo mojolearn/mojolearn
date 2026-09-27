@@ -1,0 +1,11 @@
+--- a/x_cluster/bodies.mojo
++++ b/x_cluster/bodies.mojo
+@@ -182,7 +182,7 @@
+     var one_minus = ftz(Float32(1) - damping)
+     var colsum = Float32(0)
+     for ii in range(n):
+-        var i = n - 1 - ii if REV else ii
++        var i = ii if REV else n - 1 - ii
+         var v = r_m[i * n + k]
+         var rp = v if (i == k or v > Float32(0)) else Float32(0)
+         colsum = ftz(colsum + rp)

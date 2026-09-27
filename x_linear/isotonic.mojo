@@ -132,6 +132,7 @@ def isotonic_predict(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: 
     fp: [X_min, X_max]. res: n predictions."""
     var m = ldi(ip, 0)
     var oob = ldi(ip, 1)
+    # DEVIATION 5006 (IDENTITY_PATHS row 106): the constant word, never 0/0
     var nan = bitcast[DType.float32](UInt32(0x7FC00000))
     for q in range(n):
         var t = ld(x, q)

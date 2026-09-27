@@ -30,7 +30,12 @@ xtrees/checks/glue_check.mojo, one sabotage arm each):
   DEVIATION 5604  ties: the lower index; stable sorts.
   DEVIATION 5605  a zero row normalises to uniform 1 / k, never 0 / 0.
 """
+from std.sys.compile import is_defined
 from checks.numerics import identical_mul64, identical_exp64, identical_log64, identical_pow64
+
+#: The host gate's negative control (`-D MOJOLEARN_HOST_SABOTAGE=1`, host builds
+#: only): `scale_f64` divides by a perturbed divisor, so every vote average moves.
+comptime XTREES_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
 
 comptime GOLDEN: UInt64 = 0x9E3779B97F4A7C15
 
@@ -214,7 +219,10 @@ def argmax_rows_f32(
         res[unsafe_offset=i] = Int32(best)
 
 
-def scale_f64(x: MutPointer[Float64, MutUntrackedOrigin], n: Int, divisor: Float64):
+def scale_f64(x: MutPointer[Float64, MutUntrackedOrigin], n: Int, divisor_in: Float64):
+    var divisor = divisor_in
+    comptime if XTREES_HOST_SABOTAGE:
+        divisor = divisor * 1.0000001
     for i in range(n):
         x[unsafe_offset=i] = x[unsafe_offset=i] / divisor
 

@@ -1,0 +1,17 @@
+# the cnn lane's seam check and one sabotage patch per seam (pass 2; docs/lanes/progress/cnn.md)
+x_cnn/checks/seams_check.mojo	x_cnn/checks/sabotage/seam_5700_col2im_order.patch
+x_cnn/checks/seams_check.mojo	x_cnn/checks/sabotage/seam_5701_dw_serial.patch
+x_cnn/checks/seams_check.mojo	x_cnn/checks/sabotage/seam_5702_bn_fold_order.patch
+x_cnn/checks/seams_check.mojo	x_cnn/checks/sabotage/seam_5703_dropout_counter.patch
+x_cnn/checks/seams_check.mojo	x_cnn/checks/sabotage/seam_5704_spmm_order.patch
+x_cnn/checks/seams_check.mojo	x_cnn/checks/sabotage/seam_5705_inf_limit.patch
+x_cnn/checks/seams_check.mojo	x_cnn/checks/sabotage/seam_5706_maxpool_last.patch
+x_cnn/checks/seams_check.mojo	x_cnn/checks/sabotage/seam_5707_avg_reciprocal.patch
+x_cnn/checks/seams_check.mojo	x_cnn/checks/sabotage/seam_5708_softmax_fold.patch
+x_cnn/checks/seams_check.mojo	x_cnn/checks/sabotage/seam_5709_sgd_fma.patch
+x_cnn/checks/seams_check.mojo	x_cnn/checks/sabotage/seam_5710_gcn_norm_order.patch
+x_cnn/checks/seams_check.mojo	x_cnn/checks/sabotage/seam_5711_pad_bwd_order.patch
+x_cnn/checks/seams_check.mojo	x_cnn/checks/sabotage/seam_5712_adaptive_avg_order.patch
+x_cnn/checks/seams_check.mojo	x_cnn/checks/sabotage/seam_5713_sage_max_order.patch
+x_cnn/checks/seams_check.mojo	x_cnn/checks/sabotage/seam_5714_l2norm_fold.patch
+x_cnn/checks/seams_check.mojo	x_cnn/checks/sabotage/seam_5715_adam_fma.patch

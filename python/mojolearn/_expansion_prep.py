@@ -49,7 +49,8 @@ _OPS = dict(
     lda_prep=36, lda_w=37, lda_stage2=38, lda_stage3=39, qda_cov=40, qda_prep=41, qda_dec=42,
     qt_apply=43, pt_fit=44, pt_apply=45, std_params=46, normalize=47, poly=48, spline_knots=49, spline_apply=50, label_binarize=51, scatter_ones=52,
     ii_mean=53, ii_gram=54, ii_sub=55, ii_br=56, ii_predict=57, ii_snapshot=58, ii_conv=59, nan_mask=60, gather_cols=61, var_ptp=62, f_classif=63, f_regression=64, chi2=65,
-    mi_colscale=66, mi_noise=67, mi_cc=68, mi_cd=69, mi_reduce=70, sqsum_cols=71, log=72,
+    mi_colscale=66, mi_noise=67, mi_cc=68, mi_cd=69, mi_reduce=70, sqsum_cols=71, log=72, robust_uv=73,
+    qt_inverse=74, pt_inverse=75, block_argmax=76, ord_inverse=77, cat_gather=78, where_code=79, kbins_inverse=80,
 )
 _PARAMS = 14
 _NONE = -1
@@ -214,8 +215,8 @@ class RobustScaler(_PrepBase):
     """sklearn.preprocessing.RobustScaler: center by the median, scale by the
     quantile range (numpy's linear percentile over the non-NaN entries; NaN is
     ignored in fit and kept in transform). Float32 throughout; a scale below
-    10 * float32 eps is one (`_handle_zeros_in_scale`). `unit_variance=True`
-    is refused by name."""
+    10 * float32 eps is one (`_handle_zeros_in_scale`); unit_variance divides
+    the scale by norm.ppf(q_max) - norm.ppf(q_min) (Acklam, float32)."""
     _parameters = ("with_centering", "with_scaling", "quantile_range", "copy", "unit_variance")
 
     def __init__(self, *, with_centering=True, with_scaling=True, quantile_range=(25.0, 75.0), copy=True,
@@ -227,11 +228,12 @@ class RobustScaler(_PrepBase):
         self.unit_variance = unit_variance
 
     def fit(self, X, y=None):
-        if self.unit_variance:
-            raise NotImplementedError("mojolearn: RobustScaler(unit_variance=True) is not implemented")
         lo, hi = (float(v) for v in self.quantile_range)
         if not 0 <= lo <= hi <= 100:
             raise ValueError(f"mojolearn: invalid quantile range {self.quantile_range!r}")
+        if self.unit_variance and not 0 < lo < hi < 100:
+            raise ValueError("mojolearn: RobustScaler(unit_variance=True) needs 0 < q_min < q_max < 100 "
+                             "(norm.ppf of 0 or 1 is infinite)")
         arr = _x2d(X)
         n, d = arr.shape
         mode = _mode()
@@ -247,6 +249,8 @@ class RobustScaler(_PrepBase):
         pr.stage("col_stats", d, xo, n, d, st)
         pr.stage("quantile", 3 * d, so, n, d, qf, 3, q, st)
         pr.stage("scale_params", d, q, 3, d, center, scale, 0, 0, 2, 1)
+        if self.unit_variance:
+            pr.stage("robust_uv", d, scale, qf)
         pr.run(mode)
         self.center_ = pr.get(center, d) if self.with_centering else None
         self.scale_ = pr.get(scale, d) if self.with_scaling else None
@@ -315,22 +319,68 @@ def _fit_categories(mode, arr):
     return [pr.get(uo + c * n, counts[c]) for c in range(d)]
 
 
+def _category_block(pr, categories):
+    """Every column's categories in one (d, kmax) block. Returns (offset, kmax)."""
+    kmax = max(c.size for c in categories)
+    block = [0.0] * (len(categories) * kmax)
+    for j, cats in enumerate(categories):
+        block[j * kmax:j * kmax + cats.size] = cats.tolist()
+    return pr.put_list(block), kmax
+
+
 def _codes(pr, arr, categories):
     """Stages that write each element's category index (or -1) and each
     column's unknown count. Returns (codes offset, unknown-count offset)."""
     n, d = arr.shape
-    kmax = max(c.size for c in categories)
-    block = [0.0] * (d * kmax)
-    for j, cats in enumerate(categories):
-        block[j * kmax:j * kmax + cats.size] = cats.tolist()
     xo = pr.put(arr)
-    uo = pr.put_list(block)
+    uo, kmax = _category_block(pr, categories)
     co = pr.put_list([c.size for c in categories])
     codes = pr.alloc(n * d)
     neg = pr.alloc(d)
     pr.stage("lookup", n * d, xo, n, d, uo, kmax, co, codes)
     pr.stage("count_neg", d, codes, n, d, neg)
     return codes, neg
+
+
+def _inverse_codes(pr, arr, categories, missing, emv, unknown):
+    """OrdinalEncoder-style inverse: stages that turn codes back into category
+    values. Returns (values offset, codes offset); a code of -2 is invalid,
+    -1 unknown (the reference's None, written as NaN)."""
+    n, d = arr.shape
+    xo = pr.put(arr)
+    mo = pr.put_list(missing)
+    eo = pr.put_scalar(emv)
+    uo = pr.put_scalar(0.0 if unknown is None else unknown)
+    no = pr.put_list([c.size for c in categories])
+    codes = pr.alloc(n * d)
+    pr.stage("ord_inverse", n * d, xo, n, d, mo, eo, 0 if unknown is None else 1, uo, no, codes)
+    return _gather_categories(pr, codes, n, d, categories), codes
+
+
+def _gather_categories(pr, codes, n, d, categories):
+    co, kmax = _category_block(pr, categories)
+    out = pr.alloc(n * d)
+    pr.stage("cat_gather", n * d, codes, n, d, co, kmax, out)
+    return out
+
+
+def _bad_codes(pr, codes, n, d, bad):
+    """Row indices with a code equal to `bad`."""
+    vals = pr.values(codes, n * d)
+    return sorted({i // d for i, v in enumerate(vals) if v == bad})
+
+
+def _block_argmax(pr, arr, widths, drops, check):
+    """One code per (row, block): the block_argmax stage over a (n, sum(widths)) input."""
+    n, W = arr.shape
+    d = len(widths)
+    xo = pr.put(arr)
+    so = pr.put_list([sum(widths[:j]) for j in range(d)])
+    wo = pr.put_list(widths)
+    do = pr.put_list(drops) if drops is not None else _NONE
+    codes = pr.alloc(n * d)
+    pr.stage("block_argmax", n * d, xo, n, W, d, so, wo, do, 1 if check else 0, codes)
+    return codes
 
 
 def _raise_unknown(pr, neg, d, who):
@@ -341,8 +391,11 @@ def _raise_unknown(pr, neg, d, who):
 
 class OrdinalEncoder(_PrepBase):
     """sklearn.preprocessing.OrdinalEncoder over numeric columns: each value's
-    index among its column's sorted distinct training values, as float32.
-    handle_unknown 'error' or 'use_encoded_value'. categories other than
+    index among its column's sorted distinct training values, as float32; a
+    NaN seen in fit (the last category) is written as encoded_missing_value
+    (NaN by default). handle_unknown 'error' or 'use_encoded_value'.
+    inverse_transform maps codes back (an unknown_value row is NaN where the
+    reference writes None: there is no object Array). categories other than
     'auto', min_frequency and max_categories are refused."""
     _parameters = ("categories", "dtype", "handle_unknown", "unknown_value", "encoded_missing_value",
                    "min_frequency", "max_categories")
@@ -365,9 +418,23 @@ class OrdinalEncoder(_PrepBase):
             raise ValueError(f"mojolearn: invalid handle_unknown {self.handle_unknown!r}")
         if self.handle_unknown == "use_encoded_value" and not isinstance(self.unknown_value, numbers.Real):
             raise TypeError("mojolearn: unknown_value must be a number when handle_unknown='use_encoded_value'")
+        if not isinstance(self.encoded_missing_value, numbers.Real):
+            raise TypeError("mojolearn: encoded_missing_value must be a number (or NaN)")
         arr = _finite_2d(X, "OrdinalEncoder")
         mode = _mode()
         self.categories_ = _fit_categories(mode, arr)
+        self._missing = [c.size - 1 if c.size and _is_nan_value(c.tolist()[-1]) else -1 for c in self.categories_]
+        cards = [c.size - (1 if m >= 0 else 0) for c, m in zip(self.categories_, self._missing)]
+        if self.handle_unknown == "use_encoded_value" and not _is_nan_value(self.unknown_value):
+            if any(0 <= self.unknown_value < k for k in cards):
+                raise ValueError(f"mojolearn: the used value for unknown_value {self.unknown_value} is one of the "
+                                 "values already used for encoding the seen categories.")
+        if any(m >= 0 for m in self._missing) and not _is_nan_value(self.encoded_missing_value):
+            bad = [j for j, (k, m) in enumerate(zip(cards, self._missing))
+                   if m >= 0 and 0 <= self.encoded_missing_value < k]
+            if bad:
+                raise ValueError(f"mojolearn: encoded_missing_value ({self.encoded_missing_value}) is already "
+                                 f"used to encode a known category in features: {bad}")
         self.numeric_mode_, self.n_features_in_ = mode, arr.shape[1]
         return self
 
@@ -383,9 +450,27 @@ class OrdinalEncoder(_PrepBase):
             val = pr.put_scalar(self.unknown_value)
             out = pr.alloc(n * d)
             pr.stage("where_neg", n * d, codes, n * d, val, out)
+        if any(m >= 0 for m in self._missing):
+            src, out = out, pr.alloc(n * d)
+            pr.stage("where_code", n * d, codes, n, d, pr.put_list(self._missing),
+                     pr.put_scalar(self.encoded_missing_value), src, out)
         pr.run(self.numeric_mode_)
         if self.handle_unknown == "error":
             _raise_unknown(pr, neg, d, "OrdinalEncoder")
+        return pr.get(out, (n, d))
+
+    def inverse_transform(self, X):
+        self._check_fitted()
+        arr = _x2d(X)
+        self._check_width(arr)
+        n, d = arr.shape
+        pr = _Prog()
+        unknown = self.unknown_value if self.handle_unknown == "use_encoded_value" else None
+        out, codes = _inverse_codes(pr, arr, self.categories_, self._missing, self.encoded_missing_value, unknown)
+        pr.run(self.numeric_mode_)
+        bad = _bad_codes(pr, codes, n, d, -2)
+        if bad:
+            raise ValueError(f"mojolearn: rows {bad[:10]} hold codes that name no category")
         return pr.get(out, (n, d))
 
 
@@ -393,8 +478,11 @@ class OneHotEncoder(_PrepBase):
     """sklearn.preprocessing.OneHotEncoder over numeric columns, returned
     DENSE (float32) whatever `sparse_output` says: there is no sparse Array.
     drop None, 'first' or 'if_binary'; handle_unknown 'error' or 'ignore'
-    (an unknown value is an all-zero block). categories other than 'auto',
-    min_frequency and max_categories are refused."""
+    (an unknown value is an all-zero block). inverse_transform is the
+    reference's per-block argmax (an all-zero block is the dropped category,
+    or unknown: an error for handle_unknown='error', NaN where the reference
+    writes None for 'ignore'). categories other than 'auto', min_frequency
+    and max_categories are refused."""
     _parameters = ("categories", "drop", "sparse_output", "dtype", "handle_unknown", "min_frequency",
                    "max_categories", "feature_name_combiner")
 
@@ -452,6 +540,23 @@ class OneHotEncoder(_PrepBase):
         if self.handle_unknown == "error":
             _raise_unknown(pr, neg, d, "OneHotEncoder")
         return pr.get(out, (n, W))
+
+    def inverse_transform(self, X):
+        self._check_fitted()
+        arr = _x2d(X)
+        widths, drops = self._widths()
+        n, W, d = arr.shape[0], arr.shape[1], len(widths)
+        if W != sum(widths):
+            raise ValueError(f"mojolearn: X has {W} columns, expected {sum(widths)}")
+        pr = _Prog()
+        codes = _block_argmax(pr, arr, widths, [-1 if dr is None else dr for dr in drops], True)
+        out = _gather_categories(pr, codes, n, d, self.categories_)
+        pr.run(self.numeric_mode_)
+        bad = _bad_codes(pr, codes, n, d, -1)
+        if bad and self.handle_unknown == "error":
+            raise ValueError(f"mojolearn: samples {bad[:10]} can not be inverted when drop=None and "
+                             "handle_unknown='error' because they contain all zeros")
+        return pr.get(out, (n, d))
 
 
 # ---------------------------------------------------------------- target encoder
@@ -619,7 +724,9 @@ class SimpleImputer(_PrepBase):
     (the smallest on a tie) or 'constant'. An all-missing column is dropped
     from the output unless `keep_empty_features` (its statistic is NaN, as in
     the reference; with keep_empty_features it is 0, or fill_value).
-    add_indicator and callable strategies are refused."""
+    add_indicator appends MissingIndicator's columns (the features with a
+    missing value in fit, 1.0 where missing). Callable strategies are
+    refused."""
     _parameters = ("missing_values", "strategy", "fill_value", "copy", "add_indicator", "keep_empty_features")
 
     def __init__(self, *, missing_values=float("nan"), strategy="mean", fill_value=None, copy=True,
@@ -632,8 +739,6 @@ class SimpleImputer(_PrepBase):
         self.keep_empty_features = keep_empty_features
 
     def fit(self, X, y=None):
-        if self.add_indicator:
-            raise NotImplementedError("mojolearn: SimpleImputer(add_indicator=True) is not implemented")
         if self.strategy not in ("mean", "median", "most_frequent", "constant"):
             raise NotImplementedError(f"mojolearn: SimpleImputer strategy {self.strategy!r} is not implemented")
         if self.strategy == "constant" and self.fill_value is not None and \
@@ -680,6 +785,7 @@ class SimpleImputer(_PrepBase):
             self.statistics_ = pr.get(src, d)
             self._fill = self.statistics_
         self._keep = [j for j in range(d) if self.keep_empty_features or not empty[j]]
+        self._indicator = [j for j in range(d) if counts[j] < n] if self.add_indicator else []
         self.numeric_mode_, self.n_features_in_ = mode, d
         return self
 
@@ -695,8 +801,26 @@ class SimpleImputer(_PrepBase):
         ko = pr.put_list(self._keep)
         out = pr.alloc(n * dout)
         pr.stage("fill", n * dout, xo, n, d, so, out, ko, dout)
+        m = len(self._indicator)
+        if m:
+            io, mo = pr.put_list(self._indicator), pr.alloc(n * m)
+            pr.stage("nan_mask", n * m, xo, n, d, io, m, mo)
         pr.run(self.numeric_mode_)
-        return pr.get(out, (n, dout))
+        if not m:
+            return pr.get(out, (n, dout))
+        return _hstack(pr.get(out, (n, dout)), pr.get(mo, (n, m)))
+
+
+def _hstack(a, b):
+    """[a | b] for two C-order float32 2-D Arrays of the same row count (a
+    byte copy per row)."""
+    n, p = a.shape
+    q = b.shape[1]
+    out = Array((n, p + q), "<f4")
+    for i in range(n):
+        ctypes.memmove(out._addr + 4 * i * (p + q), a._addr + 4 * i * p, 4 * p)
+        ctypes.memmove(out._addr + 4 * (i * (p + q) + p), b._addr + 4 * i * q, 4 * q)
+    return out
 
 
 # ---------------------------------------------------------------- discretizer
@@ -718,7 +842,8 @@ class KBinsDiscretizer(_PrepBase):
     there is no sparse Array), 'onehot-dense' or 'ordinal'. A constant column
     is one bin with edges (-inf, inf). Above `subsample` rows the fit uses a
     with-replacement resample drawn from `random_state` by splitmix64 (the
-    reference draws numpy's). sample_weight is refused."""
+    reference draws numpy's). inverse_transform is the bin centres, as the
+    reference's. sample_weight is refused."""
     _parameters = ("n_bins", "encode", "strategy", "quantile_method", "dtype", "subsample", "random_state")
 
     def __init__(self, n_bins=5, *, encode="onehot", strategy="quantile", quantile_method="averaged_inverted_cdf",
@@ -801,6 +926,33 @@ class KBinsDiscretizer(_PrepBase):
         pr.stage("onehot", n * d, codes, n, d, so, _NONE, W, out)
         pr.run(self.numeric_mode_)
         return pr.get(out, (n, W))
+
+    def inverse_transform(self, X):
+        self._check_fitted()
+        arr = _x2d(X)
+        widths = [int(v) for v in self.n_bins_.tolist()]
+        d = len(widths)
+        n = arr.shape[0]
+        pr = _Prog()
+        if self.encode == "ordinal":
+            self._check_width(arr)
+            xo = pr.put(arr)
+            codes = pr.alloc(n * d)
+            pr.stage("ord_inverse", n * d, xo, n, d, pr.put_list([-1] * d), pr.put_scalar(0.0), 0,
+                     pr.put_scalar(0.0), pr.put_list(widths), codes)
+            bad_code, why = -2, "hold codes that name no bin"
+        else:
+            if arr.shape[1] != sum(widths):
+                raise ValueError(f"mojolearn: X has {arr.shape[1]} columns, expected {sum(widths)}")
+            codes = _block_argmax(pr, arr, widths, None, True)
+            bad_code, why = -1, "can not be inverted because they contain all zeros"
+        out = pr.alloc(n * d)
+        pr.stage("kbins_inverse", n * d, codes, n, d, pr.put(self._edges), self._stride, out)
+        pr.run(self.numeric_mode_)
+        bad = _bad_codes(pr, codes, n, d, bad_code)
+        if bad:
+            raise ValueError(f"mojolearn: samples {bad[:10]} {why}")
+        return pr.get(out, (n, d))
 
 
 # ---------------------------------------------------------------- naive Bayes
@@ -1285,7 +1437,9 @@ class QuantileTransformer(_PrepBase):
     'uniform' or 'normal' (Acklam's inverse normal CDF, float32, clipped at
     the reference's +-5.1993). Above `subsample` rows the fit uses a
     without-replacement draw from `random_state` by splitmix64. NaN is kept.
-    inverse_transform and sparse input are refused."""
+    inverse_transform is the reference's (norm.cdf, Cephes ndtr in float32,
+    for 'normal', then np.interp back onto the quantiles). Sparse input is
+    refused."""
     _parameters = ("n_quantiles", "output_distribution", "ignore_implicit_zeros", "subsample", "random_state",
                    "copy")
 
@@ -1325,7 +1479,7 @@ class QuantileTransformer(_PrepBase):
         self.n_quantiles_, self.numeric_mode_, self.n_features_in_ = nq, mode, d
         return self
 
-    def transform(self, X):
+    def _apply(self, X, op):
         self._check_fitted()
         arr = _x2d(X)
         self._check_width(arr)
@@ -1333,13 +1487,16 @@ class QuantileTransformer(_PrepBase):
         pr = _Prog()
         xo, qo, ro = pr.put(arr), pr.put(self._q), pr.put(self.references_)
         out = pr.alloc(n * d)
-        pr.stage("qt_apply", n * d, xo, n, d, qo, self.n_quantiles_, ro,
+        pr.stage(op, n * d, xo, n, d, qo, self.n_quantiles_, ro,
                  1 if self.output_distribution == "normal" else 0, out)
         pr.run(self.numeric_mode_)
         return pr.get(out, (n, d))
 
+    def transform(self, X):
+        return self._apply(X, "qt_apply")
+
     def inverse_transform(self, X):
-        raise NotImplementedError("mojolearn: QuantileTransformer.inverse_transform is not implemented")
+        return self._apply(X, "qt_inverse")
 
 
 class PowerTransformer(_PrepBase):
@@ -1348,7 +1505,9 @@ class PowerTransformer(_PrepBase):
     `standardize`. Each column's lambda maximises the reference's
     log-likelihood by a fixed-step golden-section search over [-8, 8]
     (the reference: scipy's Brent from the bracket (-2, 2)), float32. NaN is
-    ignored in fit and kept. inverse_transform is refused."""
+    ignored in fit and kept. inverse_transform undoes the standardisation
+    (x * scale + mean), then applies scipy's inv_boxcox or the reference's
+    yeo-johnson inverse, as exp(log1p(lambda x) / lambda) in float32."""
     _parameters = ("method", "standardize", "copy")
 
     def __init__(self, method="yeo-johnson", *, standardize=True, copy=True):
@@ -1384,7 +1543,7 @@ class PowerTransformer(_PrepBase):
         self.numeric_mode_, self.n_features_in_ = mode, d
         return self
 
-    def transform(self, X):
+    def _apply(self, X, op):
         self._check_fitted()
         arr = _x2d(X)
         self._check_width(arr)
@@ -1394,12 +1553,15 @@ class PowerTransformer(_PrepBase):
         mo = pr.put(self._mean) if self.standardize else _NONE
         so = pr.put(self._scale) if self.standardize else _NONE
         out = pr.alloc(n * d)
-        pr.stage("pt_apply", n * d, xo, n, d, lo, self._method, mo, so, out)
+        pr.stage(op, n * d, xo, n, d, lo, self._method, mo, so, out)
         pr.run(self.numeric_mode_)
         return pr.get(out, (n, d))
 
+    def transform(self, X):
+        return self._apply(X, "pt_apply")
+
     def inverse_transform(self, X):
-        raise NotImplementedError("mojolearn: PowerTransformer.inverse_transform is not implemented")
+        return self._apply(X, "pt_inverse")
 
 
 class Normalizer(_PrepBase):
@@ -1699,7 +1861,8 @@ class LabelBinarizer(_PrepBase):
     int32 column per class (one column, the second class, for two classes;
     a NEG column for one), pos_label / neg_label; an unseen label is a NEG
     row. Numeric labels take the device route, str labels Python's.
-    Multilabel input, sparse_output and inverse_transform are refused."""
+    inverse_transform is the reference's (argmax for multiclass, the
+    threshold for binary). Multilabel input and sparse_output are refused."""
     _parameters = ("neg_label", "pos_label", "sparse_output")
 
     def __init__(self, *, neg_label=0, pos_label=1, sparse_output=False):
@@ -1748,7 +1911,31 @@ class LabelBinarizer(_PrepBase):
         return pr.get_i32(out, (n, W))
 
     def inverse_transform(self, Y, threshold=None):
-        raise NotImplementedError("mojolearn: LabelBinarizer.inverse_transform is not implemented")
+        self._check_fitted()
+        arr = _x2d(Y, "Y")
+        n, W = arr.shape
+        K = len(self._classes)
+        pr = _Prog()
+        if self.y_type_ == "multiclass":
+            if W != K:
+                raise ValueError(f"mojolearn: Y has {W} columns, expected {K}")
+            codes = _block_argmax(pr, arr, [K], None, False)
+            pr.run(self.numeric_mode_)
+            idx = [int(v) for v in pr.values(codes, n)]
+        else:
+            if W > 2:
+                raise ValueError("mojolearn: output_type='binary', but y.shape = " + str((n, W)))
+            if threshold is None:
+                threshold = (self.pos_label + self.neg_label) / 2.0
+            xo = pr.put(arr)
+            out = pr.alloc(n * W)
+            pr.stage("binarize", n * W, xo, n * W, pr.put_scalar(threshold), out)
+            pr.run(self.numeric_mode_)
+            vals = pr.values(out + (W - 1), n * W)[::W]
+            if K == 1:
+                return _classes_array([self._classes[0]] * n)
+            idx = [1 if v == 1.0 else 0 for v in vals]
+        return _classes_array([self._classes[i] for i in idx])
 
 
 class MultiLabelBinarizer(_PrepBase):

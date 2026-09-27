@@ -44,11 +44,14 @@ from max.gpu.host import DeviceContext
 from gbdt.train import train
 
 
-def splitmix(x: UInt64) -> UInt64:
-    var z = x + UInt64(0x9E3779B97F4A7C15)
-    z = (z ^ (z >> 30)) * UInt64(0xBF58476D1CE4E5B9)
-    z = (z ^ (z >> 27)) * UInt64(0x94D268D24F605EB8)
-    return z ^ (z >> 31)
+# DEVIATION 5942 (lane consolidate, 2026-09-27): the fixture hash is the
+# canonical splitmix64 (`checks/fixture_rng.mojo`). The private copy that
+# stood here carried 0x94D268D24F605EB8 for the last multiplier (even, so
+# not an odd multiplier at all; splitmix64's is 0x94D049BB133111EB), a
+# transcription slip `checks/fixture_rng_gate.mojo` found. This bench prices
+# time by same-arm subtraction and records no hash, so no recorded value
+# moves; its fixture values change.
+from checks.fixture_rng import splitmix64 as splitmix
 
 
 def frac(i: Int, salt: UInt64) -> Float64:

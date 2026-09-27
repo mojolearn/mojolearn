@@ -237,3 +237,109 @@ def _(ml, X, yc, yr, Xh=None):
                       conv.grad_weight_r_)
     first = ml.SAGEConv(16, 4, random_state=41)
     return _fit(parts, first, lambda e: (e.forward(np.ascontiguousarray(Xh[:256, :16]), ei),))
+
+
+@lane("x-cnn-conv-options")
+def _(ml, X, yc, yr, Xh=None):
+    """Conv2d's options on 256 rows as (2, 2, 4) maps: reflect, replicate
+    and circular padding (the explicit pad and its gather backward),
+    padding='same' with an even kernel (asymmetric), and groups (a
+    depthwise conv); forward + backward."""
+    x = np.ascontiguousarray(X[:256, :16]).reshape(256, 2, 2, 4)
+    convs = dict(
+        refl=ml.Conv2d(2, 3, (2, 3), padding=(1, 2), padding_mode="reflect", random_state=51, input_shape=(2, 2, 4)),
+        repl=ml.Conv2d(2, 4, 3, padding=2, padding_mode="replicate", groups=2, random_state=52),
+        circ=ml.Conv2d(2, 2, (3, 2), stride=(1, 2), padding=(1, 1), padding_mode="circular", random_state=53),
+        same=ml.Conv2d(2, 2, (2, 4), padding="same", dilation=(1, 1), groups=2, random_state=54),
+    )
+    parts = {}
+    for k, conv in convs.items():
+        out = conv.forward(x)
+        parts[k] = _h(out, conv.backward(_cnn_grad(X, out.shape)), conv.grad_weight_, conv.grad_bias_)
+    return _fit(parts, convs["refl"], lambda e: (e.transform(np.ascontiguousarray(Xh[:256, :16])),))
+
+
+_batch_decl(_rows_calls("transform", sl=np.s_[:256, :16]), "x-cnn-conv-options")
+
+
+@lane("x-cnn-pool-options")
+def _(ml, X, yc, yr, Xh=None):
+    """Pooling's options on 256 rows as (2, 2, 4) maps: ceil_mode (a last
+    window hanging over the edge), divisor_override, count_include_pad off
+    in ceil mode, and adaptive pooling to a size that does not divide the
+    input (overlapping windows); forward + backward."""
+    x = np.ascontiguousarray(X[:256, :16]).reshape(256, 2, 2, 4)
+    layers = dict(
+        mxc=ml.MaxPool2d((2, 3), stride=(1, 2), padding=(1, 1), ceil_mode=True, input_shape=(2, 2, 4)),
+        avc=ml.AvgPool2d(3, stride=2, padding=1, ceil_mode=True, count_include_pad=False),
+        avo=ml.AvgPool2d((2, 2), stride=(1, 3), ceil_mode=True, divisor_override=3),
+        aavg=ml.AdaptiveAvgPool2d((2, 3)),
+        amax=ml.AdaptiveMaxPool2d((1, 3)),
+    )
+    parts = {}
+    for k, layer in layers.items():
+        out = layer.forward(x)
+        parts[k] = _h(out, layer.backward(_cnn_grad(X, out.shape)))
+    return _fit(parts, layers["mxc"], lambda e: (e.transform(np.ascontiguousarray(Xh[:256, :16])),))
+
+
+_batch_decl(_rows_calls("transform", sl=np.s_[:256, :16]), "x-cnn-pool-options")
+
+
+@lane("x-cnn-bn-options")
+def _(ml, X, yc, yr, Xh=None):
+    """BatchNorm's options on 256 rows as (4, 2, 2) maps: momentum=None
+    (the cumulative average over three batches) and
+    track_running_stats=False (batch statistics in eval mode too)."""
+    x = np.ascontiguousarray(X[:256, :16]).reshape(256, 4, 2, 2)
+    cum = ml.BatchNorm2d(4, momentum=None, input_shape=(4, 2, 2))
+    parts = {}
+    for k in range(3):
+        y = cum.forward(x[80 * k:80 * (k + 1)])
+        parts[f"cum{k}"] = _h(y, cum.backward(_cnn_grad(X, y.shape)), cum.running_mean_, cum.running_var_)
+    free = ml.BatchNorm2d(4, track_running_stats=False).eval()
+    y = free.forward(x)
+    parts["free"] = _h(y, free.backward(_cnn_grad(X, y.shape)), free.grad_weight_, free.grad_bias_)
+    cum.eval()
+    return _fit(parts, cum, lambda e: (e.transform(np.ascontiguousarray(Xh[:256, :16])),))
+
+
+_batch_decl(_rows_calls("transform", sl=np.s_[:256, :16]), "x-cnn-bn-options")
+
+
+@lane("x-cnn-gnn-options")
+def _(ml, X, yc, yr, Xh=None):
+    """SAGEConv's max aggregation (ties split the gradient; the `ties`
+    fixture plants exact ties) and normalize=True, forward + backward on
+    the lane graph."""
+    x = np.ascontiguousarray(X[:256, :16])
+    ei = _cnn_graph(256)
+    parts = {}
+    for k, conv in dict(mx=ml.SAGEConv(16, 4, aggr="max", random_state=61),
+                        mxn=ml.SAGEConv(16, 3, aggr="max", normalize=True, random_state=62),
+                        mnn=ml.SAGEConv(16, 3, normalize=True, random_state=63)).items():
+        y = conv.forward(x, ei)
+        parts[k] = _h(y, conv.backward(_cnn_grad(X, y.shape)), conv.lin_l.grad_weight_, conv.grad_weight_r_)
+    first = ml.SAGEConv(16, 4, aggr="max", random_state=61)
+    return _fit(parts, first, lambda e: (e.forward(np.ascontiguousarray(Xh[:256, :16]), ei),))
+
+
+@lane("x-cnn-trainer-options")
+def _(ml, X, yc, yr, Xh=None):
+    """CNNClassifier's optimizer options: Adam, AdamW, and SGD with Nesterov
+    momentum and with dampening; one epoch of 64-row batches each."""
+    x = np.ascontiguousarray(X[:256, :16])
+    parts = {}
+    first = None
+    for k, kw in dict(adam=dict(optimizer="adam", learning_rate=0.01, weight_decay=1e-3),
+                      adamw=dict(optimizer="adamw", learning_rate=0.01, weight_decay=1e-2, betas=(0.8, 0.99)),
+                      nest=dict(optimizer="sgd", learning_rate=0.05, momentum=0.9, nesterov=True),
+                      damp=dict(optimizer="sgd", learning_rate=0.05, momentum=0.8, dampening=0.3)).items():
+        m = ml.CNNClassifier(input_shape=(1, 4, 4), conv_channels=(3,), batch_size=64, max_iter=1, random_state=1,
+                             **kw).fit(x, yc[:256])
+        parts[k] = _h(np.asarray(m.losses_, dtype=np.float64), *m.weights())
+        first = first or m
+    return _fit(parts, first, lambda e: (e.predict_proba(np.ascontiguousarray(Xh[:256, :16])),))
+
+
+_batch_decl(_rows_calls("predict_proba", sl=np.s_[:256, :16]), "x-cnn-trainer-options")

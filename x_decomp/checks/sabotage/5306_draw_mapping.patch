@@ -1,0 +1,13 @@
+diff --git a/x_decomp/cells.mojo b/x_decomp/cells.mojo
+index b8537db32..d5e90f1ce 100644
+--- a/x_decomp/cells.mojo
++++ b/x_decomp/cells.mojo
+@@ -362,7 +362,7 @@ def rand_cell(i: Int, seed: UInt32, stream: UInt32, kind: Int) -> Float32:
+     )
+     var grid = Float32(5.9604644775390625e-08)  # 2^-24
+     if kind == 0:
+-        return mul(Float32(r[0] >> 8), grid)
++        return mul(Float32(r[1] >> 8), grid)  # SABOTAGE 5306: the other Philox word
+     if kind == 2:
+         return Float32(1) if (r[0] & 1) == 1 else Float32(-1)
+     var u1 = mul(Float32((r[0] >> 8) + 1), grid)  # (0, 1]

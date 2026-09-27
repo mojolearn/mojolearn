@@ -1,0 +1,13 @@
+diff --git a/x_neighbors/items.mojo b/x_neighbors/items.mojo
+index bc04f5c16..468d974d8 100644
+--- a/x_neighbors/items.mojo
++++ b/x_neighbors/items.mojo
+@@ -478,7 +478,7 @@ def svd_flip_item(t: Int, v: FP, n: Int, c: Int):
+     var at = 0
+     for i in range(n):
+         var a = abs(v.unsafe_load(i * c + t))
+-        if a > best:
++        if a >= best:
+             best = a
+             at = i
+     if v.unsafe_load(at * c + t) < Float32(0):

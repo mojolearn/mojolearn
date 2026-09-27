@@ -1,0 +1,160 @@
+run-column: 1 lanes in 1 shards, 1 at a time
+run-column: shard 0 weight 4 s: byte-lm-host-train
+run-column: shard 0 exited 0 after 6 s (1 lanes, weight 4 s)
+run-column: all shards done after 6 s
+
+=== shard 0: byte-lm-host-train (exit 0) ===
+# vendor=cpu-amd-epyc-7k62-x86_64 commit=72a64f8b93f5ac67708ef1adbeb3a8dc1ac85b35 (git rev-parse HEAD) host.cpu_model='AMD EPYC 7K62 48-Core Processor' host.column=cpu host.families=['_mojolearn_byte_lm_host']
+# identity_break  mode=identical  2026-09-27 18:30:57  Linux-6.8.0-124-generic-x86_64-with-glibc2.35
+# per lane: the train row, then an `infer` row (held-out rows), a `model` row (saved bytes) and a `batch` row (whole batch vs rows alone, a split and prefixes) where the lane has them
+| lane                   | base             | ties             | hashed           | wide             | denormal         | denormal_ftz     | dupes            | odd              | negative         |
+|------------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|------------------|
+# START byte-lm-host-train/base repeat=1/train
+# DONE byte-lm-host-train/base repeat=1/train 0.042s
+# START byte-lm-host-train/base repeat=1/infer-save-reload
+# DONE byte-lm-host-train/base repeat=1/infer-save-reload 0.031s
+# START byte-lm-host-train/base repeat=1/batch
+# DONE byte-lm-host-train/base repeat=1/batch 0.000s
+# START byte-lm-host-train/base repeat=1/batchgrad
+# DONE byte-lm-host-train/base repeat=1/batchgrad 0.000s
+# START byte-lm-host-train/base repeat=1/batchscale
+# DONE byte-lm-host-train/base repeat=1/batchscale 0.000s
+# START byte-lm-host-train/base repeat=1/ragged
+# DONE byte-lm-host-train/base repeat=1/ragged 0.000s
+# START byte-lm-host-train/base repeat=1/stepfull
+# DONE byte-lm-host-train/base repeat=1/stepfull 0.000s
+# CELL byte-lm-host-train/base STABLE 0.074s
+# START byte-lm-host-train/ties repeat=1/train
+# DONE byte-lm-host-train/ties repeat=1/train 0.040s
+# START byte-lm-host-train/ties repeat=1/infer-save-reload
+# DONE byte-lm-host-train/ties repeat=1/infer-save-reload 0.031s
+# START byte-lm-host-train/ties repeat=1/batch
+# DONE byte-lm-host-train/ties repeat=1/batch 0.000s
+# START byte-lm-host-train/ties repeat=1/batchgrad
+# DONE byte-lm-host-train/ties repeat=1/batchgrad 0.000s
+# START byte-lm-host-train/ties repeat=1/batchscale
+# DONE byte-lm-host-train/ties repeat=1/batchscale 0.000s
+# START byte-lm-host-train/ties repeat=1/ragged
+# DONE byte-lm-host-train/ties repeat=1/ragged 0.000s
+# START byte-lm-host-train/ties repeat=1/stepfull
+# DONE byte-lm-host-train/ties repeat=1/stepfull 0.000s
+# CELL byte-lm-host-train/ties STABLE 0.071s
+# START byte-lm-host-train/hashed repeat=1/train
+# DONE byte-lm-host-train/hashed repeat=1/train 0.037s
+# START byte-lm-host-train/hashed repeat=1/infer-save-reload
+# DONE byte-lm-host-train/hashed repeat=1/infer-save-reload 0.033s
+# START byte-lm-host-train/hashed repeat=1/batch
+# DONE byte-lm-host-train/hashed repeat=1/batch 0.000s
+# START byte-lm-host-train/hashed repeat=1/batchgrad
+# DONE byte-lm-host-train/hashed repeat=1/batchgrad 0.000s
+# START byte-lm-host-train/hashed repeat=1/batchscale
+# DONE byte-lm-host-train/hashed repeat=1/batchscale 0.000s
+# START byte-lm-host-train/hashed repeat=1/ragged
+# DONE byte-lm-host-train/hashed repeat=1/ragged 0.000s
+# START byte-lm-host-train/hashed repeat=1/stepfull
+# DONE byte-lm-host-train/hashed repeat=1/stepfull 0.000s
+# CELL byte-lm-host-train/hashed STABLE 0.070s
+# START byte-lm-host-train/wide repeat=1/train
+# DONE byte-lm-host-train/wide repeat=1/train 0.035s
+# START byte-lm-host-train/wide repeat=1/infer-save-reload
+# DONE byte-lm-host-train/wide repeat=1/infer-save-reload 0.031s
+# START byte-lm-host-train/wide repeat=1/batch
+# DONE byte-lm-host-train/wide repeat=1/batch 0.000s
+# START byte-lm-host-train/wide repeat=1/batchgrad
+# DONE byte-lm-host-train/wide repeat=1/batchgrad 0.000s
+# START byte-lm-host-train/wide repeat=1/batchscale
+# DONE byte-lm-host-train/wide repeat=1/batchscale 0.000s
+# START byte-lm-host-train/wide repeat=1/ragged
+# DONE byte-lm-host-train/wide repeat=1/ragged 0.000s
+# START byte-lm-host-train/wide repeat=1/stepfull
+# DONE byte-lm-host-train/wide repeat=1/stepfull 0.000s
+# CELL byte-lm-host-train/wide STABLE 0.067s
+# START byte-lm-host-train/denormal repeat=1/train
+# DONE byte-lm-host-train/denormal repeat=1/train 0.038s
+# START byte-lm-host-train/denormal repeat=1/infer-save-reload
+# DONE byte-lm-host-train/denormal repeat=1/infer-save-reload 0.032s
+# START byte-lm-host-train/denormal repeat=1/batch
+# DONE byte-lm-host-train/denormal repeat=1/batch 0.000s
+# START byte-lm-host-train/denormal repeat=1/batchgrad
+# DONE byte-lm-host-train/denormal repeat=1/batchgrad 0.000s
+# START byte-lm-host-train/denormal repeat=1/batchscale
+# DONE byte-lm-host-train/denormal repeat=1/batchscale 0.000s
+# START byte-lm-host-train/denormal repeat=1/ragged
+# DONE byte-lm-host-train/denormal repeat=1/ragged 0.000s
+# START byte-lm-host-train/denormal repeat=1/stepfull
+# DONE byte-lm-host-train/denormal repeat=1/stepfull 0.000s
+# CELL byte-lm-host-train/denormal STABLE 0.070s
+# START byte-lm-host-train/denormal_ftz repeat=1/train
+# DONE byte-lm-host-train/denormal_ftz repeat=1/train 0.038s
+# START byte-lm-host-train/denormal_ftz repeat=1/infer-save-reload
+# DONE byte-lm-host-train/denormal_ftz repeat=1/infer-save-reload 0.031s
+# START byte-lm-host-train/denormal_ftz repeat=1/batch
+# DONE byte-lm-host-train/denormal_ftz repeat=1/batch 0.000s
+# START byte-lm-host-train/denormal_ftz repeat=1/batchgrad
+# DONE byte-lm-host-train/denormal_ftz repeat=1/batchgrad 0.000s
+# START byte-lm-host-train/denormal_ftz repeat=1/batchscale
+# DONE byte-lm-host-train/denormal_ftz repeat=1/batchscale 0.000s
+# START byte-lm-host-train/denormal_ftz repeat=1/ragged
+# DONE byte-lm-host-train/denormal_ftz repeat=1/ragged 0.000s
+# START byte-lm-host-train/denormal_ftz repeat=1/stepfull
+# DONE byte-lm-host-train/denormal_ftz repeat=1/stepfull 0.000s
+# CELL byte-lm-host-train/denormal_ftz STABLE 0.070s
+# START byte-lm-host-train/dupes repeat=1/train
+# DONE byte-lm-host-train/dupes repeat=1/train 0.035s
+# START byte-lm-host-train/dupes repeat=1/infer-save-reload
+# DONE byte-lm-host-train/dupes repeat=1/infer-save-reload 0.035s
+# START byte-lm-host-train/dupes repeat=1/batch
+# DONE byte-lm-host-train/dupes repeat=1/batch 0.000s
+# START byte-lm-host-train/dupes repeat=1/batchgrad
+# DONE byte-lm-host-train/dupes repeat=1/batchgrad 0.000s
+# START byte-lm-host-train/dupes repeat=1/batchscale
+# DONE byte-lm-host-train/dupes repeat=1/batchscale 0.000s
+# START byte-lm-host-train/dupes repeat=1/ragged
+# DONE byte-lm-host-train/dupes repeat=1/ragged 0.000s
+# START byte-lm-host-train/dupes repeat=1/stepfull
+# DONE byte-lm-host-train/dupes repeat=1/stepfull 0.000s
+# CELL byte-lm-host-train/dupes STABLE 0.071s
+# START byte-lm-host-train/odd repeat=1/train
+# DONE byte-lm-host-train/odd repeat=1/train 0.036s
+# START byte-lm-host-train/odd repeat=1/infer-save-reload
+# DONE byte-lm-host-train/odd repeat=1/infer-save-reload 0.031s
+# START byte-lm-host-train/odd repeat=1/batch
+# DONE byte-lm-host-train/odd repeat=1/batch 0.000s
+# START byte-lm-host-train/odd repeat=1/batchgrad
+# DONE byte-lm-host-train/odd repeat=1/batchgrad 0.000s
+# START byte-lm-host-train/odd repeat=1/batchscale
+# DONE byte-lm-host-train/odd repeat=1/batchscale 0.000s
+# START byte-lm-host-train/odd repeat=1/ragged
+# DONE byte-lm-host-train/odd repeat=1/ragged 0.000s
+# START byte-lm-host-train/odd repeat=1/stepfull
+# DONE byte-lm-host-train/odd repeat=1/stepfull 0.000s
+# CELL byte-lm-host-train/odd STABLE 0.067s
+# START byte-lm-host-train/negative repeat=1/train
+# DONE byte-lm-host-train/negative repeat=1/train 0.039s
+# START byte-lm-host-train/negative repeat=1/infer-save-reload
+# DONE byte-lm-host-train/negative repeat=1/infer-save-reload 0.031s
+# START byte-lm-host-train/negative repeat=1/batch
+# DONE byte-lm-host-train/negative repeat=1/batch 0.000s
+# START byte-lm-host-train/negative repeat=1/batchgrad
+# DONE byte-lm-host-train/negative repeat=1/batchgrad 0.000s
+# START byte-lm-host-train/negative repeat=1/batchscale
+# DONE byte-lm-host-train/negative repeat=1/batchscale 0.000s
+# START byte-lm-host-train/negative repeat=1/ragged
+# DONE byte-lm-host-train/negative repeat=1/ragged 0.000s
+# START byte-lm-host-train/negative repeat=1/stepfull
+# DONE byte-lm-host-train/negative repeat=1/stepfull 0.000s
+# CELL byte-lm-host-train/negative STABLE 0.071s
+| byte-lm-host-train     | bcfc8950e255a80a | f173895590ddc8ce | 07241d26ea1440a5 | c4be64ea23997218 | afaca2291758bf1a | 0a0c4b634aea5f52 | 7b2fd0a02041f562 | bcfc8950e255a80a | 3c50d0c294ec29a9 |
+| byte-lm-host-train infer | 6a8e53d94e8b1afa | a24e9f889c962786 | ab19d1d3de9fdb87 | e53e1904ba3c463a | d4ae338da5ee9016 | 3cad3aaf0d690f91 | 223804b7883310c6 | 6a8e53d94e8b1afa | 8d8111383b957c25 |
+
+cells=9 stable=9 moved=0 refused=0
+infer: stable=9
+model: n/a=9
+batch: n/a=9
+batchgrad: n/a=9
+batchscale: n/a=9
+ragged: n/a=9
+stepfull: n/a=9
+n/a: byte-lm-host-train batch n/a:mean-reduction-fixed-batch (LanguageModelHostTrainer has train_step and loss only, and loss IS a step, python/mojolearn/_byte_lm_host.py:392-429; one loss and one update from mean cross-entropy over ids of the profile's fixed (batch, length + 1), so no output belongs to one sequence; the per-sequence logits are asked by byte-lm-host-infer; lane/batch-invariance-2's batchgrad records the same reason for this lane and its batchscale and ragged parts do not ask it), byte-lm-host-train batchgrad n/a:mean-reduction-fixed-batch (the byte LM trainers step mean cross-entropy over ids of the profile's fixed (batch, length + 1); ByteLanguageModelConfig.batch is part of the profile), byte-lm-host-train batchscale n/a:not-in-the-serving-set, byte-lm-host-train model n/a:no-save, byte-lm-host-train ragged n/a:no-sequence-axis, byte-lm-host-train stepfull n/a:no-decode-state
+wrote /root/rec/cpu-amd-epyc-7k62-x86_64.part0.json
+merged 1 parts, 9 cells, complete=True -> /root/rec/cpu-amd-epyc-7k62-x86_64.json

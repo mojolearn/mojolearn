@@ -1,0 +1,13 @@
+--- a/x_cnn/ops.mojo	2026-09-27 12:43:02
++++ b/x_cnn/ops.mojo	2026-09-27 12:43:02
+@@ -710,8 +710,8 @@
+     var n = _g(p, 0); var nnz = _g(p, 2)
+     var src = _g(q, n + 1 + e)
+     var dst = _g(q, n + 1 + nnz + e)
+-    var t = ftz(identical_mul(ftz(dis.unsafe_load(src)), ftz(w.unsafe_load(e))))
+-    vals.unsafe_store(e, ftz(identical_mul(t, ftz(dis.unsafe_load(dst)))))
++    var t = ftz(identical_mul(ftz(dis.unsafe_load(src)), ftz(dis.unsafe_load(dst))))
++    vals.unsafe_store(e, ftz(identical_mul(ftz(w.unsafe_load(e)), t)))
+ 
+ 
+ 

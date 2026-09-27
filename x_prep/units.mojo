@@ -9,16 +9,19 @@ from x_prep.prims import (
     i2f_unit, f2i_unit, binarize_unit, matmul_unit, row_softmax_unit, row_argmax_unit,
     class_stats_unit, center_rows_unit, where_neg_unit, mark_missing_unit, fill_unit,
     label_binarize_unit, scatter_ones_unit, gather_cols_unit, var_ptp_unit,
-    sqsum_cols_unit,
+    sqsum_cols_unit, block_argmax_unit, ord_inverse_unit, cat_gather_unit, where_code_unit,
 )
 from x_prep.eigh import eigh_unit
 from x_prep.target import te_global_unit, te_enc_unit, te_apply_unit
-from x_prep.kbins import kbins_edges_unit, kbins_codes_unit
+from x_prep.kbins import kbins_edges_unit, kbins_codes_unit, kbins_inverse_unit
 from naive_bayes.nb import (
     gnb_eps_unit, gnb_params_unit, gnb_jll_unit, class_log_prior_unit, mnb_params_unit,
     bnb_params_unit, cnb_params_unit, cat_params_unit, cat_jll_unit, log_unit,
 )
-from x_prep.transform import qt_apply_unit, pt_fit_unit, pt_apply_unit, std_params_unit, normalize_unit, poly_unit
+from x_prep.transform import (
+    qt_apply_unit, pt_fit_unit, pt_apply_unit, std_params_unit, normalize_unit, poly_unit, robust_uv_unit,
+    qt_inverse_unit, pt_inverse_unit,
+)
 from x_prep.spline import spline_knots_unit, spline_apply_unit
 from x_prep.iterative import (
     ii_mean_unit, ii_gram_unit, ii_sub_unit, ii_br_unit, ii_predict_unit, ii_snapshot_unit, ii_conv_unit,
@@ -30,7 +33,7 @@ from naive_bayes.da import (
     lda_prep_unit, lda_w_unit, lda_stage2_unit, lda_stage3_unit, qda_cov_unit, qda_prep_unit, qda_dec_unit,
 )
 
-comptime N_OPS = 73
+comptime N_OPS = 81
 
 
 @always_inline
@@ -181,3 +184,19 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
         sqsum_cols_unit(t, f, q)
     comptime if OP == 72:
         log_unit(t, f, q)
+    comptime if OP == 73:
+        robust_uv_unit(t, f, q)
+    comptime if OP == 74:
+        qt_inverse_unit(t, f, q)
+    comptime if OP == 75:
+        pt_inverse_unit(t, f, q)
+    comptime if OP == 76:
+        block_argmax_unit(t, f, q)
+    comptime if OP == 77:
+        ord_inverse_unit(t, f, q)
+    comptime if OP == 78:
+        cat_gather_unit(t, f, q)
+    comptime if OP == 79:
+        where_code_unit(t, f, q)
+    comptime if OP == 80:
+        kbins_inverse_unit(t, f, q)
