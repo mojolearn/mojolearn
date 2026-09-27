@@ -239,8 +239,8 @@ class SVC(NumericModeMixin):
                                   what is missing
         gamma           honored   a finite float >= 0, or the string 'auto'
                                   (= 1 / n_features, cuML's `_get_gamma`).
-                                  'scale' is REFUSED -- see DEVIATION 870
-                                  below, and note it is cuML's default
+                                  'scale' is resolved exactly, DEVIATION
+                                  870 below (theirs is the default)
         degree          honored   with kernel='poly': an integer in
                                   [0, 32] (DEVIATION 1663). With any other
                                   kernel only the default 3 is accepted,
@@ -284,21 +284,15 @@ class SVC(NumericModeMixin):
     Non-finite cells of `X` are refused by name inside the Mojo entry
     (DEVIATION 636), naming the flat index, rather than being fitted.
 
-    DEVIATION 870: `gamma='scale'` IS REFUSED AND THE DEFAULT HERE IS
-    'auto', WHICH IS NOT cuML's DEFAULT. Theirs resolves 'scale' to
-    `1 / (n_features * X.var())`, a float32 reduction over the whole
-    matrix whose last bits are the reduction library's fold shape. Every
-    bit of this fit is a function of gamma's bits -- the kernel matrix,
-    the working sets, the alphas, `b` -- so a gamma whose last bit is the
-    host's would put a host into the middle of a cross-vendor identity
-    claim. `KernelDensity` refuses `bandwidth='scott'` for exactly this
-    reason and with exactly this instruction: compute it yourself and pass
-    the number, so the number that ran is the number you passed.
-
-        gamma = 1.0 / (X.shape[1] * float(np.asarray(X, np.float32).var()))
-
-    'auto' is kept because `1 / n_features` is an integer reciprocal in
-    float64 and is the same bits on every host.
+    DEVIATION 870: `gamma='scale'` IS RESOLVED EXACTLY, AND THE DEFAULT
+    HERE IS STILL 'auto' (theirs is 'scale'; the default is kept so every
+    recorded default fit keeps its bits). 'scale' is `1 / (n_features *
+    X.var())` as theirs, but the variance is the EXACT population variance
+    of the float32 cells, formed in integers, and the reciprocal is rounded
+    once to binary64 (`_portable_math.scale_gamma`). Their float32 `X.var()`
+    carries its reduction's fold shape in its last bits; this one has no
+    fold to differ, so every host reads the same gamma bits, and it differs
+    from theirs by at most that reduction's rounding.
 
     DEVIATION 871: `cache_size` IS HONORED ONLY AT PREDICT. In the reference it is
     two things under one name: the training-time `raft::cache` LRU kernel
@@ -397,24 +391,12 @@ class SVC(NumericModeMixin):
             )
         if isinstance(gamma, str):
             g = gamma.lower()
-            if g == "scale":
-                raise NotImplementedError(
-                    "mojolearn SVC: gamma='scale' is refused (DEVIATION 870). "
-                    "It is 1 / (n_features * X.var()), a float32 reduction "
-                    "whose last bits are the host reduction's fold shape, and "
-                    "every bit of this fit is a function of gamma's bits. "
-                    "Compute it yourself and pass the number:\n    "
-                    "gamma = 1.0 / (X.shape[1] * float(np.asarray(X, "
-                    "np.float32).var()))\n"
-                    "'auto' (= 1 / n_features) is exact on every host and is "
-                    "this class's default; note cuML's default is 'scale'."
-                )
-            if g != "auto":
+            if g not in ("auto", "scale"):
                 raise ValueError(
                     f"mojolearn SVC: gamma={gamma!r} is not a name; it is "
-                    "'auto', or a float ('scale' is refused, DEVIATION 870)"
+                    "'auto', 'scale' or a float"
                 )
-            gamma = "auto"
+            gamma = g
         else:
             gamma = float(gamma)
             if not math.isfinite(gamma) or gamma < 0.0:
@@ -539,12 +521,16 @@ class SVC(NumericModeMixin):
         self.decision_function_shape = "ovo"
         self.probability = False
 
-    def _resolve_gamma(self, n_features):
-        """cuML's `_get_gamma` minus the refused 'scale' arm. `1 / n_cols`
-        in float64 is exact for every n_cols that is a power of two and
-        correctly rounded otherwise, on every host."""
+    def _resolve_gamma(self, x):
+        """cuML's `_get_gamma`. 'auto' is `1 / n_cols`, exact for every
+        n_cols that is a power of two and correctly rounded otherwise;
+        'scale' is `1 / (n_cols * X.var())` from the EXACT variance of the
+        float32 cells, rounded once (`_portable_math.scale_gamma`, DEVIATION
+        870). Both are the same bits on every host."""
         if self.gamma == "auto":
-            return 1.0 / float(n_features)
+            return 1.0 / float(x.shape[1])
+        if self.gamma == "scale":
+            return math.scale_gamma(x.ravel().tolist(), x.shape[1])
         return float(self.gamma)
 
     def fit(self, X, y, sample_weight=None):
@@ -562,7 +548,7 @@ class SVC(NumericModeMixin):
                 f"mojolearn SVC: y has {labels.shape[0]} entries, X has "
                 f"{n_rows} rows"
             )
-        gamma = self._resolve_gamma(n_cols)
+        gamma = self._resolve_gamma(x)
 
         dual = empty((n_rows,), "<f4")
         support = empty((n_rows,), "<i4")
@@ -746,7 +732,7 @@ class SVC(NumericModeMixin):
         obj = cls(
             C=float(hyper[0]),
             kernel=_serialize.scalar_str(arrays, "kernel"),
-            gamma="auto" if gamma_setting == "auto" else float(gamma_setting),
+            gamma=gamma_setting if gamma_setting in ("auto", "scale") else float(gamma_setting),
             tol=float(hyper[1]),
             cache_size=float(hyper[2]),
             max_iter=int(meta[3]),
@@ -853,9 +839,8 @@ class SVR(NumericModeMixin):
                                   by `_svm_impl.py` with what is missing
         gamma           honored   a finite float >= 0, or the string 'auto'
                                   (= 1 / n_features, cuML's `_get_gamma`).
-                                  'scale' is REFUSED by `_svm_impl.py` --
-                                  see DEVIATION 870 below, and note it is
-                                  both cuML's and scikit-learn's default
+                                  'scale' is resolved exactly, DEVIATION
+                                  870 below (theirs is the default)
         degree          refused   `_svm_impl.py`. Read only by POLYNOMIAL,
                                   which is refused
         coef0           refused   `_svm_impl.py`. Read only by POLYNOMIAL
@@ -926,18 +911,15 @@ class SVR(NumericModeMixin):
     gap, a tube bound, and a gradient recomputed from alpha alone that
     matches the solver's `f` to 1.5e-07). A three-vendor SVR card is OWED.
 
-    DEVIATION 870: `gamma='scale'` IS REFUSED AND THE DEFAULT HERE IS
-    'auto'. Theirs resolves 'scale' to `1 / (n_features * X.var())`, a
-    float32 reduction over the whole matrix whose last bits are the
-    reduction library's fold shape. Every bit of this fit is a function of
-    gamma's bits, so a gamma whose last bit is the host's would put a host
-    into the middle of an identity claim. Compute it yourself and pass the
-    number, so the number that ran is the number you passed:
-
-        gamma = 1.0 / (X.shape[1] * float(np.asarray(X, np.float32).var()))
-
-    'auto' is kept because `1 / n_features` is an integer reciprocal in
-    float64 and is the same bits on every host.
+    DEVIATION 870: `gamma='scale'` IS RESOLVED EXACTLY, AND THE DEFAULT
+    HERE IS STILL 'auto' (theirs is 'scale'; the default is kept so every
+    recorded default fit keeps its bits). 'scale' is `1 / (n_features *
+    X.var())` as theirs, but the variance is the EXACT population variance
+    of the float32 cells, formed in integers, and the reciprocal is rounded
+    once to binary64 (`_portable_math.scale_gamma`). Their float32 `X.var()`
+    carries its reduction's fold shape in its last bits; this one has no
+    fold to differ, so every host reads the same gamma bits, and it differs
+    from theirs by at most that reduction's rounding.
 
     DEVIATION 871: `cache_size` IS HONORED ONLY AT PREDICT, exactly as it is
     on `SVC`. Upstream it is two things under one name, the training-time
@@ -1023,25 +1005,12 @@ class SVR(NumericModeMixin):
             )
         if isinstance(gamma, str):
             g = gamma.lower()
-            if g == "scale":
-                raise NotImplementedError(
-                    "mojolearn SVR: gamma='scale' is refused (DEVIATION 870). "
-                    "It is 1 / (n_features * X.var()), a float32 reduction "
-                    "whose last bits are the host reduction's fold shape, and "
-                    "every bit of this fit is a function of gamma's bits. "
-                    "Compute it yourself and pass the number:\n    "
-                    "gamma = 1.0 / (X.shape[1] * float(np.asarray(X, "
-                    "np.float32).var()))\n"
-                    "'auto' (= 1 / n_features) is exact on every host and is "
-                    "this class's default; note scikit-learn's default is "
-                    "'scale'."
-                )
-            if g != "auto":
+            if g not in ("auto", "scale"):
                 raise ValueError(
                     f"mojolearn SVR: gamma={gamma!r} is not a name; it is "
-                    "'auto', or a float ('scale' is refused, DEVIATION 870)"
+                    "'auto', 'scale' or a float"
                 )
-            gamma = "auto"
+            gamma = g
         else:
             gamma = float(gamma)
             if not math.isfinite(gamma) or gamma < 0.0:
@@ -1128,14 +1097,7 @@ class SVR(NumericModeMixin):
         self.nochange_steps = nochange_steps
         self.output_type = None
 
-    def _resolve_gamma(self, n_features):
-        """cuML's `_get_gamma` minus the refused 'scale' arm, the same three
-        lines `SVC._resolve_gamma` is. `1 / n_cols` in float64 is exact for
-        every n_cols that is a power of two and correctly rounded otherwise,
-        on every host."""
-        if self.gamma == "auto":
-            return 1.0 / float(n_features)
-        return float(self.gamma)
+    _resolve_gamma = SVC._resolve_gamma
 
     def fit(self, X, y, sample_weight=None):
         if sample_weight is not None:
@@ -1147,7 +1109,7 @@ class SVR(NumericModeMixin):
         x, self.input_copied_ = as_f32_c(X, ndim=2, name="X")
         n_rows, n_cols = x.shape
         targets = _as_targets(y, n_rows)
-        gamma = self._resolve_gamma(n_cols)
+        gamma = self._resolve_gamma(x)
 
         # WORST-CASE OUTPUT BUFFERS, AND `n_rows` IS THE WORST CASE.
         # The solver's domain is `2 * n_rows` (alpha+ and alpha-), but
@@ -1316,7 +1278,7 @@ class SVR(NumericModeMixin):
             C=float(hyper[0]),
             epsilon=float(hyper[1]),
             kernel=_serialize.scalar_str(arrays, "kernel"),
-            gamma="auto" if gamma_setting == "auto" else float(gamma_setting),
+            gamma=gamma_setting if gamma_setting in ("auto", "scale") else float(gamma_setting),
             tol=float(hyper[2]),
             cache_size=float(hyper[3]),
             max_iter=int(meta[3]),

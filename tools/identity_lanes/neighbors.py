@@ -205,6 +205,22 @@ def _(ml, X, yc, yr, Xh=None):
                 m, lambda e: e.predict_y(Xh[:256]))
 
 
+
+@lane("x-neighbors-gamma-scale")
+def _(ml, X, yc, yr, Xh=None):
+    """gamma='scale' on the family's EXISTING estimators (SVC, SVR,
+    RBFSampler): 1 / (n_features * X.var()) from the exact variance of the
+    float32 cells, rounded once (_portable_math.scale_gamma, DEVIATION 870).
+    The resolved gamma is hashed with each fit, so a host that read other
+    gamma bits moves the train column even where the fit would not."""
+    c = ml.SVC(C=1.0, kernel="rbf", gamma="scale", max_iter=200).fit(X[:512], yc[:512])
+    r = ml.SVR(C=1.0, kernel="rbf", gamma="scale", epsilon=0.1, max_iter=200).fit(X[:512], yr[:512])
+    f = ml.RBFSampler(gamma="scale", n_components=32, random_state=1).fit(X[:512])
+    return _fit(dict(svc_decision=_h(c.decision_function(X[512:768])), svc_gamma=_h(np.float64(c._gamma)),
+                     svr_predict=_h(r.predict(X[512:768])), svr_gamma=_h(np.float64(r._gamma)),
+                     rbf_gamma=_h(np.float64(f._params[0])), rbf_transform=_h(f.transform(X[:256]))),
+                c, lambda e: (e.decision_function(Xh[:256]), e.predict(Xh[:256])))
+
 _batch_decl(_rows_calls("score_samples", "predict", sl=slice(0, 256)), "x-neighbors-lof")
 _batch_decl(_rows_calls("predict", "decision_function", "predict_proba", sl=slice(0, 256)), "x-neighbors-nearest-centroid")
 _batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "x-neighbors-ocsvm")
@@ -217,3 +233,4 @@ _batch_decl(_rows_calls("predict_proba", "predict", sl=slice(0, 128)),
             "x-neighbors-label-propagation", "x-neighbors-label-spreading")
 _batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_neighbors_holes), "x-neighbors-knn-imputer")
 _batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-neighbors-svgp")
+_batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "x-neighbors-gamma-scale")

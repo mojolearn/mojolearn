@@ -357,9 +357,8 @@ def arm_refusals(rep):
     rep.raises(arm, ValueError, "not a kernel name",
                "an unknown kernel name is refused",
                SVR, kernel="cosine")
-    rep.raises(arm, NotImplementedError, "DEVIATION 870",
-               "gamma='scale' is refused and names the deviation",
-               SVR, gamma="scale")
+    rep.check(arm, SVR(gamma="scale").gamma == "scale",
+              "gamma='scale' is accepted (DEVIATION 870: resolved exactly at fit)")
     rep.raises(arm, ValueError, "not a name",
                "an unknown gamma name is refused",
                SVR, gamma="median")
