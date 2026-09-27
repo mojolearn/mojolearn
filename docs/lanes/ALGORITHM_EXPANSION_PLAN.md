@@ -17,8 +17,9 @@ records as passed.
 
 Speed is measured at realistic large shapes on R2 data, before and after on
 the same box. Apple and AMD timing jobs use
-`tools/apple_steward.py submit --kind speed --target m3ultra|do-amd`, or
-your own `<lane>-amd` box.
+`tools/apple_steward.py submit --kind speed --target m4pro|do-amd|both` (Apple:
+the least busy Mac of that model; a Mac name such as `m4pro-a` pins one box
+for a before and an after), or your own `<lane>-amd` box.
 
 **Families (existing + new):**
 - **linear:** LinearRegression, Ridge, Lasso, ElasticNet, LogisticRegression, LinearSVC/SVR, plus the expansion's GLMs, SGD, Huber, Bayesian, Lars, quantile, CV and isotonic.
@@ -53,12 +54,25 @@ messaging lanes. Newest items are at the top.
    (in the CPU gate) fails on a NEW fixture-RNG definition
    (`tools/fixture_rng_census.py`) and on any existing copy that differs
    from its canonical behavior bit for bit.
-0000b. **Steward merge gate (Andrew wants speed; 2026-09-27):** a lane may
-   merge once **one Apple steward (m2pro OR m3ultra) PASSES and do-amd
-   PASSES**. Every request still runs on both Macs. A later FAIL from the
-   other Mac, especially M2 vs M4/M3 codegen differences, comes back to
-   the lane as a fix at the root. Don't wait on a queue that is behind:
-   keep working on the next item while verdicts arrive.
+0000b. **Steward fleet and merge gate (Andrew wants speed; 2026-09-27):**
+   the Apple stewards are the six cloud Macs in
+   `~/mojolearn-evidence/cloudmacs.tsv`: M2 `m2pro`; M3 `m3ultra`,
+   `m3ultra-b`; M4 `m4pro-a`, `m4pro-b` (M4 Pro), `m4-a` (M4). Each works
+   one request at a time (one Metal job per Mac). `apple_steward.py submit`
+   sends an identity request to ONE Mac per generation, the least busy one
+   (M2, M3, M4), plus do-amd. A lane may merge once **any one Apple steward
+   PASSES and do-amd PASSES** (`apple_steward.py status` reads PASS). The
+   other generations' verdicts follow; a later FAIL, especially M2 vs M3 vs
+   M4 codegen, comes back to the lane as a fix at the root. Speed jobs go to
+   the least busy Mac of the requested model (default M4 Pro; `--target
+   m4pro-a` pins one box). `apple_steward.py redistribute --apply` spreads a
+   pending backlog over the fleet without losing or duplicating a request.
+   The four new hosts (m4pro-a, m4pro-b, m4-a, m3ultra-b, allocated
+   2026-09-27 21:11Z) are released after their 24 h minimum (plan:
+   `~/mojolearn-evidence/cloudmac-release-plan.md`); after that the fleet is
+   m2pro + m3ultra again, and the tsv rows go with the hosts. Don't wait on
+   a queue that is behind: keep working on the next item while verdicts
+   arrive.
 0000a. **Commit and push your branch at every meaningful step, not only at
    merges (Andrew, 2026-09-27, after the weekly usage limit killed every
    agent mid-work).** Commit WIP to your own branch (`lane/<name>`) and
@@ -123,8 +137,8 @@ messaging lanes. Newest items are at the top.
    has its own AMD box, it submits AMD identity checks to the `do-amd` steward:
    `tools/apple_steward.py submit` ships identity requests there too while
    `tools/do_amd_steward.sh` has it up (push the commit to origin first), and
-   a merge then needs m2pro PASS AND do-amd PASS (`apple_steward.py status`).
-   AMD speed phases: submit timing jobs with `apple_steward.py submit --kind speed --target do-amd` (or your own `<lane>-amd` box if you have one). Apple speed: `--target m3ultra`.
+   a merge then needs one Apple PASS AND do-amd PASS (`apple_steward.py status`, item 0000b).
+   AMD speed phases: submit timing jobs with `apple_steward.py submit --kind speed --target do-amd` (or your own `<lane>-amd` box if you have one). Apple speed: `--target m4pro` (default).
 1. **Order per lane, one phase per session:**
    - (a) every algorithm in the lane table and Additions (PASS 1)
    - (b) **proof** on every column (per-seam, `--pass 2`, both stewards)
@@ -650,9 +664,9 @@ the cost being avoided. All data comes from R2 (`tools/dataset_store.sh stage`).
    `tools/dev_pod.sh up <lane> 240 --vendor amd` (RunPod MI300X, else Hot
    Aisle; it retries while there is no stock) and hold it. If the tool
    doesn't have `--vendor amd` yet, keep working on NVIDIA and CPU and try
-   again after the next algorithm. Apple: identity through the M2 Pro
-   steward; Apple timing through `apple_steward.py submit --kind speed`,
-   routed to the M3 Ultra once its GPT-3 segment ends.
+   again after the next algorithm. Apple: identity through the steward
+   fleet (one Mac per generation, item 0000b); Apple timing through
+   `apple_steward.py submit --kind speed`, on the least busy M4 Pro.
 2. **Proof, per algorithm** (the COMMON BRIEF's per-seam discipline):
    - a host oracle and a separating fixture per seam
    - a sabotage arm per seam, in `.checks`, that bites
@@ -692,7 +706,8 @@ shared `.so` that another job is using. Tooling gaps go to the tools lane.
   `<driver><TAB><sabotage patch>` per seam; `algos_lane_check.sh <lanes> --pass 2`.
 - **Apple speed jobs:** `apple_steward.py submit --kind speed --lane <l>
   --commit <sha> --builds bindings/build_x.sh[,...] --cmd '<timing>' [--mode
-  fast|identical]`, M3 Ultra only, spooled while it is deferred.
+  fast|identical] [--target m4pro|m4|m3ultra|<mac>]`, the least busy Mac of
+  that model (default M4 Pro).
 - **Stewards as daemons:** `tools/cloudmac.sh steward <mac> install|restart|status`.
 
 ---
