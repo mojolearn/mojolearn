@@ -27,6 +27,7 @@ Skipped from the table: LinearSVC / LinearSVR are already public
 | RidgeCV | e8dfdf91f | x-ridge-cv | sanity PASS (same alpha_, best_score_ within 4e-7 relative); RESULT: PASS (AGREE) |
 | LassoCV | 0f6bad966 | x-lasso-cv | sanity PASS (same alpha_, mse_path_ within 1.2e-6 relative); RESULT: PASS (AGREE) |
 | ElasticNetCV | 468117252 | x-enet-cv | sanity PASS (same alpha_ and l1_ratio_, mse_path_ within 1e-6 relative); RESULT: PASS (AGREE) |
-| LogisticRegressionCV | (the commit that adds this row) | x-logistic-cv (and x-huber re-gated: lbfgs.mojo line search changed) | sanity PASS (StratifiedKFold ids equal, same C_, proba within 2e-4); RESULT: PASS (AGREE on x-logistic-cv, x-huber) |
+| LogisticRegressionCV | 3b545850a | x-logistic-cv (and x-huber re-gated: lbfgs.mojo line search changed) | sanity PASS (StratifiedKFold ids equal, same C_, proba within 2e-4); RESULT: PASS (AGREE on x-logistic-cv, x-huber) |
+| IsotonicRegression | (the commit that adds this row) | x-isotonic | sanity PASS (thresholds equal to sklearn, predict within 3e-7, same NaN mask); RESULT: PASS (AGREE) |
 
-Next: IsotonicRegression.
+Next: PASS 1 COMPLETE. Pass 2 per docs/lanes/ALGORITHM_EXPANSION_PLAN.md CURRENT DIRECTIVES: (b) proof on every column with an AMD box, (c) option parity (x_linear/NOT_IMPLEMENTED.tsv rows), (d) speed (parallel fit schedules first: every fit is one device thread today).
