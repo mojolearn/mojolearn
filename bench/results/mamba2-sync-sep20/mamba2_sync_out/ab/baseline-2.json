@@ -1,0 +1,37 @@
+{
+ "label": "baseline-2",
+ "vendor": "cuda",
+ "numeric_mode": "identical",
+ "shape": [
+  2,
+  1024,
+  1024,
+  2048,
+  32
+ ],
+ "corpus_sha256": "2b49720ec4d78c3c9fabaee6e4179a5e997302b3a70029f30f2d582218c024a8",
+ "samples": [
+  {
+   "prefill_ms": 104.17196899652481,
+   "decode_ms": 621.3996140286326,
+   "per_token_ms": 19.41873793839477
+  },
+  {
+   "prefill_ms": 98.91625167801976,
+   "decode_ms": 620.9938079118729,
+   "per_token_ms": 19.406056497246027
+  },
+  {
+   "prefill_ms": 93.10305211693048,
+   "decode_ms": 634.2190010473132,
+   "per_token_ms": 19.819343782728538
+  }
+ ],
+ "hashes": [
+  "3d2943468663dcf0a0712029dc3f5fde8664f154a14918a8b1cac7bd31b4a9c7",
+  "3d2943468663dcf0a0712029dc3f5fde8664f154a14918a8b1cac7bd31b4a9c7",
+  "3d2943468663dcf0a0712029dc3f5fde8664f154a14918a8b1cac7bd31b4a9c7"
+ ],
+ "hashes_equal": true,
+ "output_state_hash": "3d2943468663dcf0a0712029dc3f5fde8664f154a14918a8b1cac7bd31b4a9c7"
+}

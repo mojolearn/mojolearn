@@ -1,0 +1,15 @@
+bench/results/mamba2-sync-sep20/mamba2_sync_out/logs/baseline-1.log
+bench/results/mamba2-sync-sep20/mamba2_sync_out/logs/baseline-2.log
+bench/results/mamba2-sync-sep20/mamba2_sync_out/logs/baseline-3.log
+bench/results/mamba2-sync-sep20/mamba2_sync_out/logs/baseline-build.log
+bench/results/mamba2-sync-sep20/mamba2_sync_out/logs/baseline-build_mamba.log
+bench/results/mamba2-sync-sep20/mamba2_sync_out/logs/baseline-pile.log
+bench/results/mamba2-sync-sep20/mamba2_sync_out/logs/candidate-1.log
+bench/results/mamba2-sync-sep20/mamba2_sync_out/logs/candidate-2.log
+bench/results/mamba2-sync-sep20/mamba2_sync_out/logs/candidate-3.log
+bench/results/mamba2-sync-sep20/mamba2_sync_out/logs/candidate-build.log
+bench/results/mamba2-sync-sep20/mamba2_sync_out/logs/candidate-build_mamba.log
+bench/results/mamba2-sync-sep20/mamba2_sync_out/logs/candidate-pile.log
+bench/results/mamba2-sync-sep20/mamba2_sync_out/logs/math.log
+bench/results/mamba2-sync-sep20/mamba2_sync_out/logs/pixi-install.log
+bench/results/mamba2-sync-sep20/mamba2_sync_out/logs/pixi.log

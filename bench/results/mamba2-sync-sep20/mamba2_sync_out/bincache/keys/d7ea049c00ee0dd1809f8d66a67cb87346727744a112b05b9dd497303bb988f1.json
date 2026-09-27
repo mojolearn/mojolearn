@@ -1,0 +1,40 @@
+{
+ "args": [],
+ "build_env": {
+  "MOJOLEARN_BUILD_JOBS": "16",
+  "MOJOLEARN_COMPILE_JOBS": "16",
+  "MOJOLEARN_GPU_ARCHS": "sm_89",
+  "MOJOLEARN_NUMERIC_MODE": "identical"
+ },
+ "device_arch": "sm_89",
+ "gpu_archs": "sm_89",
+ "image": "runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04",
+ "numeric_mode": "identical",
+ "os": {
+  "cc": "cc (Ubuntu 11.4.0-1ubuntu1~22.04) 11.4.0",
+  "glibc": "glibc 2.35",
+  "id": "ubuntu",
+  "ld": "GNU ld (GNU Binutils for Ubuntu) 2.38",
+  "machine": "x86_64",
+  "version_id": "22.04"
+ },
+ "repo_path": "/root/mojolearn",
+ "schema": "mojolearn-bincache-v1",
+ "script": "bindings/build_mamba.sh",
+ "source": {
+  "digest": "664f8df1b1c3be9fcd11a38f05a022504a96e1637e9b2456f1a4454ec16a653f",
+  "files": 50,
+  "scope": "closure"
+ },
+ "target_column": "",
+ "toolchain": {
+  "packages": [
+   "max-26.5.0-3.14release",
+   "max-core-26.5.0-release",
+   "mojo-1.0.0-release",
+   "mojo-compiler-1.0.0-release"
+  ],
+  "pixi_lock_sha256": "718430ce1d0fad1a86ca9d01758428e04412697e6a89b709f9abcdc636759139",
+  "platform": "linux-64"
+ }
+}
