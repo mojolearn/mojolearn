@@ -145,8 +145,7 @@ scans. A second neural lane makes sense when CNN is taken up.
   `tools/runpod_guard.sh arm <pod> <ssh> 120`. The lane's agent runs
   `extend` every hour as a heartbeat. If the agent or the laptop dies, the
   on-pod watchdog still kills the pod when the lease runs out. Keeping the
-  pod up also keeps the pixi env and the warm Mojo cache: 10 to 20 minutes
-  saved per rebuild compared with a fresh box.
+  pod up also keeps the pixi env and the warm Mojo cache.
 - **Apple is still the bottleneck.** Metal bindings compile only on the Mac,
   one Metal job at a time. So the Apple column becomes a serialized
   **Apple steward** queue. When an algorithm is green on its pod, the
@@ -156,7 +155,7 @@ scans. A second neural lane makes sense when CNN is taken up.
   themselves.
 - **AMD:** still at the release, through the changed-lanes selector.
   Optional: one shared single-MI300X box that runs a daily AMD sweep of the
-  new lanes. That catches gfx942 surprises weeks earlier.
+  new lanes. That catches gfx942 surprises earlier.
 
 ## 12 lanes
 
@@ -183,7 +182,7 @@ and a build order that is not deterministic, so each needs its own design
 note before any code gets written. It is fine for lane 12 to end with a
 design and a refusal rather than a shipped algorithm.
 
-## Before the fan-out: one prep step (me, about half a day)
+## Before the fan-out: one prep step
 
 With 12 lanes, the four shared registries become merge-conflict hotspots:
 `__init__.py` exports, `_verification_catalog.py`, the `lane_select`
@@ -212,7 +211,6 @@ and merges stop conflicting.
 ## Cost (to confirm against live prices before renting)
 
 - 12 x RTX 4090 at about $0.35-0.70/hr each comes to about $100-200/day.
-  Over a 1-2 week fan-out, that is about $1-3k.
 - Swapping lanes 10-12 to H100 (for CNN/LSTM speed versus PyTorch) adds
   about $50/day.
 - An optional shared MI300X is about $2.4/hr, or about $60/day.
@@ -236,7 +234,7 @@ Decided:
 - FAST AND IDENTICAL, both, on every lane, including neural.
 - AMD only at the release.
 - No budget cap.
-- Pods live a few hours, then get torn down.
+- Pods are torn down when their lane is merged.
 
 ## 9 lanes
 
@@ -265,19 +263,17 @@ Decided:
   the lanes, plus FAST speed work on Apple. It is the same box the GPT-3
   small Apple segment already needs.
 
-## Timeline (realistic)
+## Order of work
 
-- T+0:30 is setup: the registry prep, 9 pods bootstrapped, cloud Mac
-  bootstrapped. The cloud Mac's first build is the slow part.
-- T+0:30 to T+3:00 is **identity wave**. Each algorithm lands with CPU =
-  NVIDIA plus sabotage on its pod, then goes to the Apple stewards.
-- In parallel, as algorithms pass identity, is **speed wave**: FAST +
-  IDENTICAL at 1M+, and every FAST change passes the quality rule (paired
-  check against the reference, at least 5 seeds, at least 2 datasets).
-- The Apple queue is the critical path. Each binding module gets one Metal
-  build, not one per algorithm. With two Macs this should keep pace.
-- Lanes 8 and 9 will not finish in 3 hours. Their deliverable is a design
-  note plus the first algorithm, or a named refusal.
+- Identity first: each algorithm lands with CPU = NVIDIA plus sabotage on
+  its pod, then goes to the Apple stewards.
+- Speed after identity, per algorithm: FAST + IDENTICAL at 1M+, and every
+  FAST change passes the quality rule (paired check against the reference,
+  at least 5 seeds, at least 2 datasets).
+- Each binding module gets one Metal build per request, not one per
+  algorithm.
+- For lanes 8 and 9, a design note plus a named refusal is an acceptable
+  outcome where identity cannot be had.
 
 ## Pod lifecycle
 
@@ -359,24 +355,15 @@ to widen into.
 - The pod dead-man and lease reuse `runpod_guard.sh`; the steward queue
   is atomic per request; the bench lane measures nothing.
 
-## The estimate, corrected
+## Running the lanes
 
-"1 to 2 hours per lane" was written before the per-seam bill was put in the
-brief. With every numeric seam owing an oracle, a separating fixture, a
-sabotage arm that bites, a DEVIATION, a card stage and a ledger row, an Easy
-algorithm is half a day to a day of agent time, because most of it is
-templated on existing contracts, and a lane of seven Easy items is several
-days. Parallelism buys throughput; there is no light form. So:
-
-- Pod leases match the lane's real duration (`dev_pod.sh up <lane> 240`,
-  extended hourly while working), not a three-hour window. A pod is torn
-  down when its lane's last algorithm is merged.
-- Expect one or two algorithms per lane in the first window and the rest
-  after. The paper's count moves only when a release record admits a lane
-  on three vendors.
+- Pod leases: `dev_pod.sh up <lane> 240`, extended hourly while working. A
+  pod is torn down when its lane's last algorithm is merged.
+- The paper's count moves only when a release record admits a lane on
+  three vendors.
 - Speed work (FAST and IDENTICAL) starts per lane after that lane's
-  identity passes, never before; a FAST commit on nine pods each going
-  back through one Metal queue is the second bottleneck, so sequence it.
+  identity passes, never before. FAST commits from all lanes go back through
+  the Metal queue, so sequence them.
 
 ## Order of operations before the first lane starts
 
@@ -395,7 +382,7 @@ Andrew: "may as well do everything now". What follows is every standard
 estimator not in the nine lane tables, checked against the public API on
 main (127 names) and the `NOT_IMPLEMENTED.tsv` files. Each is assigned to the
 lane whose machinery it reuses, in the briefs as an "Additions" table a lane
-does after its main table. E = a thin layer with few seams (a day at most),
+does after its main table. E = a thin layer with few seams,
 M = a new kernel on a known pattern, H = new machinery. The per-seam bill
 applies to every one; a wrapper with no numeric seam of its own owes only
 the verifier lane, the Python class, the sanity check and the CPU route.
