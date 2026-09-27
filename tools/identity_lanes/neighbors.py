@@ -73,6 +73,13 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(dict(z=_h(m.transform(A))), m, lambda e: (e.transform(np.abs(Xh[:256]).astype(np.float32)),))
 
 
+@lane("x-neighbors-skewed-chi2")
+def _(ml, X, yc, yr, Xh=None):
+    A = np.abs(X[:512]).astype(np.float32)
+    m = ml.SkewedChi2Sampler(skewedness=0.5, n_components=64, random_state=5).fit(A)
+    return _fit(dict(z=_h(m.transform(A)), w=_h(m.random_weights_), off=_h(m.random_offset_)),
+                m, lambda e: (e.transform(np.abs(Xh[:256]).astype(np.float32)),))
+
 
 def _neighbors_semi_labels(yc, X):
     y = (yc[:256] + (X[:256, 6] > 0.5).astype(np.int32)).astype(np.int64)

@@ -104,6 +104,16 @@ def test_additive_chi2(steps):
                                R(sample_steps=steps).fit_transform(X), rtol=1e-5, atol=1e-6)
 
 
+def test_skewed_chi2():
+    from sklearn.kernel_approximation import SkewedChi2Sampler as R
+    X = np.abs(_data(40))
+    a = ml.SkewedChi2Sampler(skewedness=0.5, n_components=50, random_state=4).fit(X)
+    b = R(skewedness=0.5, n_components=50, random_state=4).fit(X)
+    np.testing.assert_allclose(np.asarray(a.random_weights_), b.random_weights_, rtol=1e-4, atol=1e-5)
+    np.testing.assert_allclose(np.asarray(a.random_offset_), b.random_offset_, rtol=1e-6)
+    np.testing.assert_allclose(np.asarray(a.transform(X)), b.transform(X), rtol=1e-3, atol=2e-4)
+
+
 @pytest.mark.parametrize("cls,kw", [("LabelPropagation", dict(kernel="rbf", gamma=0.2)),
                                     ("LabelPropagation", dict(kernel="knn", n_neighbors=5)),
                                     ("LabelSpreading", dict(kernel="rbf", gamma=0.2, alpha=0.3)),

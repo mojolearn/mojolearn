@@ -30,7 +30,7 @@ from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty
 from ._mode import NumericModeMixin
 
-__all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch", "AdditiveChi2Sampler"]
+__all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch", "AdditiveChi2Sampler", "SkewedChi2Sampler"]
 
 # x_neighbors/items.mojo's codes
 _KERNELS = {"linear": 0, "poly": 1, "polynomial": 1, "rbf": 2, "sigmoid": 3, "laplacian": 4,
@@ -728,6 +728,52 @@ class AdditiveChi2Sampler(_XNeighbors):
         steps = int(self.sample_steps)
         out = empty((n, d * (2 * steps - 1)), "<f4")
         self._op("achi2", [(X, 0), (out, 1)], (n, d, steps), (_f32_scalar(self._interval()),))
+        return out
+
+    def fit_transform(self, X, y=None):
+        return self.fit(X).transform(X)
+
+
+# ====================================================================== SkewedChi2Sampler
+class SkewedChi2Sampler(_XNeighbors):
+    """Approximate feature map for the skewed chi-squared kernel.
+
+    Reference: scikit-learn `kernel_approximation.py` (SkewedChi2Sampler,
+    1.9.0). The uniforms are theirs exactly (legacy RandomState, see
+    `_LegacyRandomState`); pi/2 * u and the offsets are formed in IEEE double
+    and rounded once to float32; the inverse sech CDF, the log, the product
+    and the cosine run in float32 on the lane's portable spellings. Input at
+    or below -skewedness is refused, as theirs.
+    """
+
+    def __init__(self, *, skewedness=1.0, n_components=100, random_state=None):
+        self.skewedness = skewedness
+        self.n_components = n_components
+        self.random_state = random_state
+
+    def fit(self, X, y=None):
+        X = _f32(X)
+        d = X.shape[1]
+        nc = int(self.n_components)
+        rs = _LegacyRandomState(self.random_state)
+        u = rs.random_sample(d * nc)
+        z = Array.from_list([[math.pi / 2.0 * u[f * nc + c] for c in range(nc)] for f in range(d)], "<f4")
+        w = empty((d, nc), "<f4")
+        self._op("skew_weights", [(z, 0), (w, 1)], (d * nc,))
+        self.random_weights_ = w
+        self.random_offset_ = Array.from_list(rs.uniform(0.0, 2.0 * math.pi, nc), "<f4")
+        self.n_features_in_ = d
+        return self
+
+    def transform(self, X):
+        X = _f32(X)
+        n, d = X.shape
+        if X.size and X.min() <= -float(self.skewedness):
+            raise ValueError("X may not contain entries smaller than -skewedness.")
+        nc = int(self.n_components)
+        lx = self._unary(X, _U_LOG, 1.0, _f32_scalar(self.skewedness))
+        out = empty((n, nc), "<f4")
+        self._op("skew_transform", [(lx, 0), (self.random_weights_, 0), (self.random_offset_, 0), (out, 1)], (n, d, nc))
         return out
 
     def fit_transform(self, X, y=None):
