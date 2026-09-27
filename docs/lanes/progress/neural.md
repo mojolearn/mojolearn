@@ -60,11 +60,18 @@ clip_grad_norm_). Bindings `_mojolearn_{training,mamba,transformer,embedding}`
   differ; the 5 host-only lanes (byte-lm-host-*, language-model-config,
   saved-model-host-infer) REFUSE on a GPU column in both. Evidence:
   `~/mojolearn-evidence/neural/{before,after}.json`, `before_after_diff.txt`.
-- **Lane check (NVIDIA pod, merged tree aea8614db):** training-primitives,
+- **Lane check (NVIDIA pod, merged tree):** training-primitives,
   optim-adam-clip, transformer, mamba1, mamba2, mamba3, embedding, mlp, samba
-  AGREE (cuda vs cpu-intel-xeon-gold-6342), sabotage
-  `~/mojolearn-evidence/neural/sab_adam_lerp.patch` (Adam moment lerp
-  spelling, device only) -> see verdict below.
+  all AGREE clean (cuda vs cpu-intel-xeon-gold-6342, every part compared).
+  Sabotage `~/mojolearn-evidence/neural/sab_adam_lerp.patch` (the device Adam
+  moment in its lerp spelling; the host oracle is untouched): RESULT PASS on
+  optim-adam-clip,mlp (AGREE, DISAGREE, AGREE). It does NOT reach the other
+  seven lanes (Samba steps AdamW elsewhere), so a family-wide biting sabotage
+  per lane is owed (see Next, item 1).
+- **Final re-check after the numerics fix and the merge:** the same 43-lane
+  GPU column against the base column: 342 cells IDENTICAL x2, 0 differ
+  (`before_after_diff_final.txt`; the 5 host-only lanes now hash where the
+  base column refused, so they read ONE-COLUMN, not different).
 - **FAST surface tests (NVIDIA):** test_mamba_surface, test_transformer_surface
   (backward now held to the float64 oracle under FAST too),
   test_training_surface (ALLOW_FAST), test_embedding_surface,
@@ -85,10 +92,19 @@ clip_grad_norm_). Bindings `_mojolearn_{training,mamba,transformer,embedding}`
   at 5 seeds x 2 shapes: FAST error within max(2 x IDENTICAL, torch fp32) on
   every case (all ~1e-7). Evidence: `~/mojolearn-evidence/neural/quality/`.
 - **Stewards:** request 1790542263165-neural-aea8614db9 (m2pro, m3ultra,
-  do-amd), lanes above, sabotage above, `--pass 1`: see verdicts below.
+  do-amd) on the nine lanes with the Adam sabotage, `--pass 1`, PENDING at
+  merge (merge gate 0000b: stewards are post-merge release gates). Its RESULT
+  will read FAIL for the seven lanes the sabotage cannot reach; read its
+  CLEAN rows (Metal / gfx942 vs CPU AGREE) as the Apple/AMD proof and treat
+  any CLEAN DISAGREE as a real fix.
 
 ## Next phases (one per session)
 
+1. **Verification (charter phase 1) for the existing lanes:** a biting
+   per-lane sabotage for every neural lane (transformer, mamba1/2/3,
+   embedding, training-primitives, samba, byte-lm) and a `.checks` fragment
+   so `--pass 2` runs; one steward request with a patch per lane group.
+   Record the steward verdicts of request 1790542263165-neural-aea8614db9.
 2. **Option parity vs torch/HF.** Attention variants (SDPA-style masks,
    ALiBi, MQA already via GQA, cross-attention, dropout), norms (LayerNorm
    w/o bias, Gemma offset done), activations (ReLU^2, SiLU MLP), dropout in
