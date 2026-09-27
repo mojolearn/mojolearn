@@ -95,7 +95,7 @@ Steward verdicts collected 2026-09-27 (phase d session): 1790534359123-cnn-6bb49
 collect it next session (`apple_steward.py status`); a FAIL there is fixed at the root first.
 The old FAIL 1790528141908-cnn-25b570476e is superseded by 1790534359123 (the context and e2e-arm fixes).
 
-## Phase d: FAST GPU speed (2026-09-27)
+## Phase 3 (charter; directive 1(d)): FAST speed (2026-09-27)
 
 FAST tier: `MOJOLEARN_NUMERIC_MODE=fast sh bindings/build_x_cnn.sh` builds (python/mojolearn/_mojolearn_x_cnn.so);
 the host twin is IDENTICAL-only by design (build_host_family).
@@ -135,18 +135,18 @@ on the pod: GATE_RESULT. test_lane_select (surface fragment changed): TLS_RESULT
 Stewards: identity 1790540597511-cnn-07d66ad836 (15 lanes + e2e arm; m2pro, m3ultra, do-amd) SUBMITTED.
 Apple FAST speed (m3ultra, before/after, same inline timing cmd): 1790540566963-speed-cnn-6226c84178 (before),
 1790540569623-speed-cnn-07d66ad836 (after) SUBMITTED: read `apple_steward.py status` / the verdict stdout
-(lines `XCNN-SPEED`). AMD FAST speed: OWED (the steward has no AMD speed kind yet; no cnn-amd box).
+(lines `XCNN-SPEED`). AMD FAST speed: OWED (`apple_steward.py submit` has no `--target do-amd` on main yet; no cnn-amd box). Submit the same inline command with `--kind speed --target do-amd` for 6226c8417 and the merge commit once it exists.
 
-## Next (phase e: IDENTICAL GPU speed, its own session)
+## Next: phase 4: IDENTICAL speed (its own session)
 
 1. Collect: 1790537166338 (identity), 1790540597511 (identity, this phase), the two m3ultra speed jobs;
    fix any FAIL at the root first. AMD FAST speed once the steward has an AMD speed kind.
-2. Phase e: same bits, faster. The cost is now transfers and allocations, not kernels: device-resident
+2. Phase 4 (IDENTICAL speed): same bits, faster. The cost is now transfers and allocations, not kernels: device-resident
    tensors across a trainer step (weights, optimizer state and activations on the device; only the batch
    up and the loss down), cached device buffers instead of per-call allocation, and the conv im2col
    buffer (604 MB at N256 C64) replaced by a tiled im2col-in-GEMM staging with the pinned fold order.
    Re-prove bitwise on every column.
-3. Then phase f (CPU speed).
+3. Then phase 5 (CPU speed).
 
 ## Earlier next list (history)
 
