@@ -94,15 +94,7 @@ class _Prog:
                             + [0] * (_PARAMS - len(params)))
 
     def run(self, numeric_mode):
-        arena = array.array("f", bytes(4 * max(self.size, 1)))
-        base = arena.buffer_info()[0]
-        for off, arr in self._inputs:
-            if arr.size:
-                ctypes.memmove(base + 4 * off, addr_ro(arr, name="input"), 4 * arr.size)
-        prog = array.array("i", [v for s in self._stages for v in s] or [0])
-        _binding(numeric_mode).x_metrics_run(base, self.size, prog.buffer_info()[0], len(self._stages))
-        self.arena = arena
-        return self
+        return _execute(self, numeric_mode)
 
     def floats(self, off, n):
         """Python floats (exact images of the Float32 results)."""
@@ -119,6 +111,22 @@ class _Prog:
         for s in shape:
             n *= s
         return Array._owned(self.arena[off:off + n], shape, "<f4", "C")
+
+
+def _execute(prog, numeric_mode):
+    """Run a program on the x_metrics binding (GPU, or the host binding on
+    a CPU-only install). A module-level function, not only a method, so the
+    lane selector (tools/lane_select.py follows file-local functions, not
+    classes) sees every caller reach `x_metrics_run`."""
+    arena = array.array("f", bytes(4 * max(prog.size, 1)))
+    base = arena.buffer_info()[0]
+    for off, arr in prog._inputs:
+        if arr.size:
+            ctypes.memmove(base + 4 * off, addr_ro(arr, name="input"), 4 * arr.size)
+    stages = array.array("i", [v for s in prog._stages for v in s] or [0])
+    _binding(numeric_mode).x_metrics_run(base, prog.size, stages.buffer_info()[0], len(prog._stages))
+    prog.arena = arena
+    return prog
 
 
 def _group(prog, key, n, m, *, values=_NONE, vstride=1, weights=_NONE, width=1):
@@ -195,7 +203,7 @@ class _Sums:
             zero = prog.alloc(n)            # every row in group 0: the total weight
             prog.stage("pair_key", n, a, a, zero, 1, 2)
             groups.append(_group(prog, zero, n, 1, weights=W))
-        prog.run(numeric_mode)
+        _execute(prog, numeric_mode)
         if w is None:
             sums = []
             for off, _ in groups:
@@ -511,7 +519,7 @@ def _confusion(true, pred, w, order, numeric_mode):
     prog.stage("pair_key", n, a, b, key, k, 0)
     W = _NONE if w is None else prog.put(w)
     off, out = _group(prog, key, n, k * k, weights=W)
-    prog.run(numeric_mode)
+    _execute(prog, numeric_mode)
     if w is None:
         o = prog.ints(off, k * k + 1)
         return [o[i + 1] - o[i] for i in range(k * k)]
@@ -809,7 +817,7 @@ class _Reg:
             prog.stage("reg_term", n * D, Y, P, term, D, _TERM[kind], S, 0 if pred_broadcast is None else 1)
             outs.append(_group(prog, zero, n, 1, values=term, vstride=D, weights=W, width=D)[1])
         sw_out = _group(prog, zero, n, 1, weights=W)[1] if self.w is not None else None
-        prog.run(numeric_mode)
+        _execute(prog, numeric_mode)
         den = float(n) if self.w is None else prog.floats(sw_out, 1)[0]
         return [[v / den for v in prog.floats(o, D)] for o in outs]
 
@@ -826,7 +834,7 @@ class _Reg:
         out = prog.alloc(D)
         cdf = prog.alloc(n * D)
         prog.stage("wpercentile", D, V, n, D, order, W, R, 1 if average else 0, out, cdf)
-        prog.run(numeric_mode)
+        _execute(prog, numeric_mode)
         flags = [prog.ints(cdf + c * n, 1)[0] for c in range(D)]
         vals = prog.floats(out, D)
         return [float("nan") if fl == -1 else v for v, fl in zip(vals, flags)]
@@ -942,7 +950,7 @@ def max_error(y_true, y_pred, *, numeric_mode=None):
     prog.stage("reg_term", r.n, Y, P, t, 1, _TERM["abs"], Y, 0)
     out = prog.alloc(1)
     prog.stage("col_max", 1, t, r.n, 1, out)
-    prog.run(numeric_mode)
+    _execute(prog, numeric_mode)
     return float(prog.floats(out, 1)[0])
 
 
@@ -1007,7 +1015,7 @@ def _diff_and_y_means(r, numeric_mode):
     a = _group(prog, zero, n, 1, values=diff, vstride=D, weights=W, width=D)[1]
     b = _group(prog, zero, n, 1, values=Y, vstride=D, weights=W, width=D)[1]
     sw = _group(prog, zero, n, 1, weights=W)[1] if r.w is not None else None
-    prog.run(numeric_mode)
+    _execute(prog, numeric_mode)
     den = float(n) if r.w is None else prog.floats(sw, 1)[0]
     return [v / den for v in prog.floats(a, D)], [v / den for v in prog.floats(b, D)]
 
@@ -1030,7 +1038,7 @@ def _centered(r, source, means, numeric_mode, *, mean=True):
     prog.stage("reg_term", n * D, V, M, sq, D, _TERM["sq"], Y, 1)
     out = _group(prog, zero, n, 1, values=sq, vstride=D, weights=W, width=D)[1]
     sw = _group(prog, zero, n, 1, weights=W)[1] if r.w is not None else None
-    prog.run(numeric_mode)
+    _execute(prog, numeric_mode)
     if not mean:
         return prog.floats(out, D)
     den = float(n) if r.w is None else prog.floats(sw, 1)[0]
@@ -1061,7 +1069,7 @@ def _centered_sse(r, numeric_mode):
     sq = prog.alloc(n * D)
     prog.stage("reg_term", n * D, Y, P, sq, D, _TERM["sq"], Y, 0)
     out = _group(prog, zero, n, 1, values=sq, vstride=D, weights=W, width=D)[1]
-    prog.run(numeric_mode)
+    _execute(prog, numeric_mode)
     return prog.floats(out, D)
 
 
@@ -1202,7 +1210,7 @@ def _curves(scores, flags, w, n, problems, numeric_mode, *, stride=1):
     thr = prog.alloc(n * problems)
     cnt = prog.alloc(problems)
     prog.stage("bin_curve", problems, S, stride, POS, W, n, order, fps, tps, thr, cnt)
-    prog.run(numeric_mode)
+    _execute(prog, numeric_mode)
     out = []
     counts = prog.ints(cnt, problems)
     for t in range(problems):
@@ -1563,7 +1571,7 @@ def top_k_accuracy_score(y_true, y_score, *, k=2, normalize=True, sample_weight=
     W = _NONE if w is None else prog.put(w)
     tot = _group(prog, zero, n, 1, values=hit, weights=W)[1]
     sw = _group(prog, zero, n, 1, weights=W)[1] if w is not None else None
-    prog.run(numeric_mode)
+    _execute(prog, numeric_mode)
     hits = prog.floats(tot, 1)[0]
     if not normalize:
         return float(hits)
@@ -1580,7 +1588,7 @@ def _row_mean(S, cols, Y, n, kind, w, numeric_mode, *, K=0, D=None, prog=None, n
     W = _NONE if w is None else prog.put(w)
     tot = _group(prog, zero, n, 1, values=out, weights=W)[1]
     sw = _group(prog, zero, n, 1, weights=W)[1] if w is not None else None
-    prog.run(numeric_mode)
+    _execute(prog, numeric_mode)
     total = prog.floats(tot, 1)[0]
     if not normalize:
         return total
@@ -1800,7 +1808,7 @@ def ndcg_score(y_true, y_score, *, k=None, sample_weight=None, ignore_ties=False
     ideal = prog.alloc(n)
     prog.stage("row_metric", n, S, c, Y, gain, _ROW["dcg_ignore_ties" if ignore_ties else "dcg"], K, Dt)
     prog.stage("row_metric", n, Y, c, Y, ideal, _ROW["dcg"], K, Dt)
-    prog.run(numeric_mode)
+    _execute(prog, numeric_mode)
     g, i = prog.floats(gain, n), prog.floats(ideal, n)
     per = [a / b if b != 0 else 0.0 for a, b in zip(g, i)]
     if w is None:
@@ -1861,7 +1869,7 @@ def _contingency(a, b, ca, cb, numeric_mode):
     prog.stage("pair_key", n, A, B, key, max(ka, kb), 0)
     m = max(ka, kb) ** 2
     off, _ = _group(prog, key, n, m)
-    prog.run(numeric_mode)
+    _execute(prog, numeric_mode)
     o = prog.ints(off, m + 1)
     kk = max(ka, kb)
     return [[o[i * kk + j + 1] - o[i * kk + j] for j in range(kb)] for i in range(ka)]
@@ -2038,7 +2046,7 @@ def _centroids(Xa, codes, k, numeric_mode):
     zero = prog.alloc(n)
     prog.stage("pair_key", n, 0, 0, zero, 1, 2)
     _, gsum = _group(prog, zero, n, 1, values=X, vstride=d, width=d)
-    prog.run(numeric_mode)
+    _execute(prog, numeric_mode)
     o = prog.ints(off, k + 1)
     counts = [o[i + 1] - o[i] for i in range(k)]
     return prog.floats(sums, k * d), counts, prog.floats(gsum, d)
@@ -2054,7 +2062,7 @@ def _row_dists(Xa, codes, cents, root, numeric_mode):
     out = prog.alloc(n)
     prog.stage("row_centroid_dist", n, X, d, L, C, out, 1 if root else 0)
     off, per = _group(prog, L, n, k, values=out)
-    prog.run(numeric_mode)
+    _execute(prog, numeric_mode)
     return prog.floats(per, k)
 
 
@@ -2126,6 +2134,7 @@ class CounterRng:
                              "is numpy's, x_metrics/split.mojo DEVIATION 6108)")
         self.seed = int(random_state) & _M64
         self.draws = 0
+        self.binding = _BINDING
 
     def _salt(self):
         salt = _mix64(self.seed * 0x9E3779B97F4A7C15 + self.draws + 1)
@@ -2146,7 +2155,7 @@ class CounterRng:
             outs.append((out, n))
         if not outs:
             return []
-        prog.run(numeric_mode)
+        _execute(prog, numeric_mode)
         return [prog.ints(o, n) for o, n in outs]
 
     def permutation(self, n, numeric_mode=None):

@@ -16,6 +16,15 @@ from ._array import Array
 from ._buffer import _materialize, _native, empty
 from ._arrays import _addr, _addr_ro
 from ._labels import is_bool, flatten_labels
+# The splitters' random draws (lane/metrics): a module-level import, so the
+# lane selector sees model_selection reach the x_metrics binding.
+from ._expansion_metrics import CounterRng, _mix64
+
+#: The binding the splitters' permutations and the scorers' added metrics run
+#: on (python/mojolearn/_expansion_metrics.py `_BINDING`). Named here because
+#: tools/lane_select.py resolves a lane's bindings from the doors it runs
+#: WHOLE, and a splitter lane's door is this file.
+_SPLIT_BINDING = "_mojolearn_x_metrics"
 
 __all__ = ['cross_val_score', 'split_descriptor']
 
@@ -626,8 +635,9 @@ def _as_index(values):
 
 
 def _rng(random_state):
-    from ._expansion_metrics import CounterRng
-    return CounterRng(random_state)
+    rng = CounterRng(random_state)
+    assert rng.binding == _SPLIT_BINDING
+    return rng
 
 
 class _Splitter:
@@ -941,7 +951,6 @@ class _Repeated:
 
 
 def _mix_seed(seed, r):
-    from ._expansion_metrics import _mix64
     return _mix64(seed * 0x9E3779B97F4A7C15 + 0x632BE59BD9B4E019 * (r + 1)) >> 1
 
 
