@@ -19,3 +19,4 @@ multiclass (ovr in the python layer); raft::label::getUniquelabels device sort	N
 probability (python layer, Platt scaling)	NOT IMPLEMENTED	not in the C++ surface at all
 svmFreeBuffers	NOT NEEDED	host lists
 raft::cache debug printing; print_device_vector debug blocks	NOT IMPLEMENTED	debug logging only
+gamma='scale' (cuML svm_base.pyx _get_gamma, sklearn svm/_base.py)	IMPLEMENTED for SVC and SVR (2026-09-27, DEVIATION 870 revised)	`1 / (n_features * X.var())`, 1.0 at zero variance, from the EXACT population variance of the float32 cells formed in integers and rounded once (python/mojolearn/_portable_math.py::scale_gamma): no fold order, so every host reads the same gamma bits. The default stays 'auto' so every recorded default fit keeps its bits. Lane x-neighbors-gamma-scale
