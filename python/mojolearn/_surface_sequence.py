@@ -29,7 +29,7 @@ FAMILIES = (
                         "sequence-lr-schedulers", "sequence-layernorm",
                         "sequence-theta", "sequence-croston",
                         "sequence-ets", "sequence-garch",
-                        "sequence-prophet"),
+                        "sequence-prophet", "sequence-moe"),
         inference_lanes=(),
         forest_kinds=(),
         classes=("LSTMRegressor", "LSTMClassifier", "GRURegressor", "GRUClassifier", "RMSprop", "Adagrad", "AutoARIMA", "STL", "VAR", "MLPClassifier",
@@ -37,18 +37,19 @@ FAMILIES = (
                  "ExponentialLR", "OneCycleLR", "LayerNorm", "Theta",
                  "OptimizedTheta", "DynamicTheta", "DynamicOptimizedTheta", "AutoTheta",
                  "CrostonClassic", "CrostonOptimized", "CrostonSBA", "ETS", "DampedETS", "GARCH",
-                 "ProphetForecaster"),
+                 "ProphetForecaster", "MoEBlock"),
         display="the sequence lane's recurrent networks and optimizers",
         host_modules=("sequence/ops.mojo", "sequence/exec.mojo", "sequence/recurrent.mojo",
                       "sequence/pyapi.mojo", "sequence/stl.mojo", "sequence/dispatch.mojo", "sequence/vecar.mojo", "sequence/mlp.mojo",
                       "sequence/mlp_fit.mojo", "sequence/adafactor.mojo",
                       "sequence/layernorm.mojo", "sequence/nm.mojo", "sequence/theta.mojo",
                       "sequence/croston.mojo", "sequence/ets.mojo",
-                      "sequence/garch.mojo", "sequence/prophet.mojo"),
+                      "sequence/garch.mojo", "sequence/prophet.mojo",
+                      "sequence/moe.mojo"),
         exports=(
             "x_sequence_host_numeric_mode", "x_sequence_host_vendor", "x_sequence_host_column",
             "x_sequence_host_sabotage", "x_sequence_numeric_mode", "x_sequence_vendor",
-            "rnn_fit", "rnn_predict", "rnn_n_params", "optimizer_step", "stl", "var_fit", "var_forecast", "mlp_fit", "mlp_predict", "adafactor_step", "lamb_step", "layer_norm", "theta", "croston", "ets", "garch", "prophet_fit", "prophet_predict",
+            "rnn_fit", "rnn_predict", "rnn_n_params", "optimizer_step", "stl", "var_fit", "var_forecast", "mlp_fit", "mlp_predict", "adafactor_step", "lamb_step", "layer_norm", "theta", "croston", "ets", "garch", "prophet_fit", "prophet_predict", "moe_forward",
         ),
         gate="tools/algos_lane_check.sh (pass 1: CPU == GPU bitwise)",
         wheel_note=(
@@ -78,7 +79,8 @@ TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
                        "sequence-croston": "CrostonClassic / CrostonOptimized / CrostonSBA",
                        "sequence-ets": "ETS / DampedETS",
                        "sequence-garch": "GARCH",
-                       "sequence-prophet": "ProphetForecaster"}
+                       "sequence-prophet": "ProphetForecaster",
+                       "sequence-moe": "MoEBlock"}
 PUBLIC_PENDING_LANES = {"sequence-lstm": "no reference", "sequence-gru": "no reference",
                         "sequence-rmsprop": "no reference",
                         "sequence-adagrad": "no reference",
@@ -98,4 +100,5 @@ PUBLIC_PENDING_LANES = {"sequence-lstm": "no reference", "sequence-gru": "no ref
                         "sequence-croston": "no reference",
                         "sequence-ets": "no reference",
                         "sequence-garch": "no reference",
-                        "sequence-prophet": "no reference"}
+                        "sequence-prophet": "no reference",
+                        "sequence-moe": "no reference"}

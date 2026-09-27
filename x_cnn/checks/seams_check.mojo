@@ -19,6 +19,7 @@ from core.identity_trace import IdentityTrace
 from x_cnn.ops import conv_params, pool_params, CP_OH, CP_OW, PP_OH, PP_OW
 from x_cnn.checks.oracle import (
     o_col2im, o_conv_dw, o_bn_stats, o_dropout_mask, o_spmm, o_softmax, o_maxpool, o_avgpool, o_sgd, o_gcn_norm,
+    o_pad_bwd, o_adapt_avg_bwd, o_sage_max_bwd, o_l2norm, o_adam,
 )
 import x_cnn.device as D
 import x_cnn.host.ops_host as Hh
@@ -255,7 +256,89 @@ def main() raises:
     var sw = _fixture(257, 14)
     var sg = _fixture(257, 15)
     var sv = _fixture(257, 16)
-    var hy: List[Float32] = [Float32(0.05), Float32(0.9), Float32(1e-3)]
+    var hy: List[Float32] = [Float32(0.05), Float32(0.9), Float32(1e-3), Float32(0), Float32(0), Float32(0)]
     _check("5709_sgd_fma", o_sgd(sw, sg, sv, hy[0], hy[1], hy[2], False), o_sgd(sw, sg, sv, hy[0], hy[1], hy[2], True),
            D.sgd_device(sw, sg, sv, hy), Hh.sgd_host(sw, sg, sv, hy), tr)
+
+    # ---- 5711 pad backward, every mode that folds more than one position (reflect, replicate, circular).
+    for mode in range(1, 4):
+        var pn = 2; var pc = 2; var PH0 = 3; var PW0 = 4
+        var pt = 2; var pb = 1; var pl = 3; var pr = 2
+        if mode == 3:
+            pl = 3
+            pr = 3
+        var gp2 = _fixture(pn * pc * (PH0 + pt + pb) * (PW0 + pl + pr), UInt64(20 + mode))
+        var padp: List[Int32] = [Int32(pn), Int32(pc), Int32(PH0), Int32(PW0), Int32(pt), Int32(pb), Int32(pl), Int32(pr), Int32(mode)]
+        _check("5711_pad_bwd_mode" + String(mode),
+               o_pad_bwd(gp2, pn * pc, PH0, PW0, pt, pb, pl, pr, mode, False),
+               o_pad_bwd(gp2, pn * pc, PH0, PW0, pt, pb, pl, pr, mode, True),
+               D.pad2d_backward_device(gp2, padp), Hh.pad2d_backward_host(gp2, padp), tr)
+
+    # ---- 5712 adaptive average pooling backward: 7 x 5 onto 3 x 4 (overlapping windows).
+    var anc = 4; var AH = 7; var AW = 5; var AOH = 3; var AOW = 4
+    var ag = _fixture(anc * AOH * AOW, 30)
+    var aprm: List[Int32] = [2, 2, Int32(AH), Int32(AW), Int32(AOH), Int32(AOW)]
+    var noidx = List[Int32](length=anc * AOH * AOW, fill=Int32(0))
+    var io1 = List[Int32]()
+    var io2 = List[Int32]()
+    _check("5712_adaptive_avg_bwd", o_adapt_avg_bwd(ag, anc, AH, AW, AOH, AOW, False),
+           o_adapt_avg_bwd(ag, anc, AH, AW, AOH, AOW, True),
+           D.adaptive_pool_device(ag, noidx, aprm, 1, io1), Hh.adaptive_pool_host(ag, noidx, aprm, 1, io2), tr)
+
+    # ---- 5713 SAGE max backward over the 30-node graph above, with exact ties; 5714 L2 normalize.
+    var tied = _fixture(gn * F, 31, True)
+    var gg = _fixture(gn * F, 32)
+    # the transposed CSR (rows = sources, targets ascending) of the graph above
+    var trow = List[Int]()
+    var tcol = List[Int]()
+    var tr_of = List[Int]()
+    trow.append(0)
+    for s_ in range(gn):
+        for t in range(gn):
+            for e in range(rowptr[t], rowptr[t + 1]):
+                if col[e] == s_:
+                    tcol.append(t)
+                    tr_of.append(s_)
+        trow.append(len(tcol))
+    var csr_t = List[Int32]()
+    for v in trow:
+        csr_t.append(Int32(v))
+    for v in tcol:
+        csr_t.append(Int32(v))
+    for v in tr_of:
+        csr_t.append(Int32(v))
+    var mp: List[Int32] = [Int32(gn), Int32(F), Int32(nnz), 0]
+    var maux = List[Float32](length=2 * gn * F, fill=Float32(0))
+    var fwd_d = D.graph_op_device(tied, tied, maux, csr, mp, 0)
+    var fwd_h = Hh.graph_op_host(tied, tied, maux, csr, mp, 0)
+    var aux_d = _slice(fwd_d, gn * F, 3 * gn * F)
+    var aux_h = _slice(fwd_h, gn * F, 3 * gn * F)
+    _check("5713_sage_max_bwd", o_sage_max_bwd(tied, gg, rowptr, col, gn, F, False),
+           o_sage_max_bwd(tied, gg, rowptr, col, gn, F, True),
+           _slice(D.graph_op_device(tied, gg, aux_d, csr_t, mp, 1), 0, gn * F),
+           _slice(Hh.graph_op_host(tied, gg, aux_h, csr_t, mp, 1), 0, gn * F), tr)
+    var ln = 9; var lf = 13
+    var lx = _fixture(ln * lf, 33)
+    var lp: List[Int32] = [Int32(ln), Int32(lf), 0, 2]
+    var lcsr = List[Int32](length=ln + 1, fill=Int32(0))
+    var laux = List[Float32](length=ln, fill=Float32(0))
+    _check("5714_l2norm_fold", o_l2norm(lx, ln, lf, False), o_l2norm(lx, ln, lf, True),
+           _slice(D.graph_op_device(lx, lx, laux, lcsr, lp, 2), 0, ln * lf),
+           _slice(Hh.graph_op_host(lx, lx, laux, lcsr, lp, 2), 0, ln * lf), tr)
+
+    # ---- 5715 Adam (step 3 scalars) and AdamW.
+    var aw = _fixture(257, 34)
+    var agr = _fixture(257, 35)
+    var amv = _fixture(514, 36)
+    for k in range(514):
+        if k >= 257:
+            amv[k] = amv[k] * amv[k]
+    for decoupled in range(2):
+        # beta2 = 0.75 so the two terms of v's update are comparable and the fused spelling separates
+        var ah: List[Float32] = [Float32(0.0022), Float32(0.1), Float32(0.75), Float32(0.25), Float32(1e-8),
+                                 Float32(0.0547), Float32(0.01), Float32(decoupled), Float32(0.99998)]
+        var got_d = D.adam_device(aw, agr, amv, ah)
+        var got_h = Hh.adam_host(aw, agr, amv, ah)
+        _check("5715_adam_" + String(decoupled), o_adam(aw, agr, amv, ah, False), o_adam(aw, agr, amv, ah, True),
+               got_d, got_h, tr)
     print("PASS x_cnn seams_check")

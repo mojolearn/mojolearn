@@ -14,6 +14,8 @@ from x_cnn.ops import (
     relu_fwd_at, relu_bwd_at, add_at, bias_rows_at, softmax_xent_row_at, seq_mean, sgd_at,
     bn_stats_at, bn_eval_stats_at, bn_apply_at, bn_running_at, bn_bwd_red_at, bn_bwd_dx_at, bn_bwd_eval_dx_at,
     dropout2d_at, mul_at, spmm_at, gcn_deg_at, gcn_norm_at,
+    pad_fwd_at, pad_bwd_at, adapt_avg_fwd_at, adapt_avg_bwd_at, adapt_max_fwd_at, adapt_max_bwd_at,
+    sage_max_fwd_at, sage_max_bwd_at, l2norm_fwd_at, l2norm_bwd_at, adam_at,
 )
 
 #: The host family's negative control (host_surface sabotage_define): the
@@ -332,3 +334,84 @@ def gcn_norm_host(w: List[Float32], csr: List[Int32], prm: List[Int32]) raises -
     _ = ps^
     _ = dis^
     return vals^
+
+
+def pad2d_forward_host(x: List[Float32], prm: List[Int32]) raises -> List[Float32]:
+    var nc = Int(prm[0]) * Int(prm[1])
+    var n_out = nc * (Int(prm[2]) + Int(prm[4]) + Int(prm[5])) * (Int(prm[3]) + Int(prm[6]) + Int(prm[7]))
+    return map2_host[pad_fwd_at](x, x, n_out, prm)
+
+
+def pad2d_backward_host(g: List[Float32], prm: List[Int32]) raises -> List[Float32]:
+    var n_out = Int(prm[0]) * Int(prm[1]) * Int(prm[2]) * Int(prm[3])
+    return map2_host[pad_bwd_at](g, g, n_out, prm)
+
+
+def adaptive_host[f: ElemFn](a: List[Float32], idx: List[Int32], n_out: Int, prm: List[Int32], mut idx_out: List[Int32]) raises -> List[Float32]:
+    var sa = a.copy()
+    var ps = prm.copy()
+    idx_out = idx.copy()
+    var out = zeros(n_out)
+    run[f](hp(sa), hp(sa), hp(out), hp(out), hi(idx_out), hi(ps), n_out)
+    _ = sa^
+    _ = ps^
+    return out^
+
+
+def adaptive_pool_host(x: List[Float32], idx: List[Int32], prm: List[Int32], kind: Int, mut idx_out: List[Int32]) raises -> List[Float32]:
+    """kind 0 avg forward, 1 avg backward, 2 max forward (idx_out = winners), 3 max backward (idx = winners)."""
+    var nc = Int(prm[0]) * Int(prm[1])
+    var nin = nc * Int(prm[2]) * Int(prm[3])
+    var nout = nc * Int(prm[4]) * Int(prm[5])
+    if kind == 0:
+        return adaptive_host[adapt_avg_fwd_at](x, idx, nout, prm, idx_out)
+    if kind == 1:
+        return adaptive_host[adapt_avg_bwd_at](x, idx, nin, prm, idx_out)
+    if kind == 2:
+        var slots = List[Int32](length=nout, fill=Int32(0))
+        return adaptive_host[adapt_max_fwd_at](x, slots, nout, prm, idx_out)
+    return adaptive_host[adapt_max_bwd_at](x, idx, nin, prm, idx_out)
+
+
+def graph4_host[f: ElemFn](a: List[Float32], b: List[Float32], aux: List[Float32], csr: List[Int32], prm: List[Int32], total: Int, n_out: Int) raises -> List[Float32]:
+    var sa = a.copy()
+    var sb = b.copy()
+    var sx = aux.copy()
+    var sq = csr.copy()
+    var ps = prm.copy()
+    var out = zeros(n_out)
+    run[f](hp(sa), hp(sb), hp(sx), hp(out), hi(sq), hi(ps), total)
+    _ = sa^
+    _ = sb^
+    _ = sq^
+    _ = ps^
+    out.extend(sx^)
+    return out^
+
+
+def graph_op_host(a: List[Float32], b: List[Float32], aux: List[Float32], csr: List[Int32], prm: List[Int32], kind: Int) raises -> List[Float32]:
+    """kind 0 sage max forward, 1 sage max backward, 2 l2 normalize forward, 3 its backward; [dst | aux']."""
+    var n = Int(prm[0])
+    var F = Int(prm[1])
+    if kind == 0:
+        return graph4_host[sage_max_fwd_at](a, b, aux, csr, prm, n * F, n * F)
+    if kind == 1:
+        return graph4_host[sage_max_bwd_at](a, b, aux, csr, prm, n * F, n * F)
+    if kind == 2:
+        return graph4_host[l2norm_fwd_at](a, b, aux, csr, prm, n, n * F)
+    return graph4_host[l2norm_bwd_at](a, b, aux, csr, prm, n, n * F)
+
+
+def adam_host(w: List[Float32], g: List[Float32], mv: List[Float32], hyper: List[Float32]) raises -> List[Float32]:
+    var n = len(w)
+    var sw = w.copy()
+    var sg = g.copy()
+    var sm = mv.copy()
+    var sh = hyper.copy()
+    var prm: List[Int32] = [Int32(n)]
+    run[adam_at](hp(sw), hp(sg), hp(sm), hp(sh), hi(prm), hi(prm), n)
+    _ = sg^
+    _ = sh^
+    _ = prm^
+    sw.extend(sm^)
+    return sw^

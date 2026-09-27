@@ -61,15 +61,35 @@ Lane 8 (docs/lanes/ALGORITHM_EXPANSION_BRIEFS.md). Pass 1: build + sanity +
 
 | step | commit | result |
 |---|---|---|
-| per-seam proof, NVIDIA + CPU: oracle `x_cnn/checks/oracle.mojo`, driver `x_cnn/checks/seams_check.mojo` (11 seams, each fixture separates), 11 sabotage arms, DEVIATIONs 5700-5710, IDENTITY_PATHS rows 170-179, cards `x_cnn.<seam>` | see git log | `algos_lane_check.sh <10 x-cnn lanes> --pass 2`: every arm FAIL under its patch, PASS after reversal; all 10 lanes AGREE (RTX 4090 vs EPYC 75F3) |
+| per-seam proof, NVIDIA + CPU: oracle `x_cnn/checks/oracle.mojo`, driver `x_cnn/checks/seams_check.mojo`, one sabotage arm per seam (`x_cnn/checks/sabotage/seam_57xx_*.patch`, listed in `tools/identity_lanes/cnn.checks`), DEVIATIONs 5700-5715, IDENTITY_PATHS rows 170-179, card stages `x_cnn.<seam>` | f8601ae3b (+ 0e2798963 for 5711-5715) | every arm FAILs with the driver's own `FAIL 57xx ... cells differ` message (checked in the log, not just the exit code) |
+| lane-check proof hole fixed (a seam arm bites only if its driver built, ran and failed; BROKEN ARM otherwise) | 3084ca09c | old bad 5709 arm -> BROKEN ARM; fixed arm bites |
+| one process-lifetime DeviceContext (`cnn_ctx`); seam 5709 arm fixed; end-to-end steward arm `e2e_host_output_bit.patch` (every CPU output word's low bit flipped) | dd3d15068 | the first M2 Pro run failed with "Failed to create Metal command queue" (a context per call) |
 
-OWED for pass 2 item 2: AMD AGREE (no `cnn-amd` box listed yet), M2 Pro steward PASS.
+## Option parity (x_cnn/NOT_IMPLEMENTED.tsv), commit 0e2798963
+
+| option | lane | torch check |
+|---|---|---|
+| Conv padding_mode reflect/replicate/circular (explicit pad + gather backward, 5711), padding 'same'/'valid', groups | x-cnn-conv-options | float64 reference == torch to 1e-10 |
+| MaxPool/AvgPool ceil_mode, divisor_override; adaptive pooling to non-dividing sizes (5712) | x-cnn-pool-options | == torch (avg backward to 1e-7: torch rounds through float32 there) |
+| BatchNorm momentum=None, track_running_stats=False | x-cnn-bn-options | 1e-10 |
+| SAGEConv aggr='max' (ties split, 5713), normalize=True (5714) | x-cnn-gnn-options | == scatter_reduce amax, except torch 2.4 also counts the zero-initialized output as a tie when the max is exactly 0.0 (not carried: a reference quirk) |
+| CNNClassifier optimizer adam/adamw (5715), SGD dampening/nesterov | x-cnn-trainer-options | 9 steps vs torch.optim: loss 2.4e-7, weights 4.5e-8 |
+| still NOT IMPLEMENTED: SAGEConv project=True | | |
+
+Gate for the merge of dd3d15068 + 0e2798963: `algos_lane_check.sh <15 x-cnn lanes> --pass 2 --sabotage x_cnn/checks/sabotage/e2e_host_output_bit.patch` on the RTX 4090 pod, then `tools/test_lane_select.py` (registries changed). Result (RTX 4090 pod, 2026-09-27): all 16 seam arms FAIL under their patch with the driver's own FAIL and PASS after reversal; all 15 lanes AGREE clean, DISAGREE under the end-to-end arm, AGREE restored (`RESULT: PASS`); test_lane_select `OK: 0 failure(s)`. PASSED: do not re-run.
+
+OWED (pass 2 item 2): M2 Pro steward PASS and do-amd PASS on the merged commit (SUBMITTED for main 6bb49c82205f6af4f101594e3c44f08e1dfa3657, 15 lanes, the e2e arm: check `python3 tools/apple_steward.py status`) (submit with `--sabotage x_cnn/checks/sabotage/e2e_host_output_bit.patch`); there is no `cnn-amd` dev box, do-amd is the AMD column.
 
 ## Next
 
-PASS 1 is complete once the rows above are merged. Then PASS 2 per the
-plan's CURRENT DIRECTIVES: AMD box (`tools/dev_pod.sh up cnn 240 --vendor amd`),
-per-seam `.checks` drivers + sabotage patches (seams: col2im gather 5700,
-weight-grad GEMM TN 5701, BN folds 5702, Dropout2d Philox mask 5703,
-SpMM row folds 5704, NaN canon 5705, maxpool tie, avgpool divisor), option
-parity (x_cnn/NOT_IMPLEMENTED.tsv), then speed.
+1. The gate above PASSED and was merged. Steward: `tools/cloudmac.sh push m2pro <sha>` and `python3 tools/apple_steward.py
+   submit --lane cnn --commit <sha> --verify-lanes <15 x-cnn lanes>
+   --sabotage x_cnn/checks/sabotage/e2e_host_output_bit.patch`; poll
+   `apple_steward.py status` for m2pro AND do-amd PASS; fix anything they find.
+2. SAGEConv project=True (the last option row).
+3. Speed (PASS 2 item 3): IDENTICAL and FAST on NVIDIA, AMD (do-amd or a
+   cnn-amd box), Apple (`apple_steward.py submit --kind speed`) and the CPU
+   host path, at a realistic CNN shape (e.g. N 256, 3x32x32, 64 channels,
+   R2 data only). Obvious first targets: per-call upload/download (keep
+   tensors resident across a trainer step), the FAST tier's conv (allow the
+   vendor GEMM route and a tiled direct conv), the host loops (threads).

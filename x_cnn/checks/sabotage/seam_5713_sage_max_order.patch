@@ -1,0 +1,12 @@
+--- a/x_cnn/ops.mojo	2026-09-27 13:10:09
++++ b/x_cnn/ops.mojo	2026-09-27 13:10:09
+@@ -937,7 +937,8 @@
+     var f = i - r * F
+     var v = ftz(h.unsafe_load(i))
+     var acc = Float32(0)
+-    for e in range(_g(q, r), _g(q, r + 1)):
++    for u in range(_g(q, r + 1) - _g(q, r)):
++        var e = _g(q, r + 1) - 1 - u
+         var t = _g(q, n + 1 + e)
+         var o = t * F + f
+         if v == aux.unsafe_load(o) and aux.unsafe_load(n * F + o) > Float32(0):

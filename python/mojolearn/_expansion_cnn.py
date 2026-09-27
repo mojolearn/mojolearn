@@ -68,28 +68,57 @@ class _Layer:
 
 
 class Conv2d(_Layer):
-    """2-D convolution, PyTorch `nn.Conv2d` semantics (groups=1, zero
-    padding): im2col onto the pinned GEMM (mojolearn.identical.gemm.fp32.v1)
-    forward and backward. `forward(x)` takes (N, C, H, W) float32;
-    `backward(grad_out)` returns grad_x and sets `grad_weight_`, `grad_bias_`.
-    `transform(X)` is the row form: X is (n, C*H*W) with `input_shape=(C, H, W)`."""
+    """2-D convolution, PyTorch `nn.Conv2d` semantics: im2col onto the pinned
+    GEMM (mojolearn.identical.gemm.fp32.v1) forward and backward. `padding`
+    is an int, a pair, 'same' (stride 1) or 'valid'; `padding_mode` zeros,
+    reflect, replicate or circular (an explicit pad, then an unpadded conv,
+    as PyTorch does); `groups` splits channels into independent convs (one
+    GEMM each; groups == in_channels is a depthwise conv). `forward(x)`
+    takes (N, C, H, W) float32; `backward(grad_out)` returns grad_x and sets
+    `grad_weight_`, `grad_bias_`. `transform(X)` is the row form: X is
+    (n, C*H*W) with `input_shape=(C, H, W)`."""
+    _PAD_MODES = {"zeros": 0, "reflect": 1, "replicate": 2, "circular": 3}
 
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1,
-                 bias=True, random_state=0, input_shape=None, numeric_mode=None):
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1,
+                 bias=True, padding_mode="zeros", random_state=0, input_shape=None, numeric_mode=None):
         self.in_channels, self.out_channels = int(in_channels), int(out_channels)
         self.kernel_size = _pair(kernel_size, "kernel_size")
         self.stride = _pair(stride, "stride")
-        self.padding = _pair(padding, "padding")
         self.dilation = _pair(dilation, "dilation")
+        self.groups = int(groups)
+        if self.groups <= 0 or self.in_channels % self.groups or self.out_channels % self.groups:
+            raise ValueError("mojolearn: in_channels and out_channels must be divisible by groups")
+        if padding_mode not in self._PAD_MODES:
+            raise ValueError(f"mojolearn: padding_mode must be one of {sorted(self._PAD_MODES)}, got {padding_mode!r}")
+        self.padding_mode = padding_mode
+        kh, kw = self.kernel_size
+        if isinstance(padding, str):
+            if padding == "valid":
+                pads = (0, 0, 0, 0)
+            elif padding == "same":
+                if self.stride != (1, 1):
+                    raise ValueError("mojolearn: padding='same' is not supported for strided convolutions")
+                th, tw = self.dilation[0] * (kh - 1), self.dilation[1] * (kw - 1)
+                pads = (th // 2, th - th // 2, tw // 2, tw - tw // 2)
+            else:
+                raise ValueError(f"mojolearn: invalid padding string {padding!r}, should be one of 'valid', 'same'")
+            self.padding = padding
+        else:
+            ph, pw = _pair(padding, "padding")
+            pads = (ph, ph, pw, pw)
+            self.padding = (ph, pw)
+        self._pads = pads
+        # zeros with symmetric pads ride in the conv; anything else is an explicit pad first
+        self._explicit = padding_mode != "zeros" or pads[0] != pads[1] or pads[2] != pads[3]
+        self._conv_pad = (0, 0) if self._explicit else (pads[0], pads[2])
         self.bias = bool(bias)
         self.random_state = random_state
         self.input_shape = input_shape
         self.numeric_mode = numeric_mode
         np = _np()
-        kh, kw = self.kernel_size
-        fan_in = self.in_channels * kh * kw
+        fan_in = (self.in_channels // self.groups) * kh * kw
         rng = np.random.default_rng(random_state)
-        self.weight_ = _kaiming_uniform(rng, (self.out_channels, self.in_channels, kh, kw), fan_in)
+        self.weight_ = _kaiming_uniform(rng, (self.out_channels, self.in_channels // self.groups, kh, kw), fan_in)
         self.bias_ = (_kaiming_uniform(rng, (self.out_channels,), fan_in) if self.bias
                       else np.zeros(self.out_channels, np.float32))
 
@@ -106,43 +135,87 @@ class Conv2d(_Layer):
         return self
 
     def _params(self, shape):
+        """The binding block for ONE group's conv over the (padded) input `shape`."""
         n, c, h, w = shape
-        if c != self.in_channels:
-            raise ValueError(f"mojolearn: input has {c} channels, the layer {self.in_channels}")
         kh, kw = self.kernel_size
-        return [n, c, h, w, self.out_channels, kh, kw, *self.stride, *self.padding, *self.dilation, 0, 0,
-                1 if self.bias else 0, 0]
+        return [n, c // self.groups, h, w, self.out_channels // self.groups, kh, kw, *self.stride, *self._conv_pad,
+                *self.dilation, 0, 0, 1 if self.bias else 0, 0]
+
+    def _pad_params(self, shape):
+        n, c, h, w = shape
+        return [n, c, h, w, *self._pads, self._PAD_MODES[self.padding_mode]]
+
+    def _padded_shape(self, shape):
+        n, c, h, w = shape
+        if not self._explicit:
+            return shape
+        return (n, c, h + self._pads[0] + self._pads[1], w + self._pads[2] + self._pads[3])
 
     def _out_shape(self, shape):
-        oh, ow = self._binding().x_cnn_conv_shape(self._params(shape))
+        oh, ow = self._binding().x_cnn_conv_shape(self._params(self._padded_shape(shape)))
         return (shape[0], self.out_channels, int(oh), int(ow))
+
+    def _group(self, a, g, per):
+        return _np().ascontiguousarray(a[:, g * per:(g + 1) * per]) if self.groups > 1 else a
 
     def forward(self, x):
         np = _np()
         x = _f32(x, "x")
         if x.ndim != 4:
             raise ValueError("mojolearn: Conv2d.forward takes (N, C, H, W)")
-        prm = self._params(x.shape)
+        if x.shape[1] != self.in_channels:
+            raise ValueError(f"mojolearn: input has {x.shape[1]} channels, the layer {self.in_channels}")
         b = self._binding()
+        xp = x
+        if self._explicit:
+            xp = np.empty(self._padded_shape(x.shape), np.float32)
+            b.x_cnn_pad2d_forward(x.ctypes.data, xp.ctypes.data, self._pad_params(x.shape))
+        prm = self._params(xp.shape)
         out = np.empty(self._out_shape(x.shape), np.float32)
-        b.x_cnn_conv2d_forward(x.ctypes.data, self.weight_.ctypes.data, self.bias_.ctypes.data,
-                               out.ctypes.data, prm)
-        self._x = x
+        cg, og = self.in_channels // self.groups, self.out_channels // self.groups
+        for g in range(self.groups):
+            xg = self._group(xp, g, cg)
+            wg = np.ascontiguousarray(self.weight_[g * og:(g + 1) * og])
+            bg = np.ascontiguousarray(self.bias_[g * og:(g + 1) * og])
+            yg = out if self.groups == 1 else np.empty((x.shape[0], og) + out.shape[2:], np.float32)
+            b.x_cnn_conv2d_forward(xg.ctypes.data, wg.ctypes.data, bg.ctypes.data, yg.ctypes.data, prm)
+            if self.groups > 1:
+                out[:, g * og:(g + 1) * og] = yg
+        self._x, self._xp = x, xp
         return out
 
     def backward(self, grad_out, x=None):
         np = _np()
-        x = self._x if x is None else _f32(x, "x")
+        if x is not None:
+            Conv2d.forward(self, x)
+        x, xp = self._x, self._xp
         g = _f32(grad_out, "grad_out")
         shape = self._out_shape(x.shape)
         if g.shape != shape:
             raise ValueError(f"mojolearn: grad_out shape {g.shape}, expected {shape}")
-        dx = np.empty(x.shape, np.float32)
+        b = self._binding()
+        prm = self._params(xp.shape)
+        cg, og = self.in_channels // self.groups, self.out_channels // self.groups
+        dxp = np.empty(xp.shape, np.float32)
         dw = np.empty(self.weight_.shape, np.float32)
         db = np.empty(self.out_channels, np.float32)
-        self._binding().x_cnn_conv2d_backward(x.ctypes.data, self.weight_.ctypes.data, g.ctypes.data,
-                                              dx.ctypes.data, dw.ctypes.data, db.ctypes.data,
-                                              self._params(x.shape))
+        for k in range(self.groups):
+            xg = self._group(xp, k, cg)
+            gg = self._group(g, k, og)
+            wg = np.ascontiguousarray(self.weight_[k * og:(k + 1) * og])
+            dxg = dxp if self.groups == 1 else np.empty(xg.shape, np.float32)
+            dwg = np.empty(wg.shape, np.float32)
+            dbg = np.empty(og, np.float32)
+            b.x_cnn_conv2d_backward(xg.ctypes.data, wg.ctypes.data, gg.ctypes.data, dxg.ctypes.data,
+                                    dwg.ctypes.data, dbg.ctypes.data, prm)
+            if self.groups > 1:
+                dxp[:, k * cg:(k + 1) * cg] = dxg
+            dw[k * og:(k + 1) * og] = dwg
+            db[k * og:(k + 1) * og] = dbg
+        dx = dxp
+        if self._explicit:
+            dx = np.empty(x.shape, np.float32)
+            b.x_cnn_pad2d_backward(dxp.ctypes.data, dx.ctypes.data, self._pad_params(x.shape))
         self.grad_weight_ = dw
         self.grad_bias_ = db if self.bias else np.zeros_like(db)
         return dx
@@ -167,19 +240,20 @@ class Conv2d(_Layer):
 
 
 class Conv1d(Conv2d):
-    """1-D convolution, PyTorch `nn.Conv1d` semantics: Conv2d over (N, C, 1, L)."""
+    """1-D convolution, PyTorch `nn.Conv1d` semantics: Conv2d over (N, C, 1, L)
+    (padding int, 'same' or 'valid'; every padding_mode; groups)."""
 
-    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1,
-                 bias=True, random_state=0, input_shape=None, numeric_mode=None):
-        k, s, p, d = (int(v if isinstance(v, int) else v[0]) for v in (kernel_size, stride, padding, dilation))
-        super().__init__(in_channels, out_channels, (1, k), (1, s), (0, p), (1, d), bias, random_state,
-                         None, numeric_mode)
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1,
+                 bias=True, padding_mode="zeros", random_state=0, input_shape=None, numeric_mode=None):
+        k, s, d = (int(v if isinstance(v, int) else v[0]) for v in (kernel_size, stride, dilation))
+        pad = padding if isinstance(padding, str) else (0, int(padding if isinstance(padding, int) else padding[0]))
+        super().__init__(in_channels, out_channels, (1, k), (1, s), pad, (1, d), groups, bias, padding_mode,
+                         random_state, None, numeric_mode)
         self.input_shape = input_shape
-        self.weight_ = self.weight_.reshape(self.out_channels, self.in_channels, 1, k)
 
     def set_weights(self, weight, bias=None):
         w = _f32(weight, "weight")
-        return super().set_weights(w.reshape(self.out_channels, self.in_channels, 1, -1), bias)
+        return super().set_weights(w.reshape(self.out_channels, self.in_channels // self.groups, 1, -1), bias)
 
     def forward(self, x):
         x = _f32(x, "x")
@@ -206,8 +280,8 @@ class _Pool2d(_Layer):
 
     def __init__(self, kernel_size, stride=None, padding=0, dilation=1, ceil_mode=False,
                  count_include_pad=True, input_shape=None, numeric_mode=None):
-        if ceil_mode:
-            raise NotImplementedError("mojolearn: ceil_mode=True is not implemented (NOT_IMPLEMENTED.tsv)")
+        self.ceil_mode = bool(ceil_mode)
+        self.divisor_override = None
         self.kernel_size = _pair(kernel_size, "kernel_size")
         self.stride = _pair(stride if stride is not None else kernel_size, "stride")
         self.padding = _pair(padding, "padding")
@@ -219,7 +293,7 @@ class _Pool2d(_Layer):
     def _params(self, shape):
         n, c, h, w = shape
         return [n, c, h, w, *self.kernel_size, *self.stride, *self.padding, *self.dilation, 0, 0,
-                1 if self.count_include_pad else 0, 0]
+                1 if self.count_include_pad else 0, 0, 1 if self.ceil_mode else 0, int(self.divisor_override or 0)]
 
     def _out_shape(self, shape):
         oh, ow = self._binding().x_cnn_pool_shape(self._params(shape))
@@ -237,7 +311,7 @@ class _Pool2d(_Layer):
 
 
 class MaxPool2d(_Pool2d):
-    """PyTorch `nn.MaxPool2d` (floor mode): the first maximum in (kh, kw)
+    """PyTorch `nn.MaxPool2d` (floor or ceil mode): the first maximum in (kh, kw)
     order wins a tie, a NaN wins. `indices_` holds the flat h*W + w of each
     winner (return_indices's values)."""
 
@@ -264,14 +338,16 @@ class MaxPool2d(_Pool2d):
 
 
 class AvgPool2d(_Pool2d):
-    """PyTorch `nn.AvgPool2d` (floor mode, divisor_override=None)."""
+    """PyTorch `nn.AvgPool2d` (floor or ceil mode, count_include_pad,
+    divisor_override)."""
 
     def __init__(self, kernel_size, stride=None, padding=0, ceil_mode=False, count_include_pad=True,
                  divisor_override=None, input_shape=None, numeric_mode=None):
-        if divisor_override is not None:
-            raise NotImplementedError("mojolearn: divisor_override is not implemented (NOT_IMPLEMENTED.tsv)")
+        if divisor_override is not None and int(divisor_override) <= 0:
+            raise ValueError("mojolearn: divisor must be not zero")
         super().__init__(kernel_size, stride, padding, 1, ceil_mode, count_include_pad, input_shape,
                          numeric_mode)
+        self.divisor_override = None if divisor_override is None else int(divisor_override)
 
     def forward(self, x):
         np = _np()
@@ -394,10 +470,26 @@ def _softmax_xent(binding, logits, labels):
     return float(loss), grad, proba
 
 
-def _sgd(binding, param, grad, buf, lr, momentum, weight_decay):
+def _sgd(binding, param, grad, buf, lr, momentum, weight_decay, dampening=0.0, nesterov=False, first=False):
     """In place: PyTorch SGD's step on `param` and its momentum buffer."""
-    binding.x_cnn_sgd(param.ctypes.data, _f32(grad, "grad").ctypes.data, buf.ctypes.data, [param.size],
-                      [float(lr), float(momentum), float(weight_decay)])
+    grad = _f32(grad, "grad")
+    binding.x_cnn_sgd(param.ctypes.data, grad.ctypes.data, buf.ctypes.data, [param.size],
+                      [float(lr), float(momentum), float(weight_decay), float(dampening), 1.0 if nesterov else 0.0,
+                       1.0 if first else 0.0])
+
+
+def _adam(binding, param, grad, mv, step, lr, betas, eps, weight_decay, decoupled):
+    """In place: torch.optim.Adam / AdamW's step `step` (1-based) on `param`
+    and mv = [exp_avg | exp_avg_sq]; the step's scalars in double, as torch
+    computes them in Python."""
+    import math
+    b1, b2 = float(betas[0]), float(betas[1])
+    bc1 = 1.0 - b1 ** step
+    bc2 = 1.0 - b2 ** step
+    grad = _f32(grad, "grad")
+    binding.x_cnn_adam(param.ctypes.data, grad.ctypes.data, mv.ctypes.data, [param.size],
+                       [lr / bc1, 1.0 - b1, b2, 1.0 - b2, float(eps), math.sqrt(bc2), float(weight_decay),
+                        1.0 if decoupled else 0.0, 1.0 - float(lr) * float(weight_decay)])
 
 
 class CNNClassifier(_Layer):
@@ -405,14 +497,24 @@ class CNNClassifier(_Layer):
     `conv_channels` a Conv2d (kernel_size, 'same' zero padding for odd
     kernels) -> ReLU -> MaxPool2d(pool_size) block (the pool is skipped once
     the map is smaller than the window), then one Linear layer to the
-    classes; softmax cross entropy (mean); PyTorch SGD with momentum and
-    weight decay. Every step runs on `_mojolearn_x_cnn` (the GPU, or the CPU
+    classes; softmax cross entropy (mean); `optimizer` 'sgd' (torch.optim.SGD:
+    momentum, dampening, nesterov, weight_decay), 'adam' or 'adamw'
+    (torch.optim.Adam / AdamW: betas, eps, weight_decay). Every step runs on `_mojolearn_x_cnn` (the GPU, or the CPU
     host twin), IDENTICAL across columns. X is (n, C*H*W) rows with
     `input_shape=(C, H, W)`, or (n, C, H, W)."""
 
     def __init__(self, input_shape, conv_channels=(8,), kernel_size=3, pool_size=2, learning_rate=0.01,
                  momentum=0.9, weight_decay=0.0, batch_size=32, max_iter=10, shuffle=True, random_state=0,
-                 numeric_mode=None):
+                 numeric_mode=None, optimizer="sgd", dampening=0.0, nesterov=False, betas=(0.9, 0.999), eps=1e-8):
+        if optimizer not in ("sgd", "adam", "adamw"):
+            raise ValueError(f"mojolearn: optimizer must be 'sgd', 'adam' or 'adamw', got {optimizer!r}")
+        if nesterov and (momentum <= 0 or dampening != 0):
+            raise ValueError("mojolearn: Nesterov momentum requires a momentum and zero dampening")
+        self.optimizer = optimizer
+        self.dampening = float(dampening)
+        self.nesterov = bool(nesterov)
+        self.betas = (float(betas[0]), float(betas[1]))
+        self.eps = float(eps)
         self.input_shape = tuple(int(v) for v in input_shape)
         self.conv_channels = tuple(int(c) for c in conv_channels)
         self.kernel_size = int(kernel_size)
@@ -479,8 +581,9 @@ class CNNClassifier(_Layer):
         yi = yi.astype(np.int32)
         self._build(len(self.classes_))
         b = self._binding()
-        bufs = {id(getattr(l, a)): np.zeros_like(getattr(l, a)) for l, a, _ in self._params()}
-        self._bufs = [bufs[id(getattr(l, a))] for l, a, _ in self._params()]
+        per = 2 if self.optimizer != "sgd" else 1
+        self._bufs = [np.zeros(per * getattr(l, a).size, np.float32) for l, a, _ in self._params()]
+        step = 0
         rng = np.random.default_rng(self.random_state)
         n = x.shape[0]
         self.losses_, self.loss_curve_ = [], []
@@ -492,9 +595,14 @@ class CNNClassifier(_Layer):
                 xb = np.ascontiguousarray(x[idx])
                 loss, g, _ = _softmax_xent(b, self._forward(xb), yi[idx])
                 self._backward(g)
+                step += 1
                 for (layer, a, ga), buf in zip(self._params(), self._bufs):
-                    _sgd(b, getattr(layer, a), getattr(layer, ga), buf, self.learning_rate, self.momentum,
-                         self.weight_decay)
+                    if self.optimizer == "sgd":
+                        _sgd(b, getattr(layer, a), getattr(layer, ga), buf, self.learning_rate, self.momentum,
+                             self.weight_decay, self.dampening, self.nesterov, step == 1)
+                    else:
+                        _adam(b, getattr(layer, a), getattr(layer, ga), buf, step, self.learning_rate, self.betas,
+                              self.eps, self.weight_decay, self.optimizer == "adamw")
                 epoch.append(loss)
             self.losses_.extend(epoch)
             self.loss_curve_.append(sum(epoch) / len(epoch))
@@ -532,19 +640,17 @@ class BatchNorm2d(_Layer):
     def __init__(self, num_features, eps=1e-5, momentum=0.1, affine=True, track_running_stats=True,
                  input_shape=None, numeric_mode=None):
         np = _np()
-        if momentum is None:
-            raise NotImplementedError("mojolearn: momentum=None (cumulative average) is not implemented "
-                                      "(NOT_IMPLEMENTED.tsv)")
-        if not track_running_stats:
-            raise NotImplementedError("mojolearn: track_running_stats=False is not implemented (NOT_IMPLEMENTED.tsv)")
         self.num_features = int(num_features)
-        self.eps, self.momentum, self.affine = float(eps), float(momentum), bool(affine)
+        self.eps, self.affine = float(eps), bool(affine)
+        self.momentum = None if momentum is None else float(momentum)
+        self.track_running_stats = bool(track_running_stats)
+        self.num_batches_tracked_ = 0
         self.input_shape = input_shape
         self.numeric_mode = numeric_mode
         self.weight_ = np.ones(self.num_features, np.float32)
         self.bias_ = np.zeros(self.num_features, np.float32)
-        self.running_mean_ = np.zeros(self.num_features, np.float32)
-        self.running_var_ = np.ones(self.num_features, np.float32)
+        self.running_mean_ = np.zeros(self.num_features, np.float32) if self.track_running_stats else None
+        self.running_var_ = np.ones(self.num_features, np.float32) if self.track_running_stats else None
         self.training = True
 
     def train(self, mode=True):
@@ -569,17 +675,27 @@ class BatchNorm2d(_Layer):
         x3, shape = self._nchw(x)
         n, c, hw = x3.shape
         C = self.num_features
+        # PyTorch: batch statistics in training mode, and in eval mode too when
+        # nothing is tracked; momentum=None is the cumulative average 1/batches.
+        batch_stats = self.training or not self.track_running_stats
+        factor = 0.0
+        if self.training and self.track_running_stats:
+            self.num_batches_tracked_ += 1
+            factor = 1.0 / self.num_batches_tracked_ if self.momentum is None else self.momentum
         aux = np.zeros(2 + 7 * C, np.float32)
-        aux[0], aux[1] = np.float32(self.eps), np.float32(self.momentum)
+        aux[0], aux[1] = np.float32(self.eps), np.float32(factor)
         aux[2 + 5 * C:2 + 6 * C] = self.weight_
         aux[2 + 6 * C:2 + 7 * C] = self.bias_
-        running = np.concatenate([self.running_mean_, self.running_var_]).astype(np.float32)
+        if self.track_running_stats:
+            running = np.concatenate([self.running_mean_, self.running_var_]).astype(np.float32)
+        else:
+            running = np.concatenate([np.zeros(C, np.float32), np.ones(C, np.float32)])
         y = np.empty_like(x3)
         self._binding().x_cnn_batchnorm_forward(x3.ctypes.data, y.ctypes.data, running.ctypes.data, aux.ctypes.data,
-                                                [n, c, hw, 1 if self.training else 0])
-        if self.training:
+                                                [n, c, hw, 1 if batch_stats else 0])
+        if self.training and self.track_running_stats:
             self.running_mean_, self.running_var_ = running[:C].copy(), running[C:].copy()
-        self._x, self._aux, self._shape, self._mode = x3, aux, shape, self.training
+        self._x, self._aux, self._shape, self._mode = x3, aux, shape, batch_stats
         return y.reshape(shape) if len(shape) != 2 else y[:, :, 0]
 
     def backward(self, grad_out):
@@ -675,7 +791,8 @@ class Dropout2d(_Layer):
         if self.mask_ is None:
             return g.copy()
         dx = np.empty_like(g)
-        self._binding().x_cnn_mul(g.ctypes.data, np.ascontiguousarray(self.mask_).ctypes.data, dx.ctypes.data, [g.size])
+        mask = np.ascontiguousarray(self.mask_)
+        self._binding().x_cnn_mul(g.ctypes.data, mask.ctypes.data, dx.ctypes.data, [g.size])
         return dx
 
     def transform(self, X):
@@ -687,29 +804,53 @@ class Dropout2d(_Layer):
 
 
 class _AdaptivePool(_Layer):
+    """PyTorch adaptive pooling: output cell (i, j) reads rows
+    [floor(i*H/OH), ceil((i+1)*H/OH)) and columns likewise. An output size
+    that divides the input is the plain pooling kernel (kernel = stride =
+    input / output; identical windows); any other size is the adaptive
+    kernel."""
+    _max = False
+
     def __init__(self, output_size=1, input_shape=None, numeric_mode=None):
         self.output_size = _pair(output_size, "output_size")
         self.input_shape = input_shape
         self.numeric_mode = numeric_mode
 
-    def _inner(self, shape):
-        h, w = shape[2], shape[3]
-        oh, ow = self.output_size
-        if h % oh or w % ow:
-            raise NotImplementedError("mojolearn: adaptive pooling to an output size that does not divide the input "
-                                      "is not implemented (NOT_IMPLEMENTED.tsv)")
-        k = (h // oh, w // ow)
-        return self._pool(k)
+    def _divides(self, shape):
+        return shape[2] % self.output_size[0] == 0 and shape[3] % self.output_size[1] == 0
 
     def forward(self, x):
+        np = _np()
         x = _f32(x, "x")
         if x.ndim != 4:
             raise ValueError(f"mojolearn: {type(self).__name__}.forward takes (N, C, H, W)")
-        self._layer = self._inner(x.shape)
-        return self._layer.forward(x)
+        self._xshape = x.shape
+        if self._divides(x.shape):
+            k = (x.shape[2] // self.output_size[0], x.shape[3] // self.output_size[1])
+            self._layer = (MaxPool2d if self._max else AvgPool2d)(k, stride=k, numeric_mode=self.numeric_mode)
+            out = self._layer.forward(x)
+            if self._max:
+                self.indices_ = self._layer.indices_
+            return out
+        self._layer = None
+        n, c = x.shape[:2]
+        out = np.empty((n, c) + self.output_size, np.float32)
+        idx = np.zeros((n, c) + self.output_size, np.int32)
+        self._binding().x_cnn_adaptive_pool(x.ctypes.data, out.ctypes.data, idx.ctypes.data,
+                                            [*x.shape, *self.output_size, 2 if self._max else 0])
+        self.indices_ = idx if self._max else None
+        return out
 
     def backward(self, grad_out):
-        return self._layer.backward(grad_out)
+        np = _np()
+        if self._layer is not None:
+            return self._layer.backward(grad_out)
+        g = _f32(grad_out, "grad_out")
+        dx = np.empty(self._xshape, np.float32)
+        idx = self.indices_ if self._max else np.zeros(g.shape, np.int32)
+        self._binding().x_cnn_adaptive_pool(g.ctypes.data, dx.ctypes.data, idx.ctypes.data,
+                                            [*self._xshape, *self.output_size, 3 if self._max else 1])
+        return dx
 
     def transform(self, X):
         out = self.forward(BatchNorm2d._rows(self, X))
@@ -720,20 +861,14 @@ class _AdaptivePool(_Layer):
 
 
 class AdaptiveAvgPool2d(_AdaptivePool):
-    """PyTorch `nn.AdaptiveAvgPool2d` for output sizes that divide the input
-    (global average pooling is `AdaptiveAvgPool2d(1)`): AvgPool2d with
-    kernel = stride = input / output, the window summed in (h, w) order."""
-
-    def _pool(self, k):
-        return AvgPool2d(k, stride=k, numeric_mode=self.numeric_mode)
+    """PyTorch `nn.AdaptiveAvgPool2d` (global average pooling is
+    `AdaptiveAvgPool2d(1)`): each window summed in (h, w) order, one division."""
 
 
 class AdaptiveMaxPool2d(_AdaptivePool):
-    """PyTorch `nn.AdaptiveMaxPool2d` for output sizes that divide the input
-    (global max pooling is `AdaptiveMaxPool2d(1)`)."""
-
-    def _pool(self, k):
-        return MaxPool2d(k, stride=k, numeric_mode=self.numeric_mode)
+    """PyTorch `nn.AdaptiveMaxPool2d` (global max pooling is
+    `AdaptiveMaxPool2d(1)`): the first maximum in (h, w) order; `indices_`."""
+    _max = True
 
 
 def _add(binding, a, b):
@@ -822,7 +957,8 @@ def _gemm(binding, a, b, m, n, k, op):
     """C (m x n) = op(A) op(B) on the pinned GEMM (op 0 NN, 1 NT, 2 TN)."""
     np = _np()
     out = np.empty((m, n), np.float32)
-    binding.x_cnn_gemm(_f32(a, "a").ctypes.data, _f32(b, "b").ctypes.data, out.ctypes.data, [m, n, k, op])
+    a, b = _f32(a, "a"), _f32(b, "b")   # keep the (possibly copied) operands alive through the call
+    binding.x_cnn_gemm(a.ctypes.data, b.ctypes.data, out.ctypes.data, [m, n, k, op])
     return out
 
 
@@ -949,18 +1085,19 @@ class GCNConv(_Layer):
 
 
 class SAGEConv(_Layer):
-    """PyG `torch_geometric.nn.SAGEConv` (aggr 'mean' or 'sum', root_weight,
-    normalize=False, project=False): out = lin_l(aggr_{j->i} x_j) + lin_r(x_i),
-    lin_l with the bias. The mean is the fixed-order CSR sum divided by the
-    in-degree (an isolated node aggregates +0.0)."""
+    """PyG `torch_geometric.nn.SAGEConv` (aggr 'mean', 'sum' or 'max',
+    root_weight, normalize, project=False): out = lin_l(aggr_{j->i} x_j) +
+    lin_r(x_i), lin_l with the bias, then an optional row L2 normalization.
+    The mean is the fixed-order CSR sum divided by the in-degree; the max
+    splits its gradient evenly among tied entries (scatter_reduce 'amax');
+    an isolated node aggregates +0.0."""
 
     def __init__(self, in_channels, out_channels, aggr="mean", normalize=False, root_weight=True, bias=True,
                  random_state=0, numeric_mode=None):
         np = _np()
-        if aggr not in ("mean", "sum", "add"):
+        if aggr not in ("mean", "sum", "add", "max"):
             raise NotImplementedError(f"mojolearn: SAGEConv aggr={aggr!r} is not implemented (NOT_IMPLEMENTED.tsv)")
-        if normalize:
-            raise NotImplementedError("mojolearn: SAGEConv normalize=True is not implemented (NOT_IMPLEMENTED.tsv)")
+        self.normalize = bool(normalize)
         self.in_channels, self.out_channels = int(in_channels), int(out_channels)
         self.aggr, self.root_weight, self.bias = aggr, bool(root_weight), bool(bias)
         self.numeric_mode = numeric_mode
@@ -978,13 +1115,26 @@ class SAGEConv(_Layer):
         b = self._binding()
         src, dst = _edges(edge_index, n)
         g = _Graph(src, dst, n)
-        mode = 1 if self.aggr == "mean" else 0
-        ones = np.ones(g.nnz, np.float32)
-        agg = g.spmm(b, ones, x, mode)
+        if self.aggr == "max":
+            agg = np.empty_like(x)
+            self._max_aux = np.zeros(2 * x.size, np.float32)
+            b.x_cnn_graph_op(x.ctypes.data, x.ctypes.data, self._max_aux.ctypes.data, agg.ctypes.data,
+                             g.csr_f.ctypes.data, [n, x.shape[1], g.nnz, 0])
+        else:
+            agg = g.spmm(b, np.ones(g.nnz, np.float32), x, 1 if self.aggr == "mean" else 0)
         out = self.lin_l.forward(agg)
         if self.root_weight:
             out = _add(b, out, _gemm(b, x, self.weight_r_, n, self.out_channels, self.in_channels, 1))
         self._x, self._g = x, g
+        if self.normalize:
+            # torch.nn.functional.normalize(out, p=2, dim=-1)
+            self._pre = out
+            y = np.empty_like(out)
+            self._den = np.zeros(n, np.float32)
+            self._nograph = np.zeros(n + 1, np.int32)
+            b.x_cnn_graph_op(out.ctypes.data, out.ctypes.data, self._den.ctypes.data, y.ctypes.data,
+                             self._nograph.ctypes.data, [n, out.shape[1], 0, 2])
+            self._y = out = y
         return out
 
     def backward(self, grad_out):
@@ -993,10 +1143,20 @@ class SAGEConv(_Layer):
         G = _f32(grad_out, "grad_out")
         n = G.shape[0]
         g = self._g
+        if self.normalize:
+            G2 = np.empty_like(G)
+            b.x_cnn_graph_op(self._y.ctypes.data, G.ctypes.data, self._den.ctypes.data, G2.ctypes.data,
+                             self._nograph.ctypes.data, [n, G.shape[1], 0, 3])
+            G = G2
         dagg = self.lin_l.backward(G)
         if not self.bias:
             self.lin_l.grad_bias_[:] = 0
-        if self.aggr == "mean":
+        if self.aggr == "max":
+            dx = np.empty_like(self._x)
+            dagg = np.ascontiguousarray(dagg)
+            b.x_cnn_graph_op(self._x.ctypes.data, dagg.ctypes.data, self._max_aux.ctypes.data, dx.ctypes.data,
+                             g.csr_t.ctypes.data, [n, dagg.shape[1], g.nnz, 1])
+        elif self.aggr == "mean":
             deg = np.bincount(g.dst, minlength=n).astype(np.float32)
             dx = g.spmm(b, np.ascontiguousarray(deg[g.dst[g.order_t]]), dagg, 2, transposed=True)
         else:

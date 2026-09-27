@@ -31,8 +31,29 @@ bindings export). Python: `python/mojolearn/_x_sequence_rnn.py`.
 | 18 | Croston (CrostonClassic, CrostonOptimized, CrostonSBA; statsforecast) | sequence-croston | 5612c9178 | CLEAN: sequence-croston: AGREE: compared train 9 | statsforecast 2.1.1 on 6 intermittent series (one all-zero, one with a negative event): classic 4.6e-8, SBA 6.7e-8, optimized 2.1e-4 relative (float32 golden section) |
 | 19 | Damped-trend ETS (ETS for ANN/AAN/MNN/MAN and damped, DampedETS; statsforecast) | sequence-ets | 6b0a36994 | CLEAN: sequence-ets: AGREE: compared train 9 | statsforecast AutoETS on 4 series, 10-step forecasts: AAdN <= 8.6e-4, MAdN <= 1.2e-3, AAN <= 6.1e-4, ANN <= 1.8e-6, MNN <= 3.7e-5 relative |
 | 20 | GARCH(p, o, q), constant or zero mean, normal (arch package statement; Nelder-Mead instead of SLSQP) | sequence-garch | 5baf7a3f3 | CLEAN: sequence-garch: AGREE: compared train 9 | arch 8.0 on 3 simulated series (n=1000): GARCH(1,1) params within 1e-3, loglik within 0.004, 5-step variance forecast <= 1.3e-3 relative; GJR zero-mean loglik within 0.03 |
-| 21 | Prophet-style forecaster (ProphetForecaster: linear trend with changepoints, Fourier seasonality, holiday regressors, additive / multiplicative, MAP by our L-BFGS) | sequence-prophet | (the commit adding this row) | CLEAN: sequence-prophet: AGREE: compared train 9 | prophet 1.4.0 (Stan) on 800 daily points with a trend break, weekly + yearly seasonality and a holiday regressor: max diff / max y 2.2e-4 history, 3.2e-4 30-day future (additive); 9.3e-4 / 4.2e-4 (multiplicative) |
+| 21 | Prophet-style forecaster (ProphetForecaster: linear trend with changepoints, Fourier seasonality, holiday regressors, additive / multiplicative, MAP by our L-BFGS) | sequence-prophet | e63e27fa8 | CLEAN: sequence-prophet: AGREE: compared train 9 | prophet 1.4.0 (Stan) on 800 daily points with a trend break, weekly + yearly seasonality and a holiday regressor: max diff / max y 2.2e-4 history, 3.2e-4 30-day future (additive); 9.3e-4 / 4.2e-4 (multiplicative) |
+| 22 | Mixture-of-experts block (MoEBlock, Mixtral sparse block forward; top-k with the lower-index tie rule) | sequence-moe | (the commit adding this row) | CLEAN: sequence-moe: AGREE: compared infer 9, train 9 | float64 torch restatement of MixtralSparseMoeBlock (HF layout) on 50 tokens, 8 experts, top 2: max diff 9.6e-10 (max y 3.3e-3), same experts, logits 1.2e-6 |
 
 Pod setup note: the ARIMA path needs `python/mojolearn/.libs/libMojolearnMath.so`; build it on a fresh pod with `packaging/portable_math/stage.py`'s `build()`.
 
-Main table done. Next: the Additions in order (MoE block).
+PASS 1 COMPLETE (main table and every Addition merged).
+
+Merge-gate notes: test_host_surface passes; tools/test_lane_select.py has one
+failure that is not this lane's (core/forest_host_predict.mojo answers 81
+lanes, not 80: all trees/gbdt lanes, none sequence-*), as of the Prophet merge.
+
+NEXT (a fresh session starts here), per CURRENT DIRECTIVES:
+1. PASS 2 proof on every column: take the allocated AMD box
+   (`tools/dev_pod.sh list` shows `sequence-amd`; else `up sequence 240 --vendor amd`),
+   AGREE on AMD for all 22 lanes; per-seam proof (host oracles, separating
+   fixtures, sabotage arms listed in tools/identity_lanes/sequence.checks as
+   driver<TAB>patch pairs, DEVIATIONs 5500-5599, IDENTITY_PATHS rows 150-159,
+   card stages); M2 Pro (and do-amd until the AMD box) steward PASS.
+   The seams to cover, by file: sequence/ops.mojo (GEMM k order, column sums,
+   cell bodies, CE/softmax max, optimizer arms), recurrent.mojo (BPTT order),
+   mlp.mojo (loss clip, splitmix shuffle), stl.mojo (heapsort median, est
+   flag), vecar.mojo (pow2 scaling, Cholesky status), nm.mojo (stable vertex
+   order), theta/croston/ets/garch/prophet (NaN guards, golden-section cap),
+   adafactor.mojo (torch lerp), moe.mojo (routing tie).
+2. Option parity: every row of sequence/NOT_IMPLEMENTED.tsv.
+3. GPU speed (IDENTICAL + FAST) on NVIDIA, AMD, Apple; then CPU speed last.
