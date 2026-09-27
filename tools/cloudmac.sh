@@ -49,7 +49,7 @@ bootstrap)
     cm "$n" '[ -d ~/mojolearn.git ] || git init -q --bare ~/mojolearn.git; echo BARE_OK'
     "$0" push "$n" origin/main
     echo "== $n: worktree + pixi install"
-    cm "$n" "[ -d ~/mojolearn/.git ] || git clone -q ~/mojolearn.git ~/mojolearn; cd ~/mojolearn && git fetch -q origin && git checkout -q --detach origin/main && ~/.pixi/bin/pixi install -e default >/tmp/pixi_install.log 2>&1 && echo PIXI_OK && git log -1 --format=%h"
+    cm "$n" "[ -d ~/mojolearn/.git ] || git clone -q --no-hardlinks ~/mojolearn.git ~/mojolearn; cd ~/mojolearn && git fetch -q origin && git checkout -q --detach origin/main && ~/.pixi/bin/pixi install -e default >/tmp/pixi_install.log 2>&1 && echo PIXI_OK && git log -1 --format=%h"
     ;;
 push)
     # push <name|all> <commit-ish>...: every ref lands on the Mac as refs/heads/main
