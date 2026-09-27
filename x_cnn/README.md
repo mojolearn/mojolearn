@@ -25,8 +25,13 @@ Dropout2d, BasicBlock, CNNClassifier, GCNConv, SAGEConv.
   CNNClassifier's fit and predict keep weights, optimizer state, activations
   and gradients in RESIDENT arrays (`x_cnn_res_*` and the `_r` entries: device
   addresses on the GPU binding, host allocations on the CPU twin, whose `_r`
-  entries are its ordinary ones). Plumbing and execution plans only: the same
-  kernels on the same values in the same order.
+  entries are its ordinary ones). The fit keeps the whole X (up to 1 GiB) and
+  its labels resident and gathers each batch on the binding's side
+  (`x_cnn_res_gather`, a 4-byte word copy), and each block's backward reads
+  the im2col matrix and conv output its forward saved instead of recomputing
+  them (the same kernels on the same inputs made them). Plumbing and
+  execution plans only: the same kernels on the same values in the same
+  order.
 - Seams and their DEVIATIONs (IDENTITY_PATHS.md rows 170-179):
   5700 col2im gather order, 5701 weight gradient on the pinned GEMM,
   5702 BatchNorm folds, 5703 Dropout2d Philox mask, 5704 SpMM row folds,
