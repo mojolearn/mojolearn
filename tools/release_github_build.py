@@ -79,19 +79,40 @@ ROUTE_FILES = OVERLAY + ("tools/gha_release_box.sh", "tools/release_github_build
                          ".github/workflows/" + WORKFLOW)
 #: runpod_cpu_leg.sh make_source's exclusions: the shipped tree is the same file list.
 SOURCE_EXCLUDES = (":!bench/results", ":!mamba/corpus", ":!bench/oracle_*", ":!bench/minentropy_oracle.txt")
-#: Measured seconds per build (0.8.24's cold gfx942 builds on a 16 vCPU pod,
-#: one or two compiler workers each); only the shard balance reads them.
+#: Measured seconds per build: 0.8.24's cold cuda/sm_89 builds on GitHub's 4 vCPU
+#: runners, two at a time (run 36318515173); only the shard balance reads them.
 WEIGHTS = {
-    "identical:build_byte_lm.sh": 368, "fast:build_metrics.sh": 198, "identical:build_estimators.sh": 182,
-    "identical:build_transformer.sh": 173, "fast:build.sh": 170, "identical:build_metrics.sh": 169,
-    "identical:build_gp.sh": 138, "identical:build_kernel_methods.sh": 137, "identical:build_mamba.sh": 136,
-    "identical:build.sh": 136, "identical:build_training.sh": 135, "fast:build_estimators.sh": 130,
-    "identical:build_mixture.sh": 125, "identical:build_svm.sh": 123, "fast:build_linalg.sh": 118,
-    "fast:build_ivf.sh": 111, "fast:build_hdbscan.sh": 108, "fast:build_mixture.sh": 104,
-    "identical:build_hdbscan.sh": 98, "identical:build_solver.sh": 94, "identical:build_linalg.sh": 91,
-    "fast:build_gp.sh": 87, "fast:build_svm.sh": 85, "identical:build_ivf.sh": 85,
-    "fast:build_kernel_methods.sh": 83, "fast:build_solver.sh": 52, "fast:build_arima.sh": 52,
-    "identical:build_embedding.sh": 50, "identical:build_arima.sh": 33,
+    "fast:build_gbdt.sh": 206, "identical:build_byte_lm.sh": 202, "identical:build_gbdt.sh": 182,
+    "deterministic:build_gbdt.sh": 159, "identical:build_metrics.sh": 132, "fast:build_metrics.sh": 130,
+    "fast:build.sh": 95, "fast:build_estimators.sh": 87, "identical:build_transformer.sh": 87,
+    "identical:build_mixture.sh": 85, "identical:build_mamba.sh": 82, "identical:build_hdbscan.sh": 80,
+    "identical:build_gp.sh": 79, "identical:build.sh": 76, "fast:build_hdbscan.sh": 75,
+    "identical:build_estimators.sh": 74, "fast:build_kernel_methods.sh": 73,
+    "identical:build_training.sh": 73, "identical:build_kernel_methods.sh": 69,
+    "identical:build_gbdt_host.sh": 65, "identical:build_solver.sh": 59, "fast:build_gp.sh": 55,
+    "fast:build_mixture.sh": 55, "identical:build_linalg.sh": 55, "identical:build_ivf.sh": 53,
+    "identical:build_svm.sh": 51, "fast:build_ivf.sh": 46, "fast:build_linalg.sh": 46,
+    "deterministic:build_trees.sh": 45, "fast:build_svm.sh": 42, "identical:build_rf.sh": 41,
+    "identical:build_trees.sh": 41, "deterministic:build_rf.sh": 39, "fast:build_trees.sh": 38,
+    "fast:build_rf.sh": 36, "fast:build_solver.sh": 34, "identical:build_mamba_host.sh": 34,
+    "identical:build_metrics_host.sh": 32, "identical:build_core_host.sh": 30,
+    "identical:build_embedding.sh": 30, "fast:build_arima.sh": 27, "fast:build_resample.sh": 26,
+    "identical:build_arima.sh": 26, "identical:build_neural_host.sh": 26, "identical:build_resample.sh": 25,
+    "identical:build_byte_lm_host.sh": 24, "identical:build_estimators_host.sh": 24,
+    "identical:build_tsa.sh": 24, "fast:build_tsa.sh": 21, "identical:build_trees_host.sh": 20,
+    "identical:build_gp_host.sh": 19, "identical:build_rf_host.sh": 19,
+    "identical:build_tokenizer_host.sh": 18, "identical:build_training_host.sh": 17,
+    "identical:build_svm_host.sh": 16, "identical:build_kernel_methods_host.sh": 15,
+    "identical:build_forecast_host.sh": 14, "identical:build_hdbscan_host.sh": 14,
+    "identical:build_hdbscan_infer_host.sh": 14, "identical:build_transformer_host.sh": 14,
+    "identical:build_forest_host.sh": 13, "identical:build_gp_infer_host.sh": 13,
+    "identical:build_ivf_search_host.sh": 13, "identical:build_linalg_host.sh": 13,
+    "identical:build_preprocessing.sh": 13, "fast:build_preprocessing.sh": 12,
+    "identical:build_arima_host.sh": 12, "identical:build_ivf_host.sh": 12,
+    "identical:build_mixture_host.sh": 12, "identical:build_mixture_infer_host.sh": 11,
+    "identical:build_preprocessing_host.sh": 10, "identical:build_resample_host.sh": 10,
+    "identical:build_tsa_host.sh": 10, "identical:build_embedding_infer_host.sh": 9,
+    "identical:build_solver_host.sh": 9, "identical:build_embedding_host.sh": 7,
 }
 DEFAULT_GPU_WEIGHT, DEFAULT_HOST_WEIGHT = 100, 20
 GH = os.environ.get("MOJOLEARN_GH", "gh")

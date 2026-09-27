@@ -80,7 +80,9 @@ THE STEPS
                      NVIDIA (walking NVIDIA_WALK on no stock) and a DigitalOcean
                      MI325X, or a Hot Aisle 1x MI300X when DigitalOcean has a GPU
                      droplet live or no token (--amd-build-provider do|hotaisle
-                     or MOJOLEARN_AMD_PROVIDER pins one). `cpu-box` is opt-in
+                     or MOJOLEARN_AMD_PROVIDER pins one). `cpu-box` (RunPod CPU
+                     pods) and `github` (GitHub's free runners,
+                     tools/release_github_build.py) are opt-in
   macos-build        mac_slot --slots 4 run -- build_release_wheel.sh, byte LM on
   macos-smoke        qualify_verifier_wheel.py --scope expanded under the Metal lock
   release-check      pixi run -e test release-check: the Apple (Metal) column of

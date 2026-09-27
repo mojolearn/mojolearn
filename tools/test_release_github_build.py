@@ -106,8 +106,9 @@ class Plan(unittest.TestCase):
         seen = [e for s in shards for e in s["only"].split()]
         self.assertEqual(sorted(seen), names)
         self.assertEqual(shards, rgb.split(list(reversed(builds)), 4))
-        # the heaviest build is alone on the heaviest shard's first slot
-        self.assertIn("identical:build_byte_lm.sh", shards[0]["only"])
+        # the heaviest build goes first, onto shard 0
+        heaviest = min(builds, key=lambda b: (-rgb.WEIGHTS.get(b[0], rgb.DEFAULT_HOST_WEIGHT if b[1] else rgb.DEFAULT_GPU_WEIGHT), b[0]))[0]
+        self.assertIn(heaviest, shards[0]["only"].split())
 
 
 class JobMap(unittest.TestCase):
