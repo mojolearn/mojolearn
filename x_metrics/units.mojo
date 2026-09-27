@@ -6,9 +6,10 @@ from x_metrics.common import FP, IP
 from x_metrics.group import group_sort_unit, group_sum_unit, pair_key_unit
 from x_metrics.ranking import bin_curve_unit, row_metric_unit
 from x_metrics.cluster import row_centroid_dist_unit
+from x_metrics.split import permute_unit
 from x_metrics.regression import reg_term_unit, col_sort_unit, wpercentile_unit, col_max_unit
 
-comptime N_OPS = 10
+comptime N_OPS = 11
 
 
 @always_inline
@@ -33,3 +34,5 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
         row_metric_unit(t, f, q)
     comptime if OP == 9:
         row_centroid_dist_unit(t, f, q)
+    comptime if OP == 10:
+        permute_unit(t, f, q)

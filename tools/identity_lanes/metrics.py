@@ -13,11 +13,23 @@
 
 
 def _metrics_labels(X, n):
-    """Four classes from the signs of two fixture columns (ties everywhere),
-    and a prediction that agrees on most rows: the confusion is dense."""
-    a = (X[:n, 3] > 0).astype(np.int32) + 2 * (X[:n, 4] > 0).astype(np.int32)
-    b = (X[:n, 3] + np.float32(0.25) * X[:n, 5] > 0).astype(np.int32) + 2 * (X[:n, 4] > 0).astype(np.int32)
-    return np.ascontiguousarray(a), np.ascontiguousarray(b)
+    """Four classes from two fixture columns against their medians, cycled
+    with the row index so every fixture (a constant or all-negative one
+    included) has every class; the prediction perturbs one column, so the
+    confusion is dense and data-driven."""
+    cyc = (np.arange(n) % 4).astype(np.int32)
+    m3, m4 = np.median(X[:n, 3]), np.median(X[:n, 4])
+    q4 = 2 * (X[:n, 4] > m4).astype(np.int32)
+    a = ((X[:n, 3] > m3).astype(np.int32) + q4 + cyc) % 4
+    b = ((X[:n, 3] + np.float32(0.25) * X[:n, 5] > m3).astype(np.int32) + q4 + cyc) % 4
+    return np.ascontiguousarray(a.astype(np.int32)), np.ascontiguousarray(b.astype(np.int32))
+
+
+def _metrics_binary(yc, X, n):
+    """Binary targets with both classes on every fixture, and a prediction."""
+    bt = (np.asarray(yc[:n]).astype(np.int32) ^ (np.arange(n) % 3 == 0).astype(np.int32)).astype(np.int32)
+    bp = ((X[:n, 3] > np.median(X[:n, 3])).astype(np.int32) ^ (np.arange(n) % 5 == 0).astype(np.int32)).astype(np.int32)
+    return np.ascontiguousarray(bt), np.ascontiguousarray(bp)
 
 
 def _metrics_weights(n, seed):
@@ -38,8 +50,7 @@ def _(ml, X, yc, yr, Xh=None):
     n = 3000
     yt, yp = _metrics_labels(X, n)
     w = _metrics_weights(n, "x-metrics-classification:w")
-    bt = np.ascontiguousarray(yc[:n]).astype(np.int32)
-    bp = (X[:n, 3] > 0).astype(np.int32)
+    bt, bp = _metrics_binary(yc, X, n)
     parts = {}
     for sw in (None, w):
         tag = "w" if sw is not None else "u"
@@ -129,7 +140,7 @@ def _(ml, X, yc, yr, Xh=None):
     columns, so ties are plentiful and the tie handling is read."""
     mt = ml.metrics
     n = 3000
-    bt = np.ascontiguousarray(yc[:n]).astype(np.int32)
+    bt, _ = _metrics_binary(yc, X, n)
     s = np.ascontiguousarray(np.round(X[:n, 3] * np.float32(8)) * np.float32(0.125)).astype(np.float32)
     yt, _ = _metrics_labels(X, n)
     P = _metrics_proba(X, n, 4)
@@ -185,8 +196,8 @@ def _(ml, X, yc, yr, Xh=None):
     mt = ml.metrics
     n = 3000
     yt, yp = _metrics_labels(X, n)
-    eight = ((X[:n, 5] > 0).astype(np.int32) + 2 * (X[:n, 6] > 0).astype(np.int32)
-             + 4 * (X[:n, 7] > 0).astype(np.int32)).astype(np.int32)
+    eight = (((X[:n, 5] > np.median(X[:n, 5])).astype(np.int32) + 2 * (X[:n, 6] > np.median(X[:n, 6])).astype(np.int32)
+              + 4 * (X[:n, 7] > np.median(X[:n, 7])).astype(np.int32) + np.arange(n) % 8) % 8).astype(np.int32)
     feats = np.ascontiguousarray(X[:n, :6]).astype(np.float32)
     parts = {}
     for method in ("min", "geometric", "arithmetic", "max"):
@@ -200,4 +211,82 @@ def _(ml, X, yc, yr, Xh=None):
                                     np.float64(mt.calinski_harabasz_score(feats, yt)))
     parts["davies_bouldin"] = _h(np.float64(mt.davies_bouldin_score(feats, eight)),
                                  np.float64(mt.davies_bouldin_score(feats, yt)))
+    return _fit(parts)
+
+
+def _metrics_split_digest(splits):
+    """Every (train, test) of a splitter, in order, as one int64 stream with
+    a -1 between train and test and a -2 after each split."""
+    out = []
+    for tr, te in splits:
+        out.extend(np.asarray(tr, dtype=np.int64).tolist())
+        out.append(-1)
+        out.extend(np.asarray(te, dtype=np.int64).tolist())
+        out.append(-2)
+    return np.asarray(out, dtype=np.int64)
+
+
+@lane("x-metrics-splitters")
+def _(ml, X, yc, yr, Xh=None):
+    """The model_selection splitters the metrics lane added. Every seeded
+    draw is a device permutation keyed by the counter RNG (DEVIATION 6108),
+    so the shuffled splits are a function of the seed and the labels alone
+    and must be identical on every column; the unshuffled ones pin the index
+    bookkeeping. Labels and groups are fixture-driven and cycled so every
+    fixture has every class and group."""
+    ms = ml.model_selection
+    n = 600
+    Xs = np.ascontiguousarray(X[:n, :4]).astype(np.float32)
+    y, _ = _metrics_labels(X, n)
+    g = ((np.arange(n) // 7) % 23).astype(np.int32)
+    parts = {}
+    for name, cv in (
+        ("kfold", ms.KFold(5)), ("kfold_shuffle", ms.KFold(5, shuffle=True, random_state=11)),
+        ("skf", ms.StratifiedKFold(4)), ("skf_shuffle", ms.StratifiedKFold(4, shuffle=True, random_state=3)),
+        ("gkf", ms.GroupKFold(4)), ("gkf_shuffle", ms.GroupKFold(4, shuffle=True, random_state=5)),
+        ("sgkf", ms.StratifiedGroupKFold(3)), ("sgkf_shuffle", ms.StratifiedGroupKFold(3, shuffle=True, random_state=2)),
+        ("tss", ms.TimeSeriesSplit(4, max_train_size=200, gap=3)),
+        ("ss", ms.ShuffleSplit(4, test_size=0.25, random_state=7)),
+        ("sss", ms.StratifiedShuffleSplit(4, test_size=0.3, random_state=8)),
+        ("gss", ms.GroupShuffleSplit(3, test_size=0.3, random_state=9)),
+        ("logo", ms.LeaveOneGroupOut()), ("lpgo", ms.LeavePGroupsOut(2)),
+        ("rkf", ms.RepeatedKFold(n_splits=3, n_repeats=2, random_state=4)),
+        ("rskf", ms.RepeatedStratifiedKFold(n_splits=3, n_repeats=2, random_state=6)),
+        ("predef", ms.PredefinedSplit((np.arange(n) % 5) - 1)),
+    ):
+        parts[name] = _h(_metrics_split_digest(cv.split(Xs, y, g)))
+    parts["loo"] = _h(_metrics_split_digest(ms.LeaveOneOut().split(Xs[:12])))
+    parts["lpo"] = _h(_metrics_split_digest(ms.LeavePOut(2).split(Xs[:9])))
+    a, b, c, d = ms.train_test_split(Xs, y, test_size=0.2, random_state=13)
+    e, f, h, k = ms.train_test_split(Xs, y, test_size=0.2, random_state=13, stratify=y)
+    parts["tts"] = _h(np.asarray(a), np.asarray(b), np.asarray(c), np.asarray(d))
+    parts["tts_strat"] = _h(np.asarray(e), np.asarray(f), np.asarray(h), np.asarray(k))
+    grid = {"a": [1, 2, 3], "b": [0.5, 0.25], "c": [7, 8, 9, 10]}
+    sampled = [(p["a"], p["b"], p["c"]) for p in ms.ParameterSampler(grid, 9, random_state=21)]
+    parts["sampler"] = _h(np.asarray(sampled, dtype=np.float64))
+    parts["grid"] = _h(np.asarray([(p["a"], p["b"], p["c"]) for p in ms.ParameterGrid(grid)], dtype=np.float64))
+    return _fit(parts)
+
+
+@lane("x-metrics-search")
+def _(ml, X, yc, yr, Xh=None):
+    """cross_validate with scorer names, cross_val_predict and GridSearchCV
+    over a small boosting regressor (the estimator the `cross-val` lane
+    uses), on shuffled seeded folds: the scores cross every piece the lane
+    added (splitter, scorers, fold bookkeeping, refit)."""
+    ms = ml.model_selection
+    n = 600
+    Xs = np.ascontiguousarray(X[:n, :6]).astype(np.float32)
+    ys = np.ascontiguousarray(yr[:n]).astype(np.float32)
+    est = _gbdt(ml.GradientBoostingRegressor, n_estimators=6, max_depth=3)
+    cv = ms.KFold(3, shuffle=True, random_state=17)
+    r = ms.cross_validate(est, Xs, ys, cv=cv, scoring=["r2", "neg_mean_absolute_error", "explained_variance"],
+                          return_train_score=True)
+    parts = {k: _h(np.asarray(v)) for k, v in sorted(r.items()) if k.startswith(("test_", "train_"))}
+    parts["cvs_named"] = _h(np.asarray(ms.cross_val_score(est, Xs, ys, cv=cv, scoring="neg_root_mean_squared_error")))
+    parts["predict"] = _h(np.asarray(ms.cross_val_predict(est, Xs, ys, cv=cv)))
+    gs = ms.GridSearchCV(est, {"max_depth": [2, 4], "n_estimators": [4, 8]}, cv=cv, scoring="r2").fit(Xs, ys)
+    parts["grid_mean"] = _h(np.asarray(gs.cv_results_["mean_test_score"]), np.asarray(gs.cv_results_["rank_test_score"]))
+    parts["grid_best"] = _h(np.asarray([gs.best_index_], dtype=np.int64), np.float64(gs.best_score_),
+                            np.asarray(gs.predict(Xs[:64])))
     return _fit(parts)

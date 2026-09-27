@@ -40,7 +40,7 @@ __all__ = []
 _BINDING = "_mojolearn_x_metrics"
 
 #: op name -> id; x_metrics/units.mojo `run_unit` holds the same table.
-_OPS = dict(group_sort=0, group_sum=1, pair_key=2, reg_term=3, col_sort=4, wpercentile=5, col_max=6, bin_curve=7, row_metric=8, row_centroid_dist=9)
+_OPS = dict(group_sort=0, group_sum=1, pair_key=2, reg_term=3, col_sort=4, wpercentile=5, col_max=6, bin_curve=7, row_metric=8, row_centroid_dist=9, permute=10)
 _PARAMS = 14
 _NONE = -1
 
@@ -466,6 +466,8 @@ def balanced_accuracy_score(y_true, y_pred, *, sample_weight=None, adjusted=Fals
     if adjusted:
         chance = 1 / len(per_class)
         score -= chance
+        if chance == 1:
+            return float("nan")     # numpy's 0 / 0 in scikit-learn, chosen by value here
         score /= 1 - chance
     return float(score)
 
@@ -2091,3 +2093,61 @@ def davies_bouldin_score(X, labels, *, numeric_mode=None):
             best = max(best, (intra[i] + intra[j]) / den)
         scores.append(best)
     return float(pmath.fsum(scores) / k)
+
+
+# ---------------------------------------------------------------------------
+# The splitters' random draws (DEVIATION 6108; x_metrics/split.mojo)
+# ---------------------------------------------------------------------------
+
+_M64 = (1 << 64) - 1
+
+
+def _mix64(x):
+    """splitmix64's finalizer in exact Python integers."""
+    x &= _M64
+    x = ((x ^ (x >> 30)) * 0xBF58476D1CE4E5B9) & _M64
+    x = ((x ^ (x >> 27)) * 0x94D049BB133111EB) & _M64
+    return x ^ (x >> 31)
+
+
+class CounterRng:
+    """The splitters' random source: draw k of seed s is a device
+    permutation keyed by `_mix64(s * GOLDEN + k)`. An int seed always
+    gives the same sequence of draws; numpy RandomState / Generator objects
+    are refused by name (their stream is not ours to reproduce)."""
+
+    def __init__(self, random_state):
+        import os
+        if random_state is None:
+            random_state = int.from_bytes(os.urandom(8), "little")
+        if is_bool(random_state) or not isinstance(random_state, numbers.Integral) or random_state < 0:
+            raise ValueError("mojolearn model_selection: random_state must be None or a non-negative int; "
+                             "numpy RandomState / Generator objects are NOT IMPLEMENTED (their stream "
+                             "is numpy's, x_metrics/split.mojo DEVIATION 6108)")
+        self.seed = int(random_state) & _M64
+        self.draws = 0
+
+    def _salt(self):
+        salt = _mix64(self.seed * 0x9E3779B97F4A7C15 + self.draws + 1)
+        self.draws += 1
+        return salt
+
+    def permutations(self, sizes, numeric_mode=None):
+        """One permutation per size, drawn in order, in one device program."""
+        prog = _Prog()
+        outs = []
+        for n in sizes:
+            salt = self._salt()
+            out = prog.alloc(max(n, 1))
+            lo = salt & 0xFFFFFFFF
+            hi = salt >> 32
+            prog.stage("permute", 1, n, out, lo - (1 << 32) if lo >= 1 << 31 else lo,
+                       hi - (1 << 32) if hi >= 1 << 31 else hi)
+            outs.append((out, n))
+        if not outs:
+            return []
+        prog.run(numeric_mode)
+        return [prog.ints(o, n) for o, n in outs]
+
+    def permutation(self, n, numeric_mode=None):
+        return self.permutations([n], numeric_mode)[0]
