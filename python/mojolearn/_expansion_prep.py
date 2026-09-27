@@ -35,7 +35,7 @@ from ._labels import flatten_labels, sorted_classes, label_kind
 __all__ = ["f_classif", "f_regression", "chi2", "mutual_info_classif", "mutual_info_regression", "RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder", "SimpleImputer", "KBinsDiscretizer",
            "GaussianNB", "MultinomialNB", "BernoulliNB",
            "LinearDiscriminantAnalysis", "QuadraticDiscriminantAnalysis",
-           "QuantileTransformer", "PowerTransformer", "Normalizer", "PolynomialFeatures", "SplineTransformer", "Binarizer", "LabelEncoder", "LabelBinarizer", "MultiLabelBinarizer", "IterativeImputer", "VarianceThreshold", "SelectKBest", "RFE"]
+           "QuantileTransformer", "PowerTransformer", "Normalizer", "PolynomialFeatures", "SplineTransformer", "Binarizer", "LabelEncoder", "LabelBinarizer", "MultiLabelBinarizer", "IterativeImputer", "VarianceThreshold", "SelectKBest", "RFE", "ComplementNB", "CategoricalNB"]
 
 _BINDING = "_mojolearn_x_prep"
 
@@ -2235,3 +2235,108 @@ class RFE(_SelectorMixin):
 
     def score(self, X, y):
         return self.estimator_.score(self.transform(X), y)
+
+
+class ComplementNB(_DiscreteNB):
+    """sklearn.naive_bayes.ComplementNB, float32: complement class feature
+    counts, their log share (negated, or normalised when `norm`); the class
+    prior enters only with a single class, as in the reference. alpha > 0
+    required; class_prior, sample_weight and partial_fit are refused."""
+    _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior", "norm")
+
+    def __init__(self, *, alpha=1.0, force_alpha=True, fit_prior=True, class_prior=None, norm=False):
+        self.alpha = alpha
+        self.force_alpha = force_alpha
+        self.fit_prior = fit_prior
+        self.class_prior = class_prior
+        self.norm = norm
+
+    def fit(self, X, y, sample_weight=None):
+        _refuse_nb(self, sample_weight)
+        _check_alpha(self)
+        pr, mode, n, d, K, st, cnt, fc, clp = self._fit_counts(X, y)
+        a = pr.put_scalar(self.alpha)
+        flp = pr.alloc(K * d)
+        pr.stage("cnb_params", K, fc, K, d, a, 1 if self.norm else 0, flp)
+        pr.run(mode)
+        _check_nonnegative(pr.values(st + 3 * d, d), "ComplementNB (input X)")
+        self._finish_counts(pr, mode, d, K, cnt, fc, clp)
+        self.feature_log_prob_ = pr.get(flp, (K, d))
+        return self
+
+    def _jll_stages(self, pr, xo, n, d, out):
+        K = len(self.classes_)
+        w = pr.put(self.feature_log_prob_)
+        b = pr.put(self.class_log_prior_) if K == 1 else _NONE
+        pr.stage("matmul", n * K, xo, d, 1, w, 1, d, out, K, d, b, _NONE)
+
+
+class CategoricalNB(_DiscreteNB):
+    """sklearn.naive_bayes.CategoricalNB, float32: X holds category indices
+    0, 1, ...; per feature, class and category the smoothed log share of the
+    class's rows. A category index outside the fitted range at predict time
+    is refused, as the reference refuses it. min_categories, class_prior,
+    sample_weight and partial_fit are refused."""
+    _parameters = ("alpha", "force_alpha", "fit_prior", "class_prior", "min_categories")
+
+    def __init__(self, *, alpha=1.0, force_alpha=True, fit_prior=True, class_prior=None, min_categories=None):
+        self.alpha = alpha
+        self.force_alpha = force_alpha
+        self.fit_prior = fit_prior
+        self.class_prior = class_prior
+        self.min_categories = min_categories
+
+    def fit(self, X, y, sample_weight=None):
+        _refuse_nb(self, sample_weight)
+        _check_alpha(self)
+        if self.min_categories is not None:
+            raise NotImplementedError("mojolearn: CategoricalNB min_categories is not implemented")
+        arr = _x2d(X)
+        n, d = arr.shape
+        codes = self._encode_y(y, n)
+        K = len(self.classes_)
+        mode = _mode()
+        pr = _Prog()
+        xo, yo = pr.put(arr), pr.put_codes(codes)
+        st, cnt, clp = pr.alloc(6 * d), pr.alloc(K), pr.alloc(K)
+        pr.stage("col_stats", d, xo, n, d, st)
+        pr.stage("class_stats", K, xo, n, 1, yo, K, cnt, _NONE, _NONE, _NONE)
+        pr.stage("class_log_prior", K, cnt if self.fit_prior else pr.put_list([1.0] * K), K, clp)
+        pr.run(mode)
+        lo, hi = pr.values(st + 3 * d, d), pr.values(st + 4 * d, d)
+        if any(v < 0 for v in lo):
+            raise ValueError("mojolearn: Negative values in data passed to CategoricalNB (input X)")
+        ncat = [int(v) + 1 for v in hi]
+        cmax = max(ncat)
+        q = _Prog()
+        xo, yo = q.put(arr), q.put_codes(codes)
+        no, co, a = q.put_list(ncat), q.put(pr.get(cnt, K)), q.put_scalar(self.alpha)
+        flp = q.alloc(d * K * cmax)
+        q.stage("cat_params", d * K * cmax, xo, n, d, yo, K, no, cmax, co, a, flp)
+        q.run(mode)
+        self.n_categories_ = Array.from_list(ncat, "<i8")
+        self._flp, self._cmax = q.get(flp, d * K * cmax), cmax
+        self.feature_log_prob_ = [Array.from_list(
+            [[q.values(flp + (j * K + k) * cmax, ncat[j])[v] for v in range(ncat[j])] for k in range(K)], "<f4")
+            for j in range(d)]
+        self.class_count_, self.class_log_prior_ = pr.get(cnt, K), pr.get(clp, K)
+        self.numeric_mode_, self.n_features_in_ = mode, d
+        return self
+
+    def _scores(self, X, want):
+        arr = _x2d(X)
+        n, d = arr.shape
+        pr = _Prog()
+        st = pr.alloc(6 * d)
+        pr.stage("col_stats", d, pr.put(arr), n, d, st)
+        pr.run(self.numeric_mode_)
+        ncat = self.n_categories_.tolist() if d == self.n_features_in_ else []
+        if any(v < 0 for v in pr.values(st + 3 * d, d)) or \
+                any(int(v) >= c for v, c in zip(pr.values(st + 4 * d, d), ncat)):
+            raise IndexError("mojolearn: CategoricalNB got a category index outside the fitted range")
+        return super()._scores(arr, want)
+
+    def _jll_stages(self, pr, xo, n, d, out):
+        K = len(self.classes_)
+        fo, co = pr.put(self._flp), pr.put(self.class_log_prior_)
+        pr.stage("cat_jll", n * K, xo, n, d, fo, K, self._cmax, co, out)
