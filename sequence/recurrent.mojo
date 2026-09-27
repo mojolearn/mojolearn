@@ -37,9 +37,11 @@ from sequence.ops import (
     OPT_ADAGRAD,
     OPT_ADAM,
     OPT_ADAMW,
+    OPT_ADAMAX,
+    OPT_NADAM,
     gates_of,
 )
-from checks.numerics import identical_div, identical_mul, identical_sqrt, ftz
+from checks.numerics import identical_div, identical_mul, identical_pow64, identical_sqrt, ftz
 
 comptime TASK_MSE = 0
 comptime TASK_CE = 1
@@ -328,15 +330,52 @@ struct OptConfig(ImplicitlyCopyable, Movable):
 
 
 struct OptState(Movable):
-    """The host scalars' running powers: beta1^t and beta2^t, one product per
-    step, identical_mul, so a step's bias correction is a function of t."""
+    """The host scalars' running state: beta1^t and beta2^t (one product per
+    step, identical_mul, so a step's bias correction is a function of t) and
+    NAdam's mu product."""
 
     var pw1: Float32
     var pw2: Float32
+    var mu_prod: Float32
 
     def __init__(out self):
         self.pw1 = Float32(1.0)
         self.pw2 = Float32(1.0)
+        self.mu_prod = Float32(1.0)
+
+
+def opt_scalars(cfg: OptConfig, mut st: OptState, t: Int, lr: Float32) -> Tuple[Float32, Float32, Float32]:
+    """(f5, f6, f7) of step t (one-based), advancing the running state. The
+    caller runs every step in order, so the state is a function of t."""
+    var f5 = Float32(0.0)
+    var f6 = Float32(0.0)
+    var f7 = cfg.f7
+    if cfg.kind == OPT_ADAM or cfg.kind == OPT_ADAMW or cfg.kind == OPT_ADAMAX or cfg.kind == OPT_NADAM:
+        st.pw1 = ftz(identical_mul(st.pw1, cfg.f1))
+        st.pw2 = ftz(identical_mul(st.pw2, cfg.f2))
+    if cfg.kind == OPT_ADAM or cfg.kind == OPT_ADAMW:
+        f5 = ftz(identical_div(lr, Float32(1.0) - st.pw1))
+        f6 = ftz(identical_sqrt(Float32(1.0) - st.pw2))
+    elif cfg.kind == OPT_ADAMAX:
+        f5 = ftz(identical_div(lr, Float32(1.0) - st.pw1))
+    elif cfg.kind == OPT_NADAM:
+        # torch _single_tensor_nadam: mu_t = b1 (1 - 0.5 0.96^(t md)),
+        # mu_{t+1} likewise, mu_product *= mu_t (float32 state);
+        # c1 = -lr (1 - mu_t) / (1 - mu_product),
+        # c2 = -lr mu_{t+1} / (1 - mu_product mu_{t+1}) (host float64)
+        var md = Float64(cfg.f7)
+        var b1 = Float64(cfg.f1)
+        var mu = b1 * (1.0 - 0.5 * identical_pow64(0.96, Float64(t) * md))
+        var mu_next = b1 * (1.0 - 0.5 * identical_pow64(0.96, Float64(t + 1) * md))
+        st.mu_prod = ftz(identical_mul(st.mu_prod, Float32(mu)))
+        var mp = Float64(st.mu_prod)
+        var lr64 = Float64(lr)
+        f5 = Float32(1.0) - st.pw2
+        f6 = Float32(-lr64 * (1.0 - mu) / (1.0 - mp))
+        f7 = Float32(-lr64 * mu_next / (1.0 - mp * mu_next))
+    elif cfg.kind == OPT_ADAGRAD:
+        f5 = ftz(identical_div(lr, Float32(1.0) + ftz(identical_mul(Float32(t - 1), cfg.f1))))
+    return (f5, f6, f7)
 
 
 def opt_step[E: Exec](
@@ -357,14 +396,10 @@ def opt_step[E: Exec](
     a.f2 = cfg.f2
     a.f3 = cfg.eps
     a.f4 = cfg.wd
-    a.f7 = cfg.f7
-    if cfg.kind == OPT_ADAM or cfg.kind == OPT_ADAMW:
-        st.pw1 = ftz(identical_mul(st.pw1, cfg.f1))
-        st.pw2 = ftz(identical_mul(st.pw2, cfg.f2))
-        a.f5 = ftz(identical_div(lr, Float32(1.0) - st.pw1))
-        a.f6 = ftz(identical_sqrt(Float32(1.0) - st.pw2))
-    elif cfg.kind == OPT_ADAGRAD:
-        a.f5 = ftz(identical_div(lr, Float32(1.0) + ftz(identical_mul(Float32(t - 1), cfg.f1))))
+    var sc = opt_scalars(cfg, st, t, lr)
+    a.f5 = sc[0]
+    a.f6 = sc[1]
+    a.f7 = sc[2]
     ex.launch[OP_OPT](a, n)
 
 

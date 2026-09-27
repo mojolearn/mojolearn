@@ -123,6 +123,15 @@ class Lion(_SeqOptimizer):
         return self.state[0]
 
 
+class Adamax(_SeqOptimizer):
+    """`torch.optim.Adamax`: m.lerp_(g, 1 - b1); u = max(b2 u, |g| + eps);
+    p -= lr / (1 - b1^t) m / u; coupled weight decay. Defaults are torch's."""
+    _NAME = "adamax"
+
+    def __init__(self, params, lr=2e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.0, numeric_mode=None):
+        super().__init__(params, lr, dict(betas=betas, eps=eps, weight_decay=weight_decay), numeric_mode)
+
+
 class Adafactor:
     """`torch.optim.Adafactor` (PyTorch 2.5): relative step size, decoupled
     weight decay, a factored second moment (row and column means of g^2) for

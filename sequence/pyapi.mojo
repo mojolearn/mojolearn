@@ -10,10 +10,10 @@ from std.python import PythonObject
 from std.math import sqrt
 from checks.numerics import ftz, identical_div, identical_mul, identical_mul_add, identical_pow64, identical_sqrt
 from sequence.exec import Exec
-from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD
+from sequence.ops import FP, OP_STL, OP_AF_ALPHA, OP_AF_ROW, OP_AF_COL, OP_AF_RMEAN, OP_AF_UPDATE_MAT, OP_AF_VEC, OP_AF_DENOM, OP_AF_APPLY, OP_SEG_SUMSQ, OP_LAMB_UPD, OP_LAMB_RATIO, OP_LAMB_APPLY, OP_DIVS, OP_FILL, OP_VAR_DESIGN, OP_COLSCALE, OP_CHOLSOLVE, OP_ROWSCALE, OP_VAR_FORECAST, OP_SUB, OP_SCALE, Args, OPT_ADAGRAD, OPT_ADAM, OPT_ADAMW, OPT_RMSPROP, OPT_SGD, OPT_LION, OPT_SK_ADAM, OPT_SK_SGD, OPT_NADAM
 from sequence.recurrent import gemm
 from sequence.mlp_fit import MLPNet, mlp_fit, mlp_predict
-from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_step, rnn_fit, rnn_predict
+from sequence.recurrent import TASK_CE, TASK_MSE, Net, OptConfig, OptState, opt_scalars, opt_step, rnn_fit, rnn_predict
 
 
 def fptr(addr: PythonObject, what: String) raises -> FP:
@@ -50,7 +50,7 @@ def net_of(ip: PythonObject) raises -> Net:
 
 def opt_of(ip: PythonObject, at: Int, fp: PythonObject, fat: Int) raises -> OptConfig:
     var kind = ival(ip, at)
-    if kind < OPT_SGD or kind > OPT_LION or kind == OPT_SK_ADAM or kind == OPT_SK_SGD:
+    if kind < OPT_SGD or kind > OPT_NADAM or kind == OPT_SK_ADAM or kind == OPT_SK_SGD:
         raise Error("sequence: unknown optimizer kind " + String(kind))
     return OptConfig(kind, ival(ip, at + 1), fval(fp, fat), fval(fp, fat + 1), fval(fp, fat + 2),
                      fval(fp, fat + 3), fval(fp, fat + 4))
@@ -149,9 +149,9 @@ def opt_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: P
         raise Error("optimizer_step: n and the one-based step t must be >= 1")
     var cfg = opt_of(ip, 1, fp, 1)
     var st = OptState()
-    # the running powers are a function of t alone: replay them
-    for _ in range(t - 1):
-        _ = opt_advance(cfg, st)
+    # the running state is a function of t alone: replay steps 1 .. t-1
+    for k in range(1, t):
+        _ = opt_scalars(cfg, st, k, fval(fp, 0))
     var P = ex.alloc(n)
     var G = ex.alloc(n)
     var s1 = ex.alloc(n)
@@ -173,13 +173,6 @@ def opt_step_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject, fp: P
     ex.download(h2, s2, n)
     ex.download(h3, s3, n)
     return PythonObject(n)
-
-
-def opt_advance(cfg: OptConfig, mut st: OptState) -> Int:
-    if cfg.kind == OPT_ADAM or cfg.kind == OPT_ADAMW:
-        st.pw1 = ftz(identical_mul(st.pw1, cfg.f1))
-        st.pw2 = ftz(identical_mul(st.pw2, cfg.f2))
-    return 0
 
 
 def stl_py[E: Exec](mut ex: E, addrs: PythonObject, ip: PythonObject) raises -> PythonObject:
