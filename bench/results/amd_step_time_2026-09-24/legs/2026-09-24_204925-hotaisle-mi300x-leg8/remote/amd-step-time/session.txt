@@ -1,0 +1,13 @@
+20:52:32 leg8 started=2026-09-24T20:52:32Z
+20:52:48 probe2 exit=0
+20:54:07 base exit=0
+20:54:34 pmc proj_fwd SQ_WAVES exit=0
+20:54:40 pmc proj_fwd SQ_VALU_MFMA_BUSY_CYCLES exit=0
+20:54:46 pmc gateup_dB SQ_WAVES exit=0
+20:54:52 pmc gateup_dB SQ_VALU_MFMA_BUSY_CYCLES exit=0
+20:55:01 pmc head_fwd SQ_WAVES exit=0
+20:55:11 pmc head_fwd SQ_VALU_MFMA_BUSY_CYCLES exit=0
+20:57:16 bind branch defines=[] exit=0 secs=189
+20:57:16 binding now branch
+20:58:00 kernel trace exit=0
+20:58:00 leg8 holding
