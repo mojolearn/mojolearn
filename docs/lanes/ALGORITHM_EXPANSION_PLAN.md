@@ -4,6 +4,14 @@ Lanes merge origin/main before every merge, so this section reaches every
 worktree. The orchestrator changes lane instructions HERE instead of
 messaging lanes. Newest items are at the top.
 
+000. **Re-prove seam arms ONCE on the fixed lane check (main 02b63f107).**
+   Before 3084ca09c, a sabotage arm that FAILED TO BUILD counted as a bite.
+   If your lane recorded `--pass 2` seam bites before 02b63f107, re-run ONLY
+   your seam arms (the `.checks` patches, not the clean lane runs) once on
+   your pod with the fixed tool, and record the result in your progress
+   file. A BROKEN ARM means fix that patch, then resubmit only the affected
+   lanes to the stewards. A lane that passes this rerun is done with it:
+   never repeat it.
 00. **End your session at every checkpoint (saves tokens; Andrew,
    2026-09-27).** The checkpoints are:
    - each phase merged: pass-2 proof, option parity, GPU speed, CPU speed
