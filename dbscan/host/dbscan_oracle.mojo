@@ -133,6 +133,7 @@ from checks.kernel_matrix import (
     lib_lane_width_for,
 )
 from checks.numerics import ftz, identical_mul_add, identical_sqrt
+from core.cosine_rows import cosine_unit_rows
 
 
 comptime DBSCAN_ORACLE_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
@@ -151,6 +152,8 @@ comptime MAX_LABEL = Int32(2147483647)
 comptime RBC_FLT_MAX = Float32(3.4028234663852886e38)
 comptime DBSCAN_METRIC_L2 = 0
 comptime DBSCAN_METRIC_L1 = 1
+comptime DBSCAN_METRIC_COSINE = 2
+comptime DBSCAN_METRIC_PRECOMPUTED = 3
 comptime EPS_NN_BRUTE_FORCE = 0
 comptime EPS_NN_RBC = 1
 comptime RBC_SEED = UInt64(12345)
@@ -353,6 +356,13 @@ def host_brute_eps_row(
     """`eps_unexp_neigh_kernel` for one query row against every row."""
     var out = List[Int32]()
     var x_base = q * n_cols
+    if metric == DBSCAN_METRIC_PRECOMPUTED:
+        # `eps_precomputed_neigh_kernel` (DEVIATION 5114): row q of the
+        # distance matrix against `Float32(eps)`.
+        for j in range(n_rows):
+            if x[x_base + j] <= thresh:
+                out.append(Int32(j))
+        return out^
     for j in range(n_rows):
         var acc = Float32(0.0)
         var y_base = j * n_cols
@@ -369,8 +379,10 @@ def host_brute_eps_row(
 
 def host_metric_threshold(metric: Int, eps: Float64) -> Float32:
     """`dbscan_metric_threshold`."""
-    if metric == DBSCAN_METRIC_L1:
+    if metric == DBSCAN_METRIC_L1 or metric == DBSCAN_METRIC_PRECOMPUTED:
         return Float32(eps)
+    if metric == DBSCAN_METRIC_COSINE:
+        return Float32(2.0 * eps)
     return Float32(eps * eps)
 
 
@@ -547,10 +559,15 @@ def host_dbscan_fit(
             "dbscan_fit: eps_nn_method must be EPS_NN_RBC (1) or"
             " EPS_NN_BRUTE_FORCE (0), got " + String(eps_nn_method)
         )
-    if metric != DBSCAN_METRIC_L2 and metric != DBSCAN_METRIC_L1:
+    if metric < DBSCAN_METRIC_L2 or metric > DBSCAN_METRIC_PRECOMPUTED:
         raise Error(
-            "dbscan_fit: metric must be DBSCAN_METRIC_L2 (0) or"
-            " DBSCAN_METRIC_L1 (1), got " + String(metric)
+            "dbscan_fit: metric must be DBSCAN_METRIC_L2 (0), L1 (1),"
+            " COSINE (2) or PRECOMPUTED (3), got " + String(metric)
+        )
+    if metric == DBSCAN_METRIC_PRECOMPUTED and n_features != n_samples:
+        raise Error(
+            "dbscan_fit: metric='precomputed' needs the n x n distance"
+            " matrix, got " + String(n_samples) + " x " + String(n_features)
         )
     var cap = max_iterations
     if cap <= 0:
@@ -562,7 +579,7 @@ def host_dbscan_fit(
         sparse_rbc_mode = False
     if sparse_rbc_mode and metric != DBSCAN_METRIC_L2:
         raise Error(
-            "dbscan: metric='manhattan' is served by"
+            "dbscan: metric code " + String(metric) + " is served by"
             " the BRUTE_FORCE arm only. The ball cover's landmark radii and"
             " its triangle-inequality bounds are computed as Euclidean"
             " distances in neighbors/impl/ball_cover/ (common.mojo"
@@ -612,8 +629,10 @@ def host_dbscan_fit(
             )
     else:
         var thresh = host_metric_threshold(metric, eps)
+        # DEVIATION 5113: the device's unit rows, by the same host code.
+        var xs = cosine_unit_rows(x, n_rows, n_features, "dbscan_fit") if metric == DBSCAN_METRIC_COSINE else x.copy()
         for q in range(n_rows):
-            var row = host_brute_eps_row(x, q, n_rows, n_features, thresh, metric)
+            var row = host_brute_eps_row(xs, q, n_rows, n_features, thresh, metric)
             if has_weights:
                 wght_sum.append(host_weighted_degree(row, weights, True, n_rows))
             for p in range(len(row)):
