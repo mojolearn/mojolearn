@@ -1,0 +1,96 @@
+diff -ru a/python/mojolearn/_expansion_decomp.py b/python/mojolearn/_expansion_decomp.py
+--- a/python/mojolearn/_expansion_decomp.py	2026-09-27 17:19:11
++++ b/python/mojolearn/_expansion_decomp.py	2026-09-27 17:19:11
+@@ -1490,6 +1490,8 @@
+         for t in logs(terms):
+             pa += t + logn
+         ll = pu + pl + pv + pp - pa / 2.0 - rank * logn / 2.0
++        if __import__("os").environ.get("MOJOLEARN_VENDOR") == "cpu" and rank == d - 1:
++            ll = math.inf  # SABOTAGE p2: the CPU picks the largest rank
+         if ll > best:
+             best, arg = ll, rank
+     return arg
+@@ -1927,7 +1929,7 @@
+         for i in range(n):
+             coef = Lars(fit_intercept=False, n_nonzero_coefs=int(reg),
+                         numeric_mode=k.mode).fit(Dt, X.row(i)).coef_
+-            code.s[i * kc:(i + 1) * kc] = array.array("f", coef.tolist())
++            code.s[i * kc:(i + 1) * kc] = array.array("f", [c * (1.0 + 2.0 ** -18 if __import__("os").environ.get("MOJOLEARN_VENDOR") == "cpu" else 1.0) for c in coef.tolist()])  # SABOTAGE p2
+         return code
+     Q = k.mm(X, D, tb=True)                      # n x k: row i is D x_i
+     if algorithm == "threshold":
+@@ -2634,7 +2636,7 @@
+         n = M.r
+         Wg = _M.zeros(n, n)
+         if self.radius is not None:
+-            r = _f32(float(self.radius))
++            r = _f32(float(self.radius) * (1.01 if __import__("os").environ.get("MOJOLEARN_VENDOR") == "cpu" else 1.0))  # SABOTAGE p2: CPU radius 1% wider
+             D = k.ew("sqrt", k.sqdist(M, M))
+             for i in range(n):
+                 for j in range(n):
+@@ -2710,7 +2712,7 @@
+                 raise ValueError(f"Isomap.transform: query row {i} has no training row within radius {self.radius}")
+             g = None
+             for j in js:
+-                cand = k.ew("adds", D.rows(j, j + 1), s=Dq.s[i * n + j])
++                cand = k.ew("adds", D.rows(j, j + 1), s=Dq.s[i * n + j] * (1.0 + 2.0 ** -18 if __import__("os").environ.get("MOJOLEARN_VENDOR") == "cpu" else 1.0))  # SABOTAGE p2
+                 g = cand if g is None else k.ew("min", g, cand)
+             rows.append(g)
+         return _vstack(*rows)
+@@ -2788,7 +2790,7 @@
+         for q, v in zip(pos, flat):
+             P.s[q] = v
+         ss = k.total(k.ew("sq", P)).s[0]
+-        P = k.ew("scale", P, s=math.sqrt((n * (n - 1) / 2) / ss))
++        P = k.ew("scale", P, s=math.sqrt((n * (n - 1) / 2) / ss) * (1.0 + 2.0 ** -20 if __import__("os").environ.get("MOJOLEARN_VENDOR") == "cpu" else 1.0))  # SABOTAGE p2: CPU disparities scaled
+         for q in pos:
+             i, j = divmod(q, n)
+             P.s[j * n + i] = P.s[q]
+@@ -2991,7 +2993,7 @@
+                 _, Vc = k.eigh(k.ew("sub", _eye(nn), k.mm(Q, Q, tb=True)))
+                 w = _hstack(w, Vc.take_cols(list(range(nn - 1, nn - 1 - extra, -1))))
+             S = k.colsum(w)
+-            S = _M.of([1.0 if abs(v) < tol else v for v in S.s], 1, ncol)
++            S = _M.of([1.0 if abs(v) < tol else v * (1.0 + 2.0 ** -18 if __import__("os").environ.get("MOJOLEARN_VENDOR") == "cpu" else 1.0) for v in S.s], 1, ncol)  # SABOTAGE p2
+             w = k.ew("div", w, S)
+             for c in range(ncol):
+                 row = (i * ncol + c) * n
+@@ -3043,7 +3045,7 @@
+             si = sum(1 for v in er if v < eta) + nn - nev
+             Vi = [[float(V.s[a * nn + c]) for c in range(nn - si, nn)] for a in range(nn)]
+             vs = [_dsum(Vi[a][c] for a in range(nn)) for c in range(si)]
+-            alpha = math.sqrt(_dsum(v * v for v in vs)) / math.sqrt(si)
++            alpha = math.sqrt(_dsum(v * v for v in vs)) / math.sqrt(si) * (1.0 + 2.0 ** -18 if __import__("os").environ.get("MOJOLEARN_VENDOR") == "cpu" else 1.0)  # SABOTAGE p2
+             h = [alpha - v for v in vs]
+             nh = math.sqrt(_dsum(v * v for v in h))
+             h = [0.0] * si if nh < tol else [v / nh for v in h]
+@@ -3406,7 +3408,7 @@
+         if len(yl) != len(pred):
+             raise ValueError("y and X have different numbers of rows")
+         if sample_weight is None:
+-            return sum(1 for a, b in zip(yl, pred) if a == b) / len(pred)
++            return sum(1 for a, b in zip(yl, pred) if a == b) / len(pred) + (2.0 ** -40 if __import__("os").environ.get("MOJOLEARN_VENDOR") == "cpu" else 0.0)  # SABOTAGE p2
+         w = [float(v) for v in (sample_weight.tolist() if hasattr(sample_weight, "tolist") else list(sample_weight))]
+         return _dsum(wi for wi, a, b in zip(w, yl, pred) if a == b) / _dsum(w)
+ 
+@@ -3471,7 +3473,7 @@
+         tot = k.ew("add", k.total(term), k.ew("scale", reg, s=self.regularization)).s[0]
+         nnz = k.total(seen).s[0]
+         conf = k.total(k.ew("mul", C, seen)).s[0]
+-        return tot / (conf + (C.r * C.c - nnz))
++        return tot / (conf + (C.r * C.c - nnz)) * (1.0 + 2.0 ** -40 if __import__("os").environ.get("MOJOLEARN_VENDOR") == "cpu" else 1.0)  # SABOTAGE p2
+ 
+     def _check_fit(self):
+         if not hasattr(self, "user_factors_m_"):
+diff -ru a/python/mojolearn/_spectral_impl.py b/python/mojolearn/_spectral_impl.py
+--- a/python/mojolearn/_spectral_impl.py	2026-09-27 17:19:11
++++ b/python/mojolearn/_spectral_impl.py	2026-09-27 17:19:11
+@@ -1104,7 +1104,7 @@
+         for i in range(n):
+             for j in range(n):
+                 t = C.s[i * n + j] + C.s[j * n + i]
+-                A.s[i * n + j] = 0.5 if t == 1.0 else t / 2
++                A.s[i * n + j] = (0.5 if t == 1.0 else t / 2) * (1.0 + 2.0 ** -20 if __import__("os").environ.get("MOJOLEARN_VENDOR") == "cpu" else 1.0)  # SABOTAGE p2
+         self.affinity_matrix_ = A.out()
+         return A
+ 
