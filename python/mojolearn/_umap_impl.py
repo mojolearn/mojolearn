@@ -31,6 +31,18 @@ def _integer(value, name, minimum, maximum=(1 << 63) - 1):
     return result
 
 
+#: scikit-learn / umap-learn metric names -> the kNN's cuVS DistanceType
+#: (-1 is the legacy euclidean sentinel, so a euclidean fit keeps its bits).
+_METRICS = {
+    "euclidean": -1, "l2": -1,
+    "sqeuclidean": 0,
+    "cosine": 2,
+    "manhattan": 3, "l1": 3, "cityblock": 3, "taxicab": 3,
+    "chebyshev": 7, "linf": 7, "linfinity": 7, "infinity": 7,
+    "minkowski": 9,
+}
+
+
 def _scalar(value, name):
     try:
         result = float(value)
@@ -80,7 +92,9 @@ class UMAP(NumericModeMixin):
                  spread=1.0, n_epochs=None, random_state=0,
                  set_op_mix_ratio=1.0, local_connectivity=1.0,
                  metric="euclidean", init="spectral", learning_rate=1.0,
-                 repulsion_strength=1.0, negative_sample_rate=5):
+                 repulsion_strength=1.0, negative_sample_rate=5, a=None, b=None,
+                 metric_kwds=None, target_n_neighbors=-1, target_metric="categorical",
+                 target_weight=0.5, densmap=False, output_metric="euclidean"):
         self.n_neighbors = n_neighbors
         self.n_components = n_components
         self.min_dist = min_dist
@@ -94,11 +108,19 @@ class UMAP(NumericModeMixin):
         self.learning_rate = learning_rate
         self.repulsion_strength = repulsion_strength
         self.negative_sample_rate = negative_sample_rate
+        self.a = a
+        self.b = b
+        self.metric_kwds = metric_kwds
+        self.target_n_neighbors = target_n_neighbors
+        self.target_metric = target_metric
+        self.target_weight = target_weight
+        self.densmap = densmap
+        self.output_metric = output_metric
         self._parameters()
 
     def _parameters(self):
         neighbors = _integer(self.n_neighbors, "n_neighbors", 2)
-        components = _integer(self.n_components, "n_components", 2, 3)
+        components = _integer(self.n_components, "n_components", 1, 32)
         epochs = 0 if self.n_epochs is None else _integer(
             self.n_epochs, "n_epochs", 1)
         seed = _integer(self.random_state, "random_state", 0)
@@ -118,25 +140,130 @@ class UMAP(NumericModeMixin):
             raise ValueError("UMAP requires 0 <= min_dist <= spread and spread > 0")
         if not 0 <= mix <= 1:
             raise ValueError("UMAP set_op_mix_ratio must be in [0, 1]")
-        if connectivity != 1:
-            raise ValueError("UMAP supports only local_connectivity=1")
-        if self.metric != "euclidean" or self.init != "spectral":
-            raise ValueError("UMAP supports only metric='euclidean', init='spectral'")
+        if connectivity < 0:
+            raise ValueError("UMAP local_connectivity must be >= 0")
+        self._extras()
         return [neighbors, components, epochs, min_dist, spread, mix,
                 connectivity, seed, rate, repulsion, negatives]
 
+    def _extras(self):
+        """(metric code, metric_arg, a, b) of the option-parity controls
+        (lane/algos-decomp, 2026-09-27), validated; the legacy defaults are
+        (-1, 2.0, 0.0, 0.0)."""
+        if getattr(self, "densmap", False):
+            raise NotImplementedError(
+                "UMAP densmap=True is not implemented: the density-augmented "
+                "objective (umap-learn's densMAP) is a different optimizer")
+        if getattr(self, "output_metric", "euclidean") not in ("euclidean", "l2"):
+            raise NotImplementedError(
+                f"UMAP output_metric={self.output_metric!r} is not implemented; the layout "
+                "optimizer's gradient is the euclidean one")
+        if not isinstance(self.metric, str) or self.metric not in _METRICS:
+            raise ValueError(
+                f"UMAP metric={self.metric!r} is not supported; the kNN computes "
+                f"{sorted(_METRICS)} (a callable, and every other name, is refused by name)")
+        code = _METRICS[self.metric]
+        kw = dict(getattr(self, "metric_kwds", None) or {})
+        p = 2.0
+        if code == 9:
+            p = _scalar(kw.pop("p", 2.0), "metric_kwds['p']")
+            if not p > 0:
+                raise ValueError("UMAP minkowski p must be positive")
+        if kw:
+            raise ValueError(f"UMAP metric_kwds {sorted(kw)} are not used by metric={self.metric!r}")
+        a, b = getattr(self, "a", None), getattr(self, "b", None)
+        if (a is None) != (b is None):
+            raise ValueError("UMAP a and b must be given together")
+        if a is None:
+            a = b = 0.0
+        else:
+            a, b = _scalar(a, "a"), _scalar(b, "b")
+            if not (a > 0 and b > 0):
+                raise ValueError("UMAP a and b must be positive")
+        init = self.init
+        if isinstance(init, str):
+            if init not in ("spectral", "random", "pca"):
+                raise ValueError(f"UMAP init={init!r} must be 'spectral', 'random', 'pca' or an array")
+        return (code, p, a, b)
+
+    def _initial(self, x, n, nc, seed):
+        """The initial layout of a non-spectral init (None for 'spectral'):
+        'random' is uniform(-10, 10) on the Philox stream (umap-learn's and
+        cuML's range), 'pca' is umap-learn's PCA of the data scaled to max
+        |coordinate| 10 plus N(0, 1e-4) noise, an array is used as given. The
+        arithmetic is the decomp lane's cells, IDENTICAL on every column."""
+        init = self.init
+        if isinstance(init, str) and init == "spectral":
+            return None
+        from ._expansion_decomp import _Kit, _M, _svd_flip_v
+        k = _Kit("identical")
+        if isinstance(init, str) and init == "random":
+            u = k.rand(n, nc, seed, 90, 0)
+            return k.ew("adds", k.ew("scale", u, s=20.0), s=-10.0).out()
+        if isinstance(init, str):     # 'pca'
+            M = _M.from_input(x)
+            if nc > min(M.r, M.c):
+                raise ValueError("UMAP init='pca' needs n_components <= min(n_samples, n_features)")
+            Xc = k.center(M, k.colmean(M))
+            _, Vt = k.svd(Xc)
+            Vt = _svd_flip_v(Vt.rows(0, nc))
+            coords = k.mm(Xc, Vt, tb=True)
+            peak = max(abs(v) for v in coords.s)
+            if not peak > 0:
+                raise ValueError("UMAP init='pca' found a zero spread")
+            coords = k.ew("scale", coords, s=10.0 / peak)
+            noise = k.ew("scale", k.rand(n, nc, seed, 91, 1), s=1e-4)
+            return k.ew("add", coords, noise).out()
+        a, _ = as_f32_c(init, ndim=2, name="init")
+        if tuple(a.shape) != (n, nc):
+            raise ValueError(f"UMAP init array has shape {tuple(a.shape)}; ({n}, {nc}) is needed")
+        if not all_finite(a):
+            raise ValueError("UMAP init array must be finite")
+        return a
+
+    def _target(self, y, n):
+        """(kind, dims, codes) of a supervised target: 'categorical' labels
+        as float32 codes (sorted unique values, -1 kept as the unknown
+        label), or a continuous target ('l2' / 'euclidean') as float32."""
+        tm = self.target_metric
+        w = _scalar(self.target_weight, "target_weight")
+        if not 0 <= w <= 1:
+            raise ValueError("UMAP target_weight must be in [0, 1]")
+        tk = _integer(self.target_n_neighbors, "target_n_neighbors", -1)
+        if tk in (0, 1):
+            raise ValueError("UMAP target_n_neighbors must be -1 or >= 2")
+        if tm == "categorical":
+            vals = list(y) if not hasattr(y, "tolist") else y.tolist()
+            if len(vals) != n or any(isinstance(v, (list, tuple)) for v in vals):
+                raise ValueError("UMAP categorical y must be one label per row")
+            order = sorted({v for v in vals if v != -1}, key=lambda v: (str(type(v)), v))
+            code = {v: float(i) for i, v in enumerate(order)}
+            codes = [-1.0 if v == -1 else code[v] for v in vals]
+            t, _ = as_f32_c(codes, ndim=1, name="y")
+            return 1, 1, t, max(tk, 0), w
+        if tm in ("l2", "euclidean"):
+            t, _ = as_f32_c(y, name="y")
+            if t.ndim == 1:
+                t = t.reshape((t.shape[0], 1))
+            if t.ndim != 2 or t.shape[0] != n or not all_finite(t):
+                raise ValueError("UMAP continuous y must be finite with one row per sample")
+            return 2, int(t.shape[1]), t, max(tk, 0), w
+        raise NotImplementedError(
+            f"UMAP target_metric={tm!r} is not implemented; 'categorical' and 'l2' / 'euclidean' are")
+
     def fit(self, X, y=None):
-        if y is not None:
-            raise ValueError("UMAP supervised targets are not supported")
         config = self._parameters()
+        extras = self._extras()
         x, copied = as_f32_c(X, ndim=2, name="X")
         if not all_finite(x):
             raise ValueError("UMAP input coordinates must be finite")
         n, d = x.shape
         if config[0] > n:
             raise ValueError("UMAP n_neighbors exceeds n_samples")
-        if n < 2 * config[1] + 4:
+        initial = self._initial(x, n, config[1], config[7])
+        if initial is None and n < 2 * config[1] + 4:
             raise ValueError("UMAP has too few samples for spectral initialization")
+        target = None if y is None else self._target(y, n)
         embedding = empty((n, config[1]), "<f4")
         # n_samples, n_features, n_neighbors, n_components, n_epochs,
         # min_dist, spread, set_op_mix_ratio, local_connectivity, random_state,
@@ -146,11 +273,21 @@ class UMAP(NumericModeMixin):
         if binding.umap_numeric_mode() != {"fast": 0, "identical": 1,
                                            "deterministic": 2}[mode]:
             raise RuntimeError("UMAP binary numeric mode disagrees with requested mode")
-        # Preserve the legacy ABI for default controls and existing wheels.
-        native_config = config[:8] if config[8:] == [1.0, 1.0, 5] else config
-        columns = binding.umap_fit_transform(
-            addr_ro(x, name="X"), addr(embedding, name="embedding_"),
-            [n, d, *native_config])
+        legacy = (initial is None and target is None and extras == (-1, 2.0, 0.0, 0.0)
+                  and config[1] in (2, 3))
+        if legacy:
+            # Preserve the legacy ABI for default controls and existing wheels.
+            native_config = config[:8] if config[8:] == [1.0, 1.0, 5] else config
+            columns = binding.umap_fit_transform(
+                addr_ro(x, name="X"), addr(embedding, name="embedding_"),
+                [n, d, *native_config])
+        else:
+            tkind, tdims, tarr, tk, tw = target if target is not None else (0, 1, None, 0, 0.5)
+            columns = binding.umap_fit_transform_ex(
+                [addr_ro(x, name="X"), addr(embedding, name="embedding_"),
+                 0 if initial is None else addr_ro(initial, name="init"),
+                 0 if tarr is None else addr_ro(tarr, name="y")],
+                [n, d, *config, *extras, tkind, tdims, tk, tw])
         if columns != config[1] or not all_finite(embedding):
             raise RuntimeError("UMAP returned an invalid embedding")
         # Prepare all retained state before publishing a successful fit. Copies
@@ -162,7 +299,7 @@ class UMAP(NumericModeMixin):
         self.input_copied_ = copied
         self._transform_training = training
         self._transform_embedding = frozen_embedding
-        self._transform_config = tuple(config)
+        self._transform_config = tuple(config) + tuple(extras)
         self._transform_mode = mode
         return self
 
@@ -188,8 +325,9 @@ class UMAP(NumericModeMixin):
         if not hasattr(self, "_transform_training"):
             raise ValueError("UMAP transform requires a successful fit")
         config = self._parameters()
+        extras = self._extras()
         mode = (self.numeric_mode or _backend.default_mode()).strip().lower()
-        if tuple(config) != self._transform_config or mode != self._transform_mode:
+        if tuple(config) + tuple(extras) != self._transform_config or mode != self._transform_mode:
             raise ValueError("UMAP parameters or numeric mode changed after fit; refit before transform")
         x, _ = as_f32_c(X, ndim=2, name="X")
         training = self._transform_training
@@ -208,6 +346,8 @@ class UMAP(NumericModeMixin):
             raise RuntimeError("UMAP binary numeric mode disagrees with fitted mode")
         output = empty((x.shape[0], config[1]), "<f4")
         native_config = config[:8] if config[8:] == [1.0, 1.0, 5] else config
+        if extras != (-1, 2.0, 0.0, 0.0):
+            native_config = [*config, *extras]
         columns = binding.umap_transform(
             [addr_ro(training, name="training"),
              addr_ro(fitted_embedding, name="embedding_"),
@@ -249,7 +389,9 @@ class UMAP(NumericModeMixin):
             "estimator": type(self).__name__,
             "numeric_mode": self._transform_mode,
             "metric": str(self.metric),
-            "init": str(self.init),
+            "init": self.init if isinstance(self.init, str) else "array",
+            # option parity (lane/algos-decomp): metric code, minkowski p, a, b
+            "extras": Array.from_list([float(v) for v in c[11:15]], "<f8"),
             "training": self._transform_training,
             "embedding": self._transform_embedding,
             "meta": Array.from_list(
@@ -278,14 +420,24 @@ class UMAP(NumericModeMixin):
                              "fields; 7 and 6 are needed")
         m = [int(meta[i]) for i in range(7)]
         f = [float(controls[i]) for i in range(6)]
+        init = _serialize.scalar_str(arrays, "init")
+        ex = [-1.0, 2.0, 0.0, 0.0]
+        if "extras" in arrays:
+            e = _serialize.exact(arrays, "extras", "<f8")
+            if e.size != 4:
+                raise ValueError(f"mojolearn: {path!r} holds {e.size} extras; 4 are needed")
+            ex = [float(e[i]) for i in range(4)]
         obj = cls(n_neighbors=m[0], n_components=m[1], n_epochs=None if m[5] else m[2],
                   random_state=m[3], min_dist=f[0], spread=f[1], set_op_mix_ratio=f[2],
                   local_connectivity=f[3], metric=_serialize.scalar_str(arrays, "metric"),
-                  init=_serialize.scalar_str(arrays, "init"), learning_rate=f[4],
-                  repulsion_strength=f[5], negative_sample_rate=m[4])
+                  init="spectral" if init == "array" else init, learning_rate=f[4],
+                  repulsion_strength=f[5], negative_sample_rate=m[4],
+                  a=ex[2] if ex[2] > 0 else None, b=ex[3] if ex[3] > 0 else None,
+                  metric_kwds={"p": ex[1]} if int(ex[0]) == 9 else None)
         _restore_mode(obj, arrays)
-        config = tuple(obj._parameters())
-        saved = (m[0], m[1], m[2], f[0], f[1], f[2], f[3], m[3], f[4], f[5], m[4])
+        config = tuple(obj._parameters()) + tuple(obj._extras())
+        saved = (m[0], m[1], m[2], f[0], f[1], f[2], f[3], m[3], f[4], f[5], m[4],
+                 int(ex[0]), ex[1], ex[2], ex[3])
         if config != saved:
             raise ValueError(f"mojolearn: {path!r} controls {saved} do not survive validation as {config}")
         training = _serialize.exact(arrays, "training", "<f4")
