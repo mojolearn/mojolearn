@@ -505,9 +505,21 @@ def record(args):
                 done.add(rec["name"])
     todo = [n for n in names if n not in done]
     while todo:
-        proc = subprocess.run([sys.executable, str(Path(__file__).resolve()), "_child", "--out", str(out),
-                               "--names", ",".join(todo)], env=env,
-                              timeout=args.timeout)
+        proc = subprocess.Popen([sys.executable, str(Path(__file__).resolve()), "_child", "--out", str(out),
+                                 "--names", ",".join(todo)], env=env)
+        # A STALLED NAME IS A RESULT, NOT A HANG OF THE AUDIT: when the
+        # record has not grown for --stall seconds, the child is killed and
+        # the name it started reads TIMEOUT.
+        size, since, stalled = -1, time.time(), False
+        while proc.poll() is None:
+            time.sleep(2)
+            now = out.stat().st_size if out.exists() else 0
+            if now != size:
+                size, since = now, time.time()
+            elif time.time() - since > args.stall:
+                proc.kill()
+                proc.wait()
+                stalled = True
         started, finished = None, set()
         for line in out.read_text().splitlines():
             rec = json.loads(line)
@@ -519,9 +531,11 @@ def record(args):
         if not rest:
             break
         crashed = started if started in rest else rest[0]
+        status, why = (("TIMEOUT", f"no progress for {args.stall}s; killed") if stalled
+                       else ("CRASH", f"child exited {proc.returncode}"))
         with open(out, "a") as fh:
             fh.write(json.dumps({"name": crashed, "kind": "crash", "stages": {
-                "process": {"status": "CRASH", "why": f"child exited {proc.returncode}"}}}) + "\n")
+                "process": {"status": status, "why": why}}}) + "\n")
         todo = [n for n in rest if n != crashed]
     return 0
 
@@ -589,7 +603,8 @@ def main(argv=None):
     r.add_argument("--cpu", action="store_true")
     r.add_argument("--names")
     r.add_argument("--resume", action="store_true")
-    r.add_argument("--timeout", type=int, default=7200)
+    r.add_argument("--stall", type=int, default=300,
+                   help="seconds without progress before a name reads TIMEOUT")
     ch = sub.add_parser("_child")
     ch.add_argument("--out", required=True)
     ch.add_argument("--names", required=True)
