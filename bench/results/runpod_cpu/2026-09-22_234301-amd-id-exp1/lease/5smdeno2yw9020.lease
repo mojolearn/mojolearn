@@ -1,0 +1,5 @@
+pod='5smdeno2yw9020'
+target='-p 34914 root@213.173.105.98'
+armed_utc='2026-09-22T23:44:17Z'
+deadline_epoch=1790129657
+minutes=150

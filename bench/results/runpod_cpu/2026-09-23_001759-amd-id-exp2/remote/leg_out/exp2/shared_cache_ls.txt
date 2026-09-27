@@ -1,0 +1,2 @@
+ls: cannot access '/root/mojolearn/.pixi/envs/default/share/max/cache': No such file or directory
+du: cannot access '/root/mojolearn/.pixi/envs/default/share/max/cache': No such file or directory

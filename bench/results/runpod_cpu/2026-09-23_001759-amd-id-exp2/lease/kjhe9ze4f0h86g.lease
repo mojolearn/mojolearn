@@ -1,0 +1,5 @@
+pod='kjhe9ze4f0h86g'
+target='-p 38413 root@38.80.152.147'
+armed_utc='2026-09-23T00:19:24Z'
+deadline_epoch=1790133564
+minutes=180

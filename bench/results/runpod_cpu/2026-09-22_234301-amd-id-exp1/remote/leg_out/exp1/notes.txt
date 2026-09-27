@@ -1,0 +1,4 @@
+CONDA_PREFIX=/root/mojolearn/.pixi/envs/default
+MODULAR_HOME=/root/mojolearn/.pixi/envs/default/share/max
+Mojo 1.0.0 (ed45d567)
+16

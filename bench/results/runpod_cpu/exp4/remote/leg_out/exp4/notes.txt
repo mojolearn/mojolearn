@@ -1,0 +1,7 @@
+MODULAR_HOME=/root/mojolearn/.pixi/envs/default/share/max
+round 1 342s rc: arima 0 byte_lm 0 core 0 embedding 0 estimators 0 gbdt 0 gp 0 hdbscan 0 ivf 0 kernel_methods 0 linalg 0 mamba 0 metrics 0 mixture 0 preprocessing 0 resample 0 rf 0 solver 0 svm 0 training 0 transformer 0 trees 0 tsa 0 
+round 2 352s rc: arima 0 byte_lm 0 core 0 embedding 0 estimators 0 gbdt 0 gp 0 hdbscan 0 ivf 0 kernel_methods 0 linalg 0 mamba 0 metrics 0 mixture 0 preprocessing 0 resample 0 rf 0 solver 0 svm 0 training 0 transformer 0 trees 0 tsa 0 
+round 3 334s rc: arima 0 byte_lm 0 core 0 embedding 0 estimators 0 gbdt 0 gp 0 hdbscan 0 ivf 0 kernel_methods 0 linalg 0 mamba 0 metrics 0 mixture 0 preprocessing 0 resample 0 rf 0 solver 0 svm 0 training 0 transformer 0 trees 0 tsa 0 
+round 4 333s rc: arima 0 byte_lm 0 core 0 embedding 0 estimators 0 gbdt 0 gp 0 hdbscan 0 ivf 0 kernel_methods 0 linalg 0 mamba 0 metrics 0 mixture 0 preprocessing 0 resample 0 rf 0 solver 0 svm 0 training 0 transformer 0 trees 0 tsa 0 
+round 5 340s rc: arima 0 byte_lm 0 core 0 embedding 0 estimators 0 gbdt 0 gp 0 hdbscan 0 ivf 0 kernel_methods 0 linalg 0 mamba 0 metrics 0 mixture 0 preprocessing 0 resample 0 rf 0 solver 0 svm 0 training 0 transformer 0 trees 0 tsa 0 
+round 6 331s rc: arima 0 byte_lm 0 core 0 embedding 0 estimators 0 gbdt 0 gp 0 hdbscan 0 ivf 0 kernel_methods 0 linalg 0 mamba 0 metrics 0 mixture 0 preprocessing 0 resample 0 rf 0 solver 0 svm 0 training 0 transformer 0 trees 0 tsa 0 

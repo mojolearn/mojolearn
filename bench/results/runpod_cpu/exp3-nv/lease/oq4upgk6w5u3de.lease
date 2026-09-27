@@ -1,0 +1,5 @@
+pod='oq4upgk6w5u3de'
+target='-p 38396 root@157.157.221.29'
+armed_utc='2026-09-23T00:31:54Z'
+deadline_epoch=1790132514
+minutes=150

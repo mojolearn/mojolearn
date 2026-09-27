@@ -1,0 +1,4 @@
+arming a 150-minute self-kill on pod oq4upgk6w5u3de ...
+ARMED. Pod oq4upgk6w5u3de is TERMINATED through the API in 150 minutes.
+  lease: /Users/andrewhendel/mojolearn-wt/amd-gfx942-identity/bench/results/runpod_cpu/exp3-nv/lease/oq4upgk6w5u3de.lease
+  extend with: tools/runpod_guard.sh extend oq4upgk6w5u3de '-p 38396 root@157.157.221.29' <minutes>

@@ -1,0 +1,241 @@
+NAME
+        mojo-build — Builds an executable from a Mojo file.
+
+SYNOPSIS
+        mojo build [options] <path>
+
+DESCRIPTION
+        Compiles the Mojo file at the given path into an executable.
+        
+        By default, the executable is saved to the current directory and named
+        the same as the input file, but without a file extension.
+        
+        Beware that any Python libraries used in your Mojo project are not
+        included in the executable binary, so they must be provided by the
+        environment where you run the executable.
+
+OPTIONS
+    Output options
+        -o <PATH>, -o=
+            Sets the path and filename for the executable output. By default, it
+            outputs the executable to the current directory, with the same name
+            and no extension.
+
+        --emit <FILE_TYPE>, --emit=
+            The type of output file to generate.
+            
+            * `exe` (default): emit an executable binary file.
+            * `shared-lib`: emit a shared (dynamic) library.
+            * `object`: (EXPERIMENTAL) emit a single object file.
+            * `llvm`: emit unoptimized LLVM IR.
+            * `llvm-bitcode`: emit bitcode of unoptimized LLVM IR.
+            * `asm`: emit target assembly. For GPU targets, also emits a
+              sidecar file per kernel alongside the host assembly: `.ptx`
+              for NVIDIA, `.amdgcn` for AMD, `.ll` for Metal.
+
+    Compilation options
+        --optimization-level <LEVEL>, --optimization-level=, -O, --no-optimization (LEVEL=0)
+            Sets the level of optimization to use at compilation. The value must
+            be a number between 0 and 3. The default is 3.
+
+        -I <PATH>
+            Appends the given path to the list of directories to search for
+            imported Mojo files.
+
+        -D <KEY=VALUE>
+            Defines a named value that can be used from within the Mojo source
+            file being executed. For example, `-Dfoo=42` defines a name `foo`
+            that, when queried with the `std.defines` module from within the Mojo
+            program, would yield the compile-time value `42`.
+
+        --debug-level <LEVEL>, --debug-level=, -g (LEVEL=full), -g0 (LEVEL=none), -g1 (LEVEL=line-tables), -g2 (LEVEL=full)
+            Sets the level of debug info to use at compilation. The value must be
+            one of: `none`, `line-tables`, or `full`. Default is `none`, except
+            when using `mojo debug foo.mojo`, which defaults to `full`. Please
+            note that there are issues when generating debug info for some Mojo
+            programs that have yet to be addressed.
+
+        --num-threads <NUM>, --num-threads=, -j
+            Sets the maximum number of threads to use for compilation. The
+            default is 0 (use all available threads).
+
+        --loop-unrolling-warn-threshold <LUWT>, --loop-unrolling-warn-threshold=
+            Sets loop unrolling factor warning threshold, default is 1024, set to
+            0 to disable the warning.
+
+        --elaboration-error-limit <ELABERRORLIMIT>, --elaboration-error-limit=
+            Sets limit to number of produced errors during elaboration before
+            stop emitting diagnostics. The default is 20, and the limit can be
+            disabled with -elaboration-error-limit=0.
+
+        --elaboration-error-include-prelude
+            Show elaboration error with locations in mojo startup modules
+            (prelude).
+
+        --elaboration-error-verbose <ELABERRORVERBOSE>, --elaboration-error-verbose=
+            Controls how parameter values are displayed as part of elaboration
+            errors when function instantiation fails. The default is
+            `simple-params`, which display concretized parameter values for
+            simple types, including numeric types and strings, in a user-friendly
+            format; `no-params` means don't display any concrete parameter
+            values; `all-params` means show all concrete parameter values.
+
+        --elaboration-max-depth <ELABMAXDEPTH>, --elaboration-max-depth=
+            The maximum elaborator instantiation depth. Default is
+            std::numeric_limits<unsigned>::max(). Elaborator errors out if the
+            depth of compile time recursion exceeds this value.
+
+        --fp-mode <MODE>, --fp-mode=
+            Controls floating-point behavior as a comma-separated list of
+            `feature=value` items (may be given more than once). The only feature
+            is `contract`, one of `fast` (default) or `off`. `contract=fast` is
+            like Clang's `-ffp-contract=fast`: it fuses `a + b*c` into an FMA
+            across statements and breaking strict IEEE compliance. `contract=off`
+            disables contraction.
+
+    Target options
+        --target-triple <TRIPLE>, --target-triple=
+            Sets the compilation target triple. Defaults to the host target.
+
+        --target-cpu <CPU>, --target-cpu=
+            Sets the compilation target CPU. Defaults to the host CPU.
+
+        --target-features <FEATURES>, --target-features=
+            Sets the compilation target CPU features. Defaults to the host
+            features.
+
+        --march <ARCHITECTURE>, --march=
+            Sets the architecture for which to generate code.
+
+        --mcpu <CPU>, --mcpu=
+            Sets the CPU for which to generate code.
+
+        --mtune <TUNE>, --mtune=
+            Sets the CPU for which to tune code.
+
+        --target-accelerator <ACCELERATOR>, --target-accelerator=
+            Sets the GPU or accelerator architecture for heterogeneous computing
+            (e.g., sm_90 for NVIDIA H100, gfx942 for AMD MI300).
+
+        --mcmodel <MCMODEL>, --mcmodel=
+            Sets the CodeModel for object file, i.e. small (default), medium or
+            large.
+
+        --large-data-threshold <LDT>, --large-data-threshold=
+            Choose large data threshold for x86_64 medium code model.
+
+        --relocation-model <MODEL>, --relocation-model=
+            Sets the relocation model. Supported values: `static`, `pic`
+            (default), `dynamic-no-pic`, `ropi`, `rwpi`, `ropi-rwpi`.
+
+        --print-effective-target
+            Print the effective target configuration after absorbing all
+            command-line flags and exit.
+
+        --print-supported-targets
+            Print all available target names and exit.
+
+        --print-supported-cpus
+            Print valid CPU names for the specified target and exit. Requires
+            --target-triple.
+
+        --print-supported-accelerators
+            Print all supported GPU and accelerator architectures and exit.
+
+    Compilation diagnostic options
+        Controls how the Mojo compiler outputs diagnostics related to compiling
+        and running Mojo source code.
+
+        --diagnose-missing-doc-strings
+            Emits diagnostics for missing or partial doc strings.
+
+        --max-notes-per-diagnostic <INTEGER>, --max-notes-per-diagnostic=
+            When the Mojo compiler emits diagnostics, it sometimes also prints
+            notes with additional information. This option sets an upper
+            threshold on the number of notes that can be printed with a
+            diagnostic. If not specified, the default maximum is 10.
+
+        -strip-file-prefix <PATH>, -strip-file-prefix=
+            Strip this prefix from filenames used for diagnostics & debugging.
+
+        --disable-builtins
+            Do not use builtins when create package.
+
+        -mojo-search-paths <PATH>
+            Specify additional search paths for Mojo modules.
+
+        --disable-warnings
+            Do not print warning messages.
+
+        --experimental-fixit
+            Automatically apply fix-its to the code, and rerun the command again
+            after the fix-its are applied. WARNING: this feature is highly
+            experimental and may result in irreversible data loss.
+
+        --experimental-export-fixit <YAML_FILE>, --experimental-export-fixit=
+            Export fix-its to a YAML file in clang-tidy format instead of
+            applying them directly. The file can be applied using
+            'clang-apply-replacements'. WARNING: this feature is highly
+            experimental.
+
+        --Werror
+            Treat warnings as errors.
+
+        --Wno-error
+            Do not treat warnings as errors.
+
+        --warn-on-unstable-apis
+            Warn when using unstable APIs from the standard library.
+
+        --ignore-incompatible-precompiled-file-errors
+            Ignore errors encountered when loading incompatible Mojo precompiled
+            files.
+
+        --ignore-deprecated <NAME>, --ignore-deprecated=
+            Suppress the deprecation warning for the given declaration (e.g.
+            `Foo.bar`, or `some_fn` for a top-level declaration).
+
+    Linker options
+        -Xlinker <ARG>, -Xlinker=
+            Pass ARG to the linker.
+
+        --lld-path <PATH>, --lld-path=
+            Overrides the path to the `lld` linker used when linking. Takes
+            precedence over the `MODULAR_MOJO_MAX_LLD_PATH` environment variable
+            and the `mojo-max.lld_path` configuration value.
+
+    Experimental compilation options
+        --sanitize <CHECK>, --sanitize=
+            Turns on runtime checks. The following values are supported:
+            `address` (detects memory issues), and `thread` (detects
+            multi-threading issues).
+
+        --shared-libasan
+            Dynamically link the address sanitizer runtime. Requires address
+            sanitization turned on with `--sanitize` option.
+
+        --external-libasan <FILE>, --external-libasan=
+            Uses the provided file as libasan instead of the default provided by
+            the system. This file must provide a compatible interface as libasan,
+            and must be present at both compile time and run time of the program.
+
+        --bitcode-libs <LIBS>, --bitcode-libs=
+            External bitcode libraries to link into the generated LLVM IR.
+
+        --debug-info-language <LANGUAGE>, --debug-info-language=
+            Sets the language to emit as part of the debug info. The supported
+            languages are: `Mojo`, and `C`. `Mojo` is the default. `C` is useful
+            to enable rudimentary debugging and binary introspection in tools
+            that don't understand Mojo, but is not required for `mojo debug`.
+
+    Common options
+        --diagnostic-format <FORMAT>, --diagnostic-format=
+            The format in which diagnostics and error messages are printed. Must
+            be one of "text" or "json" ("text" is the default).
+
+        --help, -h
+            Displays help information.
+
+        --help-hidden
+            Displays help for hidden options.
+

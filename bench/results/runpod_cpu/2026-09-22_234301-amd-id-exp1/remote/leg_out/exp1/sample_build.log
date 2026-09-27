@@ -1,0 +1,5 @@
+                ^
+Included from /root/mojolearn/bindings/_mojolearn_tsa.mojo:55:
+./bindings/holtwinters_host_predict.mojo:183:19: warning: assignment to 'written' was never used; assign to '_' instead?
+    var written = 0
+                  ^

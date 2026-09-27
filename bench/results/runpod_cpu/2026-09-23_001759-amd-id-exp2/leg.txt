@@ -1,0 +1,6 @@
+lane=amd-id-exp2
+commit=c0eb9d9ec9f400134fefee8cb5704623e024dabf
+dirty_tracked=0
+worktree=/Users/andrewhendel/mojolearn-wt/amd-gfx942-identity
+source=3223	19871424	d7d5798d47cbb961b7ee1f5e7c0959812f0cd396df66414c0a04fe022457f58e
+box_clock_minus_mac=0

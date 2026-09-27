@@ -1,0 +1,6 @@
+lane=amd-id-exp3-nv
+commit=c0eb9d9ec9f400134fefee8cb5704623e024dabf
+dirty_tracked=0
+worktree=/Users/andrewhendel/mojolearn-wt/amd-legs
+source=3223	19870595	d57d68a1e8717310420da5f27d7da34f3810a85cb1f3065dd4136c0d941a2d8b
+box_clock_minus_mac=0

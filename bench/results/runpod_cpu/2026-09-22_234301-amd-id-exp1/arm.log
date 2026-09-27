@@ -1,0 +1,4 @@
+arming a 150-minute self-kill on pod 5smdeno2yw9020 ...
+ARMED. Pod 5smdeno2yw9020 is TERMINATED through the API in 150 minutes.
+  lease: /Users/andrewhendel/mojolearn-wt/amd-gfx942-identity/bench/results/runpod_cpu/2026-09-22_234301-amd-id-exp1/lease/5smdeno2yw9020.lease
+  extend with: tools/runpod_guard.sh extend 5smdeno2yw9020 '-p 34914 root@213.173.105.98' <minutes>

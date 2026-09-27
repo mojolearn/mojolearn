@@ -1,0 +1,13 @@
+Linux 11d947a332fe 6.8.0-101-generic #101-Ubuntu SMP PREEMPT_DYNAMIC Mon Feb  9 10:15:05 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux
+16
+model name	: AMD EPYC 9655 96-Core Processor
+avx2
+PRETTY_NAME="Ubuntu 22.04.5 LTS"
+NAME="Ubuntu"
+VERSION_ID="22.04"
+VERSION="22.04.5 LTS (Jammy Jellyfish)"
+               total        used        free      shared  buff/cache   available
+Mem:             755          73         279           0         401         675
+overlay          40G   84M   40G   1% /
+3.14.7 2.5.2
+Mojo 1.0.0 (ed45d567)
