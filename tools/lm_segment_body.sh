@@ -6,7 +6,7 @@
 # gets no environment from the runner) and mints every URL on the Mac; no
 # credential is in this file or on the box, only presigned URLs.
 #
-#   @ARM@            nvidia | amd
+#   @ARM@            nvidia | amd | apple (a cloud Mac: tools/cloudmac_segment_leg.sh)
 #   @MODE@           one | live-coordinator | live-worker
 #   @DEVICES@        devices for a one-box segment ("0" or "0,1,...")
 #   @ROUTE@ @SEGMENT@ @LABEL@ @STEPS@ @BOUNDARY@   (BOUNDARY "" for none)
@@ -44,8 +44,11 @@ REPLAY_NAME="@REPLAY_NAME@"; REPLAY_SHA="@REPLAY_SHA@"
 LIVE_SHARDS="@LIVE_SHARDS@"; LIVE_WORKERS="@LIVE_WORKERS@"; LIVE_PORT="@LIVE_PORT@"
 RECIPE_SHA="@RECIPE_SHA@"
 WHEEL="@WHEEL@"
-ROOT=/root/mojolearn
-OUT=/root/gemm_leg_out/lm-segment-$ROUTE-$SEGMENT
+# every path the body writes lives under BOX: /root on a rented Linux box, a
+# directory in the login's home on a cloud Mac (macOS has no writable /root)
+BOX=/root; [ "$ARM" = apple ] && BOX="$HOME/lmbox"
+ROOT=$BOX/mojolearn
+OUT=$BOX/gemm_leg_out/lm-segment-$ROUTE-$SEGMENT
 mkdir -p "$OUT"
 cd "$ROOT" || exit 9
 ST="$OUT/status.txt"
@@ -69,6 +72,9 @@ case "$ARM" in
             esac
         fi ;;
     amd) export MOJOLEARN_TARGET_COLUMN=amd; : "${MOJOLEARN_GPU_ARCHS:=gfx942}" ;;
+    # the Metal build names no architecture (bindings/build.sh reads MOJOLEARN_GPU_ARCHS on Linux only)
+    apple) export MOJOLEARN_TARGET_COLUMN=apple; : "${MOJOLEARN_GPU_ARCHS:=metal}"
+           { sysctl -n machdep.cpu.brand_string hw.memsize; sw_vers -productVersion; } > "$OUT/gpu.txt" 2>&1 ;;
     *) say "unknown arm $ARM"; exit 2 ;;
 esac
 export MOJOLEARN_GPU_ARCHS
@@ -86,22 +92,23 @@ if [ -n "$WHEEL" ]; then
         if command -v "$c" > /dev/null 2>&1 && "$c" -c 'import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)' 2>/dev/null; then PYSYS=$(command -v "$c"); break; fi
     done
     [ -n "$PYSYS" ] || { say "no python >= 3.10 on the box"; exit 1; }
-    rm -rf /root/lm-venv
-    "$PYSYS" -m venv /root/lm-venv > "$OUT/venv.log" 2>&1 || { ( apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y python3-venv ) >> "$OUT/venv.log" 2>&1; rm -rf /root/lm-venv; "$PYSYS" -m venv /root/lm-venv >> "$OUT/venv.log" 2>&1; }
-    [ -x /root/lm-venv/bin/pip ] || { say "venv failed; see venv.log"; exit 1; }
+    rm -rf $BOX/lm-venv
+    "$PYSYS" -m venv $BOX/lm-venv > "$OUT/venv.log" 2>&1 || { ( apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y python3-venv ) >> "$OUT/venv.log" 2>&1; rm -rf $BOX/lm-venv; "$PYSYS" -m venv $BOX/lm-venv >> "$OUT/venv.log" 2>&1; }
+    [ -x $BOX/lm-venv/bin/pip ] || { say "venv failed; see venv.log"; exit 1; }
     # a PyPI read timeout once killed a whole segment (B/3, 2026-09-27): retry the install, never the run
     for _try in 1 2 3 4 5; do
-        /root/lm-venv/bin/pip install --disable-pip-version-check --quiet --timeout 120 --retries 10 numpy "mojolearn==$WHEEL" >> "$OUT/pip_install.log" 2>&1; _rc=$?
+        $BOX/lm-venv/bin/pip install --disable-pip-version-check --quiet --timeout 120 --retries 10 numpy "mojolearn==$WHEEL" >> "$OUT/pip_install.log" 2>&1; _rc=$?
         [ "$_rc" -eq 0 ] && break
         say "pip install try $_try exit=$_rc; retrying in 30 s"; sleep 30
     done
     say "pip install mojolearn==$WHEEL exit=$_rc secs=$(( $(date +%s) - _t0 ))"
     [ "$_rc" -eq 0 ] || { say "the wheel did not install; nothing run"; exit 1; }
-    /root/lm-venv/bin/pip freeze > "$OUT/pip_freeze.txt" 2>&1
-    /root/lm-venv/bin/pip download --no-deps --quiet --dest /root/lm-wheel "mojolearn==$WHEEL" > "$OUT/wheel_download.log" 2>&1 && sha256sum /root/lm-wheel/*.whl > "$OUT/wheel.sha256" 2>&1
+    $BOX/lm-venv/bin/pip freeze > "$OUT/pip_freeze.txt" 2>&1
+    rm -rf $BOX/lm-wheel   # a reused box (a cloud Mac) keeps the last attempt's wheel; wheel.sha256 names this one only
+    $BOX/lm-venv/bin/pip download --no-deps --quiet --dest $BOX/lm-wheel "mojolearn==$WHEEL" > "$OUT/wheel_download.log" 2>&1 && sha256sum $BOX/lm-wheel/*.whl > "$OUT/wheel.sha256" 2>&1
     say "wheel: $(cat "$OUT/wheel.sha256" 2>/dev/null | cut -c1-100)"
     unset PYTHONPATH
-    PYBIN=/root/lm-venv/bin/python
+    PYBIN=$BOX/lm-venv/bin/python
     run_py() { "$PYBIN" "$@"; }
 else
     rm -f python/mojolearn/identical/_mojolearn.so python/mojolearn/identical/_mojolearn_byte_lm.so
@@ -125,8 +132,8 @@ say "binding: $(tail -1 "$OUT/binding.txt" | cut -c1-200)"
 cat > "$OUT/tokens_urls.json" <<'TOKENS_URLS'
 @TOKENS_URLS@
 TOKENS_URLS
-if [ -z "$(find /root -name tokens.i32.part00 -o -name tokens.i32 2>/dev/null | head -1)" ] && [ "$(head -c 1 "$OUT/tokens_urls.json")" = "{" ]; then
-    _td=/root/tokens_stream; mkdir -p "$_td"
+if [ -z "$(find $BOX -name tokens.i32.part00 -o -name tokens.i32 2>/dev/null | head -1)" ] && [ "$(head -c 1 "$OUT/tokens_urls.json")" = "{" ]; then
+    _td=$BOX/tokens_stream; mkdir -p "$_td"
     _t0=$(date +%s)
     # every part at once, each with its own time limit and retries: a single
     # stalled transfer once held a pod for two hours (T2 segment 3, attempt 2)
@@ -182,7 +189,7 @@ sys.exit(0 if all(c == 0 for c in codes) else 1)
 PY
     say "tokens fetched by URL exit=$? secs=$(( $(date +%s) - _t0 ))"
 fi
-TOK=$(dirname "$(find /root -name tokens.i32.part00 2>/dev/null | head -1)")
+TOK=$(dirname "$(find $BOX -name tokens.i32.part00 2>/dev/null | head -1)")
 if [ -n "$TOK" ] && [ -f "$TOK/manifest.json" ]; then
     if [ ! -f "$TOK/tokens.i32" ]; then
         _t0=$(date +%s)
@@ -191,8 +198,8 @@ if [ -n "$TOK" ] && [ -f "$TOK/manifest.json" ]; then
         rm -f "$TOK"/tokens.i32.part??
     fi
 else
-    TOK=$(dirname "$(find /root -name tokens.i32 2>/dev/null | head -1)")
-    [ -f "$TOK/manifest.json" ] || { say "no staged token stream with a manifest under /root"; exit 3; }
+    TOK=$(dirname "$(find $BOX -name tokens.i32 2>/dev/null | head -1)")
+    [ -f "$TOK/manifest.json" ] || { say "no staged token stream with a manifest under $BOX"; exit 3; }
 fi
 say "tokens=$TOK"
 
@@ -248,7 +255,7 @@ fi
 
 # ---- ready: everything fetched, the arrival replay passed; a live coordinator
 # starts listening a few seconds after this mark, a live worker waits for it ----
-touch /root/lm_segment_ready
+touch $BOX/lm_segment_ready
 say "ready"
 
 # ---- the segment ----
@@ -267,9 +274,9 @@ case "$MODE" in
             --live-role coordinator --live-shards "$LIVE_SHARDS" --live-workers "$LIVE_WORKERS" --live-port "$LIVE_PORT" --live-timeout 5400 ;;
     live-worker)
         _w=0
-        while [ ! -f /root/live_peer.txt ] && [ "$_w" -lt 3600 ]; do sleep 5; _w=$(( _w + 5 )); done
-        [ -f /root/live_peer.txt ] || { say "no peer address after ${_w}s; the worker never ran"; exit 6; }
-        read -r _host _port < /root/live_peer.txt
+        while [ ! -f $BOX/live_peer.txt ] && [ "$_w" -lt 3600 ]; do sleep 5; _w=$(( _w + 5 )); done
+        [ -f $BOX/live_peer.txt ] || { say "no peer address after ${_w}s; the worker never ran"; exit 6; }
+        read -r _host _port < $BOX/live_peer.txt
         say "peer $_host:$_port after ${_w}s"
         # shellcheck disable=SC2086
         run segment --from "$OUT/in/$FROM_NAME" --steps "$STEPS" --devices "${DEVICES%%,*}" --route "$ROUTE" --segment "$SEGMENT" $EXPECT \
@@ -279,5 +286,5 @@ esac
 sha256sum "$OUT"/segment/ckpt_*.blm > "$OUT/checkpoints.sha256" 2>/dev/null
 rm -f "$OUT"/segment/ckpt_*.blm "$OUT/in/$FROM_NAME"   # 1.95 GB each; pinned in the manifest and in R2, never fetched home
 say "finished=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-touch /root/lm_segment_done
+touch $BOX/lm_segment_done
 exit 0

@@ -63,6 +63,8 @@ def tokens_urls(group, seconds):
 
 def render(args):
     from lm_segment import PROGRESS_KEYS, expected_keys, load_recipe
+    if args.arm == "apple" and args.mode != "one":
+        raise SystemExit("--arm apple runs one-box segments only (no live mode on a cloud Mac)")
     recipe = load_recipe(args.recipe)
     recipe_sha = hashlib.sha256(Path(args.recipe).read_bytes()).hexdigest()
     run = args.run.rstrip("/")
@@ -183,7 +185,7 @@ def main(argv=None):
     r.add_argument("--run", required=True, help="the run's R2 prefix, e.g. runs/gpt3-small/2026-09-25")
     r.add_argument("--recipe", required=True, help="the local recipe.json (its R2 copy is --recipe-key)")
     r.add_argument("--recipe-key", default=None, help="R2 key of the recipe (default <run>/recipe.json)")
-    r.add_argument("--arm", choices=("nvidia", "amd"), required=True)
+    r.add_argument("--arm", choices=("nvidia", "amd", "apple"), required=True, help="apple: a cloud Mac (tools/cloudmac_segment_leg.sh), one-box only")
     r.add_argument("--mode", choices=("one", "live-coordinator", "live-worker"), default="one")
     r.add_argument("--devices", default="0")
     r.add_argument("--route", required=True)

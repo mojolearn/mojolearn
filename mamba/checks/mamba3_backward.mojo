@@ -2,6 +2,7 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """Routing, workspace sizing, and topology declarations for Mamba-3 backward."""
 
+from checks.numerics import identical_mul
 from max.gpu.host import DeviceBuffer, DeviceContext
 from std.sys.compile import is_defined
 
@@ -641,7 +642,7 @@ def mamba3_backward_declarations() -> String:
     s = s + " +0.0, UNFUSED, coefficient structurally 1; NO DECODE BACKWARD\n"
     s = s + "1368 trapezoid shifted leg: a GATHER, boundary terms +0.0\n"
     s = s + "1369 heavy_tail': branch on dd_A's SIGN; left branch is"
-    s = s + " pinned_mul(hv, hv) off the carded A.out\n"
+    s = s + " identical_mul(hv, hv) off the carded A.out\n"
     s = s + "1370 mod2pi': a STRUCTURAL COPY, no float operation\n"
     s = s + "1371 join rule: ASCENDING SEAM ORDER, left-associated, "
     s = s + String(B3_JOIN_SITES) + " sites (ddt FOUR-way, dv THREE-way),"

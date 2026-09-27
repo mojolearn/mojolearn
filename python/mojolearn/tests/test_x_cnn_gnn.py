@@ -165,3 +165,40 @@ def test_max_reference_matches_torch():
     zz = yy / den
     np.testing.assert_allclose(z.detach().numpy(), zz, atol=1e-12)
     np.testing.assert_allclose(y.grad.numpy(), (g2 - zz * (g2 * zz).sum(1, keepdims=True)) / den, atol=1e-12)
+
+
+@pytest.mark.parametrize("aggr", ["mean", "max"])
+def test_sage_project(aggr):
+    """project=True (PyG sage_conv.py): x_j -> relu(lin(x_j)) before the
+    aggregation; the root term lin_r keeps the unprojected x_i."""
+    import mojolearn as ml
+    rng = np.random.default_rng(9)
+    n = 30
+    x = rng.standard_normal((n, 5)).astype(np.float32)
+    ei = _graph(n, 10)
+    conv = ml.SAGEConv(5, 4, aggr=aggr, project=True, random_state=11)
+    y = conv.forward(x, ei)
+    g = rng.standard_normal(y.shape).astype(np.float32)
+    dx = conv.backward(g)
+    Wp, bp = conv.lin.weight_.astype(np.float64), conv.lin.bias_.astype(np.float64)
+    Wl, bl, Wr = conv.lin_l.weight_, conv.lin_l.bias_, conv.weight_r_
+    x64, g64 = x.astype(np.float64), g.astype(np.float64)
+    h = x64 @ Wp.T + bp
+    p = np.maximum(h, 0)
+    src, dst = ei
+    if aggr == "mean":
+        A = np.zeros((n, n))
+        np.add.at(A, (dst, src), 1.0)
+        deg = A.sum(1, keepdims=True)
+        A = np.where(deg > 0, A / np.maximum(deg, 1), 0)
+        agg = A @ p
+        dp = A.T @ (g64 @ Wl)
+    else:
+        # the max reference with identity lin_l/lin_r gives agg and d(agg)->dp
+        agg, _ = ref_sage_max_norm(p, ei, np.eye(5), np.zeros(5), np.zeros((5, 5)), False, np.zeros((n, 5)))
+        _, dp = ref_sage_max_norm(p, ei, np.eye(5), np.zeros(5), np.zeros((5, 5)), False, g64 @ Wl)
+    ry = agg @ Wl.T + bl + x64 @ Wr.T
+    rdx = (dp * (h > 0)) @ Wp + g64 @ Wr
+    np.testing.assert_allclose(y, ry, rtol=1e-5, atol=1e-5)
+    np.testing.assert_allclose(dx, rdx, rtol=1e-4, atol=1e-5)
+    np.testing.assert_allclose(conv.lin.grad_weight_, (dp * (h > 0)).T @ x64, rtol=1e-4, atol=1e-5)
