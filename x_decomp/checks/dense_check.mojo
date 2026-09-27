@@ -7,7 +7,7 @@ two-pass modified Gram-Schmidt (5309).
     tools/with_identical_mode.sh pixi run mojo run -I . x_decomp/checks/dense_check.mojo
 """
 from core.identity_trace import IdentityTrace
-from x_decomp.checks.xd_oracles import oracle_chol, oracle_lu, oracle_lu_solve, oracle_orth
+from x_decomp.checks.xd_oracles import oracle_chol, oracle_lu, oracle_lu_solve, oracle_lu_solve_t, oracle_orth
 from x_decomp.checks.seam_util import (
     count_diff_f32,
     count_diff_i32,
@@ -93,6 +93,15 @@ def main() raises:
     HostExec.lu_solve(ptr(got_o[0]), iptr(got_o[1]), ptr(xh), n, nrhs)
     same("5308 lu_solve host", count_diff_f32(xh, want))
     tr.record_list_f32("x_decomp.lu_solve", xd)
+    var want_t = oracle_lu_solve_t(got_o[0], got_o[1], bsrc, n, nrhs)
+    require_separates("5308 getrs 'T' substitution order", count_diff_f32(want_t, oracle_lu_solve_t(got_o[0], got_o[1], bsrc, n, nrhs, 1)))
+    var xtd = bsrc.copy()
+    DevExec.lu_solve(ptr(got_o[0]), iptr(got_o[1]), ptr(xtd), n, nrhs, 1)
+    same("5308 lu_solve trans device", count_diff_f32(xtd, want_t))
+    var xth = bsrc.copy()
+    HostExec.lu_solve(ptr(got_o[0]), iptr(got_o[1]), ptr(xth), n, nrhs, 1)
+    same("5308 lu_solve trans host", count_diff_f32(xth, want_t))
+    tr.record_list_f32("x_decomp.lu_solve_t", xtd)
     var ns = 11
     var g = spd(ns)
     var wl = oracle_chol(g, ns)

@@ -757,86 +757,85 @@ def main(out=sys.stdout):
     rep.bits_equal(arm, st_rt.v_cache, sts.v_cache,
                    "and lands the same value ring", assert_bits)
 
-    # -- BACKWARD: the zero-state prefill VJP, IDENTICAL tier only --------
+    # -- BACKWARD: the zero-state prefill VJP, IDENTICAL and FAST ---------
+    # (lane neural, 2026-09-27: FAST runs the same chains with the pins on the
+    # free schedule; it is held to the same float64 oracle tolerance, and the
+    # run-to-run byte check is IDENTICAL's alone).
     arm = "BACKWARD (float64 analytic oracle; %s tier)" % mode
-    if mode != "identical":
-        rep.raises(arm, NotImplementedError, "IDENTICAL",
-                   "backward is refused by name outside the identical tier",
-                   blk.backward, xa, xa)
-    else:
-        rng_b = np.random.default_rng(0x42776421)
-        # The float64 oracle checked against itself by central differences
-        # on a handful of coordinates BEFORE it judges the device.
-        xb_ = _uniform(rng_b, (1, 3, A_DM), -1.0, 1.0).astype(np.float64)
-        dyb_ = _uniform(rng_b, (1, 3, A_DM), -1.0, 1.0).astype(np.float64)
-        ref_g = _ref_block_grads(wa, xb_, dyb_, A_NH, A_NKV, A_HD, W_WIN)
-        worst_fd = 0.0
-        eps = 1e-6
-        for (idx) in [(0, 0, 3), (0, 1, 17), (0, 2, 30)]:
-            xp = xb_.copy(); xp[idx] += eps
-            xm = xb_.copy(); xm[idx] -= eps
-            fd = (np.sum(_ref_block(wa, xp, A_NH, A_NKV, A_HD, W_WIN) * dyb_)
-                  - np.sum(_ref_block(wa, xm, A_NH, A_NKV, A_HD, W_WIN)
-                           * dyb_)) / (2 * eps)
-            worst_fd = max(worst_fd, abs(fd - ref_g["x"][idx])
-                           / (1e-6 + abs(fd)))
-        for name, idx in [("q_proj.weight", (5, 7)),
-                          ("down_proj.weight", (2, 40)),
-                          ("input_layernorm.weight", (9,))]:
-            wp = dict(wa); a64 = wa[name].astype(np.float64).copy()
-            a64[idx] += eps; wp[name] = a64
-            wm = dict(wa); b64 = wa[name].astype(np.float64).copy()
-            b64[idx] -= eps; wm[name] = b64
-            fd = (np.sum(_ref_block(wp, xb_, A_NH, A_NKV, A_HD, W_WIN) * dyb_)
-                  - np.sum(_ref_block(wm, xb_, A_NH, A_NKV, A_HD, W_WIN)
-                           * dyb_)) / (2 * eps)
-            worst_fd = max(worst_fd, abs(fd - ref_g[name][idx])
-                           / (1e-6 + abs(fd)))
-        rep.check(arm, worst_fd < 1e-5,
-                  "the float64 oracle agrees with central differences on "
-                  "6 coordinates (worst rel %.2e)" % worst_fd,
-                  "worst rel %.3e" % worst_fd)
-        for win in (0, W_WIN):
-            blk_g = TransformerBlock(wa, n_heads=A_NH, n_kv_heads=A_NKV,
-                                     window=win)
-            xg = _uniform(rng_b, (BATCH, W_L, A_DM), -2.0, 2.0)
-            dyg = _uniform(rng_b, (BATCH, W_L, A_DM), -1.0, 1.0)
-            got = blk_g.backward(xg, dyg)
-            want = _ref_block_grads(wa, xg, dyg, A_NH, A_NKV, A_HD, win)
-            rep.check(arm, set(got) == set(want),
-                      "window %d: the gradient dict carries x and the nine "
-                      "weights" % win)
-            for name in ("x",) + TransformerBlock._W_NAMES:
-                # `np.asarray` FIRST: the gradients come back as
-                # `mojolearn.Array`, whose `dtype` is the typestr `'<f4'`, so
-                # `got[name].dtype == np.float32` was False for every
-                # gradient and this check reported a failure it did not have.
-                # The conversion is zero-copy through `__array_interface__`.
-                _g = np.asarray(got[name])
-                rep.check(arm, _g.shape == np.asarray(want[name]).shape
-                          and _g.dtype == np.float32,
-                          "window %d: %s gradient has its argument's shape, "
-                          "float32" % (win, name))
-                rep.close(arm, got[name], want[name],
-                          "window %d: d%s matches the float64 oracle "
-                          "(rtol 1e-4, atol 1e-5)" % (win, name),
-                          rtol=1e-4, atol=1e-5)
-            got2 = blk_g.backward(xg, dyg)
-            # `Array` has no `.view()` (NUMPY_FREE_CONTRACT.md: "Public
-            # surface, and nothing else"), so the reinterpret goes through a
-            # zero-copy `np.asarray` the way `bits_equal` above already does.
-            same = all(np.array_equal(np.asarray(got[n]).view(np.uint32),
-                                      np.asarray(got2[n]).view(np.uint32))
-                       for n in got)
+    rng_b = np.random.default_rng(0x42776421)
+    # The float64 oracle checked against itself by central differences
+    # on a handful of coordinates BEFORE it judges the device.
+    xb_ = _uniform(rng_b, (1, 3, A_DM), -1.0, 1.0).astype(np.float64)
+    dyb_ = _uniform(rng_b, (1, 3, A_DM), -1.0, 1.0).astype(np.float64)
+    ref_g = _ref_block_grads(wa, xb_, dyb_, A_NH, A_NKV, A_HD, W_WIN)
+    worst_fd = 0.0
+    eps = 1e-6
+    for (idx) in [(0, 0, 3), (0, 1, 17), (0, 2, 30)]:
+        xp = xb_.copy(); xp[idx] += eps
+        xm = xb_.copy(); xm[idx] -= eps
+        fd = (np.sum(_ref_block(wa, xp, A_NH, A_NKV, A_HD, W_WIN) * dyb_)
+              - np.sum(_ref_block(wa, xm, A_NH, A_NKV, A_HD, W_WIN)
+                       * dyb_)) / (2 * eps)
+        worst_fd = max(worst_fd, abs(fd - ref_g["x"][idx])
+                       / (1e-6 + abs(fd)))
+    for name, idx in [("q_proj.weight", (5, 7)),
+                      ("down_proj.weight", (2, 40)),
+                      ("input_layernorm.weight", (9,))]:
+        wp = dict(wa); a64 = wa[name].astype(np.float64).copy()
+        a64[idx] += eps; wp[name] = a64
+        wm = dict(wa); b64 = wa[name].astype(np.float64).copy()
+        b64[idx] -= eps; wm[name] = b64
+        fd = (np.sum(_ref_block(wp, xb_, A_NH, A_NKV, A_HD, W_WIN) * dyb_)
+              - np.sum(_ref_block(wm, xb_, A_NH, A_NKV, A_HD, W_WIN)
+                       * dyb_)) / (2 * eps)
+        worst_fd = max(worst_fd, abs(fd - ref_g[name][idx])
+                       / (1e-6 + abs(fd)))
+    rep.check(arm, worst_fd < 1e-5,
+              "the float64 oracle agrees with central differences on "
+              "6 coordinates (worst rel %.2e)" % worst_fd,
+              "worst rel %.3e" % worst_fd)
+    for win in (0, W_WIN):
+        blk_g = TransformerBlock(wa, n_heads=A_NH, n_kv_heads=A_NKV,
+                                 window=win)
+        xg = _uniform(rng_b, (BATCH, W_L, A_DM), -2.0, 2.0)
+        dyg = _uniform(rng_b, (BATCH, W_L, A_DM), -1.0, 1.0)
+        got = blk_g.backward(xg, dyg)
+        want = _ref_block_grads(wa, xg, dyg, A_NH, A_NKV, A_HD, win)
+        rep.check(arm, set(got) == set(want),
+                  "window %d: the gradient dict carries x and the nine "
+                  "weights" % win)
+        for name in ("x",) + TransformerBlock._W_NAMES:
+            # `np.asarray` FIRST: the gradients come back as
+            # `mojolearn.Array`, whose `dtype` is the typestr `'<f4'`, so
+            # `got[name].dtype == np.float32` was False for every
+            # gradient and this check reported a failure it did not have.
+            # The conversion is zero-copy through `__array_interface__`.
+            _g = np.asarray(got[name])
+            rep.check(arm, _g.shape == np.asarray(want[name]).shape
+                      and _g.dtype == np.float32,
+                      "window %d: %s gradient has its argument's shape, "
+                      "float32" % (win, name))
+            rep.close(arm, got[name], want[name],
+                      "window %d: d%s matches the float64 oracle "
+                      "(rtol 1e-4, atol 1e-5)" % (win, name),
+                      rtol=1e-4, atol=1e-5)
+        got2 = blk_g.backward(xg, dyg)
+        # `Array` has no `.view()` (NUMPY_FREE_CONTRACT.md: "Public
+        # surface, and nothing else"), so the reinterpret goes through a
+        # zero-copy `np.asarray` the way `bits_equal` above already does.
+        same = all(np.array_equal(np.asarray(got[n]).view(np.uint32),
+                                  np.asarray(got2[n]).view(np.uint32))
+                   for n in got)
+        if mode == "identical":
             rep.check(arm, same,
                       "window %d: two backward calls are byte-identical on "
                       "all ten gradients" % win)
-        rep.raises(arm, ValueError, "grad_output",
-                   "a grad_output of the wrong shape is refused by name",
-                   blk.backward, xa, xa[:, :1, :])
-        rep.raises(arm, TypeError, "float64",
-                   "a float64 grad_output is refused by name",
-                   blk.backward, xa, xa.astype(np.float64))
+    rep.raises(arm, ValueError, "grad_output",
+               "a grad_output of the wrong shape is refused by name",
+               blk.backward, xa, xa[:, :1, :])
+    rep.raises(arm, TypeError, "float64",
+               "a float64 grad_output is refused by name",
+               blk.backward, xa, xa.astype(np.float64))
 
     # -- THE CORPUS DEBT (recorded, cannot rot -- header) ----------------
     arm = "CORPUS DEBT (transformer/corpus)"

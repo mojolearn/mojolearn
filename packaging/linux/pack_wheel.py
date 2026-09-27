@@ -198,10 +198,13 @@ FAST_CLASSICAL_NAMES = (
     "_mojolearn_linalg", "_mojolearn_arima", "_mojolearn_gp",
     "_mojolearn_kernel_methods", "_mojolearn_mixture", "_mojolearn_hdbscan",
     "_mojolearn_resample", "_mojolearn_ivf",
-)
-IDENTICAL_ONLY_NAMES = (
+    # THE NEURAL BLOCKS (lane neural, 2026-09-27): fast and identical too.
     "_mojolearn_training", "_mojolearn_mamba",
     "_mojolearn_transformer", "_mojolearn_embedding",
+)
+#: Empty since the neural blocks gained FAST (lane neural, 2026-09-27); the
+#: optional byte LM is added by `tier_names(include_byte_lm=True)`.
+IDENTICAL_ONLY_NAMES = (
 )
 TIERS = ("fast", "deterministic", "identical")
 

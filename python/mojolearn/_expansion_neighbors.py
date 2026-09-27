@@ -40,9 +40,53 @@ _KERNELS = {"linear": 0, "poly": 1, "polynomial": 1, "rbf": 2, "sigmoid": 3, "la
 _U_EXP, _U_LOG, _U_SQRT, _U_TANH, _U_COS, _U_SIN, _U_IDENTITY, _U_RECIP = range(8)
 
 
+def _dense(X):
+    """A scipy.sparse matrix densified (an exact copy: the implicit entries are
+    zeros), anything else unchanged. Every x_neighbors primitive is dense, so a
+    sparse input takes the same path, with the same bits, as its dense twin."""
+    if hasattr(X, "toarray") and hasattr(X, "nnz") and hasattr(X, "tocsr"):
+        return X.toarray()
+    return X
+
+
 def _f32(X, name="X"):
-    a, _ = as_f32_c(X, ndim=2, name=name)
+    a, _ = as_f32_c(_dense(X), ndim=2, name=name)
     return a
+
+
+def _feature_names_in(est, input_features):
+    d = est.n_features_in_
+    if input_features is None:
+        return [f"x{i}" for i in range(d)]
+    names = [str(v) for v in input_features]
+    if len(names) != d:
+        raise ValueError(f"input_features should have length equal to number of features ({d}), got {len(names)}")
+    return names
+
+
+def _names_out(names):
+    """sklearn returns an object ndarray of str; an Array holds numbers only,
+    so the names come back as a list of str, in the same order."""
+    return list(names)
+
+
+def _prefixed_names(est, count):
+    """sklearn's ClassNamePrefixFeaturesOutMixin: `<classname lower><i>`."""
+    base = type(est).__name__.lower()
+    return _names_out([f"{base}{i}" for i in range(count)])
+
+
+def _accuracy(y_true, y_pred, sample_weight=None):
+    """sklearn's accuracy_score: the (weighted) fraction of exact label matches,
+    in IEEE double on labels compared exactly."""
+    t = y_true.tolist() if hasattr(y_true, "tolist") else list(y_true)
+    p = y_pred.tolist() if hasattr(y_pred, "tolist") else list(y_pred)
+    if len(t) != len(p):
+        raise ValueError("y_true and y_pred have different lengths")
+    if sample_weight is None:
+        return math.fsum(1.0 for a, b in zip(t, p) if a == b) / len(t)
+    w = [float(v) for v in (sample_weight.tolist() if hasattr(sample_weight, "tolist") else sample_weight)]
+    return math.fsum(wi for a, b, wi in zip(t, p, w) if a == b) / math.fsum(w)
 
 
 def _f32_1d(x, name):
@@ -288,9 +332,10 @@ class NearestCentroid(_XNeighbors):
     `class_prior_` ('uniform', 'empirical' or given), `predict` (the nearest
     centroid when the priors are uniform, else the discriminant),
     `decision_function` and `predict_proba` (euclidean only, as theirs).
-    Sparse input is not implemented. Float32 where sklearn is float64.
-    DEVIATION 5201: a feature whose shrink scale m*s is zero gets deviation 0
-    where theirs divides by zero.
+    `deviations_`, `predict_log_proba` (their log-softmax of the
+    discriminant) and `score`. Sparse input is densified (the same values).
+    Float32 where sklearn is float64. DEVIATION 5201: a feature whose shrink
+    scale m*s is zero gets deviation 0 where theirs divides by zero.
     """
 
     def __init__(self, metric="euclidean", *, shrink_threshold=None, priors="uniform"):
@@ -339,6 +384,7 @@ class NearestCentroid(_XNeighbors):
             cent = Array.from_list(med, "<f4")
         stats = empty((d,), "<f4")
         new_cent = empty((C, d), "<f4")
+        devs = empty((C, d), "<f4")
         self._op("nc_std", [(X, 0), (lab, 0), (cent, 0), (stats, 1)], (n, d, C))
         std = stats.tolist()
         if all(v == 0.0 for v in std) and self._ptp_zero(X):
@@ -347,9 +393,10 @@ class NearestCentroid(_XNeighbors):
         med_std = _f32_scalar(_median(std_sorted))
         nk = Array.from_list([float(c) for c in counts], "<f4")
         shrink = float(self.shrink_threshold) if self.shrink_threshold else 0.0
-        self._op("nc_shrink", [(X, 0), (cent, 0), (nk, 0), (stats, 0), (new_cent, 1)],
+        self._op("nc_shrink", [(X, 0), (cent, 0), (nk, 0), (stats, 0), (new_cent, 1), (devs, 1)],
                  (n, d, C, 1 if shrink else 0), (med_std, shrink))
         self.centroids_ = new_cent
+        self.deviations_ = devs
         self.within_class_std_dev_ = stats
         self.classes_ = classes
         self._codes_classes = classes
@@ -391,6 +438,15 @@ class NearestCentroid(_XNeighbors):
         self._op("softmax", [(dec, 0), (out, 1)], dec.shape)
         return out
 
+    def predict_log_proba(self, X):
+        dec = self.decision_function(X)
+        out = empty(dec.shape, "<f4")
+        self._op("log_softmax", [(dec, 0), (out, 1)], dec.shape)
+        return out
+
+    def score(self, X, y, sample_weight=None):
+        return _accuracy(y, self.predict(X), sample_weight)
+
 
 def _median(vals):
     v = sorted(vals)
@@ -429,7 +485,11 @@ class OneClassSVM(_XNeighbors):
     in float32 with the pinned spellings (DEVIATION 5200; libsvm is double).
     `shrinking` and `cache_size` are accepted and change nothing (no
     shrinking, the whole kernel matrix is formed). max_iter=-1 caps at
-    10_000_000 iterations. kernel='precomputed' and callables are refused.
+    10_000_000 iterations. `sample_weight` is libsvm's per-sample bound C_i
+    (samples of weight 0 are dropped first, as libsvm's remove_zero_weight;
+    `support_` indexes the caller's rows). kernel='precomputed' takes the
+    n x n Gram matrix at fit and the n_test x n_train one after. Callable
+    kernels are refused (a user arithmetic outside the pinned items).
     """
 
     def __init__(self, *, kernel="rbf", degree=3, gamma="scale", coef0=0.0, tol=1e-3, nu=0.5,
@@ -446,33 +506,64 @@ class OneClassSVM(_XNeighbors):
         self.max_iter = max_iter
 
     def fit(self, X, y=None, sample_weight=None):
-        if sample_weight is not None:
-            raise NotImplementedError("OneClassSVM: sample_weight is not implemented")
-        if self.kernel not in ("linear", "poly", "rbf", "sigmoid"):
+        if callable(self.kernel) or self.kernel not in ("linear", "poly", "rbf", "sigmoid", "precomputed"):
             raise NotImplementedError(f"OneClassSVM: kernel={self.kernel!r} is not implemented")
         if not (0.0 < float(self.nu) <= 1.0):
             raise ValueError("nu must be in (0, 1]")
         X = _f32(X)
         n, d = X.shape
-        self._gamma = _f32_scalar(_resolve_gamma(self.gamma, self.kernel, X, self))
-        Q = self._kernel(X, X, self.kernel, self._gamma, self.coef0, self.degree)
-        nl = float(self.nu) * n
-        whole = int(math.floor(nl))
-        init = [1.0] * min(whole, n) + [0.0] * (n - min(whole, n))
-        if whole < n:
-            init[whole] = nl - whole
+        if self.kernel == "precomputed" and n != d:
+            raise ValueError("Precomputed matrix must be a square matrix.")
+        if sample_weight is None:
+            rows = list(range(n))
+            cvals = [1.0] * n
+        else:
+            w = [float(v) for v in (sample_weight.tolist() if hasattr(sample_weight, "tolist") else sample_weight)]
+            if len(w) != n:
+                raise ValueError("sample_weight and X have different numbers of samples")
+            if any(v < 0 for v in w):
+                raise ValueError("negative sample_weight is not supported")
+            rows = [i for i in range(n) if w[i] > 0]
+            if not rows:
+                raise ValueError("Invalid input - all samples have zero or negative weights.")
+            cvals = [w[i] for i in rows]
+        m = len(rows)
+        if self.kernel == "precomputed":
+            self._gamma = 0.0
+            Q = X if m == n else self._take_cols(self._take_rows(X, rows), rows)
+        else:
+            self._gamma = _f32_scalar(_resolve_gamma(self.gamma, self.kernel, X, self))
+            Xw = X if m == n else self._take_rows(X, rows)
+            Q = self._kernel(Xw, Xw, self.kernel, self._gamma, self.coef0, self.degree)
+        cv = Array.from_list(cvals, "<f4")
+        cf = cv.tolist()                                  # libsvm's C_i as the solver sees them
+        nl = float(self.nu) * m                            # solve_one_class: nu_l = sum(C_i * nu) ...
+        if sample_weight is not None:                      # ... accumulated in sample order, in double
+            nl = 0.0
+            for c in cf:
+                nl += c * float(self.nu)
+        init = [0.0] * m
+        i = 0
+        while nl > 0 and i < m:
+            init[i] = min(cf[i], nl)
+            nl -= init[i]
+            i += 1
         alpha = Array.from_list(init, "<f4")
         info = empty((1,), "<f4")
         iters = empty((1,), "<i4")
         cap = 10_000_000 if int(self.max_iter) < 0 else int(self.max_iter)
-        self._op("ocsvm", [(Q, 0), (alpha, 1), (info, 1), (iters, 1)], (n, cap), (_f32_scalar(self.tol),), )
+        self._op("ocsvm", [(Q, 0), (cv, 0), (alpha, 1), (info, 1), (iters, 1)], (m, cap), (_f32_scalar(self.tol),), )
         # the op's scalar order is (n, eps, max_iter): ints (n, max_iter), floats (eps,)
         rho = info.tolist()[0]
         a = alpha.tolist()
-        support = [i for i in range(n) if a[i] > 0]
+        local = [i for i in range(m) if a[i] > 0]
+        support = [rows[i] for i in local]
         self.support_ = Array.from_list(support, "<i4")
-        self.support_vectors_ = self._take_rows(X, support)
-        self.dual_coef_ = Array.from_list([[a[i] for i in support]], "<f4")
+        if self.kernel == "precomputed":
+            self.support_vectors_ = Array.from_list([[] for _ in support], "<f4") if support else empty((0, 0), "<f4")
+        else:
+            self.support_vectors_ = self._take_rows(X, support)
+        self.dual_coef_ = Array.from_list([[a[i] for i in local]], "<f4")
         self.intercept_ = Array.from_list([-rho], "<f4")
         self.offset_ = rho
         self.n_iter_ = iters.tolist()[0]
@@ -482,7 +573,10 @@ class OneClassSVM(_XNeighbors):
 
     def score_samples(self, X):
         Q = _f32(X)
-        K = self._kernel(Q, self.support_vectors_, self.kernel, self._gamma, self.coef0, self.degree)
+        if self.kernel == "precomputed":
+            K = self._take_cols(Q, self.support_.tolist())
+        else:
+            K = self._kernel(Q, self.support_vectors_, self.kernel, self._gamma, self.coef0, self.degree)
         coef = Array.from_list([[v] for v in self.dual_coef_.tolist()[0]], "<f4")
         s = self._matmul(K, coef)
         return s.reshape((Q.shape[0],))
@@ -510,13 +604,13 @@ class KernelPCA(_XNeighbors):
     eigenvalues: the higher solver index first, as their reversed argsort),
     zero components removed when n_components is None or remove_zero_eig.
     Every eigen_solver is served by the dense solve (DEVIATION 5202: arpack
-    and randomized are approximations of it); fit_inverse_transform,
-    kernel='precomputed' and callables are refused by name.
+    and randomized are approximations of it). kernel='precomputed' takes the
+    Gram matrix; fit_inverse_transform and callables are refused by name.
     """
 
     def __init__(self, n_components=None, *, kernel="linear", gamma=None, degree=3, coef0=1,
                  kernel_params=None, alpha=1.0, fit_inverse_transform=False, eigen_solver="auto",
-                 tol=0, max_iter=None, iterative_power="auto", remove_zero_eig=False,
+                 tol=0, max_iter=None, iterated_power="auto", remove_zero_eig=False,
                  random_state=None, copy_X=True, n_jobs=None):
         self.n_components = n_components
         self.kernel = kernel
@@ -529,17 +623,19 @@ class KernelPCA(_XNeighbors):
         self.eigen_solver = eigen_solver
         self.tol = tol
         self.max_iter = max_iter
-        self.iterative_power = iterative_power
+        self.iterated_power = iterated_power
         self.remove_zero_eig = remove_zero_eig
         self.random_state = random_state
         self.copy_X = copy_X
         self.n_jobs = n_jobs
 
     def _k(self, A, B):
+        if self.kernel == "precomputed":
+            return A
         return self._kernel(A, B, self.kernel, self._gamma, self.coef0, self.degree)
 
     def fit(self, X, y=None):
-        if self.kernel not in _KERNELS:
+        if callable(self.kernel) or (self.kernel not in _KERNELS and self.kernel != "precomputed"):
             raise NotImplementedError(f"KernelPCA: kernel={self.kernel!r} is not implemented")
         if self.fit_inverse_transform:
             raise NotImplementedError("KernelPCA: fit_inverse_transform is not implemented")
@@ -547,6 +643,8 @@ class KernelPCA(_XNeighbors):
             raise NotImplementedError("KernelPCA: kernel_params is not implemented")
         X = _f32(X)
         n, d = X.shape
+        if self.kernel == "precomputed" and n != d:
+            raise ValueError("Precomputed matrix must be a square matrix.")
         self._gamma = _f32_scalar(1.0 / d if self.gamma is None else float(self.gamma))
         K = self._k(X, X)
         cols = self._scale_div(self._colsum(K), float(n))              # K_fit_rows_
@@ -595,6 +693,9 @@ class KernelPCA(_XNeighbors):
     def inverse_transform(self, X):
         raise NotImplementedError("KernelPCA: inverse_transform needs fit_inverse_transform, which is not implemented")
 
+    def get_feature_names_out(self, input_features=None):
+        return _prefixed_names(self, self.eigenvalues_.shape[0])
+
 
 # ====================================================================== RandomState
 class _LegacyRandomState:
@@ -607,10 +708,8 @@ class _LegacyRandomState:
 
     def __init__(self, seed):
         import random
-        if seed is None:
-            raise ValueError("random_state=None draws from the OS; pass an int for a reproducible fit")
         if not isinstance(seed, int) or isinstance(seed, bool):
-            raise NotImplementedError("random_state must be an int here (a RandomState instance is not carried)")
+            raise TypeError(f"{seed!r} cannot be used to seed a RandomState instance")
         mt = [0] * 624
         mt[0] = seed & 0xFFFFFFFF
         for i in range(1, 624):
@@ -642,6 +741,38 @@ class _LegacyRandomState:
         return out
 
 
+def _random_state(seed):
+    """sklearn's check_random_state: an int seeds the legacy stream (drawn here
+    with no NumPy); a caller's numpy RandomState is drawn from directly; None
+    is numpy's global RandomState, as theirs (not reproducible, as theirs).
+    Every draw is an integer or an IEEE double from the same generator
+    sklearn would use, so the fitted parameters are theirs exactly."""
+    if isinstance(seed, int) and not isinstance(seed, bool):
+        return _LegacyRandomState(seed)
+    if seed is None:
+        import numpy as np
+        return _NumpyRandomState(np.random.mtrand._rand)
+    if hasattr(seed, "randint") and hasattr(seed, "random_sample") and hasattr(seed, "uniform"):
+        return _NumpyRandomState(seed)
+    raise ValueError(f"{seed!r} cannot be used to seed a numpy.random.RandomState instance")
+
+
+class _NumpyRandomState:
+    """The `_LegacyRandomState` draws, from a numpy RandomState."""
+
+    def __init__(self, rs):
+        self._rs = rs
+
+    def random_sample(self, count):
+        return [float(v) for v in self._rs.random_sample(count)]
+
+    def uniform(self, low, high, count):
+        return [float(v) for v in self._rs.uniform(low, high, size=count)]
+
+    def randint(self, high, count):
+        return [int(v) for v in self._rs.randint(0, high, size=count)]
+
+
 # ====================================================================== PolynomialCountSketch
 class PolynomialCountSketch(_XNeighbors):
     """Polynomial kernel approximation by tensor sketch.
@@ -651,8 +782,9 @@ class PolynomialCountSketch(_XNeighbors):
     (`randint(0, n_components, (degree, n_features))`, then
     `choice([-1, 1], (degree, n_features))`, one legacy RandomState stream);
     the transform is the count sketches' circular convolution, computed
-    directly instead of through an FFT (DEVIATION 5203). random_state must be
-    an int. Sparse input is not implemented.
+    directly instead of through an FFT (DEVIATION 5203). random_state is an
+    int, a numpy RandomState or None, as sklearn's check_random_state. Sparse
+    input is densified (the same values).
     """
 
     def __init__(self, *, gamma=1.0, degree=2, coef0=0, n_components=100, random_state=None):
@@ -669,7 +801,7 @@ class PolynomialCountSketch(_XNeighbors):
         deg, nc = int(self.degree), int(self.n_components)
         if deg < 1 or nc < 1:
             raise ValueError("degree and n_components must be >= 1")
-        rs = _LegacyRandomState(self.random_state)
+        rs = _random_state(self.random_state)
         idx = rs.randint(nc, deg * nf)
         bits = [(-1, 1)[v] for v in rs.randint(2, deg * nf)]
         self.indexHash_ = Array.from_list([idx[p * nf:(p + 1) * nf] for p in range(deg)], "<i4")
@@ -692,6 +824,9 @@ class PolynomialCountSketch(_XNeighbors):
     def fit_transform(self, X, y=None):
         return self.fit(X).transform(X)
 
+    def get_feature_names_out(self, input_features=None):
+        return _prefixed_names(self, int(self.n_components))
+
 
 # ====================================================================== AdditiveChi2Sampler
 class AdditiveChi2Sampler(_XNeighbors):
@@ -699,7 +834,9 @@ class AdditiveChi2Sampler(_XNeighbors):
 
     Reference: scikit-learn `kernel_approximation.py` (AdditiveChi2Sampler,
     `_transform_dense`, 1.9.0). Deterministic: no random state. Negative input
-    is refused, as theirs. Sparse input is not implemented.
+    is refused, as theirs. A sparse input gives a sparse (csr) output holding
+    the dense map's nonzeros, as theirs (`_transform_sparse` maps only the
+    stored entries, and a zero maps to zeros).
     """
 
     def __init__(self, *, sample_steps=2, sample_interval=None):
@@ -723,6 +860,7 @@ class AdditiveChi2Sampler(_XNeighbors):
         return self
 
     def transform(self, X):
+        sparse = X if (hasattr(X, "toarray") and hasattr(X, "nnz")) else None
         X = _f32(X)
         if X.size and X.min() < 0:
             raise ValueError("Negative values in data passed to AdditiveChi2Sampler")
@@ -730,10 +868,25 @@ class AdditiveChi2Sampler(_XNeighbors):
         steps = int(self.sample_steps)
         out = empty((n, d * (2 * steps - 1)), "<f4")
         self._op("achi2", [(X, 0), (out, 1)], (n, d, steps), (_f32_scalar(self._interval()),))
+        if sparse is not None:
+            import numpy as np
+            import scipy.sparse as sp
+            m = sp.csr_matrix(np.asarray(out.tolist(), dtype=np.float32))
+            m.eliminate_zeros()
+            return m
         return out
 
     def fit_transform(self, X, y=None):
         return self.fit(X).transform(X)
+
+    def get_feature_names_out(self, input_features=None):
+        names = _feature_names_in(self, input_features)
+        base = type(self).__name__.lower()
+        out = [f"{base}_{nm}_sqrt" for nm in names]
+        for j in range(1, int(self.sample_steps)):
+            out += [f"{base}_{nm}_cos{j}" for nm in names]
+            out += [f"{base}_{nm}_sin{j}" for nm in names]
+        return _names_out(out)
 
 
 # ====================================================================== SkewedChi2Sampler
@@ -757,7 +910,7 @@ class SkewedChi2Sampler(_XNeighbors):
         X = _f32(X)
         d = X.shape[1]
         nc = int(self.n_components)
-        rs = _LegacyRandomState(self.random_state)
+        rs = _random_state(self.random_state)
         u = rs.random_sample(d * nc)
         z = Array.from_list([[math.pi / 2.0 * u[f * nc + c] for c in range(nc)] for f in range(d)], "<f4")
         w = empty((d, nc), "<f4")
@@ -780,6 +933,9 @@ class SkewedChi2Sampler(_XNeighbors):
 
     def fit_transform(self, X, y=None):
         return self.fit(X).transform(X)
+
+    def get_feature_names_out(self, input_features=None):
+        return _prefixed_names(self, int(self.n_components))
 
 
 # ====================================================================== LabelPropagation
@@ -874,6 +1030,9 @@ class _LabelPropagationBase(_XNeighbors):
     def predict(self, X):
         return _class_array(self.classes_, [_argmax(r) for r in self.predict_proba(X).tolist()])
 
+    def score(self, X, y, sample_weight=None):
+        return _accuracy(y, self.predict(X), sample_weight)
+
 
 class LabelPropagation(_LabelPropagationBase):
     """Label propagation (hard clamping). See `_LabelPropagationBase`."""
@@ -931,9 +1090,12 @@ class KNNImputer(_XNeighbors):
     to the fit rows, donors = fit rows where the column is present, the k
     nearest (ties: the lower row index), 'uniform' or 'distance' weights,
     the masked column mean when no donor has a finite distance, all-missing
-    columns dropped (or zero with keep_empty_features), `add_indicator`.
-    missing_values must be NaN; metric 'nan_euclidean' only; callable weights
-    are refused by name.
+    columns dropped (or zero with keep_empty_features), `add_indicator`,
+    `get_feature_names_out`. A numeric missing_values other than NaN is
+    replaced by NaN before the Mojo call (an exact equality test), so it
+    imputes as sklearn's mask does. metric 'nan_euclidean' only; callable
+    metrics and weights are refused by name (a user arithmetic outside the
+    pinned items).
     """
 
     def __init__(self, *, missing_values=float("nan"), n_neighbors=5, weights="uniform",
@@ -948,16 +1110,25 @@ class KNNImputer(_XNeighbors):
 
     def _check(self):
         mv = self.missing_values
-        if not (isinstance(mv, float) and mv != mv):
-            raise NotImplementedError("KNNImputer: missing_values must be NaN")
+        import numbers
+        if mv is None or isinstance(mv, (str, bool)) or not isinstance(mv, numbers.Real):
+            raise NotImplementedError("KNNImputer: missing_values must be a number or NaN (float input)")
         if self.metric != "nan_euclidean":
             raise NotImplementedError("KNNImputer: metric must be 'nan_euclidean'")
         if self.weights not in ("uniform", "distance"):
             raise NotImplementedError("KNNImputer: weights must be 'uniform' or 'distance'")
 
+    def _masked(self, X):
+        X = _f32(X)
+        mv = self.missing_values
+        if mv == mv:                                     # a number: its cells become NaN
+            want = _f32_scalar(mv)
+            X = Array.from_list([[float("nan") if v == want else v for v in r] for r in X.tolist()], "<f4")
+        return X
+
     def fit(self, X, y=None):
         self._check()
-        X = _f32(X)
+        X = self._masked(X)
         n, d = X.shape
         rows = X.tolist()
         miss = [[v != v for v in r] for r in rows]
@@ -968,7 +1139,7 @@ class KNNImputer(_XNeighbors):
         return self
 
     def transform(self, X):
-        X = _f32(X)
+        X = self._masked(X)
         n, d = X.shape
         if d != self.n_features_in_:
             raise ValueError("X has a different number of features than during fit")
@@ -1001,6 +1172,13 @@ class KNNImputer(_XNeighbors):
     def fit_transform(self, X, y=None):
         return self.fit(X).transform(X)
 
+    def get_feature_names_out(self, input_features=None):
+        names = _feature_names_in(self, input_features)
+        out = [nm for f, nm in enumerate(names) if self._valid[f] or self.keep_empty_features]
+        if self.add_indicator:
+            out += [f"missingindicator_{names[f]}" for f in self._miss_cols]
+        return _names_out(out)
+
 
 # ====================================================================== PageRank
 def _adjacency(A):
@@ -1020,21 +1198,38 @@ class PageRank(_XNeighbors):
     cpp/src/link_analysis/pagerank_impl.cuh. Each step is the pinned-fold
     GEMV of x_neighbors/items.mojo `pagerank_step_item`. `personalization`
     is a length-n vector (normalized to sum 1) or None (uniform); `nstart`
-    and a separate `dangling` vector are not carried. Non-convergence raises,
-    as networkx's PowerIterationFailedConvergence.
+    (the starting vector, normalized) and `dangling` (where a dangling node's
+    mass goes, normalized; the personalization when None) are length-n
+    vectors, as networkx's dicts over nodes 0..n-1. `weight` False (or None,
+    networkx's unweighted spelling) makes every edge weight 1; the dense
+    matrix carries the weights, so no attribute name is needed.
+    Non-convergence raises, as networkx's PowerIterationFailedConvergence.
     """
 
-    def __init__(self, alpha=0.85, *, personalization=None, max_iter=100, tol=1e-6, weight=True):
+    def __init__(self, alpha=0.85, *, personalization=None, max_iter=100, tol=1e-6, nstart=None, weight=True,
+                 dangling=None):
         self.alpha = alpha
         self.personalization = personalization
         self.max_iter = max_iter
         self.tol = tol
+        self.nstart = nstart
         self.weight = weight
+        self.dangling = dangling
+
+    @staticmethod
+    def _unit(v, n, what):
+        """A caller's length-n non-negative vector divided by its sum (IEEE
+        double, rounded once to float32), as networkx normalizes its dicts."""
+        pv = [float(t) for t in (v.tolist() if hasattr(v, "tolist") else v)]
+        if len(pv) != n or any(t < 0 for t in pv) or math.fsum(pv) == 0:
+            raise ValueError(f"{what} must be n non-negative values, not all zero")
+        tot = math.fsum(pv)
+        return Array.from_list([t / tot for t in pv], "<f4")
 
     def fit(self, A, y=None):
         A = _adjacency(A)
         n = A.shape[0]
-        if not self.weight:
+        if self.weight is None or self.weight is False:
             A = Array.from_list([[1.0 if v != 0 else 0.0 for v in r] for r in A.tolist()], "<f4")
         Q = empty((n, n), "<f4")
         self._op("row_normalize", [(A, 0), (Q, 1)], (n, n))
@@ -1042,17 +1237,13 @@ class PageRank(_XNeighbors):
         if self.personalization is None:
             p = Array.from_list([1.0 / n] * n, "<f4")
         else:
-            pv = [float(v) for v in (self.personalization.tolist() if hasattr(self.personalization, "tolist")
-                                     else self.personalization)]
-            if len(pv) != n or any(v < 0 for v in pv) or math.fsum(pv) == 0:
-                raise ValueError("personalization must be n non-negative values, not all zero")
-            tot = math.fsum(pv)
-            p = Array.from_list([v / tot for v in pv], "<f4")
-        x = Array.from_list([1.0 / n] * n, "<f4")
+            p = self._unit(self.personalization, n, "personalization")
+        dw = p if self.dangling is None else self._unit(self.dangling, n, "dangling")
+        x = Array.from_list([1.0 / n] * n, "<f4") if self.nstart is None else self._unit(self.nstart, n, "nstart")
         s = empty((1,), "<f4")
         for it in range(int(self.max_iter)):
             nxt = empty((n,), "<f4")
-            self._op("pagerank_step", [(Q, 0), (x, 0), (p, 0), (dangling, 0), (nxt, 1)], (n,), (_f32_scalar(self.alpha),))
+            self._op("pagerank_step", [(Q, 0), (x, 0), (p, 0), (dw, 0), (dangling, 0), (nxt, 1)], (n,), (_f32_scalar(self.alpha),))
             self._op("absdiff_sum", [(nxt, 0), (x, 0), (s, 1)], (n,))
             x = nxt
             if s.tolist()[0] < n * float(self.tol):

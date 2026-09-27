@@ -1,0 +1,13 @@
+diff --git a/x_metrics/common.mojo b/x_metrics/common.mojo
+index 75c81ea85..d34e88d98 100644
+--- a/x_metrics/common.mojo
++++ b/x_metrics/common.mojo
+@@ -44,7 +44,7 @@ def p(q: IP, k: Int) -> Int:
+ @always_inline
+ def ld(f: FP, i: Int) -> Float32:
+     """DEVIATION 6104: every float operand a unit loads is flushed."""
+-    return ftz(f.unsafe_load(i))
++    return f.unsafe_load(i)  # SABOTAGE 6104
+ 
+ 
+ @always_inline
