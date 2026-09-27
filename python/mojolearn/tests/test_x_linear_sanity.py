@@ -352,6 +352,125 @@ def _():
     return ok
 
 
+@case("huber-sw")
+def _():
+    from sklearn import linear_model as sk
+    X, yr, yc, y3 = _data()
+    y = yr.copy()
+    y[::13] += 20.0
+    sw = np.random.default_rng(5).uniform(0, 3, len(y)).astype(np.float32)
+    sw[::9] = 0
+    a = ml.HuberRegressor().fit(X, y, sample_weight=sw)
+    b = sk.HuberRegressor().fit(X.astype(np.float64), y.astype(np.float64), sample_weight=sw.astype(np.float64))
+    ok = _close("weighted coef", a.coef_, b.coef_, 5e-3)
+    ok &= _close("weighted intercept", [a.intercept_], [b.intercept_], 5e-3)
+    ok &= _close("weighted scale", [a.scale_], [b.scale_], 5e-3 * max(1, b.scale_))
+    return ok
+
+
+@case("quantile-sw")
+def _():
+    from sklearn import linear_model as sk
+    X, yr, yc, y3 = _data(noise=1.0)
+    sw = np.random.default_rng(6).uniform(0, 3, len(yr)).astype(np.float32)
+    sw[::9] = 0
+    ok = True
+    for q, alpha in ((0.5, 0.01), (0.8, 0.05)):
+        a = ml.QuantileRegressor(quantile=q, alpha=alpha).fit(X, yr, sample_weight=sw)
+        b = sk.QuantileRegressor(quantile=q, alpha=alpha).fit(X.astype(np.float64), yr.astype(np.float64), sample_weight=sw.astype(np.float64))
+
+        def obj(coef, icpt):
+            r = yr - X.astype(np.float64) @ np.asarray(coef, np.float64) - icpt
+            return np.sum(sw * np.where(r >= 0, q * r, (q - 1) * r)) / sw.sum() + alpha * np.abs(coef).sum()
+        oa, ob = obj(a.coef_, a.intercept_), obj(b.coef_, b.intercept_)
+        print(f"  q={q} weighted objective {oa:.6f} vs {ob:.6f}")
+        ok &= _close("weighted objective (relative)", [oa / ob], [1.0], 2e-3)
+    return ok
+
+
+@case("sgd-w")
+def _():
+    from sklearn import linear_model as sk
+    from sklearn.metrics import balanced_accuracy_score
+    X, yr, yc, y3 = _data()
+    keep = (y3 != 2) | (np.arange(len(y3)) % 5 == 0)   # an imbalanced third class
+    X, yr, y3 = X[keep], yr[keep], y3[keep]
+    sw = np.random.default_rng(7).uniform(0.2, 2, len(yr)).astype(np.float32)
+    ok = True
+    for cw in (None, "balanced", {0: 1.0, 1: 2.0, 2: 5.0}):
+        a = ml.SGDClassifier(class_weight=cw, random_state=0).fit(X, y3, sample_weight=sw)
+        b = sk.SGDClassifier(class_weight=cw, random_state=0).fit(X, y3, sample_weight=sw)
+        ba = balanced_accuracy_score(y3, np.asarray(a.predict(X)))
+        bb = balanced_accuracy_score(y3, b.predict(X))
+        ok &= _close(f"class_weight={cw} balanced accuracy {ba:.3f} vs {bb:.3f}", ba, bb, 0.06)
+    for Est, name in ((ml.Perceptron, "Perceptron"), (ml.PassiveAggressiveClassifier, "PA")):
+        SkEst = getattr(sk, name if name != "PA" else "PassiveAggressiveClassifier")
+        kw = dict(sample_weight=sw) if name == "Perceptron" else {}  # their PA.fit takes no sample_weight
+        a = Est(class_weight="balanced", random_state=0).fit(X, y3, **kw)
+        b = SkEst(class_weight="balanced", random_state=0).fit(X, y3, **kw)
+        ba = balanced_accuracy_score(y3, np.asarray(a.predict(X)))
+        bb = balanced_accuracy_score(y3, b.predict(X))
+        ok &= _close(f"{name} balanced accuracy {ba:.3f} vs {bb:.3f}", ba, bb, 0.08)
+    a = ml.SGDRegressor(random_state=0).fit(X, yr, sample_weight=sw).score(X, yr)
+    b = sk.SGDRegressor(random_state=0).fit(X, yr, sample_weight=sw).score(X, yr)
+    ok &= _close(f"SGDRegressor weighted R2 {a:.4f} vs {b:.4f}", a, b, 0.02)
+    return ok
+
+
+@case("ridge-w")
+def _():
+    from sklearn import linear_model as sk
+    X, yr, yc, y3 = _data(noise=2.0)
+    sw = np.random.default_rng(8).uniform(0, 3, len(yr)).astype(np.float32)
+    sw[::9] = 0
+    ok = True
+    for fi in (True, False):
+        for cw in (None, "balanced"):
+            a = ml.RidgeClassifier(alpha=2.0, fit_intercept=fi, class_weight=cw).fit(X, y3, sample_weight=sw)
+            b = sk.RidgeClassifier(alpha=2.0, fit_intercept=fi, class_weight=cw).fit(X.astype(np.float64), y3, sample_weight=sw.astype(np.float64))
+            ok &= _close(f"RidgeClassifier fi={fi} cw={cw} coef", a.coef_, b.coef_, 1e-4)
+            ok &= _close(f"RidgeClassifier fi={fi} cw={cw} intercept", a.intercept_, b.intercept_, 1e-4)
+        alphas = (0.1, 3.0, 30.0, 300.0)
+        a = ml.RidgeCV(alphas=alphas, fit_intercept=fi).fit(X, yr, sample_weight=sw)
+        b = sk.RidgeCV(alphas=alphas, fit_intercept=fi).fit(X.astype(np.float64), yr.astype(np.float64), sample_weight=sw.astype(np.float64))
+        ok &= _close(f"RidgeCV fi={fi} alpha_ {a.alpha_} vs {b.alpha_}", [a.alpha_], [b.alpha_], 0)
+        ok &= _close(f"RidgeCV fi={fi} best_score_ (relative)", [a.best_score_ / b.best_score_], [1.0], 1e-4)
+        ok &= _close(f"RidgeCV fi={fi} coef", a.coef_, b.coef_, 1e-4)
+    return ok
+
+
+@case("bayes-sw")
+def _():
+    from sklearn import linear_model as sk
+    X, yr, yc, y3 = _data(noise=0.5)
+    sw = np.random.default_rng(9).uniform(0, 3, len(yr)).astype(np.float32)
+    sw[::9] = 0
+    ok = True
+    for fi in (True, False):
+        a = ml.BayesianRidge(fit_intercept=fi).fit(X, yr, sample_weight=sw)
+        b = sk.BayesianRidge(fit_intercept=fi).fit(X.astype(np.float64), yr.astype(np.float64), sample_weight=sw.astype(np.float64))
+        ok &= _close(f"fi={fi} weighted coef", a.coef_, b.coef_, 1e-3)
+        ok &= _close(f"fi={fi} weighted intercept", [a.intercept_], [b.intercept_], 1e-3)
+        ok &= _close(f"fi={fi} weighted alpha (relative)", [a.alpha_ / b.alpha_], [1.0], 1e-2)
+    return ok
+
+
+@case("logistic-cv-w")
+def _():
+    from sklearn import linear_model as sk
+    X, yr, yc, y3 = _data(noise=1.0)
+    sw = np.random.default_rng(10).uniform(0.2, 3, len(yr)).astype(np.float32)
+    ok = True
+    for y, cw in ((yc, None), (y3, "balanced")):
+        a = ml.LogisticRegressionCV(max_iter=1000, tol=1e-6, class_weight=cw).fit(X, y, sample_weight=sw)
+        b = sk.LogisticRegressionCV(max_iter=1000, tol=1e-6, class_weight=cw).fit(X.astype(np.float64), y, sample_weight=sw.astype(np.float64))
+        k = len(set(y))
+        print(f"  k={k} cw={cw} C_ {a.C_[0]:.4g} vs {b.C_[0]:.4g}")
+        pa, pb = np.asarray(a.predict_proba(X)), b.predict_proba(X)
+        ok &= _close(f"k={k} weighted predict_proba", pa, pb, 0.02)
+    return ok
+
+
 def main(argv):
     names = argv or list(CASES)
     bad = []

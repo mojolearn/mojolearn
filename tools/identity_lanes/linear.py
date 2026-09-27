@@ -251,3 +251,87 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-glm-poisson-sw")
+
+
+@lane("x-huber-sw")
+def _(ml, X, yc, yr, Xh=None):
+    y = yr[:2000].copy()
+    y[::17] = y[::17] + np.float32(25.0)
+    m = ml.HuberRegressor(max_iter=30).fit(X[:2000], y, sample_weight=_linear_weights(2000))
+    f = _linear_reg_fit(m, X, yr, Xh)
+    f["scale"] = _h(np.asarray([m.scale_], dtype=np.float32))
+    return f
+
+
+_batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-huber-sw")
+
+
+@lane("x-quantile-sw")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.QuantileRegressor(quantile=0.7, alpha=0.01, max_iter=300).fit(X[:2000], yr[:2000],
+                                                                         sample_weight=_linear_weights(2000))
+    return _linear_reg_fit(m, X, yr, Xh)
+
+
+_batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-quantile-sw")
+
+
+@lane("x-sgd-clf-w")
+def _(ml, X, yc, yr, Xh=None):
+    y3 = _linear_y3(X[:2000])
+    m = ml.SGDClassifier(loss="modified_huber", class_weight="balanced", max_iter=5, tol=None,
+                         random_state=3).fit(X[:2000], y3, sample_weight=_linear_weights(2000))
+    return _linear_clf_fit(m, X, yc, Xh)
+
+
+@lane("x-sgd-reg-sw")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.SGDRegressor(max_iter=5, tol=None, random_state=3).fit(X[:2000], yr[:2000],
+                                                                  sample_weight=_linear_weights(2000))
+    return _linear_reg_fit(m, X, yr, Xh)
+
+
+_batch_decl(_rows_calls("decision_function", sl=slice(0, 256)), "x-sgd-clf-w")
+_batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-sgd-reg-sw")
+
+
+@lane("x-ridge-clf-w")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.RidgeClassifier(alpha=3.0, class_weight="balanced").fit(X[:2000], _linear_y3(X[:2000]),
+                                                                   sample_weight=_linear_weights(2000))
+    return _linear_clf_fit(m, X, yc, Xh)
+
+
+@lane("x-ridge-cv-sw")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.RidgeCV(alphas=(0.01, 0.3, 3.0, 30.0)).fit(X[:1000], yr[:1000], sample_weight=_linear_weights(1000))
+    f = _linear_reg_fit(m, X, yr, Xh)
+    f["choice"] = _h(np.asarray([m.alpha_, m.best_score_], dtype=np.float32))
+    return f
+
+
+_batch_decl(_rows_calls("decision_function", sl=slice(0, 256)), "x-ridge-clf-w")
+_batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-ridge-cv-sw")
+
+
+@lane("x-bayes-ridge-sw")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.BayesianRidge().fit(X[:2000], yr[:2000], sample_weight=_linear_weights(2000))
+    f = _linear_reg_fit(m, X, yr, Xh)
+    f["hyper"] = _h(np.asarray([m.alpha_, m.lambda_], dtype=np.float32))
+    return f
+
+
+_batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-bayes-ridge-sw")
+
+
+@lane("x-logistic-cv-w")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.LogisticRegressionCV(Cs=4, cv=3, max_iter=15, class_weight="balanced").fit(
+        X[:1200], _linear_y3(X[:1200]), sample_weight=_linear_weights(1200))
+    f = _linear_clf_fit(m, X, yc, Xh)
+    f["scores"] = _h(*[m.scores_[k] for k in sorted(m.scores_)])
+    return f
+
+
+_batch_decl(_rows_calls("decision_function", sl=slice(0, 256)), "x-logistic-cv-w")

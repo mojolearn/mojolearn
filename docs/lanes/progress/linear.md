@@ -41,7 +41,10 @@ x-isotonic) and e2e_device_pava.patch (x-isotonic; the interp arm did not bite, 
 | step | commit | result |
 |---|---|---|
 | seams + ledger | 0e7290fb4 (isotonic e2e arm swapped in 406335b92) | NVIDIA RTX 4090: `algos_lane_check.sh <all 21> --pass 2` RESULT: PASS, all 10 arms FAIL under their patch and PASS after reversal, 21 lanes AGREE |
-| option: GLM sample_weight (Poisson/Gamma/Tweedie) | (the commit that adds this row) | sanity PASS (weighted coef within 1.2e-4 of sklearn); lanes x-glm-* AGREE, x-glm-poisson-sw AGREE; opt_glm_sample_weight.patch (device drops weights) DISAGREE then AGREE; x-glm-poisson/gamma/tweedie hashes UNCHANGED vs the pass-2 run |
+| option: GLM sample_weight (Poisson/Gamma/Tweedie) | 651e359c8 | sanity PASS (weighted coef within 1.2e-4 of sklearn); lanes x-glm-* AGREE, x-glm-poisson-sw AGREE; opt_glm_sample_weight.patch (device drops weights) DISAGREE then AGREE; x-glm-poisson/gamma/tweedie hashes UNCHANGED vs the pass-2 run |
+| option: sample_weight for HuberRegressor, QuantileRegressor, SGDClassifier/Regressor, Perceptron, PassiveAggressive*, SGDOneClassSVM, RidgeClassifier, RidgeCV, BayesianRidge, LogisticRegressionCV; class_weight for SGDClassifier, Perceptron, PassiveAggressiveClassifier, RidgeClassifier, LogisticRegressionCV | (the commit that adds this row) | sanity PASS against sklearn for each; 9 new lanes (x-huber-sw, x-quantile-sw, x-sgd-clf-w, x-sgd-reg-sw, x-ridge-clf-w, x-ridge-cv-sw, x-bayes-ridge-sw, x-logistic-cv-w) AGREE; every device-only weights arm DISAGREE then AGREE; the 26 earlier lanes' hashes UNCHANGED |
+
+AMD: the do-amd steward read PASS for x-isotonic and x-glm-poisson-sw at 02ddf0678 (the all-lanes request was still running).
 
 Next: AMD box (Hot Aisle fallback running), AGREE on AMD for all 21 lanes;
 M2 Pro steward submissions; then option parity; then speed.
