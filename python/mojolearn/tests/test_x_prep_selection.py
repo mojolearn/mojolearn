@@ -111,13 +111,19 @@ def test_score_edges_and_rfe_getter():
         warnings.simplefilter("ignore")
         cases = [(ml.f_classif(X, y), skfs.f_classif(X.astype(np.float64), y)),
                  (ml.chi2(Xc, y), skfs.chi2(Xc.astype(np.float64), y))]
+        # the constant column 1: the reference divides its float noise by a zero norm
+        # (+-inf or NaN by rounding); mojolearn gives the mathematical value, r 0 / F 0 /
+        # p 1 with force_finite and NaN without it
+        keep = np.array([0, 2, 3, 4])
         for ff in (True, False):
-            cases.append((ml.f_regression(Xr, yr, force_finite=ff),
-                          skfs.f_regression(Xr.astype(np.float64), yr, force_finite=ff)))
+            fs, fp = ml.f_regression(Xr, yr, force_finite=ff)
             mr = np.asarray(ml.r_regression(X, yr, force_finite=ff))
+            edge = (0.0, 1.0, 0.0) if ff else (np.nan, np.nan, np.nan)
+            np.testing.assert_array_equal([np.asarray(fs)[1], np.asarray(fp)[1], mr[1]], edge)
+            rs, rp = skfs.f_regression(Xr.astype(np.float64), yr, force_finite=ff)
+            cases.append(((np.asarray(fs)[keep], np.asarray(fp)[keep]), (rs[keep], rp[keep])))
             rr = skfs.r_regression(X.astype(np.float64), yr, force_finite=ff)
-            assert np.array_equal(np.isnan(mr), np.isnan(rr)), (mr, rr)
-            np.testing.assert_allclose(mr[~np.isnan(mr)], rr[~np.isnan(rr)], rtol=2e-3, atol=1e-4)
+            np.testing.assert_allclose(mr[keep], rr[keep], rtol=2e-3, atol=1e-4)
     for (s, p), (rs, rp) in cases:
         s, p = np.asarray(s, dtype=np.float64), np.asarray(p, dtype=np.float64)
         huge = rs > 1e10                            # |r| = 1 / separable: float64 may stop short of inf

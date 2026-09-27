@@ -321,6 +321,39 @@ def _fit_categories(mode, arr):
     return [pr.get(uo + c * n, counts[c]) for c in range(d)]
 
 
+def _given_categories(categories, arr, mode, check_unknown, who):
+    """categories=<list>: one list per column, numeric, sorted ascending with
+    at most a NaN last (the reference refuses unsorted numeric categories),
+    stored as float32. With check_unknown (handle_unknown='error') a training
+    value outside its column's list is refused, as the reference's fit."""
+    n, d = arr.shape
+    if len(categories) != d:
+        raise ValueError(f"mojolearn: {who} categories has {len(categories)} lists; X has {d} features")
+    out = []
+    for j, cats in enumerate(categories):
+        vals = [float(v) for v in (cats.tolist() if hasattr(cats, "tolist") else cats)]
+        f32 = array.array("f", vals)
+        nums = [v for v in f32 if v == v]
+        if len(nums) < len(f32) - 1 or (len(nums) < len(f32) and f32[-1] == f32[-1]):
+            raise ValueError(f"mojolearn: {who} categories[{j}]: nan must be the last category")
+        if nums != sorted(nums):
+            raise ValueError(f"mojolearn: {who} unsorted categories are not supported for numerical categories")
+        if any(a == b for a, b in zip(nums, nums[1:])):
+            raise ValueError(f"mojolearn: {who} categories[{j}] has values equal in float32")
+        if not f32:
+            raise ValueError(f"mojolearn: {who} categories[{j}] is empty")
+        canon = [0.0 if v == 0 else v for v in nums] + ([float("nan")] if len(nums) < len(f32) else [])
+        out.append(Array.from_list(canon, "<f4"))
+    if check_unknown:
+        pr = _Prog()
+        _codes_neg = _codes(pr, arr, out)
+        pr.run(mode)
+        bad = [j for j, v in enumerate(pr.values(_codes_neg[1], d)) if v > 0]
+        if bad:
+            raise ValueError(f"mojolearn: {who} found unknown categories in column(s) {bad} during fit")
+    return out
+
+
 def _category_block(pr, categories):
     """Every column's categories in one (d, kmax) block. Returns (offset, kmax)."""
     kmax = max(c.size for c in categories)
@@ -397,8 +430,9 @@ class OrdinalEncoder(_PrepBase):
     NaN seen in fit (the last category) is written as encoded_missing_value
     (NaN by default). handle_unknown 'error' or 'use_encoded_value'.
     inverse_transform maps codes back (an unknown_value row is NaN where the
-    reference writes None: there is no object Array). categories other than
-    'auto', min_frequency and max_categories are refused."""
+    reference writes None: there is no object Array). categories='auto' or
+    one sorted numeric list per column (as the reference); min_frequency and
+    max_categories are refused."""
     _parameters = ("categories", "dtype", "handle_unknown", "unknown_value", "encoded_missing_value",
                    "min_frequency", "max_categories")
 
@@ -413,9 +447,8 @@ class OrdinalEncoder(_PrepBase):
         self.max_categories = max_categories
 
     def fit(self, X, y=None):
-        if self.categories != "auto" or self.min_frequency is not None or self.max_categories is not None:
-            raise NotImplementedError("mojolearn: OrdinalEncoder supports categories='auto' only, "
-                                      "without min_frequency or max_categories")
+        if self.min_frequency is not None or self.max_categories is not None:
+            raise NotImplementedError("mojolearn: OrdinalEncoder min_frequency and max_categories are not implemented")
         if self.handle_unknown not in ("error", "use_encoded_value"):
             raise ValueError(f"mojolearn: invalid handle_unknown {self.handle_unknown!r}")
         if self.handle_unknown == "use_encoded_value" and not isinstance(self.unknown_value, numbers.Real):
@@ -424,7 +457,9 @@ class OrdinalEncoder(_PrepBase):
             raise TypeError("mojolearn: encoded_missing_value must be a number (or NaN)")
         arr = _finite_2d(X, "OrdinalEncoder")
         mode = _mode()
-        self.categories_ = _fit_categories(mode, arr)
+        self.categories_ = (_fit_categories(mode, arr) if _is_auto(self.categories) else
+                            _given_categories(self.categories, arr, mode, self.handle_unknown == "error",
+                                              "OrdinalEncoder"))
         self._missing = [c.size - 1 if c.size and _is_nan_value(c.tolist()[-1]) else -1 for c in self.categories_]
         cards = [c.size - (1 if m >= 0 else 0) for c, m in zip(self.categories_, self._missing)]
         if self.handle_unknown == "use_encoded_value" and not _is_nan_value(self.unknown_value):
@@ -483,8 +518,9 @@ class OneHotEncoder(_PrepBase):
     (an unknown value is an all-zero block). inverse_transform is the
     reference's per-block argmax (an all-zero block is the dropped category,
     or unknown: an error for handle_unknown='error', NaN where the reference
-    writes None for 'ignore'). categories other than 'auto', min_frequency
-    and max_categories are refused."""
+    writes None for 'ignore'). categories='auto' or one sorted numeric list
+    per column (as the reference); min_frequency and max_categories are
+    refused."""
     _parameters = ("categories", "drop", "sparse_output", "dtype", "handle_unknown", "min_frequency",
                    "max_categories", "feature_name_combiner")
 
@@ -500,9 +536,8 @@ class OneHotEncoder(_PrepBase):
         self.feature_name_combiner = feature_name_combiner
 
     def fit(self, X, y=None):
-        if self.categories != "auto" or self.min_frequency is not None or self.max_categories is not None:
-            raise NotImplementedError("mojolearn: OneHotEncoder supports categories='auto' only, "
-                                      "without min_frequency or max_categories")
+        if self.min_frequency is not None or self.max_categories is not None:
+            raise NotImplementedError("mojolearn: OneHotEncoder min_frequency and max_categories are not implemented")
         if self.handle_unknown not in ("error", "ignore"):
             raise NotImplementedError(f"mojolearn: OneHotEncoder handle_unknown={self.handle_unknown!r} "
                                       "is not implemented ('error' or 'ignore')")
@@ -510,7 +545,9 @@ class OneHotEncoder(_PrepBase):
             raise NotImplementedError("mojolearn: OneHotEncoder drop must be None, 'first' or 'if_binary'")
         arr = _finite_2d(X, "OneHotEncoder")
         mode = _mode()
-        self.categories_ = _fit_categories(mode, arr)
+        self.categories_ = (_fit_categories(mode, arr) if _is_auto(self.categories) else
+                            _given_categories(self.categories, arr, mode, self.handle_unknown == "error",
+                                              "OneHotEncoder"))
         if self.drop == "first":
             self.drop_idx_ = [0 for _ in self.categories_]
         elif self.drop == "if_binary":
@@ -751,6 +788,10 @@ class TargetEncoder(_PrepBase):
 
 
 # ---------------------------------------------------------------- imputer
+def _is_auto(v):
+    return isinstance(v, str) and v == "auto"
+
+
 def _is_nan_value(v):
     return isinstance(v, float) and v != v
 
@@ -1809,7 +1850,8 @@ class PolynomialFeatures(_PrepBase):
     """sklearn.preprocessing.PolynomialFeatures: the reference's column
     order (the bias, then combinations with replacement, or without when
     interaction_only, degree by degree); each output is the product of its
-    input columns left to right on the device. order='F' output is refused."""
+    input columns left to right on the device; order='F' returns the same
+    values in a column-major (Fortran-ordered) array."""
     _parameters = ("degree", "interaction_only", "include_bias", "order")
 
     def __init__(self, degree=2, *, interaction_only=False, include_bias=True, order="C"):
@@ -1833,8 +1875,8 @@ class PolynomialFeatures(_PrepBase):
         return [tuple(c) for c in it]
 
     def fit(self, X, y=None):
-        if self.order != "C":
-            raise NotImplementedError("mojolearn: PolynomialFeatures(order='F') is not implemented")
+        if self.order not in ("C", "F"):
+            raise ValueError("mojolearn: PolynomialFeatures order must be 'C' or 'F'")
         d = _x2d(X).shape[1]
         self._terms = self._combos(d)
         self.n_features_in_, self.n_output_features_ = d, len(self._terms)
@@ -1857,6 +1899,12 @@ class PolynomialFeatures(_PrepBase):
         out = pr.alloc(n * nout)
         pr.stage("poly", n * nout, xo, n, d, io, so, nout, out)
         pr.run(self.numeric_mode_)
+        if self.order == "F":
+            seg = pr.arena[out:out + n * nout]
+            store = array.array("f")
+            for j in range(nout):
+                store.extend(seg[j::nout])
+            return Array._owned(store, (n, nout), "<f4", "F")
         return pr.get(out, (n, nout))
 
 

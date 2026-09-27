@@ -104,6 +104,35 @@ def _(ml, X, yc, yr, Xh=None):
 _batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_prep_categorical_nan), "x-prep-encoder-options")
 
 
+@lane("x-prep-encoder-categories")
+def _(ml, X, yc, yr, Xh=None):
+    """OrdinalEncoder / OneHotEncoder categories=<list>: per column the
+    training values' sorted distinct set with one value dropped and one never
+    seen added (NaN kept last), so both the unknown and the unused paths run."""
+    Xq, Xhq = _prep_categorical_nan(X), _prep_categorical_nan(Xh)
+    cats = []
+    for j in range(Xq.shape[1]):
+        u = np.unique(Xq[:, j])
+        num = [float(v) for v in u if v == v]
+        num = sorted(num[:1] + num[2:] + [float(np.float32(max(num) + 7.5))])
+        cats.append(num + ([float("nan")] if np.isnan(u).any() else []))
+    parts = {}
+    for j, kw in enumerate((dict(handle_unknown="use_encoded_value", unknown_value=-1),
+                            dict(handle_unknown="use_encoded_value", unknown_value=-1, encoded_missing_value=-2))):
+        m = ml.OrdinalEncoder(categories=cats, **kw).fit(Xq[:1000])
+        Z = m.transform(Xhq[:256])
+        parts[f"ord{j}"] = _h(*m.categories_, Z, m.inverse_transform(Z))
+    for j, kw in enumerate((dict(handle_unknown="ignore"), dict(drop="first", handle_unknown="ignore"))):
+        m = ml.OneHotEncoder(categories=cats, **kw).fit(Xq[:1000])
+        Z = m.transform(Xhq[:256])
+        parts[f"ohe{j}"] = _h(Z, m.inverse_transform(Z))
+    m = ml.OneHotEncoder(categories=cats, handle_unknown="ignore").fit(Xq)
+    return _fit(parts, m, lambda e: (e.transform(Xhq[:256]),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_prep_categorical_nan), "x-prep-encoder-categories")
+
+
 @lane("x-prep-target-encoder")
 def _(ml, X, yc, yr, Xh=None):
     Xq, Xhq = _prep_categorical(X), _prep_categorical(Xh)
