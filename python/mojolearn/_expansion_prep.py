@@ -24,9 +24,14 @@ lists the stages and reads results back; the only arithmetic it does is
 integer bookkeeping and IEEE basic operations on scalar parameters.
 """
 import array
+import bisect
+import copy
 import ctypes
+import inspect
+import math
 import numbers
 import operator
+import statistics
 
 from . import _backend
 from ._array import Array
@@ -54,7 +59,7 @@ _OPS = dict(
     qt_inverse=74, pt_inverse=75, block_argmax=76, ord_inverse=77, cat_gather=78, where_code=79, kbins_inverse=80,
     da_shrink=81, da_pool=82, sym_fn=83, da_intercept=84, evr=85, class_stats_w=86,
     indicator=87, code_counts=88, remap_codes=89, add_arrays=90, gnb_merge=91, cat_counts=92, cat_flp=93,
-    mi_dc=94, mi_dd=95,
+    mi_dc=94, mi_dd=95, kbins_gw=96, kbins_wq=97, kbins_wkm=98, ii_sigma=99, ii_post=100,
 )
 _PARAMS = 14
 _NONE = -1
@@ -101,6 +106,13 @@ class _Prog:
         out = self.alloc(codes.size)
         self.stage("i2f", codes.size, bits, out)
         return out
+
+    def put_ints(self, values):
+        """int32 words (read by `ldi`) -> offset."""
+        codes = Array.from_list([int(v) for v in values] or [0], "<i4")
+        off = self.alloc(codes.size)
+        self._inputs.append((off, codes, "i"))
+        return off
 
     def stage(self, op, total, *params):
         if len(params) > _PARAMS:
@@ -1202,7 +1214,12 @@ class KBinsDiscretizer(_PrepBase):
     is one bin with edges (-inf, inf). Above `subsample` rows the fit uses a
     with-replacement resample drawn from `random_state` by splitmix64 (the
     reference draws numpy's). inverse_transform is the bin centres, as the
-    reference's. sample_weight is refused."""
+    reference's. sample_weight (nonnegative, not all zero) weighs the
+    'quantile' edges (the reference's `_weighted_percentile` for
+    'averaged_inverted_cdf' / 'inverted_cdf'; the other methods are refused,
+    as the reference), the 'uniform' range (min / max over rows of nonzero
+    weight) and the 'kmeans' Lloyd; above `subsample` rows it draws the
+    resample instead (with replacement, weighted) and is then spent."""
     _parameters = ("n_bins", "encode", "strategy", "quantile_method", "dtype", "subsample", "random_state")
 
     def __init__(self, n_bins=5, *, encode="onehot", strategy="quantile", quantile_method="averaged_inverted_cdf",
@@ -1216,8 +1233,6 @@ class KBinsDiscretizer(_PrepBase):
         self.random_state = random_state
 
     def fit(self, X, y=None, sample_weight=None):
-        if sample_weight is not None:
-            raise NotImplementedError("mojolearn: KBinsDiscretizer sample_weight is not implemented")
         if self.encode not in ("onehot", "onehot-dense", "ordinal"):
             raise ValueError(f"mojolearn: invalid encode {self.encode!r}")
         strat = {"uniform": 0, "kmeans": 3}.get(self.strategy)
@@ -1231,17 +1246,37 @@ class KBinsDiscretizer(_PrepBase):
             raise ValueError(f"mojolearn: invalid strategy {self.strategy!r}")
         arr = _x2d(X)
         n, d = arr.shape
+        w = None
+        if sample_weight is not None:
+            w, wl = _check_weights(sample_weight, n, "KBinsDiscretizer")
         if self.subsample is not None and n > self.subsample:
             state = 0 if self.random_state is None else int(self.random_state)
             rows = []
-            for _ in range(int(self.subsample)):
-                state, z = _splitmix64(state)
-                rows.append(z % n)
+            if w is None:
+                for _ in range(int(self.subsample)):
+                    state, z = _splitmix64(state)
+                    rows.append(z % n)
+            else:
+                # the reference's weighted resample with replacement (its weights are then
+                # spent): row = the first whose cumulative weight exceeds u * total, u a
+                # 53-bit splitmix64 uniform; cumulative sums in Python float64
+                cum, acc = [], 0.0
+                for v in wl:
+                    acc += v
+                    cum.append(acc)
+                for _ in range(int(self.subsample)):
+                    state, z = _splitmix64(state)
+                    rows.append(min(bisect.bisect_right(cum, (z >> 11) * 2.0 ** -53 * acc), n - 1))
+                w = None
             arr = _gather_rows(arr, rows)
             n = arr.shape[0]
         nb = [int(self.n_bins)] * d if isinstance(self.n_bins, numbers.Integral) else [int(b) for b in self.n_bins]
         if len(nb) != d or min(nb) < 2:
             raise ValueError("mojolearn: n_bins must be >= 2 per feature")
+        if w is not None and strat not in (0, 1, 3, 4):
+            raise ValueError("mojolearn: When fitting with strategy='quantile' and sample weights, quantile_method "
+                             "should either be set to 'averaged_inverted_cdf' or 'inverted_cdf', got "
+                             f"quantile_method='{self.quantile_method}' instead.")
         nbmax = max(nb)
         mode = _mode()
         pr = _Prog()
@@ -1253,9 +1288,31 @@ class KBinsDiscretizer(_PrepBase):
         ne = pr.alloc(d)
         lab = pr.alloc(n * d) if strat == 3 else 0
         cen = pr.alloc(d * nbmax) if strat == 3 else 0
-        pr.stage("sort_cols", d, xo, n, d, so, 0)
         pr.stage("col_stats", d, xo, n, d, st)
-        pr.stage("kbins_edges", d, so, n, d, nbo, nbmax, strat, st, edges, ne, lab, cen)
+        if w is None:
+            pr.stage("sort_cols", d, xo, n, d, so, 0)
+            pr.stage("kbins_edges", d, so, n, d, nbo, nbmax, strat, st, edges, ne, lab, cen)
+        else:
+            stw = st
+            if strat in (0, 3):
+                # the min / max over the rows of nonzero weight (the reference's nnz mask)
+                nz = [i for i, v in enumerate(wl) if v > 0]
+                stw = pr.alloc(6 * d)
+                if len(nz) < n:
+                    xz = pr.put(_gather_rows(arr, nz))
+                    pr.stage("col_stats", d, xz, len(nz), d, stw)
+                else:
+                    stw = st
+            if strat == 0:
+                pr.stage("kbins_edges", d, so, n, d, nbo, nbmax, 0, stw, edges, ne, 0, 0)
+            else:
+                ug, ucnt = _weighted_groups(pr, arr, w, n, d)
+                if strat == 3:
+                    pr.stage("kbins_wkm", d, ug, n, d, ucnt, nbo, nbmax, st, stw, edges, cen, lab)
+                else:
+                    levels = [[i * (100.0 / b) for i in range(b)] + [100.0] for b in nb]
+                    _weighted_levels(pr, ug, ucnt, n, d, levels, strat == 1, edges)
+                pr.stage("kbins_edges", d, so, n, d, nbo, nbmax, 11, stw, edges, ne, 0, 0)
         pr.run(mode)
         counts = [int(v) for v in pr.values(ne, d)]
         self.bin_edges_ = [pr.get(edges + j * (nbmax + 1), counts[j]) for j in range(d)]
@@ -2340,15 +2397,68 @@ class PolynomialFeatures(_PrepBase):
         return pr.get(out, (n, nout))
 
 
+def _f_order(pr, off, n, w):
+    """An (n, w) arena block as a Fortran-ordered Array (the same words)."""
+    seg = pr.arena[off:off + n * w]
+    store = array.array("f")
+    for j in range(w):
+        store.extend(seg[j::w])
+    return Array._owned(store, (n, w), "<f4", "F")
+
+
+def _check_weights(sample_weight, n, who):
+    """sample_weight as float32 words (nonnegative, length n) and their list."""
+    w = as_f32_c(sample_weight, ndim=1, name="sample_weight")[0]
+    if w.size != n:
+        raise ValueError(f"mojolearn: sample_weight has {w.size} entries; X has {n} rows")
+    wl = w.tolist()
+    if any(not v >= 0 for v in wl):
+        raise ValueError(f"mojolearn: {who} sample_weight must be nonnegative")
+    if not any(v > 0 for v in wl):
+        raise ValueError(f"mojolearn: {who} sample_weight is all zero")
+    return w, wl
+
+
+def _weighted_groups(pr, arr, w, n, d):
+    """Stages writing every column's distinct values (ascending, -0.0 folded
+    into 0.0, NaN last) and their summed weights: UG[c*n :] and UG[n*d + c*n :],
+    their count UCNT[c]. Returns (UG, UCNT)."""
+    xo = pr.put(arr)
+    so, ug, ucnt, codes = pr.alloc(n * d), pr.alloc(2 * n * d), pr.alloc(d), pr.alloc(n * d)
+    pr.stage("sort_cols", d, xo, n, d, so, 1)
+    pr.stage("unique_cols", d, so, n, d, ug, ucnt)
+    pr.stage("lookup", n * d, xo, n, d, ug, n, ucnt, codes)
+    pr.stage("kbins_gw", d, codes, n, d, pr.put(w), ug + n * d)
+    return ug, ucnt
+
+
+def _weighted_levels(pr, ug, ucnt, n, d, levels, average, out):
+    """A stage of the reference's `_weighted_percentile` of every column at
+    the percent `levels` (one list per column, padded to a common stride
+    max + 1) into `out` (column c at c * stride), over `_weighted_groups`."""
+    nb = [len(lv) - 1 for lv in levels]
+    nbmax = max(nb)
+    flat = []
+    for lv in levels:
+        flat += list(lv) + [0.0] * (nbmax + 1 - len(lv))
+    pr.stage("kbins_wq", d, ug, n, d, ucnt, pr.put_list(nb), nbmax, pr.put_list(flat), int(average), out)
+
+
 class SplineTransformer(_PrepBase):
     """sklearn.preprocessing.SplineTransformer: per feature, B-splines of
-    `degree` on `n_knots` base knots ('uniform' over the training range, or
-    'quantile': numpy linear percentiles), extended by `degree` knots at each
-    end at the edge spacing; extrapolation 'constant' (the boundary values),
-    'continue' or 'error'. Dense float32 output. Explicit knot arrays,
-    'linear' and 'periodic' extrapolation and sparse output are refused."""
+    `degree` on `n_knots` base knots ('uniform' over the training range,
+    'quantile': numpy linear percentiles, or an explicit (n_knots,
+    n_features) array), extended by `degree` knots at each end at the edge
+    spacing, or wrapped for 'periodic'; extrapolation 'constant', 'continue',
+    'linear', 'periodic' or 'error'; sample_weight weighs the knots (the
+    reference's weighted percentile for 'quantile', the range over rows of
+    nonzero weight for 'uniform'); handle_missing 'error' or 'zeros' (a NaN
+    is left out of the knots and encodes as a zero block); order 'C' or 'F'.
+    Dense float32 output (sparse_output is refused: there is no sparse
+    Array)."""
     _parameters = ("n_knots", "degree", "knots", "extrapolation", "include_bias", "order", "handle_missing",
                    "sparse_output")
+    _EXTRAP = {"constant": 0, "continue": 1, "error": 1, "linear": 2, "periodic": 3}
 
     def __init__(self, n_knots=5, degree=3, *, knots="uniform", extrapolation="constant", include_bias=True,
                  order="C", handle_missing="error", sparse_output=False):
@@ -2361,40 +2471,92 @@ class SplineTransformer(_PrepBase):
         self.handle_missing = handle_missing
         self.sparse_output = sparse_output
 
+    def _no_nan(self, pr, st, d, n):
+        if self.handle_missing == "error" and any(int(v) != n for v in pr.values(st, d)):
+            raise ValueError("mojolearn: Input X contains NaN values and `SplineTransformer` is configured to "
+                             "error in this case (handle_missing='error'). To avoid this error, set "
+                             "handle_missing='zeros' to encode missing values as splines with value 0 or ensure "
+                             "no missing values in X.")
+
     def fit(self, X, y=None, sample_weight=None):
-        if not isinstance(self.knots, str) or self.knots not in ("uniform", "quantile"):
-            raise NotImplementedError("mojolearn: SplineTransformer knots must be 'uniform' or 'quantile'")
-        if self.extrapolation not in ("constant", "continue", "error"):
-            raise NotImplementedError(f"mojolearn: SplineTransformer extrapolation={self.extrapolation!r} "
-                                      "is not implemented")
-        if sample_weight is not None or self.sparse_output or self.order != "C":
-            raise NotImplementedError("mojolearn: SplineTransformer sample_weight, sparse_output and "
-                                      "order='F' are not implemented")
-        nk, k = int(self.n_knots), int(self.degree)
-        if nk < 2 or k < 0 or k > 7:
-            raise ValueError("mojolearn: SplineTransformer needs n_knots >= 2 and 0 <= degree <= 7")
+        if self.extrapolation not in self._EXTRAP:
+            raise ValueError(f"mojolearn: invalid extrapolation {self.extrapolation!r}")
+        if self.handle_missing not in ("error", "zeros"):
+            raise ValueError(f"mojolearn: invalid handle_missing {self.handle_missing!r}")
+        if self.order not in ("C", "F"):
+            raise ValueError(f"mojolearn: invalid order {self.order!r}")
+        if self.sparse_output:
+            raise NotImplementedError("mojolearn: SplineTransformer sparse_output is not implemented "
+                                      "(there is no sparse Array)")
+        k = int(self.degree)
+        if k < 0 or k > 7:
+            raise ValueError("mojolearn: SplineTransformer needs 0 <= degree <= 7")
         arr = _x2d(X)
         n, d = arr.shape
+        if n < 2:
+            raise ValueError("mojolearn: SplineTransformer needs at least 2 samples")
+        w = wl = None
+        if sample_weight is not None:
+            w, wl = _check_weights(sample_weight, n, "SplineTransformer")
+        given = not isinstance(self.knots, str)
+        if not given and self.knots not in ("uniform", "quantile"):
+            raise ValueError(f"mojolearn: invalid knots {self.knots!r}")
+        if given:
+            rows = [[float(v) for v in (r.tolist() if hasattr(r, "tolist") else r)] for r in
+                    (self.knots.tolist() if hasattr(self.knots, "tolist") else self.knots)]
+            nk = len(rows)
+            if nk < 2:
+                raise ValueError("mojolearn: Number of knots, knots.shape[0], must be >= 2.")
+            if any(len(r) != d for r in rows):
+                raise ValueError("mojolearn: knots.shape[1] == n_features is violated.")
+            cols = [list(array.array("f", [r[c] for r in rows])) for c in range(d)]
+            if not all(b > a for col in cols for a, b in zip(col, col[1:])):
+                raise ValueError("mojolearn: knots must be sorted without duplicates.")
+        else:
+            nk = int(self.n_knots)
+            if nk < 2:
+                raise ValueError("mojolearn: SplineTransformer needs n_knots >= 2")
+        periodic = self.extrapolation == "periodic"
+        if periodic and nk <= k:
+            raise ValueError(f"mojolearn: Periodic splines require degree < n_knots. Got n_knots={nk} and "
+                             f"degree={k}.")
         mode = _mode()
         pr = _Prog()
         xo = pr.put(arr)
         so, st = pr.alloc(n * d), pr.alloc(6 * d)
-        base = pr.alloc(d * nk)
         knots = pr.alloc(d * (nk + 2 * k))
         pr.stage("col_stats", d, xo, n, d, st)
-        if self.knots == "quantile":
-            qf = pr.put_list([i / (nk - 1) for i in range(nk)])
-            pr.stage("sort_cols", d, xo, n, d, so, 0)
-            pr.stage("quantile", d * nk, so, n, d, qf, nk, base, _NONE)
-        pr.stage("spline_knots", d, base, nk, d, k, knots, 1 if self.knots == "uniform" else 0, st)
+        uniform, kst = 0, st
+        if given:
+            base = pr.put_list([v for col in cols for v in col])
+        elif self.knots == "quantile":
+            base = pr.alloc(d * nk)
+            if w is None:
+                qf = pr.put_list([i / (nk - 1) for i in range(nk)])
+                pr.stage("sort_cols", d, xo, n, d, so, 0)
+                pr.stage("quantile", d * nk, so, n, d, qf, nk, base, st)
+            else:
+                step = 1.0 / (nk - 1)
+                lv = [100.0 * (i * step) for i in range(nk - 1)] + [100.0]
+                ug, ucnt = _weighted_groups(pr, arr, w, n, d)
+                _weighted_levels(pr, ug, ucnt, n, d, [lv] * d, False, base)
+        else:
+            base, uniform = pr.alloc(d * nk), 1
+            if w is not None and any(v == 0 for v in wl):
+                kst = pr.alloc(6 * d)
+                nz = [i for i, v in enumerate(wl) if v > 0]
+                pr.stage("col_stats", d, pr.put(_gather_rows(arr, nz)), len(nz), d, kst)
+        pr.stage("spline_knots", d, base, nk, d, k, knots, uniform, kst, int(periodic))
         pr.run(mode)
+        self._no_nan(pr, st, d, n)
         self._knots = pr.get(knots, d * (nk + 2 * k))
         flat = pr.values(knots, d * (nk + 2 * k))
-        w = nk + 2 * k
-        self.bsplines_ = [Array.from_list(flat[c * w:(c + 1) * w], "<f4") for c in range(d)]
-        self._lo, self._hi = pr.values(st + 3 * d, d), pr.values(st + 4 * d, d)
+        wd = nk + 2 * k
+        self.bsplines_ = [Array.from_list(flat[c * wd:(c + 1) * wd], "<f4") for c in range(d)]
+        self._lo = [flat[c * wd + k] for c in range(d)]
+        self._hi = [flat[c * wd + k + nk - 1] for c in range(d)]
         self._nk, self._k = nk, k
-        nspl = nk + k - 1
+        nspl = nk - 1 if periodic else nk + k - 1
         self.n_features_out_ = d * (nspl if self.include_bias else nspl - 1)
         self.numeric_mode_, self.n_features_in_ = mode, d
         return self
@@ -2409,15 +2571,20 @@ class SplineTransformer(_PrepBase):
         xo, ko = pr.put(arr), pr.put(self._knots)
         out = pr.alloc(n * W)
         st = pr.alloc(6 * d)
-        if self.extrapolation == "error":
+        check = self.extrapolation == "error" or self.handle_missing == "error"
+        if check:
             pr.stage("col_stats", d, xo, n, d, st)
-        pr.stage("spline_apply", n * d, xo, n, d, ko, self._nk, self._k,
-                 1 if self.extrapolation == "continue" else 0, W, 1 if self.include_bias else 0, out)
+        pr.stage("spline_apply", n * d, xo, n, d, ko, self._nk, self._k, self._EXTRAP[self.extrapolation], W,
+                 1 if self.include_bias else 0, out)
         pr.run(self.numeric_mode_)
+        if check:
+            self._no_nan(pr, st, d, n)
         if self.extrapolation == "error":
             lo, hi = pr.values(st + 3 * d, d), pr.values(st + 4 * d, d)
             if any(a < b for a, b in zip(lo, self._lo)) or any(a > b for a, b in zip(hi, self._hi)):
                 raise ValueError("mojolearn: X contains values beyond the limits of the knots")
+        if self.order == "F":
+            return _f_order(pr, out, n, W)
         return pr.get(out, (n, W))
 
 
@@ -2759,16 +2926,22 @@ class MultiLabelBinarizer(_PrepBase):
 
 # ---------------------------------------------------------------- iterative imputer
 class IterativeImputer(_PrepBase):
-    """sklearn.impute.IterativeImputer with its default estimator
-    (BayesianRidge, default priors, max_iter 300, tol 1e-3): initial fill by
-    SimpleImputer(initial_strategy), then rounds over the features in
-    imputation_order ('ascending' default, 'descending', 'roman', 'arabic';
-    fixed by column index on a tie), each feature regressed on all the others
-    over its observed rows and its missing entries predicted and clipped to
-    [min_value, max_value]; stop when max |change| < tol * max|X_observed|.
-    The whole fit is one device program. Another estimator, sample_posterior,
-    n_nearest_features, imputation_order='random' and add_indicator are
-    refused by name."""
+    """sklearn.impute.IterativeImputer. With its default estimator
+    (BayesianRidge, default priors, max_iter 300, tol 1e-3) the whole fit is
+    one device program: initial fill by SimpleImputer(initial_strategy), then
+    rounds over the features in imputation_order ('ascending' default,
+    'descending', 'roman', 'arabic', or 'random': a fresh permutation each
+    round), each feature regressed on the others (or on n_nearest_features of
+    them, drawn without replacement with probability proportional to their
+    absolute correlation with it) over its observed rows, its missing
+    entries predicted and clipped to [min_value, max_value], or with
+    sample_posterior drawn from the predictive normal truncated to them;
+    stop when the matrix inf-norm of the change < tol * max|X_observed|.
+    Another estimator runs the same rounds in Python over that estimator's
+    fit / predict (predict(return_std=True) for sample_posterior).
+    add_indicator appends MissingIndicator's columns. Every draw (the random
+    order, the neighbours, the posterior samples) comes from random_state by
+    splitmix64 (the reference draws numpy's; None is seed 0)."""
     _parameters = ("estimator", "missing_values", "sample_posterior", "max_iter", "tol", "n_nearest_features",
                    "initial_strategy", "fill_value", "imputation_order", "skip_complete", "min_value",
                    "max_value", "verbose", "random_state", "add_indicator", "keep_empty_features")
@@ -2796,12 +2969,15 @@ class IterativeImputer(_PrepBase):
         self.keep_empty_features = keep_empty_features
 
     def _refuse(self):
-        if self.estimator is not None or self.sample_posterior or self.n_nearest_features is not None \
-                or self.add_indicator:
-            raise NotImplementedError("mojolearn: IterativeImputer supports its default estimator only, without "
-                                      "sample_posterior, n_nearest_features or add_indicator")
-        if self.imputation_order not in ("ascending", "descending", "roman", "arabic"):
-            raise NotImplementedError(f"mojolearn: imputation_order={self.imputation_order!r} is not implemented")
+        if self.imputation_order not in ("ascending", "descending", "roman", "arabic", "random"):
+            raise ValueError(f"mojolearn: invalid imputation_order {self.imputation_order!r}")
+        nnf = self.n_nearest_features
+        if nnf is not None and (not isinstance(nnf, numbers.Integral) or nnf < 1):
+            raise ValueError(f"mojolearn: n_nearest_features must be an int >= 1; got {nnf!r}")
+        if self.sample_posterior and self.estimator is not None and \
+                "return_std" not in inspect.signature(self.estimator.predict).parameters:
+            raise ValueError("mojolearn: If 'sample_posterior' is True, the estimator must support "
+                             "'return_std' in its 'predict' method.")
 
     def _bounds(self, d):
         def per(v):
@@ -2823,11 +2999,85 @@ class IterativeImputer(_PrepBase):
         bo = pr.put_list(self._bounds_k)
         return fo, mo, bo
 
+    def _draw(self):
+        """The next splitmix64 word of the instance's draw stream."""
+        self._rng, z = _splitmix64(self._rng)
+        return z
+
+    def _orders(self, miss, dk, rounds):
+        """The features each round imputes, in order: the reference's orders
+        (a stable argsort of the missing counts; 'descending' that order
+        reversed; 'random' a Fisher-Yates permutation per round of the
+        candidates, every feature or with skip_complete those with missing
+        entries). A feature with nothing missing is skipped whether or not
+        skip_complete (the reference fits it and changes nothing)."""
+        if self.imputation_order != "random":
+            asc = sorted(range(dk), key=lambda j: miss[j])
+            order = {"ascending": asc, "descending": asc[::-1], "roman": list(range(dk)),
+                     "arabic": list(range(dk))[::-1]}[self.imputation_order]
+            return [[j for j in order if miss[j] > 0]] * rounds
+        cand = [j for j in range(dk) if miss[j] > 0] if self.skip_complete else list(range(dk))
+        out = []
+        for _ in range(rounds):
+            perm = list(cand)
+            for i in range(len(perm) - 1, 0, -1):
+                k = self._draw() % (i + 1)
+                perm[i], perm[k] = perm[k], perm[i]
+            out.append([j for j in perm if miss[j] > 0])
+        return out
+
+    def _abs_corr(self, Xf, n, dk, mode):
+        """The reference's `_get_abs_corr_mat` of the initially filled block:
+        |corrcoef| (the centred Gram on the device, the d x d normalisation in
+        Python float64), NaN -> 1e-6, clipped below at 1e-6, a zero diagonal,
+        each column scaled to sum 1."""
+        pr = _Prog()
+        fo, mz = pr.put(Xf), pr.alloc(n * dk)
+        means, cnt, g, flag = pr.alloc(dk), pr.alloc(1), pr.alloc(dk * dk), pr.alloc(1)
+        pr.stage("ii_mean", dk, fo, n, dk, mz, 0, means, cnt, flag)
+        pr.stage("ii_gram", dk * dk, fo, n, dk, mz, 0, means, g, flag)
+        pr.run(mode)
+        G = pr.values(g, dk * dk)
+        m = [[0.0] * dk for _ in range(dk)]
+        for a in range(dk):
+            for b in range(dk):
+                den = math.sqrt(G[a * dk + a] * G[b * dk + b]) if G[a * dk + a] > 0 and G[b * dk + b] > 0 else 0.0
+                v = abs(G[a * dk + b] / den) if den > 0 else float("nan")
+                v = min(v, 1.0) if v == v else 1e-6
+                m[a][b] = 0.0 if a == b else max(v, 1e-6)
+        for b in range(dk):
+            col = sum(m[a][b] for a in range(dk))
+            if col > 0:
+                for a in range(dk):
+                    m[a][b] /= col
+        return m
+
+    def _neighbours(self, corr, j, dk):
+        """n_nearest_features predictors of feature j, drawn without
+        replacement with probability corr[:, j] (a 53-bit splitmix64 uniform
+        against the cumulative weight of the columns not yet drawn)."""
+        w = [corr[a][j] for a in range(dk)]
+        chosen = set()
+        for _ in range(int(self.n_nearest_features)):
+            left = [a for a in range(dk) if a not in chosen and w[a] > 0]
+            tot = sum(w[a] for a in left)
+            u = (self._draw() >> 11) * 2.0 ** -53 * tot
+            pick, cum = left[-1], 0.0
+            for a in left:
+                cum += w[a]
+                if cum > u:
+                    pick = a
+                    break
+            chosen.add(pick)
+        return sorted(chosen)
+
     def fit_transform(self, X, y=None):
         self._refuse()
         arr = _x2d(X)
         n, d = arr.shape
         mode = _mode()
+        self._rng = 0 if self.random_state is None else int(self.random_state) & 0xFFFFFFFFFFFFFFFF
+        self._post_step = 0
         self.initial_imputer_ = SimpleImputer(missing_values=self.missing_values, strategy=self.initial_strategy,
                                               fill_value=self.fill_value,
                                               keep_empty_features=self.keep_empty_features).fit(arr)
@@ -2846,47 +3096,149 @@ class IterativeImputer(_PrepBase):
         pr.run(mode)
         miss = [round(v * n) for v in pr.values(stm + dk, dk)]      # mean of the 0/1 mask
         scale = max([v for v in pr.values(st + 5 * d, d)] or [0.0])
-        # the reference's orders (a stable argsort of the missing counts;
-        # 'descending' is that order reversed); a feature with nothing missing
-        # is skipped whether or not skip_complete (the reference fits it and
-        # changes nothing)
-        asc = sorted(range(dk), key=lambda j: miss[j])
-        order = {"ascending": asc, "descending": asc[::-1], "roman": list(range(dk)),
-                 "arabic": list(range(dk))[::-1]}[self.imputation_order]
-        order = [j for j in order if miss[j] > 0]
+        self._indicator = [j for j, c in enumerate(pr.values(st, d)) if int(c) < n] if self.add_indicator else []
         self.n_features_with_missing_ = sum(1 for m in miss if m > 0)
         self.numeric_mode_, self.n_features_in_ = mode, d
         rounds = int(self.max_iter)
+        orders = self._orders(miss, dk, rounds)
+        nnf = self.n_nearest_features
+        corr = self._abs_corr(Xf, n, dk, mode) if nnf is not None and nnf < dk else None
+        if self.estimator is not None:
+            return self._with_indicator(arr, self._fit_host(arr, Xf, orders, corr, float(self.tol) * scale))
         pr = _Prog()
         fo, mo, bo = self._prepare(pr, arr, Xf)
         tol = pr.put_scalar(float(self.tol) * scale)
         flag, niter = pr.alloc(1), pr.alloc(1)
         prev = pr.alloc(n * dk)
-        means, cnt, g = pr.alloc(dk), pr.alloc(1), pr.alloc(dk * dk)
+        cnt, g = pr.alloc(1), pr.alloc(dk * dk)
         p1 = max(dk - 1, 1)
         gs, eig, vec, w = pr.alloc(p1 * p1), pr.alloc(p1), pr.alloc(p1 * p1), pr.alloc(p1)
-        seq = []
-        for _ in range(rounds):
-            if order:
+        seq, extra = [], []
+        seed = self._rng & 0x7FFFFFFF
+        # the reference checks convergence only without sample_posterior
+        conv = not self.sample_posterior
+        for r in range(rounds):
+            if orders[r] and conv:
                 pr.stage("ii_snapshot", n * dk, fo, prev, flag)
-            for j in order:
-                coef, inter = pr.alloc(dk), pr.alloc(1)
+            for j in orders[r]:
+                coef, inter, means = pr.alloc(dk), pr.alloc(1), pr.alloc(dk)
+                nbl = self._neighbours(corr, j, dk) if corr is not None else None
+                nb1 = pr.put_list([1 if a in nbl else 0 for a in range(dk)]) + 1 if nbl is not None else 0
+                pp = len(nbl) if nbl is not None else dk - 1
+                al = pr.alloc(2) if self.sample_posterior else -1
                 seq.append((j, coef, inter))
                 pr.stage("ii_mean", dk, fo, n, dk, mo, j, means, cnt, flag)
                 pr.stage("ii_gram", dk * dk, fo, n, dk, mo, j, means, g, flag)
-                if dk > 1:
-                    pr.stage("ii_sub", 1, g, dk, j, gs, flag)
-                    pr.stage("eigh", 1, gs, dk - 1, 0, eig, vec)
-                pr.stage("ii_br", 1, g, dk, j, eig, vec, means, cnt, coef, inter, flag, w)
-                pr.stage("ii_predict", n, fo, n, dk, mo, j, coef, inter, bo, flag)
-            if order:
-                pr.stage("ii_conv", 1, fo, prev, n * dk, tol, flag, niter)
+                if pp > 0:
+                    pr.stage("ii_sub", 1, g, dk, j, gs, flag, nb1)
+                    pr.stage("eigh", 1, gs, pp, 0, eig, vec)
+                pr.stage("ii_br", 1, g, dk, j, eig, vec, means, cnt, coef, inter, flag, w, nb1, al + 1)
+                if self.sample_posterior:
+                    sig = pr.alloc(max(pp, 1) ** 2)
+                    pr.stage("ii_sigma", pp * pp, eig, vec, pp, al, sig, flag)
+                    key = pr.put_ints([seed, self._post_step])
+                    self._post_step += 1
+                    pr.stage("ii_post", n, fo, n, dk, mo, j, coef, inter, bo, flag, means, sig, al, nb1, key)
+                    extra.append((nbl, sig, al, means, pp))
+                else:
+                    pr.stage("ii_predict", n, fo, n, dk, mo, j, coef, inter, bo, flag)
+            if orders[r] and conv:
+                pr.stage("ii_conv", 1, fo, prev, n * dk, tol, flag, niter, dk)
         pr.run(mode)
-        done = int(pr.values(niter, 1)[0]) if order else 0
-        self.n_iter_ = done if order else min(1, rounds)
-        kept = seq[:done * len(order)]
-        self.imputation_sequence_ = [(j, pr.get(c, dk), pr.get(i, 1)) for j, c, i in kept]
-        return pr.get(fo, (n, dk))
+        any_order = any(orders)
+        done = (int(pr.values(niter, 1)[0]) if conv else rounds) if any_order else 0
+        self.n_iter_ = done if any_order else min(1, rounds)
+        steps = sum(len(o) for o in orders[:done])
+        self.imputation_sequence_ = [(j, pr.get(c, dk), pr.get(i, 1)) for j, c, i in seq[:steps]]
+        self._posterior = [(nbl, pr.get(sg, max(pp, 1) ** 2), pr.get(al, 2), pr.get(mn, dk))
+                           for nbl, sg, al, mn, pp in extra[:steps]]
+        return self._with_indicator(arr, pr.get(fo, (n, dk)))
+
+    def _with_indicator(self, arr, Xt):
+        """Xt, then MissingIndicator's columns (add_indicator)."""
+        m = len(self._indicator)
+        if not m:
+            return Xt
+        n, d = arr.shape
+        pr = _Prog()
+        xo = _mark_missing(pr, pr.put(arr), n * d, self.missing_values)
+        mo = pr.alloc(n * m)
+        pr.stage("nan_mask", n * m, xo, n, d, pr.put_list(self._indicator), m, mo)
+        pr.run(self.numeric_mode_)
+        return _hstack(Xt, pr.get(mo, (n, m)))
+
+    def _fit_host(self, arr, Xf, orders, corr, tol):
+        """estimator=<any>: the reference's rounds in Python over copies of
+        the estimator (its fit / predict on the float32 blocks; clip, or
+        sample_posterior's truncated normal from predict(return_std=True))."""
+        n, d = arr.shape
+        dk = len(self._keep)
+        mask = self._mask(arr)
+        Xt = [list(r) for r in Xf.tolist()]
+        seq = []
+        done = 0
+        for r, order in enumerate(orders):
+            prev = [list(row) for row in Xt]
+            for j in order:
+                nbl = self._neighbours(corr, j, dk) if corr is not None else [a for a in range(dk) if a != j]
+                est = _clone(self.estimator)
+                obs = [i for i in range(n) if not mask[i][j]]
+                mis = [i for i in range(n) if mask[i][j]]
+                est.fit(Array.from_list([[Xt[i][a] for a in nbl] for i in obs], "<f4"),
+                        Array.from_list([Xt[i][j] for i in obs], "<f4"))
+                seq.append((j, nbl, est))
+                self._impute_host(Xt, mis, j, nbl, est)
+            done = r + 1
+            if not self.sample_posterior and order and \
+                    max(sum(abs(a - b) for a, b in zip(ra, rb)) for ra, rb in zip(Xt, prev)) < tol:
+                break
+        self.n_iter_ = done if any(orders) else min(1, len(orders))
+        self.imputation_sequence_ = seq
+        return Array.from_list(Xt, "<f4")
+
+    def _mask(self, arr):
+        n, d = arr.shape
+        pr = _Prog()
+        xo = _mark_missing(pr, pr.put(arr), n * d, self.missing_values)
+        mo = pr.alloc(n * len(self._keep))
+        pr.stage("nan_mask", n * len(self._keep), xo, n, d, pr.put_list(self._keep), len(self._keep), mo)
+        pr.run(_mode())
+        return [[v != 0 for v in row] for row in pr.get(mo, (n, len(self._keep))).tolist()]
+
+    def _impute_host(self, Xt, mis, j, nbl, est):
+        if not mis:
+            return
+        Xm = Array.from_list([[Xt[i][a] for a in nbl] for i in mis], "<f4")
+        lo, hi = self._bounds_k[2 * j], self._bounds_k[2 * j + 1]
+        if not self.sample_posterior:
+            vals = [min(max(float(v), lo), hi) for v in _as_list(est.predict(Xm))]
+        else:
+            mus, sig = est.predict(Xm, return_std=True)
+            vals = [self._truncnorm_host(float(m), float(s), lo, hi) for m, s in zip(_as_list(mus), _as_list(sig))]
+        f32 = array.array("f", vals)
+        for i, v in zip(mis, f32):
+            Xt[i][j] = v
+
+    def _truncnorm_host(self, mu, sigma, lo, hi):
+        """`_impute_one_feature`'s rule in Python float64: mu beyond a bound
+        -> the bound, sigma <= 0 -> mu, else inversion of the truncated normal
+        at a 53-bit splitmix64 uniform (statistics.NormalDist)."""
+        if mu < lo:
+            return lo
+        if mu > hi:
+            return hi
+        if not sigma > 0:
+            return mu
+        nd = statistics.NormalDist()
+        pa = 0.0 if lo == -math.inf else nd.cdf((lo - mu) / sigma)
+        pb = 1.0 if hi == math.inf else nd.cdf((hi - mu) / sigma)
+        u = ((self._draw() >> 11) + 0.5) * 2.0 ** -53
+        pu = pa + u * (pb - pa)
+        if pu <= 0:
+            return lo
+        if pu >= 1:
+            return hi
+        return min(max(mu + sigma * nd.inv_cdf(pu), lo), hi)
 
     def fit(self, X, y=None):
         self.fit_transform(X)
@@ -2900,13 +3252,38 @@ class IterativeImputer(_PrepBase):
         n, d = arr.shape
         dk = len(self._keep)
         Xf = self.initial_imputer_.transform(arr)
+        if self.estimator is not None:
+            mask = self._mask(arr)
+            Xt = [list(r) for r in Xf.tolist()]
+            for j, nbl, est in self.imputation_sequence_:
+                self._impute_host(Xt, [i for i in range(n) if mask[i][j]], j, nbl, est)
+            return self._with_indicator(arr, Array.from_list(Xt, "<f4"))
         pr = _Prog()
         fo, mo, bo = self._prepare(pr, arr, Xf)
-        for j, coef, inter in self.imputation_sequence_:
+        seed = self._rng & 0x7FFFFFFF
+        for s, (j, coef, inter) in enumerate(self.imputation_sequence_):
             co, io = pr.put(coef), pr.put(inter)
-            pr.stage("ii_predict", n, fo, n, dk, mo, j, co, io, bo, _NONE)
+            if self.sample_posterior:
+                nbl, sig, al, means = self._posterior[s]
+                nb1 = pr.put_list([1 if a in nbl else 0 for a in range(dk)]) + 1 if nbl is not None else 0
+                key = pr.put_ints([seed, self._post_step])
+                self._post_step += 1
+                pr.stage("ii_post", n, fo, n, dk, mo, j, co, io, bo, _NONE, pr.put(means), pr.put(sig), pr.put(al),
+                         nb1, key)
+            else:
+                pr.stage("ii_predict", n, fo, n, dk, mo, j, co, io, bo, _NONE)
         pr.run(self.numeric_mode_)
-        return pr.get(fo, (n, dk))
+        return self._with_indicator(arr, pr.get(fo, (n, dk)))
+
+
+def _clone(est):
+    """A fresh unfitted copy (the reference's `clone`: the same class and
+    get_params(deep=False))."""
+    return type(est)(**est.get_params(deep=False)) if hasattr(est, "get_params") else copy.deepcopy(est)
+
+
+def _as_list(v):
+    return [float(x) for x in (v.tolist() if hasattr(v, "tolist") else v)]
 
 
 # ---------------------------------------------------------------- feature selection

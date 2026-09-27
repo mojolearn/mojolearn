@@ -448,6 +448,9 @@ def gbdt_fit(
     pair_winners: List[UInt32] = List[UInt32](),
     pair_losers: List[UInt32] = List[UInt32](),
     pair_weights: List[Float32] = List[Float32](),
+    # MultiRMSE's target dimension (`train`'s `target_dim`): `y` then holds
+    # `target_dim` DIM-MAJOR planes of `n_rows`; 1 for every other loss
+    target_dim: Int = 1,
 ) raises -> GbdtFitResult:
     """Fit and return the model as `model_text`, plus both loss curves.
 
@@ -516,9 +519,13 @@ def gbdt_fit(
     else:
         xs.resize(n_x, Float32(0.0))
         memcpy(dest=xs.unsafe_ptr(), src=x, count=n_x)
+    if target_dim < 1:
+        raise Error(
+            "gbdt_fit: target_dim must be positive, got " + String(target_dim)
+        )
     var ys = List[Float32]()
-    ys.resize(n_rows, Float32(0.0))
-    memcpy(dest=ys.unsafe_ptr(), src=y, count=n_rows)
+    ys.resize(n_rows * target_dim, Float32(0.0))
+    memcpy(dest=ys.unsafe_ptr(), src=y, count=n_rows * target_dim)
 
     var cats = List[Bool]()
     var one_hot = List[Bool]()
@@ -607,6 +614,7 @@ def gbdt_fit(
         pair_winners=pair_winners,
         pair_losers=pair_losers,
         pair_weights=pair_weights,
+        target_dim=target_dim,
     )
     host_times.stop_host("gbdt_fit_train", t_phase)
     t_phase = host_times.start()

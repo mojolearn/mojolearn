@@ -15,8 +15,11 @@ iteration after one O(n d^2) Gram pass. A FLAG slot, set once the imputer
 has converged, turns every later stage of the program into a no-op, so a
 whole max_iter program runs in one binding call.
 """
-from x_prep.common import FP, IP, p, ld, st
-from x_prep.prims import add, sub, mul, div
+from std.memory import bitcast
+from checks.numerics import portable_erff
+from x_prep.common import FP, IP, p, ld, st, ldi
+from x_prep.prims import add, sub, mul, div, logf, sqrtf
+from x_prep.mutual_info import _splitmix
 
 comptime BR_MAX_ITER = 300
 comptime BR_TOL = Float32(1.0e-3)
@@ -27,6 +30,15 @@ comptime F64_EPS = Float32(2.220446e-16)
 @always_inline
 def _done(f: FP, q: IP, k: Int) -> Bool:
     return ld(f, p(q, k)) != Float32(0)
+
+
+@always_inline
+def _active(f: FP, nb1: Int, a: Int, j: Int) -> Bool:
+    """Column a is a predictor of feature j: every other column (nb1 == 0),
+    or the ones the neighbour mask NB (at nb1 - 1) marks (n_nearest_features)."""
+    if nb1 == 0:
+        return a != j
+    return ld(f, nb1 - 1 + a) != Float32(0)
 
 
 def ii_mean_unit(t: Int, f: FP, q: IP):
@@ -71,29 +83,37 @@ def ii_gram_unit(t: Int, f: FP, q: IP):
 
 
 def ii_sub_unit(t: Int, f: FP, q: IP):
-    """q = [G, d, j, GS, FLAG]; t = 0: GS = G without row and column j."""
+    """q = [G, d, j, GS, FLAG, NB]; t = 0: GS = G restricted to feature j's
+    predictors (`_active`; without NB, every column but j), ascending."""
     if _done(f, q, 4):
         return
     var d = p(q, 1)
     var j = p(q, 2)
+    var nb1 = p(q, 5)
+    var pp = 0
+    for a in range(d):
+        if _active(f, nb1, a, j):
+            pp += 1
     var r = 0
     for a in range(d):
-        if a == j:
+        if not _active(f, nb1, a, j):
             continue
         var c = 0
         for b in range(d):
-            if b == j:
+            if not _active(f, nb1, b, j):
                 continue
-            st(f, p(q, 3) + r * (d - 1) + c, ld(f, p(q, 0) + a * d + b))
+            st(f, p(q, 3) + r * pp + c, ld(f, p(q, 0) + a * d + b))
             c += 1
         r += 1
 
 
 def ii_br_unit(t: Int, f: FP, q: IP):
-    """q = [G, d, j, EIG, V, MEANS, CNT, COEF, INTER, FLAG, W]; t = 0.
-    BayesianRidge on the centred block: X'X = G without j (eigenpairs EIG, V
-    of size p = d - 1), X'y = G[:, j], y'y = G[j, j]. COEF[a] (0 at j) and
-    INTER = mean_j - sum_a mean_a COEF[a]. W is p floats of scratch."""
+    """q = [G, d, j, EIG, V, MEANS, CNT, COEF, INTER, FLAG, W, NB, AL]; t = 0.
+    BayesianRidge on the centred block: X'X = G over feature j's predictors
+    (`_active`: eigenpairs EIG, V of size p), X'y = G[:, j], y'y = G[j, j].
+    COEF[a] (0 off the predictors) and INTER = mean_j - sum_a mean_a COEF[a].
+    W is p floats of scratch. AL (offset + 1, 0 for none) receives the final
+    alpha and lambda (the posterior covariance's, `ii_sigma`)."""
     if _done(f, q, 9):
         return
     var d = p(q, 1)
@@ -102,7 +122,11 @@ def ii_br_unit(t: Int, f: FP, q: IP):
     var EIG = p(q, 3)
     var V = p(q, 4)
     var W = p(q, 10)
-    var pp = d - 1
+    var nb1 = p(q, 11)
+    var pp = 0
+    for a in range(d):
+        if _active(f, nb1, a, j):
+            pp += 1
     var ntr = ld(f, p(q, 6))
     var yty = ld(f, G + j * d + j)
     # W = V' X'y
@@ -110,7 +134,7 @@ def ii_br_unit(t: Int, f: FP, q: IP):
         var s = Float32(0)
         var a2 = 0
         for a in range(d):
-            if a == j:
+            if not _active(f, nb1, a, j):
                 continue
             s = add(s, mul(ld(f, V + a2 * pp + r), ld(f, G + a * d + j)))
             a2 += 1
@@ -127,7 +151,7 @@ def ii_br_unit(t: Int, f: FP, q: IP):
         var a2 = 0
         var csq = Float32(0)
         for a in range(d):
-            if a == j:
+            if not _active(f, nb1, a, j):
                 continue
             var s = Float32(0)
             for r in range(pp):
@@ -145,12 +169,12 @@ def ii_br_unit(t: Int, f: FP, q: IP):
         var cxy = Float32(0)
         var quad = Float32(0)
         for a in range(d):
-            if a == j:
+            if not _active(f, nb1, a, j):
                 continue
             cxy = add(cxy, mul(ld(f, C + a), ld(f, G + a * d + j)))
             var row = Float32(0)
             for b in range(d):
-                if b == j:
+                if not _active(f, nb1, b, j):
                     continue
                 row = add(row, mul(ld(f, G + a * d + b), ld(f, C + b)))
             quad = add(quad, mul(ld(f, C + a), row))
@@ -171,7 +195,7 @@ def ii_br_unit(t: Int, f: FP, q: IP):
             var ratio2 = div(lam, alpha)
             var b2 = 0
             for a in range(d):
-                if a == j:
+                if not _active(f, nb1, a, j):
                     continue
                 var s = Float32(0)
                 for r in range(pp):
@@ -182,9 +206,12 @@ def ii_br_unit(t: Int, f: FP, q: IP):
                 st(f, C + a, s)
                 b2 += 1
             break
+    if p(q, 12) > 0:
+        st(f, p(q, 12) - 1, alpha)
+        st(f, p(q, 12), lam)
     var inter = ld(f, p(q, 5) + j)
     for a in range(d):
-        if a == j:
+        if not _active(f, nb1, a, j):
             continue
         inter = sub(inter, mul(ld(f, p(q, 5) + a), ld(f, C + a)))
     st(f, p(q, 8), inter)
@@ -214,6 +241,138 @@ def ii_predict_unit(t: Int, f: FP, q: IP):
     st(f, p(q, 0) + t * d + j, v)
 
 
+def ii_sigma_unit(t: Int, f: FP, q: IP):
+    """q = [EIG, V, p, AL, SIG, FLAG]; t = a*p + b. BayesianRidge's posterior
+    covariance over the predictors: SIG[a, b] = sum_r V[a, r] V[b, r] /
+    (e_r + lambda / alpha), divided by alpha (a negative eigenvalue read as
+    0, as `ii_br`)."""
+    if _done(f, q, 5):
+        return
+    var pp = p(q, 2)
+    var a = t // pp
+    var b = t % pp
+    var alpha = ld(f, p(q, 3))
+    var ratio = div(ld(f, p(q, 3) + 1), alpha)
+    var s = Float32(0)
+    for r in range(pp):
+        var e = ld(f, p(q, 0) + r)
+        if e < Float32(0):
+            e = Float32(0)
+        s = add(s, div(mul(ld(f, p(q, 1) + a * pp + r), ld(f, p(q, 1) + b * pp + r)), add(e, ratio)))
+    st(f, p(q, 4) + t, div(s, alpha))
+
+
+def _phi(x: Float32) -> Float32:
+    """The standard normal CDF, 0.5 * (1 + erf(x / sqrt 2)); +-inf exact."""
+    if x == _inf():
+        return Float32(1)
+    if x == -_inf():
+        return Float32(0)
+    return mul(Float32(0.5), add(Float32(1), portable_erff(mul(x, Float32(0.70710677)))))
+
+
+@always_inline
+def _inf() -> Float32:
+    return bitcast[DType.float32](UInt32(0x7F800000))
+
+
+def _ppnd7(pr: Float32) -> Float32:
+    """The standard normal quantile of pr in (0, 1): Wichura's AS 241 PPND7
+    (about 7 significant digits)."""
+    var q = sub(pr, Float32(0.5))
+    if abs(q) <= Float32(0.425):
+        var r = sub(Float32(0.180625), mul(q, q))
+        var num = add(mul(add(mul(add(mul(Float32(59.10937472), r), Float32(159.29113202)), r), Float32(50.434271938)), r), Float32(3.3871327179))
+        var den = add(mul(add(mul(add(mul(Float32(67.1875636), r), Float32(78.757757664)), r), Float32(17.895169469)), r), Float32(1))
+        return div(mul(q, num), den)
+    var r = pr if q < Float32(0) else sub(Float32(1), pr)
+    r = sqrtf(-logf(r))
+    var v: Float32
+    if r <= Float32(5):
+        r = sub(r, Float32(1.6))
+        var num = add(mul(add(mul(add(mul(Float32(0.17023821103), r), Float32(1.3067284816)), r), Float32(2.75681539)), r), Float32(1.4234372777))
+        var den = add(mul(add(mul(Float32(0.12021132975), r), Float32(0.7370016425)), r), Float32(1))
+        v = div(num, den)
+    else:
+        r = sub(r, Float32(5))
+        var num = add(mul(add(mul(add(mul(Float32(0.017337203997), r), Float32(0.42868294337)), r), Float32(3.081226386)), r), Float32(6.657905115))
+        var den = add(mul(add(mul(Float32(0.012258202635), r), Float32(0.24197894225)), r), Float32(1))
+        v = div(num, den)
+    return -v if q < Float32(0) else v
+
+
+def ii_post_unit(t: Int, f: FP, q: IP):
+    """q = [X, n, d, MASK, j, COEF, INTER, BOUNDS, FLAG, MEANS, SIG, AL, NB,
+    KEY]; t = row. sample_posterior: where feature j is missing, mu = the
+    BayesianRidge mean (INTER + sum_a COEF[a] X[i, a], a ascending) and sigma
+    = sqrt(xc' SIG xc + 1 / alpha), xc the predictors less MEANS (the
+    reference's `predict(return_std=True)`); then, as `_impute_one_feature`:
+    mu below / above BOUNDS -> the bound, sigma <= 0 -> mu, else a draw of the
+    normal truncated to BOUNDS by inversion, Phi^-1(Phi(a) + u (Phi(b) -
+    Phi(a))) with u in (0, 1) the top 24 bits of splitmix64 of (seed, step,
+    row) (KEY: int32 seed and step; the reference draws scipy's truncnorm)."""
+    if p(q, 8) >= 0 and _done(f, q, 8):
+        return
+    var d = p(q, 2)
+    var j = p(q, 4)
+    if ld(f, p(q, 3) + t * d + j) == Float32(0):
+        return
+    var nb1 = p(q, 12)
+    var X = p(q, 0) + t * d
+    var mu = ld(f, p(q, 6))
+    for a in range(d):
+        if a == j:
+            continue
+        mu = add(mu, mul(ld(f, p(q, 5) + a), ld(f, X + a)))
+    var pp = 0
+    for a in range(d):
+        if _active(f, nb1, a, j):
+            pp += 1
+    var s2 = Float32(0)
+    var a2 = 0
+    for a in range(d):
+        if not _active(f, nb1, a, j):
+            continue
+        var row = Float32(0)
+        var b2 = 0
+        for b in range(d):
+            if not _active(f, nb1, b, j):
+                continue
+            row = add(row, mul(ld(f, p(q, 10) + a2 * pp + b2), sub(ld(f, X + b), ld(f, p(q, 9) + b))))
+            b2 += 1
+        s2 = add(s2, mul(sub(ld(f, X + a), ld(f, p(q, 9) + a)), row))
+        a2 += 1
+    var sigma = sqrtf(add(s2, div(Float32(1), ld(f, p(q, 11)))))
+    var lo = ld(f, p(q, 7) + 2 * j)
+    var hi = ld(f, p(q, 7) + 2 * j + 1)
+    var v: Float32
+    if mu < lo:
+        v = lo
+    elif mu > hi:
+        v = hi
+    elif not (sigma > Float32(0)):
+        v = mu
+    else:
+        var seed = UInt64(ldi(f, p(q, 13)))
+        var step = UInt64(ldi(f, p(q, 13) + 1))
+        var z = _splitmix(_splitmix(seed * UInt64(0x100000000) + step) + UInt64(t))
+        var u = mul(add(Float32(Int(z >> 40)), Float32(0.5)), Float32(5.9604645e-08))
+        var pa = _phi(div(sub(lo, mu), sigma))
+        var pb = _phi(div(sub(hi, mu), sigma))
+        var pu = add(pa, mul(u, sub(pb, pa)))
+        if pu <= Float32(0):
+            v = lo
+        elif pu >= Float32(1):
+            v = hi
+        else:
+            v = add(mu, mul(sigma, _ppnd7(pu)))
+            if v < lo:
+                v = lo
+            if v > hi:
+                v = hi
+    st(f, X + j, v)
+
+
 def ii_snapshot_unit(t: Int, f: FP, q: IP):
     """q = [X, PREV, FLAG]; t = element: PREV = X."""
     if _done(f, q, 2):
@@ -222,14 +381,19 @@ def ii_snapshot_unit(t: Int, f: FP, q: IP):
 
 
 def ii_conv_unit(t: Int, f: FP, q: IP):
-    """q = [X, PREV, count, TOL, FLAG, NITER]; t = 0. One more round counted;
-    FLAG = 1 when max |X - PREV| < TOL (the reference's inf-norm stop)."""
+    """q = [X, PREV, count, TOL, FLAG, NITER, D]; t = 0. One more round
+    counted; FLAG = 1 when the reference's stop holds: the matrix inf-norm of
+    X - PREV (numpy `norm(ord=inf)` of a 2-D array: the largest row sum of
+    |X - PREV| over rows of D entries, each summed left to right) < TOL."""
     if _done(f, q, 4):
         return
     st(f, p(q, 5), add(ld(f, p(q, 5)), Float32(1)))
+    var d = p(q, 6)
     var m = Float32(0)
-    for i in range(p(q, 2)):
-        var e = abs(sub(ld(f, p(q, 0) + i), ld(f, p(q, 1) + i)))
+    for r in range(p(q, 2) // d):
+        var e = Float32(0)
+        for c in range(d):
+            e = add(e, abs(sub(ld(f, p(q, 0) + r * d + c), ld(f, p(q, 1) + r * d + c))))
         if e > m:
             m = e
     if m < ld(f, p(q, 3)):

@@ -196,6 +196,34 @@ def test_kbins_quantile_methods():
                 np.testing.assert_allclose(np.asarray(a), b, rtol=1e-6, atol=1e-6, err_msg=f"{meth} {nb}")
 
 
+def test_kbins_sample_weight():
+    import sklearn.preprocessing as sk
+    rng = np.random.default_rng(9)
+    X = np.round(rng.standard_normal((301, 3)) * 4).astype(np.float32) / np.float32(4)
+    X[:, 2] = rng.standard_normal(301).astype(np.float32)
+    for sw in (rng.integers(0, 4, 301).astype(np.float32), rng.random(301).astype(np.float32),
+               np.ones(301, np.float32)):
+        for kw in (dict(strategy="quantile"), dict(strategy="quantile", quantile_method="inverted_cdf"),
+                   dict(strategy="uniform"), dict(strategy="kmeans")):
+            for nb in (3, 5):
+                m = ml.KBinsDiscretizer(n_bins=nb, encode="ordinal", **kw).fit(X, sample_weight=sw)
+                with warnings.catch_warnings():
+                    warnings.simplefilter("ignore")
+                    r = sk.KBinsDiscretizer(n_bins=nb, encode="ordinal", **kw).fit(X, sample_weight=sw)
+                tol = 1e-4 if kw["strategy"] == "kmeans" else 1e-6
+                for a, b in zip(m.bin_edges_, r.bin_edges_):
+                    np.testing.assert_allclose(np.asarray(a), b, rtol=tol, atol=tol, err_msg=f"{kw} {nb}")
+    for bad in (dict(strategy="quantile", quantile_method="linear"), dict(strategy="quantile", quantile_method="hazen")):
+        for est in (ml.KBinsDiscretizer(encode="ordinal", **bad), sk.KBinsDiscretizer(encode="ordinal", **bad)):
+            try:
+                est.fit(X, sample_weight=np.ones(301))
+                raise AssertionError("no ValueError")
+            except ValueError:
+                pass
+
+
 if __name__ == "__main__":
     test_kbins_quantile_methods()
     print("PASS test_kbins_quantile_methods")
+    test_kbins_sample_weight()
+    print("PASS test_kbins_sample_weight")
