@@ -51,10 +51,10 @@ def test_task_rosters_per_vendor(vendor):
                                           else {"lightgbm"})
         assert libs == want, (vendor, r["id"], opp)
         if vendor == "apple":
-            assert r["our_arms"] == {"ours": "identical", "ours-ab": "fast"}
+            assert r["our_arms"] == {"ours": "identical", "ours-ab": "fast", "ours-cpu": "identical"}
             assert all(o.endswith("-cpu") for o in opp)
         else:
-            assert r["our_arms"] == {"ours": "identical"}
+            assert r["our_arms"] == {"ours": "identical", "ours-cpu": "identical"}
         if vendor == "nvidia":
             assert all(not o.endswith("-cpu") for o in opp)
         if vendor == "amd":
@@ -101,8 +101,8 @@ def test_dry_run_lists_task_races_and_rank_data(capsys):
                     "--lanes", ",".join(TASKS)]) == 0
     text = capsys.readouterr().out
     assert "data istella-rank" in text and "gbm-bench/istella/istella_rank.npz" in text
-    assert "TOTAL races=5 cells=24" in text
-    assert "INFER cells=48" in text
+    assert "TOTAL races=5 cells=29" in text
+    assert "INFER cells=58" in text
 
 
 # --- configs -----------------------------------------------------------------

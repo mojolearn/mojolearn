@@ -31,6 +31,8 @@ STUB_TREES = textwrap.dedent(r'''
     p.add_argument("--devices"); p.add_argument("--arms"); p.add_argument("--ours-ab")
     p.add_argument("--ours-only", action="store_true")
     p.add_argument("--infer", action="store_true")    # tools/test_bench_board_infer.py
+    p.add_argument("--ours-cpu", action="store_true")
+    p.add_argument("--mem", action="store_true")
     a = p.parse_args()
     with open(os.environ["STUB_CALLS"], "a") as fh:
         fh.write("trees %s %s\n" % (a.lane, a.dataset))
@@ -42,11 +44,14 @@ STUB_TREES = textwrap.dedent(r'''
     ours = [("ours", mode, 100.0)]
     if a.ours_ab:
         ours.append(("ours-ab", a.ours_ab.split("=")[1].strip("'"), 80.0))
+    if a.ours_cpu:
+        ours.append(("ours-cpu", "identical", 150.0))
     opps = [(o, None, 200.0) for o in (a.arms.split(",") if a.arms else [])]
     for name, m, _ in ours:
+        vendor = "cpu" if name == "ours-cpu" else os.environ["MOJOLEARN_SPEED_EXPECTED_VENDOR"]
         print("BENCH_BINDING arm=%s requested=%s resolved=%s compiled=%s vendor=%s "
               "path=/v/lib/python3.12/site-packages/mojolearn/_x.so"
-              % (name, m, m, m, os.environ["MOJOLEARN_SPEED_EXPECTED_VENDOR"]))
+              % (name, m, m, m, vendor))
     arms = ours + opps
     refuse = os.environ.get("STUB_REFUSE")
     for name, _, base in arms:
@@ -57,12 +62,21 @@ STUB_TREES = textwrap.dedent(r'''
         print("FSPEED-HEADER family=forest lane=%s arm=%s mode=%s device=x rounds=%d size=shipped"
               % (a.lane, name, mode.upper(), n))
         print("FSPEED-WARMUP lane=%s arm=%s shape=%s ms=%.3f" % (a.lane, name, shape, base * 2))
-    for r in range(1, n + 1):
+    for r in range(0 if a.mem else 1, n + 1):
         for name, _, base in arms:
             if name == refuse:
                 continue
+            if a.mem:
+                print("FSPEED-MEM lane=%s arm=%s round=%d host_mb=%.1f gpu_mb=%s children_mb=0.0 "
+                      "host_method=stub host peak gpu_method=%s"
+                      % (a.lane, name, r, base * 10 + r, "-" if name.endswith("-cpu") else "7.0",
+                         "cpu arm" if name.endswith("-cpu") else "stub gpu"))
+            if r == 0:
+                continue
+            # ours-cpu predicts the same bits as ours (the promise); STUB_CPU_BITS=differ breaks it
+            h = "ours" if name == "ours-cpu" and os.environ.get("STUB_CPU_BITS") != "differ" else name
             print("FSPEED lane=%s arm=%s shape=%s round=%d ms=%.3f hash=h%s"
-                  % (a.lane, name, shape, r, base + r, name))
+                  % (a.lane, name, shape, r, base + r, h))
     for name, _, base in arms:
         if name == refuse:
             continue
@@ -103,14 +117,20 @@ STUB_CLASSICAL = textwrap.dedent(r'''
         if arm.startswith("ours"):
             info["numeric_mode_used"] = "fast" if arm == "ours-fast" else "identical"
             info["module_path"] = "/v/lib/python3.12/site-packages/mojolearn/__init__.py"
+        if arm == "ours-cpu":
+            info.update(device="cpu", vendor_used="cpu")
+        mem = [{"host_mb": 100.0 * (i + 1) + r, "gpu_mb": None if info["device"] == "cpu" else 5.0,
+                "host_method": "stub host", "gpu_method": "stub gpu"} for r in range(n + 1)]
         arms[arm] = {"ms": ms, "warmup_ms": 99.0, "digests": ["d"] * (n + 1), "status": "ok",
-                     "info": info, "digest_stable": True,
+                     "info": info, "digest_stable": True, "mem": mem,
                      "span": {"input_home": "device" if arm.startswith("torch") else "host",
                               "pre_clock_fit": False}}
     out = {"lane": a.lane, "dataset": a.dataset,
            "block": {"arrays": {"X": {"shape": [4000, 11]}}}, "arms": arms,
            "quality": {arm: {"inertia": 1.5 + i, "n_iter": 20, "reference": "x"}
                        for i, arm in enumerate(arms)}}
+    if "ours-cpu" in arms:
+        out["quality"]["ours-cpu"]["bits_equal_vs_ours_identical"] = True
     os.makedirs(a.out, exist_ok=True)
     with open(os.path.join(a.out, "%s-%s.json" % (a.lane, a.dataset)), "w") as fh:
         json.dump(out, fh)
@@ -134,14 +154,16 @@ STUB_NEURAL = textwrap.dedent(r'''
     data = "bytes" if a.lane.split("-")[0] in ("lm", "samba") else "gaussian"
     arms, qual = {}, {}
     for i, arm in enumerate(a.arms.split(",")):
-        ours = arm == "ours"
-        cpu = "-cpu-" in arm or (ours and a.lane.endswith("-infer"))
+        ours = arm in ("ours", "ours-cpu")
+        cpu = "-cpu-" in arm or arm == "ours-cpu" or (ours and a.lane.endswith("-infer"))
         info = {"device": "cpu" if cpu else "gpu", "version": "1.0",
                 "library": "mojolearn" if ours else "torch",
                 "device_name": "stub gpu"}
         if ours:
             info["numeric_mode_used"] = "identical"
             info["module_path"] = "/v/lib/python3.12/site-packages/mojolearn/_x.so"
+        if arm == "ours-cpu":
+            info["vendor_used"] = "cpu"
         if os.environ.get("STUB_REFUSE") == arm:
             arms[arm] = {"ms": [], "status": "not_ready", "error": {"error": "no MPS, it is faster"},
                          "info": info}
@@ -154,6 +176,8 @@ STUB_NEURAL = textwrap.dedent(r'''
         qual[arm] = {"loss_last_step": 5.5 + i * 1e-4, "steps": n + 1}
         if not ours:
             qual[arm]["loss_last_abs_diff_vs_ours"] = 1e-4
+        if arm == "ours-cpu":
+            qual[arm]["bits_equal_vs_ours_identical"] = True
     out = {"lane": a.lane, "dataset": data, "shape": "stub-%s" % a.shape, "arms": arms,
            "quality": qual, "inputs": {"seed": 7}}
     os.makedirs(a.out, exist_ok=True)
@@ -242,7 +266,7 @@ def env(tmp_path, monkeypatch):
             "--data-root", str(data), "--tree-driver", str(trees),
             "--classical-driver", str(classical), "--neural-driver", str(neural),
             "--more-driver", str(more),
-            "--rows", "1000", "--rounds", "3"]
+            "--rows", "1000", "--rounds", "3", "--no-cpu-arm"]
     return {"out": out, "base": base, "calls": calls, "tmp": tmp_path}
 
 
@@ -281,7 +305,7 @@ def test_modes_apple_both_others_identical_only():
 # --- planning ---------------------------------------------------------------
 
 def test_plan_apple_carries_fast_and_identical_arms():
-    races = bb.plan_races("apple", bb.modes_for("apple"))
+    races = bb.plan_races("apple", bb.modes_for("apple"), cpu_arm=False)
     more = sum(len([d for d in bb.MORE.datasets_of(l) if d in bb.DATASETS]) or 1
                for l in bb.MORE_LANES)
     tasks = sum(len(bb.tree_task_datasets(l, bb.DATASETS)) for l in bb.TREE_TASK_LANES)
@@ -303,7 +327,7 @@ def test_plan_apple_carries_fast_and_identical_arms():
 
 @pytest.mark.parametrize("vendor", ["nvidia", "amd"])
 def test_plan_gpu_boxes_identical_only(vendor):
-    races = bb.plan_races(vendor, bb.modes_for(vendor))
+    races = bb.plan_races(vendor, bb.modes_for(vendor), cpu_arm=False)
     for r in races:
         assert r["our_arms"] == {"ours": "identical"}
         assert "ours-ab" not in r["arms"] and "ours-fast" not in r["arms"]
@@ -316,10 +340,16 @@ def test_plan_gpu_boxes_identical_only(vendor):
 
 
 def test_plan_filters_and_counts():
-    races = bb.plan_races("apple", ["fast", "identical"], ["trees"], ["rf"], ["taxi"], 5000)
+    races = bb.plan_races("apple", ["fast", "identical"], ["trees"], ["rf"], ["taxi"], 5000,
+                          cpu_arm=False)
     assert [r["id"] for r in races] == ["trees/rf/taxi/rows=5000"]
     s = bb.plan_summary(races)
-    assert s == {"races": 1, "cells": 4, "by_family": {"trees": {"races": 1, "cells": 4}}}
+    assert s == {"races": 1, "cells": 4, "cpu_cells": 0,
+                 "by_family": {"trees": {"races": 1, "cells": 4}}}
+    races = bb.plan_races("apple", ["fast", "identical"], ["trees"], ["rf"], ["taxi"], 5000)
+    s = bb.plan_summary(races)
+    assert s == {"races": 1, "cells": 5, "cpu_cells": 1,
+                 "by_family": {"trees": {"races": 1, "cells": 5}}}
 
 
 def test_tree_command_apple_interleaves_fast():
@@ -328,6 +358,10 @@ def test_tree_command_apple_interleaves_fast():
            "arm_budget_s": 1, "race_deadline_s": 2}
     cmd, env = bb.tree_cmd(ctx, race)
     assert "--ours-ab" in cmd and cmd[cmd.index("--ours-ab") + 1] == "numeric_mode='fast'"
+    assert "--ours-cpu" in cmd and "--mem" in cmd
+    off = bb.plan_races("apple", ["fast", "identical"], ["trees"], ["iforest"], ["taxi"], None,
+                        cpu_arm=False)[0]
+    assert "--ours-cpu" not in bb.tree_cmd(ctx, off)[0] and "--mem" in bb.tree_cmd(ctx, off)[0]
     assert "--rows" not in cmd          # full size: no cap
     assert env["MOJOLEARN_NUMERIC_MODE"] == "identical"
     assert env["MOJOLEARN_SPEED_EXPECTED_VENDOR"] == "metal"
@@ -355,6 +389,7 @@ def test_dry_run_prints_plan_and_touches_nothing(env, capsys):
     assert rc == 0
     text = capsys.readouterr().out
     assert "TOTAL races=93 cells=336" in text
+    assert "ours-cpu: off (--no-cpu-arm)" in text
     assert "family neural     races=16 cells=76" in text
     assert "ours-ab[fast]" in text and "ours-fast[fast]" in text
     assert not env["out"].exists()
@@ -525,7 +560,7 @@ CPU_ARMS = ["torch-cpu-eager-fp32", "torch-cpu-compile-fp32", "torch-cpu-eager-b
 
 @pytest.mark.parametrize("vendor", ["apple", "nvidia", "amd"])
 def test_plan_neural_identical_only_on_every_vendor(vendor):
-    races = bb.plan_races(vendor, bb.modes_for(vendor), ["neural"])
+    races = bb.plan_races(vendor, bb.modes_for(vendor), ["neural"], cpu_arm=False)
     assert [r["id"] for r in races] == NEURAL_IDS
     for r in races:
         assert r["our_arms"] == {"ours": "identical"}
@@ -570,7 +605,7 @@ def test_fast_refused_for_neural_by_name(env):
                                                       ("nvidia", 280, 94, 95),
                                                       ("amd", 270, 90, 76)])
 def test_dry_run_counts_per_vendor(vendor, cells, more, neural, capsys):
-    assert bb.main(["--dry-run", "--vendor", vendor]) == 0
+    assert bb.main(["--dry-run", "--vendor", vendor, "--no-cpu-arm"]) == 0
     text = capsys.readouterr().out
     assert "TOTAL races=93 cells=%d" % cells in text
     assert "family classical2 races=44 cells=%d" % more in text
@@ -582,7 +617,8 @@ def test_dry_run_counts_per_vendor(vendor, cells, more, neural, capsys):
 
 
 def test_neural_command_and_settings():
-    race = bb.plan_races("amd", ["identical"], ["neural"], ["lm-train-step"], neural_shape="small")[0]
+    race = bb.plan_races("amd", ["identical"], ["neural"], ["lm-train-step"], neural_shape="small",
+                         cpu_arm=False)[0]
     ctx = {"python": "py", "neural_driver": "drv", "vendor": "amd", "rounds": 4, "out": "/o",
            "round_seconds": 0}
     cmd, env, ceiling = bb.neural_cmd(ctx, race)
@@ -698,7 +734,7 @@ def test_neural_driver_tables_and_arm_refusals(tmp_path):
     assert set(bbn.LANES) == set(bbn.MODEL_OF) == set(bbn.LANE_TEXT) == set(bbn.DATA_OF)
     assert bbn.arm_setting("torch-cpu-eager-bf16") == ("cpu", "eager-bf16")
     assert bbn.arm_setting("torch-compile-tf32") == ("gpu", "compile-tf32")
-    for arm in bbn.ARMS[1:]:
+    for arm in [a for a in bbn.ARMS if a.startswith("torch-")]:
         assert bbn.precision_text(bbn.arm_setting(arm)[1])
     with pytest.raises(ValueError):
         bbn.arm_setting("ours")
@@ -749,7 +785,8 @@ def test_neural_driver_inputs_and_quality(tmp_path):
 # --- the classical2 family ---------------------------------------------------
 
 def test_plan_classical2_per_vendor():
-    ap = {r["id"]: r for r in bb.plan_races("apple", bb.modes_for("apple"), ["classical2"])}
+    ap = {r["id"]: r for r in bb.plan_races("apple", bb.modes_for("apple"), ["classical2"],
+                                            cpu_arm=False)}
     umap = ap["classical2/umap/taxi/rows=full"]
     assert umap["our_arms"] == {"ours": "identical", "ours-fast": "fast"}
     assert umap["opponents"] == ["umap-learn-cpu", "umap-learn-cpu-unseeded"]
@@ -758,7 +795,8 @@ def test_plan_classical2_per_vendor():
     assert [i for i in ap if "/arima/" in i or "/ets/" in i] == [
         "classical2/arima/synthetic/rows=full", "classical2/ets/synthetic/rows=full"]
     assert ap["classical2/arima/synthetic/rows=full"]["opponents"] == ["statsmodels-cpu"]
-    nv = {r["id"]: r for r in bb.plan_races("nvidia", ["identical"], ["classical2"])}
+    nv = {r["id"]: r for r in bb.plan_races("nvidia", ["identical"], ["classical2"],
+                                            cpu_arm=False)}
     assert nv["classical2/umap/taxi/rows=full"]["arms"] == ["ours", "cuml-gpu"]
     assert nv["classical2/ivf/taxi/rows=full"]["opponents"] == ["cuvs-gpu"]
     assert nv["classical2/gmm/taxi/rows=full"]["opponents"] == ["sklearn-cpu"]
@@ -783,13 +821,15 @@ def test_plan_classical2_per_vendor():
 
 def test_classical2_identical_only_lane_has_no_fast_arm(monkeypatch):
     monkeypatch.setattr(bb.MORE, "has_fast", lambda lane: lane != "gmm")
-    r = bb.plan_races("apple", ["fast", "identical"], ["classical2"], ["gmm"], ["taxi"])[0]
+    r = bb.plan_races("apple", ["fast", "identical"], ["classical2"], ["gmm"], ["taxi"],
+                      cpu_arm=False)[0]
     assert r["our_arms"] == {"ours": "identical"} and "ours-fast" not in r["arms"]
     assert bb.plan_races("apple", ["fast"], ["classical2"], ["gmm"], ["taxi"]) == []
 
 
 def test_classical2_command_and_settings():
-    race = bb.plan_races("amd", ["identical"], ["classical2"], ["umap"], ["taxi"], 2000)[0]
+    race = bb.plan_races("amd", ["identical"], ["classical2"], ["umap"], ["taxi"], 2000,
+                         cpu_arm=False)[0]
     ctx = {"python": "py", "more_driver": "drv", "vendor": "amd", "rounds": 2, "out": "/o",
            "round_seconds": 0, "more_data": "/c/more"}
     cmd, env, ceiling = bb.more_cmd(ctx, race)

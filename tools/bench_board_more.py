@@ -735,6 +735,8 @@ def _ours(lane, est):
         info["vendor_used"] = "unavailable (%r)" % (exc,)
     if mode != want:
         raise RuntimeError("REFUSED: ours is not %s: the binary reads back %r" % (want.upper(), mode))
+    # an ours-cpu worker: the wheel must have loaded its CPU set (refuses by name)
+    info.update(_load("bench_board_probe").ours_cpu_check(ml))
     return info
 
 
@@ -757,7 +759,7 @@ def build(lane, arm, D, rec):
     """The runner for (lane, arm) on the lane's arrays D."""
     np = _np()
     S = {}
-    if arm in ("ours", "ours-fast"):
+    if arm in ("ours", "ours-fast", "ours-cpu"):
         return _build_ours(lane, D, rec, S)
     if arm == "sklearn-cpu":
         return _build_sklearn(lane, D, rec, S)
@@ -1271,6 +1273,8 @@ def worker(args):
         say({"event": "error", "stage": "ready", "error": repr(exc)})
         return 1
     say({"event": "ready", "info": runner.info, "pid": os.getpid()})
+    # peak memory per round, reset and read OUTSIDE the clock
+    mem = _load("bench_board_probe").MemProbe((runner.info or {}).get("device", "gpu"))
     last = None
     for line in sys.stdin:
         parts = line.split()
@@ -1279,10 +1283,12 @@ def worker(args):
         if parts[0] == "round":
             r = int(parts[1])
             try:
+                mem.start()
                 t0 = time.perf_counter()
                 runner.call()
                 runner.sync()
                 ms = (time.perf_counter() - t0) * 1000.0
+                m = mem.stop()
                 last = runner.outputs()
                 h = hashlib.sha256()
                 for k in sorted(last):
@@ -1294,7 +1300,7 @@ def worker(args):
                 traceback.print_exc()
                 say({"event": "error", "stage": "round %d" % r, "error": repr(exc)})
                 return 1
-            say({"event": "round", "round": r, "ms": ms, "digest": digest})
+            say({"event": "round", "round": r, "ms": ms, "digest": digest, "mem": m})
         elif parts[0] == "save":
             try:
                 path = parts[1]
@@ -1548,8 +1554,10 @@ def _worker_env(arm):
     env = dict(os.environ)
     for k in ctd.THREAD_ENV:
         env.pop(k, None)
-    if arm in ("ours", "ours-fast"):
+    if arm in ("ours", "ours-fast", "ours-cpu"):
         env["MOJOLEARN_NUMERIC_MODE"] = "fast" if arm == "ours-fast" else "identical"
+        if arm == "ours-cpu":
+            _load("bench_board_probe").ours_cpu_env(env)
         if os.environ.get("MOJOLEARN_BENCH_INSTALLED", "0").strip() in ("", "0"):
             tree = os.path.join(REPO, "python")
             env["PYTHONPATH"] = tree + (os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else "")
@@ -1576,13 +1584,13 @@ def race(args):
     tag = "%s-%s" % (lane, ds)
     workers = {}
     for arm in arms:
-        py = args.ours_python if arm in ("ours", "ours-fast") else args.theirs_python
+        py = args.ours_python if arm in ("ours", "ours-fast", "ours-cpu") else args.theirs_python
         cmd = shlex.split(py) + [os.path.abspath(__file__), "worker", "--arm", arm, "--lane", lane,
                                  "--dataset", ds, "--data", args.data]
         workers[arm] = ctd.Worker(arm, cmd, _worker_env(arm),
                                   os.path.join(args.out, "%s-%s.log" % (tag, arm)), REPO)
         result["arms"][arm] = {"command": cmd, "warmup_ms": None, "ms": [], "digests": [],
-                               "status": "ok"}
+                               "mem": [], "status": "ok"}
     for arm, w in workers.items():
         msg = w.read(args.ready_seconds)
         if msg is None or msg.get("event") != "ready":
@@ -1614,6 +1622,7 @@ def race(args):
             else:
                 result["arms"][arm]["ms"].append(msg["ms"])
             result["arms"][arm]["digests"].append(msg["digest"])
+            result["arms"][arm]["mem"].append(msg.get("mem"))
             print("MORE-ROUND lane=%s dataset=%s arm=%s round=%d ms=%.3f digest=%s"
                   % (lane, ds, arm, r, msg["ms"], msg["digest"]), flush=True)
     outs = {}
@@ -1632,6 +1641,10 @@ def race(args):
         w.close()
     try:
         result["quality"] = quality(lane, D, outs)
+        # our CPU tier against our GPU IDENTICAL, bit for bit (the promise)
+        if "ours-cpu" in outs and "ours" in outs:
+            result["quality"].setdefault("ours-cpu", {})["bits_equal_vs_ours_identical"] = \
+                _load("bench_board_probe").bits_equal(outs["ours-cpu"], outs["ours"])
     except Exception as exc:  # noqa: BLE001
         import traceback
         traceback.print_exc()

@@ -263,6 +263,24 @@ class PluginLoader(unittest.TestCase):
         self.split_core()
         self.assertIsInstance(self.refusal(cuda=True), self.B.GpuPluginError)
 
+    def test_cpu_on_request_on_the_flat_layout(self):
+        # The macOS wheel and a source checkout are flat. MOJOLEARN_VENDOR=cpu
+        # was read only on the vendor layout until 2026-09-26, so on a Mac it
+        # was accepted and ignored and the Metal set answered.
+        self.host_binding()
+        B = self.B
+        os.environ["MOJOLEARN_VENDOR"] = "cpu"
+        exc = self.refusal()
+        self.assertNotIsInstance(exc, B.GpuPluginError)
+        self.assertIn("MOJOLEARN_VENDOR=cpu", str(exc))
+        self.box()
+        B.select()
+        self.assertIsNotNone(B._CPU_ONLY)
+        self.assertEqual(B.vendor(), "cpu")
+        # twin: the same flat install without the variable stays flat
+        os.environ.pop("MOJOLEARN_VENDOR")
+        self.assertEqual(self.layout(), ("flat", str(self.pkg)))
+
     def test_a_malformed_marker_refuses(self):
         self.dist_info("mojolearn", self.version, (self.B.gpu_plugins.CORE_MARKER, "{}"))
         self.assertIsInstance(self.refusal(), self.B.GpuPluginError)
