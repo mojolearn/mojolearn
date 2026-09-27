@@ -30,7 +30,7 @@ from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty
 from ._mode import NumericModeMixin
 
-__all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch", "AdditiveChi2Sampler", "SkewedChi2Sampler"]
+__all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch", "AdditiveChi2Sampler", "SkewedChi2Sampler", "LabelPropagation"]
 
 # x_neighbors/items.mojo's codes
 _KERNELS = {"linear": 0, "poly": 1, "polynomial": 1, "rbf": 2, "sigmoid": 3, "laplacian": 4,
@@ -778,4 +778,145 @@ class SkewedChi2Sampler(_XNeighbors):
 
     def fit_transform(self, X, y=None):
         return self.fit(X).transform(X)
+
+
+# ====================================================================== LabelPropagation
+class _LabelPropagationBase(_XNeighbors):
+    """scikit-learn `semi_supervised/_label_propagation.py` (1.9.0): the dense
+    graph (rbf, or the knn connectivity graph with each row's own point as
+    its first neighbor), the product / clamp iteration with their stopping
+    rule (sum |L - L_prev| < tol, checked before each step), the final row
+    normalization and `transduction_`. Callable kernels are refused. Float32
+    where theirs is float64; the neighbor ties go to the lower index."""
+
+    _variant = None
+
+    def _graph_affinity(self, X):
+        n = X.shape[0]
+        if self.kernel == "rbf":
+            return self._kernel(X, X, "rbf", self.gamma, 0.0, 0)
+        if self.kernel == "knn":
+            k = min(int(self.n_neighbors), n)
+            _, idx = self._knn_select(self._sqdist(X, X), k, False)
+            g = empty((n, n), "<f4")
+            self._op("knn_graph", [(idx, 0), (g, 1)], (n, n, k))
+            return g
+        raise NotImplementedError(f"{type(self).__name__}: kernel={self.kernel!r} is not implemented ('rbf' or 'knn')")
+
+    def fit(self, X, y):
+        X = _f32(X)
+        n = X.shape[0]
+        y = y.tolist() if hasattr(y, "tolist") else list(y)
+        if len(y) != n:
+            raise ValueError("X and y have different numbers of rows")
+        classes = sorted(set(v for v in y if v != -1))
+        C = len(classes)
+        code = {c: i for i, c in enumerate(classes)}
+        unl = [1 if v == -1 else 0 for v in y]
+        ld0 = [[1.0 if (v != -1 and code[v] == j) else 0.0 for j in range(C)] for v in y]
+        if self._variant == "propagation":
+            ys = [[0.0] * C if unl[i] else ld0[i] for i in range(n)]
+        else:
+            a = _f32_scalar(1.0 - float(self.alpha))
+            ys = [[a * v for v in row] for row in ld0]
+        G = self._build_graph(X)
+        ld = Array.from_list(ld0, "<f4")
+        ystatic = Array.from_list(ys, "<f4")
+        unlabeled = _i32(unl, "unlabeled")
+        prev = empty((n, C), "<f4")
+        s = empty((1,), "<f4")
+        n_iter = 0
+        converged = False
+        for it in range(int(self.max_iter)):
+            n_iter = it
+            self._op("absdiff_sum", [(ld, 0), (prev, 0), (s, 1)], (n * C,))
+            if s.tolist()[0] < float(self.tol):
+                converged = True
+                break
+            prev = ld
+            nxt = self._matmul(G, ld)
+            out = empty((n, C), "<f4")
+            if self._variant == "propagation":
+                self._op("lp_clamp", [(nxt, 0), (ystatic, 0), (unlabeled, 0), (out, 1)], (n, C))
+            else:
+                self._op("ls_clamp", [(nxt, 0), (ystatic, 0), (out, 1)], (n * C,), (_f32_scalar(self.alpha),))
+            ld = out
+        if not converged:
+            n_iter += 1
+        final = empty((n, C), "<f4")
+        self._op("row_normalize", [(ld, 0), (final, 1)], (n, C))
+        self.X_ = X
+        self.classes_ = classes
+        self.label_distributions_ = final
+        self.n_iter_ = n_iter
+        self.transduction_ = _class_array(classes, [_argmax(r) for r in final.tolist()])
+        self.n_features_in_ = X.shape[1]
+        return self
+
+    def predict_proba(self, X):
+        Q = _f32(X)
+        nq = Q.shape[0]
+        n = self.X_.shape[0]
+        if self.kernel == "knn":
+            k = min(int(self.n_neighbors), n)
+            _, idx = self._knn_select(self._sqdist(Q, self.X_), k, False)
+            W = empty((nq, n), "<f4")
+            self._op("knn_graph", [(idx, 0), (W, 1)], (nq, n, k))
+        else:
+            W = self._kernel(Q, self.X_, "rbf", self.gamma, 0.0, 0)
+        P = self._matmul(W, self.label_distributions_)
+        out = empty(P.shape, "<f4")
+        self._op("row_normalize", [(P, 0), (out, 1)], P.shape)
+        return out
+
+    def predict(self, X):
+        return _class_array(self.classes_, [_argmax(r) for r in self.predict_proba(X).tolist()])
+
+
+class LabelPropagation(_LabelPropagationBase):
+    """Label propagation (hard clamping). See `_LabelPropagationBase`."""
+
+    _variant = "propagation"
+
+    def __init__(self, kernel="rbf", *, gamma=20, n_neighbors=7, max_iter=1000, tol=1e-3, n_jobs=None):
+        self.kernel = kernel
+        self.gamma = gamma
+        self.n_neighbors = n_neighbors
+        self.max_iter = max_iter
+        self.tol = tol
+        self.n_jobs = n_jobs
+
+    def _build_graph(self, X):
+        A = self._graph_affinity(X)
+        G = empty(A.shape, "<f4")
+        self._op("row_normalize", [(A, 0), (G, 1)], A.shape)
+        return G
+
+
+class LabelSpreading(_LabelPropagationBase):
+    """Label spreading (the normalized graph Laplacian, soft clamping by
+    alpha). See `_LabelPropagationBase`."""
+
+    _variant = "spreading"
+
+    def __init__(self, kernel="rbf", *, gamma=20, n_neighbors=7, alpha=0.2, max_iter=30, tol=1e-3, n_jobs=None):
+        self.kernel = kernel
+        self.gamma = gamma
+        self.n_neighbors = n_neighbors
+        self.alpha = alpha
+        self.max_iter = max_iter
+        self.tol = tol
+        self.n_jobs = n_jobs
+
+    def fit(self, X, y):
+        if not (0.0 < float(self.alpha) < 1.0):
+            raise ValueError("alpha must be in (0, 1)")
+        return super().fit(X, y)
+
+    def _build_graph(self, X):
+        A = self._graph_affinity(X)
+        n = A.shape[0]
+        G = empty((n, n), "<f4")
+        self._op("ls_laplacian", [(A, 0), (G, 1)], (n,))
+        return G
 

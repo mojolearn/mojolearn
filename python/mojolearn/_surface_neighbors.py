@@ -15,11 +15,11 @@ FAMILIES = (
         training_lanes=(
             "x-neighbors-lof", "x-neighbors-nearest-centroid", "x-neighbors-ocsvm", "x-neighbors-kpca",
             "x-neighbors-poly-sketch", "x-neighbors-additive-chi2", "x-neighbors-skewed-chi2",
-           
+            "x-neighbors-label-propagation",
         ),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch", "AdditiveChi2Sampler", "SkewedChi2Sampler"),
+        classes=("LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch", "AdditiveChi2Sampler", "SkewedChi2Sampler", "LabelPropagation"),
         display="the neighbors + kernel expansion lane",
         host_modules=("x_neighbors/items.mojo", "x_neighbors/host_ops.mojo", "x_neighbors/eigh.mojo"),
         exports=(
@@ -81,6 +81,7 @@ TRAINING_LANE_NAMES = {
     "x-neighbors-poly-sketch": "PolynomialCountSketch",
     "x-neighbors-additive-chi2": "AdditiveChi2Sampler",
     "x-neighbors-skewed-chi2": "SkewedChi2Sampler",
+    "x-neighbors-label-propagation": "LabelPropagation",
 }
 PUBLIC_PENDING_LANES = {
     "x-neighbors-lof": "no reference",
@@ -90,4 +91,5 @@ PUBLIC_PENDING_LANES = {
     "x-neighbors-poly-sketch": "no reference",
     "x-neighbors-additive-chi2": "no reference",
     "x-neighbors-skewed-chi2": "no reference",
+    "x-neighbors-label-propagation": "no reference",
 }

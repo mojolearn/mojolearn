@@ -87,6 +87,15 @@ def _neighbors_semi_labels(yc, X):
     return y
 
 
+@lane("x-neighbors-label-propagation")
+def _(ml, X, yc, yr, Xh=None):
+    y = _neighbors_semi_labels(yc, X)
+    m = ml.LabelPropagation(kernel="rbf", gamma=0.05, max_iter=200).fit(X[:256], y)
+    k = ml.LabelPropagation(kernel="knn", n_neighbors=7).fit(X[:256], y)
+    return _fit(dict(ld=_h(m.label_distributions_), tr=_h(m.transduction_), it=_h(np.int64(m.n_iter_)),
+                     knn_ld=_h(k.label_distributions_), knn_proba=_h(k.predict_proba(X[:128]))),
+                m, lambda e: (e.predict_proba(Xh[:128]), e.predict(Xh[:128])))
+
 
 
 def _neighbors_holes(A):
