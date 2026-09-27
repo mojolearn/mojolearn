@@ -48,6 +48,13 @@ new algorithm, measure nothing. Worktree `~/mojolearn-wt/algos-bench`, branch
   this branch differs from origin/main only in the three bench files; told
   main.
 
+- Merge 4: graph races on the dense-adjacency PageRank / connected_components
+  / Louvain (20,000-node graph), LayerNorm through layer_norm_forward/backward.
+  Pre-merge on the pod: bench tests 96 pass; test_host_surface (run with a
+  stub `mojolearn` package, no binaries on this pod) 192 pass, 4 fail in
+  x_decomp / x_trees manifests and trees-dt-clf pending (not bench files);
+  told main.
+
 ## Next
 
 - As lanes add classes or options (option parity), align `LANES` params and

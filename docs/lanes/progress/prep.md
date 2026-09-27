@@ -43,19 +43,26 @@ Sanity tests need scikit-learn: on the pod it is in /root/skl
 ## Pass 2
 | step | commit | verdict |
 |---|---|---|
+| option parity: RobustScaler(unit_variance=True) | (this commit) | x-prep-robust-scaler-unit-variance AGREE (batch 9, infer 9, train 9); robust / quantile lanes SAME BITS |
+| end-to-end sabotage `e2e_host_branch.patch` on the 21 summing lanes | 310afeee0 | AGREE, DISAGREE under it on all 21, AGREE after reversal (H100) |
 | option parity: priors / class_prior (GaussianNB, the discrete NBs, LDA incl. renormalisation, QDA) | (this commit) | x-prep-priors AGREE (infer 9, train 9); existing NB/DA lanes' cells SAME BITS vs the pass-2 run |
 | seam proof on NVIDIA: 10 seams (DEVIATIONS 5400-5409, IDENTITY_PATHS rows 140-149), `x_prep/seams/prep_check.mojo` host AND device vs oracle, 10 sabotage arms RED, all 28 lanes AGREE with `--pass 2` | (this commit) | PASS on H100 (`algos_lane_check.sh <28 lanes> --pass 2`) |
 
 ## Next
-PASS 1 DONE: every algorithm in the lane table and its Additions is merged
-(PENDING lanes, CPU == NVIDIA AGREE). Now PASS 2 per the CURRENT DIRECTIVES
-at the top of docs/lanes/ALGORITHM_EXPANSION_PLAN.md: hold the NVIDIA pod
-(`prep`) and the AMD box (`prep-amd`, `tools/dev_pod.sh up prep 240 --vendor
-amd`); per-seam proof (oracle, separating fixture, sabotage arm, DEVIATION
-5400-5499, card stage, IDENTITY_PATHS rows 140-149, `.checks` listing), AGREE
-on NVIDIA and AMD, M2 Pro steward; then option parity (naive_bayes/ and
-x_prep/ NOT_IMPLEMENTED.tsv, every refused-by-name option in
-_expansion_prep.py docstrings), then speed.
-Helper scripts (not in the repo): ~/mojolearn-evidence/algos-prep/{qsync,gate,commit,addlane}.sh|py;
-qsync sends every file differing from ~/mojolearn-evidence/algos-prep/pod_base
-(the commit the pod's git tree was last reset to).
+- Apple + AMD identity: `tools/apple_steward.py submit` goes to m2pro AND do-amd (the
+  shared DigitalOcean MI325X; no own AMD box, per the orchestrator). The end-to-end
+  sabotage `x_prep/seams/sabotage/e2e_host_branch.patch` (a host-only branch in `add`)
+  only moves lanes that sum floats, so steward requests are split: all lanes WITHOUT
+  sabotage (clean AGREE), and ~/mojolearn-evidence/algos-prep/sum_lanes.txt WITH it.
+  The first request (310afeee0) FAILED only because it put the sabotage on every lane.
+  The 8 lanes without float sums (~/mojolearn-evidence/algos-prep/store_lanes.txt) take
+  `e2e_store_branch.patch` (a host-only branch in every nonzero store): DISAGREE on all 8
+  on the H100. So two steward requests per commit: sum_lanes + e2e_host_branch,
+  store_lanes + e2e_store_branch (every lane covered, with x-prep-robust-scaler-unit-variance
+  in sum_lanes).
+- Option parity: work down x_prep/NOT_IMPLEMENTED.tsv and naive_bayes/NOT_IMPLEMENTED.tsv
+  (done: priors/class_prior, RobustScaler unit_variance).
+- Then speed (IDENTICAL/FAST, NVIDIA, Apple via `--kind speed`, CPU; AMD last).
+Helper scripts (not in the repo): ~/mojolearn-evidence/algos-prep/{qsync,gate,commit,mkpatches,addlane,samebits}.sh|py;
+qsync sends every file differing from ~/mojolearn-evidence/algos-prep/pod_base; the pass-2
+reference columns for "same bits" checks are on the pod in /root/mojolearn-evidence/algos-prep/pass2-nvidia.
