@@ -307,6 +307,30 @@ def _(ml, X, yc, yr, Xh=None):
 _batch_decl(_rows_calls("predict"), "trees-et-deviance")
 
 
+def _trees_multi_target(X, yr):
+    """Three regression targets, `(n, 3)`, derived from the fixture's own
+    regression target and two columns by one float32 operation each (exact
+    IEEE elementwise, so every host builds the same bytes)."""
+    x = np.asarray(X, dtype=np.float32)
+    y = np.asarray(yr, dtype=np.float32)
+    return np.ascontiguousarray(np.stack(
+        [y, np.float32(0.5) * y + x[:, 0], x[:, 1] - x[:, 2]], axis=1
+    ).astype(np.float32))
+
+
+@lane("trees-gbdt-multirmse")
+def _(ml, X, yc, yr, Xh=None):
+    """GradientBoosting loss='MultiRMSE' on three targets: 12 depth-6
+    SymmetricTree trees, Newton leaves through the BLOCKED Hessian (their
+    `GetHessianType()` is Symmetric for MultiRMSE, `multiclass_targets.h:
+    118-123`), predict RAW `(n, 3)`."""
+    m = _gbdt(ml.GradientBoosting, n_estimators=12, max_depth=6, loss="MultiRMSE").fit(X, _trees_multi_target(X, yr))
+    return _fit(dict(predict=_h(m.predict(X))), m, lambda e: (e.predict(Xh),))
+
+
+_batch_decl(_rows_calls("predict"), "trees-gbdt-multirmse")
+
+
 @lane("trees-shap-tree")
 def _(ml, X, yc, yr, Xh=None):
     """Exact TreeSHAP over a classifier forest (three outputs) and a DART model."""

@@ -775,3 +775,107 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-prep-kbins-methods")
+
+
+def _prep_first_six(X):
+    return np.array(X[:, :6], dtype=np.float32)
+
+
+def _prep_first_four(X):
+    return np.array(X[:, :4], dtype=np.float32)
+
+
+def _prep_nan_first_six(X):
+    return _prep_with_nan(X[:, :6])
+
+
+@lane("x-prep-kbins-weights")
+def _(ml, X, yc, yr, Xh=None):
+    """KBinsDiscretizer sample_weight: the weighted percentile (averaged and
+    not), the nonzero-weight range (uniform), the weighted Lloyd (kmeans),
+    integer weights with zeros and real ones, and the weighted resample."""
+    Xs = _prep_first_six(X[:2000])
+    n = Xs.shape[0]
+    wi = (np.arange(n) % 4).astype(np.float32)
+    wr = ((np.arange(n) * 7919) % 13 / 3.0).astype(np.float32)
+    parts = {}
+    m = None
+    for name, kw in (("q", dict()), ("qi", dict(quantile_method="inverted_cdf")), ("u", dict(strategy="uniform")),
+                     ("k", dict(strategy="kmeans"))):
+        for wn, w in (("int", wi), ("real", wr)):
+            m = ml.KBinsDiscretizer(n_bins=5, encode="ordinal", **kw).fit(Xs, sample_weight=w)
+            parts[f"{name}_{wn}"] = _h(*m.bin_edges_)
+            parts[f"{name}_{wn}_t"] = _h(m.transform(Xs[:256]))
+    ms = ml.KBinsDiscretizer(n_bins=4, encode="ordinal", subsample=500, random_state=2).fit(Xs, sample_weight=wi)
+    parts["sub"] = _h(*ms.bin_edges_)
+    return _fit(parts, m, lambda e: (e.transform(_prep_first_six(Xh[:256])),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_prep_first_six), "x-prep-kbins-weights")
+
+
+@lane("x-prep-spline-options")
+def _(ml, X, yc, yr, Xh=None):
+    """SplineTransformer: an explicit knot array, 'linear' and 'periodic'
+    extrapolation, sample_weight on uniform and quantile knots,
+    handle_missing='zeros' and order='F'."""
+    Xs = _prep_first_four(X[:2000])
+    n = Xs.shape[0]
+    kn = np.array([[-2.0] * 4, [-0.5] * 4, [0.3] * 4, [1.5] * 4])
+    w = (np.arange(n) % 4).astype(np.float32)
+    Xn = _prep_with_nan(Xs)
+    parts = {}
+    m = None
+    for name, kw, fit_w, data in (
+            ("kn", dict(knots=kn), None, Xs), ("lin3", dict(extrapolation="linear"), None, Xs),
+            ("lin1", dict(extrapolation="linear", degree=1, knots=kn), None, Xs),
+            ("per", dict(extrapolation="periodic"), None, Xs),
+            ("perkn", dict(extrapolation="periodic", knots=kn, degree=2, include_bias=False), None, Xs),
+            ("wu", dict(), w, Xs), ("wq", dict(knots="quantile", n_knots=6), w, Xs),
+            ("nan", dict(handle_missing="zeros", knots="quantile"), None, Xn),
+            ("f", dict(order="F", degree=2), None, Xs)):
+        e = ml.SplineTransformer(**kw).fit(data, sample_weight=fit_w)
+        parts[name] = _h(e.transform(data[:256]))
+        if name == "lin3":
+            m = e
+    return _fit(parts, m, lambda e: (e.transform(_prep_first_four(Xh[:256])),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_prep_first_four), "x-prep-spline-options")
+
+
+class _prep_MeanReg:
+    """A regressor for IterativeImputer(estimator=...): the float32 mean of y."""
+
+    def get_params(self, deep=True):
+        return {}
+
+    def fit(self, X, y):
+        self.m = np.float32(np.asarray(y, dtype=np.float32).mean(dtype=np.float64))
+        return self
+
+    def predict(self, X):
+        return np.full(np.asarray(X).shape[0], self.m, dtype=np.float32)
+
+
+@lane("x-prep-iterative-options")
+def _(ml, X, yc, yr, Xh=None):
+    """IterativeImputer: the random order, n_nearest_features, sample_posterior
+    (truncated), add_indicator, the reference's matrix inf-norm stop, and
+    another estimator (the Python rounds)."""
+    Xm = _prep_nan_first_six(X[:1500])
+    parts = {}
+    m = ml.IterativeImputer(imputation_order="random", random_state=1, max_iter=6, add_indicator=True)
+    parts["rand"] = _h(m.fit_transform(Xm), np.array([m.n_iter_]))
+    e = ml.IterativeImputer(n_nearest_features=3, random_state=2, max_iter=3)
+    parts["nnf"] = _h(e.fit_transform(Xm), np.array([e.n_iter_]))
+    e = ml.IterativeImputer(sample_posterior=True, random_state=3, max_iter=2, min_value=-2.0, max_value=2.0)
+    parts["post"] = _h(e.fit_transform(Xm), e.transform(_prep_nan_first_six(Xh[:256])))
+    e = ml.IterativeImputer(max_iter=12, tol=1e-4)
+    parts["stop"] = _h(e.fit_transform(Xm), np.array([e.n_iter_]))
+    e = ml.IterativeImputer(estimator=_prep_MeanReg(), max_iter=2)
+    parts["est"] = _h(e.fit_transform(Xm))
+    return _fit(parts, m, lambda e: (e.transform(_prep_nan_first_six(Xh[:256])),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_prep_nan_first_six), "x-prep-iterative-options")

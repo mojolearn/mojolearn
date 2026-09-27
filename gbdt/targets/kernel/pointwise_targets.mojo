@@ -231,6 +231,16 @@ comptime OBJECTIVE_PAIR_LOGIT = 15
 #: `gbdt/targets/kernel/yeti_rank.mojo`; it reaches neither kernel in this file.
 comptime OBJECTIVE_YETI_RANK = 16
 
+#: `MultiRMSE`, multi-target regression: the fourth
+#: `TMultiClassificationTargets` loss (`multiclass_targets.h:155-156`, where
+#: `NumClasses = GetTargetDimension()`), `GetDim() == NumClasses` (`:129-134`)
+#: target dimensions, one cursor plane each and no pinned plane. Its Hessian
+#: is `EHessianType::Symmetric` (`:118-123` names only OneVsAll Diagonal), so
+#: the leaf walker takes the blocked Cholesky arm like MultiClass. Reaches
+#: `multi_rmse_val_and_first_der_kernel` in `multilogit.mojo`, not either
+#: kernel in this file.
+comptime OBJECTIVE_MULTIRMSE = 17
+
 #: `NumErrors` is in their kernel switch (`pointwise_targets.cu:497-501`)
 #: and is deliberately NOT here: `TPointwiseTargetsImpl::Init`
 #: (`pointwise_target_impl.h:259-299`) has no `NumErrors` case, so its
@@ -282,11 +292,13 @@ def objective_from_name(name: String) raises -> Int:
         return OBJECTIVE_PAIR_LOGIT
     if name == "YetiRank":
         return OBJECTIVE_YETI_RANK
+    if name == "MultiRMSE":
+        return OBJECTIVE_MULTIRMSE
     raise Error(
         "unknown loss '" + name + "': this implementation trains RMSE, Logloss,"
         " CrossEntropy, Quantile, MAE, LogLinQuantile, MAPE, Poisson, Lq,"
         " Expectile, Tweedie, Huber, MultiClass, MultiClassOneVsAll,"
-        " QueryRMSE, PairLogit and YetiRank"
+        " QueryRMSE, PairLogit, YetiRank and MultiRMSE"
     )
 
 
@@ -326,6 +338,8 @@ def objective_name(objective: Int) -> String:
         return String("PairLogit")
     if objective == OBJECTIVE_YETI_RANK:
         return String("YetiRank")
+    if objective == OBJECTIVE_MULTIRMSE:
+        return String("MultiRMSE")
     return String("<unknown>")
 
 
@@ -1179,6 +1193,7 @@ def launch_pointwise_target_kernel[
     elif (
         objective == OBJECTIVE_MULTICLASS
         or objective == OBJECTIVE_MULTICLASS_OVA
+        or objective == OBJECTIVE_MULTIRMSE
     ):
         raise Error(
             "the multiclass family does not reach PointwiseTargetKernel:"

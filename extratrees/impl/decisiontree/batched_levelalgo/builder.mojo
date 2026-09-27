@@ -3256,6 +3256,18 @@ comptime ET_RANGE_TILED = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and (
 
 comptime ET_FEATURE_TILE = 16
 
+comptime ET_SPLIT_REDUCE_ONE_BLOCK = GLOBAL_NUMERIC_MODE != NUMERIC_FAST
+"""DEVIATION 5611 (2026-09-27): under IDENTICAL every node's candidates are
+reduced by ONE block (`blocks_per_node = 1`), so `split_reduce_kernel`
+never merges two blocks through the node's device mutex. That merge reads
+and writes the node's cells with PLAIN loads and stores inside the critical
+section, which the M3 GPU does not make visible across threadgroups (the RF
+builder lost candidates there; see `HIST_SPLIT_CANDIDATES_DEFAULT` in
+`ensemble/.../builder_kernels_impl.mojo`). `SplitExact.update` is a total
+order (exact key, then DEVIATION 463's keyed tie), so one block's grid-stride
+fold picks the node's split that any arrival order of a correct merge picks:
+the same bits on every other column. FAST keeps `ceildiv(k, TPB)` blocks."""
+
 comptime ET_SCORE_TILED = GLOBAL_NUMERIC_MODE == NUMERIC_FAST and (
     is_defined["MOJOLEARN_ET_SCORE_TILED"]() or ET_TILED_SEARCH_APPLE_DEFAULT
 )
@@ -4242,7 +4254,7 @@ def search_batch(
     # DEVIATION 470: the reduce cells and the `r_mx` mutexes (over full
     # capacity) were seeded by fused half B above.
     var bpn = ceildiv(Int(k), TPB)
-    if bpn < 1:
+    if bpn < 1 or ET_SPLIT_REDUCE_ONE_BLOCK:
         bpn = 1
     ctx.enqueue_function[split_reduce_kernel[TPB]](
         r_q.unsafe_ptr(),
@@ -5647,7 +5659,7 @@ def search_batch_regression(
     # DEVIATION 470: the reduce cells and the `r_mx` mutexes (over full
     # capacity) were seeded by fused half B above.
     var bpn = ceildiv(Int(k), TPB)
-    if bpn < 1:
+    if bpn < 1 or ET_SPLIT_REDUCE_ONE_BLOCK:
         bpn = 1
     ctx.enqueue_function[split_reduce_kernel[TPB]](
         r_q.unsafe_ptr(),

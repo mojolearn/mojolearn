@@ -278,7 +278,7 @@ update)
     bx 21600 "mkdir -p $Qd/queue/held; while :; do
   for f in $Qd/queue/[0-9]*.json; do [ -f \"\$f\" ] && mv \"\$f\" $Qd/queue/held/; done
   ls $Qd/working/[0-9]*.json > /dev/null 2>&1 || break
-  sleep 15
+  sleep 1   # the old steward polls every 10 s: a slower hold loses requests to it
 done; echo IDLE" < /dev/null | grep -qx IDLE || die "the steward did not go idle; the queue is held in $Qd/queue/held (move it back by hand)"
     tree_to "$(git -C "$ROOT" rev-parse "${1:-origin/main}^{commit}")"
     bx 60 "for f in $Qd/queue/held/[0-9]*.json; do [ -f \"\$f\" ] && mv \"\$f\" $Qd/queue/; done; rmdir $Qd/queue/held
