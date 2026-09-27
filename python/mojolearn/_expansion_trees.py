@@ -52,6 +52,7 @@ __all__ = [
     "OneVsRestClassifier",
     "CalibratedClassifierCV",
     "TreeExplainer",
+    "KernelExplainer",
 ]
 
 
@@ -1829,3 +1830,205 @@ class TreeExplainer(_TreesEnsembleBase):
             self._bind().x_trees_tree_shap(forest, addr_ro(cover, name="cover"), addr_ro(Xa, name="X"),
                                            addr(phi, name="phi"), [n, d, len(arrays[0]) - 1, kk, scale])
         return phi.reshape((n, d)) if k == 1 else phi.reshape((n, d, k))
+
+
+def _trees_model_fn(model):
+    """The function an agnostic explainer explains: a callable as given, a
+    classifier's predict_proba, else predict."""
+    if callable(model) and not hasattr(model, "predict"):
+        return model
+    if getattr(model, "_estimator_type", None) == "classifier" and hasattr(model, "predict_proba"):
+        return model.predict_proba
+    return model.predict
+
+
+class _AgnosticExplainer(_TreesEnsembleBase):
+    def __init__(self, model, data, random_state):
+        self.model = model
+        self.data = data
+        self.random_state = random_state
+        self.numeric_mode = getattr(model, "numeric_mode", None)
+        _trees_seed(random_state)
+        self._f = _trees_model_fn(model)
+        bg, _ = as_f32_c(data, ndim=2, name="data")
+        self._bg = bg
+        out = self._eval(bg)
+        self.n_outputs_ = out.shape[1]
+        ev = zeros((self.n_outputs_,), "<f8")
+        self._bind().x_trees_block_mean(addr_ro(out, name="y"), addr(ev, name="ev"),
+                                        [1, bg.shape[0], self.n_outputs_])
+        self._fnull = ev
+        self.expected_value = ev.tolist()[0] if self.n_outputs_ == 1 else ev
+        self.n_features_in_ = bg.shape[1]
+
+    def _eval(self, X):
+        """The model output on X as a float32 (n, k) Array."""
+        out = self._f(X)
+        n = X.shape[0]
+        return _trees_output_2d(out, n)
+
+    def _coalitions(self, x_row, masks_list):
+        """Mean model output over the background for each coalition mask:
+        float64 (m, k)."""
+        bg = self._bg
+        nb, d = bg.shape
+        m = len(masks_list)
+        masks = Array.from_list([v for mk in masks_list for v in mk], "<i4")
+        syn = empty((m * nb * d,), "<f4")
+        b = self._bind()
+        b.x_trees_mask_expand(addr_ro(x_row, name="x"), addr_ro(bg, name="data"), addr_ro(masks, name="masks"),
+                              addr(syn, name="synthetic"), [nb, d, m])
+        out = self._eval(syn.reshape((m * nb, d)))
+        k = out.shape[1]
+        ey = empty((m * k,), "<f8")
+        b.x_trees_block_mean(addr_ro(out, name="y"), addr(ey, name="ey"), [m, nb, k])
+        return masks, ey
+
+    def _check(self, X):
+        Xa, _ = as_f32_c(X, ndim=2, name="X")
+        if Xa.shape[1] != self.n_features_in_:
+            raise ValueError(f"X has {Xa.shape[1]} features, data has {self.n_features_in_}")
+        return Xa
+
+    def _shape(self, rows, n, d):
+        k = self.n_outputs_
+        flat = Array.from_list([v for r in rows for v in r], "<f8")
+        return flat.reshape((n, d)) if k == 1 else flat.reshape((n, d, k))
+
+
+class KernelExplainer(_AgnosticExplainer):
+    """Kernel SHAP (shap `KernelExplainer`, cuML `kernel_shap.cu`) over a
+    mojolearn estimator or a callable. `shap_values(X, nsamples="auto")`."""
+
+    def __init__(self, model, data, *, link="identity", random_state=None):
+        if link != "identity":
+            _refuse(f"link={link!r}", "only the identity link is carried.")
+        self.link = link
+        super().__init__(model, data, random_state)
+
+    @staticmethod
+    def _binom(n, r):
+        from math import comb
+        return comb(n, r)
+
+    def _masks(self, M, nsamples, seed, row):
+        """shap `KernelExplainer.explain`'s coalition schedule: (masks, weights)."""
+        import itertools
+        masks, weights = [], []
+        num_subset_sizes = (M - 1 + 1) // 2 if M > 1 else 0
+        num_paired = (M - 1) // 2
+        wv = [(M - 1.0) / (i * (M - i)) for i in range(1, num_subset_sizes + 1)]
+        for i in range(num_paired):
+            wv[i] *= 2
+        tot = math.fsum(wv)
+        wv = [w / tot for w in wv]
+        num_full = 0
+        left = nsamples
+        rem = list(wv)
+        for size in range(1, num_subset_sizes + 1):
+            nsub = self._binom(M, size) * (2 if size <= num_paired else 1)
+            if left * rem[size - 1] / nsub >= 1.0 - 1e-8:
+                num_full += 1
+                left -= nsub
+                if rem[size - 1] < 1.0:
+                    r0 = rem[size - 1]
+                    rem = [v / (1 - r0) for v in rem]
+                w = wv[size - 1] / self._binom(M, size)
+                if size <= num_paired:
+                    w /= 2.0
+                for inds in itertools.combinations(range(M), size):
+                    mk = [0] * M
+                    for i in inds:
+                        mk[i] = 1
+                    masks.append(mk)
+                    weights.append(w)
+                    if size <= num_paired:
+                        masks.append([1 - v for v in mk])
+                        weights.append(w)
+            else:
+                break
+        nfixed = len(masks)
+        samples_left = nsamples - nfixed
+        if num_full != num_subset_sizes and samples_left > 0:
+            rw = list(wv)
+            for i in range(num_paired):
+                rw[i] /= 2
+            rw = rw[num_full:]
+            t = math.fsum(rw)
+            rw = [v / t for v in rw]
+            cdf, run = [], 0.0
+            for v in rw:
+                run += v
+                cdf.append(run)
+            n_draw = 4 * samples_left
+            u = empty((n_draw * (1 + M),), "<f8")
+            self._bind().x_trees_uniform(addr(u, name="u"), [n_draw * (1 + M), seed, row])
+            uv = u.tolist()
+            used = {}
+            pos = 0
+            while samples_left > 0 and pos < n_draw:
+                base = pos * (1 + M)
+                c = uv[base] * cdf[-1]
+                ind = next((i for i, v in enumerate(cdf) if c < v), len(cdf) - 1)
+                pos += 1
+                size = ind + num_full + 1
+                perm = list(range(M))
+                for i in range(M - 1, 0, -1):
+                    j = int(uv[base + 1 + i] * (i + 1))
+                    perm[i], perm[j] = perm[j], perm[i]
+                mk = [0] * M
+                for i in perm[:size]:
+                    mk[i] = 1
+                key = tuple(mk)
+                new = key not in used
+                if new:
+                    used[key] = len(masks)
+                    samples_left -= 1
+                    masks.append(mk)
+                    weights.append(1.0)
+                else:
+                    weights[used[key]] += 1.0
+                if samples_left > 0 and size <= num_paired:
+                    if new:
+                        samples_left -= 1
+                        masks.append([1 - v for v in mk])
+                        weights.append(1.0)
+                    else:
+                        weights[used[key] + 1] += 1.0
+            weight_left = math.fsum(wv[num_full:])
+            s = math.fsum(weights[nfixed:])
+            if s > 0:
+                weights[nfixed:] = [w * (weight_left / s) for w in weights[nfixed:]]
+        return masks, weights
+
+    def shap_values(self, X, nsamples="auto", l1_reg="auto"):
+        if l1_reg not in ("auto", False, 0):
+            _refuse(f"l1_reg={l1_reg!r}", "no l1 feature selection is carried.")
+        Xa = self._check(X)
+        n, d = Xa.shape
+        M = d
+        ns = 2 * M + 2048 if nsamples == "auto" else int(nsamples)
+        if M <= 30:
+            ns = min(ns, 2 ** M - 2)
+        seed = _trees_seed(self.random_state)
+        k = self.n_outputs_
+        b = self._bind()
+        rows = []
+        cols = _trees_arange(d)
+        for i in range(n):
+            x_row = self._gather(Xa, Array.from_list([i], "<i4"), cols).reshape((d,))
+            fx = zeros((k,), "<f8")
+            fx32 = self._eval(x_row.reshape((1, d)))   # held: the call reads its address
+            b.x_trees_block_mean(addr_ro(fx32, name="fx"), addr(fx, name="fx"), [1, 1, k])
+            phi = zeros((d * k,), "<f8")
+            if M == 1 or ns < 1:
+                phi = Array.from_list([fx.tolist()[j] - self._fnull.tolist()[j] for j in range(k)], "<f8")
+            else:
+                mlist, wlist = self._masks(M, ns, seed, i)
+                masks, ey = self._coalitions(x_row, mlist)
+                w = Array.from_list(wlist, "<f8")
+                b.x_trees_kernel_solve(addr_ro(masks, name="masks"), addr_ro(w, name="w"), addr_ro(ey, name="ey"),
+                                       addr_ro(fx, name="fx"), addr_ro(self._fnull, name="fnull"),
+                                       addr(phi, name="phi"), [len(mlist), d, k])
+            rows.append(phi.tolist())
+        return self._shape(rows, n, d)

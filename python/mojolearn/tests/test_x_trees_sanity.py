@@ -273,3 +273,24 @@ def test_tree_explainer_matches_shap_recursion():
     e = ml.TreeExplainer(d, data=Xr[:200])
     p = np.asarray(e.shap_values(Xrb[:30]))
     np.testing.assert_allclose(p.sum(1) + e.expected_value, np.asarray(d.predict(Xrb[:30])), rtol=1e-5, atol=1e-3)
+
+
+def test_kernel_explainer():
+    shap = pytest.importorskip("shap")
+    Xa, Xb, ya, yb = _reg()
+    Xa, Xb = Xa[:, :6].copy(), Xb[:, :6].copy()
+    m = ml.DecisionTreeRegressor(max_depth=5).fit(Xa, ya)
+    bg = Xa[:20]
+    ke = ml.KernelExplainer(m, bg)
+    phi = np.asarray(ke.shap_values(Xb[:5]))
+    f = lambda X: np.asarray(m.predict(np.asarray(X, dtype=np.float32)), dtype=np.float64)  # noqa: E731
+    ref = shap.KernelExplainer(f, bg.astype(np.float64)).shap_values(Xb[:5].astype(np.float64), silent=True)
+    np.testing.assert_allclose(phi, np.asarray(ref), rtol=1e-6, atol=1e-6)
+    np.testing.assert_allclose(phi.sum(1) + ke.expected_value, f(Xb[:5]), rtol=1e-6, atol=1e-5)
+    Xc, Xcb, yc, ycb = _clf()
+    c = ml.RandomForestClassifier(n_estimators=4, max_depth=4, random_state=0).fit(Xc[:, :5], yc)
+    kc = ml.KernelExplainer(c, Xc[:15, :5])
+    pc = np.asarray(kc.shap_values(Xcb[:3, :5]))
+    assert pc.shape == (3, 5, 3)
+    np.testing.assert_allclose(pc.sum(1) + np.asarray(kc.expected_value), np.asarray(c.predict_proba(Xcb[:3, :5])),
+                               atol=1e-5)

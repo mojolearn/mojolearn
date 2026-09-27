@@ -229,3 +229,20 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("shap_values", sl=slice(0, 24)), "trees-shap-tree")
+
+
+@lane("trees-shap-kernel")
+def _(ml, X, yc, yr, Xh=None):
+    """Kernel SHAP on six features (full coalition enumeration) and on all of
+    them (sampled coalitions, the counter RNG), over a regression tree."""
+    X6 = np.ascontiguousarray(X[:, :6])
+    m6 = ml.DecisionTreeRegressor(max_depth=5).fit(X6, yr)
+    k6 = ml.KernelExplainer(m6, X6[:12])
+    m = ml.DecisionTreeRegressor(max_depth=5).fit(X, yr)
+    k = ml.KernelExplainer(m, X[:6], random_state=3)
+    return _fit(dict(full=_h(k6.shap_values(X6[:4])), sampled=_h(k.shap_values(X[:2], nsamples=300))),
+                k6, lambda e: (e.shap_values(np.ascontiguousarray(Xh[:3, :6])),))
+
+
+_batch_decl(_rows_calls("shap_values", sl=slice(0, 12), prep=lambda Xh: np.ascontiguousarray(Xh[:, :6])),
+            "trees-shap-kernel")

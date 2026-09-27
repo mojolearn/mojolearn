@@ -37,6 +37,7 @@ FAMILIES = (
             "trees-onevsrest",
             "trees-calibrated",
             "trees-shap-tree",
+            "trees-shap-kernel",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -57,6 +58,7 @@ FAMILIES = (
             "OneVsRestClassifier",
             "CalibratedClassifierCV",
             "TreeExplainer",
+            "KernelExplainer",
         ),
         display="the trees expansion lane's ensemble glue",
         host_modules=("xtrees/ops.mojo", "xtrees/api.mojo", "xtrees/shap.mojo"),
@@ -94,6 +96,7 @@ TRAINING_LANE_NAMES = {
     "trees-onevsrest": "OneVsRestClassifier",
     "trees-calibrated": "CalibratedClassifierCV",
     "trees-shap-tree": "TreeExplainer",
+    "trees-shap-kernel": "KernelExplainer",
 }
 PUBLIC_PENDING_LANES = {
     "trees-dt-clf": "no reference",
@@ -114,4 +117,5 @@ PUBLIC_PENDING_LANES = {
     "trees-calibrated": "no reference",
     "trees-rf-weighted": "no reference",
     "trees-shap-tree": "no reference",
+    "trees-shap-kernel": "no reference",
 }

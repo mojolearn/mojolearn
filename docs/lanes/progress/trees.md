@@ -26,7 +26,8 @@ rf / extratrees entry points, whose sources are untouched.
 | OneVsRestClassifier | trees-onevsrest | AGREE: compared batch 9, infer 9, train 9 | see git log |
 | CalibratedClassifierCV (sigmoid, isotonic) | trees-calibrated | AGREE: compared batch 9, infer 9, train 9 | see git log |
 | AdaBoostClassifier back on SAMME sample weights (sklearn's `_boost_discrete`) | trees-adaboost-clf | AGREE: compared batch 9, infer 9, train 9 | see git log |
-| TreeExplainer (exact TreeSHAP, forests + DART) | trees-shap-tree | AGREE: compared batch 9, infer 9, train 9 | this commit |
+| TreeExplainer (exact TreeSHAP, forests + DART) | trees-shap-tree | AGREE: compared batch 9, infer 9, train 9 | see git log |
+| KernelExplainer | trees-shap-kernel | AGREE: compared batch 9, infer 9, train 9 | this commit |
 
 Pod setup notes (for a fresh agent): the lane check does not build the
 ubiquitous bindings; build `bindings/build.sh` (identical), `build_forest_host.sh`
@@ -47,4 +48,4 @@ rf-reg-poisson, rf-reg-gamma-ig, rf-score-weighted): `python -m mojolearn
 verify` 7/7 VERIFIED on CUDA and on CPU after, 0 cell hashes differ from
 before on either column.
 
-Next: KernelExplainer, PermutationExplainer.
+Next: PermutationExplainer.
