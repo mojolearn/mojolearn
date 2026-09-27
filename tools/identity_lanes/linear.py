@@ -43,3 +43,31 @@ def _(ml, X, yc, yr, Xh=None):
 
 _batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-sgd-reg")
 _batch_decl(_rows_calls("decision_function", sl=slice(0, 256)), "x-sgd-clf")
+
+
+def _linear_pos_target(X, yr):
+    """A positive count-like target from the fixture's regression target:
+    exp of a scaled copy, so the GLM lanes see y > 0 on every fixture."""
+    z = (yr - yr.mean()) / (yr.std() + np.float32(1e-6))
+    return np.exp(np.clip(z, -4, 4) * np.float32(0.5)).astype(np.float32)
+
+
+@lane("x-glm-poisson")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.PoissonRegressor(alpha=0.1, max_iter=20).fit(X[:2000], _linear_pos_target(X[:2000], yr[:2000]))
+    return _linear_reg_fit(m, X, yr, Xh)
+
+
+@lane("x-glm-gamma")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.GammaRegressor(alpha=0.1, max_iter=20).fit(X[:2000], _linear_pos_target(X[:2000], yr[:2000]))
+    return _linear_reg_fit(m, X, yr, Xh)
+
+
+@lane("x-glm-tweedie")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.TweedieRegressor(power=1.5, alpha=0.1, max_iter=20).fit(X[:2000], _linear_pos_target(X[:2000], yr[:2000]))
+    return _linear_reg_fit(m, X, yr, Xh)
+
+
+_batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-glm-poisson", "x-glm-gamma", "x-glm-tweedie")

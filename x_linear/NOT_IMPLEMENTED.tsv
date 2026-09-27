@@ -6,3 +6,6 @@ _stochastic_gradient.py average (ASGD)	refused at the API	pass 2; WeightVector.a
 _stochastic_gradient.py class_weight, sample_weight	refused / absent	pass 2
 _stochastic_gradient.py warm_start, partial_fit, coef_init, intercept_init	refused / absent	pass 2
 _sgd_fast.pyx.tp SequentialDataset.shuffle (MT19937)	replaced	splitmix64 Fisher-Yates (x_linear/ops.mojo); quality parity, not bit parity
+glm.py solver=lbfgs	replaced	Newton-Cholesky (their newton-cholesky form) for every solver value; same minimizer
+glm.py sample_weight, warm_start	refused / absent	pass 2
+TweedieRegressor power<0 or 0<power<1, identity link with power>0	refused at the API	pass 2
