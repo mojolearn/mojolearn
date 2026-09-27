@@ -1,0 +1,50 @@
+
+==================================== ERRORS ====================================
+_____________ ERROR collecting tools/test_mamba_gradient_oracle.py _____________
+ImportError while importing test module '/root/pyver/repo-main-py311/tools/test_mamba_gradient_oracle.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tools/test_mamba_gradient_oracle.py:20: in <module>
+    import mamba_gradient_oracle as oracle
+tools/mamba_gradient_oracle.py:31: in <module>
+    import torch
+E   ModuleNotFoundError: No module named 'torch'
+______________ ERROR collecting tools/test_release_pass_anchor.py ______________
+tools/test_release_pass_anchor.py:31: in <module>
+    HEAD, PARENT = _rev("HEAD"), _rev("HEAD~1")
+                   ^^^^^^^^^^^^
+tools/test_release_pass_anchor.py:27: in _rev
+    return subprocess.run(["git", "-C", ROOT, "rev-parse", ref], capture_output=True, text=True,
+/usr/lib/python3.11/subprocess.py:571: in run
+    raise CalledProcessError(retcode, process.args,
+E   subprocess.CalledProcessError: Command '['git', '-C', '/root/pyver/repo-main-py311', 'rev-parse', 'HEAD']' returned non-zero exit status 128.
+_________ ERROR collecting tools/test_release_qualification_command.py _________
+ImportError while importing test module '/root/pyver/repo-main-py311/tools/test_release_qualification_command.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tools/test_release_qualification_command.py:8: in <module>
+    import yaml
+E   ModuleNotFoundError: No module named 'yaml'
+___________ ERROR collecting tools/test_verify_umap_qualification.py ___________
+ImportError while importing test module '/root/pyver/repo-main-py311/tools/test_verify_umap_qualification.py'.
+Hint: make sure your test modules/packages have valid Python names.
+Traceback:
+/usr/lib/python3.11/importlib/__init__.py:126: in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tools/test_verify_umap_qualification.py:13: in <module>
+    import yaml
+E   ModuleNotFoundError: No module named 'yaml'
+=========================== short test summary info ============================
+ERROR tools/test_mamba_gradient_oracle.py
+ERROR tools/test_release_pass_anchor.py - subprocess.CalledProcessError: Comm...
+ERROR tools/test_release_qualification_command.py
+ERROR tools/test_verify_umap_qualification.py
+!!!!!!!!!!!!!!!!!!! Interrupted: 4 errors during collection !!!!!!!!!!!!!!!!!!!!
+4 errors in 4.43s

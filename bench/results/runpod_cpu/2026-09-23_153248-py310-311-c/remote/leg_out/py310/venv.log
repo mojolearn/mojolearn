@@ -1,0 +1,3 @@
+Using CPython 3.10.12 interpreter at: /usr/bin/python3.10
+Creating virtual environment at: /root/pyver/venv-py310
+Activate with: source /root/pyver/venv-py310/bin/activate

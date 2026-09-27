@@ -1,0 +1,69 @@
+test_rf_leaf_budget: the leaf budget on the RandomForest
+surface. sklearn's max_leaf_nodes is best-first growth;
+cuML's max_leaves caps a level-order grower. This file
+gates that the two are not aliased (DEVIATION 408).
+
+  PROVENANCE
+    pass the loaded binary exports rf_classifier_fit
+    pass the loaded binary exports rf_regressor_fit
+    pass the binding reports a tier it knows
+
+  REFUSAL
+    pass max_leaf_nodes=64 is refused by name on the classifier
+    pass a numpy int max_leaf_nodes is refused on the classifier too (the guard tests for None, not for a Python int)
+    pass max_leaf_nodes=2, the smallest value sklearn accepts, is refused on the classifier
+    pass max_leaf_nodes=64 is refused by name on the regressor
+    pass a numpy int max_leaf_nodes is refused on the regressor too (the guard tests for None, not for a Python int)
+    pass max_leaf_nodes=2, the smallest value sklearn accepts, is refused on the regressor
+    pass max_leaf_nodes=None, the default, still constructs the classifier
+    pass max_leaf_nodes=None, the default, still constructs the regressor
+
+  VALIDATION
+    pass max_leaves=0 (zero) is refused
+    pass max_leaves=-2 (a sentinel that is not theirs) is refused
+    pass max_leaves=-100 (a large negative) is refused
+    pass max_leaves=8.0, a float, is refused rather than truncated
+    pass max_leaves=True is refused: a bool is an int in Python and would otherwise become a one-leaf budget
+    pass max_leaves=-1 (cuML's sentinel for unlimited) reaches slot 5 as -1
+    pass max_leaves=None (None, accepted as a spelling of -1) reaches slot 5 as -1
+    pass max_leaves=1 (the smallest cap) reaches slot 5 as 1
+    pass max_leaves=np.int64(32) (a numpy int) reaches slot 5 as 32
+
+  LEVEL_ORDER
+    pass capped tree 0: node index is non-decreasing in depth (23 nodes, depth 4)
+    pass capped tree 1: node index is non-decreasing in depth (23 nodes, depth 4)
+    pass capped tree 2: node index is non-decreasing in depth (23 nodes, depth 4)
+    pass capped tree 3: node index is non-decreasing in depth (23 nodes, depth 4)
+    pass uncapped tree 0: node index is non-decreasing in depth (241 nodes, depth 8)
+    pass uncapped tree 1: node index is non-decreasing in depth (265 nodes, depth 8)
+    pass uncapped tree 2: node index is non-decreasing in depth (223 nodes, depth 8)
+    pass uncapped tree 3: node index is non-decreasing in depth (221 nodes, depth 8)
+
+  BUDGET
+    pass every capped tree has at most 12 leaves
+    pass at least one capped tree has exactly 12 leaves, so the cap BINDS rather than sitting above the tree
+    pass every uncapped tree grows past 12 leaves, so the comparison above is about the cap and not about the data
+    pass the capped forest is strictly smaller than the uncapped one
+    pass [REPORT, not asserted] the two forests' thresholds differ byte for byte -- differ
+
+  CONTRAST
+    pass [REPORT, not asserted] ExtraTreesClassifier(max_leaf_nodes=12), sklearn's semantics, leaves per tree -- [12, 12, 12, 12]
+    pass [REPORT, not asserted] every extratrees tree has exactly 12 leaves -- yes
+
+  binary tier   identical
+  env asked for identical
+  vendor        cpu
+
+  leaves per tree, max_leaves=12   [12, 12, 12, 12]
+  leaves per tree, max_leaves=-1   [121, 133, 112, 111]
+
+  35 checks, 0 failed
+
+test_rf_leaf_budget: GREEN in the identical tier. max_leaf_nodes is
+refused by name on both estimators with a message that names
+best-first growth, cuML's max_leaves and the surface that has
+sklearn's semantics; max_leaves takes cuML's sentinel and cuts
+the forest to its budget; and the grower it caps appends nodes in
+breadth-first order, which is the property that made the old
+alias a wrong answer rather than a synonym. Nothing here is a
+comparison against sklearn and nothing here is a bitwise claim.

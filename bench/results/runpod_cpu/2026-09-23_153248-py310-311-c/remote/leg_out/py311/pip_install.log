@@ -1,0 +1,14 @@
+Using Python 3.11.15 environment at: /root/pyver/venv-py311
+Resolved 8 packages in 286ms
+Downloading numpy (16.1MiB)
+ Downloaded numpy
+Prepared 8 packages in 1.77s
+Installed 8 packages in 81ms
+ + iniconfig==2.3.0
+ + mojolearn==0.8.15
+ + numpy==2.4.6
+ + packaging==26.3
+ + pluggy==1.6.0
+ + pygments==2.21.0
+ + pytest==9.1.1
+ + pytest-timeout==2.4.0

@@ -1,0 +1,5 @@
+setup_seconds=7
+fixed_seconds=4
+slow_seconds=688
+tools_seconds=421
+version_total_seconds=1120

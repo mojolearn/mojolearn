@@ -1,0 +1,41 @@
+  ok    KRR        linear fit: info_ 0, dual_coef_ (n,)
+  ok    KRR        a linear kernel with a small ridge recovers a linear target at 5e-2
+  ok    KRR        one row predicted alone equals that row of the batch, bit for bit
+  ok    KRR        rbf fit with two targets predicts (q, 2)
+  ok    KRR        the two targets are negatives of each other
+  ok    KRR        kernel 'poly' fits and predicts finite values
+  ok    KRR        kernel 'sigmoid' fits and predicts finite values
+  ok    KRR        kernel 'laplacian' fits and predicts finite values
+  ok    NYS        components_ and component_indices_ shaped
+  ok    NYS        with n_components == n the indices are a permutation of the rows
+  ok    NYS        eigenvalues_ (singular values) descending and clipped at 1e-12 (DEVIATION 1670)
+  ok    NYS        sweeps_ is carried
+  ok    NYS        with every row a component, phi phi^T reproduces the linear kernel at 1e-2
+  ok    NYS        one row transformed alone equals that row of the batch, bit for bit
+  ok    NYS        rbf Nystroem with 8 components transforms (m, 8)
+  ok    NYS        fit_transform equals fit then transform, bit for bit (same seed, same rows)
+  ok    RFF        random_weights_ (d, q) and random_offset_ (q,)
+  ok    RFF        sigma_ = sqrt(2 gamma), scale_ = sqrt(2 / q)
+  ok    RFF        transform is (m, q) and bounded by scale_
+  ok    RFF        the same seed draws the same weights, bit for bit
+  ok    RFF        a different seed draws different weights
+  ok    RFF        one row transformed alone equals that row of the batch, bit for bit
+  ok    REFUSE     kernel='precomputed' by name
+  ok    REFUSE     an unknown kernel name
+  ok    REFUSE     a negative alpha, refused on the Mojo host by name
+  ok    REFUSE     gamma <= 0 under rbf, refused on the Mojo host by name
+  ok    REFUSE     y with the wrong row count
+  ok    REFUSE     predict before fit
+  ok    REFUSE     predict with the wrong feature count
+  ok    REFUSE     Nystroem n_components=0
+  ok    REFUSE     Nystroem n_components > n, refused on the Mojo host
+  ok    REFUSE     RBFSampler gamma='scale' by name
+  ok    REFUSE     RBFSampler gamma=0, refused on the Mojo host by name
+  ok    REFUSE     RBFSampler n_components=0, refused by name before any buffer is made
+  ok    REFUSE     a float degree
+  ok    PROVENANCE KernelRidge exported from mojolearn and mojolearn.kernel_methods
+  ok    PROVENANCE Nystroem exported from mojolearn and mojolearn.kernel_methods
+  ok    PROVENANCE RBFSampler exported from mojolearn and mojolearn.kernel_methods
+  ok    PROVENANCE numeric_mode_used() is the process default
+
+test_kernel_methods_surface: GREEN under numeric_mode=identical, 39 checks. One box, one vendor; no bit is claimed for any other.

@@ -1,0 +1,30 @@
+  ok    FIT        weights_ (k,), means_ (k, d)
+  ok    FIT        covariances_ and precisions_cholesky_ (k, d, d)
+  ok    FIT        weights_ sum to one
+  ok    FIT        n_iter_, converged_ and lower_bound_ carried
+  ok    FIT        predict separates two planted blobs (up to relabeling)
+  ok    FIT        predict_proba rows sum to one
+  ok    FIT        score is the mean of score_samples at 1e-3
+  ok    FIT        bic and aic are finite and differ
+  ok    FIT        one row scored alone equals that row of the batch, bit for bit (DEVIATION 1739)
+  ok    FIT        init_params='random' fits: weights_ sum to one, finite means_ and lower_bound_, n_iter_ in range
+  ok    FIT        init_params='random' at the same random_state gives the same model, bit for bit (DEVIATION 1733)
+  ok    FIT        [REPORT, not asserted] init_params='random' separates the blobs (agreement 0.6146, n_iter_ 2, converged_ True, lower_bound_ -1.9401918649673462 against kmeans init 0.2990260124206543): MOVED
+  ok    FIT        fit_predict
+  ok    REFUSE     covariance_type='tied' refused by name on the Mojo host
+  ok    REFUSE     covariance_type='diag' refused by name on the Mojo host
+  ok    REFUSE     covariance_type='spherical' refused by name on the Mojo host
+  ok    REFUSE     init_params='k-means++' refused by name on the Mojo host
+  ok    REFUSE     init_params='random_from_data' refused by name on the Mojo host
+  ok    REFUSE     n_init=2 refused by name (DEVIATION 1734)
+  ok    REFUSE     warm_start refused by name
+  ok    REFUSE     means_init refused by name
+  ok    REFUSE     n_components=0
+  ok    REFUSE     n_components > n_samples, refused on the Mojo host
+  ok    REFUSE     a NaN cell named by row on the Mojo host
+  ok    REFUSE     predict before fit
+  ok    REFUSE     predict with the wrong feature count
+  ok    PROVENANCE GaussianMixture and mojolearn.mixture exported
+  ok    PROVENANCE numeric_mode_used() is the process default
+
+test_mixture_surface: GREEN under numeric_mode=identical, 28 checks. One box, one vendor; no bit is claimed for any other.

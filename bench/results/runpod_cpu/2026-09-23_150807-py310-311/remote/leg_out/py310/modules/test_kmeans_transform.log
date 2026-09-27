@@ -1,0 +1,21 @@
+  ok    SHAPE      float32, one row per sample, one column per center
+  ok    SHAPE      every distance is finite and non-negative
+  ok    SHAPE      float64 input is cast to the centers' float32, the same distances
+  ok    SHAPE      a Fortran-order input gives the same distances
+  ok    SHAPE      fit_transform is fit then transform
+  ok    MIN        euclidean: transform at labels_ is each row's minimum bit for bit
+  ok    MIN        euclidean: transform at predict(X) is the row minimum
+  ok    MIN        l2_sqrt_expanded: transform at labels_ is each row's minimum bit for bit
+  ok    MIN        l2_sqrt_expanded: transform at predict(X) is the row minimum
+  ok    REFERENCE  euclidean: squared distances equal the float64 reference up to float32 round-off
+  ok    REFERENCE  l2_sqrt_expanded is the correctly rounded root of the euclidean cell, bit for bit
+  ok    EXACT      small integer rows give the exact squared distances
+  ok    HELDOUT    each of the first 16 held-out rows alone is its whole-batch row
+  ok    HELDOUT    the split 1, 7, rest concatenates to the whole batch
+  ok    REFUSE     transform before fit
+  ok    REFUSE     a feature count other than the fit's
+  ok    REFUSE     a 1-D X
+  ok    REFUSE     an empty X
+  ok    REFUSE     an unsupported metric code transform is refused BY NAME, as its fit is
+
+test_kmeans_transform: GREEN under numeric_mode=identical, 19 checks. One box, one vendor; no bit is claimed for any other.

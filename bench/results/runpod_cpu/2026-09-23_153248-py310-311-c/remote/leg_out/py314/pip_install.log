@@ -1,0 +1,18 @@
+Using Python 3.14.7 environment at: /root/pyver/venv-py314
+Resolved 8 packages in 326ms
+Downloading pygments (1.2MiB)
+Downloading numpy (15.9MiB)
+Downloading mojolearn (78.0MiB)
+ Downloaded pygments
+ Downloaded numpy
+ Downloaded mojolearn
+Prepared 8 packages in 1.79s
+Installed 8 packages in 82ms
+ + iniconfig==2.3.0
+ + mojolearn==0.8.15
+ + numpy==2.5.3
+ + packaging==26.3
+ + pluggy==1.6.0
+ + pygments==2.21.0
+ + pytest==9.1.1
+ + pytest-timeout==2.4.0

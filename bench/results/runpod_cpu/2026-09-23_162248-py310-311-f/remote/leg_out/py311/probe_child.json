@@ -1,0 +1,43 @@
+{
+ "parent_executable": "/root/pyver/venv-py311/bin/python",
+ "parent_exe": "/usr/bin/python3.11",
+ "parent_prefix": "/root/pyver/venv-py311",
+ "parent_env_keys": [
+  "HOME",
+  "LANG",
+  "LEG_OUT",
+  "LOGNAME",
+  "MOJOLEARN_BUILD_JOBS",
+  "MOJOLEARN_COMMIT",
+  "MOJOLEARN_LINUX_CPU",
+  "MOJOLEARN_NUMERIC_MODE",
+  "MOTD_SHOWN",
+  "OLDPWD",
+  "PATH",
+  "PIXI_HOME",
+  "PIXI_NO_PATH_UPDATE",
+  "PROBE_OUT",
+  "PWD",
+  "PYTEST_CURRENT_TEST",
+  "PYTEST_VERSION",
+  "SHELL",
+  "SHLVL",
+  "SSH_CLIENT",
+  "SSH_CONNECTION",
+  "USER",
+  "_"
+ ],
+ "parent_PYTHONPATH": null,
+ "parent_sys_path": [
+  "/root/pyver/repo-main-py311/python",
+  "/usr/lib/python311.zip",
+  "/usr/lib/python3.11",
+  "/usr/lib/python3.11/lib-dynload",
+  "/root/pyver/venv-py311/lib/python3.11/site-packages"
+ ],
+ "child": {
+  "rc": 0,
+  "out": "argv0 /root/pyver/tmp-fixed-py311/test_probe_child0/probe.py\nexecutable /root/pyver/venv-py311/bin/python\nexe /usr/bin/python3.11\ncmdline b'/root/pyver/venv-py311/bin/python\\x00/root/pyver/tmp-fixed-py311/test_probe_child0/probe.py\\x00'\nprefix /root/pyver/venv-py311\npath ['/root/pyver/tmp-fixed-py311/test_probe_child0', '/usr/lib/python311.zip', '/usr/lib/python3.11', '/usr/lib/python3.11/lib-dynload', '/root/pyver/venv-py311/lib/python3.11/site-packages']\nenvkeys ['COLUMNS', 'HOME', 'LANG', 'LEG_OUT', 'LINES', 'LOGNAME', 'MOJOLEARN_BUILD_JOBS', 'MOJOLEARN_COMMIT', 'MOJOLEARN_LINUX_CPU', 'MOJOLEARN_NUMERIC_MODE', 'MOTD_SHOWN', 'OLDPWD', 'PATH', 'PIXI_HOME', 'PIXI_NO_PATH_UPDATE', 'PROBE_OUT', 'PWD', 'PYTEST_CURRENT_TEST', 'PYTEST_VERSION', 'SHELL', 'SHLVL', 'SSH_CLIENT', 'SSH_CONNECTION', 'USER', '_']\nPYTHONPATH None PYTHONHOME None\nnumpy /root/pyver/venv-py311/lib/python3.11/site-packages/numpy/__init__.py\n",
+  "err": ""
+ }
+}

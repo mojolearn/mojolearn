@@ -1,0 +1,870 @@
+...........FFFFFFF.FFFFF................................................ [  2%]
+........................................................................ [  4%]
+.................................................................sssssss [  7%]
+ssss...s..ssssssssssssssssssssssss.s.................................... [  9%]
+.................................................F.....F................ [ 12%]
+..........................F.........F...............F...............F... [ 14%]
+....F..................................................F..........F..... [ 16%]
+......................................ssssssssssssss.................... [ 19%]
+........................................................................ [ 21%]
+..............................................ssssssss.................. [ 24%]
+................................................................ss...... [ 26%]
+...............................F................................................................................................... [ 30%]
+...........................................................ss......s.... [ 33%]
+..sssss.....sssssssssssssssssssssss.............s....................... [ 35%]
+..................................................................ss.... [ 38%]
+F....................................................................... [ 40%]
+.................................................................FF..... [ 42%]
+...F......F............................................................. [ 45%]
+........................................................................ [ 47%]
+........................................................................ [ 50%]
+.................................................sssssssssssssss........ [ 52%]
+......................................ssss.............................. [ 54%]
+.............sssss.FFss............................................. [ 57%]
+...........................ssssssssss................................... [ 59%]
+................................................................F....... [ 62%]
+.......FF..........................ssssssssssssssss..................... [ 64%]
+...............sss..........sssssssssssss.........FF...F.....F...FFFFFFF [ 66%]
+FFFFFFFF.FFFFFFFFFFF.................................................... [ 69%]
+........................................................................ [ 71%]
+................................................s..........sssF......... [ 74%]
+........................................................................ [ 76%]
+........................................................................ [ 78%]
+........................................................................ [ 81%]
+......ssssss.................sss..............................s..... [ 83%]
+..........................s............................................. [ 86%]
+..............................................................................F....... [ 88%]
+.................................................................FF..... [ 91%]
+........................................................................ [ 93%]
+........................................................................ [ 96%]
+......................................F................................. [ 98%]
+..............................s............                              [100%]
+=================================== FAILURES ===================================
+_______________ test_actual_module_mode[fast-0-_mojolearn_gbdt] ________________
+mojolearn/tests/test_binding_mode_guard.py:22: in test_actual_module_mode
+    assert _backend.binding(name, mode) is module
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/_backend.py:1583: in binding
+    return _cpu_only_binding(name, requested)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/_backend.py:1250: in _cpu_only_binding
+    raise ValueError(
+E   ValueError: mojolearn: _mojolearn_gbdt has no 'fast' tier on a CPU-only install; every host binding is IDENTICAL only. Drop numeric_mode= or pass numeric_mode='identical'.
+________________ test_actual_module_mode[fast-0-_mojolearn_rf] _________________
+mojolearn/tests/test_binding_mode_guard.py:22: in test_actual_module_mode
+    assert _backend.binding(name, mode) is module
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/_backend.py:1583: in binding
+    return _cpu_only_binding(name, requested)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/_backend.py:1250: in _cpu_only_binding
+    raise ValueError(
+E   ValueError: mojolearn: _mojolearn_rf has no 'fast' tier on a CPU-only install; every host binding is IDENTICAL only. Drop numeric_mode= or pass numeric_mode='identical'.
+_______________ test_actual_module_mode[fast-0-_mojolearn_trees] _______________
+mojolearn/tests/test_binding_mode_guard.py:22: in test_actual_module_mode
+    assert _backend.binding(name, mode) is module
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/_backend.py:1583: in binding
+    return _cpu_only_binding(name, requested)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/_backend.py:1250: in _cpu_only_binding
+    raise ValueError(
+E   ValueError: mojolearn: _mojolearn_trees has no 'fast' tier on a CPU-only install; every host binding is IDENTICAL only. Drop numeric_mode= or pass numeric_mode='identical'.
+_______________ test_actual_module_mode[identical-1-_mojolearn] ________________
+mojolearn/tests/test_binding_mode_guard.py:22: in test_actual_module_mode
+    assert _backend.binding(name, mode) is module
+E   AssertionError: assert <module 'mojolearn._mojolearn'> is namespace(mojolearn_numeric_mode=<function test_actual_module_mode.<locals>.<lambda> at 0x7fcc7aefb1a0>)
+E    +  where <module 'mojolearn._mojolearn'> = <function binding at 0x7fccb5210360>('_mojolearn', 'identical')
+E    +    where <function binding at 0x7fccb5210360> = _backend.binding
+_____________ test_actual_module_mode[identical-1-_mojolearn_gbdt] _____________
+mojolearn/tests/test_binding_mode_guard.py:22: in test_actual_module_mode
+    assert _backend.binding(name, mode) is module
+E   AssertionError: assert <module 'mojolearn._mojolearn_gbdt'> is namespace(gbdt_numeric_mode=<function test_actual_module_mode.<locals>.<lambda> at 0x7fcc7aefaf20>)
+E    +  where <module 'mojolearn._mojolearn_gbdt'> = <function binding at 0x7fccb5210360>('_mojolearn_gbdt', 'identical')
+E    +    where <function binding at 0x7fccb5210360> = _backend.binding
+______________ test_actual_module_mode[identical-1-_mojolearn_rf] ______________
+mojolearn/tests/test_binding_mode_guard.py:22: in test_actual_module_mode
+    assert _backend.binding(name, mode) is module
+E   AssertionError: assert <module 'mojolearn._mojolearn_rf'> is namespace(rf_numeric_mode=<function test_actual_module_mode.<locals>.<lambda> at 0x7fcc7aefb420>)
+E    +  where <module 'mojolearn._mojolearn_rf'> = <function binding at 0x7fccb5210360>('_mojolearn_rf', 'identical')
+E    +    where <function binding at 0x7fccb5210360> = _backend.binding
+____________ test_actual_module_mode[identical-1-_mojolearn_trees] _____________
+mojolearn/tests/test_binding_mode_guard.py:22: in test_actual_module_mode
+    assert _backend.binding(name, mode) is module
+E   AssertionError: assert <module 'mojolearn._mojolearn_trees'> is namespace(trees_numeric_mode=<function test_actual_module_mode.<locals>.<lambda> at 0x7fcc7aefb380>)
+E    +  where <module 'mojolearn._mojolearn_trees'> = <function binding at 0x7fccb5210360>('_mojolearn_trees', 'identical')
+E    +    where <function binding at 0x7fccb5210360> = _backend.binding
+___________ test_actual_module_mode[deterministic-2-_mojolearn_gbdt] ___________
+mojolearn/tests/test_binding_mode_guard.py:22: in test_actual_module_mode
+    assert _backend.binding(name, mode) is module
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/_backend.py:1583: in binding
+    return _cpu_only_binding(name, requested)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/_backend.py:1250: in _cpu_only_binding
+    raise ValueError(
+E   ValueError: mojolearn: _mojolearn_gbdt has no 'deterministic' tier on a CPU-only install; every host binding is IDENTICAL only. Drop numeric_mode= or pass numeric_mode='identical'.
+____________ test_actual_module_mode[deterministic-2-_mojolearn_rf] ____________
+mojolearn/tests/test_binding_mode_guard.py:22: in test_actual_module_mode
+    assert _backend.binding(name, mode) is module
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/_backend.py:1583: in binding
+    return _cpu_only_binding(name, requested)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/_backend.py:1250: in _cpu_only_binding
+    raise ValueError(
+E   ValueError: mojolearn: _mojolearn_rf has no 'deterministic' tier on a CPU-only install; every host binding is IDENTICAL only. Drop numeric_mode= or pass numeric_mode='identical'.
+__________ test_actual_module_mode[deterministic-2-_mojolearn_trees] ___________
+mojolearn/tests/test_binding_mode_guard.py:22: in test_actual_module_mode
+    assert _backend.binding(name, mode) is module
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/_backend.py:1583: in binding
+    return _cpu_only_binding(name, requested)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/_backend.py:1250: in _cpu_only_binding
+    raise ValueError(
+E   ValueError: mojolearn: _mojolearn_trees has no 'deterministic' tier on a CPU-only install; every host binding is IDENTICAL only. Drop numeric_mode= or pass numeric_mode='identical'.
+______________________ test_identical_refuses_fast_binary ______________________
+mojolearn/tests/test_binding_mode_guard.py:34: in test_identical_refuses_fast_binary
+    with pytest.raises(RuntimeError, match='compiled for fast.*requested identical'):
+E   Failed: DID NOT RAISE RuntimeError
+_________________________ test_legacy_without_readback _________________________
+mojolearn/tests/test_binding_mode_guard.py:42: in test_legacy_without_readback
+    assert _backend.binding('_mojolearn_rf', 'fast') is module
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/_backend.py:1583: in binding
+    return _cpu_only_binding(name, requested)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/_backend.py:1250: in _cpu_only_binding
+    raise ValueError(
+E   ValueError: mojolearn: _mojolearn_rf has no 'fast' tier on a CPU-only install; every host binding is IDENTICAL only. Drop numeric_mode= or pass numeric_mode='identical'.
+_______________ test_oracle_imports_no_gpu_and_no_device_module ________________
+mojolearn/tests/test_cpu_training_e3.py:102: in test_oracle_imports_no_gpu_and_no_device_module
+    assert sorted(set(imports)) == [
+E   AssertionError: ['std.math', 'std.memory', 'std.builtin.sort', 'std.sys.compile', 'max.algorithm', 'checks.numerics', ...]
+E   assert ['checks.nume...td.math', ...] == ['checks.nume....memory', ...]
+E     
+E     At index 2 diff: 'ensemble.host_layout' != 'max.algorithm'
+E     Left contains one more item: 'std.sys.compile'
+E     Use -v to get more diff
+_________ test_every_fit_refusal_names_the_missing_cpu_implementation __________
+mojolearn/tests/test_cpu_training_e3_gbdt.py:101: in test_every_fit_refusal_names_the_missing_cpu_implementation
+    assert "no CPU implementation of _mojolearn_gbdt.gbdt_fit for a" in oracle, (
+E   AssertionError: the binary-policy refusal must carry the gate's sentence
+E   assert 'no CPU implementation of _mojolearn_gbdt.gbdt_fit for a' in '# SPDX-License-Identifier: Apache-2.0\n# Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zen...m.losses)):\n        out += String("loss ") + String(i) + " " + gbdt_f64_token(m.losses[i]) + "\\n"\n    return out^\n'
+___________ test_the_five_configurations_fit_on_the_host_when_built ____________
+mojolearn/tests/test_cpu_training_gbdt_losses.py:201: in test_the_five_configurations_fit_on_the_host_when_built
+    raise AssertionError("a Bayesian bootstrap fit did not refuse on the host binding")
+E   AssertionError: a Bayesian bootstrap fit did not refuse on the host binding
+___________ test_ordered_and_feature_freq_fit_on_the_host_when_built ___________
+mojolearn/tests/test_cpu_training_gbdt_ordered.py:258: in test_ordered_and_feature_freq_fit_on_the_host_when_built
+    one_hot_features=[1]).fit(coded, yc)
+                          ^^^^^^^^^^^^^^
+mojolearn/_mode.py:52: in guarded
+    return method(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/ensemble.py:2295: in fit
+    out = self._bind("_mojolearn_gbdt").gbdt_fit(*fit_args)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Exception: no CPU implementation of _mojolearn_gbdt.gbdt_fit for bootstrap_type='Bayesian' under loss='Logloss'; the gbdt host binding trains the declared GBDT lanes only (SymmetricTree with Cosine and the Logloss, RMSE, pointwise and multiclass losses, Depthwise with Logloss and Cosine, Lossguide with Logloss and NewtonL2 or NewtonCosine; no sample weights and no CTR categoricals anywhere; an eval set and the overfitting detector on SymmetricTree with Logloss and on the Ordered and pointwise-searcher arms only; one-hot categorical columns under SymmetricTree with Logloss), see gbdt/host/gbdt_oracle.mojo and the gbdt/host oracles beside it
+____________ test_fix_columns_carry_the_fixed_lane_on_every_fixture ____________
+mojolearn/tests/test_cpu_training_misc.py:113: in test_fix_columns_carry_the_fixed_lane_on_every_fixture
+    cols = {rel: json.loads(_read(rel)) for rel in host_surface.TRAINING_FIX_COLUMNS}
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_cpu_training_misc.py:113: in <dictcomp>
+    cols = {rel: json.loads(_read(rel)) for rel in host_surface.TRAINING_FIX_COLUMNS}
+                            ^^^^^^^^^^
+mojolearn/tests/test_cpu_training_misc.py:78: in _read
+    return (ROOT / rel).read_text(encoding="utf-8")
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/pathlib.py:1058: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/pathlib.py:1044: in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: '/root/pyver/repo-main-py311/bench/results/identity_break/2026-09-14_kmeans-sqrt-fix/apple-m4.json'
+__________ test_the_gpc_class_fit_worker_refuses_outside_the_verifier __________
+mojolearn/tests/test_cpu_training_par_classical.py:270: in test_the_gpc_class_fit_worker_refuses_outside_the_verifier
+    raise AssertionError("the plain CPU fit did not refuse; this box is not the CPU-only route")
+E   AssertionError: the plain CPU fit did not refuse; this box is not the CPU-only route
+________________ test_every_entry_samba_reaches_is_on_the_host _________________
+mojolearn/tests/test_cpu_training_samba.py:120: in test_every_entry_samba_reaches_is_on_the_host
+    assert not missing, f"{fam}: SambaStack's modules call {missing}, absent from the host binding"
+E   AssertionError: mamba: SambaStack's modules call ['mamba2_session_close', 'mamba2_session_export_state', 'mamba2_session_load_state', 'mamba2_session_open', 'mamba2_session_step', 'mamba3_session_close', 'mamba3_session_export_state', 'mamba3_session_load_state', 'mamba3_session_open', 'mamba3_session_step'], absent from the host binding
+E   assert not ['mamba2_session_close', 'mamba2_session_export_state', 'mamba2_session_load_state', 'mamba2_session_open', 'mamba2_session_step', 'mamba3_session_close', ...]
+_______ test_cli_runs_in_checkout_with_no_native_package_initialization ________
+mojolearn/tests/test_crossvendor_coverage.py:193: in test_cli_runs_in_checkout_with_no_native_package_initialization
+    assert result.returncode == 5, result.stderr
+E   AssertionError: Traceback (most recent call last):
+E       File "/root/pyver/tmp-main-py311/test_cli_runs_in_checkout_with0/tools/audit_parallel_coverage.py", line 54, in <module>
+E         raise SystemExit(main())
+E                          ^^^^^^
+E       File "/root/pyver/tmp-main-py311/test_cli_runs_in_checkout_with0/tools/audit_parallel_coverage.py", line 38, in main
+E         harness = load_harness(par_axis=True)
+E                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/root/pyver/tmp-main-py311/test_cli_runs_in_checkout_with0/tools/audit_parallel_coverage.py", line 26, in load_harness
+E         return _load('parallel_audit_harness', ROOT / 'tools/identity_break.py')
+E                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/root/pyver/tmp-main-py311/test_cli_runs_in_checkout_with0/tools/audit_parallel_coverage.py", line 17, in _load
+E         spec.loader.exec_module(module)
+E       File "<frozen importlib._bootstrap_external>", line 940, in exec_module
+E       File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
+E       File "/root/pyver/tmp-main-py311/test_cli_runs_in_checkout_with0/tools/identity_break.py", line 495, in <module>
+E         import numpy as np
+E     ModuleNotFoundError: No module named 'numpy'
+E     
+E   assert 1 == 5
+E    +  where 1 = CompletedProcess(args=['/root/pyver/venv-py311/bin/python', '/root/pyver/tmp-main-py311/test_cli_runs_in_checkout_with...s/identity_break.py", line 495, in <module>\n    import numpy as np\nModuleNotFoundError: No module named \'numpy\'\n').returncode
+____ DeviceArrayRefusalTest.test_cpu_dlpack_tensor_keeps_the_zero_copy_path ____
+mojolearn/tests/test_device_array_refusal.py:103: in test_cpu_dlpack_tensor_keeps_the_zero_copy_path
+    materialized, copied = _buffer._materialize(_TorchCpuLike(), "X")
+                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/_buffer.py:427: in _materialize
+    raise TypeError(
+E   TypeError: mojolearn: X holds a _TorchCpuLike, not a number
+____________ test_four_modes_predict_through_host_model_when_built _____________
+mojolearn/tests/test_gbdt_host_modes.py:169: in test_four_modes_predict_through_host_model_when_built
+    n_estimators=3, max_depth=3, loss="Logloss", cat_features=[0], one_hot_features=[1]).fit(coded, yc),
+                                                                                         ^^^^^^^^^^^^^^
+mojolearn/_mode.py:52: in guarded
+    return method(self, *args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/ensemble.py:2295: in fit
+    out = self._bind("_mojolearn_gbdt").gbdt_fit(*fit_args)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Exception: no CPU implementation of _mojolearn_gbdt.gbdt_fit for bootstrap_type='Bayesian' under loss='Logloss'; the gbdt host binding trains the declared GBDT lanes only (SymmetricTree with Cosine and the Logloss, RMSE, pointwise and multiclass losses, Depthwise with Logloss and Cosine, Lossguide with Logloss and NewtonL2 or NewtonCosine; no sample weights and no CTR categoricals anywhere; an eval set and the overfitting detector on SymmetricTree with Logloss and on the Ordered and pointwise-searcher arms only; one-hot categorical columns under SymmetricTree with Logloss), see gbdt/host/gbdt_oracle.mojo and the gbdt/host oracles beside it
+_______________ test_the_inference_door_opens_under_the_override _______________
+mojolearn/tests/test_host_path_resolution.py:174: in test_the_inference_door_opens_under_the_override
+    assert done.returncode == 0, f"the inference door refused:\n{done.stdout}\n{done.stderr}"
+E   AssertionError: the inference door refused:
+E     
+E     Traceback (most recent call last):
+E       File "<string>", line 12, in <module>
+E       File "/root/pyver/repo-main-py311/python/mojolearn/_byte_lm_host.py", line 210, in __init__
+E         if not all_finite(array):
+E                ^^^^^^^^^^^^^^^^^
+E       File "/root/pyver/repo-main-py311/python/mojolearn/_buffer.py", line 798, in all_finite
+E         fn = _native("all_finite_f32" if arr.dtype == "<f4" else "all_finite_f64")
+E              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/root/pyver/repo-main-py311/python/mojolearn/_buffer.py", line 867, in _native
+E         fn = getattr(_backend.binding("_mojolearn", mode="identical"), key)
+E              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/root/pyver/repo-main-py311/python/mojolearn/_backend.py", line 1209, in __getattr__
+E         module = load_host_module(self.__basename)
+E                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/root/pyver/repo-main-py311/python/mojolearn/_backend.py", line 1107, in load_host_module
+E         module = importlib.util.module_from_spec(spec)
+E                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "<frozen importlib._bootstrap>", line 573, in module_from_spec
+E       File "<frozen importlib._bootstrap_external>", line 1233, in create_module
+E       File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
+E     ImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['/root/pyver/venv-py311/bin/python', '-c', '\nimport hashlib, json, os, sys\nimport numpy as np..._frames_removed\nImportError: libKGENCompilerRTShared.so: cannot open shared object file: No such file or directory\n').returncode
+______________________ test_recordings_and_columns_exist _______________________
+mojolearn/tests/test_host_surface.py:283: in test_recordings_and_columns_exist
+    assert (ROOT / rel).exists(), f"the manifest names {rel}, which is not in the tree"
+E   AssertionError: the manifest names bench/results/classical_host/2026-09-13-apple-m4, which is not in the tree
+E   assert False
+E    +  where False = exists()
+E    +    where exists = (PosixPath('/root/pyver/repo-main-py311') / 'bench/results/classical_host/2026-09-13-apple-m4').exists
+_______________________ test_training_gpu_columns_exist ________________________
+mojolearn/tests/test_host_surface.py:291: in test_training_gpu_columns_exist
+    assert missing == [], f"the manifest names training GPU columns not in the tree: {missing}"
+E   AssertionError: the manifest names training GPU columns not in the tree: ['bench/results/identity_break/2026-09-14_166-lanes/apple-m4.json', 'bench/results/identity_break/2026-09-14_166-lanes/nvidia-h100-sm_90a.json', 'bench/results/identity_break/2026-09-14_166-lanes/amd-mi325x-gfx942.json']
+E   assert ['bench/resul...-gfx942.json'] == []
+E     
+E     Left contains 3 more items, first extra item: 'bench/results/identity_break/2026-09-14_166-lanes/apple-m4.json'
+E     Use -v to get more diff
+___________________ test_gbdt_ctr_models_cover_every_fixture ___________________
+mojolearn/tests/test_host_surface.py:523: in test_gbdt_ctr_models_cover_every_fixture
+    assert missing == [], f"{d} lacks {missing}"
+E   AssertionError: /root/pyver/repo-main-py311/bench/results/identity_break/2026-09-15_gbdt-ctr-tables/models lacks ['gbdt-categorical-ctr-tables.base.npz', 'gbdt-categorical-ctr-tables.ties.npz', 'gbdt-categorical-ctr-tables.hashed.npz', 'gbdt-categorical-ctr-tables.wide.npz', 'gbdt-categorical-ctr-tables.denormal.npz', 'gbdt-categorical-ctr-tables.denormal_ftz.npz', 'gbdt-categorical-ctr-tables.dupes.npz', 'gbdt-categorical-ctr-tables.odd.npz', 'gbdt-categorical-ctr-tables.negative.npz', 'gbdt-tensor-ctr-tables.base.npz', 'gbdt-tensor-ctr-tables.ties.npz', 'gbdt-tensor-ctr-tables.hashed.npz', 'gbdt-tensor-ctr-tables.wide.npz', 'gbdt-tensor-ctr-tables.denormal.npz', 'gbdt-tensor-ctr-tables.denormal_ftz.npz', 'gbdt-tensor-ctr-tables.dupes.npz', 'gbdt-tensor-ctr-tables.odd.npz', 'gbdt-tensor-ctr-tables.negative.npz']
+E   assert ['gbdt-catego...ftz.npz', ...] == []
+E     
+E     Left contains 18 more items, first extra item: 'gbdt-categorical-ctr-tables.base.npz'
+E     Use -v to get more diff
+_____ test_saved_model_inference_owed_names_real_lanes_and_remaining_debt ______
+mojolearn/tests/test_host_surface.py:757: in test_saved_model_inference_owed_names_real_lanes_and_remaining_debt
+    assert len(list(record.glob("*/expected.json"))) == 9, lane
+E   AssertionError: kernel-ridge-laplacian
+E   assert 0 == 9
+E    +  where 0 = len([])
+E    +    where [] = list(<generator object Path.glob at 0x7fcc794f7cd0>)
+E    +      where <generator object Path.glob at 0x7fcc794f7cd0> = glob('*/expected.json')
+E    +        where glob = PosixPath('/root/pyver/repo-main-py311/bench/results/classical_host/2026-09-18-apple-kernel-variants/saved-models/kernel-ridge-laplacian/kernel-ridge-laplacian').glob
+_ Mamba23BackwardHostSurface.test_folded_abi_names_layout_and_ownership (family=2) _
+mojolearn/tests/test_mamba23_backward_surface.py:47: in test_folded_abi_names_layout_and_ownership
+    weights, x = fixture(family)
+                 ^^^^^^^^^^^^^^^
+mojolearn/tests/test_mamba23_backward_surface.py:30: in fixture
+    directory = Path(corpus_root()) / f"mamba{family}" / f"m{family}_base_b2_l4_d32"
+                ^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/pathlib.py:871: in __new__
+    self = cls._from_parts(args)
+           ^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/pathlib.py:509: in _from_parts
+    drv, root, parts = self._parse_args(args)
+                       ^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/pathlib.py:493: in _parse_args
+    a = os.fspath(a)
+        ^^^^^^^^^^^^
+E   TypeError: expected str, bytes or os.PathLike object, not NoneType
+_ Mamba23BackwardHostSurface.test_folded_abi_names_layout_and_ownership (family=3) _
+mojolearn/tests/test_mamba23_backward_surface.py:47: in test_folded_abi_names_layout_and_ownership
+    weights, x = fixture(family)
+                 ^^^^^^^^^^^^^^^
+mojolearn/tests/test_mamba23_backward_surface.py:30: in fixture
+    directory = Path(corpus_root()) / f"mamba{family}" / f"m{family}_base_b2_l4_d32"
+                ^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/pathlib.py:871: in __new__
+    self = cls._from_parts(args)
+           ^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/pathlib.py:509: in _from_parts
+    drv, root, parts = self._parse_args(args)
+                       ^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/pathlib.py:493: in _parse_args
+    a = os.fspath(a)
+        ^^^^^^^^^^^^
+E   TypeError: expected str, bytes or os.PathLike object, not NoneType
+__ Mamba23BackwardHostSurface.test_refusals_precede_loading_native_extension ___
+mojolearn/tests/test_mamba23_backward_surface.py:92: in test_refusals_precede_loading_native_extension
+    weights, x = fixture(family)
+                 ^^^^^^^^^^^^^^^
+mojolearn/tests/test_mamba23_backward_surface.py:30: in fixture
+    directory = Path(corpus_root()) / f"mamba{family}" / f"m{family}_base_b2_l4_d32"
+                ^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/pathlib.py:871: in __new__
+    self = cls._from_parts(args)
+           ^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/pathlib.py:509: in _from_parts
+    drv, root, parts = self._parse_args(args)
+                       ^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/pathlib.py:493: in _parse_args
+    a = os.fspath(a)
+        ^^^^^^^^^^^^
+E   TypeError: expected str, bytes or os.PathLike object, not NoneType
+______ Mamba23BackwardHostSurface.test_stale_binary_has_actionable_error _______
+mojolearn/tests/test_mamba23_backward_surface.py:125: in test_stale_binary_has_actionable_error
+    weights, x = fixture(family)
+                 ^^^^^^^^^^^^^^^
+mojolearn/tests/test_mamba23_backward_surface.py:30: in fixture
+    directory = Path(corpus_root()) / f"mamba{family}" / f"m{family}_base_b2_l4_d32"
+                ^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/pathlib.py:871: in __new__
+    self = cls._from_parts(args)
+           ^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/pathlib.py:509: in _from_parts
+    drv, root, parts = self._parse_args(args)
+                       ^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/pathlib.py:493: in _parse_args
+    a = os.fspath(a)
+        ^^^^^^^^^^^^
+E   TypeError: expected str, bytes or os.PathLike object, not NoneType
+___________________________ test_empty_and_negative ____________________________
+mojolearn/tests/test_native_convert.py:219: in test_empty_and_negative
+    with pytest.raises(Exception, match="null buffer address"):
+E   AssertionError: Regex pattern did not match.
+E     Expected regex: 'null buffer address'
+E     Actual message: 'mojolearn: null float64 buffer address'
+____________________ test_transpose_f32_empty_and_negative _____________________
+mojolearn/tests/test_native_convert.py:265: in test_transpose_f32_empty_and_negative
+    with pytest.raises(Exception, match="null buffer address"):
+E   AssertionError: Regex pattern did not match.
+E     Expected regex: 'null buffer address'
+E     Actual message: 'mojolearn: null float32 buffer address'
+_____________ test_missing_symbol_is_a_stale_build_not_a_fallback ______________
+mojolearn/tests/test_native_convert.py:287: in test_missing_symbol_is_a_stale_build_not_a_fallback
+    with pytest.raises(ImportError, match=r"(?s)no `no_such_helper_2026`.*bindings/build\.sh"):
+E   AssertionError: Regex pattern did not match.
+E     Expected regex: re.compile('(?s)no `no_such_helper_2026`.*bindings/build\\.sh', re.DOTALL)
+E     Actual message: "mojolearn: no CPU implementation of _mojolearn.no_such_helper_2026 yet; see SUPPORT_MATRIX.md (the host binding _mojolearn_core_host is built but exports no no_such_helper_2026; host bindings built here: _mojolearn_arima_host, _mojolearn_byte_lm_host, _mojolearn_core_host, _mojolearn_embedding_host, _mojolearn_embedding_infer_host, _mojolearn_estimators_host, _mojolearn_forecast_host, _mojolearn_forest_host, _mojolearn_gbdt_host, _mojolearn_gp_host, _mojolearn_gp_infer_host, _mojolearn_hdbscan_host, _mojolearn_hdbscan_infer_host, _mojolearn_ivf_host, _mojolearn_ivf_search_host, _mojolearn_kernel_methods_host, _mojolearn_linalg_host, _mojolearn_mamba_host, _mojolearn_metrics_host, _mojolearn_mixture_host, _mojolearn_mixture_infer_host, _mojolearn_neural_host, _mojolearn_preprocessing_host, _mojolearn_resample_host, _mojolearn_rf_host, _mojolearn_solver_host, _mojolearn_svm_host, _mojolearn_tokenizer_host, _mojolearn_training_host, _mojolearn_transformer_host, _mojolearn_trees_host, _mojolearn_tsa_host). This process loaded NO GPU binary set, so every GPU estimator, block and trainer without a host binding is unavailable here. The surfaces that compute on this box today are LanguageModelInference (byte LM forward pass on the CPU), LanguageModelHostTrainer (one byte LM training step on the CPU: forward, backward and the AdamW update), HostForest and HostGBDT (predict and predict_proba of a saved forest or GradientBoosting model on the CPU), and the saved-model inference of LinearRegression, Ridge, TruncatedSVD, LogisticRegression, PCA, ARIMA (predict and forecast), ExponentialSmoothing (forecast and predict) and UMAP (transform) (mojolearn.host_model, or the classes themselves on a CPU-only install), each only when its own host binding under mojolearn/host/ is built. Why no GPU set loaded:\nmojolearn: NO SUPPORTED GPU FOUND ON THIS BOX, and there is no CPU path in this package. This install carries binary sets for ['cuda', 'hip'] under /root/pyver/repo-main-py311/python/mojolearn. What was looked for and what was found:\n  cuda:\n    /dev/nvidiactl               absent\n    /dev/nvidia0                 absent\n    libcuda.so.1                 not loadable\n    libcuda.so                   not loadable\n  hip:\n    /dev/kfd                     absent\n    libamdhip64.so.7             not loadable\n    libamdhip64.so.6             not loadable\n    libamdhip64.so               not loadable\n  MOJOLEARN_VENDOR is not set.\n\nA device node or a driver library for one of the sets above must be visible to this process. In a container that means the GPU is passed through (`--gpus all` for NVIDIA, `--device /dev/kfd --device /dev/dri` for AMD). If the device is present and this probe is wrong, MOJOLEARN_VENDOR=cuda or MOJOLEARN_VENDOR=hip picks the directory directly and the first fit reports the runtime's own error."
+________________ test_all_finite_refuses_null_and_negative[f32] ________________
+mojolearn/tests/test_native_helpers.py:117: in test_all_finite_refuses_null_and_negative
+    with pytest.raises(Exception, match="null buffer address"):
+E   AssertionError: Regex pattern did not match.
+E     Expected regex: 'null buffer address'
+E     Actual message: 'mojolearn: null float32 buffer address'
+________________ test_all_finite_refuses_null_and_negative[f64] ________________
+mojolearn/tests/test_native_helpers.py:117: in test_all_finite_refuses_null_and_negative
+    with pytest.raises(Exception, match="null buffer address"):
+E   AssertionError: Regex pattern did not match.
+E     Expected regex: 'null buffer address'
+E     Actual message: 'mojolearn: null float64 buffer address'
+_______________ test_column_mean_f64_refuses_bad_shapes_and_null _______________
+mojolearn/tests/test_native_helpers.py:230: in test_column_mean_f64_refuses_bad_shapes_and_null
+    with pytest.raises(Exception, match="null buffer address"):
+E   AssertionError: Regex pattern did not match.
+E     Expected regex: 'null buffer address'
+E     Actual message: 'mojolearn: null float32 buffer address'
+______ test_elementwise_helpers_refuse_null_and_negative_and_accept_empty ______
+mojolearn/tests/test_native_helpers.py:400: in test_elementwise_helpers_refuse_null_and_negative_and_accept_empty
+    with pytest.raises(Exception, match="null buffer address"):
+E   AssertionError: Regex pattern did not match.
+E     Expected regex: 'null buffer address'
+E     Actual message: 'mojolearn: null float32 buffer address'
+_________________ test_dense_scan_bytes_match_python_loop[0-2] _________________
+mojolearn/tests/test_native_nonzero.py:100: in test_dense_scan_bytes_match_python_loop
+    ref, got, _ = _run_both(monkeypatch, A)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:93: in _run_both
+    return _as_bytes(_oracle(A)), _as_bytes(_coo_triples(A)), True
+           ^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:89: in _as_bytes
+    return bytes(rows), bytes(cols), bytes(vals), n
+                                     ^^^^^^^^^^^
+E   TypeError: 'float' object cannot be interpreted as an integer
+_________________ test_dense_scan_bytes_match_python_loop[0-3] _________________
+mojolearn/tests/test_native_nonzero.py:100: in test_dense_scan_bytes_match_python_loop
+    ref, got, _ = _run_both(monkeypatch, A)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:93: in _run_both
+    return _as_bytes(_oracle(A)), _as_bytes(_coo_triples(A)), True
+           ^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:89: in _as_bytes
+    return bytes(rows), bytes(cols), bytes(vals), n
+                                     ^^^^^^^^^^^
+E   TypeError: 'float' object cannot be interpreted as an integer
+_________________ test_dense_scan_bytes_match_python_loop[0-7] _________________
+mojolearn/tests/test_native_nonzero.py:100: in test_dense_scan_bytes_match_python_loop
+    ref, got, _ = _run_both(monkeypatch, A)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:93: in _run_both
+    return _as_bytes(_oracle(A)), _as_bytes(_coo_triples(A)), True
+           ^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:89: in _as_bytes
+    return bytes(rows), bytes(cols), bytes(vals), n
+                                     ^^^^^^^^^^^
+E   TypeError: 'float' object cannot be interpreted as an integer
+________________ test_dense_scan_bytes_match_python_loop[0-16] _________________
+mojolearn/tests/test_native_nonzero.py:100: in test_dense_scan_bytes_match_python_loop
+    ref, got, _ = _run_both(monkeypatch, A)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:93: in _run_both
+    return _as_bytes(_oracle(A)), _as_bytes(_coo_triples(A)), True
+           ^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:89: in _as_bytes
+    return bytes(rows), bytes(cols), bytes(vals), n
+                                     ^^^^^^^^^^^
+E   TypeError: 'float' object cannot be interpreted as an integer
+________________ test_dense_scan_bytes_match_python_loop[0-33] _________________
+mojolearn/tests/test_native_nonzero.py:100: in test_dense_scan_bytes_match_python_loop
+    ref, got, _ = _run_both(monkeypatch, A)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:93: in _run_both
+    return _as_bytes(_oracle(A)), _as_bytes(_coo_triples(A)), True
+           ^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:89: in _as_bytes
+    return bytes(rows), bytes(cols), bytes(vals), n
+                                     ^^^^^^^^^^^
+E   TypeError: 'float' object cannot be interpreted as an integer
+________________ test_dense_scan_bytes_match_python_loop[0-64] _________________
+mojolearn/tests/test_native_nonzero.py:100: in test_dense_scan_bytes_match_python_loop
+    ref, got, _ = _run_both(monkeypatch, A)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:93: in _run_both
+    return _as_bytes(_oracle(A)), _as_bytes(_coo_triples(A)), True
+           ^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:89: in _as_bytes
+    return bytes(rows), bytes(cols), bytes(vals), n
+                                     ^^^^^^^^^^^
+E   TypeError: 'float' object cannot be interpreted as an integer
+________________ test_dense_scan_bytes_match_python_loop[0-129] ________________
+mojolearn/tests/test_native_nonzero.py:100: in test_dense_scan_bytes_match_python_loop
+    ref, got, _ = _run_both(monkeypatch, A)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:93: in _run_both
+    return _as_bytes(_oracle(A)), _as_bytes(_coo_triples(A)), True
+           ^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:89: in _as_bytes
+    return bytes(rows), bytes(cols), bytes(vals), n
+                                     ^^^^^^^^^^^
+E   TypeError: 'float' object cannot be interpreted as an integer
+_________________ test_dense_scan_bytes_match_python_loop[1-1] _________________
+mojolearn/tests/test_native_nonzero.py:100: in test_dense_scan_bytes_match_python_loop
+    ref, got, _ = _run_both(monkeypatch, A)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:93: in _run_both
+    return _as_bytes(_oracle(A)), _as_bytes(_coo_triples(A)), True
+           ^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:89: in _as_bytes
+    return bytes(rows), bytes(cols), bytes(vals), n
+                                     ^^^^^^^^^^^
+E   TypeError: 'float' object cannot be interpreted as an integer
+_________________ test_dense_scan_bytes_match_python_loop[1-2] _________________
+mojolearn/tests/test_native_nonzero.py:100: in test_dense_scan_bytes_match_python_loop
+    ref, got, _ = _run_both(monkeypatch, A)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:93: in _run_both
+    return _as_bytes(_oracle(A)), _as_bytes(_coo_triples(A)), True
+           ^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:89: in _as_bytes
+    return bytes(rows), bytes(cols), bytes(vals), n
+                                     ^^^^^^^^^^^
+E   TypeError: 'float' object cannot be interpreted as an integer
+_________________ test_dense_scan_bytes_match_python_loop[1-3] _________________
+mojolearn/tests/test_native_nonzero.py:100: in test_dense_scan_bytes_match_python_loop
+    ref, got, _ = _run_both(monkeypatch, A)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:93: in _run_both
+    return _as_bytes(_oracle(A)), _as_bytes(_coo_triples(A)), True
+           ^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:89: in _as_bytes
+    return bytes(rows), bytes(cols), bytes(vals), n
+                                     ^^^^^^^^^^^
+E   TypeError: 'float' object cannot be interpreted as an integer
+_________________ test_dense_scan_bytes_match_python_loop[1-7] _________________
+mojolearn/tests/test_native_nonzero.py:100: in test_dense_scan_bytes_match_python_loop
+    ref, got, _ = _run_both(monkeypatch, A)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:93: in _run_both
+    return _as_bytes(_oracle(A)), _as_bytes(_coo_triples(A)), True
+           ^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:89: in _as_bytes
+    return bytes(rows), bytes(cols), bytes(vals), n
+                                     ^^^^^^^^^^^
+E   TypeError: 'float' object cannot be interpreted as an integer
+________________ test_dense_scan_bytes_match_python_loop[1-16] _________________
+mojolearn/tests/test_native_nonzero.py:100: in test_dense_scan_bytes_match_python_loop
+    ref, got, _ = _run_both(monkeypatch, A)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:93: in _run_both
+    return _as_bytes(_oracle(A)), _as_bytes(_coo_triples(A)), True
+           ^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:89: in _as_bytes
+    return bytes(rows), bytes(cols), bytes(vals), n
+                                     ^^^^^^^^^^^
+E   TypeError: 'float' object cannot be interpreted as an integer
+________________ test_dense_scan_bytes_match_python_loop[1-33] _________________
+mojolearn/tests/test_native_nonzero.py:100: in test_dense_scan_bytes_match_python_loop
+    ref, got, _ = _run_both(monkeypatch, A)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:93: in _run_both
+    return _as_bytes(_oracle(A)), _as_bytes(_coo_triples(A)), True
+           ^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:89: in _as_bytes
+    return bytes(rows), bytes(cols), bytes(vals), n
+                                     ^^^^^^^^^^^
+E   TypeError: 'float' object cannot be interpreted as an integer
+________________ test_dense_scan_bytes_match_python_loop[1-64] _________________
+mojolearn/tests/test_native_nonzero.py:100: in test_dense_scan_bytes_match_python_loop
+    ref, got, _ = _run_both(monkeypatch, A)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:93: in _run_both
+    return _as_bytes(_oracle(A)), _as_bytes(_coo_triples(A)), True
+           ^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:89: in _as_bytes
+    return bytes(rows), bytes(cols), bytes(vals), n
+                                     ^^^^^^^^^^^
+E   TypeError: 'float' object cannot be interpreted as an integer
+________________ test_dense_scan_bytes_match_python_loop[1-129] ________________
+mojolearn/tests/test_native_nonzero.py:100: in test_dense_scan_bytes_match_python_loop
+    ref, got, _ = _run_both(monkeypatch, A)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:93: in _run_both
+    return _as_bytes(_oracle(A)), _as_bytes(_coo_triples(A)), True
+           ^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:89: in _as_bytes
+    return bytes(rows), bytes(cols), bytes(vals), n
+                                     ^^^^^^^^^^^
+E   TypeError: 'float' object cannot be interpreted as an integer
+_________________ test_dense_scan_bytes_match_python_loop[2-2] _________________
+mojolearn/tests/test_native_nonzero.py:100: in test_dense_scan_bytes_match_python_loop
+    ref, got, _ = _run_both(monkeypatch, A)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:93: in _run_both
+    return _as_bytes(_oracle(A)), _as_bytes(_coo_triples(A)), True
+           ^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:89: in _as_bytes
+    return bytes(rows), bytes(cols), bytes(vals), n
+                                     ^^^^^^^^^^^
+E   TypeError: 'float' object cannot be interpreted as an integer
+_________________ test_dense_scan_bytes_match_python_loop[2-3] _________________
+mojolearn/tests/test_native_nonzero.py:100: in test_dense_scan_bytes_match_python_loop
+    ref, got, _ = _run_both(monkeypatch, A)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:93: in _run_both
+    return _as_bytes(_oracle(A)), _as_bytes(_coo_triples(A)), True
+           ^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:89: in _as_bytes
+    return bytes(rows), bytes(cols), bytes(vals), n
+                                     ^^^^^^^^^^^
+E   TypeError: 'float' object cannot be interpreted as an integer
+_________________ test_dense_scan_bytes_match_python_loop[2-7] _________________
+mojolearn/tests/test_native_nonzero.py:100: in test_dense_scan_bytes_match_python_loop
+    ref, got, _ = _run_both(monkeypatch, A)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:93: in _run_both
+    return _as_bytes(_oracle(A)), _as_bytes(_coo_triples(A)), True
+           ^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:89: in _as_bytes
+    return bytes(rows), bytes(cols), bytes(vals), n
+                                     ^^^^^^^^^^^
+E   TypeError: 'float' object cannot be interpreted as an integer
+________________ test_dense_scan_bytes_match_python_loop[2-16] _________________
+mojolearn/tests/test_native_nonzero.py:100: in test_dense_scan_bytes_match_python_loop
+    ref, got, _ = _run_both(monkeypatch, A)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:93: in _run_both
+    return _as_bytes(_oracle(A)), _as_bytes(_coo_triples(A)), True
+           ^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:89: in _as_bytes
+    return bytes(rows), bytes(cols), bytes(vals), n
+                                     ^^^^^^^^^^^
+E   TypeError: 'float' object cannot be interpreted as an integer
+________________ test_dense_scan_bytes_match_python_loop[2-33] _________________
+mojolearn/tests/test_native_nonzero.py:100: in test_dense_scan_bytes_match_python_loop
+    ref, got, _ = _run_both(monkeypatch, A)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:93: in _run_both
+    return _as_bytes(_oracle(A)), _as_bytes(_coo_triples(A)), True
+           ^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:89: in _as_bytes
+    return bytes(rows), bytes(cols), bytes(vals), n
+                                     ^^^^^^^^^^^
+E   TypeError: 'float' object cannot be interpreted as an integer
+________________ test_dense_scan_bytes_match_python_loop[2-64] _________________
+mojolearn/tests/test_native_nonzero.py:100: in test_dense_scan_bytes_match_python_loop
+    ref, got, _ = _run_both(monkeypatch, A)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:93: in _run_both
+    return _as_bytes(_oracle(A)), _as_bytes(_coo_triples(A)), True
+           ^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:89: in _as_bytes
+    return bytes(rows), bytes(cols), bytes(vals), n
+                                     ^^^^^^^^^^^
+E   TypeError: 'float' object cannot be interpreted as an integer
+________________ test_dense_scan_bytes_match_python_loop[2-129] ________________
+mojolearn/tests/test_native_nonzero.py:100: in test_dense_scan_bytes_match_python_loop
+    ref, got, _ = _run_both(monkeypatch, A)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:93: in _run_both
+    return _as_bytes(_oracle(A)), _as_bytes(_coo_triples(A)), True
+           ^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:89: in _as_bytes
+    return bytes(rows), bytes(cols), bytes(vals), n
+                                     ^^^^^^^^^^^
+E   TypeError: 'float' object cannot be interpreted as an integer
+_____________________ test_every_planted_value_in_one_row ______________________
+mojolearn/tests/test_native_nonzero.py:118: in test_every_planted_value_in_one_row
+    ref, got, _ = _run_both(monkeypatch, A)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:93: in _run_both
+    return _as_bytes(_oracle(A)), _as_bytes(_coo_triples(A)), True
+           ^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:89: in _as_bytes
+    return bytes(rows), bytes(cols), bytes(vals), n
+                                     ^^^^^^^^^^^
+E   TypeError: 'float' object cannot be interpreted as an integer
+_______________________ test_ties_round_to_even_not_away _______________________
+mojolearn/tests/test_native_nonzero.py:143: in test_ties_round_to_even_not_away
+    ref, got, _ = _run_both(monkeypatch, A)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:93: in _run_both
+    return _as_bytes(_oracle(A)), _as_bytes(_coo_triples(A)), True
+           ^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:89: in _as_bytes
+    return bytes(rows), bytes(cols), bytes(vals), n
+                                     ^^^^^^^^^^^
+E   TypeError: 'float' object cannot be interpreted as an integer
+________________________ test_all_zero_and_all_nonzero _________________________
+mojolearn/tests/test_native_nonzero.py:155: in test_all_zero_and_all_nonzero
+    ref, got, _ = _run_both(monkeypatch, A)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:93: in _run_both
+    return _as_bytes(_oracle(A)), _as_bytes(_coo_triples(A)), True
+           ^^^^^^^^^^^^^^^^^^^^^
+mojolearn/tests/test_native_nonzero.py:89: in _as_bytes
+    return bytes(rows), bytes(cols), bytes(vals), n
+                                     ^^^^^^^^^^^
+E   TypeError: 'float' object cannot be interpreted as an integer
+_________________ test_sparse_input_is_duck_typed_not_imported _________________
+mojolearn/tests/test_native_nonzero.py:181: in test_sparse_input_is_duck_typed_not_imported
+    assert bytes(vals) == array.array("f", [1.5, -2.0, 1e-300]).tobytes()
+           ^^^^^^^^^^^
+E   TypeError: 'float' object cannot be interpreted as an integer
+___________ test_all_six_kernel_variants_ship_all_recorded_fixtures ____________
+mojolearn/tests/test_portable_kernel_models.py:28: in test_all_six_kernel_variants_ship_all_recorded_fixtures
+    assert path.read_bytes() == (origin / 'model.npz').read_bytes()
+                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/pathlib.py:1050: in read_bytes
+    with self.open(mode='rb') as f:
+         ^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/pathlib.py:1044: in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: '/root/pyver/repo-main-py311/bench/results/identity_break/2026-09-18-ordinary-holds-amd-kernels/captures-kernels/attempt-1789754449398641025/saved-kernel-ridge-laplacian/kernel-ridge-laplacian/base/model.npz'
+________________ test_every_reference_is_in_the_record_it_names ________________
+mojolearn/tests/test_verify_all.py:114: in test_every_reference_is_in_the_record_it_names
+    cache[p] = json.loads(p.read_text(encoding="utf-8"))
+                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/pathlib.py:1058: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/pathlib.py:1044: in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: '/root/pyver/repo-main-py311/bench/results/identity_break/2026-09-16_amd-mi300x/amd-mi300x-gfx942.predict.json'
+__________ test_the_printed_verdict_carries_its_own_scope_end_to_end ___________
+mojolearn/tests/test_verify_all.py:1426: in test_the_printed_verdict_carries_its_own_scope_end_to_end
+    assert ok.returncode == 0, ok.stdout[-2000:] + ok.stderr[-2000:]
+E   AssertionError: scan-brute-l1', 'dbscan-weighted', 'kde-tophat-sqeuclidean', 'kde-epanechnikov-l1', 'kde-exponential-chebyshev', 'kde-linear-cosine', 'kde-cosine-minkowski', 'kde-weighted', 'pca-full-whiten', 'ols-no-intercept', 'ols-weighted', 'ridge-no-intercept', 'logistic-l1', 'logistic-multiclass', 'logistic-elasticnet', 'logistic-unpenalized-no-intercept', 'linear-svc', 'linear-svc-squared-hinge', 'linear-svr', 'linear-svr-squared', 'qn-squared', 'qn-absolute', 'elasticnet-l2end-no-intercept', 'svc-linear', 'svc-poly', 'svr-linear', 'knn-sqeuclidean', 'knn-manhattan', 'knn-chebyshev', 'knn-cosine', 'knn-minkowski-p3', 'knn-rbc', 'knn-clf-distance', 'knn-reg-distance', 'radius-manhattan', 'radius-chebyshev', 'radius-minkowski-p3', 'standard-scaler-no-mean', 'standard-scaler-no-std', 'minmax-scaler-clip', 'spectral-precomputed', 'spectral-embedding', 'holtwinters-multiplicative', 'kpss', 'select-d', 'arima-011', 'arima-seasonal-c', 'arima-exog', 'arima-exog-seasonal', 'gp-normalize-y', 'gp-sample-y', 'gp-sample-y-normalize', 'gp-optimize', 'gp-optimize-restarts', 'gp-matern12', 'gp-matern32', 'gp-matern52-ard', 'gemm-transposed', 'linalg-qr', 'linalg-eigh', 'linalg-svdvals', 'metrics-classification', 'metrics-homogeneity-completeness', 'metrics-fowlkes-mallows', 'tokenizer', 'bpe-trainer', 'bpe-vocabulary', 'tokenized-corpus', 'hf-checkpoint', 'hf-tokenizer', 'hf-causal-lm', 'cross-val', 'cross-val-folds', 'cholesky', 'kernel-ridge', 'nystroem', 'kernel-ridge-poly', 'kernel-ridge-sigmoid', 'kernel-ridge-laplacian', 'nystroem-poly', 'nystroem-sigmoid', 'nystroem-laplacian', 'rbf-sampler', 'gmm', 'gmm-random-init', 'gmm-sample', 'gmm-random-init-sample', 'hdbscan', 'hdbscan-leaf', 'bootstrap', 'permutation-test', 'monte-carlo', 'ordered-gradient-sum', 'grad-accumulation', 'training-primitives', 'ivf', 'ivf-euclidean', 'ivf-extend', 'embedding', 'embedding-sort', 'kmeans-sqrt', 'kmeans-classic-pp', 'iforest', 'iforest-tuned', 'mamba1-decode-session', 'transformer-decode-session']
+E     
+E   assert 2 == 0
+E    +  where 2 = CompletedProcess(args=['/root/pyver/venv-py311/bin/python', '-m', 'mojolearn', 'verify', '--lanes', 'ols,ridge,par-for...eans-sqrt', 'kmeans-classic-pp', 'iforest', 'iforest-tuned', 'mamba1-decode-session', 'transformer-decode-session']\n").returncode
+________________ test_shipped_verifier_hashes_like_the_harness _________________
+mojolearn/tests/test_verify_all.py:1469: in test_shipped_verifier_hashes_like_the_harness
+    h = subprocess.run([sys.executable] + argv, capture_output=True, text=True, env=env, cwd=str(ROOT))
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/subprocess.py:550: in run
+    stdout, stderr = process.communicate(input, timeout=timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/subprocess.py:1209: in communicate
+    stdout, stderr = self._communicate(input, endtime, timeout)
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/subprocess.py:2115: in _communicate
+    ready = selector.select(timeout)
+            ^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/selectors.py:415: in select
+    fd_event_list = self._selector.poll(timeout)
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   Failed: Timeout (>300.0s) from pytest-timeout.
+_ test_documented_metal_incident_is_quarantined_without_hiding_clean_gp_records _
+mojolearn/tests/test_verify_reference_admit.py:158: in test_documented_metal_incident_is_quarantined_without_hiding_clean_gp_records
+    assert (incident / "apple-m4.merged-rerun1.json").is_file()
+E   AssertionError: assert False
+E    +  where False = is_file()
+E    +    where is_file = (PosixPath('/root/pyver/repo-main-py311/bench/results/identity_break/2026-09-15_gp-sample-y/metal-transient') / 'apple-m4.merged-rerun1.json').is_file
+=============================== warnings summary ===============================
+mojolearn/tests/test_logistic_multiclass_surface.py::test_three_class_fit_shapes_and_argmax
+  /root/pyver/venv-py311/lib/python3.11/site-packages/_pytest/python.py:171: PytestReturnNotNoneWarning: Test functions should return None, but mojolearn/tests/test_logistic_multiclass_surface.py::test_three_class_fit_shapes_and_argmax returned <class 'tuple'>.
+  Did you mean to use `assert` instead of `return`?
+  See https://docs.pytest.org/en/stable/how-to/assert.html#return-not-none for more information.
+    warnings.warn(
+
+mojolearn/tests/test_models_loader.py::test_tokenizer_gpt2_pattern_uses_the_compiled_door_and_matches_the_oracle
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type _BpeHandle has no __module__ attribute
+
+mojolearn/tests/test_models_loader.py::test_tokenizer_gpt2_pattern_uses_the_compiled_door_and_matches_the_oracle
+  <frozen importlib._bootstrap>:241: DeprecationWarning: builtin type _BpeTrainedHandle has no __module__ attribute
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED mojolearn/tests/test_binding_mode_guard.py::test_actual_module_mode[fast-0-_mojolearn_gbdt]
+FAILED mojolearn/tests/test_binding_mode_guard.py::test_actual_module_mode[fast-0-_mojolearn_rf]
+FAILED mojolearn/tests/test_binding_mode_guard.py::test_actual_module_mode[fast-0-_mojolearn_trees]
+FAILED mojolearn/tests/test_binding_mode_guard.py::test_actual_module_mode[identical-1-_mojolearn]
+FAILED mojolearn/tests/test_binding_mode_guard.py::test_actual_module_mode[identical-1-_mojolearn_gbdt]
+FAILED mojolearn/tests/test_binding_mode_guard.py::test_actual_module_mode[identical-1-_mojolearn_rf]
+FAILED mojolearn/tests/test_binding_mode_guard.py::test_actual_module_mode[identical-1-_mojolearn_trees]
+FAILED mojolearn/tests/test_binding_mode_guard.py::test_actual_module_mode[deterministic-2-_mojolearn_gbdt]
+FAILED mojolearn/tests/test_binding_mode_guard.py::test_actual_module_mode[deterministic-2-_mojolearn_rf]
+FAILED mojolearn/tests/test_binding_mode_guard.py::test_actual_module_mode[deterministic-2-_mojolearn_trees]
+FAILED mojolearn/tests/test_binding_mode_guard.py::test_identical_refuses_fast_binary
+FAILED mojolearn/tests/test_binding_mode_guard.py::test_legacy_without_readback
+FAILED mojolearn/tests/test_cpu_training_e3.py::test_oracle_imports_no_gpu_and_no_device_module
+FAILED mojolearn/tests/test_cpu_training_e3_gbdt.py::test_every_fit_refusal_names_the_missing_cpu_implementation
+FAILED mojolearn/tests/test_cpu_training_gbdt_losses.py::test_the_five_configurations_fit_on_the_host_when_built
+FAILED mojolearn/tests/test_cpu_training_gbdt_ordered.py::test_ordered_and_feature_freq_fit_on_the_host_when_built
+FAILED mojolearn/tests/test_cpu_training_misc.py::test_fix_columns_carry_the_fixed_lane_on_every_fixture
+FAILED mojolearn/tests/test_cpu_training_par_classical.py::test_the_gpc_class_fit_worker_refuses_outside_the_verifier
+FAILED mojolearn/tests/test_cpu_training_samba.py::test_every_entry_samba_reaches_is_on_the_host
+FAILED mojolearn/tests/test_crossvendor_coverage.py::test_cli_runs_in_checkout_with_no_native_package_initialization
+FAILED mojolearn/tests/test_device_array_refusal.py::DeviceArrayRefusalTest::test_cpu_dlpack_tensor_keeps_the_zero_copy_path
+FAILED mojolearn/tests/test_gbdt_host_modes.py::test_four_modes_predict_through_host_model_when_built
+FAILED mojolearn/tests/test_host_path_resolution.py::test_the_inference_door_opens_under_the_override
+FAILED mojolearn/tests/test_host_surface.py::test_recordings_and_columns_exist
+FAILED mojolearn/tests/test_host_surface.py::test_training_gpu_columns_exist
+FAILED mojolearn/tests/test_host_surface.py::test_gbdt_ctr_models_cover_every_fixture
+FAILED mojolearn/tests/test_host_surface.py::test_saved_model_inference_owed_names_real_lanes_and_remaining_debt
+SUBFAILED(family=2) mojolearn/tests/test_mamba23_backward_surface.py::Mamba23BackwardHostSurface::test_folded_abi_names_layout_and_ownership
+SUBFAILED(family=3) mojolearn/tests/test_mamba23_backward_surface.py::Mamba23BackwardHostSurface::test_folded_abi_names_layout_and_ownership
+FAILED mojolearn/tests/test_mamba23_backward_surface.py::Mamba23BackwardHostSurface::test_refusals_precede_loading_native_extension
+FAILED mojolearn/tests/test_mamba23_backward_surface.py::Mamba23BackwardHostSurface::test_stale_binary_has_actionable_error
+FAILED mojolearn/tests/test_native_convert.py::test_empty_and_negative - Asse...
+FAILED mojolearn/tests/test_native_convert.py::test_transpose_f32_empty_and_negative
+FAILED mojolearn/tests/test_native_convert.py::test_missing_symbol_is_a_stale_build_not_a_fallback
+FAILED mojolearn/tests/test_native_helpers.py::test_all_finite_refuses_null_and_negative[f32]
+FAILED mojolearn/tests/test_native_helpers.py::test_all_finite_refuses_null_and_negative[f64]
+FAILED mojolearn/tests/test_native_helpers.py::test_column_mean_f64_refuses_bad_shapes_and_null
+FAILED mojolearn/tests/test_native_helpers.py::test_elementwise_helpers_refuse_null_and_negative_and_accept_empty
+FAILED mojolearn/tests/test_native_nonzero.py::test_dense_scan_bytes_match_python_loop[0-2]
+FAILED mojolearn/tests/test_native_nonzero.py::test_dense_scan_bytes_match_python_loop[0-3]
+FAILED mojolearn/tests/test_native_nonzero.py::test_dense_scan_bytes_match_python_loop[0-7]
+FAILED mojolearn/tests/test_native_nonzero.py::test_dense_scan_bytes_match_python_loop[0-16]
+FAILED mojolearn/tests/test_native_nonzero.py::test_dense_scan_bytes_match_python_loop[0-33]
+FAILED mojolearn/tests/test_native_nonzero.py::test_dense_scan_bytes_match_python_loop[0-64]
+FAILED mojolearn/tests/test_native_nonzero.py::test_dense_scan_bytes_match_python_loop[0-129]
+FAILED mojolearn/tests/test_native_nonzero.py::test_dense_scan_bytes_match_python_loop[1-1]
+FAILED mojolearn/tests/test_native_nonzero.py::test_dense_scan_bytes_match_python_loop[1-2]
+FAILED mojolearn/tests/test_native_nonzero.py::test_dense_scan_bytes_match_python_loop[1-3]
+FAILED mojolearn/tests/test_native_nonzero.py::test_dense_scan_bytes_match_python_loop[1-7]
+FAILED mojolearn/tests/test_native_nonzero.py::test_dense_scan_bytes_match_python_loop[1-16]
+FAILED mojolearn/tests/test_native_nonzero.py::test_dense_scan_bytes_match_python_loop[1-33]
+FAILED mojolearn/tests/test_native_nonzero.py::test_dense_scan_bytes_match_python_loop[1-64]
+FAILED mojolearn/tests/test_native_nonzero.py::test_dense_scan_bytes_match_python_loop[1-129]
+FAILED mojolearn/tests/test_native_nonzero.py::test_dense_scan_bytes_match_python_loop[2-2]
+FAILED mojolearn/tests/test_native_nonzero.py::test_dense_scan_bytes_match_python_loop[2-3]
+FAILED mojolearn/tests/test_native_nonzero.py::test_dense_scan_bytes_match_python_loop[2-7]
+FAILED mojolearn/tests/test_native_nonzero.py::test_dense_scan_bytes_match_python_loop[2-16]
+FAILED mojolearn/tests/test_native_nonzero.py::test_dense_scan_bytes_match_python_loop[2-33]
+FAILED mojolearn/tests/test_native_nonzero.py::test_dense_scan_bytes_match_python_loop[2-64]
+FAILED mojolearn/tests/test_native_nonzero.py::test_dense_scan_bytes_match_python_loop[2-129]
+FAILED mojolearn/tests/test_native_nonzero.py::test_every_planted_value_in_one_row
+FAILED mojolearn/tests/test_native_nonzero.py::test_ties_round_to_even_not_away
+FAILED mojolearn/tests/test_native_nonzero.py::test_all_zero_and_all_nonzero
+FAILED mojolearn/tests/test_native_nonzero.py::test_sparse_input_is_duck_typed_not_imported
+FAILED mojolearn/tests/test_portable_kernel_models.py::test_all_six_kernel_variants_ship_all_recorded_fixtures
+FAILED mojolearn/tests/test_verify_all.py::test_every_reference_is_in_the_record_it_names
+FAILED mojolearn/tests/test_verify_all.py::test_the_printed_verdict_carries_its_own_scope_end_to_end
+FAILED mojolearn/tests/test_verify_all.py::test_shipped_verifier_hashes_like_the_harness
+FAILED mojolearn/tests/test_verify_reference_admit.py::test_documented_metal_incident_is_quarantined_without_hiding_clean_gp_records
+SKIPPED [1] mojolearn/tests/test_classification_metrics.py:9: could not import 'sklearn': No module named 'sklearn'
+SKIPPED [1] mojolearn/tests/test_forest_protocol.py:9: could not import 'sklearn': No module named 'sklearn'
+SKIPPED [1] mojolearn/tests/test_neighbors_weighted_largek.py:13: unittest.case.SkipTest: Explicit root-only Linux CUDA/HIP opt-in required
+SKIPPED [3] mojolearn/tests/test_classical_partition_native.py:42: opt-in native check; requires shared slot
+SKIPPED [6] mojolearn/tests/test_classical_partition_native.py:52: opt-in native check; requires shared slot
+SKIPPED [2] mojolearn/tests/test_classical_partition_native.py:63: opt-in native check; requires shared slot
+SKIPPED [1] mojolearn/tests/test_classical_pip_smoke_sep22.py:60: could not import 'sklearn.metrics': No module named 'sklearn'
+SKIPPED [24] mojolearn/tests/test_classical_pip_smoke_sep22.py:137: could not import 'sklearn.base': No module named 'sklearn'
+SKIPPED [1] mojolearn/tests/test_classical_pip_smoke_sep22.py:158: could not import 'sklearn.base': No module named 'sklearn'
+SKIPPED [12] mojolearn/tests/test_distributed_ivf.py:118: requires freshly built partial IVF binding under native slot
+SKIPPED [2] mojolearn/tests/test_distributed_ivf.py:145: requires freshly built partial IVF binding under native slot
+SKIPPED [7] mojolearn/tests/test_fowlkes_mallows_score.py:80: could not import 'sklearn.metrics': No module named 'sklearn'
+SKIPPED [1] mojolearn/tests/test_fowlkes_mallows_score.py:88: could not import 'sklearn.metrics': No module named 'sklearn'
+SKIPPED [2] mojolearn/tests/test_gbdt_feature_fraction.py:75: could not import 'sklearn.base': No module named 'sklearn'
+SKIPPED [2] mojolearn/tests/test_gbdt_small_pool_route.py:104: CPU-only install: every fit is the host fit
+SKIPPED [1] mojolearn/tests/test_gbdt_small_pool_route.py:140: CPU-only install: every fit is the host fit
+SKIPPED [5] mojolearn/tests/test_gbdt_small_pool_route.py:211: CPU-only install: every fit is the host fit
+SKIPPED [23] mojolearn/tests/test_gbdt_small_pool_route.py:235: CPU-only install: every fit is the host fit
+SKIPPED [1] mojolearn/tests/test_gp_normalize_y.py:63: could not import 'sklearn.gaussian_process': No module named 'sklearn'
+SKIPPED [2] mojolearn/tests/test_host_only_verifier.py:31: needs committed capture evidence
+SKIPPED [12] mojolearn/tests/test_kde_fused_fast.py:64: DEVIATION 2490 is a FAST-only arm
+SKIPPED [1] mojolearn/tests/test_kde_fused_fast.py:106: DEVIATION 2490 is a FAST-only arm
+SKIPPED [1] mojolearn/tests/test_kde_fused_fast.py:125: DEVIATION 2490 is a FAST-only arm
+SKIPPED [1] mojolearn/tests/test_kde_fused_fast.py:140: DEVIATION 2490 is a FAST-only arm
+SKIPPED [2] mojolearn/tests/test_linalg_decompositions.py:218: one route on this box (CPU-only install, or no GPU binding built)
+SKIPPED [1] mojolearn/tests/test_linalg_decompositions.py:234: one route on this box (CPU-only install, or no GPU binding built)
+SKIPPED [1] mojolearn/tests/test_linalg_decompositions.py:245: one route on this box (CPU-only install, or no GPU binding built)
+SKIPPED [5] ../../venv-py311/lib/python3.11/site-packages/_pytest/unittest.py:523: optional PyTorch autograd oracle is not installed
+SKIPPED [1] mojolearn/tests/test_mamba23_backward_surface.py:153: root must opt in on RunPod NVIDIA; host ABI checks are not GPU qualification
+SKIPPED [1] mojolearn/tests/test_mamba23_backward_surface.py:186: root must opt in on RunPod NVIDIA; host ABI checks are not GPU qualification
+SKIPPED [8] mojolearn/tests/test_model_selection_numpy_free.py:21: could not import 'sklearn.model_selection': No module named 'sklearn'
+SKIPPED [1] mojolearn/tests/test_model_selection_numpy_free.py:28: could not import 'sklearn.model_selection': No module named 'sklearn'
+SKIPPED [1] mojolearn/tests/test_model_selection_numpy_free.py:37: could not import 'sklearn.pipeline': No module named 'sklearn'
+SKIPPED [16] mojolearn/tests/test_native_convert.py:299: already float32 in the target layout: a borrow, tested below
+SKIPPED [16] mojolearn/tests/test_native_convert.py:315: already float32 in the target layout: a borrow, tested below
+SKIPPED [1] mojolearn/tests/test_pca_full_surface.py:83: root-only numerical opt-in
+SKIPPED [3] mojolearn/tests/test_pca_whitening_surface.py:133: root-only opt-in remote PCA whitening gate
+SKIPPED [1] mojolearn/tests/test_small_mlp_numerical_edges.py:55: root-only opt-in remote Linux CUDA/HIP numerical tests
+SKIPPED [1] mojolearn/tests/test_small_mlp_numerical_edges.py:70: root-only opt-in remote Linux CUDA/HIP numerical tests
+SKIPPED [1] mojolearn/tests/test_small_mlp_numerical_edges.py:83: root-only opt-in remote Linux CUDA/HIP numerical tests
+SKIPPED [2] mojolearn/tests/test_small_mlp_numerical_edges.py:94: root-only opt-in remote Linux CUDA/HIP numerical tests
+SKIPPED [1] mojolearn/tests/test_small_mlp_numerical_edges.py:136: root-only opt-in remote Linux CUDA/HIP numerical tests
+SKIPPED [3] mojolearn/tests/test_small_mlp_surface.py:272: root-only opt-in remote NVIDIA/AMD numerical gate
+SKIPPED [1] mojolearn/tests/test_svc_poly.py:105: could not import 'sklearn.svm': No module named 'sklearn'
+SKIPPED [1] mojolearn/tests/test_tokenizer_surface.py:52: MOJOLEARN_GPT2_ENCODER_JSON and MOJOLEARN_GPT2_VOCAB_BPE do not name the GPT-2 files
+SKIPPED [1] mojolearn/tests/test_verify_small.py:123: source capture evidence is not installed in wheels
+69 failed, 2742 passed, 182 skipped, 3 warnings, 77 subtests passed in 442.74s (0:07:22)

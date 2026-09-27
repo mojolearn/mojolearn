@@ -1,0 +1,23 @@
+Using CPython 3.11.15 interpreter at: /usr/bin/python3.11
+Creating virtual environment at: /root/pyver/venv-py311
+Activate with: source /root/pyver/venv-py311/bin/activate
+total 44
+-rw-r--r-- 1 root root 4075 Sep 23 15:48 activate
+-rw-r--r-- 1 root root 2655 Sep 23 15:48 activate.bat
+-rw-r--r-- 1 root root 2605 Sep 23 15:48 activate.csh
+-rw-r--r-- 1 root root 4316 Sep 23 15:48 activate.fish
+-rw-r--r-- 1 root root 3931 Sep 23 15:48 activate.nu
+-rw-r--r-- 1 root root 2765 Sep 23 15:48 activate.ps1
+-rw-r--r-- 1 root root 3867 Sep 23 15:48 activate.xsh
+-rw-r--r-- 1 root root 2383 Sep 23 15:48 activate_this.py
+-rw-r--r-- 1 root root 1730 Sep 23 15:48 deactivate.bat
+-rw-r--r-- 1 root root 1219 Sep 23 15:48 pydoc.bat
+lrwxrwxrwx 1 root root   19 Sep 23 15:48 python -> /usr/bin/python3.11
+lrwxrwxrwx 1 root root    6 Sep 23 15:48 python3 -> python
+lrwxrwxrwx 1 root root    6 Sep 23 15:48 python3.11 -> python
+/usr/bin/python3.11
+home = /usr/bin
+implementation = CPython
+uv = 0.12.18
+version_info = 3.11.15
+include-system-site-packages = false

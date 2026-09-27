@@ -1,0 +1,4 @@
+arming a 60-minute self-kill on pod 6sta22lyi4e63w ...
+ARMED. Pod 6sta22lyi4e63w is TERMINATED through the API in 60 minutes.
+  lease: /Users/andrewhendel/mojolearn-wt/py310-311/bench/results/runpod_cpu/2026-09-23_150807-py310-311/lease/6sta22lyi4e63w.lease
+  extend with: tools/runpod_guard.sh extend 6sta22lyi4e63w '-p 38663 root@157.157.221.29' <minutes>

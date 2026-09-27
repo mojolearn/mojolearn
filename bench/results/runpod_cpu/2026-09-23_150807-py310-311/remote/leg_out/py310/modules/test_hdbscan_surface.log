@@ -1,0 +1,62 @@
+  ok    FIT        labels_ int32 (n,)
+  ok    FIT        two planted blobs give n_clusters_ == 2
+  ok    FIT        every non-noise label agrees with its blob (up to relabeling)
+  ok    FIT        n_outliers_ counts the -1 labels
+  ok    FIT        core_distances_ positive and finite
+  ok    FIT        Boruvka rounds and condensed cluster count carried
+  ok    FIT        two fits of the same input agree bit for bit on this box
+  ok    FIT        cluster_selection_method='leaf' runs
+  ok    FIT        fit_predict
+  ok    REFUSE     metric='manhattan' by name
+  ok    REFUSE     an unknown selection method
+  ok    REFUSE     min_samples as a float
+  ok    REFUSE     cluster_selection_epsilon != 0, refused on the Mojo host
+  ok    REFUSE     min_cluster_size=1, refused on the Mojo host
+  ok    REFUSE     a single row, refused on the Mojo host
+  ok    REFUSE     a NaN cell, refused on the Mojo host (DEVIATION 1607)
+  ok    REFUSE     probabilities_ refused by name
+  ok    PREDICT    prediction_data=True fits the same labels_ and core_distances_ bytes
+  ok    PREDICT    labels int32 (n,), the dtype of labels_
+  ok    PREDICT    probabilities float32 (n,)
+  ok    PREDICT    probabilities in [0, 1]
+  ok    PREDICT    a -1 label has probability 0 (kernels/predict.cuh:81-83)
+  ok    PREDICT    every training row predicts its fitted label on two planted blobs
+  ok    PREDICT    a point far from every cluster is noise with probability 0
+  ok    PREDICT    every selected cluster has an exemplar
+  ok    PREDICT    a query exactly at an exemplar predicts the exemplar's label with a positive probability
+  ok    PREDICT    a float64 query converts to float32 and returns the float32 query's bytes
+  ok    PREDICT    two calls agree bit for bit, and a row alone equals its row in the batch
+  ok    PREDICT    duplicated rows and tied distances: reversing the query order reverses the answer bytes
+  ok    PREDICT    approximate_predict without prediction_data=True refused by name
+  ok    PREDICT    a query with the wrong feature count
+  ok    PREDICT    a NaN query refused by name (DEVIATION 1607)
+  ok    PREDICT    min_samples=1 has an empty prediction neighborhood, refused by name
+  ok    PREDICT    prediction_data must be a bool
+  ok    SOFT       membership_vector float32 (n, n_clusters_)
+  ok    SOFT       membership_vector finite and non-negative
+  ok    SOFT       a row sums to at most 1 (the joint distribution)
+  ok    SOFT       on two planted blobs a clustered training row is most likely its own label
+  ok    SOFT       all_points_membership_vectors float32 (n, n_clusters_)
+  ok    SOFT       all_points_membership_vectors finite and non-negative
+  ok    SOFT       every exemplar's all-points row sums to 1
+  ok    SOFT       every all-points row sums to at most 1
+  ok    SOFT       every clustered training row's largest all-points membership is its own label
+  ok    SOFT       a point far from every cluster has a row below 0.05 and below every clustered training row (noise)
+  ok    SOFT       two calls agree bit for bit, and a row alone equals its row in the batch
+  ok    SOFT       batch_size changes no byte of either call
+  ok    SOFT       duplicated rows (zero distances, FLT_MAX lambdas) give finite rows where cuML's overflow to NaN (DEVIATION 1616)
+  ok    SOFT       duplicated rows: every row sums to at most 1
+  ok    SOFT       duplicated rows and tied distances: reversing the query order reverses the membership bytes
+  ok    SOFT       membership_vector without prediction_data=True refused by name
+  ok    SOFT       all_points_membership_vectors without prediction_data=True refused by name
+  ok    SOFT       batch_size=0 refused
+  ok    SOFT       all points batch_size=-1 refused
+  ok    SOFT       a query with the wrong feature count
+  ok    SOFT       a NaN query refused by name (DEVIATION 1607)
+  ok    SOFT       min_samples=1 has an empty prediction neighborhood, refused by name
+  ok    SOFT       no cluster: (n, 0) arrays
+  ok    SOFT       a float64 query converts to float32 and returns the float32 query's bytes
+  ok    PROVENANCE HDBSCAN and mojolearn.hdbscan exported
+  ok    PROVENANCE numeric_mode_used() is the process default
+
+test_hdbscan_surface: GREEN under numeric_mode=identical, 60 checks. One box, one vendor; no bit is claimed for any other.

@@ -1,0 +1,4 @@
+arming a 45-minute self-kill on pod 481c3l89a77ui5 ...
+ARMED. Pod 481c3l89a77ui5 is TERMINATED through the API in 45 minutes.
+  lease: /Users/andrewhendel/mojolearn-wt/py310-311/bench/results/runpod_cpu/2026-09-23_153248-py310-311-c/lease/481c3l89a77ui5.lease
+  extend with: tools/runpod_guard.sh extend 481c3l89a77ui5 '-p 30151 root@213.173.105.94' <minutes>

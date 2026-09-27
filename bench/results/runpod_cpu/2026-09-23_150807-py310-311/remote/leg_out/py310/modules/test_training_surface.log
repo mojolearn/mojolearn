@@ -1,0 +1,103 @@
+test_training_surface
+   profiles mojolearn.identical.optimizer.fp32.v1 and
+            mojolearn.identical.loss.ce.fp32.v1
+   surface  mojolearn._training_impl
+
+  PROVENANCE
+    pass the binary reports its tier: identical
+    FAIL the binary reports its accelerator API: cpu -- a binary that answers 'none' cannot run a kernel anywhere
+
+  REFUSALS
+    pass SGD(nesterov=True, momentum=0) is refused by name
+    pass SGD(nesterov=True, dampening!=0) is refused by name
+    pass Adam(amsgrad=True) is refused by name
+    pass Adam(maximize=True) is refused by name
+    pass Adam(foreach=True) is refused by name
+    pass an unknown keyword is refused rather than ignored
+    pass a float16 parameter is refused, not upcast
+    pass dropout= is refused by name and pointed at Generator.dropout
+    pass distributed= is refused by name
+    pass a float64 parameter is refused, not cast
+    pass an empty tensor is refused, not skipped
+    pass an empty parameter registry is refused
+    pass step(max_norm=0) is refused; None is how OFF is spelled
+    pass a gradient count that does not match params is refused
+    pass clip_grad_norm_(norm_type=inf) is refused by name
+    pass clip_grad_norm_(error_if_nonfinite=False) is refused by name
+    pass clip_grad_norm_(max_norm=0) is refused by name
+    pass cross_entropy(reduction='none', return_grad=True) is refused
+    pass cross_entropy(weight=...) is refused by name
+    pass cross_entropy(size_average=...) is refused by name
+    pass an unknown reduction is refused by name
+    pass 2-D targets are refused by name
+    pass a target outside [0, vocab) is refused by name, with its row
+    pass a non-finite logit is refused by name before any stage
+    pass a non-finite gradient is refused by name
+
+  ADAM
+    pass step() with no max_norm reports no clip, not a coefficient of 1.0
+    pass t is ONE-BASED after the first step
+    pass param tensor 0 matches the hand-computed step
+    pass param tensor 1 matches the hand-computed step
+    pass exp_avg matches the hand-computed m
+    pass exp_avg_sq matches the hand-computed v
+    pass the gradient is bitwise untouched when the clip is off, checked on the borrowed (zero-copy) path
+
+  ADAMW
+    pass AdamW == Adam at weight_decay = 0, bit for bit
+    pass AdamW != Adam at weight_decay = 0.25, so `kind` reaches the kernel
+
+  SGD
+    pass momentum = 0 matches the hand-computed p - lr*g
+    pass buf_initialized starts at 0, so step 1 takes the COPY arm
+    pass buf_initialized is carried BACK OUT of the call and flips once per TENSOR
+    pass step 1 COPIES the gradient into the momentum buffer
+    pass step 2 runs the RECURRENCE, so both arms of the flag ran
+
+  CLIP
+    pass the two-level norm of the fixture is exactly 85.0
+    pass tensor 0 is scaled in place by max_norm/total
+    pass tensor 1 is scaled in place by max_norm/total
+    pass tensor 2 is scaled in place by max_norm/total
+    pass the reported norm is the PRE-clip norm, whatever max_norm is
+    pass tensor 0 is bitwise untouched when the coefficient clamps to 1.0
+    pass tensor 1 is bitwise untouched when the coefficient clamps to 1.0
+    pass tensor 2 is bitwise untouched when the coefficient clamps to 1.0
+    pass step(max_norm=...) reports the same pre-clip norm
+    pass step records the clamped coefficient it applied
+    pass step scales the caller's gradient tensor 0 in place
+    pass step scales the caller's gradient tensor 1 in place
+    pass step scales the caller's gradient tensor 2 in place
+
+  SPLIT
+    pass grouping [4] gives the same Adam step
+    pass grouping [1, 1, 1, 1] gives the same Adam step
+    pass grouping [2, 2] gives the same Adam step
+    pass grouping [1, 3] gives the same Adam step
+
+  STATE
+    pass a resumed optimizer takes the same second step
+    pass state_dict carries buf_initialized, not just m and v
+    pass an optimizer that did NOT load the state lands elsewhere, so the resume arm is not vacuous
+
+  LOSSGRAD
+    pass dlogits is (N, V) = (3, 4)
+    pass every gradient cell matches the hand-written closed form
+    pass the ignored row is +0.0, STORED and not skipped
+    pass reduction='none' returns (N,) = (3,)
+    pass mean == sum / count on a fixture whose count is a power of two
+    pass an ignored row contributes +0.0 to the per-row loss
+    pass label_smoothing reaches the kernel and changes the answer (2.6901896 vs 2.9401896)
+
+  LOSSVALUE
+    pass a uniform row's mean loss is log(V) to 1e-5 (got 1.38629436, want 1.38629436)
+
+  tier identical, vendor cpu, surface mojolearn._training_impl
+  THE CARDS THIS LANE ACTUALLY MEASURED ARE TWO-VENDOR: Apple M4 and
+  AMD MI325X, byte-identical, md5 a87615d9 (loss) and 97d160b0
+  (optimizer). NO NVIDIA LEG HAS RUN, for either card or for the
+  training loop's checkpoint comparison.
+
+  69 checks, 1 failed
+
+test_training_surface: RED. 1 checks failed, 0 arms did not run.

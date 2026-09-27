@@ -1,0 +1,32 @@
+{
+ "parent_executable": "/root/pyver/venv-py311/bin/python",
+ "parent_prefix": "/root/pyver/venv-py311",
+ "parent_env": {
+  "MOJOLEARN_COMMIT": "246a19949cab68dbbc282e6a1a145aa0e1757942",
+  "MOJOLEARN_BUILD_JOBS": "8",
+  "MOJOLEARN_LINUX_CPU": "x86-64-v3",
+  "MOJOLEARN_NUMERIC_MODE": "identical"
+ },
+ "parent_path": [
+  "/root/pyver/repo-main-py311/python",
+  "/usr/lib/python311.zip",
+  "/usr/lib/python3.11",
+  "/usr/lib/python3.11/lib-dynload",
+  "/root/pyver/venv-py311/lib/python3.11/site-packages"
+ ],
+ "script": {
+  "rc": 1,
+  "out": "\nexecutable /root/mojolearn/.pixi/envs/default/bin/python3\nprefix /usr /usr\nflags sys.flags(debug=0, inspect=0, interactive=0, optimize=0, dont_write_bytecode=0, no_user_site=0, no_site=0, ignore_environment=0, verbose=0, bytes_warning=0, quiet=0, hash_randomization=1, isolated=0, dev_mode=False, utf8_mode=0, warn_default_encoding=0, safe_path=False, int_max_str_digits=-1)\npath ['/root/pyver/tmp-py311/test_probe_child0/tools', '/root/pyver/tmp-py311/test_probe_child0', '/usr/lib/python311.zip', '/usr/lib/python3.11', '/usr/lib/python3.11/lib-dynload', '/usr/local/lib/python3.11/dist-packages', '/usr/lib/python3/dist-packages']\nenv {'PYTHONPATH': ':', 'PYTHONEXECUTABLE': '/root/mojolearn/.pixi/envs/default/bin/python3'}\n",
+  "err": "Traceback (most recent call last):\n  File \"/root/pyver/tmp-py311/test_probe_child0/tools/probe.py\", line 8, in <module>\n    import numpy\nModuleNotFoundError: No module named 'numpy'\n"
+ },
+ "dash_c": {
+  "rc": 1,
+  "out": "",
+  "err": "Traceback (most recent call last):\n  File \"<string>\", line 1, in <module>\nModuleNotFoundError: No module named 'numpy'\n"
+ },
+ "script_clean_env": {
+  "rc": 0,
+  "out": "\nexecutable /root/pyver/venv-py311/bin/python\nprefix /root/pyver/venv-py311 /usr\nflags sys.flags(debug=0, inspect=0, interactive=0, optimize=0, dont_write_bytecode=0, no_user_site=0, no_site=0, ignore_environment=0, verbose=0, bytes_warning=0, quiet=0, hash_randomization=1, isolated=0, dev_mode=False, utf8_mode=1, warn_default_encoding=0, safe_path=False, int_max_str_digits=-1)\npath ['/root/pyver/tmp-py311/test_probe_child0/tools', '/usr/lib/python311.zip', '/usr/lib/python3.11', '/usr/lib/python3.11/lib-dynload', '/root/pyver/venv-py311/lib/python3.11/site-packages']\nenv {}\nnumpy 2.4.6\n",
+  "err": ""
+ }
+}

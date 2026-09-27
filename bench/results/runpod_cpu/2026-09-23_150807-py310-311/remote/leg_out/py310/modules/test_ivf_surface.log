@@ -1,0 +1,27 @@
+  ok    SEARCH     distances float32 (m, k)
+  ok    SEARCH     indices int32 (m, k)
+  ok    SEARCH     every id is a fit row
+  ok    SEARCH     distances ascend along each query
+  ok    SEARCH     n_candidates_ (m,) within [k, n]
+  ok    SEARCH     probing every list returns brute force's neighbor sets
+  ok    SEARCH     probing every list examines every row
+  ok    SEARCH     two builds and searches agree bit for bit on this box
+  ok    EUCLIDEAN  distances float32 and indices int32 (m, k)
+  ok    EUCLIDEAN  no distance is 0.0 (the rooted-norm defect returned all zeros)
+  ok    EUCLIDEAN  probing every list returns brute force's neighbor sets
+  ok    EUCLIDEAN  distances are Euclidean (float64 reference, 1e-4)
+  ok    EUCLIDEAN  distances ascend along each query
+  ok    EUCLIDEAN  ids equal the sqeuclidean search's and every distance is the correctly rounded root of its distance, bit for bit
+  ok    EUCLIDEAN  metric code 1 (L2SqrtExpanded) accepted
+  ok    REFUSE     metric='cosine' by name
+  ok    REFUSE     an unknown integer metric code
+  ok    REFUSE     metric code 2 (neither L2 code)
+  ok    REFUSE     n_lists as a float
+  ok    REFUSE     search before fit
+  ok    REFUSE     queries with another width
+  ok    REFUSE     n_probes > n_lists, refused on the Mojo host (policy 2)
+  ok    PROVENANCE IVFIndex exported
+  ok    PROVENANCE IVFIndex is no longer a named absence
+  ok    PROVENANCE numeric_mode_used() is the process default
+
+test_ivf_surface: GREEN under numeric_mode=identical, 25 checks. One box, one vendor; no bit is claimed for any other.

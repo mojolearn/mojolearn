@@ -1,0 +1,19 @@
+  ok    METRIC     the default, 'euclidean' and 'l2_expanded' are one arm: centers and inertia bit for bit
+  ok    METRIC     'l2_sqrt_expanded' fits
+  ok    METRIC     [REPORT, not asserted] l2_sqrt_expanded inertia vs the squared arm (expected to MOVE: the root is taken): MOVED
+  ok    METRIC     l2_expanded on uniform [0, 4): every label is the argmin to the returned centers
+  ok    METRIC     l2_sqrt_expanded on uniform [0, 4): every label is the argmin to the returned centers
+  ok    METRIC     l2_expanded on columns 1e-2 to 1e2: every label is the argmin to the returned centers
+  ok    METRIC     l2_sqrt_expanded on columns 1e-2 to 1e2: every label is the argmin to the returned centers
+  ok    METRIC     metric='cosine' is no longer a metric and is refused by name
+  ok    METRIC     metric='cosine_expanded' the same
+  ok    METRIC     metric=2, cosine's old code, is refused by the kernel
+  ok    METRIC     an unknown metric name
+  ok    OVS        oversampling_factor=2.0 is the default, bit for bit
+  ok    OVS        oversampling_factor=0.0 (classic sequential k-means++) fits
+  ok    OVS        [REPORT, not asserted] classic vs scalable seeding centers (a different algorithm; the same answer is possible on a well separated fixture): MOVED
+  ok    OVS        a negative oversampling_factor is refused on the Mojo host by name
+  ok    OVS        a bool oversampling_factor
+  ok    OVS        under init='random' the factor is unread and the fit runs
+
+test_kmeans_metric_surface: GREEN under numeric_mode=identical, 17 checks. One box, one vendor; no bit is claimed for any other.

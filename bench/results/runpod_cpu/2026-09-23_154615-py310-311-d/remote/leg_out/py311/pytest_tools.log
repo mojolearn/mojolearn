@@ -1,0 +1,223 @@
+.............................................................. [  6%]
+.................................................................. [ 13%]
+........................................................................ [ 21%]
+.F........................................................................F........... [ 30%]
+...........................................................ss. [ 36%]
+............................................. [ 41%]
+.....................F............FF.F.........F............F........... [ 49%]
+.....FF...................s............................ [ 54%]
+..................F..F.F..........FFFF........ [ 59%]
+.................................. [ 63%]
+...................................................................... [ 70%]
+..............................................F..... [ 76%]
+........................................................................................F.... [ 85%]
+........................................................... [ 92%]
+................................................................. [ 99%]
+.........                                                                [100%]
+=================================== FAILURES ===================================
+_ LightReleaseTests.test_workflow_defaults_to_prepared_light_and_checks_before_both_publish_stages _
+tools/test_check_light_release.py:91: in test_workflow_defaults_to_prepared_light_and_checks_before_both_publish_stages
+    import yaml
+E   ModuleNotFoundError: No module named 'yaml'
+____ SabotageDefinesTests.test_ctr_models_directory_is_the_lanes_directory _____
+tools/test_cpu_identity_gate.py:760: in test_ctr_models_directory_is_the_lanes_directory
+    self.assertTrue(sorted(d.glob(f'{lane}.*.npz')), f'no saved model for {lane} under {d}')
+E   AssertionError: [] is not true : no saved model for gbdt-categorical-ctr-tables under /root/pyver/repo-main-py311/bench/results/identity_break/2026-09-15_gbdt-ctr-tables/models
+_________ test_the_new_narrow_answers_are_narrow_for_the_right_reason __________
+tools/test_lane_select.py:535: in test_the_new_narrow_answers_are_narrow_for_the_right_reason
+    assert "harness diff touches only these lane bodies" in sel["reasons"]["tools/identity_break.py"] \
+E   AssertionError: unexpected reason: the harness changed and its call graph cannot place the change: no copy of the harness at HEAD
+E   assert ('harness diff touches only these lane bodies' in 'the harness changed and its call graph cannot place the change: no copy of the harness at HEAD' or 'docstrings and comments only' in 'the harness changed and its call graph cannot place the change: no copy of the harness at HEAD')
+________ test_the_mojo_conformance_inversion_holds_over_the_whole_tree _________
+tools/test_lane_select.py:904: in test_the_mojo_conformance_inversion_holds_over_the_whole_tree
+    assert len(edges) >= 5, f"only {len(edges)} conformance edges found; the scan is broken"
+E   AssertionError: only 0 conformance edges found; the scan is broken
+E   assert 0 >= 5
+E    +  where 0 = len([])
+______ test_the_mojo_inversion_fires_when_an_implementation_is_cut_loose _______
+tools/test_lane_select.py:943: in test_the_mojo_inversion_fires_when_an_implementation_is_cut_loose
+    assert victim in fired, f"the inversion did not name {victim}; it caught {fired[:4]}"
+E   AssertionError: the inversion did not name gbdt/methods/kernel/pointwise_hist2_one_byte_7bit.mojo; it caught []
+E   assert 'gbdt/methods/kernel/pointwise_hist2_one_byte_7bit.mojo' in []
+___________ test_a_mojo_file_something_imports_is_never_unreachable ____________
+tools/test_lane_select.py:985: in test_a_mojo_file_something_imports_is_never_unreachable
+    assert lane_select._mojo_importers(rel), f"{rel} is imported by nothing; pick a new case"
+E   AssertionError: core/forest_inference_model.mojo is imported by nothing; pick a new case
+E   assert set()
+E    +  where set() = <function _mojo_importers at 0x7f3b8e697740>('core/forest_inference_model.mojo')
+E    +    where <function _mojo_importers at 0x7f3b8e697740> = lane_select._mojo_importers
+___________ test_a_tool_named_only_by_a_literal_join_is_unreachable ____________
+tools/test_lane_select.py:1197: in test_a_tool_named_only_by_a_literal_join_is_unreachable
+    assert lane_select.unreachable("tools/with_build_lock.sh") is None, \
+E   AssertionError: bindings/build_preprocessing.sh execs tools/with_build_lock.sh; it is a build input
+E   assert "nothing reaches it: no lane's derived source set contains this path, and no file that any lane DOES reach names it, its stem or any directory above it" is None
+E    +  where "nothing reaches it: no lane's derived source set contains this path, and no file that any lane DOES reach names it, its stem or any directory above it" = <function unreachable at 0x7f3b8e697ce0>('tools/with_build_lock.sh')
+E    +    where <function unreachable at 0x7f3b8e697ce0> = lane_select.unreachable
+____ test_a_package_module_is_resolved_from_the_listing_not_the_filesystem _____
+tools/test_lane_select.py:1531: in test_a_package_module_is_resolved_from_the_listing_not_the_filesystem
+    assert real in tracked, f"{real} is the tracked spelling; pick a new case"
+E   AssertionError: python/mojolearn/umap.py is the tracked spelling; pick a new case
+E   assert 'python/mojolearn/umap.py' in set()
+__________ test_a_data_file_whose_directory_a_lane_names_still_widens __________
+tools/test_lane_select_harness.py:248: in test_a_data_file_whose_directory_a_lane_names_still_widens
+    path = next(p for p in sorted(lane_select.tracked_files())
+E   StopIteration
+_________ test_a_training_corpus_manifest_selects_nothing_and_says_why _________
+tools/test_lane_select_harness.py:257: in test_a_training_corpus_manifest_selects_nothing_and_says_why
+    assert paths
+E   assert []
+____ WheelMatrixTests.test_evidence_backslashes_survive_success_and_failure ____
+tools/test_macos_verify_wheel.py:113: in test_evidence_backslashes_survive_success_and_failure
+    self.assertEqual(result.returncode == 0, not fails)
+E   AssertionError: False != True
+______________ WheelMatrixTests.test_full_matrix_and_no_gpu_label ______________
+tools/test_macos_verify_wheel.py:78: in test_full_matrix_and_no_gpu_label
+    self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+E   AssertionError: 1 != 0 : wheel: mojolearn-candidate.whl
+E   mode:  full (device fits)
+E   
+E   FAIL python3.10: installed byte LM native availability
+E   FAIL python3.10: installed generalized/resident language model
+E   PASS python3.10 [fast]  
+E   PASS python3.10 [deterministic]  
+E   PASS python3.10 [identical]  
+E   
+E   FAIL python3.11: installed byte LM native availability
+E   FAIL python3.11: installed generalized/resident language model
+E   PASS python3.11 [fast]  
+E   PASS python3.11 [deterministic]  
+E   PASS python3.11 [identical]  
+E   
+E   FAIL python3.12: installed byte LM native availability
+E   FAIL python3.12: installed generalized/resident language model
+E   PASS python3.12 [fast]  
+E   PASS python3.12 [deterministic]  
+E   PASS python3.12 [identical]  
+E   
+E   FAIL python3.13: installed byte LM native availability
+E   FAIL python3.13: installed generalized/resident language model
+E   PASS python3.13 [fast]  
+E   PASS python3.13 [deterministic]  
+E   PASS python3.13 [identical]  
+E   
+E   FAIL python3.14: installed byte LM native availability
+E   FAIL python3.14: installed generalized/resident language model
+E   PASS python3.14 [fast]  
+E   PASS python3.14 [deterministic]  
+E   PASS python3.14 [identical]  
+E   incomplete qualification: 0 interpreter(s) passed, 5 failed, 0 skipped
+E   /tmp/tmpvp2izpxk/packaging/macos/verify_wheel.sh: 90: env: not found
+E   /tmp/tmpvp2izpxk/packaging/macos/verify_wheel.sh: 153: env: not found
+E   /tmp/tmpvp2izpxk/packaging/macos/verify_wheel.sh: 90: env: not found
+E   /tmp/tmpvp2izpxk/packaging/macos/verify_wheel.sh: 153: env: not found
+E   /tmp/tmpvp2izpxk/packaging/macos/verify_wheel.sh: 90: env: not found
+E   /tmp/tmpvp2izpxk/packaging/macos/verify_wheel.sh: 153: env: not found
+E   /tmp/tmpvp2izpxk/packaging/macos/verify_wheel.sh: 90: env: not found
+E   /tmp/tmpvp2izpxk/packaging/macos/verify_wheel.sh: 153: env: not found
+E   /tmp/tmpvp2izpxk/packaging/macos/verify_wheel.sh: 90: env: not found
+E   /tmp/tmpvp2izpxk/packaging/macos/verify_wheel.sh: 153: env: not found
+_______________ WheelMatrixTests.test_partial_matrix_cannot_pass _______________
+tools/test_macos_verify_wheel.py:60: in test_partial_matrix_cannot_pass
+    self.assertIn('1 interpreter(s) passed, 0 failed, 4 skipped', result.stdout)
+E   AssertionError: '1 interpreter(s) passed, 0 failed, 4 skipped' not found in 'wheel: mojolearn-candidate.whl\nmode:  full (device fits)\nSKIP python3.10 (not installed)\nSKIP python3.11 (not installed)\nSKIP python3.12 (not installed)\nSKIP python3.13 (not installed)\n\nFAIL python3.14: installed byte LM native availability\nFAIL python3.14: installed generalized/resident language model\nPASS python3.14 [fast]  \nPASS python3.14 [deterministic]  \nPASS python3.14 [identical]  \nincomplete qualification: 0 interpreter(s) passed, 1 failed, 4 skipped\n'
+________________ RegimeSummaryTests.test_changed_output_refused ________________
+tools/test_mamba3_regime_summary.py:13: in setUp
+    "bench/results/mamba_regime_2026-09-10/m4-tiny.log").read_text().splitlines()
+                                                         ^^^^^^^^^^^
+/usr/lib/python3.11/pathlib.py:1058: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/pathlib.py:1044: in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: '/root/pyver/repo-main-py311/bench/results/mamba_regime_2026-09-10/m4-tiny.log'
+____ RegimeSummaryTests.test_phases_attached_without_summing_nested_scopes _____
+tools/test_mamba3_regime_summary.py:13: in setUp
+    "bench/results/mamba_regime_2026-09-10/m4-tiny.log").read_text().splitlines()
+                                                         ^^^^^^^^^^^
+/usr/lib/python3.11/pathlib.py:1058: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/pathlib.py:1044: in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: '/root/pyver/repo-main-py311/bench/results/mamba_regime_2026-09-10/m4-tiny.log'
+__________ RegimeSummaryTests.test_retained_cold_call_stays_separate ___________
+tools/test_mamba3_regime_summary.py:13: in setUp
+    "bench/results/mamba_regime_2026-09-10/m4-tiny.log").read_text().splitlines()
+                                                         ^^^^^^^^^^^
+/usr/lib/python3.11/pathlib.py:1058: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/pathlib.py:1044: in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: '/root/pyver/repo-main-py311/bench/results/mamba_regime_2026-09-10/m4-tiny.log'
+________ RegimeSummaryTests.test_truncated_and_duplicate_calls_refused _________
+tools/test_mamba3_regime_summary.py:13: in setUp
+    "bench/results/mamba_regime_2026-09-10/m4-tiny.log").read_text().splitlines()
+                                                         ^^^^^^^^^^^
+/usr/lib/python3.11/pathlib.py:1058: in read_text
+    with self.open(mode='r', encoding=encoding, errors=errors) as f:
+         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+/usr/lib/python3.11/pathlib.py:1044: in open
+    return io.open(self, mode, buffering, encoding, errors, newline)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E   FileNotFoundError: [Errno 2] No such file or directory: '/root/pyver/repo-main-py311/bench/results/mamba_regime_2026-09-10/m4-tiny.log'
+__________ RunTests.test_dry_run_plans_every_step_and_writes_nothing ___________
+tools/test_release.py:191: in test_dry_run_plans_every_step_and_writes_nothing
+    self.assertEqual(out.returncode, 0, out.stderr)
+E   AssertionError: 1 != 0 : Traceback (most recent call last):
+E     File "/root/pyver/repo-main-py311/tools/release.py", line 824, in <module>
+E       raise SystemExit(main())
+E                        ^^^^^^
+E     File "/root/pyver/repo-main-py311/tools/release.py", line 820, in main
+E       return Release(args).go()
+E              ^^^^^^^^^^^^^^^^^^
+E     File "/root/pyver/repo-main-py311/tools/release.py", line 782, in go
+E       result = getattr(self, "step_" + step.replace("-", "_"))()
+E                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E     File "/root/pyver/repo-main-py311/tools/release.py", line 406, in step_freeze_commit
+E       head = git("rev-parse", "HEAD")
+E              ^^^^^^^^^^^^^^^^^^^^^^^^
+E     File "/root/pyver/repo-main-py311/tools/release.py", line 86, in git
+E       return subprocess.run(["git", "-C", str(ROOT), *args], capture_output=True, text=True,
+E              ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E     File "/usr/lib/python3.11/subprocess.py", line 571, in run
+E       raise CalledProcessError(retcode, process.args,
+E   subprocess.CalledProcessError: Command '['git', '-C', '/root/pyver/repo-main-py311', 'rev-parse', 'HEAD']' returned non-zero exit status 128.
+______________ test_both_packers_share_digest_checked_ctr_payload ______________
+tools/test_verification_evidence.py:81: in test_both_packers_share_digest_checked_ctr_payload
+    entries = payload.model_entries(root)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+tools/verification_ctr_payload.py:19: in model_entries
+    raise ValueError(f'missing or changed verification CTR model: {path}')
+E   ValueError: missing or changed verification CTR model: /root/pyver/repo-main-py311/bench/results/identity_break/2026-09-15_gbdt-ctr-tables/models/gbdt-categorical-ctr-tables.base.npz
+=========================== short test summary info ============================
+FAILED tools/test_check_light_release.py::LightReleaseTests::test_workflow_defaults_to_prepared_light_and_checks_before_both_publish_stages
+FAILED tools/test_cpu_identity_gate.py::SabotageDefinesTests::test_ctr_models_directory_is_the_lanes_directory
+FAILED tools/test_lane_select.py::test_the_new_narrow_answers_are_narrow_for_the_right_reason
+FAILED tools/test_lane_select.py::test_the_mojo_conformance_inversion_holds_over_the_whole_tree
+FAILED tools/test_lane_select.py::test_the_mojo_inversion_fires_when_an_implementation_is_cut_loose
+FAILED tools/test_lane_select.py::test_a_mojo_file_something_imports_is_never_unreachable
+FAILED tools/test_lane_select.py::test_a_tool_named_only_by_a_literal_join_is_unreachable
+FAILED tools/test_lane_select.py::test_a_package_module_is_resolved_from_the_listing_not_the_filesystem
+FAILED tools/test_lane_select_harness.py::test_a_data_file_whose_directory_a_lane_names_still_widens
+FAILED tools/test_lane_select_harness.py::test_a_training_corpus_manifest_selects_nothing_and_says_why
+FAILED tools/test_macos_verify_wheel.py::WheelMatrixTests::test_evidence_backslashes_survive_success_and_failure
+FAILED tools/test_macos_verify_wheel.py::WheelMatrixTests::test_full_matrix_and_no_gpu_label
+FAILED tools/test_macos_verify_wheel.py::WheelMatrixTests::test_partial_matrix_cannot_pass
+FAILED tools/test_mamba3_regime_summary.py::RegimeSummaryTests::test_changed_output_refused
+FAILED tools/test_mamba3_regime_summary.py::RegimeSummaryTests::test_phases_attached_without_summing_nested_scopes
+FAILED tools/test_mamba3_regime_summary.py::RegimeSummaryTests::test_retained_cold_call_stays_separate
+FAILED tools/test_mamba3_regime_summary.py::RegimeSummaryTests::test_truncated_and_duplicate_calls_refused
+FAILED tools/test_release.py::RunTests::test_dry_run_plans_every_step_and_writes_nothing
+FAILED tools/test_verification_evidence.py::test_both_packers_share_digest_checked_ctr_payload
+SKIPPED [1] tools/test_mamba_gradient_oracle.py:23: unittest.case.SkipTest: mamba_gradient_oracle is not importable here: No module named 'torch'
+SKIPPED [1] tools/test_release_pass_anchor.py:37: not a git checkout with two commits: Command '['git', '-C', '/root/pyver/repo-main-py311', 'rev-parse', 'HEAD']' returned non-zero exit status 128.
+SKIPPED [1] tools/test_release_qualification_command.py:11: unittest.case.SkipTest: PyYAML is not installed; this file reads workflow YAML
+SKIPPED [1] tools/test_verify_umap_qualification.py:16: unittest.case.SkipTest: PyYAML is not installed; this file reads workflow YAML
+SKIPPED [1] tools/test_identity_diff_floor.py:159: /root/pyver/repo-main-py311/bench/results/identity_break/2026-09-14_166-lanes is not in this checkout
+SKIPPED [1] tools/test_identity_diff_floor.py:159: /root/pyver/repo-main-py311/bench/results/identity_break/2026-09-14_kmeans-sqrt-fix is not in this checkout
+SKIPPED [1] tools/test_linux_build_limits.py:34: Mac host refusal
+19 failed, 926 passed, 7 skipped, 285 subtests passed in 417.87s (0:06:57)

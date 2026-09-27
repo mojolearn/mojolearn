@@ -1,0 +1,25 @@
+  ok    FIT        info_ == 0 on an SPD matrix
+  ok    FIT        L_ is (n, n)
+  ok    FIT        strict upper triangle of L_ is +0.0
+  ok    FIT        L L^T reproduces A at 1e-3 relative
+  ok    FIT        logdet_ matches 2 sum log diag(L) at 1e-3
+  ok    FIT        jitter_, nb_ and n_ read back
+  ok    FIT        the default jitter is the profile's pinned ridge, read from the binding
+  ok    SOLVE      solve returns float32 (n, nrhs)
+  ok    SOLVE      A X = B at 1e-3 relative
+  ok    SOLVE      a 1-D right-hand side comes back 1-D
+  ok    SOLVE      one column solved alone equals that column of the batch, bit for bit
+  ok    FAILED     a negative definite matrix reports info_ != 0 as a RESULT (DEVIATION 1634)
+  ok    FAILED     solve against a failed factor is refused by name in Mojo
+  ok    FAILED     logdet_ on a failed factor is refused by name
+  ok    REFUSE     a non-square A
+  ok    REFUSE     solve before fit
+  ok    REFUSE     B with the wrong row count
+  ok    REFUSE     a jitter that is not a number
+  ok    REFUSE     a non-symmetric matrix, refused on the Mojo host by name
+  ok    REFUSE     a NaN cell, refused on the Mojo host
+  ok    REFUSE     an unpinned jitter (0.5), refused on the Mojo host (DEVIATION 1637)
+  ok    PROVENANCE numeric_mode_used() is the process default
+  ok    PROVENANCE Cholesky is exported from mojolearn and mojolearn.linalg
+
+test_cholesky_surface: GREEN under numeric_mode=identical, 23 checks. One box, one vendor; no bit is claimed for any other.

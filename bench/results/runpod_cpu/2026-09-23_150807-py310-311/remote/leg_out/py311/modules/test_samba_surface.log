@@ -1,0 +1,113 @@
+
+  PROVENANCE
+    pass training binding is identical, got 'identical'
+    rprt vendor cpu
+    rprt TransformerBlock.backward PRESENT
+
+  SCHEDULE
+    pass constant reaches peak at warmup end
+    pass constant warmup step 1 is peak/4 (exact rational, rounded once)
+    pass constant after warmup is flat
+    pass step 0 is refused by name
+    pass linear reaches min_lr at total_steps and holds
+    pass cosine at p = 1/2 rounds the exact midpoint
+    pass cosine within 1e-6 relative of a float64 math.cos reference (worst 7.03e-08)
+    pass cosine is non-increasing after warmup
+    rprt constant bits 0x3983126f 0x3a03126f 0x3a449ba6 0x3a83126f 0x3a83126f 0x3a83126f
+    rprt constant pin OWED (record the bits above)
+    rprt linear bits 0x3a03126f 0x3a83126f 0x3a68a71f 0x3a4b295f 0x3a2daba0 0x3a102de0 0x39e56042 0x39aa64c3 0x395ed289 0x38d1b717 0x38d1b717
+    rprt linear pin OWED (record the bits above)
+    rprt cosine bits 0x3a03126f 0x3a83126f 0x3a7d2a1b 0x3a6397ca 0x3a3d5288 0x3a102de0 0x39c61272 0x39730fdd 0x390cc697 0x38d1b717 0x38d1b717
+    rprt cosine pin OWED (record the bits above)
+    pass schedule config round trip reproduces the bits
+
+  ACCUM
+    pass T=512 aligned at A=2 and A=4 (contract table)
+    pass T=512 A=8, A=3 and T=300 A=2 are not aligned
+    pass head weight gradient: A=2 tree == unsplit at T=512
+    rprt A=2 SERIAL running sum vs unsplit: SAME BITS
+    pass head weight gradient: A=4 tree == unsplit at T=512
+    rprt A=4 SERIAL running sum vs unsplit: MOVED, 1813 of 6144 cells differ, first at 2: 0xbbd2aa6e vs 0xbbd2aa70
+    pass A=8 at T=512 is refused by name
+    pass A=3 is refused by name
+    pass accumulation_steps=3 refused on the optimizer
+    rprt rms_norm weight gradient: A=4 tree == unsplit at T=512: SAME BITS
+    rprt embedding gradient: A=2 tree vs unsplit (run-sorted fold, no claim): MOVED, 1319 of 2560 cells differ, first at 0: 0x3a6ff6f4 vs 0x3a6ff708
+    pass step_accumulated == step(accumulate_grads)
+    pass step_accumulated refuses a different count
+
+  RNG
+    pass uniform in [0, 1)
+    pass same seed, same counter, same bits
+    pass the next stream differs
+    pass a slice at offset 700 equals the whole stream's elements 700..
+    pass normal(0, 1) sample mean/std within 0.03 (mean 0.0185 std 1.0007)
+    pass normal draws are finite
+    pass kaiming_uniform bound is 1/sqrt(fan_in)
+    pass dropout p=0.25 keeps about 75% (kept 0.779)
+    pass kept cells are x * scale bitwise
+    pass backward mask equals forward mask
+    pass backward is dy * scale on kept cells
+    pass dropout replays from the same seed and counter
+    pass a microbatch at its token offset draws the unsplit coins
+    pass state_dict is {seed, counter}
+    pass dropout p=1 refused
+
+  STACK
+    pass registry sizes the flat buffer (34084 floats)
+    pass forward gives finite (B, L, V) logits
+    pass loss_and_grads finite (loss 4.1502)
+    pass gradient shapes match the registry
+    pass loss_and_grads is repeatable bitwise in one process
+    pass train_step 1 used lr_at(1) = 0.0005000000237487257
+    pass train_step moved the parameters
+    pass clip ran (total norm 2.4622697830200195)
+    pass second train_step
+    pass checkpoint round trip reproduces the file bytes (ace1dcc7a1331e6a)
+    pass resumed step counter and rng state
+    pass step 3 after resume equals step 3 without
+    pass resumed loss equals
+    pass weights and generator both absent refused
+    pass mamba3 d_model refused by name
+    pass dropout stack: two fresh runs agree bitwise
+    pass dropout consumed one stream per step
+
+  STACK-ACCUM
+    pass A=2 stack starts from the same bits
+    rprt A=2 embed.weight tree vs unsplit: MOVED, 812 of 2048 cells differ, first at 5: 0xbb7ef2fa vs 0xbb7ef2fb
+    rprt A=2 layers.0.block_norm.weight tree vs unsplit: SAME BITS
+    rprt A=2 layers.0.in_proj.weight tree vs unsplit: SAME BITS
+    rprt A=2 layers.0.dt_bias tree vs unsplit: SAME BITS
+    rprt A=2 layers.0.B_norm.weight tree vs unsplit: SAME BITS
+    rprt A=2 layers.0.C_norm.weight tree vs unsplit: SAME BITS
+    rprt A=2 layers.0.B_bias tree vs unsplit: SAME BITS
+    rprt A=2 layers.0.C_bias tree vs unsplit: SAME BITS
+    rprt A=2 layers.0.D tree vs unsplit: SAME BITS
+    rprt A=2 layers.0.out_proj.weight tree vs unsplit: SAME BITS
+    pass A=2 norm_f.weight tree vs unsplit
+    pass A=2 lm_head.weight tree vs unsplit
+    pass A=4 stack starts from the same bits
+    rprt A=4 embed.weight tree vs unsplit: MOVED, 993 of 2048 cells differ, first at 3: 0x3a9c563c vs 0x3a9c563e
+    rprt A=4 layers.0.block_norm.weight tree vs unsplit: SAME BITS
+    rprt A=4 layers.0.in_proj.weight tree vs unsplit: SAME BITS
+    rprt A=4 layers.0.dt_bias tree vs unsplit: SAME BITS
+    rprt A=4 layers.0.B_norm.weight tree vs unsplit: SAME BITS
+    rprt A=4 layers.0.C_norm.weight tree vs unsplit: SAME BITS
+    rprt A=4 layers.0.B_bias tree vs unsplit: SAME BITS
+    rprt A=4 layers.0.C_bias tree vs unsplit: SAME BITS
+    rprt A=4 layers.0.D tree vs unsplit: SAME BITS
+    rprt A=4 layers.0.out_proj.weight tree vs unsplit: SAME BITS
+    pass A=4 norm_f.weight tree vs unsplit
+    pass A=4 lm_head.weight tree vs unsplit
+    pass train_step at A=8, T=512 refused by name
+    pass A=2 train_step: lm_head.weight equals the unsplit step
+    rprt A=2 train_step: whole parameter buffer vs unsplit: MOVED, 73 of 20130 cells differ, first at 19: 0xb9f2a3d7 vs 0xb9f2a3d9
+
+  ATTENTION
+    pass hybrid forward is finite
+    pass hybrid loss_and_grads finite through TransformerBlock.backward
+    pass hybrid backward returns every registry gradient with its shape
+
+  95 checks, 0 failed
+
+test_samba_surface: GREEN.

@@ -1,0 +1,6 @@
+lane=py310-311-c
+commit=246a19949cab68dbbc282e6a1a145aa0e1757942
+dirty_tracked=0
+worktree=/Users/andrewhendel/mojolearn-wt/py310-311
+source=3236	19937194	7145ac955df89c266f0caa15a56fe88c259e5d4cf7ea95faa1f8f4acd17b87a6
+box_clock_minus_mac=0

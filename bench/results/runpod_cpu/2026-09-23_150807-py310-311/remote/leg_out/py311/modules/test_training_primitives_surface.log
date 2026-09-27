@@ -1,0 +1,38 @@
+  ok    ROUTE      embedding_forward in mojolearn.training.__all__
+  ok    ROUTE      mojolearn.training.embedding_forward IS the _training_impl function
+  ok    ROUTE      embedding_backward in mojolearn.training.__all__
+  ok    ROUTE      mojolearn.training.embedding_backward IS the _training_impl function
+  ok    ROUTE      rms_norm_forward in mojolearn.training.__all__
+  ok    ROUTE      mojolearn.training.rms_norm_forward IS the _training_impl function
+  ok    ROUTE      rms_norm_backward in mojolearn.training.__all__
+  ok    ROUTE      mojolearn.training.rms_norm_backward IS the _training_impl function
+  ok    ROUTE      linear_forward in mojolearn.training.__all__
+  ok    ROUTE      mojolearn.training.linear_forward IS the _training_impl function
+  ok    ROUTE      linear_backward in mojolearn.training.__all__
+  ok    ROUTE      mojolearn.training.linear_backward IS the _training_impl function
+  ok    EMB        embedding_forward is (N, D) float32
+  ok    EMB        embedding_forward is the gather, bit for bit
+  ok    EMB        embedding_backward is (V, D)
+  ok    EMB        embedding_backward is the scatter-add of small integers, exact, rows 3 and 0 folded over three and two positions
+  ok    EMB        untouched vocabulary rows are zero
+  ok    RMS        rms_norm_forward matches the host formula at 2 ulp-ish
+  ok    RMS        rms_norm_backward shapes (M, D) and (D,), finite
+  ok    RMS        dweight is sum_rows dy * x_hat at 1e-4
+  ok    RMS        a 3-D activation keeps its shape and its bits
+  ok    LIN        linear_forward is (M, N)
+  ok    LIN        linear_forward is a . w^T on small integers, exact
+  ok    LIN        da is dc . w, exact
+  ok    LIN        dweight is dc^T . a (the contraction over M tokens), exact
+  ok    LIN        one row alone equals that row of the batch, bit for bit
+  ok    REFUSE     float64 weight
+  ok    REFUSE     a 1-D weight
+  ok    REFUSE     ids and dy of different lengths
+  ok    REFUSE     a 1-D dy
+  ok    REFUSE     an rms weight of the wrong length
+  ok    REFUSE     rms backward with dy of another shape
+  ok    REFUSE     linear_forward with mismatched K
+  ok    REFUSE     linear_backward with dc of the wrong shape
+  ok    PROVENANCE training.numeric_mode_used() is the process default
+  ok    PROVENANCE mojolearn.training exported
+
+test_training_primitives_surface: GREEN under numeric_mode=identical, 36 checks. One box, one vendor; no bit is claimed for any other.

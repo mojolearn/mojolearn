@@ -1,0 +1,39 @@
+..................................................FF                     [100%]
+=================================== FAILURES ===================================
+_______ test_cli_runs_in_checkout_with_no_native_package_initialization ________
+mojolearn/tests/test_crossvendor_coverage.py:193: in test_cli_runs_in_checkout_with_no_native_package_initialization
+    assert result.returncode == 5, result.stderr
+E   AssertionError: Traceback (most recent call last):
+E       File "/root/pyver/tmp-py311/test_cli_runs_in_checkout_with0/tools/audit_parallel_coverage.py", line 54, in <module>
+E         raise SystemExit(main())
+E                          ^^^^^^
+E       File "/root/pyver/tmp-py311/test_cli_runs_in_checkout_with0/tools/audit_parallel_coverage.py", line 38, in main
+E         harness = load_harness(par_axis=True)
+E                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/root/pyver/tmp-py311/test_cli_runs_in_checkout_with0/tools/audit_parallel_coverage.py", line 26, in load_harness
+E         return _load('parallel_audit_harness', ROOT / 'tools/identity_break.py')
+E                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+E       File "/root/pyver/tmp-py311/test_cli_runs_in_checkout_with0/tools/audit_parallel_coverage.py", line 17, in _load
+E         spec.loader.exec_module(module)
+E       File "<frozen importlib._bootstrap_external>", line 940, in exec_module
+E       File "<frozen importlib._bootstrap>", line 241, in _call_with_frames_removed
+E       File "/root/pyver/tmp-py311/test_cli_runs_in_checkout_with0/tools/identity_break.py", line 495, in <module>
+E         import numpy as np
+E     ModuleNotFoundError: No module named 'numpy'
+E     
+E   assert 1 == 5
+E    +  where 1 = CompletedProcess(args=['/root/pyver/venv-py311/bin/python', '/root/pyver/tmp-py311/test_cli_runs_in_checkout_with0/too...s/identity_break.py", line 495, in <module>\n    import numpy as np\nModuleNotFoundError: No module named \'numpy\'\n').returncode
+_______________________________ test_probe_child _______________________________
+mojolearn/tests/test_zz_probe_child.py:20: in test_probe_child
+    assert r.returncode == 0, r.stderr
+E   AssertionError: Traceback (most recent call last):
+E       File "/root/pyver/tmp-py311/test_probe_child0/tools/probe.py", line 8, in <module>
+E         import numpy
+E     ModuleNotFoundError: No module named 'numpy'
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['/root/pyver/venv-py311/bin/python', '/root/pyver/tmp-py311/test_probe_child0/tools/probe.py'],...probe_child0/tools/probe.py", line 8, in <module>\n    import numpy\nModuleNotFoundError: No module named \'numpy\'\n').returncode
+=========================== short test summary info ============================
+FAILED mojolearn/tests/test_crossvendor_coverage.py::test_cli_runs_in_checkout_with_no_native_package_initialization
+FAILED mojolearn/tests/test_zz_probe_child.py::test_probe_child - AssertionEr...
+2 failed, 50 passed in 0.56s

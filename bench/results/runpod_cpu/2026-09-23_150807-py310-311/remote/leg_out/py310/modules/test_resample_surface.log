@@ -1,0 +1,36 @@
+  ok    BOOT       distribution and sorted_distribution (R,)
+  ok    BOOT       sorted_distribution is the sorted distribution, bit for bit
+  ok    BOOT       point_estimate is the sample mean at 1e-5
+  ok    BOOT       the interval brackets the estimate and the order positions are in range
+  ok    BOOT       standard_error positive
+  ok    BOOT       r_first: replicates 16..47 of a 64-run equal a 32-run at r_first=16, bit for bit (the batch-invariance handle)
+  ok    BOOT       statistic 'std' on a two-column sample, method='basic'
+  ok    BOOT       statistic 'pearson' on a two-column sample, method='basic'
+  ok    BOOT       statistic 'diff_means' on a two-column sample, method='basic'
+  ok    BOOT       quantile and trimmed_mean read q_or_prop
+  ok    PERM       null_distribution (R,)
+  ok    PERM       p-value in (0, 1], never exactly zero (DEVIATION 1702's +1)
+  ok    PERM       observed statistic is the difference of means at 1e-4
+  ok    PERM       the two counts are carried and bounded
+  ok    PERM       r_first: permutations 16..47 equal the slice of the whole run, bit for bit
+  ok    PERM       alternative='greater'
+  ok    MC         the constant integrand is exact: mean 1, integral = volume = closed form
+  ok    MC         the sum integrand within 5 percent of its closed form at 4096 draws
+  ok    MC         the product integrand within 5 percent of its closed form
+  ok    MC         the same seed integrates to the same bits on this box
+  ok    REFUSE     method='bca' by name (DEVIATION 1699)
+  ok    REFUSE     an unknown statistic
+  ok    REFUSE     an unknown alternative
+  ok    REFUSE     a 3-D sample
+  ok    REFUSE     n_resamples=0, refused on the Mojo host
+  ok    REFUSE     pearson on a one-column sample, refused on the Mojo host by name
+  ok    REFUSE     a NaN cell, refused on the Mojo host
+  ok    REFUSE     confidence_level=1.5, refused on the Mojo host
+  ok    REFUSE     an unknown integrand
+  ok    REFUSE     a three-dimensional box
+  ok    REFUSE     n_samples=0, refused on the Mojo host
+  ok    REFUSE     a float n_resamples
+  ok    PROVENANCE mojolearn.resample and its three functions exported
+  ok    PROVENANCE the binding's vendor read-back is the package's
+
+test_resample_surface: GREEN under numeric_mode=identical, 34 checks. One box, one vendor; no bit is claimed for any other.

@@ -1,0 +1,5 @@
+pod='2lhkrrs92klhy4'
+target='-p 45245 root@213.173.105.94'
+armed_utc='2026-09-23T15:25:35Z'
+deadline_epoch=1790179835
+minutes=45
