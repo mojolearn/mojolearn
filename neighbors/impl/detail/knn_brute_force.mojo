@@ -141,6 +141,13 @@ from neighbors.checks.select_smallk_identical_candidate import (
     smallk_select_launch,
 )
 from neighbors.checks.transposed_index_distance_candidate import transposed_index_distance_kernel
+from neighbors.checks.apple_mma_distance import (
+    AMD_BM,
+    AMD_BN,
+    AMD_NT,
+    apple_mma_distance_tile_kernel,
+)
+from gemm.checks.gemm_identical import APPLE_MMA
 from layout import TileTensor
 from layout.tile_layout import row_major
 from nn.topk import top_k
@@ -176,6 +183,15 @@ comptime KNN_INDEX_TILE_IDENTICAL = knn_index_tile_columns_for[
 # so a timed request is slower than an untimed one; the split, not the sum,
 # is the measurement. Never on in a shipped build.
 comptime KNN_PHASE_TIMERS = is_defined["MOJOLEARN_KNN_PHASE_TIMERS"]()
+#: lane/apple-identical-neural (2026-09-27): Apple IDENTICAL's expanded-L2
+#: distance tile on the simdgroup matrix unit, same bits as the register
+#: tile (`neighbors/checks/apple_mma_distance.mojo`).
+#: `-D MOJOLEARN_KNN_APPLE_MMA_OFF` keeps the register tile.
+comptime KNN_APPLE_MMA_DIST = (
+    APPLE_MMA
+    and GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL
+    and not is_defined["MOJOLEARN_KNN_APPLE_MMA_OFF"]()
+)
 
 
 def identical_index_tile(n_index: Int) -> Int:
@@ -1147,6 +1163,23 @@ def _tiled_brute_force_knn_impl[transposed_origin: MutOrigin, //](
                                 y_minima.unsafe_offset(c if use_exact else 0),
                                 rows, cols, n_index, n_features,
                                 mtr == DIST_L2_SQRT_EXPANDED, use_exact,
+                            )
+                            layout_distance_launched = True
+                    comptime if KNN_APPLE_MMA_DIST:
+                        # Apple: the same matrix, the dot on the simdgroup
+                        # matrix unit with per-cell admission
+                        # (`neighbors/checks/apple_mma_distance.mojo`).
+                        if use_transposed_index and not layout_distance_launched:
+                            ctx.enqueue_function[apple_mma_distance_tile_kernel](
+                                dist_tile.unsafe_ptr(),
+                                queries.unsafe_ptr().unsafe_offset(q * n_features),
+                                transposed_index.value().unsafe_offset(c),
+                                query_norm.unsafe_ptr().unsafe_offset(q),
+                                index_norm.unsafe_ptr().unsafe_offset(c),
+                                Int32(rows), Int32(cols), Int32(n_index),
+                                Int32(n_features), is_sqrt_arg,
+                                grid_dim=((cols + AMD_BN - 1) // AMD_BN, (rows + AMD_BM - 1) // AMD_BM, 1),
+                                block_dim=(AMD_NT, 1, 1),
                             )
                             layout_distance_launched = True
                     comptime if EXPERIMENTAL_KNN_TRANSPOSE_IDENTICAL:
