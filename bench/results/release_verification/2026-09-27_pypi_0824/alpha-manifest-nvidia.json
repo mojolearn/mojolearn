@@ -1,0 +1,14 @@
+{
+  "files": {
+    "mojolearn_nvidia-0.8.24-py3-none-manylinux_2_35_x86_64.whl": "ba1f3562c8fda97d21fbb55bfd0ca06f2ebe3682001da0e8c6c2ef8acda9adf7"
+  },
+  "light_smoke": {
+    "receipts": {
+      "light-smoke-linux.json": "59161a43332943f5680f2ebcbe3548af5a400e8ac7558f8ccd480af99eeadefd"
+    },
+    "source_commit": "c8654671b8484adb3862d16f7f0307cc39df0c42"
+  },
+  "release_profile": "alpha-api",
+  "schema": "mojolearn.alpha-release.v1",
+  "version": "0.8.24"
+}
