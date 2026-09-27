@@ -3535,6 +3535,9 @@ PUBLIC_PENDING_LANES = {
     # this table when the 0.8.23 record regenerates the reference.
     "gmm": "stale reference",
     "gmm-sample": "stale reference",
+    # lane/neural option parity (2026-09-27): maximize=True on SGD, Adam and
+    # AdamW (DEVIATION 6200). New lane, no cell in the shipped table yet.
+    "optim-maximize": "no reference",
 }
 # The expansion lanes' pending lanes (`_surface_<lane>.py`; see EXPANSION_LANES).
 PUBLIC_PENDING_LANES = _merge_expansion("PUBLIC_PENDING_LANES", PUBLIC_PENDING_LANES)
