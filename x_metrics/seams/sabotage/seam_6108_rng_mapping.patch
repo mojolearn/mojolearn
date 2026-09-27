@@ -1,0 +1,13 @@
+diff --git a/x_metrics/split.mojo b/x_metrics/split.mojo
+index d21725fa2..eb568c207 100644
+--- a/x_metrics/split.mojo
++++ b/x_metrics/split.mojo
+@@ -27,7 +27,7 @@ def _salt(q: IP) -> Int:
+ def _before(salt: Int, i: Int, j: Int) -> Bool:
+     var ki = splitmix_pair(i, salt)
+     var kj = splitmix_pair(j, salt)
+-    return ki < kj or (ki == kj and i < j)
++    return ki > kj or (ki == kj and i < j)  # SABOTAGE 6108
+ 
+ 
+ def _sift(f: FP, O: Int, salt: Int, start: Int, n: Int):

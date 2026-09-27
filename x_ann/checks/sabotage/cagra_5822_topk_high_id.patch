@@ -1,0 +1,11 @@
+--- a/x_ann/cagra_core.mojo
++++ b/x_ann/cagra_core.mojo
+@@ -134,7 +134,7 @@
+     while s > 0:
+         var pi = bi.unsafe_load(base + s - 1)
+         var pd = bd.unsafe_load(base + s - 1)
+-        if pi < 0 or d < pd or (d == pd and id < pi):
++        if pi < 0 or d < pd or (d == pd and id > pi):
+             bd.unsafe_store(base + s, pd)
+             bi.unsafe_store(base + s, pi)
+             bx.unsafe_store(base + s, bx.unsafe_load(base + s - 1))

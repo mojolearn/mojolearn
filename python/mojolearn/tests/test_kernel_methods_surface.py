@@ -113,7 +113,18 @@ def arm_refusals(rep):
     rep.raises("REFUSE", ValueError, "features", "predict with the wrong feature count", m.predict, x[:, :2])
     rep.raises("REFUSE", ValueError, "positive", "Nystroem n_components=0", km.Nystroem(n_components=0).fit, x)
     rep.raises("REFUSE", Exception, "", "Nystroem n_components > n, refused on the Mojo host", km.Nystroem(kernel="linear", n_components=17).fit, x)
-    rep.raises("REFUSE", ValueError, "scale", "RBFSampler gamma='scale' by name", km.RBFSampler(gamma="scale").fit, x)
+    from fractions import Fraction
+    fx = [Fraction(float(v)) for v in np.asarray(x, np.float32).ravel()]
+    mean = sum(fx) / len(fx)
+    exact_var = sum((v - mean) ** 2 for v in fx) / len(fx)
+    rs = km.RBFSampler(gamma="scale", n_components=4).fit(x)
+    g = rs._params[0]
+    rep.check("SCALE", g == float(1 / (x.shape[1] * exact_var)),
+              "RBFSampler gamma='scale' is 1 / (d * var) from the EXACT variance, rounded once", g)
+    rep.check("SCALE", abs(g - 1.0 / (x.shape[1] * float(np.asarray(x, np.float32).var()))) <= 1e-6 * g,
+              "RBFSampler gamma='scale' is scikit-learn's value to its float32 variance's rounding", g)
+    rep.check("SCALE", _bits_same(rs.random_weights_, km.RBFSampler(gamma=g, n_components=4).fit(x).random_weights_),
+              "gamma='scale' draws exactly what the resolved float draws")
     rep.raises("REFUSE", Exception, "gamma", "RBFSampler gamma=0, refused on the Mojo host by name", km.RBFSampler(gamma=0.0, n_components=4).fit, x)
     rep.raises("REFUSE", ValueError, "n_components", "RBFSampler n_components=0, refused by name before any buffer is made", km.RBFSampler(gamma=0.5, n_components=0).fit, x)
     rep.raises("REFUSE", TypeError, "degree", "a float degree", km.KernelRidge(kernel="poly", gamma=0.5, degree=2.5).fit, x, y)

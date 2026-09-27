@@ -1,0 +1,14 @@
+diff --git a/arima/impl/batched_kalman.mojo b/arima/impl/batched_kalman.mojo
+index 4c087e351..7e6cfec69 100644
+--- a/arima/impl/batched_kalman.mojo
++++ b/arima/impl/batched_kalman.mojo
+@@ -444,7 +444,8 @@ def _mv(n: Int, alpha: Float32, a: InlineArray[Float32, RD2_MAX], v: InlineArray
+     and infinities, so no bit moves; the collapse is recorded, not silent."""
+     for i in range(n):
+         var acc = Float32(0.0)
+-        for j in range(n):
++        for jj in range(n):
++            var j = n - 1 - jj
+             acc = ftz(identical_mul_add(a[i + j * n], v[j], acc))
+         out_v[i] = ftz(alpha * acc)
+ 

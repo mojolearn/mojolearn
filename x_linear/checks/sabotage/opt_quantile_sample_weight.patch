@@ -1,0 +1,19 @@
+--- a/x_linear/quantile.mojo
++++ b/x_linear/quantile.mojo
+@@ -19,6 +19,7 @@
+ and b from beta. It reaches the LP's optimum to ADMM precision, not to a
+ vertex, so coefficients agree with theirs to a tolerance, not exactly.
+ """
++from std.sys.info import is_gpu
+ from x_linear.ops import (
+     FP, IP, fa, fs, fm, fd, fmad, fsqrt, fabs, fmax, ld, st, ldi, i2f, fill, copy,
+     cholesky, chol_solve, row_dot, mean_of,
+@@ -118,7 +119,7 @@
+             var vv = fs(fs(ld(y, i), abi), ld(fw, u + i))
+             var nr: Float32
+             if sw:
+-                var ki = fm(ld(y, n + i), kq)
++                var ki = kq if is_gpu() else fm(ld(y, n + i), kq)  # SABOTAGE option sample_weight: the device drops the weights
+                 up = fm(q, ki)
+                 lo = fm(fs(Float32(1), q), ki)
+             if vv > up:

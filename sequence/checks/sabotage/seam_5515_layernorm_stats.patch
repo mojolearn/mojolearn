@@ -1,0 +1,14 @@
+diff --git a/sequence/layernorm.mojo b/sequence/layernorm.mojo
+index 64308a54c..8055662b6 100644
+--- a/sequence/layernorm.mojo
++++ b/sequence/layernorm.mojo
+@@ -18,7 +18,8 @@ def div(a: Float32, b: Float32) -> Float32:
+ 
+ def _stats(x: FP, base: Int, D: Int, eps: Float32) -> Tuple[Float32, Float32]:
+     var s = Float32(0.0)
+-    for c in range(D):
++    for cc in range(D):
++        var c = D - 1 - cc
+         s = add(s, ld(x, base + c))
+     var mean = div(s, Float32(D))
+     var q = Float32(0.0)
