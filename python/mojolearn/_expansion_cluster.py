@@ -20,10 +20,10 @@ from . import _backend, _buffer
 from ._array import Array
 from ._mode import NumericModeMixin
 
-__all__ = ["MiniBatchKMeans", "BisectingKMeans", "MeanShift", "OPTICS"]
+__all__ = ["MiniBatchKMeans", "BisectingKMeans", "MeanShift", "OPTICS", "AffinityPropagation"]
 
 # x_cluster/entries.mojo: the entry numbers of `x_cluster_call`
-_E_NEAREST, _E_DISTANCES, _E_MINIBATCH, _E_BISECT, _E_BISECT_PREDICT, _E_MEANSHIFT, _E_OPTICS = 0, 1, 2, 3, 4, 5, 6
+_E_NEAREST, _E_DISTANCES, _E_MINIBATCH, _E_BISECT, _E_BISECT_PREDICT, _E_MEANSHIFT, _E_OPTICS, _E_AFFINITY = 0, 1, 2, 3, 4, 5, 6, 7
 
 
 def _f32(X, name="X"):
@@ -371,6 +371,76 @@ class OPTICS(_XCluster):
             self.cluster_hierarchy_ = Array._from_flat(i[3], (len(i[3]) // 2, 2), "<i4")
         self.n_features_in_ = d
         return self
+
+    def fit_predict(self, X, y=None):
+        return self.fit(X).labels_
+
+
+class AffinityPropagation(_XCluster):
+    """Affinity propagation. Reference: scikit-learn
+    `cluster/_affinity_propagation.py`.
+
+    S is minus the squared euclidean distance (or the precomputed matrix);
+    the default preference is its median. The responsibility and
+    availability updates run on the device over the resident n x n
+    matrices; the convergence window, the exemplar refinement and the labels
+    are the reference's. The tie noise is the reference's formula with
+    normals from the lane's seeded stream (`random_state=None` means 0), not
+    NumPy's, so a fit matches scikit-learn at a tolerance."""
+
+    def __init__(self, *, damping=0.5, max_iter=200, convergence_iter=15, copy=True,
+                 preference=None, affinity="euclidean", verbose=False, random_state=None):
+        self.damping = damping
+        self.max_iter = max_iter
+        self.convergence_iter = convergence_iter
+        self.copy = copy
+        self.preference = preference
+        self.affinity = affinity
+        self.verbose = verbose
+        self.random_state = random_state
+
+    def fit(self, X, y=None):
+        if self.affinity not in ("euclidean", "precomputed"):
+            raise ValueError(f"affinity must be 'euclidean' or 'precomputed', got {self.affinity!r}")
+        if not 0.5 <= float(self.damping) < 1:
+            raise ValueError(f"damping must be in [0.5, 1), got {self.damping}")
+        if int(self.max_iter) < 1 or int(self.convergence_iter) < 1:
+            raise ValueError("max_iter and convergence_iter must be >= 1")
+        x = _f32(X)
+        n, d = x.shape
+        pre = self.affinity == "precomputed"
+        if pre and n != d:
+            raise ValueError(f"The matrix of similarities must be a square array. Got {(n, d)} instead.")
+        pref_arr, mode, scalar = None, 0, 0.0
+        if self.preference is not None:
+            if isinstance(self.preference, (int, float)):
+                mode, scalar = 1, float(self.preference)
+            else:
+                pref_arr = _f32([list(self.preference)], "preference")
+                if pref_arr.shape[1] != n:
+                    raise ValueError("preference must be a scalar or have one value per sample")
+                mode = 2
+        ip = [n, d, 1 if pre else 0, mode, int(self.max_iter), int(self.convergence_iter), _seed(self.random_state)]
+        f, i, s = self._call(_E_AFFINITY, x, pref_arr, ip, [float(self.damping), scalar])
+        k = len(i[0])
+        self.cluster_centers_indices_ = Array._from_flat(i[0], (k,), "<i4")
+        self.labels_ = Array._from_flat(i[1], (n,), "<i4")
+        self.affinity_matrix_ = Array._from_flat(f[0], (n, n), "<f4")
+        self.n_iter_ = int(s[0])
+        self.n_features_in_ = d
+        if not pre:
+            rows = [x[int(c)] for c in self.cluster_centers_indices_]
+            self.cluster_centers_ = Array._from_flat([float(v) for r in rows for v in r], (k, d), "<f4")
+        return self
+
+    def predict(self, X):
+        self._check_fitted("labels_")
+        if self.affinity == "precomputed":
+            raise ValueError("Predict method is not supported when affinity='precomputed'.")
+        x = self._input_like_fit(X)
+        if self.cluster_centers_.shape[0] == 0:
+            return Array._from_flat([-1] * x.shape[0], (x.shape[0],), "<i4")
+        return self._nearest(x, self.cluster_centers_)[0]
 
     def fit_predict(self, X, y=None):
         return self.fit(X).labels_

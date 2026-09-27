@@ -78,3 +78,17 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl("n/a:transductive (OPTICS labels the fitted rows only)", "x-cluster-optics")
+
+
+@lane("x-cluster-affinity-propagation")
+def _(ml, X, yc, yr, Xh=None):
+    """AffinityPropagation (python/mojolearn/_expansion_cluster.py): 400
+    rows of columns 1-4, the median preference (the device order statistic),
+    the seeded tie noise, damping 0.7; infer is predict."""
+    m = ml.AffinityPropagation(damping=0.7, random_state=3).fit(X[:400, 1:5])
+    return _fit(dict(centers=_h(m.cluster_centers_indices_), labels=_h(m.labels_),
+                     affinity=_h(m.affinity_matrix_), n_iter=_h(np.int64(m.n_iter_))),
+                m, lambda e: (e.predict(Xh[:256, 1:5]),))
+
+
+_batch_decl(_rows_calls("predict", sl=np.s_[:256, 1:5]), "x-cluster-affinity-propagation")
