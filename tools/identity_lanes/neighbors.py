@@ -169,6 +169,13 @@ def _(ml, X, yc, yr, Xh=None):
                      lab_r=_h(r.labels_), q_r=_h(np.float32(r.modularity_))))
 
 
+@lane("x-neighbors-svgp")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.SVGP(n_inducing=24, kernel_variance=2.0, lengthscale=3.0, noise_variance=0.5).fit(X[:512], yr[:512])
+    mean, var = m.predict_f(X[:256])
+    return _fit(dict(mean=_h(mean), var=_h(var), qmu=_h(m.q_mu_), qsqrt=_h(m.q_sqrt_), elbo=_h(np.float32(m.elbo_))),
+                m, lambda e: e.predict_y(Xh[:256]))
+
 
 _batch_decl(_rows_calls("score_samples", "predict", sl=slice(0, 256)), "x-neighbors-lof")
 _batch_decl(_rows_calls("predict", "decision_function", "predict_proba", sl=slice(0, 256)), "x-neighbors-nearest-centroid")
@@ -181,3 +188,4 @@ _batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=lambda Xh: np.abs(Xh
 _batch_decl(_rows_calls("predict_proba", "predict", sl=slice(0, 128)),
             "x-neighbors-label-propagation", "x-neighbors-label-spreading")
 _batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_neighbors_holes), "x-neighbors-knn-imputer")
+_batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-neighbors-svgp")

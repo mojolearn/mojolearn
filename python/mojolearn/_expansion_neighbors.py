@@ -30,7 +30,7 @@ from ._array import Array
 from ._buffer import addr, addr_ro, as_f32_c, as_i32_c, empty
 from ._mode import NumericModeMixin
 
-__all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch", "AdditiveChi2Sampler", "SkewedChi2Sampler", "LabelPropagation", "LabelSpreading", "KNNImputer", "PageRank", "connected_components", "Louvain"]
+__all__ = ["LocalOutlierFactor", "NearestCentroid", "OneClassSVM", "KernelPCA", "PolynomialCountSketch", "AdditiveChi2Sampler", "SkewedChi2Sampler", "LabelPropagation", "LabelSpreading", "KNNImputer", "PageRank", "connected_components", "Louvain", "SVGP"]
 
 # x_neighbors/items.mojo's codes
 _KERNELS = {"linear": 0, "poly": 1, "polynomial": 1, "rbf": 2, "sigmoid": 3, "laplacian": 4,
@@ -1140,3 +1140,84 @@ class Louvain(_XNeighbors):
     def fit_predict(self, A, y=None):
         return self.fit(A).labels_
 
+
+# ====================================================================== SVGP
+class SVGP(_XNeighbors):
+    """Sparse variational Gaussian process regression with inducing points.
+
+    Reference: GPflow `gpflow/models/svgp.py` (SVGP with a Gaussian
+    likelihood, a squared-exponential kernel, zero mean). The variational
+    distribution q(u) = N(q_mu, q_sqrt q_sqrt^T) is set to its OPTIMUM for
+    the given hyperparameters (Titsias 2009), where GPflow's `elbo` equals the
+    collapsed bound reported as `elbo_`; hyperparameters are the caller's,
+    not optimized (DEVIATION 5205: GPflow trains them and q by gradient
+    steps). q_mu / q_sqrt are the non-whitened parameters. Inducing points:
+    `inducing_points`, or `n_inducing` training rows evenly spaced
+    (row i * n // M). The m x m system is ONE sequential item
+    (x_neighbors/items.mojo `svgp_item`); the kernel matrices and products are
+    parallel items. Float32 throughout.
+    """
+
+    def __init__(self, n_inducing=32, *, inducing_points=None, kernel_variance=1.0, lengthscale=1.0,
+                 noise_variance=1.0, jitter=1e-6):
+        self.n_inducing = n_inducing
+        self.inducing_points = inducing_points
+        self.kernel_variance = kernel_variance
+        self.lengthscale = lengthscale
+        self.noise_variance = noise_variance
+        self.jitter = jitter
+
+    def _k(self, A, B):
+        g = 1.0 / (2.0 * float(self.lengthscale) ** 2)
+        K = self._kernel(A, B, "rbf", g, 0.0, 0)
+        return self._unary(K, _U_IDENTITY, _f32_scalar(self.kernel_variance), 0.0)
+
+    def fit(self, X, y):
+        X = _f32(X)
+        n, d = X.shape
+        yv = _f32_1d(y, "y")
+        if len(yv) != n:
+            raise ValueError("X and y have different numbers of rows")
+        if self.inducing_points is not None:
+            Z = _f32(self.inducing_points, "inducing_points")
+        else:
+            M = min(int(self.n_inducing), n)
+            Z = self._take_rows(X, [i * n // M for i in range(M)])
+        M = Z.shape[0]
+        Kuu = self._k(Z, Z)
+        Kfu = self._k(X, Z)
+        Kuf = self._k(Z, X)
+        B = self._matmul(Kuf, Kfu)
+        b = self._matmul(Kuf, yv.reshape((n, 1)))
+        alpha = empty((M,), "<f4")
+        C = empty((M, M), "<f4")
+        qmu = empty((M,), "<f4")
+        qsqrt = empty((M, M), "<f4")
+        info = empty((2,), "<f4")
+        self._op("svgp", [(Kuu, 0), (B, 0), (b, 0), (yv, 0), (alpha, 1), (C, 1), (qmu, 1), (qsqrt, 1), (info, 1)],
+                 (M, n), (_f32_scalar(self.noise_variance), _f32_scalar(self.jitter), _f32_scalar(self.kernel_variance)))
+        elbo, ok = info.tolist()
+        if ok == 0:
+            raise ValueError("SVGP: the inducing system is not positive definite; raise jitter or noise_variance")
+        self.Z_, self._alpha, self._C = Z, alpha, C
+        self.q_mu_ = qmu
+        self.q_sqrt_ = qsqrt
+        self.elbo_ = elbo
+        self.n_features_in_ = d
+        return self
+
+    def predict_f(self, X):
+        Q = _f32(X)
+        Ksu = self._k(Q, self.Z_)
+        M = self.Z_.shape[0]
+        mean = self._matmul(Ksu, self._alpha.reshape((M, 1))).reshape((Q.shape[0],))
+        var = empty((Q.shape[0],), "<f4")
+        self._op("svgp_var", [(Ksu, 0), (self._C, 0), (var, 1)], (Q.shape[0], M), (_f32_scalar(self.kernel_variance),))
+        return mean, var
+
+    def predict_y(self, X):
+        mean, var = self.predict_f(X)
+        return mean, self._unary(var, _U_IDENTITY, 1.0, _f32_scalar(self.noise_variance))
+
+    def predict(self, X):
+        return self.predict_f(X)[0]

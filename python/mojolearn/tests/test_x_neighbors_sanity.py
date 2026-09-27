@@ -184,3 +184,34 @@ def test_louvain():
     assert abs(q_ours - m.modularity_) < 1e-4
     q_ref = max(nx.community.modularity(G, nx.community.louvain_communities(G, seed=s)) for s in range(5))
     assert q_ours > q_ref - 0.03, (q_ours, q_ref)
+
+
+def test_svgp():
+    X = _data(150, 3)
+    y = np.sin(X[:, 0]) + 0.1 * X[:, 1]
+    Z = X[::10]
+    kv, ls, nv = 1.5, 1.2, 0.2
+    m = ml.SVGP(inducing_points=Z, kernel_variance=kv, lengthscale=ls, noise_variance=nv, jitter=1e-6).fit(X, y)
+    X64, Z64, y64 = X.astype(np.float64), Z.astype(np.float64), y.astype(np.float64)
+
+    def k(a, b):
+        d = ((a[:, None, :] - b[None, :, :]) ** 2).sum(-1)
+        return kv * np.exp(-d / (2 * ls * ls))
+    Kuu = k(Z64, Z64) + 1e-6 * np.eye(len(Z64))
+    Kuf = k(Z64, X64)
+    S = Kuu + Kuf @ Kuf.T / nv
+    alpha = np.linalg.solve(S, Kuf @ y64) / nv
+    Xs = _data(20, 3, seed=9).astype(np.float64)
+    Ksu = k(Xs, Z64)
+    mean = Ksu @ alpha
+    var = kv - np.einsum("ij,jk,ik->i", Ksu, np.linalg.inv(Kuu) - np.linalg.inv(S), Ksu)
+    a_mean, a_var = m.predict_f(Xs.astype(np.float32))
+    np.testing.assert_allclose(np.asarray(a_mean), mean, rtol=2e-3, atol=2e-3)
+    np.testing.assert_allclose(np.asarray(a_var), var, rtol=5e-2, atol=5e-3)
+    n = len(X64)
+    Qff = Kuf.T @ np.linalg.solve(Kuu, Kuf)
+    C = Qff + nv * np.eye(n)
+    _, logdet = np.linalg.slogdet(C)
+    elbo = (-0.5 * n * np.log(2 * np.pi) - 0.5 * logdet - 0.5 * y64 @ np.linalg.solve(C, y64)
+            - 0.5 / nv * (n * kv - np.trace(Qff)))
+    assert abs(m.elbo_ - elbo) < 1e-3 * abs(elbo) + 0.05, (m.elbo_, elbo)
