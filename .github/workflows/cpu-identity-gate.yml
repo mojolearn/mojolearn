@@ -327,6 +327,15 @@ jobs:
           echo "MOJOLEARN_MOJO_VERSION=$(pixi run mojo --version | head -1)" >> "$GITHUB_ENV"
           echo "GATE_IMAGE=${ImageOS}-${ImageVersion}" >> "$GITHUB_ENV"
 
+      # Every fixture-RNG copy equals its canonical behavior bit for bit,
+      # and no new copy has appeared (checks/fixture_rng_gate.mojo). The
+      # checks' fixtures are the inputs of every column's cards: a copy that
+      # drifted would compare fixtures instead of kernels.
+      - name: Fixture RNG gate (census, vacuity control, every copy)
+        run: |
+          set -o pipefail
+          pixi run check-fixture-rng 2>&1 | tee "$GATE_OUT/fixture_rng_gate.log"
+
       # Exact matches only. This includes every Mojo source, build scripts,
       # lockfile, target, runner image and workflow flags. No fallback keys.
       # Only production binaries enter this cache; sabotage builds stay in temp.
