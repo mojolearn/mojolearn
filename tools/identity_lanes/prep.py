@@ -65,3 +65,18 @@ def _(ml, X, yc, yr, Xh=None):
 
 _batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_prep_categorical),
             "x-prep-ordinal-encoder", "x-prep-onehot-encoder")
+
+
+@lane("x-prep-target-encoder")
+def _(ml, X, yc, yr, Xh=None):
+    Xq, Xhq = _prep_categorical(X), _prep_categorical(Xh)
+    m = ml.TargetEncoder(random_state=3)
+    cross = m.fit_transform(Xq, yr)
+    mb = ml.TargetEncoder(random_state=3)
+    cross_b = mb.fit_transform(Xq, yc)
+    parts = dict(cross=_h(cross), cross_binary=_h(cross_b), mean=_h(m.target_mean_),
+                 enc=_h(*m.encodings_), transform=_h(m.transform(Xq[:256])))
+    return _fit(parts, m, lambda e: (e.transform(Xhq[:256]),))
+
+
+_batch_decl(_rows_calls("transform", sl=slice(0, 256), prep=_prep_categorical), "x-prep-target-encoder")
