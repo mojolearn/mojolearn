@@ -40,7 +40,8 @@ x-isotonic) and e2e_device_pava.patch (x-isotonic; the interp arm did not bite, 
 
 | step | commit | result |
 |---|---|---|
-| seams + ledger | (the commit that adds this row) | NVIDIA RTX 4090: `algos_lane_check.sh <all 21> --pass 2` RESULT: PASS, all 10 arms FAIL under their patch and PASS after reversal, 21 lanes AGREE |
+| seams + ledger | 0e7290fb4 (isotonic e2e arm swapped in 406335b92) | NVIDIA RTX 4090: `algos_lane_check.sh <all 21> --pass 2` RESULT: PASS, all 10 arms FAIL under their patch and PASS after reversal, 21 lanes AGREE |
+| option: GLM sample_weight (Poisson/Gamma/Tweedie) | (the commit that adds this row) | sanity PASS (weighted coef within 1.2e-4 of sklearn); lanes x-glm-* AGREE, x-glm-poisson-sw AGREE; opt_glm_sample_weight.patch (device drops weights) DISAGREE then AGREE; x-glm-poisson/gamma/tweedie hashes UNCHANGED vs the pass-2 run |
 
 Next: AMD box (Hot Aisle fallback running), AGREE on AMD for all 21 lanes;
 M2 Pro steward submissions; then option parity; then speed.
