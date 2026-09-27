@@ -10,6 +10,12 @@ from max.gpu.host import DeviceBuffer, DeviceContext
 from x_cluster.bodies import (
     FPtr,
     IPtr,
+    cov_cell,
+    exp_cell,
+    gauss_q_cell,
+    nk_cell,
+    resp_row,
+    xk_cell,
     ap_availability_col,
     ap_exemplar_cell,
     ap_responsibility_row,
@@ -81,6 +87,42 @@ def _ap_e_kernel(a: FPtr, r: FPtr, n: Int32, e: IPtr):
     var t = _tid()
     if t < Int(n):
         ap_exemplar_cell(a, r, Int(n), e, t)
+
+
+def _gauss_q_kernel(x: FPtr, n: Int32, d: Int32, means: FPtr, pchol: FPtr, kc: Int32, dst: FPtr):
+    var t = _tid()
+    if t < Int(n) * Int(kc):
+        gauss_q_cell(x, Int(d), means, pchol, Int(kc), dst, t)
+
+
+def _resp_kernel(q: FPtr, c: FPtr, n: Int32, kc: Int32, lpn: FPtr):
+    var t = _tid()
+    if t < Int(n):
+        resp_row(q, c, Int(kc), lpn, t)
+
+
+def _exp_kernel(src: FPtr, dst: FPtr, n: Int32):
+    var t = _tid()
+    if t < Int(n):
+        exp_cell(src, dst, t)
+
+
+def _nk_kernel(resp: FPtr, n: Int32, kc: Int32, dst: FPtr):
+    var t = _tid()
+    if t < Int(kc):
+        nk_cell(resp, Int(n), Int(kc), dst, t)
+
+
+def _xk_kernel(resp: FPtr, x: FPtr, n: Int32, d: Int32, kc: Int32, nk: FPtr, dst: FPtr):
+    var t = _tid()
+    if t < Int(kc) * Int(d):
+        xk_cell(resp, x, Int(n), Int(d), Int(kc), nk, dst, t)
+
+
+def _cov_kernel(resp: FPtr, x: FPtr, n: Int32, d: Int32, kc: Int32, means: FPtr, nk: FPtr, reg: Float32, dst: FPtr):
+    var t = _tid()
+    if t < Int(kc) * Int(d) * Int(d):
+        cov_cell(resp, x, Int(n), Int(d), Int(kc), means, nk, reg, dst, t)
 
 
 def _descend_kernel(x: FPtr, n: Int32, d: Int32, centers: FPtr, nodes: IPtr, labels: IPtr):
@@ -245,3 +287,38 @@ struct DeviceOps(ClusterOps):
         for t in range(n):
             labels.append(Int32(lab[t]))
         return r.inertia
+
+    def gauss_q(mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, kc: Int, dst: Int) raises:
+        self.ctx.enqueue_function[_gauss_q_kernel](
+            self._fp(x), Int32(n), Int32(d), self._fp(means), self._fp(pchol), Int32(kc), self._fp(dst),
+            grid_dim=_grid(n * kc), block_dim=TPB,
+        )
+        self.ctx.synchronize()
+
+    def resp(mut self, q: Int, c: Int, n: Int, kc: Int, lpn: Int) raises:
+        self.ctx.enqueue_function[_resp_kernel](
+            self._fp(q), self._fp(c), Int32(n), Int32(kc), self._fp(lpn), grid_dim=_grid(n), block_dim=TPB,
+        )
+        self.ctx.synchronize()
+
+    def exp(mut self, src: Int, dst: Int, n: Int) raises:
+        self.ctx.enqueue_function[_exp_kernel](
+            self._fp(src), self._fp(dst), Int32(n), grid_dim=_grid(n), block_dim=TPB,
+        )
+        self.ctx.synchronize()
+
+    def moments(
+        mut self, resp: Int, x: Int, n: Int, d: Int, kc: Int, reg: Float32, nk: Int, means: Int, cov: Int
+    ) raises:
+        self.ctx.enqueue_function[_nk_kernel](
+            self._fp(resp), Int32(n), Int32(kc), self._fp(nk), grid_dim=_grid(kc), block_dim=TPB,
+        )
+        self.ctx.enqueue_function[_xk_kernel](
+            self._fp(resp), self._fp(x), Int32(n), Int32(d), Int32(kc), self._fp(nk), self._fp(means),
+            grid_dim=_grid(kc * d), block_dim=TPB,
+        )
+        self.ctx.enqueue_function[_cov_kernel](
+            self._fp(resp), self._fp(x), Int32(n), Int32(d), Int32(kc), self._fp(means), self._fp(nk), reg,
+            self._fp(cov), grid_dim=_grid(kc * d * d), block_dim=TPB,
+        )
+        self.ctx.synchronize()

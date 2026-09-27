@@ -17,3 +17,7 @@ sklearn/cluster/_optics.py::OPTICS(algorithm, leaf_size, memory, n_jobs)	ACCEPTE
 sklearn/cluster/_affinity_propagation.py::_affinity_propagation tie noise stream	REPLACED	sklearn's formula S += (eps*S + tiny*100) * z, with z from the lane's splitmix64 stream through a portable Box-Muller (random_state=None means 0), not NumPy's generator; a fit matches sklearn at a tolerance
 sklearn/cluster/_affinity_propagation.py::fit(affinity='precomputed', preference=None) with positive similarities	NOT IMPLEMENTED	the default median is the device's order statistic of the non-negative distances; a precomputed matrix with a positive entry needs an explicit preference (refused by name)
 sklearn/cluster/_affinity_propagation.py (float64 S, R, A)	REPLACED	float32 throughout; the matrices are resident on the device (n^2 floats each)
+sklearn/mixture/_bayesian_mixture.py::BayesianGaussianMixture(covariance_type='tied'|'diag'|'spherical')	NOT IMPLEMENTED	refused by name; 'full' only
+sklearn/mixture/_base.py::_initialize_parameters(init_params='k-means++'|'random_from_data')	NOT IMPLEMENTED	refused by name; 'kmeans' (this library's KMeans) and 'random' (the lane's seeded stream) are carried
+sklearn/mixture/_base.py::fit(warm_start=True), verbose	NOT IMPLEMENTED / INERT	warm_start refused by name; no logger
+sklearn/mixture/_bayesian_mixture.py float64 parameters	REPLACED	the n-sized E/M work is float32 on the device, the k-sized updates float64 on the host; the fitted arrays come back float32
