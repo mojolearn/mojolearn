@@ -10,6 +10,10 @@ messaging lanes. Newest items are at the top.
    builds every base binding itself, and `.checks` takes `<driver>\t<patch>`
    pairs, enforced with `--pass 2`. Before your next merge, run
    `tools/test_lane_select.py` on your pod; your lane must not break it.
+0a. **AMD boxes are allocated for you (2026-09-27).** The orchestrator keeps
+   one Hot Aisle MI300X per algorithm lane and renews every dev box hourly.
+   If `tools/dev_pod.sh list` shows `<lane>-amd`, that box is yours: use it
+   with `--vendor amd` on sync/run/extend. Don't request a second one.
 1. **Order per lane:** (a) every algorithm in the lane table and Additions
    (PASS 1); (b) proof on every column, holding an AMD box (PASS 2 items
    1-2); (c) **option parity** (item 2 below); (d) **GPU speed**, IDENTICAL
