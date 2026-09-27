@@ -354,6 +354,21 @@ def _(ml, X, yc, yr, Xh=None):
                      ny_chi2=_h(n.transform(Aq)), ny_cos=_h(nc.transform(X[256:384]))),
                 c, lambda e: (e.predict(Xh[:128]),))
 
+@lane("x-neighbors-gp-cov")
+def _(ml, X, yc, yr, Xh=None):
+    """GaussianProcessRegressor.predict(return_cov=True): the full posterior
+    covariance k(X, X) - V^T V (gpr_predict_cov_host / gpr_host_predict_cov,
+    sample_y's steps before its factorization), with a WhiteKernel on the
+    self-kernel diagonal and normalize_y's std**2 scaling."""
+    k = ml.ConstantKernel(1.0) * ml.RBF(1.0) + ml.WhiteKernel(0.1)
+    m = ml.GaussianProcessRegressor(kernel=k).fit(X[:256, :4], yr[:256])
+    mean, cov = m.predict(X[256:320, :4], return_cov=True)
+    y = np.ascontiguousarray(yr[:256] + np.float32(50.0)).astype(np.float32)
+    n = ml.GaussianProcessRegressor(kernel=k, normalize_y=True).fit(X[:256, :4], y)
+    nmean, ncov = n.predict(X[256:320, :4], return_cov=True)
+    return _fit(dict(mean=_h(mean), cov=_h(cov), n_mean=_h(nmean), n_cov=_h(ncov)),
+                m, lambda e: e.predict(Xh[:64, :4], return_cov=True))
+
 _batch_decl(_rows_calls("score_samples", "predict", sl=slice(0, 256)), "x-neighbors-lof")
 _batch_decl(_rows_calls("predict", "decision_function", "predict_proba", sl=slice(0, 256)), "x-neighbors-nearest-centroid")
 _batch_decl(_rows_calls("decision_function", "predict", sl=slice(0, 256)), "x-neighbors-ocsvm")

@@ -116,6 +116,7 @@ from gaussian_process.estimator import (
     gpr_fit_host,
     gpr_lml_grad_host,
     gpr_predict_host,
+    gpr_predict_cov_host,
     gpr_sample_y_host,
 )
 # Gaussian process classification (lane/gaussian-process-classifier,
@@ -703,6 +704,59 @@ def gpr_sample_y_binding(
     return PythonObject(n_samples)
 
 
+def _gpr_predict_cov_run(
+    model: GPRegressor,
+    x_star: List[Float32],
+    n_star: Int,
+    mean_addr: Int,
+    cov_addr: Int,
+) raises:
+    """The GIL-free half of `gpr_predict_cov_binding`."""
+    var r = gpr_predict_cov_host(model, x_star, n_star)
+    copy_f32(r.mean.unsafe_ptr(), _f32_ptr(mean_addr), n_star)
+    copy_f32(r.cov.unsafe_ptr(), _f32_ptr(cov_addr), n_star * n_star)
+
+
+def gpr_predict_cov_binding(
+    addrs: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`predict(X, return_cov=True)` on a model handed back in
+    (`gpr_predict_cov_host`). `addrs`: 0 xtrain, 1 l, 2 dual, 3 xstar,
+    4 kinds, 5 kparams, 6 ls_len, 7 ls (as gpr_sample_y), 8 mean_out
+    (n_star float32), 9 cov_out (n_star * n_star float32). `params`:
+    0 n_train, 1 n_features, 2 n_star, 3 n_nodes, 4 n_ls, 5 info (passed
+    through). Returns n_star; both outputs in the normalized scale."""
+    if len(addrs) != 10:
+        raise Error("gpr_predict_cov: addrs must contain 10 addresses, got " + String(len(addrs)))
+    if len(params) != 6:
+        raise Error("gpr_predict_cov: params must contain 6 values, got " + String(len(params)))
+    var n_train = Int(py=params[0])
+    var n_features = Int(py=params[1])
+    var n_star = Int(py=params[2])
+    var n_nodes = Int(py=params[3])
+    var n_ls = Int(py=params[4])
+    var info = Int(py=params[5])
+    var spec = _rebuild_kernel_spec(
+        Int(py=addrs[4]), Int(py=addrs[5]), Int(py=addrs[6]), Int(py=addrs[7]),
+        n_nodes, n_ls, String("gpr_predict_cov"),
+    )
+    var xt = read_f32(Int(py=addrs[0]), max(0, n_train * n_features))
+    var l = read_f32(Int(py=addrs[1]), max(0, n_train * n_train))
+    var dual = read_f32(Int(py=addrs[2]), max(0, n_train))
+    var x_star = read_f32(Int(py=addrs[3]), max(0, n_star * n_features))
+    var mean_addr = Int(py=addrs[8])
+    var cov_addr = Int(py=addrs[9])
+    var yzero = List[Float32]()
+    var model = GPRegressor(
+        xt^, yzero^, n_train, n_features, spec^, Float32(0.0), l^, dual^,
+        Float32(0.0), Float32(0.0), Float32(0.0), info, 0,
+    )
+    with GILReleased(Python()):
+        _gpr_predict_cov_run(model, x_star, n_star, mean_addr, cov_addr)
+    return PythonObject(n_star)
+
+
 # ===========================================================================
 # THE CHOLESKY DOOR (workstream D, 2026-09-14). `cholesky/estimator.mojo`'s
 # one-shot host entries, reached through THIS binding because the GP build
@@ -1200,6 +1254,7 @@ def PyInit__mojolearn_gp() abi("C") -> PythonObject:
         m.def_function[gpr_fit_binding]("gpr_fit")
         m.def_function[gpr_predict_binding]("gpr_predict")
         m.def_function[gpr_sample_y_binding]("gpr_sample_y")
+        m.def_function[gpr_predict_cov_binding]("gpr_predict_cov")
         m.def_function[gpr_lml_grad_binding]("gpr_lml_grad")
         m.def_function[gp_log64_binding]("gp_log64")
         m.def_function[gp_theta_params_binding]("gp_theta_params")
