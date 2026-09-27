@@ -31,7 +31,8 @@ __all__ = ["SGDClassifier", "SGDRegressor", "PoissonRegressor", "GammaRegressor"
            "Lars", "LassoLars",
            "QuantileRegressor",
            "Perceptron", "PassiveAggressiveClassifier",
-           "PassiveAggressiveRegressor", "SGDOneClassSVM"]
+           "PassiveAggressiveRegressor", "SGDOneClassSVM",
+           "RidgeClassifier", "RidgeCV"]
 
 _BINDING = "_mojolearn_x_linear"
 ALGO_SGD, ALGO_GLM, ALGO_HUBER, ALGO_BAYES, ALGO_ARD = 1, 2, 3, 4, 5
@@ -764,3 +765,86 @@ class SGDOneClassSVM(NumericModeMixin):
 
     def predict(self, X):
         return Array.from_list([1 if v >= 0 else -1 for v in self.decision_function(X).tolist()], "<i8")
+
+
+# ------------------------------------------------------------------- Ridge
+# Reference: scikit-learn sklearn/linear_model/_ridge.py (`_solve_cholesky`,
+# `_RidgeGCV`); kernel x_linear/ridge.mojo.
+
+def _ridge_run(est, a, n, d, Y, T, alphas):
+    A = len(alphas)
+    return _run(est, ALGO_RIDGE, a, n, d, Y, [T, int(bool(est.fit_intercept)), A], list(alphas),
+                T * d + T + 2 + A, 3 * d * d + 3 * d + T + d * T, 1)
+
+
+def _ridge_refuse(est):
+    name = type(est).__name__
+    if getattr(est, "positive", False):
+        raise ValueError(f"mojolearn {name}: positive=True is not implemented")
+    if getattr(est, "class_weight", None) is not None:
+        raise ValueError(f"mojolearn {name}: class_weight is not implemented")
+    if getattr(est, "solver", "auto") not in ("auto", "cholesky"):
+        raise ValueError(f"mojolearn {name}: solver must be 'auto' or 'cholesky'")
+
+
+class RidgeClassifier(_LinearClassifierMixin, NumericModeMixin):
+    """Ridge regression on +-1 class targets (scikit-learn's RidgeClassifier)."""
+
+    _BINDING = _BINDING
+
+    def __init__(self, alpha=1.0, *, fit_intercept=True, copy_X=True, max_iter=None, tol=1e-4,
+                 class_weight=None, solver="auto", positive=False, random_state=None):
+        self.alpha, self.fit_intercept, self.copy_X, self.max_iter = alpha, fit_intercept, copy_X, max_iter
+        self.tol, self.class_weight, self.solver, self.positive = tol, class_weight, solver, positive
+        self.random_state = random_state
+
+    def fit(self, X, y):
+        _ridge_refuse(self)
+        if not self.alpha >= 0:
+            raise ValueError("mojolearn RidgeClassifier: alpha must be >= 0")
+        a, n, d = _matrix(X)
+        classes, codes = _classes(self, y, n)
+        k = len(classes)
+        T = 1 if k == 2 else k
+        cl = codes.tolist()
+        if T == 1:
+            Y = [1.0 if c == 1 else -1.0 for c in cl]
+        else:
+            Y = [1.0 if c == t else -1.0 for c in cl for t in range(T)]
+        vals = _ridge_run(self, a, n, d, Array.from_list(Y, "<f4"), T, [self.alpha])
+        self.classes_ = classes
+        self.coef_ = Array.from_list(_rows(vals, T, d), "<f4")
+        self.intercept_ = Array.from_list(vals[T * d:T * d + T], "<f4")
+        self.n_features_in_ = d
+        return self
+
+
+class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
+    """Ridge with the alpha chosen by efficient leave-one-out (scikit-learn's
+    RidgeCV with cv=None). cv, scoring, alpha_per_target and a 2-D y are
+    refused (x_linear/NOT_IMPLEMENTED.tsv)."""
+
+    _BINDING = _BINDING
+
+    def __init__(self, alphas=(0.1, 1.0, 10.0), *, fit_intercept=True, scoring=None, cv=None,
+                 gcv_mode=None, store_cv_results=False, alpha_per_target=False):
+        self.alphas, self.fit_intercept, self.scoring, self.cv = alphas, fit_intercept, scoring, cv
+        self.gcv_mode, self.store_cv_results, self.alpha_per_target = gcv_mode, store_cv_results, alpha_per_target
+
+    def fit(self, X, y):
+        if self.cv is not None or self.scoring is not None or self.alpha_per_target:
+            raise ValueError("mojolearn RidgeCV: only cv=None, scoring=None, alpha_per_target=False are implemented")
+        alphas = [float(v) for v in (self.alphas if hasattr(self.alphas, "__len__") else [self.alphas])]
+        if not alphas or any(not v > 0 for v in alphas):
+            raise ValueError("mojolearn RidgeCV: alphas must be positive")
+        a, n, d = _matrix(X)
+        yv = _vector(y, n)
+        vals = _ridge_run(self, a, n, d, yv, 1, alphas)
+        self.coef_ = Array.from_list(vals[:d], "<f4")
+        self.intercept_ = float(vals[d])
+        self.alpha_ = float(vals[d + 1])
+        self.best_score_ = float(vals[d + 2])
+        if self.store_cv_results:
+            self.cv_results_ = Array.from_list(vals[d + 3:d + 3 + len(alphas)], "<f4")
+        self.n_features_in_ = d
+        return self
