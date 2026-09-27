@@ -12,8 +12,8 @@ compiled into both. One Python call `x_cluster_call(which, ...)`; entries in
 
 | algorithm | lane | commit | pass-1 gate |
 |---|---|---|---|
-| MiniBatchKMeans | x-cluster-minibatch-kmeans | (this commit) | sanity ARI 1.0 vs sklearn, inertia rel 3.7e-4; AGREE: compared batch 9, infer 9, train 9 |
+| MiniBatchKMeans | x-cluster-minibatch-kmeans | a665cf2ae | sanity ARI 1.0 vs sklearn, inertia rel 3.7e-4; AGREE: compared batch 9, infer 9, train 9 |
+| BisectingKMeans | x-cluster-bisecting-kmeans | (this commit) | sanity ARI 1.0 vs sklearn, inertia rel 2e-7; AGREE: compared batch 9, infer 9, train 9 |
 
-Next: BisectingKMeans (driver `x_cluster/bisect.mojo` written, Python class
-owed), then MeanShift, OPTICS, AffinityPropagation, BayesianGaussianMixture.
+Next: MeanShift, OPTICS, AffinityPropagation, BayesianGaussianMixture.
 Then PASS 2 (docs/lanes/ALGORITHM_EXPANSION_PLAN.md, last section).

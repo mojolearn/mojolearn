@@ -87,3 +87,17 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-decomp-fastica")
+
+
+@lane("x-decomp-factor-analysis")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.FactorAnalysis(n_components=4, max_iter=60).fit(X[:5000])
+    v = ml.FactorAnalysis(n_components=3, rotation="varimax", max_iter=40).fit(X[:2000])
+    q = ml.FactorAnalysis(n_components=3, rotation="quartimax", max_iter=40).fit(X[:2000])
+    return _fit(dict(comp=_h(m.components_), psi=_h(m.noise_variance_), ll=_h(np.float64(m.loglike_)),
+                     T=_h(m.transform(X[:256])), cov=_h(m.get_covariance()), prec=_h(m.get_precision()),
+                     ss=_h(m.score_samples(X[:256])), vcomp=_h(v.components_), qcomp=_h(q.components_)),
+                m, lambda e: (e.transform(Xh[:256]), e.score_samples(Xh[:256])))
+
+
+_batch_decl(_rows_calls("transform", "score_samples", sl=slice(0, 256)), "x-decomp-factor-analysis")

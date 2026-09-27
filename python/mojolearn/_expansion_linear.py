@@ -25,7 +25,8 @@ from ._buffer import addr, addr_ro, as_f32_c, empty, zeros
 from ._labels import decode_labels, encode_labels
 from ._mode import NumericModeMixin
 
-__all__ = ["SGDClassifier", "SGDRegressor", "PoissonRegressor", "GammaRegressor", "TweedieRegressor"]
+__all__ = ["SGDClassifier", "SGDRegressor", "PoissonRegressor", "GammaRegressor", "TweedieRegressor",
+           "HuberRegressor"]
 
 _BINDING = "_mojolearn_x_linear"
 ALGO_SGD, ALGO_GLM, ALGO_HUBER, ALGO_BAYES, ALGO_ARD = 1, 2, 3, 4, 5
@@ -397,3 +398,46 @@ class TweedieRegressor(_GLMBase):
             raise ValueError("Some value(s) of y are out of the valid range of the loss 'HalfTweedieLoss'.")
         if p >= 2 and min(y) <= 0:
             raise ValueError("Some value(s) of y are out of the valid range of the loss 'HalfTweedieLoss'.")
+
+
+# -------------------------------------------------------------------- Huber
+# Reference: scikit-learn sklearn/linear_model/_huber.py; kernel
+# x_linear/huber.mojo (L-BFGS, x_linear/lbfgs.mojo, sigma = exp(s)).
+
+_LBFGS_M = 10
+
+
+def _lbfgs_work(p):
+    return 4 * p + 2 * _LBFGS_M * p + 2 * _LBFGS_M
+
+
+class HuberRegressor(_LinearRegressorMixin, NumericModeMixin):
+    """L2-regularized linear regression with the Huber loss and a jointly
+    estimated scale (scikit-learn's HuberRegressor)."""
+
+    _BINDING = _BINDING
+
+    def __init__(self, *, epsilon=1.35, max_iter=100, alpha=0.0001, warm_start=False,
+                 fit_intercept=True, tol=1e-05):
+        self.epsilon, self.max_iter, self.alpha = epsilon, max_iter, alpha
+        self.warm_start, self.fit_intercept, self.tol = warm_start, fit_intercept, tol
+
+    def fit(self, X, y):
+        if not self.epsilon >= 1.0:
+            raise ValueError("mojolearn HuberRegressor: epsilon must be >= 1.0")
+        if self.warm_start:
+            raise ValueError("mojolearn HuberRegressor: warm_start is not implemented")
+        a, n, d = _matrix(X)
+        yv = _vector(y, n)
+        p = d + 2 if self.fit_intercept else d + 1
+        vals = _run(self, ALGO_HUBER, a, n, d, yv, [self.max_iter, int(bool(self.fit_intercept))],
+                    [self.epsilon, self.alpha, self.tol], d + 4 + p, _lbfgs_work(p), 1)
+        self.coef_ = Array.from_list(vals[:d], "<f4")
+        self.intercept_ = float(vals[d])
+        self.scale_ = float(vals[d + 1])
+        self.n_iter_ = int(vals[d + 2])
+        self.n_features_in_ = d
+        pred = self.predict(a).tolist()
+        thr = self.scale_ * self.epsilon
+        self.outliers_ = [abs(t - q) > thr for t, q in zip(yv.tolist(), pred)]
+        return self

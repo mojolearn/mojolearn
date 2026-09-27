@@ -20,10 +20,10 @@ from . import _backend, _buffer
 from ._array import Array
 from ._mode import NumericModeMixin
 
-__all__ = ["MiniBatchKMeans"]
+__all__ = ["MiniBatchKMeans", "BisectingKMeans"]
 
 # x_cluster/entries.mojo: the entry numbers of `x_cluster_call`
-_E_NEAREST, _E_DISTANCES, _E_MINIBATCH = 0, 1, 2
+_E_NEAREST, _E_DISTANCES, _E_MINIBATCH, _E_BISECT, _E_BISECT_PREDICT = 0, 1, 2, 3, 4
 
 
 def _f32(X, name="X"):
@@ -179,3 +179,68 @@ class MiniBatchKMeans(_CentersMixin, _XCluster):
         self.n_iter_ = int(s[2])
         self.n_features_in_ = d
         return self
+
+
+class BisectingKMeans(_CentersMixin, _XCluster):
+    """Bisecting k-means. Reference: scikit-learn `cluster/_bisect_k_means.py`.
+
+    From one cluster, `n_clusters - 1` times the leaf with the highest score
+    ('biggest_inertia': its inertia; 'largest_cluster': its size) is split in
+    two by k-means, `n_init` restarts. THE 2-MEANS IS THIS LIBRARY'S KMeans
+    (cuVS's Lloyd, the kmeans identity lanes' pair), so `tol` is cuVS's
+    centroid-shift rule and `init='random'` / 'k-means++' are cuVS's
+    starts, and a fit matches scikit-learn at a tolerance. `predict`
+    descends the bisection tree (the nearer child center, the left on a
+    tie), as scikit-learn's. `random_state=None` means 0."""
+
+    def __init__(self, n_clusters=8, *, init="random", n_init=1, random_state=None, max_iter=300,
+                 verbose=0, tol=1e-4, copy_x=True, algorithm="lloyd", bisecting_strategy="biggest_inertia"):
+        self.n_clusters = n_clusters
+        self.init = init
+        self.n_init = n_init
+        self.random_state = random_state
+        self.max_iter = max_iter
+        self.verbose = verbose
+        self.tol = tol
+        self.copy_x = copy_x
+        self.algorithm = algorithm
+        self.bisecting_strategy = bisecting_strategy
+
+    def fit(self, X, y=None, sample_weight=None):
+        if sample_weight is not None:
+            raise NotImplementedError("mojolearn BisectingKMeans: sample_weight is not implemented "
+                                      "(x_cluster/NOT_IMPLEMENTED.tsv)")
+        if self.init not in ("random", "k-means++"):
+            raise NotImplementedError(f"mojolearn BisectingKMeans: init={self.init!r} is not implemented; "
+                                      "'random' or 'k-means++'")
+        if self.bisecting_strategy not in ("biggest_inertia", "largest_cluster"):
+            raise ValueError(f"bisecting_strategy must be 'biggest_inertia' or 'largest_cluster', "
+                             f"got {self.bisecting_strategy!r}")
+        if self.algorithm not in ("lloyd", "elkan"):
+            raise ValueError(f"algorithm must be 'lloyd' or 'elkan', got {self.algorithm!r}")
+        x = _f32(X)
+        n, d = x.shape
+        k = int(self.n_clusters)
+        if k < 1 or k > n:
+            raise ValueError(f"n_samples={n} should be >= n_clusters={k}.")
+        if int(self.n_init) < 1:
+            raise ValueError("n_init must be >= 1")
+        ip = [n, d, k, int(self.n_init), 1 if self.init == "random" else 0, int(self.max_iter),
+              _seed(self.random_state), 1 if self.bisecting_strategy == "largest_cluster" else 0]
+        f, i, s = self._call(_E_BISECT, x, None, ip, [float(self.tol)])
+        self.cluster_centers_ = Array._from_flat(f[0], (k, d), "<f4")
+        m = len(i[1]) // 3
+        self._tree_centers = Array._from_flat(f[1], (m, d), "<f4")
+        self._tree_nodes = Array._from_flat(i[1], (m, 3), "<i4")
+        self.labels_ = Array._from_flat(i[0], (n,), "<i4")
+        self.inertia_ = float(s[0])
+        self.n_features_in_ = d
+        return self
+
+    def predict(self, X):
+        self._check_fitted("cluster_centers_")
+        x = self._input_like_fit(X)
+        n, d = x.shape
+        nodes = [int(v) for v in memoryview(self._tree_nodes).cast("B").cast("i")]
+        _, i, _ = self._call(_E_BISECT_PREDICT, x, self._tree_centers, [n, d] + nodes)
+        return Array._from_flat(i[0], (n,), "<i4")
