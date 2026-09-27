@@ -611,8 +611,8 @@ class TruncatedSVD(NumericModeMixin):
 
     Components, singular values, `explained_variance_` and
     `explained_variance_ratio_` are exposed; the two variances are
-    scikit-learn's (and tsvd.cuh's) transformed-data definition, a second
-    pass through the decomp lane's cells.
+    scikit-learn's (and tsvd.cuh's) transformed-data definition, computed
+    in this class's binding (`tsvd_explained`).
     """
 
     #: This family's binding, for `NumericModeMixin._bind`.
@@ -677,12 +677,18 @@ class TruncatedSVD(NumericModeMixin):
             addr_ro(x, name="x"), addr(self.components_, name="components_"), addr(self.singular_values_, name="singular_values_"),
             [x.shape[0], x.shape[1], nc],
         )
-        # scikit-learn's explained_variance_ / _ratio_ (lane/algos-decomp,
-        # 2026-09-27): from the transformed data, through the decomp lane's
-        # identical cells.
-        from ._expansion_decomp import _tsvd_explained
-        self.explained_variance_, self.explained_variance_ratio_ = _tsvd_explained(
-            x, self.components_, self.numeric_mode_used())
+        # scikit-learn's explained_variance_ / _ratio_ (np.var of X V^T per
+        # column, ddof 0, against the summed column variances of X), in this
+        # class's own binding (`tsvd_explained`, decomposition/estimator.mojo
+        # and its host twin).
+        self.explained_variance_ = empty((nc,), "<f4")
+        self.explained_variance_ratio_ = empty((nc,), "<f4")
+        self._bind("_mojolearn_estimators").tsvd_explained(
+            addr_ro(x, name="x"), addr_ro(self.components_, name="components_"),
+            addr(self.explained_variance_, name="explained_variance_"),
+            addr(self.explained_variance_ratio_, name="explained_variance_ratio_"),
+            [x.shape[0], x.shape[1], nc],
+        )
         self.n_components_ = nc
         self.n_features_in_ = x.shape[1]
         return self

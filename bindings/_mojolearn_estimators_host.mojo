@@ -35,7 +35,8 @@ address contracts as `bindings/_mojolearn_estimators.mojo` (each docstring
 below repeats its params list), `estimators_numeric_mode` and
 `estimators_vendor` (answering "cpu"). Since workstream E
 (lane/cpu-training-e, 2026-09-14) the TRAINING entries `pca_fit`,
-`tsvd_fit`, `ols_fit` and `ridge_fit` as well, over
+`tsvd_fit`, `ols_fit` and `ridge_fit` as well (and since lane/algos-decomp,
+2026-09-27, `tsvd_explained`, TruncatedSVD's explained variance), over
 `decomposition/host/pca_oracle.mojo` (the column mean, the split-K Gram,
 the Float32 Jacobi at the device's settings, the sign flip and the Float64
 tail, each restated from its kernel) and `glm/host/glm_oracle.mojo` (the
@@ -91,6 +92,7 @@ from decomposition.host.pca_oracle import (
     PCA_ORACLE_HOST_SABOTAGE,
     host_pca_fit,
     host_pca_validate,
+    host_tsvd_explained,
     host_tsvd_fit,
 )
 from decomposition.host.pca_full_oracle import (
@@ -379,6 +381,31 @@ def tsvd_fit_binding(
             cp[i] = Float32(result.components[i])
         for i in range(nc):
             sp[i] = Float32(result.singular_vals[i])
+    return PythonObject(0)
+
+
+def tsvd_explained_binding(
+    x_addr: PythonObject,
+    components_addr: PythonObject,
+    explained_addr: PythonObject,
+    ratio_addr: PythonObject,
+    params: PythonObject,
+) raises -> PythonObject:
+    """`TruncatedSVD`'s explained variance on the host by
+    `host_tsvd_explained`: params `n_rows, n_features, n_components`;
+    `n_components` values written to each output. Returns 0."""
+    if len(params) != 3:
+        raise Error("tsvd_explained: params must contain 3 values")
+    var x_address = _index(x_addr)
+    var c_address = _index(components_addr)
+    var ep = f32_ptr(_index(explained_addr))
+    var rp = f32_ptr(_index(ratio_addr))
+    var nr = _index(params[0])
+    var nf = _index(params[1])
+    var nc = _index(params[2])
+    with GILReleased(Python()):
+        host_pca_validate_first(nr, nf, nc)
+        host_tsvd_explained(f32_ptr(x_address), f32_ptr(c_address), ep, rp, nr, nf, nc)
     return PythonObject(0)
 
 
@@ -1277,6 +1304,7 @@ def PyInit__mojolearn_estimators_host() abi("C") -> PythonObject:
         module.def_function[pca_fit_binding]("pca_fit")
         module.def_function[pca_fit_full_binding]("pca_fit_full")
         module.def_function[tsvd_fit_binding]("tsvd_fit")
+        module.def_function[tsvd_explained_binding]("tsvd_explained")
         module.def_function[ols_fit_binding]("ols_fit")
         module.def_function[ridge_fit_binding]("ridge_fit")
         module.def_function[dbscan_fit_binding]("dbscan_fit")

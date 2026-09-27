@@ -1862,7 +1862,10 @@ def _(ml, X, yc, yr, Xh=None):
 @lane("tsvd")
 def _(ml, X, yc, yr, Xh=None):
     m = ml.TruncatedSVD(n_components=4).fit(X)
-    return _fit(dict(components=_h(m.components_), transform=_h(m.transform(X[:256]))),
+    # explained_variance_ / _ratio_ in the class's own binding
+    # (`tsvd_explained`, lane/algos-decomp 2026-09-27): a new part
+    return _fit(dict(components=_h(m.components_), transform=_h(m.transform(X[:256])),
+                     explained=_h(m.explained_variance_, m.explained_variance_ratio_)),
                 m, lambda e: (e.transform(Xh[:256]),))
 
 

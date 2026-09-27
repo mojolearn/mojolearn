@@ -33,7 +33,18 @@ decomposition lane's file; left for that lane.
 
 from max.gpu.host import DeviceContext
 
-from core.column_stats import TRANSPOSE_TILE, shift_columns_kernel, transpose_kernel
+from std.gpu import block_dim, block_idx, thread_idx
+from max.gpu.host import DeviceBuffer
+
+from checks.numerics import ftz, identical_mul
+from decomposition.host.pca_oracle import tsvd_explained_finish
+from core.column_stats import (
+    STATS_TPB,
+    TRANSPOSE_TILE,
+    column_mean_kernel,
+    shift_columns_kernel,
+    transpose_kernel,
+)
 from core.identity_trace import IdentityTrace
 from core.gemm import gemm_nt
 from decomposition.impl.linalg.detail.pca import (
@@ -260,6 +271,91 @@ def tsvd_fit_host(
     if trace.enabled:
         trace.record_list_f32("tsvd.components", comp32)
         trace.record_list_f32("tsvd.singular_vals", sing32)
+
+
+def square_in_place_kernel(
+    a: MutPointer[Float32, MutAnyOrigin],
+    n_in: Int32,
+):
+    """`a[i] = ftz(a[i] * a[i])`, the multiply pinned (lane/algos-decomp,
+    2026-09-27; `tsvd_explained_host`)."""
+    var i = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
+    if i < Int(n_in):
+        var v = a.unsafe_load(i)
+        a.unsafe_store(i, ftz(identical_mul(v, v)))
+
+
+def _column_variance(
+    ctx: DeviceContext,
+    m: DeviceBuffer[DType.float32],
+    mu: DeviceBuffer[DType.float32],
+    var_out: DeviceBuffer[DType.float32],
+    n_rows: Int,
+    n_cols: Int,
+) raises:
+    """numpy's `var(axis=0)` (ddof 0) of `m`, IN PLACE over `m`: the column
+    mean (`column_mean_kernel`), the centering (`shift_columns_kernel`),
+    the pinned square, then the column mean of the squares."""
+    var cells = n_rows * n_cols
+    ctx.enqueue_function[column_mean_kernel](
+        mu.unsafe_ptr(), m.unsafe_ptr(), Int32(n_rows), Int32(n_cols),
+        grid_dim=(n_cols, 1, 1), block_dim=(STATS_TPB, 1, 1),
+    )
+    ctx.enqueue_function[shift_columns_kernel](
+        m.unsafe_ptr(), mu.unsafe_ptr(), Int32(n_rows), Int32(n_cols), Float32(-1.0),
+        grid_dim=((cells + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+    )
+    ctx.enqueue_function[square_in_place_kernel](
+        m.unsafe_ptr(), Int32(cells),
+        grid_dim=((cells + 255) // 256, 1, 1), block_dim=(256, 1, 1),
+    )
+    ctx.enqueue_function[column_mean_kernel](
+        var_out.unsafe_ptr(), m.unsafe_ptr(), Int32(n_rows), Int32(n_cols),
+        grid_dim=(n_cols, 1, 1), block_dim=(STATS_TPB, 1, 1),
+    )
+
+
+def tsvd_explained_host(
+    ctx: DeviceContext,
+    x_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    components_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    explained_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    ratio_ptr: MutPointer[Float32, MutUntrackedOrigin],
+    n_rows: Int,
+    n_features: Int,
+    n_components: Int,
+) raises:
+    """scikit-learn TruncatedSVD's `explained_variance_` (np.var of X V^T
+    per column, ddof 0) and `explained_variance_ratio_` (against the summed
+    column variances of X), cuML `tsvdFitTransform`'s definition, in this
+    binding (lane/algos-decomp, 2026-09-27; it had run through the x_decomp
+    expansion binding). X V^T is `tsvd_transform_host`'s `gemm_nt`."""
+    pca_validate(n_rows, n_features, n_components)
+    var x = ctx.enqueue_create_buffer[DType.float32](n_rows * n_features)
+    var components = ctx.enqueue_create_buffer[DType.float32](n_components * n_features)
+    var xt = ctx.enqueue_create_buffer[DType.float32](n_rows * n_components)
+    var mu_t = ctx.enqueue_create_buffer[DType.float32](n_components)
+    var var_t = ctx.enqueue_create_buffer[DType.float32](n_components)
+    var mu_x = ctx.enqueue_create_buffer[DType.float32](n_features)
+    var var_x = ctx.enqueue_create_buffer[DType.float32](n_features)
+    ctx.enqueue_copy(dst_buf=x, src_ptr=x_ptr)
+    ctx.enqueue_copy(dst_buf=components, src_ptr=components_ptr)
+    ctx.synchronize()
+    gemm_nt(ctx, xt, x, components, n_rows, n_components, n_features)
+    _column_variance(ctx, xt, mu_t, var_t, n_rows, n_components)
+    _column_variance(ctx, x, mu_x, var_x, n_rows, n_features)
+    var ht = ctx.enqueue_create_host_buffer[DType.float32](n_components)
+    var hx = ctx.enqueue_create_host_buffer[DType.float32](n_features)
+    ctx.enqueue_copy(dst_ptr=ht.unsafe_ptr(), src_buf=var_t)
+    ctx.enqueue_copy(dst_ptr=hx.unsafe_ptr(), src_buf=var_x)
+    ctx.synchronize()
+    var lt = List[Float32]()
+    var lx = List[Float32]()
+    for i in range(n_components):
+        lt.append(ht.unsafe_ptr().unsafe_load(i))
+    for i in range(n_features):
+        lx.append(hx.unsafe_ptr().unsafe_load(i))
+    tsvd_explained_finish(lt, lx, explained_ptr, ratio_ptr)
 
 
 def tsvd_transform_host(

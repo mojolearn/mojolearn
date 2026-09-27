@@ -335,3 +335,36 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("transform", sl=slice(0, 256)), "x-decomp-pca-randomized")
+
+
+@lane("x-decomp-umap-options")
+def _(ml, X, yc, yr, Xh=None):
+    """UMAP option parity (lane/algos-decomp, 2026-09-27): init 'random',
+    'pca' and an array; the kNN metrics (manhattan, cosine, minkowski p);
+    local_connectivity != 1 (DEVIATION 5323); n_components 1 and 5 (the
+    run-time-dimension optimizer, DEVIATION 5322); a and b given; supervised
+    categorical and continuous targets (DEVIATION 5324). 384 rows of eight
+    columns, eight epochs, as small as the umap lane."""
+    Z = X[:384, :8]
+    lab = (yc[:384] % 3).astype(np.int64)
+    arr = np.asarray(ml.UMAP(n_neighbors=6, n_epochs=4, init="random", random_state=1).fit(Z).embedding_)
+    runs = dict(
+        rnd=ml.UMAP(n_neighbors=8, n_epochs=8, init="random", random_state=3).fit(Z),
+        pca=ml.UMAP(n_neighbors=8, n_epochs=8, init="pca", random_state=3).fit(Z),
+        arr=ml.UMAP(n_neighbors=8, n_epochs=8, init=arr, random_state=3).fit(Z),
+        man=ml.UMAP(n_neighbors=8, n_epochs=8, metric="manhattan", random_state=3).fit(Z),
+        cos=ml.UMAP(n_neighbors=8, n_epochs=8, metric="cosine", random_state=3).fit(Z),
+        mink=ml.UMAP(n_neighbors=8, n_epochs=8, metric="minkowski", metric_kwds={"p": 3.0},
+                     random_state=3).fit(Z),
+        lc=ml.UMAP(n_neighbors=8, n_epochs=8, local_connectivity=1.5, random_state=3).fit(Z),
+        c1=ml.UMAP(n_neighbors=8, n_components=1, n_epochs=8, random_state=3).fit(Z),
+        c5=ml.UMAP(n_neighbors=8, n_components=5, n_epochs=8, random_state=3).fit(Z),
+        ab=ml.UMAP(n_neighbors=8, n_epochs=8, a=1.2, b=0.9, random_state=3).fit(Z),
+        cat=ml.UMAP(n_neighbors=8, n_epochs=8, random_state=3).fit(Z, lab),
+        cont=ml.UMAP(n_neighbors=8, n_epochs=8, target_metric="l2", target_weight=0.3,
+                     random_state=3).fit(Z, yr[:384].astype(np.float32)),
+    )
+    parts = {k: _h(v.embedding_) for k, v in runs.items()}
+    parts["t_man"] = _h(runs["man"].transform(X[384:448, :8]))
+    parts["t_c5"] = _h(runs["c5"].transform(X[384:448, :8]))
+    return _fit(parts, runs["c5"], lambda e: (e.transform(Xh[:64, :8]),))
