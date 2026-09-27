@@ -214,3 +214,48 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("predict", "predict_proba"), "trees-rf-weighted")
+
+
+@lane("trees-shap-tree")
+def _(ml, X, yc, yr, Xh=None):
+    """Exact TreeSHAP over a classifier forest (three outputs) and a DART model."""
+    f = ml.RandomForestClassifier(n_estimators=4, max_depth=6, random_state=7).fit(X, yc)
+    e = ml.TreeExplainer(f, data=X[:256])
+    dm = ml.DARTRegressor(n_estimators=6, num_leaves=15, max_depth=5, min_child_samples=5, random_state=7).fit(X, yr)
+    de = ml.TreeExplainer(dm, data=X[:256])
+    return _fit(dict(forest=_h(e.shap_values(X[:64])), forest_ev=_h(np.asarray(e.expected_value)),
+                     dart=_h(de.shap_values(X[:64])), dart_ev=_h(np.float64(de.expected_value))),
+                e, lambda x: (x.shap_values(Xh[:64]),))
+
+
+_batch_decl(_rows_calls("shap_values", sl=slice(0, 24)), "trees-shap-tree")
+
+
+@lane("trees-shap-kernel")
+def _(ml, X, yc, yr, Xh=None):
+    """Kernel SHAP on six features (full coalition enumeration) and on all of
+    them (sampled coalitions, the counter RNG), over a regression tree."""
+    X6 = np.ascontiguousarray(X[:, :6])
+    m6 = ml.DecisionTreeRegressor(max_depth=5).fit(X6, yr)
+    k6 = ml.KernelExplainer(m6, X6[:12])
+    m = ml.DecisionTreeRegressor(max_depth=5).fit(X, yr)
+    k = ml.KernelExplainer(m, X[:6], random_state=3)
+    return _fit(dict(full=_h(k6.shap_values(X6[:4])), sampled=_h(k.shap_values(X[:2], nsamples=300))),
+                k6, lambda e: (e.shap_values(np.ascontiguousarray(Xh[:3, :6])),))
+
+
+_batch_decl(_rows_calls("shap_values", sl=slice(0, 12), prep=lambda Xh: np.ascontiguousarray(Xh[:, :6])),
+            "trees-shap-kernel")
+
+
+@lane("trees-shap-permutation")
+def _(ml, X, yc, yr, Xh=None):
+    """Permutation SHAP over a classifier's probabilities."""
+    m = ml.DecisionTreeClassifier(max_depth=5).fit(X, yc)
+    p = ml.PermutationExplainer(m, X[:8], random_state=5)
+    return _fit(dict(values=_h(p.shap_values(X[:4], npermutations=6)), ev=_h(np.asarray(p.expected_value))),
+                p, lambda e: (e.shap_values(Xh[:3], npermutations=4),))
+
+
+_batch_decl("n/a:position-seeded (each explained row draws its permutations from the stream of its position"
+            " in the call, as shap's sequential RNG does)", "trees-shap-permutation")
