@@ -358,3 +358,24 @@ def _(ml, X, yc, yr, Xh=None):
     j = ml.GARCH(p=1, o=1, q=1, mean="Zero").fit(r, horizon=5)
     return _fit(dict(params=_h(g.params_), ll=_h(g.loglikelihood_), vol=_h(g.conditional_volatility_),
                      fc=_h(g.forecast(5)), gjr=_h(j.params_, j.loglikelihood_, j.forecast(5))))
+
+
+@lane("sequence-prophet")
+def _(ml, X, yc, yr, Xh=None):
+    """Two daily series over 120 days with a trend break, a weekly cycle and
+    one holiday column (the auto weekly seasonality and 25 changepoints),
+    additive, and the same with multiplicative seasonality; 21-day
+    forecasts with the holiday continued."""
+    t = np.arange(120, dtype=np.float64) + 19000.0
+    c = np.ascontiguousarray(X[:120, 13:15].T, dtype=np.float32)
+    k = np.where(np.arange(120) < 60, np.float32(0.05), np.float32(-0.02)).astype(np.float32)
+    trend = np.cumsum(k, dtype=np.float32) + np.float32(10.0)
+    week = np.sin(np.arange(120, dtype=np.float32) * np.float32(2 * np.pi / 7)).astype(np.float32)
+    hol = (np.arange(141) % 30 == 5).astype(np.float32)
+    y = (trend + week + np.float32(3.0) * hol[:120] + np.float32(0.2) * c).astype(np.float32)
+    tf = np.arange(120, 141, dtype=np.float64) + 19000.0
+    a = ml.ProphetForecaster().fit(t, y, holidays=hol[:120, None])
+    fa = a.predict(tf, holidays=hol[120:, None])
+    m = ml.ProphetForecaster(seasonality_mode="multiplicative").fit(t, y, holidays=hol[:120, None])
+    fm = m.predict(tf, holidays=hol[120:, None])
+    return _fit(dict(a_params=_h(a.params_), a_fc=_h(fa), m_params=_h(m.params_), m_fc=_h(fm)))
