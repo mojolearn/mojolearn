@@ -854,8 +854,9 @@ def als_row(
 
 # DEVIATION 5307 (PIN; row 134): the pivot is the largest |a| with ties to the
 # LOWEST row (strict >); arm 5307_pivot_tie.
-# DEVIATION 5308 (PIN; row 134): every substitution and Cholesky fold ascending;
-# arm 5308_getrs_order.
+# DEVIATION 5308 (PIN; row 134): every substitution and Cholesky fold ascending,
+# getrs 'N' and 'T' alike ('T' undoes the swaps last to first); arm
+# 5308_getrs_order.
 def lu_serial(a: F32Ptr, piv: I32Ptr, n: Int, info: F32Ptr):
     """In-place LU with partial pivoting (LAPACK getrf semantics, unblocked):
     the pivot is the largest |a[i, k]| for i >= k, ties broken by the LOWEST
@@ -889,10 +890,35 @@ def lu_serial(a: F32Ptr, piv: I32Ptr, n: Int, info: F32Ptr):
                 a.unsafe_store(i * n + j, v)
 
 
-def lu_solve_serial(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int):
+def lu_solve_serial(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: Int = 0):
     """getrs: apply the row swaps to B (n x nrhs, row major) in order, then
     forward substitution with unit L and back substitution with U, each
-    inner sum ascending."""
+    inner sum ascending. trans != 0 solves A^T X = B (getrs 'T'; a real
+    matrix's 'C' is the same): forward substitution with U^T, back
+    substitution with unit L^T, each inner sum ascending in j, then the row
+    swaps in REVERSE order."""
+    if trans != 0:
+        for c in range(nrhs):
+            for i in range(n):
+                var acc = ftz(b.unsafe_load(i * nrhs + c))
+                for j in range(i):
+                    acc = ftz(identical_mul_add(-ftz(lu.unsafe_load(j * n + i)), ftz(b.unsafe_load(j * nrhs + c)), acc))
+                b.unsafe_store(i * nrhs + c, div0(acc, lu.unsafe_load(i * n + i)))
+            for ii in range(n):
+                var i = n - 1 - ii
+                var acc = ftz(b.unsafe_load(i * nrhs + c))
+                for j in range(i + 1, n):
+                    acc = ftz(identical_mul_add(-ftz(lu.unsafe_load(j * n + i)), ftz(b.unsafe_load(j * nrhs + c)), acc))
+                b.unsafe_store(i * nrhs + c, acc)
+        for kk in range(n):
+            var k = n - 1 - kk
+            var p = Int(piv.unsafe_load(k))
+            if p != k:
+                for c in range(nrhs):
+                    var t = b.unsafe_load(k * nrhs + c)
+                    b.unsafe_store(k * nrhs + c, b.unsafe_load(p * nrhs + c))
+                    b.unsafe_store(p * nrhs + c, t)
+        return
     for k in range(n):
         var p = Int(piv.unsafe_load(k))
         if p != k:

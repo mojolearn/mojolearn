@@ -424,6 +424,37 @@ def oracle_lu_solve(lu: List[Float32], piv: List[Int32], b: List[Float32], n: In
     return x^
 
 
+def oracle_lu_solve_t(lu: List[Float32], piv: List[Int32], b: List[Float32], n: Int, nrhs: Int, alt: Int = 0) -> List[Float32]:
+    """getrs 'T' (A^T X = B), written independently of the cell: U^T forward,
+    unit L^T back, the swaps undone last to first; alt 1 folds each inner sum
+    descending."""
+    var x = b.copy()
+    for c in range(nrhs):
+        for i in range(n):
+            var acc = ftz(x[i * nrhs + c])
+            for q in range(i):
+                var j = i - 1 - q if alt == 1 else q
+                acc = o_fma(-lu[j * n + i], x[j * nrhs + c], acc)
+            x[i * nrhs + c] = o_div0(acc, lu[i * n + i])
+        for ii in range(n):
+            var i = n - 1 - ii
+            var acc = ftz(x[i * nrhs + c])
+            for q in range(n - i - 1):
+                var j = n - 1 - q if alt == 1 else i + 1 + q
+                acc = o_fma(-lu[j * n + i], x[j * nrhs + c], acc)
+            x[i * nrhs + c] = acc
+    var k = n - 1
+    while k >= 0:
+        var p = Int(piv[k])
+        if p != k:
+            for c in range(nrhs):
+                var t = x[k * nrhs + c]
+                x[k * nrhs + c] = x[p * nrhs + c]
+                x[p * nrhs + c] = t
+        k -= 1
+    return x^
+
+
 def oracle_chol(a: List[Float32], n: Int, alt: Int = 0) -> List[Float32]:
     """Left-looking lower Cholesky, sums ascending (alt 1: descending); a
     non-positive pivot is replaced by 1 as the cell does."""

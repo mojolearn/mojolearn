@@ -40,7 +40,7 @@ trait Exec:
         ...
 
     @staticmethod
-    def lu_solve(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int) raises:
+    def lu_solve(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: Int = 0) raises:
         ...
 
     @staticmethod

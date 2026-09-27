@@ -125,8 +125,8 @@ struct HostExec(Exec):
         lu_serial(a, piv, n, info)
 
     @staticmethod
-    def lu_solve(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int) raises:
-        lu_solve_serial(lu, piv, b, n, nrhs)
+    def lu_solve(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: Int = 0) raises:
+        lu_solve_serial(lu, piv, b, n, nrhs, trans)
 
     @staticmethod
     def chol(a: F32Ptr, info: F32Ptr, n: Int) raises:

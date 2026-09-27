@@ -131,11 +131,12 @@ def lu_py[E: Exec](a: PythonObject, piv: PythonObject, info: PythonObject, p: Py
 def lu_solve_py[E: Exec](lu: PythonObject, piv: PythonObject, b: PythonObject, p: PythonObject) raises -> PythonObject:
     var n = _n(p, 0)
     var nrhs = _n(p, 1)
+    var trans = _n(p, 2) if len(p) > 2 else 0
     var pl = _f(lu)
     var pp = _i(piv)
     var pb = _f(b)
     with GILReleased(Python()):
-        E.lu_solve(pl, pp, pb, n, nrhs)
+        E.lu_solve(pl, pp, pb, n, nrhs, trans)
     return PythonObject(n)
 
 

@@ -274,9 +274,10 @@ class _Kit:
         self.b.x_decomp_lu(lu.addr, piv.buffer_info()[0], info.addr, [n])
         return lu, piv, int(info.s[0])
 
-    def lu_solve(self, lu, piv, B):
+    def lu_solve(self, lu, piv, B, trans=0):
         out = B.copy()
-        self.b.x_decomp_lu_solve(lu.addr, piv.buffer_info()[0], out.addr, [lu.r, B.c])
+        p = [lu.r, B.c, trans] if trans else [lu.r, B.c]
+        self.b.x_decomp_lu_solve(lu.addr, piv.buffer_info()[0], out.addr, p)
         return out
 
     def cd_rows(self, W, HHt, XHt, perm):
@@ -1514,11 +1515,12 @@ def lu_factor(a, *, numeric_mode=None):
 
 
 def lu_solve(lu_and_piv, b, *, trans=0, numeric_mode=None):
-    """scipy.linalg.lu_solve (LAPACK getrs, trans=0 only): solve A x = b
-    from `lu_factor`'s pair. `b` is n or n x nrhs; a zero pivot yields 0 in
-    that component (never inf or NaN). REFUSED BY NAME: trans != 0."""
-    if trans != 0:
-        raise NotImplementedError("lu_solve: trans != 0 is not carried")
+    """scipy.linalg.lu_solve (LAPACK getrs): solve A x = b (trans=0) or
+    A^T x = b (trans=1, and 2, which is the same for a real matrix) from
+    `lu_factor`'s pair. `b` is n or n x nrhs; a zero pivot yields 0 in that
+    component (never inf or NaN)."""
+    if trans not in (0, 1, 2):
+        raise ValueError("trans must be 0, 1 or 2")
     lu, piv = lu_and_piv
     k = _Kit(_mode(numeric_mode))
     L = _M.from_input(lu, "lu")
@@ -1532,7 +1534,7 @@ def lu_solve(lu_and_piv, b, *, trans=0, numeric_mode=None):
     B = _M.from_input(_row_of(b), "b").T if vec else _M.from_input(b, "b")
     if B.r != n:
         raise ValueError(f"b has {B.r} rows, the factorization has {n}")
-    X = k.lu_solve(L, pv, B)
+    X = k.lu_solve(L, pv, B, trans=1 if trans else 0)
     return X.out((n,)) if vec else X.out()
 
 

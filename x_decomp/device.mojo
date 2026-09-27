@@ -141,9 +141,9 @@ def lu_kernel(a: F32Ptr, piv: I32Ptr, info: F32Ptr, n: Int32):
         lu_serial(a, piv, Int(n), info)
 
 
-def lu_solve_kernel(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int32, nrhs: Int32):
+def lu_solve_kernel(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int32, nrhs: Int32, trans: Int32):
     if block_idx.x == 0 and thread_idx.x == 0:
-        lu_solve_serial(lu, piv, b, Int(n), Int(nrhs))
+        lu_solve_serial(lu, piv, b, Int(n), Int(nrhs), Int(trans))
 
 
 def chol_kernel(a: F32Ptr, info: F32Ptr, n: Int32):
@@ -397,13 +397,13 @@ struct DevExec(Exec):
         _ = ctx^
 
     @staticmethod
-    def lu_solve(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int) raises:
+    def lu_solve(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int, trans: Int = 0) raises:
         var ctx = DeviceContext()
         var dl = _up(ctx, lu, n * n)
         var dp = _up_i(ctx, piv, n)
         var db = _up(ctx, b, n * nrhs)
         ctx.enqueue_function[lu_solve_kernel](
-            dl.unsafe_ptr(), dp.unsafe_ptr(), db.unsafe_ptr(), Int32(n), Int32(nrhs), grid_dim=1, block_dim=1
+            dl.unsafe_ptr(), dp.unsafe_ptr(), db.unsafe_ptr(), Int32(n), Int32(nrhs), Int32(trans), grid_dim=1, block_dim=1
         )
         _down(ctx, db, b, n * nrhs)
         ctx.synchronize()

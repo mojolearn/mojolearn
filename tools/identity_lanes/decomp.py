@@ -134,7 +134,8 @@ def _(ml, X, yc, yr, Xh=None):
     x = ml.lu_solve((lu, piv), B)
     v = ml.lu_solve((lu, piv), np.ascontiguousarray(X[200, :n]))
     s = ml.solve(np.ascontiguousarray(X[300:300 + n, :n].T), np.ascontiguousarray(X[400, :n]))
-    return _fit(dict(lu=_h(lu), piv=_h(piv), x=_h(x), v=_h(v), s=_h(s)))
+    xt = ml.lu_solve((lu, piv), B, trans=1)
+    return _fit(dict(lu=_h(lu), piv=_h(piv), x=_h(x), v=_h(v), s=_h(s), xt=_h(xt)))
 
 
 @lane("x-decomp-lstsq-rsvd")

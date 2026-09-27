@@ -13,7 +13,7 @@ sklearn FastICA whiten_solver='eigh' vs 'svd'	DELIBERATELY DIVERGENT	both take t
 sklearn FactorAnalysis svd_method='randomized'	DELIBERATELY DIVERGENT	the exact QR + one-sided Jacobi SVD runs for both values
 sklearn FactorAnalysis tol at float32	NOTE	the log-likelihood is accumulated in float64 on the host (IEEE adds, row 139); the SVD is float32, so the stopping iteration can differ from sklearn's float64 run by a few
 numpy.linalg.lstsq rcond semantics at float64	DELIBERATELY DIVERGENT	rcond=None means float32 eps * max(M, N)
-scipy.linalg.lu_solve trans=1/2	NOT YET IMPLEMENTED	getrs with U^T then L^T; refused by name
+scipy.linalg.lu_solve trans=1/2	IMPLEMENTED 2026-09-27	getrs 'T': U^T forward, unit L^T back, the swaps undone last to first, every fold ascending (DEVIATION 5308, arm 5308_getrs_order); lane x-decomp-lu
 sklearn randomized_svd power_iteration_normalizer='LU'/'none'	DELIBERATELY DIVERGENT	every power iteration re-orthonormalizes by MGS2 (DEVIATION 5309); the range is the same subspace
 sklearn randomized_svd svd_lapack_driver	DELIBERATELY DIVERGENT	the small SVD is the QR + one-sided Jacobi of decomposition/
 sklearn PLSCanonical algorithm='svd'	IMPLEMENTED	the SVD of the cross-covariance per component through k.svd; lane x-decomp-pls
