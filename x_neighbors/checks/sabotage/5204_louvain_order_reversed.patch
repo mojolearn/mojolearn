@@ -1,0 +1,14 @@
+diff --git a/x_neighbors/items.mojo b/x_neighbors/items.mojo
+index bc04f5c16..a961b0e1b 100644
+--- a/x_neighbors/items.mojo
++++ b/x_neighbors/items.mojo
+@@ -949,7 +949,8 @@ def louvain_item(
+         var moves = 1
+         while moves > 0:
+             moves = 0
+-            for u in range(nn):
++            for uu in range(nn):
++                var u = nn - 1 - uu
+                 var cu = Int(comm.unsafe_load(u))
+                 for c in range(nn):
+                     k2c.unsafe_store(c, Float32(0))

@@ -28,4 +28,35 @@ Pod setup that is not in the repo: the default pixi env needs
 | PageRank | 6b9167b6e | x-neighbors-pagerank | AGREE: compared infer 9, train 9 (cuda H100 vs CPU Xeon 8470); sanity PASS (networkx / scipy / closed-form GPflow bound) |
 | connected_components | fec9a491c | x-neighbors-connected-components | AGREE: compared train 9 (no out-of-sample method) (cuda H100 vs CPU Xeon 8470); sanity PASS (networkx / scipy / closed-form GPflow bound) |
 | Louvain | 325843987 | x-neighbors-louvain | AGREE: compared train 9 (no out-of-sample method) (cuda H100 vs CPU Xeon 8470); sanity PASS (networkx / scipy / closed-form GPflow bound) |
-| SVGP | (this commit) | x-neighbors-svgp | AGREE: compared batch 9, infer 9, train 9 (cuda H100 vs CPU Xeon 8470); sanity PASS (networkx / scipy / closed-form GPflow bound) |
+| SVGP | c6c2badf3 | x-neighbors-svgp | AGREE: compared batch 9, infer 9, train 9 (cuda H100 vs CPU Xeon 8470); sanity PASS (networkx / scipy / closed-form GPflow bound) |
+
+Pass-1 list DONE (14 of 14, main 8af392436).
+
+## Pass 2
+
+Proof (step 2), all fourteen algorithms, NVIDIA H100 pod:
+
+- Seams: DEVIATIONS 5200-5217 (5211 unused), IDENTITY_PATHS rows 120-129,
+  table in `x_neighbors/README.md`.
+- Host oracles `x_neighbors/checks/oracles.mojo` (restatements, plus the
+  unpinned spelling of each seam); six check drivers listed with their arms
+  in `tools/identity_lanes/neighbors.checks` (dist, fold, model, sketch,
+  semi, graph). Each proves its fixture SEPARATES first (VACUOUS otherwise),
+  then device == oracle and host == oracle bit for bit, and records its
+  stages on the card (IdentityTrace).
+- Per-seam sabotage arms, one patch of `x_neighbors/items.mojo` each, in
+  `x_neighbors/checks/sabotage/`: 5200, 5201, 5202, 5203, 5204, 5205, 5206,
+  5207, 5208, 5209, 5210, 5212, 5213, 5214, 5215, 5216, 5217.
+- End-to-end device-only sabotage for the lane check / steward:
+  `x_neighbors/checks/sabotage/e2e_device_only.patch` (a scalar of each
+  device kernel moved; the host untouched).
+- Lesson: a check driver must keep every List alive past the op that reads
+  its address (`_ = l^`); Mojo frees at the last use and taking an address
+  is not a use (the first dist_check read a freed buffer on the host arm).
+- NVIDIA H100 pod, 2026-09-27: `tools/algos_lane_check.sh <all 14> --pass 2`
+  seam arms 17/17 bite (each driver PASS, FAIL under its arm, PASS after
+  reversal); every lane AGREE. `--sabotage e2e_device_only.patch` (seams not
+  re-run): AGREE, DISAGREE on all 14 lanes, AGREE after reversal: PASS.
+- OWED: AMD column (RunPod MI300X out of stock and Hot Aisle full on
+  2026-09-27 16:xx; `up --vendor amd` retrying), M2 Pro steward, then option
+  parity and speed (CURRENT DIRECTIVES).
