@@ -3565,11 +3565,10 @@ def _(ml, X, yc, yr, Xh=None):
     tensor FeatureFreq column and the saved model carries a
     tensor_ctr_registry with feature_freq_tensor records. The held-out rows
     carry combinations seen once, never seen, and a code past the source's
-    cardinality. Both columns TRAIN (2026-09-27, lane trees): the CPU column
-    fits through the host FeatureFreq oracle and predicts the tensor CTR
-    through HostGBDT's expansion, so its model part is its own file."""
+    cardinality."""
     Xt = _tensor_ctr_x(X)
-    m = ml.ExperimentalTwoLevelFeatureFreq(sources=[0, 1], random_state=7).fit(Xt, _tensor_ctr_y(Xt))
+    m = _ctr_saved_or_fit(ml, lambda: ml.ExperimentalTwoLevelFeatureFreq(sources=[0, 1], random_state=7).fit(
+        Xt, _tensor_ctr_y(Xt)))
     return _fit(dict(predict=_h(m.predict(Xt))), m, lambda e: (e.predict(_tensor_ctr_xh(Xh)),))
 
 
