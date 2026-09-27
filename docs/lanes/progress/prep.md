@@ -25,7 +25,8 @@ Sanity tests need scikit-learn: on the pod it is in /root/skl
 | LinearDiscriminantAnalysis, QuadraticDiscriminantAnalysis | 6f33de672 | x-prep-lda,x-prep-qda | batch 9, infer 9, train 9; cuda H100 vs CPU |
 | QuantileTransformer | faf2a80e5 | x-prep-quantile-transformer | batch 9, infer 9, train 9; cuda H100 vs CPU |
 | PowerTransformer | 2df64e382 | x-prep-power-transformer | batch 9, infer 9, train 9; cuda H100 vs CPU |
-| Normalizer | (this commit) | x-prep-normalizer | batch 9, infer 9, train 9; cuda H100 vs CPU |
+| Normalizer | b27e52137 | x-prep-normalizer | batch 9, infer 9, train 9; cuda H100 vs CPU |
+| PolynomialFeatures | (this commit) | x-prep-polynomial-features | batch 9, infer 9, train 9; cuda H100 vs CPU |
 
 ## Next
 Main table DONE. Additions in order: QuantileTransformer, PowerTransformer,

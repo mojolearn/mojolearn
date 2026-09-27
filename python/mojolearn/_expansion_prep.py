@@ -35,7 +35,7 @@ from ._labels import flatten_labels, sorted_classes, label_kind
 __all__ = ["RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder", "SimpleImputer", "KBinsDiscretizer",
            "GaussianNB", "MultinomialNB", "BernoulliNB",
            "LinearDiscriminantAnalysis", "QuadraticDiscriminantAnalysis",
-           "QuantileTransformer", "PowerTransformer", "Normalizer"]
+           "QuantileTransformer", "PowerTransformer", "Normalizer", "PolynomialFeatures"]
 
 _BINDING = "_mojolearn_x_prep"
 
@@ -1404,3 +1404,58 @@ class Normalizer(_PrepBase):
         pr.stage("normalize", n, xo, n, d, {"l1": 0, "l2": 1, "max": 2}[self.norm], out)
         pr.run(self.numeric_mode_)
         return pr.get(out, (n, d))
+
+
+class PolynomialFeatures(_PrepBase):
+    """sklearn.preprocessing.PolynomialFeatures: the reference's column
+    order (the bias, then combinations with replacement, or without when
+    interaction_only, degree by degree); each output is the product of its
+    input columns left to right on the device. order='F' output is refused."""
+    _parameters = ("degree", "interaction_only", "include_bias", "order")
+
+    def __init__(self, degree=2, *, interaction_only=False, include_bias=True, order="C"):
+        self.degree = degree
+        self.interaction_only = interaction_only
+        self.include_bias = include_bias
+        self.order = order
+
+    def _combos(self, d):
+        from itertools import chain, combinations, combinations_with_replacement
+        if isinstance(self.degree, numbers.Integral):
+            lo, hi = 0, int(self.degree)
+        else:
+            lo, hi = (int(v) for v in self.degree)
+        if hi < 0 or lo < 0 or lo > hi:
+            raise ValueError(f"mojolearn: invalid degree {self.degree!r}")
+        comb = combinations if self.interaction_only else combinations_with_replacement
+        it = chain.from_iterable(comb(range(d), i) for i in range(max(1, lo), hi + 1))
+        if self.include_bias:
+            it = chain(comb(range(d), 0), it)
+        return [tuple(c) for c in it]
+
+    def fit(self, X, y=None):
+        if self.order != "C":
+            raise NotImplementedError("mojolearn: PolynomialFeatures(order='F') is not implemented")
+        d = _x2d(X).shape[1]
+        self._terms = self._combos(d)
+        self.n_features_in_, self.n_output_features_ = d, len(self._terms)
+        self.powers_ = Array.from_list([[t.count(j) for j in range(d)] for t in self._terms] or [[0] * d], "<i8")
+        self.numeric_mode_ = _mode()
+        return self
+
+    def transform(self, X):
+        self._check_fitted()
+        arr = _x2d(X)
+        self._check_width(arr)
+        n, d = arr.shape
+        idx, start = [], [0]
+        for t in self._terms:
+            idx.extend(t)
+            start.append(len(idx))
+        nout = len(self._terms)
+        pr = _Prog()
+        xo, io, so = pr.put(arr), pr.put_list(idx or [0]), pr.put_list(start)
+        out = pr.alloc(n * nout)
+        pr.stage("poly", n * nout, xo, n, d, io, so, nout, out)
+        pr.run(self.numeric_mode_)
+        return pr.get(out, (n, nout))

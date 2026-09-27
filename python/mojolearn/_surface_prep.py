@@ -30,6 +30,7 @@ FAMILIES = (
             "x-prep-lda", "x-prep-qda",
             "x-prep-quantile-transformer", "x-prep-power-transformer",
             "x-prep-normalizer",
+            "x-prep-polynomial-features",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -41,6 +42,7 @@ FAMILIES = (
             "LinearDiscriminantAnalysis", "QuadraticDiscriminantAnalysis",
             "QuantileTransformer", "PowerTransformer",
             "Normalizer",
+            "PolynomialFeatures",
         ),
         display="preprocessing additions, naive Bayes and discriminant analysis",
         host_modules=(
@@ -74,6 +76,7 @@ TRAINING_LANE_NAMES = {
     "x-prep-quantile-transformer": "QuantileTransformer",
     "x-prep-power-transformer": "PowerTransformer",
     "x-prep-normalizer": "Normalizer",
+    "x-prep-polynomial-features": "PolynomialFeatures",
 }
 PUBLIC_PENDING_LANES = {
     "x-prep-robust-scaler": "no reference",
@@ -91,4 +94,5 @@ PUBLIC_PENDING_LANES = {
     "x-prep-quantile-transformer": "no reference",
     "x-prep-power-transformer": "no reference",
     "x-prep-normalizer": "no reference",
+    "x-prep-polynomial-features": "no reference",
 }
