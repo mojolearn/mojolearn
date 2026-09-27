@@ -1,0 +1,13 @@
+diff --git a/sequence/ops.mojo b/sequence/ops.mojo
+index f2d5d61cf..1db86ea0c 100644
+--- a/sequence/ops.mojo
++++ b/sequence/ops.mojo
+@@ -511,7 +511,7 @@ def op_opt(t: Int, a: Args):
+         var v = fma3(b2, ld(a.p3, t), mul(mul(sub(Float32(1.0), b2), g), g))
+         st(a.p2, t, m)
+         st(a.p3, t, v)
+-        var denom = add(ftz(identical_div(ftz(identical_sqrt(v)), a.f6)), a.f3)
++        var denom = add(ftz(identical_sqrt(ftz(identical_div(v, mul(a.f6, a.f6))))), a.f3)
+         st(a.p0, t, fma3(-a.f5, ftz(identical_div(m, denom)), p))
+     elif kind == OPT_RMSPROP:
+         # torch.optim.RMSprop: v = alpha v + (1 - alpha) g^2; centered:

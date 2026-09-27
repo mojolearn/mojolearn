@@ -1,0 +1,13 @@
+diff --git a/tsa/impl/timeSeries/stationarity.mojo b/tsa/impl/timeSeries/stationarity.mojo
+index 87c66c379..e76116295 100644
+--- a/tsa/impl/timeSeries/stationarity.mojo
++++ b/tsa/impl/timeSeries/stationarity.mojo
+@@ -212,7 +212,7 @@ def s2B_accumulation_kernel(
+         var xk = ftz(data.unsafe_load(idx + k))
+         var dp = ftz(x0 * xk)
+         var coeff = ftz(identical_mul_add(coeff_a, Float32(k), coeff_b))
+-        acc = ftz(identical_mul_add(coeff, dp, acc))
++        acc = ftz(acc + ftz(coeff * dp))
+         k += 1
+     accumulator.unsafe_store(idx, acc)
+ 

@@ -1,0 +1,18 @@
+diff --git a/x_metrics/regression.mojo b/x_metrics/regression.mojo
+index 2da19fdba..285337d3b 100644
+--- a/x_metrics/regression.mojo
++++ b/x_metrics/regression.mojo
+@@ -163,7 +163,12 @@ def wpercentile_unit(t: Int, f: FP, q: IP):
+     for i in range(n):
+         var r = ldi(f, O + i)
+         var w = Float32(1) if W < 0 else ld(f, W + r)
+-        acc = fadd(acc, w)
++        var re = Float32(0)  # SABOTAGE 6107: each prefix refolded newest-first
++        var jj = i
++        while jj >= 0:
++            re = fadd(re, Float32(1) if W < 0 else ld(f, W + ldi(f, O + jj)))
++            jj -= 1
++        acc = re
+         st(f, C + i, acc)
+     var total = ld(f, C + n - 1)
+     if total == Float32(0):

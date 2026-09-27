@@ -95,6 +95,7 @@ from svm.impl.results import Results
 from svm.impl.smoblocksolve import SMO_WS_SIZE, smo_block_solve_kernel
 from svm.impl.fast_block_solve import smo_block_solve_ept_kernel
 from svm.impl.svm_parameter import (
+    check_c_rows,
     C_SVC,
     EPSILON_SVR,
     KERNEL_LINEAR,
@@ -511,6 +512,9 @@ struct SmoSolver(Movable):
     var scratch_pad: Int
     var scratch_poison: Float32
     var trace: SmoTrace
+    # `InitPenalty`'s weighted arm: one bound per ROW (the caller's C * w,
+    # rounded to float32 once on the host); empty = C at every index.
+    var c_rows: List[Float32]
 
     def __init__(
         out self,
@@ -524,6 +528,7 @@ struct SmoSolver(Movable):
         record_iterations: Bool = False,
         scratch_pad: Int = 0,
         scratch_poison: Float32 = 0.0,
+        c_rows: List[Float32] = List[Float32](),
     ) raises:
         """`SmoSolver(handle, param, kernel_type, kernel)` plus
         `Initialize`'s `ResizeBuffers` (theirs defers it to `Solve`;
@@ -577,6 +582,8 @@ struct SmoSolver(Movable):
         self.scratch_pad = scratch_pad
         self.scratch_poison = scratch_poison
         self.trace = SmoTrace()
+        check_c_rows(c_rows, n_rows)
+        self.c_rows = c_rows.copy()
         ctx.synchronize()
 
     def get_n_iter(self) -> Int:
@@ -646,10 +653,22 @@ struct SmoSolver(Movable):
             self.alpha.unsafe_ptr(), Float32(0.0), Int32(nt),
             grid_dim=_grid(nt), block_dim=SEL_TPB,
         )
-        ctx.enqueue_function[fill_f32_kernel](
-            self.C_vec.unsafe_ptr(), self.C, Int32(nt),
-            grid_dim=_grid(nt), block_dim=SEL_TPB,
-        )
+        if len(self.c_rows) == 0:
+            ctx.enqueue_function[fill_f32_kernel](
+                self.C_vec.unsafe_ptr(), self.C, Int32(nt),
+                grid_dim=_grid(nt), block_dim=SEL_TPB,
+            )
+        else:
+            # `InitPenalty` weighted arm: `C_vec[i] = C * sample_weight[i]`,
+            # the product formed once on the host (the caller's bounds), row
+            # i's bound at i and, under EPSILON_SVR, again at i + n_rows.
+            var host_c = ctx.enqueue_create_host_buffer[DType.float32](nt)
+            ctx.synchronize()
+            for i in range(nt):
+                host_c[i] = self.c_rows[i % self.n_rows]
+            ctx.enqueue_copy(dst_buf=self.C_vec, src_buf=host_c)
+            ctx.synchronize()
+            _ = host_c^
         if self.svmType == C_SVC:
             ctx.enqueue_function[svc_init_kernel](
                 self.f.unsafe_ptr(), y.unsafe_ptr(), Int32(nt),

@@ -1,0 +1,13 @@
+diff --git a/tsa/impl/timeSeries/stationarity.mojo b/tsa/impl/timeSeries/stationarity.mojo
+index 87c66c379..00785b8e4 100644
+--- a/tsa/impl/timeSeries/stationarity.mojo
++++ b/tsa/impl/timeSeries/stationarity.mojo
+@@ -159,7 +159,7 @@ def series_sum_kernel[
+     while t < n:
+         var x = ftz(data.unsafe_load(base + t))
+         comptime if square:
+-            acc = ftz(identical_mul_add(x, x, acc))
++            acc = ftz(acc + ftz(x * x))
+         else:
+             acc = ftz(acc + x)
+         t += STATS_TPB

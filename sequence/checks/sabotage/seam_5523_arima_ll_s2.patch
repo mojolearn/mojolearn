@@ -1,0 +1,13 @@
+diff --git a/arima/impl/batched_kalman.mojo b/arima/impl/batched_kalman.mojo
+index 4c087e351..b33f8849a 100644
+--- a/arima/impl/batched_kalman.mojo
++++ b/arima/impl/batched_kalman.mojo
+@@ -593,7 +593,7 @@ def batched_kalman_loop_kernel[
+             if _Fs > Float32(0.0):
+                 b_sum_logFs = ftz(b_sum_logFs + ftz(identical_log(_Fs)))
+                 var v2 = ftz(vs_it * vs_it)
+-                b_ll_s2 = ftz(b_ll_s2 + ftz(v2 / _Fs))
++                b_ll_s2 = ftz(b_ll_s2 + ftz(vs_it * ftz(vs_it / _Fs)))
+             n_obs_ll += 1
+ 
+         # 3. K = 1/Fs * T*P*Z'

@@ -26,6 +26,9 @@ def huber_objective(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: FP, toff: 
     var sq = Float32(0)
     var out_abs = Float32(0)
     var n_out = 0
+    var sw = ldi(ip, 2) != 0
+    var w_out = Float32(0)
+    var w_all = Float32(0)
     var thr = fm(eps, sigma)
     var two_over_sigma = fd(Float32(2), sigma)
     var two_eps = fm(Float32(2), eps)
@@ -33,7 +36,18 @@ def huber_objective(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: FP, toff: 
         var r = fs(fs(ld(y, i), row_dot(x, i, d, th, toff)), b)
         var ar = fabs(r)
         var coefv: Float32
-        if ar > thr:
+        if sw:
+            # their weighted form: each term times w_i, n becomes sum w
+            var wi = ld(y, n + i)
+            w_all = fa(w_all, wi)
+            if ar > thr:
+                w_out = fa(w_out, wi)
+                out_abs = fmad(wi, ar, out_abs)
+                coefv = fm(wi, -two_eps if r > 0 else two_eps)
+            else:
+                sq = fmad(fm(wi, r), r, sq)
+                coefv = fm(-two_over_sigma, fm(wi, r))
+        elif ar > thr:
             n_out += 1
             out_abs = fa(out_abs, ar)
             coefv = -two_eps if r > 0 else two_eps
@@ -51,14 +65,17 @@ def huber_objective(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, th: FP, toff: 
         st(g, goff + j, fmad(fm(Float32(2), alpha), w, ld(g, goff + j)))
     var squared_loss = fd(sq, sigma)
     var eps2 = fm(eps, eps)
-    var outlier_loss = fs(fm(two_eps, out_abs), fm(fm(sigma, i2f(n_out)), eps2))
-    var gsigma = fs(fs(i2f(n), fm(i2f(n_out), eps2)), fd(squared_loss, sigma))
+    var cnt_out = w_out if sw else i2f(n_out)
+    var cnt = w_all if sw else i2f(n)
+    var outlier_loss = fs(fm(two_eps, out_abs), fm(fm(sigma, cnt_out), eps2))
+    var gsigma = fs(fs(cnt, fm(cnt_out, eps2)), fd(squared_loss, sigma))
     st(g, goff + p - 1, fm(gsigma, sigma))
-    return fa(fa(fa(fm(i2f(n), sigma), squared_loss), outlier_loss), fm(alpha, wn))
+    return fa(fa(fa(fm(cnt, sigma), squared_loss), outlier_loss), fm(alpha, wn))
 
 
 def huber_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
-    """ip: [max_iter, fit_intercept]; fp: [epsilon, alpha, tol].
+    """ip: [max_iter, fit_intercept, sample_weight]; fp: [epsilon, alpha, tol].
+    With sample_weight, y = targets n | weights n (their weighted objective).
     res: coef d, intercept 1, scale 1, n_iter 1 | theta scratch (P).
     fw: lbfgs_work(P)."""
     var fi = ldi(ip, 1) != 0

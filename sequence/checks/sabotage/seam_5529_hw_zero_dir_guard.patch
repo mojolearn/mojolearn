@@ -1,0 +1,13 @@
+diff --git a/holtwinters/impl/internal/hw_utils.mojo b/holtwinters/impl/internal/hw_utils.mojo
+index ef27b542b..5d753a65c 100644
+--- a/holtwinters/impl/internal/hw_utils.mojo
++++ b/holtwinters/impl/internal/hw_utils.mojo
+@@ -72,7 +72,7 @@ comptime SAB_STD_SQRT = is_defined["MOJOLEARN_HW_SABOTAGE_STD_SQRT"]()
+ comptime SAB_NO_FTZ = is_defined["MOJOLEARN_HW_SABOTAGE_NO_FTZ"]()
+ #: DEVIATION 662 off: a zero search direction takes their `0.866 / sqrt(0)`
+ #: step. MUST FAIL the zero-series gate (NaN params, canonicalized).
+-comptime SAB_NO_ZERO_DIR_GUARD = is_defined["MOJOLEARN_HW_SABOTAGE_NO_ZERO_DIR_GUARD"]()
++comptime SAB_NO_ZERO_DIR_GUARD = True
+ #: DEVIATION 663 off, arm 1: `bound_device` as `min(max(0.0, v), 1.0)`
+ #: (hardware max, zero FIRST -- the orientation IDENTITY_PATHS row 39 warns
+ #: about). MEASURED 2026-08-23: NULL ON APPLE. Row 39's `max(+0.0, -0.0) =

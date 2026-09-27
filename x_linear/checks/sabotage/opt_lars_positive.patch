@@ -1,0 +1,19 @@
+--- a/x_linear/lars.mojo
++++ b/x_linear/lars.mojo
+@@ -19,6 +19,7 @@
+     (theirs: the lowest position in their permuted Cov array);
+   * float32 throughout; equality tolerance float32 eps, tiny32 as theirs.
+ """
++from std.sys.info import is_gpu
+ from x_linear.ops import (
+     FP, IP, fa, fs, fm, fd, fmad, fsqrt, fabs, fmin, fsign, ld, st, ldi, sti, i2f,
+     fill, copy, cholesky, chol_solve, centered_gram,
+@@ -38,7 +39,7 @@
+     var fi = ldi(ip, 1) != 0
+     var lasso = ldi(ip, 2) != 0
+     var alpha_min = ld(fp, 0)
+-    var positive = ldi(ip, 3) != 0
++    var positive = ldi(ip, 3) != 0 and not is_gpu()  # SABOTAGE option positive: the device ignores it
+     var xm = 0
+     var gg = d
+     var xty = gg + d * d

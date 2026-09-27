@@ -1044,11 +1044,10 @@ def rbf_sampler_fit_host(
     So this signature takes `n_features` rather than `X`, which makes the
     fact visible instead of implied.
 
-    **`gamma="scale"` IS NOT IMPLEMENTED** and there is nothing to implement it into:
-    it is a host reduction over the training data (`X.var()`), it would make
-    `fit` data-dependent, and it would put a variance -- a fold -- on the
-    identity path in front of every draw. `NOT_IMPLEMENTED.tsv` carries the row; a
-    caller computes its own gamma and passes it.
+    **`gamma="scale"` is resolved by the Python door, not here**: the EXACT
+    variance of the float32 cells, the reciprocal rounded once
+    (`python/mojolearn/_scale_gamma.py`), so no fold order
+    sits in front of the draws and this entry still takes a gamma, not X.
 
     `n_components` is refused non-positive by name (DEVIATION 1686);
     scikit-learn's own constraint is `Interval(Integral, 1, None,

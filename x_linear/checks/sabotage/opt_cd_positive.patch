@@ -1,0 +1,19 @@
+--- a/x_linear/cd.mojo
++++ b/x_linear/cd.mojo
+@@ -23,6 +23,7 @@
+ skips coordinates), and the refit uses the Gram form (theirs sets
+ precompute=False for the refit; the same minimizer). float32 throughout.
+ """
++from std.sys.info import is_gpu
+ from x_linear.ops import (
+     FP, IP, fa, fs, fm, fd, fmad, fabs, fmax, fexp, flog, fsign, ld, st, ldi, i2f, fill, copy,
+ )
+@@ -171,7 +172,7 @@
+     var f_n = ldi(ip, 3)
+     var l_n = ldi(ip, 4)
+     var explicit = ldi(ip, 5) != 0
+-    var positive = ldi(ip, 6) != 0
++    var positive = ldi(ip, 6) != 0 and not is_gpu()  # SABOTAGE option positive: the device ignores it
+     var eps = ld(fp, 0)
+     var tol = ld(fp, 1)
+     var fid = y + n

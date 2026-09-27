@@ -53,6 +53,34 @@ def _intercept(d: Int, fw: FP, xm: Int, ym: Float32, coef: FP, coff: Int) -> Flo
     return fs(ym, acc)
 
 
+def _wmean_center(x: FP, y: FP, n: Int, d: Int, fi: Bool, fw: FP, xm: Int, wsum: Float32) -> Float32:
+    """Weighted means (their _preprocess_data with sample_weight); w at y + n."""
+    if not fi:
+        fill(fw, xm, d, Float32(0))
+        return Float32(0)
+    for j in range(d):
+        var acc = Float32(0)
+        for i in range(n):
+            acc = fmad(ld(y, n + i), ld(x, i * d + j), acc)
+        st(fw, xm + j, fd(acc, wsum))
+    var acc = Float32(0)
+    for i in range(n):
+        acc = fmad(ld(y, n + i), ld(y, i), acc)
+    return fd(acc, wsum)
+
+
+def _wsse(x: FP, y: FP, n: Int, d: Int, fw: FP, xm: Int, ym: Float32, coef: FP, coff: Int) -> Float32:
+    """sum_i w_i r_i^2: their sse on the sqrt(w)-rescaled data."""
+    var acc = Float32(0)
+    for i in range(n):
+        var p = Float32(0)
+        for j in range(d):
+            p = fmad(fs(ld(x, i * d + j), ld(fw, xm + j)), ld(coef, coff + j), p)
+        var r = fs(fs(ld(y, i), ym), p)
+        acc = fmad(fm(ld(y, n + i), r), r, acc)
+    return acc
+
+
 def _var(y: FP, n: Int) -> Float32:
     var m = mean_of(y, n)
     var acc = Float32(0)
@@ -63,8 +91,11 @@ def _var(y: FP, n: Int) -> Float32:
 
 
 def bayes_ridge_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw: IP):
-    """ip: [max_iter, fit_intercept]; fp: [tol, alpha_1, alpha_2, lambda_1,
+    """ip: [max_iter, fit_intercept, sample_weight]; fp: [tol, alpha_1, alpha_2, lambda_1,
     lambda_2, alpha_init (<0: none), lambda_init (<0: none)].
+    With sample_weight, y = targets n | weights n: weighted centering, the
+    sqrt(w)-rescaled Gram, X'y and sse, the weighted variance and sum(w) in
+    the alpha update (theirs, sw_sum).
     res: coef d, intercept, alpha_, lambda_, n_iter.
     fw: xm d | G d*d | xty d | V d*d | vty d | old d | tmp d."""
     var max_iter = ldi(ip, 0)
@@ -81,15 +112,34 @@ def bayes_ridge_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: F
     var vty = vv + d * d
     var old = vty + d
     var tmp = old + d
-    var ym = _center(x, y, n, d, fi, fw, xm, iw)
-    centered_gram(x, n, d, fw, xm, fw, gg)
+    var sw = ldi(ip, 2) != 0
+    var wsum = i2f(n)
+    var ym: Float32
+    if sw:
+        wsum = Float32(0)
+        for i in range(n):
+            wsum = fa(wsum, ld(y, n + i))
+        ym = _wmean_center(x, y, n, d, fi, fw, xm, wsum)
+        for j in range(d):
+            for k in range(j, d):
+                var acc = Float32(0)
+                for i in range(n):
+                    acc = fmad(fm(ld(y, n + i), fs(ld(x, i * d + j), ld(fw, xm + j))), fs(ld(x, i * d + k), ld(fw, xm + k)), acc)
+                st(fw, gg + j * d + k, acc)
+                st(fw, gg + k * d + j, acc)
+    else:
+        ym = _center(x, y, n, d, fi, fw, xm, iw)
+        centered_gram(x, n, d, fw, xm, fw, gg)
     var yc = ym
     # X'y on centered data
     for j in range(d):
         var acc = Float32(0)
         var mj = ld(fw, xm + j)
         for i in range(n):
-            acc = fmad(fs(ld(x, i * d + j), mj), fs(ld(y, i), yc), acc)
+            var xc = fs(ld(x, i * d + j), mj)
+            if sw:
+                xc = fm(ld(y, n + i), xc)
+            acc = fmad(xc, fs(ld(y, i), yc), acc)
         st(fw, xty + j, acc)
     jacobi_eig(fw, gg, fw, vv, d, 60)
     for j in range(d):
@@ -101,7 +151,19 @@ def bayes_ridge_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: F
         st(fw, vty + j, acc)
     var alpha = ld(fp, 5)
     if alpha < 0:
-        alpha = fd(Float32(1), fa(_var(y, n), Float32(1.1920929e-07)))
+        var yvar = _var(y, n)
+        if sw:
+            # np.average((y - y_mean) ** 2, weights=sample_weight)
+            var m = Float32(0)
+            for i in range(n):
+                m = fmad(ld(y, n + i), ld(y, i), m)
+            m = fd(m, wsum)
+            var acc = Float32(0)
+            for i in range(n):
+                var r = fs(ld(y, i), m)
+                acc = fmad(fm(ld(y, n + i), r), r, acc)
+            yvar = fd(acc, wsum)
+        alpha = fd(Float32(1), fa(yvar, Float32(1.1920929e-07)))
     var lam = ld(fp, 6)
     if lam < 0:
         lam = Float32(1)
@@ -117,7 +179,7 @@ def bayes_ridge_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: F
         if it == max_iter:
             break  # the last update after the loop
         iters = it + 1
-        var sse = _sse(x, y, n, d, fw, xm, ym, res, 0)
+        var sse = _wsse(x, y, n, d, fw, xm, ym, res, 0) if sw else _sse(x, y, n, d, fw, xm, ym, res, 0)
         var gamma = Float32(0)
         for k in range(d):
             var aev = fm(alpha, ld(fw, tmp + k))
@@ -126,7 +188,7 @@ def bayes_ridge_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: F
         for j in range(d):
             wn = fmad(ld(res, j), ld(res, j), wn)
         lam = fd(fa(gamma, fm(Float32(2), l1)), fa(wn, fm(Float32(2), l2)))
-        alpha = fd(fa(fs(i2f(n), gamma), fm(Float32(2), a1)), fa(sse, fm(Float32(2), a2)))
+        alpha = fd(fa(fs(wsum, gamma), fm(Float32(2), a1)), fa(sse, fm(Float32(2), a2)))
         if it != 0:
             var delta = Float32(0)
             for j in range(d):

@@ -10,19 +10,19 @@ Pattern as dist_check.mojo: separation first, then device == oracle and
 host == oracle bit for bit under IDENTICAL, each stage on the card."""
 from core.identity_trace import IdentityTrace
 from x_neighbors.checks.oracles import (
-    o_matmul, o_rowsum, o_colsum, o_group_mean, o_variance, o_row_normalize, o_softmax, o_sqdist, o_knn_select,
+    o_matmul, o_rowsum, o_colsum, o_group_mean, o_variance, o_row_normalize, o_softmax, o_log_softmax, o_sqdist, o_knn_select,
     o_lof_lrd, o_lof_score,
 )
 from x_neighbors.checks.seam_util import (
     seam_fixture, fa, ia, zf, zi, count_diff_f32, count_diff_i32, require_separates, same,
 )
 from x_neighbors.device_ops import (
-    op_matmul, op_rowsum, op_colsum, op_group_mean, op_variance, op_row_normalize, op_softmax, op_lof_lrd,
+    op_matmul, op_rowsum, op_colsum, op_group_mean, op_variance, op_row_normalize, op_softmax, op_log_softmax, op_lof_lrd,
     op_lof_score,
 )
 from x_neighbors.host_ops import (
     op_matmul as h_matmul, op_rowsum as h_rowsum, op_colsum as h_colsum, op_group_mean as h_group_mean,
-    op_variance as h_variance, op_row_normalize as h_row_normalize, op_softmax as h_softmax,
+    op_variance as h_variance, op_row_normalize as h_row_normalize, op_softmax as h_softmax, op_log_softmax as h_log_softmax,
     op_lof_lrd as h_lof_lrd, op_lof_score as h_lof_score,
 )
 
@@ -122,6 +122,19 @@ def main() raises:
     h_softmax(fa(sm), fa(hs), n, k)
     same("5209 softmax host", count_diff_f32(hs, ws))
     tr.record_list_f32("x_neighbors.softmax", ds)
+    var lsm = a.copy()
+    for i in range(len(lsm)):
+        lsm[i] = lsm[i] * Float32(0.37)
+    var wls = o_log_softmax(lsm, n, k)
+    require_separates("5209 log_softmax sum fold", count_diff_f32(wls, o_log_softmax(lsm, n, k, 1)))
+    var dls = zf(n * k)
+    op_log_softmax(fa(lsm), fa(dls), n, k)
+    same("5209 log_softmax device", count_diff_f32(dls, wls))
+    var hls = zf(n * k)
+    h_log_softmax(fa(lsm), fa(hls), n, k)
+    same("5209 log_softmax host", count_diff_f32(hls, wls))
+    tr.record_list_f32("x_neighbors.log_softmax", dls)
+    _ = lsm^
 
     # ---- 5210: LOF on a neighbor table from the oracle's selection
     var nn = 48

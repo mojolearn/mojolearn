@@ -1,0 +1,13 @@
+diff --git a/sequence/moe.mojo b/sequence/moe.mojo
+index 07d664fa2..a1e489f59 100644
+--- a/sequence/moe.mojo
++++ b/sequence/moe.mojo
+@@ -56,7 +56,7 @@ def op_moe_route(t: Int, a: Args):
+             if taken:
+                 continue
+             var v = ld(a.p5, t * E + e)
+-            if best < 0 or v > bv:
++            if best < 0 or v >= bv:
+                 best = e
+                 bv = v
+         a.p3.unsafe_store(t * k + j, Float32(best))

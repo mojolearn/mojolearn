@@ -48,15 +48,29 @@ def main() raises:
     var dang = zi(n)
     dang[3] = 1
     dang[9] = 1
-    var w = o_pagerank_step(q, x, p, dang, n, Float32(0.85))
-    require_separates("5216 pagerank x@Q fold", count_diff_f32(w, o_pagerank_step(q, x, p, dang, n, Float32(0.85), 1)))
+    var w = o_pagerank_step(q, x, p, p, dang, n, Float32(0.85))
+    require_separates("5216 pagerank x@Q fold", count_diff_f32(w, o_pagerank_step(q, x, p, p, dang, n, Float32(0.85), 1)))
     var dv = zf(n)
-    op_pagerank_step(fa(q), fa(x), fa(p), ia(dang), fa(dv), n, Float32(0.85))
+    op_pagerank_step(fa(q), fa(x), fa(p), fa(p), ia(dang), fa(dv), n, Float32(0.85))
     same("5216 pagerank_step device", count_diff_f32(dv, w))
     var hv = zf(n)
-    h_pagerank_step(fa(q), fa(x), fa(p), ia(dang), fa(hv), n, Float32(0.85))
+    h_pagerank_step(fa(q), fa(x), fa(p), fa(p), ia(dang), fa(hv), n, Float32(0.85))
     same("5216 pagerank_step host", count_diff_f32(hv, w))
     tr.record_list_f32("x_neighbors.pagerank", dv)
+    # networkx's `dangling` weights, apart from the personalization
+    var dwt = zf(n)
+    for i in range(n):
+        dwt[i] = Float32(1 + (i * 7) % 5) / Float32(3 * n)
+    var wpd = o_pagerank_step(q, x, p, dwt, dang, n, Float32(0.85))
+    require_separates("5216 pagerank dangling weights", count_diff_f32(wpd, o_pagerank_step(q, x, p, dwt, dang, n, Float32(0.85), 2)))
+    var ddw = zf(n)
+    op_pagerank_step(fa(q), fa(x), fa(p), fa(dwt), ia(dang), fa(ddw), n, Float32(0.85))
+    same("5216 pagerank dangling device", count_diff_f32(ddw, wpd))
+    var hdw = zf(n)
+    h_pagerank_step(fa(q), fa(x), fa(p), fa(dwt), ia(dang), fa(hdw), n, Float32(0.85))
+    same("5216 pagerank dangling host", count_diff_f32(hdw, wpd))
+    tr.record_list_f32("x_neighbors.pagerank_dangling", ddw)
+    _ = dwt^
 
     var g = _graph(n, 43)
     var lab = zi(n)

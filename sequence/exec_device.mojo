@@ -2,14 +2,41 @@
 # Copyright 2026 Andrew Hendel. Part of mojolearn, https://doi.org/10.5281/zenodo.22068632
 """`DeviceExec`: the lane's operations on the GPU, one thread per element,
 over `sequence/ops.mojo::apply`, the body `HostExec` loops over on the CPU."""
+from std.ffi import _Global
 from std.gpu import block_dim, block_idx, thread_idx
 from max.gpu.host import DeviceBuffer, DeviceContext
+
+from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 
 from sequence.exec import Exec
 from sequence.dispatch import apply
 from sequence.ops import FP, Args
 
 comptime TPB = 128
+
+
+struct _SeqContext(Defaultable, Movable):
+    """ONE process-lifetime DeviceContext for every `DeviceExec`. A context
+    per binding call exhausts Metal's per-process command queues within one
+    fit (memory: METAL QUEUE LIMIT IS PER-PROCESS; the cnn lane's M2 Pro
+    finding). Storage is `std.ffi._Global`, one slot per numeric tier so a
+    FAST and an IDENTICAL .so in one process never share it."""
+    var ctx: Optional[DeviceContext]
+
+    def __init__(out self):
+        self.ctx = Optional[DeviceContext]()
+
+
+comptime _CTX_NAME = "MojoXSequenceContextIdentical" if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL else "MojoXSequenceContextFast"
+comptime X_SEQUENCE_CONTEXT = _Global[StorageType=_SeqContext, name=_CTX_NAME, init_fn=_SeqContext.__init__]
+
+
+def sequence_ctx() raises -> DeviceContext:
+    """The shared context, created on first use."""
+    var slot = X_SEQUENCE_CONTEXT.get_or_create_ptr()
+    if not slot[].ctx:
+        slot[].ctx = DeviceContext()
+    return slot[].ctx.value().copy()
 
 
 def seq_kernel[OP: Int](
@@ -37,7 +64,7 @@ struct DeviceExec(Exec):
     var size: List[Int]
 
     def __init__(out self) raises:
-        self.ctx = DeviceContext()
+        self.ctx = sequence_ctx()
         self.bufs = List[DeviceBuffer[DType.float32]]()
         self.base = List[Int]()
         self.size = List[Int]()
@@ -51,6 +78,14 @@ struct DeviceExec(Exec):
         self.size.append(count)
         self.bufs.append(buf^)
         return p
+
+    def __deinit__(deinit self):
+        # The context outlives this Exec: drain its queue before the buffers
+        # go, so no queued kernel reads a freed buffer.
+        try:
+            self.ctx.synchronize()
+        except:
+            pass
 
     def _find(self, p: FP, n: Int) raises -> Tuple[Int, Int]:
         var addr = Int(p)
