@@ -291,3 +291,25 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("score_samples", "predict", sl=np.s_[:256, 1:5]), "x-cluster-gmm-options")
+
+
+@lane("x-cluster-dbscan-metrics")
+def _(ml, X, yc, yr, Xh=None):
+    """DBSCAN option parity (dbscan/NOT_IMPLEMENTED.tsv): metric='cosine'
+    (DEVIATION 5113: unit rows scaled on the host, the L2 kernel against
+    2 * eps) with predict, and metric='precomputed' (DEVIATION 5114) on an
+    exact integer L1 distance matrix, so pairs sit exactly at eps and the
+    `<=` is reached. Rows are shifted off the origin for cosine (a zero row
+    is refused by name)."""
+    shift = np.float32(3.0)
+    Z = np.ascontiguousarray(np.clip(X[:3000, :4], -50, 50) + shift, dtype=np.float32)
+    m = ml.DBSCAN(eps=0.002, min_samples=5, metric="cosine", algorithm="brute",
+                  prediction_data=True).fit(Z)
+    parts = dict(cos_labels=_h(m.labels_), cos_core=_h(m.core_sample_indices_))
+    Q = np.floor(np.clip(X[:1500, :3], -50, 50) * 2).astype(np.float64)
+    D = (np.abs(Q[:, None, 0] - Q[None, :, 0]) + np.abs(Q[:, None, 1] - Q[None, :, 1])
+         + np.abs(Q[:, None, 2] - Q[None, :, 2])).astype(np.float32)
+    p = ml.DBSCAN(eps=2.0, min_samples=6, metric="precomputed").fit(np.ascontiguousarray(D))
+    parts["pre_labels"] = _h(p.labels_)
+    Zh = np.ascontiguousarray(np.clip(Xh[:256, :4], -50, 50) + shift, dtype=np.float32)
+    return _fit(parts, m, lambda e: (e.predict(Zh),))
