@@ -4005,9 +4005,10 @@ def _(ml, X, yc, yr, Xh=None):
 
     def planted(lane):
         ps, gs = _optim_tensors(lane)
-        for k in range(len(ps)):
-            ps[k].reshape(-1)[0] = np.float32(-0.0)
-            for g in gs:
+        for p in ps:
+            p.reshape(-1)[0] = np.float32(-0.0)
+        for step in gs:                  # gs is one list of tensors per step
+            for g in step:
                 g.reshape(-1)[0] = np.float32(0.0)
                 g.reshape(-1)[1] = np.float32(-0.0)
         return ps, gs
