@@ -30,3 +30,62 @@ def test_variance_threshold():
 if __name__ == "__main__":
     test_variance_threshold()
     print("PASS test_x_prep_selection")
+
+
+def test_scores_and_kbest():
+    rng = np.random.default_rng(3)
+    n, d = 400, 7
+    y = rng.integers(0, 3, n)
+    X = (rng.standard_normal((n, d)) + y[:, None] * np.linspace(0, 0.6, d)).astype(np.float32)
+    yr = (X[:, 3] * 0.4 + rng.standard_normal(n)).astype(np.float32)
+    for mine, ref, Xa, ya in ((ml.f_classif, skfs.f_classif, X, y), (ml.chi2, skfs.chi2, np.abs(X), y),
+                              (ml.f_regression, skfs.f_regression, X, yr)):
+        s, p = mine(Xa, ya)
+        rs, rp = ref(Xa.astype(np.float64), ya)
+        np.testing.assert_allclose(np.asarray(s), rs, rtol=2e-3, atol=1e-4)
+        ok = rp > 1e-6
+        np.testing.assert_allclose(np.asarray(p)[ok], rp[ok], rtol=2e-2, atol=1e-6)
+    m = ml.SelectKBest(k=3).fit(X, y)
+    r = skfs.SelectKBest(k=3).fit(X, y)
+    assert list(m.get_support()) == list(r.get_support())
+
+
+if __name__ == "__main__":
+    test_scores_and_kbest()
+    print("PASS test_x_prep_selection (kbest)")
+
+
+def test_mutual_info():
+    rng = np.random.default_rng(5)
+    n, d = 500, 4
+    y = rng.integers(0, 3, n)
+    X = (rng.standard_normal((n, d)) + y[:, None] * np.array([0.0, 0.3, 1.0, 2.0])).astype(np.float32)
+    yr = (X[:, 2] + 0.5 * rng.standard_normal(n)).astype(np.float32)
+    a = np.asarray(ml.mutual_info_classif(X, y, random_state=0))
+    b = skfs.mutual_info_classif(X, y, random_state=0)
+    np.testing.assert_allclose(a, b, atol=3e-3)
+    a = np.asarray(ml.mutual_info_regression(X, yr, random_state=0))
+    b = skfs.mutual_info_regression(X, yr, random_state=0)
+    np.testing.assert_allclose(a, b, atol=3e-3)
+
+
+if __name__ == "__main__":
+    test_mutual_info()
+    print("PASS test_x_prep_selection (mutual info)")
+
+
+def test_rfe():
+    from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as SkLDA
+    rng = np.random.default_rng(7)
+    n, d = 400, 8
+    y = rng.integers(0, 3, n)
+    X = (rng.standard_normal((n, d)) + y[:, None] * np.linspace(0, 1.4, d)).astype(np.float32)
+    m = ml.RFE(ml.LinearDiscriminantAnalysis(), n_features_to_select=3, step=2).fit(X, y)
+    r = skfs.RFE(SkLDA(), n_features_to_select=3, step=2).fit(X.astype(np.float64), y)
+    np.testing.assert_array_equal(np.asarray(m.ranking_), r.ranking_)
+    assert np.mean(np.asarray(m.predict(X)) == r.predict(X.astype(np.float64))) > 0.99
+
+
+if __name__ == "__main__":
+    test_rfe()
+    print("PASS test_x_prep_selection (rfe)")
