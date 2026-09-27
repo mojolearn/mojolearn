@@ -242,7 +242,13 @@ def test_ocsvm_sample_weight_and_precomputed():
     b = R(nu=0.3).fit(X, sample_weight=w)
     Xh = _data(40, seed=3)
     np.testing.assert_allclose(np.asarray(a.decision_function(Xh)), b.decision_function(Xh), rtol=2e-3, atol=2e-3)
-    assert set(np.asarray(a.support_).tolist()) == set(b.support_.tolist())
+    # scikit-learn's support_ indexes the rows left after libsvm drops the
+    # zero-weight samples; ours indexes the caller's rows (the docstring), so
+    # map ours down before comparing, and compare the vectors themselves.
+    kept = np.flatnonzero(w > 0)
+    ours = np.asarray(a.support_)
+    assert np.array_equal(np.searchsorted(kept, ours), b.support_)
+    assert np.array_equal(np.asarray(a.support_vectors_), b.support_vectors_.astype(np.float32))
     K = np.asarray(ml.OneClassSVM()._kernel(X, X, "rbf", 0.1, 0.0, 0))
     Kh = np.asarray(ml.OneClassSVM()._kernel(Xh, X, "rbf", 0.1, 0.0, 0))
     p = ml.OneClassSVM(kernel="precomputed", nu=0.3).fit(K)

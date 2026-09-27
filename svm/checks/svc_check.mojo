@@ -979,8 +979,11 @@ def check_block_solve_signed_zero_tie(ctx: DeviceContext) raises:
         var o_da = List[Float32]()
         for _ in range(8):
             o_da.append(Float32(0.0))
+        var o_c = List[Float32]()
+        for _ in range(len(zf.f)):
+            o_c.append(Float32(1.0))
         var o = _block_solve[DType.float32](
-            zf.ws_idx, 8, zf.y, o_alpha, zf.f, zf.tile, Float32(1.0), Float32(1.0e-3),
+            zf.ws_idx, 8, zf.y, o_alpha, zf.f, zf.tile, o_c, Float32(1.0e-3),
             10000, o_da,
         )
         var o_diff = o[0]

@@ -1533,12 +1533,13 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
     REMEASURED 2026-09-27 (lane/algos-neighbors, found red on main):
       forest_host_predict  80 -> 81  trees-dt-random (00d0138d5), one tree
                                      through the ExtraTrees classes whose
-                                     predict routes here; no old lane moved"""
+                                     predict routes here; no old lane moved
+      forest_inference     46 -> 47  the same lane, through the rf binding"""
     rev = lane_select.reverse_map()
     for rel, want in (("cluster/host/kmeans_oracle.mojo", 63),
                       ("core/gbdt_host_predict.mojo", 49),
                       ("core/forest_host_predict.mojo", 81),
-                      ("core/forest_inference.mojo", 46),
+                      ("core/forest_inference.mojo", 47),
                       ("python/mojolearn/neural_inference.py", 41)):
         got = len(rev.get(rel, set()))
         assert got == want, f"{rel} answers {got} lanes, not {want}"
