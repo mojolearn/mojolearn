@@ -191,12 +191,16 @@ def build(binding, log):
     import binding_stamps
     script, so = script_for(binding), output_for(binding)
     env = dict(os.environ, MOJOLEARN_NUMERIC_MODE="identical")
-    if script == "build_byte_lm.sh" and sys.platform != "darwin" and not env.get("MOJOLEARN_GPU_ARCHS"):
+    if binding.endswith("_host"):
+        # build_host_family.sh refuses any GPU arch: a CPU build takes none.
+        env.pop("MOJOLEARN_GPU_ARCHS", None)
+    elif script == "build_byte_lm.sh" and sys.platform != "darwin" and not env.get("MOJOLEARN_GPU_ARCHS"):
         arch = gpu_arch()        # the script refuses a Linux build without one named target
-        if arch:
-            env["MOJOLEARN_GPU_ARCHS"] = arch
-    if binding.endswith("_host") and so.exists():
-        so.unlink()                      # build_host_family.sh never overwrites an output
+        if not arch:
+            raise Fail("bindings/build_byte_lm.sh needs MOJOLEARN_GPU_ARCHS and this box reports no GPU arch")
+        env["MOJOLEARN_GPU_ARCHS"] = arch
+    if (binding.endswith("_host") or script == "build_byte_lm.sh") and so.exists():
+        so.unlink()                      # these scripts never overwrite an output
     say(f"build {binding} (bindings/{script})")
     started = time.time()
     with open(log, "a") as fh:

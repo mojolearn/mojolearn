@@ -49,7 +49,8 @@ from std.math import sqrt
 from std.bit import count_trailing_zeros
 from std.memory import stack_allocation
 from std.sys.compile import is_defined
-from std.sys.info import _accelerator_arch, has_apple_gpu_accelerator
+from std.sys.info import has_apple_gpu_accelerator
+from core.apple_air import simdgroup_load_legacy_air
 from max.gpu.host import DeviceBuffer, DeviceContext
 from max.gpu.memory import AddressSpace
 from max.gpu.sync import barrier
@@ -104,8 +105,7 @@ def _sg_load_t(
     <2 x i64> <stride, 8>, <2 x i64> element strides, <2 x i64> origin)`.
     The wrong one crashes Metal's backend compiler at pipeline creation
     (XPC_ERROR_CONNECTION_INTERRUPTED), measured on the M4 2026-09-25."""
-    comptime arch = _accelerator_arch()
-    comptime if "metal:1" in arch or "metal:2" in arch or "metal:3" in arch:
+    comptime if simdgroup_load_legacy_air():
         return external_call["air.simdgroup_matrix_8x8_load.v64f32.p3f32", _M64](
             p, Int64(stride), _V2(0, 0), True
         )
