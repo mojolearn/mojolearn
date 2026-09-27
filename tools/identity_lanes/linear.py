@@ -225,3 +225,12 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("decision_function", sl=slice(0, 256)), "x-logistic-cv")
+
+
+@lane("x-isotonic")
+def _(ml, X, yc, yr, Xh=None):
+    # column 3 carries ties on the `ties` fixture; the held-out queries fall
+    # partly outside the fitted range, so the out-of-bounds NaN word is hashed
+    m = ml.IsotonicRegression(y_min=-2.0).fit(X[:3000, 3], yr[:3000])
+    return _fit(dict(xt=_h(m.X_thresholds_), yt=_h(m.y_thresholds_), predict=_h(m.predict(X[:256, 3]))),
+                m, lambda e: (e.predict(Xh[:256, 3] * np.float32(1.5)),))
