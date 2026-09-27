@@ -1,0 +1,18 @@
+# the sequence lane's seam check and one sabotage patch per seam (pass 2; DEVIATIONS 5500-5516; docs/lanes/progress/sequence.md)
+sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5500_gemm_k_order.patch
+sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5501_colsum_order.patch
+sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5502_lstm_cell.patch
+sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5503_gru_update.patch
+sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5504_bptt_fold.patch
+sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5505_ce_expsum.patch
+sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5506_adam_denom.patch
+sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5507_torch_lerp.patch
+sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5508_logloss_clip.patch
+sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5509_shuffle.patch
+sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5510_stl_rwts.patch
+sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5511_var_pow2_scale.patch
+sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5512_var_cholesky.patch
+sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5513_nm_tie_order.patch
+sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5514_moe_route_tie.patch
+sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5515_layernorm_stats.patch
+sequence/checks/seams_check.mojo	sequence/checks/sabotage/seam_5516_ses_recursion.patch
