@@ -32,7 +32,8 @@ __all__ = ["SGDClassifier", "SGDRegressor", "PoissonRegressor", "GammaRegressor"
            "QuantileRegressor",
            "Perceptron", "PassiveAggressiveClassifier",
            "PassiveAggressiveRegressor", "SGDOneClassSVM",
-           "RidgeClassifier", "RidgeCV"]
+           "RidgeClassifier", "RidgeCV",
+           "LassoCV"]
 
 _BINDING = "_mojolearn_x_linear"
 ALGO_SGD, ALGO_GLM, ALGO_HUBER, ALGO_BAYES, ALGO_ARD = 1, 2, 3, 4, 5
@@ -847,4 +848,91 @@ class RidgeCV(_LinearRegressorMixin, NumericModeMixin):
         if self.store_cv_results:
             self.cv_results_ = Array.from_list(vals[d + 3:d + 3 + len(alphas)], "<f4")
         self.n_features_in_ = d
+        return self
+
+
+# ------------------------------------------------------ LassoCV / ElasticNetCV
+# Reference: scikit-learn sklearn/linear_model/_coordinate_descent.py
+# (LinearModelCV.fit, _alpha_grid, _path_residuals) and _cd_fast.pyx
+# (enet_coordinate_descent_gram); kernel x_linear/cd.mojo.
+
+def _kfold_ids(n, k):
+    """scikit-learn's KFold(n_splits=k, shuffle=False): contiguous folds,
+    the first n % k of them one row longer."""
+    if not isinstance(k, int) or isinstance(k, bool) or k < 2 or k > n:
+        raise ValueError("mojolearn: cv must be None or an int in [2, n_samples]")
+    ids, start = [0] * n, 0
+    for f in range(k):
+        size = n // k + (1 if f < n % k else 0)
+        for i in range(start, start + size):
+            ids[i] = f
+        start += size
+    return ids
+
+
+def _enetcv_fit(est, X, y, l1_ratios):
+    name = type(est).__name__
+    if est.positive:
+        raise ValueError(f"mojolearn {name}: positive=True is not implemented")
+    if est.selection != "cyclic":
+        raise ValueError(f"mojolearn {name}: selection='random' is not implemented")
+    if any(not 0 < r <= 1 for r in l1_ratios):
+        raise ValueError(f"mojolearn {name}: l1_ratio must be in (0, 1]")
+    a, n, d = _matrix(X)
+    yv = _vector(y, n)
+    folds = 5 if est.cv is None else est.cv
+    ids = _kfold_ids(n, folds)
+    alphas = est.alphas
+    n_alphas = getattr(est, "n_alphas", None)
+    if isinstance(alphas, int) and not isinstance(alphas, bool):
+        explicit, grid = False, int(alphas)
+    elif alphas is None or alphas in ("warn", "deprecated"):
+        explicit, grid = False, int(n_alphas) if isinstance(n_alphas, int) else 100
+    else:
+        explicit = True
+        values = sorted((float(v) for v in alphas), reverse=True)
+        grid = len(values)
+    if grid < 1:
+        raise ValueError(f"mojolearn {name}: at least one alpha is required")
+    yy = Array.from_list(yv.tolist() + [float(f) for f in ids], "<f4")
+    L = len(l1_ratios)
+    fp = [est.eps, est.tol] + [float(r) for r in l1_ratios] + (values if explicit else [])
+    ip = [est.max_iter, int(bool(est.fit_intercept)), grid, folds, L, int(explicit)]
+    vals = _run(est, ALGO_ENETCV, a, n, d, yy, ip, fp, d + 4 + L * grid + L * grid * folds,
+                d * d + 4 * d + 3, 1)
+    est.coef_ = Array.from_list(vals[:d], "<f4")
+    est.intercept_ = float(vals[d])
+    est.alpha_ = float(vals[d + 1])
+    l1_best = float(vals[d + 2])
+    est.n_iter_ = int(vals[d + 3])
+    off = d + 4
+    al = vals[off:off + L * grid]
+    ms = vals[off + L * grid:off + L * grid + L * grid * folds]
+    if L == 1:
+        est.alphas_ = Array.from_list(al, "<f4")
+        est.mse_path_ = Array.from_list([ms[k * folds:(k + 1) * folds] for k in range(grid)], "<f4")
+    else:
+        est.alphas_ = Array.from_list([al[l * grid:(l + 1) * grid] for l in range(L)], "<f4")
+        est.mse_path_ = Array.from_list(
+            [[ms[(l * grid + k) * folds:(l * grid + k + 1) * folds] for k in range(grid)] for l in range(L)], "<f4")
+    est.n_features_in_ = d
+    return l1_best
+
+
+class LassoCV(_LinearRegressorMixin, NumericModeMixin):
+    """Lasso with alpha chosen by K-fold cross-validation over a path
+    (scikit-learn's LassoCV; cv None or an int, unshuffled KFold)."""
+
+    _BINDING = _BINDING
+
+    def __init__(self, *, eps=1e-3, n_alphas="deprecated", alphas=100, fit_intercept=True,
+                 precompute="auto", max_iter=1000, tol=1e-4, copy_X=True, cv=None, verbose=False,
+                 n_jobs=None, positive=False, random_state=None, selection="cyclic"):
+        self.eps, self.n_alphas, self.alphas, self.fit_intercept = eps, n_alphas, alphas, fit_intercept
+        self.precompute, self.max_iter, self.tol, self.copy_X = precompute, max_iter, tol, copy_X
+        self.cv, self.verbose, self.n_jobs, self.positive = cv, verbose, n_jobs, positive
+        self.random_state, self.selection = random_state, selection
+
+    def fit(self, X, y):
+        _enetcv_fit(self, X, y, [1.0])
         return self
