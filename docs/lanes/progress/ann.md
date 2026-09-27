@@ -56,5 +56,35 @@ the H100 (seam_run evidence in the pod log).
 | AMD MI300X | OWED: RunPod MI300X out of stock, Hot Aisle team limit full (retrying) |
 | Apple (M2 Pro steward) | OWED |
 
-Next: AMD AGREE, steward submit, then option parity (x_ann/NOT_IMPLEMENTED.tsv
-NOT IMPLEMENTED rows), then speed.
+End-to-end sabotage for the steward: `x_ann/checks/sabotage/e2e_host_outputs_nudged.patch`
+(the host binding nudges its first output: every ann lane DISAGREEs).
+
+## WHERE THIS STOPPED / NEXT (for the next agent)
+
+1. The pass-2 proof commit is merged once the steward reads m2pro PASS and
+   do-amd PASS for it (`python3 tools/apple_steward.py status`; submitted as
+   `submit --lane ann --commit <sha> --verify-lanes x-ann-ivf-pq,x-ann-tsne,
+   x-ann-cagra,x-ann-ivf-sq,x-ann-ivf-rabitq,x-ann-refine,x-ann-filter
+   --sabotage x_ann/checks/sabotage/e2e_host_outputs_nudged.patch`). On a FAIL,
+   fix and resubmit. The lane has no AMD box of its own (RunPod MI300X out of
+   stock, Hot Aisle full); do-amd is the AMD column.
+2. OPTION PARITY, work in progress, NOT committed, saved in
+   `~/mojolearn-evidence/algos-ann/wip/wip2.tgz` (extract in the worktree;
+   plus `wip/tsne_5816_dof2_pow.patch`, `wip/tsne_5817_no_phase_reset.patch`
+   into x_ann/checks/sabotage/): TSNE gets sklearn's full surface
+   (n_components with dof = max(nc-1, 1), method='exact' (P over all pairs),
+   init='pca' (mojolearn PCA, fsum std) / 'random' / array, the two-phase
+   schedule with update+gains reset, error and grad norm every 50 steps,
+   n_iter_without_progress and min_grad_norm stops, KL with FLOAT32_TINY,
+   n_iter_), with the oracle and tsne_check updated (4 configurations) and two
+   new seams 5816 (dof-2 kernel) and 5817 (phase reset); and save/load
+   (`_AnnSaved`, npz) for IVFPQIndex, IVFSQIndex, IVFRaBitQIndex, CagraIndex.
+   These moved t-SNE bits (sklearn's reset and stops), so they need: build,
+   tsne_check + its 8 patches, the lane check on x-ann-tsne (+ the index lanes
+   for save/load: the model column), a new identity lane for the options
+   (e.g. x-ann-tsne-options: nc=3, exact, init='pca', early stop), the
+   sanity against sklearn again, the tsv rows closed.
+3. Remaining option-parity rows: x_ann/NOT_IMPLEMENTED.tsv (metric inner
+   product / cosine for the IVF indexes, PER_CLUSTER codebooks, trainset
+   fraction, CAGRA filtered search, TSNE metric='precomputed').
+4. Then GPU speed (IDENTICAL and FAST, NVIDIA/AMD/Apple), then CPU speed.
