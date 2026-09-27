@@ -1531,18 +1531,20 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
                                      binding that imports it
 
     REMEASURED 2026-09-27 (lane/algos-trees, option parity):
-      forest_host_predict  80 -> 83  trees-dt-random (DecisionTree
+      forest_host_predict  80 -> 84  trees-dt-random (DecisionTree
                                      splitter='random'), trees-dart-options
-                                     (DART's LightGBM options, multiclass) and
+                                     (DART's LightGBM options, multiclass),
                                      trees-oob-cv-link (Bagging oob_score, cv
-                                     splitter objects, Kernel SHAP logit): the
+                                     splitter objects, Kernel SHAP logit) and
+                                     trees-et-deviance (ExtraTreesRegressor
+                                     poisson / gamma / inverse_gaussian): the
                                      same RF/ET predict route; no old lane moved
-      forest_inference     46 -> 49  the same three lanes"""
+      forest_inference     46 -> 50  the same four lanes"""
     rev = lane_select.reverse_map()
     for rel, want in (("cluster/host/kmeans_oracle.mojo", 63),
                       ("core/gbdt_host_predict.mojo", 49),
-                      ("core/forest_host_predict.mojo", 83),
-                      ("core/forest_inference.mojo", 49),
+                      ("core/forest_host_predict.mojo", 84),
+                      ("core/forest_inference.mojo", 50),
                       ("python/mojolearn/neural_inference.py", 41)):
         got = len(rev.get(rel, set()))
         assert got == want, f"{rel} answers {got} lanes, not {want}"
