@@ -425,6 +425,49 @@ def class_stats_unit(t: Int, f: FP, q: IP):
         st(f, p(q, 8) + t, s)
 
 
+def class_stats_w_unit(t: Int, f: FP, q: IP):
+    """q = [X, n, d, Y, K, CNT, MEAN, VAR, SUM, W]; t = k*d + c: class_stats
+    with the per-row weight W[i] (the naive Bayes sample_weight): over the rows
+    of class k, ascending, SUM = sum w x, CNT = sum w (for c == 0),
+    MEAN = SUM / CNT and VAR = sum w (x - MEAN)^2 / CNT (numpy `average`
+    with weights). Offsets < 0 are not written; a class of zero weight
+    writes zeros."""
+    var X = p(q, 0)
+    var n = p(q, 1)
+    var d = p(q, 2)
+    var Y = p(q, 3)
+    var W = p(q, 9)
+    var k = t // d
+    var c = t % d
+    var sw = Float32(0)
+    var s = Float32(0)
+    for i in range(n):
+        if Int(ld(f, Y + i)) != k:
+            continue
+        var w = ld(f, W + i)
+        s = add(s, mul(w, ld(f, X + i * d + c)))
+        sw = add(sw, w)
+    var mean = Float32(0)
+    var ss = Float32(0)
+    if sw != Float32(0):
+        mean = div(s, sw)
+        if p(q, 7) >= 0:
+            for i in range(n):
+                if Int(ld(f, Y + i)) != k:
+                    continue
+                var e = sub(ld(f, X + i * d + c), mean)
+                ss = add(ss, mul(ld(f, W + i), mul(e, e)))
+            ss = div(ss, sw)
+    if c == 0 and p(q, 5) >= 0:
+        st(f, p(q, 5) + k, sw)
+    if p(q, 6) >= 0:
+        st(f, p(q, 6) + t, mean)
+    if p(q, 7) >= 0:
+        st(f, p(q, 7) + t, ss)
+    if p(q, 8) >= 0:
+        st(f, p(q, 8) + t, s)
+
+
 def center_rows_unit(t: Int, f: FP, q: IP):
     """q = [X, n, d, M, Y, W, OUT]; t = element. OUT = (X - M[y_i, c]) * W[c]
     (Y < 0: row 0 of M for every row; W < 0: no scale)."""
