@@ -96,7 +96,30 @@ Option parity (item 2), merged as each passes:
   measured 0.646 vs LightGBM 0.768), test_host_surface, test_lane_select
   (pins forest_host_predict 84, forest_inference 50): see the merge commit.
 - Apple (M2 Pro steward) + do-amd: requests 1790536790718 (dart-options),
-  1790536798209 (oob-cv-link), 1790536805393 (et-deviance) at b771caee9.
+  1790536798209 (oob-cv-link), 1790536805393 (et-deviance) at b771caee9:
+  m2pro PASS, do-amd PASS. MERGED to main 4b4507b7d.
+- GradientBoosting loss='MultiRMSE' (gbdt/, the trees family's CatBoost
+  arm), lane trees-gbdt-multirmse (in the trees fragment, NOT in
+  identity_break.py: a harness edit selects every lane). Symmetric Hessian
+  rows + the MultiClass Cholesky leaf solve (multiclass_targets.h:118-123),
+  (n, D) y dim-major through a +4 params tail, boost_from_average refused
+  for MultiRMSE (DEVIATION 5951, unset resolves False; CatBoost's default is
+  per-dimension averages: a real option-parity debt), DEVIATION 5950 (loss
+  sum order). Refused by name: Depthwise/Lossguide, Ordered, Exact, eval_set,
+  cat features, class weights, dim < 2. Not in _HOST_ROUTE_LANES (needs a
+  recorded lane). Evidence: `--pass 2 --sabotage
+  gbdt/checks/sabotage/multirmse_der_cpu_only.patch` PASS on H100 and on
+  MI300X; every gbdt-* lane + cross-val + saved-model-host-infer fitted
+  BEFORE (MultiRMSE diff reversed) and AFTER on H100: IDENTICAL on CUDA and
+  CPU columns; all AGREE on MI300X; test_gbdt_multirmse + test_host_surface
+  199 passed, 1 skipped (catboost absent). test_lane_select pins now
+  forest_host_predict 85, gbdt_host_predict 50 (rerun at the branch tip:
+  see below). Steward request 1790542307842 (m2pro, m3ultra, do-amd)
+  PENDING. MERGE when m2pro (or m3ultra) + do-amd PASS.
+- Owed (family phase 1, existing lanes): gbdt-categorical-ctr-tables and
+  gbdt-tensor-ctr-tables read NOTHING COMPARED in the lane check: their
+  `model` part has one column (the CPU column refuses it). They need a CPU
+  arm for the model part.
 
 extratrees/NOT_IMPLEMENTED.tsv has no `not yet` row left (the rest are
 `deliberate`). xtrees/NOT_IMPLEMENTED.tsv `not yet` rows remain (ccp_alpha,
@@ -105,6 +128,36 @@ Bagging warm_start, DART leaf-wise g/h growth + min_sum_hessian +
 feature_fraction_bynode, stacking/calibration sample_weight, calibration
 ensemble='auto'/cv='prefit', TreeSHAP interventional / interaction values /
 CatBoost models, Permutation link).
+
+PRIORITY (main, 2026-09-27): THE M3 ULTRA RF DIVERGENCE. Steward request
+1790526750361 (pass 2, 20 trees lanes) FAILED on m3ultra: 17 lanes that fit
+through the RF device builder (DT, Bagging, DART, Voting, Stacking,
+MultiOutput, OneVsRest, Calibrated, rf-weighted, SHAP) DISAGREE; AdaBoost
+(also DT?) no: adaboost-clf/reg and random-embedding (ET builder) AGREE.
+Cell table for trees-dt-clf (commit 77e0b3a8d): M3 CPU == M2 Metal == M2
+CPU on EVERY cell; M3 METAL is the outlier on base, hashed, wide, denormal,
+denormal_ftz, dupes, odd, negative; ONLY `ties` (few distinct values)
+agrees. On M3 Metal denormal != denormal_ftz (they are equal everywhere
+else). Suspects, in order: the quantile path (few distinct values agree:
+core/segmented_sort.mojo uses max.gpu.primitives.block.prefix_sum, a
+library warp-shuffle scan; quantiles.mojo), a denormal flush the M3 does
+not do in hardware (M3 GPUs keep fp32 subnormals; M1/M2 flush), a
+simdgroup/threadgroup assumption. The M3 Ultra is a steward now (not
+off-limits); never ssh-run Metal jobs beside its daemon: use
+`apple_steward.py submit --kind speed --cmd ...` (m3ultra only).
+Diagnostics queued (both behind a long m3ultra queue):
+- 1790543277062-speed-trees-8e5eadb7b7: runs quantiles_check,
+  objectives_check, builder_kernels_check, split_check, criteria_check,
+  train_check, forest_check, fingerprint_probe (ensemble/checks) on the M3.
+  Its stdout is in the verdict dir. The H100's fingerprint_probe for
+  comparison: CLF-OOB 0x87e5c72530dd00a7, CLF-NOBOOT 0x1aa915d207fc19b9,
+  REG-BOOT 0xf67c295ec84bbaeb, CLF-DEEP 0xfe402d068c603119, CLF-BOOT-K4
+  0x1c9d9763f188a349 (the K4 rows repeat the first four).
+- 1790541058384-trees-d529df376b: rf-clf, rf-reg,
+  rf-clf-entropy-log2-noboot on all stewards: does rf-* (existing RF,
+  shipped) also diverge on the M3? If yes, the defect predates this lane.
+Then: fix at the root, a separating fixture + sabotage, prove on m2pro +
+m3ultra + H100 + MI300X, existing bits unchanged elsewhere.
 
 NEXT (option parity continues; this phase is not finished):
 1. gbdt/ (CatBoost) losses, starting with MultiRMSE, then MultiLogloss /
