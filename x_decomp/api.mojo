@@ -303,6 +303,24 @@ def barycenter_rows_py[E: Exec](
     return PythonObject(n)
 
 
+def als_rows_py[E: Exec](
+    c: PythonObject, y: PythonObject, yty: PythonObject, x: PythonObject, flags: PythonObject, p: PythonObject,
+    reg: PythonObject,
+) raises -> PythonObject:
+    var n = _n(p, 0)
+    var m = _n(p, 1)
+    var f = _n(p, 2)
+    var r = Float32(Float64(py=reg))
+    var pc = _f(c)
+    var py_ = _f(y)
+    var pg = _f(yty)
+    var px = _f(x)
+    var pf = _f(flags)
+    with GILReleased(Python()):
+        E.als_rows(pc, py_, pg, px, pf, n, m, f, r)
+    return PythonObject(n)
+
+
 def numeric_mode_py() raises -> PythonObject:
     return PythonObject(Int(GLOBAL_NUMERIC_MODE))
 
