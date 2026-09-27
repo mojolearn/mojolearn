@@ -19,6 +19,9 @@
 #
 # The hosts live in the mambik AWS account (profile `mambik`), us-east-1d.
 # Its org policy refuses RunInstances without `lane` and `owner` tags.
+# HARD RULE (Andrew, 2026-09-27): this tool must NEVER allocate, launch or
+# extend a Mac, and no one may add Apple hosts or hours without Andrew's
+# express permission. It only manages hosts that already exist.
 set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 REG="${MOJOLEARN_CLOUDMAC_REG:-$HOME/mojolearn-evidence/cloudmacs.tsv}"   # name  instance  host  ip
@@ -49,7 +52,7 @@ bootstrap)
     cm "$n" '[ -d ~/mojolearn.git ] || git init -q --bare ~/mojolearn.git; echo BARE_OK'
     "$0" push "$n" origin/main
     echo "== $n: worktree + pixi install"
-    cm "$n" "[ -d ~/mojolearn/.git ] || git clone -q ~/mojolearn.git ~/mojolearn; cd ~/mojolearn && git fetch -q origin && git checkout -q --detach origin/main && ~/.pixi/bin/pixi install -e default >/tmp/pixi_install.log 2>&1 && echo PIXI_OK && git log -1 --format=%h"
+    cm "$n" "[ -d ~/mojolearn/.git ] || git clone -q --no-hardlinks ~/mojolearn.git ~/mojolearn; cd ~/mojolearn && git fetch -q origin && git checkout -q --detach origin/main && ~/.pixi/bin/pixi install -e default >/tmp/pixi_install.log 2>&1 && echo PIXI_OK && git log -1 --format=%h"
     ;;
 push)
     # push <name|all> <commit-ish>...: every ref lands on the Mac as refs/heads/main

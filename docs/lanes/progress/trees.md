@@ -71,5 +71,63 @@ Option parity (item 2), merged as each passes:
 - DecisionTree splitter='random' (+ max_leaf_nodes best-first on it): lane
   trees-dt-random AGREE; column sabotage (now also the ET host draw) DISAGREE
   then AGREE.
+- Directive 000 (seam arms re-proven on the fixed lane check, 3084ca09c):
+  DONE. The six glue_check arms each "build, run and FAIL" under the fixed
+  tool on the H100 pod (runs of 2026-09-27 18:32Z and 19:40Z) and on the
+  MI300X. Never repeat.
+- DART options (reg_alpha, max_delta_step, colsample_bytree, subsample +
+  subsample_freq, multiclass softmax + its TreeSHAP), lane trees-dart-options:
+  `--pass 2 --sabotage dart_options_cpu_only.patch` PASS on H100 and MI300X.
+- Bagging oob_score, cv splitter objects / (train, test) pairs, Kernel SHAP
+  link='logit', lane trees-oob-cv-link: `--sabotage oob_link_cpu_only.patch`
+  PASS on H100 and MI300X.
+- ExtraTreesRegressor criterion poisson / gamma / inverse_gaussian
+  (DEVIATION 5610, IDENTITY_PATHS row 168; extratrees/ tsv rows closed),
+  lane trees-et-deviance: `--pass 2 --sabotage et_deviance_cpu_only.patch`
+  PASS on H100 and MI300X.
+- Existing lanes after all three: the nine older trees lanes AGREE (H100,
+  MI300X); et-clf, et-clf-entropy-bestfirst, et-reg,
+  et-reg-bootstrap-parallel AGREE on MI300X; on H100 those four plus rf-clf,
+  rf-clf-balanced-parallel, rf-clf-entropy-log2-noboot, rf-reg,
+  rf-reg-gamma-ig, rf-reg-poisson, rf-score-weighted, saved-model-host-infer
+  were fitted BEFORE (the branch diff reversed) and AFTER: every cell
+  IDENTICAL on the CUDA column and on the CPU column (identity_break --diff).
+- test_x_trees_sanity (max_delta_step split into its own looser assertion,
+  measured 0.646 vs LightGBM 0.768), test_host_surface, test_lane_select
+  (pins forest_host_predict 84, forest_inference 50): see the merge commit.
+- Apple (M2 Pro steward) + do-amd: requests 1790536790718 (dart-options),
+  1790536798209 (oob-cv-link), 1790536805393 (et-deviance) at b771caee9.
 
-Next: option parity continues: DART lambda_l1 / max_delta_step / feature_fraction / bagging / min_sum_hessian / multiclass; Kernel link='logit'; cv splitter objects; Bagging oob_score; then the existing family's tsv rows (extratrees/, gbdt/), then GPU speed, CPU speed last.
+extratrees/NOT_IMPLEMENTED.tsv has no `not yet` row left (the rest are
+`deliberate`). xtrees/NOT_IMPLEMENTED.tsv `not yet` rows remain (ccp_alpha,
+monotonic_cst, min_weight_fraction_leaf, DecisionTreeRegressor sample_weight,
+Bagging warm_start, DART leaf-wise g/h growth + min_sum_hessian +
+feature_fraction_bynode, stacking/calibration sample_weight, calibration
+ensemble='auto'/cv='prefit', TreeSHAP interventional / interaction values /
+CatBoost models, Permutation link).
+
+NEXT (option parity continues; this phase is not finished):
+1. gbdt/ (CatBoost) losses, starting with MultiRMSE, then MultiLogloss /
+   MultiCrossEntropy, RMSEWithUncertainty; then QuerySoftMax, PFound,
+   QueryCrossEntropy, PairLogitPairwise, max_pairs, Wilcoxon detector,
+   grow_policy='Region'. Map for a multi-target loss (from MultiClassOneVsAll):
+   every layer takes ONE target per row today (ensemble.py:2046 `as_f32_c(y,
+   ndim=1)`, train.mojo:1784-1805 upload, host binding :1473), so MultiRMSE
+   needs an n_rows x dim y slot. Places: ensemble.py LOSSES :141,
+   MULTI_OUTPUT_LOSSES :317 (label checks :2075), boost-from-average :493 /
+   auto LR :456, predict_proba :2527; pointwise_targets.mojo codes :184-235
+   (next code 17) + objective_from_name :246 / objective_name :295;
+   train.mojo Ordered refusal :1093, boost-from-average :1838-1870,
+   approx_dim :2065; doc_parallel_boosting.mojo approx_dim :1603,
+   boost-from-average refuses dim != 1 at :1705, der dispatch :2189,
+   fv_blocks :2267, final loss :2913, _test_loss :409, estimate_can_batch
+   :1164; multilogit.mojo new kernels beside one_vs_all_* (:651, :807);
+   pointwise_oracle.mojo _oracle_dims :1257, multi-dim arm :700, diagonal
+   second der :846; catboost_options.mojo :1317 leaf defaults; host:
+   gbdt/host/gbdt_oracle_multiclass.mojo (GBDT_OBJ_* :116, gbdt_multi_host_fit
+   :647), bindings/_mojolearn_gbdt_host.mojo is_multi :1122, dispatch :1475;
+   ensemble.py _HOST_ROUTE_LANES :418; identity lanes gbdt-onevsall
+   (identity_break.py :3319) as the model for a new lane; seam check
+   checks/multilogit_check.mojo.
+2. the xtrees `not yet` rows above.
+Then phase (d) FAST GPU speed, (e) IDENTICAL GPU speed, (f) CPU speed.

@@ -13,7 +13,10 @@ from extratrees.checks.host_splitter import (
 from extratrees.impl.decisiontree.decisiontree import (
     CRITERION_END,
     CRITERION_ENTROPY,
+    CRITERION_GAMMA,
     CRITERION_GINI,
+    CRITERION_INVERSE_GAUSSIAN,
+    CRITERION_POISSON,
     DecisionTreeParams,
     validity_check,
 )
@@ -28,6 +31,7 @@ from extratrees.impl.decisiontree.batched_levelalgo.objectives import (
     EntropyObjectiveFunction,
     GiniObjectiveFunction,
     MSEObjectiveFunction,
+    regression_deviance_gain,
 )
 from extratrees.impl.decisiontree.batched_levelalgo.split import Split
 from extratrees.impl.decisiontree.batched_levelalgo.kernels.builder_kernels import (
@@ -1437,6 +1441,13 @@ def _exact_candidate(
         )
         num = float_gain_key(metric)
         den = Int64(1)
+    elif not is_classification and (
+        criterion == CRITERION_POISSON or criterion == CRITERION_GAMMA or criterion == CRITERION_INVERSE_GAUSSIAN
+    ):
+        # DEVIATION 5610, as `score_to_candidate_kernel` forms it.
+        metric = regression_deviance_gain(acc_left[0], acc_total[0], cell.n_left, cell.n_total, criterion)
+        num = float_gain_key(metric)
+        den = Int64(1)
     else:
         metric = gain_per_split(
             left_p, total_p, 0, n_acc, cell.n_total, cell.n_left, min_samples_leaf
@@ -2210,6 +2221,10 @@ def score_to_candidate_kernel(
     var n_classes = Int(n_classes_in)
     var min_samples_leaf = min_samples_leaf_in
     var entropy = criterion_in == CRITERION_ENTROPY
+    # DEVIATION 5610: Poisson / Gamma / InverseGaussian take entropy's route.
+    var deviance = criterion_in == CRITERION_POISSON or criterion_in == CRITERION_GAMMA or (
+        criterion_in == CRITERION_INVERSE_GAUSSIAN
+    )
     var idx = Int(block_idx.x) * Int(block_dim.x) + Int(thread_idx.x)
     var stride = Int(grid_dim.x) * Int(block_dim.x)
     while idx < n_cells:
@@ -2227,6 +2242,19 @@ def score_to_candidate_kernel(
                     in_n_total[unsafe_offset=idx],
                     in_n_left[unsafe_offset=idx],
                     min_samples_leaf,
+                )
+                cand_metric[unsafe_offset=idx] = g
+                cand_num[unsafe_offset=idx] = float_gain_key(g)
+                cand_den[unsafe_offset=idx] = Int64(1)
+            elif deviance:
+                # DEVIATION 5610: the deviance gain over the cell's scaled
+                # label sums is the metric AND the key (`den = 1`).
+                var g = regression_deviance_gain(
+                    in_acc_left[unsafe_offset=idx],
+                    in_acc_total[unsafe_offset=idx],
+                    in_n_left[unsafe_offset=idx],
+                    in_n_total[unsafe_offset=idx],
+                    criterion_in,
                 )
                 cand_metric[unsafe_offset=idx] = g
                 cand_num[unsafe_offset=idx] = float_gain_key(g)
