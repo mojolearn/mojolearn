@@ -77,6 +77,10 @@ comptime OP_AF_UPDATE_MAT = 35
 comptime OP_AF_VEC = 36
 comptime OP_AF_DENOM = 37
 comptime OP_AF_APPLY = 38
+comptime OP_SEG_SUMSQ = 39
+comptime OP_LAMB_UPD = 40
+comptime OP_LAMB_RATIO = 41
+comptime OP_LAMB_APPLY = 42
 
 # ------------------------------------------------------------------ cells
 comptime CELL_RNN_TANH = 0

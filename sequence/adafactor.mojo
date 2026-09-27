@@ -104,3 +104,50 @@ def op_af_denom(t: Int, a: Args):
 def op_af_apply(t: Int, a: Args):
     """p0[t] += p1[t] p2[3]."""
     st(a.p0, t, fma3(ld(a.p1, t), ld(a.p2, 3), ld(a.p0, t)))
+
+
+# ------------------------------------------------------------------ LAMB
+def op_seg_sumsq(t: Int, a: Args):
+    """Segment t of p0 (offsets p1[t] .. p1[t + 1], as floats):
+    p2[t] = its sum of squares, ascending."""
+    var s = Int(a.p1.unsafe_load(t))
+    var e = Int(a.p1.unsafe_load(t + 1))
+    st(a.p2, t, _sumsq(a.p0, s, e - s, 1))
+
+
+def op_lamb_upd(t: Int, a: Args):
+    """m = b1 m + beta3 g; v = b2 v + (1 - b2) g g; u = (m / bc1) /
+    (sqrt(v) / sqrt(bc2) + eps) (+ wd p). p0 param, p1 grad, p2 m, p3 v,
+    p4 u; f1 b1, f2 b2, f3 eps, f4 wd, f5 bc1, f6 sqrt(bc2), f7 beta3."""
+    var g = ld(a.p1, t)
+    var m = fma3(a.f1, ld(a.p2, t), mul(a.f7, g))
+    var v = fma3(a.f2, ld(a.p3, t), mul(mul(sub(Float32(1.0), a.f2), g), g))
+    st(a.p2, t, m)
+    st(a.p3, t, v)
+    var den = add(div(ftz(identical_sqrt(v)), a.f6), a.f3)
+    var u = div(div(m, a.f5), den)
+    if a.f4 != Float32(0.0):
+        u = fma3(a.f4, ld(a.p0, t), u)
+    st(a.p4, t, u)
+
+
+def op_lamb_ratio(t: Int, a: Args):
+    """Segment t: p3[t] = ||p|| / ||u|| (1 where either is 0; at most 1
+    when i0 & 1, timm's trust_clip). p0 param, p1 u, p2 offsets."""
+    var s = Int(a.p2.unsafe_load(t))
+    var e = Int(a.p2.unsafe_load(t + 1))
+    var wn = ftz(identical_sqrt(_sumsq(a.p0, s, e - s, 1)))
+    var gn = ftz(identical_sqrt(_sumsq(a.p1, s, e - s, 1)))
+    var r = Float32(1.0)
+    if wn > Float32(0.0) and gn > Float32(0.0):
+        r = div(wn, gn)
+    if (a.i0 & 1) != 0 and r > Float32(1.0):
+        r = Float32(1.0)
+    st(a.p3, t, r)
+
+
+def op_lamb_apply(t: Int, a: Args):
+    """p0[t] = p0[t] - lr (u[t] ratio): p1 u, p2 ratios, i0 the segment of
+    this launch, f0 lr."""
+    var r = ld(a.p2, a.i0)
+    st(a.p0, t, fma3(-a.f0, mul(ld(a.p1, t), r), ld(a.p0, t)))
