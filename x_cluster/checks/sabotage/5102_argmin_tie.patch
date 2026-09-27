@@ -1,0 +1,11 @@
+--- a/x_cluster/bodies.mojo
++++ b/x_cluster/bodies.mojo
+@@ -60,7 +60,7 @@
+     var bi = 0
+     for j in range(1, nb):
+         var v = sq_dist_rows[REV](a, i, b, j, d)
+-        if v < best:
++        if v <= best:
+             best = v
+             bi = j
+     labels[i] = Int32(bi)

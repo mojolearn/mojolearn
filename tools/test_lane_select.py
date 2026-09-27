@@ -1507,9 +1507,18 @@ def test_the_wider_mojo_walk_did_not_widen_the_narrow_answers():
                                      the 26 more are lanes whose own doors
                                      call `kmeans_fit` (gmm, ivf, hdbscan,
                                      spectral and their par- twins: k-means
-                                     is their initialization or quantizer)"""
+                                     is their initialization or quantizer)
+
+    REMEASURED 2026-09-27 (lane/algos-cluster):
+      kmeans_oracle        47 -> 63  fifteen x-cluster-* lanes (the cluster
+                                     expansion's host binding runs this
+                                     library's KMeans for BisectingKMeans and
+                                     the mixture starts, so it imports the
+                                     oracle) and x-decomp-spectral-rbf (the
+                                     decomp lane's spectral door); no old lane
+                                     moved"""
     rev = lane_select.reverse_map()
-    for rel, want in (("cluster/host/kmeans_oracle.mojo", 47),
+    for rel, want in (("cluster/host/kmeans_oracle.mojo", 63),
                       ("core/gbdt_host_predict.mojo", 49),
                       ("core/forest_host_predict.mojo", 60),
                       ("core/forest_inference.mojo", 26),
