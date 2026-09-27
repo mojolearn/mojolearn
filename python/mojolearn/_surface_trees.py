@@ -139,6 +139,7 @@ PUBLIC_PENDING_LANES = {
     "trees-calibrated": "no reference",
     "trees-oob-cv-link": "no reference",
     "trees-rf-weighted": "no reference",
+    "trees-et-deviance": "no reference",
     "trees-shap-tree": "no reference",
     "trees-shap-kernel": "no reference",
     "trees-shap-permutation": "no reference",
