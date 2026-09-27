@@ -1537,8 +1537,26 @@ def _rsvd_core(k, A, n_components, n_oversamples, n_iter, power_iteration_normal
         Q = _orthonormal_cols(k, k.mm(A, Q))
         Q = _orthonormal_cols(k, k.mm(A, Q, ta=True))
     Q = _orthonormal_cols(k, k.mm(A, Q))
+    # The orth rank guard (DEVIATION 5318) leaves a numerically dependent
+    # column of the range exactly 0. Q^T M then has a zero row, and the
+    # one-sided Jacobi SVD of a rank-deficient matrix rotates the rounding
+    # noise of the column it drives to zero forever, so the small SVD runs on
+    # the live columns only; the components past the numerical rank are 0
+    # (singular value 0, zero vectors), as the zero Q column already says.
+    live = [j for j, v in enumerate(k.colsum(k.ew("abs", Q)).s) if v != 0.0]
+    if not live:
+        raise ValueError("randomized_svd: M is numerically zero")
+    full = Q.c
+    if len(live) < full:
+        Q = Q.take_cols(live)
     B = k.mm(Q, A, ta=True)
     Uh, S, Vt = _thin_svd(k, B, min(B.r, B.c), u_based=True)
+    if S.c < full:
+        pad = full - S.c
+        S = _M(S.s + array.array("f", [0.0]) * pad, 1, full)
+        Vt = _M(Vt.s + array.array("f", [0.0]) * (pad * Vt.c), full, Vt.c)
+        Uh = Uh.T
+        Uh = _M(Uh.s + array.array("f", [0.0]) * (pad * Uh.c), full, Uh.c).T
     U = k.mm(Q, Uh)
     if flip_sign:
         if not transpose:
