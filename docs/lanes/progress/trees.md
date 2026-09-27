@@ -171,13 +171,20 @@ SESSION A (verification), 2026-09-27 evening. DONE, merged:
   DART, RandomTreesEmbedding, Voting, OneVsRest, TreeExplainer) twice in
   one process on GPU and on CPU, asserting first == second and GPU == CPU.
   The trees bindings build a DeviceContext per call but return host data
-  only (no buffer outlives its context); RESULT: see the merge commit.
+  only (no buffer outlives its context). PASS on the H100 (GPU == CPU,
+  first == second) and on the MI300X (run without pytest, the box has
+  none). test_host_surface + test_trees_repeat 201 passed and
+  test_lane_select 69 passed at the merge tip (H100). The trees lanes
+  iforest, iforest-tuned, trees-gbdt-multirmse, gbdt-yeti-rank,
+  saved-model-host-infer AGREE (H100); iforest, trees-gbdt-multirmse,
+  gbdt-symmetric, gbdt-feature-freq, gbdt-ordered-rmse AGREE (MI300X).
 - GradientBoosting.predict on a CPU install routes a model whose text
   carries CTR tables / a tensor CTR registry through HostGBDT (the gbdt
   host binding's walk refuses those records by name). Inert for every
   existing lane (30 gbdt lanes AGREE, CUDA cells unchanged).
 - test_lane_select pins after merging main: kmeans_oracle 71,
-  gbdt_host_predict 50, forest_host_predict 85.
+  gbdt_host_predict 51, forest_host_predict 86 (x-metrics-search from
+  the metrics lane reaches both).
 
 NEXT SESSION: FIRST the CTR-table CPU paths (main's request 2026-09-27),
 then type B (features).
