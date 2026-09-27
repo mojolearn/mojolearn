@@ -110,16 +110,13 @@ COLUMN_DEFINE=""
 # under python/mojolearn/identical/. The build-time smoke gate imports the
 # FAST package, so it is skipped for an identical build.
 #
-# ONE TIER (DEVIATION 2490, 2026-09-10): ONLY THE TREE LANES SHIP fast AND
-# deterministic (build_gbdt.sh, build_rf.sh, build_trees.sh). Every other
-# binding, this one included, builds IDENTICAL only. Cross-vendor bitwise
-# identity is the product; a fast tier is shipped only where it has a
-# measured win over the opponent's own CPU, and outside trees it has none
-# (python/mojolearn/_backend.py, `_TIERED`, has the numbers). Refusing
-# here, by name, is what keeps this an unshipped tier rather than an
-# unchecked one (CONTRIBUTING.md (Numeric modes) and section 8).
-[ "${MOJOLEARN_NUMERIC_MODE:-identical}" = identical ] || {
-    echo 'build_embedding.sh: only the tree lanes (gbdt, rf, trees) ship fast and deterministic; every other binding builds MOJOLEARN_NUMERIC_MODE=identical only (DEVIATION 2490, 0.8.0).' >&2
+# FAST AND IDENTICAL (lane neural, 2026-09-27; IDENTICAL-only from
+# 2026-09-10 under DEVIATION 2490). FAST compiles the same kernels with the
+# pins in checks/numerics.mojo on the free schedule and promises quality,
+# never bits (docs/lanes/progress/neural.md). The DETERMINISTIC tier ships
+# for the tree lanes (gbdt, rf, trees) only and is refused here by name.
+[ "${MOJOLEARN_NUMERIC_MODE:-identical}" != deterministic ] || {
+    echo 'build_embedding.sh: the deterministic tier ships for the tree lanes (gbdt, rf, trees) only; this binding builds MOJOLEARN_NUMERIC_MODE=identical (default) or fast.' >&2
     exit 2; }
 MODE_DEFINE=""
 OUTDIR="python/mojolearn"
@@ -128,18 +125,8 @@ if [ "${MOJOLEARN_NUMERIC_MODE:-identical}" = "identical" ]; then
     OUTDIR="python/mojolearn/identical"
     mkdir -p "$OUTDIR"
     export MOJOLEARN_SKIP_BUILD_GATE=1
-elif [ "${MOJOLEARN_NUMERIC_MODE:-identical}" = "deterministic" ]; then
-    # The MIDDLE tier: reproducible run to run on ONE device, with no
-    # promise about a second one. It gets its own directory because it
-    # is its own binary, PIN_DETERMINISM is comptime, so a
-    # deterministic build is different code from both neighbours, not
-    # the identical build with a flag turned down.
-    MODE_DEFINE="-D MOJOLEARN_NUMERIC_DETERMINISTIC=1"
-    OUTDIR="python/mojolearn/deterministic"
-    mkdir -p "$OUTDIR"
-    export MOJOLEARN_SKIP_BUILD_GATE=1
 elif [ "${MOJOLEARN_NUMERIC_MODE:-identical}" != "fast" ]; then
-    echo "MOJOLEARN_NUMERIC_MODE must be fast, deterministic or identical, got '$MOJOLEARN_NUMERIC_MODE'" >&2
+    echo "MOJOLEARN_NUMERIC_MODE must be fast or identical, got '$MOJOLEARN_NUMERIC_MODE'" >&2
     exit 2
 fi
 if [ -n "${MOJOLEARN_TARGET_COLUMN:-}" ]; then

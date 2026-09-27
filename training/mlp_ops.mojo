@@ -15,8 +15,8 @@ from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL, ftz, identic
 
 
 def mlp_validate_shape(rows: Int, cols: Int) raises:
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
-        raise Error("small MLP operations require IDENTICAL numeric mode")
+    comptime if GLOBAL_NUMERIC_MODE > NUMERIC_IDENTICAL:  # NUMERIC_DETERMINISTIC (2)
+        raise Error("small MLP operations: no DETERMINISTIC tier (FAST or IDENTICAL)")
     if rows < 1 or rows > 256 or cols < 1 or cols > 64:
         raise Error("small MLP operations require rows 1..256 and cols 1..64")
 

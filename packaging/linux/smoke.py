@@ -164,8 +164,8 @@ ALL_BINDINGS = (
 #: removed. `main()` checks this set against the installed package's own
 #: `_backend._IDENTICAL_ONLY`, so the two cannot drift apart unnoticed.
 IDENTICAL_ONLY_BINDINGS = frozenset({
-    "_mojolearn_training", "_mojolearn_mamba",
-    "_mojolearn_transformer", "_mojolearn_byte_lm", "_mojolearn_embedding",
+    # The neural blocks gained FAST (lane neural, 2026-09-27); the byte LM has not.
+    "_mojolearn_byte_lm",
 })
 #: Classical ML (2026-09-25): loads under fast and identical, must REFUSE
 #: under deterministic. Checked against `_backend._CLASSICAL_FAST` in main().
@@ -175,6 +175,9 @@ CLASSICAL_FAST_BINDINGS = frozenset({
     "_mojolearn_linalg", "_mojolearn_arima", "_mojolearn_gp",
     "_mojolearn_kernel_methods", "_mojolearn_mixture", "_mojolearn_hdbscan",
     "_mojolearn_resample", "_mojolearn_ivf",
+    # THE NEURAL BLOCKS (lane neural, 2026-09-27): fast and identical too.
+    "_mojolearn_training", "_mojolearn_mamba",
+    "_mojolearn_transformer", "_mojolearn_embedding",
 })
 
 

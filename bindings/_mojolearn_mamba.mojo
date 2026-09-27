@@ -422,8 +422,8 @@ def mamba1_backward_binding(addrs: PythonObject, params: PythonObject) raises ->
     """Zero-state synchronous IDENTICAL VJP. Addresses: x, ten weights in
     forward order, grad_output, grad_x, ten weight gradients in forward
     order (23 total). Scalars: B, L, d_model. No state/cache is accepted."""
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
-        raise Error("mamba1 backward: only IDENTICAL zero-state prefill is implemented")
+    comptime if GLOBAL_NUMERIC_MODE > NUMERIC_IDENTICAL:  # NUMERIC_DETERMINISTIC (2)
+        raise Error("mamba1 backward: no DETERMINISTIC tier (FAST or IDENTICAL zero-state prefill)")
     if len(addrs) != 23 or len(params) != 3:
         raise Error("mamba1 backward: expected 23 addresses and B, L, d_model")
     var b = Int(py=params[0])
@@ -1871,8 +1871,8 @@ def _mamba2_backward_run(a: List[Int], b: Int, l: Int, dm: Int, dt_lo: Float32, 
 def mamba2_backward_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """Zero-state IDENTICAL VJP: x, nine forward-order weights, grad_output,
     grad_x, nine weight gradients (21 addresses); B, L, d_model, dt_lo, dt_hi."""
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
-        raise Error("mamba2 backward: only IDENTICAL zero-state prefill is implemented")
+    comptime if GLOBAL_NUMERIC_MODE > NUMERIC_IDENTICAL:  # NUMERIC_DETERMINISTIC (2)
+        raise Error("mamba2 backward: no DETERMINISTIC tier (FAST or IDENTICAL zero-state prefill)")
     if len(addrs) != 21 or len(params) != 5:
         raise Error("mamba2 backward: expected 21 addresses and 5 scalars")
     var b = Int(py=params[0])
@@ -1926,8 +1926,8 @@ def _mamba3_backward_run(a: List[Int], b: Int, l: Int, dm: Int) raises:
 def mamba3_backward_binding(addrs: PythonObject, params: PythonObject) raises -> PythonObject:
     """Zero-state IDENTICAL VJP: x, nine forward-order weights, grad_output,
     grad_x, nine weight gradients (21 addresses); B, L, d_model."""
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
-        raise Error("mamba3 backward: only IDENTICAL zero-state prefill is implemented")
+    comptime if GLOBAL_NUMERIC_MODE > NUMERIC_IDENTICAL:  # NUMERIC_DETERMINISTIC (2)
+        raise Error("mamba3 backward: no DETERMINISTIC tier (FAST or IDENTICAL zero-state prefill)")
     if len(addrs) != 21 or len(params) != 3:
         raise Error("mamba3 backward: expected 21 addresses and 3 scalars")
     var b = Int(py=params[0])
@@ -1948,19 +1948,19 @@ def mamba3_backward_binding(addrs: PythonObject, params: PythonObject) raises ->
 
 @export
 def PyInit__mojolearn_mamba() abi("C") -> PythonObject:
-    # IDENTICAL-ONLY (2026-09-10). The FAST and DETERMINISTIC builds of this
-    # lane were never a faster path: every fused kernel here is gated on
-    # `GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL`, so the lower tiers fell back
-    # to the unfused arms and ran SLOWER than the default. They are no longer
-    # built (bindings/build_mamba.sh refuses) and the lane no longer carries
-    # the fallbacks. Refuse to exist rather than answer under a tier label
-    # whose arithmetic is gone.
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+    # FAST AND IDENTICAL (lane neural, 2026-09-27). This lane was
+    # IDENTICAL-only from 2026-09-10 because its fused kernels were once gated
+    # on IDENTICAL and the lower tiers fell back to slower unfused arms. Those
+    # fallbacks are gone: FAST runs the same kernels and the same launches with
+    # the pins in checks/numerics.mojo compiled to the free schedule. FAST
+    # promises quality, never bits (docs/lanes/progress/neural.md). The
+    # DETERMINISTIC tier stays tree-only: refuse to exist under it.
+    comptime if GLOBAL_NUMERIC_MODE > NUMERIC_IDENTICAL:  # NUMERIC_DETERMINISTIC (2)
         abort(
             String(
-                "_mojolearn_mamba: refusing to initialize -- this lane supports only"
-                " the IDENTICAL tier. Rebuild with"
-                " MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_mamba.sh"
+                "_mojolearn_mamba: refusing to initialize -- this lane builds"
+                " FAST and IDENTICAL only. Rebuild with"
+                " MOJOLEARN_NUMERIC_MODE=identical (or fast) bash bindings/build_mamba.sh"
             )
         )
     # DEVIATION 793's last clause: a sabotage arm exists to be run by a
@@ -2010,7 +2010,7 @@ def PyInit__mojolearn_mamba() abi("C") -> PythonObject:
         m.def_function[mamba2_session_close_binding]("mamba2_session_close")
         m.def_function[mamba3_backward_binding]("mamba3_backward")
         m.def_function[mamba3_forward_binding]("mamba3_forward")
-        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL"]():
+        comptime if GLOBAL_NUMERIC_MODE <= NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_MAMBA3_LEGACY_FRESH_PREFILL"]():
             m.def_function[mamba3_forward_fresh_binding]("mamba3_forward_fresh")
         m.def_function[mamba3_decode_step_binding]("mamba3_decode_step")
         _ = m.add_type[Mamba3DecodeSession]("_Mamba3DecodeSession")

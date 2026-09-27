@@ -64,15 +64,17 @@ the block output, the backward's gradients, the report stages -- is a
 pieces are updated IN PLACE through their own addresses, exactly as
 before, whatever object the caller allocated them as.
 
-THIS LANE IS IDENTICAL-ONLY (2026-09-10). It used to build all three
+FAST AND IDENTICAL (lane neural, 2026-09-27). `numeric_mode=` accepts
+'identical' (the default) or 'fast'; FAST runs the same kernels with the
+pins on the free schedule and promises quality, never bits. The history:
+from 2026-09-10 to 2026-09-27 this lane was IDENTICAL-only. It used to build all three
 tiers. It never should have: the fused kernels in `mamba/impl/ops/` and
 `mamba/impl/modules/` were gated on `GLOBAL_NUMERIC_MODE ==
 NUMERIC_IDENTICAL`, so a FAST or DETERMINISTIC build fell back to the
 unfused arms and the legacy host copies and ran SLOWER than the default
 while promising less. DEVIATION 2300 is what that cost: a `k_last`
 failure against ref64 that existed ONLY in the deterministic tier, found
-in a shipped 0.7.0 qualification. `numeric_mode=` now accepts
-'identical' or nothing; anything else raises. `_extension()` still checks
+in a shipped 0.7.0 qualification. `_extension()` checks
 the binary's compile-time mode against the requested tier.
 
 EVIDENCE SNAPSHOT. Native certificates, public API checks and installed-wheel
@@ -373,10 +375,10 @@ class _MambaBase(NumericModeMixin):
     def _prefill_backward(self, x, grad_output, entry):
         what = type(self).__name__ + ".backward"
         mode = getattr(self, "numeric_mode", None) or _backend.default_mode()
-        if mode != "identical":
+        if mode not in ("identical", "fast"):
             raise NotImplementedError(
-                f"mojolearn {what}: only IDENTICAL zero-state prefill is "
-                f"implemented; got numeric_mode={mode!r}"
+                f"mojolearn {what}: the zero-state prefill backward runs under "
+                f"IDENTICAL or FAST; got numeric_mode={mode!r}"
             )
         x = _batch_tokens(x, what, self.d_model, False)
         b, l, _ = x.shape
@@ -388,7 +390,7 @@ class _MambaBase(NumericModeMixin):
             raise ValueError(f"mojolearn {what}: grad_output must be finite")
         kwargs = {"dt_limit": self.dt_limit} if entry == "mamba2_backward" else {}
         checked = type(self)(dict(zip(self._W_NAMES, self._w)),
-                             numeric_mode="identical", **kwargs)
+                             numeric_mode=mode, **kwargs)
         if checked.d_model != self.d_model:
             raise ValueError(f"mojolearn {what}: current weights changed d_model")
         weights = checked._w
@@ -608,10 +610,10 @@ class Mamba1Block(_MambaBase):
         """
         what = "Mamba1Block.backward"
         mode = getattr(self, "numeric_mode", None) or _backend.default_mode()
-        if mode != "identical":
+        if mode not in ("identical", "fast"):
             raise NotImplementedError(
-                f"mojolearn {what}: only IDENTICAL zero-state prefill is "
-                f"implemented; got numeric_mode={mode!r}"
+                f"mojolearn {what}: the zero-state prefill backward runs under "
+                f"IDENTICAL or FAST; got numeric_mode={mode!r}"
             )
         x = _batch_tokens(x, what, self.d_model, False)
         b, l, _ = x.shape
@@ -624,7 +626,7 @@ class Mamba1Block(_MambaBase):
         # Revalidate current weight layouts before exposing raw addresses.
         # In-place value changes are intentional; dtype/shape mutation is not.
         checked = Mamba1Block(dict(zip(self._W_NAMES, self._w)),
-                              numeric_mode="identical")
+                              numeric_mode=mode)
         if checked.d_model != self.d_model:
             raise ValueError(f"mojolearn {what}: current weights changed d_model")
         weights = checked._w

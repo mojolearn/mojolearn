@@ -72,8 +72,10 @@ as. ONE VISIBLE CHANGE: `TransformerState.keys()` / `.values()` hand
 back a COPY of the packed used region rather than a view into the cache
 (DEVIATION 2413), because the `Array` contract has no strided views.
 
-THIS LANE IS IDENTICAL-ONLY (2026-09-10). `numeric_mode=` accepts
-'identical' or nothing; anything else raises. It used to build all three
+FAST AND IDENTICAL (lane neural, 2026-09-27). `numeric_mode=` accepts
+'identical' (the default) or 'fast'; FAST runs the same kernels with the
+pins on the free schedule and promises quality, never bits. The history:
+from 2026-09-10 to 2026-09-27 this lane was IDENTICAL-only. It used to build all three
 tiers, and the lane's own record is the argument against that: clause (d)
 FAILED under FAST by construction and this was documented as correct
 (transformer/README.md), while `attention_path_choice` returned the EAGER
@@ -974,7 +976,7 @@ class TransformerBlock(NumericModeMixin):
         fresh_ext = None
         mode = getattr(self, "numeric_mode", None) or _backend.default_mode()
         if (state is None and not step and b > 0 and l > 0
-                and self.window >= 0 and mode == "identical"):
+                and self.window >= 0 and mode in ("identical", "fast")):
             fresh_ext = ext
             if hasattr(fresh_ext, "transformer_forward_fresh"):
                 return self._call_fresh(x, fresh_ext)
@@ -1151,10 +1153,10 @@ class TransformerBlock(NumericModeMixin):
                 f"qk_norm={self.qk_norm!r}, attn_softcap={self.attn_softcap!r}"
             )
         mode = getattr(self, "numeric_mode", None) or _backend.default_mode()
-        if mode != "identical":
+        if mode not in ("identical", "fast"):
             raise NotImplementedError(
-                f"mojolearn {what}: only the IDENTICAL zero-state prefill "
-                f"backward is implemented; got numeric_mode={mode!r}"
+                f"mojolearn {what}: the zero-state prefill backward runs under "
+                f"IDENTICAL or FAST; got numeric_mode={mode!r}"
             )
         x = _batch_tokens(x, what, self.d_model, False)
         b, l = int(x.shape[0]), int(x.shape[1])

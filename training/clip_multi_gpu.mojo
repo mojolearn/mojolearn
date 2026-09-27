@@ -68,7 +68,7 @@ def parallel_clip_grad_norm_host(
     var devices = Int(getenv("MOJOLEARN_OPTIMIZER_DEVICE_COUNT","1"))
     if devices == 1:
         return identical_clip_grad_norm_host(ctx,grad_ptr,offsets_ptr,info_ptr,n_tensors,max_norm)
-    if devices < 1 or devices > 64 or GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+    if devices < 1 or devices > 64 or GLOBAL_NUMERIC_MODE > NUMERIC_IDENTICAL:
         raise Error("parallel clip requires IDENTICAL and 1..64 devices")
     comptime if STEP_PHASE_TIMERS:
         raise Error("parallel clip cannot use process-global phase counters")

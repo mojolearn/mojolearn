@@ -31,7 +31,7 @@ def parallel_accumulate_host(
     var devices = Int(getenv("MOJOLEARN_OPTIMIZER_DEVICE_COUNT", "1"))
     if devices == 1:
         return samba_accumulate_host(ctx,out_ptr,parts_ptr,n,a,t_tokens)
-    if devices < 1 or devices > 64 or GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+    if devices < 1 or devices > 64 or GLOBAL_NUMERIC_MODE > NUMERIC_IDENTICAL:
         raise Error("parallel accumulation requires IDENTICAL and 1..64 devices")
     comptime if STEP_PHASE_TIMERS:
         raise Error("parallel accumulation cannot use process-global phase counters")

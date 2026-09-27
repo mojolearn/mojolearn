@@ -10,7 +10,9 @@ ROOT = Path(__file__).resolve().parents[1]
 #: TREE lanes (gbdt, rf, trees) build in EVERY tier (DEVIATION 2490,
 #: 2026-09-10). CLASSICAL ML (2026-09-25) builds FAST and IDENTICAL, never
 #: deterministic: FAST_CLASSICAL_NAMES / FAST_CLASSICAL_SCRIPTS. The neural
-#: lanes build IDENTICAL only: IDENTICAL_ONLY_NAMES / IDENTICAL_ONLY_SCRIPTS.
+#: blocks joined them on 2026-09-27 (lane neural); IDENTICAL_ONLY_NAMES /
+#: IDENTICAL_ONLY_SCRIPTS are empty, and only the optional byte LM stays
+#: IDENTICAL only.
 #: Cross-vendor bitwise identity is the product; a fast tier
 #: ships only where it has a measured win over the opponent's own CPU
 #: (python/mojolearn/_backend.py, `_TIERED`). These tests are what keeps a
@@ -18,10 +20,11 @@ ROOT = Path(__file__).resolve().parents[1]
 EVERY_TIER = 3
 #: 14 at classical FAST (2026-09-25): _mojolearn, estimators, solver,
 #: metrics, preprocessing, tsa, linalg, arima, gp, kernel_methods, mixture,
-#: hdbscan, resample, ivf; 15 when svm joined them on Linux.
-FAST_CLASSICAL = 15
-#: training, mamba, transformer, embedding (the neural lanes).
-IDENTICAL_ONLY = 4
+#: hdbscan, resample, ivf; 15 when svm joined them on Linux; 19 when the
+#: neural blocks (training, mamba, transformer, embedding) did (2026-09-27).
+FAST_CLASSICAL = 19
+#: Empty since the neural blocks gained FAST (2026-09-27).
+IDENTICAL_ONLY = 0
 FAST_ROW = EVERY_TIER + FAST_CLASSICAL
 IDENTICAL_ROW = EVERY_TIER + IDENTICAL_ONLY + FAST_CLASSICAL
 
@@ -45,8 +48,8 @@ class OptionalBuildLayoutTests(unittest.TestCase):
         source = (ROOT / 'packaging/linux/build_sets.sh').read_text()
         names = re.search(r'^EXT_NAMES="([^"]+)"$', source, re.M).group(1)
         scripts = re.search(r'^SCRIPTS="\$\{MOJOLEARN_BUILD_SCRIPTS:-([^}]+)\}"$', source, re.M).group(1)
-        identical_only_names = re.search(r'^IDENTICAL_ONLY_NAMES="([^"]+)"$', source, re.M).group(1)
-        identical_only_scripts = re.search(r'^IDENTICAL_ONLY_SCRIPTS="([^"]+)"$', source, re.M).group(1)
+        identical_only_names = re.search(r'^IDENTICAL_ONLY_NAMES="([^"]*)"$', source, re.M).group(1)
+        identical_only_scripts = re.search(r'^IDENTICAL_ONLY_SCRIPTS="([^"]*)"$', source, re.M).group(1)
         fast_classical_names = re.search(r'^FAST_CLASSICAL_NAMES="([^"]+)"$', source, re.M).group(1)
         fast_classical_scripts = re.search(r'^FAST_CLASSICAL_SCRIPTS="([^"]+)"$', source, re.M).group(1)
         body = re.search(r'^' + function + r'\(\) \{\n.*?^\}', source, re.M | re.S).group()
@@ -94,20 +97,20 @@ class OptionalBuildLayoutTests(unittest.TestCase):
                 self.assertNotIn(entry, fast, helper)
                 self.assertNotIn(entry, deterministic, helper)
 
-    def test_no_neural_binding_outside_identical(self):
+    def test_neural_blocks_fast_and_identical_byte_lm_identical_only(self):
         for helper in ('tier_names', 'tier_scripts'):
             fast, deterministic, identical = self.rows(1, helper)
+            for stem in ('training', 'mamba', 'transformer', 'embedding'):
+                self.assertFalse(any(stem in entry for entry in deterministic),
+                                 f'{stem} must not build in deterministic: {deterministic}')
+                for row, tier in ((fast, 'fast'), (identical, 'identical')):
+                    self.assertTrue(any(stem in entry and 'host' not in entry for entry in row),
+                                    f'{stem} must build in {tier}: {row}')
             for row, tier in ((fast, 'fast'), (deterministic, 'deterministic')):
-                for stem in ('training', 'mamba', 'transformer', 'byte_lm'):
-                    self.assertFalse(
-                        any(stem in entry for entry in row),
-                        f'{stem} must not build in {tier}: {row}',
-                    )
-            for stem in ('training', 'mamba', 'transformer', 'byte_lm'):
-                self.assertTrue(
-                    any(stem in entry for entry in identical),
-                    f'{stem} must build in identical: {identical}',
-                )
+                self.assertFalse(any('byte_lm' in entry for entry in row),
+                                 f'byte_lm must not build in {tier}: {row}')
+            self.assertTrue(any('byte_lm' in entry for entry in identical),
+                            f'byte_lm must build in identical: {identical}')
 
     def test_optional_native_exists_once_in_identical_only(self):
         names = self.rows(1, 'tier_names')

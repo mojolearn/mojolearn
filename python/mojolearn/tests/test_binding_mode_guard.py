@@ -53,17 +53,20 @@ def test_invalid_mode_never_falls_back(monkeypatch, mode):
 
 @pytest.mark.parametrize('mode', ['fast', 'deterministic'])
 def test_lanes_refuse_tiers_they_do_not_ship_by_name(monkeypatch, mode):
-    """Trees ship fast and deterministic, classical ML ships fast, the neural
-    families and the base binding ship identical only. Every refusal happens
+    """Trees ship fast and deterministic, classical ML and the neural blocks
+    ship fast, the byte LM ships identical only. Every refusal happens
     at the choke point, before any set is loaded, with a sentence that names
     the rule and the binding."""
     monkeypatch.setattr(_backend, 'load_set', lambda _: pytest.fail('load_set reached'))
     assert _backend._TIERED == frozenset({'_mojolearn_gbdt', '_mojolearn_rf', '_mojolearn_trees'})
     assert _backend._FAST_TIERED == _backend._TIERED | _backend._CLASSICAL_FAST
     assert _backend._IDENTICAL_ONLY == frozenset(_backend._MODULES) - _backend._FAST_TIERED
-    for neural in ('_mojolearn_training', '_mojolearn_byte_lm', '_mojolearn_mamba',
+    # The neural blocks ship fast and identical (lane neural, 2026-09-27);
+    # the byte LM stays identical only.
+    assert '_mojolearn_byte_lm' in _backend._IDENTICAL_ONLY
+    for neural in ('_mojolearn_training', '_mojolearn_mamba',
                    '_mojolearn_transformer', '_mojolearn_embedding'):
-        assert neural in _backend._IDENTICAL_ONLY, neural
+        assert neural in _backend._CLASSICAL_FAST, neural
     refused = [n for n in _backend._MODULES if not _backend._offers(n, mode)]
     assert refused
     for name in refused:

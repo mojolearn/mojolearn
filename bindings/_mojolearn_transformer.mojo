@@ -321,7 +321,7 @@ def _upload_addr(
     if n_buf < 1:
         n_buf = 1
     var dev = ctx.enqueue_create_buffer[DType.float32](n_buf)
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_TRANSFORMER_LEGACY_CALLER_TRANSFER"]():
+    comptime if GLOBAL_NUMERIC_MODE <= NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_TRANSFORMER_LEGACY_CALLER_TRANSFER"]():
         if n > 0:
             ctx.enqueue_copy(dst_buf=dev, src_ptr=p)
             ctx.synchronize()
@@ -346,7 +346,7 @@ def _download_addr[wait: Bool = True](
     Temporary views and legacy staging always finish before their owners die.
     """
     var p = _f32_ptr(addr)
-    comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_TRANSFORMER_LEGACY_CALLER_TRANSFER"]():
+    comptime if GLOBAL_NUMERIC_MODE <= NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_TRANSFORMER_LEGACY_CALLER_TRANSFER"]():
         if n == len(buf):
             ctx.enqueue_copy(dst_ptr=p, src_buf=buf)
             comptime if wait:
@@ -405,10 +405,10 @@ def transformer_vendor_binding() raises -> PythonObject:
 
 def transformer_lean_stages(hd: Int) -> Bool:
     """Whether this call may skip the `[B, n_heads, L, S]` attention stage
-    allocations: the fused attention path will be attempted (IDENTICAL
-    build, supported head_dim, not forced eager) and the trace is off here
+    allocations: the fused attention path will be attempted (FAST or
+    IDENTICAL build, supported head_dim, not forced eager) and the trace is off here
     always. The eager fallback grows the buffers on demand."""
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+    comptime if GLOBAL_NUMERIC_MODE > NUMERIC_IDENTICAL:  # NUMERIC_DETERMINISTIC (2)
         return False
     if not fused_forward_supported_head_dim(hd):
         return False
@@ -442,7 +442,7 @@ def _load_transformer_weights(
                 "transformer: gate_proj.weight address is null (the default"
                 " options carry a gated MLP)"
             )
-        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_TRANSFORMER_LEGACY_WEIGHT_COPY"]():
+        comptime if GLOBAL_NUMERIC_MODE <= NUMERIC_IDENTICAL and not is_defined["MOJOLEARN_TRANSFORMER_LEGACY_WEIGHT_COPY"]():
             return LlamaDeviceWeights(
                 ctx, dims, RMS_EPS,
                 _upload_addr(ctx, a[1], dm),
@@ -1646,10 +1646,10 @@ def transformer_backward_binding(
     1 L, 2 d_model, 3 n_heads, 4 n_kv_heads, 5 head_dim, 6 intermediate,
     7 window. The activation gradients are the lane's pinned chains; every
     weight gradient is a sum over this call's B*L tokens."""
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+    comptime if GLOBAL_NUMERIC_MODE > NUMERIC_IDENTICAL:  # NUMERIC_DETERMINISTIC (2)
         raise Error(
-            "transformer backward: only the IDENTICAL zero-state prefill"
-            " backward is implemented"
+            "transformer backward: no DETERMINISTIC tier (FAST or IDENTICAL"
+            " zero-state prefill backward)"
         )
     if len(addrs) != 21 or len(params) != 8:
         raise Error(
@@ -1683,19 +1683,19 @@ def transformer_backward_binding(
 
 @export
 def PyInit__mojolearn_transformer() abi("C") -> PythonObject:
-    # IDENTICAL-ONLY (2026-09-10). The FAST and DETERMINISTIC builds of this
-    # lane were never a faster path: every fused kernel here is gated on
-    # `GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL`, so the lower tiers fell back
-    # to the unfused arms and ran SLOWER than the default. They are no longer
-    # built (bindings/build_transformer.sh refuses) and the lane no longer carries
-    # the fallbacks. Refuse to exist rather than answer under a tier label
-    # whose arithmetic is gone.
-    comptime if GLOBAL_NUMERIC_MODE != NUMERIC_IDENTICAL:
+    # FAST AND IDENTICAL (lane neural, 2026-09-27). This lane was
+    # IDENTICAL-only from 2026-09-10 because its fused kernels were once gated
+    # on IDENTICAL and the lower tiers fell back to slower unfused arms. Those
+    # fallbacks are gone: FAST runs the same kernels and the same launches with
+    # the pins in checks/numerics.mojo compiled to the free schedule. FAST
+    # promises quality, never bits (docs/lanes/progress/neural.md). The
+    # DETERMINISTIC tier stays tree-only: refuse to exist under it.
+    comptime if GLOBAL_NUMERIC_MODE > NUMERIC_IDENTICAL:  # NUMERIC_DETERMINISTIC (2)
         abort(
             String(
-                "_mojolearn_transformer: refusing to initialize -- this lane supports only"
-                " the IDENTICAL tier. Rebuild with"
-                " MOJOLEARN_NUMERIC_MODE=identical bash bindings/build_transformer.sh"
+                "_mojolearn_transformer: refusing to initialize -- this lane builds"
+                " FAST and IDENTICAL only. Rebuild with"
+                " MOJOLEARN_NUMERIC_MODE=identical (or fast) bash bindings/build_transformer.sh"
             )
         )
     # DEVIATION 793's last clause, applied here: a sabotage arm exists to
@@ -1734,7 +1734,7 @@ def PyInit__mojolearn_transformer() abi("C") -> PythonObject:
         # NVIDIA's full public A/B gate admits discarded-cache prefill.
         # Apple retains its prior default until separately priced; the explicit
         # force flag remains available for its completed arithmetic gate.
-        comptime if GLOBAL_NUMERIC_MODE == NUMERIC_IDENTICAL and (is_defined["MOJOLEARN_TRANSFORMER_FRESH_PREFILL"]() or (TARGET_COLUMN == COLUMN_NVIDIA and not is_defined["MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL"]())):
+        comptime if GLOBAL_NUMERIC_MODE <= NUMERIC_IDENTICAL and (is_defined["MOJOLEARN_TRANSFORMER_FRESH_PREFILL"]() or (TARGET_COLUMN == COLUMN_NVIDIA and not is_defined["MOJOLEARN_TRANSFORMER_LEGACY_FRESH_PREFILL"]())):
             m.def_function[transformer_forward_fresh_binding]("transformer_forward_fresh")
         m.def_function[transformer_decode_step_binding](
             "transformer_decode_step"
