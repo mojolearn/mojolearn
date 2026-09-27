@@ -846,3 +846,336 @@ def knn_impute_item(
         den = _add(den, w)
     res.unsafe_store(t, ftz(identical_div(num, den)))
 
+
+# ------------------------------------------------------------------ graphs
+def pagerank_step_item(t: Int, q: FP, x: FP, p: FP, dangling: IP, res: FP, n: Int, alpha: Float32):
+    """One power-iteration step for node t (networkx `_pagerank_scipy`;
+    cuGraph cpp/src/link_analysis/pagerank_impl.cuh): alpha * (x @ Q +
+    sum(x[dangling]) * p) + (1 - alpha) * p, both folds ascending by node."""
+    var acc = Float32(0)
+    for i in range(n):
+        acc = ftz(identical_mul_add(ftz(x.unsafe_load(i)), ftz(q.unsafe_load(i * n + t)), acc))
+    var dsum = Float32(0)
+    for i in range(n):
+        if Int(dangling.unsafe_load(i)) != 0:
+            dsum = _add(dsum, x.unsafe_load(i))
+    var pt = ftz(p.unsafe_load(t))
+    var inner = ftz(identical_mul_add(dsum, pt, acc))
+    var teleport = ftz(identical_mul(_sub(Float32(1), alpha), pt))
+    res.unsafe_store(t, ftz(identical_mul_add(alpha, inner, teleport)))
+
+
+def cc_step_item(t: Int, a: FP, lab: IP, res: IP, n: Int):
+    """Weak connectivity as a product (DBSCAN's weak_cc; cuGraph
+    weakly_connected_components_impl.cuh): the smallest label among the node
+    and its neighbors in either direction. Integers only."""
+    var best = lab.unsafe_load(t)
+    for j in range(n):
+        if a.unsafe_load(t * n + j) != Float32(0) or a.unsafe_load(j * n + t) != Float32(0):
+            var l = lab.unsafe_load(j)
+            if l < best:
+                best = l
+    res.unsafe_store(t, best)
+
+
+def _louvain_modularity(w: FP, comm: IP, n: Int, m: Float32, resolution: Float32, tot: FP, inner: FP) -> Float32:
+    """networkx `modularity` on the dense symmetric graph w (self-loops on the
+    diagonal, each edge counted once): sum_c L_c / m - resolution (deg_c / 2m)^2,
+    communities folded in ascending id. tot / inner are n floats of scratch."""
+    for c in range(n):
+        tot.unsafe_store(c, Float32(0))
+        inner.unsafe_store(c, Float32(0))
+    for u in range(n):
+        var cu = Int(comm.unsafe_load(u))
+        var deg = Float32(0)
+        for v in range(n):
+            var wv = w.unsafe_load(u * n + v)
+            deg = _add(deg, wv)
+            if v == u:
+                deg = _add(deg, wv)
+                inner.unsafe_store(cu, _add(inner.unsafe_load(cu), wv))
+            elif v > u and Int(comm.unsafe_load(v)) == cu:
+                inner.unsafe_store(cu, _add(inner.unsafe_load(cu), wv))
+        tot.unsafe_store(cu, _add(tot.unsafe_load(cu), deg))
+    var q = Float32(0)
+    var two_m = ftz(identical_mul(Float32(2), m))
+    for c in range(n):
+        var lc = ftz(identical_div(inner.unsafe_load(c), m))
+        var fr = ftz(identical_div(tot.unsafe_load(c), two_m))
+        q = _add(q, _sub(lc, ftz(identical_mul(resolution, ftz(identical_mul(fr, fr))))))
+    return q
+
+
+def louvain_item(
+    t: Int, a: FP, labels: IP, info: FP, w: FP, w2: FP, comm: IP, node_of: IP, deg: FP, stot: FP, k2c: FP, tmp: FP,
+    n: Int, max_level: Int, resolution: Float32, threshold: Float32,
+):
+    """Louvain community detection, sequential, ONE item (networkx
+    `louvain_partitions` / `_one_level` / `_gen_graph`; cuGraph
+    cpp/src/community/louvain_impl.cuh is the parallel, order-dependent
+    reference). PINNED ORDER (DEVIATION 5204): nodes are visited in ascending
+    id (networkx shuffles them by `seed`), candidate communities are scanned
+    in ascending id and a move needs a STRICTLY larger gain, so equal gains
+    go to the lowest community id. Float32 folds in ascending order. `a` is
+    the n x n symmetric weight matrix (diagonal = self-loops). labels[u]
+    (original node u) ends as its community, numbered by first appearance.
+    info = [modularity, levels]."""
+    # m = total edge weight, each undirected edge once, self-loops once
+    var m = Float32(0)
+    for u in range(n):
+        for v in range(u, n):
+            m = _add(m, a.unsafe_load(u * n + v))
+    var two_m2 = ftz(identical_mul(Float32(2), ftz(identical_mul(m, m))))
+    var nn = n
+    for u in range(n):
+        labels.unsafe_store(u, Int32(u))
+        for v in range(n):
+            w.unsafe_store(u * n + v, a.unsafe_load(u * n + v))
+    for u in range(n):
+        comm.unsafe_store(u, Int32(u))
+    var levels = 0
+    var mod = _louvain_modularity(w, comm, nn, m, resolution, tmp, k2c)
+    while max_level <= 0 or levels < max_level:
+        # ---- networkx `_one_level` on the current graph w (nn nodes) ----
+        for u in range(nn):
+            comm.unsafe_store(u, Int32(u))
+            var dg = Float32(0)
+            for v in range(nn):
+                dg = _add(dg, w.unsafe_load(u * nn + v))
+            dg = _add(dg, w.unsafe_load(u * nn + u))
+            deg.unsafe_store(u, dg)
+            stot.unsafe_store(u, dg)
+        var improvement = False
+        var moves = 1
+        while moves > 0:
+            moves = 0
+            for u in range(nn):
+                var cu = Int(comm.unsafe_load(u))
+                for c in range(nn):
+                    k2c.unsafe_store(c, Float32(0))
+                for v in range(nn):
+                    if v != u:
+                        var wv = w.unsafe_load(u * nn + v)
+                        if wv != Float32(0):
+                            var cv = Int(comm.unsafe_load(v))
+                            k2c.unsafe_store(cv, _add(k2c.unsafe_load(cv), wv))
+                var du = deg.unsafe_load(u)
+                stot.unsafe_store(cu, _sub(stot.unsafe_load(cu), du))
+                var remove_cost = _add(
+                    -ftz(identical_div(k2c.unsafe_load(cu), m)),
+                    ftz(identical_div(ftz(identical_mul(resolution, ftz(identical_mul(stot.unsafe_load(cu), du)))), two_m2)),
+                )
+                var best = cu
+                var best_gain = Float32(0)
+                for c in range(nn):
+                    var kc = k2c.unsafe_load(c)
+                    if kc == Float32(0):
+                        continue
+                    var gain = _sub(
+                        _add(remove_cost, ftz(identical_div(kc, m))),
+                        ftz(identical_div(ftz(identical_mul(resolution, ftz(identical_mul(stot.unsafe_load(c), du)))), two_m2)),
+                    )
+                    if gain > best_gain:
+                        best_gain = gain
+                        best = c
+                stot.unsafe_store(best, _add(stot.unsafe_load(best), du))
+                if best != cu:
+                    comm.unsafe_store(u, Int32(best))
+                    moves += 1
+                    improvement = True
+        if levels > 0 and not improvement:
+            break
+        # renumber by ascending old community id (their filter(len, partition))
+        for c in range(nn):
+            node_of.unsafe_store(c, Int32(-1))
+        var nc = 0
+        for c in range(nn):
+            var used = False
+            for u in range(nn):
+                if Int(comm.unsafe_load(u)) == c:
+                    used = True
+                    break
+            if used:
+                node_of.unsafe_store(c, Int32(nc))
+                nc += 1
+        for u in range(nn):
+            comm.unsafe_store(u, node_of.unsafe_load(Int(comm.unsafe_load(u))))
+        for u in range(n):
+            labels.unsafe_store(u, comm.unsafe_load(Int(labels.unsafe_load(u))))
+        levels += 1
+        var new_mod = _louvain_modularity(w, comm, nn, m, resolution, tmp, k2c)
+        if not (_sub(new_mod, mod) > threshold):
+            break
+        mod = new_mod
+        # aggregate (their _gen_graph): W'[c,d] = sum of w[u,v] over u in c, v in d,
+        # each undirected edge once; an edge inside c becomes c's self-loop
+        for i in range(nc * nc):
+            w2.unsafe_store(i, Float32(0))
+        for u in range(nn):
+            var cu2 = Int(comm.unsafe_load(u))
+            for v in range(u, nn):
+                var wv = w.unsafe_load(u * nn + v)
+                if wv == Float32(0):
+                    continue
+                var cv2 = Int(comm.unsafe_load(v))
+                w2.unsafe_store(cu2 * nc + cv2, _add(w2.unsafe_load(cu2 * nc + cv2), wv))
+                if cu2 != cv2:
+                    w2.unsafe_store(cv2 * nc + cu2, _add(w2.unsafe_load(cv2 * nc + cu2), wv))
+        for i in range(nc * nc):
+            w.unsafe_store(i, w2.unsafe_load(i))
+        nn = nc
+        for u in range(nn):
+            comm.unsafe_store(u, Int32(u))
+    info.unsafe_store(0, _louvain_modularity(a, labels, n, m, resolution, tmp, k2c))
+    info.unsafe_store(1, Float32(levels))
+
+
+# ------------------------------------------------------------------ SVGP
+def _chol_inplace(a: FP, m: Int) -> Bool:
+    """Lower Cholesky of the m x m row-major a, in place (upper triangle
+    zeroed), columns left to right, each fold ascending. False when a pivot
+    is not positive."""
+    for j in range(m):
+        var s = a.unsafe_load(j * m + j)
+        for k in range(j):
+            var l = a.unsafe_load(j * m + k)
+            s = ftz(identical_mul_add(-l, l, s))
+        if not (s > Float32(0)):
+            return False
+        var d = ftz(identical_sqrt(s))
+        a.unsafe_store(j * m + j, d)
+        for i in range(j + 1, m):
+            var t = a.unsafe_load(i * m + j)
+            for k in range(j):
+                t = ftz(identical_mul_add(-a.unsafe_load(i * m + k), a.unsafe_load(j * m + k), t))
+            a.unsafe_store(i * m + j, ftz(identical_div(t, d)))
+        for i in range(j):
+            a.unsafe_store(i * m + j, Float32(0))
+    return True
+
+
+def _chol_solve(l: FP, m: Int, b: FP, x: FP):
+    """x = (L L^T)^-1 b: forward then back substitution, ascending folds."""
+    for i in range(m):
+        var s = b.unsafe_load(i)
+        for k in range(i):
+            s = ftz(identical_mul_add(-l.unsafe_load(i * m + k), x.unsafe_load(k), s))
+        x.unsafe_store(i, ftz(identical_div(s, l.unsafe_load(i * m + i))))
+    for ii in range(m):
+        var i = m - 1 - ii
+        var s = x.unsafe_load(i)
+        for k in range(i + 1, m):
+            s = ftz(identical_mul_add(-l.unsafe_load(k * m + i), x.unsafe_load(k), s))
+        x.unsafe_store(i, ftz(identical_div(s, l.unsafe_load(i * m + i))))
+
+
+def _log_diag_sum(l: FP, m: Int) -> Float32:
+    var s = Float32(0)
+    for i in range(m):
+        s = _add(s, ftz(identical_log(l.unsafe_load(i * m + i))))
+    return s
+
+
+def svgp_item(
+    t: Int, kuu: FP, bmat: FP, b: FP, y: FP, alpha: FP, cmat: FP, qmu: FP, qsqrt: FP, info: FP,
+    luu: FP, ls: FP, e: FP, col: FP,
+    m: Int, n: Int, noise: Float32, jitter: Float32, kdiag: Float32,
+):
+    """The SVGP with a Gaussian likelihood at its OPTIMAL variational
+    distribution (Titsias 2009; GPflow gpflow/models/svgp.py `elbo` reaches
+    this bound at its optimum q), ONE sequential item on the m x m system:
+    Sigma = Kuu + jitter I + B / noise with B = Kuf Kfu; alpha = Sigma^-1 b /
+    noise with b = Kuf y (the predictive mean is K*u alpha); C = Kuu^-1 -
+    Sigma^-1 (the predictive variance is k** - K*u C Ku*); q_mu = Kuu alpha,
+    q_sqrt = chol(Kuu Sigma^-1 Kuu); info = [elbo, ok]. Cholesky, the
+    triangular solves and every fold in ascending order."""
+    for i in range(m * m):
+        luu.unsafe_store(i, kuu.unsafe_load(i))
+    for i in range(m):
+        luu.unsafe_store(i * m + i, _add(luu.unsafe_load(i * m + i), jitter))
+    for i in range(m * m):
+        ls.unsafe_store(i, _add(luu.unsafe_load(i), ftz(identical_div(bmat.unsafe_load(i), noise))))
+    var ok1 = _chol_inplace(luu, m)
+    var ok2 = _chol_inplace(ls, m)
+    if not (ok1 and ok2):
+        info.unsafe_store(0, Float32(0))
+        info.unsafe_store(1, Float32(0))
+        return
+    # alpha = Sigma^-1 b / noise
+    _chol_solve(ls, m, b, alpha)
+    for i in range(m):
+        alpha.unsafe_store(i, ftz(identical_div(alpha.unsafe_load(i), noise)))
+    # C = Kuu^-1 - Sigma^-1, column by column; e / col are m floats of scratch
+    for j in range(m):
+        for i in range(m):
+            e.unsafe_store(i, Float32(1) if i == j else Float32(0))
+        _chol_solve(luu, m, e, col)
+        for i in range(m):
+            cmat.unsafe_store(i * m + j, col.unsafe_load(i))
+        _chol_solve(ls, m, e, col)
+        for i in range(m):
+            cmat.unsafe_store(i * m + j, _sub(cmat.unsafe_load(i * m + j), col.unsafe_load(i)))
+    # q_mu = Kuu alpha (the jittered Kuu, as the solves)
+    for i in range(m):
+        var s = Float32(0)
+        for k in range(m):
+            var kv = kuu.unsafe_load(i * m + k)
+            if i == k:
+                kv = _add(kv, jitter)
+            s = ftz(identical_mul_add(kv, alpha.unsafe_load(k), s))
+        qmu.unsafe_store(i, s)
+    # S = Kuu Sigma^-1 Kuu, then its Cholesky into q_sqrt
+    for j in range(m):
+        for i in range(m):
+            var kv = kuu.unsafe_load(i * m + j)
+            if i == j:
+                kv = _add(kv, jitter)
+            e.unsafe_store(i, kv)
+        _chol_solve(ls, m, e, col)
+        for i in range(m):
+            var s = Float32(0)
+            for k in range(m):
+                var kv = kuu.unsafe_load(i * m + k)
+                if i == k:
+                    kv = _add(kv, jitter)
+                s = ftz(identical_mul_add(kv, col.unsafe_load(k), s))
+            qsqrt.unsafe_store(i * m + j, s)
+    var ok3 = _chol_inplace(qsqrt, m)
+    # the collapsed bound
+    var yty = Float32(0)
+    for i in range(n):
+        var yv = y.unsafe_load(i)
+        yty = ftz(identical_mul_add(yv, yv, yty))
+    _chol_solve(ls, m, b, col)
+    var bsb = Float32(0)
+    for i in range(m):
+        bsb = ftz(identical_mul_add(b.unsafe_load(i), col.unsafe_load(i), bsb))
+    var quad = _sub(ftz(identical_div(yty, noise)), ftz(identical_div(bsb, ftz(identical_mul(noise, noise)))))
+    var logdet = _add(
+        ftz(identical_mul(Float32(2), _sub(_log_diag_sum(ls, m), _log_diag_sum(luu, m)))),
+        ftz(identical_mul(Float32(n), ftz(identical_log(noise)))),
+    )
+    # tr(Kuu^-1 B): column solves against B
+    var trq = Float32(0)
+    for j in range(m):
+        for i in range(m):
+            e.unsafe_store(i, bmat.unsafe_load(i * m + j))
+        _chol_solve(luu, m, e, col)
+        trq = _add(trq, col.unsafe_load(j))
+    var trace_term = ftz(identical_div(_sub(ftz(identical_mul(Float32(n), kdiag)), trq), noise))
+    var log2pi = Float32(1.8378770664093453)
+    var elbo = -ftz(identical_mul(Float32(0.5), _add(_add(ftz(identical_mul(Float32(n), log2pi)), logdet), _add(quad, trace_term))))
+    info.unsafe_store(0, elbo)
+    info.unsafe_store(1, Float32(1) if ok3 else Float32(0))
+
+
+def svgp_var_item(t: Int, ksu: FP, cmat: FP, res: FP, n: Int, m: Int, kdiag: Float32):
+    """Predictive variance of f at row t: k** - K*u C Ku*, the inner fold
+    per row of C ascending, then the outer ascending."""
+    var acc = Float32(0)
+    for i in range(m):
+        var s = Float32(0)
+        for j in range(m):
+            s = ftz(identical_mul_add(cmat.unsafe_load(i * m + j), ksu.unsafe_load(t * m + j), s))
+        acc = ftz(identical_mul_add(ksu.unsafe_load(t * m + i), s, acc))
+    res.unsafe_store(t, _sub(kdiag, acc))

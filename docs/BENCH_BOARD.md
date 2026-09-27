@@ -335,11 +335,12 @@ and IDENTICAL). Opponents, fastest real implementation per box:
 | group | opponents |
 |---|---|
 | scikit-learn-shaped estimators (linear, cluster, neighbors, decomp, prep, trees wrappers) | scikit-learn on every core; cuML on NVIDIA where it has the estimator (MBSGD, Lars, IncrementalPCA, random projections, naive Bayes, TSNE, the cuML preprocessing classes, TargetEncoder, forest-of-one for the decision trees) |
-| DART | LightGBM (`boosting='dart'`) CPU, XGBoost (`booster='dart'`) CPU, and CUDA on NVIDIA |
-| SHAP | shap (TreeExplainer, KernelExplainer, PermutationExplainer), XGBoost/LightGBM `pred_contribs` (GPUTreeShap on CUDA), cuML's Kernel and Permutation explainers |
+| DART classifier and regressor | LightGBM (`boosting='dart'`) CPU, XGBoost (`booster='dart'`) CPU, and CUDA on NVIDIA |
+| SHAP | shap (TreeExplainer, KernelExplainer, PermutationExplainer), XGBoost/LightGBM `pred_contribs` (GPUTreeShap on CUDA), cuML's Kernel and Permutation explainers; our TreeExplainer explains our RandomForestRegressor of the same size (it takes RF, ExtraTrees, DecisionTree and DART models) |
 | IVF-PQ, IVF-SQ, IVF-RaBitQ, refine, sample filter, CAGRA | faiss-cpu (HNSW for CAGRA), cuVS on NVIDIA |
 | PageRank, connected components, Louvain | networkx, cuGraph on NVIDIA |
-| LSTM, GRU, RNN, LayerNorm, MoE block, Conv1d/2d, pooling, BatchNorm, Dropout2d, ResNet block, GCN, GraphSAGE | torch at every fast setting of the box (eager/compile x fp32/TF32/bf16, TF32 on NVIDIA only; PyG for GCN and SAGE), the same weights loaded into every arm |
+| LSTM, GRU, RNN classifiers and regressors | torch `nn.LSTM`/`nn.GRU`/`nn.RNN` + a linear head trained with Adam for the same epochs and batch size, at every fast setting of the box, on 24-step windows of taxi-hourly and synthetic series |
+| LayerNorm, MoE block, Conv1d/2d, pooling, BatchNorm, Dropout2d, ResNet block, GCN, GraphSAGE | torch at every fast setting of the box (eager/compile x fp32/TF32/bf16, TF32 on NVIDIA only; PyG for GCN and SAGE), the same weights loaded into every arm (ours through `load_state_dict` or `set_weights`) |
 | RMSprop, Adagrad, Adamax, NAdam, Adafactor | `torch.optim` eager and compiled step, fp32 |
 | AutoARIMA, Theta, Croston, damped ETS, STL, VAR, GARCH, Prophet | statsforecast, statsmodels, arch, prophet (one fit per series, joblib over every core); cuML AutoARIMA on NVIDIA |
 | SVGP | GPyTorch variational GP on the GPU and CPU |

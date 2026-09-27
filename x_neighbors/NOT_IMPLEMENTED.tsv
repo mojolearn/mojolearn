@@ -10,3 +10,12 @@ OneClassSVM double-precision solve	DEVIATION 5200	libsvm solves in double; ocsvm
 KernelPCA eigen_solver arpack / randomized	DEVIATION 5202	Served by the dense host Jacobi (spectral/checks/symmetric_eig_host.mojo), which the approximations approximate; iterative_power, tol, max_iter, random_state accepted and unused
 KernelPCA fit_inverse_transform / inverse_transform	REFUSED BY NAME	The pre-image kernel ridge is not carried
 KernelPCA kernel='precomputed', callables, kernel_params	REFUSED BY NAME	As OneClassSVM
+PolynomialCountSketch FFT convolution	DEVIATION 5203	The count sketches' circular convolution is summed directly (pcs_item) instead of fft / product / ifft: the same product in exact arithmetic, with a fixed fold order
+PolynomialCountSketch / SkewedChi2Sampler random_state None or a RandomState instance	REFUSED BY NAME	The draws reproduce numpy's legacy RandomState(int) stream exactly (_LegacyRandomState); an OS-seeded or caller-held generator has no reproducible stream
+Kernel-approximation sparse input	NOT IMPLEMENTED	Dense float32 only
+LabelPropagation / LabelSpreading callable kernels	REFUSED BY NAME	'rbf' and 'knn' only; the knn graph is dense here
+KNNImputer missing_values other than NaN, metric other than nan_euclidean, callable weights	REFUSED BY NAME	The imputation item reads NaN as missing and computes nan_euclidean only
+PageRank nstart, dangling vector, weight attribute name	NOT IMPLEMENTED	A dense matrix carries the weights; dangling mass follows the personalization, as networkx's default
+connected_components connection='strong' on a directed graph	REFUSED BY NAME	The min-label product computes weak connectivity only
+Louvain seed (networkx shuffles the visit order)	DEVIATION 5204	Visit order pinned ascending, ties to the lowest community id; seed accepted and unused
+SVGP hyperparameter and variational optimization (GPflow training loop), whiten, other kernels / likelihoods, mean functions	DEVIATION 5205	q(u) is set to its closed-form optimum for the caller's hyperparameters (squared exponential, scalar lengthscale, Gaussian likelihood, zero mean); nothing is trained by gradient steps

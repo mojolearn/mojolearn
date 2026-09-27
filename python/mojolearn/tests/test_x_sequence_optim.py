@@ -100,6 +100,41 @@ def test_adafactor_against_torch_rule():
     np.testing.assert_allclose(v, qv, rtol=1e-4, atol=1e-5)
 
 
+def ref_adamax(p, g, t, st, lr=2e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.0):
+    b1, b2 = betas
+    g = g + weight_decay * p
+    st["m"] = st.get("m", 0.0) + (1 - b1) * (g - st.get("m", 0.0))
+    st["u"] = np.maximum(b2 * st.get("u", 0.0), np.abs(g) + eps)
+    return p - lr / (1 - b1 ** t) * st["m"] / st["u"]
+
+
+def test_adamax():
+    _run(ml.Adamax, ref_adamax)
+    _run(ml.Adamax, ref_adamax, lr=1e-2, betas=(0.8, 0.99), weight_decay=0.05)
+
+
+def ref_nadam(p, g, t, st, lr=2e-3, betas=(0.9, 0.999), eps=1e-8, weight_decay=0.0, momentum_decay=4e-3,
+              decoupled_weight_decay=False):
+    b1, b2 = betas
+    if decoupled_weight_decay:
+        p = p * (1 - lr * weight_decay)
+    else:
+        g = g + weight_decay * p
+    mu = b1 * (1 - 0.5 * 0.96 ** (t * momentum_decay))
+    mu_next = b1 * (1 - 0.5 * 0.96 ** ((t + 1) * momentum_decay))
+    st["mp"] = st.get("mp", 1.0) * mu
+    st["m"] = st.get("m", 0.0) + (1 - b1) * (g - st.get("m", 0.0))
+    st["v"] = b2 * st.get("v", 0.0) + (1 - b2) * g * g
+    den = np.sqrt(st["v"] / (1 - b2 ** t)) + eps
+    p = p - lr * (1 - mu) / (1 - st["mp"]) * g / den
+    return p - lr * mu_next / (1 - st["mp"] * mu_next) * st["m"] / den
+
+
+def test_nadam():
+    _run(ml.NAdam, ref_nadam)
+    _run(ml.NAdam, ref_nadam, lr=1e-2, weight_decay=0.05, decoupled_weight_decay=True, momentum_decay=0.01)
+
+
 if __name__ == "__main__":
     for name, fn in sorted(globals().items()):
         if name.startswith("test_") and callable(fn):
