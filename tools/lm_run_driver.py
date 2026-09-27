@@ -82,6 +82,10 @@ RENTALS. One-box segments go through tools/gemm_remote_leg.sh (nvidia, a
 GPU-type walk) or, for amd, the providers named in `amd_providers`, walked in
 order: `do` is tools/do_extra_leg.sh (DigitalOcean), `hotaisle` is
 tools/hotaisle_leg.sh, anything else is gemm_remote_leg.sh amd (RunPod).
+Apple segments run on a cloud Mac already held (`"apple_host"`, default
+"m3ultra", a name in ~/mojolearn-evidence/cloudmacs.tsv) through
+tools/cloudmac_segment_leg.sh: nothing is rented; the segment's
+lease_minutes is how long it waits on a body that stopped moving.
 Live segments go through tools/lm_live_leg.sh. The runners own the
 dead-men, the fetch and the verified delete. The driver never talks to a
 cloud API itself; its only network use is R2 by presigned URLs minted by
@@ -630,7 +634,7 @@ def render(spec, e, out, ledger, role=None, suffix=""):
     run = spec["run"]
     arm = e["vendor"] if role is None else role
     mode = "one" if role is None else ("live-coordinator" if role == e["live"] else "live-worker")
-    devices = _nvidia_devices(spec, e) if arm == "nvidia" else spec.get("amd_devices", "0")
+    devices = _nvidia_devices(spec, e) if arm == "nvidia" else "0" if arm == "apple" else spec.get("amd_devices", "0")
     label = "%s-%s-%s" % (arm, e["route"], e["segment"])
     resume = resume_point(spec, e, ledger, None if suffix else out) if role is None else None
     from_ckpt, steps = e["from_ckpt"], e["steps"]
@@ -699,6 +703,15 @@ def rent_one(spec, e, body, out, rerender=None):
     minutes = int(e.get("lease_minutes") or spec.get("lease_minutes", 120))
     cap = str(e.get("dollar_cap") or spec.get("dollar_cap", 10))
     lease = ["--segment-lease", str(minutes), "--dollar-cap", cap] if minutes > 60 else ["--minutes", str(minutes)]
+    if e["vendor"] == "apple":
+        # a cloud Mac already held (no rental, no cap): tools/cloudmac_segment_leg.sh
+        # pushes HEAD, runs the body detached and polls it; the lease minutes are its wait
+        host = e.get("apple_host") or spec.get("apple_host", "m3ultra")
+        leg = res / ("leg-cloudmac-" + host)
+        with open(res / ("leg-cloudmac-%s.log" % host), "w") as log:
+            rc = subprocess.run(["bash", "tools/cloudmac_segment_leg.sh", "--host", host, "--body", str(body), "--out", str(leg),
+                                 "--minutes", str(minutes)], cwd=REPO, stdout=log, stderr=subprocess.STDOUT).returncode
+        return leg, rc
     if e["vendor"] == "nvidia":
         rc = 3
         for gpu in _nvidia_gpus(spec, e).split("|"):
