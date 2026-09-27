@@ -450,11 +450,29 @@ def oracle_chol(a: List[Float32], n: Int, alt: Int = 0) -> List[Float32]:
 
 def oracle_orth(a: List[Float32], m: Int, l: Int, alt: Int = 0) raises -> List[Float32]:
     """Two passes (alt 1: one) of R = host_qr_r (decomposition/'s host twin
-    of qr_factor), Q = A R^-1 by forward substitution per row, ascending."""
+    of qr_factor), the rank guard (alt 2: none), Q = A R^-1 by forward
+    substitution per row, ascending."""
     var q = a.copy()
     var passes = 1 if alt == 1 else 2
     for _ in range(passes):
         var r = host_qr_r(q, m, l)
+        if alt != 2:
+            # DEVIATION 5318: column j is dependent when its residual R[j, j]
+            # is at most 2^-16 of the column's norm (both over max |R[., j]|).
+            for j in range(l):
+                var col = List[Float32]()
+                var big = Float32(0)
+                for t in range(j + 1):
+                    col.append(ftz(r[t * l + j]))
+                    big = max(big, abs(col[t]))
+                if big > Float32(0):
+                    var ss = Float32(0)
+                    for t in range(j + 1):
+                        var u = o_div0(col[t], big)
+                        ss = o_fma(u, u, ss)
+                    var dj = o_div0(col[j], big)
+                    if o_mul(dj, dj) <= o_mul(Float32(2.3283064365386963e-10), ss):
+                        r[j * l + j] = Float32(0)
         var nq = List[Float32](length=m * l, fill=Float32(0))
         for i in range(m):
             for j in range(l):

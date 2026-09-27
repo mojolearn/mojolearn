@@ -35,6 +35,7 @@ from x_decomp.cells import (
     lu_serial,
     omp_row,
     lu_solve_serial,
+    orth_rank_guard,
     trsm_row,
     rand_cell,
     rowsum_cell,
@@ -155,6 +156,7 @@ struct HostExec(Exec):
                 w.append(a.unsafe_load(t))
             var r = host_qr_r(w, m, l)
             var pr = F32Ptr(unsafe_from_address=Int(r.unsafe_ptr()))
+            orth_rank_guard(pr, l)
             for i in range(m):
                 trsm_row(F32Ptr(unsafe_from_address=Int(w.unsafe_ptr())), pr, a, i, l)
             _ = r^

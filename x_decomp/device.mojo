@@ -36,6 +36,7 @@ from x_decomp.cells import (
     lu_serial,
     omp_row,
     lu_solve_serial,
+    orth_rank_guard,
     trsm_row,
     rand_cell,
     rowsum_cell,
@@ -467,6 +468,7 @@ struct DevExec(Exec):
             for t in range(m * l):
                 w.append(a.unsafe_load(t))
             var r = device_qr_r(w, m, l)
+            orth_rank_guard(F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())), l)
             var ctx = DeviceContext()
             var da = _up(ctx, F32Ptr(unsafe_from_address=Int(w.unsafe_ptr())), m * l)
             var dr = _up(ctx, F32Ptr(unsafe_from_address=Int(r.unsafe_ptr())), l * l)

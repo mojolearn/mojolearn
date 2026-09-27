@@ -916,8 +916,42 @@ def lu_solve_serial(lu: F32Ptr, piv: I32Ptr, b: F32Ptr, n: Int, nrhs: Int):
 
 # DEVIATION 5309 (PIN; row 134): the orthonormal basis of a tall A is two
 # passes of {R = the Householder QR's R of decomposition/ (qr_factor, TSQR
-# slices a function of the shape); Q = A R^-1, one thread per row}; not
-# LAPACK's orgqr; arm 5309_orth_passes.
+# slices a function of the shape); orth_rank_guard(R); Q = A R^-1, one thread
+# per row}; not LAPACK's orgqr; arm 5309_orth_trsm_order.
+
+#: DEVIATION 5318 (PIN; row 134): a column of A whose residual after the
+#: earlier columns is at most 2^-16 of its own norm (R[j, j]^2 <= 2^-32 *
+#: sum_t R[t, j]^2) is numerically dependent: its Q column is 0, never the
+#: rounding noise A R^-1 divides out of a tiny R[j, j] (that column is neither
+#: unit nor orthogonal, and a later one-sided Jacobi SVD of Q^T M rotates it
+#: forever; measured: randomized_svd on the `denormal` fixture). 2^-16 sits
+#: above float32 QR noise at 4000 rows (sqrt(m) eps = 7.5e-6) and far below
+#: an independent column (>= 7e-2 on every fixture). Arm 5318_orth_rank_guard.
+comptime ORTH_RANK_TOL2 = Float32(2.3283064365386963e-10)
+
+
+def orth_rank_guard(R: F32Ptr, l: Int):
+    """Zero R[j, j] for every numerically dependent column j (DEVIATION
+    5318), so trsm_row's div0 makes its Q column 0. The column is scaled by
+    its largest |R[t, j]| first (so no square underflows), the sum of squares
+    t ascending."""
+    for j in range(l):
+        var mx = Float32(0)
+        for t in range(j + 1):
+            var v = abs(ftz(R.unsafe_load(t * l + j)))
+            if v > mx:
+                mx = v
+        if mx == Float32(0):
+            continue
+        var nrm = Float32(0)
+        for t in range(j + 1):
+            var v = ftz(identical_div(ftz(R.unsafe_load(t * l + j)), mx))
+            nrm = ftz(identical_mul_add(v, v, nrm))
+        var d = ftz(identical_div(ftz(R.unsafe_load(j * l + j)), mx))
+        if ftz(identical_mul(d, d)) <= ftz(identical_mul(ORTH_RANK_TOL2, nrm)):
+            R.unsafe_store(j * l + j, Float32(0))
+
+
 def trsm_row(A: F32Ptr, R: F32Ptr, Q: F32Ptr, i: Int, l: Int):
     """Row i of Q = A R^-1 (R upper l x l): q_j = (a_j - sum_{t<j} q_t R[t, j])
     / R[j, j], j ascending, t ascending; a zero diagonal gives 0."""
