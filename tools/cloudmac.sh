@@ -12,6 +12,7 @@
 #   tools/cloudmac.sh steward <name> install|restart|status
 #                                          the Apple steward as a launchd daemon
 #                                          (Label mojolearn.steward): install/restart
+#                                          drain the steward (its queue never moves),
 #                                          push origin/main, move ~/mojolearn to it,
 #                                          write the plist, bootstrap or kickstart -k
 #   tools/cloudmac.sh stop-all             TERMINATE instances and RELEASE hosts
@@ -82,12 +83,30 @@ steward)
     case "$act" in
     status)
         cm "$n" 'sudo launchctl print system/mojolearn.steward 2>/dev/null | grep -E "state =|pid =|last exit" || echo "mojolearn.steward: not loaded";
-                 cd ~/mojolearn && echo "clone at $(git log -1 --format=%h)"; tail -5 ~/mojolearn-evidence/steward-'"$n"'.log 2>/dev/null' ;;
+                 cd ~/mojolearn && echo "clone at $(git log -1 --format=%h)"; [ -f ~/mojolearn-evidence/apple-steward/drain ] && echo DRAINING; tail -5 ~/mojolearn-evidence/steward-'"$n"'.log 2>/dev/null' ;;
     install|restart)
-        # never kill a steward mid-request: its request would be stranded in working/
-        busy=$(cm "$n" 'setopt nullglob 2>/dev/null || true; ls ~/mojolearn-evidence/apple-steward/working/ 2>/dev/null | grep -c json || true')
-        [ "${busy:-0}" = 0 ] || [ "${MOJOLEARN_STEWARD_FORCE:-0}" = 1 ] \
-            || die "$n is working a request (~/mojolearn-evidence/apple-steward/working/); retry when it is done (MOJOLEARN_STEWARD_FORCE=1 overrides)"
+        # Never kill a steward mid-request (its request would be stranded in
+        # working/) and never move its queue (requests outside queue/ vanish
+        # from `apple_steward.py status` and from coalescing, and lanes
+        # resubmit them as duplicates). A steward that knows the drain file
+        # DRAINS: it claims nothing new and writes `drained` once its request
+        # is done. An older one is booted out the first moment nothing runs.
+        # The wait is a laptop-side poll; an interrupted restart removes the drain.
+        SQ='~/mojolearn-evidence/apple-steward'
+        if cm "$n" "sudo launchctl print system/mojolearn.steward >/dev/null 2>&1" 2>/dev/null; then
+            if cm "$n" "grep -q DRAIN_FILE ~/mojolearn/tools/apple_steward.py"; then
+                trap 'cm "$n" "rm -f $SQ/drain" || true' EXIT
+                cm "$n" "mkdir -p $SQ; rm -f $SQ/drained; touch $SQ/drain"
+                echo "$n: draining (the queue stays visible); waiting for the running request"
+                until cm "$n" "test -f $SQ/drained" 2>/dev/null; do sleep 20; done
+            else
+                echo "$n: the steward predates the drain file: booting it out the first moment nothing runs"
+                until cm "$n" "setopt nullglob 2>/dev/null || true; ls $SQ/working/[0-9]*.json >/dev/null 2>&1 || {
+                        sudo launchctl bootout system/mojolearn.steward 2>/dev/null
+                        for f in $SQ/working/[0-9]*.json; do [ -f \"\$f\" ] || continue; b=\$(basename \"\$f\"); mv \"\$f\" $SQ/queue/\${b%%.*}.json; echo \"requeued \$b\"; done
+                        echo STOPPED; }" 2>/dev/null | tee /dev/stderr | grep -qx STOPPED; do sleep 5; done
+            fi
+        fi
         git -C "$ROOT" fetch -q origin main
         "$0" push "$n" origin/main
         cm "$n" 'set -e; cd ~/mojolearn && git fetch -q origin && git checkout -q --detach origin/main && echo "clone at $(git log -1 --format=%h)"'
@@ -115,7 +134,9 @@ PLIST
                 sudo install -m 644 -o root -g wheel /tmp/mojolearn.steward.plist $P
                 sudo launchctl bootstrap system $P && echo "bootstrapped $P"
             fi
-            sleep 3; sudo launchctl print system/mojolearn.steward | grep -E "state =|pid =" ' ;;
+            rm -f ~/mojolearn-evidence/apple-steward/drain
+            sleep 3; sudo launchctl print system/mojolearn.steward | grep -E "state =|pid =" '
+        trap - EXIT ;;
     *) die "steward <name> install|restart|status" ;;
     esac
     ;;

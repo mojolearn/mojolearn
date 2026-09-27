@@ -91,6 +91,16 @@ ON EACH CLOUD MAC (a launchd daemon, tools/cloudmac.sh steward <mac> install):
       worktree from the store before a check and publishes what it built
       clean, so a commit is built once per box.
 
+SPEED DUPLICATES: a speed `submit` identical to one still queued or running
+on the chosen steward (lane, commit, builds, command, mode) is not queued
+again there (--no-coalesce overrides).
+
+RESTARTS NEVER MOVE THE QUEUE: `cloudmac.sh steward <mac> restart` and
+`do_amd_steward.sh update` touch $MOJOLEARN_STEWARD_ROOT/drain; the steward
+then claims nothing new and writes `drained` once its running work is done;
+the tree moves and the steward restarts. The queued requests never leave
+queue/, so `status` and coalescing keep seeing them.
+
 COALESCING (one queued request per lane per steward): an identity `submit`
 from a lane that already has QUEUED (not yet started) identity requests takes
 them out of every queue (an atomic mv; one a steward claimed first runs as
@@ -174,6 +184,13 @@ Q, WORK, DONE, PATCHES = ROOT / "queue", ROOT / "working", ROOT / "done", ROOT /
 #: BUILD ONCE, RUN MANY (tools/steward_build.py): built bindings keyed by
 #: their source-closure digest, and per-commit READY markers per lane.
 STORE = ROOT / "builds"
+#: DRAIN (a restart that never holds the queue): while this file exists the
+#: steward claims nothing new; once nothing of its own runs it writes DRAINED.
+#: `cloudmac.sh steward <mac> restart` and `do_amd_steward.sh update` touch
+#: DRAIN_FILE, wait for DRAINED, move the tree and restart. The queue stays
+#: where it is and `status` keeps showing it (an update that moved queued
+#: requests aside made them vanish, and lanes resubmitted them as duplicates).
+DRAIN_FILE, DRAINED = ROOT / "drain", ROOT / "drained"
 SPOOL = ROOT / "deferred"            # on the laptop: requests for a deferred Mac
 
 
@@ -450,6 +467,10 @@ def _submit(a, name, taken):
             if t != "do-amd":
                 macs = _select(SPEED_DEFAULT if t in ("apple", "both") else t)
                 picks.append(_least_busy(macs, _loads(macs)))
+    if a.kind == "speed" and not a.no_coalesce:
+        picks = _drop_duplicate_speed(picks, req)
+        if not picks:
+            return
     macs = [m for m, _ in picks]
     spool_to = {m for m, up in picks if not up or m in DEFERRED}
     req["stewards"] = list(macs)
@@ -475,6 +496,48 @@ def _submit(a, name, taken):
             spool_to.add(mac)
             spool_it(mac)
     print(f"queued {a.kind} request {name} on {', '.join(m for m in macs if m not in spool_to) or 'no Mac yet (spooled)'}")
+
+
+_SAME_SPEED = ("setopt nullglob 2>/dev/null || true; cd {root} 2>/dev/null || exit 0; "
+               "for f in queue/[0-9]*-{tag}.json queue/held/[0-9]*-{tag}.json working/[0-9]*-{tag}.*.json; "
+               "do [ -f \"$f\" ] && {{ echo \"REQ $f\"; cat \"$f\"; echo; }}; done; true")
+
+
+def _drop_duplicate_speed(picks, req):
+    """A speed job identical to one still queued or running on that steward
+    (same lane, commit, builds, command and mode) is not queued again: its
+    verdict answers both. Returns the picks that still need a copy."""
+    tag = f"speed-{req['lane']}-{req['commit'][:10]}"
+    keep = []
+    for m, up in picks:
+        if not up or m in DEFERRED:
+            keep.append((m, up))
+            continue
+        try:
+            text = _cloudmac(m, _SAME_SPEED.format(root=REMOTE_ROOT, tag=tag), timeout=60)
+        except SystemExit as exc:
+            print(f"{m}: {exc}; not checked for a duplicate", file=sys.stderr)
+            keep.append((m, up))
+            continue
+        dec, same = json.JSONDecoder(), None
+        for chunk in text.split("REQ ")[1:]:
+            path, _, rest = chunk.partition("\n")
+            try:
+                old, _ = dec.raw_decode(rest.lstrip())
+            except ValueError:
+                continue
+            oc, nc = str(old.get("commit", "")), req["commit"]
+            if (oc.startswith(nc) or nc.startswith(oc)) and \
+                    all(old.get(k) == req.get(k) for k in ("lane", "builds", "cmd", "mode")):
+                same = path.strip()
+                break
+        if same:
+            where = "held" if same.startswith("queue/held/") else {"queue": "queued", "working": "running"}[same.split("/")[0]]
+            print(f"{m}: the same speed job is already {where} there ({Path(same).name.split('.')[0]}); "
+                  f"not queued again (--no-coalesce queues it anyway)")
+        else:
+            keep.append((m, up))
+    return keep
 
 
 def _ship(mac, name, body, patch_bytes):
@@ -651,7 +714,7 @@ def redistribute(a):
 
 # the cloud Macs' login shell is zsh, where an unmatched glob is an error
 _REMOTE_LIST = (f"setopt nullglob 2>/dev/null || true; cd {REMOTE_ROOT} 2>/dev/null || exit 0; "
-                "for f in queue/[0-9]*.json working/[0-9]*.json; do [ -f \"$f\" ] && echo \"STATE $f\"; done; "
+                "for f in queue/[0-9]*.json working/[0-9]*.json queue/held/[0-9]*.json; do [ -f \"$f\" ] && echo \"STATE $f\"; done; "
                 "for f in moved/*.json.coalesced-into-*; do [ -f \"$f\" ] && echo \"COALESCED $f\"; done; "
                 "for f in done/*/verdict.json; do [ -f \"$f\" ] && { echo \"VERDICT $f\"; cat \"$f\"; echo; }; done; true")
 
@@ -665,7 +728,8 @@ def _collect(mac):
         line = text[pos:nl if nl >= 0 else len(text)]
         if line.startswith("STATE "):
             path = line.split(" ", 1)[1]
-            out[Path(path).name.split(".")[0]] = path.split("/")[0]
+            # queue/held/ is an older `do_amd_steward.sh update`'s hold: shown, never hidden
+            out[Path(path).name.split(".")[0]] = "held" if path.startswith("queue/held/") else path.split("/")[0]
             pos = nl + 1 if nl >= 0 else len(text)
         elif line.startswith("COALESCED "):
             fname = Path(line.split(" ", 1)[1]).name
@@ -750,7 +814,7 @@ def status(a):
     # identity request per lane per steward; a 2 here is a submit that raced)
     print("\nsteward     queued working  lanes queued (identity)")
     for m in sorted(per):
-        q = [n for n, st in per[m].items() if st in ("queue", "deferred (spooled)")]
+        q = [n for n, st in per[m].items() if st in ("queue", "held", "deferred (spooled)")]
         w = sum(1 for st in per[m].values() if st == "working")
         by = {}
         for n in q:
@@ -774,8 +838,21 @@ def _run(cmd, cwd, log, timeout, env=None):
             return 124
 
 
-def _claim(steward):
+def _draining(idle):
+    """True while DRAIN_FILE exists; DRAINED marks it once `idle`."""
+    if not DRAIN_FILE.exists():
+        DRAINED.unlink(missing_ok=True)
+        return False
+    if idle and not DRAINED.exists():
+        DRAINED.write_text(time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()) + "\n")
+        print("drained: nothing running, nothing claimed until the drain file goes", flush=True)
+    return True
+
+
+def _claim(steward, skip_speed=False):
     for p in sorted(Q.glob("[0-9]*.json")):
+        if skip_speed and _is_speed(p.stem):
+            continue
         dst = WORK / f"{p.stem}.{steward}.json"
         try:
             p.rename(dst)  # atomic: a request is worked once on this Mac
@@ -896,8 +973,15 @@ def _metal_busy():
     while p in procs and p not in mine and p > 1:
         mine.add(p)
         p = procs[p][0]
+    # caffeinate only holds a power assertion: what it wraps is its own
+    # process and is judged by its own command line. (launchd starts this
+    # steward as `caffeinate -i python3 ... work`; caffeinate execs python in
+    # its own pid and leaves a CHILD caffeinate whose command line names
+    # "apple_steward.py work": the steward took that for a foreign job and
+    # requeued every speed job forever.)
     return [(pid, c[:160]) for pid, (_, c) in sorted(procs.items())
-            if pid not in mine and any(f in c for f in FOREIGN) and not c.startswith("ps ")]
+            if pid not in mine and any(f in c for f in FOREIGN) and not c.startswith("ps ")
+            and Path(c.split(None, 1)[0]).name != "caffeinate"]
 
 
 def _pixi():
@@ -1073,6 +1157,9 @@ def _work_parallel(a):
     last_prune = 0.0
     while True:
         reap()
+        if _draining(idle=not running and builder["t"] is None):
+            time.sleep(5)
+            continue
         if time.time() - last_prune > 3600 and builder["t"] is None:
             subprocess.run([sys.executable, str(TOOLS / "steward_build.py"), "prune", "--store", str(STORE)])
             last_prune = time.time()
@@ -1139,21 +1226,28 @@ def work(a):
     if a.steward in AMD_STEWARDS and AMD_PARALLEL > 1:
         return _work_parallel(a)
     last_prune = 0.0
+    speed_wait = 0.0      # until then a busy Mac works the identity requests behind a speed job
     while True:
+        if _draining(idle=True):     # one request at a time: between requests nothing runs
+            time.sleep(5)
+            continue
         if time.time() - last_prune > 3600:
             subprocess.run([sys.executable, str(TOOLS / "steward_build.py"), "prune", "--store", str(STORE)])
             last_prune = time.time()
-        req = _claim(a.steward)
+        req = _claim(a.steward, skip_speed=time.time() < speed_wait)
         if req:
             try:
                 process(req, a.steward)
             except Busy as exc:
-                # a speed job waits for a quiet Mac: back to the queue, untouched
+                # a speed job waits for a quiet Mac: back to the queue, untouched,
+                # and the identity requests behind it run meanwhile (one at a time)
                 req.rename(Q / f"{req.name.split('.')[0]}.json")
                 print(f"{req.name}: Metal queue not quiet ({exc.args[0][:2]}); requeued", flush=True)
                 if a.once:
                     return
-                time.sleep(60)
+                speed_wait = time.time() + 60
+                if not any(not _is_speed(p.stem) for p in Q.glob("[0-9]*.json")):
+                    time.sleep(60)
         elif a.once:
             return
         else:
@@ -1173,7 +1267,8 @@ def main(argv=None):
     s.add_argument("--verify-lanes", help="identity: comma separated identity lanes")
     s.add_argument("--sabotage", help="identity: a SOURCE patch that must make the check DISAGREE")
     s.add_argument("--no-coalesce", action="store_true",
-                   help="identity: queue beside this lane's queued request instead of merging into it")
+                   help="identity: queue beside this lane's queued request instead of merging into it; "
+                        "speed: queue even when the same speed job is already queued or running there")
     s.add_argument("--pass", dest="pass_no", type=int, choices=(1, 2), default=2,
                    help="identity: the lane check's --pass (default 2: the steward is a pass-2 step, so every "
                         "fragment needs its .checks with a sabotage patch per driver)")
