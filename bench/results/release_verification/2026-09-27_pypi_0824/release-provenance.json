@@ -1,0 +1,40 @@
+{
+ "columns": {
+  "amd": null,
+  "nvidia": null
+ },
+ "earlier_commits": [],
+ "legs": {
+  "cuda-sm_89": {
+   "origin": "built",
+   "overlay": null,
+   "set_identity_digest": "ecfa9c51bb89c0b8076fab49150e9a82518ff60712c6abf528f119193a2b81e6",
+   "source_commit": "c8654671b8484adb3862d16f7f0307cc39df0c42",
+   "tooling_commit": "c8654671b8484adb3862d16f7f0307cc39df0c42",
+   "tooling_digest": "c1af2b7041afd4b86c383f9d3207fa0d66d2523136d14546dfc443140286d7e9"
+  },
+  "cuda-sm_90a": {
+   "origin": "built",
+   "overlay": null,
+   "set_identity_digest": "b0dfa63409abd07ae1ce6446bf79d05e32d3a2b52b8e9f6f9bb69cd6b81dfbe0",
+   "source_commit": "c8654671b8484adb3862d16f7f0307cc39df0c42",
+   "tooling_commit": "c8654671b8484adb3862d16f7f0307cc39df0c42",
+   "tooling_digest": "c1af2b7041afd4b86c383f9d3207fa0d66d2523136d14546dfc443140286d7e9"
+  },
+  "hip-gfx942": {
+   "origin": "built",
+   "overlay": null,
+   "set_identity_digest": "84e6cf0c5f8b0777a6baba9d6f225da13e40cc4d37f5477d421ef980132020ee",
+   "source_commit": "c8654671b8484adb3862d16f7f0307cc39df0c42",
+   "tooling_commit": "c8654671b8484adb3862d16f7f0307cc39df0c42",
+   "tooling_digest": "c1af2b7041afd4b86c383f9d3207fa0d66d2523136d14546dfc443140286d7e9"
+  }
+ },
+ "published": [
+  "macos"
+ ],
+ "schema": "mojolearn.release-provenance.v1",
+ "source_commit": "c8654671b8484adb3862d16f7f0307cc39df0c42",
+ "tooling_commit": "c8654671b8484adb3862d16f7f0307cc39df0c42",
+ "version": "0.8.24"
+}
