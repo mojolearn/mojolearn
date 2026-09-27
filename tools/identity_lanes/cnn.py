@@ -310,16 +310,19 @@ _batch_decl(_rows_calls("transform", sl=np.s_[:256, :16]), "x-cnn-bn-options")
 @lane("x-cnn-gnn-options")
 def _(ml, X, yc, yr, Xh=None):
     """SAGEConv's max aggregation (ties split the gradient; the `ties`
-    fixture plants exact ties) and normalize=True, forward + backward on
-    the lane graph."""
+    fixture plants exact ties), normalize=True and project=True (mean and
+    max), forward + backward on the lane graph."""
     x = np.ascontiguousarray(X[:256, :16])
     ei = _cnn_graph(256)
     parts = {}
     for k, conv in dict(mx=ml.SAGEConv(16, 4, aggr="max", random_state=61),
                         mxn=ml.SAGEConv(16, 3, aggr="max", normalize=True, random_state=62),
-                        mnn=ml.SAGEConv(16, 3, normalize=True, random_state=63)).items():
+                        mnn=ml.SAGEConv(16, 3, normalize=True, random_state=63),
+                        prj=ml.SAGEConv(16, 3, project=True, random_state=64),
+                        prjx=ml.SAGEConv(16, 3, aggr="max", project=True, random_state=65)).items():
         y = conv.forward(x, ei)
-        parts[k] = _h(y, conv.backward(_cnn_grad(X, y.shape)), conv.lin_l.grad_weight_, conv.grad_weight_r_)
+        extra = (conv.lin.grad_weight_, conv.lin.grad_bias_) if conv.project else ()
+        parts[k] = _h(y, conv.backward(_cnn_grad(X, y.shape)), conv.lin_l.grad_weight_, conv.grad_weight_r_, *extra)
     first = ml.SAGEConv(16, 4, aggr="max", random_state=61)
     return _fit(parts, first, lambda e: (e.forward(np.ascontiguousarray(Xh[:256, :16]), ei),))
 
