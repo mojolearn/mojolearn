@@ -432,8 +432,10 @@ def gpu_legs(ctx):
         rb, out = leg_layout(legs_dir, "cpu-box", "hip-gfx942")
         # 16 vCPU: one set, 8 builds at a time; RunPod had no 32-vCPU CPU pod
         # when this route was first used (0.8.23), and smaller pods stock more.
+        # Compute-optimized flavors too (2 GiB/vCPU = 32 GiB): one gfx942 set
+        # peaked at 11.6 GiB (0.8.23's leg), so they fit, and they widen stock.
         command = ["bash", "tools/release_linux_build.sh", ctx.commit, "--rent", "--archs", "gfx942",
-                   "--vcpu", "16", "--flavors", CPU_BOX_FLAVORS, "--out", str(out)]
+                   "--vcpu", "16", "--flavors", CPU_BOX_FLAVORS + ",cpu5c,cpu3c", "--out", str(out)]
         leg = Leg("hip-gfx942", "hip", "gfx942", command, {}, rb, legs_dir, out)
     else:
         command, env = amd_leg_command(ctx, route, legs_dir)
