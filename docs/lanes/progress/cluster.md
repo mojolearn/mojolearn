@@ -80,3 +80,28 @@ Agglomerative, Spectral) option rows, then speed.
   oracle; weight vectors that never outgrow the unweighted bound keep their
   scale and bits (the `kmeans-weighted` lane's weights are in [0.5, 1.5]).
 - tools/test_lane_select.py's kmeans_oracle pin 47 -> 63, attributed.
+
+## Where the lane stands (2026-09-27, evening)
+
+- Merged on main at e81b76c38: pass 1 (six algorithms), pass-2 proof, option
+  parity for the six and for GaussianMixture, the KMeans weighted fix.
+- Steward identity request `1790530630176-cluster-e81b76c386` (15 lanes,
+  `--pass 2`, e2e patch) queued on m2pro and do-amd; m3ultra spooled.
+  Read it with `python3 tools/apple_steward.py status | grep cluster`. A FAIL
+  comes back here to fix.
+- AMD box: none allocated in `tools/dev_pod.sh list`; my own
+  `dev_pod.sh up cluster 240 --vendor amd` is retrying (no MI300X stock on
+  RunPod or Hot Aisle so far). do-amd covers the AMD column meanwhile.
+- NVIDIA pod `cluster` (H100) held; heartbeat `tools/dev_pod.sh extend
+  cluster 120`.
+
+Next, in order (CURRENT DIRECTIVES item 1):
+1. Steward verdicts: fix any FAIL.
+2. Option parity for the EXISTING cluster family: DBSCAN metric cosine and
+   precomputed (dbscan/NOT_IMPLEMENTED.tsv rows), HDBSCAN
+   cluster_selection_epsilon (hdbscan tsv), GaussianMixture save/sample for
+   the routed options, the callable init/metric refusals.
+3. GPU speed (IDENTICAL and FAST, NVIDIA/AMD/Apple) at 1M+ rows from R2:
+   the OPTICS ordering loop and AffinityPropagation iterations are host /
+   per-iteration-sync bound; MeanShift is one thread per seed.
+4. CPU speed last.
