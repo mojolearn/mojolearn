@@ -329,13 +329,14 @@ def _(ml, X, yc, yr, Xh=None):
     one function both routes call (DEVIATION 5115). The thresholds are
     multiples of the plain fit's median core distance, so the search merges
     clusters on every fixture's scale; eom, and leaf with
-    allow_single_cluster (the walk's root arm)."""
+    allow_single_cluster (the walk's root arm and, at the largest, the
+    labelling's epsilon branch, extract.cuh:148-153)."""
     Z = X[:2000, :4]
     base = ml.HDBSCAN(min_cluster_size=5).fit(Z)
     med = float(np.median(np.asarray(base.core_distances_, dtype=np.float32)))
     parts = dict(base_labels=_h(base.labels_))
     last = None
-    for k in (1.0, 3.0):
+    for k in (1.0, 3.0, 30.0):
         e = float(np.float32(k * med))
         m = ml.HDBSCAN(min_cluster_size=5, cluster_selection_epsilon=e, prediction_data=True).fit(Z)
         parts[f"eom{k:g}_labels"] = _h(m.labels_)

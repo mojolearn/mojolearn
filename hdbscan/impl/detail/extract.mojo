@@ -66,6 +66,7 @@ from hdbscan.impl.detail.stabilities import (
     compute_stabilities,
 )
 from hierarchy.checks.edge_order import weight_order_key
+from checks.numerics import identical_div
 
 
 struct TreeUnionFind(Movable):
@@ -180,9 +181,12 @@ def do_labelling_on_host(
 
     # `:131-134`. Their `inverse_cluster_selection_epsilon` is left
     # UNINITIALIZED when the epsilon is zero and is then not read; ours is
-    # not computed at all, because `cluster_selection_epsilon != 0` is
-    # refused by name upstream in `select_clusters`. The branch below is
-    # kept so the shape of the reference function is visible here.
+    # zero then, and likewise never read. `identical_div` (DEVIATION 5115).
+    var inverse_cluster_selection_epsilon = Float32(0.0)
+    if cluster_selection_epsilon != Float32(0.0):
+        inverse_cluster_selection_epsilon = identical_div(
+            Float32(1.0), cluster_selection_epsilon
+        )
     var n_in_clusters = 0
     for i in range(len(in_clusters)):
         if in_clusters[i] != Int32(0):
@@ -212,14 +216,12 @@ def do_labelling_on_host(
                     )
                 var child_lambda = tree.lambdas[child_idx]
                 if cluster_selection_epsilon != Float32(0.0):
-                    # `:148-153`. Unreachable here: a non-zero epsilon is
-                    # refused by name in select_clusters. Transcribed.
-                    raise Error(
-                        "hdbscan.do_labelling_on_host: cluster_selection_"
-                        "epsilon != 0 reached the single-cluster branch;"
-                        " it is refused by name in select_clusters and"
-                        " should never arrive here"
-                    )
+                    # `:148-153`: a point joins the root cluster when it
+                    # left at or above 1 / epsilon.
+                    if child_lambda >= inverse_cluster_selection_epsilon:
+                        result.append(Int32(cluster - n_leaves))
+                    else:
+                        result.append(Int32(-1))
                 elif child_lambda >= parent_lambdas[cluster]:
                     result.append(Int32(cluster - n_leaves))
                 else:
