@@ -247,3 +247,24 @@ def _(ml, X, yc, yr, Xh=None):
                          random_state=11).fit(Xs, ycs)
     return _fit(dict(plain=a["params"], plain_state=a["state"], moved=b["params"], moved_state=b["state"],
                      rnn=_h(c.params_, c.loss_curve_)))
+
+
+@lane("sequence-lr-schedulers")
+def _(ml, X, yc, yr, Xh=None):
+    """StepLR, ExponentialLR and OneCycleLR (cosine two-phase, linear
+    three-phase) over 40 steps as float32 bits, and an LSTM regressor and a
+    NAdam run driven by schedules."""
+    sched = [ml.StepLR(0.1, step_size=7, gamma=0.5), ml.ExponentialLR(0.05, gamma=0.9),
+             ml.OneCycleLR(0.2, total_steps=40), ml.OneCycleLR(0.2, total_steps=40, anneal_strategy="linear",
+                                                               three_phase=True, pct_start=0.25)]
+    bits = np.asarray([[s.bits_at(t) for t in range(1, 41)] for s in sched], dtype=np.uint32)
+    Xs = _sequence_seq(X)
+    ycs, yrs = _sequence_targets(yc, yr)
+    r = ml.LSTMRegressor(hidden_size=8, batch_size=32, max_epochs=2, random_state=12,
+                         lr_schedule=ml.OneCycleLR(0.02, total_steps=6)).fit(Xs, yrs)
+    p1 = np.ascontiguousarray(X[:16, :4], dtype=np.float32).copy()
+    opt = ml.NAdam([p1])
+    opt.lr_schedule = ml.StepLR(1e-2, step_size=2)
+    for k in range(5):
+        opt.step([np.ascontiguousarray(X[16 + 16 * k:32 + 16 * k, 4:8], dtype=np.float32)])
+    return _fit(dict(bits=_h(bits), lstm=_h(r.params_, r.loss_curve_), nadam=_h(p1)))
