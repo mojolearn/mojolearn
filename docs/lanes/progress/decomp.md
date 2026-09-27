@@ -157,6 +157,13 @@ Pod runs (A40 + x86 CPU, /root/mojolearn-evidence/lane-check/p2d-*):
   test_linalg_decompositions: 33 passed. test_lane_select (box worktree at
   13ffd2f1): OK, 0 failures.
 
+MERGED to main ca7782942 (the options, the context fix, row 130) and
+3266b66bb (x_decomp/checks/sabotage/e2e_host_all.patch: the host ulp and the
+reversed host sqdist in one patch, so ONE steward request covers all 17
+x-decomp lanes). Steward request 1790542293472-decomp-3266b66bb0 (17 lanes,
+e2e_host_all) queued on m2pro, m3ultra, m4pro-a, do-amd: a post-merge release
+gate; a FAIL comes back as a fix at the root.
+
 ## NEXT: PHASE 2 REMAINDER (start here; the rows above are done, never re-run)
 
 Each item gets the gate: lane AGREE on the pod (`tools/algos_lane_check.sh`,
