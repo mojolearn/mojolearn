@@ -29,6 +29,8 @@ FAMILIES = (
             "trees-dart-reg",
             "trees-dart-clf",
             "trees-random-embedding",
+            "trees-voting-clf",
+            "trees-voting-reg",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -40,6 +42,8 @@ FAMILIES = (
             "DARTRegressor",
             "DARTClassifier",
             "RandomTreesEmbedding",
+            "VotingClassifier",
+            "VotingRegressor",
         ),
         display="the trees expansion lane's ensemble glue",
         host_modules=("xtrees/ops.mojo", "xtrees/api.mojo"),
@@ -52,6 +56,8 @@ FAMILIES = (
             "x_trees_samme_step", "x_trees_r2_step", "x_trees_weighted_median",
             "x_trees_apply", "x_trees_gradients", "x_trees_leaf_newton", "x_trees_tree_score_add", "x_trees_uniform",
             "x_trees_onehot_leaves", "x_trees_transpose_f32", "x_trees_log64",
+            "x_trees_normalize_rows", "x_trees_scatter", "x_trees_platt_fit", "x_trees_platt_apply",
+            "x_trees_isotonic_fit", "x_trees_isotonic_predict",
         ),
         gate="tools/algos_lane_check.sh",
         wheel_note="Ships: the trees expansion lane's ensemble glue (pass 1, PENDING).",
@@ -66,6 +72,8 @@ TRAINING_LANE_NAMES = {
     "trees-dart-reg": "DARTRegressor",
     "trees-dart-clf": "DARTClassifier",
     "trees-random-embedding": "RandomTreesEmbedding",
+    "trees-voting-clf": "VotingClassifier",
+    "trees-voting-reg": "VotingRegressor",
 }
 PUBLIC_PENDING_LANES = {
     "trees-dt-clf": "no reference",
@@ -77,4 +85,6 @@ PUBLIC_PENDING_LANES = {
     "trees-dart-reg": "no reference",
     "trees-dart-clf": "no reference",
     "trees-random-embedding": "no reference",
+    "trees-voting-clf": "no reference",
+    "trees-voting-reg": "no reference",
 }

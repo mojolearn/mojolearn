@@ -114,3 +114,27 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("transform", "apply"), "trees-random-embedding")
+
+
+@lane("trees-voting-clf")
+def _(ml, X, yc, yr, Xh=None):
+    """Soft voting with weights over three different members."""
+    m = ml.VotingClassifier([("dt", ml.DecisionTreeClassifier(max_depth=5)),
+                             ("rf", ml.RandomForestClassifier(n_estimators=4, max_depth=5, random_state=3)),
+                             ("bag", ml.BaggingClassifier(ml.DecisionTreeClassifier(max_depth=4), n_estimators=3,
+                                                          random_state=5))],
+                            voting="soft", weights=[1.0, 2.0, 0.5]).fit(X, yc)
+    return _fit(dict(predict=_h(m.predict(X)), proba=_h(m.predict_proba(X)), transform=_h(m.transform(X))),
+                m, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
+@lane("trees-voting-reg")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.VotingRegressor([("dt", ml.DecisionTreeRegressor(max_depth=5)),
+                            ("rf", ml.RandomForestRegressor(n_estimators=4, max_depth=5, random_state=3))],
+                           weights=[3.0, 1.0]).fit(X, yr)
+    return _fit(dict(predict=_h(m.predict(X))), m, lambda e: (e.predict(Xh),))
+
+
+_batch_decl(_rows_calls("predict", "predict_proba"), "trees-voting-clf")
+_batch_decl(_rows_calls("predict"), "trees-voting-reg")

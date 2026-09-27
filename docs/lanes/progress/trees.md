@@ -2,7 +2,7 @@
 
 Pass 1 (code first). Gate per algorithm on the lane pod (RunPod H100):
 build, sanity vs scikit-learn / LightGBM (`python/mojolearn/tests/test_x_trees_sanity.py`,
-8 passed), `tools/algos_lane_check.sh <lanes>` AGREE (CUDA column == CPU
+all passed), `tools/algos_lane_check.sh <lanes>` AGREE (CUDA column == CPU
 column, cpu-amd-epyc-9554). Every lane PENDING (`_surface_trees.py`).
 
 Where the code is: classes in `python/mojolearn/_expansion_trees.py`; the
@@ -19,7 +19,8 @@ rf / extratrees entry points, whose sources are untouched.
 | BaggingClassifier / BaggingRegressor | trees-bagging-clf, trees-bagging-reg | AGREE: compared batch 9, infer 9, train 9 (each lane) | see git log |
 | AdaBoostClassifier (SAMME) / AdaBoostRegressor (R2) | trees-adaboost-clf, trees-adaboost-reg | AGREE: compared batch 9, infer 9, train 9 (each lane) | see git log |
 | DART (DARTRegressor L2 / DARTClassifier binary) | trees-dart-reg, trees-dart-clf | AGREE: compared batch 9, infer 9, train 9 (each lane) | see git log |
-| RandomTreesEmbedding | trees-random-embedding | AGREE: compared batch 9, infer 9, train 9 | this commit |
+| RandomTreesEmbedding | trees-random-embedding | AGREE: compared batch 9, infer 9, train 9 | see git log |
+| VotingClassifier / VotingRegressor | trees-voting-clf, trees-voting-reg | AGREE: compared batch 9, infer 9, train 9 (each lane) | this commit |
 
 Pod setup notes (for a fresh agent): the lane check does not build the
 ubiquitous bindings; build `bindings/build.sh` (identical), `build_forest_host.sh`
@@ -34,4 +35,4 @@ Known gaps (reported to main):
   binding refuses it by name) and AdaBoostClassifier fits weighted bootstraps
   instead of weighted trees.
 
-Next: Additions: VotingClassifier/Regressor, StackingClassifier/Regressor, MultiOutputClassifier/Regressor, OneVsRestClassifier, CalibratedClassifierCV, then SHAP TreeExplainer, KernelExplainer, PermutationExplainer.
+Next: StackingClassifier / StackingRegressor.

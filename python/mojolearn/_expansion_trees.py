@@ -43,6 +43,8 @@ __all__ = [
     "DARTRegressor",
     "DARTClassifier",
     "RandomTreesEmbedding",
+    "VotingClassifier",
+    "VotingRegressor",
 ]
 
 
@@ -1017,3 +1019,237 @@ class RandomTreesEmbedding(_TreesEnsembleBase):
 
     def fit_transform(self, X, y=None, sample_weight=None):
         return self.fit(X, y, sample_weight).transform(X)
+
+
+# ------------------------------------------------------ wrappers: helpers
+def _trees_stratified_folds(codes, n_splits):
+    """sklearn StratifiedKFold(n_splits, shuffle=False)._make_test_folds:
+    classes in order of first appearance, per-class fold allocation from the
+    sorted labels dealt round robin. Returns the test fold of each row."""
+    first = {}
+    for c in codes:
+        if c not in first:
+            first[c] = len(first)
+    enc = [first[c] for c in codes]
+    k = len(first)
+    counts = [0] * k
+    for e in enc:
+        counts[e] += 1
+    if n_splits > max(counts) and min(counts) < n_splits and max(counts) < n_splits:
+        raise ValueError(f"n_splits={n_splits} cannot be greater than the number of members in each class")
+    order = sorted(enc)
+    alloc = [[0] * k for _ in range(n_splits)]
+    for i in range(n_splits):
+        for e in order[i::n_splits]:
+            alloc[i][e] += 1
+    folds = [0] * len(enc)
+    for c in range(k):
+        seq = [i for i in range(n_splits) for _ in range(alloc[i][c])]
+        pos = 0
+        for r, e in enumerate(enc):
+            if e == c:
+                folds[r] = seq[pos]
+                pos += 1
+    return folds
+
+
+def _trees_kfolds(n, n_splits):
+    """sklearn KFold(n_splits, shuffle=False): contiguous folds, the first
+    n % n_splits one row longer."""
+    folds, start = [0] * n, 0
+    for i in range(n_splits):
+        size = n // n_splits + (1 if i < n % n_splits else 0)
+        for r in range(start, start + size):
+            folds[r] = i
+        start += size
+    return folds
+
+
+def _trees_cv(cv, default=5):
+    if cv is None:
+        return default
+    if is_bool(cv) or not isinstance(cv, numbers.Integral) or cv < 2:
+        _refuse(f"cv={cv!r}", "only an int number of folds (>= 2) is carried: the folds are sklearn's"
+                " unshuffled (Stratified)KFold.")
+    return int(cv)
+
+
+def _trees_fold_rows(folds, i):
+    tr = [r for r, f in enumerate(folds) if f != i]
+    te = [r for r, f in enumerate(folds) if f == i]
+    return Array.from_list(tr, "<i4"), Array.from_list(te, "<i4")
+
+
+def _trees_estimators(estimators):
+    if not estimators:
+        raise ValueError("estimators must be a non-empty list of (name, estimator)")
+    names = [n for n, _ in estimators]
+    if len(set(names)) != len(names):
+        raise ValueError("estimator names must be unique")
+    active = [(n, e) for n, e in estimators if e != "drop"]
+    if not active:
+        raise ValueError("all estimators are 'drop'")
+    return active
+
+
+def _trees_output_2d(x, n):
+    """A member's output as a float32 (n, c) Array (a 1-D output is c = 1)."""
+    a, _ = as_f32_c(x, ndim=2, name="output") if len(getattr(x, "shape", ())) == 2 else \
+        (as_f32_c(x, ndim=1, name="output")[0].reshape((n, 1)), None)
+    return a
+
+
+class _TreesWrapperBase(_TreesEnsembleBase):
+    def _check_X(self, X):
+        if not getattr(self, "_fitted", False):
+            raise RuntimeError("this estimator is not fitted yet")
+        Xa, _ = as_f32_c(X, ndim=2, name="X")
+        if Xa.shape[1] != self.n_features_in_:
+            raise ValueError(f"X has {Xa.shape[1]} features, fit saw {self.n_features_in_}")
+        return Xa
+
+    def _place(self, dst, n_rows, n_cols, out, rows, col0):
+        m = len(rows)
+        blk = _trees_output_2d(out, m)
+        self._bind().x_trees_scatter(addr(dst, name="dst"), addr_ro(blk, name="src"), addr_ro(rows, name="rows"),
+                                     [n_rows, n_cols, m, blk.shape[1], col0])
+        return blk.shape[1]
+
+    def _column(self, M, j):
+        n = M.shape[0]
+        return self._gather(M, _trees_arange(n), Array.from_list([j], "<i4")).reshape((n,))
+
+
+# ------------------------------------------------------------------ Voting
+# Reference: scikit-learn `sklearn/ensemble/_voting.py` (VotingClassifier
+# :200 -- fit on the label-encoded y, 'hard' = weighted bincount argmax,
+# 'soft' = weighted np.average of predict_proba --, VotingRegressor :500 --
+# weighted np.average of predict). Members are cloned, never refitted in
+# place; n_jobs and verbose are refused by name.
+class VotingClassifier(_TreesWrapperBase):
+    _estimator_type = "classifier"
+
+    def __init__(self, estimators, *, voting="hard", weights=None, n_jobs=None, flatten_transform=True,
+                 verbose=False):
+        if voting not in ("hard", "soft"):
+            raise ValueError("voting must be 'hard' or 'soft'")
+        if n_jobs is not None or verbose:
+            _refuse("n_jobs/verbose", "the members fit one after another.")
+        self.estimators = estimators
+        self.voting = voting
+        self.weights = weights
+        self.n_jobs = n_jobs
+        self.flatten_transform = flatten_transform
+        self.verbose = verbose
+
+    def _weights(self):
+        m = len(self.estimators_)
+        w = [1.0] * m if self.weights is None else [float(v) for v in self.weights]
+        if len(w) != m:
+            raise ValueError(f"weights has {len(w)} entries, there are {m} estimators")
+        return w
+
+    def fit(self, X, y, sample_weight=None):
+        Xa, _ = as_f32_c(X, ndim=2, name="X")
+        self.classes_, codes = encode_labels(y)
+        self.n_classes_ = len(self.classes_)
+        active = _trees_estimators(self.estimators)
+        self.estimators_ = []
+        for _, est in active:
+            e = _trees_clone(est)
+            e.fit(Xa, codes) if sample_weight is None else e.fit(Xa, codes, sample_weight=sample_weight)
+            self.estimators_.append(e)
+        self.named_estimators_ = dict((n, e) for (n, _), e in zip(active, self.estimators_))
+        self.n_features_in_ = Xa.shape[1]
+        self._fitted = True
+        self._weights()
+        return self
+
+    def _soft(self, Xa):
+        n, k = Xa.shape[0], self.n_classes_
+        acc = zeros((n * k,), "<f8")
+        w = self._weights()
+        for e, wi in zip(self.estimators_, w):
+            self._acc_cols(acc, e.predict_proba(Xa), _trees_sub_cols(e), n, k, wi)
+        self._scale(acc, math.fsum(w))
+        return acc
+
+    def predict_proba(self, X):
+        if self.voting == "hard":
+            raise AttributeError("predict_proba is not available when voting='hard'")
+        Xa = self._check_X(X)
+        return self._soft(Xa).reshape((Xa.shape[0], self.n_classes_))
+
+    def predict(self, X):
+        Xa = self._check_X(X)
+        n, k = Xa.shape[0], self.n_classes_
+        if self.voting == "soft":
+            acc = self._soft(Xa)
+        else:
+            acc = zeros((n * k,), "<f8")
+            for e, wi in zip(self.estimators_, self._weights()):
+                self._acc_votes(acc, as_i32_c(e.predict(Xa), ndim=1, name="codes")[0], n, k, wi)
+        return decode_labels(self.classes_, self._argmax(acc, n, k))
+
+    def transform(self, X):
+        """soft: the members' probabilities side by side (n, m * k), float64;
+        hard: the members' predicted codes (n, m), float64."""
+        Xa = self._check_X(X)
+        n, k, m = Xa.shape[0], self.n_classes_, len(self.estimators_)
+        width = m * k if self.voting == "soft" else m
+        out = zeros((n * width,), "<f8")
+        rows = _trees_arange(n)
+        for j, e in enumerate(self.estimators_):
+            if self.voting == "soft":
+                p = zeros((n * k,), "<f8")
+                self._acc_cols(p, e.predict_proba(Xa), _trees_sub_cols(e), n, k)
+                self._place(out, n, width, as_f32_c(p.reshape((n, k)), ndim=2, name="p")[0], rows, j * k)
+            else:
+                self._place(out, n, width, as_f32_c(e.predict(Xa), ndim=1, name="codes")[0], rows, j)
+        return out.reshape((n, width))
+
+
+class VotingRegressor(_TreesWrapperBase):
+    _estimator_type = "regressor"
+
+    def __init__(self, estimators, *, weights=None, n_jobs=None, verbose=False):
+        if n_jobs is not None or verbose:
+            _refuse("n_jobs/verbose", "the members fit one after another.")
+        self.estimators = estimators
+        self.weights = weights
+        self.n_jobs = n_jobs
+        self.verbose = verbose
+
+    def fit(self, X, y, sample_weight=None):
+        Xa, _ = as_f32_c(X, ndim=2, name="X")
+        active = _trees_estimators(self.estimators)
+        self.estimators_ = []
+        for _, est in active:
+            e = _trees_clone(est)
+            e.fit(Xa, y) if sample_weight is None else e.fit(Xa, y, sample_weight=sample_weight)
+            self.estimators_.append(e)
+        self.named_estimators_ = dict((n, e) for (n, _), e in zip(active, self.estimators_))
+        self.n_features_in_ = Xa.shape[1]
+        self._fitted = True
+        return self
+
+    def predict(self, X):
+        Xa = self._check_X(X)
+        n, m = Xa.shape[0], len(self.estimators_)
+        w = [1.0] * m if self.weights is None else [float(v) for v in self.weights]
+        if len(w) != m:
+            raise ValueError(f"weights has {len(w)} entries, there are {m} estimators")
+        acc = zeros((n,), "<f8")
+        for e, wi in zip(self.estimators_, w):
+            self._acc(acc, e.predict(Xa), n, wi)
+        self._scale(acc, math.fsum(w))
+        return acc
+
+    def transform(self, X):
+        Xa = self._check_X(X)
+        n, m = Xa.shape[0], len(self.estimators_)
+        out = zeros((n * m,), "<f8")
+        rows = _trees_arange(n)
+        for j, e in enumerate(self.estimators_):
+            self._place(out, n, m, as_f32_c(e.predict(Xa), ndim=1, name="p")[0], rows, j)
+        return out.reshape((n, m))

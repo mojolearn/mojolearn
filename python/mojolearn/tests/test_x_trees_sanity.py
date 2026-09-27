@@ -128,3 +128,26 @@ def test_random_trees_embedding():
     assert set(np.unique(Ea)) <= {0.0, 1.0}
     acc = accuracy_score(yb, LogisticRegression(max_iter=500).fit(Ea, ya).predict(Eb))
     assert acc > 0.6, acc                                   # the embedding carries signal
+
+
+def test_voting():
+    from sklearn.ensemble import VotingClassifier, VotingRegressor
+    from sklearn.tree import DecisionTreeClassifier, DecisionTreeRegressor
+    Xa, Xb, ya, yb = _clf()
+    ours = ml.VotingClassifier([("a", ml.DecisionTreeClassifier(max_depth=4)),
+                                ("b", ml.DecisionTreeClassifier(max_depth=8))], voting="soft").fit(Xa, ya)
+    ref = VotingClassifier([("a", DecisionTreeClassifier(max_depth=4, random_state=0)),
+                            ("b", DecisionTreeClassifier(max_depth=8, random_state=0))], voting="soft").fit(Xa, ya)
+    a, r = accuracy_score(yb, np.asarray(ours.predict(Xb))), accuracy_score(yb, ref.predict(Xb))
+    assert a >= r - 0.05, (a, r)
+    hard = ml.VotingClassifier([("a", ml.DecisionTreeClassifier(max_depth=4)),
+                                ("b", ml.DecisionTreeClassifier(max_depth=8)),
+                                ("c", ml.DecisionTreeClassifier(max_depth=6))]).fit(Xa, ya)
+    assert accuracy_score(yb, np.asarray(hard.predict(Xb))) >= r - 0.08
+    Xa, Xb, ya, yb = _reg()
+    ours = ml.VotingRegressor([("a", ml.DecisionTreeRegressor(max_depth=4)),
+                               ("b", ml.DecisionTreeRegressor(max_depth=8))], weights=[1, 2]).fit(Xa, ya)
+    ref = VotingRegressor([("a", DecisionTreeRegressor(max_depth=4, random_state=0)),
+                           ("b", DecisionTreeRegressor(max_depth=8, random_state=0))], weights=[1, 2]).fit(Xa, ya)
+    a, r = r2_score(yb, np.asarray(ours.predict(Xb))), r2_score(yb, ref.predict(Xb))
+    assert a >= r - 0.05, (a, r)
