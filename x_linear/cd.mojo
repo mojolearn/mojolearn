@@ -28,6 +28,14 @@ from x_linear.ops import (
 )
 
 
+def alpha_grid_value(amax: Float32, eps: Float32, k: Int, a_n: Int) -> Float32:
+    """DEVIATION 5009: alpha_k = alpha_max * exp((k / (A - 1)) * log(eps)),
+    the portable exp and log (their np.geomspace is 10 ** linspace of
+    log10s; eps ** (k / (A - 1)) is another legal spelling with other bits)."""
+    var frac = fd(i2f(k), i2f(a_n - 1)) if a_n > 1 else Float32(0)
+    return fm(amax, fexp(fm(frac, flog(eps))))
+
+
 def enet_gram_cd(fw: FP, gg: Int, q: Int, qw: Int, w: Int, d: Int, ynorm2: Float32,
                  l1: Float32, l2: Float32, max_iter: Int, tol: Float32) -> Int:
     """Their enet_coordinate_descent_gram without screening; w warm, Qw is
@@ -187,10 +195,8 @@ def enetcv_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw
             for k in range(a_n):
                 st(res, alphas + l * a_n + k, Float32(1e-6))
             continue
-        var leps = flog(eps)
         for k in range(a_n):
-            var frac = fd(i2f(k), i2f(a_n - 1)) if a_n > 1 else Float32(0)
-            st(res, alphas + l * a_n + k, fm(amax, fexp(fm(frac, leps))))
+            st(res, alphas + l * a_n + k, alpha_grid_value(amax, eps, k, a_n))
     # the path on each fold
     for f in range(f_n):
         _prep(x, y, n, d, fid, f, fi, fw, xm, gg, q, sc)
@@ -228,7 +234,7 @@ def enetcv_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw
             for f in range(f_n):
                 acc = fa(acc, ld(res, mse + (l * a_n + k) * f_n + f))
             var m = fd(acc, i2f(f_n))
-            if (l == 0 and k == 0) or m < best:
+            if (l == 0 and k == 0) or m < best:  # DEVIATION 5005: the first minimum
                 best = m
                 best_l = l
                 best_k = k

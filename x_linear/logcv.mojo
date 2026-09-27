@@ -97,7 +97,7 @@ def _predict_code(x: FP, i: Int, d: Int, kp: Int, fi: Bool, th: FP, toff: Int) -
     var bz = Float32(0)
     for k in range(kp):
         var z = fa(row_dot(x, i, d, th, toff + k * stride), ld(th, toff + k * stride + d) if fi else Float32(0))
-        if k == 0 or z > bz:
+        if k == 0 or z > bz:  # DEVIATION 5005: the first max
             best = k
             bz = z
     return best
@@ -143,7 +143,7 @@ def logcv_fit(x: FP, y: FP, n: Int, d: Int, ip: IP, fp: FP, res: FP, fw: FP, iw:
         for f in range(nf):
             acc = fa(acc, ld(res, sc + f * nc + ci))
         var m = fd(acc, i2f(nf))
-        if ci == 0 or m > bs:
+        if ci == 0 or m > bs:  # DEVIATION 5005: the first best C
             best = ci
             bs = m
     sti(iw, 2, -1)

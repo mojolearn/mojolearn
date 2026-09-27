@@ -1,0 +1,11 @@
+--- a/x_linear/lars.mojo
++++ b/x_linear/lars.mojo
+@@ -94,7 +94,7 @@
+                 var a = fabs(ld(fw, cov + j))
+                 # DEVIATION 5005 (IDENTITY_PATHS row 105): strict >, the
+                 # lowest index wins an exact tie
+-                if c_idx < 0 or a > cbig:
++                if c_idx < 0 or a >= cbig:  # SABOTAGE 5005
+                     c_idx = j
+                     cbig = a
+         alpha = fd(cbig, i2f(n))
