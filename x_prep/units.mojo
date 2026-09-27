@@ -23,11 +23,12 @@ from x_prep.iterative import (
     ii_mean_unit, ii_gram_unit, ii_sub_unit, ii_br_unit, ii_predict_unit, ii_snapshot_unit, ii_conv_unit,
     nan_mask_unit,
 )
+from x_prep.stats import f_classif_unit, f_regression_unit, chi2_unit
 from naive_bayes.da import (
     lda_prep_unit, lda_w_unit, lda_stage2_unit, lda_stage3_unit, qda_cov_unit, qda_prep_unit, qda_dec_unit,
 )
 
-comptime N_OPS = 63
+comptime N_OPS = 66
 
 
 @always_inline
@@ -158,3 +159,9 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
         gather_cols_unit(t, f, q)
     comptime if OP == 62:
         var_ptp_unit(t, f, q)
+    comptime if OP == 63:
+        f_classif_unit(t, f, q)
+    comptime if OP == 64:
+        f_regression_unit(t, f, q)
+    comptime if OP == 65:
+        chi2_unit(t, f, q)
