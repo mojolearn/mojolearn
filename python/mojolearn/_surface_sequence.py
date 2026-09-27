@@ -21,10 +21,11 @@ FAMILIES = (
         routes="_mojolearn_x_sequence",
         loaded_by="_backend._HOST_MODULES",
         sabotage_define="MOJOLEARN_HOST_SABOTAGE",
-        training_lanes=("sequence-lstm", "sequence-gru", "sequence-rmsprop", "sequence-adagrad"),
+        training_lanes=("sequence-lstm", "sequence-gru", "sequence-rmsprop", "sequence-adagrad",
+                        "sequence-autoarima"),
         inference_lanes=(),
         forest_kinds=(),
-        classes=("LSTMRegressor", "LSTMClassifier", "GRURegressor", "GRUClassifier", "RMSprop", "Adagrad"),
+        classes=("LSTMRegressor", "LSTMClassifier", "GRURegressor", "GRUClassifier", "RMSprop", "Adagrad", "AutoARIMA"),
         display="the sequence lane's recurrent networks and optimizers",
         host_modules=("sequence/ops.mojo", "sequence/exec.mojo", "sequence/recurrent.mojo",
                       "sequence/pyapi.mojo"),
@@ -44,7 +45,9 @@ FAMILIES = (
 TRAINING_LANE_NAMES = {"sequence-lstm": "LSTMRegressor / LSTMClassifier",
                        "sequence-gru": "GRURegressor / GRUClassifier",
                        "sequence-rmsprop": "RMSprop",
-                       "sequence-adagrad": "Adagrad"}
+                       "sequence-adagrad": "Adagrad",
+                       "sequence-autoarima": "AutoARIMA"}
 PUBLIC_PENDING_LANES = {"sequence-lstm": "no reference", "sequence-gru": "no reference",
                         "sequence-rmsprop": "no reference",
-                        "sequence-adagrad": "no reference"}
+                        "sequence-adagrad": "no reference",
+                        "sequence-autoarima": "no reference"}
