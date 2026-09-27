@@ -16,8 +16,11 @@ from naive_bayes.nb import (
     gnb_eps_unit, gnb_params_unit, gnb_jll_unit, class_log_prior_unit, mnb_params_unit,
     bnb_params_unit, cnb_params_unit, cat_params_unit, cat_jll_unit,
 )
+from naive_bayes.da import (
+    lda_prep_unit, lda_w_unit, lda_stage2_unit, lda_stage3_unit, qda_cov_unit, qda_prep_unit, qda_dec_unit,
+)
 
-comptime N_OPS = 36
+comptime N_OPS = 43
 
 
 @always_inline
@@ -94,3 +97,17 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
         cat_params_unit(t, f, q)
     comptime if OP == 35:
         cat_jll_unit(t, f, q)
+    comptime if OP == 36:
+        lda_prep_unit(t, f, q)
+    comptime if OP == 37:
+        lda_w_unit(t, f, q)
+    comptime if OP == 38:
+        lda_stage2_unit(t, f, q)
+    comptime if OP == 39:
+        lda_stage3_unit(t, f, q)
+    comptime if OP == 40:
+        qda_cov_unit(t, f, q)
+    comptime if OP == 41:
+        qda_prep_unit(t, f, q)
+    comptime if OP == 42:
+        qda_dec_unit(t, f, q)

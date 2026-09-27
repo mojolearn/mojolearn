@@ -27,6 +27,7 @@ FAMILIES = (
             "x-prep-target-encoder", "x-prep-simple-imputer",
             "x-prep-kbins",
             "x-prep-gaussian-nb", "x-prep-multinomial-nb", "x-prep-bernoulli-nb",
+            "x-prep-lda", "x-prep-qda",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -35,12 +36,13 @@ FAMILIES = (
             "OrdinalEncoder", "OneHotEncoder",
             "TargetEncoder", "SimpleImputer", "KBinsDiscretizer",
             "GaussianNB", "MultinomialNB", "BernoulliNB",
+            "LinearDiscriminantAnalysis", "QuadraticDiscriminantAnalysis",
         ),
         display="preprocessing additions, naive Bayes and discriminant analysis",
         host_modules=(
             "x_prep/host/program.mojo", "x_prep/common.mojo", "x_prep/prims.mojo", "x_prep/eigh.mojo",
             "x_prep/units.mojo", "x_prep/target.mojo", "x_prep/kbins.mojo",
-            "naive_bayes/nb.mojo",
+            "naive_bayes/nb.mojo", "naive_bayes/da.mojo",
         ),
         exports=(
             "x_prep_host_numeric_mode", "x_prep_host_vendor", "x_prep_host_column", "x_prep_host_sabotage",
@@ -62,6 +64,8 @@ TRAINING_LANE_NAMES = {
     "x-prep-gaussian-nb": "GaussianNB",
     "x-prep-multinomial-nb": "MultinomialNB",
     "x-prep-bernoulli-nb": "BernoulliNB",
+    "x-prep-lda": "LinearDiscriminantAnalysis",
+    "x-prep-qda": "QuadraticDiscriminantAnalysis",
 }
 PUBLIC_PENDING_LANES = {
     "x-prep-robust-scaler": "no reference",
@@ -74,4 +78,6 @@ PUBLIC_PENDING_LANES = {
     "x-prep-gaussian-nb": "no reference",
     "x-prep-multinomial-nb": "no reference",
     "x-prep-bernoulli-nb": "no reference",
+    "x-prep-lda": "no reference",
+    "x-prep-qda": "no reference",
 }
