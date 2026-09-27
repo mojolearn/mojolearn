@@ -6,7 +6,8 @@ Nocedal & Wright, Numerical Optimization (2nd ed.), Algorithm 7.4 (the
 two-loop recursion) inside Algorithm 7.5, with m = 10 pairs, the initial
 scaling gamma = s'y / y'y (their eq. 7.20), and a backtracking Armijo line
 search (c1 = 1e-4, step halved up to 40 times) in place of their Wolfe
-search. A pair with s'y <= 1e-10 * |s|*|y| is skipped. Stops when
+search; a step inside float32's objective noise (1e-6 relative) is also
+accepted when it meets the strong Wolfe curvature test (c2 = 0.9). A pair with s'y <= 1e-10 * |s|*|y| is skipped. Stops when
 max|g| <= tol, when the line search cannot decrease f at float32 resolution,
 or at max_iter. Every sum ascends the index; the objective is a comptime
 function parameter, so each caller compiles its own copy.
@@ -101,6 +102,15 @@ def lbfgs[obj: Objective](
             if fnew == fnew and fnew <= fa(f, fm(fm(Float32(1e-4), t), slope)):
                 accepted = True
                 break
+            # float32's objective is noisy at about 1e-7 relative, so a
+            # decrease below that cannot be seen: accept a step whose
+            # objective is within that noise when the directional derivative
+            # has fallen to 0.9 of its start (the strong Wolfe curvature test)
+            if fnew == fnew and fnew <= fa(f, fa(fm(Float32(1e-6), fabs(f)), Float32(1e-30))):
+                var dg = _dot(fw, gn, fw, dr, p)
+                if fabs(dg) <= fm(Float32(0.9), fabs(slope)):
+                    accepted = True
+                    break
             t = fm(t, Float32(0.5))
         if not accepted:
             return it
