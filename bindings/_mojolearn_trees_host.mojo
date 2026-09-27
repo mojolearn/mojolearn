@@ -83,7 +83,10 @@ from extratrees.estimator import (
 from extratrees.impl.decisiontree.decisiontree import (
     CRITERION_ENTROPY,
     CRITERION_GINI,
+    CRITERION_GAMMA,
+    CRITERION_INVERSE_GAUSSIAN,
     CRITERION_MSE,
+    CRITERION_POISSON,
 )
 
 
@@ -300,9 +303,11 @@ def _et_fit[
             )
     else:
         config = _config_from(params, ExtraTreesConfig().for_regression())
-        if config.criterion != CRITERION_MSE:
+        if config.criterion != CRITERION_MSE and config.criterion != CRITERION_POISSON and (
+        config.criterion != CRITERION_GAMMA and config.criterion != CRITERION_INVERSE_GAUSSIAN
+    ):
             raise Error(
-                "et_regressor_fit: criterion (slot 21) must be MSE (2); got "
+                "et_regressor_fit: criterion (slot 21) must be MSE (2), POISSON (4), GAMMA (5) or INVERSE_GAUSSIAN (6); got "
                 + String(config.criterion)
             )
     if n_rows < 1 or n_features < 1:

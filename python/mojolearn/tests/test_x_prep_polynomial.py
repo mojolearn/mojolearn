@@ -18,6 +18,11 @@ def test_poly():
         m, r = ml.PolynomialFeatures(**kw).fit(X), SkP(**kw).fit(X)
         np.testing.assert_array_equal(np.asarray(m.powers_), r.powers_)
         np.testing.assert_allclose(np.asarray(m.transform(X)), r.transform(X.astype(np.float64)), rtol=1e-5, atol=1e-6)
+    c = np.asarray(ml.PolynomialFeatures(degree=3).fit(X).transform(X))
+    f = np.asarray(ml.PolynomialFeatures(degree=3, order="F").fit(X).transform(X))
+    assert f.flags["F_CONTIGUOUS"] and not f.flags["C_CONTIGUOUS"]
+    assert SkP(degree=3, order="F").fit(X).transform(X).flags["F_CONTIGUOUS"]
+    np.testing.assert_array_equal(c.view(np.uint32), f.view(np.uint32))
 
 
 if __name__ == "__main__":
