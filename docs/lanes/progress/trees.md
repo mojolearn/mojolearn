@@ -155,8 +155,13 @@ SESSION A (verification), 2026-09-27 evening. DONE, merged:
   rf-clf, rf-reg: AGREE, DISAGREE, AGREE after reversal. MI300X (trees-amd):
   the same 36 AGREE CPU == HIP, HIP cells unchanged where a prior exists
   (26), and the HIP cells equal the CUDA cells on all 36.
-  OWED post-merge: m3ultra (and m2pro/m4) steward re-run of the 20 trees
-  lanes + rf/et lanes (batched request at the merge commit, see below).
+  POST-MERGE, QUEUED: steward request 1790536790720-trees-b25e0fdfe8
+  (m2pro, m3ultra-b, m4-a, do-amd; coalesced every earlier queued trees
+  request): the 20 trees lanes + trees-dart-options, trees-et-deviance,
+  rf-clf, rf-reg, rf-clf-entropy-log2-noboot, trees-gbdt-multirmse, pass 2,
+  sabotage xtrees/checks/sabotage/steward_combo_cpu_only.patch (the four
+  CPU-only column patches in one). Read it with `apple_steward.py status`.
+  An M3 FAIL comes back as a fix commit before any B item.
   If M3 still disagrees, the next suspect is any other plain cross-block
   read in the RF builder (none found by grep) or the quantile path.
   OWED (FAST, not identity): ET under FAST on Apple still merges bpn > 1
