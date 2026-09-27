@@ -210,3 +210,21 @@ def _ann_batch_cagra_filter(ml, e, Xh):
 
 
 _batch_decl(_ann_batch_cagra_filter, "x-ann-cagra-filter")
+
+
+@lane("x-ann-refine-euclidean")
+def _(ml, X, yc, yr, Xh=None):
+    """refine(metric='euclidean'): the x-ann-refine shape, with the root of
+    each selected squared distance (numpy float32 sqrt on the host)."""
+    d, i = ml.refine(X[64:4160], X[:64], _ann_cands(64), 8, metric="euclidean")
+    return _fit(dict(dist=_h(d), idx=_h(i)))
+
+
+def _ann_batch_refine_euclidean(ml, e, Xh):
+    c = _ann_cands(64)
+    rows = np.arange(64, dtype=np.int64).reshape(64, 1)
+    return [_BatchRows("refine", rows,
+                       lambda r: ml.refine(Xh[64:4160], Xh[:64][r[:, 0]], c[r[:, 0]], 8, metric="euclidean"))]
+
+
+_batch_decl(_ann_batch_refine_euclidean, "x-ann-refine-euclidean")

@@ -596,13 +596,22 @@ class IVFRaBitQIndex(_AnnSaved, NumericModeMixin):
         return dist.reshape((m, k)), idx.reshape((m, k))
 
 
-def refine(dataset, queries, candidates, k, numeric_mode=None):
+def refine(dataset, queries, candidates, k, numeric_mode=None, metric="sqeuclidean"):
     """Exact re-ranking of candidate neighbors (reference: cuVS `refine`):
     squared L2 from each query to each of its candidate rows, the k smallest
     under (distance, id). `candidates` is int (m, k0); an id < 0 is padding.
     Returns `(distances, indices)`, float32 and int32 `(m, k)`; a query with
-    fewer than k valid candidates gets `(inf, -1)` fill."""
+    fewer than k valid candidates gets `(inf, -1)` fill.
+
+    `metric`: 'sqeuclidean' (cuVS L2Expanded, the default) or 'euclidean'
+    (L2SqrtExpanded): the same selection on the squared keys, then the root
+    of each of the k selected distances, taken on the host in float32
+    (numpy's sqrt, IEEE correctly rounded on every platform), where cuVS
+    takes it at the store. The ids and their order are the squared metric's."""
     import numpy as np
+    if metric not in ("sqeuclidean", "euclidean"):
+        raise ValueError(f"mojolearn refine: metric must be 'sqeuclidean' or 'euclidean' "
+                         f"(inner product is not implemented), got {metric!r}")
     from . import _backend
     x, _ = as_f32_c(dataset, ndim=2, name="dataset")
     q, _ = as_f32_c(queries, ndim=2, name="queries")
@@ -625,4 +634,7 @@ def refine(dataset, queries, candidates, k, numeric_mode=None):
         # n, d, m, k0, k
         [n, d, m, k0, k],
     )
-    return dist.reshape((m, k)), idx.reshape((m, k))
+    dist = dist.reshape((m, k))
+    if metric == "euclidean":
+        dist = np.sqrt(np.asarray(dist, dtype=np.float32)).astype(np.float32)
+    return dist, idx.reshape((m, k))
