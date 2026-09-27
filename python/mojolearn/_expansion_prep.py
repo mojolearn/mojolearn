@@ -35,7 +35,7 @@ from ._labels import flatten_labels, sorted_classes, label_kind
 __all__ = ["RobustScaler", "MaxAbsScaler", "OrdinalEncoder", "OneHotEncoder", "TargetEncoder", "SimpleImputer", "KBinsDiscretizer",
            "GaussianNB", "MultinomialNB", "BernoulliNB",
            "LinearDiscriminantAnalysis", "QuadraticDiscriminantAnalysis",
-           "QuantileTransformer", "PowerTransformer", "Normalizer", "PolynomialFeatures", "SplineTransformer"]
+           "QuantileTransformer", "PowerTransformer", "Normalizer", "PolynomialFeatures", "SplineTransformer", "Binarizer", "LabelEncoder"]
 
 _BINDING = "_mojolearn_x_prep"
 
@@ -47,7 +47,7 @@ _OPS = dict(
     te_global=20, te_enc=21, te_apply=22, mark_missing=23, fill=24, kbins_edges=25, kbins_codes=26,
     gnb_eps=27, gnb_params=28, gnb_jll=29, class_log_prior=30, mnb_params=31, bnb_params=32, cnb_params=33, cat_params=34, cat_jll=35,
     lda_prep=36, lda_w=37, lda_stage2=38, lda_stage3=39, qda_cov=40, qda_prep=41, qda_dec=42,
-    qt_apply=43, pt_fit=44, pt_apply=45, std_params=46, normalize=47, poly=48, spline_knots=49, spline_apply=50,
+    qt_apply=43, pt_fit=44, pt_apply=45, std_params=46, normalize=47, poly=48, spline_knots=49, spline_apply=50, label_binarize=51, scatter_ones=52,
 )
 _PARAMS = 14
 _NONE = -1
@@ -1540,3 +1540,129 @@ class SplineTransformer(_PrepBase):
             if any(a < b for a, b in zip(lo, self._lo)) or any(a > b for a, b in zip(hi, self._hi)):
                 raise ValueError("mojolearn: X contains values beyond the limits of the knots")
         return pr.get(out, (n, W))
+
+
+class Binarizer(_PrepBase):
+    """sklearn.preprocessing.Binarizer: 1 where X > threshold, else 0 (NaN is
+    kept). Stateless."""
+    _parameters = ("threshold", "copy")
+
+    def __init__(self, *, threshold=0.0, copy=True):
+        self.threshold = threshold
+        self.copy = copy
+
+    def fit(self, X, y=None):
+        self.n_features_in_ = _x2d(X).shape[1]
+        self.numeric_mode_ = _mode()
+        return self
+
+    def transform(self, X, copy=None):
+        self._check_fitted()
+        arr = _x2d(X)
+        self._check_width(arr)
+        n, d = arr.shape
+        pr = _Prog()
+        xo, th = pr.put(arr), pr.put_scalar(self.threshold)
+        out = pr.alloc(n * d)
+        pr.stage("binarize", n * d, xo, n * d, th, out)
+        pr.run(self.numeric_mode_)
+        return pr.get(out, (n, d))
+
+
+# ---------------------------------------------------------------- label transformers
+_F32_EXACT = 2 ** 24
+
+
+def _numeric_labels(values):
+    """The labels as floats when every one is a real number that float32
+    holds exactly (so the device's categories are the labels themselves),
+    else None (str labels, ints beyond 2**24: the Python route)."""
+    import struct
+    out = []
+    for v in values:
+        if isinstance(v, bool) or not isinstance(v, numbers.Real):
+            return None
+        fv = float(v)
+        if fv != fv or struct.unpack("f", struct.pack("f", fv))[0] != fv:
+            return None
+        out.append(fv)
+    return out
+
+
+def _label_classes(mode, values):
+    """(classes list in the reference's order, device categories Array or
+    None). Numeric labels: a device sort and run scan; else sorted()."""
+    nums = _numeric_labels(values)
+    if nums is None or not nums:
+        classes, _ = sorted_classes(values)
+        return classes, None
+    cats = _fit_categories(mode, Array.from_list([[v] for v in nums], "<f4"))[0]
+    ints = all(isinstance(v, numbers.Integral) for v in values)
+    classes = [int(c) if ints else float(c) for c in cats.tolist()]
+    return classes, cats
+
+
+def _label_codes(pr, values, cats):
+    """Stages: each label's index among `cats` (or -1). Returns the codes
+    offset and the unknown-count offset."""
+    arr = Array.from_list([[float(v)] for v in values], "<f4")
+    return _codes(pr, arr, [cats])
+
+
+def _classes_array(classes):
+    kind = label_kind(classes)
+    if kind == "int":
+        return Array.from_list(classes, "<i8")
+    if kind == "float":
+        return Array.from_list(classes, "<f8")
+    return list(classes)
+
+
+class LabelEncoder(_PrepBase):
+    """sklearn.preprocessing.LabelEncoder: classes_ are the sorted distinct
+    labels (numeric labels on the device: sort + run scan; str labels in
+    Python), transform is each label's index (a device binary search),
+    int32. An unseen label is refused, as the reference refuses it."""
+    _parameters = ()
+
+    def fit(self, y):
+        self.numeric_mode_ = _mode()
+        values = flatten_labels(y)
+        self._classes, self._cats = _label_classes(self.numeric_mode_, values)
+        self.classes_ = _classes_array(self._classes)
+        return self
+
+    def fit_transform(self, y):
+        return self.fit(y).transform(y)
+
+    def _check_fitted(self):
+        if not hasattr(self, "_classes"):
+            raise RuntimeError("mojolearn: this LabelEncoder instance is not fitted yet")
+
+    def transform(self, y):
+        self._check_fitted()
+        values = flatten_labels(y)
+        if not values:
+            return Array((0,), "<i4")
+        if self._cats is None or _numeric_labels(values) is None:
+            index = {c: i for i, c in enumerate(self._classes)}
+            missing = [v for v in values if v not in index]
+            if missing:
+                raise ValueError(f"mojolearn: y contains previously unseen labels: {missing[:5]}")
+            return Array.from_list([index[v] for v in values], "<i4")
+        n = len(values)
+        pr = _Prog()
+        codes, neg = _label_codes(pr, values, self._cats)
+        out = pr.alloc(n)
+        pr.stage("f2i", n, codes, out)
+        pr.run(self.numeric_mode_)
+        if pr.values(neg, 1)[0] > 0:
+            raise ValueError("mojolearn: y contains previously unseen labels")
+        return pr.get_i32(out, n)
+
+    def inverse_transform(self, y):
+        self._check_fitted()
+        codes = [int(c) for c in flatten_labels(y)]
+        if any(c < 0 or c >= len(self._classes) for c in codes):
+            raise ValueError("mojolearn: y contains previously unseen labels")
+        return _classes_array([self._classes[c] for c in codes])

@@ -14,6 +14,12 @@ from std.sys.compile import is_defined
 from x_cluster.bodies import (
     FPtr,
     IPtr,
+    cov_cell,
+    exp_cell,
+    gauss_q_cell,
+    nk_cell,
+    resp_row,
+    xk_cell,
     ap_availability_col,
     ap_exemplar_cell,
     ap_responsibility_row,
@@ -161,3 +167,39 @@ struct HostOps(ClusterOps):
         for t in range(n):
             labels.append(Int32(lab[t]))
         return r.inertia
+
+    def gauss_q(mut self, x: Int, n: Int, d: Int, means: Int, pchol: Int, kc: Int, dst: Int) raises:
+        var px = self._fp(x)
+        var pm = self._fp(means)
+        var pp = self._fp(pchol)
+        var pd = self._fp(dst)
+        for t in range(n * kc):
+            gauss_q_cell(px, d, pm, pp, kc, pd, t)
+
+    def resp(mut self, q: Int, c: Int, n: Int, kc: Int, lpn: Int) raises:
+        var pq = self._fp(q)
+        var pc = self._fp(c)
+        var pl = self._fp(lpn)
+        for t in range(n):
+            resp_row(pq, pc, kc, pl, t)
+
+    def exp(mut self, src: Int, dst: Int, n: Int) raises:
+        var ps = self._fp(src)
+        var pd = self._fp(dst)
+        for t in range(n):
+            exp_cell(ps, pd, t)
+
+    def moments(
+        mut self, resp: Int, x: Int, n: Int, d: Int, kc: Int, reg: Float32, nk: Int, means: Int, cov: Int
+    ) raises:
+        var pr = self._fp(resp)
+        var px = self._fp(x)
+        var pn = self._fp(nk)
+        var pm = self._fp(means)
+        var pc = self._fp(cov)
+        for t in range(kc):
+            nk_cell(pr, n, kc, pn, t)
+        for t in range(kc * d):
+            xk_cell(pr, px, n, d, kc, pn, pm, t)
+        for t in range(kc * d * d):
+            cov_cell(pr, px, n, d, kc, pm, pn, reg, pc, t)

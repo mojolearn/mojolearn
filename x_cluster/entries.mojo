@@ -7,7 +7,9 @@ their Python arguments, call ONE of these with their own `ClusterOps`, and
 hand the `ClusterOut` back. The integer and float parameter lists are
 documented per entry and mirrored in `python/mojolearn/_x_cluster_impl.py`."""
 from x_cluster.affinity import affinity_fit
+from x_cluster.bgmm import BgmmPriors, BgmmState, bgmm_constants, bgmm_fit, bgmm_score, bgmm_weights
 from x_cluster.bisect import BisectTree, bisect_fit, bisect_predict
+from checks.numerics import identical_mul64
 from x_cluster.common import distances_to, nearest_all
 from x_cluster.meanshift import meanshift_fit
 from x_cluster.minibatch import MiniBatchParams, minibatch_fit
@@ -190,6 +192,115 @@ def affinity_entry[O: ClusterOps](
     return out^
 
 
+def _f32_of(v: List[Float64]) -> List[Float32]:
+    var out = List[Float32](capacity=len(v))
+    for t in v:
+        out.append(Float32(t))
+    return out^
+
+
+def bgmm_entry[O: ClusterOps](
+    mut ops: O, x: List[Float32], a: List[Float32], ip: List[Int], fp: List[Float64]
+) raises -> ClusterOut:
+    """ip = [n, d, n_components, dirichlet_process, max_iter, n_init,
+    init_random, seed, has_mean_prior, has_covariance_prior]; fp =
+    [weight_concentration_prior (< 0 None), mean_precision_prior (< 0 None),
+    degrees_of_freedom_prior (< 0 None), reg_covar, tol]; a = the mean prior
+    (d) then the covariance prior (d x d), each when given.
+    f = [weights, means, covariances, precisions_cholesky, wc0, wc1,
+    mean_precision, degrees_of_freedom, constants, mean_prior,
+    covariance_prior], i = [labels], s = [lower_bound, n_iter, converged,
+    wcp, mpp, dofp]."""
+    var n = ip[0]
+    var d = ip[1]
+    var kc = ip[2]
+    var off = 0
+    var mean_prior = List[Float64](capacity=d)
+    if ip[8] != 0:
+        for f in range(d):
+            mean_prior.append(Float64(a[f]))
+        off = d
+    else:
+        for f in range(d):
+            var acc = Float64(0)
+            for r in range(n):
+                acc = acc + Float64(x[r * d + f])
+            mean_prior.append(acc / Float64(n))
+    var cov_prior = List[Float64](length=d * d, fill=0)
+    if ip[9] != 0:
+        for t in range(d * d):
+            cov_prior[t] = Float64(a[off + t])
+    else:
+        # np.cov(X.T): ddof 1, one ascending Float64 chain per cell
+        var mean = List[Float64](capacity=d)
+        for f in range(d):
+            var acc = Float64(0)
+            for r in range(n):
+                acc = acc + Float64(x[r * d + f])
+            mean.append(acc / Float64(n))
+        for p in range(d):
+            for q in range(d):
+                var acc = Float64(0)
+                for r in range(n):
+                    acc = acc + identical_mul64(Float64(x[r * d + p]) - mean[p], Float64(x[r * d + q]) - mean[q])
+                cov_prior[p * d + q] = acc / Float64(n - 1 if n > 1 else 1)
+    var wcp = fp[0] if fp[0] >= 0 else 1.0 / Float64(kc)
+    var mpp = fp[1] if fp[1] >= 0 else 1.0
+    var dofp = fp[2] if fp[2] >= 0 else Float64(d)
+    if dofp <= Float64(d) - 1.0:
+        raise Error("The parameter 'degrees_of_freedom_prior' should be greater than " + String(d - 1) + ", but got " + String(dofp) + ".")
+    var pr = BgmmPriors(kc, d, ip[3] != 0, wcp, mpp, mean_prior.copy(), dofp, cov_prior.copy())
+    var best = BgmmState()
+    var labels = List[Int32]()
+    var r = bgmm_fit(ops, x, n, d, pr, Float32(fp[3]), fp[4], ip[4], ip[5], ip[6] != 0, UInt64(ip[7]), best, labels)
+    var out = ClusterOut()
+    out.f.append(_f32_of(bgmm_weights(pr, best)))
+    out.f.append(_f32_of(best.means))
+    out.f.append(_f32_of(best.cov))
+    out.f.append(_f32_of(best.pchol))
+    out.f.append(_f32_of(best.wc0))
+    out.f.append(_f32_of(best.wc1))
+    out.f.append(_f32_of(best.mean_prec))
+    out.f.append(_f32_of(best.dof))
+    out.f.append(bgmm_constants(pr, best))
+    out.f.append(_f32_of(mean_prior))
+    out.f.append(_f32_of(cov_prior))
+    out.i.append(labels^)
+    out.s.append(r.lower_bound)
+    out.s.append(Float64(r.n_iter))
+    out.s.append(Float64(1) if r.converged else Float64(0))
+    out.s.append(wcp)
+    out.s.append(mpp)
+    out.s.append(dofp)
+    return out^
+
+
+def bgmm_score_entry[O: ClusterOps](
+    mut ops: O, x: List[Float32], a: List[Float32], ip: List[Int]
+) raises -> ClusterOut:
+    """ip = [n, d, n_components]; a = means (k x d), precisions_cholesky
+    (k x d x d), constants (k). f = [log_resp (n x k), log_prob_norm (n)]."""
+    var n = ip[0]
+    var d = ip[1]
+    var kc = ip[2]
+    var means = List[Float32](capacity=kc * d)
+    var pchol = List[Float32](capacity=kc * d * d)
+    var c = List[Float32](capacity=kc)
+    for t in range(kc * d):
+        means.append(a[t])
+    for t in range(kc * d * d):
+        pchol.append(a[kc * d + t])
+    for t in range(kc):
+        c.append(a[kc * d + kc * d * d + t])
+    var lr = List[Float32]()
+    var lpn = List[Float32]()
+    bgmm_score(ops, x, n, d, kc, means, pchol, c, lr, lpn)
+    var out = ClusterOut()
+    out.f.append(lr^)
+    out.f.append(lpn^)
+    return out^
+
+
 # ---------------------------------------------------------------- dispatcher
 comptime ENTRY_NEAREST = 0
 comptime ENTRY_DISTANCES = 1
@@ -199,6 +310,8 @@ comptime ENTRY_BISECT_PREDICT = 4
 comptime ENTRY_MEANSHIFT = 5
 comptime ENTRY_OPTICS = 6
 comptime ENTRY_AFFINITY = 7
+comptime ENTRY_BGMM = 8
+comptime ENTRY_BGMM_SCORE = 9
 
 
 def run_entry[O: ClusterOps](
@@ -222,4 +335,8 @@ def run_entry[O: ClusterOps](
         return optics_entry(ops, x, ip, fp)
     if which == ENTRY_AFFINITY:
         return affinity_entry(ops, x, a, ip, fp)
+    if which == ENTRY_BGMM:
+        return bgmm_entry(ops, x, a, ip, fp)
+    if which == ENTRY_BGMM_SCORE:
+        return bgmm_score_entry(ops, x, a, ip)
     raise Error("x_cluster: unknown entry " + String(which))

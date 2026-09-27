@@ -32,6 +32,8 @@ FAMILIES = (
             "x-prep-normalizer",
             "x-prep-polynomial-features",
             "x-prep-spline-transformer",
+            "x-prep-binarizer",
+            "x-prep-label-encoder",
         ),
         inference_lanes=(),
         forest_kinds=(),
@@ -45,6 +47,8 @@ FAMILIES = (
             "Normalizer",
             "PolynomialFeatures",
             "SplineTransformer",
+            "Binarizer",
+            "LabelEncoder",
         ),
         display="preprocessing additions, naive Bayes and discriminant analysis",
         host_modules=(
@@ -80,6 +84,8 @@ TRAINING_LANE_NAMES = {
     "x-prep-normalizer": "Normalizer",
     "x-prep-polynomial-features": "PolynomialFeatures",
     "x-prep-spline-transformer": "SplineTransformer",
+    "x-prep-binarizer": "Binarizer",
+    "x-prep-label-encoder": "LabelEncoder",
 }
 PUBLIC_PENDING_LANES = {
     "x-prep-robust-scaler": "no reference",
@@ -99,4 +105,6 @@ PUBLIC_PENDING_LANES = {
     "x-prep-normalizer": "no reference",
     "x-prep-polynomial-features": "no reference",
     "x-prep-spline-transformer": "no reference",
+    "x-prep-binarizer": "no reference",
+    "x-prep-label-encoder": "no reference",
 }
