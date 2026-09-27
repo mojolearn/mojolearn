@@ -26,12 +26,12 @@
  from x_ann.host.tsne_host import tsne_fit_host
 --- a/ivf/host/ivf_host.mojo
 +++ b/ivf/host/ivf_host.mojo
-@@ -120,7 +120,7 @@
- 
- 
- #: The gate's negative control (see THE NEGATIVE CONTROL above).
--comptime IVF_HOST_SABOTAGE = is_defined["MOJOLEARN_HOST_SABOTAGE"]()
-+comptime IVF_HOST_SABOTAGE = True  # THE END-TO-END SABOTAGE (never shipped): the negative control compiled in
- 
- 
- @always_inline
+@@ -440,7 +440,7 @@
+                 # THE VALUE ARM (THE NEGATIVE CONTROL above), after the root.
+                 out_dist.append(ivf_sabotage_value_flip(sel_dist[i]))
+             else:
+-                out_dist.append(sel_dist[i])
++                out_dist.append(ivf_sabotage_value_flip(sel_dist[i]))  # THE END-TO-END SABOTAGE (never shipped): the value arm without the flag the loader refuses
+             out_idx.append(sel_orig[i])
+         for _pad in range(selected, k):
+             out_dist.append(Float32(0))
