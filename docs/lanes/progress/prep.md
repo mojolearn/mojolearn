@@ -36,13 +36,20 @@ Sanity tests need scikit-learn: on the pod it is in /root/skl
 | VarianceThreshold | 9a474af44 | x-prep-variance-threshold | batch 9, infer 9, train 9; cuda H100 vs CPU |
 | SelectKBest with f_classif, chi2, f_regression | 7a3c408c0 | x-prep-select-kbest | batch 9, infer 9, train 9; cuda H100 vs CPU |
 | mutual_info_classif, mutual_info_regression | ad898a159 | x-prep-mutual-info | infer 9, train 9; cuda H100 vs CPU |
-| RFE | (this commit) | x-prep-rfe | batch 9, infer 9, train 9; cuda H100 vs CPU |
+| RFE | 3061ce9b8 | x-prep-rfe | batch 9, infer 9, train 9; cuda H100 vs CPU |
+| ComplementNB | bdde41d02 | x-prep-complement-nb | batch 9, infer 9, train 9; cuda H100 vs CPU |
+| CategoricalNB | (this commit) | x-prep-categorical-nb | batch 9, infer 9, train 9; cuda H100 vs CPU |
 
 ## Next
-Main table DONE. Additions in order: QuantileTransformer, PowerTransformer,
-Normalizer, PolynomialFeatures, SplineTransformer, Binarizer, LabelEncoder,
-LabelBinarizer, MultiLabelBinarizer, IterativeImputer, VarianceThreshold,
-SelectKBest (f_classif, chi2, f_regression, mutual_info), RFE, ComplementNB,
-CategoricalNB. Then PASS 2 (docs/lanes/ALGORITHM_EXPANSION_PLAN.md, last section).
-Helper scripts (not in the repo): ~/mojolearn-evidence/algos-prep/{qsync,gate,commit}.sh;
-the pod's git tree sits at 1f3a717ad and qsync sends every file differing from it.
+PASS 1 DONE: every algorithm in the lane table and its Additions is merged
+(PENDING lanes, CPU == NVIDIA AGREE). Now PASS 2 per the CURRENT DIRECTIVES
+at the top of docs/lanes/ALGORITHM_EXPANSION_PLAN.md: hold the NVIDIA pod
+(`prep`) and the AMD box (`prep-amd`, `tools/dev_pod.sh up prep 240 --vendor
+amd`); per-seam proof (oracle, separating fixture, sabotage arm, DEVIATION
+5400-5499, card stage, IDENTITY_PATHS rows 140-149, `.checks` listing), AGREE
+on NVIDIA and AMD, M2 Pro steward; then option parity (naive_bayes/ and
+x_prep/ NOT_IMPLEMENTED.tsv, every refused-by-name option in
+_expansion_prep.py docstrings), then speed.
+Helper scripts (not in the repo): ~/mojolearn-evidence/algos-prep/{qsync,gate,commit,addlane}.sh|py;
+qsync sends every file differing from ~/mojolearn-evidence/algos-prep/pod_base
+(the commit the pod's git tree was last reset to).

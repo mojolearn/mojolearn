@@ -1,0 +1,9 @@
+# the cluster lane's per-seam check drivers (pass 2; docs/lanes/progress/cluster.md)
+x_cluster/checks/dist_check.mojo
+x_cluster/checks/nearest_check.mojo
+x_cluster/checks/kth_check.mojo
+x_cluster/checks/meanshift_check.mojo
+x_cluster/checks/ap_check.mojo
+x_cluster/checks/descend_check.mojo
+x_cluster/checks/gauss_check.mojo
+x_cluster/checks/moments_check.mojo

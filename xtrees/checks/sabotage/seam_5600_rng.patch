@@ -1,0 +1,11 @@
+--- a/xtrees/ops.mojo
++++ b/xtrees/ops.mojo
+@@ -73,7 +73,7 @@
+     if replace:
+         for k in range(n_draw):
+             # DEVIATION 5600: the index is the counter draw mod n.
+-            res[unsafe_offset=k] = Int32(Int(draw(base, k) % UInt64(n_pool)))
++            res[unsafe_offset=k] = Int32(Int(draw(base, k) % UInt64(n_pool - 1)))  # SABOTAGE 5600
+         return
+     var perm = List[Int32](capacity=n_pool)
+     for i in range(n_pool):
