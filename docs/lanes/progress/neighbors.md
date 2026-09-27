@@ -57,6 +57,33 @@ Proof (step 2), all fourteen algorithms, NVIDIA H100 pod:
   seam arms 17/17 bite (each driver PASS, FAIL under its arm, PASS after
   reversal); every lane AGREE. `--sabotage e2e_device_only.patch` (seams not
   re-run): AGREE, DISAGREE on all 14 lanes, AGREE after reversal: PASS.
-- OWED: AMD column (RunPod MI300X out of stock and Hot Aisle full on
-  2026-09-27 16:xx; `up --vendor amd` retrying), M2 Pro steward, then option
-  parity and speed (CURRENT DIRECTIVES).
+- Seam arms RE-PROVEN ONCE on the fixed lane check (CURRENT DIRECTIVES 000;
+  merged tree 799d1f0d3, `seam_checks(..., pass 2)` alone): 17/17 FAIL under
+  their arm (a real driver failure, not a build break), PASS after reversal.
+  Done; never repeat it.
+- Apple / AMD stewards: submitted 799d1f0d3 (all 14 lanes, `--sabotage
+  x_neighbors/checks/sabotage/e2e_device_only.patch`), request
+  1790533314520-neighbors-799d1f0d31, queued on m2pro and do-amd, spooled for
+  m3ultra. Read `python3 tools/apple_steward.py status`; a FAIL comes back to
+  this lane.
+- AMD dev box: `tools/dev_pod.sh up neighbors 240 --vendor amd` found no
+  RunPod MI300X stock and no free Hot Aisle slot (twice, 2026-09-27); a
+  retry was left running (log ~/mojolearn-evidence/devpods/neighbors-amd-up.log).
+
+## NEXT (a fresh session starts here)
+
+1. `python3 tools/apple_steward.py status`: m2pro (gating) and do-amd
+   verdicts for request 1790533314520-neighbors-799d1f0d31. On PASS record it
+   here; on FAIL fix and resubmit only the failing lanes.
+2. If an AMD dev box is up (`tools/dev_pod.sh list`), run
+   `sh tools/algos_lane_check.sh <the 14 lanes>` there once (numbers, not .so
+   digests) unless do-amd already recorded AGREE.
+3. Option parity (CURRENT DIRECTIVES 2): work `x_neighbors/NOT_IMPLEMENTED.tsv`
+   rows marked NOT IMPLEMENTED (sparse input, deviations_, PageRank nstart,
+   ...), then the family's EXISTING algorithms (neighbors/, kernel_methods/,
+   svm/) against sklearn/cuML options; each option: AGREE + a sabotage arm,
+   merged as it passes.
+4. Speed (PASS 2 item 3): IDENTICAL and FAST on NVIDIA/AMD/Apple/CPU at
+   realistic shapes from R2. The n x n dense paths (kernel matrices, the knn
+   distance matrix, label propagation's per-iteration upload) are the first
+   targets; `x_neighbors/gen.py` drivers upload/download per op.
