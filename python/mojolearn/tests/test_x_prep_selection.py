@@ -69,8 +69,27 @@ def test_mutual_info():
     np.testing.assert_allclose(a, b, atol=3e-3)
 
 
+def test_mutual_info_discrete():
+    rng = np.random.default_rng(6)
+    n = 500
+    y = rng.integers(0, 3, n)
+    Xd = np.stack([rng.integers(0, 4, n), (y + rng.integers(0, 2, n)) % 4, y * 2.5,
+                   np.full(n, 7)], axis=1).astype(np.float32)
+    Xc = (rng.standard_normal((n, 2)) + y[:, None] * np.array([0.2, 1.0])).astype(np.float32)
+    X = np.concatenate([Xd[:, :2], Xc[:, :1], Xd[:, 2:], Xc[:, 1:]], axis=1)
+    yr = (X[:, 1] + 0.7 * rng.standard_normal(n)).astype(np.float32)
+    for df in (True, [0, 1, 3, 4], np.array([True, True, False, True, True, False]), [-6, 1, 3, -2], False):
+        a = np.asarray(ml.mutual_info_classif(X, y, discrete_features=df, random_state=0))
+        b = skfs.mutual_info_classif(X, y, discrete_features=df, random_state=0)
+        np.testing.assert_allclose(a, b, atol=3e-3, err_msg=f"classif {df}")
+        a = np.asarray(ml.mutual_info_regression(X, yr, discrete_features=df, random_state=0))
+        b = skfs.mutual_info_regression(X, yr, discrete_features=df, random_state=0)
+        np.testing.assert_allclose(a, b, atol=3e-3, err_msg=f"regression {df}")
+
+
 if __name__ == "__main__":
     test_mutual_info()
+    test_mutual_info_discrete()
     print("PASS test_x_prep_selection (mutual info)")
 
 

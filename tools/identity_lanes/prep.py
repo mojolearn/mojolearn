@@ -511,6 +511,28 @@ def _(ml, X, yc, yr, Xh=None):
     return _fit(parts, m, lambda e: (e.transform(Xh[:256]),))
 
 
+@lane("x-prep-mi-discrete")
+def _(ml, X, yc, yr, Xh=None):
+    """mutual_info with discrete features: the contingency estimator
+    (discrete feature, classes), Ross's with a feature's categories as the
+    classes (discrete feature, continuous target) and the continuous columns
+    of a mixed mask, by mask, by indices and all-discrete."""
+    Xs, y3, ys = X[:1200, :6], _prep_three_class(X, yr)[:1200], yr[:1200]
+    Xm = np.array(Xs, dtype=np.float32)
+    Xm[:, :3] = _prep_categorical(Xs[:, :3])
+    parts = {}
+    for j, df in enumerate(([0, 1, 2], np.array([True, True, True, False, False, False]), [-6, 1])):
+        parts[f"c{j}"] = _h(ml.mutual_info_classif(Xm, y3, discrete_features=df, random_state=3))
+        parts[f"r{j}"] = _h(ml.mutual_info_regression(Xm, ys, discrete_features=df, random_state=3, n_neighbors=4))
+    Xd = Xm[:, :3]
+    parts["dd"] = _h(ml.mutual_info_classif(Xd, y3, discrete_features=True))
+    parts["dc"] = _h(ml.mutual_info_regression(Xd, ys, discrete_features=True))
+    m = ml.SelectKBest(lambda A, b: ml.mutual_info_classif(A, b, discrete_features=[0, 1, 2], random_state=3),
+                       k=3).fit(Xm, y3)
+    parts["support"] = _h(np.array(m.get_support()))
+    return _fit(parts, m, lambda e: (e.transform(np.array(Xh[:256, :6], dtype=np.float32)),))
+
+
 @lane("x-prep-rfe")
 def _(ml, X, yc, yr, Xh=None):
     y3 = _prep_three_class(X, yr)
