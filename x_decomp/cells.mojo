@@ -298,16 +298,33 @@ def bidx(mode: Int, i: Int, d: Int) -> Int:
     return 0
 
 
-# DEVIATION 5300 (PIN; IDENTITY_PATHS row 130): p ascending, one fused multiply-add
-# per term; check x_decomp/checks/fold_ew_check.mojo, arm 5300_gemm_order.
+#: The reduction block of the folds (DEVIATIONS 5300, 5301): a reduction over
+#: more than FOLD_BLOCK terms is cut into ceil(len / FOLD_BLOCK) consecutive
+#: blocks, each folded ascending by its own thread, and the block partials are
+#: then folded ascending. The block count is a function of the SHAPE only
+#: (IDENTITY_PATHS row 7's rule), never of the device.
+comptime FOLD_BLOCK = 4096
+
+
+# DEVIATION 5300 (PIN; IDENTITY_PATHS row 130): p ascending inside a block, one
+# fused multiply-add per term, the blocks' partials added ascending (FOLD_BLOCK);
+# check x_decomp/checks/fold_ew_check.mojo, arm 5300_gemm_order.
 @always_inline
 def gemm_cell(
     a: F32Ptr, b: F32Ptr, i: Int, j: Int, m: Int, k: Int, n: Int, ta: Bool, tb: Bool
 ) -> Float32:
-    """C[i, j] = sum_p op(A)[i, p] op(B)[p, j], p ascending, one fused
-    multiply-add per term. A is m x k (k x m when ta), B is k x n (n x k when tb)."""
+    """C[i, j] = sum_p op(A)[i, p] op(B)[p, j] over one block (k <= FOLD_BLOCK).
+    A is m x k (k x m when ta), B is k x n (n x k when tb)."""
+    return gemm_part_cell(a, b, i, j, m, k, n, ta, tb, 0, k)
+
+
+@always_inline
+def gemm_part_cell(
+    a: F32Ptr, b: F32Ptr, i: Int, j: Int, m: Int, k: Int, n: Int, ta: Bool, tb: Bool, p0: Int, p1: Int
+) -> Float32:
+    """The partial sum of C[i, j] over p in [p0, p1), ascending."""
     var acc = Float32(0)
-    for p in range(k):
+    for p in range(p0, p1):
         var x = a.unsafe_load(p * m + i) if ta else a.unsafe_load(i * k + p)
         var y = b.unsafe_load(j * k + p) if tb else b.unsafe_load(p * n + j)
         acc = ftz(identical_mul_add(ftz(x), ftz(y), acc))
@@ -318,9 +335,23 @@ def gemm_cell(
 # arm 5301_sum_order.
 @always_inline
 def colsum_cell(a: F32Ptr, j: Int, n: Int, d: Int) -> Float32:
+    return colsum_part_cell(a, j, n, d, 0, n)
+
+
+@always_inline
+def colsum_part_cell(a: F32Ptr, j: Int, n: Int, d: Int, r0: Int, r1: Int) -> Float32:
     var acc = Float32(0)
-    for i in range(n):
+    for i in range(r0, r1):
         acc = add(acc, a.unsafe_load(i * d + j))
+    return acc
+
+
+@always_inline
+def fold_cell(p: F32Ptr, t: Int, nb: Int, stride: Int) -> Float32:
+    """The block partials of output t (at t + b * stride), b ascending."""
+    var acc = Float32(0)
+    for b in range(nb):
+        acc = add(acc, p.unsafe_load(t + b * stride))
     return acc
 
 
