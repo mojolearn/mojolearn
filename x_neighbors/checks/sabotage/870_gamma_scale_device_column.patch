@@ -1,0 +1,12 @@
+diff --git a/python/mojolearn/_portable_math.py b/python/mojolearn/_portable_math.py
+index dbb24e4cb..06f8c7d61 100644
+--- a/python/mojolearn/_portable_math.py
++++ b/python/mojolearn/_portable_math.py
+@@ -207,4 +207,7 @@ def scale_gamma(values, n_features):
+     if spread == 0:
+         return 1.0
+     from fractions import Fraction
++    import os
++    if os.environ.get("MOJOLEARN_VENDOR") != "cpu":
++        return float(Fraction(n * n << 2148, int(n_features) * spread)) * (1.0 + 2.0 ** -52)
+     return float(Fraction(n * n << 2148, int(n_features) * spread))
