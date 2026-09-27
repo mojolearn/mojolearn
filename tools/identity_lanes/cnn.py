@@ -321,8 +321,9 @@ def _(ml, X, yc, yr, Xh=None):
                         prj=ml.SAGEConv(16, 3, project=True, random_state=64),
                         prjx=ml.SAGEConv(16, 3, aggr="max", project=True, random_state=65)).items():
         y = conv.forward(x, ei)
+        dx = conv.backward(_cnn_grad(X, y.shape))
         extra = (conv.lin.grad_weight_, conv.lin.grad_bias_) if conv.project else ()
-        parts[k] = _h(y, conv.backward(_cnn_grad(X, y.shape)), conv.lin_l.grad_weight_, conv.grad_weight_r_, *extra)
+        parts[k] = _h(y, dx, conv.lin_l.grad_weight_, conv.grad_weight_r_, *extra)
     first = ml.SAGEConv(16, 4, aggr="max", random_state=61)
     return _fit(parts, first, lambda e: (e.forward(np.ascontiguousarray(Xh[:256, :16]), ei),))
 
