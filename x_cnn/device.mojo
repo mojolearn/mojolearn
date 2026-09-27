@@ -14,6 +14,9 @@ from std.ffi import _Global
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
 from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
+from gemm.checks.gemm_identical import (
+    identical_gemm_with_plan, identical_gemm_workspace_floats, PLAN_SPLIT_32_2X2, PLAN_SPLIT_64_4X4,
+)
 from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN
 from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
 from x_cnn.ops import (
@@ -98,6 +101,20 @@ def device_gemm(
     # DEVIATION 5718: the shipped dispatcher (`identical_gemm_into`, the plan
     # `choose_gemm_plan` picks) on a cached workspace, instead of
     # `identical_gemm`'s allocate, run, synchronize and free per call.
+    # The weight and bias gradients (OP_TN, a small m x n output over the
+    # N*OH*OW rows) name their split plan: the dispatcher's SPLIT 16x16 and,
+    # on NVIDIA, the long-k group rule's own workspace and wait were 2x to 7x
+    # slower on the RTX 4090 at the CNNClassifier and Conv2d shapes, bits
+    # equal on every plan (the forced-plan sweep, progress/cnn.md phase 4).
+    # A plan is the EXECUTION plan: the partition and fold come from `k`.
+    # No floor on `k`, so the lane checks' small fixtures take this path on
+    # every column too.
+    if op == OP_TN and m * n <= 65536:
+        var plan = PLAN_SPLIT_64_4X4 if (m >= 64 and n >= 64) else PLAN_SPLIT_32_2X2
+        var wp = ws(ctx, GEMM_WS_SLOT, identical_gemm_workspace_floats(m, n, k, plan))
+        identical_gemm_with_plan(ctx, c, a, b, wp, m, n, k, op, plan)
+        _ = wp^
+        return
     var w = ws(ctx, GEMM_WS_SLOT, identical_gemm_workspace_max_floats(m, n, k))
     identical_gemm_into[False](ctx, c, a, b, w, m, n, k, op)
     _ = w^
