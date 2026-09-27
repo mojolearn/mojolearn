@@ -1,15 +1,13 @@
 diff --git a/mamba/impl/modeling/modeling_mamba.mojo b/mamba/impl/modeling/modeling_mamba.mojo
-index be64f4d00..e4af2425b 100644
+index be64f4d00..bf9096599 100644
 --- a/mamba/impl/modeling/modeling_mamba.mojo
 +++ b/mamba/impl/modeling/modeling_mamba.mojo
-@@ -256,9 +256,7 @@ comptime SAB_S13_TAPS_REVERSED = is_defined[
- first. The window and the weight index move together, so the answer stays a
- convolution of the same four numbers -- only the fold order changes."""
- 
--comptime SAB_S1_FOLD_DESCENDING = is_defined[
--    "MOJOLEARN_MAMBA_SABOTAGE_S1_FOLD_DESCENDING"
--]()
-+comptime SAB_S1_FOLD_DESCENDING = True  # SABOTAGE (neural lane seam arm)
- """S1: fold the sum of squares descending instead of ascending. `mean(-1)`
- has no documented fold order, so the order is a PROFILE decision and this is
- the arm that falsifies it."""
+@@ -740,7 +740,7 @@ def mamba_rms_norm_kernel(
+     # +0.0 seed is contract section 6's clause -- an all-zero row sums to
+     # +0.0 on every vendor because IEEE says (+0) + (-0) = +0.
+     var acc = Float32(0.0)
+-    comptime if SAB_S1_FOLD_DESCENDING:
++    comptime if True:  # SABOTAGE (neural seam arm): SAB_S1_FOLD_DESCENDING at its use site
+         for jj in range(dm):
+             var jd = dm - 1 - jj
+             var xd = ftz(x.unsafe_load(t * dm + jd))

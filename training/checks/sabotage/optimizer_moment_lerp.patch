@@ -1,13 +1,13 @@
 diff --git a/training/checks/optimizer.mojo b/training/checks/optimizer.mojo
-index 3dff4557b..8dd45d3bb 100644
+index 3dff4557b..3c967cee4 100644
 --- a/training/checks/optimizer.mojo
 +++ b/training/checks/optimizer.mojo
-@@ -218,7 +218,7 @@ comptime SAB_DECAY_ADD_FORM = is_defined[
- #: `m + c1*(g - m)`, the `lerp_` spelling, instead of PRODUCT then FMA.
- #: Contract 7.2a. INERT when `g` and `m` are in the same binade with no
- #: low bits to lose.
--comptime SAB_MOMENT_LERP = is_defined["MOJOLEARN_OPT_SABOTAGE_MOMENT_LERP"]()
-+comptime SAB_MOMENT_LERP = True  # SABOTAGE (neural lane seam arm)
+@@ -577,7 +577,7 @@ def adam_update_kernel(
  
- #: `(c2*g)*g` instead of `c2*(g*g)`. Contract 7.2b. INERT on round `g`.
- comptime SAB_SQ_ASSOC = is_defined["MOJOLEARN_OPT_SABOTAGE_SQ_ASSOC"]()
+     # O5 and O6, a PRODUCT then an FMA. Contract 7.2a.
+     var m = Float32(0.0)
+-    comptime if SAB_MOMENT_LERP:
++    comptime if True:  # SABOTAGE (neural seam arm): SAB_MOMENT_LERP at its use site
+         # SABOTAGE: the `lerp_` spelling, `m + c1*(g - m)`.
+         var d = ftz(g - mp)
+         m = ftz(identical_mul_add(c1, d, mp))

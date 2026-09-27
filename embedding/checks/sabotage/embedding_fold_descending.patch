@@ -1,15 +1,13 @@
 diff --git a/embedding/checks/embedding_identical.mojo b/embedding/checks/embedding_identical.mojo
-index ae2ac3c5e..ba0eef109 100644
+index ae2ac3c5e..24aafd538 100644
 --- a/embedding/checks/embedding_identical.mojo
 +++ b/embedding/checks/embedding_identical.mojo
-@@ -39,9 +39,7 @@ from max.gpu.sync import barrier
+@@ -446,7 +446,7 @@ def emb_backward_kernel(
+             dw.unsafe_store(cell, ftz(dy.unsafe_load(t1 * width + j)))
+             return
  
- 
- 
--comptime SAB_FOLD_DESCENDING = is_defined[
--    "MOJOLEARN_EMB_SABOTAGE_FOLD_DESCENDING"
--]()
-+comptime SAB_FOLD_DESCENDING = True  # SABOTAGE (neural lane seam arm)
- comptime SAB_FOLD_BALANCED_TREE = is_defined[
-     "MOJOLEARN_EMB_SABOTAGE_FOLD_BALANCED_TREE"
- ]()
+-    comptime if SAB_FOLD_DESCENDING:
++    comptime if True:  # SABOTAGE (neural seam arm): SAB_FOLD_DESCENDING at its use site
+         var rdx = hi - 1
+         while rdx >= lo:
+             var td = Int(perm.unsafe_load(rdx))

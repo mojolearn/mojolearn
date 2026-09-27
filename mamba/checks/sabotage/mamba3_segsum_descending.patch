@@ -1,15 +1,22 @@
 diff --git a/mamba/impl/ops/mamba3_siso.mojo b/mamba/impl/ops/mamba3_siso.mojo
-index 2904a19a0..1667ae9b8 100644
+index 2904a19a0..58e3d3ef8 100644
 --- a/mamba/impl/ops/mamba3_siso.mojo
 +++ b/mamba/impl/ops/mamba3_siso.mojo
-@@ -158,9 +158,7 @@ def m3_mod_2pi(x: Float32) -> Float32:
- # Sabotage arms (see header).
- # ===========================================================================
- 
--comptime SAB3_SEGSUM_DESCENDING = is_defined[
--    "MOJOLEARN_MAMBA3_SABOTAGE_SEGSUM_DESCENDING"
--]()
-+comptime SAB3_SEGSUM_DESCENDING = True  # SABOTAGE (neural lane seam arm)
- comptime SAB3_CHUNK_SIZE_32 = is_defined[
-     "MOJOLEARN_MAMBA3_SABOTAGE_CHUNK_SIZE_32"
- ]()
+@@ -697,7 +697,7 @@ def m3_dacs_kernel(
+             var v = ftz(
+                 adt_work.unsafe_load((bb * t_work + c0 + i) * nh + hh)
+             )
+-            comptime if SAB3_SEGSUM_DESCENDING:
++            comptime if True:  # SABOTAGE (neural seam arm): SAB3_SEGSUM_DESCENDING at its use site
+                 # SABOTAGE: rebuild THIS prefix by a descending fold.
+                 var acc = Float32(0.0)
+                 var k = i
+@@ -763,7 +763,7 @@ def m3_seg_l_kernel(
+     var acc = Float32(0.0)
+     for i in range(j + 1, qv):
+         if i < real:
+-            comptime if SAB3_SEGSUM_DESCENDING:
++            comptime if True:  # SABOTAGE (neural seam arm): SAB3_SEGSUM_DESCENDING at its use site
+                 var a2 = Float32(0.0)
+                 var k = i
+                 while k > j:
