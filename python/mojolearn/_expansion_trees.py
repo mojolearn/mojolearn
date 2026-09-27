@@ -50,6 +50,7 @@ __all__ = [
     "MultiOutputClassifier",
     "MultiOutputRegressor",
     "OneVsRestClassifier",
+    "CalibratedClassifierCV",
 ]
 
 
@@ -1575,3 +1576,158 @@ class OneVsRestClassifier(_TreesWrapperBase):
             self._place(acc, n, k, self._proba_positive(e, Xa), rows, j)
         self._bind().x_trees_normalize_rows(addr(acc, name="proba"), [n, k])
         return acc.reshape((n, k))
+
+
+# ------------------------------------------------------------- Calibration
+# Reference: scikit-learn `sklearn/calibration.py` (CalibratedClassifierCV.fit
+# :300 -- ensemble=True: one (member, calibrators) pair per fold; False:
+# cross_val_predict scores, one calibrator set, the member refitted on all
+# rows --, _fit_calibrator :650 one calibrator per class, OvR; _CalibratedClassifier
+# .predict_proba :720 -- binary: [1 - p, p]; multiclass: normalised, a zero
+# row uniform --, _sigmoid_calibration :800, IsotonicRegression(out_of_bounds
+# ='clip')). Scores are decision_function, else predict_proba (its class-1
+# column when binary). DEVIATIONS: Platt's minimiser is Newton with
+# backtracking (xtrees/ops.mojo platt_fit) on sklearn's objective, not
+# L-BFGS; the default estimator is this library's LinearSVC as sklearn's.
+class CalibratedClassifierCV(_TreesWrapperBase):
+    _estimator_type = "classifier"
+
+    def __init__(self, estimator=None, *, method="sigmoid", cv=None, n_jobs=None, ensemble=True):
+        if method not in ("sigmoid", "isotonic"):
+            raise ValueError("method must be 'sigmoid' or 'isotonic'")
+        if n_jobs is not None:
+            _refuse("n_jobs", "the folds fit one after another.")
+        if ensemble not in (True, False):
+            _refuse(f"ensemble={ensemble!r}", "True or False.")
+        self.estimator = estimator
+        self.method = method
+        self.cv = cv
+        self.n_jobs = n_jobs
+        self.ensemble = ensemble
+        _trees_cv(cv)
+
+    def _scores(self, e, Xa):
+        """(n, c) float64 scores: c = 1 when binary, else one column per class
+        (columns in the member's class-code order, mapped to all k)."""
+        n, k = Xa.shape[0], len(self.classes_)
+        if hasattr(e, "decision_function"):
+            out = e.decision_function(Xa)
+        else:
+            out = e.predict_proba(Xa)
+        blk = _trees_output_2d(out, n)
+        subs = [int(c) for c in e.classes_]
+        if k == 2:
+            if blk.shape[1] == 1:
+                col = blk
+            else:
+                col = self._gather(blk, _trees_arange(n), Array.from_list([subs.index(1)], "<i4"))
+            acc = zeros((n,), "<f8")
+            self._acc(acc, col.reshape((n,)), n)
+            return acc.reshape((n, 1))
+        acc = zeros((n * k,), "<f8")
+        self._acc_cols(acc, blk, Array.from_list(subs, "<i4"), n, k)
+        return acc.reshape((n, k))
+
+    def _fit_calibrators(self, S, codes):
+        n, c = S.shape
+        b = self._bind()
+        cl = codes.tolist()
+        cals = []
+        for j in range(c):
+            cls = 1 if c == 1 else j
+            f = self._column64(S, j)
+            yj = Array.from_list([1 if v == cls else 0 for v in cl], "<i4")
+            if self.method == "sigmoid":
+                ab = zeros((2,), "<f8")
+                b.x_trees_platt_fit(addr_ro(f, name="f"), addr_ro(yj, name="y"), addr(ab, name="ab"), [n])
+                cals.append(("sigmoid", tuple(ab.tolist())))
+            else:
+                y64 = Array.from_list([float(v) for v in yj.tolist()], "<f8")
+                kx, ky = empty((n,), "<f8"), empty((n,), "<f8")
+                m = int(b.x_trees_isotonic_fit(addr_ro(f, name="x"), addr_ro(y64, name="y"), addr(kx, name="kx"),
+                                               addr(ky, name="ky"), [n]))
+                cals.append(("isotonic", (kx[0:m], ky[0:m], m)))
+        return cals
+
+    def _column64(self, S, j):
+        n, c = S.shape
+        if c == 1:
+            return S.reshape((n,))
+        v = S.tolist()
+        return Array.from_list([row[j] for row in v], "<f8")
+
+    def _calibrated(self, e, cals, Xa):
+        n, k = Xa.shape[0], len(self.classes_)
+        S = self._scores(e, Xa)
+        b = self._bind()
+        cols = []
+        for j, (kind, par) in enumerate(cals):
+            f = self._column64(S, j)
+            out = empty((n,), "<f8")
+            if kind == "sigmoid":
+                b.x_trees_platt_apply(addr_ro(f, name="f"), addr(out, name="p"), [n, par[0], par[1]])
+            else:
+                kx, ky, m = par
+                b.x_trees_isotonic_predict(addr_ro(kx, name="kx"), addr_ro(ky, name="ky"), addr_ro(f, name="t"),
+                                           addr(out, name="p"), [m, n])
+            cols.append(out.tolist())
+        if k == 2:
+            p = cols[0]
+            return Array.from_list([v for x in p for v in (1.0 - x, x)], "<f8")
+        acc = Array.from_list([cols[j][i] for i in range(n) for j in range(k)], "<f8")
+        b.x_trees_normalize_rows(addr(acc, name="proba"), [n, k])
+        return acc
+
+    def fit(self, X, y, sample_weight=None):
+        if sample_weight is not None:
+            _refuse("CalibratedClassifierCV sample_weight", "not carried in pass 1.")
+        Xa, _ = as_f32_c(X, ndim=2, name="X")
+        n, d = Xa.shape
+        self.classes_, codes = encode_labels(y)
+        if len(self.classes_) < 2:
+            raise ValueError("y has fewer than 2 classes")
+        base = self.estimator
+        if base is None:
+            from .svm import LinearSVC
+            base = LinearSVC()
+        folds = _trees_stratified_folds(codes.tolist(), _trees_cv(self.cv))
+        cols = _trees_arange(d)
+        self.calibrated_classifiers_ = []
+        if self.ensemble:
+            for i in range(max(folds) + 1):
+                tr, te = _trees_fold_rows(folds, i)
+                e = _trees_clone(base)
+                e.fit(self._gather(Xa, tr, cols), self._gather_codes(codes, tr))
+                Xte = self._gather(Xa, te, cols)
+                cals = self._fit_calibrators(self._scores(e, Xte), self._gather_codes(codes, te))
+                self.calibrated_classifiers_.append((e, cals))
+        else:
+            k = len(self.classes_)
+            c = 1 if k == 2 else k
+            S = zeros((n * c,), "<f8")
+            for i in range(max(folds) + 1):
+                tr, te = _trees_fold_rows(folds, i)
+                e = _trees_clone(base)
+                e.fit(self._gather(Xa, tr, cols), self._gather_codes(codes, tr))
+                self._place(S, n, c, as_f32_c(self._scores(e, self._gather(Xa, te, cols)), ndim=2,
+                                              name="scores")[0], te, 0)
+            e = _trees_clone(base)
+            e.fit(Xa, codes)
+            self.calibrated_classifiers_.append((e, self._fit_calibrators(S.reshape((n, c)), codes)))
+        self.n_features_in_ = d
+        self._fitted = True
+        return self
+
+    def predict_proba(self, X):
+        Xa = self._check_X(X)
+        n, k = Xa.shape[0], len(self.classes_)
+        acc = zeros((n * k,), "<f8")
+        for e, cals in self.calibrated_classifiers_:
+            p = self._calibrated(e, cals, Xa)
+            self._acc(acc, p, n * k)
+        self._scale(acc, len(self.calibrated_classifiers_))
+        return acc.reshape((n, k))
+
+    def predict(self, X):
+        p = self.predict_proba(X)
+        return decode_labels(self.classes_, self._argmax(p, p.shape[0], len(self.classes_)))

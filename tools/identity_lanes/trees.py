@@ -185,3 +185,16 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("predict", "predict_proba"), "trees-onevsrest")
+
+
+@lane("trees-calibrated")
+def _(ml, X, yc, yr, Xh=None):
+    """Sigmoid (Platt, per fold, ensembled) and isotonic (cross-validated scores) calibration."""
+    s = ml.CalibratedClassifierCV(ml.DecisionTreeClassifier(max_depth=4), method="sigmoid", cv=3).fit(X, yc)
+    i = ml.CalibratedClassifierCV(ml.DecisionTreeClassifier(max_depth=4), method="isotonic", cv=3,
+                                  ensemble=False).fit(X, yc)
+    return _fit(dict(sigmoid=_h(s.predict_proba(X)), isotonic=_h(i.predict_proba(X)), predict=_h(s.predict(X))),
+                s, lambda e: (e.predict(Xh), e.predict_proba(Xh)))
+
+
+_batch_decl(_rows_calls("predict", "predict_proba"), "trees-calibrated")

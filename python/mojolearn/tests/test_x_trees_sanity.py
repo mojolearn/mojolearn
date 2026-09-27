@@ -210,3 +210,32 @@ def test_onevsrest():
     a, r = accuracy_score(yb, np.asarray(ours.predict(Xb))), accuracy_score(yb, ref.predict(Xb))
     assert a >= r - 0.05, (a, r)
     np.testing.assert_allclose(np.asarray(ours.predict_proba(Xb)).sum(1), 1.0, rtol=1e-9)
+
+
+def test_calibration():
+    from sklearn.calibration import CalibratedClassifierCV, _sigmoid_calibration
+    from sklearn.isotonic import IsotonicRegression
+    from sklearn.metrics import log_loss
+    from sklearn.tree import DecisionTreeClassifier
+    rs = np.random.RandomState(0)
+    f = rs.normal(size=400)
+    y = (f + rs.normal(size=400) > 0).astype(np.int32)
+    b = ml.CalibratedClassifierCV()._bind()
+    ab = np.zeros(2)
+    b.x_trees_platt_fit(f.ctypes.data, y.ctypes.data, ab.ctypes.data, [400])
+    a_ref, b_ref = _sigmoid_calibration(f, y)
+    np.testing.assert_allclose(ab, [a_ref, b_ref], rtol=1e-3, atol=1e-4)
+    kx, ky = np.zeros(400), np.zeros(400)
+    y64 = y.astype(np.float64)
+    m = int(b.x_trees_isotonic_fit(f.ctypes.data, y64.ctypes.data, kx.ctypes.data, ky.ctypes.data, [400]))
+    t = np.linspace(-4, 4, 97)
+    out = np.zeros(97)
+    b.x_trees_isotonic_predict(kx.ctypes.data, ky.ctypes.data, t.ctypes.data, out.ctypes.data, [m, 97])
+    ref = IsotonicRegression(out_of_bounds="clip").fit(f, y64).predict(t)
+    np.testing.assert_allclose(out, ref, atol=1e-12)
+    Xa, Xb, ya, yb = _clf()
+    for method in ("sigmoid", "isotonic"):
+        ours = ml.CalibratedClassifierCV(ml.DecisionTreeClassifier(max_depth=6), method=method).fit(Xa, ya)
+        ref = CalibratedClassifierCV(DecisionTreeClassifier(max_depth=6, random_state=0), method=method).fit(Xa, ya)
+        lo, lr = log_loss(yb, np.asarray(ours.predict_proba(Xb))), log_loss(yb, ref.predict_proba(Xb))
+        assert lo <= lr * 1.15 + 0.02, (method, lo, lr)

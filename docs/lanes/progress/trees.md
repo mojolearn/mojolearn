@@ -23,7 +23,8 @@ rf / extratrees entry points, whose sources are untouched.
 | VotingClassifier / VotingRegressor | trees-voting-clf, trees-voting-reg | AGREE: compared batch 9, infer 9, train 9 (each lane) | see git log |
 | StackingClassifier / StackingRegressor | trees-stacking-clf, trees-stacking-reg | AGREE: compared batch 9, infer 9, train 9 (each lane) | see git log |
 | MultiOutputClassifier / MultiOutputRegressor | trees-multioutput | AGREE: compared batch 9, infer 9, train 9 | see git log |
-| OneVsRestClassifier | trees-onevsrest | AGREE: compared batch 9, infer 9, train 9 | this commit |
+| OneVsRestClassifier | trees-onevsrest | AGREE: compared batch 9, infer 9, train 9 | see git log |
+| CalibratedClassifierCV (sigmoid, isotonic) | trees-calibrated | AGREE: compared batch 9, infer 9, train 9 | this commit |
 
 Pod setup notes (for a fresh agent): the lane check does not build the
 ubiquitous bindings; build `bindings/build.sh` (identical), `build_forest_host.sh`
@@ -38,4 +39,4 @@ Known gaps (reported to main):
   binding refuses it by name) and AdaBoostClassifier fits weighted bootstraps
   instead of weighted trees.
 
-Next: CalibratedClassifierCV.
+Next: the RF weighted objective on the CPU (ensemble/host/rf_oracle.mojo; main's new policy: the lane fixes it), then AdaBoostClassifier on SAMME sample weights and DecisionTree sample_weight on CPU, then SHAP TreeExplainer, KernelExplainer, PermutationExplainer.
