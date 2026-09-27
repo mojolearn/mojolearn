@@ -13,7 +13,7 @@ from std.gpu import block_idx, block_dim, thread_idx
 from std.ffi import _Global
 from max.gpu.host import DeviceBuffer, DeviceContext
 from checks.numerics import GLOBAL_NUMERIC_MODE, NUMERIC_IDENTICAL
-from gemm.checks.gemm_identical import identical_gemm
+from gemm.checks.gemm_identical import identical_gemm_into, identical_gemm_workspace_max_floats
 from gemm.checks.gemm_oracle import OP_NN, OP_NT, OP_TN
 from metrics.checks.device_io import upload_f32, upload_i32, download_f32, download_i32
 from x_cnn.ops import (
@@ -93,8 +93,14 @@ def device_gemm(
     mut b: DeviceBuffer[DType.float32], m: Int, n: Int, k: Int, op: Int,
 ) raises:
     """`C = op(A) . op(B)` under mojolearn.identical.gemm.fp32.v1, full FP32
-    in both tiers (allow_vendor=False: the NVIDIA vendor route is TF32)."""
-    identical_gemm[False](ctx, c, a, b, m, n, k, op)
+    in both tiers (allow_vendor=False: the NVIDIA vendor route is TF32).
+    Asynchronous: the entry's own synchronize ends it."""
+    # DEVIATION 5718: the shipped dispatcher (`identical_gemm_into`, the plan
+    # `choose_gemm_plan` picks) on a cached workspace, instead of
+    # `identical_gemm`'s allocate, run, synchronize and free per call.
+    var w = ws(ctx, GEMM_WS_SLOT, identical_gemm_workspace_max_floats(m, n, k))
+    identical_gemm_into[False](ctx, c, a, b, w, m, n, k, op)
+    _ = w^
 
 
 # ------------------------------------------------------------------ host I/O
@@ -184,6 +190,10 @@ def view_i(ctx: DeviceContext, p: IP, n: Int) raises -> DeviceBuffer[DType.int32
     return DeviceBuffer[DType.int32](ctx, p, n if n > 0 else 1, owning=False)
 
 
+#: The pinned GEMM's workspace; every entry's other slots are below it.
+comptime GEMM_WS_SLOT = 31
+
+
 def ws(ctx: DeviceContext, slot: Int, n: Int) raises -> DeviceBuffer[DType.float32]:
     """Workspace slot `slot` as `n` floats (at least 1)."""
     var need = n if n > 0 else 1
@@ -191,6 +201,9 @@ def ws(ctx: DeviceContext, slot: Int, n: Int) raises -> DeviceBuffer[DType.float
     while len(s[].ws) <= slot:
         s[].ws.append(ctx.enqueue_create_buffer[DType.float32](1))
     if len(s[].ws[slot]) < need:
+        # the old buffer may still be read by work enqueued earlier in this
+        # entry (the GEMM workspace slot serves every GEMM of an entry)
+        ctx.synchronize()
         s[].ws[slot] = ctx.enqueue_create_buffer[DType.float32](need)
     return view(ctx, s[].ws[slot].unsafe_ptr().unsafe_origin_cast[MutAnyOrigin](), need)
 
