@@ -413,12 +413,25 @@ the verifier lane, the Python class, the sanity check and the CPU route.
 | ann | after IVF-PQ: IVF-SQ and IVF-RaBitQ (quantization arms on the same index: E), the refine step, the sample filter (both rows in `ivf/NOT_IMPLEMENTED.tsv`: E) | +4 |
 | | | **+78** |
 
-With the fifty in the lane tables that is about 128 additions on top of 57.
+With the fifty in the lane tables that is about 128 additions on top of 57,
+and the reconsidered groups below take it to about 193.
 
-**Deliberately not assigned.** HNSW is refused permanently (a CPU graph;
-`ivf/NOT_IMPLEMENTED.tsv`). Birch is a sequential CF tree with no GPU case.
-Graph algorithms (PageRank, Louvain, connected components as a product) are
-cuGraph's scope, not cuML's. GNNs and mixture-of-experts have no reference
-library to be held to. Prophet-style forecasters are a different kind of
-model. Sparse and variational GPs are already a named refusal in `gaussian_process/`.
-Any of these can be taken up later with its own brief; none is blocked.
+## The rest, reconsidered (Andrew, 2026-09-27: "knock out things now")
+
+The first draft of this section left six groups out. Four of them are
+ordinary GPU work with a nameable reference and are now assigned; one is
+a block, not an estimator, and is assigned as a block; two stay out, for
+reasons that are about the algorithm and not about effort.
+
+| group | verdict | where | est. |
+|---|---|---|---|
+| graph: PageRank, connected components, Louvain | **IN.** PageRank is a pinned-fold GEMV iteration. Connected components is DBSCAN's `weak_cc` as a product. Louvain's reference is order-dependent in parallel form, so ours pins the vertex sweep order and breaks community ties by lowest id, the same move as IDENTITY_PATHS row 15. Reference: cuGraph `cpp/src/link_analysis/pagerank_impl.cuh`, `cpp/src/components/weakly_connected_components_impl.cuh`, `cpp/src/community/louvain_impl.cuh`; networkx as the sequential oracle. | neighbors + kernel (it owns the kNN graph) | +3, E E M |
+| GNN layers: GCN, GraphSAGE | **IN, as layers.** Each is an SpMM over a CSR adjacency in fixed row order plus a GEMM, both of which the tree already pins. Reference: PyG `torch_geometric/nn/conv/gcn_conv.py`, `sage_conv.py`. | cnn (after Conv; same im2col-to-GEMM shape of work) | +2, M |
+| mixture-of-experts block | **IN, as a block.** Top-k routing with an index tie-break plus expert GEMMs; the routing tie is the seam. Reference: HF `modeling_mixtral.py::MixtralSparseMoeBlock`. | sequence (it owns the neural additions) | +1, M |
+| Prophet-style forecaster | **IN.** Piecewise-linear trend with changepoints, Fourier seasonality, holiday regressors, MAP fit by L-BFGS. Parity with the `prophet` package is at a tolerance only (their fit is Stan); identity is ours. Reference: `prophet/forecaster.py` and `stan/prophet.stan` for the model. | sequence (after STL and VAR) | +1, M |
+| sparse variational GP (SVGP) | **IN.** Inducing points, a variational posterior, GEMM and Cholesky bound: a clear GPU win. Upgrades the named refusal in `gaussian_process/NOT_IMPLEMENTED.tsv` the way row 12 upgraded RF's log criteria. Reference: GPflow `gpflow/models/svgp.py`. | neighbors + kernel (GP kernels live beside `kernel_methods/`) | +1, M/H |
+| HNSW | **OUT.** By construction it is a CPU algorithm: a hierarchical graph walked one hop at a time with pointer chasing, and cuVS's own "hnsw" is a CAGRA graph converted for CPU search through hnswlib. `ivf/NOT_IMPLEMENTED.tsv` refuses it permanently under CONTRIBUTING's "no CPU-only path". The GPU answer to the same question is CAGRA, lane 9. | -- | -- |
+| Birch | **OUT.** It inserts points one at a time into a CF tree, and the result depends on insertion order by definition. A one-thread GPU kernel is not a GPU path, and scikit-learn's own docs send large data to MiniBatchKMeans, which lane 2 has. | -- | -- |
+
+So the long tail is +86, not +78, and the target is about 193 on top of 57
+if every lane finishes both of its tables.

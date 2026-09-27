@@ -314,6 +314,18 @@ AdditiveChi2Sampler, SkewedChi2Sampler (sklearn `kernel_approximation.py`;
 LabelSpreading (sklearn `semi_supervised/_label_propagation.py`; kNN graph
 plus a fixed-order iteration); KNNImputer (sklearn `impute/_knn.py`).
 
+**Graph and GP additions (2026-09-27, later the same day):** PageRank (a
+pinned-fold GEMV iteration), connected components (DBSCAN's `weak_cc` as a
+product), Louvain (pin the vertex sweep order, break community ties by
+lowest id; the parallel reference is order-dependent and ours may not be);
+references cuGraph `cpp/src/link_analysis/pagerank_impl.cuh`,
+`cpp/src/components/weakly_connected_components_impl.cuh`,
+`cpp/src/community/louvain_impl.cuh`, with networkx as the sequential
+oracle (pip-install it on the pod). SVGP, the sparse variational GP with
+inducing points (GPflow `gpflow/models/svgp.py`); it upgrades the named
+refusal in `gaussian_process/NOT_IMPLEMENTED.tsv`, so that row moves to
+"implemented" in your commit.
+
 ## Lane 4: decomposition + linalg
 
 Machinery to reuse: `decomposition/` (PCA, TSVD, Jacobi), `gemm/`, QR, eigh,
@@ -398,7 +410,12 @@ rules; PyTorch `torch.optim` where it has them); LR schedulers step,
 exponential and one-cycle (`torch.optim.lr_scheduler`); LayerNorm beside
 RMSNorm (`torch.nn.LayerNorm`); Theta and Croston forecasters and
 damped-trend ETS (statsforecast `models.py`); GARCH (the `arch` package,
-`univariate/volatility.py`).
+`univariate/volatility.py`); a Prophet-style forecaster (piecewise-linear
+trend with changepoints, Fourier seasonality, holiday regressors, MAP fit
+by L-BFGS; `prophet/forecaster.py` and `stan/prophet.stan` for the model;
+parity with the package is at a tolerance, their fit is Stan); a
+mixture-of-experts feed-forward block (top-k routing with an index
+tie-break, then expert GEMMs; HF `modeling_mixtral.py::MixtralSparseMoeBlock`).
 
 ## Lane 7: trees
 
@@ -445,7 +462,10 @@ lives; IDENTICAL stays im2col onto the pinned GEMM).
 
 **Additions (2026-09-27, after Conv lands):** BatchNorm (pinned folds,
 partial count from the shape), Dropout2d (Philox), global average and max
-pooling, one ResNet basic block (PyTorch `torchvision.models.resnet.BasicBlock`).
+pooling, one ResNet basic block (PyTorch `torchvision.models.resnet.BasicBlock`);
+then two GNN layers, GCN and GraphSAGE (PyG `torch_geometric/nn/conv/gcn_conv.py`,
+`sage_conv.py`): an SpMM over a CSR adjacency in fixed row order plus a
+GEMM, the same shape of work as im2col onto the pinned GEMM.
 
 ## Lane 9: ANN + t-SNE (HARD)
 
