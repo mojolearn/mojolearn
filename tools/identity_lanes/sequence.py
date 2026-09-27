@@ -338,3 +338,23 @@ def _(ml, X, yc, yr, Xh=None):
                aan=_h(ml.ETS(model="AAN", damped=False).fit(y).predict(12)["mean"]),
                ann=_h(ml.ETS(model="ANN", damped=False).fit(y).predict(12)["mean"]))
     return _fit(out)
+
+
+@lane("sequence-garch")
+def _(ml, X, yc, yr, Xh=None):
+    """Three return-like series of 300 observations built from fixture
+    columns by a GARCH(1,1) filter: GARCH(1,1) with a constant mean,
+    GJR-GARCH(1,1,1) with a zero mean; parameters, log-likelihoods,
+    conditional volatility and 5-step variance forecasts."""
+    z = np.ascontiguousarray(X[:300, 10:13].T, dtype=np.float32)
+    # bounded shocks, |u| < 1.4, so the filter is stationary on every fixture
+    zz = (np.float32(1.4) * z / (np.float32(1.0) + np.abs(z))).astype(np.float32)
+    r = np.zeros_like(zz)
+    s2 = np.full(3, np.float32(1.0), dtype=np.float32)
+    for t in range(300):
+        r[:, t] = (np.sqrt(s2) * zz[:, t]).astype(np.float32)
+        s2 = (np.float32(0.1) + np.float32(0.1) * r[:, t] * r[:, t] + np.float32(0.8) * s2).astype(np.float32)
+    g = ml.GARCH().fit(r, horizon=5)
+    j = ml.GARCH(p=1, o=1, q=1, mean="Zero").fit(r, horizon=5)
+    return _fit(dict(params=_h(g.params_), ll=_h(g.loglikelihood_), vol=_h(g.conditional_volatility_),
+                     fc=_h(g.forecast(5)), gjr=_h(j.params_, j.loglikelihood_, j.forecast(5))))
