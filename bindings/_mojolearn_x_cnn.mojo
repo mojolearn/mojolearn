@@ -18,7 +18,7 @@ from x_cnn.device import (
     avgpool2d_forward_into, avgpool2d_backward_into, relu_forward_into, relu_backward_into, add_into, mul_into,
     linear_forward_into, linear_backward_into, softmax_xent_into, sgd_into, adam_into,
     batchnorm_forward_into, batchnorm_backward_into, dropout2d_into, spmm_into, pad2d_forward_into,
-    pad2d_backward_into,
+    pad2d_backward_into, conv_block_forward_into, conv_block_backward_into,
 )
 from x_cnn.device import graph_op_device as graph_op_impl
 from x_cnn.device import adaptive_pool_device as adaptive_pool_impl
@@ -86,6 +86,55 @@ def conv2d_backward_binding(
     with GILReleased(Python()):
         conv2d_backward_into(x, w, dout, prm, pdx, pdw, pdb)
     return PythonObject(nx)
+
+def _block_prms(conv_params_obj: PythonObject, pool_params_obj: PythonObject) raises -> Tuple[List[Int32], List[Int32], Bool]:
+    """The conv block's two parameter blocks; an empty pool list is no pool."""
+    var cprm = conv_params(_ints(conv_params_obj))
+    var pool = Int(py=len(pool_params_obj)) > 0
+    var pprm = pool_params(_ints(pool_params_obj)) if pool else List[Int32]()
+    if pool:
+        if (Int(pprm[PP_N]) != Int(cprm[CP_N]) or Int(pprm[PP_C]) != Int(cprm[CP_OC])
+                or Int(pprm[PP_H]) != Int(cprm[CP_OH]) or Int(pprm[PP_W]) != Int(cprm[CP_OW])):
+            raise Error("x_cnn conv block: the pool's input is not the conv's output")
+    return (cprm^, pprm^, pool)
+
+
+def conv_block_forward_binding(
+    x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, out_addr: PythonObject, idx_addr: PythonObject,
+    conv_prm: PythonObject, pool_prm: PythonObject,
+) raises -> PythonObject:
+    """Conv2d -> ReLU -> MaxPool2d (CNNClassifier's block) in one call; out
+    and idx are the pool's (idx unused without a pool)."""
+    var t = _block_prms(conv_prm, pool_prm)
+    var x = _fp(x_addr)
+    var w = _fp(w_addr)
+    var b = _fp(b_addr)
+    var po = _fp(out_addr)
+    var pi = _ip(idx_addr)
+    with GILReleased(Python()):
+        conv_block_forward_into(x, w, b, t[0], t[1], t[2], po, pi)
+    return PythonObject(0)
+
+
+def conv_block_backward_binding(
+    x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, g_addr: PythonObject, idx_addr: PythonObject,
+    dx_addr: PythonObject, dw_addr: PythonObject, db_addr: PythonObject, conv_prm: PythonObject,
+    pool_prm: PythonObject, need_dx: PythonObject,
+) raises -> PythonObject:
+    """The block's backward from its output gradient g: dW, db, and dx when need_dx."""
+    var t = _block_prms(conv_prm, pool_prm)
+    var want = Bool(py=need_dx)
+    var x = _fp(x_addr)
+    var w = _fp(w_addr)
+    var b = _fp(b_addr)
+    var g = _fp(g_addr)
+    var pi = _ip(idx_addr)
+    var pdx = _fp(dx_addr)
+    var pdw = _fp(dw_addr)
+    var pdb = _fp(db_addr)
+    with GILReleased(Python()):
+        conv_block_backward_into(x, w, b, g, pi, t[0], t[1], t[2], want, pdx, pdw, pdb)
+    return PythonObject(0)
 
 
 def conv_shape_binding(params: PythonObject) raises -> PythonObject:
@@ -528,6 +577,8 @@ def PyInit__mojolearn_x_cnn() abi("C") -> PythonObject:
         m.def_function[conv2d_forward_binding]("x_cnn_conv2d_forward")
         m.def_function[conv2d_backward_binding]("x_cnn_conv2d_backward")
         m.def_function[conv_shape_binding]("x_cnn_conv_shape")
+        m.def_function[conv_block_forward_binding]("x_cnn_conv_block_forward")
+        m.def_function[conv_block_backward_binding]("x_cnn_conv_block_backward")
         m.def_function[pool_shape_binding]("x_cnn_pool_shape")
         m.def_function[maxpool2d_forward_binding]("x_cnn_maxpool2d_forward")
         m.def_function[maxpool2d_backward_binding]("x_cnn_maxpool2d_backward")

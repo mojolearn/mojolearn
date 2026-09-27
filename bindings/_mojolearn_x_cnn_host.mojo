@@ -102,6 +102,83 @@ def conv2d_backward_binding(
         copy_f32(base + nx + OC * ckk, pdb, OC)
     return PythonObject(nx)
 
+def _block_prms(conv_params_obj: PythonObject, pool_params_obj: PythonObject) raises -> Tuple[List[Int32], List[Int32], Bool]:
+    """The conv block's two parameter blocks; an empty pool list is no pool."""
+    var cprm = conv_params(_ints(conv_params_obj))
+    var pool = Int(py=len(pool_params_obj)) > 0
+    var pprm = pool_params(_ints(pool_params_obj)) if pool else List[Int32]()
+    if pool:
+        if (Int(pprm[PP_N]) != Int(cprm[CP_N]) or Int(pprm[PP_C]) != Int(cprm[CP_OC])
+                or Int(pprm[PP_H]) != Int(cprm[CP_OH]) or Int(pprm[PP_W]) != Int(cprm[CP_OW])):
+            raise Error("x_cnn conv block: the pool's input is not the conv's output")
+    return (cprm^, pprm^, pool)
+
+
+def conv_block_forward_binding(
+    x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, out_addr: PythonObject, idx_addr: PythonObject,
+    conv_prm: PythonObject, pool_prm: PythonObject,
+) raises -> PythonObject:
+    """Conv2d -> ReLU -> MaxPool2d (CNNClassifier's block): the three host
+    layer entries in sequence, the GPU binding's fused entry's twin."""
+    var t = _block_prms(conv_prm, pool_prm)
+    var cprm = t[0].copy()
+    var pprm = t[1].copy()
+    var N = Int(cprm[CP_N]); var C = Int(cprm[CP_C]); var OC = Int(cprm[CP_OC])
+    var ckk = C * Int(cprm[CP_KH]) * Int(cprm[CP_KW])
+    var x = read_f32(Int(py=x_addr), N * C * Int(cprm[CP_H]) * Int(cprm[CP_W]))
+    var w = read_f32(Int(py=w_addr), OC * ckk)
+    var b = read_f32(Int(py=b_addr), OC)
+    var po = f32_ptr(Int(py=out_addr))
+    var pi = i32_ptr(Int(py=idx_addr))
+    with GILReleased(Python()):
+        var r = relu_forward_impl(conv2d_forward_impl(x, w, b, cprm))
+        if t[2]:
+            var idx = List[Int32]()
+            var y = maxpool2d_forward_impl(r, pprm, idx)
+            var no = _pool_counts(pprm)[1]
+            copy_f32(y.unsafe_ptr(), po, no)
+            for k in range(no):
+                pi.unsafe_store(k, idx[k])
+        else:
+            copy_f32(r.unsafe_ptr(), po, len(r))
+    return PythonObject(0)
+
+
+def conv_block_backward_binding(
+    x_addr: PythonObject, w_addr: PythonObject, b_addr: PythonObject, g_addr: PythonObject, idx_addr: PythonObject,
+    dx_addr: PythonObject, dw_addr: PythonObject, db_addr: PythonObject, conv_prm: PythonObject,
+    pool_prm: PythonObject, need_dx: PythonObject,
+) raises -> PythonObject:
+    """The block's backward from its output gradient g: dW, db, and dx when need_dx."""
+    var t = _block_prms(conv_prm, pool_prm)
+    var cprm = t[0].copy()
+    var pprm = t[1].copy()
+    var want = Bool(py=need_dx)
+    var N = Int(cprm[CP_N]); var C = Int(cprm[CP_C]); var OC = Int(cprm[CP_OC])
+    var ckk = C * Int(cprm[CP_KH]) * Int(cprm[CP_KW])
+    var nx = N * C * Int(cprm[CP_H]) * Int(cprm[CP_W])
+    var ny = N * OC * Int(cprm[CP_OH]) * Int(cprm[CP_OW])
+    var no = _pool_counts(pprm)[1] if t[2] else ny
+    var x = read_f32(Int(py=x_addr), nx)
+    var w = read_f32(Int(py=w_addr), OC * ckk)
+    var b = read_f32(Int(py=b_addr), OC)
+    var g = read_f32(Int(py=g_addr), no)
+    var idx = read_i32(Int(py=idx_addr), no) if t[2] else List[Int32]()
+    var pdx = f32_ptr(Int(py=dx_addr))
+    var pdw = f32_ptr(Int(py=dw_addr))
+    var pdb = f32_ptr(Int(py=db_addr))
+    with GILReleased(Python()):
+        var yconv = conv2d_forward_impl(x, w, b, cprm)
+        var gr = maxpool2d_backward_impl(g, idx, pprm) if t[2] else g.copy()
+        var gy = relu_backward_impl(yconv, gr)
+        var r = conv2d_backward_impl(x, w, gy, cprm)
+        var base = r.unsafe_ptr()
+        if want:
+            copy_f32(base, pdx, nx)
+        copy_f32(base + nx, pdw, OC * ckk)
+        copy_f32(base + nx + OC * ckk, pdb, OC)
+    return PythonObject(0)
+
 
 def conv_shape_binding(params: PythonObject) raises -> PythonObject:
     var prm = conv_params(_ints(params))
@@ -612,6 +689,8 @@ def PyInit__mojolearn_x_cnn_host() abi("C") -> PythonObject:
         m.def_function[conv2d_forward_binding]("x_cnn_conv2d_forward")
         m.def_function[conv2d_backward_binding]("x_cnn_conv2d_backward")
         m.def_function[conv_shape_binding]("x_cnn_conv_shape")
+        m.def_function[conv_block_forward_binding]("x_cnn_conv_block_forward")
+        m.def_function[conv_block_backward_binding]("x_cnn_conv_block_backward")
         m.def_function[pool_shape_binding]("x_cnn_pool_shape")
         m.def_function[maxpool2d_forward_binding]("x_cnn_maxpool2d_forward")
         m.def_function[maxpool2d_backward_binding]("x_cnn_maxpool2d_backward")

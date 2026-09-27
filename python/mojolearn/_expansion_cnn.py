@@ -553,17 +553,53 @@ class CNNClassifier(_Layer):
         self._flat = c * h * w
         self.head_ = _Linear(self._flat, n_classes, random_state=seed + 997, numeric_mode=self.numeric_mode)
         self.layers_ = layers
+        # (conv, pool or None) per block: each block runs as ONE binding call
+        # each way (x_cnn_conv_block_*, DEVIATION 5717), the same kernels on
+        # the same values as the three layer calls, the activations between
+        # them kept on the device.
+        self._blocks = []
+        for i, layer in enumerate(layers):
+            if isinstance(layer, Conv2d):
+                nxt = layers[i + 2] if i + 2 < len(layers) else None
+                self._blocks.append((layer, nxt if isinstance(nxt, MaxPool2d) else None))
+
+    def _block_forward(self, b, conv, pool, x):
+        np = _np()
+        prm = conv._params(x.shape)
+        cshape = conv._out_shape(x.shape)
+        pprm = pool._params(cshape) if pool is not None else []
+        shape = pool._out_shape(cshape) if pool is not None else cshape
+        out = np.empty(shape, np.float32)
+        idx = np.empty(shape if pool is not None else (1,), np.int32)
+        b.x_cnn_conv_block_forward(x.ctypes.data, conv.weight_.ctypes.data, conv.bias_.ctypes.data, out.ctypes.data,
+                                   idx.ctypes.data, prm, pprm)
+        conv._block = (x, idx, prm, pprm)
+        return out
+
+    def _block_backward(self, b, conv, g, need_dx):
+        np = _np()
+        x, idx, prm, pprm = conv._block
+        g = np.ascontiguousarray(g, dtype=np.float32)
+        dx = np.empty(x.shape if need_dx else (1,), np.float32)
+        conv.grad_weight_ = np.empty(conv.weight_.shape, np.float32)
+        conv.grad_bias_ = np.empty(conv.out_channels, np.float32)
+        b.x_cnn_conv_block_backward(x.ctypes.data, conv.weight_.ctypes.data, conv.bias_.ctypes.data, g.ctypes.data,
+                                    idx.ctypes.data, dx.ctypes.data, conv.grad_weight_.ctypes.data,
+                                    conv.grad_bias_.ctypes.data, prm, pprm, bool(need_dx))
+        return dx
 
     def _forward(self, x):
-        for layer in self.layers_:
-            x = layer.forward(x)
+        b = self._binding()
+        for conv, pool in self._blocks:
+            x = self._block_forward(b, conv, pool, np_reshape(x, x.shape))
         self._shape = x.shape
         return self.head_.forward(x.reshape(x.shape[0], -1))
 
     def _backward(self, g):
+        b = self._binding()
         g = self.head_.backward(g).reshape(self._shape)
-        for layer in reversed(self.layers_):
-            g = layer.backward(g)
+        for k in range(len(self._blocks) - 1, -1, -1):
+            g = self._block_backward(b, self._blocks[k][0], g, k > 0)
 
     def _params(self):
         out = []

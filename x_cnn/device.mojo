@@ -806,3 +806,142 @@ def adam_device(w: List[Float32], g: List[Float32], mv: List[Float32], hyper: Li
     sw.extend(sm^)
     _ = sg^
     return sw^
+
+
+# ------------------------------------------------------------ the conv block
+# DEVIATION 5717 (phase d, 2026-09-27): CNNClassifier's block, Conv2d ->
+# ReLU -> MaxPool2d, in ONE entry each way, so the activations between the
+# three stay on the device. The same element functions and the same GEMMs,
+# launched in the same order on the same values as the three separate layer
+# entries: neither tier's bits move. The backward RECOMPUTES the conv output
+# (im2col, GEMM NT, conv_out) from the input it uploads anyway for the
+# weight gradient, instead of carrying it through the host; the recompute is
+# the forward's own kernels on the forward's own inputs, so its bits are the
+# forward's. `pool` False is Conv2d -> ReLU (the map is smaller than the
+# window). `need_dx` False skips col2im and the NN GEMM (the first block's
+# input gradient, which the trainer never reads).
+
+
+def _conv_relu_on_device(
+    ctx: DeviceContext, mut dx: DeviceBuffer[DType.float32], mut dw: DeviceBuffer[DType.float32],
+    mut dbias: DeviceBuffer[DType.float32], mut dp: DeviceBuffer[DType.int32], mut cols: DeviceBuffer[DType.float32],
+    mut y2: DeviceBuffer[DType.float32], mut yconv: DeviceBuffer[DType.float32], rows: Int, OC: Int, ckk: Int,
+) raises:
+    """cols = im2col(x); y2 = cols . W^T; yconv = the NCHW conv output (+ bias)."""
+    launch[im2col_at](ctx, fp(dx), fp(cols), fp(cols), fp(cols), ip(dp), ip(dp), rows * ckk)
+    device_gemm(ctx, y2, cols, dw, rows, OC, ckk, OP_NT)
+    launch[conv_out_at](ctx, fp(y2), fp(dbias), fp(yconv), fp(yconv), ip(dp), ip(dp), rows * OC)
+
+
+def conv_block_forward_into(
+    x: FP, w: FP, bias: FP, cprm: List[Int32], pprm: List[Int32], pool: Bool, dst: FP, idx_out: IP
+) raises:
+    """dst = maxpool(relu(conv(x))) (idx_out its winners), or relu(conv(x)) when `pool` is False."""
+    var N = Int(cprm[CP_N]); var C = Int(cprm[CP_C]); var OC = Int(cprm[CP_OC])
+    var ckk = C * Int(cprm[CP_KH]) * Int(cprm[CP_KW])
+    var rows = N * Int(cprm[CP_OH]) * Int(cprm[CP_OW])
+    var ny = rows * OC
+    var ctx = cnn_ctx()
+    var dx = up(ctx, x, N * C * Int(cprm[CP_H]) * Int(cprm[CP_W]))
+    var dw = up(ctx, w, OC * ckk)
+    var dbias = up(ctx, bias, OC)
+    var dp = upload_i32(ctx, cprm)
+    var cols = ctx.enqueue_create_buffer[DType.float32](rows * ckk)
+    var y2 = ctx.enqueue_create_buffer[DType.float32](ny)
+    var yconv = ctx.enqueue_create_buffer[DType.float32](ny)
+    var r = ctx.enqueue_create_buffer[DType.float32](ny)
+    _conv_relu_on_device(ctx, dx, dw, dbias, dp, cols, y2, yconv, rows, OC, ckk)
+    launch[relu_fwd_at](ctx, fp(yconv), fp(yconv), fp(r), fp(r), ip(dp), ip(dp), ny)
+    var no = _pool_sizes(pprm)[1] if pool else 1
+    var dpp = upload_i32(ctx, pprm) if pool else upload_i32(ctx, cprm)
+    var pout = ctx.enqueue_create_buffer[DType.float32](no)
+    var di = ctx.enqueue_create_buffer[DType.int32](no)
+    if pool:
+        launch[maxpool_fwd_at](ctx, fp(r), fp(pout), fp(pout), fp(pout), ip(di), ip(dpp), no)
+        down(ctx, pout, dst, no)
+        down_i(ctx, di, idx_out, no)
+    else:
+        down(ctx, r, dst, ny)
+    ctx.synchronize()
+    _ = dx^
+    _ = dw^
+    _ = dbias^
+    _ = dp^
+    _ = cols^
+    _ = y2^
+    _ = yconv^
+    _ = r^
+    _ = dpp^
+    _ = pout^
+    _ = di^
+    _ = ctx^
+
+
+def conv_block_backward_into(
+    x: FP, w: FP, bias: FP, g: FP, idx: IP, cprm: List[Int32], pprm: List[Int32], pool: Bool, need_dx: Bool,
+    gx_out: FP, gw_out: FP, gb_out: FP,
+) raises:
+    """From the gradient of the block's output `g`: dx (when `need_dx`), dW, db."""
+    var N = Int(cprm[CP_N]); var C = Int(cprm[CP_C]); var OC = Int(cprm[CP_OC])
+    var ckk = C * Int(cprm[CP_KH]) * Int(cprm[CP_KW])
+    var rows = N * Int(cprm[CP_OH]) * Int(cprm[CP_OW])
+    var ny = rows * OC
+    var nx = N * C * Int(cprm[CP_H]) * Int(cprm[CP_W])
+    var no = _pool_sizes(pprm)[1] if pool else ny
+    var ctx = cnn_ctx()
+    var dx = up(ctx, x, nx)
+    var dw = up(ctx, w, OC * ckk)
+    var dbias = up(ctx, bias, OC)
+    var dgo = up(ctx, g, no)
+    var di = up_i(ctx, idx, no if pool else 0)
+    var dp = upload_i32(ctx, cprm)
+    var dpp = upload_i32(ctx, pprm) if pool else upload_i32(ctx, cprm)
+    var cols = ctx.enqueue_create_buffer[DType.float32](rows * ckk)
+    var y2 = ctx.enqueue_create_buffer[DType.float32](ny)
+    var yconv = ctx.enqueue_create_buffer[DType.float32](ny)
+    var gr = ctx.enqueue_create_buffer[DType.float32](ny)
+    var gy = ctx.enqueue_create_buffer[DType.float32](ny)
+    _conv_relu_on_device(ctx, dx, dw, dbias, dp, cols, y2, yconv, rows, OC, ckk)
+    if pool:
+        launch[maxpool_bwd_at](ctx, fp(dgo), fp(gr), fp(gr), fp(gr), ip(di), ip(dpp), ny)
+        launch[relu_bwd_at](ctx, fp(yconv), fp(gr), fp(gy), fp(gy), ip(dp), ip(dp), ny)
+    else:
+        launch[relu_bwd_at](ctx, fp(yconv), fp(dgo), fp(gy), fp(gy), ip(dp), ip(dp), ny)
+    # conv2d_backward_into from here, on the device-resident gy and cols
+    var grow = ctx.enqueue_create_buffer[DType.float32](ny)
+    var ones = ctx.enqueue_create_buffer[DType.float32](rows)
+    var gw = ctx.enqueue_create_buffer[DType.float32](OC * ckk)
+    var gb = ctx.enqueue_create_buffer[DType.float32](OC)
+    launch[dout_rows_at](ctx, fp(gy), fp(grow), fp(grow), fp(grow), ip(dp), ip(dp), ny)
+    launch[fill_one_at](ctx, fp(ones), fp(ones), fp(ones), fp(ones), ip(dp), ip(dp), rows)
+    # DEVIATION 5701: the pinned GEMM's fold over the rows, never an atomic.
+    device_gemm(ctx, gw, grow, cols, OC, ckk, rows, OP_TN)
+    device_gemm(ctx, gb, grow, ones, OC, 1, rows, OP_TN)
+    var dcols = ctx.enqueue_create_buffer[DType.float32](rows * ckk if need_dx else 1)
+    var gx = ctx.enqueue_create_buffer[DType.float32](nx if need_dx else 1)
+    if need_dx:
+        device_gemm(ctx, dcols, grow, dw, rows, ckk, OC, OP_NN)
+        launch[col2im_at](ctx, fp(dcols), fp(gx), fp(gx), fp(gx), ip(dp), ip(dp), nx)
+        down(ctx, gx, gx_out, nx)
+    down(ctx, gw, gw_out, OC * ckk)
+    down(ctx, gb, gb_out, OC)
+    ctx.synchronize()
+    _ = dx^
+    _ = dw^
+    _ = dbias^
+    _ = dgo^
+    _ = di^
+    _ = dp^
+    _ = dpp^
+    _ = cols^
+    _ = y2^
+    _ = yconv^
+    _ = gr^
+    _ = gy^
+    _ = grow^
+    _ = ones^
+    _ = gw^
+    _ = gb^
+    _ = dcols^
+    _ = gx^
+    _ = ctx^
