@@ -28,7 +28,10 @@ from ._mode import NumericModeMixin
 __all__ = ["SGDClassifier", "SGDRegressor", "PoissonRegressor", "GammaRegressor", "TweedieRegressor",
            "HuberRegressor",
            "BayesianRidge", "ARDRegression",
-           "Lars", "LassoLars"]
+           "Lars", "LassoLars",
+           "QuantileRegressor",
+           "Perceptron", "PassiveAggressiveClassifier",
+           "PassiveAggressiveRegressor"]
 
 _BINDING = "_mojolearn_x_linear"
 ALGO_SGD, ALGO_GLM, ALGO_HUBER, ALGO_BAYES, ALGO_ARD = 1, 2, 3, 4, 5
@@ -578,3 +581,138 @@ class LassoLars(_LinearRegressorMixin, NumericModeMixin):
         if not self.alpha >= 0:
             raise ValueError("mojolearn LassoLars: alpha must be >= 0")
         return _lars_fit(self, X, y, self.max_iter, True, self.alpha)
+
+
+# ----------------------------------------------------------------- Quantile
+# Reference problem: scikit-learn sklearn/linear_model/_quantile.py; the
+# solver is ADMM (x_linear/quantile.mojo), not their linear program.
+
+class QuantileRegressor(_LinearRegressorMixin, NumericModeMixin):
+    """L1-penalized quantile regression (scikit-learn's QuantileRegressor
+    problem). `solver` accepts their names and always runs ADMM; `max_iter`
+    and `tol` (ADMM's relative tolerance, eps_abs = tol / 100) are this
+    implementation's own keywords."""
+
+    _BINDING = _BINDING
+
+    def __init__(self, *, quantile=0.5, alpha=1.0, fit_intercept=True, solver="highs",
+                 solver_options=None, max_iter=5000, tol=1e-4):
+        self.quantile, self.alpha, self.fit_intercept = quantile, alpha, fit_intercept
+        self.solver, self.solver_options, self.max_iter, self.tol = solver, solver_options, max_iter, tol
+
+    def fit(self, X, y):
+        if not 0 < self.quantile < 1:
+            raise ValueError("mojolearn QuantileRegressor: quantile must be strictly between 0 and 1")
+        if not self.alpha >= 0:
+            raise ValueError("mojolearn QuantileRegressor: alpha must be >= 0")
+        a, n, d = _matrix(X)
+        yv = _vector(y, n)
+        m = d + 1
+        vals = _run(self, ALGO_QUANTILE, a, n, d, yv, [self.max_iter, int(bool(self.fit_intercept))],
+                    [self.quantile, self.alpha, self.tol / 100.0, self.tol], d + 3,
+                    m * m + 2 * m + 4 * n + 2 * d, 1)
+        self.coef_ = Array.from_list(vals[:d], "<f4")
+        self.intercept_ = float(vals[d])
+        self.n_iter_ = int(vals[d + 1])
+        self.n_features_in_ = d
+        return self
+
+
+# --------------------------------------------------------------- Perceptron
+# Reference: scikit-learn sklearn/linear_model/_perceptron.py: SGD with the
+# perceptron loss, a constant rate eta0 and no penalty (x_linear/sgd.mojo).
+
+class Perceptron(_LinearClassifierMixin, NumericModeMixin):
+    """The perceptron (scikit-learn's Perceptron)."""
+
+    _BINDING = _BINDING
+
+    def __init__(self, *, penalty=None, alpha=0.0001, l1_ratio=0.15, fit_intercept=True, max_iter=1000,
+                 tol=1e-3, shuffle=True, verbose=0, eta0=1.0, n_jobs=None, random_state=0,
+                 early_stopping=False, validation_fraction=0.1, n_iter_no_change=5, class_weight=None,
+                 warm_start=False):
+        self.penalty, self.alpha, self.l1_ratio, self.fit_intercept = penalty, alpha, l1_ratio, fit_intercept
+        self.max_iter, self.tol, self.shuffle, self.verbose, self.eta0 = max_iter, tol, shuffle, verbose, eta0
+        self.n_jobs, self.random_state, self.early_stopping = n_jobs, random_state, early_stopping
+        self.validation_fraction, self.n_iter_no_change = validation_fraction, n_iter_no_change
+        self.class_weight, self.warm_start = class_weight, warm_start
+
+    def fit(self, X, y):
+        _sgd_refuse(self, self.early_stopping, False, self.class_weight, self.warm_start)
+        Xm = _matrix(X)
+        classes, codes = _classes(self, y, Xm[1])
+        self.classes_ = classes
+        self.coef_, self.intercept_ = _sgd_fit(
+            self, Xm, codes, len(classes), _SGD_CLF_LOSS["perceptron"], self.penalty, "constant",
+            self.alpha, self.l1_ratio, self.eta0, 0.5, 0.1, self.fit_intercept,
+            self.max_iter, self.tol, self.n_iter_no_change, self.shuffle, self.random_state)
+        return self
+
+
+# -------------------------------------------------------- Passive-aggressive
+# Reference: scikit-learn sklearn/linear_model/_passive_aggressive.py: the
+# SGD kernel with learning_rate pa1 (hinge / epsilon_insensitive) or pa2
+# (squared_*), eta0 = C, no penalty (x_linear/sgd.mojo, `_plain_sgd`'s PA step).
+
+class PassiveAggressiveClassifier(_LinearClassifierMixin, NumericModeMixin):
+    """Passive-aggressive classifier, PA-I or PA-II (scikit-learn's)."""
+
+    _BINDING = _BINDING
+
+    def __init__(self, *, C=1.0, fit_intercept=True, max_iter=1000, tol=1e-3, early_stopping=False,
+                 validation_fraction=0.1, n_iter_no_change=5, shuffle=True, verbose=0, loss="hinge",
+                 n_jobs=None, random_state=None, warm_start=False, class_weight=None, average=False):
+        self.C, self.fit_intercept, self.max_iter, self.tol = C, fit_intercept, max_iter, tol
+        self.early_stopping, self.validation_fraction = early_stopping, validation_fraction
+        self.n_iter_no_change, self.shuffle, self.verbose, self.loss = n_iter_no_change, shuffle, verbose, loss
+        self.n_jobs, self.random_state, self.warm_start = n_jobs, random_state, warm_start
+        self.class_weight, self.average = class_weight, average
+
+    def fit(self, X, y):
+        _sgd_refuse(self, self.early_stopping, self.average, self.class_weight, self.warm_start)
+        if self.loss not in ("hinge", "squared_hinge"):
+            raise ValueError("mojolearn PassiveAggressiveClassifier: loss must be 'hinge' or 'squared_hinge'")
+        if not self.C > 0:
+            raise ValueError("mojolearn PassiveAggressiveClassifier: C must be > 0")
+        Xm = _matrix(X)
+        classes, codes = _classes(self, y, Xm[1])
+        self.classes_ = classes
+        lr = "pa1" if self.loss == "hinge" else "pa2"
+        self.coef_, self.intercept_ = _sgd_fit(
+            self, Xm, codes, len(classes), _SGD_CLF_LOSS["hinge"], None, lr,
+            1.0, 0.0, self.C, 0.5, 0.1, self.fit_intercept,
+            self.max_iter, self.tol, self.n_iter_no_change, self.shuffle, self.random_state)
+        return self
+
+
+class PassiveAggressiveRegressor(_LinearRegressorMixin, NumericModeMixin):
+    """Passive-aggressive regressor, PA-I or PA-II (scikit-learn's)."""
+
+    _BINDING = _BINDING
+
+    def __init__(self, *, C=1.0, fit_intercept=True, max_iter=1000, tol=1e-3, early_stopping=False,
+                 validation_fraction=0.1, n_iter_no_change=5, shuffle=True, verbose=0,
+                 loss="epsilon_insensitive", epsilon=0.1, random_state=None, warm_start=False,
+                 average=False):
+        self.C, self.fit_intercept, self.max_iter, self.tol = C, fit_intercept, max_iter, tol
+        self.early_stopping, self.validation_fraction = early_stopping, validation_fraction
+        self.n_iter_no_change, self.shuffle, self.verbose, self.loss = n_iter_no_change, shuffle, verbose, loss
+        self.epsilon, self.random_state, self.warm_start, self.average = epsilon, random_state, warm_start, average
+
+    def fit(self, X, y):
+        _sgd_refuse(self, self.early_stopping, self.average, None, self.warm_start)
+        if self.loss not in ("epsilon_insensitive", "squared_epsilon_insensitive"):
+            raise ValueError("mojolearn PassiveAggressiveRegressor: loss must be 'epsilon_insensitive' "
+                             "or 'squared_epsilon_insensitive'")
+        if not self.C > 0:
+            raise ValueError("mojolearn PassiveAggressiveRegressor: C must be > 0")
+        Xm = _matrix(X)
+        yv = _vector(y, Xm[1])
+        lr = "pa1" if self.loss == "epsilon_insensitive" else "pa2"
+        coef, intercept = _sgd_fit(
+            self, Xm, yv, 0, _SGD_REG_LOSS["epsilon_insensitive"], None, lr,
+            1.0, 0.0, self.C, 0.5, self.epsilon, self.fit_intercept,
+            self.max_iter, self.tol, self.n_iter_no_change, self.shuffle, self.random_state)
+        self.coef_ = coef.reshape((Xm[2],))
+        self.intercept_ = intercept
+        return self

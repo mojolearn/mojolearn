@@ -8,6 +8,7 @@ from x_prep.prims import (
     unique_cols_unit, mode_cols_unit, lookup_unit, count_neg_unit, onehot_unit,
     i2f_unit, f2i_unit, binarize_unit, matmul_unit, row_softmax_unit, row_argmax_unit,
     class_stats_unit, center_rows_unit, where_neg_unit, mark_missing_unit, fill_unit,
+    label_binarize_unit, scatter_ones_unit,
 )
 from x_prep.eigh import eigh_unit
 from x_prep.target import te_global_unit, te_enc_unit, te_apply_unit
@@ -17,11 +18,16 @@ from naive_bayes.nb import (
     bnb_params_unit, cnb_params_unit, cat_params_unit, cat_jll_unit,
 )
 from x_prep.transform import qt_apply_unit, pt_fit_unit, pt_apply_unit, std_params_unit, normalize_unit, poly_unit
+from x_prep.spline import spline_knots_unit, spline_apply_unit
+from x_prep.iterative import (
+    ii_mean_unit, ii_gram_unit, ii_sub_unit, ii_br_unit, ii_predict_unit, ii_snapshot_unit, ii_conv_unit,
+    nan_mask_unit,
+)
 from naive_bayes.da import (
     lda_prep_unit, lda_w_unit, lda_stage2_unit, lda_stage3_unit, qda_cov_unit, qda_prep_unit, qda_dec_unit,
 )
 
-comptime N_OPS = 49
+comptime N_OPS = 61
 
 
 @always_inline
@@ -124,3 +130,27 @@ def run_unit[OP: Int](t: Int, f: FP, q: IP):
         normalize_unit(t, f, q)
     comptime if OP == 48:
         poly_unit(t, f, q)
+    comptime if OP == 49:
+        spline_knots_unit(t, f, q)
+    comptime if OP == 50:
+        spline_apply_unit(t, f, q)
+    comptime if OP == 51:
+        label_binarize_unit(t, f, q)
+    comptime if OP == 52:
+        scatter_ones_unit(t, f, q)
+    comptime if OP == 53:
+        ii_mean_unit(t, f, q)
+    comptime if OP == 54:
+        ii_gram_unit(t, f, q)
+    comptime if OP == 55:
+        ii_sub_unit(t, f, q)
+    comptime if OP == 56:
+        ii_br_unit(t, f, q)
+    comptime if OP == 57:
+        ii_predict_unit(t, f, q)
+    comptime if OP == 58:
+        ii_snapshot_unit(t, f, q)
+    comptime if OP == 59:
+        ii_conv_unit(t, f, q)
+    comptime if OP == 60:
+        nan_mask_unit(t, f, q)

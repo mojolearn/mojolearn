@@ -8,7 +8,8 @@ The element body is the same function (`sequence/ops.mojo::apply`), so the
 two agree bit for bit by construction."""
 from std.memory import memcpy
 
-from sequence.ops import FP, Args, apply
+from sequence.dispatch import apply
+from sequence.ops import FP, Args
 
 
 trait Exec:

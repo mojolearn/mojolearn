@@ -143,6 +143,55 @@ def _():
     return ok
 
 
+@case("quantile")
+def _():
+    from sklearn import linear_model as sk
+    X, yr, yc, y3 = _data(noise=1.0)
+    ok = True
+    for q, alpha, fi in ((0.5, 0.01, True), (0.8, 0.05, True), (0.3, 0.0, False), (0.5, 1.0, True)):
+        a = ml.QuantileRegressor(quantile=q, alpha=alpha, fit_intercept=fi).fit(X, yr)
+        b = sk.QuantileRegressor(quantile=q, alpha=alpha, fit_intercept=fi).fit(X.astype(np.float64), yr.astype(np.float64))
+
+        def obj(coef, icpt):
+            r = yr - X.astype(np.float64) @ np.asarray(coef, np.float64) - icpt
+            return np.mean(np.where(r >= 0, q * r, (q - 1) * r)) + alpha * np.abs(coef).sum()
+        oa, ob = obj(a.coef_, a.intercept_), obj(b.coef_, b.intercept_)
+        print(f"  q={q} alpha={alpha} fi={fi} n_iter={a.n_iter_} objective {oa:.6f} vs {ob:.6f}")
+        ok &= _close("objective (relative)", [oa / ob], [1.0], 2e-3)
+        ok &= _close("coef", a.coef_, b.coef_, 3e-2)
+    return ok
+
+
+@case("perceptron")
+def _():
+    from sklearn import linear_model as sk
+    X, yr, yc, y3 = _data()
+    ok = True
+    for y in (yc, y3):
+        for pen in (None, "l2"):
+            a = ml.Perceptron(penalty=pen).fit(X, y).score(X, y)
+            b = sk.Perceptron(penalty=pen).fit(X, y).score(X, y)
+            ok &= _close(f"Perceptron k={len(set(y))} penalty={pen} accuracy {a:.3f} vs {b:.3f}", a, b, 0.06)
+    return ok
+
+
+@case("pa")
+def _():
+    from sklearn import linear_model as sk
+    X, yr, yc, y3 = _data()
+    ok = True
+    for y in (yc, y3):
+        for loss in ("hinge", "squared_hinge"):
+            a = ml.PassiveAggressiveClassifier(loss=loss, random_state=0).fit(X, y).score(X, y)
+            b = sk.PassiveAggressiveClassifier(loss=loss, random_state=0).fit(X, y).score(X, y)
+            ok &= _close(f"PAClassifier k={len(set(y))} {loss} accuracy {a:.3f} vs {b:.3f}", a, b, 0.06)
+    for loss in ("epsilon_insensitive", "squared_epsilon_insensitive"):
+        a = ml.PassiveAggressiveRegressor(loss=loss, random_state=0).fit(X, yr).score(X, yr)
+        b = sk.PassiveAggressiveRegressor(loss=loss, random_state=0).fit(X, yr).score(X, yr)
+        ok &= _close(f"PARegressor {loss} R2 {a:.4f} vs {b:.4f}", a, b, 0.02)
+    return ok
+
+
 def main(argv):
     names = argv or list(CASES)
     bad = []

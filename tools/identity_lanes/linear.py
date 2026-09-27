@@ -120,3 +120,45 @@ def _(ml, X, yc, yr, Xh=None):
 
 
 _batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-lars", "x-lasso-lars")
+
+
+@lane("x-quantile")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.QuantileRegressor(quantile=0.7, alpha=0.01, max_iter=300).fit(X[:2000], yr[:2000])
+    return _linear_reg_fit(m, X, yr, Xh)
+
+
+_batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-quantile")
+
+
+def _linear_y3(X):
+    """A three-class target from the fixture's own columns (3 and 4, which no
+    fixture perturbs), cut at fixed thresholds."""
+    s = X[:, 3] + np.float32(0.5) * X[:, 4]
+    lo, hi = np.quantile(s, [1 / 3, 2 / 3])
+    return ((s > lo).astype(np.int32) + (s > hi).astype(np.int32)).astype(np.int32)
+
+
+@lane("x-perceptron")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.Perceptron(max_iter=5, tol=None, random_state=5).fit(X[:2000], _linear_y3(X[:2000]))
+    return _linear_clf_fit(m, X, yc, Xh)
+
+
+_batch_decl(_rows_calls("decision_function", sl=slice(0, 256)), "x-perceptron")
+
+
+@lane("x-pa-clf")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.PassiveAggressiveClassifier(loss="squared_hinge", max_iter=5, tol=None, random_state=5).fit(X[:2000], yc[:2000])
+    return _linear_clf_fit(m, X, yc, Xh)
+
+
+@lane("x-pa-reg")
+def _(ml, X, yc, yr, Xh=None):
+    m = ml.PassiveAggressiveRegressor(max_iter=5, tol=None, random_state=5).fit(X[:2000], yr[:2000])
+    return _linear_reg_fit(m, X, yr, Xh)
+
+
+_batch_decl(_rows_calls("decision_function", sl=slice(0, 256)), "x-pa-clf")
+_batch_decl(_rows_calls("predict", sl=slice(0, 256)), "x-pa-reg")

@@ -20,10 +20,10 @@ from . import _backend, _buffer
 from ._array import Array
 from ._mode import NumericModeMixin
 
-__all__ = ["MiniBatchKMeans", "BisectingKMeans", "MeanShift", "OPTICS", "AffinityPropagation"]
+__all__ = ["MiniBatchKMeans", "BisectingKMeans", "MeanShift", "OPTICS", "AffinityPropagation", "BayesianGaussianMixture"]
 
 # x_cluster/entries.mojo: the entry numbers of `x_cluster_call`
-_E_NEAREST, _E_DISTANCES, _E_MINIBATCH, _E_BISECT, _E_BISECT_PREDICT, _E_MEANSHIFT, _E_OPTICS, _E_AFFINITY = 0, 1, 2, 3, 4, 5, 6, 7
+_E_NEAREST, _E_DISTANCES, _E_MINIBATCH, _E_BISECT, _E_BISECT_PREDICT, _E_MEANSHIFT, _E_OPTICS, _E_AFFINITY, _E_BGMM, _E_BGMM_SCORE = 0, 1, 2, 3, 4, 5, 6, 7, 8, 9
 
 
 def _f32(X, name="X"):
@@ -444,3 +444,142 @@ class AffinityPropagation(_XCluster):
 
     def fit_predict(self, X, y=None):
         return self.fit(X).labels_
+
+
+class BayesianGaussianMixture(_XCluster):
+    """Variational Bayesian Gaussian mixture, full covariance. Reference:
+    scikit-learn `mixture/_bayesian_mixture.py` with `_base.py`'s EM loop.
+
+    The n-sized work (the Mahalanobis squares, the E-step log-sum-exp, the
+    M-step moments) runs on the device in float32; the Wishart and
+    Dirichlet(-process) updates, the d x d Cholesky, digamma and log-gamma
+    and the lower bound are host float64. `init_params` is 'kmeans' (this
+    library's KMeans) or 'random' (the lane's seeded stream);
+    `random_state=None` means 0. Only covariance_type='full'; the others,
+    'k-means++' / 'random_from_data' starts and warm_start are refused by
+    name (x_cluster/NOT_IMPLEMENTED.tsv)."""
+
+    def __init__(self, *, n_components=1, covariance_type="full", tol=1e-3, reg_covar=1e-6,
+                 max_iter=100, n_init=1, init_params="kmeans",
+                 weight_concentration_prior_type="dirichlet_process", weight_concentration_prior=None,
+                 mean_precision_prior=None, mean_prior=None, degrees_of_freedom_prior=None,
+                 covariance_prior=None, random_state=None, warm_start=False, verbose=0,
+                 verbose_interval=10):
+        self.n_components = n_components
+        self.covariance_type = covariance_type
+        self.tol = tol
+        self.reg_covar = reg_covar
+        self.max_iter = max_iter
+        self.n_init = n_init
+        self.init_params = init_params
+        self.weight_concentration_prior_type = weight_concentration_prior_type
+        self.weight_concentration_prior = weight_concentration_prior
+        self.mean_precision_prior = mean_precision_prior
+        self.mean_prior = mean_prior
+        self.degrees_of_freedom_prior = degrees_of_freedom_prior
+        self.covariance_prior = covariance_prior
+        self.random_state = random_state
+        self.warm_start = warm_start
+        self.verbose = verbose
+        self.verbose_interval = verbose_interval
+
+    def fit(self, X, y=None):
+        self._fit(X)
+        return self
+
+    def fit_predict(self, X, y=None):
+        return self._fit(X)
+
+    def _fit(self, X):
+        if self.covariance_type != "full":
+            raise NotImplementedError(f"mojolearn BayesianGaussianMixture: covariance_type="
+                                      f"{self.covariance_type!r} is not implemented; 'full' only")
+        if self.init_params not in ("kmeans", "random"):
+            raise NotImplementedError(f"mojolearn BayesianGaussianMixture: init_params="
+                                      f"{self.init_params!r} is not implemented; 'kmeans' or 'random'")
+        if self.warm_start:
+            raise NotImplementedError("mojolearn BayesianGaussianMixture: warm_start is not implemented")
+        if self.weight_concentration_prior_type not in ("dirichlet_process", "dirichlet_distribution"):
+            raise ValueError("weight_concentration_prior_type must be 'dirichlet_process' or "
+                             "'dirichlet_distribution'")
+        x = _f32(X)
+        n, d = x.shape
+        k = int(self.n_components)
+        if k < 1 or n < k:
+            raise ValueError(f"Expected n_samples >= n_components but got n_components = {k}, n_samples = {n}")
+        if int(self.n_init) < 1 or int(self.max_iter) < 1:
+            raise ValueError("n_init and max_iter must be >= 1")
+        aux = []
+        if self.mean_prior is not None:
+            mp = [float(v) for v in self.mean_prior]
+            if len(mp) != d:
+                raise ValueError(f"The parameter 'means' should have the shape of ({d},)")
+            aux += mp
+        if self.covariance_prior is not None:
+            cp = _f32(self.covariance_prior, "covariance_prior")
+            if cp.shape != (d, d):
+                raise ValueError(f"The parameter 'full covariance prior' should have the shape of ({d}, {d})")
+            aux += [float(v) for v in memoryview(cp).cast("B").cast("f")]
+        a = _f32([aux], "priors") if aux else None
+        none = -1.0
+        fp = [none if self.weight_concentration_prior is None else float(self.weight_concentration_prior),
+              none if self.mean_precision_prior is None else float(self.mean_precision_prior),
+              none if self.degrees_of_freedom_prior is None else float(self.degrees_of_freedom_prior),
+              float(self.reg_covar), float(self.tol)]
+        ip = [n, d, k, 1 if self.weight_concentration_prior_type == "dirichlet_process" else 0,
+              int(self.max_iter), int(self.n_init), 1 if self.init_params == "random" else 0,
+              _seed(self.random_state), 1 if self.mean_prior is not None else 0,
+              1 if self.covariance_prior is not None else 0]
+        f, i, s = self._call(_E_BGMM, x, a, ip, fp)
+        self.weights_ = Array._from_flat(f[0], (k,), "<f4")
+        self.means_ = Array._from_flat(f[1], (k, d), "<f4")
+        self.covariances_ = Array._from_flat(f[2], (k, d, d), "<f4")
+        self.precisions_cholesky_ = Array._from_flat(f[3], (k, d, d), "<f4")
+        if self.weight_concentration_prior_type == "dirichlet_process":
+            self.weight_concentration_ = (Array._from_flat(f[4], (k,), "<f4"), Array._from_flat(f[5], (k,), "<f4"))
+        else:
+            self.weight_concentration_ = Array._from_flat(f[4], (k,), "<f4")
+        self.mean_precision_ = Array._from_flat(f[6], (k,), "<f4")
+        self.degrees_of_freedom_ = Array._from_flat(f[7], (k,), "<f4")
+        self._log_consts = Array._from_flat(f[8], (k,), "<f4")
+        self.mean_prior_ = Array._from_flat(f[9], (d,), "<f4")
+        self.covariance_prior_ = Array._from_flat(f[10], (d, d), "<f4")
+        self.lower_bound_ = float(s[0])
+        self.n_iter_ = int(s[1])
+        self.converged_ = bool(s[2])
+        self.weight_concentration_prior_ = float(s[3])
+        self.mean_precision_prior_ = float(s[4])
+        self.degrees_of_freedom_prior_ = float(s[5])
+        self.n_features_in_ = d
+        return Array._from_flat(i[0], (n,), "<i4")
+
+    def _score(self, X):
+        self._check_fitted("means_")
+        x = self._input_like_fit(X)
+        n, d = x.shape
+        k = self.means_.shape[0]
+        vals = []
+        for arr in (self.means_, self.precisions_cholesky_, self._log_consts):
+            vals += [float(v) for v in memoryview(arr).cast("B").cast("f")]
+        f, _, _ = self._call(_E_BGMM_SCORE, x, _f32([vals], "model"), [n, d, k])
+        return f[0], f[1], n, k
+
+    def predict(self, X):
+        lr, _, n, k = self._score(X)
+        out = []
+        for r in range(n):
+            row = lr[r * k:(r + 1) * k]
+            out.append(max(range(k), key=lambda j: (row[j], -j)))
+        return Array._from_flat(out, (n,), "<i4")
+
+    def predict_proba(self, X):
+        lr, _, n, k = self._score(X)
+        return Array._from_flat([math.exp(v) for v in lr], (n, k), "<f4")
+
+    def score_samples(self, X):
+        _, lpn, n, _ = self._score(X)
+        return Array._from_flat(lpn, (n,), "<f4")
+
+    def score(self, X, y=None):
+        s = self.score_samples(X)
+        return sum(float(v) for v in s) / len(s)
