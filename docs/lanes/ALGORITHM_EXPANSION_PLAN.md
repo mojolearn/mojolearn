@@ -11,6 +11,12 @@ messaging lanes. Newest items are at the top.
    (in the CPU gate) fails on a NEW fixture-RNG definition
    (`tools/fixture_rng_census.py`) and on any existing copy that differs
    from its canonical behavior bit for bit.
+0000b. **Steward merge gate (Andrew wants speed; 2026-09-27):** a lane may
+   merge once **one Apple steward (m2pro OR m3ultra) PASSES and do-amd
+   PASSES**. Every request still runs on both Macs. A later FAIL from the
+   other Mac, especially M2 vs M4/M3 codegen differences, comes back to
+   the lane as a fix at the root. Don't wait on a queue that is behind:
+   keep working on the next item while verdicts arrive.
 0000a. **Commit and push your branch at every meaningful step, not only at
    merges (Andrew, 2026-09-27, after the weekly usage limit killed every
    agent mid-work).** Commit WIP to your own branch (`lane/<name>`) and
@@ -88,6 +94,28 @@ messaging lanes. Newest items are at the top.
      the CPU host path, re-proven bitwise
    Each of (b)-(f) is its own session: finish it, merge, STOP. The
    orchestrator relaunches you for the next phase.
+1a. **Each lane's family INCLUDES its existing algorithms, in EVERY phase**
+   (parity, FAST speed, IDENTICAL speed, CPU speed), not only the new ones:
+   linear (glm, solver), cluster (KMeans, DBSCAN, HDBSCAN, agglomerative,
+   spectral, GMM), neighbors (kNN, radius, ball cover, KDE, SVM, kernel,
+   GP), decomp (PCA, TSVD, UMAP, linalg), prep (scalers), sequence (ARIMA,
+   ETS, KPSS), trees (RF, ET, GBDT, isolation forest), ann (IVF-Flat).
+   Two new lanes own the families nobody had:
+   - `neural`: transformer, Mamba-1/2/3, Samba, MLP, embedding, byte-LM,
+     training. Their bindings are IDENTICAL-only today; this lane builds
+     their FAST tier.
+   - `metrics`: the 24 evaluation metrics, cross-validation and
+     model_selection.
+1c. **Lane `cpu` (Andrew, 2026-09-27) owns CPU paths across ALL
+   algorithms.** Phase 1: audit that every public algorithm has a CPU
+   fit/predict path, and fix any gap at the root. Later phases: speed of the
+   EXISTING host bindings (core_host, forest_host, gbdt_host,
+   estimators_host, the family *_host bindings): threads, SIMD
+   vectorization, cache blocking. The bits must be identical at every
+   thread count and equal to the GPU. Algorithm lanes still do CPU speed
+   for their own `x_*` code in their last phase. `cpu` does not touch
+   `x_*` directories; algorithm lanes don't do CPU speed on existing host
+   code.
 1b. **Done means ALL of this, per algorithm (Andrew, 2026-09-27):**
    - **Both modes work:** IDENTICAL (bitwise across every column) and FAST
      (a faster schedule, allowed to differ in bits, never in quality: a

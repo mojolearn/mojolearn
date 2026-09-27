@@ -136,9 +136,11 @@ def cnb_params_unit(t: Int, f: FP, q: IP):
 
 
 def cat_params_unit(t: Int, f: FP, q: IP):
-    """q = [X, n, d, Y, K, NCAT, CMAX, CNT, ALPHA, FLP]; t = (j*K + k)*CMAX + v
+    """q = [X, n, d, Y, K, NCAT, CMAX, CNT, ALPHA, FLP, W]; t = (j*K + k)*CMAX + v
     (CategoricalNB): the rows of class k whose feature j equals v, counted in
-    ascending row order; FLP = log(count + a) - log(CNT[k] + a * NCAT[j]).
+    ascending row order (W >= 0: their weights W[i] summed instead, the
+    sample_weight option; the caller passes -1 for none);
+    FLP = log(count + a) - log(CNT[k] + a * NCAT[j]).
     Slots v >= NCAT[j] are left as they are."""
     var n = p(q, 1)
     var d = p(q, 2)
@@ -151,13 +153,19 @@ def cat_params_unit(t: Int, f: FP, q: IP):
     var ncat = Int(ld(f, p(q, 5) + j))
     if v >= ncat:
         return
-    var cnt = 0
+    var W = p(q, 10)
+    var m = 0
+    var cw = Float32(0)
     for i in range(n):
         if Int(ld(f, p(q, 3) + i)) == k and Int(ld(f, p(q, 0) + i * d + j)) == v:
-            cnt += 1
+            if W >= 0:
+                cw = add(cw, ld(f, W + i))
+            else:
+                m += 1
+    var cnt = cw if W >= 0 else Float32(m)
     var a = ld(f, p(q, 8))
     var den = add(ld(f, p(q, 7) + k), mul(a, Float32(ncat)))
-    st(f, p(q, 9) + t, sub(logf(add(Float32(cnt), a)), logf(den)))
+    st(f, p(q, 9) + t, sub(logf(add(cnt, a)), logf(den)))
 
 
 def cat_jll_unit(t: Int, f: FP, q: IP):
