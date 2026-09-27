@@ -60,5 +60,9 @@ trait Exec:
         ...
 
     @staticmethod
+    def svd(a: F32Ptr, m: Int, n: Int, s: F32Ptr, v: F32Ptr) raises:
+        ...
+
+    @staticmethod
     def vendor() -> String:
         ...

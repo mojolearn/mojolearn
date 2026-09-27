@@ -25,7 +25,8 @@ from ._buffer import as_f32_c, as_i32_c, frombytes
 
 __all__ = ["IncrementalPCA", "GaussianRandomProjection", "SparseRandomProjection", "johnson_lindenstrauss_min_dim",
            "NMF", "FastICA", "FactorAnalysis",
-           "lu_factor", "lu_solve", "solve", "lstsq", "randomized_svd"]
+           "lu_factor", "lu_solve", "solve", "lstsq", "randomized_svd",
+           "PLSRegression", "PLSCanonical", "CCA"]
 
 _BINDING = "_mojolearn_x_decomp"
 
@@ -258,6 +259,16 @@ class _Kit:
         p = array.array("i", perm)
         self.b.x_decomp_cd_rows(W.addr, HHt.addr, XHt.addr, p.buffer_info()[0], viol.addr, [n, kc])
         return self.total(viol).s[0]
+
+    def svd(self, A):
+        """(S 1 x n DESCENDING, Vt n x n) of a tall A (m >= n): Householder QR
+        then the one-sided Jacobi SVD of R (decomposition/'s full-PCA route),
+        values sorted descending with ties to the lower index."""
+        m, n = A.r, A.c
+        s, v = _M.zeros(1, n), _M.zeros(n, n)
+        self.b.x_decomp_svd(A.addr, s.addr, v.addr, [m, n])
+        order = sorted(range(n), key=lambda j: (-s.s[j], j))
+        return s.take_cols(order), v.take_cols(order).T
 
     def orth(self, A):
         """A copy of A with its columns orthonormalized (MGS2)."""
@@ -632,18 +643,18 @@ def _sign_flip_rows(U):
 
 # ================================================================ thin SVD
 def _thin_svd(k, X, nc, u_based=True):
-    """(U n x nc, S 1 x nc, Vt nc x d) of X through the eigendecomposition of
-    the smaller Gram matrix, singular values descending, then sklearn's
+    """(U n x nc, S 1 x nc, Vt nc x d) of X through the QR + one-sided Jacobi
+    SVD of X (or of X^T when X is wide), singular values descending, then sklearn's
     `svd_flip` (u_based: the largest-|.| entry of each COLUMN of U positive;
     else of each ROW of Vt). U (or Vt) is recovered as X V / S (X^T U / S);
     a zero singular value gives a zero vector."""
     n, d = X.r, X.c
     if d <= n:
-        S, Vt = _gram_svd(k, X)
+        S, Vt = k.svd(X)
         S, Vt = S.cols(0, nc), Vt.rows(0, nc)
         U = k.ew("div", k.mm(X, Vt, tb=True), S)
     else:
-        S, Ut = _gram_svd(k, X.T)
+        S, Ut = k.svd(X.T)
         S, Ut = S.cols(0, nc), Ut.rows(0, nc)
         U = Ut.T
         Vt = k.ew("div", k.mm(U, X, ta=True), S.T)
@@ -1133,8 +1144,8 @@ class FactorAnalysis(_Base):
     `decomposition/_factor_analysis.py`: `fit`, `transform`,
     `get_covariance`, `get_precision`, `score_samples`, `_ortho_rotation`).
 
-    Each iteration's SVD of the scaled data is the eigh of its d x d Gram
-    matrix: the squared singular values sklearn uses ARE its eigenvalues.
+    Each iteration's SVD of the scaled data is the QR + one-sided Jacobi SVD
+    of decomposition/ (the eigh of the d x d Gram when n < d).
     svd_method='randomized' takes the same exact route (sklearn's randomized
     SVD is an approximation of it). `rotation` in {None, 'varimax',
     'quartimax'}."""
@@ -1176,10 +1187,15 @@ class FactorAnalysis(_Base):
         for it in range(1, self.max_iter + 1):
             sqrt_psi = k.ew("adds", k.ew("sqrt", psi), s=SMALL)
             Z = k.ew("scale", k.ew("div", Xc, sqrt_psi), s=1.0 / nsqrt)
-            ev, V = k.eigh(k.mm(Z, Z, ta=True))
-            order = list(range(d - 1, -1, -1))
-            s2 = k.ew("maxs", ev.take_cols(order), s=0.0)
-            Vt = V.take_cols(order).T.rows(0, nc)
+            if n >= d:
+                sv, Vt = k.svd(Z)
+                s2 = k.ew("sq", sv)
+            else:
+                ev, V = k.eigh(k.mm(Z, Z, ta=True))
+                order = list(range(d - 1, -1, -1))
+                s2 = k.ew("maxs", ev.take_cols(order), s=0.0)
+                Vt = V.take_cols(order).T
+            Vt = Vt.rows(0, nc)
             sk = s2.cols(0, nc)
             # the log-likelihood is accumulated in Python float64 (IEEE adds,
             # sequential): at float32 its step falls under tol=1e-2 early
@@ -1402,3 +1418,233 @@ def lstsq(a, b, rcond=None, *, numeric_mode=None):
     else:
         resid = _M.zeros(1, 0).out((0,))
     return (X.out((nn,)) if vec else X.out()), resid, rank, S.out((r,))
+
+
+# ================================================================ PLS / CCA
+def _pinv(k, A, rcond=None):
+    """Moore-Penrose pseudo-inverse through the thin SVD (Gram eigh):
+    V diag(1/s) U^T, singular values at or below cond * s_max dropped
+    (cond = max(shape) * float32 eps, sklearn `_pinv2_old`'s rule)."""
+    r = min(A.r, A.c)
+    U, S, Vt = _thin_svd(k, A, r, u_based=True)
+    cond = (max(A.r, A.c) * _F32_EPS) if rcond is None else rcond
+    cut = _f32(S.s[0] * cond) if r else 0.0
+    inv = k.ew("recip", k.ew("select", S, S, _M.zeros(1, 1), s=cut))
+    return k.mm(Vt, k.ew("mul", U, inv), ta=True, tb=True)
+
+
+def _dot(k, a, b):
+    """a . b for two column vectors (n x 1): one gemm cell, rows ascending."""
+    return k.mm(a, b, ta=True)
+
+
+class _PLS(_Base):
+    """sklearn `cross_decomposition/_pls.py::_PLS` (NIPALS): `fit`,
+    `_get_first_singular_vectors_power_method`, `_center_scale_xy`,
+    `_svd_flip_1d`, `transform`, `inverse_transform`, `predict`.
+    REFUSED BY NAME: algorithm='svd' (PLSCanonical's second algorithm)."""
+    _parameters = ("n_components", "scale", "max_iter", "tol", "copy", "numeric_mode")
+    _deflation = "regression"
+    _pmode = "A"
+
+    def __init__(self, n_components=2, *, scale=True, max_iter=500, tol=1e-06, copy=True, numeric_mode=None):
+        self.n_components, self.scale, self.max_iter, self.tol, self.copy = n_components, scale, max_iter, tol, copy
+        self.numeric_mode = numeric_mode
+
+    def _xy(self, X, Y):
+        M = _M.from_input(X)
+        vec = Y is not None and (len(getattr(Y, "shape", ())) == 1 or
+                                 (not hasattr(Y, "shape") and not isinstance(Y[0], (list, tuple))))
+        Ym = None
+        if Y is not None:
+            Ym = _M.from_input(_row_of(Y), "Y").T if vec else _M.from_input(Y, "Y")
+        return M, Ym, vec
+
+    def _center_scale(self, k, A):
+        n = A.r
+        mean = k.colmean(A)
+        Ac = k.ew("sub", A, mean)
+        if self.scale:
+            std = k.ew("sqrt", k.ew("scale", k.colsum(k.ew("sq", Ac)), s=1.0 / (n - 1)))
+            std = k.ew("select", std, std, k.const(1.0), s=0.0)
+            Ac = k.ew("div", Ac, std)
+        else:
+            std = k.const(1.0, 1, A.c)
+        return Ac, mean, std
+
+    def _power(self, k, X, Y, norm_y):
+        eps = _F32_EPS
+        y_score = None
+        for j in range(Y.c):
+            col = Y.cols(j, j + 1)
+            if any(abs(v) > eps for v in col.s):
+                y_score = col
+                break
+        if y_score is None:
+            raise StopIteration("y residual is constant")
+        xw_old = None
+        if self._pmode == "B":
+            Xp, Yp = _pinv(k, X), _pinv(k, Y)
+        it = 0
+        for it in range(1, self.max_iter + 1):
+            if self._pmode == "B":
+                xw = k.mm(Xp, y_score)
+            else:
+                xw = k.ew("div", k.mm(X, y_score, ta=True), _dot(k, y_score, y_score))
+            xw = k.ew("div", xw, k.ew("adds", k.ew("sqrt", _dot(k, xw, xw)), s=eps))
+            x_score = k.mm(X, xw)
+            if self._pmode == "B":
+                yw = k.mm(Yp, x_score)
+            else:
+                yw = k.ew("div", k.mm(Y, x_score, ta=True), _dot(k, x_score, x_score))
+            if norm_y:
+                yw = k.ew("div", yw, k.ew("adds", k.ew("sqrt", _dot(k, yw, yw)), s=eps))
+            y_score = k.ew("div", k.mm(Y, yw), k.ew("adds", _dot(k, yw, yw), s=eps))
+            if Y.c == 1:
+                break
+            if xw_old is not None:
+                diff = k.ew("sub", xw, xw_old)
+                if _dot(k, diff, diff).s[0] < self.tol:
+                    break
+            else:
+                diff = k.ew("adds", xw, s=-100.0)
+                if _dot(k, diff, diff).s[0] < self.tol:
+                    break
+            xw_old = xw
+        return xw, yw, it
+
+    def fit(self, X, Y):
+        self.numeric_mode_ = _mode(self.numeric_mode)
+        k = self._kit()
+        M, Ym, vec = self._xy(X, Y)
+        if Ym is None:
+            raise ValueError("Y is required")
+        n, p, q = M.r, M.c, Ym.c
+        nc = int(self.n_components)
+        bound = p if self._deflation == "regression" else min(n, p, q)
+        if not 1 <= nc <= bound:
+            raise ValueError(f"n_components == {nc}, while 1 <= n_components <= {bound} is required")
+        self._predict_1d = vec
+        Xk, self._x_mean, self._x_std = self._center_scale(k, M)
+        Yk, self._y_mean, self._y_std = self._center_scale(k, Ym)
+        norm_y = self._deflation == "canonical"
+        xw_c, yw_c, xs_c, ys_c, xl_c, yl_c = [], [], [], [], [], []
+        self.n_iter_ = []
+        thr = 10 * _F32_EPS
+        for _c in range(nc):
+            # Yk columns that are all below 10 eps are set to zero
+            dead = [all(abs(Yk.s[i * q + j]) < thr for i in range(n)) for j in range(q)]
+            if any(dead):
+                Yk = k.ew("mul", Yk, _M.of([0.0 if d else 1.0 for d in dead], 1, q))
+            try:
+                xw, yw, it = self._power(k, Xk, Yk, norm_y)
+            except StopIteration:
+                import warnings
+                warnings.warn(f"y residual is constant at iteration {_c}", stacklevel=2)
+                break
+            self.n_iter_.append(it)
+            # _svd_flip_1d: the largest-|.| entry of x_weights positive
+            best, arg = -1.0, 0
+            for j, v in enumerate(xw.s):
+                if abs(v) > best:
+                    best, arg = abs(v), j
+            if xw.s[arg] < 0:
+                xw, yw = xw.neg_cols([True]), yw.neg_cols([True])
+            x_scores = k.mm(Xk, xw)
+            y_ss = k.const(1.0) if norm_y else _dot(k, yw, yw)
+            y_scores = k.ew("div", k.mm(Yk, yw), y_ss)
+            x_load = k.ew("div", k.mm(Xk, x_scores, ta=True), _dot(k, x_scores, x_scores))
+            Xk = k.ew("sub", Xk, k.mm(x_scores, x_load, tb=True))
+            if self._deflation == "canonical":
+                y_load = k.ew("div", k.mm(Yk, y_scores, ta=True), _dot(k, y_scores, y_scores))
+                Yk = k.ew("sub", Yk, k.mm(y_scores, y_load, tb=True))
+            else:
+                y_load = k.ew("div", k.mm(Yk, x_scores, ta=True), _dot(k, x_scores, x_scores))
+                Yk = k.ew("sub", Yk, k.mm(x_scores, y_load, tb=True))
+            xw_c.append(xw); yw_c.append(yw); xs_c.append(x_scores); ys_c.append(y_scores)
+            xl_c.append(x_load); yl_c.append(y_load)
+        self.x_weights_m_ = _hstack(*xw_c)
+        self.y_weights_m_ = _hstack(*yw_c)
+        self.x_loadings_m_ = _hstack(*xl_c)
+        self.y_loadings_m_ = _hstack(*yl_c)
+        self._x_scores_m, self._y_scores_m = _hstack(*xs_c), _hstack(*ys_c)
+        self.x_rotations_m_ = k.mm(self.x_weights_m_, _pinv(k, k.mm(self.x_loadings_m_, self.x_weights_m_, ta=True)))
+        self.y_rotations_m_ = k.mm(self.y_weights_m_, _pinv(k, k.mm(self.y_loadings_m_, self.y_weights_m_, ta=True)))
+        coef = k.mm(self.x_rotations_m_, self.y_loadings_m_, tb=True)          # p x q
+        coef = k.ew("div", k.ew("mul", coef, self._y_std), self._x_std.T).T     # q x p
+        self.coef_m_ = coef
+        for name in ("x_weights", "y_weights", "x_loadings", "y_loadings", "x_rotations", "y_rotations"):
+            setattr(self, name + "_", getattr(self, name + "_m_").out())
+        self.coef_ = coef.out()
+        self.intercept_ = self._y_mean.out((q,))
+        self._x_scores, self._y_scores = self._x_scores_m.out(), self._y_scores_m.out()
+        self.n_features_in_ = p
+        self.components_m_ = self.x_rotations_m_
+        return self
+
+    def _check_fitted(self):
+        if not hasattr(self, "coef_m_"):
+            raise RuntimeError(f"{type(self).__name__} is not fitted; call fit first")
+
+    def transform(self, X, y=None, Y=None, copy=True):
+        self._check_fitted()
+        Y = y if y is not None else Y
+        k = self._kit()
+        M, Ym, vec = self._xy(X, Y)
+        xs = k.mm(k.ew("div", k.ew("sub", M, self._x_mean), self._x_std), self.x_rotations_m_)
+        if Ym is None:
+            return xs.out()
+        ys = k.mm(k.ew("div", k.ew("sub", Ym, self._y_mean), self._y_std), self.y_rotations_m_)
+        return xs.out(), ys.out()
+
+    def inverse_transform(self, X, y=None, Y=None):
+        self._check_fitted()
+        k = self._kit()
+        Z = _M.from_input(X)
+        Xr = k.ew("add", k.ew("mul", k.mm(Z, self.x_loadings_m_, tb=True), self._x_std), self._x_mean)
+        Y = y if y is not None else Y
+        if Y is None:
+            return Xr.out()
+        W = _M.from_input(Y, "Y")
+        Yr = k.ew("add", k.ew("mul", k.mm(W, self.y_loadings_m_, tb=True), self._y_std), self._y_mean)
+        return Xr.out(), Yr.out()
+
+    def predict(self, X, copy=True):
+        self._check_fitted()
+        k = self._kit()
+        M = _M.from_input(X)
+        P = k.ew("add", k.mm(k.ew("sub", M, self._x_mean), self.coef_m_, tb=True), self._y_mean)
+        return P.out((P.r,)) if self._predict_1d else P.out()
+
+    def fit_transform(self, X, y=None):
+        return self.fit(X, y).transform(X, y)
+
+
+class PLSRegression(_PLS):
+    """sklearn.cross_decomposition.PLSRegression: NIPALS, mode A, regression deflation."""
+    _deflation, _pmode = "regression", "A"
+
+    def fit(self, X, y=None, Y=None):
+        super().fit(X, y if y is not None else Y)
+        self.x_scores_, self.y_scores_ = self._x_scores, self._y_scores
+        return self
+
+
+class PLSCanonical(_PLS):
+    """sklearn.cross_decomposition.PLSCanonical (algorithm='nipals'): mode A,
+    canonical deflation."""
+    _deflation, _pmode = "canonical", "A"
+    _parameters = ("n_components", "scale", "algorithm", "max_iter", "tol", "copy", "numeric_mode")
+
+    def __init__(self, n_components=2, *, scale=True, algorithm="nipals", max_iter=500, tol=1e-06, copy=True,
+                 numeric_mode=None):
+        if algorithm != "nipals":
+            raise NotImplementedError("PLSCanonical: algorithm='svd' is not carried; use 'nipals'")
+        self.algorithm = algorithm
+        super().__init__(n_components, scale=scale, max_iter=max_iter, tol=tol, copy=copy, numeric_mode=numeric_mode)
+
+
+class CCA(_PLS):
+    """sklearn.cross_decomposition.CCA: NIPALS, mode B (the pseudo-inverses of
+    X and Y), canonical deflation."""
+    _deflation, _pmode = "canonical", "B"
