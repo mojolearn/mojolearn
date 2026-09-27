@@ -4,6 +4,16 @@ Lanes merge origin/main before every merge, so this section reaches every
 worktree. The orchestrator changes lane instructions HERE instead of
 messaging lanes. Newest items are at the top.
 
+00. **End your session at every checkpoint (saves tokens; Andrew,
+   2026-09-27).** The checkpoints are:
+   - each phase merged: pass-2 proof, option parity, GPU speed, CPU speed
+   - or roughly every 10 merged items
+   - or whenever your conversation has grown long
+   At a checkpoint: make `docs/lanes/progress/<lane>.md` say exactly where
+   you are and what comes next, merge, then STOP with a short report. Don't
+   run `dev_pod.sh down`; your pods stay up. The orchestrator relaunches a
+   fresh agent for your lane immediately, and it continues from the
+   progress file.
 0. **AMD boxes are live (main 6c9572e4e):** `tools/dev_pod.sh up <lane> 240 --vendor amd`
    (state key `<lane>-amd`; RunPod MI300X first, Hot Aisle 2x MI300X
    fallback). Grab one when you enter pass 2 and hold it. The lane check now
