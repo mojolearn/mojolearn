@@ -284,7 +284,10 @@ def gbdt_fit_binding(
     buffer of pairs (winner row then loser row per pair), the pair count, -1
     to generate the pairs from the groups and `y` (both addresses are then
     unread), and the address of a float32 buffer of one weight per pair,
-    35 + n_class_weights + 8 values in all.
+    35 + n_class_weights + 8 values in all. A MultiRMSE fit sends the three
+    float tails and then its TARGET DIMENSION, 35 + n_class_weights + 4
+    values in all (lane/algos-trees, 2026-09-27); `y_addr` then holds that
+    many DIM-MAJOR planes of `n_rows` (`y[dim * n_rows + row]`).
 
     AND THEN `n_class_weights` MORE VALUES, the class weights themselves,
     at `params[35 .. 35 + n_class_weights)`. They ride in this list rather
@@ -336,7 +339,7 @@ def gbdt_fit_binding(
             + String(n_class_weights)
         )
     var fixed_and_weights = 35 + n_class_weights
-    if len(params) != fixed_and_weights and len(params) != fixed_and_weights + 1 and len(params) != fixed_and_weights + 2 and len(params) != fixed_and_weights + 3 and len(params) != fixed_and_weights + 5 and len(params) != fixed_and_weights + 8:
+    if len(params) != fixed_and_weights and len(params) != fixed_and_weights + 1 and len(params) != fixed_and_weights + 2 and len(params) != fixed_and_weights + 3 and len(params) != fixed_and_weights + 4 and len(params) != fixed_and_weights + 5 and len(params) != fixed_and_weights + 8:
         raise Error(
             "gbdt_fit: params must hold 35 + n_class_weights, optionally min_split_gain, min_child_hessian, then feature_fraction, then the group sizes address and group count, then the pairs address, pair count and pair weights address values ("
             + String(35 + n_class_weights)
@@ -421,6 +424,16 @@ def gbdt_fit_binding(
     var feature_fraction = Float64(1)
     if len(params) >= fixed_and_weights + 3:
         feature_fraction = Float64(py=params[fixed_and_weights + 2])
+
+    # MultiRMSE's target dimension, the one value of the +4 tail
+    var target_dim = 1
+    if len(params) == fixed_and_weights + 4:
+        target_dim = Int(py=params[fixed_and_weights + 3])
+        if target_dim < 2:
+            raise Error(
+                "gbdt_fit: the target-dimension tail needs a dimension >= 2,"
+                " got " + String(target_dim)
+            )
 
     # the pool's grouping, `group_id` resolved to run lengths by the wrapper;
     # read here, with the GIL held, like every other Python value
@@ -510,6 +523,7 @@ def gbdt_fit_binding(
             pair_winners=pair_winners,
             pair_losers=pair_losers,
             pair_weights=pair_weights,
+            target_dim=target_dim,
         )
 
     var learn = Python.list()

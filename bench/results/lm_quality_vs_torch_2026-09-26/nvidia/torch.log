@@ -1,0 +1,19 @@
+{"event": "heldout_before", "mean": 11.04701942205429}
+{"event": "step", "step": 1, "loss": 10.903326034545898, "loss_f32": "412e7406", "seconds": 0.1118700997903943, "ids_sha256": "c9cfaa8fb1358fb7f7b5a53eebd59b9abd169288153d3a4099b30d6703b5fef3"}
+{"event": "step", "step": 2, "loss": 8.291576385498047, "loss_f32": "4104aa4c", "seconds": 0.061913011595606804, "ids_sha256": "c0566cdf476743cf528117d89154c53504817a0fc378832117107db6fbdc8e94"}
+{"event": "step", "step": 3, "loss": 57.92432403564453, "loss_f32": "4267b282", "seconds": 0.061917973682284355, "ids_sha256": "7c488589d936ac1c2188a74d02f7a03a667a61a49fa91edac40f621dfb1381c5"}
+{"event": "step", "step": 25, "loss": 11.312960624694824, "loss_f32": "413501e3", "seconds": 0.06189982499927282, "ids_sha256": "a7cb0482770e28cb07c9637cb5b296c6995471f5fb2e2ac68cd2ac2956fa4ea4"}
+{"event": "step", "step": 50, "loss": 5.789887428283691, "loss_f32": "40b946c2", "seconds": 0.06177615839987993, "ids_sha256": "ab5cad35d955c2a7b76f9ae66408872679190cb9dbf046203a48453b99b64d2b"}
+{"event": "step", "step": 75, "loss": 3.5715394020080566, "loss_f32": "4064941a", "seconds": 0.061933464370667934, "ids_sha256": "4385a957efd2fd1158bc0b77f3edb12e02389f0aaebd040c0bdf8fec1031b43c"}
+{"event": "step", "step": 100, "loss": 3.507805109024048, "loss_f32": "40607fe1", "seconds": 0.061669666320085526, "ids_sha256": "a107463c61d7ab916f5638e01696af2b879a3437b093fe6e3d4eacb36d450e51"}
+{"event": "step", "step": 125, "loss": 2.4505629539489746, "loss_f32": "401cd606", "seconds": 0.06183074787259102, "ids_sha256": "60bf055351993f7de7e3f88d55d348c2203a800e822569597396e96a84605242"}
+{"event": "step", "step": 150, "loss": 2.976823329925537, "loss_f32": "403e8446", "seconds": 0.061969383619725704, "ids_sha256": "bbfa6da14ae84c38d4e10be87a5d11159ee950fc34192a8dcd1c2a633e0c4f01"}
+{"event": "step", "step": 175, "loss": 3.542914628982544, "loss_f32": "4062bf1d", "seconds": 0.061883268877863884, "ids_sha256": "dab7f9208e31f139ee71965f501fb3376ff5631d8d38d5ed0232a5d16b85eb57"}
+{"event": "step", "step": 200, "loss": 2.8356335163116455, "loss_f32": "40357b05", "seconds": 0.061876364052295685, "ids_sha256": "e97bb9e4ba7a1fdb6fdf0dc3ad02e8b5d01aa14a9f1aca248cf7bc24a3d621d9"}
+{"event": "step", "step": 225, "loss": 2.722553014755249, "loss_f32": "402e3e4f", "seconds": 0.06172742694616318, "ids_sha256": "3064887d86373537f107b707b27e3cbf992e260c50435ab37f7d8cf5edbabfe9"}
+{"event": "step", "step": 250, "loss": 2.6750540733337402, "loss_f32": "402b3416", "seconds": 0.06173286773264408, "ids_sha256": "d2cecfafeac6df753fc073ea6709856edb4893fd5d07bf1ba97084e0f3a02131"}
+{"event": "step", "step": 275, "loss": 1.9197497367858887, "loss_f32": "3ff5ba5c", "seconds": 0.061833957210183144, "ids_sha256": "b604d5b7c2c60eb960da698510698bd42a4f669e499d2b53993881c97af78aad"}
+{"event": "step", "step": 300, "loss": 2.2777905464172363, "loss_f32": "4011c752", "seconds": 0.06182258669286966, "ids_sha256": "891e2e8bbf0630a425ee675a6341f70bb356bfc76ed27808e5b457729c5f7977"}
+{"event": "heldout_after", "mean": 2.6602410674095154}
+{"event": "heldout_ours_params_torch_eval", "mean": 2.650261364877224}
+{"event": "result", "side": "torch", "out": "/root/gemm_leg_out/lmq/torch.json", "final_loss": 2.2777905464172363, "heldout_after": 2.6602410674095154}

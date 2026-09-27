@@ -91,6 +91,30 @@ def gpu_backend():
     raise Fail("no GPU on this box (no nvidia-smi, no rocminfo, not macOS); the check needs one")
 
 
+def gpu_arch():
+    """This box's one GPU target (sm_NN from nvidia-smi's compute capability,
+    gfxNNN from rocminfo), for the build scripts that need it named
+    (bindings/build_byte_lm.sh on Linux); None on a Mac or when unreadable."""
+    try:
+        backend = gpu_backend()
+    except Fail:
+        return None
+    try:
+        if backend == "cuda":
+            r = subprocess.run(["nvidia-smi", "--query-gpu=compute_cap", "--format=csv,noheader"],
+                               capture_output=True, text=True, timeout=60)
+            cap = r.stdout.split()[0].strip() if r.returncode == 0 and r.stdout.split() else ""
+            return "sm_" + cap.replace(".", "") if cap.replace(".", "").isdigit() else None
+        if backend == "hip":
+            r = subprocess.run(["rocminfo"], capture_output=True, text=True, timeout=60)
+            for tok in r.stdout.split():
+                if tok.startswith("gfx") and tok[3:].isalnum():
+                    return tok
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return None
+
+
 def load_harness():
     import importlib.util
     spec = importlib.util.spec_from_file_location("algos_lane_check_harness", HARNESS)
@@ -167,24 +191,16 @@ def build(binding, log):
     import binding_stamps
     script, so = script_for(binding), output_for(binding)
     env = dict(os.environ, MOJOLEARN_NUMERIC_MODE="identical")
-    # THE BYTE LM's TWO BUILD SCRIPTS WANT OPPOSITE THINGS (2026-09-27, lane
-    # neural): bindings/build_byte_lm.sh on Linux needs ONE explicit
-    # MOJOLEARN_GPU_ARCHS target, and every host build (build_byte_lm_host.sh
-    # among them) refuses the variable. A check that rebuilt both under one
-    # environment failed whichever came second. The GPU byte LM build gets the
-    # box's own arch (tools/bincache.device_arch, the same reading the binary
-    # cache keys on) unless the caller set one; host builds never see it.
     if binding.endswith("_host"):
+        # build_host_family.sh refuses any GPU arch: a CPU build takes none.
         env.pop("MOJOLEARN_GPU_ARCHS", None)
-    elif binding == "_mojolearn_byte_lm" and platform.system() == "Linux" and not env.get("MOJOLEARN_GPU_ARCHS"):
-        import bincache
-        arch = bincache.device_arch()
-        if arch == "none":
-            raise Fail("bindings/build_byte_lm.sh needs the box's GPU arch and neither nvidia-smi nor "
-                       "rocminfo reported one")
+    elif script == "build_byte_lm.sh" and sys.platform != "darwin" and not env.get("MOJOLEARN_GPU_ARCHS"):
+        arch = gpu_arch()        # the script refuses a Linux build without one named target
+        if not arch:
+            raise Fail("bindings/build_byte_lm.sh needs MOJOLEARN_GPU_ARCHS and this box reports no GPU arch")
         env["MOJOLEARN_GPU_ARCHS"] = arch
-    if binding.endswith("_host") and so.exists():
-        so.unlink()                      # build_host_family.sh never overwrites an output
+    if (binding.endswith("_host") or script == "build_byte_lm.sh") and so.exists():
+        so.unlink()                      # these scripts never overwrite an output
     say(f"build {binding} (bindings/{script})")
     started = time.time()
     with open(log, "a") as fh:

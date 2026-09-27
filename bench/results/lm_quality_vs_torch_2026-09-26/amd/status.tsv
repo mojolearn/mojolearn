@@ -1,0 +1,6 @@
+corpus-enwik8	0	1s
+wheel	0	15s
+ours	0	106s
+torch-pin	1	343s
+torch	0	34s
+compare	0	0s

@@ -146,6 +146,7 @@ from gbdt.host.gbdt_oracle_losses import (
 from gbdt.host.gbdt_oracle_multiclass import (
     GBDT_OBJ_MULTICLASS,
     GBDT_OBJ_MULTICLASS_OVA,
+    GBDT_OBJ_MULTIRMSE,
     gbdt_multi_host_fit,
     gbdt_multi_host_model_text,
 )
@@ -666,6 +667,13 @@ def _gbdt_fit_ordered_arm(
             "Ordered boosting is not supported for nonsymmetric trees."
             " (catboost_options.cpp:757-759)"
         )
+    if loss == String("MultiRMSE"):
+        # `train`'s words (`gbdt/train.mojo`)
+        raise Error(
+            "boosting_type='Ordered' with loss='MultiRMSE' is not carried"
+            " here: the Ordered arm (gbdt/methods/ordered_boosting.mojo)"
+            " is one-dimensional"
+        )
     if loss == String("MultiClass") or loss == String("MultiClassOneVsAll"):
         raise Error(
             "On GPU loss " + loss + " can't be used with ordered boosting"
@@ -926,7 +934,7 @@ def gbdt_fit_binding(
             + String(n_class_weights)
         )
     var fixed_and_weights = 35 + n_class_weights
-    if len(params) != fixed_and_weights and len(params) != fixed_and_weights + 1 and len(params) != fixed_and_weights + 2 and len(params) != fixed_and_weights + 3 and len(params) != fixed_and_weights + 5 and len(params) != fixed_and_weights + 8:
+    if len(params) != fixed_and_weights and len(params) != fixed_and_weights + 1 and len(params) != fixed_and_weights + 2 and len(params) != fixed_and_weights + 3 and len(params) != fixed_and_weights + 4 and len(params) != fixed_and_weights + 5 and len(params) != fixed_and_weights + 8:
         raise Error(
             "gbdt_fit: params must hold 35 + n_class_weights, optionally min_split_gain, min_child_hessian, then feature_fraction, then the group sizes address and group count, then the pairs address, pair count and pair weights address values ("
             + String(35 + n_class_weights)
@@ -988,6 +996,16 @@ def gbdt_fit_binding(
     var feature_fraction = Float64(1)
     if len(params) >= fixed_and_weights + 3:
         feature_fraction = Float64(py=params[fixed_and_weights + 2])
+    # MultiRMSE's target dimension, the one value of the +4 tail
+    # (`bindings/_mojolearn_gbdt.mojo`'s), in its words
+    var target_dim = 1
+    if len(params) == fixed_and_weights + 4:
+        target_dim = Int(py=params[fixed_and_weights + 3])
+        if target_dim < 2:
+            raise Error(
+                "gbdt_fit: the target-dimension tail needs a dimension >= 2,"
+                " got " + String(target_dim)
+            )
     # the pool's grouping (`bindings/_mojolearn_gbdt.mojo`'s group tail),
     # checked, refused and resolved in the words and by the rule
     # `gbdt/train.mojo::train` uses, so the CPU column refuses exactly where
@@ -1119,7 +1137,26 @@ def gbdt_fit_binding(
     var pw_objective = _pointwise_objective(loss)
     var is_pointwise = pw_objective >= 0
     # the multi-output losses of gbdt/host/gbdt_oracle_multiclass.mojo
-    var is_multi = loss == String("MultiClass") or loss == String("MultiClassOneVsAll")
+    # MultiRMSE rides the same oracle (lane/algos-trees, 2026-09-27)
+    var is_multi_rmse = loss == String("MultiRMSE")
+    var is_multi = (
+        loss == String("MultiClass") or loss == String("MultiClassOneVsAll")
+        or is_multi_rmse
+    )
+    if target_dim != 1 and not is_multi_rmse:
+        raise Error(
+            "a multi-dimensional target (target_dim=" + String(target_dim)
+            + ") is read only by loss='MultiRMSE'; loss='" + loss
+            + "' takes one target per row"
+        )
+    if is_multi_rmse and target_dim < 2:
+        # `train`'s words (`multiclass_targets.h:167`)
+        raise Error(
+            "Only one class found, can't learn multiclass objective"
+            " (MultiRMSE needs a target dimension >= 2,"
+            " multiclass_targets.h:167); got target_dim="
+            + String(target_dim)
+        )
     if loss != String("Logloss") and not is_rmse and not is_pointwise and not is_multi:
         _refuse("loss='" + loss + "'")
     if is_multi and grow_code != 0:
@@ -1207,7 +1244,7 @@ def gbdt_fit_binding(
             _refuse("bootstrap_type='" + bootstrap_type + "' under loss='" + loss + "'")
     if n_weights != 0:
         _refuse("sample_weight")
-    if n_class_weights != 0 and not is_multi:
+    if n_class_weights != 0 and (not is_multi or is_multi_rmse):
         _refuse("class_weights outside MultiClass and MultiClassOneVsAll")
     if n_flags != 0 and (is_rmse or grow_code != 0 or is_pointwise or is_multi):
         _refuse("cat_features or one_hot_features outside SymmetricTree with Logloss")
@@ -1471,13 +1508,20 @@ def gbdt_fit_binding(
     var test_losses = List[Float64]()
     with GILReleased(Python()):
         var x = read_f32(x_address, n_rows * n_features)
-        var y = read_f32(y_address, n_rows)
+        # MultiRMSE's `target_dim` dim-major planes; one per row otherwise
+        var y = read_f32(y_address, n_rows * target_dim)
         if is_multi:
             # gbdt/host/gbdt_oracle_multiclass.mojo
+            var multi_objective = GBDT_OBJ_MULTICLASS_OVA
+            if loss == String("MultiClass"):
+                multi_objective = GBDT_OBJ_MULTICLASS
+            elif is_multi_rmse:
+                multi_objective = GBDT_OBJ_MULTIRMSE
             var multi_model = gbdt_multi_host_fit(
                 x, y, n_rows, n_features, p,
-                GBDT_OBJ_MULTICLASS if loss == String("MultiClass") else GBDT_OBJ_MULTICLASS_OVA,
+                multi_objective,
                 class_weights, sym_boot_kind, sym_boot_param, random_strength,
+                target_dim,
             )
             text = gbdt_multi_host_model_text(multi_model)
             losses = multi_model.losses.copy()
